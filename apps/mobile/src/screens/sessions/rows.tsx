@@ -148,6 +148,11 @@ function SummaryLine({
               {waiting}
             </Text>
           ) : null}
+          {summary.lineage && !summary.lineage.reportParent ? (
+            <Text testID={`${testID}:report-off`} style={[styles.meta, { color: c.ink3 }]}>
+              {t('tree.report.stopped')}
+            </Text>
+          ) : null}
           {summary.lineage?.wakeParent === false ? (
             <Text style={[styles.meta, { color: c.ink3 }]}>{t('tree.lineage.noWake')}</Text>
           ) : null}
@@ -265,6 +270,11 @@ function ChildLine({
           ]}
         >
           ⏱
+        </Text>
+      ) : null}
+      {summary.lineage && !summary.lineage.reportParent ? (
+        <Text testID={`${testID}:report-off`} style={[styles.meta, { color: c.ink3 }]}>
+          {t('tree.report.stopped')}
         </Text>
       ) : null}
       {summary.lineage?.wakeParent === false ? (

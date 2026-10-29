@@ -271,6 +271,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
         origin: options.origin,
         title: options.title,
         wakeParent: options.wakeParent,
+        reportParent: true,
         createdAt: now,
         proposalId: options.proposalId ?? null,
       },
@@ -1057,9 +1058,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
   const childrenStopped = (deviceId: string, parentId: string): boolean =>
     host
       .summaries(deviceId)
-      .filter(
-        (entry) => entry.lineage?.parentId === parentId && entry.lineage.reportParent !== false,
-      )
+      .filter((entry) => entry.lineage?.parentId === parentId && entry.lineage.reportParent)
       .every((entry) => entry.status !== 'running' && entry.status !== 'waiting')
 
   /** 父会话有回合在跑：攒着的回报当场插进这个回合（同设备进程的 steerNotes），画在插进去的位置 */
@@ -1098,7 +1097,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       (entry) =>
         entry.lineage?.parentId === parentId &&
         entry.lineage.wakeParent &&
-        entry.lineage.reportParent !== false &&
+        entry.lineage.reportParent &&
         // 出错、被打断的回合不算（同设备进程）
         notes.some((note) => note.threadId === entry.id && note.status === 'completed'),
     )
@@ -1250,7 +1249,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       }
       const summary = host.summary(deviceId, sessionId)
       const lineage = summary?.lineage
-      if (lineage && lineage.reportParent !== false) {
+      if (lineage?.reportParent) {
         // 回报：最后一条回答的开头
         const turn = view.turns.at(-1)
         const answer = [...(turn?.itemIds ?? [])]

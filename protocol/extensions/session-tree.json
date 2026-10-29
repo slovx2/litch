@@ -17,8 +17,8 @@
   },
   "undeclared": "没声明的连接上：会话对象上没有 litchLineage，收不到 litch/thread/lineage/updated、litch/sessionProposal/changed、litch/thread/queuedNotes/updated，会话对象上也没有 litchQueuedNotes；litch/session/*、litch/sessionProposal/* 照样能调（客户端发起的方法），litch/sessionProposal/answer、litch/session/questions/ignore 和 litch/session/report/set 要求声明 sessionTree（未声明的连接不能替用户选 offer、忽略问题或设置回报）。子会话在它们眼里是普通会话；设备注入给父会话的回报与唤醒是一段包在 <litch-session-event> 里的文字，它们按普通的用户消息显示。",
   "rules": [
-    "用户控制回报：设备支持时额外声明 sessionReportControl（功能探测，不是新的投递声明）；litch/session/report/set 只接收已声明 sessionTree 的用户端连接，参数 threadId、reportParent:boolean，应答同形。只适用于未脱离的 Litch 子会话，默认 true，模型工具不提供写入口。litchLineage 的可选 reportParent 与模型 list/read 的 report_parent 可读；新通知 litch/thread/report/changed（threadId、reportParent）及字段只投递到声明 sessionTree 的连接，没声明时没有这些内容、设置方法回 extensionRequired。",
-    "关闭回报不改变父子关系或子会话运行/审批状态，但停止完成、失败、中断、needsUser 和后台任务结束的自动回报，并删除该子会话尚未投递的队列项；已投递的不撤回。恢复不补发历史完成结果，仅补报当前仍存在的 needsUser 一次，唤醒仍遵守 wakeParent 及原有资格。静默子会话不阻止其他子会话唤醒父会话；异步读取或准备投递期间切换时，旧结果不回填。状态持久化并经快照和通知同步桌面/手机。",
+    "用户控制回报：设备支持时额外声明 sessionReportControl（功能探测，不是新的投递声明）；litch/session/report/set 只接收已声明 sessionTree 的用户端连接，参数 threadId、reportParent:boolean，应答同形。只适用于未脱离的 Litch 子会话，默认 true，模型工具不提供写入口。litchLineage 的必填 reportParent 与模型 list/read 的 report_parent 可读；lineage/updated 通知及字段只投递到声明 sessionTree 的连接，没声明时没有这些内容、设置方法回 extensionRequired。",
+    "关闭回报不改变父子关系或子会话运行/审批状态，但停止完成、失败、中断、needsUser 和后台任务结束的自动回报，并删除该子会话尚未投递的队列项；已投递的不撤回。恢复不补发历史完成结果，仅补报当前仍存在且已等待满 needsUserMs 的 needsUser 一次，唤醒仍遵守 wakeParent 及原有资格。静默子会话不阻止其他子会话唤醒父会话；异步读取或准备投递期间切换时，旧结果不回填；关闭期间结束的后台任务静默消费，恢复后才结束的已登记后台任务仍报告新结果。状态持久化并经快照和通知同步桌面/手机。",
     "父子关系只在 Litch 子会话之间。写类工具（send、interrupt）只能作用于调用者自己的 Litch 子孙会话，对别的会话回 [litch:blocked]，说明里让模型请用户自己去做；对引擎原生子线程回 [litch:blocked]，说明里让模型用引擎自己的子代理工具。",
     "litch_sessions.start 可带 wake_parent（布尔值，默认 true），用于直接启动、普通提案和 offer；wrap_up 建议与 hand_off 默认 true。用户从界面开始时仍可用 wakeParent 或 overrides.wakeParent 选择。litch_sessions.set_wake(thread_id, wake) 只允许调用者改自己的直接子会话，其他目标返回结构化 forbidden（即使用户发起的回合也不放宽）；结果带 thread_id 和 wake_parent。更改持久化在 lineage，并通过 litch/thread/lineage/updated 只通知声明 sessionTree 的连接。list/read 的 session 摘要带 wake_parent，没有 Litch 父会话为 null。",
     "start 的 initiation 为 user_asked 时，用户已经要求或批准包含子会话的计划，可在唤醒、提醒、定时任务等任意后续回合直接启动，不因回合来源降成提案，任务卡关闭也可用；仍遵守用户后来的修改或撤销。直接启动每父会话每回合最多 SESSION_TOOL_LIMITS.directStartsPerTurn（16）个，不占提案额度；并发预占，只在会话尚未创建时失败退还；已建但首回合未确认启动的持久占运行名额，直到开始、归档或删除。同回合重连/重启不重置，归档成功清理该会话的启动计数，启动结果未确认时进程退出的预占保守保留。所有启动入口共用同时运行或启动最多 SESSION_TREE_LIMITS.liveChildren（8）个直接子会话的门槛。整棵树同时运行/启动最多24个（含根）、最大深度4（根是0），工具超限回forbidden并说明原因。目标 harness 放宽沙箱仍降为需用户确认的提案。50次唤醒不变。注入模型的说明统一用英文，中文说明保留在协议约定与手册；已建会话冻结的旧工具说明不强制热替换，设备执行新门禁，Codex恢复时更新instructions。提案 7 天过期。",
@@ -105,7 +105,6 @@
       "kind": "ServerNotification",
       "methods": [
         "litch/thread/lineage/updated",
-        "litch/thread/report/changed",
         "litch/sessionProposal/changed",
         "litch/thread/queuedNotes/updated"
       ],

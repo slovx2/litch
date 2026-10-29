@@ -659,7 +659,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
         type: 'function',
         name: SESSION_TOOL.list,
         description:
-          'List sessions on this device, newest first, including wake_parent (null for sessions without a Litch parent).',
+          'List sessions on this device, newest first, including wake_parent (null for sessions without a Litch parent). report_parent=false means the user stopped automatic reports from this child; read it yourself when needed.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -680,7 +680,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
         type: 'function',
         name: SESSION_TOOL.read,
         description:
-          'Read a session’s status, wake_parent, recent turns, pending_requests and delegated_responses without opening it. Pending requests include current IDs, kinds, questions and permitted decisions for respond. This snapshot covers blocking requests observed by the device; an empty list does not rule out asynchronous questions or requests held by another executor.',
+          'Read a session’s status, wake_parent, report_parent, recent turns, pending_requests and delegated_responses without opening it. report_parent=false means the user stopped automatic reports from this child; read it yourself when needed. Pending requests include current IDs, kinds, questions and permitted decisions for respond. This snapshot covers blocking requests observed by the device; an empty list does not rule out asynchronous questions or requests held by another executor.',
         inputSchema: {
           type: 'object',
           properties: {

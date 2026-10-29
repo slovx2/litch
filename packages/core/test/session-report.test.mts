@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { lineageOf } from '../src/projection/session.mjs'
 import { deviceWorld } from './device-world.mjs'
 import { harness } from './fake-device.mjs'
 import { thread } from './fixtures.mjs'
@@ -38,17 +39,7 @@ test('用户回报开关通过核心命令发送；新通知更新侧栏，保�
       { threadId: 'child', reportParent: false },
     ])
     for (const reportParent of [false, true]) {
-      world.peer.last().notify('litch/thread/report/changed', { threadId: 'child', reportParent })
-      await settle()
-      const after = world.side.sessions.get('child')
-      assert.equal(after?.lineage?.reportParent, reportParent)
-      assert.equal(after?.lineage?.parentId, 'parent')
-      assert.equal(after?.status, before?.status)
-    }
-    // 重新取得的快照也能恢复状态，不依赖上一次连接收到的通知。
-    world.peer
-      .last()
-      .notify('litch/thread/lineage/updated', {
+      world.peer.last().notify('litch/thread/lineage/updated', {
         threadId: 'child',
         lineage: {
           parentThreadId: 'parent',
@@ -56,10 +47,29 @@ test('用户回报开关通过核心命令发送；新通知更新侧栏，保�
           origin: 'model',
           title: '子任务',
           wakeParent: true,
+          reportParent,
           createdAt: 1,
-          reportParent: false,
         },
       })
+      await settle()
+      const after = world.side.sessions.get('child')
+      assert.equal(after?.lineage?.reportParent, reportParent)
+      assert.equal(after?.lineage?.parentId, 'parent')
+      assert.equal(after?.status, before?.status)
+    }
+    // 重新取得的快照也能恢复状态，不依赖上一次连接收到的通知。
+    world.peer.last().notify('litch/thread/lineage/updated', {
+      threadId: 'child',
+      lineage: {
+        parentThreadId: 'parent',
+        kind: 'fresh',
+        origin: 'model',
+        title: '子任务',
+        wakeParent: true,
+        createdAt: 1,
+        reportParent: false,
+      },
+    })
     await settle()
     assert.equal(world.side.sessions.get('child')?.lineage?.reportParent, false)
   } finally {
@@ -82,4 +92,18 @@ test('设备没有声明回报控制能力时不发送新方法', async () => {
   } finally {
     world.core.stop()
   }
+})
+
+test('回报字段必填，缺失不按开启投影；明确关闭照实保留', () => {
+  const lineage = {
+    parentThreadId: 'p',
+    kind: 'fresh',
+    origin: 'model',
+    title: '子任务',
+    wakeParent: true,
+    createdAt: 1,
+  }
+  assert.equal(lineageOf(lineage), null)
+  assert.equal(lineageOf({ ...lineage, reportParent: false })?.reportParent, false)
+  assert.equal(lineageOf({ ...lineage, reportParent: true })?.reportParent, true)
 })

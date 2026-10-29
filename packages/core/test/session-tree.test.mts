@@ -261,6 +261,7 @@ test('投影：父子关系的时间换成毫秒；不接受直接输入的子�
         origin: 'model',
         title: '查依赖',
         wakeParent: true,
+        reportParent: true,
         createdAt: 1_700_000_100,
       },
     } as never),
@@ -286,6 +287,7 @@ test('投影：父子关系的时间换成毫秒；不接受直接输入的子�
         origin: 'proposal',
         title: '整理',
         wakeParent: true,
+        reportParent: true,
         createdAt: 1,
         proposalId: 'pr1',
       },
@@ -503,6 +505,7 @@ const lineageOf = (parent: string, title: string) => ({
   origin: 'model',
   title,
   wakeParent: true,
+  reportParent: true,
   createdAt: 1_700_000_050,
 })
 
@@ -1135,6 +1138,7 @@ test('提案卡片写什么：开始了、子会话在侧栏里的写实际的 h
       origin: 'proposal' as const,
       title: 'x',
       wakeParent: true,
+      reportParent: true,
       createdAt: 0,
       proposalId: 'pr1',
     },

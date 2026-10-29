@@ -1207,6 +1207,7 @@ export const zhCN = {
   'tree.lineage.claudeDesktop': '在 Claude 桌面端派出',
   'tree.lineage.otherApp': '在其他应用中派出',
   'tree.detach': '脱离为独立会话',
+  'tree.report.stopped': '已停报',
   'tree.report.stop': '停止回报主对话',
   'tree.report.resume': '恢复回报主对话',
   'tree.report.offline': '连接执行设备后可操作',

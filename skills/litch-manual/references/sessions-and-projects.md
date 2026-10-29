@@ -51,15 +51,15 @@ sidebar.
 
 ### 停止或恢复回报主对话
 
-桌面端在侧栏子会话行右键，手机端长按会话行，选择“停止回报主对话”或“恢复回报主对话”。默认回报；只有支持此功能的执行设备才显示菜单，离线时禁用并说明原因。
+桌面端在侧栏子会话行右键，手机端长按会话行，选择“停止回报主对话”或“恢复回报主对话”。停止回报的子会话行显示“已停报”标记。默认回报；只有支持此功能的执行设备才显示菜单，离线时禁用并说明原因。
 
 停止后，子会话仍挂在父会话下，自身的运行和等待用户状态照常显示。完成、失败、中断、待答请求和后台任务结束都不再自动回报父会话，也不触发唤醒；该子会话尚未投递的回报会移出队列，已送达的不撤回。静默子会话不会挡住其他子会话唤醒父会话。
 
-恢复只接收今后的新事件，不补发停报期间的历史结果；如果仍有待答请求，补报一次当前请求。是否唤醒仍遵守独立的 `wake_parent` 开关及原有条件。设置保存在执行设备上，重连或重启后保留。模型的 `list`、`read` 可读 `report_parent`，没有修改此开关的模型工具；`set_wake` 只控制唤醒。
+恢复只接收今后的新事件，不补发停报期间的历史结果；如果仍有已等待满 10 秒的待答请求，补报一次当前请求；未满 10 秒的继续等待原来的提醒计时。是否唤醒仍遵守独立的 `wake_parent` 开关及原有条件。设置保存在执行设备上，重连或重启后保留。模型的 `list`、`read` 可读 `report_parent`，没有修改此开关的模型工具；`set_wake` 只控制唤醒。
 
-On desktop, right-click a child session in the sidebar; on mobile, long-press its row. Choose **Stop reporting to parent** or **Resume reporting to parent**. Reporting starts enabled. The menu requires device support and is disabled with a reason while offline.
+On desktop, right-click a child session in the sidebar; on mobile, long-press its row. Choose **Stop reporting to parent** or **Resume reporting to parent**. Rows show **Reports off** while reporting is stopped. Reporting starts enabled. The menu requires device support and is disabled with a reason while offline.
 
-Stopping reports keeps the child in its tree and leaves its own running or waiting status visible. It suppresses automatic completion, failure, interruption, pending-request and background-task reports, removes its undelivered reports, and prevents those reports from waking the parent. Delivered reports remain. Other children can still wake the parent. Resuming does not replay old results; it reports a currently pending request once and then future events. Waking still follows `wake_parent` and the existing rules. This device-side preference survives reconnects and restarts. Models can read `report_parent` through `list` and `read`, but cannot change it; `set_wake` only controls waking.
+Stopping reports keeps the child in its tree and leaves its own running or waiting status visible. It suppresses automatic completion, failure, interruption, pending-request and background-task reports, removes its undelivered reports, and prevents those reports from waking the parent. Delivered reports remain. Other children can still wake the parent. Resuming does not replay old results; it reports a currently pending request once after the usual 10-second waiting threshold, then future events. Waking still follows `wake_parent` and the existing rules. This device-side preference survives reconnects and restarts. Models can read `report_parent` through `list` and `read`, but cannot change it; `set_wake` only controls waking.
 
 ### 问题结果与输入
 
@@ -448,6 +448,7 @@ woken to continue.
   parent is idle, without waiting for the other sub-sessions. Once handed over they show on the message
   that carried them.
   If a sub-session finishes several turns while the parent is busy, only its latest report is handed over.
+  Users can also stop automatic reports entirely; see [Stop or resume reporting](#停止或恢复回报主对话) above.
 - **Detach as a standalone session** (session menu or the "Started from …" bar at the top of a
   sub-session) cuts the link.
 - **Subagents** started by a harness itself (for example Codex's agents) are not sub-sessions; they show

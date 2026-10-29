@@ -18,7 +18,7 @@ import {
 
 type Env = ReturnType<typeof treeRig>
 const METHOD = 'litch/session/report/set'
-const EVENT = 'litch/thread/report/changed'
+const EVENT = 'litch/thread/lineage/updated'
 
 test('REPORT-008：关闭回报和清队列原子提交；写入失败不修改持久化或内存状态', async () => {
   const env = treeRig()
@@ -106,7 +106,10 @@ test('REPORT-001：用户设置持久化，重连补读；只对声明连接通�
       threadId: id,
       reportParent: false,
     })
-    await until(() => got(client, EVENT).length === 1, '通知声明连接')
+    await until(
+      () => got(client, EVENT).some((e) => e.threadId === id && e.lineage?.reportParent === false),
+      '通知声明连接',
+    )
     assert.equal(got(old, EVENT).length, 0)
     assert.equal((await old.call('thread/read', { threadId: id })).thread.litchLineage, undefined)
     const db = openSessionDatabase(env.stateDir)
@@ -268,7 +271,7 @@ test('REPORT-005：结束后补读历史期间关闭再恢复，不会把迟到�
   }
 })
 
-test('REPORT-006：后台结束补报在关闭时一起取消，恢复不会补发旧后台结果', async () => {
+test('REPORT-006：后台任务在关闭期间结束则静默消费，恢复不补旧结果', async () => {
   const env = treeRig()
   refuseSteer(env.pi)
   try {

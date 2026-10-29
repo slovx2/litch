@@ -1482,11 +1482,6 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     // 会话树：一个会话的 Litch 父子关系建立了、脱离了。只发给声明了 sessionTree 的连接
     'litch/thread/lineage/updated': ({ threadId, lineage }) =>
       patchThread(threadId, { litchLineage: lineage ?? undefined }),
-    'litch/thread/report/changed': ({ threadId, reportParent }) => {
-      const lineage = (threads.get(threadId) as (Thread & SessionTreeThreadFields) | undefined)
-        ?.litchLineage
-      if (lineage) patchThread(threadId, { litchLineage: { ...lineage, reportParent } })
-    },
     // 会话树：子会话交来的回报进了这个会话的队列、交给了模型（整份）。对话区末尾当场画排着的
     'litch/thread/pending/changed': ({ threadId, litchPendingRequests, litchDelegatedResponses }) =>
       patchThread(threadId, { litchPendingRequests, litchDelegatedResponses } as Partial<Thread>),

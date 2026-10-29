@@ -37,7 +37,7 @@ export interface SessionLineage {
   /** 子会话这一回合结束、全部子会话都停下时，要不要唤醒父会话 */
   wakeParent: boolean
   /** 用户是否允许自动回报父会话；缺省开启，只能由用户端方法修改。 */
-  reportParent?: boolean
+  reportParent: boolean
   /** 建立父子关系的时间（秒） */
   createdAt: number
   /** origin 是 proposal 时：从哪个提案开始的（派出它的那张提案卡片据此显示“已开始”、能跳过来） */
@@ -197,8 +197,6 @@ export const SESSION_TREE_METHOD = {
 export const taskCardsSettingKey = (harness: string): string => `harness.${harness}.taskCards`
 
 export const SESSION_TREE_NOTIFICATION = {
-  /** 用户更改回报开关；只发给声明 sessionTree 的连接。 */
-  reportChanged: 'litch/thread/report/changed',
   /** 一个会话的父子关系变了（建立、脱离）。lineage 为 null 是没有父会话了 */
   lineageUpdated: 'litch/thread/lineage/updated',
   /** 一个会话上的提案变了（新提、开始、不要、撤回、过期）。带这个会话现在全部 pending 的提案，和刚变的那几条 */
@@ -212,7 +210,7 @@ export interface SessionReportSetParams {
   reportParent: boolean
 }
 
-export type SessionReportChanged = SessionReportSetParams
+export type SessionReportSetResponse = SessionReportSetParams
 
 /** `litch/session/start` 的参数 */
 export interface SessionStartParams {

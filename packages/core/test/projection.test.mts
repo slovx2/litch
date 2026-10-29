@@ -239,7 +239,13 @@ test('会话：标题、状态、时间单位', () => {
   assert.equal(threadTitle({ name: null, preview: '\n  第一行\n第二行' }), '第一行')
   assert.deepEqual(threadTitle({ name: null, preview: '' }), { key: 'session.untitled' })
   // Litch 子会话没起名时用派出时给的标题，不用第一句话（那是派出说明）；起了名还是名字优先
-  const lineage = { parentThreadId: 'p', kind: 'fresh', origin: 'model', title: '查依赖' } as const
+  const lineage = {
+    parentThreadId: 'p',
+    kind: 'fresh',
+    origin: 'model',
+    title: '查依赖',
+    reportParent: true,
+  } as const
   const child = { preview: '[Litch] Another session…', litchLineage: lineage }
   assert.equal(threadTitle({ ...child, name: null } as never), '查依赖')
   assert.equal(threadTitle({ ...child, name: '模型起的' } as never), '模型起的')

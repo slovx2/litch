@@ -321,8 +321,8 @@ export class SessionStore {
     const prepare = (sql: string) => db.prepare(sql)
     this.statements = {
       addLineage: prepare(
-        `INSERT INTO lineage(thread_id, parent_thread_id, harness, kind, origin, title, prompt, wake_parent, created_at, proposal_id)
-         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO lineage(thread_id, parent_thread_id, harness, kind, origin, title, prompt, wake_parent, created_at, proposal_id, report_epoch)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
       detach: prepare('UPDATE lineage SET detached_at=? WHERE thread_id=?'),
       setWakeParent: prepare('UPDATE lineage SET wake_parent=? WHERE thread_id=?'),
@@ -484,7 +484,7 @@ export class SessionStore {
       detachedAt: null,
       reportedTurn: null,
       reportParent: true,
-      reportEpoch: 0,
+      reportEpoch: (this.lineage.get(row.threadId)?.reportEpoch ?? -1) + 1,
     }
     // 同一个会话再派一次（脱离之后又被派）：旧的那条换掉
     this.db.prepare('DELETE FROM lineage WHERE thread_id=?').run(row.threadId)
@@ -500,6 +500,7 @@ export class SessionStore {
       row.wakeParent ? 1 : 0,
       row.createdAt,
       row.proposalId ?? null,
+      full.reportEpoch,
     )
     this.lineage.set(row.threadId, full)
     // 派子会话就是父会话给它发了第一条消息：之后两边一直可以互相发

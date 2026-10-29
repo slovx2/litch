@@ -264,8 +264,8 @@ import type {
   SessionProposalListParams,
   SessionProposalListResponse,
   SessionProposalMarkHereResult,
-  SessionReportChanged,
   SessionReportSetParams,
+  SessionReportSetResponse,
   SessionStartParams,
   SessionStartResponse,
 } from './session-tree.mjs'
@@ -574,7 +574,7 @@ export interface ClientRequests {
   // 而且设备信息的 `extensions` 里列了 sessionTree 才能用
   'litch/session/start': { params: SessionStartParams; result: SessionStartResponse }
   'litch/session/detach': { params: SessionDetachParams; result: Record<string, never> }
-  'litch/session/report/set': { params: SessionReportSetParams; result: SessionReportChanged }
+  'litch/session/report/set': { params: SessionReportSetParams; result: SessionReportSetResponse }
   'litch/sessionProposal/list': {
     params: SessionProposalListParams
     result: SessionProposalListResponse
@@ -695,7 +695,6 @@ export interface ServerNotifications {
   'litch/process/changed': DeviceProcessChangedNotification
   /** 扩展，只发给握手时声明过 sessionTree 的连接：一个会话的父子关系建立或脱离了 */
   'litch/thread/lineage/updated': LineageUpdatedNotification
-  'litch/thread/report/changed': SessionReportChanged
   /** 扩展，只发给握手时声明过 sessionTree 的连接：一个会话上的提案变了 */
   'litch/sessionProposal/changed': ProposalChangedNotification
   /** 扩展，只发给握手时声明过 sessionTree 的连接：一个会话的回报队列变了 */

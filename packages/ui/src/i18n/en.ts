@@ -1256,6 +1256,7 @@ export const en: Record<MessageKey, Entry> = {
   'tree.lineage.claudeDesktop': 'in the Claude desktop app',
   'tree.lineage.otherApp': 'in another app',
   'tree.detach': 'Detach as a standalone session',
+  'tree.report.stopped': 'Reports off',
   'tree.report.stop': 'Stop reporting to parent',
   'tree.report.resume': 'Resume reporting to parent',
   'tree.report.offline': 'Connect to the execution device to change this',
