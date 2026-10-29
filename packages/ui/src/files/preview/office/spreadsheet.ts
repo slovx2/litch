@@ -7,7 +7,9 @@ import { scanXml, withoutXmlNodes } from './xml.ts'
 
 const ROWS = 10_000,
   COLUMNS = 200,
-  CELLS = 100_000
+  CELLS = 100_000,
+  FROZEN_ROWS = 10,
+  FROZEN_COLUMNS = 3
 const reject = (): never => {
   throw new OfficeFailure('budget')
 }
@@ -79,6 +81,7 @@ function valueText(value: ExcelJS.CellValue): string {
           .toISOString()
           .replace(/T00:00:00\.000Z$/, '')
           .replace('.000Z', 'Z')
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE'
   if (typeof value !== 'object') return String(value)
   if ('formula' in value || 'sharedFormula' in value) {
     if (value.result !== undefined) return valueText(value.result)
@@ -88,6 +91,12 @@ function valueText(value: ExcelJS.CellValue): string {
   if ('text' in value) return value.text
   if ('error' in value) return value.error
   return ''
+}
+/** 数字和日期（含公式保存的结果）按 Excel 的习惯靠右显示 */
+function isNumeric(cell: ExcelJS.Cell): boolean {
+  const raw = cell.value
+  const value = raw && typeof raw === 'object' && 'result' in raw ? raw.result : raw
+  return (typeof value === 'number' && Number.isFinite(value)) || value instanceof Date
 }
 /** 常见十进制/千分位/百分比格式；复杂自定义格式保留值，不猜测货币或地区日期。 */
 function cellText(cell: ExcelJS.Cell): string {
@@ -149,6 +158,7 @@ export async function spreadsheet(parts: Part[]): Promise<WorkbookData> {
   for (const sheet of book.worksheets) {
     if (sheet.rowCount > ROWS || sheet.columnCount > COLUMNS) reject()
     const cells: Record<string, string> = Object.create(null)
+    const numeric: Record<string, true> = Object.create(null)
     sheet.eachRow((row) =>
       row.eachCell((cell) => {
         if (++count > CELLS) reject()
@@ -159,6 +169,7 @@ export async function spreadsheet(parts: Part[]): Promise<WorkbookData> {
           // sharedStrings 可由大量单元格重复引用；返回前按展开后的文本累计计费。
           if (textBytes > 8 * 1024 * 1024) reject()
           cells[`${row.number}:${cell.col}`] = value
+          if (isNumeric(cell)) numeric[`${row.number}:${cell.col}`] = true
         }
       }),
     )
@@ -168,11 +179,22 @@ export async function spreadsheet(parts: Part[]): Promise<WorkbookData> {
         end = address(b ?? a)
       return { top: start.row, left: start.column, bottom: end.row, right: end.column }
     })
+    // 侧面板很窄：冻结得太多会把可滚动的部分挤没，超出的部分照常滚动
+    const view = sheet.views?.[0]
+    const frozen =
+      view?.state === 'frozen'
+        ? {
+            rows: Math.min(FROZEN_ROWS, Math.max(0, Math.floor(view.ySplit ?? 0))),
+            columns: Math.min(FROZEN_COLUMNS, Math.max(0, Math.floor(view.xSplit ?? 0))),
+          }
+        : { rows: 0, columns: 0 }
     sheets.push({
       name: sheet.name,
       rows: sheet.rowCount,
       columns: sheet.columnCount,
       cells,
+      numeric,
+      frozen,
       merges,
     })
   }

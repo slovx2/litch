@@ -25,8 +25,9 @@ export default function DocxPreview({ data }: PreviewRendererProps) {
     setState('loading')
     const script = new URL(frameUrl, location.href).href
     // 不设 allow-same-origin；只有这个构建脚本可执行。文档脚本、网络、表单、导航均禁用。
-    // 纸张白底和灰色画布沿用文档库的版式，避免应用深色皮肤改变文档本身的颜色。
-    element.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${script}; style-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><style>html,body{margin:0}body{overflow:auto}.docx-wrapper{padding:16px!important}section.docx{margin:0 auto 16px!important}</style><script src="${script}"></script></head><body></body></html>`
+    // 纸张白底、文字颜色沿用文档库的版式，应用的深色皮肤不改文档本身的颜色；
+    // 纸张外的画布透明，由外层按皮肤铺底。color-scheme 跟随父元素，否则深色下 Chromium 会给 iframe 垫白底。
+    element.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${script}; style-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><style>:root{color-scheme:light dark}html,body{margin:0;background:transparent}body{overflow:auto}.docx-wrapper{padding:16px!important;background:transparent!important}section.docx{margin:0 auto 16px!important}</style><script src="${script}"></script></head><body></body></html>`
     const fail = (reason: OfficeError) => {
       if (abort.signal.aborted) return
       setState(reason)
@@ -76,17 +77,19 @@ export default function DocxPreview({ data }: PreviewRendererProps) {
       element.srcdoc = ''
     }
   }, [data])
+  const failed = state !== 'ready' && state !== 'loading'
   return (
     <div className="office-preview" data-office="docx" data-state={state}>
-      <p className="office-note">{t('preview.docx.note')}</p>
+      {failed ? null : <p className="office-note">{t('preview.docx.note')}</p>}
       {state === 'loading' ? (
-        <div className="office-status" role="status">
+        <div className="fv-hold" role="status">
           {t('files.view.loading')}
         </div>
       ) : null}
-      {state !== 'ready' && state !== 'loading' ? (
-        <div className="fv-hold" role="status">
-          {t(`preview.docx.${state}`)}
+      {failed ? (
+        <div className="fv-hold" data-hold={state} role="status">
+          <b>{t(state === 'budget' ? 'files.view.tooLarge' : 'files.view.failed')}</b>
+          <span>{t(`preview.docx.${state}`)}</span>
         </div>
       ) : null}
       <iframe

@@ -149,6 +149,8 @@ explain it:
   are not loaded. Macros and encrypted documents are unsupported. The preview cannot access the app.
   `.xlsx` shows sheets and cell text in a virtual grid, including saved formula results; it never
   recalculates formulas. A formula without a saved result is shown as text. Links are plain text.
+  Numbers and dates are right-aligned. Frozen panes saved in the file stay pinned (up to 10 rows
+  and 3 columns; anything beyond scrolls). Column widths are not reproduced.
   Merged cells, dates, and common decimal/percentage formats are supported; charts, pivot tables,
   printing layouts, and complex custom number formats are not reproduced. Long numeric strings
   remain strings; numeric cells retain the precision saved by Excel.
