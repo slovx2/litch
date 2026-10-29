@@ -31,9 +31,9 @@ export class RecoveryActions {
     try {
       link = await this.open(harness)
       const connected = link
-      const read = (timeoutMs = 5000) =>
-        connected.request('thread/read', { threadId, includeTurns: true }, { timeoutMs })
-      const before = await read()
+      const read = (includeTurns: boolean, timeoutMs = 5000) =>
+        connected.request('thread/read', { threadId, includeTurns }, { timeoutMs })
+      const before = await read(true)
       const last = before?.thread?.turns?.at(-1)
       if (
         last?.id !== turnId ||
@@ -56,10 +56,24 @@ export class RecoveryActions {
       )
         throw new DeviceError('unsupported', 'The turn is waiting for input or running a tool')
       const deadline = Date.now() + 10000
+      if (!this.observer.eligible(harness, threadId, turnId))
+        throw new DeviceError('unsupported', 'The turn changed; recovery was cancelled')
       await link.request('turn/interrupt', { threadId, turnId }, { timeoutMs: 10000 })
       let confirmed = false
+      let interval = 300
+      const remaining = () => Math.max(1, Math.min(5000, deadline - Date.now()))
       while (Date.now() < deadline) {
-        const state = await read(Math.max(1, Math.min(5000, deadline - Date.now())))
+        // 等中断时只看状态；离开 active 后才读一次完整历史核对回合身份与终态。
+        const summary = await read(false, remaining())
+        if (summary?.thread?.status?.type === 'active') {
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.min(interval, Math.max(0, deadline - Date.now()))),
+          )
+          interval = 500
+          continue
+        }
+        if (Date.now() >= deadline) break
+        const state = await read(true, remaining())
         const current = state?.thread?.turns?.at(-1)
         if (current?.id !== turnId)
           throw new DeviceError('unsupported', 'A different turn has already started')
@@ -69,7 +83,7 @@ export class RecoveryActions {
         }
         if (current.status !== 'inProgress')
           throw new DeviceError('unsupported', 'The original turn already finished')
-        await new Promise((resolve) => setTimeout(resolve, 100))
+        throw new DeviceError('unsupported', 'Interruption has not completed; no new turn was sent')
       }
       if (!confirmed)
         throw new DeviceError('unsupported', 'Interruption has not completed; no new turn was sent')

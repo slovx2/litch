@@ -268,13 +268,16 @@ export class DeviceServer {
     const info = deviceInfo(this.version)
     info.extensions.push(EXTENSION.turnRecovery)
     this.recovery = new TurnRecoveryObserver({
-      check: async (harness, threadId) => {
+      check: async (harness, threadId, includeTurns) => {
         const deadline = Date.now() + 5000
-        const link = await this.openEngineLink(harness, { handshakeTimeoutMs: 5000 })
+        const link = await this.openEngineLink(harness, {
+          handshakeTimeoutMs: 5000,
+          observeSnapshots: false,
+        })
         try {
           return await link.request(
             'thread/read',
-            { threadId, includeTurns: false },
+            { threadId, includeTurns },
             { timeoutMs: Math.max(1, deadline - Date.now()) },
           )
         } finally {
@@ -775,7 +778,7 @@ export class DeviceServer {
    */
   async openEngineLink(
     harness: string,
-    options: { waitMs?: number; handshakeTimeoutMs?: number } = {},
+    options: { waitMs?: number; handshakeTimeoutMs?: number; observeSnapshots?: boolean } = {},
   ): Promise<EngineLink> {
     const deadline = Date.now() + (options.waitMs ?? 0)
     for (;;) {
@@ -815,6 +818,7 @@ export class DeviceServer {
                   (link) => link.harness === from && link.claimed(requestId),
                 ),
             }),
+            options.observeSnapshots,
           )
         } catch (error) {
           failure =
@@ -832,7 +836,7 @@ export class DeviceServer {
     if (disconnected || this.power?.needsRecovery(harness)) void this.power?.reconnected(harness)
   }
 
-  private keep(link: EngineLink): EngineLink {
+  private keep(link: EngineLink, observeSnapshots = true): EngineLink {
     if (this.closed) {
       link.close()
       throw new EngineUnavailable(link.harness, 'the device service is shutting down')
@@ -865,7 +869,7 @@ export class DeviceServer {
       const release = method === 'turn/start' ? this.power?.begin(link.harness) : undefined
       try {
         const result = await request(method, params, options)
-        if (isObject(result) && isObject(result.thread))
+        if (observeSnapshots && isObject(result) && isObject(result.thread))
           this.recovery.snapshot(link.harness, result.thread)
         return result
       } finally {

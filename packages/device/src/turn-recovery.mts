@@ -13,14 +13,44 @@ interface ObservedTurn {
   waiting: boolean
   notice: TurnRecovery | null
   dismissed: boolean
+  checkedAt: number
+  items: Map<string, { status: unknown; type: unknown; textLength: number }>
 }
 interface RecoveryHost {
   now?(): number
-  check(harness: string, threadId: string): Promise<unknown>
+  check(harness: string, threadId: string, includeTurns: boolean): Promise<unknown>
   announce(notice: RecoveryNotice): void
   trace?(event: string, fields: Record<string, unknown>): void
 }
 const textItems = new Set(['agentMessage', 'reasoning', 'userMessage', 'plan'])
+const RECHECK_MS = 60000
+
+function itemIndex(items: unknown): ObservedTurn['items'] {
+  const result: ObservedTurn['items'] = new Map()
+  for (const item of Array.isArray(items) ? items : [])
+    if (isObject(item) && typeof item.id === 'string') result.set(item.id, itemState(item))
+  return result
+}
+function fingerprint(items: ObservedTurn['items']): string {
+  const last = [...items.entries()].at(-1)
+  return JSON.stringify([items.size, last?.[0], last?.[1].status, last?.[1].textLength])
+}
+function itemState(item: Record<string, unknown>): {
+  status: unknown
+  type: unknown
+  textLength: number
+} {
+  const textSize = (value: unknown): number => (typeof value === 'string' ? value.length : 0)
+  const partsSize = (value: unknown): number =>
+    Array.isArray(value)
+      ? value.reduce((size, part) => size + textSize(isObject(part) ? part.text : part), 0)
+      : 0
+  return {
+    status: item.status,
+    type: item.type,
+    textLength: textSize(item.text) + partsSize(item.summary) + partsSize(item.content),
+  }
+}
 
 /** 每个回合自己的进展时钟。轮询、重试通知、连接心跳不会替模型进展续期。 */
 export class TurnRecoveryObserver {
@@ -89,7 +119,7 @@ export class TurnRecoveryObserver {
     if (!old || old.generation !== wake.generation || old.sequence === wake.sequence) return
     for (const t of this.turns.values()) {
       if (t.startedAt >= wake.resumedAt || t.progressAt >= wake.resumedAt) continue
-      t.wakeAt = wake.resumedAt
+      t.wakeAt = Math.max(this.now(), wake.resumedAt)
       t.revision++
       t.dismissed = false
       this.set(t, null)
@@ -119,32 +149,57 @@ export class TurnRecoveryObserver {
       waiting: false,
       notice: null,
       dismissed: false,
+      checkedAt: now,
+      items: itemIndex(turn.items),
     }
     this.turns.set(key, t)
     return t
   }
-  /** 只补首次看到的活跃回合；反复读同一快照不是新进展。 */
+  private progress(t: ObservedTurn): void {
+    t.progressAt = this.now()
+    t.revision++
+    t.wakeAt = null
+    t.dismissed = false
+    this.set(t, null)
+  }
+  private setWaiting(t: ObservedTurn, waiting: boolean): void {
+    if (waiting === t.waiting) return
+    t.waiting = waiting
+    if (!waiting) this.progress(t)
+    else {
+      t.revision++
+      this.set(t, null)
+    }
+  }
+  /** 同一回合也比对条目指纹；完整快照能补回客户端离线时漏掉的进展与工具终态。 */
   snapshot(harness: string, thread: unknown): void {
-    if (!isObject(thread) || typeof thread.id !== 'string' || !Array.isArray(thread.turns)) return
-    const turn = thread.turns.findLast((t) => isObject(t) && t.status === 'inProgress')
-    if (!isObject(turn)) {
-      const old = this.turns.get(this.key(harness, thread.id))
-      if (old && isObject(thread.status) && thread.status.type === 'idle')
-        this.drop(this.key(harness, thread.id), old)
+    if (!isObject(thread) || typeof thread.id !== 'string') return
+    const key = this.key(harness, thread.id)
+    const old = this.turns.get(key)
+    if (isObject(thread.status) && ['idle', 'notLoaded'].includes(String(thread.status.type))) {
+      if (old) this.drop(key, old)
       return
     }
-    const known = this.turns.get(this.key(harness, thread.id))?.turnId === turn.id
+    if (!Array.isArray(thread.turns)) return
+    const turn = thread.turns.at(-1)
+    if (!isObject(turn) || turn.status !== 'inProgress') return
     const t = this.adopt(harness, thread.id, turn)
-    if (!t || known) return
-    for (const item of Array.isArray(turn.items) ? turn.items : [])
-      if (
-        isObject(item) &&
-        typeof item.id === 'string' &&
-        !textItems.has(String(item.type)) &&
-        item.status === 'inProgress'
+    if (!t) return
+    if (Array.isArray(turn.items)) {
+      const items = itemIndex(turn.items)
+      const changed = fingerprint(items) !== fingerprint(t.items)
+      t.items = items
+      const tools = new Set(
+        [...items]
+          .filter(([, item]) => !textItems.has(String(item.type)) && item.status === 'inProgress')
+          .map(([id]) => id),
       )
-        t.tools.add(item.id)
-    t.waiting = this.waiting(thread.status)
+      const finishedTool = [...t.tools].some((id) => !tools.has(id))
+      t.tools = tools
+      if (changed || finishedTool) this.progress(t)
+      if (tools.size) this.set(t, null)
+    }
+    this.setWaiting(t, this.waiting(thread.status))
   }
   private waiting(status: unknown): boolean {
     return (
@@ -182,22 +237,16 @@ export class TurnRecoveryObserver {
         this.drop(key, t)
         return
       }
-      const waiting = this.waiting(params.status)
-      if (waiting !== t.waiting) t.revision++
-      t.waiting = waiting
-      if (t.waiting) this.set(t, null)
+      this.setWaiting(t, this.waiting(params.status))
       return
     }
     if (method.endsWith('/requestApproval') || method === 'item/tool/requestUserInput') {
-      t.waiting = true
-      this.set(t, null)
+      this.setWaiting(t, true)
       return
     }
     if (method === 'serverRequest/resolved') {
       t.waiting = false
-      t.progressAt = this.now()
-      t.revision++
-      t.wakeAt = null
+      this.progress(t)
       return
     }
     const item = isObject(params.item) ? params.item : null
@@ -206,27 +255,27 @@ export class TurnRecoveryObserver {
       method === 'item/completed' ||
       (method.startsWith('item/') && /delta$/i.test(method))
     if (!progress) return
+    if (item && typeof item.id === 'string') t.items.set(item.id, itemState(item))
+    // 同一条回答持续出字时数量/id/status 不变；把已收到的文本长度也纳入指纹。
+    if (typeof params.itemId === 'string' && typeof params.delta === 'string') {
+      const state = t.items.get(params.itemId)
+      if (state && (state.type === 'agentMessage' || state.type === 'reasoning'))
+        state.textLength += params.delta.length
+    }
     if (item && typeof item.id === 'string' && !textItems.has(String(item.type))) {
       if (method === 'item/started') t.tools.add(item.id)
       if (method === 'item/completed') t.tools.delete(item.id)
     }
-    t.progressAt = this.now()
-    t.revision++
-    t.wakeAt = null
-    t.dismissed = false
-    this.set(t, null)
+    this.progress(t)
   }
   async tick(): Promise<void> {
     if (this.checking || this.closed) return
     this.checking = true
     try {
-      const due = [...this.turns.values()].filter(
-        (t) =>
-          !t.notice &&
-          !t.dismissed &&
-          !t.waiting &&
-          !t.tools.size &&
-          this.now() - (t.wakeAt ?? t.progressAt) >= (t.wakeAt === null ? 300000 : 30000),
+      const due = [...this.turns.values()].filter((t) =>
+        t.notice || t.dismissed || t.waiting || t.tools.size
+          ? this.now() - Math.max(t.checkedAt, t.progressAt) >= RECHECK_MS
+          : this.now() - (t.wakeAt ?? t.progressAt) >= (t.wakeAt === null ? 300000 : 30000),
       )
       // 有工作才探测，最多四条并发；状态应答不能重置模型进展计时。
       let next = 0
@@ -235,27 +284,30 @@ export class TurnRecoveryObserver {
           while (next < due.length) {
             const t = due[next++]
             if (!t) continue
+            t.checkedAt = this.now()
             const revision = t.revision
+            const current = () =>
+              !this.closed &&
+              this.turns.get(this.key(t.harness, t.threadId)) === t &&
+              revision === t.revision
             let reason: TurnRecovery['reason'] = t.wakeAt === null ? 'idle' : 'wake'
             try {
-              const result = await this.host.check(t.harness, t.threadId)
-              if (
-                this.closed ||
-                this.turns.get(this.key(t.harness, t.threadId)) !== t ||
-                revision !== t.revision
-              )
-                continue
+              const result = await this.host.check(t.harness, t.threadId, false)
+              if (!current()) continue
               if (isObject(result) && isObject(result.thread)) {
                 const status = result.thread.status
                 if (isObject(status) && ['idle', 'notLoaded'].includes(String(status.type))) {
                   this.drop(this.key(t.harness, t.threadId), t)
                   continue
                 }
-                if (this.waiting(status)) {
-                  t.waiting = true
-                  continue
-                }
               }
+              // 只有即将提醒的回合，以及一分钟一次的残留状态复查才读完整历史。
+              const full = await this.host.check(t.harness, t.threadId, true)
+              if (!current()) continue
+              if (isObject(full) && isObject(full.thread))
+                this.snapshot(t.harness, { ...full.thread, id: t.threadId })
+              // 快照发现了漏掉的进展、解除等待或换回合，本次不提醒。
+              if (!current()) continue
             } catch {
               reason = 'unresponsive'
             }
@@ -268,6 +320,7 @@ export class TurnRecoveryObserver {
               t.dismissed
             )
               continue
+            if (t.notice) continue
             this.set(t, { reason, observedAt: this.now(), lastProgressAt: t.progressAt })
           }
         }),

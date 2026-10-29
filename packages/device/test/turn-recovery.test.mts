@@ -14,8 +14,8 @@ function rig() {
   const observer = new TurnRecoveryObserver({
     now: () => now,
     announce: (n) => notices.push(structuredClone(n)),
-    check: () => {
-      checks++
+    check: (_harness, _thread, includeTurns) => {
+      if (!includeTurns) checks++
       return check()
     },
   })
@@ -92,17 +92,45 @@ test('审批和长工具不当作模型停流；回合切换与迟到的探测�
   const r = rig()
   r.start()
   r.event('item/started', { item: { id: 'tool', type: 'commandExecution' } })
+  r.check(async () => ({
+    thread: {
+      id: 't',
+      status: { type: 'active' },
+      turns: [
+        {
+          id: 'a',
+          status: 'inProgress',
+          items: [{ id: 'tool', type: 'commandExecution', status: 'inProgress' }],
+        },
+      ],
+    },
+  }))
   r.advance(400000)
   await r.observer.tick()
-  assert.equal(r.checks(), 0)
+  assert.equal(r.checks(), 1, '长工具也按较长间隔复查')
+  assert.equal(r.observer.list().length, 0)
   r.event('item/completed', { item: { id: 'tool', type: 'commandExecution' } })
   r.event('thread/status/changed', {
     status: { type: 'active', activeFlags: ['waitingOnApproval'] },
   })
+  r.check(async () => ({
+    thread: {
+      id: 't',
+      status: { type: 'active', activeFlags: ['waitingOnApproval'] },
+      turns: [
+        {
+          id: 'a',
+          status: 'inProgress',
+          items: [{ id: 'tool', type: 'commandExecution', status: 'completed' }],
+        },
+      ],
+    },
+  }))
   r.advance(400000)
   await r.observer.tick()
-  assert.equal(r.checks(), 0)
+  assert.equal(r.checks(), 2)
   r.event('thread/status/changed', { status: { type: 'active', activeFlags: [] } })
+  r.advance(300000)
   let release: (value: unknown) => void = () => {}
   r.check(
     () =>
@@ -147,7 +175,8 @@ test('检查最多四条并发，迟到的空闲快照不能删除已恢复的�
   const observer = new TurnRecoveryObserver({
     now: () => now,
     announce() {},
-    check: async () => {
+    check: async (_harness, _thread, includeTurns) => {
+      if (includeTurns) return { thread: { status: { type: 'active', activeFlags: [] } } }
       total++
       active++
       peak = Math.max(peak, active)
