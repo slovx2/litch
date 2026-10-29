@@ -188,8 +188,13 @@ if (engines.ids.includes('codex')) {
   )
   // 外壳认得的全部命名空间（开了 LITCH_CLIENT_TOOLS_ECHO，回声也在）；
   // Computer Use 的开关默认关着，建会话时不挂那组工具；
-  // 操作这台电脑（litch_machine）只给远程设备上的会话，这里的夹具是本机设备，不该有
-  const absent = [CLIENT_TOOL_NAMESPACE.machine, CLIENT_TOOL_NAMESPACE.computer]
+  // 操作这台电脑（litch_machine）只给远程设备上的会话，这里的夹具是本机设备，不该有；
+  // 经理工具只给所属的经理会话，普通首回合不该有。
+  const absent = [
+    CLIENT_TOOL_NAMESPACE.machine,
+    CLIENT_TOOL_NAMESPACE.computer,
+    CLIENT_TOOL_NAMESPACE.manager,
+  ]
   const expected = Object.values(CLIENT_TOOL_NAMESPACE).filter((name) => !absent.includes(name))
   const unexpected = [
     ...(seen.has(CLIENT_TOOL_NAMESPACE.machine)
@@ -197,6 +202,9 @@ if (engines.ids.includes('codex')) {
       : []),
     ...(seen.has(CLIENT_TOOL_NAMESPACE.computer)
       ? ['Computer Use 默认关着，工具表里却有 litch_computer']
+      : []),
+    ...(seen.has(CLIENT_TOOL_NAMESPACE.manager)
+      ? ['普通会话不该带 litch_manager（只给经理会话）']
       : []),
   ]
   outside.push(...unexpected)

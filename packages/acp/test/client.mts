@@ -59,6 +59,7 @@ export function client(server: AcpServer) {
       if (message.error)
         throw Object.assign(new Error(`${method}: ${message.error.message}`), {
           code: message.error.code,
+          data: message.error.data,
         })
       checked(() => assertResponse(method, message.result))
       return message.result

@@ -8,16 +8,19 @@ import (
 
 func TestHarnessCLISelectionAndRunningSnapshot(t *testing.T) {
 	cfg := settingsTestConfiguration(t)
-	cfg.userEnv = map[string]string{"PI_CLI": "/isolated/env/pi"}
+	root := t.TempDir()
+	envCLI := filepath.Join(root, "env", "pi")
+	settingsCLI := filepath.Join(root, "settings", "pi")
+	cfg.userEnv = map[string]string{"PI_CLI": envCLI}
 	entry := cfg.forHarness("pi")
-	selected := selectedHarnessCLI(entry, "/isolated/env/pi", "0.99.1")
+	selected := selectedHarnessCLI(entry, envCLI, "0.99.1")
 	if selected.Source != "environment" || selected.Version != "0.99.1" {
 		t.Fatal(selected)
 	}
 	manager := newHarnessManager(cfg)
 	selected.StartedAt = 1234
 	manager.slots["pi"] = &harnessSlot{id: "pi", state: stateRunning, cli: selected}
-	if _, problem, err := cfg.settings.apply(0, []settingEdit{edit(cliPathKey("pi"), "/isolated/settings/pi")}, manager.settingsSchema(), nil); err != nil || problem != nil {
+	if _, problem, err := cfg.settings.apply(0, []settingEdit{edit(cliPathKey("pi"), settingsCLI)}, manager.settingsSchema(), nil); err != nil || problem != nil {
 		t.Fatalf("%v %v", err, problem)
 	}
 	for _, view := range manager.view(nil).Harnesses {
@@ -25,12 +28,12 @@ func TestHarnessCLISelectionAndRunningSnapshot(t *testing.T) {
 			t.Fatalf("设置改了不能冒充已重启：%+v", view.CLI)
 		}
 	}
-	if next := selectedHarnessCLI(cfg.forHarness("pi"), "/isolated/settings/pi", "0.99.1"); next.Source != "settings" {
+	if next := selectedHarnessCLI(cfg.forHarness("pi"), settingsCLI, "0.99.1"); next.Source != "settings" {
 		t.Fatal(next)
 	}
 	plain := settingsTestConfiguration(t).forHarness("pi")
 	plain.userEnv = map[string]string{}
-	if got := selectedHarnessCLI(plain, "/isolated/path/pi", "0.72.0"); got.Source != "path" {
+	if got := selectedHarnessCLI(plain, filepath.Join(root, "path", "pi"), "0.72.0"); got.Source != "path" {
 		t.Fatal(got)
 	}
 }

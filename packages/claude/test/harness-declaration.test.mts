@@ -72,6 +72,7 @@ test('DECL-001：runtime/info 带结构化声明，原有字段原样保留', as
     assert.equal(wired.stopBackground, true)
     assert.equal(wired.stopAgent, true)
     assert.deepEqual(extensions, [
+      'filePreview',
       'declineWithNote',
       'planConfirmation',
       'clientTools',
@@ -94,6 +95,44 @@ test('DECL-001：runtime/info 带结构化声明，原有字段原样保留', as
   } finally {
     await client.close()
     await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('声明的 filePreview 确实支持限量读取，并拒绝未声明连接', async () => {
+  for (const enabled of [false, true]) {
+    const home = await mkdtemp(join(tmpdir(), 'declaration-preview-'))
+    const client = await ProtocolClient.start(
+      home,
+      'http://127.0.0.1:1',
+      true,
+      'api-key',
+      {},
+      {
+        litchExtensions: enabled ? ['filePreview'] : [],
+      },
+    )
+    try {
+      const path = join(home, 'image')
+      await writeFile(path, Buffer.from([0, 255, 1, 2]))
+      const params = { path, litchPreview: { root: home, maxBytes: 4 } }
+      const reply = await client.raw('fs/readFile', params)
+      if (!enabled) {
+        assert.equal(reply.error?.code, -32602)
+        continue
+      }
+      assert.deepEqual(reply.result, { dataBase64: 'AP8BAg==' })
+      const rejected = await client.raw('fs/readFile', {
+        ...params,
+        litchPreview: { root: home, maxBytes: 1 },
+      })
+      assert.equal(rejected.error?.code, -32004)
+      assert.deepEqual(rejected.error?.data, {
+        litchPreview: { kind: 'tooLarge', bytes: 4, limit: 1 },
+      })
+    } finally {
+      await client.close()
+      await rm(home, { recursive: true, force: true })
+    }
   }
 })
 

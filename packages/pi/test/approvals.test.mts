@@ -34,6 +34,7 @@ test('APPROVAL-001：打开审批后的声明：两类审批、覆盖不到子�
       uncovered: ['subagents'],
     })
     assert.deepEqual(extensions, [
+      'filePreview',
       'declineWithNote',
       'planConfirmation',
       'clientTools',
@@ -56,7 +57,12 @@ test('APPROVAL-001：打开审批后的声明：两类审批、覆盖不到子�
     const off = harnessDeclaration(false)
     assert.deepEqual({ ...features, approvals: null }, { ...off.features, approvals: null })
     assert.deepEqual(off.features?.approvals, { kinds: [], uncovered: [] })
-    assert.deepEqual(off.extensions, ['planConfirmation', 'clientTools', 'harnessConfig'])
+    assert.deepEqual(off.extensions, [
+      'filePreview',
+      'planConfirmation',
+      'clientTools',
+      'harnessConfig',
+    ])
     assert.match(off.permissionPresets?.[0]?.description['zh-CN'] ?? '', /也不询问/)
 
     const started = await c.ok('thread/start', { cwd: h.cwd, model: MODEL })

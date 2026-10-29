@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { createInterface } from 'node:readline'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -78,14 +78,33 @@ test('APPROVAL-007：入口进程按环境变量定开关：值是 1 才算开�
     const silent = { kinds: [], uncovered: [] }
     // 后台命令的变量没给，按默认开着：声明里都带 backgroundTasks
     for (const [value, approvals, extensions] of [
-      [undefined, silent, ['planConfirmation', 'clientTools', 'harnessConfig', 'backgroundTasks']],
-      ['0', silent, ['planConfirmation', 'clientTools', 'harnessConfig', 'backgroundTasks']],
+      [
+        undefined,
+        silent,
+        ['filePreview', 'planConfirmation', 'clientTools', 'harnessConfig', 'backgroundTasks'],
+      ],
+      [
+        '0',
+        silent,
+        ['filePreview', 'planConfirmation', 'clientTools', 'harnessConfig', 'backgroundTasks'],
+      ],
       // 只认 1：别的写法不算开，免得写错了的值悄悄变成“会问”的声明。
-      ['true', silent, ['planConfirmation', 'clientTools', 'harnessConfig', 'backgroundTasks']],
+      [
+        'true',
+        silent,
+        ['filePreview', 'planConfirmation', 'clientTools', 'harnessConfig', 'backgroundTasks'],
+      ],
       [
         '1',
         asking,
-        ['declineWithNote', 'planConfirmation', 'clientTools', 'harnessConfig', 'backgroundTasks'],
+        [
+          'filePreview',
+          'declineWithNote',
+          'planConfirmation',
+          'clientTools',
+          'harnessConfig',
+          'backgroundTasks',
+        ],
       ],
     ] as const) {
       const before = detected(value)
@@ -98,8 +117,11 @@ test('APPROVAL-007：入口进程按环境变量定开关：值是 1 才算开�
     ] as const) {
       const info = await served(value)
       assert.deepEqual(info.features.approvals, approvals, `起来之后，变量是 ${value}`)
-      // 两头自报的是同一份声明。
-      assert.deepEqual(info, detected(value))
+      // 检测命令额外报告宿主 CLI 路径；协议未要求运行中应答重复这项探测元数据。
+      const { cliPath, ...declaration } = detected(value)
+      assert.equal(typeof cliPath, 'string')
+      assert.ok(isAbsolute(cliPath), '检测命令必须报告实际 CLI 的绝对路径')
+      assert.deepEqual(info, declaration)
     }
   } finally {
     await rm(root, { recursive: true, force: true })

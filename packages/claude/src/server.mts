@@ -770,8 +770,14 @@ export class CodexClaudeAppServer {
       this.sendResponse(peer, request.id, undefined, {
         code: error instanceof ProtocolError ? error.code : -32000,
         message: error instanceof Error ? error.message : String(error),
-        // harness 详情设置的错误带 data.litch（原因），客户端按它处理
-        ...(error instanceof HarnessConfigError ? { data: error.data } : {}),
+        // 只为声明了预览的读取请求补传错误详情；其他错误仍沿用原来的设置错误规则。
+        ...(error instanceof HarnessConfigError ||
+        (error instanceof ProtocolError &&
+          request.method === 'fs/readFile' &&
+          this.peerFeatures.get(peer)?.extensions.has('filePreview') &&
+          'data' in error)
+          ? { data: error.data }
+          : {}),
       })
     } finally {
       if (locked) this.nativeMutations.delete(threadId as string)

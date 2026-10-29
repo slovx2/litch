@@ -48,6 +48,32 @@ async function run(s: Scene, threadId: string, input: unknown[], extra: object =
 // 模型收到的最后一次（带工具的）请求
 const lastAsk = (s: Scene) => s.model.requests.filter((body) => body.tools?.length).at(-1)
 
+test('OpenCode：filePreview 的限量错误保留详情，未声明时拒绝读取', { skip }, async () => {
+  const s = await scene(scripted({}), {}, ['filePreview'])
+  try {
+    const path = join(s.cwd, 'image')
+    await writeFile(path, Buffer.from([0, 255, 1, 2]))
+    const params = { path, litchPreview: { root: s.cwd, maxBytes: 4 } }
+    assert.deepEqual(await s.desktop.call('fs/readFile', params), { dataBase64: 'AP8BAg==' })
+    await assert.rejects(
+      s.desktop.call('fs/readFile', { ...params, litchPreview: { root: s.cwd, maxBytes: 1 } }),
+      (error: any) => {
+        assert.equal(error.code, -32004)
+        assert.deepEqual(error.data, { litchPreview: { kind: 'tooLarge', bytes: 4, limit: 1 } })
+        return true
+      },
+    )
+    const ordinary = client(s.server)
+    await ordinary.initialize()
+    await assert.rejects(
+      ordinary.call('fs/readFile', params),
+      (error: any) => error.code === -32602 && error.data === undefined,
+    )
+  } finally {
+    await s.restore()
+  }
+})
+
 test('OpenCode：runtime/info 带结构化声明', { skip, timeout: 60000 }, async () => {
   const s = await scene(scripted({}))
   try {
@@ -61,7 +87,7 @@ test('OpenCode：runtime/info 带结构化声明', { skip, timeout: 60000 }, asy
       declaration,
     )
     assert.deepEqual([displayName, badge], ['OpenCode', 'OC'])
-    assert.deepEqual(extensions, ['declineWithNote', 'clientTools', 'harnessConfig'])
+    assert.deepEqual(extensions, ['filePreview', 'declineWithNote', 'clientTools', 'harnessConfig'])
     assert.deepEqual(
       presets.map((preset) => [
         preset.id,

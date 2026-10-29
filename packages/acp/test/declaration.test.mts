@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import test from 'node:test'
 import type { HarnessFeatures, PermissionPreset } from '../../protocol/src/harness-capabilities.mjs'
-import { dispose, type Scene, scene, text, turn, violations } from './client.mjs'
+import { client, dispose, type Scene, scene, text, turn, violations } from './client.mjs'
 
 // 这个文件守着 `runtime/info` 里的结构化声明（src/declaration.mts）和实际行为一致：
 // 声明支持的调了确实成，声明不支持的调了确实被拒。声明跟着 agent 握手时报的能力走，两种 agent 各验一遍。
@@ -94,6 +95,32 @@ async function check(s: Scene): Promise<void> {
   await declared(s, features.delete, 'thread/delete', { threadId: id })
   assert.deepEqual([...violations], [])
 }
+
+test('ACP：filePreview 的限量错误保留详情，未声明时拒绝读取', async () => {
+  const s = await scene()
+  try {
+    const preview = client(s.server)
+    await preview.call('initialize', { capabilities: { litchExtensions: ['filePreview'] } })
+    const path = join(s.cwd, 'image')
+    await writeFile(path, Buffer.from([0, 255, 1, 2]))
+    const params = { path, litchPreview: { root: s.cwd, maxBytes: 4 } }
+    assert.deepEqual(await preview.call('fs/readFile', params), { dataBase64: 'AP8BAg==' })
+    await assert.rejects(
+      preview.call('fs/readFile', { ...params, litchPreview: { root: s.cwd, maxBytes: 1 } }),
+      (error: any) => {
+        assert.equal(error.code, -32004)
+        assert.deepEqual(error.data, { litchPreview: { kind: 'tooLarge', bytes: 4, limit: 1 } })
+        return true
+      },
+    )
+    await assert.rejects(
+      s.desktop.call('fs/readFile', params),
+      (error: any) => error.code === -32602 && error.data === undefined,
+    )
+  } finally {
+    await dispose(s)
+  }
+})
 
 test('能力全的 agent（有 load、list、fork、resume，收图片）', async () => {
   const s = await scene()

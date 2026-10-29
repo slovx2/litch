@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"runtime"
 	"testing"
 )
 
@@ -47,7 +48,8 @@ func TestPowerSettingsLocalRegistrationAndPersistence(t *testing.T) {
 	if got := cfg.powerSettings(); !got.local || got.working || !got.plugged {
 		t.Fatalf("用户设置没有持久保留: %+v", got)
 	}
-	if stat, err := os.Stat(settingsPath(cfg.home)); err != nil || stat.Mode().Perm() != 0600 {
+	// Windows 不提供 POSIX 权限位；文件存在性与持久化仍在所有平台检查。
+	if stat, err := os.Stat(settingsPath(cfg.home)); err != nil || (runtime.GOOS != "windows" && stat.Mode().Perm() != 0600) {
 		t.Fatalf("设置文件权限错误: %v %v", stat, err)
 	}
 }

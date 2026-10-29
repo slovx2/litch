@@ -279,7 +279,15 @@ export class AcpServer {
       // 会话不在这里不记：那是正常的应答（官方桌面端找置顶会话在哪台机器上时，拿别处的会话号向每个入口都问）
       if (!(error instanceof ThreadNotFound))
         console.error(`[${this.agentId}] ${message.method} 失败（${code}）: ${text}`)
-      peer.send({ id: message.id, error: { code, message: text } } as any)
+      // 预览错误详情只返回给声明了该扩展的读取请求，其他错误保持原样。
+      const data =
+        error instanceof ProtocolError &&
+        message.method === 'fs/readFile' &&
+        this.declared.get(peer.id)?.has(EXTENSION.filePreview) &&
+        'data' in error
+          ? { data: error.data }
+          : {}
+      peer.send({ id: message.id, error: { code, message: text, ...data } } as any)
     } finally {
       // 这次请求可能让这条连接订阅了某个会话：把还在等人回答的请求补送给它
       this.requests.replay((threadId) => this.subscribers(threadId))

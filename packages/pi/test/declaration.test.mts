@@ -168,6 +168,36 @@ const text = (value: string) => [{ type: 'text', text: value }]
 const PIXEL =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
+test('Pi：声明的 filePreview 支持限量读取，并拒绝未声明连接', async () => {
+  for (const enabled of [false, true]) {
+    const h = await harness()
+    try {
+      await h.ok('initialize', {
+        capabilities: { litchExtensions: enabled ? ['filePreview'] : [] },
+      })
+      const path = join(h.cwd, 'image')
+      await writeFile(path, Buffer.from([0, 255, 1, 2]))
+      const params = { path, litchPreview: { root: h.cwd, maxBytes: 4 } }
+      const reply = await h.call('fs/readFile', params)
+      if (!enabled) {
+        assert.equal(reply.error?.code, -32602)
+        continue
+      }
+      assert.deepEqual(reply.result, { dataBase64: 'AP8BAg==' })
+      const rejected = await h.call('fs/readFile', {
+        ...params,
+        litchPreview: { root: h.cwd, maxBytes: 1 },
+      })
+      assert.equal(rejected.error?.code, -32004)
+      assert.deepEqual(rejected.error?.data, {
+        litchPreview: { kind: 'tooLarge', bytes: 4, limit: 1 },
+      })
+    } finally {
+      await h.close()
+    }
+  }
+})
+
 test('Pi：runtime/info 带结构化声明，原有字段原样保留', { timeout: 60000 }, async () => {
   const h = await harness()
   try {
@@ -189,8 +219,13 @@ test('Pi：runtime/info 带结构化声明，原有字段原样保留', { timeou
       declaration,
     )
     assert.deepEqual([displayName, badge], ['Pi', 'PI'])
-    // 没打开审批时不发审批，扩展只有计划确认（交了计划之后的那一问只对声明了的连接问）、客户端工具和详情设置。
-    assert.deepEqual(extensions, ['planConfirmation', 'clientTools', 'harnessConfig'])
+    // 没打开审批时不发审批，仍支持文件预览、计划确认（只对声明了的连接问）、客户端工具和详情设置。
+    assert.deepEqual(extensions, [
+      'filePreview',
+      'planConfirmation',
+      'clientTools',
+      'harnessConfig',
+    ])
     assert.deepEqual(features.approvals, { kinds: [], uncovered: [] })
     // 只有一档，没得选：不用确认，也不能切换。
     assert.deepEqual(

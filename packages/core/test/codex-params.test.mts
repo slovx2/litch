@@ -24,9 +24,12 @@ import { watchSession } from './wire.mjs'
 // 1x1 的 PNG
 const PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
-// litch_sessions、litch_tasks 的执行方是设备服务，主进程从不声明它们（核心按设备信息另外带）
+// sessions、tasks 由设备服务提供；manager 只给经理会话，普通会话的主进程不声明它们。
 const NAMESPACES = Object.values(CLIENT_TOOL_NAMESPACE).filter(
-  (name) => name !== CLIENT_TOOL_NAMESPACE.sessions && name !== CLIENT_TOOL_NAMESPACE.tasks,
+  (name) =>
+    name !== CLIENT_TOOL_NAMESPACE.sessions &&
+    name !== CLIENT_TOOL_NAMESPACE.tasks &&
+    name !== CLIENT_TOOL_NAMESPACE.manager,
 )
 /** 主进程那一头：能执行的命名空间（浏览器、Computer Use，和测试用的回声） */
 const tools: ClientToolPort = { namespaces: () => NAMESPACES, post() {}, listen() {} }
