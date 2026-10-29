@@ -1,23 +1,19 @@
-// 模型边干活边问的题（codex 的 request_user_input_async）的验收：对话里的问题卡片。只对着模拟核心量
-// （话里带“边做边问”时模拟核心先出一条带题的助手消息，接着跑八秒命令再回话，见 mock-core.mts）。
-// 卡片露在过程外面、回合结束不跟着收；选一个、写一个之后发出去，答复插进还在跑的回合（不排队、不另起回合），
-// 气泡里画成“题目 → 回答”，卡片变成已答；不答等回合过去、再说一句别的之后，卡片变成只读的“没有回答”。
+// 异步问题从输入框上方的待答区作答。只检查作答、插话与待答生命周期，不绑定历史卡片/气泡的布局。
+// 模拟核心收到“边做边问”时出两题，接着跑八秒命令；回合结束不能清掉未答题。
 // 和别的验收一样，下面的函数会被原样送进页面里执行，不能引用函数外面的东西。
 
 export interface AskProbe {
-  /** 卡片出来了，等你回答；有两题，第一题两个选项 */
   shown: boolean
-  /** 卡片不在过程（.proc）里面 */
   outside: boolean
-  /** 发出去之后：卡片成了已答，第一题是选的那个、第二题是写的那句 */
   answered: string[]
-  /** 答复插进了同一个回合：回合数没变、回合还在跑、队列是空的 */
   steered: boolean
-  /** 答复的气泡里是“回答了问题”加题目和回答，不露标签和 JSON */
+  /** 历史里能读到答案，没有协议标签；不要求单独的答复气泡。 */
   bubble: boolean
-  /** 回合结束之后卡片还露在外面 */
+  remainingAfterFirst: boolean
+  shiftEnterKept: boolean
+  imeKept: boolean
   keptAfterTurn: boolean
-  /** 第二次问了不答：回合结束、再说一句别的之后，卡片是“没有回答”，没有输入框和发送按钮 */
+  /** 用户另发普通消息视为答复，待答入口收起。 */
   closed: boolean
 }
 
@@ -64,7 +60,8 @@ export async function askProbe(real: boolean): Promise<AskProbe | null> {
     )
   }
   const idle = () => until('这一轮结束', () => !running() && area(), 60_000)
-  const lastCard = () => all('.ask').at(-1)
+  const pending = () => all('[data-pending-question]')
+  const question = (id: string) => pending().find((entry) => entry.dataset.pendingQuestion === id)
 
   const title = '发版前的检查清单'
   const row = await until(`侧栏里的“${title}”`, () =>
@@ -74,46 +71,80 @@ export async function askProbe(real: boolean): Promise<AskProbe | null> {
   await until(`“${title}”的内容`, () => text(one('.crumb')).includes(title) && one('.turn'))
   await idle()
 
-  // ---- 一、问了就答：选第二个选项，第二题自己写 ----
   await say('边做边问：跑一下测试')
-  const card = await until('问题卡片', () => {
-    const found = lastCard()
-    return found?.dataset.state === 'open' ? found : null
-  })
-  const shown = all('.ask-q', card).length === 2 && all('.ask-q .opt', card).length === 2
-  const outside = card.closest('.proc') === null
+  await until('两道待答题', () => pending().length === 2)
+  const [first, second] = pending()
+  if (!first || !second) throw new Error('缺少待答题')
+  const firstId = first.dataset.pendingQuestion ?? ''
+  const secondId = second.dataset.pendingQuestion ?? ''
+  const choice = all('button', first).find((button) => text(button) === '照常全跑')
+  const shown = Boolean(choice) && Boolean(one('textarea', second))
+  const outside = pending().every((entry) => entry.closest('.proc') === null)
   const turns = all('.turn').length
-  all('.opt', card)[1]?.click()
+  choice?.click()
   await frame()
-  const field = all('input', card)[1] as HTMLInputElement | undefined
-  if (field) writeTo(field, '#litch-ci')
+  one<HTMLButtonElement>('button[type="submit"]', first)?.click()
+  await until('第一题已答', () => !question(firstId))
+  const remainingAfterFirst = Boolean(question(secondId)) && pending().length === 1
+  const field = one<HTMLTextAreaElement>('textarea', question(secondId))
+  if (!field) throw new Error('第二题没有自由答复输入框')
+  field.focus()
+  writeTo(field, '#litch-ci')
   await frame()
-  one<HTMLButtonElement>('.btn.primary', card)?.click()
-  await until('卡片变成已答', () => card.dataset.state === 'answered', 10_000).catch(() => null)
-  const answered = all('.ask-answer', card).map((entry) => text(entry))
-  const steered = all('.turn').length === turns && running() && all('.tray-row').length === 0
-  const reply = all('.turn').at(-1)?.querySelector('.ask-reply')
-  const bubble =
-    Boolean(reply) &&
-    text(reply).includes('#litch-ci') &&
-    !text(reply).includes('send_user_message_question_reply')
-  await idle()
-  await sleep(300)
-  const keptAfterTurn = lastCard() === card && card.closest('.proc') === null
-
-  // ---- 二、问了不答：回合结束、再说一句别的，卡片过去了 ----
-  await say('边做边问：再跑一遍')
-  const second = await until('第二张问题卡片', () => {
-    const found = lastCard()
-    return found !== card && found?.dataset.state === 'open' ? found : null
+  const shift = new KeyboardEvent('keydown', {
+    key: 'Enter',
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
   })
+  field.dispatchEvent(shift)
+  await frame()
+  const shiftEnterKept = !shift.defaultPrevented && Boolean(question(secondId))
+  const ime = new KeyboardEvent('keydown', {
+    key: 'Enter',
+    isComposing: true,
+    bubbles: true,
+    cancelable: true,
+  })
+  field.dispatchEvent(ime)
+  await frame()
+  const imeKept = !ime.defaultPrevented && Boolean(question(secondId))
+  field.dispatchEvent(
+    new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    }),
+  )
+  await until('第二题已答', () => !question(secondId))
+  const transcript = text(all('.turn').at(-1))
+  const answered = ['照常全跑', '#litch-ci'].filter((answer) => transcript.includes(answer))
+  const steered = all('.turn').length === turns && running() && all('.tray-row').length === 0
+  const bubble =
+    transcript.includes('#litch-ci') && !transcript.includes('send_user_message_question_reply')
   await idle()
+
+  await say('边做边问：再跑一遍')
+  await until('新一轮两道待答题', () => pending().length === 2)
+  const ids = pending().map((entry) => entry.dataset.pendingQuestion ?? '')
+  await idle()
+  const keptAfterTurn = ids.every((id) => Boolean(question(id)))
   await say('先这样')
-  await until('第二张卡片过去', () => second.dataset.state === 'closed', 10_000).catch(() => null)
-  const closed =
-    second.dataset.state === 'closed' && !one('input', second) && !one('.btn.primary', second)
+  await until('用户发话后待答入口收起', () => ids.every((id) => !question(id)))
+  const closed = ids.every((id) => !question(id))
   await idle()
-  return { shown, outside, answered, steered, bubble, keptAfterTurn, closed }
+  return {
+    shown,
+    outside,
+    answered,
+    steered,
+    bubble,
+    remainingAfterFirst,
+    shiftEnterKept,
+    imeKept,
+    keptAfterTurn,
+    closed,
+  }
 }
 
 export function judgeAsk(probe: AskProbe | null): string[] {
@@ -122,15 +153,18 @@ export function judgeAsk(probe: AskProbe | null): string[] {
   const check = (ok: boolean, what: string) => {
     if (!ok) failed.push(`问题卡片：${what}`)
   }
-  check(probe.shown, '带题的消息没有画成两题的问题卡片')
+  check(probe.shown, '输入框上方没有两道可回答的问题')
   check(probe.outside, '问题卡片收进了过程里')
   check(
     probe.answered.join('｜') === '照常全跑｜#litch-ci',
     `发出去之后卡片上的回答不对：${probe.answered.join('｜')}`,
   )
   check(probe.steered, '答复没有插进正在跑的回合（排了队或者另起了回合）')
-  check(probe.bubble, '答复的气泡没有画成题目和回答')
-  check(probe.keptAfterTurn, '回合结束之后问题卡片不见了或者收起来了')
-  check(probe.closed, '不答、回合过去之后卡片还能答')
+  check(probe.bubble, '历史没有可读答案，或露出了协议标签')
+  check(probe.remainingAfterFirst, '回答第一题错误清掉了第二题')
+  check(probe.shiftEnterKept, 'Shift+Enter 被拦截或错误提交答案')
+  check(probe.imeKept, 'IME 组字回车错误提交答案')
+  check(probe.keptAfterTurn, '回合结束清掉了尚未回答的问题')
+  check(probe.closed, '用户另发消息后仍残留此前的待答入口')
   return failed
 }
