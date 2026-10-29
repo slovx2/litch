@@ -45,6 +45,35 @@ async function offer(env: TreeEnv, threadId: string, title: string, more: object
 
 const answerOf = async (call: Promise<{ answer: any } | null>) => (await call)?.answer
 
+test('OFFER-008：接受 offer 的返回提示与初始唤醒开关一致', async () => {
+  for (const wake of [false, true]) {
+    const env = treeRig()
+    try {
+      const client = await litch(env)
+      const { threadId } = await parent(client)
+      const { proposalId, call } = await offer(env, threadId, '后台调研', { wake_parent: wake })
+      await client.call('litch/sessionProposal/answer', { proposalId, choice: 'session' })
+      resultOf(await answerOf(call))
+      const started = resultOf(
+        (
+          await env.pi.callTool(threadId, SESSIONS, 'accept', {
+            proposal_id: proposalId,
+            ...brief('后台调研'),
+          })
+        )?.answer,
+      )
+      assert.equal(env.device.sessionTree.lineage(started.thread_id)?.wakeParent, wake)
+      if (wake) assert.match(started.note, /eligible results can wake you/)
+      else {
+        assert.match(started.note, /results still arrive, but do not wake you automatically/)
+        assert.doesNotMatch(started.note, /you will be woken/)
+      }
+    } finally {
+      await env.close()
+    }
+  }
+})
+
 test('OFFER-001：用户选新会话：卡从 offered 到 chosen，调用回 choice=session；accept 必须带够宽的简报，起子会话、卡标 started', async () => {
   const env = treeRig()
   try {

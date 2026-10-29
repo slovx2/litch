@@ -801,7 +801,7 @@ async function acceptOffer(
   )
   return {
     thread_id: child.threadId,
-    note: `Started sub-session ${child.threadId} on ${child.harness}${worktreeNote(child.branch)} for "${spec.title.trim()}". It runs on its own; you will be woken with its result as a <litch-session-event> message. Do not do that work here, and do not poll it.`,
+    note: `Started sub-session ${child.threadId} on ${child.harness}${worktreeNote(child.branch)} for "${spec.title.trim()}". It runs on its own; ${proposal.wakeParent ? 'eligible results can wake you as a <litch-session-event> message' : 'results still arrive, but do not wake you automatically'}. Do not do that work here, and do not poll it.`,
   }
 }
 

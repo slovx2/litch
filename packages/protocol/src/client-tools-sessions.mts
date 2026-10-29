@@ -774,7 +774,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
         type: 'function',
         name: SESSION_TOOL.setWake,
         description:
-          'Enable or disable automatic waking by one of your direct sub-sessions. Use wake:false for long-running work whose reports do not need your immediate attention; use wake:true when you need to follow its results. Reports are still queued, displayed and delivered, including to a running parent. Enabling rechecks eligible queued reports immediately under normal wake rules: it never overrides user stops, failed or interrupted turns, scheduled/user-started child turns, parent activity or wake limits. Other targets return forbidden, even on user-started turns.',
+          'Enable or disable automatic waking by one of your direct sub-sessions. This replaces the current setting, including a setting the user chose in the UI. Use wake:false for long-running work whose reports do not need your immediate attention; use wake:true when you need to follow its results. Reports are still queued, displayed and delivered, including to a running parent. Enabling rechecks eligible queued reports immediately under normal wake rules: it never overrides user stops, failed or interrupted turns, scheduled/user-started child turns, parent activity or wake limits. Other targets return forbidden, even on user-started turns.',
         inputSchema: {
           type: 'object',
           properties: { thread_id: THREAD_ID, wake: { type: 'boolean' } },
