@@ -264,7 +264,8 @@ function targetOf(
   call: DeviceToolCall,
   tree: SessionTree,
 ): Omit<Spec, 'title' | 'prompt' | 'background'> {
-  const harness = string(args, 'harness')
+  const manager = tree.managers?.lines.managerFor(call.threadId)
+  const harness = string(args, 'harness') ?? manager?.dispatch.harness ?? manager?.harness
   const model = string(args, 'model')
   const effort = string(args, 'effort')
   const cwd = string(args, 'cwd')
@@ -378,7 +379,9 @@ async function start(
   // 目标 harness 收不到父会话那么严（比如没有沙箱的 Pi）：模型派的一律变成提案，由用户看过再点
   const wider = await widerFor(tree, call, spec)
   // 只有用户亲手发起的这个回合里、模型说是用户要的，才直接起；别的一律变成提案
-  const userTurn = tree.isUserTurn(call.harness, call.turnId)
+  const userTurn =
+    tree.isUserTurn(call.harness, call.turnId) ||
+    Boolean(tree.managers?.store.forThread(call.threadId))
   if (initiation === 'user_asked' && userTurn && wider === null) {
     const child = await startChild(
       tree,
@@ -1129,13 +1132,18 @@ export function sessionToolsHandler(
   archives: SessionArchives,
 ): DeviceToolHandler {
   return async (call, { signal }) => {
-    if (!tree.host.enabled())
+    if (!tree.enabledFor(call.threadId))
       return clientToolFailure(
         'disabled',
         'Session orchestration is turned off in this device’s settings, so litch_sessions is not available. Tell the user if they asked for it.',
       )
     const args = isObject(call.arguments) ? call.arguments : {}
     try {
+      if (tree.managers?.store.forThread(call.threadId) && call.tool === SESSION_TOOL.wrapUp)
+        throw new Refused(
+          'invalid',
+          'Managers do not use wrap_up. Record decisions and progress on the board.',
+        )
       switch (call.tool) {
         case SESSION_TOOL.list:
           return ok(await list(tree, args, call))

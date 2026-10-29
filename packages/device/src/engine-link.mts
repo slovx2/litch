@@ -85,6 +85,9 @@ const HELD_GRACE_MS = 300
 const HELD_RECHECK_MS = 5_000
 
 export interface EngineLinkOptions {
+  /** 设备级运行配额：在 turn/start 发送前占位，应答或失败后释放。 */
+  reserveTurn?(threadId: string): Promise<() => void>
+  turnStarted?(harness: string, threadId: string, turn: Record<string, unknown>): void
   harness: string
   connect: Connector
   dialect: UpstreamDialect
@@ -280,13 +283,24 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
           : null
       if (sped) params = sped.params
       const send = async (ready: unknown) => {
-        const result = await call(
-          method,
-          (isObject(ready) ? dialect.outgoing(method, ready) : null) ?? ready,
-          timeoutMs,
-        )
-        sped?.remember(result)
-        return result
+        const threadId =
+          method === 'turn/start' && isObject(ready) && typeof ready.threadId === 'string'
+            ? ready.threadId
+            : null
+        const release = threadId ? await options.reserveTurn?.(threadId) : undefined
+        try {
+          const result = await call(
+            method,
+            (isObject(ready) ? dialect.outgoing(method, ready) : null) ?? ready,
+            timeoutMs,
+          )
+          sped?.remember(result)
+          if (threadId && isObject(result?.turn))
+            options.turnStarted?.(harness, threadId, result.turn)
+          return result
+        } finally {
+          release?.()
+        }
       }
       // 原生 codex 建会话、恢复、分叉：先补齐开发者指令（codex-instructions.mts）
       const prepared =

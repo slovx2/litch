@@ -42,6 +42,7 @@ import {
   type SessionQueuedNote,
 } from '../../protocol/src/session-tree.mjs'
 import type { EngineLink } from './engine-link.mjs'
+import type { DeviceManagers } from './manager.mjs'
 import type { HarnessSource } from './session.mjs'
 import { isUserRequest, pendingRequestExcerpt, SessionPending } from './session-pending.mjs'
 import { SessionQuestions } from './session-questions.mjs'
@@ -129,6 +130,7 @@ interface OfferWait {
 }
 
 export class SessionTree {
+  managers: DeviceManagers | null = null
   private readonly questions = new SessionQuestions()
   readonly host: SessionTreeHost
   private readonly links = new Map<string, Promise<EngineLink>>()
@@ -205,6 +207,11 @@ export class SessionTree {
     const settled = host.store.settleOffers()
     if (settled > 0) host.log(`上一次还在等的 ${settled} 张 offer 卡当作在这里做了结`)
     this.scheduleExpiry()
+  }
+
+  /** 经理的线在会话编排总开关关闭时仍有自己的授权。 */
+  enabledFor(threadId: string): boolean {
+    return this.host.enabled() || Boolean(this.managers?.lines.mark(threadId))
   }
 
   get store(): SessionStore {
@@ -405,6 +412,7 @@ export class SessionTree {
   }
 
   private engineEvent(harness: string, method: string, params: Record<string, unknown>): void {
+    this.managers?.observe(method, params)
     this.questions.event(method, params)
     const threadId = typeof params.threadId === 'string' ? params.threadId : null
     if (method === 'turn/started' || method === 'turn/completed')
@@ -458,6 +466,8 @@ export class SessionTree {
   }
 
   pendingChanged(threadId: string): void {
+    const manager = this.managers?.lines.managerFor(threadId)
+    if (manager) this.managers?.changed(manager.id)
     const parent = this.store.parentOf(threadId)
     if (parent) this.notesChanged(parent.parentThreadId)
     this.host.announce(
@@ -496,7 +506,7 @@ export class SessionTree {
     const turnId = this.active.get(threadId) ?? ''
     if (!lineage || !this.waitingOnUser(threadId)) return
     const key = JSON.stringify([threadId, turnId, this.pendingRequests(threadId).map((p) => p.id)])
-    if (!this.askedOnce.has(key) && this.host.enabled()) {
+    if (!this.askedOnce.has(key) && this.enabledFor(threadId)) {
       if (this.askedOnce.size >= ENDED_LIMIT) this.askedOnce.clear()
       this.askedOnce.add(key)
       this.store.addNote(
@@ -524,8 +534,11 @@ export class SessionTree {
     if (!threadId || typeof turn?.id !== 'string') return
     const key = `${threadId}\u0000${turn.id}`
     if (this.ended.has(key)) return
+    this.managers?.lines.observe(method, params)
     if (method === 'turn/started') {
       this.active.set(threadId, turn.id)
+      const manager = this.managers?.lines.managerFor(threadId)
+      if (manager) this.managers?.changed(manager.id)
       // 回合开始时已经排着回报的（提醒收尾的回合、定时任务回合开始后才到的）：插进去
       if (this.store.notes(threadId).length) this.check(threadId)
       return
@@ -553,7 +566,7 @@ export class SessionTree {
     this.noteRemind(threadId, turn, userDriven, wrapped)
     for (const listener of [...this.listeners]) listener(threadId)
     const lineage = this.store.parentOf(threadId)
-    if (lineage && this.host.enabled() && this.store.markReported(threadId, turn.id))
+    if (lineage && this.enabledFor(threadId) && this.store.markReported(threadId, turn.id))
       void this.report(
         harness,
         threadId,
@@ -723,6 +736,7 @@ export class SessionTree {
       answer ??= lastAnswer(full)
       if (status !== 'completed') error ??= turnError(full)
     }
+    this.managers?.report(threadId, String(turn.id), answer ?? '', String(turn.status))
     // 回合刚结束、还在读的工夫里用户把它归档了（archived 那时还没有这条回报可改）：一样不唤醒
     if (!userStopped && this.host.index.archived(threadId) && !this.modelArchived.has(threadId)) {
       userStopped = 'archived'
@@ -792,7 +806,7 @@ export class SessionTree {
     if (finished && this.host.backgroundWakes(threadId)) return
     this.backgroundOwed.delete(threadId)
     const lineage = this.store.parentOf(threadId)
-    if (!lineage || !this.host.enabled()) return
+    if (!lineage || !this.enabledFor(threadId)) return
     const byUser = owed.byUser && ended.some((task) => task.status === 'stopped')
     const outcome = (task: LitchBackgroundTask) =>
       task.status === 'stopped' && byUser ? 'stopped by the user' : task.status
@@ -846,6 +860,62 @@ export class SessionTree {
     this.checks.set(parentId, next)
   }
 
+  /** 经理持久事件与普通唤醒共用串行队列；投递成功才由经理库出队。 */
+  async deliverManagerEvent(
+    threadId: string,
+    text: string,
+    eventId: string,
+    effort: string | null,
+  ): Promise<boolean> {
+    let sent = false
+    const previous = this.checks.get(threadId) ?? Promise.resolve()
+    const next = previous
+      .catch(() => {})
+      .then(async () => {
+        if (this.closed) return
+        const harness = await this.owner(threadId)
+        await this.watch(harness, threadId)
+        const link = await this.link(harness)
+        // 先核对引擎状态，设备重启后不能把正在跑的经理误当空闲。
+        const idle = await this.idle(threadId)
+        const running = this.active.get(threadId)
+        const input = [{ type: 'text', text, text_elements: [] }]
+        if (running) {
+          if (this.noSteer.has(harness)) return
+          try {
+            await link.request('turn/steer', {
+              threadId,
+              expectedTurnId: running,
+              clientUserMessageId: eventId,
+              input,
+            })
+            sent = true
+          } catch (error) {
+            if (error instanceof UpstreamRpcError && error.code === -32601)
+              this.noSteer.add(harness)
+            this.host.log(`经理事件未插入当前回合，保留重试：${String(error)}`)
+          }
+        } else if (idle) {
+          const result = await link.request('turn/start', {
+            threadId,
+            input,
+            ...(effort ? { effort } : {}),
+          })
+          if (isObject(result?.turn) && typeof result.turn.id === 'string') {
+            this.turnEvent(harness, 'turn/started', { threadId, turn: result.turn })
+            sent = true
+          }
+        }
+      })
+    this.checks.set(threadId, next)
+    try {
+      await next
+      return sent
+    } finally {
+      if (this.checks.get(threadId) === next) this.checks.delete(threadId)
+    }
+  }
+
   /** 全部有回报在排队的父会话都查一遍（有客户端连上来时） */
   checkAll(): void {
     for (const parentId of this.store.noteParents()) this.check(parentId)
@@ -858,7 +928,7 @@ export class SessionTree {
    * 回合正好在收尾、引擎不会插话的，留在队列里照旧等下一回合或唤醒
    */
   private async steerNotes(parentId: string): Promise<void> {
-    if (this.closed || !this.host.enabled()) return
+    if (this.closed || !this.enabledFor(parentId)) return
     const running = this.active.get(parentId)
     if (running === undefined || this.store.notes(parentId).length === 0) return
     const harness = await this.owner(parentId)
@@ -905,6 +975,7 @@ export class SessionTree {
    * 父会话最后一个回合结束超过 wakeIdleMs（24 小时）的不再主动唤醒。这几种都等用户发话、定时任务回合或“立即处理”带上
    */
   private async wake(parentId: string): Promise<void> {
+    if (this.managers?.store.forThread(parentId)?.status === 'ended') return
     if (this.closed || !this.host.enabled()) return
     const notes = this.store.notes(parentId)
     if (!notes.some((note) => note.wake)) return
@@ -1070,7 +1141,7 @@ export class SessionTree {
   }
 
   private withNotes(threadId: string, input: unknown): unknown[] | null {
-    if (!this.host.enabled() || !Array.isArray(input)) return null
+    if (!this.enabledFor(threadId) || !Array.isArray(input)) return null
     const notes = this.store.notes(threadId)
     if (notes.length === 0) return null
     this.store.dropNotes(threadId, Math.max(...notes.map((note) => note.seq)))
@@ -1143,6 +1214,7 @@ export class SessionTree {
 
   /** 父子关系变了：告诉声明了 sessionTree 的连接 */
   lineageChanged(threadId: string): void {
+    for (const manager of this.managers?.store.managers() ?? []) this.managers?.changed(manager.id)
     this.host.announce(
       SESSION_TREE_NOTIFICATION.lineageUpdated,
       { threadId, lineage: this.lineage(threadId) },

@@ -48,9 +48,9 @@ test('适配器的引擎：litch_tasks 的调用由设备答，不转给客户�
     })
     const greeting = engine.seen.find((item) => item.method === 'initialize')?.params
     assert.deepEqual(greeting.capabilities.litchClientTools, {
-      namespaces: ['litch_browser', 'litch_tasks', 'litch_sessions'],
+      namespaces: ['litch_browser', 'litch_tasks', 'litch_manager', 'litch_sessions'],
       // 客户端自己的（浏览器）不算不看会话的，只有设备进程执行的
-      anyThread: ['litch_tasks', 'litch_sessions'],
+      anyThread: ['litch_tasks', 'litch_manager', 'litch_sessions'],
     })
     assert.deepEqual(greeting.capabilities.litchExtensions, [...DECLARED, 'clientTools'])
     const upstream = engine.live.at(-1) as FakeConnection
