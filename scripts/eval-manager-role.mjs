@@ -438,22 +438,27 @@ try {
       record.notes.push('看板无待定决策，未发送 answers/submit。')
       return
     }
+    record.submittedAnswer = {
+      decisionId: decision.id,
+      revision: decision.revision,
+      optionId: decision.recommend,
+      text: '按推荐办',
+    }
     record.answerResponse = await call('litch/manager/answers/submit', {
       ...params(),
-      answers: [
-        {
-          decisionId: decision.id,
-          revision: decision.revision,
-          optionId: decision.recommend,
-          text: '按推荐办',
-        },
-      ],
+      answers: [record.submittedAnswer],
     })
     record.notes.push(
       `已提交 ${decision.id}，推荐=${decision.recommend ?? '无推荐，只提交自由文字'}`,
     )
     if (record.answerResponse.rejected.length)
       throw new Error(`看板答复被拒绝：${JSON.stringify(record.answerResponse.rejected)}`)
+    if (
+      record.answerResponse.accepted.length !== 1 ||
+      record.answerResponse.accepted[0].id !== decision.id ||
+      record.answerResponse.delivery !== 'queued'
+    )
+      throw new Error('看板答复未确认接收本次决策并排入事件队列')
     await settle(deadline, 'manager-answers')
   })
   await step(7, '仓库外部变化', '我刚改了路线图，你看下现在情况。', async (record, deadline) => {
@@ -530,6 +535,12 @@ try {
   if (options.fake) {
     const turns = steps.flatMap((record) => record.turns)
     const tools = turns.flatMap((turn) => turn.tools.map((tool) => tool.name))
+    const answerStep = steps.find((record) => record.number === 6)
+    const submitted = answerStep?.submittedAnswer
+    const saved = answerStep?.board?.decisions.find(
+      (decision) => decision.id === submitted?.decisionId,
+    )
+    const endStep = steps.find((record) => record.number === 9)
     run.fixtureCoverage = {
       nineSteps: steps.length === 9,
       allStepsCompleted: steps.every((record) => record.status === 'completed'),
@@ -545,6 +556,18 @@ try {
           tools.includes(`litch_manager.${name}`),
         ]),
       ),
+      // 校验协议事实：不能只见过事件就算答复落库，也不能只检查最终 ended。
+      boardAnswerPersisted: Boolean(
+        submitted &&
+          saved?.status === 'answered' &&
+          saved.answer?.by === 'user' &&
+          saved.answer.optionId === submitted.optionId &&
+          saved.answer.text === submitted.text &&
+          answerStep.answerResponse?.delivery === 'queued',
+      ),
+      endingThenEnded:
+        endStep?.endResponse?.manager.status === 'ending' &&
+        endStep?.finalManager?.status === 'ended',
       linesReported: [...lines.values()].some((line) => line.report?.text && !line.running),
       fileApproved: runtime.client.frames.some(
         (frame) =>

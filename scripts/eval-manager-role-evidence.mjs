@@ -235,6 +235,11 @@ export function digest(run, steps, frames) {
     `自动审批记录：${frames.filter((frame) => frame.direction === 'approval').length} 条，见 events.json。`,
     '完整原生工具名与参数另见 native-transcripts；思考块已剔除。回合失败、跳过和超时均保留，不算角色评判。',
   )
+  if (run.fixtureCoverage)
+    lines.push(
+      '假模型驱动覆盖（只检查剧本与协议链路，不评判角色）：',
+      `\`\`\`json\n${pretty(run.fixtureCoverage)}\n\`\`\``,
+    )
   return `${lines.join('\n\n')}\n`
 }
 
