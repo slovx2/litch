@@ -24,13 +24,13 @@
     "核对：basis 是链接数组，checked={commit,at} 单独存；verify 由设备刷新核对时间，提交号可 null，保留原因记录。第一版不自动检测过时、不生成 stale 或提醒，也没有 due、defaulted 或到期执行；default.option 只记意向，不代表执行授权。",
     "答复：草稿只在桌面本地，只有显式提交才生效。answers 非空，同一决策重复出现的条目均为 invalidAnswer。每项独立检查 revision、open 状态和 optionId；optionId 与非空 text 至少一个。成功项返回完整对象，失败项返回 code/message 和可得的最新 decision，不回滚别项。",
     "答复事件：有成功项就在同一持久化事务中记一条 manager-answers 待投递事件，delivery=queued；全失败为 none。事件只含成功项的 id、标题、选项 id/显示名、自由文字，不重复背景。闲时开回合，忙时按会话插话机制送入当前回合，暂时送不进就保留重试；同一事件不重复入队。RPC 重试因旧 revision 不会重复写答案或重复派事件。",
-    "结束：end 幂等，持久化 ended/endedAt，返回 ended 对象并只排一次 manager-end。结束后拒绝客户端 update、answers/submit、decision/reopen 和新开线；仅设备明确标记的这一次结束回合可写总结、落地链接与核对记录，回合结束或失败后看板完全只读。未完成决策和事项原样保留；结束不代表检查通过。子会话不得自动归档，需用户明确授权，仍遵守 sessionTree 的忙碌/置顶限制。",
+    "结束：end 幂等，active 先转 ending（endedAt 仍为 null），同事务只排一次 manager-end。ending 拒绝客户端 update、answers/submit、decision/reopen 和新增工作线；只在设备绑定的 manager-end 收尾回合中允许 status、close、verify 和 update（事项字段、决策 landed），其他回合不得写看板。此回合完成、失败或被打断后转 ended，记录 endedAt 并发送通知；此后看板只读。收尾事件及回合绑定持久化，设备重启后继续等待或从历史核实完成，不把普通回合结束算作收尾。未完成决策和事项原样保留；结束不代表检查通过。子会话不得自动归档，需用户明确授权，仍遵守 sessionTree 的忙碌/置顶限制。",
     "通知：经理任一字段（含待定数、运行线数、最近动态、名称）改变发送 changed 的完整经理对象；看板任一部分改变发送 board/changed 的 managerId，客户端重读。所有声明过扩展的连接都收到，包括发起者；通知可合并，重连由 list/board/read 对账。",
     "工具结果为 JSON 文本：summary={situation,decisions,items,lines}，只含 open 决策、未完事项、在跑线；get={object,changes}；add={id,object}；update/verify/close/answer={object}；status={situation}。设备验证对象种类与 id 前缀。失败 success=false，以 [litch:invalid] 或 [litch:failed] 开头解释原因。",
     "规则注入：第 1/2/3 层在创建、恢复、fork、压缩后恢复，并在每回合保持可用。第 4 层摘要只在上下文建立/恢复/压缩后补，约 2000 token，截断后提示用 summary 查完整内容；第 1 层固定文案约 800 token。第 6/9 层统一用 litch-session-event，manager-* 载荷必须带 manager，notes=[]。",
     "第一版不提供删除、接手、旁问、手机推送、到期自动推荐、巡检、提醒或草稿存储方法。模板仅决定初始规矩，建立后对象行为无区别。",
     "设备实现补充：manager.sqlite 使用只追加迁移和变更记录；成功答案及对应待投递事件同事务提交。事件在设备重启后继续重试；插话使用稳定事件 id，不支持 turn/steer 时保留到空闲回合。最近完整回报另存，不随会话树的待投递回报出队而删除，并识别 Unverified: 前缀。",
-    "L1 简报优先：end 返回后看板立即只读，结束回合也不能调用写工具，最终总结和归档询问写在该回合中；不自动归档工作线。此处收紧上文结束回合写入的例外，待集成时统一提示词。",
+    "范围与规矩变更：scope 或 rules 的实际内容变化时，同更新事务排入一条 manager-rules 事件，manager.text 带完整新范围和规矩；清空规矩时明确旧规矩不再生效。事件沿用持久队列，忙时插入、闲时开回合，失败后重试；修改其他字段或提交相同内容不产生该事件。Codex 继续按最新设置重拼开发者指令。",
     "当前分叉限制：经理派 fresh 线会移除 litch_manager 并加入线规则；Claude Code 的 thread/fork 支持替换动态工具，经理 fork/hand_off 成线也执行同样的隔离。其余现有 harness 没有这项替换能力，经理直接 fork/hand_off 成线暂时拒绝并提示 fresh；已有工作线之间的 fork 不受这项限制。Codex 的开发者规则重拼保留经理版本，不降回任务卡版本。"
   ],
   "parts": [
@@ -46,7 +46,7 @@
     { "kind": "ThreadField", "on": "thread/list、thread/read、thread/start、thread/resume、thread/started 等聚合面的会话对象", "name": "litchManager", "schema": { "$ref": "#/definitions/SessionManagerMark" }, "description": "只投递给声明本扩展的连接。" },
     { "kind": "Error", "description": "error.data.litch 标识原因，message 为可操作的英文说明；未声明时用已有 extensionRequired。", "errors": [
       { "litch": "unknownManager", "code": -32602, "description": "managerId 不存在" },
-      { "litch": "managerEnded", "code": -32600, "description": "经理已结束，不能再修改" },
+      { "litch": "managerEnded", "code": -32600, "description": "经理结束中或已结束；结束中仅指定收尾回合可写，已结束后不能修改" },
       { "litch": "invalidManager", "code": -32602, "description": "参数不合法，data.field 指明字段" },
       { "litch": "unknownDecision", "code": -32602, "description": "decisionId 不属于这个看板" },
       { "litch": "decisionNotClosed", "code": -32600, "description": "只能重新打开 expired/withdrawn" },
@@ -109,7 +109,7 @@
     }, "additionalProperties": false },
     "Manager": { "type": "object", "required": ["id", "threadId", "name", "scope", "cwd", "harness", "model", "effort", "template", "dispatch", "contact", "rules", "status", "pendingDecisions", "runningLines", "latestActivity", "createdAt", "updatedAt", "endedAt"], "properties": {
       "id": { "type": "string" }, "threadId": { "type": "string" }, "name": { "type": "string" }, "scope": { "type": "string", "minLength": 1 }, "cwd": { "type": "string" }, "harness": { "type": "string" }, "model": { "type": ["string", "null"] }, "effort": { "type": ["string", "null"] },
-      "template": { "$ref": "#/definitions/Template" }, "dispatch": { "$ref": "#/definitions/Dispatch" }, "contact": { "$ref": "#/definitions/Contact" }, "rules": { "type": "string" }, "status": { "enum": ["active", "ended"] }, "pendingDecisions": { "type": "integer", "minimum": 0 }, "runningLines": { "type": "integer", "minimum": 0 },
+      "template": { "$ref": "#/definitions/Template" }, "dispatch": { "$ref": "#/definitions/Dispatch" }, "contact": { "$ref": "#/definitions/Contact" }, "rules": { "type": "string" }, "status": { "enum": ["active", "ending", "ended"] }, "pendingDecisions": { "type": "integer", "minimum": 0 }, "runningLines": { "type": "integer", "minimum": 0 },
       "latestActivity": { "anyOf": [{ "$ref": "#/definitions/Activity" }, { "type": "null" }] }, "createdAt": { "type": "number" }, "updatedAt": { "type": "number" }, "endedAt": { "type": ["number", "null"] }
     }, "additionalProperties": false },
     "Board": { "type": "object", "required": ["managerId", "situation", "decisions", "items", "lines", "activities", "changes"], "properties": {

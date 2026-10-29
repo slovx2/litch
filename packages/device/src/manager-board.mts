@@ -27,8 +27,13 @@ export class ManagerBoardWriter {
   active(managerId: string): void {
     const manager = this.store.manager(managerId)
     if (!manager) throw new ManagerError('unknownManager', 'This manager does not exist.')
-    if (manager.status === 'ended')
-      throw new ManagerError('managerEnded', 'This manager has ended; its board is read-only.')
+    if (manager.status !== 'active')
+      throw new ManagerError(
+        'managerEnded',
+        manager.status === 'ending'
+          ? 'This manager is ending; only its finalization turn can write to the board.'
+          : 'This manager has ended; its board is read-only.',
+      )
   }
   object(managerId: string, id: unknown): BoardObject {
     const object = this.store.object(managerId, text(id, 'id'))
@@ -92,7 +97,7 @@ export class ManagerBoardWriter {
       why,
     )
   }
-  tool(managerId: string, tool: string, given: unknown): unknown {
+  tool(managerId: string, tool: string, given: unknown, turnId?: string): unknown {
     const args = validateTool(tool, given)
     if (tool === 'get') {
       const object = this.object(managerId, args.id)
@@ -101,7 +106,17 @@ export class ManagerBoardWriter {
         changes: this.store.changes(managerId).filter((change) => change.objectId === object.id),
       }
     }
-    this.active(managerId)
+    const manager = this.store.manager(managerId)
+    if (manager?.status === 'ending' && turnId && this.store.ending(managerId)?.turnId === turnId) {
+      if (!['status', 'close', 'update', 'verify'].includes(tool))
+        invalid('During finalization, only status, close, update and verify are available.')
+      if (
+        tool === 'update' &&
+        args.kind === 'decision' &&
+        Object.keys(fields(args.patch)).some((key) => key !== 'landed')
+      )
+        invalid('During finalization, decision updates may only record landed locations.')
+    } else this.active(managerId)
     return this.store.transaction(() => {
       if (tool === 'status') {
         const situation = { text: text(args.text, 'text'), at: managerNow() }

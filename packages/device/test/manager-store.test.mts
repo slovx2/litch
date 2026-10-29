@@ -242,3 +242,36 @@ test('答复：部分成功、重复条目全拒、revision 冲突、事务内�
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('经理库从版本 1 升级：保留看板、历史、编号和待投递事件，增加收尾绑定表', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'manager-upgrade-'))
+  let store = new ManagerStore(openManagerDatabase(dir))
+  try {
+    store.saveManager(manager('a'))
+    const writer = new ManagerBoardWriter(store, () => false)
+    writer.tool('a', 'add', {
+      kind: 'decision',
+      decision: { title: '迁移前的问题', background: '' },
+    })
+    writer.answers('a', [{ decisionId: 'D-1', revision: 1, optionId: null, text: '保留' }])
+    const changes = store.changes('a')
+    const events = store.deliveries('a')
+    store.db.exec('DROP TABLE endings; PRAGMA user_version=1')
+    store.close()
+    store = new ManagerStore(openManagerDatabase(dir))
+    assert.deepEqual(store.changes('a'), changes)
+    assert.deepEqual(store.deliveries('a'), events)
+    assert.equal(store.object('a', 'D-1')?.status, 'answered')
+    assert.equal(store.nextId('a', 'D'), 'D-2')
+    store.beginEnding('a', 'end-event', '收尾')
+    store.setEndingTurn('a', 'end-turn')
+    assert.deepEqual(store.ending('a'), { eventId: 'end-event', text: '收尾', turnId: 'end-turn' })
+    assert.equal(
+      store.db.prepare('PRAGMA user_version').get()?.user_version,
+      MANAGER_SCHEMA_VERSION,
+    )
+  } finally {
+    store.close()
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

@@ -17,7 +17,7 @@ export const MANAGER_NOTIFICATION = {
 } as const
 
 export type ManagerTemplate = 'release' | 'investigation' | 'research' | 'blank'
-export type ManagerStatus = 'active' | 'ended'
+export type ManagerStatus = 'active' | 'ending' | 'ended'
 export type ManagerDecisionId = `D-${number}`
 export type ManagerItemId = `I-${number}`
 export type ManagerObjectId = ManagerDecisionId | ManagerItemId
@@ -299,7 +299,7 @@ export interface ManagerChangedNotification {
 /** 失效通知：收到后重新 board/read，不把局部数据当作完整快照。 */
 export interface ManagerBoardChangedNotification extends ManagerIdParams {}
 
-/** session-tree 的三种经理事件共同携带此来源；答复只传本次写成功的那些，不重复背景。 */
+/** session-tree 的经理事件共同携带此来源；答复只传本次写成功的那些，不重复背景。 */
 export interface ManagerEventData {
   managerId: string
   text: string

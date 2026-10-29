@@ -211,7 +211,7 @@ test('经理：事件回合直接派线、子树标记、默认 harness、并发
   }
 })
 
-test('经理答复：忙时插入、闲时开回合、结束幂等且看板立即只读，不自动归档线', async () => {
+test('经理答复：忙时插入、闲时开回合、收尾后只读，不自动归档线', async () => {
   const env = treeRig()
   try {
     const connection = await client(env)
@@ -268,6 +268,10 @@ test('经理答复：忙时插入、闲时开回合、结束幂等且看板立�
     assert.equal(env.pi.current(threadId)?.id, endTurn)
     assert.equal(env.pi.running(line.threadId), true)
     assert.equal(env.pi.thread(line.threadId).archived, undefined)
+    assert.equal(env.device.managers.manager(manager.id).status, 'ending')
+    assert.equal((await tool(env, threadId, 'status', { text: '收尾总结' })).success, true)
+    env.pi.end(threadId, 'completed', '收尾完成')
+    await until(() => env.device.managers.manager(manager.id).status === 'ended', '收尾后只读')
     assert.equal((await tool(env, threadId, 'status', { text: '不能改' })).success, false)
     assert.equal(
       (await connection.fails(MANAGER_METHOD.update, { managerId: manager.id, name: '不能改' }))

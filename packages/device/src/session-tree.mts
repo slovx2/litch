@@ -552,6 +552,7 @@ export class SessionTree {
     this.ended.add(key)
     this.turnEndedAt.set(threadId, Date.now())
     if (this.active.get(threadId) === turn.id) this.active.delete(threadId)
+    this.managers?.endings.completed(threadId, turn.id)
     this.pending.ended(threadId, turn.id)
     const userDriven = this.clientTurns.delete(`${harness}\u0000${turn.id}`)
     const stop = this.userStops.get(threadId)
@@ -866,6 +867,7 @@ export class SessionTree {
     text: string,
     eventId: string,
     effort: string | null,
+    options: { startOnly?: boolean; onStarted?: (turnId: string) => void } = {},
   ): Promise<boolean> {
     let sent = false
     const previous = this.checks.get(threadId) ?? Promise.resolve()
@@ -878,9 +880,16 @@ export class SessionTree {
         const link = await this.link(harness)
         // 先核对引擎状态，设备重启后不能把正在跑的经理误当空闲。
         const idle = await this.idle(threadId)
+        if (!idle && !this.active.has(threadId)) {
+          const { thread } = await this.read(threadId, true)
+          const turns = Array.isArray(thread.turns) ? thread.turns : []
+          const active = turns.findLast((turn) => isObject(turn) && turn.status === 'inProgress')
+          if (isObject(active)) this.turnEvent(harness, 'turn/started', { threadId, turn: active })
+        }
         const running = this.active.get(threadId)
         const input = [{ type: 'text', text, text_elements: [] }]
         if (running) {
+          if (options.startOnly) return
           if (this.noSteer.has(harness)) return
           try {
             await link.request('turn/steer', {
@@ -902,6 +911,7 @@ export class SessionTree {
             ...(effort ? { effort } : {}),
           })
           if (isObject(result?.turn) && typeof result.turn.id === 'string') {
+            options.onStarted?.(result.turn.id)
             this.turnEvent(harness, 'turn/started', { threadId, turn: result.turn })
             sent = true
           }
@@ -975,7 +985,8 @@ export class SessionTree {
    * 父会话最后一个回合结束超过 wakeIdleMs（24 小时）的不再主动唤醒。这几种都等用户发话、定时任务回合或“立即处理”带上
    */
   private async wake(parentId: string): Promise<void> {
-    if (this.managers?.store.forThread(parentId)?.status === 'ended') return
+    const manager = this.managers?.store.forThread(parentId)
+    if (manager && manager.status !== 'active') return
     if (this.closed || !this.host.enabled()) return
     const notes = this.store.notes(parentId)
     if (!notes.some((note) => note.wake)) return
