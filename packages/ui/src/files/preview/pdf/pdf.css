@@ -67,9 +67,12 @@
   font-family: var(--ui);
   font-size: 12px;
 }
+/* 提示放在页顶：放在页底的话，长页面要滚到底才看得到 */
 .fp-pdf-page[data-state="textLimit"] .fp-pdf-page-status {
-  inset: auto 0 0;
+  inset: 0 0 auto;
+  padding: 4px 8px;
   background: Canvas;
+  border-bottom: 1px solid var(--line-2);
 }
 /* PDF.js 文字层用 PDF 字体/字号定位。范围只限文件页，不继承对话字体或全局正文排版。 */
 .fp-pdf-text {
@@ -107,4 +110,8 @@
 }
 .fp-pdf-text ::selection {
   background: Highlight;
+}
+/* 换行用的 br 绝对定位在页面原点，选中跨行文字时不能在左上角留一块高亮 */
+.fp-pdf-text br::selection {
+  background: transparent;
 }

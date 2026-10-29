@@ -1,5 +1,4 @@
 export const zhPreviewPdf = {
-  'preview.pdf.title': 'PDF 预览',
   'preview.pdf.controls': 'PDF 翻页和缩放',
   'preview.pdf.page': '页码',
   'preview.pdf.pageLabel': '第 {page} 页',

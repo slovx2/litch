@@ -1,6 +1,5 @@
 import type { zhPreviewPdf } from './zh-CN-preview-pdf.ts'
 export const enPreviewPdf: Record<keyof typeof zhPreviewPdf, string> = {
-  'preview.pdf.title': 'PDF preview',
   'preview.pdf.controls': 'PDF pages and zoom',
   'preview.pdf.page': 'Page number',
   'preview.pdf.pageLabel': 'Page {page}',

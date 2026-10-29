@@ -28,11 +28,22 @@ export default function PdfPreview({ data, resources }: PreviewRendererProps) {
       resources.abort.signal.removeEventListener('abort', dispose)
     }
   }, [data, resources])
+  if (!failure && !pdf)
+    return (
+      <div className="fv-hold fp-pdf-hold" role="status" data-pdf-error="">
+        {t('preview.pdf.loading')}
+      </div>
+    )
+  // 和其他文件占位一样：标题说结果（读不了、太大），下面一行说原因
   if (failure || !pdf)
     return (
       <div className="fv-hold fp-pdf-hold" role="status" data-pdf-error={failure ?? ''}>
-        <b>{t('preview.pdf.title')}</b>
-        <span>{t(`preview.pdf.${failure ?? 'loading'}`)}</span>
+        <b>
+          {t(
+            failure === 'pages' || failure === 'size' ? 'files.view.tooLarge' : 'files.view.failed',
+          )}
+        </b>
+        <span>{t(`preview.pdf.${failure ?? 'invalid'}`)}</span>
       </div>
     )
   return <PdfPages pdf={pdf} stop={stop} />
@@ -129,9 +140,9 @@ function PdfPages({ pdf, stop }: { pdf: PdfDocument; stop(): void }) {
           >
             −
           </button>
-          <button type="button" className="mini" data-pdf="fit" onClick={() => changeZoom(1)}>
-            {t('preview.fit')}
-          </button>
+          <span className="fp-scale" data-pdf="scale">
+            {Math.round(((boxes[current - 1]?.scale ?? 1) * 72 * 100) / 96)}%
+          </span>
           <button
             type="button"
             className="mini"
@@ -142,6 +153,16 @@ function PdfPages({ pdf, stop }: { pdf: PdfDocument; stop(): void }) {
           >
             +
           </button>
+          <span className="seg">
+            <button
+              type="button"
+              data-pdf="fit"
+              aria-pressed={zoom === 1}
+              onClick={() => changeZoom(1)}
+            >
+              {t('preview.fit')}
+            </button>
+          </span>
         </div>
       </fieldset>
       <div
