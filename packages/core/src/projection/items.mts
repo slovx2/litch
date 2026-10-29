@@ -175,7 +175,15 @@ function sessionEvent(event: { kind: string; notes: unknown[] }): SessionEventVi
     const view = noteView(note)
     return view ? [view] : []
   })
-  const kind = event.kind === 'wake' || event.kind === 'remind' ? event.kind : 'notes'
+  const kind =
+    event.kind === 'wake' ||
+    event.kind === 'remind' ||
+    event.kind === 'manager-open' ||
+    event.kind === 'manager-answers' ||
+    event.kind === 'manager-end' ||
+    event.kind === 'manager-rules'
+      ? event.kind
+      : 'notes'
   return { kind, notes }
 }
 
