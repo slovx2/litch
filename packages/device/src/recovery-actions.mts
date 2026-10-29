@@ -1,3 +1,4 @@
+import { recoverMessage } from '../../protocol/src/system-messages.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { TurnRecoveryObserver } from './turn-recovery.mjs'
 import { DeviceError, isObject } from './wire.mjs'
@@ -92,7 +93,7 @@ export class RecoveryActions {
         throw new DeviceError('unsupported', 'Interruption has not completed; no new turn was sent')
       await link.request(
         'turn/start',
-        { threadId, input: [{ type: 'text', text }] },
+        { threadId, input: [{ type: 'text', text: recoverMessage(text) }] },
         { timeoutMs: 10000 },
       )
       return {}

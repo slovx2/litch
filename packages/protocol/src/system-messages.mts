@@ -36,7 +36,13 @@ export interface HereMessage {
   prompt: string
 }
 
-export type SystemMessage = ScheduledTaskMessage | BriefingMessage | HereMessage
+/** 用户确认中断后，由设备服务发送的继续指令。 */
+export interface RecoverMessage {
+  kind: 'recover'
+  prompt: string
+}
+
+export type SystemMessage = ScheduledTaskMessage | BriefingMessage | HereMessage | RecoverMessage
 
 /** 别的会话用 litch_sessions.send 发来的一句 */
 export interface SessionMessage {
@@ -49,6 +55,12 @@ export interface SessionMessage {
 const SCHEDULED_HEAD = '[Scheduled task run]\n'
 /** 引导语：界面按语言给的（ui、手机端的 proposal.here.lead），设备进程缺省的是英文那句 */
 export const HERE_LEADS = ['Do it here: ', '在这里做：'] as const
+const RECOVER_HEAD = '[Litch] Continue after interruption, not typed by the user:\n\n'
+
+/** 标记留在标准文本输入里，历史重读也能识别；不向原生协议增加字段。 */
+export function recoverMessage(prompt: string): string {
+  return RECOVER_HEAD + prompt
+}
 
 /** 父会话那一段：`"标题或会话号" (会话号, harness)` */
 const WHO = '"(.*)" \\(([^\\s,()]+), ([^\\s,()]+)\\)'
@@ -132,6 +144,10 @@ function here(text: string): HereMessage | null {
 
 /** 这条用户消息是不是 Litch 替用户发的（定时任务、子会话的简报、在这里做）。不是的返回 null */
 export function parseSystemMessage(text: string): SystemMessage | null {
+  if (text.startsWith(RECOVER_HEAD)) {
+    const prompt = text.slice(RECOVER_HEAD.length)
+    return prompt.trim() ? { kind: 'recover', prompt } : null
+  }
   return scheduledTask(text) ?? briefing(text) ?? here(text)
 }
 

@@ -1,6 +1,8 @@
 // 会话视图 → 对话区的行（src/core/rows.ts）：过程连成一组、展开收起、末尾的状态行、内容没变的行复用同一个对象。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { projectItem } from '@litch/core'
+import { recoverMessage } from '../../../packages/protocol/src/system-messages.mts'
 import { RowBuilder } from '../src/core/rows.ts'
 import { experiment } from '../src/experiment.ts'
 
@@ -46,6 +48,29 @@ function viewOf(turns, items) {
 }
 
 const types = (rows) => rows.map((row) => row.type)
+
+test('中断后继续走系统行，不画成右侧用户气泡，展开后仍是系统行', () => {
+  const prompt = '请核对已经完成的步骤并继续。'
+  const text = recoverMessage(prompt)
+  const item = projectItem({
+    type: 'userMessage',
+    id: 'recover',
+    content: [{ type: 'text', text, text_elements: [] }],
+  })
+  const view = viewOf([{ id: 't', status: 'running', itemIds: ['recover'] }], [item])
+  const builder = new RowBuilder()
+  const rows = builder.build(view, 'all')
+  assert.equal(
+    rows.some((row) => row.type === 'user'),
+    false,
+  )
+  const system = rows.find((row) => row.type === 'system')
+  assert.deepEqual(system.system, { kind: 'recover', prompt })
+  builder.toggle(system.key, 't')
+  const expanded = builder.build(view, 'all').find((row) => row.type === 'system')
+  assert.equal(expanded.expanded, true)
+  assert.equal(expanded.text, text)
+})
 
 /** 回合结束后整段过程收成一行：点开它（第一次建行之前点就是展开），看过程里的各段 */
 const openedBuilder = (turnId = 't') => {

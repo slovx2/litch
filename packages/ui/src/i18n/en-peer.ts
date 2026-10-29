@@ -31,6 +31,7 @@ export const enPeer: Record<keyof typeof zhPeer, Entry> = {
   'sysmsg.from': 'from {name}',
   'sysmsg.openParentHint': 'Open the session that started this one',
   'sysmsg.here': 'Task card · Do it here',
+  'sysmsg.recover': 'Continue after interruption',
   'sysmsg.expand': 'Show full text',
   'sysmsg.collapse': 'Show less',
 }

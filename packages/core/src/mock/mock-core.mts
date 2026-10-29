@@ -3,6 +3,7 @@
 // 它会把回答按小块流出来，发送、排队、打断、审批、提问也都有个样子，让界面的每条路径真的被走到。
 
 import type { ThreadItem } from '../../../protocol/src/index.mjs'
+import { recoverMessage } from '../../../protocol/src/system-messages.mjs'
 import {
   ChannelError,
   type Clock,
@@ -2865,7 +2866,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         applySessionOps(view, [{ op: 'turn.recovery', turnId: turn.id, recovery: null }])
         if (name === 'session.recover') {
           endTurn(view, turn.id, null, 'interrupted')
-          startTurn(view, outgoing(given.text))
+          startTurn(view, outgoing(recoverMessage(given.text)))
         }
         return {}
       }

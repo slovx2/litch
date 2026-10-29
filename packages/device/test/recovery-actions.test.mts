@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { parseSystemMessage } from '../../protocol/src/system-messages.mjs'
 import type { EngineLink } from '../src/engine-link.mjs'
 import { RecoveryActions } from '../src/recovery-actions.mjs'
 import { TurnRecoveryObserver } from '../src/turn-recovery.mjs'
@@ -80,7 +81,15 @@ test('显式继续先中断并读到 interrupted，再发送一次继续请求',
     r.calls.map((c) => c.method),
     ['thread/read', 'turn/interrupt', 'thread/read', 'thread/read', 'turn/start'],
   )
-  assert.equal(r.calls.at(-1)?.params.input[0].text, r.ref.text)
+  assert.deepEqual(parseSystemMessage(r.calls.at(-1)?.params.input[0].text), {
+    kind: 'recover',
+    prompt: r.ref.text,
+  })
+  assert.deepEqual(
+    Object.keys(r.calls.at(-1)?.params.input[0]),
+    ['type', 'text'],
+    '沿用原生文本输入，不增加协议字段',
+  )
   assert.equal(r.closed(), 1)
   r.observer.close()
 })

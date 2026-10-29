@@ -56,6 +56,7 @@ macOS、Linux 支持唤醒观察，Windows 使用 5 分钟通用提醒。这里�
 才发送核对已有步骤并继续工作的消息；不会重放原始指令。10 秒内未确认中断、回合已经变化或
 已有待答请求、排队消息时，不会另发继续请求。Litch 不会自动中断或调整 harness 的网络超时。
 Codex 原生重试时显示它给出的提示，新进展或回合结束后消失；没有次数信息时不猜次数。
+续做消息由 Litch 发送，在桌面和手机对话中显示为“中断后继续”系统卡片，不属于用户手写的消息。
 
 **A model is unavailable or every turn fails at once.** Usually the harness's own sign-in or model
 configuration. The user checks it in the harness's own CLI (exception E3); the harness's runtime log

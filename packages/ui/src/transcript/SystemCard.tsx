@@ -14,7 +14,12 @@ import type { ItemRef } from './messages.tsx'
 import { usePin } from './scroll.ts'
 import { useToggle } from './state.ts'
 
-const ICON = { scheduledTask: 'clock', briefing: 'tree', here: 'suggest' } as const
+const ICON = {
+  scheduledTask: 'clock',
+  briefing: 'tree',
+  here: 'suggest',
+  recover: 'reload',
+} as const
 
 /** 派出它的会话：还在侧栏里的可以点开，不在的只写标题（没有标题写会话号） */
 function Parent({ deviceId, parent }: { deviceId: string; parent: { id: string; title: string } }) {
@@ -61,13 +66,13 @@ export function SystemCard({
   const pin = usePin()
   const card = useRef<HTMLDivElement | null>(null)
   const [open, setOpen] = useToggle(`${ref.deviceId}:${ref.sessionId}`, `u:${ref.itemId}`, false)
-  const title = system.kind === 'scheduledTask' ? '' : system.title
+  const title = 'title' in system ? system.title : ''
   const label =
     system.kind === 'scheduledTask'
       ? t('sysmsg.scheduledTask', { name: system.task })
       : system.kind === 'briefing'
         ? t(`sysmsg.briefing.${system.mode}`)
-        : t('sysmsg.here')
+        : t(system.kind === 'recover' ? 'sysmsg.recover' : 'sysmsg.here')
   return (
     <div className="sev sysm" data-anchor={`u:${ref.itemId}`} data-sys={system.kind} ref={card}>
       <CompactRow

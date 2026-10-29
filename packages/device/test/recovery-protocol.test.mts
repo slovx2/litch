@@ -17,7 +17,8 @@ test('恢复方法与通知、运行CLI字段按投递连接声明隔离', async
     startedAt: 1000,
   }
   const control = new FakeControl([{ ...managed('pi'), cli }])
-  const instance = rig({ pi: new FakeUpstream('pi') }, {}, { control })
+  const pi = new FakeUpstream('pi')
+  const instance = rig({ pi }, {}, { control })
   try {
     const aware = instance.connect(),
       plain = instance.connect()
@@ -29,6 +30,14 @@ test('恢复方法与通知、运行CLI字段按投递连接声明隔离', async
         plain.call(method, {}),
         (error: any) => error.data?.litch === 'extensionRequired',
       )
+    await assert.rejects(
+      plain.call(RECOVERY_CONTINUE, { harness: 'pi', threadId: 't', turnId: 'a', text: '继续' }),
+      (error: any) => error.data?.litch === 'extensionRequired',
+    )
+    assert.equal(
+      pi.seen.some((call) => call.method === 'turn/start' || call.method === 'turn/interrupt'),
+      false,
+    )
     const notice = {
       harness: 'codex',
       threadId: 't',

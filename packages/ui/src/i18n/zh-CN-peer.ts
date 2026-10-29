@@ -29,6 +29,7 @@ export const zhPeer = {
   'sysmsg.from': '来自 {name}',
   'sysmsg.openParentHint': '打开派出这个会话的会话',
   'sysmsg.here': '任务卡 · 在这里做',
+  'sysmsg.recover': '中断后继续',
   'sysmsg.expand': '展开全文',
   'sysmsg.collapse': '收起',
 } satisfies Record<string, Entry>

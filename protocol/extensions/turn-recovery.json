@@ -9,6 +9,7 @@
     "唤醒后三十秒或持续五分钟没有实质进展才检查；等待审批、用户输入和正在执行工具的回合不按模型停流提醒。",
     "通知中的 recovery 为 null 表示提醒已撤销；提醒是观察结果，不是失败终态。",
     "continue 必须显式调用，携带仍在等待恢复的 threadId/turnId/harness。先确认旧回合 interrupted，才能发 text 对应的继续请求；超时或出现不同回合时不发送。",
+    "续做消息沿用 system-messages 的正文标记，解析为 recover 系统卡片。仅声明 turnRecovery 的连接可发起 continue；上游仍为标准 text 输入，不新增标准协议字段。",
     "dismiss 只撤销当前提醒；下一次实质进展或新唤醒后可以重新观察。"
   ],
   "parts": [

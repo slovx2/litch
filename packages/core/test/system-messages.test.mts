@@ -2,8 +2,9 @@
 // 拼法和设备进程对得上由设备包里的单测守着（session-tree、session-tools、task-scheduler），这里只看投影
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { formatSessionEvent, type ThreadItem } from '../../protocol/src/index.mjs'
+import { formatSessionEvent, recoverMessage, type ThreadItem } from '../../protocol/src/index.mjs'
 import { localUserMessage, projectItem } from '../src/index.mjs'
+import { isUserReply } from '../src/projection/user-reply.mjs'
 
 const user = (text: string) =>
   projectItem({
@@ -11,6 +12,21 @@ const user = (text: string) =>
     id: 'u',
     content: [{ type: 'text', text, text_elements: [] }],
   } as unknown as ThreadItem)
+
+test('中断后继续：原生文本和历史投影认作recover系统消息，普通同文案仍是用户消息', () => {
+  const prompt = '上个回合已中断，请核对已完成的步骤再继续。'
+  const item = user(recoverMessage(prompt))
+  assert.ok(item.kind === 'userMessage')
+  assert.deepEqual(item.system, { kind: 'recover', prompt })
+  assert.equal(isUserReply(item, undefined, 0), false)
+  const plain = user(prompt)
+  assert.ok(plain.kind === 'userMessage')
+  assert.equal(plain.system, undefined)
+  assert.equal(
+    user(recoverMessage('')).kind === 'userMessage' && 'system' in user(recoverMessage('')),
+    false,
+  )
+})
 
 const TASK = [
   '[Scheduled task run]',
