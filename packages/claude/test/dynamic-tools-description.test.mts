@@ -1,8 +1,23 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { BROWSER_TOOLS } from '../../protocol/src/client-tools-browser.mjs'
+import { SESSION_TOOLS } from '../../protocol/src/client-tools-sessions.mjs'
 import { dynamicToolSpecs, toolDescription } from '../src/dynamic-tools.mjs'
 import { jsonSchemaValidator } from '../src/json-schema.mjs'
+
+test('子会话唤醒工具和初始开关原样交给 Claude，并校验布尔参数', () => {
+  const tools = dynamicToolSpecs([SESSION_TOOLS])
+  for (const [name, field, args] of [
+    ['set_wake', 'wake', { thread_id: 'child', wake: false }],
+    ['start', 'wake_parent', { title: '检查', wake_parent: false }],
+  ] as const) {
+    const tool = tools.find((tool) => tool.name === name && tool.namespace === 'litch_sessions')
+    assert.ok(tool)
+    const validate = jsonSchemaValidator(tool.inputSchema).compile(tool.inputSchema)
+    assert.ok(validate(args))
+    assert.ok(!validate({ ...args, [field]: 'no' }))
+  }
+})
 
 // CLI 没有命名空间这一层：命名空间的说明（litch_machine 开头写着“你在哪台机器、控制端是哪台”）要接在它第一个工具的说明前面，
 // 不然模型看不到

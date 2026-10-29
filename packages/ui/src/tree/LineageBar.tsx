@@ -67,6 +67,7 @@ export function LineageBar({ deviceId, sessionId, onOpen }: LineageBarProps) {
         </span>
       )}
       <span className="grow" />
+      {lineage?.wakeParent === false ? <span>{t('tree.lineage.noWake')}</span> : null}
       {lineage && detachable ? (
         <button type="button" className="mini" data-act="detach" onClick={() => setAsking(true)}>
           {t('tree.detach')}

@@ -37,6 +37,8 @@ sidebar.
 子会话在桌面侧栏、手机列表、任务卡和会话详情中显示 harness 标识。
 用户在自动唤醒的回合中插话成功后，该回合也按用户回合处理；后来的自动消息不会覆盖这个来源。
 
+主会话可用 `litch_sessions.set_wake(thread_id, wake)` 关闭或重新打开直接子会话的自动唤醒；`start` 的 `wake_parent` 默认开启。关闭后回报仍入队、显示，也仍可插入正在运行的主会话；重新开启会检查已有回报，但不会绕过用户停止、失败、定时回合和唤醒次数等限制。`list`、`read` 会返回当前开关，桌面会话详情和手机会话行显示“不唤醒”。
+
 ### 子会话待答与代答
 
 父会话输入框上方显示直接子会话的阻塞请求。展开某条会订阅原子会话，使用同一张请求卡作答；仍可打开子会话处理。密码、登录、手机签名或仅原执行设备能处理的请求遵循原有限制。
@@ -348,9 +350,12 @@ woken to continue.
   current turn, so work done in that turn reaches it only through the remaining plan.
 - **Reports and waking**: when a sub-session finishes a turn, the start of its last answer is handed to
   the parent ("Reports from sub-sessions"). When the parent is idle and its sub-sessions have stopped,
-  the parent is woken to continue (up to 50 times per user message; your next message resets the count). Litch decides this, not the model: sub-
-  sessions the model started or suggested always wake the parent; when you start one yourself (spawn
-  dialog, Edit and start) you can turn "Wake the main session when done" off. Waking happens on the
+  the parent is woken to continue (up to 50 times per user message; your next message resets the count). The model can set `wake_parent` when starting a sub-session (default true), then use
+  `litch_sessions.set_wake(thread_id, wake)` to disable or re-enable waking for its direct children.
+  Reports still arrive while waking is off; enabling it rechecks eligible queued reports under the
+  normal wake rules, without overriding stops, failures, scheduled turns or wake limits.
+  `list` and `read` include the current `wake_parent` value. Desktop session details and mobile rows
+  show “Wake off”. The spawn dialog and Edit and start also let you choose the initial setting. Waking happens on the
   device, also when no desktop or phone is connected. Background tasks still running in the parent or a
   sub-session after its turn do not hold it back. Turns run by scheduled tasks report but do not wake;
   a scheduled run in the parent itself carries the reports waiting there. After you stop the parent's

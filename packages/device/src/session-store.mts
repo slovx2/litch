@@ -175,7 +175,7 @@ export interface QueuedNote extends SessionEventNote {
   seq: number
   /** 进队列的时间（秒） */
   at: number
-  /** 派这个子会话时说了要唤醒父会话 */
+  /** 回报本身具备唤醒资格；检查时还要结合子会话当前的 wakeParent */
   wake: boolean
 }
 
@@ -278,6 +278,7 @@ export class SessionStore {
          VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
       detach: prepare('UPDATE lineage SET detached_at=? WHERE thread_id=?'),
+      setWakeParent: prepare('UPDATE lineage SET wake_parent=? WHERE thread_id=?'),
       reported: prepare('UPDATE lineage SET reported_turn=? WHERE thread_id=?'),
       addProposal: prepare(
         `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at, wider_sandbox, turn_id, call_id, offer, background, effort, worktree, worktree_default)
@@ -449,6 +450,15 @@ export class SessionStore {
     // 派子会话就是父会话给它发了第一条消息：之后两边一直可以互相发
     this.addContact(row.parentThreadId, row.threadId)
     return full
+  }
+
+  /** 更新已有直接父子关系的唤醒开关。 */
+  setWakeParent(threadId: string, wake: boolean): LineageRow | null {
+    const row = this.parentOf(threadId)
+    if (!row) return null
+    this.run('setWakeParent', wake ? 1 : 0, threadId)
+    row.wakeParent = wake
+    return row
   }
 
   /** 脱离：返回原来的那条（没有、已经脱离过是 null） */

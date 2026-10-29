@@ -1186,6 +1186,7 @@ export const zhCN = {
   'tree.lineage.after': '派出：{title}',
   'tree.lineage.open': '返回父会话',
   'tree.lineage.unknown': '不在侧栏中的会话',
+  'tree.lineage.noWake': '不唤醒',
   'tree.lineage.claudeDesktop': '在 Claude 桌面端派出',
   'tree.lineage.otherApp': '在其他应用中派出',
   'tree.detach': '脱离为独立会话',

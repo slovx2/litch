@@ -502,7 +502,7 @@ export class SessionTree {
       this.store.addNote(
         lineage.parentThreadId,
         { threadId, title: lineage.title, status: 'needsUser', excerpt: '' },
-        lineage.wakeParent && !this.host.taskTurn(threadId, turnId),
+        !this.host.taskTurn(threadId, turnId),
       )
       this.notesChanged(lineage.parentThreadId)
     }
@@ -741,11 +741,7 @@ export class SessionTree {
     }
     // 出错、被打断的回合不唤醒（同 Claude 桌面端：被截断的回合不算），等父会话下一回合带上，
     // 或者别的子会话的回报唤醒父会话时一起交出去。父会话正在跑的话不分结局都当场插进去（check 里的 steerNotes）
-    this.store.addNote(
-      lineage.parentThreadId,
-      note,
-      lineage.wakeParent && wakeable && status === 'completed',
-    )
+    this.store.addNote(lineage.parentThreadId, note, wakeable && status === 'completed')
     this.notesChanged(lineage.parentThreadId)
     this.host.log(`子会话 ${threadId}（${harness}）的回合 ${String(turn.id)} 已进父会话的回报队列`)
     if (background > 0) {
@@ -807,13 +803,28 @@ export class SessionTree {
       excerpt: `Background tasks finished: ${outcomes}`.slice(0, SESSION_TREE_LIMITS.noteChars),
     }
     const allByUser = byUser && !finished
-    this.store.addNote(lineage.parentThreadId, note, lineage.wakeParent && !allByUser)
+    this.store.addNote(lineage.parentThreadId, note, !allByUser)
     this.notesChanged(lineage.parentThreadId)
     this.host.log(`子会话 ${threadId} 的后台任务跑完了，补了一条回报`)
     this.check(lineage.parentThreadId)
   }
 
   // ---------- 唤醒 ----------
+
+  /** 开关只控制自动唤醒，不改回报原有的资格，也不阻止回报入队和插话。 */
+  setWakeParent(threadId: string, wake: boolean): void {
+    const row = this.store.setWakeParent(threadId, wake)
+    if (!row) return
+    this.lineageChanged(threadId)
+    if (wake) this.check(row.parentThreadId)
+  }
+
+  private hasWakeNote(parentId: string): boolean {
+    return this.store.notes(parentId).some((note) => {
+      const lineage = this.store.parentOf(note.threadId)
+      return note.wake && lineage?.parentThreadId === parentId && lineage.wakeParent
+    })
+  }
 
   /**
    * 看看要不要把回报插进在跑的回合、发“在这里做”、提醒收尾、唤醒这个会话。同一个会话的检查排成一条，检查途中又来的再查一遍。
@@ -906,8 +917,7 @@ export class SessionTree {
    */
   private async wake(parentId: string): Promise<void> {
     if (this.closed || !this.host.enabled()) return
-    const notes = this.store.notes(parentId)
-    if (!notes.some((note) => note.wake)) return
+    if (!this.hasWakeNote(parentId)) return
     if (this.store.wakes(parentId) >= SESSION_TREE_LIMITS.wakesPerUserMessage) return
     if (this.cutShort.has(parentId)) return
     if (this.host.backgroundRunning(parentId) > 0) return
@@ -916,8 +926,8 @@ export class SessionTree {
     if (!(await this.idle(parentId))) return
     if (await this.longIdle(parentId)) return
     // 上面那几步要等应答，这期间可能有用户发了话（回报已经跟着交出去了）
-    if (!this.store.notes(parentId).some((note) => note.wake) || this.active.has(parentId)) return
-    if (await this.startWake(parentId, 0))
+    if (!this.hasWakeNote(parentId) || this.active.has(parentId)) return
+    if (await this.startWake(parentId, 0, true))
       this.store.setWakes(parentId, this.store.wakes(parentId) + 1)
   }
 
@@ -947,7 +957,7 @@ export class SessionTree {
   }
 
   /** 替父会话开一个唤醒回合，带着排着的全部回报。working 是还在干活的子会话数，写进给模型的话里 */
-  private async startWake(parentId: string, working: number): Promise<boolean> {
+  private async startWake(parentId: string, working: number, automatic = false): Promise<boolean> {
     const harness = await this.owner(parentId)
     await this.watch(harness, parentId)
     const fresh = this.store.notes(parentId)
@@ -962,6 +972,8 @@ export class SessionTree {
     }
     const pendingQuestions = await this.unanswered(parentId)
     if (this.closed || this.active.has(parentId) || !this.store.notes(parentId).length) return false
+    // 读历史期间模型可能关掉开关；用户点“立即处理”仍然绕过自动唤醒限制。
+    if (automatic && !this.hasWakeNote(parentId)) return false
     const text = formatSessionEvent({
       kind: 'wake',
       ...(pendingQuestions.length ? { pendingQuestions } : {}),

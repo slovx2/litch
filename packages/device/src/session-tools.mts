@@ -124,6 +124,7 @@ function summary(
     status: statusWord(tree, thread),
     updated_at: Number(thread.updatedAt) || 0,
     parent_thread_id: lineage?.parentThreadId ?? null,
+    wake_parent: lineage?.wakeParent ?? null,
     mine: tree.store.descends(id, caller),
   }
 }
@@ -258,6 +259,13 @@ interface Spec {
   worktree: boolean | undefined
 }
 
+function wakeParent(args: Record<string, unknown>): boolean {
+  if (args.wake_parent === undefined) return true
+  if (typeof args.wake_parent !== 'boolean')
+    throw new Refused('invalid', 'wake_parent must be true or false.')
+  return args.wake_parent
+}
+
 /** 子会话起在哪：harness、模型、强度、目录、fresh 还是 fork。harness 要在这台设备上，fork 只能同 harness */
 function targetOf(
   args: Record<string, unknown>,
@@ -334,6 +342,7 @@ function proposeOne(
   spec: Spec,
   wider: string | null,
   fallback: boolean,
+  wake = true,
 ): SessionProposal {
   const title = spec.title.trim().slice(0, 120)
   gate(tree, call, title)
@@ -349,8 +358,7 @@ function proposeOne(
     kind: spec.kind,
     worktree: spec.worktree ?? null,
     worktreeDefault: fallback,
-    // 子会话停下后唤不唤醒由 Litch 定，不交给模型：模型派的、提的一律唤醒（用户从卡片开始时可以改）
-    wakeParent: true,
+    wakeParent: wake,
     turnId: call.turnId || null,
     callId: call.callId || null,
     ...(wider ? { widerSandbox: wider } : {}),
@@ -370,6 +378,7 @@ async function start(
   signal: AbortSignal,
 ): Promise<SessionsStartResult> {
   const initiation = string(args, 'initiation') ?? 'propose'
+  const wake = wakeParent(args)
   const cards = tree.host.taskCards(call.harness)
   if (initiation === 'offer') return cards ? offer(tree, args, call, signal) : offerOff(args, call)
   if (initiation !== 'user_asked' && initiation !== 'propose')
@@ -392,14 +401,14 @@ async function start(
         title: spec.title,
         prompt: spec.prompt,
         background: spec.background,
-        wakeParent: true,
+        wakeParent: wake,
         worktree: spec.worktree ?? null,
       },
       'model',
     )
     return {
       thread_id: child.threadId,
-      note: `Started sub-session ${child.threadId} on ${child.harness}${worktreeNote(child.branch)}. It runs on its own; you will be woken with its result as a <litch-session-event> message. Do not poll it.`,
+      note: `Started sub-session ${child.threadId} on ${child.harness}${worktreeNote(child.branch)}. It runs on its own; ${wake ? 'eligible results can wake you as a <litch-session-event> message' : 'results still arrive, but do not wake you automatically'}. Use set_wake to change this. Do not poll it.`,
     }
   }
   const why =
@@ -420,6 +429,7 @@ async function start(
     spec,
     wider,
     await worktreeDefault(tree, call.threadId, spec.cwd ?? null),
+    wake,
   )
   return {
     proposal_id: proposal.id,
@@ -468,7 +478,7 @@ async function offer(
     // offer 卡上的工作树开关由用户定（选新会话时带回来），模型给的不认
     worktree: null,
     worktreeDefault: fallback,
-    wakeParent: true,
+    wakeParent: wakeParent(args),
     turnId: call.turnId || null,
     callId: call.callId || null,
     offer: true,
@@ -1141,6 +1151,23 @@ export function sessionToolsHandler(
           return ok(await list(tree, args, call))
         case SESSION_TOOL.read:
           return ok(await read(tree, args, call))
+        case SESSION_TOOL.setWake: {
+          const threadId = string(args, 'thread_id', true)
+          if (tree.store.parentOf(threadId)?.parentThreadId !== call.threadId)
+            return {
+              ...ok({
+                error: {
+                  code: 'forbidden',
+                  message: 'Only your direct sub-sessions may be changed.',
+                },
+              }),
+              success: false,
+            }
+          if (typeof args.wake !== 'boolean')
+            throw new Refused('invalid', 'wake must be true or false.')
+          tree.setWakeParent(threadId, args.wake)
+          return ok({ thread_id: threadId, wake_parent: args.wake })
+        }
         case SESSION_TOOL.respond: {
           const threadId = string(args, 'thread_id', true)
           if (

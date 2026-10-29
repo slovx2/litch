@@ -1236,6 +1236,7 @@ export const en: Record<MessageKey, Entry> = {
   'tree.lineage.after': 'as “{title}”',
   'tree.lineage.open': 'Back to the parent session',
   'tree.lineage.unknown': 'a session not in the sidebar',
+  'tree.lineage.noWake': 'Wake off',
   'tree.lineage.claudeDesktop': 'in the Claude desktop app',
   'tree.lineage.otherApp': 'in another app',
   'tree.detach': 'Detach as a standalone session',

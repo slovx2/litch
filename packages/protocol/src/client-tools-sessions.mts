@@ -17,6 +17,7 @@ import type { SessionLineageKind } from './session-tree.mjs'
 export const SESSION_TOOL = {
   list: 'list',
   read: 'read',
+  setWake: 'set_wake',
   respond: 'respond',
   /** 这台设备上能开子会话的 harness、各自的型号和强度、这个会话现在用的：换 harness 或型号之前先查 */
   options: 'options',
@@ -97,8 +98,20 @@ export interface SessionsReadArguments {
   turns?: number
 }
 
+export interface SessionsSetWakeArguments {
+  thread_id: string
+  wake: boolean
+}
+
+export interface SessionsSetWakeResult {
+  thread_id: string
+  wake_parent: boolean
+}
+
 export interface SessionsStartArguments {
   title: string
+  /** 默认 true；只控制自动唤醒，回报仍交付。 */
+  wake_parent?: boolean
   /**
    * 子会话收到的第一段话：任务、相关文件、做完的标准。子会话看不到这个会话的内容（fork 除外）。
    * initiation 是 offer 时不给（只带标题先出卡，用户选了新会话再用 accept 补）
@@ -235,6 +248,8 @@ export interface SessionSummary {
   updated_at: number
   /** Litch 父子关系里的父会话；没有是 null */
   parent_thread_id: string | null
+  /** 子会话当前的自动唤醒开关；没有 Litch 父会话时为 null。 */
+  wake_parent: boolean | null
   /** 是不是调用者自己派出的子孙 */
   mine: boolean
 }
@@ -638,7 +653,8 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
       {
         type: 'function',
         name: SESSION_TOOL.list,
-        description: 'List sessions on this device, newest first.',
+        description:
+          'List sessions on this device, newest first, including wake_parent (null for sessions without a Litch parent).',
         inputSchema: {
           type: 'object',
           properties: {
@@ -659,7 +675,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
         type: 'function',
         name: SESSION_TOOL.read,
         description:
-          'Read a session’s status, recent turns, pending_requests and delegated_responses without opening it. Pending requests include current IDs, kinds, questions and permitted decisions for respond. This snapshot covers blocking requests observed by the device; an empty list does not rule out asynchronous questions or requests held by another executor.',
+          'Read a session’s status, wake_parent, recent turns, pending_requests and delegated_responses without opening it. Pending requests include current IDs, kinds, questions and permitted decisions for respond. This snapshot covers blocking requests observed by the device; an empty list does not rule out asynchronous questions or requests held by another executor.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -734,6 +750,11 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
             },
             cwd: { type: 'string', description: 'Default: this session’s folder.' },
             worktree: WORKTREE_PARAM,
+            wake_parent: {
+              type: 'boolean',
+              description:
+                'Default true. Allow eligible reports to wake this session. False still queues and delivers reports. Change later with set_wake; existing stop, failure and scheduled-turn rules still apply.',
+            },
             kind: {
               type: 'string',
               enum: ['fresh', 'fork'],
@@ -746,6 +767,18 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
             },
           },
           required: taskCards ? ['title'] : ['title', 'initiation'],
+          additionalProperties: false,
+        },
+      },
+      {
+        type: 'function',
+        name: SESSION_TOOL.setWake,
+        description:
+          'Enable or disable automatic waking by one of your direct sub-sessions. Use wake:false for long-running work whose reports do not need your immediate attention; use wake:true when you need to follow its results. Reports are still queued, displayed and delivered, including to a running parent. Enabling rechecks eligible queued reports immediately under normal wake rules: it never overrides user stops, failed or interrupted turns, scheduled/user-started child turns, parent activity or wake limits. Other targets return forbidden, even on user-started turns.',
+        inputSchema: {
+          type: 'object',
+          properties: { thread_id: THREAD_ID, wake: { type: 'boolean' } },
+          required: ['thread_id', 'wake'],
           additionalProperties: false,
         },
       },
