@@ -1153,6 +1153,11 @@ export const en: Record<MessageKey, Entry> = {
   'turn.recovery.wake': 'No new progress since the device woke',
   'turn.recovery.idle': 'No new progress for five minutes',
   'turn.recovery.unresponsive': 'The engine has not answered the status check',
+  'turn.recovery.since': 'Last progress {time}',
+  'turn.recovery.confirm.title': 'Interrupt this turn and continue?',
+  'turn.recovery.confirm.note':
+    'The step in progress stops. Completed external actions are not undone. A follow-up message then asks the model to review completed steps and continue.',
+  'turn.recovery.confirm.no': 'Cancel',
   'turn.recovery.continue': 'Interrupt and continue',
   'turn.recovery.wait': 'Keep waiting',
   'turn.recovery.pending': 'Confirming interruption…',

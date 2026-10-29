@@ -7,6 +7,7 @@ import { useT } from '../../app/appearance.ts'
 import { Confirm } from '../../app/Confirm.tsx'
 import { whyNot } from '../../app/errors.ts'
 import { Fold, useFold } from '../../app/Fold.tsx'
+import { stampFull } from '../../app/format.ts'
 import { useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
 import { InstallRow } from '../../install/InstallRow.tsx'
@@ -153,11 +154,11 @@ export function HarnessBlock(props: HarnessBlockProps) {
               <dt>{t('harness.runtime.path')}</dt>
               <dd className="mono">{harness.cli.path}</dd>
               <dt>{t('harness.runtime.version')}</dt>
-              <dd>{harness.cli.version || t('devices.harness.unknown')}</dd>
+              <dd className="mono">{harness.cli.version || t('devices.harness.unknown')}</dd>
               <dt>{t('harness.runtime.source')}</dt>
               <dd>{t(`harness.runtime.source.${harness.cli.source}`)}</dd>
               <dt>{t('harness.runtime.started')}</dt>
-              <dd>{new Date(harness.cli.startedAt).toLocaleString(t.lang)}</dd>
+              <dd>{stampFull(harness.cli.startedAt, t.lang)}</dd>
             </dl>
           ) : null}
           {/* 停用了的：开关就在标题行上，不用再解释 */}

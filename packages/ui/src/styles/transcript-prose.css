@@ -416,6 +416,9 @@
   gap: 8px;
   margin-left: auto;
 }
+.turn-recovery-actions .mini[data-tone="err"]:not(:disabled) {
+  color: var(--err);
+}
 .errbox .mini {
   align-self: center;
   margin-left: auto;

@@ -1105,6 +1105,11 @@ export const zhCN = {
   'turn.recovery.wake': '设备唤醒后尚未收到新进展',
   'turn.recovery.idle': '已持续五分钟未收到新进展',
   'turn.recovery.unresponsive': '引擎暂未响应状态检查',
+  'turn.recovery.since': '最后进展 {time}',
+  'turn.recovery.confirm.title': '中断当前回合并继续？',
+  'turn.recovery.confirm.note':
+    '正在执行的步骤会被打断，已经完成的外部操作不会撤回。随后发一条消息，让模型核对已完成的步骤再继续。',
+  'turn.recovery.confirm.no': '取消',
   'turn.recovery.continue': '中断并继续',
   'turn.recovery.wait': '继续等待',
   'turn.recovery.pending': '正在确认中断…',

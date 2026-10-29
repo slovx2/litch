@@ -615,11 +615,14 @@
 .mng-save-note.err {
   color: var(--err);
 }
+/* 同上面“已安装 … 验证版 …”那一行是元信息：12px，路径和版本用等宽 */
 .harness-runtime {
   display: grid;
   padding: 0 12px;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 6px 12px;
+  gap: 4px 12px;
+  font-size: 12px;
+  line-height: 18px;
   color: var(--ink-2);
 }
 .harness-runtime dt {

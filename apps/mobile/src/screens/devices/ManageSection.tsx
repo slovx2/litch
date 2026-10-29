@@ -20,6 +20,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
+import { stampFull } from '../../../../../packages/ui/src/app/format.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useBusy, useChannel, useKey, useReplica } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
@@ -314,18 +315,36 @@ function HarnessHead({
       </View>
       {harness.cli ? (
         <View style={styles.runtime} testID={`harness:${harness.id}:runtime`}>
-          <Text selectable style={[styles.small, { color: theme.c.ink2 }]}>
-            {t('harness.runtime.path')}: {harness.cli.path}
-          </Text>
-          <Text style={[styles.small, { color: theme.c.ink2 }]}>
-            {t('harness.runtime.version')}: {harness.cli.version || t('devices.harness.unknown')}
-          </Text>
-          <Text style={[styles.small, { color: theme.c.ink2 }]}>
-            {t('harness.runtime.source')}: {t(`harness.runtime.source.${harness.cli.source}`)}
-          </Text>
-          <Text style={[styles.small, { color: theme.c.ink2 }]}>
-            {t('harness.runtime.started')}: {new Date(harness.cli.startedAt).toLocaleString(t.lang)}
-          </Text>
+          {/* 同桌面 HarnessBlock 的 CLI 信息：标签三级字色，值二级字色，路径和版本等宽 */}
+          {(
+            [
+              ['harness.runtime.path', harness.cli.path, true],
+              [
+                'harness.runtime.version',
+                harness.cli.version || t('devices.harness.unknown'),
+                Boolean(harness.cli.version),
+              ],
+              ['harness.runtime.source', t(`harness.runtime.source.${harness.cli.source}`), false],
+              ['harness.runtime.started', stampFull(harness.cli.startedAt, t.lang), false],
+            ] as const
+          ).map(([label, value, mono]) => (
+            <View key={label} style={styles.runtimeRow}>
+              <Text style={[styles.small, styles.runtimeLabel, { color: theme.c.ink3 }]}>
+                {t(label)}
+              </Text>
+              <Text
+                selectable
+                style={[
+                  styles.small,
+                  styles.runtimeValue,
+                  { color: theme.c.ink2 },
+                  mono ? { fontFamily: theme.font.mono } : null,
+                ]}
+              >
+                {value}
+              </Text>
+            </View>
+          ))}
         </View>
       ) : null}
       {entry === 'unsupported' ? (
@@ -480,6 +499,10 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '600' },
   small: { fontSize: 12, lineHeight: 17 },
   runtime: { paddingHorizontal: 16, paddingVertical: 10, gap: 3 },
+  runtimeRow: { flexDirection: 'row', gap: 12 },
+  /** 标签固定宽度，值排成一列（同桌面的两栏） */
+  runtimeLabel: { width: '32%' },
+  runtimeValue: { flex: 1 },
   fold: { fontSize: 13, paddingHorizontal: 16, paddingVertical: 8 },
   groupNote: { fontSize: 13, lineHeight: 18, paddingHorizontal: 16 },
   actions: { flexDirection: 'row', gap: 10, paddingHorizontal: 16 },
