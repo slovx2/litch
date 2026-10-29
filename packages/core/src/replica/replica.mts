@@ -34,6 +34,7 @@ import type {
   SettingSpecView,
   SettingsSnapshotView,
 } from '../model-manage.mjs'
+import type { ManagerBoardTopicView, ManagersView, ManagerView } from '../model-manager.mjs'
 import type { PairingTopicView } from '../model-pairing.mjs'
 import type { TaskRunApprovalView, TaskRunView, TasksView, TaskView } from '../model-tasks.mjs'
 import type { TerminalInfo, TerminalsOp, TerminalsView } from '../model-terminal.mjs'
@@ -41,6 +42,7 @@ import type { AgentThreadView, SessionNoteView, SessionProposalView } from '../m
 import type { Text } from '../phrase.mjs'
 import { type AskAnswers, gatherAnswers, parseAskReply } from '../projection/asks.mjs'
 import { changedKeys } from '../projection/manage.mjs'
+import { managerBoardPages, managerSessionIds } from '../projection/manager.mjs'
 import { changesQuestions, pendingQuestions } from '../projection/pending-asks.mjs'
 import { appendOutput, appendSkipping } from '../text/output-cap.mjs'
 import { createFileTrees, type FileTrees, fileKeys } from './file-trees.mjs'
@@ -171,6 +173,17 @@ export const keys = {
   task: (deviceId: string, taskId: string) => `tasks:${deviceId}:task:${taskId}`,
   /** number：各台设备上没看过的运行一共有几条。侧栏的“定时任务”入口用它 */
   tasksUnread: 'tasks:unread',
+  /** 经理列表与可用性常驻；子树继续使用 summary、children、harnessOf。 */
+  managersAvailable: (deviceId: string) => `managers:${deviceId}:available`,
+  managerIds: (deviceId: string) => `managers:${deviceId}:ids`,
+  manager: (deviceId: string, managerId: string) => `managers:${deviceId}:manager:${managerId}`,
+  managersPending: 'managers:pending',
+  managerBoard: (deviceId: string, managerId: string) => `managers:${deviceId}:board:${managerId}`,
+  managerBoardPages: (deviceId: string, managerId: string) =>
+    `managers:${deviceId}:pages:${managerId}`,
+  managerBoardError: (deviceId: string, managerId: string) =>
+    `managers:${deviceId}:error:${managerId}`,
+  managersError: (deviceId: string) => `managers:${deviceId}:error`,
   /** TaskRunsPage：一个任务的运行记录（openTaskRuns 打开着才有） */
   taskRuns: (deviceId: string, taskId: string) => `tasks:${deviceId}:runs:${taskId}`,
   /** ChannelErrorShape：这个根的差异订阅不上（不认识的根之类） */
@@ -353,12 +366,10 @@ export interface Replica {
    * 打开一个根的差异概况：订阅它（keys.diff）。核心只在有人订阅的时候才去设备上取，
    * 所以面板不显示的时候要关掉。可以打开多次，全部关掉后才退订并清掉
    */
-  openDiff(
-    deviceId: string,
-    root: string,
-    scope: DiffScope,
-    sessionId: string | null,
-  ): () => void /**
+  openDiff(deviceId: string, root: string, scope: DiffScope, sessionId: string | null): () => void
+  /** 看板按经理订阅，可重复打开；最后一个引用关闭后清掉快照和四页投影。 */
+  openManagerBoard(deviceId: string, managerId: string): () => void
+  /**
    * 打开一个任务的运行记录：取头一页放进 keys.taskRuns，之后运行的变化跟着改；重连之后重新取头一页。
    * 可以打开多次，全部关掉后才清掉
    */
@@ -509,6 +520,67 @@ function sameHarnesses(a: SessionHarnesses, b: SessionHarnesses): boolean {
 
 export function createReplica(channel: CoreChannel): Replica {
   const store = new KeyedStore()
+  const managerLists = new Map<string, { stop(): void; rows: Map<string, ManagerView> }>()
+  const managerBoards = new Map<string, { deviceId: string; count: number; stop(): void }>()
+  const pendingManagers = () => {
+    const total = [...managerLists.values()].reduce(
+      (sum, entry) =>
+        sum +
+        [...entry.rows.values()]
+          .filter((m) => m.status === 'active')
+          .reduce((n, m) => n + m.pendingDecisions, 0),
+      0,
+    )
+    if (store.get<number>(keys.managersPending) !== total) store.set(keys.managersPending, total)
+  }
+  const watchManagers = (deviceId: string) => {
+    if (managerLists.has(deviceId)) return
+    const entry = { rows: new Map<string, ManagerView>(), stop() {} }
+    managerLists.set(deviceId, entry)
+    const put = (manager: ManagerView) => {
+      entry.rows.set(manager.id, manager)
+      store.set(keys.manager(deviceId, manager.id), manager)
+    }
+    entry.stop = channel.subscribe(
+      { kind: 'managers', deviceId },
+      {
+        snapshot(view: ManagersView) {
+          store.batch(() => {
+            for (const id of entry.rows.keys()) store.delete(keys.manager(deviceId, id))
+            entry.rows.clear()
+            for (const manager of view.managers) put(manager)
+            store.set(keys.managerIds(deviceId), [...entry.rows.keys()])
+            store.set(keys.managersAvailable(deviceId), view.available)
+            store.delete(keys.managersError(deviceId))
+            pendingManagers()
+          })
+        },
+        delta(ops) {
+          store.batch(() => {
+            for (const op of ops) put(op.manager)
+            const ids = [...entry.rows.keys()]
+            if (JSON.stringify(store.get(keys.managerIds(deviceId))) !== JSON.stringify(ids))
+              store.set(keys.managerIds(deviceId), ids)
+            pendingManagers()
+          })
+        },
+        error(error) {
+          store.set(keys.managersError(deviceId), error)
+        },
+      },
+    )
+  }
+  const dropManagers = (deviceId: string) => {
+    managerLists.get(deviceId)?.stop()
+    managerLists.delete(deviceId)
+    for (const [key, entry] of managerBoards)
+      if (entry.deviceId === deviceId) {
+        entry.stop()
+        managerBoards.delete(key)
+      }
+    store.deletePrefix(`managers:${deviceId}:`)
+    pendingManagers()
+  }
   const sidebars = new Map<string, { stop(): void; sessions: Map<string, SessionSummary> }>()
   /** 各台设备的终端列表的订阅 */
   const terminalLists = new Map<string, () => void>()
@@ -693,6 +765,9 @@ export function createReplica(channel: CoreChannel): Replica {
     sessions: Map<string, SessionSummary>,
     listed: readonly SectionView[],
   ) => {
+    const allSessions = sessions
+    const hidden = managerSessionIds(allSessions.values())
+    sessions = new Map([...allSessions].filter(([id]) => !hidden.has(id)))
     const next = groupSessions(sessions.values())
     settlePlaced(next, sessions)
     const prev = store.get<SessionGroups>(keys.groups(deviceId))
@@ -753,22 +828,22 @@ export function createReplica(channel: CoreChannel): Replica {
     if (!tallied || !sameTallies(tallied, tallies)) store.set(keys.tallies(deviceId), tallies)
     // 哪个会话属于哪个 harness：会话多了、少了才换（一个会话不会换 harness）
     const harnessOf: SessionHarnesses = {}
-    for (const session of sessions.values()) harnessOf[session.id] = session.harness
+    for (const session of allSessions.values()) harnessOf[session.id] = session.harness
     const known = store.get<SessionHarnesses>(keys.harnessOf(deviceId))
     if (!known || !sameHarnesses(known, harnessOf)) store.set(keys.harnessOf(deviceId), harnessOf)
     // 会话树：父子关系变了、会话多了少了才换
-    const children = childrenOf(sessions)
+    const children = childrenOf(allSessions)
     const nested = store.get<SessionChildren>(keys.children(deviceId))
     if (!nested || JSON.stringify(nested) !== JSON.stringify(children)) {
       store.set(keys.children(deviceId), children)
     }
-    const starts = startsOf(sessions)
+    const starts = startsOf(allSessions)
     const started = store.get<ProposalStarts>(keys.proposalStarts(deviceId))
     if (!started || JSON.stringify(started) !== JSON.stringify(starts)) {
       store.set(keys.proposalStarts(deviceId), starts)
     }
     // 别的应用派出来的会话：多了、少了才换
-    const spawned = [...sessions.values()]
+    const spawned = [...allSessions.values()]
       .filter((session) => session.nativeLineage)
       .map((session) => session.id)
       .sort()
@@ -856,6 +931,7 @@ export function createReplica(channel: CoreChannel): Replica {
     terminalLists.delete(deviceId)
     store.deletePrefix(`terminals:${deviceId}:`)
     dropTasks(deviceId)
+    dropManagers(deviceId)
   }
 
   /** 终端的列表：每个终端一个键，另有“每个工作区下有哪些标签”和“留在设备上的有哪些”两个汇总 */
@@ -924,6 +1000,7 @@ export function createReplica(channel: CoreChannel): Replica {
       watchSidebar(op.device.id)
       watchTerminals(op.device.id)
       watchTasks(op.device.id)
+      watchManagers(op.device.id)
       // 断了又连上：正看着的文件树重新对一遍（断着的时候取的都是“没连上”）
       if (before && before.connection !== 'online' && op.device.connection === 'online') {
         files.reconnected(op.device.id)
@@ -1305,6 +1382,47 @@ export function createReplica(channel: CoreChannel): Replica {
     },
 
     files,
+
+    openManagerBoard(deviceId, managerId) {
+      const key = keys.managerBoard(deviceId, managerId)
+      let entry = managerBoards.get(key)
+      if (!entry) {
+        entry = { deviceId, count: 0, stop() {} }
+        managerBoards.set(key, entry)
+        const apply = (view: ManagerBoardTopicView) =>
+          store.batch(() => {
+            store.set(key, view)
+            store.set(
+              keys.managerBoardPages(deviceId, managerId),
+              view.board ? managerBoardPages(view.board) : null,
+            )
+            store.delete(keys.managerBoardError(deviceId, managerId))
+          })
+        entry.stop = channel.subscribe(
+          { kind: 'managerBoard', deviceId, managerId },
+          {
+            snapshot: apply,
+            delta: (ops) => {
+              for (const op of ops) apply(op.view)
+            },
+            error: (error) => store.set(keys.managerBoardError(deviceId, managerId), error),
+          },
+        )
+      }
+      entry.count++
+      const held = entry
+      let released = false
+      return () => {
+        if (released) return
+        released = true
+        if (managerBoards.get(key) !== held || --held.count > 0) return
+        held.stop()
+        managerBoards.delete(key)
+        store.delete(key)
+        store.delete(keys.managerBoardPages(deviceId, managerId))
+        store.delete(keys.managerBoardError(deviceId, managerId))
+      }
+    },
 
     openTaskRuns(deviceId, taskId) {
       const key = keys.taskRuns(deviceId, taskId)

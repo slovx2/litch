@@ -46,6 +46,7 @@ import type { TerminalsAlive } from '../model-terminal.mjs'
 import type { SessionEventView } from '../model-tree.mjs'
 import { phrase } from '../phrase.mjs'
 import { projectItem } from '../projection/items.mjs'
+import { managerMark } from '../projection/manager.mjs'
 import { localUserMessage, outgoing } from '../projection/outgoing.mjs'
 import { peekOf } from '../projection/peek.mjs'
 import { settleAnswers } from '../projection/questions.mjs'
@@ -622,6 +623,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       sessions.set(key, view)
     }
     // 归档着的只能看；放回来之后（见 session.unarchive）才又能发消息
+    if (managers.ended(deviceId, sessionId)) {
+      view.live = false
+      view.note = phrase('session.readOnly')
+    }
     if (isShelved(deviceId, sessionId)) {
       view.live = false
       view.note = phrase('session.archived')
@@ -2103,6 +2108,14 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       sidebars.get(deviceId)?.sessions.find((session) => session.id === sessionId),
     summaries: (deviceId) => sidebars.get(deviceId)?.sessions ?? [],
     addSummary(deviceId, summary) {
+      const parent = sidebars
+        .get(deviceId)
+        ?.sessions.find((session) => session.id === summary.lineage?.parentId)
+      const mark = parent ? managerMark(parent) : null
+      if (mark)
+        summary = Object.assign({}, summary, {
+          litchManager: { managerId: mark.managerId, role: 'line' as const },
+        })
       sidebars.get(deviceId)?.sessions.push(summary)
       emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session: summary }])
     },

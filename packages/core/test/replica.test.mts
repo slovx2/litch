@@ -244,8 +244,11 @@ test('每个会话属于哪个 harness：一张表，会话多了少了才换', 
     b4: 'dsh',
     b5: 'claude',
     b6: 'codex',
+    m2: 'claude',
+    'manager-k5': 'claude',
+    'manager-k6': 'dsh',
   })
-  assert.equal(Object.keys(harnessOf('local') ?? {}).length, 22)
+  assert.equal(Object.keys(harnessOf('local') ?? {}).length, 31)
   assert.deepEqual(harnessOf('nas'), { n1: 'codex' })
 
   // 会话的状态、标题变了不动这张表
@@ -261,7 +264,7 @@ test('每个会话属于哪个 harness：一张表，会话多了少了才换', 
   time.advance(16)
   await settle()
   assert.equal(harnessOf('local')?.s8, undefined)
-  assert.equal(Object.keys(harnessOf('local') ?? {}).length, 21)
+  assert.equal(Object.keys(harnessOf('local') ?? {}).length, 30)
   assert.equal(seen.n, 1)
 })
 

@@ -242,6 +242,11 @@ export function createMockManagers(host: MockManagerHost) {
   }
   for (const device of host.devices()) state(device.id)
   return {
+    ended(deviceId: string, threadId: string): boolean {
+      return state(deviceId).managers.some(
+        (manager) => manager.threadId === threadId && manager.status === 'ended',
+      )
+    },
     subscribe(deviceId: string, sink: HostSink, managerId?: string) {
       const map = managerId === undefined ? lists : boards
       const id = managerId === undefined ? deviceId : key(deviceId, managerId)

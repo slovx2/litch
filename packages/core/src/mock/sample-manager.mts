@@ -3,16 +3,12 @@ import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
 } from '../../../protocol/src/manager.mjs'
-import type { SessionSummary } from '../model.mjs'
-import type {
-  ManagerBoardView,
-  ManagerDecisionView,
-  ManagerView,
-  SessionManagerMark,
-} from '../model-manager.mjs'
+import type { ManagerBoardView, ManagerDecisionView, ManagerView } from '../model-manager.mjs'
 import type { SampleLang } from './sample-text.mjs'
 
-export type ManagerSessionSummary = SessionSummary & { litchManager?: SessionManagerMark }
+export type { ManagerSessionSummary } from '../projection/manager.mjs'
+
+import type { ManagerSessionSummary } from '../projection/manager.mjs'
 
 export function sampleManagers(
   deviceId: string,
@@ -25,7 +21,7 @@ export function sampleManagers(
 } {
   const t = (zh: string, en: string) => (lang === 'zh-CN' ? zh : en)
   const ago = (minutes: number) => now - minutes * 60_000
-  const cwd = deviceId === 'build' ? '/srv/infra' : '/workspace/litch'
+  const cwd = deviceId === 'build' ? '/srv/work/infra' : '~/work/litch'
   const managers: ManagerView[] = []
   const boards: ManagerBoardView[] = []
   const sessions: ManagerSessionSummary[] = []
@@ -58,25 +54,49 @@ export function sampleManagers(
     ['e2', 'local', 'Litch 0.21', t('全部关闭', 'Everything closed')],
   ]
   const children = [
-    ['k1', 'm1', t('回退改成编辑原消息', 'Edit original messages to rewind'), 'claude', true],
     [
-      'k2',
+      'manager-k1',
+      'm1',
+      t('回退改成编辑原消息', 'Edit original messages to rewind'),
+      'claude',
+      true,
+    ],
+    [
+      'manager-k2',
       'm1',
       t('子会话能归档（照 Claude）', 'Archive child sessions like Claude'),
       'claude',
       false,
     ],
-    ['k3', 'm1', t('后台任务页筛选：先调研', 'Research background task filters'), 'pi', true],
     [
-      'k4',
+      'manager-k3',
+      'm1',
+      t('后台任务页筛选：先调研', 'Research background task filters'),
+      'pi',
+      true,
+    ],
+    [
+      'manager-k4',
       'm1',
       t('恢复 CLI 重试并显示次数', 'Restore CLI retries and show attempts'),
       'claude',
       false,
     ],
-    ['k5', 'm2', t('复现 522：压测网关', 'Reproduce 522 with gateway load tests'), 'claude', true],
-    ['k6', 'm2', t('给上游加超时告警', 'Add upstream timeout alerts'), 'dsh', false],
-    ['k7', 'm3', t('输入区高度不齐（复发）', 'Composer height mismatch returns'), 'claude', false],
+    [
+      'manager-k5',
+      'm2',
+      t('复现 522：压测网关', 'Reproduce 522 with gateway load tests'),
+      'claude',
+      true,
+    ],
+    ['manager-k6', 'm2', t('给上游加超时告警', 'Add upstream timeout alerts'), 'dsh', false],
+    [
+      'manager-k7',
+      'm3',
+      t('输入区高度不齐（复发）', 'Composer height mismatch returns'),
+      'claude',
+      false,
+    ],
   ] as const
   function session(
     id: string,
@@ -91,10 +111,10 @@ export function sampleManagers(
       title,
       harness,
       cwd,
-      workspaceId: null,
+      workspaceId: deviceId === 'build' ? 'infra' : 'litch',
       status: running ? 'running' : 'idle',
       waitingFor: null,
-      unread: id === 'k2',
+      unread: id === 'manager-k2',
       updatedAt: ago(12),
       pinned: false,
       section: null,
@@ -170,8 +190,8 @@ export function sampleManagers(
         cwd,
         status: running ? 'running' : 'idle',
         running,
-        startedAt: ago(kid === 'k3' ? 4 : 12),
-        elapsedSeconds: kid === 'k3' ? 240 : 720,
+        startedAt: ago(kid === 'manager-k3' ? 4 : 12),
+        elapsedSeconds: kid === 'manager-k3' ? 240 : 720,
         branch: null,
         ahead: null,
         merged: null,
@@ -287,7 +307,7 @@ export function sampleManagers(
       d15.blocks = ['I-1', 'I-2']
       d15.default = { kind: 'option', optionId: 'a' }
       d15.basis = [
-        { kind: 'thread', target: 'k1', label: null },
+        { kind: 'thread', target: 'manager-k1', label: null },
         { kind: 'branch', target: 'feat/edit-to-rewind', label: null },
       ]
     }
@@ -356,7 +376,10 @@ export function sampleManagers(
           ? { kind: 'user' }
           : i === 5 || i > 6
             ? { kind: 'manager' }
-            : { kind: 'line', threadId: i < 2 ? 'k1' : i === 2 ? 'k2' : 'k4' },
+            : {
+                kind: 'line',
+                threadId: i < 2 ? 'manager-k1' : i === 2 ? 'manager-k2' : 'manager-k4',
+              },
       blockedBy: i === 1 ? ['D-15'] : i === 3 ? ['D-16'] : [],
       why:
         i === 1
@@ -427,8 +450,8 @@ export function sampleManagers(
       text,
       kind: i === 0 ? 'report' : i === 3 ? 'merged' : 'decision',
       at: ago([12, 19, 28, 40, 55, 70][i] ?? 0),
-      objectId: null,
-      threadId: i === 0 ? 'k1' : null,
+      objectId: ([null, 'D-13', 'D-15', null, 'D-12', 'D-11'] as const)[i] ?? null,
+      threadId: i === 0 ? 'manager-k1' : i === 3 ? 'manager-k4' : null,
       changeId: null,
     }))
   }
@@ -446,6 +469,34 @@ export function sampleManagers(
       ),
       at: ago(90),
     }
+  if (mobile)
+    mobile.activities.push({
+      id: 'mobile-decision',
+      kind: 'decision',
+      at: ago(1440),
+      text: t('经理提了 1 项决策', 'Manager opened one decision'),
+      objectId: 'D-1',
+      threadId: null,
+      changeId: null,
+    })
+  if (gateway)
+    gateway.activities.push({
+      id: 'gateway-status',
+      kind: 'status',
+      at: ago(90),
+      text: t('经理更新了现状', 'Manager updated the situation'),
+      objectId: null,
+      threadId: null,
+      changeId: null,
+    })
+  const previous = boards.find((board) => board.managerId === 'e1')
+  if (previous && main) {
+    // 上一位经理留下的过程记录只读；不与当前看板共享可变对象。
+    previous.decisions = JSON.parse(
+      JSON.stringify(main.decisions.slice(0, 2)),
+    ) as ManagerDecisionView[]
+    previous.items = JSON.parse(JSON.stringify(main.items.slice(0, 3))) as ManagerBoardView['items']
+  }
   for (const manager of managers) {
     const board = boards.find((board) => board.managerId === manager.id)
     manager.pendingDecisions = board?.decisions.filter((d) => d.status === 'open').length ?? 0

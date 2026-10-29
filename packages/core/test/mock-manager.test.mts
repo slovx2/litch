@@ -15,13 +15,14 @@ for (const lang of ['zh-CN', 'en'] as const)
       3,
     )
     assert.equal(local.managers.filter((m) => m.status === 'ended').length, 2)
-    const board = local.boards.find((b) => b.managerId === 'm1')!
+    const board = local.boards.find((b) => b.managerId === 'm1')
+    assert.ok(board)
     assert.deepEqual(
       [board.decisions.length, board.items.length, board.lines.length, board.activities.length],
       [6, 9, 4, 6],
     )
     assert.equal(local.sessions.filter((s) => s.litchManager?.managerId === 'm1').length, 5)
-    assert.equal(local.sessions.find((s) => s.id === 'k1')?.lineage?.parentId, 'm1')
+    assert.equal(local.sessions.find((s) => s.id === 'manager-k1')?.lineage?.parentId, 'm1')
   })
 
 test('模拟经理命令：部分提交、版本冲突、重开、结束只读、新建和更新', async () => {
@@ -54,8 +55,15 @@ test('模拟经理命令：部分提交、版本冲突、重开、结束只读�
     },
     'm1',
   )
-  const command = (name: string, params: object = {}) =>
-    service.command(`managers.${name}`, { deviceId: 'local', managerId: 'm1', ...params })!
+  const command = (name: string, params: object = {}) => {
+    const result = service.command(`managers.${name}`, {
+      deviceId: 'local',
+      managerId: 'm1',
+      ...params,
+    })
+    assert.ok(result)
+    return result
+  }
   const reply = (await command('answers.submit', {
     answers: [
       { decisionId: 'D-15', revision: 1, optionId: 'a', text: '' },
@@ -77,13 +85,14 @@ test('模拟经理命令：部分提交、版本冲突、重开、结束只读�
   await command('update', { patch: { name: '新名字' } })
   await command('end')
   await assert.rejects(command('update', { patch: { name: '不可写' } }), { code: 'rejected' })
-  const sample = sampleManagers('local', clock.now(), 'zh-CN').managers[0]!
+  const sample = sampleManagers('local', clock.now(), 'zh-CN').managers[0]
+  assert.ok(sample)
   const created = (await command('create', { manager: { ...sample, firstTask: '第一件事' } })) as {
     threadId: string
   }
   assert.equal(created.threadId, 'new-manager-thread')
   assert.equal(turns.at(-1), '第一件事')
-  await assert.rejects(service.command('managers.end', { deviceId: 'nas', managerId: 'm1' })!, {
+  await assert.rejects(command('end', { deviceId: 'nas' }), {
     code: 'unsupported',
   })
   close()

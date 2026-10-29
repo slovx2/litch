@@ -228,6 +228,7 @@ export type * from './model-install.mjs'
 export type * from './model-limits.mjs'
 export type * from './model-machine.mjs'
 export type * from './model-manage.mjs'
+export type * from './model-manager.mjs'
 export type * from './model-pairing.mjs'
 export type * from './model-service.mjs'
 export type * from './model-tasks.mjs'
@@ -346,6 +347,17 @@ export {
   projectManage,
   projectSnapshot,
 } from './projection/manage.mjs'
+export {
+  type ManagerBoardPages,
+  type ManagerSessionSummary,
+  managerBoardPages,
+  managerMark,
+  managerSessionIds,
+  projectManager,
+  projectManagerAnswers,
+  projectManagerBoard,
+  projectManagerDecision,
+} from './projection/manager.mjs'
 export { localUserMessage, MAX_EXTRA_TEXT, MAX_IMAGES } from './projection/outgoing.mjs'
 export {
   changesQuestions,

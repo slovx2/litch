@@ -43,6 +43,7 @@ import {
   type ThreadSectionListResponse,
   type Turn,
 } from '../../../protocol/src/index.mjs'
+import type { ManagerThreadFields } from '../../../protocol/src/manager.mjs'
 import { taskCardsSettingKey } from '../../../protocol/src/session-tree.mjs'
 import type { ThreadWorktree, WorktreeFrom } from '../../../protocol/src/worktrees.mjs'
 import { ChannelError, type Clock, type SidebarOp } from '../channel/protocol.mjs'
@@ -143,6 +144,7 @@ import { createInstall, type Install } from './install.mjs'
 import { createLiveSessions } from './live.mjs'
 import type { MachineFacts } from './machine/types.mjs'
 import { createManagement } from './manage.mjs'
+import { createManagers, type Managers } from './manager.mjs'
 import {
   MENTION_READ_MS,
   type MentionHost,
@@ -391,6 +393,8 @@ export interface Device {
   readonly diffs: Diffs
   /** 这台设备上的定时任务：订阅、建、改、删、立即运行、运行记录（tasks.mts） */
   readonly tasks: Tasks
+  /** 设备上的经理列表与按需订阅的看板。 */
+  readonly managers: Managers
   /** 这台设备上的扫码绑定手机：出码、确认、已绑定的手机（pairing.mts） */
   readonly pairing: Pairing
   /** 这台设备上的手机批准：桌面端挂登录卡片、转回手机的答复，手机取和答（approvals.mts） */
@@ -574,6 +578,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let reattachable = false
   /** 对面支不支持定时任务（deviceTasks 扩展）。认出来之前、对面不是设备服务时都是不支持 */
   let schedulable = false
+  /** 对面声明 litchManager 后才读取看板、接受经理通知与会话标记。 */
+  let managersOn = false
   /**
    * 对面有没有会话树（sessionTree 扩展：Litch 子会话、提案、litch_sessions）。认出来之前、对面不是设备服务时都是没有；
    * 断开之后留着断开前知道的
@@ -824,13 +830,16 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
    */
   const asking = new Map<string, number>()
   const summaryOf = (thread: Thread): SessionSummary => {
-    const summary: SessionSummary = {
+    const summary: SessionSummary & ManagerThreadFields = {
       ...projectSummary(thread, {
         harness: harnessOf(thread),
         workspaceId: resolveWorkspace(thread, workspaces, pathTwin(platform)),
       }),
       unread: unread.has(thread.id),
       task: tasks.mark(thread.id),
+      ...(managersOn && (thread as Thread & ManagerThreadFields).litchManager
+        ? { litchManager: (thread as Thread & ManagerThreadFields).litchManager }
+        : {}),
     }
     const at = restarted.get(thread.id)
     if (at !== undefined) summary.restarted = at
@@ -1633,6 +1642,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         recoverySupported = info.device.extensions?.includes(EXTENSION.turnRecovery) === true
         reattachable = info.device.extensions?.includes(EXTENSION.deviceProcesses) === true
         schedulable = info.device.extensions?.includes(EXTENSION.deviceTasks) === true
+        managersOn = info.device.extensions?.includes(EXTENSION.manager) === true
         sessionTree = info.device.extensions?.includes(EXTENSION.sessionTree) === true
         ignoreQuestions =
           sessionTree && info.device.extensions?.includes(EXTENSION.sessionQuestionIgnore) === true
@@ -1657,6 +1667,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         manageable = false
         reattachable = false
         schedulable = false
+        managersOn = false
         sessionTree = false
         ignoreQuestions = false
         pairable = false
@@ -1682,6 +1693,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       manageable = false
       reattachable = false
       schedulable = false
+      managersOn = false
       sessionTree = false
       ignoreQuestions = false
       pairable = false
@@ -1717,6 +1729,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     files.resync()
     diffs.resync()
     tasks.resync()
+    managers.resync()
     pairing.resync()
     approvals.resync()
     install.resync()
@@ -1764,6 +1777,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (dropped) diffs.offline()
       manage.offline()
       tasks.offline()
+      managers.offline()
       pairing.offline()
       approvals.offline()
       install.offline()
@@ -1836,6 +1850,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         return
       }
       // 定时任务：一样和会话目录是两回事，任务模块自己对账、自己攒
+      if (managers.notification(method, params)) return
       if (tasks.notification(method, params)) return
       // 扫码绑定手机：配对的状态、已绑定的手机
       if (pairing.notification(method, params)) return
@@ -1963,6 +1978,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       // litch_machine 的说明按会话生成：开头写这个会话在哪台、桌面端是哪台；litch_computer 的说明按桌面的平台挑。
       // litch_tasks、litch_sessions 的执行方是设备服务自己：设备列了 deviceTasks、声明了会话树就各自带上，
       // 和这台桌面能执行什么无关（握手时不声明它们，toolNamespaces 里也没有）。
+      // litch_manager 只由设备在建经理时注入，普通会话和子线不能继承。
       // 最后是呈现风格（不带工具，只有 instructions；原生 codex 不带，client-tools-presentation.mts）
       // 内置浏览器、Computer Use 在这个 harness 上关着的不带（模型看不到，也省提示词）；调用时还会再查一次
       const presentation = presentationSpec(harness)
@@ -2221,6 +2237,24 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     thread: (sessionId) => threads.get(sessionId),
     put: (thread) => upsertThread(thread),
     now: () => options.clock.now(),
+  })
+
+  const managers = createManagers({
+    deviceId: config.id,
+    online: () => online,
+    supported: () => managersOn,
+    request: (method, params) => link.request(method, params),
+    fail,
+    changed(manager) {
+      const thread = threads.get(manager.threadId)
+      if (thread)
+        upsertThread({
+          ...thread,
+          name: manager.name || thread.name,
+          litchManager: { managerId: manager.id, role: 'manager' },
+        } as Thread & ManagerThreadFields)
+    },
+    log,
   })
 
   const tasks = createTasks({
@@ -2722,6 +2756,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     files,
     diffs,
     tasks,
+    managers,
     pairing,
     approvals,
     install,

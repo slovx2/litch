@@ -206,6 +206,9 @@ test('本机的电源：开了接电常开就在阻止休眠；对话里说“�
 
 test('停用一个 harness：它的状态变成停用，会话都留着但发不出去、建不了新的；再启用就恢复', async () => {
   const { write, harness, rows, channel, flush, seen } = await opened()
+  // 经理示例有一条 Pi 工作线，先结束它以验证空闲时停用。
+  await channel.command('device.harness.restart', { deviceId: 'local', harness: 'pi', force: true })
+  await flush()
   const mine = () => [...rows.values()].filter((row) => row.harness === 'pi').map((row) => row.id)
   const before = mine()
   assert.ok(before.length > 0)
@@ -485,6 +488,13 @@ test('对话里说“加一项设置”：订阅着的重新拿到结构，新�
 
 test('重启一个空闲的 harness：先是“正在启动”，停稳了才应答；本来就起不来的，重启完还是起不来', async () => {
   const { channel, harness, flush } = await opened(10)
+  const prepare = channel.command('device.harness.restart', {
+    deviceId: 'local',
+    harness: 'pi',
+    force: true,
+  })
+  await flush(200)
+  await prepare
   let done: unknown = null
   void channel
     .command('device.harness.restart', { deviceId: 'local', harness: 'pi' })
