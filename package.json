@@ -102,6 +102,7 @@
     "client:check:onboard": "npm run build --prefix packages/ui && npm run check:onboard --prefix apps/desktop",
     "client:check:harness-settings": "npm run build --prefix packages/ui && npm run check:harness-settings --prefix apps/desktop",
     "client:check:sidebar": "npm run build --prefix packages/ui && npm run check:sidebar --prefix apps/desktop",
+    "client:check:manager": "npm run build --prefix packages/ui && npm run build --prefix apps/desktop && node apps/desktop/scripts/smoke.mjs --manager",
     "client:check:tree": "npm run build --prefix packages/ui && npm run check:tree --prefix apps/desktop",
     "client:check:background": "npm run build --prefix packages/ui && npm run check:background --prefix apps/desktop",
     "client:check:goal": "npm run build --prefix packages/ui && npm run check:goal --prefix apps/desktop",

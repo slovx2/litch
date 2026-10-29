@@ -86,6 +86,7 @@ import { homeMoreProbe, judgeHomeMore } from './probe-home-more.mjs'
 import { manageProbe } from './probe-manage.mjs'
 import { judgeManage, judgeMockManage } from './probe-manage-judge.mjs'
 import { mockManageProbe } from './probe-manage-mock.mjs'
+import { judgeManager, managerProbe } from './probe-manager.mjs'
 import { judgeOnboard, onboardProbe } from './probe-onboard.mjs'
 import { judgeOrganize, organizeProbe } from './probe-organize.mjs'
 import { judgeOrganizeMock, organizeMockProbe, PICKED_FOLDER } from './probe-organize-mock.mjs'
@@ -126,6 +127,7 @@ type ProbeMode =
   | 'manage'
   | 'manage-mock'
   | 'sidebar'
+  | 'manager'
   | 'tasks'
   | 'tree'
   | 'background'
@@ -178,6 +180,7 @@ const PROBE_MODES: readonly string[] = [
   'manage',
   'manage-mock',
   'sidebar',
+  'manager',
   'tasks',
   'tree',
   'background',
@@ -200,6 +203,7 @@ export const MOCK_MODES: readonly string[] = [
   'full-mock',
   'manage-mock',
   'sidebar',
+  'manager',
   'tasks',
   'tree',
   'background',
@@ -293,6 +297,10 @@ async function measure(
     return runFilesChecks(window, mode, hooks)
   }
   if (mode === 'sidebar') return runSidebarChecks(window, hooks)
+  if (mode === 'manager') {
+    const result = await runInPage(window, managerProbe)
+    return [result, judgeManager(result)]
+  }
   if (mode === 'tasks') {
     const result = await runInPage(window, tasksProbe, TASK_NAME)
     return [result, judgeTasks(result, TASK_NAME)]

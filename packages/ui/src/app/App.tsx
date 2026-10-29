@@ -1,4 +1,6 @@
-import { keys, type SessionSummary } from '@litch/core'
+import { ManagerTitleBar } from '../manager/ManagerTitleBar.tsx'
+import '../styles/manager.css'
+import { keys, managerMark, type SessionSummary } from '@litch/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArchivedPage } from '../archived/ArchivedPage.tsx'
 import { ArchivedSession } from '../archived/ArchivedSession.tsx'
@@ -9,6 +11,9 @@ import type { PlaceWish } from '../composer/new-place.ts'
 import { useNewPlace } from '../composer/useNewPlace.ts'
 import { ApprovalNotices } from '../devices/ApprovalNotices.tsx'
 import { DevicesPage } from '../devices/DevicesPage.tsx'
+import { useManagers } from '../manager/data.ts'
+import { ManagerOrigin, ManagerPage } from '../manager/ManagerPage.tsx'
+import { ManagersPage } from '../manager/ManagersPage.tsx'
 import { SessionNotices } from '../notify/SessionNotices.tsx'
 import { Onboarding } from '../onboarding/Onboarding.tsx'
 import { InfoRail } from '../rail/InfoRail.tsx'
@@ -22,8 +27,10 @@ import { TerminalSlot } from '../terminal/TerminalSlot.tsx'
 import { Transcript } from '../transcript/Transcript.tsx'
 import {
   type DeviceSection,
+  type ManagersRoute,
   onAssistantRequest,
   onDeviceRequest,
+  onManagersRequest,
   onNewSessionRequest,
   onOpenSessionRequest,
   onSettingsRequest,
@@ -37,7 +44,7 @@ import { TitleBar } from './TitleBar.tsx'
 import { Toasts } from './toasts.tsx'
 
 /** 占着对话区的那几页：已归档对话、设备、设置、定时任务 */
-export type Page = 'archived' | 'devices' | 'settings' | 'tasks'
+export type Page = 'archived' | 'devices' | 'settings' | 'tasks' | 'managers'
 
 export interface Selection {
   deviceId: string
@@ -53,6 +60,12 @@ export interface Draft {
 export function App() {
   const { channel, replica } = useServices()
   useUpdateToast()
+  const managerData = useManagers()
+  const [sidebarMode, setSidebarMode] = useState<'chat' | 'manager'>('chat')
+  const [managersAt, setManagersAt] = useState<{ route: ManagersRoute; seq: number }>({
+    route: { view: 'list' },
+    seq: 0,
+  })
   /** 选中的会话。启动时不选：没有选中会话的时候，主区域就是新建对话页 */
   const [picked, setPicked] = useState<Selection | null>(null)
   /**
@@ -72,6 +85,16 @@ export function App() {
   const pickedSummary = useKey<SessionSummary>(
     keys.summary(picked?.deviceId ?? '', picked?.sessionId ?? ''),
   )
+  const mark = pickedSummary ? managerMark(pickedSummary) : null
+  const pickedManager = managerData.managers.find(
+    (manager) => manager.deviceId === picked?.deviceId && manager.threadId === picked.sessionId,
+  )
+  const owner =
+    mark?.role === 'line'
+      ? managerData.managers.find(
+          (manager) => manager.deviceId === picked?.deviceId && manager.id === mark.managerId,
+        )
+      : undefined
   const seen = useRef<Selection | null>(null)
   useEffect(() => {
     if (!picked) return
@@ -117,6 +140,41 @@ export function App() {
       }),
     [openPage],
   )
+  useEffect(
+    () =>
+      onManagersRequest((route) =>
+        leaveThen(() => {
+          setSidebarMode('manager')
+          const deviceId =
+            route.view === 'new'
+              ? (route.deviceId ?? picked?.deviceId ?? place?.deviceId)
+              : undefined
+          const target: ManagersRoute =
+            route.view === 'new'
+              ? {
+                  ...route,
+                  ...(deviceId ? { deviceId } : {}),
+                  workspaceId:
+                    route.workspaceId ?? pickedSummary?.workspaceId ?? place?.workspaceId ?? null,
+                }
+              : route
+          setManagersAt((was) => ({ route: target, seq: was.seq + 1 }))
+          openPage('managers')
+        }),
+      ),
+    [openPage, picked?.deviceId, pickedSummary?.workspaceId, place?.deviceId, place?.workspaceId],
+  )
+  useEffect(() => {
+    if (pickedManager || owner) setSidebarMode('manager')
+  }, [pickedManager, owner])
+  const switchSidebar = (mode: 'chat' | 'manager') =>
+    leaveThen(() => {
+      setSidebarMode(mode)
+      if (mode === 'manager') {
+        setManagersAt((was) => ({ route: { view: 'list' }, seq: was.seq + 1 }))
+        openPage('managers')
+      } else compose(null)
+    })
   const closePage = useCallback(() => openPage(null), [openPage])
   /** 当前设备详情供工具栏判断本机/远程上下文。 */
   const [deviceDetail, setDeviceDetail] = useState<string | null>(null)
@@ -262,17 +320,33 @@ export function App() {
   }, [])
 
   return (
-    <div className="app">
-      <TitleBar
-        selection={selection}
-        draft={draft}
-        page={page}
-        peek={peek}
-        devicePageId={page === 'tasks' ? taskDevice : deviceDetail}
-        onCompose={compose}
-      />
+    <div className={pickedManager && !page ? 'app mg-app' : 'app'}>
+      {page === 'managers' || (!page && (pickedManager || owner)) ? (
+        <ManagerTitleBar
+          {...(page
+            ? {}
+            : pickedManager
+              ? { manager: pickedManager }
+              : owner
+                ? { manager: owner, ...(pickedSummary ? { child: pickedSummary } : {}) }
+                : {})}
+        />
+      ) : (
+        <TitleBar
+          selection={selection}
+          draft={draft}
+          page={page}
+          peek={peek}
+          devicePageId={page === 'tasks' ? taskDevice : deviceDetail}
+          onCompose={compose}
+        />
+      )}
       {/* 侧栏和右边那一块（对话加侧面板）并排，各占一栏：侧栏变宽变窄、收起，右边那一块的宽度跟着变 */}
       <Sidebar
+        mode={sidebarMode}
+        onMode={switchSidebar}
+        managers={managerData.managers}
+        devices={managerData.devices}
         selection={selection}
         draft={page ? null : draft}
         page={page}
@@ -311,6 +385,14 @@ export function App() {
               onClose={closePage}
               onOpenSession={select}
             />
+          ) : page === 'managers' ? (
+            <ManagersPage
+              key={managersAt.seq}
+              initial={managersAt.route}
+              {...managerData}
+              onClose={() => (pickedManager ? closePage() : switchSidebar('chat'))}
+              onOpen={select}
+            />
           ) : page === 'settings' ? (
             <SettingsPage
               section={settingsAt}
@@ -319,13 +401,22 @@ export function App() {
               onDevices={openDevices}
               onArchived={() => openPage('archived')}
             />
-          ) : selection ? (
-            <Transcript
+          ) : selection && pickedManager ? (
+            <ManagerPage
+              key={`${pickedManager.deviceId}:${pickedManager.id}`}
+              manager={pickedManager}
               onOpen={select}
-              key={`${selection.deviceId}:${selection.sessionId}`}
-              deviceId={selection.deviceId}
-              sessionId={selection.sessionId}
             />
+          ) : selection ? (
+            <>
+              {owner ? <ManagerOrigin manager={owner} onOpen={select} /> : null}
+              <Transcript
+                onOpen={select}
+                key={`${selection.deviceId}:${selection.sessionId}`}
+                deviceId={selection.deviceId}
+                sessionId={selection.sessionId}
+              />
+            </>
           ) : (
             <NewSession
               draft={draft}
@@ -341,7 +432,7 @@ export function App() {
           <TerminalSlot selection={selection} draft={draft} page={page} />
         </main>
         {/* 右边常驻的信息栏（待办等）：有内容才出来，排在对话和侧面板之间 */}
-        {selection && !page ? (
+        {selection && !page && !pickedManager ? (
           <InfoRail
             key={`${selection.deviceId}:${selection.sessionId}`}
             deviceId={selection.deviceId}

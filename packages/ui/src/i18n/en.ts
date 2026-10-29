@@ -1,4 +1,5 @@
 import { enChrome } from './en-chrome.ts'
+import { enManager } from './en-manager.ts'
 // 英文文案。键必须和 zh-CN.ts 完全一致，多一句少一句都编译不过。
 
 import { enAside } from './en-aside.ts'
@@ -28,6 +29,7 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
   `${n} ${Number(n) === 1 ? one : many}`
 
 export const en: Record<MessageKey, Entry> = {
+  ...enManager,
   ...enPower,
   ...enAutomation,
   ...enChrome,

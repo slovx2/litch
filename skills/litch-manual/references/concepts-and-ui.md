@@ -27,6 +27,12 @@
 
 ## Layout
 
+### 经理入口与看板
+
+桌面侧栏顶部的“对话 / 经理”切换整个侧栏内容。“经理”显示进行中的经理的待定决策总数；经理栏包含“新经理”、进行中的经理和默认折叠的已结束组。经理行显示名称、设备颜色、待定数或运行状态，有未交答复时显示本地草稿数。展开后沿用会话树显示子会话，普通对话栏不重复显示它们。
+
+经理主区将普通对话和设备看板并排显示；窗口不足约 1240 像素时改为顶部切换。看板四个页签分别显示现状与动态、决策、事项、工作线。信息栏在经理页隐藏；文件侧面板覆盖看板，不挤压对话宽度。看板过程记录以仓库事实为准。全部经理页和新建经理页沿用定时任务的页面结构。
+
 - **Title bar** (top): sidebar toggle, a breadcrumb "device / project / session" with the harness badge,
   and on the right: the remote-activity marker (only when remote devices are running commands on this
   computer or waiting for approval, see `operate-this-computer.md`), the terminal toggle, the info

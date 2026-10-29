@@ -60,6 +60,7 @@ const probe = useRemote
           'scroll',
           'compose',
           'sidebar',
+          'manager',
           'tasks',
           'tree',
           'background',
