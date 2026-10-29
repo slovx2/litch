@@ -1078,9 +1078,12 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
               turn.origin = 'goal'
           }
         }
-        // 客户端工具的卡片是这边自己的，对面给的会话里没有：还挂着的放回去
+        // 请求走独立的 RPC 通道，不在历史快照里。resume 重放可能早于快照，已收到的请求都要保留。
         for (const waiting of live.requests.values()) {
-          if (waiting.view.kind !== 'clientAsk') continue
+          if (waiting.view.kind !== 'clientAsk' && waiting.turnId && waiting.itemId) {
+            const key = viewItem(live, viewTurn(live, waiting.turnId), waiting.itemId)
+            waiting.view = { ...waiting.view, itemId: live.view.items[key] ? key : null }
+          }
           if (!live.view.requests.some((request) => request.id === waiting.view.id)) {
             live.view.requests.push(waiting.view)
           }
@@ -1105,6 +1108,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       (error: unknown) => {
         if (cancel.signal.aborted) return
         live.loading = null
+        settleRequests(live, () => true)
         // 载入到一半它所属的 harness 不可用了：订阅留着，等它恢复再载入
         if (isHarnessDown(error)) return
         const reason = failure(error)
@@ -1395,6 +1399,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         if (entry.sinks.size === 0 && !entry.view) {
           entry.loading?.abort()
           entry.loading = null
+          settleRequests(entry, () => true)
           sessions.delete(entry.id)
           return
         }
@@ -1511,13 +1516,14 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     serverRequest(method, params, id) {
       const threadId = (params as { threadId?: unknown } | null)?.threadId
       const live = typeof threadId === 'string' ? sessions.get(threadId) : undefined
-      // 没有打开的会话来了请求：不能替用户答。回“方法不存在”，对面按没人答复处理
-      if (!live?.view) return undefined
-      const pending = projectRequest(method, params, String(id), requestTerms(live.view.harness))
+      // 普通打开、重连、父界面订阅都可能先收到 resume 重放的请求，再收到历史。
+      // 载入中的会话先登记，快照就绪后一起呈现，不能回“方法不存在”让真实请求失败。
+      if (!live || (!live.view && !live.loading)) return undefined
+      const pending = projectRequest(method, params, String(id), requestTerms(ownerOf(live) ?? ''))
       if (!pending) return undefined
       const viewId = pending.turnId ? viewTurn(live, pending.turnId) : null
       const key = viewId && pending.itemId ? viewItem(live, viewId, pending.itemId) : null
-      const view = { ...pending.view, itemId: key && live.view.items[key] ? key : null }
+      const view = { ...pending.view, itemId: key && live.view?.items[key] ? key : null }
       return new Promise<unknown>((resolve) => {
         live.requests.set(view.id, { ...pending, view, resolve })
         emit(live, [{ op: 'request.add', request: view }, ...clockCommand(live, view, null)])

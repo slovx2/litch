@@ -170,7 +170,7 @@ function setup(threads: Thread[] = [thread({ id: 'a', turns: [] })]) {
       .last()
       .seen.filter((entry) => entry.method === method)
       .map((entry) => entry.params)
-  return { core, world, peer, time, sidebar, command, sent, logs }
+  return { core, world, peer, time, sidebar, command, sent, logs, handlers }
 }
 
 /** 订阅一个会话，并像界面那样把增量落到快照上。经真的通道，见 wire.mts */
@@ -1553,4 +1553,103 @@ test('边做边问：答复要求直接插进正在进行的回合；插不进�
     ['再答'],
   )
   assert.deepEqual(session.texts(), [['一', '答复']])
+})
+
+// 普通打开会话（包括重启后恢复），不是专门的父界面路径：重放请求可能比 resume 快照先到。
+test('打开已有待答会话：resume 应答之前重放的问题不失败，快照到达后仍能回答', async () => {
+  const env = setup([thread({ id: 'a', turns: [started('t1')] })])
+  const original = env.handlers['thread/resume']
+  assert.ok(original)
+  let release: (() => void) | undefined
+  let answered = false
+  let response: Promise<JsonRpcMessage> | undefined
+  env.handlers['thread/resume'] = (params) => {
+    const result = original(params)
+    response = env.peer
+      .last()
+      .ask('item/tool/requestUserInput', {
+        threadId: 'a',
+        turnId: 't1',
+        itemId: 'q1',
+        isBlocking: true,
+        autoResolutionMs: null,
+        questions: [
+          {
+            id: 'q',
+            header: '范围',
+            question: '改哪些目录？',
+            isOther: true,
+            isSecret: false,
+            options: null,
+          },
+        ],
+      })
+      .then((value) => {
+        answered = true
+        return value
+      })
+    return new Promise((resolve) => {
+      release = () => resolve(result)
+    })
+  }
+  env.core.start()
+  await settle()
+  const session = watch(env.core)
+  await settle()
+  assert.equal(answered, false, '历史没载入不能回“客户端不处理”让真实请求失败')
+  assert.ok(release)
+  release()
+  await settle()
+  const request = session.seen.view?.requests[0]
+  assert.equal(request?.kind, 'question')
+  assert.ok(request)
+  await env.command('session.respond', {
+    ...where,
+    requestId: request.id,
+    answers: { q: ['只改 src'] },
+  })
+  assert.deepEqual(((await response) as { result: unknown }).result, {
+    answers: { q: { answers: ['只改 src'] } },
+  })
+  env.core.stop()
+})
+
+test('载入期间重放的审批已在别处解决：历史到达后不留下失效卡片，也不重复答复', async () => {
+  const env = setup([thread({ id: 'a', turns: [started('t1')] })])
+  const original = env.handlers['thread/resume']
+  assert.ok(original)
+  let release: (() => void) | undefined
+  let answered = false
+  env.handlers['thread/resume'] = (params) => {
+    const result = original(params)
+    void env.peer
+      .last()
+      .ask(
+        'item/commandExecution/requestApproval',
+        {
+          threadId: 'a',
+          turnId: 't1',
+          itemId: 'cmd',
+          command: 'echo check',
+        },
+        'replayed',
+      )
+      .then(() => {
+        answered = true
+      })
+    env.peer.last().notify('serverRequest/resolved', { threadId: 'a', requestId: 'replayed' })
+    return new Promise((resolve) => {
+      release = () => resolve(result)
+    })
+  }
+  env.core.start()
+  await settle()
+  const session = watch(env.core)
+  await settle()
+  assert.ok(release)
+  release()
+  await settle()
+  assert.deepEqual(session.seen.view?.requests, [])
+  assert.equal(answered, false)
+  env.core.stop()
 })
