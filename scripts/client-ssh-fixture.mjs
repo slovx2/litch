@@ -32,6 +32,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { refuseHarnessOnPath, wantedEngines } from './client-fixture-engines.mjs'
 import { longestSocket, prepareService } from './client-ssh-fixture-service.mjs'
+import { fixtureEnvironment } from './fixture-environment.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sshd = ['/usr/sbin/sshd', '/usr/bin/sshd'].find((path) => existsSync(path))
@@ -155,6 +156,7 @@ function startEntry() {
   return new Promise((done, fail) => {
     entryChild = spawn(process.execPath, [join(repo, 'scripts/client-fixture.mjs')], {
       cwd: repo,
+      env: fixtureEnvironment(),
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     let output = ''
@@ -399,6 +401,7 @@ try {
     // 这个 sshd 没有这一项
   }
   sshdChild = spawn(sshd, ['-D', '-e', '-f', join(root, 'sshd_config')], {
+    env: fixtureEnvironment(),
     stdio: ['ignore', 'ignore', 'pipe'],
   })
   let sshdLog = ''

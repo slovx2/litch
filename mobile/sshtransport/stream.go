@@ -61,6 +61,7 @@ type streamOpening struct {
 func setStreamsPaused(paused bool) {
 	streams.Lock()
 	streams.paused = paused
+	setSSHPaused(paused)
 	var closing []*stream
 	if paused {
 		for id, pending := range streams.opening {

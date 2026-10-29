@@ -41,20 +41,25 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
   terminal.
 - Settings of the Litch app on the phone itself are out of reach (exception E9).
   They live in the phone app under Settings: language, theme (follow the system, light, dark), skin
-  (Retro, Literary, Standard, the same three as on the desktop; default Retro), task cards, the
+  (Retro, Literary, Standard, the same three as on the desktop; default Retro), connection, task cards, the
   sign-in approval key's fingerprint, updates.
 
-## Android 后台连接
+## Android background connections
 
-手机设置 → 连接 → 后台断开连接：默认 10 分钟，可选 1、5、10、30、60 分钟或“从不”。
-应用仍在后台运行时，到点关闭本机所有 SSH 连接并暂停重试；不会停止电脑上的会话任务。
-回前台取消计时，健康连接沿用，已断开的恢复连接。“从不”只是不由 Litch 主动超时断开。
-系统冻结或深睡时计时器可能不执行；回前台不补判过去是否超时，不因此断开健康连接。
+Phone Settings → Connection → Disconnect in background defaults to **5 minutes**. Choose 1, 5, 10,
+30 or 60 minutes, or Never. Once due, Litch closes the phone's SSH connections and pauses retries;
+tasks on the computer keep running. Returning to Litch cancels the deadline, keeps healthy
+connections and restores disconnected ones. Never disables Litch's own background timeout.
 
-同组的“打开系统设置”可进入本应用的电池/后台管理；入口不可用时显示手动路径。
-需要后台保留连接时，由用户允许“后台行为”或将电池优化设为“不限制”。界面显示的
-“标准电池优化”状态只代表 Android 标准白名单，不代表 ColorOS 等厂商的全部后台权限。
-此组设置不在 iOS 显示。它是手机本机设置，桌面的 `litch config` 不修改它。
+The deadline includes time spent in deep sleep. Android may delay the non-waking alarm while the
+phone sleeps or restricts background work; disconnection is not guaranteed at the exact minute.
+Returning to the foreground cancels a pending deadline without disconnecting a healthy connection.
+
+Use Open system settings in the same section to find this app's battery or background controls.
+If the page cannot open, Litch shows a manual path. Allow background activity or choose Unrestricted
+battery use to keep connections in the background. The Standard battery optimization status reports
+only Android's exemption list, not every manufacturer's background permission.
+This section is hidden on iOS. These are phone settings; desktop `litch config` cannot change them.
 
 ## In a session on the phone
 

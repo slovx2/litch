@@ -258,6 +258,17 @@ test('连接：不值得重试的失败直接停在失败；手动重试可以�
   await settle()
   assert.deepEqual(phases(), ['connecting', 'failed'])
   assert.equal(time.pending(), 0)
+  const failure = current()
+  for (let i = 0; i < 2; i++) {
+    link.setPaused(true)
+    link.retry()
+    link.setPaused(false)
+    link.start()
+    await settle()
+    assert.deepEqual(current(), failure)
+    assert.equal(peer.servers.length, 0)
+    assert.equal(time.pending(), 0)
+  }
   link.retry()
   await settle()
   assert.equal(current().phase, 'connected')

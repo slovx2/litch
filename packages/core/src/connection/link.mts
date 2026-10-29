@@ -100,6 +100,7 @@ export function createLink(options: LinkOptions): Link {
   let opening: Cancel | null = null
   let stopTimer: (() => void) | null = null
   let paused = false
+  let pausedFailure: Extract<LinkState, { phase: 'failed' }> | null = null
   // 每次尝试一个代号。异步步骤回来时代号对不上，说明这次尝试已经作废
   let epoch = 0
 
@@ -308,6 +309,7 @@ export function createLink(options: LinkOptions): Link {
 
     stop() {
       teardown()
+      pausedFailure = null
       setState({ phase: 'idle' })
     },
 
@@ -315,8 +317,13 @@ export function createLink(options: LinkOptions): Link {
       if (next === paused) return
       paused = next
       if (paused) {
+        pausedFailure = state.phase === 'failed' ? state : null
         teardown()
         setState({ phase: 'idle' })
+      } else if (pausedFailure) {
+        const failure = pausedFailure
+        pausedFailure = null
+        setState(failure)
       } else {
         void connect(1)
       }

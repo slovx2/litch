@@ -40,7 +40,7 @@ export interface Prefs {
 }
 
 const DEFAULT_PREFS: Prefs = {
-  backgroundDisconnectMinutes: 10,
+  backgroundDisconnectMinutes: 5,
   lang: 'system',
   appearance: 'system',
   skin: 'retro',

@@ -3,7 +3,7 @@ import { native } from '../../modules/litch-ssh/src/native'
 export const BACKGROUND_MINUTES = [1, 5, 10, 30, 60] as const
 export function backgroundMinutes(value: unknown): number | null {
   if (value === null) return null
-  return BACKGROUND_MINUTES.some((minutes) => minutes === value) ? (value as number) : 10
+  return BACKGROUND_MINUTES.some((minutes) => minutes === value) ? (value as number) : 5
 }
 
 interface PolicyState {

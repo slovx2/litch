@@ -10,6 +10,14 @@ type ConnectionPolicyObserver interface {
 	OnConnectionPolicy(state string)
 }
 
+// BackgroundScheduler 由 Android 提供包含深睡时间的时钟和非唤醒闹钟。
+// Schedule/Cancel 不得同步回调 Go，避免持锁重入。
+type BackgroundScheduler interface {
+	NowMillis() int64
+	Schedule(deadlineMillis, epoch int64)
+	Cancel()
+}
+
 type connectionPolicyState struct {
 	Revision   int64 `json:"revision"`
 	Background bool  `json:"background"`
@@ -31,17 +39,32 @@ type backgroundPolicy struct {
 
 func newBackgroundPolicy(pause func(bool)) *backgroundPolicy {
 	return &backgroundPolicy{
-		timeout: 10 * time.Minute,
+		timeout: 5 * time.Minute,
 		now:     time.Now,
 		pause:   pause,
-		schedule: func(delay time.Duration, run func()) func() {
-			timer := time.AfterFunc(delay, run)
-			return func() { timer.Stop() }
-		},
 	}
 }
 
 var mobileBackground = newBackgroundPolicy(setStreamsPaused)
+
+func SetBackgroundScheduler(scheduler BackgroundScheduler) {
+	p := mobileBackground
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cancelLocked()
+	p.schedule = nil
+	if scheduler != nil {
+		p.now = func() time.Time { return time.UnixMilli(scheduler.NowMillis()) }
+		p.schedule = func(delay time.Duration, _ func()) func() {
+			scheduler.Schedule(p.now().Add(delay).UnixMilli(), p.epoch)
+			return scheduler.Cancel
+		}
+	}
+	p.armLocked()
+}
+
+// BackgroundDeadline 只接受当前轮次；前台取消后送达的闹钟不再生效。
+func BackgroundDeadline(epoch int64) { mobileBackground.expire(epoch) }
 
 // SetBackgroundTimeout 设置后台分钟数，0 表示从不。不是唤醒闹钟，冻结期间允许延迟。
 func SetBackgroundTimeout(minutes int) {
@@ -80,26 +103,28 @@ func (p *backgroundPolicy) cancelLocked() {
 
 func (p *backgroundPolicy) armLocked() {
 	p.cancelLocked()
-	if !p.state.Background || p.state.Suspended || p.timeout == 0 {
+	if !p.state.Background || p.state.Suspended || p.timeout == 0 || p.schedule == nil {
 		return
 	}
 	epoch := p.epoch
 	remaining := p.timeout - p.now().Sub(p.entered)
-	p.cancel = p.schedule(max(remaining, 0), func() {
-		p.mu.Lock()
-		if epoch != p.epoch || !p.state.Background || p.state.Suspended {
-			p.mu.Unlock()
-			return
-		}
-		p.state.Suspended = true
-		p.state.Revision++
-		p.pause(true)
-		observer, state := p.observer, p.encoded()
+	p.cancel = p.schedule(max(remaining, 0), func() { p.expire(epoch) })
+}
+
+func (p *backgroundPolicy) expire(epoch int64) {
+	p.mu.Lock()
+	if epoch != p.epoch || !p.state.Background || p.state.Suspended {
 		p.mu.Unlock()
-		if observer != nil {
-			observer.OnConnectionPolicy(state)
-		}
-	})
+		return
+	}
+	p.state.Suspended = true
+	p.state.Revision++
+	p.pause(true)
+	observer, state := p.observer, p.encoded()
+	p.mu.Unlock()
+	if observer != nil {
+		observer.OnConnectionPolicy(state)
+	}
 }
 
 func (p *backgroundPolicy) configure(timeout time.Duration) {

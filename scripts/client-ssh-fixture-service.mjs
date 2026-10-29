@@ -242,6 +242,8 @@ export async function prepareService({ repo, root, engines = {}, pace = 200 }) {
     [
       '#!/bin/sh',
       '# 由 scripts/client-ssh-fixture-service.mjs 写出，只给假的远程机器用',
+      // 即使从真实会话的终端直接调用包装脚本，也只能访问隔离 HOME。
+      'unset LITCH_DEVICE_SOCKET',
       ...Object.entries(pinned).map(([name, value]) => `${name}=${q(value)}; export ${name}`),
       'case "$1" in',
       '  device-start)',

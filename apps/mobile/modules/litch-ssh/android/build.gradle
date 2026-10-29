@@ -50,4 +50,5 @@ android {
 
 dependencies {
   implementation files(goMobileClasses)
+  implementation 'androidx.lifecycle:lifecycle-process:2.9.0'
 }

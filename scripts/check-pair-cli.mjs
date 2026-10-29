@@ -16,6 +16,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { userInfo } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { fixtureEnvironment } from './fixture-environment.mjs'
 
 const repo = fileURLToPath(new URL('..', import.meta.url))
 
@@ -24,6 +25,7 @@ function startFixture() {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['scripts/client-ssh-fixture.mjs'], {
       cwd: repo,
+      env: fixtureEnvironment(),
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     let output = ''
@@ -123,7 +125,7 @@ const fixture = await startFixture()
 /** 这里临时建的东西都在夹具的临时目录里，夹具收尾时一起删 */
 const work = mkdtempSync(join(fixture.root, 'pc-'))
 /** ssh 客户端的环境：HOME 换成临时目录，碰不到真的 ~/.ssh */
-const env = { ...process.env, HOME: work, LANG: 'C', LC_ALL: 'C' }
+const env = { ...fixtureEnvironment(), HOME: work, LANG: 'C', LC_ALL: 'C' }
 const port = Number(/^\s+Port (\d+)$/m.exec(readFileSync(fixture.config, 'utf8'))?.[1])
 const user = userInfo().username
 const keysFile = join(fixture.root, 'authorized_keys')
@@ -141,7 +143,7 @@ const running = new Set()
 
 /** 在 svc 上开一个终端跑 pair。tty 为 false 时不要终端（ssh -T） */
 function startPair({ tty = true } = {}) {
-  const remote = `. "$HOME/.profile" >/dev/null 2>&1; exec ${fixture.adapter} pair --host 127.0.0.1 --port ${port}`
+  const remote = `. "$HOME/.profile" >/dev/null 2>&1; exec ${fixture.adapter} pair --home "$HOME/.codex-harness-adapter" --host 127.0.0.1 --port ${port}`
   const child = spawn(
     'ssh',
     ['-F', fixture.config, tty ? '-tt' : '-T', fixture.aliases.svc, remote],

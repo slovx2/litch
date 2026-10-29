@@ -6,10 +6,27 @@ import (
 	"bytes"
 	"encoding/base64"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/slovx2/litch/internal/hostplatform"
 )
+
+func TestPairExplicitHomeIgnoresInheritedDeviceSocket(t *testing.T) {
+	home := t.TempDir()
+	target := resolvePairTarget(home, func(name string) string {
+		if name == deviceSocketEnvironment {
+			return "/real-service/device.sock"
+		}
+		return ""
+	})
+	want := hostplatform.DeviceSocketPath(filepath.Join(home, "device"))
+	if target.socket != want || target.home != home {
+		t.Fatalf("显式隔离目录被继承的 socket 覆盖: %#v", target)
+	}
+}
 
 // 和 packages/core/test/device-pairing-payload.test.mts 的 sample 是同一份；期望值是 Node 里
 // JSON.stringify 再 Buffer 转 base64url 得到的（那份测试断言 encodePairPayload 与它相等）

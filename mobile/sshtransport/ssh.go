@@ -90,6 +90,17 @@ func ProbeHost(host string, port int, user string) (string, error) {
 }
 
 func connectSSH(ctx context.Context, target Target) (*ssh.Client, error) {
+	attempt, finish, err := beginSSH(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ctx = attempt
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			finish()
+		}
+	}()
 	address, err := sshAddress(target.Host, target.Port)
 	if err != nil {
 		return nil, err
@@ -136,7 +147,11 @@ func connectSSH(ctx context.Context, target Target) (*ssh.Client, error) {
 	}
 	// DialContext 只管拨号；后台到期还要能取消已拨通但卡在握手里的连接。
 	stopCancel := context.AfterFunc(ctx, func() { _ = connection.Close() })
-	defer stopCancel()
+	defer func() {
+		if !handedOff {
+			stopCancel()
+		}
+	}()
 	_ = connection.SetDeadline(time.Now().Add(15 * time.Second))
 	clientConnection, channels, requests, err := ssh.NewClientConn(connection, address, config)
 	if err != nil {
@@ -149,7 +164,18 @@ func connectSSH(ctx context.Context, target Target) (*ssh.Client, error) {
 		return nil, kindf(handshakeKind(err), "SSH 握手失败: %w", err)
 	}
 	_ = connection.SetDeadline(time.Time{})
-	return ssh.NewClient(clientConnection, channels, requests), nil
+	client := ssh.NewClient(clientConnection, channels, requests)
+	if ctx.Err() != nil {
+		_ = client.Close()
+		return nil, kindf(kindUnreachable, "SSH 连接已取消")
+	}
+	handedOff = true
+	go func() {
+		_ = client.Wait()
+		stopCancel()
+		finish()
+	}()
+	return client, nil
 }
 
 // 心跳：多久发一次、等多久没回音就算断了。变量是为了测试能调短

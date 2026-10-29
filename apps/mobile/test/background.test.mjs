@@ -10,7 +10,7 @@ import {
 } from '../src/platform/background.ts'
 
 test('后台设置：默认、合法选项和从不', () => {
-  for (const value of [undefined, '10', -1, 0, 11, NaN]) assert.equal(backgroundMinutes(value), 10)
+  for (const value of [undefined, '10', -1, 0, 11, NaN]) assert.equal(backgroundMinutes(value), 5)
   for (const value of [1, 5, 10, 30, 60, null]) assert.equal(backgroundMinutes(value), value)
   let configured
   natives.LitchSsh = {
@@ -20,8 +20,8 @@ test('后台设置：默认、合法选项和从不', () => {
   }
   setBackgroundMinutes(null)
   assert.equal(configured, 0)
-  setBackgroundMinutes(10)
-  assert.equal(configured, 10)
+  setBackgroundMinutes(5)
+  assert.equal(configured, 5)
 })
 
 test('生命周期：延迟送达的后台事件按原生最新状态处理，不补断前台连接', () => {

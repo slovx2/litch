@@ -1,6 +1,7 @@
 package dev.litch.ssh
 
 import android.app.Application
+import android.os.SystemClock
 import android.util.Log
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
@@ -19,18 +20,18 @@ class LitchSshModule : Module() {
 
     OnCreate {
       application = appContext.reactContext?.applicationContext as? Application
-      application?.let { lifecycle.attach(it, appContext.currentActivity) }
+      application?.let { lifecycle.attach(it) }
       Sshtransport.setConnectionPolicyObserver(object : ConnectionPolicyObserver {
         override fun onConnectionPolicy(state: String) {
           // 只记录前后台与暂停状态，供诊断实际断开时刻；不含设备、密钥或消息。
-          Log.i("LitchConnection", state)
+          Log.i("LitchConnection", "$state elapsedMs=${SystemClock.elapsedRealtime()} uptimeMs=${SystemClock.uptimeMillis()}")
           sendEvent("onConnectionPolicy", mapOf("state" to state))
         }
       })
     }
 
     OnDestroy {
-      application?.unregisterActivityLifecycleCallbacks(lifecycle)
+      lifecycle.detach()
       Sshtransport.setConnectionPolicyObserver(null)
     }
 

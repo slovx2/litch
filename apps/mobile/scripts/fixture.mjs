@@ -13,6 +13,7 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { fixtureEnvironment } from '../../../scripts/fixture-environment.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const arg = (name) => {
@@ -52,6 +53,7 @@ function hostOptions(configText, alias) {
 
 const child = spawn(process.execPath, [join(repo, 'scripts/client-ssh-fixture.mjs')], {
   cwd: repo,
+  env: fixtureEnvironment(),
   stdio: ['ignore', 'pipe', 'inherit'],
 })
 const stop = () => child.kill('SIGTERM')
