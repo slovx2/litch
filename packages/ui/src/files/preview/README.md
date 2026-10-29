@@ -21,7 +21,7 @@
 | CSV + HTML + 媒体 | `renderers/csv.tsx`、`renderers/html.tsx`、`renderers/media.tsx`、`web/`、自己的测试与 `web.css` |
 | 主线维护 | contract/registry/resources/paths、PreviewPanel、FileViewer、协议/核心、共享翻译入口、依赖清单和锁文件、全局 CSP |
 
-三条线的中英文文案放在自己的目录，通过 `strings.ts` 的 `useRendererText(zh,en)` 得到有类型的 `t('键',参数)`；插值规则与全局文案相同，英文缺键会报类型错误，无需修改全局翻译入口。依赖精确版本需求交主线统一写 package.json/lock，避免互相覆盖。CSS 从自己的 renderer import，使用皮肤变量。PDF Worker/CMap/字体、Office 沙箱及 HTML frame 所需 CSP 由主线审阅后统一加入，不能放宽全局网络或脚本策略。
+三条线各自新增 `i18n/zh-CN-preview-<格式>.ts` 和 `i18n/en-preview-<格式>.ts`，沿用全局 `useT()` 与 `t('键',参数)`，以中文目录决定 MessageKey，英文必须齐全。主线合并时在两个总目录补充对应导入和展开，不增加独立翻译接口。依赖精确版本需求交主线统一写 package.json/lock，避免互相覆盖。CSS 从自己的 renderer import，使用皮肤变量。PDF Worker/CMap/字体、Office 沙箱及 HTML frame 所需 CSP 由主线审阅后统一加入，不能放宽全局网络或脚本策略。
 
 核心 `PreviewKind` 与预算已经预留 pdf/docx/xlsx/csv/html/media。未提供模块的格式照旧看源码或类型占位；增加模块即启用，没有第二份扩展名表要修改。仅 `.md/.markdown`、PNG/JPEG/静态 GIF/WebP、静态 SVG 在第一期启用；不支持的图片不交给任意解码器尝试。
 

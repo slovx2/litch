@@ -184,10 +184,10 @@ export default function MarkdownPreview(props: PreviewRendererProps) {
       const slug = headingSlug(heading.textContent ?? '')
       const count = names.get(slug) ?? 0
       names.set(slug, count + 1)
-      heading.id = count ? `${slug}-${count}` : slug
+      heading.id = `fp-h-${count ? `${slug}-${count}` : slug}`
     }
     if (fragment) {
-      const found = Array.from(headings).find((heading) => heading.id === fragment)
+      const found = Array.from(headings).find((heading) => heading.id === `fp-h-${fragment}`)
       found?.scrollIntoView({ block: 'start' })
     }
   }, [text, fragment, anchorJump])

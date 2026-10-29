@@ -228,7 +228,7 @@ export function PreviewPanel({
       <div className="fv-foot">
         <span className="ell">
           {content?.kind === 'ready'
-            ? `${format} · ${source ? `${t('files.view.lines', { n: splitLines(sourceText).length })} · ` : ''}${byteSize(content.bytes)}`
+            ? `${source ? `${t('files.view.lines', { n: splitLines(sourceText).length })} · ` : ''}${byteSize(content.bytes)}`
             : ''}
         </span>
         <span className="grow" />

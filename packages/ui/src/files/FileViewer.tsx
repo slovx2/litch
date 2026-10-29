@@ -1,7 +1,7 @@
 // 文件标签的右半边：开着的文件（一排标签）和正看着的那个的内容。只读。
 // 单击打开的是预览（标签上的名字是斜的），再点别的文件就被换掉；双击、回车，或者双击标签，固定下来。
 import { baseName, type FileContent, type FileGroup, previewKind, relativeTo } from '@litch/core'
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
 import { Close, Icon } from '../app/icons.tsx'
@@ -205,6 +205,7 @@ function SourceFileBody({
 function FileBody(props: { deviceId: string; root: string; uiKey: string; tab: OpenFile }) {
   const t = useT()
   const [unavailable, setUnavailable] = useState(false)
+  const onUnsupported = useCallback(() => setUnavailable(true), [])
   const format = previewKind(props.tab.path)
   if (unavailable)
     return (
@@ -216,7 +217,7 @@ function FileBody(props: { deviceId: string; root: string; uiKey: string; tab: O
       </>
     )
   return format && rendererFor(format) ? (
-    <PreviewPanel {...props} format={format} onUnsupported={() => setUnavailable(true)} />
+    <PreviewPanel {...props} format={format} onUnsupported={onUnsupported} />
   ) : (
     <SourceFileBody {...props} />
   )

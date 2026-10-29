@@ -170,6 +170,41 @@ try {
   )
   assert(!report.requests.some((url) => url.includes('preview.invalid')))
   report.checks.push('相对图片、Mermaid、外链不取')
+  await evaluate(`window.previewBefore = {
+    node: document.querySelector('.fp-document'),
+    image: document.querySelector('.fp-inline-image')?.src,
+    scroll: document.querySelector('.fp-document').scrollTop,
+    reads: window.previewCheck.readCount('docs/images/preview.md')
+  }; window.previewCheck.rerenderParent()`)
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  assert(
+    await evaluate(`window.previewBefore.node === document.querySelector('.fp-document') &&
+    window.previewBefore.image === document.querySelector('.fp-inline-image')?.src &&
+    window.previewBefore.scroll === document.querySelector('.fp-document').scrollTop &&
+    window.previewBefore.reads === window.previewCheck.readCount('docs/images/preview.md')`),
+    '父重渲染不得重挂成功预览、丢滚动位置或重解码附图',
+  )
+  for (const kind of ['tooLarge', 'outside', 'busy']) {
+    const file = `docs/images/rejected-${kind}.md`
+    await evaluate(
+      `window.previewCheck.result(${JSON.stringify(file)}, ${JSON.stringify(kind === 'tooLarge' ? { kind, bytes: 1048576, limit: 524288 } : { kind })}); window.previewCheck.open(${JSON.stringify(file)})`,
+    )
+    await until(
+      () => evaluate(`document.querySelector('.fp')?.dataset.kind === ${JSON.stringify(kind)}`),
+      '拒绝预览已显示',
+    )
+    const reads = await evaluate(`window.previewCheck.readCount(${JSON.stringify(file)})`)
+    await evaluate('window.previewCheck.rerenderParent()')
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    assert.equal(
+      await evaluate(`window.previewCheck.readCount(${JSON.stringify(file)})`),
+      reads,
+      `${kind} 父重渲染不得重复请求设备`,
+    )
+  }
+  report.checks.push('父重渲染保留成功预览，拒绝结果不重复读取')
+  await evaluate(`window.previewCheck.open('docs/images/preview.md')`)
+  await until(() => evaluate('!!document.querySelector(".fp-document h1")'), '返回文档')
   for (let attempt = 0; attempt < 2; attempt++) {
     await evaluate('document.querySelector(".fp-document").scrollTop = 0')
     await evaluate(
@@ -181,6 +216,36 @@ try {
     )
   }
   report.checks.push('同一标题重复点击重新定位')
+  const headingDocument =
+    '# Root\n\n[first](#root) · [duplicate](#root-1)\n\n' +
+    '正文段落\n\n'.repeat(30) +
+    '## Root\n\n文档末尾。'
+  await evaluate(
+    `window.previewCheck.markdown('docs/images/heading-ids.md', ${JSON.stringify(headingDocument)})`,
+  )
+  await until(
+    () => evaluate('document.querySelector(".fp-document h1")?.id === "fp-h-root"'),
+    '标题使用独立 id 前缀',
+  )
+  assert.equal(await evaluate('document.querySelectorAll("#root").length'), 1)
+  assert(await evaluate('!!document.querySelector(".fp-document #fp-h-root-1")'))
+  await evaluate(
+    'Array.from(document.querySelectorAll(".fp-document a")).find(a => a.textContent === "duplicate").click()',
+  )
+  await until(
+    () => evaluate('document.querySelector(".fp-document").scrollTop > 30'),
+    '带前缀的重名标题跳转',
+  )
+  assert.equal(
+    await evaluate('document.querySelector(".fv-foot .ell").textContent.includes("markdown")'),
+    false,
+  )
+  report.checks.push('标题 id 不冲突，重名标题锚点生效，页脚无内部格式名')
+  await evaluate(`window.previewCheck.open('docs/images/preview.md')`)
+  await until(
+    () => evaluate('document.querySelector(".fp-document h1")?.textContent === "文件预览"'),
+    '恢复视觉文档',
+  )
   await evaluate('document.querySelector(".fp-document").scrollTop = 0')
   for (const skin of ['standard', 'retro', 'human'])
     for (const theme of ['light', 'dark']) {
