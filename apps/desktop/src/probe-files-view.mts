@@ -192,6 +192,8 @@ export async function mockView(): Promise<ViewSeen> {
 
   // ---------- 内容只当字显示 ----------
   await kit.open('docs/snippet.html')
+  // HTML 现在默认静态预览；这里仍验证源码查看器不会把文件内容当 DOM 执行。
+  one<HTMLButtonElement>('.fv-head [data-tool="source"]')?.click()
   await kit.painted()
   const htmlView = kit.code() as HTMLElement
   const leaks = [

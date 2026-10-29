@@ -13,6 +13,7 @@ const CSP = [
   "font-src 'self'",
   "img-src 'self' data: blob:",
   "connect-src 'none'",
+  'media-src blob:',
 ].join('; ')
 
 const cspOnBuild = (): Plugin => {
