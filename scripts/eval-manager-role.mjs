@@ -328,6 +328,8 @@ try {
     })
     manager = created.manager
     record.createResponse = created
+    // 经理会话本身也要显式订阅：否则它回合里的命令、文件审批没有连接接，回合一直挂着。
+    await call('thread/resume', { threadId: created.manager.threadId, permissions: 'role-eval' })
     await settle(deadline, 'manager-open')
     await trigger(
       'add',
