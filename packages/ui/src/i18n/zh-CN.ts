@@ -1230,6 +1230,7 @@ export const zhCN = {
   'info.lineage.user': '由你派出',
   'info.lineage.proposal': '由提案开始',
   'info.lineage.wake': '完成后唤醒父会话',
+  'info.lineage.noWake': '完成后不唤醒父会话',
   'info.lineage.claudeDesktop': '由 Claude 桌面端派出',
   'info.lineage.otherApp': '由其他应用派出',
   'side.tab.agents': '子代理',

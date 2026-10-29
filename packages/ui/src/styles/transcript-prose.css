@@ -445,6 +445,11 @@
   font: calc(12px * var(--fs)) / 1.5 var(--ui);
   color: var(--ink-3);
 }
+/* “· 不唤醒”是一整块：换行时圆点不留在上一行末尾，间距和其他段一样 */
+.lineage-wake {
+  display: inline-flex;
+  gap: inherit;
+}
 .forked-link {
   padding: 0;
   border: 0;
