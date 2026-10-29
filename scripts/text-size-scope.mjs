@@ -20,19 +20,62 @@ export const sharedFiles = [
   'skins/standard.css',
 ]
 
+// CSS 本身不能推断无祖先限定的类在 JSX 中的挂载位置。混合文件明确登记归属；
+// 新增有字号的选择器若不属于任何已知区域，检查失败，不能静默漏掉。
+const following = {
+  'base.css': /^(chip|st|pill|caret-ic|ic)$/,
+  'shell.css': /^(dev-(none|row|note)|ws-row|filter-hid|filter-off|row-err|sec-label|ss-[\w-]+)$/,
+  'background.css': /^(bgbar|bgmark|pulse|turn-origin|st)$/,
+  skins:
+    /^(md|umsg|think|code|cmp-[\w-]+|pick-btn|sug-opt|mode-btn|req-[\w-]+|pending-[\w-]+|pill|st|mention|ss-[\w-]+|ws-row|dev-row|sec-label|tree-[\w-]+|agent-[\w-]+)$/,
+}
+const fixed = {
+  'base.css': /^(harness-off-label)$/,
+  'shell.css':
+    /^(crumb|sb-btn|sb-btn-ic|sb-look-row|sb-look-more|sb-filter-on|sb-link|info-card|info-head|toast)$/,
+  'background.css': /^(bg-group|bg-row|bg-stop|bg-empty|bg-task-head|bg-task-none)$/,
+  skins: /^(peek|peek-foot|pick-opt)$/,
+}
+const regionRoots = new Set([
+  'sb-scroll',
+  'tr',
+  'dock',
+  'tr-tail',
+  'new-compose',
+  'cmp',
+  'tree-card',
+  'prop-card',
+  'agent-row',
+  'sev',
+  'ask',
+  'req-frame',
+  'pending-asks',
+  'child-reqs',
+])
+
+/** 返回 follow / fixed / unknown；逗号分组逐个判断，未知分支不能被另一分支掩盖。 */
+export function textScope(file, selector) {
+  if (textFiles.includes(file)) return 'follow'
+  const key = file.startsWith('skins/') ? 'skins' : file
+  const scopes = selector.split(',').map((part) => {
+    // 去掉属性字符串，避免把属性值里的点号当类名；完整提取类名，ic 不会匹配 ic-other。
+    const plain = part.replace(/\[[^\]]*\]/g, '')
+    const classes = [...plain.matchAll(/\.([\w-]+)/g)].map((match) => match[1])
+    if (classes.some((name) => fixed[key]?.test(name))) return 'fixed'
+    if (classes.some((name) => regionRoots.has(name) || following[key]?.test(name))) return 'follow'
+    if (
+      (key === 'skins' && !classes.length) ||
+      (file === 'base.css' && /^(body|button)$/.test(part.trim()))
+    )
+      return 'fixed'
+    return 'unknown'
+  })
+  if (scopes.includes('unknown')) return 'unknown'
+  return scopes.includes('follow') ? 'follow' : 'fixed'
+}
+
 export function followsText(file, selector) {
-  if (textFiles.includes(file)) return true
-  if (file === 'base.css') return /\.(chip|st|pill|caret-ic|ic)\b/.test(selector)
-  if (file === 'shell.css')
-    return /\.(dev-(?:none|row|note)|ws-row|filter-hid|row-err|sec-label|ss-[\w-]+)\b/.test(
-      selector,
-    )
-  if (file === 'background.css') return /\.(bgbar|pulse)\b/.test(selector)
-  if (file.startsWith('skins/'))
-    return /\.(md|umsg|think|code|cmp-[\w-]+|pick-btn|sug-opt|mode-btn|req-[\w-]+|pending-[\w-]+|pill|st|mention|ss-[\w-]+|ws-row|dev-row|sec-label|tree-[\w-]+|agent-[\w-]+)\b/.test(
-      selector,
-    )
-  return false
+  return textScope(file, selector) === 'follow'
 }
 
 /** CSS 的最内层规则；先去注释（保留行号），媒体块里的组件规则也会逐条检查。 */

@@ -2,7 +2,12 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { runInNewContext } from 'node:vm'
-import { bareTextPixels, followsText, textRules } from '../../../scripts/text-size-scope.mjs'
+import {
+  bareTextPixels,
+  followsText,
+  textRules,
+  textScope,
+} from '../../../scripts/text-size-scope.mjs'
 
 test('首帧字号：六档正确写入，无效值回默认，不受查询参数改写', () => {
   const source = readFileSync(new URL('../public/prepaint.js', import.meta.url), 'utf8')
@@ -54,4 +59,18 @@ test('检查脚本能拦字号、font 简写、像素行高，允许使用处计
   assert.equal(followsText('shell.css', '.ss-row .time'), true)
   assert.equal(followsText('shell.css', '.sb-btn'), false)
   assert.equal(followsText('skins/human.css', '[data-skin="human"] .cmp-text'), true)
+})
+
+test('混合文件的阅读区不得漏报，独立面板不跟随，新选择器必须声明归属', () => {
+  const rule = textRules('.turn-origin { font-size: 12px; }')[0]
+  assert.equal(textScope('background.css', rule.selector), 'follow')
+  assert.deepEqual(bareTextPixels(rule.body), ['font-size: 12px'])
+  assert.equal(textScope('background.css', '.bg-row .meta'), 'fixed')
+  assert.equal(textScope('background.css', '.tr .future-label'), 'follow')
+  assert.equal(textScope('background.css', '.future-label'), 'unknown')
+  assert.equal(textScope('background.css', '.bgbar, .future-label'), 'unknown')
+  assert.equal(followsText('base.css', '.ic-other'), false)
+  assert.equal(textScope('base.css', '.ic-other'), 'unknown')
+  assert.equal(textScope('base.css', '.ic'), 'follow')
+  assert.equal(textScope('skins/human.css', '[data-skin="human"] .peek-foot .btn'), 'fixed')
 })

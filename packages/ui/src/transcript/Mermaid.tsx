@@ -89,7 +89,7 @@ export const MermaidBlock = memo(function MermaidBlock({ text, open, anchor }: M
         </span>
       </div>
       {figure ? (
-        <Figure svg={svg} />
+        <Figure svg={svg} scale={Number(current?.look.split(':')[1])} />
       ) : (
         <pre>
           <code>{text}</code>
@@ -104,20 +104,20 @@ export const MermaidBlock = memo(function MermaidBlock({ text, open, anchor }: M
  * 画好的 SVG 放进页面。它是画图库在严格模式下输出、自己净化过的；
  * 页面的内容安全策略也不许内联脚本，图里就算带了也不会执行。
  */
-function Figure({ svg }: { svg: string }) {
+function Figure({ svg, scale }: { svg: string; scale: number }) {
   const host = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => {
     if (host.current) {
       host.current.innerHTML = svg
       const figure = host.current.querySelector('svg')
-      // 图按字号重画之后保留其固有尺寸，宽图在框内滚动；按宽度再次缩小会抵消文字放大。
-      if (figure?.viewBox.baseVal.width) {
+      // 默认档沿用宽图适配容器；只有放大字号时保留重画后的尺寸，避免适配宽度抵消放大。
+      if (scale > 1 && figure?.viewBox.baseVal.width) {
         figure.style.width = `${figure.viewBox.baseVal.width}px`
         figure.style.maxWidth = 'none'
         figure.style.flex = 'none'
       }
     }
-  }, [svg])
+  }, [svg, scale])
   return <div ref={host} className="mmd-fig" />
 }
 

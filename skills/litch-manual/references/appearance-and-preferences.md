@@ -18,11 +18,14 @@ Skin, theme and language can also be changed from the **Appearance** button at t
 | Sidebar text size (`--tree-text`) | 90%, 100%, 110%, 120%, 135%, 150% | 100% |
 | Conversation text size (`--chat-text`) | 90%, 100%, 110%, 120%, 135%, 150% | 100% |
 
-会话列表字号与对话字号分别控制阅读区域，相对当前皮肤字号计算，换皮肤后保留比例。
-对话字号包含正文、代码块、图表、问题与审批卡、输入框；列表字号包含设备、项目与会话行。
-顶栏、侧栏顶部和底部、设置、菜单、信息栏、差异、文件、终端和浏览器不随这两项改变。
-字号只改文字及必要行高，界面缩放则放大整窗；两者相乘，例如 150% × 150% 为 225%。
-两项存在本机，不同步手机；普通浏览器预览同样支持字号设置。
+Sidebar text size (会话列表字号) and conversation text size (对话字号) scale their reading areas
+relative to the current skin. The selected factors are retained when switching skins.
+Conversation text size covers prose, code, diagrams, questions, approval cards and the input box;
+sidebar text size covers device, project and session rows.
+The top bar, sidebar header and footer, settings, menus, info rail, diffs, files, terminal and browser
+keep their own text sizes. Text size changes text and necessary line heights, while zoom scales the
+whole window. The factors multiply: 150% text size with 150% zoom gives 225%.
+Both preferences are saved on this computer, do not sync to phones, and also work in browser previews.
 
 `scripts/litch look set --tree-text 120 --chat-text 135` changes both sizes; `scripts/litch status`
 reads them back. Percent signs are optional; the factors `1.2` and `1.35` are also accepted.

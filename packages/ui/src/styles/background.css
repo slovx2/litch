@@ -272,7 +272,7 @@
   max-width: min(82%, 760px);
   min-width: 0;
   padding: 2px 4px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-3);
 }
 .turn-origin .ic {

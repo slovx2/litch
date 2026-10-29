@@ -164,7 +164,7 @@ const darkQuery = (): MediaQueryList | null =>
 function currentLook(): string {
   const root = document.documentElement
   const theme = root.dataset.theme ?? (darkQuery()?.matches ? 'dark' : 'light')
-  const scale = getComputedStyle(root).getPropertyValue('--fs-chat').trim() || '1'
+  const scale = root.style.getPropertyValue('--fs-chat').trim() || '1'
   return `${root.dataset.skin ?? ''}:${scale}:${theme}`
 }
 
