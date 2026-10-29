@@ -689,7 +689,7 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  height: 12px;
+  height: calc(12px * var(--fs));
   margin-left: -6px;
   overflow: hidden;
   color: var(--ink-3);
@@ -698,12 +698,12 @@
   content: "";
   flex: none;
   width: 6px;
-  height: 12px;
+  height: calc(12px * var(--fs));
 }
 .cwd-mark > svg.ic {
   flex: none;
-  width: 12px;
-  height: 12px;
+  width: calc(12px * var(--fs));
+  height: calc(12px * var(--fs));
 }
 /* 所属的 harness 现在用不了：这一行是上次留下的，淡下去（和离线设备下面的会话一个画法） */
 .ss-row.down > :not(.chip) {
@@ -852,6 +852,6 @@
   color: var(--accent);
 }
 .web-mark > svg {
-  width: 12px;
-  height: 12px;
+  width: calc(12px * var(--fs));
+  height: calc(12px * var(--fs));
 }

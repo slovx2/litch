@@ -198,7 +198,8 @@
   flex: none;
   margin-left: auto;
 }
-.mmd-seg button {
+/* 比 devices.css 里通用的 .seg button 高一级：那边加载更晚，同级会把字号盖回固定值 */
+.seg.mmd-seg button {
   height: calc(12px * var(--fs) + 8px);
   padding: 0 8px;
   font-size: calc(11px * var(--fs));
