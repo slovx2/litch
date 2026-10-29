@@ -251,7 +251,7 @@ test('半截流卡住：首次完整读取与通知条目不同，只建立基�
   }
 })
 
-test('提醒、等待、工具和已忽略状态只轻量复查，按1/2/5/10分钟退避并封顶', async () => {
+test('残留状态按1/2/5/10分钟退避，只有登记着工具的十分钟复查追加完整核对', async () => {
   for (const mode of ['notice', 'waiting', 'tool', 'dismissed']) {
     const r = rig()
     try {
@@ -275,8 +275,9 @@ test('提醒、等待、工具和已忽略状态只轻量复查，按1/2/5/10分
         assert.equal(r.reads.length, count, mode)
         r.advance(1)
         await r.observer.tick()
-        assert.deepEqual(r.reads.slice(count), [false], mode)
-        count++
+        const expected = mode === 'tool' && delay === 600000 ? [false, true] : [false]
+        assert.deepEqual(r.reads.slice(count), expected, mode)
+        count += expected.length
       }
     } finally {
       r.observer.close()
@@ -303,6 +304,101 @@ test('慢复查发现等待状态变化才完整核对，并从解除等待时�
     r.advance(1)
     await r.observer.tick()
     assert.equal(r.observer.list()[0]?.recovery?.reason, 'idle')
+  } finally {
+    r.observer.close()
+  }
+})
+
+test('通知登记的工具在完整快照中缺席或状态未知时保留，重新打开会话不误报长工具', async () => {
+  const r = rig(false)
+  try {
+    r.observer.observe('codex', 'item/started', {
+      threadId: 't',
+      turnId: 'a',
+      item: tool('inProgress'),
+    })
+    r.snapshot() // Codex 的完整读取可能暂时只有用户消息，不含正在执行的工具。
+    r.advance(300000)
+    await r.observer.tick()
+    assert.equal(r.observer.list().length, 0)
+    assert.deepEqual(r.reads, [false], '仍按工具阶段轻量复查，不把缺席当完成')
+    r.state().turns[0].items = [tool('unknown')]
+    r.snapshot()
+    r.advance(300000)
+    await r.observer.tick()
+    assert.equal(r.observer.list().length, 0)
+    // 只有明确终态才可解除；首次工具终态证据也重新开始模型等待计时。
+    r.state().turns[0].items = [tool('completed')]
+    r.snapshot()
+    r.advance(299999)
+    await r.observer.tick()
+    assert.equal(r.observer.list().length, 0)
+    r.advance(1)
+    await r.observer.tick()
+    assert.equal(r.observer.list()[0]?.recovery?.reason, 'idle')
+  } finally {
+    r.observer.close()
+  }
+})
+
+test('离线漏收工具结束且状态指纹不变：十分钟兜底确认终态，再卡住仍会提示', async () => {
+  const r = rig()
+  try {
+    r.state().turns[0].items = [
+      tool('inProgress'),
+      { id: 'answer', type: 'agentMessage', text: '继续执行' },
+    ]
+    r.snapshot()
+    // 完成的不是最后一条，数量、末条ID/状态/长度都没变，只能凭明确工具终态解除。
+    r.state().turns[0].items[0].status = 'completed'
+    for (const delay of [60000, 120000, 300000]) {
+      r.advance(delay)
+      await r.observer.tick()
+    }
+    assert.deepEqual(r.reads, [false, false, false])
+    r.advance(599999)
+    await r.observer.tick()
+    assert.equal(r.reads.length, 3)
+    r.advance(1)
+    await r.observer.tick()
+    assert.deepEqual(r.reads, [false, false, false, false, true])
+    assert.equal(r.observer.list().length, 0)
+    r.advance(299999)
+    await r.observer.tick()
+    assert.equal(r.observer.list().length, 0)
+    r.advance(1)
+    await r.observer.tick()
+    assert.equal(r.observer.list()[0]?.recovery?.reason, 'idle')
+  } finally {
+    r.observer.close()
+  }
+})
+
+test('十分钟完整核对仍没看到工具条目时不删除，其他未报告的工具也不受影响', async () => {
+  const r = rig(false)
+  try {
+    for (const id of ['tool', 'other'])
+      r.observer.observe('codex', 'item/started', {
+        threadId: 't',
+        turnId: 'a',
+        item: { ...tool('inProgress'), id },
+      })
+    for (const delay of [60000, 120000, 300000, 600000]) {
+      r.advance(delay)
+      await r.observer.tick()
+    }
+    assert.deepEqual(r.reads, [false, false, false, false, true])
+    assert.equal(r.observer.list().length, 0)
+    r.state().turns[0].items = [tool('failed')]
+    r.snapshot()
+    r.advance(300000)
+    await r.observer.tick()
+    assert.equal(r.observer.list().length, 0, 'other 缺席但未终结，仍抑制模型停流提示')
+    r.state().turns[0].items.push({ ...tool('completed'), id: 'other' })
+    r.snapshot()
+    r.advance(300000)
+    await r.observer.tick()
+    assert.equal(r.observer.list().length, 1)
   } finally {
     r.observer.close()
   }

@@ -25,6 +25,7 @@ interface RecoveryHost {
   trace?(event: string, fields: Record<string, unknown>): void
 }
 const textItems = new Set(['agentMessage', 'reasoning', 'userMessage', 'plan'])
+const terminalTools = new Set(['completed', 'failed', 'declined', 'interrupted'])
 const RECHECK_MS = [60000, 120000, 300000, 600000] as const
 type ItemIndex = Map<string, { status: unknown; type: unknown; textLength: number }>
 
@@ -209,14 +210,15 @@ export class TurnRecoveryObserver {
       const changed =
         complete && t.fullFingerprint !== null && nextFingerprint !== t.fullFingerprint
       if (complete) t.fullFingerprint = nextFingerprint
-      const tools = new Set(
-        [...items]
-          .filter(([, item]) => !textItems.has(String(item.type)) && item.status === 'inProgress')
-          .map(([id]) => id),
-      )
-      t.tools = tools
-      if (changed) this.progress(t)
-      if (tools.size) this.set(t, null)
+      let finishedTool = false
+      // 完整读取可能还没有正在写的工具。缺席不是结束，只采纳明确的进行中/终态证据。
+      for (const [id, item] of items) {
+        if (textItems.has(String(item.type))) continue
+        if (item.status === 'inProgress') t.tools.add(id)
+        else if (terminalTools.has(String(item.status)) && t.tools.delete(id)) finishedTool = true
+      }
+      if (changed || finishedTool) this.progress(t)
+      if (t.tools.size) this.set(t, null)
     }
     this.setWaiting(t, this.waiting(thread.status))
   }
@@ -324,11 +326,13 @@ export class TurnRecoveryObserver {
                   this.waiting(status) !== t.waiting
                 if (nextStatus !== null) t.statusFingerprint = nextStatus
               }
-              if (recheck && !statusChanged) {
+              // 工具结束通知也可能漏收：只有仍登记着工具且已退避到十分钟时做低频完整核对。
+              const reconcileTools = t.tools.size > 0 && t.recheckStep === RECHECK_MS.length - 1
+              if (recheck && !statusChanged && !reconcileTools) {
                 t.recheckStep = Math.min(t.recheckStep + 1, RECHECK_MS.length - 1)
                 continue
               }
-              // 残留状态通常只轻量读取并退避；只有状态改变需要核对，或即将提醒时才读完整历史。
+              // 完整读取限于即将提醒、状态改变、或工具终态的十分钟兜底核对。
               const full = await this.host.check(t.harness, t.threadId, true)
               if (!current()) continue
               if (isObject(full) && isObject(full.thread))
