@@ -4,6 +4,7 @@
 // 用户的话（一回合一次调用，工具结果回来后把结果原样说出来）：
 //   会话：<工具> <JSON 参数>   要在行首（子会话的派出说明会引用父会话的标题，别再触发一次），调 litch_sessions.<工具>，比如 会话：start {"title":"查日志","prompt":"<够宽的简报>","initiation":"user_asked"}（fresh 的简报显示宽度不到 80 会被设备进程拒绝，汉字算 2：中文至少 40 字）
 //   任务：<工具> <JSON 参数>   同样的做法调 litch_tasks.<工具>（定时任务，设备执行），比如 任务：create {"name":"日报","prompt":"总结","schedule":{"type":"interval","minutes":5}}
+//   经理：<工具> <JSON 参数>   调 litch_manager 的八种操作，回显“经理结果：”；经理事件固定应答见 client-fixture-manager.mjs。
 //   浏览器：<工具> <JSON 参数> 同样的做法调 litch_browser.<工具>（只认 navigate、snapshot），比如 浏览器：navigate {"url":"about:blank"}，
 //                              用来在 dsh、OpenCode 上验桌面端执行的客户端工具（client-fixture-browse.mjs 只认 Pi 的工具名）
 //   收尾：<JSON>               要在行首，调 litch_sessions.wrap_up：JSON 是 {"suggestions":[…]}，或者直接写那个数组，比如
@@ -19,11 +20,13 @@
 // 工具不在（会话不是 Litch 建的、这家没有客户端工具、设置里关了会话编排）时照实说一句。
 //
 // 各家给模型的工具名不一样（Claude Code 是哈希过的 MCP 名，dsh 是 <命名空间>__<工具>，OpenCode 是挂上去的 MCP 名，
-// Pi 是拼起来的名字，原生 codex 是命名空间），所以不按名字认，按工具说明的开头认：说明是 client-tools-sessions.mts、client-tools-tasks.mts
+// Pi 是拼起来的名字，原生 codex 是命名空间），所以不按名字认，按工具说明的开头认：说明是 client-tools-sessions.mts、client-tools-tasks.mts、client-tools-manager.mts
 // 里写死的，各家都原样交给模型（Claude、Pi、dsh 会把命名空间的说明接在第一个工具前面，所以用“包含”）。
 // 改了那边的说明要跟着改这里的 MARKS。
 
-export const SESSIONS_TRIGGER = /^(会话|任务|浏览器)：(\w+)\s*(\{[\s\S]*\})?/m
+import { MANAGER_HEARD, MANAGER_SPACE, managerEventReply } from './client-fixture-manager.mjs'
+
+export const SESSIONS_TRIGGER = /^(会话|任务|浏览器|经理)：(\w+)\s*(\{[\s\S]*\})?/m
 export const SESSIONS_HEARD = '会话结果：'
 export const SESSIONS_WOKEN = '收到子会话的结果：'
 export const SESSIONS_NOTED = '收到子会话的回报：'
@@ -40,13 +43,18 @@ const NOTES_ONLY = /^<litch-session-event kind="notes">([\s\S]*?)<\/litch-sessio
 const REMIND = /<litch-session-event kind="remind">/
 
 const SPACES = {
+  经理: MANAGER_SPACE,
   会话: {
     namespace: 'litch_sessions',
     marks: {
       list: 'List sessions on this device',
       read: 'Read a session’s status',
       respond: 'Explicitly answer a pending question or approval.',
-      start: 'Start a sub-session, propose one, or offer a new session.',
+      start: [
+        'Start a sub-session, propose one, or offer a new session.',
+        // 经理的 start 说明来自设备的 manager-rules.mts，开线无需提案卡。
+        'Start an in-scope line with initiation user_asked, including on manager event turns.',
+      ],
       send: 'Send a message to a session: one of your sub-sessions',
       wait: 'Wait until the given sessions stop',
       interrupt: 'Interrupt the running turn of one of your sub-sessions, or of any session',
@@ -82,10 +90,12 @@ const textOf = (content) =>
 
 /** 在工具表里按说明找 <命名空间>.<tool>：tools 是 [{ name, description }]，找不到是 null */
 function findByMark(tools, space, tool) {
-  const mark = space.marks[tool]
+  const marks = [space.marks[tool]].flat()
   return (
-    tools.find((one) => typeof one.description === 'string' && one.description.includes(mark))
-      ?.name ?? null
+    tools.find(
+      (one) =>
+        typeof one.description === 'string' && marks.some((mark) => one.description.includes(mark)),
+    )?.name ?? null
   )
 }
 
@@ -94,6 +104,8 @@ function findByMark(tools, space, tool) {
  * results 是这句话之后已经回来的工具结果。返回 null（不归这里管）、{ text }、或者 { call: { name, args } }
  */
 export function sessionsStep(said, { nameOf, results }) {
+  const managerEvent = managerEventReply(said)
+  if (managerEvent) return managerEvent
   const wake = said.match(WAKE)
   if (wake) {
     const lines = wake[1].split('\n').filter((line) => line.startsWith('- '))
@@ -140,12 +152,16 @@ export function sessionsStep(said, { nameOf, results }) {
   }
   const tool = said.match(SESSIONS_TRIGGER)
   if (!tool) return null
-  if (results.length > 0) return { text: `${SESSIONS_HEARD}\n${results.join('\n---\n')}` }
+  if (results.length > 0)
+    return {
+      text: `${tool[1] === '经理' ? MANAGER_HEARD : SESSIONS_HEARD}\n${results.join('\n---\n')}`,
+    }
   const space = SPACES[tool[1]]
   if (!Object.hasOwn(space.marks, tool[2]))
     return { text: `${space.namespace} 里没有 ${tool[2]} 这个工具` }
   const name = nameOf(space, tool[2])
-  if (!name) return { text: `没有 ${space.namespace} 这个工具` }
+  if (!name)
+    return { text: `没有 ${space.namespace}${tool[1] === '经理' ? `.${tool[2]}` : ''} 这个工具` }
   try {
     return { call: { namespace: space.namespace, name, args: tool[3] ? JSON.parse(tool[3]) : {} } }
   } catch {

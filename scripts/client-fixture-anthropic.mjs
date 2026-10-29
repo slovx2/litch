@@ -15,6 +15,7 @@
 //   派子代理     Agent 派一个前台子代理，它一步步跑几条命令    没有子代理：照常回话（见 client-fixture-subagent.mjs）
 //   后台子代理   同上，子代理放到后台（run_in_background）
 //   本机：…、命令行：…、你在哪   操作本机，见 client-fixture-machine.mjs
+//   经理：<操作> <JSON 参数>    调 litch_manager；manager-open/answers/end 事件固定回话，见 client-fixture-manager.mjs
 //   别的         把收到的话带回来，开头注明是哪个 harness 收到的；带着技能正文的记号时把记号带回来
 //
 // 走到第几步按请求的内容算，不按到达的先后：引擎自己还会发别的请求（dsh 起标题、Claude Code 数词元），

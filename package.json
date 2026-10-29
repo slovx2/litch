@@ -66,6 +66,7 @@
     "check:codex-direct-instructions": "node scripts/check-codex-direct-instructions.mjs",
     "check:client-tools-codex": "node scripts/check-client-tools-codex.mjs",
     "check:live-user-message": "node scripts/check-live-user-message.mjs",
+    "check:manager-fixture": "npm run build && node --test scripts/client-fixture-manager.test.mjs && node scripts/check-manager-fixture.mjs",
     "check:pair-cli": "node --test scripts/fixture-environment.test.mjs && node scripts/build-cli.mjs && node scripts/check-pair-cli.mjs",
     "package:adapter": "node scripts/package-adapter.mjs",
     "check:adapter-package": "node scripts/check-adapter-package.mjs",

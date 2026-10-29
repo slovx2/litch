@@ -12,6 +12,8 @@
 //   <根>/profile  给应用用的临时用户数据目录（LITCH_PROFILE）
 // 回环上的假模型和 client-fixture.mjs 里的是同一种：把收到的那句话带回来，分几段慢慢发；
 // 话里带“问我”时向用户提两个问题（client-fixture-ask.mjs）。
+// 行首“经理：<操作> <JSON 参数>”调用 litch_manager（八种操作）；经理开场、答复、结束事件固定回话，见 client-fixture-manager.mjs。
+// 经理方法由设备默认提供，无需设置开关；加入原生 Codex 用 --engines claude,pi,dsh,codex，并用 CHA_CODEX_CLI 指定命令行。
 // 话里带“跑个命令”时调用 Pi 内置的 bash 跑一条固定的命令（client-fixture-run.mjs）：打开 Pi 的审批之后，界面上能看到命令审批卡片。
 // 话里带“浏览”和网址时用桌面的内置浏览器打开（client-fixture-browse.mjs），带“操作应用”时用 Computer Use 看一个应用、打一段字
 // （client-fixture-computer.mjs）：真实窗口验收用它们验客户端工具，模型仍是假的。
