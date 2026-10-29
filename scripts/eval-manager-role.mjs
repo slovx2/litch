@@ -379,7 +379,7 @@ try {
       deadline,
     )
   })
-  await step(4, '对话里答导出格式', '导出用 JSON 吧。', async (record, deadline) => {
+  await step(4, '对话里答导出格式', '导出用 JSON 吧，其他按你的计划开始。', async (record, deadline) => {
     const before = await board()
     record.notes.push(
       `发送前决策标题：${before.decisions.map((entry) => `${entry.id} ${entry.title}`).join('；') || '无'}。是否曾提出导出格式决策由读者核对。`,
