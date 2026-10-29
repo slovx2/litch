@@ -11,6 +11,7 @@ import { zhComments } from './zh-CN-comments.ts'
 import { zhGoal } from './zh-CN-goal.ts'
 import { zhHconfig } from './zh-CN-hconfig.ts'
 import { zhLimits } from './zh-CN-limits.ts'
+import { zhManager } from './zh-CN-manager.ts'
 import { zhOnboard } from './zh-CN-onboard.ts'
 import { zhPairing } from './zh-CN-pairing.ts'
 import { zhPasswords } from './zh-CN-passwords.ts'
@@ -24,6 +25,7 @@ import { zhTasks } from './zh-CN-tasks.ts'
 import { zhWorktrees } from './zh-CN-worktrees.ts'
 
 export const zhCN = {
+  ...zhManager,
   ...zhPower,
   ...zhAutomation,
   ...zhChrome,

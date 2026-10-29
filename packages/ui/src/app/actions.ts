@@ -90,6 +90,20 @@ export function onTasksRequest(listener: (route: TasksRoute) => void): () => voi
 
 const assistantListeners = new Set<() => void>()
 
+export type ManagersRoute =
+  | { view: 'list' }
+  | { view: 'new'; deviceId?: string; workspaceId?: string | null }
+const managerListeners = new Set<(route: ManagersRoute) => void>()
+export function requestManagers(route: ManagersRoute): void {
+  for (const listener of managerListeners) listener(route)
+}
+export function onManagersRequest(listener: (route: ManagersRoute) => void): () => void {
+  managerListeners.add(listener)
+  return () => {
+    managerListeners.delete(listener)
+  }
+}
+
 /**
  * 打开配置助手：到新建对话页、设备切到本机（手册只装在本机），harness 和模型照上次的不动，
  * 输入框里放好“使用 Litch 产品手册帮我配置：”（有技能就带技能片），原来写的接在后面

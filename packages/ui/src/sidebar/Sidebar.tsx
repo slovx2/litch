@@ -25,8 +25,9 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
+import type { ManagerView } from '../../../core/src/model-manager.mts'
 import type { Draft, Page, Selection } from '../app/App.tsx'
-import { requestDevice, requestTasks } from '../app/actions.ts'
+import { requestDevice, requestManagers, requestTasks } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { useNow } from '../app/clock.ts'
 import { badgeOf, downHarness, downText, nameOf, wireStyle } from '../app/device.ts'
@@ -42,6 +43,7 @@ import { PairDialog } from '../devices/PairDialog.tsx'
 import { useRestart } from '../devices/RestartService.tsx'
 import { restartItemOf, restarting, serviceFlagOf } from '../devices/service.ts'
 import { FailureNote, shownState, useReconnect } from '../devices/status.tsx'
+import { ManagerSidebar } from '../manager/ManagerSidebar.tsx'
 import { useBrowserWants } from '../side/browser/store.ts'
 import { SpawnDialog } from '../tree/SpawnDialog.tsx'
 import { offerUndo } from './archive-undo.ts'
@@ -539,6 +541,8 @@ function BrowserWants({ deviceId, sessionId }: { deviceId: string; sessionId: st
 }
 
 interface GroupProps {
+  managerRoot?: string
+  managers?: ManagerView[]
   deviceId: string
   selection: Selection | null
   /** 正在写的新会话。它所在的那一行（工作区或设备）标成选中 */
@@ -756,7 +760,7 @@ function DeviceGroup(props: GroupProps) {
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
   /** 没有是这台设备的会话目录还没到 */
   const listed = useKey<SessionGroups>(keys.groups(deviceId))
-  const groups = listed ?? NO_GROUPS
+  const rawGroups = listed ?? NO_GROUPS
   const sections = useKey<SectionView[]>(keys.sections(deviceId)) ?? NO_SECTIONS
   /** 开着的工作区对话框：添加（workspace 为 null），或者改某一个 */
   const [dialog, setDialog] = useState<{ workspace: WorkspaceView | null } | null>(null)
@@ -789,7 +793,8 @@ function DeviceGroup(props: GroupProps) {
   /** 未读的会话：和 Dock 角标数的是同一份 */
   const unread = useKey<string[]>(keys.unread(deviceId)) ?? NO_IDS
   /** 侧栏正只看哪几个 harness 的会话。空的：都看 */
-  const filter = useSidebarHarnesses()
+  const chosenHarnesses = useSidebarHarnesses()
+  const filter = props.managerRoot ? [] : chosenHarnesses
   const harnessOf = useKey<SessionHarnesses>(keys.harnessOf(deviceId))
   /** 别的应用派出来的会话（Claude 桌面端起的子会话）显不显示：默认不显示，开关在侧栏顶上的“更多”里 */
   const showNative = useSidebarNativeChildren()
@@ -831,6 +836,17 @@ function DeviceGroup(props: GroupProps) {
     if (!dragging) setOver(null)
   }, [dragging])
   if (!device) return null
+  // 普通目录隐藏经理的整棵子树；经理模式仍复用下方的 tree()。
+  const owned = new Set<string>()
+  const collect = (id: string) => {
+    if (owned.has(id)) return
+    owned.add(id)
+    for (const child of children[id] ?? []) collect(child)
+  }
+  for (const manager of props.managers ?? []) collect(manager.threadId)
+  const groups = Object.fromEntries(
+    Object.entries(rawGroups).map(([key, ids]) => [key, ids.filter((id) => !owned.has(id))]),
+  )
   const picked = selection?.deviceId === deviceId ? selection.sessionId : null
   /** 非露出来不可的会话：正选中的那个，和停下来等人的那些。筛选筛不掉它们，“展示更多”也折不住它们 */
   const always = (id: string) => id === picked || pressing.includes(id)
@@ -915,6 +931,13 @@ function DeviceGroup(props: GroupProps) {
       </div>
     )
   }
+
+  if (props.managerRoot)
+    return (
+      <div className="mg-tree" data-device={deviceId}>
+        {(children[props.managerRoot] ?? []).map((id) => tree(id, 1))}
+      </div>
+    )
 
   const toggle = (id: string) => toggleSidebarFold(deviceId, 'closed', id)
   /**
@@ -1734,6 +1757,10 @@ function DeviceGroup(props: GroupProps) {
 }
 
 interface SidebarProps {
+  mode: 'chat' | 'manager'
+  onMode(mode: 'chat' | 'manager'): void
+  managers: ManagerView[]
+  devices: DeviceView[]
   selection: Selection | null
   draft: Draft | null
   /** 正开着哪一页：已归档对话、设备、设置。都没开就是 null */
@@ -1770,32 +1797,99 @@ export function Sidebar(props: SidebarProps) {
   const shownIds = focus && deviceIds.includes(focus.deviceId) ? [focus.deviceId] : deviceIds
   return (
     <SidebarFrame label={t('sidebar.label')}>
-      <div className="sb-top">
-        <button
-          type="button"
-          className={composing ? 'sb-link new on' : 'sb-link new'}
-          aria-current={composing ? 'page' : undefined}
-          onClick={() => onCompose(null)}
-        >
-          <Plus />
-          <span>{t('sidebar.newSession')}</span>
-        </button>
-        <HarnessFilter />
-        <SidebarMore />
+      <div className="sb-top mg-sidebar-top">
+        <div className="mg-mode seg">
+          <button
+            type="button"
+            data-sidebar-mode="chat"
+            aria-pressed={props.mode === 'chat'}
+            onClick={() => props.onMode('chat')}
+          >
+            {t('manager.chat')}
+          </button>
+          <button
+            type="button"
+            data-sidebar-mode="manager"
+            aria-pressed={props.mode === 'manager'}
+            onClick={() => props.onMode('manager')}
+          >
+            {t('manager.title')}
+            {props.managers.reduce((total, manager) => total + manager.pendingDecisions, 0) ? (
+              <span className="pill wait">
+                {props.managers.reduce((total, manager) => total + manager.pendingDecisions, 0)}
+              </span>
+            ) : null}
+          </button>
+        </div>
+        {props.mode === 'manager' ? (
+          <button
+            type="button"
+            className="sb-link new"
+            onClick={() =>
+              requestManagers({
+                view: 'new',
+                ...(selection
+                  ? { deviceId: selection.deviceId }
+                  : draft
+                    ? { deviceId: draft.deviceId, workspaceId: draft.workspaceId }
+                    : {}),
+              })
+            }
+          >
+            <Plus />
+            <span>{t('manager.new')}</span>
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={composing ? 'sb-link new on' : 'sb-link new'}
+              aria-current={composing ? 'page' : undefined}
+              onClick={() => onCompose(null)}
+            >
+              <Plus />
+              <span>{t('sidebar.newSession')}</span>
+            </button>
+            <HarnessFilter />
+            <SidebarMore />
+          </>
+        )}
       </div>
       <div className="sb-scroll">
-        {shownIds.map((deviceId) => (
-          <DeviceGroup
-            key={deviceId}
-            deviceId={deviceId}
+        {props.mode === 'manager' ? (
+          <ManagerSidebar
+            managers={props.managers}
+            devices={props.devices}
             selection={selection}
-            draft={draft}
             onSelect={onSelect}
-            onCompose={onCompose}
-            focus={focus?.deviceId === deviceId ? focus.group : null}
-            onFocus={focusOn(deviceId)}
+            tree={(manager) => (
+              <DeviceGroup
+                deviceId={manager.deviceId}
+                managerRoot={manager.threadId}
+                selection={selection}
+                draft={null}
+                onSelect={onSelect}
+                onCompose={onCompose}
+                focus={null}
+                onFocus={focusOn(manager.deviceId)}
+              />
+            )}
           />
-        ))}
+        ) : (
+          shownIds.map((deviceId) => (
+            <DeviceGroup
+              key={deviceId}
+              deviceId={deviceId}
+              managers={props.managers.filter((manager) => manager.deviceId === deviceId)}
+              selection={selection}
+              draft={draft}
+              onSelect={onSelect}
+              onCompose={onCompose}
+              focus={focus?.deviceId === deviceId ? focus.group : null}
+              onFocus={focusOn(deviceId)}
+            />
+          ))
+        )}
       </div>
       <SidebarFoot page={page} onPage={onPage} />
     </SidebarFrame>
