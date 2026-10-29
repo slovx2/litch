@@ -59,9 +59,9 @@ export interface ChildSpec {
 
 /** 派不出来：说明是给人（或模型）看的 */
 export class StartRefused extends Error {
-  readonly kind: 'invalid' | 'blocked'
+  readonly kind: 'invalid' | 'blocked' | 'forbidden'
 
-  constructor(kind: 'invalid' | 'blocked', message: string) {
+  constructor(kind: 'invalid' | 'blocked' | 'forbidden', message: string) {
     super(message)
     this.kind = kind
   }
@@ -342,6 +342,26 @@ export function placement(
 // 同一个设备进程里的所有启动入口共用名额；已登记的子会话只计一次。
 const startingChildren = new WeakMap<SessionTree, Map<string, Set<{ threadId: string | null }>>>()
 
+function treePosition(
+  threadId: string,
+  parentOf: Map<string, string>,
+): { root: string; depth: number } {
+  let root = threadId
+  let depth = 0
+  const seen = new Set<string>()
+  while (parentOf.has(root)) {
+    if (seen.has(root))
+      throw new StartRefused(
+        'forbidden',
+        'The session tree contains a cycle; cannot start another session.',
+      )
+    seen.add(root)
+    root = parentOf.get(root) as string
+    depth++
+  }
+  return { root, depth }
+}
+
 export async function startChild(
   tree: SessionTree,
   parentId: string,
@@ -352,12 +372,43 @@ export async function startChild(
   let parents = startingChildren.get(tree)
   if (!parents) startingChildren.set(tree, (parents = new Map()))
   const pending = parents.get(parentId) ?? new Set<{ threadId: string | null }>()
+  const holds = tree.store.childStarts()
+  const lineage = tree.store.children()
+  const parentOf = new Map(holds.map((row) => [row.threadId, row.parentId]))
+  for (const row of lineage) parentOf.set(row.threadId, row.parentThreadId)
+  const position = treePosition(parentId, parentOf)
+  if (position.depth >= SESSION_TREE_LIMITS.maxDepth)
+    throw new StartRefused(
+      'forbidden',
+      `Cannot start a child beyond depth ${SESSION_TREE_LIMITS.maxDepth}; the root is depth 0.`,
+    )
+  const liveTree = new Set(
+    [position.root, ...parentOf.keys()].filter(
+      (id) => tree.isActive(id) && treePosition(id, parentOf).root === position.root,
+    ),
+  )
+  for (const hold of holds)
+    if (treePosition(hold.parentId, parentOf).root === position.root) liveTree.add(hold.threadId)
+  let unnamed = 0
+  for (const [parent, slots] of parents) {
+    if (treePosition(parent, parentOf).root !== position.root) continue
+    for (const slot of slots) {
+      if (slot.threadId) liveTree.add(slot.threadId)
+      else unnamed++
+    }
+  }
+  if (liveTree.size + unnamed >= SESSION_TREE_LIMITS.liveTree)
+    throw new StartRefused(
+      'forbidden',
+      `This session tree already has ${liveTree.size + unnamed} sessions running or starting (limit ${SESSION_TREE_LIMITS.liveTree}, including the root). Wait for work to finish.`,
+    )
   const live = new Set(
     tree.store
       .childrenOf(parentId)
       .filter((child) => tree.isActive(child.threadId))
       .map((child) => child.threadId),
   )
+  for (const hold of holds) if (hold.parentId === parentId) live.add(hold.threadId)
   const occupied =
     live.size + [...pending].filter((one) => !one.threadId || !live.has(one.threadId)).length
   if (occupied >= SESSION_TREE_LIMITS.liveChildren)
@@ -384,11 +435,20 @@ export async function startChild(
   pending.add(slot)
   parents.set(parentId, pending)
   try {
-    return await startReservedChild(tree, parentId, spec, origin, (id) => {
+    const child = await startReservedChild(tree, parentId, spec, origin, (id) => {
       slot.threadId = id
+      tree.store.holdChildStart(id, parentId)
     })
+    tree.store.dropChildStart(child.threadId)
+    return child
   } catch (error) {
-    if (directTurnId !== undefined) tree.store.releaseDirectStart(parentId, directTurnId)
+    if (directTurnId !== undefined && slot.threadId === null)
+      tree.store.releaseDirectStart(parentId, directTurnId)
+    if (slot.threadId !== null)
+      throw new StartRefused(
+        'blocked',
+        `Sub-session ${slot.threadId} was created but its start was not confirmed. Its quota remains counted; inspect or reuse it, or archive it to release the running slot. ${error instanceof Error ? error.message : String(error)}`,
+      )
     throw error
   } finally {
     pending.delete(slot)

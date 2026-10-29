@@ -142,6 +142,10 @@ export const SESSION_TREE_LIMITS = {
   wakesPerUserMessage: 50,
   /** 一个会话同时最多有几个没结束的子会话（直接子女） */
   liveChildren: 8,
+  /** 同一棵树同时运行/启动的会话数（含根会话） */
+  liveTree: 24,
+  /** 子会话最深层级，根为第 0 层 */
+  maxDepth: 4,
   /** includeSettled 时最多列几条 */
   proposalListMax: 100,
 } as const

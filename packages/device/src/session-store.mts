@@ -156,6 +156,8 @@ const MIGRATIONS: readonly string[] = [
   // 直接启动先预占再发请求；成功保留、明确失败退还。重启不会重置同一回合的额度。
   `CREATE TABLE direct_starts(thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, count INTEGER NOT NULL,
      PRIMARY KEY(thread_id, turn_id)) WITHOUT ROWID;`,
+  // 会话已经建出但首回合尚未确认开始，重启后仍占启动名额，直到开始、归档或删除。
+  `CREATE TABLE child_starts(thread_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL) WITHOUT ROWID;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -287,6 +289,23 @@ export class SessionStore {
 
   dropDirectStarts(threadId: string): void {
     this.db.prepare('DELETE FROM direct_starts WHERE thread_id=?').run(threadId)
+  }
+
+  holdChildStart(threadId: string, parentId: string): void {
+    this.db
+      .prepare('INSERT OR REPLACE INTO child_starts(thread_id, parent_id) VALUES(?, ?)')
+      .run(threadId, parentId)
+  }
+
+  dropChildStart(threadId: string): void {
+    this.db.prepare('DELETE FROM child_starts WHERE thread_id=?').run(threadId)
+  }
+
+  childStarts(): { threadId: string; parentId: string }[] {
+    return this.db
+      .prepare('SELECT thread_id, parent_id FROM child_starts')
+      .all()
+      .map((row) => ({ threadId: text(row.thread_id), parentId: text(row.parent_id) }))
   }
 
   constructor(db: DatabaseSync) {

@@ -37,7 +37,7 @@ sidebar.
 子会话在桌面侧栏、手机列表、任务卡和会话详情中显示 harness 标识。
 用户在自动唤醒的回合中插话成功后，该回合也按用户回合处理；后来的自动消息不会覆盖这个来源。
 
-用户已经要求派出子会话，或批准的计划已经包含子会话时，模型可在后续唤醒、提醒、定时任务等任意回合通过 `start(initiation: "user_asked")` 直接启动；任务卡关闭也可用。仅批准目标不等于批准拆会话，新的限制或撤销优先。每个父会话每回合直接启动最多 16 个，同时运行或启动的直接子会话最多 8 个；并发创建会预占名额，失败退还，重连或重启不重置同回合额度。进程在启动结果未确认时退出，已预占的回合额度保守保留。
+用户已经要求派出子会话，或批准的计划已经包含子会话时，模型可在后续唤醒、提醒、定时任务等任意回合通过 `start(initiation: "user_asked")` 直接启动；任务卡关闭也可用。仅批准目标不等于批准拆会话，新的限制或撤销优先。每个父会话每回合直接启动最多 16 个，同时运行或启动的直接子会话最多 8 个；整棵树同时运行或启动最多 24 个会话（含根），嵌套最多 4 层（根为第 0 层）。并发创建预占名额，只有会话尚未创建时失败才退还；已创建但首回合未确认启动的仍计入额度，并占运行名额，直到开始、归档或删除。重连或重启不重置同回合额度，归档成功时清理该会话的直接启动记录。进程在启动结果未确认时退出，已预占的回合额度保守保留。
 直接启动不占提案卡名额；提案、offer 与收尾建议合计每回合最多 4 张，撤回仍计数，提醒回合与来源回合合计。目标 harness 需要放宽沙箱时仍须用户确认。50 次自动唤醒上限不变。
 
 主会话可用 `litch_sessions.set_wake(thread_id, wake)` 关闭或重新打开直接子会话的自动唤醒；`start` 的 `wake_parent` 默认开启。主会话也可以覆盖用户此前在界面上选择的唤醒设置。关闭后回报仍入队、显示，也仍可插入正在运行的主会话；重新开启会检查已有回报，但不会绕过用户停止、失败、定时回合和唤醒次数等限制。`list`、`read` 会返回当前开关，桌面会话详情顶部的来历一行写“完成后不唤醒父会话”，手机会话行显示“不唤醒”。
@@ -364,8 +364,10 @@ woken to continue.
   or withdrawal of your authorization take precedence. Task cards may be off. Direct starts have a
   separate limit of 16 per parent per turn and 8 direct children running or starting at once; they do
   not consume the 4-card allowance shared by proposals, offers and wrap-up suggestions. Concurrent
-  requests reserve slots, failures release them, and reconnecting or restarting does not reset the
-  turn allowance. A reservation whose outcome was unknown at process exit remains counted.
+  requests reserve slots. The whole tree allows 24 running or starting sessions including the root,
+  with maximum depth 4 (root is 0). Only failures before session creation release the turn allowance.
+  A created session whose first turn did not start keeps its running slot until it starts, is archived
+  or deleted. Reconnecting or restarting does not reset the turn allowance; successful archiving clears it. A reservation whose outcome was unknown at process exit remains counted.
   Wider sandbox access still needs confirmation; the 50-wake limit is unchanged.
 - **Reports and waking**: when a sub-session finishes a turn, the start of its last answer is handed to
   the parent ("Reports from sub-sessions"). When the parent is idle and its sub-sessions have stopped,

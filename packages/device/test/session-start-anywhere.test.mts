@@ -234,7 +234,7 @@ test('START-ANY-006：同回合只剩一个额度时并发启动只放行一个�
   }
 })
 
-test('START-ANY-004：直接启动必须有回合号；任务卡开关各变体都带双语授权和独立上限规则', async () => {
+test('START-ANY-004：直接启动必须有回合号；任务卡开关各变体都带英文授权和独立上限规则', async () => {
   const env = treeRig()
   try {
     const client = await litch(env)
@@ -248,8 +248,12 @@ test('START-ANY-004：直接启动必须有回合号；任务卡开关各变体�
         assert.ok(start)
         assert.match(start.description, /any turn/)
         assert.match(start.description, /16 direct starts/)
-        assert.match(start.description, /任意后续回合/)
-        assert.match(tools.instructions ?? '', /用户已经要求过/)
+        assert.match(start.description, /24 running or starting sessions/)
+        assert.match(
+          tools.instructions ?? '',
+          cards ? /if unsure, use initiation/ : /if unsure, ask the user/,
+        )
+        assert.doesNotMatch(tools.instructions ?? '', /[\u4e00-\u9fff]/)
         assert.doesNotMatch(start.description, /separate work in their latest message/)
       }
   } finally {

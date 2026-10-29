@@ -412,8 +412,11 @@ export class SessionTree {
       this.turnEvent(harness, method, params)
     else if (method === 'item/started' || method === 'item/completed') this.itemEvent(params)
     // 别处（官方桌面端等直连引擎的客户端）归档、删掉的，只能从引擎的通知上看到
-    else if (method === 'thread/archived' && threadId) this.archived(threadId)
-    else if (method === 'thread/deleted' && threadId) this.deleted(threadId)
+    else if (method === 'thread/archived' && threadId) {
+      this.store.dropDirectStarts(threadId)
+      this.store.dropChildStart(threadId)
+      this.archived(threadId)
+    } else if (method === 'thread/deleted' && threadId) this.deleted(threadId)
   }
 
   private asked(threadId: string): void {
@@ -523,6 +526,7 @@ export class SessionTree {
     const threadId = typeof params.threadId === 'string' ? params.threadId : null
     const turn = isObject(params.turn) ? params.turn : null
     if (!threadId || typeof turn?.id !== 'string') return
+    this.store.dropChildStart(threadId)
     const key = `${threadId}\u0000${turn.id}`
     if (this.ended.has(key)) return
     if (method === 'turn/started') {
@@ -1416,6 +1420,7 @@ export class SessionTree {
     this.store.dropIgnoredQuestions(threadId)
     this.store.dropResponses(threadId)
     this.store.dropDirectStarts(threadId)
+    this.store.dropChildStart(threadId)
     this.store.dropTools(threadId)
     this.store.setSpeed(threadId, null)
     this.store.dropContacts(threadId)

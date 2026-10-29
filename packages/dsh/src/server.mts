@@ -1036,6 +1036,8 @@ function replay(
     }
   // 模型以快照自带的投影为准：它是按整个会话算的，快照里的记录不一定从头开始。
   projection.selection(values.modelSelection)
+  // 最近记录可能没有 turn/start；用持久投影中的末次编号续接，避免重启后乐观回合号从1开始。
+  projection.restoreTurnNumber(values.turnBoundary?.lastTurn)
   // 回放结束仍未收尾的回合属于上一个已退出的 dsh 进程。
   if (projection.active)
     projection.apply(

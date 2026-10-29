@@ -80,6 +80,10 @@ async function refusedAsInvalid<T>(work: () => Promise<T>): Promise<T> {
   try {
     return await work()
   } catch (error) {
+    if (error instanceof StartRefused && error.kind === 'forbidden')
+      throw Object.assign(new ProtocolError(-32600, error.message), {
+        data: { litch: 'forbidden' },
+      })
     if (error instanceof StartRefused) throw new ProtocolError(-32602, error.message)
     throw error
   }

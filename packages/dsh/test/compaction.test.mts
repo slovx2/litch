@@ -20,6 +20,14 @@ const thread: DshThread = {
   ephemeral: false,
 }
 
+test('DSH 重启后的短快照没有turn/start时，从持久投影的末次编号继续，不从1重来', () => {
+  const projection = new Projection(thread)
+  projection.restoreTurnNumber(42)
+  projection.restoreTurnNumber(7)
+  projection.restoreTurnNumber(undefined)
+  assert.equal(projection.expect(() => {}).id, 'turn:43')
+})
+
 function scene() {
   const sent: { method: string; params: any }[] = []
   const notify = (method: string, params: any) => sent.push({ method, params })

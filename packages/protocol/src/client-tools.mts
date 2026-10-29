@@ -116,6 +116,8 @@ export interface ClientToolNamespaceSpec {
 
 /** 失败答复的原因分类，放在文字的开头一行里给人和模型看，也方便测试认 */
 export type ClientToolFailureKind =
+  /** 会话树总量或深度等硬门禁拒绝；原因在说明中 */
+  | 'forbidden'
   /** 这个会话没有连着能执行这个命名空间的 Litch 桌面端 */
   | 'noExecutor'
   /** 桌面端这台设备的设置里关着这项能力 */

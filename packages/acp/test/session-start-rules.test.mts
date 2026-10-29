@@ -4,7 +4,7 @@ import test from 'node:test'
 import { sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
 import { dynamicToolSpecs, toolInstructions } from '../src/client-tools.mjs'
 
-test('已授权子会话的双语规则和独立额度进入 acp 工具说明及 instructions', () => {
+test('已授权子会话的授权规则和独立额度进入 acp 工具说明及 instructions', () => {
   for (const cards of [true, false]) {
     const namespace = sessionTools(true, cards)
     const start = dynamicToolSpecs([namespace]).find(
@@ -14,10 +14,11 @@ test('已授权子会话的双语规则和独立额度进入 acp 工具说明及
     assert.match(start.description, /any turn/)
     assert.match(start.description, /16 direct starts/)
     assert.match(start.description, /8 direct children/)
-    assert.match(start.description, /任意后续回合/)
+    assert.match(start.description, /24 running or starting sessions/)
+    assert.doesNotMatch(start.description, /[\u4e00-\u9fff]/)
     const rules = toolInstructions([namespace]) ?? ''
     assert.match(rules, /including wake, reminder and scheduled turns/)
-    assert.match(rules, /用户已经要求过/)
+    assert.match(rules, cards ? /if unsure, use initiation/ : /if unsure, ask the user/)
     assert.match(rules, /Wider sandbox access still requires confirmation/)
   }
 })
