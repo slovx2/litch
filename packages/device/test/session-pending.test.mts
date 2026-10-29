@@ -1,6 +1,9 @@
 // 真实设备路由 + 两个协议假引擎：只读待答快照、显式代答、生命周期与扩展门禁。
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
+import { pendingRequestExcerpt } from '../src/session-pending.mjs'
+import { card } from './approvals-kit.mjs'
 import { resultOf } from './fake-engine.mjs'
 import {
   brief,
@@ -341,4 +344,47 @@ test('SESSION-PENDING-004：用户先答立即撤销 token；权限审批只授�
   } finally {
     await env.close()
   }
+})
+
+test('SESSION-PENDING-009：无网站名的登录审批仍给父回合非空摘要，其他空标题按类型兜底', async () => {
+  const env = treeRig()
+  try {
+    const client = await litch(env)
+    const { threadId } = await parent(client)
+    const childId = await child(env, threadId)
+    const desktop = env.connect()
+    await desktop.initialize(['harness', 'clientApprovals'])
+    const value = card({ threadId: childId })
+    value.summary.site = '   '
+    await desktop.call('litch/approval/open', value)
+    assert.equal(env.device.sessionTree.pendingRequests(childId)[0]?.title, '')
+    await until(
+      () =>
+        env.pi
+          .sent('turn/steer')
+          .some((p) =>
+            parseSessionEvent(p.input[0].text).event?.notes.some(
+              (n) => n.threadId === childId && n.status === 'needsUser',
+            ),
+          ),
+      '父回合收到等待摘要',
+    )
+    const note = env.pi
+      .sent('turn/steer')
+      .flatMap((p) => parseSessionEvent(p.input[0].text).event?.notes ?? [])
+      .find((n) => n.threadId === childId && n.status === 'needsUser')
+    assert.equal(note?.excerpt, 'Browser sign-in')
+    assert.equal(note?.pending?.[0]?.title, '')
+  } finally {
+    await env.close()
+  }
+  for (const [kind, expected] of [
+    ['question', 'Question'],
+    ['approval', 'Approval'],
+    ['form', 'Form input'],
+    ['unknown', 'Pending request'],
+  ] as const) {
+    assert.equal(pendingRequestExcerpt({ kind, title: ' ' }), expected)
+  }
+  assert.equal(pendingRequestExcerpt({ kind: 'clientApproval', title: ' GitHub ' }), 'GitHub')
 })

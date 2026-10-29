@@ -43,7 +43,7 @@ import {
 } from '../../protocol/src/session-tree.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { HarnessSource } from './session.mjs'
-import { isUserRequest, SessionPending } from './session-pending.mjs'
+import { isUserRequest, pendingRequestExcerpt, SessionPending } from './session-pending.mjs'
 import { SessionQuestions } from './session-questions.mjs'
 import type { SessionStore } from './session-store.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
@@ -484,10 +484,7 @@ export class SessionTree {
           {
             ...publicNote(note),
             pending,
-            excerpt: pending
-              .map((p) => p.title)
-              .join('; ')
-              .slice(0, 400),
+            excerpt: pending.map(pendingRequestExcerpt).join('; ').slice(0, 400),
           },
         ]
       : []

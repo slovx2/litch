@@ -19,6 +19,7 @@ import { Stamp } from '../transcript/Stamp.tsx'
 import { useToggle } from '../transcript/state.ts'
 import { delegatedPairs } from './delegated-response.ts'
 import { RequestCard } from './RequestCard.tsx'
+import { requestLabel } from './request-label.ts'
 
 export function ChildRequests({ deviceId, sessionId }: { deviceId: string; sessionId: string }) {
   const t = useT()
@@ -60,7 +61,7 @@ export function ChildRequests({ deviceId, sessionId }: { deviceId: string; sessi
                       <span className="chip">{badgeOf(device, child.harness)}</span>
                       <span className="child-req-title">{t.text(child.title)}</span>
                       <span className="child-req-what">
-                        {child.pendingRequests?.[0]?.title?.trim() || t('ask.requestFallback')}
+                        {requestLabel(child.pendingRequests?.[0], t)}
                       </span>
                       <Caret />
                     </button>

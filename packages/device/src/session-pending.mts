@@ -6,6 +6,25 @@ import type { SessionPendingRequest } from '../../protocol/src/session-pending.m
 import type { EngineLink } from './engine-link.mjs'
 import { isObject, type RpcId } from './wire.mjs'
 
+/** 给模型的回报摘要不依赖界面语言；标题为空时仍明确说明请求类型。 */
+export function pendingRequestExcerpt(
+  request: Pick<SessionPendingRequest, 'kind' | 'title'>,
+): string {
+  if (request.title.trim()) return request.title.trim()
+  switch (request.kind) {
+    case 'clientApproval':
+      return 'Browser sign-in'
+    case 'question':
+      return 'Question'
+    case 'approval':
+      return 'Approval'
+    case 'form':
+      return 'Form input'
+    default:
+      return 'Pending request'
+  }
+}
+
 export class PendingRefused extends Error {
   readonly code: string
   constructor(code: string, message: string) {

@@ -14,6 +14,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { badgeOf } from '../../../../../packages/ui/src/app/device.ts'
 import { stamp } from '../../../../../packages/ui/src/app/format.ts'
 import { delegatedPairs } from '../../../../../packages/ui/src/composer/delegated-response'
+import { requestLabel } from '../../../../../packages/ui/src/composer/request-label.ts'
 import { useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
@@ -151,7 +152,7 @@ function Child({
             numberOfLines={1}
             style={[styles.grow, { color: c.ink2, fontFamily: font.mono, fontSize: 12 }]}
           >
-            {child.pendingRequests[0]?.title?.trim() || t('ask.requestFallback')}
+            {requestLabel(child.pendingRequests[0], t)}
           </Text>
           <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{open ? '▾' : '▸'}</Text>
         </Pressable>

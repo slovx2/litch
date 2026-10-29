@@ -118,7 +118,7 @@ function PendingCard({
       <div className="pending-ask-q">{question.title}</div>
       <div className="pending-ask-meta">
         <span className="grow">
-          {age === null ? t('ask.ageUnknown') : t('ask.age', { count: age })}
+          {t(age.key, { count: age.count })}
           {question.reportsAfter > 0
             ? ` · ${t('ask.reportsAfter', { count: question.reportsAfter })}`
             : ''}

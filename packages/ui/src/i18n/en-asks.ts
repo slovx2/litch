@@ -2,15 +2,23 @@
 import type { Entry } from './types.ts'
 import type { zhAsks } from './zh-CN-asks.ts'
 
+const plural = (n: string | number | undefined, one: string, many: string) =>
+  `${n} ${Number(n) === 1 ? one : many}`
+
 export const enAsks: Record<keyof typeof zhAsks, Entry> = {
+  'ask.ageNow': 'Asked just now',
   'ask.age': 'Asked {count} min ago',
-  'ask.ageUnknown': 'Time unavailable',
-  'ask.reportsAfter': '{count} updates since',
+  'ask.ageHours': ({ count }) => `Asked ${plural(count, 'hour', 'hours')} ago`,
+  'ask.ageDays': ({ count }) => `Asked ${plural(count, 'day', 'days')} ago`,
+  'ask.ageUnknown': 'Ask time unknown',
+  'ask.reportsAfter': ({ count }) => `${plural(count, 'update', 'updates')} since`,
   'ask.ignore': 'Ignore',
   'ask.children': 'Sub-session requests',
   'ask.childrenCount': ({ count }) =>
     Number(count) === 1 ? '1 sub-session is waiting' : `${count} sub-sessions are waiting`,
   'ask.requestFallback': 'Pending request',
+  'ask.signIn': 'Sign in to {site}',
+  'ask.signInFallback': 'Browser sign-in',
   'ask.childUnavailable': 'Loading the request. Open the sub-session if it cannot be handled here.',
   'ask.delegatedHistory': 'Delegated responses · {count}',
   'ask.approvalRecorded': 'Approval decision recorded',

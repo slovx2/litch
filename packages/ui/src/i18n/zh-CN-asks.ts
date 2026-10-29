@@ -4,13 +4,18 @@
 import type { Entry } from './types.ts'
 
 export const zhAsks = {
+  'ask.ageNow': '刚刚提出',
   'ask.age': '{count} 分钟前提出',
+  'ask.ageHours': '{count} 小时前提出',
+  'ask.ageDays': '{count} 天前提出',
   'ask.ageUnknown': '提出时间未知',
   'ask.reportsAfter': '之后有 {count} 条回报',
   'ask.ignore': '忽略',
   'ask.children': '子会话待处理',
   'ask.childrenCount': '{count} 个子会话待处理',
   'ask.requestFallback': '待处理请求',
+  'ask.signIn': '登录 {site}',
+  'ask.signInFallback': '浏览器登录',
   'ask.childUnavailable': '正在读取请求；若无法在此处理，请打开子会话。',
   'ask.delegatedHistory': '代答记录 · {count} 条',
   'ask.approvalRecorded': '已记录审批决定',

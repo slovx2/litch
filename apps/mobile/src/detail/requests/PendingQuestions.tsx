@@ -122,7 +122,7 @@ function PendingCard({
       </Text>
       <View style={styles.row}>
         <Text style={{ flex: 1, color: c.ink3, fontSize: font.size.small }}>
-          {age === null ? t('ask.ageUnknown') : t('ask.age', { count: age })}
+          {t(age.key, { count: age.count })}
           {question.reportsAfter > 0
             ? ` · ${t('ask.reportsAfter', { count: question.reportsAfter })}`
             : ''}
@@ -132,9 +132,11 @@ function PendingCard({
             accessibilityRole="button"
             disabled={!enabled || busy}
             onPress={() => void ignore()}
-            hitSlop={8}
+            hitSlop={{ top: 13, bottom: 13, left: 14, right: 14 }}
+            style={{ opacity: !enabled || busy ? 0.4 : 1 }}
+            testID={`pending:${question.id}:ignore`}
           >
-            <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{t('ask.ignore')}</Text>
+            <Text style={{ color: c.accent, fontSize: font.size.meta }}>{t('ask.ignore')}</Text>
           </Pressable>
         ) : null}
       </View>
