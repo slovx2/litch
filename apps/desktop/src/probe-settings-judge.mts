@@ -67,7 +67,7 @@ export interface FirstSeen {
 const HOME = 'https://github.com/slovx2/litch'
 /** 有 Computer Use 那一组的平台（macOS 和 Windows） */
 const hasComputerUse = (platform: string) => platform === 'darwin' || platform === 'win32'
-/** 设置页左边的分组和标题：Computer Use 那一组只在 macOS 和 Windows 上有 */
+/** 设置页左边的分组和标题：Computer Use 那一组只在 macOS 和 Windows 上有；Chrome 那一组桌面外壳里都有 */
 const sectionsOn = (platform: string) =>
   hasComputerUse(platform)
     ? [
@@ -76,13 +76,14 @@ const sectionsOn = (platform: string) =>
         'chat',
         'switches',
         'browser',
+        'chrome',
         'computer',
         'notify',
         'assist',
         'keys',
         'about',
       ]
-    : ['look', 'lang', 'chat', 'switches', 'browser', 'notify', 'assist', 'keys', 'about']
+    : ['look', 'lang', 'chat', 'switches', 'browser', 'chrome', 'notify', 'assist', 'keys', 'about']
 const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
   const all =
     lang === 'en'
@@ -92,6 +93,7 @@ const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
           'Conversation',
           'Per-harness switches',
           'Built-in browser',
+          'Chrome',
           'Computer Use',
           'Notifications',
           'Config assistant',
@@ -104,6 +106,7 @@ const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
           '对话',
           '按 harness 开关',
           '内置浏览器',
+          'Chrome',
           'Computer Use',
           '通知',
           '配置助手',

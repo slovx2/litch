@@ -1,11 +1,13 @@
 import { useEffect } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Archive, Close, Forward, Machine } from '../app/icons.tsx'
+import { useServices } from '../app/services.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 import { AboutSection } from './About.tsx'
 import { AssistSection } from './AssistSection.tsx'
 import { BrowserSection } from './BrowserSection.tsx'
 import { ChatSection } from './ChatSection.tsx'
+import { ChromeSection } from './ChromeSection.tsx'
 import { ComputerSection } from './ComputerSection.tsx'
 import { computerBridge, computerIntro } from './computer-bridge.ts'
 import { HarnessSwitches } from './HarnessSwitches.tsx'
@@ -16,7 +18,8 @@ import { ShortcutsSection } from './Shortcuts.tsx'
 /**
  * 设置页左边的几组，按这个顺序排。
  * “设备”“已归档对话”不是这里的组，是左上角直接进那两页的入口。computer（Computer Use）只在 macOS 上的桌面外壳里有
- * （外壳给了 window.litchComputerUse 才显示），别的系统和普通浏览器里不出这一组
+ * （外壳给了 window.litchComputerUse 才显示），别的系统和普通浏览器里不出这一组；
+ * chrome（代理操作这台电脑上的 Chrome）不是内置浏览器，单独一组，只在桌面外壳里有
  */
 export const SETTINGS_SECTIONS = [
   'look',
@@ -24,6 +27,7 @@ export const SETTINGS_SECTIONS = [
   'chat',
   'switches',
   'browser',
+  'chrome',
   'computer',
   'notify',
   'assist',
@@ -36,8 +40,12 @@ export const isSettingsSection = (value: string): value is SettingsSection =>
   (SETTINGS_SECTIONS as readonly string[]).includes(value)
 
 /** 这个窗口里看得到的几组 */
-const shownSections = (): SettingsSection[] =>
-  SETTINGS_SECTIONS.filter((id) => id !== 'computer' || computerBridge() !== undefined)
+const shownSections = (shell: string): SettingsSection[] =>
+  SETTINGS_SECTIONS.filter(
+    (id) =>
+      (id !== 'computer' || computerBridge() !== undefined) &&
+      (id !== 'chrome' || shell === 'electron'),
+  )
 
 const TITLES: Record<SettingsSection, MessageKey> = {
   look: 'settings.group.look',
@@ -45,6 +53,7 @@ const TITLES: Record<SettingsSection, MessageKey> = {
   chat: 'settings.group.chat',
   switches: 'settings.group.switches',
   browser: 'settings.group.browser',
+  chrome: 'chrome.title',
   computer: 'settings.group.computer',
   notify: 'settings.group.notify',
   assist: 'settings.group.assist',
@@ -55,6 +64,7 @@ const TITLES: Record<SettingsSection, MessageKey> = {
 const INTROS: Partial<Record<SettingsSection, MessageKey>> = {
   switches: 'settings.switches.intro',
   browser: 'settings.browser.intro',
+  chrome: 'chrome.note',
   computer: 'settings.computer.intro',
   notify: 'settings.notify.intro',
   assist: 'settings.assist.intro',
@@ -84,7 +94,8 @@ export function SettingsPage({
   onArchived,
 }: SettingsPageProps) {
   const t = useT()
-  const sections = shownSections()
+  const { shell } = useServices()
+  const sections = shownSections(shell)
   // 要的那一组这里没有（不是 macOS 却要开 Computer Use）：落到第一组
   const section = sections.includes(asked) ? asked : 'look'
   const intro = section === 'computer' ? computerIntro() : INTROS[section]
@@ -155,6 +166,8 @@ export function SettingsPage({
             <HarnessSwitches />
           ) : section === 'browser' ? (
             <BrowserSection />
+          ) : section === 'chrome' ? (
+            <ChromeSection />
           ) : section === 'computer' ? (
             <ComputerSection onDevices={onDevices} />
           ) : section === 'notify' ? (

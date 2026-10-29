@@ -57,8 +57,7 @@ export function ChromeSection() {
   const mismatch = state?.instances.some((instance) => !instance.compatible) ?? false
   return (
     <section className="set-block" data-chrome-settings>
-      <h3>{t('chrome.title')}</h3>
-      <p className="set-para">{t('chrome.note')}</p>
+      {/* 页头已经写了“Chrome”和一句说明（SettingsPage.tsx），这里不再重复 */}
       {state && !state.supported ? (
         <p className="set-note">{t('chrome.unsupported')}</p>
       ) : (
