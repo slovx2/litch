@@ -71,6 +71,11 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
 
 ## Approving the agent's sign-ins on the phone
 
+Chrome requests have their own cards: instance access shows the Chrome instance name, website access
+shows the origin, and sign-in shows the website and reason. For Chrome sign-in, finish signing in on
+the computer and then choose **Sign-in complete**; this is separate from the built-in browser's
+saved-account sign-in flow below.
+
 When an agent asks to sign in to a site in the built-in browser (see `browser-and-computer-use.md`) and
 the session's device is paired with the phone, the card also shows in that session on the phone, above
 the input box. The phone only offers "Sign in as {account}" and Decline (the web page is on the computer,

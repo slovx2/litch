@@ -45,11 +45,17 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
     <Card
       testID="request:clientAsk"
       title={t(
-        ask.kind === 'site'
-          ? 'clientAsk.site'
-          : ask.kind === 'machine'
-            ? MACHINE_TITLE[ask.action]
-            : 'signInAsk.title',
+        ask.kind === 'chromeInstance'
+          ? 'chrome.instance'
+          : ask.kind === 'chromeSignIn'
+            ? 'chrome.signIn'
+            : ask.kind === 'site'
+              ? ask.browser === 'chrome'
+                ? 'chrome.approve'
+                : 'clientAsk.site'
+              : ask.kind === 'machine'
+                ? MACHINE_TITLE[ask.action]
+                : 'signInAsk.title',
       )}
       waiting={waiting}
       error={error}
@@ -58,7 +64,11 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
           key={option.id}
           kind={option === primary ? 'primary' : option.role === 'decline' ? 'ghost' : 'plain'}
           testID={`request:option:${option.id}`}
-          label={t(optionText[option.role])}
+          label={t(
+            ask.kind === 'chromeSignIn' && option.role === 'accept'
+              ? 'chrome.signInDone'
+              : optionText[option.role],
+          )}
           disabled={busy}
           onPress={() => respond({ optionId: option.id })}
         />
@@ -80,6 +90,17 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
         </>
       ) : ask.kind === 'machine' ? (
         <MachineWhat ask={ask} />
+      ) : ask.kind === 'chromeInstance' ? (
+        <>
+          <Meta label={t('chrome.title')} value={ask.name} />
+          <Why>{t('chrome.instanceNote')}</Why>
+        </>
+      ) : ask.kind === 'chromeSignIn' ? (
+        <>
+          <Meta label={t('clientAsk.origin')} value={ask.origin} />
+          {ask.reason ? <Well>{ask.reason}</Well> : null}
+          <Why>{t('chrome.signInNote')}</Why>
+        </>
       ) : (
         <>
           <Meta label={t('clientAsk.origin')} value={ask.origin} />
