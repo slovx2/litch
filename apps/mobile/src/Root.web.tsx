@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import App from './App'
 import { applyPrefs, runScene } from './preview/frame.web.ts'
 import { PreviewIndex } from './preview/Index.web.tsx'
+import { ManagerEventsPreview } from './preview/ManagerEvents.web.tsx'
 import { startScrollNudge } from './preview/nudge.web.ts'
 
 const params = new URLSearchParams(location.search)
@@ -20,5 +21,7 @@ function PreviewApp() {
 }
 
 export default function Root() {
+  if (inFrame && params.get('scene') === 'manager-events')
+    return <ManagerEventsPreview params={params} />
   return inFrame ? <PreviewApp /> : <PreviewIndex />
 }

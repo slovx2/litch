@@ -28,6 +28,13 @@ const say = (prompt: string) =>
 
 export const SCENES: Scene[] = [
   {
+    id: 'manager-events',
+    group: '会话',
+    name: '经理事件',
+    note: '四种经理事件与未知类型兜底；仅展开正文，无看板操作',
+    steps: [],
+  },
+  {
     id: 'wake-off',
     group: '会话',
     name: '子会话不唤醒',

@@ -12,6 +12,7 @@ import {
   parseSessionMessage,
   parseSystemMessage,
   SESSION_TOOL,
+  type SessionEvent,
   type ThreadItem,
   type UserInput,
   type WebSearchAction,
@@ -100,14 +101,15 @@ function userMessage(id: string, content: UserInput[], rawPeer?: unknown): UserM
   if (peer) return { id, kind: 'userMessage', text, attachments, peer }
   // 设备进程注入在开头的子会话回报、唤醒：认出来单放，剩下的才是用户自己说的话
   const { event, rest } = parseSessionEvent(text)
-  const said = event ? rest : text
+  const unknown = event ? null : unknownSessionEvent(text)
+  const said = event ? rest : unknown ? unknown.rest : text
   return withSessionMentions(
     withSystemMessage({
       id,
       kind: 'userMessage',
       text: said,
       attachments,
-      ...(event ? { event: sessionEvent(event) } : {}),
+      ...(event ? { event: sessionEvent(event) } : unknown ? { event: unknown.event } : {}),
     }),
   )
 }
@@ -170,21 +172,62 @@ function withClientPaths(item: UserMessageItem): UserMessageItem {
 const NOTE_STATUS = new Set(['completed', 'failed', 'interrupted', 'needsUser'])
 
 /** 注入文字里那段 JSON 是对面写的：逐项核对，不合的那一条不要 */
-function sessionEvent(event: { kind: string; notes: unknown[] }): SessionEventView {
+function sessionEvent(event: SessionEvent): SessionEventView {
   const notes = event.notes.flatMap((note) => {
     const view = noteView(note)
     return view ? [view] : []
   })
-  const kind =
-    event.kind === 'wake' ||
-    event.kind === 'remind' ||
-    event.kind === 'manager-open' ||
-    event.kind === 'manager-answers' ||
-    event.kind === 'manager-end' ||
-    event.kind === 'manager-rules'
-      ? event.kind
-      : 'notes'
-  return { kind, notes }
+  const manager = event.manager
+  if (event.kind.startsWith('manager-') && manager) {
+    const answers =
+      manager.answers?.map((answer) =>
+        [answer.decisionId, answer.title, answer.optionLabel, answer.text]
+          .filter(Boolean)
+          .join(' · '),
+      ) ?? []
+    return {
+      kind: event.kind,
+      notes,
+      body: [manager.text, ...answers].filter(Boolean).join('\n\n'),
+      ...(manager.answers
+        ? { summary: manager.answers.map((answer) => answer.decisionId).join('、') }
+        : {}),
+    }
+  }
+  return { kind: event.kind, notes }
+}
+
+/** 仅显示未知事件；已知事件校验失败仍按原文处理，不放宽设备协议的解析规则。 */
+function unknownSessionEvent(text: string): { event: SessionEventView; rest: string } | null {
+  const match =
+    /^<litch-session-event kind="([a-z][a-z0-9-]{0,127})">\n([\s\S]*?)<!-- (\{[\s\S]*?\}) -->\n<\/litch-session-event>\n?/.exec(
+      text,
+    )
+  if (
+    !match ||
+    [
+      'notes',
+      'wake',
+      'remind',
+      'manager-open',
+      'manager-answers',
+      'manager-end',
+      'manager-rules',
+    ].includes(match[1] ?? '')
+  )
+    return null
+  try {
+    const data = JSON.parse(match[3] ?? '')
+    if (!data || typeof data !== 'object' || data.kind !== match[1] || !Array.isArray(data.notes))
+      return null
+    const kind = match[1] as string
+    return {
+      event: { kind, notes: [], body: [kind, (match[2] ?? '').trim()].join('\n\n') },
+      rest: text.slice(match[0].length),
+    }
+  } catch {
+    return null
+  }
 }
 
 /** 一条回报（注入文字里的、会话对象上排着的）：对面写的，逐项核对。不合的是 null */

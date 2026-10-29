@@ -19,10 +19,14 @@ import type { Props } from '../cells'
 import { useTranscript } from '../context'
 import { useCardOpen } from '../use-card-open'
 
-const HEAD = {
+const HEAD: Partial<Record<string, Key>> = {
   notes: 'tree.event.notes',
   wake: 'tree.event.wake',
   remind: 'proposals.remind',
+  'manager-answers': 'manager.event.answers',
+  'manager-open': 'manager.event.open',
+  'manager-end': 'manager.event.end',
+  'manager-rules': 'manager.event.rules',
 } as const
 
 function Note({
@@ -60,27 +64,36 @@ function EventBar({
   id,
   head,
   notes,
+  body,
+  summary,
 }: {
   testID: string
   id: string
   head: Key
   notes: SessionNoteView[]
+  body?: string
+  summary?: string
 }) {
   const [open, toggle] = useCardOpen(id)
   const t = useT()
   const { deviceId, openSession } = useTranscript()
+  const { c, font } = useTheme()
   return (
     <CompactRow
       testID={testID}
       mark="ⓘ"
       source={t(head)}
-      summary={notes
-        .map((n) => [n.title || n.threadId, n.excerpt || n.error].filter(Boolean).join('：'))
-        .join(' · ')}
+      summary={
+        summary ??
+        notes
+          .map((n) => [n.title || n.threadId, n.excerpt || n.error].filter(Boolean).join('：'))
+          .join(' · ')
+      }
       open={open}
       onPress={toggle}
-      fixed={notes.length === 0}
+      fixed={notes.length === 0 && !body}
     >
+      {body ? <Text style={{ color: c.ink2, fontSize: font.size.meta }}>{body}</Text> : null}
       {notes.map((note) => (
         <Note key={note.threadId} deviceId={deviceId} note={note} openSession={openSession} />
       ))}
@@ -93,8 +106,10 @@ export const EventCell = memo(function EventCell({ row }: Props<'event'>) {
     <EventBar
       id={row.key}
       testID={`session-event:${row.kind}`}
-      head={HEAD[row.kind]}
+      head={HEAD[row.kind] ?? 'tree.event.generic'}
       notes={row.notes}
+      body={row.body}
+      summary={row.summary}
     />
   )
 })

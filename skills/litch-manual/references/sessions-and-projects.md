@@ -63,6 +63,8 @@ On desktop, right-click a child session in the sidebar; on mobile, long-press it
 
 Stopping reports keeps the child in its tree and leaves its own running or waiting status visible. It suppresses automatic completion, failure, interruption, pending-request and background-task reports, removes its undelivered reports, and prevents those reports from waking the parent. Delivered reports remain. Other children can still wake the parent. Resuming does not replay old results; it reports a currently pending request once after the usual 10-second waiting threshold, then future events. Waking still follows `wake_parent` and the existing rules. This device-side preference survives reconnects and restarts. Models can read `report_parent` through `list` and `read`, but cannot change it; `set_wake` only controls waking.
 
+手机上的经理开始、看板答复、收尾和规矩更新显示为系统事件行，可展开正文；答复摘要显示决策编号。手机不提供经理页或看板操作。未知事件显示“会话事件”，展开保留种类与正文。On mobile, manager events are expandable system rows; board-answer summaries include decision IDs. They provide no manager-page navigation or board actions. Unknown kinds use “Session event” and retain the kind and body when expanded.
+
 ### 问题结果与输入
 
 已答问题默认收成一行，显示已答题数和答案摘要；展开后，每题的选择或自由文字统一显示在“回答”区域，其他选项默认折叠。系统消息（子会话回报、定时任务、会话间消息、在这里做等）也默认显示一行来源与摘要，点击展开全文；开合状态按会话保留。桌面问题输入框支持 Shift+Enter 换行、Enter 确认；输入法组字时的 Enter 只确认候选。手机多行输入用回车换行，使用卡片按钮提交。

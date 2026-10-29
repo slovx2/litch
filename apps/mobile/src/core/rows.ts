@@ -113,7 +113,9 @@ export type Row =
       type: 'event'
       key: string
       turnId: string
-      kind: 'notes' | 'wake' | 'remind'
+      kind: ReturnType<typeof eventKind>
+      body?: string
+      summary?: string
       notes: SessionNoteView[]
     }
   /**
@@ -535,6 +537,8 @@ export class RowBuilder {
           turnId: turn.id,
           kind: eventKind(item.event),
           notes: item.event.notes,
+          ...(item.event.body ? { body: item.event.body } : {}),
+          ...(item.event.summary ? { summary: item.event.summary } : {}),
         }),
       )
     if (item.system)

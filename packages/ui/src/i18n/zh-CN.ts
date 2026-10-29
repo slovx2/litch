@@ -1183,6 +1183,7 @@ export const zhCN = {
   'tree.agent.state.stopped': '已停止',
   'tree.agent.spawning': '正在派出子代理',
   'tree.agent.spawnFailed': '子代理派出失败',
+  'tree.event.generic': '会话事件',
   'tree.event.notes': '子会话的回报',
   'tree.queued.one': '收到“{title}”的回报',
   'tree.queued.many': '收到 {count} 条子会话的回报',

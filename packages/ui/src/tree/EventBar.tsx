@@ -13,11 +13,12 @@ import { whyNot } from '../app/errors.ts'
 import { Caret, Icon } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
 import { useKey, useServices } from '../app/services.tsx'
+import type { MessageKey } from '../i18n/index.ts'
 import { useActions } from '../transcript/actions.tsx'
 import { CompactRow } from '../transcript/CompactRow.tsx'
 import { useToggle } from '../transcript/state.ts'
 
-const HEAD_TEXT = {
+const HEAD_TEXT: Partial<Record<string, MessageKey>> = {
   notes: 'tree.event.notes',
   wake: 'tree.event.wake',
   remind: 'tree.event.remind',
@@ -94,16 +95,24 @@ export function SessionEventBar({
     <div className="sev" data-event={event.kind} data-anchor={anchor}>
       <CompactRow
         icon={<Icon name="info" small />}
-        source={t(HEAD_TEXT[event.kind])}
-        summary={event.notes
-          .map((note) =>
-            [note.title || note.threadId, note.excerpt || note.error].filter(Boolean).join('：'),
-          )
-          .join(' · ')}
+        source={t(HEAD_TEXT[event.kind] ?? 'tree.event.generic')}
+        summary={
+          event.summary ??
+          event.notes
+            .map((note) =>
+              [note.title || note.threadId, note.excerpt || note.error].filter(Boolean).join('：'),
+            )
+            .join(' · ')
+        }
         open={open}
         onToggle={() => setOpen(!open)}
-        fixed={event.notes.length === 0}
+        fixed={event.notes.length === 0 && !event.body}
       />
+      {open && event.body ? (
+        <div className="sev-notes" style={{ whiteSpace: 'pre-wrap' }}>
+          {event.body}
+        </div>
+      ) : null}
       {open && event.notes.length > 0 ? (
         <ul className="sev-notes">
           {event.notes.map((note) => (

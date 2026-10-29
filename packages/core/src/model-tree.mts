@@ -205,14 +205,10 @@ export interface SessionQueuedNoteView extends SessionNoteView {
  * manager-*：经理的开始、看板答复、收尾与规矩更新事件，notes 是空的。
  */
 export interface SessionEventView {
-  kind:
-    | 'notes'
-    | 'wake'
-    | 'remind'
-    | 'manager-open'
-    | 'manager-answers'
-    | 'manager-end'
-    | 'manager-rules'
+  /** 显示层保留未知种类，客户端用通用事件行呈现，不据此执行动作。 */
+  kind: string
+  body?: string
+  summary?: string
   notes: SessionNoteView[]
 }
 

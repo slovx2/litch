@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { projectItem } from '@litch/core'
+import { formatSessionEvent } from '../../../packages/protocol/src/session-tree.mts'
 import { recoverMessage } from '../../../packages/protocol/src/system-messages.mts'
 import { RowBuilder } from '../src/core/rows.ts'
 import { experiment } from '../src/experiment.ts'
@@ -48,6 +49,66 @@ function viewOf(turns, items) {
 }
 
 const types = (rows) => rows.map((row) => row.type)
+
+test('经理的四种事件保留来源类型，显示系统事件行而非用户气泡', () => {
+  for (const kind of ['manager-open', 'manager-answers', 'manager-end', 'manager-rules']) {
+    const text = formatSessionEvent({
+      kind,
+      notes: [],
+      manager: {
+        managerId: 'm1',
+        text: '处理经理事件',
+        ...(kind === 'manager-answers'
+          ? {
+              answers: [
+                {
+                  decisionId: 'D-1',
+                  title: '范围',
+                  optionId: null,
+                  optionLabel: null,
+                  text: '继续',
+                },
+              ],
+            }
+          : {}),
+      },
+    })
+    const item = projectItem({
+      type: 'userMessage',
+      id: kind,
+      content: [{ type: 'text', text, text_elements: [] }],
+    })
+    const view = viewOf([{ id: 't', status: 'running', itemIds: [kind] }], [item])
+    const rows = new RowBuilder().build(view, 'all')
+    assert.equal(rows.find((row) => row.type === 'event')?.kind, kind)
+    assert.match(rows.find((row) => row.type === 'event')?.body ?? '', /处理经理事件/)
+    if (kind === 'manager-answers')
+      assert.equal(rows.find((row) => row.type === 'event')?.summary, 'D-1')
+    assert.equal(
+      rows.some((row) => row.type === 'user'),
+      false,
+    )
+  }
+})
+
+test('未知会话事件保留 kind 与正文供通用事件行展开，后续用户原话仍独立显示', () => {
+  const text =
+    '<litch-session-event kind="future-event">\n未来事件正文\n<!-- {"kind":"future-event","notes":[]} -->\n</litch-session-event>\n继续工作'
+  const item = projectItem({
+    type: 'userMessage',
+    id: 'unknown',
+    content: [{ type: 'text', text, text_elements: [] }],
+  })
+  const rows = new RowBuilder().build(
+    viewOf([{ id: 't', status: 'running', itemIds: ['unknown'] }], [item]),
+    'all',
+  )
+  const event = rows.find((row) => row.type === 'event')
+  assert.equal(event?.kind, 'future-event')
+  assert.equal(event?.body, 'future-event\n\n未来事件正文')
+  assert.deepEqual(event?.notes, [])
+  assert.equal(rows.find((row) => row.type === 'user')?.text, '继续工作')
+})
 
 test('中断后继续走系统行，不画成右侧用户气泡，展开后仍是系统行', () => {
   const prompt = '请核对已经完成的步骤并继续。'

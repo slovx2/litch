@@ -1231,6 +1231,7 @@ export const en: Record<MessageKey, Entry> = {
   'tree.agent.state.stopped': 'Stopped',
   'tree.agent.spawning': 'Starting a subagent',
   'tree.agent.spawnFailed': 'Couldn’t start a subagent',
+  'tree.event.generic': 'Session event',
   'tree.event.notes': 'Reports from sub-sessions',
   'tree.queued.one': 'Report from {title}',
   'tree.queued.many': 'Reports from {count} sub-sessions',
