@@ -47,22 +47,18 @@ export function PowerShortcut({ device }: { device: DeviceView }) {
       setBusy(false)
     }
   }
+  // 标题栏里只放闪电和开关：开着且接电（正在耗电）用等待色，开着但用电池、还没生效的淡一档；
+  // 供电状态写在开关的无障碍说明和下面电源设置的状态行里，标题栏不再挤两行小字
+  const tone = !enabled
+    ? theme.c.ink3
+    : power.powerSource === 'ac' && online
+      ? theme.c.wait
+      : theme.c.ink2
   return (
-    <View testID="power-shortcut" style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-      <Text
-        accessible={false}
-        style={{ fontSize: 20, color: enabled ? theme.c.accent : theme.c.ink3 }}
-      >
+    <View testID="power-shortcut" style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Text accessible={false} style={{ fontSize: theme.font.size.title, color: tone }}>
         ϟ
       </Text>
-      <View style={{ maxWidth: 110 }}>
-        <Text style={{ fontSize: 11, color: enabled ? theme.c.accent : theme.c.ink3 }}>
-          {t(enabled ? 'power.quick.on' : 'power.quick.off')}
-        </Text>
-        <Text numberOfLines={1} style={{ fontSize: 10, color: theme.c.ink3 }}>
-          {online ? t(`power.source.${power.powerSource}`) : t('manage.offline')}
-        </Text>
-      </View>
       <Switch
         value={enabled}
         testID="power-shortcut:switch"

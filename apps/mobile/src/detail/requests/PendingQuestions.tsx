@@ -6,33 +6,47 @@ import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import type { SessionStore } from '../../core/session-store'
 import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
 import { sendFlags, whenRunning } from '../composer/send-mode'
+import { CardButton } from './Card'
 
+/** 和请求卡片（Card.tsx）同一个样子：等待色的边、◆ 标题行，点标题收成一行；题多了在里面滚 */
 export function PendingQuestions({ store, maxHeight }: { store: SessionStore; maxHeight: number }) {
   const meta = useSyncExternalStore(store.subscribeMeta, store.getMeta)
   const [expanded, setExpanded] = useState(true)
-  const { c, font } = useTheme()
+  const theme = useTheme()
+  const { c, font } = theme
   const t = useT()
   const questions = meta?.pendingQuestions ?? []
   if (questions.length === 0) return null
   return (
-    <View style={{ maxHeight, backgroundColor: c.panel }} testID="pending-questions">
+    <View
+      testID="pending-questions"
+      style={[
+        styles.frame,
+        { maxHeight, backgroundColor: c.raised, borderColor: c.wait, borderRadius: theme.radius.l },
+      ]}
+    >
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded }}
         onPress={() => setExpanded(!expanded)}
-        style={styles.heading}
+        style={({ pressed }) => [
+          styles.head,
+          expanded ? { borderBottomColor: c.line1, ...styles.split } : null,
+          { opacity: pressed ? 0.7 : 1 },
+        ]}
       >
-        <Text style={{ color: c.wait, fontSize: font.size.meta }}>
-          ● {t('ask.pendingCount', { count: questions.length })} {expanded ? '⌄' : '›'}
+        <Text style={[styles.mark, { color: c.wait }]}>◆</Text>
+        <Text style={[styles.count, { color: c.ink2, fontSize: font.size.meta }]}>
+          {t('ask.pendingCount', { count: questions.length })}
         </Text>
+        <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{expanded ? '▾' : '▸'}</Text>
       </Pressable>
       {expanded ? (
-        <ScrollView keyboardShouldPersistTaps="handled">
-          {questions.map((question) => (
-            <PendingCard key={question.id} question={question} store={store} />
+        <ScrollView style={styles.body} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+          {questions.map((question, index) => (
+            <PendingCard key={question.id} question={question} store={store} first={index === 0} />
           ))}
         </ScrollView>
       ) : null}
@@ -40,10 +54,19 @@ export function PendingQuestions({ store, maxHeight }: { store: SessionStore; ma
   )
 }
 
-function PendingCard({ question, store }: { question: PendingQuestion; store: SessionStore }) {
+function PendingCard({
+  question,
+  store,
+  first,
+}: {
+  question: PendingQuestion
+  store: SessionStore
+  first: boolean
+}) {
   const meta = useSyncExternalStore(store.subscribeMeta, store.getMeta)
   const { channel, prefs } = useServices()
-  const { c, font, radius } = useTheme()
+  const theme = useTheme()
+  const { c, font, radius } = theme
   const t = useT()
   const [text, setText] = useState('')
   const [picked, setPicked] = useState<string | null>(null)
@@ -69,32 +92,36 @@ function PendingCard({ question, store }: { question: PendingQuestion; store: Se
       setBusy(false)
     }
   }
+  // 一道题：题目，建议的回答一排，下面是自己写的一栏和发送
   return (
     <View
-      style={[styles.card, { borderColor: c.line2, borderRadius: radius.m }]}
+      style={[styles.question, first ? null : { borderTopColor: c.line1, ...styles.splitTop }]}
       testID={`pending:${question.id}`}
     >
-      <Text style={{ color: c.ink, fontSize: font.size.body }}>{question.title}</Text>
-      <View style={styles.actions}>
-        {question.options.map((option, index) => (
-          <Button
-            key={option.label}
-            label={option.label}
-            kind={
-              (question.kind === 'wrap' ? index === 0 : picked === option.answer)
-                ? undefined
-                : 'plain'
-            }
-            disabled={!enabled || busy}
-            onPress={() =>
-              question.kind === 'wrap' ? void send(option.answer) : setPicked(option.answer)
-            }
-            testID={`pending:${question.id}:${index}`}
-          />
-        ))}
-      </View>
-      {picked ? <Text style={{ color: c.ink2 }}>{picked}</Text> : null}
-      <View style={styles.actions}>
+      <Text style={[styles.title, { color: c.ink, fontSize: font.size.body }]}>
+        {question.title}
+      </Text>
+      {question.options.length > 0 ? (
+        <View style={styles.row}>
+          {question.options.map((option, index) => (
+            <CardButton
+              key={option.label}
+              label={option.label}
+              kind={
+                (question.kind === 'wrap' ? index === 0 : picked === option.answer)
+                  ? 'primary'
+                  : 'plain'
+              }
+              disabled={!enabled || busy}
+              onPress={() =>
+                question.kind === 'wrap' ? void send(option.answer) : setPicked(option.answer)
+              }
+              testID={`pending:${question.id}:${index}`}
+            />
+          ))}
+        </View>
+      ) : null}
+      <View style={styles.row}>
         <TextInput
           multiline
           submitBehavior="newline"
@@ -104,21 +131,59 @@ function PendingCard({ question, store }: { question: PendingQuestion; store: Se
           value={text}
           onChangeText={setText}
           editable={enabled && !busy}
-          style={[styles.input, { color: c.ink, borderColor: c.line2, borderRadius: radius.m }]}
+          style={[
+            styles.input,
+            {
+              minHeight: theme.hit - 4,
+              color: c.ink,
+              backgroundColor: c.sunken,
+              borderColor: c.line2,
+              borderRadius: radius.m,
+              fontSize: font.size.body,
+            },
+          ]}
         />
-        <Button
+        <CardButton
           label={t('ask.send')}
           disabled={!enabled || busy || !(text.trim() || picked)}
           onPress={() => void send(text.trim() || picked || '')}
         />
       </View>
-      {failure ? <Text style={{ color: c.err }}>{failure}</Text> : null}
+      {failure ? <Text style={[styles.err, { color: c.err }]}>{failure}</Text> : null}
     </View>
   )
 }
 const styles = StyleSheet.create({
-  heading: { paddingHorizontal: 16, paddingVertical: 8 },
-  card: { marginHorizontal: 16, marginBottom: 8, padding: 10, gap: 8, borderWidth: 1 },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
-  input: { flex: 1, minWidth: 80, minHeight: 44, borderWidth: 1, paddingHorizontal: 10 },
+  frame: {
+    marginHorizontal: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderLeftWidth: 3,
+    overflow: 'hidden',
+  },
+  head: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  split: { borderBottomWidth: StyleSheet.hairlineWidth },
+  splitTop: { borderTopWidth: StyleSheet.hairlineWidth },
+  mark: { fontSize: 12 },
+  count: { flex: 1 },
+  body: { flexGrow: 0, flexShrink: 1 },
+  question: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
+  title: { fontWeight: '600', lineHeight: 21 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
+  input: {
+    flex: 1,
+    minWidth: 120,
+    maxHeight: 120,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    textAlignVertical: 'center',
+  },
+  err: { fontSize: 12 },
 })

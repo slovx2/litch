@@ -26,5 +26,6 @@ export const enAsks: Record<keyof typeof zhAsks, Entry> = {
   'ask.answeredCount': '{count} answered',
   'ask.answer': 'Answer',
   'ask.options': 'View other options',
+  'ask.optionsAll': 'View options',
   'ask.picked': 'Selected',
 }

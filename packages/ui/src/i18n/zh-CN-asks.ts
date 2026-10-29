@@ -26,5 +26,6 @@ export const zhAsks = {
   'ask.answeredCount': '已答 {count} 题',
   'ask.answer': '回答',
   'ask.options': '查看其他选项',
+  'ask.optionsAll': '查看选项',
   'ask.picked': '已选',
 } satisfies Record<string, Entry>

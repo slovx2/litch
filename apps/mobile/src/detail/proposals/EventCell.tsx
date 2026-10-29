@@ -14,6 +14,7 @@ import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey } from '../../shell/services'
 import { type Key, useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
+import { CompactRow } from '../CompactRow'
 import type { Props } from '../cells'
 import { useTranscript } from '../context'
 import { useCardOpen } from '../use-card-open'
@@ -66,31 +67,24 @@ function EventBar({
   notes: SessionNoteView[]
 }) {
   const [open, toggle] = useCardOpen(id)
-  const { c, font } = useTheme()
   const t = useT()
   const { deviceId, openSession } = useTranscript()
   return (
-    <View testID={testID} style={[styles.bar, { borderLeftColor: c.line2 }]}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        onPress={toggle}
-        style={{ minHeight: 36, justifyContent: 'center' }}
-      >
-        <Text numberOfLines={1} style={[styles.head, { color: c.ink3, fontFamily: font.mono }]}>
-          ⓘ {t(head)} ·{' '}
-          {notes
-            .map((n) => [n.title || n.threadId, n.excerpt || n.error].filter(Boolean).join('：'))
-            .join(' · ')}{' '}
-          {open ? '⌄' : '›'}
-        </Text>
-      </Pressable>
-      {open
-        ? notes.map((note) => (
-            <Note key={note.threadId} deviceId={deviceId} note={note} openSession={openSession} />
-          ))
-        : null}
-    </View>
+    <CompactRow
+      testID={testID}
+      mark="ⓘ"
+      source={t(head)}
+      summary={notes
+        .map((n) => [n.title || n.threadId, n.excerpt || n.error].filter(Boolean).join('：'))
+        .join(' · ')}
+      open={open}
+      onPress={toggle}
+      fixed={notes.length === 0}
+    >
+      {notes.map((note) => (
+        <Note key={note.threadId} deviceId={deviceId} note={note} openSession={openSession} />
+      ))}
+    </CompactRow>
   )
 }
 
@@ -244,8 +238,6 @@ export function QueuedNotesPanel({
 }
 
 const styles = StyleSheet.create({
-  bar: { marginHorizontal: 16, marginVertical: 4, paddingLeft: 10, borderLeftWidth: 2, gap: 2 },
-  head: { fontSize: 12, paddingVertical: 2 },
   note: { paddingVertical: 2 },
   grow: { flex: 1 },
   chip: {

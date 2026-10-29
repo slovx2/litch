@@ -66,7 +66,7 @@ function askedState(item: ToolCallItem): 'open' | 'answered' | 'closed' {
 
 /**
  * 问用户的工具（AskUserQuestion 等，核心的 ToolCallItem.asked）画成的问答卡片，和上面答过的问题卡片一个样子：
- * 每题先列题目和明确的回答区，未选项折叠；没答的写“已跳过”。
+ * 每题先列题目和明确的回答区，未选项折叠；没答的写“已跳过”。还在问的只列题目，选项在输入区的提问卡片上。
  * 问的时候在输入区的请求卡片上答，这里只读。结果对不上题目的，题目下面是原始回答
  */
 export const AskedCard = memo(function AskedCard({
@@ -119,9 +119,12 @@ export const AskedCard = memo(function AskedCard({
                   {t('ask.skipped')}
                 </div>
               ) : null}
-              {question.options.some((_, at) => !question.picked.includes(at)) ? (
+              {state !== 'open' &&
+              question.options.some((_, at) => !question.picked.includes(at)) ? (
                 <details className="ask-alternatives">
-                  <summary>{t('ask.options')}</summary>
+                  <summary>
+                    {t(question.answer === null ? 'ask.optionsAll' : 'ask.options')}
+                  </summary>
                   <ul className="ask-picks">
                     {question.options.map((option, at) =>
                       question.picked.includes(at) ? null : (

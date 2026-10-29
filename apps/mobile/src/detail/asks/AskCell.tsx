@@ -20,7 +20,8 @@ export const AskCell = memo(function AskCell({
   first: boolean
   questions: readonly AskQuestion[]
 }) {
-  const { c, font } = useTheme()
+  const theme = useTheme()
+  const { c, font } = theme
   const t = useT()
   const [open, toggle] = useCardOpen(`ask:${itemId}`)
   const { deviceId, sessionId } = useTranscript()
@@ -29,22 +30,27 @@ export const AskCell = memo(function AskCell({
   const answered = questions.filter((q) => answers[q.id] !== undefined)
   if (!first || answered.length === 0) return null
   return (
-    <View style={styles.card}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
+    <View
+      style={[
+        styles.card,
+        { borderColor: c.line2, backgroundColor: c.raised, borderRadius: theme.radius.l },
+      ]}
+    >
+      <Head
+        source={`${t('ask.title')} · ${t('ask.answeredCount', { count: answered.length })}`}
+        summary={answers[answered[0]?.id ?? '']}
+        open={open}
         onPress={toggle}
-        style={styles.compactHead}
-      >
-        <Text numberOfLines={1} style={{ color: c.ink2, fontSize: font.size.meta }}>
-          {open ? '⌄' : '›'} {t('ask.title')} · {t('ask.answeredCount', { count: answered.length })}{' '}
-          · {answers[answered[0]?.id ?? '']}
-        </Text>
-      </Pressable>
+      />
       {open
         ? answered.map((q) => (
-            <View key={q.id} style={styles.question}>
-              <Text style={{ color: c.ink2, fontSize: font.size.body }}>{q.title}</Text>
+            <View
+              key={q.id}
+              style={[styles.question, { borderTopColor: c.line1, ...styles.split }]}
+            >
+              <Text style={[styles.title, { color: c.ink, fontSize: font.size.body }]}>
+                {q.title}
+              </Text>
               <Answer text={answers[q.id] ?? ''} />
             </View>
           ))
@@ -89,35 +95,27 @@ export const AskedCell = memo(function AskedCell({ item }: { item: ToolCallItem 
         },
       ]}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ expanded: state !== 'answered' || open }}
-        disabled={state !== 'answered'}
-        onPress={toggle}
-        style={styles.compactHead}
-      >
-        <Text numberOfLines={1} style={{ color: c.ink2, fontSize: font.size.meta }}>
-          {state !== 'answered' || open ? '⌄' : '›'} {t('ask.title')} ·{' '}
-          {state === 'answered'
+      <Head
+        waiting={state === 'open'}
+        source={`${t('ask.title')} · ${
+          state === 'answered'
             ? t('ask.answeredCount', {
                 count: asked.questions.filter((q) => q.answer !== null).length,
               })
-            : t(`ask.state.${state}`)}
-          {!open && state === 'answered'
-            ? ` · ${asked.questions[0]?.answer ?? asked.raw ?? ''}`
-            : ''}
-        </Text>
-      </Pressable>
+            : t(`ask.state.${state}`)
+        }`}
+        summary={asked.questions[0]?.answer ?? asked.raw ?? undefined}
+        open={state !== 'answered' || open}
+        onPress={toggle}
+        fixed={state !== 'answered'}
+      />
       {state !== 'answered' || open ? (
         <>
           {asked.questions.map((question, at) => (
             <View
               // biome-ignore lint/suspicious/noArrayIndexKey: 题目不会增删换位
               key={at}
-              style={[
-                styles.question,
-                at > 0 ? { borderTopColor: c.line2, ...styles.split } : null,
-              ]}
+              style={[styles.question, { borderTopColor: c.line1, ...styles.split }]}
             >
               {question.header ? (
                 <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{question.header}</Text>
@@ -130,7 +128,8 @@ export const AskedCell = memo(function AskedCell({ item }: { item: ToolCallItem 
               ) : state === 'answered' && asked.raw === null ? (
                 quote(t('ask.skipped'), true)
               ) : null}
-              {question.options.some((_, index) => !question.picked.includes(index)) ? (
+              {state !== 'open' &&
+              question.options.some((_, index) => !question.picked.includes(index)) ? (
                 <>
                   <Pressable
                     accessibilityRole="button"
@@ -139,8 +138,8 @@ export const AskedCell = memo(function AskedCell({ item }: { item: ToolCallItem 
                     style={{ minHeight: theme.hit, justifyContent: 'center' }}
                   >
                     <Text style={{ color: c.ink2, fontSize: font.size.meta }}>
-                      {expanded[at] ? '⌄ ' : '› '}
-                      {t('ask.options')}
+                      {expanded[at] ? '▾ ' : '▸ '}
+                      {t(question.answer === null ? 'ask.optionsAll' : 'ask.options')}
                     </Text>
                   </Pressable>
                   {expanded[at]
@@ -165,7 +164,7 @@ export const AskedCell = memo(function AskedCell({ item }: { item: ToolCallItem 
             </View>
           ))}
           {asked.raw !== null ? (
-            <View style={[styles.question, { borderTopColor: c.line2, ...styles.split }]}>
+            <View style={[styles.question, { borderTopColor: c.line1, ...styles.split }]}>
               {quote(asked.raw, state !== 'answered')}
             </View>
           ) : null}
@@ -199,47 +198,99 @@ export function AskReplyText({ replies }: { replies: AskReply[] }) {
   )
 }
 
-const styles = StyleSheet.create({
-  card: { marginHorizontal: 16, marginVertical: 6, borderWidth: 1 },
-  head: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, paddingBottom: 0 },
-  kind: { flex: 1, fontSize: 11 },
-  state: { fontSize: 11 },
-  question: { padding: 8, gap: 4 },
-  compactHead: { paddingHorizontal: 10, minHeight: 40, justifyContent: 'center' },
-  split: { borderTopWidth: StyleSheet.hairlineWidth },
-  title: { lineHeight: 21 },
-  option: { borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8, justifyContent: 'center' },
-  input: { borderWidth: 1, paddingHorizontal: 10, fontSize: 15 },
-  answer: { borderLeftWidth: 2, paddingLeft: 10, fontSize: 15, lineHeight: 21 },
-  pick: { flexDirection: 'row', gap: 8 },
-  mark: { width: 14, fontSize: 15, lineHeight: 21 },
-  pickText: { flex: 1, gap: 2 },
-  note: { paddingHorizontal: 12, paddingBottom: 8, lineHeight: 19 },
-  acts: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, paddingTop: 0 },
-  hint: { flex: 1, lineHeight: 18 },
-  reply: { gap: 6 },
-  replyOne: { gap: 2 },
-  replyQuestion: { borderLeftWidth: 2, paddingLeft: 8, lineHeight: 19 },
-})
+/** 卡片顶上那一行：来源和答了几题、收着时第一题的回答（截断）、末尾 ▸/▾；还在问的一直展开、前面一个等待记号 */
+function Head({
+  source,
+  summary,
+  open,
+  onPress,
+  fixed = false,
+  waiting = false,
+}: {
+  source: string
+  summary?: string | undefined
+  open: boolean
+  onPress(): void
+  fixed?: boolean
+  waiting?: boolean
+}) {
+  const { c, font } = useTheme()
+  const size = { fontSize: font.size.meta }
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={fixed ? undefined : { expanded: open }}
+      disabled={fixed}
+      onPress={onPress}
+      style={({ pressed }) => [styles.head, pressed ? { backgroundColor: c.press } : null]}
+    >
+      {waiting ? <Text style={[size, { color: c.wait }]}>◆</Text> : null}
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.source,
+          size,
+          { color: c.ink2 },
+          open || !summary ? styles.grow : styles.capped,
+        ]}
+      >
+        {source}
+      </Text>
+      {!open && summary ? (
+        <Text numberOfLines={1} style={[styles.grow, size, { color: c.ink3 }]}>
+          {summary}
+        </Text>
+      ) : null}
+      {fixed ? null : <Text style={[size, { color: c.ink3 }]}>{open ? '▾' : '▸'}</Text>}
+    </Pressable>
+  )
+}
 
+/** 回答：左边一道强调色、淡淡的底，和题目分得开；选的和自己写的一个样子 */
 function Answer({ text }: { text: string }) {
   const { c, font, radius } = useTheme()
   const t = useT()
   return (
     <View
-      style={{
-        padding: 8,
-        gap: 2,
-        backgroundColor: c.selBg,
-        borderColor: c.line3,
-        borderWidth: 1,
-        borderRadius: radius.m,
-      }}
+      style={[
+        styles.answerBox,
+        {
+          backgroundColor: c.sel,
+          borderLeftColor: c.accent,
+          borderTopRightRadius: radius.s,
+          borderBottomRightRadius: radius.s,
+        },
+      ]}
     >
-      <Text style={{ color: c.selFg, fontSize: font.size.meta, fontWeight: '600' }}>
+      <Text style={{ color: c.ink3, fontSize: font.size.small, fontWeight: '500' }}>
         {t('ask.answer')}
       </Text>
-      <Text style={{ color: c.selFg, fontSize: font.size.meta + 1, lineHeight: 19 }}>{text}</Text>
+      <Text selectable style={{ color: c.ink, fontSize: font.size.meta + 1, lineHeight: 19 }}>
+        {text}
+      </Text>
     </View>
   )
 }
+
+const styles = StyleSheet.create({
+  card: { marginHorizontal: 16, marginVertical: 6, borderWidth: 1, overflow: 'hidden' },
+  head: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    minHeight: 40,
+  },
+  source: { fontWeight: '500' },
+  capped: { flexShrink: 1, maxWidth: '45%' },
+  grow: { flex: 1 },
+  question: { paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
+  split: { borderTopWidth: StyleSheet.hairlineWidth },
+  title: { lineHeight: 21 },
+  answer: { borderLeftWidth: 2, paddingLeft: 10, fontSize: 14, lineHeight: 19 },
+  answerBox: { borderLeftWidth: 2, paddingHorizontal: 10, paddingVertical: 6, gap: 2 },
+  pickText: { flex: 1, gap: 2 },
+  reply: { gap: 6 },
+  replyOne: { gap: 2 },
+  replyQuestion: { borderLeftWidth: 2, paddingLeft: 8, lineHeight: 19 },
+})

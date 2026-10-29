@@ -28,6 +28,7 @@ import { useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { type Palette, useTheme } from '../ui/theme'
 import { AskCell, AskReplyText, useAsks } from './asks/AskCell'
+import { CompactRow } from './CompactRow'
 import { CommentCards, commentsOfRow } from './comments/CommentCards'
 import { useComments, useFlashedRow, useHubValue } from './comments/context'
 import { notePressed } from './comments/hub'
@@ -70,28 +71,17 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
     notePressed(row.turnId, row.key)
     turnMenu(row.turnId)
   }
+  // 收着的时候和系统消息一样是一行（CompactRow）；展开了是下面那个带标题的气泡，能长按出回合菜单
   if (peer && !row.expanded)
     return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ expanded: !!row.expanded }}
-        onPress={() => toggle(row.key, row.turnId)}
+      <CompactRow
         testID="peer-message"
-        style={{ marginHorizontal: 16, marginVertical: 4, paddingVertical: 8 }}
-      >
-        <Text numberOfLines={1} style={{ color: c.ink2, fontSize: font.size.meta }}>
-          ✉ {peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')} · {text}{' '}
-          {row.expanded ? '⌄' : '›'}
-        </Text>
-        {row.expanded ? (
-          <Text
-            selectable
-            style={{ color: c.ink2, fontSize: font.size.meta, lineHeight: 19, marginTop: 6 }}
-          >
-            {text}
-          </Text>
-        ) : null}
-      </Pressable>
+        mark="✉"
+        source={peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')}
+        summary={text}
+        open={false}
+        onPress={() => toggle(row.key, row.turnId)}
+      />
     )
   return (
     <View style={styles.userWrap}>
