@@ -3,6 +3,7 @@ import { useT } from '../../../app/appearance.ts'
 import type { PreviewRendererProps } from '../contract.ts'
 import { errorKind, type OfficeError, type Part } from '../office/archive.ts'
 import frameUrl from '../office/docx-frame.ts?worker&url'
+import { frameResult } from '../office/frame-result.ts'
 import { officeJob } from '../office/job.ts'
 import '../office/office.css'
 
@@ -24,6 +25,7 @@ export default function DocxPreview({ data }: PreviewRendererProps) {
     setState('loading')
     const script = new URL(frameUrl, location.href).href
     // 不设 allow-same-origin；只有这个构建脚本可执行。文档脚本、网络、表单、导航均禁用。
+    // 纸张白底和灰色画布沿用文档库的版式，避免应用深色皮肤改变文档本身的颜色。
     element.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${script}; style-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><style>html,body{margin:0}body{overflow:auto}.docx-wrapper{padding:16px!important}section.docx{margin:0 auto 16px!important}</style><script src="${script}"></script></head><body></body></html>`
     const fail = (reason: OfficeError) => {
       if (abort.signal.aborted) return
@@ -43,18 +45,19 @@ export default function DocxPreview({ data }: PreviewRendererProps) {
           sent = true
           element.contentWindow?.postMessage('litch-office', '*', [channel.port2])
         }
-        channel.port1.onmessage = ({ data: result }) => {
+        channel.port1.onmessage = ({ data }: MessageEvent<unknown>) => {
           if (abort.signal.aborted) return
+          const result = frameResult(data)
           if (result === 'ready')
             channel.port1.postMessage(
               parts,
               parts.map((part) => part.bytes.buffer),
             )
-          else if (result.ok && result.isolated) {
+          else if (result.ok) {
             clearTimeout(timer)
             setState('ready')
             channel.port1.close()
-          } else fail(result.error ?? 'invalid')
+          } else fail(result.error)
         }
         channel.port1.start()
         // iframe 的 load 可能早于 Worker；已加载的 frame 可立即接收。

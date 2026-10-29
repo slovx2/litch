@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs/dist/exceljs.min.js'
 import JSZip from 'jszip'
 import { OfficeFailure, type Part } from './archive.ts'
 import type { SheetData, WorkbookData } from './model.ts'
+import { checkSheetReferences } from './sheet-references.ts'
 import { scanXml, withoutXmlNodes } from './xml.ts'
 
 const ROWS = 10_000,
@@ -104,6 +105,7 @@ function cellText(cell: ExcelJS.Cell): string {
   }).format(value)
 }
 export async function spreadsheet(parts: Part[]): Promise<WorkbookData> {
+  checkSheetReferences(parts)
   checkSheets(parts)
   const zip = new JSZip()
   const omitted = new Set([

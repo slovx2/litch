@@ -19,3 +19,5 @@ UI 直接依赖版本固定在 package.json，安装树固定在 lock。DOCX Apa
 - `node scripts/check-office-electron.mjs <上一步的assets目录>`：macOS 隐藏 Electron，真实 `app://ui` 加载。自动编译无窗口采样器，启动前/运行中查可见窗口和焦点，出现测试窗口立即终止进程树；只用临时 HOME/profile，退出检查残留。跑前仍遵守本机前台协调要求。
 
 解析补充：XLSX 的命名区域、数据验证、列定义和打印范围也可能引发 ExcelJS 扩展出巨大集合；因此在交库前用 SAX 删除这些不用于文字预览的子树，只提供 workbook/styles/sharedStrings/worksheet 等必要部件。sheetId 限于1–1000且不重复。单元格输出另按 UTF-16 文本累计计8 MiB，防止100,000个单元格反复引用同一条大 sharedString。ZIP 压缩输入每次只喂1 KiB，解码器不能在下一次JS计数前展开整块压缩数据。
+
+审阅加固：库加载前核对 workbook 的 sheet relationship 与目标部件，关系标识不能重名、目标经包内路径归一后不能被多表复用；所有独占 worksheet 的单元格/合并总量仍在加载前合计。iframe 回传通过 `frame-result.ts` 校验固定形状与白名单错误码。DOCX CSS 只重建清理后的顶层声明，嵌套/分组规则丢弃；分页属性按命名空间读取，不依赖 `w:` 前缀。`check-office-preview.mjs --review` 额外跑真实CSSOM嵌套规则与替代前缀分页回归。

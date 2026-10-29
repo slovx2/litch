@@ -137,3 +137,70 @@ test('XLSX：共享字符串重复引用的输出文本也有累计预算', asyn
   )
   await assert.rejects(spreadsheet(parts), /budget/)
 })
+
+test('XLSX：不同 sheet 关系不能重复指向同一工作表，拒绝发生在库装载前', async () => {
+  const parts = await unpack(await xlsx())
+  const rel = parts.find((p) => p.name === 'xl/_rels/workbook.xml.rels')
+  rel.bytes = new TextEncoder().encode(
+    new TextDecoder().decode(rel.bytes).replace('worksheets/sheet2.xml', 'worksheets/sheet1.xml'),
+  )
+  await assert.rejects(spreadsheet(parts), /invalid/)
+})
+
+test('XLSX：同一关系或规范化后的目标别名不能重复引用', async () => {
+  const { checkSheetReferences } = await import('../src/files/preview/office/sheet-references.ts')
+  for (const mode of ['same-id', 'absolute-target', 'dot-target', 'duplicate-rel']) {
+    const parts = await unpack(await xlsx()),
+      enc = new TextEncoder(),
+      dec = new TextDecoder()
+    const rel = parts.find((p) => p.name === 'xl/_rels/workbook.xml.rels')
+    const workbook = parts.find((p) => p.name === 'xl/workbook.xml')
+    if (mode === 'same-id')
+      workbook.bytes = enc.encode(dec.decode(workbook.bytes).replace('r:id="rId5"', 'r:id="rId4"'))
+    else if (mode === 'duplicate-rel')
+      rel.bytes = enc.encode(dec.decode(rel.bytes).replace('Id="rId5"', 'Id="rId4"'))
+    else
+      rel.bytes = enc.encode(
+        dec
+          .decode(rel.bytes)
+          .replace(
+            'worksheets/sheet2.xml',
+            mode === 'absolute-target' ? '/xl/worksheets/sheet1.xml' : 'worksheets/./sheet1.xml',
+          ),
+      )
+    assert.throws(() => checkSheetReferences(parts), /invalid/, mode)
+  }
+})
+
+test('XLSX：多个独占部件的单元格合计也必须在交库前符合预算', async () => {
+  const { checkSheetReferences } = await import('../src/files/preview/office/sheet-references.ts')
+  const parts = await unpack(await xlsx()),
+    enc = new TextEncoder()
+  const content = `<worksheet><sheetData>${Array.from({ length: 2501 }, (_, row) => `<row r="${row + 1}">${Array.from({ length: 20 }, (_, col) => `<c r="${String.fromCharCode(65 + col)}${row + 1}"/>`).join('')}</row>`).join('')}</sheetData></worksheet>`
+  for (const part of parts)
+    if (/^xl\/worksheets\/sheet[12]\.xml$/.test(part.name)) part.bytes = enc.encode(content)
+  checkSheetReferences(parts)
+  assert.throws(() => checkSheets(parts), /budget/)
+})
+
+test('DOCX MessagePort：只收固定形状与白名单错误码', async () => {
+  const { frameResult } = await import('../src/files/preview/office/frame-result.ts')
+  for (const value of [
+    null,
+    undefined,
+    [],
+    true,
+    'budget',
+    {},
+    { ok: 1, isolated: true },
+    { ok: true, isolated: false },
+    { ok: false, error: 'unknown' },
+    { ok: false, error: null },
+    { error: 'budget' },
+  ])
+    assert.deepEqual(frameResult(value), { ok: false, error: 'invalid' })
+  assert.equal(frameResult('ready'), 'ready')
+  assert.deepEqual(frameResult({ ok: true, isolated: true, pages: 1 }), { ok: true })
+  for (const error of ['budget', 'invalid', 'active', 'timeout'])
+    assert.deepEqual(frameResult({ ok: false, error }), { ok: false, error })
+})

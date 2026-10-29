@@ -32,7 +32,11 @@ export async function cleanDocx(parts: Part[]): Promise<ArrayBuffer> {
         if (++elements > 100_000) throw new OfficeFailure('budget')
         if (
           (el.localName === 'sectPr' ||
-            (el.localName === 'br' && el.getAttribute('w:type') === 'page')) &&
+            (el.localName === 'br' &&
+              el.getAttributeNS(
+                'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+                'type',
+              ) === 'page')) &&
           ++pages > 200
         )
           throw new OfficeFailure('budget')
@@ -131,7 +135,8 @@ export function cleanRendered(host: HTMLElement): void {
       for (const rule of Array.from(sheet.cssRules))
         if (rule instanceof CSSStyleRule) {
           cleanStyle(rule.style)
-          rules.push(rule.cssText)
+          // CSSStyleRule 也可包含嵌套规则；只重建已清理的顶层声明，子规则全部丢弃。
+          rules.push(`${rule.selectorText} { ${rule.style.cssText} }`)
         }
       el.textContent = rules.join('\n')
     }

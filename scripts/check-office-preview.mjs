@@ -18,6 +18,8 @@ import { build } from '../packages/ui/node_modules/vite/dist/node/index.js'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const review = process.argv.includes('--review')
+const fixture = review ? 'office-review' : 'preview'
 const out = join(root, '.local/office-preview-check', `${Date.now()}-${process.pid}`)
 mkdirSync(out, { recursive: true })
 const binary = globSync(
@@ -42,7 +44,7 @@ try {
     logLevel: 'warn',
     build: {
       outDir: join(out, 'assets'),
-      rollupOptions: { input: join(root, 'packages/ui/test/preview/index.html') },
+      rollupOptions: { input: join(root, `packages/ui/test/${fixture}/index.html`) },
     },
   })
   const assets = join(out, 'assets')
@@ -132,11 +134,19 @@ try {
   await call('Page.addScriptToEvaluateOnNewDocument', {
     source: `window.__officeWorkers=new Set();const Base=Worker;window.Worker=class extends Base{constructor(...args){super(...args);if(/office.worker|zip.worker/.test(String(args[0])))window.__officeWorkers.add(this)}terminate(){window.__officeWorkers.delete(this);super.terminate()}};window.__officeParentSentinel='private';`,
   })
-  await call('Page.navigate', { url: `http://127.0.0.1:${port}/test/preview/index.html` })
+  await call('Page.navigate', { url: `http://127.0.0.1:${port}/test/${fixture}/index.html` })
   await until(
     () => evaluate('document.querySelector(".fp-document h1")?.textContent === "文件预览"'),
     'Markdown 已渲染',
   )
+  if (review) {
+    const result = await evaluate('window.officeReviewCheck()')
+    assert(result.before.includes('.nested'))
+    assert(result.after.includes('color: rgb(1, 2, 3)'))
+    assert(!/nested|url\(|100000|999999|@media/.test(result.after), result.after)
+    assert.equal(result.pageLimit, 'budget')
+    report.checks.push('审阅回归：嵌套CSS/分组规则丢弃，替代命名空间前缀分页仍受预算约束')
+  }
 
   const open = async (path, bytes, format) => {
     const result = {
