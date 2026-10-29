@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type {
   ChromeGrant,
   ChromeTabState,
@@ -18,6 +18,7 @@ interface ListedTab extends ChromeTabState {
 }
 interface ClaimToken {
   instanceId: string
+  epoch: string
   tab: ListedTab
   session: string
   expires: number
@@ -51,8 +52,15 @@ export class ChromeExecutor implements BrowserExecutor {
   private tokens = new Map<string, ClaimToken>()
   private states = new Map<string, TabState & { generation: number }>()
   private approvals = new Map<string, Set<string>>()
+  private instancePermits = new Map<string, Set<string>>()
+  private deniedInstances = new Set<string>()
   private denied = new Set<string>()
   private busy = new Set<string>()
+  private calls = new Map<
+    string,
+    { turn: string; fingerprint: string; promise: Promise<ClientToolCallResponse> }
+  >()
+  private endedTurns = new Set<string>()
   private timer: ReturnType<typeof setInterval>
   private off: () => void
   private options: ChromeExecutorOptions
@@ -124,6 +132,48 @@ export class ChromeExecutor implements BrowserExecutor {
         'Reload the Litch extension from chrome://extensions.',
       )
     return id
+  }
+  private async permitInstance(
+    invocation: ClientToolInvocation,
+    context: ClientToolContext,
+    instanceId: string,
+  ): Promise<void> {
+    const instance = this.options.bridge.instances().find((item) => item.id === instanceId)
+    if (!instance)
+      throw new ChromeBridgeError('disconnected', 'Chrome disconnected. List targets again.')
+    const identity = `${instanceId}:${instance.epoch}`
+    const key = session(invocation)
+    const once = `${key}:${invocation.turnId}`
+    if (
+      this.instancePermits.get(key)?.has(identity) ||
+      this.instancePermits.get(once)?.has(identity)
+    )
+      return
+    if (this.deniedInstances.has(`${once}:${identity}`))
+      throw new ChromeBridgeError(
+        'originNotApproved',
+        'The user declined access to this Chrome instance. Do not switch targets to bypass the decision.',
+      )
+    const answer = await context.ask({
+      kind: 'chromeInstance',
+      instanceId,
+      name: `${instance.name} · ${instanceId.slice(0, 8)}`,
+    })
+    if (answer === 'decline') this.deniedInstances.add(`${once}:${identity}`)
+    if (!answer || answer === 'decline' || context.signal.aborted)
+      throw new ChromeBridgeError('originNotApproved', 'Chrome instance access was not approved.')
+    if (
+      this.options.bridge.instances().find((item) => item.id === instanceId)?.epoch !==
+      instance.epoch
+    )
+      throw new ChromeBridgeError(
+        'staleLease',
+        'Chrome reconnected during approval. List targets again.',
+      )
+    const scope = answer === 'session' ? key : once
+    const permitted = this.instancePermits.get(scope) ?? new Set<string>()
+    permitted.add(identity)
+    this.instancePermits.set(scope, permitted)
   }
   async approve(
     invocation: ClientToolInvocation,
@@ -197,9 +247,21 @@ export class ChromeExecutor implements BrowserExecutor {
         this.busy.has(old.id)
       )
         throw new ChromeBridgeError('busy', 'This tab is in use.')
+      original = old.grant.original
+      keep = old.grant.keep
       await old.release()
     }
+    await this.permitInstance(invocation, context, token.instanceId)
     await this.approve(invocation, context, token.instanceId, token.tab.origins)
+    if (
+      this.options.bridge.instances().find((instance) => instance.id === token.instanceId)
+        ?.epoch !== token.epoch ||
+      token.expires < Date.now()
+    )
+      throw new ChromeBridgeError(
+        'staleLease',
+        'Chrome reconnected or the tab listing expired during approval. List tabs again.',
+      )
     const grant: ChromeGrant = {
       leaseId: randomUUID(),
       tabId: token.tab.id,
@@ -232,6 +294,78 @@ export class ChromeExecutor implements BrowserExecutor {
     return page
   }
   async call(
+    invocation: ClientToolInvocation,
+    context: ClientToolContext,
+  ): Promise<ClientToolCallResponse> {
+    if (!this.options.allowed(invocation))
+      return chromeFailure(
+        new ChromeBridgeError(
+          'targetUnavailable',
+          'Chrome control is disabled for this source device.',
+        ),
+      )
+    const args = invocation.arguments as Record<string, unknown> | null
+    const target =
+      typeof args?.targetId === 'string'
+        ? args.targetId.slice(7)
+        : typeof args?.tabId === 'string'
+          ? this.pages.get(args.tabId)?.instanceId
+          : typeof args?.claimToken === 'string'
+            ? this.tokens.get(args.claimToken)?.instanceId
+            : undefined
+    if (
+      target &&
+      [...this.pages.values()].some(
+        (page) => page.valid && page.paused && page.instanceId === target,
+      ) &&
+      !['targets', 'request_sign_in'].includes(invocation.tool)
+    )
+      return chromeFailure(
+        new ChromeBridgeError('signingIn', 'This Chrome instance is paused for sign-in.'),
+      )
+    const turn = JSON.stringify([invocation.device.id, invocation.threadId, invocation.turnId])
+    if (this.endedTurns.has(turn))
+      return chromeFailure(
+        new ChromeBridgeError(
+          'staleLease',
+          'This turn has ended. Start a new turn and claim again.',
+        ),
+      )
+    const key = JSON.stringify([turn, invocation.callId])
+    const fingerprint = createHash('sha256')
+      .update(JSON.stringify([invocation.tool, invocation.arguments]))
+      .digest('hex')
+    const previous = this.calls.get(key)
+    if (previous)
+      return previous.fingerprint === fingerprint
+        ? previous.promise
+        : chromeFailure(
+            new ChromeBridgeError('invalid', 'A callId cannot be reused with different arguments.'),
+          )
+    if (this.calls.size >= 4096)
+      return chromeFailure(
+        new ChromeBridgeError(
+          'busy',
+          'Too many calls are retained for active turns. End an active turn before continuing.',
+        ),
+      )
+    const promise = this.execute(invocation, context)
+    const entry = { turn, fingerprint, promise }
+    this.calls.set(key, entry)
+    const response = await promise
+    // 大结果不无限保留；重复调用仍不得重放动作，而是明确报告结果已淘汰。
+    if (JSON.stringify(response).length > 65536)
+      entry.promise = Promise.resolve(
+        chromeFailure(
+          new ChromeBridgeError(
+            'failed',
+            'This call already ran; its large result is no longer cached. Do not repeat an action blindly.',
+          ),
+        ),
+      )
+    return response
+  }
+  private async execute(
     invocation: ClientToolInvocation,
     context: ClientToolContext,
   ): Promise<ClientToolCallResponse> {
@@ -276,6 +410,7 @@ export class ChromeExecutor implements BrowserExecutor {
         )
       if (invocation.tool === 'tabs' && args.action === 'list') {
         const instanceId = this.instance(args.targetId)
+        await this.permitInstance(invocation, context, instanceId)
         const tabs = await this.options.bridge.call<ListedTab[]>(
           instanceId,
           { op: 'list', args: {} },
@@ -293,6 +428,9 @@ export class ChromeExecutor implements BrowserExecutor {
             const claimToken = randomUUID()
             this.tokens.set(claimToken, {
               instanceId,
+              epoch:
+                this.options.bridge.instances().find((instance) => instance.id === instanceId)
+                  ?.epoch ?? '',
               tab,
               session: session(invocation),
               expires: Date.now() + 30_000,
@@ -321,12 +459,23 @@ export class ChromeExecutor implements BrowserExecutor {
           }),
         )
       }
+      if (invocation.tool === 'release' && typeof args.tabId === 'string') {
+        const released = this.pages.get(args.tabId)
+        if (
+          released &&
+          !released.valid &&
+          JSON.stringify([released.grant.owner.deviceId, released.grant.owner.threadId]) ===
+            session(invocation)
+        )
+          return ok('The Chrome tab was already released.')
+      }
       let page: ChromePage
       if (
         (invocation.tool === 'navigate' && (!args.tabId || args.newTab === true)) ||
         (invocation.tool === 'tabs' && args.action === 'new')
       ) {
         const instanceId = this.instance(args.targetId)
+        await this.permitInstance(invocation, context, instanceId)
         const tab = await this.options.bridge.call<ChromeTabState>(
           instanceId,
           { op: 'new', args: {} },
@@ -337,6 +486,9 @@ export class ChromeExecutor implements BrowserExecutor {
           context,
           {
             instanceId,
+            epoch:
+              this.options.bridge.instances().find((instance) => instance.id === instanceId)
+                ?.epoch ?? '',
             tab: { ...tab, origins: ['about:blank'], busy: false },
             session: session(invocation),
             expires: Date.now() + 30_000,
@@ -363,6 +515,11 @@ export class ChromeExecutor implements BrowserExecutor {
     return null
   }
   turnEnded(turn: { deviceId: string; threadId: string; turnId: string }): void {
+    const identity = JSON.stringify([turn.deviceId, turn.threadId, turn.turnId])
+    this.endedTurns.add(identity)
+    if (this.endedTurns.size > 512)
+      this.endedTurns.delete(this.endedTurns.values().next().value ?? '')
+    for (const [key, call] of this.calls) if (call.turn === identity) this.calls.delete(key)
     for (const page of this.pages.values())
       if (
         page.grant.owner.deviceId === turn.deviceId &&
@@ -376,6 +533,9 @@ export class ChromeExecutor implements BrowserExecutor {
     for (const [id, token] of this.tokens) if (token.session === ended) this.tokens.delete(id)
     for (const key of this.denied)
       if (key.includes(`:${ended}:${turn.turnId}:`)) this.denied.delete(key)
+    this.instancePermits.delete(`${ended}:${turn.turnId}`)
+    for (const key of this.deniedInstances)
+      if (key.startsWith(`${ended}:${turn.turnId}:`)) this.deniedInstances.delete(key)
     for (const key of this.approvals.keys())
       if (key.endsWith(`:${turn.turnId}`)) this.approvals.delete(key)
   }

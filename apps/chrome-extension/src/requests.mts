@@ -1,6 +1,7 @@
 import type { ChromeGrant, ChromeRequest } from '../../../packages/protocol/src/chrome-browser.mjs'
 import { isAllowedCdp } from '../../desktop/src/browser/cdp-allow.mjs'
 import { chromeOrigin } from './origin.mjs'
+import { disposePointer, planPointer, pointerCommand, withoutPointer } from './pointer.mjs'
 import {
   attach,
   ChromeFault,
@@ -8,6 +9,7 @@ import {
   documentStamp,
   type ExtensionState,
   inspectOrigins,
+  lockTab,
   ownerKey,
   requireGrant,
   saveAttached,
@@ -29,9 +31,11 @@ export async function execute(state: ExtensionState, request: ChromeRequest): Pr
   if (request.epoch !== state.epoch)
     throw new ChromeFault('staleLease', 'Chrome reconnected. List targets and claim again.')
   const args = request.args
+  if (state.paused.size && !['renew', 'release', 'stop', 'unfreeze'].includes(request.op))
+    throw new ChromeFault('signingIn', 'The user is signing in. This Chrome instance is paused.')
   if (request.op === 'list') {
     const tabs = await state.chrome.tabs.query({})
-    return Promise.all(
+    const result = await Promise.all(
       tabs
         .filter((tab: any) => !tab.incognito && chromeOrigin(tab.pendingUrl || tab.url || ''))
         .map(async (tab: any) => ({
@@ -40,6 +44,9 @@ export async function execute(state: ExtensionState, request: ChromeRequest): Pr
           busy: [...state.grants.values()].some((grant) => grant.tabId === tab.id),
         })),
     )
+    if (state.paused.size)
+      throw new ChromeFault('signingIn', 'Chrome was paused while listing tabs.')
+    return result
   }
   if (request.op === 'new') {
     const tab = await state.chrome.tabs.create({ url: 'about:blank', active: false })
@@ -64,26 +71,35 @@ export async function execute(state: ExtensionState, request: ChromeRequest): Pr
     if (state.stoppedTurns.has(ownerKey(grant.owner)))
       throw new ChromeFault('cancelled', 'The user stopped Chrome control for this turn.')
     const existing = [...state.grants.values()].find((one) => one.tabId === grant.tabId)
-    if (existing) throw new ChromeFault('busy', 'This Chrome tab is already claimed.')
-    const tab = await tabState(state, grant.tabId)
-    if (tab.url !== args.expectedUrl || tab.generation !== args.expectedGeneration)
-      throw new ChromeFault('staleDocument', 'The selected tab changed. List tabs again.')
-    // 同步占位，两个并行会话不能同时越过空闲检查。
+    if (existing || state.tabLocks.has(grant.tabId))
+      throw new ChromeFault('busy', 'This Chrome tab is already claimed.')
+    const unlock = lockTab(state, grant.tabId)
+    grant.expiresAt = Date.now() + 15_000
     state.grants.set(grant.leaseId, grant)
+    let attached = false
     try {
+      const tab = await tabState(state, grant.tabId)
+      if (tab.loading || tab.url !== args.expectedUrl || tab.generation !== args.expectedGeneration)
+        throw new ChromeFault('staleDocument', 'The selected tab changed. List tabs again.')
+      await saveAttached(state)
       await documentStamp(state, grant)
       await attach(state, grant.tabId)
-      await documentStamp(state, grant)
+      attached = true
+      await requireGrant(state, grant.leaseId, args.expectedGeneration as number)
       grant.expiresAt = Date.now() + 15_000
-      state.grants.set(grant.leaseId, grant)
       await saveAttached(state)
       await cdp(state, grant.tabId, 'Page.enable')
       await cdp(state, grant.tabId, 'Runtime.enable')
-      return { tab: await tabState(state, grant.tabId), leaseId: grant.leaseId }
+      const current = await tabState(state, grant.tabId)
+      await requireGrant(state, grant.leaseId, args.expectedGeneration as number)
+      return { tab: current, leaseId: grant.leaseId }
     } catch (error) {
       state.grants.delete(grant.leaseId)
-      await state.chrome.debugger.detach({ tabId: grant.tabId }).catch(() => {})
+      if (attached) await state.chrome.debugger.detach({ tabId: grant.tabId }).catch(() => {})
+      await saveAttached(state)
       throw error
+    } finally {
+      unlock()
     }
   }
   const grant = request.leaseId ? state.grants.get(request.leaseId) : undefined
@@ -127,8 +143,14 @@ export async function execute(state: ExtensionState, request: ChromeRequest): Pr
     return null
   }
   if (request.op === 'freeze') {
-    state.console.delete(grant.tabId)
+    await requireGrant(state, grant.leaseId, request.generation)
+    if (state.paused.size)
+      throw new ChromeFault('signingIn', 'Chrome is already paused for sign-in.')
     state.paused.add(grant.leaseId)
+    state.console.clear()
+    await disposePointer(state, grant)
+    const tab = await state.chrome.tabs.update(grant.tabId, { active: true })
+    await state.chrome.windows.update(tab.windowId, { focused: true })
     return null
   }
   if (request.op === 'unfreeze') {
@@ -167,7 +189,12 @@ export async function execute(state: ExtensionState, request: ChromeRequest): Pr
     if (!isAllowedCdp(method))
       throw new ChromeFault('invalid', `CDP method is not allowed: ${method}`)
     const before = await documentStamp(state, grant)
-    const result = await cdp(state, grant.tabId, method, args.params ?? {})
+    const params = (args.params ?? {}) as Record<string, unknown>
+    const dispatch = () => cdp(state, grant.tabId, method, params)
+    const result =
+      method === 'Page.captureScreenshot' || method === 'Accessibility.getFullAXTree'
+        ? await withoutPointer(state, grant, dispatch)
+        : await pointerCommand(state, grant, method, params, dispatch)
     await requireGrant(state, grant.leaseId)
     if (before !== (await documentStamp(state, grant)))
       throw new ChromeFault(
@@ -176,6 +203,11 @@ export async function execute(state: ExtensionState, request: ChromeRequest): Pr
       )
     return result
   }
-  if (request.op === 'pointer') return null // 公共光标 host 的 isolated-world 适配接入点。
+  if (request.op === 'pointer') {
+    if (typeof args.x !== 'number' || typeof args.y !== 'number')
+      throw new ChromeFault('invalid', 'Invalid pointer coordinates.')
+    await planPointer(state, grant, args.x, args.y)
+    return null
+  }
   throw new ChromeFault('invalid', 'Unknown Chrome operation.')
 }

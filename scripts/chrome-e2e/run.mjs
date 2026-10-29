@@ -34,11 +34,42 @@ if (process.argv.includes('--shown') && process.env.LITCH_CHROME_GUI_SLOT !== 'a
   throw new Error('GUI checks need an approved foreground slot and LITCH_CHROME_GUI_SLOT=approved.')
 const started = Date.now()
 const work = mkdtempSync(join(tmpdir(), 'litch-chrome-e2e-'))
-const output = join(root, '.local/chrome-e2e')
+const outputBase = join(root, '.local/chrome-e2e')
+const output = join(outputBase, `${started}-${process.pid}`)
 mkdirSync(output, { recursive: true })
 const report = { binary, checks: [], elapsedMs: 0, success: false }
 let child, bridge, executor, cdp, site
 let browserLog = ''
+let cleanupTask
+function cleanup() {
+  cleanupTask ??= (async () => {
+    executor?.dispose()
+    cdp?.close()
+    if (child && child.exitCode === null) {
+      child.kill('SIGTERM')
+      await Promise.race([
+        new Promise((resolve) => child.once('exit', resolve)),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ])
+      if (child.exitCode === null) child.kill('SIGKILL')
+    }
+    await bridge?.close()
+    if (site) await new Promise((resolve) => site.server.close(resolve))
+    rmSync(work, { recursive: true, force: true })
+  })()
+  return cleanupTask
+}
+for (const signal of ['SIGINT', 'SIGTERM'])
+  process.once(signal, () => {
+    report.success = false
+    report.error = `Interrupted by ${signal}`
+    void cleanup().finally(() => {
+      report.elapsedMs = Date.now() - started
+      writeFileSync(join(output, 'report.json'), JSON.stringify(report, null, 2))
+      writeFileSync(join(outputBase, 'report.json'), JSON.stringify({ ...report, output }, null, 2))
+      process.exit(signal === 'SIGINT' ? 130 : 143)
+    })
+  })
 const check = async (name, fn) => {
   await fn()
   report.checks.push(name)
@@ -203,7 +234,10 @@ try {
       return answer
     },
   }
-  const call = (tool, args) => executor.call({ ...invocation, tool, arguments: args }, context)
+  let callSequence = 0
+  const unique = () => `fixture-${++callSequence}`
+  const call = (tool, args) =>
+    executor.call({ ...invocation, callId: unique(), tool, arguments: args }, context)
   const text = (result) =>
     result.contentItems
       .filter((item) => item.type === 'inputText')
@@ -234,12 +268,187 @@ try {
     assert.ok(ref, value)
     await success('click', { tabId, ref })
     assert.match(text(await success('snapshot', { tabId })), /button "1"/)
+    const input = value.match(/textbox "Fixture input".*?\[ref=(e\d+)\]/)?.[1]
+    assert.ok(input)
+    await success('type', { tabId, ref: input, text: '中文 input', clear: true })
+    assert.match(text(await success('snapshot', { tabId })), /中文 input/)
+  })
+  await check('重复 callId 不重复派发点击', async () => {
+    const value = text(await success('snapshot', { tabId }))
+    const ref = value.match(/button "1".*?\[ref=(e\d+)\]/)?.[1]
+    assert.ok(ref)
+    const repeated = { ...invocation, callId: unique(), tool: 'click', arguments: { tabId, ref } }
+    const first = await executor.call(repeated, context)
+    const second = await executor.call(repeated, context)
+    assert.equal(first.success, true, text(first))
+    assert.deepEqual(second, first)
+    assert.match(text(await success('snapshot', { tabId })), /button "2"/)
   })
   await check('截图', async () => {
     const result = await success('screenshot', { tabId, format: 'png' })
     const image = result.contentItems.find((item) => item.type === 'inputImage')
     assert.ok(image)
     writeFileSync(join(output, 'page.png'), Buffer.from(image.imageUrl.split(',')[1], 'base64'))
+  })
+  await check('isolated world 公共光标 / 截图不含光标 / AX 无光标', async () => {
+    const page = executor.pages.get(tabId)
+    const target = (await cdp.call('Target.getTargets')).targetInfos.find(
+      (target) => target.type === 'page' && target.url === `${site.origin}/`,
+    )
+    const { sessionId } = await cdp.call('Target.attachToTarget', {
+      targetId: target.targetId,
+      flatten: true,
+    })
+    const evaluate = async (expression, contextId) =>
+      (
+        await cdp.call(
+          'Runtime.evaluate',
+          { expression, contextId, returnByValue: true, awaitPromise: true },
+          sessionId,
+        )
+      ).result.value
+    assert.equal(await evaluate('typeof globalThis.__litchChromePointer'), 'undefined')
+    assert.equal(
+      await evaluate(`document.querySelector('[data-litch-chrome-pointer]')?.shadowRoot === null`),
+      true,
+    )
+    assert.equal(
+      await evaluate(
+        `getComputedStyle(document.querySelector('[data-litch-chrome-pointer]')).pointerEvents`,
+      ),
+      'none',
+    )
+    const { frameTree } = await cdp.call('Page.getFrameTree', {}, sessionId)
+    const { executionContextId } = await cdp.call(
+      'Page.createIsolatedWorld',
+      { frameId: frameTree.frame.id, worldName: `litch-chrome-${page.grant.leaseId}` },
+      sessionId,
+    )
+    const status = await evaluate('__litchChromePointer.status()', executionContextId)
+    assert.equal(status.last.phase, 'completed')
+    assert.equal(status.last.pressed, false)
+    assert.equal(status.surface.kind, 'browserViewport')
+    assert.equal(status.surface.generation, page.state.generation)
+    const { cssVisualViewport: view } = await cdp.call('Page.getLayoutMetrics', {}, sessionId)
+    const dpr = await evaluate('devicePixelRatio')
+    const fit = Math.min(1, 1280 / Math.max(view.clientWidth, view.clientHeight, 1))
+    const capture = async () =>
+      (
+        await cdp.call(
+          'Page.captureScreenshot',
+          {
+            format: 'png',
+            clip: {
+              x: view.pageX,
+              y: view.pageY,
+              width: view.clientWidth,
+              height: view.clientHeight,
+              scale: fit / dpr,
+            },
+          },
+          sessionId,
+        )
+      ).data
+    const decorated = await capture()
+    const result = await success('screenshot', { tabId, format: 'png' })
+    const clean = result.contentItems
+      .find((item) => item.type === 'inputImage')
+      .imageUrl.split(',')[1]
+    assert.equal(
+      await evaluate(
+        `getComputedStyle(document.querySelector('[data-litch-chrome-pointer]')).visibility`,
+      ),
+      'visible',
+    )
+    const snapshot = text(await success('snapshot', { tabId }))
+    assert.doesNotMatch(snapshot, /litch.*pointer/i)
+    await evaluate('__litchChromePointer.dispose()', executionContextId)
+    const removed = await capture()
+    assert.equal(clean, removed, 'Product screenshot equals the image with the renderer removed')
+    assert.notEqual(decorated, clean, 'Raw browser screenshot includes the visible renderer')
+    writeFileSync(join(output, 'pointer-visible.png'), Buffer.from(decorated, 'base64'))
+    writeFileSync(join(output, 'pointer-excluded.png'), Buffer.from(clean, 'base64'))
+    await cdp.call('Target.detachFromTarget', { sessionId })
+    // 测试销毁了 world 内 renderer，重新认领后继续其余业务检查。
+    await success('release', { tabId })
+    const tab = JSON.parse(text(await success('tabs', { action: 'list', targetId }))).tabs.find(
+      (tab) => tab.url === `${site.origin}/`,
+    )
+    tabId = JSON.parse(text(await success('claim', { claimToken: tab.claimToken }))).tabId
+  })
+  await check('并行会话争用 / 令牌不可跨会话', async () => {
+    const listed = JSON.parse(text(await success('tabs', { action: 'list', targetId }))).tabs.find(
+      (tab) => tab.url === `${site.origin}/`,
+    )
+    const other = { ...invocation, threadId: 'competing-thread' }
+    const denied = await executor.call(
+      { ...other, callId: unique(), tool: 'claim', arguments: { claimToken: listed.claimToken } },
+      context,
+    )
+    assert.equal(denied.success, false)
+    const ownList = await executor.call(
+      { ...other, callId: unique(), tool: 'tabs', arguments: { action: 'list', targetId } },
+      context,
+    )
+    const ownToken = JSON.parse(text(ownList)).tabs.find(
+      (tab) => tab.url === `${site.origin}/`,
+    ).claimToken
+    const busy = await executor.call(
+      { ...other, callId: unique(), tool: 'claim', arguments: { claimToken: ownToken } },
+      context,
+    )
+    assert.equal(busy.success, false)
+    assert.match(text(busy), /busy/)
+    await success('snapshot', { tabId })
+  })
+  await check('同时认领同一空闲标签只有一个成功', async () => {
+    await success('release', { tabId })
+    const contenders = [
+      { ...invocation, threadId: 'race-one' },
+      { ...invocation, threadId: 'race-two' },
+    ]
+    const tokens = await Promise.all(
+      contenders.map(async (owner) => {
+        const list = await executor.call(
+          { ...owner, callId: unique(), tool: 'tabs', arguments: { action: 'list', targetId } },
+          context,
+        )
+        return JSON.parse(text(list)).tabs.find((tab) => tab.url === `${site.origin}/`).claimToken
+      }),
+    )
+    const claims = await Promise.all(
+      contenders.map((owner, index) =>
+        executor.call(
+          { ...owner, callId: unique(), tool: 'claim', arguments: { claimToken: tokens[index] } },
+          context,
+        ),
+      ),
+    )
+    assert.equal(claims.filter((result) => result.success).length, 1, JSON.stringify(claims))
+    const winner = claims.findIndex((result) => result.success)
+    const winnerTab = JSON.parse(text(claims[winner])).tabId
+    assert.equal(
+      (
+        await executor.call(
+          {
+            ...contenders[winner],
+            callId: unique(),
+            tool: 'snapshot',
+            arguments: { tabId: winnerTab },
+          },
+          context,
+        )
+      ).success,
+      true,
+    )
+    await executor.call(
+      { ...contenders[winner], callId: unique(), tool: 'release', arguments: { tabId: winnerTab } },
+      context,
+    )
+    const tab = JSON.parse(text(await success('tabs', { action: 'list', targetId }))).tabs.find(
+      (tab) => tab.url === `${site.origin}/`,
+    )
+    tabId = JSON.parse(text(await success('claim', { claimToken: tab.claimToken }))).tabId
   })
   await check('拒绝来源后不重复询问', async () => {
     answer = 'decline'
@@ -478,32 +687,54 @@ try {
     tabId = JSON.parse(text(await success('claim', { claimToken: tab.claimToken }))).tabId
     await success('snapshot', { tabId })
   })
+  await check('输入前取消撤销租约且不点击', async () => {
+    const value = text(await success('snapshot', { tabId }))
+    const match = value.match(/button "(\d+)".*?\[ref=(e\d+)\]/)
+    const count = match?.[1]
+    const ref = match?.[2]
+    assert.ok(ref)
+    const controller = new AbortController()
+    const pending = executor.call(
+      { ...invocation, callId: unique(), tool: 'click', arguments: { tabId, ref } },
+      { ...context, signal: controller.signal },
+    )
+    controller.abort()
+    const cancelled = await pending
+    assert.equal(cancelled.success, false)
+    assert.match(text(cancelled), /cancelled/)
+    await until(() => !executor.pages.get(tabId)?.valid, 'Cancelled lease released')
+    const tab = JSON.parse(text(await success('tabs', { action: 'list', targetId }))).tabs.find(
+      (tab) => tab.url.endsWith('/frames'),
+    )
+    tabId = JSON.parse(text(await success('claim', { claimToken: tab.claimToken }))).tabId
+    assert.match(text(await success('snapshot', { tabId })), new RegExp(`button "${count}"`))
+  })
+  await check('停止操作撤权 / 同回合不可再次认领', async () => {
+    executor.stop()
+    await until(() => !executor.pages.get(tabId)?.valid, 'Stop revoked lease')
+    assert.equal((await call('snapshot', { tabId })).success, false)
+    const tab = JSON.parse(text(await success('tabs', { action: 'list', targetId }))).tabs.find(
+      (tab) => tab.url.endsWith('/frames'),
+    )
+    const denied = await call('claim', { claimToken: tab.claimToken })
+    assert.equal(denied.success, false)
+    assert.match(text(denied), /cancelled/)
+  })
   if (process.argv.includes('--remote'))
     await check('真实 SSH / 远程 Pi / 核心审批 / 控制端 Chrome', async () => {
       report.remote = await remoteCheck({ ...driver, executor, origin: site.origin })
     })
   report.success = true
 } catch (error) {
-  report.error = error.stack ?? String(error)
+  report.error ??= error.stack ?? String(error)
   console.error(report.error)
   process.exitCode = 1
 } finally {
-  executor?.dispose()
-  cdp?.close()
-  if (child && child.exitCode === null) {
-    child.kill('SIGTERM')
-    await Promise.race([
-      new Promise((resolve) => child.once('exit', resolve)),
-      new Promise((resolve) => setTimeout(resolve, 3000)),
-    ])
-    if (child.exitCode === null) child.kill('SIGKILL')
-  }
-  await bridge?.close()
-  if (site) await new Promise((resolve) => site.server.close(resolve))
+  await cleanup()
   report.elapsedMs = Date.now() - started
   writeFileSync(join(output, 'report.json'), JSON.stringify(report, null, 2))
+  writeFileSync(join(outputBase, 'report.json'), JSON.stringify({ ...report, output }, null, 2))
   if (!report.success) writeFileSync(join(output, 'chrome.log'), browserLog)
-  rmSync(work, { recursive: true, force: true })
   console.log(
     `Chrome acceptance: ${report.success ? 'PASS' : 'FAIL'} in ${report.elapsedMs} ms; ${output}`,
   )

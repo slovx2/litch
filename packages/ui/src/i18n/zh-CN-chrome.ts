@@ -1,4 +1,6 @@
 export const zhChrome = {
+  'chrome.instance': '允许使用这个 Chrome',
+  'chrome.instanceNote': '允许代理列出此 Chrome 实例的标签标题和网址。访问页面内容仍需逐来源审批。',
   'chrome.title': 'Chrome',
   'chrome.note': '在这台 Mac 的 Chrome 中操作已登录的网站。每个来源单独审批。',
   'chrome.enable': '允许代理使用 Chrome',

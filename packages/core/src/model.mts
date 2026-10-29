@@ -950,6 +950,7 @@ export interface FormRequest {
 /** 客户端工具要用户点头的事：文字由界面按结构和语言拼（和桌面端的 ClientToolAsk 同形） */
 export type ClientAskView =
   | { kind: 'chromeSignIn'; origin: string; reason: string }
+  | { kind: 'chromeInstance'; instanceId: string; name: string }
   | {
       kind: 'site'
       /** 要访问的网站来源，比如 https://example.com */

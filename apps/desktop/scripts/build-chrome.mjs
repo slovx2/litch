@@ -21,7 +21,19 @@ export async function buildChromeExtension(
     await readFile(new URL('../../../package.json', import.meta.url), 'utf8'),
   )
   await mkdir(output, { recursive: true })
+  const pointer = await build({
+    entryPoints: [
+      fileURLToPath(new URL('../../chrome-extension/src/pointer-world.mts', import.meta.url)),
+    ],
+    bundle: true,
+    platform: 'browser',
+    format: 'iife',
+    target: 'chrome125',
+    write: false,
+    logLevel: 'warning',
+  })
   await build({
+    define: { __LITCH_POINTER_SOURCE__: JSON.stringify(pointer.outputFiles[0].text) },
     entryPoints: [
       fileURLToPath(new URL('../../chrome-extension/src/background.mts', import.meta.url)),
     ],
@@ -34,7 +46,7 @@ export async function buildChromeExtension(
   })
   await writeFile(
     `${output}/manifest.json`,
-    JSON.stringify(
+    `${JSON.stringify(
       {
         manifest_version: 3,
         name: 'Litch Browser',
@@ -48,8 +60,8 @@ export async function buildChromeExtension(
       },
       null,
       2,
-    ) + '\n',
+    )}\n`,
   )
-  await writeFile(`${output}/identity.json`, JSON.stringify({ id, version }) + '\n')
+  await writeFile(`${output}/identity.json`, `${JSON.stringify({ id, version })}\n`)
   return { directory: output, id, version }
 }

@@ -89,7 +89,7 @@
     "client:check:upgrade": "npm run check:upgrade --prefix apps/desktop",
     "client:check:pair": "npm run check:pair --prefix apps/desktop",
     "client:check:tools": "npm run check:client-tools --prefix apps/desktop --",
-    "client:check:chrome": "node scripts/chrome-e2e/run.mjs",
+    "client:check:chrome": "node scripts/chrome-e2e/start.mjs",
     "client:check:tools:remote": "npm run check:tools:remote --prefix apps/desktop",
     "client:check:adapter": "npm run check:adapter --prefix apps/desktop",
     "client:stage:adapter": "npm run stage:adapter --prefix apps/desktop",

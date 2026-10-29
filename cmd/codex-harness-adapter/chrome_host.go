@@ -3,6 +3,7 @@ package main
 // Chrome 的 Native Messaging 宿主只转发受限帧，不执行网页代码或模型命令。
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -21,7 +22,7 @@ type chromeHostConfig struct {
 	ExtensionID string `json:"extensionId"`
 }
 
-func runChromeHost(args []string) error {
+func runChromeHost(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet("chrome-host", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	configPath := flags.String("config", "", "")
@@ -59,7 +60,11 @@ func runChromeHost(args []string) error {
 	done := make(chan error, 2)
 	go func() { done <- chromeNativeToBridge(os.Stdin, conn) }()
 	go func() { done <- chromeBridgeToNative(conn, os.Stdout) }()
-	err = <-done
+	select {
+	case err = <-done:
+	case <-ctx.Done():
+		return nil
+	}
 	if errors.Is(err, io.EOF) {
 		return nil
 	}

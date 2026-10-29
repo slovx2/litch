@@ -4,10 +4,12 @@ import {
   type ChromeReply,
   type ChromeRequest,
 } from '../../../packages/protocol/src/chrome-browser.mjs'
+import { cleanupPointer, disposePointer } from './pointer.mjs'
 import { execute } from './requests.mjs'
 import {
   ChromeFault,
   type ExtensionState,
+  lockTab,
   ownerKey,
   requireGrant,
   saveAttached,
@@ -23,6 +25,7 @@ const state: ExtensionState = {
   chrome,
   epoch: crypto.randomUUID(),
   grants: new Map(),
+  tabLocks: new Map(),
   paused: new Set(),
   generations: new Map(),
   stoppedTurns: new Set(),
@@ -39,12 +42,18 @@ const state: ExtensionState = {
   async revoke(leaseId, reason) {
     const grant = state.grants.get(leaseId)
     if (!grant) return
+    const unlock = lockTab(state, grant.tabId)
     state.grants.delete(leaseId)
     state.paused.delete(leaseId)
     state.console.delete(grant.tabId)
-    await chrome.debugger.detach({ tabId: grant.tabId }).catch(() => {})
-    await saveAttached(state)
-    state.send({ kind: 'revoked', leaseId, reason })
+    try {
+      await disposePointer(state, grant)
+      await chrome.debugger.detach({ tabId: grant.tabId }).catch(() => {})
+      await saveAttached(state)
+      state.send({ kind: 'revoked', leaseId, reason })
+    } finally {
+      unlock()
+    }
   },
 }
 
@@ -97,6 +106,8 @@ chrome.tabs.onUpdated.addListener((tabId: number) => {
     .catch(() => {})
 })
 chrome.webNavigation.onCommitted.addListener((event: { tabId: number }) => {
+  for (const grant of state.grants.values())
+    if (grant.tabId === event.tabId) void disposePointer(state, grant)
   state.console.delete(event.tabId)
   state.generations.set(event.tabId, (state.generations.get(event.tabId) ?? 0) + 1)
   void tabState(state, event.tabId)
@@ -117,7 +128,7 @@ chrome.debugger.onEvent.addListener((source: { tabId?: number }, method: string,
       void requireGrant(state, grant.leaseId, generation)
         .then(() => {
           if (
-            state.paused.has(grant.leaseId) ||
+            state.paused.size ||
             !state.grants.has(grant.leaseId) ||
             (state.generations.get(tabId) ?? 0) !== generation
           )
@@ -249,11 +260,18 @@ function schedule(): void {
 }
 
 async function start(): Promise<void> {
-  const saved = await chrome.storage.session.get(['litchAttached', 'litchStoppedTurns'])
+  const saved = await chrome.storage.session.get([
+    'litchAttached',
+    'litchStoppedTurns',
+    'litchPointerLeases',
+  ])
+  for (const prior of saved.litchPointerLeases ?? [])
+    if (typeof prior.tabId === 'number' && typeof prior.leaseId === 'string')
+      await cleanupPointer(state, prior.tabId, prior.leaseId)
   // 仅撤本扩展登记过的标签，不扫描或接管用户其他调试器。
   for (const tabId of saved.litchAttached ?? [])
     await chrome.debugger.detach({ tabId }).catch(() => {})
-  await chrome.storage.session.remove('litchAttached')
+  await chrome.storage.session.remove(['litchAttached', 'litchPointerLeases'])
   for (const key of saved.litchStoppedTurns ?? [])
     if (typeof key === 'string') state.stoppedTurns.add(key)
   ready = true

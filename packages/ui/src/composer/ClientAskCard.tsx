@@ -44,11 +44,13 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
   const { ask, device } = request
   const remote = device.kind === 'ssh'
   const title = t(
-    ask.kind === 'chromeSignIn'
-      ? 'chrome.signIn'
-      : ask.kind === 'site' && ask.browser === 'chrome'
-        ? 'chrome.approve'
-        : 'clientAsk.site',
+    ask.kind === 'chromeInstance'
+      ? 'chrome.instance'
+      : ask.kind === 'chromeSignIn'
+        ? 'chrome.signIn'
+        : ask.kind === 'site' && ask.browser === 'chrome'
+          ? 'chrome.approve'
+          : 'clientAsk.site',
   )
   /** 信任所有网站要经外壳改设置；普通浏览器里（模拟核心）没有外壳，不出这个按钮 */
   const bridge = ask.kind === 'site' && ask.browser !== 'chrome' ? browserBridge() : undefined
@@ -119,6 +121,14 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
             {t('clientAsk.tool')} <b>{`${request.tool.namespace} · ${request.tool.name}`}</b>
           </span>
         </div>
+        {ask.kind === 'chromeInstance' ? (
+          <>
+            <div className="req-why">{t('chrome.instanceNote')}</div>
+            <div className="well">
+              <b>{ask.name}</b>
+            </div>
+          </>
+        ) : null}
         {ask.kind === 'chromeSignIn' ? (
           <>
             <div className="req-why">{t('chrome.signInNote')}</div>

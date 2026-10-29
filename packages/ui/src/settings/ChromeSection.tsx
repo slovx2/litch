@@ -1,3 +1,4 @@
+import './chrome-section.css'
 import {
   type ChromeSettingsRequest,
   type ChromeSettingsState,
@@ -62,7 +63,9 @@ export function ChromeSection() {
         <>
           <div className="set-rows">
             <div className="set-row">
-              <label htmlFor="chrome-enable">{t('chrome.enable')}</label>
+              <div className="set-switch-text">
+                <label htmlFor="chrome-enable">{t('chrome.enable')}</label>
+              </div>
               <button
                 id="chrome-enable"
                 className="switch"
@@ -124,7 +127,7 @@ export function ChromeSection() {
           {state?.prepared ? (
             <>
               <p className="set-para">{t('chrome.install')}</p>
-              <div className="well">
+              <div className="chrome-extension-path">
                 <code>{state.extensionDirectory}</code>
               </div>
               <p className="set-note">
@@ -145,7 +148,9 @@ export function ChromeSection() {
                 {devices.map((device) =>
                   device ? (
                     <div className="set-row" key={device.id}>
-                      <span>{t.text(device.name)}</span>
+                      <div className="set-switch-text">
+                        <span>{t.text(device.name)}</span>
+                      </div>
                       <button
                         className="switch"
                         type="button"

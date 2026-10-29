@@ -198,10 +198,13 @@ export class ChromeBridge {
             'The call was cancelled; an input already sent may have executed.',
           ),
         )
-        if (request.leaseId)
-          void this.call(instanceId, { op: 'release', leaseId: request.leaseId, args: {} }).catch(
-            () => {},
-          )
+        const leaseId =
+          request.leaseId ??
+          (request.op === 'claim'
+            ? (request.args.grant as { leaseId?: string } | undefined)?.leaseId
+            : undefined)
+        if (leaseId)
+          void this.call(instanceId, { op: 'release', leaseId, args: {} }).catch(() => {})
       }
       const timer = setTimeout(
         () =>

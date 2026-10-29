@@ -1,0 +1,10 @@
+.chrome-extension-path {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--raised);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}

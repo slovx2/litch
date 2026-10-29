@@ -17,6 +17,7 @@ export interface ExtensionState {
   chrome: any
   epoch: string
   grants: Map<string, ChromeGrant>
+  tabLocks: Map<number, number>
   paused: Set<string>
   generations: Map<number, number>
   stoppedTurns: Set<string>
@@ -107,7 +108,7 @@ export async function requireGrant(
       'staleLease',
       'The Chrome lease expired or was revoked. List tabs and claim again.',
     )
-  if (state.paused.has(grant.leaseId))
+  if (state.paused.size)
     throw new ChromeFault(
       'signingIn',
       'The user is signing in. All observation and input are paused.',
@@ -118,6 +119,11 @@ export async function requireGrant(
       'The document changed. Take a fresh snapshot before acting.',
     )
   await documentStamp(state, grant)
+  if (state.grants.get(grant.leaseId) !== grant || grant.expiresAt <= Date.now())
+    throw new ChromeFault('staleLease', 'The lease was revoked during validation.')
+  if (state.paused.size) throw new ChromeFault('signingIn', 'Chrome was paused during validation.')
+  if (generation !== undefined && generation !== (state.generations.get(grant.tabId) ?? 0))
+    throw new ChromeFault('staleDocument', 'The document changed during validation.')
   return grant
 }
 
@@ -144,5 +150,18 @@ export function cdp(
 export async function saveAttached(state: ExtensionState): Promise<void> {
   await state.chrome.storage.session.set({
     litchAttached: [...state.grants.values()].map((grant) => grant.tabId),
+    litchPointerLeases: [...state.grants.values()].map(({ tabId, leaseId }) => ({
+      tabId,
+      leaseId,
+    })),
   })
+}
+
+export function lockTab(state: ExtensionState, tabId: number): () => void {
+  state.tabLocks.set(tabId, (state.tabLocks.get(tabId) ?? 0) + 1)
+  return () => {
+    const count = (state.tabLocks.get(tabId) ?? 1) - 1
+    if (count) state.tabLocks.set(tabId, count)
+    else state.tabLocks.delete(tabId)
+  }
 }

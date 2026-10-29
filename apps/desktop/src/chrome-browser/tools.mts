@@ -65,8 +65,7 @@ export async function executePageTool(
     if (args.origin && args.origin !== chromeOrigin(page.state.url))
       throw new ChromeBridgeError('originNotApproved', 'The sign-in origin does not match the tab.')
     if (page.scripted) await page.history('reload', 30_000)
-    await page.request('show')
-    await page.request('freeze', {}, false)
+    await page.request('freeze')
     page.paused = true
     const release = context.hold?.()
     try {

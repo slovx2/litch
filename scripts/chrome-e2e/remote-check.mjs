@@ -71,11 +71,14 @@ export async function remoteCheck({
       if (answered.has(request.id)) continue
       assert.equal(request.kind, 'clientAsk')
       assert.equal(request.device.kind, 'ssh')
-      assert.equal(request.ask.browser, 'chrome')
+      assert.ok(
+        request.ask.kind === 'chromeInstance' ||
+          (request.ask.kind === 'site' && request.ask.browser === 'chrome'),
+      )
       const option = request.options.find((option) => option.role === 'accept')
       assert.ok(option)
       answered.add(request.id)
-      approvals.push(request.ask.origin)
+      if (request.ask.kind === 'site') approvals.push(request.ask.origin)
       void core.command(
         'session.respond',
         { deviceId, sessionId, requestId: request.id, optionId: option.id },
@@ -135,7 +138,7 @@ export async function remoteCheck({
     )
     const reply = await until(
       () => {
-        if (!view || !view.turns.length || view.turns.some((turn) => turn.status === 'running'))
+        if (!view?.turns.length || view.turns.some((turn) => turn.status === 'running'))
           return false
         return Object.values(view.items)
           .filter((item) => item.kind === 'agentMessage')

@@ -62,6 +62,7 @@ export type ClientToolAsk =
       browser?: 'chrome'
     }
   | { kind: 'chromeSignIn'; origin: string; reason: string }
+  | { kind: 'chromeInstance'; instanceId: string; name: string }
   | {
       /**
        * 内置浏览器请人登录（request_sign_in）：对话里和浏览器面板上同一张卡片（字段同 SignInRequest）。
