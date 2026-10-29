@@ -116,13 +116,16 @@ export class ManagerLines {
     const manager = this.managerFor(parentId)
     if (!manager) return noop
     if (threadId === manager.threadId) return noop
-    if (manager.status === 'ended')
-      throw new ManagerError('managerEnded', 'This manager has ended; no new line work can start.')
+    if (manager.status !== 'active')
+      throw new ManagerError(
+        'managerEnded',
+        'This manager is ending or has ended; no new line work can start.',
+      )
     if (threadId && [...this.reserved.values()].some((entry) => entry.threadId === threadId))
       return noop
     await this.refresh(manager.id)
     // 等读取结束后再同步计数并占位，两个并发 start 不能同时穿过上限。
-    if (this.store.manager(manager.id)?.status === 'ended')
+    if (this.store.manager(manager.id)?.status !== 'active')
       throw new ManagerError('managerEnded', 'This manager has ended.')
     const lines = this.lines(manager.id)
     if (threadId && lines.some((line) => line.threadId === threadId && line.running)) return noop

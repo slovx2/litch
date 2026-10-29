@@ -328,10 +328,11 @@ export const SESSION_EVENT_TAG = 'litch-session-event'
 
 /** 注入文字的种类 */
 export type SessionEventKind =
-  /** 经理的看板答复、第一回合和结束回合；载荷在 manager，notes 为空。 */
+  /** 经理的看板答复、规矩更新、第一回合和结束回合；载荷在 manager，notes 为空。 */
   | 'manager-answers'
   | 'manager-open'
   | 'manager-end'
+  | 'manager-rules'
   /** 子会话的回报，附在用户消息前面 */
   | 'notes'
   /** 子会话都停下了，设备进程替父会话开的回合 */
@@ -372,7 +373,7 @@ export interface SessionQueuedNote extends SessionEventNote {
 }
 
 export interface SessionEvent {
-  /** 三种 manager-* 事件必带；其他事件不带，不改变原有回报的形状。 */
+  /** manager-* 事件必带；其他事件不带，不改变原有回报的形状。 */
   manager?: ManagerEventData
   pendingQuestions?: {
     title: string
@@ -398,7 +399,9 @@ export function formatSessionEvent(event: SessionEvent): string {
         ? 'The user submitted these board answers.'
         : event.kind === 'manager-open'
           ? 'The user created this manager.'
-          : 'The user requested ending this manager.'
+          : event.kind === 'manager-rules'
+            ? 'The user updated this manager’s scope or rules.'
+            : 'The user requested ending this manager.'
     return [
       `<${SESSION_EVENT_TAG} kind="${event.kind}">`,
       `${head} This message is from Litch, not typed by the user. Manager: ${manager.managerId}.`,
@@ -468,7 +471,7 @@ export function formatSessionEvent(event: SessionEvent): string {
  */
 export function parseSessionEvent(text: string): { event: SessionEvent | null; rest: string } {
   const pattern = new RegExp(
-    `^<${SESSION_EVENT_TAG} kind="(notes|wake|remind|manager-answers|manager-open|manager-end)">\\n[\\s\\S]*?<!-- (\\{[\\s\\S]*?\\}) -->\\n</${SESSION_EVENT_TAG}>\\n?`,
+    `^<${SESSION_EVENT_TAG} kind="(notes|wake|remind|manager-answers|manager-open|manager-end|manager-rules)">\\n[\\s\\S]*?<!-- (\\{[\\s\\S]*?\\}) -->\\n</${SESSION_EVENT_TAG}>\\n?`,
   )
   const match = pattern.exec(text)
   if (!match) return { event: null, rest: text }

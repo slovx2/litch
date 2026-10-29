@@ -46,7 +46,7 @@ export function managerRoleRules(scope: string): string {
     'Each turn: identify what arrived (user message, board answers, line reports, Litch events). Apply answers to the plan, notify affected lines with litch_sessions.send, land lasting decisions in the repository under project rules and record their location with update. Check reports before changing item status. Split new requests into items; start in-scope work and raise out-of-scope work as decisions. Update items and use status when the situation materially changes. On user turns, say what changed, what is blocked and what the user needs to do; mention decision titles only, with details on the board. For report-only or event-only turns, update the ledger and reply in one or two sentences.',
     'Ask the user through board decisions, not question lists or suggestion cards in chat. One decision asks one question, with that question as its title. Background must stand alone; give options and a recommendation when useful, what happens without an answer, and basis (files, branches, sessions). Record answers already given in chat with answer; do not ask again. If a question is no longer needed, close it with a reason; never close an answered decision. Prioritize and consolidate excessive pending questions.',
     'Lines cannot see this conversation: make briefs self-contained. Turn scope or product questions in reports into decisions yourself. Serialize or combine lines changing the same files. If a line fails or stalls, reassign or send guidance where possible; raise decisions for the user, or mark an item blocked with a reason. Do not leave stalled lines unattended. Check branches, commits and check results rather than trusting completion claims. Record unverified work on items; create user-owned items for checks only the user can do (real devices, windows, login), instead of marking them done.',
-    'The board records the process; the repository is authoritative. Check the recorded basis before acting; reconcile the board with the repository. Use verify after checking that an object remains valid. Litch does not automatically detect stale basis in this version. Personal and project instructions remain with the harness; do not copy them into these rules.',
+    'The board records the process; the repository is authoritative. Check the recorded basis before acting; reconcile the board with the repository. Use verify after checking that an object remains valid.',
   ].join('\n\n')
 }
 
@@ -116,6 +116,17 @@ export function managerLineRules(name: string, dispatch: ManagerDispatchSettings
   ].join('\n')
 }
 
+/** 规矩更新由设备送事件，用户原文保留，覆盖当前上下文里的旧范围与旧规矩。 */
+export function managerRulesText(scope: string, rules: string): string {
+  return [
+    'The user changed this manager’s settings. The following scope and custom rules replace the previous ones. Apply them to the current work and future planning.',
+    `Current scope:\n${scope}`,
+    rules
+      ? `Current custom rules:\n${rules}`
+      : 'The user cleared the custom rules; no previous custom rules remain in effect.',
+  ].join('\n\n')
+}
+
 /** 第 9 层：有第一件事时按用户原文执行；默认开场必须等用户说开始。由设备包成 manager-open 事件。 */
 export function managerOpenText(scope: string, firstTask = ''): string {
   return firstTask.trim()
@@ -128,7 +139,7 @@ export function managerEndText(template: ManagerTemplate): string {
   return [
     'The user is ending this manager. Write a summary with completed work, unfinished work, and remaining decisions and items; save it with status. Land decided but unrecorded outcomes in the repository under project rules and record their locations. Leave unresolved objects as they are. Do not start new lines.',
     template === 'release' ? 'Include a draft of release notes in the summary.' : '',
-    'Ask whether the user wants your lines archived. Do not archive them without explicit agreement. The board becomes read-only after this finalization turn.',
+    'During this finalization turn, use status for the summary, close obsolete open decisions, update items and decision landed locations, and verify existing objects. Do not add new board objects or record new answers. Ask whether the user wants your lines archived directly in your final reply; do not archive them without explicit agreement. The board becomes read-only after this finalization turn.',
   ]
     .filter(Boolean)
     .join('\n')

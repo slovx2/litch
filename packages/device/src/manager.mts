@@ -1,7 +1,11 @@
 // litchManager 的设备入口：建会话、读看板、投递持久事件，以及只向声明过的连接广播。
 import { randomUUID } from 'node:crypto'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
-import { managerEndText, managerOpenText } from '../../protocol/src/client-tools-manager.mjs'
+import {
+  managerEndText,
+  managerOpenText,
+  managerRulesText,
+} from '../../protocol/src/client-tools-manager.mjs'
 import { PRESENTATION_SPEC } from '../../protocol/src/client-tools-presentation.mjs'
 import { ruledNamespaces } from '../../protocol/src/codex-developer-instructions.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
@@ -16,6 +20,7 @@ import {
 import { formatSessionEvent, parseSessionEvent } from '../../protocol/src/session-tree.mjs'
 import type { DeviceToolCall } from './device-tools.mjs'
 import { isDecision, ManagerBoardWriter } from './manager-board.mjs'
+import { ManagerEndings } from './manager-ending.mjs'
 import { ManagerLines } from './manager-lines.mjs'
 import { managerTools } from './manager-rules.mjs'
 import { ManagerStore, managerNow, openManagerDatabase } from './manager-store.mjs'
@@ -34,6 +39,7 @@ import { DeviceError, isObject } from './wire.mjs'
 export class DeviceManagers {
   readonly store: ManagerStore
   readonly lines: ManagerLines
+  readonly endings: ManagerEndings
   readonly writer: ManagerBoardWriter
   private readonly draining = new Map<string, Promise<void>>()
   private readonly timer: NodeJS.Timeout
@@ -50,6 +56,7 @@ export class DeviceManagers {
     this.born = born
     this.store = new ManagerStore(openManagerDatabase(stateDir))
     this.lines = new ManagerLines(this.store, tree)
+    this.endings = new ManagerEndings(this.store, tree, (id) => this.changed(id))
     this.writer = new ManagerBoardWriter(
       this.store,
       (managerId, threadId) =>
@@ -64,7 +71,13 @@ export class DeviceManagers {
       }
     })
     this.timer = setInterval(() => {
-      for (const id of new Set(this.store.deliveries().map((event) => event.managerId)))
+      for (const id of new Set([
+        ...this.store.deliveries().map((event) => event.managerId),
+        ...this.store
+          .managers()
+          .filter((manager) => manager.status === 'ending')
+          .map((manager) => manager.id),
+      ]))
         this.kick(id)
     }, 1000)
     this.timer.unref()
@@ -223,8 +236,18 @@ export class DeviceManagers {
         this.store.transaction(() => {
           this.store.saveManager(after)
           this.store.record(id, 'manager', 'user', before, after, 'Manager settings updated')
+          if (before.scope !== after.scope || before.rules !== after.rules)
+            this.store.enqueue(
+              id,
+              formatSessionEvent({
+                kind: 'manager-rules',
+                notes: [],
+                manager: { managerId: id, text: managerRulesText(after.scope, after.rules) },
+              }),
+            )
         })
         this.rememberRules(after)
+        this.kick(id)
         if (patch.name !== undefined) {
           const link = await this.tree.link(after.harness)
           await link
@@ -239,27 +262,30 @@ export class DeviceManagers {
       case MANAGER_METHOD.end: {
         keys(params, ['managerId'])
         const before = this.store.manager(id) as Manager
-        if (before.status !== 'ended') {
+        if (before.status === 'active') {
           this.store.transaction(() => {
             const after: Manager = {
               ...before,
-              status: 'ended',
-              endedAt: managerNow(),
+              status: 'ending',
+              endedAt: null,
               updatedAt: managerNow(),
             }
             this.store.saveManager(after)
-            this.store.record(id, 'manager', 'user', before, after, 'Manager ended')
-            this.store.enqueue(
+            this.store.record(
               id,
-              formatSessionEvent({
-                kind: 'manager-end',
-                notes: [],
-                manager: {
-                  managerId: id,
-                  text: `${managerEndText(before.template)}\nThe board is already read-only. Give the final summary and archival question in this conversation; do not call board write tools.`,
-                },
-              }),
+              'manager',
+              'user',
+              before,
+              after,
+              'Manager finalization requested',
             )
+            const message = formatSessionEvent({
+              kind: 'manager-end',
+              notes: [],
+              manager: { managerId: id, text: managerEndText(before.template) },
+            })
+            const eventId = this.store.enqueue(id, message)
+            this.store.beginEnding(id, eventId, message)
           })
           this.changed(id)
           this.kick(id)
@@ -377,7 +403,16 @@ export class DeviceManagers {
           lines: board.lines.filter((line) => line.running),
         }
       } else {
-        result = this.writer.tool(manager.id, call.tool, call.arguments)
+        if (
+          manager.status === 'ending' &&
+          call.tool !== 'get' &&
+          !(await this.endings.canWrite(manager, call.turnId))
+        )
+          throw new ManagerError(
+            'managerEnded',
+            'Only the manager-end finalization turn can write while this manager is ending.',
+          )
+        result = this.writer.tool(manager.id, call.tool, call.arguments, call.turnId)
         if (call.tool !== 'get') this.changed(manager.id)
       }
       return { success: true, contentItems: [{ type: 'inputText', text: JSON.stringify(result) }] }
@@ -400,6 +435,7 @@ export class DeviceManagers {
   private async drain(id: string): Promise<void> {
     const manager = this.store.manager(id)
     if (!manager) return
+    if (manager.status === 'ending') await this.endings.recover(id)
     for (const event of this.store.deliveries(id)) {
       if (this.closed) return
       const parsed = parseSessionEvent(event.text)
@@ -410,9 +446,13 @@ export class DeviceManagers {
         event.text,
         event.id,
         manager.effort,
+        parsed.event?.kind === 'manager-end'
+          ? { startOnly: true, onStarted: (turnId) => this.endings.started(id, turnId) }
+          : {},
       )
       if (this.closed || !sent) return
       this.store.delivered(event.id)
+      if (parsed.event?.kind === 'manager-end') await this.endings.recover(id)
     }
   }
   async close(): Promise<void> {

@@ -24,6 +24,8 @@ const MIGRATIONS = [
    CREATE INDEX changes_manager ON changes(manager_id,seq);
    CREATE TABLE deliveries(seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, manager_id TEXT NOT NULL, text TEXT NOT NULL);
    CREATE TABLE reports(thread_id TEXT PRIMARY KEY, body TEXT NOT NULL);`,
+  // 收尾回合与投递事件一起留存；重启后按事件原文找回回合，不能把普通回合误认作收尾。
+  `CREATE TABLE endings(manager_id TEXT PRIMARY KEY, event_id TEXT NOT NULL, text TEXT NOT NULL, turn_id TEXT);`,
 ] as const
 export const MANAGER_SCHEMA_VERSION = MIGRATIONS.length
 export const managerNow = () => Math.floor(Date.now() / 1000)
@@ -32,6 +34,11 @@ export interface ManagerDelivery {
   id: string
   managerId: string
   text: string
+}
+export interface ManagerEnding {
+  eventId: string
+  text: string
+  turnId: string | null
 }
 export interface LineReport {
   text: string
@@ -177,10 +184,12 @@ export class ManagerStore {
       .prepare('INSERT INTO changes(manager_id,body) VALUES(?,?)')
       .run(managerId, JSON.stringify(change))
   }
-  enqueue(managerId: string, text: string): void {
+  enqueue(managerId: string, text: string): string {
+    const id = randomUUID()
     this.db
       .prepare('INSERT INTO deliveries(id,manager_id,text) VALUES(?,?,?)')
-      .run(randomUUID(), managerId, text)
+      .run(id, managerId, text)
+    return id
   }
   deliveries(managerId?: string): ManagerDelivery[] {
     return this.db
@@ -204,6 +213,22 @@ export class ManagerStore {
         'INSERT INTO reports VALUES(?,?) ON CONFLICT(thread_id) DO UPDATE SET body=excluded.body',
       )
       .run(threadId, JSON.stringify(report))
+  }
+  beginEnding(managerId: string, eventId: string, text: string): void {
+    this.db.prepare('INSERT INTO endings VALUES(?,?,?,NULL)').run(managerId, eventId, text)
+  }
+  ending(managerId: string): ManagerEnding | null {
+    const row = this.db.prepare('SELECT * FROM endings WHERE manager_id=?').get(managerId)
+    return row
+      ? {
+          eventId: String(row.event_id),
+          text: String(row.text),
+          turnId: row.turn_id === null ? null : String(row.turn_id),
+        }
+      : null
+  }
+  setEndingTurn(managerId: string, turnId: string): void {
+    this.db.prepare('UPDATE endings SET turn_id=? WHERE manager_id=?').run(turnId, managerId)
   }
   close(): void {
     this.db.close()
