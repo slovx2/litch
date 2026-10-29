@@ -7,8 +7,16 @@
 //
 // Electron 自己的许可（LICENSE、LICENSES.chromium.html）由打包器放在应用里，不在这里管；
 // 自带的适配器那一份在 Contents/Resources/adapter 下面，带着它自己的 node_modules 和里面的许可文件。
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url))
@@ -20,23 +28,29 @@ const ROOTS = [here('../../../packages/ui'), here('..')]
 const LICENSE_FILE = /^(licen[sc]e|copying|notice)(\.|-|$)/i
 
 /** 顺着 dependencies 走到底。返回 名字@版本 → 包的目录 */
-function closure() {
+function dependencyDirectory(from, name) {
+  for (let current = realpathSync(from); ; current = dirname(current)) {
+    const candidate = join(current, 'node_modules', name)
+    if (existsSync(join(candidate, 'package.json'))) return realpathSync(candidate)
+    if (dirname(current) === current) break
+  }
+  throw new Error(`${from} 的依赖 ${name} 没有装，先装依赖再打包`)
+}
+
+function closure(roots) {
   const found = new Map()
-  for (const root of ROOTS) {
-    const modules = join(root, 'node_modules')
-    const walk = (name) => {
-      const dir = join(modules, name)
-      if (!existsSync(join(dir, 'package.json'))) {
-        throw new Error(`${root} 的依赖 ${name} 没有装（${dir}），先装依赖再打包`)
-      }
+  for (const root of roots) {
+    const walk = (from, name) => {
+      // 每个包从自身位置找依赖，保留嵌套安装的不同版本；不能只查项目顶层。
+      const dir = dependencyDirectory(from, name)
       const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
       const key = `${manifest.name}@${manifest.version}`
       if (found.has(key)) return
       found.set(key, { dir, manifest })
-      for (const dependency of Object.keys(manifest.dependencies ?? {})) walk(dependency)
+      for (const dependency of Object.keys(manifest.dependencies ?? {})) walk(dir, dependency)
     }
     const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-    for (const name of Object.keys(manifest.dependencies ?? {})) walk(name)
+    for (const name of Object.keys(manifest.dependencies ?? {})) walk(root, name)
   }
   return found
 }
@@ -46,10 +60,10 @@ function closure() {
  * 外加两份清单：给人看的 INDEX.txt，给应用读的 index.json（包名、版本、声明的许可、文件名）。
  * 有包找不到许可文件就报错，不出一个缺着的包。返回收了哪些包。
  */
-export function collectLicenses(out) {
+export function collectLicenses(out, roots = ROOTS) {
   rmSync(out, { recursive: true, force: true })
   mkdirSync(out, { recursive: true })
-  const packages = [...closure()].sort(([a], [b]) => a.localeCompare(b))
+  const packages = [...closure(roots)].sort(([a], [b]) => a.localeCompare(b))
   const index = []
   /** 给应用自己读的清单（“关于”里的许可一览，见 src/about.mts） */
   const listed = []
