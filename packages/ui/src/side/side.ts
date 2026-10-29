@@ -185,6 +185,12 @@ export function showSideTab(tab: string): void {
   setOpen(true)
 }
 
+/** 代理预览自动出现时保留用户的键盘焦点，不增加人工打开计数。 */
+export function showSideTabPassive(tab: string): void {
+  if (viewing) opened.add(viewing)
+  publish({ ...withTab(tab), open: true, raised: side.raised })
+}
+
 export interface SideLayout {
   /**
    * docked：窗口够宽，对话留够了 MAIN_MIN，面板在 SIDE_MIN 和想要的宽度之间；

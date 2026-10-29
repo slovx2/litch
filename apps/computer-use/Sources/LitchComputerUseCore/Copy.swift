@@ -35,6 +35,10 @@ public enum Copy {
     }
   }
 
+  public static func captureNotice(_ language: Language) -> String {
+    language == .zh ? "首次采集若弹出屏幕访问确认，请点“允许”" : "If macOS asks for screen access, click Allow"
+  }
+
   /// 同时在操作几个应用时标题里的应用名
   public static func apps(_ language: Language, names: [String]) -> String {
     switch language {

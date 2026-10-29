@@ -3175,6 +3175,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
 
     subscribe(topic, sink) {
+      if (topic.kind === 'automationPreview') {
+        sink.snapshot(null)
+        return () => {}
+      }
       // 管理数据有自己的一套订阅者
       if (topic.kind === 'manage') return manage.subscribe(topic.deviceId, sink)
       // 终端也是：列表和各个终端的输出

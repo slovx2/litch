@@ -36,6 +36,7 @@ export type { HelperAccess, HelperRequester } from './executor-shared.mjs'
 export { sessionKey } from './executor-shared.mjs'
 
 export interface ComputerExecutorOptions {
+  onInvocation?(invocation: ClientToolInvocation, session: string): void
   helper: HelperAccess
   /** 这台桌面的平台：win32 走 Windows 那一套，别的按 macOS */
   platform?: string
@@ -167,7 +168,15 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
       )
     }
     const client = await helper.client()
-    const request = { ...params, app: found.bundleId, session: sessionKey(invocation) }
+    const session = sessionKey(invocation)
+    options.onInvocation?.(invocation, session)
+    const request = {
+      ...params,
+      app: found.bundleId,
+      session,
+      turnId: invocation.turnId,
+      actionId: invocation.id,
+    }
     const result = await client.request(method, request, CALL_TIMEOUT, signal)
     if (method === 'getAppState') return stateResponse(result as AppStateResult)
     return text((result as ActionResult).text)

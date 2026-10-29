@@ -6,6 +6,7 @@
 // 这里不引 electron：要的几样（平台、是否打包、资源目录、用户数据目录、版本、语言）由调用方传进来，方便测试。
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { ClientToolInvocation } from '../client-tools/types.mjs'
 import { createComputerExecutor } from './executor.mjs'
 import { MacLauncher } from './launcher-mac.mjs'
 import { WinLauncher, type WinLauncherOptions } from './launcher-win.mjs'
@@ -23,6 +24,9 @@ export const HELPER_APP_NAME = 'Litch Computer Use.app'
 export const HELPER_EXE_NAME = 'litch-computer-use.exe'
 
 export interface ComputerUseOptions {
+  onAutomation?(notice: unknown): void
+  onDisconnected?(): void
+  onInvocation?(invocation: ClientToolInvocation, session: string): void
   /** 这台桌面的平台（process.platform）：darwin、win32 */
   platform: string
   /** 桌面端的用户数据目录（app.getPath('userData')） */
@@ -94,6 +98,8 @@ export function createComputerUse(options: ComputerUseOptions) {
         version: options.version,
       })
   const supervisor = new HelperSupervisor({
+    ...(options.onAutomation ? { onAutomation: options.onAutomation } : {}),
+    ...(options.onDisconnected ? { onDisconnected: options.onDisconnected } : {}),
     launcher,
     lang: () => lang,
     ...(options.log ? { log: options.log } : {}),
@@ -104,7 +110,11 @@ export function createComputerUse(options: ComputerUseOptions) {
       options.onStopped?.(notice)
     },
   })
-  const executor = createComputerExecutor({ helper: supervisor, platform: options.platform })
+  const executor = createComputerExecutor({
+    helper: supervisor,
+    platform: options.platform,
+    ...(options.onInvocation ? { onInvocation: options.onInvocation } : {}),
+  })
 
   return {
     platform: windows ? ('win32' as const) : ('darwin' as const),

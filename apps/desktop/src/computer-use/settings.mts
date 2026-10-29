@@ -128,6 +128,7 @@ export function createComputerUseSettings(
       last = {
         accessibility: permissions.accessibility,
         screenRecording: permissions.screenRecording,
+        ...(permissions.captureStatus ? { captureStatus: permissions.captureStatus } : {}),
       }
       return { platform, helper: 'ready', permissions: { ...last } }
     } catch (error) {

@@ -14,6 +14,9 @@ export type HelperErrorKind =
   | 'unauthorized'
   | 'invalid'
   | 'permission'
+  | 'capturePending'
+  | 'captureDenied'
+  | 'captureFailed'
   | 'notFound'
   | 'stopped'
   | 'userActive'
@@ -86,6 +89,7 @@ export interface HelloResult {
 export interface PermissionStatus {
   accessibility: boolean
   screenRecording: boolean
+  captureStatus?: 'untested' | 'pending' | 'ready' | 'denied' | 'failed'
 }
 
 export interface HelperApp {

@@ -176,6 +176,8 @@ final class Connection {
   /// 握手过了
   var authenticated = false
   private var open = true
+  private let requests = DispatchQueue(label: "litch.helper.requests")
+  var isOpen: Bool { writeLock.lock(); defer { writeLock.unlock() }; return open }
 
   init(id: Int, fd: Int32, server: Server) {
     self.id = id
@@ -191,16 +193,9 @@ final class Connection {
     writeLock.lock()
     defer { writeLock.unlock() }
     guard open else { return }
-    data.withUnsafeBytes { raw in
-      var offset = 0
-      while offset < raw.count {
-        let written = write(fd, raw.baseAddress! + offset, raw.count - offset)
-        if written < 0 {
-          if errno == EINTR { continue }
-          return
-        }
-        offset += written
-      }
+    if !SocketWriter.write(data, to: fd) {
+      // 半帧不可重试；唤醒读取线程统一撤销租约、停止媒体并关闭连接。
+      Darwin.shutdown(fd, SHUT_RDWR)
     }
   }
 
@@ -227,6 +222,25 @@ final class Connection {
   /// 处理一帧；回 false 表示要断开
   private func dispatch(_ frame: JSONValue) -> Bool {
     guard let message = RPCMessage.parse(frame) else { return true }
+    let method: String
+    switch message {
+    case .notification(let name, _): method = name
+    case .request(_, let name, _): method = name
+    }
+    // 读循环始终能处理取消/停止和帧确认，长文本/等待用户空闲不阻塞控制面。
+    let controls = ["cancelAction", "turnEnded", "stopSession", "takeover", "previewHide", "previewAck",
+      "previewSubscribe", "previewPin", "previewUnpin"]
+    if authenticated && !controls.contains(method) {
+      requests.async { [weak self] in
+        guard let self, self.isOpen else { return }
+        _ = self.execute(message)
+      }
+      return true
+    }
+    return execute(message)
+  }
+
+  private func execute(_ message: RPCMessage) -> Bool {
     switch message {
     case .notification(let method, let params):
       _ = try? handler?.handle(method: method, params: params)

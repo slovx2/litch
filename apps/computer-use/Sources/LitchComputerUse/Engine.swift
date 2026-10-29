@@ -20,13 +20,15 @@ import LitchComputerUseCore
 
 /// 一个会话里一个应用的状态
 struct AppSession {
+  var pid: pid_t?
+  var launchedAt: Date?
   var book = AXIndexBook()
   /// 最近一次读树时的系统对象
   var handles: [AXUIElement] = []
   /// 最近一次读树时各编号对应的行
   var lines: [Int: AXLine] = [:]
   /// 最近一次截图：截图像素大小、截图里窗口在屏幕上的位置、当时辅助功能报的窗口位置
-  var shot: (image: Size, windowFrame: Rect, axFrame: Rect)?
+  var shot: (image: Size, windowFrame: Rect, axFrame: Rect, windowID: CGWindowID)?
 }
 
 final class Engine: ConnectionHandler {
@@ -36,11 +38,19 @@ final class Engine: ConnectionHandler {
   private let lock = NSLock()
   private var apps: [String: [String: AppSession]] = [:]
   private var stopped: [String: Set<String>] = [:]
+  private var cancelled: Set<String> = []
+  private var endedTurns: Set<String> = []
+  private var turns: [String: String] = [:]
+  private var epochs: [String: Int] = [:]
+  let preview: PreviewHub
 
   init(connection: Connection, mode: PeerAuth.Mode, ownTeam: String?) {
     self.connection = connection
     self.mode = mode
     self.ownTeam = ownTeam
+    self.preview = PreviewHub { [weak connection] value in
+      connection?.send(RPC.notification("automation", value))
+    }
   }
 
   func handle(method: String, params: JSONValue) throws -> JSONValue {
@@ -49,6 +59,36 @@ final class Engine: ConnectionHandler {
       throw RPCError(.unauthorized, "say hello first")
     }
     switch method {
+    case "backgroundCapabilities": return ["mouse": .string(BackgroundMouse.status), "sipEnabledVerified": false]
+    case "cancelAction":
+      lock.lock(); cancelled.insert(params["actionId"]?.stringValue ?? ""); lock.unlock()
+      return [:]
+    case "previewSubscribe": preview.subscribe(try string(params, "session")); return [:]
+    case "previewPin":
+      let session = try string(params, "session")
+      preview.floating.onStop = { [weak self] in
+        self?.userStopped(session: session, appKey: "*", name: "Computer Use")
+        if let self { Activity.shared.end(engine: self, session: session) }
+      }
+      preview.pin(session); return [:]
+    case "previewUnpin": preview.unpin(); return [:]
+    case "previewHide": preview.hide(try string(params, "session")); return [:]
+    case "previewAck":
+      preview.ack(session: try string(params, "session"), token: try string(params, "streamId"), seq: params["seq"]?.intValue ?? -1)
+      return [:]
+    case "stopSession", "takeover":
+      let session = try string(params, "session")
+      let target = preview.target(session)
+      lock.lock(); stopped[session, default: []].insert("*"); epochs[session, default: 0] += 1; lock.unlock()
+      InputOwnership.shared.end(prefix: ownerPrefix(session))
+      preview.end(session)
+      Activity.shared.end(engine: self, session: session)
+      // 接管是用户明确请求；先撤输入所有权，随后才可激活窗口。
+      if method == "takeover", let (app, window) = target {
+        try InputOwnership.shared.waitUntilIdle()
+        try Apps.activate(app, window: window)
+      }
+      return [:]
     case "diagnostics": return Diagnostics.collect()
     case "permissions": return Permissions.status()
     case "openSettings":
@@ -64,6 +104,7 @@ final class Engine: ConnectionHandler {
       return ["opened": .bool(opened)]
     case "setLanguage":
       Overlay.shared.setLanguage(Copy.language(params["lang"]?.stringValue))
+      preview.floating.setLanguage(Copy.language(params["lang"]?.stringValue))
       return [:]
     case "listApps": return ["apps": .array(Apps.list().map(\.json))]
     case "getAppState": return try getAppState(params)
@@ -77,9 +118,13 @@ final class Engine: ConnectionHandler {
     case "turnEnded":
       let session = try string(params, "session")
       lock.lock()
+      epochs[session, default: 0] += 1
+      if let turn = turns[session] { endedTurns.insert("\(session)|\(turn)") }
       apps[session] = nil
       stopped[session] = nil
       lock.unlock()
+      InputOwnership.shared.end(prefix: ownerPrefix(session))
+      preview.end(session)
       Activity.shared.end(engine: self, session: session)
       return [:]
     case "shutdown":
@@ -92,6 +137,8 @@ final class Engine: ConnectionHandler {
   }
 
   func closed() {
+    InputOwnership.shared.end(prefix: "\(ObjectIdentifier(self))|")
+    preview.close()
     Activity.shared.endAll(engine: self)
   }
 
@@ -115,6 +162,7 @@ final class Engine: ConnectionHandler {
     }
     connection.authenticated = true
     Overlay.shared.setLanguage(Copy.language(params["lang"]?.stringValue))
+    preview.floating.setLanguage(Copy.language(params["lang"]?.stringValue))
     let auth: String
     switch mode {
     case .team: auth = "team"
@@ -157,7 +205,10 @@ final class Engine: ConnectionHandler {
   func userStopped(session: String, appKey: String, name: String) {
     lock.lock()
     stopped[session, default: []].insert(appKey)
+    epochs[session, default: 0] += 1
     lock.unlock()
+    InputOwnership.shared.end(prefix: ownerPrefix(session))
+    preview.end(session)
     connection?.send(
       RPC.notification(
         "stopped",
@@ -170,7 +221,10 @@ final class Engine: ConnectionHandler {
     let app = try Apps.resolve(try string(params, "app"))
     let key = Engine.appKey(app)
     lock.lock()
-    let isStopped = stopped[session]?.contains(key) == true
+    let turn = params["turnId"]?.stringValue ?? ""
+    let ended = endedTurns.contains("\(session)|\(turn)")
+    if turns[session] != turn { stopped[session] = nil; turns[session] = turn; preview.resume(session) }
+    let isStopped = stopped[session]?.contains(key) == true || stopped[session]?.contains("*") == true || ended
     lock.unlock()
     if isStopped {
       throw RPCError(
@@ -179,27 +233,56 @@ final class Engine: ConnectionHandler {
       )
     }
     try Permissions.require()
+    try Engine.requireDesktop()
+    withState(session, key) { state in
+      if state.pid != app.processIdentifier || state.launchedAt != app.launchDate {
+        state = AppSession(); state.pid = app.processIdentifier; state.launchedAt = app.launchDate
+      }
+    }
     Activity.shared.begin(engine: self, session: session, appKey: key, name: Engine.name(app))
     return (session, app, key)
+  }
+
+  func ownerPrefix(_ session: String) -> String { "\(ObjectIdentifier(self))|\(session)|" }
+  static func requireDesktop() throws {
+    let blocked = ["com.apple.loginwindow", "com.apple.SecurityAgent", "com.apple.UserNotificationCenter"]
+    if let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier, blocked.contains(front) {
+      throw RPCError(.userActive, "A macOS login or permission dialog is in front. The user must finish it before Computer Use can continue.")
+    }
+  }
+  func actionEpoch(_ session: String) -> Int { lock.lock(); defer { lock.unlock() }; return epochs[session] ?? 0 }
+  func actionAllowed(_ id: String, session: String, epoch: Int) -> Bool {
+    lock.lock(); defer { lock.unlock() }
+    return !cancelled.contains(id) && (epochs[session] ?? 0) == epoch && connection?.isOpen == true
   }
 
   // MARK: 取状态
 
   private func getAppState(_ params: JSONValue) throws -> JSONValue {
+    let epoch = actionEpoch(params["session"]?.stringValue ?? "")
     let (session, app, key) = try prepare(params)
     let full = params["full"]?.boolValue == true
     let pid = app.processIdentifier
     var read: AXReader.Result
     var shot: Screenshot
+    preview.status(session: session, app: app, state: "capturePending")
+    Overlay.shared.captureNotice(true)
+    defer { Overlay.shared.captureNotice(false) }
     do {
       read = try AXReader().read(pid: pid)
       shot = try Capture.window(pid: pid, axFrame: read.windowFrame)
-    } catch let error as RPCError where error.kind == .notFound {
-      // 窗口不在屏幕上（被收进程序坞、在别的桌面）：切到前台再试一次
-      try Apps.activate(app, window: nil)
-      Thread.sleep(forTimeInterval: 0.3)
-      read = try AXReader().read(pid: pid)
-      shot = try Capture.window(pid: pid, axFrame: read.windowFrame)
+    } catch {
+      let failure = CaptureAccess.error(error)
+      preview.status(session: session, app: app, state: failure.kind.rawValue)
+      throw failure
+    }
+    guard actionAllowed(params["actionId"]?.stringValue ?? "", session: session, epoch: epoch) else {
+      throw RPCError(.stopped, "Observation cancelled.")
+    }
+    do { try Engine.requireDesktop() } catch {
+      _ = CaptureAccess.begin()
+      preview.status(session: session, app: app, state: "capturePending")
+      throw CaptureAccess.pendingError
     }
     let (text, isDiff) = withState(session, key) { state -> (String, Bool) in
       let lines = state.book.lines(for: read.root)
@@ -207,9 +290,11 @@ final class Engine: ConnectionHandler {
       state.book.remember(lines)
       state.handles = read.handles
       state.lines = Dictionary(lines.map { ($0.index, $0) }, uniquingKeysWith: { a, _ in a })
-      state.shot = (shot.size, shot.windowFrame, read.windowFrame)
+      state.shot = (shot.size, shot.windowFrame, read.windowFrame, shot.windowID)
       return (diff ?? AXText.render(lines), diff != nil)
     }
+    preview.observe(session: session, app: app)
+    preview.status(session: session, app: app, state: "ready")
     return [
       "app": [
         "name": .string(Engine.name(app)), "bundleId": .optional(app.bundleIdentifier),

@@ -2,6 +2,7 @@
 
 import { enAside } from './en-aside.ts'
 import { enAsks } from './en-asks.ts'
+import { enAutomation } from './en-automation.ts'
 import { enBackground } from './en-background.ts'
 import { enBimport } from './en-bimport.ts'
 import { enComments } from './en-comments.ts'
@@ -27,6 +28,7 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
 
 export const en: Record<MessageKey, Entry> = {
   ...enPower,
+  ...enAutomation,
   ...enTasks,
   ...enAsks,
   ...enPairing,

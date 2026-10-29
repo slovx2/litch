@@ -8,6 +8,7 @@ import ScreenCaptureKit
 import UniformTypeIdentifiers
 
 struct Screenshot {
+  var windowID: CGWindowID
   var data: Data
   var mime: String
   /// 截图的像素大小（模型看到的坐标系）
@@ -18,22 +19,41 @@ struct Screenshot {
 
 enum Capture {
   static let jpegQuality = 0.85
+  private static let pendingLock = NSLock()
+  private static var pendingCapture = false
 
   /// 截 pid 的一个窗口：在它屏幕上的普通窗口里挑和 axFrame 最接近的那个
   static func window(pid: pid_t, axFrame: Rect) throws -> Screenshot {
+    let admitted = pendingLock.withLock {
+      if pendingCapture { return false }
+      pendingCapture = true; return true
+    }
+    guard admitted else { throw CaptureAccess.pendingError }
     // 截图接口是异步的，这里在连接的线程上等它（每条连接本来就是一个一个处理请求）
     let box = Outcome()
-    Task.detached {
+    let attempt = CaptureAccess.begin()
+    let task = Task.detached {
+      defer { pendingLock.withLock { pendingCapture = false } }
       do {
         box.set(.success(try await capture(pid: pid, axFrame: axFrame)))
       } catch {
         box.set(.failure(error))
       }
     }
-    guard let outcome = box.wait(seconds: 10) else {
-      throw RPCError(.failed, "Taking the screenshot timed out. Try again.")
+    guard let outcome = box.wait(seconds: 8) else {
+      task.cancel()
+      CaptureAccess.finish(attempt, "pending")
+      throw CaptureAccess.pendingError
     }
-    return try outcome.get()
+    do {
+      let shot = try outcome.get()
+      CaptureAccess.finish(attempt, "ready")
+      return shot
+    } catch {
+      let failure = CaptureAccess.error(error)
+      CaptureAccess.finish(attempt, failure.kind == .captureDenied ? "denied" : "failed")
+      throw failure
+    }
   }
 
   /// 跨线程交一次结果
@@ -63,7 +83,7 @@ enum Capture {
       content = try await SCShareableContent.excludingDesktopWindows(
         true, onScreenWindowsOnly: true)
     } catch {
-      throw RPCError(.permission, "Screen Recording")
+      throw CaptureAccess.error(error)
     }
     let candidates = content.windows.filter {
       $0.owningApplication?.processID == pid && $0.windowLayer == 0 && $0.frame.width > 1
@@ -90,7 +110,7 @@ enum Capture {
       contentFilter: filter, configuration: configuration)
     guard let data = jpeg(image) else { throw RPCError(.failed, "Could not encode the screenshot.") }
     return Screenshot(
-      data: data, mime: "image/jpeg",
+      windowID: target.windowID, data: data, mime: "image/jpeg",
       size: Size(width: Double(image.width), height: Double(image.height)),
       windowFrame: Rect(
         x: Double(frame.origin.x), y: Double(frame.origin.y), width: Double(frame.width),
@@ -102,14 +122,14 @@ enum Capture {
       + abs(Double(frame.width) - target.size.width) + abs(Double(frame.height) - target.size.height)
   }
 
-  static func jpeg(_ image: CGImage) -> Data? {
+  static func jpeg(_ image: CGImage, quality: Double = jpegQuality) -> Data? {
     let data = NSMutableData()
     guard
       let destination = CGImageDestinationCreateWithData(
         data, UTType.jpeg.identifier as CFString, 1, nil)
     else { return nil }
     CGImageDestinationAddImage(
-      destination, image, [kCGImageDestinationLossyCompressionQuality: jpegQuality] as CFDictionary)
+      destination, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
     guard CGImageDestinationFinalize(destination) else { return nil }
     return data as Data
   }

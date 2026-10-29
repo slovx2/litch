@@ -130,6 +130,16 @@ function Permissions({ bridge }: { bridge: ComputerUseBridge }) {
         {t('settings.computer.permissions')}
         <span>{t('settings.computer.permissions.note')}</span>
       </h3>
+      <p className="set-para">{t('automation.capture.notice')}</p>
+      {state?.permissions?.captureStatus === 'ready' && (
+        <p className="set-note">{t('automation.capture.ready')}</p>
+      )}
+      {state?.permissions?.captureStatus === 'pending' && (
+        <p className="set-note">{t('automation.capture.pending')}</p>
+      )}
+      {state?.permissions?.captureStatus === 'denied' && (
+        <p className="set-note">{t('automation.capture.denied')}</p>
+      )}
       {state === null ? (
         <p className="set-para">{t('settings.computer.checking')}</p>
       ) : (

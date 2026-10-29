@@ -73,4 +73,6 @@ termination.resume()
 
 let application = NSApplication.shared
 application.setActivationPolicy(.accessory)
+Overlay.shared.installMonitors()
+DispatchQueue.main.async { BackgroundMouse.startSelfTest() }
 application.run()

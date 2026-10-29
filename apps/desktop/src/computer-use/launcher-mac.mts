@@ -123,7 +123,13 @@ export class MacLauncher implements HelperLauncher {
 /** 经 LaunchServices 打开助手：新实例、不抢前台，环境变量经 --env 交过去 */
 export function openApp(appPath: string, env: Record<string, string>): Promise<void> {
   const args = ['-n', '-g', '-a', appPath]
-  for (const [name, value] of Object.entries(env)) args.push('--env', `${name}=${value}`)
+  // LaunchServices 不保证继承启动器环境；隔离验收的 HOME 必须显式传到独立助手。
+  const environment = {
+    ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
+    ...(process.env.CODEX_HOME ? { CODEX_HOME: process.env.CODEX_HOME } : {}),
+    ...env,
+  }
+  for (const [name, value] of Object.entries(environment)) args.push('--env', `${name}=${value}`)
   return new Promise((resolve, reject) => {
     execFile('/usr/bin/open', args, (error, _stdout, stderr) => {
       if (error) reject(new HelperError('failed', `open failed: ${stderr || error.message}`))

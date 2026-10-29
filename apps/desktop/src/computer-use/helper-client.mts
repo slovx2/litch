@@ -21,6 +21,7 @@ interface Pending {
 }
 
 export interface HelperClientEvents {
+  onAutomation?(notice: unknown): void
   /** 用户在屏幕提示上按了停止 */
   onStopped?(notice: HelperStopped): void
   /** 连接断了（对面退出、崩溃、被关掉） */
@@ -86,6 +87,9 @@ const KINDS = new Set<HelperErrorKind>([
   'unauthorized',
   'invalid',
   'permission',
+  'capturePending',
+  'captureDenied',
+  'captureFailed',
   'notFound',
   'stopped',
   'userActive',
@@ -160,9 +164,25 @@ export class HelperClient {
     const id = this.nextId++
     return new Promise((resolve, reject) => {
       const onAbort = () => {
+        if (typeof params.actionId === 'string')
+          this.channel.write(
+            encodeFrame({
+              jsonrpc: '2.0',
+              method: 'cancelAction',
+              params: { actionId: params.actionId },
+            }),
+          )
         this.settle(id)?.reject(new HelperError('failed', 'cancelled'))
       }
       const timer = setTimeout(() => {
+        if (typeof params.actionId === 'string')
+          this.channel.write(
+            encodeFrame({
+              jsonrpc: '2.0',
+              method: 'cancelAction',
+              params: { actionId: params.actionId },
+            }),
+          )
         this.settle(id)?.reject(
           new HelperError('failed', `helper did not answer ${method} in time`),
         )
@@ -205,6 +225,7 @@ export class HelperClient {
 
   private dispatch(message: Record<string, unknown>): void {
     if (typeof message.method === 'string') {
+      if (message.method === 'automation') this.events.onAutomation?.(message.params)
       if (message.method === 'stopped') this.events.onStopped?.(message.params as HelperStopped)
       return
     }

@@ -9,6 +9,7 @@ export type PermissionPane = 'accessibility' | 'screenRecording'
 export interface ComputerPermissions {
   accessibility: boolean
   screenRecording: boolean
+  captureStatus?: 'untested' | 'pending' | 'ready' | 'denied' | 'failed'
 }
 
 /** Windows 助手握手时报的 */

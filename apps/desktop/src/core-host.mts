@@ -17,9 +17,11 @@ import {
   serveChannel,
   type ToolToCore,
   type ToolToMain,
+  withAutomationPreview,
 } from '@litch/core'
 import type { MessagePortMain } from 'electron'
 import { APPROVAL_KEYS, type ApprovalKeysMessage } from './approvals/ipc.mjs'
+import { automationPreviewPort } from './automation-preview/core-port.mjs'
 import { CLIENT_TOOL, type ClientToolToCore, type ClientToolToMain } from './client-tools/types.mjs'
 import { fileDeviceStore } from './device-store.mjs'
 import { ATTACH, LANGUAGE, SERVICE, TERMINALS } from './ipc.mjs'
@@ -233,7 +235,8 @@ function createHost(): Core | MockCore {
   return core
 }
 
-const core = createHost()
+const previewPort = automationPreviewPort((message) => process.parentPort.postMessage(message))
+const core = withAutomationPreview(createHost(), previewPort.port)
 
 /**
  * 真的核心等主进程报完能执行哪些命名空间再开始连设备：握手时要照它声明（客户端工具）。
@@ -249,6 +252,7 @@ const begin = () => {
 const waitTools = setTimeout(begin, 3000)
 
 process.parentPort.on('message', (event) => {
+  if (previewPort.receive(event.data)) return
   if (event.data?.type === CLIENT_TOOL) {
     const message = toCore(event.data as ClientToolToCore)
     if (message.op === 'namespaces') {

@@ -57,6 +57,16 @@ function stub(granted: PermissionStatus, platform: 'darwin' | 'win32' = 'darwin'
   }
 }
 
+test('屏幕录制预检与实际采集状态分别传给设置页', async () => {
+  const helper = stub({ accessibility: true, screenRecording: true, captureStatus: 'untested' })
+  const settings = createComputerUseSettings(helper.controls)
+  assert.equal((await settings.status(true)).permissions?.captureStatus, 'untested')
+  for (const captureStatus of ['pending', 'denied', 'failed', 'ready'] as const) {
+    helper.grant({ accessibility: true, screenRecording: true, captureStatus })
+    assert.equal((await settings.status(false)).permissions?.captureStatus, captureStatus)
+  }
+})
+
 test('不拉起时：助手没在跑就回上一次问到的，一次没问过是 null', async () => {
   const helper = stub({ accessibility: true, screenRecording: false })
   const settings = createComputerUseSettings(helper.controls)

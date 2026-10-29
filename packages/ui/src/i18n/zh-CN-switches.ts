@@ -11,7 +11,7 @@ export const zhSwitches = {
   'switches.note.taskCards':
     '任务卡：会话中的建议任务卡片和回合收尾。关闭不影响子会话等其他功能。设置保存在设备上，对手机发起的会话和定时任务同样生效；设备离线时无法修改。',
   'switches.note.tools':
-    '内置浏览器、Computer Use：设置保存在本机。关闭后新会话不带这组工具，已有会话的下一次调用会被拒绝；重新开启后仅对新会话生效。',
+    '内置浏览器、Computer Use：设置保存在本机。关闭后新会话不带这组工具，已有会话的下一次调用会被拒绝；重新开启后仅对新会话生效。macOS 首次采集画面可能另弹出“直接访问屏幕”确认，请点“允许”。',
   'switches.offline': '离线',
   'switches.expand': '展开 {name}',
   'switches.collapse': '收起 {name}',

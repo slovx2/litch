@@ -1,0 +1,54 @@
+.automation-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  color: var(--ink);
+}
+.automation-preview header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.automation-preview p {
+  margin: 0;
+  font-size: inherit;
+}
+.automation-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--raised);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+}
+.automation-stage img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.automation-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.automation-controls button {
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  padding: 6px 12px;
+  background: var(--raised);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+}
+.automation-controls button:hover {
+  border-color: var(--accent);
+}
+.automation-controls button:disabled {
+  color: var(--ink-3);
+  cursor: default;
+  border-color: var(--line-2);
+}

@@ -16,7 +16,8 @@ enum Permissions {
   static func screenRecording() -> Bool { CGPreflightScreenCaptureAccess() }
 
   static func status() -> JSONValue {
-    ["accessibility": .bool(accessibility()), "screenRecording": .bool(screenRecording())]
+    ["accessibility": .bool(accessibility()), "screenRecording": .bool(screenRecording()),
+      "captureStatus": .string(CaptureAccess.status)]
   }
 
   /// 向系统申请这一项：没给过时系统把助手加进列表（开关关着），可能弹它自己的提示框；已经给了什么都不做。

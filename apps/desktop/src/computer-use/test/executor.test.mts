@@ -195,12 +195,19 @@ test('任何应用都直接交给助手，不问用户：浏览器、密码管�
     const helper = fakeHelper()
     const executor = createComputerExecutor({ helper: helper.access })
     const { ctx, asks } = context()
-    const response = await executor.call(invocation('click', { app, element: 2 }), ctx)
+    const request = invocation('click', { app, element: 2 })
+    const response = await executor.call(request, ctx)
     assert.equal(response.success, true, app)
     assert.equal(asks.length, 0)
     // 交给助手的是包标识（模型给的别名不往下传）和会话键
     const click = helper.calls.find((call) => call.method === 'click')
-    assert.deepEqual(click?.params, { app: bundleId, element: 2, session: 'local/thread-1' })
+    assert.deepEqual(click?.params, {
+      app: bundleId,
+      element: 2,
+      session: 'local/thread-1',
+      turnId: request.turnId,
+      actionId: request.id,
+    })
   }
 })
 
@@ -209,10 +216,8 @@ test('远程设备的会话也不问', async () => {
   const executor = createComputerExecutor({ helper: helper.access })
   const remote = { id: 'box', name: 'Build box', kind: 'ssh' as const, target: 'box' }
   const { ctx, asks } = context()
-  const response = await executor.call(
-    invocation('press_key', { app: 'TextEdit', key: 'cmd+s' }, remote),
-    ctx,
-  )
+  const request = invocation('press_key', { app: 'TextEdit', key: 'cmd+s' }, remote)
+  const response = await executor.call(request, ctx)
   assert.equal(response.success, true)
   assert.equal(asks.length, 0)
   const press = helper.calls.find((call) => call.method === 'pressKey')
@@ -220,6 +225,8 @@ test('远程设备的会话也不问', async () => {
     app: 'com.apple.TextEdit',
     key: 'cmd+s',
     session: 'box/thread-1',
+    turnId: request.turnId,
+    actionId: request.id,
   })
 })
 
@@ -227,10 +234,8 @@ test('get_app_state：文字加截图（data: 地址）', async () => {
   const helper = fakeHelper()
   const executor = createComputerExecutor({ helper: helper.access })
   const { ctx } = context()
-  const response = await executor.call(
-    invocation('get_app_state', { app: 'TextEdit', full: true }),
-    ctx,
-  )
+  const request = invocation('get_app_state', { app: 'TextEdit', full: true })
+  const response = await executor.call(request, ctx)
   assert.equal(response.success, true)
   assert.equal(response.contentItems.length, 2)
   assert.match(textOf(response), /Screenshot: 1200x800 pixels/)
@@ -244,6 +249,8 @@ test('get_app_state：文字加截图（data: 地址）', async () => {
     app: 'com.apple.TextEdit',
     full: true,
     session: 'local/thread-1',
+    turnId: request.turnId,
+    actionId: request.id,
   })
 })
 

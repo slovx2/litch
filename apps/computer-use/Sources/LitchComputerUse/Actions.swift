@@ -1,36 +1,51 @@
 // 动作：点击、打字、按键、滚动、设值、拖动、选中文字。
-// 共同的步骤：检查（找应用、底线名单、停没停、权限）→ 用户正在动这个应用就拒 → 切到前台 → 执行 →
-// 等界面稳一下 → 重新读一遍可访问性树，把和上一次的差异附在结果里（不截图，要看图让模型再取状态）。
+// 检查权限/观察窗口/租约；能后台做就定向投递，需要前台则等空闲并在结束后恢复。
+// 每个输入阶段检查取消与用户接管；结束后返回 AX 差异，不把连续预览塞入模型结果。
 // 元素按编号找（编号来自最近一次取状态或动作后的差异）；坐标是最近一次截图里的像素。
 import AppKit
 import ApplicationServices
 import Foundation
 import LitchComputerUseCore
 
-struct ActionContext {
-  var session: String
-  var app: NSRunningApplication
-  var key: String
-  var pid: pid_t { app.processIdentifier }
-}
-
 extension Engine {
   func act(_ params: JSONValue, _ body: (ActionContext, JSONValue) throws -> String) throws
     -> JSONValue
   {
+    let epoch = actionEpoch(params["session"]?.stringValue ?? "")
     let (session, app, key) = try prepare(params)
-    if UserActivity.isBusy(pid: app.processIdentifier) {
-      throw RPCError(
-        .userActive,
-        "The user is using \(Engine.name(app)) right now. Wait a few seconds, then call get_app_state before trying again."
-      )
+    guard let observed = withState(session, key, { $0.shot }) else {
+      throw RPCError(.stale, "Call get_app_state before acting on this app.")
     }
-    let window = AXReader.keyWindow(AXReader.appElement(app.processIdentifier))
-    try Apps.activate(app, window: window)
-    let context = ActionContext(session: session, app: app, key: key)
-    let done = try body(context, params)
+    let window = try NativeWindow.resolve(app.processIdentifier)
+    guard window.id == observed.windowID else { throw RPCError(.stale, "The active window changed. Call get_app_state again.") }
+    let owner = ownerPrefix(session)
+    let token = try InputOwnership.shared.acquire(pid: app.processIdentifier, owner: owner)
+    let actionId = params["actionId"]?.stringValue ?? UUID().uuidString
+    defer {
+      InputOwnership.shared.release(token)
+      if !actionAllowed(actionId, session: session, epoch: epoch) { InputOwnership.shared.end(prefix: owner) }
+    }
+    let context = ActionContext(session: session, app: app, key: key, actionId: actionId,
+      check: {
+        guard self.actionAllowed(actionId, session: session, epoch: epoch), InputOwnership.shared.valid(pid: app.processIdentifier, owner: owner, token: token) else {
+          throw RPCError(.stopped, "The action was cancelled or its input ownership ended.")
+        }
+      }, notice: { state, kind, point, foreground in
+        self.preview.action(session: session, app: app, actionId: actionId,
+          state: state, kind: kind, point: point, foreground: foreground)
+      })
+    context.window = window
+    let done: String
+    do {
+      try context.checkBase()
+      done = try body(context, params)
+      context.notice("completed", "semantic", nil, context.usedForeground)
+    } catch {
+      context.notice("failed", "semantic", nil, context.usedForeground)
+      throw error
+    }
     Thread.sleep(forTimeInterval: 0.4)
-    var text = done
+    var text = done + (context.usedForeground ? "\nThe app was briefly brought to the foreground; restoration was attempted without overriding user activity." : "")
     do {
       let read = try AXReader().read(pid: app.processIdentifier)
       let diff = withState(session, key) { state -> String in
@@ -136,27 +151,47 @@ extension Engine {
     let count = params["count"]?.intValue ?? 1
     let flags = try modifiers(params)
     guard let target = try target(context, params, required: true) else { return "" }
-    if let (element, line) = target.element, count == 1, flags == 0 {
+    if let (element, line) = target.element, count == 1, flags == 0, !context.chromium {
+      try context.check()
       let action = button == .right ? kAXShowMenuAction : kAXPressAction
       if button != .middle,
         AXUIElementPerformAction(element, action as CFString) == .success
       {
+        context.notice("dispatched", "semantic", target.point, false)
         return "Pressed [\(line.index)] \(line.content)."
       }
     }
-    Input.click(at: target.point, button: button, count: count, flags: flags)
+    try context.mouse(kind: "click", point: target.point) { window in
+      try Input.click(at: target.point, button: button, count: count, flags: flags, window: window, check: context.check)
+    }
     let what = target.element.map { "[\($0.1.index)] \($0.1.content)" } ?? "the point"
     return "Clicked \(what) (\(button.rawValue), \(count)x)."
   }
 
   func typeText(_ context: ActionContext, _ params: JSONValue) throws -> String {
+    try context.check()
     guard let text = params["text"]?.stringValue else { throw RPCError(.invalid, "text is required") }
     if let index = params["element"]?.intValue {
       let (element, _) = try element(context, index)
-      AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+      let focused = AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
       Thread.sleep(forTimeInterval: 0.1)
+      let current: AXUIElement? = AXReader.copy(AXReader.appElement(context.pid), kAXFocusedUIElementAttribute as String)
+      if focused != .success || current.map({ !CFEqual($0, element) }) != false {
+        try context.inForeground(kind: "semantic") {
+          guard AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success else {
+            throw RPCError(.failed, "Could not focus the requested text element; no text was sent.")
+          }
+          let actual: AXUIElement? = AXReader.copy(AXReader.appElement(context.pid), kAXFocusedUIElementAttribute as String)
+          guard actual.map({ CFEqual($0, element) }) == true else {
+            throw RPCError(.failed, "The requested text element did not receive focus; no text was sent.")
+          }
+          try Input.type(text, pid: context.pid, check: context.check)
+        }
+        return "Typed \(text.count) characters."
+      }
     }
-    Input.type(text, pid: context.pid)
+    context.notice("dispatched", "semantic", nil, false)
+    try Input.type(text, pid: context.pid, check: context.check)
     return "Typed \(text.count) characters."
   }
 
@@ -165,7 +200,7 @@ extension Engine {
     let combo = try Keys.parse(keyText)
     let times = min(max(params["repeat"]?.intValue ?? 1, 1), 50)
     for _ in 0..<times {
-      Input.key(combo, pid: context.pid)
+      try Input.key(combo, pid: context.pid, check: context.check)
       Thread.sleep(forTimeInterval: 0.03)
     }
     return "Pressed \(keyText)\(times > 1 ? " \(times) times" : "")."
@@ -184,17 +219,22 @@ extension Engine {
       point = CGPoint(x: frame.center.x, y: frame.center.y)
     }
     let lines: Int32 = 3
+    let delta: (Int32, Int32)
     switch direction {
-    case "up": Input.scroll(at: point, dx: 0, dy: lines, steps: amount)
-    case "down": Input.scroll(at: point, dx: 0, dy: -lines, steps: amount)
-    case "left": Input.scroll(at: point, dx: lines, dy: 0, steps: amount)
-    case "right": Input.scroll(at: point, dx: -lines, dy: 0, steps: amount)
+    case "up": delta = (0, lines)
+    case "down": delta = (0, -lines)
+    case "left": delta = (lines, 0)
+    case "right": delta = (-lines, 0)
     default: throw RPCError(.invalid, "direction must be up, down, left or right")
+    }
+    try context.mouse(kind: "scroll", point: point) { window in
+      try Input.scroll(at: point, dx: delta.0, dy: delta.1, steps: amount, window: window, check: context.check)
     }
     return "Scrolled \(direction) by \(amount)."
   }
 
   func setValue(_ context: ActionContext, _ params: JSONValue) throws -> String {
+    try context.check()
     guard let index = params["element"]?.intValue else {
       throw RPCError(.invalid, "element is required")
     }
@@ -225,11 +265,14 @@ extension Engine {
     guard let from = try target(context, params, prefix: "from_", required: true),
       let to = try target(context, params, prefix: "to_", required: true)
     else { return "" }
-    Input.drag(from: from.point, to: to.point)
+    try context.mouse(kind: "drag", point: from.point) { _ in
+      try Input.drag(from: from.point, to: to.point, check: context.check)
+    }
     return "Dragged."
   }
 
   func selectText(_ context: ActionContext, _ params: JSONValue) throws -> String {
+    try context.check()
     guard let index = params["element"]?.intValue else {
       throw RPCError(.invalid, "element is required")
     }

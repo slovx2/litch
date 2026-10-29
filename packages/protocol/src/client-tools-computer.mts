@@ -126,7 +126,7 @@ export function computerToolsSpec(platform: ComputerPlatform = 'darwin'): Client
       {
         type: 'function',
         name: COMPUTER_TOOL.getAppState,
-        description: `Get the state of ${win ? "one of an app's windows" : "an app's key window"}: a screenshot plus the accessibility tree as numbered text. After the first call for an app, the text lists only what changed since the previous state (+ added, - removed, ~ changed) unless full is true.${win ? " The text starts with the app's other windows." : ''} Call this before acting on an app, whenever you need to see the result, and again if the window was resized. Actions bring the app to the front and return only the changes in the accessibility tree, not a screenshot.`,
+        description: `Get the state of ${win ? "one of an app's windows" : "an app's key window"}: a screenshot plus the accessibility tree as numbered text. After the first call for an app, the text lists only what changed since the previous state (+ added, - removed, ~ changed) unless full is true.${win ? " The text starts with the app's other windows." : ''} Call this before acting on an app, whenever you need to see the result, and again if the window was resized. ${win ? 'Actions bring the app to the front.' : 'Actions prefer background input; when needed they wait for user inactivity, briefly bring the app forward and restore the previous focus. A system screen-access prompt requires the user to click Allow; permission preflight alone does not prove capture is available.'} Actions return changes in the accessibility tree, not a screenshot.`,
         inputSchema: schema({
           full: {
             type: 'boolean',

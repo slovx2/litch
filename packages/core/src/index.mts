@@ -35,6 +35,15 @@ export {
   type TaskScheduleProblem,
   validateTaskSchedule,
 } from '../../protocol/src/task-schedule.mjs'
+export { withAutomationPreview } from './automation-preview/host.mjs'
+export type {
+  AutomationPreviewCommand,
+  AutomationPreviewFrame,
+  AutomationPreviewOwner,
+  AutomationPreviewPort,
+  AutomationPreviewView,
+} from './automation-preview/model.mjs'
+export { previewOwnerKey } from './automation-preview/model.mjs'
 export { type Cancel, createCancel } from './channel/cancel.mjs'
 export { type CoreChannel, connectChannel, type TopicSink } from './channel/client.mjs'
 export { createPortPair } from './channel/memory-port.mjs'

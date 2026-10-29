@@ -125,4 +125,14 @@ export const SIDE_TABS: readonly SideTabSpec[] = [
       import('../aside/AsideTab.tsx').then((module) => ({ default: module.AsideTab })),
     ),
   },
+  {
+    id: 'automationPreview',
+    label: 'automation.tab',
+    icon: 'target',
+    Panel: lazy(() =>
+      import('../automation-preview/PreviewTab.tsx').then((module) => ({
+        default: module.PreviewTab,
+      })),
+    ),
+  },
 ]

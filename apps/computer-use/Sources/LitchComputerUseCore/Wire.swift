@@ -65,6 +65,8 @@ public enum RPCErrorKind: String, Sendable {
   case invalid
   /// 系统权限没给
   case permission
+  /// 实际采集等待系统确认、被用户拒绝或其他失败；与 TCC 预检分开。
+  case capturePending, captureDenied, captureFailed
   /// 找不到应用、应用没有窗口
   case notFound
   /// 用户在这个回合里停掉了这个应用

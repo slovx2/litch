@@ -1,5 +1,10 @@
 // 界面与核心之间那条通道的约定：有哪些主题、增量长什么样、有哪些命令、线上发什么消息。
 // 通道只有两种用法：命令（一问一答，可取消）和订阅（先快照，后增量）。
+
+import type {
+  AutomationPreviewCommand,
+  AutomationPreviewView,
+} from '../automation-preview/model.mjs'
 import type {
   AppView,
   Bilingual,
@@ -123,6 +128,7 @@ import type { SkippingOutput } from '../text/output-cap.mjs'
 // ---------- 主题 ----------
 
 export type Topic =
+  | { kind: 'automationPreview'; deviceId: string; sessionId: string; observeOnly?: boolean }
   | { kind: 'app' }
   | { kind: 'sidebar'; deviceId: string }
   | { kind: 'session'; deviceId: string; sessionId: string }
@@ -203,6 +209,7 @@ export type Topic =
 export type TopicKind = Topic['kind']
 
 export interface TopicData {
+  automationPreview: AutomationPreviewView | null
   app: AppView
   sidebar: SidebarView
   session: SessionView
@@ -327,6 +334,7 @@ export type AccountLimitsOp = { op: 'limits.set'; view: AccountLimitsView }
 export type WorktreesOp = { op: 'worktrees.set'; view: WorktreesTopicView }
 
 export interface TopicOp {
+  automationPreview: never
   app: AppOp
   sidebar: SidebarOp
   session: SessionOp
@@ -348,6 +356,7 @@ export interface TopicOp {
 // ---------- 命令 ----------
 
 export interface Commands {
+  'automationPreview.control': { params: AutomationPreviewCommand; result: Record<string, never> }
   /** 核心的基本信息。界面启动时用它确认通道是通的 */
   'core.info': { params: Record<string, never>; result: { version: string; mock: boolean } }
   /** 把一个会话标成已读 */

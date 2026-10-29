@@ -15,11 +15,28 @@ enum UserActivity {
   private static let lock = NSLock()
   private static var lastAt = Date.distantPast
   private static var lastPid: pid_t = 0
+  private static var sequence: UInt64 = 0
+
+  static var revision: UInt64 { lock.lock(); defer { lock.unlock() }; return sequence }
+  static var idleSeconds: TimeInterval {
+    lock.lock(); defer { lock.unlock() }
+    if CGEventSource.buttonState(.combinedSessionState, button: .left) ||
+      CGEventSource.buttonState(.combinedSessionState, button: .right) ||
+      CGEventSource.flagsState(.combinedSessionState).intersection([.maskShift, .maskControl, .maskAlternate, .maskCommand]).rawValue != 0 { return 0 }
+    return Date().timeIntervalSince(lastAt)
+  }
+
+  static func seed() {
+    let idle = [CGEventType.keyDown, .flagsChanged, .mouseMoved, .leftMouseDown, .rightMouseDown, .scrollWheel]
+      .map { CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) }.min() ?? 0
+    lock.lock(); lastAt = Date().addingTimeInterval(-idle); lock.unlock()
+  }
 
   static func note(pid: pid_t) {
     lock.lock()
     lastAt = Date()
     lastPid = pid
+    sequence += 1
     lock.unlock()
   }
 
@@ -43,6 +60,11 @@ final class Overlay {
   private var hintField: NSTextField?
   private var stopButton: NSButton?
   private var monitors: [Any] = []
+  private var capturePending = false
+
+  func captureNotice(_ pending: Bool) {
+    DispatchQueue.main.async { self.capturePending = pending; self.refresh() }
+  }
 
   func setLanguage(_ language: Copy.Language) {
     DispatchQueue.main.async {
@@ -57,14 +79,12 @@ final class Overlay {
       self.names = names
       if names.isEmpty {
         self.panel?.orderOut(nil)
-        self.removeMonitors()
         return
       }
       if self.panel == nil { self.build() }
       self.refresh()
       self.place()
       self.panel?.orderFrontRegardless()
-      if self.monitors.isEmpty { self.installMonitors() }
     }
   }
 
@@ -138,7 +158,7 @@ final class Overlay {
   private func refresh() {
     guard !names.isEmpty else { return }
     titleField?.stringValue = Copy.banner(language, app: Copy.apps(language, names: names))
-    hintField?.stringValue = Copy.hint(language)
+    hintField?.stringValue = capturePending ? Copy.captureNotice(language) : Copy.hint(language)
     stopButton?.title = Copy.stop(language)
   }
 
@@ -155,10 +175,12 @@ final class Overlay {
     onStop?()
   }
 
-  private func installMonitors() {
+  func installMonitors() {
+    guard monitors.isEmpty else { return }
+    UserActivity.seed()
     let mask: NSEvent.EventTypeMask = [
       .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel, .mouseMoved,
-      .leftMouseDragged,
+      .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .flagsChanged,
     ]
     if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] event in
       self?.observe(event)
@@ -183,8 +205,6 @@ final class Overlay {
 
   private func observe(_ event: NSEvent) {
     if event.cgEvent?.getIntegerValueField(.eventSourceUserData) == Input.marker { return }
-    // 我们刚发过事件之后紧跟着的鼠标移动，多半是系统因为我们挪了光标补发的，不算用户
-    if event.type == .mouseMoved, Date().timeIntervalSince(Input.lastPostedAt) < 0.3 { return }
     if event.type == .keyDown, event.keyCode == 53 {
       onStop?()
       return

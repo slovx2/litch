@@ -8,6 +8,7 @@ import { useT } from '../app/appearance.ts'
 import { Icon } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { dismissToast, showToast } from '../app/toasts.tsx'
+import { useAutomationPreviewCue } from '../automation-preview/show.ts'
 import { ownerKey } from './browser/bridge.ts'
 import { BROWSER_TAB, onPendingShow, setViewing } from './browser/store.ts'
 import { sessionRoots } from './roots.ts'
@@ -80,6 +81,7 @@ export function SideSlot({
   }, [open])
 
   useShowRouting(selection, draft, page)
+  useAutomationPreviewCue(place, page === null)
 
   useEffect(() => {
     // 在捕获阶段接：焦点在终端里的时候，这个键不能先被终端当成输入

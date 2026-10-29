@@ -12,7 +12,7 @@ export const enSwitches: Record<keyof typeof zhSwitches, Entry> = {
   'switches.note.taskCards':
     'Task cards: suggested-task cards and turn wrap-ups in sessions. Turning them off doesn’t affect sub-sessions or other features. Stored on the device, so it also applies to sessions started from a phone and to scheduled tasks. Can’t be changed while the device is offline.',
   'switches.note.tools':
-    'Built-in browser and Computer Use: stored on this computer. When off, new sessions don’t get these tools and existing sessions are refused on their next call. Turning them back on applies to new sessions only.',
+    'Built-in browser and Computer Use: stored on this computer. When off, new sessions don’t get these tools and existing sessions are refused on their next call. Turning them back on applies to new sessions only. On first capture, macOS may also ask for direct screen access; click Allow.',
   'switches.offline': 'Offline',
   'switches.expand': 'Expand {name}',
   'switches.collapse': 'Collapse {name}',

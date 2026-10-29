@@ -20,6 +20,8 @@ export interface HelperLauncher {
 }
 
 export interface SupervisorOptions {
+  onAutomation?(notice: unknown): void
+  onDisconnected?(): void
   launcher: HelperLauncher
   /** 现在的界面语言 */
   lang(): string
@@ -107,6 +109,7 @@ export class HelperSupervisor {
     this.current = client
     this.lastError = null
     client.events = {
+      onAutomation: (notice) => this.options.onAutomation?.(notice),
       onClose: () => this.lost(client),
       onStopped: (notice) => this.options.onStopped?.(notice),
     }
@@ -117,6 +120,7 @@ export class HelperSupervisor {
   private lost(client: HelperClient): void {
     if (this.current !== client || this.disposed) return
     this.current = null
+    this.options.onDisconnected?.()
     if (this.options.launcher.respawn === 'onDemand') {
       this.log('助手退出了，下一次用到时再起')
       return

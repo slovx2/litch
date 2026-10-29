@@ -7,6 +7,7 @@ import { mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, normalize, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import type { AutomationPreviewCommand } from '@litch/core'
 import { UPDATE_FEED_URL, type UpdateState } from '@litch/core'
 import {
   app,
@@ -25,6 +26,7 @@ import {
 } from 'electron'
 import { openLicenses } from './about.mjs'
 import { startApprovalsMain } from './approvals/main.mjs'
+import { AUTOMATION_PREVIEW, createAutomationPreviewHost } from './automation-preview/host.mjs'
 import { type InstalledBrowser, installBrowser } from './browser/install.mjs'
 import { createClientToolHost } from './client-tools/host.mjs'
 import { showMachineNotice } from './client-tools/notice.mjs'
@@ -244,6 +246,7 @@ let quitting = false
  * Computer Use（macOS 和 Windows）：macOS 上系统权限授给单独签名的助手应用，Windows 上助手是 Litch 起的子进程；
  * 都是用到时才拉起（computer-use/index.mts）。界面语言变了告诉它（屏幕提示跟着换），退出前收掉
  */
+let automationPreview: ReturnType<typeof createAutomationPreviewHost> | null = null
 const computerUse =
   process.platform === 'darwin' || process.platform === 'win32'
     ? createComputerUse({
@@ -257,8 +260,16 @@ const computerUse =
         version: app.isPackaged ? app.getVersion() : null,
         lang: forcedLang ?? (app.getLocale().startsWith('zh') ? 'zh-CN' : 'en'),
         log: (line) => console.error(`[computer-use] ${line}`),
+        onAutomation: (notice) => automationPreview?.receive(notice),
+        onInvocation: (invocation, session) => automationPreview?.register(invocation, session),
+        onDisconnected: () => automationPreview?.disconnected(),
       })
     : null
+if (computerUse && process.platform === 'darwin') {
+  automationPreview = createAutomationPreviewHost(computerUse.supervisor, (view, owner) => {
+    core?.postMessage({ type: AUTOMATION_PREVIEW, op: 'view', view, owner })
+  })
+}
 const clientTools = createClientToolHost(
   [
     ...createExecutors({
@@ -298,6 +309,26 @@ function startCore(): void {
   child.postMessage({ type: CLIENT_TOOL, op: 'namespaces', namespaces: clientTools.namespaces() })
   // 核心往回发两种消息：客户端工具的调用和答复；退出前问它终端的事，它的回答
   child.on('message', (message: unknown) => {
+    const preview = message as {
+      type?: string
+      op?: string
+      id: number
+      command: AutomationPreviewCommand
+    } | null
+    if (preview?.type === AUTOMATION_PREVIEW && preview.op === 'command') {
+      if (core !== child) return
+      void (automationPreview?.control(preview.command) ?? Promise.resolve()).then(
+        () => child.postMessage({ type: AUTOMATION_PREVIEW, op: 'result', id: preview.id }),
+        (error: unknown) =>
+          child.postMessage({
+            type: AUTOMATION_PREVIEW,
+            op: 'result',
+            id: preview.id,
+            error: String(error),
+          }),
+      )
+      return
+    }
     // 扫码时核对过的批准钥匙、撤销的手机（approvals/main.mts）
     if (core === child && approvalsMain.message(message)) return
     if ((message as { type?: unknown } | null)?.type === CLIENT_TOOL) {
@@ -337,6 +368,7 @@ function startCore(): void {
     askWaiting.get(data.id)?.(data.alive ?? null)
   })
   child.on('exit', (code) => {
+    automationPreview?.disconnected(true)
     mainLog.write('core.exit', { code, quitting }, code === 0 || quitting ? 'info' : 'warn')
     if (core === child) core = null
     // 核心没了：它交来的调用都不用做了，卡片都当作没答
