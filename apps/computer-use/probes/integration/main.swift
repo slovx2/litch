@@ -50,7 +50,10 @@ let audit = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
   }
   let front = NSWorkspace.shared.frontmostApplication
   let cursor = CGEvent(source: nil)?.location ?? .zero
-  let value: [String: Any] = ["pid": getpid(), "frontPid": front?.processIdentifier ?? 0,
+  let panel = NSApp.windows.first(where: { $0 is PreviewPanel && $0.isVisible })
+  // 仅视觉验收显式允许截本探针浮窗；正式助手仍为 sharingType.none。
+  if environment["LITCH_CU_PROBE_SHARE_PREVIEW"] == "1" { panel?.sharingType = .readOnly }
+  let value: [String: Any] = ["pid": getpid(), "previewWindowID": panel?.windowNumber ?? 0, "frontPid": front?.processIdentifier ?? 0,
     "frontBundle": front?.bundleIdentifier ?? "", "idle": UserActivity.idleSeconds,
     "cursorX": cursor.x, "cursorY": cursor.y, "sampledAt": Date().timeIntervalSince1970,
     "lastActivity": activity]

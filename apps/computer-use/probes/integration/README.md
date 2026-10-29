@@ -40,3 +40,44 @@ node apps/computer-use/.artifacts/integration/check.mjs \
 `prepare-fixture.mjs` 用现有假模型夹具生成独立的桌面 UI 验收入口，供真实 Litch
 窗口连接；不使用个人模型配置或真实用户状态。UI 验收应另记截图、停止/接管、窗口
 移动和缩放、首帧确认、无消费者停流及视觉检查，不能用这里的动作结果代替。
+
+## 回归与远程链路
+
+`swift test --package-path apps/computer-use` 包含真实 Connection 的控制请求绕过长动作、
+大图布局不撑大浮窗、首次输入等待自测/取消、浮窗系统输入穿透及恢复测试。
+`node --test packages/ui/test/automation-cue.test.mjs` 执行 SideSlot 的冷加载分支和真实
+预览 cue；侧面板尚未加载时仍必须订阅活动并打开预览。
+
+先构建上面的签名探针，再构建无界面的真实宿主驱动：
+
+```sh
+node apps/computer-use/probes/integration/build-driver.mjs
+# 三次冷启动；可选第二个目录让每次启动后立即点击自有 AppKit 按钮，复验自测竞态。
+node apps/computer-use/probes/integration/startup.mjs \
+  /tmp/litch-cu-startup /tmp/litch-cu-fixtures
+```
+
+远程验收需要事先准备好的独立 SSH 配置、隔离适配器及回环假模型。假模型按提示中的
+`LITCH_TOOL_PLAN` JSON 数组依次生成客户端工具调用，最后返回 `LITCH_REMOTE_DONE`。
+脚本不安装/升级远端程序、不更改远端环境；调用使用真实 Pi→设备→SSH→core→clientTools→助手。
+
+```sh
+LITCH_SSH_CONFIG=<隔离 ssh_config> \
+LITCH_REMOTE_ADAPTER=<远端隔离包装脚本> \
+LITCH_REMOTE_CODEX=<远端禁用原生 Codex 的路径> \
+LITCH_CU_REMOTE_ALIAS=<测试 SSH 别名> \
+LITCH_CU_REMOTE_CWD=<远端隔离目录> \
+node apps/computer-use/probes/integration/remote.mjs \
+  /tmp/litch-cu-fixtures /tmp/litch-cu-remote-results
+```
+
+设置 `LITCH_CU_REMOTE_TARGET=electron` 复验 Chromium 前台回退；默认 AppKit。
+`LITCH_CU_REMOTE_PIN=0` 是仅测试面板帧、不固定浮窗的对照组。默认固定浮窗应覆盖目标
+按钮的位置，以检测系统点击被浮窗截走的问题。覆盖中文、点击、滚动、本机帧/固定窗口，
+随后分别在长输入中中断回合、关闭本轮 SSH transport，确认原生文本停止且守卫未收到字符。
+`preview-panel.png` 是自有 NSView 位图，不是 WindowServer 合成截图。
+`LITCH_CU_SYSTEM_SCREENSHOT=1` 在点击完成后用 `screencapture -l` 只截本助手报告的浮窗。
+正式共享策略 `.none` 会让该命令失败；视觉验收可额外显式设置
+`LITCH_CU_PROBE_SHARE_PREVIEW=1`，只有测试 main 将自身浮窗临时设为 `.readOnly`。
+这种截图只证明合成外观，不能作为产品截图排除策略的测试结果。
+远程共享环境的清理由搭建者统一安排；本脚本只退出自己的本机助手与 caffeinate。
