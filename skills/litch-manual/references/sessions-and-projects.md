@@ -345,7 +345,7 @@ woken to continue.
   current turn, so work done in that turn reaches it only through the remaining plan.
 - **Reports and waking**: when a sub-session finishes a turn, the start of its last answer is handed to
   the parent ("Reports from sub-sessions"). When the parent is idle and its sub-sessions have stopped,
-  the parent is woken to continue (limited per user message). Litch decides this, not the model: sub-
+  the parent is woken to continue (up to 50 times per user message; your next message resets the count). Litch decides this, not the model: sub-
   sessions the model started or suggested always wake the parent; when you start one yourself (spawn
   dialog, Edit and start) you can turn "Wake the main session when done" off. Waking happens on the
   device, also when no desktop or phone is connected. Background tasks still running in the parent or a

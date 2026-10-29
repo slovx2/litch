@@ -7,7 +7,7 @@ import {
   PRESENTATION_SPEC,
   presentationSpec,
 } from '../../protocol/src/client-tools-presentation.mjs'
-import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
+import { parseSessionEvent, SESSION_TREE_LIMITS } from '../../protocol/src/session-tree.mjs'
 import { parseSystemMessage } from '../../protocol/src/system-messages.mjs'
 import { briefing } from '../src/session-start.mjs'
 import { failureOf, resultOf } from './fake-engine.mjs'
@@ -355,34 +355,36 @@ async function family(env: ReturnType<typeof treeRig>, wake = true) {
   return { client, threadId, childId }
 }
 
-test('SESSION-TREE-005：每条用户消息之后最多唤醒 10 次；用户再说话时攒着的回报附在用户消息前面，计数清零', async () => {
+test('SESSION-TREE-005：每条用户消息之后最多唤醒 50 次；用户再说话时攒着的回报附在用户消息前面，计数清零', async () => {
   const env = treeRig()
   try {
+    const limit = SESSION_TREE_LIMITS.wakesPerUserMessage
+    assert.equal(limit, 50)
     const { client, threadId, childId } = await family(env)
     env.claude.end(childId, 'completed', '第 0 次')
     env.pi.end(threadId)
     await until(() => wakesOf(env, threadId).length === 1, '第一次唤醒')
-    for (let round = 1; round <= 10; round++) {
+    for (let round = 1; round <= limit; round++) {
       // 唤醒回合结束；子会话自己又跑了一回合（引擎自己续跑的，不是用户在子会话里说的话）
-      await until(() => env.pi.running(threadId) || round > 9, '唤醒回合在跑')
+      await until(() => env.pi.running(threadId) || round === limit, '唤醒回合在跑')
       if (env.pi.running(threadId)) env.pi.end(threadId)
       env.claude.selfTurn(childId)
       env.claude.end(childId, 'completed', `第 ${round} 次`)
-      if (round < 10)
+      if (round < limit)
         await until(() => wakesOf(env, threadId).length === round + 1, `第 ${round + 1} 次唤醒`)
     }
     await until(
       () => env.device.sessionTree.store.notes(threadId).length === 1,
-      '第 11 次的回报排着',
+      `第 ${limit + 1} 次的回报排着`,
     )
     await settle(60)
-    assert.equal(wakesOf(env, threadId).length, 10, '到 10 次就不再唤醒')
+    assert.equal(wakesOf(env, threadId).length, limit, `到 ${limit} 次就不再唤醒`)
     // 用户说话：回报包成 notes 放在前面，用户自己的话在后面
     await client.call('turn/start', { threadId, input: text('接着来') })
     const sent = env.pi.sent('turn/start').at(-1)
     const parsed = parseSessionEvent(sent.input[0].text)
     assert.equal(parsed.event?.kind, 'notes')
-    assert.equal(parsed.event?.notes[0]?.excerpt, '第 10 次')
+    assert.equal(parsed.event?.notes[0]?.excerpt, `第 ${limit} 次`)
     assert.equal(parsed.rest, '接着来')
     assert.equal(env.device.sessionTree.store.notes(threadId).length, 0)
     assert.equal(env.device.sessionTree.store.wakes(threadId), 0, '用户说话之后重新计数')

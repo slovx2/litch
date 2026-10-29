@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { BACKGROUND_TASKS_NOTIFICATION } from '../../protocol/src/background-tasks.mjs'
-import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
+import { parseSessionEvent, SESSION_TREE_LIMITS } from '../../protocol/src/session-tree.mjs'
 import { resultOf } from './fake-engine.mjs'
 import type { FakeUpstream } from './fake-upstream.mjs'
 import { settle } from './helpers.mjs'
@@ -239,7 +239,7 @@ test('SESSION-WAKE-007 立即处理：父会话停着、兄弟还在跑也开唤
     await until(() => !env.device.sessionTree.isActive(threadId), '父会话停下')
     env.claude.end(first, 'completed', '忠犬能保护队友')
     await until(() => env.device.sessionTree.store.notes(threadId).length === 1, '回报进队列')
-    env.device.sessionTree.store.setWakes(threadId, 10)
+    env.device.sessionTree.store.setWakes(threadId, SESSION_TREE_LIMITS.wakesPerUserMessage)
     const woken = await client.call('litch/thread/queuedNotes/deliver', { threadId })
     assert.deepEqual(woken, { delivered: 'woken' })
     const [event] = wakesOf(env, threadId)
