@@ -1,3 +1,7 @@
+import type {
+  ChromeSettingsRequest,
+  ChromeSettingsState,
+} from '../../../protocol/src/chrome-browser.mjs'
 // 界面与核心之间那条通道的约定：有哪些主题、增量长什么样、有哪些命令、线上发什么消息。
 // 通道只有两种用法：命令（一问一答，可取消）和订阅（先快照，后增量）。
 
@@ -357,6 +361,7 @@ export interface TopicOp {
 
 export interface Commands {
   'automationPreview.control': { params: AutomationPreviewCommand; result: Record<string, never> }
+  'chrome.settings': { params: ChromeSettingsRequest; result: ChromeSettingsState }
   /** 核心的基本信息。界面启动时用它确认通道是通的 */
   'core.info': { params: Record<string, never>; result: { version: string; mock: boolean } }
   /** 把一个会话标成已读 */

@@ -1,3 +1,4 @@
+import type { ChromeSettingsRequest } from '../../protocol/src/chrome-browser.mjs'
 // 配置 Litch（litch_config 执行器，14 号设计 3.3、3.4、3.5）在核心和界面、核心和主进程之间的约定。
 // 执行器在核心里（config/）：属于界面的几项（外观、语言、两个本地偏好、打开某一页、出码对话框）由核心经 config 主题
 // 发给界面，界面照做并用 config.reply 回话；放宽安全的那几项（E6）在界面上弹确认卡，人点了才执行（config.confirm）。
@@ -96,6 +97,7 @@ export type ConfigTopicOp = { op: 'config.set'; view: ConfigTopicView }
 
 /** 要主进程做的一件事。主进程用现成的实现（浏览器的网站簿、Computer Use 的设置）。应用自身的更新不归 litch config 管 */
 export type ConfigMainRequest =
+  | ChromeSettingsRequest
   | { kind: 'browser.sites' }
   | { kind: 'browser.allow'; origin: string }
   /** origin 给 null 是全删 */

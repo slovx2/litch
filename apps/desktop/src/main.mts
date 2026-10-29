@@ -28,6 +28,7 @@ import { openLicenses } from './about.mjs'
 import { startApprovalsMain } from './approvals/main.mjs'
 import { AUTOMATION_PREVIEW, createAutomationPreviewHost } from './automation-preview/host.mjs'
 import { type InstalledBrowser, installBrowser } from './browser/install.mjs'
+import { BrowserTargets } from './chrome-browser/browser-targets.mjs'
 import { createClientToolHost } from './client-tools/host.mjs'
 import { showMachineNotice } from './client-tools/notice.mjs'
 import { createExecutors } from './client-tools/registry.mjs'
@@ -235,6 +236,7 @@ const isUiUrl = (url: string): boolean =>
 
 let core: UtilityProcess | null = null
 /** 内置浏览器。它的 executor 交给客户端工具的执行器登记表（命名空间 litch_browser） */
+let chromeTargets: BrowserTargets | null = null
 export let browser: InstalledBrowser | null = null
 let quitting = false
 
@@ -650,7 +652,11 @@ const computerUseSettings = computerUse
   : null
 
 /** litch config 里只有主进程做得了的几项：内置浏览器的网站和数据、Computer Use（config-main.mts） */
-const configMain = createConfigMain({ browser: () => browser, computer: computerUseSettings })
+const configMain = createConfigMain({
+  browser: () => browser,
+  computer: computerUseSettings,
+  chrome: () => chromeTargets,
+})
 const fromUi = (event: Electron.IpcMainInvokeEvent): boolean => {
   const frame = event.senderFrame
   return !!frame && frame === event.sender.mainFrame && isUiUrl(frame.url)
@@ -1001,6 +1007,9 @@ let quitSettled = false
 /** 正在问：这期间再按一次退出不重复问 */
 let quitAsking = false
 
+app.on('will-quit', () => {
+  void chromeTargets?.dispose()
+})
 app.on('before-quit', (event) => {
   // 界面上有没保存的改动：先问，问完了可以走再退一遍
   if (!quitSettled && !quitting && guardQuit(BrowserWindow.getAllWindows(), () => app.quit())) {
@@ -1071,7 +1080,24 @@ if (!smoke && !app.requestSingleInstanceLock()) {
       readLook(app.getPath('userData'))
     // 内置浏览器：宿主、litch_browser 的执行器、界面和设置页用的消息（browser/install.mts）
     browser = installBrowser({ isUiUrl, userData: app.getPath('userData') })
-    clientTools.add(browser.executor)
+    chromeTargets = new BrowserTargets({
+      root: join(app.getPath('userData'), 'chrome'),
+      assets: fileURLToPath(new URL('./chrome-extension', import.meta.url)),
+      nativeBinary: adapterRoot ? bundledAdapter(adapterRoot).bin : '',
+      openExtensions: () =>
+        new Promise<void>((resolve, reject) => {
+          const child = spawn('/usr/bin/open', ['-a', 'Google Chrome', 'chrome://extensions'])
+          child.once('error', reject)
+          child.once('exit', (code) =>
+            code === 0 ? resolve() : reject(new Error('Could not open Chrome.')),
+          )
+        }),
+      openDirectory: async (directory) => {
+        const error = await shell.openPath(directory)
+        if (error) throw new Error(error)
+      },
+    })
+    clientTools.add(chromeTargets.dispatch(browser.executor))
     startCore()
     // 产品手册装进本机的 harness：在后台做，不挡窗口
     manualSkill.start()

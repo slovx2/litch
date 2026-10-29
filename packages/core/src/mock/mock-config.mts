@@ -90,6 +90,14 @@ export function createMockConfig(host: MockConfigHost): MockConfig {
         policy.blocked =
           request.host === null ? [] : policy.blocked.filter((one) => one !== request.host)
         return { ok: true, data: { ...policy, blocked: [...policy.blocked] } }
+      case 'chrome.status':
+      case 'chrome.prepare':
+      case 'chrome.extensions':
+      case 'chrome.directory':
+      case 'chrome.enable':
+      case 'chrome.device':
+      case 'chrome.stop':
+        return { ok: false, reason: 'Chrome requires the desktop shell.' }
       case 'computer.status':
         return { ok: true, data: computer }
     }

@@ -212,3 +212,15 @@ macOS 优先后台操作。后台不能完成时，等待键鼠连续空闲 2 �
 “停止”结束本回合控制，“接管窗口”先停止
 代理再打开真实窗口，“固定画中画”打开不抢焦点的悬浮窗。画面过期会标明，预览不录制、不写入会话历史。
 远程设备上的会话操作的仍是控制端这台 Mac。
+
+## Chrome on the controlling Mac
+
+Chrome uses the `litch_browser` tools with an explicit Chrome target. In **Settings → Built-in browser → Chrome**, prepare the extension, open the extensions page, enable Developer mode and load the displayed unpacked extension folder. Litch registers its Native Messaging host automatically. This version is not distributed through the Chrome Web Store. Keep the folder in place and reload the extension after updating Litch. The settings show the required version, connected instances and version mismatches.
+
+Chrome control is off by default. Enable it separately and choose which remote devices may request access to this Mac. Browser feature switches for the device and harness still apply. Each source requires approval, including localhost; Chrome does not inherit the built-in browser's saved site approvals or “trust all” setting. Remote sessions operate Chrome on the controlling Mac: localhost refers to that Mac. Operating Chrome on the remote execution device is not supported in this version.
+
+The agent lists targets and tabs, then explicitly claims a tab with a short-lived claim token. User tabs are released when the turn ends and are never closed by the agent. New agent tabs are temporary unless kept. Reconnection, extension reload and ended turns invalidate leases and references; list and claim again. If a debugger cannot attach, close that tab's DevTools or other debugger and retry. Click the extension toolbar action or **Stop all Chrome control** in Litch to revoke control.
+
+Chrome sign-in is manual. `request_sign_in` brings the tab forward and pauses agent observation and actions in that Chrome instance. Sign in yourself, then choose **Sign-in complete** in Litch. The page reloads and the agent must claim it again. Never provide passwords or one-time codes to the agent. Remote uploads and cross-device downloads are not supported.
+
+New popups are unclaimed and require source approval before observation or actions. This is not a network firewall: a page can already send cross-origin requests through images, forms and fetch. The first popup request may reach its destination with cookies, referrer or URL data before approval, and may trigger GET side effects. The enforced boundary is the agent's access to page content and controls, not preventing all requests to unapproved sites.

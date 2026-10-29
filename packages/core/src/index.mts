@@ -1,5 +1,9 @@
 // 核心包的入口。界面和外壳只从这里引用。
 
+export type {
+  ChromeSettingsRequest,
+  ChromeSettingsState,
+} from '../../protocol/src/chrome-browser.mjs'
 // 扫码绑定手机：界面拼二维码文本、外壳造一次性私钥文件要用（和设备进程、手机用的是同一份）
 export {
   base64UrlDecode,

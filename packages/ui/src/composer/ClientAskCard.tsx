@@ -43,9 +43,15 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
   const refuse = request.options.find((option) => option.role === 'decline')
   const { ask, device } = request
   const remote = device.kind === 'ssh'
-  const title = t('clientAsk.site')
+  const title = t(
+    ask.kind === 'chromeSignIn'
+      ? 'chrome.signIn'
+      : ask.kind === 'site' && ask.browser === 'chrome'
+        ? 'chrome.approve'
+        : 'clientAsk.site',
+  )
   /** 信任所有网站要经外壳改设置；普通浏览器里（模拟核心）没有外壳，不出这个按钮 */
-  const bridge = ask.kind === 'site' ? browserBridge() : undefined
+  const bridge = ask.kind === 'site' && ask.browser !== 'chrome' ? browserBridge() : undefined
   const once = request.options.find((option) => option.role === 'accept')
 
   const trustAll = () => {
@@ -113,6 +119,15 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
             {t('clientAsk.tool')} <b>{`${request.tool.namespace} · ${request.tool.name}`}</b>
           </span>
         </div>
+        {ask.kind === 'chromeSignIn' ? (
+          <>
+            <div className="req-why">{t('chrome.signInNote')}</div>
+            <div className="well">
+              <b>{ask.origin}</b>
+              <p>{ask.reason}</p>
+            </div>
+          </>
+        ) : null}
         {ask.kind === 'site' ? (
           <>
             <div className="req-meta">
@@ -152,7 +167,11 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
               data-option={option.id}
               onClick={() => respond({ optionId: option.id })}
             >
-              {t(OPTION_TEXT[option.role])}
+              {t(
+                ask.kind === 'chromeSignIn' && option.role === 'accept'
+                  ? 'chrome.signInDone'
+                  : OPTION_TEXT[option.role],
+              )}
               {option === primary ? <span className="kbd">↵</span> : null}
               {option === refuse ? <span className="kbd">Esc</span> : null}
             </button>

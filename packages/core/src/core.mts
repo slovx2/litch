@@ -1457,6 +1457,11 @@ export function createCore(options: CoreOptions): Core {
           }
           return {}
         }
+        case 'chrome.settings': {
+          const result = await hub.config(params as Commands['chrome.settings']['params'])
+          if (!result.ok) throw new Error(result.reason)
+          return result.data as Commands['chrome.settings']['result']
+        }
         case 'config.run': {
           const { argv, json, lang } = params as Commands['config.run']['params']
           const response = await executor().run(

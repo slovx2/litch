@@ -145,6 +145,9 @@ func run(ctx context.Context, args []string) error {
 	if args[0] == "machine" {
 		return runMachine(ctx, args[1:])
 	}
+	if args[0] == "chrome-host" {
+		return runChromeHost(args[1:])
+	}
 	if args[0] == "pair" {
 		return runPair(ctx, args[1:])
 	}

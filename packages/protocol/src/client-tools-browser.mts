@@ -16,6 +16,10 @@ const tabId = {
   type: 'string',
   description: 'Tab id from `tabs`. Omit to use the current tab of this conversation.',
 }
+const targetId = {
+  type: 'string',
+  description: 'Explicit Chrome targetId from targets. Omit for the built-in browser.',
+}
 const ref = {
   type: 'string',
   description: 'Element ref from the latest `snapshot`, like "e12".',
@@ -138,11 +142,22 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
   name: BROWSER_NAMESPACE,
   description: GUIDE,
   tools: [
+    fn('targets', 'List connected Chrome instances. Chrome: call targets, then tabs(action:list,targetId), then claim(claimToken) for a user tab. For a new Chrome tab use navigate(targetId,url). Always keep the returned chrome: tabId in subsequent calls. Chrome runs on the controlling Mac; localhost refers to that Mac even in a remote session. Chrome requires separate source approval, including localhost. Popups are unclaimed; list and claim them separately. release returns a user tab without closing it. Old leases and refs expire on reconnect or turn end; list and claim again. request_sign_in pauses all observation while the user signs in manually, then requires a fresh claim. Do not switch browser or tab to bypass a refusal.', {}),
+    fn(
+      'claim',
+      'Claim one Chrome tab after source approval. Use a fresh claimToken from tabs.',
+      { claimToken: { type: 'string' } },
+      ['claimToken'],
+    ),
+    fn('release', 'Release a claimed Chrome tab without closing the user tab.', { tabId }, [
+      'tabId',
+    ]),
     fn(
       'tabs',
       'List, open, select, close or keep browser tabs of this conversation. Tabs you open are temporary and are closed when your turn ends unless you keep them (keep:true here or in `navigate`). `list` also shows tabs the user opened (owner "user"); you can read their URL and title but can only operate your own tabs. `keep` marks one of your tabs to stay open for the user after your turn.',
       {
         action: { type: 'string', enum: ['list', 'new', 'select', 'close', 'keep'] },
+        targetId,
         tabId,
         url: { type: 'string', description: 'For `new`: page to open (default about:blank).' },
         keep: {
@@ -159,6 +174,7 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
         url: { type: 'string', description: 'Address to open. Required unless `action` is given.' },
         action: { type: 'string', enum: ['back', 'forward', 'reload'] },
         tabId,
+        targetId,
         newTab: { type: 'boolean', description: 'Open in a new tab instead of the current one.' },
         keep: { type: 'boolean', description: 'With newTab: leave the tab open after the turn.' },
       },

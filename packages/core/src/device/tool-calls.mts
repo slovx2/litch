@@ -150,7 +150,11 @@ const DISABLED: Record<string, string> = {
  * 卡片上的选项：网站是“这一次 / 这个会话 / 一直 / 拒绝”
  */
 export const clientAskOptions = (ask: ClientAskView): ApprovalOption[] =>
-  ask.kind === 'machine'
+  ask.kind === 'chromeSignIn'
+    ? [{ id: 'once', role: 'accept' }, { id: 'decline', role: 'decline' }]
+    : ask.kind === 'site' && ask.browser === 'chrome'
+      ? [{ id: 'once', role: 'accept' }, { id: 'session', role: 'acceptSession' }, { id: 'decline', role: 'decline' }]
+    : ask.kind === 'machine'
     ? // 远程设备操作本机（08 号 3.2）：没有“始终允许”
       [
         { id: 'once', role: 'accept' },

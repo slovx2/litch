@@ -6,6 +6,7 @@ import { zhAsks } from './zh-CN-asks.ts'
 import { zhAutomation } from './zh-CN-automation.ts'
 import { zhBackground } from './zh-CN-background.ts'
 import { zhBimport } from './zh-CN-bimport.ts'
+import { zhChrome } from './zh-CN-chrome.ts'
 import { zhComments } from './zh-CN-comments.ts'
 import { zhGoal } from './zh-CN-goal.ts'
 import { zhHconfig } from './zh-CN-hconfig.ts'
@@ -25,6 +26,7 @@ import { zhWorktrees } from './zh-CN-worktrees.ts'
 export const zhCN = {
   ...zhPower,
   ...zhAutomation,
+  ...zhChrome,
   // 定时任务的文案单独放一个文件（zh-CN-tasks.ts）
   ...zhTasks,
   // 模型边干活边问的题（zh-CN-asks.ts）

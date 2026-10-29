@@ -71,3 +71,5 @@ npm run client:setup && npm run client:typecheck && npm run client:test
 
 - 包内约定：`packages/claude/src/AGENTS.md`、`packages/claude/test/AGENTS.md`、`scripts/AGENTS.md`。
 - 面向用户的说明：`README.md`（首页，只讲是什么和怎么跑）、`ADAPTER.md`（适配器的安装、配置与排障，保持简短）、`CONTRIBUTING.md`（发版）。
+
+- Chrome 隔离自动验收：`scripts/chrome-e2e/README.md`（`npm run client:check:chrome`，默认 headless）。

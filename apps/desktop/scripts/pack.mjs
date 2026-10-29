@@ -94,6 +94,9 @@ writeFileSync(
   )}\n`,
 )
 for (const file of shell) cpSync(join(appDir, 'dist', file), join(stage, 'dist', file))
+cpSync(join(appDir, 'dist/chrome-extension'), join(stage, 'dist/chrome-extension'), {
+  recursive: true,
+})
 if (process.platform === 'linux') {
   mkdirSync(join(stage, 'assets'), { recursive: true })
   cpSync(join(appDir, 'assets', 'icon.png'), join(stage, 'assets', 'icon.png'))

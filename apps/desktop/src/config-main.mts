@@ -8,9 +8,11 @@ import type {
   ConfigSiteView,
 } from '@litch/core'
 import type { InstalledBrowser } from './browser/install.mjs'
+import type { BrowserTargets } from './chrome-browser/browser-targets.mjs'
 import type { ComputerUseSettings } from './computer-use/settings.mjs'
 
 export interface ConfigMainDeps {
+  chrome?(): BrowserTargets | null
   /** 内置浏览器。应用起来之前是 null */
   browser(): InstalledBrowser | null
   /** Computer Use 的设置。这台桌面没有 Computer Use（Linux）是 null */
@@ -23,6 +25,17 @@ export function createConfigMain(deps: ConfigMainDeps) {
   return async (request: ConfigMainRequest): Promise<ConfigMainResult> => {
     try {
       switch (request.kind) {
+        case 'chrome.status':
+        case 'chrome.prepare':
+        case 'chrome.extensions':
+        case 'chrome.directory':
+        case 'chrome.enable':
+        case 'chrome.device':
+        case 'chrome.stop': {
+          const chrome = deps.chrome?.()
+          if (!chrome) return fail('Chrome control is not ready.')
+          return { ok: true, data: await chrome.settings(request) }
+        }
         case 'browser.sites':
         case 'browser.allow':
         case 'browser.forget':

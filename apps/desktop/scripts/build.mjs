@@ -3,6 +3,7 @@
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 import { buildKeychain } from '../src/browser-import/protected/native/build.mjs'
+import { buildChromeExtension } from './build-chrome.mjs'
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url))
 
@@ -58,3 +59,5 @@ await build({
   outfile: 'dist/autofill-preload.cjs',
   format: 'cjs',
 })
+
+await buildChromeExtension()
