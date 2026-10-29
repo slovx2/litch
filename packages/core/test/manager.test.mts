@@ -121,6 +121,7 @@ test('副本：普通侧栏过滤整棵经理树，经理复用原有 children �
       origin: 'model',
       title: '',
       wakeParent: true,
+      reportParent: true,
       createdAt: 0,
       proposalId: null,
     },

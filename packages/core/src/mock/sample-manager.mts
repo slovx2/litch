@@ -187,6 +187,7 @@ export function sampleManagers(
             origin: 'model',
             title,
             wakeParent: true,
+            reportParent: true,
             createdAt: ago(120),
             proposalId: null,
           }

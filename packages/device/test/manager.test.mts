@@ -629,3 +629,52 @@ test('Codex 经理规则：恢复和分叉按 CURRENT 重拼，保留用户底�
     await env.close()
   }
 })
+
+test('经理工作线停报：保留归属和运行状态，不入父队列或唤醒；恢复后新回合正常报告', async () => {
+  const env = treeRig()
+  refuseSteer(env.pi)
+  try {
+    const connection = await client(env, ['harness', 'litchManager', 'sessionTree'])
+    const { manager, threadId } = await create(env, connection)
+    const child = await startChild(
+      env.device.sessionTree,
+      threadId,
+      {
+        kind: 'fresh',
+        title: '停报工作线',
+        prompt: '检查回报',
+        worktree: false,
+        wakeParent: true,
+      },
+      'model',
+    )
+    const tree = env.device.sessionTree
+    await connection.call('litch/session/report/set', {
+      threadId: child.threadId,
+      reportParent: false,
+    })
+    const line = env.device.managers
+      .board(manager.id)
+      .lines.find((line) => line.threadId === child.threadId)
+    assert.equal(line?.running, true)
+    assert.equal(line?.parentThreadId, threadId)
+    env.pi.end(child.threadId, 'completed', '静默结果')
+    await until(() => !tree.isActive(child.threadId), '工作线停下')
+    assert.equal(tree.queuedNotes(threadId).length, 0)
+    assert.equal(
+      env.device.managers.board(manager.id).lines.find((line) => line.threadId === child.threadId)
+        ?.status,
+      'idle',
+    )
+    await connection.call('litch/session/report/set', {
+      threadId: child.threadId,
+      reportParent: true,
+    })
+    env.pi.selfTurn(child.threadId)
+    env.pi.end(child.threadId, 'completed', '新的工作线结果')
+    await until(() => tree.queuedNotes(threadId).length === 1, '恢复后的回报进入队列')
+    assert.equal(env.device.managers.store.report(child.threadId)?.text, '新的工作线结果')
+  } finally {
+    await env.close()
+  }
+})

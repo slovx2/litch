@@ -10,6 +10,8 @@ export interface ManagerSeen {
   reopened: boolean
   panels: boolean
   childReturn: boolean
+  reportsStopped: boolean
+  reportsResumed: boolean
   created: boolean
   rulesKept: boolean
   endedReadOnly: boolean
@@ -153,6 +155,13 @@ export async function managerProbe(): Promise<ManagerSeen> {
   const childIds = [...document.querySelectorAll('.mg-tree [data-session]')]
     .map((row) => row.getAttribute('data-session'))
     .filter(Boolean)
+  // 经理工作线沿用普通会话行的用户回报开关，切栏后设置和标记仍在。
+  const childRow = `.mg-tree [data-session="${CSS.escape(childIds[0] ?? '')}"]`
+  await click(`${childRow} [aria-haspopup="menu"]`)
+  await click('[data-action="report"]')
+  const reportsStopped = Boolean(
+    await until('经理子会话停报标记', () => one(`${childRow} [data-report="off"]`)),
+  )
   one<HTMLButtonElement>('[data-sidebar-mode="chat"]')?.click()
   await until('返回普通对话', () => !one('.mg-sidebar-manager'))
   const isolated =
@@ -161,6 +170,13 @@ export async function managerProbe(): Promise<ManagerSeen> {
       (id) => !document.querySelector(`.sb-scroll [data-session="${CSS.escape(id ?? '')}"]`),
     )
   await click('[data-sidebar-mode="manager"]')
+  await until('切栏后保留停报标记', () => one(`${childRow} [data-report="off"]`))
+  await click(`${childRow} [aria-haspopup="menu"]`)
+  await click('[data-action="report"]')
+  const reportsResumed = await until(
+    '恢复回报后去掉标记',
+    () => !one(`${childRow} [data-report="off"]`),
+  )
   await click('.sb-top .new')
   await until('新建经理表单', () => one('[data-manager="form"]'))
   const field = (label: string) =>
@@ -333,6 +349,8 @@ export async function managerProbe(): Promise<ManagerSeen> {
     reopened,
     panels,
     childReturn,
+    reportsStopped,
+    reportsResumed,
     created,
     rulesKept,
     endedReadOnly,
@@ -369,6 +387,8 @@ export function judgeManager(seen: ManagerSeen): string[] {
     reopened: '已关闭决策没有重新打开',
     panels: '事项或工作线没有显示事实',
     childReturn: '子会话没有返回经理',
+    reportsStopped: '经理子会话停止回报后没有显示标记',
+    reportsResumed: '经理子会话恢复回报后标记没有移除',
     created: '新建经理没有进入经理页',
     rulesKept: '手写规矩被派活选项覆盖',
     endedReadOnly: '已结束经理没有转只读',
