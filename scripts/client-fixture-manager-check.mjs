@@ -18,15 +18,80 @@ function writableDirectories(directory) {
 }
 
 /** 所有等待均有截止时间，失败消息包含最后一次实际读取的状态。 */
-export async function until(what, read, fits, timeout = 90_000) {
+export async function until(what, read, fits, timeout = 90_000, pollMs = 100) {
   const deadline = Date.now() + timeout
   let value
   do {
     value = await read()
     if (fits(value)) return value
-    await pause(100)
+    await pause(pollMs)
   } while (Date.now() < deadline)
   throw new Error(`等待超时：${what}；最后状态：${JSON.stringify(value)}`)
+}
+
+const itemText = (item) =>
+  item.type === 'agentMessage'
+    ? item.text
+    : (item.content ?? [])
+        .filter((part) => part.type === 'text')
+        .map((part) => part.text)
+        .join('\n')
+
+/**
+ * Codex 收尾时 thread/read 可能短暂返回 interrupted、completedAt=null，随后同一回合变成 completed。
+ * 不能把一次读快照的“非 inProgress”当终态，也不能用 thread.status=idle 判断回合已持久化。
+ * 真正的失败/中断通知立即报错；缺通知的旧回合须读到 completed，否则由调用方限时等待失败。
+ */
+export function completedManagerTurn(thread, frames, threadId, eventKind, turnId) {
+  const turn = thread.turns?.find((entry) =>
+    turnId
+      ? entry.id === turnId
+      : entry.items.some(
+          (item) => item.type === 'userMessage' && itemText(item).includes(`kind="${eventKind}"`),
+        ),
+  )
+  if (!turn) return null
+  const ended = frames.findLast(
+    (frame) =>
+      frame.method === 'turn/completed' &&
+      frame.params?.threadId === threadId &&
+      frame.params?.turn?.id === turn.id,
+  )
+  if (ended) assert.equal(ended.params.turn.status, 'completed', JSON.stringify(ended))
+  assert.notEqual(turn.status, 'failed', JSON.stringify(turn))
+  return turn.status === 'completed' ? turn : null
+}
+
+/** 通知验证运行结果，完整快照验证文字和工具调用；创建早于订阅的开场也可从快照读到。 */
+export async function managerReply(
+  client,
+  threadId,
+  expected,
+  eventKind = null,
+  turnId = null,
+  { timeout = 90_000, pollMs = 100 } = {},
+) {
+  let turn
+  await until(
+    `会话 ${threadId} 回复 ${expected}`,
+    () => client.call('thread/read', { threadId, includeTurns: true }),
+    ({ thread }) => {
+      turn = completedManagerTurn(thread, client.frames, threadId, eventKind, turnId)
+      return turn !== null
+    },
+    timeout,
+    pollMs,
+  )
+  const answer = turn.items.find(
+    (item) => item.type === 'agentMessage' && itemText(item).startsWith(expected),
+  )
+  assert.ok(answer, `没有收到 ${expected}；回合内容：${JSON.stringify(turn.items)}`)
+  if (eventKind)
+    assert.ok(
+      !turn.items.some((item) => /toolcall|commandexecution/i.test(item.type)),
+      `${eventKind} 不应调用工具`,
+    )
+  return answer.text
 }
 
 export async function startManagerFixture(t, engines) {
