@@ -64,6 +64,7 @@ import { describeHarness, type HarnessCatalog, REQUIRED_EXTENSIONS } from './har
 import { instructionsCall } from './instructions.mjs'
 import { listThreads } from './list-threads.mjs'
 import { type DeviceManagement, MANAGEMENT_PREFIX } from './management.mjs'
+import type { DeviceManagers } from './manager.mjs'
 import { dialectFor, NATIVE_CODEX_DIALECT } from './native-codex.mjs'
 import { type DevicePairing, PAIR_PREFIX, PairingError } from './pairing.mjs'
 import type { PowerActivity } from './power-activity.mjs'
@@ -163,6 +164,7 @@ export interface SessionHost {
   clientInvoke: ClientToolInvoker
   /** 定时任务（deviceTasks 扩展）。任务库打不开时是 null，设备上就没有这项扩展 */
   tasks: DeviceTasks | null
+  managers?: DeviceManagers
   /** 由设备进程自己执行的 litch_ 命名空间：替每条上游连接声明，调用落到哪条上就在那里拦（device-tools.mts） */
   deviceTools: DeviceTools
   /** 会话树（session-tree.mts） */
@@ -254,6 +256,7 @@ export class ClientSession implements ClientToolPeer {
       answered: (link, id, error) => this.traced(id, error, link.harness),
       deviceTools: host.deviceTools,
       observe: (link, method, params) => {
+        this.host.managers?.observe(method, params)
         this.host.recovery?.observe(link.harness, method, params)
         this.host.power()?.notification(link.harness, method, params)
         this.translators.get(link.harness)?.notification(method, params)
@@ -432,6 +435,21 @@ export class ClientSession implements ClientToolPeer {
   /** flushed：这一帧已经交给系统了（握手完成之前攒着的帧不带它，那时候还没有进程的输出） */
   private send(text: string, flushed?: () => void): void {
     if (this.state === 'closed') return
+    // relay 的会话通知和应答在实际投递连接处补标记，独立于 sessionTree 声明。
+    if (this.host.managers && text.includes('"thread"')) {
+      const frame = JSON.parse(text)
+      const envelope = isObject(frame.result)
+        ? frame.result
+        : isObject(frame.params)
+          ? frame.params
+          : null
+      if (isObject(envelope?.thread)) {
+        const thread = envelope.thread
+        if (this.declared.has(EXTENSION.manager)) this.host.managers.decorate(thread)
+        else delete thread.litchManager
+        text = JSON.stringify(frame)
+      }
+    }
     if (this.gate) this.gate.push(text)
     else this.wire.send(text, flushed)
   }
@@ -529,6 +547,12 @@ export class ClientSession implements ClientToolPeer {
           throw new DeviceError('extensionRequired', `${method} requires devicePower`)
         if (method.startsWith(MANAGEMENT_PREFIX))
           return this.host.management.call(method, frame.params)
+        if (method.startsWith('litch/manager/'))
+          return this.host.managers?.call(
+            method,
+            frame.params,
+            this.declared.has(EXTENSION.manager),
+          )
         if (method.startsWith(DEVICE_TASK_PREFIX)) return this.tasks(method, frame.params)
         return this.calls.call(method, frame.params)
       case 'workspace':
@@ -548,9 +572,11 @@ export class ClientSession implements ClientToolPeer {
               this.host.worktrees?.adopt(String(row.id), row.cwd),
             ...(this.declared.has(EXTENSION.sessionTree) ||
             this.declared.has(EXTENSION.backgroundTasks) ||
-            this.declared.has(EXTENSION.worktrees)
+            this.declared.has(EXTENSION.worktrees) ||
+            this.declared.has(EXTENSION.manager)
               ? {
                   decorate: (row: Record<string, unknown>) => {
+                    if (this.declared.has(EXTENSION.manager)) this.host.managers?.decorate(row)
                     if (this.declared.has(EXTENSION.sessionTree))
                       this.host.sessionTree.decorate(row)
                     if (this.declared.has(EXTENSION.backgroundTasks))
@@ -808,6 +834,30 @@ export class ClientSession implements ClientToolPeer {
     const proceed = (
       given: Record<string, unknown> | null,
     ): typeof HANDLED | Promise<typeof HANDLED> => {
+      if (
+        method === 'turn/start' &&
+        typeof given?.threadId === 'string' &&
+        this.host.managers?.lines.mark(given.threadId)?.role === 'line'
+      ) {
+        const threadId = given.threadId
+        return this.host.managers.lines.reserve(threadId, threadId).then((hold) => {
+          afterwards.push((result) => {
+            if (isObject(result) && isObject(result.turn))
+              this.host.sessionTree.turnEvent(link.harness, 'turn/started', {
+                threadId,
+                turn: result.turn,
+              })
+            hold.release()
+          })
+          failures.push(() => hold.release())
+          try {
+            return send(given)
+          } catch (error) {
+            hold.release()
+            throw error
+          }
+        })
+      }
       const prepared = given
         ? link.dialect.instructions?.(method, given, {
             ask: (asked, more) => this.query(link, asked, more),
@@ -940,6 +990,7 @@ export class ClientSession implements ClientToolPeer {
     if (typeof fields.isPinned === 'boolean') workspaces.pin(threadId, fields.isPinned)
     thread.harness = link.harness
     workspaces.decorate(threadId, thread)
+    if (this.declared.has(EXTENSION.manager)) this.host.managers?.decorate(thread)
     if (this.declared.has(EXTENSION.sessionTree)) this.host.sessionTree.decorate(thread)
     if (this.declared.has(EXTENSION.worktrees)) this.host.worktrees?.decorate(thread)
     return more ? result : { thread }

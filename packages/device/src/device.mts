@@ -29,6 +29,7 @@ import type { FlowLimits } from './flow.mjs'
 import { deviceInfo, deviceVersion, HarnessCatalog } from './harness-info.mjs'
 import { WorkspaceImporter } from './importer.mjs'
 import { DeviceManagement } from './management.mjs'
+import { DeviceManagers } from './manager.mjs'
 import { dialectFor } from './native-codex.mjs'
 import { DevicePairing, type PairingConfig } from './pairing.mjs'
 import { PowerActivity } from './power-activity.mjs'
@@ -235,6 +236,7 @@ export class DeviceServer {
   readonly deviceTools: DeviceTools
   /** 会话树：父子关系、提案、回报与唤醒（session-tree.mts） */
   readonly sessionTree: SessionTree
+  readonly managers: DeviceManagers
   /** 原生 codex 会话的自动起名 */
   readonly titles: CodexTitles
   /** 每个会话的后台任务（backgroundTasks 扩展） */
@@ -440,6 +442,12 @@ export class DeviceServer {
         this.control?.state?.snapshot.values[taskCardsSettingKey(harness)] !== false,
       log,
     })
+    this.managers = new DeviceManagers(this.sessionTree, options.stateDir, (harness, thread) => {
+      this.titles?.born(harness, thread)
+    })
+    this.sessionTree.managers = this.managers
+    info.extensions.push(EXTENSION.manager)
+    this.deviceTools.register(CLIENT_TOOL_NAMESPACE.manager, (call) => this.managers.tool(call))
     // 以前删会话时没删它带的动态工具（每个几十 KB）：设备不认识的会话的那一行清一次。
     // 索引是空的（device.sqlite 刚建、刚换过）时分不出哪些会话还在，留到下次启动
     const sessionStore = this.sessionTree.store
@@ -486,6 +494,12 @@ export class DeviceServer {
     )
     // 有后台任务在跑的会话：设备进程的连接跟着它，跑完以后引擎自己续跑的回合里调设备工具（收尾、任务卡）有执行方
     this.background.onBusy((threadId) => this.sessionTree.follow(threadId))
+    const managerBoardChanged = (threadId: string) => {
+      const manager = this.managers.lines.managerFor(threadId)
+      if (manager) this.managers.changed(manager.id)
+    }
+    this.background.onBusy(managerBoardChanged)
+    this.background.onSettled(managerBoardChanged)
     this.background.onBusy(() => this.power?.changed())
     this.background.onSettled(() => this.power?.changed())
     this.titles = new CodexTitles({
@@ -529,6 +543,7 @@ export class DeviceServer {
       clientTools: router,
       clientInvoke: new ClientToolInvoker({ router, index: this.index, log }),
       tasks: this.tasks,
+      managers: this.managers,
       deviceTools: this.deviceTools,
       sessionTree: this.sessionTree,
       sessionTreeOn: () => this.sessionTreeOn(),
@@ -822,6 +837,12 @@ export class DeviceServer {
               handshakeTimeoutMs: options.handshakeTimeoutMs ?? this.taskTiming.handshakeTimeoutMs,
               requestTimeoutMs: this.taskTiming.requestTimeoutMs,
               tools: this.deviceTools,
+              reserveTurn: async (threadId) => {
+                const hold = await this.managers?.lines.reserve(threadId, threadId)
+                return () => hold?.release()
+              },
+              turnStarted: (harness, threadId, turn) =>
+                this.sessionTree.turnEvent(harness, 'turn/started', { threadId, turn }),
               instructions: this.sessionTree.store,
               speeds: this.sessionTree.store,
               log: (line) => this.options.log?.(`[${harness}] ${line}`),
@@ -921,6 +942,7 @@ export class DeviceServer {
     for (const link of [...this.engineLinks]) link.close()
     for (const session of [...this.sessions]) session.close()
     this.sessionTree.close()
+    await this.managers.close()
     this.worktreeLife?.stop()
     this.titles.close()
     this.deviceTools.close()

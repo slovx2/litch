@@ -42,6 +42,7 @@ test('握手：没声明 harness 扩展的被拒绝并说明原因，声明了�
         'deviceTasks',
         // 测试机上有 git
         'worktrees',
+        'litchManager',
         'sessionTree',
         'sessionQuestionIgnore',
       ],
@@ -86,8 +87,8 @@ test('握手：没声明 harness 扩展的被拒绝并说明原因，声明了�
         litchExtensions: ['harness', 'futureThing', 'clientTools'],
         subAgentActivityKinds: ['completed'],
         litchClientTools: {
-          namespaces: ['litch_tasks', 'litch_sessions'],
-          anyThread: ['litch_tasks', 'litch_sessions'],
+          namespaces: ['litch_tasks', 'litch_manager', 'litch_sessions'],
+          anyThread: ['litch_tasks', 'litch_manager', 'litch_sessions'],
         },
       },
     })
@@ -157,6 +158,7 @@ test('runtime/info：设备信息和每个 harness 的状态，形状和扩展�
       'clientApprovals',
       'deviceTasks',
       'worktrees',
+      'litchManager',
       'sessionTree',
       'sessionQuestionIgnore',
     ])

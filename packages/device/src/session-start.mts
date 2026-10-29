@@ -5,7 +5,9 @@
 // 和设备级工作区（跟父会话在同一个工作区，除非指定了别的），给每条客户端连接发 thread/started 和父子关系的通知。
 // 目录：worktree 为真的在设备层新建一个工作树（从宿主分支的最新提交切），为假的共用父会话的目录；没定的看宿主——
 // 父会话是某棵设备层工作树的主人、或者目录就在某棵里（共用着它），就开新的，否则共用（placement）。
+
 import { realpathSync } from 'node:fs'
+import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import {
   isPresentationSpec,
   PRESENTATION_SPEC,
@@ -23,6 +25,7 @@ import {
 } from '../../protocol/src/session-tree.mjs'
 import type { Worktree, WorktreeFrom } from '../../protocol/src/worktrees.mjs'
 import type { EngineLink } from './engine-link.mjs'
+import { lineInstructions } from './manager-rules.mjs'
 import type { SessionTree } from './session-tree.mjs'
 import { DeviceError, isObject } from './wire.mjs'
 import { worktreeCwd } from './worktrees.mjs'
@@ -227,13 +230,17 @@ function childTools(
   if (!extensions.includes(EXTENSION.clientTools)) return null
   // 呈现风格看子会话建在哪个 harness 上（原生 codex 不带，按设备侧的 link.native 认），不照搬父会话的
   const inherited = (tree.store.tools(parentId) ?? []).filter(
-    (spec) => !isPresentationSpec(spec) && (!isObject(spec) || spec.name !== SESSION_TOOLS.name),
+    (spec) =>
+      !isPresentationSpec(spec) &&
+      (!isObject(spec) ||
+        (spec.name !== SESSION_TOOLS.name && spec.name !== CLIENT_TOOL_NAMESPACE.manager)),
   )
+  const manager = tree.managers?.lines.managerFor(parentId)
+  const sessions = sessionTools(tree.host.wrapUp(), tree.host.taskCards(harness))
+  if (manager) sessions.instructions = `${sessions.instructions}\n\n${lineInstructions(manager)}`
   return [
     ...inherited,
-    ...(tree.host.enabled()
-      ? [sessionTools(tree.host.wrapUp(), tree.host.taskCards(harness))]
-      : []),
+    ...(tree.host.enabled() || manager ? [sessions] : []),
     ...(link.native ? [] : [PRESENTATION_SPEC]),
   ]
 }
@@ -338,11 +345,27 @@ export function placement(
   }
 }
 
+/** 名额覆盖建工作树、建会话、开回合全过程；失败也释放。 */
 export async function startChild(
   tree: SessionTree,
   parentId: string,
   spec: ChildSpec,
   origin: SessionLineageOrigin,
+): Promise<{ threadId: string; harness: string; branch: string | null }> {
+  const reservation = await tree.managers?.lines.reserve(parentId, null)
+  try {
+    return await createChild(tree, parentId, spec, origin, (id) => reservation?.bind(id))
+  } finally {
+    reservation?.release()
+  }
+}
+
+async function createChild(
+  tree: SessionTree,
+  parentId: string,
+  spec: ChildSpec,
+  origin: SessionLineageOrigin,
+  bind: (threadId: string) => void,
 ): Promise<{ threadId: string; harness: string; branch: string | null }> {
   const title = spec.title.trim().slice(0, 120)
   if (!title) throw new StartRefused('invalid', 'title must not be empty.')
@@ -358,7 +381,8 @@ export async function startChild(
       `background is longer than ${SESSION_TOOL_LIMITS.messageChars} characters; shorten it and point to files instead.`,
     )
   const parentHarness = await tree.owner(parentId)
-  const harness = spec.harness || parentHarness
+  const manager = tree.managers?.lines.managerFor(parentId)
+  const harness = spec.harness || manager?.dispatch.harness || manager?.harness || parentHarness
   if (!tree.host.harnesses().some((source) => source.id === harness))
     throw new StartRefused('invalid', `There is no harness "${harness}" on this device.`)
   if (spec.kind === 'fork' && harness !== parentHarness)
@@ -381,13 +405,42 @@ export async function startChild(
   const parentThread = isObject(parentConfig?.thread) ? parentConfig.thread : null
   const permissions = tightened(parentConfig, spec)
   const link = harness === parentHarness ? parentLink : await tree.link(harness)
-  const tools = spec.kind === 'fresh' ? childTools(tree, parentId, harness, link) : null
+  const managerFork = spec.kind === 'fork' && Boolean(tree.managers?.store.forThread(parentId))
+  // Claude 的 thread/fork 经 saveRuntimeSettings 替换动态工具；其余现有引擎会原样继承，不能假装已经隔离。
+  if (managerFork && (link.native || link.runtime?.engine !== 'claude-code'))
+    throw new StartRefused(
+      'invalid',
+      'This harness cannot replace manager tools when forking a line. Use kind fresh with a self-contained brief.',
+    )
+  const tools =
+    spec.kind === 'fresh' || managerFork ? childTools(tree, parentId, harness, link) : null
   // 模型、强度没给的取父会话现在的；harness 不同时不带，用那边的默认。父会话自己那一对不用再问
   const same = harness === parentHarness
   const parentModel = same ? textOf(parentConfig?.model) : null
   const parentEffort = same ? textOf(parentConfig?.reasoningEffort) : null
-  const model = spec.model || parentModel
-  const wanted = spec.effort || parentEffort
+  // 孙线默认仍取经理当前的型号和强度，不能误取直接父线的覆盖值。
+  const managerConfig =
+    manager && harness === manager.harness
+      ? parentId === manager.threadId
+        ? parentConfig
+        : (await parentSettings(tree, manager.threadId, manager.harness)).config
+      : null
+  const model =
+    spec.model ||
+    manager?.dispatch.model ||
+    (manager
+      ? harness === manager.harness
+        ? (textOf(managerConfig?.model) ?? manager.model)
+        : null
+      : parentModel)
+  const wanted =
+    spec.effort ||
+    manager?.dispatch.effort ||
+    (manager
+      ? harness === manager.harness
+        ? (textOf(managerConfig?.reasoningEffort) ?? manager.effort)
+        : null
+      : parentEffort)
   const effort =
     wanted && (wanted !== parentEffort || model !== parentModel)
       ? await fitEffort(link, model, wanted)
@@ -396,10 +449,11 @@ export async function startChild(
     spec.cwd ||
     (typeof parentConfig?.cwd === 'string' ? parentConfig.cwd : null) ||
     (typeof parentThread?.cwd === 'string' ? parentThread.cwd : null)
-  const place = placement(tree, parentId, cwd, spec.worktree, Boolean(spec.cwd))
+  const worktree = spec.worktree ?? manager?.dispatch.worktree
+  const place = placement(tree, parentId, cwd, worktree, Boolean(spec.cwd))
   const made =
     place.kind === 'worktree'
-      ? await newWorktree(tree, cwd, place.from, title, spec.worktree === true)
+      ? await newWorktree(tree, cwd, place.from, title, worktree === true)
       : null
   const where = made ? worktreeCwd(made) : cwd
   let created: unknown
@@ -409,6 +463,7 @@ export async function startChild(
         ? await link.request('thread/fork', {
             threadId: parentId,
             ...(spec.handOffBefore ? { beforeTurnId: spec.handOffBefore } : {}),
+            ...(managerFork && tools ? { dynamicTools: tools } : {}),
             ...(made ? { cwd: where } : {}),
             ...(model ? { model } : {}),
             ...permissions,
@@ -467,6 +522,7 @@ export async function startChild(
     createdAt: Math.floor(Date.now() / 1000),
     ...(spec.proposalId ? { proposalId: spec.proposalId } : {}),
   })
+  bind(threadId)
   if (tools) store.setTools(threadId, tools)
   tree.host.threadStarted(harness, { ...thread })
   tree.lineageChanged(threadId)
@@ -482,11 +538,13 @@ export async function startChild(
     Boolean(spec.handOffBefore),
     spec.background ?? '',
   )
-  await link.request('turn/start', {
+  const started = await link.request('turn/start', {
     threadId,
     input: [{ type: 'text', text, text_elements: [] }],
     ...(effort ? { effort } : {}),
   })
+  if (isObject(started?.turn))
+    tree.turnEvent(harness, 'turn/started', { threadId, turn: started.turn })
   tree.host.log(
     `会话 ${parentId} 派出子会话 ${threadId}（${harness}，${spec.kind}，${origin}${branch ? `，工作树分支 ${branch}` : ''}）`,
   )

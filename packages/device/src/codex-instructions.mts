@@ -24,6 +24,7 @@ import {
   withDeveloperInstructions,
 } from '../../protocol/src/codex-developer-instructions.mjs'
 import type { Ask } from './dialect.mjs'
+import { refreshManagerRules } from './manager-rules.mjs'
 import { isObject } from './wire.mjs'
 
 /** 一个会话记下的：客户端给的开发者指令（没给是 null）、带规则的命名空间（建会话那时的原文）、目录 */
@@ -65,7 +66,10 @@ const PLAIN_HEAD = `${sessionProposalRules(false, false).split('. ')[0]}.`
  */
 const CURRENT: Record<string, ((recorded: string, tools: unknown[] | null) => string) | undefined> =
   {
+    litch_manager: (recorded) => refreshManagerRules('litch_manager', recorded) ?? recorded,
     [SESSION_TOOLS.name]: (recorded, tools) => {
+      const manager = refreshManagerRules(SESSION_TOOLS.name, recorded)
+      if (manager) return manager
       const spec = tools?.find((one) => isObject(one) && one.name === SESSION_TOOLS.name)
       if (!isObject(spec)) {
         if (recorded.startsWith(PLAIN_HEAD)) return sessionProposalRules(false, false)
