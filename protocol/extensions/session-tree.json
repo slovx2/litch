@@ -39,6 +39,7 @@
     "litch/sessionProposal/changed：每次有提案新提、开始、不要、撤回、过期，offer 卡落下、用户选了（chosen 或 here）、当作在这里做（here）都发，proposals 是这个会话现在全部还在等的（pending、offered、chosen），changed 是这次变了的那几条（任何状态，到期的同一会话一次收掉的放在一起）。",
     "子会话的审批策略、沙箱不宽于父会话：给了更宽的就收紧到父会话的那一档。模型、强度不限。目标 harness 在 runtime/info 里声明的权限预设中最严的一档也比父会话的沙箱宽时（收不紧），模型发起的 start 一律变成提案，提案上带 widerSandbox；用户点了开始、或者用户自己在界面上派的照常起。",
     "从提案开始的子会话，litchLineage 上带 proposalId。",
+    "客户端重复 dismiss 已 dismissed 的提案成功返回空对象；重复 accept 已 started 且有 startedThreadId 的提案返回原 threadId，不重复开子会话。归属校验照常执行。其他状态冲突、正在开始或未知提案按 invalid params（-32602）给具体原因，不用 method not found（-32601）伪装方法缺失。",
     "fork 只能同 harness，用目标引擎的 thread/fork；跨 harness 只能 fresh。",
     "子会话一回合结束：取最后一条回答的前 SESSION_TREE_LIMITS.noteChars 个字，等父会话下一个由用户发起的回合时，包成 kind=notes 的 <litch-session-event> 放在用户消息前面。",
     "子会话的回合失败、被打断：回报（SessionEventNote）另带 error，是回合上的错误原文，截到 SESSION_TREE_LIMITS.noteChars 个字以内；给模型的那一行写在最后（error: …）。这样的回报（第一回合也一样）照常进队列，但不算“要唤醒”的：等父会话下一个回合带上，或者别的子会话的回报唤醒父会话时一起交出去（同 Claude 桌面端：被截断的回合不唤醒）。派子会话时简报没发出去（turn/start 失败）不进队列，错误当场回给派它的那次调用。",

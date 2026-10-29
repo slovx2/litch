@@ -22,9 +22,10 @@ import {
   type SessionLineageOrigin,
 } from '../../protocol/src/session-tree.mjs'
 import type { Worktree, WorktreeFrom } from '../../protocol/src/worktrees.mjs'
+import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { SessionTree } from './session-tree.mjs'
-import { DeviceError, isObject } from './wire.mjs'
+import { isObject } from './wire.mjs'
 import { worktreeCwd } from './worktrees.mjs'
 
 export interface ChildSpec {
@@ -569,8 +570,7 @@ export async function acceptProposal(
   overrides: ProposalOverrides = {},
   from: 'pending' | 'chosen' = 'pending',
 ): Promise<{ threadId: string; harness: string; branch: string | null }> {
-  if (tree.accepting.has(proposalId))
-    throw new DeviceError('unsupported', `提案 ${proposalId} 正在开始`)
+  if (tree.accepting.has(proposalId)) throw new ProtocolError(-32602, `提案 ${proposalId} 正在开始`)
   const proposal = tree.pendingProposal(proposalId, from)
   const pick = (value: string | undefined, fallback: string | null) =>
     value === undefined ? fallback : value || null

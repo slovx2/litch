@@ -41,6 +41,7 @@ import {
   type SessionProposal,
   type SessionQueuedNote,
 } from '../../protocol/src/session-tree.mjs'
+import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { HarnessSource } from './session.mjs'
 import { isUserRequest, pendingRequestExcerpt, SessionPending } from './session-pending.mjs'
@@ -1231,9 +1232,9 @@ export class SessionTree {
    */
   pendingProposal(proposalId: string, status: Status = 'pending'): SessionProposal {
     const proposal = this.proposal(proposalId)
-    if (!proposal) throw new DeviceError('unsupported', `没有提案 ${proposalId}`)
+    if (!proposal) throw new ProtocolError(-32602, `没有提案 ${proposalId}`)
     if (proposal.status !== status)
-      throw new DeviceError('unsupported', `提案 ${proposalId} ${STATUS_WORD[proposal.status]}`)
+      throw new ProtocolError(-32602, `提案 ${proposalId} ${STATUS_WORD[proposal.status]}`)
     return proposal
   }
 
@@ -1261,10 +1262,10 @@ export class SessionTree {
     const marked = send ? undefined : this.marked.get(proposalId)
     if (marked !== undefined) return marked
     if (this.accepting.has(proposalId))
-      throw new DeviceError('unsupported', `提案 ${proposalId} 正在开始`)
+      throw new ProtocolError(-32602, `提案 ${proposalId} 正在开始`)
     const proposal = this.pendingProposal(proposalId)
     if (!this.settleProposal(proposalId, 'here', null, ['pending']))
-      throw new DeviceError('unsupported', `提案 ${proposalId} 已经了结了`)
+      throw new ProtocolError(-32602, `提案 ${proposalId} 已经了结了`)
     const text = `${lead ?? 'Do it here: '}${proposal.title}\n\n${proposal.prompt}`
     if (!send) {
       this.marked.set(proposalId, text)
@@ -1329,23 +1330,23 @@ export class SessionTree {
    */
   answerOffer(proposalId: string, choice: 'session' | 'here', worktree?: boolean): void {
     const proposal = this.proposal(proposalId)
-    if (!proposal) throw new DeviceError('unsupported', `没有提案 ${proposalId}`)
+    if (!proposal) throw new ProtocolError(-32602, `没有提案 ${proposalId}`)
     if (!proposal.offer)
-      throw new DeviceError('unsupported', `提案 ${proposalId} 不是“新会话 / 在这里做”的卡`)
+      throw new ProtocolError(-32602, `提案 ${proposalId} 不是“新会话 / 在这里做”的卡`)
     if (proposal.status !== 'offered')
-      throw new DeviceError('unsupported', `提案 ${proposalId} ${STATUS_WORD[proposal.status]}`)
+      throw new ProtocolError(-32602, `提案 ${proposalId} ${STATUS_WORD[proposal.status]}`)
     const wait = this.offers.get(proposalId)
     if (!wait) {
       // 等它的那次调用已经不在了（按说不会：落卡和开始等是同一步）。当作在这里做了结，免得卡一直挂着
       this.settleProposal(proposalId, 'here', null, ['offered'])
-      throw new DeviceError('unsupported', `提案 ${proposalId} 那次调用已经结束了`)
+      throw new ProtocolError(-32602, `提案 ${proposalId} 那次调用已经结束了`)
     }
     const status = choice === 'session' ? 'chosen' : 'here'
     // 卡上的工作树开关：模型补简报开起来时照它
     if (choice === 'session' && worktree !== undefined)
       this.store.setProposalWorktree(proposalId, worktree)
     if (!this.settleProposal(proposalId, status, null, ['offered']))
-      throw new DeviceError('unsupported', `提案 ${proposalId} 已经了结了`)
+      throw new ProtocolError(-32602, `提案 ${proposalId} 已经了结了`)
     this.offers.delete(proposalId)
     wait.resolve({ choice, reason: 'answered' })
   }

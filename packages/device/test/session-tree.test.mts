@@ -253,10 +253,10 @@ test('SESSION-TREE-003：不是用户发起的回合里说 user_asked 也只出�
     assert.equal(accepted.threadId, 'claude-code-t1')
     const child = await client.call('thread/read', { threadId: accepted.threadId })
     assert.equal(child.thread.litchLineage.origin, 'proposal')
-    const again = await client.fails('litch/sessionProposal/accept', {
+    const again = await client.call('litch/sessionProposal/accept', {
       proposalId: proposal.proposal_id,
     })
-    assert.match(again.message, /已经开始了/)
+    assert.deepEqual(again, accepted)
     await client.call('litch/sessionProposal/dismiss', { proposalId: second.proposal_id })
     assert.deepEqual((await client.call('litch/sessionProposal/list', { threadId })).proposals, [])
     // 过期：库里放一个已经到期的

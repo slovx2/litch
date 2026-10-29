@@ -310,8 +310,10 @@ woken to continue.
   off a task. A fresh card the model raises always carries a background (the overall goal,
   decisions and constraints so far) next to the task; the sub-session gets it as its own section
   before the task. Expand the brief on the card to read it.
-  手机点开始、在这里做或不要后，对话中的卡片同步显示操作后的状态；设备服务直接向手机
-  推送状态，桌面端无需保持连接。
+  On the phone, Start, Do it here and Dismiss update the card directly; the desktop need not stay
+  connected. Repeating Dismiss succeeds without changing an already dismissed card. Repeating Start
+  returns the original child session instead of creating another one. If a different action has
+  already settled the card, the error explains its actual state.
 - **Where a sub-session works** (devices that support worktrees): when the parent session is in a
   worktree Litch created (or shares one), a new sub-session gets its own new worktree and branch,
   starting from the last commit of the parent's branch (the parent's uncommitted changes are not

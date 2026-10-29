@@ -105,7 +105,13 @@ test('中断超时、回合变化、进展恢复后均不再发新回合', async
         turnId: 'a',
         delta: '已恢复',
       })
-    await assert.rejects(r.actions.continue(r.ref))
+    await assert.rejects(r.actions.continue(r.ref), (error: any) => {
+      if (mode !== 'timeout') {
+        assert.equal(error.code, -32602)
+        assert.match(error.message, /changed|no longer waiting/)
+      }
+      return true
+    })
     assert.ok(!r.calls.some((c) => c.method === 'turn/start'), mode)
     r.observer.close()
   }
@@ -114,7 +120,7 @@ test('中断超时、回合变化、进展恢复后均不再发新回合', async
 test('同一回合重复点击只执行一次', async () => {
   const r = await rig()
   const first = r.actions.continue(r.ref)
-  await assert.rejects(r.actions.continue(r.ref))
+  await assert.rejects(r.actions.continue(r.ref), { code: -32602 })
   await first
   assert.equal(r.calls.filter((c) => c.method === 'turn/start').length, 1)
   r.observer.close()

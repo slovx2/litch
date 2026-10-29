@@ -101,6 +101,7 @@ for (const tool of ['start', 'wrap_up']) {
     test(`${tool} 卡：${action} 应答后只重画所属回合，不等其他条目刷新`, async (t) => {
       const { world, channel, store, card } = await fixture(t, tool)
       const unchanged = store.getSnapshot().rows.filter((row) => row.turnId === 't2')
+      const before = world.peer.last().seen.length
       await channel.command(`session.proposal.${action}`, {
         deviceId: 'local',
         sessionId: 'p',
@@ -116,6 +117,15 @@ for (const tool of ['start', 'wrap_up']) {
       for (const row of unchanged) assert.ok(store.getSnapshot().rows.includes(row))
       if (action === 'accept') assert.equal(card().proposal.startedId, 'child')
       if (action === 'here') assert.ok(world.sent('turn/start').length > 0, '消息已发给引擎')
+      const methods = world.peer
+        .last()
+        .seen.slice(before)
+        .map((frame) => frame.method)
+      assert.deepEqual(
+        methods.filter((method) => method.startsWith('litch/sessionProposal/')),
+        [`litch/sessionProposal/${action === 'here' ? 'markHere' : action}`],
+        '一次点击只发一个提案操作，卡片刷新不能追加另一个提案请求',
+      )
     })
   }
 }

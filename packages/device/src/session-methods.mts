@@ -92,14 +92,11 @@ export async function sessionTreeCall(
   params: unknown,
   declared: boolean,
 ): Promise<unknown> {
-  if (!enabled)
-    throw new DeviceError('unsupported', `这台设备的设置里关掉了会话编排，${method} 用不了`, {
-      method,
-    })
+  if (!enabled) throw new ProtocolError(-32602, `这台设备的设置里关掉了会话编排，${method} 用不了`)
   const fields = isObject(params) ? params : {}
   switch (method) {
     case SESSION_TREE_METHOD.ignoreQuestions: {
-      if (!declared) throw new DeviceError('unsupported', 'sessionTree must be declared')
+      if (!declared) throw new DeviceError('extensionRequired', 'sessionTree must be declared')
       if (
         !Array.isArray(fields.sourceIds) ||
         !fields.sourceIds.length ||
@@ -152,22 +149,32 @@ export async function sessionTreeCall(
       }
     case SESSION_TREE_METHOD.proposalAccept: {
       const id = proposalIdOf(tree, fields)
+      // 应答丢失、旧卡片或另一个客户端再点：已创建的子会话只返回原标识，不重复派出。
+      const settled = tree.proposal(id)
+      if (settled?.status === 'started' && settled.startedThreadId)
+        return { threadId: settled.startedThreadId }
       const overrides = overridesOf(fields.overrides)
       const { threadId } = await refusedAsInvalid(() => acceptProposal(tree, id, overrides))
       return { threadId }
     }
     case SESSION_TREE_METHOD.proposalDismiss: {
       const id = proposalIdOf(tree, fields)
-      if (tree.accepting.has(id)) throw new DeviceError('unsupported', `提案 ${id} 正在开始`)
+      if (tree.accepting.has(id)) throw new ProtocolError(-32602, `提案 ${id} 正在开始`)
+      // 只对同一个已忽略结果幂等；已开始、撤回等不同结果仍返回真实拒绝原因。
+      if (tree.proposal(id)?.status === 'dismissed') return {}
       tree.pendingProposal(id)
       tree.settleProposal(id, 'dismissed', null)
       return {}
     }
     case SESSION_TREE_METHOD.proposalAnswer: {
       if (!declared)
-        throw new DeviceError('unsupported', `${method} 只给握手时声明了 sessionTree 的连接用`, {
-          method,
-        })
+        throw new DeviceError(
+          'extensionRequired',
+          `${method} 只给握手时声明了 sessionTree 的连接用`,
+          {
+            method,
+          },
+        )
       const id = proposalIdOf(tree, fields)
       const choice = fields.choice
       if (choice !== 'session' && choice !== 'here')
