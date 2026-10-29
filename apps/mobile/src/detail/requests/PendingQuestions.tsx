@@ -1,11 +1,11 @@
 // 和桌面共用待答集合；原回合移出屏幕后仍能直接回答。
-import { type PendingQuestion, pendingReplyText } from '@litch/core'
+import { type DeviceView, keys, type PendingQuestion, pendingReplyText } from '@litch/core'
 import { useState, useSyncExternalStore } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { useQuestionAge } from '../../../../../packages/ui/src/composer/question-age.ts'
 import type { SessionStore } from '../../core/session-store'
-import { useServices } from '../../shell/services'
+import { useKey, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import { sendFlags, whenRunning } from '../composer/send-mode'
@@ -66,6 +66,7 @@ function PendingCard({
 }) {
   const meta = useSyncExternalStore(store.subscribeMeta, store.getMeta)
   const { channel, prefs } = useServices()
+  const canIgnore = useKey<DeviceView>(keys.device(store.deviceId))?.ignoreQuestions === true
   const theme = useTheme()
   const { c, font, radius } = theme
   const t = useT()
@@ -95,7 +96,7 @@ function PendingCard({
     }
   }
   const ignore = async () => {
-    if (!enabled || busy) return
+    if (!canIgnore || !enabled || busy) return
     setBusy(true)
     setFailure(null)
     try {
@@ -126,14 +127,16 @@ function PendingCard({
             ? ` · ${t('ask.reportsAfter', { count: question.reportsAfter })}`
             : ''}
         </Text>
-        <Pressable
-          accessibilityRole="button"
-          disabled={!enabled || busy}
-          onPress={() => void ignore()}
-          hitSlop={8}
-        >
-          <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{t('ask.ignore')}</Text>
-        </Pressable>
+        {canIgnore ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={!enabled || busy}
+            onPress={() => void ignore()}
+            hitSlop={8}
+          >
+            <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{t('ask.ignore')}</Text>
+          </Pressable>
+        ) : null}
       </View>
       {question.options.length > 0 ? (
         <View style={styles.row}>

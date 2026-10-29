@@ -423,7 +423,8 @@ export function formatSessionEvent(event: SessionEvent): string {
           '仍有效就不要重问；过时用 litch_sessions.wrap_up 的 withdraw_questions 按题目原文撤回；改问先撤旧再问新。用户已忽略的题不要催问，过时则撤回。',
           'Do not repeat valid questions. Withdraw obsolete questions by exact title using litch_sessions.wrap_up.withdraw_questions; withdraw before rephrasing. Do not remind the user about ignored questions; withdraw them if obsolete.',
           ...event.pendingQuestions.map(
-            (q) => `${q.ignored ? '用户已忽略 / Ignored by user: ' : ''}${JSON.stringify(q)}`,
+            (q) =>
+              `${q.ignored ? '用户已忽略 / Ignored by user: ' : ''}${JSON.stringify(q).replace(/</g, '\\u003c').replace(/>/g, '\\u003e')}`,
           ),
         ]
       : []),

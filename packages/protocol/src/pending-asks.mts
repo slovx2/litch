@@ -45,6 +45,31 @@ export const questionSource = (turnId: string, itemId: string): string =>
 export const wrapQuestionId = (itemId: string, source?: string): string =>
   JSON.stringify(['wrap_up', source ? (JSON.parse(source) as string[]).join(':') : itemId])
 
+/** 忽略键只认来源的结构，不要求设备先整读历史确认它仍在。 */
+export function isQuestionSourceId(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 4000) return false
+  try {
+    const parts: unknown = JSON.parse(value)
+    if (
+      !Array.isArray(parts) ||
+      parts.length !== 3 ||
+      !['wrap', 'async'].includes(parts[0]) ||
+      typeof parts[1] !== 'string' ||
+      !Number.isSafeInteger(parts[2]) ||
+      parts[2] < 0
+    )
+      return false
+    const source: unknown = JSON.parse(parts[1])
+    return (
+      Array.isArray(source) &&
+      source.length === 2 &&
+      source.every((id) => typeof id === 'string' && id.trim().length > 0)
+    )
+  } catch {
+    return false
+  }
+}
+
 export function pendingReplyText(question: PendingQuestion, answer: string): string {
   return askReplyText(
     question.replyIds.map((questionItemId) => ({

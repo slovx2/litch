@@ -46,6 +46,7 @@ export function PendingQuestions({ deviceId, sessionId }: { deviceId: string; se
                 sessionId={sessionId}
                 enabled={meta?.live === true && device?.connection === 'online'}
                 canSteer={meta?.can.steer}
+                canIgnore={device?.ignoreQuestions === true}
               />
             ))}
           </div>
@@ -61,12 +62,14 @@ function PendingCard({
   sessionId,
   enabled,
   canSteer,
+  canIgnore,
 }: {
   question: PendingQuestion
   deviceId: string
   sessionId: string
   enabled: boolean
   canSteer: boolean | undefined
+  canIgnore: boolean
 }) {
   const t = useT()
   const { channel } = useServices()
@@ -94,7 +97,7 @@ function PendingCard({
     }
   }
   const ignore = async () => {
-    if (!enabled || busy) return
+    if (!canIgnore || !enabled || busy) return
     setBusy(true)
     setFailure(null)
     try {
@@ -120,14 +123,16 @@ function PendingCard({
             ? ` · ${t('ask.reportsAfter', { count: question.reportsAfter })}`
             : ''}
         </span>
-        <button
-          type="button"
-          className="mini"
-          disabled={!enabled || busy}
-          onClick={() => void ignore()}
-        >
-          {t('ask.ignore')}
-        </button>
+        {canIgnore ? (
+          <button
+            type="button"
+            className="mini"
+            disabled={!enabled || busy}
+            onClick={() => void ignore()}
+          >
+            {t('ask.ignore')}
+          </button>
+        ) : null}
       </div>
       <form
         className="pending-ask-row"

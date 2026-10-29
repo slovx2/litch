@@ -244,11 +244,12 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
         {
           clientInfo: { name: 'litch-device', title: null, version: options.version },
           // 项目、队列那几组方法在上游协议里标着实验性。声明 backgroundTasks：引擎的后台任务集合也发给这条连接，
-          // 没有客户端连着时会话树、定时任务的回报照样数得出后台任务（原生 codex 的方言不带我们的键）
+          // 没有客户端连着时也能数后台任务；peerMessages 保留会话间消息来历，不能误认作用户回答。
+          // 原生 codex 的方言不带这些扩展键。
           capabilities: {
             experimentalApi: true,
             requestAttestation: false,
-            [EXTENSIONS_CAPABILITY]: [EXTENSION.backgroundTasks],
+            [EXTENSIONS_CAPABILITY]: [EXTENSION.backgroundTasks, EXTENSION.peerMessages],
           },
         },
         tools.namespaces(),

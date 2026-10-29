@@ -27,7 +27,6 @@ import type { LitchBackgroundTask } from '../../protocol/src/background-tasks.mj
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { SESSION_TOOL, sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
-import { questionsOfHistory } from '../../protocol/src/pending-history.mjs'
 import { parseSessionMentions } from '../../protocol/src/session-mentions.mjs'
 import type {
   SessionDelegatedResponse,
@@ -45,6 +44,7 @@ import {
 import type { EngineLink } from './engine-link.mjs'
 import type { HarnessSource } from './session.mjs'
 import { isUserRequest, SessionPending } from './session-pending.mjs'
+import { SessionQuestions } from './session-questions.mjs'
 import type { SessionStore } from './session-store.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import { DeviceError, isObject, UpstreamRpcError } from './wire.mjs'
@@ -129,6 +129,7 @@ interface OfferWait {
 }
 
 export class SessionTree {
+  private readonly questions = new SessionQuestions()
   readonly host: SessionTreeHost
   private readonly links = new Map<string, Promise<EngineLink>>()
   /** 每条引擎连接订阅了哪些会话 */
@@ -236,6 +237,7 @@ export class SessionTree {
           (method, params) => typeof params.threadId === 'string' && isUserRequest(method),
         )
         link.onClose(() => {
+          this.questions.clear()
           this.pending.closed(link)
           if (this.links.get(harness) === pending) this.links.delete(harness)
           if (this.subscribed.get(harness) === threads) this.subscribed.delete(harness)
@@ -306,6 +308,7 @@ export class SessionTree {
     )
       return
     threads.delete(threadId)
+    this.questions.clear(threadId)
     const done = pending
       .then((link) => link.request('thread/unsubscribe', { threadId }))
       .then(
@@ -402,6 +405,7 @@ export class SessionTree {
   }
 
   private engineEvent(harness: string, method: string, params: Record<string, unknown>): void {
+    this.questions.event(method, params)
     const threadId = typeof params.threadId === 'string' ? params.threadId : null
     if (method === 'turn/started' || method === 'turn/completed')
       this.turnEvent(harness, method, params)
@@ -416,13 +420,7 @@ export class SessionTree {
   }
 
   async ignoreQuestions(threadId: string, sourceIds: string[]) {
-    const { thread } = await this.read(threadId, true)
-    const current = new Set(questionsOfHistory(thread).flatMap((q) => q.sourceIds))
-    // 只关闭当前这次提出的问题；迟到点击不能屏蔽以后重新提出的同题。
-    this.store.ignoreQuestions(
-      threadId,
-      sourceIds.filter((id) => current.has(id)),
-    )
+    this.store.ignoreQuestions(threadId, sourceIds)
     const ignoredQuestions = this.store.ignoredQuestions(threadId)
     this.host.announce(
       'litch/thread/questions/changed',
@@ -434,11 +432,16 @@ export class SessionTree {
 
   private async unanswered(threadId: string) {
     try {
-      const { thread } = await this.read(threadId, true)
-      if (!Array.isArray(thread.turns)) throw new Error('includeTurns was not returned')
-      return questionsOfHistory(thread, this.store.ignoredQuestions(threadId)).map(
-        ({ title, options, ignored }) => ({ title, options, ignored }),
+      const questions = await this.questions.read(
+        threadId,
+        async () => (await this.read(threadId, true)).thread,
       )
+      const ignored = new Set(this.store.ignoredQuestions(threadId))
+      return questions.map(({ title, options, sourceIds }) => ({
+        title,
+        options,
+        ignored: sourceIds.every((id) => ignored.has(id)),
+      }))
     } catch (error) {
       this.host.log(`会话 ${threadId} 未答题读取失败，跳过注入：${String(error)}`)
       return []
@@ -671,6 +674,7 @@ export class SessionTree {
       return
     }
     await this.watch(harness, threadId)
+    if (this.reminders.get(threadId) !== origin || this.active.has(threadId)) return
     const pendingQuestions = await this.unanswered(threadId)
     // 上面要等应答，这期间用户可能又说了话，或者别的回合里调了 wrap_up
     if (this.reminders.get(threadId) !== origin || this.active.has(threadId)) return
@@ -949,7 +953,6 @@ export class SessionTree {
   private async startWake(parentId: string, working: number): Promise<boolean> {
     const harness = await this.owner(parentId)
     await this.watch(harness, parentId)
-    const pendingQuestions = await this.unanswered(parentId)
     const fresh = this.store.notes(parentId)
     if (fresh.length === 0 || this.active.has(parentId)) return false
     const link = await this.link(harness)
@@ -960,6 +963,8 @@ export class SessionTree {
       this.notesChanged(parentId)
       return false
     }
+    const pendingQuestions = await this.unanswered(parentId)
+    if (this.closed || this.active.has(parentId) || !this.store.notes(parentId).length) return false
     const text = formatSessionEvent({
       kind: 'wake',
       ...(pendingQuestions.length ? { pendingQuestions } : {}),
@@ -1396,6 +1401,7 @@ export class SessionTree {
 
   /** 会话删掉了：它带的动态工具、记下的速度跟着删 */
   deleted(threadId: string): void {
+    this.questions.clear(threadId)
     this.pending.ended(threadId)
     this.store.dropIgnoredQuestions(threadId)
     this.store.dropResponses(threadId)

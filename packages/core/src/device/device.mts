@@ -578,6 +578,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
    * 断开之后留着断开前知道的
    */
   let sessionTree = false
+  let ignoreQuestions = false
   /** 对面支不支持扫码绑定手机（devicePairing 扩展）。断开之后留着断开前知道的 */
   let pairable = false
   /** 对面转不转手机批准（clientApprovals 扩展）。断开之后留着断开前知道的 */
@@ -756,6 +757,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     // 远程设备“操作这台电脑”：本机设备、执行不了的桌面端是 null
     machine: options.machine?.view() ?? null,
     sessionTree,
+    ignoreQuestions,
     pairing: pairable,
     install: installable,
     worktrees: worktreesOn,
@@ -1631,6 +1633,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         reattachable = info.device.extensions?.includes(EXTENSION.deviceProcesses) === true
         schedulable = info.device.extensions?.includes(EXTENSION.deviceTasks) === true
         sessionTree = info.device.extensions?.includes(EXTENSION.sessionTree) === true
+        ignoreQuestions =
+          sessionTree && info.device.extensions?.includes(EXTENSION.sessionQuestionIgnore) === true
         pairable = info.device.extensions?.includes(EXTENSION.devicePairing) === true
         approvalsOn = info.device.extensions?.includes(EXTENSION.clientApprovals) === true
         installable = info.device.extensions?.includes(EXTENSION.harnessInstall) === true
@@ -1653,6 +1657,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         reattachable = false
         schedulable = false
         sessionTree = false
+        ignoreQuestions = false
         pairable = false
         installable = false
         worktreesOn = false
@@ -1677,6 +1682,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       reattachable = false
       schedulable = false
       sessionTree = false
+      ignoreQuestions = false
       pairable = false
       installable = false
       worktreesOn = false
@@ -2572,6 +2578,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     implementPlan: (sessionId, text) => live.implementPlan(sessionId, text),
     // 以设备确认的集合更新当前视图；后到的通知是幂等的。
     async ignoreQuestions(sessionId, sourceIds) {
+      if (!ignoreQuestions) throw new ChannelError('unsupported', '此设备不支持忽略问题')
       const result = await guarded(() =>
         link.request('litch/session/questions/ignore', { threadId: sessionId, sourceIds }),
       )

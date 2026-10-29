@@ -1016,7 +1016,10 @@ export class ClientSession implements ClientToolPeer {
   private deviceInfo(): DeviceInfo {
     const { info } = this.host
     return this.host.sessionTreeOn()
-      ? { ...info, extensions: [...info.extensions, EXTENSION.sessionTree] }
+      ? {
+          ...info,
+          extensions: [...info.extensions, EXTENSION.sessionTree, EXTENSION.sessionQuestionIgnore],
+        }
       : info
   }
 

@@ -161,7 +161,7 @@
           }
         }
       },
-      "description": "仅声明 sessionTree 的连接可调用。设备保存忽略的当前问题来源，不创建消息、回合或答复；重复点击幂等。"
+      "description": "仅声明 sessionTree 的连接可调用。来源键须为 JSON [wrap|async, JSON [非空回合ID, 非空条目ID], 非负整数题序]；只校验格式，不读取历史、不静默过滤。设备保存忽略来源，不创建消息、回合或答复；重复点击幂等。"
     },
     {
       "kind": "ThreadField",
@@ -188,6 +188,12 @@
         }
       },
       "description": "仅发给声明 sessionTree 的连接，当前全部忽略来源键。"
+    },
+    {
+      "kind": "Capability",
+      "name": "sessionQuestionIgnore",
+      "on": "runtime/info.device.extensions",
+      "description": "设备明确支持 litch/session/questions/ignore 时宣告。客户端仅在同时有 sessionTree 和该标记时显示忽略按钮；请求、会话字段及通知仍以连接声明的 sessionTree 为门禁，不要求重复订阅。"
     }
   ]
 }

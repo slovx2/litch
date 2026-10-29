@@ -30,8 +30,10 @@ test('SESSION-QUESTIONS-001：同题忽略同步、持久化与重连，新来�
     assert.equal(question.sourceIds.length, 2)
     const before = env.pi.sent('turn/start').length + env.pi.sent('turn/steer').length
     const params = { threadId, sourceIds: question.sourceIds }
+    const reads = env.pi.sent('thread/read').length
     const first = await a.call('litch/session/questions/ignore', params)
     assert.equal(first.ignoredQuestions.length, 2)
+    assert.equal(env.pi.sent('thread/read').length, reads, '忽略不读取历史')
     assert.deepEqual(await b.call('litch/session/questions/ignore', params), first)
     assert.equal(env.pi.sent('turn/start').length + env.pi.sent('turn/steer').length, before)
     await until(() => got(b, 'litch/thread/questions/changed').length > 0, '跨端通知')
@@ -150,5 +152,131 @@ test('SESSION-QUESTIONS-003：remind 附未答题，失败读取照常提醒并�
     } finally {
       await env.close()
     }
+  }
+})
+
+test('SESSION-QUESTIONS-004：来源格式合法就记录，历史不可读也成功；坏键明确拒绝', async () => {
+  const env = treeRig()
+  try {
+    const client = await litch(env)
+    const sourceId = JSON.stringify(['async', JSON.stringify(['turn', 'item']), 0])
+    env.pi.handlers['thread/read'] = () => {
+      throw new Error('must not read')
+    }
+    const result = await client.call('litch/session/questions/ignore', {
+      threadId: 'unloaded',
+      sourceIds: [sourceId],
+    })
+    assert.deepEqual(result.ignoredQuestions, [sourceId])
+    assert.deepEqual(env.device.sessionTree.store.ignoredQuestions('unloaded'), [sourceId])
+    for (const id of [
+      'bad',
+      '[]',
+      JSON.stringify(['async', 'bad', 0]),
+      JSON.stringify(['wrap', '["t","i"]', -1]),
+    ]) {
+      const failure = await client.fails('litch/session/questions/ignore', {
+        threadId: 'unloaded',
+        sourceIds: [id],
+      })
+      assert.equal(failure.code, -32602)
+    }
+    const runtime = await client.call('runtime/info', {})
+    assert.ok(runtime.device.extensions.includes('sessionQuestionIgnore'))
+  } finally {
+    await env.close()
+  }
+})
+
+test('SESSION-QUESTIONS-005：watch 期间回报已被拿走，提前返回而不读取历史', async () => {
+  const env = treeRig()
+  try {
+    const client = await litch(env)
+    const { threadId } = await parent(client, false)
+    env.device.sessionTree.store.addNote(
+      threadId,
+      { threadId: 'child', title: '结果', status: 'completed', excerpt: '完成' },
+      true,
+    )
+    const resume = env.pi.handlers['thread/resume']
+    assert.ok(resume)
+    env.pi.handlers['thread/resume'] = (p, c) => {
+      env.device.sessionTree.store.dropNotes(threadId, Number.MAX_SAFE_INTEGER)
+      return resume(p, c)
+    }
+    assert.equal(await env.device.sessionTree.deliver(threadId), 'none')
+    assert.equal(env.pi.sent('thread/read').filter((p) => p.includeTurns).length, 0)
+  } finally {
+    await env.close()
+  }
+})
+
+test('SESSION-QUESTIONS-006：内部连接声明 peerMessages，按连接过滤的原生 peer 消息仍保留问题', async () => {
+  const env = treeRig()
+  try {
+    const client = await litch(env)
+    const { threadId } = await parent(client)
+    env.pi.current(threadId)?.items.push(asyncQuestion(), {
+      type: 'userMessage',
+      id: 'peer',
+      content: text('继续'),
+      litchPeer: { name: '同伴', thread: 'other' },
+    })
+    const read = env.pi.handlers['thread/read']
+    assert.ok(read)
+    env.pi.handlers['thread/read'] = (p, c) => {
+      const result = read(p, c) as { thread: { turns: { items: Record<string, unknown>[] }[] } }
+      if (!env.pi.greetings.get(c)?.capabilities.litchExtensions?.includes('peerMessages'))
+        for (const turn of result.thread.turns) for (const item of turn.items) delete item.litchPeer
+      return result
+    }
+    const history = await env.device.sessionTree.read(threadId, true)
+    assert.deepEqual(
+      questionsOfHistory(history.thread).map((q) => q.title),
+      ['范围？'],
+    )
+    const greeting = [...env.pi.greetings.values()].find(
+      (g) => g.clientInfo.name === 'litch-device',
+    )
+    assert.ok(greeting.capabilities.litchExtensions.includes('peerMessages'))
+  } finally {
+    await env.close()
+  }
+})
+
+test('SESSION-QUESTIONS-007：连续唤醒复用无题缓存，真实提问通知后重新派生', async () => {
+  const env = treeRig()
+  try {
+    const client = await litch(env)
+    const { threadId } = await parent(client, false)
+    const deliver = async () => {
+      env.device.sessionTree.store.addNote(
+        threadId,
+        {
+          threadId: 'child',
+          title: '子任务',
+          status: 'completed',
+          excerpt: '完成',
+        },
+        true,
+      )
+      assert.equal(await env.device.sessionTree.deliver(threadId), 'woken')
+      env.pi.end(threadId, 'completed', '继续处理结果')
+      await until(() => !env.device.sessionTree.isActive(threadId), '唤醒回合完成')
+    }
+    for (let i = 0; i < 3; i++) await deliver()
+    const reads = () =>
+      env.pi.sent('thread/read').filter((p) => p.threadId === threadId && p.includeTurns).length
+    assert.equal(reads(), 1)
+    env.pi.selfTurn(threadId)
+    env.pi.current(threadId)?.items.push(asyncQuestion())
+    env.pi.notify('item/completed', { threadId, item: asyncQuestion() })
+    env.pi.end(threadId, 'completed', '留下一个问题')
+    await until(() => !env.device.sessionTree.isActive(threadId), '提问回合完成')
+    await deliver()
+    assert.equal(reads(), 2)
+    assert.equal(events(env, threadId).at(-1)?.pendingQuestions?.[0]?.title, '范围？')
+  } finally {
+    await env.close()
   }
 })

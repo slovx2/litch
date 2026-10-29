@@ -2448,6 +2448,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         // 新加的远程设备：“操作这台电脑”默认关
         machine: sampleMachineAccess(''),
         sessionTree: false,
+        ignoreQuestions: false,
         pairing: false,
         install: false,
         worktrees: false,

@@ -50,7 +50,7 @@ sidebar.
 新旧问题可以同时回答，相同的待答问题只显示一次。点击回复按钮或在题目下填写回答后，只有对应的问题收起；异步卡中尚未回答的其他题目继续保留。
 用户直接在会话输入框发话则视为回答此前的待答问题，一起收起。自动的计划确认也遵循这一区分：自发回合不清除，用户发话后收起。
 待答区可以折叠，折叠后仍显示问题数量。回答会按当前发送方式插话或排队；撤销排队中的答复会恢复问题。
-待答卡显示提出时间和之后收到的子会话回报数。点“忽略”仅隐藏当前问题，不向代理发送消息，也不算回答或撤回；忽略状态在桌面、手机和重连后同步。代理在唤醒或收尾提醒时仍会看到未答题及“用户已忽略”标记，不应重复催问；过时的题应撤回。
+待答卡显示提出时间和之后收到的子会话回报数。设备支持时显示“忽略”。点“忽略”仅隐藏当前问题，不向代理发送消息，也不算回答或撤回；忽略状态在桌面、手机和重连后同步。代理在唤醒或收尾提醒时仍会看到未答题及“用户已忽略”标记，不应重复催问；过时的题应撤回。
 
 模型可以在 `litch_sessions.wrap_up` 的 `withdraw_questions` 中列出已经不需要回答的旧题目原文，明确撤回这些问题。
 审批、AskUserQuestion 和阻塞式 request_user_input 仍在请求卡片中回答；只有对应的请求被答复、撤回或其所属回合结束时收起，其他回合不会清掉它们。
@@ -392,3 +392,6 @@ The whole feature can be switched per device with the `sessions.enabled` setting
 later.
 
 A running client tool does not mean the session needs user input. Browser sign-in approvals explicitly shared by the desktop appear in the parent’s pending section; complete them through the original approval flow. Other approvals held only by a client may require opening that sub-session on that client.
+
+忽略记录目前不随分叉继承；回退后设备仍保留已失效的来源行，它们不会匹配新提出的问题。
+Ignored-question records are not inherited by forks. Reverting a session leaves obsolete source records in storage; they do not match newly asked questions.

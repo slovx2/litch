@@ -13,7 +13,7 @@ test('忽略命令和其他客户端的通知都更新打开的会话，后来�
   const source = thread({ id: 'p', turns: [turn('t', [asyncQuestion() as ThreadItem])] })
   const world = deviceWorld([harness('pi', { threads: [source] })], {
     prepare: (d) => {
-      d.extensions.push('sessionTree')
+      d.extensions.push('sessionTree', 'sessionQuestionIgnore')
     },
     extra: {
       'litch/session/questions/ignore': (p) => ({
@@ -43,4 +43,26 @@ test('忽略命令和其他客户端的通知都更新打开的会话，后来�
   assert.equal(world.sent('turn/start').length, 0)
   assert.equal(world.sent('turn/steer').length, 0)
   world.core.stop()
+})
+
+test('忽略能力单独声明：旧设备虽有会话树也不展示该能力，命令不会发送', async () => {
+  for (const supported of [false, true]) {
+    const world = deviceWorld([harness('pi')], {
+      prepare: (d) => {
+        d.extensions.push('sessionTree')
+        if (supported) d.extensions.push('sessionQuestionIgnore')
+      },
+    })
+    world.core.start()
+    await settle()
+    assert.equal(world.device()?.ignoreQuestions, supported)
+    if (!supported) {
+      await assert.rejects(
+        world.command('session.questions.ignore', { sessionId: 'p', sourceIds: [] }),
+        /不支持忽略问题/,
+      )
+      assert.equal(world.sent('litch/session/questions/ignore').length, 0)
+    }
+    world.core.stop()
+  }
 })

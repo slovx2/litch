@@ -1,3 +1,4 @@
+import { isQuestionSourceId } from '../../protocol/src/pending-asks.mjs'
 // 会话树里客户端发起的方法（litch/session/*、litch/sessionProposal/*，参数和应答见
 // packages/protocol/src/session-tree.mts）。只有聚合面有，由设备进程自己答，不转给引擎；
 // 设置里“会话编排”关着时一律回“不支持”（设备信息里这时也不列 sessionTree）。
@@ -103,7 +104,7 @@ export async function sessionTreeCall(
         !Array.isArray(fields.sourceIds) ||
         !fields.sourceIds.length ||
         fields.sourceIds.length > 1000 ||
-        fields.sourceIds.some((id) => typeof id !== 'string' || !id || id.length > 4000)
+        fields.sourceIds.some((id) => !isQuestionSourceId(id))
       )
         throw new ProtocolError(-32602, 'sourceIds 必须是问题来源标识数组')
       return tree.ignoreQuestions(
