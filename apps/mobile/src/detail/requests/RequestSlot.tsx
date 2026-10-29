@@ -20,8 +20,10 @@ export function RequestSlot({
   store,
   maxHeight,
   onRevise,
+  requestsOnly = false,
 }: {
   store: SessionStore
+  requestsOnly?: boolean
   /** 卡片最高多少：屏幕上除去标题栏、键盘、输入区之后还剩的地方的一部分 */
   maxHeight: number
   /** “带意见修改”：把焦点放进输入框 */
@@ -66,7 +68,7 @@ export function RequestSlot({
         />
       </CardHeight.Provider>
     )
-  if (!meta) return null
+  if (!meta || (requestsOnly && !request)) return null
   const waiting = (requests?.length ?? 1) - 1
   const common = { deviceId, sessionId, waiting }
   return (

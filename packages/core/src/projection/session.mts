@@ -6,6 +6,7 @@ import {
   type ThreadStatus,
   type Turn,
 } from '../../../protocol/src/index.mjs'
+import type { SessionPendingFields } from '../../../protocol/src/session-pending.mjs'
 import type {
   HarnessId,
   ItemView,
@@ -298,6 +299,8 @@ export function projectSummary(
     task: null,
     lineage: projectLineage(thread),
     queuedNotes: projectQueuedNotes(thread),
+    pendingRequests: (thread as Thread & SessionPendingFields).litchPendingRequests ?? [],
+    delegatedResponses: (thread as Thread & SessionPendingFields).litchDelegatedResponses ?? [],
     nativeLineage: projectNativeLineage(thread),
     background: projectBackground(
       (thread as Thread & { litchBackground?: unknown }).litchBackground,

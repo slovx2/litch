@@ -1,3 +1,4 @@
+import type { SessionPendingFields, SessionPendingRequest } from './session-pending.mjs'
 // 会话树（扩展名 sessionTree）：一个会话派出的子会话、提案、回报与唤醒。父子关系存在设备进程自己的库里，
 // 不存在任何引擎里；子会话本身是普通的顶层会话，照常出现在 thread/list 里，树由客户端按 litchLineage 搭。
 // 引擎自己的子代理线程（标准协议的 parentThreadId、source.subAgent）不在这里，那是引擎的事。
@@ -41,7 +42,7 @@ export interface SessionLineage {
 }
 
 /** 会话对象上我们加的字段 */
-export interface SessionTreeThreadFields {
+export interface SessionTreeThreadFields extends SessionPendingFields {
   litchLineage?: SessionLineage
   /**
    * 会话建的时候带了哪些 `litch_` 命名空间的动态工具（设备进程记下的 thread/start.dynamicTools）。
@@ -336,6 +337,7 @@ export type SessionEventKind =
 
 /** 一条回报：哪个子会话、这一回合的结果开头 */
 export interface SessionEventNote {
+  pending?: SessionPendingRequest[]
   threadId: string
   title: string
   /** 子会话这一回合的结局 */
@@ -399,7 +401,7 @@ export function formatSessionEvent(event: SessionEvent): string {
   })
   const tail =
     event.kind === 'wake'
-      ? `If the user’s request has steps these results unblock, continue${event.working ? ' with those only; the rest arrive when the other sub-sessions finish' : ''}; otherwise tell the user the outcome in one or two lines. Use litch_sessions.read for details. Do not answer requests that are waiting for the user inside a sub-session.`
+      ? `If the user’s request has steps these results unblock, continue${event.working ? ' with those only; the rest arrive when the other sub-sessions finish' : ''}; otherwise tell the user the outcome in one or two lines. Use litch_sessions.read for details and current pending request IDs. Delegate answers only through litch_sessions.respond; send messages never answer requests. Secret inputs require the user.`
       : event.kind === 'remind'
         ? 'Call litch_sessions.wrap_up now, with the suggested tasks your last reply implies or an empty list, then end your turn with at most one short line. Do not repeat or summarize your last reply: the user already has it.'
         : 'Use litch_sessions.read for details.'

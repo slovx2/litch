@@ -209,7 +209,7 @@ export function briefing(
     '',
     handOff ? `Remaining plan:\n${prompt}` : prompt,
     '',
-    'When you are done, end your turn with a short summary of the result and anything left open: Litch passes the beginning of your final answer back to the session that started you. If you need a decision, ask the user here; that session cannot answer for them.',
+    'When you are done, end your turn with a short summary of the result and anything left open: Litch passes the beginning of your final answer back to the session that started you. Ask for decisions here through the normal request tools. Your parent may answer eligible blocking requests explicitly through litch_sessions.respond; ordinary messages are not answers. Secret inputs require the user.',
   ].join('\n')
 }
 

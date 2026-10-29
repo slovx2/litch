@@ -1,3 +1,4 @@
+import type { SessionPendingChanged } from './session-pending.mjs'
 // 客户端实际会调用的方法、会处理的通知，各自的参数和应答类型。
 // 没列在这里的方法客户端不调用；没列在这里的通知客户端不处理（记日志后丢弃）。
 // 新增一项要在这里登记，核心里才有类型可用。
@@ -674,6 +675,7 @@ export interface ServerNotifications {
   'litch/sessionProposal/changed': ProposalChangedNotification
   /** 扩展，只发给握手时声明过 sessionTree 的连接：一个会话的回报队列变了 */
   'litch/thread/queuedNotes/updated': QueuedNotesUpdatedNotification
+  'litch/thread/pending/changed': SessionPendingChanged
   /** 扩展，只发给握手时声明过 worktrees 的连接：设备层的一个工作树建成、换了主人、删了或恢复了 */
   'litch/worktree/changed': WorktreeChangedNotification
   /** 扩展，只发给握手时声明过 devicePairing 的连接：一个配对的状态变了 */

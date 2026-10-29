@@ -3,6 +3,12 @@ import type { Entry } from './types.ts'
 import type { zhAsks } from './zh-CN-asks.ts'
 
 export const enAsks: Record<keyof typeof zhAsks, Entry> = {
+  'ask.children': 'Sub-session requests',
+  'ask.childUnavailable': 'Loading the request. Open the sub-session if it cannot be handled here.',
+  'ask.delegatedHistory': 'Delegated responses · {count}',
+  'ask.approvalRecorded': 'Approval decision recorded',
+  'ask.delegatedParent': 'Answered by parent · {name}',
+  'ask.delegatedSession': 'Answered by session · {name}',
   'ask.title': 'Question',
   'ask.pending': 'Pending questions',
   'ask.pendingCount': '{count} questions awaiting answers',

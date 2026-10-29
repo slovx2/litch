@@ -5,7 +5,15 @@
   "declaration": {
     "description": "设备服务在 runtime/info 的 device.extensions 里列出 sessionTree，表示下面的方法可用、会话编排的开关开着。客户端握手时在 capabilities.litchExtensions 里声明 sessionTree，表示它认识会话对象上的 litchLineage、litchQueuedNotes 和下面三条通知。",
     "where": "initialize.params.capabilities.litchExtensions",
-    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "sessionTree" } }
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "sessionTree"
+      }
+    }
   },
   "undeclared": "没声明的连接上：会话对象上没有 litchLineage，收不到 litch/thread/lineage/updated、litch/sessionProposal/changed、litch/thread/queuedNotes/updated，会话对象上也没有 litchQueuedNotes；litch/session/*、litch/sessionProposal/* 照样能调（客户端发起的方法），只有 litch/sessionProposal/answer 回不支持（看不到 offer 卡的连接不能替用户选）。子会话在它们眼里是普通会话；设备注入给父会话的回报与唤醒是一段包在 <litch-session-event> 里的文字，它们按普通的用户消息显示。",
   "rules": [
@@ -51,7 +59,8 @@
     "litch/sessionProposal/here（参数 proposalId、lead，应答空对象）：用户在普通提案卡（不是 offer 卡）上点“在这里做”。只收 pending 的提案，别的回不支持。提案 status 改成 here、记 settledAt，发 litch/sessionProposal/changed；设备进程往父会话发一条用户消息，内容是 lead（不给是 \"Do it here: \"）加提案标题，空一行再是任务原文（不带背景）。父会话没在跑时直接 turn/start；正在跑时排到这一回合结束后发（同客户端排队的消息），设备进程要关时还没发出的丢掉、提案仍是 here。",
     "litch/sessionProposal/markHere（参数同 here，应答 { text }）：同 here 的检查和了结（status 改成 here、记 settledAt、发 litch/sessionProposal/changed），但设备进程不发消息，把那条消息（写法同 here）放在应答的 text 里交回；客户端把它当用户的话放进自己的输入队列（会话在跑就排到回合结束后，同 Claude 桌面端卡片上的 Do it here）。同一提案已经由 markHere 了结过的，设备进程这次运行期间再调回同一个 text（应答丢了时客户端重试用）。旧设备没有这个方法时客户端退回 here。",
     "litch_sessions.wrap_up 的 ask、actions：ask 是这一回合留给用户定的一个短问题（最多 SESSION_TOOL_LIMITS.askChars 字），actions 是它的回复按钮（1 到 wrapUpActions 个，label 最多 actionLabelChars 字，message 最多 actionMessageChars 字）。设备进程只校验：超长的截断，按钮超过上限的丢掉多的，有 actions 没 ask 的丢掉 actions，都不算错；不建提案、不存库，界面从这次调用的参数里读出来，在回合结束后进入输入框上方的待答区。答复带题目标识（wrap_up 和调用条目号），用 send_user_message_question_reply 用户消息记录；自发回合不会清除；用户直接发话会收起此前的问题，带题目标识的答复只收对应题。withdraw_questions 可列出要明确撤回的旧问题原文；重复的待答问题合并，答复指向各自调用。",
-    "任务卡按 harness 的开关（设备设置 harness.<id>.taskCards，作用域 harness，默认开，见 session-tree.mts 的 taskCardsSettingKey）：关着时，这个 harness 上新建的会话带的 litch_sessions 换成没有建议的那一份（没有 wrap_up，规则里不提建议、offer、收尾，start 不收 propose、offer），不提醒收尾；已经建好的会话当场生效：wrap_up 照收但建议一条都不落提案（结果里每条 refused 写明这个 harness 关了任务卡、不要再建议，ask、actions 照常），start 的 propose 回 [litch:blocked] 同样写明，offer 直接当在这里做返回。litch_sessions 其余能力（list、read、send、wait、interrupt、user_asked 的 start、accept、withdraw、hand_off）照旧。设备级的会话编排（sessions.enabled）关着时以它为准。"
+    "任务卡按 harness 的开关（设备设置 harness.<id>.taskCards，作用域 harness，默认开，见 session-tree.mts 的 taskCardsSettingKey）：关着时，这个 harness 上新建的会话带的 litch_sessions 换成没有建议的那一份（没有 wrap_up，规则里不提建议、offer、收尾，start 不收 propose、offer），不提醒收尾；已经建好的会话当场生效：wrap_up 照收但建议一条都不落提案（结果里每条 refused 写明这个 harness 关了任务卡、不要再建议，ask、actions 照常），start 的 propose 回 [litch:blocked] 同样写明，offer 直接当在这里做返回。litch_sessions 其余能力（list、read、send、wait、interrupt、user_asked 的 start、accept、withdraw、hand_off）照旧。设备级的会话编排（sessions.enabled）关着时以它为准。",
+    "阻塞请求快照 litchPendingRequests 与代答记录 litchDelegatedResponses 只给声明 sessionTree 的连接；litch/thread/pending/changed 带 threadId 和两份完整集合。记录按会话落库，重读历史仍可见。litch_sessions.read 的 pending_requests 提供当前不透明请求 ID、类型、题目或动作、允许的决策、canRespond 和限制原因；respond 仅允许调用者子孙或用户输入回合，按 thread_id/request_id/answer 显式答复并记录来源。send、回报不作答也不清除请求。秘密字段与登录签名请求只由用户处理。"
   ],
   "parts": [
     {
@@ -74,18 +83,49 @@
     },
     {
       "kind": "ClientRequest",
-      "methods": ["litch/session/start", "litch/session/detach", "litch/sessionProposal/list", "litch/sessionProposal/accept", "litch/sessionProposal/dismiss", "litch/sessionProposal/answer", "litch/sessionProposal/here", "litch/sessionProposal/markHere", "litch/thread/queuedNotes/deliver"],
+      "methods": [
+        "litch/session/start",
+        "litch/session/detach",
+        "litch/sessionProposal/list",
+        "litch/sessionProposal/accept",
+        "litch/sessionProposal/dismiss",
+        "litch/sessionProposal/answer",
+        "litch/sessionProposal/here",
+        "litch/sessionProposal/markHere",
+        "litch/thread/queuedNotes/deliver"
+      ],
       "description": "参数与应答见 session-tree.mts。start 起好后发 litch/thread/lineage/updated 和标准的 thread/started。 litch/sessionProposal/answer 只收声明了 sessionTree 的连接。 litch/thread/queuedNotes/deliver（用户点“立即处理”）：父会话在跑就把排着的回报插进去（turn/steer），停着就开一个 kind=wake 的回合，不看兄弟子会话、回报该不该唤醒、次数上限和上一回合的结局，唤醒计数清零；还有子会话在干活时 <litch-session-event> 的 JSON 带 working（个数）。应答 delivered：steered、woken，或 none（队列空了、插不进去）。"
     },
     {
       "kind": "ServerNotification",
-      "methods": ["litch/thread/lineage/updated", "litch/sessionProposal/changed", "litch/thread/queuedNotes/updated"],
+      "methods": [
+        "litch/thread/lineage/updated",
+        "litch/sessionProposal/changed",
+        "litch/thread/queuedNotes/updated"
+      ],
       "description": "只发给声明了 sessionTree 的连接。"
     },
     {
       "kind": "ClientTools",
       "namespace": "litch_sessions",
       "description": "工具定义见 client-tools-sessions.mts。核心建会话时，设备信息列了 sessionTree、目标 harness 声明了 clientTools，就在 thread/start.dynamicTools 里带上；客户端不在自己的 litchClientTools 里声明它。"
+    },
+    {
+      "kind": "ThreadField",
+      "name": "litchPendingRequests",
+      "on": "声明 sessionTree 的会话对象",
+      "description": "SessionPendingRequest[]，仅当前连接有效的请求 token。"
+    },
+    {
+      "kind": "ThreadField",
+      "name": "litchDelegatedResponses",
+      "on": "声明 sessionTree 的会话对象",
+      "description": "SessionDelegatedResponse[]，设备生成的非秘密代答历史。"
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/thread/pending/changed",
+      "description": "仅声明 sessionTree 的连接，形状 SessionPendingChanged。"
     }
   ]
 }

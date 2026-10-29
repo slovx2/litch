@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 // litch_sessions：模型列出、读取这台设备上的会话，派子会话，给自己的子会话发消息、打断，等它们停下。
 // 执行方是设备进程（device-tools.mts 注册的一个命名空间），工具定义在 packages/protocol/src/client-tools-sessions.mts。
 // 读类（list、read、wait）能看这台设备上所有会话，options 列能用的 harness 和型号（session-options.mts）；写类（send、interrupt）只能作用于调用者自己的 Litch 子孙会话，
@@ -44,6 +45,7 @@ import {
 import type { DeviceToolCall, DeviceToolHandler } from './device-tools.mjs'
 import type { Cascade, SessionArchives } from './session-archive.mjs'
 import { checkHarness, modelFor, sessionOptions } from './session-options.mjs'
+import { PendingRefused } from './session-pending.mjs'
 import {
   acceptProposal,
   StartRefused,
@@ -204,7 +206,12 @@ async function read(tree: SessionTree, args: Record<string, unknown>, call: Devi
   )
   const { harness, thread } = await found(tree, threadId)
   const turns = (Array.isArray(thread.turns) ? thread.turns : []).filter(isObject).slice(-count)
-  return { session: summary(tree, harness, thread, call.threadId), turns: turns.map(turnSummary) }
+  return {
+    session: summary(tree, harness, thread, call.threadId),
+    turns: turns.map(turnSummary),
+    pending_requests: tree.pending.list(threadId),
+    delegated_responses: tree.store.responses(threadId),
+  }
 }
 
 /** 读一个会话；没有这个会话按参数不对回 */
@@ -1134,6 +1141,38 @@ export function sessionToolsHandler(
           return ok(await list(tree, args, call))
         case SESSION_TOOL.read:
           return ok(await read(tree, args, call))
+        case SESSION_TOOL.respond: {
+          const threadId = string(args, 'thread_id', true)
+          if (
+            !tree.store.descends(threadId, call.threadId) &&
+            !tree.isUserTurn(call.harness, call.turnId)
+          )
+            throw new PendingRefused(
+              'forbidden',
+              'Only a parent session or a user-driven turn can respond.',
+            )
+          const id = string(args, 'request_id', true)
+          const source = await tree.read(call.threadId, false)
+          const request = tree.pending.respond(threadId, id, args.answer)
+          const record = {
+            id: randomUUID(),
+            requestId: id,
+            threadId,
+            turnId: request.turnId,
+            sourceThreadId: call.threadId,
+            sourceTitle: threadTitle(source.thread),
+            parent: tree.store.descends(threadId, call.threadId),
+            kind: request.kind,
+            title: request.title,
+            answer: args.answer,
+            ...(request.questions
+              ? { questions: request.questions.map(({ id, question }) => ({ id, question })) }
+              : {}),
+            at: Date.now(),
+          }
+          tree.recordResponse(record)
+          return ok({ answered: true, response: record })
+        }
         case SESSION_TOOL.options:
           return ok(await sessionOptions(tree, args, call))
         case SESSION_TOOL.start:
@@ -1160,6 +1199,8 @@ export function sessionToolsHandler(
           return clientToolFailure('invalid', `litch_sessions has no tool "${call.tool}".`)
       }
     } catch (error) {
+      if (error instanceof PendingRefused)
+        return { ...ok({ error: { code: error.code, message: error.message } }), success: false }
       if (error instanceof Refused || error instanceof StartRefused)
         return clientToolFailure(error.kind, error.message)
       return clientToolFailure('failed', messageOf(error))

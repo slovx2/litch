@@ -1,3 +1,13 @@
+import type {
+  SessionDelegatedResponse,
+  SessionPendingRequest,
+} from '../../protocol/src/session-pending.mjs'
+
+export type {
+  SessionDelegatedResponse,
+  SessionPendingRequest,
+} from '../../protocol/src/session-pending.mjs'
+
 // 界面看到的数据形状。界面不认识协议类型，只认识这里的类型，各种 harness 的差异在核心里消化掉。
 // 协议条目怎么变成这些显示条目，见 projection 目录。
 // 类型是 Text 的字段可能是对面给的原文，也可能是核心自己要说的一句话（见 phrase.mts），界面按当前语言显示。
@@ -401,6 +411,8 @@ export interface SessionSummary {
    * 对话区末尾当场画出来；没有、对面没有会话树的是空数组
    */
   queuedNotes: SessionQueuedNoteView[]
+  pendingRequests?: SessionPendingRequest[]
+  delegatedResponses?: SessionDelegatedResponse[]
   /**
    * 别的应用（比如 Claude 桌面端）从另一个会话派出来的原生会话（nativeLineage 扩展）。
    * 侧栏默认不显示它们，“更多”菜单里能打开；认得出父会话的挂在父会话下面。不是的、认不出的是 null

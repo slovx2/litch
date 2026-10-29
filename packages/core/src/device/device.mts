@@ -1463,6 +1463,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     'litch/thread/lineage/updated': ({ threadId, lineage }) =>
       patchThread(threadId, { litchLineage: lineage ?? undefined }),
     // 会话树：子会话交来的回报进了这个会话的队列、交给了模型（整份）。对话区末尾当场画排着的
+    'litch/thread/pending/changed': ({ threadId, litchPendingRequests, litchDelegatedResponses }) =>
+      patchThread(threadId, { litchPendingRequests, litchDelegatedResponses } as Partial<Thread>),
     'litch/thread/queuedNotes/updated': ({ threadId, notes }) =>
       patchThread(threadId, { litchQueuedNotes: notes.length > 0 ? notes : undefined }),
     // 后台任务的集合变了（整份）。只发给声明了 backgroundTasks 的连接；没打开过的会话也发，侧栏要标

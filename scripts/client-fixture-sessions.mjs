@@ -44,7 +44,8 @@ const SPACES = {
     namespace: 'litch_sessions',
     marks: {
       list: 'List sessions on this device',
-      read: 'Read a session’s status and its last few turns',
+      read: 'Read a session’s status',
+      respond: 'Explicitly answer a pending question or approval.',
       start: 'Start a sub-session, propose one, or offer a new session.',
       send: 'Send a message to a session: one of your sub-sessions',
       wait: 'Wait until the given sessions stop',

@@ -5,6 +5,7 @@
 import { closeSync, existsSync, openSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync, type StatementSync } from 'node:sqlite'
+import type { SessionDelegatedResponse } from '../../protocol/src/session-pending.mjs'
 import type {
   SessionEventNote,
   SessionLineage,
@@ -148,6 +149,8 @@ const MIGRATIONS: readonly string[] = [
    INSERT OR IGNORE INTO contacts(a, b, created_at)
      SELECT min(thread_id, parent_thread_id), max(thread_id, parent_thread_id), created_at FROM lineage;
    DROP TABLE mentions;`,
+  `CREATE TABLE delegated_responses(id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, record TEXT NOT NULL);
+   CREATE INDEX delegated_by_thread ON delegated_responses(thread_id);`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -345,6 +348,26 @@ export class SessionStore {
 
   private run(name: string, ...values: (string | number | null)[]): void {
     this.statements[name]?.run(...values)
+  }
+
+  recordResponse(record: SessionDelegatedResponse): void {
+    this.db
+      .prepare('INSERT INTO delegated_responses(id, thread_id, record) VALUES(?, ?, ?)')
+      .run(record.id, record.threadId, JSON.stringify(record))
+  }
+
+  dropResponses(threadId: string): void {
+    this.db.prepare('DELETE FROM delegated_responses WHERE thread_id=?').run(threadId)
+  }
+
+  responses(threadId: string): SessionDelegatedResponse[] {
+    return this.db
+      .prepare(
+        'SELECT record FROM delegated_responses WHERE thread_id=? ORDER BY rowid DESC LIMIT 100',
+      )
+      .all(threadId)
+      .reverse()
+      .map((row) => JSON.parse(String(row.record)) as SessionDelegatedResponse)
   }
 
   // ---------- 父子关系 ----------

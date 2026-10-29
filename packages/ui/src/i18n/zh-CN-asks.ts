@@ -4,6 +4,12 @@
 import type { Entry } from './types.ts'
 
 export const zhAsks = {
+  'ask.children': '子会话待处理',
+  'ask.childUnavailable': '正在读取请求；若无法在此处理，请打开子会话。',
+  'ask.delegatedHistory': '代答记录 · {count} 条',
+  'ask.approvalRecorded': '已记录审批决定',
+  'ask.delegatedParent': '由主会话代答 · {name}',
+  'ask.delegatedSession': '由会话代答 · {name}',
   'ask.title': '问题',
   'ask.pending': '待答问题',
   'ask.pendingCount': '{count} 个问题待回答',

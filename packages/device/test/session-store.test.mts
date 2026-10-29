@@ -186,7 +186,7 @@ test('SESSION-STORE-005：上一版的库升上来：用户 @ 过的、派出过
   try {
     const old = new DatabaseSync(join(dir, 'sessions.sqlite'))
     initializeStoreFormat(old)
-    const previous = SESSION_SCHEMA_VERSION - 1
+    const previous = SESSION_MIGRATIONS.findIndex((step) => step.includes('DROP TABLE mentions'))
     for (const step of SESSION_MIGRATIONS.slice(0, previous)) old.exec(step)
     old.exec(`PRAGMA user_version=${previous}`)
     old.exec(
@@ -211,6 +211,37 @@ test('SESSION-STORE-005：上一版的库升上来：用户 @ 过的、派出过
     assert.equal(store.contacted('p1', 'c1'), false)
     assert.equal(store.contacted('x', 'c1'), false)
     db.close()
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('SESSION-STORE-006：代答来源和非秘密答案落库，重开可读，删除会话可清掉', () => {
+  const dir = tempDir()
+  try {
+    const db = openSessionDatabase(dir)
+    const store = new SessionStore(db)
+    store.recordResponse({
+      id: 'audit1',
+      requestId: 'token1',
+      threadId: 'child',
+      turnId: 't1',
+      sourceThreadId: 'parent',
+      sourceTitle: '经理',
+      parent: true,
+      kind: 'question',
+      title: '改哪些目录',
+      answer: { answers: { q: ['src'] } },
+      at: 123,
+    })
+    db.close()
+    const reopened = openSessionDatabase(dir)
+    const next = new SessionStore(reopened)
+    assert.equal(next.responses('child')[0]?.sourceTitle, '经理')
+    assert.deepEqual(next.responses('child')[0]?.answer, { answers: { q: ['src'] } })
+    next.dropResponses('child')
+    assert.deepEqual(next.responses('child'), [])
+    reopened.close()
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

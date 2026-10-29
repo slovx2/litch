@@ -28,6 +28,7 @@ import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { SESSION_TOOL, sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import { parseSessionMentions } from '../../protocol/src/session-mentions.mjs'
+import type { SessionDelegatedResponse } from '../../protocol/src/session-pending.mjs'
 import {
   formatSessionEvent,
   SESSION_TREE_LIMITS,
@@ -39,6 +40,7 @@ import {
 } from '../../protocol/src/session-tree.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { HarnessSource } from './session.mjs'
+import { SessionPending } from './session-pending.mjs'
 import type { SessionStore } from './session-store.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import { DeviceError, isObject, UpstreamRpcError } from './wire.mjs'
@@ -148,9 +150,9 @@ export class SessionTree {
   private readonly userStops = new Map<string, 'interrupted' | 'archived'>()
   /** 模型用 litch_sessions 归档的会话（session-archive.mts）：引擎发回的 thread/archived 不算用户归档 */
   readonly modelArchived = new Set<string>()
-  /** 子会话里挂着没人答的请求：会话 → 请求号 → 开始挂的时刻（毫秒） */
-  private readonly waiting = new Map<string, Map<string, number>>()
-  /** 已经为“在等用户”进过一次队列的回合，同一个回合只报一次 */
+  /** 原阻塞 RPC 的内存登记表，负责快照、显式代答与失效。 */
+  readonly pending = new SessionPending((threadId) => this.pendingChanged(threadId))
+  /** 已通知过的请求集合版本；同一回合的新请求仍可提醒。 */
   private readonly askedOnce = new Set<string>()
   /**
    * 已经结束的回合（会话 + 回合）。同一个回合的通知从好几条连接各来一份，各走各的套接字：
@@ -212,9 +214,31 @@ export class SessionTree {
       pending = this.host.openEngineLink(harness).then((link) => {
         const threads = new Set<string>()
         this.subscribed.set(harness, threads)
-        link.onNotification((method, params) => this.engineEvent(harness, method, params))
-        link.onServerRequest((_method, params, id) => this.asked(params, id))
+        link.onNotification((method, params) => {
+          if (
+            method === 'serverRequest/resolved' &&
+            (typeof params.requestId === 'string' || typeof params.requestId === 'number')
+          )
+            this.pending.resolve(link, params.requestId)
+          this.engineEvent(harness, method, params)
+        })
+        link.onServerRequest((method, params, id) => {
+          this.pending.add(harness, link, method, params, id)
+          if (typeof params.threadId === 'string') this.asked(params.threadId)
+        })
+        link.claimRequests(
+          (method, params) =>
+            typeof params.threadId === 'string' &&
+            [
+              'item/tool/requestUserInput',
+              'item/commandExecution/requestApproval',
+              'item/fileChange/requestApproval',
+              'item/permissions/requestApproval',
+              'mcpServer/elicitation/request',
+            ].includes(method),
+        )
         link.onClose(() => {
+          this.pending.closed(link)
           if (this.links.get(harness) === pending) this.links.delete(harness)
           if (this.subscribed.get(harness) === threads) this.subscribed.delete(harness)
           // 订阅跟着连接没了：这个 harness 上在跑的子会话要重新盯上，不然收不到它们的回合结束
@@ -279,7 +303,7 @@ export class SessionTree {
     if (
       this.active.has(threadId) ||
       this.backgroundOwed.has(threadId) ||
-      this.waiting.has(threadId) ||
+      this.pending.list(threadId).length > 0 ||
       this.host.backgroundRunning(threadId) > 0
     )
       return
@@ -387,21 +411,46 @@ export class SessionTree {
     // 别处（官方桌面端等直连引擎的客户端）归档、删掉的，只能从引擎的通知上看到
     else if (method === 'thread/archived' && threadId) this.archived(threadId)
     else if (method === 'thread/deleted' && threadId) this.deleted(threadId)
-    else if (method === 'serverRequest/resolved' && params.requestId != null)
-      for (const [threadId, requests] of this.waiting) {
-        requests.delete(String(params.requestId))
-        if (requests.size === 0) this.waiting.delete(threadId)
-      }
   }
 
-  /** 设备进程的连接上收到一个要答复的请求（审批、提问）：不答，记下它在等用户 */
-  private asked(params: Record<string, unknown>, id: unknown): void {
-    const threadId = typeof params.threadId === 'string' ? params.threadId : null
-    if (!threadId || !this.store.parentOf(threadId)) return
-    const requests = this.waiting.get(threadId) ?? new Map<string, number>()
-    requests.set(String(id), Date.now())
-    this.waiting.set(threadId, requests)
+  private asked(threadId: string): void {
     this.later(this.host.needsUserMs + 10, () => this.stillWaiting(threadId))
+  }
+
+  pendingChanged(threadId: string): void {
+    const parent = this.store.parentOf(threadId)
+    if (parent) this.notesChanged(parent.parentThreadId)
+    this.host.announce(
+      'litch/thread/pending/changed',
+      {
+        threadId,
+        litchPendingRequests: this.pending.list(threadId),
+        litchDelegatedResponses: this.store.responses(threadId),
+      },
+      EXTENSION.sessionTree,
+    )
+  }
+
+  recordResponse(record: SessionDelegatedResponse): void {
+    this.store.recordResponse(record)
+    this.pendingChanged(record.threadId)
+  }
+
+  private pendingNote(note: SessionEventNote): SessionEventNote[] {
+    if (note.status !== 'needsUser') return [publicNote(note)]
+    const pending = this.pending.list(note.threadId)
+    return pending.length
+      ? [
+          {
+            ...publicNote(note),
+            pending,
+            excerpt: pending
+              .map((p) => p.title)
+              .join('; ')
+              .slice(0, 400),
+          },
+        ]
+      : []
   }
 
   /** 子会话的请求挂满了 needsUserMs：进一条“在等用户”的回报，看看能不能唤醒父会话 */
@@ -409,8 +458,9 @@ export class SessionTree {
     const lineage = this.store.parentOf(threadId)
     const turnId = this.active.get(threadId) ?? ''
     if (!lineage || !this.waitingOnUser(threadId)) return
-    const key = `${threadId}\u0000${turnId}`
+    const key = JSON.stringify([threadId, turnId, this.pending.list(threadId).map((p) => p.id)])
     if (!this.askedOnce.has(key) && this.host.enabled()) {
+      if (this.askedOnce.size >= ENDED_LIMIT) this.askedOnce.clear()
       this.askedOnce.add(key)
       this.store.addNote(
         lineage.parentThreadId,
@@ -424,9 +474,9 @@ export class SessionTree {
 
   /** 子会话里有挂满 needsUserMs、还没人答的请求 */
   waitingOnUser(threadId: string): boolean {
-    const requests = this.waiting.get(threadId)
-    if (!requests) return false
-    const since = Math.min(...requests.values())
+    const requests = this.pending.list(threadId)
+    if (!requests.length) return false
+    const since = Math.min(...requests.map((r) => r.createdAt))
     return Date.now() - since >= this.host.needsUserMs
   }
 
@@ -452,7 +502,7 @@ export class SessionTree {
     this.ended.add(key)
     this.turnEndedAt.set(threadId, Date.now())
     if (this.active.get(threadId) === turn.id) this.active.delete(threadId)
-    this.waiting.delete(threadId)
+    this.pending.ended(threadId, turn.id)
     const userDriven = this.clientTurns.delete(`${harness}\u0000${turn.id}`)
     const stop = this.userStops.get(threadId)
     this.userStops.delete(threadId)
@@ -776,7 +826,16 @@ export class SessionTree {
     if (notes.length === 0 || this.active.get(parentId) !== running) return
     const link = await this.link(harness)
     const latest = latestPerSession(notes)
-    const text = formatSessionEvent({ kind: 'notes', notes: latest.map(publicNote) })
+    const current = latest.flatMap((note) => this.pendingNote(note))
+    if (current.length === 0) {
+      this.store.dropNotes(parentId, Math.max(...notes.map((note) => note.seq)))
+      this.notesChanged(parentId)
+      return
+    }
+    const text = formatSessionEvent({
+      kind: 'notes',
+      notes: current,
+    })
     try {
       await link.request('turn/steer', {
         threadId: parentId,
@@ -852,9 +911,15 @@ export class SessionTree {
     if (fresh.length === 0 || this.active.has(parentId)) return false
     const link = await this.link(harness)
     const latest = latestPerSession(fresh)
+    const current = latest.flatMap((note) => this.pendingNote(note))
+    if (current.length === 0) {
+      this.store.dropNotes(parentId, Math.max(...fresh.map((note) => note.seq)))
+      this.notesChanged(parentId)
+      return false
+    }
     const text = formatSessionEvent({
       kind: 'wake',
-      notes: latest.map(publicNote),
+      notes: current,
       ...(working > 0 ? { working } : {}),
     })
     const result = await link.request('turn/start', {
@@ -964,9 +1029,11 @@ export class SessionTree {
     if (notes.length === 0) return null
     this.store.dropNotes(threadId, Math.max(...notes.map((note) => note.seq)))
     this.notesChanged(threadId)
+    const current = latestPerSession(notes).flatMap((note) => this.pendingNote(note))
+    if (current.length === 0) return null
     const event = formatSessionEvent({
       kind: 'notes',
-      notes: latestPerSession(notes).map(publicNote),
+      notes: current,
     })
     const at = input.findIndex((item) => isObject(item) && item.type === 'text')
     if (at < 0) return [{ type: 'text', text: event, text_elements: [] }, ...input]
@@ -993,6 +1060,8 @@ export class SessionTree {
    */
   decorate(thread: Record<string, unknown>): void {
     if (typeof thread.id !== 'string') return
+    thread.litchPendingRequests = this.pending.list(thread.id)
+    thread.litchDelegatedResponses = this.store.responses(thread.id)
     const lineage = this.lineage(thread.id)
     if (lineage) thread.litchLineage = lineage
     const queued = this.queuedNotes(thread.id)
@@ -1036,10 +1105,9 @@ export class SessionTree {
 
   /** 这个会话现在排着、还没交给模型的回报：每个子会话最新的一条，次序同交出去时 */
   queuedNotes(threadId: string): SessionQueuedNote[] {
-    return latestPerSession(this.store.notes(threadId)).map((note) => ({
-      ...publicNote(note),
-      at: note.at,
-    }))
+    return latestPerSession(this.store.notes(threadId)).flatMap((note) =>
+      this.pendingNote(note).map((safe) => ({ ...safe, at: note.at })),
+    )
   }
 
   /** 回报队列变了：告诉声明了 sessionTree 的连接，父会话的对话区当场画出来 */
@@ -1283,6 +1351,8 @@ export class SessionTree {
 
   /** 会话删掉了：它带的动态工具、记下的速度跟着删 */
   deleted(threadId: string): void {
+    this.pending.ended(threadId)
+    this.store.dropResponses(threadId)
     this.store.dropTools(threadId)
     this.store.setSpeed(threadId, null)
     this.store.dropContacts(threadId)

@@ -249,6 +249,8 @@ export class ClientSession implements ClientToolPeer {
         this.translators.get(link.harness)?.notification(method, params)
       },
       sessions: {
+        clientAnswered: (harness, threadId, requestId) =>
+          host.sessionTree.pending.clientAnswered(harness, threadId, requestId),
         clientTurn: (harness, turnId) => host.sessionTree.clientTurn(harness, turnId),
         turnEvent: (harness, method, params) => {
           host.sessionTree.turnEvent(harness, method, params)

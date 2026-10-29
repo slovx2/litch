@@ -26,6 +26,7 @@ import { CommentsContext } from './comments/context'
 import { CommentsHub } from './comments/hub'
 import { SelectBar } from './comments/SelectBar'
 import { draftKey } from './composer/drafts'
+import { ChildRequests, DelegatedHistory } from './requests/ChildRequests'
 import { PendingQuestions } from './requests/PendingQuestions'
 import { RequestSlot } from './requests/RequestSlot'
 import { Transcript } from './Transcript'
@@ -229,6 +230,7 @@ export function DetailScreen({ route, navigation }: Props) {
     >
       {/* 键盘升起时整块往上平移，移出去的那一截裁在标题栏下沿，不压到状态栏上 */}
       <View style={styles.clip}>
+        <DelegatedHistory deviceId={deviceId} sessionId={sessionId} />
         <SessionTaskStrip deviceId={deviceId} mark={summary?.task} />
         {device?.sessionTree ? (
           <ProposalsStrip deviceId={deviceId} sessionId={sessionId} title={shownTitle} />
@@ -262,6 +264,11 @@ export function DetailScreen({ route, navigation }: Props) {
             store={store}
             maxHeight={(meta?.pendingQuestions.length ?? 0) > 0 ? cardMax / 2 : cardMax}
             onRevise={revise}
+          />
+          <ChildRequests
+            deviceId={deviceId}
+            sessionId={sessionId}
+            onOpen={(id) => navigation.push('Detail', { deviceId, sessionId: id })}
           />
           <PendingQuestions
             store={store}

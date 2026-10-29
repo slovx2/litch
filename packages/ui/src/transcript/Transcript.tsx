@@ -36,6 +36,7 @@ import { downHarness, downText, nameOf } from '../app/device.ts'
 import { duration, elapsed, retryText, turnEnded } from '../app/format.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { TurnOrigin } from '../background/TurnOrigin.tsx'
+import { ChildRequests, DelegatedHistory } from '../composer/ChildRequests.tsx'
 import { Dock, Requests } from '../composer/Dock.tsx'
 import { PendingQuestions } from '../composer/PendingQuestions.tsx'
 import { GoalReached } from '../goal/GoalReached.tsx'
@@ -544,6 +545,7 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
                 {turnIds && !failure ? (
                   <TaskNote deviceId={deviceId} sessionId={sessionId} />
                 ) : null}
+                <DelegatedHistory deviceId={deviceId} sessionId={sessionId} />
                 {failure ? (
                   <div className="errbox">
                     <span>{t('transcript.loadFailed', { reason: failureText(failure, t) })}</span>
@@ -585,6 +587,7 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
           </button>
         )}
         {footer ? null : <Requests deviceId={deviceId} sessionId={sessionId} />}
+        {footer ? null : <ChildRequests deviceId={deviceId} sessionId={sessionId} />}
         {footer ? null : <PendingQuestions deviceId={deviceId} sessionId={sessionId} />}
       </div>
       <div className="dock-wrap">

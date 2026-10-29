@@ -53,6 +53,7 @@ export interface RelayBackground {
 }
 
 export interface RelaySessions {
+  clientAnswered(harness: string, threadId: string, requestId: RpcId): void
   /** 客户端发起或成功插话的回合：只要收到用户输入就算用户回合 */
   clientTurn(harness: string, turnId: string): void
   /** 一个回合开始或结束了（turn/started、turn/completed 的参数） */
@@ -446,6 +447,8 @@ export class Relay {
     // 找不到：那个上游已经断开，或者它已经说过这个请求有结果了
     if (!entry) return
     this.pending.delete(idKey(frame.id))
+    if (entry.link && entry.threadId && frame.error === undefined && 'result' in frame)
+      this.host.sessions.clientAnswered(entry.link.harness, entry.threadId, entry.upstreamId)
     if (!entry.link) entry.onAnswer?.(frame)
     else if (entry.upstreamId === entry.facingId) entry.link.reply(raw)
     else entry.link.reply(JSON.stringify({ ...frame, id: entry.upstreamId }))

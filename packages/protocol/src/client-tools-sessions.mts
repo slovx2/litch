@@ -5,17 +5,19 @@
 // 通往引擎的连接声明能执行它，调用到了设备进程就自己答，不转给任何客户端。父子关系、提案见 session-tree.mts，
 // 规矩写在 protocol/extensions/session-tree.json。说明是写给模型看的，用英文。
 //
-// 这个文件只引用 client-tools.mts 和 session-tree.mts。
+// 只引用协议包内自包含的类型与工具声明。
 import {
   CLIENT_TOOL_NAMESPACE,
   type ClientToolFunctionSpec,
   type ClientToolNamespaceSpec,
 } from './client-tools.mjs'
+import type { SessionDelegatedResponse, SessionPendingRequest } from './session-pending.mjs'
 import type { SessionLineageKind } from './session-tree.mjs'
 
 export const SESSION_TOOL = {
   list: 'list',
   read: 'read',
+  respond: 'respond',
   /** 这台设备上能开子会话的 harness、各自的型号和强度、这个会话现在用的：换 harness 或型号之前先查 */
   options: 'options',
   start: 'start',
@@ -285,6 +287,20 @@ export interface SessionTurnSummary {
 export interface SessionsReadResult {
   session: SessionSummary
   turns: SessionTurnSummary[]
+  /** 当前设备连接观察到的阻塞请求，不包含异步或收尾问题。 */
+  pending_requests: SessionPendingRequest[]
+  delegated_responses: SessionDelegatedResponse[]
+}
+
+export interface SessionsRespondArguments {
+  thread_id: string
+  request_id: string
+  answer: { decision: unknown } | { answers: Record<string, string[]> }
+}
+
+export interface SessionsRespondResult {
+  answered: true
+  response: SessionDelegatedResponse
 }
 
 export interface SessionsStartResult {
@@ -616,7 +632,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
   return {
     type: 'namespace',
     name: CLIENT_TOOL_NAMESPACE.sessions,
-    description: `Litch sessions on this device. A sub-session is a full, separate session the user can open and talk to; it is for a task of its own that the user may want to follow apart from this work, or for work that needs another harness, model or folder. Parts of the task at hand, however large, run here or in your own subagents. ${suggestionLine(wrapUp, taskCards)} Results of your sub-sessions arrive later as a <litch-session-event> message; do not poll. Send to/interrupt sub-sessions or any session on a user-started turn; also send to any with past messages either way; archive only when the user agreed. Never answer approvals or questions waiting inside a sub-session: only the user can. If these tools report an unsupported namespace or a missing tool, you are not in Litch: stop calling litch_* tools in this conversation.`,
+    description: `Litch sessions on this device. A sub-session is a full, separate session the user can open and talk to; it is for a task of its own that the user may want to follow apart from this work, or for work that needs another harness, model or folder. Parts of the task at hand, however large, run here or in your own subagents. ${suggestionLine(wrapUp, taskCards)} Results of your sub-sessions arrive later as a <litch-session-event> message; do not poll. Send to/interrupt sub-sessions or any session on a user-started turn; also send to any with past messages either way; archive only when the user agreed. Use respond for delegated answers; secret inputs require the user. Send never answers. If these tools report an unsupported namespace or a missing tool, you are not in Litch: stop calling litch_* tools in this conversation.`,
     instructions: sessionProposalRules(wrapUp, taskCards),
     tools: [
       {
@@ -643,7 +659,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
         type: 'function',
         name: SESSION_TOOL.read,
         description:
-          'Read a session’s status and its last few turns (input and final answer, trimmed) without opening it.',
+          'Read a session’s status, recent turns, pending_requests and delegated_responses without opening it. Pending requests include current IDs, kinds, questions and permitted decisions for respond. This snapshot covers blocking requests observed by the device; an empty list does not rule out asynchronous questions or requests held by another executor.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -651,6 +667,26 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
             turns: { type: 'integer', minimum: 1, maximum: SESSION_TOOL_LIMITS.readTurnsMax },
           },
           required: ['thread_id'],
+          additionalProperties: false,
+        },
+      },
+      {
+        type: 'function',
+        name: SESSION_TOOL.respond,
+        description:
+          'Explicitly answer a pending question or approval. Read the current request ID and permitted decisions first. Only your sub-sessions or a user-driven turn may respond. Secret inputs and executor-specific requests require the user. Ordinary send messages never answer pending requests.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            thread_id: THREAD_ID,
+            request_id: { type: 'string' },
+            answer: {
+              type: 'object',
+              description:
+                'For approval: {decision: one of read.decisions}. For questions: {answers: {questionId: [answer strings]}}.',
+            },
+          },
+          required: ['thread_id', 'request_id', 'answer'],
           additionalProperties: false,
         },
       },
