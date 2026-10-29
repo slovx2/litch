@@ -25,5 +25,6 @@ let package = Package(
       ]
     ),
     .testTarget(name: "LitchComputerUseCoreTests", dependencies: ["LitchComputerUseCore"]),
+    .testTarget(name: "LitchComputerUseTests", dependencies: ["LitchComputerUse", "LitchComputerUseCore"]),
   ]
 )

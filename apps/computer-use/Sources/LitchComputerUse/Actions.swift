@@ -37,6 +37,7 @@ extension Engine {
     context.window = window
     let done: String
     do {
+      try BackgroundMouse.waitForSelfTest { try context.checkBase() }
       try context.checkBase()
       done = try body(context, params)
       context.notice("completed", "semantic", nil, context.usedForeground)

@@ -56,6 +56,8 @@ enum ForegroundExcursion {
         } catch { notice("restoreFailed") }
       } else if raised { notice("yielded") }
     }
+    let restorePreviewInput = FloatingPreview.passThroughDuringInput()
+    defer { restorePreviewInput() }
     notice("foreground")
     raised = true
     try Apps.activate(app, window: window)

@@ -54,6 +54,20 @@ enum BackgroundMouse {
   static var available: Bool { status == "available" }
   static func finish(_ result: String) { lock.lock(); state = result; lock.unlock() }
 
+  /// 首个动作不能把 pending 当作不可用而抢前台，污染仍在采样的自测。
+  /// 在请求线程等待，保留主线程处理自测事件与控制面处理取消的机会。
+  static func waitForSelfTest(check: () throws -> Void) throws {
+    let deadline = ProcessInfo.processInfo.systemUptime + 2
+    while status == "pending" {
+      try check()
+      guard ProcessInfo.processInfo.systemUptime < deadline else {
+        throw RPCError(.failed, "The input self-test has not completed; no input was sent. Retry after startup.")
+      }
+      Thread.sleep(forTimeInterval: 0.01)
+    }
+    try check()
+  }
+
   static func route(_ event: CGEvent, pid: pid_t, window: CGWindowID, frame: CGRect) throws {
     guard let location, let field else { throw RPCError(.failed, "Background mouse symbols unavailable.") }
     event.setIntegerValueField(.mouseEventWindowUnderMousePointer, value: Int64(window))
@@ -83,6 +97,7 @@ enum BackgroundMouse {
     let top = NSScreen.screens.first?.frame.maxY ?? 0
     let frame = CGRect(x: window.frame.minX, y: top - window.frame.maxY, width: 32, height: 32)
     let id = CGWindowID(window.windowNumber)
+    let started = Date()
     DispatchQueue.global().async {
       let point = CGPoint(x: frame.midX, y: frame.midY)
       do {
@@ -98,12 +113,12 @@ enum BackgroundMouse {
         try route(scroll, pid: getpid(), window: id, frame: frame)
       } catch { finish("unavailable") }
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-        let ok = view.clicked && view.scrolled &&
-          NSWorkspace.shared.frontmostApplication?.processIdentifier == front &&
-          CGEvent(source: nil)?.location == cursor
+        let frontStable = NSWorkspace.shared.frontmostApplication?.processIdentifier == front
+        let cursorStable = CGEvent(source: nil)?.location == cursor
+        let ok = view.clicked && view.scrolled && frontStable && cursorStable
         finish(ok ? "available" : "unavailable")
         window.orderOut(nil)
-        Log.write("后台鼠标启动自测：\(status)；SIP 开启未验")
+        Log.write("后台鼠标启动自测：\(status)；click=\(view.clicked) scroll=\(view.scrolled) frontStable=\(frontStable) cursorStable=\(cursorStable) elapsedMs=\(Int(Date().timeIntervalSince(started) * 1000))；SIP 开启未验")
       }
     }
   }

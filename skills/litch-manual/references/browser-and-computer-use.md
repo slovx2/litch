@@ -184,7 +184,8 @@ notice is shown; **Esc** (or Stop) takes control back and ends Computer Use for 
 ### macOS background control and preview / macOS 后台控制与预览
 
 macOS prefers background input. Typing uses public targeted keyboard events; supported mouse
-operations use window routing after a helper startup self-test. When a background action is unavailable,
+operations use window routing after a helper startup self-test. The first input waits for that test;
+if startup takes too long, the action fails without sending input. When a background action is unavailable,
 Litch waits for two seconds without keyboard/mouse input (up to eight seconds), briefly activates the
 target, performs the action, and restores the previous app and focused window. The preview reports
 that it briefly switched to the foreground. If the user takes over, Litch stops rather than overriding
@@ -198,12 +199,13 @@ stops after eight seconds instead of waiting indefinitely; retry after handling 
 The current conversation's **Computer preview** panel shows the window and agent pointer without
 replacing the system pointer. Hiding the panel stops its capture unless a floating preview is open; **Stop** ends control for
 the turn. **Take over** first stops the agent and then opens the actual target window. **Float preview**
-opens a nonactivating picture-in-picture window. A stale frame is labelled; the preview is not recorded.
+opens a nonactivating picture-in-picture window. During a brief foreground action, floating previews
+remain visible but temporarily pass mouse input through to the target. A stale frame is labelled; the preview is not recorded.
 Remote sessions use the same helper on this Mac, not the remote machine's desktop.
 
 macOS 优先后台操作。后台不能完成时，等待键鼠连续空闲 2 秒（最多 8 秒），短暂切到目标窗口，
 执行后恢复原应用和焦点窗口，预览标明“已短暂切到前台”。用户中途接管时停止，不覆盖用户的新选择。
-鼠标私有路由默认启用，每次助手启动自测；没有开关。**SIP 开启未验。**
+鼠标私有路由默认启用，每次助手启动自测；没有开关。首个输入等待自测结束，启动等待超时则返回失败，不发送输入。**SIP 开启未验。**
 
 屏幕录制预检通过后，首次采集仍可能弹出“直接访问屏幕”的系统确认，请点“允许”。等待确认、被拒绝、
 采集失败分别显示；实际取得画面后才标为可用。单次最多等 8 秒，不无限挂起；处理系统提示后再重试。
@@ -211,6 +213,7 @@ macOS 优先后台操作。后台不能完成时，等待键鼠连续空闲 2 �
 “电脑预览”显示受控窗口与代理光标；收起面板停止该面板的连续采集，已固定的悬浮窗仍会继续显示。
 “停止”结束本回合控制，“接管窗口”先停止
 代理再打开真实窗口，“固定画中画”打开不抢焦点的悬浮窗。画面过期会标明，预览不录制、不写入会话历史。
+短暂前台操作期间，浮窗保持可见并暂时允许鼠标穿透，防止挡住目标控件。
 远程设备上的会话操作的仍是控制端这台 Mac。
 
 ## Chrome on the controlling Mac
