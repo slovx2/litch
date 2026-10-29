@@ -1,0 +1,67 @@
+{
+  "extension": "devicePower",
+  "description": "本机设备服务的防休眠申请状态。工作策略和接电持续保持策略由常驻服务执行，桌面和手机经既有 deviceSettings 修改两个开关。只阻止系统空闲睡眠，允许锁屏和熄屏，不承诺合盖、主动睡眠和低电量时继续运行。",
+  "appliesTo": "有适配器主进程管理的聚合面；不在单 harness 兼容入口上提供。只有由本机 device-start --local-service 登记的服务才执行电源策略。手机使用 SSH 不改变服务的登记。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "devicePower" }
+    }
+  },
+  "undeclared": "不发送电源通知，调用读取方法返回 extensionRequired；不改变任何标准协议应答字段。",
+  "rules": [
+    "两个开关通过 deviceSettings 写入并即时生效；未登记本机的服务不展示电源组，也不自动启用。",
+    "requested 仅表示已向操作系统申请且未发现失败，不代表覆盖所有睡眠原因；失败和活动状态失效返回 degraded。",
+    "没有屏幕常亮或模拟用户输入行为。不支持的平台返回 unsupported。",
+    "工作包含未结束的回合（包括等待审批）和已确认的后台任务；客户端连接、空闲终端和未来定时计划不属于工作。",
+    "通知按实际投递的连接声明过滤。设置状态与断言申请状态独立，不以保存设置成功代替断言成功。"
+  ],
+  "parts": [
+    {
+      "kind": "Method",
+      "name": "litch/device/power/read",
+      "params": { "type": "object", "additionalProperties": false },
+      "result": { "$ref": "#/definitions/DevicePowerStatus" }
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/device/power/changed",
+      "params": { "$ref": "#/definitions/DevicePowerStatus" }
+    }
+  ],
+  "definitions": {
+    "DevicePowerStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supported",
+        "configuredForLocalService",
+        "state",
+        "reasons",
+        "powerSource",
+        "working",
+        "text"
+      ],
+      "properties": {
+        "supported": { "type": "boolean" },
+        "configuredForLocalService": { "type": "boolean" },
+        "state": { "enum": ["inactive", "requested", "degraded", "unsupported"] },
+        "reasons": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["working", "pluggedIn"] }
+        },
+        "powerSource": { "enum": ["ac", "battery", "unknown"] },
+        "working": { "type": "integer", "minimum": 0 },
+        "text": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["zh-CN", "en"],
+          "properties": { "zh-CN": { "type": "string" }, "en": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

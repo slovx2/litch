@@ -95,6 +95,7 @@ type controlServer struct {
 	installDirty chan struct{}
 	// 控制请求的摘要（logs/control.jsonl）
 	journal *jsonLog
+	power   *powerController
 }
 
 // 只有拿着设备锁的进程可以调用：遗留的套接字由它清掉。
@@ -115,6 +116,8 @@ func openControlServer(ctx context.Context, c configuration, manager *harnessMan
 		journal: newJSONLog(filepath.Join(c.logsDirectory(), "control.jsonl"), "control")}
 	server.journal.write("info", "start", map[string]any{"version": adapterVersion(c.root)})
 	server.ctx, server.stop = context.WithCancel(ctx)
+	server.power = newPowerController(server.ctx, systemPowerBackend{}, c.powerSettings, func() { server.broadcast(nil) }, func(event string, fields map[string]any) { server.journal.write("info", "power_"+event, fields) })
+	server.power.run()
 	server.installs = server.newInstaller()
 	manager.changed = server.broadcast
 	server.done.Add(2)
@@ -128,6 +131,12 @@ func (s *controlServer) close() {
 		return
 	}
 	s.stop()
+	if s.power != nil {
+		s.power.close()
+		if s.power.done != nil {
+			<-s.power.done
+		}
+	}
 	// 正在装的任务随服务停下（连它起的进程一起），等它收完尾
 	s.installs.wait()
 	_ = s.listener.Close()
@@ -198,6 +207,9 @@ func (s *controlServer) publish() {
 	}
 	state := s.manager.view(keys)
 	state.Service = s.facts
+	if s.power != nil {
+		state.Power = s.power.read()
+	}
 	message := map[string]any{"method": "state", "params": state}
 	for connection, lock := range peers {
 		s.send(connection, lock, message)
@@ -229,6 +241,9 @@ func (s *controlServer) serve(connection net.Conn) {
 		delete(s.peers, connection)
 		s.mu.Unlock()
 		s.departed(connection)
+		if s.power != nil {
+			s.power.disconnected(connection)
+		}
 		_ = connection.Close()
 	}()
 	// 连上来先要一份完整的状态。
@@ -259,9 +274,15 @@ func (s *controlServer) serve(connection net.Conn) {
 				return
 			}
 			began := time.Now()
-			result, failure := s.handle(request.Method, request.Params)
+			var result any
+			var failure *controlError
+			if request.Method == "power.activity" && s.power != nil {
+				result, failure = s.handlePowerActivity(request.Params, connection)
+			} else {
+				result, failure = s.handle(request.Method, request.Params)
+			}
 			s.record(request, began, failure)
-			if request.Method == "settings.write" || request.Method == "harness.apply" {
+			if request.Method == "settings.write" || request.Method == "harness.apply" || request.Method == "power.registerLocal" {
 				// 应答之前先把现状送到：设备进程拿手上最新的 state 当这次请求的结果，不用猜后面还有没有一条。
 				s.publish()
 			}
@@ -321,9 +342,11 @@ func decodeControlParams(params json.RawMessage, target any) *controlError {
 
 func (s *controlServer) handle(method string, params json.RawMessage) (any, *controlError) {
 	switch method {
+	case "power.read", "power.activity", "power.registerLocal":
+		return s.handlePower(method, params)
 	case "settings.read":
 		return map[string]any{
-			"schema":       s.manager.schema,
+			"schema":       s.manager.settingsSchema(),
 			"snapshot":     s.manager.snapshot(),
 			"inheritedEnv": inheritedEnvironment(s.c.userEnv),
 		}, nil
@@ -349,6 +372,9 @@ func (s *controlServer) handle(method string, params json.RawMessage) (any, *con
 				failure.Snapshot = &snapshot
 			}
 			return nil, failure
+		}
+		if s.power != nil {
+			s.power.refresh()
 		}
 		// SSH 入口的设置是当场生效的，入口要照新设置重来一遍：等它写下新的状况再应答，
 		// 应答里带的就是定下来的样子，不是“正在换”。

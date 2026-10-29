@@ -24,6 +24,7 @@ import { adoptDrafts, useDrafts } from './drafts.ts'
 import { InheritedEnv } from './EnvEditor.tsx'
 import { FoldSection } from './FoldSection.tsx'
 import { HarnessBlock } from './HarnessBlock.tsx'
+import { PowerSettings } from './PowerSettings.tsx'
 import { SaveBar } from './SaveBar.tsx'
 import { LeadSwitch, SettingRow } from './SettingRow.tsx'
 import { SshEntries } from './SshEntries.tsx'
@@ -236,7 +237,11 @@ export function ManagePanel({
             {bucket.group?.description ? (
               <p className="mng-sec-note">{t.said(bucket.group.description)}</p>
             ) : null}
-            <div className="mng-rows">{bucket.specs.map(row)}</div>
+            {bucket.group?.id === 'power' ? (
+              <PowerSettings deviceId={deviceId} specs={bucket.specs} snapshot={snapshot} />
+            ) : (
+              <div className="mng-rows">{bucket.specs.map(row)}</div>
+            )}
             {/* 工作树那一组下面列出这台设备上建过的工作树，能删、能恢复 */}
             {bucket.group?.id === 'worktrees' ? <WorktreeList device={device} /> : null}
           </FoldSection>

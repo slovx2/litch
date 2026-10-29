@@ -138,6 +138,7 @@ export const keys = {
   manage: (deviceId: string) => `manage:${deviceId}:schema`,
   /** SettingsSnapshotView：设置现在的值、待重启的 harness、SSH 入口的状况 */
   manageSnapshot: (deviceId: string) => `manage:${deviceId}:snapshot`,
+  managePower: (deviceId: string) => `manage:${deviceId}:power`,
   /** ManageRevisions：每个设置项的值从打开到现在被动过几次（自己写的、别处写的都算） */
   manageRevisions: (deviceId: string) => `manage:${deviceId}:revisions`,
   /** ChannelErrorShape：管理数据没取到，或者这台设备没有设置接口 */
@@ -509,7 +510,7 @@ export function createReplica(channel: CoreChannel): Replica {
   /** 各台设备的终端列表的订阅 */
   const terminalLists = new Map<string, () => void>()
   const opened = new Map<string, { count: number; stop(): void }>()
-  const managed = new Map<string, { count: number; stop(): void }>()
+  const managed = new Map<string, { count: number; stop(): void; failed: boolean; epoch: number }>()
   const diffs = new Map<string, { count: number; stop(): void }>()
   const pairings = new Map<string, { count: number; stop(): void }>()
   const approvalTopics = new Map<string, { count: number; stop(): void }>()
@@ -680,6 +681,7 @@ export function createReplica(channel: CoreChannel): Replica {
 
   const applyManage = (deviceId: string, op: ManageOp) => {
     if (op.op === 'settings.set') setSnapshot(deviceId, op.snapshot, op.keys)
+    else if (op.op === 'power.set') store.set(keys.managePower(deviceId), op.value)
   }
 
   // 只有分组或顺序真的变了才换掉分组这个键，否则一个会话的状态变化会让整个列表重画
@@ -1142,15 +1144,22 @@ export function createReplica(channel: CoreChannel): Replica {
     },
 
     openManage(deviceId) {
-      const existing = managed.get(deviceId)
-      if (existing) {
-        existing.count++
-      } else {
-        const stop = channel.subscribe(
+      const entry = managed.get(deviceId) ?? { count: 0, stop() {}, failed: true, epoch: 0 }
+      entry.count++
+      managed.set(deviceId, entry)
+      // 工具栏可能一直持有引用；一次订阅结束不等于所有界面都关了。新打开/重试要能换掉失败的订阅。
+      if (entry.failed) {
+        entry.stop()
+        entry.failed = false
+        const epoch = ++entry.epoch
+        const current = () => managed.get(deviceId) === entry && entry.epoch === epoch
+        entry.stop = channel.subscribe(
           { kind: 'manage', deviceId },
           {
             snapshot(view: ManageView) {
+              if (!current()) return
               store.batch(() => {
+                store.set(keys.managePower(deviceId), view.power ?? null)
                 store.delete(keys.manageError(deviceId))
                 // 重连之后重新读到的：和手上那份不一样的键，算被动过
                 const before = store.get<SettingsSnapshotView>(keys.manageSnapshot(deviceId))
@@ -1168,17 +1177,19 @@ export function createReplica(channel: CoreChannel): Replica {
               })
             },
             delta(ops) {
+              if (!current()) return
               store.batch(() => {
                 for (const op of ops) applyManage(deviceId, op)
               })
             },
             error(error) {
-              // 订阅到此结束。界面要重试的话，关掉再打开
+              if (!current()) return
+              // 保留引用数和最后一份数据；下一次 openManage 显式重订阅，不能被常驻工具栏卡住。
+              entry.failed = true
               store.set(keys.manageError(deviceId), error.toShape() satisfies ChannelErrorShape)
             },
           },
         )
-        managed.set(deviceId, { count: 1, stop })
       }
       let released = false
       return () => {

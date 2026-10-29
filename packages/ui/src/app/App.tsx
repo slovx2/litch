@@ -118,6 +118,9 @@ export function App() {
     [openPage],
   )
   const closePage = useCallback(() => openPage(null), [openPage])
+  /** 当前设备详情供工具栏判断本机/远程上下文。 */
+  const [deviceDetail, setDeviceDetail] = useState<string | null>(null)
+  const [taskDevice, setTaskDevice] = useState<string | null>(null)
   /** 别处要求直接进哪台设备的详情。seq 每次都变，同一台再要一次也重新进 */
   const [deviceAt, setDeviceAt] = useState<{
     deviceId: string
@@ -260,7 +263,14 @@ export function App() {
 
   return (
     <div className="app">
-      <TitleBar selection={selection} draft={draft} page={page} peek={peek} onCompose={compose} />
+      <TitleBar
+        selection={selection}
+        draft={draft}
+        page={page}
+        peek={peek}
+        devicePageId={page === 'tasks' ? taskDevice : deviceDetail}
+        onCompose={compose}
+      />
       {/* 侧栏和右边那一块（对话加侧面板）并排，各占一栏：侧栏变宽变窄、收起，右边那一块的宽度跟着变 */}
       <Sidebar
         selection={selection}
@@ -288,6 +298,7 @@ export function App() {
           ) : page === 'devices' ? (
             <DevicesPage
               key={deviceAt?.seq ?? 0}
+              onDeviceChange={setDeviceDetail}
               initial={deviceAt?.deviceId ?? null}
               section={deviceAt?.section ?? null}
               onClose={closePage}
@@ -296,6 +307,7 @@ export function App() {
             <TasksPage
               key={tasksAt.seq}
               initial={tasksAt.route}
+              onDeviceChange={setTaskDevice}
               onClose={closePage}
               onOpenSession={select}
             />

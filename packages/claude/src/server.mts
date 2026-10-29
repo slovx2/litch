@@ -399,6 +399,9 @@ export class CodexClaudeAppServer {
   // 线程的订阅连接。一个线程可以同时被几条连接订阅：通知和等人回答的请求发给全部订阅连接。
   private readonly subscribers = new ThreadSubscribers()
   private peerFeatures = new WeakMap<RpcPeer, PeerFeatures>()
+  // 本机设备服务的只读电源观察连接；不加入普通客户端、订阅或扩展名单。
+  private readonly powerObservers = new WeakSet<RpcPeer>()
+  private readonly powerBackgroundThreads = new Set<string>()
   private activeTurnByThread = new Map<string, string>()
   private scheduledGoals = new Map<string, string>()
   private scheduledQueues = new Map<string, string>()
@@ -560,6 +563,7 @@ export class CodexClaudeAppServer {
       onPeerWake: (to, from) => this.peerWake(to, from),
       onBackgroundCommandEnded: (threadId, end) => {
         const entry = this.backgroundCommands.take(threadId, end.taskId)
+        this.notePowerBackground(threadId)
         if (entry) this.finishBackgroundCommand(entry, end)
       },
       onBackgroundTaskMessage: (threadId, message) => {
@@ -601,6 +605,10 @@ export class CodexClaudeAppServer {
 
   // final：这条连接就是进程的寿命（标准输入输出），它断开后适配器随即退出，不会再有别的连接。
   closePeer(peer: RpcPeer, final = false): void {
+    if (this.powerObservers.delete(peer)) {
+      this.closedPeers.add(peer)
+      return
+    }
     this.accountPeers.delete(peer)
     this.closedPeers.add(peer)
     // 等不来下一个订阅者：趁还能写，告诉对端它手里的请求已经失效。
@@ -769,13 +777,20 @@ export class CodexClaudeAppServer {
       if (locked) this.nativeMutations.delete(threadId as string)
       // 这次请求可能让某个线程有了订阅连接（恢复、发消息等）：应答发出之后，
       // 把等着人回答的请求送给它，先后与原生“恢复后重放挂起的请求”一致。
-      this.pendingInteractions.reroute()
+      if (!this.powerObservers.has(peer)) this.pendingInteractions.reroute()
     }
   }
 
   private async dispatch(peer: RpcPeer, method: string, params: unknown): Promise<unknown> {
     if (params === null || typeof params !== 'object' || Array.isArray(params))
       throw new ProtocolError(-32602, 'params 必须是对象')
+    if (method === 'litch/internal/power/activity') {
+      if (!this.powerObservers.has(peer))
+        throw new ProtocolError(-32601, `method not implemented: ${method}`)
+      return this.powerActivity(asRecord(params))
+    }
+    if (this.powerObservers.has(peer) && method !== 'initialize')
+      throw new ProtocolError(-32601, `method not implemented: ${method}`)
     if (method.startsWith('litch/harness/'))
       return this.harnessConfig.dispatch(method, asRecord(params))
     if (
@@ -869,14 +884,30 @@ export class CodexClaudeAppServer {
           ],
         }
       case 'initialize': {
+        const initParams = asRecord(params)
+        const clientInfo = asRecord(initParams.clientInfo)
+        this.powerObservers.delete(peer)
+        if (clientInfo.name === 'litch-power-observer') {
+          if (this.accountPeers.has(peer))
+            throw new ProtocolError(-32600, '电源观察必须使用独立连接')
+          // 普通握手会读取模型目录、扫描原生记录和探测 MCP；观察连接不启动这些工作。
+          this.powerObservers.add(peer)
+          return {
+            userAgent: codexUserAgent(
+              'litch-power-observer',
+              stringOr(clientInfo.version, 'unknown'),
+            ),
+            codexHome: codexHome(),
+            platformFamily: platformFamily(),
+            platformOs: platformOs(),
+          }
+        }
         // Claude 用户设置（如模型服务）变更后，新连接看到的模型目录随之刷新。
         await loadRuntimeModelCatalog(this.runtime)
         this.accountPeers.add(peer)
         this.watchNative()
         if (this.detachedReapTimer) clearTimeout(this.detachedReapTimer)
         this.detachedReapTimer = null
-        const initParams = asRecord(params)
-        const clientInfo = asRecord(initParams.clientInfo)
         const capabilities = asRecord(initParams.capabilities)
         const declaredActivityKinds = Array.isArray(capabilities.subAgentActivityKinds)
           ? capabilities.subAgentActivityKinds
@@ -1031,6 +1062,7 @@ export class CodexClaudeAppServer {
         await this.runtime.closeSession?.(threadId, '会话已删除')
         this.store.deleteThread(threadId)
         this.backgroundTasks.forget(threadId)
+        this.powerBackgroundThreads.delete(threadId)
         const subscribed = this.subscribers.clear(threadId)
         this.clearThreadState(threadId)
         // 关闭（有连接订阅着它才算加载着）给原来订阅着它的连接，删除再加上删它的这条；不是临时会话的，
@@ -3120,6 +3152,7 @@ export class CodexClaudeAppServer {
       itemId,
       startedAtMs: startedAtMs ?? nowMillis(),
     })
+    this.notePowerBackground(sessionThreadId)
     if (
       this.backgroundTasks.link(sessionThreadId, taskId, { itemId, turnId, command: item.command })
     )
@@ -3159,6 +3192,7 @@ export class CodexClaudeAppServer {
         exitCode: null,
         output: '',
       })
+    this.notePowerBackground(threadId)
     this.idleCheckHandler?.()
   }
 
@@ -7928,8 +7962,57 @@ export class CodexClaudeAppServer {
     return this.peerFeatures.get(peer)?.extensions.has(EXTENSION.backgroundTasks) === true
   }
 
+  private hasPowerBackground(threadId: string): boolean {
+    return (
+      this.backgroundCommands.list(threadId).length > 0 ||
+      this.backgroundTasks.list(threadId).some((task) => task.status === 'running')
+    )
+  }
+
+  private notePowerBackground(threadId: string): void {
+    if (this.hasPowerBackground(threadId)) this.powerBackgroundThreads.add(threadId)
+    else this.powerBackgroundThreads.delete(threadId)
+  }
+
+  /** 仅查内存；恢复时取当前工作，常规查询只核对调用方已经知道的线程。 */
+  private powerActivity(params: Record<string, unknown>): unknown {
+    const requested = params.threadIds
+    if (
+      requested !== undefined &&
+      (!Array.isArray(requested) ||
+        requested.length > 16384 ||
+        requested.some((id) => typeof id !== 'string' || !id))
+    )
+      throw new ProtocolError(-32602, 'threadIds 必须是最多 16384 个非空字符串的数组')
+    const active = new Set(this.activeTurnByThread.keys())
+    // 子代理回合由主回合持有，不都登记在 activeTurnByThread；这里同样只读内存。
+    for (const state of this.subagentStateByTurn.values()) {
+      for (const id of state.active) {
+        const child = state.contexts.get(id)
+        if (child) active.add(child.childThreadId)
+      }
+      for (const child of state.resumed.values()) active.add(child.childThreadId)
+    }
+    const ids =
+      requested === undefined
+        ? new Set([...active, ...this.powerBackgroundThreads])
+        : new Set(requested as string[])
+    const threads = [...ids].map((threadId) => ({
+      threadId,
+      active: active.has(threadId),
+      background: this.hasPowerBackground(threadId),
+    }))
+    return {
+      threads:
+        requested === undefined
+          ? threads.filter((thread) => thread.active || thread.background)
+          : threads,
+    }
+  }
+
   // 集合变了：整份发给所有声明过的连接，不只是订阅者（侧栏要标没打开过的会话）。临时会话的不发
   private publishBackground(threadId: string): void {
+    this.notePowerBackground(threadId)
     if (this.stopped || this.store.getThread(threadId)?.ephemeral) return
     const params = { threadId, tasks: this.backgroundTasks.list(threadId), wakesOnFinish: true }
     // 诊断：发出去的集合里在跑的从有变没有（客户端输入框上方那一行随之消失），记一行，和核心的 background.drop 对着看

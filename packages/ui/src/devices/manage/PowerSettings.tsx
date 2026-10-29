@@ -1,0 +1,81 @@
+// 电源开关立即写入，仍以服务端快照为准；写入失败时保留原值并说明原因。
+import {
+  type DevicePowerView,
+  keys,
+  type SettingSpecView,
+  type SettingsSnapshotView,
+} from '@litch/core'
+import { useState } from 'react'
+import { useT } from '../../app/appearance.ts'
+import { whyNot } from '../../app/errors.ts'
+import { useKey, useServices } from '../../app/services.tsx'
+import { Control } from './controls.tsx'
+
+export function PowerSettings({
+  deviceId,
+  specs,
+  snapshot,
+}: {
+  deviceId: string
+  specs: readonly SettingSpecView[]
+  snapshot: SettingsSnapshotView
+}) {
+  const t = useT()
+  const { channel } = useServices()
+  const state = useKey<DevicePowerView>(keys.managePower(deviceId))
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<unknown>(null)
+  const toggle = async (key: string, value: boolean) => {
+    setBusy(true)
+    setFailure(null)
+    try {
+      await channel.command('device.settings.write', {
+        deviceId,
+        expectedVersion: snapshot.version,
+        edits: [{ key, value }],
+      })
+    } catch (error) {
+      setFailure(error)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="mng-rows" data-power-settings>
+      {state ? (
+        <p className="mng-sec-note" role="status">
+          {t.said(state.text)}
+        </p>
+      ) : null}
+      {specs.map((spec) => (
+        <div className="mng-row" data-setting={spec.key} key={spec.key}>
+          <div className="mng-row-text">
+            <label className="mng-row-title" htmlFor={`power-${deviceId}-${spec.key}`}>
+              {t.said(spec.title)}
+            </label>
+            <span className="form-note">{t.said(spec.description)}</span>
+          </div>
+          <div className="mng-row-ctl">
+            <Control
+              id={`power-${deviceId}-${spec.key}`}
+              spec={spec}
+              stored={snapshot.values[spec.key]}
+              edit={null}
+              disabled={busy}
+              wrong={false}
+              label={t.said(spec.title)}
+              onEdit={(edit) => {
+                if (edit.kind === 'boolean') void toggle(spec.key, edit.value)
+              }}
+            />
+          </div>
+        </div>
+      ))}
+      {failure ? (
+        <p className="form-note err" role="alert">
+          {whyNot(failure, t)}
+        </p>
+      ) : null}
+    </div>
+  )
+}

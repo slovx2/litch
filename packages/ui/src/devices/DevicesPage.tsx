@@ -1,5 +1,5 @@
 import { keys } from '@litch/core'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import type { DeviceSection } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { Close, Plus } from '../app/icons.tsx'
@@ -16,12 +16,14 @@ export function DevicesPage({
   initial = null,
   section = null,
   onClose,
+  onDeviceChange,
 }: {
   /** 一打开就进这台设备的详情。null：在列表上 */
   initial?: string | null
   /** 进了 initial 的详情之后停在哪一节。null：从头看 */
   section?: DeviceSection | null
   onClose(): void
+  onDeviceChange?(deviceId: string | null): void
 }) {
   const deviceIds = useKey<string[]>(keys.devices) ?? []
   const t = useT()
@@ -41,6 +43,10 @@ export function DevicesPage({
     if (gone) setDetail(null)
   }, [gone])
   const inDetail = detail !== null && !gone
+  useLayoutEffect(
+    () => onDeviceChange?.(inDetail ? detail : null),
+    [onDeviceChange, inDetail, detail],
+  )
 
   // Esc 回到对话。开着对话框的时候 Esc 归对话框；开着详情的时候 Esc 归详情（回到这张列表）
   useEffect(() => {

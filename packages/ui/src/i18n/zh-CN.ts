@@ -13,6 +13,7 @@ import { zhOnboard } from './zh-CN-onboard.ts'
 import { zhPairing } from './zh-CN-pairing.ts'
 import { zhPasswords } from './zh-CN-passwords.ts'
 import { zhPeer } from './zh-CN-peer.ts'
+import { zhPower } from './zh-CN-power.ts'
 import { zhProposals } from './zh-CN-proposals.ts'
 import { zhRestart } from './zh-CN-restart.ts'
 import { zhRupgrade } from './zh-CN-rupgrade.ts'
@@ -21,6 +22,7 @@ import { zhTasks } from './zh-CN-tasks.ts'
 import { zhWorktrees } from './zh-CN-worktrees.ts'
 
 export const zhCN = {
+  ...zhPower,
   // 定时任务的文案单独放一个文件（zh-CN-tasks.ts）
   ...zhTasks,
   // 模型边干活边问的题（zh-CN-asks.ts）

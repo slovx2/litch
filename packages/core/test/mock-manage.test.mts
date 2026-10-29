@@ -56,7 +56,7 @@ function setup(chunkMs = 0) {
     const seen = {
       view: null as ManageView | null,
       snapshots: 0,
-      ops: [] as ManageOp[],
+      ops: [] as Extract<ManageOp, { op: 'settings.set' }>[],
       errors: [] as ChannelError[],
     }
     const close = channel.subscribe(
@@ -68,6 +68,8 @@ function setup(chunkMs = 0) {
         },
         delta(ops: ManageOp[]) {
           for (const op of ops) {
+            assert.equal(op.op, 'settings.set')
+            if (op.op !== 'settings.set') continue
             seen.ops.push(structuredClone(op))
             if (seen.view) seen.view.snapshot = structuredClone(op.snapshot)
           }

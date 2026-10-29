@@ -83,6 +83,11 @@ export class DeviceBackground {
     }
   }
 
+  /** 已确认有后台工作、仍由设备观察着的会话。电源统计不靠客户端连接数。 */
+  runningThreads(): string[] {
+    return [...this.lastRunning.keys()]
+  }
+
   private settle(threadId: string): void {
     const running = this.running(threadId)
     const before = this.lastRunning.get(threadId) ?? 0

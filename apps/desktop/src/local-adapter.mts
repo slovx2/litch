@@ -278,7 +278,17 @@ export async function startDevice(
   }
   const end = await runCommand(
     adapter,
-    ['device-start', '--home', home, '--root', adapter.root, '--node', adapter.node, ...options],
+    [
+      'device-start',
+      '--local-service',
+      '--home',
+      home,
+      '--root',
+      adapter.root,
+      '--node',
+      adapter.node,
+      ...options,
+    ],
     env,
     signal,
     timeoutMs,

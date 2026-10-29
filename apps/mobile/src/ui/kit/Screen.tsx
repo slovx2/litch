@@ -21,6 +21,7 @@ export function Screen({
   subtitle,
   back = true,
   actions = [],
+  trailing,
   wire,
   compact = false,
   children,
@@ -31,6 +32,8 @@ export function Screen({
   /** 左上角返回。首页不要 */
   back?: boolean
   actions?: HeaderAction[]
+  /** 标题栏尾部的自定义状态和控件。 */
+  trailing?: ReactNode
   /** 设备的线色：标题栏左边一道竖线（设计稿里每台设备一根线色贯穿各处） */
   wire?: string
   /** 矮标题栏（横屏用） */
@@ -110,6 +113,7 @@ export function Screen({
             ) : null}
           </View>
         )}
+        {trailing}
         {actions.map((action) => (
           <Pressable
             key={action.label}

@@ -51,6 +51,8 @@ export const EXTENSION = {
    * 设备信息的 `extensions` 里列了它，而且这条连接声明了它，才有这个字段。
    */
   deviceService: 'deviceService',
+  /** 本机服务的电源申请状态，定义在 device-power.mts。 */
+  devicePower: 'devicePower',
   /**
    * 计划确认由引擎在回合里问：模型交了计划，引擎自己出一道题问要不要执行，答案在这个回合里生效
    * （定义在 protocol/extensions/plan-confirmation.json）。没声明的连接照上游的做法：回合带着计划条目

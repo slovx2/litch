@@ -8,6 +8,7 @@ import { BACKGROUND_TASKS_NOTIFICATION } from '../../protocol/src/background-tas
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import { HARNESS_INSTALL_NOTIFICATION } from '../../protocol/src/device-harness-install.mjs'
+import { DEVICE_POWER_CHANGED } from '../../protocol/src/device-power.mjs'
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
 import { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
@@ -29,6 +30,7 @@ import { WorkspaceImporter } from './importer.mjs'
 import { DeviceManagement } from './management.mjs'
 import { dialectFor } from './native-codex.mjs'
 import { DevicePairing, type PairingConfig } from './pairing.mjs'
+import { PowerActivity } from './power-activity.mjs'
 import { hasActiveTurn } from './probe.mjs'
 import { ACTIVITY_METHOD, type DeviceActivity, serviceInfo } from './service-info.mjs'
 import {
@@ -204,6 +206,10 @@ export class DeviceServer {
   private readonly layer: DeviceLayer
   private readonly options: DeviceOptions
   private readonly control: ControlChannel | null
+  private power: PowerActivity | null = null
+  private readonly powerDisconnected = new Set<string>()
+  private readonly powerRunning = new Map<string, boolean>()
+  private lastPower = ''
   private readonly version: string
   /** 定时任务。任务库打不开时是 null */
   private readonly tasks: DeviceTasks | null
@@ -259,6 +265,7 @@ export class DeviceServer {
     if (this.control) info.extensions.push(EXTENSION.deviceSettings)
     // 服务的来历也是主进程给的：有它在管，声明过的客户端才问得到“在跑的是哪一份”
     if (this.control) info.extensions.push(EXTENSION.deviceService)
+    if (this.control) info.extensions.push(EXTENSION.devicePower)
     // 给设备装 harness：装的事在主进程里做（登记表、用户的环境、装完重启它），也是有它在管才有
     if (this.control) info.extensions.push(EXTENSION.harnessInstall)
     // 可重连的终端：进程可以属于设备
@@ -432,6 +439,8 @@ export class DeviceServer {
     )
     // 有后台任务在跑的会话：设备进程的连接跟着它，跑完以后引擎自己续跑的回合里调设备工具（收尾、任务卡）有执行方
     this.background.onBusy((threadId) => this.sessionTree.follow(threadId))
+    this.background.onBusy(() => this.power?.changed())
+    this.background.onSettled(() => this.power?.changed())
     this.titles = new CodexTitles({
       openEngineLink: (harness) => this.openEngineLink(harness),
       store: this.sessionTree.store,
@@ -442,6 +451,7 @@ export class DeviceServer {
       log,
     })
     this.host = {
+      power: () => this.power,
       ...(options.trace ? { trace: options.trace } : {}),
       harnesses: () => this.harnesses(),
       management: new DeviceManagement({
@@ -487,7 +497,11 @@ export class DeviceServer {
         this.control
           ? this.control.request('codex.models', {}, CODEX_CATALOG_TIMEOUT_MS)
           : Promise.reject(new Error('没有主进程，问不到 codex 自带的模型目录')),
-      reachable: () => this.importer?.kick(),
+      powerLost: (harness) => this.powerDisconnected.add(harness),
+      reachable: (harness) => {
+        this.powerReconnected(harness)
+        this.importer?.kick()
+      },
       importing: () => {
         this.importer?.kick()
         return this.importer?.idle() ?? Promise.resolve()
@@ -507,6 +521,7 @@ export class DeviceServer {
           })
     // 运行时已经在跑的话现在就导入，不等第一个客户端连进来
     this.importer?.kick()
+    this.syncPower()
     if (!this.control) this.tasks?.begin()
     else if (this.control.state) this.tasks?.begin(taskSettings(this.control.state))
     else if (this.tasks) {
@@ -578,6 +593,7 @@ export class DeviceServer {
 
   /** 主进程推来了新的状态：各条连接跟着调整上游，设置真的变了就通知声明过的客户端 */
   private controlChanged(state: ControlState): void {
+    this.syncPower()
     this.applyProcessLimits(state)
     if (this.tasksWait) clearTimeout(this.tasksWait)
     this.tasksWait = null
@@ -592,6 +608,51 @@ export class DeviceServer {
     for (const key of state.keys) this.unannounced.add(key)
     // 有写入正在进行：这一条多半是途中的样子，等写入有了结果再说
     if (this.settling === 0) this.announceSettings()
+  }
+
+  /** 归属是服务持久配置，手机用 SSH、桌面退出都不会改变它。 */
+  private syncPower(): void {
+    const control = this.control
+    const status = control?.state?.power
+    if (control && status?.supported && status.configuredForLocalService) {
+      if (!this.power) {
+        this.power = new PowerActivity({
+          harnesses: () =>
+            this.harnesses().map((source) => ({
+              id: source.id,
+              connect: source.connect,
+              running: source.managed?.state === 'running',
+              native: source.managed ? source.managed.native === true : source.native === true,
+            })),
+          report: (report) => control.request('power.activity', report, 5000),
+          background: () =>
+            this.background.runningThreads().flatMap((threadId) => {
+              const harness = this.index.lookup(threadId)
+              return harness ? [{ harness, threadId }] : []
+            }),
+          tasks: () => this.tasks?.running ?? 0,
+          version: this.version,
+          ...(this.options.log ? { log: this.options.log } : {}),
+        })
+        for (const source of this.harnesses())
+          this.powerRunning.set(source.id, source.managed?.state === 'running')
+        this.power.start()
+      }
+    } else {
+      this.power?.close()
+      this.power = null
+    }
+    for (const source of this.harnesses()) {
+      const running = source.managed?.state === 'running'
+      if (running && this.powerRunning.get(source.id) === false)
+        void this.power?.reconnected(source.id)
+      this.powerRunning.set(source.id, running)
+    }
+    const next = JSON.stringify(status ?? null)
+    if (next !== this.lastPower) {
+      this.lastPower = next
+      if (status) this.announce(DEVICE_POWER_CHANGED, status, EXTENSION.devicePower)
+    }
   }
 
   /** 设置的现状和上一次告诉客户端的不一样，或者有改了的键还没说：发一条通知 */
@@ -731,19 +792,44 @@ export class DeviceServer {
     }
   }
 
+  private powerReconnected(harness: string): void {
+    const disconnected = this.powerDisconnected.delete(harness)
+    if (disconnected || this.power?.needsRecovery(harness)) void this.power?.reconnected(harness)
+  }
+
   private keep(link: EngineLink): EngineLink {
     if (this.closed) {
       link.close()
       throw new EngineUnavailable(link.harness, 'the device service is shutting down')
     }
     this.engineLinks.add(link)
-    link.onClose(() => this.engineLinks.delete(link))
+    this.powerReconnected(link.harness)
+    let deliberate = false
+    const close = link.close.bind(link)
+    link.close = () => {
+      deliberate = true
+      close()
+    }
+    link.onClose(() => {
+      this.engineLinks.delete(link)
+      if (!deliberate) this.powerDisconnected.add(link.harness)
+    })
     // 设备进程自己的连接上看到的也算：没有客户端连着时跑的定时任务、子会话，回报里也要数得出后台任务
     link.onNotification((method, params) => {
       if (!params || typeof params !== 'object') return
+      this.power?.notification(link.harness, method, params)
       if (method === BACKGROUND_TASKS_NOTIFICATION.changed) this.background.reportedChanged(params)
       else if (link.native) this.background.codexNotification(method, params)
     })
+    const request = link.request.bind(link)
+    link.request = async (method, params, options) => {
+      const release = method === 'turn/start' ? this.power?.begin(link.harness) : undefined
+      try {
+        return await request(method, params, options)
+      } finally {
+        release?.()
+      }
+    }
     return link
   }
 
@@ -759,6 +845,8 @@ export class DeviceServer {
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
+    this.power?.close()
+    this.power = null
     if (this.control) {
       this.control.onState = null
       this.control.onAsk = null

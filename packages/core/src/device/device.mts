@@ -16,6 +16,10 @@ import { CONFIG_NAMESPACE } from '../../../protocol/src/client-tools-config.mjs'
 import type { MachineSpecContext } from '../../../protocol/src/client-tools-machine.mjs'
 import { presentationSpec } from '../../../protocol/src/client-tools-presentation.mjs'
 import { clientToolSpecs } from '../../../protocol/src/client-tools-specs.mjs'
+import {
+  DEVICE_POWER_CHANGED,
+  type DevicePowerStatus,
+} from '../../../protocol/src/device-power.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../../protocol/src/harness-config.mjs'
 import {
   CLIENT_TOOL_NAMESPACE,
@@ -560,6 +564,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let harnesses: HarnessView[] = []
   /** 对面有没有设备配置接口（deviceSettings 扩展）。认出来之前、对面不是设备服务时都是没有 */
   let manageable = false
+  let powerSupported = false
   /** 对面有没有可重连的终端（deviceProcesses 扩展）。认出来之前、对面不是设备服务时都是没有 */
   let reattachable = false
   /** 对面支不支持定时任务（deviceTasks 扩展）。认出来之前、对面不是设备服务时都是不支持 */
@@ -1615,6 +1620,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         for (const entry of info.harnesses) remember(entry.id, termsOf(entry))
         // 设置接口有没有，看它声明的扩展，不看版本号
         manageable = info.device.extensions?.includes(EXTENSION.deviceSettings) === true
+        powerSupported = info.device.extensions?.includes(EXTENSION.devicePower) === true
         reattachable = info.device.extensions?.includes(EXTENSION.deviceProcesses) === true
         schedulable = info.device.extensions?.includes(EXTENSION.deviceTasks) === true
         sessionTree = info.device.extensions?.includes(EXTENSION.sessionTree) === true
@@ -1809,6 +1815,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       // 设置变了：和会话目录是两回事，不跟着对账攒着（攒着再放会把读到的新值盖回去）
       if (method === DEVICE_SETTINGS_CHANGED) {
         manage.changed(params as DeviceSettingsChangedNotification)
+        return
+      }
+      if (method === DEVICE_POWER_CHANGED) {
+        manage.powerChanged(params as DevicePowerStatus)
         return
       }
       // 定时任务：一样和会话目录是两回事，任务模块自己对账、自己攒
@@ -2292,6 +2302,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     deviceId: config.id,
     online: () => online,
     supported: () => manageable,
+    powerSupported: () => mode === 'full' && powerSupported,
     request: (method, params, requestOptions) => link.request(method, params, requestOptions),
     fail: (error) => fail(error),
     // 任务卡按 harness 的开关存在设备上：不为它另外去读，有人看着设置（设置页那棵树、设备详情）时跟着那一份走

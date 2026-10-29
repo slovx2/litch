@@ -66,6 +66,7 @@ import type {
   MachineOp,
 } from '../model-machine.mjs'
 import type {
+  DevicePowerView,
   DiagnosticsView,
   HarnessRestartResult,
   LogSource,
@@ -283,7 +284,9 @@ export type SessionOp =
  * 设置现在的值整份换掉：这份东西不大，变得也少。
  * keys 是这一次变了的键（自己写的、别处写的都算）：界面据此知道用户正在改的那一栏是不是被别处动过
  */
-export type ManageOp = { op: 'settings.set'; snapshot: SettingsSnapshotView; keys: string[] }
+export type ManageOp =
+  | { op: 'settings.set'; snapshot: SettingsSnapshotView; keys: string[] }
+  | { op: 'power.set'; value: DevicePowerView | null }
 
 /** 差异的概况整份换掉：它不大，而且每次重新取，变的往往是其中好几处 */
 export type DiffOp = { op: 'diff.set'; view: DiffView }

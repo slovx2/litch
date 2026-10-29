@@ -29,6 +29,7 @@ type controlState struct {
 	Processes map[string]int `json:"processes"`
 	// 定时任务的总开关和同时运行的上限（settings_tasks.go），设备进程照它当场换上。
 	Tasks map[string]any `json:"tasks"`
+	Power powerStatus    `json:"power"`
 	// 这份服务的来历（service_facts.go）。设备进程在 runtime/info 的 device.service 里把它给客户端。
 	Service *serviceFacts `json:"service,omitempty"`
 }
@@ -73,7 +74,7 @@ func (m *harnessManager) view(keys []string) controlState {
 }
 
 func (m *harnessManager) snapshot() settingsSnapshot {
-	version, values, explicit := m.base.settings.present(m.schema)
+	version, values, explicit := m.base.settings.present(m.settingsSchema())
 	snapshot := settingsSnapshot{Version: version, Values: values, Explicit: explicit, PendingRestart: m.pendingRestart()}
 	for _, id := range adapterHarnesses {
 		snapshot.SSHEntries = append(snapshot.SSHEntries, m.sshEntry(id))

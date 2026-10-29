@@ -7,6 +7,7 @@
 import type {
   ClientRequestMethod,
   ClientRequests,
+  DevicePowerStatus,
   DeviceSettingsChangedNotification,
   DeviceSettingsSnapshot,
 } from '../../../protocol/src/index.mjs'
@@ -15,6 +16,7 @@ import type { HostSink } from '../channel/server.mjs'
 import { RpcError, type RpcRequestOptions } from '../connection/rpc.mjs'
 import type { HarnessId } from '../model.mjs'
 import type {
+  DevicePowerView,
   DiagnosticsView,
   HarnessRestartResult,
   LogSource,
@@ -41,6 +43,7 @@ export interface ManagementHost {
   online(): boolean
   /** 对面有没有设备配置接口：它是设备服务，而且设备信息的 extensions 里列了 deviceSettings */
   supported(): boolean
+  powerSupported?(): boolean
   request<M extends ClientRequestMethod>(
     method: M,
     params: ClientRequests[M]['params'],
@@ -62,6 +65,7 @@ export interface Management {
   offline(): void
   /** 对面说设置、待重启的名单或者 SSH 入口的状况变了 */
   changed(note: DeviceSettingsChangedNotification): void
+  powerChanged(note: DevicePowerStatus): void
   write(expectedVersion: number, edits: readonly SettingEditView[]): Promise<SettingsWriteResult>
   restart(harness: HarnessId, force: boolean): Promise<HarnessRestartResult>
   diagnostics(harness: HarnessId | undefined): Promise<DiagnosticsView>
@@ -105,6 +109,18 @@ export function createManagement(host: ManagementHost): Management {
   let early: DeviceSettingsChangedNotification[] = []
   /** 自己有几次写入还没等到应答 */
   let writing = 0
+  let powerSerial = 0
+  let power: DevicePowerView | null = null
+  const projectPower = (status: DevicePowerStatus): DevicePowerView | null =>
+    status.configuredForLocalService
+      ? {
+          supported: status.supported,
+          state: status.state,
+          powerSource: status.powerSource,
+          reasons: [...status.reasons],
+          text: bilingual(status.text),
+        }
+      : null
   /**
    * 写入途中到的通知先攒着。设备服务是先把写入广播出去、再去重启该重启的 harness、最后才应答：
    * 中间那几条通知里，harness 会先被标成“待重启”再摘掉。等应答到了按它的快照一次到位，界面不跟着闪。
@@ -145,10 +161,17 @@ export function createManagement(host: ManagementHost): Management {
     loading = true
     early = []
     const mine = epoch
+    const powerRead = powerSerial
     try {
-      const raw = await host.request('litch/device/settings/read', {})
+      const [raw, powerStatus] = await Promise.all([
+        host.request('litch/device/settings/read', {}),
+        host.powerSupported?.()
+          ? host.request('litch/device/power/read', {})
+          : Promise.resolve(null),
+      ])
       if (mine !== epoch) return
-      view = projectManage(host.deviceId, raw)
+      if (powerRead === powerSerial) power = powerStatus ? projectPower(powerStatus) : null
+      view = { ...projectManage(host.deviceId, raw), power }
       for (const sink of sinks) sink.snapshot(view)
       host.viewed?.(view.snapshot)
       // 读的这一会儿里到的通知：比读到的新才用得上
@@ -207,6 +230,8 @@ export function createManagement(host: ManagementHost): Management {
 
     offline() {
       epoch++
+      powerSerial++
+      power = null
       loading = false
       early = []
       held = []
@@ -218,6 +243,14 @@ export function createManagement(host: ManagementHost): Management {
       if (loading) early.push(note)
       else if (writing > 0) held.push(note)
       else apply(note.snapshot, strings(note.keys))
+    },
+
+    powerChanged(note) {
+      powerSerial++
+      power = projectPower(note)
+      if (!view) return
+      view = { ...view, power }
+      publish([{ op: 'power.set', value: power }])
     },
 
     async write(expectedVersion, edits) {

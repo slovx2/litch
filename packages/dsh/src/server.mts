@@ -11,6 +11,7 @@ import {
 } from '../../shared/src/client-tool-executor.mjs'
 import { FilesystemRpc } from '../../shared/src/filesystem-rpc.mjs'
 import { FuzzyFileSearch, FuzzySearchSessions } from '../../shared/src/fuzzy-session.mjs'
+import { PowerObserver, powerThreads } from '../../shared/src/power-observer.mjs'
 import { ProcessRpc } from '../../shared/src/process-rpc.mjs'
 import { ProjectStore } from '../../shared/src/project-store.mjs'
 import {
@@ -85,6 +86,7 @@ export interface LiveThread {
 }
 
 export class DshServer {
+  private readonly powerObserver = new PowerObserver()
   readonly store: DshStore
   readonly projects: ProjectStore
   readonly queue: QueueStore
@@ -243,6 +245,22 @@ export class DshServer {
   }
 
   async handle(peer: RpcPeer, message: WireMessage): Promise<void> {
+    if (
+      this.powerObserver.handle(peer, message, (ids) =>
+        powerThreads(
+          ids,
+          () => [...this.live.keys(), ...this.ephemeral.keys()],
+          (id) => {
+            const live = this.live.get(id) ?? this.ephemeral.get(id)
+            return {
+              active: live?.projection.status().type === 'active',
+              background: Boolean(live?.jobs.list().some((task) => task.status === 'running')),
+            }
+          },
+        ),
+      )
+    )
+      return
     if (tracePath && !this.peers.has(peer.id)) {
       const send = peer.send.bind(peer)
       peer.send = (outgoing) => {
@@ -918,6 +936,7 @@ export class DshServer {
   }
 
   closePeer(peer: RpcPeer): void {
+    if (this.powerObserver.close(peer)) return
     this.peers.delete(peer.id)
     this.toolNamespaces.delete(peer.id)
     this.configPeers.delete(peer.id)

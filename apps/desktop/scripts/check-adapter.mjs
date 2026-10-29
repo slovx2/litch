@@ -194,6 +194,7 @@ const callsSince = (before) =>
     .map((call) => call.args)
 const startArgs = (home, ...options) => [
   'device-start',
+  '--local-service',
   ...['--home', home, '--root', root, '--node', node],
   ...options,
 ]
@@ -271,6 +272,7 @@ try {
     const [call] = callLog()
     assert.deepEqual(call.args, [
       'device-start',
+      '--local-service',
       '--home',
       home,
       '--root',

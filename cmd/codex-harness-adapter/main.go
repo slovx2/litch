@@ -35,6 +35,8 @@ type configuration struct {
 	// 这份常驻服务是 device-start 按需拉起、脱离出去的（--detached，只由 device-start 带上）。
 	// 前台运行的、由 brew services 或 systemd 这类管着的不带：它们的生死另有人管，客户端不替它们换版本。
 	detached bool
+	// 仅 device-start 显式登记该状态目录为本机服务；普通 SSH 启动不登记。
+	localService bool
 	// 启动参数里“设置没写过时的默认值”那一部分（--ssh、各端口、--harness），照命令行给的原样记着，
 	// 不掺设置里的值。device-start 照它拉起常驻服务，服务把它报出来，换版本重新拉起时原样带上。
 	launch []string
@@ -165,6 +167,9 @@ func run(ctx context.Context, args []string) error {
 		}
 		return err
 	}
+	if cfg.localService && command != "device-start" {
+		return errors.New(tr("--local-service 只用于 device-start", "--local-service is only valid for device-start"))
+	}
 	// device-start 只是把参数原样交给它拉起的 start，device-stop 只是请服务自己停，device-proxy 只转发字节，都用不着设置。
 	if command != "device-start" && command != "device-stop" && command != "device-proxy" {
 		if cfg.settings, err = loadSettings(cfg.home); err != nil {
@@ -246,6 +251,7 @@ func parseConfiguration(args []string) (configuration, error) {
 	flags.StringVar(&sshMode, "ssh", sshMode, tr("给 Codex 桌面端的内置 SSH 入口：on 或 off", "built-in SSH entries for the Codex desktop app: on or off"))
 	flags.BoolVar(&cfg.ifIdle, "if-idle", false, tr("device-stop：有回合或终端在跑、有客户端连着时不停", "device-stop: leave the service alone while a turn or a terminal is running or a client is connected"))
 	flags.BoolVar(&cfg.detached, "detached", false, tr("内部使用：device-start 拉起常驻服务时带上", "internal: set by device-start on the service it launches"))
+	flags.BoolVar(&cfg.localService, "local-service", false, tr("device-start：将该服务登记为本机设备并启用本机电源设置", "device-start: register this service as local and make local power settings available"))
 	if err := flags.Parse(args); err != nil {
 		return cfg, err
 	}

@@ -13,6 +13,7 @@
 //   设备进程 → 主进程   {"reply":N,"result":{…}} 或 {"reply":N,"error":"…"}
 // 请求的参数里可能有密钥，这里不往日志里写任何消息的内容。
 import net from 'node:net'
+import type { DevicePowerStatus } from '../../protocol/src/device-power.mjs'
 import type { DeviceServiceInfo } from '../../protocol/src/device-service.mjs'
 import type {
   DeviceSettingsSnapshot,
@@ -35,6 +36,7 @@ export interface ManagedHarness {
 }
 
 export interface ControlState {
+  power?: DevicePowerStatus
   /** 这一次改了的设置键；只是状态变了时是空的 */
   keys: string[]
   /** 这台设备上全部已知的 harness，顺序就是对外报告的顺序 */

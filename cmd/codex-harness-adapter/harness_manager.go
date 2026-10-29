@@ -65,9 +65,10 @@ type harnessSlot struct {
 }
 
 type harnessManager struct {
-	base   configuration
-	schema settingsSchema
-	stage  *startStage
+	base     configuration
+	schema   settingsSchema
+	schemaMu sync.RWMutex
+	stage    *startStage
 	// 这个状态目录的聚合面归本进程管，而且给得出来。这样的话一个 harness 都没在跑服务也留着：
 	// 客户端要能连上来，看到每个 harness 没起来的原因，在设置里改了再试。
 	aggregate bool
@@ -489,7 +490,7 @@ func (m *harnessManager) write(expected int, edits []settingEdit) (changed, fres
 	for _, id := range m.pendingRestart() {
 		waiting[id] = true
 	}
-	changed, problem, err = m.base.settings.apply(expected, edits, m.schema, m.base.validateSettings)
+	changed, problem, err = m.base.settings.apply(expected, edits, m.settingsSchema(), m.base.validateSettings)
 	fresh = []string{}
 	if err != nil || problem != nil || len(changed) == 0 {
 		return changed, fresh, problem, err

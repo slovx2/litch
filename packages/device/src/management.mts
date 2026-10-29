@@ -8,6 +8,7 @@
 //
 // 密钥只出现在写入请求的参数里，这个文件不把任何参数写进日志。
 import { HARNESS_INSTALL_METHOD } from '../../protocol/src/device-harness-install.mjs'
+import { DEVICE_POWER_READ } from '../../protocol/src/device-power.mjs'
 import {
   DEVICE_DIAGNOSTICS_RUN,
   DEVICE_HARNESS_RESTART,
@@ -98,6 +99,8 @@ export class DeviceManagement {
   call(method: string, params: unknown): Promise<unknown> {
     const fields = isObject(params) ? params : {}
     switch (method) {
+      case DEVICE_POWER_READ:
+        return this.ask('power.read', {}, WAIT.quick)
       case DEVICE_SETTINGS_READ:
         return this.ask('settings.read', {}, WAIT.quick)
       case DEVICE_SETTINGS_WRITE:

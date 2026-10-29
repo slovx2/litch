@@ -392,5 +392,10 @@ func buildSettingsSchema(c configuration) settingsSchema {
 	group, specs = worktreeSettings()
 	schema.Groups = append(schema.Groups, group)
 	schema.Settings = append(schema.Settings, specs...)
+	if c.powerSettings().local {
+		group, specs = powerSettingSpecs()
+		schema.Groups = append(schema.Groups, group)
+		schema.Settings = append(schema.Settings, specs...)
+	}
 	return schema
 }

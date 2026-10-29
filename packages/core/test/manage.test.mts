@@ -111,7 +111,7 @@ function world(extensions: string[] = ['harness', 'deviceSettings'], harnesses =
       const seen = {
         view: null as ManageView | null,
         snapshots: 0,
-        ops: [] as ManageOp[],
+        ops: [] as Extract<ManageOp, { op: 'settings.set' }>[],
         errors: [] as ChannelError[],
       }
       const close = core.subscribe(
@@ -123,6 +123,8 @@ function world(extensions: string[] = ['harness', 'deviceSettings'], harnesses =
           },
           delta(ops) {
             for (const op of ops as ManageOp[]) {
+              assert.equal(op.op, 'settings.set')
+              if (op.op !== 'settings.set') continue
               seen.ops.push(structuredClone(op))
               if (seen.view) seen.view.snapshot = structuredClone(op.snapshot)
             }

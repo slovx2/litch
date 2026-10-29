@@ -33,6 +33,7 @@ import { FilesystemRpc } from '../../shared/src/filesystem-rpc.mjs'
 import { FuzzyFileSearch, FuzzySearchSessions } from '../../shared/src/fuzzy-session.mjs'
 import { declaredExtensions } from '../../shared/src/harness-declaration.mjs'
 import { applyNotificationOptOut } from '../../shared/src/notification-opt-out.mjs'
+import { PowerObserver, powerThreads } from '../../shared/src/power-observer.mjs'
 import { ProcessRpc } from '../../shared/src/process-rpc.mjs'
 import { ProjectStore, threadsTable } from '../../shared/src/project-store.mjs'
 import {
@@ -111,6 +112,7 @@ export interface ActiveTurn {
   compacting?: any
 }
 export class PiServer {
+  private readonly powerObserver = new PowerObserver()
   readonly store: PiStore
   readonly projects: ProjectStore
   readonly queue: QueueStore
@@ -285,6 +287,25 @@ export class PiServer {
     )
   }
   async handle(peer: RpcPeer, message: WireMessage): Promise<void> {
+    if (
+      this.powerObserver.handle(peer, message, (ids) =>
+        powerThreads(
+          ids,
+          () => [
+            ...this.active.keys(),
+            ...this.background.keys(),
+            ...(this.shells?.runningThreadIds() ?? []),
+          ],
+          (id) => ({
+            active: this.active.has(id),
+            background:
+              Boolean(this.background.get(id)?.size) ||
+              Boolean(this.shells?.collection(id).some((task) => task.status === 'running')),
+          }),
+        ),
+      )
+    )
+      return
     this.peers.set(peer.id, peer)
     if (!('method' in message)) {
       this.requests.answer(peer, message)
@@ -908,6 +929,7 @@ export class PiServer {
     }
   }
   closePeer(peer: RpcPeer): void {
+    if (this.powerObserver.close(peer)) return
     this.peers.delete(peer.id)
     this.declared.delete(peer.id)
     this.toolNamespaces.delete(peer.id)

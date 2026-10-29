@@ -16,6 +16,7 @@ import {
 } from '../../shared/src/background-shell.mjs'
 import { FilesystemRpc } from '../../shared/src/filesystem-rpc.mjs'
 import { FuzzyFileSearch, FuzzySearchSessions } from '../../shared/src/fuzzy-session.mjs'
+import { PowerObserver, powerThreads } from '../../shared/src/power-observer.mjs'
 import { ProcessRpc } from '../../shared/src/process-rpc.mjs'
 import { ProjectStore } from '../../shared/src/project-store.mjs'
 import {
@@ -103,6 +104,7 @@ interface SessionRecord {
 }
 
 export class AcpServer {
+  private readonly powerObserver = new PowerObserver()
   readonly agentId: AcpAgentId
   readonly store: AcpStore
   readonly projects: ProjectStore
@@ -228,6 +230,28 @@ export class AcpServer {
   }
 
   async handle(peer: RpcPeer, message: WireMessage): Promise<void> {
+    if (
+      this.powerObserver.handle(peer, message, (ids) =>
+        powerThreads(
+          ids,
+          () => [
+            ...this.live.keys(),
+            ...this.ephemeral.keys(),
+            ...(this.shells?.runningThreadIds() ?? []),
+          ],
+          (id) => {
+            const live = this.live.get(id) ?? this.ephemeral.get(id)
+            return {
+              active: live?.projection.status().type === 'active',
+              background: Boolean(
+                this.shells?.collection(id).some((task) => task.status === 'running'),
+              ),
+            }
+          },
+        ),
+      )
+    )
+      return
     if (tracePath && !this.peers.has(peer.id)) {
       const send = peer.send.bind(peer)
       peer.send = (outgoing) => {
@@ -1073,6 +1097,7 @@ export class AcpServer {
   }
 
   closePeer(peer: RpcPeer): void {
+    if (this.powerObserver.close(peer)) return
     this.peers.delete(peer.id)
     this.declared.delete(peer.id)
     this.skillPeers.delete(peer.id)

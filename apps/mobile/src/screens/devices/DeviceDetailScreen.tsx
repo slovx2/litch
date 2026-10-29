@@ -16,6 +16,7 @@ import { useTheme } from '../../ui/theme'
 import { shownState } from './failure'
 import { forgetUnusedKey } from './forget'
 import { HarnessList, ManageSection } from './ManageSection'
+import { PowerShortcut } from './PowerShortcut'
 import { FailureCard, InfoLine, PublicKeyCard, useHostTrust, WirePicker } from './parts'
 import { RemoveDevice } from './RemoveDevice'
 
@@ -91,6 +92,7 @@ export function DeviceDetailScreen({ route, navigation }: Props) {
     <Screen
       title={t.text(device.name)}
       subtitle={device.host}
+      trailing={<PowerShortcut device={device} />}
       wire={theme.c.wire[device.wire]}
       testID="device-detail"
     >

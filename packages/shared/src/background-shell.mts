@@ -233,6 +233,13 @@ export class BackgroundShells {
     return count
   }
 
+  /** 只读内存活动索引，电源恢复时不枚举持久化历史。 */
+  runningThreadIds(): string[] {
+    return [...this.threads]
+      .filter(([, tasks]) => [...tasks.values()].some((task) => task.status === 'running'))
+      .map(([id]) => id)
+  }
+
   /** backgroundTasks 扩展的集合 */
   collection(threadId: string): LitchBackgroundTask[] {
     return this.list(threadId).map((task) => ({

@@ -289,7 +289,13 @@ type ToHarness<T> = T & { harness?: string }
 type CutBeforeItem<T> = T & { beforeItemId?: string }
 
 /** 客户端发给对面的请求 */
+import type { DevicePowerStatus } from './device-power.mjs'
+
 export interface ClientRequests {
+  'litch/device/power/read': {
+    params: Record<string, never>
+    result: DevicePowerStatus
+  }
   initialize: { params: InitializeParams; result: InitializeResponse }
   /**
    * 聚合面上是各个 harness 合并后的列表：带 `harness` 时只列那一个；
@@ -636,6 +642,7 @@ export interface ClientNotifications {
 
 /** 对面发来、客户端会处理的通知 */
 export interface ServerNotifications {
+  'litch/device/power/changed': DevicePowerStatus
   'thread/started': ThreadStartedNotification
   'thread/status/changed': ThreadStatusChangedNotification
   'thread/name/updated': ThreadNameUpdatedNotification

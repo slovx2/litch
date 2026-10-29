@@ -1,6 +1,7 @@
 import { type DeviceView, keys, type SessionSummary, type WorkspaceView } from '@litch/core'
 import type { PlaceWish } from '../composer/new-place.ts'
 import { useNewHarness } from '../composer/remembered.ts'
+import { PowerShortcut } from '../devices/PowerShortcut.tsx'
 import { MachineMarker } from '../machine/MachineMarker.tsx'
 import { RailToggle } from '../rail/InfoRail.tsx'
 import { SideToggle } from '../side/SideSlot.tsx'
@@ -19,7 +20,9 @@ export function TitleBar({
   page,
   peek,
   onCompose,
+  devicePageId,
 }: {
+  devicePageId: string | null
   selection: Selection | null
   /** 正在写的新会话（开着的是新建对话页）。有它的时候显示它要建在哪，跟着那一页上选的设备和工作区走 */
   draft: Draft | null
@@ -93,6 +96,14 @@ export function TitleBar({
       </nav>
       {/* 远程设备在这台电脑上有动静时才出 */}
       <MachineMarker />
+      <PowerShortcut
+        key={
+          page === 'devices' || page === 'tasks' ? (devicePageId ?? 'local') : deviceId || 'local'
+        }
+        deviceId={
+          page === 'devices' || page === 'tasks' ? (devicePageId ?? 'local') : deviceId || 'local'
+        }
+      />
       <TerminalToggle />
       <RailToggle />
       <SideToggle />

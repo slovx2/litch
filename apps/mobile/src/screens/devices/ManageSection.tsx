@@ -26,6 +26,7 @@ import { type Translator, useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
 import { Confirm } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
+import { PowerSettings } from './PowerSettings'
 import { type Draft, editOf, problemOf, SettingControl } from './SettingControl'
 
 function harnessLine(harness: HarnessView, t: Translator): string {
@@ -414,6 +415,13 @@ export function ManageSection({ device }: { device: DeviceView }) {
       {groups.map((group) => {
         const specs = deviceSpecs.filter((spec) => spec.group === group.id)
         if (specs.length === 0) return null
+        if (group.id === 'power')
+          return (
+            <View key={group.id}>
+              <Text style={[styles.fold, { color: theme.c.ink2 }]}>{t.said(group.title)}</Text>
+              <PowerSettings deviceId={deviceId} specs={specs} snapshot={snapshot} />
+            </View>
+          )
         return (
           <Block
             key={group.id}

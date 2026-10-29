@@ -52,6 +52,9 @@ type deviceStartResult struct {
 	Service *serviceFacts `json:"service,omitempty"`
 	// 执行这条命令的这份适配器。
 	CLI cliFacts `json:"cli"`
+	// 仅请求 --local-service 时返回。false 表示已有服务明确不支持登记；仍提供就绪和版本信息，
+	// 让桌面能连接忙碌的旧服务，或进入既有升级流程。没有替旧服务写入本机归属。
+	LocalServiceRegistered *bool `json:"localServiceRegistered,omitempty"`
 }
 
 func canDial(path string) bool {
@@ -182,6 +185,21 @@ func printDeviceStartResult(out io.Writer, c configuration, started bool, pid in
 		if status, ok := readServiceStatus(c); ok && (pid == 0 || status.PID == pid) {
 			result.PID, result.Service = status.PID, status.Service
 		}
+	}
+	if c.localService {
+		registered := true
+		if err := registerLocalPowerService(c); err != nil {
+			if started || !errors.Is(err, errPowerRegistrationUnsupported) {
+				return err
+			}
+			registered = false
+			fields := map[string]any{"servicePID": result.PID, "cliVersion": result.CLI.Version, "registered": false}
+			if result.Service != nil {
+				fields["serviceVersion"] = result.Service.Version
+			}
+			newJSONLog(filepath.Join(c.logsDirectory(), "device-start.jsonl"), "device-start").write("warn", "local_power_unsupported", fields)
+		}
+		result.LocalServiceRegistered = &registered
 	}
 	encoder := json.NewEncoder(out)
 	encoder.SetEscapeHTML(false)

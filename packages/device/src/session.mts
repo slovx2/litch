@@ -18,6 +18,7 @@ import {
   type HarnessUnavailable,
 } from '../../protocol/src/device.mjs'
 import { DEVICE_PAIR_ERROR } from '../../protocol/src/device-pairing.mjs'
+import { DEVICE_POWER_READ } from '../../protocol/src/device-power.mjs'
 import {
   DEVICE_SETTINGS_CHANGED,
   type DeviceSettingsChangedNotification,
@@ -60,6 +61,7 @@ import { listThreads } from './list-threads.mjs'
 import { type DeviceManagement, MANAGEMENT_PREFIX } from './management.mjs'
 import { dialectFor, NATIVE_CODEX_DIALECT } from './native-codex.mjs'
 import { type DevicePairing, PAIR_PREFIX, PairingError } from './pairing.mjs'
+import type { PowerActivity } from './power-activity.mjs'
 import { Relay } from './relay.mjs'
 import { classify } from './routes.mjs'
 import { describeDevice } from './service-info.mjs'
@@ -121,6 +123,8 @@ export interface HarnessSource extends UpstreamConfig {
 
 /** 设备进程里各条连接共用的东西 */
 export interface SessionHost {
+  power(): PowerActivity | null
+  powerLost?(harness: string): void
   /** 这台设备上现在已知的全部 harness，顺序就是对外报告的顺序。名单和状态会变 */
   harnesses(): HarnessSource[]
   /** 设备配置接口（设置、重启、诊断、日志） */
@@ -224,6 +228,8 @@ export class ClientSession implements ClientToolPeer {
   private readonly translators = new Map<string, HarnessConfigTranslator>()
   /** 记摘要用：客户端发来、还没应答的请求（键是请求号），见 traced */
   private readonly started = new Map<string, { method: string; at: number; ids: object }>()
+  private readonly powerPending = new Set<() => void>()
+  private readonly powerAvailable = new Set<string>()
 
   constructor(host: SessionHost, wire: Wire) {
     this.host = host
@@ -238,8 +244,10 @@ export class ClientSession implements ClientToolPeer {
       log: (line) => host.log(`${this.tag} ${line}`),
       answered: (link, id, error) => this.traced(id, error, link.harness),
       deviceTools: host.deviceTools,
-      observe: (link, method, params) =>
-        this.translators.get(link.harness)?.notification(method, params),
+      observe: (link, method, params) => {
+        this.host.power()?.notification(link.harness, method, params)
+        this.translators.get(link.harness)?.notification(method, params)
+      },
       sessions: {
         clientTurn: (harness, turnId) => host.sessionTree.clientTurn(harness, turnId),
         turnEvent: (harness, method, params) => {
@@ -328,6 +336,8 @@ export class ClientSession implements ClientToolPeer {
 
   /** 客户端断开：这一组上游连接一起断，它开的终端和文件监听一起清掉 */
   close(): void {
+    for (const release of this.powerPending) release()
+    this.powerPending.clear()
     if (this.state === 'closed') return
     const greeted = this.state === 'ready'
     this.state = 'closed'
@@ -438,6 +448,8 @@ export class ClientSession implements ClientToolPeer {
   }
 
   private dispatch(id: RpcId, method: string, frame: Frame, raw: string): unknown {
+    if (method === 'litch/internal/power/activity')
+      throw new ProtocolError(-32601, 'Method not found')
     if (method === 'initialize') return this.initialize(id, frame.params)
     // 命令行（litch-machine）的两个方法不用握手：握手要为它连一遍每个 harness 的运行时
     if (method === CLIENT_TOOL_METHOD.desktops && this.state !== 'closed')
@@ -481,6 +493,8 @@ export class ClientSession implements ClientToolPeer {
         }
         // 统一模式（harnessConfig）：只是文件操作，设备进程自己做，不经主进程
         if (INSTRUCTIONS_METHODS.has(method)) return instructionsCall(method, frame.params)
+        if (method === DEVICE_POWER_READ && !this.declared.has(EXTENSION.devicePower))
+          throw new DeviceError('extensionRequired', `${method} requires devicePower`)
         if (method.startsWith(MANAGEMENT_PREFIX))
           return this.host.management.call(method, frame.params)
         if (method.startsWith(DEVICE_TASK_PREFIX)) return this.tasks(method, frame.params)
@@ -721,6 +735,20 @@ export class ClientSession implements ClientToolPeer {
       })
     }
     const send = (ready: Record<string, unknown> | null): typeof HANDLED => {
+      // 先准备参数，再拿短期工作来源；准备失败不能遗留保活。
+      let outgoing = ready
+      if (outgoing) outgoing = link.dialect.outgoing(method, outgoing) ?? outgoing
+      const text = outgoing === fields ? raw : JSON.stringify({ ...frame, params: outgoing })
+      const release = method === 'turn/start' ? this.host.power()?.begin(link.harness) : undefined
+      const done = () => {
+        release?.()
+        this.powerPending.delete(done)
+      }
+      if (release) {
+        this.powerPending.add(done)
+        afterwards.push(done)
+        failures.push(done)
+      }
       if (afterwards.length || failures.length)
         this.relay.after(
           id,
@@ -733,11 +761,10 @@ export class ClientSession implements ClientToolPeer {
               }
             : undefined,
         )
-      // 这个上游的“话”里要另外带的参数（原生 codex：选了权限预设时配套的审批策略）
-      let outgoing = ready
-      if (outgoing) outgoing = link.dialect.outgoing(method, outgoing) ?? outgoing
-      const text = outgoing === fields ? raw : JSON.stringify({ ...frame, params: outgoing })
-      if (!link.forward(id, method, text)) throw this.unavailable(link, method)
+      if (!link.forward(id, method, text)) {
+        done()
+        throw this.unavailable(link, method)
+      }
       // 退订不等应答：之后到的客户端工具调用不再按订阅者挑给它
       if (method === 'thread/unsubscribe')
         if (typeof fields?.threadId === 'string')
@@ -1096,7 +1123,10 @@ export class ClientSession implements ClientToolPeer {
 
   /** 一个上游的状态变了：真的和上次报的不一样才通知客户端 */
   private status(link: UpstreamLink): void {
+    if (!link.available && this.powerAvailable.delete(link.harness))
+      this.host.powerLost?.(link.harness)
     if (link.available) {
+      this.powerAvailable.add(link.harness)
       this.host.catalog.update(link.harness, link.facts)
       this.host.reachable(link.harness)
     }

@@ -59,6 +59,12 @@
   color: var(--ink);
 }
 
+.tb .power-shortcut.on {
+  color: var(--accent);
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
 /* 会话标题后面的“···”（transcript/ViewMenu.tsx）：往下弹、靠左对齐，样子和侧栏的“更多”一样 */
 .tb-menu {
   position: relative;

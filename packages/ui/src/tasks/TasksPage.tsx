@@ -1,7 +1,7 @@
 // 定时任务：占着对话区的一整页。列表按设备分开，点一行进详情；新建、编辑是同一页里的表单。
 // 任务存在设备上，数据副本一直订着每台设备的任务（keys.taskIds / keys.task），这一页只是看和发命令。
 import { type DeviceView, keys, type TaskView } from '@litch/core'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import type { Selection } from '../app/App.tsx'
 import type { TasksRoute } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
@@ -121,11 +121,12 @@ interface TasksPageProps {
   /** 一打开就去哪：列表、某个任务的详情、新建 */
   initial: TasksRoute
   onClose(): void
+  onDeviceChange?(deviceId: string | null): void
   /** 打开一次运行跑在的那个会话 */
   onOpenSession(selection: Selection): void
 }
 
-export function TasksPage({ initial, onClose, onOpenSession }: TasksPageProps) {
+export function TasksPage({ initial, onClose, onOpenSession, onDeviceChange }: TasksPageProps) {
   const deviceIds = useKey<string[]>(keys.devices) ?? []
   const unread = useKey<number>(keys.tasksUnread) ?? 0
   const schedulable = useSchedulable()
@@ -133,6 +134,10 @@ export function TasksPage({ initial, onClose, onOpenSession }: TasksPageProps) {
   const [route, setRoute] = useState<TasksRoute>(initial)
   /** 编辑表单关掉之后回哪：从详情进去的回详情 */
   const [editing, setEditing] = useState<{ deviceId: string; taskId: string } | null>(null)
+  useLayoutEffect(() => {
+    if (!editing && route.view !== 'new')
+      onDeviceChange?.(route.view === 'detail' ? route.deviceId : null)
+  }, [onDeviceChange, editing, route])
   const toList = useCallback(() => {
     setEditing(null)
     setRoute({ view: 'list' })
@@ -154,6 +159,7 @@ export function TasksPage({ initial, onClose, onOpenSession }: TasksPageProps) {
   if (editing) {
     return (
       <TaskFormPage
+        {...(onDeviceChange ? { onDeviceChange } : {})}
         mode={{ kind: 'edit', ...editing }}
         onDone={(saved) => {
           setEditing(null)
@@ -166,6 +172,7 @@ export function TasksPage({ initial, onClose, onOpenSession }: TasksPageProps) {
   if (route.view === 'new') {
     return (
       <TaskFormPage
+        {...(onDeviceChange ? { onDeviceChange } : {})}
         mode={{ kind: 'new', deviceId: route.deviceId, threadId: route.threadId }}
         onDone={(saved) => setRoute(saved ? { view: 'detail', ...saved } : { view: 'list' })}
         onClose={onClose}

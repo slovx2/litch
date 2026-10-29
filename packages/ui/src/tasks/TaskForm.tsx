@@ -2,7 +2,7 @@
 // 界面这一侧先查一遍（form.ts 的 checkForm），设备那一头再查；设备说哪一栏不对就写在那一块下面。
 // 编辑时撞上别处的改动（conflict）：最新的样子核心已经发过来了，这边按它重新比一遍，提醒看一眼再存。
 import { ChannelError, keys, type SessionSummary, type TaskView } from '@litch/core'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { useNow } from '../app/clock.ts'
 import { reasonOf } from '../app/errors.ts'
@@ -23,6 +23,7 @@ interface TaskFormPageProps {
   /** 存好了（带着是哪个任务），或者不存了（null） */
   onDone(saved: { deviceId: string; taskId: string } | null): void
   onClose(): void
+  onDeviceChange?(deviceId: string | null): void
 }
 
 /** 设备说哪一块不对：按它给的字段名归到日程、目标，或者名字、提示词 */
@@ -35,7 +36,7 @@ const areaOf = (key: string | undefined): Area => {
   return 'other'
 }
 
-export function TaskFormPage({ mode, onDone, onClose }: TaskFormPageProps) {
+export function TaskFormPage({ mode, onDone, onClose, onDeviceChange }: TaskFormPageProps) {
   const { channel, replica } = useServices()
   const t = useT()
   const now = useNow()
@@ -45,6 +46,8 @@ export function TaskFormPage({ mode, onDone, onClose }: TaskFormPageProps) {
   /** 编辑的是哪一版：存的时候带它的 revision，比出改了什么也按它 */
   const [base, setBase] = useState<TaskView | null>(null)
   const [form, setForm] = useState<TaskForm | null>(null)
+  const selectedDevice = form?.deviceId ?? mode.deviceId
+  useLayoutEffect(() => onDeviceChange?.(selectedDevice), [onDeviceChange, selectedDevice])
   /** 点过“存”之后才把本地查出来的问题标出来，免得一打开满屏红字 */
   const [tried, setTried] = useState(false)
   const [saving, setSaving] = useState(false)

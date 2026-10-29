@@ -113,9 +113,20 @@ export interface SettingsSnapshotView {
   sshEntries: SshEntryView[]
 }
 
+/** 设备服务实际的电源申请状态；开关是否启用仍由设置快照给出。 */
+export interface DevicePowerView {
+  supported: boolean
+  state: 'inactive' | 'requested' | 'degraded' | 'unsupported'
+  powerSource: 'ac' | 'battery' | 'unknown'
+  reasons: ('working' | 'pluggedIn')[]
+  text: Bilingual
+}
+
 /** 一台设备的管理数据：设置的结构、现在的值、环境文件里的变量 */
 export interface ManageView {
   deviceId: string
+  /** 电源状态来自 devicePower；未登记本机或没有该扩展时不显示。 */
+  power?: DevicePowerView | null
   /** 顺序就是显示的顺序 */
   groups: SettingGroupView[]
   settings: SettingSpecView[]

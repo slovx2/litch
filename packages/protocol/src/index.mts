@@ -105,6 +105,8 @@ export {
   PAIR_TTL_MS,
   PHONE_KEY_MARK,
 } from './device-pairing.mjs'
+export type * from './device-power.mjs'
+export { DEVICE_POWER_CHANGED, DEVICE_POWER_READ } from './device-power.mjs'
 // 可重连的终端（deviceProcesses 扩展）：属于设备的进程的列出、挂接、解除、结束、清除。不依赖别的文件
 export type * from './device-processes.mjs'
 export {
