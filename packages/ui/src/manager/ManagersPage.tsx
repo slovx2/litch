@@ -36,9 +36,13 @@ export function ManagersPage({
         <span className="grow">
           <b>{manager.name || t('manager.manager')}</b>
           <span className="dim">{manager.scope}</span>
-          <small className="dim">{manager.latestActivity?.text ?? '—'}</small>
+          {manager.latestActivity ? (
+            <small className="dim">{manager.latestActivity.text}</small>
+          ) : null}
         </span>
-        <span className="dim">{t('manager.linesCount', { n: manager.runningLines })}</span>
+        {manager.status === 'active' ? (
+          <span className="dim">{t('manager.linesCount', { n: manager.runningLines })}</span>
+        ) : null}
         {manager.pendingDecisions ? (
           <span className="pill wait">{t('manager.pending', { n: manager.pendingDecisions })}</span>
         ) : null}
@@ -52,7 +56,9 @@ export function ManagersPage({
           {t('manager.summary')}
         </button>
       ) : null}
-      {summary === manager.id ? <p className="dim">{t('manager.summaryPlaceholder')}</p> : null}
+      {summary === manager.id ? (
+        <p className="dim mg-summary-note">{t('manager.summaryPlaceholder')}</p>
+      ) : null}
     </div>
   )
   return (

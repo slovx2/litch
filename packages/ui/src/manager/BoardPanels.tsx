@@ -1,19 +1,55 @@
 import { type DeviceView, keys, type ManagerBoardPages } from '@litch/core'
-import type { ManagerItemView } from '../../../core/src/model-manager.mts'
+import type { ManagerDecisionId, ManagerItemView } from '../../../core/src/model-manager.mts'
 import { requestOpenSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { badgeOf, nameOf } from '../app/device.ts'
 import { useKey } from '../app/services.tsx'
 
-function Item({ item }: { item: ManagerItemView }) {
+function Item({
+  item,
+  onDecision,
+}: {
+  item: ManagerItemView
+  onDecision(id: ManagerDecisionId): void
+}) {
   const t = useT()
+  const parts = item.why.split(/(D-\d+)/)
+  const link = (id: ManagerDecisionId, key: string | number) => (
+    <button
+      type="button"
+      key={key}
+      className="mg-decision-link"
+      data-decision-link={id}
+      onClick={() => onDecision(id)}
+    >
+      {id}
+    </button>
+  )
+  const missing = item.blockedBy.filter((id) => !parts.includes(id))
   return (
-    <div className="mg-item">
-      <span className="pill mute">{t(`manager.${item.status}`)}</span>
+    <div className="mg-item" data-manager-item={item.id}>
       <div className="grow">
         <b>{item.title}</b>
-        {item.why ? <p>{item.why}</p> : null}
-        {item.blockedBy.length ? <small>{item.blockedBy.join(' · ')}</small> : null}
+        {item.why || missing.length ? (
+          <p className="mg-item-reason">
+            {parts.map((part, index) => {
+              const id = item.blockedBy.find((id) => id === part)
+              return id ? link(id, index) : part
+            })}
+            {missing.length ? (
+              <>
+                {item.why ? ' · ' : ''}
+                {t('manager.waitDecisions')}{' '}
+                {missing.map((id, index) => (
+                  <span key={id}>
+                    {index ? ' · ' : ''}
+                    {link(id, id)}
+                  </span>
+                ))}
+              </>
+            ) : null}
+          </p>
+        ) : null}
         {item.unverified.map((text) => (
           <p key={text} className="dim">
             {text}
@@ -35,11 +71,13 @@ export function BoardPanels({
   deviceId,
   tab,
   onTab,
+  onDecision,
 }: {
   pages: ManagerBoardPages
   deviceId: string
   tab: 'overview' | 'items' | 'lines'
   onTab(tab: 'decisions' | 'items' | 'lines'): void
+  onDecision(id: ManagerDecisionId): void
 }) {
   const t = useT()
   const device = useKey<DeviceView>(keys.device(deviceId))
@@ -55,7 +93,7 @@ export function BoardPanels({
                   {t(`manager.${status}`)} {items.length}
                 </summary>
                 {items.map((item) => (
-                  <Item key={item.id} item={item} />
+                  <Item key={item.id} item={item} onDecision={onDecision} />
                 ))}
               </details>
             ) : null
@@ -83,13 +121,15 @@ export function BoardPanels({
                 {t('manager.openSession')}
               </button>
             </header>
-            <p className="dim mono">
-              {line.branch ?? t('manager.unknown')}
-              {line.merged !== null
-                ? ` · ${t(line.merged ? 'manager.merged' : 'manager.unmerged')}`
-                : ''}
-              {line.ahead !== null ? ` · +${line.ahead}` : ''}
-            </p>
+            {line.branch ? (
+              <p className="dim mono">
+                {line.branch}
+                {line.merged !== null
+                  ? ` · ${t(line.merged ? 'manager.merged' : 'manager.unmerged')}`
+                  : ''}
+                {line.ahead !== null ? ` · +${line.ahead}` : ''}
+              </p>
+            ) : null}
             {line.report ? <p>{line.report.text}</p> : null}
             {line.unverified.map((text) => (
               <p className="mg-unverified" key={text}>
@@ -101,7 +141,8 @@ export function BoardPanels({
         {!pages.lines.length ? <p>{t('manager.none')}</p> : null}
       </div>
     )
-  const { blocked, waitingForYou: yours, situation, stats, activities } = pages.overview
+  const { blocked, waitingForYou, situation, stats, activities } = pages.overview
+  const yours = waitingForYou.filter((item) => item.status !== 'blocked')
   return (
     <div className="mg-stack">
       <article className="mg-card">
@@ -129,18 +170,18 @@ export function BoardPanels({
           {t('manager.done')}
         </button>
       </div>
-      <section>
+      <section data-overview="blocked">
         <h3>{t('manager.blocked')}</h3>
         {blocked.length ? (
-          blocked.map((item) => <Item key={item.id} item={item} />)
+          blocked.map((item) => <Item key={item.id} item={item} onDecision={onDecision} />)
         ) : (
           <p className="dim">{t('manager.none')}</p>
         )}
       </section>
-      <section>
+      <section data-overview="yours">
         <h3>{t('manager.yours')}</h3>
         {yours.length ? (
-          yours.map((item) => <Item key={item.id} item={item} />)
+          yours.map((item) => <Item key={item.id} item={item} onDecision={onDecision} />)
         ) : (
           <p className="dim">{t('manager.none')}</p>
         )}

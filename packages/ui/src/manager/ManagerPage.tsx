@@ -1,6 +1,6 @@
 import { type DeviceView, keys } from '@litch/core'
-import { useState } from 'react'
-import type { ManagerView } from '../../../core/src/model-manager.mts'
+import { useCallback, useState } from 'react'
+import type { ManagerDecisionId, ManagerView } from '../../../core/src/model-manager.mts'
 import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
@@ -23,6 +23,13 @@ export function ManagerPage({
   const device = useKey<DeviceView>(keys.device(manager.deviceId))
   const [tab, setTab] = useState<'overview' | 'decisions' | 'items' | 'lines'>('overview')
   const [narrow, setNarrow] = useState<'chat' | 'board'>('chat')
+  const [decisionTarget, setDecisionTarget] = useState<{ id: ManagerDecisionId } | null>(null)
+  const decisionLocated = useCallback(() => setDecisionTarget(null), [])
+  const openDecision = (id: ManagerDecisionId) => {
+    setTab('decisions')
+    setNarrow('board')
+    setDecisionTarget({ id })
+  }
   const [ending, setEnding] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState('')
@@ -149,7 +156,13 @@ export function ManagerPage({
             <>
               {/* 答复区保持挂载，切页签不丢提交状态；本地草稿独立持久化。 */}
               {tab !== 'decisions' ? (
-                <BoardPanels pages={pages} deviceId={manager.deviceId} tab={tab} onTab={setTab} />
+                <BoardPanels
+                  pages={pages}
+                  deviceId={manager.deviceId}
+                  tab={tab}
+                  onTab={setTab}
+                  onDecision={openDecision}
+                />
               ) : null}
               <Decisions
                 manager={manager}
@@ -157,6 +170,8 @@ export function ManagerPage({
                 groups={pages.decisions}
                 disabled={disabled}
                 visible={tab === 'decisions'}
+                target={decisionTarget}
+                onLocated={decisionLocated}
               />
             </>
           )}

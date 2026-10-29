@@ -1,7 +1,6 @@
 import { type DeviceView, keys, type WorkspaceView } from '@litch/core'
 import { useState } from 'react'
 import type { ManagerDraft, ManagerTemplate } from '../../../core/src/model-manager.mts'
-import { managerCustomRules } from '../../../protocol/src/client-tools-manager.mts'
 import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
@@ -9,10 +8,12 @@ import {
 import type { Selection } from '../app/App.tsx'
 import type { ManagersRoute } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
+import { nameOf } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { EFFORT_TEXT } from '../composer/efforts.ts'
 import { useComposeOptions } from '../composer/SettingsBar.tsx'
+import { managerRules } from './rules.ts'
 
 const templates = ['release', 'investigation', 'research', 'blank'] as const
 const placeholders = {
@@ -92,7 +93,15 @@ export function ManagerForm({
     form.model ? entry.id === form.model : entry.isDefault,
   )
   const cwd = workspace?.roots[0] ?? form.cwd
-  const rules = edited ? form.rules : managerCustomRules(form.template, form.dispatch, form.contact)
+  const rules = edited
+    ? form.rules
+    : managerRules(
+        t,
+        form.template,
+        form.dispatch,
+        form.contact,
+        nameOf(device, form.dispatch.harness ?? form.harness),
+      )
   const change = (patch: Partial<ManagerDraft>) => {
     setForm((was) => ({ ...was, ...patch }))
     setError('')
@@ -372,21 +381,22 @@ export function ManagerForm({
         </label>
       </fieldset>
       <section className="mg-rules mng-sec">
-        <h2>{t('manager.rules')}</h2>
-        {edited ? (
-          <p className="form-note">{t('manager.rulesEdited')}</p>
-        ) : (
-          <button
-            type="button"
-            className="btn ghost"
-            onClick={() => {
-              change({ rules })
-              setEdited(true)
-            }}
-          >
-            {t('manager.editRules')}
-          </button>
-        )}
+        <div className="mg-rules-head">
+          <h2>{t('manager.rules')}</h2>
+          {!edited ? (
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => {
+                change({ rules })
+                setEdited(true)
+              }}
+            >
+              {t('manager.editRules')}
+            </button>
+          ) : null}
+        </div>
+        {edited ? <p className="form-note">{t('manager.rulesEdited')}</p> : null}
         <textarea
           aria-label={t('manager.rules')}
           className="req-input"

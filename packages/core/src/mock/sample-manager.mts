@@ -3,12 +3,63 @@ import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
 } from '../../../protocol/src/manager.mjs'
+import type { SessionView } from '../model.mjs'
 import type { ManagerBoardView, ManagerDecisionView, ManagerView } from '../model-manager.mjs'
 import type { SampleLang } from './sample-text.mjs'
 
 export type { ManagerSessionSummary } from '../projection/manager.mjs'
 
 import type { ManagerSessionSummary } from '../projection/manager.mjs'
+
+/** 示例经理有自己的开场，不走普通会话按 id 生成占位消息的分支。 */
+export function sampleManagerHistory(
+  manager: ManagerView,
+  board: ManagerBoardView,
+  lang: SampleLang,
+): Pick<SessionView, 'turns' | 'items'> {
+  const zh = lang === 'zh-CN'
+  const turnId = `${manager.id}-opening`
+  const userId = `${turnId}-user`
+  const answerId = `${turnId}-answer`
+  const pending = board.decisions.filter((decision) => decision.status === 'open').length
+  const opening = zh
+    ? `请负责「${manager.name}」。范围：${manager.scope}。请安排工作线、核对回报，需要我决定的事情放到看板。`
+    : `Please manage “${manager.name}”. Scope: ${manager.scope}. Organize the work lines, verify their reports, and put decisions that need my input on the board.`
+  const progress =
+    board.situation?.text ??
+    (manager.status === 'ended'
+      ? zh
+        ? '本轮工作已结束，未完成事项和决策保留在看板上。'
+        : 'This round has ended. Unfinished items and decisions remain on the board.'
+      : zh
+        ? '我会先按范围梳理事项和验收条件，列出计划，等待你确认开始。'
+        : 'I will outline the items and acceptance criteria, present a plan, and wait for you to start.')
+  const answer = pending
+    ? `${progress}\n\n${zh ? `看板上有 ${pending} 项决策需要你确认，背景与选项已列出。` : `There are ${pending} decisions for you on the board, with their background and options.`}`
+    : progress
+  return {
+    turns: [
+      {
+        id: turnId,
+        status: 'completed',
+        itemIds: [userId, answerId],
+        startedAt: manager.updatedAt - 60_000,
+        durationMs: 32_000,
+        error: null,
+      },
+    ],
+    items: {
+      [userId]: { id: userId, kind: 'userMessage', text: opening, attachments: [] },
+      [answerId]: {
+        id: answerId,
+        kind: 'agentMessage',
+        phase: 'final',
+        status: 'completed',
+        text: answer,
+      },
+    },
+  }
+}
 
 export function sampleManagers(
   deviceId: string,
