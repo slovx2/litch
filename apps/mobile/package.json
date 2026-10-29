@@ -1,6 +1,6 @@
 {
   "name": "@litch/mobile",
-  "version": "0.25.0",
+  "version": "0.26.0",
   "private": true,
   "description": "Litch 移动端验证原型：核心原样跑在 Hermes 上、经 SSH 连设备服务；详情页的流畅度实验",
   "license": "MIT",

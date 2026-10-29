@@ -1,6 +1,6 @@
 {
   "name": "codex-harness-adapter",
-  "version": "0.25.0",
+  "version": "0.26.0",
   "private": true,
   "description": "在 Codex 桌面端连接各种 harness",
   "license": "MIT",
