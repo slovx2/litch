@@ -20,10 +20,14 @@ test('CSV/TSV：引号、换行、BOM、长数字和公式都保持字符串', (
   assert.deepEqual(table.rows[1], ['中文,逗号', '两\n行'])
   assert.deepEqual(table.rows[2], ['900719925474099312345', '=cmd|calc'])
   assert.equal(table.rows[3][1], 'TRUE')
-  assert.deepEqual(parseCsv(bytes('a\tb\n"x\ty"\tz'), true).rows, [
+  // TSV 不认引号：引号是字段内容，以引号开头的字段不会吞掉后面的行。
+  const tsv = parseCsv(bytes('a\tb\n"引号"客户\t1\nc\td'), true)
+  assert.deepEqual(tsv.rows, [
     ['a', 'b'],
-    ['x\ty', 'z'],
+    ['"引号"客户', '1'],
+    ['c', 'd'],
   ])
+  assert.equal(tsv.errors, 0)
 })
 test('CSV：行列、原始字节预算，坏编码和坏引号', () => {
   const wide = Array.from({ length: 101 }, () => 'x').join(',')

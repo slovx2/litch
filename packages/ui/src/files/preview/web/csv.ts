@@ -18,6 +18,8 @@ export function parseCsv(bytes: Uint8Array, tsv: boolean): CsvTable {
   const table: CsvTable = { rows: [], columns: 0, rowLimit: false, columnLimit: false, errors: 0 }
   Papa.parse<string[]>(text, {
     delimiter: tsv ? '\t' : '',
+    // TSV 按 IANA 规范没有引号转义；以引号开头的普通字段不能吞掉后面的行。
+    fastMode: tsv ? true : undefined,
     dynamicTyping: false,
     header: false,
     skipEmptyLines: true,
