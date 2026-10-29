@@ -1,20 +1,12 @@
 // 浮层：底部动作单（长按一行出来的菜单）、确认框、单行输入框（改名）。都用 RN 自带的 Modal，
 // 系统返回键关掉。系统的 Alert 样式改不了、也不跟主题，所以不用它。
 import { type ReactNode, useEffect, useState } from 'react'
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native'
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useT } from '../i18n'
 import { useTheme } from '../theme'
 import { Button, sectionFont } from './controls'
+import { ModalKeyboardArea } from './ModalKeyboardArea'
 
 export interface SheetAction {
   label: string
@@ -126,20 +118,24 @@ export function Dialog({
       onRequestClose={onClose}
       onShow={onShow}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.center}
-      >
-        <Pressable style={styles.scrim} onPress={onClose} />
+      <Pressable style={styles.scrim} onPress={onClose} />
+      <ModalKeyboardArea style={styles.center}>
         <View
           style={[
             styles.dialog,
             { backgroundColor: c.raised, borderColor: c.line3, borderRadius: theme.radius.l },
           ]}
         >
-          {children}
+          <ScrollView
+            style={styles.dialogScroll}
+            contentContainerStyle={styles.dialogBody}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
+            {children}
+          </ScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </ModalKeyboardArea>
     </Modal>
   )
 }
@@ -266,7 +262,9 @@ const styles = StyleSheet.create({
   },
   sheetText: { fontSize: 16 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  dialog: { alignSelf: 'stretch', borderWidth: 1, padding: 20, gap: 14 },
+  dialog: { alignSelf: 'stretch', borderWidth: 1, maxHeight: '100%' },
+  dialogScroll: { flexGrow: 0 },
+  dialogBody: { padding: 20, gap: 14 },
   dialogTitle: { fontSize: 17, fontWeight: '600' },
   dialogDetail: { fontSize: 14, lineHeight: 20 },
   dialogButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },

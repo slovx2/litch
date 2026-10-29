@@ -1,0 +1,48 @@
+# 键盘打开时直接提交公共输入弹窗、选择搜索结果，不能先收键盘再点击。
+# 公共 Dialog 同时承载评论与消息编辑；底部 PickerSheet 独立覆盖搜索场景。
+appId: dev.litch.app
+name: mock-输入弹层避让键盘
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- openLink: litch://open?session=s3&device=local
+- extendedWaitUntil:
+    visible:
+      id: detail:menu
+    timeout: 15000
+- tapOn:
+    id: detail:menu
+- tapOn:
+    id: detail:menu:rename
+- tapOn:
+    id: prompt:input
+- eraseText: 200
+- inputText: Keyboard visible rename
+- tapOn:
+    id: prompt:ok
+- extendedWaitUntil:
+    notVisible:
+      id: prompt:input
+    timeout: 5000
+- assertVisible: .*Keyboard visible rename.*
+- openLink: litch://open?session=b6&device=build
+- extendedWaitUntil:
+    visible:
+      id: settings:model
+    timeout: 15000
+- tapOn:
+    id: settings:model
+- tapOn:
+    id: picker:search
+- inputText: mini
+- tapOn:
+    id: picker:option:gpt-5.5-mini
+- extendedWaitUntil:
+    notVisible:
+      id: picker:search
+    timeout: 5000
+- assertVisible: .*GPT-5.5 mini.*

@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SEARCH_FROM } from '../../../../../packages/ui/src/composer/picker-search.ts'
 import { useT } from '../../ui/i18n'
 import { sectionFont } from '../../ui/kit/controls'
+import { ModalKeyboardArea } from '../../ui/kit/ModalKeyboardArea'
 import { useTheme } from '../../ui/theme'
 
 export interface PickerOption {
@@ -58,86 +59,88 @@ export function PickerSheet({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.scrim} onPress={onClose} testID="picker:scrim" />
-      <View
-        testID={testID}
-        style={[
-          styles.sheet,
-          {
-            backgroundColor: c.raised,
-            borderColor: c.line3,
-            borderTopLeftRadius: theme.radius.l,
-            borderTopRightRadius: theme.radius.l,
-            paddingBottom: insets.bottom + 8,
-          },
-        ]}
-      >
-        <Text style={[styles.title, sectionFont(theme), { color: c.ink2 }]}>{title}</Text>
-        {searchable ? (
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder={search}
-            placeholderTextColor={c.ink3}
-            autoCapitalize="none"
-            autoCorrect={false}
-            testID="picker:search"
-            style={[
-              styles.search,
-              {
-                color: c.ink,
-                borderColor: c.line2,
-                backgroundColor: c.panel,
-                borderRadius: theme.radius.m,
-                minHeight: theme.hit,
-              },
-            ]}
-          />
-        ) : null}
-        <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
-          {shown.map((option) => {
-            const selected = option.id === value
-            const ink = selected ? c.selFg : option.disabled ? c.ink3 : c.ink
-            return (
-              <Pressable
-                key={option.id}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: selected, disabled: !!option.disabled }}
-                disabled={option.disabled}
-                testID={`picker:option:${option.id}`}
-                onPress={() => {
-                  onClose()
-                  if (!selected) onPick(option.id)
-                }}
-                style={({ pressed }) => [
-                  styles.row,
-                  {
-                    minHeight: theme.hit + 4,
-                    borderTopColor: c.line1,
-                    backgroundColor: selected ? c.selBg : pressed ? c.press : 'transparent',
-                  },
-                ]}
-              >
-                <Text style={[styles.rowTitle, { color: ink }]}>
-                  {selected ? '▸ ' : ''}
-                  {option.title}
-                </Text>
-                {option.note ? (
-                  <Text style={[styles.rowNote, { color: selected ? c.selFg : c.ink3 }]}>
-                    {option.note}
-                  </Text>
-                ) : null}
-              </Pressable>
-            )
-          })}
-        </ScrollView>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onClose}
-          style={[styles.row, { minHeight: theme.hit + 4, borderTopColor: c.line2 }]}
+      <ModalKeyboardArea style={styles.bottom}>
+        <View
+          testID={testID}
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: c.raised,
+              borderColor: c.line3,
+              borderTopLeftRadius: theme.radius.l,
+              borderTopRightRadius: theme.radius.l,
+              paddingBottom: insets.bottom + 8,
+            },
+          ]}
         >
-          <Text style={[styles.rowTitle, { color: c.ink2 }]}>{t('app.cancel')}</Text>
-        </Pressable>
-      </View>
+          <Text style={[styles.title, sectionFont(theme), { color: c.ink2 }]}>{title}</Text>
+          {searchable ? (
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder={search}
+              placeholderTextColor={c.ink3}
+              autoCapitalize="none"
+              autoCorrect={false}
+              testID="picker:search"
+              style={[
+                styles.search,
+                {
+                  color: c.ink,
+                  borderColor: c.line2,
+                  backgroundColor: c.panel,
+                  borderRadius: theme.radius.m,
+                  minHeight: theme.hit,
+                },
+              ]}
+            />
+          ) : null}
+          <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
+            {shown.map((option) => {
+              const selected = option.id === value
+              const ink = selected ? c.selFg : option.disabled ? c.ink3 : c.ink
+              return (
+                <Pressable
+                  key={option.id}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected, disabled: !!option.disabled }}
+                  disabled={option.disabled}
+                  testID={`picker:option:${option.id}`}
+                  onPress={() => {
+                    onClose()
+                    if (!selected) onPick(option.id)
+                  }}
+                  style={({ pressed }) => [
+                    styles.row,
+                    {
+                      minHeight: theme.hit + 4,
+                      borderTopColor: c.line1,
+                      backgroundColor: selected ? c.selBg : pressed ? c.press : 'transparent',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.rowTitle, { color: ink }]}>
+                    {selected ? '▸ ' : ''}
+                    {option.title}
+                  </Text>
+                  {option.note ? (
+                    <Text style={[styles.rowNote, { color: selected ? c.selFg : c.ink3 }]}>
+                      {option.note}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              )
+            })}
+          </ScrollView>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onClose}
+            style={[styles.row, { minHeight: theme.hit + 4, borderTopColor: c.line2 }]}
+          >
+            <Text style={[styles.rowTitle, { color: c.ink2 }]}>{t('app.cancel')}</Text>
+          </Pressable>
+        </View>
+      </ModalKeyboardArea>
     </Modal>
   )
 }
@@ -152,13 +155,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
   sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
     borderTopWidth: 1,
     maxHeight: '75%',
   },
+  bottom: { justifyContent: 'flex-end' },
   title: { fontSize: 12, paddingHorizontal: 16, paddingVertical: 12 },
   search: { marginHorizontal: 16, marginBottom: 8, borderWidth: 1, paddingHorizontal: 12 },
   list: { flexGrow: 0 },

@@ -3,20 +3,12 @@
 // 目录定了就不改（照桌面端，要换目录另加一个）。名字不填就用目录的最后一段。
 import type { WireColor, WorkspaceView } from '@litch/core'
 import { useEffect, useState } from 'react'
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import { useBusy, useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Field } from '../../ui/kit/controls'
+import { ModalKeyboardArea } from '../../ui/kit/ModalKeyboardArea'
 import { useTheme } from '../../ui/theme'
 import { FolderPicker } from './FolderPicker'
 
@@ -125,11 +117,8 @@ export function WorkspaceDialog({
 
   return (
     <Modal visible={edit !== null} transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.center}
-      >
-        <Pressable style={styles.scrim} onPress={onClose} />
+      <Pressable style={styles.scrim} onPress={onClose} />
+      <ModalKeyboardArea style={styles.center}>
         <View
           style={[
             styles.dialog,
@@ -224,7 +213,7 @@ export function WorkspaceDialog({
             </View>
           </ScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </ModalKeyboardArea>
     </Modal>
   )
 }
