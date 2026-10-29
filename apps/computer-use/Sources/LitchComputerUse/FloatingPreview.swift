@@ -54,15 +54,18 @@ final class FloatingPreview: NSObject {
     let zh = language == .zh
     stop.title = zh ? "停止" : "Stop"
     close.title = zh ? "收起" : "Hide"
+    statusLabel.textColor = .secondaryLabelColor
     switch status {
     case "capturePending": statusLabel.stringValue = zh ? "等待系统允许屏幕采集" : "Waiting for screen capture permission"
     case "captureDenied": statusLabel.stringValue = zh ? "屏幕采集被拒绝或停止" : "Screen capture denied or stopped"
     case "captureFailed", "interrupted": statusLabel.stringValue = zh ? "画面已中断" : "Preview interrupted"
     case "waitingForIdle": statusLabel.stringValue = zh ? "等待键鼠空闲" : "Waiting for idle keyboard and mouse"
     case "restoreFailed": statusLabel.stringValue = zh ? "请手动切回原窗口" : "Please switch back to the previous window"
-    default: statusLabel.stringValue = usedForeground
-      ? (zh ? "已短暂切到前台" : "Briefly brought to the foreground")
-      : (zh ? "后台操作" : "Background operation")
+    default:
+      statusLabel.stringValue = usedForeground
+        ? (zh ? "已短暂切到前台" : "Briefly brought to the foreground")
+        : (zh ? "后台操作" : "Background operation")
+      statusLabel.textColor = usedForeground ? .systemOrange : .secondaryLabelColor
     }
   }
 
@@ -109,6 +112,8 @@ final class FloatingPreview: NSObject {
     stop.target = self; stop.action = #selector(stopPressed)
     close.target = self; close.action = #selector(closePressed)
     stop.bezelStyle = .rounded; close.bezelStyle = .rounded
+    stop.font = .systemFont(ofSize: NSFont.systemFontSize)
+    close.font = .systemFont(ofSize: NSFont.systemFontSize)
     statusLabel.font = .systemFont(ofSize: 11); statusLabel.textColor = .secondaryLabelColor
     label.lineBreakMode = .byTruncatingTail; statusLabel.lineBreakMode = .byTruncatingTail
     let text = NSStackView(views: [label, statusLabel]); text.orientation = .vertical; text.alignment = .leading; text.spacing = 2

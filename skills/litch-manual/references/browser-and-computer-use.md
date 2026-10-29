@@ -204,7 +204,7 @@ remain visible but temporarily pass mouse input through to the target. A stale f
 Remote sessions use the same helper on this Mac, not the remote machine's desktop.
 
 macOS 优先后台操作。后台不能完成时，等待键鼠连续空闲 2 秒（最多 8 秒），短暂切到目标窗口，
-执行后恢复原应用和焦点窗口，预览标明“已短暂切到前台”。用户中途接管时停止，不覆盖用户的新选择。
+执行后恢复原应用和焦点窗口，预览标明“已短暂切到前台”，原生浮窗以橙色提示此状态。用户中途接管时停止，不覆盖用户的新选择。
 鼠标私有路由默认启用，每次助手启动自测；没有开关。首个输入等待自测结束，启动等待超时则返回失败，不发送输入。**SIP 开启未验。**
 
 屏幕录制预检通过后，首次采集仍可能弹出“直接访问屏幕”的系统确认，请点“允许”。等待确认、被拒绝、
