@@ -167,7 +167,15 @@ export class ManagerBoardWriter {
                 id: this.store.nextId(managerId, 'I') as ManagerItemId,
               } as ManagerItem)
         this.save(managerId, null, object, 'manager', 'Object added')
-        return { id: object.id, object }
+        return {
+          id: object.id,
+          object,
+          ...(isDecision(object) && object.basis.length === 0
+            ? {
+                note: 'Decision basis is empty; use update to add the files, commits, branches or sessions it relies on.',
+              }
+            : {}),
+        }
       }
       const before = this.object(managerId, args.id)
       if (args.kind && (args.kind === 'decision') !== isDecision(before))

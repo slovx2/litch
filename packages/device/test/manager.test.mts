@@ -7,12 +7,12 @@ import {
   MANAGER_METHOD,
   type ManagerCreateParams,
 } from '../../protocol/src/manager.mjs'
-import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
+import { formatSessionEvent, parseSessionEvent } from '../../protocol/src/session-tree.mjs'
 import { prepareInstructions } from '../src/codex-instructions.mjs'
 import { managerTools } from '../src/manager-rules.mjs'
 import { startChild } from '../src/session-start.mjs'
 import type { TestClient } from './helpers.mjs'
-import { brief, plain, treeRig, until } from './tree-kit.mjs'
+import { brief, plain, refuseSteer, treeRig, until } from './tree-kit.mjs'
 
 const params = (cwd: string, patch: Partial<ManagerCreateParams> = {}): ManagerCreateParams => ({
   cwd,
@@ -57,6 +57,116 @@ const value = (response: any) => {
   assert.equal(response.success, true, JSON.stringify(response))
   return JSON.parse(response.contentItems[0].text)
 }
+
+test('经理归档：看板答复开出的回合放行，wake 与其他事件仍拦，旧答复不授权后续回合', async () => {
+  const env = treeRig()
+  refuseSteer(env.pi)
+  try {
+    const connection = await client(env)
+    const { manager, threadId } = await create(env, connection)
+    const child = await startChild(
+      env.device.sessionTree,
+      threadId,
+      { kind: 'fresh', title: '已完成的线', prompt: '工作', worktree: false, wakeParent: true },
+      'model',
+    )
+    env.pi.end(child.threadId, 'completed', '已完成且无改动')
+    await until(() => env.device.sessionTree.store.notes(threadId).length > 0, '线回报')
+    const archive = () =>
+      tool(env, threadId, 'archive', { thread_id: child.threadId }, 'litch_sessions')
+    const refused = async () => {
+      const result = await archive()
+      assert.equal(result.success, false)
+      assert.match(result.contentItems[0].text, /\[litch:blocked\]/)
+      assert.equal(env.device.sessionTree.host.index.archived(child.threadId), false)
+    }
+    await refused() // manager-open 不算同意。
+    const { id } = value(
+      await tool(env, threadId, 'add', {
+        kind: 'decision',
+        decision: { title: '归档工作线？', background: '线已做完且无改动' },
+      }),
+    )
+    env.pi.end(threadId, 'completed', '等用户决定')
+    await until(() => env.pi.running(threadId), '回报唤醒经理')
+    const wake = env.pi.current(threadId)
+    assert.equal(
+      parseSessionEvent((wake?.items[0]?.content as any)?.[0]?.text ?? '').event?.kind,
+      'wake',
+    )
+    await refused()
+    env.pi.end(threadId, 'completed', '收到回报')
+    await until(() => !env.device.sessionTree.isActive(threadId), '经理空闲')
+    await connection.call(MANAGER_METHOD.answersSubmit, {
+      managerId: manager.id,
+      answers: [{ decisionId: id, revision: 1, optionId: null, text: '归档该会话' }],
+    })
+    await until(() => env.pi.running(threadId), '看板答复开启回合')
+    assert.equal(env.device.sessionTree.isUserTurn('pi', env.pi.current(threadId)?.id ?? ''), false)
+    const archived = value(await archive())
+    assert.equal(archived.thread_id, child.threadId)
+    assert.equal(env.device.sessionTree.host.index.archived(child.threadId), true)
+    value(await tool(env, threadId, 'unarchive', { thread_id: child.threadId }, 'litch_sessions'))
+    for (const kind of [
+      'notes',
+      'remind',
+      'manager-open',
+      'manager-end',
+      'manager-rules',
+    ] as const) {
+      env.pi.end(threadId, 'completed', '处理完毕')
+      await until(() => !env.device.sessionTree.isActive(threadId), '下一事件前空闲')
+      const text = formatSessionEvent({
+        kind,
+        notes: [],
+        ...(kind.startsWith('manager-')
+          ? { manager: { managerId: manager.id, text: '事件' } }
+          : {}),
+      })
+      assert.equal(
+        await env.device.sessionTree.deliverManagerEvent(threadId, text, kind, null),
+        true,
+      )
+      await refused()
+    }
+  } finally {
+    await env.close()
+  }
+})
+
+test('新增决策缺依据仍保存并提示 update；有依据的决策和事项不提示', async () => {
+  const env = treeRig()
+  try {
+    const connection = await client(env)
+    const { manager, threadId } = await create(env, connection)
+    const basis = [{ kind: 'file', target: 'README.md', label: null }]
+    for (const fields of [{}, { basis: [] }, { basis }]) {
+      const added = value(
+        await tool(env, threadId, 'add', {
+          kind: 'decision',
+          decision: { title: '选择方案？', background: '依据仓库', ...fields },
+        }),
+      )
+      assert.deepEqual(env.device.managers.store.object(manager.id, added.id), added.object)
+      if (added.object.basis.length === 0) {
+        assert.match(added.note, /basis is empty; use update/)
+        const updated = value(
+          await tool(env, threadId, 'update', {
+            kind: 'decision',
+            id: added.id,
+            patch: { basis },
+            why: '补上文件依据',
+          }),
+        )
+        assert.deepEqual(updated.object.basis, basis)
+      } else assert.equal(added.note, undefined)
+    }
+    const item = value(await tool(env, threadId, 'add', { kind: 'item', item: { title: '待办' } }))
+    assert.equal(item.note, undefined)
+  } finally {
+    await env.close()
+  }
+})
 
 test('经理工具：设备拒绝 kind 错配与缺失参数，错误返回模型且看板不变', async () => {
   const env = treeRig()
@@ -207,6 +317,12 @@ test('经理扩展：声明、路由、创建工具/规则、每条投递连接�
     )
     const sessions = specs.find((spec) => spec.name === 'litch_sessions')
     assert.ok(sessions.instructions.includes('Manager sessions'))
+    const archiveDescription = sessions.tools.find(
+      (item: any) => item.name === 'archive',
+    ).description
+    assert.match(archiveDescription, /on the board or in chat/)
+    assert.match(archiveDescription, /ask through a board decision/)
+    assert.doesNotMatch(archiveDescription, /message they typed|in one short question/)
     assert.equal(
       sessions.tools.some((item: any) => item.name === 'wrap_up'),
       false,

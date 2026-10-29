@@ -1041,7 +1041,7 @@ function notSubagent(thread: Record<string, unknown>, threadId: string): void {
 }
 
 /**
- * 归档一个会话（照 Claude 桌面端的 archive_session）：只在用户亲手发起的回合里收（用户在这句话里同意了）。
+ * 归档一个会话：用户亲手发话或经理收到看板答复的回合可收，其他事件不算用户同意。
  * 别的会话：在干活的、置顶的不归档，照实回；归档了的话它已经停下的子孙跟着归档。self：等这个回合结束再归档
  */
 async function archive(
@@ -1053,10 +1053,26 @@ async function archive(
   const given = string(args, 'thread_id', true)
   const self = given === SESSION_SELF || given === call.threadId
   const threadId = self ? call.threadId : given
-  if (!tree.isUserTurn(call.harness, call.turnId))
+  let userConsentTurn = tree.isUserTurn(call.harness, call.turnId)
+  const manager = tree.managers?.store.forThread(call.threadId)
+  if (!userConsentTurn && manager?.harness === call.harness) {
+    // 只认开启当前回合的看板答复；旧回合的答复或其他事件中的插话不改变归档闸。
+    const { thread } = await tree.read(call.threadId, true)
+    const turn = (Array.isArray(thread.turns) ? thread.turns : []).find(
+      (turn) => isObject(turn) && turn.id === call.turnId,
+    )
+    const input = (isObject(turn) && Array.isArray(turn.items) ? turn.items : []).find(
+      (item) => isObject(item) && item.type === 'userMessage',
+    )
+    const first = isObject(input) && Array.isArray(input.content) ? input.content[0] : null
+    const event =
+      isObject(first) && typeof first.text === 'string' ? parseSessionEvent(first.text).event : null
+    userConsentTurn = event?.kind === 'manager-answers' && event.manager?.managerId === manager.id
+  }
+  if (!userConsentTurn)
     throw new Refused(
       'blocked',
-      'Archive a session only after the user agreed to it in a message they typed, and this turn was not started that way. Ask the user first, and archive it when they say yes.',
+      'Archive only after the user agreed in chat or in a manager board answer; this turn has neither source. Ask the user first (managers: use a board decision), and archive it when they say yes.',
     )
   if (archives.pinned(threadId))
     throw new Refused(

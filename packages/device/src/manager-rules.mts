@@ -41,7 +41,13 @@ export function managerTools(manager: RuleSettings): ClientToolNamespaceSpec[] {
                 description:
                   'Start an in-scope line with initiation user_asked, including on manager event turns. Supply a self-contained brief. Out-of-scope work requires a board decision first. Permissions and the running-line limit are enforced by the device.',
               }
-            : tool,
+            : tool.name === SESSION_TOOL.archive
+              ? {
+                  ...tool,
+                  description:
+                    'Archive a session after the user explicitly agrees to archive that session on the board or in chat. For a finished line with changes landed or discarded, ask through a board decision. Conversations remain in Archived and can be restored with unarchive. Clean Litch worktrees are removed; branches and uncommitted changes are kept. Stopped sub-sessions are archived with it; working or pinned sessions are not archived. Pass "self" to archive this session when the turn ends.',
+                }
+              : tool,
         ),
     },
     { ...MANAGER_TOOLS, instructions: managerInstructions(manager) },

@@ -200,7 +200,7 @@ test('工具 schema 校验字段形状，拒绝写系统字段、工作线和跨
   }
 })
 
-test('角色规则保持预算和第一版边界，会话版原样复用共用规则', () => {
+test('角色规则保持预算和第一版边界，会话版用看板归档规则并复用其他共用规则', () => {
   const role = managerRoleRules('scope-token')
   // 4000 英文字符约为稿中 800 token 预算；实际分词随 harness 而异。
   assert.ok(role.length < 4000, String(role.length))
@@ -211,17 +211,15 @@ test('角色规则保持预算和第一版边界，会话版原样复用共用�
   assert.match(role, /Use verify after checking that an object remains valid/)
   assert.match(role, /only the user can do/)
   const sessions = managerSessionRules(4)
-  for (const shared of [
-    FRESH_BRIEF,
-    WORKTREE_RULE,
-    TITLE_LINE,
-    archiveRule(false),
-    outsideLitch(false),
-  ])
+  for (const shared of [FRESH_BRIEF, WORKTREE_RULE, TITLE_LINE, outsideLitch(false)])
     assert.ok(sessions.includes(shared))
   assert.match(sessions, /at most 4 lines/)
   assert.match(sessions, /including event turns/)
   assert.match(sessions, /Do not call wrap_up/)
+  assert.ok(!sessions.includes(archiveRule(false)))
+  assert.match(sessions, /changes are landed or discarded/)
+  assert.match(sessions, /archive it through a board decision/)
+  assert.match(sessions, /user agrees on the board or in chat/)
   assert.doesNotMatch(sessions, /initiation "propose"|initiation "offer"/)
 })
 
@@ -232,6 +230,8 @@ test('线的回报和首次、结束回合遵守草稿约束', () => {
   assert.match(line, /Do not merge, push or release/)
   assert.match(line, /do not inherit litch_manager/)
   assert.match(managerOpenText('范围'), /Do not start lines yet/)
+  assert.match(managerOpenText('范围'), /Write in the language of the scope text/)
+  assert.match(managerOpenText('范围', '第一件事'), /Write in the language of the scope text/)
   assert.match(managerOpenText('范围', '  '), /Do not start lines yet/)
   const first = '立即调研\n保留原文'
   assert.ok(managerOpenText('范围', first).endsWith(first))

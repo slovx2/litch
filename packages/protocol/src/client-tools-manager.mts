@@ -1,12 +1,6 @@
 // 经理工具与英文规则。只声明契约和拼接文字，不执行看板、会话或文件操作。
 import { CLIENT_TOOL_NAMESPACE, type ClientToolNamespaceSpec } from './client-tools.mjs'
-import {
-  archiveRule,
-  FRESH_BRIEF,
-  outsideLitch,
-  TITLE_LINE,
-  WORKTREE_RULE,
-} from './client-tools-sessions.mjs'
+import { FRESH_BRIEF, outsideLitch, TITLE_LINE, WORKTREE_RULE } from './client-tools-sessions.mjs'
 import type {
   ManagerBoard,
   ManagerChange,
@@ -58,8 +52,7 @@ export function managerSessionRules(maxRunningLines: number): string {
     FRESH_BRIEF,
     WORKTREE_RULE,
     TITLE_LINE,
-    archiveRule(false),
-    'Put the archival question on the board as a decision; do not ask it separately in chat.',
+    'Once a line is finished and its changes are landed or discarded, ask to archive it through a board decision. Archive only after the user agrees on the board or in chat.',
     outsideLitch(false),
   ].join('\n\n')
 }
@@ -94,8 +87,8 @@ export function managerRulesText(scope: string, rules: string): string {
 /** 第 9 层：有第一件事时按用户原文执行；默认开场必须等用户说开始。由设备包成 manager-open 事件。 */
 export function managerOpenText(scope: string, firstTask = ''): string {
   return firstTask.trim()
-    ? `The user supplied this first task for the manager. Follow it within scope (${scope}):\n\n${firstTask}`
-    : `Plan the first items for this scope: ${scope}. Put questions needing the user on the board as decisions, and present a plan. Do not start lines yet; wait for the user to say to begin.`
+    ? `The user supplied this first task for the manager. Write in the language of the scope text. Follow it within scope (${scope}):\n\n${firstTask}`
+    : `Plan the first items for this scope: ${scope}. Write in the language of the scope text. Put questions needing the user on the board as decisions, and present a plan. Do not start lines yet; wait for the user to say to begin.`
 }
 
 /** 第 9 层：结束回合专用；线的归档仍须用户明确同意。 */
@@ -244,7 +237,7 @@ export const MANAGER_TOOLS: ClientToolNamespaceSpec = {
       type: 'function',
       name: MANAGER_TOOL.add,
       description:
-        'Add a decision or item; returns its id and object. Omitted arrays are empty; a decision starts open, recommend null, default ask; an item starts backlog, owner manager, why empty.',
+        'Add a decision or item; returns its id and object. Decision basis: the files, commits, branches or sessions it relies on. Defaults: arrays empty; decision open, recommend null, default ask; item backlog, owner manager, why empty.',
       inputSchema: object(
         {
           kind: {
