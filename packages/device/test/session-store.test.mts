@@ -13,6 +13,30 @@ import {
 } from '../src/session-store.mjs'
 import { tempDir } from './helpers.mjs'
 
+test('SESSION-STORE-DIRECT：直接启动额度持久化、原子预占，失败退还；其他父会话和回合不互占', () => {
+  const dir = tempDir()
+  let db = openSessionDatabase(dir)
+  try {
+    let store = new SessionStore(db)
+    for (let i = 0; i < 16; i++) assert.equal(store.reserveDirectStart('parent', 'turn', 16), true)
+    assert.equal(store.reserveDirectStart('parent', 'turn', 16), false)
+    db.close()
+    db = openSessionDatabase(dir)
+    store = new SessionStore(db)
+    assert.equal(store.reserveDirectStart('parent', 'turn', 16), false, '设备重启不清零')
+    store.releaseDirectStart('parent', 'turn')
+    assert.equal(store.reserveDirectStart('parent', 'turn', 16), true)
+    assert.equal(store.reserveDirectStart('parent', 'turn', 16), false)
+    assert.equal(store.reserveDirectStart('other', 'turn', 16), true)
+    assert.equal(store.reserveDirectStart('parent', 'next', 16), true)
+    store.dropDirectStarts('parent')
+    assert.equal(store.reserveDirectStart('parent', 'turn', 16), true)
+  } finally {
+    db.close()
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('SESSION-STORE-001：第 1 版的库升上来：从提案开始过的子会话补上 proposalId，提案多出 widerSandbox 一列', () => {
   const dir = tempDir()
   try {

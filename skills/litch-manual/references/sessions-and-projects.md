@@ -37,6 +37,9 @@ sidebar.
 子会话在桌面侧栏、手机列表、任务卡和会话详情中显示 harness 标识。
 用户在自动唤醒的回合中插话成功后，该回合也按用户回合处理；后来的自动消息不会覆盖这个来源。
 
+用户已经要求派出子会话，或批准的计划已经包含子会话时，模型可在后续唤醒、提醒、定时任务等任意回合通过 `start(initiation: "user_asked")` 直接启动；任务卡关闭也可用。仅批准目标不等于批准拆会话，新的限制或撤销优先。每个父会话每回合直接启动最多 16 个，同时运行或启动的直接子会话最多 8 个；并发创建会预占名额，失败退还，重连或重启不重置同回合额度。进程在启动结果未确认时退出，已预占的回合额度保守保留。
+直接启动不占提案卡名额；提案、offer 与收尾建议合计每回合最多 4 张，撤回仍计数，提醒回合与来源回合合计。目标 harness 需要放宽沙箱时仍须用户确认。50 次自动唤醒上限不变。
+
 主会话可用 `litch_sessions.set_wake(thread_id, wake)` 关闭或重新打开直接子会话的自动唤醒；`start` 的 `wake_parent` 默认开启。主会话也可以覆盖用户此前在界面上选择的唤醒设置。关闭后回报仍入队、显示，也仍可插入正在运行的主会话；重新开启会检查已有回报，但不会绕过用户停止、失败、定时回合和唤醒次数等限制。`list`、`read` 会返回当前开关，桌面会话详情顶部的来历一行写“完成后不唤醒父会话”，手机会话行显示“不唤醒”。
 
 ### 子会话待答与代答
@@ -355,6 +358,15 @@ woken to continue.
   task and its remaining plan to a forked sub-session (a "Handed off to a forked session" card, started
   at once, waking the parent when done) and answers the new message here. The fork starts before the
   current turn, so work done in that turn reaches it only through the remaining plan.
+- **Previously authorized sub-sessions**: `start(initiation: "user_asked")` can run in any later turn,
+  including wake, reminder and scheduled turns, if you already requested sub-sessions or approved a
+  plan that includes them. Approving a goal alone does not authorize separate sessions. Later changes
+  or withdrawal of your authorization take precedence. Task cards may be off. Direct starts have a
+  separate limit of 16 per parent per turn and 8 direct children running or starting at once; they do
+  not consume the 4-card allowance shared by proposals, offers and wrap-up suggestions. Concurrent
+  requests reserve slots, failures release them, and reconnecting or restarting does not reset the
+  turn allowance. A reservation whose outcome was unknown at process exit remains counted.
+  Wider sandbox access still needs confirmation; the 50-wake limit is unchanged.
 - **Reports and waking**: when a sub-session finishes a turn, the start of its last answer is handed to
   the parent ("Reports from sub-sessions"). When the parent is idle and its sub-sessions have stopped,
   the parent is woken to continue (up to 50 times per user message; your next message resets the count). The model can set `wake_parent` when starting a sub-session (default true), then use

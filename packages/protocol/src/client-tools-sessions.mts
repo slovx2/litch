@@ -3,7 +3,7 @@
 // 和 litch_browser 这些不同，执行方是设备进程自己，不是桌面端（会话在设备上）：建会话时带不带它看的是
 // 设备信息的 extensions 有没有 sessionTree、设置里“会话编排”开没开，不看桌面端的声明；设备进程替每条
 // 通往引擎的连接声明能执行它，调用到了设备进程就自己答，不转给任何客户端。父子关系、提案见 session-tree.mts，
-// 规矩写在 protocol/extensions/session-tree.json。说明是写给模型看的，用英文。
+// 规矩写在 protocol/extensions/session-tree.json。说明写给模型看，直接启动的授权与额度同时提供中英文。
 //
 // 只引用协议包内自包含的类型与工具声明。
 import {
@@ -12,7 +12,7 @@ import {
   type ClientToolNamespaceSpec,
 } from './client-tools.mjs'
 import type { SessionDelegatedResponse, SessionPendingRequest } from './session-pending.mjs'
-import type { SessionLineageKind } from './session-tree.mjs'
+import { SESSION_TREE_LIMITS, type SessionLineageKind } from './session-tree.mjs'
 
 export const SESSION_TOOL = {
   list: 'list',
@@ -59,6 +59,8 @@ export const SESSION_TOOL_LIMITS = {
   messageChars: 32_000,
   /** 一个回合里最多提几张提案（硬上限；规则里写主动提的三张，拆计划时四张） */
   proposalsPerTurn: 4,
+  /** 每个父会话每回合直接启动的额度，与提案额度分开 */
+  directStartsPerTurn: 16,
   /** 规则里主动提的建议一回合最多几张（设备进程不单独查，照 proposalsPerTurn 拦） */
   proactivePerTurn: 3,
   /**
@@ -137,8 +139,8 @@ export interface SessionsStartArguments {
    */
   worktree?: boolean
   /**
-   * user_asked：用户在这个回合里亲口要求起这个会话，直接起（设备进程还要核对这个回合确实是用户发起的，
-   * 不是就降成提案）；propose（缺省）：出一张提案卡片，用户点了才起；
+   * user_asked：用户已经要求，或批准的计划已包含派出子会话，任意后续回合直接起，不占提案额度；
+   * 沙箱放宽仍须确认。propose（缺省）：出一张提案卡片，用户点了才起；
    * offer：用户这条消息是和这个会话无关的新任务，只带标题出一张“新会话 / 在这里做”的卡，调用一直等到用户选
    *（选了新会话，结果让模型用 accept 带上简报开起来；选了在这里做、用户又发了话、回合被打断，都是在这里做）
    */
@@ -452,7 +454,7 @@ export function wrapUpAsk(args: unknown): {
 export function sessionProposalRules(wrapUp: boolean, taskCards = true): string {
   if (!taskCards) return plainSessionRules()
   return [
-    'Separate sessions and suggested tasks (Litch). A task of its own can run in a separate session on this device, possibly on another harness, model or folder: the user starts it with one click on a card in this conversation, and nothing runs until then.',
+    'Separate sessions and suggested tasks (Litch). A task of its own can run in a separate session on this device, possibly on another harness, model or folder. Already authorized work can start directly; suggestions wait for the user to start their card.',
     SESSION_PURPOSE,
     'Before acting on a request, decide what it is to this session:',
     '- The first task: until a task has been finished in this session, the request is simply what this session is for. Do it here.',
@@ -464,7 +466,7 @@ export function sessionProposalRules(wrapUp: boolean, taskCards = true): string 
     'A piece you left or could not verify is still this task, not a follow-up: finish or check it now, here or in a subagent, or say plainly in your answer what is not done or not verified.',
     'A follow-up you name gets a card or a question, not just a sentence: when your reply calls some work a follow-up, a separate change or "for later", and it is real work worth doing next (not a one-line tweak or speculation), put it to the user before the turn ends: the one piece that acts on what you just found as that question, any other task of its own as a card. The card or the question is how you ask for their OK, so do not ask again in prose ("want me to ...?"); mention the cards in one line.',
     'When unsure whether something is a task of its own: if the brief you would write mostly retells what you found here, it stays here.',
-    `After the user accepts a plan, check whether two or more of its steps are real work that can each run on its own: none needs another step's result or changes already made in this session, none is needed by another step, none touches files another step touches, none must land in one change with another. A last step that only checks the finished work does not count. When at least two pass and the user has not said where to run them, say in one line which step you start on, and propose each of the others right away with litch_sessions.start (initiation "propose"), at most ${SESSION_TOOL_LIMITS.proposalsPerTurn}. Right before you begin a step you proposed, withdraw its card; if the user already started it, leave that step to its session.`,
+    `After the user accepts a plan, check whether two or more of its steps are real work that can each run on its own: none needs another step's result or changes already made in this session, none is needed by another step, none touches files another step touches, none must land in one change with another. A last step that only checks the finished work does not count. If the approved plan includes separate sessions, start those steps with initiation "user_asked" in this or any later turn. Otherwise, when at least two pass and the user has not said where to run them, say which step you start on and propose the others (initiation "propose"), at most ${SESSION_TOOL_LIMITS.proposalsPerTurn}. Right before you begin a step you proposed, withdraw its card; if the user already started it, leave that step to its session.`,
     "Not for a card: anything that first needs the user's decision. Ask about it, and suggest only the parts that do not depend on it.",
     HAND_OFF,
     wrapUp
@@ -492,8 +494,7 @@ export function outsideLitch(wrapUp: boolean): string {
 const SESSION_PURPOSE =
   'What a separate session is for: a task of its own. It outlives this turn, a short brief is enough to start it, the user may want to open, steer or review it apart from this work, and it ends in something of its own (a branch, a pull request, a change in another repository). A piece of the task at hand is never one, however large or parallel: searching or reading widely, independent parts of one change, and testing, checking or reviewing what you built run here or in your own subagents, whose results come back to you in this turn. Quick things (a question, a read, one edit, a handful of tool calls) stay here.'
 
-const USER_ASKED =
-  '- The user asked in words for separate, parallel or background work, or told you to start a piece now: litch_sessions.start with initiation "user_asked", one session per independent piece. Pieces whose results you need for your answer in this turn go to your own subagents instead, unless the user asked for sessions.'
+const USER_ASKED = `- The user has already requested separate sessions, or approved a plan that includes them: use litch_sessions.start with initiation "user_asked" in any turn, including wake, reminder and scheduled turns. Authorization persists until the user changes or withdraws it; approving only a goal does not authorize unrequested separate sessions. Direct starts do not consume proposal slots: at most ${SESSION_TOOL_LIMITS.directStartsPerTurn} per parent per turn, with ${SESSION_TREE_LIMITS.liveChildren} direct children running or starting at once. Wider sandbox access still requires confirmation. Do not bypass limits by creating cards or extra intermediary sessions. 用户已经要求过、或批准的计划已包含派出子会话时，可在后续任意回合直接启动；仅批准目标不等于批准拆会话，用户撤销或修改授权后按新要求执行。直接启动每回合最多 ${SESSION_TOOL_LIMITS.directStartsPerTurn} 个，同时运行或启动最多 ${SESSION_TREE_LIMITS.liveChildren} 个直接子会话，不占提案名额；放宽沙箱仍需确认。不得用提案或额外中间会话绕过上限。 Pieces whose results you need for your answer in this turn go to your own subagents instead, unless the user asked for sessions.`
 
 const HAND_OFF =
   'If a new user message about something unrelated arrives while you are in the middle of a task, hand that task off with litch_sessions.hand_off (a title and the remaining plan: steps, files, what done looks like), then answer the new message. A small correction is not that: just adjust. If the user said to keep working here, keep it here.'
@@ -626,16 +627,16 @@ const WRAP_UP_TOOL: ClientToolFunctionSpec = {
 /** 命名空间说明里讲建议的那一句，跟着两个开关 */
 function suggestionLine(wrapUp: boolean, taskCards: boolean): string {
   if (!taskCards)
-    return 'Start one only when the user asks for it in words (start, initiation "user_asked").'
+    return 'Start already requested or approved sub-sessions in any turn (start, initiation "user_asked").'
   return `${wrapUp ? 'Every turn ends with wrap_up and then your final answer; most turns have nothing to pass, and a task of its own goes into its suggestions as a card.' : 'A task of its own becomes a card with start (initiation "propose").'} A new task unrelated to this session starts with an offer (start, initiation "offer").`
 }
 
 /** start 的说明：任务卡关着时只有 user_asked */
 function startDescription(wrapUp: boolean, taskCards: boolean): string {
+  const direct = `initiation "user_asked": the user already requested sub-sessions or approved a plan including them; starts directly in any turn, including wake, reminder and scheduled turns. At most ${SESSION_TOOL_LIMITS.directStartsPerTurn} direct starts per parent per turn; ${SESSION_TREE_LIMITS.liveChildren} direct children running or starting at once. Direct starts do not count toward the card limit. Wider sandbox access still requires confirmation. 已授权的子会话可在任意后续回合直接启动，每回合最多 ${SESSION_TOOL_LIMITS.directStartsPerTurn} 个、同时运行或启动最多 ${SESSION_TREE_LIMITS.liveChildren} 个，不占提案额度；放宽沙箱仍需确认。`
   const fresh = `A fresh sub-session knows only background and prompt: background gives the context it cannot see (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2), prompt the task. Harness, model, effort and folder default to this session's current ones (model and effort: the target harness's defaults when the harness differs). To use another harness or model, call options first and pass the ids it lists.`
-  if (!taskCards)
-    return `Start a sub-session the user asked for in their latest message (initiation "user_asked"); it starts now and runs on its own. ${fresh}`
-  return `Start a sub-session, propose one, or offer a new session. initiation "user_asked": the user asked for separate work in their latest message; it starts now. "propose" (default): a card the user may start; nothing runs until they do (at most ${SESSION_TOOL_LIMITS.proposalsPerTurn} cards per turn). "offer": after a task has been finished in this session, the user's latest message is a new task unrelated to it; send the title only, as the only call in that message; the card asks the user "New session" or "Do it here" and the call waits for the answer, which tells you what to do next. ${fresh}${wrapUp ? ' To suggest work at the end of a turn, use wrap_up instead.' : ''}`
+  if (!taskCards) return `Start a sub-session. ${direct} ${fresh}`
+  return `Start a sub-session, propose one, or offer a new session. ${direct} "propose" (default): a card the user may start; nothing runs until they do (at most ${SESSION_TOOL_LIMITS.proposalsPerTurn} cards per turn). "offer": after a task has been finished in this session, the user's latest message is a new task unrelated to it; send the title only, as the only call in that message; the card asks the user "New session" or "Do it here" and the call waits for the answer, which tells you what to do next. ${fresh}${wrapUp ? ' To suggest work at the end of a turn, use wrap_up instead.' : ''}`
 }
 
 /**

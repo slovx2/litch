@@ -204,7 +204,7 @@ test('SESSION-TREE-002：fork 用同 harness 的 thread/fork；跨 harness 的 f
   }
 })
 
-test('SESSION-TREE-003：不是用户发起的回合里说 user_asked 也只出提案；接受、不要、过期都通知声明过的连接', async () => {
+test('SESSION-TREE-003：非用户回合可主动提案；接受、不要、过期都通知声明过的连接', async () => {
   const env = treeRig()
   try {
     const client = await litch(env)
@@ -216,12 +216,11 @@ test('SESSION-TREE-003：不是用户发起的回合里说 user_asked 也只出�
       title: '整理日志',
       ...brief('把 logs 里的错误按类归一下。'),
       harness: 'claude-code',
-      initiation: 'user_asked',
+      initiation: 'propose',
     })
     const proposal = resultOf(asked?.answer)
     assert.ok(proposal.proposal_id)
     assert.equal(proposal.thread_id, undefined)
-    assert.match(proposal.note, /not started by the user/)
     assert.equal(env.claude.sent('thread/start').length, 0, '提案不起任何东西')
     const second = resultOf(
       (

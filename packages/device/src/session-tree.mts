@@ -1415,6 +1415,7 @@ export class SessionTree {
     this.pending.ended(threadId)
     this.store.dropIgnoredQuestions(threadId)
     this.store.dropResponses(threadId)
+    this.store.dropDirectStarts(threadId)
     this.store.dropTools(threadId)
     this.store.setSpeed(threadId, null)
     this.store.dropContacts(threadId)

@@ -339,11 +339,69 @@ export function placement(
   }
 }
 
+// 同一个设备进程里的所有启动入口共用名额；已登记的子会话只计一次。
+const startingChildren = new WeakMap<SessionTree, Map<string, Set<{ threadId: string | null }>>>()
+
 export async function startChild(
   tree: SessionTree,
   parentId: string,
   spec: ChildSpec,
   origin: SessionLineageOrigin,
+  directTurnId?: string,
+): Promise<{ threadId: string; harness: string; branch: string | null }> {
+  let parents = startingChildren.get(tree)
+  if (!parents) startingChildren.set(tree, (parents = new Map()))
+  const pending = parents.get(parentId) ?? new Set<{ threadId: string | null }>()
+  const live = new Set(
+    tree.store
+      .childrenOf(parentId)
+      .filter((child) => tree.isActive(child.threadId))
+      .map((child) => child.threadId),
+  )
+  const occupied =
+    live.size + [...pending].filter((one) => !one.threadId || !live.has(one.threadId)).length
+  if (occupied >= SESSION_TREE_LIMITS.liveChildren)
+    throw new StartRefused(
+      'blocked',
+      `This session already has ${occupied} sub-sessions running or starting (the limit is ${SESSION_TREE_LIMITS.liveChildren}). Wait for one to finish first.`,
+    )
+  if (directTurnId !== undefined) {
+    if (!directTurnId.trim())
+      throw new StartRefused('invalid', 'Direct starts require a current turn ID.')
+    if (
+      !tree.store.reserveDirectStart(
+        parentId,
+        directTurnId,
+        SESSION_TOOL_LIMITS.directStartsPerTurn,
+      )
+    )
+      throw new StartRefused(
+        'blocked',
+        `This turn has reached the limit of ${SESSION_TOOL_LIMITS.directStartsPerTurn} direct starts. Do not retry or create proposal cards to bypass it.`,
+      )
+  }
+  const slot = { threadId: null as string | null }
+  pending.add(slot)
+  parents.set(parentId, pending)
+  try {
+    return await startReservedChild(tree, parentId, spec, origin, (id) => {
+      slot.threadId = id
+    })
+  } catch (error) {
+    if (directTurnId !== undefined) tree.store.releaseDirectStart(parentId, directTurnId)
+    throw error
+  } finally {
+    pending.delete(slot)
+    if (pending.size === 0) parents.delete(parentId)
+  }
+}
+
+async function startReservedChild(
+  tree: SessionTree,
+  parentId: string,
+  spec: ChildSpec,
+  origin: SessionLineageOrigin,
+  registered: (threadId: string) => void,
 ): Promise<{ threadId: string; harness: string; branch: string | null }> {
   const title = spec.title.trim().slice(0, 120)
   if (!title) throw new StartRefused('invalid', 'title must not be empty.')
@@ -366,12 +424,6 @@ export async function startChild(
     throw new StartRefused(
       'invalid',
       `fork only works within the same harness (${parentHarness}); use kind "fresh" with a full prompt for ${harness}.`,
-    )
-  const live = tree.store.childrenOf(parentId).filter((child) => tree.isActive(child.threadId))
-  if (live.length >= SESSION_TREE_LIMITS.liveChildren)
-    throw new StartRefused(
-      'blocked',
-      `This session already has ${live.length} sub-sessions running (the limit is ${SESSION_TREE_LIMITS.liveChildren}). Wait for one to finish first.`,
     )
   if (spec.projectId) tree.host.workspaces.requireProject(spec.projectId)
   const { link: parentLink, config: parentConfig } = await parentSettings(
@@ -430,6 +482,7 @@ export async function startChild(
     throw new Error(`${harness} 没有给回新会话`)
   }
   const threadId = thread.id
+  registered(threadId)
   // 分叉时不是每个引擎都认 cwd（Pi、OpenCode、通用 ACP 照源会话的目录）：没换过去的，刚建的工作树删掉、共用父会话的目录
   let branch: string | null = null
   if (made && sameDir(thread.cwd, where)) {
@@ -483,11 +536,14 @@ export async function startChild(
     Boolean(spec.handOffBefore),
     spec.background ?? '',
   )
-  await link.request('turn/start', {
+  const begun = await link.request('turn/start', {
     threadId,
     input: [{ type: 'text', text, text_elements: [] }],
     ...(effort ? { effort } : {}),
   })
+  // 释放预占前采纳回合应答，避免通知稍迟时出现空档；turnEvent 自身去重且忽略已结束回合。
+  if (isObject(begun) && isObject(begun.turn) && begun.turn.status === 'inProgress')
+    tree.turnEvent(harness, 'turn/started', { threadId, turn: begun.turn })
   tree.host.log(
     `会话 ${parentId} 派出子会话 ${threadId}（${harness}，${spec.kind}，${origin}${branch ? `，工作树分支 ${branch}` : ''}）`,
   )

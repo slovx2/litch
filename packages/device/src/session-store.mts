@@ -153,6 +153,9 @@ const MIGRATIONS: readonly string[] = [
    CREATE INDEX delegated_by_thread ON delegated_responses(thread_id);`,
   `CREATE TABLE ignored_questions(thread_id TEXT NOT NULL, source_id TEXT NOT NULL,
      PRIMARY KEY(thread_id, source_id)) WITHOUT ROWID;`,
+  // 直接启动先预占再发请求；成功保留、明确失败退还。重启不会重置同一回合的额度。
+  `CREATE TABLE direct_starts(thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, count INTEGER NOT NULL,
+     PRIMARY KEY(thread_id, turn_id)) WITHOUT ROWID;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -266,6 +269,25 @@ export class SessionStore {
   private readonly db: DatabaseSync
   private readonly lineage = new Map<string, LineageRow>()
   private readonly statements: Record<string, StatementSync>
+
+  reserveDirectStart(threadId: string, turnId: string, limit: number): boolean {
+    return (
+      this.db
+        .prepare(`INSERT INTO direct_starts(thread_id, turn_id, count) VALUES(?, ?, 1)
+      ON CONFLICT(thread_id, turn_id) DO UPDATE SET count=count+1 WHERE count < ?`)
+        .run(threadId, turnId, limit).changes === 1
+    )
+  }
+
+  releaseDirectStart(threadId: string, turnId: string): void {
+    this.db
+      .prepare('UPDATE direct_starts SET count=max(0, count-1) WHERE thread_id=? AND turn_id=?')
+      .run(threadId, turnId)
+  }
+
+  dropDirectStarts(threadId: string): void {
+    this.db.prepare('DELETE FROM direct_starts WHERE thread_id=?').run(threadId)
+  }
 
   constructor(db: DatabaseSync) {
     this.db = db

@@ -15,7 +15,7 @@ export type SessionLineageKind =
 
 /** 谁起的 */
 export type SessionLineageOrigin =
-  /** 模型调 litch_sessions.start 直接起的（用户在这个回合里要求的） */
+  /** 模型调 litch_sessions.start 直接起的（用户已要求或批准，可在后续回合执行） */
   | 'model'
   /** 模型提的提案，用户点了“开始” */
   | 'proposal'

@@ -386,9 +386,10 @@ async function start(
   const spec = await checked(tree, call, specOf(args, call, tree))
   // 目标 harness 收不到父会话那么严（比如没有沙箱的 Pi）：模型派的一律变成提案，由用户看过再点
   const wider = await widerFor(tree, call, spec)
-  // 只有用户亲手发起的这个回合里、模型说是用户要的，才直接起；别的一律变成提案
-  const userTurn = tree.isUserTurn(call.harness, call.turnId)
-  if (initiation === 'user_asked' && userTurn && wider === null) {
+  // 用户已经要求或批准的派出计划可以在任意后续回合执行；沙箱放宽仍需确认。
+  if (initiation === 'user_asked' && wider === null) {
+    if (!call.turnId?.trim())
+      throw new Refused('invalid', 'Direct starts require a current turn ID.')
     const child = await startChild(
       tree,
       call.threadId,
@@ -405,6 +406,7 @@ async function start(
         worktree: spec.worktree ?? null,
       },
       'model',
+      call.turnId,
     )
     return {
       thread_id: child.threadId,
@@ -414,9 +416,7 @@ async function start(
   const why =
     initiation !== 'user_asked'
       ? ''
-      : !userTurn
-        ? 'This turn was not started by the user typing a message, so the request became a proposal. '
-        : `${spec.harness ?? call.harness} cannot be sandboxed as tightly as this session (it would run with ${wider}), so the request became a proposal for the user to approve. `
+      : `${spec.harness ?? call.harness} cannot be sandboxed as tightly as this session (it would run with ${wider}), so the request became a proposal for the user to approve. `
   // 任务卡关着：不落卡。用户要的、只是降成了提案的，让用户自己从会话菜单开
   if (!cards)
     throw new Refused(
