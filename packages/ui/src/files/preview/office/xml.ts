@@ -23,7 +23,11 @@ export function scanXml(xml: string, visit: (tag: SaxesTagNS) => void = () => {}
 }
 
 /** 删除不参与数据预览的子树；用 SAX 重新编码，不能让嵌套标签/属性实体绕过删除。 */
-export function withoutXmlNodes(xml: string, omitted: ReadonlySet<string>): string {
+export function withoutXmlNodes(
+  xml: string,
+  omitted: ReadonlySet<string>,
+  keep: (tag: SaxesTagNS) => boolean = () => true,
+): string {
   const parser = new SaxesParser({ xmlns: true })
   const output: string[] = []
   const encode = (text: string) =>
@@ -34,7 +38,7 @@ export function withoutXmlNodes(xml: string, omitted: ReadonlySet<string>): stri
       .replaceAll('"', '&quot;')
   let hidden = 0
   parser.on('opentag', (tag) => {
-    if (hidden || omitted.has(tag.local)) {
+    if (hidden || omitted.has(tag.local) || !keep(tag)) {
       hidden++
       return
     }

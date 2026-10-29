@@ -81,9 +81,9 @@ test('XLSX：真实 XML 属性解析拦坐标/合并炸弹，假属性文本和�
   const check = (xml) =>
     checkSheets([{ name: 'xl/worksheets/sheet1.xml', bytes: new TextEncoder().encode(xml) }])
   for (const xml of [
-    '<worksheet><row r="10001"/></worksheet>',
-    '<worksheet><row r="1"><c foo="r=\'A1\'" r="XFD1"/></row></worksheet>',
-    '<worksheet><row r="1"><c r="A1000&#49;"/></row></worksheet>',
+    '<worksheet><row r="1048577"/></worksheet>',
+    '<worksheet><row r="1"><c foo="r=\'A1\'" r="XFE1"/></row></worksheet>',
+    '<worksheet><row r="1"><c r="A104857&#55;"/></row></worksheet>',
     '<worksheet><mergeCell ref="A1:GR10000"/></worksheet>',
   ])
     assert.throws(() => check(xml))
@@ -203,4 +203,55 @@ test('DOCX MessagePort：只收固定形状与白名单错误码', async () => {
   assert.deepEqual(frameResult({ ok: true, isolated: true, pages: 1 }), { ok: true })
   for (const error of ['budget', 'invalid', 'active', 'timeout'])
     assert.deepEqual(frameResult({ ok: false, error }), { ok: false, error })
+})
+
+test('XLSX：超出显示行列时截断，边界单元格与其他sheet仍保留', async () => {
+  const result = await spreadsheet(await unpack(await xlsx({ overflow: true, frozen: true })))
+  const sheet = result.sheets[0]
+  assert.equal(sheet.truncated, true)
+  assert.equal(sheet.rows, 10_000)
+  assert.equal(sheet.columns, 200)
+  assert.equal(sheet.cells['10000:1'], '最后可见行')
+  assert.equal(sheet.cells['1:200'], '最后可见列')
+  assert.equal(sheet.cells['10001:201'], undefined)
+  assert.equal(result.sheets[1].truncated, false)
+  assert.equal(sheet.cells['2:4'], 'TRUE')
+  assert.equal(sheet.cells['3:4'], 'FALSE')
+  assert.equal(sheet.cells['4:4'], '0')
+  assert.equal(sheet.numeric['4:4'], true)
+  assert.equal(sheet.numeric['2:2'], true)
+  assert.equal(sheet.numeric['5:2'], true)
+  assert.equal(sheet.numeric['2:4'], undefined)
+  assert.deepEqual(sheet.frozen, { rows: 10, columns: 3 })
+})
+
+test('XLSX：最远稀疏坐标与跨显示边界的合并在交库前裁剪', async () => {
+  const parts = await unpack(await xlsx()),
+    enc = new TextEncoder()
+  const sheet = parts.find((p) => p.name === 'xl/worksheets/sheet1.xml')
+  sheet.bytes = enc.encode(
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="str"><v>保留</v></c></row><row r="10000"><c r="GR10000" t="str"><v>合并边界</v></c></row><row r="1048576"><c r="XFD1048576" t="str"><v>远端</v></c></row></sheetData><mergeCells><mergeCell ref="GR10000:GS10001"/></mergeCells></worksheet>',
+  )
+  const result = await spreadsheet(parts),
+    visible = result.sheets[0]
+  assert.equal(visible.rows, 10000)
+  assert.equal(visible.columns, 200)
+  assert.equal(visible.truncated, true)
+  assert.equal(visible.cells['1:1'], '保留')
+  assert.equal(visible.cells['10000:200'], '合并边界')
+  assert.equal(visible.cells['1048576:16384'], undefined)
+  assert.deepEqual(visible.merges, [{ top: 10000, left: 200, bottom: 10000, right: 200 }])
+})
+
+test('XLSX：显示窗口外的单元格仍计入整本十万安全预算', async () => {
+  const parts = await unpack(await xlsx()),
+    enc = new TextEncoder()
+  const sheet = parts.find((p) => p.name === 'xl/worksheets/sheet1.xml')
+  const rows = Array.from(
+    { length: 10001 },
+    (_, r) =>
+      `<row r="${r + 10001}">${Array.from({ length: 10 }, (_, c) => `<c r="${String.fromCharCode(65 + c)}${r + 10001}"/>`).join('')}</row>`,
+  ).join('')
+  sheet.bytes = enc.encode(`<worksheet><sheetData>${rows}</sheetData></worksheet>`)
+  await assert.rejects(spreadsheet(parts), /budget/)
 })

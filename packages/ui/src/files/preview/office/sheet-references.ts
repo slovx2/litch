@@ -7,7 +7,7 @@ function invalid(): never {
   throw new OfficeFailure('invalid')
 }
 /** 一张表只允许引用一个独占的部件；不让库把重复关系建模或悄悄覆盖 sheet 身份。 */
-export function checkSheetReferences(parts: Part[]): void {
+export function checkSheetReferences(parts: Part[]): Map<number, string> {
   const workbook = parts.find((part) => part.name === 'xl/workbook.xml')
   const relations = parts.find((part) => part.name === 'xl/_rels/workbook.xml.rels')
   if (!workbook || !relations) invalid()
@@ -25,6 +25,7 @@ export function checkSheetReferences(parts: Part[]): void {
     })
   })
   const seen = new Set<string>()
+  const sheets = new Map<number, string>()
   scanXml(decoder.decode(workbook.bytes), (tag) => {
     if (tag.local !== 'sheet') return
     const id = Object.values(tag.attributes).find(
@@ -39,5 +40,7 @@ export function checkSheetReferences(parts: Part[]): void {
     const path = target.pathname.slice(1)
     if (!/^xl\/worksheets\/[^/]+\.xml$/.test(path) || !names.has(path) || seen.has(path)) invalid()
     seen.add(path)
+    sheets.set(Number(tag.attributes.sheetId?.value), path)
   })
+  return sheets
 }

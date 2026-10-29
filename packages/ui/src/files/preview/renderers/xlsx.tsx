@@ -39,10 +39,9 @@ function regionCells(
       const text = sheet.cells[key] ?? ''
       const lastRow = merge?.bottom ?? row,
         lastCol = merge?.right ?? col
-      const edge = [
-        lastRow === frozenRows ? 'row' : '',
-        lastCol === frozenCols ? 'col' : '',
-      ].join(' ')
+      const edge = [lastRow === frozenRows ? 'row' : '', lastCol === frozenCols ? 'col' : ''].join(
+        ' ',
+      )
       cells.push(
         // biome-ignore lint/a11y/useSemanticElements: 虚拟单元格按绝对坐标定位，不使用浏览器表格布局。
         <div
@@ -107,21 +106,19 @@ function Grid({ sheet }: { sheet: SheetData }) {
     pinnedLeft = (col: number) => view.left + GUTTER + (col - 1) * WIDTH
   const cells = regionCells(sheet, [firstRow, lastRow], [firstCol, lastCol], rowTop, colLeft, '')
   if (frozenCols)
-    cells.push(
-      ...regionCells(sheet, [firstRow, lastRow], [1, frozenCols], rowTop, pinnedLeft, 'c'),
-    )
+    cells.push(...regionCells(sheet, [firstRow, lastRow], [1, frozenCols], rowTop, pinnedLeft, 'c'))
   if (frozenRows)
-    cells.push(
-      ...regionCells(sheet, [1, frozenRows], [firstCol, lastCol], pinnedTop, colLeft, 'r'),
-    )
+    cells.push(...regionCells(sheet, [1, frozenRows], [firstCol, lastCol], pinnedTop, colLeft, 'r'))
   if (frozenRows && frozenCols)
-    cells.push(
-      ...regionCells(sheet, [1, frozenRows], [1, frozenCols], pinnedTop, pinnedLeft, 'rc'),
-    )
+    cells.push(...regionCells(sheet, [1, frozenRows], [1, frozenCols], pinnedTop, pinnedLeft, 'rc'))
   const numbers = []
   for (let row = firstRow; row <= lastRow; row++)
     numbers.push(
-      <div className="office-row-number" key={`n${row}`} style={{ top: row * HEIGHT, left: view.left }}>
+      <div
+        className="office-row-number"
+        key={`n${row}`}
+        style={{ top: row * HEIGHT, left: view.left }}
+      >
         {row}
       </div>,
     )
@@ -217,6 +214,11 @@ export default function XlsxPreview({ data }: PreviewRendererProps) {
         </div>
       ) : (
         <>
+          {book.sheets[sheet]?.truncated ? (
+            <p className="office-note" data-truncated role="status">
+              {t('preview.xlsx.truncated')}
+            </p>
+          ) : null}
           {book.sheets[sheet] ? (
             <Grid key={sheet} sheet={book.sheets[sheet]} />
           ) : (

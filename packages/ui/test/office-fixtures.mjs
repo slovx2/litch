@@ -33,7 +33,12 @@ export async function docx(malicious = false) {
       : {}),
   })
 }
-export async function xlsx({ large = false, date1904 = false } = {}) {
+export async function xlsx({
+  large = false,
+  date1904 = false,
+  overflow = false,
+  frozen = false,
+} = {}) {
   const book = new ExcelJS.Workbook()
   book.properties.date1904 = date1904
   const sheet = book.addWorksheet('数据表')
@@ -53,6 +58,15 @@ export async function xlsx({ large = false, date1904 = false } = {}) {
   sheet.getCell('A8').value = '合并单元格'
   if (large)
     for (let row = 9; row <= 10_000; row++) sheet.getRow(row).values = [`第 ${row} 行`, row, '数据']
+  if (overflow) {
+    sheet.getCell('A10000').value = '最后可见行'
+    sheet.getCell('GR1').value = '最后可见列'
+    sheet.getCell('GS10001').value = '窗口外数据'
+  }
+  if (frozen) sheet.views = [{ state: 'frozen', xSplit: 7, ySplit: 20 }]
+  sheet.getCell('D2').value = true
+  sheet.getCell('D3').value = { formula: '1=2', result: false }
+  sheet.getCell('D4').value = { formula: '1-1', result: 0 }
   const second = book.addWorksheet('第二张表')
   second.addRow(['另一个工作表', '中文'])
   return new Uint8Array(await book.xlsx.writeBuffer())

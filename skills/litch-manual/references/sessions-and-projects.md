@@ -156,7 +156,10 @@ explain it:
   remain strings; numeric cells retain the precision saved by Excel.
   Both formats are limited to 10 MiB compressed and 40 MiB expanded, with additional XML/image
   complexity limits. XLSX accepts at most 100,000 cells in total, 100 sheets, 1,000 merge ranges,
-  8 MiB of cell text, and 10,000 rows / 200 columns per sheet; files beyond these limits show an explanation. Named ranges,
+  and 8 MiB of displayed cell text; files beyond these safety limits are rejected with an explanation.
+  Within those limits, a sheet exceeding 10,000 rows or 200 columns is cropped to its first 10,000 rows
+  and 200 columns, with a notice above the grid. Cells outside that view still count toward the workbook's
+  100,000-cell safety budget. Named ranges,
   validation rules and print settings are omitted before parsing. Closing,
   switching or refreshing the file terminates its parser and releases its preview. `.doc`, `.xls`,
   `.ppt` and `.pptx` remain unsupported; phone file viewing is unchanged.

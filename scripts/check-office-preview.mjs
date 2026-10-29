@@ -262,6 +262,47 @@ try {
     'sheet switch',
   )
   report.checks.push('XLSX 多sheet、文本、缓存/无缓存公式、10000行虚拟滚动')
+  assert.equal(
+    await open('cropped.xlsx', await xlsx({ overflow: true, frozen: true }), 'xlsx'),
+    'ready',
+  )
+  await until(() => evaluate('!!document.querySelector("[data-truncated]")'), '截断提示')
+  assert.equal(
+    await evaluate('document.querySelector("[data-truncated]").textContent'),
+    '仅显示前 10,000 行、200 列。',
+  )
+  assert.equal(
+    await evaluate('document.querySelector(".office-grid").getAttribute("aria-rowcount")'),
+    '10000',
+  )
+  assert.equal(
+    await evaluate('document.querySelector(".office-grid").getAttribute("aria-colcount")'),
+    '200',
+  )
+  assert.equal(
+    await evaluate('getComputedStyle(document.querySelector(".office-cell[data-num]")).textAlign'),
+    'right',
+  )
+  assert(await evaluate('document.querySelector(".office-grid").textContent.includes("FALSE")'))
+  const frozen = await evaluate(
+    '(()=>{const e=document.querySelector(\'.office-cell[data-region="rc"]\');const r=e.getBoundingClientRect();return {x:r.x,y:r.y}})()',
+  )
+  await evaluate('document.querySelector(".office-grid").scrollTo(1400,1200)')
+  await new Promise((resolve) => setTimeout(resolve, 120))
+  const pinned = await evaluate(
+    '(()=>{const e=document.querySelector(\'.office-cell[data-region="rc"]\');const r=e.getBoundingClientRect();return {x:r.x,y:r.y}})()',
+  )
+  assert.deepEqual(pinned, frozen)
+  assert(
+    !(await evaluate('document.querySelector(".office-grid").textContent.includes("窗口外数据")')),
+  )
+  writeFileSync(
+    join(out, 'xlsx-truncated-frozen.png'),
+    Buffer.from((await call('Page.captureScreenshot', { format: 'png' })).data, 'base64'),
+  )
+  await evaluate('document.querySelectorAll(".office-sheets button")[1].click()')
+  await until(() => evaluate('!document.querySelector("[data-truncated]")'), '其他表无截断提示')
+  report.checks.push('截断窗口与提示、切sheet清提示、数字右对齐、TRUE/FALSE和冻结窗格')
   for (const format of ['docx', 'xlsx']) {
     assert.equal(await open(`invalid.${format}`, new Uint8Array([1, 2, 3]), format), 'invalid')
     assert.equal(

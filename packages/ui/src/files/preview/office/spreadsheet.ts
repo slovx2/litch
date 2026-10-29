@@ -10,6 +10,12 @@ const ROWS = 10_000,
   CELLS = 100_000,
   FROZEN_ROWS = 10,
   FROZEN_COLUMNS = 3
+const MAX_ROW = 1_048_576,
+  MAX_COLUMN = 16_384
+interface SheetExtent {
+  rows: number
+  columns: number
+}
 const reject = (): never => {
   throw new OfficeFailure('budget')
 }
@@ -19,11 +25,12 @@ export function address(value: string): { row: number; column: number } {
   let column = 0
   for (const c of match[1] ?? '') column = column * 26 + c.charCodeAt(0) - 64
   const row = Number(match[2])
-  if (row > ROWS || column > COLUMNS) reject()
+  if (row > MAX_ROW || column > MAX_COLUMN) throw new OfficeFailure('invalid')
   return { row, column }
 }
 // ExcelJS 会展开合并范围；加载前限制真实节点、坐标和合并面积，不能在加载后才数。
-export function checkSheets(parts: Part[]): void {
+export function checkSheets(parts: Part[]): Map<string, SheetExtent> {
+  const extents = new Map<string, SheetExtent>()
   let cells = 0,
     strings = 0,
     merges = 0,
@@ -48,6 +55,8 @@ export function checkSheets(parts: Part[]): void {
     }
     if (!/^xl\/worksheets\/[^/]+\.xml$/.test(part.name)) continue
     if (++sheets > 100) reject()
+    const extent = { rows: 0, columns: 0 }
+    extents.set(part.name, extent)
     scanXml(xml, (tag) => {
       const kind = tag.local
       if (!['c', 'row', 'mergeCell'].includes(kind)) return
@@ -56,12 +65,15 @@ export function checkSheets(parts: Part[]): void {
       const ref = tag.attributes[kind === 'mergeCell' ? 'ref' : 'r']?.value
       if (!ref) throw new OfficeFailure('invalid')
       if (kind === 'row') {
-        if (!/^[1-9]\d*$/.test(ref) || Number(ref) > ROWS) reject()
+        if (!/^[1-9]\d*$/.test(ref) || Number(ref) > MAX_ROW) throw new OfficeFailure('invalid')
+        extent.rows = Math.max(extent.rows, Number(ref))
         return
       }
       const [first = '', last] = ref.split(':')
       const a = address(first),
         b = address(last ?? first)
+      extent.rows = Math.max(extent.rows, a.row, b.row)
+      extent.columns = Math.max(extent.columns, a.column, b.column)
       if (kind === 'mergeCell') {
         if (++mergeCount > 1000) reject()
         if (b.row < a.row || b.column < a.column) throw new OfficeFailure('invalid')
@@ -71,6 +83,34 @@ export function checkSheets(parts: Part[]): void {
     })
   }
   if (cells + merges > CELLS) reject()
+  return extents
+}
+
+function columnLabel(value: number): string {
+  let text = ''
+  for (let n = value; n > 0; n = Math.floor((n - 1) / 26))
+    text = String.fromCharCode(65 + ((n - 1) % 26)) + text
+  return text
+}
+/** 先核整本安全预算，再截取显示窗口；远端稀疏坐标不能让库分配巨型行数组。 */
+function clipWorksheet(xml: string, omitted: ReadonlySet<string>): string {
+  return withoutXmlNodes(xml, omitted, (tag) => {
+    if (tag.local === 'row') return Number(tag.attributes.r?.value) <= ROWS
+    if (tag.local === 'c') {
+      const cell = address(tag.attributes.r?.value ?? '')
+      return cell.row <= ROWS && cell.column <= COLUMNS
+    }
+    if (tag.local === 'mergeCell') {
+      const ref = tag.attributes.ref
+      const [first = '', last] = (ref?.value ?? '').split(':')
+      const start = address(first),
+        end = address(last ?? first)
+      if (start.row > ROWS || start.column > COLUMNS) return false
+      if (ref)
+        ref.value = `${first}:${columnLabel(Math.min(end.column, COLUMNS))}${Math.min(end.row, ROWS)}`
+    }
+    return true
+  })
 }
 function valueText(value: ExcelJS.CellValue): string {
   if (value == null) return ''
@@ -93,16 +133,23 @@ function valueText(value: ExcelJS.CellValue): string {
   return ''
 }
 /** 数字和日期（含公式保存的结果）按 Excel 的习惯靠右显示 */
-function isNumeric(cell: ExcelJS.Cell): boolean {
+function displayValue(cell: ExcelJS.Cell): ExcelJS.CellValue {
   const raw = cell.value
-  const value = raw && typeof raw === 'object' && 'result' in raw ? raw.result : raw
+  // value 的公式副本会丢掉 false/0；直接读取结果访问器，保留文件中已保存的假值。
+  if (raw && typeof raw === 'object' && ('formula' in raw || 'sharedFormula' in raw)) {
+    const result = cell.result
+    if (result !== undefined) return result
+  }
+  return raw
+}
+function isNumeric(cell: ExcelJS.Cell): boolean {
+  const value = displayValue(cell)
   return (typeof value === 'number' && Number.isFinite(value)) || value instanceof Date
 }
 /** 常见十进制/千分位/百分比格式；复杂自定义格式保留值，不猜测货币或地区日期。 */
 function cellText(cell: ExcelJS.Cell): string {
-  const raw = cell.value
-  const value = raw && typeof raw === 'object' && 'result' in raw ? raw.result : raw
-  if (typeof value !== 'number' || !Number.isFinite(value)) return valueText(raw)
+  const value = displayValue(cell)
+  if (typeof value !== 'number' || !Number.isFinite(value)) return valueText(value)
   const format = cell.numFmt?.split(';')[0] ?? ''
   if (!/^[#0,]+(?:\.[0#]+)?%?$/.test(format)) return String(value)
   const fraction = format.split('.')[1]?.replace('%', '') ?? ''
@@ -114,8 +161,9 @@ function cellText(cell: ExcelJS.Cell): string {
   }).format(value)
 }
 export async function spreadsheet(parts: Part[]): Promise<WorkbookData> {
-  checkSheetReferences(parts)
-  checkSheets(parts)
+  const targets = checkSheetReferences(parts)
+  const extents = checkSheets(parts)
+  const referenced = new Set(targets.values())
   const zip = new JSZip()
   const omitted = new Set([
     'definedNames',
@@ -134,6 +182,7 @@ export async function spreadsheet(parts: Part[]): Promise<WorkbookData> {
     'pageMargins',
     'headerFooter',
     'autoFilter',
+    'dimension',
   ])
   // 只给库数据预览需要的部件，避免 Node/打印/图片及其他格式功能扩大解析面。
   for (const part of parts) {
@@ -143,7 +192,10 @@ export async function spreadsheet(parts: Part[]): Promise<WorkbookData> {
       )
     )
       continue
-    if (part.name === 'xl/workbook.xml' || part.name.startsWith('xl/worksheets/'))
+    if (part.name.startsWith('xl/worksheets/')) {
+      if (referenced.has(part.name))
+        zip.file(part.name, clipWorksheet(new TextDecoder().decode(part.bytes), omitted))
+    } else if (part.name === 'xl/workbook.xml')
       zip.file(part.name, withoutXmlNodes(new TextDecoder().decode(part.bytes), omitted))
     else zip.file(part.name, part.bytes)
   }
@@ -156,7 +208,9 @@ export async function spreadsheet(parts: Part[]): Promise<WorkbookData> {
   let count = 0,
     textBytes = 0
   for (const sheet of book.worksheets) {
-    if (sheet.rowCount > ROWS || sheet.columnCount > COLUMNS) reject()
+    const path = targets.get(sheet.id),
+      extent = path ? extents.get(path) : undefined
+    if (!extent) throw new OfficeFailure('invalid')
     const cells: Record<string, string> = Object.create(null)
     const numeric: Record<string, true> = Object.create(null)
     sheet.eachRow((row) =>
@@ -190,8 +244,9 @@ export async function spreadsheet(parts: Part[]): Promise<WorkbookData> {
         : { rows: 0, columns: 0 }
     sheets.push({
       name: sheet.name,
-      rows: sheet.rowCount,
-      columns: sheet.columnCount,
+      rows: Math.min(extent.rows, ROWS),
+      columns: Math.min(extent.columns, COLUMNS),
+      truncated: extent.rows > ROWS || extent.columns > COLUMNS,
       cells,
       numeric,
       frozen,
