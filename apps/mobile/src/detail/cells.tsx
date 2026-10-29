@@ -47,7 +47,7 @@ const pressed = (c: Palette) => ({ backgroundColor: c.press })
 
 /** 别的会话发来的话超过这么多行、字先收起来 */
 const PEER_LINES = 4
-const PEER_CHARS = 200
+const _PEER_CHARS = 200
 
 export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
   const theme = useTheme()
@@ -65,12 +65,34 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
   const comments = replies || peer ? null : commentsOfRow(row)
   const text = comments ? comments.rest : row.text
   // 别的会话发来的长话先收成几行，点一下在原处展开、再点收起
-  const folds =
-    peer !== undefined && (text.length > PEER_CHARS || text.split('\n').length > PEER_LINES)
+  const folds = peer !== undefined
   const menu = () => {
     notePressed(row.turnId, row.key)
     turnMenu(row.turnId)
   }
+  if (peer && !row.expanded)
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: !!row.expanded }}
+        onPress={() => toggle(row.key, row.turnId)}
+        testID="peer-message"
+        style={{ marginHorizontal: 16, marginVertical: 4, paddingVertical: 8 }}
+      >
+        <Text numberOfLines={1} style={{ color: c.ink2, fontSize: font.size.meta }}>
+          ✉ {peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')} · {text}{' '}
+          {row.expanded ? '⌄' : '›'}
+        </Text>
+        {row.expanded ? (
+          <Text
+            selectable
+            style={{ color: c.ink2, fontSize: font.size.meta, lineHeight: 19, marginTop: 6 }}
+          >
+            {text}
+          </Text>
+        ) : null}
+      </Pressable>
+    )
   return (
     <View style={styles.userWrap}>
       <Pressable

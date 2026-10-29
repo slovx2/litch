@@ -119,13 +119,24 @@ function PendingCard({
           void send(text.trim() || picked || '')
         }}
       >
-        <input
+        <textarea
           className="req-input"
           aria-label={t('ask.reply')}
           placeholder={t('ask.other')}
           value={text}
           disabled={!enabled || busy}
           onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (
+              event.key !== 'Enter' ||
+              event.shiftKey ||
+              event.nativeEvent.isComposing ||
+              event.keyCode === 229
+            )
+              return
+            event.preventDefault()
+            void send(text.trim() || picked || '')
+          }}
         />
         <button
           className="btn"

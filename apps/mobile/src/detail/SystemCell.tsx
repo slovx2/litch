@@ -44,7 +44,6 @@ function Head({ system }: { system: SystemMessageView }) {
 
 export const SystemCell = memo(function SystemCell({ row }: Props<'system'>) {
   const { c, font } = useTheme()
-  const t = useT()
   const toggle = useToggleInPlace()
   const { system } = row
   const title = system.kind === 'scheduledTask' ? '' : system.title
@@ -60,22 +59,20 @@ export const SystemCell = memo(function SystemCell({ row }: Props<'system'>) {
         pressed ? { backgroundColor: c.press } : null,
       ]}
     >
-      <Head system={system} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+        <View style={{ maxWidth: '45%', flexShrink: 1 }}>
+          <Head system={system} />
+        </View>
+        <Text numberOfLines={1} style={{ flex: 1, color: c.ink2, fontSize: font.size.meta }}>
+          {[title, system.prompt].filter(Boolean).join(' · ')}
+        </Text>
+        <Text style={{ color: c.ink3 }}>{row.expanded ? '⌄' : '›'}</Text>
+      </View>
       {row.expanded ? (
         <Text selectable style={[styles.body, { color: c.ink2, fontSize: font.size.meta }]}>
           {row.text}
         </Text>
-      ) : (
-        <Text numberOfLines={2} style={[styles.body, { color: c.ink2, fontSize: font.size.meta }]}>
-          {title ? <Text style={{ color: c.ink, fontWeight: '600' }}>{`${title} `}</Text> : null}
-          {system.prompt}
-        </Text>
-      )}
-      <View style={styles.foot}>
-        <Text style={{ color: c.accent, fontSize: font.size.small + 1 }}>
-          {t(row.expanded ? 'sysmsg.collapse' : 'sysmsg.expand')}
-        </Text>
-      </View>
+      ) : null}
     </Pressable>
   )
 })

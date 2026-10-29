@@ -293,8 +293,9 @@ export function QuestionCard(props: CardProps<QuestionRequest>) {
           autoCorrect={!question.secret}
           editable={!busy}
           accessibilityLabel={question.header || question.question}
-          onSubmitEditing={forward}
-          submitBehavior="submit"
+          multiline={!question.secret}
+          onSubmitEditing={question.secret ? forward : undefined}
+          submitBehavior={question.secret ? 'submit' : 'newline'}
           testID="request:other"
           style={[
             styles.input,

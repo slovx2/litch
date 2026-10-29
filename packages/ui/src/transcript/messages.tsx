@@ -133,8 +133,44 @@ export const UserMessage = memo(function UserMessage({
     )
   const event = item.event
   if (event && !said && item.attachments.length === 0) {
-    return <SessionEventBar deviceId={ref.deviceId} event={event} anchor={`u:${ref.itemId}`} />
+    return (
+      <SessionEventBar
+        sessionId={ref.sessionId}
+        itemId={ref.itemId}
+        deviceId={ref.deviceId}
+        event={event}
+        anchor={`u:${ref.itemId}`}
+      />
+    )
   }
+  if (peer)
+    return (
+      <div className="sev sysm" data-peer="" data-anchor={`u:${ref.itemId}`} ref={bubble}>
+        <button
+          type="button"
+          className="compact-message"
+          aria-expanded={open}
+          onClick={() => {
+            pin(bubble.current)
+            setOpen(!open)
+          }}
+        >
+          <span aria-hidden="true">✉</span>
+          <span className="compact-source">
+            {peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')}
+          </span>
+          <span className="ell grow">{text}</span>
+          <span>{open ? '⌄' : '›'}</span>
+        </button>
+        {open ? (
+          <>
+            <PeerHead deviceId={ref.deviceId} peer={peer} />
+            <UserAttachments attachments={item.attachments} />
+            <div className="sysm-full">{text}</div>
+          </>
+        ) : null}
+      </div>
+    )
   const message = item.system ? (
     <SystemCard {...ref} item={item} system={item.system} />
   ) : (
@@ -179,7 +215,12 @@ export const UserMessage = memo(function UserMessage({
   if (!event) return message
   return (
     <>
-      <SessionEventBar deviceId={ref.deviceId} event={event} />
+      <SessionEventBar
+        sessionId={ref.sessionId}
+        itemId={ref.itemId}
+        deviceId={ref.deviceId}
+        event={event}
+      />
       {message}
     </>
   )

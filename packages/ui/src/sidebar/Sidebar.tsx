@@ -109,7 +109,7 @@ interface RowProps {
   sessionId: string
   selected: boolean
   onSelect(selection: Selection): void
-  /** 挂在父会话下面的子会话：行上只有状态点和名字，别的在信息卡里 */
+  /** 挂在父会话下面的子会话：行上显示状态点、名字与 harness，别的在信息卡里 */
   nested?: boolean
   /** 下面挂着几个子会话。有的话行首左边一个收起、展开的小箭头 */
   kids?: number
@@ -451,15 +451,16 @@ const SessionRow = memo(function SessionRow({
             </span>
           ) : null}
           {summary.task ? <TaskMark kind={summary.task.kind} /> : null}
+          <span
+            className={down ? 'chip off' : 'chip'}
+            title={down ? downText(down, 'chip', t) : nameOf(device, summary.harness)}
+          >
+            {badgeOf(device, summary.harness)}
+          </span>
           {nested ? null : (
             <>
               <BrowserWants deviceId={deviceId} sessionId={sessionId} />
-              <span
-                className={down ? 'chip off' : 'chip'}
-                title={down ? downText(down, 'chip', t) : nameOf(device, summary.harness)}
-              >
-                {badgeOf(device, summary.harness)}
-              </span>
+
               {summary.status === 'waiting' ? (
                 <span className="pill wait">
                   {t(

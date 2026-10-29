@@ -142,7 +142,9 @@ export async function cardsProbe(real: boolean): Promise<CardsProbe> {
     press(from, '2')
     if (real) {
       const field = await until('第二问的输入框', () =>
-        all('.req .opt').length > 0 ? null : one<HTMLInputElement>('.req input.req-input'),
+        all('.req .opt').length > 0
+          ? null
+          : one<HTMLInputElement | HTMLTextAreaElement>('.req .req-input'),
       )
       await frame()
       write(field, '别动数据库')
@@ -414,7 +416,7 @@ export async function cardRoomProbe(real: boolean, terminal: boolean): Promise<C
   }
   await frame()
   const target =
-    one('.req input.req-input') ??
+    one('.req .req-input') ??
     all('.req .opt')
       .filter((option) => option.getAttribute('aria-checked') === 'true')
       .at(-1)
@@ -439,7 +441,7 @@ export async function cardRoomProbe(real: boolean, terminal: boolean): Promise<C
 
   // 把请求答掉，收拾好
   if (real) {
-    const field = one<HTMLInputElement>('.req input.req-input')
+    const field = one<HTMLInputElement | HTMLTextAreaElement>('.req .req-input')
     // 挪到了“其他”上：写一句回车就是答了；不然按数字键选第二个
     if (field) {
       write(field, '只改适配器')
@@ -450,7 +452,9 @@ export async function cardRoomProbe(real: boolean, terminal: boolean): Promise<C
       press(card, '2')
     }
     const next = await until('第二问的输入框', () =>
-      all('.req .opt').length > 0 ? null : one<HTMLInputElement>('.req input.req-input'),
+      all('.req .opt').length > 0
+        ? null
+        : one<HTMLInputElement | HTMLTextAreaElement>('.req .req-input'),
     )
     await frame()
     write(next, '别动数据库')

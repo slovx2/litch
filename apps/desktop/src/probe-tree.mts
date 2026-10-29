@@ -1,6 +1,6 @@
 // 会话树的验收（对着模拟核心）：由 scripts/smoke.mjs --tree 起（npm run check:tree）。
 // 模拟核心里说“派子会话”“提个子会话”“用子代理”各演一出（packages/core/src/mock/mock-tree.mts），这里照着点：
-//   侧栏里子会话挂在父会话下面、能收起展开，子会话的行上只有状态点和名字；
+//   侧栏里子会话挂在父会话下面、能收起展开，子会话的行上显示状态点、名字与 harness；
 //   派出卡片点了跳到子会话，子会话最上面一行写着由谁派出、点了回去，能脱离成独立会话；
 //   注入的回报、唤醒画成系统提示条，不是用户的气泡，原文里的标签不露出来；
 //   提案卡片（建议任务）在对话流里：等着的有“开始”“改了再开始”“不要”，开始了的能点进子会话，
@@ -20,7 +20,7 @@ import type { BrowserWindow } from 'electron'
 import { pendingLooks } from './probe-pending-asks.mjs'
 
 export interface TreeSeen {
-  /** 派子会话：侧栏里两个子会话挂在父会话下面，行上只有状态点和名字 */
+  /** 派子会话：侧栏里两个子会话挂在父会话下面，行上显示状态点、名字与 harness */
   nested: boolean
   bareRows: boolean
   /** 收起之后看不到子会话，箭头说“展开 2 个子会话”；再点展开回来 */
@@ -152,7 +152,9 @@ export async function treeProbe(): Promise<TreeSeen> {
   const nested = await until(() => kids().length === 2)
   const node = $(`.row-line[data-session="${PARENT}"]`)?.closest('.tree-node')
   const inside = kids().every((row) => node?.contains(row) && row.closest('.tree-kids') !== null)
-  const bareRows = kids().every((row) => !row.querySelector('.chip, .time, .pill'))
+  const bareRows = kids().every(
+    (row) => row.querySelector('.chip[title]') && !row.querySelector('.time, .pill'),
+  )
   seen.kids = kids()
     .map((row) => row.textContent ?? '')
     .join(' | ')
@@ -170,6 +172,9 @@ export async function treeProbe(): Promise<TreeSeen> {
   const unfolded = kids().length === 2
 
   // 唤醒：两个子会话都停下之后父会话被唤醒
+  await until(() => $('.main .sev[data-event="wake"]') !== null, 15000)
+  $('.main .sev[data-event="wake"] button.compact-message')?.click()
+  await sleep(100)
   const wakeBar = await until(
     () => ($('.main .sev[data-event="wake"]')?.querySelectorAll('.sev-note').length ?? 0) === 2,
     15000,
@@ -806,7 +811,7 @@ export async function treeLooks(parent: string): Promise<TreeLooks> {
 
 const LABELS: Record<Exclude<keyof TreeSeen, 'seen'>, string> = {
   nested: '派出的两个子会话挂在父会话下面',
-  bareRows: '子会话的行上只有状态点和名字',
+  bareRows: '子会话行显示状态、名字与 harness，省略时间',
   folded: '收起之后子会话不见了，箭头写着展开几个',
   unfolded: '再点一下展开回来',
   spawnCards: '对话里两张派出卡片',

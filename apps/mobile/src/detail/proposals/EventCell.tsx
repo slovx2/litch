@@ -16,6 +16,7 @@ import { type Key, useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import type { Props } from '../cells'
 import { useTranscript } from '../context'
+import { useCardOpen } from '../use-card-open'
 
 const HEAD = {
   notes: 'tree.event.notes',
@@ -45,10 +46,7 @@ function Note({
       onPress={() => openSession(note.threadId)}
       style={({ pressed }) => [styles.note, pressed ? { backgroundColor: c.press } : null]}
     >
-      <Text
-        numberOfLines={3}
-        style={{ color: c.ink2, fontSize: font.size.small + 1, lineHeight: 18 }}
-      >
+      <Text style={{ color: c.ink2, fontSize: font.size.small + 1, lineHeight: 18 }}>
         <Text style={{ color: listed ? c.accent : c.ink2 }}>{head}</Text>
         {body ? `：${body}` : ''}
       </Text>
@@ -58,28 +56,53 @@ function Note({
 
 function EventBar({
   testID,
+  id,
   head,
   notes,
 }: {
   testID: string
+  id: string
   head: Key
   notes: SessionNoteView[]
 }) {
+  const [open, toggle] = useCardOpen(id)
   const { c, font } = useTheme()
   const t = useT()
   const { deviceId, openSession } = useTranscript()
   return (
     <View testID={testID} style={[styles.bar, { borderLeftColor: c.line2 }]}>
-      <Text style={[styles.head, { color: c.ink3, fontFamily: font.mono }]}>ⓘ {t(head)}</Text>
-      {notes.map((note) => (
-        <Note key={note.threadId} deviceId={deviceId} note={note} openSession={openSession} />
-      ))}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={toggle}
+        style={{ minHeight: 36, justifyContent: 'center' }}
+      >
+        <Text numberOfLines={1} style={[styles.head, { color: c.ink3, fontFamily: font.mono }]}>
+          ⓘ {t(head)} ·{' '}
+          {notes
+            .map((n) => [n.title || n.threadId, n.excerpt || n.error].filter(Boolean).join('：'))
+            .join(' · ')}{' '}
+          {open ? '⌄' : '›'}
+        </Text>
+      </Pressable>
+      {open
+        ? notes.map((note) => (
+            <Note key={note.threadId} deviceId={deviceId} note={note} openSession={openSession} />
+          ))
+        : null}
     </View>
   )
 }
 
 export const EventCell = memo(function EventCell({ row }: Props<'event'>) {
-  return <EventBar testID={`session-event:${row.kind}`} head={HEAD[row.kind]} notes={row.notes} />
+  return (
+    <EventBar
+      id={row.key}
+      testID={`session-event:${row.kind}`}
+      head={HEAD[row.kind]}
+      notes={row.notes}
+    />
+  )
 })
 
 /** 这个会话还排着、没交给模型的子会话回报 */

@@ -170,9 +170,10 @@ function SummaryLine({
   )
 }
 
-/** 子会话的一行：缩进、每一层一根竖线，状态记号、标题、定时任务记号（和桌面侧栏一样不写 harness、时间） */
+/** 子会话的一行：缩进、每一层一根竖线，状态记号、标题、定时任务记号、harness 徽标 */
 function ChildLine({
   summary,
+  device,
   depth,
   onPress,
   onLongPress,
@@ -181,6 +182,7 @@ function ChildLine({
 }: {
   summary: SessionSummary
   depth: number
+  device: DeviceView | undefined
   onPress(): void
   onLongPress(): void
   testID: string
@@ -228,6 +230,23 @@ function ChildLine({
         ]}
       >
         {titleOf(summary, t)}
+      </Text>
+      <Text
+        accessibilityLabel={
+          device?.harnesses.find((entry) => entry.id === summary.harness)?.name ?? summary.harness
+        }
+        testID={`${testID}:harness`}
+        style={[
+          styles.badge,
+          {
+            color: c.ink2,
+            borderColor: c.line2,
+            fontFamily: theme.font.mono,
+            borderRadius: theme.radius.s,
+          },
+        ]}
+      >
+        {badgeOf(device, summary.harness)}
       </Text>
       {summary.task ? (
         <Text
@@ -321,6 +340,7 @@ export const SessionRow = memo(function SessionRow({
   if (depth > 0)
     return (
       <ChildLine
+        device={device}
         summary={summary}
         depth={depth}
         testID={testID}

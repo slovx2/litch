@@ -14,6 +14,7 @@ import { Caret, Icon } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { useActions } from '../transcript/actions.tsx'
+import { useToggle } from '../transcript/state.ts'
 
 const HEAD_TEXT = {
   notes: 'tree.event.notes',
@@ -70,22 +71,40 @@ function Note({
 
 export function SessionEventBar({
   deviceId,
+  sessionId,
+  itemId,
   event,
   anchor,
 }: {
   deviceId: string
+  sessionId: string
+  itemId: string
   event: SessionEventView
   /** 这条消息没有用户自己的话（唤醒的回合）时，滚动定位的标记打在这一条上 */
   anchor?: string | undefined
 }) {
   const t = useT()
+  const [open, setOpen] = useToggle(`${deviceId}:${sessionId}`, `event:${itemId}`, false)
   return (
     <div className="sev" data-event={event.kind} data-anchor={anchor}>
-      <div className="sev-head">
+      <button
+        type="button"
+        className="compact-message"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
         <Icon name="info" small />
-        <span>{t(HEAD_TEXT[event.kind])}</span>
-      </div>
-      {event.notes.length > 0 ? (
+        <span className="compact-source">{t(HEAD_TEXT[event.kind])}</span>
+        <span className="ell grow">
+          {event.notes
+            .map((note) =>
+              [note.title || note.threadId, note.excerpt || note.error].filter(Boolean).join('：'),
+            )
+            .join(' · ')}
+        </span>
+        <span>{open ? '⌄' : '›'}</span>
+      </button>
+      {open && event.notes.length > 0 ? (
         <ul className="sev-notes">
           {event.notes.map((note) => (
             <Note key={note.threadId} deviceId={deviceId} note={note} />

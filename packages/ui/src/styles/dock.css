@@ -1019,3 +1019,9 @@ a.btn {
   flex: 1;
   min-width: 0;
 }
+
+textarea.req-input {
+  min-height: 72px;
+  resize: vertical;
+  line-height: 1.5;
+}

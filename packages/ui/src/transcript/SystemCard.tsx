@@ -67,29 +67,34 @@ export function SystemCard({
   const card = useRef<HTMLDivElement | null>(null)
   const [open, setOpen] = useToggle(`${ref.deviceId}:${ref.sessionId}`, `u:${ref.itemId}`, false)
   const title = system.kind === 'scheduledTask' ? '' : system.title
+  const label =
+    system.kind === 'scheduledTask'
+      ? t('sysmsg.scheduledTask', { name: system.task })
+      : system.kind === 'briefing'
+        ? t('sysmsg.from', { name: system.parent.title || system.parent.id })
+        : t('sysmsg.here')
   return (
     <div className="sev sysm" data-anchor={`u:${ref.itemId}`} data-sys={system.kind} ref={card}>
-      <Head deviceId={ref.deviceId} system={system} />
-      {open ? (
-        <div className="sysm-full">{item.text}</div>
-      ) : (
-        <div className="sysm-sum">
-          {title ? <span className="sysm-title">{title}</span> : null}
-          {title ? ' ' : null}
-          {system.prompt}
-        </div>
-      )}
       <button
         type="button"
-        className="mini sysm-toggle"
+        className="compact-message"
         aria-expanded={open}
         onClick={() => {
           pin(card.current)
           setOpen(!open)
         }}
       >
-        {t(open ? 'sysmsg.collapse' : 'sysmsg.expand')}
+        <Icon name={ICON[system.kind]} small />
+        <span className="compact-source">{label}</span>
+        <span className="ell grow">{[title, system.prompt].filter(Boolean).join(' · ')}</span>
+        <span>{open ? '⌄' : '›'}</span>
       </button>
+      {open ? (
+        <>
+          <Head deviceId={ref.deviceId} system={system} />
+          <div className="sysm-full">{item.text}</div>
+        </>
+      ) : null}
     </div>
   )
 }

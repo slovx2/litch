@@ -350,14 +350,14 @@ export class SessionTree {
 
   // ---------- 回合与请求 ----------
 
-  /** 客户端用 turn/start 发起的回合（turn/start 的应答回来了） */
+  /** 客户端发起回合或插话成功：用户输入的归属保持到该回合结束 */
   clientTurn(harness: string, turnId: string): void {
     // 回合结束时删；没看到结束的（这条连接没订阅那个会话）不能一直攒着
     if (this.clientTurns.size >= ENDED_LIMIT) this.clientTurns.clear()
     this.clientTurns.add(`${harness}\u0000${turnId}`)
   }
 
-  /** 这个回合是不是客户端带着用户的话发起的（不是唤醒、不是设备进程发的、不是引擎自己续跑的） */
+  /** 这个回合里有没有客户端成功送入的用户输入（设备回报与引擎续跑不算） */
   isUserTurn(harness: string, turnId: string): boolean {
     return this.clientTurns.has(`${harness}\u0000${turnId}`)
   }

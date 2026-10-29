@@ -31,6 +31,12 @@ sidebar.
 
 ## Sessions
 
+### 问题结果与输入
+
+已答问题默认收成一行，显示已答题数和答案摘要；展开后，每题的选择或自由文字统一显示在“回答”区域，其他选项默认折叠。系统消息（子会话回报、定时任务、会话间消息、在这里做等）也默认显示一行来源与摘要，点击展开全文；开合状态按会话保留。桌面问题输入框支持 Shift+Enter 换行、Enter 确认；输入法组字时的 Enter 只确认候选。手机多行输入用回车换行，使用卡片按钮提交。
+子会话在桌面侧栏、手机列表、任务卡和会话详情中显示 harness 标识。
+用户在自动唤醒的回合中插话成功后，该回合也按用户回合处理；后来的自动消息不会覆盖这个来源。
+
 ### 待答问题
 
 桌面和手机的输入框上方会保留收尾问题与异步提问。子会话回报、定时任务、会话间消息和后台唤醒不会清掉它们。
@@ -86,6 +92,7 @@ explain it:
   (the composer's placeholder says which). Codex, Claude Code, Pi, DSH and OpenCode take images
   mid-turn; ACP agents (Gemini, Qwen and the generic ACP entry) take no messages mid-turn. "Send now"
   on a queued message puts it into the running turn. With nothing typed the button is Stop, which interrupts the turn.
+- Answered question cards and system messages default to one-line summaries; expand them to read the details. Expansion is remembered within the session. Answers use a labeled answer area for both selected options and free text; other options are collapsed. Desktop question fields use Shift+Enter for a newline and Enter to confirm, respecting IME composition. Mobile multiline fields use Return for a newline and the card buttons to submit. Child sessions show their harness in the sidebar/list, cards, and details. A successful user interruption during an automated turn makes that turn user-driven.
 - **Approvals and questions** appear as cards above the composer: commands, file changes, extra
   permissions, MCP tools (Allow once / Allow for this session / Always allow / Decline / Decline and
   stop, or decline with a note for the model); multi-question forms; plan confirmation (Run the plan /

@@ -17,5 +17,8 @@ export const zhAsks = {
   'ask.queued': '当前回合无法插入消息，回答已排队，将在回合结束后发送',
   'ask.skipped': '已跳过',
   'ask.replied': '已回答问题',
+  'ask.answeredCount': '已答 {count} 题',
+  'ask.answer': '回答',
+  'ask.options': '查看其他选项',
   'ask.picked': '已选',
 } satisfies Record<string, Entry>

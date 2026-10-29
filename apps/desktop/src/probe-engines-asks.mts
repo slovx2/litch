@@ -136,7 +136,7 @@ export async function enginesQuestion(
       option?.click()
     } else {
       const field = await until('自己填的那一栏', () =>
-        one<HTMLInputElement>('input.req-input', shown),
+        one<HTMLInputElement | HTMLTextAreaElement>('.req-input', shown),
       )
       write(field, typed)
       await frame()

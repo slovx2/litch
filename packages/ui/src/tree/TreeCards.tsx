@@ -249,7 +249,7 @@ export const TreeCard = memo(function TreeCard(ref: ItemRef) {
   if (item?.kind === 'agentMessage') return <AskCard {...ref} />
   if (item?.kind !== 'toolCall') return null
   // 问用户的工具（AskUserQuestion 等）：问答卡片
-  if (item.asked) return <AskedCard item={item} />
+  if (item.asked) return <AskedCard item={item} deviceId={ref.deviceId} sessionId={ref.sessionId} />
   if (item.wrapUp) return <WrapUpCards {...ref} item={item} />
   if (item.spawned?.via === 'offer') return <OfferCard {...ref} item={item} />
   // 降成提案、还没直接起出子会话的：建议任务的卡片

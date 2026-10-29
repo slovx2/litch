@@ -53,7 +53,7 @@ export interface RelayBackground {
 }
 
 export interface RelaySessions {
-  /** 这条连接发起的回合（turn/start 的应答回来了）：客户端发起的才算用户的回合 */
+  /** 客户端发起或成功插话的回合：只要收到用户输入就算用户回合 */
   clientTurn(harness: string, turnId: string): void
   /** 一个回合开始或结束了（turn/started、turn/completed 的参数） */
   turnEvent(harness: string, method: string, params: Record<string, unknown>): void
@@ -231,6 +231,9 @@ export class Relay {
       this.host.clientTools.turnStarted(link, turn.id)
       this.host.sessions.clientTurn(link.harness, turn.id)
     }
+    // 用户可以在自发回合中插话；按成功应答里的真实回合登记，失败或设备自己的插话不经过这里。
+    if (method === 'turn/steer' && typeof result.turnId === 'string')
+      this.host.sessions.clientTurn(link.harness, result.turnId)
   }
 
   /** 上游说成了：把设备层这边该记的记上 */

@@ -96,6 +96,8 @@ function PendingCard({ question, store }: { question: PendingQuestion; store: Se
       {picked ? <Text style={{ color: c.ink2 }}>{picked}</Text> : null}
       <View style={styles.actions}>
         <TextInput
+          multiline
+          submitBehavior="newline"
           accessibilityLabel={t('ask.reply')}
           placeholder={t('ask.other')}
           placeholderTextColor={c.ink3}

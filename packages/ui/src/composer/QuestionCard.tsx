@@ -58,6 +58,7 @@ function QuestionPage(props: PageProps) {
   const t = useT()
   const options = question.options ?? []
   const other = entry?.kind === 'other'
+  const Input = question.secret ? 'input' : 'textarea'
   const text = entry?.kind === 'other' ? entry.text : ''
   return (
     <>
@@ -105,7 +106,7 @@ function QuestionPage(props: PageProps) {
           </div>
         ) : null}
         {options.length === 0 || other ? (
-          <input
+          <Input
             className="req-input"
             type={question.secret ? 'password' : 'text'}
             value={text}
@@ -116,10 +117,14 @@ function QuestionPage(props: PageProps) {
             onKeyDown={(event) => {
               // 输入法还在选词：这个回车是确认候选，方向键是在候选里挑
               if (event.nativeEvent.isComposing || event.keyCode === 229) return
-              if (event.key === 'Enter') {
+              if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault()
                 props.onEnter()
-              } else if (event.key === 'ArrowUp' && options.length > 0) {
+              } else if (
+                event.key === 'ArrowUp' &&
+                options.length > 0 &&
+                event.currentTarget.selectionStart === 0
+              ) {
                 event.preventDefault()
                 props.onLeave()
               }
@@ -270,7 +275,7 @@ export function QuestionCard(props: CardProps<QuestionRequest>) {
     if (busyWriting(active) && !inside) return
     // 焦点在卡片外别的东西上（侧栏的某一行）：那是人放过去的，自己前进的时候不抢
     if (!first && !inside && active !== document.body) return
-    const field = node.querySelector<HTMLInputElement>('input.req-input')
+    const field = node.querySelector<HTMLInputElement | HTMLTextAreaElement>('.req-input')
     if (field) field.focus({ preventScroll: true })
     // 原来拿着焦点的那个选项随着翻题没了：焦点落回卡片上，键盘接着能用
     else if (first || !inside || active === document.body) node.focus({ preventScroll: true })
@@ -290,7 +295,7 @@ export function QuestionCard(props: CardProps<QuestionRequest>) {
     }
     const item =
       node.querySelector<HTMLElement>('.req-hint.err') ??
-      node.querySelector<HTMLElement>('input.req-input') ??
+      node.querySelector<HTMLElement>('.req-input') ??
       node.querySelector<HTMLElement>('.opt[aria-checked="true"]')
     if (item) reveal(node, item)
   }, [questionId, chosen, nagged])

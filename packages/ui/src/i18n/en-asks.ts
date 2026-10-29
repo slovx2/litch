@@ -17,5 +17,8 @@ export const enAsks: Record<keyof typeof zhAsks, Entry> = {
     'This turn can’t take input now. Your answer is queued and sent when the turn ends.',
   'ask.skipped': 'Skipped',
   'ask.replied': 'Answered a question',
+  'ask.answeredCount': '{count} answered',
+  'ask.answer': 'Answer',
+  'ask.options': 'View other options',
   'ask.picked': 'Selected',
 }

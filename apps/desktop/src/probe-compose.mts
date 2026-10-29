@@ -696,7 +696,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
       checked: () =>
         all('.opt').findIndex((option) => option.getAttribute('aria-checked') === 'true'),
       label: (index: number) => all('.opt')[index]?.querySelector('.tx b')?.textContent ?? '',
-      field: () => one<HTMLInputElement>('.req input.req-input'),
+      field: () => one<HTMLInputElement | HTMLTextAreaElement>('.req .req-input'),
       act: (name: string) => one<HTMLButtonElement>(`.req [data-act="${name}"]`),
       note: () => one('.req-hint.err')?.textContent ?? '',
     }

@@ -11,23 +11,37 @@ import { memo } from 'react'
 import { useT } from '../app/appearance.ts'
 import { useKey } from '../app/services.tsx'
 import { type ItemRef, useItem } from './messages.tsx'
+import { useToggle } from './state.ts'
 
 const NO_ANSWERS: AskAnswers = {}
 export const AskCard = memo(function AskCard(ref: ItemRef) {
   const t = useT()
+  const [open, setOpen] = useToggle(`${ref.deviceId}:${ref.sessionId}`, `ask:${ref.itemId}`, false)
   const item = useItem<AgentMessageItem>(ref)
   const answers = useKey<AskAnswers>(keys.answers(ref.deviceId, ref.sessionId)) ?? NO_ANSWERS
   const answered = item?.questions?.filter((q) => answers[q.id] !== undefined) ?? []
   if (answered.length === 0) return null
   return (
     <section className="ask" data-card="ask" data-state="answered">
-      <div className="ask-head">{t('ask.state.answered')}</div>
-      {answered.map((q) => (
-        <div className="ask-q" key={q.id}>
-          <div className="ask-text">{q.title}</div>
-          <div className="ask-answer">{answers[q.id]}</div>
-        </div>
-      ))}
+      <button
+        type="button"
+        className="ask-head ask-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <span>{open ? '⌄' : '›'}</span>
+        <span>{t('ask.title')}</span>
+        <span>{t('ask.answeredCount', { count: answered.length })}</span>
+        {!open ? <span className="ell dim grow">{answers[answered[0]?.id ?? '']}</span> : null}
+      </button>
+      {open
+        ? answered.map((q) => (
+            <div className="ask-q" key={q.id}>
+              <div className="ask-text">{q.title}</div>
+              <Answer text={answers[q.id] ?? ''} />
+            </div>
+          ))
+        : null}
     </section>
   )
 })
@@ -56,11 +70,20 @@ function askedState(item: ToolCallItem): 'open' | 'answered' | 'closed' {
 
 /**
  * 问用户的工具（AskUserQuestion 等，核心的 ToolCallItem.asked）画成的问答卡片，和上面答过的问题卡片一个样子：
- * 每题是题头、题目、选项（选中的打勾），自己写的回答引在下面；没答的写“已跳过”。
+ * 每题先列题目和明确的回答区，未选项折叠；没答的写“已跳过”。
  * 问的时候在输入区的请求卡片上答，这里只读。结果对不上题目的，题目下面是原始回答
  */
-export const AskedCard = memo(function AskedCard({ item }: { item: ToolCallItem }) {
+export const AskedCard = memo(function AskedCard({
+  item,
+  deviceId,
+  sessionId,
+}: {
+  item: ToolCallItem
+  deviceId: string
+  sessionId: string
+}) {
   const t = useT()
+  const [open, setOpen] = useToggle(`${deviceId}:${sessionId}`, `asked:${item.id}`, false)
   const asked = item.asked
   if (!asked) return null
   const state = askedState(item)
@@ -72,51 +95,81 @@ export const AskedCard = memo(function AskedCard({ item }: { item: ToolCallItem 
       data-anchor={`i:${item.id}`}
       aria-label={t('ask.title')}
     >
-      <div className="ask-head">
+      <button
+        type="button"
+        className="ask-head ask-toggle"
+        aria-expanded={state !== 'answered' || open}
+        disabled={state !== 'answered'}
+        onClick={() => setOpen(!open)}
+      >
+        <span>{state !== 'answered' || open ? '⌄' : '›'}</span>
         <i className={state === 'open' ? 'st wait' : 'st'} />
-        <span className="grow">{t('ask.title')}</span>
-        <span className="ask-state">{t(`ask.state.${state}`)}</span>
-      </div>
-      {asked.questions.map((question, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: 题目不会增删换位
-        <div className="ask-q" key={index}>
-          {question.header ? <div className="ask-kicker">{question.header}</div> : null}
-          <div className="ask-text">{question.question}</div>
-          {question.options.length > 0 ? (
-            <ul className="ask-picks">
-              {question.options.map((option, at) => {
-                const picked = question.picked.includes(at)
-                return (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: 同上
-                  <li key={at} data-picked={picked} title={picked ? t('ask.picked') : undefined}>
-                    <span className="mark" aria-hidden="true">
-                      {picked ? '✓' : ''}
-                    </span>
-                    <span className="tx">
-                      <b>{option.label}</b>
-                      {option.description ? <span>{option.description}</span> : null}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-          ) : null}
-          {question.other !== null ? (
-            <div className="ask-answer">{question.other}</div>
-          ) : state === 'answered' && asked.raw === null && question.answer === null ? (
-            <div className="ask-answer" data-skipped="true">
-              {t('ask.skipped')}
+        <span>{t('ask.title')}</span>
+        <span className="ask-state">
+          {state === 'answered'
+            ? t('ask.answeredCount', {
+                count: asked.questions.filter((q) => q.answer !== null).length,
+              })
+            : t(`ask.state.${state}`)}
+        </span>
+        {!open && state === 'answered' ? (
+          <span className="ell dim grow">{asked.questions[0]?.answer ?? asked.raw}</span>
+        ) : null}
+      </button>
+      {state !== 'answered' || open ? (
+        <>
+          {asked.questions.map((question, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: 题目不会增删换位
+            <div className="ask-q" key={index}>
+              {question.header ? <div className="ask-kicker">{question.header}</div> : null}
+              <div className="ask-text">{question.question}</div>
+              {question.answer !== null ? (
+                <Answer text={question.answer} />
+              ) : state === 'answered' && asked.raw === null ? (
+                <div className="ask-answer" data-skipped="true">
+                  {t('ask.skipped')}
+                </div>
+              ) : null}
+              {question.options.some((_, at) => !question.picked.includes(at)) ? (
+                <details className="ask-alternatives">
+                  <summary>{t('ask.options')}</summary>
+                  <ul className="ask-picks">
+                    {question.options.map((option, at) =>
+                      question.picked.includes(at) ? null : (
+                        // biome-ignore lint/suspicious/noArrayIndexKey: 选项不会增删换位
+                        <li key={at}>
+                          <span className="tx">
+                            <b>{option.label}</b>
+                            {option.description ? <span>{option.description}</span> : null}
+                          </span>
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                </details>
+              ) : null}
+            </div>
+          ))}
+          {asked.raw !== null ? (
+            <div className="ask-q">
+              <div className="ask-answer" data-skipped={state !== 'answered'}>
+                {asked.raw}
+              </div>
             </div>
           ) : null}
-        </div>
-      ))}
-      {asked.raw !== null ? (
-        <div className="ask-q">
-          <div className="ask-answer" data-skipped={state !== 'answered'}>
-            {asked.raw}
-          </div>
-        </div>
+        </>
       ) : null}
     </section>
   )
 })
+
+/** 选择项与自由文字使用相同的回答样式，保留多行。 */
+function Answer({ text }: { text: string }) {
+  const t = useT()
+  return (
+    <div className="ask-answer">
+      <span className="ask-answer-label">{t('ask.answer')}</span>
+      <div>{text}</div>
+    </div>
+  )
+}

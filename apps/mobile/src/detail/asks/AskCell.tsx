@@ -1,17 +1,19 @@
 // 已答题在历史中留痕，未答题统一在输入框上方作答。
 import { type AskQuestion, type AskReply, distinctReplies, type ToolCallItem } from '@litch/core'
-import { memo, useSyncExternalStore } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { memo, useState, useSyncExternalStore } from 'react'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import { useTranscript } from '../context'
 import { useSessionStore } from '../proposals/hooks'
+import { useCardOpen } from '../use-card-open'
 export function useAsks(itemId: string): readonly AskQuestion[] | undefined {
   const { deviceId, sessionId } = useTranscript()
   return useSessionStore(deviceId, sessionId).questionsOf(itemId)
 }
 export const AskCell = memo(function AskCell({
   first,
+  itemId,
   questions,
 }: {
   itemId: string
@@ -19,6 +21,8 @@ export const AskCell = memo(function AskCell({
   questions: readonly AskQuestion[]
 }) {
   const { c, font } = useTheme()
+  const t = useT()
+  const [open, toggle] = useCardOpen(`ask:${itemId}`)
   const { deviceId, sessionId } = useTranscript()
   const store = useSessionStore(deviceId, sessionId)
   const answers = useSyncExternalStore(store.subscribeAnswers, store.getAnswers)
@@ -26,24 +30,39 @@ export const AskCell = memo(function AskCell({
   if (!first || answered.length === 0) return null
   return (
     <View style={styles.card}>
-      {answered.map((q) => (
-        <View key={q.id} style={styles.question}>
-          <Text style={{ color: c.ink2, fontSize: font.size.body }}>{q.title}</Text>
-          <Text style={{ color: c.ink, fontSize: font.size.body }}>{answers[q.id]}</Text>
-        </View>
-      ))}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={toggle}
+        style={styles.compactHead}
+      >
+        <Text numberOfLines={1} style={{ color: c.ink2, fontSize: font.size.meta }}>
+          {open ? '⌄' : '›'} {t('ask.title')} · {t('ask.answeredCount', { count: answered.length })}{' '}
+          · {answers[answered[0]?.id ?? '']}
+        </Text>
+      </Pressable>
+      {open
+        ? answered.map((q) => (
+            <View key={q.id} style={styles.question}>
+              <Text style={{ color: c.ink2, fontSize: font.size.body }}>{q.title}</Text>
+              <Answer text={answers[q.id] ?? ''} />
+            </View>
+          ))
+        : null}
     </View>
   )
 })
 
 /**
- * 问用户的工具画成的问答卡片（核心的 ToolCallItem.asked）：每题是题头、题目、选项（选中的打勾），自己写的回答引在下面，
+ * 问用户的工具画成的问答卡片（核心的 ToolCallItem.asked）：每题先列题目和回答区，其他选项折叠，
  * 没答的写“已跳过”；结果对不上题目的，题目下面是原始回答。问的时候在请求卡片上答，这里只读
  */
 export const AskedCell = memo(function AskedCell({ item }: { item: ToolCallItem }) {
   const theme = useTheme()
   const { c, font } = theme
   const t = useT()
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({})
+  const [open, toggle] = useCardOpen(`asked:${item.id}`)
   const asked = item.asked
   if (!asked) return null
   const state =
@@ -70,65 +89,87 @@ export const AskedCell = memo(function AskedCell({ item }: { item: ToolCallItem 
         },
       ]}
     >
-      <View style={styles.head}>
-        <Text style={[styles.kind, { color: c.ink3, fontFamily: font.mono }]}>
-          ? {t('ask.title')}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: state !== 'answered' || open }}
+        disabled={state !== 'answered'}
+        onPress={toggle}
+        style={styles.compactHead}
+      >
+        <Text numberOfLines={1} style={{ color: c.ink2, fontSize: font.size.meta }}>
+          {state !== 'answered' || open ? '⌄' : '›'} {t('ask.title')} ·{' '}
+          {state === 'answered'
+            ? t('ask.answeredCount', {
+                count: asked.questions.filter((q) => q.answer !== null).length,
+              })
+            : t(`ask.state.${state}`)}
+          {!open && state === 'answered'
+            ? ` · ${asked.questions[0]?.answer ?? asked.raw ?? ''}`
+            : ''}
         </Text>
-        <Text
-          style={[
-            styles.state,
-            { color: state === 'open' ? c.wait : c.ink3, fontFamily: font.mono },
-          ]}
-        >
-          {t(`ask.state.${state}`)}
-        </Text>
-      </View>
-      {asked.questions.map((question, at) => (
-        <View
-          // biome-ignore lint/suspicious/noArrayIndexKey: 题目不会增删换位
-          key={at}
-          style={[styles.question, at > 0 ? { borderTopColor: c.line1, ...styles.split } : null]}
-        >
-          {question.header ? (
-            <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{question.header}</Text>
-          ) : null}
-          <Text style={[styles.title, { color: c.ink, fontSize: font.size.body }]}>
-            {question.question}
-          </Text>
-          {question.options.map((option, index) => {
-            const picked = question.picked.includes(index)
-            return (
-              <View
-                // biome-ignore lint/suspicious/noArrayIndexKey: 同上
-                key={index}
-                style={styles.pick}
-                accessibilityLabel={picked ? `${t('ask.picked')} ${option.label}` : option.label}
-              >
-                <Text style={[styles.mark, { color: c.accent }]}>{picked ? '✓' : ''}</Text>
-                <View style={styles.pickText}>
-                  <Text style={{ color: picked ? c.ink : c.ink2, fontSize: font.size.body }}>
-                    {option.label}
-                  </Text>
-                  {option.description ? (
-                    <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
-                      {option.description}
+      </Pressable>
+      {state !== 'answered' || open ? (
+        <>
+          {asked.questions.map((question, at) => (
+            <View
+              // biome-ignore lint/suspicious/noArrayIndexKey: 题目不会增删换位
+              key={at}
+              style={[
+                styles.question,
+                at > 0 ? { borderTopColor: c.line2, ...styles.split } : null,
+              ]}
+            >
+              {question.header ? (
+                <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{question.header}</Text>
+              ) : null}
+              <Text style={[styles.title, { color: c.ink, fontSize: font.size.body }]}>
+                {question.question}
+              </Text>
+              {question.answer !== null ? (
+                <Answer text={question.answer} />
+              ) : state === 'answered' && asked.raw === null ? (
+                quote(t('ask.skipped'), true)
+              ) : null}
+              {question.options.some((_, index) => !question.picked.includes(index)) ? (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: !!expanded[at] }}
+                    onPress={() => setExpanded((before) => ({ ...before, [at]: !before[at] }))}
+                    style={{ minHeight: theme.hit, justifyContent: 'center' }}
+                  >
+                    <Text style={{ color: c.ink2, fontSize: font.size.meta }}>
+                      {expanded[at] ? '⌄ ' : '› '}
+                      {t('ask.options')}
                     </Text>
-                  ) : null}
-                </View>
-              </View>
-            )
-          })}
-          {question.other !== null
-            ? quote(question.other, false)
-            : state === 'answered' && asked.raw === null && question.answer === null
-              ? quote(t('ask.skipped'), true)
-              : null}
-        </View>
-      ))}
-      {asked.raw !== null ? (
-        <View style={[styles.question, { borderTopColor: c.line1, ...styles.split }]}>
-          {quote(asked.raw, state !== 'answered')}
-        </View>
+                  </Pressable>
+                  {expanded[at]
+                    ? question.options.map((option, index) =>
+                        question.picked.includes(index) ? null : (
+                          // biome-ignore lint/suspicious/noArrayIndexKey: 选项不会增删换位
+                          <View key={index} style={styles.pickText}>
+                            <Text style={{ color: c.ink2, fontSize: font.size.body }}>
+                              {option.label}
+                            </Text>
+                            {option.description ? (
+                              <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
+                                {option.description}
+                              </Text>
+                            ) : null}
+                          </View>
+                        ),
+                      )
+                    : null}
+                </>
+              ) : null}
+            </View>
+          ))}
+          {asked.raw !== null ? (
+            <View style={[styles.question, { borderTopColor: c.line2, ...styles.split }]}>
+              {quote(asked.raw, state !== 'answered')}
+            </View>
+          ) : null}
+        </>
       ) : null}
     </View>
   )
@@ -163,7 +204,8 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, paddingBottom: 0 },
   kind: { flex: 1, fontSize: 11 },
   state: { fontSize: 11 },
-  question: { padding: 12, gap: 8 },
+  question: { padding: 8, gap: 4 },
+  compactHead: { paddingHorizontal: 10, minHeight: 40, justifyContent: 'center' },
   split: { borderTopWidth: StyleSheet.hairlineWidth },
   title: { lineHeight: 21 },
   option: { borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8, justifyContent: 'center' },
@@ -179,3 +221,25 @@ const styles = StyleSheet.create({
   replyOne: { gap: 2 },
   replyQuestion: { borderLeftWidth: 2, paddingLeft: 8, lineHeight: 19 },
 })
+
+function Answer({ text }: { text: string }) {
+  const { c, font, radius } = useTheme()
+  const t = useT()
+  return (
+    <View
+      style={{
+        padding: 8,
+        gap: 2,
+        backgroundColor: c.selBg,
+        borderColor: c.line3,
+        borderWidth: 1,
+        borderRadius: radius.m,
+      }}
+    >
+      <Text style={{ color: c.selFg, fontSize: font.size.meta, fontWeight: '600' }}>
+        {t('ask.answer')}
+      </Text>
+      <Text style={{ color: c.selFg, fontSize: font.size.meta + 1, lineHeight: 19 }}>{text}</Text>
+    </View>
+  )
+}
