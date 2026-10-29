@@ -19,6 +19,10 @@ export interface ManagerSeen {
   endingListed: boolean
   endCompleted: boolean
   answerEvent: boolean
+  createdEvent: boolean
+  rulesEvent: boolean
+  endEvent: boolean
+  eventsClean: boolean
   omittedActions: boolean
   itemReasons: boolean
   decisionJump: boolean
@@ -58,6 +62,13 @@ export async function managerProbe(): Promise<ManagerSeen> {
     }
     throw new Error(`经理冒烟等待超时：${what}`)
   }
+  const cleanChat = () => !one('.mg-chat')?.textContent?.includes('<litch-session-event')
+  const eventBody = async (kind: string) => {
+    const selector = `.mg-chat [data-event="${kind}"]`
+    await until(`${kind} 事件卡`, () => one(selector))
+    if (!one(`${selector} .sev-body`)) await click(`${selector} button`)
+    return until(`${kind} 事件正文`, () => one(`${selector} .sev-body`))
+  }
   ;(await until('经理入口', () => one<HTMLButtonElement>('[data-sidebar-mode="manager"]'))).click()
   const list = Boolean(await until('全部经理页', () => one('[data-manager="list"]')))
   const ended = one('[data-manager-row="e1"] .mg-list-open')
@@ -82,10 +93,11 @@ export async function managerProbe(): Promise<ManagerSeen> {
     document.querySelectorAll('[data-manager-item="I-4"]').length === 1 &&
     !one('[data-overview="yours"] [data-manager-item="I-4"]') &&
     !one('.mg-item > .pill')
-  await until('经理开场', () => one('.mg-chat .umsg'))
+  const openingBody = await eventBody('manager-open')
   const opening =
-    Boolean(one('.mg-chat')?.textContent?.includes('请负责「Litch 0.23」')) &&
+    Boolean(openingBody.textContent?.includes('请负责「Litch 0.23」')) &&
     !one('.mg-chat')?.textContent?.includes('占位回答')
+  let eventsClean = cleanChat()
   await click('[data-overview="blocked"] [data-decision-link="D-16"]')
   const decisionJump = await until(
     '定位到关联决策',
@@ -120,7 +132,8 @@ export async function managerProbe(): Promise<ManagerSeen> {
     '对话新增一回合',
     () => document.querySelectorAll('.mg-chat .turn').length > before,
   )
-  const answerEvent = Boolean(one('[data-event="manager-answers"]'))
+  const answerEvent = Boolean((await eventBody('manager-answers')).textContent?.includes('D-15'))
+  eventsClean = cleanChat() && eventsClean
   await click('.mg-decision-filter button:last-child')
   await until('已关闭的决策', () => one('[data-decision="D-12"]'))
   await click('[data-decision="D-12"] button')
@@ -229,6 +242,10 @@ export async function managerProbe(): Promise<ManagerSeen> {
     one('.mg-title')?.textContent?.includes('经理冒烟验收'),
   )
   const createdId = one('[data-manager="session"]')?.getAttribute('data-manager-id')
+  const createdEvent = Boolean(
+    (await eventBody('manager-open')).textContent?.includes('验证经理表单和答复提交'),
+  )
+  eventsClean = cleanChat() && eventsClean
   await click('[data-act="manager-settings"]')
   await until('编辑经理表单', () => one('[data-manager-mode="edit"]'))
   const editField = (label: string) => {
@@ -272,6 +289,10 @@ export async function managerProbe(): Promise<ManagerSeen> {
     '编辑设置保留规矩',
     () => one<HTMLTextAreaElement>('.mg-rules textarea')?.value === '仅执行冒烟验收范围内的任务。',
   )
+  fill(
+    await until('编辑规矩', () => one<HTMLTextAreaElement>('.mg-rules textarea')),
+    '修改后的规矩：保留验收记录。',
+  )
   await click('.mg-form button[type="submit"]')
   const settingsSaved = await until(
     '更新名字、范围和规矩事件',
@@ -284,6 +305,12 @@ export async function managerProbe(): Promise<ManagerSeen> {
       one('.mg-scope')?.textContent?.includes('修改后的经理验收范围') &&
       Boolean(one('[data-event="manager-rules"]')),
   )
+  const rulesBody = await eventBody('manager-rules')
+  const rulesEvent =
+    rulesBody.children.length === 2 &&
+    rulesBody.children[0]?.textContent === '修改后的经理验收范围' &&
+    rulesBody.children[1]?.textContent === '修改后的规矩：保留验收记录。'
+  eventsClean = cleanChat() && eventsClean
   await click('[data-act="manager-settings"]')
   await until('重新打开保存的并发上限', () => editField('同时最多几条线').value === '5')
   const dispatchSaved =
@@ -323,6 +350,7 @@ export async function managerProbe(): Promise<ManagerSeen> {
       one('.mg-decision textarea:disabled') &&
       one('.mg-sidebar-group:first-child [data-manager-id="m1"]')?.textContent?.includes('结束中'),
   )
+  eventsClean = cleanChat() && eventsClean
   await click('[data-sidebar-mode="manager"]')
   const endingListed = Boolean(
     await until('全部经理显示结束中', () =>
@@ -338,6 +366,10 @@ export async function managerProbe(): Promise<ManagerSeen> {
       one('.mg-decision textarea:disabled') &&
       !one('.mg-sidebar-group:first-child [data-manager-id="m1"]'),
   )
+  const endEvent = Boolean(
+    (await eventBody('manager-end')).textContent?.includes('请整理总结，保留未完成事项。'),
+  )
+  eventsClean = cleanChat() && eventsClean
   return {
     list,
     selected,
@@ -358,6 +390,10 @@ export async function managerProbe(): Promise<ManagerSeen> {
     endingListed,
     endCompleted,
     answerEvent,
+    createdEvent,
+    rulesEvent,
+    endEvent,
+    eventsClean,
     omittedActions,
     itemReasons,
     decisionJump,
@@ -396,6 +432,10 @@ export function judgeManager(seen: ManagerSeen): string[] {
     endingListed: '结束中经理未保留在全部经理列表',
     endCompleted: '收尾回合结束后经理未转已结束只读',
     answerEvent: '看板答复回合没有显示经理事件',
+    createdEvent: '新建经理的默认开场没有显示事件卡',
+    rulesEvent: '更新规矩后没有显示事件卡或正文没有按空行分段',
+    endEvent: '结束经理后没有显示收尾事件卡',
+    eventsClean: '经理对话中出现了原始 litch-session-event 标签',
     omittedActions: '仍显示第一版不支持的操作',
     itemReasons: '事项原因重复决策编号或状态标签',
     decisionJump: '点击决策编号没有切页并定位',

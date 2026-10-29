@@ -1985,24 +1985,51 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   const managers = createMockManagers({
     ...tasksHost,
     say(deviceId, threadId, prompt, answer) {
-      tasksHost.say(deviceId, threadId, prompt, answer)
       const view = loadSession(deviceId, threadId)
-      const turn = view.turns.at(-1)
-      const userId = turn?.itemIds[0]
-      if (!turn || !userId) return
-      // 经理事件与真实历史共用协议投影，不伪装成用户亲手输入的正文。
+      const turnId = `m${++seq}`
+      // 首次增量就走真实历史的协议投影，避免先发原文再按同一 ID 替换。
       applySessionOps(view, [
         {
+          op: 'turn.add',
+          turn: {
+            id: turnId,
+            status: 'running',
+            itemIds: [],
+            startedAt: clock.now(),
+            durationMs: null,
+            error: null,
+          },
+        },
+        {
           op: 'item.add',
-          turnId: turn.id,
+          turnId,
           item: projectItem({
             type: 'userMessage',
-            id: userId,
+            id: `${turnId}-u`,
             clientId: null,
             content: [{ type: 'text', text: prompt, text_elements: [] }],
           }),
         },
+        {
+          op: 'item.add',
+          turnId,
+          item: {
+            id: `${turnId}-a`,
+            kind: 'agentMessage',
+            text: answer,
+            phase: 'final',
+            status: 'completed',
+          },
+        },
+        { op: 'turn.status', turnId, status: 'completed', durationMs: 3000 },
       ])
+      const watched = (sinks.get(sessionKey(view))?.size ?? 0) > 0
+      updateSummary(deviceId, threadId, {
+        status: 'idle',
+        waitingFor: null,
+        updatedAt: clock.now(),
+        ...(watched ? {} : { unread: true }),
+      })
     },
     ending(deviceId, threadId, prompt, answer) {
       const view = loadSession(deviceId, threadId)

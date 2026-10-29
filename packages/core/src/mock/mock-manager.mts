@@ -7,13 +7,15 @@ import type { MockTasksHost } from './mock-tasks.mjs'
 import {
   type ManagerSessionSummary,
   sampleManagerHistory,
+  sampleManagerOpening,
   sampleManagers,
 } from './sample-manager.mjs'
 
 const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 
 export interface MockManagerHost
-  extends Pick<MockTasksHost, 'clock' | 'lang' | 'devices' | 'device' | 'spawn' | 'say'> {
+  extends Pick<MockTasksHost, 'clock' | 'lang' | 'devices' | 'device' | 'spawn'> {
+  say(deviceId: string, threadId: string, prompt: string, answer: string): void
   add(deviceId: string, session: ManagerSessionSummary): void
   mark(deviceId: string, threadId: string, manager: ManagerView): void
   /** 发出结束事件并开始收尾回合；回合停止时由宿主调用 turnEnded。 */
@@ -134,7 +136,7 @@ export function createMockManagers(host: MockManagerHost) {
       host.say(
         deviceId,
         threadId,
-        firstTask || draft.scope,
+        firstTask.trim() ? firstTask : sampleManagerOpening(manager, host.lang),
         t(
           '已建立看板，先整理计划，等待开始。',
           'The board is ready. I will organize the plan and wait to start.',

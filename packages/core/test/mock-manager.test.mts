@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
+import type { SessionOp } from '../src/channel/protocol.mjs'
 import { createMockCore } from '../src/mock/mock-core.mjs'
 import { createMockManagers } from '../src/mock/mock-manager.mjs'
 import { sampleApp } from '../src/mock/sample-data.mjs'
 import { sampleManagers } from '../src/mock/sample-manager.mjs'
-import type { SessionView } from '../src/model.mjs'
+import type { ItemView, SessionView } from '../src/model.mjs'
 import type {
   ManagerAnswersResult,
   ManagerBoardTopicView,
@@ -130,6 +131,99 @@ test('模拟经理命令：部分提交、版本冲突、重开、结束只读�
   })
   close()
 })
+
+for (const lang of ['zh-CN', 'en'] as const)
+  test(`模拟经理事件在首次增量和重订阅历史中都已投影：${lang}`, async () => {
+    const { clock } = fakeClock()
+    const core = createMockCore({ clock, lang })
+    const signal = new AbortController().signal
+    const emitted: ItemView[] = []
+    const watch = (sessionId: string) => {
+      let snapshot: SessionView | undefined
+      const close = core.subscribe(
+        { kind: 'session', deviceId: 'local', sessionId },
+        {
+          snapshot(data) {
+            snapshot = data as SessionView
+          },
+          delta(ops) {
+            for (const op of ops as SessionOp[]) if (op.op === 'item.add') emitted.push(op.item)
+          },
+          error(error) {
+            throw error
+          },
+        },
+      )
+      assert.ok(snapshot)
+      return { snapshot, close }
+    }
+    const events = (items: ItemView[]) =>
+      items.flatMap((item) => (item.kind === 'userMessage' && item.event ? [item.event] : []))
+    const clean = (items: ItemView[]) => {
+      for (const item of items)
+        if (item.kind === 'userMessage') assert.doesNotMatch(item.text, /<litch-session-event/)
+    }
+    const initial = watch('m1')
+    const where = { deviceId: 'local', managerId: 'm1' }
+    await core.command(
+      'managers.answers.submit',
+      {
+        ...where,
+        answers: [
+          { decisionId: 'D-15', revision: 1, optionId: 'a', text: '先核对协议' },
+          { decisionId: 'D-16', revision: 1, optionId: 'a', text: '保留验收记录' },
+        ],
+      },
+      signal,
+    )
+    await core.command(
+      'managers.update',
+      { ...where, patch: { scope: '核对事件显示', rules: '保留正文分段' } },
+      signal,
+    )
+    await core.command('managers.end', where, signal)
+    // 不只检查最终快照，防止先发原始标签再用同一 ID 补投影。
+    clean(emitted)
+    assert.deepEqual(
+      events(emitted).map((event) => event.kind),
+      ['manager-answers', 'manager-rules', 'manager-end'],
+    )
+    assert.equal(events(emitted)[0]?.summary, 'D-15 · D-16')
+    assert.equal(events(emitted)[1]?.body, '核对事件显示\n\n保留正文分段')
+    assert.equal(events(Object.values(initial.snapshot.items))[0]?.kind, 'manager-open')
+    initial.close()
+    const history = watch('m1')
+    clean(Object.values(history.snapshot.items))
+    assert.deepEqual(
+      events(Object.values(history.snapshot.items)).map((event) => event.kind),
+      ['manager-open', 'manager-answers', 'manager-rules', 'manager-end'],
+    )
+    history.close()
+
+    const sample = sampleManagers('local', clock.now(), lang).managers[0]
+    assert.ok(sample)
+    for (const firstTask of ['', '   ', '先核对开场正文']) {
+      const { threadId } = (await core.command(
+        'managers.create',
+        { deviceId: 'local', manager: { ...sample, firstTask } },
+        signal,
+      )) as { threadId: string }
+      const created = watch(threadId)
+      const items = Object.values(created.snapshot.items)
+      clean(items)
+      const user = items.find((item) => item.kind === 'userMessage')
+      assert.ok(user?.kind === 'userMessage')
+      if (firstTask.trim()) {
+        assert.equal(user.text, firstTask)
+        assert.equal(user.event, undefined)
+      } else {
+        assert.equal(user.text, '')
+        assert.equal(user.event?.kind, 'manager-open')
+        assert.ok(user.event.body?.includes(sample.scope))
+      }
+      created.close()
+    }
+  })
 
 for (const interrupted of [false, true])
   test(`模拟结束回合${interrupted ? '被打断' : '完成'}后才转已结束`, async () => {

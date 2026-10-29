@@ -3,13 +3,30 @@ import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
 } from '../../../protocol/src/manager.mjs'
+import { formatSessionEvent } from '../../../protocol/src/session-tree.mjs'
 import type { SessionView } from '../model.mjs'
 import type { ManagerBoardView, ManagerDecisionView, ManagerView } from '../model-manager.mjs'
+import { projectItem } from '../projection/items.mjs'
 import type { SampleLang } from './sample-text.mjs'
 
 export type { ManagerSessionSummary } from '../projection/manager.mjs'
 
 import type { ManagerSessionSummary } from '../projection/manager.mjs'
+
+/** 新建和历史示例共用开场事件；界面与真实设备使用同一投影。 */
+export function sampleManagerOpening(manager: ManagerView, lang: SampleLang): string {
+  return formatSessionEvent({
+    kind: 'manager-open',
+    notes: [],
+    manager: {
+      managerId: manager.id,
+      text:
+        lang === 'zh-CN'
+          ? `请负责「${manager.name || manager.scope}」。范围：${manager.scope}。请先整理计划，把需要我决定的事情放到看板，等待我确认开始后再安排工作线。`
+          : `Please manage “${manager.name || manager.scope}”. Scope: ${manager.scope}. Present a plan and put decisions that need my input on the board. Wait for me to start before dispatching work lines.`,
+    },
+  })
+}
 
 /** 示例经理有自己的开场，不走普通会话按 id 生成占位消息的分支。 */
 export function sampleManagerHistory(
@@ -22,9 +39,6 @@ export function sampleManagerHistory(
   const userId = `${turnId}-user`
   const answerId = `${turnId}-answer`
   const pending = board.decisions.filter((decision) => decision.status === 'open').length
-  const opening = zh
-    ? `请负责「${manager.name}」。范围：${manager.scope}。请安排工作线、核对回报，需要我决定的事情放到看板。`
-    : `Please manage “${manager.name}”. Scope: ${manager.scope}. Organize the work lines, verify their reports, and put decisions that need my input on the board.`
   const progress =
     board.situation?.text ??
     (manager.status === 'ending'
@@ -53,7 +67,12 @@ export function sampleManagerHistory(
       },
     ],
     items: {
-      [userId]: { id: userId, kind: 'userMessage', text: opening, attachments: [] },
+      [userId]: projectItem({
+        type: 'userMessage',
+        id: userId,
+        clientId: null,
+        content: [{ type: 'text', text: sampleManagerOpening(manager, lang), text_elements: [] }],
+      }),
       [answerId]: {
         id: answerId,
         kind: 'agentMessage',
