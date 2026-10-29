@@ -59,10 +59,17 @@
   color: var(--ink);
 }
 
+/* 接电常开的快捷开关（devices/PowerShortcut.tsx）：开着就是在耗电，用醒目的等待色铺一层底；
+   开着但正用电池、还没生效的只把图标染色 */
 .tb .power-shortcut.on {
-  color: var(--accent);
-  background: var(--hover);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--wait);
+  background: color-mix(in srgb, var(--wait) 16%, transparent);
+}
+.tb .power-shortcut.on:hover {
+  background: color-mix(in srgb, var(--wait) 26%, transparent);
+}
+.tb .power-shortcut.on[data-source="battery"] {
+  background: none;
 }
 
 /* 会话标题后面的“···”（transcript/ViewMenu.tsx）：往下弹、靠左对齐，样子和侧栏的“更多”一样 */
