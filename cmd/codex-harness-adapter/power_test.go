@@ -269,10 +269,10 @@ func TestPowerRequestedTextExplainsReasons(t *testing.T) {
 			r := newPowerTestRig(t)
 			r.config.plugged = item.plugged
 			state := r.activity(powerActivitySource{ID: "thread", Working: item.working})
-			if state.State != "requested" || !strings.Contains(state.Text.ZH, "已请求") || !strings.Contains(state.Text.EN, "has been requested") || !strings.Contains(state.Text.ZH, "锁屏") || !strings.Contains(state.Text.EN, "lock") {
-				t.Fatalf("状态文案必须说明申请及锁屏边界: %+v", state)
+			if state.State != "requested" || !strings.Contains(state.Text.ZH, "正在阻止系统休眠") || !strings.Contains(state.Text.EN, "Preventing sleep") {
+				t.Fatalf("状态文案必须说明正在阻止休眠: %+v", state)
 			}
-			if strings.Contains(state.Text.ZH, "工作进行中") != (item.working > 0) || strings.Contains(state.Text.EN, "Work is in progress") != (item.working > 0) || strings.Contains(state.Text.ZH, "接通电源") != item.plugged || strings.Contains(state.Text.EN, "plugged in") != item.plugged {
+			if strings.Contains(state.Text.ZH, "运行任务中") != (item.working > 0) || strings.Contains(state.Text.EN, "Running tasks") != (item.working > 0) || strings.Contains(state.Text.ZH, "接通电源") != item.plugged || strings.Contains(strings.ToLower(state.Text.EN), "plugged in") != item.plugged {
 				t.Fatalf("文案没有准确反映生效来源: %+v", state)
 			}
 		})

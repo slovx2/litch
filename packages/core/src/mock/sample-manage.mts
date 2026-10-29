@@ -390,6 +390,41 @@ function deviceSettings(harnesses: HarnessView[], firstPort: number): SettingSpe
   ]
 }
 
+/** 本机防休眠的两个开关 */
+function powerSettings(): SettingSpecView[] {
+  const scope = { kind: 'device' } as const
+  return [
+    {
+      ...BASE,
+      key: 'power.preventSleepWhileWorking',
+      group: 'power',
+      type: 'boolean',
+      scope,
+      default: true,
+      restart: 'none',
+      title: both('运行任务时阻止系统休眠', 'Prevent sleep while tasks are running'),
+      description: both(
+        '回合、后台任务和等待审批或回答期间阻止系统空闲休眠，电池供电时也生效，会增加耗电。',
+        'Prevents idle system sleep during turns, background tasks and waits for approval or answers, including on battery power; this uses more energy.',
+      ),
+    },
+    {
+      ...BASE,
+      key: 'power.keepAwakeWhilePluggedIn',
+      group: 'power',
+      type: 'boolean',
+      scope,
+      default: false,
+      restart: 'none',
+      title: both('接通电源时始终阻止系统休眠', 'Always prevent sleep when plugged in'),
+      description: both(
+        '设备服务运行且接通电源时阻止系统空闲休眠，即使没有任务、已关闭桌面应用也生效；会增加耗电。',
+        'Prevents idle system sleep while the device service is running and the computer is plugged in, even with no tasks or after the desktop app closes; this uses more energy.',
+      ),
+    },
+  ]
+}
+
 /** 这台设备上的设置。哪几台设备能管理由 sample-data.mts 的 manageable 决定 */
 export function sampleSettings(deviceId: string, harnesses: HarnessView[]): SampleSettings {
   const local = deviceId === 'local'
@@ -418,6 +453,20 @@ export function sampleSettings(deviceId: string, harnesses: HarnessView[]): Samp
       description: null,
       scope: { kind: 'device' },
     },
+    // 电源只在登记为本机的设备服务上有（照设备服务的 settings_power.go）
+    ...(local
+      ? [
+          {
+            id: 'power',
+            title: both('电源', 'Power'),
+            description: both(
+              '仅阻止系统空闲休眠，仍允许屏幕熄灭和锁屏；合盖或主动休眠仍由系统决定。',
+              'Only prevents idle system sleep; the screen can still turn off or lock. Closing the lid or choosing Sleep still follows system behavior.',
+            ),
+            scope: { kind: 'device' as const },
+          },
+        ]
+      : []),
     {
       id: 'worktrees',
       title: both('工作树', 'Worktrees'),
@@ -435,6 +484,7 @@ export function sampleSettings(deviceId: string, harnesses: HarnessView[]): Samp
       taskCardsSetting(harness),
     ]),
     ...deviceSettings(harnesses, firstPort),
+    ...(local ? powerSettings() : []),
   ]
   const has = (id: string) => harnesses.some((harness) => harness.id === id)
   const written = new Map<string, SettingValueView>()

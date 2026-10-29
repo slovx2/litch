@@ -1,8 +1,9 @@
-// 收尾建议仍在回合末尾；待答问题在输入框上方，答复在原回合留痕。
-import { type AskAnswers, type ItemView, keys, wrapQuestionId } from '@litch/core'
+// 回合末尾的收尾区：收尾留的问题画成问题卡（答案并在卡里），后面是建议任务卡片。作答在输入框上方的待答区。
+import { type ItemView, keys, wrapQuestionId } from '@litch/core'
 import { memo, useMemo } from 'react'
 import { useT } from '../app/appearance.ts'
-import { useKey, useKeys } from '../app/services.tsx'
+import { useKeys } from '../app/services.tsx'
+import { AskSheet } from '../transcript/AskCard.tsx'
 import { TreeCard } from './TreeCards.tsx'
 export const TurnTail = memo(function TurnTail({
   deviceId,
@@ -23,15 +24,11 @@ export const TurnTail = memo(function TurnTail({
     [deviceId, sessionId, itemIds],
   )
   const items = useKeys<ItemView>(itemKeys)
-  const answers = useKey<AskAnswers>(keys.answers(deviceId, sessionId)) ?? {}
+  // 只留了问题、没带建议的收尾只画问题卡；什么都没带的空收尾不画
   const shown = items.filter(
-    (item) =>
-      item &&
-      !(
-        item.kind === 'toolCall' &&
-        item.wrapUp?.suggestions.length === 0 &&
-        answers[wrapQuestionId(item.id)] === undefined
-      ),
+    (item): item is ItemView =>
+      item !== undefined &&
+      !(item.kind === 'toolCall' && item.wrapUp?.suggestions.length === 0 && !item.wrapUp.ask),
   )
   if (shown.length === 0) return null
   return (
@@ -42,21 +39,24 @@ export const TurnTail = memo(function TurnTail({
       aria-label={t('wrap.tail')}
     >
       {shown.map((item) => {
-        if (!item) return null
-        const ask = item.kind === 'toolCall' ? item.wrapUp?.ask : undefined
-        const answer = answers[wrapQuestionId(item.id)]
+        const wrap = item.kind === 'toolCall' ? item.wrapUp : undefined
         return (
           <div key={item.id}>
-            {ask && answer !== undefined ? (
-              <div className="tail-ask" data-state="past" title={ask}>
-                <i className="st" />
-                <span className="ell grow">{ask}</span>
-                <span className="tail-ask-replied ell" title={answer}>
-                  {t('wrap.replied', { label: answer })}
-                </span>
-              </div>
+            {wrap?.ask ? (
+              <AskSheet
+                deviceId={deviceId}
+                sessionId={sessionId}
+                toggleId={`wrap:${item.id}`}
+                questions={[
+                  {
+                    id: wrapQuestionId(item.id),
+                    title: wrap.ask,
+                    options: (wrap.actions ?? []).map((action) => action.label),
+                  },
+                ]}
+              />
             ) : null}
-            {item.kind === 'toolCall' && item.wrapUp?.suggestions.length === 0 ? null : (
+            {wrap?.suggestions.length === 0 ? null : (
               <TreeCard deviceId={deviceId} sessionId={sessionId} itemId={item.id} />
             )}
           </div>

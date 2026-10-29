@@ -47,12 +47,12 @@ export function PowerShortcut({ device }: { device: DeviceView }) {
       setBusy(false)
     }
   }
-  // 标题栏里只放闪电和开关：开着且接电（正在耗电）用等待色，开着但用电池、还没生效的淡一档；
+  // 标题栏里只放闪电和开关：开着且接电（正在生效）用强调色，开着但用电池、还没生效的淡一档；
   // 供电状态写在开关的无障碍说明和下面电源设置的状态行里，标题栏不再挤两行小字
   const tone = !enabled
     ? theme.c.ink3
     : power.powerSource === 'ac' && online
-      ? theme.c.wait
+      ? theme.c.accent
       : theme.c.ink2
   return (
     <View testID="power-shortcut" style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>

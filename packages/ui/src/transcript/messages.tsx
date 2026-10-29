@@ -13,9 +13,10 @@ import { memo, useLayoutEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { ImageViewer } from '../app/ImageViewer.tsx'
 import { Icon } from '../app/icons.tsx'
-import { useKey } from '../app/services.tsx'
+import { useKey, useServices } from '../app/services.tsx'
 import { SessionEventBar } from '../tree/EventBar.tsx'
 import { AskReplyBody } from './AskCard.tsx'
+import { questionItemOf } from './ask-ids.ts'
 import { CompactRow } from './CompactRow.tsx'
 import { SentComments } from './comments/Cards.tsx'
 import { commentsOf } from './comments/Cite.tsx'
@@ -110,8 +111,18 @@ export const UserMessage = memo(function UserMessage({
   const t = useT()
   const said = item?.kind === 'userMessage' ? item.text : ''
   const peer = item?.kind === 'userMessage' ? item.peer : undefined
-  // 答模型边干活边问的题时发的那一段：画成题目和回答
+  // 答模型边干活边问的题时发的那一段：答案并进问题卡（AskCard.tsx 的 AskSheet），这里不再画；
+  // 问题那一条不在会话里（历史被截掉了）的才画成题目和回答
   const replies = peer ? null : parseAskReply(said)
+  const { replica } = useServices()
+  const folded =
+    replies?.every((reply) => {
+      const itemId = questionItemOf(reply.questionItemId)
+      return (
+        itemId !== null &&
+        replica.store.get(keys.item(ref.deviceId, ref.sessionId, itemId)) !== undefined
+      )
+    }) === true
   // 开头带着评论的：评论画成卡片，下面只出打的字
   const comments = replies || peer ? null : commentsOf(said)
   const text = comments ? comments.rest : said
@@ -134,6 +145,16 @@ export const UserMessage = memo(function UserMessage({
       <MessageEdit {...ref} turnId={turnId} steered={steered} onDone={() => setEditing(false)} />
     )
   const event = item.event
+  if (folded && item.attachments.length === 0)
+    return event ? (
+      <SessionEventBar
+        sessionId={ref.sessionId}
+        itemId={ref.itemId}
+        deviceId={ref.deviceId}
+        event={event}
+        anchor={`u:${ref.itemId}`}
+      />
+    ) : null
   if (event && !said && item.attachments.length === 0) {
     return (
       <SessionEventBar

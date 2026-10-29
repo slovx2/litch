@@ -68,6 +68,11 @@ function setup(chunkMs = 0) {
         },
         delta(ops: ManageOp[]) {
           for (const op of ops) {
+            // 电源状态（只有本机有）跟着开关和有没有回合在跑变，另记在 view 上
+            if (op.op === 'power.set') {
+              if (seen.view) seen.view.power = structuredClone(op.value)
+              continue
+            }
             assert.equal(op.op, 'settings.set')
             if (op.op !== 'settings.set') continue
             seen.ops.push(structuredClone(op))
@@ -182,6 +187,21 @@ test('哪些设备能管理：没有设置接口的订阅不上；没连上的�
   assert.equal(offline.code, 'offline')
   const none = await failureOf(channel.command('device.sshConfig.read', { deviceId: 'nas' }))
   assert.equal(none.code, 'unsupported')
+})
+
+test('本机的电源：开了接电常开就在阻止休眠；对话里说“拔掉电源”后改用电池、不再算接电这一来源', async () => {
+  const { write, flush, seen, say } = await opened()
+  assert.equal(seen.view?.power?.powerSource, 'ac')
+  assert.equal(seen.view?.power?.reasons.includes('pluggedIn'), false)
+  await write([{ key: 'power.keepAwakeWhilePluggedIn', value: true }])
+  await flush()
+  assert.equal(seen.view?.power?.state, 'requested')
+  assert.ok(seen.view?.power?.reasons.includes('pluggedIn'))
+  assert.match(seen.view?.power?.text['zh-CN'] ?? '', /正在阻止系统休眠/)
+  await say('s4', '拔掉电源')
+  await flush()
+  assert.equal(seen.view?.power?.powerSource, 'battery')
+  assert.equal(seen.view?.power?.reasons.includes('pluggedIn'), false)
 })
 
 test('停用一个 harness：它的状态变成停用，会话都留着但发不出去、建不了新的；再启用就恢复', async () => {

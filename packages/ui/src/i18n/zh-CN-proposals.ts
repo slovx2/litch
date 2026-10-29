@@ -19,7 +19,6 @@ export const zhProposals = {
   'proposal.cardsOff.failed': '关闭失败：{reason}',
   'proposal.cardsOff.missing': '此设备的设备服务不支持任务卡开关，请先升级',
   'wrap.tail': '本回合的后续步骤',
-  'wrap.replied': '已回复：{label}',
   'proposal.failed': '操作失败：{reason}',
   'proposal.fresh': '全新开始',
   'proposal.fork': '带上下文',

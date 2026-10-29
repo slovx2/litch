@@ -50,6 +50,20 @@
   font-weight: 500;
   color: var(--ink-3);
 }
+/* 还没答的题：建议的回答排成一排只读的小标签，作答在输入框上方 */
+.ask-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ask-chips > span {
+  padding: 1px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
 /* 问答卡片（AskedCard）：题头一行小字；没选的选项收在“查看其他选项”里 */
 .ask-kicker {
   color: var(--ink-2);

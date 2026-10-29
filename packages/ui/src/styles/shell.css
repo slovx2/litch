@@ -59,14 +59,14 @@
   color: var(--ink);
 }
 
-/* 接电常开的快捷开关（devices/PowerShortcut.tsx）：开着就是在耗电，用醒目的等待色铺一层底；
+/* 接电常开的快捷开关（devices/PowerShortcut.tsx）：开着用强调色铺一层底；
    开着但正用电池、还没生效的只把图标染色 */
 .tb .power-shortcut.on {
-  color: var(--wait);
-  background: color-mix(in srgb, var(--wait) 16%, transparent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .tb .power-shortcut.on:hover {
-  background: color-mix(in srgb, var(--wait) 26%, transparent);
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
 }
 .tb .power-shortcut.on[data-source="battery"] {
   background: none;

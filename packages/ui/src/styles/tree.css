@@ -82,14 +82,14 @@ button.tree-card-main:hover {
   line-height: 18px;
   color: var(--ink-2);
 }
-/* 默认收成一行的卡片共用的那一行（transcript/CompactRow.tsx）：图标、来源、摘要截断、右端的箭头 */
+/* 默认收起的卡片共用的头（transcript/CompactRow.tsx）：第一行图标、来源、标题、右端的箭头；
+   收着的时候第二行是正文摘要，只占一行 */
 .compact-message {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 1px;
   width: 100%;
   min-width: 0;
-  min-height: 18px;
   padding: 0;
   font-size: 12px;
   line-height: 18px;
@@ -100,36 +100,50 @@ button.tree-card-main:hover {
 .compact-message:disabled {
   cursor: default;
 }
-.compact-message > .ic {
+.compact-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.compact-line > .ic {
   flex: none;
   color: var(--ink-3);
 }
 .compact-source {
-  flex: 0 1 auto;
-  max-width: 45%;
+  flex: none;
+  max-width: 50%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 500;
 }
-/* 展开了不写摘要，来源能占满 */
-.compact-message[aria-expanded="true"] > .compact-source {
-  max-width: none;
-}
-.compact-sum {
-  flex: 1 1 0;
+.compact-title {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--ink-3);
+  font-weight: 600;
+  color: var(--ink);
 }
-.compact-message > .caret-ic {
+.compact-line > .caret-ic {
   margin-left: auto;
   color: var(--ink-3);
 }
-.compact-message:hover:not(:disabled) > :is(.compact-source, .caret-ic) {
+.compact-message:hover:not(:disabled) .caret-ic {
   color: var(--ink);
+}
+.compact-sum {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+/* 有图标的，摘要和来源对齐（图标 14 加间距 6） */
+.compact-sum[data-indent] {
+  padding-left: 20px;
 }
 .sev-head {
   display: flex;
@@ -1004,21 +1018,6 @@ button.agent-row:hover {
   .turn-tail[data-fresh] {
     animation: none;
   }
-}
-/* 收尾留的问题答过之后：回合末尾折成一行轻字，写着回了什么。还没答的在输入框上方（PendingQuestions） */
-.tail-ask {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 2px;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--ink-3);
-}
-.tail-ask-replied {
-  flex: 0 1 auto;
-  max-width: 50%;
-  color: var(--ink-2);
 }
 /* 提案卡右上角的“···”：一项“对这个 harness 关闭任务卡” */
 .prop-menu {

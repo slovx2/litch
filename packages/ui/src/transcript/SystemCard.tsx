@@ -73,7 +73,8 @@ export function SystemCard({
       <CompactRow
         icon={<Icon name={ICON[system.kind]} small />}
         source={label}
-        summary={[title, system.prompt].filter(Boolean).join(' · ')}
+        title={title}
+        summary={system.prompt}
         open={open}
         onToggle={() => {
           pin(card.current)

@@ -123,12 +123,15 @@ test('边做边问：卡片要的题目、回合、答复表都对，答复插�
   const after = store.getMeta()
   assert.equal(after.queued.length, 0)
   assert.equal(after.lastTurn.id, meta.lastTurn.id)
-  // 行晚一帧交出来
-  await until(
-    () =>
-      store
-        .getSnapshot()
-        .rows.some((each) => each.type === 'user' && each.text === askReplyText(reply)),
-    { what: '对话里有这条答复' },
+  // 答案并进问题卡：问题那一条还在会话里，答复不另画用户气泡。行晚一帧交出来，等答复所在的回合重算完再看
+  await until(() => store.getSnapshot().rows.some((each) => each.key === row.key), {
+    what: '问题卡还在',
+  })
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  assert.equal(
+    store
+      .getSnapshot()
+      .rows.some((each) => each.type === 'user' && each.text === askReplyText(reply)),
+    false,
   )
 })

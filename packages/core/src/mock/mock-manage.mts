@@ -7,6 +7,7 @@ import { ChannelError, type Clock, type Commands, type ManageOp } from '../chann
 import type { HostSink } from '../channel/server.mjs'
 import type { DeviceView, HarnessView } from '../model.mjs'
 import type {
+  DevicePowerView,
   DiagnosticsView,
   EnvEntryView,
   HarnessRestartResult,
@@ -53,6 +54,8 @@ export interface MockManagement {
   raceNextWrite(deviceId: string, harness: string): void
   /** 设备服务多了一项设置（相当于它升级了）：订阅着的重新拿到一份结构 */
   addSetting(deviceId: string, harness: string): void
+  /** 本机拔掉或接上电源（对话里说“拔掉电源”“接上电源”）：电源状态跟着变 */
+  setPowerSource(deviceId: string, source: 'ac' | 'battery'): void
   /** 这个 harness 刚装好（mock-install.mts）：之后重启它回到的是可用的样子，不再是“没装” */
   installed(deviceId: string, harness: HarnessView): void
   /**
@@ -105,10 +108,52 @@ export function createMockManagement(host: MockManageHost): MockManagement {
     return { device, state }
   }
 
+  /** 本机的供电：一开始接着电源 */
+  const sources = new Map<string, 'ac' | 'battery'>()
+  /** 防休眠的状态，照设备服务（power_policy.go）的判断和文案；只有本机有 */
+  const powerOf = (deviceId: string): DevicePowerView | null => {
+    const { device, state } = reach(deviceId)
+    if (device.kind !== 'local') return null
+    const powerSource = sources.get(deviceId) ?? 'ac'
+    const working =
+      currentValue(state, 'power.preventSleepWhileWorking') !== false &&
+      device.harnesses.some((harness) => host.busy(deviceId, harness.id))
+    const plugged =
+      currentValue(state, 'power.keepAwakeWhilePluggedIn') === true && powerSource === 'ac'
+    const reasons: DevicePowerView['reasons'] = [
+      ...(working ? (['working'] as const) : []),
+      ...(plugged ? (['pluggedIn'] as const) : []),
+    ]
+    const text =
+      working && plugged
+        ? both(
+            '运行任务中，已接通电源 · 正在阻止系统休眠',
+            'Running tasks, plugged in · Preventing sleep',
+          )
+        : working
+          ? both('运行任务中 · 正在阻止系统休眠', 'Running tasks · Preventing sleep')
+          : plugged
+            ? both('已接通电源 · 正在阻止系统休眠', 'Plugged in · Preventing sleep')
+            : both('当前未阻止系统休眠', 'Not preventing sleep')
+    return {
+      supported: true,
+      state: reasons.length > 0 ? 'requested' : 'inactive',
+      powerSource,
+      reasons,
+      text,
+    }
+  }
+
+  /** 最近一次发出去的电源状态（JSON），没变就不再发 */
+  const powers = new Map<string, string>()
+
   const viewOf = (deviceId: string): ManageView => {
     const { device, state } = reach(deviceId)
+    const power = powerOf(deviceId)
+    powers.set(deviceId, JSON.stringify(power))
     return {
       deviceId,
+      power,
       groups: state.groups,
       settings: state.settings,
       snapshot: snapshotOf(state, device.harnesses),
@@ -122,6 +167,13 @@ export function createMockManagement(host: MockManageHost): MockManagement {
     const ops: ManageOp[] = [
       { op: 'settings.set', snapshot: snapshotOf(state, device.harnesses), keys },
     ]
+    // 电源状态变了才另发一条（照设备服务：开关、供电、有没有在干活变了才推）
+    const power = powerOf(deviceId)
+    const said = JSON.stringify(power)
+    if (said !== powers.get(deviceId)) {
+      powers.set(deviceId, said)
+      ops.push({ op: 'power.set', value: power })
+    }
     for (const sink of sinks.get(deviceId) ?? []) sink.delta(ops)
     if (keys.some((key) => key.endsWith('.taskCards'))) host.taskCardsChanged?.(deviceId)
   }
@@ -284,6 +336,11 @@ export function createMockManagement(host: MockManageHost): MockManagement {
       if (!device?.manageable || device.connection !== 'online') return null
       const value = currentValue(reach(deviceId).state, taskCardsSettingKey(harness))
       return typeof value === 'boolean' ? value : null
+    },
+
+    setPowerSource(deviceId, source) {
+      sources.set(deviceId, source)
+      if (host.device(deviceId)?.connection === 'online') publish(deviceId, [])
     },
 
     subscribe(deviceId, sink) {

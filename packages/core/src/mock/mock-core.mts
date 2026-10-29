@@ -382,6 +382,9 @@ const DROPS_HARNESS = /掉线|go offline/i
  * - 加一项设置：设备服务多了一项设置（相当于它升级了），界面不用改就该看得到、改得了。
  */
 const EDITS_ELSEWHERE = /别处改设置|settings elsewhere/i
+/** 本机拔掉、接上电源：看防休眠的状态行和快捷开关 */
+const UNPLUGS = /拔掉电源|unplug/i
+const PLUGS_IN = /接上电源|plug in/i
 const RACES_SETTINGS = /抢先改设置|race the settings/i
 const ADDS_SETTING = /加一项设置|add a setting/i
 
@@ -715,8 +718,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     if (background.claim(view, turnId, message)) return turnId
     if (peerDemo.claim(view, turnId, message)) return turnId
     if (systemDemo.claim(view, turnId, message)) return turnId
-    // 这三样只是顺带演一出别处的动静，回合照常往下走
+    // 这几样只是顺带演一出别处的动静，回合照常往下走
     if (EDITS_ELSEWHERE.test(message.text)) manage.editElsewhere(view.deviceId, view.harness)
+    if (UNPLUGS.test(message.text)) manage.setPowerSource(view.deviceId, 'battery')
+    else if (PLUGS_IN.test(message.text)) manage.setPowerSource(view.deviceId, 'ac')
     if (RACES_SETTINGS.test(message.text)) manage.raceNextWrite(view.deviceId, view.harness)
     if (ADDS_SETTING.test(message.text)) manage.addSetting(view.deviceId, view.harness)
     if (EDITS_CONFIG_ELSEWHERE.test(message.text)) harnessConfig.editElsewhere(view.deviceId)

@@ -21,3 +21,13 @@ export function powerShortcutTitle(
     .filter(Boolean)
     .join('\n')
 }
+
+/**
+ * 电源设置的状态行：服务给的申请状态；开了接电常开、正用电池、又没有别的来源在阻止休眠时，
+ * 服务只说“未阻止”，这里写成“正在使用电池 · 接通电源后生效”，说清楚开关为什么还没起作用
+ */
+export function powerStatusLine(power: DevicePowerView, plugged: boolean, t: Translator): string {
+  if (power.state === 'inactive' && plugged && power.powerSource === 'battery')
+    return `${t('power.source.battery')} · ${t('power.quick.wait')}`
+  return t.said(power.text)
+}

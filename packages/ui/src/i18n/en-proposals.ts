@@ -59,5 +59,4 @@ export const enProposals: Record<keyof typeof zhProposals, Entry> = {
   'proposal.cardsOff.missing':
     'This device’s service doesn’t support the task-card switch. Update it first',
   'wrap.tail': 'Next steps for this turn',
-  'wrap.replied': 'Replied: {label}',
 }

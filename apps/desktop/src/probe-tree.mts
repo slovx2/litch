@@ -7,7 +7,7 @@
 //   过期了、撤回了的写着状态；侧面板的“建议任务”列全部，角标是等着的个数，点一条在对话里找到那张卡片；
 //   收尾（wrap_up）带的建议照顺序一张一张、被拒的只一行原因，空的收尾不画；开始了的卡片写实际的 harness；
 //   卡片和收尾的问题排在回合最下方（回答下面），过程里只留一行“建议”；点问题的回复按钮把它的话当用户消息发出，
-//   之后问题折成一行写着回了哪个；卡片的“在这里做”在本会话发一条“在这里做：…”；“⋯”里关任务卡出可撤销的提示；
+//   之后答案并进回合末尾的问题卡、不另出答复气泡；卡片的“在这里做”在本会话发一条“在这里做：…”；“⋯”里关任务卡出可撤销的提示；
 //   没调收尾时设备进程的提醒画成一行轻字，不是用户的气泡；
 //   “新任务”出 offer 卡（“新会话 / 在这里做”），选新会话等模型补简报再写“已开始”、下面一行是子会话，
 //   选在这里做写“在这里做”；侧面板里也有这一行和两个按钮；选新会话后简报开在收不紧沙箱的 Pi 上的，
@@ -390,14 +390,16 @@ export async function treeProbe(): Promise<TreeSeen> {
     (askBox()?.querySelectorAll('button[data-act]').length ?? 0) === 2 &&
     (askBox()?.textContent ?? '').includes('解析器的单测')
   askBox()?.querySelector<HTMLElement>('button[data-act="0"]')?.click()
-  const askReplied = await until(() => {
-    const said = $$('.main .umsg').at(-1)?.textContent ?? ''
-    return (
-      said.includes('在这里把解析器的单测补齐') &&
-      wrapTurn?.querySelector<HTMLElement>('.turn-tail .tail-ask')?.dataset.state === 'past' &&
-      (wrapTurn?.querySelector('.tail-ask')?.textContent ?? '').includes('在这里把解析器的单测补齐')
-    )
-  })
+  // 答了之后：答案并进回合末尾那张问题卡（变成“已答”、收着时摘要里写着答案），不再另出一个答复的气泡
+  const tailAsk = () => wrapTurn?.querySelector<HTMLElement>('.turn-tail [data-card="ask"]')
+  const askReplied = await until(
+    () =>
+      tailAsk()?.dataset.state === 'answered' &&
+      (tailAsk()?.textContent ?? '').includes('在这里把解析器的单测补齐') &&
+      !$$('.main .umsg').some((bubble) =>
+        (bubble.textContent ?? '').includes('在这里把解析器的单测补齐'),
+      ),
+  )
   seen.ask = askBox()?.textContent ?? '没有'
   await idle()
   const firstWrap = () => wrapBox()?.querySelector<HTMLElement>('[data-card="proposal"]')
@@ -775,7 +777,7 @@ export async function treeLooks(parent: string): Promise<TreeLooks> {
     '.prop-card',
     '.prop-refused',
     '.turn-tail',
-    '.tail-ask',
+    '.turn-tail [data-card="ask"]',
     '.prop-menu .ibtn',
     '.sev',
     '.tree-kids .row-line',
@@ -835,7 +837,7 @@ const LABELS: Record<Exclude<keyof TreeSeen, 'seen'>, string> = {
   wrapActual: '“改了再开始”能改完成后唤醒；换了 harness 开始后卡片写实际的 harness',
   tailBelow: '收尾区在回合最下方、回答下面，过程里那一步写“建议”',
   askShown: '收尾的问题带两个回复按钮',
-  askReplied: '点回复按钮发出按钮的话，问题折成一行写着回了哪个',
+  askReplied: '点回复按钮发出按钮的话，答案并进回合末尾的问题卡，不另出答复气泡',
   pendingSurvived: '子会话回报唤醒后原问题仍在输入框上方且能答',
   pendingCoexist: '旧收尾问题与新的异步问题同时保留',
   pendingDeduped: '重复提出同一待答问题只显示一次',

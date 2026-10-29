@@ -419,6 +419,12 @@ export function ManageSection({ device }: { device: DeviceView }) {
           return (
             <View key={group.id}>
               <Text style={[styles.fold, { color: theme.c.ink2 }]}>{t.said(group.title)}</Text>
+              {/* 只阻止空闲休眠、仍会熄屏锁屏这条边界写在组的说明里，状态行不再重复 */}
+              {group.description ? (
+                <Text style={[styles.groupNote, { color: theme.c.ink3 }]}>
+                  {t.said(group.description)}
+                </Text>
+              ) : null}
               <PowerSettings deviceId={deviceId} specs={specs} snapshot={snapshot} />
             </View>
           )
@@ -458,6 +464,7 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '600' },
   small: { fontSize: 12, lineHeight: 17 },
   fold: { fontSize: 13, paddingHorizontal: 16, paddingVertical: 8 },
+  groupNote: { fontSize: 13, lineHeight: 18, paddingHorizontal: 16 },
   actions: { flexDirection: 'row', gap: 10, paddingHorizontal: 16 },
   save: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, paddingHorizontal: 16 },
   note: { fontSize: 13, lineHeight: 18, paddingHorizontal: 16, paddingVertical: 6 },

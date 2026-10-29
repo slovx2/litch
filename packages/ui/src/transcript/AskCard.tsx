@@ -1,10 +1,12 @@
-// 已答的异步问题在历史中留痕；未答问题统一在输入框上方作答。
+// 对话里的问题卡（AskSheet）：问题和答案在同一张卡里，状态跟着变；作答统一在输入框上方的待答区。
+// 问用户的工具（AskUserQuestion 等）答完画成问答卡片（AskedCard）。
 import {
   type AgentMessageItem,
   type AskAnswers,
   type AskReply,
   distinctReplies,
   keys,
+  type PendingQuestion,
   type ToolCallItem,
 } from '@litch/core'
 import { memo } from 'react'
@@ -15,30 +17,119 @@ import { type ItemRef, useItem } from './messages.tsx'
 import { useToggle } from './state.ts'
 
 const NO_ANSWERS: AskAnswers = {}
-export const AskCard = memo(function AskCard(ref: ItemRef) {
+const NO_PENDING: PendingQuestion[] = []
+
+/** 问题卡里的一道题：标识、题目、建议的回答（只读，作答在输入框上方的待答区） */
+export interface SheetQuestion {
+  id: string
+  title: string
+  options: readonly string[]
+}
+
+/**
+ * 问题卡：模型边干活边问的题（AskCard）和收尾留的问题（tree/TurnTail.tsx）都画成它，答案并在同一张卡里，
+ * 不再另出一个“已回答问题”的气泡（messages.tsx 认出答复就不画）。卡片跟着状态变：
+ * 待回答——一直展开，列题目和建议的回答；已答——默认收起，标题行写答了几题和题目，下面一行是答案，点开看每题；
+ * 未回答（问题已经过去了）——收起，点开看题目和当时的选项。
+ */
+export function AskSheet({
+  deviceId,
+  sessionId,
+  toggleId,
+  anchor,
+  questions,
+}: {
+  deviceId: string
+  sessionId: string
+  /** 展开状态记在对话区里用的标识 */
+  toggleId: string
+  anchor?: string | undefined
+  questions: readonly SheetQuestion[]
+}) {
   const t = useT()
-  const [open, setOpen] = useToggle(`${ref.deviceId}:${ref.sessionId}`, `ask:${ref.itemId}`, false)
-  const item = useItem<AgentMessageItem>(ref)
-  const answers = useKey<AskAnswers>(keys.answers(ref.deviceId, ref.sessionId)) ?? NO_ANSWERS
-  const answered = item?.questions?.filter((q) => answers[q.id] !== undefined) ?? []
-  if (answered.length === 0) return null
+  const [toggled, setToggled] = useToggle(`${deviceId}:${sessionId}`, toggleId, false)
+  const answers = useKey<AskAnswers>(keys.answers(deviceId, sessionId)) ?? NO_ANSWERS
+  const pending =
+    useKey<PendingQuestion[]>(keys.pendingQuestions(deviceId, sessionId)) ?? NO_PENDING
+  const answered = questions.filter((q) => answers[q.id] !== undefined)
+  const waiting = pending.some((entry) => questions.some((q) => entry.replyIds.includes(q.id)))
+  const state = answered.length === questions.length ? 'answered' : waiting ? 'open' : 'closed'
+  const open = state === 'open' || toggled
+  const first = questions[0]
+  if (!first) return null
   return (
-    <section className="ask" data-card="ask" data-state="answered">
+    <section className="ask" data-card="ask" data-state={state} data-anchor={anchor}>
       <CompactRow
-        source={`${t('ask.title')} · ${t('ask.answeredCount', { count: answered.length })}`}
-        summary={answers[answered[0]?.id ?? '']}
+        icon={state === 'open' ? <i className="st wait" /> : undefined}
+        source={`${t('ask.title')} · ${
+          state === 'answered'
+            ? t('ask.answeredCount', { count: answered.length })
+            : t(`ask.state.${state}`)
+        }`}
+        title={open ? undefined : first.title}
+        summary={answered.map((q) => answers[q.id]).join(' · ')}
         open={open}
-        onToggle={() => setOpen(!open)}
+        onToggle={() => setToggled(!toggled)}
+        fixed={state === 'open'}
       />
       {open
-        ? answered.map((q) => (
-            <div className="ask-q" key={q.id}>
-              <div className="ask-text">{q.title}</div>
-              <Answer text={answers[q.id] ?? ''} />
-            </div>
-          ))
+        ? questions.map((q) => {
+            const answer = answers[q.id]
+            return (
+              <div className="ask-q" key={q.id}>
+                <div className="ask-text">{q.title}</div>
+                {answer !== undefined ? (
+                  <Answer text={answer} />
+                ) : q.options.length > 0 ? (
+                  <div className="ask-chips">
+                    {q.options.map((option, at) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: 建议的回答不会增删换位
+                      <span key={at}>{option}</span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })
         : null}
     </section>
+  )
+}
+
+/** 建议的回答，一行一个，只读 */
+function Picks({
+  options,
+}: {
+  options: readonly { label: string; description?: string | null }[]
+}) {
+  return (
+    <ul className="ask-picks">
+      {options.map((option, at) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: 选项不会增删换位
+        <li key={at}>
+          <span className="tx">
+            <b>{option.label}</b>
+            {option.description ? <span>{option.description}</span> : null}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** 模型边干活边问的题（带题的助手消息） */
+export const AskCard = memo(function AskCard(ref: ItemRef) {
+  const item = useItem<AgentMessageItem>(ref)
+  const questions = item?.kind === 'agentMessage' ? item.questions : undefined
+  if (!questions?.length) return null
+  return (
+    <AskSheet
+      deviceId={ref.deviceId}
+      sessionId={ref.sessionId}
+      toggleId={`ask:${ref.itemId}`}
+      anchor={`i:${ref.itemId}`}
+      questions={questions}
+    />
   )
 })
 
@@ -66,7 +157,7 @@ function askedState(item: ToolCallItem): 'open' | 'answered' | 'closed' {
 
 /**
  * 问用户的工具（AskUserQuestion 等，核心的 ToolCallItem.asked）画成的问答卡片，和上面答过的问题卡片一个样子：
- * 每题先列题目和明确的回答区，未选项折叠；没答的写“已跳过”。还在问的只列题目，选项在输入区的提问卡片上。
+ * 每题先列题目和明确的回答区，未选项折叠；没答的写“已跳过”。还在问的列题目和选项（作答在输入区的提问卡片上）。
  * 问的时候在输入区的请求卡片上答，这里只读。结果对不上题目的，题目下面是原始回答
  */
 export const AskedCard = memo(function AskedCard({
@@ -100,6 +191,7 @@ export const AskedCard = memo(function AskedCard({
               })
             : t(`ask.state.${state}`)
         }`}
+        title={state !== 'answered' || open ? undefined : asked.questions[0]?.question}
         summary={asked.questions[0]?.answer ?? asked.raw}
         open={state !== 'answered' || open}
         onToggle={() => setOpen(!open)}
@@ -119,25 +211,16 @@ export const AskedCard = memo(function AskedCard({
                   {t('ask.skipped')}
                 </div>
               ) : null}
-              {state !== 'open' &&
-              question.options.some((_, at) => !question.picked.includes(at)) ? (
+              {state === 'open' ? (
+                <Picks options={question.options} />
+              ) : question.options.some((_, at) => !question.picked.includes(at)) ? (
                 <details className="ask-alternatives">
                   <summary>
                     {t(question.answer === null ? 'ask.optionsAll' : 'ask.options')}
                   </summary>
-                  <ul className="ask-picks">
-                    {question.options.map((option, at) =>
-                      question.picked.includes(at) ? null : (
-                        // biome-ignore lint/suspicious/noArrayIndexKey: 选项不会增删换位
-                        <li key={at}>
-                          <span className="tx">
-                            <b>{option.label}</b>
-                            {option.description ? <span>{option.description}</span> : null}
-                          </span>
-                        </li>
-                      ),
-                    )}
-                  </ul>
+                  <Picks
+                    options={question.options.filter((_, at) => !question.picked.includes(at))}
+                  />
                 </details>
               ) : null}
             </div>

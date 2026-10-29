@@ -45,6 +45,7 @@ import {
   blockInput,
   bucketItems,
   goalReachedIn,
+  parseAskReply,
   processFolded,
   processItemIds,
   processSettled,
@@ -54,6 +55,7 @@ import {
   thoughtShown,
   workingShown,
 } from '@litch/core'
+import { questionItemOf } from '../../../../packages/ui/src/transcript/ask-ids.ts'
 import { cardsOf, eventKind, handOffOf, isOfferCall } from '../detail/proposals/logic'
 import { type ChunkState, chunkText, emptyChunks } from './blocks'
 
@@ -416,7 +418,7 @@ export class RowBuilder {
     blocks.forEach((block, index) => {
       switch (block.type) {
         case 'user':
-          this.userRows(out, turn, view.items[block.itemId])
+          this.userRows(out, turn, view, view.items[block.itemId])
           return
         case 'answer':
         case 'plan': {
@@ -515,7 +517,12 @@ export class RowBuilder {
   }
 
   /** 回合开头（或插进来）的那条用户消息：设备进程注入的提示、系统卡片、用户气泡 */
-  private userRows(out: Row[], turn: TurnView, item: ItemView | undefined): void {
+  private userRows(
+    out: Row[],
+    turn: TurnView,
+    view: SessionView,
+    item: ItemView | undefined,
+  ): void {
     if (item?.kind !== 'userMessage') return
     if (item.event)
       out.push(
@@ -538,8 +545,12 @@ export class RowBuilder {
           expanded: this.expanded.has(item.id),
         }),
       )
-    // 唤醒、提醒的回合没有用户自己说的话：只有上面那条提示
-    else if (item.text || item.attachments.length > 0 || !item.event)
+    // 唤醒、提醒的回合没有用户自己说的话：只有上面那条提示。
+    // 整段是一份答复、问题那一条都还在会话里的：答案并进问题卡（AskSheet），不另画气泡
+    else if (
+      (item.text || item.attachments.length > 0 || !item.event) &&
+      !(item.attachments.length === 0 && foldedReply(view, item.text, item.peer !== undefined))
+    )
       out.push(
         this.keep({
           type: 'user',
@@ -905,4 +916,16 @@ export function labelOf(item: StepItem): Text {
 const lastLine = (text: string): string => {
   const lines = text.trim().split('\n')
   return lines[lines.length - 1] ?? ''
+}
+
+/** 整段是一份答复，答的题都还在会话里（问题卡上画得出答案） */
+function foldedReply(view: SessionView, text: string, peer: boolean): boolean {
+  if (peer) return false
+  const replies = parseAskReply(text)
+  return (
+    replies?.every((reply) => {
+      const itemId = questionItemOf(reply.questionItemId)
+      return itemId !== null && view.items[itemId] !== undefined
+    }) === true
+  )
 }

@@ -8,6 +8,10 @@ import {
 import { useState } from 'react'
 import { Switch, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
+import {
+  PLUGGED_POWER_SETTING,
+  powerStatusLine,
+} from '../../../../../packages/ui/src/devices/power-shortcut.ts'
 import { useBusy, useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
@@ -44,8 +48,19 @@ export function PowerSettings({
   return (
     <View testID="power-settings" style={{ padding: 16, gap: 12 }}>
       {state ? (
-        <Text accessibilityRole="text" style={{ color: theme.c.ink3 }}>
-          {t.said(state.text)}
+        // 状态行：正在阻止休眠用强调色、失败用出错色，同桌面
+        <Text
+          accessibilityRole="text"
+          style={{
+            color:
+              state.state === 'requested'
+                ? theme.c.accent
+                : state.state === 'degraded'
+                  ? theme.c.err
+                  : theme.c.ink2,
+          }}
+        >
+          {powerStatusLine(state, snapshot.values[PLUGGED_POWER_SETTING] === true, t)}
         </Text>
       ) : null}
       {specs.map((spec) => (

@@ -26,14 +26,14 @@ func (c configuration) powerSettings() powerSettings {
 }
 
 func powerSettingSpecs() (settingGroup, []settingSpec) {
-	description := both("仅阻止系统空闲睡眠，仍允许屏幕熄灭和锁屏；合盖或主动睡眠仍由系统决定。", "Only prevents idle system sleep; the screen can still turn off or lock. Closing the lid or choosing Sleep still follows system behavior.")
+	description := both("仅阻止系统空闲休眠，仍允许屏幕熄灭和锁屏；合盖或主动休眠仍由系统决定。", "Only prevents idle system sleep; the screen can still turn off or lock. Closing the lid or choosing Sleep still follows system behavior.")
 	return settingGroup{ID: "power", Scope: deviceScope, Title: both("电源", "Power"), Description: &description}, []settingSpec{
 		{Key: powerWorkingKey, Group: "power", Type: settingBoolean, Scope: deviceScope, Restart: restartNone,
-			Default: true, Title: both("运行任务时阻止系统睡眠", "Prevent sleep while tasks are running"),
-			Description: both("回合、后台任务和等待审批或回答期间阻止系统空闲睡眠，电池供电时也生效，会增加耗电。", "Prevents idle system sleep during turns, background tasks and waits for approval or answers, including on battery power; this uses more energy.")},
+			Default: true, Title: both("运行任务时阻止系统休眠", "Prevent sleep while tasks are running"),
+			Description: both("回合、后台任务和等待审批或回答期间阻止系统空闲休眠，电池供电时也生效，会增加耗电。", "Prevents idle system sleep during turns, background tasks and waits for approval or answers, including on battery power; this uses more energy.")},
 		{Key: powerPluggedKey, Group: "power", Type: settingBoolean, Scope: deviceScope, Restart: restartNone,
-			Default: false, Title: both("接通电源时始终阻止系统睡眠", "Always prevent sleep when plugged in"),
-			Description: both("设备服务运行且接通电源时阻止系统空闲睡眠，即使没有任务、已关闭桌面应用也生效；会增加耗电。", "Prevents idle system sleep while the device service is running and the computer is plugged in, even with no tasks or after the desktop app closes; this uses more energy.")},
+			Default: false, Title: both("接通电源时始终阻止系统休眠", "Always prevent sleep when plugged in"),
+			Description: both("设备服务运行且接通电源时阻止系统空闲休眠，即使没有任务、已关闭桌面应用也生效；会增加耗电。", "Prevents idle system sleep while the device service is running and the computer is plugged in, even with no tasks or after the desktop app closes; this uses more energy.")},
 	}
 }
 

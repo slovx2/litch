@@ -68,6 +68,16 @@
   line-height: 18px;
   color: var(--ink-3);
 }
+/* 电源组的状态行（devices/manage/PowerSettings.tsx） */
+.power-state {
+  color: var(--ink-2);
+}
+.power-state[data-state="requested"] {
+  color: var(--accent);
+}
+.power-state[data-state="degraded"] {
+  color: var(--err);
+}
 .mng-sec > .cfail {
   padding: 8px 10px;
   border: 1px solid var(--line-2);

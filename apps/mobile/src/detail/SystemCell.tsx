@@ -57,7 +57,8 @@ export const SystemCell = memo(function SystemCell({ row }: Props<'system'>) {
       testID={`system-message:${system.kind}`}
       mark={MARK[system.kind]}
       source={source}
-      summary={[title, system.prompt].filter(Boolean).join(' · ')}
+      title={title}
+      summary={system.prompt}
       open={row.expanded === true}
       onPress={() => toggle(row.key, row.turnId)}
     >

@@ -15,12 +15,12 @@ func (p *powerController) reconcile() bool {
 	p.lastSettings = config
 	state := powerStatus{Supported: p.backend.supported(), ConfiguredForLocalService: config.local,
 		State: "inactive", PowerSource: p.source, Reasons: []string{},
-		Text: both("当前没有保持唤醒的请求", "No keep-awake request is active")}
+		Text: both("当前未阻止系统休眠", "Not preventing sleep")}
 	if !config.local || !state.Supported {
 		p.release()
 		if !state.Supported {
 			state.State = "unsupported"
-			state.Text = both("此平台暂不支持设备服务防休眠", "Device-service keep awake is not supported on this platform")
+			state.Text = both("此平台暂不支持阻止系统休眠", "Preventing sleep is not supported on this platform")
 		} else {
 			state.Text = both("此服务未登记为本机设备，不应用电源设置", "This service is not registered as a local device; power settings do not apply")
 		}
@@ -107,25 +107,25 @@ func (p *powerController) reconcile() bool {
 		state.State = "requested"
 		switch {
 		case !wanted:
-			state.Text = both("工作已结束，将在短暂等待后释放防休眠请求", "Work has finished; the keep-awake request will be released shortly")
+			state.Text = both("任务已结束 · 稍后恢复系统休眠", "Tasks finished · Sleep resumes shortly")
 		case hasPowerReason(state, "working") && hasPowerReason(state, "pluggedIn"):
-			state.Text = both("工作进行中且已接通电源，已请求防止系统空闲休眠；仍可锁屏和熄屏", "Work is in progress and the computer is plugged in; idle sleep prevention has been requested. The screen can still turn off or lock")
+			state.Text = both("运行任务中，已接通电源 · 正在阻止系统休眠", "Running tasks, plugged in · Preventing sleep")
 		case hasPowerReason(state, "working"):
-			state.Text = both("工作进行中，已请求防止系统空闲休眠；仍可锁屏和熄屏", "Work is in progress; idle sleep prevention has been requested. The screen can still turn off or lock")
+			state.Text = both("运行任务中 · 正在阻止系统休眠", "Running tasks · Preventing sleep")
 		default:
-			state.Text = both("已接通电源，已请求持续防止系统空闲休眠；仍可锁屏和熄屏", "The computer is plugged in; continuous idle sleep prevention has been requested. The screen can still turn off or lock")
+			state.Text = both("已接通电源 · 正在阻止系统休眠", "Plugged in · Preventing sleep")
 		}
 	}
 	switch {
 	case wanted && (p.failed || p.lease == nil):
 		state.State = "degraded"
-		state.Text = both("防休眠请求未成功；请检查设备服务日志，修复后重新开关电源设置", "The keep-awake request failed. Check the device-service log, then toggle the power setting after fixing the cause")
+		state.Text = both("无法阻止系统休眠；请检查设备服务日志，修复后重新开关电源设置", "Could not prevent sleep. Check the device-service log, then toggle the power setting after fixing the cause")
 	case config.working && unknown:
 		state.State = "degraded"
 		state.Text = both("部分工作状态未确认；已有工作证据最多保留 90 秒，请检查设备连接和服务日志", "Some work status is unconfirmed. Existing evidence is kept for up to 90 seconds; check device connections and service logs")
 	case config.plugged && p.source == "unknown":
 		state.State = "degraded"
-		state.Text = both("无法确认是否接通电源，持续保持唤醒暂不生效；请检查设备服务日志", "External power could not be confirmed, so always-on keep awake is inactive. Check the device-service log")
+		state.Text = both("无法确认是否接通电源，“接通电源时始终阻止系统休眠”暂不生效；请检查设备服务日志", "Could not confirm external power, so “Always prevent sleep when plugged in” is inactive. Check the device-service log")
 	}
 	return p.setStatus(state)
 }
