@@ -108,6 +108,8 @@ export interface ActiveTurn {
   truncated?: boolean
   /** 这个回合里自动压缩最近一次的失败原因；之后压成了就清掉 */
   compactionError?: string
+  /** 最近一次模型尝试的错误；Pi 后续重试成功会清除，与回合本身的错误分开。 */
+  modelError?: PiTurn['error']
   /** 正在压缩：已经发了开始、还没完成的那个 contextCompaction 条目（turn.mts、compaction.mts） */
   compacting?: any
 }

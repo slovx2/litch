@@ -212,11 +212,12 @@ export function onEvent(server: PiServer, thread: PiThread, event: any): void {
     if (event.type === 'message_end' && event.message.role === 'assistant') {
       const message = event.message
       if (message.stopReason === 'error')
-        turn.error = {
+        active.modelError = {
           message: message.errorMessage ?? 'Pi 模型请求失败',
           codexErrorInfo: null,
           additionalDetails: null,
         }
+      else if (message.stopReason !== 'aborted') active.modelError = null
       // 压成了 Pi 会接着请求，再来一条消息时这里跟着改过来
       active.truncated = emptyLength(message)
       const u = message.usage
@@ -576,7 +577,7 @@ export async function finishTurn(
   const peer =
     (active.peer && server.peers.get(active.peer.id)) ||
     [...(server.subscriptions.get(thread.id) ?? [])].map((id) => server.peers.get(id)).find(Boolean)
-  if (!active.stopped && !turn.error) turn.error = contextError(active)
+  if (!active.stopped && !turn.error) turn.error = active.modelError ?? contextError(active)
   turn.status = active.stopped ? 'interrupted' : turn.error ? 'failed' : 'completed'
   const completedAt = Date.now()
   turn.completedAt = completedAt

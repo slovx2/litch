@@ -41,6 +41,9 @@ the failed attempt had already shown is withdrawn. To change the number of retri
 `CLAUDE_CODE_MAX_RETRIES` in the harness's environment (`0` turns retrying off). If every retry fails, the
 turn fails with the last error.
 
+**Pi 自动重试后完成回答。** 单次模型请求失败不代表整个回合失败；重试成功后回合显示完成。
+如果重试最终仍失败，显示最后一次模型错误；会话被其他实例修改等回合错误不会被成功重试清除。
+
 **A model is unavailable or every turn fails at once.** Usually the harness's own sign-in or model
 configuration. The user checks it in the harness's own CLI (exception E3); the harness's runtime log
 (`diagnose logs`) shows the error.
