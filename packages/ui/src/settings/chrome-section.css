@@ -8,3 +8,8 @@
   font-family: var(--mono);
   overflow-wrap: anywhere;
 }
+/* 准备、打开扩展页、打开目录、停止排成一排，靠左跟着上面的说明 */
+.chrome-actions {
+  justify-content: flex-start;
+  margin-bottom: 4px;
+}

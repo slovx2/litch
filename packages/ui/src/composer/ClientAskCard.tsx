@@ -121,21 +121,26 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
             {t('clientAsk.tool')} <b>{`${request.tool.namespace} · ${request.tool.name}`}</b>
           </span>
         </div>
+        {/* Chrome 的两种：要用的是哪个 Chrome、在哪个网站登录，和网站审批一样写在说明行里，下面一句说明 */}
         {ask.kind === 'chromeInstance' ? (
           <>
-            <div className="req-why">{t('chrome.instanceNote')}</div>
-            <div className="well">
-              <b>{ask.name}</b>
+            <div className="req-meta">
+              <span>
+                <b>{ask.name}</b>
+              </span>
             </div>
+            <div className="req-why">{t('chrome.instanceNote')}</div>
           </>
         ) : null}
         {ask.kind === 'chromeSignIn' ? (
           <>
-            <div className="req-why">{t('chrome.signInNote')}</div>
-            <div className="well">
-              <b>{ask.origin}</b>
-              <p>{ask.reason}</p>
+            <div className="req-meta">
+              <span>
+                {t('clientAsk.origin')} <b>{ask.origin}</b>
+              </span>
             </div>
+            {ask.reason ? <div className="req-why">{ask.reason}</div> : null}
+            <div className="req-why">{t('chrome.signInNote')}</div>
           </>
         ) : null}
         {ask.kind === 'site' ? (

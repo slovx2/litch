@@ -53,6 +53,8 @@ export function ChromeSection() {
     }
   }, [channel, shell])
   if (shell !== 'electron') return null
+  const connected = (state?.instances.length ?? 0) > 0
+  const mismatch = state?.instances.some((instance) => !instance.compatible) ?? false
   return (
     <section className="set-block" data-chrome-settings>
       <h3>{t('chrome.title')}</h3>
@@ -79,18 +81,34 @@ export function ChromeSection() {
               </button>
             </div>
           </div>
-          <p className="set-note">
+          {/* 状态一行：连上了写哪个 Chrome、什么版本；版本不对用出错色 */}
+          <p className={mismatch ? 'set-note err' : 'set-note'} role="status" data-chrome-state>
             {t(
               !state?.prepared
                 ? 'chrome.unprepared'
-                : state.instances.length === 0
+                : !connected
                   ? 'chrome.disconnected'
-                  : state.instances.some((instance) => !instance.compatible)
+                  : mismatch
                     ? 'chrome.mismatch'
                     : 'chrome.connected',
             )}
+            {state?.instances.map((instance) => (
+              <span key={instance.id}>{` · ${instance.name} ${instance.version}`}</span>
+            ))}
           </p>
-          <div className="set-actions">
+          {state?.prepared ? (
+            <>
+              <p className="set-para">{t('chrome.install')}</p>
+              <div className="chrome-extension-path">
+                <code>{state.extensionDirectory}</code>
+              </div>
+              <p className="set-note">
+                {t('chrome.version', { version: state.expectedVersion })} · {state.extensionId}
+              </p>
+            </>
+          ) : null}
+          {/* 操作排在说明和目录下面：先读怎么装，再点 */}
+          <div className="set-actions chrome-actions">
             <button
               className="btn"
               type="button"
@@ -124,22 +142,6 @@ export function ChromeSection() {
               {t('chrome.stop')}
             </button>
           </div>
-          {state?.prepared ? (
-            <>
-              <p className="set-para">{t('chrome.install')}</p>
-              <div className="chrome-extension-path">
-                <code>{state.extensionDirectory}</code>
-              </div>
-              <p className="set-note">
-                {t('chrome.version', { version: state.expectedVersion })} · {state.extensionId}
-              </p>
-            </>
-          ) : null}
-          {state?.instances.map((instance) => (
-            <p className="set-note" key={instance.id}>
-              {instance.name} · {instance.version} · {instance.id.slice(0, 8)}
-            </p>
-          ))}
           {devices.length ? (
             <>
               <h4>{t('chrome.remote')}</h4>
