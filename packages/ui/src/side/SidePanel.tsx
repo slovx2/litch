@@ -142,6 +142,8 @@ export function SidePanel({
               role="tab"
               className="side-tab"
               data-tab={tab.id}
+              title={t(tab.label)}
+              aria-label={t(tab.label)}
               aria-selected={tab.id === spec?.id}
               onClick={() => setSideTab(tab.id)}
             >

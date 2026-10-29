@@ -53,6 +53,7 @@ import { spanOp } from '../projection/span.mjs'
 import { settleSteps, todoKey } from '../projection/todo.mjs'
 import { createMockApprovals } from './mock-approvals.mjs'
 import { createMockOrganize } from './mock-arrange.mjs'
+import { createMockAutomation } from './mock-automation.mjs'
 import { createMockBackground } from './mock-background.mjs'
 import { createMockCompose } from './mock-compose.mjs'
 import { createMockConfig, RUNS_CONFIG } from './mock-config.mjs'
@@ -763,6 +764,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     if (ORGANIZES_ELSEWHERE.test(message.text)) organize.elsewhere(view.deviceId, view.sessionId)
     // 本机的设备服务换没换版本的几出（关键字在 mock-service.mts 开头）
     service.stage(view.deviceId, message.text)
+    automation.stage(view.deviceId, view.sessionId, message.text)
     // 远程设备服务比应用旧、一键升级的几出（关键字在 mock-remote-upgrade.mts 开头）
     remoteUpgrade.stage(view.deviceId, message.text)
     // 重启设备服务的几出（关键字在 mock-restart.mts 开头）
@@ -1704,6 +1706,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         (session.status === 'running' || session.status === 'waiting'),
     )
 
+  // 电脑操作预览（mock-automation.mts）
+  const automation = createMockAutomation(clock)
   const manage = createMockManagement({
     clock,
     stepMs: chunkMs,
@@ -2544,6 +2548,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (operated !== undefined) return operated
       const organized = organize.command(name, params)
       if (organized !== undefined) return organized
+      if (name === 'automationPreview.control')
+        return automation.command(params as Commands['automationPreview.control']['params'])
       const managed = manage.command(name, params)
       if (managed !== undefined) {
         // 重启过的 harness：详情设置那边要重启才生效的用上
@@ -3212,10 +3218,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
 
     subscribe(topic, sink) {
-      if (topic.kind === 'automationPreview') {
-        sink.snapshot(null)
-        return () => {}
-      }
+      if (topic.kind === 'automationPreview')
+        return automation.subscribe(topic.deviceId, topic.sessionId, sink)
       // 管理数据有自己的一套订阅者
       if (topic.kind === 'manage') return manage.subscribe(topic.deviceId, sink)
       // 终端也是：列表和各个终端的输出

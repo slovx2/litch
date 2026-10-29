@@ -48,8 +48,9 @@ export function PreviewTab({ place, shown }: SideTabProps) {
       pointer.current = createAutomationPointer(stage.current, {
         surface,
         frame,
-        color: getComputedStyle(stage.current).getPropertyValue('--accent').trim(),
-        outlineColor: getComputedStyle(stage.current).getPropertyValue('--on-accent').trim(),
+        // 写成变量引用：光标在宿主的影子树里，变量会继承进去，换皮肤、换深浅时跟着变（取一次值会停在当时的颜色）
+        color: 'var(--accent)',
+        outlineColor: 'var(--on-accent)',
         reducedMotion: () => matchMedia('(prefers-reduced-motion: reduce)').matches,
       })
     pointer.current.geometry(surface, frame)
@@ -93,22 +94,37 @@ export function PreviewTab({ place, shown }: SideTabProps) {
   }
   if (!place.sessionId || !view)
     return <div className="side-none dim">{error || t('automation.none')}</div>
+  // 一行状态：后台操作、已切到前台、等空闲、等画面、出错；出错的用出错色，等的用等待色
+  const notice: { text: string; tone: 'err' | 'wait' | null } | null =
+    view.status === 'waitingForIdle'
+      ? { text: t('automation.waiting'), tone: 'wait' }
+      : view.status === 'capturePending'
+        ? { text: t('automation.capture.pending'), tone: 'wait' }
+        : view.status === 'captureDenied'
+          ? { text: t('automation.capture.denied'), tone: 'err' }
+          : ['captureFailed', 'interrupted'].includes(view.status)
+            ? { text: t('automation.capture.failed'), tone: 'err' }
+            : view.status === 'restoreFailed'
+              ? { text: t('automation.restoreFailed'), tone: 'err' }
+              : null
   return (
     <section className="automation-preview" data-automation-preview>
-      <header>
-        <strong>{view.app}</strong>
+      <header className="automation-head">
+        <span className="automation-app">{view.app}</span>
         <span className="dim">{t('automation.local')}</span>
       </header>
-      <p role="status">
+      <p className="automation-mode" role="status" data-foreground={view.foreground}>
         {view.foreground ? t('automation.foreground') : t('automation.background')}
       </p>
-      {view.status === 'waitingForIdle' && <p>{t('automation.waiting')}</p>}
-      {view.status === 'capturePending' && <p role="status">{t('automation.capture.pending')}</p>}
-      {view.status === 'captureDenied' && <p role="alert">{t('automation.capture.denied')}</p>}
-      {['captureFailed', 'interrupted'].includes(view.status) && (
-        <p role="alert">{t('automation.capture.failed')}</p>
-      )}
-      {view.status === 'restoreFailed' && <p role="alert">{t('automation.restoreFailed')}</p>}
+      {notice ? (
+        <p
+          className="automation-notice"
+          data-tone={notice.tone}
+          role={notice.tone === 'err' ? 'alert' : 'status'}
+        >
+          {notice.text}
+        </p>
+      ) : null}
       <div className="automation-stage" ref={stage}>
         {frame && !pinned ? (
           <img
@@ -121,14 +137,15 @@ export function PreviewTab({ place, shown }: SideTabProps) {
         )}
       </div>
       {frame && !pinned && now - frame.receivedAt > 2000 && (
-        <p className="dim">{t('automation.stale')}</p>
+        <p className="automation-stale dim">{t('automation.stale')}</p>
       )}
       <div className="automation-controls">
-        <button type="button" onClick={() => void control('stop')}>
+        <button type="button" className="btn" onClick={() => void control('stop')}>
           {t('automation.stop')}
         </button>
         <button
           type="button"
+          className="btn"
           disabled={!view.surface}
           title={!view.surface ? t('automation.waitFrame') : undefined}
           onClick={() => void control('takeover')}
@@ -137,6 +154,7 @@ export function PreviewTab({ place, shown }: SideTabProps) {
         </button>
         <button
           type="button"
+          className="btn"
           disabled={!view.surface}
           title={!view.surface ? t('automation.waitFrame') : undefined}
           onClick={() => void control(pinned ? 'unpin' : 'pin')}
@@ -144,7 +162,11 @@ export function PreviewTab({ place, shown }: SideTabProps) {
           {t(pinned ? 'automation.unpin' : 'automation.pin')}
         </button>
       </div>
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <p className="automation-notice" data-tone="err" role="alert">
+          {error}
+        </p>
+      )}
     </section>
   )
 }

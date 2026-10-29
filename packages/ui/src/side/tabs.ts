@@ -128,7 +128,8 @@ export const SIDE_TABS: readonly SideTabSpec[] = [
   {
     id: 'automationPreview',
     label: 'automation.tab',
-    icon: 'target',
+    // 目标那一页用了 target，这里用屏幕，两个标签一眼分得开
+    icon: 'machine',
     Panel: lazy(() =>
       import('../automation-preview/PreviewTab.tsx').then((module) => ({
         default: module.PreviewTab,

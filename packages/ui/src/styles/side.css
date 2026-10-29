@@ -61,6 +61,14 @@
   font-size: 12px;
   white-space: nowrap;
 }
+/* 标签多了（六个起）没选中的只留图标（悬停看名字），选中的那个写全名；不再个个截成一两个字加省略号 */
+.side-tablist:has(> .side-tab:nth-child(6)) > .side-tab:not([aria-selected="true"]) {
+  flex: none;
+  padding: 0 7px;
+}
+.side-tablist:has(> .side-tab:nth-child(6)) > .side-tab:not([aria-selected="true"]) > .ell {
+  display: none;
+}
 .side-tab:hover {
   background: var(--hover);
   color: var(--ink);

@@ -1,18 +1,50 @@
+/* 侧面板“电脑预览”（PreviewTab.tsx）：和目标那一页同样的留白和字号，标题一行、状态一行、画面、按钮一排 */
 .automation-preview {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 14px;
+  padding: 12px;
   color: var(--ink);
 }
-.automation-preview header {
+.automation-head {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.automation-app {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+.automation-head .dim {
+  margin-left: auto;
+  font-size: 11.5px;
+  white-space: nowrap;
 }
 .automation-preview p {
   margin: 0;
-  font-size: inherit;
+  font-size: 12px;
+  line-height: 18px;
+}
+.automation-mode {
+  color: var(--ink-2);
+}
+/* 切到前台是要人留意的事：用等待色 */
+.automation-mode[data-foreground="true"] {
+  color: var(--wait);
+}
+.automation-notice[data-tone="wait"] {
+  color: var(--wait);
+}
+.automation-notice[data-tone="err"] {
+  color: var(--err);
 }
 .automation-stage {
   position: relative;
@@ -21,9 +53,10 @@
   overflow: hidden;
   display: grid;
   place-items: center;
-  background: var(--raised);
+  background: var(--sunken);
   border: 1px solid var(--line-2);
   border-radius: var(--r2);
+  font-size: 12px;
 }
 .automation-stage img {
   width: 100%;
@@ -32,23 +65,6 @@
 }
 .automation-controls {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
-}
-.automation-controls button {
-  border: 1px solid var(--line-2);
-  border-radius: var(--r1);
-  padding: 6px 12px;
-  background: var(--raised);
-  color: var(--ink);
-  cursor: pointer;
-  font: inherit;
-}
-.automation-controls button:hover {
-  border-color: var(--accent);
-}
-.automation-controls button:disabled {
-  color: var(--ink-3);
-  cursor: default;
-  border-color: var(--line-2);
 }
