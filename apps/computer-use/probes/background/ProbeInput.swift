@@ -3,6 +3,7 @@ import ApplicationServices
 import CoreGraphics
 import Darwin
 import Foundation
+import AppKit
 
 enum ProbeFailure: Error { case unavailable(String) }
 
@@ -13,6 +14,7 @@ enum ProbeInput {
   static let carbon = dlopen("/System/Library/Frameworks/Carbon.framework/Carbon", RTLD_NOW)
   typealias Post = @convention(c) (pid_t, CGEvent) -> Void
   typealias Location = @convention(c) (CGEvent, CGPoint) -> Void
+  typealias IntegerField = @convention(c) (CGEvent, UInt32, Int64) -> Void
   typealias PSNForPID = @convention(c) (pid_t, UnsafeMutableRawPointer) -> Int32
   typealias FocusRecord = @convention(c) (UnsafeRawPointer, UnsafeRawPointer) -> Int32
 
@@ -55,11 +57,24 @@ enum ProbeInput {
       event.setIntegerValueField(.mouseEventWindowUnderMousePointer, value: Int64(window))
       event.setIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent, value: Int64(window))
     }
-    if backend == "private" {
+    if backend == "public-nsevent-touch", mouse, event.type != .scrollWheel {
+      event.setIntegerValueField(.mouseEventSubtype, value: Int64(NSEvent.EventSubtype.touch.rawValue))
+    }
+    if ["private", "private-fields", "private-focus-fields", "private-tagged", "private-sky-tagged"].contains(backend) {
       if mouse {
+        let setField = try symbol("SLEventSetIntegerValueField", IntegerField.self)
+        // 非公开的 windowNumber 字段，明确只用于私有路径，不混入公开 API 组。
+        setField(event, 51, Int64(window))
+        if backend.hasSuffix("tagged"), event.type != .scrollWheel {
+          setField(event, 58, 1)
+          event.setIntegerValueField(.mouseEventSubtype, value: Int64(NSEvent.EventSubtype.touch.rawValue))
+          event.setIntegerValueField(.eventTargetUnixProcessID, value: Int64(pid))
+        }
         let setLocation = try symbol("CGEventSetWindowLocation", Location.self)
         setLocation(event, CGPoint(x: event.location.x - frame.minX, y: event.location.y - frame.minY))
       }
+    }
+    if backend == "private" || backend == "private-sky-tagged" {
       let post = try symbol("SLEventPostToPid", Post.self)
       post(pid, event)
     } else {
@@ -67,9 +82,19 @@ enum ProbeInput {
     }
   }
 
-  static func events(action: String, point: CGPoint) throws -> [CGEvent] {
+  static func events(action: String, point: CGPoint, window: UInt32, frame: CGRect, backend: String) throws -> [CGEvent] {
     switch action {
     case "click":
+      if backend == "public-nsevent" || backend == "public-nsevent-touch" {
+        return [NSEvent.EventType.leftMouseDown, .leftMouseUp].compactMap { type in
+          let local = CGPoint(x: point.x - frame.minX, y: frame.height - (point.y - frame.minY))
+          let event = NSEvent.mouseEvent(with: type, location: local, modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: Int(window),
+            context: nil, eventNumber: 1, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)?.cgEvent
+          event?.location = point
+          return event
+        }
+      }
       return [CGEventType.leftMouseDown, .leftMouseUp].compactMap { type in
         let event = CGEvent(mouseEventSource: source, mouseType: type,
           mouseCursorPosition: point, mouseButton: .left)
@@ -81,14 +106,17 @@ enum ProbeInput {
         wheelCount: 1, wheel1: -120, wheel2: 0, wheel3: 0) else { return [] }
       event.location = point
       return [event]
-    case "english", "chinese":
-      let units = Array((action == "english" ? "abcXYZ" : "中文测试").utf16)
-      return [true, false].compactMap { down in
-        let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down)
-        units.withUnsafeBufferPointer { buffer in
-          event?.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
+    case "english", "chinese", "english-char", "chinese-char":
+      let text = action.hasPrefix("english") ? "abcXYZ" : "中文测试"
+      let chunks = action.hasSuffix("-char") ? text.map { Array(String($0).utf16) } : [Array(text.utf16)]
+      return chunks.flatMap { units in
+        [true, false].compactMap { down in
+          let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down)
+          units.withUnsafeBufferPointer { buffer in
+            event?.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
+          }
+          return event
         }
-        return event
       }
     case "keycode":
       return [true, false].compactMap { CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: $0) }

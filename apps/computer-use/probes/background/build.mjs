@@ -62,6 +62,7 @@ function build(name, id, sources) {
 build('Litch Background Input Probe', 'io.github.slovx2.litch.background-input-probe', [
   'main.swift',
   'ProbeInput.swift',
+  'ProbeDiagnostics.swift',
 ])
 if (existsSync(join(source, 'Fixture.swift'))) {
   build('Litch Background Fixture', 'io.github.slovx2.litch.background-fixture', ['Fixture.swift'])

@@ -18,20 +18,15 @@ application.setActivationPolicy(.accessory)
   try? data.write(to: probeDirectory.appendingPathComponent(name), options: .atomic)
 }
 
-writeProbeJSON([
-  "pid": getpid(), "bundleId": Bundle.main.bundleIdentifier ?? "",
-  "accessibility": AXIsProcessTrusted(), "eventPost": CGPreflightPostEventAccess(),
-  "eventListen": CGPreflightListenEventAccess(),
-], name: "permissions.json")
+writeProbeJSON(ProbeDiagnostics.collect(), name: "permissions.json")
 
 // 不请求或修改系统授权，由用户在系统设置里为这个专用测试应用授权。
 var permissionTimer: Timer? = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-  writeProbeJSON([
-    "pid": getpid(), "bundleId": Bundle.main.bundleIdentifier ?? "",
-    "accessibility": AXIsProcessTrusted(), "eventPost": CGPreflightPostEventAccess(),
-    "eventListen": CGPreflightListenEventAccess(),
-    "frontPid": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0,
-  ], name: "permissions.json")
+  writeProbeJSON(ProbeDiagnostics.collect(), name: "permissions.json")
+}
+var foregroundTimer: Timer? = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
+  writeProbeJSON(["frontPid": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0,
+    "sampledAt": Date().timeIntervalSince1970, "instanceID": ProbeDiagnostics.instanceID], name: "foreground.json")
 }
 @Sendable func readJSON(_ path: URL) throws -> [String: Any] {
   guard let value = try JSONSerialization.jsonObject(with: Data(contentsOf: path)) as? [String: Any]
@@ -51,12 +46,21 @@ var permissionTimer: Timer? = Timer.scheduledTimer(withTimeInterval: 1, repeats:
   return (state, path)
 }
 
-@Sendable func windowID(pid: pid_t) throws -> UInt32 {
+@Sendable func windowID(pid: pid_t, frame: CGRect) throws -> UInt32 {
   let windows = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []
-  guard let window = windows.first(where: {
-    ($0[kCGWindowOwnerPID as String] as? Int32) == pid && ($0[kCGWindowLayer as String] as? Int) == 0
-  }), let number = window[kCGWindowNumber as String] as? UInt32 else {
-    throw ProbeFailure.unavailable("fixture window not found")
+  let candidates = windows.filter { window in
+    guard window[kCGWindowOwnerPID as String] as? Int32 == pid,
+      window[kCGWindowLayer as String] as? Int == 0,
+      window[kCGWindowIsOnscreen as String] as? Bool == true,
+      let raw = window[kCGWindowBounds as String] as? [String: Double]
+    else { return false }
+    return abs((raw["X"] ?? .infinity) - frame.minX) < 1 &&
+      abs((raw["Y"] ?? .infinity) - frame.minY) < 1 &&
+      abs((raw["Width"] ?? .infinity) - frame.width) < 1 &&
+      abs((raw["Height"] ?? .infinity) - frame.height) < 1
+  }
+  guard candidates.count == 1, let number = candidates[0][kCGWindowNumber as String] as? UInt32 else {
+    throw ProbeFailure.unavailable("expected one visible fixture window, found \(candidates.count)")
   }
   return number
 }
@@ -81,19 +85,43 @@ var permissionTimer: Timer? = Timer.scheduledTimer(withTimeInterval: 1, repeats:
   ]
 }
 
+@Sendable func pressFixtureButton(pid: pid_t) throws -> Int32 {
+  var pending = [AXUIElementCreateApplication(pid)]
+  var visited = 0
+  func value(_ element: AXUIElement, _ key: String) -> CFTypeRef? {
+    var result: CFTypeRef?
+    return AXUIElementCopyAttributeValue(element, key as CFString, &result) == .success ? result : nil
+  }
+  while let element = pending.popLast(), visited < 500 {
+    visited += 1
+    if value(element, kAXRoleAttribute) as? String == kAXButtonRole,
+      value(element, "AXIdentifier") as? String == "probe-button" ||
+      value(element, kAXTitleAttribute) as? String == "计数按钮" ||
+      value(element, kAXDescriptionAttribute) as? String == "计数按钮" {
+      return AXUIElementPerformAction(element, kAXPressAction as CFString).rawValue
+    }
+    pending.append(contentsOf: value(element, kAXChildrenAttribute) as? [AXUIElement] ?? [])
+  }
+  throw ProbeFailure.unavailable("AX fixture button not found")
+}
+
 enum ProbeRunner {
 @MainActor static func run(_ request: [String: Any]) async -> [String: Any] {
   var output: [String: Any] = ["id": request["id"] ?? "", "request": request,
-    "symbols": ProbeInput.capabilities(), "os": ProcessInfo.processInfo.operatingSystemVersionString]
+    "symbols": ProbeInput.capabilities(), "os": ProcessInfo.processInfo.operatingSystemVersionString,
+    "permissions": ProbeDiagnostics.collect()]
   var samples: [[String: Any]] = []
   var focusedTarget: (pid_t, UInt32)?
   do {
+    guard request["driverInstanceID"] as? String == ProbeDiagnostics.instanceID else {
+      throw ProbeFailure.unavailable("stale driver instance; no input posted")
+    }
     guard AXIsProcessTrusted(), CGPreflightPostEventAccess() else {
       throw ProbeFailure.unavailable("accessibility permission required; no input posted")
     }
     guard let targetName = request["target"] as? String, let guardName = request["guard"] as? String,
       let backend = request["backend"] as? String, let action = request["action"] as? String,
-      ["public", "public-window", "public-ax", "private-focus", "private"].contains(backend)
+      ["public", "public-window", "public-ax", "public-nsevent", "public-nsevent-touch", "private-focus", "private-fields", "private-focus-fields", "private", "private-tagged", "private-sky-tagged"].contains(backend)
     else { throw ProbeFailure.unavailable("invalid request") }
     let (target, targetPath) = try fixture(targetName)
     let (foreground, foregroundPath) = try fixture(guardName)
@@ -103,14 +131,16 @@ enum ProbeRunner {
       let point = points[action == "click" ? "button" : action == "scroll" ? "scroll" : "text"],
       let x = point["x"], let y = point["y"], let frame = target["frame"] as? [String: Double]
     else { throw ProbeFailure.unavailable("guard not foreground or fixture data incomplete") }
-    let window = try windowID(pid: pid)
     let rect = CGRect(x: frame["x"] ?? 0, y: frame["y"] ?? 0,
       width: frame["width"] ?? 0, height: frame["height"] ?? 0)
+    let window = try windowID(pid: pid, frame: rect)
+    output["selectedWindowId"] = window
+    output["selectedWindowFrame"] = frame
     output["before"] = target
     output["guardBefore"] = foreground
     samples.append(sample())
     if backend == "public-ax" { output["axFocus"] = axFocus(pid: pid) }
-    if backend.hasPrefix("private") {
+    if ["private-focus", "private-focus-fields", "private", "private-tagged", "private-sky-tagged"].contains(backend) {
       let status = try ProbeInput.focus(pid: pid, window: window, enabled: true)
       output["focusStatus"] = status
       guard status == 0 else { throw ProbeFailure.unavailable("private focus failed") }
@@ -121,8 +151,14 @@ enum ProbeRunner {
       try await Task.sleep(nanoseconds: 5_000_000)
       samples.append(sample())
     }
-    let events = try ProbeInput.events(action: action, point: CGPoint(x: x, y: y))
-    guard !events.isEmpty else { throw ProbeFailure.unavailable("event creation failed") }
+    let events: [CGEvent]
+    if action == "ax-click" {
+      output["axPressStatus"] = try pressFixtureButton(pid: pid)
+      events = []
+    } else {
+      events = try ProbeInput.events(action: action, point: CGPoint(x: x, y: y), window: window, frame: rect, backend: backend)
+      guard !events.isEmpty else { throw ProbeFailure.unavailable("event creation failed") }
+    }
     for event in events {
       let front = NSWorkspace.shared.frontmostApplication?.processIdentifier
       guard front == guardPid else { throw ProbeFailure.unavailable("foreground changed before input") }

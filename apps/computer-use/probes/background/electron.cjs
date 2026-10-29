@@ -37,11 +37,14 @@ function save() {
   fs.renameSync(path.join(directory, 'state.tmp'), path.join(directory, 'state.json'))
 }
 app.whenReady().then(async () => {
+  const reference = JSON.parse(
+    fs.readFileSync(path.join(directory, '..', 'appkit', 'state.json'), 'utf8'),
+  )
   win = new BrowserWindow({
-    x: 80,
-    y: 120,
-    width: 620,
-    height: 460,
+    x: reference.frame.x,
+    y: reference.frame.y,
+    width: reference.frame.width,
+    height: reference.frame.height,
     show: false,
     title: 'Litch M0 Electron — 仅测试内容',
     webPreferences: {

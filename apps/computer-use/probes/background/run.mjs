@@ -11,6 +11,24 @@ const operation = process.argv[2]
 const root = resolve(process.argv[3] ?? '/tmp/litch-cu-m0')
 const built = resolve(source, '../../.artifacts/background')
 const read = (file) => JSON.parse(readFileSync(file, 'utf8'))
+function freshPermissions() {
+  const state = read(join(root, 'permissions.json'))
+  const age = Date.now() / 1000 - state.sampledAt
+  if (!Number.isFinite(age) || age < 0 || age > 3 || !state.instanceID)
+    throw new Error('探针权限快照过期或无进程实例标识，停止测试')
+  process.kill(state.pid, 0)
+  if (
+    state.bundleId !== 'io.github.slovx2.litch.background-input-probe' ||
+    !state.responsibleIsSelf
+  )
+    throw new Error('探针不是独立权限责任进程，停止测试')
+  return state
+}
+function frontPid() {
+  const observation = read(join(root, 'foreground.json'))
+  if (Date.now() / 1000 - observation.sampledAt > 0.5) throw new Error('前台观察已过期')
+  return observation.frontPid
+}
 const write = (file, value) => {
   writeFileSync(`${file}.tmp`, JSON.stringify(value))
   renameSync(`${file}.tmp`, file)
@@ -38,6 +56,10 @@ function openFixture(name, role) {
   execFileSync('open', [
     '-n',
     '-g',
+    '--env',
+    `HOME=${join(root, 'home')}`,
+    '--env',
+    `CODEX_HOME=${join(root, 'codex')}`,
     join(built, 'Litch Background Fixture.app'),
     '--args',
     '--directory',
@@ -50,8 +72,11 @@ function openFixture(name, role) {
 if (operation === 'setup') {
   if (existsSync(join(root, 'permissions.json'))) throw new Error('本轮目录已经使用过，请选新目录')
   mkdirSync(root, { recursive: true, mode: 0o700 })
+  mkdirSync(join(root, 'home'), { recursive: true, mode: 0o700 })
+  mkdirSync(join(root, 'codex'), { recursive: true, mode: 0o700 })
   openFixture('appkit', 'target')
   openFixture('guard', 'guard')
+  await waitFor(() => read(join(root, 'appkit', 'state.json')).frame)
   const directory = join(root, 'electron')
   mkdirSync(directory, { recursive: true, mode: 0o700 })
   const electron = process.env.LITCH_PROBE_ELECTRON
@@ -69,6 +94,10 @@ if (operation === 'setup') {
   execFileSync('open', [
     '-n',
     '-g',
+    '--env',
+    `HOME=${join(root, 'home')}`,
+    '--env',
+    `CODEX_HOME=${join(root, 'codex')}`,
     join(built, 'Litch Background Input Probe.app'),
     '--args',
     '--directory',
@@ -92,7 +121,7 @@ if (operation === 'setup') {
     ),
   )
 } else if (operation === 'matrix') {
-  const permissions = read(join(root, 'permissions.json'))
+  const permissions = freshPermissions()
   if (!permissions.accessibility || !permissions.eventPost)
     throw new Error('未授权，未执行任何输入')
   const reps = Number(process.env.LITCH_PROBE_REPETITIONS ?? '1')
@@ -100,30 +129,49 @@ if (operation === 'setup') {
     process.env.LITCH_PROBE_BACKENDS ?? 'public,public-window,public-ax,private-focus,private'
   ).split(',')
   const targets = (process.env.LITCH_PROBE_TARGETS ?? 'appkit,electron').split(',')
+  const actions = (process.env.LITCH_PROBE_ACTIONS ?? 'click,scroll,english,chinese,keycode').split(
+    ',',
+  )
   const warm = process.env.LITCH_PROBE_COLD !== '1'
   const runID = randomUUID()
   const results = []
   // 这一步仅建立测试前置状态，动作投递阶段禁止任何激活。
+  const initial = freshPermissions()
+  if (Math.min(initial.keyboardIdleSeconds, initial.mouseIdleSeconds, initial.clickIdleSeconds) < 3)
+    throw new Error('用户正在使用电脑，未激活测试窗口，请稍后再试')
   await command('guard', 'activate')
+  const guardPid = read(join(root, 'guard', 'state.json')).pid
+  await waitFor(() => frontPid() === guardPid, 3_000)
   for (let repeat = 0; repeat < reps; repeat++) {
     for (const target of targets)
       for (const backend of backends) {
-        for (const action of ['click', 'scroll', 'english', 'chinese', 'keycode']) {
-          const live = read(join(root, 'permissions.json'))
+        for (const action of actions) {
+          const live = freshPermissions()
+          if (live.instanceID !== permissions.instanceID) throw new Error('探针已重启，停止旧轮次')
           const ownedPids = targets
             .concat('guard')
             .map((name) => read(join(root, name, 'state.json')).pid)
-          if (live.frontPid && !ownedPids.includes(live.frontPid))
-            throw new Error('用户切到其他应用，已停止测试')
+          if (!ownedPids.includes(frontPid())) throw new Error('前台切到非夹具应用，已停止测试')
           await command(target, 'reset')
           await command(target, 'focusText')
           await command('guard', 'reset')
+          await command('guard', 'focusText')
           if (warm) {
             await command(target, 'activate')
+            const pid = read(join(root, target, 'state.json')).pid
+            await waitFor(() => frontPid() === pid, 3_000)
             await command('guard', 'activate')
+            await waitFor(() => frontPid() === guardPid, 3_000)
           }
           const id = randomUUID()
-          const request = { id, target, guard: 'guard', backend, action }
+          const request = {
+            id,
+            target,
+            guard: 'guard',
+            backend,
+            action,
+            driverInstanceID: permissions.instanceID,
+          }
           write(join(root, 'request.json'), request)
           const result = await waitFor(() => {
             const r = read(join(root, 'response.json'))
@@ -131,24 +179,30 @@ if (operation === 'setup') {
           })
           const before = result.before ?? {},
             after = result.after ?? {}
-          const guardPid = result.guardBefore?.pid
+          const expectedGuardPid = result.guardBefore?.pid
           const samples = result.samples ?? [],
             first = samples[0]
           const changed =
-            action === 'click'
+            action === 'click' || action === 'ax-click'
               ? after.clicks === (before.clicks ?? 0) + 1
               : action === 'scroll'
                 ? after.scrollY > (before.scrollY ?? 0)
                 : after.text ===
-                  (action === 'english' ? 'abcXYZ' : action === 'chinese' ? '中文测试' : 'a')
+                  (action.startsWith('english')
+                    ? 'abcXYZ'
+                    : action.startsWith('chinese')
+                      ? '中文测试'
+                      : 'a')
           const summary = {
             target,
             backend,
             action,
             repeat,
             warm,
+            validTrial: !!result.before && samples.length > 0,
             changed,
-            frontStable: samples.length > 0 && samples.every((s) => s.frontPid === guardPid),
+            frontStable:
+              samples.length > 0 && samples.every((s) => s.frontPid === expectedGuardPid),
             cursorMaxDistance: first
               ? Math.max(
                   ...samples.map((s) =>
@@ -158,10 +212,19 @@ if (operation === 'setup') {
               : null,
             guardText: result.guardAfter?.text,
             guardRouteOK:
-              result.guardAfter?.text === 'v' && after.text === result.targetAfterInput?.text,
+              result.guardAfter?.events?.some((e) => e.type === 10 && e.keyCode === 9) === true &&
+              after.text === result.targetAfterInput?.text &&
+              (after.events ?? []).filter((e) => e.type === 10 && e.keyCode === 9).length ===
+                (result.targetAfterInput?.events ?? []).filter(
+                  (e) => e.type === 10 && e.keyCode === 9,
+                ).length,
             error: result.error ?? null,
             actual:
-              action === 'click' ? after.clicks : action === 'scroll' ? after.scrollY : after.text,
+              action === 'click' || action === 'ax-click'
+                ? after.clicks
+                : action === 'scroll'
+                  ? after.scrollY
+                  : after.text,
           }
           results.push({ summary, evidence: result })
           write(join(root, `matrix-${runID}.json`), { runID, permissions, results })

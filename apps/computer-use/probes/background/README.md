@@ -43,17 +43,24 @@ node apps/computer-use/probes/background/run.mjs stop /tmp/litch-cu-m0-run1
 - `LITCH_PROBE_REPETITIONS=3`：每种动作重复三次。
 - `LITCH_PROBE_TARGETS=appkit,electron`：目标子集。
 - `LITCH_PROBE_BACKENDS=public,public-window,public-ax,private-focus,private`：路径子集。
+- `LITCH_PROBE_ACTIONS=click,scroll,english,chinese,english-char,chinese-char,keycode,ax-click`：动作子集。
 - `LITCH_PROBE_COLD=1`：不事先激活目标；要使用刚 setup 的夹具，不能在已运行 warm 矩阵的窗口上假装 cold。
 
-## 五种路径严格区分
+## 路径严格区分
 
 | 名称 | 行为 |
 |---|---|
 | public | 公开 CGEvent.postToPid，屏幕坐标，不额外写窗口字段 |
 | public-window | 同上，加公开 mouseEventWindowUnderMousePointer/ThatCanHandleThisEvent 字段 |
 | public-ax | 公开 AXMain/AXFocused 设置，再用公开窗口字段和 postToPid；单独记录 AX 返回码 |
+| public-nsevent | 用公开 NSEvent.mouseEvent 构建带窗口号的点击，再 postToPid |
+| public-nsevent-touch | 上一条点击再设置公开 touch subtype；滚动不变 |
 | private-focus | 给目标窗口发 SLPSPostEventRecordTo 焦点记录，再用 public-window 投递 |
-| private | 合成焦点 + CGEventSetWindowLocation + SLEventPostToPid |
+| private-fields | 私有窗口字段 51 + CGEventSetWindowLocation，公开 postToPid；不合成焦点 |
+| private-focus-fields | private-fields 加合成焦点 |
+| private | 私有窗口字段、局部位置、合成焦点，再 SLEventPostToPid |
+| private-tagged | private-focus-fields 的点击再加字段 58、touch subtype、目标 PID |
+| private-sky-tagged | private-tagged 改用 SLEventPostToPid |
 
 缺少私有符号直接记 unavailable，不偷偷回退。私有焦点测试后给目标发撤销记录，
 不向用户前台应用发送失活记录。**这是候选私有增强的对照，不是完整复刻官方实现。**
@@ -74,7 +81,9 @@ node apps/computer-use/probes/background/run.mjs stop /tmp/litch-cu-m0-run1
 - click：真实按钮计数恰好增加 1。
 - scroll：真实滚动位置增大。
 - english/chinese：文本控件精确得到 `abcXYZ` / `中文测试`。
+- english-char/chinese-char：同样文本，每个字符单独一对 Unicode 事件，区别于整串一次投递。
 - keycode：真实虚拟键码输入得到 `a`；与 Unicode 合成文本分开测。
+- ax-click：公开 AXPress，既记录返回码，也核对真实按钮计数。
 - 输入后仅当前台仍为自有守卫时，再投递一对全局 `v` 键；应由守卫收到、目标不能收到。
   此项用于发现 frontPid 没变但系统键盘路由串线，不代表已验证真人并发输入。
 - 任一测试期间前台偏离守卫即失败并停止余下矩阵。真实光标位移单独记录，不能隐藏或复位。
@@ -87,9 +96,17 @@ JSON 中 `changed` 只证明目标结果；后台通过需要同时满足 `front
 是否遮挡和重复次数。当前 Electron 显式关闭后台节流/遮挡节流；结果不能泛化到所有 Chromium 配置。
 中文测试是 Unicode 事件，不是中文输入法组合输入。SIP 开启环境未测就写“未验”，不要混入关闭结果。
 
-## 本次准备验证（2026-10-29）
+## 权限、窗口与证据有效性
 
-macOS 26.5.1 (25F80)、SIP disabled。Swift 探针/夹具已编译并 Developer ID 签名验证，
-AppKit、前台守卫、Electron 三个真实进程均已启动并报告初始控件状态。
-输入权限检查尚为 false，matrix 的无权限拒绝路径已验证，没有投递真实输入。
-**动作矩阵与 P2 结论待用户授权后实测；SIP-on 未验。**
+`ProbeDiagnostics.swift` 由驱动自身调用权限检查，记录采样/启动时间、进程实例 UUID、
+PID/父 PID、签名与责任进程。权限文件须新于三秒、进程仍活着、责任进程是自身；
+前台文件须新于半秒，每个输入请求还绑定实例 UUID，不能用旧文件假装已授权。
+责任进程查询使用私有诊断符号，只读审计；它不参与公开组的输入投递或焦点处理。
+setup 为全部夹具与驱动显式设置隔离 HOME/CODEX_HOME。
+
+窗口号必须满足目标 PID、layer 0、onscreen、与夹具精确几何唯一匹配；
+不能取该 PID 的第一个窗口（可能是隐藏菜单栏窗口）。每行记录所选窗口与几何。
+AppKit、Electron 与守卫外框一致，warm 组先激活目标再激活守卫形成完全遮挡条件。
+探针没有读取用户窗口内容，也不需要屏幕录制；若为探针额外开过屏幕录制，测完也可撤掉。
+
+结果和限制见 [M0-results.md](M0-results.md)。SIP-off 与 SIP-on 必须分别报告。

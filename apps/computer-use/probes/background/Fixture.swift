@@ -76,7 +76,8 @@ let monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .lef
   if event.windowNumber == window.windowNumber {
     let keyboard = event.type == .keyDown || event.type == .keyUp
     events.append(["type": event.type.rawValue, "chars": keyboard ? (event.characters ?? "") : "",
-      "keyCode": keyboard ? event.keyCode : 0, "window": event.windowNumber, "time": event.timestamp])
+      "keyCode": keyboard ? event.keyCode : 0, "window": event.windowNumber, "time": event.timestamp,
+      "localX": event.locationInWindow.x, "localY": event.locationInWindow.y])
     if events.count > 200 { events.removeFirst(events.count - 200) }
   }
   return event
