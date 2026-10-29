@@ -49,7 +49,7 @@ export const TurnTail = memo(function TurnTail({
                 toggleId={`wrap:${item.id}`}
                 questions={[
                   {
-                    id: wrapQuestionId(item.id),
+                    id: wrapQuestionId(item.id, item.questionSource),
                     title: wrap.ask,
                     options: (wrap.actions ?? []).map((action) => action.label),
                   },

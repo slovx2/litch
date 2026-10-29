@@ -135,6 +135,7 @@ export type Row =
    */
   | {
       type: 'wrapAsk'
+      questionSource?: string
       key: string
       turnId: string
       itemId: string
@@ -618,6 +619,7 @@ export class RowBuilder {
         asks.push(
           this.keep({
             type: 'wrapAsk',
+            ...(item.questionSource ? { questionSource: item.questionSource } : {}),
             key: `${item.id}:ask`,
             turnId: turn.id,
             itemId: item.id,

@@ -818,6 +818,8 @@ export type ItemView = (
    * 步骤组的时长按组里第一条开始到最后一条结束算。从历史里读出来的没有这一项
    */
   span?: ItemSpan
+  /** 原始回合和条目的来源键，重连后不随临时 UI 标识改变。 */
+  questionSource?: string
 }
 
 /** 条目从开始到结束。to 是 null：还没结束 */
@@ -1178,6 +1180,7 @@ export interface SessionAbilities {
 export type SessionAbility = 'fork' | 'rollback' | 'compact' | 'steer' | 'goals'
 
 export interface SessionView {
+  ignoredQuestions?: string[]
   deviceId: string
   sessionId: string
   title: Text

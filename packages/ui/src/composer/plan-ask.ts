@@ -4,7 +4,7 @@
 // 这里只管判断，怎么画在 PlanAsk.tsx。
 // 纯逻辑加两张只在这次运行里有效的小表：test/plan-ask.test.mjs 直接引这个文件，所以只用可擦除的语法。
 import type { ItemView } from '@litch/core'
-import { isUserReply } from '../../../core/src/projection/user-reply.mts'
+import { isUserReply } from '../../../protocol/src/user-reply.mts'
 
 /** 引擎自己问“要不要执行计划”时那道题的标识（适配器的 Claude 引擎定的） */
 export const PLAN_QUESTION_ID = 'execute_plan'

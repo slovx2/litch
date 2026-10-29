@@ -4,6 +4,10 @@
 import type { Entry } from './types.ts'
 
 export const zhAsks = {
+  'ask.age': '{count} 分钟前提出',
+  'ask.ageUnknown': '提出时间未知',
+  'ask.reportsAfter': '之后有 {count} 条回报',
+  'ask.ignore': '忽略',
   'ask.children': '子会话待处理',
   'ask.childrenCount': '{count} 个子会话待处理',
   'ask.requestFallback': '待处理请求',

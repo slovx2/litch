@@ -131,7 +131,10 @@ export const keys = {
    * 带题的那张卡片据此显示“已答”
    */
   answers: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:answers`,
-  /** PendingQuestion[]：跨回合保留的待答问题，输入框上方只显示这一份。 */
+  /** string[]：设备确认的忽略来源键。 */
+  ignoredQuestions: (deviceId: string, sessionId: string) =>
+    `session:${deviceId}:${sessionId}:ignoredQuestions`,
+  /** PendingQuestion[]：输入框上方可见的跨回合待答集合。 */
   pendingQuestions: (deviceId: string, sessionId: string) =>
     `session:${deviceId}:${sessionId}:pendingQuestions`,
   /** ManageSchema：这台设备上有哪些设置。有这个键说明管理数据的快照已经到了 */
@@ -945,8 +948,12 @@ export function createReplica(channel: CoreChannel): Replica {
       (id) => store.get<ItemView>(keys.item(deviceId, sessionId, id)),
       store.get<AskAnswers>(keys.answers(deviceId, sessionId)) ?? {},
       store.get<QueuedMessage[]>(keys.queued(deviceId, sessionId)) ?? [],
+      store.get<string[]>(keys.ignoredQuestions(deviceId, sessionId)) ?? [],
     )
-    store.set(keys.pendingQuestions(deviceId, sessionId), questions)
+    store.set(
+      keys.pendingQuestions(deviceId, sessionId),
+      questions.filter((q) => !q.ignored),
+    )
   }
 
   const applySession = (deviceId: string, sessionId: string, op: SessionOp) => {
@@ -1103,6 +1110,9 @@ export function createReplica(channel: CoreChannel): Replica {
         if (meta) store.set(keys.session(deviceId, sessionId), { ...meta, can: op.can })
         return
       }
+      case 'session.ignoredQuestions':
+        store.set(keys.ignoredQuestions(deviceId, sessionId), op.sourceIds)
+        return
       case 'session.proposals':
         store.set(keys.proposals(deviceId, sessionId), op.proposals satisfies SessionProposalView[])
         return
@@ -1232,6 +1242,7 @@ export function createReplica(channel: CoreChannel): Replica {
                   view.turns.map((turn) => turn.id),
                 )
                 store.set(keys.requests(deviceId, sessionId), view.requests)
+                store.set(keys.ignoredQuestions(deviceId, sessionId), view.ignoredQuestions ?? [])
                 store.set(keys.queued(deviceId, sessionId), view.queued)
                 store.set(keys.settings(deviceId, sessionId), view.settings)
                 store.set(keys.usage(deviceId, sessionId), view.usage)

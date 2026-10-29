@@ -151,6 +151,8 @@ const MIGRATIONS: readonly string[] = [
    DROP TABLE mentions;`,
   `CREATE TABLE delegated_responses(id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, record TEXT NOT NULL);
    CREATE INDEX delegated_by_thread ON delegated_responses(thread_id);`,
+  `CREATE TABLE ignored_questions(thread_id TEXT NOT NULL, source_id TEXT NOT NULL,
+     PRIMARY KEY(thread_id, source_id)) WITHOUT ROWID;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -774,6 +776,31 @@ export class SessionStore {
       JSON.stringify(record.namespaces),
       record.cwd,
     )
+  }
+
+  dropIgnoredQuestions(threadId: string): void {
+    this.db.prepare('DELETE FROM ignored_questions WHERE thread_id=?').run(threadId)
+  }
+
+  ignoredQuestions(threadId: string): string[] {
+    return this.db
+      .prepare('SELECT source_id FROM ignored_questions WHERE thread_id=? ORDER BY source_id')
+      .all(threadId)
+      .map((row) => String(row.source_id))
+  }
+
+  ignoreQuestions(threadId: string, sources: string[]): void {
+    const insert = this.db.prepare(
+      'INSERT OR IGNORE INTO ignored_questions(thread_id, source_id) VALUES (?, ?)',
+    )
+    this.db.exec('BEGIN')
+    try {
+      for (const source of sources) insert.run(threadId, source)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
   }
 
   // ---------- Litch 替 harness 做的功能的开关 ----------

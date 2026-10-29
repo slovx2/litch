@@ -464,6 +464,9 @@ export class SessionStore {
       case 'item.appendOutput':
         mark(this.itemTurn.get(op.itemId))
         return
+      case 'session.ignoredQuestions':
+        this.metaDirty = true
+        return
       case 'session.proposals':
         // 提案变了（新提、开始、不要、撤回、过期）：画着它们的那几个回合重算。
         // 没记着提在哪次调用里的旧提案只能按提案号去找 start 那一条，不知道在哪个回合，全部重算
@@ -558,7 +561,7 @@ export class SessionStore {
     if (this.metaDirty) {
       this.metaDirty = false
       this.meta = {
-        pendingQuestions: questionsOfView(view),
+        pendingQuestions: questionsOfView(view).filter((q) => !q.ignored),
         title: view.title,
         harness: view.harness,
         cwd: view.cwd,

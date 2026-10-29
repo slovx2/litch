@@ -3,6 +3,7 @@ import { type PendingQuestion, pendingReplyText } from '@litch/core'
 import { useState, useSyncExternalStore } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
+import { useQuestionAge } from '../../../../../packages/ui/src/composer/question-age.ts'
 import type { SessionStore } from '../../core/session-store'
 import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -72,6 +73,7 @@ function PendingCard({
   const [picked, setPicked] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  const age = useQuestionAge(question.proposedAt)
   const enabled = meta?.live === true
   const send = async (answer: string) => {
     if (!enabled || busy || !answer.trim()) return
@@ -92,6 +94,22 @@ function PendingCard({
       setBusy(false)
     }
   }
+  const ignore = async () => {
+    if (!enabled || busy) return
+    setBusy(true)
+    setFailure(null)
+    try {
+      await channel.command('session.questions.ignore', {
+        deviceId: store.deviceId,
+        sessionId: store.sessionId,
+        sourceIds: question.sourceIds,
+      })
+    } catch (error) {
+      setFailure(whyNot(error, t))
+    } finally {
+      setBusy(false)
+    }
+  }
   // 一道题：题目，建议的回答一排，下面是自己写的一栏和发送
   return (
     <View
@@ -101,6 +119,22 @@ function PendingCard({
       <Text style={[styles.title, { color: c.ink, fontSize: font.size.body }]}>
         {question.title}
       </Text>
+      <View style={styles.row}>
+        <Text style={{ flex: 1, color: c.ink3, fontSize: font.size.small }}>
+          {age === null ? t('ask.ageUnknown') : t('ask.age', { count: age })}
+          {question.reportsAfter > 0
+            ? ` · ${t('ask.reportsAfter', { count: question.reportsAfter })}`
+            : ''}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          disabled={!enabled || busy}
+          onPress={() => void ignore()}
+          hitSlop={8}
+        >
+          <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{t('ask.ignore')}</Text>
+        </Pressable>
+      </View>
       {question.options.length > 0 ? (
         <View style={styles.row}>
           {question.options.map((option, index) => (

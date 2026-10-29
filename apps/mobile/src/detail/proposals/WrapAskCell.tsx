@@ -12,7 +12,7 @@ export const WrapAskCell = memo(function WrapAskCell({ row }: Props<'wrapAsk'>) 
       testID={`wrap-ask:${row.itemId}`}
       questions={[
         {
-          id: wrapQuestionId(row.itemId),
+          id: wrapQuestionId(row.itemId, row.questionSource),
           title: row.ask,
           options: row.actions.map((action) => action.label),
         },

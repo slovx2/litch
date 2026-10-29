@@ -593,6 +593,10 @@ export interface ClientRequests {
     params: SessionProposalHereParams
     result: SessionProposalMarkHereResult
   }
+  'litch/session/questions/ignore': {
+    params: { threadId: string; sourceIds: string[] }
+    result: { ignoredQuestions: string[] }
+  }
   'litch/thread/queuedNotes/deliver': {
     params: QueuedNotesDeliverParams
     result: QueuedNotesDeliverResponse
@@ -689,6 +693,7 @@ export interface ServerNotifications {
   'litch/sessionProposal/changed': ProposalChangedNotification
   /** 扩展，只发给握手时声明过 sessionTree 的连接：一个会话的回报队列变了 */
   'litch/thread/queuedNotes/updated': QueuedNotesUpdatedNotification
+  'litch/thread/questions/changed': { threadId: string; ignoredQuestions: string[] }
   'litch/thread/pending/changed': SessionPendingChanged
   /** 扩展，只发给握手时声明过 worktrees 的连接：设备层的一个工作树建成、换了主人、删了或恢复了 */
   'litch/worktree/changed': WorktreeChangedNotification

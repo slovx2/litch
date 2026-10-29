@@ -1,3 +1,4 @@
+import { questionSource } from '../../../protocol/src/pending-asks.mjs'
 // 一台设备上“打开着”的会话：订阅它的事件，把通知变成会话增量，受理发送、打断和答复。
 // 这里维护每个会话当前的完整视图：后来的订阅者拿到的快照已经包含之前的增量。
 //
@@ -648,6 +649,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     }
     const key = echoed ?? viewItem(live, viewId, item.id, position)
     const view: ItemView = { ...projectItem(item, streaming), id: key }
+    if (
+      (view.kind === 'agentMessage' && view.questions?.length) ||
+      (view.kind === 'toolCall' && view.wrapUp)
+    )
+      view.questionSource = questionSource(turnId, item.id || `#${position}`)
     if (view.kind === 'compaction') {
       // 完成时沿用开始时定下的来源；头一次见到它时认一下是不是这边点的
       const seen = live.view?.items[key]
@@ -962,6 +968,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         emit(live, [{ op: 'session.state', live: true, note: null }])
     },
     // 会话树：这个会话上的提案变了（新提、开始、不要、撤回、过期），带着现在全部等着的和刚变的那几条
+    'litch/thread/questions/changed': (live, { ignoredQuestions }) =>
+      emit(live, [{ op: 'session.ignoredQuestions', sourceIds: ignoredQuestions }]),
     'litch/sessionProposal/changed': (live, { proposals, changed }) => {
       if (!live.view) return
       const merged = mergeProposals(live.view.proposals, proposals, changed ?? [], host.clock.now())

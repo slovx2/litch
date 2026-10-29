@@ -2673,6 +2673,18 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         const first = device?.harnesses.find((entry) => entry.state === 'ready')
         return sampleDefaults(harnessOn(deviceId, harness ?? first?.id ?? ''))
       }
+      if (name === 'session.questions.ignore') {
+        const { deviceId, sessionId, sourceIds } =
+          params as Commands['session.questions.ignore']['params']
+        const view = loadSession(deviceId, sessionId)
+        applySessionOps(view, [
+          {
+            op: 'session.ignoredQuestions',
+            sourceIds: [...new Set([...(view.ignoredQuestions ?? []), ...sourceIds])],
+          },
+        ])
+        return {}
+      }
       if (name === 'session.rename') {
         const { deviceId, sessionId, title } = params as Commands['session.rename']['params']
         updateSummary(deviceId, sessionId, { title: title.trim() })

@@ -285,6 +285,7 @@ export type SessionOp =
   /** 对面做不做得了的几件事变了（刚发现有一件它不认识） */
   | { op: 'session.can'; can: SessionAbilities }
   /** 这个会话上等着用户点的子会话提案整份换掉（会话树） */
+  | { op: 'session.ignoredQuestions'; sourceIds: string[] }
   | { op: 'session.proposals'; proposals: SessionProposalView[] }
   /** 这个会话的子代理（引擎自己派出的子线程）整份换掉：派了新的，或者哪个的状态变了 */
   | { op: 'session.agents'; agents: AgentThreadView[] }
@@ -506,6 +507,10 @@ export interface Commands {
     result: Record<string, never>
   }
   /** 给会话改名 */
+  'session.questions.ignore': {
+    params: { deviceId: string; sessionId: string; sourceIds: string[] }
+    result: Record<string, never>
+  }
   'session.rename': {
     params: { deviceId: string; sessionId: string; title: string }
     result: Record<string, never>

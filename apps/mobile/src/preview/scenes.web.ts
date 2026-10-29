@@ -156,6 +156,13 @@ export const SCENES: Scene[] = [
     steps: [say('用 Chrome 登录')],
   },
   {
+    id: 'pending-questions',
+    group: '对话',
+    name: '跨回合待答问题',
+    note: '问题的时长、回报数和忽略操作',
+    steps: [say('收尾后回报')],
+  },
+  {
     id: 'question',
     group: '对话',
     name: '提问与表单',

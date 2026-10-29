@@ -214,3 +214,29 @@ test('后台任务：报集合的会话不派生（meta.derived 是 null），�
   assert.equal(meta.derived, null)
   assert.equal(meta.running, false)
 })
+
+test('待答题忽略后只关闭当前题，后来的手机订阅快照保持隐藏，没有新增用户消息', async () => {
+  const { store, channel, sessionId } = await open('收尾后回报')
+  store.start()
+  await until(() => store.getMeta()?.pendingQuestions.length === 3 && !store.getMeta()?.running, {
+    timeoutMs: 15000,
+    what: '回报后出现三题',
+  })
+  const before = store.getSnapshot().rows.filter((row) => row.type === 'user').length
+  const first = store.getMeta().pendingQuestions[0]
+  assert.ok(first.reportsAfter > 0)
+  assert.ok(first.proposedAt)
+  await channel.command('session.questions.ignore', {
+    deviceId: 'local',
+    sessionId,
+    sourceIds: first.sourceIds,
+  })
+  await until(() => store.getMeta()?.pendingQuestions.length === 2, { what: '忽略题消失' })
+  assert.equal(store.getSnapshot().rows.filter((row) => row.type === 'user').length, before)
+  const second = new SessionStore(channel, 'local', sessionId)
+  cleanup.push(() => second.stop())
+  second.start()
+  await until(() => second.getMeta()?.pendingQuestions.length === 2, {
+    what: '新的订阅保留忽略状态',
+  })
+})

@@ -470,6 +470,16 @@ export function createCore(options: CoreOptions): Core {
           }
           return {}
         }
+        case 'session.questions.ignore': {
+          const { deviceId, sessionId, sourceIds } =
+            params as Commands['session.questions.ignore']['params']
+          try {
+            await deviceOf(deviceId).ignoreQuestions(sessionId, sourceIds)
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+          return {}
+        }
         case 'session.rename': {
           const { deviceId, sessionId, title } = params as Commands['session.rename']['params']
           try {

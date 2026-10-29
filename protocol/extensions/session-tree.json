@@ -126,6 +126,68 @@
       "kind": "Notification",
       "name": "litch/thread/pending/changed",
       "description": "仅声明 sessionTree 的连接，形状 SessionPendingChanged。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/session/questions/ignore",
+      "params": {
+        "type": "object",
+        "required": ["threadId", "sourceIds"],
+        "properties": {
+          "threadId": {
+            "type": "string"
+          },
+          "sourceIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1000,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            }
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["ignoredQuestions"],
+        "properties": {
+          "ignoredQuestions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "description": "仅声明 sessionTree 的连接可调用。设备保存忽略的当前问题来源，不创建消息、回合或答复；重复点击幂等。"
+    },
+    {
+      "kind": "ThreadField",
+      "name": "litchIgnoredQuestions",
+      "on": "声明 sessionTree 的会话对象",
+      "description": "string[]，设备持久化的忽略来源键。只影响问题卡展示，不算回答或撤回。来源键为 JSON [kind, JSON [原始回合ID, 原始条目ID], 题序]。"
+    },
+    {
+      "kind": "Notification",
+      "name": "litch/thread/questions/changed",
+      "params": {
+        "type": "object",
+        "required": ["threadId", "ignoredQuestions"],
+        "properties": {
+          "threadId": {
+            "type": "string"
+          },
+          "ignoredQuestions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "description": "仅发给声明 sessionTree 的连接，当前全部忽略来源键。"
     }
   ]
 }

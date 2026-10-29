@@ -3,6 +3,10 @@ import type { Entry } from './types.ts'
 import type { zhAsks } from './zh-CN-asks.ts'
 
 export const enAsks: Record<keyof typeof zhAsks, Entry> = {
+  'ask.age': 'Asked {count} min ago',
+  'ask.ageUnknown': 'Time unavailable',
+  'ask.reportsAfter': '{count} updates since',
+  'ask.ignore': 'Ignore',
   'ask.children': 'Sub-session requests',
   'ask.childrenCount': ({ count }) =>
     Number(count) === 1 ? '1 sub-session is waiting' : `${count} sub-sessions are waiting`,

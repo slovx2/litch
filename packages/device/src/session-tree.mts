@@ -27,6 +27,7 @@ import type { LitchBackgroundTask } from '../../protocol/src/background-tasks.mj
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { SESSION_TOOL, sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import { questionsOfHistory } from '../../protocol/src/pending-history.mjs'
 import { parseSessionMentions } from '../../protocol/src/session-mentions.mjs'
 import type {
   SessionDelegatedResponse,
@@ -414,6 +415,36 @@ export class SessionTree {
     this.later(this.host.needsUserMs + 10, () => this.stillWaiting(threadId))
   }
 
+  async ignoreQuestions(threadId: string, sourceIds: string[]) {
+    const { thread } = await this.read(threadId, true)
+    const current = new Set(questionsOfHistory(thread).flatMap((q) => q.sourceIds))
+    // 只关闭当前这次提出的问题；迟到点击不能屏蔽以后重新提出的同题。
+    this.store.ignoreQuestions(
+      threadId,
+      sourceIds.filter((id) => current.has(id)),
+    )
+    const ignoredQuestions = this.store.ignoredQuestions(threadId)
+    this.host.announce(
+      'litch/thread/questions/changed',
+      { threadId, ignoredQuestions },
+      EXTENSION.sessionTree,
+    )
+    return { ignoredQuestions }
+  }
+
+  private async unanswered(threadId: string) {
+    try {
+      const { thread } = await this.read(threadId, true)
+      if (!Array.isArray(thread.turns)) throw new Error('includeTurns was not returned')
+      return questionsOfHistory(thread, this.store.ignoredQuestions(threadId)).map(
+        ({ title, options, ignored }) => ({ title, options, ignored }),
+      )
+    } catch (error) {
+      this.host.log(`会话 ${threadId} 未答题读取失败，跳过注入：${String(error)}`)
+      return []
+    }
+  }
+
   pendingRequests(threadId: string): SessionPendingRequest[] {
     return [...this.pending.list(threadId), ...(this.host.clientRequests?.(threadId) ?? [])]
   }
@@ -640,11 +671,16 @@ export class SessionTree {
       return
     }
     await this.watch(harness, threadId)
+    const pendingQuestions = await this.unanswered(threadId)
     // 上面要等应答，这期间用户可能又说了话，或者别的回合里调了 wrap_up
     if (this.reminders.get(threadId) !== origin || this.active.has(threadId)) return
     this.reminders.delete(threadId)
     const link = await this.link(harness)
-    const text = formatSessionEvent({ kind: 'remind', notes: [] })
+    const text = formatSessionEvent({
+      kind: 'remind',
+      notes: [],
+      ...(pendingQuestions.length ? { pendingQuestions } : {}),
+    })
     const result = await link.request('turn/start', {
       threadId,
       input: [{ type: 'text', text, text_elements: [] }],
@@ -913,6 +949,7 @@ export class SessionTree {
   private async startWake(parentId: string, working: number): Promise<boolean> {
     const harness = await this.owner(parentId)
     await this.watch(harness, parentId)
+    const pendingQuestions = await this.unanswered(parentId)
     const fresh = this.store.notes(parentId)
     if (fresh.length === 0 || this.active.has(parentId)) return false
     const link = await this.link(harness)
@@ -925,6 +962,7 @@ export class SessionTree {
     }
     const text = formatSessionEvent({
       kind: 'wake',
+      ...(pendingQuestions.length ? { pendingQuestions } : {}),
       notes: current,
       ...(working > 0 ? { working } : {}),
     })
@@ -1066,6 +1104,7 @@ export class SessionTree {
    */
   decorate(thread: Record<string, unknown>): void {
     if (typeof thread.id !== 'string') return
+    thread.litchIgnoredQuestions = this.store.ignoredQuestions(thread.id)
     thread.litchPendingRequests = this.pendingRequests(thread.id)
     thread.litchDelegatedResponses = this.store.responses(thread.id)
     const lineage = this.lineage(thread.id)
@@ -1358,6 +1397,7 @@ export class SessionTree {
   /** 会话删掉了：它带的动态工具、记下的速度跟着删 */
   deleted(threadId: string): void {
     this.pending.ended(threadId)
+    this.store.dropIgnoredQuestions(threadId)
     this.store.dropResponses(threadId)
     this.store.dropTools(threadId)
     this.store.setSpeed(threadId, null)

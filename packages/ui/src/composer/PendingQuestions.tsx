@@ -11,6 +11,7 @@ import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
 import { Caret } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
+import { useQuestionAge } from './question-age.ts'
 import { useRunningSend } from './send-mode.ts'
 
 export function PendingQuestions({ deviceId, sessionId }: { deviceId: string; sessionId: string }) {
@@ -69,6 +70,7 @@ function PendingCard({
 }) {
   const t = useT()
   const { channel } = useServices()
+  const age = useQuestionAge(question.proposedAt)
   const steer = useRunningSend(canSteer) === 'steer'
   const [text, setText] = useState('')
   const [picked, setPicked] = useState<string | null>(null)
@@ -91,10 +93,42 @@ function PendingCard({
       setBusy(false)
     }
   }
+  const ignore = async () => {
+    if (!enabled || busy) return
+    setBusy(true)
+    setFailure(null)
+    try {
+      await channel.command('session.questions.ignore', {
+        deviceId,
+        sessionId,
+        sourceIds: question.sourceIds,
+      })
+    } catch (error) {
+      setFailure(whyNot(error, t))
+    } finally {
+      setBusy(false)
+    }
+  }
   // 一道题两行：题目，下面是建议的回答和自己写的一栏排在同一行，窄了再折行
   return (
     <div className="pending-ask" data-state="open" data-pending-question={question.id}>
       <div className="pending-ask-q">{question.title}</div>
+      <div className="pending-ask-meta">
+        <span className="grow">
+          {age === null ? t('ask.ageUnknown') : t('ask.age', { count: age })}
+          {question.reportsAfter > 0
+            ? ` · ${t('ask.reportsAfter', { count: question.reportsAfter })}`
+            : ''}
+        </span>
+        <button
+          type="button"
+          className="mini"
+          disabled={!enabled || busy}
+          onClick={() => void ignore()}
+        >
+          {t('ask.ignore')}
+        </button>
+      </div>
       <form
         className="pending-ask-row"
         onSubmit={(event) => {

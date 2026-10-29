@@ -35,6 +35,7 @@ export interface SessionDelegatedResponse {
 }
 
 export interface SessionPendingFields {
+  litchIgnoredQuestions?: string[]
   litchPendingRequests?: SessionPendingRequest[]
   litchDelegatedResponses?: SessionDelegatedResponse[]
 }

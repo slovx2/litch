@@ -6,6 +6,7 @@ import {
   type ThreadStatus,
   type Turn,
 } from '../../../protocol/src/index.mjs'
+import { questionSource } from '../../../protocol/src/pending-asks.mjs'
 import type { SessionPendingFields } from '../../../protocol/src/session-pending.mjs'
 import type {
   HarnessId,
@@ -114,7 +115,16 @@ export function projectTurn(turn: Turn, viewId = turn.id): { turn: TurnView; ite
     // 回合还在进行时，只有最后一个条目可能还在往外出字
     const view = projectItem(item, running && index === last)
     if (view.kind === 'compaction' && manual) view.source = 'manual'
-    return [{ ...view, id: itemKey(viewId, view.id, index) }]
+    return [
+      {
+        ...view,
+        id: itemKey(viewId, view.id, index),
+        ...((view.kind === 'agentMessage' && view.questions?.length) ||
+        (view.kind === 'toolCall' && view.wrapUp)
+          ? { questionSource: questionSource(turn.id, view.id || `#${index}`) }
+          : {}),
+      },
+    ]
   })
   return {
     turn: {
@@ -148,6 +158,7 @@ export function projectThread(
   return {
     deviceId: scope.deviceId,
     sessionId: thread.id,
+    ignoredQuestions: (thread as Thread & SessionPendingFields).litchIgnoredQuestions ?? [],
     title: threadTitle(thread),
     harness: scope.harness,
     cwd: thread.cwd,

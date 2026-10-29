@@ -1,3 +1,4 @@
+import { wrapQuestionFields } from '../../../protocol/src/pending-history.mjs'
 // 投影的第一步：协议条目 → 显示条目。纯函数，不碰连接，不碰状态。
 // 各种 harness 的差异在这里消化掉，界面拿到的条目和 harness 无关。
 // 对面的协议版本可能比我们的类型新，所以不认识的条目类型、缺的字段都有兜底，不抛错。
@@ -11,7 +12,6 @@ import {
   parseSessionMessage,
   parseSystemMessage,
   SESSION_TOOL,
-  SESSION_TOOL_LIMITS,
   type ThreadItem,
   type UserInput,
   type WebSearchAction,
@@ -361,29 +361,7 @@ function wrapUpOf(
       },
     ]
   })
-  // 留给用户定的那件事和回复按钮：没有问题时按钮不画；按钮至多 wrapUpActions 个，没有字的不要
-  const ask = typeof given.ask === 'string' ? given.ask.trim() : ''
-  const actions = (Array.isArray(given.actions) ? given.actions : [])
-    .flatMap((entry): { label: string; message?: string }[] => {
-      if (typeof entry !== 'object' || entry === null) return []
-      const raw = entry as Record<string, unknown>
-      const label = typeof raw.label === 'string' ? raw.label.trim() : ''
-      const message = typeof raw.message === 'string' ? raw.message.trim() : ''
-      return label ? [message ? { label, message } : { label }] : []
-    })
-    .slice(0, SESSION_TOOL_LIMITS.wrapUpActions)
-  return {
-    suggestions,
-    ...(!failed && Array.isArray(given.withdraw_questions)
-      ? {
-          withdrawQuestions: given.withdraw_questions
-            .filter((v): v is string => typeof v === 'string')
-            .map((v) => v.trim()),
-        }
-      : {}),
-    ...(ask ? { ask } : {}),
-    ...(ask && actions.length > 0 ? { actions } : {}),
-  }
+  return { suggestions, ...wrapQuestionFields(args, failed) }
 }
 
 /** 数一个补丁里加了几行、删了几行。只认以单个加号或减号开头的行，文件头不算 */

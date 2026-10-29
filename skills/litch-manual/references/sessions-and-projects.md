@@ -50,6 +50,8 @@ sidebar.
 新旧问题可以同时回答，相同的待答问题只显示一次。点击回复按钮或在题目下填写回答后，只有对应的问题收起；异步卡中尚未回答的其他题目继续保留。
 用户直接在会话输入框发话则视为回答此前的待答问题，一起收起。自动的计划确认也遵循这一区分：自发回合不清除，用户发话后收起。
 待答区可以折叠，折叠后仍显示问题数量。回答会按当前发送方式插话或排队；撤销排队中的答复会恢复问题。
+待答卡显示提出时间和之后收到的子会话回报数。点“忽略”仅隐藏当前问题，不向代理发送消息，也不算回答或撤回；忽略状态在桌面、手机和重连后同步。代理在唤醒或收尾提醒时仍会看到未答题及“用户已忽略”标记，不应重复催问；过时的题应撤回。
+
 模型可以在 `litch_sessions.wrap_up` 的 `withdraw_questions` 中列出已经不需要回答的旧题目原文，明确撤回这些问题。
 审批、AskUserQuestion 和阻塞式 request_user_input 仍在请求卡片中回答；只有对应的请求被答复、撤回或其所属回合结束时收起，其他回合不会清掉它们。
 
@@ -286,7 +288,7 @@ woken to continue.
   simply continues what the model just found (say, fixing what it diagnosed), it asks one short
   question at the end of the turn with one or two reply buttons instead of making a card; a click
   sends the answer with its question as your message. Pending questions stay above the composer until
-  answered or explicitly withdrawn; automated turns do not clear them. A message you type in the main composer settles earlier pending questions; a reply inside one question settles only that question. Suggested
+  answered, explicitly withdrawn, or hidden with Ignore; automated turns do not clear them. Ignore is synced across clients and reconnects without sending a message or answering the question. Cards show their age and the number of sub-session updates since they were asked. Wake and wrap-up reminder turns tell the agent which questions remain, including ignored ones; the agent should avoid repeats and withdraw obsolete questions. A message you type in the main composer settles earlier pending questions; a reply inside one question settles only that question. Suggested
   cards from the wrap-up appear below the final answer once the turn has ended;
   cards the model raises mid-turn (independent plan steps) appear where it raised them, as soon as it
   does, and scroll with the conversation. The

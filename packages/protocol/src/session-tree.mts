@@ -172,6 +172,8 @@ export const SESSION_TREE_METHOD = {
    * 应答 SessionProposalMarkHereResult。旧的设备进程没有这个方法，客户端退回 here
    */
   proposalMarkHere: 'litch/sessionProposal/markHere',
+  /** 仅隐藏当前问题来源，跨客户端持久化，不生成消息或答案。 */
+  ignoreQuestions: 'litch/session/questions/ignore',
   /**
    * 用户在排着的回报上点“立即处理”：父会话在跑就插进去，停着就替它开一个唤醒回合，不等别的子会话。
    * 参数 QueuedNotesDeliverParams，应答 QueuedNotesDeliverResponse。旧的设备进程没有这个方法
@@ -365,6 +367,11 @@ export interface SessionQueuedNote extends SessionEventNote {
 }
 
 export interface SessionEvent {
+  pendingQuestions?: {
+    title: string
+    options: { label: string; answer: string }[]
+    ignored: boolean
+  }[]
   kind: SessionEventKind
   notes: SessionEventNote[]
   /** 唤醒时还有几个子会话在干活（用户点了“立即处理”，不等它们）。都停了的不带 */
@@ -410,6 +417,16 @@ export function formatSessionEvent(event: SessionEvent): string {
     head,
     ...lines,
     tail,
+    ...(event.pendingQuestions?.length
+      ? [
+          '当前未答问题 / Current unanswered questions:',
+          '仍有效就不要重问；过时用 litch_sessions.wrap_up 的 withdraw_questions 按题目原文撤回；改问先撤旧再问新。用户已忽略的题不要催问，过时则撤回。',
+          'Do not repeat valid questions. Withdraw obsolete questions by exact title using litch_sessions.wrap_up.withdraw_questions; withdraw before rephrasing. Do not remind the user about ignored questions; withdraw them if obsolete.',
+          ...event.pendingQuestions.map(
+            (q) => `${q.ignored ? '用户已忽略 / Ignored by user: ' : ''}${JSON.stringify(q)}`,
+          ),
+        ]
+      : []),
     // 回答里可能有 -->，把 > 写成 \u003e，JSON 照样能解析，注释也不会被提前截断
     `<!-- ${JSON.stringify(event).replace(/>/g, '\\u003e')} -->`,
     `</${SESSION_EVENT_TAG}>`,

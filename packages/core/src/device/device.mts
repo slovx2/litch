@@ -321,6 +321,7 @@ export interface Device {
   configure(sessionId: string, settings: Partial<SessionSettings>): void
   /** 执行计划：退出计划模式，并以 text 这句话发起一个回合 */
   implementPlan(sessionId: string, text: string): Promise<void>
+  ignoreQuestions(sessionId: string, sourceIds: string[]): Promise<void>
   rename(sessionId: string, title: string): Promise<void>
   /** 归档：从列表里收起来，内容还在设备上 */
   archive(sessionId: string): Promise<void>
@@ -525,6 +526,7 @@ type DirectoryMethod = Exclude<
   | 'thread/goal/cleared'
   // 导进来的会话被别处占上、放开：只关系打开着的那个会话能不能写（live.mts）
   | 'litch/thread/nativeOwner/changed'
+  | 'litch/thread/questions/changed'
   // harness 详情设置的通知不归会话目录（harness-config.mts）
   | 'litch/harness/config/changed'
   | 'litch/harness/auth/updated'
@@ -2568,7 +2570,17 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       ),
     configure: (sessionId, settings) => live.configure(sessionId, settings),
     implementPlan: (sessionId, text) => live.implementPlan(sessionId, text),
-    // 这三件事对面成了之后会发通知，但不一定发给提出请求的这条连接：这边自己先改，通知再来是幂等的
+    // 以设备确认的集合更新当前视图；后到的通知是幂等的。
+    async ignoreQuestions(sessionId, sourceIds) {
+      const result = await guarded(() =>
+        link.request('litch/session/questions/ignore', { threadId: sessionId, sourceIds }),
+      )
+      live.notification('litch/thread/questions/changed', {
+        threadId: sessionId,
+        ignoredQuestions: result.ignoredQuestions,
+      })
+    },
+    // 这三件事对面成了之后会发通知；自己先改，通知再来是幂等的。
     async rename(sessionId, title) {
       const name = title.trim()
       if (!name) throw new ChannelError('rejected', '名称不能为空')

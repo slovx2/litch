@@ -1039,6 +1039,14 @@ a.btn {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.pending-ask-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+}
 /* 建议的回答和自己写的一栏排一行；自己写的那栏占剩下的地方，太窄就折到下一行 */
 .pending-ask-row {
   display: flex;

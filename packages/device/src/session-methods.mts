@@ -97,6 +97,20 @@ export async function sessionTreeCall(
     })
   const fields = isObject(params) ? params : {}
   switch (method) {
+    case SESSION_TREE_METHOD.ignoreQuestions: {
+      if (!declared) throw new DeviceError('unsupported', 'sessionTree must be declared')
+      if (
+        !Array.isArray(fields.sourceIds) ||
+        !fields.sourceIds.length ||
+        fields.sourceIds.length > 1000 ||
+        fields.sourceIds.some((id) => typeof id !== 'string' || !id || id.length > 4000)
+      )
+        throw new ProtocolError(-32602, 'sourceIds 必须是问题来源标识数组')
+      return tree.ignoreQuestions(
+        requiredString(fields.threadId, 'threadId'),
+        fields.sourceIds as string[],
+      )
+    }
     case SESSION_TREE_METHOD.start: {
       const wakeParent = fields.wakeParent
       if (typeof wakeParent !== 'boolean')
