@@ -60,7 +60,7 @@ function openFixture(name, role) {
     `HOME=${join(root, 'home')}`,
     '--env',
     `CODEX_HOME=${join(root, 'codex')}`,
-    join(built, 'Litch Background Fixture.app'),
+    join(built, role === 'guard' ? 'Litch Background Guard.app' : 'Litch Background Fixture.app'),
     '--args',
     '--directory',
     directory,

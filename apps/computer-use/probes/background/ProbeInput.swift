@@ -60,7 +60,7 @@ enum ProbeInput {
     if backend == "public-nsevent-touch", mouse, event.type != .scrollWheel {
       event.setIntegerValueField(.mouseEventSubtype, value: Int64(NSEvent.EventSubtype.touch.rawValue))
     }
-    if ["private", "private-fields", "private-focus-fields", "private-tagged", "private-sky-tagged"].contains(backend) {
+    if ["private", "private-fields", "private-focus-fields", "private-ax-focus-fields", "private-tagged", "private-sky-tagged"].contains(backend) {
       if mouse {
         let setField = try symbol("SLEventSetIntegerValueField", IntegerField.self)
         // 非公开的 windowNumber 字段，明确只用于私有路径，不混入公开 API 组。

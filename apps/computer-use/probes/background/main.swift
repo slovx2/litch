@@ -41,7 +41,7 @@ var foregroundTimer: Timer? = Timer.scheduledTimer(withTimeInterval: 0.05, repea
   let path = probeDirectory.appendingPathComponent(name).appendingPathComponent("state.json")
   let state = try readJSON(path)
   guard let pid = state["pid"] as? Int32, let running = NSRunningApplication(processIdentifier: pid),
-    ["io.github.slovx2.litch.background-fixture", "com.github.Electron"].contains(running.bundleIdentifier ?? "")
+    ["io.github.slovx2.litch.background-fixture", "io.github.slovx2.litch.background-guard", "com.github.Electron"].contains(running.bundleIdentifier ?? "")
   else { throw ProbeFailure.unavailable("not a running test fixture") }
   return (state, path)
 }
@@ -121,7 +121,7 @@ enum ProbeRunner {
     }
     guard let targetName = request["target"] as? String, let guardName = request["guard"] as? String,
       let backend = request["backend"] as? String, let action = request["action"] as? String,
-      ["public", "public-window", "public-ax", "public-nsevent", "public-nsevent-touch", "private-focus", "private-fields", "private-focus-fields", "private", "private-tagged", "private-sky-tagged"].contains(backend)
+      ["public", "public-window", "public-ax", "public-nsevent", "public-nsevent-touch", "private-focus", "private-fields", "private-focus-fields", "private-ax-focus-fields", "private", "private-tagged", "private-sky-tagged"].contains(backend)
     else { throw ProbeFailure.unavailable("invalid request") }
     let (target, targetPath) = try fixture(targetName)
     let (foreground, foregroundPath) = try fixture(guardName)
@@ -139,8 +139,8 @@ enum ProbeRunner {
     output["before"] = target
     output["guardBefore"] = foreground
     samples.append(sample())
-    if backend == "public-ax" { output["axFocus"] = axFocus(pid: pid) }
-    if ["private-focus", "private-focus-fields", "private", "private-tagged", "private-sky-tagged"].contains(backend) {
+    if backend == "public-ax" || backend == "private-ax-focus-fields" { output["axFocus"] = axFocus(pid: pid) }
+    if ["private-focus", "private-focus-fields", "private-ax-focus-fields", "private", "private-tagged", "private-sky-tagged"].contains(backend) {
       let status = try ProbeInput.focus(pid: pid, window: window, enabled: true)
       output["focusStatus"] = status
       guard status == 0 else { throw ProbeFailure.unavailable("private focus failed") }

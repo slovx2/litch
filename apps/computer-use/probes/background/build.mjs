@@ -66,4 +66,5 @@ build('Litch Background Input Probe', 'io.github.slovx2.litch.background-input-p
 ])
 if (existsSync(join(source, 'Fixture.swift'))) {
   build('Litch Background Fixture', 'io.github.slovx2.litch.background-fixture', ['Fixture.swift'])
+  build('Litch Background Guard', 'io.github.slovx2.litch.background-guard', ['Fixture.swift'])
 }
