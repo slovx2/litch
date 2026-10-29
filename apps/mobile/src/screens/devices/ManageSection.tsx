@@ -312,6 +312,22 @@ function HarnessHead({
           />
         ) : null}
       </View>
+      {harness.cli ? (
+        <View style={styles.runtime} testID={`harness:${harness.id}:runtime`}>
+          <Text selectable style={[styles.small, { color: theme.c.ink2 }]}>
+            {t('harness.runtime.path')}: {harness.cli.path}
+          </Text>
+          <Text style={[styles.small, { color: theme.c.ink2 }]}>
+            {t('harness.runtime.version')}: {harness.cli.version || t('devices.harness.unknown')}
+          </Text>
+          <Text style={[styles.small, { color: theme.c.ink2 }]}>
+            {t('harness.runtime.source')}: {t(`harness.runtime.source.${harness.cli.source}`)}
+          </Text>
+          <Text style={[styles.small, { color: theme.c.ink2 }]}>
+            {t('harness.runtime.started')}: {new Date(harness.cli.startedAt).toLocaleString(t.lang)}
+          </Text>
+        </View>
+      ) : null}
       {entry === 'unsupported' ? (
         <Text style={[styles.note, { color: theme.c.ink3 }]}>{t('hc.entry.unsupported')}</Text>
       ) : null}
@@ -463,6 +479,7 @@ const styles = StyleSheet.create({
   grow: { flex: 1, minWidth: 0 },
   name: { fontSize: 15, fontWeight: '600' },
   small: { fontSize: 12, lineHeight: 17 },
+  runtime: { paddingHorizontal: 16, paddingVertical: 10, gap: 3 },
   fold: { fontSize: 13, paddingHorizontal: 16, paddingVertical: 8 },
   groupNote: { fontSize: 13, lineHeight: 18, paddingHorizontal: 16 },
   actions: { flexDirection: 'row', gap: 10, paddingHorizontal: 16 },

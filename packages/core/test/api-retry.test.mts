@@ -71,6 +71,44 @@ const running = () =>
     ],
   })
 
+test('原生 willRetry 展示原话，不猜次数；新进展和回合结束清除', async () => {
+  const { core, peer } = setup([running()])
+  core.start()
+  await settle()
+  const session = watchSession(core)
+  await settle()
+  const server = peer.last()
+  const retry = () => session.seen.view?.turns[0]?.retry
+  const notify = () =>
+    server.notify('error', {
+      threadId: 'a',
+      turnId: 't1',
+      willRetry: true,
+      error: {
+        message: 'Reconnecting... waiting for network',
+        codexErrorInfo: null,
+        additionalDetails: null,
+      },
+    })
+  notify()
+  await settle()
+  assert.equal(retry()?.message, 'Reconnecting... waiting for network')
+  assert.equal(retry()?.attempt, null)
+  server.notify('item/agentMessage/delta', {
+    threadId: 'a',
+    turnId: 't1',
+    itemId: 'half',
+    delta: '恢复',
+  })
+  await settle()
+  assert.equal(retry(), null)
+  notify()
+  await settle()
+  server.notify('turn/completed', { threadId: 'a', turn: turn('t1', [], { status: 'completed' }) })
+  await settle()
+  assert.equal(retry(), null)
+})
+
 test('API-RETRY-001：握手声明 apiRetry；重试中记在回合上，半截回答撤掉，重试结束去掉', async () => {
   const { core, peer } = setup([running()])
   core.start()

@@ -16,7 +16,8 @@ type harnessView struct {
 	// 不在运行时的说明。
 	Text *bilingual `json:"text"`
 	// 它的运行时是原生的 codex，不是适配器：不认识我们的协议扩展，能力声明由设备进程替它整理。
-	Native bool `json:"native,omitempty"`
+	Native bool            `json:"native,omitempty"`
+	CLI    *harnessCLIInfo `json:"cli,omitempty"`
 }
 
 type controlState struct {
@@ -30,6 +31,7 @@ type controlState struct {
 	// 定时任务的总开关和同时运行的上限（settings_tasks.go），设备进程照它当场换上。
 	Tasks map[string]any `json:"tasks"`
 	Power powerStatus    `json:"power"`
+	Wake  wakeStatus     `json:"wake"`
 	// 这份服务的来历（service_facts.go）。设备进程在 runtime/info 的 device.service 里把它给客户端。
 	Service *serviceFacts `json:"service,omitempty"`
 }
@@ -65,8 +67,15 @@ func (m *harnessManager) view(keys []string) controlState {
 		if current == stateRunning {
 			text = nil
 		}
+		var cli *harnessCLIInfo
+		m.mu.Lock()
+		if slot := m.slots[id]; current == stateRunning && slot != nil && slot.cli != nil {
+			copy := *slot.cli
+			cli = &copy
+		}
+		m.mu.Unlock()
 		state.Harnesses = append(state.Harnesses, harnessView{
-			ID: id, State: current, Text: text, Native: id == nativeCodex,
+			ID: id, State: current, Text: text, Native: id == nativeCodex, CLI: cli,
 			Socket: hostplatform.ListenURL(hostplatform.SocketPath(filepath.Join(m.base.home, id))),
 		})
 	}

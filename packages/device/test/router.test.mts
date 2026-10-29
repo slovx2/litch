@@ -35,6 +35,7 @@ test('握手：没声明 harness 扩展的被拒绝并说明原因，声明了�
       supported: [
         'harness',
         'deviceWorkspaces',
+        'turnRecovery',
         'deviceProcesses',
         'harnessConfig',
         'clientApprovals',
@@ -149,6 +150,7 @@ test('runtime/info：设备信息和每个 harness 的状态，形状和扩展�
     assert.deepEqual(info.device.extensions, [
       'harness',
       'deviceWorkspaces',
+      'turnRecovery',
       'deviceProcesses',
       'harnessConfig',
       'clientApprovals',

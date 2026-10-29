@@ -19,6 +19,8 @@ import (
 )
 
 type runtimeDetails struct {
+	CLIPath         string `json:"cliPath"`
+	CLIBuild        string `json:"cliBuild"`
 	Engine          string `json:"engine"`
 	ProtocolVersion string `json:"protocolVersion"`
 	NodeVersion     string `json:"nodeVersion"`

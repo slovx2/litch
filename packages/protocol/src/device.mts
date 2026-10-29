@@ -141,6 +141,10 @@ export const EXTENSION = {
    * 定义在 protocol/extensions/api-retry.json）。声明了它的连接才收得到这个通知。
    */
   apiRetry: 'apiRetry',
+  /** 执行设备的唤醒与无进展提醒；只提示，显式请求中断确认后才继续。 */
+  turnRecovery: 'turnRecovery',
+  /** 当前这轮启动实际选择的 CLI 入口、版本与来源，不代表下次启动的设置。 */
+  harnessRuntime: 'harnessRuntime',
 } as const
 
 export type ExtensionName = (typeof EXTENSION)[keyof typeof EXTENSION]
@@ -191,7 +195,16 @@ export interface HarnessUnavailable {
 }
 
 /** 一个 harness 的声明和现在的状态 */
+export interface HarnessRuntimeInfo {
+  path: string
+  version: string
+  source: 'settings' | 'environment' | 'path' | 'default'
+  startedAt: number
+}
+
 export interface HarnessInfo {
+  /** 仅向声明 harnessRuntime 的连接提供。 */
+  cli?: HarnessRuntimeInfo
   /** 标识。别处的 `harness` 字段、参数填的都是它 */
   id: string
   displayName: string

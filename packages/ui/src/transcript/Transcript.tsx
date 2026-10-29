@@ -54,6 +54,7 @@ import { CommentLayer } from './comments/Layer.tsx'
 import { FileLinksProvider, useSessionFileLinks } from './FileLinks.tsx'
 import { AgentAnswer, PlanCard, UserMessage } from './messages.tsx'
 import { ProcessHead, ProcessParts } from './process.tsx'
+import { Recovery } from './Recovery.tsx'
 import { Stamp } from './Stamp.tsx'
 import { PinProvider, savedTurns, useTranscriptScroll } from './scroll.ts'
 import { TurnTouch, touchTurn, useFold, useTurnTouched } from './state.ts'
@@ -354,6 +355,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
             <span>{turn.error}</span>
           </div>
         ) : null}
+        {running && turn.recovery ? <Recovery {...ref} turn={turn} /> : null}
         {/* 建议任务的卡片和收尾留的问题：固定在回合最下方（最终回答下面），不随回答往上冲 */}
         {/* 收尾带的卡片和问题等回合结束才进来（核心的 bucketItems），先收尾再写回答时不比回答先出 */}
         {tail ? (

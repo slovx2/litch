@@ -230,6 +230,8 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.backgroundTasks,
                 // apiRetry：声明了才收得到模型请求重试的通知（litch/turn/apiRetry/updated），回合状态行写“重试中”
                 EXTENSION.apiRetry,
+                EXTENSION.turnRecovery,
+                EXTENSION.harnessRuntime,
                 // clientTools：litch_ 开头的命名空间的工具调用交给声明了的连接执行（内置浏览器、Computer Use）
                 ...(tools.length > 0 ? [EXTENSION.clientTools] : []),
               ],

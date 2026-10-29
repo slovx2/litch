@@ -13,6 +13,7 @@ import {
   startWebSocketTransport,
 } from '../../shared/src/transports.mjs'
 import type { RpcPeer } from '../../shared/src/types.mjs'
+import { hostOpencodeExecutable } from './host-opencode.mjs'
 import { OpencodeServer } from './server.mjs'
 import { runtimeInfo, versions } from './versions.mjs'
 
@@ -28,7 +29,9 @@ async function main(): Promise<void> {
     // runtimeInfo 会定位用户安装的 OpenCode 并核对版本下限，找不到或过低时在这里报错。
     if (!isVersionAtLeast(process.versions.node, versions.node))
       throw new Error(`需要 Node >= ${versions.node}`)
-    process.stdout.write(`${JSON.stringify(runtimeInfo(backgroundShellEnabled()))}\n`)
+    process.stdout.write(
+      `${JSON.stringify({ ...runtimeInfo(backgroundShellEnabled()), cliPath: hostOpencodeExecutable() })}\n`,
+    )
     return
   }
   if (args[0] === '--pty-self-check') {

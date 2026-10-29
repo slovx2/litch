@@ -96,6 +96,8 @@ const RETRY_REASONS = {
 
 /** 模型请求在重试时状态行上的那一段：重试中 2/10 · 连接中断。不知道最多几次时写第几次 */
 export function retryText(retry: TurnRetryView, t: Translator): string {
+  if (retry.message) return retry.message
+  if (retry.attempt === null) return t('turn.retryUnknown')
   const progress = retry.maxRetries
     ? t('turn.retry', { n: retry.attempt, max: retry.maxRetries })
     : t('turn.retryBare', { n: retry.attempt })

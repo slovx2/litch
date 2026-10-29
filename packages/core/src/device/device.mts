@@ -346,6 +346,7 @@ export interface Device {
   send(sessionId: string, message: OutgoingMessage, now?: boolean): Promise<void>
   steer(sessionId: string, messageId: string): Promise<void>
   interrupt(sessionId: string): Promise<void>
+  recover(sessionId: string, turnId: string, text?: string): Promise<void>
   /** 停掉会话的一个后台命令（session.stopBackground） */
   stopBackground(sessionId: string, taskId: string, itemId: string | null): Promise<void>
   unqueue(sessionId: string, messageId: string): void
@@ -565,6 +566,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   /** 对面有没有设备配置接口（deviceSettings 扩展）。认出来之前、对面不是设备服务时都是没有 */
   let manageable = false
   let powerSupported = false
+  let recoverySupported = false
   /** 对面有没有可重连的终端（deviceProcesses 扩展）。认出来之前、对面不是设备服务时都是没有 */
   let reattachable = false
   /** 对面支不支持定时任务（deviceTasks 扩展）。认出来之前、对面不是设备服务时都是不支持 */
@@ -1623,6 +1625,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         // 设置接口有没有，看它声明的扩展，不看版本号
         manageable = info.device.extensions?.includes(EXTENSION.deviceSettings) === true
         powerSupported = info.device.extensions?.includes(EXTENSION.devicePower) === true
+        recoverySupported = info.device.extensions?.includes(EXTENSION.turnRecovery) === true
         reattachable = info.device.extensions?.includes(EXTENSION.deviceProcesses) === true
         schedulable = info.device.extensions?.includes(EXTENSION.deviceTasks) === true
         sessionTree = info.device.extensions?.includes(EXTENSION.sessionTree) === true
@@ -1891,6 +1894,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   })
 
   const live = createLiveSessions({
+    recoverySupported: () => mode === 'full' && recoverySupported,
     deviceId: config.id,
     clock: options.clock,
     online: () => online,
@@ -2650,6 +2654,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         : live.send(sessionId, message, now),
     steer: (sessionId, messageId) => live.steer(sessionId, messageId),
     interrupt: (sessionId) => live.interrupt(sessionId),
+    recover: (sessionId, turnId, text) => live.recover(sessionId, turnId, text),
     stopBackground: (sessionId, taskId, itemId) => live.stopBackground(sessionId, taskId, itemId),
     unqueue: (sessionId, messageId) => live.unqueue(sessionId, messageId),
     respond: (sessionId, requestId, choice) => live.respond(sessionId, requestId, choice),

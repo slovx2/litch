@@ -80,7 +80,15 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       os: 'macos',
       harnesses: [
         harness('claude'),
-        harness('pi'),
+        {
+          ...harness('pi'),
+          cli: {
+            path: '/opt/homebrew/bin/pi',
+            version: '0.99.1',
+            source: 'path',
+            startedAt: now - HOUR,
+          },
+        },
         harness('dsh'),
         // 不可用的那一个：这台机器上没装 codex。种类是认识的，界面说得出原因和下一步；设备的原话放在后面
         harness('codex', {

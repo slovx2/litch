@@ -12,6 +12,7 @@ import { DEVICE_POWER_CHANGED } from '../../protocol/src/device-power.mjs'
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
 import { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
+import { RECOVERY_CHANGED } from '../../protocol/src/turn-recovery.mjs'
 import { WORKTREE_DEFAULTS, WORKTREE_SETTING } from '../../protocol/src/worktrees.mjs'
 import { PINNED_SECTION_ID } from '../../shared/src/thread-sections.mjs'
 import { DeviceApprovals } from './approvals.mjs'
@@ -32,6 +33,7 @@ import { dialectFor } from './native-codex.mjs'
 import { DevicePairing, type PairingConfig } from './pairing.mjs'
 import { PowerActivity } from './power-activity.mjs'
 import { hasActiveTurn } from './probe.mjs'
+import { RecoveryActions } from './recovery-actions.mjs'
 import { ACTIVITY_METHOD, type DeviceActivity, serviceInfo } from './service-info.mjs'
 import {
   ClientSession,
@@ -50,6 +52,7 @@ import { DEFAULT_TASK_SETTINGS, type TaskClock, type TaskSettings } from './task
 import { DeviceTasks } from './tasks.mjs'
 import { registerTasksTool } from './tasks-tool.mjs'
 import { ThreadIndex } from './thread-index.mjs'
+import { TurnRecoveryObserver } from './turn-recovery.mjs'
 import { type Connector, isObject, type Wire, type WireHandlers } from './wire.mjs'
 import { Workspaces } from './workspaces.mjs'
 import { gitVersion } from './worktree-git.mjs'
@@ -207,6 +210,8 @@ export class DeviceServer {
   private readonly options: DeviceOptions
   private readonly control: ControlChannel | null
   private power: PowerActivity | null = null
+  private readonly recovery: TurnRecoveryObserver
+  private readonly recoveryActions: RecoveryActions
   private readonly powerDisconnected = new Set<string>()
   private readonly powerRunning = new Map<string, boolean>()
   private lastPower = ''
@@ -261,8 +266,32 @@ export class DeviceServer {
       announce: (method, params, extension) => this.announce(method, params, extension),
     })
     const info = deviceInfo(this.version)
+    info.extensions.push(EXTENSION.turnRecovery)
+    this.recovery = new TurnRecoveryObserver({
+      check: async (harness, threadId) => {
+        const deadline = Date.now() + 5000
+        const link = await this.openEngineLink(harness, { handshakeTimeoutMs: 5000 })
+        try {
+          return await link.request(
+            'thread/read',
+            { threadId, includeTurns: false },
+            { timeoutMs: Math.max(1, deadline - Date.now()) },
+          )
+        } finally {
+          link.close()
+        }
+      },
+      announce: (notice) => this.announce(RECOVERY_CHANGED, notice, EXTENSION.turnRecovery),
+      ...(options.trace ? { trace: options.trace } : {}),
+    })
+    this.recoveryActions = new RecoveryActions(this.recovery, (harness) =>
+      this.openEngineLink(harness, { handshakeTimeoutMs: 5000 }),
+    )
+    this.recovery.resumed(this.control?.state?.wake)
+    this.recovery.start()
     // 设置功能要有适配器主进程在管才有：客户端看这份列表决定出不出设置界面
     if (this.control) info.extensions.push(EXTENSION.deviceSettings)
+    if (this.control) info.extensions.push(EXTENSION.harnessRuntime)
     // 服务的来历也是主进程给的：有它在管，声明过的客户端才问得到“在跑的是哪一份”
     if (this.control) info.extensions.push(EXTENSION.deviceService)
     if (this.control) info.extensions.push(EXTENSION.devicePower)
@@ -452,6 +481,8 @@ export class DeviceServer {
     })
     this.host = {
       power: () => this.power,
+      recovery: this.recovery,
+      recoveryActions: this.recoveryActions,
       ...(options.trace ? { trace: options.trace } : {}),
       harnesses: () => this.harnesses(),
       management: new DeviceManagement({
@@ -593,6 +624,7 @@ export class DeviceServer {
 
   /** 主进程推来了新的状态：各条连接跟着调整上游，设置真的变了就通知声明过的客户端 */
   private controlChanged(state: ControlState): void {
+    this.recovery.resumed(state.wake)
     this.syncPower()
     this.applyProcessLimits(state)
     if (this.tasksWait) clearTimeout(this.tasksWait)
@@ -741,7 +773,10 @@ export class DeviceServer {
    * harness 没配、不在 running、连不上抛 EngineUnavailable（code 是 harnessUnavailable）。
    * waitMs：它正在起、暂时连不上时最多等多久，默认不等。用完调 close；设备进程关的时候一起关掉
    */
-  async openEngineLink(harness: string, options: { waitMs?: number } = {}): Promise<EngineLink> {
+  async openEngineLink(
+    harness: string,
+    options: { waitMs?: number; handshakeTimeoutMs?: number } = {},
+  ): Promise<EngineLink> {
     const deadline = Date.now() + (options.waitMs ?? 0)
     for (;;) {
       if (this.closed) throw new EngineUnavailable(harness, 'the device service is shutting down')
@@ -766,7 +801,7 @@ export class DeviceServer {
               connect: source.connect,
               dialect: dialectFor(source.managed ? source.managed.native : source.native),
               version: this.version,
-              handshakeTimeoutMs: this.taskTiming.handshakeTimeoutMs,
+              handshakeTimeoutMs: options.handshakeTimeoutMs ?? this.taskTiming.handshakeTimeoutMs,
               requestTimeoutMs: this.taskTiming.requestTimeoutMs,
               tools: this.deviceTools,
               instructions: this.sessionTree.store,
@@ -817,15 +852,22 @@ export class DeviceServer {
     // 设备进程自己的连接上看到的也算：没有客户端连着时跑的定时任务、子会话，回报里也要数得出后台任务
     link.onNotification((method, params) => {
       if (!params || typeof params !== 'object') return
+      this.recovery.observe(link.harness, method, params)
       this.power?.notification(link.harness, method, params)
       if (method === BACKGROUND_TASKS_NOTIFICATION.changed) this.background.reportedChanged(params)
       else if (link.native) this.background.codexNotification(method, params)
     })
     const request = link.request.bind(link)
+    link.onServerRequest((method, params) => {
+      if (isObject(params)) this.recovery.observe(link.harness, method, params)
+    })
     link.request = async (method, params, options) => {
       const release = method === 'turn/start' ? this.power?.begin(link.harness) : undefined
       try {
-        return await request(method, params, options)
+        const result = await request(method, params, options)
+        if (isObject(result) && isObject(result.thread))
+          this.recovery.snapshot(link.harness, result.thread)
+        return result
       } finally {
         release?.()
       }
@@ -845,6 +887,7 @@ export class DeviceServer {
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
+    this.recovery.close()
     this.power?.close()
     this.power = null
     if (this.control) {

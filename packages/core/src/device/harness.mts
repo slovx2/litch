@@ -195,6 +195,7 @@ export function harnessFromInfo(info: HarnessInfo): HarnessView {
     badge: info.badge || info.id.slice(0, 2).toUpperCase(),
     state: info.available ? 'ready' : downState(down?.kind),
     version: info.version,
+    ...(info.cli ? { cli: { ...info.cli } } : {}),
     reason: info.available ? null : phrase(UNAVAILABLE[down?.kind ?? ''] ?? 'harness.unavailable'),
     // 握手时声明过 deviceSettings 的连接，适配器主进程给的原因带着两种语言的版本：有就用它，界面按语言挑
     detail: down?.text ? bilingual(down.text) : down?.message || null,

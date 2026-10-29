@@ -38,7 +38,9 @@ async function main(): Promise<void> {
     })
     if (cli.error || cli.status !== 0 || !isVersionAtLeast(cli.stdout.trim(), versions.cli))
       throw new Error(`需要用户安装的 Pi CLI >= ${versions.cli}；可用 PI_CLI 指定路径`)
-    process.stdout.write(`${JSON.stringify({ ...info, cliBuild: cli.stdout.trim() })}\n`)
+    process.stdout.write(
+      `${JSON.stringify({ ...info, cliBuild: cli.stdout.trim(), cliPath: hostPi().cli })}\n`,
+    )
     return
   }
   if (args[0] === '--pty-self-check') {

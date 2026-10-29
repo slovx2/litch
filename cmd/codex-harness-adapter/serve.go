@@ -20,7 +20,8 @@ func serve(ctx context.Context, c configuration) error {
 // 常驻服务管着运行时的时候挂上来的：运行时就绪了要知道，SSH 入口要跟着设置变。
 // 单独 serve 一个入口时没有，为 nil，SSH 入口照启动参数来、一直不变。
 type runtimeHooks struct {
-	running func()
+	running  func()
+	selected func(*harnessCLIInfo)
 	// SSH 入口现行的设置。
 	ssh func() (enabled bool, port int)
 	// 设置变了，回头再看一眼 ssh。
@@ -32,23 +33,23 @@ func plainFailure(text bilingual) error {
 }
 
 // 检查环境，备好起运行时的命令行（还没有起）。version 是 SSH 入口报给桌面端的版本，原生 codex 没有入口，为空。
-func prepareRuntime(ctx context.Context, c configuration) (process *exec.Cmd, version string, err error) {
+func prepareRuntime(ctx context.Context, c configuration) (process *exec.Cmd, version string, cli *harnessCLIInfo, err error) {
 	if c.native() {
 		// 上一次的服务被强杀时留下的 app-server 先收掉，不然新的起不来（native_codex_unix.go）
 		reapCodexOrphan(c)
-		path, _, err := inspectCodex(ctx, c)
+		path, actual, err := inspectCodex(ctx, c)
 		if err != nil {
-			return nil, "", err
+			return nil, "", nil, err
 		}
-		return codexCommand(c, path), "", nil
+		return codexCommand(c, path), "", selectedHarnessCLI(c, path, actual), nil
 	}
 	info, err := inspectRuntime(ctx, c)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 	process = exec.Command(c.node, c.adapter(), "app-server", "--listen", hostplatform.ListenURL(c.socket()))
 	process.Env = c.environment()
-	return process, info.ProtocolVersion + " (codex-harness-adapter-" + c.harness + ")", nil
+	return process, info.ProtocolVersion + " (codex-harness-adapter-" + c.harness + ")", selectedHarnessCLI(c, info.CLIPath, info.CLIBuild), nil
 }
 
 // 看运行时起来没有：连得上它听的那个套接字就算。
@@ -86,9 +87,12 @@ func serveRuntime(ctx context.Context, c configuration, autoInit bool, stage *st
 		return plainFailure(both("此 harness 状态目录已有运行进程", "another process is already running on this harness's state directory"))
 	}
 	defer hostplatform.Unlock(lock)
-	process, version, err := prepareRuntime(ctx, c)
+	process, version, cli, err := prepareRuntime(ctx, c)
 	if err != nil {
 		return err
+	}
+	if hooks != nil && hooks.selected != nil {
+		hooks.selected(cli)
 	}
 	if autoInit {
 		fmt.Printf(tr("[%s] 检测通过，正在初始化并启动…\n", "[%s] Check passed; initialising and starting…\n"), c.harness)

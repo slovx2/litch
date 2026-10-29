@@ -1,4 +1,11 @@
 export type * from './session-pending.mjs'
+export type * from './turn-recovery.mjs'
+export {
+  RECOVERY_CHANGED,
+  RECOVERY_CONTINUE,
+  RECOVERY_DISMISS,
+  RECOVERY_READ,
+} from './turn-recovery.mjs'
 // 协议包的入口。设备进程（packages/device）和客户端核心（packages/core）都从这里取类型。
 // codex.mts 是 Codex 原有的，extensions.mts 是我们加的，两边分开放，
 // 改上游的类型时不会碰到我们的扩展。

@@ -12,6 +12,7 @@ import {
 import { buildInfo } from './build-info.mjs'
 import { buildCliConfigLayer, cliConfigArgs, setCliConfigLayer } from './cli-config.mjs'
 import { sandboxCommand } from './command-sandbox.mjs'
+import { hostClaudeExecutable } from './host-claude.mjs'
 import { createRuntime } from './runtime-factory.mjs'
 import { CodexClaudeAppServer } from './server.mjs'
 import { loadRuntimeModelCatalog } from './server-helpers.mjs'
@@ -58,7 +59,7 @@ process.on('unhandledRejection', (reason: unknown) => {
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
   if (args[0] === '--runtime-info') {
-    process.stdout.write(`${JSON.stringify(buildInfo())}\n`)
+    process.stdout.write(`${JSON.stringify({ ...buildInfo(), cliPath: hostClaudeExecutable() })}\n`)
     return
   }
   if (args[0] === '--pty-self-check') {

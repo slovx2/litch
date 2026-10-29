@@ -1031,6 +1031,20 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       retryThenReply(view, turnId)
       return turnId
     }
+    if (/恢复观察|stall recovery/i.test(message.text)) {
+      applySessionOps(view, [
+        {
+          op: 'turn.recovery',
+          turnId,
+          recovery: {
+            reason: 'wake',
+            observedAt: clock.now(),
+            lastProgressAt: clock.now() - 30000,
+          },
+        },
+      ])
+      return turnId
+    }
     if (EDITS_FILES.test(message.text)) {
       applySessionOps(view, [
         {
@@ -2840,6 +2854,19 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         const view = reachView(params as Commands['session.stopBackground']['params'])
         if (!background.stop(view, taskId))
           throw new ChannelError('rejected', '找不到这个后台任务', phrase('fault.backgroundStop'))
+        return {}
+      }
+      if (name === 'session.recover' || name === 'session.dismissRecovery') {
+        const given = params as Commands['session.recover']['params']
+        const view = reachView(given)
+        const turn = running(view)
+        if (turn?.id !== given.turnId || !turn.recovery)
+          throw new ChannelError('rejected', '回合已经变化')
+        applySessionOps(view, [{ op: 'turn.recovery', turnId: turn.id, recovery: null }])
+        if (name === 'session.recover') {
+          endTurn(view, turn.id, null, 'interrupted')
+          startTurn(view, outgoing(given.text))
+        }
         return {}
       }
       if (name === 'session.interrupt') {

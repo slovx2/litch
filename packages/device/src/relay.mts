@@ -134,8 +134,10 @@ export class Relay {
   /** 上游发来的一帧。request：这一帧是哪个转发过去的请求的应答 */
   upstream(link: UpstreamLink, frame: Frame, raw: string, request?: ForwardedRequest): void {
     if (typeof frame.method !== 'string') this.response(link, frame, raw, request)
-    else if (frame.id != null) this.serverRequest(link, frame, frame.id, raw)
-    else this.notification(link, frame, frame.method, raw)
+    else if (frame.id != null) {
+      if (isObject(frame.params)) this.host.observe(link, frame.method, frame.params)
+      this.serverRequest(link, frame, frame.id, raw)
+    } else this.notification(link, frame, frame.method, raw)
   }
 
   /** 这个请求（马上要转给上游）成功应答时调一下 work；失败、上游断开时调 failed（有的话） */
@@ -203,6 +205,8 @@ export class Relay {
       this.host.background.resumed(link, result.thread)
     let changed = false
     if (isObject(result)) {
+      if (isObject(result.thread))
+        this.host.observe(link, 'thread/snapshot', { thread: result.thread })
       changed = this.stamp(link, result.thread)
       // 搜索结果这类：一页里每一项带着一个会话对象
       if (Array.isArray(result.data))

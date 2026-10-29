@@ -634,6 +634,23 @@ export function createCore(options: CoreOptions): Core {
           }
           return {}
         }
+        case 'session.recover':
+        case 'session.dismissRecovery': {
+          const { deviceId, sessionId, turnId } =
+            params as Commands['session.dismissRecovery']['params']
+          try {
+            await deviceOf(deviceId).recover(
+              sessionId,
+              turnId,
+              name === 'session.recover'
+                ? (params as Commands['session.recover']['params']).text
+                : undefined,
+            )
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+          return {}
+        }
         case 'session.unqueue': {
           const { deviceId, sessionId, messageId } = params as Commands['session.unqueue']['params']
           deviceOf(deviceId).unqueue(sessionId, messageId)

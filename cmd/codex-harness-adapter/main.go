@@ -396,6 +396,11 @@ var adapterCLIPath = sync.OnceValue(func() string {
 // 优先级：适配器固定变量 > 设置里给这个 harness 的 > 启动进程已有的 > 环境文件。
 // 原生 codex 没有固定变量：它的数据目录是用户自己的，CODEX_HOME 由用户的环境（或者设置）说了算。
 func (c configuration) environment() []string {
+	return withFallbackCLI(c.harness, c.baseEnvironment())
+}
+
+// 不含默认安装位置补出的 CLI 变量，用于准确标记选择来源。
+func (c configuration) baseEnvironment() []string {
 	values := map[string]string{
 		"CODEX_HOME":              filepath.Join(c.directory(), "codex"),
 		"CHA_CLAUDE_IDLE_EXIT_MS": "0",
@@ -448,7 +453,7 @@ func (c configuration) environment() []string {
 	for name, value := range values {
 		result = append(result, name+"="+value)
 	}
-	return withFallbackCLI(c.harness, result)
+	return result
 }
 
 func doctor(ctx context.Context, c configuration) error {

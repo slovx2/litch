@@ -1,0 +1,8 @@
+{
+  "extension": "harnessRuntime",
+  "description": "设备服务启动当前 harness 时选择的 CLI 入口、版本、来源与启动时间。选择规则不变，只有正在运行的实例有此字段。",
+  "appliesTo": "有主进程管理的设备聚合面。",
+  "declaration": { "where": "initialize.params.capabilities.litchExtensions", "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "harnessRuntime" } } },
+  "undeclared": "runtime/info.harnesses 和 harness 状态通知中的 HarnessInfo 不带 cli。",
+  "parts": [{ "kind": "HarnessField", "name": "cli", "on": "runtime/info.harnesses[]、litch/harness/status/changed.info", "description": "形状唯一地定义在 harness.json 的 HarnessRuntimeInfo。仅按投递连接的声明增加，不从当前设置猜测正在运行的旧进程。path 是启动时解析的 CLI 入口，可能是包装脚本。" }]
+}

@@ -399,6 +399,23 @@
   font-size: 11px;
   color: var(--ink-3);
 }
+.turn-recovery {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--wait) 40%, transparent);
+  border-radius: var(--r2);
+  background: color-mix(in srgb, var(--wait) 7%, transparent);
+  color: var(--ink-2);
+}
+.turn-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
 .errbox .mini {
   align-self: center;
   margin-left: auto;

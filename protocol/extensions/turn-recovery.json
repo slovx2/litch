@@ -1,0 +1,25 @@
+{
+  "extension": "turnRecovery",
+  "description": "执行设备上的唤醒后无进展、持续五分钟无进展提醒。不修改原生回合状态与 harness 超时，不自动中断或重放。",
+  "appliesTo": "设备聚合面，单 harness 兼容入口不提供。",
+  "declaration": { "where": "initialize.params.capabilities.litchExtensions", "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "turnRecovery" } } },
+  "undeclared": "不发送恢复通知、不增加标准协议字段；读取、忽略和继续请求均返回 extensionRequired。",
+  "rules": [
+    "唤醒来自运行 harness 的设备；客户端自己的休眠不能据此中断远端回合。",
+    "唤醒后三十秒或持续五分钟没有实质进展才检查；等待审批、用户输入和正在执行工具的回合不按模型停流提醒。",
+    "通知中的 recovery 为 null 表示提醒已撤销；提醒是观察结果，不是失败终态。",
+    "continue 必须显式调用，携带仍在等待恢复的 threadId/turnId/harness。先确认旧回合 interrupted，才能发 text 对应的继续请求；超时或出现不同回合时不发送。",
+    "dismiss 只撤销当前提醒；下一次实质进展或新唤醒后可以重新观察。"
+  ],
+  "parts": [
+    { "kind": "Method", "name": "litch/device/recovery/read", "params": { "type": "object", "additionalProperties": false }, "result": { "type": "object", "additionalProperties": false, "required": ["notices"], "properties": { "notices": { "type": "array", "items": { "$ref": "#/definitions/RecoveryNotice" } } } } },
+    { "kind": "Method", "name": "litch/device/recovery/dismiss", "params": { "$ref": "#/definitions/RecoveryReference" }, "result": { "type": "object", "additionalProperties": false } },
+    { "kind": "Method", "name": "litch/device/recovery/continue", "params": { "type": "object", "additionalProperties": false, "required": ["harness", "threadId", "turnId", "text"], "properties": { "harness": { "type": "string", "minLength": 1 }, "threadId": { "type": "string", "minLength": 1 }, "turnId": { "type": "string", "minLength": 1 }, "text": { "type": "string", "minLength": 1, "maxLength": 4000 } } }, "result": { "type": "object", "additionalProperties": false } },
+    { "kind": "Notification", "name": "litch/turn/recovery/changed", "params": { "$ref": "#/definitions/RecoveryNotice" } }
+  ],
+  "definitions": {
+    "RecoveryReference": { "type": "object", "additionalProperties": false, "required": ["harness", "threadId", "turnId"], "properties": { "harness": { "type": "string", "minLength": 1 }, "threadId": { "type": "string", "minLength": 1 }, "turnId": { "type": "string", "minLength": 1 } } },
+    "TurnRecovery": { "type": "object", "additionalProperties": false, "required": ["reason", "observedAt", "lastProgressAt"], "properties": { "reason": { "enum": ["wake", "idle", "unresponsive"] }, "observedAt": { "type": "number" }, "lastProgressAt": { "type": "number" } } },
+    "RecoveryNotice": { "type": "object", "additionalProperties": false, "required": ["harness", "threadId", "turnId", "recovery"], "properties": { "harness": { "type": "string" }, "threadId": { "type": "string" }, "turnId": { "type": "string" }, "recovery": { "oneOf": [{ "type": "null" }, { "$ref": "#/definitions/TurnRecovery" }] } } }
+  }
+}

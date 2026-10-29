@@ -13,8 +13,10 @@ export type {
 // 类型是 Text 的字段可能是对面给的原文，也可能是核心自己要说的一句话（见 phrase.mts），界面按当前语言显示。
 
 import type { ApiRetryReason } from '../../protocol/src/api-retry.mjs'
+import type { HarnessRuntimeInfo } from '../../protocol/src/device.mjs'
 import type { SessionMentionRef } from '../../protocol/src/session-mentions.mjs'
 import type { SystemMessage } from '../../protocol/src/system-messages.mjs'
+import type { TurnRecovery } from '../../protocol/src/turn-recovery.mjs'
 import type { SessionBackgroundView, TurnOrigin } from './model-background.mjs'
 import type { GoalReachedView, SessionGoalView } from './model-goal.mjs'
 import type { MachineAccessView, MachineAskView } from './model-machine.mjs'
@@ -56,6 +58,7 @@ export type ConnectionState = 'connecting' | 'online' | 'reconnecting' | 'offlin
 export type HarnessId = string
 
 export interface HarnessView {
+  cli?: HarnessRuntimeInfo
   id: HarnessId
   name: string
   /** 两个字母的徽标，例如 CC、PI */
@@ -839,11 +842,15 @@ export interface TurnView {
   origin?: Exclude<TurnOrigin, 'user'>
   /** 回合里的模型请求正在重试（apiRetry 扩展）。没在重试不带或是 null */
   retry?: TurnRetryView | null
+  /** 执行设备观察到的无进展提醒，不改变原生回合状态。 */
+  recovery?: TurnRecovery | null
 }
 
 /** 模型请求在重试：状态行写“重试中 第几次/最多几次”和原因 */
 export interface TurnRetryView {
-  attempt: number
+  attempt: number | null
+  /** 原生 error.willRetry 没有结构化次数，保留它给用户的说明，不解析英文文案。 */
+  message?: string
   /** 最多几次；harness 没说是 null，只写第几次 */
   maxRetries: number | null
   reason: ApiRetryReason

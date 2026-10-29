@@ -96,6 +96,7 @@ type controlServer struct {
 	// 控制请求的摘要（logs/control.jsonl）
 	journal *jsonLog
 	power   *powerController
+	wake    *wakeObserver
 }
 
 // 只有拿着设备锁的进程可以调用：遗留的套接字由它清掉。
@@ -118,6 +119,17 @@ func openControlServer(ctx context.Context, c configuration, manager *harnessMan
 	server.ctx, server.stop = context.WithCancel(ctx)
 	server.power = newPowerController(server.ctx, systemPowerBackend{}, c.powerSettings, func() { server.broadcast(nil) }, func(event string, fields map[string]any) { server.journal.write("info", "power_"+event, fields) })
 	server.power.run()
+	server.wake = newWakeObserver(&systemWakeSource{})
+	server.wake.poll()
+	server.done.Add(1)
+	go func() {
+		defer server.done.Done()
+		server.wake.run(server.ctx, func() {
+			state := server.wake.read()
+			server.journal.write("info", "system_resume", map[string]any{"sequence": state.Sequence, "resumedAt": state.ResumedAt})
+			server.broadcast(nil)
+		})
+	}()
 	server.installs = server.newInstaller()
 	manager.changed = server.broadcast
 	server.done.Add(2)
@@ -207,6 +219,9 @@ func (s *controlServer) publish() {
 	}
 	state := s.manager.view(keys)
 	state.Service = s.facts
+	if s.wake != nil {
+		state.Wake = s.wake.read()
+	}
 	if s.power != nil {
 		state.Power = s.power.read()
 	}

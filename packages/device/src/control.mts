@@ -13,6 +13,7 @@
 //   设备进程 → 主进程   {"reply":N,"result":{…}} 或 {"reply":N,"error":"…"}
 // 请求的参数里可能有密钥，这里不往日志里写任何消息的内容。
 import net from 'node:net'
+import type { HarnessRuntimeInfo } from '../../protocol/src/device.mjs'
 import type { DevicePowerStatus } from '../../protocol/src/device-power.mjs'
 import type { DeviceServiceInfo } from '../../protocol/src/device-service.mjs'
 import type {
@@ -20,11 +21,13 @@ import type {
   LocalizedText,
   ManagedHarnessState,
 } from '../../protocol/src/device-settings.mjs'
+import type { SystemWake } from '../../protocol/src/turn-recovery.mjs'
 import type { ProcessLimits } from './device-processes.mjs'
 import { isObject } from './wire.mjs'
 
 /** 主进程眼里的一个 harness */
 export interface ManagedHarness {
+  cli?: HarnessRuntimeInfo
   id: string
   /** 它的运行时在哪个套接字上，写法和 --upstream 一样（unix://路径）。没在跑时那里没有东西 */
   socket: string
@@ -36,6 +39,7 @@ export interface ManagedHarness {
 }
 
 export interface ControlState {
+  wake?: SystemWake
   power?: DevicePowerStatus
   /** 这一次改了的设置键；只是状态变了时是空的 */
   keys: string[]

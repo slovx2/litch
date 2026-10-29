@@ -28,6 +28,13 @@ const say = (prompt: string) =>
 
 export const SCENES: Scene[] = [
   {
+    id: 'stall-recovery',
+    group: '会话',
+    name: '唤醒后无进展',
+    note: '继续等待、中断并继续；只由用户操作',
+    steps: [say('恢复观察')],
+  },
+  {
     id: 'home',
     group: '设备',
     name: '首页',

@@ -428,6 +428,7 @@ export class SessionStore {
         this.todoDirty = true
         return
       case 'turn.retry':
+      case 'turn.recovery':
         mark(op.turnId)
         return
       case 'item.add': {

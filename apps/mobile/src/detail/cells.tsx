@@ -38,6 +38,7 @@ import { linkify } from './links'
 import { markdownStyleOf } from './markdownStyle'
 import { MermaidCard } from './mermaid/MermaidCard'
 import { splitMermaid } from './mermaid/segments'
+import { Recovery } from './Recovery'
 import { MentionedText } from './SessionMentions'
 import { currentStep, todoProgress } from './todo/logic'
 import { TodoSteps } from './todo/TodoViews'
@@ -421,33 +422,36 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
           ? `${t('turn.interrupted')}${time}${at}`
           : `${t('turn.failed')}${at}`
   return (
-    <View style={styles.status}>
-      <Text
-        style={[
-          styles.meta,
-          styles.grow,
-          { color: row.status === 'failed' ? c.err : c.ink3, fontSize: font.size.small + 1 },
-        ]}
-        numberOfLines={1}
-      >
-        {retry ? <Text style={{ color: c.wait }}>{retryText(retry, t)}</Text> : null}
-        {text}
-      </Text>
-      {row.status === 'running' ? null : (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('detail.menu.more')}
-          hitSlop={{ top: 10, bottom: 10, left: 14, right: 14 }}
-          onPress={() => {
-            notePressed(row.turnId, null)
-            turnMenu(row.turnId)
-          }}
-          style={({ pressed: down }) => [styles.more, down ? pressed(c) : null]}
-          testID="turn-menu"
+    <View>
+      {row.recovery ? <Recovery turnId={row.turnId} recovery={row.recovery} /> : null}
+      <View style={styles.status}>
+        <Text
+          style={[
+            styles.meta,
+            styles.grow,
+            { color: row.status === 'failed' ? c.err : c.ink3, fontSize: font.size.small + 1 },
+          ]}
+          numberOfLines={1}
         >
-          <Text style={[styles.meta, { color: c.ink3, fontFamily: font.mono }]}>⋯</Text>
-        </Pressable>
-      )}
+          {retry ? <Text style={{ color: c.wait }}>{retryText(retry, t)}</Text> : null}
+          {text}
+        </Text>
+        {row.status === 'running' ? null : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('detail.menu.more')}
+            hitSlop={{ top: 10, bottom: 10, left: 14, right: 14 }}
+            onPress={() => {
+              notePressed(row.turnId, null)
+              turnMenu(row.turnId)
+            }}
+            style={({ pressed: down }) => [styles.more, down ? pressed(c) : null]}
+            testID="turn-menu"
+          >
+            <Text style={[styles.meta, { color: c.ink3, fontFamily: font.mono }]}>⋯</Text>
+          </Pressable>
+        )}
+      </View>
     </View>
   )
 })

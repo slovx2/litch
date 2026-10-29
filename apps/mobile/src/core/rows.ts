@@ -289,6 +289,7 @@ export type Row =
       working: boolean
       /** 回合在跑、模型请求在重试：状态行照写“正在工作”，后面接第几次和原因 */
       retry: TurnRetryView | null
+      recovery?: TurnView['recovery']
     }
 
 interface ItemCache {
@@ -511,6 +512,7 @@ export class RowBuilder {
         startedAt: turn.startedAt,
         working: running && workingShown(running, items, view.requests.length),
         retry: running ? (turn.retry ?? null) : null,
+        recovery: running ? (turn.recovery ?? null) : null,
       }),
     )
     return out

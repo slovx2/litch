@@ -12,6 +12,7 @@ import {
   startWebSocketTransport,
 } from '../../shared/src/transports.mjs'
 import type { RpcPeer } from '../../shared/src/types.mjs'
+import { hostDshExecutable } from './host-dsh.mjs'
 import { DshServer } from './server.mjs'
 import { runtimeInfo, versions } from './versions.mjs'
 
@@ -25,7 +26,7 @@ async function main(): Promise<void> {
     // runtimeInfo 会定位用户安装的 dsh 并核对版本下限，找不到或过低时在这里报错。
     if (!isVersionAtLeast(process.versions.node, versions.node))
       throw new Error(`需要 Node >= ${versions.node}`)
-    process.stdout.write(`${JSON.stringify(runtimeInfo())}\n`)
+    process.stdout.write(`${JSON.stringify({ ...runtimeInfo(), cliPath: hostDshExecutable() })}\n`)
     return
   }
   if (args[0] === '--pty-self-check') {

@@ -40,6 +40,11 @@ export function reduceSession(view: SessionView, op: SessionOp): void {
       if (turn) turn.retry = op.retry ? { ...op.retry } : null
       return
     }
+    case 'turn.recovery': {
+      const turn = view.turns.find((entry) => entry.id === op.turnId)
+      if (turn) turn.recovery = op.recovery ? { ...op.recovery } : null
+      return
+    }
     case 'item.add': {
       view.items[op.item.id] = copyValue(op.item)
       const turn = view.turns.find((entry) => entry.id === op.turnId)

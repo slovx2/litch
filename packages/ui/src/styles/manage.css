@@ -615,3 +615,17 @@
 .mng-save-note.err {
   color: var(--err);
 }
+.harness-runtime {
+  display: grid;
+  padding: 0 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 12px;
+  color: var(--ink-2);
+}
+.harness-runtime dt {
+  color: var(--ink-3);
+}
+.harness-runtime dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

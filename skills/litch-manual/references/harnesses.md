@@ -18,6 +18,10 @@ mode exists only where the harness supports it.
 
 ## Seeing what is there
 
+桌面与手机的设备详情中，正在运行的 harness 会显示当前 CLI 入口、启动时版本、选择来源和
+启动时间。来源为命令行路径设置、环境变量、PATH 查找或默认安装位置；这不改变现有选择顺序。
+入口可能是包装脚本。修改路径设置后，旧进程的信息保留到实际重启；未运行时不把新设置冒充当前入口。
+
 - `scripts/litch harness list <device>` shows every harness on the device: enabled or not, ready or
   unavailable with the reason, and the version when known.
 

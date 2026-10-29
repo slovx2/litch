@@ -267,6 +267,7 @@ import type {
   SessionStartParams,
   SessionStartResponse,
 } from './session-tree.mjs'
+import type { RecoveryNotice } from './turn-recovery.mjs'
 import type {
   Worktree,
   WorktreeBranchesParams,
@@ -293,6 +294,18 @@ type CutBeforeItem<T> = T & { beforeItemId?: string }
 import type { DevicePowerStatus } from './device-power.mjs'
 
 export interface ClientRequests {
+  'litch/device/recovery/read': {
+    params: Record<string, never>
+    result: { notices: RecoveryNotice[] }
+  }
+  'litch/device/recovery/continue': {
+    params: { harness: string; threadId: string; turnId: string; text: string }
+    result: Record<string, never>
+  }
+  'litch/device/recovery/dismiss': {
+    params: { harness: string; threadId: string; turnId: string }
+    result: Record<string, never>
+  }
   'litch/device/power/read': {
     params: Record<string, never>
     result: DevicePowerStatus
@@ -643,6 +656,7 @@ export interface ClientNotifications {
 
 /** 对面发来、客户端会处理的通知 */
 export interface ServerNotifications {
+  'litch/turn/recovery/changed': RecoveryNotice
   'litch/device/power/changed': DevicePowerStatus
   'thread/started': ThreadStartedNotification
   'thread/status/changed': ThreadStatusChangedNotification

@@ -44,6 +44,16 @@ turn fails with the last error.
 **Pi 自动重试后完成回答。** 单次模型请求失败不代表整个回合失败；重试成功后回合显示完成。
 如果重试最终仍失败，显示最后一次模型错误；会话被其他实例修改等回合错误不会被成功重试清除。
 
+**合盖或断网后一直显示工作中。** 执行回合的设备唤醒后约 30 秒没有新进展，或一般情况下
+持续 5 分钟没有进展，Litch 会在回合末尾提醒。检查每 5 秒进行一次；等待审批、用户回答或
+正在执行工具时不会按模型停流提醒。远程回合由远程设备观察，本机唤醒不会触发远程中断。
+macOS、Linux 支持唤醒观察，Windows 使用 5 分钟通用提醒。这里只能发现可能停滞，不能证明网络故障。
+
+可以选择“继续等待”收起本次提醒，或点击“中断并继续”。后者先请求中断，确认旧回合已经中断后
+才发送核对已有步骤并继续工作的消息；不会重放原始指令。10 秒内未确认中断、回合已经变化或
+已有待答请求、排队消息时，不会另发继续请求。Litch 不会自动中断或调整 harness 的网络超时。
+Codex 原生重试时显示它给出的提示，新进展或回合结束后消失；没有次数信息时不猜次数。
+
 **A model is unavailable or every turn fails at once.** Usually the harness's own sign-in or model
 configuration. The user checks it in the harness's own CLI (exception E3); the harness's runtime log
 (`diagnose logs`) shows the error.

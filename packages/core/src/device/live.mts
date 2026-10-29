@@ -84,6 +84,7 @@ import type { HarnessTerms } from './harness.mjs'
 import { staleView, trimView, type ViewStore } from './view-store.mjs'
 
 export interface LiveHost {
+  recoverySupported?(): boolean
   deviceId: string
   clock: Clock
   online(): boolean
@@ -141,6 +142,7 @@ export interface LiveHost {
 }
 
 export interface LiveSessions {
+  recover(sessionId: string, turnId: string, text?: string): Promise<void>
   open(sessionId: string, sink: HostSink): () => void
   /** 界面上有没有人开着这个会话 */
   watched(sessionId: string): boolean
@@ -251,6 +253,7 @@ interface Waiting extends PendingRequest {
 }
 
 interface Live {
+  recoveryRevision: number
   id: string
   sinks: Set<HostSink>
   /** null：还没载入成功 */
@@ -817,6 +820,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       putTurn(live, turn)
       // 回合结束了，还在重试的那一句不留着（对面一般在结束前已经说过重试结束了）
       const viewId = viewTurn(live, turn.id)
+      emit(live, [{ op: 'turn.recovery', turnId: viewId, recovery: null }])
       if (live.view?.turns.find((entry) => entry.id === viewId)?.retry)
         emit(live, [{ op: 'turn.retry', turnId: viewId, retry: null }])
       markGoalTurn(live, viewTurn(live, turn.id))
@@ -892,7 +896,29 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         })
       emit(live, ops)
     },
+    'litch/turn/recovery/changed': (live, { turnId, recovery }) => {
+      const id = viewTurn(live, turnId)
+      if (live.view?.turns.some((turn) => turn.id === id && turn.status === 'running'))
+        emit(live, [{ op: 'turn.recovery', turnId: id, recovery }])
+    },
     error: (live, { error, willRetry, turnId }) => {
+      if (willRetry) {
+        const id = viewTurn(live, turnId)
+        if (live.view?.turns.some((turn) => turn.id === id && turn.status === 'running'))
+          emit(live, [
+            {
+              op: 'turn.retry',
+              turnId: id,
+              retry: {
+                attempt: null,
+                maxRetries: null,
+                reason: 'other',
+                httpStatus: null,
+                message: error.message,
+              },
+            },
+          ])
+      }
       // 不再重试的错误，随后的“回合结束”里带着同样的原因；这里只留个记录
       host.log(
         `会话 ${live.id} 的回合 ${turnId} 报错（${willRetry ? '会重试' : '不再重试'}）：${error.message}`,
@@ -1103,6 +1129,18 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         live.held = []
         for (const entry of held) deliver(live, entry.method, entry.params, true)
         pump(live)
+        if (host.recoverySupported?.()) {
+          const revision = live.recoveryRevision
+          void host
+            .request('litch/device/recovery/read', {})
+            .then(({ notices }) => {
+              if (live.recoveryRevision !== revision || live.loading || live.stale) return
+              for (const notice of notices)
+                if (notice.threadId === live.id)
+                  deliver(live, 'litch/turn/recovery/changed', notice)
+            })
+            .catch((error) => host.log(`读取回合恢复状态失败：${String(error)}`))
+        }
         release(live)
       },
       (error: unknown) => {
@@ -1287,6 +1325,19 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       return
     }
     if (!live.view) return
+    live.recoveryRevision++
+    if (
+      method === 'item/started' ||
+      method === 'item/completed' ||
+      (method.startsWith('item/') && /delta$/i.test(method))
+    ) {
+      const id = viewTurn(live, (params as { turnId: string }).turnId)
+      const turn = live.view.turns.find((turn) => turn.id === id)
+      const clear: SessionOp[] = []
+      if (turn?.retry?.message) clear.push({ op: 'turn.retry', turnId: id, retry: null })
+      if (turn?.recovery) clear.push({ op: 'turn.recovery', turnId: id, recovery: null })
+      if (clear.length) emit(live, clear)
+    }
     if (replay && method.endsWith('elta')) {
       // 载入期间攒下的文本增量：条目已经在快照里的不再加，免得同一段文字出现两遍。
       // 就算因此少了几个字，条目定稿时对面会给出完整内容。
@@ -1297,6 +1348,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   }
 
   const blank = (id: string): Live => ({
+    recoveryRevision: 0,
     id,
     sinks: new Set(),
     view: null,
@@ -1372,6 +1424,30 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   }
 
   const sessionsApi: LiveSessions = {
+    async recover(sessionId, turnId, text) {
+      const live = need(sessionId)
+      mustReach(live)
+      const turn = live.view.turns.find((turn) => turn.id === turnId)
+      if (!host.recoverySupported?.() || !turn?.recovery || turn.status !== 'running')
+        throw new ChannelError('rejected', 'The turn is no longer waiting for recovery')
+      if (text && (live.queued.length || live.view.requests.length))
+        throw new ChannelError(
+          'rejected',
+          'Resolve pending requests and queued messages before continuing',
+        )
+      const rawTurnId = [...live.alias].find(([, id]) => id === turnId)?.[0] ?? turnId
+      const harness = live.view.harness
+      if (!harness) throw new ChannelError('unsupported', 'Recovery requires an executing device')
+      const params = { harness, threadId: sessionId, turnId: rawTurnId }
+      if (text) {
+        host.interrupting?.(sessionId)
+        await host.request(
+          'litch/device/recovery/continue',
+          { ...params, text },
+          { timeoutMs: 40000 },
+        )
+      } else await host.request('litch/device/recovery/dismiss', params)
+    },
     open(sessionId, sink) {
       let live = sessions.get(sessionId)
       if (!live) {

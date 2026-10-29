@@ -27,6 +27,11 @@ import type { HarnessConfigChangedNotification } from '../../protocol/src/harnes
 import { SESSION_TREE_METHOD } from '../../protocol/src/session-tree.mjs'
 import { localTaskTimeZone } from '../../protocol/src/task-schedule.mjs'
 import {
+  RECOVERY_CONTINUE,
+  RECOVERY_DISMISS,
+  RECOVERY_READ,
+} from '../../protocol/src/turn-recovery.mjs'
+import {
   clientToolNamespaces,
   type DeclaredClientTools,
   NO_CLIENT_TOOLS,
@@ -62,6 +67,7 @@ import { type DeviceManagement, MANAGEMENT_PREFIX } from './management.mjs'
 import { dialectFor, NATIVE_CODEX_DIALECT } from './native-codex.mjs'
 import { type DevicePairing, PAIR_PREFIX, PairingError } from './pairing.mjs'
 import type { PowerActivity } from './power-activity.mjs'
+import type { RecoveryActions } from './recovery-actions.mjs'
 import { Relay } from './relay.mjs'
 import { classify } from './routes.mjs'
 import { describeDevice } from './service-info.mjs'
@@ -70,6 +76,7 @@ import { sessionTreeCall } from './session-methods.mjs'
 import type { SessionTree } from './session-tree.mjs'
 import { DEVICE_TASK_PREFIX, type DeviceTasks } from './tasks.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
+import type { TurnRecoveryObserver } from './turn-recovery.mjs'
 import { type ForwardedRequest, INTERNAL_ID_PREFIX, UpstreamLink } from './upstream.mjs'
 import {
   type Connector,
@@ -123,6 +130,8 @@ export interface HarnessSource extends UpstreamConfig {
 
 /** 设备进程里各条连接共用的东西 */
 export interface SessionHost {
+  recovery?: TurnRecoveryObserver
+  recoveryActions?: RecoveryActions
   power(): PowerActivity | null
   powerLost?(harness: string): void
   /** 这台设备上现在已知的全部 harness，顺序就是对外报告的顺序。名单和状态会变 */
@@ -245,6 +254,7 @@ export class ClientSession implements ClientToolPeer {
       answered: (link, id, error) => this.traced(id, error, link.harness),
       deviceTools: host.deviceTools,
       observe: (link, method, params) => {
+        this.host.recovery?.observe(link.harness, method, params)
         this.host.power()?.notification(link.harness, method, params)
         this.translators.get(link.harness)?.notification(method, params)
       },
@@ -474,6 +484,26 @@ export class ClientSession implements ClientToolPeer {
     switch (route.kind) {
       case 'device':
         if (method === 'runtime/info') return this.runtimeInfo()
+        if ([RECOVERY_READ, RECOVERY_CONTINUE, RECOVERY_DISMISS].includes(method)) {
+          if (!this.declared.has(EXTENSION.turnRecovery))
+            throw new DeviceError('extensionRequired', `${method} requires turnRecovery`)
+          if (method === RECOVERY_READ) return { notices: this.host.recovery?.list() ?? [] }
+          if (method === RECOVERY_CONTINUE) {
+            if (!this.host.recoveryActions)
+              throw new DeviceError('unsupported', 'Recovery is unavailable')
+            return this.host.recoveryActions.continue(frame.params)
+          }
+          const p = frame.params
+          if (
+            !isObject(p) ||
+            typeof p.harness !== 'string' ||
+            typeof p.threadId !== 'string' ||
+            typeof p.turnId !== 'string'
+          )
+            throw new DeviceError('unsupported', 'Invalid recovery reference')
+          this.host.recovery?.dismiss(p.harness, p.threadId, p.turnId)
+          return {}
+        }
         if (
           method.startsWith('litch/session/') ||
           method.startsWith('litch/sessionProposal/') ||
@@ -970,11 +1000,16 @@ export class ClientSession implements ClientToolPeer {
     // 说明的两种语言版本是 deviceSettings 扩展的内容，只给声明过它的连接
     if (unavailable?.text && !this.declared.has(EXTENSION.deviceSettings))
       unavailable = { kind: unavailable.kind, message: unavailable.message }
-    return describeHarness(
+    const info = describeHarness(
       link.harness,
       seen ? link.facts : this.host.catalog.latest(link.harness),
       unavailable,
     )
+    if (this.declared.has(EXTENSION.harnessRuntime)) {
+      const cli = this.host.harnesses().find((source) => source.id === link.harness)?.managed?.cli
+      if (cli) info.cli = { ...cli }
+    }
+    return info
   }
 
   /** 设备信息。会话编排开着才列 sessionTree：客户端按它决定带不带 litch_sessions、出不出派子会话的界面 */

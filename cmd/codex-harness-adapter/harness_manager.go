@@ -60,6 +60,7 @@ type harnessSlot struct {
 	failure error
 	// 这一轮是什么时候跑起来的。没跑起来过是零值。
 	ranAt time.Time
+	cli   *harnessCLIInfo
 	// 连着自己停了几次（每次都自动再起了）。稳稳跑过一阵、或者人来重新应用，就清零。
 	crashes int
 }
@@ -196,6 +197,7 @@ func (m *harnessManager) run(ctx context.Context, id string) error {
 		slot.cancel = cancel
 		slot.applied = m.base.runtimeFingerprint(id, enabled)
 		slot.ranAt = time.Time{}
+		slot.cli = nil
 		select {
 		case <-slot.wake:
 		default:
@@ -212,9 +214,13 @@ func (m *harnessManager) run(ctx context.Context, id string) error {
 		if enabled {
 			fmt.Printf(tr("[%s] 正在检测本机 CLI 和运行环境…\n", "[%s] Checking the local CLI and runtime…\n"), id)
 			err = serveRuntime(roundContext, entry, true, m.stage, &runtimeHooks{
+				selected: func(cli *harnessCLIInfo) { m.mu.Lock(); slot.cli = cli; m.mu.Unlock() },
 				running: func() {
 					m.mu.Lock()
 					slot.ranAt = time.Now()
+					if slot.cli != nil {
+						slot.cli.StartedAt = slot.ranAt.UnixMilli()
+					}
 					m.mu.Unlock()
 					m.setState(slot, stateRunning, nil)
 				},

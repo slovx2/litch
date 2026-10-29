@@ -2,6 +2,7 @@ import type {
   ChromeSettingsRequest,
   ChromeSettingsState,
 } from '../../../protocol/src/chrome-browser.mjs'
+import type { TurnRecovery } from '../../../protocol/src/turn-recovery.mjs'
 // 界面与核心之间那条通道的约定：有哪些主题、增量长什么样、有哪些命令、线上发什么消息。
 // 通道只有两种用法：命令（一问一答，可取消）和订阅（先快照，后增量）。
 
@@ -263,6 +264,7 @@ export type SessionOp =
     }
   /** 回合里的模型请求开始重试、又重试了一次（第几次、原因），null 是重试结束了 */
   | { op: 'turn.retry'; turnId: string; retry: TurnRetryView | null }
+  | { op: 'turn.recovery'; turnId: string; recovery: TurnRecovery | null }
   /** 加一个条目；标识已经有了就整个换掉（条目定稿时对面会给出完整的最终内容） */
   | { op: 'item.add'; turnId: string; item: ItemView }
   | { op: 'item.appendText'; itemId: string; field: 'text' | 'output'; text: string }
@@ -616,6 +618,14 @@ export interface Commands {
   /** 打断正在进行的回合 */
   'session.interrupt': {
     params: { deviceId: string; sessionId: string }
+    result: Record<string, never>
+  }
+  'session.recover': {
+    params: { deviceId: string; sessionId: string; turnId: string; text: string }
+    result: Record<string, never>
+  }
+  'session.dismissRecovery': {
+    params: { deviceId: string; sessionId: string; turnId: string }
     result: Record<string, never>
   }
   /**
