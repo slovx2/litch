@@ -12,7 +12,100 @@ import {
   MANAGER_OPENED,
   MANAGER_SPACE,
 } from './client-fixture-manager.mjs'
+import { completedManagerTurn, managerReply } from './client-fixture-manager-check.mjs'
 import { sessionsReply, sessionsResponses } from './client-fixture-sessions.mjs'
+
+const snapshot = (status) => ({
+  status: { type: 'idle' },
+  turns: [
+    {
+      id: 'turn-1',
+      status,
+      completedAt: status === 'completed' ? 1 : null,
+      items: [
+        {
+          type: 'userMessage',
+          content: [
+            {
+              type: 'text',
+              text: '<litch-session-event kind="manager-end">结束</litch-session-event>',
+            },
+          ],
+        },
+        { type: 'agentMessage', text: '已完成' },
+      ],
+    },
+  ],
+})
+const completion = (status, threadId = 'thread-1', turnId = 'turn-1') => ({
+  method: 'turn/completed',
+  params: { threadId, turn: { id: turnId, status } },
+})
+
+test('经理等待：idle 加瞬时 interrupted 不是终态；同回合完整快照随后完成才通过', async () => {
+  let reads = 0
+  const client = {
+    frames: [completion('completed')],
+    call: async () => ({ thread: snapshot(++reads === 1 ? 'interrupted' : 'completed') }),
+  }
+  assert.equal(
+    await managerReply(client, 'thread-1', '已完成', 'manager-end', null, { pollMs: 1 }),
+    '已完成',
+  )
+  assert.equal(reads, 2, '真实完成通知不能替代尚未完整的快照')
+})
+
+test('经理等待：真实中断/失败通知立即失败，其他会话或回合的通知不能串入', () => {
+  for (const status of ['interrupted', 'failed'])
+    assert.throws(
+      () =>
+        completedManagerTurn(
+          snapshot('completed'),
+          [completion(status)],
+          'thread-1',
+          null,
+          'turn-1',
+        ),
+      new RegExp(status),
+    )
+  assert.throws(
+    () => completedManagerTurn(snapshot('failed'), [], 'thread-1', null, 'turn-1'),
+    /failed/,
+  )
+  assert.equal(
+    completedManagerTurn(
+      snapshot('interrupted'),
+      [completion('completed', 'other')],
+      'thread-1',
+      null,
+      'turn-1',
+    ),
+    null,
+  )
+  assert.equal(
+    completedManagerTurn(
+      snapshot('interrupted'),
+      [completion('completed', 'thread-1', 'other')],
+      'thread-1',
+      null,
+      'turn-1',
+    ),
+    null,
+  )
+  assert.equal(completedManagerTurn(snapshot('completed'), [], 'thread-1', null, 'other'), null)
+  assert.equal(
+    completedManagerTurn(snapshot('completed'), [], 'thread-1', 'manager-open', null),
+    null,
+  )
+})
+
+test('经理等待：订阅前发生的真实中断不能无限等待，超时包含最后快照', async () => {
+  const client = { frames: [], call: async () => ({ thread: snapshot('interrupted') }) }
+  await assert.rejects(
+    managerReply(client, 'thread-1', '已完成', null, 'turn-1', { timeout: 10, pollMs: 1 }),
+    /等待超时.*interrupted/,
+  )
+})
 
 const spaces = managerTools({
   name: '验收经理',

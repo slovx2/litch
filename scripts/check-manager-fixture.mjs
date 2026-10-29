@@ -1,5 +1,7 @@
 // 经理的脚本验收：真实 CLI → 回环假模型 → 设备 → 看板，全程不用窗口。
 // npm run check:manager-fixture（先安装各引擎依赖；命令会构建并跑脚本单测）。需要 Go。
+// 单路重复验收：npm run check:manager-fixture -- --harness codex --repeat 8。
+// 收尾读取竞态：追加 --poll-ms 1 高频检查，不能把瞬时 interrupted 快照当作真实中断。
 // Claude 只用 CHA_CLAUDE_CLI 指定的隔离副本，没给就明确跳过；Codex 用 CHA_CODEX_CLI 或 PATH。
 // 子进程显式使用临时 HOME、CODEX_HOME，OPENAI_API_KEY、OPENAI_BASE_URL 等个人凭据不进入环境。
 // 流程：manager-open → 经理：add 决策 → answers/submit → manager-answers → 会话：start → 工作线回报 → end → 只读。
@@ -7,6 +9,7 @@ import assert from 'node:assert/strict'
 import { accessSync, constants, existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
+import { parseArgs } from 'node:util'
 import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
@@ -18,46 +21,33 @@ import {
   MANAGER_HEARD,
   MANAGER_OPENED,
 } from './client-fixture-manager.mjs'
-import { managerClient, startManagerFixture, until } from './client-fixture-manager-check.mjs'
+import {
+  managerClient,
+  managerReply,
+  startManagerFixture,
+  until,
+} from './client-fixture-manager-check.mjs'
 import { findCodex } from './client-fixture-responses.mjs'
 import { SESSIONS_HEARD } from './client-fixture-sessions.mjs'
 
 const text = (value) => [{ type: 'text', text: value, text_elements: [] }]
-const itemText = (item) =>
-  item.type === 'agentMessage'
-    ? item.text
-    : (item.content ?? [])
-        .filter((part) => part.type === 'text')
-        .map((part) => part.text)
-        .join('\n')
-
-/** 直接读设备保存的完整回合，覆盖创建早于客户端订阅的开场事件，不依赖通知时序。 */
-async function replied(client, threadId, expected, eventKind = null, turnId = null) {
-  const target = (turn) =>
-    turnId
-      ? turn.id === turnId
-      : turn.items.some(
-          (item) => item.type === 'userMessage' && itemText(item).includes(`kind="${eventKind}"`),
-        )
-  const result = await until(
-    `会话 ${threadId} 回复 ${expected}`,
-    () => client.call('thread/read', { threadId, includeTurns: true }),
-    ({ thread }) => thread.turns?.some((turn) => target(turn) && turn.status !== 'inProgress'),
-  )
-  const turn = result.thread.turns.find(target)
-  assert.equal(turn.status, 'completed', JSON.stringify(turn))
-  const answer = turn.items.find(
-    (item) => item.type === 'agentMessage' && itemText(item).startsWith(expected),
-  )
-  assert.ok(answer, `没有收到 ${expected}；回合内容：${JSON.stringify(turn.items)}`)
-  if (eventKind) {
-    assert.ok(
-      !turn.items.some((item) => /toolcall|commandexecution/i.test(item.type)),
-      `${eventKind} 不应调用工具`,
-    )
-  }
-  return answer.text
-}
+const { values } = parseArgs({
+  options: {
+    harness: { type: 'string' },
+    repeat: { type: 'string', default: '1' },
+    'poll-ms': { type: 'string', default: '100' },
+  },
+})
+const repeat = Number(values.repeat)
+const pollMs = Number(values['poll-ms'])
+assert.ok(Number.isSafeInteger(repeat) && repeat > 0, '--repeat 必须为正整数')
+assert.ok(Number.isSafeInteger(pollMs) && pollMs > 0, '--poll-ms 必须为正整数')
+assert.ok(
+  !values.harness || ['claude-code', 'codex', 'pi'].includes(values.harness),
+  '未知 harness',
+)
+const replied = (client, threadId, expected, eventKind = null, turnId = null) =>
+  managerReply(client, threadId, expected, eventKind, turnId, { pollMs })
 
 async function say(client, threadId, said, expected) {
   const { turn } = await client.call('turn/start', { threadId, input: text(said) })
@@ -80,6 +70,8 @@ async function checkManager(t, client, cwd, harness) {
   })
   const params = { managerId: manager.id }
   const board = async () => (await client.call(MANAGER_METHOD.boardRead, params)).board
+  // 和打开经理页一样订阅会话，真实中断由 turn/completed 通知确认；早于订阅的开场仍读快照。
+  await client.call('thread/resume', { threadId })
   await replied(client, threadId, MANAGER_OPENED, 'manager-open')
   t.diagnostic(`${harness}：收到 manager-open，未调工具`)
   const decision = {
@@ -148,8 +140,28 @@ async function checkManager(t, client, cwd, harness) {
   t.diagnostic(`${harness}：开线完成，工作线页数据含回报及“没验”项`)
 
   const ended = await client.call(MANAGER_METHOD.end, params)
-  assert.equal(ended.manager.status, 'ended')
+  assert.equal(ended.manager.status, 'ending')
+  assert.equal(ended.manager.endedAt, null)
+  // 收尾回合可以写总结；客户端在 ending 期间不能改设置或提交看板答复。
+  await assert.rejects(
+    client.call(MANAGER_METHOD.update, { ...params, name: '结束中不能改' }),
+    (error) => error.data?.litch === 'managerEnded' && /is ending/.test(error.message),
+  )
+  await assert.rejects(
+    client.call(MANAGER_METHOD.answersSubmit, {
+      ...params,
+      answers: [
+        { decisionId: saved.id, revision: saved.revision, optionId: 'go', text: '结束中不能写' },
+      ],
+    }),
+    (error) => error.data?.litch === 'managerEnded' && /is ending/.test(error.message),
+  )
   await replied(client, threadId, MANAGER_ENDED, 'manager-end')
+  await until(
+    `${harness} 收尾完成后进入 ended`,
+    () => client.call(MANAGER_METHOD.list),
+    ({ managers }) => managers.find((entry) => entry.id === manager.id)?.status === 'ended',
+  )
   await assert.rejects(
     client.call(MANAGER_METHOD.update, { ...params, name: '不应写入' }),
     (error) => error.data?.litch === 'managerEnded',
@@ -173,10 +185,12 @@ async function checkManager(t, client, cwd, harness) {
 }
 
 test('经理真实 CLI 的隔离脚本验收', { timeout: 600_000 }, async (t) => {
-  const claude = process.env.CHA_CLAUDE_CLI?.trim()
-  const codex = findCodex()
+  const claude =
+    !values.harness || values.harness === 'claude-code' ? process.env.CHA_CLAUDE_CLI?.trim() : null
+  const codex = !values.harness || values.harness === 'codex' ? findCodex() : null
+  if (values.harness === 'claude-code') assert.ok(claude, 'Claude 单路验收必须提供 CHA_CLAUDE_CLI')
   assert.ok(
-    codex,
+    codex || (values.harness && values.harness !== 'codex'),
     '未找到 Codex：请设置 CHA_CODEX_CLI 或把 codex 放入 PATH；本检查必须覆盖原生 Codex',
   )
   if (claude) accessSync(claude, constants.X_OK)
@@ -202,28 +216,35 @@ test('经理真实 CLI 的隔离脚本验收', { timeout: 600_000 }, async (t) =
     ['codex', true, ''],
     ['pi', true, ''],
   ]) {
-    await t.test(harness, { skip: available ? false : reason }, async (t) => {
-      assert.equal(runtime.harnesses.find((entry) => entry.id === harness)?.available, true)
-      try {
-        await checkManager(t, client, info.engines.cwd, harness)
-      } catch (error) {
-        // Claude 的工具可能在 CLI 处理 MCP 定义时消失；失败时保留实际请求里的名单，收场仍删除原始请求。
-        const requests = existsSync(info.modelDump)
-          ? readdirSync(info.modelDump)
-              .filter((file) => file.endsWith(`-${harness}.json`))
-              .sort()
-          : []
-        if (requests.length) {
-          const { request } = JSON.parse(
-            readFileSync(join(info.modelDump, requests.at(-1)), 'utf8'),
-          )
-          const tools = (request.tools ?? []).flatMap(
-            (tool) => tool.description?.match(/\[litch_manager\.\w+\]/g) ?? [],
-          )
-          t.diagnostic(`模型实际收到的经理工具：${tools.join('、') || '无'}`)
-        }
-        throw error
-      }
-    })
+    if (values.harness && values.harness !== harness) continue
+    for (let iteration = 1; iteration <= repeat; iteration++) {
+      await t.test(
+        `${harness} ${iteration}/${repeat}`,
+        { skip: available ? false : reason },
+        async (t) => {
+          assert.equal(runtime.harnesses.find((entry) => entry.id === harness)?.available, true)
+          try {
+            await checkManager(t, client, info.engines.cwd, harness)
+          } catch (error) {
+            // Claude 的工具可能在 CLI 处理 MCP 定义时消失；失败时保留实际请求里的名单，收场仍删除原始请求。
+            const requests = existsSync(info.modelDump)
+              ? readdirSync(info.modelDump)
+                  .filter((file) => file.endsWith(`-${harness}.json`))
+                  .sort()
+              : []
+            if (requests.length) {
+              const { request } = JSON.parse(
+                readFileSync(join(info.modelDump, requests.at(-1)), 'utf8'),
+              )
+              const tools = (request.tools ?? []).flatMap(
+                (tool) => tool.description?.match(/\[litch_manager\.\w+\]/g) ?? [],
+              )
+              t.diagnostic(`模型实际收到的经理工具：${tools.join('、') || '无'}`)
+            }
+            throw error
+          }
+        },
+      )
+    }
   }
 })

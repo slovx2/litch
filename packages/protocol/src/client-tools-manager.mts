@@ -154,8 +154,9 @@ export interface ManagerToolResults {
   status: { situation: ManagerSituation }
 }
 
-// schema 只使用原生 Codex 会保留的关键字；跨字段引用、空白文本与状态流转由设备再次校验。
+// 顶层保持普通对象，避免 Claude 丢弃工具；kind 对应关系、跨字段引用与状态流转由设备校验。
 const STRING = { type: 'string' }
+const KIND = { type: 'string', enum: ['decision', 'item'] }
 const NULLABLE_STRING = { type: ['string', 'null'] }
 const STRINGS = { type: 'array', items: STRING }
 const ID = { type: 'string', description: 'Board object id: D-<n> or I-<n>.' }
@@ -244,51 +245,36 @@ export const MANAGER_TOOLS: ClientToolNamespaceSpec = {
       name: MANAGER_TOOL.add,
       description:
         'Add a decision or item; returns its id and object. Omitted arrays are empty; a decision starts open, recommend null, default ask; an item starts backlog, owner manager, why empty.',
-      inputSchema: {
-        type: 'object',
-        oneOf: [
-          object(
-            {
-              kind: { type: 'string', const: 'decision' },
-              decision: object(DECISION_FIELDS, ['title', 'background']),
-            },
-            ['kind', 'decision'],
-          ),
-          object(
-            { kind: { type: 'string', const: 'item' }, item: object(ITEM_FIELDS, ['title']) },
-            ['kind', 'item'],
-          ),
-        ],
-      },
+      inputSchema: object(
+        {
+          kind: {
+            ...KIND,
+            description: 'For decision, supply only decision; for item, supply only item.',
+          },
+          decision: object(DECISION_FIELDS, ['title', 'background']),
+          item: object(ITEM_FIELDS, ['title']),
+        },
+        ['kind'],
+      ),
     },
     {
       type: 'function',
       name: MANAGER_TOOL.update,
       description:
         'Patch supplied fields and record why. Arrays replace whole arrays; null clears recommend. Use answer/close for decision transitions and verify for checked. Cannot write line facts.',
-      inputSchema: {
-        type: 'object',
-        oneOf: [
-          object(
-            {
-              kind: { type: 'string', const: 'decision' },
-              id: ID,
-              patch: object(DECISION_FIELDS),
-              why: STRING,
-            },
-            ['kind', 'id', 'patch', 'why'],
-          ),
-          object(
-            {
-              kind: { type: 'string', const: 'item' },
-              id: ID,
-              patch: object(ITEM_FIELDS),
-              why: STRING,
-            },
-            ['kind', 'id', 'patch', 'why'],
-          ),
-        ],
-      },
+      inputSchema: object(
+        {
+          kind: KIND,
+          id: ID,
+          patch: {
+            description:
+              'Nonempty fields for the selected kind: decision uses the first shape, item the second. Do not mix them.',
+            anyOf: [object(DECISION_FIELDS), object(ITEM_FIELDS)],
+          },
+          why: STRING,
+        },
+        ['kind', 'id', 'patch', 'why'],
+      ),
     },
     {
       type: 'function',
@@ -306,29 +292,19 @@ export const MANAGER_TOOLS: ClientToolNamespaceSpec = {
       name: MANAGER_TOOL.close,
       description:
         'Close an open decision as expired/withdrawn, or finish/defer an item. Give a nonempty reason. Never close an answered decision.',
-      inputSchema: {
-        type: 'object',
-        oneOf: [
-          object(
-            {
-              kind: { type: 'string', const: 'decision' },
-              id: ID,
-              status: { type: 'string', enum: ['expired', 'withdrawn'] },
-              reason: STRING,
-            },
-            ['kind', 'id', 'status', 'reason'],
-          ),
-          object(
-            {
-              kind: { type: 'string', const: 'item' },
-              id: ID,
-              status: { type: 'string', enum: ['done', 'deferred'] },
-              reason: STRING,
-            },
-            ['kind', 'id', 'status', 'reason'],
-          ),
-        ],
-      },
+      inputSchema: object(
+        {
+          kind: KIND,
+          id: ID,
+          status: {
+            type: 'string',
+            enum: ['expired', 'withdrawn', 'done', 'deferred'],
+            description: 'For decision: expired or withdrawn. For item: done or deferred.',
+          },
+          reason: STRING,
+        },
+        ['kind', 'id', 'status', 'reason'],
+      ),
     },
     {
       type: 'function',
