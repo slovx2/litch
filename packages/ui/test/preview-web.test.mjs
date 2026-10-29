@@ -4,6 +4,12 @@ import { parseCsv } from '../src/files/preview/web/csv.ts'
 import { mediaType } from '../src/files/preview/web/media.ts'
 
 const bytes = (text) => new TextEncoder().encode(text)
+test('单列 CSV 不将分隔符自动识别的提示计为坏行', () => {
+  const table = parseCsv(bytes('a\nb\nc'), false)
+  assert.deepEqual(table.rows, [['a'], ['b'], ['c']])
+  assert.equal(table.errors, 0)
+  assert.ok(parseCsv(bytes('a\n"unclosed'), false).errors > 0, '仍然报告坏引号')
+})
 test('CSV/TSV：引号、换行、BOM、长数字和公式都保持字符串', () => {
   const table = parseCsv(
     bytes(

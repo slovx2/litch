@@ -27,7 +27,8 @@ export function parseCsv(bytes: Uint8Array, tsv: boolean): CsvTable {
         parser.abort()
         return
       }
-      table.errors += result.errors.length
+      // 单列数据没有可识别的分隔符，但仍是有效 CSV；真正的引号等错误照常报告。
+      table.errors += result.errors.filter((error) => error.code !== 'UndetectableDelimiter').length
       table.columnLimit ||= result.data.length > CSV_COLUMNS
       const row = result.data.slice(0, CSV_COLUMNS)
       table.columns = Math.max(table.columns, row.length)

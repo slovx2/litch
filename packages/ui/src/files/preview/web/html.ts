@@ -10,6 +10,22 @@ const CSS_PROPERTIES = new Set(
     ' ',
   ),
 )
+// CSSOM 会把简写展开为长属性；允许对应的静态排版项，仍不允许 border-image 等资源属性。
+for (const side of ['top', 'right', 'bottom', 'left'])
+  for (const part of ['width', 'style', 'color']) CSS_PROPERTIES.add(`border-${side}-${part}`)
+for (const corner of ['top-left', 'top-right', 'bottom-left', 'bottom-right'])
+  CSS_PROPERTIES.add(`border-${corner}-radius`)
+for (const part of ['line', 'style', 'color', 'thickness'])
+  CSS_PROPERTIES.add(`text-decoration-${part}`)
+for (const name of [
+  'white-space-collapse',
+  'text-wrap-mode',
+  'grid-column-start',
+  'grid-column-end',
+  'grid-row-start',
+  'grid-row-end',
+])
+  CSS_PROPERTIES.add(name)
 
 /** CSS 仅保留静态排版属性。拒绝转义、变量和任何资源函数，不支持外部样式或字体。 */
 function declarations(style: CSSStyleDeclaration): string {

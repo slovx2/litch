@@ -290,6 +290,59 @@ void app.whenReady().then(async () => {
       false,
     )
     check('HTML 重写 data 附图仍受 16 MiB / 40 百万像素累计预算约束')
+    const readsBeforeRepeat = (await js('window.previewWeb.reads()')).filter((path) =>
+      path.endsWith('/bytes1.png'),
+    ).length
+    await open('repeated.html', 'html', `<h2>重复附图</h2>${'<img src="bytes1.png">'.repeat(3)}`)
+    await wait(
+      () => js('document.querySelector(".fp-html-frame")?.srcdoc.includes("重复附图")'),
+      '重复附图',
+    )
+    const repeated = await js(
+      `(()=>{const source=document.querySelector('.fp-html-frame').srcdoc;return {count:(source.match(/src="data:/g)??[]).length,bytes:source.length}})()`,
+    )
+    const css = await js(`(()=>{
+      const style='border:1px solid red;text-decoration:underline solid blue;border-radius:8px;white-space:pre-wrap;grid-column:2 / span 3';
+      const result=window.previewWeb.html('<style>.sample{'+style+'}</style><p class="sample" style="'+style+'">样式</p>');
+      const template=document.createElement('template');template.innerHTML=result;
+      const inline=template.content.querySelector('p').style;
+      const sheet=new CSSStyleSheet();sheet.replaceSync(Array.from(template.content.querySelectorAll('style')).at(-1).textContent);
+      const properties=['border-top-width','text-decoration-line','border-top-left-radius','white-space','grid-column'];
+      return [inline,sheet.cssRules[0]?.style].map(value=>properties.map(name=>value?.getPropertyValue(name)??''));
+    })()`)
+    // 同时记录两种失败，避免旧实现的内联膨胀掩盖样式回归。
+    assert.deepEqual(
+      { images: repeated.count, css },
+      {
+        images: 2,
+        css: Array.from({ length: 2 }, () => ['1px', 'underline', '8px', 'pre-wrap', '2 / span 3']),
+      },
+    )
+    assert.ok(
+      repeated.bytes < 23 * 1024 * 1024,
+      '16 MiB 原图预算对应约 22 MiB base64，不随缓存命中膨胀',
+    )
+    assert.equal(
+      (await js('window.previewWeb.reads()')).filter((path) => path.endsWith('/bytes1.png'))
+        .length - readsBeforeRepeat,
+      1,
+      '重复资源仍只读取一次',
+    )
+    await open(
+      'repeated-pixels.html',
+      'html',
+      `<h2>重复像素</h2>${'<img src="pixel1.png">'.repeat(3)}`,
+    )
+    await wait(
+      () => js('document.querySelector(".fp-html-frame")?.srcdoc.includes("重复像素")'),
+      '重复像素',
+    )
+    assert.equal(
+      await js('(document.querySelector(".fp-html-frame").srcdoc.match(/src="data:/g)??[]).length'),
+      2,
+    )
+    check('HTML 重复引用逐次计入内联字节/像素预算；内联与样式表简写保留')
+
     // 刷新必须替换文档；坏结构、坏编码、损坏媒体和设备超限都有可见回退。
     await open('refresh.html', 'html', '<h1>旧内容</h1>')
     await wait(

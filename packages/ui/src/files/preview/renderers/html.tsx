@@ -21,22 +21,36 @@ export default function HtmlPreview({ data, scope, resources }: PreviewRendererP
       const source = new TextDecoder('utf-8', { fatal: true }).decode(decodeBase64(data.dataBase64))
       const clean = sanitizeHtml(source)
       let missed = 0
+      // 缓存只节省读取；每个 img 都复制一份 data URL，必须逐引用计入内联预算。
+      let inlineBytes = 0
+      let inlinePixels = 0
       // 只处理前 16 个附图，顺序读取避免为超限资源创建无界 Promise 队列。
       for (const [index, { element, href }] of clean.images.entries()) {
         const target = documentTarget(scope.root, scope.path, href)
         const format = target.kind === 'local' ? previewKind(target.path) : null
         let shown = false
-        if (index < 16 && target.kind === 'local' && (format === 'image' || format === 'svg')) {
+        if (
+          index < 16 &&
+          inlineBytes < 16 * 1024 * 1024 &&
+          target.kind === 'local' &&
+          (format === 'image' || format === 'svg')
+        ) {
           try {
             const result = await resources.load({ ...scope, path: target.path }, format, true)
             if (!alive || resources.abort.signal.aborted) return
-            if (result.kind === 'ready') {
+            if (result.kind === 'ready' && inlineBytes + result.bytes <= 16 * 1024 * 1024) {
               const bytes = decodeBase64(result.dataBase64)
               const info =
                 format === 'svg' ? svgInfo(new TextDecoder().decode(bytes)) : imageInfo(bytes)
-              if (info && resources.claimPixels(target.path, info.width * info.height)) {
+              if (
+                info &&
+                inlinePixels + info.width * info.height <= 40_000_000 &&
+                resources.claimPixels(target.path, info.width * info.height)
+              ) {
                 // app:// 的 Blob URL 不能被不透明来源的 srcdoc 读取；仅内嵌已核验的设备图片。
                 element.src = `data:${info.mime};base64,${result.dataBase64}`
+                inlineBytes += result.bytes
+                inlinePixels += info.width * info.height
                 shown = true
               }
             }
