@@ -6,6 +6,7 @@ import {
   SKINS,
   type Skin,
   setAppearance,
+  TEXT_SCALES,
   THEMES,
   useAppearance,
   useT,
@@ -182,6 +183,17 @@ export function LookSection() {
               onPick={(zoom) => setAppearance({ zoom })}
             />
           </Row>
+          {(['treeText', 'chatText'] as const).map((name) => (
+            <Row key={name} title={t(`look.${name}`)}>
+              <Choice
+                name={name}
+                value={look[name]}
+                options={TEXT_SCALES}
+                label={(scale) => `${Math.round(scale * 100)}%`}
+                onPick={(scale) => setAppearance({ [name]: scale })}
+              />
+            </Row>
+          ))}
         </div>
       </section>
     </>

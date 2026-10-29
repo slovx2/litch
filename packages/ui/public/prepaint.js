@@ -27,6 +27,15 @@
     ? saved.density
     : 'standard'
   root.dataset.chatWidth = ['wide', 'compact'].includes(saved.chatWidth) ? saved.chatWidth : 'wide'
+  const textScales = [0.9, 1, 1.1, 1.2, 1.35, 1.5]
+  root.style.setProperty(
+    '--fs-tree',
+    String(textScales.includes(saved.treeText) ? saved.treeText : 1),
+  )
+  root.style.setProperty(
+    '--fs-chat',
+    String(textScales.includes(saved.chatText) ? saved.chatText : 1),
+  )
   // 缩放是外壳做的（普通浏览器里没有外壳，这一项不起作用）。窗口刚开时外壳先按它自己记着的上一次的倍数缩放，
   // 这里再报一遍界面记着的：两边对不上的时候以界面这份为准
   const zoom = [0.8, 0.9, 1, 1.1, 1.25, 1.5].includes(saved.zoom) ? saved.zoom : 1

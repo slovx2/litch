@@ -15,6 +15,17 @@ Skin, theme and language can also be changed from the **Appearance** button at t
 | Density | Compact, Standard, Roomy | Standard |
 | Conversation width (`--width`) | `wide` (text up to 1280 px), `compact` (up to 760 px, 中文「紧凑」) | `wide` |
 | Zoom | 80%, 90%, 100%, 110%, 125%, 150% | 100% |
+| Sidebar text size (`--tree-text`) | 90%, 100%, 110%, 120%, 135%, 150% | 100% |
+| Conversation text size (`--chat-text`) | 90%, 100%, 110%, 120%, 135%, 150% | 100% |
+
+会话列表字号与对话字号分别控制阅读区域，相对当前皮肤字号计算，换皮肤后保留比例。
+对话字号包含正文、代码块、图表、问题与审批卡、输入框；列表字号包含设备、项目与会话行。
+顶栏、侧栏顶部和底部、设置、菜单、信息栏、差异、文件、终端和浏览器不随这两项改变。
+字号只改文字及必要行高，界面缩放则放大整窗；两者相乘，例如 150% × 150% 为 225%。
+两项存在本机，不同步手机；普通浏览器预览同样支持字号设置。
+
+`scripts/litch look set --tree-text 120 --chat-text 135` changes both sizes; `scripts/litch status`
+reads them back. Percent signs are optional; the factors `1.2` and `1.35` are also accepted.
 
 Conversation width only matters in wide windows: the conversation and the input box stay centred and
 never run under the info rail; when the conversation area is narrower than about 810 px both settings

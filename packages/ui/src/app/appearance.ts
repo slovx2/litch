@@ -1,4 +1,4 @@
-// 外观和语言：皮肤、明暗、密度、对话区宽度、界面缩放、界面语言。记在本机，改了立刻生效。改的入口在设置页（settings/）。
+// 外观和语言：皮肤、明暗、密度、对话区宽度、界面缩放、区域字号、界面语言。记在本机，改了立刻生效。
 // 首帧由 public/prepaint.js 先按同样的规则写到根元素上（那是个赶在样式之前跑的普通脚本，逻辑要和这里保持一致）。
 import { useMemo, useSyncExternalStore } from 'react'
 import { type Lang, type Translator, translator } from '../i18n/index.ts'
@@ -14,6 +14,9 @@ export const CHAT_WIDTHS = ['wide', 'compact'] as const
  * 所以样式里的像素数都不用动。在普通浏览器里没有外壳，这一项不起作用，用浏览器自己的缩放
  */
 export const ZOOMS = [0.8, 0.9, 1, 1.1, 1.25, 1.5] as const
+/** 相对皮肤的区域字号，与整窗缩放相乘。 */
+export const TEXT_SCALES = [0.9, 1, 1.1, 1.2, 1.35, 1.5] as const
+export type TextScale = (typeof TEXT_SCALES)[number]
 export const LANGS: readonly Lang[] = ['zh-CN', 'en']
 
 export type Skin = (typeof SKINS)[number]
@@ -28,6 +31,8 @@ export interface Appearance {
   density: Density
   chatWidth: ChatWidth
   zoom: Zoom
+  treeText: TextScale
+  chatText: TextScale
   lang: Lang
 }
 
@@ -38,6 +43,8 @@ const DEFAULTS = {
   density: 'standard',
   chatWidth: 'wide',
   zoom: 1,
+  treeText: 1,
+  chatText: 1,
 } as const
 
 /** 系统的语言里我们有的那一种；没有对应的就是英文 */
@@ -89,6 +96,8 @@ let current: Appearance = {
   density: pick(DENSITIES, saved.density, DEFAULTS.density),
   chatWidth: pick(CHAT_WIDTHS, saved.chatWidth, DEFAULTS.chatWidth),
   zoom: pick(ZOOMS, saved.zoom, DEFAULTS.zoom),
+  treeText: pick(TEXT_SCALES, saved.treeText, DEFAULTS.treeText),
+  chatText: pick(TEXT_SCALES, saved.chatText, DEFAULTS.chatText),
   lang: overrides.lang ?? (LANGS.includes(saved.lang as Lang) ? (saved.lang as Lang) : firstLang()),
 }
 const listeners = new Set<() => void>()
@@ -100,6 +109,8 @@ function apply(): void {
   else root.dataset.theme = current.theme
   root.dataset.density = current.density
   root.dataset.chatWidth = current.chatWidth
+  root.style.setProperty('--fs-tree', String(current.treeText))
+  root.style.setProperty('--fs-chat', String(current.chatText))
   root.lang = current.lang
   // 在桌面外壳里：应用菜单是外壳画的，把语言告诉它；
   // 缩放是外壳做的，窗口在页面画出来之前的底色也是它的，把皮肤、明暗、缩放告诉它（它记着，下次冷启动用）

@@ -35,7 +35,7 @@ export const SETTINGS_SECTIONS = [
 ]
 
 const prefsLine = (prefs: ConfigPrefs) =>
-  `language ${prefs.lang} · skin ${prefs.skin} · mode ${prefs.theme} · density ${prefs.density} · width ${prefs.chatWidth} · zoom ${Math.round(prefs.zoom * 100)}% · links ${prefs.linksInApp ? 'in-app' : 'system'} · task-success notices ${prefs.notifySuccess ? 'on' : 'off'} · session notices ${prefs.notifySessions ? 'on' : 'off'}`
+  `language ${prefs.lang} · skin ${prefs.skin} · mode ${prefs.theme} · density ${prefs.density} · width ${prefs.chatWidth} · zoom ${Math.round(prefs.zoom * 100)}% · sidebar text ${Math.round(prefs.treeText * 100)}% · conversation text ${Math.round(prefs.chatText * 100)}% · links ${prefs.linksInApp ? 'in-app' : 'system'} · task-success notices ${prefs.notifySuccess ? 'on' : 'off'} · session notices ${prefs.notifySessions ? 'on' : 'off'}`
 
 const setPrefs = async (ctx: OpContext, patch: Partial<ConfigPrefs>) => {
   const prefs = (await ctx.ui({ kind: 'prefs.set', patch })) as ConfigPrefs
@@ -146,11 +146,11 @@ export const APP_OPS: Record<string, OpSpec> = {
   },
   'look set': {
     args: [0, 0],
-    options: ['skin', 'mode', 'density', 'width', 'zoom'],
-    usage: `look set [--skin ${SKINS.join('|')}] [--mode ${MODES.join('|')}] [--density ${DENSITIES.join('|')}] [--width ${WIDTHS.join('|')}] [--zoom ${ZOOMS.map((zoom) => `${Math.round(zoom * 100)}`).join('|')}]`,
+    options: ['skin', 'mode', 'density', 'width', 'zoom', 'tree-text', 'chat-text'],
+    usage: `look set [--skin ${SKINS.join('|')}] [--mode ${MODES.join('|')}] [--density ${DENSITIES.join('|')}] [--width ${WIDTHS.join('|')}] [--zoom ${ZOOMS.map((zoom) => `${Math.round(zoom * 100)}`).join('|')}] [--tree-text 90|100|110|120|135|150] [--chat-text 90|100|110|120|135|150]`,
     summary: {
-      zh: '换外观（皮肤、明暗、密度、对话区宽度、缩放）',
-      en: 'Change the look (skin, light/dark, density, conversation width, zoom)',
+      zh: '调整外观（皮肤、明暗、密度、对话区宽度、缩放、字号）',
+      en: 'Change appearance (skin, theme, density, conversation width, zoom, text sizes)',
     },
     async run(ctx) {
       const get = (name: string) => ctx.cmd.options.get(name)
@@ -199,6 +199,22 @@ export const APP_OPS: Record<string, OpSpec> = {
           )
         }
         patch.zoom = zoom
+      }
+      for (const [option, field] of [
+        ['tree-text', 'treeText'],
+        ['chat-text', 'chatText'],
+      ] as const) {
+        const raw = get(option)
+        if (raw === undefined) continue
+        const number = Number(raw.replace(/%$/, ''))
+        const scale = number > 5 ? number / 100 : number
+        if (![0.9, 1, 1.1, 1.2, 1.35, 1.5].includes(scale))
+          throw bad(
+            ctx,
+            '字号只能是 90%、100%、110%、120%、135%、150%',
+            `--${option} must be 90, 100, 110, 120, 135 or 150`,
+          )
+        patch[field] = scale
       }
       if (Object.keys(patch).length === 0)
         throw bad(ctx, '至少给一项。', 'Pass at least one option.')

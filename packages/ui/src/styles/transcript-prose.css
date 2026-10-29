@@ -3,8 +3,8 @@
 /* 行高一律写成整数像素。回答一行一行长出来的时候，不在底部的用户靠改滚动位置来保持眼前的内容不动，
    而滚动位置只能是整数像素：行高带零头的话，零头会越积越多，内容就会时不时抖一个像素 */
 .md {
-  font-size: 14px;
-  line-height: 23px;
+  font-size: calc(14px * var(--fs));
+  line-height: round(calc(23px * var(--fs)), 1px);
   overflow-wrap: anywhere;
   min-width: 0;
 }
@@ -41,23 +41,23 @@
   margin-top: 18px;
 }
 .md h1 {
-  font-size: 18px;
-  line-height: 24px;
+  font-size: calc(18px * var(--fs));
+  line-height: round(calc(24px * var(--fs)), 1px);
 }
 .md h2 {
-  font-size: 16px;
-  line-height: 22px;
+  font-size: calc(16px * var(--fs));
+  line-height: round(calc(22px * var(--fs)), 1px);
 }
 .md h3 {
-  font-size: 15px;
-  line-height: 20px;
+  font-size: calc(15px * var(--fs));
+  line-height: round(calc(20px * var(--fs)), 1px);
 }
 .md :is(h4, h5, h6) {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: calc(14px * var(--fs));
+  line-height: round(calc(20px * var(--fs)), 1px);
 }
 .md code {
-  font: 12.5px / 1 var(--mono);
+  font: calc(12.5px * var(--fs)) / 1 var(--mono);
   background: var(--hover);
   padding: 1px 4px;
   border-radius: 3px;
@@ -91,7 +91,7 @@
 }
 .md table {
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
 }
 .md :is(th, td) {
   border: 1px solid var(--line-2);
@@ -115,9 +115,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 28px;
+  height: calc(20px * var(--fs) + 8px);
   padding: 0 4px 0 12px;
-  font: 11px / 1 var(--mono);
+  font: calc(11px * var(--fs)) / 1 var(--mono);
   color: var(--ink-3);
   border-bottom: 1px solid var(--line-1);
 }
@@ -127,7 +127,7 @@
 .code pre {
   margin: 0;
   padding: 10px 12px;
-  font: 12px / 20px var(--mono);
+  font: calc(12px * var(--fs)) / round(calc(20px * var(--fs)), 1px) var(--mono);
   overflow-x: auto;
 }
 .code pre code {
@@ -199,13 +199,13 @@
   margin-left: auto;
 }
 .mmd-seg button {
-  height: 20px;
+  height: calc(12px * var(--fs) + 8px);
   padding: 0 8px;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
 }
 .mmd-fig {
   display: flex;
-  justify-content: center;
+  justify-content: safe center;
   padding: 12px;
   overflow-x: auto;
 }
@@ -241,7 +241,7 @@
   left: 50%;
   transform: translateX(-50%);
   padding: 4px 10px;
-  font: 11px / 16px var(--mono);
+  font: calc(11px * var(--fs)) / round(calc(16px * var(--fs)), 1px) var(--mono);
   color: var(--ink-2);
   background: var(--raised);
   border: 1px solid var(--line-2);
@@ -299,7 +299,7 @@
 }
 .todo-count,
 .todo-now {
-  font: 11px / 1 var(--mono);
+  font: calc(11px * var(--fs)) / 1 var(--mono);
   color: var(--ink-3);
 }
 .todo-bar {
@@ -320,8 +320,8 @@
 /* 行高写整数像素，原因见这个文件开头 */
 .todo-note {
   padding: 8px 12px 0;
-  font-size: 12px;
-  line-height: 19px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(19px * var(--fs)), 1px);
   color: var(--ink-2);
   overflow-wrap: anywhere;
 }
@@ -335,8 +335,8 @@
   align-items: flex-start;
   gap: 8px;
   padding: 2px 0;
-  font-size: 13px;
-  line-height: 21px;
+  font-size: calc(13px * var(--fs));
+  line-height: round(calc(21px * var(--fs)), 1px);
   color: var(--ink-2);
 }
 .todo-text {
@@ -392,11 +392,11 @@
   flex-wrap: wrap;
   gap: 6px 10px;
   align-items: center;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   line-height: 1.5;
 }
 .errbox .mono {
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
   color: var(--ink-3);
 }
 .turn-recovery {
@@ -429,7 +429,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font: 11px / 1 var(--mono);
+  font: calc(11px * var(--fs)) / 1 var(--mono);
   color: var(--ink-3);
 }
 /* 分叉出来的会话：对话最上面一行写明从哪个会话分出来，点名字回到那个会话 */
@@ -441,7 +441,7 @@
   margin-bottom: 16px;
   padding-bottom: 10px;
   border-bottom: 1px dashed var(--line-2);
-  font: 12px / 1.5 var(--ui);
+  font: calc(12px * var(--fs)) / 1.5 var(--ui);
   color: var(--ink-3);
 }
 .forked-link {
@@ -461,7 +461,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-2);
 }
 /* 对话里回合进行中末尾那一格（.slot；新建会话页那一行不带）：高度固定，正文出字时隐去（Transcript.tsx 的 useWorking），不改布局。

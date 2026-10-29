@@ -763,6 +763,8 @@ export const zhCN = {
   'theme.dark': '深色',
   'look.density': '密度',
   'look.zoom': '界面缩放',
+  'look.treeText': '会话列表字号',
+  'look.chatText': '对话字号',
   'density.compact': '紧凑',
   'density.standard': '标准',
   'density.roomy': '宽松',

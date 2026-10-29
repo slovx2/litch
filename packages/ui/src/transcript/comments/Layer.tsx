@@ -4,7 +4,7 @@
 import { clipQuote, keys, type SessionMeta, type TurnView } from '@litch/core'
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useT } from '../../app/appearance.ts'
+import { onAppearanceChange, useT } from '../../app/appearance.ts'
 import { Bubble, Icon } from '../../app/icons.tsx'
 import { useKey, useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
@@ -244,10 +244,13 @@ export const CommentLayer = memo(function CommentLayer({
     mutations.observe(root, { childList: true, subtree: true, characterData: true })
     const sizes = new ResizeObserver(later)
     sizes.observe(root)
+    // 字号改变时行内位置也会变；即使容器总尺寸恰好不变，也重算编号与高亮。
+    const stopAppearance = onAppearanceChange(later)
     return () => {
       cancelAnimationFrame(frame)
       mutations.disconnect()
       sizes.disconnect()
+      stopAppearance()
     }
   }, [comments, editing, scope, deviceId, sessionId, own])
 

@@ -66,7 +66,7 @@
 [data-skin="retro"] .pill {
   background: none;
   border: 1px solid currentColor;
-  line-height: 14px;
+  line-height: round(calc(14px * var(--fs)), 1px);
 }
 [data-skin="retro"] .mini:hover {
   background: var(--sel);
@@ -94,8 +94,8 @@
 
 /* 状态记号：闪烁的光标块、?、*、! */
 [data-skin="retro"] .st.run::before {
-  width: 6px;
-  height: 11px;
+  width: calc(6px * var(--fs));
+  height: calc(11px * var(--fs));
   animation: blink 1s steps(1) infinite;
   box-shadow: var(--glow);
 }
@@ -105,15 +105,15 @@
   height: auto;
   background: none;
   transform: none;
-  font: 700 12px / 14px var(--mono);
+  font: 700 calc(12px * var(--fs)) / round(calc(14px * var(--fs)), 1px) var(--mono);
   color: var(--wait);
 }
 [data-skin="retro"] .st.unread::before {
   content: "*";
   width: auto;
-  height: 9px;
+  height: calc(9px * var(--fs));
   background: none;
-  font: 700 15px / 14px var(--mono);
+  font: 700 calc(15px * var(--fs)) / round(calc(14px * var(--fs)), 1px) var(--mono);
   color: var(--ink);
 }
 [data-skin="retro"] .st.err::before {
@@ -152,7 +152,7 @@
 [data-skin="retro"] .mention {
   background: none;
   border: 1px solid var(--line-2);
-  line-height: 16px;
+  line-height: round(calc(16px * var(--fs)), 1px);
 }
 [data-skin="retro"] .plan,
 [data-skin="retro"] .todo,
@@ -245,7 +245,7 @@
   content: "> ";
   white-space: pre;
   color: var(--accent);
-  font: 600 14px / 24px var(--mono);
+  font: 600 calc(14px * var(--fs)) / round(calc(24px * var(--fs)), 1px) var(--mono);
 }
 /* 复古皮肤里图片也是直角 */
 [data-skin="retro"] :is(.cmp-att img, .cmp-att-x, .uimg, .viewer img) {

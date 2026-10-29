@@ -68,7 +68,7 @@ function config(look: string) {
     themeVariables: {
       darkMode: dark,
       fontFamily: font,
-      fontSize: '13px',
+      fontSize: `${13 * Number(look.split(':')[1])}px`,
       // 画图库默认给节点加一道固定灰色的投影，换了皮肤也不变，在深色里像一圈光晕
       dropShadow: 'none',
       background: color.sunken,
@@ -160,11 +160,12 @@ function toHex([r = 0, g = 0, b = 0, a = 1]: number[], [br = 0, bg = 0, bb = 0]:
 const darkQuery = (): MediaQueryList | null =>
   typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null
 
-/** 现在的皮肤和明暗（跟随系统时看系统），比如 retro:dark。皮肤、明暗、系统明暗变了都会重算 */
+/** 皮肤、对话字号、明暗组成缓存键；字号变了也要按新的文字尺寸重排图。 */
 function currentLook(): string {
   const root = document.documentElement
   const theme = root.dataset.theme ?? (darkQuery()?.matches ? 'dark' : 'light')
-  return `${root.dataset.skin ?? ''}:${theme}`
+  const scale = getComputedStyle(root).getPropertyValue('--fs-chat').trim() || '1'
+  return `${root.dataset.skin ?? ''}:${scale}:${theme}`
 }
 
 function subscribe(listener: () => void): () => void {

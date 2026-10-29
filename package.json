@@ -31,7 +31,7 @@
     "typecheck": "npm run typecheck --prefix packages/claude && npm run typecheck --prefix packages/pi && npm run typecheck --prefix packages/dsh && npm run typecheck --prefix packages/opencode && npm run typecheck --prefix packages/acp && npm run typecheck --prefix packages/device",
     "lint": "biome lint packages apps scripts",
     "format": "biome format --write packages apps scripts",
-    "check": "biome check packages apps scripts && node scripts/check-versions.mjs && node scripts/check-manual.mjs",
+    "check": "biome check packages apps scripts && node scripts/check-versions.mjs && node scripts/check-manual.mjs && node scripts/check-text-sizes.mjs",
     "check:fix": "biome check --write packages apps scripts",
     "check:rust-protocol-fixtures": "node scripts/check-rust-protocol-fixtures.mjs",
     "docs:dev": "vitepress dev docs",

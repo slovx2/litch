@@ -107,7 +107,16 @@ export const MermaidBlock = memo(function MermaidBlock({ text, open, anchor }: M
 function Figure({ svg }: { svg: string }) {
   const host = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => {
-    if (host.current) host.current.innerHTML = svg
+    if (host.current) {
+      host.current.innerHTML = svg
+      const figure = host.current.querySelector('svg')
+      // 图按字号重画之后保留其固有尺寸，宽图在框内滚动；按宽度再次缩小会抵消文字放大。
+      if (figure?.viewBox.baseVal.width) {
+        figure.style.width = `${figure.viewBox.baseVal.width}px`
+        figure.style.maxWidth = 'none'
+        figure.style.flex = 'none'
+      }
+    }
   }, [svg])
   return <div ref={host} className="mmd-fig" />
 }

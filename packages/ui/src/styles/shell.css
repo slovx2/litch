@@ -336,7 +336,7 @@
 /* 筛选之后这台设备下面一个会话都不剩 */
 .dev-none {
   padding: 4px 6px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-3);
 }
 /* 一个项目、一组里的会话全被筛掉了：一句有几个，后面“关闭筛选” */
@@ -346,8 +346,8 @@
   gap: 8px;
   margin: 1px 4px 4px 16px;
   padding: 3px 8px;
-  font-size: 11px;
-  line-height: 16px;
+  font-size: calc(11px * var(--fs));
+  line-height: round(calc(16px * var(--fs)), 1px);
   color: var(--ink-3);
 }
 .filter-hid-text {
@@ -482,8 +482,8 @@
 }
 .row-err {
   padding: 2px 6px 4px 12px;
-  font-size: 11px;
-  line-height: 16px;
+  font-size: calc(11px * var(--fs));
+  line-height: round(calc(16px * var(--fs)), 1px);
   color: var(--err);
 }
 .dev-row .name {
@@ -499,8 +499,8 @@
   color: var(--ink-3);
 }
 .dev-flag svg.ic {
-  width: 14px;
-  height: 14px;
+  width: calc(14px * var(--fs));
+  height: calc(14px * var(--fs));
 }
 /* 设备服务比应用的旧：名字后面一个和设备列表同样的记号，点了进设备详情。
    行本身是展开收起的按钮，按钮不能套按钮：行里留一个空位（.dev-upg-slot），真正的按钮在行外，用锚点贴到空位上。
@@ -539,8 +539,8 @@
   outline-offset: -1px;
 }
 .dev-upg svg.ic {
-  width: 14px;
-  height: 14px;
+  width: calc(14px * var(--fs));
+  height: calc(14px * var(--fs));
 }
 .dev-body {
   position: relative;
@@ -574,7 +574,7 @@
   border-radius: var(--r2);
   background: var(--panel);
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   line-height: 1.5;
 }
 .ws-row {
@@ -630,7 +630,7 @@
 }
 .sec-label {
   padding: 6px 4px 2px;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
   color: var(--ink-3);
   letter-spacing: 0.06em;
 }
@@ -655,7 +655,7 @@
   gap: 6px;
   min-height: var(--row-h);
   padding: 0 6px 0 28px;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
 }
 .ss-more .mini {
   align-self: center;
@@ -671,7 +671,7 @@
   font-weight: 600;
 }
 .ss-row .time {
-  font: 11px / 1 var(--mono);
+  font: calc(11px * var(--fs)) / 1 var(--mono);
   color: var(--ink-3);
   flex: none;
 }

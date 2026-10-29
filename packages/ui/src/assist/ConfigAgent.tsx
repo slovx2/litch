@@ -23,6 +23,7 @@ import {
   SKINS,
   type Skin,
   setAppearance,
+  TEXT_SCALES,
   THEMES,
   type Theme,
   useAppearance,
@@ -45,6 +46,8 @@ function prefsNow(look: Appearance): ConfigPrefs {
     density: look.density,
     chatWidth: look.chatWidth,
     zoom: look.zoom,
+    treeText: look.treeText,
+    chatText: look.chatText,
     lang: currentLang(),
     linksInApp: linksInApp(),
     notifySuccess: notifySuccess(),
@@ -286,6 +289,10 @@ function pickLook(patch: Partial<ConfigPrefs>): Partial<Appearance> {
   if (chatWidth) look.chatWidth = chatWidth
   const zoom = oneOf<Zoom>(ZOOMS, patch.zoom)
   if (zoom !== undefined) look.zoom = zoom
+  for (const name of ['treeText', 'chatText'] as const) {
+    const scale = oneOf(TEXT_SCALES, patch[name])
+    if (scale !== undefined) look[name] = scale
+  }
   if (patch.lang === 'zh-CN' || patch.lang === 'en') look.lang = patch.lang
   return look
 }

@@ -801,6 +801,8 @@ export const en: Record<MessageKey, Entry> = {
   'theme.dark': 'Dark',
   'look.density': 'Density',
   'look.zoom': 'Zoom',
+  'look.treeText': 'Sidebar text size',
+  'look.chatText': 'Conversation text size',
   'density.compact': 'Compact',
   'density.standard': 'Standard',
   'density.roomy': 'Roomy',

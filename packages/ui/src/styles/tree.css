@@ -6,8 +6,8 @@
   border: 1px solid var(--line-2);
   border-radius: var(--r2);
   background: var(--raised);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: calc(13px * var(--fs));
+  line-height: round(calc(20px * var(--fs)), 1px);
 }
 .tree-card-main {
   display: flex;
@@ -32,7 +32,7 @@ button.tree-card-main:hover {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-3);
 }
 .tree-card-line {
@@ -46,7 +46,7 @@ button.tree-card-main:hover {
 }
 .tree-card-state {
   flex: none;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-2);
 }
 .tree-card-report {
@@ -54,7 +54,7 @@ button.tree-card-main:hover {
   gap: 8px;
   padding: 6px 12px 8px;
   border-top: 1px solid var(--line-1);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .tree-card-label {
   flex: none;
@@ -78,8 +78,8 @@ button.tree-card-main:hover {
   padding: 6px 10px;
   border: 1px dashed var(--line-2);
   border-radius: var(--r2);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--ink-2);
 }
 /* 默认收起的卡片共用的头（transcript/CompactRow.tsx）：第一行图标、来源、标题、右端的箭头；
@@ -91,8 +91,8 @@ button.tree-card-main:hover {
   width: 100%;
   min-width: 0;
   padding: 0;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--ink-2);
   text-align: left;
   cursor: pointer;
@@ -210,7 +210,7 @@ button.sev-title {
   border: 1px solid var(--line-2);
   border-radius: var(--r2);
   background: var(--panel);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-2);
   cursor: pointer;
 }
@@ -242,7 +242,7 @@ button.sev-title {
   max-height: min(360px, 60vh);
   overflow: auto;
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .qn-head {
   display: flex;
@@ -287,7 +287,7 @@ button.sev-title {
 }
 .prop-state {
   flex: none;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-2);
 }
 [data-state="pending"] > .prop-body .prop-state,
@@ -299,15 +299,15 @@ button.sev-title {
 /* offer 卡上那一问，和选了之后的一句说明 */
 .prop-ask {
   margin: 2px 0 0;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--ink-2);
 }
 .prop-ask.dim {
   color: var(--ink-3);
 }
 .prop-title {
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -317,11 +317,11 @@ button.sev-title {
   flex-wrap: wrap;
   gap: 4px 8px;
   min-width: 0;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-3);
 }
 .prop-meta .mono {
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
 }
 .prop-cwd {
   max-width: 100%;
@@ -329,15 +329,15 @@ button.sev-title {
 .prop-brief {
   margin-top: 2px;
   color: var(--ink-2);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .prop-brief-label {
   display: block;
   color: var(--ink-3);
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
 }
 .prop-brief[data-open="false"] {
   display: -webkit-box;
@@ -351,7 +351,7 @@ button.sev-title {
   border: 0;
   background: none;
   font: inherit;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--accent);
   cursor: pointer;
 }
@@ -373,11 +373,11 @@ button.sev-title {
 .prop-acts[data-small="true"] .btn {
   height: 24px;
   padding: 0 8px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .prop-err {
   margin: 4px 0 0;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 /* 开始了：下面一行是起出来的子会话，点了进去 */
 .prop-child {
@@ -392,7 +392,7 @@ button.sev-title {
   background: none;
   color: inherit;
   font: inherit;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   text-align: left;
   cursor: pointer;
 }
@@ -418,8 +418,8 @@ button.sev-title {
   padding: 4px 12px;
   border: 1px dashed var(--line-2);
   border-radius: var(--r2);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--ink-3);
 }
 .prop-refused-title {
@@ -541,10 +541,10 @@ button.sysm-from {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .prop-row-line b {
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   font-weight: 600;
 }
 .prop-row:not([data-state="pending"]):not([data-state="offered"]):not([data-state="chosen"])
@@ -555,7 +555,7 @@ button.sysm-from {
 }
 .prop-empty {
   padding: 12px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .prop-fold {
   display: flex;
@@ -568,7 +568,7 @@ button.sysm-from {
   background: none;
   color: var(--ink-3);
   font: inherit;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   text-align: left;
   cursor: pointer;
 }
@@ -576,8 +576,8 @@ button.sysm-from {
   color: var(--ink);
 }
 .prop-fold .caret-ic {
-  width: 10px;
-  height: 10px;
+  width: calc(10px * var(--fs));
+  height: calc(10px * var(--fs));
 }
 .prop-fold[aria-expanded="false"] .caret-ic {
   transform: rotate(-90deg);
@@ -591,9 +591,9 @@ button.sysm-from {
   border-radius: 8px;
   background: var(--accent-solid);
   color: var(--on-accent);
-  font-size: 10px;
+  font-size: calc(10px * var(--fs));
   font-weight: 600;
-  line-height: 16px;
+  line-height: round(calc(16px * var(--fs)), 1px);
   text-align: center;
 }
 
@@ -634,8 +634,8 @@ button.sysm-from {
   left: 0;
   top: 50%;
   transform: translateY(-50%);
-  width: 12px;
-  height: 18px;
+  width: calc(12px * var(--fs));
+  height: calc(18px * var(--fs));
   padding: 0;
   display: grid;
   place-items: center;
@@ -650,8 +650,8 @@ button.sysm-from {
   background: var(--hover);
 }
 .tree-fold .caret-ic {
-  width: 10px;
-  height: 10px;
+  width: calc(10px * var(--fs));
+  height: calc(10px * var(--fs));
 }
 
 /* ---------- 派一个子会话 ---------- */
@@ -673,21 +673,21 @@ button.sysm-from {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
 }
 /* “新工作树”勾选：卡片上跟在按钮后面，弹窗里和“完成后唤醒”一样一行 */
 .wt-check {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   color: var(--ink-2);
 }
 .prop-acts .wt-check {
   margin-left: 4px;
 }
 .prop-acts[data-small="true"] .wt-check {
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .spawn-kind label.off {
   color: var(--ink-3);
@@ -718,16 +718,16 @@ button.sysm-from {
   flex: none;
   padding: 0 6px;
   border-radius: 3px;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
   font-weight: 500;
-  line-height: 16px;
+  line-height: round(calc(16px * var(--fs)), 1px);
   white-space: nowrap;
   color: var(--ink-2);
   background: var(--hover);
 }
 .agent-st .st {
-  width: 10px;
-  height: 10px;
+  width: calc(10px * var(--fs));
+  height: calc(10px * var(--fs));
 }
 .agent-st[data-state="running"] {
   color: var(--accent);
@@ -742,7 +742,7 @@ button.sysm-from {
   background: color-mix(in srgb, var(--err) 13%, transparent);
 }
 .agent-time {
-  font: 11px / 1 var(--mono);
+  font: calc(11px * var(--fs)) / 1 var(--mono);
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
@@ -757,14 +757,14 @@ button.sysm-from {
   align-items: center;
   gap: 8px;
   width: 100%;
-  height: 30px;
+  height: calc(22px * var(--fs) + 8px);
   padding: 0 8px 0 6px;
   border: 1px solid var(--line-2);
   border-radius: var(--r1);
   background: var(--raised);
   color: inherit;
   font: inherit;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs));
   text-align: left;
 }
 button.agent-row {
@@ -779,7 +779,7 @@ button.agent-row:hover {
 }
 .agent-kind {
   flex: none;
-  font: 11px / 1 var(--mono);
+  font: calc(11px * var(--fs)) / 1 var(--mono);
   color: var(--ink-3);
 }
 .agent-desc {
@@ -823,7 +823,7 @@ button.agent-row:hover {
   flex: 1 1 auto;
   min-width: 0;
   margin: 0;
-  font-size: 15px;
+  font-size: calc(15px * var(--fs));
   font-weight: 600;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -835,7 +835,7 @@ button.agent-row:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 14px;
-  font: 11px / 1.5 var(--mono);
+  font: calc(11px * var(--fs)) / 1.5 var(--mono);
   color: var(--ink-3);
 }
 .agents-meta b {
@@ -854,7 +854,7 @@ button.agent-row:hover {
   height: 26px;
   padding: 0 10px;
   border-bottom: 1px solid var(--line-1);
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
   color: var(--ink-3);
 }
 .agents-task-text {
@@ -863,7 +863,7 @@ button.agent-row:hover {
   -webkit-line-clamp: 3;
   overflow: hidden;
   margin: 8px 10px; /* 用外边距：内边距会把第四行露出半截 */
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs));
   line-height: 1.6;
   color: var(--ink-2);
   white-space: pre-wrap;
@@ -879,7 +879,7 @@ button.agent-row:hover {
   border: 0;
   background: none;
   font: inherit;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--accent);
   cursor: pointer;
 }
@@ -890,7 +890,7 @@ button.agent-row:hover {
   padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--err) 55%, transparent);
   border-radius: var(--r2);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs));
   line-height: 1.55;
 }
 .agents-fail b {
@@ -899,7 +899,7 @@ button.agent-row:hover {
 }
 .agents-fail span {
   color: var(--ink-2);
-  font: 12px / 1.55 var(--mono);
+  font: calc(12px * var(--fs)) / 1.55 var(--mono);
   overflow-wrap: anywhere;
 }
 .agents-transcript {
@@ -990,7 +990,7 @@ button.agent-row:hover {
 .prop-wider,
 .spawn-wider {
   color: var(--wait);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 
 /* ---------- 回合最下方的收尾区（TurnTail.tsx）：收尾留的问题和回复按钮，再是这一回合的建议任务卡片 ---------- */
@@ -1053,13 +1053,13 @@ button.agent-row:hover {
   align-items: baseline;
   gap: 8px;
   min-width: 0;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-3);
 }
 .delegated-by time {
   flex: none;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
 }
 .delegated-pair {
   display: flex;
@@ -1067,8 +1067,8 @@ button.agent-row:hover {
   gap: 4px;
 }
 .delegated-q {
-  font-size: 13px;
-  line-height: 20px;
+  font-size: calc(13px * var(--fs));
+  line-height: round(calc(20px * var(--fs)), 1px);
   color: var(--ink);
   white-space: pre-wrap;
   overflow-wrap: anywhere;

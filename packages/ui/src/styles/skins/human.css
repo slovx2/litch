@@ -66,15 +66,15 @@
   border-radius: 6px;
 }
 [data-skin="human"] .wire-sq {
-  width: 9px;
-  height: 9px;
+  width: calc(9px * var(--fs));
+  height: calc(9px * var(--fs));
   border-radius: 50%;
 }
 
 /* 状态记号：圆环、菱形、朱砂点 */
 [data-skin="human"] .st.run::before {
-  width: 8px;
-  height: 8px;
+  width: calc(8px * var(--fs));
+  height: calc(8px * var(--fs));
   border-radius: 50%;
   background: none;
   box-shadow: inset 0 0 0 1.5px var(--accent);
@@ -113,8 +113,8 @@
   gap: 30px;
 }
 [data-skin="human"] .md {
-  font-size: 15px;
-  line-height: 28px;
+  font-size: calc(15px * var(--fs));
+  line-height: round(calc(28px * var(--fs)), 1px);
 }
 [data-skin="human"] .md > * + * {
   margin-top: 12px;
@@ -127,8 +127,8 @@
   border-color: transparent;
   border-radius: 18px 18px 6px 18px;
   padding: 10px 15px;
-  font-size: 15px;
-  line-height: 26px;
+  font-size: calc(15px * var(--fs));
+  line-height: round(calc(26px * var(--fs)), 1px);
 }
 [data-skin="human"] .umsg.peer {
   background: var(--panel);
@@ -148,14 +148,14 @@
   margin: 10px 12px;
   padding: 0 0 0 12px;
   border-left: 2px solid var(--line-3);
-  font-size: 14px;
-  line-height: 24px;
+  font-size: calc(14px * var(--fs));
+  line-height: round(calc(24px * var(--fs)), 1px);
 }
 [data-skin="human"] .code {
   border-color: var(--line-1);
 }
 [data-skin="human"] .code pre {
-  line-height: 21px;
+  line-height: round(calc(21px * var(--fs)), 1px);
 }
 [data-skin="human"] .plan,
 [data-skin="human"] .todo {
@@ -204,8 +204,8 @@
   padding: 12px 16px 2px 18px;
 }
 [data-skin="human"] .cmp-text {
-  font-size: 15px;
-  line-height: 26px;
+  font-size: calc(15px * var(--fs));
+  line-height: round(calc(26px * var(--fs)), 1px);
 }
 [data-skin="human"] .cmp.off .cmp-text {
   padding: 12px 16px 12px 18px;
@@ -229,7 +229,7 @@
   height: 26px;
   padding: 0 6px 0 8px;
   border-radius: 13px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
 }
 [data-skin="human"] .pick-pop {
   padding: 6px;
@@ -246,12 +246,12 @@
 [data-skin="human"] .sug-opt {
   padding: 5px 10px;
   border-radius: 9px;
-  font-size: 13px;
-  line-height: 20px;
+  font-size: calc(13px * var(--fs));
+  line-height: round(calc(20px * var(--fs)), 1px);
 }
 [data-skin="human"] .sug-opt b {
-  font-size: 13px;
-  line-height: 20px;
+  font-size: calc(13px * var(--fs));
+  line-height: round(calc(20px * var(--fs)), 1px);
 }
 [data-skin="human"] :is(.sug-head, .sug-note) {
   padding-left: 10px;
@@ -294,7 +294,7 @@
   height: 26px;
   padding: 0 10px 0 6px;
   border-radius: 13px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
 }
 [data-skin="human"] .plan-ask {
   padding: 10px 10px 10px 18px;
@@ -326,7 +326,7 @@
 }
 [data-skin="human"] .req-q {
   padding-left: 18px;
-  font-size: 16px;
+  font-size: calc(16px * var(--fs));
 }
 [data-skin="human"] .req-body {
   margin-left: 18px;
@@ -356,7 +356,7 @@
   padding: 12px 14px 14px 18px;
 }
 [data-skin="human"] .pending-ask-q {
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
 }
 [data-skin="human"] .tray {
   border-color: var(--line-1);

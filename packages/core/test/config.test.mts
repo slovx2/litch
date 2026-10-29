@@ -242,13 +242,29 @@ test('界面那几项交给最近开的窗口，窗口做完回话；没有窗�
 
   const older = m.window()
   const newer = m.window()
-  const pending = m.run(['look', 'set', '--skin', 'human', '--width', 'compact', '--zoom', '110'])
+  const invalidText = await m.run(['look', 'set', '--chat-text', '125'], { lang: 'en' })
+  assert.equal(invalidText.ok, false)
+  assert.match(invalidText.text, /--chat-text must be/)
+  const pending = m.run([
+    'look',
+    'set',
+    '--skin',
+    'human',
+    '--width',
+    'compact',
+    '--zoom',
+    '110',
+    '--tree-text',
+    '135',
+    '--chat-text',
+    '150%',
+  ])
   await flush()
   assert.equal(older.seen.view?.asks.length, 0, '只交给最近订阅的那一个')
   const [ask] = newer.seen.view?.asks ?? []
   assert.deepEqual(ask?.request, {
     kind: 'prefs.set',
-    patch: { skin: 'human', chatWidth: 'compact', zoom: 1.1 },
+    patch: { skin: 'human', chatWidth: 'compact', zoom: 1.1, treeText: 1.35, chatText: 1.5 },
   })
   await m.command('config.reply', {
     id: ask?.id,
@@ -259,6 +275,8 @@ test('界面那几项交给最近开的窗口，窗口做完回话；没有窗�
       density: 'normal',
       chatWidth: 'compact',
       zoom: 1.1,
+      treeText: 1.35,
+      chatText: 1.5,
       lang: 'zh-CN',
       linksInApp: true,
       notifySuccess: false,
@@ -269,6 +287,7 @@ test('界面那几项交给最近开的窗口，窗口做完回话；没有窗�
   assert.ok(done.ok)
   assert.match(done.text, /human/)
   assert.match(done.text, /width compact/)
+  assert.match(done.text, /sidebar text 135% · conversation text 150%/)
   assert.equal(newer.seen.view?.asks.length, 0)
   await assert.rejects(m.command('config.reply', { id: ask?.id, ok: true }), { code: 'notFound' })
 
