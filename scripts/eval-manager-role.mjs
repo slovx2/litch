@@ -381,38 +381,43 @@ try {
       deadline,
     )
   })
-  await step(4, '对话里答导出格式', '导出用 JSON 吧，其他按你的计划开始。', async (record, deadline) => {
-    const before = await board()
-    record.notes.push(
-      `发送前决策标题：${before.decisions.map((entry) => `${entry.id} ${entry.title}`).join('；') || '无'}。是否曾提出导出格式决策由读者核对。`,
-    )
-    await say(record.input, record, deadline)
-    if (options.fake) {
-      const decision = before.decisions.find((entry) => entry.title === '导出采用什么格式？')
-      if (decision)
+  await step(
+    4,
+    '对话里答导出格式',
+    '导出用 JSON 吧，其他按你的计划开始。',
+    async (record, deadline) => {
+      const before = await board()
+      record.notes.push(
+        `发送前决策标题：${before.decisions.map((entry) => `${entry.id} ${entry.title}`).join('；') || '无'}。是否曾提出导出格式决策由读者核对。`,
+      )
+      await say(record.input, record, deadline)
+      if (options.fake) {
+        const decision = before.decisions.find((entry) => entry.title === '导出采用什么格式？')
+        if (decision)
+          await trigger(
+            'answer',
+            { id: decision.id, optionId: 'json', text: record.input },
+            record,
+            deadline,
+          )
         await trigger(
-          'answer',
-          { id: decision.id, optionId: 'json', text: record.input },
+          'start',
+          {
+            title: '夹具工作线',
+            prompt:
+              '这是 todo-lite 0.2 的隔离驱动验收；本条线仅验证工具、工作树和回报收集，不实现产品功能，不联网、不推送。请写个文件，随后如实报告执行结果。\n没验：真实模型的角色表现。',
+            background:
+              '经理正在隔离的 todo-lite 仓库验证九步剧本。用户已经选择 JSON，现需验证工作线可以继承供应商和模型、使用独立工作树，并把回报交还经理；不修改真实项目或用户配置。',
+            initiation: 'user_asked',
+            kind: 'fresh',
+          },
           record,
           deadline,
+          '会话',
         )
-      await trigger(
-        'start',
-        {
-          title: '夹具工作线',
-          prompt:
-            '这是 todo-lite 0.2 的隔离驱动验收；本条线仅验证工具、工作树和回报收集，不实现产品功能，不联网、不推送。请写个文件，随后如实报告执行结果。\n没验：真实模型的角色表现。',
-          background:
-            '经理正在隔离的 todo-lite 仓库验证九步剧本。用户已经选择 JSON，现需验证工作线可以继承供应商和模型、使用独立工作树，并把回报交还经理；不修改真实项目或用户配置。',
-          initiation: 'user_asked',
-          kind: 'fresh',
-        },
-        record,
-        deadline,
-        '会话',
-      )
-    }
-  })
+      }
+    },
+  )
   await step(5, '等待线回报', '等待设备注入工作线回报事件', async (record, deadline) => {
     await settle(deadline)
     if (options.fake) {
