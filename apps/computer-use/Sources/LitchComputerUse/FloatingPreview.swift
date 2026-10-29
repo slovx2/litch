@@ -54,13 +54,23 @@ final class FloatingPreview: NSObject {
     let zh = language == .zh
     stop.title = zh ? "停止" : "Stop"
     close.title = zh ? "收起" : "Hide"
-    statusLabel.textColor = .secondaryLabelColor
+    // 颜色同侧面板“电脑预览”（PreviewTab.tsx）：在等的用等待色，失败的用错误色，切到前台过用等待色
     switch status {
-    case "capturePending": statusLabel.stringValue = zh ? "等待系统允许屏幕采集" : "Waiting for screen capture permission"
-    case "captureDenied": statusLabel.stringValue = zh ? "屏幕采集被拒绝或停止" : "Screen capture denied or stopped"
-    case "captureFailed", "interrupted": statusLabel.stringValue = zh ? "画面已中断" : "Preview interrupted"
-    case "waitingForIdle": statusLabel.stringValue = zh ? "等待键鼠空闲" : "Waiting for idle keyboard and mouse"
-    case "restoreFailed": statusLabel.stringValue = zh ? "请手动切回原窗口" : "Please switch back to the previous window"
+    case "capturePending":
+      statusLabel.stringValue = zh ? "等待系统允许屏幕采集" : "Waiting for screen capture permission"
+      statusLabel.textColor = .systemOrange
+    case "captureDenied":
+      statusLabel.stringValue = zh ? "屏幕采集被拒绝或停止" : "Screen capture denied or stopped"
+      statusLabel.textColor = .systemRed
+    case "captureFailed", "interrupted":
+      statusLabel.stringValue = zh ? "画面已中断" : "Preview interrupted"
+      statusLabel.textColor = .systemRed
+    case "waitingForIdle":
+      statusLabel.stringValue = zh ? "等待键鼠空闲" : "Waiting for idle keyboard and mouse"
+      statusLabel.textColor = .systemOrange
+    case "restoreFailed":
+      statusLabel.stringValue = zh ? "请手动切回原窗口" : "Please switch back to the previous window"
+      statusLabel.textColor = .systemRed
     default:
       statusLabel.stringValue = usedForeground
         ? (zh ? "已短暂切到前台" : "Briefly brought to the foreground")
