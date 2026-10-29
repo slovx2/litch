@@ -68,7 +68,7 @@ function PdfPages({ pdf, stop }: { pdf: PdfDocument; stop(): void }) {
   }, [])
   const go = (page: number) => {
     const selected = Math.min(boxes.length, Math.max(1, Math.round(page)))
-    if (Number.isFinite(selected))
+    if (Number.isFinite(selected) && selected !== current)
       scroll.current?.scrollTo({ top: Math.max(0, (boxes[selected - 1]?.top ?? GAP) - GAP) })
     setInput(String(Number.isFinite(selected) ? selected : current))
   }

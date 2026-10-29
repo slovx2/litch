@@ -3,7 +3,7 @@ const assets = import.meta.glob<string>(
   [
     '/node_modules/pdfjs-dist/cmaps/*.bcmap',
     '/node_modules/pdfjs-dist/standard_fonts/*.{pfb,ttf}',
-    '/node_modules/pdfjs-dist/wasm/{openjpeg,jbig2,qcms_bg}.wasm',
+    '/node_modules/pdfjs-dist/wasm/{openjpeg,jbig2}.wasm',
   ],
   { query: '?url&inline', import: 'default' },
 )

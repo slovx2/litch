@@ -28,7 +28,7 @@ export function loadPdf(
     fail('invalid')
     return () => {}
   }
-  const port = new Worker(new URL('./worker.ts', import.meta.url), {
+  const port = new Worker(new URL('./pdf-worker.ts', import.meta.url), {
     type: 'module',
     name: 'litch-pdf',
   })
@@ -60,13 +60,20 @@ export function loadPdf(
     if (closed) return
     closed = true
     window.clearTimeout(timer)
-    // 立即停 worker，不等待损坏文件的解析协程回信。
-    void loading.destroy().catch(() => {})
-    worker.destroy()
-    port.terminate()
-    dom.dispose()
-    // 子页先 cancel，再清文字层的共享测量缓存；库会保留仍在渲染的其他文档。
-    queueMicrotask(() => TextLayer.cleanup())
+    // 正常关闭让库收 Terminate 回执、完成全部清理；卡住的解析最多再等 500ms 后强停。
+    let stopped = false
+    const finish = () => {
+      if (stopped) return
+      stopped = true
+      window.clearTimeout(deadline)
+      worker.destroy()
+      port.terminate()
+      dom.dispose()
+      // 子页先 cancel，再清文字层的共享测量缓存；库会保留仍在渲染的其他文档。
+      queueMicrotask(() => TextLayer.cleanup())
+    }
+    const deadline = window.setTimeout(finish, 500)
+    void loading.destroy().then(finish, finish)
   }
   function reject(reason: PdfFailure) {
     if (closed) return

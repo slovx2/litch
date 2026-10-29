@@ -1,6 +1,6 @@
 import 'pdfjs-dist/build/pdf.worker.mjs'
 
-// PDF 字节和库资源由主线程传入；即使解析库走到备用加载路径，也不准访问网络。
+// 正式 app:// 响应 CSP 禁止连接和 import。下面的覆盖只防误用，不是安全边界；开发 Worker 的响应策略相同。
 globalThis.fetch = async () => {
   throw new Error('PDF worker network is disabled')
 }

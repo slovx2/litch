@@ -3,15 +3,15 @@
 // 打开浏览器标签、地址栏开网页、网页叠在 .bw-view 那块矩形上、收起面板就摘下来、浮层压上来时撤下、
 // 代理的 show 打开面板、在标签上关掉、对话里的链接在内置浏览器里开。结果打一行 LITCH_BROWSER {ok, checks}；LITCH_BROWSER_SHOTS 给了目录时存几张截图。
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { join, normalize, sep } from 'node:path'
-import { pathToFileURL } from 'node:url'
-import { app, BrowserWindow, net, protocol } from 'electron'
+import { join, normalize } from 'node:path'
+import { app, BrowserWindow, protocol } from 'electron'
 import type { HostTab } from './browser/electron-tab.mjs'
 import { installBrowser } from './browser/install.mjs'
 import { checkLinks } from './probe-browser-links.mjs'
 import { startPages } from './probe-browser-pages.mjs'
 import { checkSavePrompt } from './probe-browser-save-prompt.mjs'
 import { checkSignInCard } from './probe-browser-sign-in.mjs'
+import { serveUiResource } from './ui-protocol.mjs'
 
 // 保存提示那一段会用到 safeStorage：钥匙串里那把钥匙按应用名起名，用测试专用的（check-browser.mjs 跑完删掉）
 app.setName('Litch Autofill Probe')
@@ -41,13 +41,7 @@ void app.whenReady().then(async () => {
     console.log(`LITCH_BROWSER ${JSON.stringify({ ok: false, checks, error: '超时' })}`)
     app.exit(1)
   }, 120_000)
-  protocol.handle('app', (request) => {
-    const url = new URL(request.url)
-    const path = decodeURIComponent(url.pathname)
-    const file = normalize(join(uiRoot, path === '/' ? 'index.html' : path))
-    if (!file.startsWith(uiRoot + sep)) return new Response('forbidden', { status: 403 })
-    return net.fetch(pathToFileURL(file).toString())
-  })
+  protocol.handle('app', (request) => serveUiResource(uiRoot, request))
   const pages = await startPages()
   const browser = installBrowser({
     isUiUrl: (url) => url.startsWith('app://ui/'),

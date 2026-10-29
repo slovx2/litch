@@ -74,7 +74,8 @@ export function collectLicenses(out, roots = ROOTS) {
     if (manifest.name === 'pdfjs-dist') {
       for (const folder of ['cmaps', 'standard_fonts', 'wasm']) {
         for (const file of readdirSync(join(dir, folder))) {
-          if (/^(LICENSE|NOTICE)([_.-]|$)/i.test(file)) files.push(join(folder, file))
+          if (/^(LICENSE|NOTICE)([_.-]|$)/i.test(file) && !file.includes('QCMS'))
+            files.push(join(folder, file))
         }
       }
     }

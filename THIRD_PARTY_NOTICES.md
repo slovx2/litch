@@ -18,7 +18,7 @@
 - 终端控件 `@xterm/xterm` 及其插件 `@xterm/addon-fit`、`@xterm/addon-unicode11`、`@xterm/addon-web-links`，MIT，Copyright (c) The xterm.js authors、SourceLair Private Company、Christopher Jeffrey。
 - 代码高亮 `highlight.js`，BSD-3-Clause，Copyright (c) 2006 Ivan Sagalaev。
 - Markdown 解析 `marked`，MIT，Copyright (c) MarkedJS、Christopher Jeffrey。
-- PDF 只读预览使用 `pdfjs-dist 6.4.299`，Apache-2.0，Copyright Mozilla Foundation；本地打包的 Adobe CMap、Foxit/Liberation 字体、OpenJPEG/JBIG2/QCMS 解码资源各自的 LICENSE 原文与包的 LICENSE 一同收入 `licenses/pdfjs-dist@6.4.299.txt`，不分发 PDF 脚本执行器。文字层定位样式依据该库公开接口编写。
+- PDF 只读预览使用 `pdfjs-dist 6.4.299`，Apache-2.0，Copyright Mozilla Foundation；本地打包的 Adobe CMap、Foxit/Liberation 字体、OpenJPEG/JBIG2 解码资源各自的 LICENSE 原文与包的 LICENSE 一同收入 `licenses/pdfjs-dist@6.4.299.txt`，不分发 QCMS 或 PDF 脚本执行器。文字层定位样式依据该库公开接口编写。
 - 画图 `mermaid`（回答里的 mermaid 代码块画成图，第一次遇到时才装载），MIT，Copyright (c) 2014 - 2022 Knut Sveidqvist；连同它带进来的 `d3` 各包（ISC、BSD-3-Clause，Mike Bostock）、`cytoscape`、`dagre-d3-es`、`roughjs`、`katex`、`khroma` 等（MIT）、`chevrotain`（Apache-2.0）、`dompurify`（MPL-2.0 或 Apache-2.0，Cure53）、`elkjs`（EPL-2.0）、`robust-predicates`（Unlicense），各包的许可全文同样收在 `licenses/` 里。
 - WebSocket `ws`，MIT，Copyright (c) Einar Otto Stangvik、Arnout Kazemier、Luigi Pinca 及贡献者。
 - 二维码生成 `uqr`（扫码绑定手机的出码对话框用），MIT，Copyright (c) Project Nayuki、Anthony Fu。

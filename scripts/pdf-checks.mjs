@@ -24,7 +24,10 @@ export async function checkPdf({ evaluate, call, report, out, pdfFixture }) {
   const fixture = pdfFixture()
   await open('sample.pdf', fixture)
   await ready()
-  assert.equal(await evaluate('window.pdfCheck.workers()'), 1)
+  await until(
+    () => evaluate('window.pdfCheck.workers() === 1'),
+    '正常初始化释放 StrictMode 旧 Worker',
+  )
   assert(
     (await evaluate('document.querySelector(".fp-pdf-text").textContent')).includes('中文文件预览'),
   )
@@ -42,9 +45,23 @@ export async function checkPdf({ evaluate, call, report, out, pdfFixture }) {
   assert((await evaluate('getSelection().toString()')).includes('Litch PDF preview'))
   await evaluate('getSelection().removeAllRanges()')
   report.checks.push('协议字节 → 本地 Worker，中文 CMap/英文字体、扫描图、可选择文字层')
+  await evaluate('document.querySelector(".fp-pdf-scroll").scrollTop = 180')
+  await until(
+    () => evaluate('document.querySelector(".fp-pdf-scroll").scrollTop === 180'),
+    '页内滚动',
+  )
+  await evaluate('document.querySelector(".fp-pdf-pagination input").focus()')
+  await evaluate('document.querySelector(".fp-pdf-pagination input").blur()')
+  assert.equal(await evaluate('document.querySelector(".fp-pdf-scroll").scrollTop'), 180)
+  await evaluate('document.querySelector(".fp-pdf-scroll").scrollTop = 0')
+  report.checks.push('页码未修改时失焦保持页内滚动位置')
   assert((await evaluate("window.pdfCheck.asset('wasmUrl', 'openjpeg.wasm')")) > 0)
   assert((await evaluate("window.pdfCheck.asset('wasmUrl', 'jbig2.wasm')")) > 0)
-  assert((await evaluate("window.pdfCheck.asset('wasmUrl', 'qcms_bg.wasm')")) > 0)
+  assert(
+    await evaluate(
+      "window.pdfCheck.asset('wasmUrl', 'qcms_bg.wasm').then(() => false, () => true)",
+    ),
+  )
   assert(
     await evaluate("window.pdfCheck.asset('cMapUrl', '../LICENSE').then(() => false, () => true)"),
   )
@@ -59,7 +76,7 @@ export async function checkPdf({ evaluate, call, report, out, pdfFixture }) {
   assert(
     csp.includes("connect-src 'none'") &&
       csp.includes("worker-src 'self'") &&
-      csp.includes("'wasm-unsafe-eval'"),
+      !csp.includes("'wasm-unsafe-eval'"),
   )
   report.csp = csp
   assert(await evaluate(`fetch('https://pdf.invalid/network').then(() => false, () => true)`))
@@ -72,10 +89,12 @@ export async function checkPdf({ evaluate, call, report, out, pdfFixture }) {
     '生产 CSP 拒绝事件',
   )
   assert(
-    await evaluate(`WebAssembly.compile(new Uint8Array([0,97,115,109,1,0,0,0])).then(() => true)`),
+    await evaluate(
+      `WebAssembly.compile(new Uint8Array([0,97,115,109,1,0,0,0])).then(() => false, () => true)`,
+    ),
   )
   report.checks.push(
-    '生产 CSP：网络与 JS eval 拒绝，本地 WASM 可编译；资源白名单拒绝跨目录和脚本执行器',
+    '主文档 CSP：网络、JS eval 和 WASM 编译均拒绝；资源白名单拒绝跨目录/QCMS/脚本执行器',
   )
   for (const skin of ['standard', 'retro', 'human'])
     for (const theme of ['light', 'dark']) {
@@ -157,7 +176,7 @@ export async function checkPdf({ evaluate, call, report, out, pdfFixture }) {
       () => evaluate(`document.querySelector('[data-pdf-error]')?.dataset.pdfError === '${error}'`),
       name,
     )
-    assert.equal(await evaluate('window.pdfCheck.workers()'), 0)
+    await until(() => evaluate('window.pdfCheck.workers() === 0'), '错误文档销毁完成')
   }
   report.checks.push('损坏、密码、201 页、过大页面、20 MiB 超限占位且释放 Worker')
   await open('text-limit.pdf', pdfFixture({ pages: 1, longText: true }))
@@ -182,14 +201,14 @@ export async function checkPdf({ evaluate, call, report, out, pdfFixture }) {
     '解析超时强制终止',
     25000,
   )
-  assert.equal(await evaluate('window.pdfCheck.workers()'), 0)
+  await until(() => evaluate('window.pdfCheck.workers() === 0'), '超时文档强停完成')
   await evaluate('window.pdfCheck.freeze(false)')
   report.checks.push('解析 20 秒超时强制终止，50 次文件切换释放 Worker 和字体')
   await open('last.pdf', fixture)
   await ready()
   await evaluate('document.querySelector("[data-tool=reload]").click()')
   await ready()
-  assert.equal(await evaluate('window.pdfCheck.workers()'), 1)
+  await until(() => evaluate('window.pdfCheck.workers() === 1'), '刷新后旧 Worker 释放')
   assert.equal(await evaluate('!!window.__pdfScriptExecuted'), false)
   assert.equal(
     await evaluate(

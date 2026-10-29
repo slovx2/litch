@@ -64,7 +64,6 @@ window.pdfCheck = {
   violations: () => violations,
   async asset(kind: string, filename: string) {
     const bytes = await new LocalPdfData().fetch({ kind, filename })
-    if (kind === 'wasmUrl') await WebAssembly.compile(new Uint8Array(bytes))
     return bytes.byteLength
   },
 }

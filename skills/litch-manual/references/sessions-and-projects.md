@@ -140,6 +140,7 @@ explain it:
   预览要求设备声明 `filePreview`；设备服务和自有单 harness 入口提供它。直连原生 Codex 没有这项能力时保留原来的源码/类型查看，不自动另用 shell 取文件。手机文件查看不变。
   Markdown 渲染上限 512 KiB、源码 2 MiB、位图 8 MiB、SVG 1 MiB；Markdown 自动附图最多 16 张、累计 16 MiB，刷新重读文件。Office、CSV 表格、HTML 渲染和媒体播放尚未在这一阶段启用。
   PDF 支持只读翻页、滚动、缩放和选择文字，上限 20 MiB / 200 页；只绘制可见页及相邻页。损坏、需要密码、超限或处理超时的文件显示原因；不执行 PDF 脚本，不打开表单、附件和外链，不提供打印、签名或编辑。字体、CMap 和解码资源随应用提供，PDF 不上传转换服务；未嵌入字体和特殊色彩配置可能与专业阅读器有差异。
+  页码未修改时移开焦点会保留当前滚动位置；只有更换页码才跳到对应页。
 - **Side chat**: a temporary fork of the current session for asking something on the side. It starts
   with the session's context up to the last finished turn (if a turn is running it stops before it, and
   the main turn keeps going), lives in the side panel's Side chat tab, never shows in the sidebar, and
