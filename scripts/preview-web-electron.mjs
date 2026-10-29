@@ -1,8 +1,10 @@
 // check-preview-web.mjs 的子进程；窗口始终隐藏，脚本不发送系统输入。
 import assert from 'node:assert/strict'
 import { readFileSync, writeFileSync } from 'node:fs'
-import { extname, join, resolve } from 'node:path'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, protocol, session } from 'electron'
+import { serveUiResource } from '../apps/desktop/src/ui-protocol.mts'
 
 const out = process.argv[2],
   home = process.env.LITCH_PREVIEW_CHECK_HOME
@@ -14,7 +16,14 @@ if (process.platform === 'darwin') app.setActivationPolicy('prohibited')
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ])
-const report = { checks: [], media: [], versions: process.versions, requests: [], errors: [] }
+const report = {
+  checks: [],
+  media: [],
+  versions: process.versions,
+  requests: [],
+  responses: [],
+  errors: [],
+}
 let win
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const wait = async (fn, label) => {
@@ -55,25 +64,22 @@ void app.whenReady().then(async () => {
   try {
     app.dock?.hide()
     const assets = join(out, 'assets')
-    protocol.handle('app', (request) => {
-      const url = new URL(request.url),
-        path = resolve(assets, `.${decodeURIComponent(url.pathname)}`)
-      if (!path.startsWith(`${assets}/`)) return new Response('', { status: 403 })
-      const types = {
-        '.js': 'text/javascript',
-        '.css': 'text/css',
-        '.html': 'text/html',
-        '.woff2': 'font/woff2',
-        '.wasm': 'application/wasm',
-      }
-      return new Response(readFileSync(path), {
-        headers: { 'Content-Type': types[extname(path)] ?? 'application/octet-stream' },
+    protocol.handle('app', async (request) => {
+      const response = await serveUiResource(assets, request)
+      report.responses.push({
+        url: request.url,
+        csp: response.headers.get('Content-Security-Policy'),
       })
+      return response
     })
     session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
       report.requests.push(details.url)
       callback({
-        cancel: !details.url.startsWith('app://preview/') && !details.url.startsWith('blob:'),
+        // 正式处理器的 net.fetch 只读取本次构建目录；外网请求仍一律拦截。
+        cancel:
+          !details.url.startsWith('app://ui/') &&
+          !details.url.startsWith('blob:') &&
+          !details.url.startsWith(pathToFileURL(`${assets}/`).href),
       })
     })
     win = new BrowserWindow({
@@ -93,7 +99,7 @@ void app.whenReady().then(async () => {
     win.webContents.on('console-message', (event) => {
       console.log('renderer:', event.level, event.message)
     })
-    await win.loadURL('app://preview/test/preview-web/index.html')
+    await win.loadURL('app://ui/test/preview-web/index.html')
     await wait(() => js('Boolean(window.previewWeb)'), '夹具就绪')
     assert.equal(win.isVisible(), false)
     check('Electron 生产构建 / sandbox / 始终隐藏')
@@ -103,6 +109,14 @@ void app.whenReady().then(async () => {
       '名称,编号,内容\n中文,900719925474099312345,"字段内\n换行"\n公式,=cmd|calc,"<img src=x onerror=alert(1)>"',
     )
     await wait(() => js('Boolean(document.querySelector(".fp-csv-grid"))'), 'CSV Worker')
+    const csvWorker = report.responses.find(({ url }) => /\/csv\.worker-[^/]+\.js$/.test(url))
+    assert.ok(csvWorker, 'PapaParse Worker 必须实际请求独立构建资源')
+    assert.ok(csvWorker.url.startsWith('app://ui/'), 'Worker 使用 self URL，不是 blob')
+    assert.equal(csvWorker.csp, "connect-src 'none'; script-src 'self'; worker-src 'self'")
+    assert.equal(
+      report.responses.find(({ url }) => url.endsWith('/index.html'))?.csp,
+      csvWorker.csp,
+    )
     assert.equal(await js('document.querySelectorAll(".fp-csv-grid img").length'), 0)
     assert.equal(
       await js(

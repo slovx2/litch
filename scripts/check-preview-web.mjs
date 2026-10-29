@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { build as bundle } from '../apps/desktop/node_modules/esbuild/lib/main.js'
 import { build } from '../packages/ui/node_modules/vite/dist/node/index.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -50,12 +51,22 @@ execFileSync(
   ],
   { timeout: 30000 },
 )
+// 共用正式 app:// 处理器，使主文档、Worker、资源均收到生产响应 CSP。
+await bundle({
+  entryPoints: [join(root, 'scripts/preview-web-electron.mjs')],
+  outfile: join(out, 'main.mjs'),
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  external: ['electron'],
+  target: 'node24',
+})
 const home = mkdtempSync(join(tmpdir(), 'litch-preview-web-'))
 const exe = join(
   root,
   'apps/desktop/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron',
 )
-const child = spawn(exe, [join(root, 'scripts/preview-web-electron.mjs'), out], {
+const child = spawn(exe, [join(out, 'main.mjs'), out], {
   env: { PATH: process.env.PATH, HOME: home, TMPDIR: home, LITCH_PREVIEW_CHECK_HOME: home },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
