@@ -390,6 +390,10 @@
 .mg-form .req-input {
   width: 100%;
 }
+.mg-fixed {
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
 .mg-rules {
   align-self: start;
   position: sticky;

@@ -9,6 +9,7 @@ import { Transcript } from '../transcript/Transcript.tsx'
 import { BoardPanels } from './BoardPanels.tsx'
 import { Decisions } from './Decisions.tsx'
 import { useManagerBoard } from './data.ts'
+import { ManagerForm } from './ManagerForm.tsx'
 
 export function ManagerPage({
   manager,
@@ -31,6 +32,7 @@ export function ManagerPage({
     setDecisionTarget({ id })
   }
   const [ending, setEnding] = useState(false)
+  const [settings, setSettings] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState('')
   const board = view?.board
@@ -54,6 +56,29 @@ export function ManagerPage({
       setBusy(false)
     }
   }
+  if (settings && !readOnly) {
+    return (
+      <section className="arch-page" data-manager="settings">
+        <header className="arch-head">
+          <h1>{t('manager.settings')}</h1>
+          <button type="button" className="btn ghost" onClick={() => setSettings(false)}>
+            {t('manager.back')}
+          </button>
+        </header>
+        <div className="arch-body">
+          <ManagerForm
+            key={`${manager.deviceId}:${manager.id}`}
+            devices={device ? [device] : []}
+            initial={{ view: 'new', deviceId: manager.deviceId }}
+            manager={manager}
+            disabled={disabled}
+            onCancel={() => setSettings(false)}
+            onCreated={() => setSettings(false)}
+          />
+        </div>
+      </section>
+    )
+  }
   return (
     <section
       className="mg-page"
@@ -66,15 +91,28 @@ export function ManagerPage({
         <span className="pill mute">{t('manager.manager')}</span>
         <b className="ell grow">{manager.name}</b>
         {manager.status === 'active' ? (
-          <button
-            type="button"
-            className="btn ghost"
-            disabled={disabled}
-            title={disabled ? t('manager.offline') : undefined}
-            onClick={() => setEnding(true)}
-          >
-            {t('manager.end')}
-          </button>
+          <>
+            <button
+              type="button"
+              className="btn ghost"
+              data-act="manager-settings"
+              disabled={disabled}
+              title={disabled ? t('manager.offline') : undefined}
+              onClick={() => setSettings(true)}
+            >
+              {t('manager.settings')}
+            </button>
+            <button
+              type="button"
+              className="btn ghost"
+              data-act="manager-end"
+              disabled={disabled}
+              title={disabled ? t('manager.offline') : undefined}
+              onClick={() => setEnding(true)}
+            >
+              {t('manager.end')}
+            </button>
+          </>
         ) : (
           <span className="dim">{t(`manager.${manager.status}`)}</span>
         )}

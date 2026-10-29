@@ -138,4 +138,10 @@ export const zhManager = {
   'manager.manager': '经理',
   'manager.line': '工作线',
   'manager.settings': '设置',
+  'manager.save': '保存',
+  'manager.saving': '正在保存…',
+  'manager.rulesPreserved': '已保存的规矩保留原文，选项不会自动修改规矩。',
+  'manager.updateRequired': '请填写范围；并发上限须为正整数。',
+  'manager.lineModel': '子会话模型',
+  'manager.lineEffort': '子会话强度',
 } satisfies Record<string, Entry>

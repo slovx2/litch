@@ -25,6 +25,12 @@ export interface ManagerSeen {
   localizedRules: boolean
   endedRow: boolean
   branchFacts: boolean
+  settingsSaved: boolean
+  settingsKept: boolean
+  settingsCancelled: boolean
+  settingsReadOnly: boolean
+  settingsValidation: boolean
+  dispatchSaved: boolean
 }
 
 export async function managerProbe(): Promise<ManagerSeen> {
@@ -206,19 +212,91 @@ export async function managerProbe(): Promise<ManagerSeen> {
   const created = await until('建好后进入经理', () =>
     one('.mg-title')?.textContent?.includes('经理冒烟验收'),
   )
+  const createdId = one('[data-manager="session"]')?.getAttribute('data-manager-id')
+  await click('[data-act="manager-settings"]')
+  await until('编辑经理表单', () => one('[data-manager-mode="edit"]'))
+  const editField = (label: string) => {
+    const input = field(label)?.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+      'input, textarea',
+    )
+    if (!input) throw new Error(`缺少设置字段：${label}`)
+    return input
+  }
+  const settingsReadOnly =
+    document.querySelectorAll('.mg-fixed').length === 5 &&
+    !field('工作目录')?.querySelector('input') &&
+    !field('第一件事') &&
+    !field('从哪种开始')
+  fill(editField('名字'), '经理设置验收')
+  fill(editField('范围'), '   ')
+  await click('.mg-form button[type="submit"]')
+  const settingsValidation = Boolean(
+    await until('无效范围显示原因', () => one('.mg-form [role="alert"]')),
+  )
+  fill(editField('范围'), '修改后的经理验收范围')
+  fill(editField('同时最多几条线'), '5')
+  const select = async (label: string, value: string) => {
+    const input = field(label)?.querySelector('select')
+    if (!input) throw new Error(`缺少设置选项：${label}`)
+    input.value = value
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await new Promise((resolve) => setTimeout(resolve, 40))
+  }
+  const lineModel = await until(
+    '子会话模型选项',
+    () => field('子会话模型')?.querySelector('select')?.options[1]?.value,
+  )
+  await select('子会话模型', lineModel)
+  await select('谁来合并', 'user')
+  for (const checkbox of document.querySelectorAll<HTMLInputElement>(
+    '.mg-fields input[type="checkbox"]',
+  ))
+    checkbox.click()
+  const settingsKept = await until(
+    '编辑设置保留规矩',
+    () => one<HTMLTextAreaElement>('.mg-rules textarea')?.value === '仅执行冒烟验收范围内的任务。',
+  )
+  await click('.mg-form button[type="submit"]')
+  const settingsSaved = await until(
+    '更新名字、范围和规矩事件',
+    () =>
+      one('.mg-title')?.textContent?.includes('经理设置验收') &&
+      one('.crumb')?.textContent?.includes('经理设置验收') &&
+      one(`.mg-sidebar-manager[data-manager-id="${createdId}"] .mg-pick`)?.textContent?.includes(
+        '经理设置验收',
+      ) &&
+      one('.mg-scope')?.textContent?.includes('修改后的经理验收范围') &&
+      Boolean(one('[data-event="manager-rules"]')),
+  )
+  await click('[data-act="manager-settings"]')
+  await until('重新打开保存的并发上限', () => editField('同时最多几条线').value === '5')
+  const dispatchSaved =
+    field('子会话模型')?.querySelector('select')?.value === lineModel &&
+    field('谁来合并')?.querySelector('select')?.value === 'user' &&
+    [...document.querySelectorAll<HTMLInputElement>('.mg-fields input[type="checkbox"]')].every(
+      (input) => !input.checked,
+    )
+  fill(editField('范围'), '取消的修改不应保存')
+  await click('.mg-form-foot button[type="button"]')
+  const settingsCancelled = await until('取消不保存', () =>
+    one('.mg-scope')?.textContent?.includes('修改后的经理验收范围'),
+  )
   await click('[data-sidebar-mode="manager"]')
   await click('[data-manager-row="e1"] .mg-list-open')
   await click('[data-board-tab="decisions"]')
   const endedReadOnly = Boolean(
     await until(
       '已结束看板只读',
-      () => one('.mg-readonly') && one('.mg-decision textarea:disabled'),
+      () =>
+        one('.mg-readonly') &&
+        one('.mg-decision textarea:disabled') &&
+        !one('[data-act="manager-settings"]'),
     ),
   )
   await click('[data-manager-id="m1"] .mg-pick')
   await until('回到主经理', () => one('[data-manager="session"][data-manager-id="m1"]'))
   await click('[data-board-tab="decisions"]')
-  await click('.mg-title button')
+  await click('[data-act="manager-end"]')
   await click('.mg-end button:last-child')
   await until('先进入结束中', () => one('[data-manager-status="ending"]'))
   const endingReadOnly = Boolean(
@@ -270,6 +348,12 @@ export async function managerProbe(): Promise<ManagerSeen> {
     localizedRules,
     endedRow,
     branchFacts,
+    settingsSaved,
+    settingsKept,
+    settingsCancelled,
+    settingsReadOnly,
+    settingsValidation,
+    dispatchSaved,
   }
 }
 
@@ -300,6 +384,12 @@ export function judgeManager(seen: ManagerSeen): string[] {
     localizedRules: '规矩初稿没有跟随界面语言和设置',
     endedRow: '已结束经理有无效占位或总结按钮错位',
     branchFacts: '工作线仍显示孤立的未知',
+    settingsSaved: '设置保存后名字、范围或规矩事件未更新',
+    settingsKept: '编辑经理时原有规矩被选项覆盖',
+    settingsCancelled: '取消设置仍保存了修改',
+    settingsReadOnly: '编辑经理仍能修改设备、目录或经理自身运行配置',
+    settingsValidation: '无效设置没有显示原因并保留表单',
+    dispatchSaved: '子会话模型、工作树、合并方式或通知设置没有保存',
   }
   return (Object.keys(messages) as (keyof ManagerSeen)[])
     .filter((key) => !seen[key])

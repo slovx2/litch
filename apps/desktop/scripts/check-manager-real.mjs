@@ -38,7 +38,11 @@ if (skipped.length && !values['skip-missing']) {
   process.exit(1)
 }
 const ids = ['claude-code', 'codex'].filter((id) => !skipped.some((s) => s.harness === id))
-const directory = join(repo, '../_mgr/accept', new Date().toISOString().replaceAll(':', '-'))
+const directory = join(
+  repo,
+  '.artifacts/manager-real',
+  new Date().toISOString().replaceAll(':', '-'),
+)
 mkdirSync(directory, { recursive: true })
 const cleanup = []
 let child
@@ -77,7 +81,7 @@ try {
     ).values
     const env = settings['harness.codex.env']
     assert.equal(env.find((entry) => entry.name === 'CODEX_HOME')?.value, join(fixture.root, 'cx'))
-    assert.ok(!env.some((entry) => ['OPENAI_API_KEY', 'OPENAI_BASE_URL'].includes(entry.name)))
+    assert.ok(!env.some((entry) => entry.name.startsWith('OPENAI_')))
   }
   console.log(`隔离设备就绪：${JSON.stringify(versions)}；窗口${values.show ? '显示' : '隐藏'}`)
   const bootstrap = join(scratch, 'manager-real.mjs')

@@ -147,4 +147,11 @@ export const enManager = {
   'manager.manager': 'Manager',
   'manager.line': 'Work line',
   'manager.settings': 'Settings',
+  'manager.save': 'Save',
+  'manager.saving': 'Saving…',
+  'manager.rulesPreserved': 'Saved rules are preserved. Changing options will not rewrite them.',
+  'manager.updateRequired':
+    'Enter a scope and a positive whole number for the concurrent line limit.',
+  'manager.lineModel': 'Line model',
+  'manager.lineEffort': 'Line reasoning effort',
 } satisfies Record<string, Entry>

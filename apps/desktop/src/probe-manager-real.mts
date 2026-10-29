@@ -24,6 +24,8 @@ const steps = [
   '03-answers',
   '04-line',
   '05-origin',
+  '06-return',
+  '06-settings',
   '06-rules',
   '07-ending',
   '07-ended',
@@ -223,22 +225,55 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     await kit.idle()
     return { origin: text(one('.mg-origin')) }
   }
-  if (step === '06-rules') {
+  if (step === '06-return') {
     await click('.mg-origin button')
     await wait('返回原经理', () =>
       one(`[data-manager="session"][data-manager-id="${CSS.escape(state.managerId)}"]`),
     )
     await wait('返回后对话和看板读完', () => one('.mg-chat .turn') && one('.mg-body .mg-card'))
     await kit.idle()
-    const controls = all('.mg-title button, .tb button').map(text)
-    assert(!controls.some((label) => /规矩|范围/.test(label)), '新增了编辑入口，应补齐改规矩验收')
-    return {
-      skipped: '没验：第一版经理页没有编辑范围或规矩的入口，未验证 manager-rules 事件卡',
-      returned: state.managerId,
-    }
+    assert(one('[data-act="manager-settings"]'), '没有设置入口')
+    return { returned: state.managerId }
+  }
+  if (step === '06-settings') {
+    await click('[data-act="manager-settings"]')
+    await wait('经理编辑表单', () => one('[data-manager-mode="edit"]'))
+    assert(all('.mg-fixed').length === 5, '经理自身配置未只读显示')
+    assert(!field('第一件事') && !field('从哪种开始'), '编辑仍显示创建专用字段')
+    return { fixed: all('.mg-fixed').map(text) }
+  }
+  if (step === '06-rules') {
+    const rules = await wait('可编辑的规矩', () => one<HTMLTextAreaElement>('.mg-rules textarea'))
+    const updated = `${rules.value}\n仅在隔离仓库执行 ${harness} 设置验收，完成后等待用户确认。`
+    write(rules, updated)
+    await frame()
+    await fill('范围', `${harness} 修改后的范围：验证设置保存和规矩事件。`)
+    await fill('同时最多几条线', '2')
+    assert(rules.value === updated, '派活选项覆盖了手写规矩')
+    await click('.mg-form button[type="submit"]')
+    await wait('保存后范围更新', () => text(one('.mg-scope')).includes(`${harness} 修改后的范围`))
+    const event = await wait('规矩事件卡', () => one('[data-event="manager-rules"]'))
+    await wait('规矩回合完成', () => {
+      const turn = event.closest('.turn')
+      return (
+        turn?.querySelector('.md') && text(turn.querySelector('.turn-foot span')).includes('完成')
+      )
+    })
+    await kit.idle()
+    await click('[data-act="manager-settings"]')
+    await wait(
+      '保存的并发上限',
+      () => field('同时最多几条线')?.querySelector<HTMLInputElement>('input')?.value === '2',
+    )
+    assert(one<HTMLTextAreaElement>('.mg-rules textarea')?.value === updated, '保存的规矩不符')
+    await click('.mg-form-foot button[type="button"]')
+    const card = await wait('返回后规矩事件卡', () => one('[data-event="manager-rules"]'))
+    card.scrollIntoView({ block: 'center' })
+    await frame()
+    return { event: text(card), scope: text(one('.mg-scope')), maxRunningLines: 2, rules: updated }
   }
   if (step === '07-ending') {
-    await click('.mg-title button')
+    await click('[data-act="manager-end"]')
     await click('.mg-end button:last-child')
     await wait('结束中', () => one('[data-manager-status="ending"]'))
     assert(
@@ -288,6 +323,60 @@ async function run(window: BrowserWindow, fixture: Fixture): Promise<void> {
     )
   await inPage(installFilesKit)
   await inPage(installEnginesKit)
+  const looks = async (step: string) => {
+    for (const skin of ['standard', 'retro', 'human']) {
+      for (const theme of ['light', 'dark']) {
+        await inPage(
+          async (skin: string, theme: string, step: string) => {
+            const page = globalThis as unknown as {
+              __litchLook: { set(patch: { skin: string; theme: string }): void }
+              __filesKit: FilesKit
+            }
+            page.__litchLook.set({ skin, theme })
+            document.querySelector('.arch-body')?.scrollTo(0, 0)
+            await page.__filesKit.frame()
+            await page.__filesKit.frame()
+            // 隐藏窗口的合成帧晚于 DOM 更新；留出绘制时间，避免截到上一套外观。
+            await page.__filesKit.sleep(200)
+            if (
+              document.documentElement.dataset.skin !== skin ||
+              document.documentElement.dataset.theme !== theme
+            )
+              throw new Error(`${skin}/${theme} 外观未应用`)
+            const root = document.querySelector(step === '06-settings' ? '.mg-form' : '.mg-title')
+            if (!root || root.scrollWidth > root.clientWidth + 1)
+              throw new Error(`${skin}/${theme} 设置区域溢出或不可见`)
+          },
+          skin,
+          theme,
+          step,
+        )
+        await writeFile(
+          join(fixture.directory, `${step}-${skin}-${theme}.png`),
+          (await window.webContents.capturePage()).toPNG(),
+        )
+        if (step === '06-settings') {
+          await inPage(async () => {
+            document.querySelector('.mg-form-foot')?.scrollIntoView({ block: 'end' })
+            await (globalThis as unknown as { __filesKit: FilesKit }).__filesKit.frame()
+            await (globalThis as unknown as { __filesKit: FilesKit }).__filesKit.sleep(200)
+          })
+          await writeFile(
+            join(fixture.directory, `${step}-${skin}-${theme}-bottom.png`),
+            (await window.webContents.capturePage()).toPNG(),
+          )
+        }
+      }
+    }
+    await inPage(() => {
+      ;(
+        globalThis as unknown as {
+          __litchLook: { set(patch: { skin: string; theme: string }): void }
+        }
+      ).__litchLook.set({ skin: 'standard', theme: 'light' })
+      document.querySelector('.arch-body')?.scrollTo(0, 0)
+    })
+  }
   const rows: Record<
     string,
     Record<string, { status: string; evidence?: object; screenshot: string }>
@@ -299,6 +388,8 @@ async function run(window: BrowserWindow, fixture: Fixture): Promise<void> {
       const screenshot = join(fixture.directory, `${id}-${step}.png`)
       try {
         const evidence = await inPage(managerRealStep, step, id, fixture.cwd)
+        if (id === fixture.ids[0] && (step === '06-return' || step === '06-settings'))
+          await looks(step)
         await writeFile(screenshot, (await window.webContents.capturePage()).toPNG())
         row[step] = {
           status: 'skipped' in evidence ? String(evidence.skipped) : '通过',

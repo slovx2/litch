@@ -1,6 +1,10 @@
 import { type DeviceView, keys, type WorkspaceView } from '@litch/core'
 import { useState } from 'react'
-import type { ManagerDraft, ManagerTemplate } from '../../../core/src/model-manager.mts'
+import type {
+  ManagerDraft,
+  ManagerTemplate,
+  ManagerView,
+} from '../../../core/src/model-manager.mts'
 import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
@@ -48,11 +52,15 @@ export function ManagerForm({
   initial,
   onCancel,
   onCreated,
+  manager,
+  disabled = false,
 }: {
   devices: DeviceView[]
   initial: Extract<ManagersRoute, { view: 'new' }>
   onCancel(): void
   onCreated(selection: Selection): void
+  manager?: ManagerView
+  disabled?: boolean
 }) {
   const t = useT()
   const { channel } = useServices()
@@ -66,6 +74,7 @@ export function ManagerForm({
   )
   const workspace = workspaces.find((entry) => entry.id === workspaceId)
   const [form, setForm] = useState<ManagerDraft>(() => {
+    if (manager) return { ...manager, firstTask: '' }
     const last = remembered(deviceId)
     return {
       name: '',
@@ -85,10 +94,22 @@ export function ManagerForm({
       firstTask: '',
     }
   })
-  const [edited, setEdited] = useState(false)
+  // 设备没有记录规矩是否手写；编辑已有经理时始终保留原文，不重新拼接。
+  const [edited, setEdited] = useState(Boolean(manager))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const options = useComposeOptions(deviceId, form.harness || undefined)
+  const lineOptions = useComposeOptions(deviceId, form.dispatch.harness ?? form.harness)
+  const sameHarness = !form.dispatch.harness || form.dispatch.harness === form.harness
+  const lineModel = lineOptions?.models.find((entry) =>
+    form.dispatch.model
+      ? entry.id === form.dispatch.model
+      : !sameHarness
+        ? entry.isDefault
+        : form.model
+          ? entry.id === form.model
+          : entry.isDefault,
+  )
   const model = options?.models.find((entry) =>
     form.model ? entry.id === form.model : entry.isDefault,
   )
@@ -107,19 +128,35 @@ export function ManagerForm({
     setError('')
   }
   const save = async () => {
-    if (busy) return
+    if (busy || disabled) return
     if (
       !form.scope.trim() ||
       !cwd.trim() ||
-      !device?.harnesses.some((entry) => entry.id === form.harness && entry.state === 'ready') ||
+      (!manager &&
+        !device?.harnesses.some((entry) => entry.id === form.harness && entry.state === 'ready')) ||
       !Number.isInteger(form.dispatch.maxRunningLines) ||
       form.dispatch.maxRunningLines < 1
     ) {
-      setError(t('manager.required'))
+      setError(t(manager ? 'manager.updateRequired' : 'manager.required'))
       return
     }
     setBusy(true)
     try {
+      if (manager) {
+        await channel.command('managers.update', {
+          deviceId,
+          managerId: manager.id,
+          patch: {
+            name: form.name,
+            scope: form.scope.trim(),
+            rules,
+            dispatch: form.dispatch,
+            contact: form.contact,
+          },
+        })
+        onCreated({ deviceId, sessionId: manager.threadId })
+        return
+      }
       const result = await channel.command('managers.create', {
         deviceId,
         manager: { ...form, scope: form.scope.trim(), cwd: cwd.trim(), rules },
@@ -145,26 +182,29 @@ export function ManagerForm({
     <form
       className="mng-wrap mg-form"
       data-manager="form"
+      data-manager-mode={manager ? 'edit' : 'create'}
       onSubmit={(event) => {
         event.preventDefault()
         void save()
       }}
     >
-      <fieldset className="mg-fields" disabled={busy}>
+      <fieldset className="mg-fields" disabled={busy || disabled}>
         <section className="mng-sec">
-          <label className="form-field">
-            {t('manager.template')}
-            <select
-              value={form.template}
-              onChange={(event) => change({ template: event.target.value as ManagerTemplate })}
-            >
-              {templates.map((template) => (
-                <option key={template} value={template}>
-                  {t(`manager.${template}`)}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!manager ? (
+            <label className="form-field">
+              {t('manager.template')}
+              <select
+                value={form.template}
+                onChange={(event) => change({ template: event.target.value as ManagerTemplate })}
+              >
+                {templates.map((template) => (
+                  <option key={template} value={template}>
+                    {t(`manager.${template}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className="form-field">
             {t('manager.name')}
             <input
@@ -187,105 +227,127 @@ export function ManagerForm({
           </label>
         </section>
         <section className="mng-sec mg-form-grid">
-          <label className="form-field">
-            {t('manager.device')}
-            <select
-              value={deviceId}
-              onChange={(event) => {
-                const id = event.target.value
-                const next = devices.find((entry) => entry.id === id)
-                const last = remembered(id)
-                setDeviceId(id)
-                setWorkspaceId('')
-                change({
-                  cwd: '',
-                  harness:
-                    next?.harnesses.find(
-                      (entry) => entry.state === 'ready' && entry.id === last.harness,
-                    )?.id ??
-                    next?.harnesses.find((entry) => entry.state === 'ready')?.id ??
-                    '',
-                  model: last.model ?? null,
-                  effort: last.effort ?? null,
-                })
-              }}
-            >
-              {devices.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {t.text(entry.name)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="form-field">
-            {t('manager.workspace')}
-            <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
-              <option value="">{t('workspace.none')}</option>
-              {workspaces.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="form-field">
-            {t('manager.cwd')}
-            <input
-              className="req-input"
-              required
-              value={cwd}
-              readOnly={Boolean(workspace)}
-              onChange={(event) => change({ cwd: event.target.value })}
-            />
-          </label>
-          <label className="form-field">
-            {t('manager.harness')}
-            <select
-              value={form.harness}
-              onChange={(event) =>
-                change({ harness: event.target.value, model: null, effort: null })
-              }
-            >
-              {device?.harnesses
-                .filter((entry) => entry.state === 'ready')
-                .map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.name}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <label className="form-field">
-            {t('manager.model')}
-            <select
-              value={form.model ?? ''}
-              onChange={(event) => change({ model: event.target.value || null, effort: null })}
-            >
-              <option value="">{t('manager.default')}</option>
-              {options?.models.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.title}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="form-field">
-            {t('manager.effort')}
-            <select
-              value={form.effort ?? ''}
-              onChange={(event) => change({ effort: event.target.value || null })}
-            >
-              <option value="">{t('manager.default')}</option>
-              {model?.efforts.map((entry) => {
-                const label = EFFORT_TEXT[entry.id]
-                return (
-                  <option key={entry.id} value={entry.id}>
-                    {label ? t(label) : entry.id}
-                  </option>
-                )
-              })}
-            </select>
-          </label>
+          {manager ? (
+            (
+              [
+                ['manager.device', device ? t.text(device.name) : manager.deviceId],
+                ['manager.cwd', manager.cwd],
+                ['manager.harness', nameOf(device, manager.harness)],
+                ['manager.model', manager.model ?? t('manager.default')],
+                ['manager.effort', manager.effort ?? t('manager.default')],
+              ] as const
+            ).map(([label, value]) => (
+              <div className="form-field" key={label}>
+                <span>{t(label)}</span>
+                <span className="mg-fixed">{value}</span>
+              </div>
+            ))
+          ) : (
+            <>
+              <label className="form-field">
+                {t('manager.device')}
+                <select
+                  value={deviceId}
+                  onChange={(event) => {
+                    const id = event.target.value
+                    const next = devices.find((entry) => entry.id === id)
+                    const last = remembered(id)
+                    setDeviceId(id)
+                    setWorkspaceId('')
+                    change({
+                      cwd: '',
+                      harness:
+                        next?.harnesses.find(
+                          (entry) => entry.state === 'ready' && entry.id === last.harness,
+                        )?.id ??
+                        next?.harnesses.find((entry) => entry.state === 'ready')?.id ??
+                        '',
+                      model: last.model ?? null,
+                      effort: last.effort ?? null,
+                    })
+                  }}
+                >
+                  {devices.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {t.text(entry.name)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="form-field">
+                {t('manager.workspace')}
+                <select
+                  value={workspaceId}
+                  onChange={(event) => setWorkspaceId(event.target.value)}
+                >
+                  <option value="">{t('workspace.none')}</option>
+                  {workspaces.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="form-field">
+                {t('manager.cwd')}
+                <input
+                  className="req-input"
+                  required
+                  value={cwd}
+                  readOnly={Boolean(workspace)}
+                  onChange={(event) => change({ cwd: event.target.value })}
+                />
+              </label>
+              <label className="form-field">
+                {t('manager.harness')}
+                <select
+                  value={form.harness}
+                  onChange={(event) =>
+                    change({ harness: event.target.value, model: null, effort: null })
+                  }
+                >
+                  {device?.harnesses
+                    .filter((entry) => entry.state === 'ready')
+                    .map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="form-field">
+                {t('manager.model')}
+                <select
+                  value={form.model ?? ''}
+                  onChange={(event) => change({ model: event.target.value || null, effort: null })}
+                >
+                  <option value="">{t('manager.default')}</option>
+                  {options?.models.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="form-field">
+                {t('manager.effort')}
+                <select
+                  value={form.effort ?? ''}
+                  onChange={(event) => change({ effort: event.target.value || null })}
+                >
+                  <option value="">{t('manager.default')}</option>
+                  {model?.efforts.map((entry) => {
+                    const label = EFFORT_TEXT[entry.id]
+                    return (
+                      <option key={entry.id} value={entry.id}>
+                        {label ? t(label) : entry.id}
+                      </option>
+                    )
+                  })}
+                </select>
+              </label>
+            </>
+          )}
         </section>
         <section className="mng-sec">
           <h2>{t('manager.dispatch')}</h2>
@@ -312,6 +374,53 @@ export function ManagerForm({
                     {entry.name}
                   </option>
                 ))}
+            </select>
+          </label>
+          <label className="form-field">
+            {t('manager.lineModel')}
+            <select
+              value={form.dispatch.model ?? ''}
+              onChange={(event) =>
+                change({
+                  dispatch: { ...form.dispatch, model: event.target.value || null, effort: null },
+                })
+              }
+            >
+              <option value="">{t(sameHarness ? 'manager.same' : 'manager.default')}</option>
+              {form.dispatch.model &&
+              !lineOptions?.models.some((entry) => entry.id === form.dispatch.model) ? (
+                <option value={form.dispatch.model}>{form.dispatch.model}</option>
+              ) : null}
+              {lineOptions?.models.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="form-field">
+            {t('manager.lineEffort')}
+            <select
+              value={form.dispatch.effort ?? ''}
+              onChange={(event) =>
+                change({
+                  dispatch: { ...form.dispatch, effort: event.target.value || null },
+                })
+              }
+            >
+              <option value="">{t(sameHarness ? 'manager.same' : 'manager.default')}</option>
+              {form.dispatch.effort &&
+              !lineModel?.efforts.some((entry) => entry.id === form.dispatch.effort) ? (
+                <option value={form.dispatch.effort}>{form.dispatch.effort}</option>
+              ) : null}
+              {lineModel?.efforts.map((entry) => {
+                const label = EFFORT_TEXT[entry.id]
+                return (
+                  <option key={entry.id} value={entry.id}>
+                    {label ? t(label) : entry.id}
+                  </option>
+                )
+              })}
             </select>
           </label>
           <label className="form-check">
@@ -369,16 +478,18 @@ export function ManagerForm({
           </label>
           <p className="dim">{t('manager.unanswered')}</p>
         </section>
-        <label className="form-field">
-          {t('manager.firstTask')}
-          <textarea
-            className="req-input"
-            rows={3}
-            value={form.firstTask}
-            placeholder={t('manager.firstPlaceholder')}
-            onChange={(event) => change({ firstTask: event.target.value })}
-          />
-        </label>
+        {!manager ? (
+          <label className="form-field">
+            {t('manager.firstTask')}
+            <textarea
+              className="req-input"
+              rows={3}
+              value={form.firstTask}
+              placeholder={t('manager.firstPlaceholder')}
+              onChange={(event) => change({ firstTask: event.target.value })}
+            />
+          </label>
+        ) : null}
       </fieldset>
       <section className="mg-rules mng-sec">
         <div className="mg-rules-head">
@@ -396,13 +507,17 @@ export function ManagerForm({
             </button>
           ) : null}
         </div>
-        {edited ? <p className="form-note">{t('manager.rulesEdited')}</p> : null}
+        {edited ? (
+          <p className="form-note">
+            {t(manager ? 'manager.rulesPreserved' : 'manager.rulesEdited')}
+          </p>
+        ) : null}
         <textarea
           aria-label={t('manager.rules')}
           className="req-input"
           value={rules}
           readOnly={!edited}
-          disabled={busy}
+          disabled={busy || disabled}
           rows={20}
           onChange={(event) => change({ rules: event.target.value })}
         />
@@ -420,10 +535,18 @@ export function ManagerForm({
         <button
           type="submit"
           className="btn primary"
-          disabled={busy || !device}
-          title={!device ? t('manager.noDevice') : undefined}
+          disabled={busy || disabled || !device}
+          title={disabled ? t('manager.offline') : !device ? t('manager.noDevice') : undefined}
         >
-          {t(busy ? 'manager.creating' : 'manager.create')}
+          {t(
+            manager
+              ? busy
+                ? 'manager.saving'
+                : 'manager.save'
+              : busy
+                ? 'manager.creating'
+                : 'manager.create',
+          )}
         </button>
       </footer>
     </form>
