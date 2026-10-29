@@ -17,3 +17,5 @@ UI 直接依赖版本固定在 package.json，安装树固定在 lock。DOCX Apa
 - `node --test packages/ui/test/office.test.mjs`：炸弹（声明/实际）、CRC/路径、宏/实体、XML深度、坐标/合并/单元格预算、日期/字符串/公式。
 - `node scripts/check-office-preview.mjs`：生产构建/CSP + headless Chrome，真实文件面板；opaque父页隔离、脚本/事件不执行、外链不请求、页眉页脚、虚拟滚动、sheet切换、取消释放、三皮肤深浅及760宽。报告在 `.local/office-preview-check/`。
 - `node scripts/check-office-electron.mjs <上一步的assets目录>`：macOS 隐藏 Electron，真实 `app://ui` 加载。自动编译无窗口采样器，启动前/运行中查可见窗口和焦点，出现测试窗口立即终止进程树；只用临时 HOME/profile，退出检查残留。跑前仍遵守本机前台协调要求。
+
+解析补充：XLSX 的命名区域、数据验证、列定义和打印范围也可能引发 ExcelJS 扩展出巨大集合；因此在交库前用 SAX 删除这些不用于文字预览的子树，只提供 workbook/styles/sharedStrings/worksheet 等必要部件。sheetId 限于1–1000且不重复。单元格输出另按 UTF-16 文本累计计8 MiB，防止100,000个单元格反复引用同一条大 sharedString。ZIP 压缩输入每次只喂1 KiB，解码器不能在下一次JS计数前展开整块压缩数据。

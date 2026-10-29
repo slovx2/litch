@@ -154,7 +154,8 @@ explain it:
   remain strings; numeric cells retain the precision saved by Excel.
   Both formats are limited to 10 MiB compressed and 40 MiB expanded, with additional XML/image
   complexity limits. XLSX accepts at most 100,000 cells in total, 100 sheets, 1,000 merge ranges,
-  and 10,000 rows / 200 columns per sheet; files beyond these limits show an explanation. Closing,
+  8 MiB of cell text, and 10,000 rows / 200 columns per sheet; files beyond these limits show an explanation. Named ranges,
+  validation rules and print settings are omitted before parsing. Closing,
   switching or refreshing the file terminates its parser and releases its preview. `.doc`, `.xls`,
   `.ppt` and `.pptx` remain unsupported; phone file viewing is unchanged.
 - **Side chat**: a temporary fork of the current session for asking something on the side. It starts

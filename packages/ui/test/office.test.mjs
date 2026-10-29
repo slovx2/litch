@@ -88,3 +88,52 @@ test('XLSX：真实 XML 属性解析拦坐标/合并炸弹，假属性文本和�
   ])
     assert.throws(() => check(xml))
 })
+
+test('XLSX：巨型命名区域、数据验证、列定义不进入 ExcelJS 展开路径', async () => {
+  const parts = await unpack(await xlsx())
+  const enc = new TextEncoder(),
+    dec = new TextDecoder()
+  for (const part of parts) {
+    let xml = dec.decode(part.bytes)
+    if (part.name === 'xl/workbook.xml')
+      xml = xml.replace(
+        '</workbook>',
+        '<definedNames><definedName name="EntireBook">数据表!$A$1:$XFD$1048576</definedName></definedNames></workbook>',
+      )
+    if (part.name === 'xl/worksheets/sheet1.xml')
+      xml = xml.replace(
+        '</worksheet>',
+        '<cols><col min="1" max="4294967295" width="10"/></cols><dataValidations><dataValidation sqref="A1:XFD1048576" type="whole"><formula1>0</formula1></dataValidation></dataValidations></worksheet>',
+      )
+    if (part.name.endsWith('.xml')) part.bytes = enc.encode(xml)
+  }
+  const result = await spreadsheet(parts)
+  assert.equal(result.sheets[0].cells['3:2'], '42')
+  assert.throws(
+    () =>
+      checkSheets([
+        {
+          name: 'xl/workbook.xml',
+          bytes: enc.encode('<workbook><sheets><sheet sheetId="4294967295"/></sheets></workbook>'),
+        },
+      ]),
+    /budget/,
+  )
+})
+
+test('XLSX：共享字符串重复引用的输出文本也有累计预算', async () => {
+  const parts = await unpack(await xlsx()),
+    enc = new TextEncoder()
+  const strings = parts.find((p) => p.name === 'xl/sharedStrings.xml')
+  const sheet = parts.find((p) => p.name === 'xl/worksheets/sheet1.xml')
+  // 保留其他索引，第二张表仍引用原来的 sharedStrings，避免夹具先因悬空索引损坏。
+  strings.bytes = enc.encode(
+    new TextDecoder()
+      .decode(strings.bytes)
+      .replace(/<t>[^<]*<\/t>/, `<t>${'x'.repeat(100_000)}</t>`),
+  )
+  sheet.bytes = enc.encode(
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${Array.from({ length: 50 }, (_, i) => `<row r="${i + 1}"><c r="A${i + 1}" t="s"><v>0</v></c></row>`).join('')}</sheetData></worksheet>`,
+  )
+  await assert.rejects(spreadsheet(parts), /budget/)
+})

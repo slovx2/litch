@@ -2,7 +2,7 @@ import ExcelJS from 'exceljs/dist/exceljs.min.js'
 import JSZip from 'jszip'
 import { OfficeFailure, type Part } from './archive.ts'
 import type { SheetData, WorkbookData } from './model.ts'
-import { scanXml } from './xml.ts'
+import { scanXml, withoutXmlNodes } from './xml.ts'
 
 const ROWS = 10_000,
   COLUMNS = 200,
@@ -29,6 +29,15 @@ export function checkSheets(parts: Part[]): void {
   for (const part of parts) {
     if (!part.name.endsWith('.xml')) continue
     const xml = new TextDecoder().decode(part.bytes)
+    if (part.name === 'xl/workbook.xml') {
+      const ids = new Set<number>()
+      scanXml(xml, (tag) => {
+        if (tag.local !== 'sheet') return
+        const id = Number(tag.attributes.sheetId?.value)
+        if (!Number.isInteger(id) || id < 1 || id > 1000 || ids.has(id) || ids.size >= 100) reject()
+        ids.add(id)
+      })
+    }
     if (part.name === 'xl/sharedStrings.xml') {
       scanXml(xml, (tag) => {
         if (tag.local === 'si' && ++strings > CELLS) reject()
@@ -97,18 +106,44 @@ function cellText(cell: ExcelJS.Cell): string {
 export async function spreadsheet(parts: Part[]): Promise<WorkbookData> {
   checkSheets(parts)
   const zip = new JSZip()
-  // 不向 ExcelJS 提供图片、外链、嵌入对象或绘图。数据单元格里的链接仅取显示文字。
+  const omitted = new Set([
+    'definedNames',
+    'cols',
+    'dataValidations',
+    'conditionalFormatting',
+    'hyperlinks',
+    'extLst',
+    'drawing',
+    'picture',
+    'tableParts',
+    'sheetProtection',
+    'rowBreaks',
+    'colBreaks',
+    'pageSetup',
+    'pageMargins',
+    'headerFooter',
+    'autoFilter',
+  ])
+  // 只给库数据预览需要的部件，避免 Node/打印/图片及其他格式功能扩大解析面。
   for (const part of parts) {
-    if (/^xl\/(media|drawings|externalLinks|embeddings)\//.test(part.name)) continue
-    zip.file(part.name, part.bytes)
+    if (
+      !/^(?:\[Content_Types\]\.xml|_rels\/\.rels|xl\/(?:workbook\.xml|_rels\/workbook\.xml\.rels|styles\.xml|sharedStrings\.xml|worksheets\/[^/]+\.xml))$/.test(
+        part.name,
+      )
+    )
+      continue
+    if (part.name === 'xl/workbook.xml' || part.name.startsWith('xl/worksheets/'))
+      zip.file(part.name, withoutXmlNodes(new TextDecoder().decode(part.bytes), omitted))
+    else zip.file(part.name, part.bytes)
   }
   const bytes = await zip.generateAsync({ type: 'arraybuffer', compression: 'STORE' })
   const book = new ExcelJS.Workbook()
   await book.xlsx.load(bytes, {
-    ignoreNodes: ['drawing', 'picture', 'extLst', 'conditionalFormatting'],
+    ignoreNodes: [...omitted],
   })
   const sheets: SheetData[] = []
-  let count = 0
+  let count = 0,
+    textBytes = 0
   for (const sheet of book.worksheets) {
     if (sheet.rowCount > ROWS || sheet.columnCount > COLUMNS) reject()
     const cells: Record<string, string> = Object.create(null)
@@ -118,6 +153,9 @@ export async function spreadsheet(parts: Part[]): Promise<WorkbookData> {
         if (!cell.isMerged || cell.master.address === cell.address) {
           const value = cellText(cell)
           if (value.length > 100_000) reject()
+          textBytes += value.length * 2
+          // sharedStrings 可由大量单元格重复引用；返回前按展开后的文本累计计费。
+          if (textBytes > 8 * 1024 * 1024) reject()
           cells[`${row.number}:${cell.col}`] = value
         }
       }),

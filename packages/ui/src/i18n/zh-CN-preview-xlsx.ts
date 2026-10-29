@@ -5,7 +5,7 @@ export const zhPreviewXlsx = {
   'preview.xlsx.sheets': '工作表',
   'preview.xlsx.invalid': '工作簿损坏、已加密或格式不受支持。',
   'preview.xlsx.budget':
-    '工作簿超出预览上限：10 MiB 文件、40 MiB 展开内容、100,000 个单元格，每表 10,000 行、200 列。',
+    '工作簿超出预览上限：10 MiB 文件、40 MiB 展开内容、8 MiB 文本、100,000 个单元格，每表 10,000 行、200 列，或其他内容复杂度上限。',
   'preview.xlsx.active': '工作簿包含宏或不支持的主动内容，无法预览。',
   'preview.xlsx.timeout': '工作簿处理超时，请使用其他应用查看。',
 } as const

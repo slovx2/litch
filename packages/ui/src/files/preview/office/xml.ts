@@ -21,3 +21,44 @@ export function scanXml(xml: string, visit: (tag: SaxesTagNS) => void = () => {}
   parser.write(xml).close()
   return nodes
 }
+
+/** 删除不参与数据预览的子树；用 SAX 重新编码，不能让嵌套标签/属性实体绕过删除。 */
+export function withoutXmlNodes(xml: string, omitted: ReadonlySet<string>): string {
+  const parser = new SaxesParser({ xmlns: true })
+  const output: string[] = []
+  const encode = (text: string) =>
+    text
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+  let hidden = 0
+  parser.on('opentag', (tag) => {
+    if (hidden || omitted.has(tag.local)) {
+      hidden++
+      return
+    }
+    output.push(
+      `<${tag.name}${Object.values(tag.attributes)
+        .map((attr) => ` ${attr.name}="${encode(attr.value)}"`)
+        .join('')}>`,
+    )
+  })
+  parser.on('closetag', (tag) => {
+    if (hidden) {
+      hidden--
+      return
+    }
+    output.push(`</${tag.name}>`)
+  })
+  const text = (value: string) => {
+    if (!hidden) output.push(encode(value))
+  }
+  parser.on('text', text)
+  parser.on('cdata', text)
+  parser.on('doctype', () => {
+    throw new OfficeFailure('active')
+  })
+  parser.write(xml).close()
+  return output.join('')
+}
