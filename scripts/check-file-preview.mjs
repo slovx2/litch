@@ -163,6 +163,46 @@ try {
   )
   report.checks.push('文档链接：空格、跨根和编码 scheme')
   await until(() => evaluate('document.querySelector(".mmd-fig svg") !== null'), 'Mermaid', 30000)
+  const diagramSize = `(() => {
+    const svg = document.querySelector('.fp-document .mmd-fig svg');
+    return {
+      font: getComputedStyle(svg.querySelector('text')).fontSize,
+      box: svg.getAttribute('viewBox'),
+      body: getComputedStyle(document.querySelector('.fp-document p')).fontSize
+    };
+  })()`
+  const normalDiagram = await evaluate(diagramSize)
+  await evaluate(`window.previewDiagram = document.querySelector('.fp-document .mmd-fig svg');
+    window.__litchLook.set({chatText: 1.5})`)
+  await new Promise((resolve) => setTimeout(resolve, 400))
+  assert.deepEqual(await evaluate(diagramSize), normalDiagram)
+  assert(
+    await evaluate('window.previewDiagram === document.querySelector(".fp-document .mmd-fig svg")'),
+    '对话字号变化不得重画文件预览 Mermaid',
+  )
+  await evaluate(`window.previewCheck.markdown('docs/images/font-scale.md',
+    '# 字号验收\\n\\n正文\\n\\n\x60\x60\x60mermaid\\ngraph LR\\n A[字体测试] --> B[固定字号]\\n\x60\x60\x60')`)
+  await until(
+    () =>
+      evaluate(
+        'document.querySelector(".fp-document h1")?.textContent === "字号验收" && !!document.querySelector(".mmd-fig svg")',
+      ),
+    '放大对话字号后首次打开文档图表',
+  )
+  const enlargedSettingDiagram = await evaluate(diagramSize)
+  assert.equal(enlargedSettingDiagram.font, normalDiagram.font)
+  await evaluate('window.__litchLook.set({chatText: 1})')
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  assert.deepEqual(await evaluate(diagramSize), enlargedSettingDiagram)
+  report.checks.push('Mermaid 文档字号固定：100%/150% 切换不重画，150% 首次打开仍为默认尺寸')
+  await evaluate(`window.previewCheck.open('docs/images/preview.md')`)
+  await until(
+    () =>
+      evaluate(
+        'document.querySelector(".fp-document h1")?.textContent === "文件预览" && !!document.querySelector(".mmd-fig svg")',
+      ),
+    '恢复文档图表',
+  )
   await evaluate('document.querySelector(".fp-document").scrollTop = 10000')
   await until(
     () => evaluate('document.querySelector(".fp-inline-image")?.naturalWidth > 0'),

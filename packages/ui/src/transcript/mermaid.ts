@@ -164,10 +164,11 @@ const darkQuery = (): MediaQueryList | null =>
   typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null
 
 /** 皮肤、对话字号、明暗组成缓存键；字号变了也要按新的文字尺寸重排图。 */
-function currentLook(): string {
+function currentLook(bounded = false): string {
   const root = document.documentElement
   const theme = root.dataset.theme ?? (darkQuery()?.matches ? 'dark' : 'light')
-  const scale = root.style.getPropertyValue('--fs-chat').trim() || '1'
+  // 文件侧面板与文档正文一样固定字号，不跟随对话区设置，也不因此重画。
+  const scale = bounded ? '1' : root.style.getPropertyValue('--fs-chat').trim() || '1'
   return `${root.dataset.skin ?? ''}:${scale}:${theme}`
 }
 
@@ -181,4 +182,6 @@ function subscribe(listener: () => void): () => void {
   }
 }
 
-export const useLook = (): string => useSyncExternalStore(subscribe, currentLook)
+const documentLook = (): string => currentLook(true)
+export const useLook = (bounded = false): string =>
+  useSyncExternalStore(subscribe, bounded ? documentLook : currentLook)

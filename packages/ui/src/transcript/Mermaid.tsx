@@ -26,7 +26,7 @@ export const MermaidBlock = memo(function MermaidBlock({
   bounded = false,
 }: MermaidBlockProps) {
   const t = useT()
-  const look = useLook()
+  const look = useLook(bounded)
   const [source, setSource] = useState(false)
   const [zoomed, setZoomed] = useState(false)
   const [drawn, setDrawn] = useState<Drawn | null>(null)
