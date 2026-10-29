@@ -210,7 +210,8 @@ export async function startRuntime(options, writer, registerCleanup) {
   mkdirSync(env.CHA_CLAUDE_HOME, { recursive: true })
   mkdirSync(env.TMPDIR, { recursive: true })
   mkdirSync(env.CLAUDE_CODE_TMPDIR, { recursive: true })
-  // 默认档位给所有经理和线；写权限限于本次沙箱，状态/密钥目录禁止模型工具读取。
+  // 默认档位给所有经理和线；写权限限于本次沙箱，密钥所在的引擎状态目录和 CLI 配置目录禁止模型工具读取。
+  // 不整个禁掉临时根目录：工作树在它下面，命令的工作目录有被禁读的上级时 node 启动即中止、mkdir -p 也失败。
   const overrides = {
     approval_policy: 'on-request',
     default_permissions: 'role-eval',
@@ -218,7 +219,8 @@ export async function startRuntime(options, writer, registerCleanup) {
       'role-eval': {
         filesystem: {
           ':root': 'read',
-          [root]: 'deny',
+          [env.CHA_CLAUDE_HOME]: 'deny',
+          [paths.claude]: 'deny',
           [work]: 'write',
           [paths.worktrees]: 'write',
         },
