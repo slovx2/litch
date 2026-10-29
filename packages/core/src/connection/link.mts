@@ -17,6 +17,7 @@ import type { Clock } from '../channel/protocol.mjs'
 import type { ConnectGuide, ConnectStage } from '../model.mjs'
 import { phrase, type Text } from '../phrase.mjs'
 import type { CoreTrace } from '../trace.mjs'
+import type { ManagerRequests } from './manager-protocol.mjs'
 import { createRpc, type Rpc, RpcAbortError, RpcError, type RpcRequestOptions } from './rpc.mjs'
 import { ConnectError, type TransportOpener, toConnectError } from './transport.mjs'
 
@@ -82,11 +83,11 @@ export interface Link {
   stop(): void
   /** 暂时关闭连接并禁止重试；恢复不重开健康连接，也不销毁设备的缓存与订阅。 */
   setPaused(paused: boolean): void
-  request<M extends ClientRequestMethod>(
+  request<M extends ClientRequestMethod | keyof ManagerRequests>(
     method: M,
-    params: ClientRequests[M]['params'],
+    params: (ClientRequests & ManagerRequests)[M]['params'],
     options?: RpcRequestOptions,
-  ): Promise<ClientRequests[M]['result']>
+  ): Promise<(ClientRequests & ManagerRequests)[M]['result']>
 }
 
 const DEFAULT_BACKOFF = [500, 1000, 2000, 5000, 10_000, 30_000]
@@ -210,6 +211,7 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.planConfirmation,
                 // deviceTasks：声明了才收得到定时任务和运行的变化通知（litch/task/changed、litch/task/run/changed）
                 EXTENSION.deviceTasks,
+                EXTENSION.manager,
                 // sessionTree：声明了，会话对象上才有 Litch 子会话的 litchLineage，才收得到父子关系、提案变了的通知
                 EXTENSION.sessionTree,
                 // devicePairing：声明了才收得到配对状态和已绑定手机的变化通知（litch/pair/changed、litch/pair/phones/changed）

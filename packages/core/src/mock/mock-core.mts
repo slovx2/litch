@@ -46,6 +46,7 @@ import type { TerminalsAlive } from '../model-terminal.mjs'
 import type { SessionEventView } from '../model-tree.mjs'
 import { phrase } from '../phrase.mjs'
 import { projectItem } from '../projection/items.mjs'
+import { managerMark } from '../projection/manager.mjs'
 import { localUserMessage, outgoing } from '../projection/outgoing.mjs'
 import { peekOf } from '../projection/peek.mjs'
 import { settleAnswers } from '../projection/questions.mjs'
@@ -66,13 +67,14 @@ import { createMockInstall } from './mock-install.mjs'
 import { mockAccountLimits } from './mock-limits.mjs'
 import { createMockMachine } from './mock-machine.mjs'
 import { createMockManagement } from './mock-manage.mjs'
+import { createMockManagers } from './mock-manager.mjs'
 import { createMockPairing } from './mock-pairing.mjs'
 import { createMockPeer } from './mock-peer.mjs'
 import { createMockRemoteUpgrade } from './mock-remote-upgrade.mjs'
 import { createMockRestart } from './mock-restart.mjs'
 import { createMockService } from './mock-service.mjs'
 import { createMockSystem } from './mock-system.mjs'
-import { createMockTasks } from './mock-tasks.mjs'
+import { createMockTasks, type MockTasksHost } from './mock-tasks.mjs'
 import { createMockTerminals } from './mock-terminals.mjs'
 import { createMockTree } from './mock-tree.mjs'
 import { createMockWorktrees, shownOf } from './mock-worktrees.mjs'
@@ -621,6 +623,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       sessions.set(key, view)
     }
     // 归档着的只能看；放回来之后（见 session.unarchive）才又能发消息
+    if (managers.ended(deviceId, sessionId)) {
+      view.live = false
+      view.note = phrase('session.readOnly')
+    }
     if (isShelved(deviceId, sessionId)) {
       view.live = false
       view.note = phrase('session.archived')
@@ -1860,7 +1866,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   })
 
   // ---------- 定时任务（mock-tasks.mts） ----------
-  const tasks = createMockTasks({
+  const tasksHost: MockTasksHost = {
     clock,
     stepMs: chunkMs,
     lang,
@@ -1969,6 +1975,25 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         updatedAt: clock.now(),
         ...(watched ? {} : { unread: true }),
       })
+    },
+  }
+  const tasks = createMockTasks(tasksHost)
+  const managers = createMockManagers({
+    ...tasksHost,
+    add(deviceId, session) {
+      sidebars.get(deviceId)?.sessions.push(session)
+      emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session }])
+    },
+    mark(deviceId, threadId, manager) {
+      const marked = {
+        title: manager.name || manager.scope,
+        litchManager: { managerId: manager.id, role: 'manager' as const },
+      }
+      updateSummary(deviceId, threadId, marked)
+      if (manager.status === 'ended') {
+        const view = loadSession(deviceId, threadId)
+        applySessionOps(view, [{ op: 'session.state', live: false, note: null }])
+      }
     },
   })
   // 一开始就跟定时任务有关的示例会话：侧栏那几行带着记号
@@ -2083,6 +2108,14 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       sidebars.get(deviceId)?.sessions.find((session) => session.id === sessionId),
     summaries: (deviceId) => sidebars.get(deviceId)?.sessions ?? [],
     addSummary(deviceId, summary) {
+      const parent = sidebars
+        .get(deviceId)
+        ?.sessions.find((session) => session.id === summary.lineage?.parentId)
+      const mark = parent ? managerMark(parent) : null
+      if (mark)
+        summary = Object.assign({}, summary, {
+          litchManager: { managerId: mark.managerId, role: 'line' as const },
+        })
       sidebars.get(deviceId)?.sessions.push(summary)
       emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session: summary }])
     },
@@ -2598,6 +2631,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       }
       const tuned = harnessConfig.command(name, params)
       if (tuned !== undefined) return tuned
+      const managerResult = managers.command(name, params)
+      if (managerResult) return managerResult
       const scheduled = tasks.command(name, params)
       if (scheduled !== undefined) return scheduled
       const paired = pairing.command(name, params)
@@ -3289,6 +3324,9 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       // 08 号：远程会话在这台电脑上的动静（mock-machine.mts）
       if (topic.kind === 'machine') return machine.subscribe(sink)
       // 定时任务（mock-tasks.mts）
+      if (topic.kind === 'managers') return managers.subscribe(topic.deviceId, sink)
+      if (topic.kind === 'managerBoard')
+        return managers.subscribe(topic.deviceId, sink, topic.managerId)
       if (topic.kind === 'tasks') return tasks.subscribe(topic.deviceId, sink)
       // 扫码绑定手机（mock-pairing.mts）
       if (topic.kind === 'pairing') return pairing.subscribe(topic.deviceId, sink)

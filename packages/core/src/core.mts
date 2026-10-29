@@ -1191,7 +1191,29 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId } = params as Commands['diff.requests']['params']
           return deviceOf(deviceId).diffs.requests()
         }
-        // 定时任务。出错的原因任务模块自己已经换成界面能用的了，原样过去
+        // 经理与定时任务：各模块把设备结果转换为界面形状。
+        case 'managers.create': {
+          const { deviceId, manager } = params as Commands['managers.create']['params']
+          return await deviceOf(deviceId).managers.create(manager)
+        }
+        case 'managers.update': {
+          const { deviceId, managerId, patch } = params as Commands['managers.update']['params']
+          return await deviceOf(deviceId).managers.update(managerId, patch)
+        }
+        case 'managers.end': {
+          const { deviceId, managerId } = params as Commands['managers.end']['params']
+          return await deviceOf(deviceId).managers.end(managerId)
+        }
+        case 'managers.answers.submit': {
+          const { deviceId, managerId, answers } =
+            params as Commands['managers.answers.submit']['params']
+          return await deviceOf(deviceId).managers.submit(managerId, answers)
+        }
+        case 'managers.decision.reopen': {
+          const { deviceId, managerId, decisionId } =
+            params as Commands['managers.decision.reopen']['params']
+          return await deviceOf(deviceId).managers.reopen({ managerId, decisionId })
+        }
         case 'tasks.create': {
           const { deviceId, task } = params as Commands['tasks.create']['params']
           return { task: await deviceOf(deviceId).tasks.create(task) }
@@ -1564,7 +1586,9 @@ export function createCore(options: CoreOptions): Core {
       if (topic.kind === 'diff') {
         return device.diffs.open(topic.root, topic.scope, topic.sessionId ?? null, sink)
       }
-      // 定时任务：设备没连上时给上次知道的，不支持时 available 是 false
+      // 经理与定时任务：断线保留快照，不支持时 available 是 false
+      if (topic.kind === 'managers') return device.managers.open(sink)
+      if (topic.kind === 'managerBoard') return device.managers.openBoard(topic.managerId, sink)
       if (topic.kind === 'tasks') return device.tasks.open(sink)
       if (topic.kind === 'pairing') return device.pairing.open(sink)
       // 手机批准：设备不支持时 available 是 false，照样成立
