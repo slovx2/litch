@@ -314,7 +314,12 @@ export function Decisions({
       {answers.length ? (
         <footer className="mg-send">
           <span className="grow">{t('manager.unsent', { n: answers.length })}</span>
-          <button type="button" className="btn ghost" disabled={busy} onClick={() => save({})}>
+          <button
+            type="button"
+            className="btn ghost"
+            disabled={disabled || busy}
+            onClick={() => save({})}
+          >
             {t('manager.clear')}
           </button>
           <button
@@ -326,7 +331,13 @@ export function Decisions({
               conflict
                 ? t('manager.conflict')
                 : disabled
-                  ? t(manager.status === 'ended' ? 'manager.readOnly' : 'manager.offline')
+                  ? t(
+                      manager.status === 'active'
+                        ? 'manager.offline'
+                        : manager.status === 'ending'
+                          ? 'manager.endingNote'
+                          : 'manager.readOnly',
+                    )
                   : undefined
             }
             onClick={() => void submit()}

@@ -40,7 +40,9 @@ export function ManagerPage({
     items: (pages?.overview.stats.totalItems ?? 0) - (pages?.overview.stats.doneItems ?? 0),
     lines: manager.runningLines,
   }
-  const disabled = manager.status === 'ended' || device?.connection !== 'online'
+  const readOnly = manager.status !== 'active'
+  const readOnlyText = t(manager.status === 'ending' ? 'manager.endingNote' : 'manager.readOnly')
+  const disabled = readOnly || device?.connection !== 'online'
   const end = async () => {
     setBusy(true)
     try {
@@ -57,6 +59,7 @@ export function ManagerPage({
       className="mg-page"
       data-manager="session"
       data-manager-id={manager.id}
+      data-manager-status={manager.status}
       data-narrow={narrow}
     >
       <header className="mg-title">
@@ -73,10 +76,10 @@ export function ManagerPage({
             {t('manager.end')}
           </button>
         ) : (
-          <span className="dim">{t('manager.ended')}</span>
+          <span className="dim">{t(`manager.${manager.status}`)}</span>
         )}
       </header>
-      {ending ? (
+      {ending && !readOnly ? (
         <div className="mg-end" role="alert">
           <span className="grow">{t('manager.endNote')}</span>
           <button
@@ -107,7 +110,12 @@ export function ManagerPage({
         ))}
       </div>
       <div className="mg-chat">
-        <Transcript deviceId={manager.deviceId} sessionId={manager.threadId} onOpen={onOpen} />
+        <Transcript
+          deviceId={manager.deviceId}
+          sessionId={manager.threadId}
+          onOpen={onOpen}
+          footer={readOnly ? <p className="mg-readonly">{readOnlyText}</p> : undefined}
+        />
       </div>
       <section className="mg-board" aria-label={t('manager.board')}>
         <div className="mg-scope">
@@ -139,9 +147,7 @@ export function ManagerPage({
           </div>
         </div>
         {disabled ? (
-          <p className="mg-readonly">
-            {t(manager.status === 'ended' ? 'manager.readOnly' : 'manager.offline')}
-          </p>
+          <p className="mg-readonly">{readOnly ? readOnlyText : t('manager.offline')}</p>
         ) : null}
         <div className="mg-body">
           {error ? (

@@ -625,9 +625,9 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       sessions.set(key, view)
     }
     // 归档着的只能看；放回来之后（见 session.unarchive）才又能发消息
-    if (managers.ended(deviceId, sessionId)) {
+    if (managers.readOnly(deviceId, sessionId)) {
       view.live = false
-      view.note = phrase('session.readOnly')
+      view.note = managers.readOnlyNote(deviceId, sessionId)
     }
     if (isShelved(deviceId, sessionId)) {
       view.live = false
@@ -703,6 +703,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     diffs.turnEnded(view.deviceId, view.sessionId)
     tree.turnStopped(view)
     goal.turnEnded(view, turnId, status)
+    managers.turnEnded(view.deviceId, view.sessionId, turnId)
+    if (managers.readOnly(view.deviceId, view.sessionId)) return
     const next = view.queued[0]
     if (next) {
       applySessionOps(view, [{ op: 'queue.set', queued: view.queued.slice(1) }])
@@ -1982,6 +1984,68 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   const tasks = createMockTasks(tasksHost)
   const managers = createMockManagers({
     ...tasksHost,
+    say(deviceId, threadId, prompt, answer) {
+      tasksHost.say(deviceId, threadId, prompt, answer)
+      const view = loadSession(deviceId, threadId)
+      const turn = view.turns.at(-1)
+      const userId = turn?.itemIds[0]
+      if (!turn || !userId) return
+      // 经理事件与真实历史共用协议投影，不伪装成用户亲手输入的正文。
+      applySessionOps(view, [
+        {
+          op: 'item.add',
+          turnId: turn.id,
+          item: projectItem({
+            type: 'userMessage',
+            id: userId,
+            clientId: null,
+            content: [{ type: 'text', text: prompt, text_elements: [] }],
+          }),
+        },
+      ])
+    },
+    ending(deviceId, threadId, prompt, answer) {
+      const view = loadSession(deviceId, threadId)
+      const previous = running(view)
+      if (previous) {
+        replies.get(sessionKey(view))?.()
+        const current = replyItems.get(sessionKey(view))
+        endTurn(
+          view,
+          previous.id,
+          current?.turnId === previous.id ? current.itemId : null,
+          'interrupted',
+        )
+      }
+      const turnId = `m${++seq}`
+      const userId = `${turnId}-u`
+      applySessionOps(view, [
+        {
+          op: 'turn.add',
+          turn: {
+            id: turnId,
+            status: 'running',
+            itemIds: [],
+            startedAt: clock.now(),
+            durationMs: null,
+            error: null,
+          },
+        },
+        {
+          op: 'item.add',
+          turnId,
+          item: projectItem({
+            type: 'userMessage',
+            id: userId,
+            clientId: null,
+            content: [{ type: 'text', text: prompt, text_elements: [] }],
+          }),
+        },
+      ])
+      updateSummary(deviceId, threadId, { status: 'running', updatedAt: clock.now() })
+      reply(view, turnId, answer)
+      return turnId
+    },
     add(deviceId, session) {
       sidebars.get(deviceId)?.sessions.push(session)
       emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session }])
@@ -1992,9 +2056,11 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         litchManager: { managerId: manager.id, role: 'manager' as const },
       }
       updateSummary(deviceId, threadId, marked)
-      if (manager.status === 'ended') {
+      if (manager.status !== 'active') {
         const view = loadSession(deviceId, threadId)
-        applySessionOps(view, [{ op: 'session.state', live: false, note: null }])
+        applySessionOps(view, [
+          { op: 'session.state', live: false, note: managers.readOnlyNote(deviceId, threadId) },
+        ])
       }
     },
   })

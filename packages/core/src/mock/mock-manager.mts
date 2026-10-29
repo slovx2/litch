@@ -1,4 +1,5 @@
 // 模拟经理：与真实通道同形的快照、增量和命令，答复按项校验版本。
+import { formatSessionEvent } from '../../../protocol/src/session-tree.mjs'
 import { ChannelError, type Commands } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import type { ManagerAnswersResult, ManagerBoardView, ManagerView } from '../model-manager.mjs'
@@ -15,6 +16,8 @@ export interface MockManagerHost
   extends Pick<MockTasksHost, 'clock' | 'lang' | 'devices' | 'device' | 'spawn' | 'say'> {
   add(deviceId: string, session: ManagerSessionSummary): void
   mark(deviceId: string, threadId: string, manager: ManagerView): void
+  /** 发出结束事件并开始收尾回合；回合停止时由宿主调用 turnEnded。 */
+  ending(deviceId: string, threadId: string, prompt: string, answer: string): string
 }
 
 export function createMockManagers(host: MockManagerHost) {
@@ -22,6 +25,7 @@ export function createMockManagers(host: MockManagerHost) {
   const histories = new Map<string, ReturnType<typeof sampleManagerHistory>>()
   const lists = new Map<string, Set<HostSink>>()
   const boards = new Map<string, Set<HostSink>>()
+  const endingTurns = new Map<string, string>()
   let seq = 0
   const t = (zh: string, en: string) => (host.lang === 'zh-CN' ? zh : en)
   const available = (id: string) => {
@@ -144,10 +148,12 @@ export function createMockManagers(host: MockManagerHost) {
     const manager = data.managers.find((m) => m.id === managerId)
     const board = data.boards.find((b) => b.managerId === managerId)
     if (!manager || !board) throw new ChannelError('notFound', t('经理不存在', 'Manager not found'))
-    if (manager.status === 'ended')
+    if (manager.status !== 'active')
       throw new ChannelError(
         'rejected',
-        t('经理已结束，看板只读', 'The manager has ended; the board is read-only'),
+        manager.status === 'ending'
+          ? t('经理正在收尾，看板只读', 'The manager is wrapping up; the board is read-only')
+          : t('经理已结束，看板只读', 'The manager has ended; the board is read-only'),
       )
     let result: unknown
     if (name === 'managers.update') {
@@ -162,12 +168,49 @@ export function createMockManagers(host: MockManagerHost) {
           'invalid',
           t('并行线数必须为正整数', 'The concurrent line limit must be a positive integer'),
         )
+      const rulesChanged =
+        (patch.scope !== undefined && patch.scope !== manager.scope) ||
+        (patch.rules !== undefined && patch.rules !== manager.rules)
       Object.assign(manager, copy(patch))
+      if (rulesChanged) {
+        host.say(
+          deviceId,
+          manager.threadId,
+          formatSessionEvent({
+            kind: 'manager-rules',
+            notes: [],
+            manager: { managerId, text: `${manager.scope}\n\n${manager.rules}` },
+          }),
+          t(
+            '已更新范围和规矩，将按新约定安排工作。',
+            'Scope and rules updated. I will follow the new instructions.',
+          ),
+        )
+      }
       result = { manager }
     } else if (name === 'managers.end') {
-      manager.status = 'ended'
-      manager.endedAt = host.clock.now()
-      activity(board, t('经理已结束，看板只读', 'Manager ended; board is read-only'))
+      manager.status = 'ending'
+      activity(board, t('经理正在收尾', 'Manager is wrapping up'))
+      const turnId = host.ending(
+        deviceId,
+        manager.threadId,
+        formatSessionEvent({
+          kind: 'manager-end',
+          notes: [],
+          manager: {
+            managerId,
+            text: t(
+              '请整理总结，保留未完成事项。',
+              'Summarize the work and preserve unfinished items.',
+            ),
+          },
+        }),
+        t(
+          '本轮工作已结束，已整理工作结果，未完成事项和决策保留在看板上。',
+          'This round has ended. The results are summarized, and unfinished items and decisions remain on the board.',
+        ),
+      )
+      endingTurns.set(key(deviceId, manager.threadId), turnId)
       result = { manager }
     } else if (name === 'managers.decision.reopen') {
       const { decisionId } = params as Commands['managers.decision.reopen']['params']
@@ -237,7 +280,23 @@ export function createMockManagers(host: MockManagerHost) {
         host.say(
           deviceId,
           manager.threadId,
-          text,
+          formatSessionEvent({
+            kind: 'manager-answers',
+            notes: [],
+            manager: {
+              managerId,
+              text,
+              answers: submitted.accepted.map((decision) => ({
+                decisionId: decision.id,
+                title: decision.title,
+                optionId: decision.answer?.optionId ?? null,
+                optionLabel:
+                  decision.options.find((option) => option.id === decision.answer?.optionId)
+                    ?.label ?? null,
+                text: decision.answer?.text ?? '',
+              })),
+            },
+          }),
           t(
             '已收到答复，将据此安排后续工作。',
             'Answers received. I will use them to plan the next steps.',
@@ -251,15 +310,37 @@ export function createMockManagers(host: MockManagerHost) {
     return copy(result)
   }
   for (const device of host.devices()) state(device.id)
+  const readOnlyNote = (deviceId: string, threadId: string): string | null => {
+    const manager = state(deviceId).managers.find((entry) => entry.threadId === threadId)
+    if (!manager || manager.status === 'active') return null
+    return manager.status === 'ending'
+      ? t(
+          '经理正在收尾，对话和看板只读',
+          'The manager is wrapping up. Chat and board are read-only.',
+        )
+      : t('经理已结束，对话和看板只读', 'This manager has ended. Chat and board are read-only.')
+  }
   return {
+    readOnlyNote,
     history(deviceId: string, threadId: string) {
       const history = histories.get(key(deviceId, threadId))
       return history ? copy(history) : undefined
     },
-    ended(deviceId: string, threadId: string): boolean {
-      return state(deviceId).managers.some(
-        (manager) => manager.threadId === threadId && manager.status === 'ended',
-      )
+    readOnly(deviceId: string, threadId: string): boolean {
+      return readOnlyNote(deviceId, threadId) !== null
+    },
+    turnEnded(deviceId: string, threadId: string, turnId: string) {
+      const id = key(deviceId, threadId)
+      if (endingTurns.get(id) !== turnId) return
+      endingTurns.delete(id)
+      const data = state(deviceId)
+      const manager = data.managers.find((entry) => entry.threadId === threadId)
+      const board = data.boards.find((entry) => entry.managerId === manager?.id)
+      if (!manager || !board) return
+      manager.status = 'ended'
+      manager.endedAt = host.clock.now()
+      activity(board, t('经理已结束，看板只读', 'Manager ended; board is read-only'))
+      publish(deviceId, manager, board)
     },
     subscribe(deviceId: string, sink: HostSink, managerId?: string) {
       const map = managerId === undefined ? lists : boards

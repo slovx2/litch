@@ -53,11 +53,13 @@ function ManagerRow({
           <span className="ell grow">{manager.name || t('manager.manager')}</span>
           <i className="wire-sq" title={device ? t.text(device.name) : manager.deviceId} />
           <small className={manager.pendingDecisions || count ? 'mg-attention' : 'dim'}>
-            {count
-              ? t('manager.draftCount', { n: count })
-              : manager.pendingDecisions
-                ? t('manager.pending', { n: manager.pendingDecisions })
-                : t(manager.runningLines ? 'manager.running' : 'manager.idle')}
+            {manager.status === 'ending'
+              ? t('manager.ending')
+              : count
+                ? t('manager.draftCount', { n: count })
+                : manager.pendingDecisions
+                  ? t('manager.pending', { n: manager.pendingDecisions })
+                  : t(manager.runningLines ? 'manager.running' : 'manager.idle')}
           </small>
         </button>
       </div>
@@ -109,7 +111,9 @@ export function ManagerSidebar({
           </header>
           {status === 'active' || ended
             ? managers
-                .filter((manager) => manager.status === status)
+                .filter((manager) =>
+                  status === 'active' ? manager.status !== 'ended' : manager.status === 'ended',
+                )
                 .map((manager) => (
                   <ManagerRow
                     key={`${manager.deviceId}:${manager.id}`}

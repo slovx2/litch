@@ -13,6 +13,10 @@ export interface ManagerSeen {
   created: boolean
   rulesKept: boolean
   endedReadOnly: boolean
+  endingReadOnly: boolean
+  endingListed: boolean
+  endCompleted: boolean
+  answerEvent: boolean
   omittedActions: boolean
   itemReasons: boolean
   decisionJump: boolean
@@ -108,6 +112,7 @@ export async function managerProbe(): Promise<ManagerSeen> {
     '对话新增一回合',
     () => document.querySelectorAll('.mg-chat .turn').length > before,
   )
+  const answerEvent = Boolean(one('[data-event="manager-answers"]'))
   await click('.mg-decision-filter button:last-child')
   await until('已关闭的决策', () => one('[data-decision="D-12"]'))
   await click('[data-decision="D-12"] button')
@@ -212,6 +217,33 @@ export async function managerProbe(): Promise<ManagerSeen> {
   )
   await click('[data-manager-id="m1"] .mg-pick')
   await until('回到主经理', () => one('[data-manager="session"][data-manager-id="m1"]'))
+  await click('[data-board-tab="decisions"]')
+  await click('.mg-title button')
+  await click('.mg-end button:last-child')
+  await until('先进入结束中', () => one('[data-manager-status="ending"]'))
+  const endingReadOnly = Boolean(
+    one('.mg-title')?.textContent?.includes('结束中') &&
+      one('.mg-readonly')?.textContent?.includes('正在收尾') &&
+      !one('.mg-title button') &&
+      !one('.mg-chat textarea') &&
+      one('.mg-decision textarea:disabled') &&
+      one('.mg-sidebar-group:first-child [data-manager-id="m1"]')?.textContent?.includes('结束中'),
+  )
+  await click('[data-sidebar-mode="manager"]')
+  const endingListed = Boolean(
+    await until('全部经理显示结束中', () =>
+      one('[data-manager-row="m1"]')?.textContent?.includes('结束中'),
+    ),
+  )
+  await click('[data-manager-row="m1"] .mg-list-open')
+  await until('收尾回合完成后结束', () => one('[data-manager-status="ended"]'))
+  await click('[data-board-tab="decisions"]')
+  const endCompleted = Boolean(
+    one('.mg-title')?.textContent?.includes('已结束') &&
+      !one('.mg-chat textarea') &&
+      one('.mg-decision textarea:disabled') &&
+      !one('.mg-sidebar-group:first-child [data-manager-id="m1"]'),
+  )
   return {
     list,
     selected,
@@ -226,6 +258,10 @@ export async function managerProbe(): Promise<ManagerSeen> {
     created,
     rulesKept,
     endedReadOnly,
+    endingReadOnly,
+    endingListed,
+    endCompleted,
+    answerEvent,
     omittedActions,
     itemReasons,
     decisionJump,
@@ -252,6 +288,10 @@ export function judgeManager(seen: ManagerSeen): string[] {
     created: '新建经理没有进入经理页',
     rulesKept: '手写规矩被派活选项覆盖',
     endedReadOnly: '已结束经理没有转只读',
+    endingReadOnly: '结束中经理未标明状态或仍能写入',
+    endingListed: '结束中经理未保留在全部经理列表',
+    endCompleted: '收尾回合结束后经理未转已结束只读',
+    answerEvent: '看板答复回合没有显示经理事件',
     omittedActions: '仍显示第一版不支持的操作',
     itemReasons: '事项原因重复决策编号或状态标签',
     decisionJump: '点击决策编号没有切页并定位',

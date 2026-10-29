@@ -42,6 +42,8 @@ export function ManagersPage({
         </span>
         {manager.status === 'active' ? (
           <span className="dim">{t('manager.linesCount', { n: manager.runningLines })}</span>
+        ) : manager.status === 'ending' ? (
+          <span className="dim">{t('manager.ending')}</span>
         ) : null}
         {manager.pendingDecisions ? (
           <span className="pill wait">{t('manager.pending', { n: manager.pendingDecisions })}</span>
@@ -104,7 +106,7 @@ export function ManagersPage({
           <div className="mng-wrap mg-list">
             {devices.map((device) => {
               const list = managers.filter(
-                (manager) => manager.deviceId === device.id && manager.status === 'active',
+                (manager) => manager.deviceId === device.id && manager.status !== 'ended',
               )
               return list.length ? (
                 <section className="mng-sec" key={device.id}>
