@@ -206,7 +206,8 @@ test('角色规则保持预算和第一版边界，会话版原样复用共用�
   assert.ok(role.length < 4000, String(role.length))
   assert.match(role, /scope-token/)
   assert.match(role, /Do not implement code yourself/)
-  assert.match(role, /does not automatically detect stale/)
+  assert.match(role, /Check the recorded basis before acting/)
+  assert.match(role, /Use verify after checking that an object remains valid/)
   assert.match(role, /only the user can do/)
   const sessions = managerSessionRules(4)
   for (const shared of [

@@ -200,9 +200,17 @@ export interface SessionQueuedNoteView extends SessionNoteView {
  * 设备进程注入给父会话的文字（包在 <litch-session-event> 里）认出来之后的样子。
  * notes：附在用户消息前面的回报；wake：子会话都停下了，设备进程替父会话开的回合；
  * remind：用户发起的回合结束时模型没调收尾（litch_sessions.wrap_up），设备进程替它再开的回合，notes 是空的
+ * manager-*：经理的开始、看板答复、收尾与规矩更新事件，notes 是空的。
  */
 export interface SessionEventView {
-  kind: 'notes' | 'wake' | 'remind'
+  kind:
+    | 'notes'
+    | 'wake'
+    | 'remind'
+    | 'manager-open'
+    | 'manager-answers'
+    | 'manager-end'
+    | 'manager-rules'
   notes: SessionNoteView[]
 }
 

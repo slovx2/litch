@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
+import { createMockCore } from '../src/mock/mock-core.mjs'
 import { createMockManagers } from '../src/mock/mock-manager.mjs'
 import { sampleApp } from '../src/mock/sample-data.mjs'
 import { sampleManagers } from '../src/mock/sample-manager.mjs'
-import type { ManagerAnswersResult, ManagerBoardTopicView } from '../src/model-manager.mjs'
+import type { SessionView } from '../src/model.mjs'
+import type {
+  ManagerAnswersResult,
+  ManagerBoardTopicView,
+  ManagerView,
+} from '../src/model-manager.mjs'
 import { fakeClock } from './helpers.mjs'
 
 for (const lang of ['zh-CN', 'en'] as const)
@@ -29,13 +36,20 @@ test('模拟经理命令：部分提交、版本冲突、重开、结束只读�
   const { clock } = fakeClock()
   const devices = sampleApp('zh-CN', clock.now()).devices
   const turns: string[] = []
+  const statuses: string[] = []
   const service = createMockManagers({
     clock,
     lang: 'zh-CN',
     devices: () => devices,
     device: (id) => devices.find((d) => d.id === id),
     add() {},
-    mark() {},
+    mark(_device, _thread, manager) {
+      statuses.push(manager.status)
+    },
+    ending(_device, _thread, prompt) {
+      turns.push(prompt)
+      return 'ending-turn'
+    },
     spawn: () => 'new-manager-thread',
     say: (_device, _thread, prompt) => {
       turns.push(prompt)
@@ -78,13 +92,32 @@ test('模拟经理命令：部分提交、版本冲突、重开、结束只读�
     ['decisionConflict', 'invalidAnswer'],
   )
   assert.equal(turns.length, 1)
+  assert.equal(parseSessionEvent(turns[0] ?? '').event?.kind, 'manager-answers')
   assert.equal(board?.board?.activities.length, 7)
   assert.equal(board?.board?.decisions.find((d) => d.id === 'D-15')?.status, 'answered')
   await command('decision.reopen', { decisionId: 'D-12' })
   assert.equal(board?.board?.decisions.find((d) => d.id === 'D-12')?.revision, 2)
   await command('update', { patch: { name: '新名字' } })
-  await command('end')
+  assert.equal(turns.length, 1)
+  await command('update', { patch: { scope: '只完成本轮验收', rules: '保留未完成事项' } })
+  assert.equal(parseSessionEvent(turns.at(-1) ?? '').event?.kind, 'manager-rules')
+  assert.match(parseSessionEvent(turns.at(-1) ?? '').event?.manager?.text ?? '', /只完成本轮验收/)
+  const count = turns.length
+  await command('update', { patch: { scope: '只完成本轮验收', rules: '保留未完成事项' } })
+  assert.equal(turns.length, count)
+  const ending = (await command('end')) as { manager: ManagerView }
+  assert.equal(ending.manager.status, 'ending')
+  assert.equal(ending.manager.endedAt, null)
+  assert.equal(service.readOnly('local', 'm1'), true)
+  assert.equal(parseSessionEvent(turns.at(-1) ?? '').event?.kind, 'manager-end')
+  await assert.rejects(command('answers.submit', { answers: [] }), { code: 'rejected' })
+  await assert.rejects(command('end'), { code: 'rejected' })
   await assert.rejects(command('update', { patch: { name: '不可写' } }), { code: 'rejected' })
+  service.turnEnded('local', 'm1', 'other-turn')
+  assert.equal(statuses.at(-1), 'ending')
+  service.turnEnded('local', 'm1', 'ending-turn')
+  assert.equal(statuses.at(-1), 'ended')
+  assert.equal(service.readOnly('local', 'm1'), true)
   const sample = sampleManagers('local', clock.now(), 'zh-CN').managers[0]
   assert.ok(sample)
   const created = (await command('create', { manager: { ...sample, firstTask: '第一件事' } })) as {
@@ -97,3 +130,66 @@ test('模拟经理命令：部分提交、版本冲突、重开、结束只读�
   })
   close()
 })
+
+for (const interrupted of [false, true])
+  test(`模拟结束回合${interrupted ? '被打断' : '完成'}后才转已结束`, async () => {
+    const time = fakeClock()
+    const core = createMockCore({ clock: time.clock, chunkMs: 10 })
+    const signal = new AbortController().signal
+    const where = { deviceId: 'local', managerId: 'm1' }
+    const managers = new Map<string, ManagerView>()
+    const close = core.subscribe(
+      { kind: 'managers', deviceId: 'local' },
+      {
+        snapshot(data) {
+          for (const manager of (data as { managers: ManagerView[] }).managers)
+            managers.set(manager.id, manager)
+        },
+        delta(ops) {
+          for (const op of ops as { manager: ManagerView }[])
+            managers.set(op.manager.id, op.manager)
+        },
+        error(error) {
+          throw error
+        },
+      },
+    )
+    const read = () => {
+      let session: SessionView | undefined
+      core.subscribe(
+        { kind: 'session', deviceId: 'local', sessionId: 'm1' },
+        {
+          snapshot(data) {
+            session = data as SessionView
+          },
+          delta() {},
+          error(error) {
+            throw error
+          },
+        },
+      )()
+      assert.ok(session)
+      return session
+    }
+    await core.command('managers.end', where, signal)
+    assert.equal(managers.get('m1')?.status, 'ending')
+    assert.equal(managers.get('m1')?.endedAt, null)
+    assert.equal(read().turns.at(-1)?.status, 'running')
+    assert.equal(read().live, false)
+    await assert.rejects(
+      core.command('managers.update', { ...where, patch: { scope: '不能写' } }, signal),
+      { code: 'rejected' },
+    )
+    if (interrupted)
+      await core.command('session.interrupt', { deviceId: 'local', sessionId: 'm1' }, signal)
+    else time.advance(2000)
+    assert.equal(managers.get('m1')?.status, 'ended')
+    const endedAt = managers.get('m1')?.endedAt
+    assert.ok(endedAt !== null && endedAt !== undefined && endedAt <= time.clock.now())
+    const last = read().turns.at(-1)
+    assert.ok(last?.startedAt !== null && last?.startedAt !== undefined && last.durationMs !== null)
+    assert.equal(endedAt, last.startedAt + last.durationMs)
+    assert.equal(read().turns.at(-1)?.status, interrupted ? 'interrupted' : 'completed')
+    assert.equal(read().live, false)
+    close()
+  })

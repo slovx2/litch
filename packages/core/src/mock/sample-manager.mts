@@ -27,13 +27,17 @@ export function sampleManagerHistory(
     : `Please manage “${manager.name}”. Scope: ${manager.scope}. Organize the work lines, verify their reports, and put decisions that need my input on the board.`
   const progress =
     board.situation?.text ??
-    (manager.status === 'ended'
+    (manager.status === 'ending'
       ? zh
-        ? '本轮工作已结束，未完成事项和决策保留在看板上。'
-        : 'This round has ended. Unfinished items and decisions remain on the board.'
-      : zh
-        ? '我会先按范围梳理事项和验收条件，列出计划，等待你确认开始。'
-        : 'I will outline the items and acceptance criteria, present a plan, and wait for you to start.')
+        ? '正在整理总结，未完成事项和决策会保留在看板上。'
+        : 'I am preparing the summary. Unfinished items and decisions will remain on the board.'
+      : manager.status === 'ended'
+        ? zh
+          ? '本轮工作已结束，未完成事项和决策保留在看板上。'
+          : 'This round has ended. Unfinished items and decisions remain on the board.'
+        : zh
+          ? '我会先按范围梳理事项和验收条件，列出计划，等待你确认开始。'
+          : 'I will outline the items and acceptance criteria, present a plan, and wait for you to start.')
   const answer = pending
     ? `${progress}\n\n${zh ? `看板上有 ${pending} 项决策需要你确认，背景与选项已列出。` : `There are ${pending} decisions for you on the board, with their background and options.`}`
     : progress

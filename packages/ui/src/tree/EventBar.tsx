@@ -21,7 +21,11 @@ const HEAD_TEXT = {
   notes: 'tree.event.notes',
   wake: 'tree.event.wake',
   remind: 'tree.event.remind',
-} as const satisfies Record<SessionEventView['kind'], string>
+  'manager-answers': 'manager.event.answers',
+  'manager-open': 'manager.event.open',
+  'manager-end': 'manager.event.end',
+  'manager-rules': 'manager.event.rules',
+} as const
 
 const NOTE_MARK: Record<SessionNoteView['status'], string> = {
   completed: '',
