@@ -55,14 +55,27 @@ export function PeerLinks({
   )
 }
 
-export function PeerHead({ deviceId, peer }: { deviceId: string; peer: PeerView }) {
+export function PeerHead({
+  deviceId,
+  peer,
+  detail = false,
+}: {
+  deviceId: string
+  peer: PeerView
+  /** 来源已经写在折叠的那一行上（CompactRow）：只留标记和链接 */
+  detail?: boolean
+}) {
   const t = useT()
   return (
     <div className="peer-head">
-      <Icon name="note" small />
-      <span className="peer-from">
-        {peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')}
-      </span>
+      {detail ? null : (
+        <>
+          <Icon name="note" small />
+          <span className="peer-from">
+            {peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')}
+          </span>
+        </>
+      )}
       {peer.bypass ? (
         <span className="peer-tag" title={t('peer.bypassHint')}>
           {t('peer.bypass')}

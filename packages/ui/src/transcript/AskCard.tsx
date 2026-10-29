@@ -10,6 +10,7 @@ import {
 import { memo } from 'react'
 import { useT } from '../app/appearance.ts'
 import { useKey } from '../app/services.tsx'
+import { CompactRow } from './CompactRow.tsx'
 import { type ItemRef, useItem } from './messages.tsx'
 import { useToggle } from './state.ts'
 
@@ -23,17 +24,12 @@ export const AskCard = memo(function AskCard(ref: ItemRef) {
   if (answered.length === 0) return null
   return (
     <section className="ask" data-card="ask" data-state="answered">
-      <button
-        type="button"
-        className="ask-head ask-toggle"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-      >
-        <span>{open ? '⌄' : '›'}</span>
-        <span>{t('ask.title')}</span>
-        <span>{t('ask.answeredCount', { count: answered.length })}</span>
-        {!open ? <span className="ell dim grow">{answers[answered[0]?.id ?? '']}</span> : null}
-      </button>
+      <CompactRow
+        source={`${t('ask.title')} · ${t('ask.answeredCount', { count: answered.length })}`}
+        summary={answers[answered[0]?.id ?? '']}
+        open={open}
+        onToggle={() => setOpen(!open)}
+      />
       {open
         ? answered.map((q) => (
             <div className="ask-q" key={q.id}>
@@ -95,27 +91,20 @@ export const AskedCard = memo(function AskedCard({
       data-anchor={`i:${item.id}`}
       aria-label={t('ask.title')}
     >
-      <button
-        type="button"
-        className="ask-head ask-toggle"
-        aria-expanded={state !== 'answered' || open}
-        disabled={state !== 'answered'}
-        onClick={() => setOpen(!open)}
-      >
-        <span>{state !== 'answered' || open ? '⌄' : '›'}</span>
-        <i className={state === 'open' ? 'st wait' : 'st'} />
-        <span>{t('ask.title')}</span>
-        <span className="ask-state">
-          {state === 'answered'
+      <CompactRow
+        icon={state === 'open' ? <i className="st wait" /> : undefined}
+        source={`${t('ask.title')} · ${
+          state === 'answered'
             ? t('ask.answeredCount', {
                 count: asked.questions.filter((q) => q.answer !== null).length,
               })
-            : t(`ask.state.${state}`)}
-        </span>
-        {!open && state === 'answered' ? (
-          <span className="ell dim grow">{asked.questions[0]?.answer ?? asked.raw}</span>
-        ) : null}
-      </button>
+            : t(`ask.state.${state}`)
+        }`}
+        summary={asked.questions[0]?.answer ?? asked.raw}
+        open={state !== 'answered' || open}
+        onToggle={() => setOpen(!open)}
+        fixed={state !== 'answered'}
+      />
       {state !== 'answered' || open ? (
         <>
           {asked.questions.map((question, index) => (

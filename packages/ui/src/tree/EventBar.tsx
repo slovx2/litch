@@ -14,6 +14,7 @@ import { Caret, Icon } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { useActions } from '../transcript/actions.tsx'
+import { CompactRow } from '../transcript/CompactRow.tsx'
 import { useToggle } from '../transcript/state.ts'
 
 const HEAD_TEXT = {
@@ -87,23 +88,18 @@ export function SessionEventBar({
   const [open, setOpen] = useToggle(`${deviceId}:${sessionId}`, `event:${itemId}`, false)
   return (
     <div className="sev" data-event={event.kind} data-anchor={anchor}>
-      <button
-        type="button"
-        className="compact-message"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-      >
-        <Icon name="info" small />
-        <span className="compact-source">{t(HEAD_TEXT[event.kind])}</span>
-        <span className="ell grow">
-          {event.notes
-            .map((note) =>
-              [note.title || note.threadId, note.excerpt || note.error].filter(Boolean).join('：'),
-            )
-            .join(' · ')}
-        </span>
-        <span>{open ? '⌄' : '›'}</span>
-      </button>
+      <CompactRow
+        icon={<Icon name="info" small />}
+        source={t(HEAD_TEXT[event.kind])}
+        summary={event.notes
+          .map((note) =>
+            [note.title || note.threadId, note.excerpt || note.error].filter(Boolean).join('：'),
+          )
+          .join(' · ')}
+        open={open}
+        onToggle={() => setOpen(!open)}
+        fixed={event.notes.length === 0}
+      />
       {open && event.notes.length > 0 ? (
         <ul className="sev-notes">
           {event.notes.map((note) => (

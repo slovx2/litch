@@ -82,6 +82,55 @@ button.tree-card-main:hover {
   line-height: 18px;
   color: var(--ink-2);
 }
+/* 默认收成一行的卡片共用的那一行（transcript/CompactRow.tsx）：图标、来源、摘要截断、右端的箭头 */
+.compact-message {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 18px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+  text-align: left;
+  cursor: pointer;
+}
+.compact-message:disabled {
+  cursor: default;
+}
+.compact-message > .ic {
+  flex: none;
+  color: var(--ink-3);
+}
+.compact-source {
+  flex: 0 1 auto;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+/* 展开了不写摘要，来源能占满 */
+.compact-message[aria-expanded="true"] > .compact-source {
+  max-width: none;
+}
+.compact-sum {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+}
+.compact-message > .caret-ic {
+  margin-left: auto;
+  color: var(--ink-3);
+}
+.compact-message:hover:not(:disabled) > :is(.compact-source, .caret-ic) {
+  color: var(--ink);
+}
 .sev-head {
   display: flex;
   align-items: center;
@@ -379,16 +428,19 @@ button.sev-title {
   color: var(--ink-3);
 }
 /* Litch 替用户发的话（SystemCard.tsx：定时任务、子会话的启动指令、在这里做）：同回报那一条的框，
-   第一行来源和类型，下面两行简略内容，展开看发给模型的原文 */
+   默认一行（.compact-message），展开后是来源会话、手动运行之类的补充和发给模型的原文 */
 .sysm-head {
   min-width: 0;
 }
 .sysm-head > .ic {
   flex: none;
 }
-.sysm-kind {
-  min-width: 0;
-  flex: 0 1 auto;
+/* 展开后补充的那一行（来源会话、手动运行、别的会话发来的标记和链接），紧跟在折叠的那一行下面 */
+.sev > :is(.sysm-head, .peer-head) {
+  margin-top: 4px;
+}
+.sev > .peer-head:empty {
+  display: none;
 }
 .sysm-from {
   min-width: 0;
@@ -407,27 +459,10 @@ button.sysm-from {
   border: 1px solid var(--line-2);
   border-radius: var(--r1);
 }
-.sysm-sum {
-  margin-top: 2px;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-.sysm-title {
-  font-weight: 600;
-  color: var(--ink);
-}
 .sysm-full {
   margin-top: 4px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-.sysm-toggle {
-  display: block;
-  margin-top: 2px;
 }
 
 /* 侧面板点了一条：对话里那张卡片（找不到时是那一行）闪一圈 */

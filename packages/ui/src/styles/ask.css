@@ -1,5 +1,5 @@
-/* 模型边干活边问的题（transcript/AskCard.tsx）：和计划卡片一样的外框，题目一题一段，
-   选项和输入框用输入区提问卡片的那一套（.opt、.req-input），答过、过去了的只留文字 */
+/* 答过的问题（transcript/AskCard.tsx）：和计划卡片一样的外框，默认收成一行（CompactRow，样式在 tree.css），
+   点开每题是题目加回答；还没答完的问答卡片（AskedCard）一直展开 */
 .ask {
   border: 1px solid var(--line-2);
   border-radius: var(--r2);
@@ -8,54 +8,66 @@
 .ask[data-state="open"] {
   border-color: var(--line-3);
 }
-.ask-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--line-1);
-  font-weight: 500;
+.ask > .compact-message {
+  padding: 6px 10px;
 }
-.ask-state {
-  color: var(--ink-2);
-  font-size: 12px;
-  font-weight: 400;
+.ask > .compact-message[aria-expanded="true"] {
+  border-bottom: 1px solid var(--line-1);
 }
 .ask-q {
-  font-size: 13px;
-  line-height: 1.45;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
   padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.45;
 }
 .ask-q + .ask-q {
-  border-top: 1px solid var(--line-2);
+  border-top: 1px solid var(--line-1);
 }
 .ask-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.ask-input {
-  min-width: 0;
-}
+/* 回答：左边一道强调色，底上淡淡一层，和题目分得开；选的和自己写的一个样子 */
 .ask-answer {
-  padding: 6px 8px;
-  border: 1px solid var(--line-3);
-  border-radius: var(--r1);
-  background: var(--sel);
+  padding: 4px 10px;
+  border-left: 2px solid var(--accent);
+  border-radius: 0 var(--r1) var(--r1) 0;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
   color: var(--ink);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .ask-answer[data-skipped="true"] {
   border-left-color: var(--line-2);
+  background: none;
   color: var(--ink-2);
 }
-/* 问答卡片（AskedCard）：题头一行小字，选项一行一个，选中的打勾、没选的淡一些 */
+.ask-answer-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+/* 问答卡片（AskedCard）：题头一行小字；没选的选项收在“查看其他选项”里 */
 .ask-kicker {
   color: var(--ink-2);
   font-size: 12px;
+}
+.ask-alternatives {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.ask-alternatives summary {
+  width: max-content;
+  cursor: pointer;
+}
+.ask-alternatives summary:hover {
+  color: var(--ink);
+}
+.ask-alternatives .ask-picks {
+  margin-top: 6px;
 }
 .ask-picks {
   display: flex;
@@ -70,14 +82,6 @@
   gap: 8px;
   color: var(--ink-2);
 }
-.ask-picks li[data-picked="true"] {
-  color: var(--ink);
-}
-.ask-picks .mark {
-  flex: none;
-  width: 1em;
-  color: var(--accent);
-}
 .ask-picks .tx {
   display: flex;
   flex-direction: column;
@@ -88,32 +92,6 @@
   font-weight: 500;
 }
 .ask-picks .tx span {
-  font-size: 12px;
-}
-.ask-options {
-  margin: 0;
-  padding-left: 18px;
-  color: var(--ink-2);
-}
-.ask-hint {
-  margin: 0;
-  padding: 0 12px 10px;
-  color: var(--ink-2);
-  font-size: 12px;
-}
-.ask-hint.err {
-  color: var(--err);
-}
-.ask-acts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px 12px;
-}
-.ask-note {
-  min-width: 0;
-  color: var(--ink-2);
   font-size: 12px;
 }
 /* 用户答复的那条消息：先一行小字“回答了问题”，每题是引着的题目加回答 */
@@ -130,67 +108,4 @@
   padding-left: 8px;
   border-left: 2px solid var(--line-2);
   color: var(--ink-2);
-}
-
-.ask-answer-label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 2px;
-}
-.ask-alternatives {
-  color: var(--ink-2);
-  font-size: 12px;
-}
-.ask-alternatives summary {
-  cursor: pointer;
-}
-.ask-alternatives .ask-picks {
-  margin-top: 8px;
-}
-.ask-answer[data-skipped="true"] {
-  background: none;
-  border-color: var(--line-2);
-}
-
-.ask-toggle {
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-  font-size: 12px;
-  min-width: 0;
-}
-.ask-toggle[aria-expanded="false"] {
-  border-bottom: 0;
-}
-.ask-toggle:disabled {
-  opacity: 1;
-  cursor: default;
-}
-.ask-answer-label {
-  font-size: 11px;
-}
-
-.compact-message {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  width: 100%;
-  padding: 4px 0;
-  text-align: left;
-  color: var(--ink-2);
-  font-size: 12px;
-  cursor: pointer;
-}
-.compact-source {
-  flex-shrink: 1;
-  max-width: 40%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.compact-message .grow {
-  min-width: 0;
-  white-space: nowrap;
 }

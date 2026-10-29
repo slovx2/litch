@@ -12,9 +12,11 @@ import {
 import { memo, useLayoutEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { ImageViewer } from '../app/ImageViewer.tsx'
+import { Icon } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { SessionEventBar } from '../tree/EventBar.tsx'
 import { AskReplyBody } from './AskCard.tsx'
+import { CompactRow } from './CompactRow.tsx'
 import { SentComments } from './comments/Cards.tsx'
 import { commentsOf } from './comments/Cite.tsx'
 import { Markdown } from './Markdown.tsx'
@@ -146,25 +148,19 @@ export const UserMessage = memo(function UserMessage({
   if (peer)
     return (
       <div className="sev sysm" data-peer="" data-anchor={`u:${ref.itemId}`} ref={bubble}>
-        <button
-          type="button"
-          className="compact-message"
-          aria-expanded={open}
-          onClick={() => {
+        <CompactRow
+          icon={<Icon name="note" small />}
+          source={peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')}
+          summary={text}
+          open={open}
+          onToggle={() => {
             pin(bubble.current)
             setOpen(!open)
           }}
-        >
-          <span aria-hidden="true">✉</span>
-          <span className="compact-source">
-            {peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')}
-          </span>
-          <span className="ell grow">{text}</span>
-          <span>{open ? '⌄' : '›'}</span>
-        </button>
+        />
         {open ? (
           <>
-            <PeerHead deviceId={ref.deviceId} peer={peer} />
+            <PeerHead deviceId={ref.deviceId} peer={peer} detail />
             <UserAttachments attachments={item.attachments} />
             <div className="sysm-full">{text}</div>
           </>
