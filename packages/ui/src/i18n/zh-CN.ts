@@ -22,6 +22,8 @@ import { zhPreviewCsv } from './zh-CN-preview-csv.ts'
 import { zhPreviewHtml } from './zh-CN-preview-html.ts'
 import { zhPreviewMedia } from './zh-CN-preview-media.ts'
 import { zhPreviewPdf } from './zh-CN-preview-pdf.ts'
+import { zhPreviewDocx } from './zh-CN-preview-docx.ts'
+import { zhPreviewXlsx } from './zh-CN-preview-xlsx.ts'
 import { zhProposals } from './zh-CN-proposals.ts'
 import { zhRestart } from './zh-CN-restart.ts'
 import { zhRupgrade } from './zh-CN-rupgrade.ts'
@@ -30,6 +32,8 @@ import { zhTasks } from './zh-CN-tasks.ts'
 import { zhWorktrees } from './zh-CN-worktrees.ts'
 
 export const zhCN = {
+  ...zhPreviewDocx,
+  ...zhPreviewXlsx,
   ...zhPreview,
   ...zhPreviewPdf,
   ...zhPreviewCsv,

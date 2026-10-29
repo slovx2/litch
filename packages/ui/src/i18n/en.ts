@@ -20,6 +20,8 @@ import { enPreviewCsv } from './en-preview-csv.ts'
 import { enPreviewHtml } from './en-preview-html.ts'
 import { enPreviewMedia } from './en-preview-media.ts'
 import { enPreviewPdf } from './en-preview-pdf.ts'
+import { enPreviewDocx } from './en-preview-docx.ts'
+import { enPreviewXlsx } from './en-preview-xlsx.ts'
 import { enProposals } from './en-proposals.ts'
 import { enRestart } from './en-restart.ts'
 import { enRupgrade } from './en-rupgrade.ts'
@@ -33,6 +35,8 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
   `${n} ${Number(n) === 1 ? one : many}`
 
 export const en: Record<MessageKey, Entry> = {
+  ...enPreviewDocx,
+  ...enPreviewXlsx,
   ...enPreview,
   ...enPreviewPdf,
   ...enPreviewCsv,

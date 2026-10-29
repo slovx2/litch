@@ -144,6 +144,19 @@ explain it:
   静态 HTML 上限 1 MiB，在隔离框架内显示，脚本、表单、导航、外部 CSS/字体和网络资源禁用；仅加载最多 16 张项目根内图片，内联原始字节累计 16 MiB、像素累计 4,000 万；重复引用同一图片也逐次计入。保留部分静态布局样式，不保证网页完整效果；超深或超大 DOM 拒绝预览。
   MP3、PCM WAV、H.264/AAC MP4、VP9/Opus WebM 短媒体按 16 MiB 整读，不自动播放，关闭即停止并释放。实际编码支持取决于系统；损坏或不支持的编码显示提示，不进行转码、远程流式读取或字幕加载。以上媒体样例已在 macOS Electron 验证，其他系统可能不同。
   PDF 与 Office 由独立预览模块提供；手机文件查看仍不改变。
+- **Office previews (desktop)**: `.docx` is a read-only, approximate layout with paragraphs, tables,
+  images, headers and footers. External resources, embedded objects, altChunk HTML and embedded fonts
+  are not loaded. Macros and encrypted documents are unsupported. The preview cannot access the app.
+  `.xlsx` shows sheets and cell text in a virtual grid, including saved formula results; it never
+  recalculates formulas. A formula without a saved result is shown as text. Links are plain text.
+  Merged cells, dates, and common decimal/percentage formats are supported; charts, pivot tables,
+  printing layouts, and complex custom number formats are not reproduced. Long numeric strings
+  remain strings; numeric cells retain the precision saved by Excel.
+  Both formats are limited to 10 MiB compressed and 40 MiB expanded, with additional XML/image
+  complexity limits. XLSX accepts at most 100,000 cells in total, 100 sheets, 1,000 merge ranges,
+  and 10,000 rows / 200 columns per sheet; files beyond these limits show an explanation. Closing,
+  switching or refreshing the file terminates its parser and releases its preview. `.doc`, `.xls`,
+  `.ppt` and `.pptx` remain unsupported; phone file viewing is unchanged.
 - **Side chat**: a temporary fork of the current session for asking something on the side. It starts
   with the session's context up to the last finished turn (if a turn is running it stops before it, and
   the main turn keeps going), lives in the side panel's Side chat tab, never shows in the sidebar, and

@@ -20,6 +20,7 @@
 - CSV/TSV 解析 `papaparse` 5.7.0，MIT，Copyright (c) 2015 Matthew Holt；静态 HTML 净化 `dompurify` 3.4.17，选择 Apache-2.0，Copyright (c) Cure53，许可全文随应用分发。
 - Markdown 解析 `marked`，MIT，Copyright (c) MarkedJS、Christopher Jeffrey。
 - PDF 只读预览使用 `pdfjs-dist 6.4.299`，Apache-2.0，Copyright Mozilla Foundation；本地打包的 Adobe CMap、Foxit/Liberation 字体、OpenJPEG/JBIG2 解码资源各自的 LICENSE 原文与包的 LICENSE 一同收入 `licenses/pdfjs-dist@6.4.299.txt`，不分发 QCMS 或 PDF 脚本执行器。文字层定位样式依据该库公开接口编写。
+- Office 只读预览：`docx-preview 0.4.1`，Apache-2.0（Volodymyr Baydalka）；`jszip 3.10.2` 采用 MIT 许可选项（Stuart Knightley、David Duponchel、Francois Zaninotto、Jonathan A.）；`exceljs 4.4.0`，MIT（Guyon Roche）；`saxes 5.0.1`，ISC（版本随包许可为准）；`dompurify 3.4.17` 采用 Apache-2.0 许可选项（Cure53）。各包及传递依赖的原始版权、许可和 NOTICE 由应用许可收集脚本随分发保留。
 - 画图 `mermaid`（回答里的 mermaid 代码块画成图，第一次遇到时才装载），MIT，Copyright (c) 2014 - 2022 Knut Sveidqvist；连同它带进来的 `d3` 各包（ISC、BSD-3-Clause，Mike Bostock）、`cytoscape`、`dagre-d3-es`、`roughjs`、`katex`、`khroma` 等（MIT）、`chevrotain`（Apache-2.0）、`dompurify`（MPL-2.0 或 Apache-2.0，Cure53）、`elkjs`（EPL-2.0）、`robust-predicates`（Unlicense），各包的许可全文同样收在 `licenses/` 里。
 - WebSocket `ws`，MIT，Copyright (c) Einar Otto Stangvik、Arnout Kazemier、Luigi Pinca 及贡献者。
 - 二维码生成 `uqr`（扫码绑定手机的出码对话框用），MIT，Copyright (c) Project Nayuki、Anthony Fu。

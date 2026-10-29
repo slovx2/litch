@@ -31,3 +31,24 @@ test('许可收集按包位置解析嵌套依赖，两个版本都带原始许�
     rmSync(temp, { recursive: true, force: true })
   }
 })
+
+test('ExcelJS 浏览器声明覆盖 source map 中每个内嵌包', () => {
+  const map = JSON.parse(
+    readFileSync(
+      new URL('../packages/ui/node_modules/exceljs/dist/exceljs.min.js.map', import.meta.url),
+    ),
+  )
+  const notice = readFileSync(
+    new URL('../apps/desktop/licenses/exceljs-4.4.0-browser.txt', import.meta.url),
+    'utf8',
+  )
+  for (const source of map.sources) {
+    if (!source.includes('node_modules/')) continue
+    const tail = source.split('node_modules/').at(-1)
+    const name = tail
+      .split('/')
+      .slice(0, tail.startsWith('@') ? 2 : 1)
+      .join('/')
+    assert(notice.includes(`=== ${name} (license reference `), name)
+  }
+})
