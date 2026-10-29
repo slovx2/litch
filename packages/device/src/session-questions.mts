@@ -1,7 +1,7 @@
 // 只缓存待答派生结果，不缓存整段历史。通知只标记可能影响集合的变化；纯工具进度、
 // 回报和普通助手输出不会造成下一次唤醒重读长会话。退订/断连后无法保证没漏通知，须作废。
-import type { PendingQuestion } from '../../protocol/src/pending-asks.mjs'
-import { pendingHistory, questionsOfHistory } from '../../protocol/src/pending-history.mjs'
+import { type PendingQuestion, questionsOfView } from '../../protocol/src/pending-asks.mjs'
+import { pendingHistory } from '../../protocol/src/pending-history.mjs'
 import { isUserReply } from '../../protocol/src/user-reply.mjs'
 import { isObject } from './wire.mjs'
 
@@ -9,6 +9,7 @@ interface Entry {
   questions: PendingQuestion[]
   dirty: boolean
   revision: number
+  wrapTurns: Set<string>
 }
 
 export class SessionQuestions {
@@ -29,6 +30,7 @@ export class SessionQuestions {
       return
     }
     const turn = isObject(params.turn) ? params.turn : null
+    const turnId = typeof params.turnId === 'string' ? params.turnId : turn?.id
     const items = isObject(params.item)
       ? [params.item]
       : Array.isArray(turn?.items)
@@ -58,6 +60,16 @@ export class SessionQuestions {
         entry.dirty = true
         entry.revision++
       }
+      if (wraps && typeof turnId === 'string') entry.wrapTurns.add(turnId)
+    }
+    // 收尾条目完成时回合仍可能运行；此时读入的缓存尚不包含收尾题。
+    // 正在读历史时也递增版本，避免完成通知被较早的运行中快照覆盖。
+    if (method === 'turn/completed') {
+      const hadWrap = typeof turnId === 'string' && entry.wrapTurns.delete(turnId)
+      if (hadWrap || entry.dirty) {
+        entry.dirty = true
+        entry.revision++
+      }
     }
   }
 
@@ -70,15 +82,29 @@ export class SessionQuestions {
     if (!entry) {
       // 只保留用过的会话；上限防常驻服务无限积累。
       if (this.entries.size >= 10_000) this.entries.clear()
-      entry = { questions: [], dirty: true, revision: 0 }
+      entry = { questions: [], dirty: true, revision: 0, wrapTurns: new Set() }
       this.entries.set(threadId, entry)
     }
     const revision = entry.revision
     const thread = await load()
     if (!Array.isArray(thread.turns)) throw new Error('includeTurns was not returned')
-    const questions = questionsOfHistory(thread)
+    const view = pendingHistory(thread)
+    const questions = questionsOfView(view)
     // 读取途中有新消息、回退或断连：这一份不能冒充当前快照，下次再取。
     if (this.entries.get(threadId) !== entry || entry.revision !== revision) return []
+    // 首次读取或重连可能错过条目通知，从运行中历史补齐回合标记。
+    entry.wrapTurns = new Set(
+      view.turns
+        .filter(
+          (turn) =>
+            turn.status === 'running' &&
+            turn.itemIds.some((id) => {
+              const wrap = view.items[id]?.wrapUp
+              return wrap?.ask || wrap?.withdrawQuestions?.length
+            }),
+        )
+        .map((turn) => turn.id),
+    )
     entry.questions = questions
     entry.dirty = false
     return questions

@@ -118,3 +118,51 @@ test('QUESTION-CACHE-004：自动回合中途的用户插话同样使旧问题�
   await cache.read(tid, load)
   assert.equal(reads, 2)
 })
+
+test('QUESTION-CACHE-005：回合中缓存过已完成的收尾条目，回合结束后重新读入问题', async () => {
+  for (const warm of [true, false]) {
+    const cache = new SessionQuestions()
+    let reads = 0
+    let history = { turns: [turn('t1', [])] }
+    const load = async () => {
+      reads++
+      return history
+    }
+    if (warm) await cache.read(tid, load)
+    const item = wrapQuestion()
+    cache.event('item/completed', { threadId: tid, turnId: 't1', item })
+    history = { turns: [turn('t1', [item], { status: 'inProgress' })] }
+    assert.deepEqual(await cache.read(tid, load), [])
+    const before = reads
+    // 其他回合结束不能提前消费标记；完成通知不保证携带条目。
+    cache.event('turn/completed', { threadId: tid, turn: { id: 'other' } })
+    assert.deepEqual(await cache.read(tid, load), [])
+    assert.equal(reads, before)
+    history = { turns: [turn('t1', [item])] }
+    cache.event('turn/completed', { threadId: tid, turn: { id: 't1' } })
+    assert.equal((await cache.read(tid, load))[0]?.title, '继续？')
+    assert.equal(reads, before + 1)
+    cache.event('turn/completed', { threadId: tid, turn: { id: 't2' } })
+    assert.equal((await cache.read(tid, load))[0]?.title, '继续？')
+    assert.equal(reads, before + 1, '标记消费后普通回合不重读')
+  }
+})
+
+test('QUESTION-CACHE-006：冷读途中回合结束，运行中快照不能缓存为最终结果', async () => {
+  const cache = new SessionQuestions()
+  let finish: (thread: Record<string, unknown>) => void = () => {}
+  const pending = cache.read(
+    tid,
+    () =>
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+  )
+  cache.event('turn/completed', { threadId: tid, turn: { id: 't1' } })
+  finish({ turns: [turn('t1', [wrapQuestion()], { status: 'inProgress' })] })
+  assert.deepEqual(await pending, [])
+  const questions = await cache.read(tid, async () => ({
+    turns: [turn('t1', [wrapQuestion()])],
+  }))
+  assert.equal(questions[0]?.title, '继续？')
+})
