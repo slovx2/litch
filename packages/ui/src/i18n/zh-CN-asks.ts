@@ -5,6 +5,7 @@ import type { Entry } from './types.ts'
 
 export const zhAsks = {
   'ask.children': '子会话待处理',
+  'ask.childrenCount': '{count} 个子会话待处理',
   'ask.childUnavailable': '正在读取请求；若无法在此处理，请打开子会话。',
   'ask.delegatedHistory': '代答记录 · {count} 条',
   'ask.approvalRecorded': '已记录审批决定',

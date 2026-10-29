@@ -1035,3 +1035,41 @@ button.agent-row:hover {
   width: max-content;
   max-width: min(320px, 80vw);
 }
+
+/* 代答记录（composer/ChildRequests.tsx 的 DelegatedHistory）：展开后一条一块，谁代答、什么时候，下面问答成对 */
+.delegated-one {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-left: 20px;
+}
+.delegated-one + .delegated-one {
+  padding-top: 8px;
+  border-top: 1px solid var(--line-1);
+}
+.delegated-by {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.delegated-by time {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.delegated-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.delegated-q {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

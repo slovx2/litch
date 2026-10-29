@@ -1070,3 +1070,78 @@ textarea.req-input {
   resize: vertical;
   line-height: 1.5;
 }
+
+/* ---------- 子会话待处理（composer/ChildRequests.tsx）：和待答问题同一种卡片，一个子会话一行 ---------- */
+.child-req {
+  border-top: 1px solid var(--line-1);
+}
+.child-req-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 0;
+}
+.child-req-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 0 0 14px;
+  font-size: 13px;
+  text-align: left;
+  color: var(--ink);
+}
+.child-req-toggle .chip {
+  flex: none;
+}
+.child-req-title {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.child-req-what {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.child-req-toggle .caret-ic {
+  color: var(--ink-3);
+}
+.child-req-toggle:hover .caret-ic {
+  color: var(--ink);
+}
+.child-req-line > .mini {
+  flex: none;
+  align-self: center;
+}
+/* 点开的请求卡放在这张卡里：去掉它自己的边框和底色，不套两层；高度由外面这张卡管 */
+.child-reqs .child-req-body .req-frame {
+  max-height: none;
+}
+.child-reqs .child-req-body .req {
+  border: 0;
+  box-shadow: none;
+  border-top: 1px dashed var(--line-1);
+  border-radius: 0;
+  background: none;
+  overflow: visible;
+}
+.child-req-note {
+  margin: 0;
+  padding: 8px 14px 12px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.child-reqs .child-req-body .req-frame::after {
+  display: none;
+}

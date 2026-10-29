@@ -249,6 +249,20 @@ export const SCENES: Scene[] = [
     steps: [say('别的会话')],
   },
   {
+    id: 'child-requests',
+    group: '对话',
+    name: '子会话待处理',
+    note: '子会话停下要审批，在父会话里代答',
+    steps: [say('子会话待审批')],
+  },
+  {
+    id: 'delegated',
+    group: '对话',
+    name: '代答记录',
+    note: '别的会话替这个会话答过的请求',
+    steps: [say('代答记录')],
+  },
+  {
     id: 'system-cards',
     group: '对话',
     name: '系统消息',

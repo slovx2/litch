@@ -341,7 +341,7 @@ function Head({
 }
 
 /** 回答：左边一道强调色、淡淡的底，和题目分得开；选的和自己写的一个样子 */
-function Answer({ text }: { text: string }) {
+export function Answer({ text }: { text: string }) {
   const { c, font, radius } = useTheme()
   const t = useT()
   return (

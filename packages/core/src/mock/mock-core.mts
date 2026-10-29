@@ -32,8 +32,10 @@ import type {
   QuestionView,
   RemoteCheck,
   RemoteTarget,
+  RequestView,
   SessionAbilities,
   SessionAbility,
+  SessionPendingRequest,
   SessionSummary,
   SessionView,
   SidebarView,
@@ -509,6 +511,31 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     return summary
   }
 
+  /** 请求在侧栏摘要上的样子：只要类型、标题、一句摘要 */
+  const pendingOf = (view: SessionView, request: RequestView): SessionPendingRequest => ({
+    id: request.id,
+    threadId: view.sessionId,
+    harness: view.harness,
+    turnId: running(view)?.id ?? null,
+    kind:
+      request.kind === 'approval' || request.kind === 'clientAsk'
+        ? 'approval'
+        : request.kind === 'question'
+          ? 'question'
+          : 'form',
+    title:
+      request.kind === 'approval'
+        ? (request.command ?? request.reason ?? 'Approval')
+        : request.kind === 'question'
+          ? (request.questions[0]?.question ?? 'Question')
+          : request.kind === 'form'
+            ? request.message
+            : request.tool.name,
+    summary: '',
+    createdAt: clock.now(),
+    canRespond: true,
+  })
+
   const updateSummary = (deviceId: string, sessionId: string, patch: Partial<SessionSummary>) => {
     const view = sidebars.get(deviceId)
     const index = view?.sessions.findIndex((session) => session.id === sessionId) ?? -1
@@ -595,6 +622,11 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       return stamped
     })
     emit(`session:${view.deviceId}:${view.sessionId}`, ops)
+    // 待处理的请求变了：侧栏摘要上的阻塞请求（父会话的“子会话待处理”用）跟着变，同设备服务
+    if (ops.some((op) => op.op === 'request.add' || op.op === 'request.remove'))
+      updateSummary(view.deviceId, view.sessionId, {
+        pendingRequests: view.requests.map((request) => pendingOf(view, request)),
+      })
   }
 
   const sessionKey = (view: SessionView) => `session:${view.deviceId}:${view.sessionId}`

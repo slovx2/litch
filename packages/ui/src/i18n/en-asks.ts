@@ -4,6 +4,8 @@ import type { zhAsks } from './zh-CN-asks.ts'
 
 export const enAsks: Record<keyof typeof zhAsks, Entry> = {
   'ask.children': 'Sub-session requests',
+  'ask.childrenCount': ({ count }) =>
+    Number(count) === 1 ? '1 sub-session is waiting' : `${count} sub-sessions are waiting`,
   'ask.childUnavailable': 'Loading the request. Open the sub-session if it cannot be handled here.',
   'ask.delegatedHistory': 'Delegated responses · {count}',
   'ask.approvalRecorded': 'Approval decision recorded',

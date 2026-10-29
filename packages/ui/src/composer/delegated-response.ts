@@ -2,15 +2,17 @@
 import type { SessionDelegatedResponse } from '@litch/core'
 import type { MessageKey } from '../i18n/index.ts'
 
-export function delegatedResponseText(
+/** 一条代答记录拆成“问了什么 → 答了什么”：问题一题一对，审批是要批的事和选的那一项 */
+export function delegatedPairs(
   record: SessionDelegatedResponse,
   t: (key: MessageKey) => string,
-): string {
+): { question: string; answer: string }[] {
   const answer = record.answer as { answers?: Record<string, string[]>; decision?: unknown }
   if (record.kind === 'question')
-    return (record.questions ?? [])
-      .map((q) => `${q.question}\n${answer.answers?.[q.id]?.join('、') || t('ask.skipped')}`)
-      .join('\n\n')
+    return (record.questions ?? []).map((q) => ({
+      question: q.question,
+      answer: answer.answers?.[q.id]?.join('、') || t('ask.skipped'),
+    }))
   const decision = answer.decision
   const label: MessageKey =
     decision === 'decline'
@@ -22,5 +24,14 @@ export function delegatedResponseText(
           : typeof decision === 'object' && decision !== null
             ? 'ask.approvalRecorded'
             : 'request.option.accept'
-  return `${record.title}\n${t(label)}`
+  return [{ question: record.title, answer: t(label) }]
+}
+
+export function delegatedResponseText(
+  record: SessionDelegatedResponse,
+  t: (key: MessageKey) => string,
+): string {
+  return delegatedPairs(record, t)
+    .map((pair) => `${pair.question}\n${pair.answer}`)
+    .join('\n\n')
 }

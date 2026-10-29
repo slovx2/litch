@@ -57,6 +57,10 @@ import {
 } from './sample-tree.mjs'
 
 const SPAWNS = /派子会话|spawn sub-sessions/i
+/** 派一个子会话，它一上来就停下要审批：父会话输入框上方出“子会话待处理”，可以在父会话里代答 */
+const CHILD_BLOCKED = /子会话待审批|child needs approval/i
+/** 这个会话上有两条“由主会话代答”的记录（审批一条、问题一条） */
+const DELEGATED = /代答记录|delegated history/i
 const PROPOSES = /提个子会话|propose a sub-session/i
 const WITHDRAWS = /撤回提案|withdraw a proposal/i
 const WRAPS = /收尾建议|suggest follow-ups/i
@@ -377,6 +381,78 @@ export function createMockTree(host: MockTreeHost): MockTree {
     })
     host.apply(view, ops)
     host.reply(view, turnId, text.spawnReply, emptyWrapUp(turnId))
+  }
+
+  const blockedDemo = (view: SessionView, turnId: string) => {
+    const zh = host.lang === 'zh-CN'
+    const title = zh ? '装依赖' : 'Install dependencies'
+    // 子会话的第一段话里带“审批”：它的回合一开始就停下要一次审批（mock-core 的 ASKS_APPROVAL）
+    const prompt = zh
+      ? '装上 vitest 和 happy-dom，装之前要审批。'
+      : 'Install vitest and happy-dom; this needs approval first.'
+    const threadId = startChild(view, {
+      title,
+      prompt,
+      harness: view.harness,
+      kind: 'fresh',
+      origin: 'model',
+      wakeParent: true,
+      reply: null,
+    })
+    host.apply(view, [
+      sessionsCall(
+        turnId,
+        { title, prompt, harness: view.harness, initiation: 'user_asked' },
+        { thread_id: threadId, note: 'Started.' },
+      ),
+    ])
+    host.reply(
+      view,
+      turnId,
+      zh
+        ? '派了一个子会话去装依赖，它停下来要审批。'
+        : 'Started a sub-session to install dependencies; it is waiting for approval.',
+      emptyWrapUp(turnId),
+    )
+  }
+
+  const delegatedDemo = (view: SessionView, turnId: string) => {
+    const zh = host.lang === 'zh-CN'
+    const parent = host.summary(view.deviceId, view.sessionId)?.lineage?.parentId ?? 's6'
+    const now = host.now()
+    const base = {
+      threadId: view.sessionId,
+      turnId,
+      sourceThreadId: parent,
+      sourceTitle: zh ? '远程设备安装指引' : 'Remote device setup guide',
+      parent: true,
+    }
+    host.updateSummary(view.deviceId, view.sessionId, {
+      delegatedResponses: [
+        {
+          ...base,
+          id: host.nextId('dr'),
+          requestId: host.nextId('rq'),
+          kind: 'approval',
+          title: 'npm install -D vitest@3.2.4 happy-dom@18.0.1',
+          answer: { decision: 'accept' },
+          at: now - 120_000,
+        },
+        {
+          ...base,
+          id: host.nextId('dr'),
+          requestId: host.nextId('rq'),
+          kind: 'question',
+          title: zh ? '测试放在哪个目录？' : 'Where should the tests go?',
+          questions: [
+            { id: 'dir', question: zh ? '测试放在哪个目录？' : 'Where should the tests go?' },
+          ],
+          answer: { answers: { dir: ['test/'] } },
+          at: now - 60_000,
+        },
+      ],
+    })
+    host.reply(view, turnId, zh ? '收到。' : 'Got it.', emptyWrapUp(turnId))
   }
 
   const setProposals = (view: SessionView, proposals: SessionProposalView[]) =>
@@ -1103,6 +1179,18 @@ export function createMockTree(host: MockTreeHost): MockTree {
           wrapUpOps(view, turnId, [], { ask: text.wrapAsk, actions: text.wrapActions }),
         )
         spawnDemo(view, turnId)
+        return true
+      }
+      // 子会话的启动指令里带着父会话的标题，可能也有这几个字：子会话里不再演
+      if (
+        CHILD_BLOCKED.test(message.text) &&
+        !host.summary(view.deviceId, view.sessionId)?.lineage
+      ) {
+        blockedDemo(view, turnId)
+        return true
+      }
+      if (DELEGATED.test(message.text)) {
+        delegatedDemo(view, turnId)
         return true
       }
       if (SPAWNS.test(message.text)) {

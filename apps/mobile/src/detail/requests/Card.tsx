@@ -28,6 +28,9 @@ export interface Choice {
 /** 卡片最高多少（外面按屏幕和键盘算好给进来） */
 export const CardHeight = createContext(320)
 
+/** 卡片套在另一张等待色的卡片里（父会话里的“子会话待处理”）：不画自己的外框和底色，不套两层 */
+export const CardNested = createContext(false)
+
 export function useRespond({ deviceId, sessionId, request }: CardProps) {
   const channel = useChannel()
   const t = useT()
@@ -74,18 +77,21 @@ export function Card({
   const theme = useTheme()
   const t = useT()
   const maxHeight = useContext(CardHeight)
+  const nested = useContext(CardNested)
   const { c } = theme
   return (
     <View
       testID={testID}
       style={[
         styles.card,
-        {
-          maxHeight,
-          backgroundColor: c.raised,
-          borderColor: c.wait,
-          borderRadius: theme.radius.l,
-        },
+        nested
+          ? [styles.nested, { maxHeight, borderTopColor: c.line1 }]
+          : {
+              maxHeight,
+              backgroundColor: c.raised,
+              borderColor: c.wait,
+              borderRadius: theme.radius.l,
+            },
       ]}
     >
       <View style={[styles.head, { borderBottomColor: c.line1 }]}>
@@ -215,6 +221,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderLeftWidth: 3,
     overflow: 'hidden',
+  },
+  nested: {
+    marginHorizontal: 0,
+    marginBottom: 0,
+    borderWidth: 0,
+    borderLeftWidth: 0,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   head: {
     flexDirection: 'row',
