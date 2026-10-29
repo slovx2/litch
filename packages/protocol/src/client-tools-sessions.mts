@@ -252,6 +252,8 @@ export interface SessionSummary {
   parent_thread_id: string | null
   /** 子会话当前的自动唤醒开关；没有 Litch 父会话时为 null。 */
   wake_parent: boolean | null
+  /** 用户是否允许自动回报；无父会话时为 null。模型只能读。 */
+  report_parent?: boolean | null
   /** 是不是调用者自己派出的子孙 */
   mine: boolean
 }

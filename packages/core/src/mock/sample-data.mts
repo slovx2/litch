@@ -118,6 +118,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       machine: null,
       // 会话树：对话里说“派子会话”“提个子会话”“用子代理”各演一出（mock-tree.mts）
       sessionTree: true,
+      reportControl: true,
       ignoreQuestions: true,
       // 扫码绑定手机：出码之后过几秒“手机”来登记（mock-pairing.mts）
       pairing: true,
@@ -170,6 +171,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       // 08 号：远程设备“操作这台电脑”。示例里只有 build-01 开着
       machine: sampleMachineAccess('build'),
       sessionTree: true,
+      reportControl: true,
       ignoreQuestions: true,
       pairing: true,
       install: true,
@@ -242,6 +244,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       tools: { browser: true, computer: false },
       machine: sampleMachineAccess('gpu'),
       sessionTree: true,
+      reportControl: true,
       ignoreQuestions: true,
       // 断开之前知道它支持；现在连不上，出不了码
       pairing: true,

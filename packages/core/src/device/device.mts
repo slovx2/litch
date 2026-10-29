@@ -417,6 +417,7 @@ export interface Device {
   spawn(request: SpawnRequest): Promise<string>
   /** 会话树：把子会话脱离成独立会话 */
   detach(sessionId: string): Promise<void>
+  setReportParent(sessionId: string, reportParent: boolean): Promise<void>
   /** 会话树：提案上点了“开始”（overrides 是“改了再开始”改过的那几项），返回起出来的子会话 */
   acceptProposal(
     sessionId: string,
@@ -587,6 +588,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
    */
   let sessionTree = false
   let ignoreQuestions = false
+  let reportControl = false
   /** 对面支不支持扫码绑定手机（devicePairing 扩展）。断开之后留着断开前知道的 */
   let pairable = false
   /** 对面转不转手机批准（clientApprovals 扩展）。断开之后留着断开前知道的 */
@@ -766,6 +768,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     machine: options.machine?.view() ?? null,
     sessionTree,
     ignoreQuestions,
+    reportControl,
     pairing: pairable,
     install: installable,
     worktrees: worktreesOn,
@@ -1479,6 +1482,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     // 会话树：一个会话的 Litch 父子关系建立了、脱离了。只发给声明了 sessionTree 的连接
     'litch/thread/lineage/updated': ({ threadId, lineage }) =>
       patchThread(threadId, { litchLineage: lineage ?? undefined }),
+    'litch/thread/report/changed': ({ threadId, reportParent }) => {
+      const lineage = (threads.get(threadId) as (Thread & SessionTreeThreadFields) | undefined)
+        ?.litchLineage
+      if (lineage) patchThread(threadId, { litchLineage: { ...lineage, reportParent } })
+    },
     // 会话树：子会话交来的回报进了这个会话的队列、交给了模型（整份）。对话区末尾当场画排着的
     'litch/thread/pending/changed': ({ threadId, litchPendingRequests, litchDelegatedResponses }) =>
       patchThread(threadId, { litchPendingRequests, litchDelegatedResponses } as Partial<Thread>),
@@ -1647,6 +1655,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         schedulable = info.device.extensions?.includes(EXTENSION.deviceTasks) === true
         managersOn = info.device.extensions?.includes(EXTENSION.manager) === true
         sessionTree = info.device.extensions?.includes(EXTENSION.sessionTree) === true
+        reportControl =
+          sessionTree && info.device.extensions?.includes(EXTENSION.sessionReportControl) === true
         ignoreQuestions =
           sessionTree && info.device.extensions?.includes(EXTENSION.sessionQuestionIgnore) === true
         pairable = info.device.extensions?.includes(EXTENSION.devicePairing) === true
@@ -1674,6 +1684,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         managersOn = false
         sessionTree = false
         ignoreQuestions = false
+        reportControl = false
         pairable = false
         installable = false
         worktreesOn = false
@@ -1700,6 +1711,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       managersOn = false
       sessionTree = false
       ignoreQuestions = false
+      reportControl = false
       pairable = false
       installable = false
       worktreesOn = false
@@ -2777,6 +2789,14 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       await guarded(() => link.request(SESSION_TREE_METHOD.detach, { threadId: sessionId }))
       // 对面成了之后会发父子关系变了的通知，不一定发给这条连接：这边先改
       patchThread(sessionId, { litchLineage: undefined })
+    },
+    async setReportParent(sessionId, reportParent) {
+      treeOnly()
+      if (!reportControl) throw new ChannelError('unsupported', '此设备不支持控制回报')
+      await guarded(() =>
+        link.request(SESSION_TREE_METHOD.reportSet, { threadId: sessionId, reportParent }),
+      )
+      // 通知是权威状态，避免并发切换时用迟到应答覆盖更新的通知。
     },
     async acceptProposal(sessionId, proposalId, overrides) {
       treeOnly()

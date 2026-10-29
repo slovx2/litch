@@ -85,6 +85,7 @@ export const EXTENSION = {
   sessionTree: 'sessionTree',
   /** 设备支持忽略未答题；方法、字段和通知仍由 sessionTree 声明控制。 */
   sessionQuestionIgnore: 'sessionQuestionIgnore',
+  sessionReportControl: 'sessionReportControl',
   /**
    * 扫码绑定手机：设备服务临时放行一把一次性钥匙，手机登进来登记自己的公钥（device-pairing.mts，
    * 定义在 protocol/extensions/device-pairing.json）。设备信息的 `extensions` 里列了它，litch/pair/* 才能用；

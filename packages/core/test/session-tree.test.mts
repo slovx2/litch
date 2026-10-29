@@ -271,6 +271,7 @@ test('投影：父子关系的时间换成毫秒；不接受直接输入的子�
     origin: 'model',
     title: '查依赖',
     wakeParent: true,
+    reportParent: true,
     createdAt: 1_700_000_100_000,
     proposalId: null,
   })

@@ -99,6 +99,12 @@ export async function sessionTreeCall(
   if (!enabled) throw new ProtocolError(-32602, `这台设备的设置里关掉了会话编排，${method} 用不了`)
   const fields = isObject(params) ? params : {}
   switch (method) {
+    case SESSION_TREE_METHOD.reportSet: {
+      if (!declared) throw new DeviceError('extensionRequired', 'sessionTree must be declared')
+      if (typeof fields.reportParent !== 'boolean')
+        throw new ProtocolError(-32602, 'reportParent 必须是布尔值')
+      return tree.setReportParent(requiredString(fields.threadId, 'threadId'), fields.reportParent)
+    }
     case SESSION_TREE_METHOD.ignoreQuestions: {
       if (!declared) throw new DeviceError('extensionRequired', 'sessionTree must be declared')
       if (

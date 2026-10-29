@@ -1057,7 +1057,9 @@ export function createMockTree(host: MockTreeHost): MockTree {
   const childrenStopped = (deviceId: string, parentId: string): boolean =>
     host
       .summaries(deviceId)
-      .filter((entry) => entry.lineage?.parentId === parentId)
+      .filter(
+        (entry) => entry.lineage?.parentId === parentId && entry.lineage.reportParent !== false,
+      )
       .every((entry) => entry.status !== 'running' && entry.status !== 'waiting')
 
   /** 父会话有回合在跑：攒着的回报当场插进这个回合（同设备进程的 steerNotes），画在插进去的位置 */
@@ -1096,6 +1098,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       (entry) =>
         entry.lineage?.parentId === parentId &&
         entry.lineage.wakeParent &&
+        entry.lineage.reportParent !== false &&
         // 出错、被打断的回合不算（同设备进程）
         notes.some((note) => note.threadId === entry.id && note.status === 'completed'),
     )
@@ -1247,7 +1250,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       }
       const summary = host.summary(deviceId, sessionId)
       const lineage = summary?.lineage
-      if (lineage) {
+      if (lineage && lineage.reportParent !== false) {
         // 回报：最后一条回答的开头
         const turn = view.turns.at(-1)
         const answer = [...(turn?.itemIds ?? [])]
@@ -1291,7 +1294,8 @@ export function createMockTree(host: MockTreeHost): MockTree {
       if (
         name.startsWith('session.proposal.') ||
         name === 'session.spawn' ||
-        name === 'session.detach'
+        name === 'session.detach' ||
+        name === 'session.report.set'
       ) {
         const { deviceId } = params as { deviceId: string }
         if (!host.treeOn(deviceId)) {
@@ -1320,6 +1324,22 @@ export function createMockTree(host: MockTreeHost): MockTree {
           worktree: rest.worktree ?? null,
         })
         return { sessionId }
+      }
+      if (name === 'session.report.set') {
+        const { deviceId, sessionId, reportParent } =
+          params as Commands['session.report.set']['params']
+        const lineage = host.summary(deviceId, sessionId)?.lineage
+        if (!lineage) throw new ChannelError('rejected', '这个会话不是子会话')
+        host.updateSummary(deviceId, sessionId, { lineage: { ...lineage, reportParent } })
+        if (!reportParent)
+          queue(
+            deviceId,
+            lineage.parentId,
+            (pending.get(sameKey(deviceId, lineage.parentId)) ?? []).filter(
+              (note) => note.threadId !== sessionId,
+            ),
+          )
+        return {}
       }
       if (name === 'session.detach') {
         const { deviceId, sessionId } = params as Commands['session.detach']['params']

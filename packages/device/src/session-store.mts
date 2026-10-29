@@ -158,6 +158,8 @@ const MIGRATIONS: readonly string[] = [
      PRIMARY KEY(thread_id, turn_id)) WITHOUT ROWID;`,
   // 会话已经建出但首回合尚未确认开始，重启后仍占启动名额，直到开始、归档或删除。
   `CREATE TABLE child_starts(thread_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL) WITHOUT ROWID;`,
+  `ALTER TABLE lineage ADD COLUMN report_parent INTEGER NOT NULL DEFAULT 1;
+   ALTER TABLE lineage ADD COLUMN report_epoch INTEGER NOT NULL DEFAULT 0;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -167,6 +169,8 @@ export const SESSION_MIGRATIONS = MIGRATIONS
 
 /** 库里的一条父子关系 */
 export interface LineageRow extends SessionLineage {
+  reportParent: boolean
+  reportEpoch: number
   threadId: string
   /** 子会话所在的 harness */
   harness: string
@@ -232,6 +236,8 @@ function lineageOf(row: Row): LineageRow {
     title: text(row.title),
     prompt: text(row.prompt),
     wakeParent: row.wake_parent === 1,
+    reportParent: row.report_parent === 1,
+    reportEpoch: Number(row.report_epoch),
     createdAt: Number(row.created_at),
     detachedAt: row.detached_at == null ? null : Number(row.detached_at),
     reportedTurn: maybe(row.reported_turn),
@@ -470,8 +476,16 @@ export class SessionStore {
     return [...this.lineage.values()].filter((row) => row.detachedAt === null)
   }
 
-  addLineage(row: Omit<LineageRow, 'detachedAt' | 'reportedTurn'>): LineageRow {
-    const full: LineageRow = { ...row, detachedAt: null, reportedTurn: null }
+  addLineage(
+    row: Omit<LineageRow, 'detachedAt' | 'reportedTurn' | 'reportParent' | 'reportEpoch'>,
+  ): LineageRow {
+    const full: LineageRow = {
+      ...row,
+      detachedAt: null,
+      reportedTurn: null,
+      reportParent: true,
+      reportEpoch: 0,
+    }
     // 同一个会话再派一次（脱离之后又被派）：旧的那条换掉
     this.db.prepare('DELETE FROM lineage WHERE thread_id=?').run(row.threadId)
     this.run(
@@ -491,6 +505,29 @@ export class SessionStore {
     // 派子会话就是父会话给它发了第一条消息：之后两边一直可以互相发
     this.addContact(row.parentThreadId, row.threadId)
     return full
+  }
+
+  /** 用户更新回报开关，关闭时清理尚未投递的回报；epoch 防止异步旧结果回填。 */
+  setReportParent(threadId: string, report: boolean): LineageRow | null {
+    const row = this.parentOf(threadId)
+    if (!row || row.reportParent === report) return row
+    // 开关和队列一起提交，设备退出后不能留下已关闭子会话的待投递项。
+    this.db.exec('BEGIN')
+    try {
+      this.db
+        .prepare(
+          'UPDATE lineage SET report_parent=?, report_epoch=report_epoch+1 WHERE thread_id=?',
+        )
+        .run(report ? 1 : 0, threadId)
+      if (!report) this.db.prepare('DELETE FROM notes WHERE thread_id=?').run(threadId)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+    row.reportParent = report
+    row.reportEpoch++
+    return row
   }
 
   /** 更新已有直接父子关系的唤醒开关。 */

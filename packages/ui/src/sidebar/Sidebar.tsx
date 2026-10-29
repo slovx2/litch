@@ -258,6 +258,12 @@ const SessionRow = memo(function SessionRow({
   const organizable = device?.organizable === true
   const elsewhere = workspaces.filter((entry) => entry.id !== summary.workspaceId)
   const actions: RowAction[] = []
+  if (summary.lineage && device?.reportControl)
+    actions.push({
+      id: 'report',
+      title: t(summary.lineage.reportParent === false ? 'tree.report.resume' : 'tree.report.stop'),
+      ...(device.connection === 'online' ? {} : { disabled: t('tree.report.offline') }),
+    })
   if (organizable) {
     if (summary.pinned) actions.push({ id: 'unpin', title: t('session.unpin') })
     else {
@@ -361,7 +367,16 @@ const SessionRow = memo(function SessionRow({
       }
     } else if (id === 'schedule') requestTasks({ view: 'new', deviceId, threadId: sessionId })
     else if (id === 'spawn') setSpawning(true)
-    else if (id === 'detach') {
+    else if (id === 'report') {
+      setFailure(null)
+      channel
+        .command('session.report.set', {
+          deviceId,
+          sessionId,
+          reportParent: summary.lineage?.reportParent === false,
+        })
+        .catch(failed)
+    } else if (id === 'detach') {
       setFailure(null)
       channel.command('session.detach', { deviceId, sessionId }).catch(failed)
     } else if (id === 'pin') place('pinned')

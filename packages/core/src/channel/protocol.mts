@@ -1105,6 +1105,10 @@ export interface Commands {
     params: { deviceId: string; sessionId: string }
     result: Record<string, never>
   }
+  'session.report.set': {
+    params: { deviceId: string; sessionId: string; reportParent: boolean }
+    result: Record<string, never>
+  }
   /**
    * 用户点了提案上的“开始”（或者“改了再开始”，带着改过的那几项）：起这个子会话。应答时子会话已经建好
    */

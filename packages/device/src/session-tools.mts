@@ -125,6 +125,7 @@ function summary(
     updated_at: Number(thread.updatedAt) || 0,
     parent_thread_id: lineage?.parentThreadId ?? null,
     wake_parent: lineage?.wakeParent ?? null,
+    report_parent: lineage?.reportParent ?? null,
     mine: tree.store.descends(id, caller),
   }
 }

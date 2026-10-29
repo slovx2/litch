@@ -1069,7 +1069,12 @@ export class ClientSession implements ClientToolPeer {
     return this.host.sessionTreeOn()
       ? {
           ...info,
-          extensions: [...info.extensions, EXTENSION.sessionTree, EXTENSION.sessionQuestionIgnore],
+          extensions: [
+            ...info.extensions,
+            EXTENSION.sessionTree,
+            EXTENSION.sessionQuestionIgnore,
+            EXTENSION.sessionReportControl,
+          ],
         }
       : info
   }

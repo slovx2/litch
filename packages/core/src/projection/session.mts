@@ -221,10 +221,8 @@ export function projectNativeLineage(thread: Thread): NativeLineageView | null {
 
 export function lineageOf(raw: unknown): SessionLineageView | null {
   if (typeof raw !== 'object' || raw === null) return null
-  const { parentThreadId, kind, origin, title, wakeParent, createdAt, proposalId } = raw as Record<
-    string,
-    unknown
-  >
+  const { parentThreadId, kind, origin, title, wakeParent, reportParent, createdAt, proposalId } =
+    raw as Record<string, unknown>
   if (typeof parentThreadId !== 'string' || !parentThreadId) return null
   return {
     parentId: parentThreadId,
@@ -232,6 +230,7 @@ export function lineageOf(raw: unknown): SessionLineageView | null {
     origin: origin === 'model' || origin === 'proposal' ? origin : 'user',
     title: typeof title === 'string' ? title : '',
     wakeParent: wakeParent === true,
+    reportParent: reportParent !== false,
     createdAt: toMs(typeof createdAt === 'number' ? createdAt : null) ?? 0,
     proposalId: typeof proposalId === 'string' && proposalId ? proposalId : null,
   }

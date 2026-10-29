@@ -760,6 +760,16 @@ export function createCore(options: CoreOptions): Core {
             throw toChannelFailure(error)
           }
         }
+        case 'session.report.set': {
+          const { deviceId, sessionId, reportParent } =
+            params as Commands['session.report.set']['params']
+          try {
+            await deviceOf(deviceId).setReportParent(sessionId, reportParent)
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+          return {}
+        }
         case 'session.detach': {
           const { deviceId, sessionId } = params as Commands['session.detach']['params']
           try {

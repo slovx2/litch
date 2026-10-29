@@ -22,6 +22,8 @@ export interface SessionLineageView {
   title: string
   /** 这个子会话停下之后要不要唤醒父会话 */
   wakeParent: boolean
+  /** 用户控制是否自动回报父会话，缺省开启。 */
+  reportParent?: boolean
   /** 建立父子关系的时间，毫秒 */
   createdAt: number
   /** 从哪个提案开始的（用户点了提案卡片上的“开始”）。不是从提案来的是 null */

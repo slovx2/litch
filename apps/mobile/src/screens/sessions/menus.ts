@@ -5,12 +5,21 @@
 import type { DeviceView, SessionSummary, WorkspaceView } from '@litch/core'
 import type { Translator } from '../../ui/i18n'
 
-export type SessionAct = 'pin' | 'unpin' | 'unsection' | 'move' | 'rename' | 'archive' | 'delete'
+export type SessionAct =
+  | 'pin'
+  | 'unpin'
+  | 'unsection'
+  | 'move'
+  | 'rename'
+  | 'archive'
+  | 'delete'
+  | 'report'
 
 export interface MenuEntry<A extends string> {
   act: A
   label: string
   danger?: boolean
+  disabled?: string
 }
 
 export function sessionMenu(
@@ -23,6 +32,12 @@ export function sessionMenu(
   const online = device?.connection === 'online' && harness?.state === 'ready'
   const can = harness?.abilities
   const entries: MenuEntry<SessionAct>[] = []
+  if (summary.lineage && device?.reportControl)
+    entries.push({
+      act: 'report',
+      label: t(summary.lineage.reportParent === false ? 'tree.report.resume' : 'tree.report.stop'),
+      ...(device.connection === 'online' ? {} : { disabled: t('tree.report.offline') }),
+    })
   if (device?.organizable) {
     if (summary.pinned) entries.push({ act: 'unpin', label: t('session.unpin') })
     else {

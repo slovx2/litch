@@ -1256,6 +1256,9 @@ export const en: Record<MessageKey, Entry> = {
   'tree.lineage.claudeDesktop': 'in the Claude desktop app',
   'tree.lineage.otherApp': 'in another app',
   'tree.detach': 'Detach as a standalone session',
+  'tree.report.stop': 'Stop reporting to parent',
+  'tree.report.resume': 'Resume reporting to parent',
+  'tree.report.offline': 'Connect to the execution device to change this',
   'tree.detach.title': 'Detach as a standalone session?',
   'tree.detach.note':
     'It stays in the sidebar but no longer belongs to its parent and won’t wake it when done.',

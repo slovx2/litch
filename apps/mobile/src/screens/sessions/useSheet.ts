@@ -1,9 +1,9 @@
 // 会话列表上弹出来的动作单：现在是哪一张（会话的、移到哪个工作区、工作区的、已归档的、整页的），
 // 里面有哪几项、点了做什么。哪几项由 menus.ts 定，这里只把它们接到命令和别的浮层上。
-import type { DeviceView, SessionSummary, WorkspaceView } from '@litch/core'
+import { type DeviceView, keys, type SessionSummary, type WorkspaceView } from '@litch/core'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { RootStackParamList } from '../../nav/routes'
-import { useChannel, useServices } from '../../shell/services'
+import { useChannel, useKey, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import type { SheetAction } from '../../ui/kit/overlays'
 import { archivedMenu, sessionMenu, workspaceMenu } from './menus'
@@ -54,6 +54,10 @@ export function useSheet({
   const t = useT()
   const channel = useChannel()
   const { prefs, setPrefs } = useServices()
+  // 菜单打开时另一端也可能切换开关，显示和操作都取当前订阅值。
+  const latest = useKey<SessionSummary>(
+    keys.summary(deviceId, menu && 'summary' in menu ? menu.summary.id : ''),
+  )
   if (!menu) return { actions: [] }
   const target = (summary: SessionSummary) => ({ deviceId, sessionId: summary.id })
   const askDelete = (summary: SessionSummary) =>
@@ -66,9 +70,16 @@ export function useSheet({
 
   switch (menu.kind) {
     case 'session': {
-      const { summary } = menu
+      const summary = latest ?? menu.summary
       const entries = sessionMenu(summary, device, workspaces, t)
       const run = {
+        report: () =>
+          act(
+            channel.command('session.report.set', {
+              ...target(summary),
+              reportParent: summary.lineage?.reportParent === false,
+            }),
+          ),
         pin: () => act(channel.command('session.place', { ...target(summary), place: 'pinned' })),
         unpin: () => act(channel.command('session.place', { ...target(summary), place: null })),
         unsection: () => act(channel.command('session.place', { ...target(summary), place: null })),
@@ -82,6 +93,7 @@ export function useSheet({
         actions: entries.map((entry) => ({
           label: entry.label,
           danger: entry.danger,
+          disabled: entry.disabled,
           testID: `menu:${entry.act}`,
           onPress: run[entry.act],
         })),
