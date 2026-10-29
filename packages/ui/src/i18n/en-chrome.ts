@@ -1,5 +1,6 @@
 export const enChrome = {
   'chrome.instance': 'Allow access to this Chrome instance',
+  'chrome.instanceLabel': 'Instance',
   'chrome.instanceNote':
     'Allow the agent to list tab titles and URLs in this Chrome instance. Page content still requires origin approval.',
   'chrome.title': 'Chrome',

@@ -76,6 +76,7 @@ import { createMockTerminals } from './mock-terminals.mjs'
 import { createMockTree } from './mock-tree.mjs'
 import { createMockWorktrees, shownOf } from './mock-worktrees.mjs'
 import {
+  type ChromeDemo,
   type ClientAskDemo,
   clientAskRequest,
   clientToolCall,
@@ -343,6 +344,19 @@ const USES_APP = /操作应用|use an app/i
  * 模拟核心里没有外壳，卡片只能拒绝
  */
 const SIGNS_IN = /登录网站|sign in to a site/i
+
+/**
+ * 发的话里带“用 Chrome”时，演一次代理操作这台电脑上的 Chrome：再带“登录”是请人在 Chrome 里登录，
+ * 带“网站”是在 Chrome 里打开没去过的网站，都不带是要列一个 Chrome 实例的标签页。模拟核心里没有 Chrome，卡片答了就回一句话
+ */
+const USES_CHROME = /用 ?Chrome|use Chrome/i
+
+const chromeDemo = (text: string): ChromeDemo =>
+  /登录|sign in/i.test(text)
+    ? 'chromeSignIn'
+    : /网站|site/i.test(text)
+      ? 'chromeSite'
+      : 'chromeInstance'
 
 const signInDemo = (text: string): SignInDemo =>
   /没账号|no account/i.test(text)
@@ -835,6 +849,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     const machineDemo = MACHINE_ASKS.find(([pattern]) => pattern.test(message.text))?.[1]
     if (machineDemo) {
       askMachine(view, turnId, machineDemo)
+      return turnId
+    }
+    if (USES_CHROME.test(message.text)) {
+      askClientTool(view, turnId, chromeDemo(message.text))
       return turnId
     }
     if (SIGNS_IN.test(message.text)) {

@@ -12,12 +12,15 @@ export const SAMPLE_SHOT =
 
 /**
  * 各出是哪一种：网站（浏览器打开一个没去过的地方）、应用（Computer Use 看一个应用，不出卡片）、
- * 代理请人登录（request_sign_in）的四样：有已存账号、库里没有、预检不过、定时任务的回合
+ * 代理请人登录（request_sign_in）的四样：有已存账号、库里没有、预检不过、定时任务的回合；
+ * 操作这台电脑上的 Chrome 的三样：列一个 Chrome 实例的标签页、在 Chrome 里打开没去过的网站、请人在 Chrome 里登录
  */
 export type ClientToolDemo = ClientAskDemo | 'app'
 
 /** 要出卡片的那几出 */
-export type ClientAskDemo = 'site' | SignInDemo
+export type ClientAskDemo = 'site' | SignInDemo | ChromeDemo
+
+export type ChromeDemo = 'chromeInstance' | 'chromeSite' | 'chromeSignIn'
 
 export type SignInDemo = 'signIn' | 'signInNone' | 'signInBlocked' | 'signInTask'
 
@@ -36,6 +39,21 @@ const CALLS: Record<ClientToolDemo, { namespace: string; tool: string; args: Jso
     namespace: CLIENT_TOOL_NAMESPACE.browser,
     tool: 'navigate',
     args: { url: 'https://example.com/docs/start' },
+  },
+  chromeInstance: {
+    namespace: CLIENT_TOOL_NAMESPACE.browser,
+    tool: 'tabs',
+    args: { action: 'list', target: 'chrome' },
+  },
+  chromeSite: {
+    namespace: CLIENT_TOOL_NAMESPACE.browser,
+    tool: 'navigate',
+    args: { url: 'https://example.com/docs/start', target: 'chrome' },
+  },
+  chromeSignIn: {
+    namespace: CLIENT_TOOL_NAMESPACE.browser,
+    tool: 'request_sign_in',
+    args: { target: 'chrome', reason: 'Need to open the repository settings.' },
   },
   app: {
     namespace: CLIENT_TOOL_NAMESPACE.computer,
@@ -68,11 +86,15 @@ export function clientToolCall(
             {
               type: 'inputText',
               text:
-                demo === 'site'
+                demo === 'site' || demo === 'chromeSite'
                   ? 'Opened https://example.com/docs/start'
-                  : demo === 'app'
-                    ? 'Safari · 1 window'
-                    : 'Litch filled the account the user approved and submitted; the page loaded https://github.com. Take a fresh snapshot to check you are signed in.',
+                  : demo === 'chromeInstance'
+                    ? 'Chrome · 3 tabs'
+                    : demo === 'chromeSignIn'
+                      ? 'The user finished signing in; the page reloaded. Claim the tab again.'
+                      : demo === 'app'
+                        ? 'Safari · 1 window'
+                        : 'Litch filled the account the user approved and submitted; the page loaded https://github.com. Take a fresh snapshot to check you are signed in.',
             },
             { type: 'inputImage', imageUrl: SAMPLE_SHOT },
           ]
@@ -95,7 +117,22 @@ export function clientAskRequest(
   const ask: ClientAskView =
     demo === 'site'
       ? { kind: 'site', origin: 'https://example.com', url: 'https://example.com/docs/start' }
-      : signInAsk(demo, id)
+      : demo === 'chromeSite'
+        ? {
+            kind: 'site',
+            origin: 'https://example.com',
+            url: 'https://example.com/docs/start',
+            browser: 'chrome',
+          }
+        : demo === 'chromeInstance'
+          ? { kind: 'chromeInstance', instanceId: 'chrome-1', name: 'Chrome · 3f9a1c27' }
+          : demo === 'chromeSignIn'
+            ? {
+                kind: 'chromeSignIn',
+                origin: 'https://github.com',
+                reason: 'Need to open the repository settings.',
+              }
+            : signInAsk(demo, id)
   return {
     id,
     kind: 'clientAsk',

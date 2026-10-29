@@ -92,7 +92,7 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
         <MachineWhat ask={ask} />
       ) : ask.kind === 'chromeInstance' ? (
         <>
-          <Meta label={t('chrome.title')} value={ask.name} />
+          <Meta label={t('chrome.instanceLabel')} value={ask.name} />
           <Why>{t('chrome.instanceNote')}</Why>
         </>
       ) : ask.kind === 'chromeSignIn' ? (

@@ -128,6 +128,27 @@ export const SCENES: Scene[] = [
     steps: [sessions('local'), open('local', 'p1')],
   },
   {
+    id: 'chrome-instance',
+    group: '对话',
+    name: 'Chrome 实例审批',
+    note: '代理要列这台电脑上一个 Chrome 实例的标签页',
+    steps: [say('用 Chrome')],
+  },
+  {
+    id: 'chrome-site',
+    group: '对话',
+    name: 'Chrome 网站审批',
+    note: '代理要在 Chrome 里打开没去过的网站',
+    steps: [say('用 Chrome 打开网站')],
+  },
+  {
+    id: 'chrome-sign-in',
+    group: '对话',
+    name: 'Chrome 登录',
+    note: '代理请人在 Chrome 里登录，登录完点“已完成登录”',
+    steps: [say('用 Chrome 登录')],
+  },
+  {
     id: 'question',
     group: '对话',
     name: '提问与表单',

@@ -126,7 +126,7 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
           <>
             <div className="req-meta">
               <span>
-                <b>{ask.name}</b>
+                {t('chrome.instanceLabel')} <b>{ask.name}</b>
               </span>
             </div>
             <div className="req-why">{t('chrome.instanceNote')}</div>
