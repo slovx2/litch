@@ -51,7 +51,7 @@ export function PowerSettings({
       ) : null}
       <div className="mng-rows" data-power-settings>
         {specs.map((spec) => (
-          <div className="mng-row" data-setting={spec.key} key={spec.key}>
+          <div className="mng-row" data-setting={spec.key} data-type={spec.type} key={spec.key}>
             <div className="mng-row-text">
               <label className="mng-row-title" htmlFor={`power-${deviceId}-${spec.key}`}>
                 {t.said(spec.title)}

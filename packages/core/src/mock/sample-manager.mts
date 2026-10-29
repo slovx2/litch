@@ -108,6 +108,8 @@ export function sampleManagers(
     ['e1', 'local', 'Litch 0.22', t('留下 2 项决策、3 件事', '2 decisions and 3 items remain')],
     ['e2', 'local', 'Litch 0.21', t('全部关闭', 'Everything closed')],
   ]
+  // 本机上在跑的线只用 Claude Code：模拟核心的本机要让 Pi 保持空闲（设备管理的验收在那里停用 Pi，
+  // 有回合在跑就只能“待重启”），Claude Code 本来就有在跑的会话
   const children = [
     [
       'manager-k1',
@@ -127,7 +129,7 @@ export function sampleManagers(
       'manager-k3',
       'm1',
       t('后台任务页筛选：先调研', 'Research background task filters'),
-      'pi',
+      'claude',
       true,
     ],
     [

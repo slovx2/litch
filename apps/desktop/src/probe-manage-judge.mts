@@ -65,6 +65,7 @@ export function judgeMockManage(probe: MockManageProbe): string[] {
       '状况：1 个启动失败，1 个监听中',
       'ssh：已开启 2 个',
       'terminal：',
+      'power：已开启 1 个',
       'worktrees：',
       '环境文件：2 个变量',
     ],
