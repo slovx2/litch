@@ -26,6 +26,7 @@ import {
   gatherAnswers,
   isAgentSpawn,
   parseAskReply,
+  proposedBy,
   reduceSession,
 } from '@litch/core'
 import { type LatestTodo, latestTodo } from '../detail/todo/logic'
@@ -453,7 +454,11 @@ export class SessionStore {
         // 没记着提在哪次调用里的旧提案只能按提案号去找 start 那一条，不知道在哪个回合，全部重算
         for (const proposal of [...(before ?? []), ...op.proposals]) {
           if (!proposal.callId) this.dirty = 'all'
-          else mark(this.itemTurn.get(proposal.callId))
+          else {
+            // callId 是协议条目号，索引键是“显示回合号:条目号”，与画卡片时用同一套对应关系。
+            for (const [itemId, turnId] of this.itemTurn)
+              if (proposedBy(proposal, itemId)) mark(turnId)
+          }
         }
         this.proposalsDirty = true
         return

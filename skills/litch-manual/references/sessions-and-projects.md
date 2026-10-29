@@ -98,6 +98,8 @@ explain it:
   Anthropic subscription, Codex with ChatGPT) it also lists the plan limits: the 5-hour and weekly
   limits, per-model weekly limits when there are any, how much of each is used and when it resets. API
   keys and third-party providers have no plan limits, and those rows are not shown.
+  桌面和手机的压缩状态统一显示「正在压缩上下文」和「已压缩上下文」（英文
+  “Compacting context” / “Context compacted”）；中断且未完成时仍显示「压缩没有完成」。
 - **Side panel**: Files (tree, search, read-only viewer, add a file to the conversation), Diff (all /
   staged / unstaged, stage, unstage, discard, comment on lines; comments go with the next message),
   Browser, Suggested tasks, Background tasks, Goal, Side chat.
@@ -274,6 +276,8 @@ woken to continue.
   off a task. A fresh card the model raises always carries a background (the overall goal,
   decisions and constraints so far) next to the task; the sub-session gets it as its own section
   before the task. Expand the brief on the card to read it.
+  手机点开始、在这里做或不要后，对话中的卡片同步显示操作后的状态；设备服务直接向手机
+  推送状态，桌面端无需保持连接。
 - **Where a sub-session works** (devices that support worktrees): when the parent session is in a
   worktree Litch created (or shares one), a new sub-session gets its own new worktree and branch,
   starting from the last commit of the parent's branch (the parent's uncommitted changes are not

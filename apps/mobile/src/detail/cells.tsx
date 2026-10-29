@@ -468,20 +468,16 @@ export const NoticeCell = memo(function NoticeCell({ row }: Props<'notice'>) {
   )
 })
 
-/** 压了这么久还没完，后面加一句“可能要几分钟”（和桌面端一样 10 秒） */
-const COMPACTION_SLOW_MS = 10_000
-
 /** 上下文压缩：一条分隔线，字在中间。压的时候写“正在压缩上下文”，压完写已压缩，没压完回合就停了写没完成 */
 export const CompactionCell = memo(function CompactionCell({ row }: Props<'compaction'>) {
   const { c, font } = useTheme()
   const t = useT()
   const running = row.status === 'inProgress'
-  const spent = useTicking(running ? row.startedAt : null)
   const label = running
-    ? t(spent !== null && spent >= COMPACTION_SLOW_MS ? 'compaction.slow' : 'compaction.running')
+    ? t('compaction.running')
     : row.status === 'interrupted'
       ? t('compaction.interrupted')
-      : t(row.source === 'manual' ? 'compaction.manual' : 'compaction.automatic')
+      : t('compaction.completed')
   return (
     <View style={styles.compaction} testID="compaction">
       <View style={[styles.compactionLine, { backgroundColor: c.line2 }]} />

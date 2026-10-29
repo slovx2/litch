@@ -1685,9 +1685,7 @@ export const zhCN = {
   'notice.enteredReview': '进入审查模式',
   'notice.exitedReview': '退出审查模式',
   'compaction.running': '正在压缩上下文',
-  'compaction.slow': '正在压缩上下文，会话长的话要几分钟',
-  'compaction.manual': '上下文已压缩',
-  'compaction.automatic': '上下文快满了，已自动压缩',
+  'compaction.completed': '已压缩上下文',
   'compaction.interrupted': '压缩没有完成',
   'notice.unknownItem': '当前版本不支持的条目：{type}',
   // 对话区的两档视图（transcript/view.ts），在标题栏会话标题后面的菜单里切

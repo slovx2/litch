@@ -1774,9 +1774,7 @@ export const en: Record<MessageKey, Entry> = {
   'notice.enteredReview': 'Entered review mode',
   'notice.exitedReview': 'Exited review mode',
   'compaction.running': 'Compacting context',
-  'compaction.slow': 'Compacting context — long sessions can take a few minutes',
-  'compaction.manual': 'Context compacted',
-  'compaction.automatic': 'Context was nearly full and got compacted',
+  'compaction.completed': 'Context compacted',
   'compaction.interrupted': 'Compaction didn’t finish',
   'notice.unknownItem': 'Unsupported item type: {type}',
   // 对话区的两档视图（transcript/view.ts），在标题栏会话标题后面的菜单里切
