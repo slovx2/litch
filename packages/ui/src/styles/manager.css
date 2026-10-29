@@ -14,6 +14,11 @@
   gap: 6px;
   align-items: center;
 }
+.mg-mode > button[aria-pressed="true"] .pill {
+  color: inherit;
+  background: transparent;
+  border-color: currentColor;
+}
 .mg-sidebar-group {
   padding: 6px 0;
 }
@@ -170,6 +175,10 @@
 }
 .mg-decision[data-draft="true"] {
   border-color: var(--wait);
+}
+.mg-decision > textarea {
+  width: 100%;
+  resize: vertical;
 }
 .mg-decision-filter {
   margin-bottom: 14px;
@@ -343,6 +352,16 @@
   gap: 7px;
   margin-bottom: 16px;
 }
+.mg-form .mng-sec {
+  padding: 18px 0;
+}
+.mg-form .mng-sec:first-child {
+  padding-top: 0;
+}
+.mg-form .mng-sec h2 {
+  margin: 0 0 14px;
+  font-size: 14px;
+}
 .mg-form select {
   width: 100%;
   min-height: 32px;
@@ -364,6 +383,8 @@
 .mg-rules textarea {
   margin-top: 12px;
   line-height: 1.7;
+  height: 55vh;
+  min-height: 320px;
   resize: vertical;
 }
 .mg-form-foot {

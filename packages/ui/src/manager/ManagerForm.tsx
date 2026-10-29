@@ -281,7 +281,7 @@ export function ManagerForm({
         <section className="mng-sec">
           <h2>{t('manager.dispatch')}</h2>
           <label className="form-field">
-            {t('manager.harness')}
+            {t('manager.lineHarness')}
             <select
               value={form.dispatch.harness ?? ''}
               onChange={(event) =>

@@ -1,6 +1,6 @@
 import { ManagerTitleBar } from '../manager/ManagerTitleBar.tsx'
 import '../styles/manager.css'
-import { keys, type SessionChildren, type SessionSummary } from '@litch/core'
+import { keys, managerMark, type SessionSummary } from '@litch/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArchivedPage } from '../archived/ArchivedPage.tsx'
 import { ArchivedSession } from '../archived/ArchivedSession.tsx'
@@ -85,23 +85,16 @@ export function App() {
   const pickedSummary = useKey<SessionSummary>(
     keys.summary(picked?.deviceId ?? '', picked?.sessionId ?? ''),
   )
-  const managerChildren = useKey<SessionChildren>(keys.children(picked?.deviceId ?? ''))
+  const mark = pickedSummary ? managerMark(pickedSummary) : null
   const pickedManager = managerData.managers.find(
     (manager) => manager.deviceId === picked?.deviceId && manager.threadId === picked.sessionId,
   )
-  const owner = managerData.managers.find((manager) => {
-    if (manager.deviceId !== picked?.deviceId || manager.threadId === picked?.sessionId)
-      return false
-    const visited = new Set<string>()
-    const contains = (id: string): boolean => {
-      if (visited.has(id)) return false
-      visited.add(id)
-      return (managerChildren?.[id] ?? []).some(
-        (child) => child === picked?.sessionId || contains(child),
-      )
-    }
-    return contains(manager.threadId)
-  })
+  const owner =
+    mark?.role === 'line'
+      ? managerData.managers.find(
+          (manager) => manager.deviceId === picked?.deviceId && manager.id === mark.managerId,
+        )
+      : undefined
   const seen = useRef<Selection | null>(null)
   useEffect(() => {
     if (!picked) return

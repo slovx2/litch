@@ -1,3 +1,4 @@
+import type { ManagerBoardPages } from '@litch/core'
 import { useState } from 'react'
 import type {
   ManagerDecisionView,
@@ -12,11 +13,13 @@ import { type AnswerDrafts, answeredDrafts, useAnswerDrafts } from './drafts.ts'
 export function Decisions({
   manager,
   decisions,
+  groups,
   disabled,
   visible,
 }: {
   manager: ManagerView
   decisions: ManagerDecisionView[]
+  groups: ManagerBoardPages['decisions']
   disabled: boolean
   visible: boolean
 }) {
@@ -26,7 +29,6 @@ export function Decisions({
   const [filter, setFilter] = useState<'open' | 'answered' | 'closed'>('open')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const answers = answeredDrafts(drafts)
   const conflict = answers.some(
     (draft) =>
@@ -57,24 +59,6 @@ export function Decisions({
         ...patch,
       },
     })
-  }
-  const request = async (text: string) => {
-    setBusy(true)
-    setError('')
-    setNotice('')
-    try {
-      await channel.command('session.send', {
-        deviceId: manager.deviceId,
-        sessionId: manager.threadId,
-        text,
-        now: true,
-      })
-      setNotice(t('manager.requested'))
-    } catch (cause) {
-      setError(reasonOf(cause, t))
-    } finally {
-      setBusy(false)
-    }
   }
   const submit = async () => {
     if (busy || disabled || conflict || !answers.length) return
@@ -120,13 +104,7 @@ export function Decisions({
       setBusy(false)
     }
   }
-  const grouped = {
-    open: decisions.filter((decision) => decision.status === 'open'),
-    answered: decisions.filter((decision) => decision.status === 'answered'),
-    closed: decisions.filter(
-      (decision) => decision.status === 'expired' || decision.status === 'withdrawn',
-    ),
-  }
+  const grouped = { open: groups.pending, answered: groups.answered, closed: groups.closed }
   return (
     <>
       <div hidden={!visible}>
@@ -246,15 +224,6 @@ export function Decisions({
                           {t('manager.useRecommend')}
                         </button>
                       ) : null}
-                      <span className="grow" />
-                      <button
-                        type="button"
-                        className="btn ghost"
-                        disabled={disabled || busy}
-                        onClick={() => void request(t('manager.deferRequest', { id: decision.id }))}
-                      >
-                        {t('manager.defer')}
-                      </button>
                     </div>
                   </>
                 ) : (
@@ -298,27 +267,18 @@ export function Decisions({
                   </span>
                   {decision.checked ? (
                     <span>
-                      {decision.checked.commit?.slice(0, 8)} ·{' '}
+                      {decision.checked.commit ? `${decision.checked.commit.slice(0, 8)} · ` : ''}
                       {t('manager.checked', {
                         time: new Date(decision.checked.at).toLocaleString(),
                       })}
                     </span>
                   ) : null}
-                  <button
-                    type="button"
-                    className="btn ghost"
-                    disabled={disabled || busy}
-                    onClick={() => void request(t('manager.verifyRequest', { id: decision.id }))}
-                  >
-                    {t('manager.verify')}
-                  </button>
                 </footer>
               </article>
             )
           })}
         </div>
       </div>
-      {notice ? <p role="status">{notice}</p> : null}
       {error ? (
         <p className="err" role="alert">
           {error}

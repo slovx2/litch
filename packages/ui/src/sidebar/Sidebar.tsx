@@ -542,7 +542,6 @@ function BrowserWants({ deviceId, sessionId }: { deviceId: string; sessionId: st
 
 interface GroupProps {
   managerRoot?: string
-  managers?: ManagerView[]
   deviceId: string
   selection: Selection | null
   /** 正在写的新会话。它所在的那一行（工作区或设备）标成选中 */
@@ -760,7 +759,7 @@ function DeviceGroup(props: GroupProps) {
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
   /** 没有是这台设备的会话目录还没到 */
   const listed = useKey<SessionGroups>(keys.groups(deviceId))
-  const rawGroups = listed ?? NO_GROUPS
+  const groups = listed ?? NO_GROUPS
   const sections = useKey<SectionView[]>(keys.sections(deviceId)) ?? NO_SECTIONS
   /** 开着的工作区对话框：添加（workspace 为 null），或者改某一个 */
   const [dialog, setDialog] = useState<{ workspace: WorkspaceView | null } | null>(null)
@@ -829,24 +828,19 @@ function DeviceGroup(props: GroupProps) {
       ...workspaces.map((entry) => entry.id),
       ...sections.map((entry) => groupOfSection(entry.id)),
     ]
-    pruneSidebarFolds(deviceId, foldsKeep(listed, kept))
-  }, [settled, listed, workspaces, sections, deviceId])
+    const keep = foldsKeep(listed, kept)
+    // 普通分组不含经理子树，折叠记录仍需保留完整 children 目录里的会话。
+    for (const [parent, kids] of Object.entries(children)) {
+      keep.folded.add(parent)
+      for (const id of kids) keep.folded.add(id)
+    }
+    pruneSidebarFolds(deviceId, keep)
+  }, [settled, listed, workspaces, sections, deviceId, children])
   // 拖完了：落点的高亮去掉
   useEffect(() => {
     if (!dragging) setOver(null)
   }, [dragging])
   if (!device) return null
-  // 普通目录隐藏经理的整棵子树；经理模式仍复用下方的 tree()。
-  const owned = new Set<string>()
-  const collect = (id: string) => {
-    if (owned.has(id)) return
-    owned.add(id)
-    for (const child of children[id] ?? []) collect(child)
-  }
-  for (const manager of props.managers ?? []) collect(manager.threadId)
-  const groups = Object.fromEntries(
-    Object.entries(rawGroups).map(([key, ids]) => [key, ids.filter((id) => !owned.has(id))]),
-  )
   const picked = selection?.deviceId === deviceId ? selection.sessionId : null
   /** 非露出来不可的会话：正选中的那个，和停下来等人的那些。筛选筛不掉它们，“展示更多”也折不住它们 */
   const always = (id: string) => id === picked || pressing.includes(id)
@@ -1774,6 +1768,7 @@ interface SidebarProps {
 export function Sidebar(props: SidebarProps) {
   const { selection, draft, page, onSelect, onCompose, onPage } = props
   const deviceIds = useKey<string[]>(keys.devices) ?? []
+  const pending = useKey<number>(keys.managersPending) ?? 0
   const t = useT()
   /** 正在单独查看哪台设备上的哪一组（置顶、组、工作区）。null：照常显示全部 */
   const [focus, setFocus] = useState<{ deviceId: string; group: string } | null>(null)
@@ -1814,11 +1809,7 @@ export function Sidebar(props: SidebarProps) {
             onClick={() => props.onMode('manager')}
           >
             {t('manager.title')}
-            {props.managers.reduce((total, manager) => total + manager.pendingDecisions, 0) ? (
-              <span className="pill wait">
-                {props.managers.reduce((total, manager) => total + manager.pendingDecisions, 0)}
-              </span>
-            ) : null}
+            {pending ? <span className="pill wait">{pending}</span> : null}
           </button>
         </div>
         {props.mode === 'manager' ? (
@@ -1880,7 +1871,6 @@ export function Sidebar(props: SidebarProps) {
             <DeviceGroup
               key={deviceId}
               deviceId={deviceId}
-              managers={props.managers.filter((manager) => manager.deviceId === deviceId)}
               selection={selection}
               draft={draft}
               onSelect={onSelect}

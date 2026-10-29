@@ -1,6 +1,9 @@
-import type { ManagerBoardView, ManagerItemView } from '../../../core/src/model-manager.mts'
+import { type DeviceView, keys, type ManagerBoardPages } from '@litch/core'
+import type { ManagerItemView } from '../../../core/src/model-manager.mts'
 import { requestOpenSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
+import { badgeOf, nameOf } from '../app/device.ts'
+import { useKey } from '../app/services.tsx'
 
 function Item({ item }: { item: ManagerItemView }) {
   const t = useT()
@@ -13,7 +16,7 @@ function Item({ item }: { item: ManagerItemView }) {
         {item.blockedBy.length ? <small>{item.blockedBy.join(' · ')}</small> : null}
         {item.unverified.map((text) => (
           <p key={text} className="dim">
-            {t('manager.unverified')} · {text}
+            {text}
           </p>
         ))}
         {item.basis.length ? (
@@ -28,21 +31,24 @@ function Item({ item }: { item: ManagerItemView }) {
 }
 
 export function BoardPanels({
-  board,
+  pages,
+  deviceId,
   tab,
   onTab,
 }: {
-  board: ManagerBoardView
+  pages: ManagerBoardPages
+  deviceId: string
   tab: 'overview' | 'items' | 'lines'
   onTab(tab: 'decisions' | 'items' | 'lines'): void
 }) {
   const t = useT()
+  const device = useKey<DeviceView>(keys.device(deviceId))
   if (tab === 'items')
     return (
       <div className="mg-stack">
         {(['blocked', 'running', 'review', 'backlog', 'deferred', 'done'] as const).map(
           (status) => {
-            const items = board.items.filter((item) => item.status === status)
+            const items = pages.items[status]
             return items.length ? (
               <details key={status} open={status !== 'done' && status !== 'deferred'}>
                 <summary>
@@ -55,33 +61,33 @@ export function BoardPanels({
             ) : null
           },
         )}
-        {!board.items.length ? <p>{t('manager.none')}</p> : null}
+        {!pages.overview.stats.totalItems ? <p>{t('manager.none')}</p> : null}
       </div>
     )
   if (tab === 'lines')
     return (
       <div className="mg-stack">
-        {board.lines.map((line) => (
+        {pages.lines.map((line) => (
           <article className="mg-card" key={line.threadId}>
             <header>
               <span className="pill mute">{t(`manager.${line.status}`)}</span>
               <b className="grow">{line.title}</b>
-              <span className="chip">{line.harness}</span>
+              <span className="chip" title={nameOf(device, line.harness)}>
+                {badgeOf(device, line.harness)}
+              </span>
               <button
                 type="button"
                 className="btn ghost"
-                onClick={() =>
-                  requestOpenSession({ deviceId: board.deviceId, sessionId: line.threadId })
-                }
+                onClick={() => requestOpenSession({ deviceId, sessionId: line.threadId })}
               >
                 {t('manager.openSession')}
               </button>
             </header>
             <p className="dim mono">
-              {line.branch ?? t('manager.unknown')} ·{' '}
-              {line.merged === null
-                ? t('manager.unknown')
-                : t(line.merged ? 'manager.merged' : 'manager.unmerged')}
+              {line.branch ?? t('manager.unknown')}
+              {line.merged !== null
+                ? ` · ${t(line.merged ? 'manager.merged' : 'manager.unmerged')}`
+                : ''}
               {line.ahead !== null ? ` · +${line.ahead}` : ''}
             </p>
             {line.report ? <p>{line.report.text}</p> : null}
@@ -92,27 +98,22 @@ export function BoardPanels({
             ))}
           </article>
         ))}
-        {!board.lines.length ? <p>{t('manager.none')}</p> : null}
+        {!pages.lines.length ? <p>{t('manager.none')}</p> : null}
       </div>
     )
-  const blocked = board.items.filter((item) => item.status === 'blocked')
-  const yours = board.items.filter(
-    (item) => item.owner.kind === 'user' && item.status !== 'done' && item.status !== 'deferred',
-  )
+  const { blocked, waitingForYou: yours, situation, stats, activities } = pages.overview
   return (
     <div className="mg-stack">
       <article className="mg-card">
         <header>
           <b className="grow">{t('manager.situation')}</b>
-          <small className="dim">
-            {board.situation ? new Date(board.situation.at).toLocaleString() : ''}
-          </small>
+          <small className="dim">{situation ? new Date(situation.at).toLocaleString() : ''}</small>
         </header>
-        <p>{board.situation?.text ?? t('manager.none')}</p>
+        <p>{situation?.text ?? t('manager.none')}</p>
       </article>
       <div className="mg-stats">
         <button type="button" onClick={() => onTab('decisions')}>
-          <b>{board.decisions.filter((decision) => decision.status === 'open').length}</b>
+          <b>{stats.pendingDecisions}</b>
           {t('manager.wait')}
         </button>
         <button type="button" onClick={() => onTab('items')}>
@@ -120,11 +121,11 @@ export function BoardPanels({
           {t('manager.yours')}
         </button>
         <button type="button" onClick={() => onTab('lines')}>
-          <b>{board.lines.filter((line) => line.running).length}</b>
+          <b>{stats.runningLines}</b>
           {t('manager.running')}
         </button>
         <button type="button" onClick={() => onTab('items')}>
-          <b>{board.items.filter((item) => item.status === 'done').length}</b>
+          <b>{stats.doneItems}</b>
           {t('manager.done')}
         </button>
       </div>
@@ -146,7 +147,7 @@ export function BoardPanels({
       </section>
       <section>
         <h3>{t('manager.activity')}</h3>
-        {board.activities.map((activity) => (
+        {activities.map((activity) => (
           <div className="mg-activity" key={activity.id}>
             <time className="dim">{new Date(activity.at).toLocaleTimeString()}</time>
             <span>{activity.text}</span>

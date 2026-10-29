@@ -1,75 +1,34 @@
-import { useEffect, useState } from 'react'
-import type {
-  ManagerBoardTopicView,
-  ManagersView,
-  ManagerView,
-} from '../../../core/src/model-manager.mts'
-import { useServices } from '../app/services.tsx'
+import { type ChannelError, keys, type ManagerBoardPages } from '@litch/core'
+import { useEffect } from 'react'
+import type { ManagerBoardTopicView, ManagerView } from '../../../core/src/model-manager.mts'
+import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { useDevices } from '../composer/useNewPlace.ts'
 
-/** 列表只订阅设备目录；看板由打开它的页面单独订阅。 */
+/** 经理目录由副本常驻订阅；界面只读取自己显示的键。 */
 export function useManagers() {
-  const { channel } = useServices()
   const devices = useDevices()
-  const ids = devices.map((device) => device.id).join('\n')
-  const [views, setViews] = useState<Record<string, ManagersView>>({})
-  useEffect(() => {
-    const stops = (ids ? ids.split('\n') : []).map((deviceId) =>
-      channel.subscribe(
-        { kind: 'managers', deviceId },
-        {
-          snapshot: (view) => setViews((was) => ({ ...was, [deviceId]: view })),
-          delta: (ops) =>
-            setViews((was) => {
-              const view = was[deviceId]
-              if (!view) return was
-              const managers = new Map(view.managers.map((manager) => [manager.id, manager]))
-              for (const op of ops) managers.set(op.manager.id, op.manager)
-              return { ...was, [deviceId]: { ...view, managers: [...managers.values()] } }
-            }),
-          error: () =>
-            setViews((was) => ({
-              ...was,
-              [deviceId]: {
-                deviceId,
-                available: false,
-                managers: was[deviceId]?.managers ?? [],
-              },
-            })),
-        },
-      ),
-    )
-    return () => {
-      for (const stop of stops) stop()
-    }
-  }, [channel, ids])
+  const ids = useKeys<string[]>(devices.map((device) => keys.managerIds(device.id)))
+  const managers = useKeys<ManagerView>(
+    devices.flatMap((device, index) => (ids[index] ?? []).map((id) => keys.manager(device.id, id))),
+  ).filter((manager) => manager !== undefined)
+  const available = useKeys<boolean | null>(
+    devices.map((device) => keys.managersAvailable(device.id)),
+  )
   return {
     devices,
-    managers: devices.flatMap((device) => views[device.id]?.managers ?? []),
+    managers,
     available: devices.filter(
-      (device) => device.connection === 'online' && views[device.id]?.available === true,
+      (device, index) => device.connection === 'online' && available[index] === true,
     ),
   }
 }
 
 export function useManagerBoard(manager: ManagerView) {
-  const { channel } = useServices()
-  const [view, setView] = useState<ManagerBoardTopicView | null>(null)
-  const [error, setError] = useState<unknown>(null)
+  const { replica } = useServices()
   const { deviceId, id: managerId } = manager
-  useEffect(() => {
-    setView(null)
-    setError(null)
-    return channel.subscribe(
-      { kind: 'managerBoard', deviceId, managerId },
-      {
-        snapshot: setView,
-        delta: (ops) => {
-          for (const op of ops) setView(op.view)
-        },
-        error: setError,
-      },
-    )
-  }, [channel, deviceId, managerId])
-  return { view, error }
+  useEffect(() => replica.openManagerBoard(deviceId, managerId), [replica, deviceId, managerId])
+  const view = useKey<ManagerBoardTopicView>(keys.managerBoard(deviceId, managerId))
+  const pages = useKey<ManagerBoardPages | null>(keys.managerBoardPages(deviceId, managerId))
+  const error = useKey<ChannelError>(keys.managerBoardError(deviceId, managerId))
+  return { view, pages, error }
 }

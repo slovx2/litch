@@ -19,7 +19,7 @@ export function ManagerPage({
 }) {
   const t = useT()
   const { channel } = useServices()
-  const { view, error } = useManagerBoard(manager)
+  const { view, pages, error } = useManagerBoard(manager)
   const device = useKey<DeviceView>(keys.device(manager.deviceId))
   const [tab, setTab] = useState<'overview' | 'decisions' | 'items' | 'lines'>('overview')
   const [narrow, setNarrow] = useState<'chat' | 'board'>('chat')
@@ -27,6 +27,12 @@ export function ManagerPage({
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState('')
   const board = view?.board
+  const counts = {
+    overview: 0,
+    decisions: manager.pendingDecisions,
+    items: (pages?.overview.stats.totalItems ?? 0) - (pages?.overview.stats.doneItems ?? 0),
+    lines: manager.runningLines,
+  }
   const disabled = manager.status === 'ended' || device?.connection !== 'online'
   const end = async () => {
     setBusy(true)
@@ -116,8 +122,10 @@ export function ManagerPage({
                 onClick={() => setTab(key)}
               >
                 {t(`manager.${key}`)}
-                {key === 'decisions' && manager.pendingDecisions ? (
-                  <span className="pill wait">{manager.pendingDecisions}</span>
+                {counts[key] ? (
+                  <span className={key === 'decisions' ? 'pill wait' : 'pill mute'}>
+                    {counts[key]}
+                  </span>
                 ) : null}
               </button>
             ))}
@@ -135,15 +143,18 @@ export function ManagerPage({
             </p>
           ) : view?.available === false ? (
             <p>{t('manager.unavailable')}</p>
-          ) : !board ? (
+          ) : !board || !pages ? (
             <p>{t('manager.loading')}</p>
           ) : (
             <>
               {/* 答复区保持挂载，切页签不丢提交状态；本地草稿独立持久化。 */}
-              {tab !== 'decisions' ? <BoardPanels board={board} tab={tab} onTab={setTab} /> : null}
+              {tab !== 'decisions' ? (
+                <BoardPanels pages={pages} deviceId={manager.deviceId} tab={tab} onTab={setTab} />
+              ) : null}
               <Decisions
                 manager={manager}
                 decisions={board.decisions}
+                groups={pages.decisions}
                 disabled={disabled}
                 visible={tab === 'decisions'}
               />
