@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import '../../protocol/test/client-tools-schema.test.mjs'
 import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
@@ -56,6 +57,134 @@ const value = (response: any) => {
   assert.equal(response.success, true, JSON.stringify(response))
   return JSON.parse(response.contentItems[0].text)
 }
+
+test('经理工具：设备拒绝 kind 错配与缺失参数，错误返回模型且看板不变', async () => {
+  const env = treeRig()
+  try {
+    const connection = await client(env)
+    const { manager, threadId } = await create(env, connection)
+    value(
+      await tool(env, threadId, 'add', {
+        kind: 'decision',
+        decision: { title: '待定', background: '' },
+      }),
+    )
+    value(await tool(env, threadId, 'add', { kind: 'item', item: { title: '待办' } }))
+    const board = () => connection.call(MANAGER_METHOD.boardRead, { managerId: manager.id })
+    const before = await board()
+    const cases: [string, Record<string, unknown>, RegExp][] = [
+      ['add', {}, /kind/],
+      ['add', { kind: 'line' }, /kind/],
+      ['add', { kind: 'decision' }, /decision is required/],
+      ['add', { kind: 'item' }, /item is required/],
+      ['add', { kind: 'decision', item: { title: '错配' } }, /decision is required/],
+      ['add', { kind: 'item', decision: { title: '错配', background: '' } }, /item is required/],
+      [
+        'add',
+        { kind: 'decision', decision: { title: '双传', background: '' }, item: { title: '双传' } },
+        /omit item/,
+      ],
+      [
+        'add',
+        { kind: 'item', item: { title: '双传' }, decision: { title: '双传', background: '' } },
+        /omit decision/,
+      ],
+      ['add', { kind: 'decision', decision: { title: '缺背景' } }, /background/],
+      ['add', { kind: 'decision', decision: { background: '' } }, /title/],
+      ['add', { kind: 'item', item: {} }, /title/],
+      [
+        'update',
+        { kind: 'decision', id: 'D-1', patch: { status: 'done' }, why: '错配' },
+        /patch.status.*kind=decision/,
+      ],
+      [
+        'update',
+        { kind: 'item', id: 'I-1', patch: { background: '错配' }, why: '错配' },
+        /patch.background.*kind=item/,
+      ],
+      [
+        'update',
+        { kind: 'decision', id: 'I-1', patch: { title: '错配' }, why: '错配' },
+        /kind does not match/,
+      ],
+      ['update', { kind: 'item', id: 'I-1', patch: {}, why: '空修改' }, /patch must not be empty/],
+      [
+        'update',
+        { kind: 'item', id: 'I-1', patch: { title: '改' }, why: ' ' },
+        /why must be nonempty/,
+      ],
+      [
+        'close',
+        { kind: 'decision', id: 'D-1', status: 'done', reason: '错配' },
+        /status must be expired or withdrawn/,
+      ],
+      [
+        'close',
+        { kind: 'decision', id: 'D-1', status: 'deferred', reason: '错配' },
+        /status must be expired or withdrawn/,
+      ],
+      [
+        'close',
+        { kind: 'item', id: 'I-1', status: 'expired', reason: '错配' },
+        /status must be done or deferred/,
+      ],
+      [
+        'close',
+        { kind: 'item', id: 'I-1', status: 'withdrawn', reason: '错配' },
+        /status must be done or deferred/,
+      ],
+      ['close', { kind: 'item', id: 'D-1', status: 'done', reason: '错配' }, /kind does not match/],
+      [
+        'close',
+        { kind: 'item', id: 'I-1', status: 'done', reason: ' ' },
+        /reason must be nonempty/,
+      ],
+    ]
+    // 通用 schema 仍校验每个必填字段，不能因展平分支而放松执行入口。
+    for (const [name, args] of [
+      ['update', { kind: 'item', id: 'I-1', patch: { title: '改' }, why: '更新' }],
+      ['close', { kind: 'item', id: 'I-1', status: 'done', reason: '完成' }],
+    ] as const) {
+      for (const key of Object.keys(args)) {
+        const incomplete: Record<string, unknown> = { ...args }
+        delete incomplete[key]
+        cases.push([name, incomplete, new RegExp(key)])
+      }
+    }
+    for (const [name, args, message] of cases) {
+      const result = await tool(env, threadId, name, args)
+      assert.equal(result.success, false, JSON.stringify({ name, args }))
+      assert.match(result.contentItems[0].text, message)
+      assert.deepEqual(await board(), before, '拒绝后不能改对象、修订号或历史')
+    }
+    for (const [kind, id, patch] of [
+      ['decision', 'D-1', { background: '已核对' }],
+      ['item', 'I-1', { status: 'review' }],
+    ] as const) {
+      const updated = value(await tool(env, threadId, 'update', { kind, id, patch, why: '进展' }))
+      for (const [key, expected] of Object.entries(patch))
+        assert.equal(updated.object[key], expected)
+    }
+    for (const [kind, status] of [
+      ['decision', 'expired'],
+      ['decision', 'withdrawn'],
+      ['item', 'done'],
+      ['item', 'deferred'],
+    ] as const) {
+      const args =
+        kind === 'decision'
+          ? { kind, decision: { title: status, background: '' } }
+          : { kind, item: { title: status } }
+      const { id } = value(await tool(env, threadId, 'add', args))
+      const closed = value(
+        await tool(env, threadId, 'close', { kind, id, status, reason: '已核对' }),
+      )
+      assert.equal(closed.object.status, status)
+    }
+  } finally {
+    await env.close()
+  }
+})
 
 test('经理扩展：声明、路由、创建工具/规则、每条投递连接独立 decorate，普通会话伪造工具无权限', async () => {
   const env = treeRig()

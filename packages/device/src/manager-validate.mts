@@ -82,9 +82,38 @@ const ajv = new Ajv({ strict: false, allErrors: true })
 const validators = new Map(
   MANAGER_TOOLS.tools.map((tool) => [tool.name, ajv.compile(tool.inputSchema)]),
 )
+// 从同一份字段定义取可改字段，不另维护一份随协议漂移的白名单。
+const addProperties = fields(
+  MANAGER_TOOLS.tools.find((tool) => tool.name === 'add')?.inputSchema.properties,
+)
+const patchKeys = new Map(
+  ['decision', 'item'].map((kind) => [
+    kind,
+    Object.keys(fields(fields(addProperties[kind]).properties)),
+  ]),
+)
 export function validateTool(tool: string, args: unknown): Record<string, unknown> {
   const validator = validators.get(tool)
   if (!validator) invalid(`Unknown litch_manager tool: ${tool}.`)
   if (!validator(args)) invalid(`Invalid ${tool} arguments: ${ajv.errorsText(validator.errors)}.`)
-  return fields(args)
+  const input = fields(args)
+  // 工具顶层不能使用组合关键字；设备补齐原先分支 schema 的 kind 约束。
+  if (tool === 'add') {
+    const kind = input.kind as string
+    const other = kind === 'decision' ? 'item' : 'decision'
+    if (!(kind in input)) invalid(`For kind=${kind}, ${kind} is required.`, kind)
+    if (other in input) invalid(`For kind=${kind}, omit ${other}.`, other)
+  }
+  if (tool === 'update') {
+    const allowed = patchKeys.get(input.kind as string) ?? []
+    for (const key of Object.keys(fields(input.patch)))
+      if (!allowed.includes(key))
+        invalid(`patch.${key} is not allowed for kind=${input.kind}.`, `patch.${key}`)
+  }
+  if (tool === 'close') {
+    const statuses = input.kind === 'decision' ? ['expired', 'withdrawn'] : ['done', 'deferred']
+    if (!statuses.includes(input.status as string))
+      invalid(`For kind=${input.kind}, status must be ${statuses.join(' or ')}.`, 'status')
+  }
+  return input
 }

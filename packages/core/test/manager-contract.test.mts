@@ -151,7 +151,7 @@ test('经理工具登记完整，通过原生 Codex 约束，命名空间说明�
   assert.ok([...MANAGER_TOOLS.description].length <= 1024)
 })
 
-test('工具 schema 区分决策与事项，拒绝写系统字段、工作线和跨板 id', () => {
+test('工具 schema 校验字段形状，拒绝写系统字段、工作线和跨板 id；kind 对应关系由设备校验', () => {
   const cases: Record<string, { valid: unknown; invalid: unknown[] }> = {
     summary: { valid: {}, invalid: [{ managerId: 'other' }] },
     get: { valid: { id: 'D-1' }, invalid: [{}] },
@@ -181,7 +181,7 @@ test('工具 schema 区分决策与事项，拒绝写系统字段、工作线和
     close: {
       valid: { kind: 'decision', id: 'D-1', status: 'withdrawn', reason: '已不需要' },
       invalid: [
-        { kind: 'decision', id: 'D-1', status: 'done', reason: '错误种类' },
+        { kind: 'decision', id: 'D-1', status: 'answered', reason: '不能绕过 answer' },
         { kind: 'decision', id: 'D-1', status: 'expired' },
       ],
     },
@@ -206,7 +206,8 @@ test('角色规则保持预算和第一版边界，会话版原样复用共用�
   assert.ok(role.length < 4000, String(role.length))
   assert.match(role, /scope-token/)
   assert.match(role, /Do not implement code yourself/)
-  assert.match(role, /does not automatically detect stale/)
+  assert.match(role, /repository is authoritative/)
+  assert.match(role, /Use verify after checking/)
   assert.match(role, /only the user can do/)
   const sessions = managerSessionRules(4)
   for (const shared of [
