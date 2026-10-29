@@ -26,12 +26,14 @@
   position: relative;
   min-width: 100%;
 }
-.fp-csv-head {
+/* 粘住的是 thead：它的父元素是整张表，粘性才能跟着滚动；表头行本身的父元素只有一行高 */
+.fp-csv-grid thead {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--panel);
-  font-weight: 600;
+}
+.fp-csv-head {
+  background: var(--sunken);
 }
 .fp-csv-row {
   position: absolute;
@@ -59,7 +61,7 @@
   position: sticky;
   left: 0;
   text-align: right;
-  background: var(--panel);
+  background: var(--sunken);
   color: var(--ink-3);
   z-index: 1;
 }
@@ -74,7 +76,8 @@
   flex: 1;
   min-height: 0;
   display: flex;
-  align-items: center;
+  /* 靠上：高面板里音频条和视频不悬在正中 */
+  align-items: flex-start;
   justify-content: center;
   padding: 16px;
 }
@@ -95,6 +98,8 @@
   font-weight: normal;
   text-align: left;
 }
+/* 列头和 Excel 预览一致：字母、居中、淡色 */
 .fp-csv-head .fp-csv-cell {
-  font-weight: 600;
+  text-align: center;
+  color: var(--ink-3);
 }

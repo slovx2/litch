@@ -79,7 +79,8 @@ export default function HtmlPreview({ data, scope, resources }: PreviewRendererP
   }, [data, scope, resources, t])
   if (error)
     return (
-      <div className="fv-hold" role="status">
+      <div className="fv-hold" data-hold="invalid" role="status">
+        <b>{t('files.view.failed')}</b>
         <span>{t('preview.html.invalid')}</span>
       </div>
     )

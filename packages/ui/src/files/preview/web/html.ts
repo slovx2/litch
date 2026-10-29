@@ -91,7 +91,18 @@ export function sanitizeHtml(source: string): StaticHtml {
     ALLOWED_ATTR: ATTRS,
     ALLOW_DATA_ATTR: false,
     ALLOW_ARIA_ATTR: false,
-    FORBID_CONTENTS: ['script', 'iframe', 'object', 'embed', 'template', 'svg', 'math', 'form'],
+    // title 不在允许的标签里；不连内容一起丢掉的话，标题文字会漏到正文开头
+    FORBID_CONTENTS: [
+      'script',
+      'iframe',
+      'object',
+      'embed',
+      'template',
+      'svg',
+      'math',
+      'form',
+      'title',
+    ],
   })
   const images: StaticHtml['images'] = []
   for (const element of fragment.querySelectorAll('*')) {
@@ -116,7 +127,8 @@ export function htmlDocument(fragment: DocumentFragment): string {
   const wrapper = document.createElement('div')
   wrapper.append(fragment)
   // 文档自己的 CSP 比宿主更严；空 sandbox 禁脚本、同源、表单、弹窗和顶层导航。
+  // 没写颜色的文档按浏览器默认的白底黑字显示：只写了字色的文档在深色皮肤下不能透出应用的深色底。
   const csp =
     "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none'; media-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="referrer" content="no-referrer"><style>html{color-scheme:light}body{margin:16px;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{max-width:100%}pre{white-space:pre-wrap}</style></head><body>${wrapper.innerHTML}</body></html>`
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="referrer" content="no-referrer"><style>html{color-scheme:light;background:Canvas;color:CanvasText}body{margin:16px;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{max-width:100%}pre{white-space:pre-wrap}</style></head><body>${wrapper.innerHTML}</body></html>`
 }

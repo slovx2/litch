@@ -36,7 +36,8 @@ export default function MediaPreview({ data, scope }: PreviewRendererProps) {
   }, [url, failed])
   if (!parsed.type || failed)
     return (
-      <div className="fv-hold" role="status">
+      <div className="fv-hold" data-hold="invalid" role="status">
+        <b>{t('files.view.failed')}</b>
         <span>{t('preview.media.invalid')}</span>
       </div>
     )

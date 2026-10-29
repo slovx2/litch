@@ -10,6 +10,13 @@ const COLUMN = 180
 const GUTTER = 56
 // 单个字段也可能占满 2 MiB；保留原值，只限制交给浏览器排版的文字长度。
 const cellText = (value = '') => (value.length > 4096 ? `${value.slice(0, 4096)}…` : value)
+/** 列头用字母（A…Z、AA…），和行号区分开，也和 Excel 预览一致 */
+function columnName(index: number): string {
+  let label = ''
+  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26))
+    label = String.fromCharCode(65 + ((n - 1) % 26)) + label
+  return label
+}
 
 export default function CsvPreview({ data, scope, resources }: PreviewRendererProps) {
   const t = useT()
@@ -61,7 +68,8 @@ export default function CsvPreview({ data, scope, resources }: PreviewRendererPr
   }, [table])
   if (!table || failed)
     return (
-      <div className="fv-hold" role="status">
+      <div className="fv-hold" data-hold={failed ? 'invalid' : 'loading'} role="status">
+        {failed ? <b>{t('files.view.failed')}</b> : null}
         <span>{t(failed ? 'preview.csv.invalid' : 'files.view.loading')}</span>
       </div>
     )
@@ -106,7 +114,7 @@ export default function CsvPreview({ data, scope, resources }: PreviewRendererPr
                   key={c}
                   style={{ left: GUTTER + c * COLUMN, width: COLUMN }}
                 >
-                  {c + 1}
+                  {columnName(c)}
                 </th>
               ))}
             </tr>
