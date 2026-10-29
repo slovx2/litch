@@ -54,6 +54,12 @@ try {
     }).trim() !== String(child.pid)
   )
     throw new Error('Chrome PID mismatch')
+  if (
+    !execFileSync('/bin/ps', ['-p', String(child.pid), '-o', 'args='], {
+      encoding: 'utf8',
+    }).includes(`--user-data-dir=${work}/profile`)
+  )
+    throw new Error('Chrome isolated profile mismatch')
   cdp = await Cdp.connect(version.webSocketDebuggerUrl)
   const target = (await cdp.call('Target.getTargets')).targetInfos.find(
     (target) => target.type === 'page',

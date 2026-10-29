@@ -143,7 +143,7 @@ try {
     [
       ...(process.argv.includes('--shown') ? [] : ['--headless=new']),
       `--user-data-dir=${profile}`,
-      '--enable-unsafe-extension-debugging',
+      `--load-extension=${installer.extensionDirectory}`,
       `--remote-debugging-port=${debugPort}`,
       '--remote-debugging-address=127.0.0.1',
       '--use-mock-keychain',
@@ -182,9 +182,13 @@ try {
     .trim()
     .split('\n')
   assert.deepEqual(pids, [String(child.pid)])
+  const launchArguments = execFileSync('/bin/ps', ['-p', String(child.pid), '-o', 'args='], {
+    encoding: 'utf8',
+  })
+  assert.ok(launchArguments.includes(`--user-data-dir=${profile}`), 'Isolated profile PID')
   report.version = version.Browser
   cdp = await Cdp.connect(version.webSocketDebuggerUrl)
-  // 和正式手动安装一样先开启开发者模式，否则 Chrome 会在 reload 时禁用未打包扩展。
+  // CFT 命令行加载只用于自动验收；开启开发者模式保证 runtime.reload 后仍启用。
   const settingsTarget = await cdp.call('Target.createTarget', { url: 'chrome://extensions/' })
   const settingsSession = (
     await cdp.call('Target.attachToTarget', { targetId: settingsTarget.targetId, flatten: true })
@@ -209,10 +213,6 @@ try {
     settingsSession,
   )
   await cdp.call('Target.closeTarget', { targetId: settingsTarget.targetId })
-  const installed = await cdp.call('Extensions.loadUnpacked', {
-    path: installer.extensionDirectory,
-  })
-  assert.equal(installed.id, identity.id)
   await until(() => bridge.instances().length === 1, 'Native Messaging handshake')
   const targetId = `chrome:${bridge.instances()[0].id}`
   const invocation = {
