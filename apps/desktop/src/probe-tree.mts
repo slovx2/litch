@@ -438,7 +438,7 @@ export async function treeProbe(): Promise<TreeSeen> {
   const wrapHere = await until(
     () =>
       secondWrap()?.dataset.state === 'here' &&
-      hereMessage()?.querySelector('.sysm-title')?.textContent === '在 Pi 上对一遍文案' &&
+      hereMessage()?.querySelector('.compact-title')?.textContent === '在 Pi 上对一遍文案' &&
       kids().length === hereLeft,
   )
   seen.here = `${secondWrap()?.dataset.state} ${hereMessage()?.textContent ?? ''}`
