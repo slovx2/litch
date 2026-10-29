@@ -1,6 +1,7 @@
 import { decodeBase64, type FilePreview, previewKind } from '@litch/core'
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useT } from '../../../app/appearance.ts'
+import type { MessageKey } from '../../../i18n/index.ts'
 import { CodeBlock } from '../../../transcript/CodeBlock.tsx'
 import { ExternalLink } from '../../../transcript/ExternalLink.tsx'
 import { Markdown } from '../../../transcript/Markdown.tsx'
@@ -9,6 +10,28 @@ import { type MarkdownPolicy, MarkdownPolicyContext } from '../../../transcript/
 import type { PreviewRendererProps } from '../contract.ts'
 import { imageInfo, svgInfo } from '../image-info.ts'
 import { documentTarget, headingSlug } from '../paths.ts'
+
+/** 文中的图没画出来时写的原因：还在读、读到了但不能显示、或者本来就不自动加载 */
+function imageNote(loads: boolean, content: FilePreview | null): MessageKey {
+  if (!loads) return 'preview.blocked'
+  switch (content?.kind) {
+    case undefined:
+    case 'ready':
+      return 'files.view.loading'
+    case 'tooLarge':
+      return 'preview.imageTooLarge'
+    case 'missing':
+      return 'files.view.missing'
+    case 'outside':
+      return 'preview.imageOutside'
+    case 'unsupported':
+    case 'changed':
+    case 'busy':
+      return `preview.${content.kind}`
+    default:
+      return 'preview.imageInvalid'
+  }
+}
 
 function DocumentImage({
   href,
@@ -24,10 +47,11 @@ function DocumentImage({
   const [visible, setVisible] = useState(false)
   const [content, setContent] = useState<FilePreview | null>(null)
   const [url, setUrl] = useState('')
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useState<MessageKey | null>(null)
   const target = documentTarget(props.scope.root, props.scope.path, href)
   const path = target.kind === 'local' ? target.path : null
   const format = path ? previewKind(path) : null
+  const loads = format === 'image' || format === 'svg'
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -39,43 +63,54 @@ function DocumentImage({
     return () => observer.disconnect()
   }, [])
   useEffect(() => {
-    if (!visible || !path || (format !== 'image' && format !== 'svg')) return
+    if (!visible || !path || !loads) return
     let alive = true
     props.resources.load({ ...props.scope, path }, format, true).then(
       (result) => {
         if (alive) setContent(result)
       },
       () => {
-        if (alive) setFailed(true)
+        if (alive) setFailed('files.view.failed')
       },
     )
     return () => {
       alive = false
     }
-  }, [visible, path, format, props.resources, props.scope])
+  }, [visible, path, format, loads, props.resources, props.scope])
   useEffect(() => {
     if (content?.kind !== 'ready') return
     const bytes = decodeBase64(content.dataBase64)
     const info = format === 'svg' ? svgInfo(new TextDecoder().decode(bytes)) : imageInfo(bytes)
-    if (!info || !props.resources.claimPixels(path ?? href, info.width * info.height)) {
-      setFailed(true)
+    if (!info) {
+      setFailed('preview.imageInvalid')
+      return
+    }
+    if (!props.resources.claimPixels(path ?? href, info.width * info.height)) {
+      setFailed('preview.imageBudget')
       return
     }
     const made = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: info.mime }))
     setUrl(made)
     return () => URL.revokeObjectURL(made)
   }, [content, format, props.resources, path, href])
+  const shown = url && !failed
   return (
-    <span ref={element} className="fp-resource">
-      {url && !failed ? (
-        <img className="fp-inline-image" src={url} alt={alt} onError={() => setFailed(true)} />
+    <span ref={element} className="fp-resource" data-state={shown ? 'image' : 'note'}>
+      {shown ? (
+        <img
+          className="fp-inline-image"
+          src={url}
+          alt={alt}
+          onError={() => setFailed('preview.imageInvalid')}
+        />
       ) : (
         <span className="dim">
           {alt || href} ·{' '}
           {t(
-            failed || (content && content.kind !== 'ready')
-              ? 'preview.imageLimit'
-              : 'preview.blocked',
+            failed ??
+              (target.kind === 'blocked' && target.outside
+                ? 'preview.imageOutside'
+                : imageNote(loads, content)),
           )}
           {target.kind === 'external' ? (
             <>

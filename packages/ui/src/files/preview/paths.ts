@@ -3,7 +3,8 @@ import { isAbsolutePath, joinPath, normalizePath, parentPath, withinRoot } from 
 export type DocumentTarget =
   | { kind: 'external'; href: string }
   | { kind: 'local'; path: string; line?: number; fragment?: string }
-  | { kind: 'blocked' }
+  /** outside：路径本身没问题，只是出了项目根目录 */
+  | { kind: 'blocked'; outside?: true }
 
 /** 文件内链接使用文件目录，不使用会话 cwd；URL 解码后再次拒绝 scheme/UNC/NUL。 */
 export function documentTarget(root: string, path: string, href: string): DocumentTarget {
@@ -27,7 +28,7 @@ export function documentTarget(root: string, path: string, href: string): Docume
       ? normalizePath(name)
       : joinPath(parentPath(path) ?? root, name)
   const safe = withinRoot(root, full)
-  if (safe === null) return { kind: 'blocked' }
+  if (safe === null) return { kind: 'blocked', outside: true }
   const line = Number(location?.[1] ?? colon?.[1])
   return {
     kind: 'local',

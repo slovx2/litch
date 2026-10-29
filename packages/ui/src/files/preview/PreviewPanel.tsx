@@ -8,8 +8,9 @@ import {
 import { Component, lazy, type ReactNode, Suspense, useEffect, useMemo, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { whyNot } from '../../app/errors.ts'
+import { Icon } from '../../app/icons.tsx'
 import { useServices } from '../../app/services.tsx'
-import { runFileAction } from '../actions.ts'
+import { type FileAction, runFileAction } from '../actions.ts'
 import { CodeView } from '../CodeView.tsx'
 import { byteSize, splitLines } from '../lines.ts'
 import { type OpenFile, openFile, retargetFile, setFileMode } from '../state.ts'
@@ -49,10 +50,14 @@ export function PreviewPanel({
   const t = useT()
   const { channel } = useServices()
   const [refresh, setRefresh] = useState(0)
-  const [content, setContent] = useState<FilePreview | null>(null)
   const [error, setError] = useState('')
   const text = ['markdown', 'svg', 'html', 'csv'].includes(format)
   const source = text && (tab.previewMode ?? (tab.line ? 'source' : 'preview')) === 'source'
+  // 记下内容是按哪种方式读的：切到源码的那一帧还拿着预览读到的内容，不能先拿它画源码，
+  // 否则行号定位在这一帧就算滚过了，读完重画时不再滚
+  const reading = source ? 'source' : format
+  const [loaded, setLoaded] = useState<{ reading: string; value: FilePreview } | null>(null)
+  const content = loaded?.reading === reading ? loaded.value : null
   const scope = useMemo<PreviewScope>(
     () => ({ deviceId, root, path: tab.path }),
     [deviceId, root, tab.path],
@@ -82,9 +87,9 @@ export function PreviewPanel({
   useEffect(() => {
     if (!resources) return
     let alive = true
-    setContent(null)
+    setLoaded(null)
     setError('')
-    resources.load(scope, source ? 'source' : format).then(
+    resources.load(scope, reading).then(
       (result) => {
         if (!alive) return
         if (result.kind === 'unsupported') {
@@ -95,7 +100,7 @@ export function PreviewPanel({
           retargetFile(uiKey, tab.path, tab.alt)
           return
         }
-        setContent(result)
+        setLoaded({ reading, value: result })
       },
       (reason) => {
         if (alive && !resources.abort.signal.aborted) setError(whyNot(reason, t))
@@ -104,17 +109,28 @@ export function PreviewPanel({
     return () => {
       alive = false
     }
-  }, [scope, resources, format, source, tab.alt, tab.path, uiKey, t, onUnsupported])
+  }, [scope, resources, reading, tab.alt, tab.path, uiKey, t, onUnsupported])
+  const reload = () => setRefresh((n) => n + 1)
+  const act = (action: FileAction) =>
+    runFileAction(action, { path: tab.path, relative: relativeTo(root, tab.path), line: tab.line })
+  const retry = (
+    <button type="button" className="btn" onClick={reload}>
+      {t('files.retry')}
+    </button>
+  )
   const invalid = (
-    <div className="fv-hold" role="status">
-      {t('preview.invalid')}
+    <div className="fv-hold" data-hold="invalid" role="status">
+      <b>{t('files.view.failed')}</b>
+      <span>{t('preview.invalid')}</span>
     </div>
   )
   let body: ReactNode = null
   if (error)
     body = (
-      <div className="fv-hold" role="status">
-        {error}
+      <div className="fv-hold" data-hold="failed" role="status">
+        <b>{t('files.view.failed')}</b>
+        <span>{error}</span>
+        {retry}
       </div>
     )
   else if (!content)
@@ -153,7 +169,7 @@ export function PreviewPanel({
     )
   } else if (content.kind === 'tooLarge')
     body = (
-      <div className="fv-hold" role="status">
+      <div className="fv-hold" data-hold="tooLarge" role="status">
         <b>{t('files.view.tooLarge')}</b>
         <span>
           {t('files.view.tooLarge.note', {
@@ -161,12 +177,31 @@ export function PreviewPanel({
             limit: byteSize(content.limit),
           })}
         </span>
+        {/* 源码的上限比渲染宽：渲染不了的文档多半还能看源码 */}
+        {text && !source ? (
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setFileMode(uiKey, tab.path, 'source')}
+          >
+            {t('preview.openSource')}
+          </button>
+        ) : null}
+      </div>
+    )
+  else if (content.kind === 'missing')
+    body = (
+      <div className="fv-hold" data-hold="missing" role="status">
+        <b>{t('files.view.missing')}</b>
+        <span>{t('files.view.missing.note')}</span>
       </div>
     )
   else
     body = (
-      <div className="fv-hold" role="status">
-        {content.kind === 'missing' ? t('files.view.missing') : t(`preview.${content.kind}`)}
+      <div className="fv-hold" data-hold={content.kind} role="status">
+        <b>{t('files.view.failed')}</b>
+        <span>{t(`preview.${content.kind}`)}</span>
+        {content.kind === 'changed' || content.kind === 'busy' ? retry : null}
       </div>
     )
   return (
@@ -200,26 +235,29 @@ export function PreviewPanel({
             </button>
           </span>
         ) : null}
-        <button
-          type="button"
-          className="mini"
-          onClick={() =>
-            runFileAction('mention', {
-              path: tab.path,
-              relative: relativeTo(root, tab.path),
-              line: tab.line,
-            })
-          }
-        >
+        <button type="button" className="mini" data-tool="mention" onClick={() => act('mention')}>
           {t('files.action.mention')}
         </button>
         <button
           type="button"
-          className="mini"
-          data-tool="reload"
-          onClick={() => setRefresh((n) => n + 1)}
+          className="ibtn"
+          data-tool="copy"
+          title={t('files.action.copyRelative')}
+          aria-label={t('files.action.copyRelative')}
+          onClick={() => act('copyRelative')}
         >
-          {t('files.view.reload')}
+          <Icon name="copy" small />
+        </button>
+        <button
+          type="button"
+          className="ibtn"
+          data-tool="reload"
+          title={t('files.view.reload')}
+          aria-label={t('files.view.reload')}
+          aria-busy={!error && !content}
+          onClick={reload}
+        >
+          <Icon name="reload" small />
         </button>
       </div>
       <PreviewBoundary key={`${tab.path}:${source}:${refresh}`} fallback={invalid}>

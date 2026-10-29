@@ -14,6 +14,11 @@ export const enPreview: Record<keyof typeof zhPreview, string> = {
   'preview.busy': 'The device is reading other previews. Refresh shortly.',
   'preview.invalid': 'Invalid file contents or unsupported format.',
   'preview.blocked': 'This resource is not loaded automatically',
-  'preview.imageLimit': 'Invalid, animated or oversized image.',
+  'preview.imageInvalid': 'This image is invalid or animated and can’t be previewed.',
+  'preview.imageBudget':
+    'Images on this page exceed the preview pixel limit; this one isn’t shown.',
+  'preview.imageTooLarge': 'This image exceeds the preview size limit and wasn’t loaded.',
+  'preview.imageOutside': 'This image is outside the project root and isn’t loaded.',
+  'preview.openSource': 'View source',
   'preview.anchorMissing': 'This heading was not found in the document.',
 }

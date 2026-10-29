@@ -12,6 +12,10 @@ export const zhPreview = {
   'preview.busy': '设备正在读取其他预览，请稍后刷新。',
   'preview.invalid': '文件内容无效或格式不受支持。',
   'preview.blocked': '此资源不自动加载',
-  'preview.imageLimit': '图片无效、含动画或超出预览预算。',
+  'preview.imageInvalid': '图片无效或含动画，无法预览。',
+  'preview.imageBudget': '本页图片的总像素超出预览上限，此图未显示。',
+  'preview.imageTooLarge': '图片超出预览的大小上限，未加载。',
+  'preview.imageOutside': '图片在项目根目录之外，不加载。',
+  'preview.openSource': '查看源码',
   'preview.anchorMissing': '文档中没有这个标题。',
 } as const
