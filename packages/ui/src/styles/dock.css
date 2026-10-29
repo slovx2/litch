@@ -524,13 +524,16 @@
   background: var(--overlay);
   box-shadow: var(--shadow);
 }
-/* 在行上点右键叫出来的：弹在鼠标那里，位置由脚本给 */
+/* 位置由脚本给的：右键弹在鼠标那里，侧栏行上的“更多”弹在按钮底下。
+   侧栏行上的放在顶层里，浏览器给顶层浮层的外边距和字色要抹掉 */
 .pick-pop.down.at {
   position: fixed;
   right: auto;
   z-index: 30;
+  margin: 0;
+  color: inherit;
 }
-/* 往下弹、靠右对齐的那一种：侧栏行上的菜单 */
+/* 往下弹、靠右对齐的那一种：侧栏顶上的筛选与“更多”这类按钮菜单 */
 .pick-pop.down {
   top: calc(100% + 4px);
   bottom: auto;

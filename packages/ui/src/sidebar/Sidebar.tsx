@@ -446,7 +446,7 @@ const SessionRow = memo(function SessionRow({
           />
           <span className="title ell grow">{t.text(summary.title)}</span>
           {summary.lineage && !summary.lineage.reportParent ? (
-            <span className="chip" data-report="off" title={t('tree.report.stopped')}>
+            <span className="pill mute" data-report="off">
               {t('tree.report.stopped')}
             </span>
           ) : null}

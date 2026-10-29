@@ -42,8 +42,8 @@ export function RowMenu({ label, actions, onAction, handle }: RowMenuProps) {
   const [asking, setAsking] = useState<RowAction | null>(null)
   /** 正在“再挑一个”的那一项 */
   const [choosing, setChoosing] = useState<RowAction | null>(null)
-  /** 是从右键叫出来的：弹在哪。null 就是照常弹在按钮底下 */
-  const [spot, setSpot] = useState<{ x: number; y: number } | null>(null)
+  /** 弹在哪：右键是鼠标那里，按钮是按钮底下、右边对齐（end：x 是右边沿，量出宽度后换成左边沿）。收起时是 null */
+  const [spot, setSpot] = useState<{ x: number; y: number; end?: boolean } | null>(null)
   const { open, setOpen, close, root, trigger, pop, onKeyDown } = usePopover(asking ?? choosing)
 
   useImperativeHandle(
@@ -66,28 +66,36 @@ export function RowMenu({ label, actions, onAction, handle }: RowMenuProps) {
     setSpot(null)
   }, [open])
 
-  // 弹在鼠标那里的：靠近窗口边沿时往回挪，整块都留在窗口里。换成确认那一屏会变大，再量一次
+  // 菜单放进顶层：离线设备下面那一块整体淡下去，留在行里的菜单会跟着淡、伸出侧栏的部分被主区盖住。
+  // 靠近窗口边沿时往回挪，整块都留在窗口里。换成确认那一屏会变大，再量一次
   // biome-ignore lint/correctness/useExhaustiveDependencies: 换了一屏要重新量
   useLayoutEffect(() => {
     const box = pop.current
     if (!open || !spot || !box) return
-    const x = Math.max(EDGE, Math.min(spot.x, window.innerWidth - box.offsetWidth - EDGE))
+    const left = spot.end ? spot.x - box.offsetWidth : spot.x
+    const x = Math.max(EDGE, Math.min(left, window.innerWidth - box.offsetWidth - EDGE))
     const y = Math.max(EDGE, Math.min(spot.y, window.innerHeight - box.offsetHeight - EDGE))
-    if (x !== spot.x || y !== spot.y) setSpot({ x, y })
+    if (spot.end || x !== spot.x || y !== spot.y) setSpot({ x, y })
   }, [open, spot, asking, choosing, pop])
 
-  // 弹在鼠标那里的不跟着行走：侧栏一滚、窗口一失焦就收起
+  // 弹出来的菜单不跟着行走：这一行所在的地方（侧栏）一滚、窗口一失焦就收起。别处滚（对话区跟着流式输出往下走）不算
   const floating = open && spot !== null
   useEffect(() => {
     if (!floating) return
-    const gone = () => setOpen(false)
+    const gone = (event: Event) => {
+      if (
+        event.type === 'blur' ||
+        (event.target instanceof Node && event.target.contains(root.current))
+      )
+        setOpen(false)
+    }
     window.addEventListener('scroll', gone, true)
     window.addEventListener('blur', gone)
     return () => {
       window.removeEventListener('scroll', gone, true)
       window.removeEventListener('blur', gone)
     }
-  }, [floating, setOpen])
+  }, [floating, setOpen, root])
 
   const run = (action: RowAction, confirmed = false) => {
     if (action.disabled !== undefined) return
@@ -117,7 +125,14 @@ export function RowMenu({ label, actions, onAction, handle }: RowMenuProps) {
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          const box = trigger.current?.getBoundingClientRect()
+          if (open || !box) setOpen(false)
+          else {
+            setSpot({ x: box.right, y: box.bottom + 4, end: true })
+            setOpen(true)
+          }
+        }}
       >
         <More />
       </button>
@@ -126,7 +141,12 @@ export function RowMenu({ label, actions, onAction, handle }: RowMenuProps) {
         <div
           className={spot ? 'pick-pop down at' : 'pick-pop down'}
           style={spot ? { left: spot.x, top: spot.y } : undefined}
-          ref={pop}
+          popover={spot ? 'manual' : undefined}
+          ref={(box) => {
+            pop.current = box
+            // 挂上就进顶层：要赶在 usePopover 往里落焦点之前，没弹出来的顶层浮层不显示、焦点落不进去
+            if (box?.hasAttribute('popover') && !box.matches(':popover-open')) box.showPopover()
+          }}
           onKeyDown={onKeyDown}
         >
           {asking?.confirm ? (

@@ -329,7 +329,10 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
       (real
         ? ['', '置顶|移到组…', '置顶|移到组…|移到项目…'].includes(organizing)
         : organizing === '置顶|移到组…|移到项目…'),
-    atPointer: Math.abs(spot.left - click.x) < 2 && Math.abs(spot.top - click.y) < 2,
+    // 行离窗口底边近的时候菜单往上挪、整块留在窗口里（离边 8 像素），挪回来的那一下由下面的 clamped 单独量
+    atPointer:
+      Math.abs(spot.left - Math.min(click.x, innerWidth - spot.width - 8)) < 2 &&
+      Math.abs(spot.top - Math.min(click.y, innerHeight - spot.height - 8)) < 2,
     focused: popped.contains(document.activeElement),
     closed: false,
     clamped: false,

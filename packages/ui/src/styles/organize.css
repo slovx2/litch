@@ -228,16 +228,19 @@
 .row-focus:focus-visible {
   opacity: 1;
 }
-/* 收起时行尾的汇总：行尾的按钮露出来的时候往左让（一个让 30，两个让 54） */
+/* 收起时行尾的汇总：行尾的按钮露出来的时候往左让（一个让 30，两个让 54）。
+   “更多”的菜单在顶层里，焦点落在菜单上时这一行不算 :focus-within，要看 .row-more.on */
 .head-tally {
   flex: none;
   display: inline-flex;
   padding-right: 6px;
 }
-.head-line:has(> .row-add, > .row-more):is(:hover, :focus-within) > .head-tally {
+.head-line:has(> .row-add, > .row-more):is(:hover, :focus-within, :has(> .row-more.on))
+  > .head-tally {
   padding-right: 30px;
 }
-.head-line:has(> .row-add):has(> .row-more):is(:hover, :focus-within) > .head-tally {
+.head-line:has(> .row-add):has(> .row-more):is(:hover, :focus-within, :has(> .row-more.on))
+  > .head-tally {
   padding-right: 54px;
 }
 /* 置顶、组那一行：名字是小标题的样子，比工作区那一行矮一点 */
