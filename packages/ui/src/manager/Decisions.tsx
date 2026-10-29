@@ -1,6 +1,7 @@
 import type { ManagerBoardPages } from '@litch/core'
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type {
+  ManagerDecisionId,
   ManagerDecisionView,
   ManagerSubmittedAnswer,
   ManagerView,
@@ -16,17 +17,42 @@ export function Decisions({
   groups,
   disabled,
   visible,
+  target,
+  onLocated,
 }: {
   manager: ManagerView
   decisions: ManagerDecisionView[]
   groups: ManagerBoardPages['decisions']
   disabled: boolean
   visible: boolean
+  target: { id: ManagerDecisionId } | null
+  onLocated(): void
 }) {
   const t = useT()
   const { channel } = useServices()
   const { drafts, write } = useAnswerDrafts(manager.deviceId, manager.id)
   const [filter, setFilter] = useState<'open' | 'answered' | 'closed'>('open')
+  const cards = useRef<HTMLDivElement>(null)
+  const targetDecision = target
+    ? decisions.find((decision) => decision.id === target.id)
+    : undefined
+  const targetGroup =
+    targetDecision?.status === 'open'
+      ? 'open'
+      : targetDecision?.status === 'answered'
+        ? 'answered'
+        : 'closed'
+  useLayoutEffect(() => {
+    if (target) setFilter(targetGroup)
+  }, [target, targetGroup])
+  useLayoutEffect(() => {
+    if (!target || !visible || filter !== targetGroup) return
+    const card = cards.current?.querySelector<HTMLElement>(`[data-decision="${target.id}"]`)
+    if (!card) return
+    card.scrollIntoView({ block: 'start' })
+    card.focus({ preventScroll: true })
+    onLocated()
+  }, [target, targetGroup, filter, visible, onLocated])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const answers = answeredDrafts(drafts)
@@ -120,7 +146,7 @@ export function Decisions({
             </button>
           ))}
         </div>
-        <div className="mg-stack">
+        <div className="mg-stack" ref={cards}>
           {grouped[filter].length === 0 ? <p className="mg-empty">{t('manager.none')}</p> : null}
           {grouped[filter].map((decision) => {
             const draft = drafts[decision.id]
@@ -131,6 +157,7 @@ export function Decisions({
                 data-decision={decision.id}
                 key={decision.id}
                 data-draft={Boolean(draft)}
+                tabIndex={-1}
               >
                 <header>
                   <span className="mono dim">{decision.id}</span>

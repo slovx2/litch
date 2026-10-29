@@ -619,6 +619,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       const summary = findSummary(deviceId, sessionId)
       const harness = harnessOn(deviceId, summary.harness)
       view = sampleSession(summary, deviceId, clock.now(), lang, harness)
+      const history = managers.history(deviceId, sessionId)
+      if (history) Object.assign(view, history)
       view.can = canOf(deviceId, view.harness)
       sessions.set(key, view)
     }

@@ -10,7 +10,6 @@ import {
 import type {
   ManagerBoard,
   ManagerChange,
-  ManagerContactSettings,
   ManagerDecision,
   ManagerDecisionFields,
   ManagerDecisionId,
@@ -63,41 +62,6 @@ export function managerSessionRules(maxRunningLines: number): string {
     'Put the archival question on the board as a decision; do not ask it separately in chat.',
     outsideLitch(false),
   ].join('\n\n')
-}
-
-const TEMPLATE_RULES: Record<ManagerTemplate, string> = {
-  release:
-    'Before release, list all unverified items and ask through a decision whether to complete those checks. Keep a draft of release notes as work lands.',
-  investigation:
-    'Track evidence and hypotheses separately in the board. Give each investigation line a concrete question and a stopping condition; record ruled-out explanations.',
-  research:
-    'Record sources and their limits. Give research lines distinct questions; synthesize findings and unresolved disagreements before proposing a decision.',
-  blank: '',
-}
-
-/** 第 3 层初稿：手写后由界面停止自动重拼，设备保存收到的原文。 */
-export function managerCustomRules(
-  template: ManagerTemplate,
-  dispatch: ManagerDispatchSettings,
-  contact: ManagerContactSettings,
-): string {
-  return [
-    `Default line harness: ${dispatch.harness ?? 'the manager’s harness'}. Model: ${dispatch.model ?? 'the manager’s model when the harness matches; otherwise the target harness’s default'}. Effort: ${dispatch.effort ?? 'the manager’s effort when the harness matches; otherwise the target harness’s default'}.`,
-    dispatch.worktree
-      ? 'Give code-changing lines their own worktrees.'
-      : 'Code-changing lines share the working folder; serialize changes that overlap.',
-    `At most ${dispatch.maxRunningLines} lines may run at once.`,
-    dispatch.merge === 'manager'
-      ? 'After acceptance, the manager integrates the line into main under project rules.'
-      : 'Leave merging to the user; report which lines passed acceptance and are ready to merge.',
-    'Wait for unanswered decisions; never adopt a recommendation automatically.',
-    contact.desktopNotification
-      ? 'Litch sends desktop notifications for new decisions.'
-      : 'Desktop notifications for new decisions are disabled.',
-    TEMPLATE_RULES[template],
-  ]
-    .filter(Boolean)
-    .join('\n')
 }
 
 /** 第 7 层：派活默认参数由设备执行；文字只告诉线与自身有关的工作树和合并约束。 */

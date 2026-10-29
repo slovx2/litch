@@ -2,6 +2,31 @@
 import type { Entry } from './types.ts'
 
 export const enManager = {
+  'manager.waitDecisions': 'Waiting for decisions',
+  'manager.rules.line': 'Default line harness: {harness}. Model: {model}. Effort: {effort}.',
+  'manager.rules.sameHarness': 'the manager’s harness',
+  'manager.rules.modelDefault':
+    'the manager’s model when the harness matches; otherwise the target harness’s default',
+  'manager.rules.effortDefault':
+    'the manager’s effort when the harness matches; otherwise the target harness’s default',
+  'manager.rules.worktree': 'Give code-changing lines their own worktrees.',
+  'manager.rules.sharedFolder':
+    'Code-changing lines share the working folder; serialize changes that overlap.',
+  'manager.rules.limit': 'At most {n} lines may run at once.',
+  'manager.rules.managerMerge':
+    'After acceptance, the manager integrates the line into the main branch under project rules.',
+  'manager.rules.userMerge':
+    'Leave merging to the user; report which lines passed acceptance and are ready to merge.',
+  'manager.rules.wait':
+    'Wait for unanswered decisions; never adopt a recommendation automatically.',
+  'manager.rules.notify': 'Litch sends desktop notifications for new decisions.',
+  'manager.rules.noNotify': 'Desktop notifications for new decisions are disabled.',
+  'manager.rules.release':
+    'Before release, list all unverified items and ask through a decision whether to complete those checks. Keep a draft of release notes as work lands.',
+  'manager.rules.investigation':
+    'Track evidence and hypotheses separately in the board. Give each investigation line a concrete question and a stopping condition; record ruled-out explanations.',
+  'manager.rules.research':
+    'Record sources and their limits. Give research lines distinct questions; synthesize findings and unresolved disagreements before proposing a decision.',
   'manager.clearOption': 'Clear selection',
   'manager.chat': 'Chat',
   'manager.title': 'Managers',

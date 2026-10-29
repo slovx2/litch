@@ -7,7 +7,6 @@ import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import {
   MANAGER_TOOL,
   MANAGER_TOOLS,
-  managerCustomRules,
   managerEndText,
   managerLineRules,
   managerOpenText,
@@ -222,42 +221,6 @@ test('角色规则保持预算和第一版边界，会话版原样复用共用�
   assert.match(sessions, /including event turns/)
   assert.match(sessions, /Do not call wrap_up/)
   assert.doesNotMatch(sessions, /initiation "propose"|initiation "offer"/)
-})
-
-test('四种模板只加各自规矩，设置拼稿确定且不改输入', () => {
-  const dispatch = Object.freeze({ ...MANAGER_DEFAULT_DISPATCH })
-  const contact = Object.freeze({ ...MANAGER_DEFAULT_CONTACT })
-  const blank = managerCustomRules('blank', dispatch, contact)
-  assert.match(blank, /the manager’s harness/)
-  assert.match(blank, /when the harness matches; otherwise the target harness’s default/)
-  assert.match(blank, /at once/)
-  assert.match(blank, /never adopt a recommendation automatically/)
-  for (const template of ['release', 'investigation', 'research'] as const) {
-    const rules = managerCustomRules(template, dispatch, contact)
-    assert.ok(rules.startsWith(blank))
-    assert.ok(rules.length > blank.length)
-    assert.equal(rules, managerCustomRules(template, dispatch, contact))
-  }
-  const custom = managerCustomRules(
-    'blank',
-    {
-      ...dispatch,
-      harness: 'pi',
-      model: 'test-model',
-      effort: 'high',
-      worktree: false,
-      merge: 'user',
-      maxRunningLines: 2,
-    },
-    { desktopNotification: false, unanswered: 'wait' },
-  )
-  assert.match(custom, /harness: pi/)
-  assert.match(custom, /Model: test-model/)
-  assert.match(custom, /Effort: high/)
-  assert.match(custom, /At most 2 lines/)
-  assert.match(custom, /Leave merging to the user/)
-  assert.match(custom, /disabled/)
-  assert.match(custom, /share the working folder/)
 })
 
 test('线的回报和首次、结束回合遵守草稿约束', () => {

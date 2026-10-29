@@ -3,7 +3,11 @@ import { ChannelError, type Commands } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import type { ManagerAnswersResult, ManagerBoardView, ManagerView } from '../model-manager.mjs'
 import type { MockTasksHost } from './mock-tasks.mjs'
-import { type ManagerSessionSummary, sampleManagers } from './sample-manager.mjs'
+import {
+  type ManagerSessionSummary,
+  sampleManagerHistory,
+  sampleManagers,
+} from './sample-manager.mjs'
 
 const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 
@@ -15,6 +19,7 @@ export interface MockManagerHost
 
 export function createMockManagers(host: MockManagerHost) {
   const states = new Map<string, ReturnType<typeof sampleManagers>>()
+  const histories = new Map<string, ReturnType<typeof sampleManagerHistory>>()
   const lists = new Map<string, Set<HostSink>>()
   const boards = new Map<string, Set<HostSink>>()
   let seq = 0
@@ -32,6 +37,11 @@ export function createMockManagers(host: MockManagerHost) {
           : { managers: [], boards: [], sessions: [] }
       states.set(id, value)
       for (const session of value.sessions) host.add(id, session)
+      for (const manager of value.managers) {
+        const board = value.boards.find((board) => board.managerId === manager.id)
+        if (board)
+          histories.set(key(id, manager.threadId), sampleManagerHistory(manager, board, host.lang))
+      }
     }
     return value
   }
@@ -242,6 +252,10 @@ export function createMockManagers(host: MockManagerHost) {
   }
   for (const device of host.devices()) state(device.id)
   return {
+    history(deviceId: string, threadId: string) {
+      const history = histories.get(key(deviceId, threadId))
+      return history ? copy(history) : undefined
+    },
     ended(deviceId: string, threadId: string): boolean {
       return state(deviceId).managers.some(
         (manager) => manager.threadId === threadId && manager.status === 'ended',

@@ -2,6 +2,25 @@
 import type { Entry } from './types.ts'
 
 export const zhManager = {
+  'manager.waitDecisions': '等待决策',
+  'manager.rules.line': '子会话默认使用：{harness}。模型：{model}。强度：{effort}。',
+  'manager.rules.sameHarness': '与经理相同的 harness',
+  'manager.rules.modelDefault': 'harness 相同时沿用经理的模型，否则使用目标 harness 的默认模型',
+  'manager.rules.effortDefault': 'harness 相同时沿用经理的强度，否则使用目标 harness 的默认强度',
+  'manager.rules.worktree': '修改代码的工作线使用独立工作树。',
+  'manager.rules.sharedFolder': '修改代码的工作线共用工作目录；涉及相同文件的修改按顺序执行。',
+  'manager.rules.limit': '同时最多运行 {n} 条工作线。',
+  'manager.rules.managerMerge': '验收通过后，由经理按项目约定将工作线合入主分支。',
+  'manager.rules.userMerge': '由用户合并；回报哪些工作线已通过验收、可以合并。',
+  'manager.rules.wait': '决策未答复时一直等待，不自动采用推荐选项。',
+  'manager.rules.notify': '有新决策时，通过 Litch 桌面通知用户。',
+  'manager.rules.noNotify': '不发送新决策的桌面通知。',
+  'manager.rules.release':
+    '发版前列出所有未验证项，通过决策确认是否补验；随工作落地维护发版说明草稿。',
+  'manager.rules.investigation':
+    '在看板上分开记录事实证据与推测。每条排查线有明确问题和停止条件，已排除的原因也要记录。',
+  'manager.rules.research':
+    '记录资料来源及其局限。各条调研线分别回答不同问题，提出决策前先综合结论和未解决的分歧。',
   'manager.clearOption': '清除选择',
   'manager.chat': '对话',
   'manager.title': '经理',
