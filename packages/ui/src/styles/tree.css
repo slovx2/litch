@@ -159,6 +159,18 @@ button.tree-card-main:hover {
   flex-direction: column;
   gap: 2px;
 }
+/* 事件自带的正文（经理事件、认不出的事件）：一段一块，段内的换行照原样 */
+.sev-body {
+  margin: 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sev-body > p {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
 .sev-note {
   display: flex;
   align-items: baseline;

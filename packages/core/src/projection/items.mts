@@ -190,7 +190,8 @@ function sessionEvent(event: SessionEvent): SessionEventView {
       notes,
       body: [manager.text, ...answers].filter(Boolean).join('\n\n'),
       ...(manager.answers
-        ? { summary: manager.answers.map((answer) => answer.decisionId).join('、') }
+        ? // 核心不认识语言：和回报摘要一样用“ · ”隔开，中英文都通
+          { summary: manager.answers.map((answer) => answer.decisionId).join(' · ') }
         : {}),
     }
   }

@@ -109,8 +109,12 @@ export function SessionEventBar({
         fixed={event.notes.length === 0 && !event.body}
       />
       {open && event.body ? (
-        <div className="sev-notes" style={{ whiteSpace: 'pre-wrap' }}>
-          {event.body}
+        // 空行隔开的几段各占一块，段间和回报列表一样只隔一点，不画出整行空白
+        <div className="sev-body">
+          {event.body.split(/\n{2,}/).map((part, at) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: 正文是一整段字拆开的，段落没有别的标识
+            <p key={at}>{part}</p>
+          ))}
         </div>
       ) : null}
       {open && event.notes.length > 0 ? (

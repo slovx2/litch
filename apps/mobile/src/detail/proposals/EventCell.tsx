@@ -93,7 +93,13 @@ function EventBar({
       onPress={toggle}
       fixed={notes.length === 0 && !body}
     >
-      {body ? <Text style={{ color: c.ink2, fontSize: font.size.meta }}>{body}</Text> : null}
+      {/* 空行隔开的几段各占一行，段间距和回报列表一样，不画出整行空白（同桌面） */}
+      {body?.split(/\n{2,}/).map((part, at) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: 正文是一整段字拆开的，段落没有别的标识
+        <Text key={at} style={{ color: c.ink2, fontSize: font.size.meta }}>
+          {part}
+        </Text>
+      ))}
       {notes.map((note) => (
         <Note key={note.threadId} deviceId={deviceId} note={note} openSession={openSession} />
       ))}
