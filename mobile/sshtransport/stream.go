@@ -48,8 +48,35 @@ type streamState struct {
 
 var streams = struct {
 	sync.Mutex
-	items map[string]*stream
-}{items: make(map[string]*stream)}
+	items   map[string]*stream
+	opening map[string]*streamOpening
+	paused  bool
+}{items: make(map[string]*stream), opening: make(map[string]*streamOpening)}
+
+type streamOpening struct {
+	cancel context.CancelFunc
+}
+
+// 暂停与登记开流共用一把锁，后台到期后，正在握手或晚到的结果都不能复活连接。
+func setStreamsPaused(paused bool) {
+	streams.Lock()
+	streams.paused = paused
+	var closing []*stream
+	if paused {
+		for id, pending := range streams.opening {
+			pending.cancel()
+			delete(streams.opening, id)
+		}
+		for id, s := range streams.items {
+			closing = append(closing, s)
+			delete(streams.items, id)
+		}
+	}
+	streams.Unlock()
+	for _, s := range closing {
+		go s.close()
+	}
+}
 
 type streamEndpoint struct {
 	URL string `json:"url"`
@@ -67,6 +94,25 @@ func OpenStream(id, targetJSON, script, marker string) (string, error) {
 		return "", err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	pending := &streamOpening{cancel: cancel}
+	streams.Lock()
+	if streams.paused {
+		streams.Unlock()
+		cancel()
+		return "", kindf(kindUnreachable, "后台连接已暂停")
+	}
+	if previous := streams.opening[id]; previous != nil {
+		previous.cancel()
+	}
+	streams.opening[id] = pending
+	streams.Unlock()
+	defer func() {
+		streams.Lock()
+		if streams.opening[id] == pending {
+			delete(streams.opening, id)
+		}
+		streams.Unlock()
+	}()
 	client, err := connectSSH(ctx, target)
 	if err != nil {
 		cancel()
@@ -88,6 +134,12 @@ func OpenStream(id, targetJSON, script, marker string) (string, error) {
 	s := &stream{id: id, target: target, script: script, marker: marker, token: token,
 		listener: listener, client: client, ctx: ctx, cancel: cancel}
 	streams.Lock()
+	if streams.paused || streams.opening[id] != pending || ctx.Err() != nil {
+		streams.Unlock()
+		s.close()
+		return "", kindf(kindUnreachable, "开流已取消")
+	}
+	delete(streams.opening, id)
 	previous := streams.items[id]
 	streams.items[id] = s
 	streams.Unlock()
@@ -115,6 +167,10 @@ func StreamState(id string) (string, error) {
 // CloseStream 关掉一条流和它的 SSH 连接
 func CloseStream(id string) {
 	streams.Lock()
+	if pending := streams.opening[id]; pending != nil {
+		pending.cancel()
+		delete(streams.opening, id)
+	}
 	s := streams.items[id]
 	if s != nil {
 		delete(streams.items, id)
@@ -272,10 +328,11 @@ func (s *stream) close() {
 		if local != nil {
 			_ = local.Close()
 		}
+		// 先关 TCP，避免网络静默时 session.Close 等待发送而挡住实际断开。
+		_ = s.client.Close()
 		if session != nil {
 			_ = session.Close()
 		}
-		_ = s.client.Close()
 	})
 }
 

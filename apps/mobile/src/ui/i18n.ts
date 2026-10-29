@@ -9,6 +9,7 @@ import * as app from './messages/app'
 import * as approvals from './messages/approvals'
 import * as comments from './messages/comments'
 import * as compose from './messages/compose'
+import * as connection from './messages/connection'
 import * as detail from './messages/detail'
 import * as devices from './messages/devices'
 import * as hconfig from './messages/hconfig'
@@ -32,6 +33,7 @@ const zhCN = {
   ...detail.zhCN,
   ...compose.zhCN,
   ...comments.zhCN,
+  ...connection.zhCN,
   ...tools.zhCN,
   ...tasks.zhCN,
   ...update.zhCN,
@@ -49,6 +51,7 @@ const en: Record<MobileKey, Entry> = {
   ...detail.en,
   ...compose.en,
   ...comments.en,
+  ...connection.en,
   ...tools.en,
   ...tasks.en,
   ...update.en,

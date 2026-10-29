@@ -80,6 +80,8 @@ export interface Link {
    */
   reopen(): void
   stop(): void
+  /** 暂时关闭连接并禁止重试；恢复不重开健康连接，也不销毁设备的缓存与订阅。 */
+  setPaused(paused: boolean): void
   request<M extends ClientRequestMethod>(
     method: M,
     params: ClientRequests[M]['params'],
@@ -94,8 +96,10 @@ export function createLink(options: LinkOptions): Link {
   const backoff = options.backoffMs ?? DEFAULT_BACKOFF
   let state: LinkState = { phase: 'idle' }
   let rpc: Rpc | null = null
+  let handshaking: Rpc | null = null
   let opening: Cancel | null = null
   let stopTimer: (() => void) | null = null
+  let paused = false
   // 每次尝试一个代号。异步步骤回来时代号对不上，说明这次尝试已经作废
   let epoch = 0
 
@@ -113,6 +117,8 @@ export function createLink(options: LinkOptions): Link {
     const old = rpc
     rpc = null
     old?.close()
+    handshaking?.close()
+    handshaking = null
   }
 
   const fail = (attempt: number, failure: ConnectError) => {
@@ -172,6 +178,7 @@ export function createLink(options: LinkOptions): Link {
         ...(options.trace ? { trace: options.trace } : {}),
       })
       let info: InitializeResponse
+      handshaking = peer
       // 能执行的客户端工具：声明了扩展，还要在 litchClientTools 里列出命名空间（client-tools.mts）
       const tools = [...(options.clientTools?.() ?? [])]
       const desktop = tools.length > 0 ? (options.clientToolsDesktop?.() ?? null) : null
@@ -248,6 +255,7 @@ export function createLink(options: LinkOptions): Link {
           { timeoutMs: options.handshakeTimeoutMs ?? 10_000 },
         )) as InitializeResponse
       } catch (error) {
+        if (handshaking === peer) handshaking = null
         peer.close()
         if (stale()) return
         // 对面明确拒绝了握手，再试也是一样的结果；超时和断开可以再试
@@ -264,6 +272,7 @@ export function createLink(options: LinkOptions): Link {
         return
       }
       peer.notify('initialized')
+      handshaking = null
       rpc = peer
       setState({ phase: 'connected', info })
     } catch (error) {
@@ -279,17 +288,19 @@ export function createLink(options: LinkOptions): Link {
     },
 
     start() {
-      if (state.phase !== 'idle') return
+      if (paused || state.phase !== 'idle') return
       void connect(1)
     },
 
     retry() {
+      if (paused) return
       if (state.phase !== 'waiting' && state.phase !== 'failed') return
       teardown()
       void connect(1)
     },
 
     reopen() {
+      if (paused) return
       if (state.phase !== 'connected') return
       teardown()
       void connect(1)
@@ -298,6 +309,17 @@ export function createLink(options: LinkOptions): Link {
     stop() {
       teardown()
       setState({ phase: 'idle' })
+    },
+
+    setPaused(next) {
+      if (next === paused) return
+      paused = next
+      if (paused) {
+        teardown()
+        setState({ phase: 'idle' })
+      } else {
+        void connect(1)
+      }
     },
 
     request(method, params, requestOptions) {

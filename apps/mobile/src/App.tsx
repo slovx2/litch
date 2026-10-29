@@ -7,13 +7,14 @@ import {
 } from '@react-navigation/native'
 import { StatusBar } from 'expo-status-bar'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AppState, Linking, StyleSheet, Text, useColorScheme, View } from 'react-native'
+import { AppState, Linking, Platform, StyleSheet, Text, useColorScheme, View } from 'react-native'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { keepAllViews, setViewCache } from './core/store-cache'
 import { createViewCache } from './core/view-cache'
 import { MermaidHost } from './detail/mermaid/MermaidHost'
 import { Navigator } from './nav/Navigator'
+import { setBackgroundMinutes } from './platform/background'
 import { type Booted, boot, VERSION } from './shell/boot'
 import { handleDevLink, navigationRef } from './shell/dev-links'
 import { jsonFile } from './shell/json-file'
@@ -65,6 +66,9 @@ function useBooted(prefs: Prefs, lang: 'zh-CN' | 'en') {
 
 export default function App() {
   const [prefs, setPrefsState] = useState(loadPrefs)
+  useEffect(() => {
+    if (Platform.OS === 'android') setBackgroundMinutes(prefs.backgroundDisconnectMinutes)
+  }, [prefs.backgroundDisconnectMinutes])
   const setPrefs = useCallback((patch: Partial<Prefs>) => {
     setPrefsState((current) => {
       const next = { ...current, ...patch }

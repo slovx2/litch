@@ -8,6 +8,11 @@ const PUBLIC_KEY =
 const unreachable = () => Promise.reject(new Error('[unreachable] 界面预览不连真实设备'))
 
 export const native: Native = {
+  setBackgroundTimeout() {},
+  connectionPolicyState: () => JSON.stringify({ revision: 0, background: false, suspended: false }),
+  addListener: () => ({ remove() {} }),
+  batteryOptimization: () => 'unknown',
+  openBackgroundSettings: () => false,
   probeHost: async () => JSON.stringify({ fingerprint: FINGERPRINT, keyType: 'ssh-ed25519' }),
   runScript: unreachable,
   openStream: unreachable,

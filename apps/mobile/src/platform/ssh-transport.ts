@@ -167,6 +167,7 @@ const resolveConfig = async (source: ConfigSource): Promise<RemoteConfig> =>
 export function sshOpener(source: ConfigSource): TransportOpener {
   return async (signal, report) => {
     const config = await resolveConfig(source)
+    checkAborted(signal)
     const names = namesOf(config)
     report?.(phrase('ssh.step.connect'))
     const first = await openProxy(config, 'auto')

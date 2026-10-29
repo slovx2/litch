@@ -15,12 +15,14 @@ import {
 } from 'react'
 import type { SendMode } from '../../../../packages/ui/src/composer/send-mode-logic.ts'
 import { sendModeOf } from '../detail/composer/send-mode'
+import { backgroundMinutes } from '../platform/background'
 import type { Lang } from '../ui/i18n'
 import type { Skin } from '../ui/theme'
 import type { Booted, BootMode } from './boot'
 import { jsonFile } from './json-file'
 
 export interface Prefs {
+  backgroundDisconnectMinutes: number | null
   lang: Lang | 'system'
   appearance: 'system' | 'light' | 'dark'
   skin: Skin
@@ -38,6 +40,7 @@ export interface Prefs {
 }
 
 const DEFAULT_PREFS: Prefs = {
+  backgroundDisconnectMinutes: 10,
   lang: 'system',
   appearance: 'system',
   skin: 'retro',
@@ -50,7 +53,12 @@ const prefsFile = jsonFile<Partial<Prefs>>('prefs.json')
 
 export function loadPrefs(): Prefs {
   const saved = prefsFile.read() ?? {}
-  return { ...DEFAULT_PREFS, ...saved, sendMode: sendModeOf(saved.sendMode) }
+  return {
+    ...DEFAULT_PREFS,
+    ...saved,
+    sendMode: sendModeOf(saved.sendMode),
+    backgroundDisconnectMinutes: backgroundMinutes(saved.backgroundDisconnectMinutes),
+  }
 }
 
 export function savePrefs(prefs: Prefs): void {

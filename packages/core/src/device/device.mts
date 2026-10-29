@@ -283,6 +283,7 @@ export interface Device {
   readonly online: boolean
   start(): void
   stop(): void
+  setConnectionPaused(paused: boolean): void
   /** 立刻重连。连着的时候是丢掉现在这条连接、从头再连一次 */
   retry(): void
   /** 远程设备服务的一键升级：升级（或换上新版）、现在再请一次空闲时停、立即换上。做不了的抛 ChannelError */
@@ -2516,6 +2517,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       return online
     },
     start: () => link.start(),
+    setConnectionPaused: (paused) => link.setPaused(paused),
     stop: () => {
       upgrader?.dispose()
       restarter?.dispose()

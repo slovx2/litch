@@ -15,6 +15,7 @@ import { Screen } from '../../ui/kit/Screen'
 import { SKINS, type Skin, useTheme } from '../../ui/theme'
 import { CURRENT_VERSION } from '../../update/store'
 import { ApprovalKeySection } from './ApprovalKeySection'
+import { ConnectionSection } from './ConnectionSection'
 import { TaskCardsSection } from './TaskCardsSection'
 import { AutoUpdateSwitch, UpdateStatus } from './UpdateSection'
 
@@ -144,6 +145,8 @@ export function SettingsScreen(_props: Props) {
           onPick={(sendMode) => setPrefs({ sendMode })}
         />
         <Note>{t('settings.chat.sendMode.note')}</Note>
+
+        <ConnectionSection />
 
         <SectionLabel>{t('switches.col.taskCards')}</SectionLabel>
         <TaskCardsSection />

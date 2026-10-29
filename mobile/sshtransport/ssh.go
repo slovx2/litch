@@ -134,6 +134,9 @@ func connectSSH(ctx context.Context, target Target) (*ssh.Client, error) {
 	if err != nil {
 		return nil, kindf(kindUnreachable, "连接 SSH 主机: %w", err)
 	}
+	// DialContext 只管拨号；后台到期还要能取消已拨通但卡在握手里的连接。
+	stopCancel := context.AfterFunc(ctx, func() { _ = connection.Close() })
+	defer stopCancel()
 	_ = connection.SetDeadline(time.Now().Add(15 * time.Second))
 	clientConnection, channels, requests, err := ssh.NewClientConn(connection, address, config)
 	if err != nil {

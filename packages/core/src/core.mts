@@ -104,6 +104,8 @@ export interface Core extends CoreHost {
   /** 开始连接各台设备。各连各的，谁连不上都不耽误别人 */
   start(): void
   stop(): void
+  /** 外壳暂挂 SSH 连接，保留数据与订阅；不影响本机设备。 */
+  setConnectionsPaused(paused: boolean): void
   /** 各台设备上还活着的终端一共有多少。外壳在退出应用之前问 */
   terminalsAlive(): TerminalsAlive
   /** 把开着的、属于设备的终端都结束掉：退出应用时用户选了“结束”才调。等各台设备应答，或者到点 */
@@ -142,6 +144,7 @@ export function createCore(options: CoreOptions): Core {
   const { remote, store } = options
   let saved = store?.load() ?? { localWire: null, remotes: [] }
   let started = false
+  let connectionsPaused = false
   const hub = createToolHub(
     options.clientTools,
     (line) => options.log?.(line),
@@ -283,6 +286,7 @@ export function createCore(options: CoreOptions): Core {
         },
       },
     })
+    if (connectionsPaused && config.kind === 'ssh') device.setConnectionPaused(true)
     return device
   }
 
@@ -365,12 +369,23 @@ export function createCore(options: CoreOptions): Core {
   const host: Core = {
     start() {
       started = true
-      for (const device of devices.values()) device.start()
+      for (const device of devices.values()) {
+        if (device.view.kind === 'ssh') device.setConnectionPaused(connectionsPaused)
+        device.start()
+      }
     },
 
     stop() {
       started = false
       for (const device of devices.values()) device.stop()
+    },
+
+    setConnectionsPaused(paused) {
+      connectionsPaused = paused
+      if (!started) return
+      for (const device of devices.values()) {
+        if (device.view.kind === 'ssh') device.setConnectionPaused(paused)
+      }
     },
 
     terminalsAlive() {

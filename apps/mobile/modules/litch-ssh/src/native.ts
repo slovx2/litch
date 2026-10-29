@@ -2,6 +2,14 @@
 import { requireNativeModule } from 'expo-modules-core'
 
 export interface Native {
+  setBackgroundTimeout(minutes: number): void
+  connectionPolicyState(): string
+  addListener(
+    event: 'onConnectionPolicy',
+    listener: (event: { state: string }) => void,
+  ): { remove(): void }
+  batteryOptimization(): 'exempt' | 'restricted' | 'unknown'
+  openBackgroundSettings(): boolean
   probeHost(host: string, port: number, user: string): Promise<string>
   runScript(target: string, script: string, marker: string): Promise<string>
   openStream(id: string, target: string, script: string, marker: string): Promise<string>

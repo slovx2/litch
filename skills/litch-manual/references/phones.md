@@ -44,6 +44,18 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
   (Retro, Literary, Standard, the same three as on the desktop; default Retro), task cards, the
   sign-in approval key's fingerprint, updates.
 
+## Android 后台连接
+
+手机设置 → 连接 → 后台断开连接：默认 10 分钟，可选 1、5、10、30、60 分钟或“从不”。
+应用仍在后台运行时，到点关闭本机所有 SSH 连接并暂停重试；不会停止电脑上的会话任务。
+回前台取消计时，健康连接沿用，已断开的恢复连接。“从不”只是不由 Litch 主动超时断开。
+系统冻结或深睡时计时器可能不执行；回前台不补判过去是否超时，不因此断开健康连接。
+
+同组的“打开系统设置”可进入本应用的电池/后台管理；入口不可用时显示手动路径。
+需要后台保留连接时，由用户允许“后台行为”或将电池优化设为“不限制”。界面显示的
+“标准电池优化”状态只代表 Android 标准白名单，不代表 ColorOS 等厂商的全部后台权限。
+此组设置不在 iOS 显示。它是手机本机设置，桌面的 `litch config` 不修改它。
+
 ## In a session on the phone
 
 - **Usage and limits**: tap "Context N% ›" under the input box, or ⋯ → Usage and limits. It shows the

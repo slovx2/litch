@@ -14,8 +14,10 @@ import {
   type DeviceConfig,
   serveChannel,
 } from '@litch/core'
+import { Platform } from 'react-native'
 import app from '../../app.json'
 import { mobilePlatform } from '../platform'
+import { watchConnections } from '../platform/background'
 import { type RemoteConfig, sshOpener } from '../platform/ssh-transport'
 
 export type BootMode = 'stored' | 'mock' | 'fixture'
@@ -44,14 +46,21 @@ export const FIXTURE_DEVICE = 'fixture'
 /** 夹具的配置从这个端口取（电脑上 fixture.mjs --serve 的端口经 adb reverse 映射到手机的这个端口） */
 const FIXTURE_CONFIG_PORT = 8765
 
-function serve(core: Parameters<typeof serveChannel>[1], start?: () => void, stop?: () => void) {
+function serve(
+  core: Parameters<typeof serveChannel>[1],
+  start?: () => void,
+  stop?: () => void,
+  pause?: (paused: boolean) => void,
+) {
   const [uiPort, corePort] = createPortPair()
   const unserve = serveChannel(corePort, core, { clock })
   const channel = connectChannel(uiPort)
+  const unwatch = Platform.OS === 'android' && pause ? watchConnections(pause) : () => {}
   start?.()
   return {
     channel,
     stop() {
+      unwatch()
       channel.close()
       unserve()
       stop?.()
@@ -89,6 +98,7 @@ export async function boot(mode: BootMode, lang: 'zh-CN' | 'en'): Promise<Booted
       core,
       () => core.start(),
       () => core.stop(),
+      (paused) => core.setConnectionsPaused(paused),
     )
     return { mode, work: config.work ?? null, ...served }
   }
@@ -105,6 +115,7 @@ export async function boot(mode: BootMode, lang: 'zh-CN' | 'en'): Promise<Booted
     core,
     () => core.start(),
     () => core.stop(),
+    (paused) => core.setConnectionsPaused(paused),
   )
   return { mode, work: null, ...served }
 }

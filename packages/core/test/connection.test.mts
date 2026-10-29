@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   ConnectError,
+  createCore,
   createLink,
   createRpc,
   createTransportPair,
@@ -87,6 +88,124 @@ function linkSetup(handlers: Parameters<typeof fakeOpener>[0] = {}) {
   const current = (): LinkState => link.state
   return { link, peer, time, states, phases, current, notes }
 }
+
+test('连接：后台暂停保留连接对象，禁止所有重试入口，恢复只连一次', async () => {
+  const { link, peer, time, current } = linkSetup()
+  link.start()
+  await settle()
+  const first = peer.last()
+  link.setPaused(false)
+  assert.equal(peer.last(), first, '健康连接不应该重握手')
+  link.setPaused(true)
+  assert.equal(current().phase, 'idle')
+  link.retry()
+  link.reopen()
+  link.start()
+  time.advance(60_000)
+  await settle()
+  assert.equal(current().phase, 'idle')
+  assert.equal(peer.last(), first)
+  link.setPaused(false)
+  link.setPaused(false)
+  await settle()
+  assert.equal(current().phase, 'connected')
+  assert.notEqual(peer.last(), first)
+  link.stop()
+})
+
+test('连接：重试计时中暂停，旧重试定时器不会重新拨号', async () => {
+  const { link, peer, time, current } = linkSetup()
+  peer.failures.push(new Error('offline'))
+  link.start()
+  await settle()
+  assert.equal(current().phase, 'waiting')
+  link.setPaused(true)
+  time.advance(60_000)
+  await settle()
+  assert.equal(current().phase, 'idle')
+  assert.equal(time.pending(), 0)
+  link.setPaused(false)
+  await settle()
+  assert.equal(current().phase, 'connected')
+  link.stop()
+})
+
+test('连接：initialize 还在等待时暂停立即关闭传输，不留下握手超时', async () => {
+  const { link, time, current } = linkSetup({ initialize: () => undefined })
+  link.start()
+  await settle()
+  assert.equal(current().phase, 'handshaking')
+  assert.equal(time.pending(), 1)
+  link.setPaused(true)
+  await settle()
+  assert.equal(current().phase, 'idle')
+  assert.equal(time.pending(), 0)
+})
+
+test('核心后台暂停只影响 SSH，恢复后沿用原订阅，已停止的核心不会偷偷启动', async () => {
+  const time = fakeClock()
+  const handlers = { 'project/list': () => ({ data: [] }), 'thread/list': () => ({ data: [] }) }
+  const local = fakeOpener(handlers)
+  const remote = fakeOpener(handlers)
+  const core = createCore({
+    clock: time.clock,
+    version: 'test',
+    devices: [
+      {
+        id: 'local',
+        kind: 'local',
+        name: '本机',
+        host: '',
+        target: null,
+        wire: 'green',
+        open: local.open,
+      },
+      {
+        id: 'remote',
+        kind: 'ssh',
+        name: '远程',
+        host: '',
+        target: null,
+        wire: 'orange',
+        open: remote.open,
+      },
+    ],
+  })
+  let updates = 0
+  const close = core.subscribe(
+    { kind: 'app' },
+    {
+      snapshot() {
+        updates++
+      },
+      delta() {
+        updates++
+      },
+      error() {},
+    },
+  )
+  core.setConnectionsPaused(true)
+  core.start()
+  await settle()
+  assert.equal(local.servers.length, 1)
+  assert.equal(remote.servers.length, 0)
+  core.setConnectionsPaused(false)
+  await settle()
+  assert.equal(remote.servers.length, 1)
+  const before = updates
+  core.setConnectionsPaused(true)
+  core.setConnectionsPaused(false)
+  await settle()
+  assert.equal(local.servers.length, 1)
+  assert.equal(remote.servers.length, 2)
+  assert.ok(updates > before)
+  core.setConnectionsPaused(true)
+  core.stop()
+  core.setConnectionsPaused(false)
+  await settle()
+  assert.equal(remote.servers.length, 2)
+  close()
+})
 
 test('连接：开传输、握手、连上，握手里带着客户端信息', async () => {
   const { link, peer, phases, current } = linkSetup({ ping: () => ({ pong: true }) })
