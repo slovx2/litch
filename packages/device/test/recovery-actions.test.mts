@@ -4,7 +4,7 @@ import type { EngineLink } from '../src/engine-link.mjs'
 import { RecoveryActions } from '../src/recovery-actions.mjs'
 import { TurnRecoveryObserver } from '../src/turn-recovery.mjs'
 
-async function rig(slowReads = 0) {
+async function rig(slowReads = 0, staleFullReads = 0) {
   let now = 1_800_000_000_000
   const observer = new TurnRecoveryObserver({
     now: () => now,
@@ -31,13 +31,14 @@ async function rig(slowReads = 0) {
       if (method === 'thread/read') {
         const full = (params as { includeTurns: boolean }).includeTurns
         if (!full && stopping && --slowReads <= 0) status = 'interrupted'
+        const reportedStatus = full && stopping && staleFullReads-- > 0 ? 'inProgress' : status
         return {
           thread: {
             get status() {
               onFlags()
               return { type: status === 'inProgress' ? 'active' : 'idle', activeFlags: [] }
             },
-            ...(full ? { turns: [{ id, status }] } : {}),
+            ...(full ? { turns: [{ id, status: reportedStatus }] } : {}),
           },
         }
       }
@@ -165,5 +166,42 @@ test('状态离开active后仍完整核对旧回合，新回合已经出现则�
     )
   } finally {
     r.observer.close()
+  }
+})
+
+test('状态先离开active、完整回合稍后才写成interrupted：核对退避重试后再继续', async () => {
+  const r = await rig(0, 2)
+  try {
+    await r.actions.continue(r.ref)
+    const reads = r.calls.filter((c) => c.method === 'thread/read')
+    assert.deepEqual(
+      reads.map((c) => c.params.includeTurns),
+      [true, false, true, false, true, false, true],
+    )
+    assert.equal(r.calls.at(-1)?.method, 'turn/start')
+    assert.equal(r.calls.filter((c) => c.method === 'turn/start').length, 1)
+  } finally {
+    r.observer.close()
+  }
+})
+
+test('状态已停但完整回合始终未确认中断：等到截止时间，不发送继续', async (t) => {
+  const r = await rig(0, Number.POSITIVE_INFINITY)
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] })
+  try {
+    const pending = r.actions.continue(r.ref)
+    const rejected = assert.rejects(pending, /Interruption has not completed/)
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(r.calls.at(-1)?.params.includeTurns, true)
+    t.mock.timers.tick(10000)
+    await rejected
+    assert.equal(
+      r.calls.some((c) => c.method === 'turn/start'),
+      false,
+    )
+    assert.equal(r.closed(), 1)
+  } finally {
+    r.observer.close()
+    t.mock.timers.reset()
   }
 })

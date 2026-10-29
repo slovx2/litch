@@ -63,7 +63,7 @@ export class RecoveryActions {
       let interval = 300
       const remaining = () => Math.max(1, Math.min(5000, deadline - Date.now()))
       while (Date.now() < deadline) {
-        // 等中断时只看状态；离开 active 后才读一次完整历史核对回合身份与终态。
+        // 等中断时只看状态；离开 active 后核对完整终态。状态可能先于回合落盘，核对也要重试。
         const summary = await read(false, remaining())
         if (summary?.thread?.status?.type === 'active') {
           await new Promise((resolve) =>
@@ -83,7 +83,10 @@ export class RecoveryActions {
         }
         if (current.status !== 'inProgress')
           throw new DeviceError('unsupported', 'The original turn already finished')
-        throw new DeviceError('unsupported', 'Interruption has not completed; no new turn was sent')
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.min(interval, Math.max(0, deadline - Date.now()))),
+        )
+        interval = 500
       }
       if (!confirmed)
         throw new DeviceError('unsupported', 'Interruption has not completed; no new turn was sent')

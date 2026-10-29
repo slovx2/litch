@@ -4,7 +4,7 @@ import { TurnRecoveryObserver } from '../src/turn-recovery.mjs'
 
 const epoch = 1_800_000_000_000
 const tool = (status: string) => ({ id: 'tool', type: 'commandExecution', status })
-function rig() {
+function rig(seedSnapshot = true) {
   let now = epoch
   let thread: any = {
     id: 't',
@@ -22,7 +22,9 @@ function rig() {
       }
     },
   })
-  observer.snapshot('codex', structuredClone(thread))
+  if (seedSnapshot) observer.snapshot('codex', structuredClone(thread))
+  else
+    observer.observe('codex', 'turn/started', { threadId: 't', turn: { id: 'a', startedAt: now } })
   return {
     observer,
     reads,
@@ -50,14 +52,16 @@ test('客户端离线期间出现新条目：只在即将提醒时完整读取�
     await r.observer.tick()
     assert.deepEqual(r.reads, [false, true])
     assert.equal(r.observer.list().length, 0)
-    // 没有收到工具结束通知，一分钟后的复查也能解除工具状态。
+    // 状态没有变化时不全量读取；客户端再次取得完整快照时补回工具终态。
     r.state().turns[0].items[0].status = 'completed'
     r.advance(59999)
     await r.observer.tick()
     assert.equal(r.reads.length, 2)
     r.advance(1)
     await r.observer.tick()
+    assert.deepEqual(r.reads, [false, true, false])
     assert.equal(r.observer.list().length, 0)
+    r.snapshot()
     r.advance(299999)
     await r.observer.tick()
     assert.equal(r.observer.list().length, 0)
@@ -78,6 +82,8 @@ test('已知回合的快照更新进展，重复快照不能续期，已有提�
     r.state().turns[0].items.push({ id: 'answer', type: 'agentMessage' })
     r.advance(60000)
     await r.observer.tick()
+    assert.equal(r.observer.list().length, 1, '状态未变的慢复查只读状态')
+    r.snapshot()
     assert.equal(r.observer.list().length, 0)
     r.advance(299999)
     r.snapshot()
@@ -94,7 +100,7 @@ test('已知回合的快照更新进展，重复快照不能续期，已有提�
   }
 })
 
-test('提醒、等待和长工具残留每分钟轻量复查；空闲或未加载直接清除，不完整读取', async () => {
+test('提醒、等待和长工具首轮轻量复查；空闲或未加载直接清除，不完整读取', async () => {
   for (const mode of ['notice', 'waiting', 'tool'])
     for (const status of ['idle', 'notLoaded']) {
       const r = rig()
@@ -183,7 +189,7 @@ test('延迟收到的内核唤醒标记从本地接收时刻计30秒，未来标
   }
 })
 
-test('离线时同一回答仅增加文字也算进展；已收到的delta与相同完整快照不会重复续期', async () => {
+test('完整快照之间同条回答增长算进展，重复完整快照不会续期', async () => {
   const r = rig()
   try {
     r.state().turns[0].items.push({ id: 'answer', type: 'agentMessage', text: '开始' })
@@ -197,11 +203,106 @@ test('离线时同一回答仅增加文字也算进展；已收到的delta与相
     r.state().turns[0].items[0].text += '继续'
     r.advance(300000)
     await r.observer.tick()
-    assert.equal(r.observer.list().length, 1, '已经收到的流不因补读重复续期')
+    assert.equal(r.observer.list().length, 0, '只比较两次完整快照，独立于收到的delta')
+    r.advance(300000)
+    await r.observer.tick()
+    assert.equal(r.observer.list().length, 1)
     r.state().turns[0].items[0].text += '离线期间仍在出字'
     r.advance(60000)
-    await r.observer.tick()
+    r.snapshot()
     assert.equal(r.observer.list().length, 0, '漏掉的同条文本进展应撤销旧提醒')
+  } finally {
+    r.observer.close()
+  }
+})
+
+test('半截流卡住：首次完整读取与通知条目不同，只建立基线，唤醒30秒仍提示', async () => {
+  for (const items of [[], [{ id: 'answer', type: 'agentMessage', text: '半' }]]) {
+    const r = rig(false)
+    try {
+      r.observer.resumed({ supported: true, generation: 'g', sequence: 0, resumedAt: 0 })
+      r.observer.observe('codex', 'item/started', {
+        threadId: 't',
+        turnId: 'a',
+        item: { id: 'answer', type: 'agentMessage', text: '' },
+      })
+      r.observer.observe('codex', 'item/agentMessage/delta', {
+        threadId: 't',
+        turnId: 'a',
+        itemId: 'answer',
+        delta: '半截流的内容',
+      })
+      r.state().turns[0].items = items
+      r.advance(1000)
+      r.observer.resumed({ supported: true, generation: 'g', sequence: 1, resumedAt: epoch + 1000 })
+      r.advance(29999)
+      await r.observer.tick()
+      assert.equal(r.reads.length, 0)
+      r.advance(1)
+      await r.observer.tick()
+      assert.equal(r.observer.list()[0]?.recovery?.reason, 'wake')
+      assert.equal(r.observer.list()[0]?.recovery?.lastProgressAt, epoch)
+      assert.deepEqual(r.reads, [false, true])
+      r.snapshot()
+      assert.equal(r.observer.list()[0]?.recovery?.reason, 'wake', '同一个完整基线不算进展')
+    } finally {
+      r.observer.close()
+    }
+  }
+})
+
+test('提醒、等待、工具和已忽略状态只轻量复查，按1/2/5/10分钟退避并封顶', async () => {
+  for (const mode of ['notice', 'waiting', 'tool', 'dismissed']) {
+    const r = rig()
+    try {
+      if (mode === 'notice' || mode === 'dismissed') {
+        r.advance(300000)
+        await r.observer.tick()
+      }
+      if (mode === 'dismissed') r.observer.dismiss('codex', 't', 'a')
+      if (mode === 'waiting') {
+        r.state().status.activeFlags = ['waitingOnApproval']
+        r.snapshot()
+      }
+      if (mode === 'tool') {
+        r.state().turns[0].items = [tool('inProgress')]
+        r.snapshot()
+      }
+      let count = r.reads.length
+      for (const delay of [60000, 120000, 300000, 600000, 600000]) {
+        r.advance(delay - 1)
+        await r.observer.tick()
+        assert.equal(r.reads.length, count, mode)
+        r.advance(1)
+        await r.observer.tick()
+        assert.deepEqual(r.reads.slice(count), [false], mode)
+        count++
+      }
+    } finally {
+      r.observer.close()
+    }
+  }
+})
+
+test('慢复查发现等待状态变化才完整核对，并从解除等待时重新计时', async () => {
+  const r = rig()
+  try {
+    r.state().status.activeFlags = ['waitingOnApproval']
+    r.snapshot()
+    r.advance(60000)
+    await r.observer.tick()
+    assert.deepEqual(r.reads, [false])
+    r.state().status.activeFlags = []
+    r.advance(120000)
+    await r.observer.tick()
+    assert.deepEqual(r.reads, [false, false, true])
+    assert.equal(r.observer.list().length, 0)
+    r.advance(299999)
+    await r.observer.tick()
+    assert.equal(r.reads.length, 3)
+    r.advance(1)
+    await r.observer.tick()
+    assert.equal(r.observer.list()[0]?.recovery?.reason, 'idle')
   } finally {
     r.observer.close()
   }
