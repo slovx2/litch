@@ -136,7 +136,7 @@ export function declarationFor(id: AcpAgentId, caps: AgentCapabilities | null): 
     // 审批的选项是 agent 给的那几个，带不了用户写的说明：不支持 declineWithNote。
     // 动态工具经按会话挂的 MCP 桥交给 agent（ACP 要求每个 agent 都收 stdio 的 MCP 服务），
     // litch_ 命名空间的调用照 clientTools 的规矩挑执行方（client-tools.mts）。
-    extensions: [EXTENSION.clientTools],
+    extensions: [EXTENSION.filePreview, EXTENSION.clientTools],
     features: featuresOf(caps),
     permissionPresets: [
       { ...builtinPreset(PRESET.fullAccess, PRESET_TEXT, switching), requiresConfirmation: false },

@@ -1,5 +1,7 @@
 import { cp, lstat, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { isAbsolute, join } from 'node:path'
+import { isAbsolute } from 'node:path'
+import { readPreview } from './file-preview.mjs'
+import { declaredExtensions } from './harness-declaration.mjs'
 import { PathWatch } from './path-watch.mjs'
 import { ProtocolError, requiredString } from './protocol-contract.mjs'
 import type { RpcPeer } from './types.mjs'
@@ -28,11 +30,37 @@ function optionalBoolean(params: Record<string, unknown>, key: string, fallback:
 
 export class FilesystemRpc {
   private watchers = new Map<string, Map<string, PathWatch>>()
+  private previewPeers = new Set<string>()
+  private previews = 0
 
-  async call(peer: RpcPeer, method: string, params: Record<string, unknown>): Promise<unknown> {
+  declare(peer: RpcPeer, params: unknown): void {
+    if (declaredExtensions(params).has('filePreview')) this.previewPeers.add(peer.id)
+    else this.previewPeers.delete(peer.id)
+  }
+
+  async call(
+    peer: RpcPeer,
+    method: string,
+    params: Record<string, unknown>,
+    previewAllowed = this.previewPeers.has(peer.id),
+  ): Promise<unknown> {
     switch (method) {
-      case 'fs/readFile':
+      case 'fs/readFile': {
+        if (params.litchPreview !== undefined) {
+          if (!previewAllowed) throw new ProtocolError(-32602, 'filePreview 扩展未声明')
+          if (this.previews >= 4)
+            throw Object.assign(new ProtocolError(-32004, '预览读取繁忙'), {
+              data: { litchPreview: { kind: 'busy' } },
+            })
+          this.previews++
+          try {
+            return await readPreview(pathParam(params), params.litchPreview)
+          } finally {
+            this.previews--
+          }
+        }
         return { dataBase64: (await readFile(pathParam(params))).toString('base64') }
+      }
       case 'fs/readDirectory': {
         const entries = await readdir(pathParam(params), { withFileTypes: true })
         return {
@@ -97,11 +125,13 @@ export class FilesystemRpc {
   }
 
   closePeer(peerId: string): void {
+    this.previewPeers.delete(peerId)
     for (const watcher of this.watchers.get(peerId)?.values() ?? []) watcher.close()
     this.watchers.delete(peerId)
   }
 
   close(): void {
+    this.previewPeers.clear()
     for (const peerId of this.watchers.keys()) this.closePeer(peerId)
   }
 }

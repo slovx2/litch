@@ -175,6 +175,7 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
     )
   switch (method) {
     case 'initialize':
+      s.files.declare(peer, p)
       // 客户端退订的通知，这条连接上从现在起不发。
       applyNotificationOptOut(peer, p)
       // 这条连接能执行哪些客户端工具命名空间（clientTools 扩展），挑执行方时看

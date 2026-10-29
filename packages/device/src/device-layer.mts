@@ -113,7 +113,13 @@ export class DeviceCalls {
   call(method: string, params: unknown): unknown {
     const raw = isObject(params) ? params : {}
     const fields = nativeWirePaths(raw)
-    if (method.startsWith('fs/')) return this.layer.files.call(this.connection, method, fields)
+    if (method.startsWith('fs/'))
+      return this.layer.files.call(
+        this.connection,
+        method,
+        fields,
+        this.connection.declares(EXTENSION.filePreview),
+      )
     if (method.startsWith(DEVICE_PROCESS_PREFIX)) return this.deviceProcess(method, fields)
     const devices = this.layer.deviceProcesses
     const id = this.connection.id

@@ -3,6 +3,7 @@
 // 以及这个会话的路径相对于谁、点了去哪。
 import {
   type DeviceView,
+  explicitFileRef,
   type FileRef,
   type FileScope,
   fileRefOf,
@@ -58,7 +59,15 @@ export function useSessionFileLinks(
     return {
       scope: { root, cwd: here || root, twin },
       open: (ref) =>
-        openInFiles({ deviceId, workspaceId, root, path: ref.path, alt: ref.alt, line: ref.line }),
+        openInFiles({
+          deviceId,
+          workspaceId,
+          root,
+          path: ref.path,
+          alt: ref.alt,
+          line: ref.line,
+          ...(ref.fragment ? { fragment: ref.fragment } : {}),
+        }),
     }
   }, [deviceId, summary !== undefined, workspaceId, cwd, rootsKey, os])
 }
@@ -116,15 +125,7 @@ export function CodeSpan({ text }: { text: string }) {
 export function Link({ href, children }: { href: string; children: ReactNode }) {
   const links = useContext(Context)
   let target: FileRef | null = null
-  if (links && !/^[a-z][a-z0-9+.-]*:/i.test(href)) {
-    let path = href
-    try {
-      path = decodeURI(href)
-    } catch {
-      // 解不开就照原样认
-    }
-    target = fileRefOf(path, links.scope)
-  }
+  if (links) target = explicitFileRef(href, links.scope)
   if (!links || !target) return <ExternalLink href={href}>{children}</ExternalLink>
   return (
     <FileLink links={links} target={target}>

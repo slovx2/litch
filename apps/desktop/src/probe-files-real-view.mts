@@ -70,7 +70,8 @@ export async function realView(args: {
   let brokenHold = ''
   if (kit.row('link-broken')) {
     await kit.open('link-broken')
-    brokenHold = (await until('断链的占位', () => one<HTMLElement>('.fv-hold'))).dataset.hold ?? ''
+    brokenHold =
+      (await until('断链的占位', () => one<HTMLElement>('.fv-hold[data-hold]'))).dataset.hold ?? ''
   }
 
   await kit.expand('src')
@@ -90,7 +91,11 @@ export async function realView(args: {
   const holds: string[] = []
   for (const file of ['big.log', 'blob.dat', 'shot.png']) {
     await kit.open(file)
-    const hold = await until(`${file} 的占位`, () => one<HTMLElement>('.fv-hold'), 60_000)
+    const hold = await until(
+      `${file} 的占位`,
+      () => one<HTMLElement>('.fv-hold[data-hold]'),
+      60_000,
+    )
     holds.push([file, hold.dataset.hold, text(one('b', hold))].join('｜'))
   }
 

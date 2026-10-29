@@ -144,7 +144,7 @@ function judgeRealView(
   failed.push(...judgeGaps('打开六千行的文件、给它上色', view.longGaps, lines, false))
   must(
     view.holds.map((hold) => hold.split('｜').slice(0, 2).join('｜')).join(' ') ===
-      'big.log｜tooLarge blob.dat｜binary shot.png｜binary',
+      'big.log｜tooLarge blob.dat｜binary shot.png｜invalidImage',
     `显示不了的文件占位不对：${view.holds.join(' ／ ')}`,
   )
   const wanted = [

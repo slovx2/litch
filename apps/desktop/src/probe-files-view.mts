@@ -68,6 +68,8 @@ export async function mockView(): Promise<ViewSeen> {
   // ---------- 预览与固定 ----------
   await kit.open('README.md')
   mark('单击 README.md')
+  await until('Markdown 默认渲染', () => one('.fp-document h1'))
+  one<HTMLButtonElement>('[data-tool="source"]')?.click()
   const paint = await kit.painted()
   const view = kit.code() as HTMLElement
   const language = view.dataset.language ?? ''
@@ -180,7 +182,7 @@ export async function mockView(): Promise<ViewSeen> {
     'fixtures/gone.txt',
   ]) {
     await kit.open(file)
-    const hold = await until(`${file} 的占位`, () => one<HTMLElement>('.fv-hold'))
+    const hold = await until(`${file} 的占位`, () => one<HTMLElement>('.fv-hold[data-hold]'))
     holds.push([file, hold.dataset.hold, text(one('b', hold)), text(one('span', hold))].join('｜'))
   }
   await kit.open('fixtures/latin1.txt')

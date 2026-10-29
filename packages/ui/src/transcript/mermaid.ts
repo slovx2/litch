@@ -21,13 +21,16 @@ const drawn = new Map<string, Promise<string>>()
 const KEEP = 60
 
 /** 画一张图，给回 SVG 的原文。语法错时抛出画图库的错误 */
-export function drawMermaid(source: string, look: string): Promise<string> {
-  const key = `${look}\n${source}`
+export function drawMermaid(source: string, look: string, bounded = false): Promise<string> {
+  const key = `${bounded}:${look}\n${source}`
   const known = drawn.get(key)
   if (known) return known
   const job = queue.then(async () => {
     const mermaid = await load()
-    mermaid.initialize(config(look))
+    mermaid.initialize({
+      ...config(look),
+      ...(bounded ? { maxTextSize: 20_000, maxEdges: 200 } : {}),
+    })
     serial += 1
     const { svg } = await mermaid.render(`litch-mmd-${serial}`, source)
     return svg

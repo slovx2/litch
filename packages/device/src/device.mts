@@ -266,6 +266,7 @@ export class DeviceServer {
       announce: (method, params, extension) => this.announce(method, params, extension),
     })
     const info = deviceInfo(this.version)
+    info.extensions.push(EXTENSION.filePreview)
     info.extensions.push(EXTENSION.turnRecovery)
     this.recovery = new TurnRecoveryObserver({
       check: async (harness, threadId, includeTurns) => {

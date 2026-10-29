@@ -1,5 +1,6 @@
 // 中文文案。这一份是“有哪些句子”的依据：键的集合以这里为准，别的语言必须一句不少。
 // 前半是界面自己的话，后半是核心要说的话（键和 packages/core/src/phrase.mts 一一对应）。
+
 import type { Entry } from './types.ts'
 import { zhAside } from './zh-CN-aside.ts'
 import { zhAsks } from './zh-CN-asks.ts'
@@ -16,6 +17,7 @@ import { zhPairing } from './zh-CN-pairing.ts'
 import { zhPasswords } from './zh-CN-passwords.ts'
 import { zhPeer } from './zh-CN-peer.ts'
 import { zhPower } from './zh-CN-power.ts'
+import { zhPreview } from './zh-CN-preview.ts'
 import { zhProposals } from './zh-CN-proposals.ts'
 import { zhRestart } from './zh-CN-restart.ts'
 import { zhRupgrade } from './zh-CN-rupgrade.ts'
@@ -24,6 +26,7 @@ import { zhTasks } from './zh-CN-tasks.ts'
 import { zhWorktrees } from './zh-CN-worktrees.ts'
 
 export const zhCN = {
+  ...zhPreview,
   ...zhPower,
   ...zhAutomation,
   ...zhChrome,

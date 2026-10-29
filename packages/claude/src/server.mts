@@ -908,6 +908,7 @@ export class CodexClaudeAppServer {
         this.watchNative()
         if (this.detachedReapTimer) clearTimeout(this.detachedReapTimer)
         this.detachedReapTimer = null
+        this.filesystem.declare(peer, initParams)
         const capabilities = asRecord(initParams.capabilities)
         const declaredActivityKinds = Array.isArray(capabilities.subAgentActivityKinds)
           ? capabilities.subAgentActivityKinds

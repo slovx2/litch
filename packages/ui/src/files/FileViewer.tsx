@@ -1,6 +1,6 @@
 // 文件标签的右半边：开着的文件（一排标签）和正看着的那个的内容。只读。
 // 单击打开的是预览（标签上的名字是斜的），再点别的文件就被换掉；双击、回车，或者双击标签，固定下来。
-import { baseName, type FileContent, type FileGroup, relativeTo } from '@litch/core'
+import { baseName, type FileContent, type FileGroup, previewKind, relativeTo } from '@litch/core'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
@@ -10,6 +10,8 @@ import { type FileAction, runFileAction } from './actions.ts'
 import { CodeView } from './CodeView.tsx'
 import { useFileContent } from './content.ts'
 import { byteSize, splitLines } from './lines.ts'
+import { PreviewPanel } from './preview/PreviewPanel.tsx'
+import { rendererFor } from './preview/registry.ts'
 import {
   activateFile,
   closeFile,
@@ -63,7 +65,7 @@ function Delayed({ ms, children }: { ms: number; children: ReactNode }) {
   return shown ? children : null
 }
 
-function FileBody({
+function SourceFileBody({
   deviceId,
   root,
   uiKey,
@@ -197,6 +199,26 @@ function FileBody({
         <span className="pill mute">{t('files.view.readonly')}</span>
       </div>
     </div>
+  )
+}
+
+function FileBody(props: { deviceId: string; root: string; uiKey: string; tab: OpenFile }) {
+  const t = useT()
+  const [unavailable, setUnavailable] = useState(false)
+  const format = previewKind(props.tab.path)
+  if (unavailable)
+    return (
+      <>
+        <div className="fp-unavailable dim" role="status">
+          {t('preview.unsupported')}
+        </div>
+        <SourceFileBody {...props} />
+      </>
+    )
+  return format && rendererFor(format) ? (
+    <PreviewPanel {...props} format={format} onUnsupported={() => setUnavailable(true)} />
+  ) : (
+    <SourceFileBody {...props} />
   )
 }
 

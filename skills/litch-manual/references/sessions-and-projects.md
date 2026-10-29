@@ -131,6 +131,10 @@ explain it:
 - **Side panel**: Files (tree, search, read-only viewer, add a file to the conversation), Diff (all /
   staged / unstaged, stage, unstage, discard, comment on lines; comments go with the next message),
   Browser, Suggested tasks, Background tasks, Goal, Side chat.
+- **文件预览（桌面）**：文件树、搜索结果和对话文件链接共用“文件”页。Markdown 默认渲染，可切源码；带行号的链接先显示源码。支持 PNG、JPEG、静态 GIF/WebP 和静态 SVG，图片可缩放；这些文件仍然只读。
+  Markdown 相对链接和图片以文件所在目录为基准，只允许项目根内资源；外链图片不自动下载，原始 HTML 只显示文字。动画、主动 SVG 内容、超出字节/像素预算的图片会显示原因。
+  预览要求设备声明 `filePreview`；设备服务和自有单 harness 入口提供它。直连原生 Codex 没有这项能力时保留原来的源码/类型查看，不自动另用 shell 取文件。手机文件查看不变。
+  Markdown 渲染上限 512 KiB、源码 2 MiB、位图 8 MiB、SVG 1 MiB；Markdown 自动附图最多 16 张、累计 16 MiB，刷新重读文件。PDF、Office、CSV 表格、HTML 渲染和媒体播放尚未在这一阶段启用。
 - **Side chat**: a temporary fork of the current session for asking something on the side. It starts
   with the session's context up to the last finished turn (if a turn is running it stops before it, and
   the main turn keeps going), lives in the side panel's Side chat tab, never shows in the sidebar, and

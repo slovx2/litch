@@ -67,7 +67,12 @@ export const declaration: HarnessDeclaration = {
   // 工具经 dsh 里的插件交给模型（client-tools.mts）。
   // harness 详情设置（harnessConfig）：配置项、provider 与登录、MCP、AGENTS.md 都读写 dsh 自己的配置（harness-config.mts）。
   // 后台作业的集合、回合的来历只给声明了 backgroundTasks 的连接（protocol.mts 的 withBackground）。
-  extensions: [EXTENSION.clientTools, EXTENSION.harnessConfig, EXTENSION.backgroundTasks],
+  extensions: [
+    EXTENSION.filePreview,
+    EXTENSION.clientTools,
+    EXTENSION.harnessConfig,
+    EXTENSION.backgroundTasks,
+  ],
   features,
   // dsh 的沙箱只管写文件：三档都能读任何文件，也都不限制联网。
   permissionPresets: [

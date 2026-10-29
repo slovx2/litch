@@ -15,6 +15,7 @@ import { enPairing } from './en-pairing.ts'
 import { enPasswords } from './en-passwords.ts'
 import { enPeer } from './en-peer.ts'
 import { enPower } from './en-power.ts'
+import { enPreview } from './en-preview.ts'
 import { enProposals } from './en-proposals.ts'
 import { enRestart } from './en-restart.ts'
 import { enRupgrade } from './en-rupgrade.ts'
@@ -28,6 +29,7 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
   `${n} ${Number(n) === 1 ? one : many}`
 
 export const en: Record<MessageKey, Entry> = {
+  ...enPreview,
   ...enPower,
   ...enAutomation,
   ...enChrome,

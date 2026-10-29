@@ -115,6 +115,7 @@ export async function dispatch(s: AcpServer, peer: RpcPeer, method: string, p: a
     )
   switch (method) {
     case 'initialize':
+      s.files.declare(peer, p)
       applyNotificationOptOut(peer, p)
       s.clientTools.declare(peer, p)
       s.declared.set(peer.id, declaredExtensions(p))

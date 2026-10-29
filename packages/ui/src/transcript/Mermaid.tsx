@@ -4,6 +4,7 @@ import { Close } from '../app/icons.tsx'
 import { drawMermaid, firstLine, useLook } from './mermaid.ts'
 
 interface MermaidBlockProps {
+  bounded?: boolean
   text: string
   /** 代码块还没写完（流式输出中、围栏还没闭合）：先显示源码，写完再画 */
   open: boolean
@@ -18,7 +19,12 @@ type Drawn =
  * mermaid 代码块：画成图。块头上可以在“图 / 源码”之间切换、复制源码、放大查看。
  * 还没写完、画图库还在装载、画不出来（语法错）的时候显示源码；画不出来时块头写出错误的第一行。
  */
-export const MermaidBlock = memo(function MermaidBlock({ text, open, anchor }: MermaidBlockProps) {
+export const MermaidBlock = memo(function MermaidBlock({
+  text,
+  open,
+  anchor,
+  bounded = false,
+}: MermaidBlockProps) {
   const t = useT()
   const look = useLook()
   const [source, setSource] = useState(false)
@@ -31,14 +37,14 @@ export const MermaidBlock = memo(function MermaidBlock({ text, open, anchor }: M
   useEffect(() => {
     if (open) return
     let alive = true
-    drawMermaid(text, look).then(
+    drawMermaid(text, look, bounded).then(
       (svg) => alive && setDrawn({ look, text, svg }),
       (error: unknown) => alive && setDrawn({ look, text, error: firstLine(error) }),
     )
     return () => {
       alive = false
     }
-  }, [text, look, open])
+  }, [text, look, open, bounded])
 
   // 换了外观、正在重画时先留着上一张，免得块的高度来回跳
   const current = !open && drawn?.text === text ? drawn : null

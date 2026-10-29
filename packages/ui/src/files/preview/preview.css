@@ -1,0 +1,90 @@
+.fp .fv-head {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 32px;
+  gap: 6px;
+  padding-block: 4px;
+}
+.fp-unavailable {
+  flex: none;
+  padding: 8px 10px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--line-1);
+}
+.fp-document {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 20px 40px;
+  overflow-wrap: anywhere;
+}
+.fp-document :is(h1, h2, h3, h4, h5, h6) {
+  scroll-margin-top: 14px;
+}
+.fp-document .md {
+  max-width: 100%;
+}
+.fp-resource {
+  display: block;
+  min-height: 48px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r2);
+  padding: 8px;
+  margin-block: 10px;
+}
+.fp-image {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fp-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.fp-image-stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  background-color: var(--panel);
+  background-image: conic-gradient(
+    var(--sunken) 25%,
+    transparent 0 50%,
+    var(--sunken) 0 75%,
+    transparent 0
+  );
+  background-size: 20px 20px;
+}
+.fp-image-stage img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  margin: auto;
+  object-fit: contain;
+}
+.fp-image-stage[data-actual="true"] img {
+  max-width: none;
+  max-height: none;
+}
+.fp-document .fp-image-stage img {
+  max-height: 480px;
+}
+.fp-inline-image {
+  display: block;
+  max-width: 100%;
+  max-height: 480px;
+  margin: auto;
+  object-fit: contain;
+}
+.fp-document .md-dead {
+  color: var(--ink-3);
+}
+.fp-code {
+  max-height: 480px;
+  overflow: auto;
+}

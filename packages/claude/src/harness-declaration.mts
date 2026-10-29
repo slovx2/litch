@@ -118,6 +118,7 @@ export function harnessDeclaration(runtime: RuntimeBackendType): HarnessDeclarat
     // harness 详情设置（litch/harness/*）读写 Claude Code 自己的配置与账号（harness-config.mts）；
     // 后台任务的集合、回合的来历只给声明了 backgroundTasks 的连接（server.mts 的 withBackground）
     extensions: [
+      EXTENSION.filePreview,
       EXTENSION.declineWithNote,
       EXTENSION.planConfirmation,
       EXTENSION.clientTools,

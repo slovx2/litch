@@ -1145,6 +1145,10 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId, path } = params as Commands['folders.list']['params']
           return await deviceOf(deviceId).files.folders(path ?? null, signal)
         }
+        case 'files.preview': {
+          const { deviceId, root, path, format } = params as Commands['files.preview']['params']
+          return await deviceOf(deviceId).files.preview(root, path, format, signal)
+        }
         case 'files.read': {
           const { deviceId, root, path } = params as Commands['files.read']['params']
           return await deviceOf(deviceId).files.read(root, path, signal)

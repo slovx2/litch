@@ -18,11 +18,13 @@ export function nativeWirePaths<T>(value: T, platform = process.platform): T {
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => [
       key,
-      pathKeys.has(key)
-        ? path(item)
-        : pathLists.has(key) && Array.isArray(item)
-          ? item.map(path)
-          : nativeWirePaths(item, platform),
+      key === 'litchPreview' && item !== null && typeof item === 'object' && !Array.isArray(item)
+        ? { ...item, root: path((item as { root?: unknown }).root) }
+        : pathKeys.has(key)
+          ? path(item)
+          : pathLists.has(key) && Array.isArray(item)
+            ? item.map(path)
+            : nativeWirePaths(item, platform),
     ]),
   ) as T
 }

@@ -1,0 +1,17 @@
+export const zhPreview = {
+  'preview.zoomIn': '放大',
+  'preview.zoomOut': '缩小',
+  'preview.view': '预览',
+  'preview.source': '源码',
+  'preview.fit': '适应宽度',
+  'preview.actual': '原始尺寸',
+  'preview.unsupported': '此设备不提供受限文件预览，请升级设备服务。',
+  'preview.outside': '文件指向项目根目录之外，无法预览。',
+  'preview.notFile': '此路径不是普通文件。',
+  'preview.changed': '读取期间文件已改变，请刷新。',
+  'preview.busy': '设备正在读取其他预览，请稍后刷新。',
+  'preview.invalid': '文件内容无效或格式不受支持。',
+  'preview.blocked': '此资源不自动加载',
+  'preview.imageLimit': '图片无效、含动画或超出预览预算。',
+  'preview.anchorMissing': '文档中没有这个标题。',
+} as const

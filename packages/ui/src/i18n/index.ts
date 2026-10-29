@@ -1,7 +1,7 @@
 // 界面的文案。组件里不写死给人看的字，一律 t('键')；核心给的文字（Text）用 t.text(...)。
 import type { PhraseKey, Said, Text } from '@litch/core'
 import { en } from './en.ts'
-import type { Args, Entry, Lang } from './types.ts'
+import { type Args, type Entry, formatEntry, type Lang } from './types.ts'
 import { type MessageKey, zhCN } from './zh-CN.ts'
 
 export type { Args, Lang } from './types.ts'
@@ -16,8 +16,7 @@ void everyPhraseHasText
 
 export function translate(lang: Lang, key: MessageKey, args: Args = {}): string {
   const entry: Entry = CATALOGS[lang][key]
-  if (typeof entry === 'function') return entry(args)
-  return entry.replace(/\{(\w+)\}/g, (whole, name: string) => String(args[name] ?? whole))
+  return formatEntry(entry, args)
 }
 
 export interface Translator {

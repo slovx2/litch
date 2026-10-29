@@ -22,6 +22,7 @@ import type {
   FileSearchView,
   FolderListing,
 } from '../model-files.mjs'
+import { type FilePreview, PREVIEW_LIMIT, type PreviewKind } from '../model-preview.mjs'
 import { phrase } from '../phrase.mjs'
 import {
   projectDirectory,
@@ -29,6 +30,7 @@ import {
   sortEntries,
   unreadableGroup,
 } from '../projection/files.mjs'
+import { base64Bytes } from '../text/bytes.mjs'
 import {
   isAbsolutePath,
   isNetworkPath,
@@ -42,6 +44,7 @@ import {
 import { lacksMethod } from './faults.mjs'
 
 export interface FilesHost {
+  previewSupported?(): boolean
   clock: Clock
   online(): boolean
   /** 对面的系统（macos、linux、windows），还不知道是 null：路径的另一种写法按它认（text/paths.mts 的 pathTwin） */
@@ -61,6 +64,12 @@ export interface FilesHost {
 }
 
 export interface Files {
+  preview(
+    root: string,
+    path: string,
+    format: PreviewKind,
+    signal?: AbortSignalLike,
+  ): Promise<FilePreview>
   /** 列一层目录。fresh：不用缓存里的，重新去取 */
   list(root: string, path: string, fresh: boolean, signal?: AbortSignalLike): Promise<DirectoryView>
   read(root: string, path: string, signal?: AbortSignalLike): Promise<FileContent>
@@ -293,6 +302,42 @@ export function createFiles(host: FilesHost): Files {
   }
 
   return {
+    async preview(root, path, format, signal) {
+      const at = locate(root, path)
+      mustBeOnline()
+      if (!host.previewSupported?.()) return { kind: 'unsupported', path: at.path }
+      if (!Object.hasOwn(PREVIEW_LIMIT, format)) return { kind: 'invalid', path: at.path }
+      const limit = PREVIEW_LIMIT[format]
+      try {
+        tally(asked.reads, at.path)
+        const { dataBase64 } = await host.request(
+          'fs/readFile',
+          {
+            path: at.path,
+            litchPreview: { root: at.root, maxBytes: limit },
+          },
+          { timeoutMs: READ_TIMEOUT_MS, ...(signal ? { signal } : {}) },
+        )
+        if (typeof dataBase64 !== 'string') return { kind: 'invalid', path: at.path }
+        const bytes = base64Bytes(dataBase64)
+        if (bytes > limit) return { kind: 'tooLarge', path: at.path, bytes, limit }
+        if (dataBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(dataBase64))
+          return { kind: 'invalid', path: at.path }
+        return { kind: 'ready', path: at.path, format, dataBase64, bytes }
+      } catch (error) {
+        if (isMissing(error)) return { kind: 'missing', path: at.path }
+        const data =
+          error instanceof RpcError
+            ? (error.data as { litchPreview?: { kind?: string; bytes?: number } } | null)
+            : null
+        const reason = data?.litchPreview
+        if (reason?.kind === 'tooLarge')
+          return { kind: 'tooLarge', path: at.path, bytes: reason.bytes ?? limit + 1, limit }
+        if (reason && ['outside', 'notFile', 'changed', 'busy'].includes(reason.kind ?? ''))
+          return { kind: reason.kind as 'outside' | 'notFile' | 'changed' | 'busy', path: at.path }
+        throw failed(error, 'fs')
+      }
+    },
     async list(root, path, fresh, signal) {
       return listPath(locate(root, path).path, fresh, signal)
     },
