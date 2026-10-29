@@ -1,8 +1,32 @@
 // 只供生产构建的浏览器验收；不进入产品入口。
 import '../preview/fixture.tsx'
+import JSZip from 'jszip'
+import { unpack } from '../../src/files/preview/office/archive.ts'
 import { cleanDocx, cleanRendered } from '../../src/files/preview/office/docx-clean.ts'
 
 Object.assign(window, {
+  officeImageCheck: async (base64: string) => {
+    const parts = await unpack(Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)))
+    const drawings: number[] = []
+    for (const missing of [false, true]) {
+      const cleaned = await cleanDocx(
+        parts.filter((p) => !missing || !p.name.endsWith('image1.png')),
+      )
+      const zip = await JSZip.loadAsync(cleaned)
+      const document = zip.file('word/document.xml')
+      if (!document) throw Error('缺少文档主体')
+      const xml = await document.async('string')
+      drawings.push(
+        new DOMParser()
+          .parseFromString(xml, 'application/xml')
+          .getElementsByTagNameNS(
+            'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+            'drawing',
+          ).length,
+      )
+    }
+    return drawings
+  },
   officeReviewCheck: async () => {
     const host = document.createElement('div')
     host.innerHTML = `<style>.docx { color: rgb(1, 2, 3); & .nested { background: url("data:image/svg+xml,bad"); width: 100000px; } @media (min-width: 0px) { font-size: 999999px; } } @media (min-width:0px) { .nested { background:url("https://office-probe.invalid/css"); } }</style><p class="docx">文档</p>`

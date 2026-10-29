@@ -61,7 +61,65 @@ export async function cleanDocx(parts: Part[]): Promise<ArrayBuffer> {
       zip.file(part.name, new XMLSerializer().serializeToString(doc))
     } else zip.file(part.name, part.bytes)
   }
+  await cleanImageReferences(zip)
   return zip.generateAsync({ type: 'arraybuffer', compression: 'STORE' })
+}
+
+// 删除关系后也删掉引用它的图片；否则库会先给 detached img 赋 src=null，触发 CSP。
+async function cleanImageReferences(zip: JSZip): Promise<void> {
+  const ns = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+  for (const part of Object.values(zip.files)) {
+    if (!part.name.endsWith('.xml')) continue
+    const doc = new DOMParser().parseFromString(await part.async('string'), 'application/xml')
+    const refs = Array.from(doc.getElementsByTagName('*')).filter(
+      (el) => el.localName === 'blip' || el.localName === 'imagedata',
+    )
+    if (!refs.length) continue
+    const slash = part.name.lastIndexOf('/')
+    const rels = zip.file(
+      `${part.name.slice(0, slash + 1)}_rels/${part.name.slice(slash + 1)}.rels`,
+    )
+    const valid = new Set<string>(),
+      seen = new Set<string>()
+    if (rels) {
+      const relations = new DOMParser().parseFromString(
+        await rels.async('string'),
+        'application/xml',
+      )
+      for (const rel of Array.from(relations.getElementsByTagName('*'))) {
+        if (rel.localName !== 'Relationship') continue
+        const id = rel.getAttribute('Id') ?? ''
+        if (seen.has(id)) throw new OfficeFailure('invalid')
+        seen.add(id)
+        const target = new URL(
+          rel.getAttribute('Target') ?? '',
+          `https://office.invalid/${part.name}`,
+        )
+        const path = target.pathname.slice(1)
+        if (
+          target.origin === 'https://office.invalid' &&
+          !target.search &&
+          !target.hash &&
+          /\.(png|jpe?g|gif|webp)$/i.test(path) &&
+          zip.file(path)
+        )
+          valid.add(id)
+      }
+    }
+    for (const ref of refs) {
+      const id = ref.getAttributeNS(ns, ref.localName === 'blip' ? 'embed' : 'id')
+      if (id && valid.has(id)) continue
+      let container: Element = ref
+      for (let parent = ref.parentElement; parent; parent = parent.parentElement) {
+        if (['drawing', 'pict', 'numPicBullet'].includes(parent.localName)) {
+          container = parent
+          break
+        }
+      }
+      container.remove()
+    }
+    zip.file(part.name, new XMLSerializer().serializeToString(doc))
+  }
 }
 
 function cleanStyle(style: CSSStyleDeclaration): void {
