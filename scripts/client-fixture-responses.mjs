@@ -9,6 +9,7 @@
 //   - 收尾（codexSocketCleanup）：codex 的套接字是个链接，真的文件建在 /tmp/codex-daemon-<uid>/ 下，它退出时链接没了、
 //     旁边的锁还留着。
 // 事件的形状对着真的 codex（0.160.0、0.163.0）实测过。
+// 行首“经理：<操作> <JSON 参数>”经 sessionsResponses 调 litch_manager；经理开场、答复、结束事件固定回话，见 client-fixture-manager.mjs。
 
 import { readlinkSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
