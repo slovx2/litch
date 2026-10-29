@@ -22,6 +22,7 @@ import { wireStyle } from '../app/device.ts'
 import { whyNot } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { dismissToast, showToast } from '../app/toasts.tsx'
+import { useAsking } from '../composer/asking.ts'
 import type { MessageKey } from '../i18n/index.ts'
 import {
   clampHeight,
@@ -137,6 +138,8 @@ export function TerminalPanel({
   const active = useKey<TerminalInfo>(keys.terminal(deviceId, activeId ?? ''))
   const online = device?.connection === 'online'
   const visible = panel.open && place !== null
+  // 有请求卡片时让出地方（dock.css）
+  const asking = useAsking()
   const root = useRef<HTMLElement>(null)
   const mount = useRef<HTMLDivElement>(null)
   /** 这一步是人做的（打开面板、点标签、新开）：做完把焦点放进终端 */
@@ -346,6 +349,7 @@ export function TerminalPanel({
       ref={root}
       className="term-dock"
       hidden={!visible}
+      data-asking={asking || undefined}
       aria-label={t('terminal.panel')}
       style={{ ...wireStyle(device?.wire), height: panel.height }}
       data-device={deviceId}

@@ -725,8 +725,9 @@
   flex: none;
 }
 /* 有请求等着的时候，下面的终端面板让一让：上面至少留得下输入区和一张压矮了的卡片。
-   平常大小的窗口里这个上限比面板高得多，碰不到 */
-.main:has(.req-frame) > .term-dock {
+   平常大小的窗口里这个上限比面板高得多，碰不到。有没有请求由界面打标记（composer/asking.ts），
+   不要改回 .main:has(.req-frame)：面板挂上后它让每次输入都重算整片主区域的样式 */
+.term-dock[data-asking] {
   max-height: max(120px, calc(100% - 360px));
 }
 /* 卡片自己拿着焦点时不画焦点框：它的边框已经够显眼了 */

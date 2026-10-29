@@ -2,6 +2,7 @@ import type { ApprovalOption, ApprovalRequest } from '@litch/core'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import type { MessageKey } from '../i18n/index.ts'
+import { useHoldAsking } from './asking.ts'
 import { ClientAskCard } from './ClientAskCard.tsx'
 import { FormCard } from './FormCard.tsx'
 import { typing, useCardFocus } from './focus.ts'
@@ -203,6 +204,7 @@ function Approval(props: CardProps<ApprovalRequest>) {
  */
 export function RequestCard(props: CardProps) {
   const { request } = props
+  useHoldAsking()
   return (
     <div className="req-frame">
       {request.kind === 'approval' ? (
