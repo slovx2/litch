@@ -114,7 +114,7 @@
       "kind": "ThreadField",
       "name": "litchPendingRequests",
       "on": "声明 sessionTree 的会话对象",
-      "description": "SessionPendingRequest[]，仅当前连接有效的请求 token。"
+      "description": "SessionPendingRequest[]，仅当前连接有效的请求 token。kind 可为 question、approval、form、clientApproval、unknown。clientApproval 是客户端显式挂出的登录审批，仅提供摘要，canRespond=false，reason=executor_required，沿原客户端审批通道处理。执行中的 item/tool/call 不属于待用户集合。"
     },
     {
       "kind": "ThreadField",

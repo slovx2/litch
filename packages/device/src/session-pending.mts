@@ -17,6 +17,15 @@ export class PendingRefused extends Error {
 const text = (value: unknown): string => (typeof value === 'string' ? value : '')
 const short = (value: unknown): string => text(value).slice(0, 4000)
 const same = isDeepStrictEqual
+/** 执行中的客户端工具不是待用户请求；是否需要批准由客户端另行上报。 */
+export const isUserRequest = (method: string): boolean =>
+  [
+    'item/tool/requestUserInput',
+    'item/commandExecution/requestApproval',
+    'item/fileChange/requestApproval',
+    'item/permissions/requestApproval',
+    'mcpServer/elicitation/request',
+  ].includes(method)
 const secret = (value: unknown): boolean => {
   if (!isObject(value)) return false
   if (
@@ -58,7 +67,7 @@ export class SessionPending {
     params: Record<string, unknown>,
     rpcId: RpcId,
   ): void {
-    if (typeof params.threadId !== 'string') return
+    if (!isUserRequest(method) || typeof params.threadId !== 'string') return
     // 同一连接重发幂等；数字 1 和字符串 "1" 是不同的 RPC ID。
     if ([...this.requests.values()].some((r) => r.link === link && r.rpcId === rpcId)) return
     const questions = Array.isArray(params.questions) ? params.questions.filter(isObject) : []
@@ -84,8 +93,8 @@ export class SessionPending {
       kind,
       title:
         kind === 'question'
-          ? short(questions[0]?.question)
-          : short(params.reason) ||
+          ? short(questions[0]?.question).trim() || 'Question / 待答问题'
+          : short(params.reason).trim() ||
             (method === 'item/commandExecution/requestApproval'
               ? 'Command approval'
               : method === 'item/fileChange/requestApproval'
@@ -146,6 +155,7 @@ export class SessionPending {
           }
         : {}),
     }
+    if (!sensitive && !snapshot.summary) snapshot.summary = snapshot.title
     this.requests.set(snapshot.id, { snapshot, method, params, rpcId, link })
     this.changed(snapshot.threadId)
   }

@@ -316,6 +316,7 @@ export class DeviceServer {
     if (this.pairing?.available) info.extensions.push(EXTENSION.devicePairing)
     // 手机上批准只是转交，设备上什么都不要
     this.approvals = new DeviceApprovals({
+      changed: (id) => this.sessionTree?.clientRequestsChanged(id),
       announce: (method, params, extension) => this.announce(method, params, extension),
       log,
     })
@@ -393,6 +394,19 @@ export class DeviceServer {
     if (this.worktrees) info.extensions.push(EXTENSION.worktrees)
     this.orchestrating = this.sessionTreeOn()
     this.sessionTree = new SessionTree({
+      clientRequests: (threadId) =>
+        this.approvals.list(threadId).map((card) => ({
+          id: `client:${card.id}`,
+          threadId,
+          harness: this.index.lookup(threadId) ?? '',
+          turnId: null,
+          kind: 'clientApproval',
+          createdAt: card.openedAt,
+          title: card.summary.site.trim() || 'Browser sign-in / 浏览器登录',
+          summary: [card.summary.origin, card.summary.reason].filter(Boolean).join('\n'),
+          canRespond: false,
+          reason: 'executor_required',
+        })),
       harnesses: () => this.harnesses(),
       openEngineLink: (harness) => this.openEngineLink(harness),
       index: this.index,

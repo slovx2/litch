@@ -151,7 +151,7 @@ function Child({
             numberOfLines={1}
             style={[styles.grow, { color: c.ink2, fontFamily: font.mono, fontSize: 12 }]}
           >
-            {child.pendingRequests[0]?.title}
+            {child.pendingRequests[0]?.title?.trim() || t('ask.requestFallback')}
           </Text>
           <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{open ? '▾' : '▸'}</Text>
         </Pressable>

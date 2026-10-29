@@ -4,7 +4,7 @@ export interface SessionPendingRequest {
   threadId: string
   harness: string
   turnId: string | null
-  kind: 'question' | 'approval' | 'form' | 'unknown'
+  kind: 'question' | 'approval' | 'form' | 'clientApproval' | 'unknown'
   title: string
   summary: string
   createdAt: number

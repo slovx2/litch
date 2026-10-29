@@ -28,7 +28,10 @@ import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { SESSION_TOOL, sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import { parseSessionMentions } from '../../protocol/src/session-mentions.mjs'
-import type { SessionDelegatedResponse } from '../../protocol/src/session-pending.mjs'
+import type {
+  SessionDelegatedResponse,
+  SessionPendingRequest,
+} from '../../protocol/src/session-pending.mjs'
 import {
   formatSessionEvent,
   SESSION_TREE_LIMITS,
@@ -40,7 +43,7 @@ import {
 } from '../../protocol/src/session-tree.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { HarnessSource } from './session.mjs'
-import { SessionPending } from './session-pending.mjs'
+import { isUserRequest, SessionPending } from './session-pending.mjs'
 import type { SessionStore } from './session-store.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import { DeviceError, isObject, UpstreamRpcError } from './wire.mjs'
@@ -61,6 +64,7 @@ export interface SessionTreeHost {
   announce(method: string, params: unknown, extension: string): void
   /** 设备进程建出来的会话：给每条客户端连接发一条标准的 thread/started（各自挂上 harness、工作区、litchLineage） */
   threadStarted(harness: string, thread: Record<string, unknown>): void
+  clientRequests?(threadId: string): SessionPendingRequest[]
   timeoutMs: number
   /** 子会话里的审批、提问挂了这么久没人答，算它停下来在等用户 */
   needsUserMs: number
@@ -223,19 +227,12 @@ export class SessionTree {
           this.engineEvent(harness, method, params)
         })
         link.onServerRequest((method, params, id) => {
+          if (!isUserRequest(method)) return
           this.pending.add(harness, link, method, params, id)
           if (typeof params.threadId === 'string') this.asked(params.threadId)
         })
         link.claimRequests(
-          (method, params) =>
-            typeof params.threadId === 'string' &&
-            [
-              'item/tool/requestUserInput',
-              'item/commandExecution/requestApproval',
-              'item/fileChange/requestApproval',
-              'item/permissions/requestApproval',
-              'mcpServer/elicitation/request',
-            ].includes(method),
+          (method, params) => typeof params.threadId === 'string' && isUserRequest(method),
         )
         link.onClose(() => {
           this.pending.closed(link)
@@ -303,7 +300,7 @@ export class SessionTree {
     if (
       this.active.has(threadId) ||
       this.backgroundOwed.has(threadId) ||
-      this.pending.list(threadId).length > 0 ||
+      this.pendingRequests(threadId).length > 0 ||
       this.host.backgroundRunning(threadId) > 0
     )
       return
@@ -417,6 +414,15 @@ export class SessionTree {
     this.later(this.host.needsUserMs + 10, () => this.stillWaiting(threadId))
   }
 
+  pendingRequests(threadId: string): SessionPendingRequest[] {
+    return [...this.pending.list(threadId), ...(this.host.clientRequests?.(threadId) ?? [])]
+  }
+
+  clientRequestsChanged(threadId: string): void {
+    this.pendingChanged(threadId)
+    if (this.pendingRequests(threadId).length) this.asked(threadId)
+  }
+
   pendingChanged(threadId: string): void {
     const parent = this.store.parentOf(threadId)
     if (parent) this.notesChanged(parent.parentThreadId)
@@ -424,7 +430,7 @@ export class SessionTree {
       'litch/thread/pending/changed',
       {
         threadId,
-        litchPendingRequests: this.pending.list(threadId),
+        litchPendingRequests: this.pendingRequests(threadId),
         litchDelegatedResponses: this.store.responses(threadId),
       },
       EXTENSION.sessionTree,
@@ -438,7 +444,7 @@ export class SessionTree {
 
   private pendingNote(note: SessionEventNote): SessionEventNote[] {
     if (note.status !== 'needsUser') return [publicNote(note)]
-    const pending = this.pending.list(note.threadId)
+    const pending = this.pendingRequests(note.threadId)
     return pending.length
       ? [
           {
@@ -458,7 +464,7 @@ export class SessionTree {
     const lineage = this.store.parentOf(threadId)
     const turnId = this.active.get(threadId) ?? ''
     if (!lineage || !this.waitingOnUser(threadId)) return
-    const key = JSON.stringify([threadId, turnId, this.pending.list(threadId).map((p) => p.id)])
+    const key = JSON.stringify([threadId, turnId, this.pendingRequests(threadId).map((p) => p.id)])
     if (!this.askedOnce.has(key) && this.host.enabled()) {
       if (this.askedOnce.size >= ENDED_LIMIT) this.askedOnce.clear()
       this.askedOnce.add(key)
@@ -474,7 +480,7 @@ export class SessionTree {
 
   /** 子会话里有挂满 needsUserMs、还没人答的请求 */
   waitingOnUser(threadId: string): boolean {
-    const requests = this.pending.list(threadId)
+    const requests = this.pendingRequests(threadId)
     if (!requests.length) return false
     const since = Math.min(...requests.map((r) => r.createdAt))
     return Date.now() - since >= this.host.needsUserMs
@@ -1060,7 +1066,7 @@ export class SessionTree {
    */
   decorate(thread: Record<string, unknown>): void {
     if (typeof thread.id !== 'string') return
-    thread.litchPendingRequests = this.pending.list(thread.id)
+    thread.litchPendingRequests = this.pendingRequests(thread.id)
     thread.litchDelegatedResponses = this.store.responses(thread.id)
     const lineage = this.lineage(thread.id)
     if (lineage) thread.litchLineage = lineage

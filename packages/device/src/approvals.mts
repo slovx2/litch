@@ -40,6 +40,7 @@ export interface ApprovalPeer {
 export interface ApprovalsHost {
   /** 发给所有声明了 extension 的连接 */
   announce(method: string, params: unknown, extension: string): void
+  changed?(threadId: string): void
   log(line: string): void
 }
 
@@ -168,7 +169,7 @@ export class DeviceApprovals {
     if (held?.owner === peer) this.drop(held)
   }
 
-  private list(threadId: string | undefined): ApprovalCardView[] {
+  list(threadId: string | undefined): ApprovalCardView[] {
     const data: ApprovalCardView[] = []
     for (const held of this.cards.values())
       if (threadId === undefined || held.card.threadId === threadId) data.push(viewOf(held))
@@ -214,6 +215,7 @@ export class DeviceApprovals {
   }
 
   private changed(threadId: string): void {
+    this.host.changed?.(threadId)
     this.host.announce(
       APPROVAL_CHANGED,
       { threadId, data: this.list(threadId) },

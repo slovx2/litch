@@ -209,7 +209,7 @@ async function read(tree: SessionTree, args: Record<string, unknown>, call: Devi
   return {
     session: summary(tree, harness, thread, call.threadId),
     turns: turns.map(turnSummary),
-    pending_requests: tree.pending.list(threadId),
+    pending_requests: tree.pendingRequests(threadId),
     delegated_responses: tree.store.responses(threadId),
   }
 }
@@ -1153,6 +1153,13 @@ export function sessionToolsHandler(
             )
           const id = string(args, 'request_id', true)
           const source = await tree.read(call.threadId, false)
+          if (
+            tree.pendingRequests(threadId).some((r) => r.id === id && r.kind === 'clientApproval')
+          )
+            throw new PendingRefused(
+              'executor_required',
+              'Answer this approval on its original client.',
+            )
           const request = tree.pending.respond(threadId, id, args.answer)
           const record = {
             id: randomUUID(),

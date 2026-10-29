@@ -59,7 +59,9 @@ export function ChildRequests({ deviceId, sessionId }: { deviceId: string; sessi
                     >
                       <span className="chip">{badgeOf(device, child.harness)}</span>
                       <span className="child-req-title">{t.text(child.title)}</span>
-                      <span className="child-req-what">{child.pendingRequests?.[0]?.title}</span>
+                      <span className="child-req-what">
+                        {child.pendingRequests?.[0]?.title?.trim() || t('ask.requestFallback')}
+                      </span>
                       <Caret />
                     </button>
                     <button
