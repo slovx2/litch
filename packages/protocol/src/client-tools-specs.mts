@@ -13,6 +13,7 @@ import { CLIENT_TOOL_NAMESPACE, type ClientToolNamespaceSpec } from './client-to
 import { BROWSER_TOOLS } from './client-tools-browser.mjs'
 import { computerPlatform, computerToolsSpec } from './client-tools-computer.mjs'
 import { type MachineSpecContext, machineToolsSpec } from './client-tools-machine.mjs'
+import { MANAGER_TOOLS } from './client-tools-manager.mjs'
 import { SESSION_TOOLS } from './client-tools-sessions.mjs'
 import { TASKS_TOOLS } from './client-tools-tasks.mjs'
 
@@ -65,6 +66,8 @@ const SPECS: Record<string, ClientToolNamespaceSpec> = {
   [TASKS_TOOLS.name]: TASKS_TOOLS,
   // 执行方是设备进程，不是桌面端：核心按设备的 sessionTree 扩展另外带上，不在桌面端的声明里
   [SESSION_TOOLS.name]: SESSION_TOOLS,
+  // 只有经理会话由设备挂载，不能凭客户端声明向普通会话授予看板写权限。
+  [MANAGER_TOOLS.name]: MANAGER_TOOLS,
 }
 
 /** 建会话时知道的、按会话生成定义要用的东西。没有就给 null，说明里不写具体的机器 */

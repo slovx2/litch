@@ -483,20 +483,20 @@ const USER_ASKED =
 const HAND_OFF =
   'If a new user message about something unrelated arrives while you are in the middle of a task, hand that task off with litch_sessions.hand_off (a title and the remaining plan: steps, files, what done looks like), then answer the new message. A small correction is not that: just adjust. If the user said to keep working here, keep it here.'
 
-const FRESH_BRIEF = `A fresh session sees nothing of this conversation: it gets only the two parts of its brief, written in your own words for someone who has not read any of this. background: the overall goal, what has been decided or ruled out so far, the constraints to respect, and how this piece fits in (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2). prompt: the task itself, the files or area, and what done looks like. A fork already has this conversation, so it needs only the prompt. Follow-ups for a session you started go to it with litch_sessions.send, not to a new session.`
+export const FRESH_BRIEF = `A fresh session sees nothing of this conversation: it gets only the two parts of its brief, written in your own words for someone who has not read any of this. background: the overall goal, what has been decided or ruled out so far, the constraints to respect, and how this piece fits in (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2). prompt: the task itself, the files or area, and what done looks like. A fork already has this conversation, so it needs only the prompt. Follow-ups for a session you started go to it with litch_sessions.send, not to a new session.`
 
-const WORKTREE_RULE =
+export const WORKTREE_RULE =
   "Where a new session works: work that ends in a branch or pull request of its own gets its own git worktree (worktree true; the folder must be in a git repository), so it does not mix with this session's changes; work that must land in one change with this one, or only reads, shares this folder (worktree false). Leave worktree out to follow the default: a new worktree when this session is in a worktree Litch created, otherwise this folder. A new worktree starts from the last commit of this session's branch, so commit first what it needs. If this session is already in a worktree Litch created, do not create another one with your own worktree tool (for example EnterWorktree)."
 
 /**
  * 归档：照 Claude 桌面端 archive_session 的用法，只在用户同意了归档那个会话之后才归档，不自己拿主意；
  * 子会话都跑完、结果到手之后可以提议归档它们，用户说好再归档。有收尾时用收尾的 ask 问
  */
-function archiveRule(wrapUp: boolean): string {
+export function archiveRule(wrapUp: boolean): string {
   return `Archiving: litch_sessions.archive moves a session to Archived, and litch_sessions.unarchive brings it back. Archive a session only after the user has explicitly agreed to archiving that specific session, never on your own or speculatively. When all of your sub-sessions have finished and you have their results, you may ask the user whether to archive them (${wrapUp ? "with wrap_up's ask and a reply button" : 'in one short question'}) and archive them when they say yes.`
 }
 
-const TITLE_LINE =
+export const TITLE_LINE =
   'Right before each litch_sessions.start or hand_off, write a bold title line and one sentence on what it will do.'
 
 /** 任务卡关着时的规则：只有用户明说时派子会话、交接、简报，不提建议、offer、收尾 */

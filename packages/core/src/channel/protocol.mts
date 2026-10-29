@@ -88,6 +88,16 @@ import type {
   SshConfigView,
 } from '../model-manage.mjs'
 import type {
+  ManagerAnswersResult,
+  ManagerBoardTopicView,
+  ManagerDecisionView,
+  ManagerDraft,
+  ManagerEdit,
+  ManagerSubmittedAnswer,
+  ManagersView,
+  ManagerView,
+} from '../model-manager.mjs'
+import type {
   PairingAddress,
   PairingTarget,
   PairingTopicView,
@@ -170,6 +180,10 @@ export type Topic =
    * 照样成立；没连上时给上次知道的（还没连上过是 null）。连上、重连之后再给一份快照
    */
   | { kind: 'tasks'; deviceId: string }
+  /** 经理列表常驻订阅，断线保留快照；可用性同 tasks。 */
+  | { kind: 'managers'; deviceId: string }
+  /** 只在看板打开时订阅；设备变更通知后重读整块看板。 */
+  | { kind: 'managerBoard'; deviceId: string; managerId: string }
   /**
    * 一台设备上扫码绑定手机的情况（devicePairing 扩展）：已绑定的手机，和这台桌面端开出来的配对现在走到哪了。
    * 设备详情、出码对话框开着时才订阅。设备没有这项扩展时快照里 available 是 false，照样成立；
@@ -224,6 +238,8 @@ export interface TopicData {
   diff: DiffView
   machine: MachineActivityView
   tasks: TasksView
+  managers: ManagersView
+  managerBoard: ManagerBoardTopicView
   pairing: PairingTopicView
   approvals: ApprovalsTopicView
   install: InstallTopicView
@@ -317,6 +333,10 @@ export type TasksOp =
   | { op: 'task.remove'; taskId: string }
   | { op: 'run.upsert'; run: TaskRunView; finished: boolean; asking?: TaskRunApprovalView[] }
 
+/** 列表按经理整条替换；看板重读后的快照整份替换。 */
+export type ManagersOp = { op: 'manager.upsert'; manager: ManagerView }
+export type ManagerBoardOp = { op: 'managerBoard.set'; view: ManagerBoardTopicView }
+
 /**
  * 扫码绑定手机的增量。已绑定的手机整份换（不长，变得也少）；
  * 一个配对的状态整条换（只有这台桌面端开出来的配对才有，别处开的不发）
@@ -351,6 +371,8 @@ export interface TopicOp {
   diff: DiffOp
   machine: MachineOp
   tasks: TasksOp
+  managers: ManagersOp
+  managerBoard: ManagerBoardOp
   pairing: PairingOp
   approvals: ApprovalsOp
   install: InstallOp
@@ -363,6 +385,28 @@ export interface TopicOp {
 // ---------- 命令 ----------
 
 export interface Commands {
+  // 经理方法须设备支持 litchManager；离线回 offline，不支持回 unsupported。
+  // 成功后核心先更新相应主题，通知再次到达时幂等；部分答复失败保留桌面本地草稿。
+  'managers.create': {
+    params: { deviceId: string; manager: ManagerDraft }
+    result: { manager: ManagerView; threadId: string }
+  }
+  'managers.update': {
+    params: { deviceId: string; managerId: string; patch: ManagerEdit }
+    result: { manager: ManagerView }
+  }
+  'managers.end': {
+    params: { deviceId: string; managerId: string }
+    result: { manager: ManagerView }
+  }
+  'managers.answers.submit': {
+    params: { deviceId: string; managerId: string; answers: ManagerSubmittedAnswer[] }
+    result: ManagerAnswersResult
+  }
+  'managers.decision.reopen': {
+    params: { deviceId: string; managerId: string; decisionId: ManagerDecisionView['id'] }
+    result: { decision: ManagerDecisionView }
+  }
   'automationPreview.control': { params: AutomationPreviewCommand; result: Record<string, never> }
   'chrome.settings': { params: ChromeSettingsRequest; result: ChromeSettingsState }
   /** 核心的基本信息。界面启动时用它确认通道是通的 */

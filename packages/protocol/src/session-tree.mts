@@ -1,3 +1,4 @@
+import type { ManagerEventData } from './manager.mjs'
 import type { SessionPendingFields, SessionPendingRequest } from './session-pending.mjs'
 // 会话树（扩展名 sessionTree）：一个会话派出的子会话、提案、回报与唤醒。父子关系存在设备进程自己的库里，
 // 不存在任何引擎里；子会话本身是普通的顶层会话，照常出现在 thread/list 里，树由客户端按 litchLineage 搭。
@@ -327,6 +328,10 @@ export const SESSION_EVENT_TAG = 'litch-session-event'
 
 /** 注入文字的种类 */
 export type SessionEventKind =
+  /** 经理的看板答复、第一回合和结束回合；载荷在 manager，notes 为空。 */
+  | 'manager-answers'
+  | 'manager-open'
+  | 'manager-end'
   /** 子会话的回报，附在用户消息前面 */
   | 'notes'
   /** 子会话都停下了，设备进程替父会话开的回合 */
@@ -367,6 +372,8 @@ export interface SessionQueuedNote extends SessionEventNote {
 }
 
 export interface SessionEvent {
+  /** 三种 manager-* 事件必带；其他事件不带，不改变原有回报的形状。 */
+  manager?: ManagerEventData
   pendingQuestions?: {
     title: string
     options: { label: string; answer: string }[]
@@ -383,6 +390,27 @@ export interface SessionEvent {
  * 给模型的说明写在里面：这不是用户说的话，需要细节就用 litch_sessions.read。
  */
 export function formatSessionEvent(event: SessionEvent): string {
+  if (event.kind.startsWith('manager-')) {
+    if (!validManagerEvent(event)) throw new Error('Invalid manager session event')
+    const manager = event.manager as ManagerEventData
+    const head =
+      event.kind === 'manager-answers'
+        ? 'The user submitted these board answers.'
+        : event.kind === 'manager-open'
+          ? 'The user created this manager.'
+          : 'The user requested ending this manager.'
+    return [
+      `<${SESSION_EVENT_TAG} kind="${event.kind}">`,
+      `${head} This message is from Litch, not typed by the user. Manager: ${manager.managerId}.`,
+      ...(manager.answers ?? []).map(
+        (answer) =>
+          `- ${answer.decisionId} ${JSON.stringify(answer.title)}: ${JSON.stringify(answer.optionLabel ?? answer.optionId)}; ${JSON.stringify(answer.text)}`,
+      ),
+      manager.text,
+      `<!-- ${JSON.stringify(event).replace(/>/g, '\\u003e')} -->`,
+      `</${SESSION_EVENT_TAG}>`,
+    ].join('\n')
+  }
   const head =
     event.kind === 'wake'
       ? event.working
@@ -440,15 +468,44 @@ export function formatSessionEvent(event: SessionEvent): string {
  */
 export function parseSessionEvent(text: string): { event: SessionEvent | null; rest: string } {
   const pattern = new RegExp(
-    `^<${SESSION_EVENT_TAG} kind="(notes|wake|remind)">\\n[\\s\\S]*?<!-- (\\{[\\s\\S]*?\\}) -->\\n</${SESSION_EVENT_TAG}>\\n?`,
+    `^<${SESSION_EVENT_TAG} kind="(notes|wake|remind|manager-answers|manager-open|manager-end)">\\n[\\s\\S]*?<!-- (\\{[\\s\\S]*?\\}) -->\\n</${SESSION_EVENT_TAG}>\\n?`,
   )
   const match = pattern.exec(text)
   if (!match) return { event: null, rest: text }
   try {
     const event = JSON.parse(match[2] ?? '') as SessionEvent
     if (event.kind !== match[1] || !Array.isArray(event.notes)) return { event: null, rest: text }
+    if (event.kind.startsWith('manager-') && !validManagerEvent(event))
+      return { event: null, rest: text }
     return { event, rest: text.slice(match[0].length) }
   } catch {
     return { event: null, rest: text }
   }
+}
+
+/** 只校验新增事件的载荷；既有的 notes/wake/remind 保持原来的解析语义。 */
+function validManagerEvent(event: SessionEvent): boolean {
+  const data = event.manager
+  if (
+    event.notes.length !== 0 ||
+    !data ||
+    typeof data.managerId !== 'string' ||
+    !data.managerId.trim() ||
+    typeof data.text !== 'string'
+  )
+    return false
+  if (event.kind !== 'manager-answers') return data.answers === undefined
+  return (
+    Array.isArray(data.answers) &&
+    data.answers.length > 0 &&
+    data.answers.every(
+      (answer) =>
+        answer &&
+        /^D-[1-9]\d*$/.test(answer.decisionId) &&
+        typeof answer.title === 'string' &&
+        (answer.optionId === null || typeof answer.optionId === 'string') &&
+        (answer.optionLabel === null || typeof answer.optionLabel === 'string') &&
+        typeof answer.text === 'string',
+    )
+  )
 }
