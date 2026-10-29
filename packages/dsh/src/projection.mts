@@ -369,6 +369,11 @@ export class Projection {
   }
 
   // 适配器发出提示词前按下一个回合编号先建好回合，随后的 turn/start 事件与它对上。
+  restoreTurnNumber(last: unknown): void {
+    if (typeof last === 'number' && Number.isSafeInteger(last) && last >= 0)
+      this.turnNumber = Math.max(this.turnNumber, last)
+  }
+
   expect(notify: Notify): DshTurn {
     const turn = this.begin(this.turnNumber + 1, Date.now(), notify)
     this.expected = true

@@ -162,6 +162,8 @@ export {
   TASK_RUN_SUMMARY_MAX,
 } from './device-tasks.mjs'
 export type * from './extensions.mjs'
+export type * from './file-preview.mjs'
+export { PREVIEW_HARD_BYTES, PREVIEW_LIMIT } from './file-preview.mjs'
 // 每个 harness 的结构化声明（能力位、权限预设）和“拒绝时附说明”：harness-capabilities.mts 不依赖别的文件
 export type * from './harness-capabilities.mjs'
 export { DECLINE_NOTE_MAX_LENGTH, DECLINE_WITH_NOTE_DECISION } from './harness-capabilities.mjs'

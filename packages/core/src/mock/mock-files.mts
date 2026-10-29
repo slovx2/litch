@@ -215,6 +215,7 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
       roots: new Set(),
       short: new Set(),
       files: createFiles({
+        previewSupported: () => deviceId !== NO_FILES,
         clock,
         online: () => host.device(deviceId)?.connection === 'online',
         platform: () => host.device(deviceId)?.os ?? null,
@@ -266,6 +267,16 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
       const files = filesOf(deviceId, null)
       for (const root of host.rootsOf(deviceId)) filesOf(deviceId, root)
       return await files.folders(path === null ? null : expand(path), signal)
+    },
+
+    async 'files.preview'({ deviceId, root, path, format }, signal) {
+      const content = await filesOf(deviceId, root).preview(
+        expand(root),
+        expand(path),
+        format,
+        signal,
+      )
+      return { ...content, path: outward(root, content.path) }
     },
 
     async 'files.read'({ deviceId, root, path }, signal) {

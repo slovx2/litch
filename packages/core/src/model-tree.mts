@@ -294,7 +294,7 @@ export interface SpawnedView {
   cwd: string | null
   kind: LineageKind
   /**
-   * start 的 initiation 是 user_asked（用户亲口要的，直接起）：设备进程核对不过时才降成提案。
+   * start 的 initiation 是 user_asked（用户已要求或批准）：任意回合直接起，仅沙箱放宽时降成提案。
    * 别的（propose、offer、hand_off）是 false
    */
   asked: boolean

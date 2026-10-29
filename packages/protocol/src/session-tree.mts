@@ -16,7 +16,7 @@ export type SessionLineageKind =
 
 /** 谁起的 */
 export type SessionLineageOrigin =
-  /** 模型调 litch_sessions.start 直接起的（用户在这个回合里要求的） */
+  /** 模型调 litch_sessions.start 直接起的（用户已要求或批准，可在后续回合执行） */
   | 'model'
   /** 模型提的提案，用户点了“开始” */
   | 'proposal'
@@ -143,6 +143,10 @@ export const SESSION_TREE_LIMITS = {
   wakesPerUserMessage: 50,
   /** 一个会话同时最多有几个没结束的子会话（直接子女） */
   liveChildren: 8,
+  /** 同一棵树同时运行/启动的会话数（含根会话） */
+  liveTree: 24,
+  /** 子会话最深层级，根为第 0 层 */
+  maxDepth: 4,
   /** includeSettled 时最多列几条 */
   proposalListMax: 100,
 } as const
@@ -156,9 +160,9 @@ export const SESSION_TREE_METHOD = {
   detach: 'litch/session/detach',
   /** 一个会话上的提案（缺省只列 pending 的，includeSettled 连了结的一起）。应答 SessionProposalListResponse */
   proposalList: 'litch/sessionProposal/list',
-  /** 用户点“开始”（可以改 harness、模型、目录、简报等再开始）。参数 SessionProposalAcceptParams，应答 SessionStartResponse */
+  /** 用户点“开始”（可带 overrides）。已 started 且记有子会话时返回原 threadId，不重复派出。应答 SessionStartResponse */
   proposalAccept: 'litch/sessionProposal/accept',
-  /** 用户点“不要”。应答空对象 */
+  /** 用户点“不要”。已 dismissed 时幂等成功；其他结算状态拒绝并给具体原因。应答空对象 */
   proposalDismiss: 'litch/sessionProposal/dismiss',
   /** 用户在 offer 卡上选“新会话”或“在这里做”。参数 SessionProposalAnswerParams，应答空对象 */
   proposalAnswer: 'litch/sessionProposal/answer',

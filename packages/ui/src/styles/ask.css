@@ -19,7 +19,7 @@
   flex-direction: column;
   gap: 6px;
   padding: 8px 10px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   line-height: 1.45;
 }
 .ask-q + .ask-q {
@@ -46,7 +46,7 @@
 }
 .ask-answer-label {
   display: block;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
   font-weight: 500;
   color: var(--ink-3);
 }
@@ -60,18 +60,18 @@
   padding: 1px 8px;
   border: 1px solid var(--line-2);
   border-radius: var(--r2);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--ink-2);
 }
 /* 问答卡片（AskedCard）：题头一行小字；没选的选项收在“查看其他选项”里 */
 .ask-kicker {
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .ask-alternatives {
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .ask-alternatives summary {
   width: max-content;
@@ -106,7 +106,7 @@
   font-weight: 500;
 }
 .ask-picks .tx span {
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 /* 用户答复的那条消息：先一行小字“回答了问题”，每题是引着的题目加回答 */
 .ask-reply {
@@ -116,7 +116,7 @@
 }
 .ask-reply-kind {
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .ask-reply-q {
   padding-left: 8px;

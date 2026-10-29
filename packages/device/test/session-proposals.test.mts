@@ -472,7 +472,7 @@ test('SESSION-PROPOSALS-006：用户开始时可改 harness、模型、强度、
   }
 })
 
-test('SESSION-PROPOSALS-007：用户正在开始一张提案时：再点开始、点不要都回不支持，模型撤回等它起完、答 started', async () => {
+test('SESSION-PROPOSALS-007：正在开始时拒绝其他卡片操作并给真实原因，模型撤回等它起完、答 started', async () => {
   const env = treeRig()
   try {
     const client = await litch(env)
@@ -491,8 +491,15 @@ test('SESSION-PROPOSALS-007：用户正在开始一张提案时：再点开始�
     await until(() => held !== null, '开始走到建会话')
     const dismiss = await client.fails('litch/sessionProposal/dismiss', { proposalId })
     assert.match(dismiss.message, /正在开始/)
+    assert.equal(dismiss.code, -32602)
     const twice = await client.fails('litch/sessionProposal/accept', { proposalId })
     assert.match(twice.message, /正在开始/)
+    assert.equal(twice.code, -32602)
+    for (const method of ['here', 'markHere']) {
+      const failed = await client.fails(`litch/sessionProposal/${method}`, { proposalId })
+      assert.equal(failed.code, -32602)
+      assert.match(failed.message, /正在开始/)
+    }
     const withdrawing = env.pi.callTool(threadId, SESSIONS, 'withdraw', { proposal_id: proposalId })
     await new Promise((resolve) => setTimeout(resolve, 50))
     env.claude.handlers['thread/start'] = original

@@ -144,7 +144,7 @@ test('TASK-CARDS-002：已有会话当场生效：wrap_up 照收但建议都 ref
   }
 })
 
-test('TASK-CARDS-003：用户要的直接起被降成提案时，任务卡关着就回 blocked，不落卡', async () => {
+test('TASK-CARDS-003：任务卡关闭，非用户回合也可直接启动已授权子会话，不落卡', async () => {
   const env = treeRig({}, { values: { 'harness.pi.taskCards': false } })
   try {
     const client = await litch(env)
@@ -160,11 +160,7 @@ test('TASK-CARDS-003：用户要的直接起被降成提案时，任务卡关着
         initiation: 'user_asked',
       })
     )?.answer
-    assert.equal(failureOf(answer), 'blocked')
-    assert.match(
-      answer.result.contentItems[0].text,
-      /not started by the user.*Task cards are turned off.*session menu/s,
-    )
+    assert.ok(resultOf(answer).thread_id)
     assert.equal(env.device.sessionTree.proposals(threadId, true).length, 0)
   } finally {
     await env.close()

@@ -28,6 +28,13 @@ const say = (prompt: string) =>
 
 export const SCENES: Scene[] = [
   {
+    id: 'wake-off',
+    group: '会话',
+    name: '子会话不唤醒',
+    note: '关闭自动唤醒的子会话在列表中显示弱提示',
+    steps: [link('litch://spawn?device=local&parent=s2&title=后台调研'), sessions('local')],
+  },
+  {
     id: 'stall-recovery',
     group: '会话',
     name: '唤醒后无进展',

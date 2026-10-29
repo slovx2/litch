@@ -572,6 +572,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let harnesses: HarnessView[] = []
   /** 对面有没有设备配置接口（deviceSettings 扩展）。认出来之前、对面不是设备服务时都是没有 */
   let manageable = false
+  let filePreviewSupported = false
   let powerSupported = false
   let recoverySupported = false
   /** 对面有没有可重连的终端（deviceProcesses 扩展）。认出来之前、对面不是设备服务时都是没有 */
@@ -1623,6 +1624,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     terms.clear()
     serviceDue = false
     nativeDirect = false
+    filePreviewSupported = false
     try {
       const info = await link.request('runtime/info', {})
       if (mine !== session) return
@@ -1633,6 +1635,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         const declares = info.device.extensions?.includes(EXTENSION.deviceWorkspaces) === true
         if (declares || mode !== 'full') hasProjects = null
         mode = 'full'
+        filePreviewSupported = info.device.extensions?.includes(EXTENSION.filePreview) === true
         configurable = info.device.extensions?.includes(EXTENSION.harnessConfig) === true
         harnesses = info.harnesses.map((entry) => withConfig(harnessFromInfo(entry)))
         for (const entry of info.harnesses) remember(entry.id, termsOf(entry))
@@ -1663,6 +1666,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         if (mode === 'full') hasProjects = null
         remember(harnessFromRuntimeInfo(info).id, termsOf(info))
         mode = 'single'
+        filePreviewSupported = info.extensions?.includes(EXTENSION.filePreview) === true
         harnesses = [harnessFromRuntimeInfo(info)]
         manageable = false
         reattachable = false
@@ -2384,6 +2388,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   })
 
   const files = createFiles({
+    previewSupported: () => filePreviewSupported,
     clock: options.clock,
     online: () => online,
     platform: () => platform,

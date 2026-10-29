@@ -73,6 +73,8 @@ export class SessionArchives {
 
   /** 一个会话归档成了（客户端的请求应答回来、或者设备进程自己归档的）：先收拾工作树，再带上子会话 */
   async archived(threadId: string, by: ArchivedBy): Promise<Cascade> {
+    this.tree.store.dropDirectStarts(threadId)
+    this.tree.store.dropChildStart(threadId)
     await this.host.worktreeLife()?.archived(threadId)
     return this.cascade(threadId, by)
   }

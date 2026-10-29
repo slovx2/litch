@@ -19,6 +19,8 @@ export const EXTENSIONS_CAPABILITY = 'litchExtensions'
 export const EXTENSION = {
   /** 设备上的经理、看板和工作线；字段与通知只发给声明过 litchManager 的连接（manager.mts）。 */
   manager: 'litchManager',
+  /** 受根目录与字节预算约束的 fs/readFile，见 file-preview.mts。 */
+  filePreview: 'filePreview',
   /**
    * 一条连接里有多个 harness：会话对象、请求、通知上的 `harness`，聚合面的 `runtime/info`，
    * 合并的会话列表，harness 状态变化的通知。聚合面要求客户端必须声明它。

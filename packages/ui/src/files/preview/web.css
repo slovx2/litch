@@ -1,0 +1,105 @@
+.fp-web {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.fp-web-note {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--line-1);
+}
+.fp-csv-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  font-size: 12px;
+  font-family: var(--mono);
+}
+.fp-csv-grid {
+  position: relative;
+  min-width: 100%;
+}
+/* 粘住的是 thead：它的父元素是整张表，粘性才能跟着滚动；表头行本身的父元素只有一行高 */
+.fp-csv-grid thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.fp-csv-head {
+  background: var(--sunken);
+}
+.fp-csv-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+.fp-csv-cell,
+.fp-csv-number {
+  display: block;
+  height: 28px;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  line-height: 19px;
+  border-right: 1px solid var(--line-1);
+  border-bottom: 1px solid var(--line-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+.fp-csv-cell {
+  position: absolute;
+  top: 0;
+}
+.fp-csv-number {
+  position: sticky;
+  left: 0;
+  text-align: right;
+  background: var(--sunken);
+  color: var(--ink-3);
+  z-index: 1;
+}
+.fp-html-frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: var(--panel);
+}
+.fp-media-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  /* 靠上：高面板里音频条和视频不悬在正中 */
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px;
+}
+.fp-media-stage :is(audio, video) {
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.fp-csv-grid,
+.fp-csv-grid thead,
+.fp-csv-grid tbody,
+.fp-csv-head {
+  display: block;
+  border-spacing: 0;
+}
+.fp-csv-cell {
+  font-weight: normal;
+  text-align: left;
+}
+/* 列头和 Excel 预览一致：字母、居中、淡色 */
+.fp-csv-head .fp-csv-cell {
+  text-align: center;
+  color: var(--ink-3);
+}

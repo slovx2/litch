@@ -15,6 +15,20 @@ Skin, theme and language can also be changed from the **Appearance** button at t
 | Density | Compact, Standard, Roomy | Standard |
 | Conversation width (`--width`) | `wide` (text up to 1280 px), `compact` (up to 760 px, 中文「紧凑」) | `wide` |
 | Zoom | 80%, 90%, 100%, 110%, 125%, 150% | 100% |
+| Sidebar text size (`--tree-text`) | 90%, 100%, 110%, 120%, 135%, 150% | 100% |
+| Conversation text size (`--chat-text`) | 90%, 100%, 110%, 120%, 135%, 150% | 100% |
+
+Sidebar text size (会话列表字号) and conversation text size (对话字号) scale their reading areas
+relative to the current skin. The selected factors are retained when switching skins.
+Conversation text size covers prose, code, diagrams, questions, approval cards and the input box;
+sidebar text size covers device, project and session rows.
+The top bar, sidebar header and footer, settings, menus, info rail, diffs, files, terminal and browser
+keep their own text sizes. Text size changes text and necessary line heights, while zoom scales the
+whole window. The factors multiply: 150% text size with 150% zoom gives 225%.
+Both preferences are saved on this computer, do not sync to phones, and also work in browser previews.
+
+`scripts/litch look set --tree-text 120 --chat-text 135` changes both sizes; `scripts/litch status`
+reads them back. Percent signs are optional; the factors `1.2` and `1.35` are also accepted.
 
 Conversation width only matters in wide windows: the conversation and the input box stay centred and
 never run under the info rail; when the conversation area is narrower than about 810 px both settings

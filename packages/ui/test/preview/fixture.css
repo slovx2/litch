@@ -1,0 +1,12 @@
+.preview-check {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  container-type: inline-size;
+}
+.preview-check > header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-1);
+  font: 600 14px var(--ui);
+}

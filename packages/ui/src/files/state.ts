@@ -7,6 +7,8 @@ import { showSideTab } from '../side/side.ts'
 import { FILES_TAB } from '../side/tabs.ts'
 
 export interface OpenFile {
+  fragment?: string
+  previewMode?: 'source' | 'preview'
   path: string
   /** 固定了没有。没固定的是预览：再点开别的文件，它就被换掉 */
   pinned: boolean
@@ -59,12 +61,21 @@ export function useTreeUi(key: string): TreeUi {
   )
 }
 
+export function setFileMode(key: string, path: string, previewMode: 'source' | 'preview'): void {
+  const ui = treeUiNow(key)
+  publish(key, {
+    ...ui,
+    tabs: ui.tabs.map((tab) => (tab.path === path ? { ...tab, previewMode } : tab)),
+  })
+}
+
 export function selectPath(key: string, path: string | null): void {
   const ui = treeUiNow(key)
   if (ui.selected !== path) publish(key, { ...ui, selected: path })
 }
 
 export interface OpenOptions {
+  fragment?: string
   /** 固定打开（双击、回车）。不给就是预览 */
   pin?: boolean
   /** 定位到这一行 */
@@ -89,14 +100,19 @@ export function openFile(key: string, path: string, options: OpenOptions = {}): 
       index === at
         ? {
             ...tab,
+            ...(options.fragment
+              ? { fragment: options.fragment, previewMode: 'preview' as const }
+              : {}),
+            ...(line !== null ? { previewMode: 'source' as const } : {}),
             pinned: tab.pinned || pin,
             line: line ?? tab.line,
-            jump: line === null ? tab.jump : tab.jump + 1,
+            jump: line === null && !options.fragment ? tab.jump : tab.jump + 1,
           }
         : tab,
     )
   } else {
     const fresh: OpenFile = {
+      ...(options.fragment ? { fragment: options.fragment } : {}),
       path,
       pinned: pin,
       line,
@@ -240,6 +256,7 @@ export function usePickedRoot(
 // ---------- 别处要“在文件面板里打开这个文件” ----------
 
 export interface FileTarget {
+  fragment?: string
   deviceId: string
   workspaceId: string | null
   /** 文件在哪个根下面 */
@@ -254,6 +271,7 @@ export function openInFiles(target: FileTarget): void {
   showSideTab(FILES_TAB)
   pickRoot(target.deviceId, target.workspaceId, target.root)
   openFile(treeKey(target.deviceId, target.root), target.path, {
+    ...(target.fragment ? { fragment: target.fragment } : {}),
     line: target.line ?? null,
     alt: target.alt ?? null,
     reveal: true,

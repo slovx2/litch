@@ -350,7 +350,8 @@ test('SESSION-TOOLS-004：设置里关掉会话编排：设备信息不列 sessi
       prompt: 'y',
       wakeParent: true,
     })
-    assert.equal(refused.code, -32601)
+    assert.equal(refused.code, -32602)
+    assert.match(refused.message, /设置里关掉了会话编排/)
     const disabled = await env.pi.callTool(threadId, SESSIONS, 'list', {})
     assert.equal(failureOf(disabled?.answer), 'disabled')
     env.claude.end(childId, 'completed', '关着的时候做完的')

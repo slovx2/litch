@@ -124,6 +124,7 @@ function summary(
     status: statusWord(tree, thread),
     updated_at: Number(thread.updatedAt) || 0,
     parent_thread_id: lineage?.parentThreadId ?? null,
+    wake_parent: lineage?.wakeParent ?? null,
     mine: tree.store.descends(id, caller),
   }
 }
@@ -258,6 +259,13 @@ interface Spec {
   worktree: boolean | undefined
 }
 
+function wakeParent(args: Record<string, unknown>): boolean {
+  if (args.wake_parent === undefined) return true
+  if (typeof args.wake_parent !== 'boolean')
+    throw new Refused('invalid', 'wake_parent must be true or false.')
+  return args.wake_parent
+}
+
 /** 子会话起在哪：harness、模型、强度、目录、fresh 还是 fork。harness 要在这台设备上，fork 只能同 harness */
 function targetOf(
   args: Record<string, unknown>,
@@ -335,6 +343,7 @@ function proposeOne(
   spec: Spec,
   wider: string | null,
   fallback: boolean,
+  wake = true,
 ): SessionProposal {
   const title = spec.title.trim().slice(0, 120)
   gate(tree, call, title)
@@ -350,8 +359,7 @@ function proposeOne(
     kind: spec.kind,
     worktree: spec.worktree ?? null,
     worktreeDefault: fallback,
-    // 子会话停下后唤不唤醒由 Litch 定，不交给模型：模型派的、提的一律唤醒（用户从卡片开始时可以改）
-    wakeParent: true,
+    wakeParent: wake,
     turnId: call.turnId || null,
     callId: call.callId || null,
     ...(wider ? { widerSandbox: wider } : {}),
@@ -371,6 +379,7 @@ async function start(
   signal: AbortSignal,
 ): Promise<SessionsStartResult> {
   const initiation = string(args, 'initiation') ?? 'propose'
+  const wake = wakeParent(args)
   const cards = tree.host.taskCards(call.harness)
   if (initiation === 'offer') return cards ? offer(tree, args, call, signal) : offerOff(args, call)
   if (initiation !== 'user_asked' && initiation !== 'propose')
@@ -378,11 +387,10 @@ async function start(
   const spec = await checked(tree, call, specOf(args, call, tree))
   // 目标 harness 收不到父会话那么严（比如没有沙箱的 Pi）：模型派的一律变成提案，由用户看过再点
   const wider = await widerFor(tree, call, spec)
-  // 只有用户亲手发起的这个回合里、模型说是用户要的，才直接起；别的一律变成提案
-  const userTurn =
-    tree.isUserTurn(call.harness, call.turnId) ||
-    Boolean(tree.managers?.store.forThread(call.threadId))
-  if (initiation === 'user_asked' && userTurn && wider === null) {
+  // 用户已经要求或批准的派出计划可以在任意后续回合执行；沙箱放宽仍需确认。
+  if (initiation === 'user_asked' && wider === null) {
+    if (!call.turnId?.trim())
+      throw new Refused('invalid', 'Direct starts require a current turn ID.')
     const child = await startChild(
       tree,
       call.threadId,
@@ -395,22 +403,21 @@ async function start(
         title: spec.title,
         prompt: spec.prompt,
         background: spec.background,
-        wakeParent: true,
+        wakeParent: wake,
         worktree: spec.worktree ?? null,
       },
       'model',
+      call.turnId,
     )
     return {
       thread_id: child.threadId,
-      note: `Started sub-session ${child.threadId} on ${child.harness}${worktreeNote(child.branch)}. It runs on its own; you will be woken with its result as a <litch-session-event> message. Do not poll it.`,
+      note: `Started sub-session ${child.threadId} on ${child.harness}${worktreeNote(child.branch)}. It runs on its own; ${wake ? 'eligible results can wake you as a <litch-session-event> message' : 'results still arrive, but do not wake you automatically'}. Use set_wake to change this. Do not poll it.`,
     }
   }
   const why =
     initiation !== 'user_asked'
       ? ''
-      : !userTurn
-        ? 'This turn was not started by the user typing a message, so the request became a proposal. '
-        : `${spec.harness ?? call.harness} cannot be sandboxed as tightly as this session (it would run with ${wider}), so the request became a proposal for the user to approve. `
+      : `${spec.harness ?? call.harness} cannot be sandboxed as tightly as this session (it would run with ${wider}), so the request became a proposal for the user to approve. `
   // 任务卡关着：不落卡。用户要的、只是降成了提案的，让用户自己从会话菜单开
   if (!cards)
     throw new Refused(
@@ -423,6 +430,7 @@ async function start(
     spec,
     wider,
     await worktreeDefault(tree, call.threadId, spec.cwd ?? null),
+    wake,
   )
   return {
     proposal_id: proposal.id,
@@ -471,7 +479,7 @@ async function offer(
     // offer 卡上的工作树开关由用户定（选新会话时带回来），模型给的不认
     worktree: null,
     worktreeDefault: fallback,
-    wakeParent: true,
+    wakeParent: wakeParent(args),
     turnId: call.turnId || null,
     callId: call.callId || null,
     offer: true,
@@ -794,7 +802,7 @@ async function acceptOffer(
   )
   return {
     thread_id: child.threadId,
-    note: `Started sub-session ${child.threadId} on ${child.harness}${worktreeNote(child.branch)} for "${spec.title.trim()}". It runs on its own; you will be woken with its result as a <litch-session-event> message. Do not do that work here, and do not poll it.`,
+    note: `Started sub-session ${child.threadId} on ${child.harness}${worktreeNote(child.branch)} for "${spec.title.trim()}". It runs on its own; ${proposal.wakeParent ? 'eligible results can wake you as a <litch-session-event> message' : 'results still arrive, but do not wake you automatically'}. Do not do that work here, and do not poll it.`,
   }
 }
 
@@ -1168,6 +1176,23 @@ export function sessionToolsHandler(
           return ok(await list(tree, args, call))
         case SESSION_TOOL.read:
           return ok(await read(tree, args, call))
+        case SESSION_TOOL.setWake: {
+          const threadId = string(args, 'thread_id', true)
+          if (tree.store.parentOf(threadId)?.parentThreadId !== call.threadId)
+            return {
+              ...ok({
+                error: {
+                  code: 'forbidden',
+                  message: 'Only your direct sub-sessions may be changed.',
+                },
+              }),
+              success: false,
+            }
+          if (typeof args.wake !== 'boolean')
+            throw new Refused('invalid', 'wake must be true or false.')
+          tree.setWakeParent(threadId, args.wake)
+          return ok({ thread_id: threadId, wake_parent: args.wake })
+        }
         case SESSION_TOOL.respond: {
           const threadId = string(args, 'thread_id', true)
           if (

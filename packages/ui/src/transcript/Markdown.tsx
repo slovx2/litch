@@ -4,7 +4,7 @@
 // 解析结果直接变成 React 元素，不经过 HTML 字符串，所以回答里写的任何 HTML 都只会被当成文字显示。
 import { repairStreamingMarkdown } from '@litch/core'
 import type { Token, Tokens } from 'marked'
-import { memo, type ReactNode, useRef } from 'react'
+import { memo, type ReactNode, useContext, useRef } from 'react'
 import { CodeBlock } from './CodeBlock.tsx'
 import { CiteText, HAS_CITE } from './comments/Cite.tsx'
 import { ITEM_ATTR } from './comments/text-range.ts'
@@ -13,6 +13,7 @@ import { CodeSpan, Link, Prose } from './FileLinks.tsx'
 import { languageOf } from './highlight.tsx'
 import { MermaidBlock } from './Mermaid.tsx'
 import { lex } from './markdown-lex.ts'
+import { MarkdownPolicyContext } from './markdown-policy.ts'
 import { AnswerMentions, HAS_MENTION } from './SessionMentions.tsx'
 
 interface Parsed {
@@ -49,40 +50,69 @@ function inline(tokens: Token[] | undefined): ReactNode {
         return <del key={key}>{inline((token as Tokens.Del).tokens)}</del>
       case 'codespan':
         // 整段是工作区里的文件路径的能点开（FileLinks.tsx）
-        return <CodeSpan key={key} text={(token as Tokens.Codespan).text} />
+        return <PolicyCodeSpan key={key} text={(token as Tokens.Codespan).text} />
       case 'br':
         return <br key={key} />
       case 'link': {
         const link = token as Tokens.Link
         return (
-          <Link key={key} href={link.href}>
+          <PolicyLink key={key} href={link.href}>
             {inline(link.tokens)}
-          </Link>
+          </PolicyLink>
         )
       }
       case 'image': {
         // 不加载回答里引用的图片（内容安全策略也不允许），只给出它的说明和地址
         const image = token as Tokens.Image
-        return (
-          <ExternalLink key={key} href={image.href}>
-            {image.text || image.href}
-          </ExternalLink>
-        )
+        return <PolicyImage key={key} href={image.href} alt={image.text} />
       }
       case 'text': {
         const text = token as Tokens.Text
         if (text.tokens) return <span key={key}>{inline(text.tokens)}</span>
         // 可能是这一回合用户提到的会话（SessionMentions.tsx）：对得上的画成片，其余照下面的办
-        if (HAS_MENTION.test(text.text)) {
-          return <AnswerMentions key={key} text={text.text} plain={plainText} />
-        }
-        return plainText(text.text, key)
+        return <PolicyText key={key} text={text.text} />
       }
       default:
         // 转义字符、行内 HTML 和以后新出的类型：按原文显示
         return 'text' in token ? (token as { text: string }).text : token.raw
     }
   })
+}
+
+function PolicyText({ text }: { text: string }) {
+  const policy = useContext(MarkdownPolicyContext)
+  if (policy) return text
+  return HAS_MENTION.test(text) ? (
+    <AnswerMentions text={text} plain={plainText} />
+  ) : (
+    plainText(text, 0)
+  )
+}
+function PolicyCodeSpan({ text }: { text: string }) {
+  return useContext(MarkdownPolicyContext) ? <code>{text}</code> : <CodeSpan text={text} />
+}
+function PolicyLink({ href, children }: { href: string; children: ReactNode }) {
+  const policy = useContext(MarkdownPolicyContext)
+  return policy ? policy.link(href, children) : <Link href={href}>{children}</Link>
+}
+function PolicyImage({ href, alt }: { href: string; alt: string }) {
+  const policy = useContext(MarkdownPolicyContext)
+  return policy ? policy.image(href, alt) : <ExternalLink href={href}>{alt || href}</ExternalLink>
+}
+function PolicyCode({
+  code,
+  anchor,
+  open,
+}: {
+  code: Tokens.Code
+  anchor?: string | undefined
+  open: boolean
+}) {
+  const policy = useContext(MarkdownPolicyContext)
+  if (policy) return policy.code(code.lang ?? '', code.text)
+  if (languageOf(code.lang ?? '') === 'mermaid')
+    return <MermaidBlock anchor={anchor} text={code.text} open={open} />
+  return <CodeBlock anchor={anchor} lang={code.lang ?? ''} text={code.text} />
 }
 
 /** 回答里一段没有格式的字 */
@@ -140,9 +170,7 @@ function block(token: Token, key: number, anchor?: string, open = false): ReactN
     }
     case 'code': {
       const code = token as Tokens.Code
-      if (languageOf(code.lang ?? '') === 'mermaid')
-        return <MermaidBlock key={key} anchor={anchor} text={code.text} open={open} />
-      return <CodeBlock key={key} anchor={anchor} lang={code.lang ?? ''} text={code.text} />
+      return <PolicyCode key={key} code={code} anchor={anchor} open={open} />
     }
     case 'list': {
       const list = token as Tokens.List

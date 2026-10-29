@@ -153,6 +153,11 @@ const MIGRATIONS: readonly string[] = [
    CREATE INDEX delegated_by_thread ON delegated_responses(thread_id);`,
   `CREATE TABLE ignored_questions(thread_id TEXT NOT NULL, source_id TEXT NOT NULL,
      PRIMARY KEY(thread_id, source_id)) WITHOUT ROWID;`,
+  // 直接启动先预占再发请求；成功保留、明确失败退还。重启不会重置同一回合的额度。
+  `CREATE TABLE direct_starts(thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, count INTEGER NOT NULL,
+     PRIMARY KEY(thread_id, turn_id)) WITHOUT ROWID;`,
+  // 会话已经建出但首回合尚未确认开始，重启后仍占启动名额，直到开始、归档或删除。
+  `CREATE TABLE child_starts(thread_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL) WITHOUT ROWID;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -175,7 +180,7 @@ export interface QueuedNote extends SessionEventNote {
   seq: number
   /** 进队列的时间（秒） */
   at: number
-  /** 派这个子会话时说了要唤醒父会话 */
+  /** 回报本身具备唤醒资格；检查时还要结合子会话当前的 wakeParent */
   wake: boolean
 }
 
@@ -267,6 +272,42 @@ export class SessionStore {
   private readonly lineage = new Map<string, LineageRow>()
   private readonly statements: Record<string, StatementSync>
 
+  reserveDirectStart(threadId: string, turnId: string, limit: number): boolean {
+    return (
+      this.db
+        .prepare(`INSERT INTO direct_starts(thread_id, turn_id, count) VALUES(?, ?, 1)
+      ON CONFLICT(thread_id, turn_id) DO UPDATE SET count=count+1 WHERE count < ?`)
+        .run(threadId, turnId, limit).changes === 1
+    )
+  }
+
+  releaseDirectStart(threadId: string, turnId: string): void {
+    this.db
+      .prepare('UPDATE direct_starts SET count=max(0, count-1) WHERE thread_id=? AND turn_id=?')
+      .run(threadId, turnId)
+  }
+
+  dropDirectStarts(threadId: string): void {
+    this.db.prepare('DELETE FROM direct_starts WHERE thread_id=?').run(threadId)
+  }
+
+  holdChildStart(threadId: string, parentId: string): void {
+    this.db
+      .prepare('INSERT OR REPLACE INTO child_starts(thread_id, parent_id) VALUES(?, ?)')
+      .run(threadId, parentId)
+  }
+
+  dropChildStart(threadId: string): void {
+    this.db.prepare('DELETE FROM child_starts WHERE thread_id=?').run(threadId)
+  }
+
+  childStarts(): { threadId: string; parentId: string }[] {
+    return this.db
+      .prepare('SELECT thread_id, parent_id FROM child_starts')
+      .all()
+      .map((row) => ({ threadId: text(row.thread_id), parentId: text(row.parent_id) }))
+  }
+
   constructor(db: DatabaseSync) {
     this.db = db
     for (const row of db.prepare('SELECT * FROM lineage').all())
@@ -278,6 +319,7 @@ export class SessionStore {
          VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
       detach: prepare('UPDATE lineage SET detached_at=? WHERE thread_id=?'),
+      setWakeParent: prepare('UPDATE lineage SET wake_parent=? WHERE thread_id=?'),
       reported: prepare('UPDATE lineage SET reported_turn=? WHERE thread_id=?'),
       addProposal: prepare(
         `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at, wider_sandbox, turn_id, call_id, offer, background, effort, worktree, worktree_default)
@@ -449,6 +491,15 @@ export class SessionStore {
     // 派子会话就是父会话给它发了第一条消息：之后两边一直可以互相发
     this.addContact(row.parentThreadId, row.threadId)
     return full
+  }
+
+  /** 更新已有直接父子关系的唤醒开关。 */
+  setWakeParent(threadId: string, wake: boolean): LineageRow | null {
+    const row = this.parentOf(threadId)
+    if (!row) return null
+    this.run('setWakeParent', wake ? 1 : 0, threadId)
+    row.wakeParent = wake
+    return row
   }
 
   /** 脱离：返回原来的那条（没有、已经脱离过是 null） */

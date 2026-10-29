@@ -7,8 +7,18 @@
 //
 // Electron 自己的许可（LICENSE、LICENSES.chromium.html）由打包器放在应用里，不在这里管；
 // 自带的适配器那一份在 Contents/Resources/adapter 下面，带着它自己的 node_modules 和里面的许可文件。
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+
+import { createHash } from 'node:crypto'
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url))
@@ -19,24 +29,47 @@ const ROOTS = [here('../../../packages/ui'), here('..')]
 /** 许可文件的名字：LICENSE、LICENCE、COPYING、NOTICE，带不带后缀都算 */
 const LICENSE_FILE = /^(licen[sc]e|copying|notice)(\.|-|$)/i
 
+// Office 使用 ExcelJS 的预构建浏览器包；其内嵌依赖与 Node 入口的 dependencies 不同。
+// 逐包声明依据发布包 source map 收齐并固化；换版本或更换产物必须重新审计。
+function browserNotice(dir, manifest) {
+  if (manifest.name !== 'exceljs') return null
+  const hash = createHash('sha256')
+    .update(readFileSync(join(dir, 'dist/exceljs.min.js')))
+    .digest('hex')
+  if (
+    manifest.version !== '4.4.0' ||
+    hash !== '7e49da68588e250dbb8bba190d2caa8ab3787cc0284bda1d8b2f805c4df742c9'
+  )
+    throw new Error('ExcelJS 浏览器产物已改变，必须重新收集其内嵌依赖许可')
+  return here('../licenses/exceljs-4.4.0-browser.txt')
+}
+
 /** 顺着 dependencies 走到底。返回 名字@版本 → 包的目录 */
-function closure() {
+function dependencyDirectory(from, name) {
+  for (let current = realpathSync(from); ; current = dirname(current)) {
+    const candidate = join(current, 'node_modules', name)
+    if (existsSync(join(candidate, 'package.json'))) return realpathSync(candidate)
+    if (dirname(current) === current) break
+  }
+  throw new Error(`${from} 的依赖 ${name} 没有装，先装依赖再打包`)
+}
+
+function closure(roots) {
   const found = new Map()
-  for (const root of ROOTS) {
-    const modules = join(root, 'node_modules')
-    const walk = (name) => {
-      const dir = join(modules, name)
-      if (!existsSync(join(dir, 'package.json'))) {
-        throw new Error(`${root} 的依赖 ${name} 没有装（${dir}），先装依赖再打包`)
-      }
+  for (const root of roots) {
+    const walk = (from, name) => {
+      // 每个包从自身位置找依赖，保留嵌套安装的不同版本；不能只查项目顶层。
+      const dir = dependencyDirectory(from, name)
       const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
       const key = `${manifest.name}@${manifest.version}`
       if (found.has(key)) return
-      found.set(key, { dir, manifest })
-      for (const dependency of Object.keys(manifest.dependencies ?? {})) walk(dependency)
+      const bundled = browserNotice(dir, manifest)
+      found.set(key, { dir, manifest, bundled })
+      if (bundled) return
+      for (const dependency of Object.keys(manifest.dependencies ?? {})) walk(dir, dependency)
     }
     const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-    for (const name of Object.keys(manifest.dependencies ?? {})) walk(name)
+    for (const name of Object.keys(manifest.dependencies ?? {})) walk(root, name)
   }
   return found
 }
@@ -46,17 +79,31 @@ function closure() {
  * 外加两份清单：给人看的 INDEX.txt，给应用读的 index.json（包名、版本、声明的许可、文件名）。
  * 有包找不到许可文件就报错，不出一个缺着的包。返回收了哪些包。
  */
-export function collectLicenses(out) {
+export function collectLicenses(out, roots = ROOTS) {
   rmSync(out, { recursive: true, force: true })
   mkdirSync(out, { recursive: true })
-  const packages = [...closure()].sort(([a], [b]) => a.localeCompare(b))
+  const packages = [...closure(roots)].sort(([a], [b]) => a.localeCompare(b))
   const index = []
   /** 给应用自己读的清单（“关于”里的许可一览，见 src/about.mts） */
   const listed = []
   const missing = []
-  for (const [key, { dir, manifest }] of packages) {
+  for (const [key, { dir, manifest, bundled }] of packages) {
     const files = readdirSync(dir).filter((file) => LICENSE_FILE.test(file))
-    if (files.length === 0) {
+    // PDF 的字体、CMap、WASM 分别附带许可，根目录的 Apache 许可不能替代它们。
+    if (manifest.name === 'pdfjs-dist') {
+      for (const folder of ['cmaps', 'standard_fonts', 'wasm']) {
+        for (const file of readdirSync(join(dir, folder))) {
+          if (/^(LICENSE|NOTICE)([_.-]|$)/i.test(file) && !file.includes('QCMS'))
+            files.push(join(folder, file))
+        }
+      }
+    }
+    // 这两份 npm 发布包漏了独立 LICENSE：保留固定版本的上游/README 原文。
+    const supplemental = {
+      'saxes@5.0.1': here('../licenses/saxes-5.0.1.txt'),
+      'isarray@1.0.0': here('../licenses/isarray-1.0.0.txt'),
+    }[key]
+    if (files.length === 0 && !supplemental) {
       missing.push(key)
       continue
     }
@@ -66,6 +113,8 @@ export function collectLicenses(out) {
       .filter(Boolean)
       .join('\n')
     const texts = files.map((file) => readFileSync(join(dir, file), 'utf8').trimEnd())
+    for (const file of [supplemental, bundled])
+      if (file) texts.push(readFileSync(file, 'utf8').trimEnd())
     // 包名里的斜杠（@scope/name）换掉，免得变成子目录
     const file = `${key.replaceAll('/', '__')}.txt`
     writeFileSync(join(out, file), `${head}\n\n${texts.join('\n\n')}\n`)

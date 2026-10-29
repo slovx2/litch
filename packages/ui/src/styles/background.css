@@ -5,8 +5,8 @@
 /* 呼吸点：实心点加一圈慢慢扩散的环 */
 .pulse {
   position: relative;
-  width: 7px;
-  height: 7px;
+  width: calc(7px * var(--fs));
+  height: calc(7px * var(--fs));
   flex: none;
   border-radius: 1px;
   background: var(--accent);
@@ -43,7 +43,7 @@
   border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line-2));
   border-radius: var(--r2);
   background: color-mix(in srgb, var(--accent) 6%, var(--panel));
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink);
   cursor: pointer;
   animation:
@@ -255,8 +255,8 @@
   color: var(--accent);
 }
 .bgmark .pulse {
-  width: 5px;
-  height: 5px;
+  width: calc(5px * var(--fs));
+  height: calc(5px * var(--fs));
 }
 .bgmark .pulse::after {
   inset: -2px;
@@ -272,7 +272,7 @@
   max-width: min(82%, 760px);
   min-width: 0;
   padding: 2px 4px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-3);
 }
 .turn-origin .ic {
@@ -289,8 +289,8 @@
 
 /* 侧栏：只有后台任务在跑。空心记号慢呼吸，不闪 */
 .st.bg::before {
-  width: 7px;
-  height: 7px;
+  width: calc(7px * var(--fs));
+  height: calc(7px * var(--fs));
   box-sizing: border-box;
   border: 1.5px solid var(--accent);
   animation: bg-breath 2.4s ease-in-out infinite;
@@ -322,14 +322,14 @@
   width: auto;
   height: auto;
   border: 0;
-  font: 700 12px / 14px var(--mono);
+  font: 700 calc(12px * var(--fs)) / round(calc(14px * var(--fs)), 1px) var(--mono);
   color: var(--accent);
 }
 [data-skin="human"] .pulse {
   border-radius: 50%;
 }
 [data-skin="human"] .st.bg::before {
-  width: 8px;
-  height: 8px;
+  width: calc(8px * var(--fs));
+  height: calc(8px * var(--fs));
   border-radius: 50%;
 }

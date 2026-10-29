@@ -3,6 +3,7 @@
 // ACP 的更新里没有回合：一次 session/prompt 从发出到应答是一个回合，由适配器建（begin）、按应答的
 // stopReason 收尾（finish）。回放时没有 prompt，用户的话（user_message_chunk）开始一个新回合。
 
+import { randomUUID } from 'node:crypto'
 import type { LitchTurnOrigin } from '../../protocol/src/background-tasks.mjs'
 import { isShellEventText } from '../../shared/src/background-shell.mjs'
 import { canonical, type DynamicToolSpec } from './client-tools.mjs'
@@ -156,10 +157,10 @@ export class Projection {
   }
 
   /** 开一个回合。实时的由适配器在发 prompt 之前开；回放的由用户的话开。origin：不是用户发起的，谁开的 */
-  begin(notify: Notify, time = Date.now(), origin?: LitchTurnOrigin): AcpTurn {
+  begin(notify: Notify, time = Date.now(), origin?: LitchTurnOrigin, id?: string): AcpTurn {
     if (this.active) this.finish({ interrupted: true }, notify, time)
     const turn: AcpTurn = {
-      id: `turn:${this.turns.length + 1}`,
+      id: id ?? `turn:${this.turns.length + 1}`,
       items: [],
       status: 'inProgress',
       error: null,
@@ -175,6 +176,11 @@ export class Projection {
     notify('turn/started', { turn })
     notify('thread/status/changed', { status: this.status() })
     return turn
+  }
+
+  /** 实时回合不能按历史条数编号：进行中的回合不进快照，重启后会重用编号。回放仍保留确定的编号。 */
+  beginLive(notify: Notify, time = Date.now(), origin?: LitchTurnOrigin): AcpTurn {
+    return this.begin(notify, time, origin, randomUUID())
   }
 
   /** 回合里用户的那句话：content 是客户端发来的样子，preview 取其中的字 */

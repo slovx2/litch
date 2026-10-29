@@ -1,7 +1,8 @@
 import { recoverMessage } from '../../protocol/src/system-messages.mjs'
+import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { TurnRecoveryObserver } from './turn-recovery.mjs'
-import { DeviceError, isObject } from './wire.mjs'
+import { isObject } from './wire.mjs'
 
 /** 显式点击才执行。先确认旧回合中断，超时、换回合或仍在等工具时绝不发新回合。 */
 export class RecoveryActions {
@@ -22,11 +23,11 @@ export class RecoveryActions {
       !params.text.trim() ||
       params.text.length > 4000
     )
-      throw new DeviceError('unsupported', 'Invalid recovery request')
+      throw new ProtocolError(-32602, 'Invalid recovery request')
     const { harness, threadId, turnId, text } = params
     const key = JSON.stringify([harness, threadId])
     if (this.running.has(key) || !this.observer.eligible(harness, threadId, turnId))
-      throw new DeviceError('unsupported', 'The turn changed or is no longer waiting for recovery')
+      throw new ProtocolError(-32602, 'The turn changed or is no longer waiting for recovery')
     this.running.add(key)
     let link: EngineLink | null = null
     try {
@@ -41,7 +42,7 @@ export class RecoveryActions {
         last.status !== 'inProgress' ||
         !this.observer.eligible(harness, threadId, turnId)
       )
-        throw new DeviceError('unsupported', 'The turn changed; recovery was cancelled')
+        throw new ProtocolError(-32602, 'The turn changed; recovery was cancelled')
       const flags = before?.thread?.status?.activeFlags
       const tools =
         Array.isArray(last.items) &&
@@ -55,10 +56,10 @@ export class RecoveryActions {
         (Array.isArray(flags) &&
           flags.some((flag) => flag === 'waitingOnApproval' || flag === 'waitingOnUserInput'))
       )
-        throw new DeviceError('unsupported', 'The turn is waiting for input or running a tool')
+        throw new ProtocolError(-32602, 'The turn is waiting for input or running a tool')
       const deadline = Date.now() + 10000
       if (!this.observer.eligible(harness, threadId, turnId))
-        throw new DeviceError('unsupported', 'The turn changed; recovery was cancelled')
+        throw new ProtocolError(-32602, 'The turn changed; recovery was cancelled')
       await link.request('turn/interrupt', { threadId, turnId }, { timeoutMs: 10000 })
       let confirmed = false
       let interval = 300
@@ -77,20 +78,20 @@ export class RecoveryActions {
         const state = await read(true, remaining())
         const current = state?.thread?.turns?.at(-1)
         if (current?.id !== turnId)
-          throw new DeviceError('unsupported', 'A different turn has already started')
+          throw new ProtocolError(-32602, 'A different turn has already started')
         if (current.status === 'interrupted') {
           confirmed = true
           break
         }
         if (current.status !== 'inProgress')
-          throw new DeviceError('unsupported', 'The original turn already finished')
+          throw new ProtocolError(-32602, 'The original turn already finished')
         await new Promise((resolve) =>
           setTimeout(resolve, Math.min(interval, Math.max(0, deadline - Date.now()))),
         )
         interval = 500
       }
       if (!confirmed)
-        throw new DeviceError('unsupported', 'Interruption has not completed; no new turn was sent')
+        throw new ProtocolError(-32602, 'Interruption has not completed; no new turn was sent')
       await link.request(
         'turn/start',
         { threadId, input: [{ type: 'text', text: recoverMessage(text) }] },

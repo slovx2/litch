@@ -225,7 +225,7 @@ export function judgeView(view: ViewSeen, lines: FileLines): string[] {
   const kinds = view.holds.map((hold) => hold.split('｜').slice(0, 2).join('｜'))
   must(
     kinds.join(' ') ===
-      'fixtures/big.log｜tooLarge fixtures/blob.dat｜binary docs/images/shot.png｜binary fixtures/gone.txt｜missing',
+      'fixtures/big.log｜tooLarge fixtures/blob.dat｜binary docs/images/shot.png｜invalidImage fixtures/gone.txt｜missing',
     `显示不了的文件占位不对：${view.holds.join(' ／ ')}`,
   )
   must(view.holds[2]?.includes('｜图片｜') === true, `图片的占位没有说是图片：${view.holds[2]}`)

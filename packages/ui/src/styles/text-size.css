@@ -1,0 +1,62 @@
+/* 倍数在区域边界选择，计算放在实际使用处；禁止在根元素预算依赖 --fs 的字号令牌。 */
+.sb-scroll {
+  --fs: var(--fs-tree);
+  --row-h: round(calc(var(--row-base) * var(--fs)), 1px);
+  font-size: calc(13px * var(--fs));
+}
+.tr,
+.dock,
+.tr-tail,
+.new-compose,
+.cmp,
+.tree-card,
+.prop-card,
+.agent-row,
+.sev,
+.ask,
+.req-frame,
+.pending-asks,
+.child-reqs {
+  --fs: var(--fs-chat);
+}
+.tr,
+.dock,
+.tr-tail,
+.new-compose {
+  font-size: calc(13px * var(--fs));
+}
+
+/* 弹层即使挂在阅读区里也属于外壳；其中复用的真正对话组件会重新选择 chat 倍数。 */
+.pick-pop,
+.info-card,
+.ctx-menu,
+.tip,
+.toast,
+dialog,
+.modal,
+.cmt-pop,
+.cmt-editor,
+.peek,
+.sug {
+  --fs: 1;
+}
+/* 没有独立字号的外壳容器不能继承阅读区已算好的 font-size。 */
+.pick-pop,
+.ctx-menu,
+.tip,
+dialog,
+.modal,
+.cmt-editor,
+.sug {
+  font-size: calc(13px * var(--fs));
+}
+
+.cmp-text {
+  min-height: round(calc(24px * var(--fs)), 1px);
+}
+.cmt-badge,
+.ucmt-n,
+.cmt-chip-n {
+  min-width: calc(16px * var(--fs));
+  height: calc(16px * var(--fs));
+}

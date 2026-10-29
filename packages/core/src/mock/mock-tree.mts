@@ -1333,6 +1333,14 @@ export function createMockTree(host: MockTreeHost): MockTree {
         const { deviceId, sessionId, proposalId, overrides } =
           params as Commands['session.proposal.accept']['params']
         const view = host.view(deviceId, sessionId)
+        const settled = view.proposals.find((entry) => entry.id === proposalId)
+        if (name === 'session.proposal.dismiss' && settled?.status === 'dismissed') return {}
+        if (
+          name === 'session.proposal.accept' &&
+          settled?.status === 'started' &&
+          settled.startedId
+        )
+          return { sessionId: settled.startedId }
         const proposal = waiting(view, proposalId)
         if (!proposal) throw new ChannelError('notFound', '这个提案已经不在了')
         if (name === 'session.proposal.dismiss') {

@@ -213,6 +213,7 @@ export class OpencodeServer {
       const params =
         message.params && typeof message.params === 'object' ? (message.params as any) : {}
       if (message.method === 'initialize') {
+        this.files.declare(peer, params)
         this.declared.set(peer.id, declaredExtensions(params))
         this.clientTools.declare(peer, params)
         applyNotificationOptOut(peer, params)

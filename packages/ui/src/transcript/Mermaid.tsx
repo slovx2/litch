@@ -4,6 +4,7 @@ import { Close } from '../app/icons.tsx'
 import { drawMermaid, firstLine, useLook } from './mermaid.ts'
 
 interface MermaidBlockProps {
+  bounded?: boolean
   text: string
   /** 代码块还没写完（流式输出中、围栏还没闭合）：先显示源码，写完再画 */
   open: boolean
@@ -18,9 +19,14 @@ type Drawn =
  * mermaid 代码块：画成图。块头上可以在“图 / 源码”之间切换、复制源码、放大查看。
  * 还没写完、画图库还在装载、画不出来（语法错）的时候显示源码；画不出来时块头写出错误的第一行。
  */
-export const MermaidBlock = memo(function MermaidBlock({ text, open, anchor }: MermaidBlockProps) {
+export const MermaidBlock = memo(function MermaidBlock({
+  text,
+  open,
+  anchor,
+  bounded = false,
+}: MermaidBlockProps) {
   const t = useT()
-  const look = useLook()
+  const look = useLook(bounded)
   const [source, setSource] = useState(false)
   const [zoomed, setZoomed] = useState(false)
   const [drawn, setDrawn] = useState<Drawn | null>(null)
@@ -31,14 +37,14 @@ export const MermaidBlock = memo(function MermaidBlock({ text, open, anchor }: M
   useEffect(() => {
     if (open) return
     let alive = true
-    drawMermaid(text, look).then(
+    drawMermaid(text, look, bounded).then(
       (svg) => alive && setDrawn({ look, text, svg }),
       (error: unknown) => alive && setDrawn({ look, text, error: firstLine(error) }),
     )
     return () => {
       alive = false
     }
-  }, [text, look, open])
+  }, [text, look, open, bounded])
 
   // 换了外观、正在重画时先留着上一张，免得块的高度来回跳
   const current = !open && drawn?.text === text ? drawn : null
@@ -89,7 +95,7 @@ export const MermaidBlock = memo(function MermaidBlock({ text, open, anchor }: M
         </span>
       </div>
       {figure ? (
-        <Figure svg={svg} />
+        <Figure svg={svg} scale={Number(current?.look.split(':')[1])} />
       ) : (
         <pre>
           <code>{text}</code>
@@ -104,11 +110,20 @@ export const MermaidBlock = memo(function MermaidBlock({ text, open, anchor }: M
  * 画好的 SVG 放进页面。它是画图库在严格模式下输出、自己净化过的；
  * 页面的内容安全策略也不许内联脚本，图里就算带了也不会执行。
  */
-function Figure({ svg }: { svg: string }) {
+function Figure({ svg, scale }: { svg: string; scale: number }) {
   const host = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => {
-    if (host.current) host.current.innerHTML = svg
-  }, [svg])
+    if (host.current) {
+      host.current.innerHTML = svg
+      const figure = host.current.querySelector('svg')
+      // 默认档沿用宽图适配容器；只有放大字号时保留重画后的尺寸，避免适配宽度抵消放大。
+      if (scale > 1 && figure?.viewBox.baseVal.width) {
+        figure.style.width = `${figure.viewBox.baseVal.width}px`
+        figure.style.maxWidth = 'none'
+        figure.style.flex = 'none'
+      }
+    }
+  }, [svg, scale])
   return <div ref={host} className="mmd-fig" />
 }
 

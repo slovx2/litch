@@ -106,6 +106,7 @@ import type {
   PairPhone,
   PairStatus,
 } from '../model-pairing.mjs'
+import type { FilePreview, PreviewKind } from '../model-preview.mjs'
 import type { ServiceRestartSession } from '../model-service.mjs'
 import type {
   TaskDraft,
@@ -921,6 +922,11 @@ export interface Commands {
   'files.read': {
     params: { deviceId: string; root: string; path: string }
     result: FileContent
+  }
+  /** 只对已声明 filePreview 的服务发受限读取；不退回整文件或 shell 读取。 */
+  'files.preview': {
+    params: { deviceId: string; root: string; path: string; format: PreviewKind }
+    result: FilePreview
   }
   /**
    * 在根下面模糊找文件，最多几十条。同一个根上后来的一次会让前一次以 cancelled 结束；

@@ -55,6 +55,11 @@ sidebar.
 子会话在桌面侧栏、手机列表、任务卡和会话详情中显示 harness 标识。
 用户在自动唤醒的回合中插话成功后，该回合也按用户回合处理；后来的自动消息不会覆盖这个来源。
 
+用户已经要求派出子会话，或批准的计划已经包含子会话时，模型可在后续唤醒、提醒、定时任务等任意回合通过 `start(initiation: "user_asked")` 直接启动；任务卡关闭也可用。仅批准目标不等于批准拆会话，新的限制或撤销优先。每个父会话每回合直接启动最多 16 个，同时运行或启动的直接子会话最多 8 个；整棵树同时运行或启动最多 24 个会话（含根），嵌套最多 4 层（根为第 0 层）。并发创建预占名额，只有会话尚未创建时失败才退还；已创建但首回合未确认启动的仍计入额度，并占运行名额，直到开始、归档或删除。重连或重启不重置同回合额度，归档成功时清理该会话的直接启动记录。进程在启动结果未确认时退出，已预占的回合额度保守保留。
+直接启动不占提案卡名额；提案、offer 与收尾建议合计每回合最多 4 张，撤回仍计数，提醒回合与来源回合合计。目标 harness 需要放宽沙箱时仍须用户确认。50 次自动唤醒上限不变。
+
+主会话可用 `litch_sessions.set_wake(thread_id, wake)` 关闭或重新打开直接子会话的自动唤醒；`start` 的 `wake_parent` 默认开启。主会话也可以覆盖用户此前在界面上选择的唤醒设置。关闭后回报仍入队、显示，也仍可插入正在运行的主会话；重新开启会检查已有回报，但不会绕过用户停止、失败、定时回合和唤醒次数等限制。`list`、`read` 会返回当前开关，桌面会话详情顶部的来历一行写“完成后不唤醒父会话”，手机会话行显示“不唤醒”。
+
 ### 子会话待答与代答
 
 父会话输入框上方显示直接子会话的阻塞请求。展开某条会订阅原子会话，使用同一张请求卡作答；仍可打开子会话处理。密码、登录、手机签名或仅原执行设备能处理的请求遵循原有限制。
@@ -147,6 +152,35 @@ explain it:
 - **Side panel**: Files (tree, search, read-only viewer, add a file to the conversation), Diff (all /
   staged / unstaged, stage, unstage, discard, comment on lines; comments go with the next message),
   Browser, Suggested tasks, Background tasks, Goal, Side chat.
+- **文件预览（桌面）**：文件树、搜索结果和对话文件链接共用“文件”页。Markdown 默认渲染，可切源码；带行号的链接先显示源码。支持 PNG、JPEG、静态 GIF/WebP 和静态 SVG，图片可缩放；这些文件仍然只读。
+  Markdown 相对链接和图片以文件所在目录为基准，只允许项目根内资源；外链图片不自动下载，原始 HTML 只显示文字。动画、主动 SVG 内容、超出字节/像素预算的图片会显示原因。
+  文档正文和 Mermaid 图表保持固定字号，不跟随“对话文字”设置。
+  预览要求设备声明 `filePreview`；设备服务和自有单 harness 入口提供它。直连原生 Codex 没有这项能力时保留原来的源码/类型查看，不自动另用 shell 取文件。手机文件查看不变。
+  PDF 支持只读翻页、滚动、缩放和选择文字，上限 20 MiB / 200 页；只绘制可见页及相邻页。损坏、需要密码、超限或处理超时的文件显示原因；不执行 PDF 脚本，不打开表单、附件和外链，不提供打印、签名或编辑。字体、CMap 和解码资源随应用提供，PDF 不上传转换服务；未嵌入字体和特殊色彩配置可能与专业阅读器有差异。
+  页码未修改时移开焦点会保留当前滚动位置；只有更换页码才跳到对应页。
+  Markdown 渲染上限 512 KiB、源码 2 MiB、位图 8 MiB、SVG 1 MiB；Markdown 自动附图最多 16 张、累计 16 MiB，刷新重读文件。CSV/TSV 可预览数据表格：文件上限 2 MiB，显示前 10,000 行、100 列，字段均为字符串，不执行公式；TSV 只按制表符分列，引号原样显示；长字段截断显示，完整内容可切换源码查看。UTF-8 之外的编码需先转换。
+  静态 HTML 上限 1 MiB，在隔离框架内显示，脚本、表单、导航、外部 CSS/字体和网络资源禁用；仅加载最多 16 张项目根内图片，内联原始字节累计 16 MiB、像素累计 4,000 万；重复引用同一图片也逐次计入。保留部分静态布局样式，不保证网页完整效果；超深或超大 DOM 拒绝预览。
+  MP3、PCM WAV、H.264/AAC MP4、VP9/Opus WebM 短媒体按 16 MiB 整读，不自动播放，关闭即停止并释放。实际编码支持取决于系统；损坏或不支持的编码显示提示，不进行转码、远程流式读取或字幕加载。以上媒体样例已在 macOS Electron 验证，其他系统可能不同。
+  PDF 与 Office 由独立预览模块提供；手机文件查看仍不改变。
+- **Office previews (desktop)**: `.docx` is a read-only, approximate layout with paragraphs, tables,
+  images, headers and footers. External resources, embedded objects, altChunk HTML and embedded fonts
+  are not loaded. Macros and encrypted documents are unsupported. The preview cannot access the app.
+  `.xlsx` shows sheets and cell text in a virtual grid, including saved formula results; it never
+  recalculates formulas. A formula without a saved result is shown as text. Links are plain text.
+  Numbers and dates are right-aligned. Frozen panes saved in the file stay pinned (up to 10 rows
+  and 3 columns; anything beyond scrolls). Column widths are not reproduced.
+  Merged cells, dates, and common decimal/percentage formats are supported; charts, pivot tables,
+  printing layouts, and complex custom number formats are not reproduced. Long numeric strings
+  remain strings; numeric cells retain the precision saved by Excel.
+  Both formats are limited to 10 MiB compressed and 40 MiB expanded, with additional XML/image
+  complexity limits. XLSX accepts at most 100,000 cells in total, 100 sheets, 1,000 merge ranges,
+  and 8 MiB of displayed cell text; files beyond these safety limits are rejected with an explanation.
+  Within those limits, a sheet exceeding 10,000 rows or 200 columns is cropped to its first 10,000 rows
+  and 200 columns, with a notice above the grid. Cells outside that view still count toward the workbook's
+  100,000-cell safety budget. Named ranges,
+  validation rules and print settings are omitted before parsing. Closing,
+  switching or refreshing the file terminates its parser and releases its preview. `.doc`, `.xls`,
+  `.ppt` and `.pptx` remain unsupported; phone file viewing is unchanged.
 - **Side chat**: a temporary fork of the current session for asking something on the side. It starts
   with the session's context up to the last finished turn (if a turn is running it stops before it, and
   the main turn keeps going), lives in the side panel's Side chat tab, never shows in the sidebar, and
@@ -321,8 +355,10 @@ woken to continue.
   off a task. A fresh card the model raises always carries a background (the overall goal,
   decisions and constraints so far) next to the task; the sub-session gets it as its own section
   before the task. Expand the brief on the card to read it.
-  手机点开始、在这里做或不要后，对话中的卡片同步显示操作后的状态；设备服务直接向手机
-  推送状态，桌面端无需保持连接。
+  On the phone, Start, Do it here and Dismiss update the card directly; the desktop need not stay
+  connected. Repeating Dismiss succeeds without changing an already dismissed card. Repeating Start
+  returns the original child session instead of creating another one. If a different action has
+  already settled the card, the error explains its actual state.
 - **Where a sub-session works** (devices that support worktrees): when the parent session is in a
   worktree Litch created (or shares one), a new sub-session gets its own new worktree and branch,
   starting from the last commit of the parent's branch (the parent's uncommitted changes are not
@@ -364,11 +400,26 @@ woken to continue.
   task and its remaining plan to a forked sub-session (a "Handed off to a forked session" card, started
   at once, waking the parent when done) and answers the new message here. The fork starts before the
   current turn, so work done in that turn reaches it only through the remaining plan.
+- **Previously authorized sub-sessions**: `start(initiation: "user_asked")` can run in any later turn,
+  including wake, reminder and scheduled turns, if you already requested sub-sessions or approved a
+  plan that includes them. Approving a goal alone does not authorize separate sessions. Later changes
+  or withdrawal of your authorization take precedence. Task cards may be off. Direct starts have a
+  separate limit of 16 per parent per turn and 8 direct children running or starting at once; they do
+  not consume the 4-card allowance shared by proposals, offers and wrap-up suggestions. Concurrent
+  requests reserve slots. The whole tree allows 24 running or starting sessions including the root,
+  with maximum depth 4 (root is 0). Only failures before session creation release the turn allowance.
+  A created session whose first turn did not start keeps its running slot until it starts, is archived
+  or deleted. Reconnecting or restarting does not reset the turn allowance; successful archiving clears it. A reservation whose outcome was unknown at process exit remains counted.
+  Wider sandbox access still needs confirmation; the 50-wake limit is unchanged.
 - **Reports and waking**: when a sub-session finishes a turn, the start of its last answer is handed to
   the parent ("Reports from sub-sessions"). When the parent is idle and its sub-sessions have stopped,
-  the parent is woken to continue (up to 50 times per user message; your next message resets the count). Litch decides this, not the model: sub-
-  sessions the model started or suggested always wake the parent; when you start one yourself (spawn
-  dialog, Edit and start) you can turn "Wake the main session when done" off. Waking happens on the
+  the parent is woken to continue (up to 50 times per user message; your next message resets the count). The model can set `wake_parent` when starting a sub-session (default true), then use
+  `litch_sessions.set_wake(thread_id, wake)` to disable or re-enable waking for its direct children,
+  including overriding the setting previously chosen in the UI.
+  Reports still arrive while waking is off; enabling it rechecks eligible queued reports under the
+  normal wake rules, without overriding stops, failures, scheduled turns or wake limits.
+  `list` and `read` include the current `wake_parent` value. Desktop session details and mobile rows
+  show “Wake off”. The spawn dialog and Edit and start also let you choose the initial setting. Waking happens on the
   device, also when no desktop or phone is connected. Background tasks still running in the parent or a
   sub-session after its turn do not hold it back. Turns run by scheduled tasks report but do not wake;
   a scheduled run in the parent itself carries the reports waiting there. After you stop the parent's

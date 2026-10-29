@@ -21,13 +21,16 @@ const drawn = new Map<string, Promise<string>>()
 const KEEP = 60
 
 /** 画一张图，给回 SVG 的原文。语法错时抛出画图库的错误 */
-export function drawMermaid(source: string, look: string): Promise<string> {
-  const key = `${look}\n${source}`
+export function drawMermaid(source: string, look: string, bounded = false): Promise<string> {
+  const key = `${bounded}:${look}\n${source}`
   const known = drawn.get(key)
   if (known) return known
   const job = queue.then(async () => {
     const mermaid = await load()
-    mermaid.initialize(config(look))
+    mermaid.initialize({
+      ...config(look),
+      ...(bounded ? { maxTextSize: 20_000, maxEdges: 200 } : {}),
+    })
     serial += 1
     const { svg } = await mermaid.render(`litch-mmd-${serial}`, source)
     return svg
@@ -68,7 +71,7 @@ function config(look: string) {
     themeVariables: {
       darkMode: dark,
       fontFamily: font,
-      fontSize: '13px',
+      fontSize: `${13 * Number(look.split(':')[1])}px`,
       // 画图库默认给节点加一道固定灰色的投影，换了皮肤也不变，在深色里像一圈光晕
       dropShadow: 'none',
       background: color.sunken,
@@ -160,11 +163,13 @@ function toHex([r = 0, g = 0, b = 0, a = 1]: number[], [br = 0, bg = 0, bb = 0]:
 const darkQuery = (): MediaQueryList | null =>
   typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null
 
-/** 现在的皮肤和明暗（跟随系统时看系统），比如 retro:dark。皮肤、明暗、系统明暗变了都会重算 */
-function currentLook(): string {
+/** 皮肤、对话字号、明暗组成缓存键；字号变了也要按新的文字尺寸重排图。 */
+function currentLook(bounded = false): string {
   const root = document.documentElement
   const theme = root.dataset.theme ?? (darkQuery()?.matches ? 'dark' : 'light')
-  return `${root.dataset.skin ?? ''}:${theme}`
+  // 文件侧面板与文档正文一样固定字号，不跟随对话区设置，也不因此重画。
+  const scale = bounded ? '1' : root.style.getPropertyValue('--fs-chat').trim() || '1'
+  return `${root.dataset.skin ?? ''}:${scale}:${theme}`
 }
 
 function subscribe(listener: () => void): () => void {
@@ -177,4 +182,6 @@ function subscribe(listener: () => void): () => void {
   }
 }
 
-export const useLook = (): string => useSyncExternalStore(subscribe, currentLook)
+const documentLook = (): string => currentLook(true)
+export const useLook = (bounded = false): string =>
+  useSyncExternalStore(subscribe, bounded ? documentLook : currentLook)

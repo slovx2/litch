@@ -1,7 +1,7 @@
 // 自发回合收到用户插话后按用户回合处理；设备回报与会话间消息不能取得这项权限。
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { resultOf } from './fake-engine.mjs'
+import { failureOf, resultOf } from './fake-engine.mjs'
 import { brief, litch, parent, SESSIONS, text, treeRig, until } from './tree-kit.mjs'
 
 test('SESSION-USER-STEER-001：自发回合夹入用户输入后能直接派子会话，后续回报不覆盖，下一回合不继承', async () => {
@@ -85,12 +85,20 @@ test('SESSION-USER-STEER-002：插话失败不授予用户回合权限', async (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
           title: '未收到的请求',
           ...brief('未收到的请求'),
-          initiation: 'user_asked',
+          initiation: 'propose',
         })
       )?.answer,
     )
     assert.equal(typeof result.proposal_id, 'string')
     assert.equal(result.thread_id, undefined)
+    const accepted = await env.pi.callTool(threadId, SESSIONS, 'accept', {
+      proposal_id: result.proposal_id,
+    })
+    assert.equal(
+      failureOf(accepted?.answer),
+      'blocked',
+      'accept 仍要求用户回合，直接启动的放开不扩大其他权限',
+    )
   } finally {
     await env.close()
   }

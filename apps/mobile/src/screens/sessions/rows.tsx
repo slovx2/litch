@@ -148,6 +148,9 @@ function SummaryLine({
               {waiting}
             </Text>
           ) : null}
+          {summary.lineage?.wakeParent === false ? (
+            <Text style={[styles.meta, { color: c.ink3 }]}>{t('tree.lineage.noWake')}</Text>
+          ) : null}
           {/* 在设备层建的工作树里：目录名是随机的短串，没意思，换成写分支 */}
           <Text
             numberOfLines={1}
@@ -263,6 +266,9 @@ function ChildLine({
         >
           ⏱
         </Text>
+      ) : null}
+      {summary.lineage?.wakeParent === false ? (
+        <Text style={[styles.meta, { color: c.ink3 }]}>{t('tree.lineage.noWake')}</Text>
       ) : null}
       {fold}
     </Pressable>

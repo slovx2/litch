@@ -502,6 +502,18 @@ test('接在模拟核心上：说“提个子会话”出三张卡；点“不�
     store.getProposals().find((entry) => entry.id === target.proposal.id).status,
     'dismissed',
   )
+  assert.deepEqual(
+    await mock.channel.command('session.proposal.dismiss', {
+      deviceId: 'local',
+      sessionId,
+      proposalId: target.proposal.id,
+    }),
+    {},
+  )
+  const pending = store.getProposals().find((entry) => entry.status === 'pending')
+  const params = { deviceId: 'local', sessionId, proposalId: pending.id }
+  const accepted = await mock.channel.command('session.proposal.accept', params)
+  assert.deepEqual(await mock.channel.command('session.proposal.accept', params), accepted)
 })
 
 test('文案：中英文的键一样多；没有和桌面界面撞名的键；每种状态都有字', () => {

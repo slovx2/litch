@@ -27,6 +27,8 @@ export interface FileScope {
 }
 
 export interface FileRef {
+  /** 明确的 Markdown 文件链接可携带文档标题锚点。 */
+  fragment?: string
   /** 完整路径，理过，在根之内，照根的写法 */
   path: string
   /** 工作目录不是根的时候，相对路径的另一种读法：相对于根。按 path 找不到文件时界面再试这个 */
@@ -162,4 +164,30 @@ export function knownFileRef(path: string, scope: FileScope): FileRef | null {
   const full = joinPath(scope.cwd ? normalizePath(scope.cwd) : root, path)
   const inside = withinRoot(root, full, scope.twin ?? noTwin)
   return inside !== null && inside !== root ? { path: inside, alt: null, line: null } : null
+}
+
+/** 明确的链接地址允许空格和二进制文件名，不扩宽正文的启发式识别。 */
+export function explicitFileRef(href: string, scope: FileScope): FileRef | null {
+  const hash = href.indexOf('#')
+  let value: string, fragment: string
+  try {
+    value = decodeURIComponent(hash >= 0 ? href.slice(0, hash) : href)
+    fragment = hash >= 0 ? decodeURIComponent(href.slice(hash + 1)) : ''
+  } catch {
+    return null
+  }
+  if (
+    (/^[a-z][a-z0-9+.-]*:/i.test(value) && !/^[a-z]:\//i.test(value)) ||
+    /^[\\/]{2}/.test(value) ||
+    /[\0\r\n]/.test(value + fragment)
+  )
+    return null
+  const normal = fileRefOf(value, scope)
+  if (normal && !fragment) return normal
+  const path = value
+  if ((!normal && !EXTENSION.test(path)) || path.endsWith('/')) return null
+  const ref = normal ?? knownFileRef(path, scope)
+  if (!ref) return null
+  const line = /^L(\d+)(?:-L?\d+)?$/.exec(fragment)
+  return { ...ref, ...(line ? { line: Number(line[1]) } : fragment ? { fragment } : {}) }
 }

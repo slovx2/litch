@@ -14,6 +14,8 @@ export interface RuntimeInfoResponse extends HarnessDeclaration {
   engine: 'claude-code' | 'pi' | 'dsh' | 'opencode' | 'gemini' | 'qwen' | 'acp'
   protocolVersion: string
   cliBuild: string
+  /** 运行时解析到的实际 CLI 入口路径；不提供时未知。 */
+  cliPath?: string
   capabilities: string[]
   releaseReady: boolean
   nodeVersion?: string

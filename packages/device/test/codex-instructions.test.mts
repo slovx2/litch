@@ -61,6 +61,16 @@ test('CODEX-DEV-001：建会话时客户端没给开发者指令：底子是 con
     })
     assert.deepEqual(last(env, 'config/read'), { cwd: '/work/proj' })
     const seen = last(env, 'thread/start')
+    const sessionTools = seen.dynamicTools.find((spec: any) => spec.name === 'litch_sessions').tools
+    assert.deepEqual(
+      sessionTools.find((tool: any) => tool.name === 'set_wake').inputSchema.required,
+      ['thread_id', 'wake'],
+    )
+    assert.equal(
+      sessionTools.find((tool: any) => tool.name === 'start').inputSchema.properties.wake_parent
+        .type,
+      'boolean',
+    )
     assert.equal(seen.developerInstructions, `${PROJECT}\n\n${RULES}`)
     assert.equal(
       seen.dynamicTools.some((spec: any) => 'instructions' in spec),

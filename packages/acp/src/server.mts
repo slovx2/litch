@@ -878,7 +878,7 @@ export class AcpServer {
     const threadId = projection.thread.id
     const notify = (method: string, value: any) => this.notify(threadId, method, value)
     this.subscribe(peer, threadId)
-    const turn = projection.begin(notify)
+    const turn = projection.beginLive(notify)
     live.starter = { turnId: turn.id, peerId: peer.id }
     projection.userMessage(echoContent(input), clientId, notify)
     if (clientId) live.submitted.set(clientId, turn)
@@ -961,7 +961,7 @@ export class AcpServer {
       const started = await this.serial(threadId, async () => {
         if (live.running || live.projection.active) return false
         const notify = (method: string, value: any) => this.notify(threadId, method, value)
-        const turn = live.projection.begin(notify, Date.now(), 'backgroundTask')
+        const turn = live.projection.beginLive(notify, Date.now(), 'backgroundTask')
         live.starter = null
         this.save(live, true)
         this.drive(live, turn, async () => [
@@ -992,7 +992,7 @@ export class AcpServer {
     const threadId = projection.thread.id
     const notify = (method: string, value: any) => this.notify(threadId, method, value)
     this.subscribe(peer, threadId)
-    const turn = projection.begin(notify)
+    const turn = projection.beginLive(notify)
     if (clientId) live.submitted.set(clientId, turn)
     setImmediate(() => {
       projection.userMessage(

@@ -450,7 +450,7 @@ test('WRAP-UP-010：没有主进程管设置时看启动参数 --wrap-up-reminde
   }
 })
 
-test('WRAP-UP-011：唤不唤醒由 Litch 定：模型的 start（直接起、提案）给了 wake_parent 也不认，一律唤醒；用户从卡片开始时仍可改', async () => {
+test('WRAP-UP-011：模型的 start（直接起、提案）接受 wake_parent，用户从卡片开始时仍可改', async () => {
   const env = treeRig()
   try {
     const client = await litch(env)
@@ -466,18 +466,18 @@ test('WRAP-UP-011：唤不唤醒由 Litch 定：模型的 start（直接起、�
         })
       )?.answer,
     )
-    assert.equal(env.device.sessionTree.lineage(direct.thread_id)?.wakeParent, true)
-    assert.match(direct.note, /you will be woken/)
+    assert.equal(env.device.sessionTree.lineage(direct.thread_id)?.wakeParent, false)
+    assert.match(direct.note, /do not wake/)
     const proposed = resultOf(
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
           title: '提一张',
           ...brief('提一张。'),
-          wake_parent: 'no',
+          wake_parent: false,
         })
       )?.answer,
     )
-    assert.equal(env.device.sessionTree.store.proposal(proposed.proposal_id)?.wakeParent, true)
+    assert.equal(env.device.sessionTree.store.proposal(proposed.proposal_id)?.wakeParent, false)
   } finally {
     await env.close()
   }

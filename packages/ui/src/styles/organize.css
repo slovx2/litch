@@ -216,13 +216,13 @@
 }
 /* 名字后面的“单独查看”：平时不显示，鼠标到这一行或者键盘走到它上面才出来 */
 .row-focus {
-  width: 18px;
-  height: 18px;
+  width: calc(18px * var(--fs));
+  height: calc(18px * var(--fs));
   opacity: 0;
 }
 .row-focus svg.ic {
-  width: 12px;
-  height: 12px;
+  width: calc(12px * var(--fs));
+  height: calc(12px * var(--fs));
 }
 .head-line:hover .row-focus,
 .row-focus:focus-visible {

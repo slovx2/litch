@@ -66,6 +66,13 @@ export function LineageBar({ deviceId, sessionId, onOpen }: LineageBarProps) {
           )}
         </span>
       )}
+      {/* 状态不是操作：跟在来历后面、用淡色，不和右边的按钮排在一起 */}
+      {lineage?.wakeParent === false ? (
+        <span className="lineage-wake dim">
+          <span>·</span>
+          <span>{t('info.lineage.noWake')}</span>
+        </span>
+      ) : null}
       <span className="grow" />
       {lineage && detachable ? (
         <button type="button" className="mini" data-act="detach" onClick={() => setAsking(true)}>

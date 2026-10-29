@@ -277,6 +277,18 @@ function staticFiles(lang: SampleLang): Map<string, () => SampleData> {
     'pub struct Size {\n    pub rows: u16,\n    pub cols: u16,\n}\n\nimpl Size {\n    pub fn cells(&self) -> u32 {\n        u32::from(self.rows) * u32::from(self.cols)\n    }\n}\n',
   )
   put('docs/guide.md', guide(zh))
+  put(
+    'docs/images/preview.md',
+    '# 文件预览\n\nMarkdown、图片与 SVG 在设备上受限读取。\n\n## 中文标题\n\n[跳到标题](#中文标题) · [另一份文档](../guide.md)\n\n| 类型 | 状态 |\n| --- | --- |\n| Markdown | 只读预览 |\n| 图片 | 本地资源 |\n\n- [x] 支持远程设备\n- [ ] 后续文档格式\n\n```ts\nconst preview = "Litch"\n```\n\n```mermaid\nflowchart LR\n  A[设备文件] --> B[受限读取]\n  B --> C[侧面板]\n```\n\n![静态图](./preview.svg)\n\n![外链不加载](https://preview.invalid/private.png)\n\n<script>window.__previewLeak = true</script>\n',
+  )
+  put(
+    'docs/images/preview.svg',
+    '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="160" viewBox="0 0 480 160"><rect x="4" y="4" width="472" height="152" rx="16" fill="#e5effa"/><circle cx="80" cy="80" r="42" fill="#4179af"/><text x="150" y="88" font-size="28" fill="#25405b">Litch preview</text></svg>',
+  )
+  put(
+    'docs/images/unsafe.svg',
+    '<svg xmlns="http://www.w3.org/2000/svg" onload="window.__previewLeak=true"><script>window.__previewLeak=true</script></svg>',
+  )
   // 里面有标记的文件：查看器要把它当字显示，不能当成页面的一部分
   put(
     'docs/snippet.html',

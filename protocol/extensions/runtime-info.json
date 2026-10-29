@@ -33,6 +33,11 @@
         "type": "string",
         "minLength": 1
       },
+      "cliPath": {
+        "description": "可选：运行时解析到的实际 CLI 入口路径，--runtime-info 可用它报告宿主程序；未提供时不推断。",
+        "type": "string",
+        "minLength": 1
+      },
       "capabilities": {
         "type": "array",
         "items": {

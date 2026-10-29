@@ -38,7 +38,7 @@ export function ConnectionSection() {
       <Text style={note}>
         {t(minutes === null ? 'connection.never.note' : 'connection.timeout.note')}
       </Text>
-      <View style={styles.system}>
+      <View style={[styles.system, { backgroundColor: c.panel, borderColor: c.line2 }]}>
         <Text style={{ color: c.ink, fontFamily: font.ui, fontSize: font.size.body }}>
           {t('connection.system')}
         </Text>
@@ -47,7 +47,11 @@ export function ConnectionSection() {
         </Text>
         <Text
           testID={`settings:battery:${status}`}
-          style={{ color: c.ink2, fontFamily: font.ui, fontSize: font.size.meta }}
+          style={{
+            color: status === 'restricted' ? c.wait : status === 'unknown' ? c.ink3 : c.ink2,
+            fontFamily: font.ui,
+            fontSize: font.size.meta,
+          }}
         >
           {t(`connection.battery.${status}`)}
         </Text>
@@ -56,6 +60,7 @@ export function ConnectionSection() {
         </Text>
         <View style={{ alignSelf: 'flex-start' }}>
           <Button
+            kind="plain"
             label={t('connection.open')}
             testID="settings:openBattery"
             onPress={() => setOpened(openBatterySettings())}
@@ -90,6 +95,7 @@ export function ConnectionSection() {
 
 const styles = StyleSheet.create({
   note: { paddingHorizontal: 16, paddingTop: 6, fontSize: 12, lineHeight: 17 },
-  system: { padding: 16, gap: 8 },
+  // 和批准钥匙那一节同样的框：说明、状态和操作放在一起，和上面的行区分开
+  system: { marginTop: 12, borderTopWidth: 1, borderBottomWidth: 1, padding: 16, gap: 8 },
   inset: { paddingHorizontal: 0, paddingTop: 0 },
 })

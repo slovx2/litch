@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   RECOVERY_CHANGED,
   RECOVERY_CONTINUE,
+  RECOVERY_DISMISS,
   RECOVERY_READ,
 } from '../../protocol/src/turn-recovery.mjs'
 import { FakeControl, managed } from './fake-control.mjs'
@@ -25,6 +26,12 @@ test('恢复方法与通知、运行CLI字段按投递连接声明隔离', async
     await aware.initialize(['harness', 'turnRecovery', 'harnessRuntime'])
     await plain.initialize(['harness'])
     assert.deepEqual(await aware.call(RECOVERY_READ, {}), { notices: [] })
+    for (const method of [RECOVERY_CONTINUE, RECOVERY_DISMISS]) {
+      const failure = await aware.fails(method, {})
+      assert.equal(failure.code, -32602)
+      assert.match(failure.message, /Invalid recovery/)
+      assert.equal(failure.data?.litch, undefined)
+    }
     for (const method of [RECOVERY_READ, RECOVERY_CONTINUE])
       await assert.rejects(
         plain.call(method, {}),

@@ -518,7 +518,7 @@ export class ClientSession implements ClientToolPeer {
             typeof p.threadId !== 'string' ||
             typeof p.turnId !== 'string'
           )
-            throw new DeviceError('unsupported', 'Invalid recovery reference')
+            throw new ProtocolError(-32602, 'Invalid recovery reference')
           this.host.recovery?.dismiss(p.harness, p.threadId, p.turnId)
           return {}
         }

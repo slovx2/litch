@@ -320,6 +320,7 @@ export class PiServer {
       // 记下这条连接握手时声明认识的扩展：服务端主动给的扩展内容只发给声明过的连接。
       // 也记下它退订的通知：从这里起，这条连接上不发名单里的通知。
       if (message.method === 'initialize') {
+        this.files.declare(peer, params)
         this.declared.set(peer.id, declaredExtensions(params))
         this.toolNamespaces.set(peer.id, clientToolNamespaces(params))
         applyNotificationOptOut(peer, params)

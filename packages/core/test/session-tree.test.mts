@@ -661,6 +661,15 @@ test('设备：子代理线程不进侧栏；Litch 子会话带着父子关系�
   assert.equal(world.side.sessions.get('c1')?.lineage?.parentId, 'p')
   assert.equal(world.side.sessions.get('p')?.lineage, null)
 
+  for (const wakeParent of [false, true]) {
+    world.peer.last().notify('litch/thread/lineage/updated', {
+      threadId: 'c1',
+      lineage: { ...lineageOf('p', '子会话'), wakeParent },
+    })
+    await settle()
+    assert.equal(world.side.sessions.get('c1')?.lineage?.wakeParent, wakeParent)
+  }
+
   // 子代理线程开始跑时对面会发 thread/started：也不进侧栏
   world.peer.last().notify('thread/started', {
     thread: thread({ id: 'ag2', parentThreadId: 'p' }),

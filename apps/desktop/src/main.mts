@@ -5,8 +5,8 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, join, normalize, sep } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { isAbsolute, join, normalize } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { AutomationPreviewCommand } from '@litch/core'
 import { UPDATE_FEED_URL, type UpdateState } from '@litch/core'
 import {
@@ -17,7 +17,6 @@ import {
   Menu,
   MessageChannelMain,
   nativeTheme,
-  net,
   protocol,
   screen,
   shell,
@@ -105,6 +104,7 @@ import {
 import { runShots } from './shots.mjs'
 import { MOCK_MODES, runSmoke, SMOKE_MODES, type SmokeMode } from './smoke.mjs'
 import { closeTaskNotice, parseTaskNotice, showTaskNotice } from './task-notice.mjs'
+import { serveUiResource } from './ui-protocol.mjs'
 import { createUpdater, type Updater, updatePlatform } from './updater.mjs'
 
 const here = fileURLToPath(new URL('.', import.meta.url))
@@ -210,16 +210,6 @@ const manualSkill = createManualSkill({
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ])
-
-function serveUi(request: Request): Response | Promise<Response> {
-  const url = new URL(request.url)
-  if (url.host !== 'ui') return new Response('not found', { status: 404 })
-  const path = decodeURIComponent(url.pathname)
-  const file = normalize(join(uiRoot, path === '/' ? 'index.html' : path))
-  // 不许走出界面的产物目录
-  if (!file.startsWith(uiRoot + sep)) return new Response('forbidden', { status: 403 })
-  return net.fetch(pathToFileURL(file).toString())
-}
 
 /** 界面的地址。params 是外观上的临时指定（语言、皮肤、明暗），界面优先用它，但不会记下来 */
 export function uiUrl(params: Record<string, string>): string {
@@ -1073,7 +1063,7 @@ if (!smoke && !app.requestSingleInstanceLock()) {
     // 没打包的时候程序坞上是 Electron 自己的图标，换成我们的，免得和别的 Electron 应用分不清
     else if (!app.isPackaged) app.dock?.setIcon(join(assetsDir, 'icon-dock.png'))
     showMenu(forcedLang ?? (app.getLocale().startsWith('zh') ? 'zh-CN' : 'en'))
-    protocol.handle('app', serveUi)
+    protocol.handle('app', (request) => serveUiResource(uiRoot, request))
     // 上次的外观：窗口一建出来就按它来。地址里临时指定了皮肤、明暗的这一次按指定的
     look =
       parseLook({ ...readLook(app.getPath('userData')), ...forcedLook }) ??

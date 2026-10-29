@@ -210,9 +210,9 @@ function TreeFacts({ summary, device }: { summary: SessionSummary; device: Devic
               {t(lineage.kind === 'fork' ? 'info.lineage.fork' : 'info.lineage.fresh')}
               {' · '}
               {t(`info.lineage.${lineage.origin}`)}
-              {lineage.wakeParent ? (
-                <span className="info-cwd">{t('info.lineage.wake')}</span>
-              ) : null}
+              <span className="info-cwd">
+                {t(lineage.wakeParent ? 'info.lineage.wake' : 'info.lineage.noWake')}
+              </span>
             </dd>
           </div>
         </>

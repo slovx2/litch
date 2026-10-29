@@ -25,8 +25,8 @@
 }
 .sug-head {
   padding: 4px 8px 2px;
-  font-size: 11px;
-  line-height: 16px;
+  font-size: calc(11px * var(--fs));
+  line-height: round(calc(16px * var(--fs)), 1px);
   color: var(--ink-3);
 }
 /* 一行：记号、名字、一句说明。说明放不下就截断，全文在底下那一栏 */
@@ -39,8 +39,8 @@
   padding: 4px 8px;
   border-radius: var(--r1);
   text-align: left;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
 }
 .sug-opt .ic {
   flex: none;
@@ -53,7 +53,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 500 12px / 18px var(--mono);
+  font: 500 calc(12px * var(--fs)) / round(calc(18px * var(--fs)), 1px) var(--mono);
 }
 .sug-opt span {
   flex: 1 1 0;
@@ -68,8 +68,8 @@
 /* 一组现在的状况：正在取、没取到、这里没有 */
 .sug-note {
   padding: 4px 8px;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--ink-3);
 }
 .sug-note.err {
@@ -83,8 +83,8 @@
   gap: 2px 14px;
   padding: 6px 12px;
   border-top: 1px solid var(--line-1);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--ink-2);
 }
 .sug-foot-note {
@@ -122,7 +122,7 @@
   border: 1px solid var(--line-2);
   border-radius: var(--r1);
   background: var(--hover);
-  font: 12px / 18px var(--mono);
+  font: calc(12px * var(--fs)) / round(calc(18px * var(--fs)), 1px) var(--mono);
 }
 .cmp-chip > .ic {
   flex: none;
@@ -189,7 +189,7 @@
   border-radius: var(--r2);
   background: var(--overlay);
   box-shadow: var(--shadow);
-  font: 12px / 18px var(--ui);
+  font: calc(12px * var(--fs)) / round(calc(18px * var(--fs)), 1px) var(--ui);
   color: var(--ink);
 }
 .peek-head {
@@ -223,7 +223,7 @@
   margin: 0;
   padding: 8px 12px;
   overflow: auto;
-  font: 12px / 18px var(--mono);
+  font: calc(12px * var(--fs)) / round(calc(18px * var(--fs)), 1px) var(--mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: var(--ink-2);
@@ -252,7 +252,7 @@
 }
 .peek-foot .btn {
   height: 24px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 
 /* ---------- 计划模式 ---------- */
@@ -261,13 +261,13 @@
    圆角跟着皮肤走（和设置页的 .switch 同一个算法）：有圆角的皮肤里是胶囊，方角的皮肤里是方块 */
 .mode-btn {
   flex: none;
-  height: 24px;
+  height: calc(16px * var(--fs) + 8px);
   padding: 0 6px 0 4px;
   border-radius: var(--r1);
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-3);
 }
 .mode-btn:hover {
@@ -331,8 +331,8 @@
   border: 1px solid color-mix(in srgb, var(--wait) 60%, transparent);
   border-radius: var(--r2);
   background: var(--raised);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
 }
 .plan-ask-text {
   flex: 1 1 260px;
@@ -341,7 +341,7 @@
   flex-direction: column;
 }
 .plan-ask .plan-ask-text b {
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   font-weight: 600;
 }
 .plan-ask-text span {

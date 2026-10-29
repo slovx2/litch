@@ -614,7 +614,10 @@ export interface ClientRequests {
   /** 只列这一层。条目只有名字和“是不是目录、是不是普通文件”，没有大小；符号链接在适配器上两样都不是 */
   'fs/readDirectory': { params: FsReadDirectoryParams; result: FsReadDirectoryResponse }
   /** 整个文件一次读回来（base64）。协议没有“只读一段”，元数据里也没有大小，读之前不知道它多大 */
-  'fs/readFile': { params: FsReadFileParams; result: FsReadFileResponse }
+  'fs/readFile': {
+    params: FsReadFileParams & { litchPreview?: import('./file-preview.mjs').FilePreviewOption }
+    result: FsReadFileResponse
+  }
   /** 跟着符号链接走到底之后是什么；`isSymlink` 说的是这个路径本身 */
   'fs/getMetadata': { params: FsGetMetadataParams; result: FsGetMetadataResponse }
   // 以下四个是 litch_machine 的执行器写文件、建目录用的（core 的 device/machine/）。

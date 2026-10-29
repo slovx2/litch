@@ -16,6 +16,13 @@ import { enPairing } from './en-pairing.ts'
 import { enPasswords } from './en-passwords.ts'
 import { enPeer } from './en-peer.ts'
 import { enPower } from './en-power.ts'
+import { enPreview } from './en-preview.ts'
+import { enPreviewCsv } from './en-preview-csv.ts'
+import { enPreviewDocx } from './en-preview-docx.ts'
+import { enPreviewHtml } from './en-preview-html.ts'
+import { enPreviewMedia } from './en-preview-media.ts'
+import { enPreviewPdf } from './en-preview-pdf.ts'
+import { enPreviewXlsx } from './en-preview-xlsx.ts'
 import { enProposals } from './en-proposals.ts'
 import { enRestart } from './en-restart.ts'
 import { enRupgrade } from './en-rupgrade.ts'
@@ -30,6 +37,13 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
 
 export const en: Record<MessageKey, Entry> = {
   ...enManager,
+  ...enPreviewDocx,
+  ...enPreviewXlsx,
+  ...enPreview,
+  ...enPreviewPdf,
+  ...enPreviewCsv,
+  ...enPreviewHtml,
+  ...enPreviewMedia,
   ...enPower,
   ...enAutomation,
   ...enChrome,
@@ -803,6 +817,8 @@ export const en: Record<MessageKey, Entry> = {
   'theme.dark': 'Dark',
   'look.density': 'Density',
   'look.zoom': 'Zoom',
+  'look.treeText': 'Sidebar text size',
+  'look.chatText': 'Conversation text size',
   'density.compact': 'Compact',
   'density.standard': 'Standard',
   'density.roomy': 'Roomy',
@@ -1236,6 +1252,7 @@ export const en: Record<MessageKey, Entry> = {
   'tree.lineage.after': 'as “{title}”',
   'tree.lineage.open': 'Back to the parent session',
   'tree.lineage.unknown': 'a session not in the sidebar',
+  'tree.lineage.noWake': 'Won’t wake',
   'tree.lineage.claudeDesktop': 'in the Claude desktop app',
   'tree.lineage.otherApp': 'in another app',
   'tree.detach': 'Detach as a standalone session',
@@ -1280,6 +1297,7 @@ export const en: Record<MessageKey, Entry> = {
   'info.lineage.user': 'by you',
   'info.lineage.proposal': 'from a proposal',
   'info.lineage.wake': 'Wakes the parent when done',
+  'info.lineage.noWake': 'Doesn’t wake the parent when done',
   'info.lineage.claudeDesktop': 'Started in the Claude desktop app',
   'info.lineage.otherApp': 'Started in another app',
   'side.tab.agents': 'Subagents',

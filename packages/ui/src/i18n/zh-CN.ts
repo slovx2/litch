@@ -1,5 +1,6 @@
 // 中文文案。这一份是“有哪些句子”的依据：键的集合以这里为准，别的语言必须一句不少。
 // 前半是界面自己的话，后半是核心要说的话（键和 packages/core/src/phrase.mts 一一对应）。
+
 import type { Entry } from './types.ts'
 import { zhAside } from './zh-CN-aside.ts'
 import { zhAsks } from './zh-CN-asks.ts'
@@ -17,6 +18,13 @@ import { zhPairing } from './zh-CN-pairing.ts'
 import { zhPasswords } from './zh-CN-passwords.ts'
 import { zhPeer } from './zh-CN-peer.ts'
 import { zhPower } from './zh-CN-power.ts'
+import { zhPreview } from './zh-CN-preview.ts'
+import { zhPreviewCsv } from './zh-CN-preview-csv.ts'
+import { zhPreviewDocx } from './zh-CN-preview-docx.ts'
+import { zhPreviewHtml } from './zh-CN-preview-html.ts'
+import { zhPreviewMedia } from './zh-CN-preview-media.ts'
+import { zhPreviewPdf } from './zh-CN-preview-pdf.ts'
+import { zhPreviewXlsx } from './zh-CN-preview-xlsx.ts'
 import { zhProposals } from './zh-CN-proposals.ts'
 import { zhRestart } from './zh-CN-restart.ts'
 import { zhRupgrade } from './zh-CN-rupgrade.ts'
@@ -26,6 +34,13 @@ import { zhWorktrees } from './zh-CN-worktrees.ts'
 
 export const zhCN = {
   ...zhManager,
+  ...zhPreviewDocx,
+  ...zhPreviewXlsx,
+  ...zhPreview,
+  ...zhPreviewPdf,
+  ...zhPreviewCsv,
+  ...zhPreviewHtml,
+  ...zhPreviewMedia,
   ...zhPower,
   ...zhAutomation,
   ...zhChrome,
@@ -765,6 +780,8 @@ export const zhCN = {
   'theme.dark': '深色',
   'look.density': '密度',
   'look.zoom': '界面缩放',
+  'look.treeText': '会话列表字号',
+  'look.chatText': '对话字号',
   'density.compact': '紧凑',
   'density.standard': '标准',
   'density.roomy': '宽松',
@@ -1186,6 +1203,7 @@ export const zhCN = {
   'tree.lineage.after': '派出：{title}',
   'tree.lineage.open': '返回父会话',
   'tree.lineage.unknown': '不在侧栏中的会话',
+  'tree.lineage.noWake': '不唤醒',
   'tree.lineage.claudeDesktop': '在 Claude 桌面端派出',
   'tree.lineage.otherApp': '在其他应用中派出',
   'tree.detach': '脱离为独立会话',
@@ -1229,6 +1247,7 @@ export const zhCN = {
   'info.lineage.user': '由你派出',
   'info.lineage.proposal': '由提案开始',
   'info.lineage.wake': '完成后唤醒父会话',
+  'info.lineage.noWake': '完成后不唤醒父会话',
   'info.lineage.claudeDesktop': '由 Claude 桌面端派出',
   'info.lineage.otherApp': '由其他应用派出',
   'side.tab.agents': '子代理',

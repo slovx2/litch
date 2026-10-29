@@ -27,7 +27,7 @@
 
 /* ---------- 通用小控件 ---------- */
 .btn {
-  height: 28px;
+  height: calc(20px * var(--fs) + 8px);
   padding: 0 10px;
   border-radius: var(--r2);
   border: 1px solid var(--line-2);
@@ -66,7 +66,7 @@
   filter: none;
 }
 .kbd {
-  font: 10px / 14px var(--mono);
+  font: calc(10px * var(--fs)) / round(calc(14px * var(--fs)), 1px) var(--mono);
   padding: 0 4px;
   border: 1px solid var(--line-2);
   border-radius: 3px;
@@ -121,8 +121,8 @@
 }
 .new-hero h1 {
   margin: 0;
-  font-size: 24px;
-  line-height: 32px;
+  font-size: calc(24px * var(--fs));
+  line-height: round(calc(32px * var(--fs)), 1px);
   font-weight: 600;
   color: var(--ink);
 }
@@ -142,7 +142,7 @@
 }
 .new-place-label {
   flex: none;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-3);
 }
 /* 选择器上的小记号：设备的线色（方块）、工作区挑过的颜色（圆点） */
@@ -161,8 +161,8 @@
   border: 1px solid var(--line-2);
   border-radius: var(--r2);
   background: var(--raised);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--ink-2);
 }
 .new-why-row {
@@ -284,9 +284,9 @@
   background: none;
   color: var(--ink);
   font: inherit;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
   /* 行高写整数像素：输入框的高度跟着内容长，带零头会让下面的对话区跟着抖 */
-  line-height: 24px;
+  line-height: round(calc(24px * var(--fs)), 1px);
   /* 跟着内容长高由浏览器做（field-sizing）。以前每打一个字先收成 auto 再量 scrollHeight，
      会让整页重新布局两次，会话很长时打字跟着卡 */
   field-sizing: content;
@@ -329,7 +329,7 @@
 .cmp-esc {
   min-width: 0;
   margin-right: 8px;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
   color: var(--ink-2);
 }
 /* 上下文占用：小圆环加百分比。平时很淡，快满的时候换成提醒的颜色 */
@@ -339,12 +339,12 @@
   align-items: center;
   gap: 5px;
   margin-right: 8px;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
   color: var(--ink-3);
 }
 .ctx svg {
-  width: 14px;
-  height: 14px;
+  width: calc(14px * var(--fs));
+  height: calc(14px * var(--fs));
 }
 .ctx circle {
   fill: none;
@@ -403,8 +403,8 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   white-space: nowrap;
 }
 .meter-name {
@@ -416,14 +416,14 @@
 }
 .meter-detail {
   flex: none;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
   color: var(--ink-3);
 }
 .meter-pct {
   flex: none;
   min-width: 4ch;
   text-align: right;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
   color: var(--ink);
 }
 .meter-bar {
@@ -456,7 +456,7 @@
   width: 100%;
   justify-content: center;
   margin-top: 6px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .btn.ctx-compact[aria-disabled="true"] {
   opacity: 0.45;
@@ -470,8 +470,8 @@
 }
 .ctx-why {
   padding: 4px 6px 0;
-  font-size: 11px;
-  line-height: 16px;
+  font-size: calc(11px * var(--fs));
+  line-height: round(calc(16px * var(--fs)), 1px);
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
@@ -483,16 +483,21 @@
   position: relative;
   min-width: 0;
 }
+/* 强度只有一个字，缩了就只剩箭头：输入框底栏挤的时候（大字号、窄窗口）让模型和权限去截短 */
+.cmp-bar > .pick[data-kind="effort"] {
+  flex-shrink: 0;
+}
 .pick-btn {
   /* 再窄也不比它所在的那一格宽：地方不够时名字截成省略号，不压到旁边的选择器上（侧面板开着、窗口又窄的时候会这样） */
-  max-width: min(180px, 100%);
-  height: 24px;
+  /* 上限跟着字号：字变大而上限不变，名字被截断，外层仍按原宽留位，中间空出一段 */
+  max-width: min(calc(180px * var(--fs)), 100%);
+  height: calc(16px * var(--fs) + 8px);
   padding: 0 4px 0 6px;
   border-radius: var(--r1);
   display: flex;
   align-items: center;
   gap: 2px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-2);
 }
 .pick-btn:hover,
@@ -547,8 +552,8 @@
   background: var(--overlay);
   color: var(--ink);
   font: inherit;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   outline: none;
 }
 .pick-search::placeholder {
@@ -557,8 +562,8 @@
 .pick-none {
   padding: 5px 8px;
   color: var(--ink-3);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
 }
 .pick-list {
   display: flex;
@@ -573,8 +578,8 @@
   padding: 5px 8px;
   border-radius: var(--r1);
   text-align: left;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
 }
 .pick-opt b {
   font-weight: 500;
@@ -606,8 +611,8 @@
   position: absolute;
   right: 8px;
   bottom: 5px;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--accent);
 }
 .pick-note-action:hover {
@@ -627,8 +632,8 @@
   gap: 6px;
   padding: 8px;
   width: 260px;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
 }
 .pick-ask span {
   color: var(--ink-2);
@@ -646,8 +651,8 @@
   font-weight: 500;
 }
 .cmp-hint {
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--ink-3);
   padding: 0 2px;
 }
@@ -667,7 +672,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .tray-row {
   display: flex;
@@ -720,8 +725,9 @@
   flex: none;
 }
 /* 有请求等着的时候，下面的终端面板让一让：上面至少留得下输入区和一张压矮了的卡片。
-   平常大小的窗口里这个上限比面板高得多，碰不到 */
-.main:has(.req-frame) > .term-dock {
+   平常大小的窗口里这个上限比面板高得多，碰不到。有没有请求由界面打标记（composer/asking.ts），
+   不要改回 .main:has(.req-frame)：面板挂上后它让每次输入都重算整片主区域的样式 */
+.term-dock[data-asking] {
   max-height: max(120px, calc(100% - 360px));
 }
 /* 卡片自己拿着焦点时不画焦点框：它的边框已经够显眼了 */
@@ -733,12 +739,12 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px 0 14px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-2);
 }
 .req-q {
   padding: 6px 12px 0 14px;
-  font-size: 15px;
+  font-size: calc(15px * var(--fs));
   font-weight: 600;
 }
 /* 提问向导：每道题一个小标记，答了的实心，跳过的虚线加删除线，当前这一道底下有一道杠 */
@@ -755,7 +761,7 @@
   padding: 0 5px;
   border: 1px solid var(--line-2);
   border-radius: var(--r1);
-  font: 11px / 20px var(--mono);
+  font: calc(11px * var(--fs)) / round(calc(20px * var(--fs)), 1px) var(--mono);
   color: var(--ink-2);
   text-align: center;
 }
@@ -789,8 +795,8 @@
 /* 题目下面的一句说明：这道题跳过了、这道题还没答 */
 .req-hint {
   padding: 8px 12px 0 14px;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--ink-2);
 }
 .req-hint.err {
@@ -814,7 +820,7 @@
 .req-body .well pre {
   margin: 0;
   padding: 8px 10px;
-  font: 12px / 19px var(--mono);
+  font: calc(12px * var(--fs)) / round(calc(19px * var(--fs)), 1px) var(--mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -822,7 +828,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px 16px;
-  font: 11px / 1.5 var(--mono);
+  font: calc(11px * var(--fs)) / 1.5 var(--mono);
   color: var(--ink-3);
 }
 .req-meta b {
@@ -831,7 +837,7 @@
 }
 .req-why {
   color: var(--ink-2);
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   line-height: 1.55;
 }
 /* 客户端工具的卡片：远程设备上的模型在用这台电脑、高风险的应用，这两句用醒目的颜色 */
@@ -856,7 +862,7 @@
 .req-foot {
   border-top: 1px solid var(--line-1);
   padding: 7px 12px 7px 14px;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
   color: var(--ink-3);
   display: flex;
   gap: 14px;
@@ -896,7 +902,7 @@
   gap: 5px;
 }
 .form-label {
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   font-weight: 500;
   color: var(--ink-2);
 }
@@ -906,8 +912,8 @@
   margin-left: 3px;
 }
 .form-note {
-  font-size: 11px;
-  line-height: 16px;
+  font-size: calc(11px * var(--fs));
+  line-height: round(calc(16px * var(--fs)), 1px);
   color: var(--ink-3);
 }
 .form-note.err {
@@ -917,7 +923,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
 }
 .form-check input {
   accent-color: var(--accent-solid);
@@ -984,7 +990,7 @@ a.btn {
 }
 .opt .tx span {
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 /* ---------- 待答问题：跨回合留着的提问，和审批卡同一个位置、同一种卡片 ---------- */
 /* 外层的 .req-slot 管左右留白；卡片和输入区一样宽，最高到窗口的四成，再多在卡片里面滚，标题一行贴顶 */
@@ -1012,7 +1018,7 @@ a.btn {
   height: 34px;
   padding: 0 12px 0 14px;
   background: var(--raised);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-2);
   text-align: left;
 }
@@ -1033,9 +1039,9 @@ a.btn {
   border-top: 1px solid var(--line-1);
 }
 .pending-ask-q {
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   font-weight: 500;
-  line-height: 20px;
+  line-height: round(calc(20px * var(--fs)), 1px);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -1044,8 +1050,8 @@ a.btn {
   align-items: center;
   gap: 8px;
   color: var(--ink-3);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
 }
 /* 建议的回答和自己写的一栏排一行；自己写的那栏占剩下的地方，太窄就折到下一行 */
 .pending-ask-row {
@@ -1062,14 +1068,14 @@ a.btn {
   max-height: 120px;
   height: auto;
   padding: 4px 10px;
-  line-height: 18px;
+  line-height: round(calc(18px * var(--fs)), 1px);
   field-sizing: content;
   resize: none;
 }
 .pending-ask-err {
   margin: 0;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--err);
 }
 
@@ -1097,7 +1103,7 @@ textarea.req-input {
   gap: 8px;
   height: 38px;
   padding: 0 0 0 14px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   text-align: left;
   color: var(--ink);
 }
@@ -1120,7 +1126,7 @@ textarea.req-input {
   white-space: nowrap;
   color: var(--ink-2);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .child-req-toggle .caret-ic {
   color: var(--ink-3);
@@ -1147,7 +1153,7 @@ textarea.req-input {
 .child-req-note {
   margin: 0;
   padding: 8px 14px 12px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--ink-3);
 }
 .child-reqs .child-req-body .req-frame::after {

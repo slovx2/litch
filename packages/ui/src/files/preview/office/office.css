@@ -1,0 +1,116 @@
+.office-preview {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--panel);
+}
+.office-note {
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.5;
+  border-bottom: 1px solid var(--line-1);
+}
+.office-docx {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  /* 纸张外的衬底随皮肤；纸张本身保持白底，iframe 里的文档是透明的 */
+  background: var(--sunken);
+}
+.office-docx[hidden] {
+  display: none;
+}
+.office-grid {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  position: relative;
+  font: 12px / 28px var(--ui);
+  outline-offset: -2px;
+}
+.office-grid-space {
+  position: relative;
+}
+.office-cell,
+.office-row-number,
+.office-column,
+.office-corner {
+  position: absolute;
+  box-sizing: border-box;
+  border-right: 1px solid var(--line-1);
+  border-bottom: 1px solid var(--line-1);
+  height: 28px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 0 8px;
+}
+.office-cell {
+  background: var(--panel);
+  user-select: text;
+}
+.office-cell[data-num] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* 冻结的行列盖在滚动的部分上面，最后一行、最后一列用深一档的线隔开 */
+.office-cell[data-region] {
+  z-index: 1;
+}
+.office-cell[data-edge~="row"],
+.office-row-number[data-edge="row"] {
+  border-bottom-color: var(--line-3);
+}
+.office-cell[data-edge~="col"],
+.office-column[data-edge="col"] {
+  border-right-color: var(--line-3);
+}
+.office-row-number,
+.office-column,
+.office-corner {
+  color: var(--ink-3);
+  background: var(--sunken);
+  text-align: center;
+  z-index: 2;
+}
+.office-row-number,
+.office-corner {
+  width: 48px;
+}
+.office-column {
+  width: 136px;
+}
+.office-corner {
+  z-index: 3;
+}
+.office-sheets {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  padding: 4px;
+  overflow-x: auto;
+  border-top: 1px solid var(--line-1);
+  background: var(--sunken);
+}
+.office-sheets button {
+  flex: none;
+  font: 12px / 24px var(--ui);
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--r2);
+  color: var(--ink-3);
+  background: transparent;
+}
+.office-sheets button[aria-selected="true"] {
+  border-color: var(--line-2);
+  color: var(--ink);
+  background: var(--raised);
+}

@@ -93,7 +93,11 @@ export function harnessDeclaration(
     // litch_ 命名空间的动态工具只交给声明了 clientTools 的连接（server.mts 的 call）。
     // litch/harness/* 读写 Pi 自己的配置文件（harness-config.mts），配置变化和登录进展只通知声明了它的连接。
     // 后台 shell 开着时，后台任务的集合、回合的来历只给声明了 backgroundTasks 的连接。
-    extensions: backgroundShell ? [...extensions, EXTENSION.backgroundTasks] : extensions,
+    extensions: [
+      EXTENSION.filePreview,
+      ...extensions,
+      ...(backgroundShell ? [EXTENSION.backgroundTasks] : []),
+    ],
     features: features(approvals, backgroundShell),
     permissionPresets: [
       {

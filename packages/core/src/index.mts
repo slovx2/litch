@@ -230,6 +230,8 @@ export type * from './model-machine.mjs'
 export type * from './model-manage.mjs'
 export type * from './model-manager.mjs'
 export type * from './model-pairing.mjs'
+export type * from './model-preview.mjs'
+export { PREVIEW_LIMIT, previewKind } from './model-preview.mjs'
 export type * from './model-service.mjs'
 export type * from './model-tasks.mjs'
 export type * from './model-terminal.mjs'
@@ -311,6 +313,7 @@ export {
 } from './projection/comments.mjs'
 export { type EditableMessage, editableOf, resendOf } from './projection/edit.mjs'
 export {
+  explicitFileRef,
   type FileRef,
   type FileRefMode,
   type FileRefSpan,

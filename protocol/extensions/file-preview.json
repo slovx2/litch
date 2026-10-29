@@ -1,0 +1,36 @@
+{
+  "extension": "filePreview",
+  "description": "文件预览的限量读取。根校验和字节预算在持有文件的设备执行。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "filePreview" }
+    }
+  },
+  "undeclared": "携带 litchPreview 返回 -32602；不带该字段的标准 fs/readFile 行为及响应形状不变。",
+  "rules": [
+    "runtime/info 的设备或 harness extensions 声明 filePreview 后客户端才能发送该参数。",
+    "root 与 path 都为设备绝对路径，目标真实路径必须在根的真实路径内；拒绝 UNC 与非普通文件。",
+    "maxBytes 为 1 至 20971520 的整数；先检查句柄大小，再最多读取限额加一字节；文件或路径身份在读取期间改变则拒绝。",
+    "最多同时四次读取；响应仍只有 dataBase64。错误 data.litchPreview.kind 为 tooLarge/outside/notFile/changed/busy，tooLarge 附 bytes/limit。",
+    "这是避免文档越界引用的边界，不承诺抵抗恶意本机进程持续替换目录的原子沙箱。"
+  ],
+  "parts": [
+    {
+      "kind": "Param",
+      "on": "fs/readFile",
+      "name": "litchPreview",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["root", "maxBytes"],
+        "properties": {
+          "root": { "type": "string", "minLength": 1 },
+          "maxBytes": { "type": "integer", "minimum": 1, "maximum": 20971520 }
+        }
+      }
+    }
+  ]
+}

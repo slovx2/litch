@@ -7,6 +7,7 @@ import {
   PRESENTATION_RULES,
   PRESENTATION_SPEC,
 } from '../../protocol/src/client-tools-presentation.mjs'
+import { SESSION_TOOLS } from '../../protocol/src/client-tools-sessions.mjs'
 import { dynamicToolSpecs, matchDynamicTool, toolInstructions } from '../src/client-tools.mjs'
 import { AcpServer } from '../src/server.mjs'
 import { client, dispose, type Scene, scene, text, turn, violations } from './client.mjs'
@@ -14,6 +15,18 @@ import { client, dispose, type Scene, scene, text, turn, violations } from './cl
 // 动态工具（含 Litch 的客户端工具）：声明、按会话挂 MCP 桥、调用往返、出错、接回会话后还在。
 // 假 agent 收到 mcpServers 就把 MCP 服务起起来，回合里按“tool <报法> <工具> <参数>”调（fake-agent.mts）。
 
+test('子会话唤醒工具和初始开关原样进入 ACP 的 MCP 工具定义', () => {
+  const tools = dynamicToolSpecs([SESSION_TOOLS])
+  const wake = tools.find((tool) => tool.namespace === 'litch_sessions' && tool.tool === 'set_wake')
+  const start = tools.find((tool) => tool.namespace === 'litch_sessions' && tool.tool === 'start')
+  assert.ok(wake)
+  assert.ok(start)
+  assert.deepEqual(wake.inputSchema.required, ['thread_id', 'wake'])
+  assert.equal(
+    (start.inputSchema.properties as Record<string, { type: string }>).wake_parent?.type,
+    'boolean',
+  )
+})
 const TOOLS = [
   {
     type: 'namespace',
