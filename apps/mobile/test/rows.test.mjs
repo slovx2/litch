@@ -50,6 +50,40 @@ function viewOf(turns, items) {
 
 const types = (rows) => rows.map((row) => row.type)
 
+test('独立的后台续做回合结束后保留脚注：过程收起、无最终回答都不省略，下一回合用户消息在脚注之后', () => {
+  for (const hasAnswer of [false, true]) {
+    const items = [command('bg:c', 'completed', 0)]
+    if (hasAnswer) items.push(answer('bg:a', ''))
+    const ids = items.map((item) => item.id)
+    items.push(user('next:u', '继续检查'))
+    const rows = new RowBuilder().build(
+      viewOf(
+        [
+          {
+            id: 'bg',
+            origin: 'backgroundTask',
+            status: 'completed',
+            itemIds: ids,
+            startedAt: 1000,
+            durationMs: 196000,
+          },
+          { id: 'next', status: 'running', itemIds: ['next:u'] },
+        ],
+        items,
+      ),
+      'all',
+    )
+    const footer = rows.findIndex((row) => row.type === 'status' && row.turnId === 'bg')
+    assert.ok(footer > 0)
+    assert.equal(rows[footer].status, 'completed')
+    assert.equal(rows[footer].startedAt, 1000)
+    assert.equal(rows[footer].durationMs, 196000)
+    assert.equal(rows[footer + 1].type, 'user')
+    assert.equal(rows[footer + 1].turnId, 'next')
+    if (hasAnswer) assert.equal(rows[footer - 1].type, 'process')
+  }
+})
+
 test('经理的四种事件保留来源类型，显示系统事件行而非用户气泡', () => {
   for (const kind of ['manager-open', 'manager-answers', 'manager-end', 'manager-rules']) {
     const text = formatSessionEvent({

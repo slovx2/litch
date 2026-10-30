@@ -263,17 +263,20 @@
   border-width: 1px;
 }
 
-/* 自发回合开头：放在用户气泡的位置 */
+/* 自发回合的来源靠左，与下方过程紧邻，避免被误认成上一回合的尾注。 */
 .turn-origin {
-  align-self: flex-end;
+  align-self: stretch;
   display: flex;
   align-items: center;
   gap: 6px;
-  max-width: min(82%, 760px);
+  max-width: 100%;
   min-width: 0;
-  padding: 2px 4px;
+  padding: 2px 6px 0 2px;
   font-size: calc(12px * var(--fs));
-  color: var(--ink-3);
+  color: var(--ink-2);
+}
+.turn-origin + .proc {
+  margin-top: -8px;
 }
 .turn-origin .ic {
   flex: none;
@@ -281,6 +284,11 @@
 }
 .turn-origin > span {
   white-space: nowrap;
+}
+.turn-origin .origin-label {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .turn-origin .ell {
   min-width: 0;

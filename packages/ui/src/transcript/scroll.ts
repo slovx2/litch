@@ -12,6 +12,8 @@
 // - 上面那行变得更少：视口里有东西收起来了（活动区自动收起）。盯住下面那行，上面的滑下来，
 //   这样正在看的最终回答不跳。
 // 三种情况合起来就是：取两个变化量里较大的那个。
+// 例外是过程自动收起：触控入口可能比原来的一条步骤摘要更高，不能仅凭增高判断成展开；
+// 预先记录过程后面的可见正文，收起时优先守住它。
 // 点开或收起一个条目时盯住的是被点的那一行，办法一样。
 // 浏览器自带的滚动锚定已经在样式里关掉了（overflow-anchor: none），不然会补偿两次。
 //
@@ -143,6 +145,8 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
   const upper = useRef<Hold | null>(null)
   const lower = useRef<Hold | null>(null)
   const pinned = useRef<Hold | null>(null)
+  /** 自动收起可能反而增高（短步骤组换成触控入口），这时仍守住后面的正文。 */
+  const folding = useRef<{ body: Element; process: Element; after: Hold } | null>(null)
   /** 视口里最靠上的那一行，上边缘在窗口里的纵坐标。和 upper 一起记 */
   const upperTop = useRef(0)
   /**
@@ -167,6 +171,7 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
     upper.current = null
     lower.current = null
     pinned.current = null
+    folding.current = null
     steadied.current = null
     written.current = null
     seen.current = null
@@ -242,6 +247,18 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
       return
     }
     if (follow.current) return
+    const fold = folding.current
+    if (
+      fold &&
+      !fold.body.isConnected &&
+      fold.process.querySelector(':scope > .proc-head[aria-expanded="false"]')
+    ) {
+      const delta = grown(fold.after)
+      if (delta !== null) {
+        shift(delta)
+        return
+      }
+    }
     const deltas = [grown(upper.current), grown(lower.current)].filter((delta) => delta !== null)
     if (deltas.length > 0) shift(Math.max(...deltas))
   }, [grown, shift])
@@ -252,6 +269,7 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
     const content = contentRef.current
     if (!scroller || !content || !armed.current) return
     seen.current = scroller.scrollTop
+    folding.current = null
     const distance = -scroller.scrollTop
     const atBottom = distance <= AT_BOTTOM
     if (atBottom !== follow.current) {
@@ -272,6 +290,25 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
     const last = countWhile(rows, (row) => row.getBoundingClientRect().top < view.bottom) - 1
     upper.current = hold(rows[first])
     lower.current = last > first ? hold(rows[last]) : null
+    // 只记录眼前尚未收起的过程及其后的稳定行；手动开合仍由 pinned 优先处理。
+    for (let index = first; index <= last; index++) {
+      const row = rows[index]
+      if (!row || row.closest('.proc')) continue
+      const bodies = row.closest('.turn')?.querySelectorAll('.proc.live > .proc-body') ?? []
+      const body = [...bodies].find((entry) => {
+        const box = entry.getBoundingClientRect()
+        return (
+          box.bottom > view.top &&
+          box.top < view.bottom &&
+          (entry.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+        )
+      })
+      const after = body ? hold(row) : null
+      if (body?.parentElement && after) {
+        folding.current = { body, process: body.parentElement, after }
+        break
+      }
+    }
     const element = upper.current?.element
     if (!element) return
     upperTop.current = element.getBoundingClientRect().top
