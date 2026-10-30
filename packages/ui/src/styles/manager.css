@@ -353,6 +353,41 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 24px;
 }
+.mg-form-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--line-2);
+  padding-bottom: 12px;
+}
+.mg-form-nav button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  font: inherit;
+}
+.mg-form-nav button[aria-current="step"],
+.mg-form-nav button[aria-selected="true"] {
+  color: var(--ink);
+  background: var(--raised);
+  border-color: var(--line-2);
+  font-weight: 600;
+}
+.mg-form-nav button:disabled {
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+.mg-step-number {
+  font-variant-numeric: tabular-nums;
+}
+.mg-panel[hidden] {
+  display: none;
+}
 .mg-fields {
   border: 0;
   padding: 0;

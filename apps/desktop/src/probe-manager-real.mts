@@ -61,7 +61,9 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     await frame()
   }
   const field = (label: string) =>
-    all('.mg-form label').find((entry) => entry.firstChild?.textContent?.trim() === label)
+    all('.mg-panel:not([hidden]) label').find(
+      (entry) => entry.firstChild?.textContent?.trim() === label,
+    )
   const fill = async (label: string, value: string) => {
     const input = await wait(label, () =>
       field(label)?.querySelector<HTMLInputElement | HTMLTextAreaElement>('input, textarea'),
@@ -89,6 +91,8 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     await wait('新建经理表单', () => one('[data-manager="form"]'))
     await fill('名称', `${harness} 真实界面经理`)
     await fill('经理设定', '在隔离仓库验收决策、答复、工作线回报和结束流程。')
+    await click('.mg-form button[type="submit"]')
+    await wait('运行环境步骤', () => one('[data-manager-step="runtime"]'))
     await fill('工作目录', cwd)
     const picker = await wait('经理 harness 选择项', () => {
       const candidate = [...document.querySelectorAll<HTMLSelectElement>('.mg-form select')].find(
@@ -99,6 +103,8 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     picker.value = harness
     picker.dispatchEvent(new Event('change', { bubbles: true }))
     await frame()
+    await click('.mg-form button[type="submit"]')
+    await wait('任务分配步骤', () => one('[data-manager-step="dispatch"]'))
     // 夹具只验会话回报，不创建额外工作树；通过正式任务分配选项关闭。
     for (const label of all('.mg-form label')) {
       const checkbox = one<HTMLInputElement>('input[type="checkbox"]', label)
@@ -239,9 +245,12 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
   if (step === '06-settings') {
     await click('[data-act="manager-settings"]')
     await wait('经理编辑表单', () => one('[data-manager-mode="edit"]'))
-    assert(all('.mg-fixed').length === 5, '经理自身配置未只读显示')
+    await click('[data-form-tab="runtime"]')
+    assert(all('.mg-panel:not([hidden]) .mg-fixed').length === 5, '经理自身配置未只读显示')
     assert(!field('首个任务') && !field('从哪种开始'), '编辑仍显示创建专用字段')
-    return { fixed: all('.mg-fixed').map(text) }
+    const fixed = all('.mg-fixed').map(text)
+    await click('[data-form-tab="basic"]')
+    return { fixed }
   }
   if (step === '06-rules') {
     const rules = await wait('可编辑的经理设定', () =>
@@ -250,7 +259,9 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     const updated = `${rules.value}\n仅在隔离仓库执行 ${harness} 设置验收，完成后等待用户确认。`
     write(rules, updated)
     await frame()
+    await click('[data-form-tab="dispatch"]')
     await fill('最大并行工作线数', '2')
+    await click('[data-form-tab="basic"]')
     assert(rules.value === updated, '任务分配选项覆盖了经理设定')
     await click('.mg-form button[type="submit"]')
     await wait('保存后经理设定更新', () => text(one('.mg-scope')).includes(updated))
@@ -263,10 +274,12 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     })
     await kit.idle()
     await click('[data-act="manager-settings"]')
+    await click('[data-form-tab="dispatch"]')
     await wait(
       '保存的并发上限',
       () => field('最大并行工作线数')?.querySelector<HTMLInputElement>('input')?.value === '2',
     )
+    await click('[data-form-tab="basic"]')
     assert(
       field('经理设定')?.querySelector<HTMLTextAreaElement>('textarea')?.value === updated,
       '保存的经理设定不符',

@@ -13,6 +13,12 @@ import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { EFFORT_TEXT } from '../composer/efforts.ts'
 import { useComposeOptions } from '../composer/SettingsBar.tsx'
+import {
+  MANAGER_FORM_STEPS,
+  type ManagerFormStep,
+  managerStepError,
+  managerTabTarget,
+} from './form-steps.ts'
 
 function remembered(deviceId: string) {
   try {
@@ -70,6 +76,8 @@ export function ManagerForm({
       firstTask: '',
     }
   })
+  const [step, setStep] = useState<ManagerFormStep>('basic')
+  const stepIndex = MANAGER_FORM_STEPS.findIndex((entry) => entry.id === step)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const options = useComposeOptions(deviceId, form.harness || undefined)
@@ -94,14 +102,21 @@ export function ManagerForm({
   }
   const save = async () => {
     if (busy || disabled) return
-    if (
-      !cwd.trim() ||
-      (!manager &&
-        !device?.harnesses.some((entry) => entry.id === form.harness && entry.state === 'ready')) ||
-      !Number.isInteger(form.dispatch.maxRunningLines) ||
-      form.dispatch.maxRunningLines < 1
-    ) {
-      setError(t(manager ? 'manager.updateRequired' : 'manager.required'))
+    const issue = managerStepError(manager ? 'dispatch' : step, {
+      cwd,
+      harnessReady: Boolean(
+        device?.harnesses.some((entry) => entry.id === form.harness && entry.state === 'ready'),
+      ),
+      maxRunningLines: form.dispatch.maxRunningLines,
+    })
+    if (issue) {
+      if (manager) setStep('dispatch')
+      setError(t(issue))
+      return
+    }
+    if (!manager && step !== 'dispatch') {
+      setStep(step === 'basic' ? 'runtime' : 'dispatch')
+      setError('')
       return
     }
     setBusy(true)
@@ -147,13 +162,61 @@ export function ManagerForm({
       className="mng-wrap mg-form"
       data-manager="form"
       data-manager-mode={manager ? 'edit' : 'create'}
+      data-manager-step={step}
+      noValidate
       onSubmit={(event) => {
         event.preventDefault()
         void save()
       }}
     >
+      <nav
+        className="mg-form-nav"
+        role={manager ? 'tablist' : undefined}
+        aria-label={t('manager.formSections')}
+      >
+        {MANAGER_FORM_STEPS.map((entry, index) => (
+          <button
+            key={entry.id}
+            id={`manager-tab-${entry.id}`}
+            data-form-tab={entry.id}
+            type="button"
+            {...(manager
+              ? { role: 'tab', 'aria-selected': step === entry.id }
+              : { 'aria-current': step === entry.id ? 'step' : undefined })}
+            aria-controls={`manager-panel-${entry.id}`}
+            tabIndex={manager && step !== entry.id ? -1 : 0}
+            disabled={busy || (!manager && index > stepIndex)}
+            title={!manager && index > stepIndex ? t('manager.stepUnavailable') : undefined}
+            onClick={() => {
+              setStep(entry.id)
+              setError('')
+            }}
+            onKeyDown={(event) => {
+              if (!manager || busy) return
+              const next = managerTabTarget(step, event.key)
+              if (!next) return
+              event.preventDefault()
+              setStep(next)
+              setError('')
+              event.currentTarget.parentElement
+                ?.querySelector<HTMLButtonElement>(`[data-form-tab="${next}"]`)
+                ?.focus()
+            }}
+          >
+            {!manager ? <span className="mg-step-number">{index + 1}</span> : null}
+            {t(entry.label)}
+          </button>
+        ))}
+      </nav>
       <fieldset className="mg-fields" disabled={busy || disabled}>
-        <section className="mng-sec">
+        <section
+          className="mng-sec mg-panel"
+          id="manager-panel-basic"
+          data-manager-panel="basic"
+          hidden={step !== 'basic'}
+          role={manager ? 'tabpanel' : undefined}
+          aria-labelledby="manager-tab-basic"
+        >
           <label className="form-field">
             {t('manager.name')}
             <input
@@ -173,8 +236,27 @@ export function ManagerForm({
               onChange={(event) => change({ rules: event.target.value })}
             />
           </label>
+          {!manager ? (
+            <label className="form-field">
+              {t('manager.firstTask')}
+              <textarea
+                className="req-input"
+                rows={3}
+                value={form.firstTask}
+                placeholder={t('manager.firstPlaceholder')}
+                onChange={(event) => change({ firstTask: event.target.value })}
+              />
+            </label>
+          ) : null}
         </section>
-        <section className="mng-sec mg-form-grid">
+        <section
+          className="mng-sec mg-form-grid mg-panel"
+          id="manager-panel-runtime"
+          data-manager-panel="runtime"
+          hidden={step !== 'runtime'}
+          role={manager ? 'tabpanel' : undefined}
+          aria-labelledby="manager-tab-runtime"
+        >
           {manager ? (
             (
               [
@@ -297,147 +379,146 @@ export function ManagerForm({
             </>
           )}
         </section>
-        <section className="mng-sec">
-          <h2>{t('manager.dispatch')}</h2>
-          <label className="form-field">
-            {t('manager.lineHarness')}
-            <select
-              value={form.dispatch.harness ?? ''}
-              onChange={(event) =>
-                change({
-                  dispatch: {
-                    ...form.dispatch,
-                    harness: event.target.value || null,
-                    model: null,
-                    effort: null,
-                  },
-                })
-              }
-            >
-              <option value="">{t('manager.same')}</option>
-              {device?.harnesses
-                .filter((entry) => entry.state === 'ready')
-                .map((entry) => (
+        <section
+          className="mg-panel"
+          id="manager-panel-dispatch"
+          data-manager-panel="dispatch"
+          hidden={step !== 'dispatch'}
+          role={manager ? 'tabpanel' : undefined}
+          aria-labelledby="manager-tab-dispatch"
+        >
+          <section className="mng-sec">
+            <h2>{t('manager.dispatch')}</h2>
+            <label className="form-field">
+              {t('manager.lineHarness')}
+              <select
+                value={form.dispatch.harness ?? ''}
+                onChange={(event) =>
+                  change({
+                    dispatch: {
+                      ...form.dispatch,
+                      harness: event.target.value || null,
+                      model: null,
+                      effort: null,
+                    },
+                  })
+                }
+              >
+                <option value="">{t('manager.same')}</option>
+                {device?.harnesses
+                  .filter((entry) => entry.state === 'ready')
+                  .map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className="form-field">
+              {t('manager.lineModel')}
+              <select
+                value={form.dispatch.model ?? ''}
+                onChange={(event) =>
+                  change({
+                    dispatch: { ...form.dispatch, model: event.target.value || null, effort: null },
+                  })
+                }
+              >
+                <option value="">{t(sameHarness ? 'manager.same' : 'manager.default')}</option>
+                {form.dispatch.model &&
+                !lineOptions?.models.some((entry) => entry.id === form.dispatch.model) ? (
+                  <option value={form.dispatch.model}>{form.dispatch.model}</option>
+                ) : null}
+                {lineOptions?.models.map((entry) => (
                   <option key={entry.id} value={entry.id}>
-                    {entry.name}
+                    {entry.title}
                   </option>
                 ))}
-            </select>
-          </label>
-          <label className="form-field">
-            {t('manager.lineModel')}
-            <select
-              value={form.dispatch.model ?? ''}
-              onChange={(event) =>
-                change({
-                  dispatch: { ...form.dispatch, model: event.target.value || null, effort: null },
-                })
-              }
-            >
-              <option value="">{t(sameHarness ? 'manager.same' : 'manager.default')}</option>
-              {form.dispatch.model &&
-              !lineOptions?.models.some((entry) => entry.id === form.dispatch.model) ? (
-                <option value={form.dispatch.model}>{form.dispatch.model}</option>
-              ) : null}
-              {lineOptions?.models.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.title}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="form-field">
-            {t('manager.lineEffort')}
-            <select
-              value={form.dispatch.effort ?? ''}
-              onChange={(event) =>
-                change({
-                  dispatch: { ...form.dispatch, effort: event.target.value || null },
-                })
-              }
-            >
-              <option value="">{t(sameHarness ? 'manager.same' : 'manager.default')}</option>
-              {form.dispatch.effort &&
-              !lineModel?.efforts.some((entry) => entry.id === form.dispatch.effort) ? (
-                <option value={form.dispatch.effort}>{form.dispatch.effort}</option>
-              ) : null}
-              {lineModel?.efforts.map((entry) => {
-                const label = EFFORT_TEXT[entry.id]
-                return (
-                  <option key={entry.id} value={entry.id}>
-                    {label ? t(label) : entry.id}
-                  </option>
-                )
-              })}
-            </select>
-          </label>
-          <label className="form-check">
-            <input
-              type="checkbox"
-              checked={form.dispatch.worktree}
-              onChange={(event) =>
-                change({ dispatch: { ...form.dispatch, worktree: event.target.checked } })
-              }
-            />
-            {t('manager.worktree')}
-          </label>
-          <label className="form-field">
-            {t('manager.merge')}
-            <select
-              value={form.dispatch.merge}
-              onChange={(event) =>
-                change({
-                  dispatch: { ...form.dispatch, merge: event.target.value as 'manager' | 'user' },
-                })
-              }
-            >
-              <option value="manager">{t('manager.mergeManager')}</option>
-              <option value="user">{t('manager.mergeUser')}</option>
-            </select>
-          </label>
-          <label className="form-field">
-            {t('manager.max')}
-            <input
-              className="req-input"
-              type="number"
-              min={1}
-              step={1}
-              required
-              value={form.dispatch.maxRunningLines}
-              onChange={(event) =>
-                change({
-                  dispatch: { ...form.dispatch, maxRunningLines: Number(event.target.value) },
-                })
-              }
-            />
-          </label>
+              </select>
+            </label>
+            <label className="form-field">
+              {t('manager.lineEffort')}
+              <select
+                value={form.dispatch.effort ?? ''}
+                onChange={(event) =>
+                  change({
+                    dispatch: { ...form.dispatch, effort: event.target.value || null },
+                  })
+                }
+              >
+                <option value="">{t(sameHarness ? 'manager.same' : 'manager.default')}</option>
+                {form.dispatch.effort &&
+                !lineModel?.efforts.some((entry) => entry.id === form.dispatch.effort) ? (
+                  <option value={form.dispatch.effort}>{form.dispatch.effort}</option>
+                ) : null}
+                {lineModel?.efforts.map((entry) => {
+                  const label = EFFORT_TEXT[entry.id]
+                  return (
+                    <option key={entry.id} value={entry.id}>
+                      {label ? t(label) : entry.id}
+                    </option>
+                  )
+                })}
+              </select>
+            </label>
+            <label className="form-check">
+              <input
+                type="checkbox"
+                checked={form.dispatch.worktree}
+                onChange={(event) =>
+                  change({ dispatch: { ...form.dispatch, worktree: event.target.checked } })
+                }
+              />
+              {t('manager.worktree')}
+            </label>
+            <label className="form-field">
+              {t('manager.merge')}
+              <select
+                value={form.dispatch.merge}
+                onChange={(event) =>
+                  change({
+                    dispatch: { ...form.dispatch, merge: event.target.value as 'manager' | 'user' },
+                  })
+                }
+              >
+                <option value="manager">{t('manager.mergeManager')}</option>
+                <option value="user">{t('manager.mergeUser')}</option>
+              </select>
+            </label>
+            <label className="form-field">
+              {t('manager.max')}
+              <input
+                className="req-input"
+                type="number"
+                min={1}
+                step={1}
+                required
+                value={form.dispatch.maxRunningLines}
+                onChange={(event) =>
+                  change({
+                    dispatch: { ...form.dispatch, maxRunningLines: Number(event.target.value) },
+                  })
+                }
+              />
+            </label>
+          </section>
+          <section className="mng-sec">
+            <h2>{t('manager.contact')}</h2>
+            <label className="form-check">
+              <input
+                type="checkbox"
+                checked={form.contact.desktopNotification}
+                onChange={(event) =>
+                  change({
+                    contact: { ...form.contact, desktopNotification: event.target.checked },
+                  })
+                }
+              />
+              {t('manager.notify')}
+            </label>
+            <p className="dim">{t('manager.unanswered')}</p>
+          </section>
         </section>
-        <section className="mng-sec">
-          <h2>{t('manager.contact')}</h2>
-          <label className="form-check">
-            <input
-              type="checkbox"
-              checked={form.contact.desktopNotification}
-              onChange={(event) =>
-                change({ contact: { ...form.contact, desktopNotification: event.target.checked } })
-              }
-            />
-            {t('manager.notify')}
-          </label>
-          <p className="dim">{t('manager.unanswered')}</p>
-        </section>
-        {!manager ? (
-          <label className="form-field">
-            {t('manager.firstTask')}
-            <textarea
-              className="req-input"
-              rows={3}
-              value={form.firstTask}
-              placeholder={t('manager.firstPlaceholder')}
-              onChange={(event) => change({ firstTask: event.target.value })}
-            />
-          </label>
-        ) : null}
       </fieldset>
       <footer className="tk-form-foot mg-form-foot">
         {error ? (
@@ -449,20 +530,36 @@ export function ManagerForm({
         <button type="button" className="btn ghost" disabled={busy} onClick={onCancel}>
           {t('manager.cancel')}
         </button>
+        {!manager && step !== 'basic' ? (
+          <button
+            type="button"
+            className="btn ghost"
+            data-act="manager-previous"
+            disabled={busy}
+            onClick={() => {
+              setStep(step === 'dispatch' ? 'runtime' : 'basic')
+              setError('')
+            }}
+          >
+            {t('manager.previous')}
+          </button>
+        ) : null}
         <button
           type="submit"
           className="btn primary"
-          disabled={busy || disabled || !device}
-          title={disabled ? t('manager.offline') : !device ? t('manager.noDevice') : undefined}
+          disabled={busy || disabled}
+          title={disabled ? t('manager.offline') : undefined}
         >
           {t(
             manager
               ? busy
                 ? 'manager.saving'
                 : 'manager.save'
-              : busy
-                ? 'manager.creating'
-                : 'manager.create',
+              : step !== 'dispatch'
+                ? 'manager.next'
+                : busy
+                  ? 'manager.creating'
+                  : 'manager.create',
           )}
         </button>
       </footer>
