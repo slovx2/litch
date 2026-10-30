@@ -35,7 +35,7 @@ export const SETTINGS_SECTIONS = [
 ]
 
 const prefsLine = (prefs: ConfigPrefs) =>
-  `language ${prefs.lang} · skin ${prefs.skin} · mode ${prefs.theme} · density ${prefs.density} · width ${prefs.chatWidth} · zoom ${Math.round(prefs.zoom * 100)}% · sidebar text ${Math.round(prefs.treeText * 100)}% · conversation text ${Math.round(prefs.chatText * 100)}% · links ${prefs.linksInApp ? 'in-app' : 'system'} · task-success notices ${prefs.notifySuccess ? 'on' : 'off'} · session notices ${prefs.notifySessions ? 'on' : 'off'}`
+  `language ${prefs.lang} · skin ${prefs.skin} · mode ${prefs.theme} · density ${prefs.density} · width ${prefs.chatWidth} · zoom ${Math.round(prefs.zoom * 100)}% · sidebar text ${Math.round(prefs.treeText * 100)}% · conversation text ${Math.round(prefs.chatText * 100)}% · links ${prefs.linksInApp ? 'in-app' : 'system'} · task-success notices ${prefs.notifySuccess ? 'on' : 'off'} · session notices ${prefs.notifySessions ? 'on' : 'off'} · notification scope ${prefs.notifyScope}`
 
 const setPrefs = async (ctx: OpContext, patch: Partial<ConfigPrefs>) => {
   const prefs = (await ctx.ui({ kind: 'prefs.set', patch })) as ConfigPrefs
@@ -420,6 +420,20 @@ export const APP_OPS: Record<string, OpSpec> = {
       const on = parseSwitch(ctx.cmd.positionals[0])
       if (on === null) throw bad(ctx, '只能是 on 或 off', 'Use on or off')
       return setPrefs(ctx, { notifySessions: on })
+    },
+  },
+  'notify scope': {
+    args: [1, 1],
+    usage: 'notify scope all|main',
+    summary: {
+      zh: '会话通知范围：全部对话或仅主会话',
+      en: 'Notify for all conversations or main sessions only',
+    },
+    async run(ctx) {
+      const scope = ctx.cmd.positionals[0]
+      if (scope !== 'all' && scope !== 'main')
+        throw bad(ctx, '只能是 all 或 main', 'Use all or main')
+      return setPrefs(ctx, { notifyScope: scope })
     },
   },
 }

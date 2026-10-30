@@ -21,8 +21,10 @@ import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { useSidebarNativeChildren } from '../sidebar/state.ts'
 import { ManagerNotices } from './ManagerNotices.tsx'
 import {
+  inNoticeScope,
   type NoticeSlot,
   noticeBodyOf,
+  notifyScope,
   notifySessions,
   sessionNoticeOf,
   slotOf,
@@ -65,7 +67,7 @@ export function SessionNotices({
       if (before?.status === 'waiting' && after.status !== 'waiting')
         shell.closeNotice?.(noticeId(deviceId, after.id, 'ask'))
       if (!notifySessions()) return
-      const kind = sessionNoticeOf(before, after, !nativeShown.current)
+      const kind = sessionNoticeOf(before, after, !nativeShown.current, notifyScope())
       if (!kind) return
       const seen = viewing.current
       if (document.hasFocus() && seen?.deviceId === deviceId && seen.sessionId === after.id) return
@@ -74,6 +76,10 @@ export function SessionNotices({
         .command('session.peek', { deviceId, sessionId: after.id })
         .catch((): SessionPeek | null => null)
         .then((peek) => {
+          // 取正文期间可能改了通知偏好或补齐父会话关系，发送前再按现值过滤。
+          const summary =
+            replica.store.get<SessionSummary>(keys.summary(deviceId, after.id)) ?? after
+          if (!notifySessions() || !inNoticeScope(summary, notifyScope())) return
           const t = said.current
           const device = replica.store.get<DeviceView>(keys.device(deviceId))
           const deviceName = device ? t.text(device.name) : deviceId

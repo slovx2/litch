@@ -215,6 +215,11 @@ export const zhTasks = {
   'settings.group.notify': '通知',
   'settings.notify.intro': '窗口不在前台时发送系统通知，点击通知可打开对应会话。',
   'settings.notify.sessions': '会话',
+  'settings.notify.scope': '通知范围',
+  'settings.notify.scope.all': '全部对话',
+  'settings.notify.scope.main': '仅主会话',
+  'settings.notify.scope.note':
+    '主会话指没有父会话的对话。经理决策、定时任务和远程操作审批不受影响。',
   'settings.notify.sessionsSwitch': '回合结束、需要审批或回答时通知',
   'notify.session.done': '{harness} 回合已结束',
   'notify.manager.decision': '新决策待答',

@@ -22,6 +22,8 @@ export interface ConfigPrefs {
   notifySuccess: boolean
   /** 会话回合结束、要人审批或回答时发系统通知（窗口不在前台时） */
   notifySessions: boolean
+  /** 普通会话通知范围：全部对话，或仅没有父会话的主会话 */
+  notifyScope: 'all' | 'main'
 }
 
 /** 打开哪一页 */

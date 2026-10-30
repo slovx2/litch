@@ -34,7 +34,12 @@ import {
 import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { PairDialog } from '../devices/PairDialog.tsx'
 import type { Translator } from '../i18n/index.ts'
-import { notifySessions, setNotifySessions } from '../notify/session-notice.ts'
+import {
+  notifyScope,
+  notifySessions,
+  setNotifyScope,
+  setNotifySessions,
+} from '../notify/session-notice.ts'
 import { linksInApp, setLinksInBrowser } from '../side/browser/links.ts'
 import { notifySuccess, setNotifySuccess } from '../tasks/notify-pref.ts'
 
@@ -52,6 +57,7 @@ function prefsNow(look: Appearance): ConfigPrefs {
     linksInApp: linksInApp(),
     notifySuccess: notifySuccess(),
     notifySessions: notifySessions(),
+    notifyScope: notifyScope(),
   }
 }
 
@@ -65,6 +71,7 @@ function applyPrefs(patch: Partial<ConfigPrefs>): void {
   if (typeof patch.linksInApp === 'boolean') setLinksInBrowser(patch.linksInApp)
   if (typeof patch.notifySuccess === 'boolean') setNotifySuccess(patch.notifySuccess)
   if (typeof patch.notifySessions === 'boolean') setNotifySessions(patch.notifySessions)
+  if (patch.notifyScope === 'all' || patch.notifyScope === 'main') setNotifyScope(patch.notifyScope)
 }
 
 /** 确认卡上一项的话 */

@@ -67,6 +67,63 @@ test('每个会话两条：回合结束、出错占一条，审批、回答占�
   ])
 })
 
+test('范围按父会话字段过滤四类通知：主会话照常，Litch 子会话、经理工作线、原生子会话受控', () => {
+  const changes = [
+    [{}, 'done'],
+    [{ status: 'error' }, 'failed'],
+    [{ status: 'waiting', waitingFor: 'approval' }, 'approval'],
+    [{ status: 'waiting', waitingFor: 'answer' }, 'answer'],
+  ]
+  const children = [
+    { lineage: { parentId: 'parent' } },
+    { lineage: { parentId: 'manager' } },
+    { nativeLineage: { app: 'claude-desktop', parentId: 'missing-parent', createdAt: 0 } },
+  ]
+  for (const [change, kind] of changes) {
+    assert.equal(sessionNoticeOf(running, session(change), false, 'main'), kind)
+    for (const child of children) {
+      const before = session({ ...child, status: 'running' })
+      const after = session({ ...child, ...change })
+      assert.equal(sessionNoticeOf(before, after, false, 'main'), null)
+      assert.equal(sessionNoticeOf(before, after, false, 'all'), kind)
+      assert.equal(sessionNoticeOf(before, after), kind, '默认全部对话')
+    }
+    const unknown = { nativeLineage: { app: 'claude-desktop', parentId: null, createdAt: 0 } }
+    assert.equal(sessionNoticeOf(running, session({ ...unknown, ...change }), false, 'main'), kind)
+    assert.equal(sessionNoticeOf(running, session({ ...unknown, ...change }), true, 'main'), null)
+  }
+})
+
+test('通知范围沿用本地偏好：默认全部、立即读取、重新加载后保留，不改变会话总开关', async () => {
+  const saved = new Map()
+  const old = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key) => saved.get(key) ?? null,
+      setItem: (key, value) => saved.set(key, value),
+    },
+  })
+  try {
+    const prefs = await import('../src/notify/session-notice.ts?prefs')
+    assert.equal(prefs.notifyScope(), 'all')
+    prefs.setNotifyScope('main')
+    assert.equal(prefs.notifyScope(), 'main')
+    assert.equal(saved.get('litch.notify.scope'), 'main')
+    assert.equal(prefs.notifySessions(), true)
+    prefs.setNotifySessions(false)
+    assert.equal(prefs.notifyScope(), 'main')
+    const reloaded = await import('../src/notify/session-notice.ts?reloaded')
+    assert.equal(reloaded.notifyScope(), 'main')
+    assert.equal(reloaded.notifySessions(), false)
+    reloaded.setNotifyScope('all')
+    assert.equal(saved.get('litch.notify.scope'), 'all')
+  } finally {
+    if (old) Object.defineProperty(globalThis, 'localStorage', old)
+    else Reflect.deleteProperty(globalThis, 'localStorage')
+  }
+})
+
 const say = (text) => (typeof text === 'string' ? text : `[${text.key}]`)
 const peek = (over = {}) => ({ answer: null, error: null, pending: null, ...over })
 
