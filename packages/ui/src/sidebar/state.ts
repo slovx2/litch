@@ -126,6 +126,9 @@ export const useSidebar = (): SidebarState => useSyncExternalStore(subscribe, ()
 
 export const sidebarNow = (): SidebarState => sidebar
 
+/** 定位只关心开合，不让宽度、折叠或筛选变化重画整个侧栏。 */
+export const useSidebarOpen = (): boolean => useSyncExternalStore(subscribe, () => sidebar.open)
+
 /** 只要“只看哪几个 harness”这一项：拖宽、开合的时候用它的组件（各台设备的会话树）不跟着重画 */
 export const useSidebarHarnesses = (): readonly string[] =>
   useSyncExternalStore(subscribe, () => sidebar.harnesses)

@@ -18,6 +18,7 @@
 // 下面的 treeProbe、treeLooks 会被原样送进页面里执行，不能引用函数外面的东西。
 import type { BrowserWindow } from 'electron'
 import { pendingLooks } from './probe-pending-asks.mjs'
+import { checkSidebarReveal } from './probe-sidebar-reveal.mjs'
 
 export interface TreeSeen {
   /** 派子会话：侧栏里两个子会话挂在父会话下面，行上显示状态点、名字与 harness */
@@ -890,5 +891,9 @@ export async function runTreeChecks(window: BrowserWindow): Promise<readonly [ob
   const seen = await inPage(treeProbe)
   const pending = await pendingLooks(window)
   const looks = await inPage(treeLooks, 's6')
-  return [{ ...seen, looks, pending }, [...judgeTree(seen, looks), ...pending.failed]]
+  const reveal = await checkSidebarReveal(window)
+  return [
+    { ...seen, looks, pending, reveal: reveal.result },
+    [...judgeTree(seen, looks), ...pending.failed, ...reveal.failed],
+  ]
 }
