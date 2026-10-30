@@ -12,8 +12,8 @@
     "存储：经理、决策、事项、现状、变更记录存在设备状态目录，不写进仓库。数据库重启后保留，无法识别的结构直接拒绝，不迁就旧格式。看板记过程，以仓库为准；决定落地的位置写进 landed，不规定仓库文档格式。",
     "时间：协议所有 at、createdAt、updatedAt、startedAt、endedAt 为 Unix 秒；elapsedSeconds 为秒时长。核心投影把时间戳转毫秒，时长和审计 before/after 原文不变。",
     "标记：经理本人 litchManager={managerId,role:manager}，由其开出的整棵会话子树 role=line；无关系的会话不带字段。各层不能嵌套另一个经理，脱离树后重新计算标记。每次 thread/list、read、resume、started 和其他携带会话对象的投递都按该连接声明过滤。",
-    "创建：scope、cwd、harness 不得为空，cwd 是设备上存在的绝对路径。name 和 firstTask 可为空串，model/effort 可为 null。先持久化经理与会话关系，再投递 manager-open。firstTask 为空时先排事项和决策，不开线，等用户说开始；非空时按用户这项任务执行。空名字沿用会话自动命名，随后通知。",
-    "设置：dispatch/contact 每次整份替换，rules 保存用户传来的原文，设备不重拼。默认子会话参数在未显式指定时才用派活设置；harness=null 跟经理，换 harness 而 model/effort=null 用目标默认。worktree 适用于改代码的线，纯读取可显式 false；不支持工作树时明确报错，不退到共享目录。既有线不因设置更新而改参数。",
+    "创建：cwd、harness 不得为空；scope 可为空，cwd 是设备上存在的绝对路径。name、rules 和 firstTask 可为空串，model/effort 可为 null。先持久化经理与会话关系，再投递 manager-open。firstTask 为空时先排事项和决策，不开线，等用户说开始；非空时按用户这项任务执行。空名字沿用会话自动命名，随后通知。",
+    "设置：dispatch/contact 每次整份替换，rules 仅保存用户的经理设定原文；设备根据当前 dispatch/contact 自动生成行为规则，用户设定放在提示词最后。worktree 默认 false；桌面通知尚未接入，不生成发送通知的承诺。默认子会话参数在未显式指定时才用派活设置；harness=null 跟经理，换 harness 而 model/effort=null 用目标默认。worktree 适用于改代码的线，纯读取可显式 false；不支持工作树时明确报错，不退到共享目录。既有线不因设置更新而改参数。",
     "并发硬限制：maxRunningLines 为正整数，默认 4，统计整棵子树的在跑会话（一个会话至多占一次，回合、等待审批/用户输入、后台任务均占用）。start、hand_off、恢复/唤醒会话开始工作时原子预占名额；达到上限拒绝新工作并说明原因，不创建悬空会话。调低上限不打断正在跑的线，但禁止新增。与 sessionTree 的其他限额、权限限制同时生效。",
     "授权：范围内 litch_sessions.start 的 user_asked 可由经理在事件回合直接调用，不依赖这回合由用户发起；不得放宽子会话的审批或沙箱。超范围先提决策。设备为经理换会话规则、start 和命名空间说明，移除 wrap_up，避免普通任务卡规则与经理授权冲突。",
     "工具隔离：litch_manager 只授予经理本人，工具以实际调用会话绑定 managerId，参数不能指定别的看板。设备执行，不转给桌面。子会话即使 fork 也不继承 litch_manager 或经理角色规则，只加线规则；普通会话伪造动态工具声明不获得权限。",
@@ -108,7 +108,7 @@
       "objectId": { "anyOf": [{ "$ref": "#/definitions/ObjectId" }, { "type": "null" }] }, "threadId": { "type": ["string", "null"] }, "changeId": { "type": ["string", "null"] }
     }, "additionalProperties": false },
     "Manager": { "type": "object", "required": ["id", "threadId", "name", "scope", "cwd", "harness", "model", "effort", "template", "dispatch", "contact", "rules", "status", "pendingDecisions", "runningLines", "latestActivity", "createdAt", "updatedAt", "endedAt"], "properties": {
-      "id": { "type": "string" }, "threadId": { "type": "string" }, "name": { "type": "string" }, "scope": { "type": "string", "minLength": 1 }, "cwd": { "type": "string" }, "harness": { "type": "string" }, "model": { "type": ["string", "null"] }, "effort": { "type": ["string", "null"] },
+      "id": { "type": "string" }, "threadId": { "type": "string" }, "name": { "type": "string" }, "scope": { "type": "string" }, "cwd": { "type": "string" }, "harness": { "type": "string" }, "model": { "type": ["string", "null"] }, "effort": { "type": ["string", "null"] },
       "template": { "$ref": "#/definitions/Template" }, "dispatch": { "$ref": "#/definitions/Dispatch" }, "contact": { "$ref": "#/definitions/Contact" }, "rules": { "type": "string" }, "status": { "enum": ["active", "ending", "ended"] }, "pendingDecisions": { "type": "integer", "minimum": 0 }, "runningLines": { "type": "integer", "minimum": 0 },
       "latestActivity": { "anyOf": [{ "$ref": "#/definitions/Activity" }, { "type": "null" }] }, "createdAt": { "type": "number" }, "updatedAt": { "type": "number" }, "endedAt": { "type": ["number", "null"] }
     }, "additionalProperties": false },
@@ -117,11 +117,11 @@
       "lines": { "type": "array", "items": { "$ref": "#/definitions/Line" } }, "activities": { "type": "array", "items": { "$ref": "#/definitions/Activity" } }, "changes": { "type": "array", "items": { "$ref": "#/definitions/Change" } }
     }, "additionalProperties": false },
     "CreateParams": { "type": "object", "required": ["cwd", "harness", "model", "effort", "name", "scope", "template", "dispatch", "contact", "rules", "firstTask"], "properties": {
-      "cwd": { "type": "string", "minLength": 1 }, "harness": { "type": "string", "minLength": 1 }, "model": { "type": ["string", "null"] }, "effort": { "type": ["string", "null"] }, "name": { "type": "string" }, "scope": { "type": "string", "minLength": 1 },
+      "cwd": { "type": "string", "minLength": 1 }, "harness": { "type": "string", "minLength": 1 }, "model": { "type": ["string", "null"] }, "effort": { "type": ["string", "null"] }, "name": { "type": "string" }, "scope": { "type": "string" },
       "template": { "$ref": "#/definitions/Template" }, "dispatch": { "$ref": "#/definitions/Dispatch" }, "contact": { "$ref": "#/definitions/Contact" }, "rules": { "type": "string" }, "firstTask": { "type": "string" }
     }, "additionalProperties": false },
     "UpdateParams": { "type": "object", "required": ["managerId"], "properties": {
-      "managerId": { "type": "string" }, "name": { "type": "string" }, "scope": { "type": "string", "minLength": 1 }, "rules": { "type": "string" }, "dispatch": { "$ref": "#/definitions/Dispatch" }, "contact": { "$ref": "#/definitions/Contact" }
+      "managerId": { "type": "string" }, "name": { "type": "string" }, "scope": { "type": "string" }, "rules": { "type": "string" }, "dispatch": { "$ref": "#/definitions/Dispatch" }, "contact": { "$ref": "#/definitions/Contact" }
     }, "additionalProperties": false },
     "SubmittedAnswer": { "type": "object", "required": ["decisionId", "revision", "optionId", "text"], "properties": { "decisionId": { "$ref": "#/definitions/DecisionId" }, "revision": { "type": "integer", "minimum": 1 }, "optionId": { "type": ["string", "null"] }, "text": { "type": "string" } }, "additionalProperties": false },
     "AnswersParams": { "type": "object", "required": ["managerId", "answers"], "properties": { "managerId": { "type": "string" }, "answers": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/SubmittedAnswer" } } }, "additionalProperties": false },

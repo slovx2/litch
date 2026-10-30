@@ -87,7 +87,7 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     await click('.sb-top .new')
     await wait('新建经理表单', () => one('[data-manager="form"]'))
     await fill('名称', `${harness} 真实界面经理`)
-    await fill('范围', '在隔离仓库验收决策、答复、工作线回报和结束流程。')
+    await fill('经理设定', '在隔离仓库验收决策、答复、工作线回报和结束流程。')
     await fill('工作目录', cwd)
     const picker = await wait('经理 harness 选择项', () => {
       const candidate = [...document.querySelectorAll<HTMLSelectElement>('.mg-form select')].find(
@@ -243,15 +243,16 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     return { fixed: all('.mg-fixed').map(text) }
   }
   if (step === '06-rules') {
-    const rules = await wait('可编辑的规则', () => one<HTMLTextAreaElement>('.mg-rules textarea'))
+    const rules = await wait('可编辑的经理设定', () =>
+      field('经理设定')?.querySelector<HTMLTextAreaElement>('textarea'),
+    )
     const updated = `${rules.value}\n仅在隔离仓库执行 ${harness} 设置验收，完成后等待用户确认。`
     write(rules, updated)
     await frame()
-    await fill('范围', `${harness} 修改后的范围：验证设置保存和规则事件。`)
     await fill('最大并行工作线数', '2')
-    assert(rules.value === updated, '任务分配选项覆盖了手写规则')
+    assert(rules.value === updated, '任务分配选项覆盖了经理设定')
     await click('.mg-form button[type="submit"]')
-    await wait('保存后范围更新', () => text(one('.mg-scope')).includes(`${harness} 修改后的范围`))
+    await wait('保存后经理设定更新', () => text(one('.mg-scope')).includes(updated))
     const event = await wait('规则事件卡', () => one('[data-event="manager-rules"]'))
     await wait('规则回合完成', () => {
       const turn = event.closest('.turn')
@@ -265,12 +266,15 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
       '保存的并发上限',
       () => field('最大并行工作线数')?.querySelector<HTMLInputElement>('input')?.value === '2',
     )
-    assert(one<HTMLTextAreaElement>('.mg-rules textarea')?.value === updated, '保存的规则不符')
+    assert(
+      field('经理设定')?.querySelector<HTMLTextAreaElement>('textarea')?.value === updated,
+      '保存的经理设定不符',
+    )
     await click('.mg-form-foot button[type="button"]')
     const card = await wait('返回后规则事件卡', () => one('[data-event="manager-rules"]'))
     card.scrollIntoView({ block: 'center' })
     await frame()
-    return { event: text(card), scope: text(one('.mg-scope')), maxRunningLines: 2, rules: updated }
+    return { event: text(card), prompt: text(one('.mg-scope')), maxRunningLines: 2, rules: updated }
   }
   if (step === '07-ending') {
     await click('[data-act="manager-end"]')

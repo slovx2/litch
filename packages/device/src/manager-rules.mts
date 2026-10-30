@@ -6,11 +6,12 @@ import {
   managerLineRules,
   managerRoleRules,
   managerSessionRules,
+  managerSettingsRules,
 } from '../../protocol/src/client-tools-manager.mjs'
 import { SESSION_TOOL, sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
 import type { Manager } from '../../protocol/src/manager.mjs'
 
-type RuleSettings = Pick<Manager, 'name' | 'scope' | 'rules' | 'dispatch'>
+type RuleSettings = Pick<Manager, 'name' | 'scope' | 'rules' | 'dispatch' | 'contact'>
 const MARK = '\n<!-- litch-manager-settings: '
 export function ruleSettings(recorded: string): RuleSettings | null {
   const at = recorded.lastIndexOf(MARK)
@@ -55,7 +56,13 @@ export function managerTools(manager: RuleSettings): ClientToolNamespaceSpec[] {
 }
 export function managerInstructions(manager: RuleSettings): string {
   return tagged(
-    [managerRoleRules(manager.scope), manager.rules].filter(Boolean).join('\n\n'),
+    [
+      managerRoleRules(manager.scope),
+      managerSettingsRules(manager.dispatch, manager.contact),
+      manager.rules,
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
     manager,
   )
 }

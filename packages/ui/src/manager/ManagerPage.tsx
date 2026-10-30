@@ -156,12 +156,14 @@ export function ManagerPage({
         />
       </div>
       <section className="mg-board" aria-label={t('manager.board')}>
-        <div className="mg-scope">
-          <span className="dim">{t('manager.scope')}</span>
-          <span className="ell" title={manager.scope}>
-            {manager.scope}
-          </span>
-        </div>
+        {manager.rules ? (
+          <div className="mg-scope">
+            <span className="dim">{t('manager.prompt')}</span>
+            <span className="ell" title={manager.rules}>
+              {manager.rules}
+            </span>
+          </div>
+        ) : null}
         <div className="side-tabs">
           <div className="side-tablist" role="tablist">
             {(['overview', 'decisions', 'items', 'lines'] as const).map((key) => (

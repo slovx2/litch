@@ -40,8 +40,7 @@ function nullable(value: unknown, field: string): void {
 const PATCH = ['name', 'scope', 'rules', 'dispatch', 'contact']
 export function validatePatch(value: Record<string, unknown>): ManagerPatch {
   keys(value, PATCH)
-  for (const key of ['name', 'scope', 'rules'])
-    if (key in value) text(value[key], key, key === 'scope')
+  for (const key of ['name', 'scope', 'rules']) if (key in value) text(value[key], key, false)
   if ('dispatch' in value) {
     const dispatch = fields(value.dispatch)
     keys(dispatch, ['harness', 'model', 'effort', 'worktree', 'merge', 'maxRunningLines'])
@@ -64,7 +63,7 @@ export function validateCreate(value: unknown): ManagerCreateParams {
   const input = fields(value)
   keys(input, [...PATCH, 'cwd', 'harness', 'model', 'effort', 'template', 'firstTask'])
   for (const key of ['cwd', 'harness', 'scope', 'name', 'rules', 'firstTask'])
-    text(input[key], key, ['cwd', 'harness', 'scope'].includes(key))
+    text(input[key], key, ['cwd', 'harness'].includes(key))
   for (const key of ['model', 'effort']) nullable(input[key], key)
   if (!['release', 'investigation', 'research', 'blank'].includes(String(input.template)))
     invalid('Unknown manager template.', 'template')

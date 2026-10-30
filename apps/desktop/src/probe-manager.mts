@@ -13,7 +13,7 @@ export interface ManagerSeen {
   reportsStopped: boolean
   reportsResumed: boolean
   created: boolean
-  rulesKept: boolean
+  promptKept: boolean
   endedReadOnly: boolean
   endingReadOnly: boolean
   endingListed: boolean
@@ -28,7 +28,7 @@ export interface ManagerSeen {
   decisionJump: boolean
   overviewUnique: boolean
   opening: boolean
-  localizedRules: boolean
+  promptLocalized: boolean
   endedRow: boolean
   branchFacts: boolean
   settingsSaved: boolean
@@ -199,53 +199,40 @@ export async function managerProbe(): Promise<ManagerSeen> {
   if (document.querySelector('.mg-form .mng-sec:first-child select'))
     throw new Error('新建经理仍显示模板选择')
   const nameInput = field('名称')?.querySelector('input')
-  const scopeInput = field('范围')?.querySelector('textarea')
+  const promptInput = field('经理设定')?.querySelector('textarea')
   const cwdInput = field('工作目录')?.querySelector('input')
-  if (!nameInput || !scopeInput || !cwdInput) throw new Error('经理表单缺少必填字段')
-  fill(nameInput, '经理冒烟验收')
-  fill(scopeInput, '验证经理表单和答复提交，不启动真实任务')
-  fill(cwdInput, '~/work/litch')
-  await until('规则初稿', () =>
-    one<HTMLTextAreaElement>('.mg-rules textarea')?.value.includes('同时最多运行 4 条工作线'),
-  )
-  const rules = one<HTMLTextAreaElement>('.mg-rules textarea')
   const max = field('最大并行工作线数')?.querySelector('input')
-  if (!rules || !max) throw new Error('经理表单缺少规则或任务分配字段')
+  if (!nameInput || !promptInput || !cwdInput || !max) throw new Error('经理表单缺少字段')
+  if (one('.mg-rules') || field('范围')) throw new Error('经理表单仍显示范围或自动规则')
+  if (one<HTMLInputElement>('.mg-fields input[type="checkbox"]')?.checked)
+    throw new Error('新建经理默认启用了工作树')
+  fill(nameInput, '经理冒烟验收')
+  fill(promptInput, '仅执行冒烟验收范围内的任务。')
+  fill(cwdInput, '~/work/litch')
   const look = (
     window as unknown as { __litchLook: { set(patch: { lang: 'zh-CN' | 'en' }): void } }
   ).__litchLook
   look.set({ lang: 'en' })
-  await until('英文规则', () => rules.value.includes('At most 4 work lines'))
-  fill(max, '3')
-  await until('选项更新英文规则', () => rules.value.includes('At most 3 work lines'))
-  look.set({ lang: 'zh-CN' })
-  const localizedRules = await until(
-    '中文规则跟随设置',
-    () =>
-      rules.value.includes('同时最多运行 3 条工作线') &&
-      !rules.value.includes('Default work line harness'),
+  const promptLocalized = await until(
+    '经理设定英文标签',
+    () => Boolean(field('Manager settings')) && promptInput.placeholder.includes('Optional'),
   )
-  await click('.mg-rules button')
-  fill(rules, '仅执行冒烟验收范围内的任务。')
   fill(max, '2')
-  const rulesKept = await until(
-    '手写规则保持原文',
-    () => rules.value === '仅执行冒烟验收范围内的任务。' && max.value === '2',
-  )
-  look.set({ lang: 'en' })
-  await until(
-    '切语言仍保留手写规则',
-    () => rules.value === '仅执行冒烟验收范围内的任务。' && document.documentElement.lang === 'en',
+  const promptKept = await until(
+    '修改任务分配和语言保留经理设定',
+    () => promptInput.value === '仅执行冒烟验收范围内的任务。' && max.value === '2',
   )
   look.set({ lang: 'zh-CN' })
   await until('恢复中文', () => document.documentElement.lang === 'zh-CN')
+  // 空经理设定可以创建，自动规则不由界面填入。
+  fill(promptInput, '')
   await click('.mg-form button[type="submit"]')
   const created = await until('建好后进入经理', () =>
     one('.mg-title')?.textContent?.includes('经理冒烟验收'),
   )
   const createdId = one('[data-manager="session"]')?.getAttribute('data-manager-id')
   const createdEvent = Boolean(
-    (await eventBody('manager-open')).textContent?.includes('验证经理表单和答复提交'),
+    (await eventBody('manager-open')).textContent?.includes('经理冒烟验收'),
   )
   eventsClean = cleanChat() && eventsClean
   await click('[data-act="manager-settings"]')
@@ -263,12 +250,12 @@ export async function managerProbe(): Promise<ManagerSeen> {
     !field('首个任务') &&
     !field('从哪种开始')
   fill(editField('名称'), '经理设置验收')
-  fill(editField('范围'), '   ')
-  await click('.mg-form button[type="submit"]')
+  fill(editField('最大并行工作线数'), '0')
+  one('.mg-form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
   const settingsValidation = Boolean(
-    await until('无效范围显示原因', () => one('.mg-form [role="alert"]')),
+    await until('无效并发上限显示原因', () => one('.mg-form [role="alert"]')),
   )
-  fill(editField('范围'), '修改后的经理验收范围')
+  fill(editField('经理设定'), '修改后的经理设定\n\n保留验收记录。')
   fill(editField('最大并行工作线数'), '5')
   const select = async (label: string, value: string) => {
     const input = field(label)?.querySelector('select')
@@ -288,30 +275,26 @@ export async function managerProbe(): Promise<ManagerSeen> {
   ))
     checkbox.click()
   const settingsKept = await until(
-    '编辑设置保留规则',
-    () => one<HTMLTextAreaElement>('.mg-rules textarea')?.value === '仅执行冒烟验收范围内的任务。',
-  )
-  fill(
-    await until('编辑规则', () => one<HTMLTextAreaElement>('.mg-rules textarea')),
-    '修改后的规则：保留验收记录。',
+    '编辑任务分配保留经理设定',
+    () => editField('经理设定').value === '修改后的经理设定\n\n保留验收记录。',
   )
   await click('.mg-form button[type="submit"]')
   const settingsSaved = await until(
-    '更新名称、范围和规则事件',
+    '更新名称、经理设定和事件',
     () =>
       one('.mg-title')?.textContent?.includes('经理设置验收') &&
       one('.crumb')?.textContent?.includes('经理设置验收') &&
       one(`.mg-sidebar-manager[data-manager-id="${createdId}"] .mg-pick`)?.textContent?.includes(
         '经理设置验收',
       ) &&
-      one('.mg-scope')?.textContent?.includes('修改后的经理验收范围') &&
+      one('.mg-scope')?.textContent?.includes('修改后的经理设定') &&
       Boolean(one('[data-event="manager-rules"]')),
   )
   const rulesBody = await eventBody('manager-rules')
   const rulesEvent =
     rulesBody.children.length === 2 &&
-    rulesBody.children[0]?.textContent === '修改后的经理验收范围' &&
-    rulesBody.children[1]?.textContent === '修改后的规则：保留验收记录。'
+    rulesBody.children[0]?.textContent === '修改后的经理设定' &&
+    rulesBody.children[1]?.textContent === '保留验收记录。'
   eventsClean = cleanChat() && eventsClean
   await click('[data-act="manager-settings"]')
   await until('重新打开保存的并发上限', () => editField('最大并行工作线数').value === '5')
@@ -319,12 +302,12 @@ export async function managerProbe(): Promise<ManagerSeen> {
     field('子会话模型')?.querySelector('select')?.value === lineModel &&
     field('合并方式')?.querySelector('select')?.value === 'user' &&
     [...document.querySelectorAll<HTMLInputElement>('.mg-fields input[type="checkbox"]')].every(
-      (input) => !input.checked,
+      (input, index) => input.checked === (index === 0),
     )
-  fill(editField('范围'), '取消的修改不应保存')
+  fill(editField('经理设定'), '取消的修改不应保存')
   await click('.mg-form-foot button[type="button"]')
   const settingsCancelled = await until('取消不保存', () =>
-    one('.mg-scope')?.textContent?.includes('修改后的经理验收范围'),
+    one('.mg-scope')?.textContent?.includes('修改后的经理设定'),
   )
   await click('[data-sidebar-mode="manager"]')
   await click('[data-manager-row="e1"] .mg-list-open')
@@ -386,7 +369,7 @@ export async function managerProbe(): Promise<ManagerSeen> {
     reportsStopped,
     reportsResumed,
     created,
-    rulesKept,
+    promptKept,
     endedReadOnly,
     endingReadOnly,
     endingListed,
@@ -401,7 +384,7 @@ export async function managerProbe(): Promise<ManagerSeen> {
     decisionJump,
     overviewUnique,
     opening,
-    localizedRules,
+    promptLocalized,
     endedRow,
     branchFacts,
     settingsSaved,
@@ -428,7 +411,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
     reportsStopped: '经理子会话停止回报后没有显示标记',
     reportsResumed: '经理子会话恢复回报后标记没有移除',
     created: '新建经理没有进入经理页',
-    rulesKept: '手写规则被任务分配选项覆盖',
+    promptKept: '经理设定被任务分配选项覆盖',
     endedReadOnly: '已结束经理没有转只读',
     endingReadOnly: '结束中经理未标明状态或仍能写入',
     endingListed: '结束中经理未保留在全部经理列表',
@@ -443,11 +426,11 @@ export function judgeManager(seen: ManagerSeen): string[] {
     decisionJump: '点击决策编号没有切页并定位',
     overviewUnique: '卡住的用户事项在概览重复出现',
     opening: '经理对话仍使用 id 或占位回答开场',
-    localizedRules: '规则初稿没有跟随界面语言和设置',
+    promptLocalized: '经理设定标签和占位提示没有跟随界面语言',
     endedRow: '已结束经理有无效占位或总结按钮错位',
     branchFacts: '工作线仍显示孤立的未知',
-    settingsSaved: '设置保存后名称、范围或规则事件未更新',
-    settingsKept: '编辑经理时原有规则被选项覆盖',
+    settingsSaved: '设置保存后名称、经理设定或事件未更新',
+    settingsKept: '编辑经理时原有设定被选项覆盖',
     settingsCancelled: '取消设置仍保存了修改',
     settingsReadOnly: '编辑经理仍能修改设备、目录或经理自身运行配置',
     settingsValidation: '无效设置没有显示原因并保留表单',

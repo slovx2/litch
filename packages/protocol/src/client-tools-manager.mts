@@ -4,6 +4,7 @@ import { FRESH_BRIEF, outsideLitch, TITLE_LINE, WORKTREE_RULE } from './client-t
 import type {
   ManagerBoard,
   ManagerChange,
+  ManagerContactSettings,
   ManagerDecision,
   ManagerDecisionFields,
   ManagerDecisionId,
@@ -31,10 +32,10 @@ export const MANAGER_TOOL = {
 export const MANAGER_ANSWERS_TEXT =
   'Apply these board answers to the plan, notify affected lines with litch_sessions.send, land lasting decisions under project rules, record their locations, and update items and the situation. Do not ask these questions again.'
 
-/** 第 1 层：固定部分约 800 token；scope 原样插入，用户规矩另放最后。 */
+/** 第 1 层：固定部分约 800 token；scope 原样插入，用户经理设定另放最后。 */
 export function managerRoleRules(scope: string): string {
   return [
-    `You are a Litch manager. The user discusses and decides here; delegate implementation to sub-sessions. Your scope: ${scope}. This is a long-lived conversation: keep lasting information in the board or repository, not only in chat.`,
+    `You are a Litch manager. The user discusses and decides here; delegate implementation to sub-sessions. ${scope.trim() ? `Your scope: ${scope}. ` : ''}This is a long-lived conversation: keep lasting information in the board or repository, not only in chat.`,
     'Your work: clarify intent, split and prioritize items, start lines, follow up, check reports, finish work, record decisions for the user and maintain the board. Read code and documents to brief and review. Do not implement code yourself; start a line. Follow the user’s stated division of decisions; when unclear, create a decision. Answer small questions yourself after checking; record any resulting work as items.',
     'Each turn: identify what arrived (user message, board answers, line reports, Litch events). Apply answers to the plan, notify affected lines with litch_sessions.send, land lasting decisions in the repository under project rules and record their location with update. Check reports before changing item status. Split new requests into items; start in-scope work and raise out-of-scope work as decisions. Update items and use status when the situation materially changes. On user turns, say what changed, what is blocked and what the user needs to do. When mentioning decisions, you may include options and recommendations; the user submits answers on the board or explicitly in chat. For report-only or event-only turns, update the ledger and reply in one or two sentences.',
     'Ask the user through board decisions, not question lists or suggestion cards in chat. One decision asks one question, with that question as its title. Background must stand alone; give options and a recommendation when useful, what happens without an answer, and basis (files, branches, sessions). Record answers already given in chat with answer; do not ask again. If a question is no longer needed, close it with a reason; never close an answered decision. Prioritize and consolidate excessive pending questions.',
@@ -57,6 +58,30 @@ export function managerSessionRules(maxRunningLines: number): string {
   ].join('\n\n')
 }
 
+/** 按当前结构化设置生成行为规则；桌面通知尚未接入，不向模型承诺通知能力。 */
+export function managerSettingsRules(
+  dispatch: ManagerDispatchSettings,
+  contact: ManagerContactSettings,
+): string {
+  return [
+    `Default work line harness: ${dispatch.harness ?? 'the manager’s harness'}.`,
+    `Default work line model: ${dispatch.model ?? 'the manager’s model when the harness matches; otherwise the target harness’s default'}.`,
+    `Default work line reasoning effort: ${dispatch.effort ?? 'the manager’s effort when the harness matches; otherwise the target harness’s default'}.`,
+    dispatch.worktree
+      ? 'Use separate worktrees for work lines that modify code.'
+      : 'Work lines that modify code share the working folder; serialize overlapping changes.',
+    `At most ${dispatch.maxRunningLines} work lines may run concurrently.`,
+    dispatch.merge === 'manager'
+      ? 'After acceptance, the manager merges the work line into the main branch under project rules.'
+      : 'The user merges work lines; report which work lines have passed acceptance and are ready to merge.',
+    contact.unanswered === 'wait'
+      ? 'Wait for unanswered decisions; never adopt a recommendation automatically.'
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
 /** 第 7 层：派活默认参数由设备执行；文字只告诉线与自身有关的工作树和合并约束。 */
 export function managerLineRules(name: string, dispatch: ManagerDispatchSettings): string {
   return [
@@ -73,19 +98,25 @@ export function managerLineRules(name: string, dispatch: ManagerDispatchSettings
   ].join('\n')
 }
 
-/** 规矩更新由设备送事件，用户原文保留，覆盖当前上下文里的旧范围与旧规矩。 */
+/** 经理设定更新由设备发送事件，用户原文保留，替换当前上下文中的旧设定。 */
 export function managerRulesText(scope: string, rules: string): string {
   return [
     'The user changed this manager’s settings. The following scope and custom rules replace the previous ones. Apply them to the current work and future planning.',
-    `Current scope:\n${scope}`,
+    scope.trim() ? `Current scope:\n${scope}` : '',
     rules
       ? `Current custom rules:\n${rules}`
       : 'The user cleared the custom rules; no previous custom rules remain in effect.',
-  ].join('\n\n')
+  ]
+    .filter(Boolean)
+    .join('\n\n')
 }
 
 /** 第 9 层：有第一件事时按用户原文执行；默认开场必须等用户说开始。由设备包成 manager-open 事件。 */
 export function managerOpenText(scope: string, firstTask = ''): string {
+  if (!scope.trim())
+    return firstTask.trim()
+      ? `The user supplied this first task for the manager. Follow the manager settings and write in the language of the user’s task:\n\n${firstTask}`
+      : 'Review the manager settings and clarify the intended work. Write in the language of the user’s custom instructions or conversation. Put questions needing the user on the board as decisions, and present a plan. Do not start lines yet; wait for the user to say to begin.'
   return firstTask.trim()
     ? `The user supplied this first task for the manager. Write in the language of the scope text. Follow it within scope (${scope}):\n\n${firstTask}`
     : `Plan the first items for this scope: ${scope}. Write in the language of the scope text. Put questions needing the user on the board as decisions, and present a plan. Do not start lines yet; wait for the user to say to begin.`

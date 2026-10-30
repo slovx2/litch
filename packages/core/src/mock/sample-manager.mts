@@ -22,8 +22,8 @@ export function sampleManagerOpening(manager: ManagerView, lang: SampleLang): st
       managerId: manager.id,
       text:
         lang === 'zh-CN'
-          ? `请负责「${manager.name || manager.scope}」。范围：${manager.scope}。请先整理计划，把需要我决定的事情放到看板，等待我确认开始后再安排工作线。`
-          : `Please manage “${manager.name || manager.scope}”. Scope: ${manager.scope}. Present a plan and put decisions that need my input on the board. Wait for me to start before dispatching work lines.`,
+          ? `请负责「${manager.name || manager.scope}」。经理设定：${manager.rules || '未填写'}。请先整理计划，把需要我决定的事情放到看板，等待我确认开始后再安排工作线。`
+          : `Please manage “${manager.name || manager.scope}”. Manager settings: ${manager.rules || 'Not specified'}. Present a plan and put decisions that need my input on the board. Wait for me to start before dispatching work lines.`,
     },
   })
 }

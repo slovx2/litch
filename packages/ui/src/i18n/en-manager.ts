@@ -3,24 +3,6 @@ import type { Entry } from './types.ts'
 
 export const enManager = {
   'manager.waitDecisions': 'Waiting for decisions',
-  'manager.rules.line': 'Default work line harness: {harness}. Model: {model}. Effort: {effort}.',
-  'manager.rules.sameHarness': 'the manager’s harness',
-  'manager.rules.modelDefault':
-    'the manager’s model when the harness matches; otherwise the target harness’s default',
-  'manager.rules.effortDefault':
-    'the manager’s effort when the harness matches; otherwise the target harness’s default',
-  'manager.rules.worktree': 'Use separate worktrees for work lines that modify code.',
-  'manager.rules.sharedFolder':
-    'Work lines that modify code share the working folder; serialize overlapping changes.',
-  'manager.rules.limit': 'At most {n} work lines may run concurrently.',
-  'manager.rules.managerMerge':
-    'After acceptance, the manager merges the work line into the main branch under project rules.',
-  'manager.rules.userMerge':
-    'The user merges work lines; report which work lines have passed acceptance and are ready to merge.',
-  'manager.rules.wait':
-    'Wait for unanswered decisions; never adopt a recommendation automatically.',
-  'manager.rules.notify': 'Litch sends desktop notifications for new decisions.',
-  'manager.rules.noNotify': 'Desktop notifications for new decisions are disabled.',
   'manager.clearOption': 'Clear selection',
   'manager.chat': 'Chat',
   'manager.title': 'Managers',
@@ -33,13 +15,13 @@ export const enManager = {
   'manager.event.answers': 'Board answers submitted',
   'manager.event.open': 'Manager started',
   'manager.event.end': 'Manager started final tasks',
-  'manager.event.rules': 'Scope and rules updated',
+  'manager.event.rules': 'Manager settings updated',
   'manager.pending': '{n} pending',
   'manager.running': 'Running',
   'manager.idle': 'Idle',
   'manager.empty': 'No managers',
   'manager.board': 'Board',
-  'manager.scope': 'Scope',
+  'manager.prompt': 'Manager settings',
   'manager.overview': 'Overview',
   'manager.decisions': 'Decisions',
   'manager.items': 'Items',
@@ -93,7 +75,8 @@ export const enManager = {
   'manager.linesCount': '{n} work lines running',
   'manager.name': 'Name',
   'manager.optionalName': 'Leave blank for an assigned name',
-  'manager.scopeBlank': 'Management scope and completion criteria',
+  'manager.promptPlaceholder':
+    'Optional custom manager prompt, such as role and behavior guidelines',
   'manager.device': 'Device',
   'manager.workspace': 'Project',
   'manager.cwd': 'Working folder',
@@ -112,16 +95,13 @@ export const enManager = {
   'manager.contact': 'Notifications',
   'manager.notify': 'Send desktop notifications for new decisions',
   'manager.unanswered': 'Wait until decisions are answered',
-  'manager.rules': 'Rules',
-  'manager.editRules': 'Edit manually',
-  'manager.rulesEdited': 'Rules were edited manually; options no longer update them.',
   'manager.firstTask': 'First task',
   'manager.firstPlaceholder': 'Leave blank to plan only and wait for user confirmation to start',
   'manager.create': 'Create manager',
   'manager.creating': 'Creating…',
   'manager.noDevice': 'No online device supports managers',
   'manager.required':
-    'Enter a scope and working folder, select an available harness, and set a positive integer for the concurrent work line limit.',
+    'Enter a working folder, select an available harness, and set a positive integer for the concurrent work line limit.',
   'manager.savedFail': 'Could not save the draft; check available browser storage.',
   'manager.readOnly': 'This manager has ended; chat and board are read-only.',
   'manager.review': 'Awaiting review',
@@ -136,9 +116,7 @@ export const enManager = {
   'manager.settings': 'Settings',
   'manager.save': 'Save',
   'manager.saving': 'Saving…',
-  'manager.rulesPreserved': 'Saved rules are preserved; changing options will not update them.',
-  'manager.updateRequired':
-    'Enter a scope and a positive integer for the concurrent work line limit.',
+  'manager.updateRequired': 'Enter a positive integer for the concurrent work line limit.',
   'manager.lineModel': 'Work line model',
   'manager.lineEffort': 'Work line reasoning effort',
 } satisfies Record<string, Entry>
