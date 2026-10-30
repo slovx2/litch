@@ -11,28 +11,40 @@ import { Decisions } from './Decisions.tsx'
 import { useManagerBoard } from './data.ts'
 import { ManagerForm } from './ManagerForm.tsx'
 
+/** 放在应用导航层，离开经理视图后仍能恢复看板页签和设置页。 */
+export interface ManagerPageLocation {
+  tab: 'overview' | 'decisions' | 'items' | 'lines'
+  narrow: 'chat' | 'board'
+  settings: boolean
+}
+const defaultLocation: ManagerPageLocation = { tab: 'overview', narrow: 'chat', settings: false }
+
 export function ManagerPage({
   manager,
   onOpen,
+  location = defaultLocation,
+  onLocation,
 }: {
   manager: ManagerView
   onOpen(selection: Selection): void
+  location: ManagerPageLocation | undefined
+  onLocation(location: ManagerPageLocation): void
 }) {
   const t = useT()
   const { channel } = useServices()
   const { view, pages, error } = useManagerBoard(manager)
   const device = useKey<DeviceView>(keys.device(manager.deviceId))
-  const [tab, setTab] = useState<'overview' | 'decisions' | 'items' | 'lines'>('overview')
-  const [narrow, setNarrow] = useState<'chat' | 'board'>('chat')
+  const { tab, narrow, settings } = location
+  const setTab = (tab: ManagerPageLocation['tab']) => onLocation({ ...location, tab })
+  const setNarrow = (narrow: ManagerPageLocation['narrow']) => onLocation({ ...location, narrow })
+  const setSettings = (settings: boolean) => onLocation({ ...location, settings })
   const [decisionTarget, setDecisionTarget] = useState<{ id: ManagerDecisionId } | null>(null)
   const decisionLocated = useCallback(() => setDecisionTarget(null), [])
   const openDecision = (id: ManagerDecisionId) => {
-    setTab('decisions')
-    setNarrow('board')
+    onLocation({ ...location, tab: 'decisions', narrow: 'board' })
     setDecisionTarget({ id })
   }
   const [ending, setEnding] = useState(false)
-  const [settings, setSettings] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState('')
   const board = view?.board

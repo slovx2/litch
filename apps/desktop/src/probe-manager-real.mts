@@ -82,6 +82,7 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
   if (step === '01-open') {
     page.__litchLook.set({ lang: 'zh-CN' })
     await click('[data-sidebar-mode="manager"]')
+    if (!one('[data-manager="list"]')) await click('.mg-sidebar-group header .ibtn')
     await wait('全部经理页', () => one('[data-manager="list"]'))
     state.pending = pending()
     await click('.sb-top .new')
