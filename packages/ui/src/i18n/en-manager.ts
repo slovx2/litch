@@ -100,8 +100,6 @@ export const enManager = {
   'manager.create': 'Create manager',
   'manager.creating': 'Creating…',
   'manager.noDevice': 'No online device supports managers',
-  'manager.required':
-    'Enter a working folder, select an available harness, and set a positive integer for the concurrent work line limit.',
   'manager.savedFail': 'Could not save the draft; check available browser storage.',
   'manager.readOnly': 'This manager has ended; chat and board are read-only.',
   'manager.review': 'Awaiting review',
@@ -119,4 +117,12 @@ export const enManager = {
   'manager.updateRequired': 'Enter a positive integer for the concurrent work line limit.',
   'manager.lineModel': 'Work line model',
   'manager.lineEffort': 'Work line reasoning effort',
+  'manager.stepBasic': 'Basic information',
+  'manager.stepRuntime': 'Environment',
+  'manager.stepDispatch': 'Assignment and notifications',
+  'manager.formSections': 'Manager form sections',
+  'manager.stepUnavailable': 'Complete the preceding steps first',
+  'manager.previous': 'Back',
+  'manager.next': 'Next',
+  'manager.environmentRequired': 'Enter a working folder and select an available harness.',
 } satisfies Record<string, Entry>

@@ -193,40 +193,87 @@ export async function managerProbe(): Promise<ManagerSeen> {
   await click('.sb-top .new')
   await until('新建经理表单', () => one('[data-manager="form"]'))
   const field = (label: string) =>
-    [...document.querySelectorAll<HTMLLabelElement>('.mg-form label')].find(
+    [...document.querySelectorAll<HTMLLabelElement>('.mg-panel:not([hidden]) label')].find(
       (entry) => entry.firstChild?.textContent?.trim() === label,
     )
-  if (document.querySelector('.mg-form .mng-sec:first-child select'))
-    throw new Error('新建经理仍显示模板选择')
-  const nameInput = field('名称')?.querySelector('input')
-  const promptInput = field('经理设定')?.querySelector('textarea')
-  const cwdInput = field('工作目录')?.querySelector('input')
-  const max = field('最大并行工作线数')?.querySelector('input')
-  if (!nameInput || !promptInput || !cwdInput || !max) throw new Error('经理表单缺少字段')
+  const activeStep = (step: string) => Boolean(one(`.mg-form[data-manager-step="${step}"]`))
+  const tab = (step: string) => click(`[data-form-tab="${step}"]`)
+  const next = () => click('.mg-form button[type="submit"]')
+  const input = (label: string) => {
+    const target = field(label)?.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+      'input, textarea',
+    )
+    if (!target) throw new Error(`缺少当前步骤字段：${label}`)
+    return target
+  }
+  if (!activeStep('basic') || field('工作目录') || field('最大并行工作线数'))
+    throw new Error('基本信息步骤显示了参数设置')
+  if (!one<HTMLButtonElement>('[data-form-tab="dispatch"]')?.disabled)
+    throw new Error('未完成前序步骤时可以跳到任务分配')
   if (one('.mg-rules') || field('范围')) throw new Error('经理表单仍显示范围或自动规则')
-  if (one<HTMLInputElement>('.mg-fields input[type="checkbox"]')?.checked)
-    throw new Error('新建经理默认启用了工作树')
-  fill(nameInput, '经理冒烟验收')
-  fill(promptInput, '仅执行冒烟验收范围内的任务。')
-  fill(cwdInput, '~/work/litch')
+  const labels = [...document.querySelectorAll('.mg-panel:not([hidden]) label')].map((entry) =>
+    entry.firstChild?.textContent?.trim(),
+  )
+  if (labels.join('/') !== '名称/经理设定/首个任务') throw new Error('基本信息字段顺序错误')
+  fill(input('名称'), '经理冒烟验收')
+  fill(input('经理设定'), '仅执行冒烟验收范围内的任务。')
+  fill(input('首个任务'), '保留首个任务草稿')
   const look = (
     window as unknown as { __litchLook: { set(patch: { lang: 'zh-CN' | 'en' }): void } }
   ).__litchLook
   look.set({ lang: 'en' })
   const promptLocalized = await until(
     '经理设定英文标签',
-    () => Boolean(field('Manager settings')) && promptInput.placeholder.includes('Optional'),
-  )
-  fill(max, '2')
-  const promptKept = await until(
-    '修改任务分配和语言保留经理设定',
-    () => promptInput.value === '仅执行冒烟验收范围内的任务。' && max.value === '2',
+    () =>
+      Boolean(field('Manager settings')) &&
+      input('Manager settings').getAttribute('placeholder')?.includes('Optional'),
   )
   look.set({ lang: 'zh-CN' })
   await until('恢复中文', () => document.documentElement.lang === 'zh-CN')
-  // 空经理设定可以创建，自动规则不由界面填入。
-  fill(promptInput, '')
-  await click('.mg-form button[type="submit"]')
+  await next()
+  await until('进入运行环境', () => activeStep('runtime'))
+  await next()
+  await until(
+    '空工作目录留在运行环境并显示原因',
+    () => activeStep('runtime') && one('.mg-form [role="alert"]'),
+  )
+  fill(input('工作目录'), '~/work/litch')
+  await next()
+  await until('进入任务分配', () => activeStep('dispatch'))
+  if (one<HTMLInputElement>('.mg-panel:not([hidden]) input[type="checkbox"]')?.checked)
+    throw new Error('新建经理默认启用了工作树')
+  fill(input('最大并行工作线数'), '0')
+  await next()
+  await until(
+    '并发数无效时留在任务分配',
+    () => activeStep('dispatch') && one('.mg-form [role="alert"]'),
+  )
+  fill(input('最大并行工作线数'), '2')
+  await click('[data-act="manager-previous"]')
+  await until(
+    '上一步保留运行环境',
+    () => activeStep('runtime') && input('工作目录').value === '~/work/litch',
+  )
+  await tab('basic')
+  const promptKept = await until(
+    '回到基本信息保留所有文本',
+    () =>
+      activeStep('basic') &&
+      input('名称').value === '经理冒烟验收' &&
+      input('经理设定').value === '仅执行冒烟验收范围内的任务。' &&
+      input('首个任务').value === '保留首个任务草稿',
+  )
+  // 空经理设定与首个任务仍可创建，跨步骤保留任务分配设置。
+  fill(input('经理设定'), '')
+  fill(input('首个任务'), '')
+  await next()
+  await until('再次进入运行环境', () => activeStep('runtime'))
+  await next()
+  await until(
+    '再次进入任务分配',
+    () => activeStep('dispatch') && input('最大并行工作线数').value === '2',
+  )
+  await next()
   const created = await until('建好后进入经理', () =>
     one('.mg-title')?.textContent?.includes('经理冒烟验收'),
   )
@@ -244,18 +291,25 @@ export async function managerProbe(): Promise<ManagerSeen> {
     if (!input) throw new Error(`缺少设置字段：${label}`)
     return input
   }
+  await tab('runtime')
   const settingsReadOnly =
     document.querySelectorAll('.mg-fixed').length === 5 &&
     !field('工作目录')?.querySelector('input') &&
     !field('首个任务') &&
     !field('从哪种开始')
+  await tab('basic')
   fill(editField('名称'), '经理设置验收')
-  fill(editField('最大并行工作线数'), '0')
-  one('.mg-form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-  const settingsValidation = Boolean(
-    await until('无效并发上限显示原因', () => one('.mg-form [role="alert"]')),
-  )
   fill(editField('经理设定'), '修改后的经理设定\n\n保留验收记录。')
+  await tab('dispatch')
+  fill(editField('最大并行工作线数'), '0')
+  await tab('basic')
+  await next()
+  const settingsValidation = Boolean(
+    await until(
+      '保存时定位到无效参数页签',
+      () => activeStep('dispatch') && one('.mg-form [role="alert"]'),
+    ),
+  )
   fill(editField('最大并行工作线数'), '5')
   const select = async (label: string, value: string) => {
     const input = field(label)?.querySelector('select')
@@ -274,6 +328,7 @@ export async function managerProbe(): Promise<ManagerSeen> {
     '.mg-fields input[type="checkbox"]',
   ))
     checkbox.click()
+  await tab('basic')
   const settingsKept = await until(
     '编辑任务分配保留经理设定',
     () => editField('经理设定').value === '修改后的经理设定\n\n保留验收记录。',
@@ -297,6 +352,7 @@ export async function managerProbe(): Promise<ManagerSeen> {
     rulesBody.children[1]?.textContent === '保留验收记录。'
   eventsClean = cleanChat() && eventsClean
   await click('[data-act="manager-settings"]')
+  await tab('dispatch')
   await until('重新打开保存的并发上限', () => editField('最大并行工作线数').value === '5')
   const dispatchSaved =
     field('子会话模型')?.querySelector('select')?.value === lineModel &&
@@ -304,6 +360,7 @@ export async function managerProbe(): Promise<ManagerSeen> {
     [...document.querySelectorAll<HTMLInputElement>('.mg-fields input[type="checkbox"]')].every(
       (input, index) => input.checked === (index === 0),
     )
+  await tab('basic')
   fill(editField('经理设定'), '取消的修改不应保存')
   await click('.mg-form-foot button[type="button"]')
   const settingsCancelled = await until('取消不保存', () =>
