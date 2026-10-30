@@ -610,12 +610,13 @@ test('被打断的回合不收（照 Codex 桌面端）：中途插的话之间�
     'md',
     'status',
   ])
-  // 同样的条目、回合正常结束：有最终回答，收成一行
+  // 同样的条目、回合正常结束：有最终回答，按补充位置收成两段
   const done = viewOf([{ id: 't', status: 'completed', itemIds: ids }], items)
   assert.deepEqual(types(new RowBuilder().build(done, 'all')), [
     'user',
     'process',
     'user',
+    'process',
     'md',
     'status',
   ])
@@ -694,4 +695,112 @@ test('发送时刻：回合开头那条用户消息带回合开始的时刻，�
       ['u3', undefined],
     ],
   )
+})
+
+test('零次、一次、多次补充：每段独立开合，计数、总脚注和来源不重复', () => {
+  for (const origin of [undefined, 'backgroundTask']) {
+    for (const count of [0, 1, 2]) {
+      const items = origin ? [] : [user('u0', '开头')]
+      for (let i = 0; i <= count; i++) {
+        if (i > 0) items.push(user(`u${i}`, '补充'))
+        items.push(
+          { ...answer(`n${i}`, '说明'), phase: 'commentary' },
+          command(`c${i}`, 'completed', 0),
+        )
+      }
+      items.push(answer('a', '最终回答'))
+      const view = viewOf(
+        [
+          {
+            id: 't',
+            status: 'completed',
+            origin,
+            durationMs: 196000,
+            itemIds: items.map((i) => i.id),
+          },
+        ],
+        items,
+      )
+      const builder = new RowBuilder()
+      const rows = builder.build(view, 'all')
+      const heads = rows.filter((r) => r.type === 'process')
+      assert.equal(heads.length, count + 1)
+      assert.deepEqual(
+        heads.map((r) => [r.notes, r.steps]),
+        Array.from({ length: count + 1 }, () => [1, 1]),
+      )
+      assert.ok(heads.every((r) => r.durationMs === (count > 0 ? null : 196000)))
+      assert.equal(rows.filter((r) => r.type === 'status').length, 1)
+      assert.equal(rows.at(-1).type, 'status')
+      assert.equal(rows.filter((r) => r.type === 'origin').length, origin ? 1 : 0)
+      assert.deepEqual(
+        rows.filter((r) => r.type === 'user').map((r) => r.addition === true),
+        origin ? Array(count).fill(true) : [false, ...Array(count).fill(true)],
+      )
+      builder.toggle(heads.at(-1).key, 't')
+      const opened = builder.build(view, 'all').filter((r) => r.type === 'process')
+      assert.deepEqual(
+        opened.map((r) => r.expanded),
+        Array.from({ length: count + 1 }, (_, i) => i === count),
+      )
+    }
+  }
+})
+
+test('补充后没有最终回答、仍进行中或被中断：过程保持展开，补充标注保留', () => {
+  for (const status of ['completed', 'running', 'interrupted']) {
+    const items = [command('c1', 'completed', 0), user('u', '补充'), command('c2', 'completed', 0)]
+    const rows = new RowBuilder().build(
+      viewOf(
+        [{ id: 't', origin: 'backgroundTask', status, itemIds: items.map((i) => i.id) }],
+        items,
+      ),
+      'all',
+    )
+    assert.equal(
+      rows.some((r) => r.type === 'process'),
+      false,
+    )
+    assert.equal(rows.find((r) => r.type === 'user').addition, true)
+    assert.equal(rows.filter((r) => r.type === 'group').length, 2)
+    assert.equal(rows.at(-1).type, 'status')
+  }
+})
+
+test('R2 回合形状：3 段说明 6 步、补充、5 段说明 10 步、长回答、完成', () => {
+  const items = []
+  const process = (prefix, notes, steps) => {
+    for (let i = 0; i < notes; i++)
+      items.push({ ...answer(`${prefix}n${i}`, '说明'), phase: 'commentary' })
+    for (let i = 0; i < steps; i++) items.push(command(`${prefix}c${i}`, 'completed', 0))
+  }
+  process('b', 3, 6)
+  items.push(user('u', '为什么又倒了，人物有防御吗'))
+  process('a', 5, 10)
+  items.push(answer('final', '有防御。'.repeat(300)))
+  const rows = new RowBuilder().build(
+    viewOf(
+      [
+        {
+          id: 't',
+          origin: 'backgroundTask',
+          status: 'completed',
+          durationMs: 196000,
+          itemIds: items.map((i) => i.id),
+        },
+      ],
+      items,
+    ),
+    'all',
+  )
+  assert.deepEqual(types(rows).slice(0, 4), ['origin', 'process', 'user', 'process'])
+  assert.deepEqual(
+    rows.filter((r) => r.type === 'process').map((r) => [r.notes, r.steps]),
+    [
+      [3, 6],
+      [5, 10],
+    ],
+  )
+  assert.equal(rows.at(-1).durationMs, 196000)
+  assert.ok(rows.slice(4, -1).every((r) => r.type === 'md'))
 })

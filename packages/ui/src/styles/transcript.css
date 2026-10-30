@@ -108,6 +108,10 @@
 .umsg {
   position: relative;
 }
+.umsg-addition {
+  color: var(--ink-2);
+  font-size: calc(12px * var(--fs));
+}
 .umsg-acts {
   position: absolute;
   right: 100%;

@@ -1,16 +1,17 @@
-// 预览专用：固定相邻回合，用正式单元格检查收起、展开、长来源与小屏触控区域。
+// 预览专用：用 R2 的插话形状、正式行构建器和单元格检查分段、长来源与小屏触控区域。
 import type { SessionBackgroundView } from '@litch/core'
 import { useEffect, useState } from 'react'
 import { ScrollView } from 'react-native'
-import type { Row } from '../core/rows'
+import { RowBuilder } from '../core/rows'
 import { OriginCell } from '../detail/background/OriginCell'
 import { MarkdownCell, StatusCell, UserCell } from '../detail/cells'
 import { BackgroundContext, TranscriptContext } from '../detail/context'
-import { ProcessCell } from '../detail/steps'
+import { GroupCell, GroupEndCell, ProcessCell, StepCell } from '../detail/steps'
 import { type Booted, boot } from '../shell/boot'
 import { loadPrefs, ServicesProvider } from '../shell/services'
 import { I18nContext, translator } from '../ui/i18n'
 import { makeTheme, SKINS, type Skin, ThemeContext } from '../ui/theme'
+import { midTurnFixture } from './mid-turn-fixture.web.ts'
 
 const noop = () => {}
 const now = new Date()
@@ -41,7 +42,7 @@ export function CollapsedTurnPreview({ params }: { params: URLSearchParams }) {
     theme: params.get('appearance') ?? 'light',
     lang: params.get('lang') ?? 'zh-CN',
   })
-  const [expanded, setExpanded] = useState(false)
+  const [, setExpanded] = useState(false)
   const [booted, setBooted] = useState<Booted | null>(null)
   useEffect(() => {
     let stopped = false
@@ -63,17 +64,8 @@ export function CollapsedTurnPreview({ params }: { params: URLSearchParams }) {
   })
   const zh = look.lang !== 'en'
   const theme = makeTheme(look.skin, look.theme === 'dark')
-  const answer = (key: string, text: string): Extract<Row, { type: 'md' }> => ({
-    type: 'md',
-    key,
-    turnId: 'first',
-    itemId: key,
-    text,
-    open: false,
-    live: false,
-    plan: false,
-    first: true,
-  })
+  const [builder] = useState(() => new RowBuilder())
+  const rows = builder.build(midTurnFixture(), 'all')
   if (!booted) return null
   return (
     <ServicesProvider booted={booted} prefs={loadPrefs()} setPrefs={noop}>
@@ -86,7 +78,10 @@ export function CollapsedTurnPreview({ params }: { params: URLSearchParams }) {
               harness: 'Codex',
               scope: null,
               root: null,
-              toggle: () => setExpanded((current) => !current),
+              toggle: (key, turnId) => {
+                builder.toggle(key, turnId)
+                setExpanded((current) => !current)
+              },
               openLink: noop,
               turnMenu: noop,
               openDiff: noop,
@@ -100,84 +95,17 @@ export function CollapsedTurnPreview({ params }: { params: URLSearchParams }) {
                 style={{ flex: 1, backgroundColor: theme.c.win }}
                 contentContainerStyle={{ paddingVertical: 40 }}
               >
-                <MarkdownCell
-                  row={answer(
-                    'answer',
-                    zh
-                      ? '已完成本轮检查，后台任务结束后继续核对。'
-                      : 'This review is complete. I will continue checking when the background task finishes.',
-                  )}
-                />
-                <StatusCell
-                  row={{
-                    type: 'status',
-                    key: 'first-status',
-                    turnId: 'first',
-                    status: 'completed',
-                    durationMs: 9000,
-                    startedAt,
-                    working: false,
-                    retry: null,
-                  }}
-                />
-                <OriginCell
-                  row={{
-                    type: 'origin',
-                    key: 'origin',
-                    turnId: 'second',
-                    origin: 'backgroundTask',
-                    startedAt: now.getTime(),
-                  }}
-                />
-                <ProcessCell
-                  row={{
-                    type: 'process',
-                    key: 'process',
-                    turnId: 'second',
-                    expanded,
-                    notes: 8,
-                    steps: 16,
-                    agents: 0,
-                    declined: 0,
-                    agentsFailed: 0,
-                    status: 'completed',
-                    durationMs: 196000,
-                    ids: '',
-                  }}
-                />
-                {expanded ? (
-                  <MarkdownCell
-                    row={answer(
-                      'process-note',
-                      zh
-                        ? '正在核对后台任务的检查结果。'
-                        : 'Reviewing the background task results.',
-                    )}
-                  />
-                ) : null}
-                <StatusCell
-                  row={{
-                    type: 'status',
-                    key: 'second-status',
-                    turnId: 'second',
-                    status: 'completed',
-                    durationMs: 196000,
-                    startedAt: now.getTime(),
-                    working: false,
-                    retry: null,
-                  }}
-                />
-                <UserCell
-                  row={{
-                    type: 'user',
-                    key: 'next-user',
-                    turnId: 'third',
-                    text: zh
-                      ? '为什么又倒了，人物有防御吗？'
-                      : 'Why did the character fall again? Does it have any defense?',
-                    attachments: [],
-                  }}
-                />
+                {rows.map((row) => {
+                  if (row.type === 'origin') return <OriginCell key={row.key} row={row} />
+                  if (row.type === 'process') return <ProcessCell key={row.key} row={row} />
+                  if (row.type === 'group') return <GroupCell key={row.key} row={row} />
+                  if (row.type === 'step') return <StepCell key={row.key} row={row} />
+                  if (row.type === 'groupEnd') return <GroupEndCell key={row.key} row={row} />
+                  if (row.type === 'user') return <UserCell key={row.key} row={row} />
+                  if (row.type === 'md') return <MarkdownCell key={row.key} row={row} />
+                  if (row.type === 'status') return <StatusCell key={row.key} row={row} />
+                  return null
+                })}
               </ScrollView>
             </BackgroundContext.Provider>
           </TranscriptContext.Provider>

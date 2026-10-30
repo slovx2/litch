@@ -111,7 +111,7 @@ export function projectTurn(turn: Turn, viewId = turn.id): { turn: TurnView; ite
   const manual = !(turn.items ?? []).some((item) => item.type === 'userMessage')
   const items = (turn.items ?? []).flatMap((item, index) => {
     // 持续目标的续跑回合里那句“接着做”是入口替 harness 说的（Claude 入口），不是用户说的：不画成用户消息
-    if (origin.origin === 'goal' && item.type === 'userMessage') return []
+    if (origin.origin === 'goal' && index === 0 && item.type === 'userMessage') return []
     // 回合还在进行时，只有最后一个条目可能还在往外出字
     const view = projectItem(item, running && index === last)
     if (view.kind === 'compaction' && manual) view.source = 'manual'
@@ -135,6 +135,9 @@ export function projectTurn(turn: Turn, viewId = turn.id): { turn: TurnView; ite
       durationMs: turn.durationMs ?? null,
       error: turn.error?.message ?? null,
       ...origin,
+      ...(origin.origin === 'goal' && turn.items?.[0]?.type === 'userMessage'
+        ? { hiddenInputId: turn.items[0].id }
+        : {}),
     },
     items,
   }
