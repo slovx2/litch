@@ -212,6 +212,11 @@ export const enTasks: Record<keyof typeof zhTasks, Entry> = {
   'settings.notify.intro':
     'System notifications while the window is in the background. Click one to open its session.',
   'settings.notify.sessions': 'Sessions',
+  'settings.notify.scope': 'Notification scope',
+  'settings.notify.scope.all': 'All conversations',
+  'settings.notify.scope.main': 'Main sessions only',
+  'settings.notify.scope.note':
+    'Main sessions have no parent session. Manager decisions, scheduled tasks and remote operation approvals are unaffected.',
   'settings.notify.sessionsSwitch': 'Notify when a turn ends or needs approval or an answer',
   'notify.session.done': '{harness} finished a turn',
   'notify.manager.decision': 'New decision awaiting your answer',

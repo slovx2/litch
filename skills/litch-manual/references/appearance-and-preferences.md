@@ -41,6 +41,15 @@ app menu). There is no "follow the system" choice; on first launch Litch picks t
 
 ## Notifications (Settings → Notifications)
 
+“设置 → 通知 → 会话”中的“通知范围”有“全部对话”（默认）和“仅主会话”两档，沿用这台电脑的本地偏好存储，修改后立即生效。
+主会话指会话树里没有父会话的对话；Litch 子会话、经理工作线和其他应用派出的有父会话的对话，均属于子会话。
+父会话尚未加载或已归档不改变该关系；其他应用的会话若没有已知父会话字段，按主会话处理，仍遵守侧栏隐藏时不通知的规则。
+“仅主会话”过滤子会话的回合结束、出错、待审批和待回答通知，不改变未读数与 Dock 角标。
+经理新决策、定时任务以及无会话归属的远程操作审批通知不受范围设置影响；会话通知总开关仍控制范围内的普通会话通知。
+命令 `scripts/litch notify scope main` 选择仅主会话，`scripts/litch notify scope all` 恢复全部对话；
+等同于 `litch config notify scope main|all`，`scripts/litch status` 可读回 `notifyScope`。
+手机端目前没有系统推送，不同步此桌面偏好。
+
 经理的“新决策通知桌面”由每个经理的新建表单或设置单独控制，不受普通会话通知开关影响。
 桌面端连接期间，看板新增待答决策或重新打开决策时通知一次；修改待答决策的文字不重复通知。
 首次连接、重连、重新加载看板或刚开启开关时，不补发已有决策。前台正在查看该经理时不弹出。
@@ -58,7 +67,7 @@ app to be running and connected to the device.
 
 A session shows a system notification when its turn ends or fails and when it stops for an approval
 or an answer, unless you are looking at that very session in the focused Litch window (looking at
-another session still notifies). Sub-sessions notify too; sessions another app started stay quiet
+another session still notifies). Sub-sessions notify with the default scope; sessions another app started stay quiet
 while the sidebar hides them; runs of scheduled tasks are covered below. The title is the session's
 title (for an approval, the project), the line under it names the project or session and the device,
 and the text says what happened: the start of the last answer, the error, the command or files

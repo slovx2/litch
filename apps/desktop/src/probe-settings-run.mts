@@ -19,6 +19,7 @@ import {
   type ZoomSeen,
 } from './probe-settings-judge.mjs'
 import { installSettingsKit, type SettingsKit } from './probe-settings-kit.mjs'
+import { notifyScopeSeen } from './probe-settings-notify.mjs'
 import { controlsSeen, menuSeen, pageSeen, previewSeen } from './probe-settings-page.mjs'
 import { passwordsRemoved, passwordsSeen, SEEDED_SEALED } from './probe-settings-passwords.mjs'
 import { switchesSeen } from './probe-settings-switches.mjs'
@@ -180,6 +181,13 @@ async function runFirst(window: BrowserWindow, hooks: SmokeHooks): Promise<First
   }
 
   const controls = await inPage(window, controlsSeen)
+  await inPage(window, lookSet, { lang: 'zh-CN' }, base)
+  await inPage(window, notifyScopeSeen, 'all', true)
+  await shot(window, 'notify-scope-zh-CN')
+  await inPage(window, lookSet, { lang: 'en' }, base)
+  await inPage(window, notifyScopeSeen, 'main')
+  await shot(window, 'notify-scope-en')
+  await inPage(window, lookSet, { lang: 'zh-CN' }, base)
   await inPage(window, showSection, 'look')
   await shot(window, 'look')
   const preview = await inPage(window, previewSeen)
@@ -218,6 +226,7 @@ async function runFirst(window: BrowserWindow, hooks: SmokeHooks): Promise<First
   await hooks.load({})
   await inPage(window, installSettingsKit)
   const persist = await inPage(window, persistSeen, base)
+  await inPage(window, notifyScopeSeen, 'main')
   // 语言换回中文留给第二遍；别的留着
   await inPage(window, lookSet, { lang: 'zh-CN' }, base)
   return {
@@ -257,6 +266,7 @@ async function run(
   const born = hooks.born()
   await inPage(window, installSettingsKit)
   const cold = await inPage(window, coldSeen, base)
+  await inPage(window, notifyScopeSeen, 'main')
   const seen = {
     born,
     backdropNow: window.getBackgroundColor(),

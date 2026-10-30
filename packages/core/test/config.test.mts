@@ -281,6 +281,7 @@ test('界面那几项交给最近开的窗口，窗口做完回话；没有窗�
       linksInApp: true,
       notifySuccess: false,
       notifySessions: true,
+      notifyScope: 'all',
     },
   })
   const done = await pending
@@ -303,6 +304,29 @@ test('界面那几项交给最近开的窗口，窗口做完回话；没有窗�
   const failed = await opened
   assert.equal(failed.ok, false)
   assert.match(failed.text, /window is closing/)
+})
+
+test('notify scope：两档交给界面保存并读回，非法值不下发', async () => {
+  const m = mock()
+  const win = m.window()
+  for (const notifyScope of ['main', 'all']) {
+    const pending = m.run(['notify', 'scope', notifyScope])
+    await flush()
+    const [ask] = win.seen.view?.asks ?? []
+    assert.deepEqual(ask?.request, { kind: 'prefs.set', patch: { notifyScope } })
+    await m.command('config.reply', {
+      id: ask?.id,
+      ok: true,
+      data: { notifyScope },
+    })
+    const done = await pending
+    assert.ok(done.ok)
+    assert.match(done.text, new RegExp(`notification scope ${notifyScope}`))
+  }
+  const invalid = await m.run(['notify', 'scope', 'children'], { lang: 'en' })
+  assert.equal(invalid.ok, false)
+  assert.match(invalid.text, /Use all or main/)
+  assert.equal(win.seen.view?.asks.length, 0)
 })
 
 test('phones pair：只打开出码对话框（带预填），回“请用手机扫码并在桌面端核对确认码”', async () => {

@@ -82,6 +82,7 @@ export const CONFIG_OPS: readonly ConfigOp[] = [
 
   { group: 'notify', action: 'task-success', write: true },
   { group: 'notify', action: 'sessions', write: true },
+  { group: 'notify', action: 'scope', write: true },
 
   { group: 'diagnose', action: 'run', write: false },
   { group: 'diagnose', action: 'logs', write: false },
