@@ -59,11 +59,16 @@ enum Input {
   }
 
   static func move(to point: CGPoint) {
-    post(
-      CGEvent(
-        mouseEventSource: source, mouseType: .mouseMoved, mouseCursorPosition: point,
-        mouseButton: .left))
+    post(pointerMove(to: point))
     Thread.sleep(forTimeInterval: 0.03)
+  }
+
+  /// 前台恢复只还原指针位置，不把私有源上一次快捷键的修饰键带到 HID 层。
+  static func pointerMove(to point: CGPoint) -> CGEvent? {
+    let event = CGEvent(mouseEventSource: source, mouseType: .mouseMoved,
+      mouseCursorPosition: point, mouseButton: .left)
+    event?.flags = []
+    return event
   }
 
   static func click(at point: CGPoint, button: Button, count: Int, flags: UInt64,
@@ -146,15 +151,74 @@ enum Input {
     }
   }
 
-  static func key(_ combo: KeyCombo, pid: pid_t, check: () throws -> Void = {}) throws {
-    try check()
-    let flags = CGEventFlags(rawValue: combo.flags)
-    for down in [true, false] {
-      let event = CGEvent(keyboardEventSource: source, virtualKey: combo.keyCode, keyDown: down)
-      event?.flags = flags
-      post(event, to: pid)
-      Thread.sleep(forTimeInterval: 0.015)
+  /// 测试可替换投递与读回，不向真实桌面发送事件。
+  struct KeyboardIO {
+    var target: (CGEvent, pid_t) -> Void = { post($0, to: $1) }
+    var system: (CGEvent) -> Void = { post($0) }
+    var flags: () -> UInt64 = {
+      CGEventSource.flagsState(.combinedSessionState).rawValue |
+        CGEventSource.flagsState(.hidSystemState).rawValue
     }
+    var revision: () -> UInt64 = { UserActivity.revision }
+    var pause: () -> Void = { Thread.sleep(forTimeInterval: 0.02) }
+  }
+
+  /// 返回是否补发过系统层的修饰键松开；失败和取消也先收尾，再把原错误交回。
+  @discardableResult
+  static func key(_ combo: KeyCombo, pid: pid_t, check: () throws -> Void = {},
+    io: KeyboardIO = KeyboardIO()) throws -> Bool {
+    try check()
+    guard let down = CGEvent(keyboardEventSource: source, virtualKey: combo.keyCode, keyDown: true),
+      let up = CGEvent(keyboardEventSource: source, virtualKey: combo.keyCode, keyDown: false) else {
+      throw RPCError(.failed, "Could not create keyboard events; no input was sent.")
+    }
+    let before = io.revision()
+    let initialFlags = io.flags()
+    down.flags = CGEventFlags(rawValue: combo.flags)
+    // keyUp 继续带 Command 会污染私有源，恢复指针时再传到系统层，后续空闲检查就一直失败。
+    up.flags = []
+    mark(down); io.target(down, pid)
+    io.pause()
+    var error: Error?
+    do { try check() } catch let failure { error = failure }
+    mark(up); io.target(up, pid)
+    releaseModifiers(combo.flags, pid: pid, io: io)
+
+    // 动作开始前已经存在的修饰键不属于本次注入，不能替用户松开。
+    let mask = combo.flags & ~initialFlags & (Keys.command | Keys.shift | Keys.option | Keys.control | Keys.function)
+    var residual = io.flags() & mask
+    var repaired = false
+    // 真用户介入后不能用全局松开覆盖他的修饰键。目标进程上的代理 keyUp 已完成，直接让行。
+    if residual != 0, io.revision() == before {
+      releaseModifiers(residual, pid: pid, system: true, io: io)
+      repaired = true
+      residual = io.flags() & mask
+    }
+    if io.revision() != before {
+      throw RPCError(.userActive, "The user intervened during the shortcut. Targeted keys were released; no further input will be sent.")
+    }
+    if residual != 0 {
+      throw RPCError(.failed, "Modifier keys remained set after release and one recovery attempt. Stop and ask the user to press and release the modifier keys before continuing.")
+    }
+    if let error {
+      let original = error as? RPCError
+      throw RPCError(original?.kind ?? .failed,
+        (original?.message ?? String(describing: error)) + (repaired ? " Residual modifier keys were detected and released." : " Targeted keys were released."))
+    }
+    return repaired
+  }
+
+  /// 只松开本次注入的修饰键，仍用同一个私有事件源、标记和目标进程；清理不被取消检查拦下。
+  static func releaseModifiers(_ flags: UInt64, pid: pid_t, system: Bool = false,
+    io: KeyboardIO = KeyboardIO()) {
+    for (mask, code) in [(Keys.command, UInt16(55)), (Keys.shift, 56), (Keys.option, 58), (Keys.control, 59), (Keys.function, 63)] where flags & mask != 0 {
+      guard let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false) else { continue }
+      up.type = .flagsChanged
+      up.flags = []
+      mark(up)
+      if system { io.system(up) } else { io.target(up, pid) }
+    }
+    io.pause()
   }
 
   /// 打字：每个字符单独一对 Unicode 事件；整串在 Chromium 后台会丢。换行、Tab 用键码。

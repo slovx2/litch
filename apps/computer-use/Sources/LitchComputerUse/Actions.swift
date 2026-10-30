@@ -232,9 +232,10 @@ extension Engine {
     let keyText = try string(params, "key")
     let combo = try Keys.parse(keyText)
     let times = min(max(params["repeat"]?.intValue ?? 1, 1), 50)
+    var repaired = false
     let send = {
       for _ in 0..<times {
-        try Input.key(combo, pid: context.pid, check: context.check)
+        if try Input.key(combo, pid: context.pid, check: context.check) { repaired = true }
         Thread.sleep(forTimeInterval: 0.03)
       }
     }
@@ -243,7 +244,8 @@ extension Engine {
       try context.inForeground(kind: "semantic", send)
     }
     else { try send() }
-    return "Pressed \(keyText)\(times > 1 ? " \(times) times" : "")."
+    return "Pressed \(keyText)\(times > 1 ? " \(times) times" : "")." +
+      (repaired ? " Residual modifier keys were detected and released." : "")
   }
 
   func scroll(_ context: ActionContext, _ params: JSONValue) throws -> String {

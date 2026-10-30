@@ -202,6 +202,13 @@ and observation times; the tree and image are sequential samples and may differ 
 关闭普通打开面板；系统权限和登录提示仍由用户处理。原生列表单击优先选择对应行。
 Command 快捷键使用带空闲等待和焦点恢复的短暂前台路径，避免应用在后台忽略菜单快捷键；
 普通文字输入继续定向投递，不要求激活应用。
+快捷键完成、失败或取消时都会松开代理注入的按键与修饰键；恢复鼠标位置不携带快捷键修饰键。
+助手读回系统状态，发现本次注入的修饰键残留时，在用户没有介入的前提下补发一次松开，并在结果中报告；
+仍有残留则停止，请用户按下再松开相应修饰键。真实用户已按住或中途按下的修饰键不会被全局补发覆盖。
+Shortcuts release injected keys and modifiers on success, failure or cancellation. Pointer restoration
+does not carry shortcut modifiers. The helper checks system state and reports one recovery release
+for newly stuck modifiers when the user has not intervened; if they remain set, it stops and asks
+the user to press and release them. Existing or intervening user-held modifiers are not globally released.
 文本控件返回字符选区，便于直接核验选择操作，不必为确认选区另取截图。
 macOS 截图必须唯一匹配辅助功能窗口，并附窗口编号和观察时间。树与截图是先后采样，动画期间仍可能不同步。
 
