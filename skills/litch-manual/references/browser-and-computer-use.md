@@ -212,6 +212,7 @@ remain visible but temporarily pass mouse input through to the target. A stale f
 Remote sessions use the same helper on this Mac, not the remote machine's desktop.
 Turn completion, interruption, failure, session closure and core shutdown release Computer Use
 activity and previews even when the conversation is not open. Late actions from an ended turn cannot reopen them.
+An idle, unloaded or failed session status also releases activity when no turn-completion event is delivered.
 Closing all desktop windows hides floating previews and stops their streams; background sessions continue.
 
 macOS 优先后台操作。后台不能完成时，等待键鼠连续空闲 2 秒（最多 8 秒），短暂切到目标窗口，
@@ -228,6 +229,7 @@ macOS 优先后台操作。后台不能完成时，等待键鼠连续空闲 2 �
 远程设备上的会话操作的仍是控制端这台 Mac。
 回合完成、中断、失败、会话关闭或核心退出时，即使对话没有打开，也会撤销操控活动和预览。
 已经结束的回合中迟到的动作不会重新显示光标。
+后台会话只有空闲、卸载或异常状态广播而没有回合结束事件时，也会收起活动提示。
 关闭全部桌面窗口会收起悬浮预览并停止预览流，后台会话继续运行。
 
 ## Chrome on the controlling Mac

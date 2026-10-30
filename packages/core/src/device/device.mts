@@ -1410,6 +1410,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       )
     },
     'thread/status/changed': ({ threadId, status }) => {
+      // 未订阅对话时可能只有状态广播，没有 turn/completed；原生资源仍须收尾。
+      if (status.type !== 'active') toolCalls.closed(threadId)
       // 认出来了的子代理线程：只记状态，不去要、不进侧栏
       if (agentThreads.has(threadId)) {
         patchThread(threadId, { status })
@@ -1447,7 +1449,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       patchThread(threadId, { name: threadName ?? null }),
     'thread/archived': ({ threadId }) => shelve(threadId),
     'thread/deleted': ({ threadId }) => {
-      toolCalls.interrupted(threadId)
+      toolCalls.closed(threadId)
       removeThread(threadId)
       live.forget(threadId, true)
       unshelve(threadId)
@@ -1456,7 +1458,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     // 侧栏要的都在那条里；官方桌面端也只拿它收拾跟这个会话绑着的东西。这里只忘掉
     // 临时会话和还没说过话的会话的标识（还没说过话就卸载了的，记录不落盘，以后也不会有它的事）
     'thread/closed': ({ threadId }) => {
-      toolCalls.interrupted(threadId)
+      toolCalls.closed(threadId)
       transient.delete(threadId)
       unspoken.delete(threadId)
     },

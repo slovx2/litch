@@ -112,6 +112,8 @@ export interface ToolCalls {
   resolved(requestId: string): void
   /** 用户在这边打断了这个会话的回合：正在执行的调用当场取消 */
   interrupted(threadId: string): void
+  /** 会话已停止、关闭或卸载，不保证还会收到 turn/completed */
+  closed(threadId: string): void
   /** 回合结束了（完成、打断、出错都算） */
   turnEnded(threadId: string, turnId: string): void
   /** 连接断了：都不等了，执行过调用的回合一并当作结束 */
@@ -504,10 +506,10 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
       }
     },
 
-    interrupted(threadId) {
+    closed(threadId) {
       for (const entry of [...running.values()]) {
         if (entry.threadId !== threadId) continue
-        abandon(entry, clientToolFailure('failed', 'The user interrupted this turn.'))
+        abandon(entry, clientToolFailure('failed', 'The session stopped before the tool finished.'))
       }
       // 已返回的动作仍可能留着光标、预览或临时标签；不等引擎的结束通知。
       for (const [key, turn] of turns) {
@@ -515,6 +517,14 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
         turns.delete(key)
         host.hub.turnEnded(host.deviceId, threadId, turn.turnId)
       }
+    },
+
+    interrupted(threadId) {
+      for (const entry of [...running.values()]) {
+        if (entry.threadId === threadId)
+          abandon(entry, clientToolFailure('failed', 'The user interrupted this turn.'))
+      }
+      this.closed(threadId)
     },
 
     turnEnded(threadId, turnId) {

@@ -571,7 +571,15 @@ test('打断：用户在这边打断时正在执行的调用当场取消', async
 })
 
 test('未打开的会话完成、失败、中断或关闭时，已返回的工具也收尾且只收一次', async () => {
-  for (const status of ['completed', 'failed', 'interrupted', 'closed'] as const) {
+  for (const status of [
+    'completed',
+    'failed',
+    'interrupted',
+    'closed',
+    'idle',
+    'notLoaded',
+    'systemError',
+  ] as const) {
     const { core, main, call, peer } = setup()
     core.start()
     await settle()
@@ -582,6 +590,8 @@ test('未打开的会话完成、失败、中断或关闭时，已返回的工�
     await pending
     for (let repeat = 0; repeat < 2; repeat++) {
       if (status === 'closed') peer.last().notify('thread/closed', { threadId: 'a' })
+      else if (status === 'idle' || status === 'notLoaded' || status === 'systemError')
+        peer.last().notify('thread/status/changed', { threadId: 'a', status: { type: status } })
       else peer.last().notify('turn/completed', { threadId: 'a', turn: turn('t1', [], { status }) })
       await settle()
     }
