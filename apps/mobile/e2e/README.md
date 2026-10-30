@@ -123,6 +123,11 @@ echo no | avdmanager create avd -n <名字> --package 'system-images;android-35;
 
 几个坑：
 
+- 回合过程收起行的箭头和统计分开显示，`process-head` 的无障碍名称包含统计、不含箭头。子代理流程同时限定这个
+  testID、三个子代理和一个失败，并检查明细未展开，不能用带箭头的旧整行文本匹配。
+- offer 降成提案后，回合结束会贴底；原因说明在回答和过程收起行上方。先等 `turn-menu` 出现，再向上找
+  `proposal:.*:held`，之后向下找开始按钮。M11 增高收起行后，旧流程只向下找会在 320×640 上漏掉说明；
+  本机保留 M9、M12、仅撤回 M11 手机收起行的对照包上，旧 offer 流程通过，确认不是提案状态或 testID 丢失。
 - `launchApp` 之后立刻发的测试链接会丢（JS 还没挂上监听），所以 `fresh.yaml` 先等首页出来再发。
 - `litch://new` 不等设备连上，夹具刚列出设备时发会落空：夹具的流程走界面新建会话，或者先等设备那一行写着“已连接”。
 - CI 的模拟器偶尔掉线一下（Maestro 打出 `device offline`），正跑着的流程会挂，`adb reverse` 的映射也全没了、

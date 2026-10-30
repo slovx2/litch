@@ -28,13 +28,18 @@ tags: [mock]
     timeout: 20000
 - tapOn:
     id: proposal:.*:session
-# 模型补完简报（模拟时钟里不到一秒）：卡片写明原因，按钮换成普通提案的那一排
+# 回合结束后贴底；卡片在回答和过程收起行的上方，小屏幕上要向上找原因说明。
+- extendedWaitUntil:
+    visible:
+      id: turn-menu
+    timeout: 20000
 - scrollUntilVisible:
     element:
       id: proposal:.*:held
-    direction: DOWN
+    direction: UP
     timeout: 15000
 - assertVisible:
+    id: proposal:.*:held
     text: .*Pi.*
 - assertNotVisible:
     id: proposal:.*:child

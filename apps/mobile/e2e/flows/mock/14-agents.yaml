@@ -29,7 +29,11 @@ tags: [mock]
       id: process-head
     timeout: 30000
 - assertVisible:
-    text: "▸.*(3 subagents|3 个子代理).*"
+    id: process-head
+    text: ".*(3 subagents|3 个子代理).*(1 subagent failed|1 个子代理失败).*"
+# 箭头是单独的图标；同一个收起按钮的无障碍名称保留统计，子代理明细尚未展开。
+- assertNotVisible:
+    text: ".*(Walk the repository layout|走一遍仓库的目录结构).*(Done|完成).*"
 - tapOn:
     id: process-head
 # 子代理那一条的无障碍文字是“描述 状态”
