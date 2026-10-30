@@ -8,6 +8,10 @@
     "com.apple.systempreferences"
   ],
   "processNames": ["TextEdit", "Finder", "Calculator", "System Settings"],
+  "paragraphs": [
+    "今天测试桌面自动化，保留中文、数字 123 和标点。",
+    "这一段需要加粗，用于检查选择与格式操作。"
+  ],
   "instructions": "请仅用 litch_computer 完成界面任务，不用 shell、脚本、网页或其他工具代替。只操作指定的四个应用和测试目录，不碰已有文档或其他窗口。记录自己新开的窗口。遇到用户正在使用时退让，稍后重试；反复退让就报告未完成。每个任务完成后简短报告结果及哪里不顺。不改任何系统设置。",
   "tasks": [
     {
@@ -18,7 +22,10 @@
       "id": "finder",
       "prompt": "在访达新窗口中打开 {{directory}}，新建名为 临时资料 的文件夹，把它改名为 已整理，再将 cu-note.rtf 拖入 已整理。核验结果。"
     },
-    { "id": "calculator", "prompt": "用计算器计算 (123 + 456) × 7 − 89，读出并报告最后结果。" },
+    {
+      "id": "calculator",
+      "prompt": "用计算器计算 (123 + 456) × 7 − 89，读出并报告最后结果。"
+    },
     {
       "id": "settings",
       "prompt": "打开系统设置，只读查看当前显示器的分辨率和外观（深色或浅色），报告结果。不要修改任何设置。"

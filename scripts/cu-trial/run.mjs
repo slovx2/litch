@@ -5,6 +5,7 @@
 import { execFileSync } from 'node:child_process'
 import {
   appendFileSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -59,6 +60,8 @@ if (cases.directory !== '/tmp/litch-cu-trial') throw new Error('测试仅允许 
 const root = mkdtempSync('/tmp/litch-cu-model-')
 const allowed = new Set(cases.allowedApps)
 const opened = new Set()
+const pinnedSessions = new Set()
+const preview = process.argv.includes('--preview')
 let ownsDirectory = false,
   rpc,
   threadId,
@@ -99,10 +102,27 @@ const helper = new HelperSupervisor({
   launcher,
   lang: () => 'zh-CN',
   log: (line) => record('helper.jsonl', { line }),
+  onAutomation: (notice) => {
+    record('automation.jsonl', { at: new Date().toISOString(), notice })
+    if (notice.event === 'removed') pinnedSessions.delete(notice.session)
+    if (preview && notice.event === 'surface' && !pinnedSessions.has(notice.session)) {
+      pinnedSessions.add(notice.session)
+      void helper.connected
+        ?.request('previewPin', { session: notice.session })
+        .catch(() => pinnedSessions.delete(notice.session))
+    }
+  },
 })
 const executor = createComputerExecutor({ helper })
 let activeTurn
 let blockedReason
+const auditPreview = () => {
+  try {
+    return JSON.parse(readFileSync(join(root, 'helper/foreground.json'), 'utf8'))
+  } catch {
+    return null
+  }
+}
 // list_apps 只列已有窗口的进程，应用刚启动还没有窗口时不能据此判断其是否原本在运行。
 function targetProcesses() {
   return execFileSync('ps', ['-axo', 'pid=,comm='], { encoding: 'utf8' })
@@ -119,7 +139,9 @@ async function invoke(message) {
   const p = message.params
   const start = Date.now()
   let result
-  if (++toolCount > 160 || p.namespace !== 'litch_computer') {
+  if (blockedReason) {
+    result = { success: false, contentItems: [{ type: 'inputText', text: blockedReason }] }
+  } else if (++toolCount > 160 || p.namespace !== 'litch_computer') {
     result = {
       success: false,
       contentItems: [{ type: 'inputText', text: 'Trial scope exceeded.' }],
@@ -229,7 +251,19 @@ try {
       const done = await rpc.wait(
         (event) => event.method === 'turn/completed' && event.params.turn.id === activeTurn,
       )
+      if (preview) {
+        writeFileSync(join(root, 'helper/preview-snapshot.request'), activeTurn)
+        await delay(250)
+        const shot = join(root, 'helper/preview-panel.png')
+        if (auditPreview()?.previewWindowID && existsSync(shot))
+          copyFileSync(shot, join(out, `preview-before-end-${task}.png`))
+        record('preview-lifecycle.jsonl', { task, phase: 'beforeEnd', audit: auditPreview() })
+      }
       executor.turnEnded({ deviceId: 'trial', threadId, turnId: activeTurn })
+      if (preview) {
+        await delay(250)
+        record('preview-lifecycle.jsonl', { task, phase: 'afterEnd', audit: auditPreview() })
+      }
       record('turns.jsonl', { task, durationMs: Date.now() - started, turn: done.params.turn })
       activeTurn = undefined
       if (done.params.turn.status !== 'completed') throw new Error(`${task} 回合未完成`)
@@ -240,9 +274,25 @@ try {
     }
     const { statSync } = await import('node:fs')
     const note = join(cases.directory, '已整理/cu-note.rtf')
+    let richText = null
+    if (existsSync(note)) {
+      copyFileSync(note, join(out, 'saved-note.rtf'))
+      richText = JSON.parse(
+        execFileSync(
+          'swift',
+          [
+            join(dirname(fileURLToPath(import.meta.url)), 'verify-rtf.swift'),
+            note,
+            ...cases.paragraphs,
+          ],
+          { env, encoding: 'utf8' },
+        ),
+      )
+    }
     record('verification.jsonl', {
       movedFileExists: existsSync(note),
       bytes: existsSync(note) ? statSync(note).size : 0,
+      richText,
     })
   }
 } finally {

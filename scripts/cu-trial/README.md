@@ -33,6 +33,7 @@ node scripts/cu-trial/summarize.mjs .artifacts/cu-trial/round-1 .artifacts/cu-tr
 用例在 `cases.json`，可通过 `--cases` 指定另一份数据。默认只操作文本编辑、访达、
 计算器和系统设置；系统设置仅查看，不改值。文件只能写入 `/tmp/litch-cu-trial`，
 该目录必须原先不存在，脚本不接管已有目录。操作者需事先保存这几个应用的工作。
+不预先打开空白文档；应用启动后没有窗口也属于实测范围，由模型自行新建。
 脚本打开所需应用，由模型新建自己的文档和访达窗口；最后要求模型只关闭自己新开的
 窗口，再终止脚本新启动的应用、助手与 Codex，删除测试目录及临时配置。
 原先运行的应用不退出。若系统弹窗挡住关闭窗口，必须人工检查是否遗留测试窗口。
@@ -43,6 +44,11 @@ node scripts/cu-trial/summarize.mjs .artifacts/cu-trial/round-1 .artifacts/cu-tr
 每次调用的参数/耗时/完整结果、全部 app-server 事件、每个回合耗时与文件核验；
 截图单独存放，JSONL 使用文件名引用。截图可能含允许应用窗口中的可见资料，
 分享前须人工检查。认证副本、原始个人配置和实测记录不能提交。
+
+加 `--preview` 会在观察到窗口后打开本轮助手的浮动预览，记录 `automation.jsonl` 与
+`preview-lifecycle.jsonl`。结束前保存助手自身 NSView 的位图（不是整屏截图），结束后
+记录可见预览窗口号；0 表示浮窗已隐藏。该检查验证本地助手，不代表完整 Litch UI 链路。
+目标文件成功移动后保存测试 RTF 副本，用 AppKit 只读核验两段文字和第二段的粗体属性。
 
 进程被强制杀死时 `finally` 无法保证运行。先确认该次 Codex/探针已退出，再依据
 该次运行日志检查对应 `/tmp/litch-cu-model-*` 与 `/tmp/litch-cu-trial`，对确认属于
