@@ -26,7 +26,7 @@ Start every investigation with `scripts/litch status`, then narrow down.
 指定隔离副本，Codex 从 `CHA_CODEX_CLI` 或 PATH 取；缺少任意一家默认报错，只有显式
 `-- --skip-missing` 才跳过并标记不完整。默认隐藏窗口，`-- --show` 可显示验收窗口。
 逐步截图和结果保存在命令输出的 `_mgr/accept/<时间>/` 目录。验收覆盖创建、决策、看板答复、
-工作线回报与来源、结束中和已结束只读；第一版经理页没有编辑规矩入口，该项明确标为“没验”。
+工作线回报与来源、经理设置和自定义提示词更新、结束中和已结束只读。
 先安装仓库及各包的精确版本依赖，不在验收中安装或升级用户的 harness。
 
 **`scripts/litch` says the Litch desktop app is not running.** Ask the user to open Litch; retry. The

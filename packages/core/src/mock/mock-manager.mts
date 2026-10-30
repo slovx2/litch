@@ -91,14 +91,10 @@ export function createMockManagers(host: MockManagerHost) {
     const data = state(deviceId)
     if (name === 'managers.create') {
       const { manager: draft } = params as Commands['managers.create']['params']
-      if (
-        !draft.scope.trim() ||
-        !Number.isInteger(draft.dispatch.maxRunningLines) ||
-        draft.dispatch.maxRunningLines < 1
-      )
+      if (!Number.isInteger(draft.dispatch.maxRunningLines) || draft.dispatch.maxRunningLines < 1)
         throw new ChannelError(
           'invalid',
-          t('范围和并行线数无效', 'Invalid scope or concurrent line limit'),
+          t('并行线数必须为正整数', 'The concurrent line limit must be a positive integer'),
         )
       const id = `manager-${++seq}`
       const threadId = host.spawn(deviceId, {
@@ -160,8 +156,6 @@ export function createMockManagers(host: MockManagerHost) {
     let result: unknown
     if (name === 'managers.update') {
       const { patch } = params as Commands['managers.update']['params']
-      if (patch.scope !== undefined && !patch.scope.trim())
-        throw new ChannelError('invalid', t('范围不能为空', 'Scope is required'))
       if (
         patch.dispatch &&
         (!Number.isInteger(patch.dispatch.maxRunningLines) || patch.dispatch.maxRunningLines < 1)
@@ -181,11 +175,14 @@ export function createMockManagers(host: MockManagerHost) {
           formatSessionEvent({
             kind: 'manager-rules',
             notes: [],
-            manager: { managerId, text: `${manager.scope}\n\n${manager.rules}` },
+            manager: {
+              managerId,
+              text: [manager.scope, manager.rules].filter(Boolean).join('\n\n'),
+            },
           }),
           t(
-            '已更新范围和规矩，将按新约定安排工作。',
-            'Scope and rules updated. I will follow the new instructions.',
+            '已更新经理设定，将按新设定安排工作。',
+            'Manager settings updated; future work will follow the new instructions.',
           ),
         )
       }

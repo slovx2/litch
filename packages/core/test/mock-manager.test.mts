@@ -100,11 +100,11 @@ test('模拟经理命令：部分提交、版本冲突、重开、结束只读�
   assert.equal(board?.board?.decisions.find((d) => d.id === 'D-12')?.revision, 2)
   await command('update', { patch: { name: '新名字' } })
   assert.equal(turns.length, 1)
-  await command('update', { patch: { scope: '只完成本轮验收', rules: '保留未完成事项' } })
+  await command('update', { patch: { scope: '', rules: '保留未完成事项' } })
   assert.equal(parseSessionEvent(turns.at(-1) ?? '').event?.kind, 'manager-rules')
-  assert.match(parseSessionEvent(turns.at(-1) ?? '').event?.manager?.text ?? '', /只完成本轮验收/)
+  assert.equal(parseSessionEvent(turns.at(-1) ?? '').event?.manager?.text, '保留未完成事项')
   const count = turns.length
-  await command('update', { patch: { scope: '只完成本轮验收', rules: '保留未完成事项' } })
+  await command('update', { patch: { scope: '', rules: '保留未完成事项' } })
   assert.equal(turns.length, count)
   const ending = (await command('end')) as { manager: ManagerView }
   assert.equal(ending.manager.status, 'ending')
@@ -219,7 +219,7 @@ for (const lang of ['zh-CN', 'en'] as const)
       } else {
         assert.equal(user.text, '')
         assert.equal(user.event?.kind, 'manager-open')
-        assert.ok(user.event.body?.includes(sample.scope))
+        assert.ok(user.event.body?.includes(sample.rules))
       }
       created.close()
     }

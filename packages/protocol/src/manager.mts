@@ -43,7 +43,7 @@ export const MANAGER_DEFAULT_DISPATCH: Readonly<ManagerDispatchSettings> = {
   harness: null,
   model: null,
   effort: null,
-  worktree: true,
+  worktree: false,
   merge: 'manager',
   maxRunningLines: 4,
 }
@@ -198,6 +198,7 @@ export interface Manager {
   template: ManagerTemplate
   dispatch: ManagerDispatchSettings
   contact: ManagerContactSettings
+  /** 用户自定义的经理设定原文，可为空；自动行为规则由设备另行生成。 */
   rules: string
   status: ManagerStatus
   pendingDecisions: number

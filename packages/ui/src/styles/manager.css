@@ -350,7 +350,7 @@
 }
 .mg-form {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
 }
 .mg-fields {
@@ -393,27 +393,6 @@
 .mg-fixed {
   color: var(--ink-2);
   overflow-wrap: anywhere;
-}
-.mg-rules {
-  align-self: start;
-  position: sticky;
-  top: 0;
-}
-.mg-rules textarea {
-  margin-top: 12px;
-  line-height: 1.7;
-  height: 55vh;
-  min-height: 320px;
-  resize: vertical;
-}
-.mg-rules-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.mg-form .mg-rules-head h2 {
-  margin: 0;
 }
 .mg-form-foot {
   grid-column: 1 / -1;
@@ -464,12 +443,6 @@
   .mg-page[data-narrow="chat"] .mg-board,
   .mg-page[data-narrow="board"] .mg-chat {
     display: none;
-  }
-  .mg-form {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .mg-rules {
-    position: static;
   }
 }
 @media (max-width: 700px) {

@@ -38,7 +38,7 @@ export function ManagersPage({
       >
         <span className="grow">
           <b>{manager.name || t('manager.manager')}</b>
-          <span className="dim">{manager.scope}</span>
+          <span className="dim">{manager.rules}</span>
           {manager.latestActivity ? (
             <small className="dim">{manager.latestActivity.text}</small>
           ) : null}

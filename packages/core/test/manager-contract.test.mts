@@ -11,7 +11,9 @@ import {
   managerLineRules,
   managerOpenText,
   managerRoleRules,
+  managerRulesText,
   managerSessionRules,
+  managerSettingsRules,
 } from '../../protocol/src/client-tools-manager.mjs'
 import {
   archiveRule,
@@ -93,7 +95,9 @@ test('创建形状覆盖设置，第一版不收手机或截止执行字段', ()
     firstTask: '',
   }
   assert.equal(validate('CreateParams', params), true)
-  assert.equal(validate('CreateParams', { ...params, scope: '' }), false)
+  assert.equal(validate('CreateParams', { ...params, scope: '', rules: '' }), true)
+  assert.equal(validate('UpdateParams', { managerId: 'm1', scope: '', rules: '' }), true)
+  assert.equal(MANAGER_DEFAULT_DISPATCH.worktree, false)
   assert.equal(validate('Dispatch', { ...params.dispatch, maxRunningLines: 0 }), false)
   assert.equal(validate('Dispatch', { ...params.dispatch, maxRunningLines: 1.5 }), false)
   assert.equal(validate('Contact', { ...params.contact, pushPhone: true }), false)
@@ -253,4 +257,19 @@ test('线的回报和首次、结束回合遵守草稿约束', () => {
   )
   assert.match(managerEndText('blank'), /Other sessions still require explicit user agreement/)
   assert.doesNotMatch(managerEndText('blank'), /Ask whether the user wants your lines archived/)
+})
+
+test('空范围不生成空标题，自动规则和用户设定分别表达', () => {
+  assert.doesNotMatch(managerRoleRules(''), /Your scope:/)
+  assert.doesNotMatch(managerRoleRules('  '), /Your scope:/)
+  assert.doesNotMatch(managerRulesText('', '角色原文'), /Current scope:/)
+  assert.ok(managerRulesText('', '角色原文').endsWith('角色原文'))
+  assert.match(managerRulesText('', ''), /cleared the custom rules/)
+  assert.doesNotMatch(managerOpenText(''), /scope text|scope:/)
+  assert.match(managerOpenText(''), /Do not start lines yet/)
+  assert.ok(managerOpenText('', '第一项任务').endsWith('第一项任务'))
+  const rules = managerSettingsRules(MANAGER_DEFAULT_DISPATCH, MANAGER_DEFAULT_CONTACT)
+  assert.match(rules, /share the working folder/)
+  assert.match(rules, /Wait for unanswered decisions/)
+  assert.doesNotMatch(rules, /desktop notification/i)
 })
