@@ -11,6 +11,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import { registerHooks } from 'node:module'
@@ -123,7 +124,7 @@ const auditPreview = () => {
     return null
   }
 }
-// list_apps 只列已有窗口的进程，应用刚启动还没有窗口时不能据此判断其是否原本在运行。
+// 独立进程清单负责清理归属，不依赖 list_apps 的窗口或应用筛选规则。
 function targetProcesses() {
   return execFileSync('ps', ['-axo', 'pid=,comm='], { encoding: 'utf8' })
     .split('\n')
@@ -267,12 +268,39 @@ try {
       record('turns.jsonl', { task, durationMs: Date.now() - started, turn: done.params.turn })
       activeTurn = undefined
       if (done.params.turn.status !== 'completed') throw new Error(`${task} 回合未完成`)
+      // 每项完成后只读核验，避免后续移动失败掩盖前一步已保存的文件。
+      if (task === 'textedit' || task === 'finder') {
+        const original = join(cases.directory, 'cu-note.rtf')
+        const moved = join(cases.directory, '已整理/cu-note.rtf')
+        const note = task === 'textedit' ? original : moved
+        let richText = null
+        if (existsSync(note)) {
+          copyFileSync(note, join(out, `saved-note-${task}.rtf`))
+          richText = JSON.parse(
+            execFileSync(
+              'swift',
+              [
+                join(dirname(fileURLToPath(import.meta.url)), 'verify-rtf.swift'),
+                note,
+                ...cases.paragraphs,
+              ],
+              { env, encoding: 'utf8' },
+            ),
+          )
+        }
+        record('verification.jsonl', {
+          task,
+          originalFileExists: existsSync(original),
+          movedFileExists: existsSync(moved),
+          bytes: existsSync(note) ? statSync(note).size : 0,
+          richText,
+        })
+      }
       if (blockedReason) {
         record('blocked.jsonl', { task, reason: blockedReason })
         break
       }
     }
-    const { statSync } = await import('node:fs')
     const note = join(cases.directory, '已整理/cu-note.rtf')
     let richText = null
     if (existsSync(note)) {

@@ -37,6 +37,9 @@ node scripts/cu-trial/summarize.mjs .artifacts/cu-trial/round-1 .artifacts/cu-tr
 脚本打开所需应用，由模型新建自己的文档和访达窗口；最后要求模型只关闭自己新开的
 窗口，再终止脚本新启动的应用、助手与 Codex，删除测试目录及临时配置。
 原先运行的应用不退出。若系统弹窗挡住关闭窗口，必须人工检查是否遗留测试窗口。
+终止进程不等于丢弃 TextEdit 自动保存草稿。清理须通过界面关闭本轮测试文档；恢复的旧草稿
+只有内容精确匹配用例两段文字才可选择“不保存/删除”。操作者重开 TextEdit，确认草稿不再
+恢复，再退出本轮启动的 TextEdit；不得手动删除自动保存目录或处理用户自己的文档。
 新启动进程按启动前后进程清单登记（不以是否已经出现窗口判断），写入 `launched.jsonl`。
 系统授权/登录拦截后结束本轮，不继续消耗后续任务；恢复后用新记录目录重跑。
 
@@ -48,7 +51,10 @@ node scripts/cu-trial/summarize.mjs .artifacts/cu-trial/round-1 .artifacts/cu-tr
 加 `--preview` 会在观察到窗口后打开本轮助手的浮动预览，记录 `automation.jsonl` 与
 `preview-lifecycle.jsonl`。结束前保存助手自身 NSView 的位图（不是整屏截图），结束后
 记录可见预览窗口号；0 表示浮窗已隐藏。该检查验证本地助手，不代表完整 Litch UI 链路。
-目标文件成功移动后保存测试 RTF 副本，用 AppKit 只读核验两段文字和第二段的粗体属性。
+TextEdit 与 Finder 每项结束时分别保存测试 RTF 副本，用 AppKit 只读核验两段文字和第二段的粗体属性；
+同时记录原路径和移动后路径是否存在，避免后一项失败掩盖前一项成功。
+汇总器另按任务、工具拆分调用与耗时，并对并发工具区间取并集；墙钟减工具占用只是
+模型、网络、编排和预览审计的合计，不能视为纯模型思考耗时。
 
 进程被强制杀死时 `finally` 无法保证运行。先确认该次 Codex/探针已退出，再依据
 该次运行日志检查对应 `/tmp/litch-cu-model-*` 与 `/tmp/litch-cu-trial`，对确认属于
