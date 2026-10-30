@@ -997,6 +997,7 @@ export const zhCN = {
   'attachment.view': '查看大图',
   'viewer.close': '关闭',
   'message.expand': '展开全部',
+  'message.turnAddition': '本回合补充',
   'message.collapse': '收起',
   'ability.unsupported': '此设备上的引擎不支持该操作',
   'turn.busy': '回合进行中，请在结束后再操作',

@@ -290,9 +290,12 @@ export {
   cardOf,
   cardPlace,
   type ProcessPart,
+  type ProcessSegment,
   type ProcessTally,
+  processDuration,
   processFolded,
   processItemIds,
+  processSegments,
   processSettled,
   processTally,
   quietOf,
@@ -303,6 +306,7 @@ export {
   stepsTally,
   thoughtShown,
   toolKind,
+  turnAddition,
 } from './projection/blocks.mjs'
 export {
   type CommentExtra,

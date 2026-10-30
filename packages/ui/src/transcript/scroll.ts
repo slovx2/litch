@@ -146,7 +146,7 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
   const lower = useRef<Hold | null>(null)
   const pinned = useRef<Hold | null>(null)
   /** 自动收起可能反而增高（短步骤组换成触控入口），这时仍守住后面的正文。 */
-  const folding = useRef<{ body: Element; process: Element; after: Hold } | null>(null)
+  const folding = useRef<{ body: Element; turn: Element; after: Hold } | null>(null)
   /** 视口里最靠上的那一行，上边缘在窗口里的纵坐标。和 upper 一起记 */
   const upperTop = useRef(0)
   /**
@@ -251,7 +251,7 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
     if (
       fold &&
       !fold.body.isConnected &&
-      fold.process.querySelector(':scope > .proc-head[aria-expanded="false"]')
+      fold.turn.querySelector('.proc-head[aria-expanded="false"]')
     ) {
       const delta = grown(fold.after)
       if (delta !== null) {
@@ -290,11 +290,19 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
     const last = countWhile(rows, (row) => row.getBoundingClientRect().top < view.bottom) - 1
     upper.current = hold(rows[first])
     lower.current = last > first ? hold(rows[last]) : null
-    // 只记录眼前尚未收起的过程及其后的稳定行；手动开合仍由 pinned 优先处理。
-    for (let index = first; index <= last; index++) {
-      const row = rows[index]
+    // 分段同时收起时优先守住眼前的最终回答，其次才是补充气泡等稳定行。
+    // 手动开合仍由 pinned 优先处理；被折叠的过程块可以整个消失，所以检查所属回合。
+    const candidates = [...rows]
+      .slice(first, last + 1)
+      .sort(
+        (a, b) =>
+          Number(b.getAttribute('data-anchor')?.startsWith('a:')) -
+          Number(a.getAttribute('data-anchor')?.startsWith('a:')),
+      )
+    for (const row of candidates) {
       if (!row || row.closest('.proc')) continue
-      const bodies = row.closest('.turn')?.querySelectorAll('.proc.live > .proc-body') ?? []
+      const turn = row.closest('.turn')
+      const bodies = turn?.querySelectorAll('.proc.live > .proc-body') ?? []
       const body = [...bodies].find((entry) => {
         const box = entry.getBoundingClientRect()
         return (
@@ -304,8 +312,8 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
         )
       })
       const after = body ? hold(row) : null
-      if (body?.parentElement && after) {
-        folding.current = { body, process: body.parentElement, after }
+      if (body && turn && after) {
+        folding.current = { body, turn, after }
         break
       }
     }
