@@ -1,5 +1,5 @@
 // 收尾（wrap_up）留给用户的问题：和模型边干活边问的题一样画成问题卡（asks/AskCell.tsx 的 AskSheet），
-// 还没答时列题目和回复按钮的字（作答在输入框上方），答完收起、点开看回答
+// 待答时只在输入框上方作答；答完、忽略或关闭后在对话流留痕，点开看题目与回答
 import { wrapQuestionId } from '@litch/core'
 import { memo } from 'react'
 import { AskSheet } from '../asks/AskCell'

@@ -1,9 +1,10 @@
-// 问用户的题画成一张卡，状态跟着变：还没答的一直展开，列题目和建议的回答（作答在输入框上方，这里只读）；
+// 问用户的题在待答时只显示输入区的作答卡；已答、已忽略或已关闭的题在对话流里留痕。
 // 答完收起，标题行加一行答案摘要，点开看每题的回答。答复那条用户消息不再单独画（rows.ts 认出来跳过）。
 // 模型边干活边问的题（AskCell）和收尾的问题（WrapAskCell）共用 AskSheet，同桌面的 AskSheet
 import { type AskQuestion, type AskReply, distinctReplies, type ToolCallItem } from '@litch/core'
 import { memo, useState, useSyncExternalStore } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { historyQuestions } from '../../../../../packages/ui/src/transcript/ask-history.ts'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import { useTranscript } from '../context'
@@ -22,13 +23,13 @@ export interface SheetQuestion {
 }
 
 /**
- * 问题卡：还在待答集合里的（输入框上方那一块）算“待回答”，一直展开；都答了算“已答”，默认收起；
+ * 问题卡：还在待答集合里的只在输入区显示；已答的在这里默认收起；
  * 都不是（回合过去了没人答）算“未回答”，收起，点开看题目
  */
 export function AskSheet({
   cardId,
   testID,
-  questions,
+  questions: allQuestions,
 }: {
   cardId: string
   testID: string
@@ -42,37 +43,32 @@ export function AskSheet({
   const store = useSessionStore(deviceId, sessionId)
   const answers = useSyncExternalStore(store.subscribeAnswers, store.getAnswers)
   const meta = useSyncExternalStore(store.subscribeMeta, store.getMeta)
+  const questions = historyQuestions(allQuestions, meta?.pendingQuestions ?? [])
   const answered = questions.filter((q) => answers[q.id] !== undefined)
-  const done = answered.length === questions.length
-  const waiting =
-    !done &&
-    (meta?.pendingQuestions ?? []).some((p) => questions.some((q) => p.replyIds.includes(q.id)))
-  const open = waiting || opened
+  const open = opened
   const source = `${t('ask.title')} · ${
-    answered.length > 0
-      ? t('ask.answeredCount', { count: answered.length })
-      : t(waiting ? 'ask.state.open' : 'ask.state.closed')
+    answered.length > 0 ? t('ask.answeredCount', { count: answered.length }) : t('ask.state.closed')
   }`
+  if (questions.length === 0) return null
   return (
     <View
       testID={testID}
       style={[
         styles.card,
         {
-          borderColor: waiting ? c.line3 : c.line2,
+          borderColor: c.line2,
           backgroundColor: c.raised,
           borderRadius: theme.radius.l,
         },
       ]}
     >
       <Head
-        waiting={waiting}
+        waiting={false}
         source={source}
         title={open ? undefined : questions[0]?.title}
         summary={answered.map((q) => answers[q.id]).join(' · ') || undefined}
         open={open}
         onPress={toggle}
-        fixed={waiting}
       />
       {open
         ? questions.map((q) => {

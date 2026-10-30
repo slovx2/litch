@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 import { askReplyText, askState, createReplica, keys, pendingReplyText } from '@litch/core'
+import { historyQuestions } from '../../../packages/ui/src/transcript/ask-history.ts'
 import { SessionStore } from '../src/core/session-store.ts'
 import { mockChannel, until } from './helpers.mjs'
 
@@ -102,6 +103,7 @@ test('边做边问：卡片要的题目、回合、答复表都对，答复插�
   assert.equal(meta.running, true)
   assert.equal(store.turnOf(row.itemId), meta.lastTurn.id)
   assert.equal(askState(questions, store.getAnswers(), meta.live), 'open')
+  assert.deepEqual(historyQuestions(questions, meta.pendingQuestions), [], '待答时没有历史卡')
 
   const reply = [
     { questionItemId: questions[0].id, question: questions[0].title, answer: '照常全跑' },
@@ -119,6 +121,12 @@ test('边做边问：卡片要的题目、回合、答复表都对，答复插�
   assert.equal(answers[questions[0].id], '照常全跑')
   assert.equal(answers[questions[1].id], undefined)
   assert.equal(askState(questions, answers, true), 'open')
+  await until(() => store.getMeta().pendingQuestions.length === 1, { what: '已答题退出待答区' })
+  assert.deepEqual(
+    historyQuestions(questions, store.getMeta().pendingQuestions),
+    [questions[0]],
+    '部分作答只留下已答题，剩余题只在待答区显示',
+  )
   // 插进了同一个回合，没有排队，也没有另起一个回合
   const after = store.getMeta()
   assert.equal(after.queued.length, 0)

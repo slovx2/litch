@@ -385,13 +385,14 @@ export async function treeProbe(): Promise<TreeSeen> {
     (wrapTurn?.querySelector('.proc')?.textContent ?? '').includes('建议')
   seen.tail = `${tail?.previousElementSibling?.className ?? '没有'} | ${wrapTurn?.querySelector('.proc')?.textContent ?? '没有过程'}`
   const askBox = () => $('.pending-asks [data-pending-question]')
+  const tailAsk = () => wrapTurn?.querySelector<HTMLElement>('.turn-tail [data-card="ask"]')
   const askShown =
+    tailAsk() === null &&
     askBox()?.dataset.state === 'open' &&
     (askBox()?.querySelectorAll('button[data-act]').length ?? 0) === 2 &&
     (askBox()?.textContent ?? '').includes('解析器的单测')
   askBox()?.querySelector<HTMLElement>('button[data-act="0"]')?.click()
   // 答了之后：答案并进回合末尾那张问题卡（变成“已答”、收着时摘要里写着答案），不再另出一个答复的气泡
-  const tailAsk = () => wrapTurn?.querySelector<HTMLElement>('.turn-tail [data-card="ask"]')
   const askReplied = await until(
     () =>
       tailAsk()?.dataset.state === 'answered' &&
