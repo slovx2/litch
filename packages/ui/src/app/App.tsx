@@ -1,3 +1,5 @@
+import { type SuggestionFilter, SuggestionsPage } from '../tree/SuggestionsPage.tsx'
+import '../styles/suggestions.css'
 import { ManagerTitleBar } from '../manager/ManagerTitleBar.tsx'
 import '../styles/manager.css'
 import { keys, managerMark, type SessionSummary } from '@litch/core'
@@ -46,7 +48,7 @@ import { useSelectionLifetime } from './useSelectionLifetime.ts'
 import { initialNavigation, navigate, type ViewMode } from './view-navigation.ts'
 
 /** 占着对话区的那几页：已归档对话、设备、设置、定时任务 */
-export type Page = 'archived' | 'devices' | 'settings' | 'tasks' | 'managers'
+export type Page = 'archived' | 'devices' | 'settings' | 'tasks' | 'managers' | 'suggestions'
 
 export interface Selection {
   deviceId: string
@@ -63,6 +65,7 @@ export function App() {
   const { channel, replica } = useServices()
   useUpdateToast()
   const managerData = useManagers()
+  const [suggestionFilter, setSuggestionFilter] = useState<SuggestionFilter>(null)
   const [navigation, dispatch] = useReducer(navigate, initialNavigation)
   const sidebarMode = navigation.mode
   const { picked, wish, page } = navigation[sidebarMode]
@@ -206,6 +209,7 @@ export function App() {
   const onPage = useCallback(
     (next: Page) =>
       leaveThen(() => {
+        if (next === 'suggestions') setSuggestionFilter(null)
         if (next === 'tasks') setTasksAt((was) => ({ route: { view: 'list' }, seq: was.seq + 1 }))
         openPage(next)
       }),
@@ -381,6 +385,13 @@ export function App() {
               section={deviceAt?.section ?? null}
               onClose={closePage}
             />
+          ) : page === 'suggestions' ? (
+            <SuggestionsPage
+              filter={suggestionFilter}
+              onClear={() => setSuggestionFilter(null)}
+              onClose={closePage}
+              onOpen={(next, archived) => (archived ? setPeek(next) : select(next))}
+            />
           ) : page === 'tasks' ? (
             <TasksPage
               key={tasksAt.seq}
@@ -411,6 +422,13 @@ export function App() {
             <ManagerPage
               key={`${pickedManager.deviceId}:${pickedManager.id}`}
               manager={pickedManager}
+              onSuggestions={() => {
+                setSuggestionFilter({
+                  deviceId: pickedManager.deviceId,
+                  managerId: pickedManager.id,
+                })
+                openPage('suggestions')
+              }}
               location={managerLocations[`${pickedManager.deviceId}:${pickedManager.id}`]}
               onLocation={(location) =>
                 setManagerLocations((was) => ({

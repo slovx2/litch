@@ -50,6 +50,7 @@ export function classify(method: string, params: unknown): Route {
   // 会话树（sessionTree 扩展）：派子会话、脱离、提案。父子关系存在设备进程自己的库里，不转给引擎
   if (
     method.startsWith('litch/session/') ||
+    method.startsWith('litch/suggestions/') ||
     method.startsWith('litch/sessionProposal/') ||
     method === SESSION_TREE_METHOD.queuedNotesDeliver
   )

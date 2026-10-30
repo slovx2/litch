@@ -67,6 +67,7 @@ export function judgeMockManage(probe: MockManageProbe): string[] {
       'terminal：',
       'power：已开启 1 个',
       'worktrees：',
+      'sessions：',
       '环境文件：2 个变量',
     ],
     '收着的各节，标题后面的摘要不对',

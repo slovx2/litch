@@ -1601,6 +1601,7 @@ export function createCore(options: CoreOptions): Core {
         return device.diffs.open(topic.root, topic.scope, topic.sessionId ?? null, sink)
       }
       // 经理与定时任务：断线保留快照，不支持时 available 是 false
+      if (topic.kind === 'suggestions') return device.suggestions.open(sink)
       if (topic.kind === 'managers') return device.managers.open(sink)
       if (topic.kind === 'managerBoard') return device.managers.openBoard(topic.managerId, sink)
       if (topic.kind === 'tasks') return device.tasks.open(sink)

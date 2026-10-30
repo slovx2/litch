@@ -92,12 +92,13 @@ export function judgeFoot(seen: FootSeen): string[] {
   must(seen.looks.length === 12, `底部按钮没有在六套皮肤明暗、两种语言下量全：${seen.looks.length}`)
   for (const line of seen.looks) {
     const [where, ...buttons] = line.split('｜')
-    must(buttons.length === 3, `${where} 下底部不是三个按钮：${buttons.length}`)
+    must(buttons.length === 4, `${where} 下底部不是四个按钮：${buttons.length}`)
     const widths = new Set<string>()
     for (const button of buttons) {
       const [name, size = '', icon, cut, contrast] = button.split(':')
       const [width = 0, height = 0] = size.split('x').map(Number)
-      widths.add(String(width))
+      if (button !== buttons[0]) widths.add(String(width))
+      else must(width >= 200, `${where} 下建议入口没有独占一行：${size}`)
       must(width >= 60 && height >= 28, `${where} 下“${name}”太小：${size}`)
       must(Number(icon) >= 14, `${where} 下“${name}”的图标没画出来：${icon}`)
       must(cut === '全', `${where} 下“${name}”的名字被截断了`)

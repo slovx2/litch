@@ -5,6 +5,29 @@ import (
 	"testing"
 )
 
+// 留存走通用设置持久化，拒绝自由天数与错误类型。
+func TestSuggestionRetentionSetting(t *testing.T) {
+	cfg := settingsTestConfiguration(t)
+	schema := buildSettingsSchema(cfg)
+	key := "sessions.suggestionRetentionDays"
+	spec, ok := schema.spec(key)
+	if !ok || spec.Type != settingEnum || spec.Default != "7" || spec.Scope != deviceScope || spec.Restart != restartNone || len(spec.Options) != 6 {
+		t.Fatalf("建议留存声明不完整: %+v", spec)
+	}
+	for _, value := range []any{"2", "0", 7} {
+		if _, problem, _ := cfg.settings.apply(0, []settingEdit{edit(key, value)}, schema, cfg.validateSettings); problem == nil {
+			t.Fatalf("不应接受留存值: %v", value)
+		}
+	}
+	_, problem, err := cfg.settings.apply(0, []settingEdit{edit(key, "never")}, schema, cfg.validateSettings)
+	if problem != nil || err != nil {
+		t.Fatalf("保存不过期失败: %+v %v", problem, err)
+	}
+	if raw, written := cfg.settings.lookup(key); !written || string(raw) != `"never"` {
+		t.Fatalf("未持久化: %s", raw)
+	}
+}
+
 // 会话编排的开关：单独一组、设备级的布尔项、默认开、立刻生效；写错类型被拒绝，写成关能写进去。
 func TestSessionTreeSettingIsDeclared(t *testing.T) {
 	cfg := settingsTestConfiguration(t)

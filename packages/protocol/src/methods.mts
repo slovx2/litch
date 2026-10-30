@@ -575,6 +575,10 @@ export interface ClientRequests {
   'litch/session/start': { params: SessionStartParams; result: SessionStartResponse }
   'litch/session/detach': { params: SessionDetachParams; result: Record<string, never> }
   'litch/session/report/set': { params: SessionReportSetParams; result: SessionReportSetResponse }
+  'litch/suggestions/list': {
+    params: Record<string, never>
+    result: import('./suggestion-inbox.mjs').SuggestionsSnapshot
+  }
   'litch/sessionProposal/list': {
     params: SessionProposalListParams
     result: SessionProposalListResponse
@@ -697,6 +701,8 @@ export interface ServerNotifications {
   'litch/thread/lineage/updated': LineageUpdatedNotification
   /** 扩展，只发给握手时声明过 sessionTree 的连接：一个会话上的提案变了 */
   'litch/sessionProposal/changed': ProposalChangedNotification
+  /** 设备级增量，只发给声明过 suggestionInbox 的连接。 */
+  'litch/suggestions/changed': import('./suggestion-inbox.mjs').SuggestionsChanged
   /** 扩展，只发给握手时声明过 sessionTree 的连接：一个会话的回报队列变了 */
   'litch/thread/queuedNotes/updated': QueuedNotesUpdatedNotification
   'litch/thread/questions/changed': { threadId: string; ignoredQuestions: string[] }

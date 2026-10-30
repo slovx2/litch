@@ -4,6 +4,17 @@
 import type { Entry } from './types.ts'
 
 export const zhProposals = {
+  'suggestions.title': '建议',
+  'suggestions.manager': '本经理工作线的建议',
+  'suggestions.all': '全部建议',
+  'suggestions.empty': '没有待处理建议',
+  'suggestions.archived': '来源已归档',
+  'suggestions.here': '在来源会话里做',
+  'suggestions.restore': '在来源会话里执行将先恢复该会话。',
+  'suggestions.offline': '设备离线，连接后可处理建议。',
+  'suggestions.openSource': '打开来源会话',
+  'suggestions.close': '关闭建议',
+
   'proposal.kind': '建议任务',
   'proposal.start': '开始',
   'proposal.edit': '编辑后开始',

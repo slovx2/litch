@@ -1,0 +1,27 @@
+.suggestions-list {
+  list-style: none;
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+  max-width: 880px;
+  padding: 0 24px 24px;
+}
+
+[data-page="suggestions"] .arch-head h1 {
+  flex: 1;
+}
+
+[data-page="suggestions"] .arch-note,
+[data-page="suggestions"] .arch-body > .dim {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 0 24px 16px;
+}
+
+.suggestion-row .prop-meta {
+  flex-wrap: wrap;
+}
+
+.suggestion-row .prop-body {
+  min-width: 0;
+}

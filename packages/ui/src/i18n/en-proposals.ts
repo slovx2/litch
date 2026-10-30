@@ -3,6 +3,17 @@ import type { Entry } from './types.ts'
 import type { zhProposals } from './zh-CN-proposals.ts'
 
 export const enProposals: Record<keyof typeof zhProposals, Entry> = {
+  'suggestions.title': 'Suggestions',
+  'suggestions.manager': 'Suggestions from this manager’s lines',
+  'suggestions.all': 'All suggestions',
+  'suggestions.empty': 'No pending suggestions',
+  'suggestions.archived': 'Source archived',
+  'suggestions.here': 'Do in source session',
+  'suggestions.restore': 'Running in the source session will restore it first.',
+  'suggestions.offline': 'Device offline. Connect to act on suggestions.',
+  'suggestions.openSource': 'Open source session',
+  'suggestions.close': 'Close suggestions',
+
   'proposal.kind': 'Suggested task',
   'proposal.start': 'Start',
   'proposal.edit': 'Edit and start',

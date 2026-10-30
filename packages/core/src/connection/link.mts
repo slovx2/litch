@@ -215,6 +215,7 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.manager,
                 // sessionTree：声明了，会话对象上才有 Litch 子会话的 litchLineage，才收得到父子关系、提案变了的通知
                 EXTENSION.sessionTree,
+                EXTENSION.suggestionInbox,
                 // devicePairing：声明了才收得到配对状态和已绑定手机的变化通知（litch/pair/changed、litch/pair/phones/changed）
                 EXTENSION.devicePairing,
                 // clientApprovals：声明了才能把登录卡片挂到设备上、收到手机的答复（桌面端），收得到卡片变化的通知（手机）

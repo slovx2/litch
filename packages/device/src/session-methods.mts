@@ -193,9 +193,11 @@ export async function sessionTreeCall(
       return {}
     }
     case SESSION_TREE_METHOD.proposalHere:
+      await restoreProposalSource(tree, proposalIdOf(tree, fields))
       tree.proposalHere(proposalIdOf(tree, fields), optional(fields.lead, 'lead'))
       return {}
     case SESSION_TREE_METHOD.proposalMarkHere:
+      await restoreProposalSource(tree, proposalIdOf(tree, fields))
       return {
         text: tree.proposalHere(proposalIdOf(tree, fields), optional(fields.lead, 'lead'), false),
       }
@@ -204,4 +206,11 @@ export async function sessionTreeCall(
     default:
       throw new DeviceError('unsupported', `聚合面不支持 ${method}`, { method })
   }
+}
+
+async function restoreProposalSource(tree: SessionTree, id: string): Promise<void> {
+  const proposal = tree.proposal(id)
+  if (proposal?.status !== 'pending' || !tree.host.index.archived(proposal.threadId)) return
+  if (!tree.restoreSource) throw new ProtocolError(-32602, '无法恢复来源会话')
+  await tree.restoreSource(proposal.threadId)
 }

@@ -24,8 +24,10 @@ export function ManagerPage({
   onOpen,
   location = defaultLocation,
   onLocation,
+  onSuggestions,
 }: {
   manager: ManagerView
+  onSuggestions(): void
   onOpen(selection: Selection): void
   location: ManagerPageLocation | undefined
   onLocation(location: ManagerPageLocation): void
@@ -102,6 +104,14 @@ export function ManagerPage({
       <header className="mg-title">
         <span className="pill mute">{t('manager.manager')}</span>
         <b className="ell grow">{manager.name}</b>
+        <button
+          type="button"
+          className="btn ghost"
+          data-act="manager-suggestions"
+          onClick={onSuggestions}
+        >
+          {t('suggestions.manager')}
+        </button>
         {manager.status === 'active' ? (
           <>
             <button

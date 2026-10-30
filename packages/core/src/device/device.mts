@@ -162,6 +162,7 @@ import {
 } from './service-restart.mjs'
 import { createServiceUpgrader, type UpgradeMode } from './service-upgrade.mjs'
 import type { SnapshotStore } from './snapshot.mjs'
+import { createSuggestions, type Suggestions } from './suggestions.mjs'
 import { createTasks, type Tasks } from './tasks.mjs'
 import type { TerminalNotesStore } from './terminal-launch.mjs'
 import { createTerminals, type Terminals } from './terminals.mjs'
@@ -393,6 +394,8 @@ export interface Device {
   readonly diffs: Diffs
   /** 这台设备上的定时任务：订阅、建、改、删、立即运行、运行记录（tasks.mts） */
   readonly tasks: Tasks
+  /** 设备上的普通待处理建议。 */
+  readonly suggestions: Suggestions
   /** 设备上的经理列表与按需订阅的看板。 */
   readonly managers: Managers
   /** 这台设备上的扫码绑定手机：出码、确认、已绑定的手机（pairing.mts） */
@@ -580,6 +583,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let reattachable = false
   /** 对面支不支持定时任务（deviceTasks 扩展）。认出来之前、对面不是设备服务时都是不支持 */
   let schedulable = false
+  let suggestionsOn = false
   /** 对面声明 litchManager 后才读取看板、接受经理通知与会话标记。 */
   let managersOn = false
   /**
@@ -1657,6 +1661,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         recoverySupported = info.device.extensions?.includes(EXTENSION.turnRecovery) === true
         reattachable = info.device.extensions?.includes(EXTENSION.deviceProcesses) === true
         schedulable = info.device.extensions?.includes(EXTENSION.deviceTasks) === true
+        suggestionsOn = info.device.extensions?.includes(EXTENSION.suggestionInbox) === true
         managersOn = info.device.extensions?.includes(EXTENSION.manager) === true
         sessionTree = info.device.extensions?.includes(EXTENSION.sessionTree) === true
         reportControl =
@@ -1685,6 +1690,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         manageable = false
         reattachable = false
         schedulable = false
+        suggestionsOn = false
         managersOn = false
         sessionTree = false
         ignoreQuestions = false
@@ -1712,6 +1718,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       manageable = false
       reattachable = false
       schedulable = false
+      suggestionsOn = false
       managersOn = false
       sessionTree = false
       ignoreQuestions = false
@@ -1749,6 +1756,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     files.resync()
     diffs.resync()
     tasks.resync()
+    suggestions.resync()
     managers.resync()
     pairing.resync()
     approvals.resync()
@@ -1797,6 +1805,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (dropped) diffs.offline()
       manage.offline()
       tasks.offline()
+      suggestions.offline()
       managers.offline()
       pairing.offline()
       approvals.offline()
@@ -1870,6 +1879,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         return
       }
       // 定时任务：一样和会话目录是两回事，任务模块自己对账、自己攒
+      if (suggestions.notification(method, params)) return
       if (managers.notification(method, params)) return
       if (tasks.notification(method, params)) return
       // 扫码绑定手机：配对的状态、已绑定的手机
@@ -2257,6 +2267,14 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     thread: (sessionId) => threads.get(sessionId),
     put: (thread) => upsertThread(thread),
     now: () => options.clock.now(),
+  })
+
+  const suggestions = createSuggestions({
+    deviceId: config.id,
+    online: () => online,
+    supported: () => suggestionsOn,
+    request: () => link.request('litch/suggestions/list', {}),
+    log,
   })
 
   const managers = createManagers({
@@ -2777,6 +2795,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     files,
     diffs,
     tasks,
+    suggestions,
     managers,
     pairing,
     approvals,

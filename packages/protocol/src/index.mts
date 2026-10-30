@@ -223,6 +223,12 @@ export {
   SESSION_TREE_METHOD,
   SESSION_TREE_NOTIFICATION,
 } from './session-tree.mjs'
+export type * from './suggestion-inbox.mjs'
+export {
+  SUGGESTION_RETENTION_SETTING,
+  SUGGESTIONS_CHANGED,
+  SUGGESTIONS_LIST,
+} from './suggestion-inbox.mjs'
 // Litch 替用户发进会话的话（定时任务、子会话的简报、在这里做、litch_sessions.send）：从用户消息里认回来。不依赖别的文件
 export type * from './system-messages.mjs'
 export {

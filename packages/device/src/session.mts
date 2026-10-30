@@ -25,6 +25,7 @@ import {
 } from '../../protocol/src/device-settings.mjs'
 import type { HarnessConfigChangedNotification } from '../../protocol/src/harness-config.mjs'
 import { SESSION_TREE_METHOD } from '../../protocol/src/session-tree.mjs'
+import { SUGGESTIONS_LIST } from '../../protocol/src/suggestion-inbox.mjs'
 import { localTaskTimeZone } from '../../protocol/src/task-schedule.mjs'
 import {
   RECOVERY_CONTINUE,
@@ -257,6 +258,7 @@ export class ClientSession implements ClientToolPeer {
       deviceTools: host.deviceTools,
       observe: (link, method, params) => {
         this.host.managers?.observe(method, params)
+        if (method === 'thread/name/updated') this.host.sessionTree.suggestions.changed()
         this.host.recovery?.observe(link.harness, method, params)
         this.host.power()?.notification(link.harness, method, params)
         this.translators.get(link.harness)?.notification(method, params)
@@ -521,6 +523,11 @@ export class ClientSession implements ClientToolPeer {
             throw new ProtocolError(-32602, 'Invalid recovery reference')
           this.host.recovery?.dismiss(p.harness, p.threadId, p.turnId)
           return {}
+        }
+        if (method === SUGGESTIONS_LIST) {
+          if (!this.declared.has(EXTENSION.suggestionInbox))
+            throw new DeviceError('extensionRequired', '请声明 suggestionInbox', { method })
+          return this.host.sessionTree.suggestions.list()
         }
         if (
           method.startsWith('litch/session/') ||

@@ -41,6 +41,7 @@ import {
   type SessionProposal,
   type SessionQueuedNote,
 } from '../../protocol/src/session-tree.mjs'
+import { suggestionExpiry } from '../../protocol/src/suggestion-inbox.mjs'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { DeviceManagers } from './manager.mjs'
@@ -48,6 +49,7 @@ import type { HarnessSource } from './session.mjs'
 import { isUserRequest, pendingRequestExcerpt, SessionPending } from './session-pending.mjs'
 import { SessionQuestions } from './session-questions.mjs'
 import type { SessionStore } from './session-store.mjs'
+import { SuggestionInbox } from './suggestion-inbox.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import { DeviceError, isObject, UpstreamRpcError } from './wire.mjs'
 import type { Workspaces } from './workspaces.mjs'
@@ -132,6 +134,38 @@ interface OfferWait {
 
 export class SessionTree {
   managers: DeviceManagers | null = null
+  readonly suggestions = new SuggestionInbox(this)
+  restoreSource: ((threadId: string) => Promise<void>) | null = null
+  private retentionDays = '7'
+
+  setSuggestionRetention(value: unknown): void {
+    const days =
+      typeof value === 'string' && ['1', '3', '7', '14', '30', 'never'].includes(value)
+        ? value
+        : '7'
+    this.retentionDays = days
+    const changed = new Map<string, SessionProposal[]>()
+    for (const proposal of this.store.allSuggestions()) {
+      const expiresAt = suggestionExpiry(proposal.createdAt, days)
+      if (proposal.expiresAt === expiresAt) continue
+      this.store.suggestionExpiry(proposal.id, expiresAt)
+      changed.set(proposal.threadId, [
+        ...(changed.get(proposal.threadId) ?? []),
+        { ...proposal, expiresAt },
+      ])
+    }
+    this.expire()
+    for (const [id, proposals] of changed)
+      this.proposalsChanged(
+        id,
+        proposals.map((p) => this.store.proposal(p.id) ?? p),
+      )
+    this.scheduleExpiry()
+  }
+
+  expireSuggestions(): void {
+    this.expire()
+  }
   private readonly questions = new SessionQuestions()
   readonly host: SessionTreeHost
   private readonly links = new Map<string, Promise<EngineLink>>()
@@ -414,6 +448,7 @@ export class SessionTree {
 
   private engineEvent(harness: string, method: string, params: Record<string, unknown>): void {
     this.managers?.observe(method, params)
+    if (method === 'thread/name/updated') this.suggestions.changed()
     this.questions.event(method, params)
     const threadId = typeof params.threadId === 'string' ? params.threadId : null
     if (method === 'turn/started' || method === 'turn/completed')
@@ -1281,6 +1316,7 @@ export class SessionTree {
 
   /** 父子关系变了：告诉声明了 sessionTree 的连接 */
   lineageChanged(threadId: string): void {
+    this.suggestions.changed()
     for (const manager of this.managers?.store.managers() ?? []) this.managers?.changed(manager.id)
     this.host.announce(
       SESSION_TREE_NOTIFICATION.lineageUpdated,
@@ -1328,7 +1364,9 @@ export class SessionTree {
       ...fields,
       id: randomUUID(),
       createdAt,
-      expiresAt: createdAt + SESSION_TREE_LIMITS.proposalTtlSeconds,
+      expiresAt: fields.offer
+        ? createdAt + SESSION_TREE_LIMITS.proposalTtlSeconds
+        : suggestionExpiry(createdAt, this.retentionDays),
     })
     this.proposalsChanged(fields.threadId, [proposal])
     this.scheduleExpiry()
@@ -1537,6 +1575,9 @@ export class SessionTree {
 
   /** 会话删掉了：它带的动态工具、记下的速度跟着删 */
   deleted(threadId: string): void {
+    for (const proposal of this.store.pending(threadId))
+      if (proposal.status === 'pending' && !proposal.offer)
+        this.settleProposal(proposal.id, 'withdrawn', null)
     this.questions.clear(threadId)
     this.pending.ended(threadId)
     this.store.dropIgnoredQuestions(threadId)
@@ -1566,6 +1607,7 @@ export class SessionTree {
 
   /** 提案变了：带上这个会话现在全部 pending 的，和刚变的那几条 */
   private proposalsChanged(threadId: string, changed: SessionProposal[]): void {
+    this.suggestions.changed()
     this.host.announce(
       SESSION_TREE_NOTIFICATION.proposalChanged,
       { threadId, proposals: this.store.pending(threadId), changed },
@@ -1678,6 +1720,7 @@ export class SessionTree {
   }
 
   close(): void {
+    this.suggestions.close()
     this.closed = true
     if (this.expiry) clearTimeout(this.expiry)
     for (const timer of this.timers) clearTimeout(timer)

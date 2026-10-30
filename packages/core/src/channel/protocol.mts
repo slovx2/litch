@@ -183,6 +183,7 @@ export type Topic =
   | { kind: 'tasks'; deviceId: string }
   /** 经理列表常驻订阅，断线保留快照；可用性同 tasks。 */
   | { kind: 'managers'; deviceId: string }
+  | { kind: 'suggestions'; deviceId: string }
   /** 只在看板打开时订阅；设备变更通知后重读整块看板。 */
   | { kind: 'managerBoard'; deviceId: string; managerId: string }
   /**
@@ -239,6 +240,7 @@ export interface TopicData {
   diff: DiffView
   machine: MachineActivityView
   tasks: TasksView
+  suggestions: import('../model-suggestions.mjs').SuggestionsView
   managers: ManagersView
   managerBoard: ManagerBoardTopicView
   pairing: PairingTopicView
@@ -374,6 +376,7 @@ export interface TopicOp {
   diff: DiffOp
   machine: MachineOp
   tasks: TasksOp
+  suggestions: { op: 'suggestions.set'; view: import('../model-suggestions.mjs').SuggestionsView }
   managers: ManagersOp
   managerBoard: ManagerBoardOp
   pairing: PairingOp

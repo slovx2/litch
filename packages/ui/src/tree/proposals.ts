@@ -25,7 +25,7 @@ export const useProposalList = (
 
 /**
  * 现在的时刻。等着的提案里最早过期的那一刻重画一次，卡片、角标从“等开始”变成“过期了”。
- * 定时器的上限是 2^31 毫秒（二十多天）：七天的提案在这之内
+ * 超过浏览器计时上限的期限分段等待，支持三十天和不过期
  */
 export function useProposalClock(list: readonly SessionProposalView[] | undefined): number {
   const [, redraw] = useState(0)
@@ -37,9 +37,12 @@ export function useProposalClock(list: readonly SessionProposalView[] | undefine
   )
   useEffect(() => {
     if (!Number.isFinite(next)) return
-    const timer = window.setTimeout(() => redraw((n) => n + 1), Math.max(0, next - Date.now()) + 50)
+    const timer = window.setTimeout(
+      () => redraw((n) => n + 1),
+      Math.min(2_000_000_000, Math.max(0, next - now) + 50),
+    )
     return () => window.clearTimeout(timer)
-  }, [next])
+  }, [next, now])
   return now
 }
 

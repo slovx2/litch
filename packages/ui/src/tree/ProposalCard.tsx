@@ -46,15 +46,19 @@ export function ProposalActs({
   sessionId,
   proposal,
   small,
+  inbox,
+  sourceParent,
 }: {
   deviceId: string
   sessionId: string
   proposal: SessionProposalView
   small?: boolean
+  inbox?: boolean
+  sourceParent?: Pick<SessionSummary, 'id' | 'title' | 'harness' | 'cwd' | 'workspaceId'>
 }) {
   const t = useT()
   const device = useKey<DeviceView>(keys.device(deviceId))
-  const parent = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
+  const parent = useKey<SessionSummary>(keys.summary(deviceId, sessionId)) ?? sourceParent
   const act = useProposalAct(deviceId, sessionId, proposal.id)
   const [editing, setEditing] = useState(false)
   // 卡上的工作树开关为准：初值是模型定的，没定的照设备算的缺省
@@ -80,7 +84,7 @@ export function ProposalActs({
           disabled={off}
           onClick={() => act.here()}
         >
-          {t('proposal.here')}
+          {t(inbox ? 'suggestions.here' : 'proposal.here')}
         </button>
         <button
           type="button"

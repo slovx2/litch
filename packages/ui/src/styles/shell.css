@@ -150,10 +150,20 @@
 }
 .sb-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: stretch;
   gap: 4px;
   padding: 4px 8px 6px;
   border-top: 1px solid var(--line-1);
+}
+
+.sb-foot > .sb-btn.suggestions {
+  flex: 1 0 100%;
+  min-height: 32px;
+  flex-direction: row;
+  justify-content: flex-start;
+  padding-inline: 10px;
+  gap: 12px;
 }
 /* 底下横排三个一样宽的小按钮：图标在上、名字在下。名字太长时省略，不换行、不挤歪 */
 .sb-foot > .sb-btn,

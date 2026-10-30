@@ -41,6 +41,7 @@ import type {
   ManagerView,
 } from '../model-manager.mjs'
 import type { PairingTopicView } from '../model-pairing.mjs'
+import type { SuggestionsView, SuggestionView } from '../model-suggestions.mjs'
 import type { TaskRunApprovalView, TaskRunView, TasksView, TaskView } from '../model-tasks.mjs'
 import type { TerminalInfo, TerminalsOp, TerminalsView } from '../model-terminal.mjs'
 import type { AgentThreadView, SessionNoteView, SessionProposalView } from '../model-tree.mjs'
@@ -183,6 +184,8 @@ export const keys = {
   managerIds: (deviceId: string) => `managers:${deviceId}:ids`,
   manager: (deviceId: string, managerId: string) => `managers:${deviceId}:manager:${managerId}`,
   managersPending: 'managers:pending',
+  suggestions: 'suggestions:all',
+  suggestionsAvailable: (deviceId: string) => `suggestions:${deviceId}:available`,
   managerBoard: (deviceId: string, managerId: string) => `managers:${deviceId}:board:${managerId}`,
   managerBoardPages: (deviceId: string, managerId: string) =>
     `managers:${deviceId}:pages:${managerId}`,
@@ -542,6 +545,46 @@ export function createReplica(channel: CoreChannel): Replica {
       0,
     )
     if (store.get<number>(keys.managersPending) !== total) store.set(keys.managersPending, total)
+  }
+  const suggestionLists = new Map<string, { rows: SuggestionView[]; stop(): void }>()
+  const publishSuggestions = () =>
+    store.set(
+      keys.suggestions,
+      [...suggestionLists.values()]
+        .flatMap((entry) => entry.rows)
+        .sort(
+          (a, b) =>
+            b.proposal.createdAt - a.proposal.createdAt ||
+            a.proposal.id.localeCompare(b.proposal.id),
+        ),
+    )
+  const watchSuggestions = (deviceId: string) => {
+    if (suggestionLists.has(deviceId)) return
+    const entry = { rows: [] as SuggestionView[], stop() {} }
+    suggestionLists.set(deviceId, entry)
+    const put = (view: SuggestionsView) => {
+      entry.rows = view.suggestions
+      store.batch(() => {
+        store.set(keys.suggestionsAvailable(deviceId), view.available)
+        publishSuggestions()
+      })
+    }
+    entry.stop = channel.subscribe(
+      { kind: 'suggestions', deviceId },
+      {
+        snapshot: put,
+        delta(ops) {
+          for (const op of ops) put(op.view)
+        },
+        error() {},
+      },
+    )
+  }
+  const dropSuggestions = (deviceId: string) => {
+    suggestionLists.get(deviceId)?.stop()
+    suggestionLists.delete(deviceId)
+    store.delete(keys.suggestionsAvailable(deviceId))
+    publishSuggestions()
   }
   const watchManagers = (deviceId: string) => {
     if (managerLists.has(deviceId)) return
@@ -944,6 +987,7 @@ export function createReplica(channel: CoreChannel): Replica {
     terminalLists.delete(deviceId)
     store.deletePrefix(`terminals:${deviceId}:`)
     dropTasks(deviceId)
+    dropSuggestions(deviceId)
     dropManagers(deviceId)
   }
 
@@ -1013,6 +1057,7 @@ export function createReplica(channel: CoreChannel): Replica {
       watchSidebar(op.device.id)
       watchTerminals(op.device.id)
       watchTasks(op.device.id)
+      watchSuggestions(op.device.id)
       watchManagers(op.device.id)
       // 断了又连上：正看着的文件树重新对一遍（断着的时候取的都是“没连上”）
       if (before && before.connection !== 'online' && op.device.connection === 'online') {

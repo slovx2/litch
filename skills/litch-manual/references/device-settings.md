@@ -107,3 +107,9 @@ installed there). Existing worktrees are never moved.
 - Projects: `scripts/litch projects list` and friends (`sessions-and-projects.md`).
 - The adapter's `env` file (`~/.codex-harness-adapter/env`) is for standalone installs; prefer the
   per-harness `env` setting, which takes precedence anyway.
+
+### 建议保留时间
+
+键 `sessions.suggestionRetentionDays`，设备作用域，默认字符串 `7`。可选字符串 `1`、`3`、`7`、`14`、`30`、`never`（不过期）。位于“会话编排”组，立即生效，无需重启。按原创建时间重算全部普通待处理建议；已处理和已过期卡不会复活。缩短后已超期的卡立即过期。
+
+CLI 沿用通用设备设置命令，例如 `scripts/litch settings set local sessions.suggestionRetentionDays=never`；选天数需传 JSON 字符串，例如 `scripts/litch settings set local 'sessions.suggestionRetentionDays="14"'`。

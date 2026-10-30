@@ -1,0 +1,20 @@
+{
+  "extension": "suggestionInbox",
+  "description": "设备级普通待处理建议集中列表，类型在 packages/protocol/src/suggestion-inbox.mts。",
+  "appliesTo": "设备聚合面，不改变 sessionTree 的会话级提案方法。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "suggestionInbox" } }
+  },
+  "undeclared": "方法返回 extensionRequired，不发送 changed；按实际接收连接的声明判断。",
+  "rules": [
+    "只列 status=pending 且 offer=false 的建议，包含归档来源。每项是原 proposal、source={threadId,title,harness,cwd,archived,project（id/name 或 null）} 和 managerId（非经理工作线为 null）。经理归属覆盖工作线整个子树。",
+    "list 返回 {suggestions:SuggestionEntry[]}；changed 返回 {upserts:SuggestionEntry[],removed:string[]}，removed 是提案 id。来源元数据变化同样推增量；重连取新快照。时间单位沿用 sessionTree 的秒。",
+    "来源删除时待处理提案撤回；来源归档时保留。普通提案 here/markHere 在来源已归档时先恢复来源（含工作树），失败不结算提案。",
+    "设备设置 sessions.suggestionRetentionDays 的枚举字符串为 1、3、7、14、30、never，默认 7，立即重算全部普通 pending 卡，从 createdAt 起算；已处理、撤回、过期的卡不会恢复。never 的 expiresAt 为 8640000000000 秒，保持既有 expiresAt 数值结构。"
+  ],
+  "parts": [
+    { "kind": "ClientRequest", "method": "litch/suggestions/list", "description": "参数为空对象；应答 SuggestionsSnapshot。" },
+    { "kind": "ServerNotification", "methods": ["litch/suggestions/changed"], "description": "参数 SuggestionsChanged；只投递给声明过 suggestionInbox 的连接。" }
+  ]
+}

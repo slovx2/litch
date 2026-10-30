@@ -12,6 +12,7 @@ import { DEVICE_POWER_CHANGED } from '../../protocol/src/device-power.mjs'
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
 import { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
+import { SUGGESTION_RETENTION_SETTING } from '../../protocol/src/suggestion-inbox.mjs'
 import { RECOVERY_CHANGED } from '../../protocol/src/turn-recovery.mjs'
 import { WORKTREE_DEFAULTS, WORKTREE_SETTING } from '../../protocol/src/worktrees.mjs'
 import { PINNED_SECTION_ID } from '../../shared/src/thread-sections.mjs'
@@ -447,7 +448,8 @@ export class DeviceServer {
       this.titles?.born(harness, thread)
     })
     this.sessionTree.managers = this.managers
-    info.extensions.push(EXTENSION.manager)
+    info.extensions.push(EXTENSION.manager, EXTENSION.suggestionInbox)
+    this.index.onChanged = () => this.sessionTree.suggestions.changed()
     this.deviceTools.register(CLIENT_TOOL_NAMESPACE.manager, (call) => this.managers.tool(call))
     // 以前删会话时没删它带的动态工具（每个几十 KB）：设备不认识的会话的那一行清一次。
     // 索引是空的（device.sqlite 刚建、刚换过）时分不出哪些会话还在，留到下次启动
@@ -488,6 +490,10 @@ export class DeviceServer {
       : null
     this.worktreeLife?.start()
     // 不等客户端连上：在跑的子会话重新盯上、排着的回报看看要不要唤醒（没人连着也唤醒，决 660）
+    this.sessionTree.restoreSource = (id) => this.archives.unarchive(id)
+    this.sessionTree.setSuggestionRetention(
+      this.control?.state?.snapshot.values[SUGGESTION_RETENTION_SETTING],
+    )
     this.sessionTree.started()
     // 子会话的后台任务跑完了：引擎不会接着做的，会话树补一条回报（决 430）
     this.background.onSettled((threadId, tasks) =>
@@ -605,6 +611,8 @@ export class DeviceServer {
    * （第一次导入时会有成百上千条，不该追着刚连上的客户端发）。
    */
   private announce(method: string, params: unknown, extension?: string): void {
+    if (method === 'thread/project/updated' || method === 'project/changed')
+      this.sessionTree?.suggestions.changed()
     const audience = [...this.sessions].filter((session) => session.ready)
     if (audience.length === 0) return
     setImmediate(() => {
@@ -664,6 +672,7 @@ export class DeviceServer {
     if (this.tasksWait) clearTimeout(this.tasksWait)
     this.tasksWait = null
     this.tasks?.setSettings(taskSettings(state))
+    this.sessionTree?.setSuggestionRetention(state.snapshot.values[SUGGESTION_RETENTION_SETTING])
     const orchestrating = this.sessionTreeOn()
     // 会话编排刚打开：关着时攒下的回报现在可以唤醒了
     if (orchestrating && !this.orchestrating) this.sessionTree.checkAll()

@@ -1,12 +1,32 @@
-import { keys } from '@litch/core'
+import { keys, type SuggestionView } from '@litch/core'
 import { useEffect, useState } from 'react'
 import type { Page } from '../app/App.tsx'
 import { requestSettings } from '../app/actions.ts'
 import { LANGS, SKINS, setAppearance, THEMES, useAppearance, useT } from '../app/appearance.ts'
-import { Clock, Gear, Palette } from '../app/icons.tsx'
+import { Clock, Gear, Icon, Palette } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { Choice, LANG_NAMES } from '../settings/Look.tsx'
+
+function SuggestionsButton({ on, onOpen }: { on: boolean; onOpen(): void }) {
+  const t = useT()
+  const count = useKey<readonly SuggestionView[]>(keys.suggestions)?.length ?? 0
+  return (
+    <button
+      type="button"
+      className={on ? 'sb-btn suggestions on' : 'sb-btn suggestions'}
+      aria-current={on ? 'page' : undefined}
+      title={t('suggestions.title')}
+      onClick={onOpen}
+    >
+      <span className="sb-btn-ic">
+        <Icon name="suggest" />
+        {count ? <span className="sb-count">{count}</span> : null}
+      </span>
+      <span className="sb-btn-name">{t('suggestions.title')}</span>
+    </button>
+  )
+}
 
 /** 定时任务：图标右上角是各台设备上没看过的运行一共几条 */
 function TasksButton({ on, onOpen }: { on: boolean; onOpen(): void }) {
@@ -154,10 +174,11 @@ function SettingsButton({ page, onOpen }: { page: Page | null; onOpen(): void })
   )
 }
 
-/** 侧栏底部横排三个小按钮：定时任务、外观、设置。图标在上、名字在下，最窄的侧栏里英文也放得下 */
+/** 侧栏底部建议独占一行，下面横排定时任务、外观、设置；最窄侧栏里英文也放得下 */
 export function SidebarFoot({ page, onPage }: { page: Page | null; onPage(page: Page): void }) {
   return (
     <div className="sb-foot">
+      <SuggestionsButton on={page === 'suggestions'} onOpen={() => onPage('suggestions')} />
       <TasksButton on={page === 'tasks'} onOpen={() => onPage('tasks')} />
       <LookButton />
       <SettingsButton page={page} onOpen={() => onPage('settings')} />

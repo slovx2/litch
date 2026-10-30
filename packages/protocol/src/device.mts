@@ -19,6 +19,7 @@ export const EXTENSIONS_CAPABILITY = 'litchExtensions'
 export const EXTENSION = {
   /** 设备上的经理、看板和工作线；字段与通知只发给声明过 litchManager 的连接（manager.mts）。 */
   manager: 'litchManager',
+  suggestionInbox: 'suggestionInbox',
   /** 受根目录与字节预算约束的 fs/readFile，见 file-preview.mts。 */
   filePreview: 'filePreview',
   /**

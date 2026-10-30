@@ -40,6 +40,7 @@ export interface MockManageHost {
   interrupt(deviceId: string, harnessId: string): void
   /** 这台设备上有 harness 的任务卡开关（harness.<id>.taskCards）变了 */
   taskCardsChanged?(deviceId: string): void
+  retentionChanged?(deviceId: string, days: string): void
 }
 
 export interface MockManagement {
@@ -175,6 +176,11 @@ export function createMockManagement(host: MockManageHost): MockManagement {
       ops.push({ op: 'power.set', value: power })
     }
     for (const sink of sinks.get(deviceId) ?? []) sink.delta(ops)
+    if (keys.includes('sessions.suggestionRetentionDays'))
+      host.retentionChanged?.(
+        deviceId,
+        String(currentValue(state, 'sessions.suggestionRetentionDays')),
+      )
     if (keys.some((key) => key.endsWith('.taskCards'))) host.taskCardsChanged?.(deviceId)
   }
 

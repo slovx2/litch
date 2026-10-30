@@ -453,6 +453,45 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   /** 各设备上已归档的会话。界面要了才放进侧栏的数据里 */
   const shelved = sampleArchived(clock.now(), lang)
   const sessions = new Map<string, SessionView>()
+  const suggestionSinks = new Map<string, Set<HostSink>>()
+  const suggestionsView = (
+    deviceId: string,
+  ): import('../model-suggestions.mjs').SuggestionsView => {
+    const sidebar = sidebars.get(deviceId)
+    return {
+      deviceId,
+      available: true,
+      suggestions: [...sessions.values()]
+        .filter((view) => view.deviceId === deviceId)
+        .flatMap((view) => {
+          const source = [...(sidebar?.sessions ?? []), ...(shelved.get(deviceId) ?? [])].find(
+            (row) => row.id === view.sessionId,
+          )
+          if (!source) return []
+          const mark = managerMark(source)
+          const project = sidebar?.workspaces.find((w) => w.id === source.workspaceId)
+          return (view.proposals ?? [])
+            .filter((p) => p.status === 'pending' && !p.offer && p.expiresAt > clock.now())
+            .map((proposal) => ({
+              deviceId,
+              proposal,
+              source: {
+                threadId: source.id,
+                title: typeof source.title === 'string' ? source.title : source.id,
+                project: project ? { id: project.id, name: project.name } : null,
+                harness: source.harness,
+                cwd: source.cwd,
+                archived: shelved.get(deviceId)?.some((s) => s.id === source.id) === true,
+              },
+              managerId: mark?.role === 'line' ? mark.managerId : null,
+            }))
+        }),
+    }
+  }
+  const publishSuggestions = (deviceId: string) => {
+    for (const sink of suggestionSinks.get(deviceId) ?? [])
+      sink.delta([{ op: 'suggestions.set', view: suggestionsView(deviceId) }])
+  }
   const sinks = new Map<string, Set<HostSink>>()
   /** 各会话里正在流的回答：取消函数。打断时用 */
   const replies = new Map<string, () => void>()
@@ -487,6 +526,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   /** 已归档的那张表变了。界面要过的才通知 */
   const archivedChanged = (deviceId: string) => {
     const view = sidebars.get(deviceId)
+    publishSuggestions(deviceId)
     if (!view || view.archived === null) return
     view.archived = [...(shelved.get(deviceId) ?? [])].sort((a, b) => b.updatedAt - a.updatedAt)
     const ops: SidebarOp[] = [{ op: 'archived.set', sessions: view.archived }]
@@ -520,7 +560,27 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   const isShelved = (deviceId: string, sessionId: string): boolean =>
     (shelved.get(deviceId) ?? []).some((session) => session.id === sessionId)
 
-  /** 会话的摘要。归档着的也找得到：它们的内容可以只读地打开看 */
+  /** 直接恢复和集中建议的执行路径共用，恢复后开放已有只读视图。 */
+  const restoreSuggestionSource = (deviceId: string, sessionId: string) => {
+    const sidebar = sidebars.get(deviceId)
+    const list = shelved.get(deviceId) ?? []
+    const summary = list.find((entry) => entry.id === sessionId)
+    if (!sidebar || !summary) throw new ChannelError('notFound', `没有这个会话：${sessionId}`)
+    shelved.set(
+      deviceId,
+      list.filter((entry) => entry !== summary),
+    )
+    sidebar.sessions.push(summary)
+    const ops: SidebarOp[] = [{ op: 'session.upsert', session: summary }]
+    emit(`sidebar:${deviceId}`, ops)
+    archivedChanged(deviceId)
+    // 正只读地开着的：现在能发消息了
+    const opened = sessions.get(`session:${deviceId}:${sessionId}`)
+    if (opened && !opened.live) {
+      applySessionOps(opened, [{ op: 'session.state', live: true, note: null }])
+    }
+  }
+
   const findSummary = (deviceId: string, sessionId: string): SessionSummary => {
     const summary =
       sidebars.get(deviceId)?.sessions.find((session) => session.id === sessionId) ??
@@ -564,6 +624,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     view.sessions[index] = next
     const ops: SidebarOp[] = [{ op: 'session.upsert', session: next }]
     emit(`sidebar:${deviceId}`, ops)
+    publishSuggestions(deviceId)
   }
 
   /** 已经“发现”不会的事：设备 + harness + 哪件事，冒号隔开 */
@@ -646,6 +707,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       return stamped
     })
     emit(`session:${view.deviceId}:${view.sessionId}`, ops)
+    if (ops.some((op) => op.op === 'session.proposals')) publishSuggestions(view.deviceId)
     // 待处理的请求变了：侧栏摘要上的阻塞请求（父会话的“子会话待处理”用）跟着变，同设备服务
     if (ops.some((op) => op.op === 'request.add' || op.op === 'request.remove'))
       updateSummary(view.deviceId, view.sessionId, {
@@ -1755,6 +1817,22 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     clock,
     stepMs: chunkMs,
     // 任务卡的开关改了：设备的开关一栏跟着变
+    retentionChanged(deviceId, days) {
+      for (const view of sessions.values()) {
+        if (view.deviceId !== deviceId) continue
+        const proposals = view.proposals.map((p) => {
+          if (p.status !== 'pending' || p.offer) return p
+          const expiresAt =
+            days === 'never' ? 8_640_000_000_000_000 : p.createdAt + Number(days) * 86_400_000
+          return {
+            ...p,
+            expiresAt,
+            status: expiresAt <= clock.now() ? ('expired' as const) : p.status,
+          }
+        })
+        applySessionOps(view, [{ op: 'session.proposals', proposals }])
+      }
+    },
     taskCardsChanged(deviceId) {
       const device = app.devices.find((entry) => entry.id === deviceId)
       if (device) emitDevice(device)
@@ -2200,7 +2278,9 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     now: () => clock.now(),
     setTimer: (run, ms) => clock.setTimer(run, ms),
     summary: (deviceId, sessionId) =>
-      sidebars.get(deviceId)?.sessions.find((session) => session.id === sessionId),
+      [...(sidebars.get(deviceId)?.sessions ?? []), ...(shelved.get(deviceId) ?? [])].find(
+        (session) => session.id === sessionId,
+      ),
     summaries: (deviceId) => sidebars.get(deviceId)?.sessions ?? [],
     addSummary(deviceId, summary) {
       const parent = sidebars
@@ -2748,6 +2828,11 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (composed !== undefined) return composed
       const reviewed = diffs.command(name, params, signal)
       if (reviewed !== undefined) return reviewed
+      if (name === 'session.proposal.here') {
+        const { deviceId, sessionId } = params as Commands['session.proposal.here']['params']
+        if (shelved.get(deviceId)?.some((s) => s.id === sessionId))
+          restoreSuggestionSource(deviceId, sessionId)
+      }
       const nested = tree.command(name, params)
       if (nested !== undefined) return nested
       if (name === 'session.markRead') {
@@ -2831,23 +2916,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       }
       if (name === 'session.unarchive') {
         const { deviceId, sessionId } = params as Commands['session.unarchive']['params']
-        const sidebar = sidebars.get(deviceId)
-        const list = shelved.get(deviceId) ?? []
-        const summary = list.find((entry) => entry.id === sessionId)
-        if (!sidebar || !summary) throw new ChannelError('notFound', `没有这个会话：${sessionId}`)
-        shelved.set(
-          deviceId,
-          list.filter((entry) => entry !== summary),
-        )
-        sidebar.sessions.push(summary)
-        const ops: SidebarOp[] = [{ op: 'session.upsert', session: summary }]
-        emit(`sidebar:${deviceId}`, ops)
-        archivedChanged(deviceId)
-        // 正只读地开着的：现在能发消息了
-        const opened = sessions.get(`session:${deviceId}:${sessionId}`)
-        if (opened && !opened.live) {
-          applySessionOps(opened, [{ op: 'session.state', live: true, note: null }])
-        }
+        restoreSuggestionSource(deviceId, sessionId)
         return {}
       }
       if (name === 'session.archive' || name === 'session.delete') {
@@ -2873,6 +2942,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         if (sidebar) sidebar.sessions = sidebar.sessions.filter((entry) => entry !== summary)
         replies.get(`session:${deviceId}:${sessionId}`)?.()
         sessions.delete(`session:${deviceId}:${sessionId}`)
+        publishSuggestions(deviceId)
         const ops: SidebarOp[] = [{ op: 'session.remove', sessionId }]
         emit(`sidebar:${deviceId}`, ops)
         return {}
@@ -3407,6 +3477,15 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
 
     subscribe(topic, sink) {
+      if (topic.kind === 'suggestions') {
+        const listeners = suggestionSinks.get(topic.deviceId) ?? new Set<HostSink>()
+        suggestionSinks.set(topic.deviceId, listeners)
+        listeners.add(sink)
+        sink.snapshot(suggestionsView(topic.deviceId))
+        return () => {
+          listeners.delete(sink)
+        }
+      }
       if (topic.kind === 'automationPreview')
         return automation.subscribe(topic.deviceId, topic.sessionId, sink)
       // 管理数据有自己的一套订阅者

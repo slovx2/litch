@@ -477,7 +477,35 @@ export function sampleSettings(deviceId: string, harnesses: HarnessView[]): Samp
       scope: { kind: 'device' },
     },
   ]
+  groups.push({
+    id: 'sessions',
+    title: both('会话编排', 'Session orchestration'),
+    description: null,
+    scope: { kind: 'device' },
+  })
+  const retention: SettingSpecView = {
+    ...BASE,
+    key: 'sessions.suggestionRetentionDays',
+    group: 'sessions',
+    type: 'enum',
+    scope: { kind: 'device' },
+    default: '7',
+    restart: 'none',
+    title: both('建议保留时间', 'Suggestion retention'),
+    description: both(
+      '按创建时间重新计算待处理建议的期限；缩短后，已超期的建议立即过期。',
+      'Recalculates pending suggestions from their creation time. Shortening retention expires older suggestions immediately.',
+    ),
+    options: ['1', '3', '7', '14', '30', 'never'].map((value) => ({
+      value,
+      title: both(
+        value === 'never' ? '不过期' : `${value} 天`,
+        value === 'never' ? 'Never' : value + (value === '1' ? ' day' : ' days'),
+      ),
+    })),
+  }
   const settings = [
+    retention,
     ...harnesses.flatMap((harness) => [
       ...harnessSettings(harness),
       ...extraSettings(harness),

@@ -69,5 +69,18 @@ func sessionSettings() (settingGroup, []settingSpec) {
 			"While Wrap up every turn is on, the model should call litch_sessions.wrap_up in every turn. While this is on, if a turn you started ends without it, Litch opens one more turn to remind the model (a few extra tokens). When off, there is no reminder; the model can still call it. Has no effect while Wrap up every turn is off. Takes effect at once.",
 		),
 	}
-	return group, []settingSpec{spec, wrapUp, reminder}
+	retention := settingSpec{
+		Key: "sessions.suggestionRetentionDays", Group: sessionGroup, Type: settingEnum, Scope: deviceScope, Restart: restartNone,
+		Default: "7", Title: both("建议保留时间", "Suggestion retention"),
+		Description: both("按创建时间重新计算待处理建议的期限；缩短后，已超期的建议立即过期。", "Recalculates pending suggestions from their creation time. Shortening retention expires older suggestions immediately."),
+		Options: []settingOption{
+			{Value: "1", Title: both("1 天", "1 day")},
+			{Value: "3", Title: both("3 天", "3 days")},
+			{Value: "7", Title: both("7 天", "7 days")},
+			{Value: "14", Title: both("14 天", "14 days")},
+			{Value: "30", Title: both("30 天", "30 days")},
+			{Value: "never", Title: both("不过期", "Never")},
+		},
+	}
+	return group, []settingSpec{spec, wrapUp, reminder, retention}
 }

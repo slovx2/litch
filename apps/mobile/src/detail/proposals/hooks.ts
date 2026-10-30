@@ -34,7 +34,7 @@ export function useProposalList(
 
 /**
  * 现在的时刻。等着的提案里最早过期的那一刻重画一次（设备进程到点也会发通知，界面不等它）。
- * 定时器的上限是 2^31 毫秒（二十多天）：七天的提案在这之内
+ * 超过浏览器计时上限的期限分段等待，支持三十天和不过期
  */
 export function useProposalClock(
   list: readonly (SessionProposalView | null)[] | undefined,
@@ -47,9 +47,12 @@ export function useProposalClock(
   )
   useEffect(() => {
     if (next === null) return
-    const timer = setTimeout(() => redraw((n) => n + 1), Math.max(0, next - Date.now()) + 50)
+    const timer = setTimeout(
+      () => redraw((n) => n + 1),
+      Math.min(2_000_000_000, Math.max(0, next - now) + 50),
+    )
     return () => clearTimeout(timer)
-  }, [next])
+  }, [next, now])
   return now
 }
 

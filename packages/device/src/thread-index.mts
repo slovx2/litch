@@ -16,9 +16,13 @@ export interface SeenThread {
   id: string
   updatedAt?: unknown
   ephemeral?: unknown
+  name?: unknown
+  cwd?: unknown
 }
 
 export class ThreadIndex {
+  onChanged: (() => void) | null = null
+  private readonly metadata = new Map<string, string>()
   private readonly db: DatabaseSync
   /** 内存里的那一份，和库里的一致 */
   private readonly known = new Map<string, Known>()
@@ -74,6 +78,13 @@ export class ThreadIndex {
    */
   see(thread: SeenThread, harness: string, archived?: boolean): void {
     const old = this.load(thread.id)
+    if (thread.name !== undefined || thread.cwd !== undefined) {
+      const meta = JSON.stringify([thread.name, thread.cwd])
+      if (this.metadata.get(thread.id) !== meta) {
+        this.metadata.set(thread.id, meta)
+        this.onChanged?.()
+      }
+    }
     const time = Number(thread.updatedAt)
     const next: Known = {
       harness,
@@ -90,6 +101,7 @@ export class ThreadIndex {
     )
       return
     this.known.set(thread.id, next)
+    this.onChanged?.()
     this.upsert.run(
       thread.id,
       next.harness,

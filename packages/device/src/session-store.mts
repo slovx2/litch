@@ -337,6 +337,12 @@ export class SessionStore {
          WHERE id=? AND status='chosen'`,
       ),
       proposal: prepare('SELECT * FROM proposals WHERE id=?'),
+      allSuggestions: prepare(
+        "SELECT * FROM proposals WHERE status='pending' AND offer=0 ORDER BY created_at DESC, id",
+      ),
+      suggestionExpiry: prepare(
+        "UPDATE proposals SET expires_at=? WHERE id=? AND status='pending' AND offer=0",
+      ),
       // 还在等的：等用户点的卡、等用户选的 offer 卡、用户选了新会话等模型补简报的
       pending: prepare(
         "SELECT * FROM proposals WHERE thread_id=? AND status IN ('pending', 'offered', 'chosen') ORDER BY created_at, rowid",
@@ -632,6 +638,14 @@ export class SessionStore {
       id,
     )
     return Number(result?.changes ?? 0) > 0
+  }
+
+  allSuggestions(): SessionProposal[] {
+    return (this.statements.allSuggestions?.all() ?? []).map(proposalOf)
+  }
+
+  suggestionExpiry(id: string, at: number): void {
+    this.run('suggestionExpiry', at, id)
   }
 
   proposal(id: string): SessionProposal | null {

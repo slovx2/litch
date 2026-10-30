@@ -24,7 +24,9 @@ import { fieldsFor, kindOf, overridesOf, type SpawnFields, spawnParams } from '.
 
 interface SpawnDialogProps {
   deviceId: string
-  parent: SessionSummary
+  parent: Pick<SessionSummary, 'id' | 'title' | 'harness' | 'cwd' | 'workspaceId'> & {
+    worktree?: object | null
+  }
   /** 给了就是“改了再开始”这张提案 */
   proposal?: SessionProposalView
   /** 派出去（开始）了：子会话的标识。在关掉之前叫 */

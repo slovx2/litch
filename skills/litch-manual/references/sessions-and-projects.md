@@ -377,7 +377,7 @@ woken to continue.
   cards the model raises mid-turn (independent plan steps) appear where it raised them, as soon as it
   does, and scroll with the conversation. The
   card shows its state (waiting, started, done here, dismissed, withdrawn by the model, expired after
-  7 days). Buttons: Start, Do it here (the card is settled and "Do it here: <title>" plus the task is
+  the configured retention period, 7 days by default). Buttons: Start, Do it here (the card is settled and "Do it here: <title>" plus the task is
   sent to the session as your message, after the running turn if one is running), Edit and start
   (change the harness, model, effort, project, folder, fresh or with context, title, task,
   background, permissions), Dismiss. Whatever the card does not set comes from the parent session as
@@ -497,3 +497,13 @@ A running client tool does not mean the session needs user input. Browser sign-i
 
 忽略记录目前不随分叉继承；回退后设备仍保留已失效的来源行，它们不会匹配新提出的问题。
 Ignored-question records are not inherited by forks. Reverting a session leaves obsolete source records in storage; they do not match newly asked questions.
+
+### 集中查看建议
+
+桌面侧栏底部的“建议”汇总所有设备的普通待处理建议，并显示数量。每行显示标题、简报、可打开的来源会话、项目/设备与创建时间；操作复用原卡片的开始、改后开始、在来源会话里做和忽略。处理、撤回或过期后自动移出，历史留在来源对话。离线设备保留最后快照，连接后才能操作。
+
+经理看板的“本经理工作线的建议”打开同一列表，按该经理的整棵工作线子树筛选；可切回全部建议。建议与经理事项分开，不自动转事项。即时“新会话 / 在这里做”选择卡不进入列表。
+
+来源归档后继续保留并标注“来源已归档”；点来源打开归档预览，点“在来源会话里做”会先恢复来源（含工作树），恢复失败时卡片仍待处理。来源删除时撤回其待处理卡。手机本轮仍使用会话内建议列表，没有全局入口。
+
+建议默认保留 7 天，可在设备设置的“会话编排 → 建议保留时间”选择 1、3、7、14、30 天或不过期。修改后按创建时间重新计算尚未处理的卡，缩短可能立即使旧卡过期；已经过期或处理的卡不会恢复。
