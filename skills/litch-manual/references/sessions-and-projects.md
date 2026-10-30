@@ -233,6 +233,9 @@ explain it:
   the composer next to the background-tasks line while steps remain (or the turn is still running);
   tap it to open the list above the composer and Collapse to put it away. In the conversation the
   phone shows one line per list (progress and the current step); tap it to expand the list in place.
+- **CJK emphasis**: in replies and Markdown file previews, bold, italic and strikethrough render even
+  when the markers touch Chinese punctuation (for example `**“文件”**的`); code and link text stay
+  as written. Desktop and phone use the same rules.
 - **Mermaid diagrams**: a `mermaid` code block in a reply is drawn as a diagram once the block is
   complete (while it is still being written, the source shows). The block's header switches between
   Diagram and Source and copies the source; Enlarge opens a viewer (wheel to zoom, drag to pan). If a
