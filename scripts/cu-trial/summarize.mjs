@@ -11,8 +11,8 @@ const read = (directory, name) => {
     : []
 }
 const sum = (rows) => rows.reduce((total, row) => total + row.durationMs, 0)
-console.log('|轮次/任务|调用数|失败数|工具耗时 ms|回合墙钟 ms|')
-console.log('|---|---:|---:|---:|---:|')
+console.log('|轮次/任务|调用数|失败数|工具耗时 ms|回合墙钟 ms|批量调用次数|批内平均步数|')
+console.log('|---|---:|---:|---:|---:|---:|---:|')
 const details = []
 const breakdown = []
 for (const directory of process.argv.slice(2)) {
@@ -29,7 +29,7 @@ for (const directory of process.argv.slice(2)) {
       `|${name}/${task}|${measured.occupiedMs}|${measured.outsideToolMs}|${measured.noChanges}|`,
     )
     console.log(
-      `|${name}/${task}|${group.length}|${group.filter((row) => !row.result.success).length}|${sum(group)}|${sum(turns.filter((row) => row.task === task))}|`,
+      `|${name}/${task}|${group.length}|${group.filter((row) => !row.result.success).length}|${sum(group)}|${sum(turns.filter((row) => row.task === task))}|${measured.batchCalls}|${measured.averageBatchSteps.toFixed(1)}|`,
     )
   }
   details.push(
@@ -41,8 +41,9 @@ for (const directory of process.argv.slice(2)) {
         })
         .join('\n'),
   )
+  const total = metrics(calls, turns)
   console.log(
-    `|${name}/总计|${calls.length}|${calls.filter((row) => !row.result.success).length}|${sum(calls)}|${sum(turns)}|`,
+    `|${name}/总计|${calls.length}|${calls.filter((row) => !row.result.success).length}|${sum(calls)}|${sum(turns)}|${total.batchCalls}|${total.averageBatchSteps.toFixed(1)}|`,
   )
   for (const [index, call] of calls.entries()) {
     if (!call.result.success)
@@ -64,7 +65,7 @@ console.log(
 )
 for (const row of breakdown) console.log(row)
 console.log(
-  '\n非工具时间包含模型推理、网络、编排及预览审计；不能据此分离纯模型思考。无变化不自动表示失败，需结合任务证据。',
+  '\n非工具时间包含模型推理、网络、编排及预览审计；不能据此分离纯模型思考。无变化不自动表示失败，需结合任务证据。批内平均步数按实际尝试的步骤（含失败当步）统计，不计首错之后未执行的步骤。',
 )
 console.log(
   '\n回合完成只表示模型结束回答，不代表任务成功。文件核验见 verification.jsonl；完整结果和图片见 calls.jsonl、events.jsonl。',

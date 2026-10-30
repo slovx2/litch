@@ -324,7 +324,7 @@ final class Engine: ConnectionHandler {
       state.shot = (shot.size, shot.windowFrame, windowFrame, shot.windowID)
       state.observation.capture(shot.windowID)
       state.observedAXWindow = read.window
-      return (diff ?? AXText.render(lines), diff != nil)
+      return ((diff ?? AXText.render(lines)) + SavePanelGuidance.filenameControl(read.root, lines: lines), diff != nil)
     }
     preview.observe(session: session, app: app)
     preview.status(session: session, app: app, state: "ready")
@@ -345,7 +345,7 @@ final class Engine: ConnectionHandler {
         "mime": .string(shot.mime), "data": .string(shot.data.base64EncodedString()),
         "width": .int(Int(shot.size.width)), "height": .int(Int(shot.size.height)),
       ],
-      "text": .string(text),
+      "text": .string(text + (SavePanelGuidance.note(read.root).map { "\n\n" + $0 } ?? "")),
       "diff": .bool(isDiff),
       "truncated": .bool(read.truncated),
     ]

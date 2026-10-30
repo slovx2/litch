@@ -13,6 +13,8 @@ test('并发工具取并集，非工具残差不等于模型推理时间', () =>
     {
       calls: 3,
       failures: 1,
+      batchCalls: 0,
+      averageBatchSteps: 0,
       toolMs: 220,
       occupiedMs: 170,
       wallMs: 500,
@@ -20,6 +22,25 @@ test('并发工具取并集，非工具残差不等于模型推理时间', () =>
       noChanges: 0,
     },
   )
+})
+
+test('批量平均步数按实际尝试算，首错之后未执行的步骤不计', () => {
+  const row = (text) => ({
+    tool: 'run_actions',
+    at: new Date(0).toISOString(),
+    durationMs: 1,
+    arguments: { actions: [{}, {}, {}] },
+    result: { success: false, contentItems: [{ type: 'inputText', text }] },
+  })
+  const result = metrics(
+    [
+      row('Stopped at step 1.\n1. click: failed.'),
+      row('Batch completed.\n1. press_key: done\n2. press_key: done\n3. click: done'),
+    ],
+    [],
+  )
+  assert.equal(result.batchCalls, 2)
+  assert.equal(result.averageBatchSteps, 2)
 })
 
 test('零调用回合仍保留墙钟；无变化只是线索，不自动判失败', () => {

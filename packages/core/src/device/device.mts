@@ -1942,6 +1942,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       clientToolSpecs(namespaces, {
         machine: machineSpec(),
         desktopPlatform: options.tools?.platform?.() ?? null,
+        computerActions: true,
       }),
     cwdOf: (threadId) => threads.get(threadId)?.cwd ?? null,
     log,
@@ -2026,6 +2027,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
           {
             machine: machineSpec(),
             desktopPlatform: options.tools?.platform?.() ?? null,
+            computerActions: true,
           },
         ),
         ...(presentation ? [presentation] : []),

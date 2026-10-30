@@ -7,7 +7,11 @@ import { clientToolSpecs } from '../src/client-tools-specs.mjs'
 test('所有客户端工具的顶层都是普通对象，不含 Claude 拒绝的组合关键字', () => {
   const namespaces = Object.values(CLIENT_TOOL_NAMESPACE)
   for (const desktopPlatform of ['darwin', 'win32', 'linux']) {
-    const specs = clientToolSpecs(namespaces, { machine: null, desktopPlatform })
+    const specs = clientToolSpecs(namespaces, {
+      machine: null,
+      desktopPlatform,
+      computerActions: true,
+    })
     assert.deepEqual(
       specs.map((spec) => spec.name),
       namespaces,

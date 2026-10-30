@@ -102,6 +102,10 @@
       "type": "object",
       "required": ["namespaces"],
       "properties": {
+        "computerActions": {
+          "type": "boolean",
+          "description": "明确声明这条连接可执行 litch_computer.run_actions；须同时声明 clientTools 扩展和 litch_computer 命名空间。该工具只投递给此值为 true 的连接，原有离散工具不受影响。批量最多 12 个现有动作，按顺序执行；动作共限 60 秒，最终观察另限 10 秒；失败即停、不回滚。每步沿用系统权限、让行、停止检查，设备/harness 开关照常；依决 646 不逐应用审批。最终只回最后尝试的应用的完整状态（最多一张截图）；其他应用另行观察。"
+        },
         "namespaces": {
           "type": "array",
           "items": { "type": "string", "pattern": "^litch_" },

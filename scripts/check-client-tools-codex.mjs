@@ -80,9 +80,14 @@ registerHooks({
 const { CLIENT_TOOL_NAMESPACE } = await import('../packages/protocol/src/client-tools.mts')
 const { clientToolSpecs } = await import('../packages/protocol/src/client-tools-specs.mts')
 const ECHO = CLIENT_TOOL_NAMESPACE.echo
-const TOOLS = clientToolSpecs(Object.values(CLIENT_TOOL_NAMESPACE))
+const TOOLS = clientToolSpecs(Object.values(CLIENT_TOOL_NAMESPACE), {
+  machine: null,
+  computerActions: true,
+})
 /** 模型请求里出现过的命名空间：codex 收下的定义要原样交给模型 */
 const namespacesSeen = new Set()
+let batchSchemaSeen = null
+let batchInstructionsSeen = false
 // 1x1 的 PNG
 const PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
@@ -96,8 +101,28 @@ const model = await startResponsesModel((body, serial) => {
   const input = Array.isArray(body.input) ? body.input : []
   const last = input.at(-1)
   for (const name of namespacesOf(body)) namespacesSeen.add(name)
+  const batch = (body.tools ?? [])
+    .find((entry) => entry.type === 'namespace' && entry.name === 'litch_computer')
+    ?.tools.find((entry) => entry.name === 'run_actions')
+  if (batch) batchSchemaSeen = batch.parameters
+  if (
+    JSON.stringify([body.instructions, body.input]).includes(
+      'Prefer run_actions for two or more known actions',
+    )
+  )
+    batchInstructionsSeen = true
   const tool = (body.tools ?? []).find((entry) => entry.type === 'namespace' && entry.name === ECHO)
   if (tool) lastInputs.push(last)
+  if (userText(body).includes('批量动作') && batch && last?.type !== 'function_call_output')
+    return {
+      call: {
+        namespace: 'litch_computer',
+        name: 'run_actions',
+        arguments: JSON.stringify({
+          actions: [{ tool: 'press_key', arguments: { app: 'fixture', key: 'Return' } }],
+        }),
+      },
+    }
   if (userText(body).includes('调用工具') && tool && last?.type !== 'function_call_output')
     return {
       call: {
@@ -248,7 +273,7 @@ async function main() {
   }
   const litch = await connect('litch-check', {
     litchExtensions: ['harness', 'deviceSettings', 'clientTools'],
-    litchClientTools: { namespaces: [ECHO] },
+    litchClientTools: { namespaces: [ECHO, 'litch_computer'], computerActions: true },
   })
   // 在设置里打开 Codex，命令行路径写明是 PATH 里找到的那个。提醒收尾关掉：假模型不调 wrap_up，
   // 开着的话每个回合后面多一个提醒回合，跟下面桌面端发起的回合撞上
@@ -294,6 +319,13 @@ async function main() {
   for (const spec of TOOLS)
     expect(namespacesSeen.has(spec.name), `模型请求里没有 ${spec.name}：${[...namespacesSeen]}`)
   passed(`Codex 收下了 Litch 的全部工具定义（${TOOLS.map((spec) => spec.name).join('、')}）`)
+  expect(
+    batchSchemaSeen?.properties?.actions?.items?.oneOf?.some((choice) =>
+      choice.properties?.tool?.enum?.includes('press_key'),
+    ),
+    '批量动作的子工具 schema 必须到达模型',
+  )
+  expect(batchInstructionsSeen, '批量优先的工作流指令必须到达原生 Codex 的模型请求')
   await desktop.call('thread/resume', { threadId })
 
   // 一：桌面端发起，Litch 执行
@@ -318,6 +350,29 @@ async function main() {
   expect(desktop.toolCalls().length === 0, '没声明的桌面端不该收到调用')
   passed(`桌面端发起的回合里，调用只交给了 Litch（请求号 ${call.id}），文字和图片都到了模型`)
 
+  // 批量能力单独声明；只有命名空间的连接不能收到新工具。
+  const old = await connect('old-computer-check', {
+    litchExtensions: ['harness', 'clientTools'],
+    litchClientTools: { namespaces: ['litch_computer'] },
+  })
+  await old.call('thread/resume', { threadId })
+  const batchTurn = await old.call('turn/start', { threadId, input: text('请执行批量动作') })
+  const batchCall = await litch.waitFor(
+    'run_actions',
+    (frame) => frame.method === 'item/tool/call' && frame.params.tool === 'run_actions',
+  )
+  litch.answer(batchCall.id, {
+    success: true,
+    contentItems: [{ type: 'inputText', text: 'BATCH fixture completed' }],
+  })
+  await turnDone(old, batchTurn.turn.id)
+  expect(old.toolCalls().length === 0, '旧 CU 连接不能收到 run_actions')
+  expect(
+    JSON.stringify(lastInputs.at(-1)).includes('BATCH fixture completed'),
+    '批量结果必须回到假模型',
+  )
+  passed('原生 Codex 批量 schema、调用和结果走通；只有命名空间的连接未收到新工具')
+
   // 二：Litch 断开，桌面端再发起：设备进程当场替它回 noExecutor
   litch.close()
   await pause(300)
@@ -328,6 +383,14 @@ async function main() {
   expect(failed.includes('[litch:noExecutor]'), `模型应拿到 noExecutor：${failed.slice(0, 300)}`)
   expect(desktop.toolCalls().length === 0, '桌面端仍不该收到调用')
   passed('没有 Litch 连着时，设备进程当场回 noExecutor，回合照常结束')
+  const deniedBatch = await old.call('turn/start', { threadId, input: text('再执行批量动作') })
+  await turnDone(old, deniedBatch.turn.id)
+  expect(
+    JSON.stringify(lastInputs.at(-1)).includes('[litch:noExecutor]'),
+    '仅旧 CU 连接在线时批量应回 noExecutor',
+  )
+  expect(old.toolCalls().length === 0, '不能降级投递给旧 CU 连接')
+  old.close()
   desktop.close()
 }
 

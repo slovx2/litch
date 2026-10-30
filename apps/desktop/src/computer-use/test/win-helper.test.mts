@@ -237,6 +237,32 @@ test('执行器（win32）：列应用、不问用户、取状态、编号换 re
     )
     assert.match(textOf(clicked), /\+ \[4\] Button "Save"/)
 
+    // 批量同样使用 Windows 参数转换；中间只读树，最后才截图。
+    const batch = await executor.call(
+      invocation('run_actions', {
+        actions: [
+          { tool: 'type_text', arguments: { app: 'Notepad', text: 'batch', element: 3 } },
+          { tool: 'press_key', arguments: { app: 'Notepad', key: 'ctrl+b' } },
+        ],
+      }),
+      context,
+    )
+    assert.equal(batch.success, true, textOf(batch))
+    assert.equal(batch.contentItems.filter((item) => item.type === 'inputImage').length, 1)
+    assert.match(textOf(batch), /1\. type_text/)
+    const invalidBatch = await executor.call(
+      invocation('run_actions', {
+        actions: [
+          { tool: 'click', arguments: { app: 'Notepad', element: 9999 } },
+          { tool: 'type_text', arguments: { app: 'Notepad', text: 'must not happen' } },
+        ],
+      }),
+      context,
+    )
+    assert.equal(invalidBatch.success, false)
+    assert.match(textOf(invalidBatch), /Stopped at step 1/)
+    assert.doesNotMatch(textOf(invalidBatch), /must not happen/)
+
     // 坐标：带上最近一次截图的号；截图之后窗口挪过就 stale
     await executor.call(invocation('click', { app: 'Notepad', x: 100, y: 200 }), context)
     await cu.supervisor.connected?.request('_test.move')
@@ -296,23 +322,45 @@ test('执行器（win32）：列应用、不问用户、取状态、编号换 re
     })
     const clicks = sent('click')
     assert.equal(clicks[0]?.params.ref, '1001.2')
-    assert.equal(clicks[1]?.params.screenshotId, 'shot-1')
+    assert.equal(clicks[1]?.params.screenshotId, 'shot-3')
     assert.equal(clicks[1]?.params.x, 100)
     assert.deepEqual(sent('drag')[0]?.params, {
       session: 'local/thread-1',
       appId: NOTEPAD,
       windowId: 1001,
-      screenshotId: 'shot-2',
+      screenshotId: 'shot-4',
       from: { x: 400, y: 300 },
       to: { x: 10, y: 10 },
     })
     assert.deepEqual(sent('pressKey')[0]?.params.modifiers, ['ctrl'])
-    assert.equal(sent('pressKey').length, 1, 'Windows 键没交给助手')
+    assert.equal(sent('pressKey').length, 2, '批量 ctrl+b 和单步 ctrl+s；Windows 键没交给助手')
+    assert.equal(sent('typeText').length, 2, '失效编号之后的输入没有交给助手')
     assert.equal(sent('setValue')[0]?.params.windowId, 1002)
     assert.equal(sent('setValue')[0]?.params.ref, '1002.1')
     // 每个动作之后都不截图取一次树
     const followUps = sent('getAppState').filter((call) => call.params.screenshot === false)
     assert.ok(followUps.length >= 5)
+
+    // 批内第一步切到对话框后，第二步不能继续使用文档窗口的编号。
+    const beforeBatch = await executor.call(
+      invocation('get_app_state', { app: 'Notepad', window: 1001 }),
+      context,
+    )
+    const document = Number(/\[(\d+)\] Document/.exec(textOf(beforeBatch))?.[1])
+    assert.ok(Number.isInteger(document))
+    const changedWindow = await executor.call(
+      invocation('run_actions', {
+        actions: [
+          { tool: 'press_key', arguments: { app: 'Notepad', window: 1002, key: 'Tab' } },
+          { tool: 'click', arguments: { app: 'Notepad', element: document } },
+          { tool: 'type_text', arguments: { app: 'Notepad', text: 'never after stale' } },
+        ],
+      }),
+      context,
+    )
+    assert.equal(changedWindow.success, false)
+    assert.match(textOf(changedWindow), /Stopped at step 2/)
+    assert.match(textOf(changedWindow), /Save As/)
   } finally {
     await cu.dispose()
   }

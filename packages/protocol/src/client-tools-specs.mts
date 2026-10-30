@@ -75,6 +75,7 @@ export interface ClientToolSpecContext {
   machine: MachineSpecContext | null
   /** 执行客户端工具的那台桌面的平台（process.platform）：litch_computer 的说明按它出。没有按 macOS */
   desktopPlatform?: string | null
+  computerActions?: boolean
 }
 
 /** 一个命名空间的定义。没有这一份（还没接上的、不认识的）是 null */
@@ -84,7 +85,10 @@ export function clientToolSpec(
 ): ClientToolNamespaceSpec | null {
   if (namespace === CLIENT_TOOL_NAMESPACE.machine) return machineToolsSpec(context?.machine ?? null)
   if (namespace === CLIENT_TOOL_NAMESPACE.computer) {
-    return computerToolsSpec(computerPlatform(context?.desktopPlatform))
+    return computerToolsSpec(
+      computerPlatform(context?.desktopPlatform),
+      context?.computerActions === true,
+    )
   }
   return Object.hasOwn(SPECS, namespace) ? (SPECS[namespace] ?? null) : null
 }

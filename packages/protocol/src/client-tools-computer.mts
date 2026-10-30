@@ -21,7 +21,24 @@ export const COMPUTER_TOOL = {
   setValue: 'set_value',
   drag: 'drag',
   selectText: 'select_text',
+  runActions: 'run_actions',
 } as const
+
+export const COMPUTER_BATCH_MAX_ACTIONS = 12
+export const COMPUTER_BATCH_ACTION_MS = 60_000
+export const COMPUTER_BATCH_STATE_MS = 10_000
+
+// 规则随声明了批量能力的工具表交给模型，不能只藏在新工具的单条描述里。
+export const COMPUTER_BATCH_INSTRUCTIONS = `Prefer run_actions for two or more known actions. First observe the app, then group the steps whose targets and arguments you already know. The batch returns a fresh final state, so do not request the same state again unless information is missing.
+
+Useful groups include typing into a known field, selecting the intended text, formatting it, and opening Save; or opening a new file-manager window, navigating with keyboard shortcuts, entering a known folder path, and confirming it. Focused typing and shortcuts do not need invented element numbers. Stop the group before an unknown control, a choice that depends on new UI, or a user confirmation. Then inspect the returned state and form the next group.
+
+For example, after selecting the intended text in TextEdit, one call can be {"actions":[{"tool":"press_key","arguments":{"app":"com.apple.TextEdit","key":"cmd+b"}},{"tool":"press_key","arguments":{"app":"com.apple.TextEdit","key":"cmd+s"}}]}. Observe the save panel before choosing its fields.
+
+Do not use batching to bypass permission, user activity, stop, or sensitive-action rules. A failed step stops the group; inspect the returned state and continue only unfinished work. Never replay the entire group blindly.`
+
+export const COMPUTER_BATCH_STATE_GUIDANCE =
+  'Litch workflow: if run_actions is available, prefer one batch for two or more next steps whose targets and arguments are already known. It returns the final state. Observe separately when the next choice depends on unknown UI; do not invent element numbers.'
 
 export type ComputerToolName = (typeof COMPUTER_TOOL)[keyof typeof COMPUTER_TOOL]
 
@@ -106,7 +123,57 @@ function inputSchema(
 }
 
 /** litch_computer 在这个平台上的工具定义 */
-export function computerToolsSpec(platform: ComputerPlatform = 'darwin'): ClientToolNamespaceSpec {
+export function computerToolsSpec(
+  platform: ComputerPlatform = 'darwin',
+  batch = false,
+): ClientToolNamespaceSpec {
+  const spec = discreteComputerToolsSpec(platform)
+  if (!batch) return spec
+  spec.instructions = COMPUTER_BATCH_INSTRUCTIONS
+  // 命名空间说明有 1024 字符上限；完整工作流放 instructions，动作条目留一个短指引。
+  for (const tool of spec.tools) {
+    if (tool.name === COMPUTER_TOOL.listApps) continue
+    tool.description +=
+      tool.name === COMPUTER_TOOL.getAppState
+        ? ' After observing, prefer run_actions for two or more known steps; it returns the final state.'
+        : ' Prefer run_actions when this and the following actions are already known.'
+  }
+  const actions = spec.tools.filter(
+    (tool) => tool.name !== COMPUTER_TOOL.listApps && tool.name !== COMPUTER_TOOL.getAppState,
+  )
+  spec.tools.push({
+    type: 'function',
+    name: COMPUTER_TOOL.runActions,
+    description:
+      'Execute 1–12 known actions in order using the same tool names and arguments as individual actions. Observe each app with get_app_state first. Use this when the next steps are already known (e.g. select text, bold, save shortcut); use individual actions and observe first when the next step depends on new UI. No loops, nested batches or observations inside a batch. Actions have 60 seconds total; final observation has up to 10 seconds. Every step keeps normal permission, user-activity, stop and safety checks; there is no per-app approval. Stops on the first failure without rollback or retries. Returns short step results and one final full state of the last attempted app, with at most one screenshot. Element numbers and coordinates must come from an existing observation; stale references stop the batch. Never guess new numbers or reuse coordinates after a window change. Inspect the returned state and continue only unfinished work; a failed action may have partly executed. Ask for any necessary user approval before submitting the batch.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        actions: {
+          type: 'array',
+          minItems: 1,
+          maxItems: COMPUTER_BATCH_MAX_ACTIONS,
+          items: {
+            oneOf: actions.map((tool) => ({
+              type: 'object',
+              properties: {
+                tool: { enum: [tool.name], type: 'string' },
+                arguments: tool.inputSchema,
+              },
+              required: ['tool', 'arguments'],
+              additionalProperties: false,
+            })),
+          },
+        },
+      },
+      required: ['actions'],
+      additionalProperties: false,
+    },
+  })
+  return spec
+}
+
+function discreteComputerToolsSpec(platform: ComputerPlatform): ClientToolNamespaceSpec {
   const schema = (properties: Record<string, unknown>, required?: string[]) =>
     inputSchema(platform, properties, required)
   const win = platform === 'win32'

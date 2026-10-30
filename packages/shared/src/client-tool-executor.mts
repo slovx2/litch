@@ -12,6 +12,7 @@ import {
   clientToolFailure,
   declaredAnyThreadNamespaces,
   declaredClientToolNamespaces,
+  declaredComputerActions,
 } from '../../protocol/src/client-tools.mjs'
 import { EXTENSION, EXTENSIONS_CAPABILITY } from '../../protocol/src/device.mjs'
 
@@ -20,9 +21,22 @@ export { isClientToolNamespace } from '../../protocol/src/client-tools.mjs'
 /** 一条连接声明能执行的命名空间（就是这个集合），anyThread 是其中替任何会话执行的那些 */
 export class DeclaredClientTools extends Set<string> {
   readonly anyThread: ReadonlySet<string>
-  constructor(namespaces: Iterable<string> = [], anyThread: Iterable<string> = []) {
+  readonly computerActions: boolean
+  constructor(
+    namespaces: Iterable<string> = [],
+    anyThread: Iterable<string> = [],
+    computerActions = false,
+  ) {
     super(namespaces)
     this.anyThread = new Set(anyThread)
+    this.computerActions = computerActions
+  }
+
+  supports(namespace: string, tool?: string): boolean {
+    return (
+      this.has(namespace) &&
+      (namespace !== 'litch_computer' || tool !== 'run_actions' || this.computerActions)
+    )
   }
 }
 
@@ -43,6 +57,7 @@ export function clientToolNamespaces(initializeParams: unknown): DeclaredClientT
   return new DeclaredClientTools(
     declaredClientToolNamespaces(capabilities, declared),
     declaredAnyThreadNamespaces(capabilities, declared),
+    declaredComputerActions(capabilities, declared),
   )
 }
 
@@ -57,12 +72,19 @@ export function pickClientToolExecutor<T>(
   subscribers: readonly T[],
   namespacesOf: (connection: T) => DeclaredClientTools,
   everyone: Iterable<T>,
+  tool?: string,
 ): T | null {
-  if (starter !== null && namespacesOf(starter).has(namespace)) return starter
-  const subscriber = subscribers.find((connection) => namespacesOf(connection).has(namespace))
+  if (starter !== null && namespacesOf(starter).supports(namespace, tool)) return starter
+  const subscriber = subscribers.find((connection) =>
+    namespacesOf(connection).supports(namespace, tool),
+  )
   if (subscriber !== undefined) return subscriber
   for (const connection of everyone)
-    if (namespacesOf(connection).anyThread.has(namespace)) return connection
+    if (
+      namespacesOf(connection).anyThread.has(namespace) &&
+      namespacesOf(connection).supports(namespace, tool)
+    )
+      return connection
   return null
 }
 

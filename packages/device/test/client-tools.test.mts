@@ -39,10 +39,13 @@ type Env = ReturnType<typeof codexRig>
 async function join_(
   env: Env,
   namespaces: string[] | null,
+  computerActions = false,
 ): Promise<{ client: TestClient; upstream: FakeConnection }> {
   const client = env.connect()
   if (namespaces)
-    await client.initialize(['harness', 'clientTools'], { litchClientTools: { namespaces } })
+    await client.initialize(['harness', 'clientTools'], {
+      litchClientTools: { namespaces, computerActions },
+    })
   else await client.initialize()
   const upstream = env.codex.live.at(-1)
   assert.ok(upstream)
@@ -55,6 +58,37 @@ const answersOf = (env: Env) => env.codex.connections.flatMap((connection) => co
 const resume = (client: TestClient) => client.call('thread/resume', { threadId: THREAD })
 const start = (client: TestClient) =>
   client.call('turn/start', { threadId: THREAD, input: [{ type: 'text', text: '调' }] })
+
+test('批量 CU 只投递给声明 computerActions 的连接；旧连接发起也不能抢到', async () => {
+  const env = codexRig()
+  try {
+    const old = await join_(env, ['litch_computer'])
+    const fresh = await join_(env, ['litch_computer'], true)
+    await resume(old.client)
+    await resume(fresh.client)
+    await start(old.client)
+    for (const peer of [old, fresh])
+      peer.upstream.send({
+        id: 'batch-request',
+        method: 'item/tool/call',
+        params: {
+          threadId: THREAD,
+          turnId: TURN,
+          callId: 'batch-call',
+          namespace: 'litch_computer',
+          tool: 'run_actions',
+          arguments: { actions: [] },
+        },
+      })
+    const call = await fresh.client.waitFor((frame) => frame.method === 'item/tool/call')
+    fresh.client.answer(call.id, OK)
+    await settle()
+    assert.equal(calls(old.client).length, 0)
+    assert.equal(calls(fresh.client).length, 1)
+  } finally {
+    await env.close()
+  }
+})
 
 test('CLIENT-TOOLS-DEV-001：发起回合的连接声明了，调用只转给它；它没订阅、没收到那一份也一样，答复从它自己的连接回', async () => {
   const env = codexRig()

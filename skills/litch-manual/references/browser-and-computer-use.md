@@ -201,9 +201,49 @@ and observation times; the tree and image are sequential samples and may differ 
 应用没有可截窗口时仍返回菜单、可见窗口数和前台应用，可用菜单或快捷键新建窗口，或用 Escape
 关闭普通打开面板；系统权限和登录提示仍由用户处理。原生列表单击优先选择对应行。
 Command 快捷键使用带空闲等待和焦点恢复的短暂前台路径，避免应用在后台忽略菜单快捷键；
-普通文字输入继续定向投递，不要求激活应用。
+普通应用中的文字输入继续定向投递，不要求激活应用；系统保存面板等跨进程控件的文字与按键
+会先等待空闲、短暂激活宿主，再投给焦点控件的实际进程，结束后尝试恢复前台。
+快捷键完成、失败或取消时都会松开代理注入的按键与修饰键；恢复鼠标位置不携带快捷键修饰键。
+助手读回系统状态，发现本次注入的修饰键残留时，在用户没有介入的前提下补发一次松开，并在结果中报告；
+仍有残留则停止，请用户按下再松开相应修饰键。真实用户已按住或中途按下的修饰键不会被全局补发覆盖。
+Shortcuts release injected keys and modifiers on success, failure or cancellation. Pointer restoration
+does not carry shortcut modifiers. The helper checks system state and reports one recovery release
+for newly stuck modifiers when the user has not intervened; if they remain set, it stops and asks
+the user to press and release them. Existing or intervening user-held modifiers are not globally released.
+识别到中英文系统保存面板时，结果会提示：文件名框只填文件名，使用 Command+Shift+G 选择目录，
+核验目标目录后再保存，避免把完整路径当成文件名误存到 iCloud。快捷键正常打开新窗口不会因旧窗口失效而报错。
+For recognized English or Chinese save panels, results explain that Save As takes a filename;
+use Command+Shift+G to choose the folder and verify the destination before saving. Opening a new
+window with a shortcut does not fail solely because the previous window changed.
+保存面板的文件名框即使被长目录列表截断，也会在状态末尾附上当前编号。优先用 `set_value`
+替换文件名，不依赖跨次前台切换后的全选状态。无法解析焦点控件的实际进程时停止输入，先重新观察。
+Save panels include the current Save As element number even when a long file list truncates the tree.
+Prefer `set_value` to replace the filename. Remote panel controls receive input in their actual process
+during a protected foreground visit; unresolved keyboard targets stop input and require a fresh observation.
 文本控件返回字符选区，便于直接核验选择操作，不必为确认选区另取截图。
 macOS 截图必须唯一匹配辅助功能窗口，并附窗口编号和观察时间。树与截图是先后采样，动画期间仍可能不同步。
+
+### Batch actions / 批量动作
+
+After observing an app, agents prefer `run_actions` for two or more known steps, up to 12 in one call.
+Each step uses an existing action's name and arguments. The batch stops at the first failure,
+without retrying or undoing previous steps. Actions have 60 seconds in total; the final observation
+has another 10 seconds. Results contain short step summaries and the last attempted app's full
+state with at most one screenshot. Other apps must be checked separately. Observe first when
+the next step depends on a new window or unknown controls; expired element numbers stop the batch.
+Device and harness switches, system permissions, user activity, Stop, and sensitive-action rules
+apply throughout. There is no per-app approval. Handle missing permissions before starting a new batch.
+
+观察应用后，已知连续两步或更多操作时，代理优先用 `run_actions`，一次最多 12 个动作，每步沿用原工具
+名称和参数。首个失败即停止，不重试、不撤销已完成步骤。动作总计最多 60 秒，最终观察另限
+10 秒。结果包含逐步摘要和最后尝试的应用的完整状态，最多一张截图；其他应用须另行核验。
+下一步依赖新窗口或未知控件时，应先观察；编号失效则停止。设备与 harness 开关、系统权限、
+用户让行、停止和敏感操作规则全程有效，不新增逐应用授权。缺权限时由用户处理，再发起新批次。
+批量优先规则随工具表下发，离散工具说明和观察结果也提示这一用法；遇到未知控件或需要用户确认时，
+仍先停下观察或询问。批次结束已有最终状态，信息足够时不再重复观察。
+The batching preference is included in tool instructions, individual tool descriptions and state results.
+Unknown controls and user confirmations remain stopping points; do not repeat an observation when the
+batch's final state already supplies the needed information.
 
 ### macOS background control and preview / macOS 后台控制与预览
 

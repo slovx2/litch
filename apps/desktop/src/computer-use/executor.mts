@@ -15,12 +15,16 @@ import {
   type ClientToolContentItem,
   clientToolFailure,
 } from '../../../../packages/protocol/src/client-tools.mjs'
-import { COMPUTER_TOOL } from '../../../../packages/protocol/src/client-tools-computer.mjs'
+import {
+  COMPUTER_BATCH_STATE_GUIDANCE,
+  COMPUTER_TOOL,
+} from '../../../../packages/protocol/src/client-tools-computer.mjs'
 import type {
   ClientToolContext,
   ClientToolExecutor,
   ClientToolInvocation,
 } from '../client-tools/types.mjs'
+import { runComputerActions } from './batch.mjs'
 import { CALL_TIMEOUT, type HelperAccess, sessionKey, text } from './executor-shared.mjs'
 import { createWinRunner } from './executor-win.mjs'
 import {
@@ -157,14 +161,25 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
 
   const win = platform === 'win32' ? createWinRunner({ helper }) : null
 
+  const single = async (invocation: ClientToolInvocation, context: ClientToolContext) => {
+    try {
+      const result = await (win ? win.run(invocation, context) : run(invocation, context))
+      if (invocation.tool === COMPUTER_TOOL.getAppState && result.success) {
+        const first = result.contentItems.find((item) => item.type === 'inputText')
+        if (first?.type === 'inputText') first.text += `\n\n${COMPUTER_BATCH_STATE_GUIDANCE}`
+      }
+      return result
+    } catch (error) {
+      return failureOf(error, context.signal)
+    }
+  }
+
   return {
     namespace: CLIENT_TOOL_NAMESPACE.computer,
     async call(invocation, context) {
-      try {
-        return await (win ? win.run(invocation, context) : run(invocation, context))
-      } catch (error) {
-        return failureOf(error, context.signal)
-      }
+      return invocation.tool === COMPUTER_TOOL.runActions
+        ? runComputerActions(invocation, context, single)
+        : single(invocation, context)
     },
     turnEnded(turn) {
       const session = sessionKey({ device: { id: turn.deviceId }, threadId: turn.threadId })
