@@ -87,6 +87,7 @@ const TOOLS = clientToolSpecs(Object.values(CLIENT_TOOL_NAMESPACE), {
 /** 模型请求里出现过的命名空间：codex 收下的定义要原样交给模型 */
 const namespacesSeen = new Set()
 let batchSchemaSeen = null
+let batchInstructionsSeen = false
 // 1x1 的 PNG
 const PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
@@ -104,6 +105,12 @@ const model = await startResponsesModel((body, serial) => {
     .find((entry) => entry.type === 'namespace' && entry.name === 'litch_computer')
     ?.tools.find((entry) => entry.name === 'run_actions')
   if (batch) batchSchemaSeen = batch.parameters
+  if (
+    JSON.stringify([body.instructions, body.input]).includes(
+      'Prefer run_actions for two or more known actions',
+    )
+  )
+    batchInstructionsSeen = true
   const tool = (body.tools ?? []).find((entry) => entry.type === 'namespace' && entry.name === ECHO)
   if (tool) lastInputs.push(last)
   if (userText(body).includes('批量动作') && batch && last?.type !== 'function_call_output')
@@ -318,6 +325,7 @@ async function main() {
     ),
     '批量动作的子工具 schema 必须到达模型',
   )
+  expect(batchInstructionsSeen, '批量优先的工作流指令必须到达原生 Codex 的模型请求')
   await desktop.call('thread/resume', { threadId })
 
   // 一：桌面端发起，Litch 执行

@@ -193,7 +193,15 @@ test('新工具显式挂载，子动作 schema 与离散工具完全相同', () 
   for (const platform of ['darwin', 'win32'] as const) {
     const original = computerToolsSpec(platform)
     const batch = computerToolsSpec(platform, true)
-    assert.deepEqual(batch.tools.slice(0, -1), original.tools)
+    assert.deepEqual(
+      batch.tools.slice(0, -1).map(({ name, inputSchema }) => ({ name, inputSchema })),
+      original.tools.map(({ name, inputSchema }) => ({ name, inputSchema })),
+    )
+    assert.equal(original.instructions, undefined)
+    assert.match(batch.instructions ?? '', /Prefer run_actions for two or more known actions/)
+    for (const tool of batch.tools.slice(0, -1)) {
+      if (tool.name !== 'list_apps') assert.match(tool.description, /prefer run_actions/i)
+    }
     const props = batch.tools.at(-1)?.inputSchema.properties as {
       actions: {
         items: { oneOf: { properties: { tool: { enum: string[] }; arguments: unknown } }[] }
@@ -206,6 +214,17 @@ test('新工具显式挂载，子动作 schema 与离散工具完全相同', () 
       )
     }
   }
+})
+
+test('观察结果给出批量优先提示，同时保留独立观察和未知控件的边界', async () => {
+  const { executor } = rig()
+  const result = await executor.call(
+    { ...call([]), tool: 'get_app_state', arguments: { app } },
+    context(),
+  )
+  assert.match(textOf(result), /Litch workflow: if run_actions is available/)
+  assert.match(textOf(result), /two or more next steps/)
+  assert.match(textOf(result), /do not invent element numbers/)
 })
 
 test('助手启动不响应取消时，仍按总时限结束，不提交第二步', async () => {

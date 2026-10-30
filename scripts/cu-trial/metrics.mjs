@@ -10,9 +10,16 @@ export function metrics(calls, turns) {
     end = Math.max(end, stop)
   }
   const wallMs = turns.reduce((total, turn) => total + turn.durationMs, 0)
+  const batches = calls.filter((call) => call.tool === 'run_actions')
+  const attempted = batches.reduce((total, call) => {
+    const summary = call.result.contentItems.find((item) => item.type === 'inputText')?.text ?? ''
+    return total + [...summary.matchAll(/^\d+\. /gm)].length
+  }, 0)
   return {
     calls: calls.length,
     failures: calls.filter((call) => !call.result.success).length,
+    batchCalls: batches.length,
+    averageBatchSteps: batches.length ? attempted / batches.length : 0,
     toolMs: calls.reduce((total, call) => total + call.durationMs, 0),
     occupiedMs,
     wallMs,

@@ -227,6 +227,8 @@ try {
     for (const app of after) if (!before.some((old) => old.pid === app.pid)) opened.add(app.pid)
     record('launched.jsonl', { before, after, ownedPids: [...opened] })
     const spec = computerToolsSpec('darwin', true)
+    // 直连原生 Codex 没有设备层代为合并 namespace.instructions；按产品同样放到开发者指令。
+    const { instructions, ...nativeSpec } = spec
     record('spec.jsonl', spec)
     rpc = startCodex(
       executable,
@@ -246,7 +248,8 @@ try {
       approvalPolicy: 'never',
       sandbox: 'read-only',
       baseInstructions: cases.instructions,
-      dynamicTools: [spec],
+      developerInstructions: instructions,
+      dynamicTools: [nativeSpec],
       ephemeral: true,
     })
     threadId = thread.thread.id

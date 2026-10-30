@@ -15,7 +15,10 @@ import {
   type ClientToolContentItem,
   clientToolFailure,
 } from '../../../../packages/protocol/src/client-tools.mjs'
-import { COMPUTER_TOOL } from '../../../../packages/protocol/src/client-tools-computer.mjs'
+import {
+  COMPUTER_BATCH_STATE_GUIDANCE,
+  COMPUTER_TOOL,
+} from '../../../../packages/protocol/src/client-tools-computer.mjs'
 import type {
   ClientToolContext,
   ClientToolExecutor,
@@ -160,7 +163,12 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
 
   const single = async (invocation: ClientToolInvocation, context: ClientToolContext) => {
     try {
-      return await (win ? win.run(invocation, context) : run(invocation, context))
+      const result = await (win ? win.run(invocation, context) : run(invocation, context))
+      if (invocation.tool === COMPUTER_TOOL.getAppState && result.success) {
+        const first = result.contentItems.find((item) => item.type === 'inputText')
+        if (first?.type === 'inputText') first.text += `\n\n${COMPUTER_BATCH_STATE_GUIDANCE}`
+      }
+      return result
     } catch (error) {
       return failureOf(error, context.signal)
     }
