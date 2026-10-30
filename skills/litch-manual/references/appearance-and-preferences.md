@@ -44,6 +44,15 @@ look the same.
 
 ## Language (Settings → Language)
 
+`scripts/litch look get` reads appearance, language and desktop preferences. `scripts/litch notify get`
+reads the session notification switch, scope and scheduled-task success notification switch.
+For Settings → Conversation, `scripts/litch chat get` reads the sending mode;
+`scripts/litch chat send-mode now` sends into the running turn (default), and
+`scripts/litch chat send-mode queue` queues until the current turn ends.
+For Settings → Config assistant, `scripts/litch assist get` reads installation status and target paths;
+`scripts/litch assist manual on|off` installs or removes only Litch-managed manual copies.
+Turning it off does not remove user-owned skills. Turn it back on to reinstall.
+
 `scripts/litch look language zh-CN` or `scripts/litch look language en` switches the whole UI (and the
 app menu). There is no "follow the system" choice; on first launch Litch picks the system language.
 

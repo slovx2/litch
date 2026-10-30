@@ -108,6 +108,10 @@ still store it in that harness's environment on that device:
 
 ## Enabling, disabling, restarting
 
+`scripts/litch harness auto-title <device>` reads Litch's automatic naming switch for new Codex
+sessions. Append `on` or `off` to change it. In the UI: Devices → Codex → Settings → Config →
+Name sessions automatically. This does not rename existing sessions or change Codex's native settings.
+
 - `scripts/litch harness enable <device> <id>` / `scripts/litch harness disable <device> <id>` turn a
   harness on or off on that device (the `harness.<id>.enabled` setting). Disabling stops its runtime;
   its sessions stay on disk and come back when re-enabled. Disabled harnesses disappear from the

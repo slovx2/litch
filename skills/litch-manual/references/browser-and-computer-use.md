@@ -290,6 +290,12 @@ macOS 优先后台操作。后台不能完成时，等待键鼠连续空闲 2 �
 
 ## Chrome on the controlling Mac
 
+`scripts/litch chrome get` reads the control switch, connected instances and allowed remote devices.
+`scripts/litch chrome set on|off` changes the global switch; add `--device <device>` for one remote
+device. Enabling either requires a confirmation card in Litch. These switches do not grant instance,
+website or sign-in approval. Extension preparation/loading stays in Settings → Chrome;
+`scripts/litch open settings/chrome` opens it.
+
 Chrome uses the `litch_browser` tools with an explicit Chrome target. In **Settings → Chrome**, prepare the extension, open the extensions page, enable Developer mode and load the displayed unpacked extension folder. Litch registers its Native Messaging host automatically. This version is not distributed through the Chrome Web Store. Keep the folder in place and reload the extension after updating Litch. The settings show the required version, connected instances and version mismatches.
 
 Chrome control is off by default. Enable it separately and choose which remote devices may request access to this Mac. Browser feature switches for the device and harness still apply. Each source requires approval, including localhost; Chrome does not inherit the built-in browser's saved site approvals or “trust all” setting. Remote sessions operate Chrome on the controlling Mac: localhost refers to that Mac. Operating Chrome on the remote execution device is not supported in this version.

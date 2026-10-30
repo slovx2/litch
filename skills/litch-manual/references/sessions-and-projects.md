@@ -39,6 +39,24 @@ sidebar.
 
 ### 经理（桌面端）
 
+Creating a manager authorizes autonomous dispatch and always requires desktop confirmation.
+The card shows its name, instruction summary, device, folder, manager/workline harness, concurrency,
+worktree/merge choices and whether a first task was supplied. Declining creates nothing.
+Increasing concurrency, changing the effective workline harness, moving merging from the user to
+the manager or disabling separate worktrees also requires confirmation. Declining leaves settings
+unchanged; reads and ordinary edits execute directly. If settings change during confirmation,
+read again before retrying.
+
+`scripts/litch managers list <device>` lists managers; `scripts/litch managers get <device> <manager>`
+reads one by id or unique name. `scripts/litch managers create <device> --cwd <path> --harness <id>`
+creates one (use the ready harness id printed by `harness list`). `scripts/litch managers set <device>
+<manager> --rules <text>` changes the custom manager instructions. Other options cover the name,
+workline harness/model/effort, worktree, merge responsibility, concurrency and decision notifications;
+see `scripts/litch managers --help`. Empty workline harness/model/effort values restore inherited
+defaults. Setting one field preserves the others. Existing worklines are unchanged; ending/ended
+managers are read-only. The manager's own device/folder/harness/model/effort are fixed after creation.
+`scripts/litch open managers` opens the manager list; `scripts/litch open suggestions` opens all suggestions.
+
 侧栏顶部切换“对话 / 经理”。经理是专门管理其他会话的会话，看板保存在所选设备上；经理及其子会话只列在经理栏。首次切到经理时打开全部经理页，再次切回时恢复此前的位置；点击“全部经理”可返回列表。列表按设备分组，已结束的经理放在下方。
 
 “新建经理”按三步填写：基本信息（名称、经理设定、首个任务）、运行环境（设备、项目、工作目录、经理 harness、模型与强度）、任务分配与通知（子会话参数、工作树、合并方式、并行数、通知）。顶端步骤指示可返回已完成的步骤，底部使用“上一步 / 下一步”，最后一步为“创建经理”；返回时保留已填内容。运行环境步骤要求工作目录和可用的 harness，任务分配步骤要求正整数并行数，校验失败停在当前步骤并显示原因。“经理设定”为可选的自定义提示词，可填写角色设定、行为规范等；名称可留空，由经理命名。任务分配默认使用经理的 harness、共用工作目录、由经理验收后合并，最大并行工作线数为四；“代码修改使用独立工作树”默认不勾选。决策未答复时持续等待；桌面通知开关控制新待答决策的系统通知，首次连接与重连不补发已有决策。
