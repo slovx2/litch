@@ -1,15 +1,13 @@
 import type {
   ManagerContactSettings,
   ManagerDispatchSettings,
-  ManagerTemplate,
 } from '../../../core/src/model-manager.mts'
 import { EFFORT_TEXT } from '../composer/efforts.ts'
 import type { Translator } from '../i18n/index.ts'
 
-/** 用户规矩的初稿跟随界面语言；手写后由表单保存原文，不再自动拼接。 */
+/** 用户规则的初稿跟随界面语言；手写后由表单保存原文，不再自动拼接。 */
 export function managerRules(
   t: Translator,
-  template: ManagerTemplate,
   dispatch: ManagerDispatchSettings,
   contact: ManagerContactSettings,
   harnessName: string,
@@ -26,8 +24,5 @@ export function managerRules(
     t(dispatch.merge === 'manager' ? 'manager.rules.managerMerge' : 'manager.rules.userMerge'),
     t('manager.rules.wait'),
     t(contact.desktopNotification ? 'manager.rules.notify' : 'manager.rules.noNotify'),
-    template === 'blank' ? '' : t(`manager.rules.${template}`),
-  ]
-    .filter(Boolean)
-    .join('\n')
+  ].join('\n')
 }

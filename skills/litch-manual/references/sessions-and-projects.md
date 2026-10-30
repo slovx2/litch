@@ -35,19 +35,19 @@ sidebar.
 
 侧栏顶部切换“对话 / 经理”。经理是专门管理其他会话的会话，看板保存在所选设备上；经理及其子会话只列在经理栏。切到经理时先打开全部经理页，列表按设备分组，已结束的经理放在下方。
 
-“新经理”打开独立表单：选择版本迭代、长期排查、调研或空白模板，填写必填范围、设备、项目或工作目录，并选择 harness、模型与强度。名字可留空，由经理命名。派活默认使用经理的 harness、独立工作树、经理验收后合并、最多同时运行四条线；新决策可通知桌面，未答复时一直等待。
+“新建经理”打开独立表单：填写必填范围、设备、项目或工作目录，并选择 harness、模型与强度。名称可留空，由经理命名。任务分配默认使用经理的 harness、独立工作树、经理验收后合并、最大并行工作线数为四；有新决策时可发送桌面通知，决策未答复时持续等待。
 
-规矩初稿按当前界面语言，由模板、派活和通知选项实时生成。点击标题右侧的“手动编辑”后，选项和界面语言不再自动修改规矩，设备仍执行派活的硬限制。“第一件事”留空时只排计划，等待用户要求开始；开场按范围文字所用的语言回复。
+规则初稿按当前界面语言，由任务分配和通知选项实时生成。点击标题右侧的“手动编辑”后，选项和界面语言不再自动修改规则，设备仍执行任务分配的硬限制。“首个任务”留空时仅制定计划，待用户确认后开始；开场按范围文字所用的语言回复。
 
-经理页左侧是普通对话，右侧是概览、决策、事项和工作线。窄窗口使用“对话 / 看板”切换。工作线可打开子会话；子会话顶端的“回到经理”返回经理页。经理在对话中提到决策时，可以同时说明选项和推荐；用户在看板上提交答复，也可以在对话中明确答复。
+经理页左侧是普通对话，右侧是概览、决策、事项和工作线。窄窗口使用“对话 / 看板”切换。工作线可打开子会话；子会话顶端的“返回经理”返回经理页。经理在对话中提到决策时，可以同时说明选项和推荐；用户在看板上提交答复，也可以在对话中明确答复。
 
-经理页标题栏的“设置”可修改名字、范围、规矩、派活（子会话 harness、模型与强度、工作树、合并方式、并发上限）和桌面通知。设备、工作目录和经理自己的 harness、模型与强度只供查看。编辑已有经理时保留已保存的规矩原文，修改派活或找你选项不会覆盖它；需要调整规矩时直接编辑文本。保存失败会显示原因并保留表单；取消不保存。范围或规矩保存后，对话会出现“已更新范围和规矩”事件卡。结束中和已结束的经理不提供设置入口。
+经理页标题栏的“设置”可修改名称、范围、规则、任务分配（子会话 harness、模型与强度、工作树、合并方式、并发上限）和桌面通知。设备、工作目录和经理自己的 harness、模型与强度只供查看。编辑已有经理时保留已保存的规则原文，修改任务分配或通知选项不会覆盖它；需要调整规则时直接编辑文本。保存失败会显示原因并保留表单；取消不保存。范围或规则保存后，对话会出现“已更新范围和规则”事件卡。结束中和已结束的经理不提供设置入口。
 
-决策可以选推荐或其他选项，也可以直接写答复。答复先保存在当前桌面端本地，不跨客户端同步，不自动提交。底部“交给经理”将答复写入设备看板，并触发经理处理；部分失败时只清除成功项，失败草稿保留。决策版本变化后，需要核对最新内容并确认当前版本。“清掉草稿”仅清除本地未提交内容。已关闭决策可重新打开。事项中的决策编号可以点击，切到决策页并定位对应卡片；已答或已关闭的决策会自动切到相应分组。
+决策可以选推荐或其他选项，也可以直接写答复。答复先保存在当前桌面端本地，不跨客户端同步，不自动提交。底部“提交给经理”将答复写入设备看板，并触发经理处理；部分失败时只清除成功项，失败草稿保留。决策版本变化后，需要核对最新内容并确认当前版本。“清除草稿”仅清除本地未提交内容。已关闭决策可重新打开。事项中的决策编号可以点击，切到决策页并定位对应卡片；已答或已关闭的决策会自动切到相应分组。
 
-决策的依据记录其关联文件、提交、分支或会话；缺少依据仍可创建，设备会提示经理补齐。依据按看板记录显示，第一版不自动检测过时，也不显示“仍然有效”和“推迟”按钮。结束经理前会提示看板将只读、未完成事项保留。确认后先进入“结束中”，仍列在进行中组，对话和看板不可写；收尾回合完成、失败或被打断后转为“已结束”。范围或规矩更新会在经理对话里显示“已更新范围和规矩”事件。已结束经理的“看总结”当前为占位，不提供接手。
+决策的依据记录其关联文件、提交、分支或会话；缺少依据仍可创建，设备会提示经理补齐。依据按看板记录显示，第一版不自动检测过时，也不显示“仍然有效”和“推迟”按钮。结束经理前会提示看板将只读、未完成事项保留。确认后先进入“结束中”，仍列在进行中组，对话和看板不可写；收尾回合完成、失败或被打断后转为“已结束”。范围或规则更新会在经理对话里显示“已更新范围和规则”事件。已结束经理的“查看总结”当前为占位，不提供接手。
 
-经理自己开的工作线（包括线派出的子会话）完成、改动已落地或作废后，由经理直接归档，不再询问用户；结束经理时也按此处理。归档后可恢复。在跑或置顶的会话仍不会归档。归档其他会话仍须用户明确同意；看板答复开启的经理回合可以执行，回报唤醒、提醒等事件回合不视为用户同意。
+经理自己开的工作线（包括线派出的子会话）完成、改动已落地或作废后，由经理直接归档，不再询问用户；结束经理时也按此处理。归档后可恢复。运行中或置顶的会话仍不会归档。归档其他会话仍须用户明确同意；看板答复开启的经理回合可以执行，回报唤醒、提醒等事件回合不视为用户同意。
 
 ### 停止或恢复回报主对话
 
@@ -63,7 +63,7 @@ On desktop, right-click a child session in the sidebar; on mobile, long-press it
 
 Stopping reports keeps the child in its tree and leaves its own running or waiting status visible. It suppresses automatic completion, failure, interruption, pending-request and background-task reports, removes its undelivered reports, and prevents those reports from waking the parent. Delivered reports remain. Other children can still wake the parent. Resuming does not replay old results; it reports a currently pending request once after the usual 10-second waiting threshold, then future events. Waking still follows `wake_parent` and the existing rules. This device-side preference survives reconnects and restarts. Models can read `report_parent` through `list` and `read`, but cannot change it; `set_wake` only controls waking.
 
-手机上的经理开始、看板答复、收尾和规矩更新显示为系统事件行，可展开正文；答复摘要显示决策编号。手机不提供经理页或看板操作。未知事件显示“会话事件”，展开保留种类与正文。On mobile, manager events are expandable system rows; board-answer summaries include decision IDs. They provide no manager-page navigation or board actions. Unknown kinds use “Session event” and retain the kind and body when expanded.
+手机上的经理开始、看板答复、收尾和规则更新显示为系统事件行，可展开正文；答复摘要显示决策编号。手机不提供经理页或看板操作。未知事件显示“会话事件”，展开保留种类与正文。On mobile, manager events are expandable system rows; board-answer summaries include decision IDs. They provide no manager-page navigation or board actions. Unknown kinds use “Session event” and retain the kind and body when expanded.
 
 ### 问题结果与输入
 

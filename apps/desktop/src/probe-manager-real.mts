@@ -86,7 +86,7 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     state.pending = pending()
     await click('.sb-top .new')
     await wait('新建经理表单', () => one('[data-manager="form"]'))
-    await fill('名字', `${harness} 真实界面经理`)
+    await fill('名称', `${harness} 真实界面经理`)
     await fill('范围', '在隔离仓库验收决策、答复、工作线回报和结束流程。')
     await fill('工作目录', cwd)
     const picker = await wait('经理 harness 选择项', () => {
@@ -98,7 +98,7 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     picker.value = harness
     picker.dispatchEvent(new Event('change', { bubbles: true }))
     await frame()
-    // 夹具只验会话回报，不创建额外工作树；通过正式派活选项关闭。
+    // 夹具只验会话回报，不创建额外工作树；通过正式任务分配选项关闭。
     for (const label of all('.mg-form label')) {
       const checkbox = one<HTMLInputElement>('input[type="checkbox"]', label)
       if (checkbox?.checked && /工作树|桌面通知/.test(text(label))) checkbox.click()
@@ -220,7 +220,7 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
   }
   if (step === '05-origin') {
     await click('.mg-body .mg-card button')
-    await wait('来源条', () => text(one('.mg-origin')).includes('由经理开出'))
+    await wait('来源条', () => text(one('.mg-origin')).includes('由经理创建'))
     await wait('工作线对话读完', () => kit.lastAnswer().includes(`${harness} 真实界面工作线回报`))
     await kit.idle()
     return { origin: text(one('.mg-origin')) }
@@ -239,21 +239,21 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     await click('[data-act="manager-settings"]')
     await wait('经理编辑表单', () => one('[data-manager-mode="edit"]'))
     assert(all('.mg-fixed').length === 5, '经理自身配置未只读显示')
-    assert(!field('第一件事') && !field('从哪种开始'), '编辑仍显示创建专用字段')
+    assert(!field('首个任务') && !field('从哪种开始'), '编辑仍显示创建专用字段')
     return { fixed: all('.mg-fixed').map(text) }
   }
   if (step === '06-rules') {
-    const rules = await wait('可编辑的规矩', () => one<HTMLTextAreaElement>('.mg-rules textarea'))
+    const rules = await wait('可编辑的规则', () => one<HTMLTextAreaElement>('.mg-rules textarea'))
     const updated = `${rules.value}\n仅在隔离仓库执行 ${harness} 设置验收，完成后等待用户确认。`
     write(rules, updated)
     await frame()
-    await fill('范围', `${harness} 修改后的范围：验证设置保存和规矩事件。`)
-    await fill('同时最多几条线', '2')
-    assert(rules.value === updated, '派活选项覆盖了手写规矩')
+    await fill('范围', `${harness} 修改后的范围：验证设置保存和规则事件。`)
+    await fill('最大并行工作线数', '2')
+    assert(rules.value === updated, '任务分配选项覆盖了手写规则')
     await click('.mg-form button[type="submit"]')
     await wait('保存后范围更新', () => text(one('.mg-scope')).includes(`${harness} 修改后的范围`))
-    const event = await wait('规矩事件卡', () => one('[data-event="manager-rules"]'))
-    await wait('规矩回合完成', () => {
+    const event = await wait('规则事件卡', () => one('[data-event="manager-rules"]'))
+    await wait('规则回合完成', () => {
       const turn = event.closest('.turn')
       return (
         turn?.querySelector('.md') && text(turn.querySelector('.turn-foot span')).includes('完成')
@@ -263,11 +263,11 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
     await click('[data-act="manager-settings"]')
     await wait(
       '保存的并发上限',
-      () => field('同时最多几条线')?.querySelector<HTMLInputElement>('input')?.value === '2',
+      () => field('最大并行工作线数')?.querySelector<HTMLInputElement>('input')?.value === '2',
     )
-    assert(one<HTMLTextAreaElement>('.mg-rules textarea')?.value === updated, '保存的规矩不符')
+    assert(one<HTMLTextAreaElement>('.mg-rules textarea')?.value === updated, '保存的规则不符')
     await click('.mg-form-foot button[type="button"]')
-    const card = await wait('返回后规矩事件卡', () => one('[data-event="manager-rules"]'))
+    const card = await wait('返回后规则事件卡', () => one('[data-event="manager-rules"]'))
     card.scrollIntoView({ block: 'center' })
     await frame()
     return { event: text(card), scope: text(one('.mg-scope')), maxRunningLines: 2, rules: updated }

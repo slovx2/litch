@@ -1,10 +1,6 @@
 import { type DeviceView, keys, type WorkspaceView } from '@litch/core'
 import { useState } from 'react'
-import type {
-  ManagerDraft,
-  ManagerTemplate,
-  ManagerView,
-} from '../../../core/src/model-manager.mts'
+import type { ManagerDraft, ManagerView } from '../../../core/src/model-manager.mts'
 import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
@@ -19,14 +15,6 @@ import { EFFORT_TEXT } from '../composer/efforts.ts'
 import { useComposeOptions } from '../composer/SettingsBar.tsx'
 import { managerRules } from './rules.ts'
 
-const templates = ['release', 'investigation', 'research', 'blank'] as const
-const placeholders = {
-  release: 'manager.scopeRelease',
-  investigation: 'manager.scopeInvestigation',
-  research: 'manager.scopeResearch',
-  blank: 'manager.scopeBlank',
-} as const
-
 function remembered(deviceId: string) {
   try {
     return JSON.parse(localStorage.getItem(`litch.manager.defaults:${deviceId}`) ?? '{}') as {
@@ -38,15 +26,6 @@ function remembered(deviceId: string) {
     return {}
   }
 }
-function lastTemplate(): ManagerTemplate {
-  try {
-    const value = localStorage.getItem('litch.manager.template')
-    return templates.find((template) => template === value) ?? 'release'
-  } catch {
-    return 'release'
-  }
-}
-
 export function ManagerForm({
   devices,
   initial,
@@ -73,7 +52,7 @@ export function ManagerForm({
     initial.deviceId === deviceId ? (initial.workspaceId ?? '') : '',
   )
   const workspace = workspaces.find((entry) => entry.id === workspaceId)
-  const [form, setForm] = useState<ManagerDraft>(() => {
+  const [form, setForm] = useState<Omit<ManagerDraft, 'template'>>(() => {
     if (manager) return { ...manager, firstTask: '' }
     const last = remembered(deviceId)
     return {
@@ -87,14 +66,13 @@ export function ManagerForm({
         '',
       model: last.model ?? null,
       effort: last.effort ?? null,
-      template: lastTemplate(),
       dispatch: { ...MANAGER_DEFAULT_DISPATCH },
       contact: { ...MANAGER_DEFAULT_CONTACT },
       rules: '',
       firstTask: '',
     }
   })
-  // 设备没有记录规矩是否手写；编辑已有经理时始终保留原文，不重新拼接。
+  // 设备没有记录规则是否手写；编辑已有经理时始终保留原文，不重新拼接。
   const [edited, setEdited] = useState(Boolean(manager))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -118,12 +96,11 @@ export function ManagerForm({
     ? form.rules
     : managerRules(
         t,
-        form.template,
         form.dispatch,
         form.contact,
         nameOf(device, form.dispatch.harness ?? form.harness),
       )
-  const change = (patch: Partial<ManagerDraft>) => {
+  const change = (patch: Partial<Omit<ManagerDraft, 'template'>>) => {
     setForm((was) => ({ ...was, ...patch }))
     setError('')
   }
@@ -157,13 +134,13 @@ export function ManagerForm({
         onCreated({ deviceId, sessionId: manager.threadId })
         return
       }
+      // template 字段已发布；固定发送 blank，以支持不同版本的桌面端与设备互连。
       const result = await channel.command('managers.create', {
         deviceId,
-        manager: { ...form, scope: form.scope.trim(), cwd: cwd.trim(), rules },
+        manager: { ...form, template: 'blank', scope: form.scope.trim(), cwd: cwd.trim(), rules },
       })
       // 创建已成功；偏好存储失败不能把它显示成创建失败，也不能重复创建。
       try {
-        localStorage.setItem('litch.manager.template', form.template)
         localStorage.setItem(
           `litch.manager.defaults:${deviceId}`,
           JSON.stringify({ harness: form.harness, model: form.model, effort: form.effort }),
@@ -190,21 +167,6 @@ export function ManagerForm({
     >
       <fieldset className="mg-fields" disabled={busy || disabled}>
         <section className="mng-sec">
-          {!manager ? (
-            <label className="form-field">
-              {t('manager.template')}
-              <select
-                value={form.template}
-                onChange={(event) => change({ template: event.target.value as ManagerTemplate })}
-              >
-                {templates.map((template) => (
-                  <option key={template} value={template}>
-                    {t(`manager.${template}`)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
           <label className="form-field">
             {t('manager.name')}
             <input
@@ -221,7 +183,7 @@ export function ManagerForm({
               className="req-input"
               rows={3}
               value={form.scope}
-              placeholder={t(placeholders[form.template])}
+              placeholder={t('manager.scopeBlank')}
               onChange={(event) => change({ scope: event.target.value })}
             />
           </label>
