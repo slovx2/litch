@@ -24,6 +24,8 @@ export interface ConfigPrefs {
   notifySessions: boolean
   /** 普通会话通知范围：全部对话，或仅没有父会话的主会话 */
   notifyScope: 'all' | 'main'
+  /** 回合进行中发送消息：立即补充或排队。 */
+  sendMode?: 'now' | 'queue'
 }
 
 /** 打开哪一页 */
@@ -32,9 +34,13 @@ export type ConfigOpenPlace =
   | { where: 'device'; deviceId: string }
   | { where: 'tasks' }
   | { where: 'new' }
+  | { where: 'managers' }
+  | { where: 'suggestions' }
 
 /** 要界面做的一件事。界面做完用 config.reply 回：成了带 data，没成带 reason */
 export type ConfigUiRequest =
+  | { kind: 'manual.get' }
+  | { kind: 'manual.set'; enabled: boolean }
   /** 现在的偏好。回 ConfigPrefs */
   | { kind: 'prefs.get' }
   /** 改其中几项（和设置页上点是一回事）。回改完的 ConfigPrefs */
@@ -54,6 +60,23 @@ export interface ConfigUiAsk {
 
 /** 确认卡上“要做什么”的一项。字由界面拼 */
 export type ConfigConfirmItem =
+  /** 创建即授权自主派活；扩大已有经理的派活能力也须确认。 */
+  | {
+      kind: 'manager'
+      action: 'create' | 'dispatch'
+      name: string
+      rules: string
+      device: string
+      cwd: string
+      harness: string
+      lineHarness: string
+      maxRunning: number
+      worktree: boolean
+      merge: 'manager' | 'user'
+      firstTask: boolean
+    }
+  /** 开启 Chrome 控制或允许一台远程设备使用。 */
+  | { kind: 'chrome'; device: string | null }
   /** 给这台设备打开 Computer Use 或“操作这台电脑” */
   | { kind: 'tool'; tool: 'computer' | 'machine'; device: string }
   /** “操作这台电脑”的审批改成不问 */

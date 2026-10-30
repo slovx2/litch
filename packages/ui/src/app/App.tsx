@@ -36,6 +36,7 @@ import {
   onNewSessionRequest,
   onOpenSessionRequest,
   onSettingsRequest,
+  onSuggestionsRequest,
   onTasksRequest,
   type TasksRoute,
 } from './actions.ts'
@@ -215,6 +216,7 @@ export function App() {
       }),
     [openPage],
   )
+  useEffect(() => onSuggestionsRequest(() => onPage('suggestions')), [onPage])
   // 别处要去定时任务的某个地方（会话顶上那一条的“去看任务”、会话菜单的“为这个会话建定时任务”）
   useEffect(
     () =>

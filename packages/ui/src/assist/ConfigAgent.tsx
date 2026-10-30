@@ -12,7 +12,14 @@ import type {
 } from '@litch/core'
 import { keys } from '@litch/core'
 import { useEffect, useRef, useState } from 'react'
-import { requestDevice, requestNewSession, requestSettings, requestTasks } from '../app/actions.ts'
+import {
+  requestDevice,
+  requestManagers,
+  requestNewSession,
+  requestSettings,
+  requestSuggestions,
+  requestTasks,
+} from '../app/actions.ts'
 import {
   type Appearance,
   CHAT_WIDTHS,
@@ -32,6 +39,7 @@ import {
   type Zoom,
 } from '../app/appearance.ts'
 import { useKey, useKeys, useServices } from '../app/services.tsx'
+import { sendMode, setSendMode } from '../composer/send-mode.ts'
 import { PairDialog } from '../devices/PairDialog.tsx'
 import type { Translator } from '../i18n/index.ts'
 import {
@@ -42,6 +50,7 @@ import {
 } from '../notify/session-notice.ts'
 import { linksInApp, setLinksInBrowser } from '../side/browser/links.ts'
 import { notifySuccess, setNotifySuccess } from '../tasks/notify-pref.ts'
+import { manualBridge } from './manual-bridge.ts'
 
 /** 现在的偏好（执行器读、写完回给模型看的那一份） */
 function prefsNow(look: Appearance): ConfigPrefs {
@@ -58,6 +67,7 @@ function prefsNow(look: Appearance): ConfigPrefs {
     notifySuccess: notifySuccess(),
     notifySessions: notifySessions(),
     notifyScope: notifyScope(),
+    sendMode: sendMode(),
   }
 }
 
@@ -72,11 +82,34 @@ function applyPrefs(patch: Partial<ConfigPrefs>): void {
   if (typeof patch.notifySuccess === 'boolean') setNotifySuccess(patch.notifySuccess)
   if (typeof patch.notifySessions === 'boolean') setNotifySessions(patch.notifySessions)
   if (patch.notifyScope === 'all' || patch.notifyScope === 'main') setNotifyScope(patch.notifyScope)
+  if (patch.sendMode === 'now' || patch.sendMode === 'queue') setSendMode(patch.sendMode)
 }
 
 /** 确认卡上一项的话 */
 export function itemText(item: ConfigConfirmItem, t: Translator): string {
   switch (item.kind) {
+    case 'manager':
+      return t('assist.confirm.manager', {
+        action: t(
+          item.action === 'create'
+            ? 'assist.confirm.managerCreate'
+            : 'assist.confirm.managerDispatch',
+        ),
+        name: item.name || t('manager.optionalName'),
+        rules: item.rules || t('assist.confirm.managerEmpty'),
+        device: item.device,
+        cwd: item.cwd,
+        harness: item.harness,
+        lineHarness: item.lineHarness,
+        max: item.maxRunning,
+        worktree: t(item.worktree ? 'assist.confirm.managerYes' : 'assist.confirm.managerNo'),
+        merge: t(item.merge === 'manager' ? 'manager.mergeManager' : 'manager.mergeUser'),
+        firstTask: t(item.firstTask ? 'assist.confirm.managerYes' : 'assist.confirm.managerNo'),
+      })
+    case 'chrome':
+      return item.device === null
+        ? t('assist.confirm.chrome')
+        : t('assist.confirm.chromeDevice', { device: item.device })
     case 'tool':
       return t(item.tool === 'computer' ? 'assist.confirm.computer' : 'assist.confirm.machine', {
         device: item.device,
@@ -231,6 +264,21 @@ export function ConfigAgent() {
       handled.current.add(ask.id)
       const { request } = ask
       switch (request.kind) {
+        case 'manual.get':
+        case 'manual.set': {
+          const bridge = manualBridge()
+          if (!bridge) {
+            reply(ask, false, undefined, 'The manual installer is not available.')
+            break
+          }
+          const pending =
+            request.kind === 'manual.get' ? bridge.status() : bridge.setEnabled(request.enabled)
+          void pending.then(
+            (data) => reply(ask, true, data),
+            (error) => reply(ask, false, undefined, String(error)),
+          )
+          break
+        }
         case 'prefs.get':
           reply(ask, true, prefsNow(lookRef.current))
           break
@@ -244,6 +292,8 @@ export function ConfigAgent() {
           if (place.where === 'settings') requestSettings(place.section ?? 'look')
           else if (place.where === 'device') requestDevice(place.deviceId)
           else if (place.where === 'tasks') requestTasks({ view: 'list' })
+          else if (place.where === 'managers') requestManagers({ view: 'list' })
+          else if (place.where === 'suggestions') requestSuggestions()
           else requestNewSession()
           reply(ask, true)
           break

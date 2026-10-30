@@ -33,6 +33,7 @@ const subscribe = (listener: () => void) => {
 }
 
 export const useSendMode = (): SendMode => useSyncExternalStore(subscribe, () => current)
+export const sendMode = (): SendMode => current
 
 /**
  * 回合进行中在这个会话里发东西会怎样（runningSend）：输入框、收尾的回复按钮、评论的直接发送都用它，

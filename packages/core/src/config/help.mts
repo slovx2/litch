@@ -28,6 +28,13 @@ const GROUP_NOTES: Record<string, { zh: string; en: string }> = {
   projects: { zh: '设备上的项目', en: 'Projects on a device' },
   tasks: { zh: '定时任务', en: 'Scheduled tasks' },
   look: { zh: '外观和语言', en: 'Look and language' },
+  chat: { zh: '对话偏好', en: 'Conversation preferences' },
+  assist: { zh: '产品手册安装', en: 'Manual installation' },
+  chrome: { zh: 'Chrome 控制与设备授权', en: 'Chrome control and device access' },
+  managers: {
+    zh: '经理及其设定、任务分配和通知',
+    en: 'Managers, instructions, dispatch and notifications',
+  },
   browser: { zh: '内置浏览器', en: 'Built-in browser' },
   computer: { zh: 'Computer Use', en: 'Computer Use' },
   notify: { zh: '通知', en: 'Notifications' },
@@ -40,6 +47,7 @@ const INTRO = {
     '<device> 写设备的标识、名字或 local（本机）。加 --json 输出结构化结果。',
     '不可逆的（移除设备、撤销手机、删任务、清除浏览数据、清掉操作记录）先在对话里问过用户。',
     '放宽安全的（打开 Computer Use 或“操作这台电脑”、审批改成不问、访问范围全放开、一直允许网站）会在桌面端弹确认卡，用户点允许才生效。',
+    '开启 Chrome 访问、创建经理或扩大经理派活能力也须在桌面端确认。',
     '装 harness、系统权限、harness 自己的登录不归这里管。',
   ],
   en: [
@@ -47,6 +55,7 @@ const INTRO = {
     '<device> is a device id, its name, or local (this computer). Add --json for structured output.',
     'Irreversible ops (remove a device, revoke a phone, delete a task, clear browser data, clear the log): ask the user in the conversation first.',
     'Ops that widen access (turn on Computer Use or "use this computer", never-ask approval, open access, always-allow a site) show a confirmation card on the desktop and take effect only if the user allows.',
+    'Enabling Chrome access, creating a manager or expanding manager dispatch also needs desktop confirmation.',
     'Installing harnesses, system permissions and harness logins are not handled here.',
   ],
 }

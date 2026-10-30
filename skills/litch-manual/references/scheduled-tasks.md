@@ -46,8 +46,9 @@ Exact flags: `scripts/litch tasks --help`.
 
 ## Rules worth telling the user
 
-- Missed times (device off, schedules disabled) are run once when possible, recorded as "merged N
-  missed runs"; a one-time task still runs once.
+- Missed times while the device/service is unavailable are merged into one run when possible.
+  Re-enabling the global Run on schedule switch skips recurring times missed while it was off;
+  a one-time task still runs once.
 - A run is limited to 2 hours. A failed run does not pause the task; a task whose target session is
   gone is paused.
 - Approvals and questions in a task's turn wait for a person: the session shows "waiting for you" in the
@@ -58,5 +59,18 @@ Exact flags: `scripts/litch tasks --help`.
   2); `tasks.enabled` switches all schedules on the device off and on (`device-settings.md`).
 - Failed runs always show a system notification on the desktop; successful ones only when the user
   turns that on: `scripts/litch notify task-success` (`appearance-and-preferences.md`).
-- Models in Codex, Claude Code, Pi, DSH and OpenCode sessions can manage tasks themselves through their
+- Models in sessions that expose the device’s scheduled-task tools can manage tasks through their
   `litch_tasks` tools; a task created that way continues the session it was created from by default.
+
+## Common problems
+
+Browser sign-in during a task still uses the user approval flow. A sign-in card may offer
+“Use this account for this task from now on”; only the user grants it. It applies to that task,
+device, website and saved account, not arbitrary future sign-ins. The desktop must be connected to
+perform browser work even though the scheduled turn itself can run without it. Login details are in
+`browser-and-computer-use.md`; there is no configuration command for granting saved-account access.
+
+A task does not fire: read it with tasks list, check its time zone, state, device connection and
+`scripts/litch settings get <device> tasks.enabled`. The device must be awake; the desktop need not
+be open. A queued run waits for a concurrency slot. Notifications are separate from execution; see
+`appearance-and-preferences.md`.

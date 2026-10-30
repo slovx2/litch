@@ -27,6 +27,7 @@ export const SETTINGS_SECTIONS = [
   'chat',
   'switches',
   'browser',
+  'chrome',
   'computer',
   'notify',
   'assist',
@@ -34,7 +35,7 @@ export const SETTINGS_SECTIONS = [
   'about',
 ]
 
-const prefsLine = (prefs: ConfigPrefs) =>
+export const prefsLine = (prefs: ConfigPrefs) =>
   `language ${prefs.lang} · skin ${prefs.skin} · mode ${prefs.theme} · density ${prefs.density} · width ${prefs.chatWidth} · zoom ${Math.round(prefs.zoom * 100)}% · sidebar text ${Math.round(prefs.treeText * 100)}% · conversation text ${Math.round(prefs.chatText * 100)}% · links ${prefs.linksInApp ? 'in-app' : 'system'} · task-success notices ${prefs.notifySuccess ? 'on' : 'off'} · session notices ${prefs.notifySessions ? 'on' : 'off'} · notification scope ${prefs.notifyScope}`
 
 const setPrefs = async (ctx: OpContext, patch: Partial<ConfigPrefs>) => {
@@ -123,7 +124,7 @@ export const APP_OPS: Record<string, OpSpec> = {
   },
   open: {
     args: [1, 2],
-    usage: `open settings[/${SETTINGS_SECTIONS.join('|')}] | open device <device> | open tasks | open new`,
+    usage: `open settings[/${SETTINGS_SECTIONS.join('|')}] | open device <device> | open tasks | open managers | open suggestions | open new`,
     summary: { zh: '在桌面端打开某一页', en: 'Open a page in the desktop app' },
     async run(ctx) {
       const [where = '', arg] = ctx.cmd.positionals
@@ -138,6 +139,8 @@ export const APP_OPS: Record<string, OpSpec> = {
       } else if (where === 'device') {
         place = { where: 'device', deviceId: (await ctx.device(arg)).id }
       } else if (where === 'tasks') place = { where: 'tasks' }
+      else if (where === 'managers') place = { where: 'managers' }
+      else if (where === 'suggestions') place = { where: 'suggestions' }
       else if (where === 'new') place = { where: 'new' }
       else throw bad(ctx, `不知道打开哪：${where}`, `Unknown page: ${where}`)
       await ctx.ui({ kind: 'open', place })

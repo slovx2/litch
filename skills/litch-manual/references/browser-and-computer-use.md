@@ -105,8 +105,8 @@ Tabs an agent opened show no suggestions and are never filled.
 
 After a sign-in with a password Litch does not have, the Browser tab asks the user: **Save**, **Not
 now** or **Never for this site**. If Litch already has that user name for the site with a different
-password, it offers to **Update** it instead. This also happens when an agent typed and submitted the
-form; only the user answers, nothing is saved automatically.
+password, it offers to **Update** it instead. Only the user answers; nothing is saved automatically. Agents must use request_sign_in rather
+than typing passwords.
 
 Settings → Built-in browser → **Saved passwords** lists them by site and user name: search, delete
 one, delete all. Below it, **Never save passwords for** lists the sites marked "Never for this site";
@@ -176,119 +176,84 @@ notice is shown; **Esc** (or Stop) takes control back and ends Computer Use for 
   as administrator or UAC is off (the helper could then control elevated windows).
 - `scripts/litch computer status` reports the permission or helper state.
 - **No per-app approval**: once Computer Use is on for the device and harness, the agent can use any
-  app with a window, including on sessions from remote devices; nothing asks first and there is no app
+  running app, including an app without a window and sessions from remote devices; nothing asks first and there is no app
   list to manage. On Windows, windows that run as administrator still cannot be controlled. The agent
   does not open apps that are not running; it asks the user to.
 - Not supported: Linux, a locked screen.
 
-Actions already return accessibility changes; use these to verify the outcome. When an action observes
-a new window, its elements and keyboard input can be used directly; coordinates still need a fresh screenshot.
-Running apps without a capturable window return their menu text, visible-window count and foreground app.
-Use a menu item or press_key (such as cmd+n) to create a window, or Escape to dismiss an ordinary Open panel.
-System permission and login prompts still require the user. Native list clicks prefer selecting their row.
-Command shortcuts use the guarded foreground path because some apps ignore menu shortcuts in the background;
-ordinary typing remains targeted to the app without activation.
-Text fields report their selected character range so selection changes can be verified without another screenshot.
-Request another state only when those changes are insufficient or a screenshot is needed.
-If an element number expires, use the current number from the latest action changes; request state
-again when the needed element is missing.
-On macOS, screenshots must uniquely match the accessibility window. The result includes its ID
-and observation times; the tree and image are sequential samples and may differ during animation.
+### Working with apps and save panels
 
-动作已附带辅助功能树变化，可直接用于核验结果；信息不足或需要截图时再取状态。
-动作返回了新窗口的控件树后，可直接按新编号或快捷键继续；旧截图坐标仍须重新截图才能使用。
-元素编号失效时，优先使用最近动作返回的新编号；缺少所需控件时再取状态。
-应用没有可截窗口时仍返回菜单、可见窗口数和前台应用，可用菜单或快捷键新建窗口，或用 Escape
-关闭普通打开面板；系统权限和登录提示仍由用户处理。原生列表单击优先选择对应行。
-Command 快捷键使用带空闲等待和焦点恢复的短暂前台路径，避免应用在后台忽略菜单快捷键；
-普通应用中的文字输入继续定向投递，不要求激活应用；系统保存面板等跨进程控件的文字与按键
-会先等待空闲、短暂激活宿主，再投给焦点控件的实际进程，结束后尝试恢复前台。
-快捷键完成、失败或取消时都会松开代理注入的按键与修饰键；恢复鼠标位置不携带快捷键修饰键。
-助手读回系统状态，发现本次注入的修饰键残留时，在用户没有介入的前提下补发一次松开，并在结果中报告；
-仍有残留则停止，请用户按下再松开相应修饰键。真实用户已按住或中途按下的修饰键不会被全局补发覆盖。
-Shortcuts release injected keys and modifiers on success, failure or cancellation. Pointer restoration
-does not carry shortcut modifiers. The helper checks system state and reports one recovery release
-for newly stuck modifiers when the user has not intervened; if they remain set, it stops and asks
-the user to press and release them. Existing or intervening user-held modifiers are not globally released.
-识别到中英文系统保存面板时，结果会提示：文件名框只填文件名，使用 Command+Shift+G 选择目录，
-核验目标目录后再保存，避免把完整路径当成文件名误存到 iCloud。快捷键正常打开新窗口不会因旧窗口失效而报错。
-For recognized English or Chinese save panels, results explain that Save As takes a filename;
-use Command+Shift+G to choose the folder and verify the destination before saving. Opening a new
-window with a shortcut does not fail solely because the previous window changed.
-保存面板的文件名框即使被长目录列表截断，也会在状态末尾附上当前编号。优先用 `set_value`
-替换文件名，不依赖跨次前台切换后的全选状态。无法解析焦点控件的实际进程时停止输入，先重新观察。
-Save panels include the current Save As element number even when a long file list truncates the tree.
-Prefer `set_value` to replace the filename. Remote panel controls receive input in their actual process
-during a protected foreground visit; unresolved keyboard targets stop input and require a fresh observation.
-文本控件返回字符选区，便于直接核验选择操作，不必为确认选区另取截图。
-macOS 截图必须唯一匹配辅助功能窗口，并附窗口编号和观察时间。树与截图是先后采样，动画期间仍可能不同步。
+Start with list_apps, then get_app_state for the target app. Prefer current element numbers;
+use screenshot coordinates only when there is no element. Actions return accessibility changes:
+use those new numbers, and request another state if information is missing or a fresh screenshot is
+needed. After a window change, old coordinates are invalid. A snapshot can change during animation.
 
-### Batch actions / 批量动作
+A running app without a capturable window still exposes menus and window status. Use a menu item or
+press_key (for example cmd+n) to create a window, or Escape to dismiss an ordinary Open panel.
+System permission and login prompts still require the user. The agent does not launch a stopped app.
 
-After observing an app, agents prefer `run_actions` for two or more known steps, up to 12 in one call.
-Each step uses an existing action's name and arguments. The batch stops at the first failure,
-without retrying or undoing previous steps. Actions have 60 seconds in total; the final observation
-has another 10 seconds. Results contain short step summaries and the last attempted app's full
-state with at most one screenshot. Other apps must be checked separately. Observe first when
-the next step depends on a new window or unknown controls; expired element numbers stop the batch.
-Device and harness switches, system permissions, user activity, Stop, and sensitive-action rules
-apply throughout. There is no per-app approval. Handle missing permissions before starting a new batch.
+In a Save panel, put only the filename in **Save As**. Use Command+Shift+G for the directory and verify
+the destination before saving. Prefer set_value for replacing the filename; do not assume selection
+survived a focus change. Cross-process Save controls receive keys in their actual process during a
+protected foreground visit. If the keyboard target cannot be resolved, input stops: observe again.
 
-观察应用后，已知连续两步或更多操作时，代理优先用 `run_actions`，一次最多 12 个动作，每步沿用原工具
-名称和参数。首个失败即停止，不重试、不撤销已完成步骤。动作总计最多 60 秒，最终观察另限
-10 秒。结果包含逐步摘要和最后尝试的应用的完整状态，最多一张截图；其他应用须另行核验。
-下一步依赖新窗口或未知控件时，应先观察；编号失效则停止。设备与 harness 开关、系统权限、
-用户让行、停止和敏感操作规则全程有效，不新增逐应用授权。缺权限时由用户处理，再发起新批次。
-批量优先规则随工具表下发，离散工具说明和观察结果也提示这一用法；遇到未知控件或需要用户确认时，
-仍先停下观察或询问。批次结束已有最终状态，信息足够时不再重复观察。
-The batching preference is included in tool instructions, individual tool descriptions and state results.
-Unknown controls and user confirmations remain stopping points; do not repeat an observation when the
-batch's final state already supplies the needed information.
+Shortcuts release injected keys and modifiers after success, failure or cancellation. If the helper
+reports a modifier still held after recovery, stop and let the user press and release that key.
+User-held keys are not forcibly released.
 
-### macOS background control and preview / macOS 后台控制与预览
+### Batch actions
 
-macOS prefers background input. Typing uses public targeted keyboard events; supported mouse
-operations use window routing after a helper startup self-test. The first input waits for that test;
-if startup takes too long, the action fails without sending input. When a background action is unavailable,
-Litch waits for two seconds without keyboard/mouse input (up to eight seconds), briefly activates the
-target, performs the action, and restores the previous app and focused window. The preview reports
-that it briefly switched to the foreground. If the user takes over, Litch stops rather than overriding
-their new focus. Private routing has no user-facing switch. **SIP enabled has not been verified.**
+After observing the app, prefer **run_actions** when two or more next steps are already known. It
+accepts 1–12 actions, with the same tool name and arguments as individual calls. For example, after
+observing the intended TextEdit window and confirming these steps are appropriate:
 
-Screen Recording preflight can pass while macOS still needs first-capture confirmation. If it asks
-for direct screen/window access, click **Allow**. Litch distinguishes capture waiting, denied and
-failed from the permission toggles, and verifies capture only after receiving a real image. An attempt
-stops after eight seconds instead of waiting indefinitely; retry after handling the system prompt.
+```json
+{"actions":[{"tool":"press_key","arguments":{"app":"com.apple.TextEdit","key":"cmd+a"}},{"tool":"press_key","arguments":{"app":"com.apple.TextEdit","key":"cmd+b"}}]}
+```
 
-The current conversation's **Computer preview** panel shows the window and agent pointer without
-replacing the system pointer. Hiding the panel stops its capture unless a floating preview is open; **Stop** ends control for
-the turn. **Take over** first stops the agent and then opens the actual target window. **Float preview**
-opens a nonactivating picture-in-picture window. During a brief foreground action, floating previews
-remain visible but temporarily pass mouse input through to the target. A stale frame is labelled; the preview is not recorded.
-Remote sessions use the same helper on this Mac, not the remote machine's desktop.
-Turn completion, interruption, failure, session closure and core shutdown release Computer Use
-activity and previews even when the conversation is not open. Late actions from an ended turn cannot reopen them.
-An idle, unloaded or failed session status also releases activity when no turn-completion event is delivered.
-Closing all desktop windows hides floating previews and stops their streams; background sessions continue.
+The batch stops at the first failure; it does not retry or undo completed work. A failed action may
+have partly executed, so inspect the result before continuing. Actions have 60 seconds total and the
+final observation up to 10 more seconds. Results contain short per-step summaries and the last
+attempted app's full state, with at most one screenshot. Verify other apps separately. Do not repeat
+that final observation when it already answers what you need to know.
 
-macOS 优先后台操作。后台不能完成时，等待键鼠连续空闲 2 秒（最多 8 秒），短暂切到目标窗口，
-执行后恢复原应用和焦点窗口，预览标明“已短暂切到前台”，原生浮窗以橙色提示此状态。用户中途接管时停止，不覆盖用户的新选择。
-鼠标私有路由默认启用，每次助手启动自测；没有开关。首个输入等待自测结束，启动等待超时则返回失败，不发送输入。**SIP 开启未验。**
+No loops, nested batches or observations are allowed inside a batch. Stop to observe when the next
+step depends on a new window or unknown controls. Stale element numbers stop execution. Device and
+harness switches, system permissions, user activity and Stop still apply to every action. Obtain
+any required sensitive-action approval before submitting a batch. There is no extra batch switch or
+litch config operation: enable Computer Use with tools set and use its tool interface.
 
-屏幕录制预检通过后，首次采集仍可能弹出“直接访问屏幕”的系统确认，请点“允许”。等待确认、被拒绝、
-采集失败分别显示；实际取得画面后才标为可用。单次最多等 8 秒，不无限挂起；处理系统提示后再重试。
+### Background control and preview (macOS)
 
-“电脑预览”显示受控窗口与代理光标；收起面板停止该面板的连续采集，已固定的悬浮窗仍会继续显示。
-“停止”结束本回合控制，“接管窗口”先停止
-代理再打开真实窗口，“固定画中画”打开不抢焦点的悬浮窗。画面过期会标明，预览不录制、不写入会话历史。
-短暂前台操作期间，浮窗保持可见并暂时允许鼠标穿透，防止挡住目标控件。
-远程设备上的会话操作的仍是控制端这台 Mac。
-回合完成、中断、失败、会话关闭或核心退出时，即使对话没有打开，也会撤销操控活动和预览。
-已经结束的回合中迟到的动作不会重新显示光标。
-后台会话只有空闲、卸载或异常状态广播而没有回合结束事件时，也会收起活动提示。
-关闭全部桌面窗口会收起悬浮预览并停止预览流，后台会话继续运行。
+Litch prefers background actions. Where foreground is needed, it waits for keyboard/mouse inactivity,
+briefly activates the target, performs the action and restores previous focus. The preview indicates
+this foreground visit. If the user takes over, it stops instead of overriding the user's focus.
+
+Screen Recording's toggle can be on while first capture still needs a separate system confirmation.
+If macOS asks for screen/window access, the user clicks Allow; retry after handling it. Litch reports
+waiting, denial and capture failure separately, and only considers capture usable after a real image.
+
+The session's **Computer preview** shows the window and agent pointer. **Stop** ends control for this
+turn; **Take over** stops the agent and opens the actual window. **Float preview** opens a floating
+window without taking focus. Hiding the panel stops its capture unless a floating preview is open.
+Stale frames are labelled; previews are not recorded. Remote sessions operate this Mac's helper.
+Ending/interruption/failure releases control and previews; closing all desktop windows hides floating
+previews while background sessions continue.
+
+### Common problems
+
+No image: check computer status, the system prompt and whether there is a window to capture. “User
+is using” means wait for the user to finish, then retry; an explicit Stop means leave that app alone
+for this turn. Element missing or expired: use the latest action result or get_app_state. A batch
+failure is not a reason to replay all its actions.
 
 ## Chrome on the controlling Mac
+
+`scripts/litch chrome get` reads the control switch, connected instances and allowed remote devices.
+`scripts/litch chrome set on|off` changes the global switch; add `--device <device>` for one remote
+device. Enabling either requires a confirmation card in Litch. These switches do not grant instance,
+website or sign-in approval. Extension preparation/loading stays in Settings → Chrome;
+`scripts/litch open settings/chrome` opens it.
 
 Chrome uses the `litch_browser` tools with an explicit Chrome target. In **Settings → Chrome**, prepare the extension, open the extensions page, enable Developer mode and load the displayed unpacked extension folder. Litch registers its Native Messaging host automatically. This version is not distributed through the Chrome Web Store. Keep the folder in place and reload the extension after updating Litch. The settings show the required version, connected instances and version mismatches.
 

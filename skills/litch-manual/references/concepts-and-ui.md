@@ -27,17 +27,10 @@
 
 ## Layout
 
-### 经理入口与看板
-
-“对话 / 经理”来回切换时，两边分别保留当前打开的位置：对话恢复原会话和侧面板，经理恢复原经理、工作线、看板页签或设置页。被归档或删除的会话、已移除的经理不再恢复；原会话页回到该视图的默认页，设备、设置等独立页面保持当前位置。这些位置只保留到应用关闭。
-
-从通知、会话链接或全局活动中打开会话时，侧栏自动切到它所属的视图：普通会话进入“对话”，经理及其工作线进入“经理”。另一视图记住的位置不受影响。
-
-经理对话中的开始、看板答复、收尾和经理设定更新分别显示对应的事件提示，与子会话回报区分；事件后附带的用户正文照常显示。
-
-桌面侧栏顶部的“对话 / 经理”切换整个侧栏内容。“经理”显示进行中的经理的待定决策总数；经理栏包含“新建经理”、进行中的经理和默认折叠的已结束组。经理行显示名称、设备颜色、待定数或运行状态，有未提交答复时显示本地草稿数。收尾期间仍列在进行中组，行尾和经理页标题显示“结束中”，对话和看板只读；收尾回合停止后才进入已结束组。展开后沿用会话树显示子会话，普通对话栏不重复显示它们。
-
-经理主区将普通对话和设备看板并排显示；窗口不足约 1240 像素时改为顶部切换。看板四个页签分别显示现状与动态、决策、事项、工作线。概览中卡住的事项只列在“受阻事项”，行尾保留负责人；“待用户处理”只列用户负责且未卡住的事项。事项按状态分组，行内不重复状态标签。信息栏在经理页隐藏；文件侧面板覆盖看板，不挤压对话宽度。看板过程记录以仓库事实为准。全部经理页和新建经理页沿用定时任务的页面结构。
+Use the sidebar's **Chat / Managers** switch for ordinary conversations or manager worklines.
+Each view remembers its own position until the app closes. Manager setup and board use are in
+[Managers and suggested tasks](managers-and-suggestions.md); external session opening and automatic
+sidebar location are in [Projects and sessions](sessions-and-projects.md).
 
 - **Title bar** (top): sidebar toggle, a breadcrumb "device / project / session" with the harness badge,
   and on the right: the remote-activity marker (only when remote devices are running commands on this
@@ -50,7 +43,7 @@
   while the filter is on; **Show Claude Code sub-sessions** shows sessions the Claude desktop app
   started from another session); then one block per device
   (device row with status, then Pinned, your groups, the built-in Projects group, and "No project"
-  sessions); at the bottom three small buttons: **Schedule** (scheduled tasks), **Appearance** (a
+  sessions); at the bottom: **Suggestions** (pending suggestions across devices), **Schedule** (scheduled tasks), **Appearance** (a
   popover for skin, theme and language, with a link to Settings → Appearance) and **Settings** (Devices
   and Archived sessions are entered from the Settings page).
   Hovering a device, project or "No project" row shows a **+** that starts a new session there (the
@@ -61,7 +54,7 @@
   Device rows, groups, projects and sessions with sub-sessions can be collapsed. What is collapsed is
   remembered per device (on the phone too) and kept after a restart; new ones start expanded.
 - **Main area**: the new-session page, a session, or one of the pages (Devices, Settings, Scheduled
-  tasks, Archived sessions).
+  tasks, Managers, Suggestions, Archived sessions).
 - **Info panel** (right of the conversation): small cards that appear only when there is something to
   show, such as the session's latest to-do list and its worktree. It stays out when the window is too
   narrow; when it is hidden or out, the to-do list is shown in the conversation instead.
@@ -71,7 +64,7 @@
   device when the connection drops.
 
 Open a page for the user with `scripts/litch open` (the argument is the page: `settings`,
-`settings/<section>`, `device <device>`, `tasks`, `new`; see `scripts/litch open --help`). This only
+`settings/<section>`, `device <device>`, `tasks`, `managers`, `suggestions`, `new`; see `scripts/litch open --help`). This only
 changes what the window shows.
 
 ## Pages
@@ -110,12 +103,12 @@ together with a save bar. See `devices.md` and `device-settings.md`.
 
 ### Settings
 
-Sections in order: **Appearance** (skin, theme, density, conversation width, zoom), **Language**, **Devices** (a shortcut
-to the Devices page), **Built-in browser** (links, import from another browser, trust all sites and the blocklist, always-allowed sites, saved passwords, clear browsing data),
-**Computer Use** (macOS and Windows only: permissions or helper status),
-**Notifications** (sessions, scheduled tasks), **Config assistant** (section id `assist`: the switch that
-installs this manual into local harnesses and where it went, "Open config assistant", "Show the
-welcome guide again"), **Shortcuts** (read-only list), **About** (version, updates, licenses).
+Sections in order: **Appearance**, **Language**, **Conversation**, **Per-harness switches**,
+**Built-in browser**, **Chrome** (desktop), **Computer Use** (supported desktop platforms),
+**Notifications**, **Config assistant**, **Shortcuts**, **About**. **Devices** and **Archived sessions**
+are links above the section list, not settings sections. Appearance includes window zoom and the two
+text sizes. Conversation sets mid-turn sending. Browser and Chrome use separate permission settings.
+Configuration commands and defaults are in the corresponding references.
 
 ### Welcome guide and config assistant
 
@@ -125,6 +118,14 @@ official instructions; once one works it suggests the config assistant. The **Co
 button under the new-session title (also in Settings → Config assistant) opens the new-session page on
 this computer with `/litch-manual` and "Use the Litch manual to help me configure: " filled in; the
 user finishes the sentence and sends it to the harness they picked.
+
+Settings → Config assistant also offers **Show the welcome guide again** and **Install the manual into
+local harnesses** (on by default). It lists installation paths, status and failure reasons. Read this
+with `scripts/litch assist get`; use `scripts/litch assist manual on|off` to install/remove only
+Litch-managed copies, then read back. Turning it on reinstalls them. User-owned skills are preserved;
+remote devices do not receive this manual. If it is absent from a harness's skill list, the assistant
+prefills its file path instead. A failed/skipped install is explained in this section; do not edit
+Litch-managed skill files by hand.
 
 ### Scheduled tasks
 

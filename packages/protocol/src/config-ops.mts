@@ -48,6 +48,7 @@ export const CONFIG_OPS: readonly ConfigOp[] = [
   { group: 'harness', action: 'enable', write: true },
   { group: 'harness', action: 'disable', write: true },
   { group: 'harness', action: 'restart', write: true },
+  { group: 'harness', action: 'auto-title', write: true },
 
   { group: 'phones', action: 'list', write: false },
   { group: 'phones', action: 'pair', write: false },
@@ -66,6 +67,18 @@ export const CONFIG_OPS: readonly ConfigOp[] = [
   { group: 'tasks', action: 'delete', write: true, irreversible: true },
 
   { group: 'look', action: 'set', write: true },
+  { group: 'look', action: 'get', write: false },
+  { group: 'notify', action: 'get', write: false },
+  { group: 'chat', action: 'get', write: false },
+  { group: 'chat', action: 'send-mode', write: true },
+  { group: 'assist', action: 'get', write: false },
+  { group: 'assist', action: 'manual', write: true },
+  { group: 'chrome', action: 'get', write: false },
+  { group: 'chrome', action: 'set', write: true, guarded: true },
+  { group: 'managers', action: 'list', write: false },
+  { group: 'managers', action: 'get', write: false },
+  { group: 'managers', action: 'set', write: true, guarded: true },
+  { group: 'managers', action: 'create', write: true, guarded: true },
   { group: 'look', action: 'language', write: true },
 
   { group: 'browser', action: 'links', write: true },

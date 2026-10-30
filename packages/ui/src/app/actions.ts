@@ -17,6 +17,16 @@ export function onNewSessionRequest(listener: () => void): () => void {
 }
 
 const settingsListeners = new Set<(section: string) => void>()
+const suggestionListeners = new Set<() => void>()
+export function requestSuggestions(): void {
+  for (const listener of suggestionListeners) listener()
+}
+export function onSuggestionsRequest(listener: () => void): () => void {
+  suggestionListeners.add(listener)
+  return () => {
+    suggestionListeners.delete(listener)
+  }
+}
 
 /** 打开设置页，到这一组（SettingsPage.tsx 的 SETTINGS_SECTIONS 里的一个） */
 export function requestSettings(section: string): void {

@@ -24,9 +24,13 @@ import {
 } from './context.mjs'
 import { helpText } from './help.mjs'
 import { APP_OPS } from './ops-app.mjs'
+import { AUTO_TITLE_OPS } from './ops-auto-title.mjs'
+import { CHROME_OPS } from './ops-chrome.mjs'
 import { DEVICE_OPS } from './ops-devices.mjs'
 import { HARNESS_OPS } from './ops-harness.mjs'
+import { MANAGER_OPS } from './ops-managers.mjs'
 import { PLACE_OPS } from './ops-places.mjs'
+import { PREFERENCE_OPS } from './ops-preferences.mjs'
 
 /** 帮助本身也是清单里的一项 */
 const HELP_OP: OpSpec = {
@@ -45,6 +49,10 @@ export const CONFIG_HANDLERS: Record<string, OpSpec> = {
   ...DEVICE_OPS,
   ...HARNESS_OPS,
   ...PLACE_OPS,
+  ...PREFERENCE_OPS,
+  ...CHROME_OPS,
+  ...MANAGER_OPS,
+  ...AUTO_TITLE_OPS,
 }
 
 /** 拿主题快照最多等多久（设备的设置要先向设备取） */

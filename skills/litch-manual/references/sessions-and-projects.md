@@ -31,90 +31,64 @@ sidebar.
 
 ## Sessions
 
-### 从其他入口打开会话
+### Opening from outside the sidebar
 
-桌面端从通知、任务卡、会话链接、经理工作线或待处理入口打开会话时，侧栏自动展开所在设备、项目分组和各级父会话，并高亮当前行。只有目标不在可见区域时才滚动定位；直接点击树内会话行不会触发自动展开或滚动。侧栏收起时保持收起，重新打开后再定位。单独查看某组时，从其他入口打开会话会返回完整列表。
+Opening a session from a notification, task card, link, manager workline or pending activity reveals
+its device, project/group and parent chain and highlights the row. It scrolls only if the row is out
+of view. Clicking a row already in the tree does not reveal or scroll it again. A hidden sidebar stays
+hidden and locates the row when reopened. A single-group view returns to the full list.
+Filters and display switches are preserved; when the target cannot be shown, its nearest visible
+ancestor is revealed. Archived previews do not select a sidebar row.
 
-定位不修改“更多”里的显示开关或 harness 筛选。当前会话仍遵守已有的临时显示规则；目标确实不能显示时，定位到最近可见的祖先。归档预览不选中侧栏里的会话。
+Chat and Managers remember separate open sessions/pages/panels until the app closes. Opening from
+an external entry switches to the session's owning view (manager and worklines → Managers, ordinary
+sessions → Chat) without overwriting the other view's location. Removed managers and archived or
+deleted sessions are not restored. These navigation behaviors have no setting to turn off.
+Managers and the global suggestion list: see [Managers and suggested tasks](managers-and-suggestions.md).
 
-### 经理（桌面端）
+### Pending questions and answers
 
-侧栏顶部切换“对话 / 经理”。经理是专门管理其他会话的会话，看板保存在所选设备上；经理及其子会话只列在经理栏。首次切到经理时打开全部经理页，再次切回时恢复此前的位置；点击“全部经理”可返回列表。列表按设备分组，已结束的经理放在下方。
+Answer pending wrap-up and asynchronous questions **above the composer**, on desktop and phone.
+They survive sub-session reports, schedules, messages and background wakes. Several old and new
+questions can coexist; duplicates are shown once. Answering one settles only that question. A message
+you type in the main composer settles earlier pending questions together. Automated plan confirmation
+follows the same distinction. Automated turns do not count as your answer.
 
-“新建经理”按三步填写：基本信息（名称、经理设定、首个任务）、运行环境（设备、项目、工作目录、经理 harness、模型与强度）、任务分配与通知（子会话参数、工作树、合并方式、并行数、通知）。顶端步骤指示可返回已完成的步骤，底部使用“上一步 / 下一步”，最后一步为“创建经理”；返回时保留已填内容。运行环境步骤要求工作目录和可用的 harness，任务分配步骤要求正整数并行数，校验失败停在当前步骤并显示原因。“经理设定”为可选的自定义提示词，可填写角色设定、行为规范等；名称可留空，由经理命名。任务分配默认使用经理的 harness、共用工作目录、由经理验收后合并，最大并行工作线数为四；“代码修改使用独立工作树”默认不勾选。决策未答复时持续等待；桌面通知开关控制新待答决策的系统通知，首次连接与重连不补发已有决策。
+The transcript shows a question only after it is answered, ignored or closed, combining its record
+and answers in one card. In partially answered groups only settled questions appear there; the rest
+remain above the composer. Answered groups fold to a count and summary; expand to read answers and
+other options. Desktop answer fields use Enter to confirm and Shift+Enter for a newline; IME Enter
+only confirms composition. On the phone Return adds a newline and the card's button submits.
 
-新建步骤条和设置页签与内容区之间各保留一条分隔线；同页后续分节仍以分隔线区分。
+The pending section can collapse while retaining its count. Cards show their age and later
+sub-session report count. Replies follow the configured send mode (immediate or queued); cancelling a
+queued answer restores the question. **Ignore**, when supported by the device, hides a question
+without sending a message or answering it, and syncs across clients/reconnects. Ignored questions
+remain visible to the agent in wake/reminder context; obsolete questions should be explicitly
+withdrawn through wrap_up. Ignore state is not inherited when a session forks.
 
-行为规则由设备根据当前任务分配与等待策略自动生成，不在界面展示或编辑；修改设置后重拼提示词时使用最新值。“经理设定”保留用户原文，放在提示词最后，可留空；任务分配和界面语言变化不会覆盖它。“首个任务”留空时仅制定计划，待用户确认后开始；开场使用用户设定或对话的语言。
+Blocking approvals and questions remain in their request cards until answered, withdrawn or their
+owning turn ends. The parent also shows direct children's blocking requests above its composer;
+expanding one opens the original request card. The model can read a current request id and explicitly
+respond when authorized (its descendants, or a user-input turn). Ordinary messages never answer a
+request. Secrets, MCP forms and requests owned only by another executor still require the user in the
+original flow. Delegated answers leave an audit record in the child conversation.
 
-经理页左侧是普通对话，右侧是概览、决策、事项和工作线。窄窗口使用“对话 / 看板”切换。工作线可打开子会话；子会话顶端的“返回经理”返回经理页。经理在对话中提到决策时，可以同时说明选项和推荐；用户在看板上提交答复，也可以在对话中明确答复。
+### Folded turns and mid-turn input
 
-经理页标题栏的“设置”按“基本信息 / 运行环境 / 任务分配与通知”三个页签分组，没有“首个任务”；支持方向键切换页签，保存按钮始终位于页签外。可修改名称、经理设定、任务分配（子会话 harness、模型与强度、工作树、合并方式、并发上限）和桌面通知。设备、工作目录和经理自己的 harness、模型与强度只供查看。经理设定与任务分配分别保存，修改任务分配或通知选项不会覆盖用户设定。切换页签保留已填内容，保存时若并行数无效则定位到任务分配页签并显示原因；保存失败保留表单，取消不保存。经理设定内容变化后，对话会出现“已更新经理设定”事件卡。结束中和已结束的经理不提供设置入口。
+In the compact transcript, a finished turn with a final answer folds its activity into a full-width
+row: elapsed time, supporting counts of commentary/steps/subagents, and any failure, refusal or still
+running background work. Click the row to expand. Stopped turns and turns without a final answer stay
+open. The detailed view keeps its usual behavior.
 
-决策可以选推荐或其他选项，也可以直接写答复。答复先保存在当前桌面端本地，不跨客户端同步，不自动提交。底部“提交给经理”将答复写入设备看板，并触发经理处理；部分失败时只清除成功项，失败草稿保留。决策版本变化后，需要核对最新内容并确认当前版本。“清除草稿”仅清除本地未提交内容。已关闭决策可重新打开。事项中的决策编号可以点击，切到决策页并定位对应卡片；已答或已关闭的决策会自动切到相应分组。
+A user message delivered during a turn is labelled **Added to this turn** (本回合补充). It stays in
+that turn and divides its activity into independently expandable segments on desktop and phone.
+Segment time appears only when every entry has timestamps. The turn's source appears once at its
+start, and completion/total time once at its end. With no mid-turn input there is one activity row.
+System events (reports, schedules, messages and manager updates) fold to their source and summary;
+expand to read the body. Their open state is remembered per session.
 
-决策的依据记录其关联文件、提交、分支或会话；缺少依据仍可创建，设备会提示经理补齐。依据按看板记录显示，第一版不自动检测过时，也不显示“仍然有效”和“推迟”按钮。结束经理前会提示看板将只读、未完成事项保留。确认后先进入“结束中”，仍列在进行中组，对话和看板不可写；收尾回合完成、失败或被打断后转为“已结束”。经理设定更新会在对话中显示“已更新经理设定”事件。已结束经理的“查看总结”当前为占位，不提供接手。
-
-经理自己开的工作线（包括线派出的子会话）完成、改动已落地或作废后，由经理直接归档，不再询问用户；结束经理时也按此处理。归档后可恢复。运行中或置顶的会话仍不会归档。归档其他会话仍须用户明确同意；看板答复开启的经理回合可以执行，回报唤醒、提醒等事件回合不视为用户同意。
-
-新界面创建和保存设置时发送空范围，仅将“经理设定”原文写入自定义规则字段；旧版设备仍要求非空范围，需升级设备后使用新表单。
-
-### 停止或恢复回报主对话
-
-经理栏里的工作线也提供相同的停报菜单与标记，切换“对话 / 经理”不会重置设置。Manager worklines use the same reporting menu and indicator; switching sidebar tabs keeps the setting.
-
-桌面端在侧栏子会话行右键，手机端长按会话行，选择“停止回报主对话”或“恢复回报主对话”。停止回报的子会话行显示“已停报”标记。默认回报；只有支持此功能的执行设备才显示菜单，离线时禁用并说明原因。
-
-停止后，子会话仍挂在父会话下，自身的运行和等待用户状态照常显示。完成、失败、中断、待答请求和后台任务结束都不再自动回报父会话，也不触发唤醒；该子会话尚未投递的回报会移出队列，已送达的不撤回。静默子会话不会挡住其他子会话唤醒父会话。
-
-恢复只接收今后的新事件，不补发停报期间的历史结果；如果仍有已等待满 10 秒的待答请求，补报一次当前请求；未满 10 秒的继续等待原来的提醒计时。是否唤醒仍遵守独立的 `wake_parent` 开关及原有条件。设置保存在执行设备上，重连或重启后保留。模型的 `list`、`read` 可读 `report_parent`，没有修改此开关的模型工具；`set_wake` 只控制唤醒。
-
-On desktop, right-click a child session in the sidebar; on mobile, long-press its row. Choose **Stop reporting to parent** or **Resume reporting to parent**. Rows show **Reports off** while reporting is stopped. Reporting starts enabled. The menu requires device support and is disabled with a reason while offline.
-
-Stopping reports keeps the child in its tree and leaves its own running or waiting status visible. It suppresses automatic completion, failure, interruption, pending-request and background-task reports, removes its undelivered reports, and prevents those reports from waking the parent. Delivered reports remain. Other children can still wake the parent. Resuming does not replay old results; it reports a currently pending request once after the usual 10-second waiting threshold, then future events. Waking still follows `wake_parent` and the existing rules. This device-side preference survives reconnects and restarts. Models can read `report_parent` through `list` and `read`, but cannot change it; `set_wake` only controls waking.
-
-手机上的经理开始、看板答复、收尾和经理设定更新显示为系统事件行，可展开正文；答复摘要显示决策编号。手机不提供经理页或看板操作。未知事件显示“会话事件”，展开保留种类与正文。On mobile, manager events are expandable system rows; board-answer summaries include decision IDs. They provide no manager-page navigation or board actions. Unknown kinds use “Session event” and retain the kind and body when expanded.
-
-### 问题结果与输入
-
-已答问题默认收成一行，显示已答题数和答案摘要；展开后，每题的选择或自由文字统一显示在“回答”区域，其他选项默认折叠。系统消息（子会话回报、定时任务、会话间消息、在这里做等）也默认显示一行来源与摘要，点击展开全文；开合状态按会话保留。桌面问题输入框支持 Shift+Enter 换行、Enter 确认；输入法组字时的 Enter 只确认候选。手机多行输入用回车换行，使用卡片按钮提交。
-子会话在桌面侧栏、手机列表、任务卡和会话详情中显示 harness 标识。
-用户在自动唤醒的回合中插话成功后，该回合也按用户回合处理；后来的自动消息不会覆盖这个来源。
-
-用户已经要求派出子会话，或批准的计划已经包含子会话时，模型可在后续唤醒、提醒、定时任务等任意回合通过 `start(initiation: "user_asked")` 直接启动；任务卡关闭也可用。仅批准目标不等于批准拆会话，新的限制或撤销优先。每个父会话每回合直接启动最多 16 个，同时运行或启动的直接子会话最多 8 个；整棵树同时运行或启动最多 24 个会话（含根），嵌套最多 4 层（根为第 0 层）。并发创建预占名额，只有会话尚未创建时失败才退还；已创建但首回合未确认启动的仍计入额度，并占运行名额，直到开始、归档或删除。重连或重启不重置同回合额度，归档成功时清理该会话的直接启动记录。进程在启动结果未确认时退出，已预占的回合额度保守保留。
-直接启动不占提案卡名额；提案、offer 与收尾建议合计每回合最多 4 张，撤回仍计数，提醒回合与来源回合合计。目标 harness 需要放宽沙箱时仍须用户确认。50 次自动唤醒上限不变。
-
-主会话可用 `litch_sessions.set_wake(thread_id, wake)` 关闭或重新打开直接子会话的自动唤醒；`start` 的 `wake_parent` 默认开启。主会话也可以覆盖用户此前在界面上选择的唤醒设置。关闭后回报仍入队、显示，也仍可插入正在运行的主会话；重新开启会检查已有回报，但不会绕过用户停止、失败、定时回合和唤醒次数等限制。`list`、`read` 会返回当前开关，桌面会话详情顶部的来历一行写“完成后不唤醒父会话”，手机会话行显示“不唤醒”。
-
-### 子会话待答与代答
-
-父会话输入框上方显示直接子会话的阻塞请求。展开某条会订阅原子会话，使用同一张请求卡作答；仍可打开子会话处理。密码、登录、手机签名或仅原执行设备能处理的请求遵循原有限制。
-模型通过 `litch_sessions.read` 查看当前请求 ID、类型与内容，通过显式 `respond(thread_id, request_id, answer)` 代答。只能代答自己的子孙会话，或在包含用户输入的回合里代答；有过消息联系本身不授予代答权限。
-普通消息、回报和自发回合都不是答案。过期、目标不匹配、无权限、秘密字段会返回结构化错误。命令、文件及权限审批和阻塞提问支持代答；MCP 表单与原执行端专属请求由用户处理。异步提问与收尾问题仍用各会话自己的待答区。
-代答以设备生成的审计记录保存在子会话中，显示“由主会话代答”或具体来源会话；重开历史仍可查看最近 100 条记录。未声明会话树扩展的客户端不接收这些字段。
-
-### 回合过程
-
-精简视图中，已结束回合的过程收起为整行入口：左侧显示处理时长，说明、步骤和子代理数量作为辅助信息，底部分隔线标明过程范围。点击整行可展开或收起；失败、被拒和仍在后台运行的提示保留在入口上。手机点击区域至少 44pt，统计可分行，长任务名截断显示。
-
-后台任务唤醒、目标续做等自发回合的来源标记靠左，与所属回合的过程相邻，和上一回合的完成信息分开。详细视图和原有的自动收起条件不变。
-
-回合进行中发送的用户消息标注“本回合补充”，仍属于当前回合。桌面和手机在这些消息的位置把过程分段收起，每段独立展开，分别统计说明、步骤和子代理；只有完整记录了该段条目时间时才显示分段用时。没有补充的回合仍只有一行过程摘要。来源标记只在整个回合开头出现一次，“完成”和总用时只在整个回合末尾出现一次；没有最终回答或被中断的回合仍保持过程展开。
-
-### 待答问题
-
-桌面和手机的输入框上方会保留收尾问题与异步提问。子会话回报、定时任务、会话间消息和后台唤醒不会清掉它们。
-收尾问题在所属回合结束后计入未答集合，随后的唤醒和收尾提醒会附上这些问题。
-新旧问题可以同时回答，相同的待答问题只显示一次。点击回复按钮或在题目下填写回答后，只有对应的问题收起；异步卡中尚未回答的其他题目继续保留。
-待答题只在输入框上方的交互卡显示；回答、忽略或关闭后，对话流再显示这道题的记录，已有的答案合并在同一张卡中。多题部分作答时，对话流只显示已处理的题，剩余题目继续在待答区作答。
-用户直接在会话输入框发话则视为回答此前的待答问题，一起收起。自动的计划确认也遵循这一区分：自发回合不清除，用户发话后收起。
-待答区可以折叠，折叠后仍显示问题数量。回答会按当前发送方式插话或排队；撤销排队中的答复会恢复问题。
-待答卡按刚刚、分钟、小时、天显示提出时间，并显示之后收到的子会话回报数。设备支持时显示“忽略”。点“忽略”仅隐藏当前问题，不向代理发送消息，也不算回答或撤回；忽略状态在桌面、手机和重连后同步。代理在唤醒或收尾提醒时仍会看到未答题及“用户已忽略”标记，不应重复催问；过时的题应撤回。
-
-模型可以在 `litch_sessions.wrap_up` 的 `withdraw_questions` 中列出已经不需要回答的旧题目原文，明确撤回这些问题。
-审批、AskUserQuestion 和阻塞式 request_user_input 仍在请求卡片中回答；只有对应的请求被答复、撤回或其所属回合结束时收起，其他回合不会清掉它们。
-
-Sessions are not created or edited through `litch config`. What the user can do in the UI, so you can
+Ordinary sessions are managed in the UI or with session tools; manager configuration has its own commands. What the user can do in the UI, so you can
 explain it:
 
 - **Start**: New session (Mod+N) → pick device, project, harness, model, reasoning effort, permissions
@@ -160,7 +134,8 @@ explain it:
   (the composer's placeholder says which). Codex, Claude Code, Pi, DSH and OpenCode take images
   mid-turn; ACP agents (Gemini, Qwen and the generic ACP entry) take no messages mid-turn. "Send now"
   on a queued message puts it into the running turn. With nothing typed the button is Stop, which interrupts the turn.
-- Answered question cards and system messages default to one-line summaries; expand them to read the details. Expansion is remembered within the session. Answers use a labeled answer area for both selected options and free text; other options are collapsed. Desktop question fields use Shift+Enter for a newline and Enter to confirm, respecting IME composition. Mobile multiline fields use Return for a newline and the card buttons to submit. Child sessions show their harness in the sidebar/list, cards, and details. A successful user interruption during an automated turn makes that turn user-driven.
+- Child sessions show their harness in the sidebar/list, cards and details. A successful user message
+  during an automated turn makes that turn user-driven.
 - **Approvals and questions** appear as cards above the composer: commands, file changes, extra
   permissions, MCP tools (Allow once / Allow for this session / Always allow / Decline / Decline and
   stop, or decline with a note for the model); multi-question forms; plan confirmation (Run the plan /
@@ -187,36 +162,20 @@ explain it:
 - **Side panel**: Files (tree, search, read-only viewer, add a file to the conversation), Diff (all /
   staged / unstaged, stage, unstage, discard, comment on lines; comments go with the next message),
   Browser, Suggested tasks, Background tasks, Goal, Side chat.
-- **文件预览（桌面）**：文件树、搜索结果和对话文件链接共用“文件”页。Markdown 默认渲染，可切源码；带行号的链接先显示源码。支持 PNG、JPEG、静态 GIF/WebP 和静态 SVG，图片可缩放；这些文件仍然只读。
-  Markdown 相对链接和图片以文件所在目录为基准，只允许项目根内资源；外链图片不自动下载，原始 HTML 只显示文字。动画、主动 SVG 内容、超出字节/像素预算的图片会显示原因。
-  文档正文和 Mermaid 图表保持固定字号，不跟随“对话文字”设置。
-  预览要求设备声明 `filePreview`；设备服务和自有单 harness 入口提供它。直连原生 Codex 没有这项能力时保留原来的源码/类型查看，不自动另用 shell 取文件。手机文件查看不变。
-  直连 Claude Code、OpenCode 或 ACP 入口时，超限和根目录外的预览也会返回具体原因；读取被拒绝后不会返回文件内容。
-  PDF 支持只读翻页、滚动、缩放和选择文字，上限 20 MiB / 200 页；只绘制可见页及相邻页。损坏、需要密码、超限或处理超时的文件显示原因；不执行 PDF 脚本，不打开表单、附件和外链，不提供打印、签名或编辑。字体、CMap 和解码资源随应用提供，PDF 不上传转换服务；未嵌入字体和特殊色彩配置可能与专业阅读器有差异。
-  页码未修改时移开焦点会保留当前滚动位置；只有更换页码才跳到对应页。
-  Markdown 渲染上限 512 KiB、源码 2 MiB、位图 8 MiB、SVG 1 MiB；Markdown 自动附图最多 16 张、累计 16 MiB，刷新重读文件。CSV/TSV 可预览数据表格：文件上限 2 MiB，显示前 10,000 行、100 列，字段均为字符串，不执行公式；TSV 只按制表符分列，引号原样显示；长字段截断显示，完整内容可切换源码查看。UTF-8 之外的编码需先转换。
-  静态 HTML 上限 1 MiB，在隔离框架内显示，脚本、表单、导航、外部 CSS/字体和网络资源禁用；仅加载最多 16 张项目根内图片，内联原始字节累计 16 MiB、像素累计 4,000 万；重复引用同一图片也逐次计入。保留部分静态布局样式，不保证网页完整效果；超深或超大 DOM 拒绝预览。
-  MP3、PCM WAV、H.264/AAC MP4、VP9/Opus WebM 短媒体按 16 MiB 整读，不自动播放，关闭即停止并释放。实际编码支持取决于系统；损坏或不支持的编码显示提示，不进行转码、远程流式读取或字幕加载。以上媒体样例已在 macOS Electron 验证，其他系统可能不同。
-  PDF 与 Office 由独立预览模块提供；手机文件查看仍不改变。
-- **Office previews (desktop)**: `.docx` is a read-only, approximate layout with paragraphs, tables,
-  images, headers and footers. External resources, embedded objects, altChunk HTML and embedded fonts
-  are not loaded. Macros and encrypted documents are unsupported. The preview cannot access the app.
-  `.xlsx` shows sheets and cell text in a virtual grid, including saved formula results; it never
-  recalculates formulas. A formula without a saved result is shown as text. Links are plain text.
-  Numbers and dates are right-aligned. Frozen panes saved in the file stay pinned (up to 10 rows
-  and 3 columns; anything beyond scrolls). Column widths are not reproduced.
-  Merged cells, dates, and common decimal/percentage formats are supported; charts, pivot tables,
-  printing layouts, and complex custom number formats are not reproduced. Long numeric strings
-  remain strings; numeric cells retain the precision saved by Excel.
-  Both formats are limited to 10 MiB compressed and 40 MiB expanded, with additional XML/image
-  complexity limits. XLSX accepts at most 100,000 cells in total, 100 sheets, 1,000 merge ranges,
-  and 8 MiB of displayed cell text; files beyond these safety limits are rejected with an explanation.
-  Within those limits, a sheet exceeding 10,000 rows or 200 columns is cropped to its first 10,000 rows
-  and 200 columns, with a notice above the grid. Cells outside that view still count toward the workbook's
-  100,000-cell safety budget. Named ranges,
-  validation rules and print settings are omitted before parsing. Closing,
-  switching or refreshing the file terminates its parser and releases its preview. `.doc`, `.xls`,
-  `.ppt` and `.pptx` remain unsupported; phone file viewing is unchanged.
+- **File previews (desktop)**: the Files tab opens tree/search results and file links read-only.
+  Markdown renders by default (Source is available; line-number links open source). Static images
+  and SVG can zoom. PDF supports pages, scroll, zoom and text selection. CSV/TSV shows strings, never
+  evaluates formulas, and offers source for cropped fields. Static HTML disables scripts, forms,
+  navigation and external resources. Short MP3/WAV/MP4/WebM media has manual playback; codec support
+  depends on the system. DOCX approximates document layout; XLSX shows sheets and saved formula
+  results without recalculation, with basic number/date formats, merges and limited frozen panes.
+  Unsupported formats include DOC, XLS, PPT and PPTX. Previews do not reproduce every Office feature.
+  Project-relative images/links stay inside the project root; remote images, active SVG, PDF actions,
+  macros and encrypted Office files are not opened. Size/complexity limits show a reason (PDF:
+  20 MiB/200 pages; Office: 10 MiB compressed/40 MiB expanded; media: 16 MiB). Large table previews
+  are cropped with a notice. Use the original application for editing or full fidelity. Preview
+  fonts do not follow Conversation text size. A device without preview support offers its ordinary
+  source/type view; phone file viewing is unchanged.
 - **Side chat**: a temporary fork of the current session for asking something on the side. It starts
   with the session's context up to the last finished turn (if a turn is running it stops before it, and
   the main turn keeps going), lives in the side panel's Side chat tab, never shows in the sidebar, and
@@ -346,7 +305,7 @@ app, `claude` in a terminal). They can be opened and continued in Litch, and bac
 ## Session trees (sub-sessions)
 
 A session can start **sub-sessions** on the same device, with any harness. They are nested under the
-parent in the sidebar (up to 8 levels), their results come back to the parent, and the parent can be
+parent in the sidebar, their results come back to the parent, and the parent can be
 woken to continue.
 
 - **By hand**: session menu → Start a sub-session… → harness, model, project, context ("Start fresh",
@@ -363,41 +322,19 @@ woken to continue.
   message each other at any time after that, also after archiving and restoring either (interrupting
   still needs a turn you started, unless it is its own sub-session). It archives a session only after you agree in a message you typed (when its sub-sessions
   have all finished it may suggest archiving them), never one that is still working or pinned; it can
-  restore its own sub-sessions any time. When the user did not ask for
-  a sub-session in that turn, it becomes a suggested task instead of starting directly. To use another
+  restore its own sub-sessions any time. Without authorization to start sub-sessions (including earlier authorization still in effect), the model proposes a task card instead. To use another
   harness or model it first looks up what the device offers (`litch_sessions.options`: each harness's
   models as in the model menu, Claude Code's with their provider, reasoning efforts, defaults); a
   harness or model the device does not have is refused with the choices instead of starting a session
   that fails on its first turn.
-- **Suggested tasks**: the model suggests a task of its own as a card instead of only mentioning it:
-  work that ends in something of its own (a branch, a pull request) and that you may want to follow
-  apart from this conversation, such as something it noticed, the follow-up its answer recommends, or
-  independent steps of an agreed plan. Parts of the current task (however large), and anything it left
-  unfinished or unverified, stay in the conversation; most turns end with no card. When the next step
-  simply continues what the model just found (say, fixing what it diagnosed), it asks one short
-  question at the end of the turn with one or two reply buttons instead of making a card; a click
-  sends the answer with its question as your message. Questions awaiting a reply appear only above
-  the composer. After they are answered, ignored, or closed, the transcript shows their record with
-  any answers in the same card. Partially answered groups show only settled questions in the transcript.
-  Pending questions stay above the composer until
-  answered, explicitly withdrawn, or hidden with Ignore; automated turns do not clear them. Ignore is synced across clients and reconnects without sending a message or answering the question. Cards show their age as just now, minutes, hours, or days, and the number of sub-session updates since they were asked. Wake and wrap-up reminder turns tell the agent which questions remain, including ignored ones; the agent should avoid repeats and withdraw obsolete questions. A message you type in the main composer settles earlier pending questions; a reply inside one question settles only that question. Suggested
-  cards from the wrap-up appear below the final answer once the turn has ended;
-  cards the model raises mid-turn (independent plan steps) appear where it raised them, as soon as it
-  does, and scroll with the conversation. The
-  card shows its state (waiting, started, done here, dismissed, withdrawn by the model, expired after
-  the configured retention period, 7 days by default). Buttons: Start, Do it here (the card is settled and "Do it here: <title>" plus the task is
-  sent to the session as your message, after the running turn if one is running), Edit and start
-  (change the harness, model, effort, project, folder, fresh or with context, title, task,
-  background, permissions), Dismiss. Whatever the card does not set comes from the parent session as
-  it is when you start: harness, model, reasoning effort and folder (on another harness, that
-  harness's default model and effort). The same holds when the model starts a sub-session or hands
-  off a task. A fresh card the model raises always carries a background (the overall goal,
-  decisions and constraints so far) next to the task; the sub-session gets it as its own section
-  before the task. Expand the brief on the card to read it.
-  On the phone, Start, Do it here and Dismiss update the card directly; the desktop need not stay
-  connected. Repeating Dismiss succeeds without changing an already dismissed card. Repeating Start
-  returns the original child session instead of creating another one. If a different action has
-  already settled the card, the error explains its actual state.
+- **Suggested tasks**: the model proposes work with an outcome of its own that you may want to
+  follow separately, including independent steps of an agreed plan. Parts of the current task,
+  unfinished work and verification stay in the conversation. Most turns need no card. A next step
+  continuing a diagnosis is one question with reply buttons; answering sends your response to this
+  session. Wrap-up suggestions appear below the final answer when the turn ends; mid-turn proposals
+  appear where raised. Card actions, inheritance, retention and the session/global lists are in
+  `managers-and-suggestions.md`. Repeated Start returns the original child, not another session;
+  an already settled card reports its actual state.
 - **Where a sub-session works** (devices that support worktrees): when the parent session is in a
   worktree Litch created (or shares one), a new sub-session gets its own new worktree and branch,
   starting from the last commit of the parent's branch (the parent's uncommitted changes are not
@@ -407,26 +344,12 @@ woken to continue.
   session and folder. A handed-off task gets a worktree only on harnesses that can fork into another
   folder (Codex, Claude Code); elsewhere it shares the folder. On the phone the cards, the offer card
   and "Edit and start" have the same "New worktree" switch.
-  The side panel's **Suggested tasks** tab lists every card of the current session, with a badge for
-  the waiting ones; clicking one scrolls to it. You can also tell the model "start the second one", and
-  it withdraws cards that went stale. At most three cards it raises on its own per turn (independent
-  steps of an agreed plan count separately), four in all. When its work is done, the model makes a
-  wrap-up call that carries its suggestions (an empty one when there are none) and then writes its full
-  final answer as the last message of the turn; the steps before the wrap-up fold into "Worked". If a
-  model still writes its answer first and only a short line after the wrap-up, the answer is shown in
-  full, not folded. When a turn the user started ends without a wrap-up, Litch starts one short reminder
-  turn (a light line "Reminded the model to wrap up"). Device settings: `sessions.wrapUp` (on by default)
-  turns the wrap-up off for sessions created afterwards (the model then suggests cards only when it sees
-  fit, and nothing is reminded); `sessions.wrapUpReminder` (on by default, no effect while
-  `sessions.wrapUp` is off) switches the reminder, at once. **Task cards** can be switched off per
-  harness with the device setting `harness.<id>.taskCards` (on by default, for example
-  `scripts/litch settings set <device> harness.pi.taskCards=false`): sessions of that harness then get
-  no suggested-task cards, no new-session offers, no wrap-up and no reminder, at once and in running
-  sessions too; the model still starts sub-sessions when you ask and hands off tasks. Started cards
-  show the harness and folder the sub-session actually got. The mobile app shows the same cards and a
-  per-session list (the "N suggested tasks waiting for you" bar at the top of a conversation, or the menu).
-  Cards and wrap-ups are kept on the device, so a session on a remote device makes them even when no
-  desktop or phone is connected; they show up when you open the session later.
+  At most three unsolicited suggestions and four total cards can be raised per turn. To start one,
+  click its card or tell the model which one. The model withdraws stale proposals. Wrap-up precedes
+  the final answer and may carry no suggestions. A missed wrap-up can trigger one reminder turn.
+  Settings for task cards, wrap-up and reminders are documented once in `device-settings.md`;
+  these do not remove authorization for explicitly requested sub-sessions. Cards live on the device
+  and can be created while no desktop or phone is connected.
 - **New task or here**: when the user asks for something unrelated to the current session (after a
   first task has been done in it; the first request is simply what the session is for), the model
   first shows a card with only a title and two buttons, "New session" and "Do it here". New session: the
@@ -444,11 +367,8 @@ woken to continue.
   plan that includes them. Approving a goal alone does not authorize separate sessions. Later changes
   or withdrawal of your authorization take precedence. Task cards may be off. Direct starts have a
   separate limit of 16 per parent per turn and 8 direct children running or starting at once; they do
-  not consume the 4-card allowance shared by proposals, offers and wrap-up suggestions. Concurrent
-  requests reserve slots. The whole tree allows 24 running or starting sessions including the root,
-  with maximum depth 4 (root is 0). Only failures before session creation release the turn allowance.
-  A created session whose first turn did not start keeps its running slot until it starts, is archived
-  or deleted. Reconnecting or restarting does not reset the turn allowance; successful archiving clears it. A reservation whose outcome was unknown at process exit remains counted.
+  not consume the 4-card allowance shared by proposals, offers and wrap-up suggestions. The whole tree allows 24 running or starting sessions including the root,
+  with maximum depth 4 (root is 0).
   Wider sandbox access still needs confirmation; the 50-wake limit is unchanged.
 - **Reports and waking**: when a sub-session finishes a turn, the start of its last answer is handed to
   the parent ("Reports from sub-sessions"). When the parent is idle and its sub-sessions have stopped,
@@ -474,7 +394,7 @@ woken to continue.
   parent is idle, without waiting for the other sub-sessions. Once handed over they show on the message
   that carried them.
   If a sub-session finishes several turns while the parent is busy, only its latest report is handed over.
-  Users can also stop automatic reports entirely; see [Stop or resume reporting](#停止或恢复回报主对话) above.
+  Users can also stop automatic reports entirely; see [Stop or resume reporting](#stop-or-resume-reporting) below.
 - **Detach as a standalone session** (session menu or the "Started from …" bar at the top of a
   sub-session) cuts the link.
 - **Subagents** started by a harness itself (for example Codex's agents) are not sub-sessions; they show
@@ -503,15 +423,18 @@ later.
 
 A running client tool does not mean the session needs user input. Browser sign-in approvals explicitly shared by the desktop appear in the parent’s pending section; complete them through the original approval flow. Other approvals held only by a client may require opening that sub-session on that client.
 
-忽略记录目前不随分叉继承；回退后设备仍保留已失效的来源行，它们不会匹配新提出的问题。
-Ignored-question records are not inherited by forks. Reverting a session leaves obsolete source records in storage; they do not match newly asked questions.
 
-### 集中查看建议
+### Stop or resume reporting
 
-桌面侧栏底部的“建议”汇总所有设备的普通待处理建议，并显示数量。每行显示标题、简报、可打开的来源会话、项目/设备与创建时间；操作复用原卡片的开始、改后开始、在来源会话里做和忽略。处理、撤回或过期后自动移出，历史留在来源对话。离线设备保留最后快照，连接后才能操作。
+Right-click a child session on desktop, or long-press it on the phone, then choose **Stop reporting to
+parent** or **Resume reporting to parent**. Manager worklines have the same menu. It requires an online
+device supporting the feature; a stopped row shows **Reports off**. The setting is stored on that
+device and survives reconnects/restarts.
 
-经理看板的“本经理工作线的建议”打开同一列表，按该经理的整棵工作线子树筛选；可切回全部建议。建议与经理事项分开，不自动转事项。即时“新会话 / 在这里做”选择卡不进入列表。
-
-来源归档后继续保留并标注“来源已归档”；点来源打开归档预览，点“在来源会话里做”会先恢复来源（含工作树），恢复失败时卡片仍待处理。来源删除时撤回其待处理卡。手机本轮仍使用会话内建议列表，没有全局入口。
-
-建议默认保留 7 天，可在设备设置的“会话编排 → 建议保留时间”选择 1、3、7、14、30 天或不过期。修改后按创建时间重新计算尚未处理的卡，缩短可能立即使旧卡过期；已经过期或处理的卡不会恢复。
+Stopping reports keeps the child in the tree and leaves its own running/waiting status visible. It
+suppresses future automatic completion, failure, interruption, pending-request and background reports,
+removes undelivered reports and prevents their wakes. Already delivered reports remain. Other
+children still report and wake normally. Resuming does not replay old results; a currently pending
+request is reported once after the usual 10-second waiting threshold. Waking also obeys the separate
+wake_parent switch. Models can read report_parent through list/read but cannot change this user
+control; set_wake only controls waking. There is no litch config command for it.

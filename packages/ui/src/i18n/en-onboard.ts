@@ -73,6 +73,15 @@ export const enOnboard: Record<keyof typeof zhOnboard, Entry> = {
   'assist.confirm.unknown': 'A model in a harness on this computer requests:',
   'assist.confirm.computer':
     'Let sessions on {device} use Computer Use (see the screen, click, type)',
+  'assist.confirm.chrome': 'Allow agents to control Chrome on this computer',
+  'assist.confirm.manager':
+    '{action}: {name}. Instructions: {rules}. Device: {device}. Folder: {cwd}. Manager harness: {harness}. Workline harness: {lineHarness}. Concurrency: {max}. Separate worktrees: {worktree}. Merge: {merge}. First task supplied: {firstTask}. This authorizes the manager to dispatch work autonomously.',
+  'assist.confirm.managerCreate': 'Create manager',
+  'assist.confirm.managerDispatch': 'Expand manager dispatch',
+  'assist.confirm.managerEmpty': 'Empty',
+  'assist.confirm.managerYes': 'Yes',
+  'assist.confirm.managerNo': 'No',
+  'assist.confirm.chromeDevice': 'Allow sessions on {device} to control Chrome on this computer',
   'assist.confirm.machine':
     'Let sessions on {device} use this computer (run commands, read and write files)',
   'assist.confirm.approval': 'Stop asking when {device} uses this computer',

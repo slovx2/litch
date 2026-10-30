@@ -63,6 +63,12 @@ This section is hidden on iOS. These are phone settings; desktop `litch config` 
 
 ## In a session on the phone
 
+Pending questions are answered above the composer; settled questions leave a combined question/answer
+record in the conversation. Mid-turn messages say “Added to this turn” and divide folded activity into
+segments. The rules are shared with the desktop and described in `sessions-and-projects.md`.
+Manager events can be read as expandable system rows, but the phone has no manager board/settings
+or global Suggestions entry; it keeps its per-session suggestion list (`managers-and-suggestions.md`).
+
 - **Usage and limits**: tap "Context N% ›" under the input box, or ⋯ → Usage and limits. It shows the
   context in use and, for subscription logins (Claude Code with an Anthropic subscription, Codex with a
   ChatGPT login), each limit window's usage and when it resets; API keys have no limits to show.
