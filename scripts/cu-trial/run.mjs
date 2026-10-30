@@ -13,7 +13,8 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { registerHooks } from 'node:module'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { prepareEnvironment } from './environment.mjs'
 import { startCodex } from './rpc.mjs'
@@ -101,6 +102,18 @@ const helper = new HelperSupervisor({
 })
 const executor = createComputerExecutor({ helper })
 let activeTurn
+let blockedReason
+// list_apps 只列已有窗口的进程，应用刚启动还没有窗口时不能据此判断其是否原本在运行。
+function targetProcesses() {
+  return execFileSync('ps', ['-axo', 'pid=,comm='], { encoding: 'utf8' })
+    .split('\n')
+    .flatMap((line) => {
+      const match = /^\s*(\d+)\s+(.+)$/.exec(line)
+      return match && cases.processNames.includes(basename(match[2]))
+        ? [{ pid: Number(match[1]), executable: match[2] }]
+        : []
+    })
+}
 async function invoke(message) {
   if (message.method !== 'item/tool/call') throw new Error(`实测不处理 ${message.method}`)
   const p = message.params
@@ -141,6 +154,18 @@ async function invoke(message) {
     arguments: p.arguments,
     result,
   })
+  if (!result.success) {
+    const text = result.contentItems
+      .filter((item) => item.type === 'inputText')
+      .map((item) => item.text)
+      .join('\n')
+    if (
+      /macOS login or permission dialog|macOS denied or stopped screen capture|does not have macOS permission|Trial scope exceeded/.test(
+        text,
+      )
+    )
+      blockedReason = text
+  }
   console.log(`${task}: ${p.tool} ${Date.now() - start} ms ${result.success ? 'ok' : 'failed'}`)
   return result
 }
@@ -159,16 +184,16 @@ try {
     mkdirSync(cases.directory, { mode: 0o700 })
     ownsDirectory = true
     const env = prepareEnvironment(root, resolve(source), cases.model)
-    const before = (await client.request('listApps')).apps
+    const before = targetProcesses()
     for (const app of allowed) {
       if (app === 'com.apple.finder') continue
       execFileSync('open', ['-g', '-b', app])
     }
     // 只终止运行器启动前没有在运行的应用进程。
-    const after = (await client.request('listApps')).apps
-    for (const app of after)
-      if (allowed.has(app.bundleId) && !before.some((old) => old.pid === app.pid))
-        opened.add(app.pid)
+    await delay(500)
+    const after = targetProcesses()
+    for (const app of after) if (!before.some((old) => old.pid === app.pid)) opened.add(app.pid)
+    record('launched.jsonl', { before, after, ownedPids: [...opened] })
     const spec = computerToolsSpec('darwin')
     record('spec.jsonl', spec)
     rpc = startCodex(
@@ -208,6 +233,10 @@ try {
       record('turns.jsonl', { task, durationMs: Date.now() - started, turn: done.params.turn })
       activeTurn = undefined
       if (done.params.turn.status !== 'completed') throw new Error(`${task} 回合未完成`)
+      if (blockedReason) {
+        record('blocked.jsonl', { task, reason: blockedReason })
+        break
+      }
     }
     const { statSync } = await import('node:fs')
     const note = join(cases.directory, '已整理/cu-note.rtf')

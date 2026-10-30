@@ -7,6 +7,7 @@
     "com.apple.calculator",
     "com.apple.systempreferences"
   ],
+  "processNames": ["TextEdit", "Finder", "Calculator", "System Settings"],
   "instructions": "请仅用 litch_computer 完成界面任务，不用 shell、脚本、网页或其他工具代替。只操作指定的四个应用和测试目录，不碰已有文档或其他窗口。记录自己新开的窗口。遇到用户正在使用时退让，稍后重试；反复退让就报告未完成。每个任务完成后简短报告结果及哪里不顺。不改任何系统设置。",
   "tasks": [
     {
