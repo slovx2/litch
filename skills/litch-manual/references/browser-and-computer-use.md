@@ -181,6 +181,30 @@ notice is shown; **Esc** (or Stop) takes control back and ends Computer Use for 
   does not open apps that are not running; it asks the user to.
 - Not supported: Linux, a locked screen.
 
+Actions already return accessibility changes; use these to verify the outcome. When an action observes
+a new window, its elements and keyboard input can be used directly; coordinates still need a fresh screenshot.
+Running apps without a capturable window return their menu text, visible-window count and foreground app.
+Use a menu item or press_key (such as cmd+n) to create a window, or Escape to dismiss an ordinary Open panel.
+System permission and login prompts still require the user. Native list clicks prefer selecting their row.
+Command shortcuts use the guarded foreground path because some apps ignore menu shortcuts in the background;
+ordinary typing remains targeted to the app without activation.
+Text fields report their selected character range so selection changes can be verified without another screenshot.
+Request another state only when those changes are insufficient or a screenshot is needed.
+If an element number expires, use the current number from the latest action changes; request state
+again when the needed element is missing.
+On macOS, screenshots must uniquely match the accessibility window. The result includes its ID
+and observation times; the tree and image are sequential samples and may differ during animation.
+
+动作已附带辅助功能树变化，可直接用于核验结果；信息不足或需要截图时再取状态。
+动作返回了新窗口的控件树后，可直接按新编号或快捷键继续；旧截图坐标仍须重新截图才能使用。
+元素编号失效时，优先使用最近动作返回的新编号；缺少所需控件时再取状态。
+应用没有可截窗口时仍返回菜单、可见窗口数和前台应用，可用菜单或快捷键新建窗口，或用 Escape
+关闭普通打开面板；系统权限和登录提示仍由用户处理。原生列表单击优先选择对应行。
+Command 快捷键使用带空闲等待和焦点恢复的短暂前台路径，避免应用在后台忽略菜单快捷键；
+普通文字输入继续定向投递，不要求激活应用。
+文本控件返回字符选区，便于直接核验选择操作，不必为确认选区另取截图。
+macOS 截图必须唯一匹配辅助功能窗口，并附窗口编号和观察时间。树与截图是先后采样，动画期间仍可能不同步。
+
 ### macOS background control and preview / macOS 后台控制与预览
 
 macOS prefers background input. Typing uses public targeted keyboard events; supported mouse
@@ -202,6 +226,10 @@ the turn. **Take over** first stops the agent and then opens the actual target w
 opens a nonactivating picture-in-picture window. During a brief foreground action, floating previews
 remain visible but temporarily pass mouse input through to the target. A stale frame is labelled; the preview is not recorded.
 Remote sessions use the same helper on this Mac, not the remote machine's desktop.
+Turn completion, interruption, failure, session closure and core shutdown release Computer Use
+activity and previews even when the conversation is not open. Late actions from an ended turn cannot reopen them.
+An idle, unloaded or failed session status also releases activity when no turn-completion event is delivered.
+Closing all desktop windows hides floating previews and stops their streams; background sessions continue.
 
 macOS 优先后台操作。后台不能完成时，等待键鼠连续空闲 2 秒（最多 8 秒），短暂切到目标窗口，
 执行后恢复原应用和焦点窗口，预览标明“已短暂切到前台”，原生浮窗以橙色提示此状态。用户中途接管时停止，不覆盖用户的新选择。
@@ -215,6 +243,10 @@ macOS 优先后台操作。后台不能完成时，等待键鼠连续空闲 2 �
 代理再打开真实窗口，“固定画中画”打开不抢焦点的悬浮窗。画面过期会标明，预览不录制、不写入会话历史。
 短暂前台操作期间，浮窗保持可见并暂时允许鼠标穿透，防止挡住目标控件。
 远程设备上的会话操作的仍是控制端这台 Mac。
+回合完成、中断、失败、会话关闭或核心退出时，即使对话没有打开，也会撤销操控活动和预览。
+已经结束的回合中迟到的动作不会重新显示光标。
+后台会话只有空闲、卸载或异常状态广播而没有回合结束事件时，也会收起活动提示。
+关闭全部桌面窗口会收起悬浮预览并停止预览流，后台会话继续运行。
 
 ## Chrome on the controlling Mac
 

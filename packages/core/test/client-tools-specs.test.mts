@@ -51,7 +51,8 @@ test('litch_computer 的说明按桌面的平台出：Windows 那份也过得了
   })
   assert.ok(mac && win)
   assert.deepEqual(dynamicToolProblems([win]), [])
-  assert.match(mac.description, /^Control macOS apps/)
+  assert.match(mac.description, /macOS apps/)
+  assert.match(mac.description, /without a window/)
   assert.match(win.description, /^Control Windows apps/)
   assert.match(win.description, /Windows key/)
   assert.deepEqual(

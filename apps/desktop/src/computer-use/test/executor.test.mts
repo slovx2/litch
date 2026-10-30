@@ -62,6 +62,8 @@ function fakeHelper(
     async request(method, params = {}, _timeout, signal) {
       calls.push({ method, params })
       if (signal?.aborted) throw new HelperError('failed', 'cancelled')
+      if (params.app === 'Nope')
+        throw new HelperError('notFound', 'No running app matches Nope. Call list_apps.')
       const override = overrides[method]
       if (override) return override(params)
       switch (method) {
@@ -187,11 +189,7 @@ test('没有权限：重启一次助手再查，还没有就回 permission，不
 })
 
 test('任何应用都直接交给助手，不问用户：浏览器、密码管理器、Litch 自己都一样', async () => {
-  for (const [app, bundleId] of [
-    ['safari', 'com.apple.Safari'],
-    ['1Password', 'com.1password.1password'],
-    ['io.github.slovx2.litch', 'io.github.slovx2.litch'],
-  ]) {
+  for (const app of ['safari', '1Password', 'io.github.slovx2.litch']) {
     const helper = fakeHelper()
     const executor = createComputerExecutor({ helper: helper.access })
     const { ctx, asks } = context()
@@ -199,10 +197,10 @@ test('任何应用都直接交给助手，不问用户：浏览器、密码管�
     const response = await executor.call(request, ctx)
     assert.equal(response.success, true, app)
     assert.equal(asks.length, 0)
-    // 交给助手的是包标识（模型给的别名不往下传）和会话键
+    // 助手负责名字解析；主进程不重复枚举全部窗口
     const click = helper.calls.find((call) => call.method === 'click')
     assert.deepEqual(click?.params, {
-      app: bundleId,
+      app,
       element: 2,
       session: 'local/thread-1',
       turnId: request.turnId,
@@ -222,7 +220,7 @@ test('远程设备的会话也不问', async () => {
   assert.equal(asks.length, 0)
   const press = helper.calls.find((call) => call.method === 'pressKey')
   assert.deepEqual(press?.params, {
-    app: 'com.apple.TextEdit',
+    app: 'TextEdit',
     key: 'cmd+s',
     session: 'box/thread-1',
     turnId: request.turnId,
@@ -237,6 +235,10 @@ test('get_app_state：文字加截图（data: 地址）', async () => {
   const request = invocation('get_app_state', { app: 'TextEdit', full: true })
   const response = await executor.call(request, ctx)
   assert.equal(response.success, true)
+  assert.deepEqual(
+    helper.calls.map((call) => call.method),
+    ['permissions', 'getAppState'],
+  )
   assert.equal(response.contentItems.length, 2)
   assert.match(textOf(response), /Screenshot: 1200x800 pixels/)
   assert.match(textOf(response), /\[2\] TextArea/)
@@ -246,12 +248,50 @@ test('get_app_state：文字加截图（data: 地址）', async () => {
   })
   const call = helper.calls.find((one) => one.method === 'getAppState')
   assert.deepEqual(call?.params, {
-    app: 'com.apple.TextEdit',
+    app: 'TextEdit',
     full: true,
     session: 'local/thread-1',
     turnId: request.turnId,
     actionId: request.id,
   })
+})
+
+test('应用清单包含没有可见窗口的应用', async () => {
+  const helper = fakeHelper({ listApps: () => ({ apps: [{ ...APPS[0], windows: 0 }] }) })
+  const executor = createComputerExecutor({ helper: helper.access })
+  const result = await executor.call(invocation('list_apps', {}), context().ctx)
+  assert.match(textOf(result), /TextEdit.*no visible windows/)
+})
+
+test('无窗口应用返回菜单和下一步，仍可直接发送新建快捷键，不伪造截图', async () => {
+  const helper = fakeHelper({
+    getAppState: () => ({
+      windowless: true,
+      app: { name: 'TextEdit', bundleId: 'com.apple.TextEdit', pid: 11 },
+      accessibleWindow: null,
+      visibleWindows: 0,
+      frontmost: 'Finder',
+      menuAvailable: true,
+      text: '[1] MenuBar\n [2] MenuBarItem "File"',
+      diff: false,
+      truncated: false,
+    }),
+  })
+  const executor = createComputerExecutor({ helper: helper.access })
+  const { ctx } = context()
+  const state = await executor.call(invocation('get_app_state', { app: 'TextEdit' }), ctx)
+  assert.equal(state.success, true)
+  assert.equal(state.contentItems.length, 1)
+  assert.match(textOf(state), /Visible windows: 0/)
+  assert.match(textOf(state), /foreground app: Finder/)
+  assert.match(textOf(state), /cmd\+n/)
+  assert.match(textOf(state), /MenuBarItem/)
+  const action = await executor.call(
+    invocation('press_key', { app: 'TextEdit', key: 'cmd+n' }),
+    ctx,
+  )
+  assert.equal(action.success, true)
+  assert.equal(helper.calls.at(-1)?.method, 'pressKey')
 })
 
 test('助手的错误分类转成失败答复', async () => {
@@ -310,5 +350,7 @@ test('回合结束：告诉助手撤提示、清这个会话', async () => {
   const executor = createComputerExecutor({ helper: helper.access })
   executor.turnEnded?.({ deviceId: 'box', threadId: 't7', turnId: 'u1' })
   await new Promise((resolve) => setTimeout(resolve, 0))
-  assert.deepEqual(helper.calls, [{ method: 'turnEnded', params: { session: 'box/t7' } }])
+  assert.deepEqual(helper.calls, [
+    { method: 'turnEnded', params: { session: 'box/t7', turnId: 'u1' } },
+  ])
 })

@@ -13,11 +13,14 @@ extension Engine {
   {
     let epoch = actionEpoch(params["session"]?.stringValue ?? "")
     let (session, app, key) = try prepare(params)
-    guard let observed = withState(session, key, { $0.shot }) else {
-      throw RPCError(.stale, "Call get_app_state before acting on this app.")
+    let axWindow = AXReader.keyWindow(AXReader.appElement(app.processIdentifier))
+    let window = try? NativeWindow.resolve(app.processIdentifier)
+    try withState(session, key) { state in
+      try state.observation.require(window?.id)
+      let same = axWindow.map { current in state.observedAXWindow.map { CFEqual(current, $0) } ?? false }
+        ?? (state.observedAXWindow == nil)
+      guard same else { throw RPCError(.stale, "The accessible window changed. Call get_app_state again.") }
     }
-    let window = try NativeWindow.resolve(app.processIdentifier)
-    guard window.id == observed.windowID else { throw RPCError(.stale, "The active window changed. Call get_app_state again.") }
     let owner = ownerPrefix(session)
     let token = try InputOwnership.shared.acquire(pid: app.processIdentifier, owner: owner)
     let actionId = params["actionId"]?.stringValue ?? UUID().uuidString
@@ -35,6 +38,7 @@ extension Engine {
           state: state, kind: kind, point: point, foreground: foreground)
       })
     context.window = window
+    context.accessibleWindow = axWindow
     let done: String
     do {
       try BackgroundMouse.waitForSelfTest { try context.checkBase() }
@@ -49,7 +53,12 @@ extension Engine {
     var text = done + (context.usedForeground ? "\nThe app was briefly brought to the foreground; restoration was attempted without overriding user activity." : "")
     do {
       let read = try AXReader().read(pid: app.processIdentifier)
+      let current = try? NativeWindow.resolve(app.processIdentifier)
+      let observedID = current.flatMap { native in read.window.flatMap { CFEqual(native.element, $0) ? native.id : nil } }
       let diff = withState(session, key) { state -> String in
+        state.observation.observe(observedID)
+        state.observedAXWindow = read.window
+        if observedID == nil { state.observation.observeApplication(); state.shot = nil }
         let lines = state.book.lines(for: read.root)
         let diff = AXText.diff(
           previous: state.book.previous, current: lines, limit: AXText.actionDiffLimit)
@@ -58,8 +67,12 @@ extension Engine {
         state.lines = Dictionary(lines.map { ($0.index, $0) }, uniquingKeysWith: { a, _ in a })
         return diff ?? AXText.render(lines, limit: AXText.actionDiffLimit)
       }
-      text += "\n\nChanges in the app's accessibility tree since the last state:\n\(diff)"
+      text += "\n\nObserved window: \(read.window == nil ? "none; application menu only (press_key and menu elements remain available)" : read.windowTitle ?? "untitled"). Changes in the app's accessibility tree since the last state:\n\(diff)"
+      if diff == "(no changes since the last state)" {
+        text += "\nInput dispatch alone does not confirm the intended result. Inspect the state before deciding the next action."
+      }
     } catch {
+      withState(session, key) { $0.observation.observe(nil) }
       text += "\n\n(Could not read the app's state after the action; call get_app_state.)"
     }
     return ["text": .string(text)]
@@ -74,7 +87,7 @@ extension Engine {
       else {
         throw RPCError(
           .invalid,
-          "Element [\(index)] is not in the latest state of this app. Call get_app_state and use a current number."
+          "Element [\(index)] is not in the latest state of this app. Use a current number from the latest action changes, or call get_app_state if it is missing."
         )
       }
       return (state.handles[line.handle], line)
@@ -91,6 +104,8 @@ extension Engine {
 
   /// 截图像素 → 屏幕上的点。窗口挪了照挪；窗口大小变了就要求重新取状态
   func screenPoint(_ context: ActionContext, x: Double, y: Double) throws -> CGPoint {
+    guard let window = context.window else { throw RPCError(.stale, "Call get_app_state again.") }
+    try withState(context.session, context.key) { try $0.observation.require(window.id, screenshot: true) }
     let shot = withState(context.session, context.key) { $0.shot }
     guard let shot else {
       throw RPCError(.invalid, "No screenshot of this app yet. Call get_app_state first.")
@@ -151,17 +166,34 @@ extension Engine {
     let button = Input.Button(rawValue: params["button"]?.stringValue ?? "left") ?? .left
     let count = params["count"]?.intValue ?? 1
     let flags = try modifiers(params)
-    guard let target = try target(context, params, required: true) else { return "" }
-    if let (element, line) = target.element, count == 1, flags == 0, !context.chromium {
+    if let index = params["element"]?.intValue, count == 1, flags == 0, !context.chromium {
+      let (element, line) = try element(context, index)
+      let point = try? center(element, line)
       try context.check()
+      if button == .left, let row = AXReader.selectableRow(containing: element),
+        AXUIElementSetAttributeValue(row, kAXSelectedAttribute as CFString, kCFBooleanTrue) == .success {
+        context.notice("dispatched", "semantic", point, false)
+        return "Selected the row containing [\(line.index)] \(line.content)."
+      }
       let action = button == .right ? kAXShowMenuAction : kAXPressAction
       if button != .middle,
         AXUIElementPerformAction(element, action as CFString) == .success
       {
-        context.notice("dispatched", "semantic", target.point, false)
+        context.notice("dispatched", "semantic", point, false)
         return "Pressed [\(line.index)] \(line.content)."
       }
+      let role: String? = AXReader.copy(element, kAXRoleAttribute as String)
+      if context.window == nil, button == .left, [kAXMenuBarItemRole, kAXMenuItemRole].contains(role ?? "") {
+        try context.inForeground(kind: "semantic") {
+          guard AXUIElementPerformAction(element, kAXPressAction as CFString) == .success else {
+            throw RPCError(.failed, "This menu item could not be pressed. Use its keyboard shortcut instead.")
+          }
+        }
+        return "Pressed menu [\(line.index)] \(line.content)."
+      }
     }
+    guard context.window != nil else { throw RPCError(.stale, "There is no screenshot window for mouse input. Use press_key or an accessible menu element.") }
+    guard let target = try target(context, params, required: true) else { return "" }
     try context.mouse(kind: "click", point: target.point) { window in
       try Input.click(at: target.point, button: button, count: count, flags: flags, window: window, check: context.check)
     }
@@ -200,10 +232,17 @@ extension Engine {
     let keyText = try string(params, "key")
     let combo = try Keys.parse(keyText)
     let times = min(max(params["repeat"]?.intValue ?? 1, 1), 50)
-    for _ in 0..<times {
-      try Input.key(combo, pid: context.pid, check: context.check)
-      Thread.sleep(forTimeInterval: 0.03)
+    let send = {
+      for _ in 0..<times {
+        try Input.key(combo, pid: context.pid, check: context.check)
+        Thread.sleep(forTimeInterval: 0.03)
+      }
     }
+    // 没有窗口接收按键时，让应用菜单处理快捷键；仍走空闲等待与焦点恢复，不直接抢前台。
+    if InputPolicy.keyboardNeedsForeground(hasWindow: context.window != nil, flags: combo.flags) {
+      try context.inForeground(kind: "semantic", send)
+    }
+    else { try send() }
     return "Pressed \(keyText)\(times > 1 ? " \(times) times" : "")."
   }
 

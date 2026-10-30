@@ -3,6 +3,11 @@ public enum InputPolicy {
   public static let quietSeconds: Double = 2
   public static let waitSeconds: Double = 8
 
+  /// AppKit 的菜单快捷键在后台可能被忽略；窗口缺失或使用 Command 时在受控前台发送。
+  public static func keyboardNeedsForeground(hasWindow: Bool, flags: UInt64) -> Bool {
+    !hasWindow || flags & Keys.command != 0
+  }
+
   public static func systemScrollDelta(_ delta: Int32, natural: Bool) -> Int32 {
     natural ? -delta : delta
   }

@@ -16,8 +16,8 @@ final class AXReader {
   /// 读的结果：树、窗口对象和它的位置大小、标题
   struct Result {
     var root: AXNode
-    var window: AXUIElement
-    var windowFrame: Rect
+    var window: AXUIElement?
+    var windowFrame: Rect?
     var windowTitle: String?
     var handles: [AXUIElement]
     var truncated: Bool
@@ -63,21 +63,35 @@ final class AXReader {
     return value as? T
   }
 
+  /// 原生列表中的文字可能声称支持 AXPress，却不改变选中行；优先使用行自己的选择属性。
+  static func selectableRow(containing element: AXUIElement) -> AXUIElement? {
+    var current: AXUIElement? = element
+    for _ in 0..<8 {
+      guard let node = current else { return nil }
+      let role: String? = copy(node, kAXRoleAttribute as String)
+      if role == "AXWebArea" || role == kAXWindowRole { return nil }
+      if role == kAXRowRole {
+        let selected: Bool = copy(node, kAXSelectedAttribute as String) ?? false
+        var settable: DarwinBoolean = false
+        AXUIElementIsAttributeSettable(node, kAXSelectedAttribute as CFString, &settable)
+        return !selected && settable.boolValue ? node : nil
+      }
+      current = copy(node, kAXParentAttribute as String)
+    }
+    return nil
+  }
+
   func read(pid: pid_t) throws -> Result {
     let app = AXReader.appElement(pid)
-    guard let window = AXReader.keyWindow(app) else {
-      throw RPCError(
-        .notFound,
-        "The app has no window that can be read. Ask the user to open a window, or check that it is not minimized."
-      )
-    }
-    guard let windowFrame = AXReader.frame(of: window) else {
+    let window = AXReader.keyWindow(app)
+    let windowFrame = window.flatMap { AXReader.frame(of: $0) }
+    if window != nil && windowFrame == nil {
       throw RPCError(.failed, "Could not read the window position.")
     }
     handles = []
     truncated = false
     var children: [AXNode] = []
-    if let windowNode = node(window, depth: 0) { children.append(windowNode) }
+    if let window, let windowNode = node(window, depth: 0) { children.append(windowNode) }
     if let menuBar: AXUIElement = AXReader.copy(app, kAXMenuBarAttribute as String),
       let menuNode = menu(menuBar)
     {
@@ -86,7 +100,7 @@ final class AXReader {
     let root = AXNode(role: "AXGroup", children: children)
     return Result(
       root: root, window: window, windowFrame: windowFrame,
-      windowTitle: AXReader.copy(window, kAXTitleAttribute as String), handles: handles,
+      windowTitle: window.flatMap { AXReader.copy($0, kAXTitleAttribute as String) }, handles: handles,
       truncated: truncated)
   }
 
@@ -127,7 +141,7 @@ final class AXReader {
     kAXRoleAttribute, kAXSubroleAttribute, kAXTitleAttribute, kAXDescriptionAttribute,
     kAXValueAttribute, kAXIdentifierAttribute, kAXEnabledAttribute, kAXFocusedAttribute,
     kAXSelectedAttribute, kAXExpandedAttribute, kAXPositionAttribute, kAXSizeAttribute,
-    kAXPlaceholderValueAttribute,
+    kAXPlaceholderValueAttribute, kAXSelectedTextRangeAttribute,
   ].map { $0 as String }
 
   /// 一个元素自己的信息（不含孩子），并登记句柄
@@ -155,6 +169,15 @@ final class AXReader {
     if flag(6) == false { states.append("disabled") }
     if flag(8) == true { states.append("selected") }
     if flag(9) == true { states.append("expanded") }
+    if role == kAXTextAreaRole || role == kAXTextFieldRole {
+      let rangeValue = list[13] as AnyObject
+      if CFGetTypeID(rangeValue) == AXValueGetTypeID() {
+        var range = CFRange()
+        if AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) {
+          states.append("selection: \(range.location)..\(range.location + range.length)")
+        }
+      }
+    }
     var value = text(4)
     if role == "AXCheckBox" || role == "AXRadioButton" {
       if value == "1" { states.append("checked") }

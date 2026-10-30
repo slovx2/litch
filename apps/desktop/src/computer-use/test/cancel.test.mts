@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { createClientToolHost } from '../../client-tools/host.mjs'
+import { CLIENT_TOOL, type ClientToolInvocation } from '../../client-tools/types.mjs'
 import { type HelperChannel, HelperClient } from '../helper-client.mjs'
 import { FrameReader } from '../wire.mjs'
 
@@ -34,4 +36,42 @@ test('取消与超时都把动作编号送给助手，不只是丢弃本地 Prom
       params: { actionId: 'owned-action' },
     })
   }
+})
+
+test('核心退出也收尾已经返回的工具回合，正常收尾过的不重复', async () => {
+  const ended: string[] = []
+  const host = createClientToolHost(
+    [
+      {
+        namespace: 'litch_computer',
+        call: async () => ({ success: true, contentItems: [] }),
+        turnEnded: (turn) => ended.push(turn.turnId),
+      },
+    ],
+    () => {},
+  )
+  for (const turnId of ['completed', 'orphan']) {
+    host.handle({
+      type: CLIENT_TOOL,
+      op: 'call',
+      invocation: {
+        id: turnId,
+        namespace: 'litch_computer',
+        device: { id: 'local' },
+        threadId: 's',
+        turnId,
+      } as ClientToolInvocation,
+    })
+  }
+  await Promise.resolve()
+  host.handle({
+    type: CLIENT_TOOL,
+    op: 'turnEnded',
+    deviceId: 'local',
+    threadId: 's',
+    turnId: 'completed',
+  })
+  host.reset()
+  host.reset()
+  assert.deepEqual(ended, ['completed', 'orphan'])
 })

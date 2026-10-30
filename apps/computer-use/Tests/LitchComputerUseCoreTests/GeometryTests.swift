@@ -3,6 +3,15 @@ import XCTest
 @testable import LitchComputerUseCore
 
 final class GeometryTests: XCTestCase {
+  func testScreenshotRejectsMissingAndAmbiguousWindowInsteadOfPickingNearest() {
+    let target = Rect(x: 10, y: 20, width: 400, height: 300)
+    let other = Rect(x: 40, y: 20, width: 400, height: 300)
+    XCTAssertNil(Geometry.matchingWindowIndex(frames: [], target: target))
+    XCTAssertNil(Geometry.matchingWindowIndex(frames: [other], target: target))
+    XCTAssertNil(Geometry.matchingWindowIndex(frames: [target, target], target: target))
+    XCTAssertEqual(Geometry.matchingWindowIndex(frames: [other, target], target: target), 1)
+  }
+
   func testRetinaWindowUnderCapKeepsFullResolution() {
     let size = Geometry.screenshotSize(window: Size(width: 700, height: 500), backingScale: 2)
     XCTAssertEqual(size.width, 1400)

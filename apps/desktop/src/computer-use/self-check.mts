@@ -89,7 +89,7 @@ export async function checkAdhoc(appPath: string, userData: string): Promise<str
     assert.equal(listed.success, true, JSON.stringify(listed))
     const first = listed.contentItems[0]
     assert.ok(first?.type === 'inputText')
-    report.push(`list_apps：${first.text.split('\n').length - 1} 个带窗口的应用`)
+    report.push(`list_apps：${first.text.split('\n').length - 1} 个运行中的应用`)
 
     // 该拒的连接
     const socket = join(userData, 'computer-use', 'helper.sock')

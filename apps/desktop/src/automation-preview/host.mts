@@ -177,6 +177,16 @@ export function createAutomationPreviewHost(
         5000,
       )
     },
+    async closePanels() {
+      // 关闭桌面窗口只收起画面，不停止仍在后台运行的会话。
+      watching.clear()
+      const client = helper.connected
+      if (!client) return
+      await client.request('previewUnpin', {}, 5000).catch(() => {})
+      for (const session of owners.keys()) {
+        await client.request('previewHide', { session }, 5000).catch(() => {})
+      }
+    },
     disconnected(clearSubscriptions = false) {
       for (const view of views.values()) publish(null, view.owner)
       views.clear()

@@ -1,0 +1,35 @@
+{
+  "model": "gpt-6-astra",
+  "directory": "/tmp/litch-cu-trial",
+  "allowedApps": [
+    "com.apple.TextEdit",
+    "com.apple.finder",
+    "com.apple.calculator",
+    "com.apple.systempreferences"
+  ],
+  "processNames": ["TextEdit", "Finder", "Calculator", "System Settings"],
+  "paragraphs": [
+    "今天测试桌面自动化，保留中文、数字 123 和标点。",
+    "这一段需要加粗，用于检查选择与格式操作。"
+  ],
+  "instructions": "请仅用 litch_computer 完成界面任务，不用 shell、脚本、网页或其他工具代替。只操作文本编辑（com.apple.TextEdit）、访达（com.apple.finder）、计算器（com.apple.calculator）、系统设置（com.apple.systempreferences）这四个应用和测试目录，不碰已有文档或其他窗口。记录自己新开的窗口。遇到用户正在使用时退让，稍后重试；反复退让就报告未完成。每个任务完成后简短报告结果及哪里不顺。不改任何系统设置。",
+  "tasks": [
+    {
+      "id": "textedit",
+      "prompt": "在文本编辑中新建空白富文本文档。第一段写：今天测试桌面自动化，保留中文、数字 123 和标点。第二段写：这一段需要加粗，用于检查选择与格式操作。将第二段整段加粗，保存到 {{directory}}/cu-note.rtf。"
+    },
+    {
+      "id": "finder",
+      "prompt": "在访达新窗口中打开 {{directory}}，新建名为 临时资料 的文件夹，把它改名为 已整理，再将 cu-note.rtf 拖入 已整理。核验结果。"
+    },
+    {
+      "id": "calculator",
+      "prompt": "用计算器计算 (123 + 456) × 7 − 89，读出并报告最后结果。即使已显示相同表达式，也要先清除当前输入并重新计算，不能只读取旧结果。"
+    },
+    {
+      "id": "settings",
+      "prompt": "打开系统设置，只读查看当前显示器的分辨率和外观（深色或浅色），报告结果。不要修改任何设置。"
+    }
+  ],
+  "cleanup": "关闭本次测试中自己打开的文档和访达窗口；允许丢弃仅本次输入的测试文档内容，不保留未保存的测试文档。TextEdit 若恢复了此前实测草稿，只有内容恰好是本用例那两段文字时才可一并关闭并选择不保存或删除，丢弃其自动保存草稿。不要关闭用户原有文档或窗口，不删除任何已有文件，不退出原本已运行的应用，不手动删除自动保存目录。测试目录由运行器随后清理。报告未能关闭的测试窗口，运行器退出前由操作者重开 TextEdit 确认测试草稿不再恢复，再退出本轮启动的 TextEdit。"
+}

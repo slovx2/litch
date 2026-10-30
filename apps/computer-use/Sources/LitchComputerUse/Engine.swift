@@ -10,7 +10,7 @@
 //   listApps       {}                                   → {apps: [...]}
 //   getAppState    {session, app, full?}                → {app, window, screenshot, text, diff, truncated}
 //   click / typeText / pressKey / scroll / setValue / drag / selectText  → {text}
-//   turnEnded      {session}
+//   turnEnded      {session, turnId?}（不给回合号时撤销整个会话）
 //   shutdown       {}
 // 助手发给主进程的通知：stopped {session, app, bundleId}（用户按了停止）
 import AppKit
@@ -20,6 +20,8 @@ import LitchComputerUseCore
 
 /// 一个会话里一个应用的状态
 struct AppSession {
+  var observation = ObservationWindow()
+  var observedAXWindow: AXUIElement?
   var pid: pid_t?
   var launchedAt: Date?
   var book = AXIndexBook()
@@ -118,14 +120,17 @@ final class Engine: ConnectionHandler {
     case "turnEnded":
       let session = try string(params, "session")
       lock.lock()
+      let turn = params["turnId"]?.stringValue ?? turns[session] ?? ""
+      endedTurns.insert("\(session)|\(turn)")
+      // 结束通知可先于队列中的首个动作到达；旧回合的迟到通知也不能撤掉新回合。
+      if let current = turns[session], current != turn { lock.unlock(); return [:] }
       epochs[session, default: 0] += 1
-      if let turn = turns[session] { endedTurns.insert("\(session)|\(turn)") }
       apps[session] = nil
       stopped[session] = nil
-      lock.unlock()
       InputOwnership.shared.end(prefix: ownerPrefix(session))
       preview.end(session)
       Activity.shared.end(engine: self, session: session)
+      lock.unlock()
       return [:]
     case "shutdown":
       Log.write("主进程要求退出")
@@ -218,12 +223,17 @@ final class Engine: ConnectionHandler {
   /// 动作和取状态之前的共同检查：找应用、停没停、权限
   func prepare(_ params: JSONValue) throws -> (session: String, app: NSRunningApplication, key: String) {
     let session = try string(params, "session")
+    let turn = params["turnId"]?.stringValue ?? ""
+    lock.lock()
+    let alreadyEnded = endedTurns.contains("\(session)|\(turn)")
+    lock.unlock()
+    guard !alreadyEnded else { throw RPCError(.stopped, "This turn ended. Do not retry actions from this turn.") }
     let app = try Apps.resolve(try string(params, "app"))
+    guard app.bundleIdentifier != nil else { throw RPCError(.notFound, "This app has no bundle identifier and cannot be controlled.") }
     let key = Engine.appKey(app)
     lock.lock()
-    let turn = params["turnId"]?.stringValue ?? ""
     let ended = endedTurns.contains("\(session)|\(turn)")
-    if turns[session] != turn { stopped[session] = nil; turns[session] = turn; preview.resume(session) }
+    if !ended, turns[session] != turn { stopped[session] = nil; turns[session] = turn; preview.resume(session) }
     let isStopped = stopped[session]?.contains(key) == true || stopped[session]?.contains("*") == true || ended
     lock.unlock()
     if isStopped {
@@ -238,6 +248,11 @@ final class Engine: ConnectionHandler {
       if state.pid != app.processIdentifier || state.launchedAt != app.launchDate {
         state = AppSession(); state.pid = app.processIdentifier; state.launchedAt = app.launchDate
       }
+    }
+    lock.lock()
+    defer { lock.unlock() }
+    guard !endedTurns.contains("\(session)|\(turn)"), connection?.isOpen == true else {
+      throw RPCError(.stopped, "This turn ended. Do not retry actions from this turn.")
     }
     Activity.shared.begin(engine: self, session: session, appKey: key, name: Engine.name(app))
     return (session, app, key)
@@ -265,12 +280,28 @@ final class Engine: ConnectionHandler {
     let pid = app.processIdentifier
     var read: AXReader.Result
     var shot: Screenshot
+    var windowFrame: Rect
+    var observedAt: Double = 0
     preview.status(session: session, app: app, state: "capturePending")
     Overlay.shared.captureNotice(true)
     defer { Overlay.shared.captureNotice(false) }
     do {
       read = try AXReader().read(pid: pid)
-      shot = try Capture.window(pid: pid, axFrame: read.windowFrame)
+      guard let window = read.window, let frame = read.windowFrame,
+        (try? NativeWindow.resolve(pid)) != nil else {
+        guard actionAllowed(params["actionId"]?.stringValue ?? "", session: session, epoch: epoch) else {
+          throw RPCError(.stopped, "Observation cancelled.")
+        }
+        try Engine.requireDesktop()
+        return windowlessState(read, app: app, session: session, key: key, full: full)
+      }
+      windowFrame = frame
+      observedAt = Date().timeIntervalSince1970 * 1000
+      shot = try Capture.window(pid: pid, axFrame: frame)
+      guard let current = AXReader.keyWindow(AXReader.appElement(pid)), CFEqual(current, window),
+        AXReader.frame(of: current) == frame else {
+        throw RPCError(.stale, "The window changed while observing. Call get_app_state again before acting.")
+      }
     } catch {
       let failure = CaptureAccess.error(error)
       preview.status(session: session, app: app, state: failure.kind.rawValue)
@@ -290,7 +321,9 @@ final class Engine: ConnectionHandler {
       state.book.remember(lines)
       state.handles = read.handles
       state.lines = Dictionary(lines.map { ($0.index, $0) }, uniquingKeysWith: { a, _ in a })
-      state.shot = (shot.size, shot.windowFrame, read.windowFrame, shot.windowID)
+      state.shot = (shot.size, shot.windowFrame, windowFrame, shot.windowID)
+      state.observation.capture(shot.windowID)
+      state.observedAXWindow = read.window
       return (diff ?? AXText.render(lines), diff != nil)
     }
     preview.observe(session: session, app: app)
@@ -301,9 +334,12 @@ final class Engine: ConnectionHandler {
         "pid": .int(Int(pid)),
       ],
       "window": [
+        "id": .int(Int(shot.windowID)),
+        "observedAt": .number(observedAt),
+        "capturedAt": .number(Date().timeIntervalSince1970 * 1000),
         "title": .optional(read.windowTitle),
-        "width": .number(read.windowFrame.size.width),
-        "height": .number(read.windowFrame.size.height),
+        "width": .number(windowFrame.size.width),
+        "height": .number(windowFrame.size.height),
       ],
       "screenshot": [
         "mime": .string(shot.mime), "data": .string(shot.data.base64EncodedString()),
@@ -313,6 +349,31 @@ final class Engine: ConnectionHandler {
       "diff": .bool(isDiff),
       "truncated": .bool(read.truncated),
     ]
+  }
+
+  /// 没有 AX 窗口不等于应用无法操作：保留菜单栏，允许定向按键新建窗口，不伪造截图。
+  private func windowlessState(_ read: AXReader.Result, app: NSRunningApplication,
+    session: String, key: String, full: Bool) -> JSONValue {
+    let (text, isDiff) = withState(session, key) { state -> (String, Bool) in
+      let lines = state.book.lines(for: read.root)
+      let diff = full ? nil : AXText.diff(previous: state.book.previous, current: lines)
+      state.book.remember(lines)
+      state.handles = read.handles
+      state.lines = Dictionary(lines.map { ($0.index, $0) }, uniquingKeysWith: { a, _ in a })
+      state.shot = nil
+      state.observation.observeApplication()
+      state.observedAXWindow = read.window
+      return (diff ?? AXText.render(lines), diff != nil)
+    }
+    preview.clearWindow(session)
+    let front = NSWorkspace.shared.frontmostApplication
+    return ["windowless": true,
+      "app": ["name": .string(Engine.name(app)), "bundleId": .optional(app.bundleIdentifier), "pid": .int(Int(app.processIdentifier))],
+      "visibleWindows": .int(Apps.windowCounts()[app.processIdentifier] ?? 0),
+      "accessibleWindow": .optional(read.windowTitle),
+      "frontmost": .optional(front.map { "\(Engine.name($0)) (\($0.bundleIdentifier ?? "no bundle id"))" }),
+      "menuAvailable": .bool(read.root.children.contains { $0.role == kAXMenuBarRole }),
+      "text": .string(text), "diff": .bool(isDiff), "truncated": .bool(read.truncated)]
   }
 
   // MARK: 参数

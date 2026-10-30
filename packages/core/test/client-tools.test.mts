@@ -567,6 +567,41 @@ test('打断：用户在这边打断时正在执行的调用当场取消', async
   const stopped = resultOf(await pending)
   assert.match(stopped?.contentItems[0]?.text ?? '', /interrupted/)
   assert.equal(main?.of('cancel').length, 1)
+  assert.equal(main?.of('turnEnded').length, 1, '不等服务端确认便撤销预览')
+})
+
+test('未打开的会话完成、失败、中断或关闭时，已返回的工具也收尾且只收一次', async () => {
+  for (const status of [
+    'completed',
+    'failed',
+    'interrupted',
+    'closed',
+    'idle',
+    'notLoaded',
+    'systemError',
+  ] as const) {
+    const { core, main, call, peer } = setup()
+    core.start()
+    await settle()
+    const pending = call({})
+    await settle()
+    const id = main?.of('call')[0]?.invocation.id ?? ''
+    main?.reply({ op: 'result', id, response: { success: true, contentItems: [] } })
+    await pending
+    for (let repeat = 0; repeat < 2; repeat++) {
+      if (status === 'closed') peer.last().notify('thread/closed', { threadId: 'a' })
+      else if (status === 'idle' || status === 'notLoaded' || status === 'systemError')
+        peer.last().notify('thread/status/changed', { threadId: 'a', status: { type: status } })
+      else peer.last().notify('turn/completed', { threadId: 'a', turn: turn('t1', [], { status }) })
+      await settle()
+    }
+    assert.deepEqual(
+      main?.of('turnEnded'),
+      [{ type: CLIENT_TOOL, op: 'turnEnded', deviceId: 'local', threadId: 'a', turnId: 't1' }],
+      status,
+    )
+    core.stop()
+  }
 })
 
 test('引擎撤回请求、连接断开：不等了，告诉主进程取消；断开时执行过调用的回合一并收尾', async () => {
