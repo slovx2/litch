@@ -47,12 +47,13 @@
 
 /* ---------- 选区上方的小浮层：评论、复制 ---------- */
 .cmt-pop {
+  max-width: calc(100vw - 16px);
+  flex-wrap: wrap;
   position: fixed;
   z-index: 30;
   display: flex;
-  gap: 2px;
-  padding: 3px;
-  transform: translateY(-100%);
+  gap: calc(2px * var(--fs));
+  padding: calc(3px * var(--fs));
   border: 1px solid var(--line-2);
   border-radius: var(--r2);
   background: var(--overlay);
@@ -62,15 +63,15 @@
 .cmt-pop button {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 24px;
-  padding: 0 8px;
+  gap: calc(5px * var(--fs));
+  height: calc(24px * var(--fs));
+  padding: 0 calc(8px * var(--fs));
   border-radius: var(--r1);
   color: var(--ink);
 }
 .cmt-pop button .ic {
-  width: 13px;
-  height: 13px;
+  width: calc(13px * var(--fs));
+  height: calc(13px * var(--fs));
   color: var(--ink-3);
 }
 .cmt-pop button:hover:not(:disabled) {
@@ -85,13 +86,15 @@
 
 /* ---------- 编辑框 ---------- */
 .cmt-edit {
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   position: fixed;
   z-index: 30;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: min(340px, calc(100vw - 16px));
-  padding: 10px;
+  gap: calc(8px * var(--fs));
+  width: min(calc(340px * var(--fs)), calc(100vw - 16px));
+  padding: calc(10px * var(--fs));
   border: 1px solid var(--line-2);
   border-radius: var(--r2);
   background: var(--overlay);
@@ -100,14 +103,15 @@
   color: var(--ink);
 }
 .cmt-edit-quote {
-  padding-left: 8px;
+  flex-shrink: 0;
+  padding-left: calc(8px * var(--fs));
   border-left: 2px solid var(--accent);
   font-size: calc(12px * var(--fs));
   line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--ink-2);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  max-height: 180px;
+  max-height: calc(180px * var(--fs));
   overflow: auto;
 }
 .cmt-edit-quote.fold {
@@ -118,17 +122,17 @@
   overflow: hidden;
 }
 .cmt-edit .cmt-edit-more {
-  margin-top: -6px;
-  height: 20px;
+  margin-top: calc(-6px * var(--fs));
+  height: calc(20px * var(--fs));
   font-size: calc(11px * var(--fs));
 }
 .cmt-edit-text {
   width: 100%;
-  min-height: 44px;
+  min-height: calc(44px * var(--fs));
   /* 跟着内容长高（同输入框，dock.css 的 .cmp-text） */
   field-sizing: content;
-  max-height: 160px;
-  padding: 6px 8px;
+  max-height: calc(160px * var(--fs));
+  padding: calc(6px * var(--fs)) calc(8px * var(--fs));
   border: 1px solid var(--line-2);
   border-radius: var(--r1);
   background: var(--raised);
@@ -147,7 +151,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: calc(6px * var(--fs));
 }
 .cmt-edit-foot .grow {
   flex: 1 1 60px;
@@ -156,12 +160,10 @@
 .cmt-edit-hint {
   font-size: calc(11px * var(--fs));
   color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 .cmt-edit-foot .btn {
-  height: 24px;
+  height: calc(24px * var(--fs));
   font-size: calc(12px * var(--fs));
 }
 .cmt-edit-foot [data-act="delete"]:hover {
@@ -264,13 +266,15 @@
   border-color: var(--accent);
 }
 .cmt-peek {
+  max-height: calc(100vh - 16px);
+  overflow: auto;
   position: fixed;
   z-index: 30;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-width: 320px;
-  padding: 8px 10px;
+  gap: calc(4px * var(--fs));
+  max-width: min(calc(320px * var(--fs)), calc(100vw - 16px));
+  padding: calc(8px * var(--fs)) calc(10px * var(--fs));
   border: 1px solid var(--line-2);
   border-radius: var(--r2);
   background: var(--overlay);
@@ -279,11 +283,8 @@
   color: var(--ink);
   pointer-events: none;
 }
-.cmt-peek[data-up] {
-  transform: translateY(-100%);
-}
 .cmt-peek-quote {
-  padding-left: 8px;
+  padding-left: calc(8px * var(--fs));
   border-left: 2px solid var(--accent);
   color: var(--ink-2);
   display: -webkit-box;

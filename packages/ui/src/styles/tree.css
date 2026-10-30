@@ -216,7 +216,7 @@ button.sev-title {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 26px;
+  height: round(calc(26px * var(--fs)), 1px);
   max-width: 100%;
   padding: 0 6px 0 8px;
   border: 1px solid var(--line-2);
@@ -383,7 +383,7 @@ button.sev-title {
   margin-top: 2px;
 }
 .prop-acts[data-small="true"] .btn {
-  height: 24px;
+  height: round(calc(24px * var(--fs)), 1px);
   padding: 0 8px;
   font-size: calc(12px * var(--fs));
 }
@@ -863,7 +863,7 @@ button.agent-row:hover {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 26px;
+  height: calc(26px * var(--fs));
   padding: 0 10px;
   border-bottom: 1px solid var(--line-1);
   font-size: calc(11px * var(--fs));
@@ -1039,8 +1039,8 @@ button.agent-row:hover {
   margin: -3px -6px -3px 0;
 }
 .prop-menu > .ibtn {
-  width: 22px;
-  height: 22px;
+  width: round(calc(22px * var(--fs)), 1px);
+  height: round(calc(22px * var(--fs)), 1px);
   color: var(--ink-3);
 }
 .prop-menu .pick-pop {

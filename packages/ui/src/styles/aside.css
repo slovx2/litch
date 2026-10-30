@@ -9,7 +9,7 @@
   gap: 12px;
   padding: 24px 28px;
   text-align: center;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs));
   line-height: 1.6;
   color: var(--ink-2);
 }
@@ -33,9 +33,9 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 6px 0 12px;
+  gap: calc(6px * var(--fs));
+  height: calc(34px * var(--fs));
+  padding: 0 calc(6px * var(--fs)) 0 calc(12px * var(--fs));
   border-bottom: 1px solid var(--line-1);
 }
 .aside-label {
@@ -44,7 +44,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   font-weight: 500;
   color: var(--ink-2);
 }
@@ -71,7 +71,7 @@
   flex-direction: column;
   gap: 4px;
   margin-bottom: 12px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   line-height: 1.6;
 }
 .aside-context {

@@ -29,7 +29,7 @@
 /* ---------- 行菜单里“再挑一个”的那一屏（移到哪个工作区） ---------- */
 .pick-title {
   padding: 4px 8px 2px;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
   color: var(--ink-3);
 }
 .pick-choice b {
@@ -57,8 +57,8 @@
 .ws-fixed {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--ink-2);
   user-select: text;
 }
@@ -94,8 +94,8 @@
   min-width: 0;
   padding: 3px 8px;
   border-radius: var(--r1);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--ink-2);
   text-align: left;
 }
@@ -123,7 +123,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .ws-picker-list {
   margin: 0;
@@ -167,8 +167,8 @@
 }
 .harness-said {
   flex-basis: 100%;
-  font-size: 11px;
-  line-height: 16px;
+  font-size: calc(11px * var(--fs));
+  line-height: round(calc(16px * var(--fs)), 1px);
   color: var(--ink-3);
   overflow-wrap: anywhere;
 }
@@ -181,7 +181,7 @@
   padding: 0 4px;
   border: 1px solid var(--line-2);
   border-radius: 3px;
-  font: 11px / 16px var(--mono);
+  font: calc(11px * var(--fs)) / round(calc(16px * var(--fs)), 1px) var(--mono);
   color: var(--ink-2);
   vertical-align: middle;
 }

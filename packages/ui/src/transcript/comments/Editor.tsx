@@ -25,7 +25,6 @@ export interface EditorProps {
   onLocate?(): void
 }
 
-const WIDTH = 340
 const GAP = 6
 const MARGIN = 8
 
@@ -52,7 +51,7 @@ export function CommentEditor(props: EditorProps) {
       const element = card.current
       if (!box || !element) return
       const height = element.offsetHeight
-      const width = Math.min(WIDTH, window.innerWidth - MARGIN * 2)
+      const width = element.offsetWidth
       const left = Math.max(MARGIN, Math.min(box.left, window.innerWidth - width - MARGIN))
       const below = box.bottom + GAP
       const above = box.top - GAP - height
@@ -106,7 +105,12 @@ export function CommentEditor(props: EditorProps) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: 引用变了要重新量
   useLayoutEffect(() => {
     const box = quoteBox.current
-    if (box && !unfolded) setFoldable(box.scrollHeight > box.clientHeight + 1)
+    if (!box || unfolded) return
+    const measure = () => setFoldable(box.scrollHeight > box.clientHeight + 1)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(box)
+    return () => observer.disconnect()
   }, [quote, unfolded])
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {

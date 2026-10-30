@@ -75,7 +75,7 @@
   bottom: calc(100% + 12px);
   transform: translateX(-50%);
   z-index: 2;
-  height: 28px;
+  height: round(calc(28px * var(--fs)), 1px);
   padding: 0 12px;
   border: 1px solid var(--line-2);
   border-radius: var(--r2);
@@ -350,7 +350,7 @@ button.smen:focus-visible {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 24px;
+  min-height: round(calc(24px * var(--fs)), 1px);
   padding: 0 6px 0 2px;
   border-radius: 3px;
   color: var(--ink-3);
@@ -387,7 +387,7 @@ button.smen:focus-visible {
 }
 .steps-head > .st {
   width: 12px;
-  height: 12px;
+  height: round(calc(12px * var(--fs)), 1px);
 }
 .steps-body {
   margin: 4px 0 2px 7px;
@@ -399,7 +399,7 @@ button.smen:focus-visible {
   align-items: center;
   gap: 8px;
   width: 100%;
-  height: 30px;
+  height: round(calc(30px * var(--fs)), 1px);
   padding: 0 10px;
   text-align: left;
   color: var(--ink-2);
@@ -451,7 +451,7 @@ button.smen:focus-visible {
  */
 .well-gap {
   display: block;
-  height: 19px;
+  height: round(calc(19px * var(--fs)), 1px);
   font: calc(11px * var(--fs)) / round(calc(19px * var(--fs)), 1px) var(--ui);
   color: var(--ink-3);
   background: var(--hover);
@@ -459,7 +459,7 @@ button.smen:focus-visible {
 /* 工具结果里图片、音频、资源那一段：只有一行说明，块级、和输出的一行一样高 */
 .well-blob {
   display: block;
-  height: 19px;
+  height: round(calc(19px * var(--fs)), 1px);
   font: calc(11px * var(--fs)) / round(calc(19px * var(--fs)), 1px) var(--ui);
   color: var(--ink-3);
 }
@@ -499,7 +499,7 @@ button.smen:focus-visible {
 }
 /* 步骤组展开后的逐条行：比独立的行矮一点，详情缩进到图标后面 */
 .steps-body .item-head {
-  height: 26px;
+  height: round(calc(26px * var(--fs)), 1px);
   padding: 0 8px;
   font-size: calc(12px * var(--fs));
 }
@@ -514,7 +514,7 @@ button.smen:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 22px;
+  min-height: round(calc(22px * var(--fs)), 1px);
   font-size: calc(12px * var(--fs));
   color: var(--ink-3);
 }
@@ -537,7 +537,7 @@ button.smen:focus-visible {
 }
 /* 只有提示的回合：提示直接露在外面 */
 .notes .item-head {
-  height: 26px;
+  height: round(calc(26px * var(--fs)), 1px);
   padding: 0 4px;
   font-size: calc(12px * var(--fs));
 }
@@ -553,7 +553,7 @@ button.smen:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 28px;
+  height: round(calc(28px * var(--fs)), 1px);
   padding: 0 10px 0 12px;
   font: calc(12px * var(--fs)) / 1 var(--mono);
   color: var(--ink-2);
@@ -578,7 +578,7 @@ button.smen:focus-visible {
 }
 .file-head .file-diff {
   width: 20px;
-  height: 20px;
+  height: round(calc(20px * var(--fs)), 1px);
 }
 .dl {
   display: flex;
@@ -641,7 +641,7 @@ button.smen:focus-visible {
 }
 /* 只有思考的一组：不收成汇总，每条思考直接一行 */
 .steps.thoughts .item-head {
-  height: 26px;
+  height: round(calc(26px * var(--fs)), 1px);
   padding: 0 4px;
   font-size: calc(12px * var(--fs));
 }

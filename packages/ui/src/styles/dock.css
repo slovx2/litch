@@ -81,8 +81,8 @@
   color: var(--on-accent);
 }
 .ibtn {
-  width: 22px;
-  height: 22px;
+  width: calc(22px * var(--fs));
+  height: calc(22px * var(--fs));
   display: grid;
   place-items: center;
   border-radius: var(--r1);
@@ -307,8 +307,8 @@
   padding: 4px 6px 6px 8px;
 }
 .send {
-  width: 28px;
-  height: 28px;
+  width: round(calc(28px * var(--fs)), 1px);
+  height: round(calc(28px * var(--fs)), 1px);
   border-radius: var(--r2);
   background: var(--accent-solid);
   color: var(--on-accent);
@@ -371,7 +371,7 @@
   margin-right: 8px;
 }
 .ctx-btn {
-  height: 24px;
+  height: calc(24px * var(--fs));
   margin-right: 0;
   padding: 0 6px;
   border-radius: var(--r1);
@@ -759,8 +759,8 @@
 }
 .step {
   position: relative;
-  min-width: 22px;
-  height: 22px;
+  min-width: round(calc(22px * var(--fs)), 1px);
+  height: round(calc(22px * var(--fs)), 1px);
   padding: 0 5px;
   border: 1px solid var(--line-2);
   border-radius: var(--r1);
@@ -788,7 +788,7 @@
   left: -1px;
   right: -1px;
   bottom: -5px;
-  height: 2px;
+  height: round(calc(2px * var(--fs)), 1px);
   background: var(--ink);
 }
 .step:disabled,
@@ -872,7 +872,7 @@
   align-items: center;
 }
 .req-input {
-  height: 32px;
+  height: calc(32px * var(--fs));
   padding: 0 10px;
   border: 1px solid var(--line-2);
   border-radius: var(--r2);
@@ -938,7 +938,7 @@
   gap: 6px;
 }
 .pickset-opt {
-  height: 28px;
+  height: calc(28px * var(--fs));
   padding: 0 10px;
   border: 1px solid var(--line-2);
   border-radius: var(--r2);
@@ -1018,7 +1018,7 @@ a.btn {
   align-items: center;
   gap: 8px;
   width: 100%;
-  height: 34px;
+  height: calc(34px * var(--fs));
   padding: 0 12px 0 14px;
   background: var(--raised);
   font-size: calc(12px * var(--fs));
@@ -1067,7 +1067,7 @@ a.btn {
 .pending-ask-row textarea.req-input {
   flex: 1 1 220px;
   min-width: 0;
-  min-height: 28px;
+  min-height: calc(28px * var(--fs));
   max-height: 120px;
   height: auto;
   padding: 4px 10px;
@@ -1083,7 +1083,7 @@ a.btn {
 }
 
 textarea.req-input {
-  min-height: 72px;
+  min-height: calc(72px * var(--fs));
   resize: vertical;
   line-height: 1.5;
 }
@@ -1104,7 +1104,7 @@ textarea.req-input {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 38px;
+  height: calc(38px * var(--fs));
   padding: 0 0 0 14px;
   font-size: calc(13px * var(--fs));
   text-align: left;

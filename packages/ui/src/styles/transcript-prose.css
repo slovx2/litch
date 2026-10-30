@@ -290,7 +290,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 34px;
+  height: round(calc(34px * var(--fs)), 1px);
   padding: 0 12px;
   border-bottom: 1px solid var(--line-1);
   white-space: nowrap;
@@ -347,7 +347,7 @@
 /* 记号和第一行字一样高，字折行了它也对着第一行 */
 .todo-mark {
   width: 14px;
-  height: 21px;
+  height: round(calc(21px * var(--fs)), 1px);
   flex: none;
   display: grid;
   place-items: center;
@@ -486,7 +486,7 @@
   white-space: nowrap;
 }
 .running-line.slot {
-  height: 18px;
+  height: round(calc(18px * var(--fs)), 1px);
   transition: opacity 0.2s ease;
 }
 .running-line.slot[data-hidden] {

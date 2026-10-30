@@ -1,5 +1,6 @@
-// 字号检查与迁移共用的范围。共享样式按所在组件继承 --fs；外壳、弹层在区域边界重置为 1。
+// 字号检查与迁移共用的范围。共享浮层继承所属区域；评论 portal 明确选择对话倍率。
 // 不把差异、文件、终端、信息栏等独立工具纳入检查。
+export const chatPortals = ['cmt-pop', 'cmt-edit', 'cmt-peek']
 export const textFiles = [
   'tree.css',
   'transcript.css',
@@ -10,11 +11,14 @@ export const textFiles = [
   'comments.css',
   'goal.css',
   'text-size.css',
+  'aside.css',
+  'background.css',
 ]
 export const sharedFiles = [
   'base.css',
   'shell.css',
-  'background.css',
+  'organize.css',
+  'devices.css',
   'skins/retro.css',
   'skins/human.css',
   'skins/standard.css',
@@ -25,16 +29,20 @@ export const sharedFiles = [
 const following = {
   'base.css': /^(chip|st|pill|caret-ic|ic)$/,
   'shell.css': /^(dev-(none|row|note)|ws-row|filter-hid|filter-off|row-err|sec-label|ss-[\w-]+)$/,
-  'background.css': /^(bgbar|bgmark|pulse|turn-origin|st)$/,
+  'organize.css': /^(req-rule|harness-said|pick-title|ws-fixed|ws-root|ws-picker-head)$/,
+  'devices.css':
+    /^(confirm-body|modal-head|modal-note|modal-foot|form-row|form-label|form-input|form-note)$/,
   skins:
-    /^(md|umsg|think|code|cmp-[\w-]+|pick-btn|sug-opt|mode-btn|req-[\w-]+|pending-[\w-]+|pill|st|mention|ss-[\w-]+|ws-row|dev-row|sec-label|tree-[\w-]+|agent-[\w-]+)$/,
+    /^(md|umsg|think|code|cmp-[\w-]+|pick-btn|pick-opt|peek|peek-foot|sug-opt|mode-btn|req-[\w-]+|pending-[\w-]+|pill|st|mention|ss-[\w-]+|ws-row|dev-row|sec-label|tree-[\w-]+|agent-[\w-]+)$/,
 }
 const fixed = {
   'base.css': /^(harness-off-label)$/,
   'shell.css':
     /^(crumb|sb-btn|sb-btn-ic|sb-look-row|sb-look-more|sb-filter-on|sb-link|info-card|info-head|toast)$/,
-  'background.css': /^(bg-group|bg-row|bg-stop|bg-empty|bg-task-head|bg-task-none)$/,
-  skins: /^(peek|peek-foot|pick-opt)$/,
+  'organize.css':
+    /^(head-rename|head-count|head-toggle|head-more|band-empty|focus-back|focus-device)$/,
+  'devices.css':
+    /^(dev-[\w-]+|cfail-[\w-]+|probe-[\w-]+|svc-[\w-]+|conn-[\w-]+|auth-[\w-]+|devp-[\w-]+|host|check|callout|linkish|wt-list-wrap|wt-facts|seg|field|toggle|empty-[\w-]+)$/,
 }
 const regionRoots = new Set([
   'sb-scroll',

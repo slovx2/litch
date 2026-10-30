@@ -20,10 +20,18 @@ Skin, theme and language can also be changed from the **Appearance** button at t
 
 Sidebar text size (会话列表字号) and conversation text size (对话字号) scale their reading areas
 relative to the current skin. The selected factors are retained when switching skins.
-Conversation text size covers prose, code, diagrams, questions, approval cards and the input box;
-sidebar text size covers device, project and session rows.
-The top bar, sidebar header and footer, settings, menus, info rail, diffs, files, terminal and browser
-keep their own text sizes. Text size changes text and necessary line heights, while zoom scales the
+对话字号同时影响正文、代码、图表、提问与审批卡、输入框，以及选字菜单、评论编辑与引用预览、
+输入建议、模型与权限菜单、附件预览和对话确认框。侧聊、子代理详情、后台任务和目标内容也跟随对话字号；
+浮层按实际大小重新定位，空间不足时换行或在浮层内滚动。
+会话列表字号影响设备、项目和会话行。顶栏、侧栏头尾与菜单、设置、信息栏、侧面板标签、
+差异工具、文件预览、终端及浏览器仍用各自字号。
+
+Conversation text size covers prose, code, diagrams, questions, approvals, the composer and its menus,
+selection actions, comment editors and previews, suggestions, attachments and conversation confirmations.
+Side chats, agent details, background tasks and goals also follow it. Floating cards reposition to fit
+the window and wrap or scroll when needed. Sidebar text size covers device, project and session rows.
+The top bar, sidebar header/footer and menus, settings, info rail, panel tabs, diffs, files, terminal
+and browser keep their own text sizes. Text size changes text and necessary line heights, while zoom scales the
 whole window. The factors multiply: 150% text size with 150% zoom gives 225%.
 Both preferences are saved on this computer, do not sync to phones, and also work in browser previews.
 

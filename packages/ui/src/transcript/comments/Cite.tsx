@@ -25,6 +25,7 @@ import { MentionScope } from '../SessionMentions.tsx'
 import { setToggle } from '../state.ts'
 import { cardMark, cardToggle } from './Cards.tsx'
 import { revealOrigin } from './locate.ts'
+import { useCommentPosition } from './position.ts'
 
 interface CiteValue {
   deviceId: string
@@ -108,6 +109,7 @@ function Cite({ scope, comment }: { scope: CiteValue; comment: ParsedComment }) 
   const { store } = useServices().replica
   const button = useRef<HTMLButtonElement>(null)
   const [peek, setPeek] = useState<DOMRect | null>(null)
+  const position = useCommentPosition(peek, 'below', button)
   const { deviceId, sessionId, userId } = scope
 
   const open = () => {
@@ -145,16 +147,7 @@ function Cite({ scope, comment }: { scope: CiteValue; comment: ParsedComment }) 
       </button>
       {peek
         ? createPortal(
-            <div
-              className="cmt-peek"
-              role="tooltip"
-              // 下面放不下就放到记号上面
-              data-up={peek.bottom > window.innerHeight - 180 || undefined}
-              style={{
-                left: Math.max(8, Math.min(peek.left, window.innerWidth - 328)),
-                top: peek.bottom > window.innerHeight - 180 ? peek.top - 6 : peek.bottom + 6,
-              }}
-            >
+            <div ref={position.ref} className="cmt-peek" role="tooltip" style={position.style}>
               <span className="cmt-peek-quote">{comment.quote}</span>
               {comment.note ? <span className="cmt-peek-note">{comment.note}</span> : null}
             </div>,

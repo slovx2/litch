@@ -16,7 +16,15 @@
 .ask,
 .req-frame,
 .pending-asks,
-.child-reqs {
+.child-reqs,
+.cmt-pop,
+.cmt-edit,
+.cmt-peek,
+.aside-view,
+.aside-start,
+.agents-view,
+.goal-panel,
+.bg-panel {
   --fs: var(--fs-chat);
 }
 .tr,
@@ -26,18 +34,12 @@
   font-size: calc(13px * var(--fs));
 }
 
-/* 弹层即使挂在阅读区里也属于外壳；其中复用的真正对话组件会重新选择 chat 倍数。 */
-.pick-pop,
+/* 通用浮层跟随所在区域；侧栏菜单、全局外壳仍用自己的字号。评论 portal 在上面明确选择对话倍率。 */
+.sb .pick-pop,
+.sb dialog,
+.sb .modal,
 .info-card,
-.ctx-menu,
-.tip,
-.toast,
-dialog,
-.modal,
-.cmt-pop,
-.cmt-editor,
-.peek,
-.sug {
+.toast {
   --fs: 1;
 }
 /* 没有独立字号的外壳容器不能继承阅读区已算好的 font-size。 */
@@ -46,7 +48,6 @@ dialog,
 .tip,
 dialog,
 .modal,
-.cmt-editor,
 .sug {
   font-size: calc(13px * var(--fs));
 }

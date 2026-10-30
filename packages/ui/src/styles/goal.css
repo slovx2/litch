@@ -4,10 +4,10 @@
 .goalbar {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: calc(2px * var(--fs));
   min-width: 0;
-  height: 28px;
-  padding: 0 2px 0 0;
+  height: calc(28px * var(--fs));
+  padding: 0 calc(2px * var(--fs)) 0 0;
   border: 1px solid var(--line-2);
   border-radius: var(--r2);
   background: var(--panel);
@@ -76,8 +76,8 @@
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 24px;
-  height: 24px;
+  width: calc(24px * var(--fs));
+  height: calc(24px * var(--fs));
   border: 0;
   border-radius: var(--r1);
   background: none;
@@ -101,6 +101,7 @@
   font-size: calc(12.5px * var(--fs));
 }
 .goal-head {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -133,6 +134,7 @@
 }
 .goal-edit-row,
 .goal-acts {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   gap: 8px;

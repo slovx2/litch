@@ -23,6 +23,7 @@ import {
   updateComment,
   useDraftComments,
 } from './model.ts'
+import { useCommentPosition } from './position.ts'
 import { ITEM_ATTR, itemRoot, offsetOf, plainOf, rootByQuote, textNodes } from './text-range.ts'
 
 /** 原文上的淡底色 */
@@ -359,6 +360,7 @@ export const CommentLayer = memo(function CommentLayer({
   })()
 
   const box = pick?.range.getBoundingClientRect()
+  const position = useCommentPosition(box ?? null, 'above')
   return (
     <>
       <div className="cmt-marks" ref={layer} aria-hidden={badges.length === 0 || undefined}>
@@ -391,10 +393,11 @@ export const CommentLayer = memo(function CommentLayer({
       {pick && box && box.width + box.height > 0
         ? createPortal(
             <div
+              ref={position.ref}
               className="cmt-pop"
               role="toolbar"
               aria-label={t('comment.pop')}
-              style={{ left: Math.max(8, box.left), top: Math.max(8, box.top - 6) }}
+              style={position.style}
               // 按下时不让选区丢掉，键盘照常点里面的按钮
               onMouseDown={(event) => event.preventDefault()}
             >

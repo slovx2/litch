@@ -114,11 +114,11 @@
 .cmp-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: calc(4px * var(--fs));
   min-width: 0;
   max-width: 100%;
-  height: 24px;
-  padding: 0 3px 0 7px;
+  height: calc(24px * var(--fs));
+  padding: 0 calc(3px * var(--fs)) 0 calc(7px * var(--fs));
   border: 1px solid var(--line-2);
   border-radius: var(--r1);
   background: var(--hover);
@@ -126,16 +126,16 @@
 }
 .cmp-chip > .ic {
   flex: none;
-  width: 12px;
-  height: 12px;
+  width: calc(12px * var(--fs));
+  height: calc(12px * var(--fs));
   color: var(--ink-3);
 }
 .cmp-chip-x {
   flex: none;
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: calc(18px * var(--fs));
+  height: calc(18px * var(--fs));
   border-radius: var(--r1);
   color: var(--ink-3);
 }
@@ -144,8 +144,8 @@
   background: var(--press);
 }
 .cmp-chip-x .ic {
-  width: 10px;
-  height: 10px;
+  width: calc(10px * var(--fs));
+  height: calc(10px * var(--fs));
 }
 
 /* 带着的文字那一片点得开。里面这一层不占位置，片里的东西照旧排成一行 */
@@ -155,7 +155,7 @@
 .cmp-chip-open {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: calc(4px * var(--fs));
   min-width: 0;
   height: 100%;
   font: inherit;
@@ -163,8 +163,8 @@
 }
 .cmp-chip-open .ic {
   flex: none;
-  width: 12px;
-  height: 12px;
+  width: calc(12px * var(--fs));
+  height: calc(12px * var(--fs));
   color: var(--ink-3);
 }
 .cmp-chip-open:hover,
@@ -242,8 +242,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 8px;
-  padding: 6px 8px 6px 12px;
+  gap: calc(6px * var(--fs)) calc(8px * var(--fs));
+  padding: calc(6px * var(--fs)) calc(8px * var(--fs)) calc(6px * var(--fs)) calc(12px * var(--fs));
   border-top: 1px solid var(--line-1);
   color: var(--ink-3);
 }
@@ -251,7 +251,7 @@
   flex: 1 1 140px;
 }
 .peek-foot .btn {
-  height: 24px;
+  height: calc(24px * var(--fs));
   font-size: calc(12px * var(--fs));
 }
 

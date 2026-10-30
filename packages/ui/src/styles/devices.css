@@ -308,7 +308,7 @@
   align-items: center;
   gap: 10px;
   padding: 14px 16px 0;
-  font-size: 15px;
+  font-size: calc(15px * var(--fs));
   font-weight: 600;
 }
 .modal-body {
@@ -327,11 +327,11 @@
   gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--line-2);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .modal-note {
-  font-size: 12px;
-  line-height: 18px;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
   color: var(--ink-3);
 }
 .modal-note.err {
@@ -508,17 +508,18 @@
 
 /* 做一件找不回来的事之前再问一次（app/Confirm.tsx）：窄一些的对话框 */
 .modal.confirm {
-  width: min(380px, calc(100vw - 48px));
+  width: min(calc(380px * var(--fs)), calc(100vw - 48px));
 }
 .confirm-body {
+  overflow: auto;
   flex: 1 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 16px;
-  font-size: 13px;
-  line-height: 20px;
+  font-size: calc(13px * var(--fs));
+  line-height: round(calc(20px * var(--fs)), 1px);
 }
 .confirm-body span {
   color: var(--ink-2);

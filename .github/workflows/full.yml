@@ -187,6 +187,8 @@ jobs:
       # 快捷键一览和真的应用菜单对账、关于与许可、回合正在跑的时候换外观、六套皮肤组合下各屏的溢出与对比度、
       # 缩放到最小最大时的终端行列数；再用同一份用户数据目录冷启动一遍，看窗口一建出来的底色和缩放
       - run: npm run client:check:settings
+      # 对话字号：三套皮肤的评论 portal、窄窗口定位、输入浮层和侧面板边界。
+      - run: npm run client:check:text-scale
       # 完整模式（多 harness 的会话目录、工作区、置顶与分区、新建时选 harness、提问向导）和设备管理页的验收：
       # 各跑两遍，模拟核心一遍、多 harness 的隔离设备一遍
       - run: npm run client:check:full

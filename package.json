@@ -112,6 +112,7 @@
     "client:check:files": "npm run build --prefix packages/ui && npm run check:files --prefix apps/desktop",
     "client:check:diff": "npm run build --prefix packages/ui && npm run check:diff --prefix apps/desktop",
     "client:check:settings": "npm run build --prefix packages/ui && npm run check:settings --prefix apps/desktop",
+    "client:check:text-scale": "npm run build --prefix packages/ui && npm run check:text-scale --prefix apps/desktop",
     "client:check:engines": "npm run build --prefix packages/ui && npm run check:engines --prefix apps/desktop --",
     "client:check:first-turn": "npm run build --prefix packages/ui && npm run check:first-turn --prefix apps/desktop --",
     "client:check:opencode": "node scripts/check-opencode-e2e.mjs",
