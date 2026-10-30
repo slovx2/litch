@@ -58,6 +58,7 @@ import type { Worktrees } from './worktrees.mjs'
 export interface SessionTreeHost {
   harnesses(): HarnessSource[]
   openEngineLink(harness: string): Promise<EngineLink>
+  inheritClientTools?(parentId: string, childId: string): void
   index: ThreadIndex
   workspaces: Workspaces
   store: SessionStore

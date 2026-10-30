@@ -4,7 +4,11 @@
 // 有客户端拿着就留给客户端；没人可送时本来就等着的引擎（Claude）照旧不答。
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
+import {
+  CLIENT_TOOL_NAMESPACE,
+  type ClientToolCallResponse,
+  clientToolFailure,
+} from '../../protocol/src/client-tools.mjs'
 import { NO_RECIPIENT_MESSAGE } from '../../shared/src/server-requests.mjs'
 import { type DeviceToolCall, DeviceTools } from '../src/device-tools.mjs'
 import { EngineUnavailable, runTurn } from '../src/engine-link.mjs'
@@ -117,8 +121,9 @@ test('另注册一个命名空间：每条通往引擎的连接都替它声明�
     const own = internal(engine)[0]
     assert.ok(own, '内部连接连上了')
     assert.deepEqual(JSON.parse(own.raw[0] as string).params.capabilities.litchClientTools, {
-      namespaces: ['litch_tasks', 'litch_manager', 'litch_sessions', 'litch_demo'],
+      namespaces: [...Object.values(CLIENT_TOOL_NAMESPACE), 'litch_demo'],
       anyThread: ['litch_tasks', 'litch_manager', 'litch_sessions', 'litch_demo'],
+      computerActions: true,
     })
     link.close()
   } finally {

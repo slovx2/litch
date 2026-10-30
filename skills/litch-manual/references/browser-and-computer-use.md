@@ -5,6 +5,14 @@ Litch (Codex, Claude Code, Pi, DSH, OpenCode, Gemini CLI, Qwen Code, ACP) get `l
 `litch_computer` tools. Sessions on remote devices use the desktop's browser and Computer Use too,
 while the desktop is connected (remote adapter 0.8.0 or later).
 
+后台子会话（包括跨 harness 派出的会话）继承派出时父会话可用的桌面执行连接，无须先打开子会话即可调用
+浏览器和 Computer Use。设备、harness 开关及网站、登录等审批仍由执行桌面检查。没有获授权且在线的
+执行方时，调用立即返回 `noExecutor`，表示当前没有可执行的桌面端，不表示浏览器不可用。
+执行中桌面断线会返回失败，不会自动换另一台桌面重做；操作可能已部分完成。先核查结果，再连接桌面并
+打开会话后重试。设备保留近期已了结调用的去重记录，防止回合结束后恢复会话时重复执行。
+会话卸载、归档或删除时释放执行连接和去重记录；去重记录也有总量上限，超出后淘汰最早的记录。
+执行连接的继承仅保存在设备服务内存中，会话卸载或服务重启后需重新打开会话以建立执行关系。
+
 ## Switches per device and harness
 
 The browser and Computer Use are switched per device and, below that, per harness (task cards too;

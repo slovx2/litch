@@ -3,6 +3,7 @@
 // 不同，它断了就报 onClose，要再用由调用方重新开；和 side-link.mts（问几句就关）也不同，它一直听着。
 // 通知交给 onNotification 的订阅者；引擎发来要答复的请求里：
 //   - 设备工具（device-tools.mts 注册的 litch_ 命名空间）的 item/tool/call 交给注册表答；
+//   - 客户端工具交给统一路由，使用已声明能力的桌面连接（包括子会话继承的连接），无人可执行即回 noExecutor；
 //   - 别的（审批、提问、MCP 征询……）交给 onServerRequest 的订阅者看（会话树看子会话是不是在等用户），
 //     这一版不答。只有一件事要替引擎做：这条连接订阅着会话，引擎把请求
 //     也发给了它。对“没有连接可送就当场失败”的引擎（Pi、dsh、OpenCode、ACP 这几个用共享的
@@ -12,11 +13,13 @@
 //     例外是调用方用 claimRequests 接过去的（定时任务回合里的审批，task-approvals.mts）：由它等人、到时限答。
 //     别的内部连接接过去的也算有人拿着（held 里问 claimed）：会话树的连接在客户端断开后也订阅着在跑的会话，
 //     引擎把任务回合里的审批补送给它，它不能替引擎回“没人可送”把定时任务那条连接还在等的请求答掉。
-// 握手时声明 clientTools，命名空间取注册表里的，引擎挑执行方时挑得中这条连接。
+// 握手声明设备工具及已知客户端工具；只有设备工具声明 anyThread，客户端工具仅替订阅会话转交。
 
+import { CLIENT_TOOL_NAMESPACE, isClientToolNamespace } from '../../protocol/src/client-tools.mjs'
 import { prepareSpeed, type SpeedStore } from '../../protocol/src/codex-speeds.mjs'
 import { EXTENSION, EXTENSIONS_CAPABILITY } from '../../protocol/src/device.mjs'
 import { NO_RECIPIENT_MESSAGE } from '../../shared/src/server-requests.mjs'
+import type { ClientToolRouter, ClientToolSource } from './client-tools.mjs'
 import type { InstructionStore } from './codex-instructions.mjs'
 import { type DeviceTools, declareDeviceTools } from './device-tools.mjs'
 import type { UpstreamDialect } from './dialect.mjs'
@@ -96,6 +99,8 @@ export interface EngineLinkOptions {
   /** request 不给时限时用的 */
   requestTimeoutMs: number
   tools: Pick<DeviceTools, 'namespaces' | 'has' | 'dispatch' | 'turnEnded'>
+  /** 后台会话的客户端工具也交给设备统一路由，内部连接只转交，不获得桌面权限。 */
+  clientTools?: ClientToolRouter
   /** 这个 harness 发来的这条请求（按请求号）此刻有没有真正的客户端连接拿着 */
   held(harness: string, requestId: RpcId): boolean
   heldGraceMs?: number
@@ -128,6 +133,15 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
   let closedWith: string | null = null
   let runtime: Record<string, unknown> | null = null
   let wire: Wire | null = null
+  const source: ClientToolSource = {
+    harness,
+    get available() {
+      return closedWith === null
+    },
+    reply: (raw) => {
+      if (closedWith === null) wire?.send(raw)
+    },
+  }
 
   const send = (frame: unknown) => {
     if (closedWith === null) wire?.send(JSON.stringify(frame))
@@ -135,6 +149,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
   const shut = (reason: string) => {
     if (closedWith !== null) return false
     closedWith = reason
+    options.clientTools?.dropped(source)
     for (const entry of waiting.values()) {
       clearTimeout(entry.timer)
       entry.reject(new Error(reason))
@@ -176,15 +191,25 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
     if (typeof frame.method === 'string') {
       const params = isObject(frame.params) ? frame.params : {}
       if (frame.id == null) {
+        options.clientTools?.threadEvent(harness, frame.method, params)
         if (frame.method === 'serverRequest/resolved' && params.requestId != null) {
+          options.clientTools?.resolved(source, params.requestId as RpcId)
           const key = idKey(params.requestId as RpcId)
           clearTimeout(unanswered.get(key))
           unanswered.delete(key)
           taken.delete(key)
         }
         // 回合结束：这个回合里还在执行的设备工具作废
-        if (frame.method === 'turn/completed' && isObject(params.turn))
+        if (frame.method === 'turn/completed' && isObject(params.turn)) {
           tools.turnEnded(harness, String(params.turn.id))
+          options.clientTools?.turnEnded(harness, String(params.turn.id))
+        }
+        if (
+          frame.method === 'turn/started' &&
+          isObject(params.turn) &&
+          typeof params.threadId === 'string'
+        )
+          options.clientTools?.turnBegan(harness, params.threadId, String(params.turn.id))
         for (const listener of [...notified]) listener(frame.method, params)
         return
       }
@@ -195,6 +220,14 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
           send({ id, result })
           return true
         })
+        return
+      }
+      if (
+        frame.method === 'item/tool/call' &&
+        isClientToolNamespace(params.namespace as string) &&
+        options.clientTools
+      ) {
+        options.clientTools.offer(null, source, frame, id)
         return
       }
       for (const listener of [...requested]) listener(frame.method, params, id)
@@ -252,7 +285,20 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
           capabilities: {
             experimentalApi: true,
             requestAttestation: false,
-            [EXTENSIONS_CAPABILITY]: [EXTENSION.backgroundTasks, EXTENSION.peerMessages],
+            [EXTENSIONS_CAPABILITY]: [
+              EXTENSION.backgroundTasks,
+              EXTENSION.peerMessages,
+              ...(options.clientTools ? [EXTENSION.clientTools] : []),
+            ],
+            // 仅对订阅会话转交客户端工具；anyThread 仍只有设备工具，最终桌面必须逐项声明能力。
+            ...(options.clientTools
+              ? {
+                  litchClientTools: {
+                    namespaces: Object.values(CLIENT_TOOL_NAMESPACE),
+                    computerActions: true,
+                  },
+                }
+              : {}),
           },
         },
         tools.namespaces(),
@@ -295,8 +341,16 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
             timeoutMs,
           )
           sped?.remember(result)
-          if (threadId && isObject(result?.turn))
+          if (
+            (method === 'thread/archive' || method === 'thread/delete') &&
+            isObject(ready) &&
+            typeof ready.threadId === 'string'
+          )
+            options.clientTools?.threadClosed(harness, ready.threadId)
+          if (threadId && isObject(result?.turn)) {
+            options.clientTools?.turnBegan(harness, threadId, String(result.turn.id))
             options.turnStarted?.(harness, threadId, result.turn)
+          }
           return result
         } finally {
           release?.()

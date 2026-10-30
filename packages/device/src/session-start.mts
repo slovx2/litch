@@ -600,6 +600,7 @@ async function createChild(
     throw new Error(`${harness} 没有给回新会话`)
   }
   const threadId = thread.id
+  tree.host.inheritClientTools?.(parentId, threadId)
   registered(threadId)
   // 分叉时不是每个引擎都认 cwd（Pi、OpenCode、通用 ACP 照源会话的目录）：没换过去的，刚建的工作树删掉、共用父会话的目录
   let branch: string | null = null

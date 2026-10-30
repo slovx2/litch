@@ -81,6 +81,10 @@ const SPACES = {
       snapshot: 'Read the page as an accessibility tree',
     },
   },
+  电脑: {
+    namespace: 'litch_computer',
+    marks: { list_apps: ['List running apps', 'List the apps that have at least one window'] },
+  },
 }
 
 const textOf = (content) =>
@@ -104,6 +108,22 @@ function findByMark(tools, space, tool) {
  * results 是这句话之后已经回来的工具结果。返回 null（不归这里管）、{ text }、或者 { call: { name, args } }
  */
 export function sessionsStep(said, { nameOf, results }) {
+  // 真实桌面后台路由验收：同一个未打开的子会话依次导航、读取页面，再只读列出应用。
+  const desktop = said.match(/^后台桌面验收：(http:\/\/localhost:\d+\/\S*)/m)
+  if (desktop) {
+    const steps = [
+      [SPACES.浏览器, 'navigate', { url: desktop[1] }],
+      [SPACES.浏览器, 'snapshot', {}],
+      [SPACES.电脑, 'list_apps', {}],
+    ]
+    const step = steps[results.length]
+    if (!step) return { text: `${SESSIONS_HEARD}\n${results.join('\n---\n')}` }
+    const [space, tool, args] = step
+    const name = nameOf(space, tool)
+    return name
+      ? { call: { namespace: space.namespace, name, args } }
+      : { text: `没有 ${space.namespace}.${tool} 这个工具` }
+  }
   const managerEvent = managerEventReply(said)
   if (managerEvent) return managerEvent
   const wake = said.match(WAKE)

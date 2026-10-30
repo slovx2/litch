@@ -3,6 +3,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { managerTools } from '../packages/device/dist/device/src/manager-rules.mjs'
 import { MANAGER_TOOLS } from '../packages/device/dist/protocol/src/client-tools-manager.mjs'
+import {
+  MANAGER_DEFAULT_CONTACT,
+  MANAGER_DEFAULT_DISPATCH,
+} from '../packages/device/dist/protocol/src/manager.mjs'
 import { formatSessionEvent } from '../packages/device/dist/protocol/src/session-tree.mjs'
 import { anthropicReply } from './client-fixture-anthropic.mjs'
 import {
@@ -111,7 +115,8 @@ const spaces = managerTools({
   name: '验收经理',
   scope: '隔离验收',
   rules: '',
-  dispatch: { maxRunningLines: 4 },
+  dispatch: { ...MANAGER_DEFAULT_DISPATCH, maxRunningLines: 4 },
+  contact: { ...MANAGER_DEFAULT_CONTACT },
 })
 const flat = spaces.flatMap((space) =>
   space.tools.map((tool, index) => ({
