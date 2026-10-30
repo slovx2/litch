@@ -72,7 +72,23 @@ test('空面板不拉起助手，隐藏与停止分开', async () => {
   const host = createAutomationPreviewHost({ connected: null } as HelperAccess, () => {})
   await host.control({ deviceId: 'local', sessionId: 'unused', action: 'show' })
   await host.control({ deviceId: 'local', sessionId: 'unused', action: 'hide' })
+  await host.closePanels()
   host.disconnected()
+})
+
+test('桌面窗口全部关闭时收起悬浮预览和流，不终止后台会话', async () => {
+  const methods: string[] = []
+  const helper = {
+    connected: {
+      request: async (method: string) => {
+        methods.push(method)
+      },
+    },
+  } as HelperAccess
+  const host = createAutomationPreviewHost(helper, () => {})
+  host.register({ device: { id: 'local' }, threadId: 's' } as ClientToolInvocation, 'local/s')
+  await host.closePanels()
+  assert.deepEqual(methods, ['previewUnpin', 'previewHide'])
 })
 
 test('面板意图跨回合、采集拒绝和助手重连恢复，核心退出才清除', async () => {

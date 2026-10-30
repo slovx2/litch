@@ -10,7 +10,7 @@
 //   listApps       {}                                   → {apps: [...]}
 //   getAppState    {session, app, full?}                → {app, window, screenshot, text, diff, truncated}
 //   click / typeText / pressKey / scroll / setValue / drag / selectText  → {text}
-//   turnEnded      {session}
+//   turnEnded      {session, turnId?}（不给回合号时撤销整个会话）
 //   shutdown       {}
 // 助手发给主进程的通知：stopped {session, app, bundleId}（用户按了停止）
 import AppKit
@@ -118,14 +118,17 @@ final class Engine: ConnectionHandler {
     case "turnEnded":
       let session = try string(params, "session")
       lock.lock()
+      let turn = params["turnId"]?.stringValue ?? turns[session] ?? ""
+      endedTurns.insert("\(session)|\(turn)")
+      // 结束通知可先于队列中的首个动作到达；旧回合的迟到通知也不能撤掉新回合。
+      if let current = turns[session], current != turn { lock.unlock(); return [:] }
       epochs[session, default: 0] += 1
-      if let turn = turns[session] { endedTurns.insert("\(session)|\(turn)") }
       apps[session] = nil
       stopped[session] = nil
-      lock.unlock()
       InputOwnership.shared.end(prefix: ownerPrefix(session))
       preview.end(session)
       Activity.shared.end(engine: self, session: session)
+      lock.unlock()
       return [:]
     case "shutdown":
       Log.write("主进程要求退出")
@@ -218,12 +221,16 @@ final class Engine: ConnectionHandler {
   /// 动作和取状态之前的共同检查：找应用、停没停、权限
   func prepare(_ params: JSONValue) throws -> (session: String, app: NSRunningApplication, key: String) {
     let session = try string(params, "session")
+    let turn = params["turnId"]?.stringValue ?? ""
+    lock.lock()
+    let alreadyEnded = endedTurns.contains("\(session)|\(turn)")
+    lock.unlock()
+    guard !alreadyEnded else { throw RPCError(.stopped, "This turn ended. Do not retry actions from this turn.") }
     let app = try Apps.resolve(try string(params, "app"))
     let key = Engine.appKey(app)
     lock.lock()
-    let turn = params["turnId"]?.stringValue ?? ""
     let ended = endedTurns.contains("\(session)|\(turn)")
-    if turns[session] != turn { stopped[session] = nil; turns[session] = turn; preview.resume(session) }
+    if !ended, turns[session] != turn { stopped[session] = nil; turns[session] = turn; preview.resume(session) }
     let isStopped = stopped[session]?.contains(key) == true || stopped[session]?.contains("*") == true || ended
     lock.unlock()
     if isStopped {
@@ -238,6 +245,11 @@ final class Engine: ConnectionHandler {
       if state.pid != app.processIdentifier || state.launchedAt != app.launchDate {
         state = AppSession(); state.pid = app.processIdentifier; state.launchedAt = app.launchDate
       }
+    }
+    lock.lock()
+    defer { lock.unlock() }
+    guard !endedTurns.contains("\(session)|\(turn)"), connection?.isOpen == true else {
+      throw RPCError(.stopped, "This turn ended. Do not retry actions from this turn.")
     }
     Activity.shared.begin(engine: self, session: session, appKey: key, name: Engine.name(app))
     return (session, app, key)

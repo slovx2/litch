@@ -196,7 +196,7 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
     turnEnded(turn) {
       const session = sessionKey({ device: { id: turn.deviceId }, threadId: turn.threadId })
       win?.turnEnded(session)
-      helper.connected?.request('turnEnded', { session }, 5000).catch(() => {})
+      helper.connected?.request('turnEnded', { session, turnId: turn.turnId }, 5000).catch(() => {})
     },
     // macOS 的“已停止”记在助手里（它自己拒）；Windows 助手只发通知，记在这边
     stopped(notice) {

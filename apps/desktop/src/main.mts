@@ -1040,6 +1040,7 @@ app.on('before-quit', (event) => {
 })
 
 app.on('window-all-closed', () => {
+  void automationPreview?.closePanels()
   if (process.platform !== 'darwin') app.quit()
 })
 

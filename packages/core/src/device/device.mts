@@ -1447,6 +1447,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       patchThread(threadId, { name: threadName ?? null }),
     'thread/archived': ({ threadId }) => shelve(threadId),
     'thread/deleted': ({ threadId }) => {
+      toolCalls.interrupted(threadId)
       removeThread(threadId)
       live.forget(threadId, true)
       unshelve(threadId)
@@ -1455,6 +1456,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     // 侧栏要的都在那条里；官方桌面端也只拿它收拾跟这个会话绑着的东西。这里只忘掉
     // 临时会话和还没说过话的会话的标识（还没说过话就卸载了的，记录不落盘，以后也不会有它的事）
     'thread/closed': ({ threadId }) => {
+      toolCalls.interrupted(threadId)
       transient.delete(threadId)
       unspoken.delete(threadId)
     },
@@ -1509,6 +1511,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       // 不认识的通知只记一次就丢掉，绝不因此刷新整张表
       unknownNotes.add(method)
       log(`不处理的通知：${method}`)
+    }
+    // 先让已载入的视图撤销审批，再收尾；未打开或还在载入的会话也不能漏掉。
+    if (method === 'turn/completed') {
+      const { threadId, turn } = params as { threadId: string; turn: Turn }
+      toolCalls.turnEnded(threadId, turn.id)
     }
   }
 

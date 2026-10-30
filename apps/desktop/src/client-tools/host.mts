@@ -51,6 +51,20 @@ export function createClientToolHost(
   }
   for (const executor of executors) add(executor)
   const running = new Map<string, Running>()
+  // 调用结束不等于回合结束；核心退出时也要收拾已经返回的工具留下的资源。
+  const turns = new Map<string, { deviceId: string; threadId: string; turnId: string }>()
+  const turnKey = (turn: { deviceId: string; threadId: string; turnId: string }) =>
+    JSON.stringify([turn.deviceId, turn.threadId, turn.turnId])
+  const endTurn = (turn: { deviceId: string; threadId: string; turnId: string }) => {
+    turns.delete(turnKey(turn))
+    for (const executor of byNamespace.values()) {
+      try {
+        executor.turnEnded?.(turn)
+      } catch (error) {
+        log(`执行器 ${executor.namespace} 收尾出错：${String(error)}`)
+      }
+    }
+  }
   /** 等用户答的卡片：卡片的标识 → 答了（或者撤了，null）之后怎么办 */
   const waiting = new Map<string, (answer: ClientToolAnswer | null) => void>()
   let askSeq = 0
@@ -74,6 +88,12 @@ export function createClientToolHost(
   const run = async (executor: ClientToolExecutor, message: ClientToolToMain & { op: 'call' }) => {
     const { invocation } = message
     const { id } = invocation
+    const turn = {
+      deviceId: invocation.device.id,
+      threadId: invocation.threadId,
+      turnId: invocation.turnId,
+    }
+    turns.set(turnKey(turn), turn)
     const entry: Running = { controller: new AbortController(), asks: new Set() }
     running.set(id, entry)
     const { signal } = entry.controller
@@ -177,17 +197,11 @@ export function createClientToolHost(
           settleAsk(message.askId, message.answer)
           return
         case 'turnEnded':
-          for (const executor of byNamespace.values()) {
-            try {
-              executor.turnEnded?.({
-                deviceId: message.deviceId,
-                threadId: message.threadId,
-                turnId: message.turnId,
-              })
-            } catch (error) {
-              log(`执行器 ${executor.namespace} 收尾出错：${String(error)}`)
-            }
-          }
+          endTurn({
+            deviceId: message.deviceId,
+            threadId: message.threadId,
+            turnId: message.turnId,
+          })
           return
         case 'phoneAnswer':
           for (const executor of byNamespace.values()) {
@@ -207,6 +221,7 @@ export function createClientToolHost(
         entry.controller.abort()
       }
       running.clear()
+      for (const turn of turns.values()) endTurn(turn)
       for (const askId of [...waiting.keys()]) settleAsk(askId, null)
     },
   }

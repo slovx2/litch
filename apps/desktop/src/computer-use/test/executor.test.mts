@@ -310,5 +310,7 @@ test('回合结束：告诉助手撤提示、清这个会话', async () => {
   const executor = createComputerExecutor({ helper: helper.access })
   executor.turnEnded?.({ deviceId: 'box', threadId: 't7', turnId: 'u1' })
   await new Promise((resolve) => setTimeout(resolve, 0))
-  assert.deepEqual(helper.calls, [{ method: 'turnEnded', params: { session: 'box/t7' } }])
+  assert.deepEqual(helper.calls, [
+    { method: 'turnEnded', params: { session: 'box/t7', turnId: 'u1' } },
+  ])
 })

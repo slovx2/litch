@@ -509,6 +509,12 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
         if (entry.threadId !== threadId) continue
         abandon(entry, clientToolFailure('failed', 'The user interrupted this turn.'))
       }
+      // 已返回的动作仍可能留着光标、预览或临时标签；不等引擎的结束通知。
+      for (const [key, turn] of turns) {
+        if (turn.threadId !== threadId) continue
+        turns.delete(key)
+        host.hub.turnEnded(host.deviceId, threadId, turn.turnId)
+      }
     },
 
     turnEnded(threadId, turnId) {

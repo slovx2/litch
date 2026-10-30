@@ -5,6 +5,20 @@ import LitchComputerUseCore
 @testable import LitchComputerUse
 
 final class PreviewRegressionTests: XCTestCase {
+  func testTurnEndedBeforeQueuedObservationRejectsBeforeResolvingApp() throws {
+    var fds: [Int32] = [-1, -1]
+    XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds), 0)
+    let server = Server(socketPath: "/unused") { _ in fatalError("不启动监听") }
+    let connection = Connection(id: 2, fd: fds[0], server: server)
+    connection.authenticated = true
+    let engine = Engine(connection: connection, mode: .closed, ownTeam: nil)
+    defer { connection.shutdown(); close(fds[1]) }
+    _ = try engine.handle(method: "turnEnded", params: ["session": "fixture", "turnId": "ended"])
+    XCTAssertThrowsError(try engine.prepare(["session": "fixture", "turnId": "ended", "app": "nonexistent-fixture"])) { error in
+      XCTAssertEqual((error as? RPCError)?.kind, .stopped)
+    }
+  }
+
   func testForegroundInputPassesThroughAllPreviewPanelsAndRestoresFlags() {
     _ = NSApplication.shared
     let panels = (0..<2).map { _ in PreviewPanel(contentRect: .zero,
