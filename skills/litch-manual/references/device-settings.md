@@ -4,7 +4,7 @@ Each device (Local and every remote device with the device service) keeps its ow
 they are the management area of the device's detail page (Devices → the device). The device service
 declares the settings and their descriptions, so the live list is authoritative:
 
-- `scripts/litch settings get <device>` lists every setting with its current value, default and
+- `scripts/litch settings get <device>` lists every setting with its current value, type and title; querying one also gives its
   description; `scripts/litch settings get <device> <key>` shows one.
 - `scripts/litch settings set <device> key=value …` changes one or more settings in one save (exact
   value syntax for lists and environment variables: `scripts/litch settings --help`).
@@ -16,18 +16,19 @@ and redo the change. Devices that only have Codex (no device service) have no se
 
 `<id>` is a harness id: `claude-code`, `codex`, `pi`, `dsh`, `opencode`, `gemini`, `qwen`, `acp`.
 
-### Harnesses (one group per harness; changes restart that harness)
+### Harnesses (one group per harness; changes restart unless stated otherwise)
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `harness.<id>.enabled` | boolean | on for Claude Code and Pi; on when installed for DSH, OpenCode and Codex; off for Gemini CLI, Qwen Code and ACP | Offer this harness on the device. Off stops its runtime; the harness's own saved sessions are not touched |
 | `harness.<id>.cliPath` | path | empty | Absolute path of the harness's command. Empty means look it up on the login `PATH` (and a few usual places). For `acp` it is required: the command of the ACP agent to run |
 | `harness.<id>.env` | environment | empty | Environment variables only for this harness: proxy, API endpoint, API keys, `CODEX_HOME` for Codex. They override the service's own environment and the adapter's `env` file. Values can be marked secret |
-| `harness.<id>.backgroundShell` | boolean | on | Only `pi`, `opencode` and `acp`. "Background commands": gives the model `litch_shell` tools (start, read, stop, list) so dev servers, watchers and long builds or scripts keep running after the turn ends; they show under Background tasks and the model continues on its own when one finishes by itself. Commands run on this device like the model's own; running ones stop when this harness's runtime restarts. Claude Code, Codex and DSH have their own background commands; Gemini CLI and Qwen Code do not get this. Restarts the harness. Passed to the runtime as `CHA_BACKGROUND_SHELL` |
+| `harness.<id>.taskCards` | boolean | on | Suggested tasks, new-session offers, wrap-up and reminders for this harness; applies immediately to existing sessions too. Explicitly authorized sub-session starts remain available |
+| `harness.<id>.backgroundShell` | boolean | on | Only `pi`, `opencode` and `acp`. "Background commands": gives the model `litch_shell` tools (start, read, stop, list) so dev servers, watchers and long builds or scripts keep running after the turn ends; they show under Background tasks and the model continues on its own when one finishes by itself. Commands run on this device like the model's own; running ones stop when this harness's runtime restarts. Claude Code, Codex and DSH have their own background commands; Gemini CLI and Qwen Code do not get this. Restarts the harness. |
 | `harness.pi.approvals` | boolean | off | "Ask before acting": Pi asks before running commands, writing or editing files and other side effects in the main session. Not a security boundary (no sandbox; subagents are not asked about) |
-| `harness.claude-code.promptCacheTtl` | enum `default` / `1h` | `default` | "Prompt cache duration" for Claude Code. `default` is what Claude Code does on its own (5 minutes with an API key, 1 hour when signed in with a Claude subscription). `1h` keeps the main conversation cached for an hour: cheaper for long conversations with pauses, but each cache write costs more (about 2× input instead of 1.25×). Subagents stay at 5 minutes. Passed to the runtime as `CHA_CLAUDE_PROMPT_CACHE_TTL` |
-| `harness.claude-code.crossSessionInbox` | boolean | on | "Messages from other Claude sessions". While on, other Claude sessions on the same computer (the Claude desktop app, Claude Code in a terminal, other Claude sessions in Litch) can list Litch's Claude sessions and message them with `SendMessage`. The message shows in the conversation as "Message from …" and the session handles it in a turn of its own, with its own permissions: a full-access session runs the request without asking. From the Claude desktop app or a terminal, messages arrive only while the session's Claude Code process is running (after a turn ends it stays running for as long as `idleKeepAlive` says); another Litch Claude session on the same device starts the receiving session's process first if it is not running. Off: Litch's sessions are hidden from other sessions and receive nothing. Restarts Claude Code. Passed to the runtime as `CHA_CLAUDE_CROSS_SESSION_INBOX` |
-| `harness.claude-code.idleKeepAlive` | enum `off` / `15m` / `1h` / `4h` | `1h` | "Keep idle sessions online". How long a Claude Code process stays after its turn ends when no background command keeps it, so other Claude sessions can still message the session and the next turn starts without a restart. Each kept session uses about 100–200 MB of memory; at most 8 processes are kept at once (shared with those keeping background commands), the longest idle closing first. Kept processes are not closed when every client disconnects. Applies only while `crossSessionInbox` is on. Restarts Claude Code. Passed to the runtime as `CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS` |
+| `harness.claude-code.promptCacheTtl` | enum `default` / `1h` | `default` | "Prompt cache duration" for Claude Code. `default` is what Claude Code does on its own (5 minutes with an API key, 1 hour when signed in with a Claude subscription). `1h` keeps the main conversation cached for an hour: cheaper for long conversations with pauses, but each cache write costs more (about 2× input instead of 1.25×). Subagents stay at 5 minutes. |
+| `harness.claude-code.crossSessionInbox` | boolean | on | "Messages from other Claude sessions". While on, other Claude sessions on the same computer (the Claude desktop app, Claude Code in a terminal, other Claude sessions in Litch) can list Litch's Claude sessions and message them with `SendMessage`. The message shows in the conversation as "Message from …" and the session handles it in a turn of its own, with its own permissions: a full-access session runs the request without asking. From the Claude desktop app or a terminal, messages arrive only while the session's Claude Code process is running (after a turn ends it stays running for as long as `idleKeepAlive` says); another Litch Claude session on the same device starts the receiving session's process first if it is not running. Off: Litch's sessions are hidden from other sessions and receive nothing. Restarts Claude Code. |
+| `harness.claude-code.idleKeepAlive` | enum `off` / `15m` / `1h` / `4h` | `1h` | "Keep idle sessions online". How long a Claude Code process stays after its turn ends when no background command keeps it, so other Claude sessions can still message the session and the next turn starts without a restart. Each kept session uses about 100–200 MB of memory; at most 8 processes are kept at once (shared with those keeping background commands), the longest idle closing first. Kept processes are not closed when every client disconnects. Applies only while `crossSessionInbox` is on. Restarts Claude Code. |
 
 The ACP entries take their arguments from an environment variable in their own `env` setting:
 `CHA_GEMINI_ARGS`, `CHA_QWEN_ARGS`, `CHA_ACP_ARGS` (split on whitespace, double quotes supported).
@@ -83,22 +84,49 @@ installed there). Existing worktrees are never moved.
 | `worktrees.keepCount` | 15 (1 – 200) | Live worktrees to keep on the device |
 | `worktrees.keptDays` | 30 (7 – 365) | A worktree with uncommitted changes whose session was archived is kept as it is for this many days, then its changes are saved as a snapshot and the folder removed |
 
-## 本机防休眠（macOS）
+## Power (local macOS service)
 
-桌面启动的本机服务会登记本机归属。电脑和手机的设备设置页都显示「电源」，两个开关切换后立即保存并生效，无须重启服务：
+Devices → the device → **Power** has two switches that save immediately. The desktop registers its
+local service; a phone connected to that service can use them too. Ordinary remote services do not
+get them automatically. Windows/Linux do not support them.
 
-- 「运行任务时阻止系统休眠」（Prevent sleep while tasks are running，`power.preventSleepWhileWorking`）：默认开启。有未结束的回合（包括等待审批或回答）或后台任务时阻止系统空闲休眠，电池供电时也生效，会增加耗电。最后任务结束后有 30 秒宽限。
-- 「接通电源时始终阻止系统休眠」（Always prevent sleep when plugged in，`power.keepAwakeWhilePluggedIn`）：默认关闭。接通电源且设备服务运行时，即使没有任务、已关闭桌面应用，也阻止系统空闲休眠，方便手机随时经 SSH 连回来；会增加耗电。拔电后最多 15 秒撤销这一来源，正在运行的任务不受影响。
+| Key | Default | Meaning |
+|---|---|---|
+| `power.preventSleepWhileWorking` | on | Prevent idle system sleep while a turn (including approvals/questions) or background task runs, on battery too; releases 30 seconds after work ends |
+| `power.keepAwakeWhilePluggedIn` | off | While plugged in, keep the system awake even without tasks and with the desktop app closed, as long as the device service runs |
 
-仅已登记的服务提供快捷开关：桌面选中本机设备时，可在右上角工具栏切换「接通电源时始终阻止系统休眠」；手机可在设备页头部切换。快捷开关与电源设置中的同名项同步，保存后立即生效。
+The desktop's local-device toolbar and the phone device header offer the plugged-in shortcut.
+The state line reports whether the service is actually requesting wakefulness, running on battery,
+or failed. Unplugging releases the plugged-in request within about 15 seconds; running tasks still
+follow the other switch. Both increase power use and allow the display to sleep and lock. They do
+not prevent lid closure/manual sleep/shutdown/low-battery protection, wake a sleeping machine, or make
+locked-screen interaction work. Work bypassing the device service is outside their scope.
 
-工作状态来自本机设备服务路由、回合和后台事件；不会定期扫描历史会话。官方客户端绕过设备服务直接连接 harness 的工作不在此功能范围内。
+```sh
+scripts/litch settings get local power.keepAwakeWhilePluggedIn
+scripts/litch settings set local power.keepAwakeWhilePluggedIn=on
+```
 
-电源组顶部的状态行写服务实际的申请状态，例如「已接通电源 · 正在阻止系统休眠」；开了「接通电源时始终阻止系统休眠」但正用电池时写「正在使用电池 · 接通电源后生效」；申请失败时写原因。两个设置只阻止系统空闲休眠，仍允许屏幕熄灭和锁屏；保存开关成功不等于操作系统保证继续运行。不保证合盖、主动休眠、关机、低电量和热保护时继续运行，也不能唤醒已经进入休眠的机器。锁屏下需要桌面交互的工具仍可能不可用。
+A service-only local install can register on that computer with
+`codex-harness-adapter device-start --local-service`; later restarts keep the choice.
 
-普通远程服务不会自动启用。只有服务、没有桌面的本机安装，可在该电脑上执行 `codex-harness-adapter device-start --local-service` 登记；后续重启保留归属和开关，不重置用户选择。手机通过 SSH 连接这台已登记的电脑时，仍能查看和切换。Windows/Linux 当前不支持，不提供虚假的保活成功状态。
+## Suggestion retention
 
-诊断可使用声明了 `devicePower` 扩展的连接调用 `litch/device/power/read`；macOS 上用 `pmset -g assertions` 按 caffeinate PID 核对。不要修改系统全局休眠设置，也不需要关闭 SIP。
+Devices → the device → **Session orchestration → Suggestion retention** controls ordinary pending
+suggestions. `sessions.suggestionRetentionDays` is an enum: `1`, `3`, `7` (default),
+`14`, `30` or `never`. Changes apply immediately without restarting and recalculate expiry
+from each card's original creation time. Shortening retention can expire old cards immediately;
+handled and expired cards never come back when retention increases. The global list is described
+in `managers-and-suggestions.md`.
+
+```sh
+scripts/litch settings get local sessions.suggestionRetentionDays
+scripts/litch settings set local sessions.suggestionRetentionDays=14
+scripts/litch settings get local sessions.suggestionRetentionDays
+```
+
+Use `never` instead of `14` to keep pending cards indefinitely. Values are plain enum strings:
+do not add JSON quotation marks inside the value.
 
 ## Things that are not device settings
 
@@ -107,9 +135,3 @@ installed there). Existing worktrees are never moved.
 - Projects: `scripts/litch projects list` and friends (`sessions-and-projects.md`).
 - The adapter's `env` file (`~/.codex-harness-adapter/env`) is for standalone installs; prefer the
   per-harness `env` setting, which takes precedence anyway.
-
-### 建议保留时间
-
-键 `sessions.suggestionRetentionDays`，设备作用域，默认字符串 `7`。可选字符串 `1`、`3`、`7`、`14`、`30`、`never`（不过期）。位于“会话编排”组，立即生效，无需重启。按原创建时间重算全部普通待处理建议；已处理和已过期卡不会复活。缩短后已超期的卡立即过期。
-
-CLI 沿用通用设备设置命令，例如 `scripts/litch settings set local sessions.suggestionRetentionDays=never`；选天数需传 JSON 字符串，例如 `scripts/litch settings set local 'sessions.suggestionRetentionDays="14"'`。

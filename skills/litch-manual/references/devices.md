@@ -32,7 +32,7 @@ Requirements the user must meet first (Litch will not do these, exception E4):
    agent (a key with a passphrase has to be added to the agent first). Litch has no password field.
 2. The host key must already be trusted: the user connects once in a terminal (`ssh <target>`) and
    accepts the fingerprint.
-3. The Litch adapter 0.6.0 or later should be installed on that machine (or the Codex CLI 0.125.0 or
+3. The Litch adapter 0.6.0 or later should be installed on that machine (or the Codex CLI 0.157.1 or
    later for a Codex-only device). Install on Linux or macOS:
    `curl -fsSL https://github.com/slovx2/litch/releases/latest/download/install.sh | sh`, or on macOS
    `brew install slovx2/tap/codex-harness-adapter`. Litch then starts the service itself; nothing has to

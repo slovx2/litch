@@ -1,6 +1,6 @@
 ---
 name: litch-manual
-description: "Litch product manual and configuration assistant. Use when the user asks how Litch works or wants Litch set up or changed: devices and remote devices, harnesses (enable, CLI path, environment, how to install them), projects, sessions and sub-sessions, scheduled tasks, the built-in browser, Computer Use, letting remote devices operate this computer, phone pairing, appearance and language, diagnostics. Changes go through the bundled litch config command. Litch 产品手册与配置助手：用户问 Litch 怎么用，或要配置 Litch（设备与远程设备、harness 的开关与安装方法、项目、会话与子会话、定时任务、内置浏览器、Computer Use、远程设备操作本机、扫码绑定手机、外观与语言、诊断）时使用；改配置一律通过自带的 litch config 命令。"
+description: "Litch manual and configuration assistant: devices, harnesses, sessions, managers and worklines, suggestions and retention, notifications, appearance, scheduled tasks, phone pairing, built-in browser, Chrome, Computer Use and batch actions. Configure Litch through the bundled litch config command; explain system permissions and user sign-in steps. Litch 产品手册与配置助手：设备、harness、会话、经理与工作线、建议及留存、通知范围、外观、定时任务、手机绑定、内置浏览器、Chrome、Computer Use 与批量动作；通过自带 litch config 配置，说明系统权限与用户登录步骤。"
 ---
 
 # Litch manual
@@ -8,7 +8,8 @@ description: "Litch product manual and configuration assistant. Use when the use
 Litch is a desktop client (macOS, Windows) that gathers coding-agent harnesses (Claude Code, Codex, Pi,
 DSH, OpenCode, Gemini CLI, Qwen Code and other ACP agents) from this computer and from remote machines
 reached over SSH into one window. This skill is its manual: what everything is, where it lives in the UI,
-and how to change it for the user with the `litch config` command.
+and how to change it for the user with the `litch config` command. The Android app connects to the
+same devices; its own preferences and user-only approvals stay on the phone.
 
 Answer in the user's language (this manual is in English; translate UI names when the user writes
 Chinese, the UI itself is bilingual).
@@ -54,7 +55,8 @@ command is written `scripts/litch …`; always call it by its absolute path.
 4. **Guarded and irreversible actions wait for a click in the desktop app.** Actions that give agents
    more power (`scripts/litch tools set` turning Computer Use or "operate this computer" on,
    `scripts/litch machine set` loosening approval or access, `scripts/litch browser allow`,
-   `scripts/litch browser trust on`, `scripts/litch browser unblock`) make Litch
+   `scripts/litch browser trust on`, `scripts/litch browser unblock`, `scripts/litch chrome set on`, `scripts/litch managers create`,
+   or `scripts/litch managers set` expanding dispatch) make Litch
    show a confirmation card, and so do the irreversible actions in rule 3; the change only happens when
    the user clicks Allow there. Tell the user to look at the Litch window. If they decline, accept it
    and do not retry in a loop.
@@ -84,14 +86,14 @@ command: `scripts/litch harness restart`, `scripts/litch devices reconnect`, or 
 |---|---|---|
 | E1 | Grant system permissions: macOS Accessibility and Screen Recording, Windows UAC prompts | Tell the user which switch to turn on and where (`references/browser-and-computer-use.md`); the user flips it |
 | E2 | Scan the phone pairing QR code, compare the confirmation code, click Allow | `scripts/litch phones pair <device>` opens the QR dialog; the user does the rest on the phone and the computer |
-| E3 | Sign in to a harness (Claude Code's sign-in, `codex login`, getting API keys) | Tell the user to sign in in that harness's own CLI. If they give you a key, you may store it in the harness's environment (see `references/harnesses.md`) |
+| E3 | Complete a harness login, obtain a key, or handle an OAuth secret | Guide the user to Devices → harness → Settings → Accounts or the harness CLI. Litch supports account setup in that page; the user completes its browser/code steps. User-supplied keys may go in the harness environment (`references/harnesses.md`) |
 | E4 | Password logins, first-time host-key confirmation, creating or copying SSH keys when adding a remote device | Litch only adds targets that already log in without a password. Explain how to set that up (`references/devices.md`) and let the user do it |
 | E5 | Updating Litch itself (checking, downloading, restarting to update, the automatic-check switch) | Not part of this manual or the command. Tell the user it is in Settings → About → Updates |
-| E6 | Loosen security without the user seeing it | Guarded actions always show a confirmation card in Litch (rule 4) |
+| E6 | Expand agent access or autonomous manager dispatch without user confirmation | Guarded actions always show a confirmation card in Litch (rule 4) |
 | E7 | Irreversible changes without asking | Ask first, then the user confirms in Litch (rules 3 and 4) |
 | E8 | Keyboard shortcuts | Not configurable in Litch; you can only tell the user what they are |
 | E9 | Settings of the Litch app on a phone | The desktop cannot reach them; tell the user where they are in the phone app |
-| E10 | Import cookies or passwords from another browser; see or copy saved passwords | There is no command. Tell the user where to click: Settings → Built-in browser → Import from another browser, or the Browser tab's menu (`references/browser-and-computer-use.md`). Saved passwords cannot be shown or copied at all |
+| E10 | Import cookies/passwords, change biometric filling requirements or saved sign-in grants, or reveal secrets | There is no command. Tell the user where to click: Settings → Built-in browser → Import from another browser, or the Browser tab's menu (`references/browser-and-computer-use.md`). Manage saved accounts and Touch ID there; agent sign-in uses request_sign_in with user approval. Saved passwords cannot be shown or copied at all |
 
 When you hit one of these, say plainly which step the user has to do, where, and what happens after.
 
@@ -103,19 +105,23 @@ Every operation, with the reference that explains it. Exact arguments: `scripts/
 |---|---|---|
 | `scripts/litch help` | List all groups and actions | this file |
 | `scripts/litch status` | Overview: devices and connection state, harnesses and versions, tool switches, paired phones, app version, language and look | `references/concepts-and-ui.md` |
-| `scripts/litch open` | Open a page in the app: `settings[/section]`, `device <device>`, `tasks`, `new` | `references/concepts-and-ui.md` |
+| `scripts/litch open` | Open a page in the app: `settings[/section]`, `device <device>`, `tasks`, `managers`, `suggestions`, `new` | `references/concepts-and-ui.md` |
 | `scripts/litch devices list` / `check` / `add` / `rename` / `wire` / `target` / `reconnect` / `remove` | Devices and remote devices | `references/devices.md` |
 | `scripts/litch settings get` / `set` | A device's settings (harness switches, CLI paths, environment, SSH entries, terminals, scheduled tasks, session orchestration) | `references/device-settings.md` |
-| `scripts/litch harness list` / `enable` / `disable` / `restart` | Harnesses on a device (installing them is a shell task, see the reference) | `references/harnesses.md` |
+| `scripts/litch harness list` / `enable` / `disable` / `restart` / `auto-title` | Harnesses on a device (installing them is a shell task, see the reference) | `references/harnesses.md` |
 | `scripts/litch projects list` / `add` / `remove` | Projects (folders) on a device | `references/sessions-and-projects.md` |
 | `scripts/litch tasks list` / `create` / `update` / `pause` / `resume` / `run` / `delete` | Scheduled tasks | `references/scheduled-tasks.md` |
 | `scripts/litch tools set` | Switches per device or per harness: task cards, built-in browser, Computer Use; operate this computer (per device) | `references/browser-and-computer-use.md`, `references/operate-this-computer.md` |
 | `scripts/litch machine set` / `log` / `log-clear` | "Operate this computer": approval, access scope, activity log | `references/operate-this-computer.md` |
-| `scripts/litch browser links` / `sites` / `allow` / `forget` / `clear-data` | Built-in browser preferences and data | `references/browser-and-computer-use.md` |
+| `scripts/litch browser links` / `sites` / `allow` / `forget` / `trust` / `blocked` / `block` / `unblock` / `clear-data` | Built-in browser preferences and data | `references/browser-and-computer-use.md` |
 | `scripts/litch computer status` | Computer Use permission or helper status | `references/browser-and-computer-use.md` |
 | `scripts/litch phones list` / `pair` / `revoke` | Phones paired by QR code | `references/phones.md` |
-| `scripts/litch look set` / `language` | Skin, light/dark, density, conversation width, zoom, sidebar and conversation text sizes; UI language | `references/appearance-and-preferences.md` |
-| `scripts/litch notify task-success` / `sessions` / `scope` | System notifications for scheduled tasks and sessions; session notification scope | `references/appearance-and-preferences.md` |
+| `scripts/litch look get` / `set` / `language` | Skin, light/dark, density, conversation width, zoom, sidebar and conversation text sizes; UI language | `references/appearance-and-preferences.md` |
+| `scripts/litch notify get` / `task-success` / `sessions` / `scope` | System notifications for scheduled tasks and sessions; session notification scope | `references/appearance-and-preferences.md` |
+| `scripts/litch chat get` / `send-mode` | Immediate or queued mid-turn messages | `references/appearance-and-preferences.md` |
+| `scripts/litch assist get` / `manual` | Manual installation status and switch | `references/concepts-and-ui.md` |
+| `scripts/litch chrome get` / `set` | Chrome control and remote-device access | `references/browser-and-computer-use.md` |
+| `scripts/litch managers list` / `get` / `create` / `set` | Manager instructions, dispatch and notifications | `references/managers-and-suggestions.md` |
 | `scripts/litch diagnose run` / `logs` / `ssh-config` | Diagnostics, logs, SSH entries for the official Codex app | `references/troubleshooting.md` |
 
 ## References
@@ -131,8 +137,11 @@ Read only the file you need.
   (verified versions), enabling, CLI path, environment variables, sign-in.
 - `references/sessions-and-projects.md`: projects, sessions, the composer, approvals, plan mode,
   sub-sessions and session trees.
+- `references/managers-and-suggestions.md`: manager creation and settings, worklines, board answers,
+  the global suggestion list and manager filter.
 - `references/scheduled-tasks.md`: scheduled tasks and their settings.
-- `references/browser-and-computer-use.md`: the built-in browser and Computer Use.
+- `references/browser-and-computer-use.md`: the built-in browser, Chrome, sign-in approvals, Computer Use
+  batches, no-window apps, save panels and previews.
 - `references/operate-this-computer.md`: letting agents on remote devices run commands and touch files
   on this computer.
 - `references/phones.md`: pairing the Android app by QR code, revoking phones; usage, compacting, quoting replies and updates in the phone app.

@@ -18,9 +18,9 @@ mode exists only where the harness supports it.
 
 ## Seeing what is there
 
-桌面与手机的设备详情中，正在运行的 harness 会显示当前 CLI 入口、启动时版本、选择来源和
-启动时间。来源为命令行路径设置、环境变量、PATH 查找或默认安装位置；这不改变现有选择顺序。
-入口可能是包装脚本。修改路径设置后，旧进程的信息保留到实际重启；未运行时不把新设置冒充当前入口。
+Device details on desktop and phone show a running harness's CLI entry, launch-time version, selection
+source and start time. It may be a wrapper script. A changed path is not shown as the running entry
+until the harness actually restarts; a stopped harness does not claim a new path is already running.
 
 - `scripts/litch harness list <device>` shows every harness on the device: enabled or not, ready or
   unavailable with the reason, and the version when known.
@@ -37,12 +37,12 @@ user. Litch has no command for it. Do it yourself with the user's OK, or give th
 | Pi | `npm install -g @earendil-works/pi-coding-agent@0.99.1` | 0.99.1 | 0.99.1 | https://github.com/earendil-works/pi |
 | DSH | `npm install -g @deepseek-ai/dsh@0.2.0-rc.2` | 0.2.0-rc.2 | 0.2.0-rc.2 | https://www.npmjs.com/package/@deepseek-ai/dsh |
 | OpenCode | `curl -fsSL https://opencode.ai/install \| bash -s -- --version 1.18.33` (Windows: `npm install -g opencode-ai@1.18.33`) | 1.18.33 | 1.18.0 | https://opencode.ai/docs |
-| Gemini CLI | `npm install -g @google/gemini-cli` | none | none | https://github.com/google-gemini/gemini-cli |
-| Qwen Code | `npm install -g @qwen-code/qwen-code` | none | none | https://github.com/QwenLM/qwen-code |
+| Gemini CLI | Official instructions; choose an explicit version before installing | none | none | https://github.com/google-gemini/gemini-cli |
+| Qwen Code | Official instructions; choose an explicit version before installing | none | none | https://github.com/QwenLM/qwen-code |
 
 - Prefer the verified version. Newer versions usually work too; Litch only needs the minimum and never
-  requires an exact version. For the latest, drop the version (`@latest`, or no argument to the
-  scripts). Gemini CLI and Qwen Code have not been verified by Litch.
+  requires an exact version. To use a newer release, check the official version and pin that exact version in the command.
+  Gemini CLI and Qwen Code have not been verified by Litch.
 - Never use sudo. If npm's global folder is not writable, tell the user (they can set an npm prefix in
   their home, or use a Node version manager); do not change system folders.
 - npm must be the one on the user's login `PATH`, the same one the harness will be found with.
@@ -102,7 +102,9 @@ Unsaved changes on the Config, Models or Instructions tab are not dropped silent
 going back, opening another page or device, or closing the window (desktop) first asks Save, Discard or
 Cancel (on the phone: switching tab and going back).
 
-Guide the user there; signing in needs the user in a browser. If the user hands you an API key, you may
+These tabs edit the harness’s own files and account state, so litch config does not duplicate their
+Config/Models/MCP/Instructions editors or OAuth flow. Litch’s own automatic-naming switch is the
+exception described below. Guide the user to Accounts to sign in and complete browser/code steps. If the user hands you an API key, you may
 still store it in that harness's environment on that device:
 `scripts/litch settings set <device> harness.<id>.env=…` (value syntax: `scripts/litch settings --help`).
 

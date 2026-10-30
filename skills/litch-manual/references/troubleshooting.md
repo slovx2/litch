@@ -21,14 +21,6 @@ Start every investigation with `scripts/litch status`, then narrow down.
 
 ## Common problems
 
-**经理真实界面验收（源码开发环境）。** `npm run client:check:manager-real` 启动正式桌面外壳、
-隔离设备和真实 Claude Code / 原生 Codex，模型使用回环假接口。Claude 必须通过 `CHA_CLAUDE_CLI`
-指定隔离副本，Codex 从 `CHA_CODEX_CLI` 或 PATH 取；缺少任意一家默认报错，只有显式
-`-- --skip-missing` 才跳过并标记不完整。默认隐藏窗口，`-- --show` 可显示验收窗口。
-逐步截图和结果保存在命令输出的 `_mgr/accept/<时间>/` 目录。验收覆盖创建、决策、看板答复、
-工作线回报与来源、经理设置和自定义提示词更新、结束中和已结束只读。
-先安装仓库及各包的精确版本依赖，不在验收中安装或升级用户的 harness。
-
 **`scripts/litch` says the Litch desktop app is not running.** Ask the user to open Litch; retry. The
 command never starts Litch.
 
@@ -49,27 +41,25 @@ the failed attempt had already shown is withdrawn. To change the number of retri
 `CLAUDE_CODE_MAX_RETRIES` in the harness's environment (`0` turns retrying off). If every retry fails, the
 turn fails with the last error.
 
-**Pi 自动重试后完成回答。** 单次模型请求失败不代表整个回合失败；重试成功后回合显示完成。
-如果重试最终仍失败，显示最后一次模型错误；会话被其他实例修改等回合错误不会被成功重试清除。
+**Pi completes after retrying.** A failed model request does not necessarily fail the whole turn.
+If retries recover, the turn completes; if they fail, the final error is shown. Other turn errors,
+such as another instance modifying the session, are not cleared by a successful retry.
 
-**合盖或断网后一直显示工作中。** 执行回合的设备唤醒后约 30 秒没有新进展，或一般情况下
-持续 5 分钟没有进展，Litch 会在回合末尾提醒。检查每 5 秒进行一次；等待审批、用户回答或
-正在执行工具时不会按模型停流提醒。远程回合由远程设备观察，本机唤醒不会触发远程中断。
-macOS、Linux 支持唤醒观察，Windows 使用 5 分钟通用提醒。这里只能发现可能停滞，不能证明网络故障。
-提醒前会复查完整回合，完整快照只与上次完整快照比较，首次读取只记基线。已有提醒、等待、工具
-和已忽略状态通常只轻量复查，间隔依次为 1、2、5、10 分钟，封顶 10 分钟；状态改变需要核对时
-再读完整回合，回合结束后撤销。唤醒标记延迟送达时，从收到标记起至少再观察 30 秒。
-完整快照没列出工具不代表工具已结束；已登记的工具只在收到结束通知或读到明确终态时移除。
-仍登记着工具时，在 10 分钟档位追加完整核对，以补回离线期间漏掉的工具结束通知；首次兜底在累计 18 分钟，此后每 10 分钟一次。
+**Still working after sleep or a network drop.** After prolonged silence (normally 5 minutes, or
+about 30 seconds after the executing device wakes), Litch can show a stalled-turn notice. Waiting
+for approval, an answer or a tool is not treated as silent model output. Remote turns are observed
+on the remote device; local wake does not interrupt them. This notice suggests missing progress,
+not proof of a network failure. Windows uses the general silence threshold.
 
-提醒上写着最后一次收到进展的时刻。可以选择“继续等待”收起本次提醒，或点击“中断并继续”：先弹出确认，确认后先请求中断，确认旧回合已经中断后
-才发送核对已有步骤并继续工作的消息；不会重放原始指令。10 秒内未确认中断、回合已经变化或
-已有待答请求、排队消息时，不会另发继续请求。Litch 不会自动中断或调整 harness 的网络超时。
-Codex 原生重试时显示它给出的提示，新进展或回合结束后消失；没有次数信息时不猜次数。
-续做消息由 Litch 发送，在桌面和手机对话中显示为“中断后继续”系统卡片，不属于用户手写的消息。
+The notice gives the last progress time. **Keep waiting** hides it. **Interrupt and continue** asks
+for confirmation, waits for interruption and sends a message to check completed steps and continue;
+it does not replay your original prompt. If interruption cannot be confirmed, the turn changed or
+there is another pending request/queued message, it does not start a continuation. Litch does not
+automatically interrupt or change harness network timeouts. Native retry messages disappear on new
+progress or completion. The continuation appears as a system card on desktop and phone.
 
 **A model is unavailable or every turn fails at once.** Usually the harness's own sign-in or model
-configuration. The user checks it in the harness's own CLI (exception E3); the harness's runtime log
+configuration. Check Devices → harness → Settings → Accounts/Config, or its own CLI; the user completes login steps. the harness's runtime log
 (`diagnose logs`) shows the error.
 
 **A remote device does not connect.** `scripts/litch devices check <target>` and the table in
@@ -102,7 +92,7 @@ network-share folders are not supported in the files panel.
   (`LITCH_LOG_MAX_BYTES`, `LITCH_LOG_KEEP`, `LITCH_LOG_MAX_AGE_DAYS` in the service's environment change
   this). Claude Code's `debug.jsonl` rotates at 50 MB and keeps 3 older files instead
   (`CHA_CLAUDE_DEBUG_LOG_MAX_BYTES`, `CHA_CLAUDE_DEBUG_LOG_KEEP`); the 7-day rule applies to it too. Logs left in the old places (`device/*.log`, `<harness>/*.log`, `claude-code/debug.jsonl`) by
-  versions before this layout are no longer written and can be deleted.
+  versions before this layout are no longer written.
 - The desktop app's own logs (`main.jsonl`, `core.jsonl`: requests to devices, connection changes, UI
   commands): `~/Library/Logs/Litch` on macOS, the app's logs folder elsewhere, same limits. On the
   local device, Devices → the device → Logs has buttons that open this folder and the device's log
