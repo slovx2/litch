@@ -316,6 +316,12 @@ export async function managerProbe(): Promise<ManagerSeen> {
   await until('恢复中文', () => document.documentElement.lang === 'zh-CN')
   await next()
   await until('进入运行环境', () => activeStep('runtime'))
+  // 视图恢复后可能带入当前会话的项目，先明确改为无项目，再验空目录的校验。
+  const workspace = field('项目')?.querySelector('select')
+  if (!workspace) throw new Error('运行环境缺少项目选择')
+  workspace.value = ''
+  workspace.dispatchEvent(new Event('change', { bubbles: true }))
+  await until('清除项目预填的目录', () => input('工作目录').value === '')
   await next()
   await until(
     '空工作目录留在运行环境并显示原因',
