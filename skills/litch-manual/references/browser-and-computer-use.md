@@ -189,13 +189,15 @@ System permission and login prompts still require the user. Native list clicks p
 Command shortcuts use the guarded foreground path because some apps ignore menu shortcuts in the background;
 ordinary typing remains targeted to the app without activation.
 Text fields report their selected character range so selection changes can be verified without another screenshot.
-Request another
-state only when those changes are insufficient, a screenshot is needed, or the window changed.
+Request another state only when those changes are insufficient or a screenshot is needed.
+If an element number expires, use the current number from the latest action changes; request state
+again when the needed element is missing.
 On macOS, screenshots must uniquely match the accessibility window. The result includes its ID
 and observation times; the tree and image are sequential samples and may differ during animation.
 
-动作已附带辅助功能树变化，可直接用于核验结果；信息不足、需要截图或窗口变化时再取状态。
+动作已附带辅助功能树变化，可直接用于核验结果；信息不足或需要截图时再取状态。
 动作返回了新窗口的控件树后，可直接按新编号或快捷键继续；旧截图坐标仍须重新截图才能使用。
+元素编号失效时，优先使用最近动作返回的新编号；缺少所需控件时再取状态。
 应用没有可截窗口时仍返回菜单、可见窗口数和前台应用，可用菜单或快捷键新建窗口，或用 Escape
 关闭普通打开面板；系统权限和登录提示仍由用户处理。原生列表单击优先选择对应行。
 Command 快捷键使用带空闲等待和焦点恢复的短暂前台路径，避免应用在后台忽略菜单快捷键；

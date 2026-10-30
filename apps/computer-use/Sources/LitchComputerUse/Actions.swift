@@ -87,7 +87,7 @@ extension Engine {
       else {
         throw RPCError(
           .invalid,
-          "Element [\(index)] is not in the latest state of this app. Call get_app_state and use a current number."
+          "Element [\(index)] is not in the latest state of this app. Use a current number from the latest action changes, or call get_app_state if it is missing."
         )
       }
       return (state.handles[line.handle], line)
