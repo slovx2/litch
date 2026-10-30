@@ -67,6 +67,8 @@ import { foldsKeep, foldsSettled } from './folds.ts'
 import { HarnessFilter } from './HarnessFilter.tsx'
 import { DeviceInfo, SessionInfo, WorkspaceInfo } from './InfoCards.tsx'
 import { type RowAction, RowMenu, type RowMenuHandle } from './RowMenu.tsx'
+import { revealPath, revealRow } from './reveal.ts'
+import { SidebarReveal, useSidebarReveal } from './reveal-context.ts'
 import { SectionDialog } from './SectionDialog.tsx'
 import { SidebarFoot } from './SidebarFoot.tsx'
 import { SidebarFrame } from './SidebarFrame.tsx'
@@ -80,6 +82,7 @@ import {
   useSidebarFolds,
   useSidebarHarnesses,
   useSidebarNativeChildren,
+  useSidebarOpen,
   useSidebarShowActive,
 } from './state.ts'
 import { TallyMarks } from './TallyMarks.tsx'
@@ -131,6 +134,7 @@ const SessionRow = memo(function SessionRow({
   onFold,
 }: RowProps) {
   const { channel, replica } = useServices()
+  const { fromTree } = useSidebarReveal()
   const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
@@ -432,7 +436,11 @@ const SessionRow = memo(function SessionRow({
           type="button"
           className={classes.filter(Boolean).join(' ')}
           aria-current={selected ? 'true' : undefined}
-          onClick={() => onSelect({ deviceId, sessionId })}
+          onClick={() => {
+            const next = { deviceId, sessionId }
+            fromTree(next)
+            onSelect(next)
+          }}
           {...info.anchor}
         >
           <i
@@ -775,6 +783,9 @@ function below(event: DragEvent): boolean {
 function DeviceGroup(props: GroupProps) {
   const { deviceId, selection, draft, onSelect, onCompose, focus, onFocus } = props
   const { channel } = useServices()
+  const { request } = useSidebarReveal()
+  const root = useRef<HTMLDivElement>(null)
+  const revealed = useRef<Selection | null>(null)
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
   /** 没有是这台设备的会话目录还没到 */
@@ -860,7 +871,6 @@ function DeviceGroup(props: GroupProps) {
   useEffect(() => {
     if (!dragging) setOver(null)
   }, [dragging])
-  if (!device) return null
   const picked = selection?.deviceId === deviceId ? selection.sessionId : null
   /** 非露出来不可的会话：正选中的那个，和停下来等人的那些。筛选筛不掉它们，“展示更多”也折不住它们 */
   const always = (id: string) => id === picked || pressing.includes(id)
@@ -913,6 +923,60 @@ function DeviceGroup(props: GroupProps) {
   )
   const kidsOf = (id: string) =>
     keepSessions(dropNativeChildren(children[id], hidden, unfolded), filter, harnessOf, unfiltered)
+  // 目录可以晚于选中到达。找到并画出目标之前保留请求；成功一次后不干涉用户再折叠或滚动。
+  useEffect(() => {
+    if (!request || request.deviceId !== deviceId || revealed.current === request) return
+    const path = revealPath(
+      request.sessionId,
+      groups,
+      children,
+      (ids) =>
+        keepSessions(dropNativeChildren(ids, hidden, unfolded), filter, harnessOf, unfiltered),
+      props.managerRoot,
+    )
+    if (!path) return
+    const workspace = workspaces.find((entry) => entry.id === path.group)
+    const band = workspace
+      ? workspace.pinned
+        ? PINNED
+        : workspace.sectionId
+          ? groupOfSection(workspace.sectionId)
+          : PROJECTS
+      : path.group
+    const opening = props.managerRoot ? [] : ['', band, path.group]
+    const parents = path.ids.slice(0, -1)
+    let changed = opening.some((id) => closed.has(id)) || parents.some((id) => folded.has(id))
+    if (changed)
+      pruneSidebarFolds(deviceId, {
+        closed: new Set(folds.closed.filter((id) => !opening.includes(id))),
+        folded: new Set(folds.folded.filter((id) => !parents.includes(id))),
+      })
+    const more = path.rootIndex + 1 - FIRST_ROWS
+    if (!props.managerRoot && more > (extra[path.group] ?? 0)) {
+      setExtra((was) => ({ ...was, [path.group]: more }))
+      changed = true
+    }
+    if (changed) return
+    const target = path.ids.at(-1)
+    const element = root.current
+    const scroll = element?.closest<HTMLElement>('.sb-scroll')
+    if (!element || !scroll) return
+    const finish = () => {
+      const row = element.querySelector<HTMLElement>(`[data-session="${CSS.escape(target ?? '')}"]`)
+      if (!row?.getClientRects().length) return false
+      revealRow(row, scroll)
+      revealed.current = request
+      return true
+    }
+    if (finish()) return
+    // 分组目录先到、行摘要后到时，行自己更新，不会重画 DeviceGroup。
+    const observer = new MutationObserver(() => {
+      if (finish()) observer.disconnect()
+    })
+    observer.observe(element, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  })
+  if (!device) return null
   const fold = (id: string) => toggleSidebarFold(deviceId, 'folded', id)
   /** 一行会话，和挂在它下面的子会话（一层套一层）。收起了的父会话下面只露出非露出来不可的 */
   const tree = (sessionId: string, depth: number): ReactNode => {
@@ -948,7 +1012,7 @@ function DeviceGroup(props: GroupProps) {
 
   if (props.managerRoot)
     return (
-      <div className="mg-tree" data-device={deviceId}>
+      <div ref={root} className="mg-tree" data-device={deviceId}>
         {(children[props.managerRoot] ?? []).map((id) => tree(id, 1))}
       </div>
     )
@@ -1651,6 +1715,7 @@ function DeviceGroup(props: GroupProps) {
   if (focus !== null && !gone) {
     return (
       <section
+        ref={root}
         className={offline ? 'dev-group focus off' : 'dev-group focus'}
         data-device={deviceId}
         data-focus={focus}
@@ -1673,6 +1738,7 @@ function DeviceGroup(props: GroupProps) {
 
   return (
     <section
+      ref={root}
       className={offline ? 'dev-group off' : 'dev-group'}
       data-device={deviceId}
       style={wireStyle(device.wire)}
@@ -1792,6 +1858,22 @@ export function Sidebar(props: SidebarProps) {
   const t = useT()
   /** 正在单独查看哪台设备上的哪一组（置顶、组、工作区）。null：照常显示全部 */
   const [focus, setFocus] = useState<{ deviceId: string; group: string } | null>(null)
+  const open = useSidebarOpen()
+  const treeSelection = useRef<Selection | null>(null)
+  const [request, setRequest] = useState<Selection | null>(null)
+  const fromTree = useCallback((next: Selection) => {
+    treeSelection.current = next
+  }, [])
+  useEffect(() => {
+    const direct = treeSelection.current === selection
+    treeSelection.current = null
+    setRequest(direct ? null : selection)
+    if (selection && !direct) setFocus(null)
+  }, [selection])
+  const reveal = useMemo(
+    () => ({ request: open && request === selection ? request : null, fromTree }),
+    [open, request, selection, fromTree],
+  )
   const focusOn = useCallback(
     (deviceId: string) => (group: string | null) =>
       setFocus(group === null ? null : { deviceId, group }),
@@ -1811,97 +1893,99 @@ export function Sidebar(props: SidebarProps) {
   const composing = page === null && selection === null
   const shownIds = focus && deviceIds.includes(focus.deviceId) ? [focus.deviceId] : deviceIds
   return (
-    <SidebarFrame label={t('sidebar.label')}>
-      <div className="sb-top mg-sidebar-top">
-        <div className="mg-mode seg">
-          <button
-            type="button"
-            data-sidebar-mode="chat"
-            aria-pressed={props.mode === 'chat'}
-            onClick={() => props.onMode('chat')}
-          >
-            {t('manager.chat')}
-          </button>
-          <button
-            type="button"
-            data-sidebar-mode="manager"
-            aria-pressed={props.mode === 'manager'}
-            onClick={() => props.onMode('manager')}
-          >
-            {t('manager.title')}
-            {pending ? <span className="pill wait">{pending}</span> : null}
-          </button>
-        </div>
-        {props.mode === 'manager' ? (
-          <button
-            type="button"
-            className="sb-link new"
-            onClick={() =>
-              requestManagers({
-                view: 'new',
-                ...(selection
-                  ? { deviceId: selection.deviceId }
-                  : draft
-                    ? { deviceId: draft.deviceId, workspaceId: draft.workspaceId }
-                    : {}),
-              })
-            }
-          >
-            <Plus />
-            <span>{t('manager.new')}</span>
-          </button>
-        ) : (
-          <>
+    <SidebarReveal value={reveal}>
+      <SidebarFrame label={t('sidebar.label')}>
+        <div className="sb-top mg-sidebar-top">
+          <div className="mg-mode seg">
             <button
               type="button"
-              className={composing ? 'sb-link new on' : 'sb-link new'}
-              aria-current={composing ? 'page' : undefined}
-              onClick={() => onCompose(null)}
+              data-sidebar-mode="chat"
+              aria-pressed={props.mode === 'chat'}
+              onClick={() => props.onMode('chat')}
+            >
+              {t('manager.chat')}
+            </button>
+            <button
+              type="button"
+              data-sidebar-mode="manager"
+              aria-pressed={props.mode === 'manager'}
+              onClick={() => props.onMode('manager')}
+            >
+              {t('manager.title')}
+              {pending ? <span className="pill wait">{pending}</span> : null}
+            </button>
+          </div>
+          {props.mode === 'manager' ? (
+            <button
+              type="button"
+              className="sb-link new"
+              onClick={() =>
+                requestManagers({
+                  view: 'new',
+                  ...(selection
+                    ? { deviceId: selection.deviceId }
+                    : draft
+                      ? { deviceId: draft.deviceId, workspaceId: draft.workspaceId }
+                      : {}),
+                })
+              }
             >
               <Plus />
-              <span>{t('sidebar.newSession')}</span>
+              <span>{t('manager.new')}</span>
             </button>
-            <HarnessFilter />
-            <SidebarMore />
-          </>
-        )}
-      </div>
-      <div className="sb-scroll">
-        {props.mode === 'manager' ? (
-          <ManagerSidebar
-            managers={props.managers}
-            devices={props.devices}
-            selection={selection}
-            onSelect={onSelect}
-            tree={(manager) => (
+          ) : (
+            <>
+              <button
+                type="button"
+                className={composing ? 'sb-link new on' : 'sb-link new'}
+                aria-current={composing ? 'page' : undefined}
+                onClick={() => onCompose(null)}
+              >
+                <Plus />
+                <span>{t('sidebar.newSession')}</span>
+              </button>
+              <HarnessFilter />
+              <SidebarMore />
+            </>
+          )}
+        </div>
+        <div className="sb-scroll">
+          {props.mode === 'manager' ? (
+            <ManagerSidebar
+              managers={props.managers}
+              devices={props.devices}
+              selection={selection}
+              onSelect={onSelect}
+              tree={(manager) => (
+                <DeviceGroup
+                  deviceId={manager.deviceId}
+                  managerRoot={manager.threadId}
+                  selection={selection}
+                  draft={null}
+                  onSelect={onSelect}
+                  onCompose={onCompose}
+                  focus={null}
+                  onFocus={focusOn(manager.deviceId)}
+                />
+              )}
+            />
+          ) : (
+            shownIds.map((deviceId) => (
               <DeviceGroup
-                deviceId={manager.deviceId}
-                managerRoot={manager.threadId}
+                key={deviceId}
+                deviceId={deviceId}
                 selection={selection}
-                draft={null}
+                draft={draft}
                 onSelect={onSelect}
                 onCompose={onCompose}
-                focus={null}
-                onFocus={focusOn(manager.deviceId)}
+                focus={focus?.deviceId === deviceId ? focus.group : null}
+                onFocus={focusOn(deviceId)}
               />
-            )}
-          />
-        ) : (
-          shownIds.map((deviceId) => (
-            <DeviceGroup
-              key={deviceId}
-              deviceId={deviceId}
-              selection={selection}
-              draft={draft}
-              onSelect={onSelect}
-              onCompose={onCompose}
-              focus={focus?.deviceId === deviceId ? focus.group : null}
-              onFocus={focusOn(deviceId)}
-            />
-          ))
-        )}
-      </div>
-      <SidebarFoot page={page} onPage={onPage} />
-    </SidebarFrame>
+            ))
+          )}
+        </div>
+        <SidebarFoot page={page} onPage={onPage} />
+      </SidebarFrame>
+    </SidebarReveal>
   )
 }

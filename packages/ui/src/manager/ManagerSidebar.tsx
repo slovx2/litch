@@ -1,11 +1,14 @@
-import type { DeviceView } from '@litch/core'
-import { type ReactNode, useState } from 'react'
+import { type DeviceView, keys, type SessionChildren } from '@litch/core'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import type { ManagerView } from '../../../core/src/model-manager.mts'
 import type { Selection } from '../app/App.tsx'
 import { requestManagers } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { wireStyle } from '../app/device.ts'
 import { Caret, Forward } from '../app/icons.tsx'
+import { useKey } from '../app/services.tsx'
+import { containsSession, revealRow } from '../sidebar/reveal.ts'
+import { useSidebarReveal } from '../sidebar/reveal-context.ts'
 import { answeredDrafts, useAnswerDrafts } from './drafts.ts'
 
 function ManagerRow({
@@ -14,15 +17,26 @@ function ManagerRow({
   selection,
   onSelect,
   children,
+  reveal,
 }: {
   manager: ManagerView
   device: DeviceView | undefined
   selection: Selection | null
   onSelect(selection: Selection): void
   children: ReactNode
+  reveal: Selection | null
 }) {
   const t = useT()
   const [open, setOpen] = useState(true)
+  const row = useRef<HTMLDivElement>(null)
+  const { fromTree } = useSidebarReveal()
+  useEffect(() => {
+    if (!reveal) return
+    setOpen(true)
+    if (reveal.sessionId !== manager.threadId) return
+    const scroll = row.current?.closest<HTMLElement>('.sb-scroll')
+    if (row.current && scroll) revealRow(row.current, scroll)
+  }, [reveal, manager.threadId])
   const { drafts } = useAnswerDrafts(manager.deviceId, manager.id)
   const count = answeredDrafts(drafts).length
   const picked =
@@ -33,7 +47,7 @@ function ManagerRow({
       style={wireStyle(device?.wire)}
       data-manager-id={manager.id}
     >
-      <div className="mg-sidebar-row" data-selected={picked}>
+      <div ref={row} className="mg-sidebar-row" data-selected={picked}>
         <button
           type="button"
           className="ibtn mg-fold"
@@ -47,7 +61,11 @@ function ManagerRow({
           type="button"
           className="mg-pick"
           aria-current={picked ? 'page' : undefined}
-          onClick={() => onSelect({ deviceId: manager.deviceId, sessionId: manager.threadId })}
+          onClick={() => {
+            const next = { deviceId: manager.deviceId, sessionId: manager.threadId }
+            fromTree(next)
+            onSelect(next)
+          }}
         >
           <i className={manager.runningLines ? 'st run' : 'st'} />
           <span className="ell grow">{manager.name || t('manager.manager')}</span>
@@ -83,6 +101,19 @@ export function ManagerSidebar({
 }) {
   const t = useT()
   const [ended, setEnded] = useState(false)
+  const { request } = useSidebarReveal()
+  const children = useKey<SessionChildren>(keys.children(request?.deviceId ?? ''))
+  const target = request
+    ? managers.find(
+        (manager) =>
+          manager.deviceId === request.deviceId &&
+          containsSession(children ?? {}, manager.threadId, request.sessionId),
+      )
+    : undefined
+  const targetEnded = target?.status === 'ended'
+  useEffect(() => {
+    if (request && targetEnded) setEnded(true)
+  }, [request, targetEnded])
   return (
     <>
       {(['active', 'ended'] as const).map((status) => (
@@ -121,6 +152,7 @@ export function ManagerSidebar({
                     device={devices.find((device) => device.id === manager.deviceId)}
                     selection={selection}
                     onSelect={onSelect}
+                    reveal={manager === target ? request : null}
                   >
                     {tree(manager)}
                   </ManagerRow>
