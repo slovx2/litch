@@ -68,6 +68,7 @@ extension Engine {
         return diff ?? AXText.render(lines, limit: AXText.actionDiffLimit)
       }
       text += "\n\nObserved window: \(read.window == nil ? "none; application menu only (press_key and menu elements remain available)" : read.windowTitle ?? "untitled"). Changes in the app's accessibility tree since the last state:\n\(diff)"
+      if let guidance = SavePanelGuidance.note(read.root) { text += "\n\n" + guidance }
       if diff == "(no changes since the last state)" {
         text += "\nInput dispatch alone does not confirm the intended result. Inspect the state before deciding the next action."
       }
@@ -235,7 +236,9 @@ extension Engine {
     var repaired = false
     let send = {
       for _ in 0..<times {
-        if try Input.key(combo, pid: context.pid, check: context.check) { repaired = true }
+        // 快捷键本来就可能打开保存框或新窗口；派发后只查取消/桌面/前台，不用旧窗口判失败。
+        if try Input.key(combo, pid: context.pid, check: context.check,
+          checkAfterDown: context.checkBase) { repaired = true }
         Thread.sleep(forTimeInterval: 0.03)
       }
     }

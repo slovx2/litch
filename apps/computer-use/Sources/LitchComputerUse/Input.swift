@@ -166,6 +166,7 @@ enum Input {
   /// 返回是否补发过系统层的修饰键松开；失败和取消也先收尾，再把原错误交回。
   @discardableResult
   static func key(_ combo: KeyCombo, pid: pid_t, check: () throws -> Void = {},
+    checkAfterDown: (() throws -> Void)? = nil,
     io: KeyboardIO = KeyboardIO()) throws -> Bool {
     try check()
     guard let down = CGEvent(keyboardEventSource: source, virtualKey: combo.keyCode, keyDown: true),
@@ -180,7 +181,9 @@ enum Input {
     mark(down); io.target(down, pid)
     io.pause()
     var error: Error?
-    do { try check() } catch let failure { error = failure }
+    do {
+      if let checkAfterDown { try checkAfterDown() } else { try check() }
+    } catch let failure { error = failure }
     mark(up); io.target(up, pid)
     releaseModifiers(combo.flags, pid: pid, io: io)
 

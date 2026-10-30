@@ -125,4 +125,18 @@ final class KeyboardReleaseTests: XCTestCase {
     XCTAssertTrue(sink.system.isEmpty)
     XCTAssertEqual(sink.globalFlags, Keys.shift)
   }
+
+  func testShortcutOpeningAnotherWindowStillReleasesWithoutFalseStaleFailure() throws {
+    let sink = Sink()
+    var windowChecks = 0, cancellationChecks = 0
+    XCTAssertFalse(try Input.key(Keys.parse("cmd+s"), pid: 1, check: {
+      windowChecks += 1
+      if windowChecks > 1 { throw RPCError(.stale, "save sheet replaced the old window") }
+    }, checkAfterDown: {
+      cancellationChecks += 1
+    }, io: sink.io))
+    XCTAssertEqual(windowChecks, 1)
+    XCTAssertEqual(cancellationChecks, 1)
+    XCTAssertEqual(sink.privateFlags, 0)
+  }
 }

@@ -345,7 +345,7 @@ final class Engine: ConnectionHandler {
         "mime": .string(shot.mime), "data": .string(shot.data.base64EncodedString()),
         "width": .int(Int(shot.size.width)), "height": .int(Int(shot.size.height)),
       ],
-      "text": .string(text),
+      "text": .string(text + (SavePanelGuidance.note(read.root).map { "\n\n" + $0 } ?? "")),
       "diff": .bool(isDiff),
       "truncated": .bool(read.truncated),
     ]

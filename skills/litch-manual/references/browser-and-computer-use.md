@@ -209,6 +209,11 @@ Shortcuts release injected keys and modifiers on success, failure or cancellatio
 does not carry shortcut modifiers. The helper checks system state and reports one recovery release
 for newly stuck modifiers when the user has not intervened; if they remain set, it stops and asks
 the user to press and release them. Existing or intervening user-held modifiers are not globally released.
+识别到中英文系统保存面板时，结果会提示：文件名框只填文件名，使用 Command+Shift+G 选择目录，
+核验目标目录后再保存，避免把完整路径当成文件名误存到 iCloud。快捷键正常打开新窗口不会因旧窗口失效而报错。
+For recognized English or Chinese save panels, results explain that Save As takes a filename;
+use Command+Shift+G to choose the folder and verify the destination before saving. Opening a new
+window with a shortcut does not fail solely because the previous window changed.
 文本控件返回字符选区，便于直接核验选择操作，不必为确认选区另取截图。
 macOS 截图必须唯一匹配辅助功能窗口，并附窗口编号和观察时间。树与截图是先后采样，动画期间仍可能不同步。
 
