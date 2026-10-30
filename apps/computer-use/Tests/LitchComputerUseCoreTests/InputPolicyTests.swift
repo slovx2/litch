@@ -2,6 +2,13 @@ import XCTest
 @testable import LitchComputerUseCore
 
 final class InputPolicyTests: XCTestCase {
+  func testCommandShortcutsAndWindowlessKeysUseGuardedForeground() {
+    XCTAssertTrue(InputPolicy.keyboardNeedsForeground(hasWindow: false, flags: 0))
+    XCTAssertTrue(InputPolicy.keyboardNeedsForeground(hasWindow: true, flags: Keys.command))
+    XCTAssertTrue(InputPolicy.keyboardNeedsForeground(hasWindow: true, flags: Keys.command | Keys.shift))
+    XCTAssertFalse(InputPolicy.keyboardNeedsForeground(hasWindow: true, flags: 0))
+    XCTAssertFalse(InputPolicy.keyboardNeedsForeground(hasWindow: true, flags: Keys.shift))
+  }
   func testForegroundScrollDirection() {
     for delta in [Int32(-3), 0, 3] {
       XCTAssertEqual(InputPolicy.systemScrollDelta(delta, natural: true), -delta)

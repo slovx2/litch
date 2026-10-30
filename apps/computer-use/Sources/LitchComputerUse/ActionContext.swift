@@ -12,6 +12,7 @@ final class ActionContext {
   var foreground = false
   var usedForeground = false
   var window: NativeWindow?
+  var accessibleWindow: AXUIElement?
   var pid: pid_t { app.processIdentifier }
 
   init(session: String, app: NSRunningApplication, key: String, actionId: String,
@@ -43,7 +44,7 @@ final class ActionContext {
   }
 
   func inForeground<T>(kind: String, point: CGPoint? = nil, _ body: () throws -> T) throws -> T {
-    return try ForegroundExcursion.run(app: app, window: window?.element,
+    return try ForegroundExcursion.run(app: app, window: window?.element ?? accessibleWindow,
       check: { try self.checkBase() }, notice: { state in
         if state == "foreground" { self.usedForeground = true }
         self.notice(state, kind, point, false)

@@ -141,7 +141,7 @@ final class AXReader {
     kAXRoleAttribute, kAXSubroleAttribute, kAXTitleAttribute, kAXDescriptionAttribute,
     kAXValueAttribute, kAXIdentifierAttribute, kAXEnabledAttribute, kAXFocusedAttribute,
     kAXSelectedAttribute, kAXExpandedAttribute, kAXPositionAttribute, kAXSizeAttribute,
-    kAXPlaceholderValueAttribute,
+    kAXPlaceholderValueAttribute, kAXSelectedTextRangeAttribute,
   ].map { $0 as String }
 
   /// 一个元素自己的信息（不含孩子），并登记句柄
@@ -169,6 +169,15 @@ final class AXReader {
     if flag(6) == false { states.append("disabled") }
     if flag(8) == true { states.append("selected") }
     if flag(9) == true { states.append("expanded") }
+    if role == kAXTextAreaRole || role == kAXTextFieldRole {
+      let rangeValue = list[13] as AnyObject
+      if CFGetTypeID(rangeValue) == AXValueGetTypeID() {
+        var range = CFRange()
+        if AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) {
+          states.append("selection: \(range.location)..\(range.location + range.length)")
+        }
+      }
+    }
     var value = text(4)
     if role == "AXCheckBox" || role == "AXRadioButton" {
       if value == "1" { states.append("checked") }

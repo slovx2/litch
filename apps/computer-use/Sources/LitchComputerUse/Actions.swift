@@ -38,6 +38,7 @@ extension Engine {
           state: state, kind: kind, point: point, foreground: foreground)
       })
     context.window = window
+    context.accessibleWindow = axWindow
     let done: String
     do {
       try BackgroundMouse.waitForSelfTest { try context.checkBase() }
@@ -238,7 +239,9 @@ extension Engine {
       }
     }
     // 没有窗口接收按键时，让应用菜单处理快捷键；仍走空闲等待与焦点恢复，不直接抢前台。
-    if context.window == nil { try context.inForeground(kind: "semantic", send) }
+    if InputPolicy.keyboardNeedsForeground(hasWindow: context.window != nil, flags: combo.flags) {
+      try context.inForeground(kind: "semantic", send)
+    }
     else { try send() }
     return "Pressed \(keyText)\(times > 1 ? " \(times) times" : "")."
   }

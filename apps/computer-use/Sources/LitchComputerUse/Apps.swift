@@ -104,7 +104,7 @@ enum Apps {
     app.bundleURL?.deletingPathExtension().lastPathComponent
   }
 
-  /// 在跑的、有窗口的普通应用
+  /// 正在运行的普通应用；没有可见窗口也保留，便于通过菜单或快捷键新建。
   static func list() -> [AppInfo] {
     let counts = windowCounts()
     let front = NSWorkspace.shared.frontmostApplication?.processIdentifier

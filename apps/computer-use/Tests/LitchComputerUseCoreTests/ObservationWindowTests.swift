@@ -17,6 +17,8 @@ final class ObservationWindowTests: XCTestCase {
     state.observeApplication()
     try state.require(nil)
     XCTAssertThrowsError(try state.require(7, screenshot: true))
+    state.observe(7)
+    XCTAssertThrowsError(try state.require(7, screenshot: true))
   }
   func testNewWindowFromActionAcceptsSemanticInputButRejectsOldScreenshotCoordinates() throws {
     var state = ObservationWindow()

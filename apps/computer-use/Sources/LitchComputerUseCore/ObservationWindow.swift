@@ -8,7 +8,7 @@ public struct ObservationWindow: Sendable {
 
   public mutating func capture(_ window: UInt32) { observe(window); captured = window }
   public mutating func observe(_ window: UInt32?) { observed = window; applicationObserved = window != nil }
-  public mutating func observeApplication() { observed = nil; applicationObserved = true }
+  public mutating func observeApplication() { observed = nil; captured = nil; applicationObserved = true }
 
   public func require(_ window: UInt32?, screenshot: Bool = false) throws {
     guard applicationObserved else { throw RPCError(.stale, "Call get_app_state before acting on this app.") }

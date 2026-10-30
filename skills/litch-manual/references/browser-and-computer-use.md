@@ -186,6 +186,9 @@ a new window, its elements and keyboard input can be used directly; coordinates 
 Running apps without a capturable window return their menu text, visible-window count and foreground app.
 Use a menu item or press_key (such as cmd+n) to create a window, or Escape to dismiss an ordinary Open panel.
 System permission and login prompts still require the user. Native list clicks prefer selecting their row.
+Command shortcuts use the guarded foreground path because some apps ignore menu shortcuts in the background;
+ordinary typing remains targeted to the app without activation.
+Text fields report their selected character range so selection changes can be verified without another screenshot.
 Request another
 state only when those changes are insufficient, a screenshot is needed, or the window changed.
 On macOS, screenshots must uniquely match the accessibility window. The result includes its ID
@@ -195,6 +198,9 @@ and observation times; the tree and image are sequential samples and may differ 
 动作返回了新窗口的控件树后，可直接按新编号或快捷键继续；旧截图坐标仍须重新截图才能使用。
 应用没有可截窗口时仍返回菜单、可见窗口数和前台应用，可用菜单或快捷键新建窗口，或用 Escape
 关闭普通打开面板；系统权限和登录提示仍由用户处理。原生列表单击优先选择对应行。
+Command 快捷键使用带空闲等待和焦点恢复的短暂前台路径，避免应用在后台忽略菜单快捷键；
+普通文字输入继续定向投递，不要求激活应用。
+文本控件返回字符选区，便于直接核验选择操作，不必为确认选区另取截图。
 macOS 截图必须唯一匹配辅助功能窗口，并附窗口编号和观察时间。树与截图是先后采样，动画期间仍可能不同步。
 
 ### macOS background control and preview / macOS 后台控制与预览
