@@ -1,4 +1,5 @@
-// 经理列表常驻，看板按需读取。通知使快照失效；在途读取期间再有通知则补读一次。
+// 经理列表常驻，看板按需读取；开启桌面通知的经理也常驻读取看板以发现新决策。
+// 设备通知使快照失效；在途读取期间再有通知则补读一次。
 
 import {
   MANAGER_METHOD,
@@ -14,6 +15,7 @@ import type { ManagerRequests } from '../connection/manager-protocol.mjs'
 import { RpcError } from '../connection/rpc.mjs'
 import type {
   ManagerBoardTopicView,
+  ManagerBoardView,
   ManagerDraft,
   ManagerEdit,
   ManagersView,
@@ -25,6 +27,7 @@ import {
   projectManagerBoard,
   projectManagerDecision,
 } from '../projection/manager.mjs'
+import { openedManagerDecisions } from './manager-decisions.mjs'
 
 export interface ManagersHost {
   deviceId: string
@@ -43,6 +46,7 @@ interface BoardEntry {
   view: ManagerBoardTopicView
   loading: boolean
   dirty: boolean
+  observed: ManagerBoardView | null
 }
 export type Managers = ReturnType<typeof createManagers>
 
@@ -65,13 +69,14 @@ export function createManagers(host: ManagersHost) {
     managers.set(next.id, next)
     host.changed(raw)
     if (publish) for (const sink of sinks) sink.delta([{ op: 'manager.upsert', manager: next }])
+    if (publish) watchBoards()
     return next
   }
   const publishBoard = (entry: BoardEntry) => {
     for (const sink of entry.sinks) sink.delta([{ op: 'managerBoard.set', view: entry.view }])
   }
   const loadBoard = async (managerId: string, entry: BoardEntry) => {
-    if (!host.online() || !host.supported() || !entry.sinks.size) return
+    if (!host.online() || !host.supported() || (!entry.sinks.size && !watching(managerId))) return
     if (entry.loading) {
       entry.dirty = true
       return
@@ -84,22 +89,60 @@ export function createManagers(host: ManagersHost) {
       if (mine !== epoch || boards.get(managerId) !== entry) return
       // 在途期间有失效通知：不先闪出一份已知过时的快照。
       if (!entry.dirty) {
+        const projected = projectManagerBoard(deviceId, board)
+        const manager = managers.get(managerId)
+        if (watching(managerId) && manager) {
+          if (early === null)
+            for (const decision of openedManagerDecisions(entry.observed, projected))
+              for (const sink of sinks)
+                sink.delta([{ op: 'manager.decisionOpened', manager, decision }])
+          entry.observed = projected
+        }
         entry.view = {
           deviceId,
           managerId,
           available: true,
-          board: projectManagerBoard(deviceId, board),
+          board: projected,
         }
         publishBoard(entry)
       }
     } catch (error) {
       if (mine !== epoch || boards.get(managerId) !== entry) return
+      entry.observed = null
       host.log(`读取经理看板失败：${String(error)}`)
     } finally {
       if (mine === epoch && boards.get(managerId) === entry) {
         entry.loading = false
         if (entry.dirty) void loadBoard(managerId, entry)
       }
+    }
+  }
+  const watching = (managerId: string): boolean =>
+    sinks.size > 0 && managers.get(managerId)?.contact.desktopNotification === true
+  const boardEntry = (managerId: string): BoardEntry => {
+    let entry = boards.get(managerId)
+    if (!entry) {
+      entry = {
+        sinks: new Set(),
+        view: { deviceId, managerId, available, board: null },
+        loading: false,
+        dirty: false,
+        observed: null,
+      }
+      boards.set(managerId, entry)
+    }
+    return entry
+  }
+  const watchBoards = () => {
+    for (const id of managers.keys()) {
+      if (!watching(id)) continue
+      const entry = boardEntry(id)
+      if (!entry.observed && !entry.loading) void loadBoard(id, entry)
+    }
+    for (const [id, entry] of boards) {
+      if (watching(id)) continue
+      entry.observed = null
+      if (!entry.sinks.size) boards.delete(id)
     }
   }
   const invalidate = (managerId: string) => {
@@ -118,11 +161,13 @@ export function createManagers(host: ManagersHost) {
       early = null
       available = true
       snapshot()
+      watchBoards()
     } catch (error) {
       if (mine !== epoch) return
       const pending = early ?? []
       early = null
       for (const manager of pending) keep(manager)
+      watchBoards()
       host.log(`读取经理列表失败：${String(error)}`)
     }
   }
@@ -178,21 +223,14 @@ export function createManagers(host: ManagersHost) {
     open(sink: HostSink) {
       sinks.add(sink)
       sink.snapshot(view())
+      watchBoards()
       return () => {
         sinks.delete(sink)
+        watchBoards()
       }
     },
     openBoard(managerId: string, sink: HostSink) {
-      let entry = boards.get(managerId)
-      if (!entry) {
-        entry = {
-          sinks: new Set(),
-          view: { deviceId, managerId, available, board: null },
-          loading: false,
-          dirty: false,
-        }
-        boards.set(managerId, entry)
-      }
+      const entry = boardEntry(managerId)
       const first = entry.sinks.size === 0
       entry.sinks.add(sink)
       sink.snapshot(entry.view)
@@ -200,7 +238,7 @@ export function createManagers(host: ManagersHost) {
       const watched = entry
       return () => {
         watched.sinks.delete(sink)
-        if (!watched.sinks.size) boards.delete(managerId)
+        if (!watched.sinks.size && !watching(managerId)) boards.delete(managerId)
       }
     },
     resync() {
@@ -209,6 +247,7 @@ export function createManagers(host: ManagersHost) {
       for (const entry of boards.values()) {
         entry.loading = false
         entry.dirty = false
+        entry.observed = null
       }
       if (!host.supported()) {
         available = false
@@ -230,6 +269,7 @@ export function createManagers(host: ManagersHost) {
       for (const entry of boards.values()) {
         entry.loading = false
         entry.dirty = false
+        entry.observed = null
       }
     },
     notification(method: string, params: unknown): boolean {

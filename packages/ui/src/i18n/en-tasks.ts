@@ -214,6 +214,7 @@ export const enTasks: Record<keyof typeof zhTasks, Entry> = {
   'settings.notify.sessions': 'Sessions',
   'settings.notify.sessionsSwitch': 'Notify when a turn ends or needs approval or an answer',
   'notify.session.done': '{harness} finished a turn',
+  'notify.manager.decision': 'New decision awaiting your answer',
   'notify.session.failed': '{harness} turn failed',
   'notify.session.approval': '{harness} needs approval',
   'notify.session.answer': '{harness} is waiting for your answer',
