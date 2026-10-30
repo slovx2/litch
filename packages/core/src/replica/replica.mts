@@ -34,7 +34,12 @@ import type {
   SettingSpecView,
   SettingsSnapshotView,
 } from '../model-manage.mjs'
-import type { ManagerBoardTopicView, ManagersView, ManagerView } from '../model-manager.mjs'
+import type {
+  ManagerBoardTopicView,
+  ManagerDecisionView,
+  ManagersView,
+  ManagerView,
+} from '../model-manager.mjs'
 import type { PairingTopicView } from '../model-pairing.mjs'
 import type { TaskRunApprovalView, TaskRunView, TasksView, TaskView } from '../model-tasks.mjs'
 import type { TerminalInfo, TerminalsOp, TerminalsView } from '../model-terminal.mjs'
@@ -404,6 +409,10 @@ export interface Replica {
   onSessionUpdate(
     listener: (deviceId: string, before: SessionSummary | undefined, after: SessionSummary) => void,
   ): () => void
+  /** 连续在线期间新变为待答的经理决策；初次读取和重连对账不触发。 */
+  onManagerDecision(
+    listener: (manager: ManagerView, decision: ManagerDecisionView) => void,
+  ): () => void
 }
 
 const byId = (a: { id: string }, b: { id: string }): number =>
@@ -520,6 +529,7 @@ function sameHarnesses(a: SessionHarnesses, b: SessionHarnesses): boolean {
 
 export function createReplica(channel: CoreChannel): Replica {
   const store = new KeyedStore()
+  const decisionListeners = new Set<(manager: ManagerView, decision: ManagerDecisionView) => void>()
   const managerLists = new Map<string, { stop(): void; rows: Map<string, ManagerView> }>()
   const managerBoards = new Map<string, { deviceId: string; count: number; stop(): void }>()
   const pendingManagers = () => {
@@ -557,7 +567,10 @@ export function createReplica(channel: CoreChannel): Replica {
         },
         delta(ops) {
           store.batch(() => {
-            for (const op of ops) put(op.manager)
+            for (const op of ops) {
+              if (op.op === 'manager.upsert') put(op.manager)
+              else for (const listener of [...decisionListeners]) listener(op.manager, op.decision)
+            }
             const ids = [...entry.rows.keys()]
             if (JSON.stringify(store.get(keys.managerIds(deviceId))) !== JSON.stringify(ids))
               store.set(keys.managerIds(deviceId), ids)
@@ -1467,6 +1480,13 @@ export function createReplica(channel: CoreChannel): Replica {
       sessionListeners.add(listener)
       return () => {
         sessionListeners.delete(listener)
+      }
+    },
+
+    onManagerDecision(listener) {
+      decisionListeners.add(listener)
+      return () => {
+        decisionListeners.delete(listener)
       }
     },
 

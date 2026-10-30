@@ -41,6 +41,21 @@ app menu). There is no "follow the system" choice; on first launch Litch picks t
 
 ## Notifications (Settings → Notifications)
 
+经理的“新决策通知桌面”由每个经理的新建表单或设置单独控制，不受普通会话通知开关影响。
+桌面端连接期间，看板新增待答决策或重新打开决策时通知一次；修改待答决策的文字不重复通知。
+首次连接、重连、重新加载看板或刚开启开关时，不补发已有决策。前台正在查看该经理时不弹出。
+标题为经理名称，正文为决策标题，过长会截断；点击通知唤起窗口并打开该经理页，可在那里查看看板。
+关闭桌面应用或设备断线期间不发送。
+
+Each manager's **Desktop notifications for new decisions** setting is independent of session
+notifications. While connected, the desktop app notifies once when a decision becomes open,
+including reopened decisions. Editing an open decision does not notify again. Initial loading,
+reconnecting, reloading a board, or enabling the setting does not replay existing decisions.
+No notification appears while you are viewing that manager in the focused window. The title names
+the manager and the body shows the decision title, shortened if needed. Clicking brings Litch
+forward and opens the manager page, where its board is available. Notifications require the desktop
+app to be running and connected to the device.
+
 A session shows a system notification when its turn ends or fails and when it stops for an approval
 or an answer, unless you are looking at that very session in the focused Litch window (looking at
 another session still notifies). Sub-sessions notify too; sessions another app started stay quiet

@@ -335,7 +335,9 @@ export type TasksOp =
   | { op: 'run.upsert'; run: TaskRunView; finished: boolean; asking?: TaskRunApprovalView[] }
 
 /** 列表按经理整条替换；看板重读后的快照整份替换。 */
-export type ManagersOp = { op: 'manager.upsert'; manager: ManagerView }
+export type ManagersOp =
+  | { op: 'manager.upsert'; manager: ManagerView }
+  | { op: 'manager.decisionOpened'; manager: ManagerView; decision: ManagerDecisionView }
 export type ManagerBoardOp = { op: 'managerBoard.set'; view: ManagerBoardTopicView }
 
 /**

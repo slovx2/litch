@@ -217,6 +217,7 @@ export const zhTasks = {
   'settings.notify.sessions': '会话',
   'settings.notify.sessionsSwitch': '回合结束、需要审批或回答时通知',
   'notify.session.done': '{harness} 回合已结束',
+  'notify.manager.decision': '新决策待答',
   'notify.session.failed': '{harness} 回合出错',
   'notify.session.approval': '{harness} 需要审批',
   'notify.session.answer': '{harness} 在等你回答',

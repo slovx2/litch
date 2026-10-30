@@ -19,6 +19,7 @@ import { useT } from '../app/appearance.ts'
 import { nameOf } from '../app/device.ts'
 import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { useSidebarNativeChildren } from '../sidebar/state.ts'
+import { ManagerNotices } from './ManagerNotices.tsx'
 import {
   type NoticeSlot,
   noticeBodyOf,
@@ -143,5 +144,5 @@ export function SessionNotices({
   useEffect(() => {
     window.litchShell?.setBadge?.(total)
   }, [total])
-  return null
+  return <ManagerNotices onOpen={onOpen} selection={selection} />
 }
