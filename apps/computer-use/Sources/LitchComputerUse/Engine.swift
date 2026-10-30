@@ -227,6 +227,7 @@ final class Engine: ConnectionHandler {
     lock.unlock()
     guard !alreadyEnded else { throw RPCError(.stopped, "This turn ended. Do not retry actions from this turn.") }
     let app = try Apps.resolve(try string(params, "app"))
+    guard app.bundleIdentifier != nil else { throw RPCError(.notFound, "This app has no bundle identifier and cannot be controlled.") }
     let key = Engine.appKey(app)
     lock.lock()
     let ended = endedTurns.contains("\(session)|\(turn)")
@@ -277,12 +278,18 @@ final class Engine: ConnectionHandler {
     let pid = app.processIdentifier
     var read: AXReader.Result
     var shot: Screenshot
+    var observedAt: Double = 0
     preview.status(session: session, app: app, state: "capturePending")
     Overlay.shared.captureNotice(true)
     defer { Overlay.shared.captureNotice(false) }
     do {
       read = try AXReader().read(pid: pid)
+      observedAt = Date().timeIntervalSince1970 * 1000
       shot = try Capture.window(pid: pid, axFrame: read.windowFrame)
+      guard let current = AXReader.keyWindow(AXReader.appElement(pid)), CFEqual(current, read.window),
+        AXReader.frame(of: current) == read.windowFrame else {
+        throw RPCError(.stale, "The window changed while observing. Call get_app_state again before acting.")
+      }
     } catch {
       let failure = CaptureAccess.error(error)
       preview.status(session: session, app: app, state: failure.kind.rawValue)
@@ -313,6 +320,9 @@ final class Engine: ConnectionHandler {
         "pid": .int(Int(pid)),
       ],
       "window": [
+        "id": .int(Int(shot.windowID)),
+        "observedAt": .number(observedAt),
+        "capturedAt": .number(Date().timeIntervalSince1970 * 1000),
         "title": .optional(read.windowTitle),
         "width": .number(read.windowFrame.size.width),
         "height": .number(read.windowFrame.size.height),

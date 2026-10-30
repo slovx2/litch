@@ -105,7 +105,14 @@ export interface HelperApp {
 
 export interface AppStateResult {
   app: { name: string; bundleId: string | null; pid: number }
-  window: { title: string | null; width: number; height: number }
+  window: {
+    title: string | null
+    width: number
+    height: number
+    id?: number
+    observedAt?: number
+    capturedAt?: number
+  }
   screenshot: { mime: string; data: string; width: number; height: number }
   text: string
   diff: boolean

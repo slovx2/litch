@@ -6,7 +6,7 @@
 // macOS 上一次调用的顺序：
 //   1. 认工具、看参数是不是对象
 //   2. list_apps 不要系统权限，直接问助手；别的先查辅助功能和屏幕录制，缺了回 permission，告诉模型和用户去哪里开
-//   3. 按模型给的 app 在在跑的应用里找到它，定下包标识
+//   3. 应用名由助手解析一次，避免主进程重复枚举窗口
 //   4. 交给助手，结果转成给模型的文字和截图
 // 回合结束时告诉助手：撤掉屏幕提示、清掉这个会话的编号和“已停止”的记录。
 import {
@@ -92,21 +92,6 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
     return status
   }
 
-  /** 按模型给的名字或包标识找应用（和助手的找法一样：包标识、名字、不分大小写的包标识） */
-  async function findApp(query: string, signal: AbortSignal): Promise<HelperApp | null> {
-    const client = await helper.client()
-    const { apps } = (await client.request('listApps', {}, 10_000, signal)) as { apps: HelperApp[] }
-    const needle = query.trim()
-    const lower = needle.toLowerCase()
-    return (
-      apps.find((one) => one.bundleId === needle) ??
-      apps.find((one) => one.name.toLowerCase() === lower) ??
-      apps.find((one) => one.fileName?.toLowerCase() === lower) ??
-      apps.find((one) => one.bundleId?.toLowerCase() === lower) ??
-      null
-    )
-  }
-
   async function run(
     invocation: ClientToolInvocation,
     context: ClientToolContext,
@@ -154,25 +139,12 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
       return clientToolFailure('permission', permissionMessage(status))
     }
 
-    const found = await findApp(params.app, signal)
-    if (!found) {
-      return clientToolFailure(
-        'failed',
-        `No running app with a window matches "${params.app}". Call list_apps; if the app is not running, ask the user to open it.`,
-      )
-    }
-    if (!found.bundleId) {
-      return clientToolFailure(
-        'failed',
-        `${found.name} has no bundle identifier and cannot be controlled.`,
-      )
-    }
     const client = await helper.client()
     const session = sessionKey(invocation)
     options.onInvocation?.(invocation, session)
     const request = {
       ...params,
-      app: found.bundleId,
+      app: params.app.trim(),
       session,
       turnId: invocation.turnId,
       actionId: invocation.id,
@@ -209,6 +181,9 @@ function stateResponse(state: AppStateResult): ClientToolCallResponse {
   const title = state.window.title ? ` "${state.window.title}"` : ''
   const header =
     `App: ${state.app.name} (${state.app.bundleId ?? 'no bundle id'}), window${title}.\n` +
+    (state.window.id === undefined
+      ? ''
+      : `Window ID: ${state.window.id}; tree observed at ${state.window.observedAt}, screenshot captured at ${state.window.capturedAt} (Unix ms). These are sequential observations, not an atomic snapshot.\n`) +
     `Screenshot: ${state.screenshot.width}x${state.screenshot.height} pixels; x/y in actions are pixels of this image.\n` +
     (state.diff
       ? 'Accessibility tree, changes since the previous state (+ added, - removed, ~ changed):'

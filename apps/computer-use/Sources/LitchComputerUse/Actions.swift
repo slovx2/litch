@@ -58,7 +58,10 @@ extension Engine {
         state.lines = Dictionary(lines.map { ($0.index, $0) }, uniquingKeysWith: { a, _ in a })
         return diff ?? AXText.render(lines, limit: AXText.actionDiffLimit)
       }
-      text += "\n\nChanges in the app's accessibility tree since the last state:\n\(diff)"
+      text += "\n\nObserved window: \(read.windowTitle ?? "untitled"). Changes in the app's accessibility tree since the last state:\n\(diff)"
+      if diff == "(no changes since the last state)" {
+        text += "\nInput dispatch alone does not confirm the intended result. Inspect the state before deciding the next action."
+      }
     } catch {
       text += "\n\n(Could not read the app's state after the action; call get_app_state.)"
     }

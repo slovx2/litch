@@ -62,6 +62,8 @@ function fakeHelper(
     async request(method, params = {}, _timeout, signal) {
       calls.push({ method, params })
       if (signal?.aborted) throw new HelperError('failed', 'cancelled')
+      if (params.app === 'Nope')
+        throw new HelperError('notFound', 'No running app matches Nope. Call list_apps.')
       const override = overrides[method]
       if (override) return override(params)
       switch (method) {
@@ -187,11 +189,7 @@ test('没有权限：重启一次助手再查，还没有就回 permission，不
 })
 
 test('任何应用都直接交给助手，不问用户：浏览器、密码管理器、Litch 自己都一样', async () => {
-  for (const [app, bundleId] of [
-    ['safari', 'com.apple.Safari'],
-    ['1Password', 'com.1password.1password'],
-    ['io.github.slovx2.litch', 'io.github.slovx2.litch'],
-  ]) {
+  for (const app of ['safari', '1Password', 'io.github.slovx2.litch']) {
     const helper = fakeHelper()
     const executor = createComputerExecutor({ helper: helper.access })
     const { ctx, asks } = context()
@@ -199,10 +197,10 @@ test('任何应用都直接交给助手，不问用户：浏览器、密码管�
     const response = await executor.call(request, ctx)
     assert.equal(response.success, true, app)
     assert.equal(asks.length, 0)
-    // 交给助手的是包标识（模型给的别名不往下传）和会话键
+    // 助手负责名字解析；主进程不重复枚举全部窗口
     const click = helper.calls.find((call) => call.method === 'click')
     assert.deepEqual(click?.params, {
-      app: bundleId,
+      app,
       element: 2,
       session: 'local/thread-1',
       turnId: request.turnId,
@@ -222,7 +220,7 @@ test('远程设备的会话也不问', async () => {
   assert.equal(asks.length, 0)
   const press = helper.calls.find((call) => call.method === 'pressKey')
   assert.deepEqual(press?.params, {
-    app: 'com.apple.TextEdit',
+    app: 'TextEdit',
     key: 'cmd+s',
     session: 'box/thread-1',
     turnId: request.turnId,
@@ -237,6 +235,10 @@ test('get_app_state：文字加截图（data: 地址）', async () => {
   const request = invocation('get_app_state', { app: 'TextEdit', full: true })
   const response = await executor.call(request, ctx)
   assert.equal(response.success, true)
+  assert.deepEqual(
+    helper.calls.map((call) => call.method),
+    ['permissions', 'getAppState'],
+  )
   assert.equal(response.contentItems.length, 2)
   assert.match(textOf(response), /Screenshot: 1200x800 pixels/)
   assert.match(textOf(response), /\[2\] TextArea/)
@@ -246,7 +248,7 @@ test('get_app_state：文字加截图（data: 地址）', async () => {
   })
   const call = helper.calls.find((one) => one.method === 'getAppState')
   assert.deepEqual(call?.params, {
-    app: 'com.apple.TextEdit',
+    app: 'TextEdit',
     full: true,
     session: 'local/thread-1',
     turnId: request.turnId,

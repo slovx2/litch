@@ -181,6 +181,14 @@ notice is shown; **Esc** (or Stop) takes control back and ends Computer Use for 
   does not open apps that are not running; it asks the user to.
 - Not supported: Linux, a locked screen.
 
+Actions already return accessibility changes; use these to verify the outcome. Request another
+state only when those changes are insufficient, a screenshot is needed, or the window changed.
+On macOS, screenshots must uniquely match the accessibility window. The result includes its ID
+and observation times; the tree and image are sequential samples and may differ during animation.
+
+动作已附带辅助功能树变化，可直接用于核验结果；信息不足、需要截图或窗口变化时再取状态。
+macOS 截图必须唯一匹配辅助功能窗口，并附窗口编号和观察时间。树与截图是先后采样，动画期间仍可能不同步。
+
 ### macOS background control and preview / macOS 后台控制与预览
 
 macOS prefers background input. Typing uses public targeted keyboard events; supported mouse

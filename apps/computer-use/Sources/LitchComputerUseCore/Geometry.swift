@@ -39,6 +39,16 @@ public struct Rect: Equatable, Sendable {
 }
 
 public enum Geometry {
+  /// 截图必须唯一匹配 AX 窗口；不能在目标最小化后改截另一个“最近”的窗口。
+  public static func matchingWindowIndex(frames: [Rect], target: Rect) -> Int? {
+    let matches = frames.indices.filter { index in
+      let frame = frames[index]
+      return abs(frame.origin.x - target.origin.x) < 2 && abs(frame.origin.y - target.origin.y) < 2
+        && abs(frame.size.width - target.size.width) < 2 && abs(frame.size.height - target.size.height) < 2
+    }
+    return matches.count == 1 ? matches[0] : nil
+  }
+
   /// 截图最长边的上限（像素）。超过就等比缩小
   public static let maxScreenshotEdge = 1568
 
