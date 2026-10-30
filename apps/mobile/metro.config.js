@@ -13,6 +13,8 @@ config.watchFolders = [
   // 桌面界面里不依赖 React 和浏览器的纯逻辑（文案、时间与原因的说法、计划确认、提问草稿、差异模型等）和手机共用；
   // 只能引这类文件，引到带 React 或 DOM 的会出两份 React
   path.join(repo, 'packages/ui/src'),
+  // 两端的 Markdown 验收使用同一份语料；只有网页预览引用。
+  path.join(repo, 'packages/ui/test/fixtures'),
 ]
 const CORE_ENTRY = path.join(repo, 'packages/core/src/index.mts')
 config.resolver.sourceExts = [...config.resolver.sourceExts, 'mts']

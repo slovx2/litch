@@ -1,0 +1,17 @@
+{
+  "dependency": "1.1.0",
+  "cjkExtension": "0.1.3",
+  "emscripten": "4.0.19",
+  "sources": {
+    "md4c/md4c.c": "80e065c1074414ed12e609ce48586c6320436b2721d6577773caa113116647c3",
+    "md4c/md4c.h": "c03b2d722bf283ee4b520f449a85d8a96ba1575ee531917afbd713a6249ca7d9",
+    "md4c/litch_cjk.h": "237c84abc6b68517509ffc7c16add16f703a2191eaeeafdd5a43a0959d5231a3",
+    "parser/MD4CParser.cpp": "603f1c81414b1deb8006fca02f9c8a015805af6a9c4afc06bcc03dd24603c18d",
+    "parser/MD4CParser.hpp": "c13bf56a28a7af13266347c8c2f7f192266f6208bf14d89893a833230cb6054b",
+    "parser/MarkdownASTNode.hpp": "fbca859d7ed79b8bfe2913b8c54a7616ae81fa75e99b683b201718cdc87168a0",
+    "wasm/ASTSerializer.cpp": "f7702f043e4873997ec551dc3d1917374c88a3ac33fac813db396a812210aaa7",
+    "wasm/ASTSerializer.hpp": "94145e37f1857a2b23fcd9b6a2173b17b35ad56ad3dc44d4b3ca1aafeaf37a72",
+    "wasm/md4c_wasm.cpp": "767bfda90896728f6946308bea2b4acd9e081e5ae5fda54db57b04344039eaa0"
+  },
+  "wasm": "f6e53ddd47130e96e9bb92a770773fcef4419d579e073334d546a6f5015e92b2"
+}

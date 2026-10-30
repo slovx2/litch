@@ -28,6 +28,13 @@ const say = (prompt: string) =>
 
 export const SCENES: Scene[] = [
   {
+    id: 'cjk-emphasis',
+    group: '对话',
+    name: '中文强调定界符',
+    note: '加粗、斜体、删除线及代码与链接的共同用例',
+    steps: [],
+  },
+  {
     id: 'collapsed-turn',
     group: '对话',
     name: '回合过程收起',

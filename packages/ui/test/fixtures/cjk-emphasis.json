@@ -1,0 +1,49 @@
+[
+  { "source": "**标题：**正文", "kind": "strong", "text": "标题：" },
+  { "source": "**强调。**后文", "kind": "strong", "text": "强调。" },
+  { "source": "**“引号”**后文", "kind": "strong", "text": "“引号”" },
+  { "source": "（**括号内**）", "kind": "strong", "text": "括号内" },
+  { "source": "*斜体：*后文", "kind": "em", "text": "斜体：" },
+  { "source": "__下划线：__后文", "kind": "strong", "text": "下划线：" },
+  { "source": "**English:**text", "kind": "text", "text": "**English:**text" },
+  { "source": "**数字 3**个", "kind": "strong", "text": "数字 3" },
+  { "source": "~~删除线：~~后文", "kind": "del", "text": "删除线：" },
+  { "source": "中文**加粗**中文", "kind": "strong", "text": "加粗" },
+  { "source": "a**b**c", "kind": "strong", "text": "b" },
+  { "source": "`**标题：**正文`", "kind": "codespan", "text": "**标题：**正文" },
+  { "source": "```txt\n**标题：**正文\n```", "kind": "code", "text": "**标题：**正文" },
+  {
+    "source": "[网址](https://example.com/a**b**c)",
+    "kind": "link",
+    "text": "网址",
+    "href": "https://example.com/a**b**c"
+  },
+  {
+    "source": "<https://example.com/a**b**c>",
+    "kind": "link",
+    "text": "https://example.com/a**b**c",
+    "href": "https://example.com/a**b**c"
+  },
+  {
+    "source": "https://example.com/a**b**c",
+    "kind": "link",
+    "text": "https://example.com/a**b**c",
+    "href": "https://example.com/a**b**c"
+  },
+  { "source": "\\*\\*标题：\\*\\*正文", "kind": "text", "text": "**标题：**正文" },
+  { "source": "**标题：**text", "kind": "strong", "text": "标题：" },
+  { "source": "**标题：**正文和**第二段。**后文", "kind": "strong", "text": "标题：", "count": 2 },
+  { "source": "**𠀀。**𠀁", "kind": "strong", "text": "𠀀。" },
+  { "source": "**한글。**다음", "kind": "strong", "text": "한글。" },
+  { "source": "**かな。**続き", "kind": "strong", "text": "かな。" },
+  { "source": "[**标题：**正文](https://example.com)", "kind": "strong", "text": "标题：" },
+  { "source": "~~**标题：**正文~~后文", "kind": "del", "text": "标题：正文" },
+  { "source": "~范围~和147~155级", "kind": "text", "text": "~范围~和147~155级" },
+  { "source": "**未闭合：", "kind": "text", "text": "**未闭合：" },
+  { "source": "中文__加粗__中文", "kind": "text", "text": "中文__加粗__中文" },
+  { "source": "~~**bold**~~text", "kind": "del", "text": "bold" },
+  { "source": "**标题： **正文", "kind": "text", "text": "**标题： **正文" },
+  { "source": "** 标题：**正文", "kind": "text", "text": "** 标题：**正文" },
+  { "source": "**漢󠄀。**漢󠄀", "kind": "strong", "text": "漢󠄀。" },
+  { "source": "**漢︀。**漢︀", "kind": "strong", "text": "漢︀。" }
+]
