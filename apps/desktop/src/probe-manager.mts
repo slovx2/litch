@@ -37,6 +37,14 @@ export interface ManagerSeen {
   settingsReadOnly: boolean
   settingsValidation: boolean
   dispatchSaved: boolean
+  chatRestored: boolean
+  managerRestored: boolean
+  lineRestored: boolean
+  settingsRestored: boolean
+  createdKeepsChat: boolean
+  archivedFallback: boolean
+  externalChat: boolean
+  externalKeepsManager: boolean
 }
 
 export async function managerProbe(): Promise<ManagerSeen> {
@@ -60,7 +68,14 @@ export async function managerProbe(): Promise<ManagerSeen> {
       if (value) return value
       await new Promise((resolve) => setTimeout(resolve, 40))
     }
-    throw new Error(`经理冒烟等待超时：${what}`)
+    throw new Error(
+      `经理冒烟等待超时：${what}；${JSON.stringify({
+        page: one('[data-manager]')?.getAttribute('data-manager'),
+        title: one('.mg-title')?.textContent,
+        crumb: one('.crumb')?.textContent,
+        error: one('.mg-form [role="alert"]')?.textContent,
+      })}`,
+    )
   }
   const cleanChat = () => !one('.mg-chat')?.textContent?.includes('<litch-session-event')
   const eventBody = async (kind: string) => {
@@ -69,7 +84,11 @@ export async function managerProbe(): Promise<ManagerSeen> {
     if (!one(`${selector} .sev-body`)) await click(`${selector} button`)
     return until(`${kind} 事件正文`, () => one(`${selector} .sev-body`))
   }
-  ;(await until('经理入口', () => one<HTMLButtonElement>('[data-sidebar-mode="manager"]'))).click()
+  await click('[data-session="p1"] .ss-row')
+  await until('普通会话选中', () => one('[data-session="p1"] .ss-row.sel'))
+  await click('.tb-side')
+  await until('会话侧面板打开', () => one('.tb-side[aria-pressed="true"]'))
+  await click('[data-sidebar-mode="manager"]')
   const list = Boolean(await until('全部经理页', () => one('[data-manager="list"]')))
   const ended = one('[data-manager-row="e1"] .mg-list-open')
   const summary = one('[data-manager-row="e1"] > button.btn')
@@ -85,6 +104,56 @@ export async function managerProbe(): Promise<ManagerSeen> {
   )
   await click('[data-manager-id="m1"] .mg-pick')
   const selected = Boolean(await until('经理页', () => one('[data-manager="session"]')))
+  await click('[data-board-tab="lines"]')
+  await click('[data-sidebar-mode="chat"]')
+  const chatRestored = Boolean(
+    await until(
+      '切回普通会话和侧面板',
+      () => one('[data-session="p1"] .ss-row.sel') && one('.tb-side[aria-pressed="true"]'),
+    ),
+  )
+  await click('[data-sidebar-mode="manager"]')
+  const managerRestored = Boolean(
+    await until(
+      '切回原经理与看板页签',
+      () =>
+        one('[data-manager="session"][data-manager-id="m1"]') &&
+        one('[data-board-tab="lines"][aria-selected="true"]'),
+    ),
+  )
+  // 顶栏的全局活动入口走 requestOpenSession，目标普通会话不在经理侧栏里。
+  await click('.mach-mark')
+  await click('[data-process="mp-1"] .mach-proc-meta button')
+  const externalChat = Boolean(
+    await until(
+      '外部入口打开普通会话并切回对话栏',
+      () =>
+        one('[data-sidebar-mode="chat"][aria-pressed="true"]') &&
+        one('[data-session="b3"] .ss-row.sel'),
+    ),
+  )
+  await click('[data-sidebar-mode="manager"]')
+  const externalKeepsManager = Boolean(
+    await until(
+      '外部跳转后仍恢复原经理和页签',
+      () =>
+        one('[data-manager="session"][data-manager-id="m1"]') &&
+        one('[data-board-tab="lines"][aria-selected="true"]'),
+    ),
+  )
+  await click('[data-sidebar-mode="chat"]')
+  await click('[data-session="p1"] .ss-row')
+  await click('[data-sidebar-mode="manager"]')
+  await click('[data-act="manager-settings"]')
+  await until('经理设置页', () => one('[data-manager="settings"]'))
+  await click('[data-sidebar-mode="chat"]')
+  await until('设置页切到对话', () => one('[data-session="p1"] .ss-row.sel'))
+  await click('[data-sidebar-mode="manager"]')
+  const settingsRestored = Boolean(
+    await until('恢复经理设置页', () => one('[data-manager="settings"]')),
+  )
+  await click('[data-manager="settings"] .arch-head button')
+  await click('[data-board-tab="overview"]')
   // 窄窗口中先切到看板；宽窗口同一组按钮不显示，不需要点。
   const narrow = one<HTMLButtonElement>('.mg-narrow button:last-child')
   if (narrow && narrow.getBoundingClientRect().height > 0) narrow.click()
@@ -161,6 +230,21 @@ export async function managerProbe(): Promise<ManagerSeen> {
   )
   await click('.mg-body .mg-card button')
   await until('子会话来源', () => one('.mg-origin'))
+  const selectedLine = one('.mg-tree .ss-row.sel')
+    ?.closest('[data-session]')
+    ?.getAttribute('data-session')
+  await click('[data-sidebar-mode="chat"]')
+  await until('工作线切回对话', () => one('[data-session="p1"] .ss-row.sel'))
+  await click('[data-sidebar-mode="manager"]')
+  const lineRestored = Boolean(
+    await until(
+      '恢复经理工作线',
+      () =>
+        one('.mg-origin') &&
+        selectedLine &&
+        one(`.mg-tree [data-session="${CSS.escape(selectedLine)}"] .ss-row.sel`),
+    ),
+  )
   await click('.mg-origin button')
   const childReturn = Boolean(
     await until('回到经理', () => one('[data-manager="session"][data-manager-id="m1"]')),
@@ -245,6 +329,14 @@ export async function managerProbe(): Promise<ManagerSeen> {
   const createdEvent = Boolean(
     (await eventBody('manager-open')).textContent?.includes('验证经理表单和答复提交'),
   )
+  await click('[data-sidebar-mode="chat"]')
+  const createdKeepsChat = Boolean(
+    await until('新建经理不覆盖原对话', () => one('[data-session="p1"] .ss-row.sel')),
+  )
+  await click('[data-sidebar-mode="manager"]')
+  await until('恢复新建的经理', () =>
+    one(`[data-manager="session"][data-manager-id="${createdId}"]`),
+  )
   eventsClean = cleanChat() && eventsClean
   await click('[data-act="manager-settings"]')
   await until('编辑经理表单', () => one('[data-manager-mode="edit"]'))
@@ -324,7 +416,7 @@ export async function managerProbe(): Promise<ManagerSeen> {
   const settingsCancelled = await until('取消不保存', () =>
     one('.mg-scope')?.textContent?.includes('修改后的经理验收范围'),
   )
-  await click('[data-sidebar-mode="manager"]')
+  await click('.mg-sidebar-group header .ibtn')
   await click('[data-manager-row="e1"] .mg-list-open')
   await click('[data-board-tab="decisions"]')
   const endedReadOnly = Boolean(
@@ -351,7 +443,7 @@ export async function managerProbe(): Promise<ManagerSeen> {
       one('.mg-sidebar-group:first-child [data-manager-id="m1"]')?.textContent?.includes('结束中'),
   )
   eventsClean = cleanChat() && eventsClean
-  await click('[data-sidebar-mode="manager"]')
+  await click('.mg-sidebar-group header .ibtn')
   const endingListed = Boolean(
     await until('全部经理显示结束中', () =>
       one('[data-manager-row="m1"]')?.textContent?.includes('结束中'),
@@ -370,6 +462,14 @@ export async function managerProbe(): Promise<ManagerSeen> {
     (await eventBody('manager-end')).textContent?.includes('请整理总结，保留未完成事项。'),
   )
   eventsClean = cleanChat() && eventsClean
+  await click('[data-sidebar-mode="chat"]')
+  await click('[data-session="p1"] [aria-haspopup="menu"]')
+  await click('[data-action="archive"]')
+  await until('已归档的会话从目录移除', () => !one('[data-session="p1"]'))
+  await click('[data-sidebar-mode="manager"]')
+  await until('归档普通会话不影响经理', () => one('[data-manager="session"][data-manager-id="m1"]'))
+  await click('[data-sidebar-mode="chat"]')
+  const archivedFallback = Boolean(await until('切回对话默认页', () => one('.new-page')))
   return {
     list,
     selected,
@@ -408,6 +508,14 @@ export async function managerProbe(): Promise<ManagerSeen> {
     settingsReadOnly,
     settingsValidation,
     dispatchSaved,
+    chatRestored,
+    managerRestored,
+    lineRestored,
+    settingsRestored,
+    createdKeepsChat,
+    archivedFallback,
+    externalChat,
+    externalKeepsManager,
   }
 }
 
@@ -450,6 +558,14 @@ export function judgeManager(seen: ManagerSeen): string[] {
     settingsReadOnly: '编辑经理仍能修改设备、目录或经理自身运行配置',
     settingsValidation: '无效设置没有显示原因并保留表单',
     dispatchSaved: '子会话模型、工作树、合并方式或通知设置没有保存',
+    chatRestored: '切回对话后原会话或侧面板丢失',
+    managerRestored: '切回经理后原经理或看板页签丢失',
+    lineRestored: '切回经理后原工作线丢失',
+    settingsRestored: '切回经理后设置页丢失',
+    createdKeepsChat: '新建经理覆盖了对话视图的位置',
+    archivedFallback: '已归档会话在切回对话后仍被恢复',
+    externalChat: '经理视图从外部打开普通会话后未切到对话栏',
+    externalKeepsManager: '外部跳转到普通会话后丢失了经理位置',
   }
   return (Object.keys(messages) as (keyof ManagerSeen)[])
     .filter((key) => !seen[key])

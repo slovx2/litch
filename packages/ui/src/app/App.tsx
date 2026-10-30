@@ -1,7 +1,7 @@
 import { ManagerTitleBar } from '../manager/ManagerTitleBar.tsx'
 import '../styles/manager.css'
 import { keys, managerMark, type SessionSummary } from '@litch/core'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useReducer, useState } from 'react'
 import { ArchivedPage } from '../archived/ArchivedPage.tsx'
 import { ArchivedSession } from '../archived/ArchivedSession.tsx'
 import { ConfigAgent } from '../assist/ConfigAgent.tsx'
@@ -12,7 +12,7 @@ import { useNewPlace } from '../composer/useNewPlace.ts'
 import { ApprovalNotices } from '../devices/ApprovalNotices.tsx'
 import { DevicesPage } from '../devices/DevicesPage.tsx'
 import { useManagers } from '../manager/data.ts'
-import { ManagerOrigin, ManagerPage } from '../manager/ManagerPage.tsx'
+import { ManagerOrigin, ManagerPage, type ManagerPageLocation } from '../manager/ManagerPage.tsx'
 import { ManagersPage } from '../manager/ManagersPage.tsx'
 import { SessionNotices } from '../notify/SessionNotices.tsx'
 import { Onboarding } from '../onboarding/Onboarding.tsx'
@@ -42,6 +42,8 @@ import { readWhileOpen } from './read.ts'
 import { useKey, useServices } from './services.tsx'
 import { TitleBar } from './TitleBar.tsx'
 import { Toasts } from './toasts.tsx'
+import { useSelectionLifetime } from './useSelectionLifetime.ts'
+import { initialNavigation, navigate, type ViewMode } from './view-navigation.ts'
 
 /** 占着对话区的那几页：已归档对话、设备、设置、定时任务 */
 export type Page = 'archived' | 'devices' | 'settings' | 'tasks' | 'managers'
@@ -61,21 +63,20 @@ export function App() {
   const { channel, replica } = useServices()
   useUpdateToast()
   const managerData = useManagers()
-  const [sidebarMode, setSidebarMode] = useState<'chat' | 'manager'>('chat')
+  const [navigation, dispatch] = useReducer(navigate, initialNavigation)
+  const sidebarMode = navigation.mode
+  const { picked, wish, page } = navigation[sidebarMode]
+  const setWish = (wish: PlaceWish | null) => dispatch({ type: 'wish', wish })
+  const [managerLocations, setManagerLocations] = useState<Record<string, ManagerPageLocation>>({})
   const [managersAt, setManagersAt] = useState<{ route: ManagersRoute; seq: number }>({
     route: { view: 'list' },
     seq: 0,
   })
-  /** 选中的会话。启动时不选：没有选中会话的时候，主区域就是新建对话页 */
-  const [picked, setPicked] = useState<Selection | null>(null)
   /**
    * 新建对话页上明说的去处：从侧栏工作区行的加号带过来的，或者在页上自己换的。
    * null：按默认的来（上次用的设备和工作区）
    */
-  const [wish, setWish] = useState<PlaceWish | null>(null)
   const place = useNewPlace(wish)
-  /** 正开着的那一页：已归档对话、设备，或者设置。选一个会话或者开始写新会话就离开它 */
-  const [page, setPage] = useState<Page | null>(null)
   /** 设置页上正看着哪一组。记在这里：应用菜单的“关于”要能直接开到那一组 */
   const [settingsAt, setSettingsAt] = useState<SettingsSection>('look')
   /** 在“已归档对话”那一页里正只读地看着的那个对话 */
@@ -95,12 +96,16 @@ export function App() {
           (manager) => manager.deviceId === picked?.deviceId && manager.id === mark.managerId,
         )
       : undefined
-  const seen = useRef<Selection | null>(null)
-  useEffect(() => {
-    if (!picked) return
-    if (pickedSummary) seen.current = picked
-    else if (seen.current === picked) setPicked(null)
-  }, [picked, pickedSummary])
+  const forgetChat = useCallback(
+    (selection: Selection) => dispatch({ type: 'missing', mode: 'chat', selection }),
+    [],
+  )
+  const forgetManager = useCallback((selection: Selection) => {
+    dispatch({ type: 'missing', mode: 'manager', selection })
+    setManagersAt((was) => ({ route: { view: 'list' }, seq: was.seq + 1 }))
+  }, [])
+  useSelectionLifetime(navigation.chat.picked, managerData.managers, forgetChat)
+  useSelectionLifetime(navigation.manager.picked, managerData.managers, forgetManager)
   /** 正在写的新会话要建在哪。选中了会话就没有它；一台设备都没有的时候也是 null */
   const draft: Draft | null = picked ? null : place
   // 开着某一页的时候，侧栏里没有哪个会话是选中的
@@ -116,35 +121,40 @@ export function App() {
   const openPage = useCallback(
     (next: Page | null) =>
       leaveThen(() => {
-        setPage(next)
+        dispatch({ type: 'page', page: next })
         setPeek(null)
       }),
     [],
   )
   const select = useCallback(
-    (next: Selection) =>
+    (next: Selection, mode?: ViewMode) =>
       leaveThen(() => {
-        setPicked(next)
-        setWish(null)
-        openPage(null)
+        const summary = replica.store.get<SessionSummary>(
+          keys.summary(next.deviceId, next.sessionId),
+        )
+        const managed =
+          (summary && managerMark(summary)) ||
+          managerData.managers.some(
+            (manager) => manager.deviceId === next.deviceId && manager.threadId === next.sessionId,
+          )
+        dispatch({ type: 'select', mode: mode ?? (managed ? 'manager' : 'chat'), selection: next })
+        setPeek(null)
       }),
-    [openPage],
+    [replica, managerData.managers],
   )
   /** 到新建对话页去。next 是明说要建在哪；null 是按默认的来 */
   const compose = useCallback(
     (next: PlaceWish | null) =>
       leaveThen(() => {
-        setPicked(null)
-        setWish(next)
-        openPage(null)
+        dispatch({ type: 'compose', wish: next })
+        setPeek(null)
       }),
-    [openPage],
+    [],
   )
   useEffect(
     () =>
       onManagersRequest((route) =>
         leaveThen(() => {
-          setSidebarMode('manager')
           const deviceId =
             route.view === 'new'
               ? (route.deviceId ?? picked?.deviceId ?? place?.deviceId)
@@ -159,21 +169,15 @@ export function App() {
                 }
               : route
           setManagersAt((was) => ({ route: target, seq: was.seq + 1 }))
-          openPage('managers')
+          dispatch({ type: 'page', mode: 'manager', page: 'managers' })
+          setPeek(null)
         }),
       ),
-    [openPage, picked?.deviceId, pickedSummary?.workspaceId, place?.deviceId, place?.workspaceId],
+    [picked?.deviceId, pickedSummary?.workspaceId, place?.deviceId, place?.workspaceId],
   )
-  useEffect(() => {
-    if (pickedManager || owner) setSidebarMode('manager')
-  }, [pickedManager, owner])
   const switchSidebar = (mode: 'chat' | 'manager') =>
     leaveThen(() => {
-      setSidebarMode(mode)
-      if (mode === 'manager') {
-        setManagersAt((was) => ({ route: { view: 'list' }, seq: was.seq + 1 }))
-        openPage('managers')
-      } else compose(null)
+      dispatch({ type: 'switch', mode })
     })
   const closePage = useCallback(() => openPage(null), [openPage])
   /** 当前设备详情供工具栏判断本机/远程上下文。 */
@@ -389,9 +393,11 @@ export function App() {
             <ManagersPage
               key={managersAt.seq}
               initial={managersAt.route}
+              onRoute={(route) => setManagersAt((was) => ({ ...was, route }))}
               {...managerData}
               onClose={() => (pickedManager ? closePage() : switchSidebar('chat'))}
-              onOpen={select}
+              // 新建应答可能先于目录摘要到达，经理入口明确保留所属视图。
+              onOpen={(next) => select(next, 'manager')}
             />
           ) : page === 'settings' ? (
             <SettingsPage
@@ -405,6 +411,13 @@ export function App() {
             <ManagerPage
               key={`${pickedManager.deviceId}:${pickedManager.id}`}
               manager={pickedManager}
+              location={managerLocations[`${pickedManager.deviceId}:${pickedManager.id}`]}
+              onLocation={(location) =>
+                setManagerLocations((was) => ({
+                  ...was,
+                  [`${pickedManager.deviceId}:${pickedManager.id}`]: location,
+                }))
+              }
               onOpen={select}
             />
           ) : selection ? (

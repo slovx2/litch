@@ -10,6 +10,7 @@ import { ManagerForm } from './ManagerForm.tsx'
 
 export function ManagersPage({
   initial,
+  onRoute,
   managers,
   devices,
   available,
@@ -17,6 +18,7 @@ export function ManagersPage({
   onOpen,
 }: {
   initial: ManagersRoute
+  onRoute(route: ManagersRoute): void
   managers: ManagerView[]
   devices: DeviceView[]
   available: DeviceView[]
@@ -24,7 +26,8 @@ export function ManagersPage({
   onOpen(selection: Selection): void
 }) {
   const t = useT()
-  const [route, setRoute] = useState(initial)
+  const route = initial
+  const setRoute = onRoute
   const [summary, setSummary] = useState<string | null>(null)
   const row = (manager: ManagerView) => (
     <div className="mg-list-row" key={manager.id} data-manager-row={manager.id}>
