@@ -37,10 +37,12 @@ export interface ToolInvocation extends ClientToolCallParams {
 export type ToolAnswer = 'once' | 'session' | 'always' | 'decline'
 
 /**
- * litch_machine 的调用找不到会话、卡片进了全局待处理时，请主进程发的系统通知。
+ * litch_machine 的卡片进入全局待处理时，请主进程发的系统通知（包括开启确认）。
  * 核心不认识语言，只给结构，文字由主进程按界面的语言拼
  */
 export interface MachineNotice {
+  /** 开启确认的通知；会话号用于区分已知会话与命令行调用 */
+  enable?: { sessionId: string | null }
   /** 全局待处理里那张卡片的标识 */
   pendingId: string
   /** 调用来自哪台设备：给人看的名字和主机 */

@@ -35,6 +35,8 @@ export type MachineAction = 'exec' | 'write' | 'read' | 'list' | 'copy' | 'proce
 /** 卡片里 litch_machine 那一种（ClientAskView 的一员） */
 export interface MachineAskView {
   kind: 'machine'
+  /** 开关关闭时的开启确认；只由桌面界面回答，不转给代理或未验签的远程连接 */
+  enable?: { sessionId: string | null }
   action: MachineAction
   /** exec：完整的命令 */
   command: string | null
@@ -65,7 +67,7 @@ export interface MachineProcessView {
   startedAt: number
 }
 
-/** 全局待处理里的一张卡片：找不到会话的调用（入口二） */
+/** 全局待处理里的一张卡片：找不到会话的调用（入口二），或会话开启确认的同一张卡 */
 export interface MachinePendingView {
   id: string
   deviceId: string

@@ -212,6 +212,20 @@ export function createCore(options: CoreOptions): Core {
           }
         },
         settings: machineSettingsOf,
+        enable(deviceId) {
+          const device = devices.get(deviceId)
+          if (device?.view.kind !== 'ssh') return
+          saved = {
+            ...saved,
+            tools: { ...saved.tools, [deviceId]: { ...saved.tools?.[deviceId], machine: true } },
+            machine: {
+              ...saved.machine,
+              [deviceId]: { ...saved.machine?.[deviceId], approval: 'each', access: 'sensitive' },
+            },
+          }
+          persist()
+          device.update({})
+        },
         notify: (notice) => hub.notify(notice),
         ...(store?.machineLog
           ? { logStore: (deviceId: string) => store.machineLog?.(deviceId) ?? null }

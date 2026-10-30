@@ -1,6 +1,6 @@
 // litch_machine 的接线（接口见 device/machine/types.mts）：远程设备上的会话要操作这台电脑时，
 // 各台设备把调用交到这里（device/tool-calls.mts → device.mts → 这里），这里
-// - 查这台设备的开关（默认关），关着当场回 disabled，说明写给模型；
+// - 查这台设备的开关（默认关），关着先请用户在桌面端确认开启，再按原审批规则继续；
 // - 把“能操作的机器”交给执行器：desktop 是本机设备的连接，session 是会话所在那台远程设备的连接；
 // - 按审批方式决定 approve 弹不弹卡片：“本会话都允许”按 mutate、read 两类各记；命令里提到禁止位置
 //   （ask.flagged）时除了“不确认”都再弹；同一回合里被拒的同一件事不再问；卡片 10 分钟没人答作废；
@@ -42,7 +42,10 @@ export const MACHINE_LOG_LIMIT = 500
 
 /** 开关关着时给模型的话：告诉它让用户去哪里打开 */
 export const MACHINE_DISABLED =
-  'The user has not allowed this device to operate the computer running Litch. Ask the user to turn on "Operate this computer" in Litch (Devices → this device), then try again.'
+  '"Operate this computer" is off for this device. Only the user can enable it in Litch (Devices → this device). Until they do, do not retry repeatedly or use other tools to bypass this restriction.\n“允许远程设备操作本机”尚未开启。请用户在 Litch 的设备设置中开启；开启之前不要反复重试，也不要换用其他工具绕过限制。'
+
+/** 已展示卡片但未获允许；不把拒绝或超时说成仍在等待 */
+export const MACHINE_ENABLE_DECLINED = `${MACHINE_DISABLED}\nAn enable card was shown in the calling conversation (or Litch’s global pending requests). It was declined, cancelled or expired. Tell the user to enable access in Litch if they still want to proceed; do not request approval again in this turn.\nLitch 已在调用会话（或全局待处理）展示开启卡，但卡片已被拒绝、取消或超时。若用户仍需继续，请提示用户在 Litch 中开启；本回合不要再次请求。`
 
 /** 一台设备上“操作这台电脑”的设置（存在桌面端，按设备） */
 export interface MachineSettings {
@@ -85,6 +88,8 @@ export interface MachineWiringHost {
   /** 一台远程设备。不认识（去掉了、是本机）是 null */
   device(deviceId: string): MachineSessionDevice | null
   settings(deviceId: string): MachineSettings
+  /** 只能在本地确认卡获得允许后调用；存最保守的范围与逐条审批 */
+  enable(deviceId: string): void
   notify(notice: MachineNotice): void
   /** 一台设备的操作记录存在哪。不给就只记在内存里 */
   logStore?(deviceId: string): MachineLogStore | null
@@ -341,6 +346,7 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
       const release = input.hold()
       let drop: () => void = () => {}
       let stopExpiry: () => void = () => {}
+      const abort = () => settle({ kind: 'cancelled' })
       const settle = (outcome: AskOutcome) => {
         if (over) return
         over = true
@@ -349,11 +355,17 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
         release()
         resolve(outcome)
       }
+      if (input.signal.aborted) {
+        settle({ kind: 'cancelled' })
+        return
+      }
       if (session) {
         drop = session(ask, (pick, note) =>
           settle(pick ? { kind: 'answered', pick, note } : { kind: 'cancelled' }),
         )
-      } else {
+      }
+      // 开启设置的确认同时出现在现有全局待处理中，窗口没打开会话时也能找到。
+      if (!session || ask.enable) {
         const id = `machine-pending:${++pendingSeq}`
         const device = host.device(deviceId)
         const view: MachinePendingView = {
@@ -364,12 +376,14 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
           harness: input.harness,
           ask,
           options: PENDING_OPTIONS.filter(
-            (option) => !(ask.perCall && option.role === 'acceptSession'),
+            (option) => !((ask.perCall || ask.enable) && option.role === 'acceptSession'),
           ).map((option) => ({ ...option })),
           expiresAt: clock.now() + MACHINE_ASK_EXPIRES_MS,
         }
         pending.set(id, { view, settle })
+        const dropSession = drop
         drop = () => {
+          dropSession()
           if (pending.delete(id)) push()
         }
         push()
@@ -379,10 +393,11 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
           host: view.host,
           action: ask.action,
           summary: askSummary(ask),
+          ...(ask.enable ? { enable: ask.enable } : {}),
         })
       }
       stopExpiry = clock.setTimer(() => settle({ kind: 'expired' }), MACHINE_ASK_EXPIRES_MS)
-      input.signal.addEventListener('abort', () => settle({ kind: 'cancelled' }), { once: true })
+      input.signal.addEventListener('abort', abort, { once: true })
     })
 
   /** MachineCallContext.approve：按审批方式决定弹不弹，命令里提到禁止位置时再弹 */
@@ -434,8 +449,51 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
   return {
     async call(deviceId, input, session) {
       const owner = { deviceId, threadId: input.threadId, harness: input.harness }
-      const settings = host.settings(deviceId)
-      if (!settings.enabled || !host.device(deviceId)) {
+      let settings = host.settings(deviceId)
+      if (!settings.enabled && host.device(deviceId) && !input.signal.aborted) {
+        const key =
+          input.threadId && input.turnId
+            ? `${turnPrefix(deviceId, input.threadId, input.turnId)}enable`
+            : null
+        if (key === null || !declined.has(key)) {
+          const outcome = await askUser(
+            deviceId,
+            input,
+            {
+              kind: 'machine',
+              enable: { sessionId: input.threadId },
+              action: 'exec',
+              command: `${input.tool}: ${summarizeCall(input.tool, input.arguments)}`,
+              cwd: null,
+              path: null,
+              copy: null,
+              flagged: [],
+              perCall: true,
+            },
+            session,
+          )
+          if (
+            outcome.kind === 'answered' &&
+            outcome.pick === 'once' &&
+            !input.signal.aborted &&
+            host.device(deviceId)
+          ) {
+            // 用户已在另一张卡或设置页开启时保留其设置，不覆盖后续选择。
+            if (!host.settings(deviceId).enabled) host.enable(deviceId)
+          } else {
+            if (key !== null) declined.set(key, null)
+            addLog(deviceId, owner, {
+              tool: input.tool,
+              summary: summarizeCall(input.tool, input.arguments),
+              result: 'disabled',
+              flagged: false,
+            })
+            return clientToolFailure('disabled', MACHINE_ENABLE_DECLINED)
+          }
+        }
+        settings = host.settings(deviceId)
+      }
+      if (!settings.enabled || !host.device(deviceId) || input.signal.aborted) {
         addLog(deviceId, owner, {
           tool: input.tool,
           summary: summarizeCall(input.tool, input.arguments),

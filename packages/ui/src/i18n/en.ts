@@ -1614,6 +1614,12 @@ export const en: Record<MessageKey, Entry> = {
   'machine.session.unknown': 'Unknown session',
   'machine.session.gone': 'Session no longer exists',
   'machine.ask.exec': 'Approval needed: run a command on this computer',
+  'machine.enable.prompt': 'Allow this remote device to operate this computer?',
+  'machine.enable.body':
+    'A session on this device wants to operate this computer, but access is off. Enabling access lets this device request commands and file operations. Sensitive places will be blocked, and each command or write will require approval. This call will still go through operation approval.',
+  'machine.enable.allow': 'Enable and continue',
+  'machine.enable.decline': 'Don’t allow',
+  'machine.enable.settings': 'Open settings',
   'machine.ask.read': 'Approval needed: read a file on this computer',
   'machine.ask.write': 'Approval needed: write a file on this computer',
   'machine.ask.list': 'Approval needed: list a folder on this computer',

@@ -133,6 +133,8 @@ export interface ClientToolExecutor {
  * 核心只给结构，文字由这边按界面的语言拼（client-tools/notice.mts）
  */
 export interface MachineNotice {
+  /** 远程操作开关的开启确认，沿用全局待处理通知 */
+  enable?: { sessionId: string | null }
   pendingId: string
   /** 调用来自哪台设备 */
   deviceName: string

@@ -1,4 +1,4 @@
-// litch_machine 的系统通知：远程设备上一个找不到会话的命令行调用要用户点头时，卡片进了顶栏的
+// litch_machine 的系统通知：开启权限的确认、找不到会话的命令行调用要用户点头时，卡片进了顶栏的
 // 全局待处理，同时在这里发一条系统通知，免得用户不在 Litch 的窗口前就一直没人答。
 // 文字按界面的语言拼（核心不认识语言，只给结构）。点通知把窗口叫到前面，答在窗口里答。
 import { Notification } from 'electron'
@@ -39,10 +39,17 @@ export function noticeText(
   lang: NoticeLang,
 ): { title: string; body: string } {
   const who = notice.deviceName || notice.host
-  const action = ACTIONS[lang][notice.action] ?? ACTIONS[lang].exec
+  const action = notice.enable
+    ? lang === 'zh-CN'
+      ? '请求开启远程操作本机'
+      : 'wants permission to operate this computer'
+    : (ACTIONS[lang][notice.action] ?? ACTIONS[lang].exec)
   const title = `${who} ${action}`
-  const tail =
-    lang === 'zh-CN'
+  const tail = notice.enable
+    ? lang === 'zh-CN'
+      ? `远程操作本机尚未开启。${notice.enable.sessionId ? `会话：${notice.enable.sessionId}。` : ''}请在 Litch 中确认。`
+      : `Access is off.${notice.enable.sessionId ? ` Session: ${notice.enable.sessionId}.` : ''} Review the enable request in Litch.`
+    : lang === 'zh-CN'
       ? '来自命令行调用（会话未知），请在 Litch 中确认。'
       : 'From a command-line call (session unknown). Review it in Litch.'
   const summary = clip(notice.summary)

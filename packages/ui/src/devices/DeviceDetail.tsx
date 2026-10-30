@@ -336,7 +336,7 @@ export function DeviceDetail({ deviceId, section = null, onBack, onClose }: Devi
               </div>
             ) : null}
           </section>
-          <ToolSwitches device={device} />
+          <ToolSwitches device={device} reveal={section === 'tools'} />
           <ServiceSection device={device} reveal={section === 'service'} />
           <PhonesSection device={device} />
           {managed ? (

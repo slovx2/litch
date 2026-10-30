@@ -168,7 +168,9 @@ export const clientAskOptions = (ask: ClientAskView): ApprovalOption[] =>
           [
             { id: 'once', role: 'accept' },
             // “逐条确认”下的执行、写入每次都问，允许整个会话没有意义
-            ...(ask.perCall ? [] : [{ id: 'session', role: 'acceptSession' } as const]),
+            ...(ask.perCall || ask.enable
+              ? []
+              : [{ id: 'session', role: 'acceptSession' } as const]),
             // 拒绝时可以附一句理由给模型
             { id: 'decline', role: 'decline', note: true },
           ]

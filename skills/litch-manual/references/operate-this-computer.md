@@ -16,6 +16,14 @@ app; no port is opened and macOS Remote Login is not used.
 In the UI: Devices → the remote device → "Use this computer" → "Operate this computer (commands and
 files)".
 
+When access is off, a tool call displays an enable card in the calling conversation and the desktop's
+global pending requests, with a system notification. Only the user can choose **Enable and continue**:
+this enables access with sensitive places blocked and every command/write requiring approval, then
+continues the same call through its normal operation approval. **Open settings** opens that device's
+settings without enabling access. Declining or leaving the card unanswered for 10 minutes keeps access
+off; the model must not retry repeatedly or bypass this restriction. This enable card is desktop-only;
+the phone's signed approval channel currently supports browser sign-in, not this setting.
+
 - Turn it on or off with `scripts/litch tools set <device> …` (see `scripts/litch tools --help`).
   Turning it on is **guarded** (the user confirms in Litch). Turning it off ends every process that
   device started here, withdraws pending cards and fails calls in progress.
