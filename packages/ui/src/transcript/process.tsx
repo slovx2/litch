@@ -88,22 +88,23 @@ export const ProcessHead = memo(function ProcessHead({
       data-anchor={`p:${turn.id}`}
       ref={head}
       aria-expanded={open}
+      aria-label={[
+        ...plain,
+        ...bad,
+        ...(inBackground > 0 ? [t('background.inTurn', { count: inBackground })] : []),
+      ].join(' · ')}
       onClick={() => {
         pin(head.current)
         onToggle(!open)
       }}
     >
       <Caret />
-      {[...plain, ...bad].map((text, index) => (
-        <span key={text} className={index < plain.length ? undefined : 'bad'}>
-          {index > 0 ? <span className="sep">·</span> : null}
-          {text}
-        </span>
-      ))}
+      <span className="proc-title">{plain[0]}</span>
+      {plain.length > 1 ? <span className="proc-counts">{plain.slice(1).join(' · ')}</span> : null}
+      {bad.length > 0 ? <span className="bad">{bad.join(' · ')}</span> : null}
       {/* 这一轮起的后台任务还在跑：末尾一个呼吸点加个数 */}
       {inBackground > 0 ? (
         <span className="bgmark" data-background={inBackground}>
-          <span className="sep">·</span>
           <i className="pulse" aria-hidden="true" />
           {t('background.inTurn', { count: inBackground })}
         </span>

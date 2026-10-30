@@ -41,11 +41,11 @@ function useInBackground(ended: boolean, ids: string): number {
 }
 
 /**
- * 告一段落后整段过程收成的那一行（照桌面端的收起行）：已处理多久、几段说明、几步、几个子代理，被拒、失败的子代理、
- * 回合出错或中断红字标在后面。点了开合整段过程
+ * 告一段落后整段过程的开合入口：第一行是用时，第二行是统计，底线标清整个过程的边界。
+ * 异常和后台任务单独显示，不被窄屏上的统计截断。点击范围沿用皮肤的触控高度。
  */
 export const ProcessCell = memo(function ProcessCell({ row }: Props<'process'>) {
-  const { c, font } = useTheme()
+  const { c, font, hit } = useTheme()
   const t = useT()
   const toggle = useToggleInPlace()
   const ended = row.status !== 'running'
@@ -56,24 +56,38 @@ export const ProcessCell = memo(function ProcessCell({ row }: Props<'process'>) 
     t,
     row.status === 'failed' || row.status === 'interrupted' ? row.status : null,
   )
+  const backgroundText = inBackground > 0 ? t('background.inTurn', { count: inBackground }) : null
   return (
     <View style={styles.group}>
       <Pressable
         onPress={() => toggle(row.key, row.turnId)}
         accessibilityRole="button"
         accessibilityState={{ expanded: row.expanded }}
-        style={({ pressed }) => [styles.groupHeader, pressed ? { backgroundColor: c.press } : null]}
+        accessibilityLabel={[...plain, ...bad, backgroundText].filter(Boolean).join(' · ')}
+        style={({ pressed }) => [
+          styles.processHeader,
+          { minHeight: hit, borderBottomColor: c.line2 },
+          pressed ? { backgroundColor: c.press } : null,
+        ]}
         testID="process-head"
       >
-        <Text style={{ fontSize: font.size.meta, color: c.ink3 }} numberOfLines={1}>
-          {row.expanded ? '▾' : '▸'} {plain.join(' · ')}
-          {bad.length > 0 ? <Text style={{ color: c.err }}>{` · ${bad.join(' · ')}`}</Text> : null}
-          {inBackground > 0 ? (
-            <Text style={{ color: c.accent }}>
-              {` · ${t('background.inTurn', { count: inBackground })}`}
+        <Text style={{ fontSize: font.size.body, color: c.ink2 }}>{row.expanded ? '▾' : '▸'}</Text>
+        <View style={styles.processBody}>
+          <Text style={{ fontSize: font.size.body, fontFamily: font.ui, color: c.ink2 }}>
+            {plain[0]}
+          </Text>
+          {plain.length > 1 ? (
+            <Text style={{ fontSize: font.size.meta, color: c.ink2 }} numberOfLines={1}>
+              {plain.slice(1).join(' · ')}
             </Text>
           ) : null}
-        </Text>
+          {bad.length > 0 ? (
+            <Text style={{ fontSize: font.size.meta, color: c.err }}>{bad.join(' · ')}</Text>
+          ) : null}
+          {backgroundText ? (
+            <Text style={{ fontSize: font.size.meta, color: c.accent }}>{backgroundText}</Text>
+          ) : null}
+        </View>
       </Pressable>
     </View>
   )
@@ -514,6 +528,14 @@ function Parts({ title, parts, tone }: { title: string; parts: ToolPart[]; tone?
 
 const styles = StyleSheet.create({
   group: { paddingHorizontal: 16, paddingVertical: 2 },
+  processHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  processBody: { flex: 1, gap: 4 },
   groupHeader: { height: 32, justifyContent: 'center' },
   step: {
     marginLeft: 16,

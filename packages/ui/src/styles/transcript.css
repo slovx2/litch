@@ -314,28 +314,36 @@ button.smen:focus-visible {
   margin-left: 7px;
   border-left: 1px solid var(--line-2);
 }
-/* 回合结束后整段过程收成的那一行 */
+/* 整段过程的入口：与普通步骤区别，整行可点；统计在窄面板换行，错误和后台状态不截掉。 */
 .proc-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: calc(20px * var(--fs) + 4px);
-  align-self: flex-start;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-height: 44px;
+  width: 100%;
   max-width: 100%;
-  padding: 0 6px 0 2px;
-  border-radius: 3px;
-  color: var(--ink-3);
-  font-size: calc(12px * var(--fs));
-  white-space: nowrap;
-  overflow: hidden;
+  padding: 8px 6px 8px 2px;
+  border-bottom: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  color: var(--ink-2);
+  font-size: calc(14px * var(--fs));
+  text-align: left;
 }
 .proc-head:hover {
   background: var(--hover);
-  color: var(--ink-2);
+  color: var(--ink);
 }
-.proc-head .sep {
-  color: var(--ink-3);
-  margin: 0 6px 0 0;
+.proc-title {
+  font-weight: 500;
+}
+.proc-counts,
+.proc-head .bad,
+.proc-head .bgmark {
+  font-size: calc(12px * var(--fs));
+}
+.proc-counts {
+  margin-left: auto;
 }
 .proc-head .bad,
 .steps-head .bad {

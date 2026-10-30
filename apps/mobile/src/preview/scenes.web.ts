@@ -28,6 +28,13 @@ const say = (prompt: string) =>
 
 export const SCENES: Scene[] = [
   {
+    id: 'collapsed-turn',
+    group: '对话',
+    name: '回合过程收起',
+    note: '回答、完成行、自发回合来源、整段过程与下一条用户消息',
+    steps: [],
+  },
+  {
     id: 'manager-events',
     group: '会话',
     name: '经理事件',
