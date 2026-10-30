@@ -25,6 +25,7 @@ import { CALL_TIMEOUT, type HelperAccess, sessionKey, text } from './executor-sh
 import { createWinRunner } from './executor-win.mjs'
 import {
   type ActionResult,
+  type AppMenuStateResult,
   type AppStateResult,
   type HelperApp,
   HelperError,
@@ -110,14 +111,13 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
         apps: HelperApp[]
       }
       const lines = apps.map((one) => {
-        const note = one.active ? ' (frontmost)' : ''
+        const note =
+          (one.active ? ' (frontmost)' : '') + (one.windows === 0 ? ' (no visible windows)' : '')
         const also = one.fileName && one.fileName !== one.name ? ` (${one.fileName})` : ''
         return `- ${one.name}${also} — ${one.bundleId ?? 'no bundle id'}${note}`
       })
       return text(
-        lines.length > 0
-          ? `Running apps with windows:\n${lines.join('\n')}`
-          : 'No app has a window on screen.',
+        lines.length > 0 ? `Running apps:\n${lines.join('\n')}` : 'No regular app is running.',
       )
     }
 
@@ -150,7 +150,8 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
       actionId: invocation.id,
     }
     const result = await client.request(method, request, CALL_TIMEOUT, signal)
-    if (method === 'getAppState') return stateResponse(result as AppStateResult)
+    if (method === 'getAppState')
+      return stateResponse(result as AppStateResult | AppMenuStateResult)
     return text((result as ActionResult).text)
   }
 
@@ -177,7 +178,16 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
   }
 }
 
-function stateResponse(state: AppStateResult): ClientToolCallResponse {
+function stateResponse(state: AppStateResult | AppMenuStateResult): ClientToolCallResponse {
+  if ('windowless' in state) {
+    return text(
+      `App: ${state.app.name} (${state.app.bundleId}). No uniquely identified window is available for a screenshot.\n` +
+        `Visible windows: ${state.visibleWindows}; accessible window: ${state.accessibleWindow ?? 'none'}; foreground app: ${state.frontmost ?? 'none'}.\n` +
+        `Menu bar: ${state.menuAvailable ? 'available below' : 'not exposed by this app'}. ` +
+        'You can use press_key (for example cmd+n to create a document) or an available menu element. If an Open panel is blocking creation, use Escape or its Cancel button, then cmd+n. Screenshot coordinates are unavailable.\n' +
+        `${state.diff ? 'Accessibility changes' : 'Accessibility tree'}:\n${state.text}`,
+    )
+  }
   const title = state.window.title ? ` "${state.window.title}"` : ''
   const header =
     `App: ${state.app.name} (${state.app.bundleId ?? 'no bundle id'}), window${title}.\n` +

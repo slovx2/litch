@@ -123,6 +123,19 @@ export interface ActionResult {
   text: string
 }
 
+/** 无可截窗口时仍可观察应用菜单；原有窗口/截图结果形状保持不变。 */
+export interface AppMenuStateResult {
+  windowless: true
+  app: AppStateResult['app']
+  accessibleWindow: string | null
+  visibleWindows: number
+  frontmost: string | null
+  menuAvailable: boolean
+  text: string
+  diff: boolean
+  truncated: boolean
+}
+
 /** 助手发来的通知：用户按了停止 */
 export interface StoppedNotice {
   session: string

@@ -256,6 +256,44 @@ test('get_app_state：文字加截图（data: 地址）', async () => {
   })
 })
 
+test('应用清单包含没有可见窗口的应用', async () => {
+  const helper = fakeHelper({ listApps: () => ({ apps: [{ ...APPS[0], windows: 0 }] }) })
+  const executor = createComputerExecutor({ helper: helper.access })
+  const result = await executor.call(invocation('list_apps', {}), context().ctx)
+  assert.match(textOf(result), /TextEdit.*no visible windows/)
+})
+
+test('无窗口应用返回菜单和下一步，仍可直接发送新建快捷键，不伪造截图', async () => {
+  const helper = fakeHelper({
+    getAppState: () => ({
+      windowless: true,
+      app: { name: 'TextEdit', bundleId: 'com.apple.TextEdit', pid: 11 },
+      accessibleWindow: null,
+      visibleWindows: 0,
+      frontmost: 'Finder',
+      menuAvailable: true,
+      text: '[1] MenuBar\n [2] MenuBarItem "File"',
+      diff: false,
+      truncated: false,
+    }),
+  })
+  const executor = createComputerExecutor({ helper: helper.access })
+  const { ctx } = context()
+  const state = await executor.call(invocation('get_app_state', { app: 'TextEdit' }), ctx)
+  assert.equal(state.success, true)
+  assert.equal(state.contentItems.length, 1)
+  assert.match(textOf(state), /Visible windows: 0/)
+  assert.match(textOf(state), /foreground app: Finder/)
+  assert.match(textOf(state), /cmd\+n/)
+  assert.match(textOf(state), /MenuBarItem/)
+  const action = await executor.call(
+    invocation('press_key', { app: 'TextEdit', key: 'cmd+n' }),
+    ctx,
+  )
+  assert.equal(action.success, true)
+  assert.equal(helper.calls.at(-1)?.method, 'pressKey')
+})
+
 test('助手的错误分类转成失败答复', async () => {
   const cases: [string, RegExp][] = [
     ['stopped', /^\[litch:failed\] stopped by user/],

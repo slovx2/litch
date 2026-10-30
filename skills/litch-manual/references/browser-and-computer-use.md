@@ -181,12 +181,20 @@ notice is shown; **Esc** (or Stop) takes control back and ends Computer Use for 
   does not open apps that are not running; it asks the user to.
 - Not supported: Linux, a locked screen.
 
-Actions already return accessibility changes; use these to verify the outcome. Request another
+Actions already return accessibility changes; use these to verify the outcome. When an action observes
+a new window, its elements and keyboard input can be used directly; coordinates still need a fresh screenshot.
+Running apps without a capturable window return their menu text, visible-window count and foreground app.
+Use a menu item or press_key (such as cmd+n) to create a window, or Escape to dismiss an ordinary Open panel.
+System permission and login prompts still require the user. Native list clicks prefer selecting their row.
+Request another
 state only when those changes are insufficient, a screenshot is needed, or the window changed.
 On macOS, screenshots must uniquely match the accessibility window. The result includes its ID
 and observation times; the tree and image are sequential samples and may differ during animation.
 
 动作已附带辅助功能树变化，可直接用于核验结果；信息不足、需要截图或窗口变化时再取状态。
+动作返回了新窗口的控件树后，可直接按新编号或快捷键继续；旧截图坐标仍须重新截图才能使用。
+应用没有可截窗口时仍返回菜单、可见窗口数和前台应用，可用菜单或快捷键新建窗口，或用 Escape
+关闭普通打开面板；系统权限和登录提示仍由用户处理。原生列表单击优先选择对应行。
 macOS 截图必须唯一匹配辅助功能窗口，并附窗口编号和观察时间。树与截图是先后采样，动画期间仍可能不同步。
 
 ### macOS background control and preview / macOS 后台控制与预览

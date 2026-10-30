@@ -20,6 +20,8 @@ import LitchComputerUseCore
 
 /// 一个会话里一个应用的状态
 struct AppSession {
+  var observation = ObservationWindow()
+  var observedAXWindow: AXUIElement?
   var pid: pid_t?
   var launchedAt: Date?
   var book = AXIndexBook()
@@ -278,16 +280,26 @@ final class Engine: ConnectionHandler {
     let pid = app.processIdentifier
     var read: AXReader.Result
     var shot: Screenshot
+    var windowFrame: Rect
     var observedAt: Double = 0
     preview.status(session: session, app: app, state: "capturePending")
     Overlay.shared.captureNotice(true)
     defer { Overlay.shared.captureNotice(false) }
     do {
       read = try AXReader().read(pid: pid)
+      guard let window = read.window, let frame = read.windowFrame,
+        (try? NativeWindow.resolve(pid)) != nil else {
+        guard actionAllowed(params["actionId"]?.stringValue ?? "", session: session, epoch: epoch) else {
+          throw RPCError(.stopped, "Observation cancelled.")
+        }
+        try Engine.requireDesktop()
+        return windowlessState(read, app: app, session: session, key: key, full: full)
+      }
+      windowFrame = frame
       observedAt = Date().timeIntervalSince1970 * 1000
-      shot = try Capture.window(pid: pid, axFrame: read.windowFrame)
-      guard let current = AXReader.keyWindow(AXReader.appElement(pid)), CFEqual(current, read.window),
-        AXReader.frame(of: current) == read.windowFrame else {
+      shot = try Capture.window(pid: pid, axFrame: frame)
+      guard let current = AXReader.keyWindow(AXReader.appElement(pid)), CFEqual(current, window),
+        AXReader.frame(of: current) == frame else {
         throw RPCError(.stale, "The window changed while observing. Call get_app_state again before acting.")
       }
     } catch {
@@ -309,7 +321,9 @@ final class Engine: ConnectionHandler {
       state.book.remember(lines)
       state.handles = read.handles
       state.lines = Dictionary(lines.map { ($0.index, $0) }, uniquingKeysWith: { a, _ in a })
-      state.shot = (shot.size, shot.windowFrame, read.windowFrame, shot.windowID)
+      state.shot = (shot.size, shot.windowFrame, windowFrame, shot.windowID)
+      state.observation.capture(shot.windowID)
+      state.observedAXWindow = read.window
       return (diff ?? AXText.render(lines), diff != nil)
     }
     preview.observe(session: session, app: app)
@@ -324,8 +338,8 @@ final class Engine: ConnectionHandler {
         "observedAt": .number(observedAt),
         "capturedAt": .number(Date().timeIntervalSince1970 * 1000),
         "title": .optional(read.windowTitle),
-        "width": .number(read.windowFrame.size.width),
-        "height": .number(read.windowFrame.size.height),
+        "width": .number(windowFrame.size.width),
+        "height": .number(windowFrame.size.height),
       ],
       "screenshot": [
         "mime": .string(shot.mime), "data": .string(shot.data.base64EncodedString()),
@@ -335,6 +349,31 @@ final class Engine: ConnectionHandler {
       "diff": .bool(isDiff),
       "truncated": .bool(read.truncated),
     ]
+  }
+
+  /// 没有 AX 窗口不等于应用无法操作：保留菜单栏，允许定向按键新建窗口，不伪造截图。
+  private func windowlessState(_ read: AXReader.Result, app: NSRunningApplication,
+    session: String, key: String, full: Bool) -> JSONValue {
+    let (text, isDiff) = withState(session, key) { state -> (String, Bool) in
+      let lines = state.book.lines(for: read.root)
+      let diff = full ? nil : AXText.diff(previous: state.book.previous, current: lines)
+      state.book.remember(lines)
+      state.handles = read.handles
+      state.lines = Dictionary(lines.map { ($0.index, $0) }, uniquingKeysWith: { a, _ in a })
+      state.shot = nil
+      state.observation.observeApplication()
+      state.observedAXWindow = read.window
+      return (diff ?? AXText.render(lines), diff != nil)
+    }
+    preview.clearWindow(session)
+    let front = NSWorkspace.shared.frontmostApplication
+    return ["windowless": true,
+      "app": ["name": .string(Engine.name(app)), "bundleId": .optional(app.bundleIdentifier), "pid": .int(Int(app.processIdentifier))],
+      "visibleWindows": .int(Apps.windowCounts()[app.processIdentifier] ?? 0),
+      "accessibleWindow": .optional(read.windowTitle),
+      "frontmost": .optional(front.map { "\(Engine.name($0)) (\($0.bundleIdentifier ?? "no bundle id"))" }),
+      "menuAvailable": .bool(read.root.children.contains { $0.role == kAXMenuBarRole }),
+      "text": .string(text), "diff": .bool(isDiff), "truncated": .bool(read.truncated)]
   }
 
   // MARK: 参数

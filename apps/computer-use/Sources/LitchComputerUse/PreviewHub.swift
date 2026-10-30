@@ -166,6 +166,11 @@ final class PreviewHub {
   func end(_ session: String) {
     lock.lock(); defer { lock.unlock() }
     ended.insert(session)
+    clearWindow(session)
+  }
+
+  func clearWindow(_ session: String) {
+    lock.lock(); defer { lock.unlock() }
     if pinned == session { pinned = nil; floating.hide() }
     hide(session)
     entries[session] = nil

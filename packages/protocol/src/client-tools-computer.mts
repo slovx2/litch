@@ -69,7 +69,7 @@ const SAFETY = `- Ask the user before anything irreversible or sensitive: deleti
 - Do not bypass security checks or solve CAPTCHAs.`
 
 const NAMESPACE_DESCRIPTION: Record<ComputerPlatform, string> = {
-  darwin: `Control macOS apps on the user's computer through Litch. Any app with a window can be used; there is no per-app approval.
+  darwin: `Control running macOS apps through Litch, including apps without a window; there is no per-app approval.
 
 ${HOW_TO_WORK}
 
@@ -120,13 +120,13 @@ export function computerToolsSpec(platform: ComputerPlatform = 'darwin'): Client
         name: COMPUTER_TOOL.listApps,
         description: win
           ? 'List the apps that have at least one window on screen, with name, app id, whether each is frontmost, and their windows (number and title).'
-          : 'List the apps that are running and have at least one window on screen, with name, bundle identifier and whether each is frontmost.',
+          : 'List running apps, including those with no visible windows, with name, bundle identifier and whether each is frontmost.',
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       },
       {
         type: 'function',
         name: COMPUTER_TOOL.getAppState,
-        description: `Get the state of ${win ? "one of an app's windows" : "an app's key window"}: a screenshot plus the accessibility tree as numbered text. After the first call for an app, the text lists only what changed since the previous state (+ added, - removed, ~ changed) unless full is true.${win ? " The text starts with the app's other windows." : ''} Call this before acting on an app, when action changes do not confirm the result, and again if the window was resized. ${win ? 'Actions bring the app to the front.' : 'Actions prefer background input; when needed they wait for user inactivity, briefly bring the app forward and restore the previous focus. A system screen-access prompt requires the user to click Allow; permission preflight alone does not prove capture is available.'} Actions return changes in the accessibility tree, not a screenshot.`,
+        description: `Get the state of ${win ? "one of an app's windows" : "an app's key window"}: a screenshot plus the accessibility tree as numbered text. After the first call for an app, the text lists only what changed since the previous state (+ added, - removed, ~ changed) unless full is true.${win ? " The text starts with the app's other windows." : ''} Call this before acting on an app, when action changes do not confirm the result, and again if the window was resized. ${win ? 'Actions bring the app to the front.' : 'Actions prefer background input; when needed they wait for user inactivity, briefly bring the app forward and restore the previous focus. Without a capturable window, get_app_state returns menu text and foreground details; press_key (e.g. cmd+n) and menu elements still work. System screen-access prompts require the user to click Allow.'} Actions return changes in the accessibility tree, not a screenshot.`,
         inputSchema: schema({
           full: {
             type: 'boolean',

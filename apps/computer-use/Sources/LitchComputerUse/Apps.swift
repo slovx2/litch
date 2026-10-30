@@ -112,7 +112,6 @@ enum Apps {
       .filter { $0.activationPolicy == .regular && !$0.isTerminated }
       .compactMap { app -> AppInfo? in
         let windows = counts[app.processIdentifier] ?? 0
-        guard windows > 0 else { return nil }
         return AppInfo(
           name: app.localizedName ?? app.bundleIdentifier ?? "pid \(app.processIdentifier)",
           fileName: fileName(app), bundleId: app.bundleIdentifier, pid: app.processIdentifier,
