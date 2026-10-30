@@ -45,7 +45,12 @@ export function navigate(state: ViewNavigation, action: NavigationAction): ViewN
       if (location.picked !== action.selection) return state
       return {
         ...state,
-        [mode]: { ...location, picked: null, page: mode === 'manager' ? 'managers' : null },
+        [mode]: {
+          ...location,
+          picked: null,
+          // 设备改连会清掉旧会话；独立页面仍要显示连接结果，只有会话页回到默认入口。
+          page: location.page ?? (mode === 'manager' ? 'managers' : null),
+        },
       }
   }
 }

@@ -48,3 +48,21 @@ test('旧订阅的删除结果不能清掉新选中的会话，同栏重复点�
   assert.deepEqual(switchTo(state, 'chat'), state)
   assert.equal(navigate(state, { type: 'missing', mode: 'chat', selection: manager }), state)
 })
+
+test('修改设备连接导致原会话消失时，继续显示设备页与连接结果', () => {
+  let state = select(initialNavigation, 'chat', chat)
+  state = navigate(state, { type: 'page', page: 'devices' })
+  state = navigate(state, { type: 'missing', mode: 'chat', selection: chat })
+  assert.equal(state.chat.picked, null)
+  assert.equal(state.chat.page, 'devices')
+})
+
+test('隐藏经理视图的会话消失时，保留独立设置页且不切换当前视图', () => {
+  let state = select(initialNavigation, 'manager', manager)
+  state = navigate(state, { type: 'page', page: 'settings' })
+  state = switchTo(state, 'chat')
+  state = navigate(state, { type: 'missing', mode: 'manager', selection: manager })
+  assert.equal(state.manager.picked, null)
+  assert.equal(state.manager.page, 'settings')
+  assert.equal(state.mode, 'chat')
+})
