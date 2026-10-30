@@ -12,6 +12,7 @@ import {
 import { memo } from 'react'
 import { useT } from '../app/appearance.ts'
 import { useKey } from '../app/services.tsx'
+import { historyQuestions } from './ask-history.ts'
 import { CompactRow } from './CompactRow.tsx'
 import { type ItemRef, useItem } from './messages.tsx'
 import { useToggle } from './state.ts'
@@ -29,7 +30,7 @@ export interface SheetQuestion {
 /**
  * 问题卡：模型边干活边问的题（AskCard）和收尾留的问题（tree/TurnTail.tsx）都画成它，答案并在同一张卡里，
  * 不再另出一个“已回答问题”的气泡（messages.tsx 认出答复就不画）。卡片跟着状态变：
- * 待回答——一直展开，列题目和建议的回答；已答——默认收起，标题行写答了几题和题目，下面一行是答案，点开看每题；
+ * 待回答——只在输入区显示；已答——默认收起，标题行写答了几题和题目，下面一行是答案，点开看每题；
  * 未回答（问题已经过去了）——收起，点开看题目和当时的选项。
  */
 export function AskSheet({
@@ -37,7 +38,7 @@ export function AskSheet({
   sessionId,
   toggleId,
   anchor,
-  questions,
+  questions: allQuestions,
 }: {
   deviceId: string
   sessionId: string
@@ -51,16 +52,15 @@ export function AskSheet({
   const answers = useKey<AskAnswers>(keys.answers(deviceId, sessionId)) ?? NO_ANSWERS
   const pending =
     useKey<PendingQuestion[]>(keys.pendingQuestions(deviceId, sessionId)) ?? NO_PENDING
+  const questions = historyQuestions(allQuestions, pending)
   const answered = questions.filter((q) => answers[q.id] !== undefined)
-  const waiting = pending.some((entry) => questions.some((q) => entry.replyIds.includes(q.id)))
-  const state = answered.length === questions.length ? 'answered' : waiting ? 'open' : 'closed'
-  const open = state === 'open' || toggled
+  const state = answered.length === questions.length ? 'answered' : 'closed'
+  const open = toggled
   const first = questions[0]
   if (!first) return null
   return (
     <section className="ask" data-card="ask" data-state={state} data-anchor={anchor}>
       <CompactRow
-        icon={state === 'open' ? <i className="st wait" /> : undefined}
         source={`${t('ask.title')} · ${
           state === 'answered'
             ? t('ask.answeredCount', { count: answered.length })
@@ -70,7 +70,6 @@ export function AskSheet({
         summary={answered.map((q) => answers[q.id]).join(' · ')}
         open={open}
         onToggle={() => setToggled(!toggled)}
-        fixed={state === 'open'}
       />
       {open
         ? questions.map((q) => {

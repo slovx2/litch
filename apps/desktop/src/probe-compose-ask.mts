@@ -3,6 +3,10 @@
 // 和别的验收一样，下面的函数会被原样送进页面里执行，不能引用函数外面的东西。
 
 export interface AskProbe {
+  singleLocation: boolean
+  partialRecord: boolean
+  ignoredRecord: boolean
+  closedRecord: boolean
   shown: boolean
   outside: boolean
   answered: string[]
@@ -80,12 +84,19 @@ export async function askProbe(real: boolean): Promise<AskProbe | null> {
   const choice = all('button', first).find((button) => text(button) === '照常全跑')
   const shown = Boolean(choice) && Boolean(one('textarea', second))
   const outside = pending().every((entry) => entry.closest('.proc') === null)
+  const sourceTurn = all('.turn').at(-1)
+  const singleLocation = sourceTurn?.querySelector('[data-card="ask"]') === null
+  const secondTitle = text(one('.pending-ask-q', second))
   const turns = all('.turn').length
   choice?.click()
   await frame()
   one<HTMLButtonElement>('button[type="submit"]', first)?.click()
   await until('第一题已答', () => !question(firstId))
   const remainingAfterFirst = Boolean(question(secondId)) && pending().length === 1
+  const partialRecord = await until('第一题的记录出现，第二题不重复', () => {
+    const record = sourceTurn?.querySelector('[data-card="ask"]')
+    return text(record).includes('照常全跑') && !text(record).includes(secondTitle)
+  })
   const field = one<HTMLTextAreaElement>('textarea', question(secondId))
   if (!field) throw new Error('第二题没有自由答复输入框')
   field.focus()
@@ -129,11 +140,36 @@ export async function askProbe(real: boolean): Promise<AskProbe | null> {
   const ids = pending().map((entry) => entry.dataset.pendingQuestion ?? '')
   await idle()
   const keptAfterTurn = ids.every((id) => Boolean(question(id)))
+  const nextTurn = all('.turn').at(-1)
+  const ignored = pending()[0]
+  const ignoredTitle = text(one('.pending-ask-q', ignored))
+  all('button', ignored)
+    .find((button) => text(button) === '忽略')
+    ?.click()
+  const ignoredRecord = await until(
+    '忽略后进入记录',
+    () =>
+      !question(ids[0] ?? '') &&
+      text(nextTurn?.querySelector('[data-card="ask"]')).includes(ignoredTitle),
+  )
   await say('先这样')
   await until('用户发话后待答入口收起', () => ids.every((id) => !question(id)))
   const closed = ids.every((id) => !question(id))
+  nextTurn?.querySelector<HTMLElement>('[data-card="ask"] .compact-message')?.click()
+  const closedRecord = await until('关闭后题目留在记录中', () => {
+    const record = nextTurn?.querySelector('[data-card="ask"]')
+    return (
+      record?.getAttribute('data-state') === 'closed' &&
+      record.querySelectorAll('.ask-q').length === 2 &&
+      text(record).includes(secondTitle)
+    )
+  })
   await idle()
   return {
+    singleLocation,
+    partialRecord,
+    ignoredRecord,
+    closedRecord,
     shown,
     outside,
     answered,
@@ -154,6 +190,10 @@ export function judgeAsk(probe: AskProbe | null): string[] {
     if (!ok) failed.push(`问题卡片：${what}`)
   }
   check(probe.shown, '输入框上方没有两道可回答的问题')
+  check(probe.singleLocation, '未回答的题在对话流里重复显示')
+  check(probe.partialRecord, '部分回答时未答题混进了记录')
+  check(probe.ignoredRecord, '忽略后的题没有留下记录')
+  check(probe.closedRecord, '关闭后的题没有留下记录')
   check(probe.outside, '问题卡片收进了过程里')
   check(
     probe.answered.join('｜') === '照常全跑｜#litch-ci',
