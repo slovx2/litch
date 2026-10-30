@@ -408,6 +408,11 @@
 .mg-form .mng-sec {
   padding: 18px 0;
 }
+/* 导航条已有分隔线，内容首节不重复描边；同页后续分节保留。 */
+.mg-form .mg-panel.mng-sec,
+.mg-form .mg-panel > .mng-sec:first-child {
+  border-top: 0;
+}
 .mg-form .mng-sec h2 {
   margin: 0 0 14px;
   font-size: 14px;
