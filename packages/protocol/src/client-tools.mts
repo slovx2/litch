@@ -32,6 +32,8 @@ export const CLIENT_TOOL_NAMESPACE = {
 export interface ClientToolsDeclaration {
   /** 这条连接能执行的命名空间。每个都必须以 CLIENT_TOOL_NAMESPACE_PREFIX 开头 */
   namespaces: string[]
+  /** 明确声明可执行 litch_computer.run_actions；只声明命名空间不够 */
+  computerActions?: boolean
   /** Litch 桌面端报的自己是哪台（声明了 litch_machine 时带）。设备进程按它列出、挑选桌面端 */
   desktop?: ClientToolsDesktopInfo
 }
@@ -70,6 +72,23 @@ export function declaredAnyThreadNamespaces(
   const list = (raw as Record<string, unknown>).anyThread
   if (!Array.isArray(list)) return []
   return namespaces.filter((one) => list.includes(one))
+}
+
+export function declaredComputerActions(
+  capabilities: unknown,
+  extensionDeclared: boolean,
+): boolean {
+  if (
+    !declaredClientToolNamespaces(capabilities, extensionDeclared).includes(
+      CLIENT_TOOL_NAMESPACE.computer,
+    )
+  )
+    return false
+  const raw = (capabilities as Record<string, unknown>)[CLIENT_TOOLS_CAPABILITY] as Record<
+    string,
+    unknown
+  >
+  return raw.computerActions === true
 }
 
 // —— 协议原有的形状（codex 0.157.1 起一致），这里抄一份最小的，免得设备进程去引 codex.mts ——

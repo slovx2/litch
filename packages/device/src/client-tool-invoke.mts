@@ -114,7 +114,9 @@ export class ClientToolInvoker {
   invoke(caller: InvokeCaller, raw: unknown): Promise<InvokeOutcome> {
     const params = parseParams(raw)
     const { router, index } = this.options
-    let candidates = router.executors(params.namespace)
+    let candidates = router
+      .executors(params.namespace)
+      .filter((peer) => peer.clientToolNamespaces.supports(params.namespace, params.tool))
     if (params.desktop !== undefined) {
       const all = candidates
       candidates = all.filter((peer) => matches(peer, params.desktop as string))

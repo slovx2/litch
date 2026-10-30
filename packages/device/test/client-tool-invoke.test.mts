@@ -47,6 +47,7 @@ async function litch(
   env: Env,
   hostname: string | null,
   namespaces: string[] | null = [MACHINE],
+  computerActions = false,
 ): Promise<TestClient> {
   const client = env.connect()
   if (!namespaces) await client.initialize()
@@ -54,6 +55,7 @@ async function litch(
     await client.initialize(['harness', 'clientTools'], {
       litchClientTools: {
         namespaces,
+        computerActions,
         ...(hostname ? { desktop: { hostname, name: `${hostname} 的桌面` } } : {}),
       },
     })
@@ -71,6 +73,26 @@ const invoke = (caller: TestClient, more: Record<string, unknown> = {}) =>
     threadId: null,
     ...more,
   })
+
+test('批量 CU 命令调用不会绕过能力声明，显式指定旧桌面也拒绝', async () => {
+  const { env } = setup()
+  try {
+    const old = await litch(env, 'old', ['litch_computer'])
+    const fresh = await litch(env, 'fresh', ['litch_computer'], true)
+    const caller = env.connect()
+    const params = { namespace: 'litch_computer', tool: 'run_actions', arguments: { actions: [] } }
+    const denied = await invoke(caller, { ...params, desktop: 'old' })
+    assert.equal(denied.success, false)
+    assert.equal(detached(old).length, 0)
+    const pending = invoke(caller, params)
+    const call = await fresh.waitFor((frame) => frame.method === CLIENT_TOOL_METHOD.call)
+    fresh.answer(call.id, OK)
+    assert.deepEqual(await pending, OK)
+    assert.equal(detached(old).length, 0)
+  } finally {
+    await env.close()
+  }
+})
 
 test('INVOKE-001：没有 Litch 连着时当场回 noExecutor；调用者不用握手', async () => {
   const { env } = setup()

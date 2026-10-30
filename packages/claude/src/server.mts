@@ -4911,7 +4911,7 @@ export class CodexClaudeAppServer {
           // 客户端工具（litch_ 开头的命名空间）只交给声明过能执行它的连接，挑不出来当场失败，不等人订阅
           const namespace = tool.namespace ?? null
           const executor = isClientToolNamespace(namespace)
-            ? this.clientToolExecutor(peer, thread.id, namespace as string)
+            ? this.clientToolExecutor(peer, thread.id, namespace as string, tool.name)
             : undefined
           if (executor === null) {
             const result = noClientToolExecutor(namespace as string)
@@ -8219,7 +8219,12 @@ export class CodexClaudeAppServer {
   // 命名空间就是它；否则订阅着线程（或照 recipients 跟着父会话）、声明了的连接里最早订阅的那条；再没有是
   // 握手过、把它列在 anyThread 里的（设备进程的连接）；没有返回 null。
   // CLI 自己开的回合（收到别的会话发来的消息、后台跑完续跑）没有发起者（peer 是脱离的那个）。
-  private clientToolExecutor(peer: RpcPeer, threadId: string, namespace: string): RpcPeer | null {
+  private clientToolExecutor(
+    peer: RpcPeer,
+    threadId: string,
+    namespace: string,
+    tool: string,
+  ): RpcPeer | null {
     const namespacesOf = (target: RpcPeer) =>
       this.peerFeatures.get(target)?.clientTools ?? NO_CLIENT_TOOLS
     const starter = this.isConnected(peer) ? peer : null
@@ -8227,7 +8232,7 @@ export class CodexClaudeAppServer {
       this.isConnected(target),
     )
     const everyone = [...this.accountPeers].filter((target) => this.isConnected(target))
-    return pickClientToolExecutor(namespace, starter, watching, namespacesOf, everyone)
+    return pickClientToolExecutor(namespace, starter, watching, namespacesOf, everyone, tool)
   }
 
   private completeActiveTurns(status: 'interrupted' | 'failed', error: unknown): void {

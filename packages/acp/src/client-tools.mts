@@ -624,6 +624,7 @@ export class ClientTools {
         subscribers,
         (peer) => this.declared.get(peer.id) ?? NO_CLIENT_TOOLS,
         this.host.peers.values(),
+        spec.tool,
       )
       if (!executor) return noClientToolExecutor(namespace)
       targets = [executor]

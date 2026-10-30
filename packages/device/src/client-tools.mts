@@ -174,6 +174,7 @@ export class ClientToolRouter {
       (peer) => peer.clientToolNamespaces,
       // 到这里的都是客户端执行的命名空间（设备进程自己执行的在 relay 里先截下了），只交给看着这个会话的
       [],
+      (call.frame.params as { tool?: string }).tool,
     )
   }
 

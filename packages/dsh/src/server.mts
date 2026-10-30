@@ -885,6 +885,7 @@ export class DshServer {
           subscribers,
           (peer) => this.toolNamespaces.get(peer.id) ?? NO_CLIENT_TOOLS,
           this.peers.values(),
+          tool.tool,
         )
       : (starter ?? subscribers[0] ?? null)
     if (!target)

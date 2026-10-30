@@ -1,9 +1,13 @@
 # 手动 Computer Use 真模型实测
 
 此目录不进入 CI。使用一个独立 `codex app-server`，给它直接下发仓库中的
-`computerToolsSpec('darwin')`，调用由同一份 `createComputerExecutor`、`HelperSupervisor`
+`computerToolsSpec('darwin', true)`，调用由同一份 `createComputerExecutor`、`HelperSupervisor`
 和本分支 Swift 助手处理。工具名称、说明、参数和成功结果与 Litch 相同，
 不经过 Litch 界面、会话树或正在使用的桌面实例。
+
+M10 起显式用 `computerToolsSpec('darwin', true)` 下发批量工具；批内每个应用也须在四个应用的
+允许范围内。连续实测期间累计两次用户活动等待超时即停止后续任务，等待重新约定空闲时段，
+不降低原生让行阈值。批量调用在统计中算一次工具往返；其提交的动作数保留在调用参数中。
 
 运行器额外拒绝用例允许范围外的应用及超过 160 次的调用；`list_apps` 仍返回原生应用清单。
 它不自动同意审批，不修改 TCC，不接入正式助手。真实屏幕不是沙箱：只在用户授权的

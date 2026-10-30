@@ -205,6 +205,23 @@ Command 快捷键使用带空闲等待和焦点恢复的短暂前台路径，避
 文本控件返回字符选区，便于直接核验选择操作，不必为确认选区另取截图。
 macOS 截图必须唯一匹配辅助功能窗口，并附窗口编号和观察时间。树与截图是先后采样，动画期间仍可能不同步。
 
+### Batch actions / 批量动作
+
+After observing an app, agents can use `run_actions` for up to 12 known actions in one call.
+Each step uses an existing action's name and arguments. The batch stops at the first failure,
+without retrying or undoing previous steps. Actions have 60 seconds in total; the final observation
+has another 10 seconds. Results contain short step summaries and the last attempted app's full
+state with at most one screenshot. Other apps must be checked separately. Observe first when
+the next step depends on a new window or unknown controls; expired element numbers stop the batch.
+Device and harness switches, system permissions, user activity, Stop, and sensitive-action rules
+apply throughout. There is no per-app approval. Handle missing permissions before starting a new batch.
+
+观察应用后，代理可用 `run_actions` 在一次调用中顺序执行最多 12 个已知动作，每步沿用原工具
+名称和参数。首个失败即停止，不重试、不撤销已完成步骤。动作总计最多 60 秒，最终观察另限
+10 秒。结果包含逐步摘要和最后尝试的应用的完整状态，最多一张截图；其他应用须另行核验。
+下一步依赖新窗口或未知控件时，应先观察；编号失效则停止。设备与 harness 开关、系统权限、
+用户让行、停止和敏感操作规则全程有效，不新增逐应用授权。缺权限时由用户处理，再发起新批次。
+
 ### macOS background control and preview / macOS 后台控制与预览
 
 macOS prefers background input. Typing uses public targeted keyboard events; supported mouse

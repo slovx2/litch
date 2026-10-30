@@ -21,7 +21,12 @@ export const COMPUTER_TOOL = {
   setValue: 'set_value',
   drag: 'drag',
   selectText: 'select_text',
+  runActions: 'run_actions',
 } as const
+
+export const COMPUTER_BATCH_MAX_ACTIONS = 12
+export const COMPUTER_BATCH_ACTION_MS = 60_000
+export const COMPUTER_BATCH_STATE_MS = 10_000
 
 export type ComputerToolName = (typeof COMPUTER_TOOL)[keyof typeof COMPUTER_TOOL]
 
@@ -106,7 +111,48 @@ function inputSchema(
 }
 
 /** litch_computer 在这个平台上的工具定义 */
-export function computerToolsSpec(platform: ComputerPlatform = 'darwin'): ClientToolNamespaceSpec {
+export function computerToolsSpec(
+  platform: ComputerPlatform = 'darwin',
+  batch = false,
+): ClientToolNamespaceSpec {
+  const spec = discreteComputerToolsSpec(platform)
+  if (!batch) return spec
+  const actions = spec.tools.filter(
+    (tool) => tool.name !== COMPUTER_TOOL.listApps && tool.name !== COMPUTER_TOOL.getAppState,
+  )
+  spec.tools.push({
+    type: 'function',
+    name: COMPUTER_TOOL.runActions,
+    description:
+      'Execute 1–12 known actions in order using the same tool names and arguments as individual actions. Observe each app with get_app_state first. Use this when the next steps are already known (e.g. select text, bold, save shortcut); use individual actions and observe first when the next step depends on new UI. No loops, nested batches or observations inside a batch. Actions have 60 seconds total; final observation has up to 10 seconds. Every step keeps normal permission, user-activity, stop and safety checks; there is no per-app approval. Stops on the first failure without rollback or retries. Returns short step results and one final full state of the last attempted app, with at most one screenshot. Element numbers and coordinates must come from an existing observation; stale references stop the batch. Never guess new numbers or reuse coordinates after a window change. Inspect the returned state and continue only unfinished work; a failed action may have partly executed. Ask for any necessary user approval before submitting the batch.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        actions: {
+          type: 'array',
+          minItems: 1,
+          maxItems: COMPUTER_BATCH_MAX_ACTIONS,
+          items: {
+            oneOf: actions.map((tool) => ({
+              type: 'object',
+              properties: {
+                tool: { enum: [tool.name], type: 'string' },
+                arguments: tool.inputSchema,
+              },
+              required: ['tool', 'arguments'],
+              additionalProperties: false,
+            })),
+          },
+        },
+      },
+      required: ['actions'],
+      additionalProperties: false,
+    },
+  })
+  return spec
+}
+
+function discreteComputerToolsSpec(platform: ComputerPlatform): ClientToolNamespaceSpec {
   const schema = (properties: Record<string, unknown>, required?: string[]) =>
     inputSchema(platform, properties, required)
   const win = platform === 'win32'

@@ -557,7 +557,7 @@ export class PiServer {
     let targets: RpcPeer[]
     if (tool && isClientToolNamespace(params.namespace)) {
       // 客户端工具（litch_ 开头的命名空间）只交给声明了它的连接，挑不出来当场失败，不交给别人
-      const executor = this.clientToolExecutor(peer, threadId, params.namespace)
+      const executor = this.clientToolExecutor(peer, threadId, params.namespace, params.tool)
       if (!executor) return Promise.resolve(noClientToolExecutor(params.namespace))
       targets = [executor]
     } else targets = this.targets(peer, threadId, tool)
@@ -578,6 +578,7 @@ export class PiServer {
     peer: RpcPeer | undefined,
     threadId: string,
     namespace: string,
+    tool: string,
   ): RpcPeer | null {
     const starter = (peer && this.peers.get(peer.id)) ?? null
     return pickClientToolExecutor(
@@ -586,6 +587,7 @@ export class PiServer {
       this.subscribers(threadId),
       (target) => this.toolNamespaces.get(target.id) ?? NO_CLIENT_TOOLS,
       this.peers.values(),
+      tool,
     )
   }
   /** 订阅着这个会话、还连着的连接，按订阅的先后 */

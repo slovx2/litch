@@ -69,6 +69,7 @@ let ownsDirectory = false,
   task = 'preflight',
   imageSeq = 0,
   toolCount = 0
+let idleTimeouts = 0
 const controller = new AbortController()
 const record = (file, value) => {
   const data = JSON.stringify(value, (_key, item) => {
@@ -147,7 +148,13 @@ async function invoke(message) {
       success: false,
       contentItems: [{ type: 'inputText', text: 'Trial scope exceeded.' }],
     }
-  } else if (p.tool !== 'list_apps' && !allowed.has(p.arguments?.app)) {
+  } else if (
+    p.tool !== 'list_apps' &&
+    !(p.tool === 'run_actions'
+      ? Array.isArray(p.arguments?.actions) &&
+        p.arguments.actions.every((step) => allowed.has(step?.arguments?.app))
+      : allowed.has(p.arguments?.app))
+  ) {
     result = {
       success: false,
       contentItems: [
@@ -182,6 +189,8 @@ async function invoke(message) {
       .filter((item) => item.type === 'inputText')
       .map((item) => item.text)
       .join('\n')
+    if (/Timed out waiting for 2 seconds of idle time/.test(text) && ++idleTimeouts >= 2)
+      blockedReason = `Trial stopped after repeated user-activity timeouts. Arrange an idle period before retrying. ${text}`
     if (
       /macOS login or permission dialog|macOS denied or stopped screen capture|does not have macOS permission|Trial scope exceeded/.test(
         text,
@@ -217,7 +226,7 @@ try {
     const after = targetProcesses()
     for (const app of after) if (!before.some((old) => old.pid === app.pid)) opened.add(app.pid)
     record('launched.jsonl', { before, after, ownedPids: [...opened] })
-    const spec = computerToolsSpec('darwin')
+    const spec = computerToolsSpec('darwin', true)
     record('spec.jsonl', spec)
     rpc = startCodex(
       executable,

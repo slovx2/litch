@@ -21,6 +21,7 @@ import type {
   ClientToolExecutor,
   ClientToolInvocation,
 } from '../client-tools/types.mjs'
+import { runComputerActions } from './batch.mjs'
 import { CALL_TIMEOUT, type HelperAccess, sessionKey, text } from './executor-shared.mjs'
 import { createWinRunner } from './executor-win.mjs'
 import {
@@ -157,14 +158,20 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
 
   const win = platform === 'win32' ? createWinRunner({ helper }) : null
 
+  const single = async (invocation: ClientToolInvocation, context: ClientToolContext) => {
+    try {
+      return await (win ? win.run(invocation, context) : run(invocation, context))
+    } catch (error) {
+      return failureOf(error, context.signal)
+    }
+  }
+
   return {
     namespace: CLIENT_TOOL_NAMESPACE.computer,
     async call(invocation, context) {
-      try {
-        return await (win ? win.run(invocation, context) : run(invocation, context))
-      } catch (error) {
-        return failureOf(error, context.signal)
-      }
+      return invocation.tool === COMPUTER_TOOL.runActions
+        ? runComputerActions(invocation, context, single)
+        : single(invocation, context)
     },
     turnEnded(turn) {
       const session = sessionKey({ device: { id: turn.deviceId }, threadId: turn.threadId })

@@ -250,6 +250,7 @@ export function createLink(options: LinkOptions): Link {
                 ? {
                     [CLIENT_TOOLS_CAPABILITY]: {
                       namespaces: tools,
+                      ...(tools.includes('litch_computer') ? { computerActions: true } : {}),
                       ...(desktop ? { desktop: { ...desktop } } : {}),
                     },
                   }
