@@ -133,7 +133,7 @@ const machine = {
   description: 'Machine id from machines. Omit for the desktop.',
 }
 
-const GUIDE = `Run commands and read/write files on the user's machines through Litch. The user approves on the desktop; a declined or blocked call says why: do not retry it unchanged.
+const GUIDE = `Run commands and read/write files on the user's machines through Litch. If access is off, Litch shows an enable card: direct the user to it and wait. Only the user may enable access. Do not retry repeatedly or bypass restrictions with other tools. A declined or blocked call says why.
 - Use paths and commands that fit the target machine's system.
 - Long commands: set yield_ms, then poll with process.
 - Ask the user before anything irreversible or sensitive: deleting data, changing system or account settings, sending messages, payments.

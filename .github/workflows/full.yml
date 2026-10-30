@@ -202,6 +202,8 @@ jobs:
       # 先不起界面把每一种连接情形过一遍，再在真的外壳里走添加、连接、断线重连、移除
       - run: npm run client:check:ssh
       - run: npm run client:check:remote
+      # 远程操作本机的开启确认：隔离状态、隐藏窗口、中英文卡片及继续执行。
+      - run: npm run check:machine-enable --prefix apps/desktop
 
   # dsh 本体不随适配器分发，测试需要一份真实的 dsh：按 protocol/versions.json 登记的下限版本装到临时前缀。
   # 模型端是回环 mock，SSH 实例发往回环之外的 HTTP(S) 请求都落到陷阱代理上，验收要求一次也没有。

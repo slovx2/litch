@@ -5,7 +5,7 @@
 // 这里不为看一眼去拉起助手，只问在跑的那个、或者这次运行里上一次问到的（computer-bridge.ts 的 status(false)）。
 // 远程设备在这一组里还多一行“操作这台电脑（命令与文件）”（machine/MachineAccess.tsx），它不分 harness，开关还在这里。
 import type { DeviceView } from '@litch/core'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { requestSettings } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import type { MessageKey, Translator } from '../i18n/index.ts'
@@ -35,7 +35,11 @@ const summaryText = (summary: Summary, t: Translator): string => {
   return t('switches.summary.some', { names: summary.names.join(t('list.comma')) })
 }
 
-export function ToolSwitches({ device }: { device: DeviceView }) {
+export function ToolSwitches({ device, reveal = false }: { device: DeviceView; reveal?: boolean }) {
+  const section = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (reveal) section.current?.scrollIntoView({ block: 'start' })
+  }, [reveal])
   const t = useT()
   const rows = ROWS.filter(({ column }) =>
     column === 'taskCards' ? harnessRows(device).length > 0 : device.tools[column] !== null,
@@ -45,7 +49,7 @@ export function ToolSwitches({ device }: { device: DeviceView }) {
   const remote = device.kind === 'ssh'
 
   return (
-    <section className="mng-sec" data-sec="tools">
+    <section className="mng-sec" data-sec="tools" ref={section}>
       <div className="mng-sec-head">
         <h2>{t('devices.tools')}</h2>
         <span className="grow" />

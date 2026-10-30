@@ -59,6 +59,39 @@ const resume = (client: TestClient) => client.call('thread/resume', { threadId: 
 const start = (client: TestClient) =>
   client.call('turn/start', { threadId: THREAD, input: [{ type: 'text', text: '调' }] })
 
+test('M13：litch_machine 只投递给声明该命名空间的桌面，普通连接和手机不收到调用', async () => {
+  const env = codexRig()
+  try {
+    const ordinary = await join_(env, null)
+    const phone = await join_(env, ['litch_browser'])
+    const desktop = await join_(env, ['litch_machine'])
+    for (const peer of [ordinary, phone, desktop]) await resume(peer.client)
+    await start(ordinary.client)
+    for (const peer of [ordinary, phone, desktop]) {
+      peer.upstream.send({
+        id: 'machine-enable-request',
+        method: 'item/tool/call',
+        params: {
+          threadId: THREAD,
+          turnId: TURN,
+          callId: 'machine-enable-call',
+          namespace: 'litch_machine',
+          tool: 'exec',
+          arguments: { command: 'pwd' },
+        },
+      })
+    }
+    const call = await desktop.client.waitFor((frame) => frame.method === 'item/tool/call')
+    desktop.client.answer(call.id, OK)
+    await settle()
+    assert.equal(calls(ordinary.client).length, 0)
+    assert.equal(calls(phone.client).length, 0)
+    assert.equal(calls(desktop.client).length, 1)
+  } finally {
+    await env.close()
+  }
+})
+
 test('批量 CU 只投递给声明 computerActions 的连接；旧连接发起也不能抢到', async () => {
   const env = codexRig()
   try {

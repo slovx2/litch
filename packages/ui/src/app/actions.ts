@@ -50,7 +50,7 @@ export function onOpenSessionRequest(listener: (session: SessionRef) => void): (
 }
 
 /** 设备详情里要直接去的一节。service：“设备服务”那一节（侧栏设备行上的升级记号） */
-export type DeviceSection = 'service'
+export type DeviceSection = 'service' | 'tools'
 
 const deviceListeners = new Set<(deviceId: string, section: DeviceSection | null) => void>()
 

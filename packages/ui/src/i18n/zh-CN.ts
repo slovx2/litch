@@ -1551,6 +1551,12 @@ export const zhCN = {
   'machine.session.unknown': '未知会话',
   'machine.session.gone': '会话已不存在',
   'machine.ask.exec': '需要批准：在本机运行命令',
+  'machine.enable.prompt': '允许远程设备操作本机？',
+  'machine.enable.body':
+    '此设备上的会话请求操作这台电脑，但“允许远程设备操作本机”尚未开启。开启后，该设备可请求执行命令及读写文件；默认禁止常用敏感位置，并逐条确认命令和写入。当前调用仍需通过操作审批。',
+  'machine.enable.allow': '开启并继续',
+  'machine.enable.decline': '不允许',
+  'machine.enable.settings': '打开设置页',
   'machine.ask.read': '需要批准：读取本机文件',
   'machine.ask.write': '需要批准：写入本机文件',
   'machine.ask.list': '需要批准：查看本机目录',

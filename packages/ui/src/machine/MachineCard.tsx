@@ -14,6 +14,7 @@ import type {
 } from '@litch/core'
 import { keys } from '@litch/core'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
+import { requestDevice } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { useElapsed } from '../app/clock.ts'
 import { nameOf } from '../app/device.ts'
@@ -34,6 +35,7 @@ const TITLE: Record<MachineAskView['action'], MessageKey> = {
 }
 
 interface MachineCardProps {
+  deviceId: string
   ask: MachineAskView
   options: ApprovalOption[]
   /** 调用来自哪台设备。远程的整张卡片左边一道醒目的边，头一行写明 */
@@ -64,7 +66,7 @@ function MachineCard(props: MachineCardProps) {
   const [note, setNote] = useState<string | null>(null)
   const noting = note !== null && refuse !== undefined
   const flagged = ask.flagged.length > 0
-  const title = t(TITLE[ask.action])
+  const title = t(ask.enable ? 'machine.enable.prompt' : TITLE[ask.action])
 
   // 对话里的卡片一出现就拿焦点（和 useCardFocus 一样，人正写着东西的不打断）；弹层里的不抢
   const { grab } = props
@@ -88,7 +90,8 @@ function MachineCard(props: MachineCardProps) {
       if (!ownsKey(event, card.current)) return
       if (typing(event.target)) return
       if (event.key === 'Enter' && event.target instanceof HTMLButtonElement) return
-      const option = event.key === 'Enter' ? primary : event.key === 'Escape' ? refuse : undefined
+      const option =
+        event.key === 'Enter' && !ask.enable ? primary : event.key === 'Escape' ? refuse : undefined
       if (!option) return
       event.preventDefault()
       onChoose({ optionId: option.id })
@@ -114,6 +117,7 @@ function MachineCard(props: MachineCardProps) {
         {props.expiresAt !== null ? <Expires at={props.expiresAt} /> : null}
       </div>
       <div className="req-body">
+        {ask.enable ? <p>{t('machine.enable.body')}</p> : null}
         <div className={from.remote ? 'mach-from remote' : 'mach-from'} data-from>
           {from.remote ? t('machine.ask.fromRemote') : t('machine.ask.fromLocal')}{' '}
           <b>{from.name}</b>
@@ -188,7 +192,17 @@ function MachineCard(props: MachineCardProps) {
         {options.map((option) => (
           <Fragment key={option.id}>
             {/* 拒绝前面多一个入口：点开写一句为什么，模型看得到 */}
-            {option === refuse && !noting ? (
+            {option === refuse && ask.enable ? (
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={() => requestDevice(props.deviceId, 'tools')}
+              >
+                {t('machine.enable.settings')}
+              </button>
+            ) : null}
+            {option === refuse && !noting && !ask.enable ? (
               <button
                 type="button"
                 className="btn ghost note-open"
@@ -211,8 +225,14 @@ function MachineCard(props: MachineCardProps) {
               data-option={option.id}
               onClick={() => onChoose({ optionId: option.id })}
             >
-              {t(optionText(option, props.sessionText))}
-              {option === primary ? <span className="kbd">↵</span> : null}
+              {t(
+                ask.enable
+                  ? option === primary
+                    ? 'machine.enable.allow'
+                    : 'machine.enable.decline'
+                  : optionText(option, props.sessionText),
+              )}
+              {option === primary && !ask.enable ? <span className="kbd">↵</span> : null}
               {option === refuse ? <span className="kbd">Esc</span> : null}
             </button>
           </Fragment>
@@ -316,6 +336,7 @@ export function MachineSessionCard(props: CardProps<ClientAskRequest> & { ask: M
   const t = useT()
   return (
     <MachineCard
+      deviceId={deviceId}
       ask={ask}
       options={request.options}
       from={{
@@ -324,13 +345,13 @@ export function MachineSessionCard(props: CardProps<ClientAskRequest> & { ask: M
         remote: request.device.kind === 'ssh',
       }}
       harness={summary ? nameOf(device, summary.harness) : null}
-      session="here"
+      session={ask.enable ? { title: summary ? t.text(summary.title) : sessionId } : 'here'}
       expiresAt={null}
       sessionText="machine.option.session"
       busy={busy}
       error={error}
       waiting={waiting}
-      grab={true}
+      grab={!ask.enable}
       onChoose={respond}
     />
   )
@@ -364,11 +385,12 @@ export function MachinePendingCard({ pending }: { pending: MachinePendingView })
   }
   return (
     <MachineCard
+      deviceId={pending.deviceId}
       ask={pending.ask}
       options={pending.options}
       from={{ name: t.text(pending.deviceName), host: pending.host, remote: true }}
       harness={pending.harness ? nameOf(device, pending.harness) : null}
-      session={null}
+      session={pending.ask.enable?.sessionId ? { title: pending.ask.enable.sessionId } : null}
       expiresAt={pending.expiresAt}
       sessionText="machine.option.cli"
       busy={busy}

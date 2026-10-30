@@ -362,8 +362,9 @@ async function started() {
   return world
 }
 
-test('开关：远程设备默认关、本机没有这一项；关着当场回 disabled（说明写给模型）不找执行器，记一条操作记录', async () => {
-  const { app, call, command, fake, box } = await started()
+test('开关：默认关闭时展示开启卡；拒绝仍回 disabled 和双语提示，不执行并记录', async () => {
+  const world = await started()
+  const { app, call, command, fake, box } = world
   assert.equal(app.devices.find((entry) => entry.id === 'local')?.machine, null)
   assert.deepEqual(box()?.machine, {
     enabled: false,
@@ -371,8 +372,29 @@ test('开关：远程设备默认关、本机没有这一项；关着当场回 d
     access: { mode: 'sensitive', custom: [] },
     presets: [...SENSITIVE_PRESETS],
   })
-  const off = textOf(await call({ command: 'ls' }))
+  const session = watchSession(world.core, 'a', 'box')
+  const pending = call({ command: 'ls' })
+  await settle()
+  const [card] = cardsOf(session)
+  assert.deepEqual(card?.ask.kind === 'machine' && card.ask.enable, { sessionId: 'a' })
+  assert.deepEqual(
+    card?.options.map((option) => option.id),
+    ['once', 'decline'],
+  )
+  assert.equal(world.activity.view?.pending.length, 1)
+  assert.equal(world.main.notices().length, 1)
+  assert.equal(
+    world.remote.last().seen.some((entry) => entry.method === 'litch/approval/open'),
+    false,
+  )
+  await respond(world, card, 'decline')
+  const off = textOf(await pending)
   assert.match(off, /^\[litch:disabled\] .*Operate this computer/)
+  assert.match(off, /enable card was shown/)
+  assert.match(off, /不要反复重试/)
+  assert.match(off, /do not retry repeatedly or use other tools to bypass/)
+  assert.equal(cardsOf(session).length, 0)
+  assert.equal(world.activity.view?.pending.length, 0)
   assert.equal(fake.seen.length, 0)
   const { entries } = (await command('machine.log', { deviceId: 'box' })) as {
     entries: MachineLogEntry[]
@@ -381,6 +403,8 @@ test('开关：远程设备默认关、本机没有这一项；关着当场回 d
     entries.map((entry) => [entry.tool, entry.summary, entry.result, entry.sessionId]),
     [['exec', 'ls', 'disabled', 'a']],
   )
+  assert.match(textOf(await call({ command: 'another command' })), /^\[litch:disabled\]/)
+  assert.equal(cardsOf(session).length, 0)
   // 本机设备改不了这一项
   await assert.rejects(command('device.tools.set', { deviceId: 'local', machine: true }), {
     code: 'invalid',
@@ -494,6 +518,88 @@ const respond = (
     optionId,
     ...(note === undefined ? {} : { note }),
   })
+
+test('开启并继续：最保守范围、逐条审批持久化；同一次调用仍需操作审批', async () => {
+  const world = await started()
+  await world.command('device.machine.set', {
+    deviceId: 'box',
+    approval: 'never',
+    access: { mode: 'open' },
+  })
+  const session = watchSession(world.core, 'a', 'box')
+  const pending = world.call({ command: 'make' })
+  await settle()
+  assert.equal(world.fake.seen.length, 0)
+  const [enableCard] = cardsOf(session)
+  await assert.rejects(respond(world, enableCard, 'session'))
+  assert.equal(world.box()?.machine?.enabled, false)
+  await respond(world, enableCard, 'once')
+  await settle()
+  assert.equal(world.box()?.machine?.enabled, true)
+  assert.equal(world.box()?.machine?.approval, 'each')
+  assert.equal(world.box()?.machine?.access.mode, 'sensitive')
+  assert.equal(world.activity.view?.pending.length, 0)
+  const [operationCard] = cardsOf(session)
+  assert.equal(operationCard?.ask.kind === 'machine' && operationCard.ask.enable, undefined)
+  assert.equal(world.fake.seen.length, 1)
+  await respond(world, operationCard, 'once')
+  assert.equal(textOf(await pending), 'ok')
+  assert.equal(world.fake.seen.length, 1)
+  assert.deepEqual(world.fake.seen[0]?.context.policy, {
+    mode: 'sensitive',
+    denied: SENSITIVE_PRESETS,
+  })
+})
+
+test('开启卡超时：暂停调用计时，十分钟后撤销两处卡片，不开启且本回合不再问', async () => {
+  const world = await started()
+  const session = watchSession(world.core, 'a', 'box')
+  const pending = world.call({ command: 'make' })
+  await settle()
+  world.time.advance(200_000)
+  await settle()
+  assert.equal(cardsOf(session).length, 1)
+  world.time.advance(MACHINE_ASK_EXPIRES_MS - 200_000)
+  assert.match(textOf(await pending), /^\[litch:disabled\]/)
+  assert.equal(cardsOf(session).length, 0)
+  assert.equal(world.activity.view?.pending.length, 0)
+  assert.equal(world.box()?.machine?.enabled, false)
+  assert.equal(world.fake.seen.length, 0)
+  assert.match(textOf(await world.call({ command: 'make' })), /do not retry/)
+  assert.equal(cardsOf(session).length, 0)
+  await assert.rejects(
+    world.command('machine.answer', { pendingId: 'machine-pending:1', optionId: 'once' }),
+    { code: 'notFound' },
+  )
+})
+
+test('全局待处理可回答开启卡，回答后同步撤掉会话卡；全部停止不能开启', async () => {
+  const world = await started()
+  const session = watchSession(world.core, 'a', 'box')
+  const pending = world.call({ command: 'make' })
+  await settle()
+  const [card] = world.activity.view?.pending ?? []
+  assert.ok(card)
+  assert.deepEqual(
+    card.options.map((option) => option.id),
+    ['once', 'decline'],
+  )
+  await world.command('machine.answer', { pendingId: card.id, optionId: 'once' })
+  await settle()
+  assert.equal(world.box()?.machine?.enabled, true)
+  assert.equal(cardsOf(session).length, 1)
+  await respond(world, cardsOf(session)[0], 'decline')
+  assert.match(textOf(await pending), /^\[litch:declined\]/)
+
+  await world.command('device.tools.set', { deviceId: 'box', machine: false })
+  const detached = world.detached({ path: '/tmp/a' }, { tool: 'read_file' })
+  await settle()
+  assert.equal(world.activity.view?.pending.length, 1)
+  await world.command('machine.stopAll', {})
+  assert.match(textOf(await detached), /^\[litch:disabled\]/)
+  assert.equal(world.box()?.machine?.enabled, false)
+  assert.equal(world.activity.view?.pending.length, 0)
+})
 
 test('审批·每个会话确认一次（默认）：执行、读各弹一次，“本会话都允许”两类各管各的', async () => {
   const world = await started()
