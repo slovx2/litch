@@ -8,7 +8,7 @@
 // 回合中途 start 提的提案、offer 卡露在调用的位置，跟着对话往上走，后面的过程和回答接着往下长。
 
 import { CLIENT_TOOL_NAMESPACE } from '../../../protocol/src/client-tools.mjs'
-import type { ItemView, TurnStatus } from '../model.mjs'
+import type { ItemView, TurnStatus, TurnView } from '../model.mjs'
 import type { AgentThreadView } from '../model-tree.mjs'
 import type { Text } from '../phrase.mjs'
 import { spanOf } from './span.mjs'
@@ -180,6 +180,43 @@ function remindBlocks(shown: BlockInput[], options: BucketOptions): Block[] {
 /** 一段过程里所有条目的标识，按先后 */
 export function processItemIds(parts: ProcessPart[]): string[] {
   return parts.flatMap((part) => (part.type === 'steps' ? part.itemIds : [part.itemId]))
+}
+
+/** 后台自发回合没有开场用户消息；目标续跑的代发输入已在投影时隐藏。 */
+export function turnAddition(turn: TurnView, itemId: string): boolean {
+  const index = turn.itemIds.indexOf(itemId)
+  return index >= 0 && (index > 0 || turn.origin === 'backgroundTask' || turn.origin === 'goal')
+}
+
+export interface ProcessSegment {
+  /** 第一块过程的键：同段的其他过程块共用开关和摘要。 */
+  key: string
+  itemIds: string[]
+}
+
+/** 只在用户消息处断开。待办、卡片等仍露在原处，不增加摘要行。 */
+export function processSegments(blocks: Block[]): Map<string, ProcessSegment> {
+  const segments = new Map<string, ProcessSegment>()
+  let current: ProcessSegment | undefined
+  for (const block of blocks) {
+    if (block.type === 'user') current = undefined
+    else if (block.type === 'process') {
+      current ??= { key: block.key, itemIds: [] }
+      current.itemIds.push(...processItemIds(block.parts))
+      segments.set(block.key, current)
+    }
+  }
+  return segments
+}
+
+/** 分段后只用完整记录的条目时间，不拿整回合耗时充当每段耗时。 */
+export function processDuration(
+  turn: TurnView,
+  items: ItemView[],
+  divided: boolean,
+): number | null {
+  if (!divided) return turn.durationMs
+  return items.length > 0 && items.every((item) => item.span?.to != null) ? spanOf(items) : null
 }
 
 /**

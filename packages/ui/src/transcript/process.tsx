@@ -1,14 +1,15 @@
 // 过程区：用户消息和最终回答之间的那一段。说明段按正文画（和最终回答同一个样子），
 // 步骤组收成一行汇总（activity.tsx 的 Steps），启动子代理那一行排在它所在的位置（tree/TreeCards.tsx）。
-// 回合结束后整段过程收成一行“已处理 X · N 段说明 · N 步 · N 个子代理”，点开恢复；
+// 回合结束后按用户补充的位置分段，各段收成一行“已处理 X · N 段说明 · N 步 · N 个子代理”，点开恢复；
 // 这一轮起的后台任务还在跑的，末尾再加“· N 个在后台运行”。
 import {
   type ItemView,
   keys,
   type ProcessPart,
+  processDuration,
   processTally,
-  runningFromTurn,
   type TurnView,
+  taskOfItem,
 } from '@litch/core'
 import { memo, useMemo, useRef } from 'react'
 import { useT } from '../app/appearance.ts'
@@ -45,6 +46,8 @@ interface ProcessHeadProps extends SessionRef {
   turn: TurnView
   /** 整段过程里所有条目的标识 */
   itemIds: string[]
+  anchor: string
+  divided: boolean
   open: boolean
   onToggle(next: boolean): void
 }
@@ -55,6 +58,8 @@ export const ProcessHead = memo(function ProcessHead({
   sessionId,
   turn,
   itemIds,
+  anchor,
+  divided,
   open,
   onToggle,
 }: ProcessHeadProps) {
@@ -77,15 +82,23 @@ export const ProcessHead = memo(function ProcessHead({
     [values, agents],
   )
   const ended = turn.status === 'failed' || turn.status === 'interrupted' ? turn.status : null
-  const time = turn.status !== 'running' && turn.durationMs ? duration(turn.durationMs, t) : null
+  const ms = processDuration(
+    turn,
+    values.filter((value): value is ItemView => value !== undefined),
+    divided,
+  )
+  const time = turn.status !== 'running' && ms ? duration(ms, t) : null
   const { plain, bad } = processSummary(tally, time, t, ended)
   const background = useSessionBackground(deviceId, sessionId)
-  const inBackground = turn.status === 'running' ? 0 : runningFromTurn(background, turn)
+  const inBackground =
+    turn.status === 'running' || !background
+      ? 0
+      : itemIds.filter((id) => taskOfItem(background, id)?.status === 'running').length
   return (
     <button
       type="button"
       className="proc-head"
-      data-anchor={`p:${turn.id}`}
+      data-anchor={anchor}
       ref={head}
       aria-expanded={open}
       aria-label={[

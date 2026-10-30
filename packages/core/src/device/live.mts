@@ -623,12 +623,16 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
   const putItem = (live: Live, turnId: string, item: ThreadItem, streaming: boolean) => {
     const viewId = viewTurn(live, turnId)
+    const current = live.view?.turns.find((turn) => turn.id === viewId)
     // 续跑回合里入口替 harness 说的那句“接着做”不画成用户消息（和载入时一样，projectTurn）
-    if (
-      item.type === 'userMessage' &&
-      live.view?.turns.find((turn) => turn.id === viewId)?.origin === 'goal'
-    )
-      return
+    if (item.type === 'userMessage' && current?.origin === 'goal') {
+      if (current.hiddenInputId === item.id) return
+      // 入口也可以先报空回合，再回显代发输入。记住其标识，后续补充不再按来源一概过滤。
+      if (!current.hiddenInputId && current.itemIds.length === 0) {
+        emit(live, [{ op: 'turn.add', turn: { ...current, hiddenInputId: item.id } }])
+        return
+      }
+    }
     const ops = ensureTurn(live, viewId)
     const position = live.view?.turns.find((turn) => turn.id === viewId)?.itemIds.length ?? 0
     // 对面回显了本机先显示出来的消息：落在同一个条目上，不多出一条。

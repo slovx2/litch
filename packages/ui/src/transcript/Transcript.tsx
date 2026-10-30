@@ -5,8 +5,9 @@ import {
   type DeviceView,
   type ItemView,
   keys,
+  type ProcessSegment,
   processFolded,
-  processItemIds,
+  processSegments,
   processSettled,
   type RequestView,
   type SessionMeta,
@@ -14,6 +15,7 @@ import {
   type Text,
   type TurnStatus,
   type TurnView,
+  turnAddition,
   workingShown,
 } from '@litch/core'
 import {
@@ -73,8 +75,8 @@ interface TurnBlocks {
   remind: boolean
   /** 最终回答那一条 */
   answerId: string | undefined
-  /** 整段过程里所有条目的标识 */
-  processIds: string[]
+  /** 每块过程所属的段，同段共用摘要与开关。 */
+  segments: Map<string, ProcessSegment>
 }
 
 /**
@@ -99,9 +101,7 @@ function useBlocks(
       blocks,
       remind: inputs[0] !== undefined && 'remind' in inputs[0] && inputs[0].remind,
       answerId: blocks.find((block) => block.type === 'answer')?.itemId,
-      processIds: blocks.flatMap((block) =>
-        block.type === 'process' ? processItemIds(block.parts) : [],
-      ),
+      segments: processSegments(blocks),
     }
   }, [store, deviceId, sessionId, itemIds, status])
 }
@@ -204,6 +204,55 @@ type SessionFailure = { code?: string; message: string; text?: Text }
 
 const NO_ITEMS: string[] = []
 
+/** 同段过程块共用开关；插话两侧各自展开，条目节点的位置和键保持稳定。 */
+function SegmentBlock({
+  turn,
+  block,
+  segment,
+  first,
+  divided,
+  settled,
+  autoOpen,
+  userId,
+  ...ref
+}: SessionRef & {
+  turn: TurnView
+  block: Extract<Block, { type: 'process' }>
+  segment: ProcessSegment
+  first: boolean
+  divided: boolean
+  settled: boolean
+  autoOpen: boolean
+  userId: string | undefined
+}) {
+  const foldKey = first ? `p:${turn.id}` : `p:${turn.id}:${segment.key}`
+  const [open, setOpen] = useFold(`${ref.deviceId}:${ref.sessionId}`, foldKey, autoOpen)
+  const head = block.key === segment.key
+  if (settled && !open && !head) return null
+  return (
+    <div className={settled ? 'proc' : 'proc live'}>
+      {settled && head ? (
+        <ProcessHead
+          {...ref}
+          turn={turn}
+          itemIds={segment.itemIds}
+          anchor={foldKey}
+          divided={divided}
+          open={open}
+          onToggle={setOpen}
+        />
+      ) : null}
+      {settled && !open ? null : (
+        <div className="proc-body">
+          <CiteScope {...ref} userId={userId}>
+            <ProcessParts {...ref} parts={block.parts} live={turn.status === 'running'} />
+          </CiteScope>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const TURN_END: Record<Exclude<TurnView['status'], 'running'>, MessageKey> = {
   failed: 'turn.failed',
   interrupted: 'turn.interrupted',
@@ -229,7 +278,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   const running = turn?.status === 'running'
   // 回合结束的时刻（开始加用时），结尾那一行写在用时后面
   const ended = turn ? turnEnded(turn) : null
-  const { blocks, remind, answerId, processIds } = useBlocks(ref, turn?.itemIds ?? [], turn?.status)
+  const { blocks, remind, answerId, segments } = useBlocks(ref, turn?.itemIds ?? [], turn?.status)
   const settled = useSettled(ref, turn?.status, answerId, meta?.can.finalOnStart === true)
   const working = useLasting(useWorking(ref, running, turn?.itemIds ?? NO_ITEMS), WORKING_DELAY_MS)
   // 模型请求在重试：状态行一直显出，后面写第几次和原因，重试结束（新一次出字）就去掉
@@ -240,11 +289,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   // 回合里还有没做完的子代理时不自动收（状态以子线程为准，见 tree/agent-view.tsx）
   const agentsRunning = useAgentsUnfinished(deviceId, sessionId, turnId)
   // 详细视图里整段过程一直开着，回合结束也不收（useFold）
-  const [open, setOpen] = useFold(
-    sessionKey,
-    `p:${turnId}`,
-    !processFolded(settled, touched, agentsRunning),
-  )
+  const autoOpen = !processFolded(settled, touched, agentsRunning)
   // 详细视图里点开什么都不算“手动展开过”：切回精简时照常自动收
   const verbose = useTranscriptView(sessionKey) === 'verbose'
   const touch = useCallback(() => {
@@ -257,8 +302,9 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   const freshTail = !running && seen.current.running && !seen.current.tail
   // 提醒收尾的回合对用户透明（核心的 bucketItems 只给它留卡片）：没有卡片就整个不画，有卡片也不画开头、用时和结尾
   if (!turn || (remind && blocks.length === 0)) return null
-  // 告一段落之后，第一段过程的开头是收起整段过程的那一行；没告一段落时没有这一行，过程照常摊开
-  const firstProcess = blocks.findIndex((block) => block.type === 'process')
+  // 告一段落之后，每段的第一块过程显示摘要；没告一段落时过程照常摊开。
+  const firstSegment = segments.values().next().value
+  const divided = blocks.some((block) => block.type === 'user' && turnAddition(turn, block.itemId))
   const tail = blocks.find((block) => block.type === 'tail')
   const lastAnswer = blocks.findLastIndex((block) => block.type === 'answer')
   // 每一块前面最近的那条用户消息：它带着评论的话，回答里的 [N] 指向它的评论（comments/Cite.tsx）
@@ -298,6 +344,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
                 itemId={block.itemId}
                 turnId={actable ? turnId : undefined}
                 steered={turn.itemIds.indexOf(block.itemId) > 0}
+                addition={turnAddition(turn, block.itemId)}
               />
             )
           if (block.type === 'answer')
@@ -324,28 +371,20 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
             return <Compaction key={block.itemId} {...ref} itemId={block.itemId} />
           // 收尾区排在回合最后（下面单独画），这里跳过
           if (block.type === 'tail') return null
-          // 收起时后面几段过程都不占地方，只留第一段开头的那一行
-          if (settled && !open && index !== firstProcess) return null
-          // 位置固定的几个子元素（收起那一行、过程本身），中间切换时下面的说明和步骤组不会被重建
+          const segment = segments.get(block.key)!
           return (
-            <div key={block.key} className={settled ? 'proc' : 'proc live'}>
-              {settled && index === firstProcess ? (
-                <ProcessHead
-                  {...ref}
-                  turn={turn}
-                  itemIds={processIds}
-                  open={open}
-                  onToggle={setOpen}
-                />
-              ) : null}
-              {settled && !open ? null : (
-                <div className="proc-body">
-                  <CiteScope {...ref} userId={userBefore[index]}>
-                    <ProcessParts {...ref} parts={block.parts} live={running} />
-                  </CiteScope>
-                </div>
-              )}
-            </div>
+            <SegmentBlock
+              key={block.key}
+              {...ref}
+              turn={turn}
+              block={block}
+              segment={segment}
+              first={segment === firstSegment}
+              divided={divided}
+              settled={settled}
+              autoOpen={autoOpen}
+              userId={userBefore[index]}
+            />
           )
         })}
         {/* 回合级的出错框只给失败的回合（官方桌面端也是这样）：被打断的回合对面就算带了一句错误

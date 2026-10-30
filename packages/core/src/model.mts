@@ -846,6 +846,8 @@ export interface TurnView {
   error: string | null
   /** 不是用户发起的回合是怎么开始的（后台任务结束后接着做、定时任务触发）。用户发的不带 */
   origin?: Exclude<TurnOrigin, 'user'>
+  /** 目标续跑开头被隐藏的代发输入原始标识；增量回显时只过滤这一条。 */
+  hiddenInputId?: string
   /** 回合里的模型请求正在重试（apiRetry 扩展）。没在重试不带或是 null */
   retry?: TurnRetryView | null
   /** 执行设备观察到的无进展提醒，不改变原生回合状态。 */

@@ -31,7 +31,7 @@ export const SCENES: Scene[] = [
     id: 'collapsed-turn',
     group: '对话',
     name: '回合过程收起',
-    note: '回答、完成行、自发回合来源、整段过程与下一条用户消息',
+    note: '后台续做、回合中途补充、分段过程、长回答与唯一的完成行',
     steps: [],
   },
   {

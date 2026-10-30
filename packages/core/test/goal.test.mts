@@ -301,6 +301,23 @@ test('GOAL-CORE-005 续跑回合的来历：入口带着 goal 的不画那句内
   })
   await settle()
   assert.deepEqual(kinds('t5'), [])
+  world.peer.last().notify('item/completed', {
+    threadId: 'a',
+    turnId: 't5',
+    item: userText('u5', '继续执行当前持续目标'),
+  })
+  world.peer.last().notify('item/started', {
+    threadId: 'a',
+    turnId: 't5',
+    item: userText('added', '补充一个约束'),
+  })
+  world.peer.last().notify('item/completed', {
+    threadId: 'a',
+    turnId: 't5',
+    item: userText('added', '补充一个约束'),
+  })
+  await settle()
+  assert.deepEqual(kinds('t5'), ['userMessage'], '仅代发输入被过滤，真实补充只出现一次')
   watched.close()
 })
 

@@ -87,6 +87,7 @@ interface UserMessageProps extends ItemRef {
   turnId?: string | undefined
   /** 它不是回合开头的那条，是回合进行中插进来的话 */
   steered?: boolean
+  addition?: boolean
 }
 
 /**
@@ -98,6 +99,7 @@ interface UserMessageProps extends ItemRef {
 export const UserMessage = memo(function UserMessage({
   turnId,
   steered = false,
+  addition = false,
   ...ref
 }: UserMessageProps) {
   const item = useItem<UserMessageItem>(ref)
@@ -192,6 +194,7 @@ export const UserMessage = memo(function UserMessage({
     <SystemCard {...ref} item={item} system={item.system} />
   ) : (
     <div className="umsg" data-anchor={`u:${ref.itemId}`} ref={bubble}>
+      {addition ? <div className="umsg-addition">{t('message.turnAddition')}</div> : null}
       <UserAttachments attachments={item.attachments} />
       {comments ? <SentComments {...ref} comments={comments.comments} /> : null}
       {replies ? (

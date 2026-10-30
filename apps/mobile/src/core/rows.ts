@@ -3,7 +3,7 @@
 // - 分块和桌面端共用核心的 bucketItems：过程里按时间排说明段、步骤组、启动子代理那一行；思考是步骤组里的一步，不把组断开。
 //   步骤组收起时是一行高度固定的摘要；展开时每一步各是一行，排在摘要的下面，最后再一行“收起”
 //  （照桌面端往下展开；被点的摘要不动由 detail/keep-place.ts 管）。
-// - 过程告一段落（回合结束，或最终回答写完了）后整段收成一行（process），照桌面端：用户在这一回合里展开过某一组、某一步，
+// - 过程告一段落（回合结束，或最终回答写完了）后按用户补充的位置分段收起（process），照桌面端：用户在这一回合里展开过某一组、某一步，
 //   或者还有子代理没做完时不自动收；点那一行开合。
 // - 启动子代理的那次调用不进步骤组，单独一行，每个子代理一条（照桌面端）；等待、发输入这些协作调用还是组里的一步。
 // - 每个回合末尾一行状态，从回合开始到结束一直在，只换字不换高度。回合在跑时写“{name} 正在工作”和已用的时间，只在正文出字、等人答复时留空（workingShown）。
@@ -14,7 +14,6 @@
 import type {
   AgentState,
   AgentThreadView,
-  Block,
   CommandItem,
   CompactionItem,
   FileChangeItem,
@@ -46,13 +45,15 @@ import {
   bucketItems,
   goalReachedIn,
   parseAskReply,
+  processDuration,
   processFolded,
-  processItemIds,
+  processSegments,
   processSettled,
   processTally,
   spanFrom,
   spanOf,
   thoughtShown,
+  turnAddition,
   workingShown,
 } from '@litch/core'
 import { questionItemOf } from '../../../../packages/ui/src/transcript/ask-ids.ts'
@@ -81,6 +82,8 @@ export type Row =
       sessions?: SessionMentionView[]
       /** 发送的时刻（回合开始的时刻），只有回合开头那条有：插进来的话条目上不带时刻 */
       sentAt?: number
+      /** 同一回合进行中补充的用户输入。 */
+      addition?: boolean
     }
   /**
    * Litch 替用户发的话（核心认出来的 UserMessageItem.system：定时任务、子会话的简报、在这里做）：画成系统卡片，
@@ -328,15 +331,15 @@ export class RowBuilder {
   readonly expanded = new Set<string>()
   /** 手动展开过的键（收起了也留着）：回合里展开过某一组、某一步、某段思考，告一段落时不自动收起整段过程（照桌面端） */
   private readonly touched = new Set<string>()
-  /** 点过整段过程那一行的回合：点成了开还是关（没点过的按 processFolded 自动定） */
+  /** 点过的过程段：点成了开还是关（没点过的按 processFolded 自动定） */
   private readonly processOpen = new Map<string, boolean>()
-  /** 上一次给出的整段过程开没开着：点那一行时从它翻 */
+  /** 上一次给出的过程段开没开着：点那一行时从它翻 */
   private readonly processShown = new Map<string, boolean>()
 
   /** 展开或收起一样东西。key 是整段过程那一行（`回合:process`）时翻它的开关，别的进出 expanded */
   toggle(key: string, turnId: string): void {
-    if (key === `${turnId}:process`) {
-      this.processOpen.set(turnId, !(this.processShown.get(turnId) ?? false))
+    if (key === `${turnId}:process` || key.startsWith(`${turnId}:process:`)) {
+      this.processOpen.set(key, !(this.processShown.get(key) ?? false))
       return
     }
     if (this.expanded.delete(key)) return
@@ -411,15 +414,17 @@ export class RowBuilder {
     const answerId = blocks.find((block) => block.type === 'answer')?.itemId
     const answer = answerId ? view.items[answerId] : undefined
     const settled = processSettled(turn.status, answer ? [answer] : [], view.can.finalOnStart)
-    const processKey = `${turn.id}:process`
-    const open =
-      this.processOpen.get(turn.id) ??
-      !processFolded(settled, this.touchedIn(turn, items), agentsUnfinished(items, view.agents))
-    if (settled) this.processShown.set(turn.id, open)
-    const firstProcess = blocks.findIndex((block) => block.type === 'process')
+    const segments = processSegments(blocks)
+    const firstSegment = segments.values().next().value
+    const divided = items.some((item) => item.kind === 'userMessage' && turnAddition(turn, item.id))
+    const autoOpen = !processFolded(
+      settled,
+      this.touchedIn(turn, items),
+      agentsUnfinished(items, view.agents),
+    )
     /** 最后一条回答的末尾在 out 里的位置：目标达成那一句插在这里 */
     let answerEnd = -1
-    blocks.forEach((block, index) => {
+    blocks.forEach((block) => {
       switch (block.type) {
         case 'user':
           this.userRows(out, turn, view, view.items[block.itemId])
@@ -477,9 +482,14 @@ export class RowBuilder {
           // 收尾区排在回合最后（下面单独排）
           return
         case 'process': {
-          if (settled && index === firstProcess)
-            out.push(this.process(view, turn, processKey, open, blocks))
-          // 收起时后面几段过程都不占地方，只留第一段开头的那一行
+          const segment = segments.get(block.key)!
+          const processKey =
+            segment === firstSegment ? `${turn.id}:process` : `${turn.id}:process:${segment.key}`
+          const open = this.processOpen.get(processKey) ?? autoOpen
+          if (settled) this.processShown.set(processKey, open)
+          if (settled && block.key === segment.key)
+            out.push(this.process(view, turn, processKey, open, segment.itemIds, divided))
+          // 每段只在自己的第一块过程处显示摘要，开关互不影响。
           if (settled && !open) return
           for (const part of block.parts) this.part(out, view, turn, part, reportedOf)
           return
@@ -565,9 +575,10 @@ export class RowBuilder {
           turnId: turn.id,
           text: item.text,
           attachments: item.attachments,
+          ...(turnAddition(turn, item.id) ? { addition: true } : {}),
           ...(item.peer ? { peer: item.peer, expanded: this.expanded.has(item.id) } : {}),
           ...(item.sessions ? { sessions: item.sessions } : {}),
-          ...(turn.itemIds[0] === item.id && turn.startedAt !== null
+          ...(!turnAddition(turn, item.id) && turn.startedAt !== null
             ? { sentAt: turn.startedAt }
             : {}),
         }),
@@ -641,11 +652,9 @@ export class RowBuilder {
     turn: TurnView,
     key: string,
     open: boolean,
-    blocks: Block[],
+    ids: string[],
+    divided: boolean,
   ): Row {
-    const ids = blocks.flatMap((block) =>
-      block.type === 'process' ? processItemIds(block.parts) : [],
-    )
     const tally = processTally(
       ids.flatMap((id) => {
         const item = view.items[id]
@@ -664,7 +673,11 @@ export class RowBuilder {
       declined: tally.declined,
       agentsFailed: tally.agentsFailed,
       status: turn.status,
-      durationMs: turn.durationMs,
+      durationMs: processDuration(
+        turn,
+        ids.flatMap((id) => view.items[id] ?? []),
+        divided,
+      ),
       ids: ids.join(' '),
     })
   }
