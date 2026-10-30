@@ -201,7 +201,8 @@ and observation times; the tree and image are sequential samples and may differ 
 应用没有可截窗口时仍返回菜单、可见窗口数和前台应用，可用菜单或快捷键新建窗口，或用 Escape
 关闭普通打开面板；系统权限和登录提示仍由用户处理。原生列表单击优先选择对应行。
 Command 快捷键使用带空闲等待和焦点恢复的短暂前台路径，避免应用在后台忽略菜单快捷键；
-普通文字输入继续定向投递，不要求激活应用。
+普通应用中的文字输入继续定向投递，不要求激活应用；系统保存面板等跨进程控件的文字与按键
+会先等待空闲、短暂激活宿主，再投给焦点控件的实际进程，结束后尝试恢复前台。
 快捷键完成、失败或取消时都会松开代理注入的按键与修饰键；恢复鼠标位置不携带快捷键修饰键。
 助手读回系统状态，发现本次注入的修饰键残留时，在用户没有介入的前提下补发一次松开，并在结果中报告；
 仍有残留则停止，请用户按下再松开相应修饰键。真实用户已按住或中途按下的修饰键不会被全局补发覆盖。
@@ -214,6 +215,11 @@ the user to press and release them. Existing or intervening user-held modifiers 
 For recognized English or Chinese save panels, results explain that Save As takes a filename;
 use Command+Shift+G to choose the folder and verify the destination before saving. Opening a new
 window with a shortcut does not fail solely because the previous window changed.
+保存面板的文件名框即使被长目录列表截断，也会在状态末尾附上当前编号。优先用 `set_value`
+替换文件名，不依赖跨次前台切换后的全选状态。无法解析焦点控件的实际进程时停止输入，先重新观察。
+Save panels include the current Save As element number even when a long file list truncates the tree.
+Prefer `set_value` to replace the filename. Remote panel controls receive input in their actual process
+during a protected foreground visit; unresolved keyboard targets stop input and require a fresh observation.
 文本控件返回字符选区，便于直接核验选择操作，不必为确认选区另取截图。
 macOS 截图必须唯一匹配辅助功能窗口，并附窗口编号和观察时间。树与截图是先后采样，动画期间仍可能不同步。
 

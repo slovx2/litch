@@ -219,13 +219,21 @@ extension Engine {
           guard actual.map({ CFEqual($0, element) }) == true else {
             throw RPCError(.failed, "The requested text element did not receive focus; no text was sent.")
           }
-          try Input.type(text, pid: context.pid, check: context.check)
+          try Input.type(text, pid: KeyboardTarget.resolve(appPID: context.pid), check: context.check)
         }
         return "Typed \(text.count) characters."
       }
     }
-    context.notice("dispatched", "semantic", nil, false)
-    try Input.type(text, pid: context.pid, check: context.check)
+    let keyboardPID = try KeyboardTarget.resolve(appPID: context.pid)
+    if keyboardPID != context.pid {
+      // ViewBridge 控件会忽略宿主退到后台后的字符；切前台后重新解析焦点。
+      try context.inForeground(kind: "semantic") {
+        try Input.type(text, pid: KeyboardTarget.resolve(appPID: context.pid), check: context.check)
+      }
+    } else {
+      context.notice("dispatched", "semantic", nil, false)
+      try Input.type(text, pid: keyboardPID, check: context.check)
+    }
     return "Typed \(text.count) characters."
   }
 
@@ -237,13 +245,16 @@ extension Engine {
     let send = {
       for _ in 0..<times {
         // 快捷键本来就可能打开保存框或新窗口；派发后只查取消/桌面/前台，不用旧窗口判失败。
-        if try Input.key(combo, pid: context.pid, check: context.check,
+        // 激活后再解析，每次重复都重新读取；保存面板的远程焦点不能投给宿主 PID。
+        let keyboardPID = try KeyboardTarget.resolve(appPID: context.pid)
+        if try Input.key(combo, pid: keyboardPID, check: context.check,
           checkAfterDown: context.checkBase) { repaired = true }
         Thread.sleep(forTimeInterval: 0.03)
       }
     }
     // 没有窗口接收按键时，让应用菜单处理快捷键；仍走空闲等待与焦点恢复，不直接抢前台。
-    if InputPolicy.keyboardNeedsForeground(hasWindow: context.window != nil, flags: combo.flags) {
+    let remoteFocus = try KeyboardTarget.resolve(appPID: context.pid) != context.pid
+    if InputPolicy.keyboardNeedsForeground(hasWindow: context.window != nil, flags: combo.flags, remoteFocus: remoteFocus) {
       try context.inForeground(kind: "semantic", send)
     }
     else { try send() }

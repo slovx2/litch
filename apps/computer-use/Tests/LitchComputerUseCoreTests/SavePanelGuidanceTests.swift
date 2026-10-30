@@ -2,6 +2,21 @@ import XCTest
 @testable import LitchComputerUseCore
 
 final class SavePanelGuidanceTests: XCTestCase {
+  func testFilenameNumberSurvivesLongDirectoryTextAndIsNotGuessed() {
+    var root = panel()
+    root.children[1].identifier = "saveAsNameTextField"
+    root.children[1].handle = 42
+    root.children.insert(AXNode(role: "AXList", children: (0..<500).map {
+      AXNode(role: "AXTextField", value: "directory-entry-\($0)", handle: 100 + $0)
+    }), at: 0)
+    var book = AXIndexBook()
+    let lines = book.lines(for: root)
+    XCTAssertFalse(AXText.render(lines, limit: 1000).contains("Untitled"))
+    let line = lines.first { $0.handle == 42 }!
+    XCTAssertTrue(SavePanelGuidance.filenameControl(root, lines: lines).contains("[\(line.index)]"))
+    XCTAssertEqual(SavePanelGuidance.filenameControl(root, lines: []), "")
+  }
+
   func panel(english: Bool = false, filename: String = "Untitled", role: String = "AXSheet") -> AXNode {
     AXNode(role: role, title: english ? "Save" : "保存", children: [
       AXNode(role: "AXStaticText", value: english ? "Save As:" : "保存为："),

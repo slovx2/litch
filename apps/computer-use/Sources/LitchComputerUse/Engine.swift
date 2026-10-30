@@ -324,7 +324,7 @@ final class Engine: ConnectionHandler {
       state.shot = (shot.size, shot.windowFrame, windowFrame, shot.windowID)
       state.observation.capture(shot.windowID)
       state.observedAXWindow = read.window
-      return (diff ?? AXText.render(lines), diff != nil)
+      return ((diff ?? AXText.render(lines)) + SavePanelGuidance.filenameControl(read.root, lines: lines), diff != nil)
     }
     preview.observe(session: session, app: app)
     preview.status(session: session, app: app, state: "ready")

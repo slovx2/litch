@@ -2,6 +2,14 @@
 import Foundation
 
 public enum SavePanelGuidance {
+  /// 文件列表很长时，正文可能截掉底部文件名框；补回同次观察的真实编号，不能让模型猜。
+  public static func filenameControl(_ root: AXNode, lines: [AXLine]) -> String {
+    guard note(root) != nil,
+      let field = descendants(root).first(where: { $0.role == "AXTextField" && $0.identifier == "saveAsNameTextField" }),
+      let line = lines.first(where: { $0.handle == field.handle }) else { return "" }
+    return "\nSave As control: [\(line.index)] \(line.content). Use set_value to replace the filename; verify it before saving."
+  }
+
   public static func note(_ root: AXNode) -> String? {
     let panel = root.role == "AXSheet" ||
       (root.role == "AXWindow" && ["Save", "保存"].contains(root.title ?? ""))

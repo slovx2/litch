@@ -63,3 +63,19 @@ TextEdit 与 Finder 每项结束时分别保存测试 RTF 副本，用 AppKit �
 进程被强制杀死时 `finally` 无法保证运行。先确认该次 Codex/探针已退出，再依据
 该次运行日志检查对应 `/tmp/litch-cu-model-*` 与 `/tmp/litch-cu-trial`，对确认属于
 本轮的字面量绝对路径进行清理，不使用通配符删除临时目录。
+# 保存面板确定性回归（不调用模型）
+
+`save-panel.mjs` 使用同一产品执行器和独立签名探针。仅在用户允许占用电脑时手动运行；
+TextEdit 必须已退出，`/tmp/litch-cu-trial` 和输出目录必须不存在。缺权限、用户介入或任何断言
+失败都会停止，不能绕过提示继续；失败时按日志核对测试文档并清理，不接管用户文件。
+
+```sh
+PATH=/opt/homebrew/opt/node@24/bin:$PATH node scripts/cu-trial/save-panel.mjs \
+  '/绝对工作树/apps/computer-use/.artifacts/integration/Litch Background Input Probe.app' \
+  '/绝对工作树/.artifacts/cu-trial/save-panel-regression'
+```
+
+验证新建、两段文字及第二段粗体、保存面板 cmd+shift+g、正确目录落盘、RTF 字体属性、关闭并
+重开无恢复及系统修饰键无残留。成功后退出本次应用、删除测试目录和助手临时配置，RTF 证据及
+工具结果只留输出目录。`inspect-keyboard-target.swift` 只读焦点的公开/实际 PID 和测试目标标记，
+不发送事件、不导出目录文件列表。该验证独立于真模型性能表，不能算作新一轮模型验收。
