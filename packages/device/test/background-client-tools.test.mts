@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/useLiteralKeys: 方括号仅用于单测检查私有状态，不扩大生产接口。
 // 后台子会话只由内部 EngineLink 订阅，桌面从未恢复过它。
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -213,3 +214,31 @@ test('M16：继承命名空间不能绕过 CU 批量能力声明', async () => {
     await env.close()
   }
 })
+
+for (const via of ['internal', 'client', 'archive'] as const)
+  test(`M16：${via} 会话清理入口释放继承连接和去重状态`, async () => {
+    const env = await background()
+    try {
+      const router = env.device['host'].clientTools
+      env.send()
+      const call = await env.client.waitFor((frame) => frame.method === 'item/tool/call')
+      env.client.answer(call.id, OK)
+      await settle()
+      assert.equal(router['byRequest'].size, 0)
+      assert.ok(router['done'].size > 0)
+      assert.ok(router['inherited'].has(env.childId))
+      if (via === 'archive') await env.client.call('thread/archive', { threadId: env.childId })
+      else {
+        const upstream =
+          via === 'internal' ? env.internal : env.codex.live.find((one) => one !== env.internal)
+        assert.ok(upstream)
+        upstream.send({ method: 'thread/closed', params: { threadId: env.childId } })
+      }
+      await settle()
+      assert.equal(router['byRequest'].size, 0)
+      assert.equal(router['done'].size, 0)
+      assert.equal(router['inherited'].has(env.childId), false)
+    } finally {
+      await env.close()
+    }
+  })

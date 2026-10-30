@@ -191,6 +191,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
     if (typeof frame.method === 'string') {
       const params = isObject(frame.params) ? frame.params : {}
       if (frame.id == null) {
+        options.clientTools?.threadEvent(harness, frame.method, params)
         if (frame.method === 'serverRequest/resolved' && params.requestId != null) {
           options.clientTools?.resolved(source, params.requestId as RpcId)
           const key = idKey(params.requestId as RpcId)
@@ -340,6 +341,12 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
             timeoutMs,
           )
           sped?.remember(result)
+          if (
+            (method === 'thread/archive' || method === 'thread/delete') &&
+            isObject(ready) &&
+            typeof ready.threadId === 'string'
+          )
+            options.clientTools?.threadClosed(harness, ready.threadId)
           if (threadId && isObject(result?.turn)) {
             options.clientTools?.turnBegan(harness, threadId, String(result.turn.id))
             options.turnStarted?.(harness, threadId, result.turn)

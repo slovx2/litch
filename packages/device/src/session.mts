@@ -312,6 +312,9 @@ export class ClientSession implements ClientToolPeer {
         },
       },
       clientTools: {
+        threadClosed: (harness, threadId) => host.clientTools.threadClosed(harness, threadId),
+        threadEvent: (harness, method, params) =>
+          host.clientTools.threadEvent(harness, method, params),
         offer: (link, frame, upstreamId) => host.clientTools.offer(this, link, frame, upstreamId),
         resolved: (link, requestId) => host.clientTools.resolved(link, requestId),
         subscribed: (link, threadId) => host.clientTools.subscribed(this, link.harness, threadId),

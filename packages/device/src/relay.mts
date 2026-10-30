@@ -71,6 +71,8 @@ export interface RelaySessions {
  * 命令行的调用（litch/clientTool/invoke）按会话找发起回合的 Litch，哪个 harness 的会话都要
  */
 export interface RelayClientTools {
+  threadClosed(harness: string, threadId: string): void
+  threadEvent(harness: string, method: string, params: Record<string, unknown>): void
   /** 一份 litch_ 命名空间的 item/tool/call 到了：不往下转 */
   offer(link: UpstreamLink, frame: Frame, upstreamId: RpcId): void
   /** 上游说这个请求有结果了。返回 true：是客户端工具调用，这条通知不往下转 */
@@ -245,11 +247,14 @@ export class Relay {
   private fulfil(link: UpstreamLink, tracked: Tracked, result: unknown): void {
     const { index, workspaces } = this.host
     if (tracked.kind === 'gone') {
+      this.host.clientTools.threadClosed(link.harness, tracked.threadId)
       workspaces.forget(tracked.threadId)
       index.forget(tracked.threadId)
       this.host.sessions.deleted(tracked.threadId)
-    } else if (tracked.kind === 'shelved') index.setArchived(tracked.threadId, tracked.archived)
-    else {
+    } else if (tracked.kind === 'shelved') {
+      index.setArchived(tracked.threadId, tracked.archived)
+      if (tracked.archived) this.host.clientTools.threadClosed(link.harness, tracked.threadId)
+    } else {
       const thread = isObject(result) ? result.thread : null
       if (!isObject(thread) || typeof thread.id !== 'string') return
       // 先登记再归：归属要认会话在不在、是不是临时的（临时会话的归属只活在这次运行里）
@@ -295,6 +300,7 @@ export class Relay {
     if (ENGINE_PROJECT_NOTIFICATIONS.has(method)) return
     const fields = isObject(frame.params) ? frame.params : null
     const threadId = typeof fields?.threadId === 'string' ? fields.threadId : null
+    if (fields) this.host.clientTools.threadEvent(link.harness, method, fields)
     let changed = false
     if (method === 'thread/started') {
       const thread = fields?.thread

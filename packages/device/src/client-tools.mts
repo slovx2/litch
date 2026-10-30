@@ -79,6 +79,12 @@ export interface ClientToolRouterOptions {
 
 const sep = '\u0000'
 
+/**
+ * 最多记住 16384 次已了结调用，按先入先出淘汰，避免常驻设备随历史无限增长。
+ * 保留跨回合的近期补发保护；会话卸载后及超过此窗口的旧请求由上游生命周期保证不再补发。
+ */
+export const CLIENT_TOOL_DONE_LIMIT = 16_384
+
 export class ClientToolRouter {
   private readonly options: ClientToolRouterOptions
   private readonly peers = new Set<ClientToolPeer>()
@@ -94,9 +100,9 @@ export class ClientToolRouter {
   private readonly byRequest = new Map<string, string>()
   /**
    * 已经了结的调用（键同 calls）：之后再到的那几份（迟到的、恢复会话时补发的）直接丢掉。
-   * 保留到设备服务结束，不按回合结束或调用数量淘汰，免得迟到的恢复补发再次执行。
+   * 值是请求索引，用于拦住各连接重复发来的 resolved；随会话清理，并受总量上限约束。
    */
-  private readonly done = new Set<string>()
+  private readonly done = new Map<string, string>()
   /**
    * 会话正在跑的回合（turn/started 时记，turn/completed 时清）。键：会话；会话号各 harness 之间不重。
    * 命令行的调用（litch/clientTool/invoke）只带会话号，按它找发起这个回合的连接（client-tool-invoke.mts）
@@ -248,17 +254,61 @@ export class ClientToolRouter {
     if (call.grace) clearTimeout(call.grace)
     call.grace = null
     this.calls.delete(call.key)
-    this.done.add(call.key)
+    const request = call.harness + sep + idKey(call.upstreamId)
+    this.byRequest.delete(request)
+    this.done.set(call.key, request)
+    if (this.done.size > CLIENT_TOOL_DONE_LIMIT) {
+      const oldest = this.done.keys().next().value
+      if (oldest !== undefined) this.done.delete(oldest)
+    }
   }
 
   /** 原生 codex 说这个请求有结果了。是这里在管的调用就返回 true：这条通知不再往客户端转 */
   resolved(link: ClientToolSource, requestId: RpcId): boolean {
     const request = link.harness + sep + idKey(requestId)
     const key = this.byRequest.get(request)
-    if (key === undefined) return false
+    // 已了结的索引不留在 byRequest；近期完成记录仍拦住其他连接上的重复通知。
+    if (key === undefined) {
+      for (const completed of this.done.values()) if (completed === request) return true
+      return false
+    }
     const call = this.calls.get(key)
     if (call) this.withdraw(call)
     return true
+  }
+
+  /** 会话真正离开运行时或归档、删除时释放状态；单条连接退订不代表会话卸载。 */
+  threadClosed(harness: string, threadId: string): void {
+    for (const call of [...this.calls.values()])
+      if (call.harness === harness && call.threadId === threadId)
+        this.finish(
+          call,
+          clientToolFailure('failed', '会话已卸载、归档或删除，这次调用已取消。'),
+          '随会话关闭',
+        )
+    const prefix = harness + sep + threadId + sep
+    for (const key of this.done.keys()) if (key.startsWith(prefix)) this.done.delete(key)
+    this.inherited.delete(threadId)
+    this.subscribers.delete(harness + sep + threadId)
+    const turn = this.running.get(threadId)
+    if (turn?.harness === harness) {
+      this.starters.delete(harness + sep + turn.turnId)
+      this.running.delete(threadId)
+    }
+  }
+
+  /** 两类上游连接收到的会话生命周期通知统一处理，重复通知可安全清理。 */
+  threadEvent(harness: string, method: string, params: Record<string, unknown>): void {
+    if (typeof params.threadId !== 'string') return
+    if (
+      method === 'thread/closed' ||
+      method === 'thread/archived' ||
+      method === 'thread/deleted' ||
+      (method === 'thread/status/changed' &&
+        isObject(params.status) &&
+        params.status.type === 'notLoaded')
+    )
+      this.threadClosed(harness, params.threadId)
   }
 
   /** 回合结束：撤回待答调用、清掉发起者；已了结记录仍挡住恢复会话时补发的旧调用。 */
