@@ -46,6 +46,7 @@ jobs:
       # 含协议兼容性的两项测试（回放、结构校验，各包的 upstream-compat.test.mts）：
       # Claude Code、Pi 两个入口和设备聚合面在这里，dsh 入口的在下面的 dsh job 里
       - run: npm test
+      # 这里只跑手机纯逻辑单测；需要手机和 UI 依赖的 Markdown 测试在下面的 mobile 作业执行
       - run: npm run mobile:test
       - run: npm run test:local-ssh
       - run: npm run docs:build
@@ -368,6 +369,9 @@ jobs:
       # 终端页的网页（npm run web:build）用的是界面包里的那份 xterm
       - run: npm ci --prefix packages/ui --no-audit --no-fund
       - run: npm run mobile:test
+      # 手机 postinstall 应用原生和 WASM 补丁，UI 依赖用于核对 CJK 扩展版本；缺依赖或补丁必须失败
+      - name: 手机原生 Markdown 与 WASM 中文强调对照
+        run: npm run mobile:test:markdown
       # 夹具那一组要真的适配器命令行、Pi 和设备进程（不要别的引擎包，所以不跑根目录的 npm run build）
       - run: npm run build --prefix packages/pi && npm run build --prefix packages/device && node scripts/build-cli.mjs
       - name: 打 release 包

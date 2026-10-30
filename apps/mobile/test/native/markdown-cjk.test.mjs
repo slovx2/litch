@@ -8,10 +8,10 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
-import { linkify } from '../src/detail/links.ts'
+import { linkify } from '../../src/detail/links.ts'
 
 const dependency = fileURLToPath(
-  new URL('../node_modules/react-native-enriched-markdown/', import.meta.url),
+  new URL('../../node_modules/react-native-enriched-markdown/', import.meta.url),
 )
 const cpp = join(dependency, 'cpp')
 const work = mkdtempSync(join(tmpdir(), 'litch-markdown-test-'))
@@ -24,7 +24,7 @@ execFileSync(process.env.CXX ?? 'c++', [
   '-O2',
   '-I',
   cpp,
-  fileURLToPath(new URL('./fixtures/markdown-parser.cpp', import.meta.url)),
+  fileURLToPath(new URL('../fixtures/markdown-parser.cpp', import.meta.url)),
   join(cpp, 'parser/MD4CParser.cpp'),
   join(cpp, 'wasm/ASTSerializer.cpp'),
   object,
@@ -61,12 +61,12 @@ const kinds = {
   link: 'Link',
 }
 const cases = JSON.parse(
-  readFileSync(new URL('../../../packages/ui/test/fixtures/cjk-emphasis.json', import.meta.url)),
+  readFileSync(new URL('../../../../packages/ui/test/fixtures/cjk-emphasis.json', import.meta.url)),
 )
 
 test('网页 WASM 必须由当前原生源码构建，两入口产物一致', () => {
   const patch = readFileSync(
-    new URL('../patches/react-native-enriched-markdown+1.1.0.patch', import.meta.url),
+    new URL('../../patches/react-native-enriched-markdown+1.1.0.patch', import.meta.url),
     'utf8',
   )
   assert.ok(
@@ -74,7 +74,7 @@ test('网页 WASM 必须由当前原生源码构建，两入口产物一致', ()
     'patch-package 不会应用二进制差异，WASM 必须使用 base64 文本',
   )
   const manifest = JSON.parse(
-    readFileSync(new URL('./fixtures/markdown-wasm.json', import.meta.url)),
+    readFileSync(new URL('../fixtures/markdown-wasm.json', import.meta.url)),
   )
   const hash = (path) => createHash('sha256').update(readFileSync(path)).digest('hex')
   assert.equal(
@@ -84,7 +84,7 @@ test('网页 WASM 必须由当前原生源码构建，两入口产物一致', ()
   const cjk = JSON.parse(
     readFileSync(
       new URL(
-        '../../../packages/ui/node_modules/marked-cjk-friendly/package.json',
+        '../../../../packages/ui/node_modules/marked-cjk-friendly/package.json',
         import.meta.url,
       ),
     ),

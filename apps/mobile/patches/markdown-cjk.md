@@ -27,9 +27,13 @@ JS 插入零宽字符会污染复制内容和选区偏移；整体替换解析�
    编译脚本固定编译器版本，重新生成两份 WASM JS 和源码/产物 SHA-256 清单。
    必须保留 `SINGLE_FILE_BINARY_ENCODE=0`：默认二进制字符串包含 NUL，patch-package
    只会写入 `Binary files differ`，安装时却不应用它；脚本和测试都拒绝这种产物。
-4. 从干净依赖安装运行 `npm ci` 验证补丁，再运行手机单测、类型检查、`preview:check`。
-   手机单测需要 C/C++ 编译器（`CC`/`CXX`，默认 `cc`/`c++`），测试原生解析器、WASM
-   与清单；普通安装和测试不需要 Emscripten。
+4. 在仓库根目录运行 `npm ci --prefix apps/mobile` 和 `npm ci --prefix packages/ui`，
+   验证手机补丁并安装用于核对版本的桌面 CJK 扩展，再运行 `npm run mobile:test:markdown`。
+   这组测试需要 C/C++ 编译器（`CC`/`CXX`，默认 `cc`/`c++`），测试原生解析器、WASM
+   与清单；缺依赖或补丁直接失败，不需要 Emscripten。
+   `npm run mobile:test` 只跑不依赖手机安装包的纯逻辑单测；两组都要运行，再检查手机类型和
+   `preview:check`。CI 门禁和全量的 adapters 作业运行纯逻辑单测；全量的 mobile 作业
+   安装上述两份依赖后，显式运行两组测试。
 5. 同时运行桌面单测和对话区验收。共同语料在
    `packages/ui/test/fixtures/cjk-emphasis.json`；手机另测现有 `$...$` / `$$...$$` 数学式。
    桌面目前未实现数学解析，不据此宣称两端全部 Markdown 功能一致。

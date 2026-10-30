@@ -51,6 +51,7 @@ jobs:
       - run: npm run check
       - run: npm run typecheck
       - run: npm run build
+      # 纯逻辑单测不需要手机依赖；原生 Markdown 与 WASM 对照在 full.yml 的 mobile 作业执行
       - run: npm run mobile:test
       - run: npm run test --prefix packages/pi
       - run: npm run test --prefix packages/device
