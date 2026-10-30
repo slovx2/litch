@@ -2,6 +2,7 @@
 // 这两件和定时任务线共用，这里只测它们自己的约定。
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { DeviceTools } from '../src/device-tools.mjs'
 import { runTurn } from '../src/engine-link.mjs'
 import { FakeControl, managed } from './fake-control.mjs'
@@ -18,8 +19,9 @@ test('ENGINE-LINK-001：openEngineLink 握手时声明设备注册的命名空�
     const greeting = [...pi.greetings.values()][0]
     assert.equal(greeting.clientInfo.name, 'litch-device')
     assert.deepEqual(greeting.capabilities.litchClientTools, {
-      namespaces: ['litch_tasks', 'litch_manager', 'litch_sessions'],
+      namespaces: Object.values(CLIENT_TOOL_NAMESPACE),
       anyThread: ['litch_tasks', 'litch_manager', 'litch_sessions'],
+      computerActions: true,
     })
     const { thread } = await link.request('thread/start', { cwd: '/work' })
     const running = runTurn(

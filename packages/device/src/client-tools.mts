@@ -1,5 +1,6 @@
 // 原生 codex 的客户端工具调用由设备进程挑执行方（clientTools 扩展，protocol/extensions/client-tools.json）。
-// 适配器的入口（claude-code、pi）自己按扩展挑，发来的调用只到选中的那条连接，设备进程原样转发就行；
+// 适配器的入口（claude-code、pi）自己按扩展挑：选中客户端上游的原样转发，选中内部 EngineLink 的也进这里。
+// 后台子会话继承派出时父会话的获授权连接，内部连接只负责转交和答复，不具有桌面执行权限。
 // 原生 codex 不认识这项扩展，把同一个请求（请求号相同）发给订阅着会话的每条连接，
 // 在设备进程里就是每条客户端连接各自的上游连接上各一份。这里把这几份并成一次调用：
 //   - 按扩展的规矩挑一条客户端连接，只转给它一份，别的那几份不转，也不替它们答；
@@ -21,6 +22,13 @@ import {
 } from '../../shared/src/client-tool-executor.mjs'
 import type { UpstreamLink } from './upstream.mjs'
 import { type Frame, idKey, isObject, type RpcId } from './wire.mjs'
+
+/** 内部 EngineLink 和客户端上游都能作为答复通道；不把内部连接当作桌面执行方。 */
+export interface ClientToolSource {
+  readonly harness: string
+  readonly available: boolean
+  reply(raw: string): void
+}
 
 /** 一条客户端连接在这件事里要做的几样（ClientSession 实现） */
 export interface ClientToolPeer {
@@ -51,7 +59,7 @@ interface Call {
   namespace: string
   frame: Frame
   /** 收到这一份的上游连接和它所属的客户端连接，按到达的先后 */
-  copies: { link: UpstreamLink; peer: ClientToolPeer }[]
+  copies: { link: ClientToolSource; peer: ClientToolPeer | null }[]
   executor: ClientToolPeer | null
   facingId: RpcId | null
   /** 还没挑出执行方、在等别的几份到齐的计时 */
@@ -78,15 +86,17 @@ export class ClientToolRouter {
   private readonly subscribers = new Map<string, ClientToolPeer[]>()
   /** 发起回合的连接。键：harness + 回合 */
   private readonly starters = new Map<string, ClientToolPeer>()
+  /** 派出时父会话的获授权连接快照，仅在本设备进程内存活；断线后不转授给无关桌面。 */
+  private readonly inherited = new Map<string, ClientToolPeer[]>()
   /** 还没了结的调用。键：harness + 会话 + callId */
   private readonly calls = new Map<string, Call>()
   /** 请求号到调用的键，认 codex 发来的 serverRequest/resolved 用。键：harness + 请求号 */
   private readonly byRequest = new Map<string, string>()
   /**
-   * 已经了结的调用（键同 calls）到它的回合：之后再到的那几份（迟到的、恢复会话时补发的）直接丢掉。
-   * 回合结束时清掉
+   * 已经了结的调用（键同 calls）：之后再到的那几份（迟到的、恢复会话时补发的）直接丢掉。
+   * 保留到设备服务结束，不按回合结束或调用数量淘汰，免得迟到的恢复补发再次执行。
    */
-  private readonly done = new Map<string, { harness: string; turnId: string; request: string }>()
+  private readonly done = new Set<string>()
   /**
    * 会话正在跑的回合（turn/started 时记，turn/completed 时清）。键：会话；会话号各 harness 之间不重。
    * 命令行的调用（litch/clientTool/invoke）只带会话号，按它找发起这个回合的连接（client-tool-invoke.mts）
@@ -122,8 +132,13 @@ export class ClientToolRouter {
     this.starters.set(harness + sep + turnId, peer)
   }
 
-  /** 原生 codex 发来一份 litch_ 命名空间的 item/tool/call。这一份不再往下转，怎么办都在这里 */
-  offer(peer: ClientToolPeer, link: UpstreamLink, frame: Frame, upstreamId: RpcId): void {
+  /** 客户端上游或内部连接发来一份客户端工具请求；peer 为 null 的内部连接不参与挑选执行方。 */
+  offer(
+    peer: ClientToolPeer | null,
+    link: ClientToolSource,
+    frame: Frame,
+    upstreamId: RpcId,
+  ): void {
     const params = isObject(frame.params) ? frame.params : {}
     const threadId = typeof params.threadId === 'string' ? params.threadId : ''
     const callId = typeof params.callId === 'string' ? params.callId : idKey(upstreamId)
@@ -162,11 +177,13 @@ export class ClientToolRouter {
       }, this.options.graceMs)
   }
 
-  /** 发起者优先，其次订阅者（设备进程看到的先后），最后是收到了某一份的连接（到达的先后） */
+  /** 发起者优先，其次订阅者、派出时继承的执行方，最后是收到了某一份的客户端连接。 */
   private pick(call: Call): ClientToolPeer | null {
     const starter = this.starters.get(call.harness + sep + call.turnId)
     const ordered = [...(this.subscribers.get(call.harness + sep + call.threadId) ?? [])]
-    for (const { peer } of call.copies) if (!ordered.includes(peer)) ordered.push(peer)
+    for (const peer of this.inherited.get(call.threadId) ?? [])
+      if (!ordered.includes(peer)) ordered.push(peer)
+    for (const { peer } of call.copies) if (peer && !ordered.includes(peer)) ordered.push(peer)
     return pickClientToolExecutor(
       call.namespace,
       starter?.ready ? starter : null,
@@ -200,13 +217,15 @@ export class ClientToolRouter {
     return true
   }
 
-  private replyLink(call: Call): UpstreamLink | null {
-    const candidates: (UpstreamLink | null | undefined)[] = [
+  private replyLink(call: Call): ClientToolSource | null {
+    const candidates: (ClientToolSource | null | undefined)[] = [
+      // 内部连接收到的调用先从原通道答，适配器不必接受另一条连接上的请求号。
+      ...call.copies.filter((copy) => copy.peer === null).map((copy) => copy.link),
       call.executor?.upstream(call.harness),
       ...call.copies.map((copy) => copy.link),
       ...[...this.peers].map((peer) => peer.upstream(call.harness)),
     ]
-    return candidates.find((link): link is UpstreamLink => !!link?.available) ?? null
+    return candidates.find((link): link is ClientToolSource => !!link?.available) ?? null
   }
 
   /** 替这次调用回一个结果并了结。执行方那边要是还挂着卡片，收掉 */
@@ -229,15 +248,11 @@ export class ClientToolRouter {
     if (call.grace) clearTimeout(call.grace)
     call.grace = null
     this.calls.delete(call.key)
-    this.done.set(call.key, {
-      harness: call.harness,
-      turnId: call.turnId,
-      request: call.harness + sep + idKey(call.upstreamId),
-    })
+    this.done.add(call.key)
   }
 
   /** 原生 codex 说这个请求有结果了。是这里在管的调用就返回 true：这条通知不再往客户端转 */
-  resolved(link: UpstreamLink, requestId: RpcId): boolean {
+  resolved(link: ClientToolSource, requestId: RpcId): boolean {
     const request = link.harness + sep + idKey(requestId)
     const key = this.byRequest.get(request)
     if (key === undefined) return false
@@ -246,15 +261,10 @@ export class ClientToolRouter {
     return true
   }
 
-  /** 回合结束：这个回合里还没了结的调用就此了结，记着的发起者和“已了结”一起清掉 */
+  /** 回合结束：撤回待答调用、清掉发起者；已了结记录仍挡住恢复会话时补发的旧调用。 */
   turnEnded(harness: string, turnId: string): void {
     for (const call of [...this.calls.values()])
       if (call.harness === harness && call.turnId === turnId) this.withdraw(call)
-    for (const [key, entry] of this.done)
-      if (entry.harness === harness && entry.turnId === turnId) {
-        this.done.delete(key)
-        this.byRequest.delete(entry.request)
-      }
     this.starters.delete(harness + sep + turnId)
     for (const [threadId, turn] of this.running)
       if (turn.harness === harness && turn.turnId === turnId) this.running.delete(threadId)
@@ -263,6 +273,18 @@ export class ClientToolRouter {
   /** 会话的一个回合开始了（turn/started 通知；每条订阅着的连接各收到一份，记一次就够） */
   turnBegan(harness: string, threadId: string, turnId: string): void {
     this.running.set(threadId, { harness, turnId })
+  }
+
+  /** 子会话开回合前固定父会话当时的执行候选，支持跨 harness 和继续派出孙会话。 */
+  inherit(parentId: string, childId: string): void {
+    const turn = this.running.get(parentId)
+    const starter = turn ? this.starters.get(turn.harness + sep + turn.turnId) : null
+    const peers = new Set<ClientToolPeer>(starter ? [starter] : [])
+    for (const [key, list] of this.subscribers)
+      if (key.slice(key.indexOf(sep) + 1) === parentId) for (const peer of list) peers.add(peer)
+    for (const peer of this.inherited.get(parentId) ?? []) peers.add(peer)
+    const allowed = [...peers].filter((peer) => peer.ready && peer.clientToolNamespaces.size > 0)
+    if (allowed.length) this.inherited.set(childId, allowed)
   }
 
   /** 还连着、声明了这个命名空间的连接，按连上的先后。namespace 为 null：声明了任何一个的都算 */
@@ -296,6 +318,8 @@ export class ClientToolRouter {
       harness ??= key.slice(0, at)
       for (const peer of list) if (!subscribers.includes(peer)) subscribers.push(peer)
     }
+    for (const peer of this.inherited.get(threadId) ?? [])
+      if (!subscribers.includes(peer)) subscribers.push(peer)
     const allowed = (peer: ClientToolPeer) => peer.ready && candidates.includes(peer)
     const peer = pickClientToolExecutor(
       namespace,
@@ -308,7 +332,7 @@ export class ClientToolRouter {
   }
 
   /** 一条上游连接断了：它收到的那几份作废；一次调用再也没有路可以答的，就此了结 */
-  dropped(link: UpstreamLink): void {
+  dropped(link: ClientToolSource): void {
     for (const call of [...this.calls.values()]) {
       call.copies = call.copies.filter((copy) => copy.link !== link)
       if (!this.replyLink(call)) this.withdraw(call)
@@ -324,6 +348,11 @@ export class ClientToolRouter {
       else this.subscribers.delete(key)
     }
     for (const [key, starter] of this.starters) if (starter === peer) this.starters.delete(key)
+    for (const [key, list] of this.inherited) {
+      const rest = list.filter((one) => one !== peer)
+      if (rest.length) this.inherited.set(key, rest)
+      else this.inherited.delete(key)
+    }
     for (const call of [...this.calls.values()]) {
       call.copies = call.copies.filter((copy) => copy.peer !== peer)
       if (call.executor === peer)

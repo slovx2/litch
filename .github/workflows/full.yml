@@ -330,6 +330,7 @@ jobs:
       - run: npm run client:check:first-turn -- --engines pi,codex,claude,dsh,opencode,acp
       - run: npm run check:native-codex
       - run: npm run check:client-tools-codex
+      - run: npm run check:background-client-tools
 
   # 移动端：单元测试，再在安卓模拟器上对着 release 包跑端到端（Maestro，模拟核心和夹具两组，apps/mobile/e2e/README.md）。
   # GitHub 的 macOS 跑机不能嵌套虚拟化，起不了安卓模拟器，所以用 ubuntu 加 KVM；包在这里现打

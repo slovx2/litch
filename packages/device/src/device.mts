@@ -412,6 +412,7 @@ export class DeviceServer {
           canRespond: false,
           reason: 'executor_required',
         })),
+      inheritClientTools: (parentId, childId) => this.host.clientTools.inherit(parentId, childId),
       harnesses: () => this.harnesses(),
       openEngineLink: (harness) => this.openEngineLink(harness),
       index: this.index,
@@ -847,6 +848,7 @@ export class DeviceServer {
               handshakeTimeoutMs: options.handshakeTimeoutMs ?? this.taskTiming.handshakeTimeoutMs,
               requestTimeoutMs: this.taskTiming.requestTimeoutMs,
               tools: this.deviceTools,
+              clientTools: this.host.clientTools,
               reserveTurn: async (threadId) => {
                 const hold = await this.managers?.lines.reserve(threadId, threadId)
                 return () => hold?.release()

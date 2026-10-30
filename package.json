@@ -66,6 +66,7 @@
     "check:native-codex-instructions": "node scripts/check-native-codex-instructions.mjs",
     "check:codex-direct-instructions": "node scripts/check-codex-direct-instructions.mjs",
     "check:client-tools-codex": "node scripts/check-client-tools-codex.mjs",
+    "check:background-client-tools": "npm run build --prefix packages/device && npm run build --prefix packages/pi && npm run build --prefix packages/claude && node scripts/check-background-client-tools.mjs",
     "check:live-user-message": "node scripts/check-live-user-message.mjs",
     "check:manager-fixture": "npm run build && node --test scripts/client-fixture-manager.test.mjs && node scripts/check-manager-fixture.mjs",
     "check:pair-cli": "node --test scripts/fixture-environment.test.mjs && node scripts/build-cli.mjs && node scripts/check-pair-cli.mjs",

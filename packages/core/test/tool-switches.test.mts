@@ -13,6 +13,7 @@ import {
 } from '../src/index.mjs'
 import { deviceWorld, features } from './device-world.mjs'
 import { harness } from './fake-device.mjs'
+import { thread } from './fixtures.mjs'
 import { settle } from './helpers.mjs'
 
 test('存法：没改过按默认；harness 没单独设过的跟设备一级；和设备一级一样的不记', () => {
@@ -108,6 +109,28 @@ async function twoHarnesses() {
 
 const failure = (message: JsonRpcMessage) =>
   (message as { result?: { success: boolean; contentItems: { text?: string }[] } }).result
+
+test('M16：从未打开的跨 harness 子会话仍按自身 harness 的开关检查', async () => {
+  const { peer, command, call, main, sent } = await twoHarnesses()
+  await command('device.tools.set', { harness: 'pi', browser: false })
+  peer.last().notify('thread/started', {
+    thread: {
+      ...thread({ id: 'background-child', cwd: '/work/child', name: '后台子会话' }),
+      harness: 'pi',
+    },
+  })
+  await settle()
+  const refused = failure(await call('background-child', 'litch_browser'))
+  assert.match(refused?.contentItems[0]?.text ?? '', /^\[litch:disabled\]/)
+  assert.equal(main.calls().length, 0)
+  await command('device.tools.set', { harness: 'pi', browser: true })
+  void call('background-child', 'litch_browser')
+  await settle()
+  const invocation = main.calls()[0] as Extract<ToolToMain, { op: 'call' }>
+  assert.equal(invocation.invocation.harness, 'pi')
+  assert.equal(invocation.invocation.cwd, '/work/child')
+  assert.equal(sent('thread/resume').length, 0)
+})
 
 test('显示数据：设备一级两个，加上每个 harness 三样；只改一个 harness 时设备一级和别的 harness 不动', async () => {
   const { device, command } = await twoHarnesses()
