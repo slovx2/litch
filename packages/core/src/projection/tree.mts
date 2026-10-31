@@ -211,12 +211,31 @@ export function agentStatesOf(items: readonly (ItemView | undefined)[]): Map<str
   return states
 }
 
-/** 这个条目是不是派出子代理的那一次调用（collab.spawnAgent） */
+/** 这个条目是否提供子代理行（派出调用或原生活动标记） */
 export const isAgentSpawn = (item: ItemView | undefined): boolean =>
   item?.kind === 'toolCall' &&
   item.agents !== undefined &&
-  typeof item.tool === 'object' &&
-  item.tool.key === 'collab.spawnAgent'
+  (item.agentActivity !== undefined ||
+    (typeof item.tool === 'object' && item.tool.key === 'collab.spawnAgent'))
+
+/** 同一回合内活动标记共用第一行；已有派出调用的用调用行，避免两种协议表示重复展示。 */
+export function agentRowShown(item: ItemView, items: readonly (ItemView | undefined)[]): boolean {
+  if (item.kind !== 'toolCall' || !item.agentActivity) return true
+  const id = item.agents?.[0]?.threadId
+  if (!id) return false
+  for (const other of items) {
+    if (other?.kind !== 'toolCall' || other.agentActivity || !isAgentSpawn(other)) continue
+    if (other.agents?.some((agent) => agent.threadId === id)) return false
+  }
+  return (
+    items.find(
+      (other) =>
+        other?.kind === 'toolCall' &&
+        other.agentActivity &&
+        other.agents?.some((agent) => agent.threadId === id),
+    )?.id === item.id
+  )
+}
 
 /**
  * 一个回合（按先后给出它的条目）里还有没有没做完的子代理：派出的子代理里有排队、进行中的，

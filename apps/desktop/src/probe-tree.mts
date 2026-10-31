@@ -17,6 +17,7 @@
 //   三种皮肤、深浅两套下这几样东西不溢出。
 // 下面的 treeProbe、treeLooks 会被原样送进页面里执行，不能引用函数外面的东西。
 import type { BrowserWindow } from 'electron'
+import { checkAgentActivity } from './probe-agent-activity.mjs'
 import { pendingLooks } from './probe-pending-asks.mjs'
 import { checkSidebarReveal } from './probe-sidebar-reveal.mjs'
 import { checkTreeSummary } from './probe-tree-summary.mjs'
@@ -898,8 +899,15 @@ export async function runTreeChecks(window: BrowserWindow): Promise<readonly [ob
   const looks = await inPage(treeLooks, 's6')
   const reveal = await checkSidebarReveal(window)
   const summary = await checkTreeSummary(window)
+  const activity = await checkAgentActivity(window)
   return [
-    { ...seen, looks, pending, reveal: reveal.result, summary },
-    [...judgeTree(seen, looks), ...pending.failed, ...reveal.failed, ...summary.failed],
+    { ...seen, looks, pending, reveal: reveal.result, summary, activity },
+    [
+      ...judgeTree(seen, looks),
+      ...pending.failed,
+      ...reveal.failed,
+      ...summary.failed,
+      ...activity.failed,
+    ],
   ]
 }

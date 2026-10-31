@@ -147,7 +147,9 @@ export const AgentsCell = memo(function AgentsCell({ row }: Props<'agents'>) {
   const { item, threads } = row
   const agents = item.agents ?? []
   const states = row.states ? (row.states.split(' ') as AgentRunState[]) : NO_STATES
-  const prompt = item.input.flatMap((part) => (part.kind === 'text' ? [part.text] : [])).join('\n')
+  const prompt =
+    item.agentActivity?.name ||
+    item.input.flatMap((part) => (part.kind === 'text' ? [part.text] : [])).join('\n')
   const missing = agents.some((agent) => !threads.some((thread) => thread.id === agent.threadId))
   useEffect(() => {
     if (missing) askAgents(channel, deviceId, sessionId)

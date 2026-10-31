@@ -96,6 +96,12 @@ row: elapsed time, supporting counts of commentary/steps/subagents, and any fail
 running background work. Click the row to expand. Stopped turns and turns without a final answer stay
 open. The detailed view keeps its usual behavior.
 
+Native subagents appear as compact rows with a description, status and elapsed time when available
+on desktop and phone. Click a row to open the subagent's conversation. Codex activity markers and
+the structured subagent calls used by Claude Code, Pi, DSH and OpenCode share this presentation;
+repeated activity markers update the same row within a turn. Generic ACP tool reports without a
+subagent identity remain tool steps.
+
 A user message delivered during a turn appears as a regular message bubble. It stays in
 that turn and divides its activity into independently expandable segments on desktop and phone.
 Segment time appears only when every entry has timestamps. The turn's source appears once at its

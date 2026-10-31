@@ -278,6 +278,44 @@ const collab = (id, tool, agents, status = 'completed') => ({
   agents,
 })
 
+test('Codex 活动与协作调用共用子代理行，状态更新不增加行，历史回放也不重复', () => {
+  const activity = (id, kind) =>
+    projectItem({
+      type: 'subAgentActivity',
+      id,
+      kind,
+      agentThreadId: 'a1',
+      agentPath: '/root/review',
+      model: null,
+      reasoningEffort: null,
+    })
+  const start = activity('start', 'started')
+  const done = activity('done', 'completed')
+  const items = [user('u', '审核'), start]
+  const view = viewOf(
+    [{ id: 't', status: 'running', itemIds: items.map((item) => item.id) }],
+    items,
+  )
+  const builder = openedBuilder()
+  const first = builder.build(view, 'all')
+  assert.equal(first.filter((row) => row.type === 'agents').length, 1)
+  assert.equal(first.find((row) => row.type === 'agents').states, 'running')
+  view.items.done = done
+  view.turns[0].itemIds.push('done')
+  const updated = builder.build(view, new Set(['t']))
+  assert.equal(updated.filter((row) => row.type === 'agents').length, 1)
+  assert.equal(updated.find((row) => row.type === 'agents').states, 'completed')
+  const spawn = collab('sp', 'spawnAgent', [{ threadId: 'a1', state: 'running', message: null }])
+  view.items.sp = spawn
+  view.turns[0].itemIds.splice(1, 0, 'sp')
+  const replay = new RowBuilder().build(view, 'all')
+  const rows = replay.filter((row) => row.type === 'agents')
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].item.id, 'sp')
+  assert.equal(rows[0].states, 'completed')
+  assert.ok(!replay.some((row) => row.type === 'notice' || row.type === 'group'))
+})
+
 test('启动子代理不进过程组，单独一行；等待还是组里的一步', () => {
   const spawn = collab('sp', 'spawnAgent', [
     { threadId: 'a1', state: 'running', message: null },

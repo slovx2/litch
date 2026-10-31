@@ -203,7 +203,10 @@ const AgentsCard = memo(function AgentsCard(ref: ItemRef) {
   useAgentList(deviceId, sessionId, '', agents.length > 0)
   const states = useAgentStates(ref, agents)
   if (item?.kind !== 'toolCall') return null
-  const prompt = item.input.flatMap((part) => (part.kind === 'text' ? [part.text] : [])).join('\n')
+  if (item.agentActivity && states.length === 0) return null
+  const prompt =
+    item.agentActivity?.name ||
+    item.input.flatMap((part) => (part.kind === 'text' ? [part.text] : [])).join('\n')
   return (
     <div className="agents-rows" data-card="agents" data-anchor={`i:${ref.itemId}`}>
       {agents.length === 0 ? (

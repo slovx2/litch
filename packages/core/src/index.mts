@@ -405,6 +405,7 @@ export { spanFrom, spanned, spanOf, spanOp } from './projection/span.mjs'
 export { todoKey } from './projection/todo.mjs'
 // 子代理的状态：对话流的那一行、子代理页、信息卡，和“这个回合里还有没做完的子代理”（回合收起的判定）
 export {
+  agentRowShown,
   agentRunState,
   agentStatesOf,
   agentsUnfinished,

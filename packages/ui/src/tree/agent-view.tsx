@@ -5,6 +5,7 @@ import {
   type AgentRefView,
   type AgentRunState,
   type AgentThreadView,
+  agentRowShown,
   agentRunState,
   agentStatesOf,
   agentsUnfinished,
@@ -73,6 +74,8 @@ export function useAgentStates(
   const list = useAgents(ref.deviceId, ref.sessionId)
   const items = useTurnItems(ref.deviceId, ref.sessionId, ref.itemId)
   return useMemo(() => {
+    const item = items.find((entry) => entry?.id === ref.itemId)
+    if (item && !agentRowShown(item, items)) return []
     const reported = agentStatesOf(items)
     return agents.map((agent) => {
       const thread = list?.find((entry) => entry.id === agent.threadId)
@@ -82,7 +85,7 @@ export function useAgentStates(
         state: agentRunState(thread, reported.get(agent.threadId), agent.state),
       }
     })
-  }, [agents, items, list])
+  }, [agents, items, list, ref.itemId])
 }
 
 /**

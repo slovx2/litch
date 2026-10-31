@@ -12,7 +12,7 @@ import type { ItemView, TurnStatus, TurnView } from '../model.mjs'
 import type { AgentThreadView } from '../model-tree.mjs'
 import type { Text } from '../phrase.mjs'
 import { spanOf } from './span.mjs'
-import { agentRunState, agentStatesOf } from './tree.mjs'
+import { agentRowShown, agentRunState, agentStatesOf, isAgentSpawn } from './tree.mjs'
 
 /** 分块只需要知道条目的标识和种类；助手消息还要知道它是过程说明还是回答 */
 export interface BlockInput {
@@ -307,11 +307,7 @@ export function cardPlace(item: ItemView): CardPlace | null {
   if (item.asked) return 'outside'
   if (item.wrapUp) return quietOf(item) ? null : 'tail'
   // 启动子代理刚开始时还不知道子线程是谁（上游开始的事件里没有），也画成卡片，等结束时填上
-  return item.agents !== undefined &&
-    typeof item.tool === 'object' &&
-    item.tool.key === 'collab.spawnAgent'
-    ? 'inline'
-    : null
+  return isAgentSpawn(item) ? 'inline' : null
 }
 
 // ---------- 步骤组的汇总 ----------
@@ -545,6 +541,7 @@ export function processTally(
     if (item.kind === 'agentMessage') {
       tally.notes++
     } else if (cardPlace(item) === 'inline' && item.kind === 'toolCall') {
+      if (!agentRowShown(item, items)) continue
       const agents = item.agents ?? []
       tally.agents += Math.max(1, agents.length)
       tally.agentsFailed += agents.filter((agent) => {

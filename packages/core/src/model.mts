@@ -715,8 +715,10 @@ export interface ToolCallItem {
   error: ToolPart[] | Phrase | null
   durationMs: number | null
   status: ItemStatus
-  /** 子代理调用（collabAgentToolCall）涉及的子线程，点开在侧面板里看。别的工具调用没有这一项 */
+  /** 子代理调用或活动事件涉及的子线程，点开在侧面板里看。别的工具调用没有这一项 */
   agents?: AgentRefView[]
+  /** 原生子代理活动标记；同一子代理与调用条目共用一行，name 只在子线程资料缺失时作标题。 */
+  agentActivity?: { name: string }
   /** litch_sessions.start：派出的 Litch 子会话（或者降成的提案）。别的工具调用没有这一项 */
   spawned?: SpawnedView
   /** litch_sessions.wrap_up：这一回合收尾时的建议任务（每条一张提案）。别的工具调用没有这一项 */

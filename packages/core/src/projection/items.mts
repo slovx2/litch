@@ -789,12 +789,24 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
         detail: (item.fragments ?? []).map((fragment) => fragment.text).join('\n') || null,
       }
     case 'subAgentActivity':
-      return {
-        id,
-        kind: 'notice',
-        label: phrase('notice.subAgentActivity'),
-        detail: item.agentPath || null,
-      }
+      return toolCall(id, {
+        source: phrase('collab.source'),
+        tool: phrase('notice.subAgentActivity'),
+        agentActivity: { name: item.agentPath?.split('/').filter(Boolean).at(-1) ?? '' },
+        agents: [
+          {
+            threadId: item.agentThreadId,
+            // 活动标记本身已经发生，不代表子代理已完成；状态以事件种类为准。
+            state:
+              item.kind === 'completed'
+                ? 'completed'
+                : item.kind === 'interrupted'
+                  ? 'interrupted'
+                  : 'running',
+            message: null,
+          },
+        ],
+      })
     case 'imageView':
       return { id, kind: 'notice', label: phrase('notice.imageView'), detail: item.path }
     case 'imageGeneration':

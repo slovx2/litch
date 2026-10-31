@@ -38,6 +38,7 @@ import type {
   WebSearchItem,
 } from '@litch/core'
 import {
+  agentRowShown,
   agentRunState,
   agentStatesOf,
   agentsUnfinished,
@@ -698,7 +699,14 @@ export class RowBuilder {
     }
     if (part.type === 'card') {
       const item = view.items[part.itemId]
-      if (item?.kind === 'toolCall') out.push(this.agents(turn.id, item, view.agents, reported()))
+      if (
+        item?.kind === 'toolCall' &&
+        agentRowShown(
+          item,
+          turn.itemIds.map((id) => view.items[id]),
+        )
+      )
+        out.push(this.agents(turn.id, item, view.agents, reported()))
       return
     }
     // 交接（hand_off）单独一行，把步骤组从它那里断开

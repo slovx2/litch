@@ -78,7 +78,7 @@ const PRESET_OF: Record<SandboxLevel, string> = {
   'workspace-write': ':workspace',
   'danger-full-access': ':danger-full-access',
 }
-const USES_AGENTS = /用子代理|use sub-agents/i
+const USES_AGENTS = /用(?:Codex)?子代理|use (?:codex )?sub-agents/i
 
 /** 演示里失败的子代理过多久失败、只剩要停掉的子代理时父会话过多久停掉它（按模拟的时钟） */
 const AGENT_FAIL_MS = 600
@@ -953,7 +953,19 @@ export function createMockTree(host: MockTreeHost): MockTree {
       { op: 'session.agents', agents: agentList(deviceId, parentId) },
     ])
 
-  const agentsDemo = (view: SessionView, turnId: string) => {
+  const agentActivity = (entry: AgentEntry, kind: 'started' | 'completed' | 'interrupted') =>
+    projectItem({
+      type: 'subAgentActivity',
+      model: null,
+      reasoningEffort: null,
+      id: host.nextId('activity'),
+      kind,
+      agentThreadId: entry.view.sessionId,
+      agentPath: `/root/${entry.view.sessionId}`,
+    })
+
+  // Codex 场景只报活动标记；其他场景同时报调用和标记，验证两种表示不会重复出行。
+  const agentsDemo = (view: SessionView, turnId: string, native = false) => {
     const itemId = host.nextId('ca')
     const made: AgentEntry[] = text.agents.map((spec) => {
       const id = host.nextId('ag')
@@ -990,13 +1002,14 @@ export function createMockTree(host: MockTreeHost): MockTree {
       host.putView(agent)
       return entry
     })
-    host.apply(view, [
-      {
-        op: 'item.add',
-        turnId,
-        item: collabItem(itemId, 'spawnAgent', 'inProgress', made, view.sessionId),
-      },
-    ])
+    if (!native)
+      host.apply(view, [
+        {
+          op: 'item.add',
+          turnId,
+          item: collabItem(itemId, 'spawnAgent', 'inProgress', made, view.sessionId),
+        },
+      ])
     for (const entry of made) {
       const key = sameKey(entry.deviceId, entry.view.sessionId)
       // 完成的回一句话；失败的、要停掉的回合开始时不回话（claim 认下就不往下走）
@@ -1007,13 +1020,22 @@ export function createMockTree(host: MockTreeHost): MockTree {
       if (entry.spec.outcome === 'failed')
         host.setTimer(() => host.fail(entry.view, childTurn, entry.spec.error ?? ''), AGENT_FAIL_MS)
     }
-    host.apply(view, [
-      {
+    if (!native)
+      host.apply(view, [
+        {
+          op: 'item.add',
+          turnId,
+          item: collabItem(itemId, 'spawnAgent', 'completed', made, view.sessionId),
+        },
+      ])
+    host.apply(
+      view,
+      made.map((entry) => ({
         op: 'item.add',
         turnId,
-        item: collabItem(itemId, 'spawnAgent', 'completed', made, view.sessionId),
-      },
-    ])
+        item: agentActivity(entry, 'started'),
+      })),
+    )
     pushAgents(view.deviceId, view.sessionId)
   }
 
@@ -1030,6 +1052,13 @@ export function createMockTree(host: MockTreeHost): MockTree {
   const agentDone = (entry: AgentEntry, status: 'completed' | 'interrupted' | 'failed') => {
     entry.done = status
     pushAgents(entry.deviceId, entry.parentId)
+    host.apply(host.view(entry.deviceId, entry.parentId), [
+      {
+        op: 'item.add',
+        turnId: entry.turnId,
+        item: agentActivity(entry, status === 'interrupted' ? 'interrupted' : 'completed'),
+      },
+    ])
     const siblings = siblingsOf(entry)
     const left = siblings.filter((other) => !other.done)
     if (left.length > 0) {
@@ -1169,7 +1198,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
         return true
       }
       if (USES_AGENTS.test(message.text)) {
-        agentsDemo(view, turnId)
+        agentsDemo(view, turnId, /codex/i.test(message.text))
         return true
       }
       // Litch 子会话的两出要设备有会话树
