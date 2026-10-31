@@ -71,7 +71,6 @@ function PendingCard({
   const { c, font, radius } = theme
   const t = useT()
   const [text, setText] = useState('')
-  const [picked, setPicked] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const age = useQuestionAge(question.proposedAt)
@@ -146,15 +145,9 @@ function PendingCard({
             <CardButton
               key={option.label}
               label={option.label}
-              kind={
-                (question.kind === 'wrap' ? index === 0 : picked === option.answer)
-                  ? 'primary'
-                  : 'plain'
-              }
+              kind={question.kind === 'wrap' && index === 0 ? 'primary' : 'plain'}
               disabled={!enabled || busy}
-              onPress={() =>
-                question.kind === 'wrap' ? void send(option.answer) : setPicked(option.answer)
-              }
+              onPress={() => void send(option.answer)}
               testID={`pending:${question.id}:${index}`}
             />
           ))}
@@ -184,8 +177,8 @@ function PendingCard({
         />
         <CardButton
           label={t('ask.send')}
-          disabled={!enabled || busy || !(text.trim() || picked)}
-          onPress={() => void send(text.trim() || picked || '')}
+          disabled={!enabled || busy || !text.trim()}
+          onPress={() => void send(text)}
         />
       </View>
       {failure ? <Text style={[styles.err, { color: c.err }]}>{failure}</Text> : null}

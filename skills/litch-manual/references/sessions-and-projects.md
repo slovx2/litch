@@ -65,7 +65,8 @@ follows the same distinction. Automated turns do not count as your answer.
 The transcript shows a question only after it is answered, ignored or closed, combining its record
 and answers in one card. In partially answered groups only settled questions appear there; the rest
 remain above the composer. Answered groups fold to a count and summary; expand to read answers and
-other options. Desktop answer fields use Enter to confirm and Shift+Enter for a newline; IME Enter
+other options. In pending questions, clicking an option sends that answer immediately on desktop
+and phone. The Send button is only for a custom answer. Desktop answer fields use Enter to confirm and Shift+Enter for a newline; IME Enter
 only confirms composition. On the phone Return adds a newline and the card's button submits.
 
 The pending section can collapse while retaining its count. Cards show their age and later
@@ -87,6 +88,8 @@ original flow. Delegated answers leave an audit record in the child conversation
 Long desktop conversations load their history progressively so the sidebar stays responsive.
 When returning to an earlier reading position, the transcript briefly shows a loading message
 while restoring it. You can select another conversation during that time.
+Scrolling while earlier turns are being filled in keeps your reading position; code blocks and
+other inner scroll areas retain their own scrolling.
 
 In the compact transcript, a finished turn with a final answer folds its activity into a full-width
 row: elapsed time, supporting counts of commentary/steps/subagents, and any failure, refusal or still

@@ -15,7 +15,7 @@
     "dev": "npm run build && LITCH_UI_URL=http://localhost:5199 electron .",
     "smoke": "npm run build && node scripts/smoke.mjs",
     "smoke:entry": "npm run build && node scripts/smoke.mjs --entry",
-    "check:scroll": "npm run build && node scripts/smoke.mjs --scroll",
+    "check:scroll": "npm run build && node scripts/smoke.mjs --scroll && node scripts/check-scroll-wheel.mjs",
     "shots": "npm run build && node scripts/shots.mjs",
     "check:scroll:entry": "npm run build && node scripts/smoke.mjs --scroll --entry",
     "check:compose": "npm run build && node scripts/smoke.mjs --compose",

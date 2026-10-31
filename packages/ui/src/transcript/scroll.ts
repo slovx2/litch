@@ -50,6 +50,7 @@ import {
 } from 'react'
 import { onAppearanceChange } from '../app/appearance.ts'
 import { onViewSwitch } from './view.ts'
+import { transcriptWheel } from './wheel.ts'
 
 /** 离底部不超过这么多像素算“在底部” */
 const AT_BOTTOM = 1
@@ -353,12 +354,26 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
       if (steady && scroller.scrollTop !== steady.scrollTop) steadied.current = null
       update()
     }
+    // 反向列向前补历史会改变滚动原点。合成线程处理滚轮时可能仍用旧原点，把一批历史的高度
+    // 算成位移（实测 48px 跳成 6 万 px）。纵向位移和布局补偿放在同一线程，避免两边坐标错位。
+    const wheel = (event: WheelEvent) => {
+      const delta = transcriptWheel(scroller, event)
+      if (delta === null) return
+      event.preventDefault()
+      steadied.current = null
+      pinned.current = null
+      compensate()
+      shift(-delta)
+      observe()
+    }
+    scroller.addEventListener('wheel', wheel, { passive: false })
     scroller.addEventListener('scroll', scrolled, { passive: true })
     return () => {
       resize.disconnect()
+      scroller.removeEventListener('wheel', wheel)
       scroller.removeEventListener('scroll', scrolled)
     }
-  }, [compensate, observe])
+  }, [compensate, observe, shift])
 
   /** 接下来这一阵子盯住这几行（排前面的优先），版面定下来再放手 */
   const steadyOn = useCallback((held: Steady) => {

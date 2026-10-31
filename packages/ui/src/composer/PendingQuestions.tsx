@@ -76,7 +76,6 @@ function PendingCard({
   const age = useQuestionAge(question.proposedAt)
   const steer = useRunningSend(canSteer) === 'steer'
   const [text, setText] = useState('')
-  const [picked, setPicked] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const send = async (answer: string) => {
@@ -138,24 +137,17 @@ function PendingCard({
         className="pending-ask-row"
         onSubmit={(event) => {
           event.preventDefault()
-          void send(text.trim() || picked || '')
+          void send(text)
         }}
       >
         {question.options.map((option, index) => (
           <button
             key={option.label}
             type="button"
-            className={
-              (question.kind === 'wrap' ? index === 0 : picked === option.answer)
-                ? 'btn primary'
-                : 'btn'
-            }
+            className={question.kind === 'wrap' && index === 0 ? 'btn primary' : 'btn'}
             data-act={index}
             disabled={!enabled || busy}
-            aria-pressed={question.kind === 'async' ? picked === option.answer : undefined}
-            onClick={() =>
-              question.kind === 'wrap' ? void send(option.answer) : setPicked(option.answer)
-            }
+            onClick={() => void send(option.answer)}
           >
             {option.label}
           </button>
@@ -177,14 +169,10 @@ function PendingCard({
             )
               return
             event.preventDefault()
-            void send(text.trim() || picked || '')
+            void send(text)
           }}
         />
-        <button
-          className="btn"
-          type="submit"
-          disabled={!enabled || busy || !(text.trim() || picked)}
-        >
+        <button className="btn" type="submit" disabled={!enabled || busy || !text.trim()}>
           {t('ask.send')}
         </button>
       </form>
