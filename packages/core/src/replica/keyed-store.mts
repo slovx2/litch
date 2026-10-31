@@ -22,11 +22,13 @@ export class KeyedStore {
     if (this.#values.delete(key)) this.#touch(key)
   }
 
-  /** 删掉所有以某个前缀开头的键。关掉一个会话时用 */
+  /** 关会话时整批清理，只通知完整清理后的状态，避免卸载中的组件反复扫描历史。 */
   deletePrefix(prefix: string): void {
-    for (const key of [...this.#values.keys()]) {
-      if (key.startsWith(prefix)) this.delete(key)
-    }
+    this.batch(() => {
+      for (const key of this.#values.keys()) {
+        if (key.startsWith(prefix)) this.delete(key)
+      }
+    })
   }
 
   subscribe(key: string, listener: () => void): () => void {
@@ -39,7 +41,7 @@ export class KeyedStore {
     }
   }
 
-  /** 一批改动合在一起通知：同一个键改了多次，订阅者只被叫一次 */
+  /** 一批改动合在一起通知：同一个订阅者即使监听多个键，也只通知一次。 */
   batch(apply: () => void): void {
     this.#batchDepth++
     try {
@@ -58,8 +60,10 @@ export class KeyedStore {
   #flush(): void {
     const keys = [...this.#dirty]
     this.#dirty.clear()
+    const listeners = new Set<() => void>()
     for (const key of keys) {
-      for (const listener of [...(this.#listeners.get(key) ?? [])]) listener()
+      for (const listener of this.#listeners.get(key) ?? []) listeners.add(listener)
     }
+    for (const listener of listeners) listener()
   }
 }
