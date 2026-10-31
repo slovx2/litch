@@ -361,7 +361,7 @@ export interface Device {
   /** 侧聊：临时分出一个会话（live.mts 的 sideChat） */
   sideChat(sessionId: string): Promise<string>
   rollback(sessionId: string, turnId: string, itemId?: string): Promise<void>
-  compact(sessionId: string): Promise<void>
+  compact(sessionId: string, thenConfigure?: Partial<SessionSettings>): Promise<void>
   /** 设、改、清持续目标（live.mts 的 setGoal、clearGoal） */
   setGoal(sessionId: string, change: GoalChange): Promise<void>
   clearGoal(sessionId: string): Promise<void>
@@ -2757,7 +2757,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     fork: (sessionId, turnId, itemId) => live.fork(sessionId, turnId, itemId),
     sideChat: (sessionId) => live.sideChat(sessionId),
     rollback: (sessionId, turnId, itemId) => live.rollback(sessionId, turnId, itemId),
-    compact: (sessionId) => live.compact(sessionId),
+    compact: (sessionId, thenConfigure) => live.compact(sessionId, thenConfigure),
     setGoal: (sessionId, change) => live.setGoal(sessionId, change),
     clearGoal: (sessionId) => live.clearGoal(sessionId),
     markRead(sessionId) {

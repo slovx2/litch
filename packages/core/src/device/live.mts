@@ -229,8 +229,8 @@ export interface LiveSessions {
   sideChat(sessionId: string): Promise<string>
   /** 把 turnId 这个回合和它后面的都撤掉；带 itemId 时这一回合只撤掉这条插进去的话和它之后的 */
   rollback(sessionId: string, turnId: string, itemId?: string): Promise<void>
-  /** 让对面开始压缩上下文。受理了就返回 */
-  compact(sessionId: string): Promise<void>
+  /** 普通压缩受理就返回；带设置时等压缩成功再应用设置并返回。 */
+  compact(sessionId: string, thenConfigure?: Partial<SessionSettings>): Promise<void>
   /** 设、改持续目标（thread/goal/set，origin 是 user）。受理了就返回，新的样子随后由通知带来 */
   setGoal(sessionId: string, change: GoalChange): Promise<void>
   /** 清掉持续目标 */
@@ -292,6 +292,13 @@ interface Live {
   revertEchoUntil: number
   /** 这边发出的手动压缩里，对面还没开始压的几次：接下来开始的压缩算手动的（官方桌面端也这样认） */
   compacting: number
+  /** 压缩确认成功之后才切供应商；同时拦住队列，免得下一条抢先使用旧型号。 */
+  compactSwitch?: {
+    turnId: string | null
+    completed: boolean
+    resolve(): void
+    reject(error: unknown): void
+  }
   /**
    * 手里的视图是旧的：没人看着时连接断过（或者它的 harness 断过），订阅已经没了、没重新载入。
    * 再打开时先摆它（标 stale），同时重新载入
@@ -659,6 +666,13 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     )
       view.questionSource = questionSource(turnId, item.id || `#${position}`)
     if (view.kind === 'compaction') {
+      if (
+        live.compactSwitch &&
+        (!live.compactSwitch.turnId || live.compactSwitch.turnId === turnId)
+      ) {
+        live.compactSwitch.turnId = turnId
+        if (!streaming && view.status === 'completed') live.compactSwitch.completed = true
+      }
       // 完成时沿用开始时定下的来源；头一次见到它时认一下是不是这边点的
       const seen = live.view?.items[key]
       if (seen?.kind === 'compaction') view.source = seen.source
@@ -825,7 +839,10 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (live.view.settings.mode === mode) return
       emit(live, [{ op: 'session.settings', settings: { ...live.view.settings, mode } }])
     },
-    'turn/started': (live, { turn }) => putTurn(live, turn),
+    'turn/started': (live, { turn }) => {
+      if (live.compactSwitch && !live.compactSwitch.turnId) live.compactSwitch.turnId = turn.id
+      putTurn(live, turn)
+    },
     'turn/completed': (live, { turn }) => {
       putTurn(live, turn)
       // 回合结束了，还在重试的那一句不留着（对面一般在结束前已经说过重试结束了）
@@ -839,6 +856,18 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       settleSteered(live, viewTurn(live, turn.id), turn.status === 'completed')
       // 手动压缩的回合结束了还没见到压缩条目（对面不发）：不留到以后，免得把下一次自动压缩认成手动的
       live.compacting = 0
+      const switching = live.compactSwitch
+      if (switching?.turnId === turn.id) {
+        if (turn.status === 'completed' && switching.completed) switching.resolve()
+        else
+          switching.reject(
+            new ChannelError(
+              'rejected',
+              '压缩未完成，未切换供应商',
+              phrase('session.switchIncomplete'),
+            ),
+          )
+      }
       // 阻塞请求的接收方随所属回合结束而撤销。其他回合的结束不能影响它；
       // wrap_up 和异步提问没有挂在此 RPC 表里，按明确答复单独保留。
       settleRequests(live, (request) => request.turnId === turn.id)
@@ -1176,7 +1205,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
    * 留着的照样收对面的通知、视图跟着变，只是没有界面在看（watched 为假，未读、通知照旧按没人看算）
    */
   const release = (live: Live) => {
-    if (live.sinks.size > 0 || live.loading) return
+    if (live.sinks.size > 0 || live.loading || live.compactSwitch) return
     if (live.view && (isRunning(live.view) || live.requests.size > 0 || live.queued.length > 0))
       return
     if (!live.view) {
@@ -1206,7 +1235,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   /** 退订并放掉。期间又被打开、换成了别的、已经放掉了的不动 */
   const drop = (live: Live) => {
     unlinger(live.id)
-    if (sessions.get(live.id) !== live || live.sinks.size > 0) return
+    if (sessions.get(live.id) !== live || live.sinks.size > 0 || live.compactSwitch) return
     sessions.delete(live.id)
     // 够不着的时候不用退：订阅已经随连接（或者它的 harness 的上游连接）一起没了；旧的（stale）也一样
     if (live.view?.live && !live.stale && reachable(live)) {
@@ -1308,7 +1337,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   /** 空下来了就把排着队的第一条发出去 */
   const pump = (live: Live) => {
     // 摆着旧的、正在重新载入的：等载入完（load 成功时再 pump）
-    if (live.stale || live.loading) return
+    if (live.stale || live.loading || live.compactSwitch) return
     if (!live.view?.live || !reachable(live) || isRunning(live.view)) return
     const next = live.queued[0]
     if (!next) return
@@ -1425,7 +1454,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   const idle = (sessionId: string, why: string): Live & { view: SessionView } => {
     const live = need(sessionId)
     mustReach(live)
-    if (isRunning(live.view)) throw new ChannelError('rejected', why)
+    if (isRunning(live.view) || live.compactSwitch) throw new ChannelError('rejected', why)
     return live
   }
 
@@ -1514,6 +1543,9 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
     offline() {
       for (const live of sessions.values()) {
+        live.compactSwitch?.reject(
+          new ChannelError('offline', '连接已断开，未切换供应商', phrase('session.switchOffline')),
+        )
         live.loading?.abort()
         live.loading = null
         live.starting = null
@@ -1535,6 +1567,9 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     harnessDown(harness) {
       for (const live of sessions.values()) {
         if (ownerOf(live) !== harness) continue
+        live.compactSwitch?.reject(
+          new ChannelError('offline', '引擎已断开，未切换供应商', phrase('session.switchOffline')),
+        )
         live.loading?.abort()
         live.loading = null
         live.starting = null
@@ -1548,6 +1583,13 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       host.views?.forget(sessionId)
       const live = sessions.get(sessionId)
       if (!live) return
+      live.compactSwitch?.reject(
+        new ChannelError(
+          'cancelled',
+          '会话已关闭，未切换供应商',
+          phrase('session.switchCancelled'),
+        ),
+      )
       live.loading?.abort()
       live.loading = null
       live.queued = []
@@ -1758,6 +1800,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
     configure(sessionId, settings) {
       const live = need(sessionId)
+      if (live.compactSwitch)
+        throw new ChannelError('rejected', '正在压缩并切换供应商', phrase('session.switchBusy'))
       for (const key of ['model', 'effort', 'speed', 'permission'] as const) {
         const value = settings[key]
         if (value) live.pending[key] = value
@@ -1785,14 +1829,20 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
       mustReach(live)
       // 摆着旧的、正在载入的、回合在跑的、前面还有排着的：排上，载入完或者回合结束再发
-      if (live.stale || live.loading || isRunning(live.view) || live.queued.length > 0) {
+      if (
+        live.stale ||
+        live.loading ||
+        live.compactSwitch ||
+        isRunning(live.view) ||
+        live.queued.length > 0
+      ) {
         const id = `q${++localSeq}`
         live.queued = [...live.queued, { id, ...message }]
         emit(live, [{ op: 'queue.set', queued: live.queued }])
         pump(live)
         // 插不进去时 steer 已经把它放回了队列：消息照常排着，等这个回合结束再发，不算没发成。
         // 它不会插话的（界面跟着退回排队，提示里写着）不用再说；别的原因写一句，不然只看得到消息躺在队列里
-        if (now && !live.stale && !live.loading && isRunning(live.view)) {
+        if (now && !live.stale && !live.loading && !live.compactSwitch && isRunning(live.view)) {
           await sessionsApi.steer(sessionId, id).catch((error: unknown) => {
             if (error instanceof ChannelError && error.code === 'unsupported') return
             setNote(live, phrase('session.steerQueued', { message: failure(error).message }))
@@ -2084,21 +2134,54 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       host.touched(live.id)
     },
 
-    async compact(sessionId) {
+    async compact(sessionId, thenConfigure) {
       const live = idle(sessionId, '回合正在进行，结束后才能压缩')
       if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
+      if (live.compacting)
+        throw new ChannelError('rejected', '正在等待压缩开始', phrase('session.switchBusy'))
+      let cancelTimer: (() => void) | undefined
+      const completion = thenConfigure
+        ? new Promise<void>((resolve, reject) => {
+            live.compactSwitch = { turnId: null, completed: false, resolve, reject }
+            cancelTimer = host.clock.setTimer(
+              () =>
+                reject(
+                  new ChannelError(
+                    'rejected',
+                    '等待压缩完成超时，未切换供应商',
+                    phrase('session.switchTimeout'),
+                  ),
+                ),
+              10 * 60_000,
+            )
+          })
+        : Promise.resolve()
       live.compacting++
       try {
-        await attempt(live, 'compact', () =>
-          host.request(
-            'thread/compact/start',
-            { threadId: sessionId },
-            { timeoutMs: LOAD_TIMEOUT },
+        await Promise.all([
+          completion,
+          attempt(live, 'compact', () =>
+            host.request(
+              'thread/compact/start',
+              { threadId: sessionId },
+              { timeoutMs: LOAD_TIMEOUT },
+            ),
           ),
-        )
+        ])
+        if (thenConfigure) {
+          delete live.compactSwitch
+          sessionsApi.configure(sessionId, thenConfigure)
+        }
       } catch (error) {
         live.compacting = Math.max(0, live.compacting - 1)
         throw error
+      } finally {
+        cancelTimer?.()
+        delete live.compactSwitch
+        if (thenConfigure) {
+          pump(live)
+          release(live)
+        }
       }
       host.touched(live.id)
     },

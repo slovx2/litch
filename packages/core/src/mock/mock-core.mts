@@ -3430,7 +3430,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         return {}
       }
       if (name === 'session.compact') {
-        const view = reachView(params as Commands['session.compact']['params'])
+        const { thenConfigure, ...where } = params as Commands['session.compact']['params']
+        const view = reachView(where)
         if (running(view)) throw new ChannelError('rejected', '回合还在进行，结束之后才能压缩')
         attempt(view, 'compact')
         // 压缩是一个没有用户消息的回合：先是一行“正在压缩上下文”，过一会儿变成“上下文已压缩”，占用降下来
@@ -3456,8 +3457,24 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           { op: 'item.add', turnId, item: compaction },
         ])
         updateSummary(view.deviceId, view.sessionId, { status: 'running', updatedAt: clock.now() })
+        let resolveCompletion: (() => void) | undefined
+        let rejectCompletion: ((error: unknown) => void) | undefined
+        const completion = thenConfigure
+          ? new Promise<void>((resolve, reject) => {
+              resolveCompletion = resolve
+              rejectCompletion = reject
+            })
+          : null
         const finish = () => {
           applySessionOps(view, [
+            ...(thenConfigure
+              ? [
+                  {
+                    op: 'session.settings',
+                    settings: { ...view.settings, ...thenConfigure },
+                  } satisfies SessionOp,
+                ]
+              : []),
             { op: 'item.add', turnId, item: { ...compaction, status: 'completed' } },
             ...(view.usage
               ? [
@@ -3469,8 +3486,20 @@ export function createMockCore(options: MockCoreOptions): MockCore {
               : []),
           ])
           endTurn(view, turnId, null, 'completed')
+          resolveCompletion?.()
         }
-        replies.set(sessionKey(view), clock.setTimer(finish, Math.max(chunkMs * 40, 1)))
+        const cancel = clock.setTimer(finish, Math.max(chunkMs * 40, 1))
+        replies.set(sessionKey(view), () => {
+          cancel()
+          rejectCompletion?.(
+            new ChannelError(
+              'cancelled',
+              '压缩已中断，未切换供应商',
+              phrase('session.switchCancelled'),
+            ),
+          )
+        })
+        if (completion) await completion
         return {}
       }
       throw new ChannelError('unknownCommand', `不认识的命令：${name}`)

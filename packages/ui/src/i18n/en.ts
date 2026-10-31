@@ -1336,6 +1336,21 @@ export const en: Record<MessageKey, Entry> = {
   'composer.stop': 'Stop',
   'composer.stopKeys': 'Stop (press Esc twice)',
   'composer.escAgain': 'Press Esc again to stop',
+  'session.switchIncomplete': 'Compaction did not complete. The provider was not changed.',
+  'session.switchOffline': 'Disconnected. The provider was not changed.',
+  'session.switchCancelled': 'Cancelled. The provider was not changed.',
+  'session.switchTimeout': 'Timed out waiting for compaction. The provider was not changed.',
+  'session.switchBusy': 'Waiting for compaction to finish. Please try again afterward.',
+  'composer.switch.title': 'Switch provider',
+  'composer.switch.note':
+    'Compacting first can reduce the cost of processing your history with the new provider. Your current provider handles compaction; switching happens only after it succeeds.',
+  'composer.switch.compact': 'Compact and switch',
+  'composer.switch.direct': 'Switch directly',
+  'composer.switch.stop': 'Stop the current turn before switching.',
+  'composer.switch.working':
+    'Compacting context. The provider will switch after compaction succeeds.',
+  'composer.switch.unavailable':
+    'Compaction is unavailable for this session. You can switch directly.',
   'composer.providerSwitch':
     'The next turn uses {name}. Its first turn won’t hit the prompt cache.',
   'composer.providerSwitch.claude':

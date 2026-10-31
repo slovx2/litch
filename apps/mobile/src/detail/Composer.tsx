@@ -4,6 +4,8 @@
 // 直接插进去，选了排队或这个会话插不了话的由核心排队；排着的可以现在就插进去（steer）、拿回来改、拿掉。
 // 回合在跑而输入框是空的，按钮是“停止”（session.interrupt；有在做的目标时核心先把它暂停）。
 // harness 会持续目标时，输入框上方有目标那一行，`/goal 要做到的事` 截下来设目标（goal/）。
+
+import type { SessionSettings } from '@litch/core'
 import {
   type CommentExtra,
   type DeviceView,
@@ -17,6 +19,7 @@ import { StyleSheet, type TextInput, View } from 'react-native'
 import { nameOf } from '../../../../packages/ui/src/app/device.ts'
 import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
 import { runningPlaceholder } from '../../../../packages/ui/src/composer/send-mode-logic.ts'
+import { useProviderSwitch } from '../../../../packages/ui/src/composer/useProviderSwitch'
 import type { SessionStore } from '../core/session-store'
 import { useKey, useServices } from '../shell/services'
 import { useT } from '../ui/i18n'
@@ -25,6 +28,16 @@ import { ComposeBox, useDraft } from './composer/ComposeBox'
 import { draftKey, type SessionExtra } from './composer/drafts'
 import { downHarness, useComposeOptions } from './composer/options'
 import { ProviderSwitch } from './composer/ProviderSwitch'
+import { ProviderSwitchDialog } from './composer/ProviderSwitchDialog'
+
+const NO_SETTINGS: SessionSettings = {
+  model: null,
+  effort: null,
+  speed: null,
+  permission: null,
+  mode: null,
+}
+
 import { QueueTray } from './composer/QueueTray'
 import { SettingsBar } from './composer/SettingsBar'
 import { sendFlags, whenRunning } from './composer/send-mode'
@@ -69,6 +82,13 @@ export function Composer({
     [deviceId, sessionId, refill],
   )
 
+  const switching = useProviderSwitch(
+    channel,
+    deviceId,
+    sessionId,
+    meta?.harness,
+    meta?.settings ?? NO_SETTINGS,
+  )
   const running = meta?.running ?? false
   const down = downHarness(device, meta?.harness)
   const blocked =
@@ -138,92 +158,99 @@ export function Composer({
   }
 
   return (
-    <ComposeBox
-      draft={draft}
-      placeholder={
-        running
-          ? t(runningPlaceholder(onRunning), { harness: nameOf(device, meta?.harness ?? '') })
-          : t('compose.placeholder')
-      }
-      running={running}
-      steer={onRunning === 'steer'}
-      steerImages={meta?.can.steerImages !== false}
-      blocked={blocked}
-      imagesOff={imagesOff}
-      error={error}
-      markers={markers}
-      inputRef={inputRef}
-      mentions={{ deviceId, sessionId }}
-      onSend={goal.send}
-      onStop={stop}
-      onError={setError}
-      top={
-        meta ? (
-          <>
-            {goal.confirm}
-            {/* 斜杠单子：刚打了 / 开头的一个词，harness 会目标时给出 /goal */}
-            <SlashGoal text={draft.text} able={goalsAble} onPick={draft.setText} />
-            {/* 会话的持续目标：状态、用时、目标的话，暂停或继续、清除 */}
-            <GoalBar store={store} onError={setError} />
-            {/* 待办的浮窗：点了下面的小按钮展开，整份清单跟着待办换 */}
-            {panel === 'todo' ? <TodoPanel store={store} onClose={() => setPanel(null)} /> : null}
-            {/* 排着的回报的浮窗：点了下面的小按钮展开，一条一行 */}
-            {panel === 'notes' ? (
-              <QueuedNotesPanel
-                deviceId={deviceId}
-                sessionId={sessionId}
-                onClose={() => setPanel(null)}
-              />
-            ) : null}
-            {/* 后台还有任务在跑（回合在不在跑都一样）：一行，只说有几个，点开进后台任务页；
+    <>
+      {switching.pending ? (
+        <ProviderSwitchDialog
+          state={switching}
+          running={running}
+          able={meta?.can.compact !== false}
+        />
+      ) : null}
+      <ComposeBox
+        draft={draft}
+        placeholder={
+          running
+            ? t(runningPlaceholder(onRunning), { harness: nameOf(device, meta?.harness ?? '') })
+            : t('compose.placeholder')
+        }
+        running={running}
+        steer={onRunning === 'steer'}
+        steerImages={meta?.can.steerImages !== false}
+        blocked={blocked}
+        imagesOff={imagesOff}
+        error={error}
+        markers={markers}
+        inputRef={inputRef}
+        mentions={{ deviceId, sessionId }}
+        onSend={goal.send}
+        onStop={stop}
+        onError={setError}
+        top={
+          meta ? (
+            <>
+              {goal.confirm}
+              {/* 斜杠单子：刚打了 / 开头的一个词，harness 会目标时给出 /goal */}
+              <SlashGoal text={draft.text} able={goalsAble} onPick={draft.setText} />
+              {/* 会话的持续目标：状态、用时、目标的话，暂停或继续、清除 */}
+              <GoalBar store={store} onError={setError} />
+              {/* 待办的浮窗：点了下面的小按钮展开，整份清单跟着待办换 */}
+              {panel === 'todo' ? <TodoPanel store={store} onClose={() => setPanel(null)} /> : null}
+              {/* 排着的回报的浮窗：点了下面的小按钮展开，一条一行 */}
+              {panel === 'notes' ? (
+                <QueuedNotesPanel
+                  deviceId={deviceId}
+                  sessionId={sessionId}
+                  onClose={() => setPanel(null)}
+                />
+              ) : null}
+              {/* 后台还有任务在跑（回合在不在跑都一样）：一行，只说有几个，点开进后台任务页；
                 旁边是排着的子会话回报（几条合成一个）和待办的小按钮（照桌面端信息栏的待办卡片），排不下就折到下一行 */}
-            <View style={styles.chips}>
-              <BackgroundBar store={store} />
-              <QueuedNotesChip
-                deviceId={deviceId}
+              <View style={styles.chips}>
+                <BackgroundBar store={store} />
+                <QueuedNotesChip
+                  deviceId={deviceId}
+                  sessionId={sessionId}
+                  open={panel === 'notes'}
+                  onToggle={() => toggle('notes')}
+                />
+                <TodoChip store={store} open={panel === 'todo'} onToggle={() => toggle('todo')} />
+              </View>
+              {/* 下一轮要换到别的供应商：提示一行 */}
+              <ProviderSwitch
                 sessionId={sessionId}
-                open={panel === 'notes'}
-                onToggle={() => toggle('notes')}
+                harness={meta.harness}
+                model={meta.settings.model}
+                running={running}
+                options={options}
               />
-              <TodoChip store={store} open={panel === 'todo'} onToggle={() => toggle('todo')} />
-            </View>
-            {/* 下一轮要换到别的供应商：提示一行 */}
-            <ProviderSwitch
-              sessionId={sessionId}
-              harness={meta.harness}
-              model={meta.settings.model}
-              running={running}
+              <QueueTray
+                queued={meta.queued}
+                running={running}
+                canSteer={meta.can.steer}
+                steerImages={meta.can.steerImages}
+                onSteer={steer}
+                onEdit={(message) => unqueue(message, true)}
+                onRemove={(message) => unqueue(message, false)}
+                onRefused={() => setError(t('composer.steer.noImages'))}
+              />
+            </>
+          ) : null
+        }
+        bar={
+          meta?.live ? (
+            <SettingsBar
               options={options}
+              settings={meta.settings}
+              usage={meta.usage}
+              {...(onUsage ? { onUsage } : {})}
+              onChange={(patch) => {
+                switching.change(patch).catch((reason: unknown) => setError(whyNot(reason, t)))
+              }}
             />
-            <QueueTray
-              queued={meta.queued}
-              running={running}
-              canSteer={meta.can.steer}
-              steerImages={meta.can.steerImages}
-              onSteer={steer}
-              onEdit={(message) => unqueue(message, true)}
-              onRemove={(message) => unqueue(message, false)}
-              onRefused={() => setError(t('composer.steer.noImages'))}
-            />
-          </>
-        ) : null
-      }
-      bar={
-        meta?.live ? (
-          <SettingsBar
-            options={options}
-            settings={meta.settings}
-            usage={meta.usage}
-            {...(onUsage ? { onUsage } : {})}
-            onChange={(patch) => {
-              channel
-                .command('session.configure', { deviceId, sessionId, settings: patch })
-                .catch((reason: unknown) => setError(whyNot(reason, t)))
-            }}
-          />
-        ) : null
-      }
-    />
+          ) : null
+        }
+      />
+    </>
   )
 }
 

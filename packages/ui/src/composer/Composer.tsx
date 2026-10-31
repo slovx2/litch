@@ -83,11 +83,13 @@ import {
   MAX_IMAGES,
   readImages,
 } from './images.ts'
+import { ProviderSwitchDialog } from './ProviderSwitchDialog.tsx'
 import { switchedProvider } from './provider-switch.ts'
 import { SettingsBar, useComposeOptions } from './SettingsBar.tsx'
 import { useRunningSend } from './send-mode.ts'
 import { runningPlaceholder } from './send-mode-logic.ts'
 import { keepMentioned } from './session-hits.ts'
+import { useProviderSwitch } from './useProviderSwitch.ts'
 import { useSuggest } from './useSuggest.tsx'
 
 interface ComposerProps {
@@ -861,6 +863,7 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
   const settings = useKey<SessionSettings>(keys.settings(deviceId, sessionId)) ?? NO_SETTINGS
   const usage = useKey<ContextUsage | null>(keys.usage(deviceId, sessionId))
   const meta = useKey<SessionMeta>(keys.session(deviceId, sessionId))
+  const switching = useProviderSwitch(channel, deviceId, sessionId, meta?.harness, settings)
   const can = meta?.can
   const able = can?.compact !== false
   // 它声明了不会压缩：不出这个入口。没有声明的照旧留着，对面说不认识了再停掉并写明原因
@@ -937,59 +940,62 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
     return sent
   }, [replica, deviceId, sessionId])
   return (
-    <Composer
-      deviceId={deviceId}
-      sessionId={sessionId}
-      harness={meta?.harness}
-      draftKey={`${deviceId}:${sessionId}`}
-      cwd={meta?.cwd ?? null}
-      onNew={requestNewSession}
-      placeholder={
-        running
-          ? t(runningPlaceholder(whenRunning), { harness: nameOf(device, meta?.harness ?? '') })
-          : t('composer.placeholder')
-      }
-      blocked={blocked}
-      lead={<PendingNotes deviceId={deviceId} sessionId={sessionId} />}
-      below={
-        switched ? (
-          <div className="cmp-hint" data-provider-switch>
-            {t(
-              meta?.harness === 'claude-code'
-                ? 'composer.providerSwitch.claude'
-                : 'composer.providerSwitch',
-              { name: switched },
-            )}
-          </div>
-        ) : undefined
-      }
-      running={running}
-      turnId={last}
-      asking={asking}
-      steerNow={whenRunning === 'steer'}
-      queued={queued}
-      settings={settings}
-      usage={usage ?? null}
-      {...(compact ? { compact } : {})}
-      history={history}
-      onSettings={(patch) => {
-        channel
-          .command('session.configure', { deviceId, sessionId, settings: patch })
-          .catch(() => {})
-      }}
-      onSend={sendOrGoal}
-      onStop={() => channel.command('session.interrupt', { deviceId, sessionId })}
-      // 它不会引导（声明了不会，或者试过对面不认识）就没有“现在就说”，排着的等回合结束照常发
-      {...(can?.steer === false
-        ? {}
-        : {
-            onSteer: (messageId: string) =>
-              channel.command('session.steer', { deviceId, sessionId, messageId }),
-          })}
-      steerImages={can?.steerImages !== false}
-      onUnqueue={(messageId) => {
-        channel.command('session.unqueue', { deviceId, sessionId, messageId }).catch(() => {})
-      }}
-    />
+    <>
+      {switching.pending ? (
+        <ProviderSwitchDialog state={switching} running={running} able={able} />
+      ) : null}
+      <Composer
+        deviceId={deviceId}
+        sessionId={sessionId}
+        harness={meta?.harness}
+        draftKey={`${deviceId}:${sessionId}`}
+        cwd={meta?.cwd ?? null}
+        onNew={requestNewSession}
+        placeholder={
+          running
+            ? t(runningPlaceholder(whenRunning), { harness: nameOf(device, meta?.harness ?? '') })
+            : t('composer.placeholder')
+        }
+        blocked={blocked}
+        lead={<PendingNotes deviceId={deviceId} sessionId={sessionId} />}
+        below={
+          switched ? (
+            <div className="cmp-hint" data-provider-switch>
+              {t(
+                meta?.harness === 'claude-code'
+                  ? 'composer.providerSwitch.claude'
+                  : 'composer.providerSwitch',
+                { name: switched },
+              )}
+            </div>
+          ) : undefined
+        }
+        running={running}
+        turnId={last}
+        asking={asking}
+        steerNow={whenRunning === 'steer'}
+        queued={queued}
+        settings={settings}
+        usage={usage ?? null}
+        {...(compact ? { compact } : {})}
+        history={history}
+        onSettings={(patch) => {
+          switching.change(patch).catch(() => {})
+        }}
+        onSend={sendOrGoal}
+        onStop={() => channel.command('session.interrupt', { deviceId, sessionId })}
+        // 它不会引导（声明了不会，或者试过对面不认识）就没有“现在就说”，排着的等回合结束照常发
+        {...(can?.steer === false
+          ? {}
+          : {
+              onSteer: (messageId: string) =>
+                channel.command('session.steer', { deviceId, sessionId, messageId }),
+            })}
+        steerImages={can?.steerImages !== false}
+        onUnqueue={(messageId) => {
+          channel.command('session.unqueue', { deviceId, sessionId, messageId }).catch(() => {})
+        }}
+      />
+    </>
   )
 }

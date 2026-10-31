@@ -8,6 +8,20 @@ export function providerOf(id: string | null): string | null {
   return slash > 0 ? id.slice(0, slash) : null
 }
 
+/** 无前缀型号由设备环境决定供应商，切到明确的供应商时也确认；同前缀换型号不打断选择。 */
+export function needsProviderConfirmation(
+  harness: string | undefined,
+  before: string | null,
+  after: string | null,
+): boolean {
+  return (
+    (harness === 'claude-code' || harness === 'claude') &&
+    !!before &&
+    !!after &&
+    providerOf(before) !== providerOf(after)
+  )
+}
+
 /**
  * 从 `ranWith`（上一轮用的型号）换到 `next` 是不是换了供应商；换了给出新的那家叫什么：
  * 选单里那一行显示名开头的 `[名字]`，没有就用 ID 里的前缀

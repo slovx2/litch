@@ -757,9 +757,10 @@ export function createCore(options: CoreOptions): Core {
           return {}
         }
         case 'session.compact': {
-          const { deviceId, sessionId } = params as Commands['session.compact']['params']
+          const { deviceId, sessionId, thenConfigure } =
+            params as Commands['session.compact']['params']
           try {
-            await deviceOf(deviceId).compact(sessionId)
+            await deviceOf(deviceId).compact(sessionId, thenConfigure)
           } catch (error) {
             throw toChannelFailure(error)
           }

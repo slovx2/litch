@@ -3,7 +3,25 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const { providerOf, switchedProvider } = await import('../src/composer/provider-switch.ts')
+const { providerOf, switchedProvider, needsProviderConfirmation } = await import(
+  '../src/composer/provider-switch.ts'
+)
+
+test('Claude 跨供应商选择先确认，账号也算供应商；同供应商和其他引擎不确认', () => {
+  // 单入口在核心里用 claude，设备聚合面使用引擎标识 claude-code。
+  assert.equal(needsProviderConfirmation('claude', 'anthropic/opus', 'konstants/opus'), true)
+  assert.equal(needsProviderConfirmation('claude-code', 'anthropic/opus', 'konstants/opus'), true)
+  assert.equal(needsProviderConfirmation('claude-code', 'konstants/opus', 'anthropic/opus'), true)
+  assert.equal(needsProviderConfirmation('claude-code', 'opus', 'konstants/opus'), true)
+  assert.equal(needsProviderConfirmation('claude-code', 'native/opus', 'anthropic/opus'), true)
+  assert.equal(
+    needsProviderConfirmation('claude-code', 'anthropic/opus', 'anthropic/sonnet'),
+    false,
+  )
+  assert.equal(needsProviderConfirmation('claude-code', 'opus', 'sonnet'), false)
+  assert.equal(needsProviderConfirmation('claude-code', null, 'konstants/opus'), false)
+  assert.equal(needsProviderConfirmation('codex', 'anthropic/opus', 'konstants/opus'), false)
+})
 
 test('换了供应商才提示，名字取选单里的 [名字]', () => {
   const models = [

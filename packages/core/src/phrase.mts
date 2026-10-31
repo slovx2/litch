@@ -89,6 +89,11 @@ export type PhraseKey =
   | 'session.nativeOwned'
   | 'session.archived'
   | 'session.queueFailed'
+  | 'session.switchIncomplete'
+  | 'session.switchOffline'
+  | 'session.switchCancelled'
+  | 'session.switchTimeout'
+  | 'session.switchBusy'
   | 'session.steerQueued'
   // 终端
   | 'terminal.limit'

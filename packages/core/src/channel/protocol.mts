@@ -532,7 +532,12 @@ export interface Commands {
    * 应答表示对面受理了；压缩本身作为一个回合进行，结果照常从会话的增量里来。
    */
   'session.compact': {
-    params: { deviceId: string; sessionId: string }
+    params: {
+      deviceId: string
+      sessionId: string
+      /** 有此项时等压缩成功后再改设置；失败或中断保留原设置。 */
+      thenConfigure?: Partial<SessionSettings>
+    }
     result: Record<string, never>
   }
   /**
