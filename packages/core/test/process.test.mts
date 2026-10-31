@@ -21,7 +21,7 @@ import {
   workingShown,
 } from '../src/index.mjs'
 
-test('分块：说明把工具调用切成几组，最后一条 final 是最终回答，其余都进过程', () => {
+test('分块：说明把工具调用切成几组，final 留在过程之外', () => {
   const blocks = bucketItems([
     { id: 'u', kind: 'userMessage' },
     { id: 'n1', kind: 'agentMessage', phase: 'commentary' },
@@ -46,6 +46,59 @@ test('分块：说明把工具调用切成几组，最后一条 final 是最终�
     },
     { type: 'answer', itemId: 'a' },
   ])
+})
+
+test('同回合先给调研结论再回复插入消息：两段 final 都留在折叠区外', () => {
+  const blocks = bucketItems([
+    { id: 'question', kind: 'userMessage' },
+    { id: 'progress', kind: 'agentMessage', phase: 'commentary' },
+    { id: 'research', kind: 'toolCall' },
+    { id: 'conclusion', kind: 'agentMessage', phase: 'final' },
+    { id: 'parent-message', kind: 'userMessage' },
+    { id: 'reply-tool', kind: 'toolCall' },
+    { id: 'acknowledgement', kind: 'agentMessage', phase: 'final' },
+  ])
+  assert.deepEqual(
+    blocks.filter((block) => block.type === 'answer'),
+    [
+      { type: 'answer', itemId: 'conclusion' },
+      { type: 'answer', itemId: 'acknowledgement' },
+    ],
+  )
+  assert.deepEqual(
+    blocks.filter((block) => block.type === 'process'),
+    [
+      {
+        type: 'process',
+        key: 'progress',
+        parts: [
+          { type: 'note', itemId: 'progress' },
+          { type: 'steps', key: 'research', itemIds: ['research'] },
+        ],
+      },
+      {
+        type: 'process',
+        key: 'reply-tool',
+        parts: [{ type: 'steps', key: 'reply-tool', itemIds: ['reply-tool'] }],
+      },
+    ],
+  )
+})
+
+test('没有新增用户消息时，多段 final 也保留；工具和过程说明仍可折叠', () => {
+  const blocks = bucketItems(
+    [
+      { id: 'first', kind: 'agentMessage', phase: 'final' },
+      { id: 'tool', kind: 'toolCall' },
+      { id: 'progress', kind: 'agentMessage', phase: 'commentary' },
+      { id: 'second', kind: 'agentMessage', phase: 'final' },
+    ],
+    { turnRunning: true },
+  )
+  assert.deepEqual(
+    blocks.map((block) => block.type),
+    ['answer', 'process', 'answer'],
+  )
 })
 
 test('分块：计划、待办、派出的子会话露在外面，把过程分成几段；子代理那一行排在过程里', () => {

@@ -94,7 +94,9 @@ other inner scroll areas retain their own scrolling.
 In the compact transcript, a finished turn with a final answer folds its activity into a full-width
 row: elapsed time, supporting counts of commentary/steps/subagents, and any failure, refusal or still
 running background work. Click the row to expand. Stopped turns and turns without a final answer stay
-open. The detailed view keeps its usual behavior.
+open. Every message explicitly marked as a final answer stays outside the folded activity, including
+a conclusion followed by a short reply to a message received in the same turn. The detailed view
+keeps its usual behavior.
 
 Native subagents appear as compact rows with a description, status and elapsed time when available
 on desktop and phone. Click a row to open the subagent's conversation. Codex activity markers and
@@ -180,6 +182,9 @@ explain it:
   keys and third-party providers have no plan limits, and those rows are not shown.
   Compaction shows in the conversation as a divider: “Compacting context” while it runs, “Context
   compacted” when done (manual and automatic alike), “Compaction didn’t finish” when it was cut short.
+  In Claude Code, background notifications that continue after manual compaction run in a separate
+  normal turn with the session’s own permissions; they do not inherit compaction’s temporary
+  read-only restrictions.
 - **Side panel**: Files (tree, search, read-only viewer, add a file to the conversation), Diff (all /
   staged / unstaged, stage, unstage, discard, comment on lines; comments go with the next message),
   Browser, Suggested tasks, Background tasks, Goal, Side chat.
@@ -287,8 +292,9 @@ explain it:
 - **Session menu**: pin, move to group or project, rename, archive (undo available), delete (permanent),
   schedule a task for this session, start a sub-session, detach a sub-session.
 - **Session names**: Claude Code sessions take the title Claude Code writes; Codex sessions started in
-  Litch are named by Litch after their first turn (switch and conditions in `harnesses.md`). A name the
-  user sets by hand is never replaced.
+  Litch are named after their first text message is accepted, independently of the main turn
+  (switch and conditions in `harnesses.md`). Interrupting the turn does not cancel naming. A name
+  the user sets by hand is never replaced.
 - **Archived sessions** page: restore, open read-only, delete.
 - **Archiving with sub-sessions**: archiving a session (sub-sessions included) also archives its
   sub-sessions that have stopped, and theirs; ones still working (a turn running, waiting for you,

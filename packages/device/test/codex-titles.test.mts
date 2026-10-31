@@ -1,13 +1,13 @@
 // 原生 codex 会话的自动起名（codex-titles.mts）：一台由主进程管着的设备，上面是假的原生 codex（fake-codex.mts，
-// 参数照上游的约束核对）。客户端新建会话、第一回合结束，设备进程在自己的连接上开临时会话起名，再写回去。
+// 参数照上游的约束核对）。客户端新建会话、消息成功提交后，设备进程在自己的连接上开临时会话起名，再写回去。
 // CI 上没有 codex；对着真的 codex 只在本机手动验过。
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { firstExchange, parseTitle, pickTitleModel, TITLE_MAX_CHARS } from '../src/codex-titles.mjs'
+import { parseTitle, pickTitleModel, TITLE_MAX_CHARS, titleRequest } from '../src/codex-titles.mjs'
 import { codexRig, sentTo } from './codex-kit.mjs'
 import { codexThread } from './fake-codex.mjs'
 import { installConfig } from './fake-codex-config.mjs'
-import type { FakeConnection } from './fake-upstream.mjs'
+import { type FakeConnection, RpcFailure } from './fake-upstream.mjs'
 
 const CODEX = { harness: 'codex' }
 const LUNA = [
@@ -30,6 +30,8 @@ interface Options {
   answer?: string
   /** 临时会话跑着的时候用户手动改了名 */
   renameDuring?: string
+  /** 命名回合等待测试主动放行，用来确定中断与重发的先后。 */
+  holdTitle?: boolean
 }
 
 /** 假 codex 补上起名要用的几样：会话带回合、模型清单、临时会话的回合、改名 */
@@ -39,8 +41,15 @@ async function setup(options: Options = {}) {
   const state = installConfig(codex)
   state.user = { mcp_servers: { docs: { command: '/bin/echo' } } }
   let serial = 100
-  /** 用户会话的回合（thread/read 带回合时给出） */
-  const turns = new Map<string, unknown[]>()
+  let userThreadId = ''
+  let titleBegan!: () => void
+  const titleStarted = new Promise<void>((resolve) => {
+    titleBegan = resolve
+  })
+  const replies: (() => void)[] = []
+  const finishTitles = () => {
+    for (const reply of replies.splice(0)) reply()
+  }
   const validatedStart = codex.handlers['thread/start'] as NonNullable<
     (typeof codex.handlers)[string]
   >
@@ -59,19 +68,25 @@ async function setup(options: Options = {}) {
   codex.handlers['thread/read'] = (params) => {
     const thread = codex.threads.find((item) => item.id === params.threadId)
     if (!thread) throw new Error('未知会话')
-    return { thread: { ...thread, turns: params.includeTurns ? (turns.get(thread.id) ?? []) : [] } }
+    // 特意不提供历史：起名必须用提交时的文字，不能等主回合写入历史。
+    return { thread: { ...thread, turns: [] } }
   }
   codex.handlers['model/list'] = () => ({ data: options.models ?? LUNA, nextCursor: null })
+  codex.handlers['turn/interrupt'] = () => ({})
+  codex.handlers['thread/revert'] = (params) => ({
+    thread: { ...codex.threads.find((thread) => thread.id === params.threadId), turns: [] },
+  })
   const validatedTurn = codex.handlers['turn/start'] as NonNullable<(typeof codex.handlers)[string]>
   codex.handlers['turn/start'] = (params, connection) => {
     const result = validatedTurn(params, connection) as { turn: { id: string } }
     const thread = codex.threads.find((item) => item.id === params.threadId)
+    if (!thread?.ephemeral) userThreadId = params.threadId as string
     if (thread?.ephemeral) {
-      const user = codex.threads.find((item) => !item.ephemeral && turns.has(item.id))
+      const user = codex.threads.find((item) => item.id === userThreadId)
       if (options.renameDuring && user) user.name = options.renameDuring
       const turnId = result.turn.id
       // 临时会话只订阅在开它的那条连接上：回答和结束只发给它
-      setTimeout(() => {
+      const reply = () => {
         const send = (method: string, more: Record<string, unknown>) =>
           (connection as FakeConnection).send({ method, params: { threadId: thread.id, ...more } })
         send('item/completed', {
@@ -83,7 +98,10 @@ async function setup(options: Options = {}) {
           },
         })
         send('turn/completed', { turn: { id: turnId, status: 'completed', items: [] } })
-      }, 5)
+      }
+      if (options.holdTitle) replies.push(reply)
+      else setTimeout(reply, 5)
+      titleBegan()
     }
     return result
   }
@@ -98,31 +116,21 @@ async function setup(options: Options = {}) {
     return {}
   }
 
-  /** 客户端新建会话、发一句话，codex 说第一回合结束了 */
-  async function firstTurn(client: ReturnType<typeof env.connect>, status = 'completed') {
+  /** 客户端新建会话、发一句话；主回合不发完成通知。 */
+  async function firstTurn(client: ReturnType<typeof env.connect>) {
     const started = await client.call('thread/start', { ...CODEX, cwd: '/work/codex' })
     const threadId = started.thread.id as string
-    turns.set(threadId, [
-      {
-        id: 'u1',
-        items: [
-          { type: 'userMessage', id: 'm1', content: text('帮我写个 CSV 转 JSON 的脚本') },
-          { type: 'agentMessage', id: 'm2', text: '好的，下面是脚本。' },
-        ],
-      },
-    ])
     await client.call('turn/start', { threadId, input: text('帮我写个 CSV 转 JSON 的脚本') })
-    codex.notify('turn/completed', { threadId, turn: { id: `turn-of-${threadId}`, status } })
     return threadId
   }
 
   /** 设备进程开过的临时会话的 thread/start 参数 */
   const temporaries = () => sentTo(codex, 'thread/start').filter((params) => params.ephemeral)
 
-  return { env, codex, state, firstTurn, temporaries }
+  return { env, codex, state, firstTurn, temporaries, titleStarted, finishTitles }
 }
 
-test('第一回合正常结束：设备进程开只读、不带工具的临时会话，用最新的 luna 起名，退订，名字写回去', async () => {
+test('消息发出后不等主回合结束：设备进程开只读、不带工具的临时会话，用最新的 luna 起名，退订，名字写回去', async () => {
   const { env, codex, firstTurn, temporaries } = await setup()
   const client = env.connect()
   try {
@@ -145,7 +153,8 @@ test('第一回合正常结束：设备进程开只读、不带工具的临时�
     assert.equal(turn.effort, 'low')
     assert.deepEqual(turn.outputSchema.required, ['title'])
     assert.match(turn.input[0].text, /帮我写个 CSV 转 JSON 的脚本/)
-    assert.match(turn.input[0].text, /好的，下面是脚本/)
+    assert.doesNotMatch(turn.input[0].text, /<assistant_reply>/)
+    assert.ok(sentTo(codex, 'thread/read').every((params) => params.includeTurns === false))
     await env.device.titles.settled()
     assert.equal(sentTo(codex, 'thread/unsubscribe').length, 1)
     // 只试一次：同一个会话再结束一个回合不再起名
@@ -160,27 +169,100 @@ test('第一回合正常结束：设备进程开只读、不带工具的临时�
   }
 })
 
-test('不起名：第一回合没正常结束、模型清单里没有 luna', async () => {
-  const interrupted = await setup()
-  let client = interrupted.env.connect()
+test('主回合打断并编辑重发，正在进行的命名仍完成且只生成一次', async () => {
+  const { env, codex, firstTurn, temporaries, titleStarted, finishTitles } = await setup({
+    holdTitle: true,
+  })
+  const client = env.connect()
   try {
     await client.initialize(['harness', 'harnessConfig'])
-    const threadId = await interrupted.firstTurn(client, 'interrupted')
-    // 第一回合被打断：这个会话不再试，后面的回合正常结束了也不起
-    interrupted.codex.notify('turn/completed', {
-      threadId,
-      turn: { id: 'turn-2', status: 'completed' },
-    })
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    await interrupted.env.device.titles.settled()
-    assert.equal(interrupted.temporaries().length, 0)
+    const threadId = await firstTurn(client)
+    await titleStarted
+    await client.call('turn/interrupt', { threadId, turnId: 'main-turn' })
+    codex.notify('turn/completed', { threadId, turn: { id: 'main-turn', status: 'interrupted' } })
+    await client.call('thread/revert', { threadId, beforeTurnId: 'main-turn' })
+    await client.call('turn/start', { threadId, input: text('编辑后重发') })
+    assert.equal(sentTo(codex, 'thread/name/set').length, 0, '命名仍在等结果，主会话操作已完成')
+    finishTitles()
+    const named = await client.waitFor(
+      (frame) =>
+        frame.method === 'thread/name/updated' && (frame.params as Named).threadId === threadId,
+    )
+    assert.equal((named.params as Named).threadName, 'CSV 转 JSON 脚本')
+    await env.device.titles.settled()
+    assert.equal(temporaries().length, 1)
+    assert.equal(sentTo(codex, 'thread/name/set').length, 1)
+    assert.deepEqual(
+      sentTo(codex, 'turn/interrupt').map((params) => params.threadId),
+      [threadId],
+    )
+  } finally {
+    finishTitles()
+    client.close()
+    await env.close()
+  }
+})
+
+test('发送失败不消耗命名机会，重试成功后立即起名', async () => {
+  const { env, codex, temporaries } = await setup()
+  const client = env.connect()
+  const accept = codex.handlers['turn/start'] as NonNullable<(typeof codex.handlers)[string]>
+  let reject = true
+  codex.handlers['turn/start'] = (params, connection) => {
+    if (reject) throw new RpcFailure(-32600, '模拟消息未被接受')
+    return accept(params, connection)
+  }
+  try {
+    await client.initialize(['harness', 'harnessConfig'])
+    const started = await client.call('thread/start', CODEX)
+    const threadId = started.thread.id as string
+    await assert.rejects(client.call('turn/start', { threadId, input: text('未发出的消息') }))
+    await env.device.titles.settled()
+    assert.equal(temporaries().length, 0)
+    reject = false
+    await client.call('turn/start', { threadId, input: text('重试后的消息') })
+    await client.waitFor(
+      (frame) =>
+        frame.method === 'thread/name/updated' && (frame.params as Named).threadId === threadId,
+    )
+    const naming = sentTo(codex, 'turn/start').find((params) => params.threadId !== threadId)
+    assert.match(naming.input[0].text, /重试后的消息/)
+    assert.doesNotMatch(naming.input[0].text, /未发出的消息/)
+    assert.equal(temporaries().length, 1)
   } finally {
     client.close()
-    await interrupted.env.close()
+    await env.close()
   }
+})
 
+test('只发图片不消耗命名机会，之后提交文字再起名', async () => {
+  const { env, temporaries } = await setup()
+  const client = env.connect()
+  try {
+    await client.initialize(['harness', 'harnessConfig'])
+    const started = await client.call('thread/start', CODEX)
+    const threadId = started.thread.id as string
+    await client.call('turn/start', {
+      threadId,
+      input: [{ type: 'image', url: 'data:image/png;base64,AA==' }],
+    })
+    await env.device.titles.settled()
+    assert.equal(temporaries().length, 0)
+    await client.call('turn/start', { threadId, input: text('检查这张图片') })
+    await client.waitFor(
+      (frame) =>
+        frame.method === 'thread/name/updated' && (frame.params as Named).threadId === threadId,
+    )
+    assert.equal(temporaries().length, 1)
+  } finally {
+    client.close()
+    await env.close()
+  }
+})
+
+test('模型清单里没有 luna 时不起名', async () => {
   const plain = await setup({ models: [{ id: 'gpt-6-sol', model: 'gpt-6-sol' }] })
-  client = plain.env.connect()
+  const client = plain.env.connect()
   try {
     await client.initialize(['harness', 'harnessConfig'])
     const threadId = await plain.firstTurn(client)
@@ -270,9 +352,14 @@ test('挑模型、取标题、取第一句话', () => {
     Array.from(parseTitle(`{"title": "${'长'.repeat(80)}"}`) ?? '').length,
     TITLE_MAX_CHARS,
   )
-  assert.deepEqual(firstExchange({ preview: '只有图片时的预览', turns: [] }), {
-    request: '只有图片时的预览',
-    answer: null,
-  })
-  assert.equal(firstExchange({ preview: '', turns: [] }), null)
+  assert.equal(titleRequest([{ type: 'image', url: 'file:///only-image.png' }]), null)
+  assert.equal(titleRequest(text('   ')), null)
+  assert.equal(
+    titleRequest([
+      ...text('第一段'),
+      { type: 'image', url: 'file:///ignored.png' },
+      ...text('第二段'),
+    ]),
+    '第一段\n第二段',
+  )
 })

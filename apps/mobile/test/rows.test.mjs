@@ -50,6 +50,28 @@ function viewOf(turns, items) {
 
 const types = (rows) => rows.map((row) => row.type)
 
+test('同回合两段最终回答都显示，父会话插话后的短答不折叠调研结论', () => {
+  const items = [
+    user('question', '请调研'),
+    command('research', 'completed', 0),
+    answer('conclusion', '完整调研结论'),
+    user('peer', '父会话发来补充'),
+    command('ack-tool', 'completed', 0),
+    answer('ack', '已知悉'),
+  ]
+  const rows = new RowBuilder().build(
+    viewOf(
+      [{ id: 'research-turn', status: 'completed', itemIds: items.map((item) => item.id) }],
+      items,
+    ),
+    'all',
+  )
+  const markdown = rows.filter((row) => row.type === 'md')
+  assert.equal(markdown.length, 2)
+  assert.ok(JSON.stringify(markdown).includes('完整调研结论'))
+  assert.ok(JSON.stringify(markdown).includes('已知悉'))
+})
+
 test('独立的后台续做回合结束后保留脚注：过程收起、无最终回答都不省略，下一回合用户消息在脚注之后', () => {
   for (const hasAnswer of [false, true]) {
     const items = [command('bg:c', 'completed', 0)]

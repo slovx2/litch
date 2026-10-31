@@ -1,9 +1,10 @@
-// 原生 codex 会话的自动起名。codex 的 app-server 自己不起名，只有 thread/name/set；它的 TUI 和官方桌面端是客户端在
-// 第一回合之后另开一个临时会话，让小模型出一个标题再写回去。Litch 把这件事放在设备进程里做，桌面端、手机都不用管：
+// 原生 codex 会话的自动起名。codex 的 app-server 自己不起名，只有 thread/name/set；它的 TUI 和官方桌面端由客户端
+// 另开一个临时会话，让小模型出一个标题再写回去。Litch 把这件事放在设备进程里做，桌面端、手机都不用管：
 //   - 只管 Litch 客户端经聚合面新建的原生 codex 会话（session.mts 在 thread/start 的应答回来时报 born；聚合面只认
 //     声明了我们扩展的客户端）。官方桌面端、命令行直接连 codex 建的不管；临时会话不管；设备进程自己建的（会话树的子会话、定时任务的会话）本来就带名字，
 //     也不经那里；codex 自己派的子代理线程不走 thread/start，也来不了。
-//   - 第一个回合结束时（turnEvent）试一次，只试这一次：回合不是正常结束的、起名出错、超时，都不再试。
+//   - 首条有文字的消息成功提交后独立起名，不等主回合结束；主回合中断、编辑重发不取消或重复起名。
+//     提交失败不消耗机会；起名请求本身出错、超时仍只试一次。
 //   - 模型只用 model/list 里的 luna 系小模型（有几个就挑版本最新的），强度 low；没有就不起名，不退回会话自己的模型。
 //   - 临时会话：ephemeral、只读、审批 never、关掉工具和功能、MCP 全停，threadSource 记 thread_title。
 //     开在设备进程自己的一条引擎连接上（不接会话树、定时任务的回合钩子），用完退订。codex 把它的 thread/started
@@ -24,11 +25,10 @@ const TITLE_TIMEOUT_MS = 30_000
 /** 标题最长多少个字（按码点算），模型给长了截掉 */
 export const TITLE_MAX_CHARS = 40
 
-/** 交给模型的第一句话、第一段回答各留多少个字 */
+/** 交给模型的第一句话最多留多少个字 */
 const REQUEST_CHARS = 2000
-const ANSWER_CHARS = 600
 
-/** 记着等第一回合结束的会话最多这么多个（客户端没等到回合结束就走了的会一直留着），满了清掉重来 */
+/** 记着等首条文字消息的会话最多这么多个，满了清掉重来 */
 const PENDING_LIMIT = 1000
 
 /** 临时会话里关掉的功能和工具：只要它照着结构化输出答一句话 */
@@ -73,7 +73,7 @@ export interface CodexTitlesHost {
 
 export class CodexTitles {
   private readonly host: CodexTitlesHost
-  /** 等第一回合结束的会话 → harness */
+  /** 等首条文字消息成功提交的会话 → harness */
   private readonly pending = new Map<string, string>()
   /** 每个 harness 一条起名用的连接，断了下次再开 */
   private readonly links = new Map<string, Promise<EngineLink>>()
@@ -102,16 +102,15 @@ export class CodexTitles {
     this.pending.set(thread.id, harness)
   }
 
-  /** 一个回合开始或结束了（各条客户端连接都报，同一个回合会来好几次；只认等着的会话的第一次结束） */
-  turnEvent(method: string, params: Record<string, unknown>): void {
-    if (method !== 'turn/completed' || typeof params.threadId !== 'string') return
+  /** turn/start 成功应答后调用；直接使用提交的文字，不等历史落盘或主回合回答。 */
+  submitted(harness: string, params: Record<string, unknown>): void {
+    if (this.closed || typeof params.threadId !== 'string') return
     const threadId = params.threadId
-    const harness = this.pending.get(threadId)
-    if (harness === undefined) return
+    if (this.pending.get(threadId) !== harness || !this.enabled(harness)) return
+    const request = titleRequest(params.input)
+    if (!request) return
     this.pending.delete(threadId)
-    const turn = isObject(params.turn) ? params.turn : null
-    if (turn?.status !== 'completed' || !this.enabled(harness)) return
-    const job: Promise<void> = this.title(harness, threadId)
+    const job: Promise<void> = this.title(harness, threadId, request)
       .catch((error: unknown) =>
         this.host.log(`给会话 ${threadId}（${harness}）起名没成：${describe(error)}`),
       )
@@ -154,16 +153,14 @@ export class CodexTitles {
     return pending
   }
 
-  private async title(harness: string, threadId: string): Promise<void> {
+  private async title(harness: string, threadId: string, request: string): Promise<void> {
     const deadline = Date.now() + (this.host.timeoutMs ?? TITLE_TIMEOUT_MS)
     const left = () => Math.max(1, deadline - Date.now())
     const link = await this.link(harness)
-    const thread = await readThread(link, threadId, true, left())
+    const thread = await readThread(link, threadId, false, left())
     // 会话树的子会话建出来就带名字，这里再看一眼，免得哪条路漏了
     if (!thread || hasName(thread) || thread.ephemeral === true || thread.parentThreadId) return
     if (this.host.store.parentOf(threadId)) return
-    const exchange = firstExchange(thread)
-    if (!exchange) return
     const model = pickTitleModel(await listModels(link, left()))
     if (!model) {
       this.host.log(`${harness} 的模型清单里没有 luna 系小模型，会话 ${threadId} 不起名`)
@@ -176,7 +173,7 @@ export class CodexTitles {
         link,
         {
           threadId: temporary,
-          input: [{ type: 'text', text: titlePrompt(exchange), text_elements: [] }],
+          input: [{ type: 'text', text: titlePrompt(request), text_elements: [] }],
           overrides: {
             outputSchema: OUTPUT_SCHEMA,
             ...(model.low ? { effort: 'low' } : {}),
@@ -201,12 +198,6 @@ export class CodexTitles {
     await link.request('thread/name/set', { threadId, name: title }, { timeoutMs: left() })
     this.host.log(`给会话 ${threadId}（${harness}）起了名字，用的模型是 ${model.model}`)
   }
-}
-
-/** 第一句话和第一段回答 */
-interface Exchange {
-  request: string
-  answer: string | null
 }
 
 const describe = (error: unknown): string =>
@@ -234,29 +225,15 @@ async function readThread(
   return isObject(result) && isObject(result.thread) ? result.thread : null
 }
 
-/** 会话里第一条用户消息的文字和它之后的第一段回答。没有文字（只发了图）退回会话的 preview，再没有是 null */
-export function firstExchange(thread: Record<string, unknown>): Exchange | null {
-  const turns = Array.isArray(thread.turns) ? thread.turns : []
-  let request = ''
-  let answer: string | null = null
-  for (const turn of turns) {
-    const items = isObject(turn) && Array.isArray(turn.items) ? turn.items : []
-    for (const item of items) {
-      if (!isObject(item)) continue
-      if (!request && item.type === 'userMessage' && Array.isArray(item.content))
-        request = item.content
-          .filter((part) => isObject(part) && part.type === 'text' && typeof part.text === 'string')
-          .map((part) => (part as { text: string }).text)
-          .join('\n')
-          .trim()
-      else if (request && !answer && item.type === 'agentMessage' && typeof item.text === 'string')
-        answer = item.text.trim() || null
-    }
-    if (request) break
-  }
-  if (!request && typeof thread.preview === 'string') request = thread.preview.trim()
-  if (!request) return null
-  return { request: clip(request, REQUEST_CHARS), answer: answer && clip(answer, ANSWER_CHARS) }
+/** 只取本次提交的文字，不把图片、文件地址或设备层追加的消息当命名材料。 */
+export function titleRequest(input: unknown): string | null {
+  if (!Array.isArray(input)) return null
+  const request = input
+    .filter((part) => isObject(part) && part.type === 'text' && typeof part.text === 'string')
+    .map((part) => (part as { text: string }).text)
+    .join('\n')
+    .trim()
+  return request ? clip(request, REQUEST_CHARS) : null
 }
 
 /** model/list 的全部条目（含隐藏的），最多翻几页 */
@@ -347,7 +324,7 @@ async function startTemporary(
 }
 
 /** 给小模型的话。会话内容当材料，不当指令 */
-export function titlePrompt(exchange: Exchange): string {
+export function titlePrompt(request: string): string {
   return [
     'Give the conversation below a title for a list of conversations.',
     '- Write it in the language the user wrote in.',
@@ -357,9 +334,8 @@ export function titlePrompt(exchange: Exchange): string {
     'Answer with JSON: {"title": "..."}',
     '',
     '<user_message>',
-    exchange.request,
+    request,
     '</user_message>',
-    ...(exchange.answer ? ['<assistant_reply>', exchange.answer, '</assistant_reply>'] : []),
   ].join('\n')
 }
 

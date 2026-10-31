@@ -269,7 +269,6 @@ export class ClientSession implements ClientToolPeer {
         clientTurn: (harness, turnId) => host.sessionTree.clientTurn(harness, turnId),
         turnEvent: (harness, method, params) => {
           host.sessionTree.turnEvent(harness, method, params)
-          host.titles.turnEvent(method, params)
         },
         itemEvent: (params) => host.sessionTree.itemEvent(params),
         decorate: (thread) => host.sessionTree.decorate(thread),
@@ -777,12 +776,17 @@ export class ClientSession implements ClientToolPeer {
           this.host.sessionTree.store.setTools(thread.id, tools)
       })
     }
-    // 经聚合面新建的原生 codex 会话（聚合面只认声明了 harness 扩展的客户端，也就是 Litch）：第一回合结束后起名
+    // 经聚合面新建的原生 codex 会话（聚合面只认声明了 harness 扩展的客户端，也就是 Litch）：首条消息成功提交后起名
     if (method === 'thread/start' && link.dialect === NATIVE_CODEX_DIALECT)
       afterwards.push((result) => {
         const thread = isObject(result) ? result.thread : null
         if (isObject(thread)) this.host.titles.born(link.harness, thread)
       })
+    // 只在主回合接受消息后启动命名，使用客户端原始输入，避开设备层追加的回报；不等待命名完成。
+    if (method === 'turn/start' && link.dialect === NATIVE_CODEX_DIALECT && fields) {
+      const submitted = fields
+      afterwards.push(() => this.host.titles.submitted(link.harness, submitted))
+    }
     // 工作树跟着会话走（worktree-life.mts）：归档、删了之后收拾，取消归档之后建回或接着用；
     // 归档了的会话已经停下的子会话跟着归档（session-archive.mts）
     const life = this.host.worktreeLife

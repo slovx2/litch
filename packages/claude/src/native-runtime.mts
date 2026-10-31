@@ -2264,8 +2264,10 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     if (subtype === 'background_tasks_changed') return
     if (subtype === 'command_lifecycle') {
       // 用户消息对应的那一轮跑完了；有些命令（如压缩）的 result 不带消息 ID。
-      if (message.state === 'completed' && message.command_uuid === pending.awaited)
+      if (message.state === 'completed' && message.command_uuid === pending.awaited) {
         pending.awaitedSeen = true
+        if (pending.context.purpose === 'compact') await this.finishDeferredResult(pending)
+      }
       return
     }
     if (subtype === 'session_state_changed') {
@@ -3250,14 +3252,25 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     }
     if (!force && deferred.success && !confirmed) return
     if (!force && deferred.success && this.hasPendingWorkflowTasks(pending)) return
-    // 后台子代理结束后 CLI 会自行续跑一轮并再发一条 result；idle 之前回合都没有结束。
-    if (!force && deferred.success && session?.state != null && session.state !== 'idle') return
+    // 压缩命令确认完成就交还回合。之后的后台通知必须由协议层另建普通回合，
+    // 重新读取会话权限和工具处理器，不能继续借用压缩的只读上下文。
+    const compact = pending.context.purpose === 'compact'
+    // 普通回合仍等后台子代理自行续跑完，idle 之前不结束。
+    if (
+      !force &&
+      !compact &&
+      deferred.success &&
+      session?.state != null &&
+      session.state !== 'idle'
+    )
+      return
     // 结束通知与 idle 几乎同时到达时，通知触发的那一轮还没开始；等它开始再结束回合。
-    if (!force && deferred.success && session && this.awaitsNotificationRound(session)) return
+    if (!force && !compact && deferred.success && session && this.awaitsNotificationRound(session))
+      return
 
     pending.deferredResult = null
     this.detach(pending)
-    const refusal = session && !force ? this.keepAlive(session) : null
+    const refusal = session && !force ? this.keepAlive(session, compact && deferred.success) : null
     // 进程要退出了：请它起的标题还没写进会话记录的话，等一会儿（标题用的是小模型，一般早就起完了）
     if (session?.title && !force && refusal !== null)
       await Promise.race([session.title, delay(TITLE_GRACE_MS)])
@@ -3295,11 +3308,13 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   // 回合结束时进程要不要留下。返回 null 表示留下；空串表示不留；
   // 其他文字表示本该留下却留不了，要告诉用户后台命令为什么停了。
   // 没有后台命令时只有开了空闲保留才留，满额时先回收闲得最久的空闲会话，回收不出位置就不留。
-  private keepAlive(session: NativeSession): string | null {
+  private keepAlive(session: NativeSession, handoff = false): string | null {
     if (session.closing || session.process.hasExited) return ''
     const shells = hasBackgroundWork(session)
     // 临时会话没人会接着聊、也不该被别的会话找到：只为后台命令留
-    if (!shells && (keepAliveIdleMs() <= 0 || session.context.ephemeral)) return ''
+    // 压缩刚交还回合时，后台任务的通知可能已经排队。即使关了空闲保留，
+    // 也走 scheduleReap 的短暂宽限，让通知能接成普通回合；没有通知则按时回收。
+    if (!shells && !handoff && (keepAliveIdleMs() <= 0 || session.context.ephemeral)) return ''
     const limit = keepAliveLimit()
     if (limit <= 0) return ''
     if (!session.kept) {

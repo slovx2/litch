@@ -45,7 +45,7 @@ export type ProcessPart =
 export type Block =
   | { type: 'user'; itemId: string }
   /**
-   * 最终回答：有 final 的取最后一条 final；分不清阶段的取回合里最后一条助手消息。
+   * 最终回答：所有明确标为 final 的都保留；分不清阶段的取回合里最后一条助手消息。
    * 空收尾前后的回答（answersAroundQuietWrapUp）可能是几条，每条一块
    */
   | { type: 'answer'; itemId: string }
@@ -117,7 +117,15 @@ export function bucketItems(items: BlockInput[], options: BucketOptions = {}): B
   // 只留收尾带出来的卡片（建议、问题）
   if (shown[0]?.kind === 'userMessage' && shown[0].remind === true)
     return remindBlocks(shown, options)
-  const answers = new Set<string>()
+  // 同一回合里可能先给出结论，再处理插入的会话消息并补一句回答。
+  // 后一条 final 不能把此前的正式结论降为过程说明。
+  const answers = new Set(
+    shown
+      .filter(
+        (item) => item.kind === 'agentMessage' && item.phase === 'final' && item.card === undefined,
+      )
+      .map((item) => item.id),
+  )
   const last = answerOf(shown)
   if (last !== undefined) answers.add(last)
   for (const id of answersAroundWrapUp(items)) answers.add(id)

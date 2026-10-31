@@ -96,8 +96,8 @@ export function sampleCodex({ home, remote }: SampleHome): SampleHc {
     spec('litch.autoTitle', 'behavior', 'boolean', t('自动起名', 'Name sessions automatically'), {
       default: true,
       description: t(
-        '在 Litch 里新建的会话，第一回合结束后由 Litch 用小模型（luna 系，账号的模型清单里有才用）起个名字；手动改过名的不动。关掉后新建的会话不再起名。',
-        'Sessions you start in Litch get a name after their first turn, written by a small model (the luna family, only when your account lists one). Names you set yourself are kept. When off, new sessions are not named.',
+        '在 Litch 里新建的会话，首条文字消息发送成功后由小模型（luna 系，账号的模型清单里有才用）独立命名，无需等待回合结束，中断回合不影响命名；手动改过的名称保留。关掉后新建的会话不再起名。',
+        'Sessions you start in Litch are named independently after the first text message is accepted, using a small model (the luna family, only when your account lists one). Naming does not wait for the turn to finish and continues if you interrupt it. Names you set yourself are kept. When off, new sessions are not named.',
       ),
     }),
     spec('web_search', 'behavior', 'enum', t('网页搜索', 'Web search'), {

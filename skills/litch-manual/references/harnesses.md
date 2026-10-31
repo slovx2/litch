@@ -71,9 +71,11 @@ harness's own config files on that device (shared with its CLI there):
   OpenCode, Pi, DSH: their own settings). Codex also has a global context window and auto-compact
   limit that apply to every model. Some changes say they need a new session or a restart; the page
   offers the restart. Codex's Config tab also has **Name sessions automatically** (on by default; it is
-  Litch's own switch, kept on the device, not in Codex's config file): after the first turn of a
-  session started in Litch, Litch names it with a small model of the luna family, only if the account's
-  model list has one, and never over a name the user set. Turning it off affects sessions started
+  Litch's own switch, kept on the device, not in Codex's config file): after the first text message of a
+  session started in Litch is accepted, Litch names it independently with a small model of the luna
+  family, only if the account's model list has one, and never over a name the user set. Naming does
+  not wait for the main turn to finish and continues if it is interrupted. Failed sends do not
+  consume the naming opportunity. Turning it off affects sessions started
   afterwards. DSH's Config tab lists its built-in plugins; the ones DSH cannot run without are locked
   on (turning them off broke turns, restarts or this page), and one that is already off can be turned
   back on (it says so). Turning off any other removes what it provides.
