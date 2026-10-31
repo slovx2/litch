@@ -16,6 +16,7 @@
 export interface HarnessSettingsProbe {
   /** 本机设备上带“详情设置”入口的 harness */
   entries: string[]
+  runtimeFlow: string[]
   /** build-01 上声明里没有详情设置的 dsh：有没有入口、点开后的说明 */
   unsupportedEntry: boolean
   unsupportedNote: string
@@ -145,7 +146,7 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
     await until(`${harness} 的详情设置页`, () =>
       one(`.hc-page[data-hc="${harness}"][data-hc-device="${deviceId}"] .hc-tabs`),
     )
-    one<HTMLButtonElement>(`.hc-tabs [data-tab="${tab}"]`)?.click()
+    await click(`${tab} 标签`, () => one<HTMLButtonElement>(`.hc-tabs [data-tab="${tab}"]`))
     return until(`${tab} 这一块`, () => one<HTMLElement>(`[data-hc-tab="${tab}"]`))
   }
   /** 本机侧栏里某个 harness 的会话（按徽标认）里说一句，等这个回合结束 */
@@ -159,13 +160,16 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
       const found = one<HTMLTextAreaElement>('textarea.cmp-text')
       return found && one('.ss-row.sel') ? found : null
     })
-    const before = all('.turn').length
+    await until('历史加载完成', () => one('.tr-scroll[aria-busy="false"]') && !one('.send.stop'))
     fill(area, words)
     await frame()
     area.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
     )
-    await until('这个回合结束', () => all('.turn').length > before && !one('.running-line'))
+    await until('这个回合结束', () => {
+      const last = all('.turn').at(-1)
+      return last && text(last).includes(words) && one('.turn-foot', last) && !one('.send.stop')
+    })
   }
   const row = (key: string) => one(`[data-hc-key="${key}"]`)
   const bar = () => one('[data-hc-save]')
@@ -205,14 +209,54 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
   const entries = all('[data-harness-block]')
     .filter((block) => act('harness-settings', block))
     .map((block) => block.dataset.harnessBlock ?? '')
-  // build-01 上的 dsh 还不支持：没有入口，点开那一块说一句
+  // 尚无原生配置接口的 harness 仍能打开运行设置。
   await openDetail('build')
   const dsh = await until('build-01 上 dsh 那一块', () => one('[data-harness-block="dsh"]'))
   const unsupportedEntry = act('harness-settings', dsh) !== null
-  if (one('.fold[aria-expanded="false"]', dsh)) one<HTMLButtonElement>('.fold', dsh)?.click()
-  const unsupportedNote = text(
-    await until('“还不支持”的说明', () => one('[data-hc-unsupported]', dsh)),
-  )
+  act('harness-settings', dsh)?.click()
+  await until('dsh 运行设置', () => one('[data-runtime-settings="dsh"]'))
+  const unsupportedNote = all('.hc-tabs [data-tab]')
+    .map((tab) => tab.dataset.tab)
+    .join(',')
+
+  // 运行设置：默认值、保存、恢复默认，以及离开时保存/放弃/取消。
+  await openDetail('local')
+  act('harness-settings', one('[data-harness-block="claude"]') ?? document)?.click()
+  await until('Claude 运行设置', () => one('[data-runtime-settings="claude"]'))
+  const ttl = () => one<HTMLSelectElement>('[data-setting="harness.claude.promptCacheTtl"] select')
+  const runtimeFlow = [ttl()?.value ?? 'missing']
+  const changeTtl = async (value: string) => {
+    const field = ttl() as HTMLSelectElement
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(field, value)
+    field.dispatchEvent(new Event('change', { bubbles: true }))
+    await until('运行设置草稿', () => one('.mng-save'))
+  }
+  await changeTtl('default')
+  one<HTMLButtonElement>('.hc-tabs [data-tab="config"]')?.click()
+  await until('运行设置离开确认', () => one('[data-leave-ask]'))
+  act('leave-cancel')?.click()
+  await until('取消后继续编辑', () => !one('[data-leave-ask]'))
+  runtimeFlow.push(ttl()?.value ?? 'missing')
+  one<HTMLButtonElement>('.hc-tabs [data-tab="config"]')?.click()
+  await until('放弃前确认', () => one('[data-leave-ask]'))
+  act('leave-discard')?.click()
+  await until('配置标签', () => one('[data-hc-tab="config"]'))
+  one<HTMLButtonElement>('.hc-tabs [data-tab="runtime"]')?.click()
+  await until('运行设置回来', () => ttl())
+  runtimeFlow.push(ttl()?.value ?? 'missing')
+  await changeTtl('default')
+  act('hc-back')?.click()
+  await until('保存后返回确认', () => one('[data-leave-ask]'))
+  act('leave-save')?.click()
+  await until('返回设备页', () => one('[data-detail="local"]'))
+  act('harness-settings', one('[data-harness-block="claude"]') ?? document)?.click()
+  await until('运行设置再次打开', () => ttl())
+  runtimeFlow.push(ttl()?.value ?? 'missing')
+  act('reset', one('[data-setting="harness.claude.promptCacheTtl"]') ?? document)?.click()
+  await until('恢复默认草稿', () => one('.mng-save'))
+  act('save', one('.mng-save') ?? document)?.click()
+  await until('默认值保存', () => !one('.mng-save'))
+  runtimeFlow.push(ttl()?.value ?? 'missing')
 
   // ---------- 一、配置（本机 Claude Code） ----------
   await openSettings('local', 'claude')
@@ -487,6 +531,7 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
 
   return {
     entries,
+    runtimeFlow,
     unsupportedEntry,
     unsupportedNote,
     badNumber,
@@ -537,14 +582,15 @@ export function judgeHarnessSettings(seen: HarnessSettingsProbe): string[] {
   const must = (ok: boolean, what: string) => {
     if (!ok) failed.push(what)
   }
+  must(
+    seen.runtimeFlow.join(',') === '1h,default,1h,default,1h',
+    `运行设置保存和离开：${seen.runtimeFlow}`,
+  )
   for (const id of ['claude', 'codex', 'pi', 'dsh']) {
     must(seen.entries.includes(id), `本机的 ${id} 没有“详情设置”入口：${seen.entries.join('、')}`)
   }
-  must(!seen.unsupportedEntry, 'build-01 上还不支持的 dsh 也有“详情设置”入口')
-  must(
-    seen.unsupportedNote.includes('不支持'),
-    `还不支持的 harness 没有说明：“${seen.unsupportedNote}”`,
-  )
+  must(seen.unsupportedEntry, 'build-01 上 dsh 没有运行设置入口')
+  must(seen.unsupportedNote === 'runtime', `还不支持的 harness 没有说明：“${seen.unsupportedNote}”`)
   must(seen.badNumber.includes('范围'), `保留天数填 0 没有提示超出范围：“${seen.badNumber}”`)
   must(seen.saveBlocked, '填错了还能按保存')
   must(seen.saved.fast === 'false→true', `快速模式没存成开：${seen.saved.fast}`)

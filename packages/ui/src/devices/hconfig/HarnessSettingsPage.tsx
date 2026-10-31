@@ -13,14 +13,15 @@ import { Back, Close } from '../../app/icons.tsx'
 import { leaveThen } from '../../app/leave-guard.tsx'
 import { useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
+import { ManagePanel } from '../manage/ManagePanel.tsx'
 import { AccountsTab } from './AccountsTab.tsx'
 import { ConfigTab } from './ConfigTab.tsx'
 import { InstructionsTab } from './InstructionsTab.tsx'
 import { McpTab } from './McpTab.tsx'
 import { ModelsTab } from './ModelsTab.tsx'
 
-type Tab = 'config' | 'accounts' | 'models' | 'mcp' | 'instructions'
-const TABS: readonly Tab[] = ['config', 'accounts', 'models', 'mcp', 'instructions']
+type Tab = 'runtime' | 'config' | 'accounts' | 'models' | 'mcp' | 'instructions'
+const TABS: readonly Tab[] = ['runtime', 'config', 'accounts', 'models', 'mcp', 'instructions']
 
 /** 订阅这个 harness 的详情设置。订不上（设备没了）是 'error' */
 export function useHarnessConfig(
@@ -60,7 +61,7 @@ export function HarnessSettingsPage({ device, harnessId, onBack, onClose }: Page
   const view = useHarnessConfig(device.id, harnessId)
   const harness = device.harnesses.find((entry) => entry.id === harnessId)
   const name = harness?.name ?? harnessId
-  const [tab, setTab] = useState<Tab>('config')
+  const [tab, setTab] = useState<Tab>('runtime')
 
   // Esc 回到设备详情。开着对话框的时候 Esc 归对话框
   useEffect(() => {
@@ -76,9 +77,11 @@ export function HarnessSettingsPage({ device, harnessId, onBack, onClose }: Page
 
   const ready = view !== undefined && view !== 'error' && view.supported === true
   const catalog = ready && view.config.data?.modelCatalog === true
-  const tabs = TABS.filter((one) => one !== 'models' || catalog)
+  const tabs = TABS.filter((one) =>
+    one === 'runtime' ? device.manageable : ready && (one !== 'models' || catalog),
+  )
   // 模型标签没了（重读后说没有了）：回到配置
-  const shown: Tab = tabs.includes(tab) ? tab : 'config'
+  const shown: Tab = tabs.includes(tab) ? tab : (tabs[0] ?? 'config')
   let body = null
   if (view === undefined) {
     body = (
@@ -135,9 +138,9 @@ export function HarnessSettingsPage({ device, harnessId, onBack, onClose }: Page
       <div className="arch-body">
         <div className="mng-wrap">
           <div className="mng hc">
-            {ready ? (
+            {tabs.length > 0 ? (
               <>
-                {view.restartRequired ? (
+                {ready && view.restartRequired ? (
                   <RestartBanner device={device} name={name} harnessId={harnessId} />
                 ) : null}
                 {/* biome-ignore lint/a11y/useSemanticElements: 分段按钮，不用 fieldset */}
@@ -156,7 +159,11 @@ export function HarnessSettingsPage({ device, harnessId, onBack, onClose }: Page
                     </button>
                   ))}
                 </div>
-                {shown === 'config' ? (
+                {shown === 'runtime' ? (
+                  <ManagePanel device={device} harnessId={harnessId} />
+                ) : !ready ? (
+                  body
+                ) : shown === 'config' ? (
                   <ConfigTab device={device} harnessId={harnessId} slot={view.config} />
                 ) : shown === 'accounts' ? (
                   <AccountsTab device={device} harnessId={harnessId} view={view} />

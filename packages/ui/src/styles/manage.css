@@ -120,7 +120,7 @@
   min-height: 44px;
   padding: 8px 10px 8px 12px;
 }
-/* 标题行左边一大半（箭头、徽标、名字、版本）是展开和收起的按钮；状态、开关、重启靠右 */
+/* 标题行只展示身份；设置从详情入口打开，状态、开关、重启靠右。 */
 .mng-h-head h3 {
   flex: 1 1 0;
   min-width: 0;
@@ -129,7 +129,9 @@
   font-size: 13px;
   font-weight: 600;
 }
-.mng-h-head .fold {
+.mng-h-label {
+  display: flex;
+  align-items: center;
   flex: 1 1 0;
   gap: 8px;
   min-height: 28px;

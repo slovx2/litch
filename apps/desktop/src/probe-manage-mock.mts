@@ -179,6 +179,10 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   }
   /** 回到设备列表（在详情里的话先退出来），再点开一台设备的详情 */
   const openDetail = async (deviceId: string) => {
+    if (one('.hc-page')) {
+      act(document, 'hc-back')?.click()
+      await until('返回设备详情', () => one('[data-detail]'))
+    }
     if (one('[data-detail]')) act(document, 'back')?.click()
     else {
       one<HTMLButtonElement>('.sb-settings')?.click()
@@ -205,6 +209,12 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
     }
     throw new Error('详情里有收着的地方点不开')
   }
+  const openRuntime = async (id: string) => {
+    await openDetail('local')
+    await ready()
+    act(block(id), 'harness-settings')?.click()
+    await until(`${id} 运行设置`, () => one(`[data-runtime-settings="${id}"]`))
+  }
   /** “这台设备”一节里能做的事 */
   const actsOf = (page: Element) =>
     `${page.getAttribute('data-detail')}:${all('[data-sec="device"] [data-act]', page)
@@ -221,13 +231,16 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
       const found = one<HTMLTextAreaElement>('textarea.cmp-text')
       return found && one('.ss-row.sel') ? found : null
     })
-    const before = all('.turn').length
+    await until('历史加载完成', () => one('.tr-scroll[aria-busy="false"]') && !one('.send.stop'))
     fill(area, words)
     await frame()
     area.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
     )
-    await until('这个回合结束', () => all('.turn').length > before && !one('.running-line'))
+    await until('这个回合结束', () => {
+      const last = all('.turn').at(-1)
+      return last && text(last).includes(words) && one('.turn-foot', last) && !one('.send.stop')
+    })
   }
   /** 新建会话的选择器里有哪些 harness。看完把选择器收起来 */
   const pickerOptions = async () => {
@@ -306,7 +319,7 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   ]
   const folds = all('.fold', page)
   const foldsReachable =
-    folds.length >= 8 &&
+    folds.length >= 4 &&
     folds.every((fold) => {
       fold.focus()
       return (
@@ -316,53 +329,57 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
         Boolean(one('.caret-ic', fold))
       )
     })
-  // 点开不可用的那一个：原因在里面；再点一下收起
-  const codexFold = one<HTMLButtonElement>('.fold', block('codex') as HTMLElement)
-  codexFold?.click()
-  const downReason = text(
-    await until('不可用的原因', () => one('.mng-h-why', block('codex') as HTMLElement)),
-  )
-  const shownOpen = `${block('codex')?.dataset.open}:${codexFold?.getAttribute('aria-expanded')}:${Boolean(
-    document.getElementById(codexFold?.getAttribute('aria-controls') ?? ''),
-  )}`
-  codexFold?.click()
-  await until('收起来', () => !one('.mng-h-why', block('codex') as HTMLElement))
-  const foldToggles = `${shownOpen}>${block('codex')?.dataset.open}:${codexFold?.getAttribute('aria-expanded')}`
+  // 不可用原因只在详情中显示，返回后设备页仍只有标题行。
+  await openRuntime('codex')
+  const downReason = text(await until('不可用的原因', () => one('.mng-h-why')))
+  const shownOpen = `${block('codex')?.dataset.open}:${Boolean(one('[data-runtime-settings="codex"]'))}`
+  await openDetail('local')
+  await ready()
+  const foldToggles = `${shownOpen}>${block('codex')?.dataset.open}:${Boolean(one('[data-setting]'))}`
   await unfold()
   const harnesses = all('[data-harness-block]').map(
     (entry) => `${entry.dataset.harnessBlock}:${entry.dataset.state}`,
   )
   const controls: Record<string, string> = {}
-  for (const entry of all('[data-setting]')) {
-    const type = entry.dataset.type ?? ''
-    controls[type] ??= one('.switch', entry)
-      ? 'switch'
-      : one('select', entry)
-        ? 'select'
-        : one('.env', entry)
-          ? 'env'
-          : one('.mng-unknown', entry)
-            ? 'readonly'
-            : one('input[type="password"]', entry)
-              ? 'password'
-              : one('.mng-num', entry)
-                ? 'number'
-                : one('input', entry)
-                  ? 'text'
-                  : 'none'
+  const collectControls = () => {
+    for (const entry of all('[data-setting]')) {
+      const type = entry.dataset.type ?? ''
+      controls[type] ??= one('.switch', entry)
+        ? 'switch'
+        : one('select', entry)
+          ? 'select'
+          : one('.env', entry)
+            ? 'env'
+            : one('.mng-unknown', entry)
+              ? 'readonly'
+              : one('input[type="password"]', entry)
+                ? 'password'
+                : one('.mng-num', entry)
+                  ? 'number'
+                  : one('input', entry)
+                    ? 'text'
+                    : 'none'
+    }
   }
-  const unknown = row('harness.dsh.wakeSchedule') as HTMLElement
-  const unknownNote = text(one('.form-note', one('.mng-unknown', unknown) as HTMLElement))
-  const unknownEditable = Boolean(one('input, select, button', unknown))
-  const secretShown = text(one('[data-secret-state]', row('harness.pi.apiKey') as HTMLElement))
-  const envSecret = one('[data-env="ANTHROPIC_API_KEY"]') as HTMLElement
-  const envSecretShown = text(one('.env-kept .pill', envSecret))
-  const envSecretHasInput = Boolean(one('.env-value', envSecret))
+  collectControls()
   const inheritedSecret = text(one('[data-inherited="OPENAI_API_KEY"] .pill'))
   const sshStates = all('[data-ssh-entry]').map(
     (entry) => `${entry.dataset.sshEntry}:${entry.dataset.state}`,
   )
   const sshFailedReason = text(one('[data-ssh-entry][data-state="failed"] .ssh-why'))
+  await openRuntime('dsh')
+  collectControls()
+  const unknown = row('harness.dsh.wakeSchedule') as HTMLElement
+  const unknownNote = text(one('.form-note', one('.mng-unknown', unknown) as HTMLElement))
+  const unknownEditable = Boolean(one('input, select, button', unknown))
+  await openRuntime('claude')
+  collectControls()
+  const envSecret = one('[data-env="ANTHROPIC_API_KEY"]') as HTMLElement
+  const envSecretShown = text(one('.env-kept .pill', envSecret))
+  const envSecretHasInput = Boolean(one('.env-value', envSecret))
+  await openRuntime('pi')
+  collectControls()
+  const secretShown = text(one('[data-secret-state]', row('harness.pi.apiKey') as HTMLElement))
   // 切到英文看一眼，再切回来。换语言走界面给验收留的口子，不靠界面上哪个按钮
   const look = (
     window as unknown as {
@@ -381,20 +398,16 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   await until('标题换回中文', () => title() === chinese)
 
   // ---- 三、停用 Pi（在收着的标题行上拨），再启用（在里面那一行上拨） ----
-  const enabled = () => one<HTMLButtonElement>('.switch', row('harness.pi.enabled') as HTMLElement)
+  const enabled = () =>
+    one<HTMLButtonElement>('.switch', row('harness.pi.enabled') ?? document.createElement('div'))
   const lead = () =>
     one<HTMLButtonElement>('.mng-h-head [data-lead] .switch', block('pi') as HTMLElement)
-  const piFold = () => one<HTMLButtonElement>('.fold', block('pi') as HTMLElement)
   const isDown = (entry: HTMLElement) => entry.classList.contains('down')
-  piFold()?.click()
-  await until('Pi 收起来', () => block('pi')?.dataset.open === 'false')
+  await openDetail('local')
+  await ready()
   lead()?.click()
   await until('保存条', bar)
-  // 有没保存的改动：这一块自己开了，再点收起也收不起来
-  await until('Pi 这一块自己开了', () => block('pi')?.dataset.open === 'true' && enabled())
-  piFold()?.click()
-  await frame()
-  const leadOpens = `${block('pi')?.dataset.open}:${lead()?.getAttribute('aria-checked')}:${enabled()?.getAttribute('aria-checked')}`
+  const leadOpens = `${block('pi')?.dataset.open}:${lead()?.getAttribute('aria-checked')}:${Boolean(enabled())}`
   const disableBar = dirty()
   await save()
   await until('Pi 变成停用', () => block('pi')?.dataset.state === 'disabled')
@@ -406,12 +419,12 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   const disabledHint = text(await until('输入区说了发不了', () => one('.dock .cmp-hint.err')))
   await openDetail('local')
   await ready()
-  await unfold()
+  await openRuntime('pi')
   enabled()?.click()
-  const leadFollows = Boolean(
-    await until('标题行上的开关跟着变', () => lead()?.getAttribute('aria-checked') === 'true'),
-  )
   await save()
+  await openDetail('local')
+  await ready()
+  const leadFollows = lead()?.getAttribute('aria-checked') === 'true'
   await until('Pi 恢复可用', () => block('pi')?.dataset.state === 'ready')
   const enabledState = block('pi')?.dataset.state ?? ''
   const pickerWith = await pickerOptions()
@@ -421,6 +434,7 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   await openDetail('local')
   await ready()
   await unfold()
+  await openRuntime('dsh')
   const env = () => row('harness.dsh.env') as HTMLElement
   const addVariable = async (name: string, value: string) => {
     act(env(), 'env-add')?.click()
@@ -437,16 +451,19 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   await addVariable('DSH_REGION', 'cn-east')
   // 名字看着像密钥的不用勾，自己就按密钥来
   await addVariable('DSH_TOKEN', 'sk-PROBE-secret-one')
-  fill(input('harness.pi.apiKey') as HTMLInputElement, 'sk-PROBE-secret-two')
-  await until('两栏改动', () => dirty() === 2)
+  await until('环境变量改动', () => dirty() === 1)
   const masked = one<HTMLInputElement>('[data-env="DSH_TOKEN"] .env-value', env())?.type
   await save()
-  const savedToast = toast('manage-save:local')
+  let savedToast = toast('manage-save:local')
   await until('密钥收成“已设置”', () => one('[data-env="DSH_TOKEN"] .env-kept', env()))
   const envSaved = all('.env-row', env()).map(
     (entry) =>
       `${entry.dataset.env}=${one<HTMLInputElement>('.env-value', entry)?.value ?? text(one('.env-kept .pill', entry))}`,
   )
+  await openRuntime('pi')
+  fill(input('harness.pi.apiKey') as HTMLInputElement, 'sk-PROBE-secret-two')
+  await save()
+  savedToast += `；${toast('manage-save:local')}`
   const secretRow = row('harness.pi.apiKey') as HTMLElement
   const apiKeyAfter = `${text(one('[data-secret-state]', secretRow))}|${input('harness.pi.apiKey')?.value}|${masked}`
   // 把刚填的密钥找一遍：页面上的字、每个输入框里的值、浏览器的本地存储
@@ -462,11 +479,14 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
         secretLeaks.push('本地存储')
     }
   }
+  await openDetail('local')
+  await ready()
   await until('dsh 和 Pi 重新起来', () =>
     ['dsh', 'pi'].every((id) => block(id)?.dataset.state === 'ready'),
   )
 
   // ---- 五、Claude Code 有回合在跑：改它要重启才生效的设置，标成待重启；重启先问 ----
+  await openRuntime('claude')
   const claude = () => block('claude') as HTMLElement
   choose(select('harness.claude.logLevel') as HTMLSelectElement, 'debug')
   await save()
@@ -492,6 +512,9 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   const restarted = !one('[data-pending-pill]', claude())
 
   // ---- 六、填得不对：界面自己拦的（超出范围），设备服务不认的（端口和别的入口相同） ----
+  await openDetail('local')
+  await ready()
+  await unfold()
   const scrollback = () => input('terminal.scrollback') as HTMLInputElement
   const port = () => input('ssh.dsh.port') as HTMLInputElement
   fill(scrollback(), '10')
@@ -565,12 +588,16 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   await openDetail('local')
   await ready()
   await unfold()
+  await openRuntime('dsh')
   const added = await until('新加的那一项', () => row('harness.dsh.startupNote'))
   const addedType = `${added.dataset.type}:${text(one('.mng-row-title', added))}`
   fill(input('harness.dsh.startupNote') as HTMLInputElement, '升级之后加的')
   await save()
   const addedSaved = input('harness.dsh.startupNote')?.value ?? ''
 
+  await openDetail('local')
+  await ready()
+  await unfold()
   // ---- 十、诊断、日志、ssh 配置片段 ----
   act(document, 'run-diagnostics')?.click()
   const checks = (

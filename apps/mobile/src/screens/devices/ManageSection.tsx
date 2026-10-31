@@ -27,6 +27,7 @@ import { type Translator, useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
 import { Confirm } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
+import { useLeaveGuard } from './hconfig/leave'
 import { PowerSettings } from './PowerSettings'
 import { type Draft, editOf, problemOf, SettingControl } from './SettingControl'
 
@@ -77,6 +78,7 @@ interface BlockProps {
   /** 默认收着；有草稿的那一块自己开着 */
   header?: ReactNode
   testID: string
+  detail?: boolean
 }
 
 /** 一块设置：点标题展开，里面有草稿时出“保存” */
@@ -91,6 +93,7 @@ function Block({
   clear,
   header,
   testID,
+  detail = false,
 }: BlockProps) {
   const theme = useTheme()
   const t = useT()
@@ -99,12 +102,14 @@ function Block({
   const [saving, run] = useBusy()
   const [said, setSaid] = useState<{ text: string; bad: boolean } | null>(null)
   const dirty = specs.filter((spec) => drafts[spec.key] !== undefined)
-  const shown = open || dirty.length > 0
+  const shown = detail || open || dirty.length > 0
+  const leave = useLeaveGuard(detail && dirty.length > 0)
   const save = async () => {
+    if (dirty.length === 0) return true
     setSaid(null)
     if (dirty.some((spec) => problemOf(spec, drafts[spec.key], t))) {
       setSaid({ text: t('manage.save.fix'), bad: true })
-      return
+      return false
     }
     const edits = dirty
       .map((spec) => editOf(spec, drafts[spec.key]))
@@ -127,6 +132,7 @@ function Block({
               : t('manage.saved'),
         bad: false,
       })
+      return true
     } catch (failed) {
       const conflict = (failed as { code?: string } | null)?.code === 'conflict'
       if (conflict) clear(dirty.map((spec) => spec.key))
@@ -136,12 +142,14 @@ function Block({
           : t('manage.save.failed', { reason: whyNot(failed, t) }),
         bad: true,
       })
+      return false
     }
   }
+  leave.current = save
   return (
     <View style={[styles.block, { borderBottomColor: theme.c.line1 }]} testID={testID}>
       {header}
-      {specs.length > 0 ? (
+      {specs.length > 0 && !detail ? (
         <Pressable
           accessibilityRole="button"
           onPress={() => setOpen(!open)}
@@ -189,7 +197,7 @@ function Block({
 
 /** 详情设置的入口：它声明了就给按钮；设备支持（别的 harness 声明了）它却没有，说还不支持；设备整个不支持就没有 */
 function settingsEntry(device: DeviceView, harness: HarnessView): 'open' | 'unsupported' | null {
-  if (harness.configurable) return 'open'
+  if (device.manageable || harness.configurable) return 'open'
   return device.harnesses.some((entry) => entry.configurable) ? 'unsupported' : null
 }
 
@@ -200,12 +208,14 @@ function HarnessHead({
   enable,
   snapshot,
   entry,
+  detail = false,
 }: {
   deviceId: string
   harness: HarnessView
   enable: SettingSpecView | null
   snapshot: SettingsSnapshotView
   entry: 'open' | 'unsupported' | null
+  detail?: boolean
 }) {
   const theme = useTheme()
   const t = useT()
@@ -313,7 +323,7 @@ function HarnessHead({
           />
         ) : null}
       </View>
-      {harness.cli ? (
+      {detail && harness.cli ? (
         <View style={styles.runtime} testID={`harness:${harness.id}:runtime`}>
           {/* 同桌面 HarnessBlock 的 CLI 信息：标签三级字色，值二级字色，路径和版本等宽 */}
           {(
@@ -376,7 +386,7 @@ function HarnessHead({
 const belongsTo = (spec: SettingSpecView, harness: string) =>
   spec.scope.kind === 'harness' && spec.scope.harness === harness
 
-export function ManageSection({ device }: { device: DeviceView }) {
+export function ManageSection({ device, harnessId }: { device: DeviceView; harnessId?: string }) {
   const replica = useReplica()
   const theme = useTheme()
   const t = useT()
@@ -418,6 +428,32 @@ export function ManageSection({ device }: { device: DeviceView }) {
     })
   const nameOf = (id: string) => device.harnesses.find((harness) => harness.id === id)?.name ?? id
   const shared = { deviceId, nameOf, snapshot, drafts, setDraft, clear }
+  if (harnessId) {
+    const harness = device.harnesses.find((entry) => entry.id === harnessId)
+    const specs = schema.settings.filter((spec) => belongsTo(spec, harnessId))
+    const enable = specs.find((spec) => spec.role === 'enable' && spec.type === 'boolean') ?? null
+    return (
+      <Block
+        {...shared}
+        detail
+        title={t('hc.tab.runtime')}
+        testID={`manage:${harnessId}`}
+        specs={specs.filter((spec) => spec !== enable)}
+        header={
+          harness ? (
+            <HarnessHead
+              deviceId={deviceId}
+              harness={harness}
+              enable={enable}
+              snapshot={snapshot}
+              entry={null}
+              detail
+            />
+          ) : null
+        }
+      />
+    )
+  }
   const deviceSpecs = schema.settings.filter((spec) => spec.scope.kind === 'device')
   const groups = schema.groups.filter((group) => group.scope.kind === 'device')
   const loose = deviceSpecs.filter((spec) => !groups.some((group) => group.id === spec.group))
@@ -427,23 +463,14 @@ export function ManageSection({ device }: { device: DeviceView }) {
         const specs = schema.settings.filter((spec) => belongsTo(spec, harness.id))
         const enable =
           specs.find((spec) => spec.role === 'enable' && spec.type === 'boolean') ?? null
-        const rest = specs.filter((spec) => spec !== enable)
         return (
-          <Block
+          <HarnessHead
             key={harness.id}
-            {...shared}
-            testID={`manage:${harness.id}`}
-            title={t('devices.manage.settings', { count: rest.length })}
-            specs={rest}
-            header={
-              <HarnessHead
-                deviceId={deviceId}
-                harness={harness}
-                enable={enable}
-                snapshot={snapshot}
-                entry={settingsEntry(device, harness)}
-              />
-            }
+            deviceId={deviceId}
+            harness={harness}
+            enable={enable}
+            snapshot={snapshot}
+            entry={settingsEntry(device, harness)}
           />
         )
       })}

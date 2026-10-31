@@ -16,6 +16,7 @@ export const enHconfig: Record<keyof typeof zhHconfig, Entry> = {
   'hc.unreadable': 'Couldn’t read: {reason}',
   'hc.failed': 'Failed: {reason}',
   'hc.tab.config': 'Config',
+  'hc.tab.runtime': 'Runtime',
   'hc.tab.accounts': 'Accounts',
   'hc.tab.mcp': 'MCP',
   'hc.tab.instructions': 'Instructions',

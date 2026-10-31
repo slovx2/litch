@@ -18,7 +18,7 @@ mode exists only where the harness supports it.
 
 ## Seeing what is there
 
-Device details on desktop and phone show a running harness's CLI entry, launch-time version, selection
+The harness Settings → Runtime tab on desktop and phone shows a running harness's CLI entry, launch-time version, selection
 source and start time. It may be a wrapper script. A changed path is not shown as the running entry
 until the harness actually restarts; a stopped harness does not claim a new path is already running.
 
@@ -56,8 +56,14 @@ user. Litch has no command for it. Do it yourself with the user's OK, or give th
   `scripts/litch harness enable <device> <id>`.
 
 **Signing in, API keys, providers and the harness's own settings** live on the Devices page: each
-harness row has a **Settings** button (详情设置) that opens these tabs, all reading and writing the
+harness row has a **Settings** button (详情设置) that opens these tabs. Runtime settings belong to Litch; the other tabs read and write the
 harness's own config files on that device (shared with its CLI there):
+
+- **Runtime** (opens first on managed devices): CLI path, environment, task cards, browser and computer
+  use switches, and harness-specific runtime options such as Claude Code prompt cache duration.
+  These settings are available even when the harness has no native Config tab. Unsaved runtime
+  changes prompt to save, discard or cancel when leaving. The device page keeps status, enable,
+  installation and restart controls.
 
 - **Config**: default model and effort, permissions, and the rest of what the harness's official app
   offers (Codex: approval, sandbox, web search, features, skills/plugins/hooks, memories; Claude Code:

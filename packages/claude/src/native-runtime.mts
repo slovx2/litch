@@ -11,7 +11,7 @@ import { homedir } from 'node:os'
 import { join, relative } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-// 提示缓存时长（CHA_CLAUDE_PROMPT_CACHE_TTL=1h 时设 CLI 自己的那几个变量，默认什么都不设），CLI 继承这个进程的环境
+// 提示缓存时长（默认主对话 1h、子代理 5m；CHA_CLAUDE_PROMPT_CACHE_TTL=default 时不覆盖），CLI 继承这个进程的环境
 applyPromptCacheTtl()
 
 // In-process Claude runtime — replaces the Python sidecar entirely. Talks to

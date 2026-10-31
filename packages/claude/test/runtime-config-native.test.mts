@@ -42,7 +42,7 @@ test('CHA_CLAUDE_SETTING_SOURCES：默认三层都读，可只读其中几层，
     settingSources: ['user', 'project', 'local'],
     plansLocation: 'workspace',
     threadIdHeader: false,
-    promptCacheTtl: 'default',
+    promptCacheTtl: '1h',
     sessionTitle: true,
   })
 })
@@ -148,8 +148,9 @@ test('CHA_CLAUDE_SETTING_SOURCES 也管入口自己读的设置：钩子列表�
   }
 })
 
-test('CHA_CLAUDE_PROMPT_CACHE_TTL：默认 default、什么都不设；1h 设 CLI 自己的三个变量，用户设过的照旧；别的值报错', () => {
-  assert.equal(claudePromptCacheTtl({}), 'default')
+test('CHA_CLAUDE_PROMPT_CACHE_TTL：默认 1h，明确 default 时不设；用户设过的照旧，别的值报错', () => {
+  assert.equal(claudePromptCacheTtl({}), '1h')
+  assert.equal(claudePromptCacheTtl({ CHA_CLAUDE_PROMPT_CACHE_TTL: ' ' }), '1h')
   assert.equal(claudePromptCacheTtl({ CHA_CLAUDE_PROMPT_CACHE_TTL: ' Default ' }), 'default')
   assert.equal(claudePromptCacheTtl({ CHA_CLAUDE_PROMPT_CACHE_TTL: '1H' }), '1h')
   for (const bad of ['1', '5m', '0', 'on'])
@@ -157,9 +158,19 @@ test('CHA_CLAUDE_PROMPT_CACHE_TTL：默认 default、什么都不设；1h 设 CL
       () => resolveRuntimeConfig({ CHA_CLAUDE_PROMPT_CACHE_TTL: bad }),
       /CHA_CLAUDE_PROMPT_CACHE_TTL 无效/,
     )
-  const untouched: NodeJS.ProcessEnv = { ANTHROPIC_BETAS: 'user-beta' }
+  const untouched: NodeJS.ProcessEnv = {
+    ANTHROPIC_BETAS: 'user-beta',
+    CHA_CLAUDE_PROMPT_CACHE_TTL: 'default',
+  }
   applyPromptCacheTtl(untouched)
-  assert.deepEqual(untouched, { ANTHROPIC_BETAS: 'user-beta' })
+  assert.deepEqual(untouched, {
+    ANTHROPIC_BETAS: 'user-beta',
+    CHA_CLAUDE_PROMPT_CACHE_TTL: 'default',
+  })
+  const implicit: NodeJS.ProcessEnv = {}
+  applyPromptCacheTtl(implicit)
+  assert.equal(implicit.CLAUDE_CODE_PROMPT_CACHE_TTL, '1h')
+  assert.equal(implicit.CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL, '5m')
   const hour: NodeJS.ProcessEnv = { CHA_CLAUDE_PROMPT_CACHE_TTL: '1h' }
   applyPromptCacheTtl(hour)
   applyPromptCacheTtl(hour)

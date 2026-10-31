@@ -6,7 +6,7 @@ import test from 'node:test'
 import { MockLLM } from './fixtures/mock-llm.mjs'
 import { ProtocolClient } from './fixtures/protocol-client.mjs'
 
-// CHA_CLAUDE_PROMPT_CACHE_TTL：默认入口什么都不设，CLI 发的请求和直接跑 CLI 时一样；1h 时设 CLI 自己的
+// CHA_CLAUDE_PROMPT_CACHE_TTL：默认 1h，明确 default 时不覆盖；1h 时设 CLI 自己的
 // ENABLE_PROMPT_CACHING_1H、CLAUDE_CODE_PROMPT_CACHE_TTL、CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL，
 // 请求体里的 cache_control.ttl 和 anthropic-beta 由 CLI 自己决定。真实 CLI 加回环上的假模型，抓主对话的请求。
 
@@ -29,7 +29,14 @@ function ttls(body: unknown): string[] {
 }
 
 const cases = [
-  { label: 'API key、默认', auth: 'api-key', env: {}, ttl: 'none', beta: false },
+  { label: 'API key、未配置时默认 1h', auth: 'api-key', env: {}, ttl: '1h', beta: true },
+  {
+    label: 'API key、明确跟官方一致',
+    auth: 'api-key',
+    env: { CHA_CLAUDE_PROMPT_CACHE_TTL: 'default' },
+    ttl: 'none',
+    beta: false,
+  },
   {
     label: 'API key、1h',
     auth: 'api-key',

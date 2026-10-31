@@ -12,6 +12,7 @@ export const zhHconfig = {
   'hc.unreadable': '读取失败：{reason}',
   'hc.failed': '操作失败：{reason}',
   'hc.tab.config': '配置',
+  'hc.tab.runtime': '运行设置',
   'hc.tab.accounts': '账号',
   'hc.tab.mcp': 'MCP',
   'hc.tab.instructions': '指令文件',

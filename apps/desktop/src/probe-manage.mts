@@ -139,6 +139,10 @@ export async function manageProbe(): Promise<ManageProbe> {
     throw new Error('详情里有收着的地方点不开')
   }
   const openDetail = async () => {
+    if (one('.hc-page')) {
+      act(document, 'hc-back')?.click()
+      await until('返回设备详情', () => one('[data-detail]'))
+    }
     if (!one('[data-detail]')) {
       one<HTMLButtonElement>('.sb-settings')?.click()
       ;(
@@ -151,6 +155,11 @@ export async function manageProbe(): Promise<ManageProbe> {
     }
     await until('管理数据', () => one('[data-manage-state="ready"]'))
     await unfold()
+  }
+  const openRuntime = async (id: string) => {
+    await openDetail()
+    act(block(id), 'harness-settings')?.click()
+    await until(`${id} 运行设置`, () => one(`[data-runtime-settings="${id}"]`))
   }
   const piReady = (ms = 60_000) =>
     until(
@@ -210,9 +219,15 @@ export async function manageProbe(): Promise<ManageProbe> {
     (item) => `${item.dataset.harnessBlock}:${item.dataset.state}`,
   )
   // 停用了的不写原因（开关就在标题行上），只看一时用不了的
-  const downReasons = all('[data-harness-block][data-state="unavailable"]').map((item) =>
-    text(one('.mng-h-why', item)),
+  const downReasons: string[] = []
+  const unavailable = all('[data-harness-block][data-state="unavailable"]').map(
+    (item) => item.dataset.harnessBlock ?? '',
   )
+  for (const id of unavailable) {
+    await openRuntime(id)
+    downReasons.push(text(one('.mng-h-why')))
+  }
+  await openDetail()
   const leads = all('[data-harness-block]').map(
     (item) =>
       `${item.dataset.harnessBlock}:${
@@ -222,6 +237,10 @@ export async function manageProbe(): Promise<ManageProbe> {
   const settingTypes = [...new Set(all('[data-setting]').map((item) => item.dataset.type ?? ''))]
     .filter(Boolean)
     .sort()
+
+  await openRuntime('pi')
+  settingTypes.push(...all('[data-setting]').map((item) => item.dataset.type ?? ''))
+  await openDetail()
 
   // ---- 二、别的客户端改了两项设置：一项这边没在改，一项这边正改着 ----
   const piPort = () => input('ssh.pi.port') as HTMLInputElement
@@ -247,7 +266,7 @@ export async function manageProbe(): Promise<ManageProbe> {
   const tookLatest = `${piPort().value}:${elsewhere}`
 
   // ---- 三、停用 Pi ----
-  const enabled = () => one<HTMLButtonElement>('.switch', row('harness.pi.enabled'))
+  const enabled = () => one<HTMLButtonElement>('[data-lead] .switch', block('pi'))
   const before = rows().length
   enabled()?.click()
   await save()
@@ -286,7 +305,7 @@ export async function manageProbe(): Promise<ManageProbe> {
   const spokeAfterEnable = await converse(SESSION, '启用之后说一句')
 
   // ---- 五、给 Pi 加两个环境变量：一个普通的，一个密钥 ----
-  await openDetail()
+  await openRuntime('pi')
   const env = () => row('harness.pi.env')
   const addVariable = async (name: string, value: string) => {
     act(env(), 'env-add')?.click()
@@ -330,7 +349,7 @@ export async function manageProbe(): Promise<ManageProbe> {
   // ---- 六、有请求停着等人时改它要重启才生效的设置：待重启；重启先问 ----
   await sayIn(SESSION, '问我两个问题')
   await until('提问的卡片', () => one('.req'))
-  await openDetail()
+  await openRuntime('pi')
   await addVariable('LITCH_PROBE_EXTRA', '1')
   await save()
   await until('Pi 标成待重启', () => block('pi').dataset.pending === 'true', 20_000)
@@ -353,6 +372,7 @@ export async function manageProbe(): Promise<ManageProbe> {
   await piReady()
   const restartState = block('pi').dataset.state ?? ''
 
+  await openDetail()
   // ---- 八、诊断 ----
   act(document, 'run-diagnostics')?.click()
   const checks = (

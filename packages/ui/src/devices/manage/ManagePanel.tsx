@@ -16,16 +16,17 @@ import {
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { whyNot } from '../../app/errors.ts'
+import { leaveThen, useLeaveGuard } from '../../app/leave-guard.tsx'
 import { useKey, useServices } from '../../app/services.tsx'
 import { useInstall } from '../../install/useInstall.ts'
 import { WorktreeList } from '../../worktrees/WorktreeList.tsx'
 import { Diagnostics, Logs } from './Diagnostics.tsx'
-import { adoptDrafts, useDrafts } from './drafts.ts'
+import { adoptDrafts, draftsOf, dropDrafts, useDrafts } from './drafts.ts'
 import { InheritedEnv } from './EnvEditor.tsx'
 import { FoldSection } from './FoldSection.tsx'
 import { HarnessBlock } from './HarnessBlock.tsx'
 import { PowerSettings } from './PowerSettings.tsx'
-import { SaveBar } from './SaveBar.tsx'
+import { SaveBar, saveDrafts } from './SaveBar.tsx'
 import { LeadSwitch, SettingRow } from './SettingRow.tsx'
 import { SshEntries } from './SshEntries.tsx'
 
@@ -58,29 +59,18 @@ function switchesOn(
   return switches.filter((spec) => snapshot.values[spec.key] === true).length
 }
 
-/**
- * 一个 harness 的详情设置入口：它声明了就给按钮；设备支持（别的 harness 声明了）它却没有，说一句还不支持；
- * 设备整个不支持就什么都不显示
- */
-function settingsEntry(
-  device: DeviceView,
-  id: string,
-  onSettings: (harnessId: string) => void,
-): (() => void) | 'unsupported' | null {
-  if (device.harnesses.some((entry) => entry.id === id && entry.configurable))
-    return () => onSettings(id)
-  return device.harnesses.some((entry) => entry.configurable) ? 'unsupported' : null
-}
-
 export function ManagePanel({
   device,
   onSettings,
+  harnessId,
 }: {
   device: DeviceView
   /** 打开一个 harness 的详情设置 */
-  onSettings(harnessId: string): void
+  onSettings?(harnessId: string): void
+  /** 详情页只显示这个 harness 的运行设置。 */
+  harnessId?: string
 }) {
-  const { replica } = useServices()
+  const { replica, channel } = useServices()
   const t = useT()
   const deviceId = device.id
   /** 订阅没成时点“重试”：换一个数，重新订阅 */
@@ -97,6 +87,28 @@ export function ManagePanel({
   const revisions = useKey<ManageRevisions>(keys.manageRevisions(deviceId)) ?? NO_REVISIONS
   const error = useKey<ChannelErrorShape>(keys.manageError(deviceId))
   const { drafts, saving, failure } = useDrafts(deviceId)
+  const selected =
+    schema?.settings.filter((spec) =>
+      harnessId
+        ? spec.scope.kind === 'harness' && spec.scope.harness === harnessId
+        : spec.scope.kind === 'device' || spec.role === 'enable',
+    ) ?? []
+  const scoped = schema ? { ...schema, settings: selected } : undefined
+  const guard = useLeaveGuard(Boolean(harnessId && selected.some((spec) => drafts[spec.key])))
+  guard.current = async () => {
+    if (!scoped) return false
+    await saveDrafts(channel, replica, device, scoped)
+    return selected.every((spec) => !draftsOf(deviceId).drafts[spec.key])
+  }
+  const ownedKeys = useRef<string[]>([])
+  ownedKeys.current = selected.map((spec) => spec.key)
+  useEffect(
+    () => () => {
+      // 详情标签离开前已经处理保存/放弃；只清这一页的草稿，不影响设备页或其他 harness。
+      if (harnessId) dropDrafts(deviceId, ownedKeys.current)
+    },
+    [deviceId, harnessId],
+  )
   /** 设备能装 harness 时：各 harness 的版本和安装任务（每一块标题行下那一行） */
   const install = useInstall(device)
 
@@ -118,7 +130,7 @@ export function ManagePanel({
       </div>
     )
   }
-  if (!schema || !snapshot) {
+  if (!schema || !snapshot || !scoped) {
     return (
       <div className="mng-state" data-manage-state="loading">
         {t('manage.loading')}
@@ -147,6 +159,28 @@ export function ManagePanel({
   )
   const ofHarness = (id: string) =>
     schema.settings.filter((spec) => spec.scope.kind === 'harness' && spec.scope.harness === id)
+  if (harnessId)
+    return (
+      <div className="mng" data-manage-state="ready" data-runtime-settings={harnessId}>
+        <HarnessBlock
+          device={device}
+          harnessId={harnessId}
+          harness={device.harnesses.find((entry) => entry.id === harnessId)}
+          install={install}
+          pending={snapshot.pendingRestart.includes(harnessId)}
+          detail
+          toggle={null}
+          settings={null}
+        >
+          {bucketsOf(schema, ofHarness(harnessId)).map((bucket) => (
+            <div className="mng-bucket" key={bucket.group?.id ?? ''}>
+              {bucket.specs.map(row)}
+            </div>
+          ))}
+        </HarnessBlock>
+        <SaveBar device={device} schema={scoped} revisions={revisions} />
+      </div>
+    )
   /** 这几项里有没保存的改动（填得不对的、被别处动过的也都在里面）：它们所在的那一块不能收着 */
   const touched = (specs: readonly SettingSpecView[]) => specs.some((spec) => spec.key in drafts)
   // 设备声明了的 harness 照它的顺序；设置里提到了、设备没声明的排在后面，不让它们的设置没处放
@@ -171,7 +205,6 @@ export function ManagePanel({
         </div>
         {harnessIds.map((id) => {
           const specs = ofHarness(id)
-          const buckets = bucketsOf(schema, specs)
           // 设备服务标成“启用开关”的那一项：标题行上也放一个，不用点开就能拨。
           // 认的是它带的角色标记，不认键名，也不看它排在第几；没有哪一项带着就没有这个开关
           const lead = specs.find((spec) => spec.role === 'enable' && spec.type === 'boolean')
@@ -183,8 +216,7 @@ export function ManagePanel({
               harness={device.harnesses.find((entry) => entry.id === id)}
               install={install}
               pending={snapshot.pendingRestart.includes(id)}
-              forced={touched(specs)}
-              settings={settingsEntry(device, id, onSettings)}
+              settings={onSettings ? () => leaveThen(() => onSettings(id)) : null}
               toggle={
                 lead ? (
                   <LeadSwitch
@@ -198,18 +230,7 @@ export function ManagePanel({
                 ) : null
               }
             >
-              {buckets.map((bucket) => (
-                <div key={bucket.group?.id ?? ''} className="mng-bucket">
-                  {/* 一个 harness 的设置通常就一组，组名就是它自己，不用再写一遍 */}
-                  {buckets.length > 1 && bucket.group ? (
-                    <h4>{t.said(bucket.group.title)}</h4>
-                  ) : null}
-                  {bucket.specs.map(row)}
-                </div>
-              ))}
-              {buckets.length === 0 ? (
-                <div className="form-note">{t('manage.harness.noSettings')}</div>
-              ) : null}
+              {null}
             </HarnessBlock>
           )
         })}
@@ -249,7 +270,7 @@ export function ManagePanel({
       })}
       <Diagnostics device={device} />
       <Logs device={device} />
-      <SaveBar device={device} schema={schema} revisions={revisions} />
+      <SaveBar device={device} schema={scoped} revisions={revisions} />
     </div>
   )
 }

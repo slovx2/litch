@@ -8,7 +8,7 @@ import type { DeviceView } from '@litch/core'
 import { keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useEffect, useRef, useState } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { ScrollView, StyleSheet, View } from 'react-native'
 import { whyNot } from '../../../../../../packages/ui/src/app/errors.ts'
 import type { RootStackParamList } from '../../../nav/routes'
 import { useChannel, useKey } from '../../../shell/services'
@@ -17,6 +17,7 @@ import { Button, Chip } from '../../../ui/kit/controls'
 import { Confirm } from '../../../ui/kit/overlays'
 import { Screen } from '../../../ui/kit/Screen'
 import { useTheme } from '../../../ui/theme'
+import { ManageSection } from '../ManageSection'
 import { AccountsTab } from './AccountsTab'
 import { ConfigTab } from './ConfigTab'
 import { LeaveScope, useLeave } from './leave'
@@ -26,8 +27,8 @@ import { Note, SaidNote, useHarnessConfig, useSaid } from './parts'
 import { InstructionsTab, McpTab } from './ReadOnlyTabs'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HarnessSettings'>
-type Tab = 'config' | 'accounts' | 'models' | 'mcp' | 'instructions'
-const TABS: readonly Tab[] = ['config', 'accounts', 'models', 'mcp', 'instructions']
+type Tab = 'runtime' | 'config' | 'accounts' | 'models' | 'mcp' | 'instructions'
+const TABS: readonly Tab[] = ['runtime', 'config', 'accounts', 'models', 'mcp', 'instructions']
 
 export function HarnessSettingsScreen({ route, navigation }: Props) {
   const { deviceId, harness: harnessId } = route.params
@@ -35,7 +36,7 @@ export function HarnessSettingsScreen({ route, navigation }: Props) {
   const t = useT()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const view = useHarnessConfig(deviceId, harnessId)
-  const [tab, setTab] = useState<Tab>('config')
+  const [tab, setTab] = useState<Tab>('runtime')
   const { leaveThen, unsaved, guards, dialog } = useLeave()
   // 返回（标题栏的、系统的、手势）：有没保存的改动先问，问完了再照原来的动作走；走的那一次不再拦
   const leaving = useRef(false)
@@ -57,12 +58,22 @@ export function HarnessSettingsScreen({ route, navigation }: Props) {
     harnessId
   const state = pageState(view)
   const ready = state === 'ready' && view !== undefined && view !== 'error' ? view : null
-  const tabs = TABS.filter((one) => one !== 'models' || ready?.config.data?.modelCatalog === true)
+  const tabs = TABS.filter((one) =>
+    one === 'runtime'
+      ? device?.manageable
+      : ready && (one !== 'models' || ready.config.data?.modelCatalog === true),
+  )
   // 模型标签没了（重读后说没有了）：回到配置
-  const shown: Tab = tabs.includes(tab) ? tab : 'config'
+  const shown: Tab = tabs.includes(tab) ? tab : (tabs[0] ?? 'config')
 
   let body = null
-  if (ready) {
+  if (shown === 'runtime' && device) {
+    body = (
+      <ScrollView>
+        <ManageSection device={device} harnessId={harnessId} />
+      </ScrollView>
+    )
+  } else if (ready) {
     body =
       shown === 'config' ? (
         <ConfigTab deviceId={deviceId} harnessId={harnessId} slot={ready.config} />
@@ -97,9 +108,9 @@ export function HarnessSettingsScreen({ route, navigation }: Props) {
       wire={device ? theme.c.wire[device.wire] : undefined}
       testID="harness-settings"
     >
-      {ready ? (
+      {tabs.length > 0 ? (
         <>
-          {ready.restartRequired ? (
+          {ready?.restartRequired ? (
             <RestartBanner deviceId={deviceId} harnessId={harnessId} name={name} />
           ) : null}
           <View

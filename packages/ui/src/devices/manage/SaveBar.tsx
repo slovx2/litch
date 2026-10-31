@@ -1,4 +1,4 @@
-// 保存条：有没保存的改动时贴在详情页底下。整台设备的改动一起保存，一次写入要么全成、要么一项都不落。
+// 保存条：有没保存的改动时贴在详情页底下。当前页的改动一起保存，一次写入要么全成、要么一项都不落。
 // 为什么不是改一项存一项：有的改动要几项一起才成立（两个入口互换端口）；不少设置一改就要重启 harness，
 // 逐项即存会一下一下地重启；停用 harness、关入口这类有后果的事，也该是用户明确按一下才发生。
 import {
@@ -146,9 +146,17 @@ export function SaveBar({ device, schema, revisions }: SaveBarProps) {
   ]
 
   const discard = () => {
-    const gone = drafts
+    const gone = Object.fromEntries(
+      dirty.flatMap((spec) => {
+        const draft = drafts[spec.key]
+        return draft ? [[spec.key, draft]] : []
+      }),
+    )
     const count = dirty.length
-    dropDrafts(deviceId)
+    dropDrafts(
+      deviceId,
+      dirty.map((spec) => spec.key),
+    )
     showToast({
       id: toastId(deviceId),
       text: (say) => say('manage.discarded', { count }),

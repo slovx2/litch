@@ -1,12 +1,11 @@
 // 一个 harness 占一块，平时只有一行：它是谁、现在什么状态、开没开、能不能重启。
-// 点开才是用不了的原因、它自己的那些设置和各自的说明。里面有没保存的改动时一定开着，不把问题藏在收起的块里。
+// 进入详情页后显示运行信息、不可用原因和设置。
 // “启用”也只是按声明画出来的一项，界面不认它的键：标题行上的开关是设备服务标了“启用开关”角色的那一项（见 ManagePanel）。
 import type { DeviceView, HarnessView, InstallTopicView } from '@litch/core'
-import { type ReactNode, useId, useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { Confirm } from '../../app/Confirm.tsx'
 import { whyNot } from '../../app/errors.ts'
-import { Fold, useFold } from '../../app/Fold.tsx'
 import { stampFull } from '../../app/format.ts'
 import { useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
@@ -29,8 +28,8 @@ interface HarnessBlockProps {
   install: InstallTopicView | undefined
   /** 改过的设置还没用上，等着重启 */
   pending: boolean
-  /** 它的设置里有没保存的改动：这一块一定开着 */
-  forced: boolean
+  /** 详情页显示运行信息与设置；设备列表只显示标题行。 */
+  detail?: boolean
   /** 标题行上的开关。设备服务没有给哪一项标“启用开关”的角色就没有 */
   toggle: ReactNode
   /** 详情设置：打开它；'unsupported' 是设备支持而这个 harness 还不支持；null 是设备不支持，不提 */
@@ -39,11 +38,19 @@ interface HarnessBlockProps {
 }
 
 export function HarnessBlock(props: HarnessBlockProps) {
-  const { device, harnessId, harness, install, pending, forced, toggle, settings, children } = props
+  const {
+    device,
+    harnessId,
+    harness,
+    install,
+    pending,
+    detail = false,
+    toggle,
+    settings,
+    children,
+  } = props
   const { channel } = useServices()
   const t = useT()
-  const fold = useFold(forced)
-  const bodyId = useId()
   const [restarting, setRestarting] = useState(false)
   /** 它有回合在跑，设备服务没有照做：问用户要不要仍然重启 */
   const [asking, setAsking] = useState(false)
@@ -98,16 +105,11 @@ export function HarnessBlock(props: HarnessBlockProps) {
       data-state={harness?.state ?? 'unknown'}
       data-pending={pending}
       data-restarting={restarting}
-      data-open={fold.open}
+      data-open={detail}
     >
       <header className="mng-h-head">
         <h3>
-          <Fold
-            open={fold.open}
-            onToggle={fold.toggle}
-            controls={bodyId}
-            title={forced ? t('manage.fold.locked') : undefined}
-          >
+          <span className="mng-h-label">
             <span className={ready ? 'chip' : 'chip off'}>
               {harness?.badge ?? harnessId.slice(0, 2).toUpperCase()}
             </span>
@@ -115,7 +117,7 @@ export function HarnessBlock(props: HarnessBlockProps) {
             {harness?.version ? (
               <span className="mng-h-ver mono dim">{harness.version}</span>
             ) : null}
-          </Fold>
+          </span>
         </h3>
         {harness ? (
           <span className={STATE_CLASS[harness.state]} data-harness-state>
@@ -147,8 +149,8 @@ export function HarnessBlock(props: HarnessBlockProps) {
         ) : null}
       </header>
       <InstallRow device={device} harnessId={harnessId} view={install} name={name} />
-      {fold.open ? (
-        <div id={bodyId} className="mng-h-body">
+      {detail ? (
+        <div className="mng-h-body">
           {harness?.cli ? (
             <dl className="harness-runtime" data-harness-runtime>
               <dt>{t('harness.runtime.path')}</dt>

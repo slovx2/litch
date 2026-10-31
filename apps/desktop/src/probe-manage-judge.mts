@@ -74,8 +74,8 @@ export function judgeMockManage(probe: MockManageProbe): string[] {
   )
   must(probe.foldsReachable, '收起展开的地方不都是聚焦得到、带着状态和箭头的按钮')
   must(
-    probe.foldToggles === 'true:true:true>false:false',
-    `点开再收起不对（开着:按钮的状态:内容在不在 > 收起之后）：${probe.foldToggles}`,
+    probe.foldToggles === 'true:true>false:false',
+    `详情显示及返回后的设置隐藏不对：${probe.foldToggles}`,
   )
   same(
     probe.harnesses,
@@ -124,8 +124,8 @@ export function judgeMockManage(probe: MockManageProbe): string[] {
   )
 
   must(
-    probe.leadOpens === 'true:false:false',
-    `在收着的标题行上拨开关，这一块没有自己开着，或者里面那一行没跟着变：${probe.leadOpens}`,
+    probe.leadOpens === 'false:false:false',
+    `设备页拨开关后不应展开运行设置：${probe.leadOpens}`,
   )
   must(probe.disableBar === 1, `改了一项，保存条上不是一项：${probe.disableBar}`)
   must(probe.disabledState === 'disabled', `停用之后状态没变：${probe.disabledState}`)

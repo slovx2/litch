@@ -118,7 +118,7 @@ export function claudeThreadIdHeaderEnv(
 export type ClaudePromptCacheTtl = 'default' | '1h'
 
 /**
- * 1h 时给 CLI 设的它自己的环境变量（照 Claude 桌面端起 CLI 时的设法）：主对话 1 小时，子代理、后台和辅助请求
+ * 1h 时给 CLI 设的它自己的环境变量：主对话 1 小时，子代理、后台和辅助请求
  * 仍是 5 分钟。请求体里的 cache_control.ttl 和 anthropic-beta 由 CLI 按这些变量自己决定，入口不写
  */
 export const PROMPT_CACHE_1H_ENV: Readonly<Record<string, string>> = {
@@ -128,13 +128,13 @@ export const PROMPT_CACHE_1H_ENV: Readonly<Record<string, string>> = {
 }
 
 /**
- * CHA_CLAUDE_PROMPT_CACHE_TTL：Claude Code 的提示缓存时长，取值 default（没设、为空也是它）或 1h。
+ * CHA_CLAUDE_PROMPT_CACHE_TTL：没设或为空时用 1h；明确设 default 时跟随官方 CLI。
  * 认不出的值直接报错，不默默退回默认
  */
 export function claudePromptCacheTtl(env: NodeJS.ProcessEnv = process.env): ClaudePromptCacheTtl {
   const raw = env.CHA_CLAUDE_PROMPT_CACHE_TTL?.trim().toLowerCase()
-  if (!raw || raw === 'default') return 'default'
-  if (raw === '1h') return '1h'
+  if (!raw || raw === '1h') return '1h'
+  if (raw === 'default') return 'default'
   throw new Error(
     `CHA_CLAUDE_PROMPT_CACHE_TTL 无效：${env.CHA_CLAUDE_PROMPT_CACHE_TTL}（只能是 default 或 1h）`,
   )

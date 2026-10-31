@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Claude Code 的提示缓存时长：只有 Claude Code 有，默认跟官方一致，改了要重启；写过才落到 CHA_CLAUDE_PROMPT_CACHE_TTL 上，
+// Claude Code 的提示缓存时长：只有 Claude Code 有，默认 1 小时，改了要重启；写过才落到 CHA_CLAUDE_PROMPT_CACHE_TTL 上，
 // 没写过时由更低几层说了算；只认 default 和 1h。
 func TestClaudeCacheTTLSetting(t *testing.T) {
 	t.Setenv(claudeCacheTTLVariable, "")
@@ -15,7 +15,7 @@ func TestClaudeCacheTTLSetting(t *testing.T) {
 	cfg := settingsTestConfiguration(t)
 	schema := buildSettingsSchema(cfg)
 	spec, declared := schema.spec(claudeCacheTTLKey)
-	if !declared || spec.Type != settingEnum || spec.Default != claudeCacheTTLDefault || spec.Restart != restartHarness ||
+	if !declared || spec.Type != settingEnum || spec.Default != claudeCacheTTLHour || spec.Restart != restartHarness ||
 		spec.Group != "harness.claude-code" || spec.Scope != harnessScope(claudeHarness) || len(spec.Options) != 2 ||
 		spec.Options[0].Value != claudeCacheTTLDefault || spec.Options[1].Value != claudeCacheTTLHour {
 		t.Fatalf("提示缓存时长的声明不对: %+v", spec)
@@ -44,8 +44,8 @@ func TestClaudeCacheTTLSetting(t *testing.T) {
 		}
 	}
 
-	// 没写过：不给变量，和加这一项之前一样（跟官方一致）。
-	if variable(claudeHarness) != "" || len(cfg.forHarness(claudeHarness).settingsEnv) != 0 || shown() != claudeCacheTTLDefault {
+	// 没写过：不给变量，由运行时采用 1 小时默认值。
+	if variable(claudeHarness) != "" || len(cfg.forHarness(claudeHarness).settingsEnv) != 0 || shown() != claudeCacheTTLHour {
 		t.Fatalf("没写过时不该给变量: %q %v", variable(claudeHarness), shown())
 	}
 	untouched, pi := cfg.runtimeFingerprint(claudeHarness, true), cfg.runtimeFingerprint("pi", true)
@@ -71,6 +71,12 @@ func TestClaudeCacheTTLSetting(t *testing.T) {
 	write(2, json.RawMessage("null"))
 	if variable(claudeHarness) != "1h" || shown() != claudeCacheTTLHour || cfg.runtimeFingerprint(claudeHarness, true) != untouched {
 		t.Fatalf("清掉之后应由环境文件说了算: %q %v", variable(claudeHarness), shown())
+	}
+	cfg.userEnv = nil
+	// 更低层明确要求官方默认时，界面也必须显示官方默认。
+	cfg.userEnv = map[string]string{claudeCacheTTLVariable: "default"}
+	if cfg.defaultClaudeCacheTTL() != claudeCacheTTLDefault {
+		t.Fatal("环境中明确选择 default 时不能显示为 1h")
 	}
 	cfg.userEnv = nil
 
