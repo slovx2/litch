@@ -84,6 +84,10 @@ original flow. Delegated answers leave an audit record in the child conversation
 
 ### Folded turns and mid-turn input
 
+Long desktop conversations load their history progressively so the sidebar stays responsive.
+When returning to an earlier reading position, the transcript briefly shows a loading message
+while restoring it. You can select another conversation during that time.
+
 In the compact transcript, a finished turn with a final answer folds its activity into a full-width
 row: elapsed time, supporting counts of commentary/steps/subagents, and any failure, refusal or still
 running background work. Click the row to expand. Stopped turns and turns without a final answer stay

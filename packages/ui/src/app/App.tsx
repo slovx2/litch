@@ -344,7 +344,7 @@ export function App() {
       ) : (
         <TitleBar
           selection={selection}
-          draft={draft}
+          draft={peek ? null : draft}
           page={page}
           peek={peek}
           devicePageId={page === 'tasks' ? taskDevice : deviceDetail}
@@ -370,7 +370,7 @@ export function App() {
           <ApprovalNotices />
           <TaskNotices onOpen={select} />
           <SessionNotices onOpen={select} selection={selection} />
-          {page === 'archived' && peek ? (
+          {(page === 'archived' || page === 'suggestions') && peek ? (
             <ArchivedSession
               key={`${peek.deviceId}:${peek.sessionId}`}
               {...peek}

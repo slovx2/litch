@@ -81,7 +81,7 @@ const markOf = (steady: Steady): Mark | undefined =>
   steady.marks.find((mark) => mark.element.isConnected)
 
 /** rows 里从头数，连续满足条件的有多少个。条件必须是“前一段都满足、后一段都不满足” */
-function countWhile(rows: NodeListOf<Element>, test: (row: Element) => boolean): number {
+function countWhile(rows: readonly Element[], test: (row: Element) => boolean): number {
   let low = 0
   let high = rows.length
   while (low < high) {
@@ -284,7 +284,10 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
     }
     const view = scroller.getBoundingClientRect()
     // 带标记的行互不重叠、从上到下排列，所以可以二分
-    const rows = content.querySelectorAll('[data-anchor]')
+    // 屏外回合由 content-visibility 跳过排版；量它们的子节点会强制展开，改变整份历史的高度。
+    const rows = [...content.querySelectorAll('[data-anchor]')].filter((row) =>
+      row.checkVisibility({ contentVisibilityAuto: true }),
+    )
     // 第一个还没完全滚出上边缘的，和最后一个已经露出下边缘的
     const first = countWhile(rows, (row) => row.getBoundingClientRect().bottom <= view.top)
     const last = countWhile(rows, (row) => row.getBoundingClientRect().top < view.bottom) - 1
@@ -432,6 +435,7 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
   const toBottom = useCallback(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
+    steadied.current = null
     scroller.scrollTop = 0
     written.current = null
     observe()
@@ -452,6 +456,12 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
     } else if (target) {
       const viewTop = scroller.getBoundingClientRect().top
       scroller.scrollTop += target.getBoundingClientRect().top - viewTop - state.offset
+      // 滚到目标后，附近原本在屏外的回合才会取得真实高度，暂时守住这条原文。
+      if (content.hasAttribute('data-windowed'))
+        steadyOn({
+          marks: [{ element: target, top: viewTop + state.offset }],
+          scrollTop: scroller.scrollTop,
+        })
     } else {
       // 那一行不在了：退而求其次，回到离底部同样远的地方
       scroller.scrollTop = -state.distance
@@ -460,7 +470,7 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
     // 从这一刻起才开始记这个会话的位置
     armed.current = true
     observe()
-  }, [sessionKey, observe])
+  }, [sessionKey, observe, steadyOn])
 
   const pin = useCallback(
     (element: Element | null) => {

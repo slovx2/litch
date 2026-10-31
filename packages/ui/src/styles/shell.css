@@ -150,22 +150,13 @@
 }
 .sb-foot {
   display: flex;
-  flex-wrap: wrap;
   align-items: stretch;
   gap: 4px;
   padding: 4px 8px 6px;
   border-top: 1px solid var(--line-1);
 }
 
-.sb-foot > .sb-btn.suggestions {
-  flex: 1 0 100%;
-  min-height: 32px;
-  flex-direction: row;
-  justify-content: flex-start;
-  padding-inline: 10px;
-  gap: 12px;
-}
-/* 底下横排三个一样宽的小按钮：图标在上、名字在下。名字太长时省略，不换行、不挤歪 */
+/* 底下横排四个一样宽的小按钮：图标在上、名字在下。名字太长时省略，不换行、不挤歪 */
 .sb-foot > .sb-btn,
 .sb-look {
   flex: 1 1 0;
@@ -183,7 +174,7 @@
   align-items: center;
   justify-content: center;
   gap: 2px;
-  /* 左右不垫：flex-basis 为 0 时内边距会算进宽度，三个就不一样宽了 */
+  /* 左右不垫：flex-basis 为 0 时内边距会算进宽度，按钮就不一样宽了 */
   padding: 4px 0 3px;
   border-radius: var(--r1);
   color: var(--ink-2);

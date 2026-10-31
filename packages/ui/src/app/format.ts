@@ -6,6 +6,18 @@ const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
 
+// 长会话的每条消息都有时间，复用有限几种格式，避免逐条初始化 Intl。
+const formats = new Map<string, Intl.DateTimeFormat>()
+function dateFormat(lang: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = `${lang}:${JSON.stringify(options)}`
+  let format = formats.get(key)
+  if (!format) {
+    format = new Intl.DateTimeFormat(lang, options)
+    formats.set(key, format)
+  }
+  return format
+}
+
 /** 多久以前：现在、12分、3时、5天，更早的写月和日 */
 export function ago(timestamp: number, now: number, t: Translator): string {
   const diff = Math.max(0, now - timestamp)
@@ -35,8 +47,8 @@ export function stamp(timestamp: number, now: number, lang: string): string {
   const days = Math.max(0, daysApart(timestamp, now))
   // 星期和时刻分开排再用空格接上：中文合在一起排是“星期一14:32”，中间没有空格
   if (days > 0 && days < 7) {
-    const weekday = new Intl.DateTimeFormat(lang, { weekday: 'long' }).format(timestamp)
-    return `${weekday} ${new Intl.DateTimeFormat(lang, time).format(timestamp)}`
+    const weekday = dateFormat(lang, { weekday: 'long' }).format(timestamp)
+    return `${weekday} ${dateFormat(lang, time).format(timestamp)}`
   }
   const options: Intl.DateTimeFormatOptions =
     days === 0
@@ -44,12 +56,12 @@ export function stamp(timestamp: number, now: number, lang: string): string {
       : new Date(timestamp).getFullYear() === new Date(now).getFullYear()
         ? { ...time, month: 'short', day: 'numeric' }
         : { ...time, year: 'numeric', month: 'short', day: 'numeric' }
-  return new Intl.DateTimeFormat(lang, options).format(timestamp)
+  return dateFormat(lang, options).format(timestamp)
 }
 
 /** 悬停时看的完整时刻：年月日加时分 */
 export function stampFull(timestamp: number, lang: string): string {
-  return new Intl.DateTimeFormat(lang, {
+  return dateFormat(lang, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

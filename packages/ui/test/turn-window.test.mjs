@@ -1,15 +1,15 @@
-// 对话区一次画多少个回合（src/transcript/turn-window.ts）：先画最后几个，回来时包住上次停的那一行，之后一批批补到全
+// 首批固定，恢复旧位置也分批补齐，不随锚点距离扩大一次提交的内容。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const { FIRST_TURNS, MORE_TURNS, firstWindow, growWindow } = await import(
+const { FIRST_TURNS, MORE_TURNS, restoreWindow, growWindow } = await import(
   '../src/transcript/turn-window.ts'
 )
 
-test('先画最后几个；上次停在更早的回合就多画到包住它', () => {
-  assert.equal(firstWindow(null), FIRST_TURNS)
-  assert.equal(firstWindow(2), FIRST_TURNS)
-  assert.equal(firstWindow(50), 51)
+test('恢复锚点需要补齐的范围，包含前面一个回合', () => {
+  assert.equal(restoreWindow(null), FIRST_TURNS)
+  assert.equal(restoreWindow(2), FIRST_TURNS)
+  assert.equal(restoreWindow(50), 51)
 })
 
 test('一批批补，补到全为止', () => {

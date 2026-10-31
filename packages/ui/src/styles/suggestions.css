@@ -2,9 +2,15 @@
   list-style: none;
   margin: 0 auto;
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  align-items: start;
   gap: 16px;
-  max-width: 880px;
+  width: 100%;
   padding: 0 24px 24px;
+}
+
+[data-page="suggestions"] .arch-head {
+  max-width: none;
 }
 
 [data-page="suggestions"] .arch-head h1 {
@@ -13,7 +19,7 @@
 
 [data-page="suggestions"] .arch-note,
 [data-page="suggestions"] .arch-body > .dim {
-  max-width: 880px;
+  max-width: none;
   margin: 0 auto;
   padding: 0 24px 16px;
 }
@@ -23,5 +29,14 @@
 }
 
 .suggestion-row .prop-body {
+  min-width: 0;
+}
+
+.suggestion-row .suggestion-source {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.suggestion-source .ell {
   min-width: 0;
 }

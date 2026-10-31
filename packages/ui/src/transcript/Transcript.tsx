@@ -25,6 +25,7 @@ import {
   type ReactNode,
   startTransition,
   useCallback,
+  useDeferredValue,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -61,7 +62,7 @@ import { Stamp } from './Stamp.tsx'
 import { PinProvider, savedTurns, useTranscriptScroll } from './scroll.ts'
 import { TurnTouch, touchTurn, useFold, useTurnTouched } from './state.ts'
 import { TodoCard } from './Todo.tsx'
-import { firstWindow, growWindow } from './turn-window.ts'
+import { FIRST_TURNS, growWindow, restoreWindow, WINDOWED_TURNS } from './turn-window.ts'
 import { useTranscriptView } from './view.ts'
 
 interface SessionRef {
@@ -495,30 +496,36 @@ interface TranscriptProps extends SessionRef {
  * 这一刻画最后几个回合（turn-window.ts）：先画一截，之后每次让出主线程再往前补一批，补的渲染可被打断（transition），
  * 打字、点按不用等它。换了会话从头来
  */
-function useTurnWindow(sessionKey: string, total: number): number {
+function useTurnWindow(sessionKey: string, total: number): { span: number; restoring: boolean } {
   const [state, setState] = useState(() => ({
     key: sessionKey,
-    shown: firstWindow(savedTurns(sessionKey)),
+    shown: FIRST_TURNS,
+    restore: restoreWindow(savedTurns(sessionKey)),
   }))
-  let shown = state.shown
+  let current = state
   if (state.key !== sessionKey) {
-    shown = firstWindow(savedTurns(sessionKey))
-    setState({ key: sessionKey, shown })
+    current = {
+      key: sessionKey,
+      shown: FIRST_TURNS,
+      restore: restoreWindow(savedTurns(sessionKey)),
+    }
+    setState(current)
   }
+  const { shown, restore } = current
   useEffect(() => {
     if (shown >= total) return
     const timer = setTimeout(() =>
       startTransition(() =>
         setState((current) =>
           current.key === sessionKey
-            ? { key: sessionKey, shown: growWindow(current.shown, total) }
+            ? { ...current, shown: growWindow(current.shown, total) }
             : current,
         ),
       ),
     )
     return () => clearTimeout(timer)
   }, [sessionKey, shown, total])
-  return shown
+  return { span: shown, restoring: shown < Math.min(total, restore) }
 }
 
 /** 对话区：只在显示期间订阅这个会话，切走就退订 */
@@ -528,7 +535,8 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
   const [attempt, setAttempt] = useState(0)
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt 变了就是要重新订阅
   useEffect(() => replica.openSession(deviceId, sessionId), [replica, deviceId, sessionId, attempt])
-  const allTurns = useKey<string[]>(keys.turnIds(deviceId, sessionId))
+  // 状态库的通知是同步更新。把历史渲染降为可中断任务，先让侧栏完成选中和后续点击。
+  const allTurns = useDeferredValue(useKey<string[]>(keys.turnIds(deviceId, sessionId)))
   const skip = aside?.skip
   const turnIds = useMemo(
     () => (allTurns && skip?.length ? allTurns.filter((id) => !skip.includes(id)) : allTurns),
@@ -541,7 +549,7 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
   const down = downHarness(device, listed?.harness)
   const t = useT()
   const scroll = useTranscriptScroll(`${deviceId}:${sessionId}`)
-  const span = useTurnWindow(`${deviceId}:${sessionId}`, turnIds?.length ?? 0)
+  const { span, restoring } = useTurnWindow(`${deviceId}:${sessionId}`, turnIds?.length ?? 0)
   const drawn = useMemo(
     () => (turnIds && span < turnIds.length ? turnIds.slice(-span) : turnIds),
     [turnIds, span],
@@ -554,15 +562,20 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
   const fileLinks = useSessionFileLinks(deviceId, listed)
 
   // 内容第一次画出来的那一刻，回到上次离开这个会话时的位置
-  const ready = turnIds !== undefined
+  const ready = turnIds !== undefined && !restoring
   useLayoutEffect(() => {
     if (ready) restore()
   }, [ready, restore])
 
   return (
     <>
-      <div className="tr-scroll" ref={scroll.scrollerRef}>
-        <div className="tr" ref={scroll.contentRef}>
+      <div className="tr-scroll" ref={scroll.scrollerRef} aria-busy={restoring || !turnIds}>
+        {restoring ? <div className="tr-loading dim">{t('transcript.loading')}</div> : null}
+        <div
+          className="tr"
+          ref={scroll.contentRef}
+          data-windowed={(turnIds?.length ?? 0) > WINDOWED_TURNS ? '' : undefined}
+        >
           <PinProvider value={scroll.pin}>
             <FileLinksProvider value={fileLinks}>
               <ActionsProvider value={actions}>

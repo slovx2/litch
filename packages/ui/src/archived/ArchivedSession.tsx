@@ -8,7 +8,7 @@ import { useKey, useServices } from '../app/services.tsx'
 import { Transcript } from '../transcript/Transcript.tsx'
 
 interface ArchivedSessionProps extends Selection {
-  /** 回到已归档对话的列表 */
+  /** 回到打开它的列表（已归档对话或全局建议） */
   onBack(): void
   /** 恢复成了：它回到侧栏里，接着在平常的对话区里打开 */
   onRestored(selection: Selection): void
@@ -25,10 +25,26 @@ export function ArchivedSession({ deviceId, sessionId, onBack, onRestored }: Arc
   const t = useT()
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
   const bar = useRef<HTMLDivElement>(null)
   const online = device?.connection === 'online'
   /** 正在恢复：这时它从已归档的表里消失是我们自己做的，不算“在别处没了” */
   const restoring = useRef(false)
+
+  // 建议列表也能直接打开归档会话，不能依赖之前进过“已归档”列表。
+  useEffect(() => {
+    if (!online) return
+    const controller = new AbortController()
+    setLoaded(false)
+    channel.command('device.loadArchived', { deviceId }, { signal: controller.signal }).then(
+      () => setLoaded(true),
+      (error: unknown) => {
+        if (!controller.signal.aborted)
+          setFailure(t('archived.failed', { reason: reasonOf(error, t) }))
+      },
+    )
+    return () => controller.abort()
+  }, [channel, deviceId, online, t])
 
   // 一打开焦点就落在这条栏上：按 Esc 回列表，Tab 一下就是“恢复”
   useEffect(() => {
@@ -36,7 +52,8 @@ export function ArchivedSession({ deviceId, sessionId, onBack, onRestored }: Arc
   }, [])
 
   // 正看着的时候它在别处被恢复或者删掉了：这一页没有着落了，回到列表
-  const gone = Array.isArray(shelved) && !shelved.some((summary) => summary.id === sessionId)
+  const gone =
+    loaded && Array.isArray(shelved) && !shelved.some((summary) => summary.id === sessionId)
   useEffect(() => {
     if (gone && !restoring.current) onBack()
   }, [gone, onBack])

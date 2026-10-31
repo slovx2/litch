@@ -174,7 +174,7 @@ function SettingsButton({ page, onOpen }: { page: Page | null; onOpen(): void })
   )
 }
 
-/** 侧栏底部建议独占一行，下面横排定时任务、外观、设置；最窄侧栏里英文也放得下 */
+/** 侧栏底部横排建议、定时任务、外观、设置 */
 export function SidebarFoot({ page, onPage }: { page: Page | null; onPage(page: Page): void }) {
   return (
     <div className="sb-foot">

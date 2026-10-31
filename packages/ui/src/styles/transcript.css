@@ -17,6 +17,7 @@
 /* 反向列布局：滚动位置是“离底部多远”，内容在底部增长时浏览器自己保持贴底。
    关掉浏览器的滚动锚定，离开底部之后的补偿由 transcript/scroll.ts 自己算 */
 .tr-scroll {
+  position: relative;
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
@@ -26,6 +27,13 @@
   /* 滑块平时不画，鼠标进来才露出来（scrollbar.css）。
      右边常驻信息栏和对话之间就不会立着一条滑块，把页面隔成两块 */
   --sb-rest: transparent;
+}
+.tr-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 20px 24px;
+  background: var(--panel);
 }
 .tr {
   width: 100%;
@@ -42,6 +50,11 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+.tr[data-windowed] > .turn {
+  /* 屏外回合保留 DOM 和查找能力，但不排版内部正文；滚到附近再按实际高度展开。 */
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 400px;
 }
 .mini {
   align-self: flex-start;

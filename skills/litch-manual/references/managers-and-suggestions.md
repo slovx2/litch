@@ -113,7 +113,9 @@ are in `sessions-and-projects.md`.
 ### Where and how to use them
 
 The desktop sidebar's **Suggestions** entry shows pending ordinary suggestions across devices with
-a count. Rows show the title, brief, source conversation, project/device and creation time, with the
+a count, alongside Tasks, Appearance and Settings in the bottom row. Cards automatically form a
+multi-column grid when space allows and return to one column in narrow windows. They show the
+title, brief, source conversation, project/device and creation time, with the
 same actions as the original card. A manager board's **Suggestions from this manager’s lines**
 opens this list filtered to that manager's whole subtree; switch back to all suggestions there.
 Instant “New session / Do it here” offers are not included. The side panel also lists suggestions
@@ -121,7 +123,9 @@ for the current session; the phone has only the per-session list.
 
 Handled, withdrawn and expired suggestions leave the list; history stays in the source conversation.
 Offline devices keep the last snapshot, but actions need a connection. An archived source is marked
-and opens as a read-only preview. **Do it here** first restores it and its worktree; a failed restore
+and opens as a read-only preview. Click the source conversation's name and arrow to open it;
+**Back to list** or Escape returns from an archived preview to the same suggestion list and filter.
+**Do it here** first restores it and its worktree; a failed restore
 leaves the suggestion pending. Deleting the source withdraws its pending cards.
 
 ### Configuration and common questions

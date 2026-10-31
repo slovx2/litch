@@ -9,7 +9,7 @@ import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { useNow } from '../app/clock.ts'
 import { ago } from '../app/format.ts'
-import { Close } from '../app/icons.tsx'
+import { Close, Forward } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { Brief, ProposalActs } from './ProposalCard.tsx'
 import { SANDBOX_LEVEL } from './sandbox.ts'
@@ -38,12 +38,14 @@ function SuggestionRow({
         <div className="prop-meta">
           <button
             type="button"
-            className="btn ghost"
+            className="btn ghost suggestion-source"
+            data-act="open-source"
             disabled={!online}
             title={!online ? t('suggestions.offline') : t('suggestions.openSource')}
             onClick={() => onOpen({ deviceId, sessionId: source.threadId }, source.archived)}
           >
-            {source.title}
+            <span className="ell">{source.title}</span>
+            <Forward />
           </button>
           {source.archived ? <span className="pill mute">{t('suggestions.archived')}</span> : null}
           <span>{device ? t.text(device.name) : deviceId}</span>

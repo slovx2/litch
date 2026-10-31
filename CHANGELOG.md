@@ -5,6 +5,11 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 全局建议支持打开来源会话，已归档来源可只读查看并返回原列表；建议卡片按窗口宽度自动分列，侧栏底部四个入口改为同排
+- 桌面端打开长对话时分批渲染历史、延后屏外排版，恢复旧滚动位置也不再一次渲染大量回合，减少对侧栏点击和连续切换的阻塞
+
 ## 0.27.1
 
 - 桌面端与手机端去掉回合中途消息上的“本回合补充”标识，保留按消息位置分段收起过程

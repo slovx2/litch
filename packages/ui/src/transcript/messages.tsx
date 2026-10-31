@@ -9,7 +9,7 @@ import {
   type UserAttachment,
   type UserMessageItem,
 } from '@litch/core'
-import { memo, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { ImageViewer } from '../app/ImageViewer.tsx'
 import { Icon } from '../app/icons.tsx'
@@ -129,11 +129,11 @@ export const UserMessage = memo(function UserMessage({
 
   // 是不是超过了 20 行，要画出来才知道，而且跟宽度有关：盯着这块文字的尺寸，变了就重新量
   const hasText = text !== ''
-  useLayoutEffect(() => {
+  useEffect(() => {
     const element = body.current
     if (!element || open || !hasText) return
     const measure = () => setLong(element.scrollHeight > element.clientHeight + 1)
-    measure()
+    // ResizeObserver 首次观察也会回调；挂载时不逐条强制同步排版。
     const observer = new ResizeObserver(measure)
     observer.observe(element)
     return () => observer.disconnect()
