@@ -5,7 +5,9 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
-## 未发布
+## 0.27.1
+
+- 桌面端与手机端去掉回合中途消息上的“本回合补充”标识，保留按消息位置分段收起过程
 
 - 桌面侧栏收起父会话后，在子会话竖线内显示“N 个子会话”；部分子会话仍显示时，只计入尚未显示的数量，写为“还有 N 个子会话”。点击该行展开。增加子会话缩进并加深实线，明确后续平级会话的层级
 

@@ -344,7 +344,6 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
                 itemId={block.itemId}
                 turnId={actable ? turnId : undefined}
                 steered={turn.itemIds.indexOf(block.itemId) > 0}
-                addition={turnAddition(turn, block.itemId)}
               />
             )
           if (block.type === 'answer')

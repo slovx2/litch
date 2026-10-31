@@ -1043,7 +1043,6 @@ export const en: Record<MessageKey, Entry> = {
   'attachment.view': 'View image',
   'viewer.close': 'Close',
   'message.expand': 'Show all',
-  'message.turnAddition': 'Added to this turn',
   'message.collapse': 'Show less',
   'ability.unsupported': 'The engine on this device doesn’t support this',
   'turn.busy': 'A turn is running. Try again when it finishes.',

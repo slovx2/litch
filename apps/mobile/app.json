@@ -2,7 +2,7 @@
   "expo": {
     "name": "Litch",
     "slug": "litch",
-    "version": "0.27.0",
+    "version": "0.27.1",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "scheme": "litch",

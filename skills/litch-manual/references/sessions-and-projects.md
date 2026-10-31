@@ -89,7 +89,7 @@ row: elapsed time, supporting counts of commentary/steps/subagents, and any fail
 running background work. Click the row to expand. Stopped turns and turns without a final answer stay
 open. The detailed view keeps its usual behavior.
 
-A user message delivered during a turn is labelled **Added to this turn** (本回合补充). It stays in
+A user message delivered during a turn appears as a regular message bubble. It stays in
 that turn and divides its activity into independently expandable segments on desktop and phone.
 Segment time appears only when every entry has timestamps. The turn's source appears once at its
 start, and completion/total time once at its end. With no mid-turn input there is one activity row.
