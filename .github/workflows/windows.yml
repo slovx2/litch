@@ -27,6 +27,8 @@ jobs:
           "CHA_CLAUDE_CLI=$env:GITHUB_WORKSPACE/.artifacts/host-cli/node_modules/@anthropic-ai/claude-code/bin/claude.exe" >> $env:GITHUB_ENV
           "CLAUDE_CODE_GIT_BASH_PATH=C:\Program Files\Git\bin\bash.exe" >> $env:GITHUB_ENV
       - run: npm run typecheck
+      - name: 上游镜像按原始字节检出
+        run: node --test scripts/magpie-checkout.test.mjs
       - run: npm run build
       - name: 路径、权限和存储边界
         run: |
