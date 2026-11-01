@@ -56,7 +56,7 @@ export class TuiQuery implements AsyncIterable<Record<string, unknown>> {
       hostClaudeVersion(options.pathToClaudeCodeExecutable, '2.1.316')
     } catch (error) {
       throw new Error(
-        'TUI 需要 Claude Code 2.1.316 或更新版本。请在设备的 Claude Code 设置中选择安装与更新 → 更新到最新。也可切回 SDK。',
+        'TUI 需要 Claude Code 2.1.316 或更新版本。请在设备的 Claude Code 设置中选择安装与更新 → 默认验证版，或更新到最新。也可切回 SDK。',
         { cause: error },
       )
     }

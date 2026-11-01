@@ -13,6 +13,17 @@ test('TUI：SDK → TUI → SDK 保持上下文、标题和历史；TUI 工具�
   const home = await realpath(await mkdtemp(join(tmpdir(), 'ltt-')))
   const config = join(home, 'claude')
   await mkdir(config)
+  // 2.1.316 忽略项目登录凭据，但仍应读取普通项目环境；两个后端切换后规则一致。
+  await mkdir(join(home, '.claude'))
+  await writeFile(
+    join(home, '.claude', 'settings.json'),
+    JSON.stringify({
+      env: {
+        CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat01-project-must-be-ignored',
+        CHA_TUI_PROJECT_PROBE: 'project-loaded',
+      },
+    }),
+  )
   const onboarding = {
     hasCompletedOnboarding: true,
     theme: 'dark',
@@ -54,6 +65,8 @@ test('TUI：SDK → TUI → SDK 保持上下文、标题和历史；TUI 工具�
         release = resolve
       })
       model.enqueue(async (body, headers) => {
+        assert.equal(headers['x-api-key'], 'test-not-a-secret')
+        assert.ok(!String(headers.authorization).includes('project-must-be-ignored'))
         if (index) assert.match(JSON.stringify(body.messages), /CONTEXT_SEED_0/)
         if (backend === 'tui') {
           console.log('TUI UA', headers['user-agent'])
@@ -134,7 +147,9 @@ test('TUI：SDK → TUI → SDK 保持上下文、标题和历史；TUI 工具�
           type: 'tool_use',
           id: `tool_${approve}`,
           name: 'Bash',
-          input: { command: `printf approved > '${file}'` },
+          input: {
+            command: `test "$CHA_TUI_PROJECT_PROBE" = project-loaded && printf approved > '${file}'`,
+          },
         },
       ])
       model.enqueue(() => [{ type: 'text', text: 'TOOL_DONE' }])
