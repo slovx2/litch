@@ -52,3 +52,16 @@ test('待答问题、工作线与侧栏未读计数的英文单复数', () => {
     assert.equal(translate('en', 'sidebar.projection.count', { n }), unread)
   }
 })
+
+test('D-29：悬停明细含已审建议，不含报告未读', () => {
+  const counts = { decisions: 3, requests: 1, suggestions: 2, reports: 9 }
+  assert.equal(
+    translate('zh-CN', 'manager.pendingDetail', counts),
+    '3 个决策 · 1 个请你做 · 2 条建议',
+  )
+  assert.equal(
+    translate('en', 'manager.pendingDetail', counts),
+    '3 decisions · 1 request for you · 2 suggestions',
+  )
+  assert.equal(translate('en', 'manager.pendingDetail', { reports: 9 }), '')
+})

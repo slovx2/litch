@@ -93,7 +93,7 @@ export const enManager = {
   'manager.event.end': 'Manager started final tasks',
   'manager.event.rules': 'Manager settings updated',
   'manager.pending': '{n} to handle',
-  'manager.pendingDetail': ({ decisions, requests, suggestions, reports }) =>
+  'manager.pendingDetail': ({ decisions, requests, suggestions }) =>
     [
       Number(decisions) > 0
         ? `${decisions} ${Number(decisions) === 1 ? 'decision' : 'decisions'}`
@@ -103,9 +103,6 @@ export const enManager = {
         : '',
       Number(suggestions) > 0
         ? `${suggestions} ${Number(suggestions) === 1 ? 'suggestion' : 'suggestions'}`
-        : '',
-      Number(reports) > 0
-        ? `${reports} unread ${Number(reports) === 1 ? 'report' : 'reports'}`
         : '',
     ]
       .filter(Boolean)

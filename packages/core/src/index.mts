@@ -373,6 +373,7 @@ export {
 export {
   type ManagerBoardPages,
   type ManagerSessionSummary,
+  managerAttentionCount,
   managerBoardPages,
   managerMark,
   managerSessionIds,

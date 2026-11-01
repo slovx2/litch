@@ -1,5 +1,5 @@
 // 手机经理入口只读目录；设置和调度仍在桌面。
-import { keys, type ManagerView } from '@litch/core'
+import { keys, type ManagerView, managerAttentionCount } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { ScrollView, View } from 'react-native'
 import type { RootStackParamList } from '../../nav/routes'
@@ -21,11 +21,7 @@ function ManagerRow({
   const manager = useKey<ManagerView>(keys.manager(deviceId, id))
   const t = useT()
   if (!manager) return null
-  const count =
-    manager.pendingDecisions +
-    (manager.pendingRequests ?? 0) +
-    (manager.pendingReports ?? 0) +
-    (manager.pendingSuggestions ?? 0)
+  const count = managerAttentionCount(manager)
   return (
     <Row
       title={manager.name || t('manager.manager')}

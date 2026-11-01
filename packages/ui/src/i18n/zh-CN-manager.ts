@@ -89,12 +89,11 @@ export const zhManager = {
   'manager.event.end': '经理开始收尾',
   'manager.event.rules': '已更新经理设定',
   'manager.pending': '{n} 待处理',
-  'manager.pendingDetail': ({ decisions, requests, suggestions, reports }) =>
+  'manager.pendingDetail': ({ decisions, requests, suggestions }) =>
     [
       Number(decisions) > 0 ? `${decisions} 个决策` : '',
       Number(requests) > 0 ? `${requests} 个请你做` : '',
       Number(suggestions) > 0 ? `${suggestions} 条建议` : '',
-      Number(reports) > 0 ? `${reports} 篇未阅报告` : '',
     ]
       .filter(Boolean)
       .join(' · '),

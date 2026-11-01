@@ -137,17 +137,17 @@ try {
   await click('[data-board-tab="inbox"]')
   assert.ok(
     await read(
-      "document.querySelector('[data-manager-id=\"m1\"] .mg-pick small').textContent.includes('5')",
+      "document.querySelector('[data-manager-id=\"m1\"] .mg-pick small').textContent.includes('4')",
     ),
     '侧栏合计待定决策与待做请求',
   )
   assert.equal(
     await read("document.querySelector('.mg-sidebar-counts [title]').title"),
-    '3 个决策 · 1 个请你做 · 1 篇未阅报告',
+    '3 个决策 · 1 个请你做',
   )
   assert.equal(
     await read("document.querySelector('.mg-sidebar-counts [title]').textContent"),
-    '5 待处理',
+    '4 待处理',
   )
   await shot('manager-entry')
   await click('[data-board-tab="suggestions"]')
@@ -582,7 +582,7 @@ try {
   assert.equal(await read('document.querySelector(\'[data-board-tab="requests"] .pill\')'), null)
   assert.ok(
     await read(
-      "document.querySelector('[data-manager-id=\"m1\"] .mg-pick small').textContent.includes('3')",
+      "document.querySelector('[data-manager-id=\"m1\"] .mg-pick small').textContent.includes('2')",
     ),
   )
   await click('[data-board-tab="decisions"]')
@@ -618,7 +618,7 @@ try {
   )
   assert.ok(
     await read(
-      "document.querySelector('.mg-sidebar-counts').textContent.includes('3 待处理') && document.querySelector('.mg-sidebar-counts [data-manager-draft-count]').textContent==='1 项草稿'",
+      "document.querySelector('.mg-sidebar-counts').textContent.includes('2 待处理') && document.querySelector('.mg-sidebar-counts [data-manager-draft-count]').textContent==='1 项草稿'",
     ),
   )
   await read("window.__litchLook.set({lang:'en'})")
@@ -677,7 +677,7 @@ try {
   await click('[data-act="manager-board-toggle"]')
   assert.equal(
     await read('document.querySelector(\'[data-act="manager-board-toggle"] .pill\').textContent'),
-    '3 待处理',
+    '2 待处理',
   )
   await click('[data-act="manager-board-toggle"]')
   await read("window.__litchLook.set({skin:'standard',theme:'light',lang:'en'})")

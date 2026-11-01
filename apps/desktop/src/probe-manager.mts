@@ -127,7 +127,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     one<HTMLButtonElement>('[data-act="manager-board-toggle"][aria-expanded="false"]'),
   )
   const pendingTooltip = Boolean(
-    boardToggle.title &&
+    boardToggle.title === '3 个决策 · 1 个请你做' &&
+      one('[data-act="manager-board-toggle"] .pill')?.textContent === '4 待处理' &&
       boardToggle.title === one('[data-act="manager-board-toggle"] .pill')?.getAttribute('title'),
   )
   await click('[data-act="manager-board-toggle"]')
@@ -353,6 +354,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     one('[data-report="P-1"] [data-relations="P-1"] [data-relation-target="D-15"]') &&
       one('[data-report="P-1"] [data-board-reference="I-2"]')?.getAttribute('title'),
   )
+  const attentionBeforeRead = one('[data-board-tab="inbox"] .pill')?.textContent
+  const unreadBadgeBeforeRead = one('[data-board-tab="reports"] .pill')?.textContent === '1'
   await click('[data-act="report-read"]')
   await until('报告已阅', () => !one('[data-act="report-read"]'))
   await click('[data-report="P-1"] [data-act="post-ask"]')
@@ -362,9 +365,12 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   )
   await click('[data-report="P-1"] [data-act="post-question-send"]')
   const consoleReports = Boolean(
-    await until('报告帖子记录', () =>
-      one('[data-report="P-1"] .mg-post-timeline')?.textContent?.includes('报告还有什么限制'),
-    ),
+    unreadBadgeBeforeRead &&
+      !one('[data-board-tab="reports"] .pill') &&
+      attentionBeforeRead === one('[data-board-tab="inbox"] .pill')?.textContent &&
+      (await until('报告帖子记录', () =>
+        one('[data-report="P-1"] .mg-post-timeline')?.textContent?.includes('报告还有什么限制'),
+      )),
   )
   await click('[data-board-tab="items"]')
   await until('事项分组', () => one('.mg-body details .mg-item'))

@@ -24,6 +24,15 @@ export const managerMark = (session: SessionSummary): SessionManagerMark | null 
 const ms = (value: number | null): number | null => (value === null ? null : value * 1000)
 const timed = <T extends { at: number }>(value: T): T => ({ ...value, at: value.at * 1000 })
 
+/** 待处理只计需行动的三类；报告未读仅留在报告分类（D-29）。 */
+export function managerAttentionCount(
+  manager: Pick<Manager, 'pendingDecisions' | 'pendingRequests' | 'pendingSuggestions'>,
+): number {
+  return (
+    manager.pendingDecisions + (manager.pendingRequests ?? 0) + (manager.pendingSuggestions ?? 0)
+  )
+}
+
 export function projectManager(deviceId: string, manager: Manager): ManagerView {
   return {
     ...manager,

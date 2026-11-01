@@ -112,7 +112,15 @@ try {
     await shot(`mobile-related-item-${skin}`)
   }
   await press('报告')
+  assert.equal(
+    await read('document.querySelector(\'[data-testid="manager-reports-unread"]\').textContent'),
+    '1',
+  )
   await press('标记已阅')
+  await until(
+    () => read('!document.querySelector(\'[data-testid="manager-reports-unread"]\')'),
+    '报告未读徽标消失',
+  )
   await until(
     () =>
       read(

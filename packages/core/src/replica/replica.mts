@@ -48,7 +48,11 @@ import type { AgentThreadView, SessionNoteView, SessionProposalView } from '../m
 import type { Text } from '../phrase.mjs'
 import { type AskAnswers, gatherAnswers, parseAskReply } from '../projection/asks.mjs'
 import { changedKeys } from '../projection/manage.mjs'
-import { managerBoardPages, managerSessionIds } from '../projection/manager.mjs'
+import {
+  managerAttentionCount,
+  managerBoardPages,
+  managerSessionIds,
+} from '../projection/manager.mjs'
 import { changesQuestions, pendingQuestions } from '../projection/pending-asks.mjs'
 import type { SidebarActivity } from '../projection/sidebar-activity.mjs'
 import { projectSidebarGroups, type SidebarProjections } from '../projection/sidebar-groups.mjs'
@@ -551,15 +555,7 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
         sum +
         [...entry.rows.values()]
           .filter((m) => m.status === 'active')
-          .reduce(
-            (n, m) =>
-              n +
-              m.pendingDecisions +
-              (m.pendingRequests ?? 0) +
-              (m.pendingReports ?? 0) +
-              (m.pendingSuggestions ?? 0),
-            0,
-          ),
+          .reduce((n, m) => n + managerAttentionCount(m), 0),
       0,
     )
     if (store.get<number>(keys.managersPending) !== total) store.set(keys.managersPending, total)

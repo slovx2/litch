@@ -2,6 +2,7 @@ import {
   type DeviceView,
   filterSuggestions,
   keys,
+  managerAttentionCount,
   type SuggestionView,
   suggestionCount,
 } from '@litch/core'
@@ -144,24 +145,15 @@ export function ManagerPage({
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState('')
   const board = view?.board
-  const attention =
-    manager.pendingDecisions +
-    (manager.pendingRequests ?? 0) +
-    (manager.pendingReports ?? 0) +
-    (manager.pendingSuggestions ?? 0)
+  const attention = managerAttentionCount(manager)
   const attentionTitle = t('manager.pendingDetail', {
     decisions: manager.pendingDecisions,
     requests: manager.pendingRequests ?? 0,
-    reports: manager.pendingReports ?? 0,
     suggestions: manager.pendingSuggestions ?? 0,
   })
   const counts = {
     overview: 0,
-    inbox:
-      manager.pendingDecisions +
-      (manager.pendingRequests ?? 0) +
-      (manager.pendingReports ?? 0) +
-      (manager.pendingSuggestions ?? 0),
+    inbox: managerAttentionCount(manager),
     reports: manager.pendingReports ?? 0,
     requests: manager.pendingRequests ?? 0,
     decisions: manager.pendingDecisions,

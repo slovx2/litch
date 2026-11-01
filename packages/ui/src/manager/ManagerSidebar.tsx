@@ -1,4 +1,4 @@
-import { type DeviceView, keys, type SessionChildren } from '@litch/core'
+import { type DeviceView, keys, managerAttentionCount, type SessionChildren } from '@litch/core'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import type { ManagerView } from '../../../core/src/model-manager.mts'
 import type { Selection } from '../app/App.tsx'
@@ -47,11 +47,7 @@ function ManagerRow({
     submittedRequests(requests).length +
     new Set([...answeredDrafts(drafts), ...questionDrafts(drafts)].map((draft) => draft.decisionId))
       .size
-  const attention =
-    manager.pendingDecisions +
-    (manager.pendingRequests ?? 0) +
-    (manager.pendingReports ?? 0) +
-    (manager.pendingSuggestions ?? 0)
+  const attention = managerAttentionCount(manager)
   const picked =
     selection?.deviceId === manager.deviceId && selection.sessionId === manager.threadId
   return (
@@ -93,7 +89,6 @@ function ManagerRow({
                 title={t('manager.pendingDetail', {
                   decisions: manager.pendingDecisions,
                   requests: manager.pendingRequests ?? 0,
-                  reports: manager.pendingReports ?? 0,
                   suggestions: manager.pendingSuggestions ?? 0,
                 })}
               >

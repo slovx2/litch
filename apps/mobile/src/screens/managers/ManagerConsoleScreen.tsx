@@ -368,7 +368,7 @@ export function ManagerConsoleScreen({ route }: Props) {
   const { deviceId, managerId } = route.params
   const replica = useReplica()
   const t = useT()
-  const { c } = useTheme()
+  const { c, radius } = useTheme()
   const [kind, setKind] = useState<ManagerPost['kind'] | 'item'>('decision')
   useEffect(() => replica.openManagerBoard(deviceId, managerId), [replica, deviceId, managerId])
   const manager = useKey<ManagerView>(keys.manager(deviceId, managerId))
@@ -397,15 +397,33 @@ export function ManagerConsoleScreen({ route }: Props) {
     <Screen title={t('manager.inbox')} subtitle={manager?.name} testID="manager-console">
       <View style={styles.actions}>
         {(Object.keys(kinds) as (keyof typeof kinds)[]).map((k) => (
-          <Button
-            key={k}
-            kind={kind === k ? 'solid' : 'plain'}
-            label={t(kinds[k])}
-            onPress={() => {
-              setSelected(null)
-              setKind(k)
-            }}
-          />
+          <View key={k} style={styles.category}>
+            <Button
+              kind={kind === k ? 'solid' : 'plain'}
+              label={t(kinds[k])}
+              onPress={() => {
+                setSelected(null)
+                setKind(k)
+              }}
+            />
+            {k === 'report' && (manager?.pendingReports ?? 0) > 0 ? (
+              <Text
+                testID="manager-reports-unread"
+                accessibilityLabel={`${t('manager.reportUnread')} ${manager?.pendingReports}`}
+                style={[
+                  styles.badge,
+                  {
+                    color: c.wait,
+                    backgroundColor: c.panel,
+                    borderColor: c.wait,
+                    borderRadius: radius.s,
+                  },
+                ]}
+              >
+                {manager?.pendingReports}
+              </Text>
+            ) : null}
+          </View>
         ))}
       </View>
       {device?.connection !== 'online' || manager?.status !== 'active' ? (
@@ -463,6 +481,16 @@ export function ManagerConsoleScreen({ route }: Props) {
   )
 }
 const styles = StyleSheet.create({
+  category: { position: 'relative' },
+  badge: {
+    position: 'absolute',
+    right: -4,
+    top: -4,
+    paddingHorizontal: 4,
+    minWidth: 18,
+    textAlign: 'center',
+    borderWidth: 1,
+  },
   card: { padding: 16, margin: 12, borderWidth: 1, gap: 12 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 8 },
   input: { borderWidth: 1, minHeight: 80, padding: 10, textAlignVertical: 'top' },

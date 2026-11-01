@@ -152,7 +152,9 @@ versions and the edit reason. A question does not grant permission to act or ans
 Reports contain longer progress summaries, limitations or release notes. The manager publishes them
 with `litch_manager.report` and edits them with `post_reply`. **Mark as read** clears the unread state;
 opening the report does not. Editing its original content makes it unread again. Pending decisions,
-open For you requests, reviewed pending suggestions and unread reports count towards **N to handle**.
+open For you requests and reviewed pending suggestions count towards **N to handle**. Unread reports
+are excluded from this total and its tooltip; only the Reports category shows their unread badge.
+Desktop and phone use the same rule.
 
 **Temporary chat** is an alternative on Claude Code, Codex, Pi and OpenCode. Each issue has its own
 device-stored thread shared between clients. It may read files and the board, and update only that
@@ -244,7 +246,7 @@ and whether the cards were handled or expired. Increasing retention does not res
 
 ### 看板答复与待办提示
 
-侧栏、窄窗口的“看板”和收起后的“展开看板”数字，合计待定决策、待做的“请你做”、已审核待开始建议与未阅报告。
+侧栏、窄窗口的“看板”和收起后的“展开看板”数字，合计待定决策、待做的“请你做”和经理已审核待开始建议；报告未读不计入。
 已回复、已交付或已取消的请求不重复计入；已回复但尚未交付的请求仍保留在概览中。
 “请你做”的默认交付按钮是“标记完成 / Mark as done”，经理可以指定其他文案。
 提交后的回复按 Markdown 展示，并标明回复时间。
@@ -258,7 +260,7 @@ and whether the cards were handled or expired. Increasing retention does not res
 矮窗口中长草稿在输入框内滚动，为请求卡片按钮和终端保留空间。
 全局建议汇总卡的已审核数量与未审核数量并列在标题行；未审核卡的标签只占文字所需宽度。
 
-侧栏、收起入口及窄窗口中的合计统一标为“N 待处理 / N to handle”，悬停可查看四类议题的数量明细，数量为零的部分省略。收起入口的按钮与数量标签提供相同明细。侧栏同时保留待处理数与草稿数；看板内“待定”仍只表示决策。
+侧栏、收起入口及窄窗口中的合计统一标为“N 待处理 / N to handle”，悬停可查看三类待处理议题的数量明细，数量为零的部分省略。收起入口的按钮与数量标签提供相同明细。侧栏同时保留待处理数与草稿数；看板内“待定”仍只表示决策。
 已答复决策先展示答案，再提供“修改答案”；答复与核对时间沿用消息时间格式。
 临时追问的回复标为“助手（临时对话）”；请求卡的回复行仅显示“你的回复”和时间，状态保留在卡片头部。
 
@@ -267,12 +269,12 @@ and whether the cards were handled or expired. Increasing retention does not res
 经理看板的“事项”改名为“经理事项 / Manager items”，仍只记录经理与工作线进展。
 需要用户关注的内容统一进入“控制台 / Console”，每一条称为“议题 / issue”，分为决策、建议、请你做和报告。
 建议仍可开始、编辑后开始或忽略；工作线建议仍先归入默认收起的未审核组。请你做仍支持交付与文字回复。
-报告承载较长的阶段说明、范围限制或版本小结，阅读后可点“标记已阅”。未阅报告计入待处理，正文更新后重新提醒。
+报告承载较长的阶段说明、范围限制或版本小结，阅读后可点“标记已阅”。未阅报告不计入待处理，只在报告分类显示未读徽标；原帖编辑后重新未阅。
 
 每类议题都可追问。原帖和操作区始终在上方，问答记录在下方按时间排列；不再切换“回答/追问”两套视图。
 默认交给经理主对话，也可选受限的临时对话（支持该能力的 harness）；临时助手可更新当前原帖，但不能改其他议题、文件或开工作线。
 经理可只编辑原帖、只回复或两者同时做；“已编辑”可展开旧版本、编辑时间与原因。
-控制台合计待定决策、待做请你做、已审核待开始建议及未阅报告；悬停显示各类数量。
+控制台合计待定决策、待做请你做和经理已审核待开始建议；悬停也只显示这三类数量。手机采用相同口径。
 
 手机首页新增控制台入口，可选择经理，阅读和操作四类议题，并提交经理或临时追问。
 手机沿用建议的开始/编辑/忽略，支持请求交付/文字回复、决策答复、报告已阅和讨论历史；创建经理、派活设置及完整经理事项看板仍在桌面。

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { managerAttentionCount } from '../../../packages/core/src/projection/manager.mts'
 import { relationGroups } from '../../../packages/protocol/src/manager-relations.mts'
 import { issueLinks } from '../src/screens/managers/relations.ts'
 
@@ -17,4 +18,24 @@ test('同一关系正向是来源，反向是派生；相关关系双向对称',
   assert.deepEqual(relationGroups([edge], a).source, [b])
   assert.deepEqual(relationGroups([edge], b).derived, [a])
   assert.deepEqual(relationGroups([{ ...edge, kind: 'related' }], b).related, [a])
+})
+
+test('D-29：手机使用核心统一口径，报告未读不占待处理', () => {
+  const manager = {
+    pendingDecisions: 3,
+    pendingRequests: 1,
+    pendingSuggestions: 2,
+    pendingReports: 9,
+  }
+  assert.equal(managerAttentionCount(manager), 6)
+  assert.equal(managerAttentionCount({ ...manager, pendingReports: 0 }), 6)
+  assert.equal(
+    managerAttentionCount({
+      ...manager,
+      pendingDecisions: 0,
+      pendingRequests: 0,
+      pendingSuggestions: 0,
+    }),
+    0,
+  )
 })

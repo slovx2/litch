@@ -97,7 +97,7 @@ test('副本：普通侧栏过滤整棵经理树，经理复用原有 children �
   const stop = replica.start()
   await settle()
   await settle()
-  assert.equal(replica.store.get(keys.managersPending), 6)
+  assert.equal(replica.store.get(keys.managersPending), 5)
   assert.deepEqual(replica.store.get(keys.managerIds('local')), ['m1', 'm3', 'e1', 'e2'])
   const root = replica.store.get<SessionSummary>(keys.summary('local', 'm1'))
   assert.ok(root)
@@ -374,7 +374,7 @@ test('设备返回经理领域错误时保留错误码、字段和双语提示',
   })
 })
 
-test('控制台通道：报告显式已阅减少待处理，报告、请求和决策的追问独立保存，旧版本拒绝', async () => {
+test('控制台通道：报告显式已阅只清未读徽标、不改变待处理，报告、请求和决策的追问独立保存，旧版本拒绝', async () => {
   const time = fakeClock()
   const [uiPort, corePort] = createPortPair()
   const server = serveChannel(corePort, createMockCore({ clock: time.clock, chunkMs: 0 }), {
@@ -391,6 +391,7 @@ test('控制台通道：报告显式已阅减少待处理，报告、请求和�
     const read = () =>
       replica.store.get<ManagerBoardTopicView>(keys.managerBoard('local', 'm1'))?.board
     assert.equal(read()?.posts?.find((p) => p.id === 'P-1')?.unread, true)
+    const pendingBeforeRead = replica.store.get(keys.managersPending)
     await channel.command('managers.report.read', {
       deviceId: 'local',
       managerId: 'm1',
@@ -401,6 +402,7 @@ test('控制台通道：报告显式已阅减少待处理，报告、请求和�
     time.advance(20)
     await settle()
     assert.equal(replica.store.get<ManagerView>(keys.manager('local', 'm1'))?.pendingReports, 0)
+    assert.equal(replica.store.get(keys.managersPending), pendingBeforeRead)
     for (const id of ['P-1', 'R-1', 'D-15'] as const) {
       const post = read()?.posts?.find((p) => p.id === id)
       assert.ok(post)

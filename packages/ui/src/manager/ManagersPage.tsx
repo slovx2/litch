@@ -1,4 +1,5 @@
 import type { DeviceView } from '@litch/core'
+import { managerAttentionCount } from '@litch/core'
 import { useState } from 'react'
 import type { ManagerView } from '../../../core/src/model-manager.mts'
 import type { Selection } from '../app/App.tsx'
@@ -48,25 +49,17 @@ export function ManagersPage({
         ) : manager.status === 'ending' ? (
           <span className="dim">{t('manager.ending')}</span>
         ) : null}
-        {manager.pendingDecisions +
-        (manager.pendingRequests ?? 0) +
-        (manager.pendingReports ?? 0) +
-        (manager.pendingSuggestions ?? 0) ? (
+        {managerAttentionCount(manager) ? (
           <span
             className="pill wait"
             title={t('manager.pendingDetail', {
               decisions: manager.pendingDecisions,
               requests: manager.pendingRequests ?? 0,
-              reports: manager.pendingReports ?? 0,
               suggestions: manager.pendingSuggestions ?? 0,
             })}
           >
             {t('manager.pending', {
-              n:
-                manager.pendingDecisions +
-                (manager.pendingRequests ?? 0) +
-                (manager.pendingReports ?? 0) +
-                (manager.pendingSuggestions ?? 0),
+              n: managerAttentionCount(manager),
             })}
           </span>
         ) : null}
