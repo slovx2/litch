@@ -72,6 +72,23 @@ tags: [mock]
     timeout: 10000
 - assertVisible:
     id: proposal-start:wider
+# Pi 不能继承父会话的项目权限：先保留警告断言，再返回明确提升父会话权限。
+- tapOn:
+    id: header:back
+- runFlow: ../_shared/full-access.yaml
+- scrollUntilVisible:
+    element:
+      id: proposal:.*:edit
+    direction: UP
+    timeout: 10000
+- tapOn:
+    id: proposal:.*:edit
+- extendedWaitUntil:
+    visible:
+      id: proposal-start
+    timeout: 10000
+- assertNotVisible:
+    id: proposal-start:wider
 # 页面比一屏长（多了背景一栏），标题和唤醒开关在下面
 - scrollUntilVisible:
     element:

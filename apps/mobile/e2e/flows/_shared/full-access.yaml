@@ -1,0 +1,14 @@
+# 仅用于隔离模拟核心：Pi 只支持完全访问；先在父会话明确确认，再允许提案继承。
+appId: dev.litch.app
+---
+- tapOn:
+    id: settings:permission
+- tapOn:
+    id: picker:option::danger-full-access
+- tapOn:
+    id: confirm:ok
+- extendedWaitUntil:
+    visible:
+      id: settings:permission
+      text: .*(Full access|完全访问).*
+    timeout: 10000

@@ -53,7 +53,7 @@ tags: [mock]
     id: harness:codex:settings
 - extendedWaitUntil:
     visible:
-      id: hc:tab:config
+      id: hc:tab:models:pick
     timeout: 15000
 - tapOn:
     id: hc:tab:models:pick

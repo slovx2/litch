@@ -26,6 +26,9 @@ tags: [mock]
       id: harness:claude:settings
 - tapOn:
     id: harness:claude:settings
+# 详情默认进入运行设置；模型配置仍在独立页签。
+- tapOn:
+    id: hc:tab:config:pick
 # 配置：强度改成高，底下出“保存”，存完说一句
 - extendedWaitUntil:
     visible:
@@ -71,6 +74,8 @@ tags: [mock]
     timeout: 10000
 - tapOn:
     id: harness:claude:settings
+- tapOn:
+    id: hc:tab:config:pick
 - extendedWaitUntil:
     visible:
       id: hc:tab:config

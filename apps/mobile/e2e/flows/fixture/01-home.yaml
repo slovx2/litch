@@ -21,9 +21,9 @@ tags: [fixture, smoke]
     timeout: 60000
 - scrollUntilVisible:
     element:
-      id: manage:pi
+      id: harness:pi
     direction: DOWN
-# Pi 那一行写着“版本 · 可用”：就在“Pi”这行字的下面（这一版的视图树里它不是 manage:pi 的子节点，childOf 配不上）。
+# Pi 概览那一行写着“版本 · 可用”；运行设置已移到详情页。
 # 整串匹配、要带版本号：“不可用”、没装的那几行（“不可用 · 没装”）都配不上
 - assertVisible:
     text: \d+\.\d+\.\d+ · (Ready|可用)

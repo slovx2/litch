@@ -51,6 +51,17 @@ tags: [mock]
     timeout: 10000
 - tapOn:
     id: proposal:.*:start
+- assertVisible:
+    text: .*目标 harness 不支持父会话权限.*
+# 保留拒绝越权的验收；明确提升父会话权限后重试才可创建 Pi 子会话。
+- runFlow: ../_shared/full-access.yaml
+- scrollUntilVisible:
+    element:
+      id: proposal:.*:start
+    direction: UP
+    timeout: 10000
+- tapOn:
+    id: proposal:.*:start
 - scrollUntilVisible:
     element:
       id: proposal:.*:child
