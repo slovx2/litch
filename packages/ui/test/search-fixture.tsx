@@ -18,6 +18,7 @@ import type { Thread } from '../../protocol/src/index.mts'
 import { ServicesProvider } from '../src/app/services.tsx'
 import { PendingQuestions } from '../src/composer/PendingQuestions.tsx'
 import { requestSearch } from '../src/search/actions.ts'
+import { FindButton } from '../src/search/FindButton.tsx'
 import { TitleSearch } from '../src/search/TitleSearch.tsx'
 import { Transcript } from '../src/transcript/Transcript.tsx'
 import '../src/styles/index.css'
@@ -29,7 +30,10 @@ const clock: Clock = {
     return () => clearTimeout(timer)
   },
 }
-const mock = createMockCore({ clock })
+const params = new URLSearchParams(location.search)
+const sample = params.has('mock')
+const sessionId = sample ? 's1' : 'search-fixture'
+const mock = createMockCore({ clock, chunkMs: Number(params.get('chunkMs') ?? 60) })
 const count = 5000
 const turns = Array.from({ length: count }, (_, i) => ({
   id: `t${i}`,
@@ -119,8 +123,16 @@ const comment = bodyOf(
 )
 view.items['t1:u1'] = { id: 't1:u1', kind: 'userMessage', text: comment, attachments: [] }
 let sink: HostSink | null = null
+let refreshFails = false
 const host: CoreHost = {
-  command: mock.command.bind(mock),
+  async command(name, args, signal) {
+    if (name === 'device.refresh') {
+      await new Promise((resolve) => setTimeout(resolve, 400))
+      if (refreshFails) throw new Error('隔离夹具：读取失败')
+      return {} as never
+    }
+    return mock.command(name, args, signal)
+  },
   subscribe(topic, receiver) {
     if (topic.kind === 'session' && topic.sessionId === 'search-fixture') {
       sink = receiver
@@ -137,94 +149,102 @@ serveChannel(server, host, { clock })
 const channel = connectChannel(client)
 const replica = createReplica(channel)
 replica.start()
-Object.assign(window, {
-  searchFixture: {
-    openTitles: requestSearch,
-    pulse() {
-      let count = 0
-      const timer = window.setInterval(() => {
-        const id = 't4999:a4999'
-        const item = view.items[id]
-        if (item?.kind !== 'agentMessage') return
-        const text = count++ === 0 ? ' PulseNeedle' : ' 增量'
-        view.items[id] = { ...item, text: item.text + text }
-        sink?.delta([{ op: 'item.appendText', itemId: id, field: 'text', text }])
-        if (count === 100) clearInterval(timer)
-      }, 30)
-    },
-    ask() {
-      const id = 't4999:a4999',
-        item = view.items[id]
-      if (item?.kind !== 'agentMessage') return
-      view.items[id] = {
-        ...item,
-        questions: [{ id: 'async-test', title: 'PendingNeedle', options: ['PendingOptionNeedle'] }],
-      }
-      sink?.snapshot(view)
-    },
-    answer() {
-      const id = 't4999:reply'
-      view.items[id] = {
-        id,
-        kind: 'userMessage',
-        attachments: [],
-        text: askReplyText([
-          {
-            questionItemId: 'async-test',
-            question: 'PendingNeedle',
-            answer: 'AnsweredAsyncNeedle',
-          },
-        ]),
-      }
-      view.turns.at(-1)?.itemIds.push(id)
-      sink?.snapshot(view)
-    },
-    append(text: string) {
-      const originalId = `t${count - 1}:a${count - 1}`
-      const original = view.items[originalId]
-      const id =
-        original?.kind === 'agentMessage' && original.questions?.length
-          ? 't4999:continuation'
-          : originalId
-      const item = view.items[id]
-      if (!item) {
-        const added = {
-          id,
-          kind: 'agentMessage' as const,
-          text,
-          phase: 'final' as const,
-          status: 'completed' as const,
-        }
-        view.items[id] = added
-        view.turns.at(-1)?.itemIds.push(id)
-        sink?.delta([{ op: 'item.add', turnId: 't4999', item: added }])
-      } else if (item.kind === 'agentMessage') {
-        view.items[id] = { ...item, text: item.text + text }
-        sink?.delta([{ op: 'item.appendText', itemId: id, field: 'text', text }])
-      }
-    },
-    replaceFirst(text: string) {
-      const id = 't0:a0'
-      view.items[id] = { ...view.items[id]!, text } as never
-      sink?.snapshot(view)
-    },
+const fixture = {
+  openTitles: requestSearch,
+  failRefresh(value: boolean) {
+    refreshFails = value
   },
-})
+  opened: null as { deviceId: string; sessionId: string } | null,
+  pulse() {
+    let count = 0
+    const timer = window.setInterval(() => {
+      const id = 't4999:a4999'
+      const item = view.items[id]
+      if (item?.kind !== 'agentMessage') return
+      const text = count++ === 0 ? ' PulseNeedle' : ' 增量'
+      view.items[id] = { ...item, text: item.text + text }
+      sink?.delta([{ op: 'item.appendText', itemId: id, field: 'text', text }])
+      if (count === 100) clearInterval(timer)
+    }, 30)
+  },
+  ask() {
+    const id = 't4999:a4999',
+      item = view.items[id]
+    if (item?.kind !== 'agentMessage') return
+    view.items[id] = {
+      ...item,
+      questions: [{ id: 'async-test', title: 'PendingNeedle', options: ['PendingOptionNeedle'] }],
+    }
+    sink?.snapshot(view)
+  },
+  answer() {
+    const id = 't4999:reply'
+    view.items[id] = {
+      id,
+      kind: 'userMessage',
+      attachments: [],
+      text: askReplyText([
+        {
+          questionItemId: 'async-test',
+          question: 'PendingNeedle',
+          answer: 'AnsweredAsyncNeedle',
+        },
+      ]),
+    }
+    view.turns.at(-1)?.itemIds.push(id)
+    sink?.snapshot(view)
+  },
+  append(text: string) {
+    const originalId = `t${count - 1}:a${count - 1}`
+    const original = view.items[originalId]
+    const id =
+      original?.kind === 'agentMessage' && original.questions?.length
+        ? 't4999:continuation'
+        : originalId
+    const item = view.items[id]
+    if (!item) {
+      const added = {
+        id,
+        kind: 'agentMessage' as const,
+        text,
+        phase: 'final' as const,
+        status: 'completed' as const,
+      }
+      view.items[id] = added
+      view.turns.at(-1)?.itemIds.push(id)
+      sink?.delta([{ op: 'item.add', turnId: 't4999', item: added }])
+    } else if (item.kind === 'agentMessage') {
+      view.items[id] = { ...item, text: item.text + text }
+      sink?.delta([{ op: 'item.appendText', itemId: id, field: 'text', text }])
+    }
+  },
+  replaceFirst(text: string) {
+    const id = 't0:a0'
+    view.items[id] = { ...view.items[id]!, text } as never
+    sink?.snapshot(view)
+  },
+}
+Object.assign(window, { searchFixture: fixture })
 createRoot(document.getElementById('root')!).render(
   <ServicesProvider value={{ channel, replica, shell: 'browser' }}>
     <div style={{ height: '100vh', display: 'flex' }}>
       <main className="main">
+        <FindButton deviceId="local" sessionId={sessionId} />
         <Transcript
           deviceId="local"
-          sessionId="search-fixture"
+          sessionId={sessionId}
           footer={
             <>
-              <PendingQuestions deviceId="local" sessionId="search-fixture" />
+              <PendingQuestions deviceId="local" sessionId={sessionId} />
               <span>隔离验收</span>
             </>
           }
         />
-        <TitleSearch onOpen={() => {}} />
+        <TitleSearch
+          onOpen={(selection) => {
+            fixture.opened = selection
+          }}
+        />
       </main>
     </div>
   </ServicesProvider>,

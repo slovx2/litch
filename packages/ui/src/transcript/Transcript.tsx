@@ -41,6 +41,7 @@ import { useT } from '../app/appearance.ts'
 import { useElapsed } from '../app/clock.ts'
 import { downHarness, downText, nameOf } from '../app/device.ts'
 import { duration, elapsed, retryText, turnEnded } from '../app/format.ts'
+import { currentPlatform } from '../app/platform.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { TurnOrigin } from '../background/TurnOrigin.tsx'
 import { ChildRequests, DelegatedHistory } from '../composer/ChildRequests.tsx'
@@ -49,6 +50,7 @@ import { PendingQuestions } from '../composer/PendingQuestions.tsx'
 import { GoalReached } from '../goal/GoalReached.tsx'
 import type { MessageKey, Translator } from '../i18n/index.ts'
 import { useRailHasTodo } from '../rail/rail-state.ts'
+import { onFind } from '../search/actions.ts'
 import { TaskNote } from '../tasks/TaskNote.tsx'
 import { useAgentsUnfinished } from '../tree/agent-view.tsx'
 import { LineageBar } from '../tree/LineageBar.tsx'
@@ -273,7 +275,12 @@ function failureText(failure: SessionFailure, t: Translator): string {
   return failure.code === 'remote' && failure.message ? failure.message : t('error.other')
 }
 
-const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { turnId: string }) {
+const Turn = memo(function Turn({
+  deviceId,
+  sessionId,
+  turnId,
+  kept,
+}: SessionRef & { turnId: string; kept: boolean }) {
   const turn = useKey<TurnView>(keys.turn(deviceId, sessionId, turnId))
   const meta = useKey<SessionMeta>(keys.session(deviceId, sessionId))
   const device = useKey<DeviceView>(keys.device(deviceId))
@@ -331,7 +338,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
     !downHarness(device, meta.harness)
   return (
     <TurnTouch.Provider value={touch}>
-      <section className="turn" data-search-turn={turnId}>
+      <section className="turn" data-search-turn={turnId} data-search-keep={kept ? '' : undefined}>
         {/* 后台任务结束后、目标续跑时 harness 自己开的回合：开头一行写怎么来的 */}
         {/* 别的会话发来消息、定时任务开的回合：开头那条消息（来自 X 的消息、定时任务卡片）自己写着来源，不再另写一行 */}
         {turn.origin && turn.origin !== 'peer' && turn.origin !== 'schedule' && !remind ? (
@@ -560,6 +567,7 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
   const scroll = useTranscriptScroll(`${deviceId}:${sessionId}`)
   const [finding, setFinding] = useState(false)
   const [target, setTarget] = useState<SearchHit | null>(null)
+  const [reading, setReading] = useState<string | null>(null)
   const focusBeforeSearch = useRef<HTMLElement | null>(null)
   const openFind = useCallback(() => {
     const input = document.querySelector<HTMLInputElement>(
@@ -574,9 +582,38 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
     setFinding(true)
   }, [deviceId, sessionId])
   const closeFind = useCallback(() => {
+    // DOM 高亮是最后实际显示的位置；目标状态可能还在等 React 提交。
+    const range = [...(CSS.highlights.get('litch-find-current') ?? [])][0]
+    const active = range?.startContainer.parentElement?.closest('[data-search-item]')
+    const element =
+      active ??
+      (target
+        ? scroll.contentRef.current?.querySelector(
+            `[data-search-item="${CSS.escape(target.itemId)}"]`,
+          )
+        : null)
+    if (element) scroll.keepReading(element)
+    setReading(
+      element?.closest('[data-search-turn]')?.getAttribute('data-search-turn') ??
+        target?.turnId ??
+        null,
+    )
     setFinding(false)
-    focusBeforeSearch.current?.focus({ preventScroll: true })
-  }, [])
+    setTarget(null)
+    requestAnimationFrame(() => {
+      const previous = focusBeforeSearch.current
+      const fallback =
+        document.querySelector<HTMLElement>('.search-entry') ?? scroll.scrollerRef.current
+      ;(previous?.isConnected ? previous : fallback)?.focus({ preventScroll: true })
+    })
+  }, [target, scroll])
+  useEffect(
+    () =>
+      onFind((device, session) => {
+        if (device === deviceId && session === sessionId) openFind()
+      }),
+    [deviceId, sessionId, openFind],
+  )
   const searchTarget = useCallback((hit: SearchHit | null) => {
     if (hit) setTarget(hit)
   }, [])
@@ -584,6 +621,7 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
   useEffect(() => {
     setFinding(false)
     setTarget(null)
+    setReading(null)
   }, [deviceId, sessionId])
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
@@ -592,31 +630,38 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
         event.isComposing ||
         event.shiftKey ||
         event.altKey ||
-        !(event.metaKey || event.ctrlKey) ||
+        !(currentPlatform() === 'mac'
+          ? event.metaKey && !event.ctrlKey
+          : event.ctrlKey && !event.metaKey) ||
         event.code !== 'KeyF'
       )
         return
       const active = event.target instanceof Element ? event.target : null
-      if (active?.closest('.side, .terminal-slot, .xterm, [role="dialog"]')) return
-      if (aside) return
+      const owner = active?.closest('.aside-view, .agents-view') ?? null
+      const mine = scroll.scrollerRef.current?.closest('.aside-view, .agents-view') ?? null
+      if (owner !== mine || (active?.closest('.side') && !mine)) return
+      if (active?.closest('.terminal-slot, .xterm, dialog[open], [role="dialog"]')) return
       event.preventDefault()
       openFind()
     }
     document.addEventListener('keydown', key)
     return () => document.removeEventListener('keydown', key)
-  }, [openFind, aside])
+  }, [openFind, scroll.scrollerRef])
   const { span, restoring } = useTurnWindow(
     `${deviceId}:${sessionId}`,
     turnIds?.length ?? 0,
     finding,
   )
-  const drawn = useMemo(
-    () => (turnIds ? searchWindow(turnIds, target?.turnId ?? null, span) : turnIds),
-    [turnIds, span, target?.turnId],
-  )
+  const drawn = useMemo(() => {
+    if (!turnIds) return turnIds
+    if (finding && target?.turnId) return searchWindow(turnIds, target.turnId, span)
+    const at = reading ? turnIds.indexOf(reading) : -1
+    // 退出后接入连续的阅读窗口，逐批向两边补齐，不保留搜索的稀疏窗口或分隔行。
+    return at < 0 ? turnIds.slice(-span) : turnIds.slice(Math.max(0, at - span + 1), at + span)
+  }, [turnIds, span, target?.turnId, finding, reading])
   const searchGaps = useMemo(() => {
     const gaps = new Map<string, number>()
-    if ((!finding && !target) || !turnIds || !drawn) return gaps
+    if (!finding || !turnIds || !drawn) return gaps
     const positions = new Map(turnIds.map((id, index) => [id, index]))
     let previous = -1
     for (const id of drawn) {
@@ -625,7 +670,7 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
       previous = index
     }
     return gaps
-  }, [finding, target, turnIds, drawn])
+  }, [finding, turnIds, drawn])
   const { restore } = scroll
   const lastTurn = useKey<TurnView>(keys.turn(deviceId, sessionId, turnIds?.at(-1) ?? ''))
   const busy = lastTurn?.status === 'running'
@@ -649,16 +694,16 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
           root={scroll.contentRef}
           onTarget={searchTarget}
           reveal={scroll.reveal}
+          updateRange={scroll.updateSearchRange}
           onClose={closeFind}
         />
-      ) : (
-        <div className="search-entry">
-          <button type="button" onClick={openFind}>
-            {t('search.inConversation')}
-          </button>
-        </div>
-      )}
-      <div className="tr-scroll" ref={scroll.scrollerRef} aria-busy={restoring || !turnIds}>
+      ) : null}
+      <div
+        className="tr-scroll"
+        tabIndex={-1}
+        ref={scroll.scrollerRef}
+        aria-busy={restoring || !turnIds}
+      >
         {restoring ? <div className="tr-loading dim">{t('transcript.loading')}</div> : null}
         <div
           className="tr"
@@ -714,7 +759,12 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
                         </div>
                       ) : null}
                       <TurnBoundary label={t('turn.broken')}>
-                        <Turn deviceId={deviceId} sessionId={sessionId} turnId={turnId} />
+                        <Turn
+                          deviceId={deviceId}
+                          sessionId={sessionId}
+                          turnId={turnId}
+                          kept={turnId === target?.turnId || turnId === reading}
+                        />
                       </TurnBoundary>
                     </Fragment>
                   ))
@@ -731,7 +781,14 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
       {/* 对话区和输入区之间：“回到底部”，还有等着回答的请求。请求排在输入框上面，不占它的位置 */}
       <div className="tr-tail">
         {scroll.following ? null : (
-          <button type="button" className="to-bottom" onClick={scroll.toBottom}>
+          <button
+            type="button"
+            className="to-bottom"
+            onClick={() => {
+              setReading(null)
+              scroll.toBottom()
+            }}
+          >
             {t('transcript.toBottom')}
           </button>
         )}

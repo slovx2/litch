@@ -16,6 +16,8 @@ export interface SearchResult {
   count: number
   query: string
   revision: number
+  /** 按对话顺序排列的结果中，离查询起点最近的一处。 */
+  nearest?: number
 }
 export interface TitleHit {
   session: SessionSummary
@@ -33,4 +35,10 @@ export interface TitleSearchResult {
 export type SearchWorkerInput =
   | { type: 'reset' }
   | { type: 'update'; sources: SearchSource[]; removed: string[] }
-  | { type: 'query'; query: string; revision: number; order: string[] }
+  | {
+      type: 'query'
+      query: string
+      revision: number
+      order: string[]
+      anchor?: { itemId: string; start: number }
+    }

@@ -17,6 +17,8 @@
   --line-3: rgb(var(--ink-rgb) / var(--L, 1) var(--D, 0.7));
   --hover: rgb(var(--ink-rgb) / 0.08);
   --press: rgb(var(--ink-rgb) / 0.16);
+  --find: var(--L, #426c4e) var(--D, #8b9cda);
+  --on-find: var(--L, #ffffff) var(--D, #14151a);
   --sel: rgb(var(--ink-rgb) / 0.14);
   --shadow: var(--L, 6px 6px 0 rgb(26 26 20 / 0.9)) var(--D, 6px 6px 0 rgb(77 255 136 / 0.26));
   /* 浅色里实心块一律用墨色，绿色只做信号；深色里两者都是荧光绿 */

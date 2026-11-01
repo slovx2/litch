@@ -6,6 +6,7 @@ import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync }
 import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { checkSearchReview } from './check-search-review.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 
 const binary =
@@ -107,8 +108,8 @@ try {
     return r.result.value
   }
   await cdp.call('Page.navigate', { url: `${base}/test/search-fixture.html` })
-  await until(() => evaluate(`!!document.querySelector('.search-entry button')`), '对话入口')
-  await evaluate(`document.querySelector('.search-entry button').click()`)
+  await until(() => evaluate(`!!document.querySelector('.search-entry')`), '对话入口')
+  await evaluate(`document.querySelector('.search-entry').click()`)
   await until(() => evaluate(`!!document.querySelector('.search-bar input')`), '搜索框')
   const before = await evaluate(
     `({turns:document.querySelectorAll('.turn').length,early:!!document.querySelector('[data-search-turn="t0"]')})`,
@@ -133,8 +134,8 @@ try {
     assert.ok(frameMs < 100, `${text} 输入响应 ${frameMs}ms`)
     assert.ok(result.visible, `${text} 不在视口`)
     assert.equal(
-      result.text.toLowerCase().replace(/\s+/g, ' '),
-      text.toLowerCase().replace(/\s+/g, ' '),
+      result.text.normalize('NFKC').toLowerCase().replace(/\s+/g, ' '),
+      text.normalize('NFKC').toLowerCase().replace(/\s+/g, ' '),
       '高亮须属于当前查询',
     )
     return result
@@ -143,6 +144,7 @@ try {
   await query('ThoughtNeedle')
   await query('ProcessNeedle')
   await query('CodeNeedle')
+  await query('ｃｏｄｅｎｅｅｄｌｅ')
   await query('最早中文')
   await query('👩‍💻')
   await query('i̇stanbul')
@@ -211,11 +213,11 @@ try {
   )
   report.checks.push({ name: '退出恢复思考折叠' })
   await evaluate(
-    `document.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyF',key:'f',ctrlKey:true,bubbles:true}))`,
+    `document.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyF',key:'f',metaKey:true,bubbles:true}))`,
   )
   await until(() => evaluate(`!!document.querySelector('.search-bar input')`), 'Ctrl+F')
   await evaluate(
-    `document.querySelector('.search-bar input').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));document.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyF',key:'f',ctrlKey:true,shiftKey:true,bubbles:true}))`,
+    `document.querySelector('.search-bar input').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));document.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyF',key:'f',metaKey:true,shiftKey:true,bubbles:true}))`,
   )
   await until(() => evaluate(`!!document.querySelector('.search-dialog[open]')`), '全局搜索')
   await evaluate(
@@ -233,6 +235,7 @@ try {
   await cdp
     .call('Page.captureScreenshot', { format: 'png' })
     .then((r) => writeFileSync(join(output, 'titles.png'), Buffer.from(r.data, 'base64')))
+  await checkSearchReview({ cdp, evaluate, query, report, output, base })
   assert.deepEqual(errors, [])
   report.success = true
 } catch (error) {

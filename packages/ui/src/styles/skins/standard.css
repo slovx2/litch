@@ -21,6 +21,8 @@
   --line-3: rgb(var(--ink-rgb) / 0.22);
   --hover: rgb(var(--ink-rgb) / 0.05);
   --press: rgb(var(--ink-rgb) / 0.1);
+  --find: var(--L, #936200) var(--D, #d2a64c);
+  --on-find: var(--L, #ffffff) var(--D, #14151a);
   --sel: rgb(var(--ink-rgb) / 0.08);
   --shadow: var(--L, 0 8px 28px rgb(20 22 34 / 0.14)) var(--D, 0 10px 32px rgb(0 0 0 / 0.55));
   /* 强调色：主按钮、焦点、链接、进行中 */

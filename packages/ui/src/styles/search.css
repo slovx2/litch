@@ -1,14 +1,4 @@
-/* 搜索使用皮肤现有的强调、面板和边框颜色。 */
-.search-entry {
-  display: flex;
-  justify-content: flex-end;
-  padding: 4px var(--tr-gut);
-  color: var(--ink-3);
-  font-size: inherit;
-}
-.search-entry button:hover {
-  color: var(--accent);
-}
+/* 搜索范围使用专用皮肤色，当前项仍使用强调色。 */
 .search-bar {
   display: flex;
   flex-wrap: wrap;
@@ -31,6 +21,10 @@
   font: inherit;
 }
 .search-bar button {
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  min-height: 32px;
   padding: 4px 8px;
   border-radius: var(--r1);
 }
@@ -46,51 +40,27 @@
   flex-basis: 100%;
 }
 ::highlight(litch-find) {
-  background-color: var(--sel);
-  color: var(--ink);
+  background-color: var(--find);
+  color: var(--on-find);
 }
 ::highlight(litch-find-current) {
   background-color: var(--accent-solid);
   color: var(--on-accent);
 }
-.search-sidebar {
-  margin: 4px 12px;
-  padding: 8px;
-  text-align: left;
-  color: var(--ink-2);
-  border-radius: var(--r1);
-}
-.search-sidebar:hover {
-  background: var(--sel);
-}
-.search-dialog {
-  width: min(740px, 90vw);
-  max-height: 82vh;
-  color: var(--ink);
-  background: var(--panel);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r2);
-  padding: 20px;
-  overflow: auto;
+.modal.search-dialog {
+  width: min(740px, calc(100vw - 48px));
+  flex-direction: column;
   font-family: var(--ui);
 }
-.search-dialog::backdrop {
-  background: var(--press);
+.search-dialog .modal-head h2 {
+  flex: 1;
+  margin: 0;
+  font: inherit;
 }
-.search-dialog header,
 .search-controls {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-.search-dialog h2 {
-  flex: 1;
-  margin: 0 0 12px;
-  font: inherit;
-  font-weight: 600;
-}
-.search-dialog header button {
-  padding: 8px;
 }
 .search-controls select {
   background: var(--panel);
@@ -105,7 +75,7 @@
   margin: 12px 0;
   padding: 0;
 }
-.search-results li {
+.search-results [role="option"] {
   border-bottom: 1px solid var(--line-2);
 }
 .search-results button {
@@ -117,15 +87,19 @@
   text-align: left;
   overflow-wrap: anywhere;
 }
+.search-results [aria-selected="true"],
 .search-results button:hover {
   background: var(--sel);
 }
 .search-results mark {
-  background: var(--sel);
-  color: var(--ink);
+  background: var(--find);
+  color: var(--on-find);
 }
 .search-coverage {
-  color: var(--ink-3);
+  color: var(--ink-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
 }
 
 .search-gap {
@@ -133,4 +107,9 @@
   text-align: center;
   padding: 8px;
   border-block: 1px dashed var(--line-2);
+}
+
+/* 搜索定位与退出后的阅读锚点必须有真实布局，补画其他回合不能将它换成估算高度。 */
+.tr[data-windowed] > .turn[data-search-keep] {
+  content-visibility: visible;
 }

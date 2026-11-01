@@ -220,7 +220,7 @@ export const UserMessage = memo(function UserMessage({
           <MentionedText deviceId={ref.deviceId} text={text} sessions={item.sessions} />
         </div>
       ) : null}
-      {long || open ? (
+      {long ? (
         <button
           type="button"
           className="mini"

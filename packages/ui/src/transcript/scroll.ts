@@ -131,7 +131,9 @@ export interface TranscriptScroll {
   /** 是否贴在底部。不在底部时显示“回到底部” */
   following: boolean
   toBottom(): void
-  reveal(element: Element): void
+  reveal(element: Element, range?: Range): void
+  keepReading(element: Element): void
+  updateSearchRange(range: Range): void
   /** 内容第一次画出来之后调用一次：回到上次离开这个会话时的位置。调用之后才开始记这个会话的位置 */
   restore(): void
   /** 交给点击处理函数用：接下来这次布局变化里，让这个元素在屏幕上不动 */
@@ -143,7 +145,12 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
   const contentRef = useRef<HTMLDivElement | null>(null)
   const [following, setFollowing] = useState(true)
   const follow = useRef(true)
-  const searchHold = useRef<{ element: Element; until: number } | null>(null)
+  const readingHold = useRef<{
+    marks: Mark[]
+    viewTop: number
+    range?: Range
+    rangeTop?: number
+  } | null>(null)
   /** 视口里最靠上、最靠下的两行，以及刚被点过的那一行 */
   const upper = useRef<Hold | null>(null)
   const lower = useRef<Hold | null>(null)
@@ -169,7 +176,7 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
   // 新会话的内容可能要等一会儿才到，这段时间里滚动容器是空的；这时候要是照常记，
   // 就会把“在底部”记到新会话名下，把它上次离开时的位置盖掉
   useLayoutEffect(() => {
-    searchHold.current = null
+    readingHold.current = null
     shown.current = sessionKey
     armed.current = false
     upper.current = null
@@ -227,12 +234,18 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
   /** 把排版变化造成的移动补回去 */
   const compensate = useCallback(() => {
     if (!armed.current) return
-    const searching = searchHold.current
-    if (searching && performance.now() < searching.until && searching.element.isConnected) {
-      searching.element.scrollIntoView({ block: 'center', behavior: 'instant' })
+    const reading = readingHold.current
+    const readingMark = reading?.marks.find((mark) => mark.element.isConnected)
+    const viewport = scrollerRef.current
+    if (reading && readingMark && viewport) {
+      const range =
+        reading.range?.startContainer.isConnected && !reading.range.collapsed ? reading.range : null
+      const top = range ? (reading.rangeTop ?? readingMark.top) : readingMark.top
+      const wanted = top + viewport.getBoundingClientRect().top - reading.viewTop
+      const drift = (range ?? readingMark.element).getBoundingClientRect().top - wanted
+      if (Math.abs(drift) >= 0.5) viewport.scrollTop += drift
       return
     }
-    searchHold.current = null
     const pin = pinned.current
     // 外观正在变：把盯着的那一行放回它在屏幕上原来的位置（它要是已经不在页面里了，就照平时的算）。
     // 刚点过的那一行优先
@@ -369,7 +382,7 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
       const delta = transcriptWheel(scroller, event)
       if (delta === null) return
       event.preventDefault()
-      searchHold.current = null
+      readingHold.current = null
       steadied.current = null
       pinned.current = null
       compensate()
@@ -377,7 +390,7 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
       observe()
     }
     const interacted = () => {
-      searchHold.current = null
+      readingHold.current = null
     }
     scroller.addEventListener('pointerdown', interacted, { passive: true })
     scroller.addEventListener('keydown', interacted)
@@ -465,16 +478,30 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
   )
 
   const reveal = useCallback(
-    (element: Element) => {
-      searchHold.current = { element, until: performance.now() + 300 }
+    (element: Element, range?: Range) => {
+      readingHold.current = null
       follow.current = false
       setFollowing(false)
       pinned.current = null
       steadied.current = null
       written.current = null
       element.scrollIntoView({ block: 'center', behavior: 'instant' })
-      observe()
       const scroller = scrollerRef.current
+      if (range && scroller) {
+        const view = scroller.getBoundingClientRect(),
+          rect = range.getBoundingClientRect()
+        scroller.scrollTop += rect.top - view.top - (view.height - rect.height) / 2
+      }
+      // Markdown 流式尾段会替换段落节点，用条目容器保持阅读位置。
+      // 固定顶边，不能每帧重新居中正在变高的段落。
+      const anchor = element.closest('[data-search-item]') ?? element
+      if (scroller)
+        readingHold.current = {
+          marks: [{ element: anchor, top: anchor.getBoundingClientRect().top }],
+          viewTop: scroller.getBoundingClientRect().top,
+          ...(range ? { range, rangeTop: range.getBoundingClientRect().top } : {}),
+        }
+      observe()
       if (scroller)
         steadyOn({
           marks: [{ element, top: element.getBoundingClientRect().top }],
@@ -484,8 +511,34 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
     [observe, steadyOn],
   )
 
+  const updateSearchRange = useCallback(
+    (range: Range) => {
+      const held = readingHold.current
+      if (!held?.range) return
+      // 替换流式 Markdown 的 Range，仅补回布局位移，不改变当前命中或居中目标。
+      held.range = range
+      compensate()
+      observe()
+    },
+    [compensate, observe],
+  )
+
+  const keepReading = useCallback((element: Element) => {
+    pinned.current = null
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const turn = element.closest('.turn')
+    const marks = [element, turn]
+      .filter((el): el is Element => !!el)
+      .map((el) => ({ element: el, top: el.getBoundingClientRect().top }))
+    // 搜索稀疏窗口退出后仍在逐批补历史，不能用500ms的外观稳定窗口代替阅读锚点。
+    // 只在用户滚动/点按、下次搜索定位、切换会话时释放。
+    steadied.current = null
+    readingHold.current = { marks, viewTop: scroller.getBoundingClientRect().top }
+  }, [])
+
   const toBottom = useCallback(() => {
-    searchHold.current = null
+    readingHold.current = null
     const scroller = scrollerRef.current
     if (!scroller) return
     steadied.current = null
@@ -541,8 +594,18 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
   )
 
   return useMemo(
-    () => ({ scrollerRef, contentRef, following, toBottom, restore, pin, reveal }),
-    [following, toBottom, restore, pin, reveal],
+    () => ({
+      scrollerRef,
+      contentRef,
+      following,
+      toBottom,
+      restore,
+      pin,
+      reveal,
+      keepReading,
+      updateSearchRange,
+    }),
+    [following, toBottom, restore, pin, reveal, keepReading, updateSearchRange],
   )
 }
 

@@ -9,6 +9,7 @@ import {
   searchableItems,
   searchCardItem,
   searchProposalItem,
+  searchQuery,
   searchTransferItem,
   type TurnView,
   wrapQuestionId,
@@ -28,19 +29,24 @@ export function useSearch(
   sessionId: string,
   query: string,
   skip?: readonly string[],
+  anchor?: { itemId: string; start: number },
 ) {
   const { store } = useServices().replica
   const t = useT()
   const [result, setResult] = useState(EMPTY)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
+  const searchable = useRef<ReadonlySet<string>>(new Set())
   const input = useRef(query)
+  const origin = useRef(anchor)
+  origin.current = anchor
   const request = useRef<(() => void) | null>(null)
   useEffect(() => {
     const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
     const bindings = new Map<string, () => void>(),
       previous = new Map<string, ItemView>()
     const indexed = new Set<string>()
+    searchable.current = indexed
     const omitted = new Set(skip)
     const turnCache = new Map<
       string,
@@ -203,6 +209,7 @@ export function useSearch(
         query: input.current,
         revision: mine,
         order: all.map((s) => s.item.id),
+        anchor: origin.current,
       })
     }
     function schedule() {
@@ -212,7 +219,6 @@ export function useSearch(
         return
       }
       if (timer) return
-      setBusy(true)
       timer = window.setTimeout(() => {
         timer = 0
         building = true
@@ -222,11 +228,31 @@ export function useSearch(
           building = false
           if (again) schedule()
         })
-      }, 120)
+      }, 180)
     }
     worker.onmessage = (event: MessageEvent<SearchResult>) => {
       if (stopped || event.data.revision !== revision) return
-      setResult(event.data)
+      if (event.data.query !== searchQuery(input.current)) return
+      setResult((previous) => {
+        const next = event.data
+        if (
+          previous.query === next.query &&
+          previous.count === next.count &&
+          previous.hits.length === next.hits.length &&
+          previous.hits.every((hit, i) => {
+            const other = next.hits[i]!
+            return (
+              hit.itemId === other.itemId &&
+              hit.turnId === other.turnId &&
+              hit.ordinal === other.ordinal &&
+              hit.start === other.start &&
+              hit.end === other.end
+            )
+          })
+        )
+          return previous
+        return next
+      })
       setBusy(false)
     }
     worker.onerror = () => {
@@ -236,6 +262,7 @@ export function useSearch(
       }
     }
     request.current = () => {
+      setBusy(true)
       revision++
       window.clearTimeout(timer)
       timer = 0
@@ -256,5 +283,5 @@ export function useSearch(
     input.current = query
     request.current?.()
   }, [query])
-  return { result, busy, failed }
+  return { result, busy, failed, searchable }
 }

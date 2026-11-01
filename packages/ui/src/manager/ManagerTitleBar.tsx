@@ -7,6 +7,7 @@ import { useKey } from '../app/services.tsx'
 import { PowerShortcut } from '../devices/PowerShortcut.tsx'
 import { MachineMarker } from '../machine/MachineMarker.tsx'
 import { RailToggle } from '../rail/InfoRail.tsx'
+import { FindButton } from '../search/FindButton.tsx'
 import { SideToggle } from '../side/SideSlot.tsx'
 import { SidebarToggle } from '../sidebar/SidebarFrame.tsx'
 import { TerminalToggle } from '../terminal/TerminalSlot.tsx'
@@ -69,6 +70,9 @@ export function ManagerTitleBar({
           </span>
         ) : null}
       </nav>
+      {manager ? (
+        <FindButton deviceId={manager.deviceId} sessionId={child?.id ?? manager.threadId} />
+      ) : null}
       <MachineMarker />
       <PowerShortcut deviceId={manager?.deviceId ?? 'local'} />
       {child ? (

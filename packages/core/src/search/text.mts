@@ -6,7 +6,7 @@ export interface SearchRange {
 export const SEARCH_LIMIT = 500
 export const SEARCH_QUERY_LIMIT = 256
 
-const lower = (text: string): string => text.toLowerCase().replace(/ς/gu, 'σ')
+const lower = (text: string): string => text.normalize('NFKC').toLowerCase().replace(/ς/gu, 'σ')
 
 export function searchText(text: string): string {
   return lower(text).replace(/\s+/gu, ' ')
@@ -21,21 +21,32 @@ export function occurrences(
   text: string,
   query: string,
   limit = SEARCH_LIMIT,
+  near = 0,
 ): {
-  ranges: SearchRange[]
+  ranges: (SearchRange & { ordinal: number })[]
   count: number
 } {
-  const ranges: SearchRange[] = []
-  if (!query) return { ranges, count: 0 }
+  const before: (SearchRange & { ordinal: number })[] = [],
+    after: typeof before = []
+  if (!query) return { ranges: [], count: 0 }
   let count = 0
+  // 环形缓冲只保留起点之前最后 limit 处和之后最初 limit 处，超长单条也有界。
   for (
     let start = text.indexOf(query);
     start >= 0;
     start = text.indexOf(query, start + query.length)
   ) {
-    count++
-    if (ranges.length < limit) ranges.push({ start, end: start + query.length })
+    const range = { start, end: start + query.length, ordinal: count++ }
+    if (!limit) continue
+    if (start <= near) before[(count - 1) % limit] = range
+    else if (after.length < limit) after.push(range)
   }
+  const ranges = [...before, ...after]
+    .sort((a, b) =>
+      near === Infinity ? b.start - a.start : Math.abs(a.start - near) - Math.abs(b.start - near),
+    )
+    .slice(0, limit)
+    .sort((a, b) => a.start - b.start)
   return { ranges, count }
 }
 
@@ -46,7 +57,9 @@ export function originalRanges(text: string, query: string, limit = SEARCH_LIMIT
   let normalized = '',
     offset = 0,
     space = false
-  for (const char of text) {
+  for (const { segment: char } of new Intl.Segmenter(undefined, {
+    granularity: 'grapheme',
+  }).segment(text)) {
     const end = offset + char.length
     if (/\s/u.test(char)) {
       if (space) ends[ends.length - 1] = end

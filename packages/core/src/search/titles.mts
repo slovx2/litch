@@ -13,7 +13,6 @@ export function matchTitles(
 } {
   const cap = Math.max(1, Math.min(500, limit))
   const wanted = searchQuery(query)
-  if (!wanted) return { hits: [], hasMore: false }
   const matches = [...rows]
     .filter(
       ({ session }) =>

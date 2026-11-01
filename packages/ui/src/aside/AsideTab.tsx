@@ -8,6 +8,7 @@ import { Confirm } from '../app/Confirm.tsx'
 import { whyNot } from '../app/errors.ts'
 import { Close, Icon } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
+import { FindButton } from '../search/FindButton.tsx'
 import type { SideTabProps } from '../side/tabs.ts'
 import { Transcript } from '../transcript/Transcript.tsx'
 import {
@@ -118,6 +119,7 @@ function AsideChat({ deviceId, parentId, aside, sessionId, inherited, shown }: C
           <Icon name="aside" small />
           {t('side.tab.aside')}
         </span>
+        <FindButton deviceId={deviceId} sessionId={sessionId} />
         <button
           type="button"
           className="mini"

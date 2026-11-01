@@ -59,7 +59,7 @@ const SKIP =
   '.message-acts,.umsg-acts,.code-head,.compact-source,.item[data-tone="quiet"] > .item-head,.ask-reply-kind,.cmt-cite,summary,[data-search-skip]'
 
 /** 只读命中消息的 DOM。跨行内标签相连，块边界补空白，不能跨两条消息造出命中。 */
-export function searchDOM(roots: Element[], query: string): Range[] {
+export function searchDOM(roots: Element[], query: string, limit = 500): Range[] {
   let plain = '',
     lastBlock: Element | null = null
   const spans: { node: Text; start: number; end: number }[] = []
@@ -97,7 +97,7 @@ export function searchDOM(roots: Element[], query: string): Range[] {
     plain += '\n'
     lastBlock = null
   }
-  return originalRanges(plain, query).flatMap((hit) => {
+  return originalRanges(plain, query, limit).flatMap((hit) => {
     const start = spans.find((s) => hit.start >= s.start && hit.start < s.end)
     const end = spans.find((s) => hit.end > s.start && hit.end <= s.end)
     if (!start || !end) return []

@@ -124,6 +124,14 @@ test('跨设备标题服务只匹配标题，排除临时与原生子代理，�
     ['a', 'b'],
   )
   assert.equal(matchTitles(rows, 'needle', 1).hasMore, true)
+  assert.deepEqual(
+    matchTitles(rows, '').hits.map((h) => h.session.id),
+    ['a', 'b', 'd'],
+  )
+  assert.deepEqual(
+    matchTitles(rows, 'ＮＥＥＤＬＥ').hits.map((h) => h.session.id),
+    ['a', 'b'],
+  )
 })
 
 test('目录游标停滞与翻页上限都报告不完整，正常终页完整', async () => {
@@ -343,4 +351,39 @@ test('真实核心标题命令跨设备读取目录：含归档、排除临时/�
   } finally {
     core.stop()
   }
+})
+
+test('NFKC 全角、兼容连字、组合字符搜索，并映射回原文完整字素', () => {
+  for (const [text, query, matched] of [
+    ['CodeNeedle', 'ｃｏｄｅｎｅｅｄｌｅ', 'CodeNeedle'],
+    ['ｃｏｄｅ', 'CODE', 'ｃｏｄｅ'],
+    ['a ﬃ b', 'ffi', 'ﬃ'],
+    ['Cafe\u0301', 'CAFÉ', 'Cafe\u0301'],
+    ['👩‍💻', '👩‍💻', '👩‍💻'],
+  ]) {
+    assert.ok(searchText(text!).includes(searchQuery(query!)))
+    const range = originalRanges(text!, query!)[0]!
+    assert.equal(text!.slice(range.start, range.end), matched)
+  }
+})
+
+test('500 上限围绕视口选择，命中仍按对话顺序，超长单条保留原始序号', () => {
+  const index = new ConversationSearch((parts) => parts.map((p) => p.text).join('\n'))
+  const order = Array.from({ length: 6000 }, (_, i) => `a${i}`)
+  index.update(
+    order.map((id) => ({ turnId: id, item: agent(id, 'needle') })),
+    [],
+  )
+  const tail = index.query('needle', 1, order, { itemId: 'a5999', start: Infinity })
+  assert.equal(tail.count, 6000)
+  assert.equal(tail.hits.length, 500)
+  assert.equal(tail.hits[0]?.itemId, 'a5500')
+  assert.equal(tail.hits[tail.nearest!]?.itemId, 'a5999')
+  const middle = index.query('needle', 2, order, { itemId: 'a3000', start: 0 })
+  assert.equal(middle.hits[middle.nearest!]?.itemId, 'a3000')
+  assert.ok(middle.hits.every((h) => Math.abs(Number(h.itemId.slice(1)) - 3000) <= 250))
+  index.update([{ turnId: 'huge', item: agent('huge', 'needle '.repeat(1500)) }], [])
+  const huge = index.query('needle', 3, ['huge'], { itemId: 'huge', start: Infinity })
+  assert.equal(huge.hits[0]?.ordinal, 1000)
+  assert.equal(huge.hits[huge.nearest!]?.ordinal, 1499)
 })

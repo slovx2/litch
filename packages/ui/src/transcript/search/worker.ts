@@ -10,5 +10,5 @@ self.addEventListener('message', (event: MessageEvent<SearchWorkerInput>) => {
   const message = event.data
   if (message.type === 'reset') index = create()
   else if (message.type === 'update') index.update(message.sources, message.removed)
-  else self.postMessage(index.query(message.query, message.revision, message.order))
+  else self.postMessage(index.query(message.query, message.revision, message.order, message.anchor))
 })

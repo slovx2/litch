@@ -19,6 +19,7 @@ import { Icon } from '../app/icons.tsx'
 import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import { shortTokens } from '../composer/ContextMeter.tsx'
+import { FindButton } from '../search/FindButton.tsx'
 import { Transcript } from '../transcript/Transcript.tsx'
 import { AgentStatus, AgentTime } from './agent-view.tsx'
 
@@ -110,6 +111,7 @@ export const AgentDetail = memo(function AgentDetail({
         <div className="agents-title">
           <h3>{agent?.description || agent?.nickname || t('tree.agent.unnamed', { n: 1 })}</h3>
           {state ? <AgentStatus state={state} /> : null}
+          <FindButton deviceId={deviceId} sessionId={agentId} />
           {canStop ? (
             <button
               type="button"

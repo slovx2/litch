@@ -44,7 +44,7 @@ import { useRestart } from '../devices/RestartService.tsx'
 import { restartItemOf, restarting, serviceFlagOf } from '../devices/service.ts'
 import { FailureNote, shownState, useReconnect } from '../devices/status.tsx'
 import { ManagerSidebar } from '../manager/ManagerSidebar.tsx'
-import { requestSearch } from '../search/actions.ts'
+import { TitleSearchButton } from '../search/FindButton.tsx'
 import { useBrowserWants } from '../side/browser/store.ts'
 import { SpawnDialog } from '../tree/SpawnDialog.tsx'
 import { offerUndo } from './archive-undo.ts'
@@ -1914,9 +1914,6 @@ export function Sidebar(props: SidebarProps) {
   return (
     <SidebarReveal value={reveal}>
       <SidebarFrame label={t('sidebar.label')}>
-        <button type="button" className="search-sidebar" onClick={requestSearch}>
-          {t('search.titles')}
-        </button>
         <div className="sb-top mg-sidebar-top">
           <div className="mg-mode seg">
             <button
@@ -1938,23 +1935,26 @@ export function Sidebar(props: SidebarProps) {
             </button>
           </div>
           {props.mode === 'manager' ? (
-            <button
-              type="button"
-              className="sb-link new"
-              onClick={() =>
-                requestManagers({
-                  view: 'new',
-                  ...(selection
-                    ? { deviceId: selection.deviceId }
-                    : draft
-                      ? { deviceId: draft.deviceId, workspaceId: draft.workspaceId }
-                      : {}),
-                })
-              }
-            >
-              <Plus />
-              <span>{t('manager.new')}</span>
-            </button>
+            <>
+              <button
+                type="button"
+                className="sb-link new"
+                onClick={() =>
+                  requestManagers({
+                    view: 'new',
+                    ...(selection
+                      ? { deviceId: selection.deviceId }
+                      : draft
+                        ? { deviceId: draft.deviceId, workspaceId: draft.workspaceId }
+                        : {}),
+                  })
+                }
+              >
+                <Plus />
+                <span>{t('manager.new')}</span>
+              </button>
+              <TitleSearchButton />
+            </>
           ) : (
             <>
               <button
@@ -1966,6 +1966,7 @@ export function Sidebar(props: SidebarProps) {
                 <Plus />
                 <span>{t('sidebar.newSession')}</span>
               </button>
+              <TitleSearchButton />
               <HarnessFilter />
               <SidebarMore />
             </>
