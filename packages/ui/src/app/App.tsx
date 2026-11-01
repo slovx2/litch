@@ -116,6 +116,11 @@ export function App() {
   // 开着某一页的时候，侧栏里没有哪个会话是选中的
   const selection = page ? null : picked
 
+  // 只记实际呈现在主区域的会话；预取、打开侧面板和后台订阅不算查看。
+  useEffect(() => {
+    if (selection) replica.visitSession(selection.deviceId, selection.sessionId)
+  }, [selection, replica])
+
   // 开着一个会话就算读过了：摘要上的未读一出现就清（摘要比选中晚到的也算）
   useEffect(() => {
     if (!selection) return
@@ -143,6 +148,7 @@ export function App() {
             (manager) => manager.deviceId === next.deviceId && manager.threadId === next.sessionId,
           )
         dispatch({ type: 'select', mode: mode ?? (managed ? 'manager' : 'chat'), selection: next })
+        replica.visitSession(next.deviceId, next.sessionId)
         setPeek(null)
       }),
     [replica, managerData.managers],

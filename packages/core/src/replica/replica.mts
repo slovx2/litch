@@ -50,12 +50,16 @@ import { type AskAnswers, gatherAnswers, parseAskReply } from '../projection/ask
 import { changedKeys } from '../projection/manage.mjs'
 import { managerBoardPages, managerSessionIds } from '../projection/manager.mjs'
 import { changesQuestions, pendingQuestions } from '../projection/pending-asks.mjs'
+import type { SidebarActivity } from '../projection/sidebar-activity.mjs'
+import { projectSidebarGroups, type SidebarProjections } from '../projection/sidebar-groups.mjs'
 import { appendOutput, appendSkipping } from '../text/output-cap.mjs'
 import { createFileTrees, type FileTrees, fileKeys } from './file-trees.mjs'
 import { KeyedStore } from './keyed-store.mjs'
 
 /** 状态库里有哪些键、每个键放什么 */
 export const keys = {
+  /** SidebarProjections：本设备的未读 / 最近主会话投影，不含经理子树。 */
+  sidebarProjections: (deviceId: string) => `sidebar:${deviceId}:projections`,
   /** string[]：设备标识，按添加顺序 */
   devices: 'devices',
   /** DeviceView */
@@ -364,6 +368,8 @@ export interface SessionMeta {
 
 export interface Replica {
   readonly store: KeyedStore
+  /** 用户显式打开、切到会话；预取和 openSession 订阅不记浏览。 */
+  visitSession(deviceId: string, sessionId: string): void
   /** 开始订阅应用和各设备的侧栏。返回停止函数 */
   start(): () => void
   /** 打开一个会话：订阅它的内容。同一个会话可以被打开多次，全部关掉后才退订并清掉内容 */
@@ -533,7 +539,7 @@ function sameHarnesses(a: SessionHarnesses, b: SessionHarnesses): boolean {
   return ids.length === Object.keys(b).length && ids.every((id) => a[id] === b[id])
 }
 
-export function createReplica(channel: CoreChannel): Replica {
+export function createReplica(channel: CoreChannel, activity?: SidebarActivity): Replica {
   const store = new KeyedStore()
   const decisionListeners = new Set<(manager: ManagerView, decision: ManagerDecisionView) => void>()
   const managerLists = new Map<string, { stop(): void; rows: Map<string, ManagerView> }>()
@@ -819,13 +825,23 @@ export function createReplica(channel: CoreChannel): Replica {
     else if (op.op === 'power.set') store.set(keys.managePower(deviceId), op.value)
   }
 
-  // 只有分组或顺序真的变了才换掉分组这个键，否则一个会话的状态变化会让整个列表重画
+  // 投影的主项、项目或排序依据没变就不通知；正文流式增量不经过侧栏目录。
+  const refreshProjections = (deviceId: string, sessions: Map<string, SessionSummary>) => {
+    const next = projectSidebarGroups(deviceId, sessions, (id) => activity?.time(deviceId, id) ?? 0)
+    const previous = store.get<SidebarProjections>(keys.sidebarProjections(deviceId))
+    if (JSON.stringify(previous) !== JSON.stringify(next)) {
+      store.set(keys.sidebarProjections(deviceId), next)
+    }
+  }
+
+  // 只有分组或顺序真的变了才换掉分组这个键，否则一个会话的状态变化会让整个列表重画。
   const refreshGroups = (
     deviceId: string,
     sessions: Map<string, SessionSummary>,
     listed: readonly SectionView[],
   ) => {
     const allSessions = sessions
+    refreshProjections(deviceId, allSessions)
     const hidden = managerSessionIds(allSessions.values())
     sessions = new Map([...allSessions].filter(([id]) => !hidden.has(id)))
     const next = groupSessions(sessions.values())
@@ -1269,8 +1285,13 @@ export function createReplica(channel: CoreChannel): Replica {
 
   return {
     store,
+    visitSession: (deviceId, sessionId) => activity?.visit(deviceId, sessionId),
 
     start() {
+      const stopActivity = activity?.subscribe((deviceId) => {
+        const entry = sidebars.get(deviceId)
+        if (entry) refreshProjections(deviceId, entry.sessions)
+      })
       const stopApp = channel.subscribe(
         { kind: 'app' },
         {
@@ -1292,6 +1313,8 @@ export function createReplica(channel: CoreChannel): Replica {
         },
       )
       return () => {
+        stopActivity?.()
+        activity?.flush()
         stopApp()
         for (const deviceId of [...sidebars.keys()]) dropSidebar(deviceId)
       }

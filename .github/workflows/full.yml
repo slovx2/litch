@@ -184,6 +184,7 @@ jobs:
           ditto -xk "${directory}/chrome.zip" "${directory}"
           echo "LITCH_CHROME_BINARY=${directory}/chrome-${architecture}/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" >> "${GITHUB_ENV}"
       - run: npm run client:check:search
+      - run: npm run client:check:projections
       # 对着真实入口的自检：在临时目录里起一个 Pi 引擎，模型请求全部走回环上的假模型
       - run: npm ci --no-audit --no-fund --prefix packages/pi
       - run: npm run build --prefix packages/pi

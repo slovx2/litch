@@ -416,6 +416,20 @@ export {
   shownEffort,
   shownSpeed,
 } from './projection/settings.mjs'
+export {
+  type ActivityStorage,
+  createSidebarActivity,
+  type SessionInteraction,
+  type SidebarActivity,
+} from './projection/sidebar-activity.mjs'
+export {
+  pageSidebarProjection,
+  projectSidebarGroups,
+  type SidebarProjectionBlock,
+  type SidebarProjectionKind,
+  type SidebarProjectionRow,
+  type SidebarProjections,
+} from './projection/sidebar-groups.mjs'
 export { spanFrom, spanned, spanOf, spanOp } from './projection/span.mjs'
 export { todoKey } from './projection/todo.mjs'
 // 子代理的状态：对话流的那一行、子代理页、信息卡，和“这个回合里还有没做完的子代理”（回合收起的判定）

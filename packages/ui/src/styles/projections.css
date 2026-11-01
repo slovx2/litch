@@ -1,0 +1,36 @@
+/* 投影组沿用设备原树的操作和行；颜色来自同一个 DeviceView.wire。 */
+.projection-group {
+  margin-bottom: 8px;
+}
+.projection-head .dev-row {
+  min-width: 0;
+  padding-inline-end: 32px;
+}
+.projection-head .arr {
+  display: flex;
+}
+.projection-head .arr.shut {
+  transform: rotate(-90deg);
+}
+.projection-count {
+  font-variant-numeric: tabular-nums;
+}
+.projection-body {
+  padding-inline: 8px;
+}
+.projection-block {
+  border-inline-start: 2px solid var(--wire);
+  min-width: 0;
+  margin-block: 4px;
+  padding-inline-start: 4px;
+}
+.projection-block.off {
+  border-inline-start-style: dashed;
+}
+.projection-empty {
+  padding: 4px 8px 8px;
+  font-size: calc(12px * var(--fs));
+}
+.projection-head .row-more {
+  opacity: 1;
+}

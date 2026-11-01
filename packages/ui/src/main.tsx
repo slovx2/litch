@@ -16,17 +16,26 @@ import '@fontsource/sometype-mono/400.css'
 import '@fontsource/sometype-mono/500.css'
 import '@fontsource/sometype-mono/600.css'
 import './styles/index.css'
-import { createReplica } from '@litch/core'
+import { createReplica, createSidebarActivity } from '@litch/core'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './app/App.tsx'
 import { currentLang } from './app/appearance.ts'
 import { currentPlatform } from './app/platform.ts'
 import { ServicesProvider } from './app/services.tsx'
-import { openChannel } from './boot/channel.ts'
+import { browserClock, openChannel } from './boot/channel.ts'
 
-const { channel, shell } = await openChannel(currentLang())
-const replica = createReplica(channel)
+const { channel: transport, shell } = await openChannel(currentLang())
+const activity = createSidebarActivity(transport, browserClock, {
+  load: () => JSON.parse(localStorage.getItem('litch.sidebar.activity') ?? '[]'),
+  save: (entries) => localStorage.setItem('litch.sidebar.activity', JSON.stringify(entries)),
+})
+const channel = activity.channel
+const replica = createReplica(channel, activity)
+window.addEventListener('pagehide', () => activity.flush())
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') activity.flush()
+})
 replica.start()
 // 样式要按外壳和系统区分一处：macOS 的桌面外壳里系统的窗口按钮盖在标题栏左上角，要给它让位置；
 // 别的系统上窗口按钮在系统自己的标题栏里，不用让

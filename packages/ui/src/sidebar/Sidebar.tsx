@@ -67,6 +67,7 @@ import { dropNativeChildren, keepSessions, keptAnyway, workspaceShown } from './
 import { foldsKeep, foldsSettled } from './folds.ts'
 import { HarnessFilter } from './HarnessFilter.tsx'
 import { DeviceInfo, SessionInfo, WorkspaceInfo } from './InfoCards.tsx'
+import { type ProjectedBlock, ProjectionGroups } from './ProjectionGroups.tsx'
 import { type RowAction, RowMenu, type RowMenuHandle } from './RowMenu.tsx'
 import { revealPath, revealRow } from './reveal.ts'
 import { SidebarReveal, useSidebarReveal } from './reveal-context.ts'
@@ -88,6 +89,7 @@ import {
 } from './state.ts'
 import { TallyMarks } from './TallyMarks.tsx'
 import { kidsShown, MAX_DEPTH, nestedUnder } from './tree.ts'
+import { WorkspaceActions } from './WorkspaceActions.tsx'
 import { WorkspaceDialog } from './WorkspaceDialog.tsx'
 
 const NO_WORKSPACES: readonly WorkspaceView[] = []
@@ -121,6 +123,7 @@ interface RowProps {
   kids?: number
   folded?: boolean
   onFold?(): void
+  interactionAt?: number | undefined
 }
 
 /** 一行会话。只订阅这一个会话的摘要：别的会话变了，这一行不重画 */
@@ -133,6 +136,7 @@ const SessionRow = memo(function SessionRow({
   kids = 0,
   folded = false,
   onFold,
+  interactionAt,
 }: RowProps) {
   const { channel, replica } = useServices()
   const { fromTree } = useSidebarReveal()
@@ -499,7 +503,7 @@ const SessionRow = memo(function SessionRow({
                   )}
                 </span>
               ) : (
-                <span className="time">{ago(summary.updatedAt, now, t)}</span>
+                <span className="time">{ago(interactionAt ?? summary.updatedAt, now, t)}</span>
               )}
             </>
           )}
@@ -779,6 +783,160 @@ function below(event: DragEvent): boolean {
   if (!head) return false
   const box = head.getBoundingClientRect()
   return event.clientY > box.top + box.height / 2
+}
+
+/** 投影只挂载当前页的行，不为每个主项重算整台设备的分组、筛选与拖放目录。 */
+function ProjectedDeviceBlock({
+  projection,
+  selection,
+  draft,
+  onSelect,
+  onCompose,
+  onFocus,
+}: {
+  projection: ProjectedBlock
+  selection: Selection | null
+  draft: Draft | null
+  onSelect(selection: Selection): void
+  onCompose(draft: Draft): void
+  onFocus(group: string | null): void
+}) {
+  const { kind, block, byProject } = projection
+  const deviceId = block.deviceId
+  const device = useKey<DeviceView>(keys.device(deviceId))
+  const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
+  const sections = useKey<SectionView[]>(keys.sections(deviceId)) ?? NO_SECTIONS
+  const children = useKey<SessionChildren>(keys.children(deviceId)) ?? NO_CHILDREN
+  const scope = `:projection:${kind}:${deviceId}`
+  const folds = useSidebarFolds(scope)
+  const [editing, setEditing] = useState<WorkspaceView | null>(null)
+  const [grouping, setGrouping] = useState<{ then(id: string): void } | null>(null)
+  const t = useT()
+  if (!device) return null
+  const workspace = workspaces.find((entry) => entry.id === block.workspaceId)
+  const projectKey = block.workspaceId ?? LOOSE
+  const expanded = !byProject || !folds.closed.includes(projectKey)
+  const toggle = () => toggleSidebarFold(scope, 'closed', projectKey)
+  const add =
+    device.connection === 'online' ? (
+      <button
+        type="button"
+        className={
+          draft?.deviceId === deviceId && draft.workspaceId === block.workspaceId
+            ? 'ibtn row-add on'
+            : 'ibtn row-add'
+        }
+        title={t('newSession.button')}
+        aria-label={t('newSession.button')}
+        onClick={() => onCompose({ deviceId, workspaceId: block.workspaceId })}
+      >
+        <Plus />
+      </button>
+    ) : null
+  const tree = (sessionId: string, depth: number, interactionAt?: number): ReactNode => {
+    if (depth > MAX_DEPTH) return null
+    const kids = children[sessionId] ?? NO_IDS
+    // 投影默认收起子树；用户显式展开后才挂载后代。
+    const shut = !folds.folded.includes(sessionId)
+    const fold = () => toggleSidebarFold(scope, 'folded', sessionId)
+    return (
+      <div
+        key={sessionId}
+        className="tree-node"
+        data-depth={depth}
+        style={depth > 0 ? ({ '--indent': `${depth * INDENT}px` } as CSSProperties) : undefined}
+      >
+        <SessionRow
+          deviceId={deviceId}
+          sessionId={sessionId}
+          onSelect={onSelect}
+          selected={selection?.deviceId === deviceId && selection.sessionId === sessionId}
+          nested={depth > 0}
+          kids={kids.length}
+          folded={shut}
+          onFold={fold}
+          interactionAt={interactionAt}
+        />
+        {kids.length > 0 ? (
+          <div className="tree-kids">
+            {shut ? (
+              <button
+                type="button"
+                className="tree-sum"
+                aria-expanded="false"
+                title={t('tree.unfold', { n: kids.length })}
+                onClick={fold}
+              >
+                <Caret />
+                <span className="ell">{t('tree.tucked', { n: kids.length })}</span>
+              </button>
+            ) : (
+              kids.map((id) => tree(id, depth + 1))
+            )}
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+  return (
+    <div
+      className={`projection-block${device.connection !== 'online' ? ' off' : ''}`}
+      data-device={deviceId}
+      style={wireStyle(device.wire)}
+      title={t.text(device.name)}
+    >
+      {byProject ? (
+        workspace ? (
+          <WorkspaceHead
+            workspace={workspace}
+            device={device}
+            count={block.rows.length}
+            expanded={expanded}
+            onToggle={toggle}
+            onFocus={() => onFocus(workspace.id)}
+            add={add}
+            drop={false}
+            menu={
+              <WorkspaceActions
+                device={device}
+                workspace={workspace}
+                workspaces={workspaces}
+                sections={sections}
+                onEdit={setEditing}
+                onNewSection={(then) => setGrouping({ then })}
+              />
+            }
+          />
+        ) : (
+          <HeadLine
+            group={LOOSE}
+            deviceId={deviceId}
+            className="ws-line"
+            toggleClass="ws-row"
+            label={<span className="name ell">{t('workspace.none')}</span>}
+            expanded={expanded}
+            onToggle={toggle}
+            add={add}
+            menu={null}
+          />
+        )
+      ) : null}
+      {expanded
+        ? block.rows.map((row) => tree(row.sessionId, 0, kind === 'recent' ? row.at : undefined))
+        : null}
+      {editing ? (
+        <WorkspaceDialog deviceId={deviceId} workspace={editing} onClose={() => setEditing(null)} />
+      ) : null}
+      {grouping ? (
+        <SectionDialog
+          deviceId={deviceId}
+          section={null}
+          onCreated={grouping.then}
+          onClose={() => setGrouping(null)}
+        />
+      ) : null}
+    </div>
+  )
 }
 
 function DeviceGroup(props: GroupProps) {
@@ -1234,90 +1392,16 @@ function DeviceGroup(props: GroupProps) {
   /** 现在提示的是不是“放进”这一处 */
   const into = (name: string) => over?.zone === name && over.mode === 'into'
 
-  /** 和它在一处（同在置顶、同一个组、都在“项目”里）的工作区，按设备上的顺序 */
-  const siblingsOf = (workspace: WorkspaceView) =>
-    workspaces.filter((entry) =>
-      workspace.pinned
-        ? entry.pinned
-        : workspace.sectionId
-          ? entry.sectionId === workspace.sectionId
-          : !entry.pinned && !entry.sectionId,
-    )
-  /** 工作区行尾的“更多”。这台设备上整理不了（没连着、对面没有这组方法）就没有 */
-  const workspaceMenu = (workspace: WorkspaceView) => {
-    if (!device.organizable) return null
-    const siblings = siblingsOf(workspace)
-    const at = siblings.indexOf(workspace)
-    const home = sections.find((entry) => entry.id === workspace.sectionId)
-    const actions: RowAction[] = [{ id: 'edit', title: t('workspace.edit') }]
-    if (home) actions.push({ id: 'ungroup', title: t('workspace.ungroup', { name: home.name }) })
-    else
-      actions.push({ id: 'pin', title: t(workspace.pinned ? 'workspace.unpin' : 'workspace.pin') })
-    actions.push({
-      id: 'group',
-      title: t('section.move'),
-      choices: {
-        title: t('section.move.title'),
-        back: t('session.move.back'),
-        options: [
-          // 在置顶、用户组里的可以挪回内置的“项目”
-          ...(workspace.pinned || workspace.sectionId
-            ? [{ id: PROJECTS, title: t('sidebar.projects') }]
-            : []),
-          ...sections
-            .filter((entry) => entry.id !== workspace.sectionId)
-            .map((entry) => ({ id: entry.id, title: entry.name })),
-          { id: NEW_SECTION, title: t('section.add') },
-        ],
-      },
-    })
-    if (at > 0) actions.push({ id: 'up', title: t('workspace.up') })
-    if (at < siblings.length - 1) actions.push({ id: 'down', title: t('workspace.down') })
-    actions.push({
-      id: 'delete',
-      title: t('workspace.delete'),
-      confirm: {
-        title: t('workspace.delete.title', { name: workspace.name }),
-        note: t('workspace.delete.note'),
-        yes: t('workspace.delete'),
-        no: t('workspace.cancel'),
-      },
-    })
-    const target = { deviceId, workspaceId: workspace.id }
-    const regroup = (sectionId: string) =>
-      organize(channel.command('workspace.update', { ...target, sectionId }))
-    return (
-      <RowMenu
-        label={t('workspace.menu')}
-        actions={actions}
-        onAction={(id, choice) => {
-          if (id === 'edit') setDialog({ workspace })
-          else if (id === 'delete') organize(channel.command('workspace.delete', target))
-          else if (id === 'pin') {
-            organize(channel.command('workspace.update', { ...target, pinned: !workspace.pinned }))
-          } else if (id === 'ungroup') {
-            organize(channel.command('workspace.update', { ...target, sectionId: null }))
-          } else if (id === 'group') {
-            if (choice === NEW_SECTION) newSection(regroup)
-            else if (choice === PROJECTS) {
-              const out = workspace.pinned ? { pinned: false } : { sectionId: null }
-              organize(channel.command('workspace.update', { ...target, ...out }))
-            } else if (choice) regroup(choice)
-          } else {
-            // 上移：挪到同一处前一个的前面；下移：挪到同一处后面第二个的前面，
-            // 后面只剩一个就挪到它在整张表里的下一个前面（没有就是最后）
-            const next = siblings[at + 1]
-            const before =
-              id === 'up'
-                ? (siblings[at - 1]?.id ?? null)
-                : (siblings[at + 2]?.id ??
-                  (next ? (workspaces[workspaces.indexOf(next) + 1]?.id ?? null) : null))
-            organize(channel.command('workspace.move', { ...target, before }))
-          }
-        }}
-      />
-    )
-  }
+  const workspaceMenu = (workspace: WorkspaceView) => (
+    <WorkspaceActions
+      device={device}
+      workspace={workspace}
+      workspaces={workspaces}
+      sections={sections}
+      onEdit={(workspace) => setDialog({ workspace })}
+      onNewSection={newSection}
+    />
+  )
 
   /**
    * 藏着别的应用派出来的会话时，里面只有这些会话的工作区整块不出。
@@ -1993,18 +2077,34 @@ export function Sidebar(props: SidebarProps) {
               )}
             />
           ) : (
-            shownIds.map((deviceId) => (
-              <DeviceGroup
-                key={deviceId}
-                deviceId={deviceId}
-                selection={selection}
-                draft={draft}
-                onSelect={onSelect}
-                onCompose={onCompose}
-                focus={focus?.deviceId === deviceId ? focus.group : null}
-                onFocus={focusOn(deviceId)}
-              />
-            ))
+            <>
+              {!focus ? (
+                <ProjectionGroups
+                  render={(projection) => (
+                    <ProjectedDeviceBlock
+                      projection={projection}
+                      selection={selection}
+                      draft={draft}
+                      onSelect={onSelect}
+                      onCompose={onCompose}
+                      onFocus={focusOn(projection.block.deviceId)}
+                    />
+                  )}
+                />
+              ) : null}
+              {shownIds.map((deviceId) => (
+                <DeviceGroup
+                  key={deviceId}
+                  deviceId={deviceId}
+                  selection={selection}
+                  draft={draft}
+                  onSelect={onSelect}
+                  onCompose={onCompose}
+                  focus={focus?.deviceId === deviceId ? focus.group : null}
+                  onFocus={focusOn(deviceId)}
+                />
+              ))}
+            </>
           )}
         </div>
         <SidebarFoot page={page} onPage={onPage} />
