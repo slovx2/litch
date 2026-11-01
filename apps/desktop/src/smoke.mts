@@ -86,7 +86,7 @@ import { homeMoreProbe, judgeHomeMore } from './probe-home-more.mjs'
 import { manageProbe } from './probe-manage.mjs'
 import { judgeManage, judgeMockManage } from './probe-manage-judge.mjs'
 import { mockManageProbe } from './probe-manage-mock.mjs'
-import { judgeManager, managerProbe } from './probe-manager.mjs'
+import { runManagerChecks } from './probe-manager-run.mjs'
 import { judgeOnboard, onboardProbe } from './probe-onboard.mjs'
 import { judgeOrganize, organizeProbe } from './probe-organize.mjs'
 import { judgeOrganizeMock, organizeMockProbe, PICKED_FOLDER } from './probe-organize-mock.mjs'
@@ -298,8 +298,7 @@ async function measure(
   }
   if (mode === 'sidebar') return runSidebarChecks(window, hooks)
   if (mode === 'manager') {
-    const result = await runInPage(window, managerProbe)
-    return [result, judgeManager(result)]
+    return runManagerChecks(window)
   }
   if (mode === 'tasks') {
     const result = await runInPage(window, tasksProbe, TASK_NAME)

@@ -9,6 +9,8 @@ export const MANAGER_METHOD = {
   boardRead: 'litch/manager/board/read',
   answersSubmit: 'litch/manager/answers/submit',
   decisionReopen: 'litch/manager/decision/reopen',
+  questionAsk: 'litch/manager/question/ask',
+  questionForward: 'litch/manager/question/forward',
 } as const
 
 export const MANAGER_NOTIFICATION = {
@@ -123,6 +125,8 @@ export interface ManagerDecisionFields {
   landed: ManagerLink[]
 }
 export interface ManagerDecision extends ManagerDecisionFields {
+  /** 设备持久化的旁问；不属于答复草稿，也不改变决策版本。 */
+  discussion?: ManagerDiscussion
   id: ManagerDecisionId
   /** 每次变更加一，答复必须带所读版本，防止按旧背景或选项答。 */
   revision: number
@@ -132,6 +136,26 @@ export interface ManagerDecision extends ManagerDecisionFields {
   closed: ManagerClosed | null
   createdAt: number
   updatedAt: number
+}
+export interface ManagerQuestion {
+  id: string
+  question: string
+  answer: string | null
+  status: 'running' | 'completed' | 'failed'
+  refreshed: boolean
+  at: number
+}
+export interface ManagerDiscussion {
+  messages: ManagerQuestion[]
+  /** 无经理历史的轻会话。 */
+  light: boolean
+  summary: string | null
+  forwarded: number
+}
+export interface ManagerQuestionParams extends ManagerIdParams {
+  decisionId: ManagerDecisionId
+  revision: number
+  question: string
 }
 export interface ManagerItemFields {
   title: string
@@ -312,6 +336,7 @@ export interface ManagerEventData {
     optionId: string | null
     optionLabel: string | null
     text: string
+    discussion?: ManagerDiscussion
   }[]
 }
 

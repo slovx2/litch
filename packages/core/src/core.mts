@@ -1247,6 +1247,15 @@ export function createCore(options: CoreOptions): Core {
             params as Commands['managers.decision.reopen']['params']
           return await deviceOf(deviceId).managers.reopen({ managerId, decisionId })
         }
+        case 'managers.question.ask': {
+          const { deviceId, ...question } = params as Commands['managers.question.ask']['params']
+          return await deviceOf(deviceId).managers.ask(question)
+        }
+        case 'managers.question.forward': {
+          const { deviceId, ...question } =
+            params as Commands['managers.question.forward']['params']
+          return await deviceOf(deviceId).managers.forward(question)
+        }
         case 'tasks.create': {
           const { deviceId, task } = params as Commands['tasks.create']['params']
           return { task: await deviceOf(deviceId).tasks.create(task) }

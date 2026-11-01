@@ -2,6 +2,22 @@
 import type { Entry } from './types.ts'
 
 export const enManager = {
+  'manager.editAnswer': 'Edit answer',
+  'manager.questionBackground': 'Ask for context',
+  'manager.questionNote':
+    'This conversation is saved separately and included when you submit your answer.',
+  'manager.questionLight':
+    'Only board context is available here, without the manager’s conversation history.',
+  'manager.questionRefreshed':
+    'The manager has made progress. This answer uses the latest context.',
+  'manager.questionYou': 'You:',
+  'manager.questionRunning': 'Answering…',
+  'manager.questionFailed': 'The answer did not complete. Please ask again.',
+  'manager.questionInput': 'What context would help?',
+  'manager.questionSend': 'Ask',
+  'manager.questionForward': 'Forward to manager',
+  'manager.questionForwarded': 'Forwarded to manager',
+  'manager.questionWait': 'Wait for the background conversation to finish before submitting.',
   'manager.waitDecisions': 'Waiting for decisions',
   'manager.clearOption': 'Clear selection',
   'manager.chat': 'Chat',

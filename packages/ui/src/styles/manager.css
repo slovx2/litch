@@ -1,4 +1,21 @@
 /* 经理：侧栏入口、对话与看板、设备列表和新建表单。颜色与表面均跟随皮肤。 */
+.mg-questions {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.mg-question-body {
+  display: grid;
+  gap: 8px;
+}
+.mg-question-log {
+  max-height: 360px;
+  overflow: auto;
+}
+.mg-question-round {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--line);
+}
 .mg-sidebar-top {
   flex-wrap: wrap;
 }

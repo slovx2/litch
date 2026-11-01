@@ -215,6 +215,7 @@ export class ManagerBoardWriter {
           why = 'User answered in conversation'
           patch = {
             status: 'answered',
+            closed: null,
             answer: { optionId: args.optionId, text: args.text, by, at: managerNow() },
           }
           break
@@ -226,7 +227,6 @@ export class ManagerBoardWriter {
     })
   }
   private answerFailure(decision: ManagerDecision, answer: ManagerSubmittedAnswer): string | null {
-    if (decision.status !== 'open') return 'The decision is no longer open.'
     if (
       typeof answer.text !== 'string' ||
       (answer.optionId !== null && typeof answer.optionId !== 'string')
@@ -257,8 +257,12 @@ export class ManagerBoardWriter {
         const answer = raw as unknown as ManagerSubmittedAnswer
         const found = this.store.object(managerId, answer.decisionId)
         const decision = found && isDecision(found) ? found : null
+        const discussion = this.store.question(managerId, answer.decisionId)?.discussion
+        const asking = this.store
+          .question(managerId, answer.decisionId)
+          ?.discussion.messages.some((entry) => entry.status === 'running')
         const code =
-          counts.get(answer.decisionId) !== 1
+          asking || counts.get(answer.decisionId) !== 1
             ? 'invalidAnswer'
             : !decision
               ? 'unknownDecision'
@@ -266,23 +270,20 @@ export class ManagerBoardWriter {
                 ? 'invalidAnswer'
                 : answer.revision !== decision.revision
                   ? 'decisionConflict'
-                  : decision.status !== 'open'
-                    ? 'decisionNotOpen'
-                    : this.answerFailure(decision, answer)
-                      ? 'invalidAnswer'
-                      : null
+                  : this.answerFailure(decision, answer)
+                    ? 'invalidAnswer'
+                    : null
         if (code || !decision) {
           result.rejected.push({
             decisionId: answer.decisionId,
             code: code ?? 'unknownDecision',
-            message:
-              code === 'decisionConflict'
+            message: asking
+              ? 'Wait for the background answer before submitting this decision.'
+              : code === 'decisionConflict'
                 ? 'The decision changed; read it and confirm again.'
-                : code === 'decisionNotOpen'
-                  ? 'The decision is no longer open.'
-                  : code === 'unknownDecision'
-                    ? 'Unknown decision.'
-                    : 'Invalid or duplicate answer; choose an existing option or enter text.',
+                : code === 'unknownDecision'
+                  ? 'Unknown decision.'
+                  : 'Invalid or duplicate answer; choose an existing option or enter text.',
             decision,
           })
           continue
@@ -293,6 +294,8 @@ export class ManagerBoardWriter {
             decision,
             {
               status: 'answered',
+              closed: null,
+              ...(discussion ? { discussion } : {}),
               answer: {
                 optionId: answer.optionId,
                 text: answer.text,
@@ -322,6 +325,7 @@ export class ManagerBoardWriter {
                   decision.options.find((option) => option.id === decision.answer?.optionId)
                     ?.label ?? null,
                 text: decision.answer?.text ?? '',
+                ...(decision.discussion ? { discussion: decision.discussion } : {}),
               })),
             },
           }),

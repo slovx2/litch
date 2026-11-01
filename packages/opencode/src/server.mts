@@ -268,7 +268,9 @@ export class OpencodeServer {
     // 会话的新建、状态、改名、归档这些和上游一样发给所有连接；临时线程的除外（不进列表）
     const everyone =
       threadId === null ||
-      (BROADCAST_THREAD_NOTIFICATIONS.has(method) && !threadId.startsWith(EPHEMERAL_PREFIX))
+      (BROADCAST_THREAD_NOTIFICATIONS.has(method) &&
+        !threadId.startsWith(EPHEMERAL_PREFIX) &&
+        !this.live.get(threadId)?.projection.thread.ephemeral)
     for (const peer of this.peers.values())
       if (everyone || (threadId !== null && this.subscriptions.get(threadId)?.has(peer.id))) {
         // 回合的来历只给声明了 backgroundTasks 的连接（另拷一份）
@@ -504,6 +506,14 @@ export class OpencodeServer {
     }
     return true
   }
+  /** 旁问使用隐藏的真实轻会话；原有起标题用的内存线程不变。 */
+  async releaseQuestion(id: string): Promise<void> {
+    const live = this.live.get(id)
+    if (!live?.projection.thread.ephemeral || this.subscriptions.get(id)?.size) return
+    const api = await this.api()
+    await api.request('DELETE', `/session/${id}`, { directory: live.directory })
+    this.sessions.deleted(id)
+  }
 
   // /global/event 上的一条事件。只管打开着的会话；子代理会话的权限和提问归到它所属的主会话（Sessions.owner）。
   private event(directory: string | null, payload: any): void {
@@ -582,6 +592,11 @@ export class OpencodeServer {
     this.processes.closePeer(peer.id)
     for (const ids of this.subscriptions.values()) ids.delete(peer.id)
     for (const id of [...this.ephemeral.keys()]) this.releaseEphemeral(id)
+    for (const [id, live] of this.live)
+      if (live.projection.thread.ephemeral)
+        void this.releaseQuestion(id).catch((error) =>
+          console.error(`[opencode] 释放旁问失败: ${String(error)}`),
+        )
     // 订阅者断开只摘掉它自己：别的连接还拿着的请求继续等，一条都不剩的才结束。
     this.requests.dropPeer(peer.id, '客户端已断开')
   }

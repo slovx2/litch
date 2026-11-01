@@ -60,6 +60,8 @@ const text = (value: unknown): string => (typeof value === 'string' ? value : ''
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
 export class DeviceTools implements DeviceToolRegistry {
+  /** 设备拥有的只读旁问对所有动态工具统一把关，包含客户端工具。 */
+  allowed: (threadId: string, namespace: unknown, tool: unknown) => boolean = () => true
   private readonly handlers = new Map<string, DeviceToolHandler>()
   /** 正在执行的调用。键：harness + 会话 + callId */
   private readonly running = new Map<string, Running>()
@@ -93,6 +95,10 @@ export class DeviceTools implements DeviceToolRegistry {
    * 没注册的命名空间当场回 invalid
    */
   dispatch(harness: string, params: Record<string, unknown>, reply: DeviceToolReply): void {
+    if (!this.allowed(text(params.threadId), params.namespace, params.tool)) {
+      reply(clientToolFailure('blocked', 'Decision background questions are read-only.'))
+      return
+    }
     const call: DeviceToolCall = {
       harness,
       threadId: text(params.threadId),

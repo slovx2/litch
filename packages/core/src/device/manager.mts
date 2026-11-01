@@ -7,6 +7,7 @@ import {
   type Manager,
   type ManagerChangedNotification,
   type ManagerDecisionReopenParams,
+  type ManagerQuestionParams,
   type ManagerSubmittedAnswer,
 } from '../../../protocol/src/manager.mjs'
 import { ChannelError } from '../channel/protocol.mjs'
@@ -308,6 +309,16 @@ export function createManagers(host: ManagersHost) {
       const result = await guarded(() => host.request(MANAGER_METHOD.decisionReopen, params))
       invalidate(params.managerId)
       return { decision: projectManagerDecision(result.decision) }
+    },
+    async ask(params: ManagerQuestionParams) {
+      await guarded(() => host.request(MANAGER_METHOD.questionAsk, params))
+      invalidate(params.managerId)
+      return {}
+    },
+    async forward(params: ManagerDecisionReopenParams) {
+      const result = await guarded(() => host.request(MANAGER_METHOD.questionForward, params))
+      invalidate(params.managerId)
+      return result
     },
   }
 }

@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { isAbsolute, relative } from 'node:path'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
+import { isManagerQuestionTools } from '../../protocol/src/manager-question.mjs'
 import {
   BACKGROUND_SHELL_NAMESPACE,
   backgroundShellSpec,
@@ -261,6 +262,24 @@ export class ClientTools {
    * 的 presetTools），读、停、列照给：规则照先后、最后对得上的算数，所以写在放开的那条后面
    */
   rules(threadId: string, preset: Preset | null = null): Record<string, boolean> {
+    if (isManagerQuestionTools(this.server.store.getMeta('dynamicTools', threadId))) {
+      // 全拒绝后逐项开放，不能让用户安装的 MCP 或后台 shell 混入。
+      return {
+        '*': false,
+        read: true,
+        glob: true,
+        grep: true,
+        list: true,
+        ...Object.fromEntries(
+          this.specs(threadId)
+            .filter(
+              (spec) =>
+                spec.namespace === 'litch_manager' && ['summary', 'get'].includes(spec.tool),
+            )
+            .map((spec) => [`${serverName(threadId)}_${spec.mcpName}`, true]),
+        ),
+      }
+    }
     const rules = toolRules(this.specs(threadId).length ? threadId : null)
     if (preset === ':read-only' && this.builtIn.length) {
       const start = this.builtIn.find((spec) => spec.tool === SHELL_START_TOOL)

@@ -97,8 +97,26 @@ Choose an option or write an answer. Answers are local drafts until **Submit to 
 not sync before submission. Submitting saves them to the device and asks the manager to handle them.
 Successful drafts clear; failed ones remain. If a decision changed, review its new version before
 confirming. **Clear drafts** only clears local unsent answers. Closed decisions can be reopened.
+Answered and closed decisions also offer **Edit answer**. Submit the revised answer to notify the
+manager; the previous answer and closure remain in the change history. A revised closed decision
+moves to Answered. Decisions under an ending or ended manager remain read-only.
 You may also answer explicitly in the manager conversation. Recorded links and evidence do not
 automatically become stale or verified; there is no automatic deadline/default-answer execution.
+
+**Ask for context** opens a separate conversation below any decision, including answered and closed
+decisions. Each decision has its own thread, saved on the device and shared between windows. The
+assistant can read files and the board but cannot change files, edit the board, start worklines or
+send messages. A running manager is not interrupted: questions use its latest finished turn. If the
+manager completes another turn or the decision changes, the next question uses fresh context with
+the earlier Q&A quoted; a notice explains the change. OpenCode uses a separate light conversation
+with board context instead of manager history. ACP and DSH cannot yet enforce this read-only tool
+boundary, so questions must be asked in the manager conversation.
+
+Submitting an answer includes the saved Q&A; long conversations include a summary followed by the
+full text. Wait for a running answer before submitting. **Forward to manager** sends the Q&A without
+answering the decision. Sending the same conversation twice does not send another message. Questions
+and answers remain in the decision history after submission or closure; further questions remain
+available while the manager is active. A device restart retains the text and recreates its helper.
 
 **End manager** asks for confirmation, makes chat and board read-only during final tasks, then moves
 the manager into Ended when its final turn stops. Unfinished items remain recorded. The manager may

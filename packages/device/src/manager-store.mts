@@ -26,6 +26,7 @@ const MIGRATIONS = [
    CREATE TABLE reports(thread_id TEXT PRIMARY KEY, body TEXT NOT NULL);`,
   // 收尾回合与投递事件一起留存；重启后按事件原文找回回合，不能把普通回合误认作收尾。
   `CREATE TABLE endings(manager_id TEXT PRIMARY KEY, event_id TEXT NOT NULL, text TEXT NOT NULL, turn_id TEXT);`,
+  `CREATE TABLE questions(manager_id TEXT NOT NULL, decision_id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(manager_id,decision_id));`,
 ] as const
 export const MANAGER_SCHEMA_VERSION = MIGRATIONS.length
 export const managerNow = () => Math.floor(Date.now() / 1000)
@@ -39,6 +40,16 @@ export interface ManagerEnding {
   eventId: string
   text: string
   turnId: string | null
+}
+export interface QuestionState {
+  managerId: string
+  decisionId: import('../../protocol/src/manager.mjs').ManagerDecisionId
+  discussion: import('../../protocol/src/manager.mjs').ManagerDiscussion
+  threadId: string | null
+  /** 退休分叉的身份仍保留，迟到调用和重启都不能恢复写权限。 */
+  threads: string[]
+  source: string
+  revision: number
 }
 export interface LineReport {
   text: string
@@ -132,6 +143,26 @@ export class ManagerStore {
         'INSERT INTO objects VALUES(?,?,?) ON CONFLICT(manager_id,id) DO UPDATE SET body=excluded.body',
       )
       .run(managerId, object.id, JSON.stringify(object))
+  }
+  questions(managerId?: string): QuestionState[] {
+    return this.db
+      .prepare(`SELECT body FROM questions ${managerId ? 'WHERE manager_id=?' : ''}`)
+      .all(...(managerId ? [managerId] : []))
+      .map((row) => body<QuestionState>(row) as QuestionState)
+  }
+  question(managerId: string, decisionId: string): QuestionState | null {
+    return body(
+      this.db
+        .prepare('SELECT body FROM questions WHERE manager_id=? AND decision_id=?')
+        .get(managerId, decisionId),
+    )
+  }
+  saveQuestion(state: QuestionState): void {
+    this.db
+      .prepare(
+        'INSERT INTO questions VALUES(?,?,?) ON CONFLICT(manager_id,decision_id) DO UPDATE SET body=excluded.body',
+      )
+      .run(state.managerId, state.decisionId, JSON.stringify(state))
   }
   nextId(managerId: string, kind: 'D' | 'I'): ManagerObjectId {
     const row = this.db

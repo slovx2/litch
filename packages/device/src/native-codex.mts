@@ -98,6 +98,7 @@ function codexFeatures(): HarnessFeatures {
     goals: true,
     // thread/fork 带 ephemeral：上游的临时线程带着源线程的历史、只在内存里，卸载即消失（thread_processor.rs）；官方桌面端的侧聊用它
     ephemeralFork: true,
+    managerQuestions: true,
   }
 }
 
@@ -251,6 +252,12 @@ export const NATIVE_CODEX_DIALECT: UpstreamDialect = {
     const trimmed = withoutEmptyNamespaces(method, given)
     const folded = foldToolInstructions(method, trimmed ?? given) ?? trimmed
     const params = folded ?? given
+    // 原生 fork 继承工具，不能替换列表；旁问的有效工具由设备入口和只读沙箱收紧。
+    // instructions 已在发送前抽出，不能把本地使用的 dynamicTools 参数交给上游。
+    if (method === 'thread/fork' && Object.hasOwn(params, 'dynamicTools')) {
+      const { dynamicTools: _tools, ...rest } = params
+      return rest
+    }
     if (!PRESET_METHODS.has(method) || params.approvalPolicy != null) return folded
     const approvalPolicy =
       typeof params.permissions === 'string' ? PRESET_APPROVAL[params.permissions] : undefined

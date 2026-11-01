@@ -450,6 +450,8 @@ export class DeviceServer {
       this.titles?.born(harness, thread)
     })
     this.sessionTree.managers = this.managers
+    this.deviceTools.allowed = (threadId, namespace, tool) =>
+      this.managers.questions.allowed(threadId, namespace, tool)
     info.extensions.push(EXTENSION.manager, EXTENSION.suggestionInbox)
     this.index.onChanged = () => this.sessionTree.suggestions.changed()
     this.deviceTools.register(CLIENT_TOOL_NAMESPACE.manager, (call) => this.managers.tool(call))

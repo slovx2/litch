@@ -16,6 +16,7 @@ import { builtinPreset, PRESET } from '../../shared/src/harness-declaration.mjs'
 const inputTypes: HarnessInputType[] = ['text', 'image', 'localImage', 'skill', 'mention']
 
 const features: HarnessFeatures = {
+  managerQuestions: true,
   // 会话忙着的时候再发一句，OpenCode 在当前这一步结束后把它并进正在跑的循环。
   steer: true,
   // abort 之后适配器自己收拾挂着的审批和提问（turns.mts 的 interrupt）。

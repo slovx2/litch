@@ -122,6 +122,8 @@ export interface HarnessFeatures {
    * 客户端的侧聊靠它。后加的位，没报就是不会（有的引擎的临时会话只是个不带历史的帮手）
    */
   ephemeralFork?: boolean
+  /** 可强制决策旁问工具只读；设备才可发起旁问。 */
+  managerQuestions?: boolean
 }
 
 export type PermissionRisk = 'low' | 'medium' | 'high'

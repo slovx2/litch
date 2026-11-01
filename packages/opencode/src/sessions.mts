@@ -1,3 +1,4 @@
+import { isManagerQuestionTools } from '../../protocol/src/manager-question.mjs'
 import type { OcThread, Projection } from './projection.mjs'
 import type { OpencodeServer, Preset, ThreadSettings } from './server.mjs'
 
@@ -65,7 +66,7 @@ export class Sessions {
         typeof info.parentID === 'string' && typeof info.agent === 'string' && info.agent
           ? info.agent
           : null,
-      ephemeral: false,
+      ephemeral: isManagerQuestionTools(this.meta('dynamicTools', info.id)),
     }
   }
 
@@ -100,6 +101,7 @@ export class Sessions {
     const threads: OcThread[] = []
     for (const row of rows) {
       const thread = this.server.live.get(row.id)?.projection.thread ?? this.thread(row)
+      if (thread.ephemeral) continue
       this.known.set(thread.id, thread)
       if (row.time?.archived) this.nativeArchived.add(thread.id)
       if (isDefaultTitle(row.title) && !this.meta('display', row.id)) continue

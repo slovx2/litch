@@ -701,8 +701,10 @@ async function nativeMutation(s: PiServer, peer: RpcPeer, method: string, p: any
       .some((e) => e.type === 'message' && e.message.role === 'user')
     // 照上游：分叉出来的是一个新会话，建立和最后活动都是分叉这一刻，不沿用源会话的最后活动
     const now = Math.floor(Date.now() / 1000)
+    if (p.dynamicTools !== undefined) clientTools(p.dynamicTools)
     const fork = {
       ...thread,
+      ...(p.dynamicTools !== undefined ? { dynamicTools: p.dynamicTools } : {}),
       id: manager.getSessionId(),
       path: manager.getSessionFile() ?? null,
       // 临时分叉：不进列表，会话级的通知只给订阅着它的连接（notify），卸载了就没了（releaseUnused）

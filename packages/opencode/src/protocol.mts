@@ -1,4 +1,5 @@
 import { isAbsolute } from 'node:path'
+import { isManagerQuestionTools } from '../../protocol/src/manager-question.mjs'
 import { backgroundTerminalsPage, withBackground } from '../../shared/src/background-report.mjs'
 import { gitDiffToRemote } from '../../shared/src/git-diff-remote.mjs'
 import { applyNotificationOptOut } from '../../shared/src/notification-opt-out.mjs'
@@ -240,6 +241,7 @@ export async function dispatch(
     case 'thread/unsubscribe': {
       const subscribed = s.subscriptions.get(p.threadId)?.delete(peer.id)
       const ephemeral = s.releaseEphemeral(p.threadId)
+      await s.releaseQuestion(p.threadId)
       return {
         status: subscribed
           ? 'unsubscribed'
@@ -273,7 +275,7 @@ async function startThread(s: OpencodeServer, peer: RpcPeer, p: any): Promise<an
     base.model = null
     base.effort = null
   }
-  if (p.ephemeral === true) {
+  if (p.ephemeral === true && !isManagerQuestionTools(p.dynamicTools)) {
     const live = s.openEphemeral(peer, cwd, base)
     const started = envelope(s, live.projection.thread)
     setImmediate(() => s.notify(started.id, 'thread/started', { thread: started }))

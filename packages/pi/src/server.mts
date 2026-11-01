@@ -7,6 +7,7 @@ import {
 } from '../../protocol/src/background-tasks.mjs'
 import type { ClientToolNamespaceSpec } from '../../protocol/src/client-tools.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import { isManagerQuestionTools } from '../../protocol/src/manager-question.mjs'
 import {
   type BackgroundReport,
   notificationWithOrigin,
@@ -414,6 +415,11 @@ export class PiServer {
     ask: ToolCallAsk,
   ): Promise<ToolCallBlock | undefined> {
     const client = clientTools(thread.dynamicTools).some((tool) => tool.piName === ask.toolName)
+    if (isManagerQuestionTools(thread.dynamicTools))
+      return client ||
+        ['builtin:read', 'builtin:grep', 'builtin:find', 'builtin:ls'].includes(ask.source ?? '')
+        ? undefined
+        : { block: true, reason: '决策旁问只允许读文件和读取看板' }
     // 后台 shell 起命令照跑命令问，别的几个（读、停、列）不问
     const shell = this.shellSpec?.tools.find((tool) => shellToolName(tool.name) === ask.toolName)
     const kind = shell
@@ -713,7 +719,7 @@ export class PiServer {
             signal,
           ),
         // 没打开审批时不给这一项：Pi 那边不挂钩子，和以前一样什么都不问。
-        ...(this.approvals
+        ...(this.approvals || isManagerQuestionTools(thread.dynamicTools)
           ? { approve: (ask: ToolCallAsk) => this.approve(peer, thread, ask) }
           : {}),
         ...(this.shellSpec

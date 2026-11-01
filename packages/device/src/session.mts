@@ -500,6 +500,16 @@ export class ClientSession implements ClientToolPeer {
       return this.host.pairing.call(method, frame.params)
     }
     if (this.state !== 'ready') throw new ProtocolError(-32600, 'Not initialized')
+    // 旁问只由设备编排；普通客户端不能绕过卡片提升权限、发任意回合或复制成可写会话。
+    if (
+      isObject(frame.params) &&
+      typeof frame.params.threadId === 'string' &&
+      this.host.managers?.questions.managerFor(frame.params.threadId)
+    )
+      throw new ProtocolError(
+        -32600,
+        'Decision background sessions are controlled by the manager board.',
+      )
     if (typeof id === 'string' && id.startsWith(INTERNAL_ID_PREFIX))
       throw new ProtocolError(-32600, `请求号不能以 ${INTERNAL_ID_PREFIX} 开头`)
     const route = classify(method, frame.params)

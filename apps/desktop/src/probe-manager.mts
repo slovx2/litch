@@ -1,5 +1,8 @@
 // 经理冒烟只操作正式界面，模拟核心负责写答案和生成答复回合。
 export interface ManagerSeen {
+  backgroundQuestions: boolean
+  questionForwarded: boolean
+  revisedAnswer: boolean
   list: boolean
   selected: boolean
   draft: boolean
@@ -47,7 +50,7 @@ export interface ManagerSeen {
   externalKeepsManager: boolean
 }
 
-export async function managerProbe(): Promise<ManagerSeen> {
+export async function managerProbe(captureQuestions = false): Promise<ManagerSeen> {
   const one = <T extends Element = HTMLElement>(selector: string) =>
     document.querySelector<T>(selector)
   const click = (selector: string) =>
@@ -176,6 +179,43 @@ export async function managerProbe(): Promise<ManagerSeen> {
       one('[data-board-tab="decisions"]')?.getAttribute('aria-selected') === 'true',
   )
   ;(await until('决策页签', () => one<HTMLButtonElement>('[data-board-tab="decisions"]'))).click()
+  await click('[data-decision="D-15"] [data-act="manager-question-toggle"]')
+  const askBackground = async (value: string, count: number) => {
+    const input = await until('背景问题输入框', () =>
+      one<HTMLTextAreaElement>('[data-decision="D-15"] .mg-questions textarea'),
+    )
+    fill(input, value)
+    await until(
+      '背景提问按钮可用',
+      () =>
+        !one<HTMLButtonElement>('[data-decision="D-15"] [data-act="manager-question-send"]')
+          ?.disabled,
+    )
+    await click('[data-decision="D-15"] [data-act="manager-question-send"]')
+    await until(
+      '背景问答完成',
+      () => document.querySelectorAll('[data-decision="D-15"] .mg-question-round').length === count,
+    )
+  }
+  const turnsBeforeQuestions = document.querySelectorAll('.mg-chat .turn').length
+  await askBackground('为什么推荐这个选项？', 1)
+  await askBackground('还有哪些影响需要确认？', 2)
+  if (captureQuestions) {
+    one('[data-decision="D-15"] .mg-questions')?.scrollIntoView({ block: 'center' })
+    await new Promise<void>((resolve) => {
+      window.addEventListener('litch-manager-questions-captured', () => resolve(), { once: true })
+      document.documentElement.dataset.managerQuestionsReady = 'true'
+    })
+  }
+  const backgroundQuestions =
+    document.querySelectorAll('.mg-chat .turn').length === turnsBeforeQuestions
+  await click('[data-decision="D-15"] [data-act="manager-question-forward"]')
+  const questionForwarded = Boolean(
+    await until('问答已转给经理', () =>
+      one('[data-act="manager-question-forward"]')?.textContent?.includes('已转给经理'),
+    ),
+  )
+  await click('[data-decision="D-15"] [data-act="manager-question-toggle"]')
   ;(await until('按推荐', () => one<HTMLButtonElement>('[data-act="manager-recommend"]'))).click()
   const draft = Boolean(await until('本地草稿', () => one('.mg-decision[data-draft="true"]')))
   await click('[data-manager-id="m3"] .mg-pick')
@@ -204,9 +244,28 @@ export async function managerProbe(): Promise<ManagerSeen> {
   )
   const answerEvent = Boolean((await eventBody('manager-answers')).textContent?.includes('D-15'))
   eventsClean = cleanChat() && eventsClean
+  await click('[data-decision="D-15"] [data-act="manager-edit-answer"]')
+  fill(
+    await until('修改答案输入框', () =>
+      one<HTMLTextAreaElement>('[data-decision="D-15"] [data-act="manager-answer"]'),
+    ),
+    '修改后的答案：先核对影响',
+  )
+  await until(
+    '修改答案可提交',
+    () => !one<HTMLButtonElement>('[data-act="manager-submit"]')?.disabled,
+  )
+  await click('[data-act="manager-submit"]')
+  const revisedAnswer = Boolean(
+    await until(
+      '修改答案写回',
+      () =>
+        !one('.mg-send') && one('[data-decision="D-15"]')?.textContent?.includes('修改后的答案'),
+    ),
+  )
   await click('.mg-decision-filter button:last-child')
   await until('已关闭的决策', () => one('[data-decision="D-12"]'))
-  await click('[data-decision="D-12"] button')
+  await click('[data-decision="D-12"] [data-act="manager-reopen"]')
   const reopened = Boolean(
     await until('决策重新打开', () => one('[data-decision="D-12"] textarea')),
   )
@@ -575,6 +634,9 @@ export async function managerProbe(): Promise<ManagerSeen> {
   await click('[data-sidebar-mode="chat"]')
   const archivedFallback = Boolean(await until('切回对话默认页', () => one('.new-page')))
   return {
+    backgroundQuestions,
+    questionForwarded,
+    revisedAnswer,
     list,
     selected,
     draft,
@@ -625,6 +687,9 @@ export async function managerProbe(): Promise<ManagerSeen> {
 
 export function judgeManager(seen: ManagerSeen): string[] {
   const messages: Record<keyof ManagerSeen, string> = {
+    backgroundQuestions: '两轮背景问答没有保持在独立线程',
+    questionForwarded: '背景问答没有转给经理',
+    revisedAnswer: '已答复决策没有保存修改后的答案',
     list: '切换后没有全部经理页',
     selected: '没有打开经理页',
     draft: '答复没有标为本地草稿',

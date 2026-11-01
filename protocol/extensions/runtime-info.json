@@ -393,6 +393,10 @@
           "ephemeralFork": {
             "description": "后加的位，可以不报（不报就是不会）：thread/fork 带 ephemeral: true 得到的临时会话带着源会话到分叉位置为止的历史，能照常跑回合（工具、审批和普通会话一样），不进 thread/list，没有订阅者、闲置一段时间后卸载即消失。客户端的侧聊只给报了的 harness 出入口",
             "type": "boolean"
+          },
+          "managerQuestions": {
+            "description": "后加的位，未声明即不支持：能强制决策旁问只读。适配器识别带 Litch decision background question (read-only). 规则的 litch_manager 动态工具，限制为读文件及 summary/get，拒绝命令、写入、其它 MCP、子代理和提权；支持上下文分叉的适配器还可替换该工具集。设备替原生 Codex 声明时用只读断网沙箱限制文件命令、关闭外部工具并在设备拒绝写工具调用。",
+            "type": "boolean"
           }
         }
       },

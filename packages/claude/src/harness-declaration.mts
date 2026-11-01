@@ -54,6 +54,7 @@ const features: HarnessFeatures = {
   goals: true,
   // 临时分叉（ephemeral）是一份带着历史的 CLI 会话，照常跑回合；卸载时连 CLI 写下的记录一起删（server.mts 的 scheduleEphemeralUnload）
   ephemeralFork: true,
+  managerQuestions: true,
 }
 
 // 权限档随回合开始时的会话设置定下来：两个回合之间可以换，回合进行中改的要到下一个回合才起作用。

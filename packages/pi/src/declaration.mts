@@ -53,6 +53,7 @@ const features = (approvals: boolean, backgroundShell: boolean): HarnessFeatures
   agentMessagePhase: 'onCompleted',
   // 临时分叉建在内存会话管理器里，复制源会话的条目，照常跑回合，不写会话文件（protocol.mts 的 forkSession）
   ephemeralFork: true,
+  managerQuestions: true,
   // 后台 shell 停得掉（thread/backgroundTerminals/terminate）
   ...(backgroundShell ? { backgroundTasks: true, stopBackground: true } : {}),
 })

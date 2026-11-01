@@ -335,7 +335,7 @@ export const MANAGER_TOOLS: ClientToolNamespaceSpec = {
       type: 'function',
       name: MANAGER_TOOL.answer,
       description:
-        'Record an answer the user already gave in conversation, as user-conversation. Supply an option id or nonempty text (or both). Only open decisions; never invent the user’s answer.',
+        'Record or revise an answer the user already gave in conversation, as user-conversation. Supply an option id or nonempty text (or both). Answered and closed decisions may be revised; the previous answer and closure remain in history. Never invent the user’s answer.',
       inputSchema: object({ id: ID, optionId: NULLABLE_STRING, text: STRING }, [
         'id',
         'optionId',

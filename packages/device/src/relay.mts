@@ -29,7 +29,8 @@ export interface RelayHost {
   /** 原生 codex 的客户端工具调用交给设备进程挑执行方（client-tools.mts），这几处要告诉它 */
   clientTools: RelayClientTools
   /** 由设备进程自己执行的命名空间：这类 item/tool/call 不管哪种上游都在这里拦下交给它（device-tools.mts） */
-  deviceTools: Pick<DeviceTools, 'has' | 'dispatch' | 'turnEnded'>
+  deviceTools: Pick<DeviceTools, 'has' | 'dispatch' | 'turnEnded'> &
+    Partial<Pick<DeviceTools, 'allowed'>>
   /** 上游的每条通知都给看一眼（替原生 codex 翻译 harness 详情设置的，要从里面看登录的结果）。只看不改 */
   observe(link: UpstreamLink, method: string, params: Record<string, unknown>): void
   /** 会话树要看的几样（session-tree.mts） */
@@ -378,7 +379,8 @@ export class Relay {
     if (
       frame.method === 'item/tool/call' &&
       fields &&
-      this.host.deviceTools.has(fields.namespace)
+      (this.host.deviceTools.has(fields.namespace) ||
+        this.host.deviceTools.allowed?.(threadId ?? '', fields.namespace, fields.tool) === false)
     ) {
       this.host.deviceTools.dispatch(link.harness, fields, (result) => {
         if (!link.available) return false

@@ -256,7 +256,7 @@ test('经理库从版本 1 升级：保留看板、历史、编号和待投递�
     writer.answers('a', [{ decisionId: 'D-1', revision: 1, optionId: null, text: '保留' }])
     const changes = store.changes('a')
     const events = store.deliveries('a')
-    store.db.exec('DROP TABLE endings; PRAGMA user_version=1')
+    store.db.exec('DROP TABLE endings; DROP TABLE questions; PRAGMA user_version=1')
     store.close()
     store = new ManagerStore(openManagerDatabase(dir))
     assert.deepEqual(store.changes('a'), changes)

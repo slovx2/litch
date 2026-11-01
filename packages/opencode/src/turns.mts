@@ -112,7 +112,7 @@ export class Turns {
     this.server.subscribe(peer, threadId)
     const id = messageId()
     this.server.remember(threadId, id, echoContent(params.input ?? []), clientId)
-    if (projection.thread.ephemeral) return this.helper(live, id, params)
+    if (this.server.ephemeral.has(threadId)) return this.helper(live, id, params)
     const turn = projection.expect(id, live.settings.plan, notify)
     if (clientId) live.submitted.set(clientId, turn)
     const preset = live.settings.preset

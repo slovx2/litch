@@ -2,6 +2,19 @@
 import type { Entry } from './types.ts'
 
 export const zhManager = {
+  'manager.editAnswer': '修改答案',
+  'manager.questionBackground': '先问背景',
+  'manager.questionNote': '问答独立保存；交答复时会一并交给经理。',
+  'manager.questionLight': '当前问答仅有看板背景，不包含经理的对话记录。',
+  'manager.questionRefreshed': '经理之后有了新进展，这次按最新的状态答。',
+  'manager.questionYou': '你：',
+  'manager.questionRunning': '正在回答…',
+  'manager.questionFailed': '回答未完成，请重新提问。',
+  'manager.questionInput': '想了解什么背景？',
+  'manager.questionSend': '提问',
+  'manager.questionForward': '转给经理',
+  'manager.questionForwarded': '已转给经理',
+  'manager.questionWait': '请等待背景问答完成后再交答复。',
   'manager.waitDecisions': '等待决策',
   'manager.clearOption': '清除选择',
   'manager.chat': '对话',

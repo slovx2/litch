@@ -79,6 +79,9 @@ test('模拟经理命令：部分提交、版本冲突、重开、结束只读�
     assert.ok(result)
     return result
   }
+  await command('question.ask', { decisionId: 'D-15', revision: 1, question: '选项依据？' })
+  await command('question.ask', { decisionId: 'D-15', revision: 1, question: '影响范围？' })
+  assert.equal(turns.length, 0, '旁问不能进入经理主对话')
   const reply = (await command('answers.submit', {
     answers: [
       { decisionId: 'D-15', revision: 1, optionId: 'a', text: '' },
@@ -88,6 +91,9 @@ test('模拟经理命令：部分提交、版本冲突、重开、结束只读�
   })) as ManagerAnswersResult
   assert.equal(reply.delivery, 'queued')
   assert.equal(reply.accepted.length, 1)
+  const discussion = parseSessionEvent(turns.at(-1) ?? '').event?.manager?.answers?.[0]?.discussion
+  assert.equal(discussion?.messages.length, 2)
+  assert.equal(discussion?.messages[1]?.question, '影响范围？')
   assert.deepEqual(
     reply.rejected.map((r) => r.code),
     ['decisionConflict', 'invalidAnswer'],

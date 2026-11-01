@@ -403,6 +403,14 @@ export interface Commands {
     params: ProjectPermissionSet & { deviceId: string }
     result: ProjectPermission
   }
+  'managers.question.ask': {
+    params: import('../../../protocol/src/manager.mjs').ManagerQuestionParams & { deviceId: string }
+    result: Record<string, never>
+  }
+  'managers.question.forward': {
+    params: { deviceId: string; managerId: string; decisionId: ManagerDecisionView['id'] }
+    result: { queued: boolean }
+  }
   // 经理方法须设备支持 litchManager；离线回 offline，不支持回 unsupported。
   // 成功后核心先更新相应主题，通知再次到达时幂等；部分答复失败保留桌面本地草稿。
   'managers.create': {

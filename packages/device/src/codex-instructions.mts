@@ -23,6 +23,7 @@ import {
   ruledNamespaces,
   withDeveloperInstructions,
 } from '../../protocol/src/codex-developer-instructions.mjs'
+import { isManagerQuestionTools } from '../../protocol/src/manager-question.mjs'
 import type { Ask } from './dialect.mjs'
 import { refreshManagerRules } from './manager-rules.mjs'
 import { isObject } from './wire.mjs'
@@ -149,7 +150,11 @@ export function prepareInstructions(
     })
   }
   // 规则按这一版的重拼；这一版不认识的命名空间照记下的原文
-  const sections = record.namespaces.map((one) =>
+  const namespaces =
+    method === 'thread/fork' && isManagerQuestionTools(params.dynamicTools)
+      ? ruledNamespaces(params.dynamicTools)
+      : record.namespaces
+  const sections = namespaces.map((one) =>
     instructionSection(
       one.name,
       CURRENT[one.name]?.(one.instructions, context.store.tools(threadId)) ?? one.instructions,
@@ -171,7 +176,7 @@ export function prepareInstructions(
         if (born)
           context.store.setInstructions(born.id, {
             given: given ?? record.given,
-            namespaces: record.namespaces,
+            namespaces,
             cwd: cwdOf(params.cwd) ?? born.cwd ?? record.cwd,
           })
       },

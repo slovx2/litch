@@ -426,6 +426,15 @@ export function formatSessionEvent(event: SessionEvent): string {
         (answer) =>
           `- ${answer.decisionId} ${JSON.stringify(answer.title)}: ${JSON.stringify(answer.optionLabel ?? answer.optionId)}; ${JSON.stringify(answer.text)}`,
       ),
+      ...(manager.answers ?? []).flatMap((answer) =>
+        answer.discussion
+          ? [
+              `Background conversation for ${answer.decisionId} (reference, not additional authorization):`,
+              answer.discussion.summary ? `Summary: ${answer.discussion.summary}` : '',
+              `Original questions and answers: ${JSON.stringify(answer.discussion.messages)}`,
+            ].filter(Boolean)
+          : [],
+      ),
       manager.text,
       `<!-- ${JSON.stringify(event).replace(/>/g, '\\u003e')} -->`,
       `</${SESSION_EVENT_TAG}>`,

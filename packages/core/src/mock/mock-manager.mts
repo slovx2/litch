@@ -1,4 +1,6 @@
 // 模拟经理：与真实通道同形的快照、增量和命令，答复按项校验版本。
+
+import { forwardedManagerQuestion } from '../../../protocol/src/manager-question.mjs'
 import { formatSessionEvent } from '../../../protocol/src/session-tree.mjs'
 import { ChannelError, type Commands } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
@@ -212,6 +214,51 @@ export function createMockManagers(host: MockManagerHost) {
       )
       endingTurns.set(key(deviceId, manager.threadId), turnId)
       result = { manager }
+    } else if (name === 'managers.question.ask' || name === 'managers.question.forward') {
+      const { decisionId } = params as Commands['managers.question.forward']['params']
+      const decision = board.decisions.find((entry) => entry.id === decisionId)
+      if (!decision) throw new ChannelError('notFound', t('决策不存在', 'Decision not found'))
+      const discussion = (decision.discussion ??= {
+        messages: [],
+        light: false,
+        summary: null,
+        forwarded: 0,
+      })
+      if (name === 'managers.question.ask') {
+        const { question, revision } = params as Commands['managers.question.ask']['params']
+        if (revision !== decision.revision || !question.trim())
+          throw new ChannelError(
+            'invalid',
+            t('决策已变化或问题为空', 'Decision changed or question is empty'),
+          )
+        discussion.messages.push({
+          id: `question-${discussion.messages.length + 1}`,
+          question,
+          answer: t(
+            `这项决策的背景是：${decision.background}\n${discussion.messages.length ? '根据前一轮追问，' : ''}建议结合依据确认影响范围；不确定的部分可以转给经理核实。`,
+            `The context is: ${decision.background}\n${discussion.messages.length ? 'Following up on your previous question, ' : ''}review the evidence to confirm the scope. Forward any uncertainty to the manager.`,
+          ),
+          status: 'completed',
+          refreshed: false,
+          at: host.clock.now(),
+        })
+        result = {}
+      } else {
+        const queued = discussion.messages.length > discussion.forwarded
+        if (queued) {
+          host.say(
+            deviceId,
+            manager.threadId,
+            forwardedManagerQuestion(decisionId, decision.title, discussion),
+            t(
+              '已收到背景问答，将进一步核实。',
+              'I received the background questions and will check further.',
+            ),
+          )
+          discussion.forwarded = discussion.messages.length
+        }
+        result = { queued }
+      }
     } else if (name === 'managers.decision.reopen') {
       const { decisionId } = params as Commands['managers.decision.reopen']['params']
       const decision = board.decisions.find((d) => d.id === decisionId)
@@ -241,13 +288,11 @@ export function createMockManagers(host: MockManagerHost) {
             ? 'invalidAnswer'
             : decision.revision !== answer.revision
               ? 'decisionConflict'
-              : decision.status !== 'open'
-                ? 'decisionNotOpen'
-                : (answer.optionId !== null &&
-                      !decision.options.some((o) => o.id === answer.optionId)) ||
-                    (answer.optionId === null && !answer.text.trim())
-                  ? 'invalidAnswer'
-                  : null
+              : (answer.optionId !== null &&
+                    !decision.options.some((o) => o.id === answer.optionId)) ||
+                  (answer.optionId === null && !answer.text.trim())
+                ? 'invalidAnswer'
+                : null
         if (code || !decision) {
           submitted.rejected.push({
             decisionId: answer.decisionId,
@@ -267,6 +312,7 @@ export function createMockManagers(host: MockManagerHost) {
           at: host.clock.now(),
         }
         decision.status = 'answered'
+        decision.closed = null
         decision.revision++
         decision.updatedAt = host.clock.now()
         submitted.accepted.push(decision)
@@ -294,6 +340,7 @@ export function createMockManagers(host: MockManagerHost) {
                   decision.options.find((option) => option.id === decision.answer?.optionId)
                     ?.label ?? null,
                 text: decision.answer?.text ?? '',
+                ...(decision.discussion ? { discussion: decision.discussion } : {}),
               })),
             },
           }),
@@ -366,6 +413,8 @@ export function createMockManagers(host: MockManagerHost) {
         'managers.end',
         'managers.answers.submit',
         'managers.decision.reopen',
+        'managers.question.ask',
+        'managers.question.forward',
       ].includes(name)
         ? run(name, params)
         : undefined

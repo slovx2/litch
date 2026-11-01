@@ -98,7 +98,8 @@ export interface EngineLinkOptions {
   handshakeTimeoutMs: number
   /** request 不给时限时用的 */
   requestTimeoutMs: number
-  tools: Pick<DeviceTools, 'namespaces' | 'has' | 'dispatch' | 'turnEnded'>
+  tools: Pick<DeviceTools, 'namespaces' | 'has' | 'dispatch' | 'turnEnded'> &
+    Partial<Pick<DeviceTools, 'allowed'>>
   /** 后台会话的客户端工具也交给设备统一路由，内部连接只转交，不获得桌面权限。 */
   clientTools?: ClientToolRouter
   /** 这个 harness 发来的这条请求（按请求号）此刻有没有真正的客户端连接拿着 */
@@ -214,7 +215,11 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
         return
       }
       const id = frame.id as RpcId
-      if (frame.method === 'item/tool/call' && tools.has(params.namespace)) {
+      if (
+        frame.method === 'item/tool/call' &&
+        (tools.has(params.namespace) ||
+          tools.allowed?.(String(params.threadId), params.namespace, params.tool) === false)
+      ) {
         tools.dispatch(harness, params, (result) => {
           if (closedWith !== null) return false
           send({ id, result })

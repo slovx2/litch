@@ -22,6 +22,7 @@ import type { DeviceToolCall } from './device-tools.mjs'
 import { isDecision, ManagerBoardWriter } from './manager-board.mjs'
 import { ManagerEndings } from './manager-ending.mjs'
 import { ManagerLines } from './manager-lines.mjs'
+import { ManagerQuestions } from './manager-questions.mjs'
 import { managerTools } from './manager-rules.mjs'
 import { ManagerStore, managerNow, openManagerDatabase } from './manager-store.mjs'
 import {
@@ -42,6 +43,7 @@ export class DeviceManagers {
   readonly lines: ManagerLines
   readonly endings: ManagerEndings
   readonly writer: ManagerBoardWriter
+  readonly questions: ManagerQuestions
   private readonly draining = new Map<string, Promise<void>>()
   private readonly timer: NodeJS.Timeout
   private closed = false
@@ -64,6 +66,7 @@ export class DeviceManagers {
         this.lines.mark(threadId)?.managerId === managerId &&
         this.lines.mark(threadId)?.role === 'line',
     )
+    this.questions = new ManagerQuestions(this)
     this.unlisten = tree.onTurnEnded((threadId) => {
       const manager = this.lines.managerFor(threadId)
       if (manager) {
@@ -133,7 +136,10 @@ export class DeviceManagers {
     return {
       managerId: id,
       situation: this.store.situation(id),
-      decisions: objects.filter(isDecision),
+      decisions: objects.filter(isDecision).map((decision) => {
+        const state = this.store.question(id, decision.id)
+        return state ? { ...decision, discussion: state.discussion } : decision
+      }),
       items: objects.filter((object) => !isDecision(object)),
       lines,
       activities,
@@ -142,6 +148,7 @@ export class DeviceManagers {
   }
   changed(id: string): void {
     if (this.closed) return
+    this.questions.releaseClosed(id)
     this.tree.host.announce(
       MANAGER_NOTIFICATION.changed,
       { manager: this.manager(id) },
@@ -219,6 +226,17 @@ export class DeviceManagers {
     const id = text(params.managerId, 'managerId')
     this.manager(id)
     switch (method) {
+      case MANAGER_METHOD.questionAsk:
+        keys(params, ['managerId', 'decisionId', 'revision', 'question'])
+        return this.questions.ask(
+          id,
+          text(params.decisionId, 'decisionId') as `D-${number}`,
+          typeof params.revision === 'number' ? params.revision : Number.NaN,
+          text(params.question, 'question'),
+        )
+      case MANAGER_METHOD.questionForward:
+        keys(params, ['managerId', 'decisionId'])
+        return this.questions.forward(id, text(params.decisionId, 'decisionId') as `D-${number}`)
       case MANAGER_METHOD.boardRead:
         keys(params, ['managerId'])
         await this.lines.refresh(id)
@@ -393,7 +411,12 @@ export class DeviceManagers {
   }
   async tool(call: DeviceToolCall): Promise<ClientToolCallResponse> {
     try {
-      const manager = this.store.forThread(call.threadId)
+      const questionManager = this.questions.managerFor(call.threadId)
+      const manager = questionManager
+        ? this.store.manager(questionManager)
+        : this.store.forThread(call.threadId)
+      if (!this.questions.allowed(call.threadId, call.namespace, call.tool))
+        throw new ManagerError('invalidManager', 'Background questions are read-only.')
       if (!manager || manager.harness !== call.harness)
         throw new ManagerError(
           'invalidManager',
@@ -406,7 +429,13 @@ export class DeviceManagers {
         const board = this.board(manager.id)
         result = {
           situation: board.situation,
-          decisions: board.decisions.filter((decision) => decision.status === 'open'),
+          decisions: board.decisions
+            .filter((decision) => decision.status === 'open')
+            .map((decision) => {
+              if (!questionManager) return decision
+              const { discussion: _discussion, ...fields } = decision
+              return fields
+            }),
           items: board.items.filter((item) => !['done', 'deferred'].includes(item.status)),
           lines: board.lines.filter((line) => line.running),
         }
@@ -467,6 +496,7 @@ export class DeviceManagers {
     this.closed = true
     clearInterval(this.timer)
     this.unlisten()
+    await this.questions.close()
     await Promise.allSettled(this.draining.values())
     this.store.close()
   }

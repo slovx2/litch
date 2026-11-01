@@ -8,15 +8,25 @@ import type {
   ManagerCreateResponse,
   ManagerDecisionReopenParams,
   ManagerDecisionReopenResponse,
+  ManagerDiscussion,
   ManagerEndParams,
   ManagerEndResponse,
   ManagerListParams,
   ManagerListResponse,
+  ManagerQuestionParams,
   ManagerUpdateParams,
   ManagerUpdateResponse,
 } from '../../../protocol/src/manager.mjs'
 
 export interface ManagerRequests {
+  'litch/manager/question/ask': {
+    params: ManagerQuestionParams
+    result: { discussion: ManagerDiscussion }
+  }
+  'litch/manager/question/forward': {
+    params: ManagerDecisionReopenParams
+    result: { queued: boolean }
+  }
   'litch/manager/list': { params: ManagerListParams; result: ManagerListResponse }
   'litch/manager/create': { params: ManagerCreateParams; result: ManagerCreateResponse }
   'litch/manager/update': { params: ManagerUpdateParams; result: ManagerUpdateResponse }

@@ -35,6 +35,11 @@ export function projectManager(deviceId: string, manager: Manager): ManagerView 
 export function projectManagerDecision(decision: ManagerDecision): ManagerDecisionView {
   return {
     ...decision,
+    ...(decision.discussion
+      ? {
+          discussion: { ...decision.discussion, messages: decision.discussion.messages.map(timed) },
+        }
+      : {}),
     createdAt: decision.createdAt * 1000,
     updatedAt: decision.updatedAt * 1000,
     checked: decision.checked ? timed(decision.checked) : null,

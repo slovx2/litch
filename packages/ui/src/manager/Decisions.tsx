@@ -10,6 +10,7 @@ import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useServices } from '../app/services.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
+import { DecisionQuestions } from './DecisionQuestions.tsx'
 import { type AnswerDrafts, answeredDrafts, useAnswerDrafts } from './drafts.ts'
 
 export function Decisions({
@@ -33,6 +34,7 @@ export function Decisions({
   const { channel } = useServices()
   const { drafts, write } = useAnswerDrafts(manager.deviceId, manager.id)
   const [filter, setFilter] = useState<'open' | 'answered' | 'closed'>('open')
+  const [editing, setEditing] = useState<Set<string>>(new Set())
   const cards = useRef<HTMLDivElement>(null)
   const targetDecision = target
     ? decisions.find((decision) => decision.id === target.id)
@@ -57,13 +59,15 @@ export function Decisions({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const answers = answeredDrafts(drafts)
+  const asking = answers.some((answer) =>
+    decisions
+      .find((decision) => decision.id === answer.decisionId)
+      ?.discussion?.messages.some((entry) => entry.status === 'running'),
+  )
   const conflict = answers.some(
     (draft) =>
       !decisions.some(
-        (decision) =>
-          decision.id === draft.decisionId &&
-          decision.status === 'open' &&
-          decision.revision === draft.revision,
+        (decision) => decision.id === draft.decisionId && decision.revision === draft.revision,
       ),
   )
   const save = (next: AnswerDrafts) => {
@@ -88,7 +92,7 @@ export function Decisions({
     })
   }
   const submit = async () => {
-    if (busy || disabled || conflict || !answers.length) return
+    if (busy || disabled || conflict || asking || !answers.length) return
     setBusy(true)
     setError('')
     try {
@@ -109,6 +113,7 @@ export function Decisions({
           }),
         )
       else setFilter('answered')
+      setEditing(new Set())
     } catch (cause) {
       setError(reasonOf(cause, t))
     } finally {
@@ -173,7 +178,7 @@ export function Decisions({
                     {t('manager.blocked')} · {decision.blocks.join(', ')}
                   </p>
                 ) : null}
-                {decision.status === 'open' ? (
+                {decision.status === 'open' || editing.has(decision.id) || draft ? (
                   <>
                     {stale ? (
                       <div className="mg-conflict" role="alert">
@@ -234,6 +239,7 @@ export function Decisions({
                       ) : null}
                     </fieldset>
                     <textarea
+                      data-act="manager-answer"
                       className="req-input"
                       rows={2}
                       aria-label={t('manager.answer')}
@@ -258,6 +264,21 @@ export function Decisions({
                   </>
                 ) : (
                   <>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      data-act="manager-edit-answer"
+                      disabled={disabled || busy}
+                      onClick={() => {
+                        setEditing(new Set([...editing, decision.id]))
+                        change(decision, {
+                          optionId: decision.answer?.optionId ?? null,
+                          text: decision.answer?.text ?? '',
+                        })
+                      }}
+                    >
+                      {t('manager.editAnswer')}
+                    </button>
                     {decision.answer ? (
                       <p>
                         {
@@ -284,12 +305,18 @@ export function Decisions({
                         className="btn ghost"
                         disabled={disabled || busy}
                         onClick={() => void reopen(decision)}
+                        data-act="manager-reopen"
                       >
                         {t('manager.reopen')}
                       </button>
                     ) : null}
                   </>
                 )}
+                <DecisionQuestions
+                  manager={manager}
+                  decision={decision}
+                  disabled={disabled || busy}
+                />
                 <footer className="mg-basis">
                   <span>
                     {t('manager.basis')}{' '}
@@ -329,19 +356,21 @@ export function Decisions({
             type="button"
             className="btn primary"
             data-act="manager-submit"
-            disabled={disabled || busy || conflict}
+            disabled={disabled || busy || conflict || asking}
             title={
-              conflict
-                ? t('manager.conflict')
-                : disabled
-                  ? t(
-                      manager.status === 'active'
-                        ? 'manager.offline'
-                        : manager.status === 'ending'
-                          ? 'manager.endingNote'
-                          : 'manager.readOnly',
-                    )
-                  : undefined
+              asking
+                ? t('manager.questionWait')
+                : conflict
+                  ? t('manager.conflict')
+                  : disabled
+                    ? t(
+                        manager.status === 'active'
+                          ? 'manager.offline'
+                          : manager.status === 'ending'
+                            ? 'manager.endingNote'
+                            : 'manager.readOnly',
+                      )
+                    : undefined
             }
             onClick={() => void submit()}
           >
