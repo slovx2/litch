@@ -11,6 +11,10 @@ import { HARNESS_INSTALL_NOTIFICATION } from '../../protocol/src/device-harness-
 import { DEVICE_POWER_CHANGED } from '../../protocol/src/device-power.mjs'
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
+import {
+  NATIVE_BACKGROUND_NAMESPACE,
+  supportsNativeBackground,
+} from '../../protocol/src/native-background-wake.mjs'
 import { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
 import { SUGGESTION_RETENTION_SETTING } from '../../protocol/src/suggestion-inbox.mjs'
 import { RECOVERY_CHANGED } from '../../protocol/src/turn-recovery.mjs'
@@ -31,6 +35,8 @@ import { deviceInfo, deviceVersion, HarnessCatalog } from './harness-info.mjs'
 import { WorkspaceImporter } from './importer.mjs'
 import { DeviceManagement } from './management.mjs'
 import { DeviceManagers } from './manager.mjs'
+import { NativeBackgroundStore } from './native-background-store.mjs'
+import { NativeBackgroundWake } from './native-background-wake.mjs'
 import { dialectFor } from './native-codex.mjs'
 import { DevicePairing, type PairingConfig } from './pairing.mjs'
 import { PowerActivity } from './power-activity.mjs'
@@ -242,6 +248,7 @@ export class DeviceServer {
   readonly titles: CodexTitles
   /** 每个会话的后台任务（backgroundTasks 扩展） */
   readonly background: DeviceBackground
+  readonly nativeBackground: NativeBackgroundWake
   /** 上一次看到的“会话编排”开关，变了才动 */
   private orchestrating: boolean
   /** 扫码绑定手机。没给配置时是 null */
@@ -361,6 +368,7 @@ export class DeviceServer {
         this.openEngineLink(harness, { waitMs: taskTiming.harnessWaitMs }),
       backgroundRunning: (threadId) => this.background.running(threadId),
       backgroundWakes: (threadId) => this.background.wakes(threadId),
+      continuationPending: (threadId) => this.nativeBackground?.pending(threadId) ?? false,
       // 工作树在下面才建好，用的时候再取
       worktrees: () => this.worktrees,
     })
@@ -430,6 +438,9 @@ export class DeviceServer {
       wakeIdleMs: options.timing?.wakeIdleMs ?? DEFAULT_TIMING.wakeIdleMs,
       releaseMs: options.timing?.releaseMs ?? DEFAULT_TIMING.releaseMs,
       taskTurn: (threadId, turnId) => this.tasks?.isTaskTurn(threadId, turnId) ?? false,
+      backgroundWorking: (threadId) =>
+        this.nativeBackground?.working(threadId) ?? this.background.running(threadId),
+      continuationPending: (threadId) => this.nativeBackground?.pending(threadId) ?? false,
       backgroundRunning: (threadId) => this.background.running(threadId),
       backgroundTasks: (threadId) => this.background.tasks(threadId),
       backgroundWakes: (threadId) => this.background.wakes(threadId),
@@ -446,6 +457,25 @@ export class DeviceServer {
         this.control?.state?.snapshot.values[taskCardsSettingKey(harness)] !== false,
       log,
     })
+    this.nativeBackground = new NativeBackgroundWake({
+      store: new NativeBackgroundStore(this.sessionsDb),
+      sessions: this.sessionTree.store,
+      link: (harness) => this.sessionTree.link(harness),
+      watch: (harness, threadId) => this.sessionTree.watch(harness, threadId),
+      canContinue: (threadId) => this.sessionTree.canAutoContinue(threadId),
+      changed: (threadId) => {
+        this.background.refresh(threadId)
+        if (!this.nativeBackground.pending(threadId) && !this.sessionTree.isActive(threadId))
+          this.sessionTree.backgroundSettled(threadId, this.background.tasks(threadId))
+      },
+      log,
+    })
+    this.background.continuation = (id) => this.nativeBackground.working(id)
+    this.deviceTools.register(NATIVE_BACKGROUND_NAMESPACE, (call) =>
+      this.nativeBackground.tool(call),
+    )
+    this.sessionTree.onTurnEnded((id) => this.nativeBackground.schedule(id))
+    info.extensions.push(EXTENSION.nativeBackgroundWake)
     this.managers = new DeviceManagers(this.sessionTree, options.stateDir, (harness, thread) => {
       this.titles?.born(harness, thread)
     })
@@ -565,6 +595,7 @@ export class DeviceServer {
       harnessEnvNames: (harness) => this.harnessEnvNames(harness),
       titles: this.titles,
       background: this.background,
+      nativeBackground: this.nativeBackground,
       worktrees: this.worktrees,
       worktreeLife: this.worktreeLife,
       archives: this.archives,
@@ -903,10 +934,18 @@ export class DeviceServer {
     link.onClose(() => {
       this.engineLinks.delete(link)
       if (!deliberate) this.powerDisconnected.add(link.harness)
+      if (!deliberate && link.native) this.nativeBackground.disconnected(link.harness)
     })
     // 设备进程自己的连接上看到的也算：没有客户端连着时跑的定时任务、子会话，回报里也要数得出后台任务
     link.onNotification((method, params) => {
       if (!params || typeof params !== 'object') return
+      if (link.native) {
+        this.nativeBackground.observe(link.harness, method, params)
+        this.nativeBackground.decorate(
+          typeof params.threadId === 'string' ? params.threadId : '',
+          params,
+        )
+      }
       this.recovery.observe(link.harness, method, params)
       this.power?.notification(link.harness, method, params)
       if (method === BACKGROUND_TASKS_NOTIFICATION.changed) this.background.reportedChanged(params)
@@ -919,7 +958,23 @@ export class DeviceServer {
     link.request = async (method, params, options) => {
       const release = method === 'turn/start' ? this.power?.begin(link.harness) : undefined
       try {
-        const result = await request(method, params, options)
+        const ready =
+          link.native && supportsNativeBackground(link.runtime?.cliBuild) && isObject(params)
+            ? this.nativeBackground.prepare(link.harness, method, params)
+            : params
+        const result = link.native
+          ? await this.nativeBackground.request(method, ready, (value) =>
+              request(method, value, options),
+            )
+          : await request(method, ready, options)
+        if (link.native && isObject(ready)) {
+          this.nativeBackground.born(method, ready, result)
+          if (isObject(result))
+            this.nativeBackground.decorate(
+              typeof ready.threadId === 'string' ? ready.threadId : '',
+              result,
+            )
+        }
         if (observeSnapshots && isObject(result) && isObject(result.thread))
           this.recovery.snapshot(link.harness, result.thread)
         return result
@@ -942,6 +997,7 @@ export class DeviceServer {
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
+    this.nativeBackground.close()
     this.recovery.close()
     this.power?.close()
     this.power = null

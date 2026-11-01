@@ -161,6 +161,11 @@ const MIGRATIONS: readonly string[] = [
   `ALTER TABLE lineage ADD COLUMN report_parent INTEGER NOT NULL DEFAULT 1;
    ALTER TABLE lineage ADD COLUMN report_epoch INTEGER NOT NULL DEFAULT 0;`,
   `ALTER TABLE proposals ADD COLUMN permission TEXT;`,
+  // 原生后台任务仅持久化结果与投递凭据；重启不会恢复自动执行。
+  `CREATE TABLE native_background_tasks(id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, body TEXT NOT NULL);
+   CREATE INDEX native_background_by_thread ON native_background_tasks(thread_id);
+   CREATE TABLE native_background_turns(thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, batch_id TEXT NOT NULL,
+     PRIMARY KEY(thread_id, turn_id)) WITHOUT ROWID;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length

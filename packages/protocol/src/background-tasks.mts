@@ -13,6 +13,8 @@ export type BackgroundTaskKind = 'shell' | 'agent' | 'monitor' | 'workflow' | 'r
 export type BackgroundTaskStatus = 'running' | 'completed' | 'failed' | 'stopped'
 
 export interface LitchBackgroundTask {
+  /** 仅向声明 nativeBackgroundWake 的连接提供，原生命令的登记/接续状态。 */
+  litchWake?: import('./native-background-wake.mjs').NativeBackgroundState
   /** 引擎内唯一，同一个任务前后不变 */
   id: string
   kind: BackgroundTaskKind

@@ -22,6 +22,7 @@ export interface FollowHost {
   settleMs: number
   backgroundRunning(threadId: string): number
   backgroundWakes(threadId: string): boolean
+  continuationPending?(threadId: string): boolean
   summaryOf(text: string | null): string | null
   log(line: string): void
 }
@@ -55,8 +56,13 @@ export function followBackground(
 
   /** 看一眼还有没有在跑的：没有了、也没有回合在跑，就收尾 */
   const review = () => {
-    if (stopped || host.backgroundRunning(threadId) > 0 || turns.size > 0) {
-      if (settle && turns.size > 0) {
+    if (
+      stopped ||
+      host.backgroundRunning(threadId) > 0 ||
+      turns.size > 0 ||
+      host.continuationPending?.(threadId)
+    ) {
+      if (settle) {
         clearTimeout(settle)
         settle = null
       }

@@ -7,6 +7,10 @@ import {
   type LitchBackground,
   type LitchTurnOrigin,
 } from '../../../protocol/src/background-tasks.mjs'
+import {
+  NATIVE_BACKGROUND_STATES,
+  type NativeBackgroundState,
+} from '../../../protocol/src/native-background-wake.mjs'
 import type { HarnessAbilities, ItemView, TurnView } from '../model.mjs'
 import type {
   BackgroundEntriesView,
@@ -57,6 +61,9 @@ export function projectBackground(raw: unknown): SessionBackgroundView | null {
       agentThreadId: text(one.agentThreadId),
       startedAt: time(one.startedAt),
       endedAt: time(one.endedAt),
+      ...(NATIVE_BACKGROUND_STATES.includes(one.litchWake as NativeBackgroundState)
+        ? { litchWake: one.litchWake as NativeBackgroundState }
+        : {}),
     })
   }
   if (views.length === 0) return null

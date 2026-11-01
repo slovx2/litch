@@ -243,6 +243,7 @@ export function createLink(options: LinkOptions): Link {
                 // backgroundTasks：声明了，会话对象上才有后台任务的集合 litchBackground、回合上才有来历 litchOrigin，
                 // 才收得到集合变了的通知（litch/thread/background/changed）
                 EXTENSION.backgroundTasks,
+                EXTENSION.nativeBackgroundWake,
                 // apiRetry：声明了才收得到模型请求重试的通知（litch/turn/apiRetry/updated），回合状态行写“重试中”
                 EXTENSION.apiRetry,
                 EXTENSION.turnRecovery,

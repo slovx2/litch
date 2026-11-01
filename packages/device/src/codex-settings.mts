@@ -75,6 +75,7 @@ type Spec = HarnessSettingSpec & {
     | { kind: 'skill'; path: string }
     | { kind: 'hookTrust'; hookKey: string; hash: string }
     | { kind: 'autoTitle' }
+    | { kind: 'backgroundWake' }
 }
 
 /**
@@ -367,6 +368,19 @@ function permissionSpecs(snapshot: CodexSnapshot): Spec[] {
 function behaviorSpecs(snapshot: CodexSnapshot): Spec[] {
   return [
     autoTitleSpec(),
+    {
+      ...boolSpec(
+        'litch.backgroundWake',
+        'behavior',
+        ['后台任务自动继续', 'Continue after background tasks'],
+        true,
+        [
+          '新建 Litch 会话可登记原生命令，完成后自动继续。关闭会撤销已登记任务的自动继续，不停止命令。设备或 Codex 重启后不自动续跑。',
+          'New Litch sessions can register native commands for continuation on completion. Turning this off cancels pending continuations without stopping commands. Continuations do not survive device or Codex restarts.',
+        ],
+      ),
+      write: { kind: 'backgroundWake' },
+    },
     enumSpec(
       'web_search',
       'behavior',
@@ -560,9 +574,11 @@ function userValue(
   snapshot: CodexSnapshot,
   catalog: Catalog,
   autoTitle: boolean,
+  backgroundWake: boolean,
 ): HarnessSettingValue | undefined {
   // 开着是默认，不算写过
   if (spec.write?.kind === 'autoTitle') return autoTitle ? undefined : false
+  if (spec.write?.kind === 'backgroundWake') return backgroundWake ? undefined : false
   if (spec.write?.kind === 'skill') {
     const listed = valueAt(snapshot.user, ['skills', 'config'])
     const path = spec.write.path
@@ -598,6 +614,7 @@ export async function readCodexSettings(
   harness: string,
   home: string | null,
   autoTitle: boolean,
+  backgroundWake = true,
 ): Promise<CodexSettings> {
   const [snapshot, catalog] = await Promise.all([
     readSnapshot(ask, harness),
@@ -615,7 +632,7 @@ export async function readCodexSettings(
   const values: Record<string, HarnessSettingValue> = {}
   const overridden: NonNullable<HarnessConfigReadResponse['overridden']> = {}
   for (const spec of specs) {
-    const value = userValue(spec, snapshot, catalog, autoTitle)
+    const value = userValue(spec, snapshot, catalog, autoTitle, backgroundWake)
     if (value !== undefined) values[spec.key] = value
     if (spec.write) continue
     const path = splitKey(spec.key)

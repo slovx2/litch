@@ -24,6 +24,10 @@ import {
   withDeveloperInstructions,
 } from '../../protocol/src/codex-developer-instructions.mjs'
 import { isManagerQuestionTools } from '../../protocol/src/manager-question.mjs'
+import {
+  NATIVE_BACKGROUND_NAMESPACE,
+  NATIVE_BACKGROUND_RULES,
+} from '../../protocol/src/native-background-wake.mjs'
 import type { Ask } from './dialect.mjs'
 import { refreshManagerRules } from './manager-rules.mjs'
 import { isObject } from './wire.mjs'
@@ -67,6 +71,7 @@ const PLAIN_HEAD = `${sessionProposalRules(false, false).split('. ')[0]}.`
  */
 const CURRENT: Record<string, ((recorded: string, tools: unknown[] | null) => string) | undefined> =
   {
+    [NATIVE_BACKGROUND_NAMESPACE]: () => NATIVE_BACKGROUND_RULES,
     litch_manager: (recorded) => refreshManagerRules('litch_manager', recorded) ?? recorded,
     [SESSION_TOOLS.name]: (recorded, tools) => {
       const manager = refreshManagerRules(SESSION_TOOLS.name, recorded)

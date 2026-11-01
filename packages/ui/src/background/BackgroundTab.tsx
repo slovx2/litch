@@ -85,7 +85,9 @@ export function BackgroundTab({ place }: SideTabProps) {
             <div className="bg-group" data-group="running">
               <span>{t('background.running')}</span>
               <b>{running.length}</b>
-              {wakes === null || !running.some((entry) => entry.source === 'task') ? null : (
+              {wakes === null ||
+              entries.some((entry) => entry.task?.litchWake) ||
+              !running.some((entry) => entry.source === 'task') ? null : (
                 <span className="bg-wakes dim">
                   {t(wakes ? 'background.wakes' : 'background.noWake')}
                 </span>
@@ -193,6 +195,7 @@ const EntryRow = memo(function EntryRow({
       </span>
       <span className="t ell">{entry.title || label}</span>
       <span className="meta">
+        {entry.task?.litchWake ? <span>{t(`background.wake.${entry.task.litchWake}`)}</span> : null}
         {elapsed === null ? null : <span>{duration(elapsed, t)}</span>}
         <span className={`bg-st ${entry.status}`}>
           {t(stopping ? 'background.stopping' : `background.status.${entry.status}`)}

@@ -18,6 +18,7 @@ import {
   sessionTools,
 } from '../../protocol/src/client-tools-sessions.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import { NATIVE_BACKGROUND_NAMESPACE } from '../../protocol/src/native-background-wake.mjs'
 import {
   SESSION_TREE_LIMITS,
   type SessionLineageKind,
@@ -197,7 +198,9 @@ function childTools(
     (spec) =>
       !isPresentationSpec(spec) &&
       (!isObject(spec) ||
-        (spec.name !== SESSION_TOOLS.name && spec.name !== CLIENT_TOOL_NAMESPACE.manager)),
+        (spec.name !== SESSION_TOOLS.name &&
+          spec.name !== CLIENT_TOOL_NAMESPACE.manager &&
+          spec.name !== NATIVE_BACKGROUND_NAMESPACE)),
   )
   const manager = tree.managers?.lines.managerFor(parentId)
   const sessions = sessionTools(tree.host.wrapUp(), tree.host.taskCards(harness))

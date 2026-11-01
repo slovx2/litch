@@ -82,6 +82,8 @@ export interface SessionTreeHost {
   taskTurn(threadId: string, turnId: string): boolean
   /** 会话里还有几个后台任务在跑（background.mts） */
   backgroundRunning(threadId: string): number
+  backgroundWorking?(threadId: string): number
+  continuationPending?(threadId: string): boolean
   /** 会话的后台任务集合（background.mts） */
   backgroundTasks(threadId: string): LitchBackgroundTask[]
   /** 后台任务跑完了引擎会不会自己接着做（background.mts 的 wakes） */
@@ -347,6 +349,7 @@ export class SessionTree {
       this.active.has(threadId) ||
       this.backgroundOwed.has(threadId) ||
       this.pendingRequests(threadId).length > 0 ||
+      this.host.continuationPending?.(threadId) ||
       this.host.backgroundRunning(threadId) > 0
     )
       return
@@ -433,6 +436,19 @@ export class SessionTree {
   /** 会话现在有没有回合在跑（按看到的通知） */
   isActive(threadId: string): boolean {
     return this.active.has(threadId)
+  }
+
+  /** 原生后台接续不属于用户回合；停止、失败、待答与经理暂停仍然约束它。 */
+  canAutoContinue(threadId: string): boolean {
+    const manager =
+      this.managers?.store.forThread(threadId) ?? this.managers?.lines.managerFor(threadId)
+    return (
+      !this.closed &&
+      !this.cutShort.has(threadId) &&
+      !this.active.has(threadId) &&
+      this.pendingRequests(threadId).length === 0 &&
+      (!manager || manager.status === 'active')
+    )
   }
 
   activeTurn(threadId: string): string | null {
@@ -1078,7 +1094,8 @@ export class SessionTree {
     if (!this.hasWakeNote(parentId)) return
     if (this.store.wakes(parentId) >= SESSION_TREE_LIMITS.wakesPerUserMessage) return
     if (this.cutShort.has(parentId)) return
-    if (this.host.backgroundRunning(parentId) > 0) return
+    if ((this.host.backgroundWorking?.(parentId) ?? this.host.backgroundRunning(parentId)) > 0)
+      return
     // 子会话都停下了（在等用户答的挂满一阵也算，有后台任务在跑的不算），父会话自己闲着（等着用户答请求的也是在跑）
     if ((await this.working(parentId)) > 0) return
     if (!(await this.idle(parentId))) return
@@ -1095,7 +1112,11 @@ export class SessionTree {
     for (const child of this.store.childrenOf(parentId)) {
       if (!child.reportParent) continue
       if (this.waitingOnUser(child.threadId)) continue
-      if (this.host.backgroundRunning(child.threadId) > 0 || !(await this.idle(child.threadId)))
+      if (
+        (this.host.backgroundWorking?.(child.threadId) ??
+          this.host.backgroundRunning(child.threadId)) > 0 ||
+        !(await this.idle(child.threadId))
+      )
         count++
     }
     return count

@@ -95,7 +95,7 @@ export function BackgroundScreen({ route, navigation }: Props) {
           <View testID="background:running">
             <SectionLabel
               right={
-                wakes === null ? undefined : (
+                wakes === null || entries.some((entry) => entry.task?.litchWake) ? undefined : (
                   <Text numberOfLines={1} style={[styles.note, { color: c.ink3 }]}>
                     {t(wakes ? 'background.wakes' : 'background.noWake')}
                   </Text>
@@ -195,6 +195,7 @@ function EntryRow({
         </Text>
       </View>
       <Text style={[styles.meta, { color, fontFamily: theme.font.mono }]}>
+        {entry.task?.litchWake ? `${t(`background.wake.${entry.task.litchWake}`)} · ` : ''}
         {t(`background.status.${entry.status}`)}
       </Text>
       {canStop ? (

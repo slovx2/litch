@@ -99,12 +99,20 @@ export class CodexHarnessConfig implements HarnessConfigTranslator {
             harness,
             this.context.home(),
             this.context.autoTitle.enabled(),
+            this.context.backgroundWake?.enabled(),
           )
         ).response
       case M.configWrite:
         return this.changing(
           'config',
-          writeCodexSettings(ask, harness, this.context.home(), this.context.autoTitle, params),
+          writeCodexSettings(
+            ask,
+            harness,
+            this.context.home(),
+            this.context.autoTitle,
+            params,
+            this.context.backgroundWake,
+          ),
         )
       case M.configAction:
         return this.changing('config', runCodexAction(ask, harness, params))

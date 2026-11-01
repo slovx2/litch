@@ -64,6 +64,7 @@
     "bench:delta": "npm run build && node scripts/bench-delta.mjs",
     "check:native-codex": "node scripts/check-native-codex.mjs",
     "check:native-codex-instructions": "node scripts/check-native-codex-instructions.mjs",
+    "check:native-codex-background-wake": "npm run build --prefix packages/device && node scripts/check-native-codex-background-wake.mjs",
     "check:codex-direct-instructions": "node scripts/check-codex-direct-instructions.mjs",
     "check:client-tools-codex": "node scripts/check-client-tools-codex.mjs",
     "check:background-client-tools": "npm run build --prefix packages/device && npm run build --prefix packages/pi && npm run build --prefix packages/claude && node scripts/check-background-client-tools.mjs",

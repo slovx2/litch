@@ -80,6 +80,7 @@ export interface DeviceTasksOptions {
   backgroundRunning?(threadId: string): number
   /** 后台任务跑完了引擎会不会自己接着做。不给当不会 */
   backgroundWakes?(threadId: string): boolean
+  continuationPending?(threadId: string): boolean
   /** 设备层的工作树（每次在新工作树里跑的任务用）。没有 git、不给时是 null */
   worktrees?(): Worktrees | null
   /** 会话树对任务回合的接应（见 RunHost.hooks） */
@@ -134,6 +135,7 @@ export class DeviceTasks {
       openEngineLink: (harness) => options.openEngineLink(harness),
       backgroundRunning: (threadId) => options.backgroundRunning?.(threadId) ?? 0,
       backgroundWakes: (threadId) => options.backgroundWakes?.(threadId) ?? false,
+      continuationPending: (threadId) => options.continuationPending?.(threadId) ?? false,
       log: options.log,
       taskChanged: (id) => this.changed('updated', id),
       runChanged: (run) => this.runChanged(run),

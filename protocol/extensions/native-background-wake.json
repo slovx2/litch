@@ -1,0 +1,38 @@
+{
+  "extension": "nativeBackgroundWake",
+  "description": "原生 Codex 有限终端任务的显式登记与完成接续，不执行命令，不改变沙箱与审批。",
+  "appliesTo": "设备聚合面新建的原生 Codex 会话，默认开启，Codex 设备设置可关闭。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "nativeBackgroundWake" }
+    }
+  },
+  "undeclared": "不自动注入登记工具，不提供任务的 litchWake 字段。同线程的标准回合和工具条目仍按上游协议投递。",
+  "parts": [
+    {
+      "kind": "TaskField",
+      "name": "litchWake",
+      "on": "litchBackground.tasks 与 litch/thread/background/changed.tasks",
+      "target": "LitchBackgroundTask",
+      "properties": {
+        "litchWake": {
+          "type": "string",
+          "enum": ["watching", "pending", "paused", "delivered", "cancelled", "lost", "unknown"]
+        }
+      }
+    }
+  ],
+  "rules": [
+    "动态命名空间 litch_background 的 watch/read/cancel 由设备执行，工具定义包含在 thread/start.dynamicTools；恢复、分叉沿用原有工具，不继承运行中任务登记。",
+    "任务命令仍由原生 exec_command 执行；服务器和监听不登记。完成先合批，空闲时用原生 turn/start.toolOutput 投递，回合来历按 backgroundTasks 声明给出 backgroundTask。",
+    "按完成顺序合批，300ms 合并窗口，每批最多四个任务，正文序列化后不超过 16KiB；同一线程接续启动间隔至少两秒。以上为单批大小与时间节流，不是续跑次数上限。任务 id 是一次登记的一次完成标识，结果包含原回合/条目、目的、退出码、时长和有界输出；上游可能先行截断，不能保证完整日志。",
+    "与 backgroundTasks 的内存集合不同，显式登记与来源凭据保存在设备会话库。每线程保留最近五十条已交付/取消/失效登记；未交付登记不因此淘汰。",
+    "litchWake 仅给同时声明 backgroundTasks 和 nativeBackgroundWake 的连接，实时集合与历史快照一致。",
+    "用户停止阻塞自动继续，待发用户内容不自动发送；明确发送后可解除。主动取消或停止任务不唤醒。",
+    "不设自动续跑次数上限。重复完成不重复投递；投递结果不明不自动重试；设备或原生运行时重启不自动续跑。",
+    "共享线程的标准历史对所有订阅连接可见，无法按连接隔离线程行为；绕过设备的并发写入不具有设备侧原子仲裁保证。"
+  ]
+}

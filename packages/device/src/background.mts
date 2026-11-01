@@ -32,6 +32,8 @@ interface RunningCommand {
 }
 
 export class DeviceBackground {
+  /** 原生已登记且仍需接续的任务数；undefined 表示沿用引擎本身语义。 */
+  continuation?: (threadId: string) => number | undefined
   private readonly host: BackgroundHost
   /** 适配器的引擎报的：会话 → 最近一份集合 */
   private readonly reported = new Map<string, LitchBackground>()
@@ -268,6 +270,15 @@ export class DeviceBackground {
     this.settle(threadId)
   }
 
+  refresh(threadId: string): void {
+    const background = this.derivedOf(threadId) ?? { tasks: [], wakesOnFinish: false }
+    this.host.announce(
+      BACKGROUND_TASKS_NOTIFICATION.changed,
+      { threadId, ...background },
+      EXTENSION.backgroundTasks,
+    )
+  }
+
   /** 原生 codex 的会话对象经过、这条连接声明了扩展：挂上派生的集合 */
   decorate(thread: Record<string, unknown>): boolean {
     if (typeof thread.id !== 'string') return false
@@ -279,6 +290,8 @@ export class DeviceBackground {
 
   /** 后台任务跑完了引擎会不会自己接着做（原生 codex 不会；引擎报的照它说的） */
   wakes(threadId: string): boolean {
+    const continuation = this.continuation?.(threadId)
+    if (continuation !== undefined) return continuation > 0
     if (this.derived.get(threadId)?.size) return false
     return this.reported.get(threadId)?.wakesOnFinish === true
   }

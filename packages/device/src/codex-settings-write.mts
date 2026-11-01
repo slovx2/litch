@@ -73,6 +73,7 @@ interface Plan {
   skills: { path: string; enabled: boolean }[]
   /** 自动起名改成什么（null 是回到默认）；没改是 undefined */
   autoTitle?: boolean | null
+  backgroundWake?: boolean | null
   restartRequired: boolean
 }
 
@@ -123,6 +124,10 @@ function plan(harness: string, settings: CodexSettings, edits: unknown): Plan {
       result.autoTitle = value as boolean | null
       continue
     }
+    if (spec.write?.kind === 'backgroundWake') {
+      result.backgroundWake = value as boolean | null
+      continue
+    }
     if (spec.write?.kind === 'hookTrust') {
       const base = edit.key.slice(0, -'.trusted'.length)
       result.edits.push({
@@ -144,6 +149,7 @@ export async function writeCodexSettings(
   home: string | null,
   autoTitle: TranslatorContext['autoTitle'],
   params: Record<string, unknown>,
+  backgroundWake?: TranslatorContext['backgroundWake'],
 ): Promise<HarnessConfigWriteResponse> {
   if (typeof params.expectedVersion !== 'string')
     throw new HarnessConfigError(
@@ -151,11 +157,18 @@ export async function writeCodexSettings(
       harness,
       text('缺少 expectedVersion', 'expectedVersion is required'),
     )
-  const settings = await readCodexSettings(ask, harness, home, autoTitle.enabled())
+  const settings = await readCodexSettings(
+    ask,
+    harness,
+    home,
+    autoTitle.enabled(),
+    backgroundWake?.enabled(),
+  )
   const steps = plan(harness, settings, params.edits)
   await batchWrite(ask, harness, settings.snapshot, steps.edits, params.expectedVersion)
   for (const skill of steps.skills) await ask('skills/config/write', skill)
   if (steps.autoTitle !== undefined) autoTitle.set(steps.autoTitle)
+  if (steps.backgroundWake !== undefined) backgroundWake?.set(steps.backgroundWake)
   // 写完重读一遍：新的版本，以及哪些键写进去了但被更高一层盖住
   const after = await readSnapshot(ask, harness)
   const keys = (params.edits as HarnessConfigEdit[]).map((edit) => edit.key)

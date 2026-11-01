@@ -137,6 +137,8 @@ still store it in that harness's environment on that device:
 sessions. Append `on` or `off` to change it. In the UI: Devices → Codex → Settings → Config →
 Name sessions automatically. This does not rename existing sessions or change Codex's native settings.
 
+原生 Codex 0.163.0 及以上支持显式后台任务接续。设备详情 → 设置 → 配置中有“后台任务自动继续”（`litch.backgroundWake`），默认开启。新建 Litch 会话获得显式登记有限原生命令的工具，完成后可自动接续；已有会话不会因此补装工具。关闭立即撤销已登记任务的自动继续，不停止原生命令。开启不恢复已取消登记；设备服务或 Codex 重启后不自动续跑。这个设置保存在设备服务中，不修改 Codex 的全局配置。
+
 - `scripts/litch harness enable <device> <id>` / `scripts/litch harness disable <device> <id>` turn a
   harness on or off on that device (the `harness.<id>.enabled` setting). Disabling stops its runtime;
   its sessions stay on disk and come back when re-enabled. Disabled harnesses disappear from the

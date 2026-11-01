@@ -62,7 +62,11 @@ export class ManagerLines {
             : []
         const waiting = this.tree.pendingRequests(child.threadId).length > 0 || flags.length > 0
         const active = this.tree.isActive(child.threadId) || state === 'active'
-        const running = active || waiting || this.tree.host.backgroundRunning(child.threadId) > 0
+        const running =
+          active ||
+          waiting ||
+          this.tree.host.backgroundRunning(child.threadId) > 0 ||
+          this.tree.host.continuationPending?.(child.threadId) === true
         const worktree =
           this.tree.host.worktrees?.forThread(child.threadId) ??
           (typeof thread?.cwd === 'string'

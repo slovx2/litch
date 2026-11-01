@@ -53,6 +53,20 @@ const commandItem = (id: string, status: 'inProgress' | 'completed'): ThreadItem
     durationMs: null,
   }) as ThreadItem
 
+test('BG-CORE-NATIVE 登记与暂停状态进入任务投影，未知状态不展示', () => {
+  const background = projectBackground({
+    tasks: [
+      { id: 'a', kind: 'shell', title: 'build', status: 'completed', litchWake: 'paused' },
+      { id: 'b', kind: 'shell', title: 'server', status: 'running', litchWake: 'invented' },
+    ],
+    wakesOnFinish: false,
+  })
+  assert.equal(background?.tasks[0]?.litchWake, 'paused')
+  assert.equal(background?.tasks[1]?.litchWake, undefined)
+  const entries = backgroundEntries(background, [])
+  assert.equal(entries?.entries.find((e) => e.id === 'a')?.task?.litchWake, 'paused')
+})
+
 test('BG-CORE-001 集合的投影：形状不对的丢掉，不认识的种类当 other，空集合是 null；来历只认得出的', () => {
   assert.equal(projectBackground(undefined), null)
   assert.equal(projectBackground({ tasks: [], wakesOnFinish: true }), null)

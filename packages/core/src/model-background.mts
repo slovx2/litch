@@ -15,6 +15,7 @@ export type { BackgroundTaskKind, BackgroundTaskStatus }
 export type TurnOrigin = LitchTurnOrigin
 
 export interface BackgroundTaskView {
+  litchWake?: import('../../protocol/src/native-background-wake.mjs').NativeBackgroundState
   /** 引擎内唯一，前后不变 */
   id: string
   kind: BackgroundTaskKind

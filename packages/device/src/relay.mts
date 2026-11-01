@@ -13,6 +13,13 @@ import { DeviceError, type Frame, idKey, isObject, type RpcId, toRpcError } from
 import type { Expectation, Workspaces } from './workspaces.mjs'
 
 export interface RelayHost {
+  /** 原生接续来源：只装饰声明过的连接，也处理分页回合。 */
+  decorateNative?(
+    link: UpstreamLink,
+    method: string,
+    value: Record<string, unknown>,
+    threadId?: string,
+  ): boolean
   /** 发给客户端 */
   send(text: string): void
   /** 客户端握手时退订了这个通知 */
@@ -208,9 +215,10 @@ export class Relay {
       this.host.background.resumed(link, result.thread)
     let changed = false
     if (isObject(result)) {
+      if (this.host.decorateNative?.(link, request?.method ?? '', result)) changed = true
       if (isObject(result.thread))
         this.host.observe(link, 'thread/snapshot', { thread: result.thread })
-      changed = this.stamp(link, result.thread)
+      changed = this.stamp(link, result.thread) || changed
       // 搜索结果这类：一页里每一项带着一个会话对象
       if (Array.isArray(result.data))
         for (const item of result.data)
@@ -355,6 +363,8 @@ export class Relay {
     if (fields && (method === 'item/started' || method === 'item/completed'))
       this.host.sessions.itemEvent(fields)
     if (fields) this.host.observe(link, method, fields)
+    if (fields && this.host.decorateNative?.(link, method, fields, threadId ?? undefined))
+      changed = true
     // harness 详情设置的通知（引擎发的配置变了、登录有进展）只给声明过这项扩展的连接
     if (isHarnessConfigNotification(method) && !this.host.declares(EXTENSION.harnessConfig)) return
     if (this.host.optedOut(method)) return

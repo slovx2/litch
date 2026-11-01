@@ -78,6 +78,7 @@ export interface SchedulerHost {
   backgroundRunning(threadId: string): number
   /** 后台任务跑完了引擎会不会自己接着做（background.mts 的 wakes） */
   backgroundWakes(threadId: string): boolean
+  continuationPending?(threadId: string): boolean
   log(line: string): void
   /** 任务的字段变了（下一次运行时间、最近一次运行、未读数……） */
   taskChanged(taskId: string): void
@@ -369,6 +370,7 @@ export class TaskScheduler {
         settleMs: host.timing.followSettleMs,
         backgroundRunning: (thread) => host.backgroundRunning(thread),
         backgroundWakes: (thread) => host.backgroundWakes(thread),
+        continuationPending: (thread) => host.continuationPending?.(thread) ?? false,
         summaryOf,
         log: host.log,
       },

@@ -254,15 +254,16 @@ explain it:
   instead of the spinner. Claude Code, dsh and Litch's background commands (Pi, OpenCode, ACP)
   continue on their own when a task finishes by itself; that turn starts with "Background task
   finished, continuing" instead of a message from the user. A task you or the model stopped does not
-  wake the session; when you stop one, the model is told on its next turn that you stopped it. Codex does not continue on its own. Gemini CLI and Qwen Code get no Litch
+  wake the session; when you stop one, the model is told on its next turn that you stopped it. 原生 Codex 在新建 Litch 会话中默认提供 `litch_background.watch/read/cancel`：模型用原生命令执行有限任务，再登记需要结果后继续的 session_id；登记成功后可以结束回合，任务完成后设备自动投递结果并继续。开发服务器和监听不登记，不因退出自动续跑。命令权限和沙箱仍由 Codex 管理。Gemini CLI and Qwen Code get no Litch
   background commands. Litch's background commands run on the device the session runs on, as the
   model's own commands do; their output goes to a log file the model can read. They keep running when
   every client disconnects, and stop when the harness's runtime restarts (a settings change, a service
   restart or upgrade) or the session is deleted. A sub-session reports to its parent when its turn ends and says how many
   background tasks are still running, then reports again when they finish (after the turn that
-  continues, or right away for Codex and when the tasks were stopped). If you stopped them, that report
+  continues, or right away for unregistered Codex terminals and when the tasks were stopped). If you stopped them, that report
   says so and does not wake the parent. A scheduled run ends with its turn too; when the background
   work finishes later, the run's summary and count are updated and it shows as unread again.
+  原生 Codex 登记的任务在后台页显示自动继续状态。停止回合会暂停自动继续，命令本身不会额外被杀；输入框中的待发消息不会因此自动发送，用户明确发送后才能解除暂停。取消登记只撤销自动继续，停止命令使用后台页的停止按钮。客户端全部断开时，设备仍可收到结果并继续；设备服务或 Codex 重启不自动续跑，已保存结果仍可读取。自动续跑没有次数上限，可能持续产生模型费用；重复完成只投递一次，交付未确认时不自动重试。官方客户端同时打开同一线程会看到标准回合和工具输出；绕过设备的并发写入不能获得设备侧的原子仲裁保证。
   To stop a task without the Stop button, ask the model or stop the turn. With Pi's "Ask before acting" on, starting a background command is asked about like
   any other command; in OpenCode's read-only permission mode the model cannot start one, and outside
   the project folder it asks first (except with full access). On the phone, the same line (or

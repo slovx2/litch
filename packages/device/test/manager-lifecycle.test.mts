@@ -55,6 +55,28 @@ async function setup() {
   return { ...env, engine, client, manager, threadId, call, value }
 }
 
+test('后台完成等待接续仍占工作线名额；经理结束后不允许后台自动开工', async () => {
+  const env = await setup()
+  try {
+    const child = await startChild(
+      env.device.sessionTree,
+      env.threadId,
+      { kind: 'fresh', title: '后台测试', prompt: '任务', wakeParent: false, worktree: false },
+      'model',
+    )
+    env.engine.end(child.threadId, 'completed', '等后台结果')
+    await until(() => !env.device.sessionTree.isActive(child.threadId), '子会话停下')
+    env.device.sessionTree.host.continuationPending = (id) => id === child.threadId
+    const lines = env.device.managers.lines.lines(env.manager.id)
+    assert.equal(lines.find((line) => line.threadId === child.threadId)?.running, true)
+    assert.equal(env.device.sessionTree.canAutoContinue(child.threadId), true)
+    await env.client.call(MANAGER_METHOD.end, { managerId: env.manager.id })
+    assert.equal(env.device.sessionTree.canAutoContinue(child.threadId), false)
+  } finally {
+    await env.close()
+  }
+})
+
 test('结束中：等旧回合停下、只授权收尾回合，收尾可写总结/事项/关闭/landed，重复 end 不多开', async () => {
   const env = await setup()
   try {

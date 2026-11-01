@@ -24,6 +24,7 @@ import {
   type DeviceSettingsChangedNotification,
 } from '../../protocol/src/device-settings.mjs'
 import type { HarnessConfigChangedNotification } from '../../protocol/src/harness-config.mjs'
+import { supportsNativeBackground } from '../../protocol/src/native-background-wake.mjs'
 import { SESSION_TREE_METHOD } from '../../protocol/src/session-tree.mjs'
 import { SUGGESTIONS_LIST } from '../../protocol/src/suggestion-inbox.mjs'
 import { localTaskTimeZone } from '../../protocol/src/task-schedule.mjs'
@@ -66,6 +67,7 @@ import { instructionsCall } from './instructions.mjs'
 import { listThreads } from './list-threads.mjs'
 import { type DeviceManagement, MANAGEMENT_PREFIX } from './management.mjs'
 import type { DeviceManagers } from './manager.mjs'
+import type { NativeBackgroundWake } from './native-background-wake.mjs'
 import { dialectFor, NATIVE_CODEX_DIALECT } from './native-codex.mjs'
 import { type DevicePairing, PAIR_PREFIX, PairingError } from './pairing.mjs'
 import type { PowerActivity } from './power-activity.mjs'
@@ -186,6 +188,7 @@ export interface SessionHost {
   titles: CodexTitles
   /** 每个会话的后台任务（background.mts，各连接共用） */
   background: DeviceBackground
+  nativeBackground?: NativeBackgroundWake
   /** 设备层的工作树（worktrees.mts）。这台机器上没有 git 时是 null，设备上就没有这项扩展 */
   worktrees: Worktrees | null
   /** 工作树跟着会话的归档、删除、重新打开走（worktree-life.mts）。没有 git 时是 null */
@@ -256,6 +259,10 @@ export class ClientSession implements ClientToolPeer {
       log: (line) => host.log(`${this.tag} ${line}`),
       answered: (link, id, error) => this.traced(id, error, link.harness),
       deviceTools: host.deviceTools,
+      decorateNative: (link, _method, value, threadId) =>
+        link.dialect.clientToolsByDevice === true && this.declared.has(EXTENSION.backgroundTasks)
+          ? (host.nativeBackground?.decorate(threadId ?? '', value) ?? false)
+          : false,
       observe: (link, method, params) => {
         this.host.managers?.observe(method, params)
         if (method === 'thread/name/updated') this.host.sessionTree.suggestions.changed()
@@ -280,6 +287,8 @@ export class ClientSession implements ClientToolPeer {
       },
       background: {
         notification: (link, method, params) => {
+          if (link.dialect.clientToolsByDevice)
+            host.nativeBackground?.observe(link.harness, method, params)
           if (method === BACKGROUND_TASKS_NOTIFICATION.changed)
             host.background.reportedChanged(params)
           else if (link.dialect.clientToolsByDevice)
@@ -287,6 +296,15 @@ export class ClientSession implements ClientToolPeer {
         },
         decorate: (thread) => {
           host.background.decorate(thread)
+          if (this.declared.has(EXTENSION.nativeBackgroundWake) && typeof thread.id === 'string') {
+            const background = host.nativeBackground?.decorateBackground(
+              thread.id,
+              isObject(thread.litchBackground)
+                ? (thread.litchBackground as unknown as import('../../protocol/src/background-tasks.mjs').LitchBackground)
+                : null,
+            )
+            if (background) thread.litchBackground = background
+          }
         },
         resumed: (link, thread) => {
           if (!link.dialect.clientToolsByDevice) return
@@ -672,6 +690,10 @@ export class ClientSession implements ClientToolPeer {
         enabled: () => this.host.titles.enabled(link.harness),
         set: (value) => this.host.titles.setEnabled(link.harness, value),
       },
+      backgroundWake: {
+        enabled: () => this.host.nativeBackground?.enabled(link.harness) ?? true,
+        set: (value) => this.host.nativeBackground?.setEnabled(link.harness, value),
+      },
       notify: (method, params) => {
         if (this.declared.has(EXTENSION.harnessConfig)) this.announce(method, params)
       },
@@ -713,6 +735,8 @@ export class ClientSession implements ClientToolPeer {
     keepHarness = false,
   ): typeof HANDLED | Promise<typeof HANDLED> {
     const fields = isObject(frame.params) ? frame.params : null
+    if (fields && link.dialect.clientToolsByDevice)
+      this.host.nativeBackground?.input(method, fields, true)
     // 新建会话带的工作区是设备层的，先摘下来，应答回来时再记
     const { expectation, withhold } = fields
       ? this.host.workspaces.outgoing(method, fields)
@@ -770,10 +794,27 @@ export class ClientSession implements ClientToolPeer {
     if (params && method === 'thread/start') {
       const tools = this.host.sessionTree.currentSessionTools(params.dynamicTools, link.harness)
       if (tools) params = { ...params, dynamicTools: tools }
+      if (
+        link.dialect.clientToolsByDevice &&
+        this.declared.has(EXTENSION.nativeBackgroundWake) &&
+        supportsNativeBackground(link.facts.runtime?.cliBuild)
+      )
+        params = this.host.nativeBackground?.prepare(link.harness, method, params) ?? params
     }
     // 应答回来之后要记的（一个请求只有一个 after）；没成时要收拾的
     const afterwards: ((result: unknown) => void)[] = []
     const failures: (() => void)[] = []
+    if (params && link.dialect.clientToolsByDevice) {
+      const given = params
+      afterwards.push((result) => {
+        this.host.nativeBackground?.born(method, given, result)
+        if (
+          typeof given.threadId === 'string' &&
+          (method === 'turn/start' || method === 'turn/steer')
+        )
+          this.host.nativeBackground?.accepted(given.threadId, result, true)
+      })
+    }
     // 原生 codex 不保存速度：客户端选过的记下来，恢复、分叉没带时补回（codex-speeds.mts）
     if (params && link.dialect === NATIVE_CODEX_DIALECT) {
       const sped = prepareSpeed(method, params, this.host.sessionTree.store)
@@ -860,9 +901,34 @@ export class ClientSession implements ClientToolPeer {
       return HANDLED
     }
     // 原生 codex 建会话、恢复、分叉：先补齐开发者指令（可能要先问它一句 config/read），再转（codex-instructions.mts）
+    let nativeHeld = false
     const proceed = (
       given: Record<string, unknown> | null,
     ): typeof HANDLED | Promise<typeof HANDLED> => {
+      if (
+        !nativeHeld &&
+        method === 'turn/start' &&
+        typeof given?.threadId === 'string' &&
+        link.dialect.clientToolsByDevice &&
+        this.host.nativeBackground
+      ) {
+        nativeHeld = true
+        return this.host.nativeBackground.acquire(given.threadId).then((release) => {
+          const done = () => {
+            release()
+            this.powerPending.delete(done)
+          }
+          this.powerPending.add(done)
+          afterwards.push(done)
+          failures.push(done)
+          return Promise.resolve()
+            .then(() => proceed(given))
+            .catch((error) => {
+              done()
+              throw error
+            })
+        })
+      }
       if (
         method === 'turn/start' &&
         typeof given?.threadId === 'string' &&
@@ -1218,6 +1284,18 @@ export class ClientSession implements ClientToolPeer {
     if (this.state !== 'ready') return
     if (extension !== undefined && !this.declared.has(extension)) return
     if (this.optOut.has(method)) return
+    if (
+      method === BACKGROUND_TASKS_NOTIFICATION.changed &&
+      this.declared.has(EXTENSION.nativeBackgroundWake) &&
+      isObject(params) &&
+      typeof params.threadId === 'string'
+    ) {
+      const background = this.host.nativeBackground?.decorateBackground(
+        params.threadId,
+        params as unknown as import('../../protocol/src/background-tasks.mjs').LitchBackground,
+      )
+      if (background) params = { ...params, ...background }
+    }
     this.send(JSON.stringify({ method, params }))
   }
 
