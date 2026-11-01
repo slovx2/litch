@@ -1,0 +1,26 @@
+# 常显按钮复制用户消息和回答，核对原生剪贴板写入成功后的反馈；全文规则由单测守住。
+appId: dev.litch.app
+name: mock-复制整条消息
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- openLink: litch://open?session=s3&device=local
+- extendedWaitUntil:
+    visible:
+      id: message-copy:s3-t1-u
+    timeout: 30000
+- tapOn:
+    id: message-copy:s3-t1-u
+    waitToSettleTimeoutMs: 250
+- assertVisible: (已复制|Copied)
+- extendedWaitUntil:
+    notVisible: (已复制|Copied)
+    timeout: 10000
+- tapOn:
+    id: message-copy:s3-t1-a
+    waitToSettleTimeoutMs: 250
+- assertVisible: (已复制|Copied)

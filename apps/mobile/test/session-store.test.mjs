@@ -48,6 +48,32 @@ test('新建会话：收到回答，回合结束后是用户消息、回答、�
   assert.ok(store.stats.publishes > 1, '流式时交了不止一次')
 })
 
+test('复制从消息条目取全文，长回答多个块只在末块显示操作', async () => {
+  const { store } = await open('长报告', { chunkMs: 1 })
+  store.start()
+  await until(() => finished(store), { timeoutMs: 20000, what: '长回答完成' })
+  const rows = store.getSnapshot().rows
+  const user = rows.find((row) => row.type === 'user')
+  assert.equal(
+    store.copyText(user.key, (attachment) => attachment.kind),
+    '长报告',
+  )
+  const answerId = rows.find((row) => row.type === 'md').itemId
+  const blocks = rows.filter((row) => row.type === 'md' && row.itemId === answerId)
+  assert.ok(blocks.length > 1)
+  assert.equal(blocks.filter((row) => row.last).length, 1)
+  const text = store.itemText(blocks[0].itemId)
+  assert.ok(text.length > blocks[0].text.length)
+  assert.equal(
+    store.copyText(blocks[0].itemId, () => ''),
+    text,
+  )
+  assert.equal(
+    store.copyText('missing', () => ''),
+    null,
+  )
+})
+
 test('流式时尾巴单独交出：列表里没有正在长的回答，写完才并回列表', async () => {
   // 慢一点流，好在中途看
   const { store } = await open('长回答', { chunkMs: 20 })

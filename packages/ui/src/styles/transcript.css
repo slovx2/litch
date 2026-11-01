@@ -146,6 +146,21 @@
   color: var(--ink-3);
   opacity: 0.55;
 }
+/* 回答的操作区留出固定高度，悬停和键盘聚焦只改显隐，不推动正文。 */
+.message-acts {
+  display: flex;
+  opacity: 0;
+}
+.agent-message:hover .message-acts,
+.message-acts:focus-within {
+  opacity: 1;
+}
+@media (hover: none) {
+  .umsg-acts,
+  .message-acts {
+    opacity: 1;
+  }
+}
 /* 别的会话发来的消息（messages.tsx）不是用户的话：同系统卡片靠左铺满，展开后这一行是标记和点过去的按钮，都靠左排 */
 .peer-head {
   display: flex;

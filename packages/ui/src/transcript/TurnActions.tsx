@@ -91,7 +91,7 @@ export function TurnActions({
   const forkTitle = forkBlocked ?? t('turn.fork')
   const editTitle = rollbackBlocked ?? t('turn.edit')
   return (
-    <div className="umsg-acts">
+    <>
       {sentAt === null ? null : <Stamp className="umsg-time" at={sentAt} />}
       {/* 做不了的时候不用 disabled：那样鼠标放上去没有说明，点了也没反应。留着能点，点了说为什么 */}
       {showFork ? (
@@ -121,6 +121,6 @@ export function TurnActions({
           <Pencil />
         </button>
       ) : null}
-    </div>
+    </>
   )
 }

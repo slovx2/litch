@@ -29,6 +29,8 @@ export interface TranscriptActions {
   openLink(url: string): void
   /** 长按一个回合里的东西。itemId 是被按的那条回答（复制它的全文），按的是别处时是 null */
   turnMenu(turnId: string): void
+  /** 复制指定消息的全文，按下时从会话存储读取，包含刚收到的流式文本。 */
+  copyMessage(itemId: string): void
   /** 到“差异”页看这个会话工作目录里的改动 */
   openDiff(): void
   /** 到另一个会话（分叉来源） */

@@ -27,6 +27,7 @@ import {
   deriveBackground,
   gatherAnswers,
   isAgentSpawn,
+  messageCopyText,
   parseAskReply,
   proposedBy,
   questionsOfView,
@@ -325,6 +326,14 @@ export class SessionStore {
   itemText(itemId: string): string | null {
     const item = this.view?.items[itemId]
     return item?.kind === 'agentMessage' ? item.text : null
+  }
+
+  /** 从原条目取全文，不能拿列表里切出来的一块当整条消息。 */
+  copyText(itemId: string, attachmentName: Parameters<typeof messageCopyText>[1]): string | null {
+    const item = this.view?.items[itemId]
+    return item?.kind === 'agentMessage' || item?.kind === 'userMessage'
+      ? messageCopyText(item, attachmentName)
+      : null
   }
 
   readonly subscribe = (listener: () => void): (() => void) => {

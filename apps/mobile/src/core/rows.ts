@@ -168,7 +168,7 @@ export type Row =
     }
   /**
    * 回答或计划的一块。open：这一块还在长；live：这条回答还在流式（它的块都算，哪怕最后一块刚好封了口）；
-   * plan：计划条目，first 的那一块上面写“计划”
+   * plan：计划条目，first 的那一块上面写“计划”；last 标识末块，全文复制按钮只放在这里。
    */
   | {
       type: 'md'
@@ -180,6 +180,7 @@ export type Row =
       live: boolean
       plan: boolean
       first: boolean
+      last: boolean
     }
   /** 收起时只有最后一行字，点开是全文 */
   | {
@@ -887,6 +888,7 @@ export class RowBuilder {
         live: open,
         plan,
         first: chunk.index === 0,
+        last: chunk.index === chunks.length - 1,
       }),
     )
   }

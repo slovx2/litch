@@ -1,5 +1,5 @@
 // 对话区的各种行（过程那几种在 steps.tsx）。每个单元格按行对象 memo：行对象没换（rows.ts 的 keep）就不重画。
-// 文字平时不可选：安卓上文本选择的监听在滚动时占主线程；复制走长按回合的菜单（长按用户消息、回答，或点状态行的“⋯”）。
+// 文字平时不可选：安卓上文本选择的监听在滚动时占主线程；复制可点消息下方按钮，也可走长按菜单。
 // 长按菜单里点了“选择文字”的那条回答例外：它的几块能自由选字，系统的选字菜单里多一个“回复”（comments/hub.ts）。
 // 颜色、字号只从主题取。会长高的东西（流式的那一块）之外，行的高度在内容不变时不变。
 import { type FileScope, keys, parseAskReply, type SessionSummary } from '@litch/core'
@@ -35,6 +35,7 @@ import { notePressed } from './comments/hub'
 import { linkCommentRefs, parseCommentHref } from './comments/refs'
 import { useToggleInPlace, useTranscript } from './context'
 import { linkify } from './links'
+import { MessageCopy } from './MessageCopy'
 import { markdownStyleOf } from './markdownStyle'
 import { MermaidCard } from './mermaid/MermaidCard'
 import { splitMermaid } from './mermaid/segments'
@@ -78,6 +79,7 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
         <Text selectable style={[styles.peerText, { color: c.ink2, fontSize: font.size.meta }]}>
           {row.text}
         </Text>
+        <MessageCopy itemId={row.key} />
       </CompactRow>
     )
   // 答模型边干活边问的题时发的那一段：画成题目和回答
@@ -121,12 +123,15 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
           </Text>
         ) : null}
       </Pressable>
-      {/* 发送的时刻：手机上没有悬停，常显在气泡下面（照 Claude 桌面端在触屏上常显） */}
-      {row.sentAt === undefined ? null : (
-        <Text style={[styles.userTime, { color: c.ink3, fontSize: font.size.small }]}>
-          {stamp(row.sentAt, Date.now(), t.lang)}
-        </Text>
-      )}
+      <View style={styles.userActions}>
+        <MessageCopy itemId={row.key} />
+        {/* 发送的时刻与复制按钮常显在气泡下面。 */}
+        {row.sentAt === undefined ? null : (
+          <Text style={[styles.userTime, { color: c.ink3, fontSize: font.size.small }]}>
+            {stamp(row.sentAt, Date.now(), t.lang)}
+          </Text>
+        )}
+      </View>
     </View>
   )
 })
@@ -279,33 +284,40 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
       )
     )
   return (
-    <Pressable
-      // 选字时这一层不接触摸：Pressable 一拿到 JS 的触摸响应，RN 就让它这一层拦下之后的移动事件，
-      // 手指稍一抖，里面的文字就收到取消，系统的长按选字起不来（只有一点不动的长按才行）
-      disabled={selecting}
-      onLongPress={
-        selecting
-          ? undefined
-          : () => {
-              notePressed(row.turnId, row.itemId)
-              turnMenu(row.turnId)
-            }
-      }
-      style={[
-        styles.md,
-        row.plan ? [styles.plan, { borderLeftColor: c.line3 }] : null,
-        // 选字时铺一层淡底，看得出能选的是哪条（不改边距：钉过高度的块宽度一变会排出不同的行数）
-        flashed || selecting ? { backgroundColor: c.sel } : null,
-      ]}
-      testID="answer"
-    >
-      {row.plan && row.first ? (
-        <Text style={[styles.planTitle, { color: c.ink2, fontFamily: font.mono }]}>
-          {t('plan.title')}
-        </Text>
+    <View>
+      <Pressable
+        // 选字时这一层不接触摸：Pressable 一拿到 JS 的触摸响应，RN 就让它这一层拦下之后的移动事件，
+        // 手指稍一抖，里面的文字就收到取消，系统的长按选字起不来（只有一点不动的长按才行）
+        disabled={selecting}
+        onLongPress={
+          selecting
+            ? undefined
+            : () => {
+                notePressed(row.turnId, row.itemId)
+                turnMenu(row.turnId)
+              }
+        }
+        style={[
+          styles.md,
+          row.plan ? [styles.plan, { borderLeftColor: c.line3 }] : null,
+          // 选字时铺一层淡底，看得出能选的是哪条（不改边距：钉过高度的块宽度一变会排出不同的行数）
+          flashed || selecting ? { backgroundColor: c.sel } : null,
+        ]}
+        testID="answer"
+      >
+        {row.plan && row.first ? (
+          <Text style={[styles.planTitle, { color: c.ink2, fontFamily: font.mono }]}>
+            {t('plan.title')}
+          </Text>
+        ) : null}
+        {body}
+      </Pressable>
+      {row.last && !row.plan ? (
+        <View style={styles.answerActions}>
+          <MessageCopy itemId={row.itemId} />
+        </View>
       ) : null}
-      {body}
-    </Pressable>
+    </View>
   )
 })
 
@@ -618,6 +630,8 @@ export const styles = StyleSheet.create({
   meta: { fontSize: 13 },
   userWrap: { paddingHorizontal: 16, paddingVertical: 6, alignItems: 'flex-end' },
   userTime: { marginTop: 3, marginRight: 2 },
+  userActions: { flexDirection: 'row', alignItems: 'center' },
+  answerActions: { paddingHorizontal: 8 },
   userBubble: {
     borderWidth: 1,
     paddingHorizontal: 12,

@@ -10,6 +10,7 @@ import { useTheme } from '../ui/theme'
 import { CompactRow } from './CompactRow'
 import type { Props } from './cells'
 import { useToggleInPlace, useTranscript } from './context'
+import { MessageCopy } from './MessageCopy'
 
 const MARK = { scheduledTask: '◷', briefing: '⑂', here: '↳', recover: '↻' } as const
 
@@ -66,6 +67,7 @@ export const SystemCell = memo(function SystemCell({ row }: Props<'system'>) {
       <Text selectable style={[styles.body, { color: c.ink2, fontSize: font.size.meta }]}>
         {row.text}
       </Text>
+      <MessageCopy itemId={row.key} />
     </CompactRow>
   )
 })

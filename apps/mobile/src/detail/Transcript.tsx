@@ -7,6 +7,7 @@ import { type DeviceView, keys } from '@litch/core'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { FlashList, type FlashListRef, type ListRenderItem } from '@shopify/flash-list'
+import * as Clipboard from 'expo-clipboard'
 import {
   forwardRef,
   type RefObject,
@@ -203,6 +204,14 @@ function useActions(store: SessionStore) {
           Linking.openURL(url).catch(() => setFlash(t('detail.link.failed', { url })))
       },
       turnMenu: setMenu,
+      copyMessage: (itemId) => {
+        const text = store.copyText(itemId, (attachment) => t(`attachment.${attachment.kind}`))
+        if (!text) return setFlash(t('message.copy.empty'))
+        void Clipboard.setStringAsync(text).then(
+          (copied) => setFlash(t(copied ? 'message.copied' : 'message.copy.failed')),
+          () => setFlash(t('message.copy.failed')),
+        )
+      },
       openDiff: () => {
         const dir = cwd ?? root
         if (dir) navigation.navigate('Diff', { deviceId, root: dir, scope: 'all', sessionId })

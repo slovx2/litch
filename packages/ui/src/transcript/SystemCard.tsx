@@ -10,6 +10,7 @@ import { Icon } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { useActions } from './actions.tsx'
 import { CompactRow } from './CompactRow.tsx'
+import { MessageCopy } from './MessageCopy.tsx'
 import type { ItemRef } from './messages.tsx'
 import { usePin } from './scroll.ts'
 import { useToggle } from './state.ts'
@@ -90,6 +91,7 @@ export function SystemCard({
         <>
           <Detail deviceId={ref.deviceId} system={system} />
           <div className="sysm-full">{item.text}</div>
+          <MessageCopy item={item} />
         </>
       ) : null}
     </div>

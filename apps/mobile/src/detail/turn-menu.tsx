@@ -63,16 +63,22 @@ export function TurnMenu({
   const target = turnId ? turnTarget(store, meta?.can, turnId, pressed) : null
   if (turnId && target) {
     const { user, fork, rollback: back } = target
-    const answer = store.answerText(turnId)
+    const answer =
+      pressed && store.kindOf(pressed) === 'agentMessage'
+        ? store.itemText(pressed)
+        : store.answerText(turnId)
+    const userText = user
+      ? store.copyText(user.id, (attachment) => t(`attachment.${attachment.kind}`))
+      : null
     const copy = (text: string) => {
       Clipboard.setStringAsync(text).then(
-        () => say(t('detail.menu.copied')),
-        (error: unknown) => say(reasonOf(error)),
+        (copied) => say(t(copied ? 'detail.menu.copied' : 'message.copy.failed')),
+        () => say(t('message.copy.failed')),
       )
     }
     if (answer) actions.push({ label: t('detail.menu.copyAnswer'), onPress: () => copy(answer) })
-    if (user?.text)
-      actions.push({ label: t('detail.menu.copyMessage'), onPress: () => copy(user.text) })
+    if (userText)
+      actions.push({ label: t('detail.menu.copyMessage'), onPress: () => copy(userText) })
     if (fork) {
       actions.push({
         label: t('turn.fork'),

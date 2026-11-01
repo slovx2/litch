@@ -21,6 +21,7 @@ import { CompactRow } from './CompactRow.tsx'
 import { SentComments } from './comments/Cards.tsx'
 import { commentsOf } from './comments/Cite.tsx'
 import { Markdown } from './Markdown.tsx'
+import { MessageCopy } from './MessageCopy.tsx'
 import { MessageEdit } from './MessageEdit.tsx'
 import { PeerHead } from './PeerHead.tsx'
 import { MentionedText } from './SessionMentions.tsx'
@@ -184,6 +185,7 @@ export const UserMessage = memo(function UserMessage({
             <PeerHead deviceId={ref.deviceId} peer={peer} detail />
             <UserAttachments attachments={item.attachments} />
             <div className="sysm-full">{text}</div>
+            <MessageCopy item={item} />
           </>
         ) : null}
       </div>
@@ -213,9 +215,12 @@ export const UserMessage = memo(function UserMessage({
           {t(open ? 'message.collapse' : 'message.expand')}
         </button>
       ) : null}
-      {turnId ? (
-        <TurnActions {...ref} turnId={turnId} steered={steered} onEdit={() => setEditing(true)} />
-      ) : null}
+      <div className="umsg-acts">
+        <MessageCopy item={item} />
+        {turnId ? (
+          <TurnActions {...ref} turnId={turnId} steered={steered} onEdit={() => setEditing(true)} />
+        ) : null}
+      </div>
     </div>
   )
   if (!event) return message
@@ -239,7 +244,14 @@ export const AgentAnswer = memo(function AgentAnswer(ref: ItemRef) {
   if (item?.kind !== 'agentMessage') return null
   // 条目已经定稿但字还没放完时，继续按“输出中”画，放完那一刻才换成定稿的样子，中间没有跳变
   const streaming = item.status === 'inProgress' || revealing
-  return <Markdown text={text} streaming={streaming} anchor={`a:${ref.itemId}`} item={ref.itemId} />
+  return (
+    <div className="agent-message">
+      <Markdown text={text} streaming={streaming} anchor={`a:${ref.itemId}`} item={ref.itemId} />
+      <div className="message-acts">
+        <MessageCopy item={item} />
+      </div>
+    </div>
+  )
 })
 
 /** 计划：一张卡片，内容按 Markdown 画 */

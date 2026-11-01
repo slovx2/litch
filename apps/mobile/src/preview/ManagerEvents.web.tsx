@@ -87,6 +87,7 @@ export function ManagerEventsPreview({ params }: { params: URLSearchParams }) {
             toggle: noop,
             openLink: noop,
             turnMenu: noop,
+            copyMessage: noop,
             openDiff: noop,
             openSession: noop,
             viewImage: noop,

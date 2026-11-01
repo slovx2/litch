@@ -63,6 +63,10 @@ This section is hidden on iOS. These are phone settings; desktop `litch config` 
 
 ## In a session on the phone
 
+消息下方常显“复制消息”，点击复制该条全文并显示“已复制”。长回答即使拆成多个显示块，
+也只在末块放一个按钮，复制内容仍是完整 Markdown。长按回答菜单的“复制回答”针对按住的那条；
+状态行菜单仍可复制回合最后一条回答。用户消息的评论、附件和会话提及规则见 `sessions-and-projects.md`。
+
 Pending questions are answered above the composer; settled questions leave a combined question/answer
 record in the conversation. Mid-turn messages say “Added to this turn” and divide folded activity into
 segments. The rules are shared with the desktop and described in `sessions-and-projects.md`.
