@@ -101,6 +101,7 @@ export const zhManager = {
   'manager.dispatch': '任务分配',
   'manager.same': '与经理相同',
   'manager.worktree': '代码修改使用独立工作树',
+  'manager.worktreeNote': '仅设置默认做法；经理可按任务决定是否使用独立工作树。',
   'manager.merge': '合并方式',
   'manager.mergeManager': '由经理合并',
   'manager.mergeUser': '由用户合并',

@@ -276,3 +276,24 @@ test('空范围不生成空标题，自动规则和用户设定分别表达', ()
   assert.match(rules, /Wait for unanswered decisions/)
   assert.doesNotMatch(rules, /desktop notification/i)
 })
+
+test('工作树开关只设默认值，两种状态都允许经理按任务覆盖，工作线按实际简报执行', () => {
+  for (const worktree of [false, true]) {
+    const dispatch = { ...MANAGER_DEFAULT_DISPATCH, worktree }
+    const rules = managerSettingsRules(dispatch, MANAGER_DEFAULT_CONTACT)
+    assert.match(rules, /default, not a requirement/)
+    assert.match(rules, /Choose per task/)
+    assert.match(rules, /worktree: true or false explicitly to override it for a line/)
+    assert.match(
+      rules,
+      worktree
+        ? /Use separate worktrees for work lines that modify code by default/
+        : /By default, work lines that modify code share the working folder; serialize overlapping changes/,
+    )
+    const line = managerLineRules('经理', dispatch)
+    assert.match(line, /Use the folder or worktree assigned in your brief/)
+    assert.match(line, /do not create another worktree on your own/)
+    assert.match(line, /preserve other lines’ edits/)
+    assert.doesNotMatch(line, /Code work shares a folder|Code work uses the worktree/)
+  }
+})

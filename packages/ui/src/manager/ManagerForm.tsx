@@ -493,11 +493,18 @@ export function ManagerForm({
               <input
                 type="checkbox"
                 checked={form.dispatch.worktree}
+                aria-describedby="manager-worktree-note"
                 onChange={(event) =>
                   change({ dispatch: { ...form.dispatch, worktree: event.target.checked } })
                 }
               />
-              {t('manager.worktree')}
+              <span>
+                {t('manager.worktree')}
+                <br />
+                <small id="manager-worktree-note" className="form-note">
+                  {t('manager.worktreeNote')}
+                </small>
+              </span>
             </label>
             <label className="form-field">
               {t('manager.merge')}

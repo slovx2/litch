@@ -108,6 +108,8 @@ export const enManager = {
   'manager.dispatch': 'Task assignment',
   'manager.same': 'Same as manager',
   'manager.worktree': 'Use separate worktrees for code changes',
+  'manager.worktreeNote':
+    'Sets the default only. The manager can choose whether to use a separate worktree for each task.',
   'manager.merge': 'Merge responsibility',
   'manager.mergeManager': 'Manager merges',
   'manager.mergeUser': 'User merges',

@@ -68,8 +68,9 @@ export function managerSettingsRules(
     `Default work line model: ${dispatch.model ?? 'the manager’s model when the harness matches; otherwise the target harness’s default'}.`,
     `Default work line reasoning effort: ${dispatch.effort ?? 'the manager’s effort when the harness matches; otherwise the target harness’s default'}.`,
     dispatch.worktree
-      ? 'Use separate worktrees for work lines that modify code.'
-      : 'Work lines that modify code share the working folder; serialize overlapping changes.',
+      ? 'Use separate worktrees for work lines that modify code by default.'
+      : 'By default, work lines that modify code share the working folder; serialize overlapping changes.',
+    'This worktree setting is a default, not a requirement. Choose per task: use a separate worktree for independent changes or a separate branch, and share the folder when the task calls for it. When worktree is omitted, use this setting’s default; pass worktree: true or false explicitly to override it for a line.',
     `At most ${dispatch.maxRunningLines} work lines may run concurrently.`,
     dispatch.merge === 'manager'
       ? 'After acceptance, the manager merges the work line into the main branch under project rules.'
@@ -90,9 +91,7 @@ export function managerLineRules(name: string, dispatch: ManagerDispatchSettings
     'Do not send progress messages to the manager during work unless there is a major change, a major finding, or a decision needed to continue. Otherwise, report once at the end of the turn.',
     'At the end of each turn, report: what you did; branch, commits and whether you pushed; checks and results; each unverified part on its own line starting exactly with "没验："; decisions needed from the manager.',
     'Do not merge, push or release unless the brief explicitly authorizes it. You do not inherit litch_manager; report board changes to the manager.',
-    dispatch.worktree
-      ? 'Code work uses the worktree assigned in your brief; do not create a second worktree.'
-      : 'Code work shares a folder; respect the brief’s file ownership and preserve other lines’ edits.',
+    'Use the folder or worktree assigned in your brief; do not create another worktree on your own. When sharing a folder, respect the brief’s file ownership and preserve other lines’ edits.',
     dispatch.merge === 'manager'
       ? 'Report acceptance evidence to the manager for integration.'
       : 'Leave integration to the user and report readiness to the manager.',

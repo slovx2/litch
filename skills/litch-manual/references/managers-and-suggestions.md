@@ -30,6 +30,10 @@ notifications are on, and unanswered decisions wait indefinitely. Changing workl
 choosing a model or effort uses that harness's defaults. Workline concurrency includes the entire
 subtree; approvals and background work also occupy slots.
 
+“代码修改使用独立工作树”只设置默认做法，开、关均不限制经理按任务选择。
+独立改动或需要单独分支时，经理可为该线指定工作树；需要共享目录时也可单独关闭。
+工作线遵守简报中实际分配的目录或工作树，共享目录时仍需保留其他线的修改。
+
 工作线执行期间仅在出现重大变更、重大发现，或需要经理决策才能继续时发送中途消息；其余结果在每回合结束时集中回报。
 
 ### 看板编号
