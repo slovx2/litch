@@ -25,6 +25,7 @@ for (const lang of ['zh-CN', 'en'] as const)
     assert.equal(local.managers.filter((m) => m.status === 'ended').length, 2)
     const board = local.boards.find((b) => b.managerId === 'm1')
     assert.ok(board)
+    assert.equal(local.managers.find((m) => m.id === 'm1')?.pendingRequests, 1)
     assert.deepEqual(
       [board.decisions.length, board.items.length, board.lines.length, board.activities.length],
       [6, 9, 4, 6],
@@ -298,13 +299,16 @@ test('模拟看板混合提交答案、追问与请你做，事件保留三类�
   const { clock } = fakeClock()
   const devices = sampleApp('zh-CN', clock.now()).devices
   const turns: string[] = []
+  let pendingRequests: number | undefined
   const service = createMockManagers({
     clock,
     lang: 'zh-CN',
     devices: () => devices,
     device: (id) => devices.find((d) => d.id === id),
     add() {},
-    mark() {},
+    mark(_device, _thread, manager) {
+      pendingRequests = manager.pendingRequests
+    },
     ending() {
       return 'end'
     },
@@ -323,6 +327,7 @@ test('模拟看板混合提交答案、追问与请你做，事件保留三类�
   assert.equal(result.accepted.length, 1)
   assert.equal(result.acceptedQuestions[0]?.discussion?.messages.at(-1)?.mode, 'manager')
   assert.equal(result.acceptedRequests[0]?.status, 'delivered')
+  assert.equal(pendingRequests, 0)
   const event = parseSessionEvent(turns[0] ?? '').event
   assert.equal(event?.manager?.answers?.length, 1)
   assert.equal(event?.manager?.questions?.length, 1)

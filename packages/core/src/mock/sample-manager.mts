@@ -643,6 +643,7 @@ export function sampleManagers(
   for (const manager of managers) {
     const board = boards.find((board) => board.managerId === manager.id)
     manager.pendingDecisions = board?.decisions.filter((d) => d.status === 'open').length ?? 0
+    manager.pendingRequests = board?.requests?.filter((r) => r.status === 'open').length ?? 0
     manager.latestActivity = board?.activities[0] ?? null
   }
   return { managers, boards, sessions }

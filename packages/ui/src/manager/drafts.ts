@@ -72,3 +72,12 @@ export function questionDrafts(drafts: AnswerDrafts) {
       question: draft.question?.trim() ?? '',
     }))
 }
+
+/** 放弃答案修改时保留同一决策的追问，以及其他决策的草稿。 */
+export function cancelAnswerEdit(drafts: AnswerDrafts, id: string): AnswerDrafts {
+  const next = { ...drafts }
+  const draft = next[id]
+  if (draft?.question?.trim()) next[id] = { ...draft, optionId: null, text: '' }
+  else delete next[id]
+  return next
+}

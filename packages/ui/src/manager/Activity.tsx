@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import type { ManagerActivityView } from '../../../core/src/model-manager.mts'
 import { requestOpenSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
+import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 
 export function Activity({
@@ -36,12 +37,12 @@ export function Activity({
             className="pill mute mg-activity-source"
             onClick={() => requestOpenSession({ deviceId, sessionId: source.threadId })}
           >
-            {t('manager.source.line')} · {source.title}
+            {t('manager.source.line')} · {source.title} <span aria-hidden="true">↗</span>
           </button>
         ) : (
           <span className="pill mute">{t(`manager.source.${source.kind}`)}</span>
         )}
-        <time className="dim">{new Date(activity.at).toLocaleTimeString()}</time>
+        <Stamp className="dim" at={activity.at} />
       </header>
       <div className="mg-activity-content" data-expanded={expanded} ref={body}>
         <BoardMarkdown text={activity.text} />

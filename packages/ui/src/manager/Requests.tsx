@@ -6,6 +6,7 @@ import type {
   ManagerView,
 } from '../../../core/src/model-manager.mts'
 import { useT } from '../app/appearance.ts'
+import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { useRequestDrafts } from './request-drafts.ts'
@@ -70,17 +71,27 @@ export function Requests({
             <header>
               <span className="mono dim">{request.id}</span>
               <h3 className="grow">{request.title}</h3>
-              <span className="pill mute">{t(`manager.request.${request.status}`)}</span>
+              <span className={request.status === 'open' ? 'pill wait' : 'pill mute'}>
+                {t(`manager.request.${request.status}`)}
+              </span>
               {draft ? <span className="pill wait">{t('manager.draft')}</span> : null}
             </header>
             <BoardMarkdown text={request.description} />
             {request.response ? (
-              <p>
-                {request.response.delivered
-                  ? (request.buttonLabel ?? t('manager.requestDone'))
-                  : t('manager.request.replied')}
-                {request.response.text ? ` · ${request.response.text}` : ''}
-              </p>
+              <section className="mg-request-response">
+                <header>
+                  <b>{t('manager.yourReply')}</b>
+                  <span className="dim">
+                    {t(
+                      request.response.delivered
+                        ? 'manager.request.delivered'
+                        : 'manager.request.replied',
+                    )}
+                  </span>
+                  <Stamp className="dim" at={request.response.at} />
+                </header>
+                {request.response.text ? <BoardMarkdown text={request.response.text} /> : null}
+              </section>
             ) : null}
             {request.cancelled ? <p className="dim">{request.cancelled.reason}</p> : null}
             {draft && draft.revision !== request.revision ? (
@@ -119,6 +130,26 @@ export function Requests({
                   {request.buttonLabel ?? t('manager.requestDone')}
                   {draft?.delivered ? ` · ${t('manager.draft')}` : ''}
                 </button>
+                {request.response && draft ? (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    data-act="manager-request-cancel-edit"
+                    disabled={locked}
+                    onClick={() => {
+                      try {
+                        const next = { ...drafts }
+                        delete next[request.id]
+                        write(next)
+                        setError('')
+                      } catch {
+                        setError(t('manager.savedFail'))
+                      }
+                    }}
+                  >
+                    {t('manager.cancelEdit')}
+                  </button>
+                ) : null}
               </>
             ) : request.status !== 'cancelled' ? (
               <button

@@ -902,39 +902,40 @@ export function Composer(props: ComposerProps) {
             fresh={props.fresh}
             onChange={props.onSettings}
           />
-          <span className="grow" />
-          {armed ? (
-            <span className="cmp-esc ell" role="status">
-              {t('composer.escAgain')}
-            </span>
-          ) : null}
-          <ContextMeter
-            usage={props.usage ?? null}
-            compact={props.compact}
-            limits={props.harness ? { deviceId, harness: props.harness } : undefined}
-          />
-          {mode === 'stop' ? (
-            <button
-              type="button"
-              className={armed ? 'send stop armed' : 'send stop'}
-              title={t('composer.stopKeys')}
-              aria-label={t('composer.stop')}
-              onClick={stop}
-            >
-              <Stop />
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="send"
-              title={t(mode === 'queue' ? 'composer.queue' : 'composer.send')}
-              aria-label={t(mode === 'queue' ? 'composer.queue' : 'composer.send')}
-              disabled={!ready}
-              onClick={send}
-            >
-              <Send />
-            </button>
-          )}
+          <div className="cmp-send-actions">
+            {armed ? (
+              <span className="cmp-esc ell" role="status">
+                {t('composer.escAgain')}
+              </span>
+            ) : null}
+            <ContextMeter
+              usage={props.usage ?? null}
+              compact={props.compact}
+              limits={props.harness ? { deviceId, harness: props.harness } : undefined}
+            />
+            {mode === 'stop' ? (
+              <button
+                type="button"
+                className={armed ? 'send stop armed' : 'send stop'}
+                title={t('composer.stopKeys')}
+                aria-label={t('composer.stop')}
+                onClick={stop}
+              >
+                <Stop />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="send"
+                title={t(mode === 'queue' ? 'composer.queue' : 'composer.send')}
+                aria-label={t(mode === 'queue' ? 'composer.queue' : 'composer.send')}
+                disabled={!ready}
+                onClick={send}
+              >
+                <Send />
+              </button>
+            )}
+          </div>
         </div>
       </div>
       {props.below}

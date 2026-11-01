@@ -126,6 +126,12 @@ try {
   await click('[data-sidebar-mode="manager"]')
   await click('[data-manager-id="m1"] .mg-pick')
   await wait('[data-board-tab="suggestions"]')
+  assert.ok(
+    await read(
+      "document.querySelector('[data-manager-id=\"m1\"] .mg-pick small').textContent.includes('4')",
+    ),
+    '侧栏合计待定决策与待做请求',
+  )
   await shot('manager-entry')
   await click('[data-board-tab="suggestions"]')
   assert.equal(await read("document.querySelectorAll('.suggestion-row').length"), 0)
@@ -206,7 +212,7 @@ try {
   await wait('[data-suggestion-manager="m1"]')
   assert.equal(
     await read(
-      'document.querySelector(\'[data-suggestion-manager="m1"] header .pill:last-of-type\').textContent',
+      'document.querySelector(\'[data-suggestion-manager="m1"] header .pill:nth-of-type(2)\').textContent',
     ),
     '2 条建议',
   )
@@ -277,6 +283,15 @@ try {
   assert.equal(await read("document.querySelector('.mg-body').scrollTop"), 0)
   await click('[data-overview="requests"] [data-board-reference="R-1"]')
   assert.equal(await read("document.activeElement?.getAttribute('data-manager-request')"), 'R-1')
+  assert.equal(
+    await read('document.querySelector(\'[data-board-tab="requests"] .pill\').textContent'),
+    '1',
+  )
+  assert.ok(
+    await read(
+      "document.querySelector('[data-board-tab=\"requests\"] .pill').classList.contains('wait')",
+    ),
+  )
   await click('[data-board-tab="items"]')
 
   const size = async (width) => {
@@ -369,6 +384,21 @@ try {
     )
   }, '键盘调整到最大宽度')
   assert.ok((await widthOf('.mg-chat')) >= 460, '对话保留足够宽度')
+  for (const skin of ['standard', 'human', 'retro']) {
+    for (const lang of ['zh-CN', 'en']) {
+      await read(
+        `window.__litchLook.set({skin:${JSON.stringify(skin)},lang:${JSON.stringify(lang)}})`,
+      )
+      assert.ok(
+        await read(
+          `Array.from(document.querySelectorAll('.mg-chat .cmp-bar .pick-btn .ell')).every(e=>e.scrollWidth<=e.clientWidth+1)`,
+        ),
+        '最窄对话的模型、权限按钮保留完整文字',
+      )
+      await shot(`composer-min-${skin}-${lang}`)
+    }
+  }
+
   await noOverflow()
   const restoreGrip = await read(
     "(()=>{const r=document.querySelector('.mg-board-grip').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+100}})()",
@@ -472,6 +502,117 @@ try {
       await click('[data-act="manager-board-toggle"]')
     }
   }
+  // 回答与追问键盘切换、混合提交、单项取消修改，均操作正式界面。
+  const fill = async (selector, text) => {
+    await read(
+      `(()=>{const e=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,${JSON.stringify(text)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+    )
+    await new Promise((r) => setTimeout(r, 120))
+  }
+  const question = '[data-decision="D-15"] [data-act="manager-question-input"]'
+  const answerTab = '[data-decision="D-15"] [data-decision-tab="answer"]'
+  const questionTab = '[data-decision="D-15"] [data-decision-tab="question"]'
+  await click('[data-board-tab="decisions"]')
+  await read(`document.querySelector(${JSON.stringify(answerTab)}).focus()`)
+  await call('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: 'ArrowRight',
+    code: 'ArrowRight',
+    windowsVirtualKeyCode: 39,
+  })
+  await until(
+    () => read("document.activeElement?.dataset.decisionTab === 'question'"),
+    '方向键切到追问',
+  )
+  assert.ok(
+    await read(
+      `(()=>{const t=document.querySelector(${JSON.stringify(questionTab)});const p=document.getElementById(t.getAttribute('aria-controls'));return !p.hidden&&p.getAttribute('role')==='tabpanel'&&p.getAttribute('aria-labelledby')===t.id})()`,
+    ),
+  )
+  await fill(question, '此次修改的依据？')
+  assert.ok(await read(`!!document.querySelector('[data-decision="D-15"] .mg-question-draft')`))
+  await click('[data-board-tab="requests"]')
+  await fill('[data-act="manager-request-text"]', '真机复验 **通过**。')
+  await click('[data-act="manager-request-deliver"]')
+  await click('[data-act="manager-submit"]')
+  await wait('[data-act="manager-request-edit"]')
+  assert.ok(
+    await read("document.querySelector('.mg-request-response strong')?.textContent === '通过'"),
+  )
+  assert.ok(await read("!!document.querySelector('.mg-request-response time[datetime][title]')"))
+  assert.equal(await read('document.querySelector(\'[data-board-tab="requests"] .pill\')'), null)
+  assert.ok(
+    await read(
+      "document.querySelector('[data-manager-id=\"m1\"] .mg-pick small').textContent.includes('2')",
+    ),
+  )
+  await click('[data-board-tab="decisions"]')
+  await click('.mg-decision-filter button:nth-child(2)')
+  assert.ok(
+    await read(
+      '!!document.querySelector(\'[data-decision="D-13"] .mg-item-meta-row .mg-item-links li\')',
+    ),
+    '已落地采用元信息列表',
+  )
+  await shot('answered-landed-metadata')
+  await click(questionTab)
+  await fill(question, '保留的追问草稿')
+  await click(answerTab)
+  await click('[data-decision="D-15"] [data-act="manager-edit-answer"]')
+  await fill('[data-decision="D-15"] [data-act="manager-answer"]', '放弃这次答案修改')
+  await click('[data-decision="D-15"] [data-act="manager-cancel-answer-edit"]')
+  assert.ok(
+    await read(
+      `!!document.querySelector('[data-decision="D-15"] [data-act="manager-edit-answer"]')`,
+    ),
+  )
+  await click(questionTab)
+  assert.equal(
+    await read(`document.querySelector(${JSON.stringify(question)}).value`),
+    '保留的追问草稿',
+  )
+  await click('[data-board-tab="requests"]')
+  await click('[data-act="manager-request-edit"]')
+  await fill('[data-act="manager-request-text"]', '放弃这次回复修改')
+  await click('[data-act="manager-request-cancel-edit"]')
+  assert.ok(await read('!document.querySelector(\'[data-act="manager-request-text"]\')'))
+  assert.ok(
+    await read("document.querySelector('.mg-request-response strong')?.textContent === '通过'"),
+  )
+  await click('[data-board-tab="decisions"]')
+  await click(questionTab)
+  assert.equal(
+    await read(`document.querySelector(${JSON.stringify(question)}).value`),
+    '保留的追问草稿',
+  )
+  await click('[data-decision="D-15"] [data-question-mode="temporary"]')
+  await fill(question, '再确认影响范围')
+  await click('[data-decision="D-15"] [data-act="manager-question-send"]')
+  await until(
+    () =>
+      read(
+        "Array.from(document.querySelectorAll('.mg-question-round b')).some(e=>e.textContent==='临时对话：')",
+      ),
+    '临时对话标明发言人',
+  )
+  for (const skin of ['standard', 'human', 'retro']) {
+    await read(`window.__litchLook.set({skin:${JSON.stringify(skin)},theme:'light',lang:'zh-CN'})`)
+    await shot(`question-speakers-${skin}`)
+    await click('[data-board-tab="requests"]')
+    await shot(`request-response-${skin}`)
+    await click('[data-board-tab="decisions"]')
+    await size(760)
+    await click('.mg-narrow button:last-child')
+    await noOverflow()
+    await shot(`question-narrow-${skin}`)
+    await size(1600)
+  }
+  await click('[data-act="manager-board-toggle"]')
+  assert.equal(
+    await read('document.querySelector(\'[data-act="manager-board-toggle"] .pill\').textContent'),
+    '2',
+  )
+  await click('[data-act="manager-board-toggle"]')
   await read("window.__litchLook.set({skin:'standard',theme:'light',lang:'en'})")
   await click('[data-board-tab="suggestions"]')
   await shot('board-en')
@@ -502,7 +643,7 @@ try {
   )
   await shot('retention')
   console.log(
-    '经理看板与集中建议验收通过：汇总卡、看板操作、Markdown 与编号跳转、拖动与收起/恢复、刷新持久化、两档对话宽度、三皮肤明暗及窄窗口、留存枚举。',
+    '经理看板与集中建议验收通过：汇总卡、Markdown 与编号跳转、已落地元信息、待办计数、单项取消修改、追问标记与键盘操作、回复 Markdown 与发言人、最窄输入框、拖动收起/恢复、三皮肤明暗及窄窗口、留存枚举。',
   )
 } finally {
   cdp?.close()

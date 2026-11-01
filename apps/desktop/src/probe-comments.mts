@@ -126,7 +126,7 @@ export async function commentsProbe(session: string): Promise<CommentsProbe> {
   const lastTurn = () => all('.main .tr .turn').at(-1)
   const finalAnswer = () => {
     const turn = lastTurn()
-    return turn ? all(':scope > [data-comment-item]', turn).at(-1) : undefined
+    return turn ? all(':scope > .agent-message > [data-comment-item]', turn).at(-1) : undefined
   }
 
   // 打开会话、清掉上一次留下的片

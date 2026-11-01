@@ -302,9 +302,18 @@
 }
 .cmp-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 2px;
   padding: 4px 6px 6px 8px;
+}
+/* 上下文和发送保持一组，换行后仍靠右。 */
+.cmp-send-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
 }
 .send {
   width: round(calc(28px * var(--fs)), 1px);
@@ -483,9 +492,10 @@
   position: relative;
   min-width: 0;
 }
-/* 强度只有一个字，缩了就只剩箭头：输入框底栏挤的时候（大字号、窄窗口）让模型和权限去截短 */
-.cmp-bar > .pick[data-kind="effort"] {
-  flex-shrink: 0;
+/* 底栏不足一行时整项换行，保留模型和权限的辨识文字。 */
+.cmp-bar > .pick {
+  flex: 0 0 auto;
+  max-width: 100%;
 }
 .pick-btn {
   /* 再窄也不比它所在的那一格宽：地方不够时名字截成省略号，不压到旁边的选择器上（侧面板开着、窗口又窄的时候会这样） */
@@ -499,6 +509,9 @@
   gap: 2px;
   font-size: calc(12px * var(--fs));
   color: var(--ink-2);
+}
+.cmp-bar > .pick[data-kind="model"] .pick-btn {
+  max-width: min(calc(280px * var(--fs)), 100%);
 }
 .pick-btn:hover,
 .pick-btn[aria-expanded="true"] {

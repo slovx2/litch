@@ -83,5 +83,5 @@
 }
 
 .suggestion-review-label {
-  justify-self: start;
+  align-self: flex-start;
 }

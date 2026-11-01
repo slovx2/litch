@@ -40,6 +40,7 @@ test('请你做：版本校验、混合提交、文字回复与修改交付、�
       why: '需要真机',
     })
     assert.equal(added.id, 'R-1')
+    assert.equal(env.device.managers.manager(manager.id).pendingRequests, 1)
     assert.equal(added.object.buttonLabel, null)
     const updated = call('update', {
       kind: 'request',
@@ -83,6 +84,7 @@ test('请你做：版本校验、混合提交、文字回复与修改交付、�
       [{ decisionId: 'D-1', revision: 1, question: '还有哪些影响？' }],
     )
     assert.equal(result.acceptedRequests[0].status, 'replied')
+    assert.equal(env.device.managers.manager(manager.id).pendingRequests, 0)
     assert.equal(result.acceptedRequests[0].response.delivered, false)
     assert.equal(result.acceptedQuestions.length, 1)
     assert.equal(result.accepted.length, 1)

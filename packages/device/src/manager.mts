@@ -95,6 +95,7 @@ export class DeviceManagers {
     return {
       ...manager,
       pendingDecisions: board.decisions.filter((decision) => decision.status === 'open').length,
+      pendingRequests: (board.requests ?? []).filter((request) => request.status === 'open').length,
       runningLines: board.lines.filter((line) => line.running).length,
       latestActivity: board.activities[0] ?? null,
       updatedAt: Math.max(manager.updatedAt, board.activities[0]?.at ?? 0),

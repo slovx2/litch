@@ -44,6 +44,7 @@ function ManagerRow({
     submittedRequests(requests).length +
     new Set([...answeredDrafts(drafts), ...questionDrafts(drafts)].map((draft) => draft.decisionId))
       .size
+  const attention = manager.pendingDecisions + (manager.pendingRequests ?? 0)
   const picked =
     selection?.deviceId === manager.deviceId && selection.sessionId === manager.threadId
   return (
@@ -75,13 +76,15 @@ function ManagerRow({
           <i className={manager.runningLines ? 'st run' : 'st'} />
           <span className="ell grow">{manager.name || t('manager.manager')}</span>
           <i className="wire-sq" title={device ? t.text(device.name) : manager.deviceId} />
-          <small className={manager.pendingDecisions || count ? 'mg-attention' : 'dim'}>
+          <small className={attention || count ? 'mg-attention' : 'dim'}>
             {manager.status === 'ending'
               ? t('manager.ending')
               : count
                 ? t('manager.draftCount', { n: count })
-                : manager.pendingDecisions
-                  ? t('manager.pending', { n: manager.pendingDecisions })
+                : attention
+                  ? t('manager.pending', {
+                      n: attention,
+                    })
                   : t(manager.runningLines ? 'manager.running' : 'manager.idle')}
           </small>
         </button>

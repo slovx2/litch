@@ -70,16 +70,16 @@ export async function workingProbe(): Promise<WorkingProbe> {
   await until(`“${title}”的内容`, () => text(one('.crumb')).includes(title) && area())
   await idle()
 
-  const before = all('.turn').length
   const input = await until('输入框', area)
   write(input, '忙一阵')
   await frame()
   press(input, 'Enter')
   const sent = performance.now()
-  const turn = await until('新的回合', () =>
-    all('.turn').length > before ? all('.turn').at(-1) : null,
-  )
-  const slot = await until('末尾那一格', () => one('.running-line.slot', turn))
+  // 虚拟列表的可见回合数会随输入框换行而变化，不能用数量增长判断新回合。
+  // 发出消息前已等到空闲，直接等正在运行的回合状态行，再定位所属回合。
+  const slot = await until('新回合的末尾状态行', () => one('.turn .running-line.slot'))
+  const turn = slot.closest<HTMLElement>('.turn')
+  if (!turn) throw new Error('正在工作那一行：状态行不在回合内')
 
   /** 此刻回合里在发生什么。还没出字的正文（只有光标）不算在出字，那还是在等 */
   const live = () => all('.md.live', turn).some((block) => text(block) !== '')

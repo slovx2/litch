@@ -62,6 +62,7 @@ export function createMockManagers(host: MockManagerHost) {
   })
   const publish = (deviceId: string, manager: ManagerView, board: ManagerBoardView) => {
     manager.pendingDecisions = board.decisions.filter((d) => d.status === 'open').length
+    manager.pendingRequests = (board.requests ?? []).filter((r) => r.status === 'open').length
     manager.latestActivity = board.activities[0] ?? null
     manager.updatedAt = host.clock.now()
     host.mark(deviceId, manager.threadId, manager)

@@ -92,9 +92,10 @@ export function ManagerPage({
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState('')
   const board = view?.board
+  const attention = manager.pendingDecisions + (manager.pendingRequests ?? 0)
   const counts = {
     overview: 0,
-    requests: pages?.overview.requests.length ?? 0,
+    requests: manager.pendingRequests ?? 0,
     decisions: manager.pendingDecisions,
     items: (pages?.overview.stats.totalItems ?? 0) - (pages?.overview.stats.doneItems ?? 0),
     lines: manager.runningLines,
@@ -166,9 +167,7 @@ export function ManagerPage({
           onClick={() => setBoardLayout({ open: !layout.open })}
         >
           {t(layout.open ? 'manager.hideBoard' : 'manager.showBoard')}
-          {!layout.open && manager.pendingDecisions ? (
-            <span className="pill wait">{manager.pendingDecisions}</span>
-          ) : null}
+          {!layout.open && attention ? <span className="pill wait">{attention}</span> : null}
         </button>
         {manager.status === 'active' ? (
           <>
@@ -223,7 +222,7 @@ export function ManagerPage({
             onClick={() => setNarrow(key)}
           >
             {t(`manager.${key}`)}
-            {key === 'board' && manager.pendingDecisions ? ` ${manager.pendingDecisions}` : ''}
+            {key === 'board' && attention ? ` ${attention}` : ''}
           </button>
         ))}
       </div>
@@ -263,7 +262,11 @@ export function ManagerPage({
               >
                 {t(`manager.${key}`)}
                 {counts[key] ? (
-                  <span className={key === 'decisions' ? 'pill wait' : 'pill mute'}>
+                  <span
+                    className={
+                      key === 'decisions' || key === 'requests' ? 'pill wait' : 'pill mute'
+                    }
+                  >
                     {counts[key]}
                   </span>
                 ) : null}

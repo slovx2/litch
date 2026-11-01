@@ -48,8 +48,10 @@ export function ManagersPage({
         ) : manager.status === 'ending' ? (
           <span className="dim">{t('manager.ending')}</span>
         ) : null}
-        {manager.pendingDecisions ? (
-          <span className="pill wait">{t('manager.pending', { n: manager.pendingDecisions })}</span>
+        {manager.pendingDecisions + (manager.pendingRequests ?? 0) ? (
+          <span className="pill wait">
+            {t('manager.pending', { n: manager.pendingDecisions + (manager.pendingRequests ?? 0) })}
+          </span>
         ) : null}
       </button>
       {manager.status === 'ended' ? (

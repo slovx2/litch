@@ -665,6 +665,7 @@
         "rules": { "type": "string" },
         "status": { "enum": ["active", "ending", "ended"] },
         "pendingDecisions": { "type": "integer", "minimum": 0 },
+        "pendingRequests": { "type": "integer", "minimum": 0 },
         "runningLines": { "type": "integer", "minimum": 0 },
         "latestActivity": { "anyOf": [{ "$ref": "#/definitions/Activity" }, { "type": "null" }] },
         "createdAt": { "type": "number" },

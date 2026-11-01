@@ -224,3 +224,18 @@ are in `device-settings.md`. Task cards can be switched per harness with
 
 No suggestions visible: check the manager's Suggestions tab, source device's connection and task-card switch,
 and whether the cards were handled or expired. Increasing retention does not restore expired cards.
+
+### 看板答复与待办提示
+
+侧栏、窄窗口的“看板”和收起后的“展开看板”数字，合计待定决策与待做的“请你做”。
+已回复、已交付或已取消的请求不重复计入；已回复但尚未交付的请求仍保留在概览中。
+“请你做”的默认交付按钮是“标记完成 / Mark as done”，经理可以指定其他文案。
+提交后的回复按 Markdown 展示，并标明回复时间。
+
+修改已提交的答案或请求回复时，可以点“取消修改”放弃当前修改，其他草稿不受影响；
+取消答案修改也保留同一决策的追问草稿。“追问”页签上的圆点表示有尚未提交的追问。
+“回答 / 追问”支持方向键和 Home、End 切换；追问方式使用次级文字切换，记录标明发言人。
+动态时间沿用消息时间格式，非当天显示星期或日期，悬停查看完整日期与时刻。
+
+看板挤压对话时，输入框的模型、权限等选项按整项换行，避免按钮文字缩成单字。
+全局建议汇总卡的已审核数量与未审核数量并列在标题行；未审核卡的标签只占文字所需宽度。

@@ -234,6 +234,8 @@ export interface Manager {
   rules: string
   status: ManagerStatus
   pendingDecisions: number
+  /** 仍待用户操作的请你做；已回复、已交付及已取消不计入。 */
+  pendingRequests?: number
   runningLines: number
   latestActivity: ManagerActivity | null
   createdAt: number

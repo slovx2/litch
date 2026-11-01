@@ -55,7 +55,7 @@ export function DecisionQuestions({
   }
   return (
     <section className="mg-questions">
-      <fieldset className="seg mg-question-modes" aria-label={t('manager.questionMode')}>
+      <fieldset className="mg-question-modes" aria-label={t('manager.questionMode')}>
         <button
           type="button"
           aria-pressed={mode === 'manager'}
@@ -90,6 +90,13 @@ export function DecisionQuestions({
                 <b>{t('manager.questionYou')}</b> {entry.question}
               </p>
               <div className={entry.status === 'failed' ? 'err' : undefined}>
+                <b>
+                  {t(
+                    entry.mode === 'manager'
+                      ? 'manager.questionManagerSpeaker'
+                      : 'manager.questionTemporarySpeaker',
+                  )}
+                </b>
                 {entry.status === 'running' ? (
                   t(
                     entry.mode === 'manager'

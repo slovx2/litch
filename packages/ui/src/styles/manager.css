@@ -7,11 +7,15 @@
   display: grid;
   gap: 8px;
 }
+.mg-question-log:not(:empty) {
+  margin-bottom: 8px;
+}
 .mg-question-log {
   max-height: 360px;
   overflow: auto;
 }
 .mg-question-round {
+  padding-block: 8px 12px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   border-bottom: 1px solid var(--line);
@@ -498,6 +502,12 @@
 }
 .mg-activity-source {
   cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.mg-activity-source:hover {
+  background: var(--hover);
+  color: var(--accent);
 }
 .mg-empty {
   text-align: center;
@@ -744,6 +754,35 @@
   margin-block: 12px;
 }
 .mg-question-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+  font-size: calc(12px * var(--fs));
+}
+.mg-question-modes button {
+  padding: 4px 0;
+  color: var(--ink-3);
+  border-bottom: 2px solid transparent;
+}
+.mg-question-modes button[aria-pressed="true"] {
+  color: var(--accent);
+  border-bottom-color: currentColor;
+}
+.mg-question-modes button:hover {
+  color: var(--ink);
+}
+.mg-question-draft {
+  margin-left: 6px;
+  color: var(--wait);
+}
+.mg-request-response header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
   margin-bottom: 8px;
 }
 

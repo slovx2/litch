@@ -16,6 +16,7 @@ import { DecisionQuestions } from './DecisionQuestions.tsx'
 import {
   type AnswerDrafts,
   answeredDrafts,
+  cancelAnswerEdit,
   type DecisionDraft,
   questionDrafts,
   useAnswerDrafts,
@@ -213,6 +214,7 @@ export function Decisions({
           {grouped[filter].map((decision) => {
             const draft = drafts[decision.id]
             const selectedTab = tabs[decision.id] ?? 'answer'
+            const tabId = `manager-response-${manager.id}-${decision.id}`
             const stale = draft && draft.revision !== decision.revision
             return (
               <article
@@ -250,16 +252,52 @@ export function Decisions({
                       type="button"
                       role="tab"
                       key={tab}
+                      id={`${tabId}-${tab}`}
                       aria-selected={selectedTab === tab}
+                      aria-controls={`${tabId}-${tab}-panel`}
+                      tabIndex={selectedTab === tab ? 0 : -1}
+                      onKeyDown={(event) => {
+                        const next =
+                          event.key === 'Home'
+                            ? 'answer'
+                            : event.key === 'End'
+                              ? 'question'
+                              : ['ArrowLeft', 'ArrowRight'].includes(event.key)
+                                ? tab === 'answer'
+                                  ? 'question'
+                                  : 'answer'
+                                : null
+                        if (!next) return
+                        event.preventDefault()
+                        setTabs({ ...tabs, [decision.id]: next })
+                        document.getElementById(`${tabId}-${next}`)?.focus()
+                      }}
                       data-decision-tab={tab}
                       onClick={() => setTabs({ ...tabs, [decision.id]: tab })}
                     >
                       {t(tab === 'answer' ? 'manager.answerTab' : 'manager.questionTab')}
+                      {tab === 'question' && draft?.question?.trim() ? (
+                        <span
+                          role="img"
+                          className="mg-question-draft"
+                          aria-label={t('manager.draft')}
+                        >
+                          •
+                        </span>
+                      ) : null}
                     </button>
                   ))}
                 </div>
-                <div hidden={selectedTab !== 'answer'}>
-                  {decision.status === 'open' || editing.has(decision.id) || draft ? (
+                <div
+                  id={`${tabId}-answer-panel`}
+                  role="tabpanel"
+                  aria-labelledby={`${tabId}-answer`}
+                  hidden={selectedTab !== 'answer'}
+                >
+                  {decision.status === 'open' ||
+                  editing.has(decision.id) ||
+                  draft?.optionId ||
+                  draft?.text.trim() ? (
                     <>
                       {stale ? (
                         <div className="mg-conflict" role="alert">
@@ -356,6 +394,20 @@ export function Decisions({
                         onChange={(event) => change(decision, { text: event.target.value })}
                       />
                       <div className="mg-actions">
+                        {decision.status !== 'open' ? (
+                          <button
+                            type="button"
+                            className="btn ghost"
+                            data-act="manager-cancel-answer-edit"
+                            disabled={disabled || busy}
+                            onClick={() => {
+                              save(cancelAnswerEdit(drafts, decision.id))
+                              setEditing(new Set([...editing].filter((id) => id !== decision.id)))
+                            }}
+                          >
+                            {t('manager.cancelEdit')}
+                          </button>
+                        ) : null}
                         {decision.recommend ? (
                           <button
                             type="button"
@@ -402,10 +454,12 @@ export function Decisions({
                       ) : null}
                       {decision.closed ? <p>{decision.closed.reason}</p> : null}
                       {decision.landed.length ? (
-                        <p className="dim">
-                          {t('manager.landed')}{' '}
-                          {decision.landed.map((link) => link.label ?? link.target).join(' · ')}
-                        </p>
+                        <div className="mg-item-meta">
+                          <div className="mg-item-meta-row">
+                            <span className="mg-meta-label">{t('manager.landed')}</span>
+                            <BoardLinks links={decision.landed} />
+                          </div>
+                        </div>
                       ) : null}
                       {decision.status !== 'answered' ? (
                         <button
@@ -421,7 +475,12 @@ export function Decisions({
                     </>
                   )}
                 </div>
-                <div hidden={selectedTab !== 'question'}>
+                <div
+                  id={`${tabId}-question-panel`}
+                  role="tabpanel"
+                  aria-labelledby={`${tabId}-question`}
+                  hidden={selectedTab !== 'question'}
+                >
                   {stale ? (
                     <div className="mg-conflict" role="alert">
                       <p>{t('manager.conflict')}</p>

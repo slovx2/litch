@@ -160,6 +160,11 @@ function ManagerSuggestionCard({
             <span className="pill mute">{t('manager.manager')}</span>
             <b>{manager?.name || t('suggestions.managerLoading')}</b>
             <span className="pill mute">{t('suggestions.count', { n: reviewed.length })}</span>
+            {pending ? (
+              <span className="pill mute">
+                {t('suggestions.unreviewed')} {pending}
+              </span>
+            ) : null}
           </header>
           <div className="prop-meta">
             <span>{device ? t.text(device.name) : entry.deviceId}</span>
@@ -169,11 +174,6 @@ function ManagerSuggestionCard({
               </time>
             ) : null}
           </div>
-          {pending ? (
-            <span className="dim">
-              {t('suggestions.unreviewed')} {pending}
-            </span>
-          ) : null}
           {latest ? (
             <>
               <strong>{latest.proposal.title}</strong>

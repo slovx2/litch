@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { answeredDrafts, questionDrafts } from '../src/manager/drafts.ts'
+import { answeredDrafts, cancelAnswerEdit, questionDrafts } from '../src/manager/drafts.ts'
 import { boardReferences } from '../src/manager/references.ts'
 import { submittedRequests } from '../src/manager/request-drafts.ts'
 
@@ -34,4 +34,18 @@ test('请你做允许仅交付、仅文字及带备注；编号可混合跳转',
       .map((part) => part.id),
     ['I-1', 'R-2', 'D-3'],
   )
+})
+
+test('取消答案修改保留同一决策追问与其他草稿，不修改原对象', () => {
+  const drafts = {
+    'D-1': { decisionId: 'D-1', revision: 4, optionId: 'yes', text: '修改', question: '依据？' },
+    'D-2': { decisionId: 'D-2', revision: 2, optionId: null, text: '继续', question: '' },
+  }
+  const next = cancelAnswerEdit(drafts, 'D-1')
+  assert.deepEqual(answeredDrafts(next), [
+    { decisionId: 'D-2', revision: 2, optionId: null, text: '继续' },
+  ])
+  assert.equal(questionDrafts(next)[0].question, '依据？')
+  assert.equal(drafts['D-1'].text, '修改')
+  assert.deepEqual(Object.keys(cancelAnswerEdit(next, 'D-2')), ['D-1'])
 })
