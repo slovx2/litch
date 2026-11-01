@@ -428,7 +428,7 @@ test('OFFER-006：选了新会话的卡模型可以撤回；设备进程重启�
   }
 })
 
-test('OFFER-007：选了新会话、模型补的简报开到收不紧沙箱的 harness 上：不开，卡带着简报降成 pending 的提案，由用户开始', async () => {
+test('OFFER-007：目标权限更宽时保留待修改提案，用户开始也不能越权，调整父权限后才能开始', async () => {
   const env = treeRig()
   try {
     env.claude.declaration = {
@@ -469,18 +469,24 @@ test('OFFER-007：选了新会话、模型补的简报开到收不紧沙箱的 h
         ),
       '降级的通知',
     )
-    // 模型再 accept：只能用户从卡片开始
+    // 模型再 accept：指出必须更换目标或调整父权限，不能暗示人工点击即可绕过。
     const again = await env.pi.callTool(threadId, SESSIONS, 'accept', { proposal_id: proposalId })
     assert.equal(failureOf(again?.answer), 'blocked')
-    assert.match(again?.answer.result.contentItems[0].text, /only the user can start it/)
+    assert.match(
+      again?.answer.result.contentItems[0].text,
+      /change the target harness or parent permission before starting it/,
+    )
     // 回合结束：不再当作在这里做（已经不是 chosen 了）
     env.pi.end(threadId)
     await until(() => !env.device.sessionTree.isActive(threadId), '回合结束')
     assert.equal(env.device.sessionTree.store.proposal(proposalId)?.status, 'pending')
-    // 用户在卡上点开始：照简报起在 claude-code 上
+    // 用户在卡上点开始也拒绝；拒绝不创建会话、不结算卡片。
     await assert.rejects(client.call('litch/sessionProposal/accept', { proposalId, threadId }), {
       message: /does not support/,
     })
+    assert.deepEqual(env.claude.sent('thread/start'), [])
+    assert.equal(env.device.sessionTree.store.proposal(proposalId)?.status, 'pending')
+    // 用户先调整父会话权限，再开始才能成功。
     env.pi.config = { approvalPolicy: 'never', sandbox: { type: 'dangerFullAccess' } }
     const { threadId: child } = await client.call('litch/sessionProposal/accept', {
       proposalId,

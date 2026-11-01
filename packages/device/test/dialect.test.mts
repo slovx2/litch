@@ -184,7 +184,7 @@ test('DIALECT-007：父会话带着呈现风格，设备进程派到原生 codex
       dynamicTools: [ECHO_TOOLS, PRESENTATION_SPEC],
     })
     const parentThreadId = created.thread.id
-    await client.call('litch/session/start', {
+    const start = {
       parentThreadId,
       harness: 'codex',
       kind: 'fresh',
@@ -192,8 +192,24 @@ test('DIALECT-007：父会话带着呈现风格，设备进程派到原生 codex
       prompt: '看看 README。',
       background: 'x'.repeat(100),
       wakeParent: false,
+    }
+    // 通用 FakeUpstream 不报告权限：未知父权限必须拒绝，不能因目标是原生 Codex 就放行。
+    await assert.rejects(client.call('litch/session/start', start), {
+      message: /Cannot compare the parent permission/,
     })
+    assert.equal(sentTo(env.codex, 'thread/start').length, 0)
+    // 为本用例补齐真实 Pi 的完全访问响应，继续核对呈现工具剔除与权限继承。
+    env.pi.handlers['thread/resume'] = () => ({
+      thread: { ...created.thread, turns: [] },
+      model: 'fake',
+      approvalPolicy: 'never',
+      sandbox: { type: 'dangerFullAccess' },
+      activePermissionProfile: { id: ':danger-full-access' },
+    })
+    await client.call('litch/session/start', start)
     const toCodex = sentTo(env.codex, 'thread/start').at(-1)
+    assert.equal(toCodex.permissions, ':danger-full-access')
+    assert.equal(toCodex.approvalPolicy, 'never')
     assert.deepEqual(
       toCodex.dynamicTools.map((spec: any) => spec.name),
       ['litch_echo', 'litch_sessions'],
