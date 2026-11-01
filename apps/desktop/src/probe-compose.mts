@@ -86,6 +86,8 @@ export interface ComposeProbe {
   archived: boolean
   /** 在那一页里恢复：回到侧栏里，那一页不再有它；点开，内容还是原来的 */
   restored: boolean
+  /** 打开前的滚动事件不能关新菜单，打开后实际滚动仍应收起。模拟核心保证侧栏可滚。 */
+  menuScroll: { pendingKept: boolean; movedClosed: boolean } | null
   /** 删除先问一句；确认之后这一行消失，主区域回到新建对话页（不是落到别的会话里） */
   deleteAsked: boolean
   deletedHome: boolean
@@ -746,6 +748,26 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   await until('恢复的会话的内容', () => users().includes(opening))
   const restored = !one('.arch-page') && Boolean(one('.crumb')?.textContent?.includes(newName))
 
+  let menuScroll: ComposeProbe['menuScroll'] = null
+  if (!real) {
+    const row = rowOf(newName)
+    const scroll = row?.closest<HTMLElement>('.sb-scroll')
+    const trigger = row?.parentElement?.querySelector<HTMLButtonElement>('.row-more > .ibtn')
+    if (!scroll || !trigger) throw new Error('恢复的会话缺少侧栏滚动容器或菜单按钮')
+    // 同一个任务里先滚、后点：原生 scroll 事件稍后派发，重现 CI 上菜单立即消失的竞态。
+    const before = scroll.scrollTop
+    scroll.scrollTop += before > 0 ? -1 : 1
+    if (scroll.scrollTop === before) throw new Error('侧栏无法滚动，未覆盖菜单的延迟滚动事件')
+    trigger.click()
+    await until('恢复会话的菜单打开', () => trigger.getAttribute('aria-expanded') === 'true')
+    await frame()
+    await frame()
+    const pendingKept = trigger.getAttribute('aria-expanded') === 'true'
+    // 真正改变锚点位置时仍应关闭，不能为了稳定探针取消滚动关闭行为。
+    scroll.scrollTop += scroll.scrollTop > 0 ? -1 : 1
+    await until('滚动后会话菜单收起', () => trigger.getAttribute('aria-expanded') === 'false')
+    menuScroll = { pendingKept, movedClosed: trigger.getAttribute('aria-expanded') === 'false' }
+  }
   await act(newName, 'delete')
   const deleteAsked = Boolean(one('.row-more .pick-ask')) && Boolean(rowOf(newName))
   one<HTMLButtonElement>('.row-more .pick-ask .btn.danger')?.click()
@@ -1305,6 +1327,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     renamed,
     archived,
     restored,
+    menuScroll,
     deleteAsked,
     deletedHome,
     historyRecalled,
@@ -1371,6 +1394,8 @@ export function judgeCompose(probe: ComposeProbe): string[] {
   if (!probe.renamed) failed.push('会话改名没有生效，或者输入框没有拿到焦点')
   if (!probe.archived) failed.push('归档之后会话还在侧栏里，或者“已归档对话”里没有它')
   if (!probe.restored) failed.push('在“已归档对话”里恢复的会话没有回到侧栏里')
+  if (probe.menuScroll?.pendingKept === false) failed.push('打开前的延迟滚动事件关掉了新菜单')
+  if (probe.menuScroll?.movedClosed === false) failed.push('打开后实际滚动没有关闭会话菜单')
   if (!probe.deleteAsked) failed.push('删除会话没有先问一句')
   if (!probe.deletedHome) failed.push('会话删掉之后没有回到新建对话页')
   if (!probe.historyRecalled) failed.push('上下箭头没有翻出这个会话里发过的话')

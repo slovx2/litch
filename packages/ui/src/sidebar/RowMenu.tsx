@@ -83,14 +83,19 @@ export function RowMenu({ label, actions, onAction, handle }: RowMenuProps) {
 
   // 弹出来的菜单不跟着行走：这一行所在的地方（侧栏）一滚、窗口一失焦就收起。别处滚（对话区跟着流式输出往下走）不算
   const floating = open && spot !== null
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!floating) return
+    const anchor = root.current?.getBoundingClientRect()
     const gone = (event: Event) => {
-      if (
-        event.type === 'blur' ||
-        (event.target instanceof Node && event.target.contains(root.current))
-      )
+      if (event.type === 'blur') {
         setOpen(false)
+        return
+      }
+      if (!(event.target instanceof Node && event.target.contains(root.current))) return
+      // 滚动已发生、菜单才打开时，排队中的 scroll 事件不能关掉新菜单。
+      // 只认打开后锚点的实际位移；仍在原位的菜单无需收起。
+      const current = root.current?.getBoundingClientRect()
+      if (!anchor || !current || current.x !== anchor.x || current.y !== anchor.y) setOpen(false)
     }
     window.addEventListener('scroll', gone, true)
     window.addEventListener('blur', gone)
