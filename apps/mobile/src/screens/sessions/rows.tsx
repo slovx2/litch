@@ -52,13 +52,15 @@ function markOf(summary: SessionSummary) {
 }
 
 /** 一个会话的一行：状态记号、标题、多久以前；第二行是 harness 徽标、在等什么、工作目录的最后一段 */
-function SummaryLine({
+export function SummaryLine({
   summary,
   device,
   onPress,
   onLongPress,
   testID,
   fold,
+  at,
+  where,
 }: {
   summary: SessionSummary
   device: DeviceView | undefined
@@ -67,6 +69,10 @@ function SummaryLine({
   testID: string
   /** 有子会话：行尾的收起、展开按钮 */
   fold?: ReactNode
+  /** 右上角的时间：默认是会话的更新时间，「最近」组给最后一次主动交互的时间 */
+  at?: number
+  /** 第二行目录前面加的一段（「最近」组跨设备时写设备名） */
+  where?: string
 }) {
   const theme = useTheme()
   const t = useT()
@@ -109,7 +115,7 @@ function SummaryLine({
             {titleOf(summary, t)}
           </Text>
           <Text style={[styles.meta, { color: c.ink3, fontFamily: theme.font.mono }]}>
-            {ago(summary.updatedAt, now, t)}
+            {ago(at ?? summary.updatedAt, now, t)}
           </Text>
         </View>
         <View style={styles.line}>
@@ -162,6 +168,7 @@ function SummaryLine({
             testID={summary.worktree ? `${testID}:worktree` : undefined}
             style={[styles.cwd, { color: c.ink3, fontFamily: theme.font.mono }]}
           >
+            {where ? `${where} · ` : ''}
             {summary.worktree
               ? t(
                   summary.worktree.state === 'removed'

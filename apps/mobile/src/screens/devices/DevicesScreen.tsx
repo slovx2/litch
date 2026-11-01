@@ -2,7 +2,7 @@
 // 点一行进这台设备的会话；右边的“⋯”和长按出菜单（详情、重新连接、改名、移除）。
 // 一行只订阅它自己的两个键（keys.device、keys.activity），不遍历会话。
 // 应用回到前台时，没连着的设备立刻重连一次（手机切到后台时连接常被系统掐掉，不等退避的下一拍）。
-// 设备列表上面一行是定时任务的入口（所有设备的任务、没看过的运行合计）。
+// 设备列表上面一行是定时任务的入口（所有设备的任务、没看过的运行合计）；再往下是「最近」组（RecentGroup），然后才是各台设备。
 // 顶上有新版本时出更新的横条（UpdateBanner）；定时查更新也挂在这一页（首页一直在栈底）。
 import { type DeviceActivity, type DeviceView, keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
@@ -12,13 +12,14 @@ import { ago } from '../../../../../packages/ui/src/app/format.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button, Empty, Row, StatusMark } from '../../ui/kit/controls'
+import { Button, Empty, Row, SectionLabel, StatusMark } from '../../ui/kit/controls'
 import { Prompt, Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { useUpdateSchedule } from '../../update/use-update'
 import { reasonText, type ShownState, shownState } from './failure'
 import { forgetUnusedKey } from './forget'
+import { RecentGroup } from './RecentGroup'
 import { RemoveDevice } from './RemoveDevice'
 import { RestartDevice } from './RestartDevice'
 import { UpdateBanner } from './UpdateBanner'
@@ -171,6 +172,16 @@ export function DevicesScreen({ navigation }: Props) {
                 onPress={() => navigation.navigate('Managers')}
               />
               <TasksEntry onPress={() => navigation.navigate('Tasks', {})} />
+              <RecentGroup
+                onOpen={(row, title) =>
+                  navigation.navigate('Detail', {
+                    deviceId: row.deviceId,
+                    sessionId: row.sessionId,
+                    title,
+                  })
+                }
+              />
+              <SectionLabel>{t('sidebar.devices')}</SectionLabel>
             </>
           ) : null
         }

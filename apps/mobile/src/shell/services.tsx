@@ -2,6 +2,7 @@
 // 页面取数据的规矩：
 // - 只从订阅拿数据，不经路由传；按键订阅（useKey），一个键变了只重画用它的那个组件。
 // - 会话详情不走 replica，用 src/core/session-store.ts（对话区为流式专门做过的那一套）。
+// 页面拿到的通道包了一层「最近」的记录（src/shell/activity.ts）：经它发出的主动操作计入最近，核心内部的不算。
 import { type CoreChannel, createReplica, type Replica } from '@litch/core'
 import {
   createContext,
@@ -13,12 +14,15 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
+import { AppState } from 'react-native'
 import type { SendMode } from '../../../../packages/ui/src/composer/send-mode-logic.ts'
 import { sendModeOf } from '../detail/composer/send-mode'
 import { backgroundMinutes } from '../platform/background'
 import type { Lang } from '../ui/i18n'
 import type { Skin } from '../ui/theme'
-import type { Booted, BootMode } from './boot'
+import { createMobileActivity, watchMobileActivity } from './activity'
+import { type Booted, type BootMode, clock } from './boot'
+import { navigationRef } from './dev-links'
 import { jsonFile } from './json-file'
 
 export interface Prefs {
@@ -89,11 +93,35 @@ export function ServicesProvider({
   onReady?(services: Services): void
   children: ReactNode
 }) {
-  const replica = useMemo(() => createReplica(booted.channel), [booted])
+  // 记录按装法分开存：模拟核心的示例会话和真设备上的不混
+  const activity = useMemo(
+    () =>
+      createMobileActivity(booted.channel, clock, jsonFile(`${booted.mode}-sidebar-activity.json`)),
+    [booted],
+  )
+  const replica = useMemo(() => createReplica(activity.channel, activity), [activity])
   useEffect(() => replica.start(), [replica])
+  useEffect(
+    () =>
+      watchMobileActivity(
+        activity,
+        {
+          current: () => AppState.currentState,
+          listen(changed) {
+            const subscription = AppState.addEventListener('change', changed)
+            return () => subscription.remove()
+          },
+        },
+        {
+          current: () => (navigationRef.isReady() ? navigationRef.getCurrentRoute() : undefined),
+          listen: (changed) => navigationRef.addListener('state', changed),
+        },
+      ),
+    [activity],
+  )
   const value = useMemo(
-    () => ({ booted, channel: booted.channel, replica, prefs, setPrefs }),
-    [booted, replica, prefs, setPrefs],
+    () => ({ booted, channel: activity.channel, replica, prefs, setPrefs }),
+    [booted, activity, replica, prefs, setPrefs],
   )
   // 花括号不能省：onReady 的返回值会被当成清理函数，设置一变就拿它去调
   useEffect(() => {

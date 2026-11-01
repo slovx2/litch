@@ -77,6 +77,30 @@ export const SCENES: Scene[] = [
     steps: [],
   },
   {
+    id: 'home-recent',
+    group: '设备',
+    name: '首页 · 最近',
+    note: '两台设备上各有主动操作（派子会话）后的「最近」组，线色区分设备',
+    steps: [
+      link('litch://spawn?device=local&parent=s2&title=调研'),
+      link('litch://spawn?device=build&parent=b2&title=复测'),
+      link('litch://spawn?device=local&parent=s4&title=整理'),
+    ],
+  },
+  {
+    id: 'home-recent-more',
+    group: '设备',
+    name: '首页 · 最近 · 显示更多',
+    note: '七个主对话有过主动操作，默认显示 5 条，其余在“显示更多”里',
+    steps: ['s1', 's2', 's3', 's4', 's5']
+      .map((parent) => link(`litch://spawn?device=local&parent=${parent}&title=跟进`))
+      .concat(
+        ['b1', 'b2'].map((parent) =>
+          link(`litch://spawn?device=build&parent=${parent}&title=复测`),
+        ),
+      ),
+  },
+  {
     id: 'add-device',
     group: '设备',
     name: '添加设备',
