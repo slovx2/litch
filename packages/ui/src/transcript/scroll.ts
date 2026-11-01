@@ -291,6 +291,12 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
     if (deltas.length > 0) shift(Math.max(...deltas))
   }, [grown, shift])
 
+  // 守着阅读锚点时（关查找后窗口仍在逐批补回合），每次提交后立刻补偿。尺寸观察要等到下一次渲染才回调，
+  // 提交与渲染之间的任务读到的是被顶走的位置；页面不可见时根本不渲染，会一直停在错位处
+  useLayoutEffect(() => {
+    if (readingHold.current) compensate()
+  })
+
   /** 重新认一下现在在不在底部、视口里最靠上和最靠下的是哪两行，并记下来 */
   const observe = useCallback(() => {
     const scroller = scrollerRef.current

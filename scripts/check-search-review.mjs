@@ -26,7 +26,7 @@ export async function checkSearchReview({ cdp, evaluate, query, report, output, 
     })
   }
   const open = async (suffix = '') => {
-    // 下面的断言要看高亮，依赖动画帧；先确保夹具页在前台（后台页单独在 S6 验）
+    // 下面的断言要看高亮，依赖动画帧；先确保夹具页在前台（后台页单独在最后一项验）
     await cdp.call('Page.bringToFront')
     await cdp.call('Page.navigate', { url: `${base}/test/search-fixture.html?lang=zh-CN${suffix}` })
     await until(() => evaluate(`!!document.querySelector('.search-entry')`), '夹具入口')
@@ -64,7 +64,16 @@ export async function checkSearchReview({ cdp, evaluate, query, report, output, 
     `document.querySelector('[data-search-item="t0:u0"]').getBoundingClientRect().top - document.querySelector('.tr-scroll').getBoundingClientRect().top`,
   )
   await key('Escape', 'Escape')
-  await pause(3300)
+  // 关闭后窗口仍在逐批补回合；每 100ms 取一次，任何一次错位都算失败，不只看最后一刻
+  const drift = []
+  for (let i = 0; i < 33; i++) {
+    await pause(100)
+    const top = await evaluate(
+      `document.querySelector('[data-search-item="t0:u0"]')?.getBoundingClientRect().top - document.querySelector('.tr-scroll').getBoundingClientRect().top`,
+    )
+    if (!(Math.abs(top - before) < 4)) drift.push({ at: (i + 1) * 100, offset: top - before })
+  }
+  assert.deepEqual(drift, [], `关闭后位置偏移 ${JSON.stringify(drift.slice(0, 5))}`)
   const closed = await evaluate(
     `({top:document.querySelector('[data-search-item="t0:u0"]')?.getBoundingClientRect().top - document.querySelector('.tr-scroll').getBoundingClientRect().top,gaps:document.querySelectorAll('.search-gap').length,bar:!!document.querySelector('.search-bar'),focus:document.activeElement.className})`,
   )
@@ -73,7 +82,7 @@ export async function checkSearchReview({ cdp, evaluate, query, report, output, 
   assert.ok(Math.abs(closed.top - before) < 4, `关闭后位置偏移 ${closed.top - before}`)
   assert.ok(closed.focus.includes('search-entry'), '关闭归还入口焦点')
   report.checks.push({
-    name: 'S3 关闭3.3秒后仍在原命中、无搜索分隔行、焦点返回入口',
+    name: 'S3 关闭后3.3秒内每100ms都在原命中、无搜索分隔行、焦点返回入口',
     before,
     ...closed,
   })
