@@ -180,8 +180,8 @@ EOF
 	}
 	job := rig.start(t, "claude-code", installTargetVerified)
 	last := rig.finished(t, job)
-	if last.State != installSucceeded || *last.Installed != "2.1.282" || last.Command != "curl -fsSL https://claude.ai/install.sh | bash -s 2.1.282" {
-		t.Fatalf("应装成验证版 2.1.282: %+v", last)
+	if last.State != installSucceeded || *last.Installed != "2.1.316" || last.Command != "curl -fsSL https://claude.ai/install.sh | bash -s 2.1.316" {
+		t.Fatalf("应装成验证版 2.1.316: %+v", last)
 	}
 	if data, _ := os.ReadFile(filepath.Join(rig.home, "curl-args")); strings.TrimSpace(string(data)) != "-fsSL https://claude.ai/install.sh" {
 		t.Fatalf("curl 的参数: %q", data)
@@ -205,7 +205,7 @@ EOF
 		t.Fatal(err)
 	}
 	last := rig.finished(t, rig.start(t, "claude-code", installTargetVerified))
-	if last.State != installSucceeded || *last.Installed != "2.1.282" {
+	if last.State != installSucceeded || *last.Installed != "2.1.316" {
 		t.Fatalf("应装成: %+v", last)
 	}
 	if len(rig.found) != 1 || !rig.found[0].overrides || rig.found[0].path != filepath.Join(rig.home, ".local", "bin", "claude") {
@@ -450,7 +450,7 @@ func TestHarnessVersions(t *testing.T) {
 	if acp.Installable || acp.Method != nil || acp.Manual != "" || acp.Installed != nil || acp.DocsURL == "" {
 		t.Fatalf("acp 不能装: %+v", acp)
 	}
-	if claude.Installed != nil || *claude.Verified != "2.1.282" || *claude.Minimum != "2.1.282" || claude.Manual != "curl -fsSL https://claude.ai/install.sh | bash -s 2.1.282" {
+	if claude.Installed != nil || *claude.Verified != "2.1.316" || *claude.Minimum != "2.1.282" || claude.Manual != "curl -fsSL https://claude.ai/install.sh | bash -s 2.1.316" {
 		t.Fatalf("claude: %+v", claude)
 	}
 	mu.Lock()

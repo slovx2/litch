@@ -46,10 +46,10 @@ const SAMPLES: readonly Sample[] = [
     harness: 'claude',
     method: 'script',
     minimum: '2.1.282',
-    verified: '2.1.282',
-    latest: '2.1.303',
+    verified: '2.1.316',
+    latest: '2.1.316',
     docsUrl: 'https://code.claude.com/docs/en/setup',
-    manual: 'curl -fsSL https://claude.ai/install.sh | bash -s 2.1.282',
+    manual: 'curl -fsSL https://claude.ai/install.sh | bash -s 2.1.316',
   },
   {
     harness: 'pi',

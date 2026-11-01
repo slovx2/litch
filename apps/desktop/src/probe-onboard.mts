@@ -268,7 +268,7 @@ export function judgeOnboard(seen: OnboardProbe): string[] {
   for (const id of ['claude', 'codex', 'pi', 'dsh', 'gemini']) {
     must(seen.listed.includes(id), `第一步没列 ${id}：${seen.listed.join('、')}`)
   }
-  must(seen.claudeButton.includes('2.1.282'), `Claude 的按钮不是装验证版：“${seen.claudeButton}”`)
+  must(seen.claudeButton.includes('2.1.316'), `Claude 的按钮不是装验证版：“${seen.claudeButton}”`)
   must(seen.failure.includes('EACCES'), `Codex 没装成的原因不对：“${seen.failure}”`)
   must(seen.failedLog.includes('npm error code EACCES'), '展开的日志里没有 npm 的报错')
   must(seen.manual.startsWith('npm install -g @openai/codex@'), `官方命令不对：“${seen.manual}”`)
