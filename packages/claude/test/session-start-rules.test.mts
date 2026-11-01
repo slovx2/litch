@@ -19,6 +19,11 @@ test('已授权子会话的授权规则和独立额度进入 claude 工具说明
     const rules = dynamicToolInstructions([namespace]) ?? ''
     assert.match(rules, /including wake, reminder and scheduled turns/)
     assert.match(rules, cards ? /if unsure, use initiation/ : /if unsure, ask the user/)
-    assert.match(rules, /Wider sandbox access still requires confirmation/)
+    // 统一权限契约：继承父会话，只能降低；用户确认也不能越过父权限上限。
+    for (const text of [start.description, rules]) {
+      assert.match(text, /Sub-sessions inherit the parent permission/)
+      assert.match(text, /may use a lower supported level, never a higher one/)
+      assert.doesNotMatch(text, /Wider sandbox access still requires confirmation/)
+    }
   }
 })
