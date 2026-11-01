@@ -280,7 +280,7 @@ test('EVENTS-004：用户设了自动压缩窗口，报的上下文窗口是它�
   }
 })
 
-test('EVENTS-005：窗口记下过的模型，新会话第一个回合里的用量就带窗口，不等回合结束（派出的子会话一跑很久）', {
+test('EVENTS-005：首个请求即观测窗口，同模型的新配置不借用旧窗口', {
   timeout: 90_000,
 }, async () => {
   const home = await mkdtemp(join(tmpdir(), 'native-window-early-'))
@@ -302,22 +302,37 @@ test('EVENTS-005：窗口记下过的模型，新会话第一个回合里的用�
       input: [{ type: 'text', text: '说一句' }],
     })
     assert.equal((await client.completed(turn.id)).status, 'completed')
-    return client.trace.filter(
+    const updates = client.trace.filter(
       (message) =>
         message.method === 'thread/tokenUsage/updated' && message.params.threadId === thread.id,
     )
+    const done = client.trace.findIndex(
+      (message) => message.method === 'turn/completed' && message.params.turn.id === turn.id,
+    )
+    assert.ok(updates.length >= 2, '请求用量与回合累计用量分别报告')
+    assert.ok(client.trace.indexOf(updates[0]) < done, '首次窗口观测在回合结束之前报告')
+    return updates
   }
   try {
     llm.enqueue(reply)
     llm.enqueue(reply)
+    llm.enqueue(reply)
     const first = await run()
-    // 头一个会话：回合结束之前还不知道窗口
-    assert.equal(first[0]?.params.tokenUsage.modelContextWindow, null)
+    // 不依赖预热缓存：运行时在首个主请求读取 CLI summary。
     const window = first.at(-1)?.params.tokenUsage.modelContextWindow
     assert.ok(typeof window === 'number' && window > 0)
+    assert.equal(first[0]?.params.tokenUsage.modelContextWindow, window)
     const second = await run()
     assert.ok(second.length >= 2, '回合中的那次和回合结束的那次都要报')
     assert.equal(second[0]?.params.tokenUsage.modelContextWindow, window)
+    // 同一个真实模型换了窗口配置，新的 CLI 必须重新观测，不能复用前两轮的缓存。
+    await writeFile(
+      join(home, 'claude', 'settings.json'),
+      JSON.stringify({ env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '150000' } }),
+    )
+    const changed = await run()
+    assert.equal(changed[0]?.params.tokenUsage.modelContextWindow, 150_000)
+    assert.equal(changed.at(-1)?.params.tokenUsage.modelContextWindow, 150_000)
     llm.assertConsumed()
   } finally {
     await client.close()
