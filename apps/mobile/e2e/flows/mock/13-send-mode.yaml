@@ -1,6 +1,6 @@
 # 模拟核心：回合进行中发消息。用等审批的会话 s2（回合停在等审批，一直在跑，不靠计时）：
 # 默认立即发送，按钮写“发送”，发一句 → 插进这个回合、不排队 → 设置页“对话”改成排队 → 回来再发一句，
-# 按钮写“排队” → 排在输入框上方的托盘里
+# 按钮写“排队” → 排在输入框上方的托盘里 → 停止后保留待发，显式发送才进入新回合
 appId: dev.litch.app
 name: mock-回合中发消息插话或排队
 tags: [mock]
@@ -64,3 +64,57 @@ tags: [mock]
     timeout: 10000
 - assertVisible:
     text: queue e2e
+- hideKeyboard
+
+# 停止只暂停待发，不自动续发；已经插进回合的第一句保留，排队的第二句还不能出现在对话气泡里。
+- tapOn:
+    id: composer-send
+    text: (Stop|停止)
+- extendedWaitUntil:
+    visible:
+      id: queue:send
+    timeout: 10000
+- assertVisible:
+    id: queue:choice:include
+    checked: true
+- assertVisible:
+    id: queue:0
+- assertNotVisible:
+    id: user-message
+    text: queue e2e
+- assertNotVisible:
+    id: request:approval
+# 切走再回来，待发仍在，不能因为停止回执或重新订阅而自动续发。
+- openLink: litch://home
+- openLink: litch://open?session=s2&device=local
+- extendedWaitUntil:
+    visible:
+      id: queue:0:send
+    timeout: 10000
+- tapOn:
+    id: queue:0:send
+- extendedWaitUntil:
+    notVisible:
+      id: queue
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: composer-send
+      text: (Send|发送)
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: user-message
+      text: queue e2e
+    direction: UP
+    timeout: 10000
+- assertNotVisible:
+    id: user-message
+    text: queue e2e
+    index: 1
+- scrollUntilVisible:
+    element:
+      id: user-message
+      text: steer e2e
+    direction: UP
+    timeout: 10000
