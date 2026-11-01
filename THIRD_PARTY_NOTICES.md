@@ -34,3 +34,5 @@ Windows 的安装程序里另有这两样（不在应用里）：
 - 安装向导的简体中文文案 `apps/desktop/packaging/ChineseSimplified.isl` 来自 https://github.com/kira-96/Inno-Setup-Chinese-Simplified-Translation （提交 1ff90ac），MIT，Copyright (c) 2019 - 2020 kirakira；原样收录，许可全文在同目录的 `ChineseSimplified.isl.LICENSE`。
 
 运行包保留 node_modules 内的许可证。源码仓库不提交 node_modules、引擎二进制或用户凭据。
+
+Claude 可选 TUI 驱动包含 yetone/magpie（MIT，Copyright (c) 2026 yetone）提交 `647323409e888968c11a6f7ade7b11a573127057` 的 claudetui 及其完整包依赖。原始代码在 `third_party/magpie/`，完整 LICENSE、THIRD_PARTY_NOTICES 和逐文件 SHA-256 清单均保留；Litch 适配层在镜像之外。每个平台的 helper 随运行包附 `packages/claude/dist/claude/src/tui-helper/licenses/`，含 magpie 完整许可与 notices（包括 jieba 字典）、Go 及实际 Go 依赖的许可材料。镜像未做本地补丁，详见 PATCHES.md。
