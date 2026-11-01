@@ -1,4 +1,5 @@
-import { type SuggestionFilter, SuggestionsPage } from '../tree/SuggestionsPage.tsx'
+import { setBoardLayout } from '../manager/board-layout.ts'
+import { SuggestionsPage } from '../tree/SuggestionsPage.tsx'
 import '../styles/suggestions.css'
 import { ManagerTitleBar } from '../manager/ManagerTitleBar.tsx'
 import '../styles/manager.css'
@@ -66,7 +67,6 @@ export function App() {
   const { channel, replica } = useServices()
   useUpdateToast()
   const managerData = useManagers()
-  const [suggestionFilter, setSuggestionFilter] = useState<SuggestionFilter>(null)
   const [navigation, dispatch] = useReducer(navigate, initialNavigation)
   const sidebarMode = navigation.mode
   const { picked, wish, page } = navigation[sidebarMode]
@@ -210,7 +210,6 @@ export function App() {
   const onPage = useCallback(
     (next: Page) =>
       leaveThen(() => {
-        if (next === 'suggestions') setSuggestionFilter(null)
         if (next === 'tasks') setTasksAt((was) => ({ route: { view: 'list' }, seq: was.seq + 1 }))
         openPage(next)
       }),
@@ -370,7 +369,7 @@ export function App() {
           <ApprovalNotices />
           <TaskNotices onOpen={select} />
           <SessionNotices onOpen={select} selection={selection} />
-          {(page === 'archived' || page === 'suggestions') && peek ? (
+          {(page === 'archived' || page === 'suggestions' || (!page && pickedManager)) && peek ? (
             <ArchivedSession
               key={`${peek.deviceId}:${peek.sessionId}`}
               {...peek}
@@ -389,8 +388,19 @@ export function App() {
             />
           ) : page === 'suggestions' ? (
             <SuggestionsPage
-              filter={suggestionFilter}
-              onClear={() => setSuggestionFilter(null)}
+              onManager={(manager) => {
+                setBoardLayout({ open: true })
+                setManagerLocations((was) => ({
+                  ...was,
+                  [`${manager.deviceId}:${manager.id}`]: {
+                    ...was[`${manager.deviceId}:${manager.id}`],
+                    tab: 'suggestions',
+                    narrow: 'board',
+                    settings: false,
+                  },
+                }))
+                select({ deviceId: manager.deviceId, sessionId: manager.threadId }, 'manager')
+              }}
               onClose={closePage}
               onOpen={(next, archived) => (archived ? setPeek(next) : select(next))}
             />
@@ -424,12 +434,9 @@ export function App() {
             <ManagerPage
               key={`${pickedManager.deviceId}:${pickedManager.id}`}
               manager={pickedManager}
-              onSuggestions={() => {
-                setSuggestionFilter({
-                  deviceId: pickedManager.deviceId,
-                  managerId: pickedManager.id,
-                })
-                openPage('suggestions')
+              onSuggestionSource={(next, archived) => {
+                if (archived) setPeek(next)
+                else select(next)
               }}
               location={managerLocations[`${pickedManager.deviceId}:${pickedManager.id}`]}
               onLocation={(location) =>

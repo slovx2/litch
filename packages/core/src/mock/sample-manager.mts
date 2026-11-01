@@ -386,6 +386,15 @@ export function sampleManagers(
         ' Related items: I-1 and I-2. See I-8 for completed mobile rendering and D-13 for the answered scope decision.',
       )
       d15.blocks = ['I-1', 'I-2']
+      d15.background += t(
+        '\n\n**需要确认的范围**\n- 桌面实现：I-1\n- 手机跟进：I-2\n\n保留 `revision` 校验；[核对记录](https://example.com/review)。',
+        '\n\n**Scope to confirm**\n- Desktop implementation: I-1\n- Mobile follow-up: I-2\n\nKeep the `revision` check; [review notes](https://example.com/review).',
+      )
+      if (d15.options[0])
+        d15.options[0].description = t(
+          '**推荐**，先交付已验证部分。\n- 保留 `revision` 校验\n- 范围见 I-1',
+          '**Recommended:** ship the verified part first.\n- Keep the `revision` check\n- See I-1 for scope',
+        )
       d15.default = { kind: 'option', optionId: 'a' }
       d15.basis = [
         { kind: 'thread', target: 'manager-k1', label: null },
@@ -464,13 +473,33 @@ export function sampleManagers(
       blockedBy: i === 1 ? ['D-15'] : i === 3 ? ['D-16'] : [],
       why:
         i === 1
-          ? t('等 D-15', 'Waiting for D-15')
+          ? t(
+              '**等待 D-15** 确认范围。\n\n- 同步桌面编辑行为\n- 保留 `revision` 校验，参见 I-1',
+              '**Waiting for D-15** to confirm scope.\n\n- Match desktop editing behavior\n- Keep the `revision` check; see I-1',
+            )
           : i === 3
             ? t('等 D-16', 'Waiting for D-16')
             : '',
-      links: [],
-      basis: [],
-      unverified: i === 2 ? [t('没验：真实窗口', 'Not verified: real window')] : [],
+      links:
+        i === 2
+          ? [
+              {
+                kind: 'url',
+                target: 'https://example.com/review',
+                label: t('验收记录', 'Review notes'),
+              },
+            ]
+          : [],
+      basis: i === 2 ? [{ kind: 'file', target: 'scripts/check-manager.mjs', label: null }] : [],
+      unverified:
+        i === 2
+          ? [
+              t(
+                '**真实窗口**中的父子会话归档。\n需核对 `thread/archive` 完成后的界面。',
+                '**Parent and child archiving** in a real window.\nCheck the UI after `thread/archive` completes.',
+              ),
+            ]
+          : [],
       checked: { commit: 'a9a85c1', at: ago(40) },
       createdAt: ago(180),
       updatedAt: ago(40),

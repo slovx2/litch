@@ -9,7 +9,7 @@ import type {
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useServices } from '../app/services.tsx'
-import { BoardReferences } from './BoardReferences.tsx'
+import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { DecisionQuestions } from './DecisionQuestions.tsx'
 import { type AnswerDrafts, answeredDrafts, useAnswerDrafts } from './drafts.ts'
 
@@ -170,9 +170,7 @@ export function Decisions({
                   <h3>{decision.title}</h3>
                   {draft ? <span className="pill wait">{t('manager.draft')}</span> : null}
                 </header>
-                <p>
-                  <BoardReferences text={decision.background} />
-                </p>
+                <BoardMarkdown text={decision.background} />
                 {decision.blocks.length ? (
                   <p className="dim">
                     {t('manager.blocked')} · {decision.blocks.join(', ')}
@@ -208,25 +206,30 @@ export function Decisions({
                       aria-label={decision.title}
                     >
                       {decision.options.map((option) => (
-                        <label
+                        <div
                           key={option.id}
                           className="mg-option"
                           data-selected={draft?.optionId === option.id}
                         >
                           <input
+                            id={`option-${manager.id}-${decision.id}-${option.id}`}
                             type="radio"
                             name={`manager-${manager.id}-${decision.id}`}
                             checked={draft?.optionId === option.id}
                             onChange={() => change(decision, { optionId: option.id })}
                           />
-                          <span className="grow">
-                            <b>{option.label}</b>
-                            {option.description ? <small>{option.description}</small> : null}
-                          </span>
+                          <div className="grow">
+                            <label htmlFor={`option-${manager.id}-${decision.id}-${option.id}`}>
+                              <b>{option.label}</b>
+                            </label>
+                            {option.description ? (
+                              <BoardMarkdown text={option.description} />
+                            ) : null}
+                          </div>
                           {decision.recommend === option.id ? (
                             <span className="mg-recommend">{t('manager.recommend')}</span>
                           ) : null}
-                        </label>
+                        </div>
                       ))}
                       {draft?.optionId ? (
                         <button

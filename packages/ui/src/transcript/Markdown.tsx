@@ -81,7 +81,7 @@ function inline(tokens: Token[] | undefined): ReactNode {
 
 function PolicyText({ text }: { text: string }) {
   const policy = useContext(MarkdownPolicyContext)
-  if (policy) return text
+  if (policy) return policy.text?.(text) ?? text
   return HAS_MENTION.test(text) ? (
     <AnswerMentions text={text} plain={plainText} />
   ) : (
@@ -89,7 +89,8 @@ function PolicyText({ text }: { text: string }) {
   )
 }
 function PolicyCodeSpan({ text }: { text: string }) {
-  return useContext(MarkdownPolicyContext) ? <code>{text}</code> : <CodeSpan text={text} />
+  const policy = useContext(MarkdownPolicyContext)
+  return policy ? (policy.codeSpan?.(text) ?? <code>{text}</code>) : <CodeSpan text={text} />
 }
 function PolicyLink({ href, children }: { href: string; children: ReactNode }) {
   const policy = useContext(MarkdownPolicyContext)

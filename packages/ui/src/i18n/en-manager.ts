@@ -2,6 +2,11 @@
 import type { Entry } from './types.ts'
 
 export const enManager = {
+  'manager.suggestions': 'Suggestions',
+  'manager.links': 'Related links',
+  'manager.hideBoard': 'Hide board',
+  'manager.showBoard': 'Show board',
+  'manager.resizeBoard': 'Resize board',
   'manager.editAnswer': 'Edit answer',
   'manager.questionBackground': 'Ask for context',
   'manager.questionNote':
@@ -51,7 +56,6 @@ export const enManager = {
   'manager.unavailable': 'Managers are unavailable on this device',
   'manager.offline': 'Connect the device to make changes',
   'manager.none': 'No entries',
-  'manager.process': 'The board tracks progress; the repository is authoritative.',
   'manager.open': 'Open',
   'manager.answered': 'Answered',
   'manager.closed': 'Closed',

@@ -13,9 +13,11 @@ import {
 } from '../src/index.mjs'
 import {
   filterSuggestions,
+  groupSuggestions,
   type SuggestionsView,
   type SuggestionView,
 } from '../src/model-suggestions.mjs'
+import { projectProposal } from '../src/projection/tree.mjs'
 import { fakeClock, settle } from './helpers.mjs'
 
 const row = (id: string): SuggestionEntry => ({
@@ -43,6 +45,39 @@ const row = (id: string): SuggestionEntry => ({
     archived: true,
   },
   managerId: 'm1',
+})
+
+test('全局建议按设备和经理归组，普通建议独立，最近一条在前且不改输入', () => {
+  const make = (
+    id: string,
+    deviceId: string,
+    managerId: string | null,
+    at: number,
+  ): SuggestionView => {
+    const proposal = projectProposal({ ...row(id).proposal, createdAt: at }, 0)
+    assert.ok(proposal)
+    return { ...row(id), deviceId, managerId, proposal }
+  }
+  const rows = [
+    make('old', 'one', 'm1', 1),
+    make('ordinary', 'one', null, 5),
+    make('latest', 'one', 'm1', 9),
+    make('other-device', 'two', 'm1', 7),
+  ]
+  const grouped = groupSuggestions(rows)
+  assert.equal(grouped.length, 3)
+  assert.deepEqual(
+    grouped.map((entry) => entry.kind),
+    ['manager', 'manager', 'suggestion'],
+  )
+  assert.equal(grouped[0]?.kind, 'manager')
+  if (grouped[0]?.kind === 'manager')
+    assert.deepEqual(
+      grouped[0].rows.map((entry) => entry.proposal.id),
+      ['latest', 'old'],
+    )
+  assert.equal(rows[0]?.proposal.id, 'old')
+  assert.equal(groupSuggestions(rows.filter((entry) => entry.managerId !== 'm1')).length, 1)
 })
 
 test('快照在途重放增量，断线保留，重连清除服务端已处理建议', async () => {

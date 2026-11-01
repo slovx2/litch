@@ -6,7 +6,7 @@ export const BoardReferencesContext = createContext<{
   open(id: BoardReference): void
 } | null>(null)
 
-/** 事项与决策的说明共用链接规则，仍保留原有纯文本排版。 */
+/** 纯文本编号及 Markdown 正文片段共用同一套跳转规则。 */
 export function BoardReferences({ text }: { text: string }) {
   const context = useContext(BoardReferencesContext)
   if (!context) return text

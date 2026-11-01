@@ -1,10 +1,13 @@
 import {
   type DeviceView,
   filterSuggestions,
+  groupSuggestions,
   keys,
+  type SuggestionEntry,
   type SuggestionView,
   type WorkspaceView,
 } from '@litch/core'
+import type { ManagerView } from '../../../core/src/model-manager.mts'
 import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { useNow } from '../app/clock.ts'
@@ -14,7 +17,6 @@ import { useKey } from '../app/services.tsx'
 import { Brief, ProposalActs } from './ProposalCard.tsx'
 import { SANDBOX_LEVEL } from './sandbox.ts'
 
-export type SuggestionFilter = { deviceId: string; managerId: string } | null
 const NONE: readonly SuggestionView[] = []
 
 function SuggestionRow({
@@ -85,31 +87,83 @@ function SuggestionRow({
   )
 }
 
+export function ManagerSuggestions({
+  manager,
+  onOpen,
+}: {
+  manager: ManagerView
+  onOpen(selection: Selection, archived: boolean): void
+}) {
+  const all = useKey<readonly SuggestionView[]>(keys.suggestions) ?? NONE
+  const rows = filterSuggestions(all, { deviceId: manager.deviceId, managerId: manager.id })
+  const t = useT()
+  return rows.length ? (
+    <ul className="suggestions-list mg-suggestions-list">
+      {rows.map((row) => (
+        <SuggestionRow key={row.proposal.id} row={row} onOpen={onOpen} />
+      ))}
+    </ul>
+  ) : (
+    <p className="mg-empty">{t('suggestions.empty')}</p>
+  )
+}
+
+function ManagerSuggestionCard({
+  entry,
+  onOpen,
+}: {
+  entry: Extract<SuggestionEntry, { kind: 'manager' }>
+  onOpen(manager: ManagerView): void
+}) {
+  const manager = useKey<ManagerView>(keys.manager(entry.deviceId, entry.managerId))
+  const device = useKey<DeviceView>(keys.device(entry.deviceId))
+  const latest = entry.rows[0]
+  const t = useT()
+  return (
+    <li
+      className="suggestion-manager"
+      data-suggestion-manager={entry.managerId}
+      data-device={entry.deviceId}
+    >
+      <button
+        type="button"
+        disabled={!manager}
+        onClick={() => manager && onOpen(manager)}
+        title={!manager ? t('manager.unavailable') : t('suggestions.openManager')}
+      >
+        <header>
+          <span className="pill mute">{t('manager.manager')}</span>
+          <b>{manager?.name || t('manager.loading')}</b>
+          <span className="pill mute">{entry.rows.length}</span>
+          <Forward />
+        </header>
+        <span className="dim">{device ? t.text(device.name) : entry.deviceId}</span>
+        <strong>{latest?.proposal.title}</strong>
+        <p>{latest?.proposal.prompt}</p>
+        <span className="suggestion-manager-open">{t('suggestions.openManager')}</span>
+      </button>
+    </li>
+  )
+}
+
 export function SuggestionsPage({
-  filter,
-  onClear,
+  onManager,
   onOpen,
   onClose,
 }: {
-  filter: SuggestionFilter
-  onClear(): void
+  onManager(manager: ManagerView): void
   onOpen(selection: Selection, archived: boolean): void
   onClose(): void
 }) {
   const t = useT()
   const all = useKey<readonly SuggestionView[]>(keys.suggestions) ?? NONE
-  const rows = filterSuggestions(all, filter)
+  const entries = groupSuggestions(all)
   return (
     <section className="arch-page" data-page="suggestions">
       <header className="arch-head">
         <h1>
-          {t('suggestions.title')} <span className="pill mute">{rows.length}</span>
+          {t('suggestions.title')} <span className="pill mute">{all.length}</span>
         </h1>
-        {filter ? (
-          <button type="button" className="btn" onClick={onClear}>
-            {t('suggestions.all')}
-          </button>
-        ) : null}
         <button
           type="button"
           className="ibtn"
@@ -120,12 +174,23 @@ export function SuggestionsPage({
         </button>
       </header>
       <div className="arch-body">
-        {filter ? <p className="dim">{t('suggestions.manager')}</p> : null}
-        {rows.length ? (
+        {entries.length ? (
           <ul className="suggestions-list">
-            {rows.map((row) => (
-              <SuggestionRow key={`${row.deviceId}:${row.proposal.id}`} row={row} onOpen={onOpen} />
-            ))}
+            {entries.map((entry) =>
+              entry.kind === 'manager' ? (
+                <ManagerSuggestionCard
+                  key={`manager:${entry.deviceId}:${entry.managerId}`}
+                  entry={entry}
+                  onOpen={onManager}
+                />
+              ) : (
+                <SuggestionRow
+                  key={`${entry.row.deviceId}:${entry.row.proposal.id}`}
+                  row={entry.row}
+                  onOpen={onOpen}
+                />
+              ),
+            )}
           </ul>
         ) : (
           <p className="arch-note">{t('suggestions.empty')}</p>

@@ -2,6 +2,8 @@ import { createContext, type ReactNode } from 'react'
 
 /** 文档复用 token 渲染；链接、图片、代码及正文识别由所属表面决定。 */
 export interface MarkdownPolicy {
+  text?(text: string): ReactNode
+  codeSpan?(text: string): ReactNode
   link(href: string, children: ReactNode): ReactNode
   image(href: string, alt: string): ReactNode
   code(lang: string, text: string): ReactNode

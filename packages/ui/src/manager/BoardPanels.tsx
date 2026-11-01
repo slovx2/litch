@@ -1,50 +1,89 @@
 import { type DeviceView, keys, type ManagerBoardPages } from '@litch/core'
 import { useLayoutEffect, useRef } from 'react'
-import type { ManagerItemId, ManagerItemView } from '../../../core/src/model-manager.mts'
+import type {
+  ManagerItemId,
+  ManagerItemView,
+  ManagerLink,
+} from '../../../core/src/model-manager.mts'
 import { requestOpenSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { badgeOf, nameOf } from '../app/device.ts'
 import { useKey } from '../app/services.tsx'
+import { ExternalLink } from '../transcript/ExternalLink.tsx'
+import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
 
 function Item({ item }: { item: ManagerItemView }) {
   const t = useT()
-  const parts = item.why.split(/(D-\d+)/)
-  const missing = item.blockedBy.filter((id) => !parts.includes(id))
+  const links = (entries: ManagerLink[]) => (
+    <ul className="mg-item-links">
+      {entries.map((link) => (
+        <li key={`${link.kind}:${link.target}:${link.label}`}>
+          {link.kind === 'url' ? (
+            <ExternalLink href={link.target}>{link.label ?? link.target}</ExternalLink>
+          ) : (
+            <span title={link.target}>{link.label ?? link.target}</span>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
   return (
-    <div className="mg-item" data-manager-item={item.id} tabIndex={-1}>
-      <div className="grow">
-        <span className="mono dim">{item.id}</span> <b>{item.title}</b>
-        {item.why || missing.length ? (
-          <p className="mg-item-reason">
-            <BoardReferences text={item.why} />
-            {missing.length ? (
-              <>
-                {item.why ? ' · ' : ''}
-                {t('manager.waitDecisions')}{' '}
-                {missing.map((id, index) => (
-                  <span key={id}>
-                    {index ? ' · ' : ''}
-                    <BoardReferences text={id} />
-                  </span>
+    <article className="mg-item" data-manager-item={item.id} tabIndex={-1}>
+      <header className="mg-item-heading">
+        <span className="mono mg-item-id">{item.id}</span>
+        <h3>{item.title}</h3>
+        <div className="mg-item-badges">
+          <span className={`pill ${item.status === 'blocked' ? 'wait' : 'mute'}`}>
+            {t(`manager.${item.status}`)}
+          </span>
+          <span className="mg-item-owner">{t(`manager.${item.owner.kind}`)}</span>
+        </div>
+      </header>
+      {item.why ? (
+        <div className="mg-item-reason">
+          <BoardMarkdown text={item.why} />
+        </div>
+      ) : null}
+      {item.blockedBy.length || item.unverified.length || item.basis.length || item.links.length ? (
+        <div className="mg-item-meta">
+          {item.blockedBy.length ? (
+            <div className="mg-item-meta-row">
+              <span className="mg-meta-label">{t('manager.waitDecisions')}</span>
+              <div className="mg-item-waits">
+                {item.blockedBy.map((id) => (
+                  <BoardReferences key={id} text={id} />
                 ))}
-              </>
-            ) : null}
-          </p>
-        ) : null}
-        {item.unverified.map((text) => (
-          <p key={text} className="dim">
-            {text}
-          </p>
-        ))}
-        {item.basis.length ? (
-          <p className="mg-basis">
-            {t('manager.basis')} {item.basis.map((link) => link.label ?? link.target).join(' · ')}
-          </p>
-        ) : null}
-      </div>
-      <small>{t(`manager.${item.owner.kind}`)}</small>
-    </div>
+              </div>
+            </div>
+          ) : null}
+          {item.unverified.length ? (
+            <div className="mg-item-unverified">
+              <span className="pill wait">{t('manager.unverified')}</span>
+              <ul>
+                {item.unverified.map((text) => (
+                  <li key={text}>
+                    <BoardMarkdown text={text} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {item.basis.length ? (
+            <div className="mg-item-meta-row">
+              <span className="mg-meta-label">{t('manager.basis')}</span>
+              {links(item.basis)}
+            </div>
+          ) : null}
+          {item.links.length ? (
+            <div className="mg-item-meta-row">
+              <span className="mg-meta-label">{t('manager.links')}</span>
+              {links(item.links)}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
   )
 }
 

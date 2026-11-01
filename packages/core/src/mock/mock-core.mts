@@ -483,7 +483,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
                 cwd: source.cwd,
                 archived: shelved.get(deviceId)?.some((s) => s.id === source.id) === true,
               },
-              managerId: mark?.role === 'line' ? mark.managerId : null,
+              managerId: mark?.managerId ?? null,
             }))
         }),
     }

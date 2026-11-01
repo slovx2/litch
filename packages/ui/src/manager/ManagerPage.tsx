@@ -1,5 +1,5 @@
-import { type DeviceView, keys } from '@litch/core'
-import { useCallback, useState } from 'react'
+import { type DeviceView, filterSuggestions, keys, type SuggestionView } from '@litch/core'
+import { type CSSProperties, useCallback, useRef, useState } from 'react'
 import type {
   ManagerDecisionId,
   ManagerItemId,
@@ -10,8 +10,11 @@ import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { Transcript } from '../transcript/Transcript.tsx'
+import { ManagerSuggestions } from '../tree/SuggestionsPage.tsx'
+import { BoardGrip } from './BoardGrip.tsx'
 import { BoardPanels } from './BoardPanels.tsx'
 import { BoardReferencesContext } from './BoardReferences.tsx'
+import { setBoardLayout, useBoardLayout } from './board-layout.ts'
 import { Decisions } from './Decisions.tsx'
 import { useManagerBoard } from './data.ts'
 import { ManagerForm } from './ManagerForm.tsx'
@@ -19,7 +22,7 @@ import type { BoardReference } from './references.ts'
 
 /** 放在应用导航层，离开经理视图后仍能恢复看板页签和设置页。 */
 export interface ManagerPageLocation {
-  tab: 'overview' | 'decisions' | 'items' | 'lines'
+  tab: 'overview' | 'decisions' | 'items' | 'lines' | 'suggestions'
   narrow: 'chat' | 'board'
   settings: boolean
 }
@@ -30,10 +33,10 @@ export function ManagerPage({
   onOpen,
   location = defaultLocation,
   onLocation,
-  onSuggestions,
+  onSuggestionSource,
 }: {
   manager: ManagerView
-  onSuggestions(): void
+  onSuggestionSource(selection: Selection, archived: boolean): void
   onOpen(selection: Selection): void
   location: ManagerPageLocation | undefined
   onLocation(location: ManagerPageLocation): void
@@ -41,6 +44,13 @@ export function ManagerPage({
   const t = useT()
   const { channel } = useServices()
   const { view, pages, error } = useManagerBoard(manager)
+  const allSuggestions = useKey<readonly SuggestionView[]>(keys.suggestions) ?? []
+  const suggestions = filterSuggestions(allSuggestions, {
+    deviceId: manager.deviceId,
+    managerId: manager.id,
+  })
+  const layout = useBoardLayout()
+  const page = useRef<HTMLElement>(null)
   const device = useKey<DeviceView>(keys.device(manager.deviceId))
   const { tab, narrow, settings } = location
   const setTab = (tab: ManagerPageLocation['tab']) => onLocation({ ...location, tab })
@@ -51,6 +61,7 @@ export function ManagerPage({
   const [itemTarget, setItemTarget] = useState<{ id: ManagerItemId } | null>(null)
   const itemLocated = useCallback(() => setItemTarget(null), [])
   const openReference = (id: BoardReference) => {
+    setBoardLayout({ open: true })
     const item = id.startsWith('I-')
     onLocation({ ...location, tab: item ? 'items' : 'decisions', narrow: 'board' })
     setItemTarget(item ? { id: id as ManagerItemId } : null)
@@ -65,6 +76,7 @@ export function ManagerPage({
     decisions: manager.pendingDecisions,
     items: (pages?.overview.stats.totalItems ?? 0) - (pages?.overview.stats.doneItems ?? 0),
     lines: manager.runningLines,
+    suggestions: suggestions.length,
   }
   const readOnly = manager.status !== 'active'
   const readOnlyText = t(manager.status === 'ending' ? 'manager.endingNote' : 'manager.readOnly')
@@ -110,17 +122,21 @@ export function ManagerPage({
       data-manager-id={manager.id}
       data-manager-status={manager.status}
       data-narrow={narrow}
+      data-board-open={layout.open}
+      ref={page}
+      style={{ '--mg-board-width': `${layout.width}px` } as CSSProperties}
     >
       <header className="mg-title">
         <span className="pill mute">{t('manager.manager')}</span>
         <b className="ell grow">{manager.name}</b>
         <button
           type="button"
-          className="btn ghost"
-          data-act="manager-suggestions"
-          onClick={onSuggestions}
+          className="btn ghost mg-board-toggle"
+          data-act="manager-board-toggle"
+          aria-expanded={layout.open}
+          onClick={() => setBoardLayout({ open: !layout.open })}
         >
-          {t('suggestions.manager')}
+          {t(layout.open ? 'manager.hideBoard' : 'manager.showBoard')}
         </button>
         {manager.status === 'active' ? (
           <>
@@ -187,6 +203,7 @@ export function ManagerPage({
           footer={readOnly ? <p className="mg-readonly">{readOnlyText}</p> : undefined}
         />
       </div>
+      <BoardGrip page={page} />
       <section className="mg-board" aria-label={t('manager.board')}>
         {manager.rules ? (
           <div className="mg-scope">
@@ -198,7 +215,7 @@ export function ManagerPage({
         ) : null}
         <div className="side-tabs">
           <div className="side-tablist" role="tablist">
-            {(['overview', 'decisions', 'items', 'lines'] as const).map((key) => (
+            {(['overview', 'decisions', 'items', 'lines', 'suggestions'] as const).map((key) => (
               <button
                 type="button"
                 role="tab"
@@ -209,7 +226,7 @@ export function ManagerPage({
                 onClick={() => setTab(key)}
               >
                 {t(`manager.${key}`)}
-                {counts[key] ? (
+                {counts[key] || key === 'suggestions' ? (
                   <span className={key === 'decisions' ? 'pill wait' : 'pill mute'}>
                     {counts[key]}
                   </span>
@@ -241,7 +258,10 @@ export function ManagerPage({
               }}
             >
               {/* 答复区保持挂载，切页签不丢提交状态；本地草稿独立持久化。 */}
-              {tab !== 'decisions' ? (
+              {tab === 'suggestions' ? (
+                <ManagerSuggestions manager={manager} onOpen={onSuggestionSource} />
+              ) : null}
+              {tab !== 'decisions' && tab !== 'suggestions' ? (
                 <BoardPanels
                   pages={pages}
                   deviceId={manager.deviceId}
@@ -263,7 +283,6 @@ export function ManagerPage({
             </BoardReferencesContext.Provider>
           )}
         </div>
-        <footer className="mg-foot">{t('manager.process')}</footer>
       </section>
     </section>
   )

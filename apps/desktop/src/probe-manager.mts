@@ -600,7 +600,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const endingReadOnly = Boolean(
     one('.mg-title')?.textContent?.includes('结束中') &&
       one('.mg-readonly')?.textContent?.includes('正在收尾') &&
-      !one('.mg-title button:not([data-act="manager-suggestions"])') &&
+      !one('.mg-title button:not([data-act="manager-board-toggle"])') &&
       !one('.mg-chat textarea') &&
       one('.mg-decision textarea:disabled') &&
       one('.mg-sidebar-group:first-child [data-manager-id="m1"]')?.textContent?.includes('结束中'),

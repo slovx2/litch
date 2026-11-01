@@ -40,3 +40,52 @@
 .suggestion-source .ell {
   min-width: 0;
 }
+.mg-suggestions-list {
+  padding: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+.suggestion-manager {
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--raised);
+  min-width: 0;
+}
+.suggestion-manager > button {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  padding: 18px;
+  text-align: left;
+  border-radius: inherit;
+}
+.suggestion-manager > button:hover {
+  background: var(--hover);
+}
+.suggestion-manager header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.suggestion-manager header b {
+  flex: 1;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.suggestion-manager strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.suggestion-manager p {
+  color: var(--ink-2);
+  line-height: 1.6;
+  margin: 0;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.suggestion-manager-open {
+  color: var(--accent);
+  font-size: 12px;
+}

@@ -2,6 +2,11 @@
 import type { Entry } from './types.ts'
 
 export const zhManager = {
+  'manager.suggestions': '建议',
+  'manager.links': '相关链接',
+  'manager.hideBoard': '收起看板',
+  'manager.showBoard': '展开看板',
+  'manager.resizeBoard': '调整看板宽度',
   'manager.editAnswer': '修改答案',
   'manager.questionBackground': '先问背景',
   'manager.questionNote': '问答独立保存；交答复时会一并交给经理。',
@@ -48,7 +53,6 @@ export const zhManager = {
   'manager.unavailable': '设备未提供经理功能',
   'manager.offline': '设备未连接，暂时无法修改',
   'manager.none': '暂无记录',
-  'manager.process': '看板记录工作过程，实际结果以仓库为准',
   'manager.open': '待定',
   'manager.answered': '已答复',
   'manager.closed': '已关闭',

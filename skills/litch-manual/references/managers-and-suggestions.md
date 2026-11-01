@@ -87,11 +87,26 @@ instead of overwriting them; read again and retry the intended change.
 
 ### Board and decisions
 
-The manager page has the conversation beside **Overview**, **Decisions**, **Items** and **Work lines**.
-Narrow windows switch between Chat and Board. Opening Files covers the board; the info rail is hidden.
+The manager page has the conversation beside **Overview**, **Decisions**, **Items**, **Work lines**
+and **Suggestions**. The Suggestions tab shows the pending count and lets you start, edit or dismiss
+suggestions from this manager and its entire workline subtree directly on the board.
+Use **Hide board** to give the conversation the full area, and **Show board** to bring it back.
+Drag the divider to resize the board, or focus it and use the arrow keys (Home/End reach its limits).
+Board width and visibility are saved on this computer. The board stays between 360 and 900 pixels
+while reserving at least 380 pixels for chat; smaller spaces compress the board without changing
+the saved preference. Both chat width settings continue to apply inside the available space.
+Narrow windows keep the Chat/Board switch, independently of desktop board visibility.
+Opening Files covers the board; the info rail is hidden.
 Overview separates blocked items from unblocked items assigned to the user. Work lines open their
 conversations; **Back to manager** returns. Clicking an item's decision id opens that decision,
 including the appropriate answered or closed group.
+
+Items separate their title, status and owner from the explanation and supporting metadata.
+Unverified points have a distinct label and accent stripe; waiting decisions, evidence and related
+links appear below the explanation. Item explanations and unverified points, decision backgrounds
+and option descriptions support Markdown: lists, emphasis, inline code and links. Existing I-n/D-n
+references in prose and inline code still navigate to the matching board object. Explicit Markdown
+links keep their stated targets; HTML is displayed as text and images are not loaded automatically.
 
 Choose an option or write an answer. Answers are local drafts until **Submit to manager**; they do
 not sync before submission. Submitting saves them to the device and asks the manager to handle them.
@@ -144,19 +159,22 @@ are in `sessions-and-projects.md`.
 
 ### Where and how to use them
 
-The desktop sidebar's **Suggestions** entry shows pending ordinary suggestions across devices with
+The desktop sidebar's **Suggestions** entry shows pending suggestions across devices with
 a count, alongside Tasks, Appearance and Settings in the bottom row. Cards automatically form a
 multi-column grid when space allows and return to one column in narrow windows. They show the
 title, brief, source conversation, project/device and creation time, with the
-same actions as the original card. A manager board's **Suggestions from this manager’s lines**
-opens this list filtered to that manager's whole subtree; switch back to all suggestions there.
+same actions as the original card. Suggestions belonging to a manager, including its entire
+workline subtree, are grouped into one summary card per manager with its name, pending count and
+the latest suggestion's title and excerpt. Select it to open that manager's **Suggestions** board
+tab. Ordinary suggestions remain individual cards in the global list.
 Instant “New session / Do it here” offers are not included. The side panel also lists suggestions
 for the current session; the phone has only the per-session list.
 
 Handled, withdrawn and expired suggestions leave the list; history stays in the source conversation.
 Offline devices keep the last snapshot, but actions need a connection. An archived source is marked
 and opens as a read-only preview. Click the source conversation's name and arrow to open it;
-**Back to list** or Escape returns from an archived preview to the same suggestion list and filter.
+**Back to list** or Escape returns from an archived preview to the originating global list or
+manager board tab.
 **Do it here** first restores it and its worktree; a failed restore
 leaves the suggestion pending. Deleting the source withdraws its pending cards.
 
@@ -167,5 +185,5 @@ device → Session orchestration → Suggestion retention. Its values, commands 
 are in `device-settings.md`. Task cards can be switched per harness with
 `scripts/litch tools set <device> --harness <id> --task-cards on|off`.
 
-No suggestions visible: check the manager filter, source device's connection and task-card switch,
+No suggestions visible: check the manager's Suggestions tab, source device's connection and task-card switch,
 and whether the cards were handled or expired. Increasing retention does not restore expired cards.

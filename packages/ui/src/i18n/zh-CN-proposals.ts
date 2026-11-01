@@ -5,7 +5,7 @@ import type { Entry } from './types.ts'
 
 export const zhProposals = {
   'suggestions.title': '建议',
-  'suggestions.manager': '本经理工作线的建议',
+  'suggestions.openManager': '到经理看板处理',
   'suggestions.all': '全部建议',
   'suggestions.empty': '没有待处理建议',
   'suggestions.archived': '来源已归档',

@@ -8,7 +8,7 @@ import { useKey, useServices } from '../app/services.tsx'
 import { Transcript } from '../transcript/Transcript.tsx'
 
 interface ArchivedSessionProps extends Selection {
-  /** 回到打开它的列表（已归档对话或全局建议） */
+  /** 回到打开它的列表（已归档对话、全局建议或经理看板） */
   onBack(): void
   /** 恢复成了：它回到侧栏里，接着在平常的对话区里打开 */
   onRestored(selection: Selection): void

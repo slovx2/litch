@@ -106,7 +106,7 @@ export class SuggestionInbox {
       next.set(proposal.id, {
         proposal,
         source,
-        managerId: mark?.role === 'line' ? mark.managerId : null,
+        managerId: mark?.managerId ?? null,
       })
     }
     const upserts = [...next.values()].filter(

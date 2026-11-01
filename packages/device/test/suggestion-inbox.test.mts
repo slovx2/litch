@@ -158,6 +158,13 @@ test('经理筛选归属覆盖工作线的子孙，脱离后移除归属', async
       'user',
     )
     const p = propose(child.threadId)
+    const own = propose(manager.threadId)
+    assert.equal(
+      (await client.call(SUGGESTIONS_LIST, {})).suggestions.find(
+        (r: any) => r.proposal.id === own.id,
+      )?.managerId,
+      manager.id,
+    )
     const find = async () =>
       (await client.call(SUGGESTIONS_LIST, {})).suggestions.find((r: any) => r.proposal.id === p.id)
     assert.equal((await find()).managerId, manager.id)
