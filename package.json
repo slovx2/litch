@@ -85,7 +85,7 @@
     "client:fixture": "node scripts/client-fixture.mjs",
     "client:smoke": "npm run build --prefix packages/ui && npm run smoke --prefix apps/desktop",
     "client:smoke:entry": "npm run build --prefix packages/ui && npm run smoke:entry --prefix apps/desktop",
-    "client:check:search": "tsc -p packages/ui/test/tsconfig.search.json --noEmit && node scripts/check-search-ui.mjs",
+    "client:check:search": "node --test scripts/search-input-metrics.test.mjs && tsc -p packages/ui/test/tsconfig.search.json --noEmit && node scripts/check-search-ui.mjs",
     "client:check:projections": "node scripts/check-sidebar-projections.mjs",
     "client:check:scroll": "npm run build --prefix packages/ui && npm run check:scroll --prefix apps/desktop",
     "client:check:scroll:entry": "npm run build --prefix packages/ui && npm run check:scroll:entry --prefix apps/desktop",

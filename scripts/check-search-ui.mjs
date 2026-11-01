@@ -1,5 +1,6 @@
 // S1 隔离浏览器验收。自动启动回环 Vite，只控制自己创建的 headless CFT。
 // 用法：npm run client:check:search；也可用 LITCH_SEARCH_UI 指向已启动的回环夹具。
+// LITCH_SEARCH_CPU=4 在渲染进程中降速；输入响应按查询分别报告冷值和预热后 11 次样本的 p90。
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -9,6 +10,7 @@ import { join, resolve } from 'node:path'
 import { checkSearchR3 } from './check-search-r3.mjs'
 import { checkSearchReview } from './check-search-review.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
+import { checkInputBudget, INPUT_SAMPLES, inputMetrics } from './search-input-metrics.mjs'
 
 const binary =
   process.env.LITCH_CHROME_BINARY ??
@@ -27,7 +29,8 @@ const work = mkdtempSync(join(tmpdir(), 'litch-search-ui-'))
 const outputBase = resolve('.local/search-ui')
 const output = join(outputBase, `${Date.now()}-${process.pid}`)
 mkdirSync(output, { recursive: true })
-const report = { checks: [], success: false, work, output }
+const cpuRate = Number(process.env.LITCH_SEARCH_CPU ?? 1)
+const report = { checks: [], success: false, work, output, cpuRate }
 let vite
 if (!base) {
   const reserve = createServer()
@@ -93,6 +96,7 @@ try {
   }, '浏览器页面')
   cdp = await Cdp.connect(page)
   await cdp.call('Runtime.enable')
+  await cdp.call('Emulation.setCPUThrottlingRate', { rate: cpuRate })
   // 用英文浏览器复查 CI 的语言差异，避免本机中文环境掩盖夹具漏设语言。
   await cdp.call('Emulation.setUserAgentOverride', {
     userAgent: (await cdp.call('Browser.getVersion')).userAgent,
@@ -130,7 +134,7 @@ try {
   )
   assert.equal(before.early, false)
   report.checks.push({ name: '早期命中尚未挂载', ...before })
-  const query = async (text) => {
+  const query = async (text, record = true) => {
     const frameMs = await evaluate(
       `new Promise(resolve=>{const start=performance.now();const input=document.querySelector('.search-bar input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(text)});input.dispatchEvent(new Event('input',{bubbles:true}));requestAnimationFrame(()=>resolve(performance.now()-start));})`,
     )
@@ -144,15 +148,14 @@ try {
     const result = await evaluate(
       `(()=>{const range=[...CSS.highlights.get('litch-find-current')][0];const rect=range.getBoundingClientRect();return {text:range.toString(),count:document.querySelector('.search-count').textContent,visible:rect.bottom>0&&rect.top<innerHeight,mounted:document.querySelectorAll('.turn').length};})()`,
     )
-    report.checks.push({ name: text, frameMs, ...result })
-    assert.ok(frameMs < 100, `${text} 输入响应 ${frameMs}ms`)
+    if (record) report.checks.push({ name: text, frameMs, ...result })
     assert.ok(result.visible, `${text} 不在视口`)
     assert.equal(
       result.text.normalize('NFKC').toLowerCase().replace(/\s+/g, ' '),
       text.normalize('NFKC').toLowerCase().replace(/\s+/g, ' '),
       '高亮须属于当前查询',
     )
-    return result
+    return { ...result, frameMs }
   }
   assert.equal((await query('跨节点匹配')).text, '跨节点匹配')
   await query('ThoughtNeedle')
@@ -168,6 +171,36 @@ try {
   await query('OptionNeedle')
   await query('CommentNeedle')
   await query('QuoteNeedle')
+  // 冷路径的单次值留在上面的语义报告中。热路径先预热一轮，再逐查询采样，不能把不同
+  // 查询混在一起稀释慢项；每次都切到不同文本，并照常验证当前高亮与视口。
+  const inputQueries = [
+    '跨节点匹配',
+    'ThoughtNeedle',
+    'ProcessNeedle',
+    'CodeNeedle',
+    'ｃｏｄｅｎｅｅｄｌｅ',
+    '最早中文',
+    '👩‍💻',
+    'i̇stanbul',
+    'PlanNeedle',
+    'QuestionNeedle',
+    'AnswerNeedle',
+    'OptionNeedle',
+    'CommentNeedle',
+    'QuoteNeedle',
+    '容量文本',
+  ]
+  const samples = new Map(inputQueries.map((text) => [text, []]))
+  for (let round = 0; round <= INPUT_SAMPLES; round++)
+    for (const text of inputQueries) {
+      const { frameMs } = await query(text, false)
+      if (round > 0) samples.get(text).push(frameMs)
+    }
+  report.inputPerformance = Object.fromEntries(
+    [...samples].map(([text, values]) => [text, inputMetrics(values)]),
+  )
+  for (const [text, metrics] of Object.entries(report.inputPerformance))
+    checkInputBudget(text, metrics)
   await evaluate(
     `(()=>{const input=document.querySelector('.search-bar input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'ToolNeedle');input.dispatchEvent(new Event('input',{bubbles:true}));})()`,
   )
@@ -208,7 +241,7 @@ try {
   const inputMs = await evaluate(
     `new Promise(resolve=>{const start=performance.now();const input=document.querySelector('.search-bar input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'容量文本');input.dispatchEvent(new Event('input',{bubbles:true}));requestAnimationFrame(()=>resolve(performance.now()-start));})`,
   )
-  assert.ok(inputMs < 100, `输入响应 ${inputMs}ms`)
+  // 一万条目场景的热响应门槛已由上面的“容量文本”样本组检查；这里保留原流程的观测值。
   report.checks.push({ name: '10000 条目输入到下一帧', ms: inputMs })
   await query('ThoughtNeedle')
   await evaluate(
