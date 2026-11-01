@@ -4,7 +4,7 @@
 // 收尾读取竞态：追加 --poll-ms 1 高频检查，不能把瞬时 interrupted 快照当作真实中断。
 // Claude 只用 CHA_CLAUDE_CLI 指定的隔离副本，没给就明确跳过；Codex 用 CHA_CODEX_CLI 或 PATH。
 // 子进程显式使用临时 HOME、CODEX_HOME，OPENAI_API_KEY、OPENAI_BASE_URL 等个人凭据不进入环境。
-// 流程：manager-open → 经理：add 决策 → answers/submit → manager-answers → 会话：start → 工作线回报 → end → 只读。
+// 流程：manager-open → 经理：add 决策 → answer 记录与修改 → answers/submit → manager-answers → 会话：start → 工作线回报 → end → 只读。
 import assert from 'node:assert/strict'
 import { accessSync, constants, existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -87,10 +87,29 @@ async function checkManager(t, client, cwd, harness) {
     MANAGER_HEARD,
   )
   const added = JSON.parse(heard.slice(MANAGER_HEARD.length).trim())
-  const saved = (await board()).decisions.find((entry) => entry.id === added.id)
+  let saved = (await board()).decisions.find((entry) => entry.id === added.id)
   assert.ok(saved, '工具返回的决策应出现在看板上')
   assert.equal(saved.title, decision.title)
   assert.equal(saved.status, 'open')
+  // 工具说明变更不能只靠脚本识别测试；经真实 CLI 调用 answer 并核对设备写入。
+  for (const answerText of ['对话中确认开始', '对话中补充：先核对夹具']) {
+    const result = await say(
+      client,
+      threadId,
+      `经理：answer ${JSON.stringify({ id: saved.id, optionId: 'go', text: answerText })}`,
+      MANAGER_HEARD,
+    )
+    const recorded = JSON.parse(result.slice(MANAGER_HEARD.length).trim()).object
+    const current = (await board()).decisions.find((entry) => entry.id === saved.id)
+    assert.equal(recorded.id, saved.id)
+    assert.equal(recorded.status, 'answered')
+    assert.equal(recorded.answer.text, answerText)
+    assert.equal(recorded.answer.by, 'user-conversation')
+    assert.equal(recorded.revision, saved.revision + 1)
+    assert.deepEqual(current, recorded)
+    saved = current
+  }
+  t.diagnostic(`${harness}：answer 工具完成记录与修改，结果与看板一致`)
   const submitted = await client.call(MANAGER_METHOD.answersSubmit, {
     ...params,
     answers: [

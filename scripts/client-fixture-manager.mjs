@@ -17,7 +17,8 @@ export const MANAGER_SPACE = {
     update: 'Patch supplied fields and record why.',
     verify: 'Record that you checked the basis and it is still valid.',
     close: 'Close an open decision as expired/withdrawn, or finish/defer an item.',
-    answer: 'Record an answer the user already gave in conversation, as user-conversation.',
+    answer:
+      'Record or revise an answer the user already gave in conversation, as user-conversation.',
     status: 'Replace the current situation with a short account of material progress;',
   },
 }
