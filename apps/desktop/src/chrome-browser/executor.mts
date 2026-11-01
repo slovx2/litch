@@ -8,7 +8,7 @@ import { chromeOrigin } from '../../../chrome-extension/src/origin.mjs'
 import { newRefBook } from '../browser/ax.mjs'
 import type { BrowserExecutor, TabState } from '../browser/executor.mjs'
 import type { ClientToolContext, ClientToolInvocation } from '../client-tools/types.mjs'
-import { type ChromeBridge, ChromeBridgeError } from './bridge.mjs'
+import { type ChromeBridge, ChromeBridgeError, incompatibleMessage } from './bridge.mjs'
 import { ChromePage } from './page.mjs'
 import { executePageTool } from './tools.mjs'
 
@@ -126,11 +126,8 @@ export class ChromeExecutor implements BrowserExecutor {
         'disconnected',
         'This Chrome instance disconnected. List targets again.',
       )
-    if (!found.compatible)
-      throw new ChromeBridgeError(
-        'versionMismatch',
-        'Reload the Litch extension from chrome://extensions.',
-      )
+    if (found.incompatible)
+      throw new ChromeBridgeError('versionMismatch', incompatibleMessage(found))
     return id
   }
   private async permitInstance(
@@ -384,6 +381,9 @@ export class ChromeExecutor implements BrowserExecutor {
             targets: this.options.bridge.instances().map((instance) => ({
               ...instance,
               targetId: `chrome:${instance.id}`,
+              ...(instance.incompatible
+                ? { unavailableReason: incompatibleMessage(instance) }
+                : {}),
               browser: 'chrome',
               location: 'controller',
             })),

@@ -1,8 +1,11 @@
 import {
   CHROME_HOST_NAME,
+  CHROME_WIRE_MIN,
   CHROME_WIRE_VERSION,
+  type ChromeExtensionSource,
   type ChromeReply,
   type ChromeRequest,
+  type ChromeWelcome,
 } from '../../../packages/protocol/src/chrome-browser.mjs'
 import { cleanupPointer, disposePointer } from './pointer.mjs'
 import { execute } from './requests.mjs'
@@ -21,6 +24,8 @@ let port: any = null
 let reconnect: ReturnType<typeof setTimeout> | null = null
 let attempt = 0
 let ready = false
+/** Litch 协商出的协议号；以后升号时按它决定说哪一版。不兼容或还没收到 welcome 时为 null。 */
+let wire: number | null = null
 const state: ExtensionState = {
   chrome,
   epoch: crypto.randomUUID(),
@@ -87,6 +92,7 @@ chrome.runtime.onMessage.addListener(
       reply({
         connected: !!port,
         version: chrome.runtime.getManifest().version,
+        protocol: wire,
         claimed: state.grants.size,
       })
       return false
@@ -189,10 +195,17 @@ async function connect(): Promise<void> {
     void chrome.runtime.lastError
     if (port !== current) return
     port = null
+    wire = null
+    void showCompatibility(null)
     for (const id of [...state.grants.keys()]) void state.revoke(id, 'bridgeDisconnected')
     schedule()
   })
-  current.onMessage.addListener((message: ChromeRequest) => {
+  current.onMessage.addListener((message: ChromeRequest | ChromeWelcome) => {
+    if (message?.kind === 'welcome') {
+      wire = message.protocol
+      void showCompatibility(message)
+      return
+    }
     if (
       message?.kind !== 'request' ||
       typeof message.id !== 'string' ||
@@ -221,6 +234,8 @@ async function connect(): Promise<void> {
     state.send({
       kind: 'hello',
       protocol: CHROME_WIRE_VERSION,
+      minProtocol: CHROME_WIRE_MIN,
+      source: await installSource(),
       version: chrome.runtime.getManifest().version,
       instanceId,
       epoch: state.epoch,
@@ -228,6 +243,26 @@ async function connect(): Promise<void> {
     })
     attempt = 0
   }
+}
+
+/** 商店（含策略安装）和开发者模式加载的更新方式不同，Litch 据此提示怎么更新扩展。 */
+async function installSource(): Promise<ChromeExtensionSource | undefined> {
+  const self = await chrome.management.getSelf()
+  if (self.installType === 'development') return 'unpacked'
+  if (self.installType === 'normal' || self.installType === 'admin') return 'store'
+  return undefined
+}
+
+/** 不兼容时在工具栏图标上标出来；详细原因和办法在 Litch 设置页。 */
+async function showCompatibility(welcome: ChromeWelcome | null): Promise<void> {
+  const title =
+    welcome?.incompatible === 'litchOutdated'
+      ? `Litch — Update Litch (${welcome.litchVersion}) to use this extension`
+      : welcome?.incompatible === 'extensionOutdated'
+        ? `Litch — Update this extension for Litch ${welcome.litchVersion}`
+        : 'Litch — Stop browser control'
+  await chrome.action.setBadgeText({ text: welcome?.incompatible ? '!' : '' })
+  await chrome.action.setTitle({ title })
 }
 
 function respond(current: any, reply: ChromeReply): void {

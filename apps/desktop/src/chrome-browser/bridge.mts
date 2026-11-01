@@ -3,13 +3,17 @@ import { chmod, mkdir, rm } from 'node:fs/promises'
 import { createServer, type Server, type Socket } from 'node:net'
 import { dirname } from 'node:path'
 import {
-  CHROME_WIRE_VERSION,
   type ChromeErrorCode,
   type ChromeEvent,
   type ChromeInstance,
   type ChromeReply,
   type ChromeRequest,
+  type ChromeWelcome,
+  negotiateChromeWire,
 } from '../../../../packages/protocol/src/chrome-browser.mjs'
+
+const wireNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 1
 
 export class ChromeBridgeError extends Error {
   readonly code: ChromeErrorCode
@@ -35,6 +39,15 @@ export interface BridgeOptions {
   token: string
   extensionId: string
   version: string
+}
+
+/** 给模型和用户的说明：哪一边要更新、怎么更新。 */
+export function incompatibleMessage(instance: ChromeInstance): string {
+  if (instance.incompatible === 'litchOutdated')
+    return `The Litch Chrome extension ${instance.version} needs a newer Litch. Ask the user to update Litch.`
+  return instance.source === 'store'
+    ? `The Litch Chrome extension ${instance.version} is too old for this Litch. Ask the user to update it on chrome://extensions (Update) or wait for Chrome to update it.`
+    : `The Litch Chrome extension ${instance.version} is too old for this Litch. Ask the user to reload it on chrome://extensions.`
 }
 
 export class ChromeBridge {
@@ -111,12 +124,17 @@ export class ChromeBridge {
             continue
           }
           if (!peer) {
+            const minProtocol = message.minProtocol ?? message.protocol
             if (
               message.kind !== 'hello' ||
               !/^[a-zA-Z0-9-]{1,128}$/.test(message.instanceId) ||
               typeof message.epoch !== 'string' ||
               message.epoch.length > 128 ||
-              typeof message.version !== 'string'
+              typeof message.version !== 'string' ||
+              message.version.length > 64 ||
+              !wireNumber(message.protocol) ||
+              !wireNumber(minProtocol) ||
+              minProtocol > message.protocol
             ) {
               socket.destroy()
               return
@@ -124,6 +142,7 @@ export class ChromeBridge {
             clearTimeout(timeout)
             const previous = this.peers.get(message.instanceId)
             previous?.socket.destroy()
+            const wire = negotiateChromeWire({ protocol: message.protocol, minProtocol })
             peer = {
               socket,
               instance: {
@@ -131,11 +150,21 @@ export class ChromeBridge {
                 epoch: message.epoch,
                 version: message.version,
                 name: 'Chrome',
-                compatible:
-                  message.protocol === CHROME_WIRE_VERSION &&
-                  message.version === this.options.version,
+                protocol: 'protocol' in wire ? wire.protocol : null,
+                incompatible: 'incompatible' in wire ? wire.incompatible : null,
+                source:
+                  message.source === 'store' || message.source === 'unpacked'
+                    ? message.source
+                    : null,
               },
             }
+            const welcome: ChromeWelcome = {
+              kind: 'welcome',
+              protocol: peer.instance.protocol,
+              incompatible: peer.instance.incompatible,
+              litchVersion: this.options.version,
+            }
+            socket.write(`${JSON.stringify(welcome)}\n`)
             this.peers.set(peer.instance.id, peer)
             this.emit(peer.instance.id, message as ChromeEvent)
           } else if (message.kind === 'result') this.resolve(peer, message)
@@ -179,11 +208,8 @@ export class ChromeBridge {
         'disconnected',
         'Chrome is not connected. Open the Litch Chrome extension and retry.',
       )
-    if (!peer.instance.compatible)
-      throw new ChromeBridgeError(
-        'versionMismatch',
-        'Reload the Litch extension from chrome://extensions to match this Litch version.',
-      )
+    if (peer.instance.incompatible)
+      throw new ChromeBridgeError('versionMismatch', incompatibleMessage(peer.instance))
     if (signal?.aborted) throw new ChromeBridgeError('cancelled', 'The call was cancelled.')
     const id = randomUUID()
     const data = `${JSON.stringify({ ...request, kind: 'request', id, epoch: peer.instance.epoch })}\n`

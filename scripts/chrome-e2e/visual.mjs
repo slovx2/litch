@@ -80,6 +80,9 @@ try {
     { state: 'connected', skin: 'standard', theme: 'light' },
     { state: 'fresh', skin: 'retro', theme: 'dark' },
     { state: 'mismatch', skin: 'human', theme: 'light' },
+    { state: 'litch-outdated', skin: 'standard', theme: 'dark' },
+    { state: 'reload', skin: 'standard', theme: 'light' },
+    { state: 'store', skin: 'retro', theme: 'light' },
     { state: 'connected', skin: 'standard', theme: 'light', width: 560 },
   ]
   for (const test of cases) {

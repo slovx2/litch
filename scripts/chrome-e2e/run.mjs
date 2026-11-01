@@ -251,6 +251,13 @@ try {
   let tabId
   await check('固定 ID / Native Messaging / 正式 executor', async () => {
     assert.equal(identity.id, 'fakgembkgnmeknpaegnneneockbjhaai')
+    // 协议协商与安装来源：开发者模式加载报 unpacked，协商出当前协议号
+    assert.deepEqual(
+      (({ protocol, incompatible, source }) => ({ protocol, incompatible, source }))(
+        bridge.instances()[0],
+      ),
+      { protocol: 1, incompatible: null, source: 'unpacked' },
+    )
     await success('targets', {})
     const result = await success('navigate', { targetId, url: `${site.origin}/login`, keep: true })
     tabId = JSON.parse(text(result).split('\n')[0]).tabId

@@ -93,6 +93,7 @@ export function createMockConfig(host: MockConfigHost): MockConfig {
       case 'chrome.status':
       case 'chrome.prepare':
       case 'chrome.extensions':
+      case 'chrome.store':
       case 'chrome.directory':
       case 'chrome.enable':
       case 'chrome.device':

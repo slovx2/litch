@@ -13,3 +13,11 @@
   justify-content: flex-start;
   margin-bottom: 4px;
 }
+/* 上架后开发者模式加载收成一段，可展开 */
+.chrome-unpacked {
+  margin-top: 8px;
+}
+.chrome-unpacked summary {
+  cursor: pointer;
+  color: var(--ink-2);
+}

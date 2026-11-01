@@ -1097,9 +1097,9 @@ if (!smoke && !app.requestSingleInstanceLock()) {
       root: join(app.getPath('userData'), 'chrome'),
       assets: fileURLToPath(new URL('./chrome-extension', import.meta.url)),
       nativeBinary: adapterRoot ? bundledAdapter(adapterRoot).bin : '',
-      openExtensions: () =>
+      openInChrome: (url) =>
         new Promise<void>((resolve, reject) => {
-          const child = spawn('/usr/bin/open', ['-a', 'Google Chrome', 'chrome://extensions'])
+          const child = spawn('/usr/bin/open', ['-a', 'Google Chrome', url])
           child.once('error', reject)
           child.once('exit', (code) =>
             code === 0 ? resolve() : reject(new Error('Could not open Chrome.')),

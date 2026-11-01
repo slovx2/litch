@@ -16,22 +16,37 @@ let state: ChromeSettingsState = {
   enabled: true,
   allowedDevices: ['remote'],
   extensionId: 'fakgembkgnmeknpaegnneneockbjhaai',
-  expectedVersion: '0.25.0',
+  bundledVersion: '0.25.0',
   extensionDirectory: '/Users/fixture/Library/Application Support/Litch/chrome/extension',
+  storeUrl: null,
   instances: [
     {
       id: 'fixture-chrome-instance',
       epoch: 'fixture',
       name: 'Chrome',
       version: '0.25.0',
-      compatible: true,
+      protocol: 1,
+      incompatible: null,
+      source: 'unpacked',
     },
   ],
   lastError: null,
 }
 const requested = new URLSearchParams(location.search).get('state')
 if (requested === 'disconnected') state.instances = []
-if (requested === 'mismatch') state.instances[0].compatible = false
+if (requested === 'mismatch') {
+  state.instances[0].incompatible = 'extensionOutdated'
+  state.instances[0].protocol = null
+}
+if (requested === 'litch-outdated') {
+  state.instances[0].incompatible = 'litchOutdated'
+  state.instances[0].protocol = null
+}
+if (requested === 'reload') state.instances[0].version = '0.24.0'
+if (requested === 'store') {
+  state.storeUrl = 'https://chromewebstore.google.com/detail/fixture'
+  state.instances[0].source = 'store'
+}
 if (requested === 'fresh') {
   state.prepared = false
   state.enabled = false

@@ -2,9 +2,10 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type {
-  ChromeSettingsRequest,
-  ChromeSettingsState,
+import {
+  CHROME_STORE_URL,
+  type ChromeSettingsRequest,
+  type ChromeSettingsState,
 } from '../../../../packages/protocol/src/chrome-browser.mjs'
 import type { BrowserExecutor } from '../browser/executor.mjs'
 import type { ClientToolExecutor, ClientToolInvocation } from '../client-tools/types.mjs'
@@ -16,7 +17,8 @@ export interface BrowserTargetsOptions {
   root: string
   assets: string
   nativeBinary: string
-  openExtensions(): Promise<void>
+  /** 在 Google Chrome 里打开网址（扩展页、商店页都要在 Chrome 里开，不能交给默认浏览器）。 */
+  openInChrome(url: string): Promise<void>
   openDirectory(directory: string): Promise<void>
 }
 export class BrowserTargets {
@@ -87,7 +89,12 @@ export class BrowserTargets {
         await this.installer.prepare()
         this.lastError = null
       }
-      if (request.kind === 'chrome.extensions') await this.options.openExtensions()
+      if (request.kind === 'chrome.extensions')
+        await this.options.openInChrome('chrome://extensions')
+      if (request.kind === 'chrome.store') {
+        if (!CHROME_STORE_URL) throw new Error('The Chrome Web Store listing is not available yet.')
+        await this.options.openInChrome(CHROME_STORE_URL)
+      }
       if (request.kind === 'chrome.directory')
         await this.options.openDirectory(this.installer.extensionDirectory)
       if (request.kind === 'chrome.enable') {
@@ -111,8 +118,9 @@ export class BrowserTargets {
       enabled: this.enabled,
       allowedDevices: [...this.devices],
       extensionId: this.identity.id,
-      expectedVersion: this.identity.version,
+      bundledVersion: this.identity.version,
       extensionDirectory: this.installer?.extensionDirectory ?? '',
+      storeUrl: CHROME_STORE_URL,
       instances: this.bridge?.instances() ?? [],
       lastError: this.lastError,
     }
