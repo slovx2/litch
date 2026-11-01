@@ -69,7 +69,7 @@ func TestDeviceStartDetachesAndIsIdempotent(t *testing.T) {
 	if !processAlive(started.PID) || !canDial(cfg.deviceSocket()) {
 		t.Fatal("调用方的会话结束后服务没了")
 	}
-	if status, ok := readServiceStatus(cfg); !ok || status.PID != started.PID || status.State != "ready" {
+	if status := awaitServiceReady(t, cfg); status.PID != started.PID {
 		t.Fatalf("服务状况不对: %+v", status)
 	}
 	// --node 原样传给常驻的 start，运行时和设备进程都由它来跑。
@@ -217,6 +217,25 @@ func TestDeviceStartLeavesServiceWithoutAggregateAlone(t *testing.T) {
 	})
 }
 
+// 等服务把状况写成就绪。device-start 等到聚合面能连就返回；服务是读到设备进程报就绪的那一行
+// 才写 ready 的，那一行在设备进程开始监听之后才打，所以状况比能连晚一点，慢机器上晚得更明显
+func awaitServiceReady(t *testing.T, cfg configuration) serviceStatus {
+	t.Helper()
+	var status serviceStatus
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		got, ok := readServiceStatus(cfg)
+		status = got
+		if ok && got.State == "ready" {
+			return status
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("服务状况一直没写成就绪: %+v", status)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // 一个 harness 都起不来（全新的机器上什么都没装）不算拉起失败：聚合面给得出来，服务就留着，
 // device-start 照样以 0 返回。客户端连上去才看得到各自的原因，才有地方改设置再试。
 func TestDeviceStartSucceedsWhenNoHarnessCanStart(t *testing.T) {
@@ -233,7 +252,7 @@ func TestDeviceStartSucceedsWhenNoHarnessCanStart(t *testing.T) {
 	if !canDial(cfg.deviceSocket()) {
 		t.Fatal("返回时聚合面还连不上")
 	}
-	if status, ok := readServiceStatus(cfg); !ok || status.PID != started.PID || status.State != "ready" {
+	if status := awaitServiceReady(t, cfg); status.PID != started.PID {
 		t.Fatalf("服务状况不对: %+v", status)
 	}
 	if got := strings.Join(deviceFixtureArguments(t, cfg), " "); strings.Contains(got, "--upstream") {

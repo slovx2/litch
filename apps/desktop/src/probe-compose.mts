@@ -236,13 +236,20 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     target.dispatchEvent(
       new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }),
     )
-  /** 在输入框里写一句话，按回车 */
+  /**
+   * 在输入框里写一句话，按回车。上一条还没发完（真实入口上要等对面回话）时发送按钮按不了、回车不发，
+   * 写进去的字会被下一句盖掉：等按钮能按了再按回车，按完等输入框清空，说明这一句接住了
+   */
   const say = async (text: string) => {
     const input = await until('输入框', area)
     write(input, text)
     await frame()
+    await until(`“${text}”能发`, () => {
+      const button = one<HTMLButtonElement>('.dock .send:not(.stop)')
+      return button && !button.disabled
+    })
     press(input, 'Enter')
-    await frame()
+    await until(`“${text}”发出去`, () => area()?.value === '')
   }
 
   /**

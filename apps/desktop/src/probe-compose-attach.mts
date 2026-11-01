@@ -179,11 +179,22 @@ export async function attachProbe(real: boolean): Promise<AttachProbe> {
   }
 
   // ---- 六、发出去；回合还在跑的时候再发一条带文字的 ----
-  const turnsBefore = all('.turn').length
+  // 不数回合、不按下标取：旧回合分批补画在前面，数目和下标都会变。认最后一个回合：按下之后才有、里面有打的字
+  const turnOf = (entry: HTMLElement | undefined) => entry?.dataset.searchTurn ?? ''
+  const lastBefore = turnOf(all('.turn').at(-1))
   input.focus()
   press(input, 'Enter')
-  await until('发出去的那一条', () => all('.turn').length > turnsBefore)
-  const turn = () => all('.turn')[turnsBefore]
+  const sentTurn = turnOf(
+    await until('发出去的那一条', () => {
+      const last = all('.turn').at(-1)
+      return last &&
+        turnOf(last) !== lastBefore &&
+        all('.umsg-text', last).some((entry) => text(entry).includes(words))
+        ? last
+        : null
+    }),
+  )
+  const turn = () => all('.turn').find((entry) => turnOf(entry) === sentTurn)
   await frame()
   const cleared = chips().length === 0 && area()?.value === ''
   let queued: AttachProbe['queued'] = null
@@ -192,6 +203,15 @@ export async function attachProbe(real: boolean): Promise<AttachProbe> {
     write(input, '排着队的那一条')
     paste(input, block(35, '排队的那一段'))
     await until('排队那一条的片', () => chips().length === 1, 5000)
+    // 上一条还没发完（真实入口上要等对面回话）时发送按钮按不了、回车不发：等能按了再按
+    await until(
+      '排队那一条能发',
+      () => {
+        const button = one<HTMLButtonElement>('.dock .send:not(.stop)')
+        return button && !button.disabled
+      },
+      5000,
+    ).catch(() => null)
     press(input, 'Enter')
     const row = await until('托盘里的那一行', () => one('.tray-row'), 5000).catch(() => null)
     if (row) {

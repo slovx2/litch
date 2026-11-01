@@ -1655,6 +1655,17 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   ): Record<string, unknown> {
     const originalBashInputs: OriginalBashInputs = new Map()
     const reservedGoalTools = new Set<string>()
+    // 工具回调所属的回合。压缩回合自己不调工具：它还挂着时来的工具回调，属于 CLI 紧接着自己开的那一轮
+    // （比如后台命令结束的通知）。压缩的结果和这一轮的回调走两条路，回调可能先到：等压缩回合交还、
+    // 那一轮接上，再按那一轮的权限和处理器办，不能借用压缩的只读上下文
+    const toolTurn = async (): Promise<PendingTurn | null> => {
+      let pending = await current()
+      while (pending?.context.purpose === 'compact') {
+        await pending.settled
+        pending = await current()
+      }
+      return pending
+    }
     // 会话所选型号的供应商：没填密钥、供应商被删了在这里报错，回合失败，绝不退回账号
     if (Object.keys(launch.flagSettings?.modelSettings ?? {}).length)
       hostClaudeVersion(hostClaudeExecutable(), '2.1.299')
@@ -1706,7 +1717,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         // CHA_CLAUDE_SESSION_TITLE=off：CLI 不自己用小模型起标题（入口这边也不请它起，见 server.mts）
         ...(claudeSessionTitle() ? {} : { CLAUDE_CODE_DISABLE_TERMINAL_TITLE: '1' }),
       },
-      ...runtimePermissionOptions(context, originalBashInputs),
+      ...runtimePermissionOptions(context, originalBashInputs, toolTurn),
       settings: {
         // 放 CLI 自己的默认位置时给空串：这一层优先于用户、项目的设置，盖掉那里配的 plansDirectory，
         // CLI 见到空值就用默认位置，和豁免的目录对得上（给项目外的目录 CLI 会报错再退回默认位置）
@@ -1771,7 +1782,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
               throw new Error('钩子事件里没有会话记录的路径')
             // 新会话的记录文件还没写出来时等它出现，不然崩了连会话都恢复不了（native-tool-intents.mts）
             await waitForTranscript(transcriptPath, abort.signal)
-            const pending = await current()
+            const pending = await toolTurn()
             if (!pending) throw new Error('没有接着这一轮的回合')
             pending.handlers.onNativeToolCall?.({
               callId: toolUseId,
@@ -1865,14 +1876,14 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       }
     }
 
-    opts.canUseTool = this.makeCanUseTool(context, originalBashInputs, current)
+    opts.canUseTool = this.makeCanUseTool(context, originalBashInputs, toolTurn)
     const hooks = opts.hooks as Record<string, unknown>
     hooks.PostToolUse = [
       {
         matcher: 'EnterPlanMode|ExitPlanMode|Write|Edit',
         hooks: [
           async (event: Record<string, unknown>) => {
-            const pending = await current()
+            const pending = await toolTurn()
             if (!pending || pending.abort.signal.aborted || event.agent_id) return {}
             const input = (event.tool_input ?? {}) as Record<string, unknown>
             if (isPlanFile(context, String(event.tool_name), input)) {
@@ -1895,7 +1906,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     ]
     const confirmNativeTool =
       (failed: boolean) => async (event: Record<string, unknown>, callId: string) => {
-        const pending = await current()
+        const pending = await toolTurn()
         if (pending && reservedGoalTools.delete(callId) && !isGoalTool(String(event.tool_name)))
           pending.handlers.onNativeToolResult?.(callId, { confirmed: true, failed })
         return {}

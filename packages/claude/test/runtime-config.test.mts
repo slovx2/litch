@@ -131,8 +131,9 @@ test('native SDK runtime maps manual /workflows prompts to the human workflow tr
   assert.deepEqual(messages[0].origin, { kind: 'human' })
 
   const buildOptions = Reflect.get(runtime, 'buildOptions')
-  // 权限回调按“当前回合”取处理器。
+  // 权限回调按“当前回合”取处理器和回合的用途（压缩回合还挂着时来的工具回调要等下一轮）。
   const options = buildOptions.call(runtime, {}, context, new AbortController(), async () => ({
+    context,
     handlers: {},
   }))
   assert.deepEqual(options.settings, {

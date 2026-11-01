@@ -283,9 +283,11 @@ export function deniedTool(
   return null
 }
 
+// owner：工具调用所属的回合接上之后才结束。context 是跟着当前回合走的，先等它，判断才按那个回合的权限
 export function runtimePermissionOptions(
   context: RuntimeTurnContext,
   originals: OriginalBashInputs = new Map(),
+  owner: () => Promise<unknown> = async () => {},
 ): Record<string, unknown> {
   // 计划模式用每次工具调用的动态 hook 限制；退出计划不能解除用户选择的沙箱。
   return {
@@ -297,6 +299,7 @@ export function runtimePermissionOptions(
         {
           hooks: [
             async (event: Record<string, unknown>, toolUseId: string) => {
+              await owner()
               await notePlanFile(
                 context,
                 String(event.tool_name),
