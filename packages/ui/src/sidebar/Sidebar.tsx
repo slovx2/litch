@@ -32,7 +32,7 @@ import { useT } from '../app/appearance.ts'
 import { useNow } from '../app/clock.ts'
 import { badgeOf, downHarness, downText, nameOf, wireStyle } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
-import { ago } from '../app/format.ts'
+import { ago, stampFull } from '../app/format.ts'
 import { useHoverCard } from '../app/HoverCard.tsx'
 import { Back, Caret, Forward, Icon, Notice, Plus } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
@@ -123,7 +123,8 @@ interface RowProps {
   kids?: number
   folded?: boolean
   onFold?(): void
-  interactionAt?: number | undefined
+  projectionTime?: { kind: 'recent' | 'unread'; at: number } | undefined
+  deviceLabel?: string | undefined
 }
 
 /** 一行会话。只订阅这一个会话的摘要：别的会话变了，这一行不重画 */
@@ -136,7 +137,8 @@ const SessionRow = memo(function SessionRow({
   kids = 0,
   folded = false,
   onFold,
-  interactionAt,
+  projectionTime,
+  deviceLabel,
 }: RowProps) {
   const { channel, replica } = useServices()
   const { fromTree } = useSidebarReveal()
@@ -492,6 +494,11 @@ const SessionRow = memo(function SessionRow({
           >
             {badgeOf(device, summary.harness)}
           </span>
+          {deviceLabel ? (
+            <span className="projection-device ell dim" title={deviceLabel}>
+              {deviceLabel}
+            </span>
+          ) : null}
           {nested ? null : (
             <>
               <BrowserWants deviceId={deviceId} sessionId={sessionId} />
@@ -503,7 +510,18 @@ const SessionRow = memo(function SessionRow({
                   )}
                 </span>
               ) : (
-                <span className="time">{ago(interactionAt ?? summary.updatedAt, now, t)}</span>
+                <span
+                  className="time"
+                  title={
+                    projectionTime
+                      ? t(`sidebar.projection.${projectionTime.kind}Time`, {
+                          time: stampFull(projectionTime.at, t.lang),
+                        })
+                      : undefined
+                  }
+                >
+                  {ago(projectionTime?.at ?? summary.updatedAt, now, t)}
+                </span>
               )}
             </>
           )}
@@ -687,6 +705,7 @@ interface WorkspaceHeadProps {
   menu: ReactNode
   /** 拖着的会话放下去就是回到这个项目：整行高亮 */
   drop: boolean
+  deviceLabel?: string | undefined
 }
 
 /**
@@ -710,6 +729,12 @@ function WorkspaceHead(props: WorkspaceHeadProps) {
         <>
           {workspace.color ? <i className="ws-dot" style={wireStyle(workspace.color)} /> : null}
           <span className="name ell">{workspace.name}</span>
+          {props.deviceLabel ? (
+            <span className="projection-device project ell dim" title={props.deviceLabel}>
+              {' '}
+              · {props.deviceLabel}
+            </span>
+          ) : null}
         </>
       }
       expanded={expanded}
@@ -801,7 +826,7 @@ function ProjectedDeviceBlock({
   onCompose(draft: Draft): void
   onFocus(group: string | null): void
 }) {
-  const { kind, block, byProject } = projection
+  const { kind, block, byProject, showDevice } = projection
   const deviceId = block.deviceId
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
@@ -833,7 +858,7 @@ function ProjectedDeviceBlock({
         <Plus />
       </button>
     ) : null
-  const tree = (sessionId: string, depth: number, interactionAt?: number): ReactNode => {
+  const tree = (sessionId: string, depth: number, at?: number): ReactNode => {
     if (depth > MAX_DEPTH) return null
     const kids = children[sessionId] ?? NO_IDS
     // 投影默认收起子树；用户显式展开后才挂载后代。
@@ -855,7 +880,8 @@ function ProjectedDeviceBlock({
           kids={kids.length}
           folded={shut}
           onFold={fold}
-          interactionAt={interactionAt}
+          projectionTime={at === undefined ? undefined : { kind, at }}
+          deviceLabel={showDevice && !byProject ? t.text(device.name) : undefined}
         />
         {kids.length > 0 ? (
           <div className="tree-kids">
@@ -883,7 +909,6 @@ function ProjectedDeviceBlock({
       className={`projection-block${device.connection !== 'online' ? ' off' : ''}`}
       data-device={deviceId}
       style={wireStyle(device.wire)}
-      title={t.text(device.name)}
     >
       {byProject ? (
         workspace ? (
@@ -896,6 +921,7 @@ function ProjectedDeviceBlock({
             onFocus={() => onFocus(workspace.id)}
             add={add}
             drop={false}
+            deviceLabel={showDevice ? t.text(device.name) : undefined}
             menu={
               <WorkspaceActions
                 device={device}
@@ -913,7 +939,17 @@ function ProjectedDeviceBlock({
             deviceId={deviceId}
             className="ws-line"
             toggleClass="ws-row"
-            label={<span className="name ell">{t('workspace.none')}</span>}
+            label={
+              <>
+                <span className="name ell">{t('workspace.none')}</span>
+                {showDevice ? (
+                  <span className="projection-device project ell dim" title={t.text(device.name)}>
+                    {' '}
+                    · {t.text(device.name)}
+                  </span>
+                ) : null}
+              </>
+            }
             expanded={expanded}
             onToggle={toggle}
             add={add}
@@ -921,9 +957,7 @@ function ProjectedDeviceBlock({
           />
         )
       ) : null}
-      {expanded
-        ? block.rows.map((row) => tree(row.sessionId, 0, kind === 'recent' ? row.at : undefined))
-        : null}
+      {expanded ? block.rows.map((row) => tree(row.sessionId, 0, row.at)) : null}
       {editing ? (
         <WorkspaceDialog deviceId={deviceId} workspace={editing} onClose={() => setEditing(null)} />
       ) : null}
@@ -2080,6 +2114,7 @@ export function Sidebar(props: SidebarProps) {
             <>
               {!focus ? (
                 <ProjectionGroups
+                  selection={selection}
                   render={(projection) => (
                     <ProjectedDeviceBlock
                       projection={projection}

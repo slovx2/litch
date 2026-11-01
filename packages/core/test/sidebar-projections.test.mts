@@ -10,6 +10,7 @@ import {
   keys,
   pageSidebarProjection,
   projectSidebarGroups,
+  retainOpenedUnread,
   type SessionInteraction,
   type SessionSummary,
   type SidebarProjections,
@@ -34,6 +35,30 @@ const child = (id: string, parent: string, patch: Partial<SessionSummary> = {}) 
     nativeLineage: { app: 'claude-desktop', parentId: parent, createdAt: 1 },
     ...patch,
   })
+
+test('当前打开的未读主项保留原位置，切走移除；不篡改未读目录或时间', () => {
+  const a = { deviceId: 'local', sessionId: 'a', workspaceId: 'w', at: 100 }
+  const b = { ...a, sessionId: 'b', at: 90 }
+  const remote = { ...a, deviceId: 'remote', at: 200 }
+  const rows = [b, remote]
+  const opened = { row: a, index: 0 }
+  assert.deepEqual(retainOpenedUnread(rows, opened), [a, remote, b])
+  assert.deepEqual(rows, [b, remote], '已读项只暂留在显示投影，不写回未读目录')
+  assert.deepEqual(retainOpenedUnread(rows, null), [remote, b], '切走后立即移出')
+  assert.deepEqual(retainOpenedUnread([a, b], opened), [a, b], '还未清除标记时不重复')
+  const updated = { ...a, at: 300 }
+  assert.deepEqual(retainOpenedUnread([updated, b, remote], { row: a, index: 1 }), [
+    remote,
+    updated,
+    b,
+  ])
+  assert.deepEqual(
+    pageSidebarProjection(rows, false, 2, opened).blocks.map((block) => block.rows[0]),
+    [a, remote],
+  )
+  assert.equal(pageSidebarProjection(rows, false, 2, opened).remaining, 1)
+  assert.deepEqual(pageSidebarProjection([b], true, 5, opened).blocks[0]?.rows, [a, b])
+})
 
 test('未读按后代归并主项；最近只认主动交互，排序不受 updatedAt 和置顶影响', () => {
   const sessions = map(

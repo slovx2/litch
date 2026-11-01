@@ -1,11 +1,15 @@
 import {
   keys,
+  type OpenedUnread,
   pageSidebarProjection,
+  retainOpenedUnread,
+  type SessionChildren,
   type SidebarProjectionBlock,
   type SidebarProjectionKind,
   type SidebarProjections,
 } from '@litch/core'
-import { type ReactNode, useMemo, useState } from 'react'
+import { type ReactNode, useId, useMemo, useState } from 'react'
+import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { Caret } from '../app/icons.tsx'
 import { useKey, useKeys } from '../app/services.tsx'
@@ -17,14 +21,43 @@ export interface ProjectedBlock {
   kind: SidebarProjectionKind
   block: SidebarProjectionBlock
   byProject: boolean
+  showDevice: boolean
 }
-export function ProjectionGroups({ render }: { render(props: ProjectedBlock): ReactNode }) {
+export function ProjectionGroups({
+  render,
+  selection,
+}: {
+  render(props: ProjectedBlock): ReactNode
+  selection: Selection | null
+}) {
   const devices = useKey<string[]>(keys.devices) ?? NONE
   const projections = useKeys<SidebarProjections>(devices.map(keys.sidebarProjections))
+  const children = useKey<SessionChildren>(keys.children(selection?.deviceId ?? ''))
+  // 原生子会话和 Litch 子会话都归到同一个主项，切换同棵子树时保留它。
+  const selectedRoot = useMemo(() => {
+    if (!selection) return null
+    const parents = new Map(
+      Object.entries(children ?? {}).flatMap(([parent, kids]) =>
+        kids.map((id) => [id, parent] as const),
+      ),
+    )
+    let id = selection.sessionId
+    const seen = new Set<string>()
+    while (parents.has(id) && !seen.has(id)) {
+      seen.add(id)
+      id = parents.get(id) ?? id
+    }
+    return { deviceId: selection.deviceId, sessionId: id }
+  }, [selection, children])
   return (
     <>
-      <ProjectionGroup kind="unread" projections={projections} render={render} />
-      <ProjectionGroup kind="recent" projections={projections} render={render} />
+      <ProjectionGroup
+        kind="unread"
+        projections={projections}
+        render={render}
+        selection={selectedRoot}
+      />
+      <ProjectionGroup kind="recent" projections={projections} render={render} selection={null} />
     </>
   )
 }
@@ -33,46 +66,78 @@ function ProjectionGroup({
   kind,
   projections,
   render,
+  selection,
 }: {
   kind: SidebarProjectionKind
   projections: readonly (SidebarProjections | undefined)[]
   render(props: ProjectedBlock): ReactNode
+  selection: Selection | null
 }) {
   const t = useT()
+  const headingId = useId()
   const settings = useProjectionSettings(kind)
   const [extra, setExtra] = useState(0)
   const rows = useMemo(
-    () => projections.flatMap((value) => value?.[kind] ?? []),
+    () =>
+      retainOpenedUnread(
+        projections.flatMap((value) => value?.[kind] ?? []),
+        null,
+      ),
     [projections, kind],
   )
+  const selected = selection ? JSON.stringify([selection.deviceId, selection.sessionId]) : null
+  const [held, setHeld] = useState<{ selected: string | null; opened: OpenedUnread | null }>({
+    selected: null,
+    opened: null,
+  })
+  let opened = held.opened
+  if (held.selected !== selected) {
+    const index = rows.findIndex(
+      (row) => row.deviceId === selection?.deviceId && row.sessionId === selection.sessionId,
+    )
+    const row = rows[index]
+    opened = row ? { row, index } : null
+    // 在提交画面前固定原位置，避免读标记的下一帧把下一项顶到鼠标下。
+    setHeld({ selected, opened })
+  }
+  const shownRows = useMemo(() => retainOpenedUnread(rows, opened), [rows, opened])
   const page = useMemo(
-    () => pageSidebarProjection(rows, settings.byProject, settings.first + extra),
-    [rows, settings.byProject, settings.first, extra],
+    () => pageSidebarProjection(rows, settings.byProject, settings.first + extra, opened),
+    [rows, settings.byProject, settings.first, extra, opened],
   )
+  const showDevice = new Set(page.blocks.map((block) => block.deviceId)).size > 1
   return (
-    <section className="projection-group" data-projection={kind}>
+    <section className="projection-group" data-projection={kind} aria-labelledby={headingId}>
       <div className="row-line projection-head">
         <button
           type="button"
           className="dev-row"
+          aria-label={
+            kind === 'unread' ? t('sidebar.projection.count', { n: rows.length }) : undefined
+          }
           aria-expanded={!settings.collapsed}
           onClick={() => setProjectionSettings(kind, { collapsed: !settings.collapsed })}
         >
-          <span className={settings.collapsed ? 'arr shut' : 'arr'}>
+          <span className={settings.collapsed ? 'arr wire-sq shut' : 'arr wire-sq'}>
             <Caret />
           </span>
-          <span className="name ell">{t(`sidebar.projection.${kind}`)}</span>
+          <span className="name ell" id={headingId}>
+            {t(`sidebar.projection.${kind}`)}
+          </span>
           <span className="grow" />
-          <span className="dim projection-count">{rows.length}</span>
+          {kind === 'unread' ? (
+            <span className="dim projection-count" aria-hidden="true">
+              {rows.length}
+            </span>
+          ) : null}
         </button>
         <RowMenu
           label={t('sidebar.projection.settings', { name: t(`sidebar.projection.${kind}`) })}
           actions={[
             {
               id: 'project',
-              title: t(
-                settings.byProject ? 'sidebar.projection.flat' : 'sidebar.projection.project',
-              ),
+              title: t('sidebar.projection.project'),
+              checked: settings.byProject,
             },
             {
               id: 'first',
@@ -80,7 +145,11 @@ function ProjectionGroup({
               choices: {
                 title: t('sidebar.projection.firstTitle'),
                 back: t('session.move.back'),
-                options: [5, 10, 20].map((n) => ({ id: String(n), title: String(n) })),
+                options: [5, 10, 20].map((n) => ({
+                  id: String(n),
+                  title: String(n),
+                  checked: settings.first === n,
+                })),
               },
             },
           ]}
@@ -96,9 +165,11 @@ function ProjectionGroup({
       {!settings.collapsed ? (
         <div className="projection-body">
           {page.blocks.map((block) => (
-            <div key={block.key}>{render({ kind, block, byProject: settings.byProject })}</div>
+            <div key={block.key}>
+              {render({ kind, block, byProject: settings.byProject, showDevice })}
+            </div>
           ))}
-          {rows.length === 0 ? (
+          {shownRows.length === 0 ? (
             <div className="projection-empty dim">{t(`sidebar.projection.${kind}Empty`)}</div>
           ) : null}
           {page.remaining > 0 || extra > 0 ? (

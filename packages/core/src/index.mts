@@ -423,8 +423,10 @@ export {
   type SidebarActivity,
 } from './projection/sidebar-activity.mjs'
 export {
+  type OpenedUnread,
   pageSidebarProjection,
   projectSidebarGroups,
+  retainOpenedUnread,
   type SidebarProjectionBlock,
   type SidebarProjectionKind,
   type SidebarProjectionRow,

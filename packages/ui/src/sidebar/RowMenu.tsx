@@ -1,6 +1,6 @@
 import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useState } from 'react'
 import { wireStyle } from '../app/device.ts'
-import { More } from '../app/icons.tsx'
+import { Check, More } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
 
 /** 让这一行别处的操作（在行上点右键）也能把这份菜单叫出来 */
@@ -15,6 +15,8 @@ const EDGE = 8
 export interface RowAction {
   id: string
   title: string
+  /** 开关项：明确暴露当前选择；普通操作不传。 */
+  checked?: boolean
   /** 做之前要再确认一次（删除这类找不回来的事） */
   confirm?: { title: string; note: string; yes: string; no: string }
   /** 点了之后还要再挑一个（移到哪个工作区）：换成一屏选项，挑中的那一项的标识随 onAction 给出去 */
@@ -26,6 +28,7 @@ export interface RowAction {
 export interface RowChoice {
   id: string
   title: string
+  checked?: boolean
   /** 名字前面的色块用哪根线色。不给就没有色块 */
   wire?: string | null
 }
@@ -169,7 +172,12 @@ export function RowMenu({ label, actions, onAction, handle }: RowMenuProps) {
                 <button
                   key={option.id}
                   type="button"
-                  role="menuitem"
+                  {...(option.checked === undefined
+                    ? { role: 'menuitem' as const }
+                    : {
+                        role: 'menuitemradio' as const,
+                        'aria-checked': option.checked,
+                      })}
                   className="pick-opt pick-choice"
                   data-choice={option.id}
                   onClick={() => choose(choosing, option.id)}
@@ -177,6 +185,7 @@ export function RowMenu({ label, actions, onAction, handle }: RowMenuProps) {
                   <b>
                     {option.wire ? <i className="ws-dot" style={wireStyle(option.wire)} /> : null}
                     {option.title}
+                    {option.checked ? <Check /> : null}
                   </b>
                 </button>
               ))}
@@ -195,13 +204,21 @@ export function RowMenu({ label, actions, onAction, handle }: RowMenuProps) {
                 <button
                   key={action.id}
                   type="button"
-                  role="menuitem"
+                  {...(action.checked === undefined
+                    ? { role: 'menuitem' as const }
+                    : {
+                        role: 'menuitemcheckbox' as const,
+                        'aria-checked': action.checked,
+                      })}
                   className="pick-opt"
                   data-action={action.id}
                   aria-disabled={action.disabled !== undefined || undefined}
                   onClick={() => run(action)}
                 >
-                  <b>{action.title}</b>
+                  <b>
+                    {action.title}
+                    {action.checked ? <Check /> : null}
+                  </b>
                   {typeof action.disabled === 'string' ? <span>{action.disabled}</span> : null}
                 </button>
               ))}

@@ -246,7 +246,7 @@ test('添加远程设备：出现在设备表里、开始连、连上后列出�
   assert.equal(added?.kind, 'ssh')
   assert.equal(added?.name, 'build-01', '没起名字就用别名')
   assert.equal(added?.host, 'build-01')
-  assert.notEqual(added?.wire, 'green', '线色挑一个本机没用的')
+  assert.equal(added?.wire, 'blue', '本机默认绿色时，首台远程优先蓝色，不默认组成绿/橙或绿/红')
   await settle()
   await settle()
   assert.equal(device(deviceId)?.connection, 'online')

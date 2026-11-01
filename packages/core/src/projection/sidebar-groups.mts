@@ -10,6 +10,26 @@ export interface SidebarProjectionRow {
 }
 export type SidebarProjections = Record<SidebarProjectionKind, SidebarProjectionRow[]>
 
+/** 查看未读后暂留的主项和原来的位置；不修改真正的未读状态。 */
+export interface OpenedUnread {
+  row: SidebarProjectionRow
+  index: number
+}
+
+export function retainOpenedUnread(
+  rows: readonly SidebarProjectionRow[],
+  opened: OpenedUnread | null,
+): SidebarProjectionRow[] {
+  const sorted = [...rows].sort(orderProjection)
+  if (!opened) return sorted
+  const same = (row: SidebarProjectionRow) =>
+    row.deviceId === opened.row.deviceId && row.sessionId === opened.row.sessionId
+  const kept = sorted.find(same) ?? opened.row
+  const result = sorted.filter((row) => !same(row))
+  result.splice(Math.min(Math.max(0, opened.index), result.length), 0, kept)
+  return result
+}
+
 export const orderProjection = (a: SidebarProjectionRow, b: SidebarProjectionRow): number =>
   b.at - a.at || a.deviceId.localeCompare(b.deviceId) || a.sessionId.localeCompare(b.sessionId)
 
@@ -75,8 +95,9 @@ export function pageSidebarProjection(
   rows: readonly SidebarProjectionRow[],
   byProject: boolean,
   limit: number,
+  opened: OpenedUnread | null = null,
 ): { blocks: SidebarProjectionBlock[]; remaining: number } {
-  const sorted = [...rows].sort(orderProjection)
+  const sorted = retainOpenedUnread(rows, opened)
   const shown = sorted.slice(0, Math.max(0, limit))
   const blocks = new Map<string, SidebarProjectionBlock>()
   for (const row of shown) {

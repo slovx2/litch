@@ -7,7 +7,11 @@
   padding-inline-end: 32px;
 }
 .projection-head .arr {
+  /* 沿用设备色块的占位尺寸，连同皮肤和字号变化一起对齐。 */
   display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
 }
 .projection-head .arr.shut {
   transform: rotate(-90deg);
@@ -33,4 +37,22 @@
 }
 .projection-head .row-more {
   opacity: 1;
+}
+.projection-device {
+  flex: none;
+  max-width: 10ch;
+  font-size: calc(11px * var(--fs));
+}
+.pick-opt[aria-checked] > b {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pick-opt[aria-checked] > b > svg {
+  flex: none;
+}
+/* 保留选择底色；读过的行恢复普通字重，不伪造未读记号。 */
+[data-projection="unread"] .ss-row.sel:not(.is-unread) .title {
+  font-weight: normal;
 }

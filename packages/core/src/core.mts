@@ -353,7 +353,23 @@ export function createCore(options: CoreOptions): Core {
   /** 挑一个还没有设备在用的线色；都用过了就从头轮 */
   const freeWire = (): WireColor => {
     const used = new Set([...devices.values()].map((device) => device.view.wire))
-    return WIRES.find((wire) => !used.has(wire)) ?? WIRES[devices.size % WIRES.length] ?? 'slate'
+    // 本机通常是绿色；先选蓝、紫、灰，避免首台远程默认与它组成绿/橙或绿/红。
+    // 有限色板无法单独保证辨识；投影里的设备名同时提供文字区分，不改已经保存的颜色。
+    const priority: readonly WireColor[] = [
+      'blue',
+      'violet',
+      'slate',
+      'yellow',
+      'orange',
+      'green',
+      'brown',
+      'red',
+    ]
+    return (
+      priority.find((wire) => !used.has(wire)) ??
+      priority[devices.size % priority.length] ??
+      'slate'
+    )
   }
 
   const newId = (): string => {
