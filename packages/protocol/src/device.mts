@@ -360,6 +360,8 @@ export const DEVICE_ERROR_CODE = {
   unknownThread: -32602,
   /** 请求要发给的 harness 现在不可用，或者等应答的时候它断开了 */
   harnessUnavailable: -32050,
+  /** 重启恢复暂时占用会话；订阅可退避重试，不能降级成永久只读 */
+  sessionRecovering: -32051,
 } as const
 
 export type DeviceErrorReason = keyof typeof DEVICE_ERROR_CODE

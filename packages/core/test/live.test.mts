@@ -192,6 +192,93 @@ function setup(
 /** 订阅一个会话，并像界面那样把增量落到快照上。经真的通道，见 wire.mts */
 const watch = watchSession
 
+test('重连撞上设备恢复：保持可写视图，输入先排队，订阅恢复后只发送一次', async () => {
+  const { core, peer, time, handlers, command, sent } = setup()
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  assert.equal(session.seen.view?.live, true)
+  const resume = handlers['thread/resume']
+  assert.ok(resume)
+  let attempts = 0
+  handlers['thread/resume'] = (params) => {
+    if (++attempts <= 2)
+      throw new RpcFailure(-32051, 'temporary recovery gate', { litch: 'sessionRecovering' })
+    return resume(params)
+  }
+  peer.last().drop()
+  await settle()
+  time.advance(500)
+  await settle()
+  await settle()
+  assert.equal(attempts, 1)
+  assert.equal(session.seen.view?.live, true, '恢复期间不能退成只读')
+  assert.deepEqual(session.seen.errors, [])
+  await command('session.send', { ...where, text: '恢复期间发送的原文' })
+  assert.equal(sent('turn/start').length, 0)
+  time.advance(250)
+  await settle()
+  assert.equal(attempts, 2)
+  time.advance(500)
+  await settle()
+  await settle()
+  assert.equal(attempts, 3)
+  assert.equal(session.seen.view?.live, true)
+  assert.deepEqual(session.seen.errors, [])
+  assert.equal(sent('thread/read').length, 0, '暂态错误不触发只读回退')
+  assert.deepEqual(
+    sent('turn/start').map((params) => (params as { input: { text: string }[] }).input[0]?.text),
+    ['恢复期间发送的原文'],
+  )
+  core.stop()
+})
+
+test('恢复订阅有限重试：持续繁忙报载入失败，不生成只读快照', async () => {
+  const { core, time, handlers, sent } = setup()
+  let attempts = 0
+  handlers['thread/resume'] = () => {
+    attempts++
+    throw new RpcFailure(-32051, 'busy', { litch: 'sessionRecovering' })
+  }
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  for (const delay of [250, 500, 1000, 2000, 4000, 8000]) {
+    assert.equal(session.seen.snapshots, 0)
+    assert.deepEqual(session.seen.errors, [])
+    time.advance(delay)
+    await settle()
+  }
+  assert.equal(attempts, 7)
+  assert.equal(session.seen.snapshots, 0)
+  assert.equal(session.seen.errors.length, 1)
+  assert.equal(sent('thread/read').length, 0)
+  time.advance(60_000)
+  await settle()
+  assert.equal(attempts, 7)
+  core.stop()
+})
+
+test('恢复订阅退避中关闭核心，不再向已关闭的连接重试', async () => {
+  const { core, time, handlers } = setup()
+  let attempts = 0
+  handlers['thread/resume'] = () => {
+    attempts++
+    throw new RpcFailure(-32051, 'busy', { litch: 'sessionRecovering' })
+  }
+  core.start()
+  await settle()
+  watch(core)
+  await settle()
+  core.stop()
+  assert.equal(time.pending(), 0, '关闭时清掉恢复退避定时器')
+  time.advance(60_000)
+  await settle()
+  assert.equal(attempts, 1)
+})
+
 /** 协议里的一个模型，只填界面用得到的字段 */
 function model(
   id: string,

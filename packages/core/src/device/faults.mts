@@ -20,6 +20,10 @@ export function deviceFault(error: unknown): DeviceErrorData | null {
 export const isHarnessDown = (error: unknown): boolean =>
   deviceFault(error)?.litch === 'harnessUnavailable'
 
+/** 重启恢复占用会话是暂态，不代表引擎永远不能订阅它。 */
+export const isSessionRecovering = (error: unknown): boolean =>
+  deviceFault(error)?.litch === 'sessionRecovering'
+
 /**
  * 这个会话正被别处的 codex 进程用着。原生 codex 同一个会话同一时间只许一个进程写，
  * 用户在终端里（或者官方桌面端里）开着它的时候，这边恢复、归档、删除都会被这样拒掉

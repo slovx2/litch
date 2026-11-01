@@ -80,9 +80,11 @@ import {
   harnessDownError,
   isHarnessDown,
   isHeldElsewhere,
+  isSessionRecovering,
   lacksMethod,
 } from './faults.mjs'
 import type { HarnessTerms } from './harness.mjs'
+import { resumeAfterRecovery } from './resume-retry.mjs'
 import { staleView, trimView, type ViewStore } from './view-store.mjs'
 
 export interface LiveHost {
@@ -1147,7 +1149,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       }
     }
     try {
-      const resumed = await withSpeed('thread/resume', { threadId: live.id }, options)
+      const resumed = await resumeAfterRecovery(
+        () => withSpeed('thread/resume', { threadId: live.id }, options),
+        host.clock,
+        cancel.signal,
+      )
       for (const turn of resumed.thread.turns ?? [])
         for (const item of turn.items) reconcileInput(live, item)
       const view = projectThread(resumed.thread, scope(resumed.thread))
@@ -1160,7 +1166,9 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     } catch (error) {
       // 只有对面明确说“订阅不了”才退回去只取历史；断线、超时照常报错。
       // 它所属的 harness 不可用也不是“订阅不了”：只读地取同样取不到，等它恢复再载入
-      if (!(error instanceof RpcError) || isHarnessDown(error)) throw error
+      // 恢复重试耗尽也应报载入失败，让界面可重试，不能生成永久只读视图。
+      if (!(error instanceof RpcError) || isHarnessDown(error) || isSessionRecovering(error))
+        throw error
       host.log(`订阅会话 ${live.id} 失败，改为只读载入：${error.message}`)
       const { thread } = await host.request(
         'thread/read',

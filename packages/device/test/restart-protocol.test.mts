@@ -18,6 +18,28 @@ function control(pid: number): FakeControl {
   return value
 }
 
+test('恢复占用时订阅和插话返回明确的暂态标记，释放后原会话仍能订阅', async () => {
+  const engine = new FakeEngine('pi')
+  const ctl = control(1)
+  const env = rig({ pi: engine }, {}, { control: ctl, wrapUpReminder: false })
+  try {
+    const client = env.connect()
+    await client.initialize()
+    const { thread } = await client.call('thread/start', { harness: 'pi', cwd: env.stateDir })
+    await ctl.onAsk?.('restart.prepare')
+    for (const method of ['thread/resume', 'turn/steer']) {
+      await assert.rejects(client.call(method, { threadId: thread.id }), {
+        code: -32051,
+        data: { litch: 'sessionRecovering', method, harness: 'pi', threadId: thread.id },
+      })
+    }
+    env.device.restart.release()
+    assert.equal((await client.call('thread/resume', { threadId: thread.id })).thread.id, thread.id)
+  } finally {
+    await env.close()
+  }
+})
+
 test('设备协议：明确准备后重建设备，在原线程发送一次标准文本；无需新扩展', async () => {
   const engine = new FakeEngine('pi')
   const oldControl = control(1)

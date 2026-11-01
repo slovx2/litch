@@ -148,6 +148,11 @@
           "litch": "harnessUnavailable",
           "code": -32050,
           "description": "请求要发给的 harness 现在不可用，或者等应答的时候它断开了"
+        },
+        {
+          "litch": "sessionRecovering",
+          "code": -32051,
+          "description": "设备正在重启或恢复此会话，暂时不能执行 thread/resume 或 turn/steer。data 带 method、harness 和已知的 threadId。客户端可对订阅请求做有限次退避重试，不应将会话降级为永久只读；不得因此自动重发写操作。"
         }
       ],
       "data": {
@@ -160,7 +165,8 @@
               "extensionRequired",
               "unknownHarness",
               "unknownThread",
-              "harnessUnavailable"
+              "harnessUnavailable",
+              "sessionRecovering"
             ]
           },
           "method": { "type": "string" },
@@ -175,7 +181,8 @@
   ],
   "definitions": {
     "HarnessRuntimeInfo": {
-      "type": "object", "additionalProperties": false,
+      "type": "object",
+      "additionalProperties": false,
       "required": ["path", "version", "source", "startedAt"],
       "properties": {
         "path": { "type": "string", "minLength": 1 },
@@ -218,7 +225,10 @@
         },
         "displayName": { "type": "string", "minLength": 1 },
         "badge": { "description": "两个字母的徽标", "type": "string", "minLength": 1 },
-        "cli": { "description": "仅向声明 harnessRuntime 的连接发送，见 harness-runtime.json", "$ref": "#/definitions/HarnessRuntimeInfo" },
+        "cli": {
+          "description": "仅向声明 harnessRuntime 的连接发送，见 harness-runtime.json",
+          "$ref": "#/definitions/HarnessRuntimeInfo"
+        },
         "version": { "type": ["string", "null"] },
         "engine": { "description": "运行时自己报的引擎名", "type": ["string", "null"] },
         "available": { "type": "boolean" },

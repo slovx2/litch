@@ -889,7 +889,11 @@ export class ClientSession implements ClientToolPeer {
         ['turn/steer', 'thread/resume'].includes(method) &&
         this.host.restart?.blocked(link.harness, threadId ?? undefined)
       ) {
-        throw new Error('设备正在重启或恢复此会话，请稍后重试')
+        throw new DeviceError('sessionRecovering', '设备正在重启或恢复此会话，请稍后重试', {
+          method,
+          harness: link.harness,
+          ...(threadId ? { threadId } : {}),
+        })
       }
       // 先准备参数，再拿短期工作来源；准备失败不能遗留保活。
       let outgoing = ready
