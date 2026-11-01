@@ -106,6 +106,10 @@ export function ManagerPage({
   const [failure, setFailure] = useState('')
   const board = view?.board
   const attention = manager.pendingDecisions + (manager.pendingRequests ?? 0)
+  const attentionTitle = t('manager.pendingDetail', {
+    decisions: manager.pendingDecisions,
+    requests: manager.pendingRequests ?? 0,
+  })
   const counts = {
     overview: 0,
     requests: manager.pendingRequests ?? 0,
@@ -180,7 +184,11 @@ export function ManagerPage({
           onClick={() => setBoardLayout({ open: !layout.open })}
         >
           {t(layout.open ? 'manager.hideBoard' : 'manager.showBoard')}
-          {!layout.open && attention ? <span className="pill wait">{attention}</span> : null}
+          {!layout.open && attention ? (
+            <span className="pill wait" title={attentionTitle}>
+              {t('manager.pending', { n: attention })}
+            </span>
+          ) : null}
         </button>
         {manager.status === 'active' ? (
           <>
@@ -231,11 +239,12 @@ export function ManagerPage({
           <button
             type="button"
             key={key}
+            title={key === 'board' ? attentionTitle : undefined}
             aria-pressed={narrow === key}
             onClick={() => setNarrow(key)}
           >
             {t(`manager.${key}`)}
-            {key === 'board' && attention ? ` ${attention}` : ''}
+            {key === 'board' && attention ? ` · ${t('manager.pending', { n: attention })}` : ''}
           </button>
         ))}
       </div>

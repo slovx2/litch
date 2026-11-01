@@ -81,13 +81,6 @@ export function Requests({
               <section className="mg-request-response">
                 <header>
                   <b>{t('manager.yourReply')}</b>
-                  <span className="dim">
-                    {t(
-                      request.response.delivered
-                        ? 'manager.request.delivered'
-                        : 'manager.request.replied',
-                    )}
-                  </span>
                   <Stamp className="dim" at={request.response.at} />
                 </header>
                 {request.response.text ? <BoardMarkdown text={request.response.text} /> : null}

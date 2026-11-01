@@ -812,3 +812,12 @@
 .mg-request > .btn {
   align-self: flex-start;
 }
+
+/* 待处理与本地草稿分行并列，窄侧栏也保留两种数量。 */
+.mg-sidebar-counts {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}

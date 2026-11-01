@@ -9,6 +9,7 @@ import type {
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useServices } from '../app/services.tsx'
+import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
@@ -423,6 +424,20 @@ export function Decisions({
                     </>
                   ) : (
                     <>
+                      {decision.answer ? (
+                        <p>
+                          {
+                            decision.options.find(
+                              (option) => option.id === decision.answer?.optionId,
+                            )?.label
+                          }{' '}
+                          {decision.answer.text}
+                          <small className="dim">
+                            {' '}
+                            · <Stamp at={decision.answer.at} />
+                          </small>
+                        </p>
+                      ) : null}
                       <button
                         type="button"
                         className="btn ghost"
@@ -438,20 +453,6 @@ export function Decisions({
                       >
                         {t('manager.editAnswer')}
                       </button>
-                      {decision.answer ? (
-                        <p>
-                          {
-                            decision.options.find(
-                              (option) => option.id === decision.answer?.optionId,
-                            )?.label
-                          }{' '}
-                          {decision.answer.text}
-                          <small className="dim">
-                            {' '}
-                            · {new Date(decision.answer.at).toLocaleString()}
-                          </small>
-                        </p>
-                      ) : null}
                       {decision.closed ? <p>{decision.closed.reason}</p> : null}
                       {decision.landed.length ? (
                         <div className="mg-item-meta">
@@ -514,7 +515,7 @@ export function Decisions({
                       <span className="mg-meta-label">{t('manager.verification')}</span>
                       <span>
                         {decision.checked.commit ? `${decision.checked.commit.slice(0, 8)} · ` : ''}
-                        {new Date(decision.checked.at).toLocaleString()}
+                        <Stamp at={decision.checked.at} />
                       </span>
                     </div>
                   ) : null}

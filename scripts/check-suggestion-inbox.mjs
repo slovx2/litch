@@ -132,6 +132,14 @@ try {
     ),
     '侧栏合计待定决策与待做请求',
   )
+  assert.equal(
+    await read("document.querySelector('.mg-sidebar-counts [title]').title"),
+    '3 个决策 · 1 个请你做',
+  )
+  assert.equal(
+    await read("document.querySelector('.mg-sidebar-counts [title]').textContent"),
+    '4 待处理',
+  )
   await shot('manager-entry')
   await click('[data-board-tab="suggestions"]')
   assert.equal(await read("document.querySelectorAll('.suggestion-row').length"), 0)
@@ -554,6 +562,11 @@ try {
     ),
     '已落地采用元信息列表',
   )
+  assert.ok(
+    await read(
+      `(()=>{const card=document.querySelector('[data-decision="D-13"]');const answer=card.querySelector('[role="tabpanel"] p');const edit=card.querySelector('[data-act="manager-edit-answer"]');return !!answer.querySelector('time[datetime][title]')&&!!card.querySelector('footer time[datetime][title]')&&!!(answer.compareDocumentPosition(edit)&Node.DOCUMENT_POSITION_FOLLOWING)})()`,
+    ),
+  )
   await shot('answered-landed-metadata')
   await click(questionTab)
   await fill(question, '保留的追问草稿')
@@ -571,7 +584,28 @@ try {
     await read(`document.querySelector(${JSON.stringify(question)}).value`),
     '保留的追问草稿',
   )
+  assert.ok(
+    await read(
+      "document.querySelector('.mg-sidebar-counts').textContent.includes('2 待处理') && document.querySelector('.mg-sidebar-counts [data-manager-draft-count]').textContent==='1 项草稿'",
+    ),
+  )
+  await read("window.__litchLook.set({lang:'en'})")
+  assert.equal(await read("document.querySelector('.mg-send .grow').textContent"), '1 draft')
+  assert.equal(
+    await read(
+      "document.querySelector('.mg-sidebar-counts [data-manager-draft-count]').textContent",
+    ),
+    '1 draft',
+  )
+  await shot('draft-and-attention-en')
+  await read("window.__litchLook.set({lang:'zh-CN'})")
   await click('[data-board-tab="requests"]')
+  assert.equal(
+    await read(
+      "document.querySelector('.mg-request-response header').textContent.includes('已交付')",
+    ),
+    false,
+  )
   await click('[data-act="manager-request-edit"]')
   await fill('[data-act="manager-request-text"]', '放弃这次回复修改')
   await click('[data-act="manager-request-cancel-edit"]')
@@ -591,7 +625,7 @@ try {
   await until(
     () =>
       read(
-        "Array.from(document.querySelectorAll('.mg-question-round b')).some(e=>e.textContent==='临时对话：')",
+        "Array.from(document.querySelectorAll('.mg-question-round b')).some(e=>e.textContent==='助手（临时对话）：')",
       ),
     '临时对话标明发言人',
   )
@@ -610,7 +644,7 @@ try {
   await click('[data-act="manager-board-toggle"]')
   assert.equal(
     await read('document.querySelector(\'[data-act="manager-board-toggle"] .pill\').textContent'),
-    '2',
+    '2 待处理',
   )
   await click('[data-act="manager-board-toggle"]')
   await read("window.__litchLook.set({skin:'standard',theme:'light',lang:'en'})")

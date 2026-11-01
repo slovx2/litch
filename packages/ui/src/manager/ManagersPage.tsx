@@ -49,7 +49,13 @@ export function ManagersPage({
           <span className="dim">{t('manager.ending')}</span>
         ) : null}
         {manager.pendingDecisions + (manager.pendingRequests ?? 0) ? (
-          <span className="pill wait">
+          <span
+            className="pill wait"
+            title={t('manager.pendingDetail', {
+              decisions: manager.pendingDecisions,
+              requests: manager.pendingRequests ?? 0,
+            })}
+          >
             {t('manager.pending', { n: manager.pendingDecisions + (manager.pendingRequests ?? 0) })}
           </span>
         ) : null}

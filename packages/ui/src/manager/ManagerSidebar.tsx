@@ -76,16 +76,30 @@ function ManagerRow({
           <i className={manager.runningLines ? 'st run' : 'st'} />
           <span className="ell grow">{manager.name || t('manager.manager')}</span>
           <i className="wire-sq" title={device ? t.text(device.name) : manager.deviceId} />
-          <small className={attention || count ? 'mg-attention' : 'dim'}>
-            {manager.status === 'ending'
-              ? t('manager.ending')
-              : count
-                ? t('manager.draftCount', { n: count })
-                : attention
-                  ? t('manager.pending', {
-                      n: attention,
-                    })
-                  : t(manager.runningLines ? 'manager.running' : 'manager.idle')}
+          <small className="mg-sidebar-counts">
+            {manager.status === 'ending' ? (
+              <span className="dim">{t('manager.ending')}</span>
+            ) : null}
+            {attention || count ? (
+              <span
+                className={attention ? 'mg-attention' : 'dim'}
+                title={t('manager.pendingDetail', {
+                  decisions: manager.pendingDecisions,
+                  requests: manager.pendingRequests ?? 0,
+                })}
+              >
+                {t('manager.pending', { n: attention })}
+              </span>
+            ) : manager.status !== 'ending' ? (
+              <span className="dim">
+                {t(manager.runningLines ? 'manager.running' : 'manager.idle')}
+              </span>
+            ) : null}
+            {count ? (
+              <span className="mg-attention" data-manager-draft-count>
+                {t('manager.draftCount', { n: count })}
+              </span>
+            ) : null}
           </small>
         </button>
       </div>
