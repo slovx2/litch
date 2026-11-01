@@ -495,10 +495,18 @@ async function main() {
   expect(info.available && info.engine === 'codex', `应该可用：${JSON.stringify(info.unavailable)}`)
   expect(/^\d+\.\d+\.\d+/.test(info.version ?? ''), `版本没有认出来：${info.version}`)
   expect(info.features && info.permissionPresets?.length > 0, '声明里应有能力位和权限预设')
-  // 它不认识我们的扩展；客户端工具是设备进程替它挑执行方，harness 详情设置是设备进程替它翻译，所以报这两项
+  // 这里是经聚合面使用这个 harness 时可用的能力清单，不是这条连接已启用的扩展。
+  // 原生不认识这些扩展：设备负责客户端工具、详情设置，以及 0.163 起的显式后台接续；
+  // 本连接未声明 nativeBackgroundWake，因此发现这项能力仍不会自动注入登记工具。
+  const [major, minor] = info.version.split('.').map(Number)
+  const expectedExtensions = [
+    'clientTools',
+    'harnessConfig',
+    ...(major > 0 || minor >= 163 ? ['nativeBackgroundWake'] : []),
+  ]
   expect(
-    JSON.stringify(info.extensions) === JSON.stringify(['clientTools', 'harnessConfig']),
-    `扩展只应有设备进程替它做的 clientTools、harnessConfig：${JSON.stringify(info.extensions)}`,
+    JSON.stringify(info.extensions) === JSON.stringify(expectedExtensions),
+    `扩展应为设备替当前版本提供的 ${expectedExtensions.join('、')}：${JSON.stringify(info.extensions)}`,
   )
   passed(
     `启用后可用：${info.displayName} ${info.version}（${codex}），权限预设 ${info.permissionPresets.map((preset) => preset.id).join('、')}`,

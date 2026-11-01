@@ -232,7 +232,8 @@ export const NATIVE_CODEX_DIALECT: UpstreamDialect = {
       ...HARNESS_IDENTITY.codex,
       // 它不认识我们的任何扩展。“拒绝时附说明”也没有：它的拒绝带不了话。
       // 客户端工具是设备进程替它做的（client-tools.mts），经聚合面连到它时成立；
-      // harness 详情设置也是设备进程替它翻译的（codex-harness-config.mts）
+      // harness 详情设置也是设备进程替它翻译的（codex-harness-config.mts），原生后台登记接续同理。
+      // 这里声明可用能力；工具注入、扩展字段投递仍分别检查客户端声明。
       extensions: [
         EXTENSION.clientTools,
         EXTENSION.harnessConfig,
