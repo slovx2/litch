@@ -20,6 +20,7 @@ import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.m
 import {
   type ClaudeAuthStatus,
   ClaudeLoginAttempt,
+  claudeAccountKind,
   claudeAuthLogout,
   claudeAuthStatus,
   type LoginMode,
@@ -89,8 +90,10 @@ function joinText(...parts: Array<HarnessText | null>): HarnessText {
   }
 }
 
-function accountAuth(status: ClaudeAuthStatus): HarnessProviderAuthState {
-  if (!status.loggedIn) return { signedIn: false, kind: 'none', label: null }
+function accountAuth(status: ClaudeAuthStatus, env: NodeJS.ProcessEnv): HarnessProviderAuthState {
+  const account = claudeAccountKind(status, env)
+  if (account === null) return { signedIn: false, kind: 'none', label: null }
+  if (account === 'token') return { signedIn: true, kind: 'env', label: 'CLAUDE_CODE_OAUTH_TOKEN' }
   const who = (...parts: Array<string | null>) => parts.filter(Boolean).join(' · ') || null
   switch (status.authMethod) {
     case 'claude.ai':
@@ -349,15 +352,15 @@ export class ClaudeProviders {
     this.host = host
   }
 
-  // 按账号算的环境：查状态、登录、登出都用它。auth 子命令不收 --settings，用户 settings.json 里另配的
-  // 凭据会让它报的不是账号（读的时候另加提示）
+  // 登录、登出沿用账号环境；状态查询还要应用账号回合的命令行设置覆盖。
   private accountEnv(): NodeJS.ProcessEnv {
     return providerLaunch(ACCOUNT_PROVIDER, null).env
   }
 
   private async accountState(): Promise<HarnessProviderAuthState> {
     try {
-      return accountAuth(await claudeAuthStatus(this.accountEnv()))
+      const { env, flagSettings } = providerLaunch(ACCOUNT_PROVIDER, null)
+      return accountAuth(await claudeAuthStatus(env, flagSettings), env)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       return {

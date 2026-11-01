@@ -28,6 +28,7 @@ import { NativeTurnInput } from '../src/native-turn-input.mjs'
 import { resolveRuntimeConfig } from '../src/runtime-config.mjs'
 import { planDirectory } from '../src/runtime-permissions.mjs'
 import { buildSystemPromptAddendum } from '../src/server-helpers.mjs'
+import { ToolObservation } from '../src/tool-observation.mjs'
 import type { RuntimeTurnContext } from '../src/types.mjs'
 import { parseWorkflowCommand, workflowRuntimePrompt } from '../src/workflow-command.mjs'
 import {
@@ -527,6 +528,7 @@ test('native SDK parent result does not cap workflow runtime at three seconds', 
   let resolved = false
   const pending = {
     context: nativeTurnContext({ turnId: 'parent-result-workflow-turn' }),
+    toolObservation: new ToolObservation(),
     input: new NativeTurnInput(),
     // 与 attachTurn 的必填状态一致；延迟收尾也必须结算尚未确认的插话。
     pendingInputs: new Set(['deferred-steer']),

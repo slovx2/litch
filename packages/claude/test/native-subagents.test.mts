@@ -279,7 +279,7 @@ test('SUBAGENT-003：新旧模型都向 CLI 暴露 TodoWrite 清单工具', { ti
   const client = await ProtocolClient.start(home, await model.start())
   try {
     const { thread } = await client.request('thread/start', { cwd: home })
-    model.enqueue(() => [
+    model.enqueueWithTools(['TodoWrite'], () => [
       {
         type: 'tool_use',
         id: toolId(),
@@ -295,9 +295,9 @@ test('SUBAGENT-003：新旧模型都向 CLI 暴露 TodoWrite 清单工具', { ti
       input: [{ type: 'text', text: '列一个任务清单' }],
     })
     assert.equal((await client.completed(turn.id)).status, 'completed')
-    const tools = ((model.requests[0]?.tools ?? []) as Array<{ name: string }>).map(
-      (tool) => tool.name,
-    )
+    const tools = (
+      (model.requests[model.toolSearchRequests.length]?.tools ?? []) as Array<{ name: string }>
+    ).map((tool) => tool.name)
     assert.ok(tools.includes('TodoWrite'), `CLI 应提供 TodoWrite，实际：${tools.join(',')}`)
     assert.ok(!tools.includes('TaskCreate'), '不应同时提供适配器未映射的 TaskCreate')
     const plan = await client.notification(
@@ -306,7 +306,7 @@ test('SUBAGENT-003：新旧模型都向 CLI 暴露 TodoWrite 清单工具', { ti
     )
     assert.deepEqual(plan.plan, [{ step: '第一步', status: 'inProgress' }])
     // 工具真实执行成功，而不是被 CLI 以“无此工具”拒绝。
-    const followUp = JSON.stringify(model.requests[1]?.messages.at(-1))
+    const followUp = JSON.stringify(model.requests.at(-1)?.messages.at(-1))
     assert.ok(!followUp.includes('No such tool'), followUp.slice(0, 400))
     model.assertConsumed()
   } finally {

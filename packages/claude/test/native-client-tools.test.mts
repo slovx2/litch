@@ -303,7 +303,7 @@ test('CLIENT-TOOLS-CC-005：用户自己的 MCP 工具照旧走审批', { timeou
         : { decision: 'decline' }
     }
     let result = ''
-    model.enqueue((request) => {
+    model.enqueueWithTools(['mcp__fixture__echo'], (request) => {
       const name = 'mcp__fixture__echo'
       assert.ok(request.tools.some((tool: any) => tool.name === name))
       return [{ type: 'tool_use', id: 'toolu_mcp', name, input: { value: 'MCP_RAN' } }]
@@ -410,8 +410,14 @@ for (const [label, side, identical] of [
         seen.some((block) => block.type === 'text' && block.text === 'SCREENSHOT'),
         summary,
       )
-      // 没有换成“图存在某个文件里”的说明
-      assert.doesNotMatch(summary, /\/(tmp|var|private|Users)\//, summary)
+      // CLI 可给真实图片附上自己缓存的来源，但不能用路径替代图片或带出客户端路径。
+      for (const block of seen.filter((entry) => entry.type === 'text')) {
+        const source = /^\[Image: source: (.+)\]$/.exec(block.text.trim())
+        if (source) {
+          assert.ok(source[1]!.startsWith(join(home, 'claude', 'projects') + '/'), block.text)
+          assert.ok(source[1]!.includes('/tool-results/'), block.text)
+        } else assert.doesNotMatch(block.text, /\/(tmp|var|private|Users)\//)
+      }
       const received = Buffer.from(images[0].source.data, 'base64')
       assert.equal(imageSize(received), `${side}x${side}`, summary)
       if (identical) {

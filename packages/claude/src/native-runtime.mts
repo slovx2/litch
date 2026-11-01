@@ -10,6 +10,7 @@ import {
 import { homedir } from 'node:os'
 import { join, relative } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { ToolObservation } from './tool-observation.mjs'
 
 // 提示缓存时长（默认主对话 1h、子代理 5m；CHA_CLAUDE_PROMPT_CACHE_TTL=default 时不覆盖），CLI 继承这个进程的环境
 applyPromptCacheTtl()
@@ -301,11 +302,8 @@ interface PendingTurn {
   workflowTranscriptRoots: string[]
   skippedWorkflowTaskIds: Set<string>
   workflowTasks: Map<string, WorkflowTaskState>
-  // Tool ids whose content_block_start we already saw — used to skip the
-  // second delivery via AssistantMessage.content (the SDK ships every
-  // ToolUseBlock twice; we keep only the AssistantMessage copy because
-  // content_block_start arrives with empty input).
-  toolStartSeen: Set<string>
+  // 已处理正文之后观察到的工具；让控制通道上的计划确认与消息通道有明确先后。
+  toolObservation: ToolObservation
   // Buffer + tool ids for StructuredOutput coercion: when the SDK ships a
   // synthetic StructuredOutput tool_use we want to suppress the streamed
   // text and emit only the final coerced JSON.
@@ -591,7 +589,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       workflowTranscriptRoots: defaultWorkflowTranscriptRoots(process.env, context.cwd),
       skippedWorkflowTaskIds: new Set(),
       workflowTasks: new Map(),
-      toolStartSeen: new Set(),
+      toolObservation: new ToolObservation(),
       structuredBuffer: '',
       pendingUserMessage: null,
       deferredResult: null,
@@ -1940,6 +1938,9 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         return { behavior: 'deny', message: '子代理不能修改父会话的计划模式' }
       if (toolName === 'EnterPlanMode') return { behavior: 'allow', updatedInput: input }
       if (toolName === 'ExitPlanMode') {
+        // 控制通道可能先于 stdout 消息到达；按工具 ID 等待正文处理，不能靠延时猜测。
+        if (!(await pending.toolObservation.wait(toolUseId, options.signal)))
+          return { behavior: 'deny', message: '计划确认已取消' }
         // 发起回合的连接没声明 planConfirmation（官方桌面端、移动端）：它们在回合结束后自己问，
         // 入口不再问一次。不放行这次调用（放行就退出计划模式接着执行了），并让 CLI 就此停下，
         // 回合带着计划正常结束；要执行时客户端会发一个切回默认模式的新回合。
@@ -2154,6 +2155,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
 
   // 把回合从进程上摘下来；进程是否留下由调用方决定。
   private detach(pending: PendingTurn): void {
+    pending.toolObservation.close()
     pending.resolved = true
     this.turns.delete(pending.context.turnId)
     if (pending.session?.turn === pending) pending.session.turn = null
@@ -2699,7 +2701,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         // Skip the start envelope for tool_use — input is empty here and the
         // full block lands later inside the AssistantMessage. Without this
         // we'd emit one orphan inProgress item per tool and a real one.
-        if (id) pending.toolStartSeen.add(id)
+        if (id) pending.toolObservation.observe(id)
       }
       return
     }
@@ -2876,6 +2878,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           continue
         }
         if (name === 'AskUserQuestion' || name === 'ExitPlanMode') {
+          if (!nestedMessage) pending.toolObservation.observe(id)
           // The canUseTool bridge below renders this as a Codex-native
           // dynamicToolCall via onUserInputRequest. Skip the generic
           // tool_use event so the App doesn't also draw an mcpToolCall card

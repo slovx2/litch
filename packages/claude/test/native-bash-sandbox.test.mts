@@ -23,6 +23,11 @@ test('PERMISSION-006：真实 Bash 的工作区、网络、只读和计划边界
   assert.ok(address && typeof address !== 'string')
   const url = 'http://127.0.0.1:' + address.port
   const model = new MockLLM()
+  // 分类器放行，仍由真实沙箱阻止写入；不能让模型拒绝掩盖权限执行失效。
+  model.permissionClassifier = (request) => {
+    assert.match(JSON.stringify(request.messages), /plan-write\.txt/)
+    return [{ type: 'text', text: '<block>no</block>' }]
+  }
   const client = await ProtocolClient.start(home, await model.start())
   try {
     const approvals: string[] = []

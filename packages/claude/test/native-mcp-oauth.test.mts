@@ -124,7 +124,7 @@ test('MCP-011：真实 SDK OAuth PKCE、并发刷新、重启与配置范围隔�
     assert.equal(credentials.length, 1)
     assert.equal((await stat(join(directory, credentials[0]!))).mode & 0o777, 0o600)
     const run = async () => {
-      model.enqueue((request) => {
+      model.enqueueWithTools(['mcp__secure__oauth_write'], (request) => {
         assert.ok(request.tools.some((tool: any) => tool.name === 'mcp__secure__oauth_write'))
         assert.ok(!JSON.stringify(request).includes(fixture.token))
         return [
@@ -357,7 +357,7 @@ test('MCP-011：真实 SSE OAuth 未登录、SDK 工具执行、并发刷新及�
   await oauthFixture(async (home, fixture, model, client) => {
     assert.equal((await client.request('mcpServerStatus/list')).data[0].authStatus, 'notLoggedIn')
     assert.equal((await fetch(await authorize(client))).status, 200)
-    model.enqueue((request) => {
+    model.enqueueWithTools(['mcp__secure__oauth_write'], (request) => {
       assert.ok(request.tools.some((tool: any) => tool.name === 'mcp__secure__oauth_write'))
       assert.ok(!JSON.stringify(request).includes(fixture.token))
       return [
@@ -392,7 +392,7 @@ test('MCP-011：真实 SSE OAuth 未登录、SDK 工具执行、并发刷新及�
     assert.equal((await client.request('mcpServerStatus/list')).data[0].authStatus, 'notLoggedIn')
     assert.equal(fixture.tokenRequests, 3)
     assert.equal(fixture.effects, 1)
-    assert.equal(model.requests.length, 2)
+    assert.equal(model.requests.length, 2 + model.toolSearchRequests.length)
     assert.equal(await readFile(join(home, 'effect.txt'), 'utf8'), 'OAUTH_REAL_EFFECT\n')
     fixture.failToken = false
     assert.equal((await client.request('mcpServerStatus/list')).data[0].authStatus, 'oAuth')

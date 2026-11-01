@@ -43,7 +43,9 @@ for (const mode of ['full', 'no-idle', 'read-only'] as const)
             (e) => e.method === 'item/completed' && e.params?.item?.type === 'commandExecution',
           ),
         )
-        return [{ type: 'text', text: '摘要：用户希望后台命令结束后写一个标记文件。' }]
+        return [
+          { type: 'text', text: '<summary>摘要：用户希望后台命令结束后写一个标记文件。</summary>' },
+        ]
       })
       // CLI 的通知轮次可能合并，按请求内容响应，不依赖请求次数。
       scene.model.fallback = (request) => {

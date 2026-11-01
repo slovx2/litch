@@ -81,7 +81,7 @@ for (const [label, sources, projectLoaded] of [
     try {
       let tools: string[] = []
       let sawMemory = false
-      model.enqueue((request) => {
+      model.enqueueWithTools(projectLoaded ? ['mcp__probe__echo'] : [], (request) => {
         tools = (request.tools ?? []).map((tool: any) => String(tool.name))
         sawMemory = promptText([request.system, request.messages]).includes(MEMORY_MARKER)
         return [

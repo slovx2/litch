@@ -22,6 +22,8 @@ const readTools = new Set([
   'Read',
   'Glob',
   'Grep',
+  // 仅加载工具定义；实际调用仍按各工具原有的权限规则检查。
+  'ToolSearch',
   'AskUserQuestion',
   'EnterPlanMode',
   'ExitPlanMode',
@@ -237,7 +239,7 @@ export function deniedTool(
 ): string | null {
   if (
     isManagerQuestionTools(context.dynamicTools) &&
-    !['Read', 'Glob', 'Grep'].includes(name) &&
+    !['Read', 'Glob', 'Grep', 'ToolSearch'].includes(name) &&
     !dynamicToolCliNames(context.dynamicTools).has(name)
   )
     return '决策旁问只允许读文件和读取看板'

@@ -21,7 +21,12 @@ test('CONTEXT-002：原生压缩后重启恢复使用压缩上下文', { timeout
     assert.equal((await client.completed(turn.id)).status, 'completed')
     model.enqueue((request) => {
       assert.match(JSON.stringify(request.messages), /COMPACT_ORIGINAL_INPUT/)
-      return [{ type: 'text', text: 'NATIVE_COMPACT_SUMMARY: Continue the fixture task.' }]
+      return [
+        {
+          type: 'text',
+          text: '<summary>NATIVE_COMPACT_SUMMARY: Continue the fixture task.</summary>',
+        },
+      ]
     })
     await client.request('thread/compact/start', { threadId: thread.id })
     const started = await client.notification(
@@ -86,7 +91,7 @@ test('CONTEXT-003：回合中途自动压缩时照上游发 contextCompaction �
         await new Promise((resolve) => setTimeout(resolve, 20))
       startedWhileCompacting =
         compaction('item/started').length === 1 && compaction('item/completed').length === 0
-      return [{ type: 'text', text: 'AUTO_COMPACT_SUMMARY' }]
+      return [{ type: 'text', text: '<summary>AUTO_COMPACT_SUMMARY</summary>' }]
     })
     model.enqueue(() => [{ type: 'text', text: 'AFTER_AUTO_COMPACT' }])
     const second = await client.request('turn/start', {

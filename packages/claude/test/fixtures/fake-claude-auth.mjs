@@ -10,16 +10,21 @@ import { createInterface } from 'node:readline'
 const dir = process.env.CLAUDE_CONFIG_DIR
 const state = join(dir, 'fake-auth.json')
 const args = process.argv.slice(2)
+// --settings 是顶层参数；保留它供断言，同时按子命令读取其后的参数。
+const settings = args[0] === '--settings' ? JSON.parse(args.splice(0, 2)[1]) : null
 appendFileSync(
   join(dir, 'fake-calls.jsonl'),
   `${JSON.stringify({
     args,
+    ...(settings ? { settings } : {}),
     BROWSER: process.env.BROWSER ?? null,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? null,
     ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL ?? null,
     CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN ?? null,
   })}\n`,
 )
+
+if (settings?.env) Object.assign(process.env, settings.env)
 
 function current() {
   try {

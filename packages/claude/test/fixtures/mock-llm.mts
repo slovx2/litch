@@ -39,6 +39,10 @@ export class MockLLM {
   readonly unexpected: string[] = []
   // 计划之外的请求由它应答。只用于时机不由测试控制的请求，例如后台命令结束后 CLI 自行续跑。
   fallback: ModelStep | null = null
+  // 单独应答 CLI 的权限分类请求，不消耗业务步骤；测试必须显式提供分类器。
+  permissionClassifier: ModelStep | null = null
+  readonly classificationRequests: ModelRequest[] = []
+  readonly toolSearchRequests: ModelRequest[] = []
   // CLI 给会话起标题的那次小模型请求（它自己起，或者入口请它起）不进计划、不记进 requests，
   // 由这里直接回一个标题。默认回空的：CLI 当作没起出来，会话保持没有名字。
   sessionTitle = ''
@@ -68,11 +72,18 @@ export class MockLLM {
         return
       }
       const titling = !responsesAPI && sessionTitleRequest(body)
+      const classifying =
+        this.permissionClassifier &&
+        textOf(body.messages?.at(-1)?.content).startsWith('<transcript>\n') &&
+        textOf(body.messages?.at(-1)?.content).includes('response MUST begin with <block>')
       if (titling) this.titleRequests.push(body)
+      else if (classifying) this.classificationRequests.push(body)
       else this.requests.push(body)
       const step: ModelStep | null = titling
         ? () => [{ type: 'text', text: JSON.stringify({ title: this.sessionTitle }) }]
-        : (this.steps.shift() ?? this.fallback)
+        : classifying
+          ? this.permissionClassifier
+          : (this.steps.shift() ?? this.fallback)
       if (!step) throw new Error('收到未计划的模型请求')
       const reply = await step(body, req.headers)
       if (!Array.isArray(reply) && !('content' in reply)) {
@@ -209,7 +220,15 @@ export class MockLLM {
             : item.type === 'thinking'
               ? { type: 'thinking_delta', thinking: item.thinking }
               : { type: 'input_json_delta', partial_json: JSON.stringify(item.input) }
-        this.event(res, 'content_block_delta', { index, delta })
+        if (item.type === 'text' && typeof item.pieces === 'number') {
+          const text = String(item.text)
+          const size = Math.max(1, Math.ceil(text.length / item.pieces))
+          for (let at = 0; at < text.length; at += size)
+            this.event(res, 'content_block_delta', {
+              index,
+              delta: { type: 'text_delta', text: text.slice(at, at + size) },
+            })
+        } else this.event(res, 'content_block_delta', { index, delta })
         // 思考块的签名照真的接口在收尾前单独一个 signature_delta（CLI 靠签名认旁白）
         if (item.type === 'thinking' && typeof item.signature === 'string')
           this.event(res, 'content_block_delta', {
@@ -239,6 +258,46 @@ export class MockLLM {
   }
   enqueue(step: ModelStep): void {
     this.steps.push(step)
+  }
+  /** 先请真实 CLI 加载定义，收到实际 schema 后才执行原步骤，不伪造工具清单。 */
+  enqueueWithTools(names: string[], step: ModelStep): void {
+    let searched = false
+    const load: ModelStep = (request, headers) => {
+      const referenced = new Set(
+        (request.messages ?? []).flatMap((message: any) =>
+          Array.isArray(message.content)
+            ? message.content.flatMap((block: any) =>
+                block.type === 'tool_result' && !block.is_error && Array.isArray(block.content)
+                  ? block.content
+                      .filter((part: any) => part.type === 'tool_reference')
+                      .map((part: any) => part.tool_name)
+                  : [],
+              )
+            : [],
+        ),
+      )
+      const offered = new Set(
+        (request.tools ?? [])
+          .filter((tool: any) => !tool.defer_loading || referenced.has(tool.name))
+          .map((tool: any) => tool.name),
+      )
+      const missing = names.filter((name) => !offered.has(name))
+      if (!missing.length) return step(request, headers)
+      if (searched || !offered.has('ToolSearch'))
+        throw new Error(`工具定义未加载：${missing.join(',')}`)
+      searched = true
+      this.toolSearchRequests.push(request)
+      this.steps.unshift(load)
+      return [
+        {
+          type: 'tool_use',
+          id: `load_${randomUUID()}`,
+          name: 'ToolSearch',
+          input: { query: `select:${missing.join(',')}` },
+        },
+      ]
+    }
+    this.enqueue(load)
   }
   async start(): Promise<string> {
     await new Promise<void>((resolve) => this.server.listen(0, '127.0.0.1', resolve))

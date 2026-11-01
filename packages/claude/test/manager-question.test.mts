@@ -37,6 +37,24 @@ test('旁问的执行拦截优先于完全访问、计划文件、权限工具�
     'request_permissions',
   ])
     assert.match(deniedTool(context, name, {}) ?? '', /只允许/)
-  for (const name of ['Read', 'Glob', 'Grep', ...dynamicToolCliNames(dynamicTools)])
+  for (const name of ['Read', 'Glob', 'Grep', 'ToolSearch', ...dynamicToolCliNames(dynamicTools)])
     assert.equal(deniedTool(context, name, {}), null)
+})
+
+test('计划和只读可发现工具，但发现不会豁免实际写入或外部 MCP', () => {
+  for (const planMode of [true, false]) {
+    const context = {
+      cwd: '/tmp',
+      threadId: 'fixture-plan-discovery',
+      dynamicTools: [],
+      sandboxMode: 'read-only',
+      planMode,
+    } as unknown as RuntimeTurnContext
+    assert.equal(
+      deniedTool(context, 'ToolSearch', { query: 'select:Write,mcp__external__write' }),
+      null,
+    )
+    assert.ok(deniedTool(context, 'Write', { file_path: '/tmp/not-allowed.txt' }))
+    assert.ok(deniedTool(context, 'mcp__external__write', {}))
+  }
 })

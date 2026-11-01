@@ -39,6 +39,7 @@ async function planTurn(
   answer: Answer,
   script: (model: MockLLM, answer: Answer) => void = spokenPlan,
   planByTool = false,
+  modelName = 'claude-sonnet-4-6',
 ) {
   const home = await mkdtemp(join(tmpdir(), 'native-plan-items-'))
   const model = new MockLLM()
@@ -68,7 +69,7 @@ async function planTurn(
         collaborationMode: {
           mode: 'plan',
           settings: {
-            model: 'claude-sonnet-4-6',
+            model: modelName,
             reasoning_effort: null,
             developer_instructions: null,
           },
@@ -128,6 +129,27 @@ for (const answer of ['继续规划', '执行计划'] as const) {
     assert.deepEqual(texts(stored, 'agentMessage'), [PLAN, replyTo(answer)])
     assert.equal(stored.findLast((item: any) => item.type === 'agentMessage').phase, 'final_answer')
     // 计划条目在问用户之前就收尾了
+    const order = live.map((item: any) => item.type)
+    assert.ok(order.indexOf('plan') < order.indexOf('dynamicToolCall'), order.join())
+    sameAsStored(live, stored)
+  })
+}
+
+for (const answer of ['继续规划', '执行计划'] as const) {
+  test(`PLAN-007：延迟加载后口述计划仍先于确认卡片（${answer}）`, { timeout: 60_000 }, async () => {
+    const { live, stored } = await planTurn(
+      answer,
+      (model) => {
+        model.enqueueWithTools(['ExitPlanMode'], () => [
+          { type: 'text', text: PLAN, pieces: 6 },
+          { type: 'tool_use', id: 'toolu_exit', name: 'ExitPlanMode', input: {} },
+        ])
+        model.enqueue(() => [{ type: 'text', text: replyTo(answer) }])
+      },
+      false,
+      'claude-opus-5-5',
+    )
+    assert.deepEqual(texts(stored, 'plan'), [PLAN], JSON.stringify(stored))
     const order = live.map((item: any) => item.type)
     assert.ok(order.indexOf('plan') < order.indexOf('dynamicToolCall'), order.join())
     sameAsStored(live, stored)

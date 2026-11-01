@@ -36,7 +36,7 @@ test('EMPTY-001：手动压缩的回合里只有压缩条目，没有空的回�
       input: [{ type: 'text', text: '压缩之前的话' }],
     })
     assert.equal((await client.completed(turn.id)).status, 'completed')
-    model.enqueue(() => say('压缩出来的摘要'))
+    model.enqueue(() => say('<summary>压缩出来的摘要</summary>'))
     await client.request('thread/compact/start', { threadId: thread.id })
     const started = await client.notification('turn/started', (p) => p.turn.id !== turn.id)
     const compacted = await client.completed(started.turn.id)

@@ -5,6 +5,7 @@
 // 状态用 `claude auth status --json`，登出 `claude auth logout`。
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process'
 import { cliCommand } from '../../shared/src/host-cli.mjs'
+import { claudeSettingsPath, readJsonObject } from './claude-native-files.mjs'
 import { hostClaudeExecutable } from './host-claude.mjs'
 import { newId } from './util.mjs'
 
@@ -16,6 +17,33 @@ export interface ClaudeAuthStatus {
   email: string | null
   orgName: string | null
   subscriptionType: string | null
+}
+
+/** auth status 只报告当前生效的凭据；另配 API key 时仍可能同时持有账号令牌。只认用户层与启动环境。 */
+export function claudeAccountKind(
+  status: ClaudeAuthStatus,
+  env: NodeJS.ProcessEnv,
+): 'token' | 'login' | null {
+  let token: unknown = env.CLAUDE_CODE_OAUTH_TOKEN
+  try {
+    const settings = readJsonObject(claudeSettingsPath(env)).value
+    const values = settings.env
+    if (values && typeof values === 'object' && !Array.isArray(values)) {
+      const configured = (values as Record<string, unknown>).CLAUDE_CODE_OAUTH_TOKEN
+      if (typeof configured === 'string') token = configured
+    }
+  } catch {
+    // 损坏的用户配置不能覆盖明确传给此账号的启动凭据。
+  }
+  if (typeof token === 'string' && token.trim()) return 'token'
+  if (!status.loggedIn) return null
+  if (status.authMethod === 'oauth_token') return 'token'
+  if (
+    status.authMethod === 'claude.ai' ||
+    (status.authMethod === 'api_key' && status.apiKeySource === '/login managed key')
+  )
+    return 'login'
+  return null
 }
 
 export type LoginMode = 'claudeai' | 'console'
@@ -41,8 +69,15 @@ function stringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value ? value : null
 }
 
-export function claudeAuthStatus(env: NodeJS.ProcessEnv): Promise<ClaudeAuthStatus> {
-  const [command, args] = cliArgs(['auth', 'status', '--json'], env)
+export function claudeAuthStatus(
+  env: NodeJS.ProcessEnv,
+  settings: Record<string, unknown> | null = null,
+): Promise<ClaudeAuthStatus> {
+  // --settings 是顶层选项，必须放在 auth 前；与账号回合使用同一份覆盖，避免网关 key 遮住登录态。
+  const [command, args] = cliArgs(
+    [...(settings ? ['--settings', JSON.stringify(settings)] : []), 'auth', 'status', '--json'],
+    env,
+  )
   return new Promise((resolve, reject) => {
     // 没登录时 CLI 以 1 退出，输出照样是 JSON
     execFile(command, args, { env, timeout: 20_000, encoding: 'utf8' }, (error, stdout, stderr) => {

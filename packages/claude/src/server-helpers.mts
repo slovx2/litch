@@ -9,7 +9,7 @@ import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import type { ApprovalPolicy } from './approval-policy.mjs'
-import { type ClaudeAuthStatus, claudeAuthStatus } from './claude-auth.mjs'
+import { claudeAccountKind, claudeAuthStatus } from './claude-auth.mjs'
 import {
   ACCOUNT_PROVIDER,
   hasProviderPrefix,
@@ -167,23 +167,14 @@ export function usableProviders(): string[] {
   return [...(account ? [ACCOUNT_PROVIDER] : []), ...others]
 }
 
-function accountUsable(status: ClaudeAuthStatus): boolean {
-  if (!status.loggedIn) return false
-  // auth 子命令不收 --settings：用户 settings.json 里另配的 key 也会报成已登录，那不是账号
-  return (
-    status.authMethod === 'claude.ai' ||
-    status.authMethod === 'oauth_token' ||
-    (status.authMethod === 'api_key' && status.apiKeySource === '/login managed key')
-  )
-}
-
 export async function loadRuntimeModelCatalog(runtime: ClaudeRuntime): Promise<void> {
   if (process.env.CHA_CLAUDE_MODELS || !runtime.supportedModels) return
   const key = modelCatalogKey()
   if (otherProviders().length > 0 && accountSignedIn?.key !== key) {
     let value = false
     try {
-      value = accountUsable(await claudeAuthStatus(providerLaunch(ACCOUNT_PROVIDER, null).env))
+      const { env, flagSettings } = providerLaunch(ACCOUNT_PROVIDER, null)
+      value = claudeAccountKind(await claudeAuthStatus(env, flagSettings), env) !== null
     } catch {}
     accountSignedIn = { key, value }
   }
@@ -930,7 +921,7 @@ export function subagentStructuredResult(value: unknown): SubagentTrailer | null
     .join('\n')
   const totalTokens = Number(result.totalTokens)
   return {
-    cleanText,
+    cleanText: cleanSubagentMetadata(cleanText),
     agentId: typeof result.agentId === 'string' && result.agentId ? result.agentId : null,
     usage: Number.isFinite(totalTokens)
       ? {
@@ -1006,7 +997,20 @@ export function parseSubagentTrailer(text: string): SubagentTrailer {
     cleanText = cleanText.slice(0, agentMatch.index).replace(/\s+$/, '')
   }
 
-  return { cleanText, agentId, usage }
+  return { cleanText: cleanSubagentMetadata(cleanText), agentId, usage }
+}
+
+/** CLI 给工具结果加的元数据只用于运行时；不删正文内的 XML、示例代码或未知标签。 */
+export function cleanSubagentMetadata(text: string): string {
+  const tag = '(?:tools-used-(?:before|after)-summary|system-reminder|usage)'
+  const leading = new RegExp(`^\\s*<(${tag})(?:\\s[^>]*)?>[^<]*<\\/\\1>(?:\\s*\\n|$)`)
+  const trailing = new RegExp(`(?:^|\\n)[ \\t]*<(${tag})(?:\\s[^>]*)?>[^<]*<\\/\\1>\\s*$`)
+  let result = text
+  for (;;) {
+    const next = result.replace(leading, '').replace(trailing, '')
+    if (next === result) return result
+    result = next
+  }
 }
 
 // Best-effort parse of a Claude Bash tool_result for the real shell exit

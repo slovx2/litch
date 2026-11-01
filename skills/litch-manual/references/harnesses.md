@@ -59,6 +59,13 @@ user. Litch has no command for it. Do it yourself with the user's OK, or give th
 harness row has a **Settings** button (详情设置) that opens these tabs. Runtime settings belong to Litch; the other tabs read and write the
 harness's own config files on that device (shared with its CLI there):
 
+- **Claude Code 账号与网关并用**：另配 API key 不会隐藏已配置的官方账号模型。
+  Claude Code 2.1.316 不再从项目的 `.claude/settings.json` 或 `settings.local.json` 读取
+  claude.ai 登录凭据；请在设备的启动环境、用户级设置或 Litch 的账号设置中配置。
+  项目中的其他设置仍按 CLI 的设置层级生效。
+- **Claude Code 子代理与工具发现**：子代理回答不显示 CLI 附加的工具清单和用量包装。
+  计划和只读模式允许加载延迟工具的定义，实际调用仍受原有权限边界限制。计划确认在对应正文处理后显示。
+
 - **Runtime** (opens first on managed devices): CLI path, environment, task cards, browser and computer
   use switches, and harness-specific runtime options such as Claude Code prompt cache duration.
   These settings are available even when the harness has no native Config tab. Unsaved runtime

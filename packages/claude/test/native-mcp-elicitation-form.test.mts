@@ -151,7 +151,12 @@ async function assertMcpClient(stage: Stage, name: string, elicitation: unknown)
   assert.ok(greeted.length >= 1)
   for (const entry of greeted) {
     assert.equal(entry.message.params.clientInfo.name, name)
-    assert.deepEqual(entry.message.params.capabilities.elicitation, elicitation)
+    const capabilities = entry.message.params.capabilities.elicitation
+    if (name === 'claude-code') {
+      assert.ok(capabilities && typeof capabilities === 'object' && !Array.isArray(capabilities))
+      // 空对象是早期表单声明；显式列能力时必须仍包含 form。
+      if (Object.keys(capabilities).length) assert.deepEqual(capabilities.form, {})
+    } else assert.deepEqual(capabilities, elicitation)
   }
 }
 

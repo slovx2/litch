@@ -76,6 +76,71 @@ function text(value: string) {
   return { type: 'text', text: value }
 }
 
+for (const streamed of [true, false]) {
+  test(`计划控制请求先到时，等对应消息正文处理完再交计划（流式=${streamed}）`, async () => {
+    const runtime = new NativeClaudeRuntime()
+    const events: RuntimeEvent[] = []
+    let asked = false
+    Reflect.set(runtime, 'sdk', {
+      query: async function* ({
+        options,
+      }: {
+        options: { canUseTool: (...args: any[]) => Promise<unknown> }
+      }) {
+        const permission = options.canUseTool(
+          'ExitPlanMode',
+          {},
+          {
+            toolUseID: 'exit-plan',
+            signal: new AbortController().signal,
+          },
+        )
+        await Promise.resolve()
+        assert.equal(asked, false)
+        if (streamed) {
+          yield start('plan')
+          yield delta('text', '# 这份计划')
+          yield stream({
+            type: 'content_block_start',
+            index: 1,
+            content_block: { type: 'tool_use', id: 'exit-plan', name: 'ExitPlanMode' },
+          })
+        } else
+          yield assistant('plan', [
+            text('# 这份计划'),
+            {
+              type: 'tool_use',
+              id: 'exit-plan',
+              name: 'ExitPlanMode',
+              input: {},
+            },
+          ])
+        await permission
+        yield { type: 'result', subtype: 'success', result: 'done' }
+      },
+    })
+    await runtime.runTurn(
+      { ...context, planMode: true, planConfirmation: true },
+      {
+        onEvent: async (event) => {
+          events.push(event)
+        },
+        onPermissionRequest: async () => ({ decision: 'accept' }),
+        onUserInputRequest: async () => {
+          asked = true
+          assert.deepEqual(
+            events.filter((event) => event.type === 'text_delta').map((event) => event.delta),
+            ['# 这份计划'],
+          )
+          assert.equal(events.at(-1)?.type, 'plan_handoff')
+          return { answers: {} }
+        },
+      },
+    )
+    assert.equal(asked, true)
+  })
+}
+
 test('native presentation keeps streamed progress and a later unstreamed final answer', async () => {
   const events = await collect([
     start('progress'),

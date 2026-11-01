@@ -146,7 +146,27 @@ export function anthropicReply(harness, body, pace) {
   if (offered.size === 0) return [{ text: titleFrom(textOf(messages.find(isPrompt))) }]
   const asked = messages.findLastIndex(isPrompt)
   const said = asked < 0 ? '' : textOf(messages[asked])
-  const step = messages.slice(asked + 1).filter((message) => message.role === 'assistant').length
+  // 工具发现不消耗业务步骤：只有实际工具调用才推进计划/提问等流程。
+  const step = messages
+    .slice(asked + 1)
+    .filter(
+      (message) =>
+        message.role === 'assistant' &&
+        !blocksOf(message).every(
+          (block) => block.type === 'tool_use' && block.name === 'ToolSearch',
+        ),
+    ).length
+  const deferred = [...(body.messages ?? []), { content: body.system ?? [] }].flatMap((message) =>
+    blocksOf(message).flatMap((block) => {
+      const listing =
+        block.type === 'text' &&
+        /The following deferred tools are now available via ToolSearch\.[\s\S]*?before calling them:\n([^<]+)/.exec(
+          block.text ?? '',
+        )
+      return listing ? listing[1].trim().split('\n') : []
+    }),
+  )
+  const available = new Set([...offered, ...(offered.has('ToolSearch') ? deferred : [])])
   const result = lastResult(messages)
   const say = (text) => [{ text, pace }]
   // 操作本机（litch_machine 和 litch-machine 命令）的那几句，见 client-fixture-machine.mjs
@@ -171,12 +191,25 @@ export function anthropicReply(harness, body, pace) {
     [ASK_TRIGGER, 'ask', tools.ask],
     [PLAN_TRIGGER, 'plan', tools.plan],
   ]
-    .filter(([, , tool]) => tool && offered.has(tool))
+    .filter(([, , tool]) => tool && available.has(tool))
     .map(([trigger, mark, tool]) => ({ mark, tool, at: said.search(trigger) }))
     .filter((entry) => entry.at >= 0)
     .sort((a, b) => b.at - a.at)
   const { mark, tool } = marks[0] ?? {}
   if (mark && step === 0) {
+    if (!offered.has(tool)) {
+      if (
+        messages
+          .slice(asked + 1)
+          .some((message) =>
+            blocksOf(message).some(
+              (block) => block.type === 'tool_use' && block.name === 'ToolSearch',
+            ),
+          )
+      )
+        throw new Error(`工具定义未加载：${tool}`)
+      return [{ tool: 'ToolSearch', input: { query: `select:${tool}` } }]
+    }
     if (mark === 'bg')
       return [
         {
@@ -210,11 +243,11 @@ export function anthropicReply(harness, body, pace) {
       return [{ tool, input: { file_path: path, content: WRITE_BODY } }]
     }
     if (mark === 'plan') return [{ text: FIXTURE_PLAN }, { tool, input: {} }]
-    const asked = ASK_QUESTIONS.slice(0, mark === 'one' ? 1 : undefined)
+    const questionsRequested = ASK_QUESTIONS.slice(0, mark === 'one' ? 1 : undefined)
     // dsh 的提问工具每道题要一个标识，选项可有可无（没有就是自己填）
     const questions =
       harness === 'dsh'
-        ? asked.map((question, index) => ({
+        ? questionsRequested.map((question, index) => ({
             id: `q${index + 1}`,
             question: question.title,
             header: ASK_HEADERS[index],
@@ -227,7 +260,7 @@ export function anthropicReply(harness, body, pace) {
                 }
               : {}),
           }))
-        : asked.map(asQuestion)
+        : questionsRequested.map(asQuestion)
     return [{ tool, input: { questions } }]
   }
   if (mark === 'bg') return say(BG_REPLY)
