@@ -119,6 +119,19 @@ export async function scrollProbe(): Promise<ScrollProbe> {
     await until('另一个会话的内容', () => !live() && one('.turn'))
     row('把运行时与')?.click()
     await until('回答开始输出', live)
+    // 会话切换会延后渲染历史并恢复滚动位置；正文出现不代表恢复已结束。
+    // 等恢复提交及其滚动事件更新按钮，避免在旧页状态下漏点“回到底部”。
+    await until('会话滚动位置恢复', () => scroller().getAttribute('aria-busy') !== 'true')
+    await frame()
+    await frame()
+  }
+
+  const backToBottom = async () => {
+    if (Math.abs(scroller().scrollTop) > 1) {
+      ;(await until('回到底部按钮', () => one<HTMLButtonElement>('.to-bottom'))).click()
+    }
+    await until('已回到底部', () => Math.abs(scroller().scrollTop) <= 1)
+    await frame()
   }
 
   // 启动落在新建对话页：先点开那个一打开就在流的会话
@@ -158,8 +171,7 @@ export async function scrollProbe(): Promise<ScrollProbe> {
   // ---- 四、不在底部，但过程区和最终回答都在眼前：收起时回答不跳 ----
   await openStreaming()
   // 重新打开时会回到上一步离开的位置，先回到底部
-  one('.to-bottom')?.click()
-  await frame()
+  await backToBottom()
   // 等回答长出几行再往上滚一点：这样既离开了底部，过程区和回答的开头又都还在视口里
   const answer = (await until('回答的第一块', () => live()?.firstElementChild)) as HTMLElement
   await until(
@@ -184,8 +196,7 @@ export async function scrollProbe(): Promise<ScrollProbe> {
 
   // ---- 五、贴在底部时经历同样的过程 ----
   await openStreaming()
-  one('.to-bottom')?.click()
-  await frame()
+  await backToBottom()
   const toBottomWorks = Math.abs(scroller().scrollTop) <= 1 && !one('.to-bottom')
   const bottom = track(gap)
   await frames(500, bottom.sample, live)
