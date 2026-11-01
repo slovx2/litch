@@ -3,6 +3,7 @@ import test from 'node:test'
 import { managerAttentionCount } from '../../../packages/core/src/projection/manager.mts'
 import { relationGroups } from '../../../packages/protocol/src/manager-relations.mts'
 import {
+  decisionActions,
   issueCounts,
   issueMarkdownStyle,
   orderedIssues,
@@ -85,4 +86,22 @@ test('手机三皮肤报告正文标题不大于卡片标题', () => {
       for (const key of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
         assert.ok(style[key].fontSize < theme.font.size.title)
     }
+})
+
+test('关闭决策无答案时仅可重开，有答案时保留修改与重开，已答复不能重开', () => {
+  for (const status of ['expired', 'withdrawn']) {
+    assert.deepEqual(decisionActions({ status, answer: null }), { edit: false, reopen: true })
+    assert.deepEqual(decisionActions({ status, answer: { text: '旧答案' } }), {
+      edit: true,
+      reopen: true,
+    })
+  }
+  assert.deepEqual(decisionActions({ status: 'answered', answer: { text: '答案' } }), {
+    edit: true,
+    reopen: false,
+  })
+  assert.deepEqual(decisionActions({ status: 'open', answer: null }), {
+    edit: false,
+    reopen: false,
+  })
 })

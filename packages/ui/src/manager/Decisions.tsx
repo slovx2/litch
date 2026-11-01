@@ -427,21 +427,23 @@ export function Decisions({
                           </small>
                         </p>
                       ) : null}
-                      <button
-                        type="button"
-                        className="btn ghost"
-                        data-act="manager-edit-answer"
-                        disabled={disabled || busy}
-                        onClick={() => {
-                          setEditing(new Set([...editing, decision.id]))
-                          change(decision, {
-                            optionId: decision.answer?.optionId ?? null,
-                            text: decision.answer?.text ?? '',
-                          })
-                        }}
-                      >
-                        {t('manager.editAnswer')}
-                      </button>
+                      {decision.answer || decision.status === 'answered' ? (
+                        <button
+                          type="button"
+                          className="btn ghost"
+                          data-act="manager-edit-answer"
+                          disabled={disabled || busy}
+                          onClick={() => {
+                            setEditing(new Set([...editing, decision.id]))
+                            change(decision, {
+                              optionId: decision.answer?.optionId ?? null,
+                              text: decision.answer?.text ?? '',
+                            })
+                          }}
+                        >
+                          {t('manager.editAnswer')}
+                        </button>
+                      ) : null}
                       {decision.closed ? <p>{decision.closed.reason}</p> : null}
                       {decision.landed.length ? (
                         <div className="mg-item-meta">

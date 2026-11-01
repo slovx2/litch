@@ -87,7 +87,7 @@ export const en: Record<MessageKey, Entry> = {
   'sidebar.projection.recent': 'Recent',
   'sidebar.projection.unreadEmpty': 'No unread results',
   'sidebar.projection.recentEmpty':
-    'Conversations appear after 5 seconds in the foreground or an interaction',
+    'Conversations you view for 5 seconds or interact with appear here',
   'sidebar.projection.settings': '{name} settings',
   'sidebar.projection.project': 'Group by project',
   'sidebar.projection.count': ({ n }) => plural(n, 'unread conversation', 'unread conversations'),

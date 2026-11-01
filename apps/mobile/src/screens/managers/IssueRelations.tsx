@@ -126,7 +126,13 @@ export function IssueRelations({
                       <Text style={{ color: c.ink3, fontSize: font.size.small }}>
                         {ICONS[target.kind]} {t(`manager.relationKind.${target.kind}`)}
                       </Text>
-                      <Text style={{ color: c.ink2, fontSize: font.size.meta }}>
+                      <Text
+                        style={{
+                          color: c.accent,
+                          fontSize: font.size.meta,
+                          textDecorationLine: 'underline',
+                        }}
+                      >
                         {target.kind === 'issue' || target.kind === 'item'
                           ? `#${target.target} · `
                           : ''}

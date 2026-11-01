@@ -115,6 +115,20 @@ try {
       "document.querySelector('[data-testid=\"issue-status:D-12\"]').textContent.includes('已关闭')",
     ),
   )
+  assert.ok(
+    await read(
+      "document.querySelector('[data-testid=\"manager-issue:D-12\"]').innerText.includes('重新打开') && !document.querySelector('[data-testid=\"manager-issue:D-12\"]').innerText.includes('修改答案')",
+    ),
+    '从未回答的关闭决策仅提供重开',
+  )
+  await press('重新打开')
+  await until(
+    () =>
+      read(
+        "document.querySelector('[data-testid=\"issue-status:D-12\"]').textContent==='待定' && !!document.querySelector('[data-testid=\"manager-issue:D-12\"] textarea')",
+      ),
+    '重开后显示答复区',
+  )
   for (const skin of ['standard', 'human', 'retro'])
     for (const theme of ['light', 'dark']) {
       await read(
@@ -126,6 +140,12 @@ try {
       await wait('[data-testid="manager-issue:P-1"]')
       await shot(`mobile-report-${skin}-${theme}`)
       await press('关联 3')
+      assert.ok(
+        await read(
+          "[...document.querySelectorAll('[data-testid=\"manager-issue:P-1\"] [role=button]')].some(e=>e.textContent.includes('#I-2') && [...e.querySelectorAll('*')].some(t=>getComputedStyle(t).textDecorationLine.includes('underline')))",
+        ),
+        '关联标题显示链接样式',
+      )
       await shot(`mobile-relations-${skin}-${theme}`)
 
       await press('▤ 经理事项#I-2 · 回退编辑：手机端跟进')
@@ -150,6 +170,18 @@ try {
     '标记已阅',
   )
   await press('追问')
+  assert.equal(
+    await read("document.querySelector('textarea').getAttribute('aria-label')"),
+    await read("document.querySelector('textarea').placeholder"),
+    '读屏名称与经理模式占位一致',
+  )
+  await press('临时对话')
+  assert.equal(
+    await read("document.querySelector('textarea').getAttribute('aria-label')"),
+    await read("document.querySelector('textarea').placeholder"),
+    '读屏名称与临时模式占位一致',
+  )
+  await press('经理对话')
   await read(
     `(()=>{const input=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'手机追问范围');input.dispatchEvent(new Event('input',{bubbles:true}))})()`,
   )

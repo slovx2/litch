@@ -65,3 +65,14 @@ test('D-29：悬停明细含已审建议，不含报告未读', () => {
   )
   assert.equal(translate('en', 'manager.pendingDetail', { reports: 9 }), '')
 })
+
+test('最近空状态说明查看时长或交互，不使用前台技术术语', () => {
+  assert.equal(
+    translate('zh-CN', 'sidebar.projection.recentEmpty'),
+    '查看满 5 秒或有过操作的对话会出现在这里',
+  )
+  assert.equal(
+    translate('en', 'sidebar.projection.recentEmpty'),
+    'Conversations you view for 5 seconds or interact with appear here',
+  )
+})

@@ -136,8 +136,8 @@ Choose an option or write an answer. Answers are local drafts until **Submit to 
 not sync before submission. Submitting saves them to the device and asks the manager to handle them.
 Successful drafts clear; failed ones remain. If a decision changed, review its new version before
 confirming. **Clear drafts** clears local unsent answers, questions and For you responses. Closed decisions can be reopened.
-Answered and closed decisions also offer **Edit answer**. Submit the revised answer to notify the
-manager; the previous answer and closure remain in the change history. A revised closed decision
+Answered decisions offer **Edit answer**. Closed decisions offer **Reopen** and, when a previous
+answer exists, **Edit answer**. Submit the revised answer to notify the manager; the previous answer and closure remain in the change history. A revised closed decision
 moves to Answered. Decisions under an ending or ended manager remain read-only.
 You may also answer explicitly in the manager conversation. Recorded links and evidence do not
 automatically become stale or verified; there is no automatic deadline/default-answer execution.
@@ -288,12 +288,18 @@ and whether the cards were handled or expired. Increasing retention does not res
 
 决策状态使用文字筛选（○ 待定、✓ 已答复、⊘ 已关闭），与控制台分类分开。追问展开后有独立输入区、模式占位和“收起追问”，成功提交后自动收起。编号统一显示 #X-n；桌面鼠标悬停或键盘聚焦会显示标题、状态卡片，手机长按预览。
 
-关联按卡片宽度切换：达到 520px 放在右侧，否则顶部折叠。每项显示类型和标题，工作线不显示内部编号。手机的经理事项在控制台之外；决策待定优先，已答复和已关闭默认不显示输入区，可点“修改答案”。请你做的交付按钮为唯一主操作，只有输入文字才出现次要提交按钮；已交付或已回复后通过“修改回复”再编辑。
+关联按卡片宽度切换：达到 520px 放在右侧，否则顶部折叠。每项显示类型和标题，工作线不显示内部编号。手机的经理事项在控制台之外；决策待定优先，已答复和已关闭默认不显示输入区；有旧答案的可点“修改答案”，从未答复的关闭决策先“重新打开”。请你做的交付按钮为唯一主操作，只有输入文字才出现次要提交按钮；已交付或已回复后通过“修改回复”再编辑。
 
 Decision status filters are lightweight text links beneath the issue categories. Questions have a
 labelled composer, mode-specific placeholder and a collapse toggle; successful submission closes it.
 Hover or keyboard-focus an object reference for its title and status. Links show their type and title
 on separate rows; wide cards put them on the right. On phone, Manager items is separate from Console.
-Open decisions come first; answered and closed ones show their result and an explicit Edit answer
-entry. For you cards use the delivery action as their only primary button; a secondary submit action
+Open decisions come first; answered and closed ones show their result. Edit answer is available
+when an answer exists; closed decisions can be reopened. For you cards use the delivery action as their only primary button; a secondary submit action
 appears only when a text reply exists. Submitted replies can be edited explicitly.
+
+
+手机与桌面的关闭决策规则一致：从未答复的关闭决策只显示“重新打开”；有旧答案的保留“修改答案”和“重新打开”。已答复决策只提供修改答案。手机追问框的读屏名称与当前模式的占位相同，关联标题使用链接色和下划线提示可点。
+Closed decisions without an answer offer Reopen on both desktop and phone. Those with a previous
+answer retain Edit answer as well; answered decisions only offer editing. Phone question inputs
+use the same accessible name and placeholder. Related targets use link color and underlining.

@@ -30,7 +30,7 @@ import { Button, Empty } from '../../ui/kit/controls'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { IssueContext, IssueRelations } from './IssueRelations'
-import { issueCounts, issueMarkdownStyle, orderedIssues } from './presentation'
+import { decisionActions, issueCounts, issueMarkdownStyle, orderedIssues } from './presentation'
 import { issueLinks } from './relations'
 
 const replyFile = jsonFile<Record<string, string>>('manager-replies.json')
@@ -129,6 +129,12 @@ function Issue({
   }
   const request = board?.requests?.find((r) => r.id === post.id)
   const decision = board?.decisions.find((d) => d.id === post.id)
+  const decisionButtons = decision ? decisionActions(decision) : null
+  const questionPrompt = t(
+    mode === 'manager'
+      ? 'manager.questionManagerPlaceholder'
+      : 'manager.questionTemporaryPlaceholder',
+  )
   const suggestion = suggestions.find((s) => s.proposal.id === post.proposalId)
   const pendingReview = suggestion?.managerReview?.state === 'pending'
   const writeQuestion = (text: string) => {
@@ -366,15 +372,36 @@ function Issue({
                   ) : null}
                 </>
               ) : (
-                <Button
-                  kind="plain"
-                  disabled={locked}
-                  label={t('manager.editAnswer')}
-                  onPress={() => {
-                    writeReply(decision.answer?.text ?? '')
-                    setEditing(true)
-                  }}
-                />
+                <>
+                  {decisionButtons?.edit ? (
+                    <Button
+                      kind="plain"
+                      disabled={locked}
+                      label={t('manager.editAnswer')}
+                      onPress={() => {
+                        writeReply(decision.answer?.text ?? '')
+                        setEditing(true)
+                      }}
+                    />
+                  ) : null}
+                  {decisionButtons?.reopen ? (
+                    <Button
+                      kind="plain"
+                      disabled={locked}
+                      label={t('manager.reopen')}
+                      onPress={() =>
+                        void run(async () => {
+                          await channel.command('managers.decision.reopen', {
+                            deviceId: manager.deviceId,
+                            managerId: manager.id,
+                            decisionId: decision.id,
+                          })
+                          setEditing(false)
+                        })
+                      }
+                    />
+                  ) : null}
+                </>
               )}
             </>
           ) : null}
@@ -441,12 +468,8 @@ function Issue({
               <Text style={{ color: c.ink3 }}>{t('manager.postAsk')}</Text>
               <TextInput
                 multiline
-                accessibilityLabel={t('manager.questionInput')}
-                placeholder={t(
-                  mode === 'manager'
-                    ? 'manager.questionManagerPlaceholder'
-                    : 'manager.questionTemporaryPlaceholder',
-                )}
+                accessibilityLabel={questionPrompt}
+                placeholder={questionPrompt}
                 placeholderTextColor={c.ink3}
                 style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
                 value={question}

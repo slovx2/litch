@@ -343,9 +343,11 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
 
   await click('.mg-decision-filter button:last-child')
   await until('已关闭的决策', () => one('[data-decision="D-12"]'))
+  const closedNeedsReopen = !one('[data-decision="D-12"] [data-act="manager-edit-answer"]')
   await click('[data-decision="D-12"] [data-act="manager-reopen"]')
   const reopened = Boolean(
-    await until('决策重新打开', () => one('[data-decision="D-12"] textarea')),
+    closedNeedsReopen &&
+      (await until('决策重新打开', () => one('[data-decision="D-12"] textarea'))),
   )
   const omittedActions = ![...document.querySelectorAll('.mg-board button')].some((button) =>
     /^(仍然有效|推迟)$/.test(button.textContent?.trim() ?? ''),

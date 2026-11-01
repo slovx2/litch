@@ -4,6 +4,14 @@ import type { ManagerPost } from '../../../../../packages/protocol/src/manager-p
 import { markdownStyleOf } from '../../detail/markdownStyle'
 import type { Theme } from '../../ui/theme'
 
+/** 未回答的关闭决策只能重开；有旧答案时保留修改入口，与桌面相同。 */
+export function decisionActions(decision: Pick<ManagerDecision, 'status' | 'answer'>) {
+  return {
+    edit: decision.status === 'answered' || Boolean(decision.answer),
+    reopen: decision.status === 'expired' || decision.status === 'withdrawn',
+  }
+}
+
 export function issueCounts(manager: Manager | undefined) {
   return {
     decision: manager?.pendingDecisions ?? 0,
