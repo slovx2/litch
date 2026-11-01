@@ -15,6 +15,7 @@ import { chmodSync } from 'node:fs'
 import { join } from 'node:path'
 import { claudeSettingsPath, readJsonObject, writeJsonObject } from './claude-native-files.mjs'
 import { readConfigFile, writeConfigFile } from './config-store.mjs'
+import { contextWindowSettings } from './context-windows.mjs'
 import { adapterHome } from './util.mjs'
 
 export const PROVIDER_CONFIG_KEY = 'litch_providers'
@@ -364,11 +365,17 @@ export interface ProviderLaunch {
    * 要放进 CLI 命令行设置层（SDK 的 settings）的几项。账号：把用户设置里的凭据、地址、云厂商开关、
    * apiKeyHelper 置空（这一层高于用户、项目设置，空串等于没设）；别的供应商不放（这一层在进程参数里）
    */
-  flagSettings: { env?: Record<string, string>; apiKeyHelper?: string } | null
+  flagSettings: {
+    env?: Record<string, string>
+    apiKeyHelper?: string
+    modelSettings?: Record<string, { autoCompactWindow: number }>
+  } | null
   /** 托管模式：CLI 只认进程环境里的凭据、地址、型号映射和请求头，设置文件里的这些都不认 */
   managed: boolean
   /** 进程复用时比它：供应商、它的定义、密钥任一变了都要换进程 */
   scope: string
+  /** 不含窗口策略；仅窗口改变且仍有后台工作时，推迟重启，不停止它们。 */
+  routingScope: string
 }
 
 function scopeOf(parts: unknown): string {
@@ -392,13 +399,13 @@ function without(base: NodeJS.ProcessEnv, names: readonly string[]): NodeJS.Proc
  * 供应商不存在、没填密钥时抛 ProviderUnavailableError：绝不退回账号（CLI 只拿到地址没有凭据时
  * 会把账号的令牌发给那个地址）。
  */
-export function providerLaunch(
+function routingLaunch(
   provider: string,
   model: string | null,
   base: NodeJS.ProcessEnv = process.env,
   config = readProviderConfig(),
   secrets = readProviderSecrets(),
-): ProviderLaunch {
+): Omit<ProviderLaunch, 'routingScope'> {
   if (provider === NATIVE_PROVIDER)
     return {
       provider,
@@ -495,6 +502,25 @@ export function providerLaunch(
   }
 }
 
+export function providerLaunch(
+  provider: string,
+  model: string | null,
+  base: NodeJS.ProcessEnv = process.env,
+  config = readProviderConfig(),
+  secrets = readProviderSecrets(),
+): ProviderLaunch {
+  const launch = routingLaunch(provider, model, base, config, secrets)
+  const modelSettings = contextWindowSettings(provider)
+  return {
+    ...launch,
+    routingScope: launch.scope,
+    scope: scopeOf([launch.scope, modelSettings]),
+    flagSettings: Object.keys(modelSettings).length
+      ? { ...launch.flagSettings, modelSettings }
+      : launch.flagSettings,
+  }
+}
+
 /** 按会话的供应商起 CLI；不知道供应商（以前的会话、一次性的查询）时按 plainProvider() 算 */
 export function contextLaunch(
   provider: string | null | undefined,
@@ -512,6 +538,24 @@ export function withFlagSettings(
   const env = { ...asObject(settings.env), ...(launch.flagSettings.env ?? {}) }
   return {
     ...settings,
+    ...(launch.flagSettings.modelSettings
+      ? {
+          modelSettings: Object.fromEntries(
+            [
+              ...new Set([
+                ...Object.keys(asObject(settings.modelSettings)),
+                ...Object.keys(launch.flagSettings.modelSettings),
+              ]),
+            ].map((model) => [
+              model,
+              {
+                ...asObject(asObject(settings.modelSettings)[model]),
+                ...launch.flagSettings?.modelSettings?.[model],
+              },
+            ]),
+          ),
+        }
+      : {}),
     ...(Object.keys(env).length ? { env } : {}),
     ...(launch.flagSettings.apiKeyHelper !== undefined
       ? { apiKeyHelper: launch.flagSettings.apiKeyHelper }

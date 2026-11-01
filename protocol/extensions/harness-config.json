@@ -109,6 +109,10 @@
           },
           "actionId": {
             "type": "string"
+          },
+          "expectedVersion": {
+            "type": "string",
+            "description": "修改配置的动作携带 config/read 的版本；版本变化时回 versionConflict。"
           }
         },
         "required": ["harness", "actionId"]

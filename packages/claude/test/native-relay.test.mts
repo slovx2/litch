@@ -446,7 +446,7 @@ const used = (input: number, output: number) => ({
   output_tokens: output,
 })
 
-test('RELAY-006：导入会话的上下文用量取最后一次顶层请求，窗口按入口自己跑回合时记下的“模型 → 窗口”查，查不到是 null', async () => {
+test('RELAY-006：导入会话取最后一次顶层请求的用量，不借其他供应商或窗口策略的分母', async () => {
   await fresh()
   const S = id(6)
   await write(
@@ -497,6 +497,7 @@ test('RELAY-006：导入会话的上下文用量取最后一次顶层请求，�
         usage: used(1, 1),
         contextWindow: 200_000,
         model: 'claude-test',
+        windowScope: 'provider-a:policy-a',
       })
       await handlers.onEvent({ type: 'completed', success: true, result: '好的' })
     }
@@ -505,9 +506,13 @@ test('RELAY-006：导入会话的上下文用量取最后一次顶层请求，�
       input: [{ type: 'text', text: '这边跑一轮', text_elements: [] }],
     })
     await app.completed(turn.id)
-    assert.equal(stage.store.modelWindow('claude-test'), 200_000)
+    assert.equal(
+      stage.store.modelWindow(JSON.stringify(['provider-a:policy-a', 'claude-test'])),
+      200_000,
+    )
+    assert.equal(stage.store.modelWindow('claude-test'), null)
 
-    // 桌面端接着说了几句，又压缩过：占用换成压缩后的数，窗口查得到
+    // 桌面端原生记录不含供应商/窗口策略快照，不能借用入口上次跑的窗口。
     await append(
       S,
       say(S, 'u2', 'a2', '接着说') +
@@ -526,7 +531,7 @@ test('RELAY-006：导入会话的上下文用量取最后一次顶层请求，�
     assert.ok(reread.thread)
     const updates = app.notifications('thread/tokenUsage/updated').map((message) => message.params)
     assert.deepEqual(updates.at(-1)?.tokenUsage.last.totalTokens, 12_000)
-    assert.deepEqual(updates.at(-1)?.tokenUsage.modelContextWindow, 200_000)
+    assert.deepEqual(updates.at(-1)?.tokenUsage.modelContextWindow, null)
   })
 })
 

@@ -65,6 +65,16 @@ harness's own config files on that device (shared with its CLI there):
   changes prompt to save, discard or cancel when leaving. The device page keeps status, enable,
   installation and restart controls.
 
+- **Claude Code 自动压缩窗口（桌面端）**：设备详情的“配置 → 上下文窗口”按供应商和实际模型分别设置，包含官方账号。
+  范围为 100K–1M token，留空继承 Claude 设置；同一模型的 `[1m]` 变体共用一行。
+  设置存在设备的 Litch `context-windows.json`，不会改其他供应商，也不改变模型容量或订阅额度。
+  CLI 会预留输出和摘要空间后提前压缩，这不是请求的硬上限；需 Claude Code 2.1.299 或更新版本。
+  保存后在没有后台任务的下一回合生效；已有后台任务继续运行，不会为更新窗口被停止。
+  若 `settings.json` 的 env 配了全局窗口（例如 500K），每个模型行都会显示覆盖数值和来源。
+  “改为默认自动压缩窗口”经确认把它移到顶层 `autoCompactWindow`：单独设置的模型优先，其余模型继续用该默认值；
+  “清除全局覆盖”只删用户 env 的这一项。设备启动环境或管理员设置的覆盖仍会显示，不会静默清除。
+  “关闭 1M 上下文”独立控制可用容量，自动压缩窗口仍受该容量限制。手机端专门验收另行安排。
+
 - **Config**: default model and effort, permissions, and the rest of what the harness's official app
   offers (Codex: approval, sandbox, web search, features, skills/plugins/hooks, memories; Claude Code:
   `~/.claude/settings.json`, including models, context window, telemetry and OpenTelemetry export;

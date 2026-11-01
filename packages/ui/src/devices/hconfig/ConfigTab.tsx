@@ -138,6 +138,7 @@ export function ConfigTab({ device, harnessId, slot }: ConfigTabProps) {
         deviceId: device.id,
         harness: harnessId,
         actionId: action.id,
+        expectedVersion: data.version,
       })
       showToast({
         id: `hc-action:${action.id}`,
@@ -231,6 +232,8 @@ export function ConfigTab({ device, harnessId, slot }: ConfigTabProps) {
                     <button
                       type="button"
                       className={action.danger ? 'btn danger' : 'btn'}
+                      disabled={busy || dirty.length > 0}
+                      title={dirty.length > 0 ? t('hc.action.unsaved') : undefined}
                       onClick={() => (action.confirm ? setAsking(action) : void runAction(action))}
                     >
                       {t.said(action.title)}
@@ -421,10 +424,15 @@ function ConfigRow({ device, spec, data, draft, parsed, refused, saving, onDraft
       ) : null}
       {overridden ? (
         <div className="mng-row-note hc-over" data-hc-overridden>
-          {t('hc.overridden', {
-            value: valueText(spec, overridden.value),
-            by: t.said(overridden.by),
-          })}
+          {t(
+            spec.key.startsWith('litch_context_windows.')
+              ? 'hc.context.overridden'
+              : 'hc.overridden',
+            {
+              value: valueText(spec, overridden.value),
+              by: t.said(overridden.by),
+            },
+          )}
         </div>
       ) : null}
       {spec.readOnly && spec.readOnlyReason ? (

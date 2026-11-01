@@ -1,5 +1,7 @@
 // 模拟核心里 Claude Code 的详情设置示例（15 号设计 2.2）：~/.claude/settings.json 的那些项，
 // 账号（订阅、Console、长期令牌）和用户加的供应商（33 号设计：API key、Anthropic 兼容网关），没有“当前供应商”。
+
+import type { HcConfigView } from '../model-harness-config.mjs'
 import {
   configOf,
   field,
@@ -14,6 +16,51 @@ import {
   spec,
   t,
 } from './sample-hc-kit.mjs'
+
+/** 模拟与真实引擎一致：全局 env 覆盖所有行，清掉后各供应商分别生效。 */
+export function refreshClaudeContext(config: HcConfigView): void {
+  const global = config.values['env.CLAUDE_CODE_AUTO_COMPACT_WINDOW']
+  for (const item of config.settings.filter((item) =>
+    item.key.startsWith('litch_context_windows.'),
+  )) {
+    if (typeof global === 'number')
+      config.overridden[item.key] = {
+        value: global,
+        by: t('用户 settings.json env', 'User settings.json env'),
+      }
+    else delete config.overridden[item.key]
+  }
+  config.actions =
+    typeof global === 'number'
+      ? [
+          {
+            id: 'context-window.use-default',
+            group: 'context',
+            title: t('改为默认自动压缩窗口', 'Use as default auto-compact window'),
+            description: t(
+              `将 ${global} 作为默认值，并清除用户 env 覆盖。`,
+              `Use ${global} as the default and remove the user env override.`,
+            ),
+            confirm: t(
+              '按供应商与模型的设置将优先生效，现有默认值会被替换。',
+              'Provider and model settings will take precedence. The existing default will be replaced.',
+            ),
+            danger: false,
+          },
+          {
+            id: 'context-window.clear-global',
+            group: 'context',
+            title: t('清除全局覆盖', 'Clear global override'),
+            description: null,
+            confirm: t(
+              '清除用户 settings.json env 中的全局覆盖？',
+              'Remove the global override from user settings.json env?',
+            ),
+            danger: false,
+          },
+        ]
+      : []
+}
 
 export function sampleClaude({ home }: SampleHome): SampleHc {
   const dir = `${home}/.claude`
@@ -122,6 +169,7 @@ export function sampleClaude({ home }: SampleHome): SampleHc {
   const config = configOf(
     [
       GROUPS.defaults,
+      { id: 'context', title: t('上下文窗口', 'Context window'), description: null },
       GROUPS.permissions,
       GROUPS.behavior,
       GROUPS.tools,
@@ -153,6 +201,66 @@ export function sampleClaude({ home }: SampleHome): SampleHc {
       ],
     },
   )
+  config.settings.push(
+    spec(
+      'env.CLAUDE_CODE_AUTO_COMPACT_WINDOW',
+      'context',
+      'integer',
+      t('全局自动压缩窗口（settings.json env）', 'Global auto-compact window (settings.json env)'),
+      {
+        minimum: 100_000,
+        maximum: 1_000_000,
+        description: t(
+          '覆盖所有供应商与模型。可改为默认值或清除，按模型设置才会生效。',
+          'Overrides every provider and model. Convert or clear it to use model windows.',
+        ),
+      },
+    ),
+    spec(
+      'autoCompactWindow',
+      'context',
+      'integer',
+      t('默认自动压缩窗口', 'Default auto-compact window'),
+      { minimum: 100_000, maximum: 1_000_000 },
+    ),
+    spec(
+      'env.CLAUDE_CODE_DISABLE_1M_CONTEXT',
+      'context',
+      'boolean',
+      t('关闭 1M 上下文', 'Disable 1M context'),
+      {
+        default: false,
+        description: t(
+          '自动压缩窗口不能超过模型可用容量，关闭后通常最多 200K。',
+          'Auto-compact windows cannot exceed model capacity, normally 200K when disabled.',
+        ),
+      },
+    ),
+    ...[
+      ['anthropic', '官方账号', 'Account', 'claude-opus-5-5', 400000],
+      ['anthropic', '官方账号', 'Account', 'claude-sonnet-5-5', 200000],
+      ['work', '工作', 'Work', 'claude-opus-5-5', 300000],
+    ].map(([providerId, zh, en, model, value]) => {
+      const key = `litch_context_windows.${providerId}.${model}`
+      config.values[key] = value
+      return spec(
+        key,
+        'context',
+        'integer',
+        t(`[${zh}] ${model} 自动压缩窗口`, `[${en}] ${model} auto-compact window`),
+        {
+          minimum: 100_000,
+          maximum: 1_000_000,
+          description: t(
+            '仅此供应商；在无后台任务的下一回合生效。',
+            'For this provider; applies on the next turn without background tasks.',
+          ),
+        },
+      )
+    }),
+  )
+  config.values['env.CLAUDE_CODE_AUTO_COMPACT_WINDOW'] = 500000
+  refreshClaudeContext(config)
   const paste = [field('code', t('授权码（code#state）', 'Authorization code (code#state)'))]
   const name = spec('title', 'provider', 'string', t('名字', 'Name'), {
     description: t('模型选单里显示成“[名字] 模型”。', 'Shown as "[Name] model" in the model menu.'),

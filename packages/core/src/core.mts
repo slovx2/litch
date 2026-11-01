@@ -1393,7 +1393,11 @@ export function createCore(options: CoreOptions): Core {
         }
         case 'harnessConfig.action': {
           const p = params as Commands['harnessConfig.action']['params']
-          await deviceOf(p.deviceId).harnessConfig.action(String(p.harness), String(p.actionId))
+          await deviceOf(p.deviceId).harnessConfig.action(
+            String(p.harness),
+            String(p.actionId),
+            p.expectedVersion,
+          )
           return {}
         }
         case 'harnessConfig.reload': {

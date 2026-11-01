@@ -46,6 +46,11 @@ jobs:
       # 含协议兼容性的两项测试（回放、结构校验，各包的 upstream-compat.test.mts）：
       # Claude Code、Pi 两个入口和设备聚合面在这里，dsh 入口的在下面的 dsh job 里
       - run: npm test
+      # 按模型窗口需要较新的 CLI；单独隔离，不改变其余测试的 2.1.282 基线。
+      - name: Claude 按供应商与模型自动压缩窗口
+        run: |
+          npm install --prefix .artifacts/context-cli --save-exact "@anthropic-ai/claude-code@$(node -p 'require("./protocol/versions.json").claudeContextCli')" --no-audit --no-fund
+          CHA_CLAUDE_CLI="${GITHUB_WORKSPACE}/.artifacts/context-cli/node_modules/.bin/claude" node --import ./packages/claude/dist/claude/test/fixtures/isolate-process.mjs --test --test-force-exit packages/claude/dist/claude/test/context-window-cli/*.mjs
       # 这里只跑手机纯逻辑单测；需要手机和 UI 依赖的 Markdown 测试在下面的 mobile 作业执行
       - run: npm run mobile:test
       - run: npm run test:local-ssh
@@ -194,6 +199,7 @@ jobs:
       # 各跑两遍，模拟核心一遍、多 harness 的隔离设备一遍
       - run: npm run client:check:full
       - run: npm run client:check:manage
+      - run: npm run client:check:harness-settings
       # 本机内置适配器的打开方式（拿假的适配器，不起界面）：拉起、已经在跑就复用、换版本的各种情形、每一种没连上
       - run: npm run client:check:adapter
       # 侧面板里“差异”标签的验收：模拟核心（示例仓库）、多 harness 的隔离设备、单个 harness 的入口

@@ -6,6 +6,8 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
   `${n} ${Number(n) === 1 ? one : many}`
 
 export const enHconfig: Record<keyof typeof zhHconfig, Entry> = {
+  'hc.action.unsaved': 'Save or discard your changes first',
+  'hc.context.overridden': 'Window override: {value} (from {by}; capped by model capacity)',
   'hc.entry': 'Settings',
   'hc.entry.unsupported': 'Settings aren’t supported for this harness yet',
   'hc.title': '{name} settings',

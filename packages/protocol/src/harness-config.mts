@@ -253,6 +253,8 @@ export interface HarnessConfigWriteResponse {
 
 export interface HarnessConfigActionParams extends HarnessParams {
   actionId: string
+  /** 修改配置的动作携带读到的版本，防止确认期间覆盖其他修改。 */
+  expectedVersion?: string
 }
 
 // ---------- 账号与 provider ----------

@@ -428,11 +428,13 @@ export type RuntimeEvent =
   // address 是对方的收件箱地址（uds:<套接字路径>），CLI 给了才有
   | { type: 'peer_message'; text: string; peer: LitchPeer; address?: string }
   // 回合累计的用量（只加进 total）；contextWindow 是主模型的上下文窗口，不知道是 null
-  // model 是最近一次顶层请求的模型（窗口按它记下，导进来的会话算用量时查）
+  // model 是最近一次顶层请求的真实模型；窗口缓存还必须带实际 CLI 的 windowScope。
   | {
       type: 'usage'
       usage: Record<string, unknown>
       contextWindow?: number | null
+      /** 实际 CLI 启动时的供应商和窗口配置快照；没有时不写入跨会话缓存。 */
+      windowScope?: string
       model?: string | null
     }
   // 一次模型请求结束：现在上下文里有多少（换掉 last）。agentToolUseId 不为空的是那个子代理自己的请求
@@ -440,8 +442,10 @@ export type RuntimeEvent =
   | {
       type: 'context_usage'
       usage: Record<string, unknown>
+      contextWindow?: number | null
       agentToolUseId: string | null
       model?: string | null
+      windowScope?: string
     }
   | { type: 'goal_usage'; messageId: string; usage: Record<string, unknown> }
   | { type: 'goal_limit'; usageLimited: boolean }

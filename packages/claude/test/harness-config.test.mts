@@ -314,7 +314,7 @@ test('HC-CLAUDE-012：遥测、模型、上下文窗口的项读写 settings.jso
       const item = byKey.get(key)
       assert.ok(item, key)
       assert.ok(groups.includes(item.group), `${key} 的分组 ${item.group}`)
-      assert.equal(item.effect, 'newSession', key)
+      assert.equal(item.effect, item.group === 'context' ? 'none' : 'newSession', key)
     }
     assert.equal(byKey.get('env.DISABLE_TELEMETRY')?.type, 'boolean')
     assert.equal(byKey.get('env.CLAUDE_CODE_AUTO_COMPACT_WINDOW')?.type, 'integer')

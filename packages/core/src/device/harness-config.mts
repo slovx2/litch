@@ -100,7 +100,7 @@ export interface HarnessConfig {
     edits: readonly HcEdit[],
     expectedVersion: string,
   ): Promise<{ overriddenKeys: string[]; restartRequired: boolean }>
-  action(harness: string, actionId: string): Promise<void>
+  action(harness: string, actionId: string, expectedVersion?: string): Promise<void>
   reload(harness: string, part: HcPart | undefined): Promise<void>
   upsertProvider(
     harness: string,
@@ -626,11 +626,11 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
       }
     },
 
-    async action(harness, actionId) {
+    async action(harness, actionId, expectedVersion) {
       await writing(harness, 'config', () =>
         host.request(
           HARNESS_CONFIG_METHOD.configAction,
-          { harness, actionId },
+          { harness, actionId, ...(expectedVersion === undefined ? {} : { expectedVersion }) },
           { timeoutMs: WAIT_MS },
         ),
       )

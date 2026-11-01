@@ -153,6 +153,12 @@ function world(options: { deviceExtension?: boolean; target?: RemoteTarget | nul
       state.version = `${state.version}x`
       return { version: state.version, overriddenKeys: [], restartRequired: true }
     },
+    'litch/harness/config/action': (params) => {
+      const { expectedVersion } = params as { expectedVersion?: string }
+      if (expectedVersion !== state.version)
+        throw new RpcFailure(-32000, 'conflict', { litch: 'versionConflict', harness: 'pi' })
+      return {}
+    },
     'litch/harness/providers/read': () => PROVIDERS(state.signedIn),
     'litch/harness/mcp/read': () => ({
       servers: [{ name: 'fetch', transport: 'stdio', enabled: true, command: 'uvx' }],
@@ -328,6 +334,32 @@ test('版本冲突：以 conflict 结束，那一块重读', async () => {
   await drain()
   assert.equal(w.sent('litch/harness/config/read').length, before + 1)
   assert.equal(pi.seen.view?.config.data?.version, 'v9')
+})
+
+test('修改配置的动作透传确认时的版本，旧版本拒绝并重读', async () => {
+  const w = await started()
+  const pi = w.watch('pi')
+  await drain()
+  await w.command('harnessConfig.action', {
+    harness: 'pi',
+    actionId: 'context-window.use-default',
+    expectedVersion: 'v1',
+  })
+  assert.deepEqual(w.sent('litch/harness/config/action').at(-1), {
+    harness: 'pi',
+    actionId: 'context-window.use-default',
+    expectedVersion: 'v1',
+  })
+  w.state.version = 'v2'
+  await assert.rejects(
+    w.command('harnessConfig.action', {
+      harness: 'pi',
+      actionId: 'context-window.use-default',
+      expectedVersion: 'v1',
+    }),
+  )
+  await drain()
+  assert.equal(pi.seen.view?.config.data?.version, 'v2')
 })
 
 test('浏览器登录：远程设备先把回调端口转过去；完成的通知到了 provider 重读', async () => {

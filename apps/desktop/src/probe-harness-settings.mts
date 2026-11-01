@@ -24,6 +24,11 @@ export interface HarnessSettingsProbe {
   badNumber: string
   saveBlocked: boolean
   saved: { fast: string; days: string; written: string }
+  contextWindows: {
+    opus: string | undefined
+    work: string | undefined
+    default: string | undefined
+  }
   readOnly: boolean
   overridden: string
   /** 抢先改：第一次保存的结果、改动还在不在、再存之后 */
@@ -260,6 +265,48 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
 
   // ---------- 一、配置（本机 Claude Code） ----------
   await openSettings('local', 'claude')
+  const contextOpus = 'litch_context_windows.anthropic.claude-opus-5-5'
+  const must = (condition: boolean, message: string) => {
+    if (!condition) throw new Error(message)
+  }
+  const contextWork = 'litch_context_windows.work.claude-opus-5-5'
+  const windowOverride = text(one('[data-hc-overridden]', row(contextOpus) ?? document))
+  must(
+    windowOverride.includes('500000') && windowOverride.includes('settings.json env'),
+    `全局覆盖没有来源与数值：${windowOverride}`,
+  )
+  fill(
+    await until('模型窗口输入框', () =>
+      one<HTMLInputElement>('input', row(contextOpus) ?? document),
+    ),
+    '450000',
+  )
+  must(
+    one<HTMLButtonElement>('[data-hc-action="context-window.use-default"] button')?.disabled ===
+      true,
+    '有草稿时动作不应覆盖尚未保存的修改',
+  )
+  await save()
+  must(
+    text(one('[data-hc-overridden]', row(contextOpus) ?? document)).includes('500000'),
+    '改模型值不应静默清除全局覆盖',
+  )
+  await click('改为默认窗口', () =>
+    one<HTMLButtonElement>('[data-hc-action="context-window.use-default"] button'),
+  )
+  await confirmYes()
+  await until('全局覆盖已清除', () => !one('[data-hc-overridden]', row(contextOpus) ?? document))
+  const contextWindows = {
+    opus: one<HTMLInputElement>('input', row(contextOpus) ?? document)?.value,
+    work: one<HTMLInputElement>('input', row(contextWork) ?? document)?.value,
+    default: one<HTMLInputElement>('input', row('autoCompactWindow') ?? document)?.value,
+  }
+  must(
+    contextWindows.opus === '450000' &&
+      contextWindows.work === '300000' &&
+      contextWindows.default === '500000',
+    `供应商窗口或默认值不对：${JSON.stringify(contextWindows)}`,
+  )
   const switchOf = (key: string) =>
     one<HTMLButtonElement>('button[role="switch"]', row(key) ?? document)
   const fastBefore = switchOf('fastMode')?.getAttribute('aria-checked')
@@ -537,6 +584,7 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
     badNumber,
     saveBlocked,
     saved,
+    contextWindows,
     readOnly,
     overridden,
     conflict,

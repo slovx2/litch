@@ -4,7 +4,7 @@
 // - MCP：~/.claude.json 顶层的 mcpServers（等同 `claude mcp add -s user`），文件其余部分不动
 // - 指令：<配置目录>/CLAUDE.md
 // - 账号与 provider：claude-provider.mts（选择）、claude-auth.mts（`claude auth` 子进程）
-// 配置项、MCP、指令的改动都是新开的会话才用上（适配器每个会话起一份 CLI，起的时候读这些文件）。
+// 上下文策略在安全回合边界更新 CLI；其他配置、MCP 和指令按各项声明的生效范围处理。
 import { readdirSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import type {
@@ -48,7 +48,19 @@ import {
   writeJsonObject,
   writeTextFileAtomic,
 } from './claude-native-files.mjs'
+import {
+  AUTO_COMPACT_ENV,
+  CONTEXT_WINDOWS_KEY,
+  contextWindowsPath,
+  readContextWindows,
+} from './context-windows.mjs'
 import { CLAUDE_HARNESS_ID, fileError, HarnessConfigError, text } from './harness-config-common.mjs'
+import {
+  type ContextModelOption,
+  contextWindowRows,
+  globalWindowOverride,
+  windowOverrideActions,
+} from './harness-context-windows.mjs'
 import { ClaudeProviders, type ProvidersHost } from './harness-providers.mjs'
 import { ProtocolError } from './protocol-contract.mjs'
 import { newId } from './util.mjs'
@@ -247,16 +259,19 @@ const CONTEXT_SPECS: HarnessSettingSpec[] = [
     group: 'context',
     title: text('关闭 1M 上下文', 'Disable 1M context'),
     description: text(
-      '模型名带 [1m] 后缀（例如 opus[1m]）才用 1M 上下文。开了这一项，模型列表里不再有 [1m] 的型号，上下文限在 200K。',
-      'A model uses 1M context only with the [1m] suffix (e.g. opus[1m]). When on, [1m] models are removed from the list and context is limited to 200K.',
+      '关闭模型的 1M 上下文。自动压缩窗口不能超过模型当前可用容量；关闭后通常最多 200K，部分自定义型号按供应商声明。',
+      'Disables 1M context. Auto-compact windows cannot exceed the available model capacity, normally 200K when disabled; some custom models use the provider declaration.',
     ),
   }),
   envSpec('CLAUDE_CODE_AUTO_COMPACT_WINDOW', 'integer', {
     group: 'context',
-    title: text('自动压缩窗口（环境变量）', 'Auto-compact window (env)'),
+    title: text(
+      '全局自动压缩窗口（settings.json env）',
+      'Global auto-compact window (settings.json env)',
+    ),
     description: text(
-      '上下文用到多少 token 时自动压缩，100000 到 1000000，超过模型的窗口按模型的算。设了它，下面的“自动压缩窗口”和按模型的设置都不起作用。',
-      'Token count at which auto-compact kicks in, 100000 to 1000000, capped at the model window. When set, it overrides the auto-compact window below and per-model settings.',
+      '覆盖所有供应商与模型的设置。CLI 在此窗口内预留输出和摘要空间，提前压缩；不是请求硬上限。可用下方动作改为默认值或清除。',
+      'Overrides all provider and model windows. Claude reserves space for output and summaries and compacts earlier; this is not a hard request limit. Use the actions below to convert or clear it.',
     ),
     ...COMPACT_WINDOW,
   }),
@@ -264,10 +279,10 @@ const CONTEXT_SPECS: HarnessSettingSpec[] = [
     key: 'autoCompactWindow',
     group: 'context',
     type: 'integer',
-    title: text('自动压缩窗口', 'Auto-compact window'),
+    title: text('默认自动压缩窗口', 'Default auto-compact window'),
     description: text(
-      '同上，写在设置里；按模型的设置（modelSettings）里写了的以那边为准。不写按模型自动定。',
-      'Same as above, as a setting; per-model settings (modelSettings) take precedence. Unset picks a window per model.',
+      '未单独配置的模型使用此默认值。按供应商与模型的设置、原生按模型设置或更高层配置可覆盖它；留空由 Claude 自动决定。',
+      'Default for models without their own window. Provider and model settings, native per-model settings or higher-priority configuration may override it. Unset lets Claude decide.',
     ),
     ...COMPACT_WINDOW,
   }),
@@ -275,8 +290,8 @@ const CONTEXT_SPECS: HarnessSettingSpec[] = [
     group: 'context',
     title: text('提前压缩（百分比）', 'Compact earlier (percent)'),
     description: text(
-      '用到自动压缩窗口的百分之几就压缩，1 到 100。只能让压缩来得更早，不能推迟。',
-      'Compact at this percentage (1–100) of the auto-compact window. Can only make compaction happen earlier.',
+      '按扣除输出预留后的窗口计算百分比，1 到 100；只会提前触发，不能推迟默认压缩时机。',
+      'Percentage of the window after reserving output space (1–100). Can only trigger compaction earlier, never delay the default threshold.',
     ),
     minimum: 1,
     maximum: 100,
@@ -686,6 +701,7 @@ function settingsFiles(): HarnessConfigFile[] {
     { role: 'settings', path: claudeSettingsPath() },
     { role: 'mcp', path: claudeGlobalConfigPath() },
     { role: 'instructions', path: claudeInstructionsPath() },
+    { role: 'context-windows', path: contextWindowsPath() },
   ]
   // macOS 上凭据在钥匙串里，没有文件
   if (process.platform !== 'darwin')
@@ -704,7 +720,10 @@ interface LoadedSettings {
   managed: Record<string, unknown>
 }
 
-function loadSettings(models: HarnessSettingOption[]): LoadedSettings {
+function loadSettings(
+  models: HarnessSettingOption[],
+  contextModels: ContextModelOption[] = [],
+): LoadedSettings {
   let loaded: { value: Record<string, unknown>; raw: string | null }
   try {
     loaded = readJsonObject(claudeSettingsPath())
@@ -712,24 +731,40 @@ function loadSettings(models: HarnessSettingOption[]): LoadedSettings {
     fileError(error)
   }
   const managed = readManagedSettings()
-  const specs = [...staticSpecs(models), outputStyleSpec(), ...pluginSpecs(loaded.value)].map(
-    (item) =>
-      getAtPath(managed, parseKeyPath(item.key)!) === undefined
-        ? item
-        : {
-            ...item,
-            readOnly: true,
-            readOnlyReason: text('被管理员设置锁住', 'Locked by managed settings'),
-          },
-  )
+  const windows = readContextWindows()
+  const specs = [
+    ...staticSpecs(models),
+    outputStyleSpec(),
+    ...pluginSpecs(loaded.value),
+    ...contextWindowRows(contextModels, models, windows),
+  ].map((raw) => {
+    const item = raw.group === 'context' ? { ...raw, effect: 'none' as const } : raw
+    return getAtPath(managed, parseKeyPath(item.key)!) === undefined
+      ? item
+      : {
+          ...item,
+          readOnly: true,
+          readOnlyReason: text('被管理员设置锁住', 'Locked by managed settings'),
+        }
+  })
   // 显示顺序按分组排，组内按声明的先后
   const order = new Map(GROUPS.map((group, index) => [group.id, index]))
   specs.sort((a, b) => (order.get(a.group) ?? 99) - (order.get(b.group) ?? 99))
-  return { settings: loaded.value, version: contentHash(loaded.raw ?? ''), specs, managed }
+  return {
+    settings: { ...loaded.value, [CONTEXT_WINDOWS_KEY]: windows },
+    version: contentHash(
+      JSON.stringify([loaded.raw ?? '', windows, managed, specs.map((item) => item.key)]),
+    ),
+    specs,
+    managed,
+  }
 }
 
-export function readClaudeConfig(models: HarnessSettingOption[]): HarnessConfigReadResponse {
-  const { settings, version, specs, managed } = loadSettings(models)
+export function readClaudeConfig(
+  models: HarnessSettingOption[],
+  contextModels: ContextModelOption[] = [],
+): HarnessConfigReadResponse {
+  const { settings, version, specs, managed } = loadSettings(models, contextModels)
   const values: Record<string, HarnessSettingValue> = {}
   const overridden: Record<string, { value: HarnessSettingValue; by: HarnessText }> = {}
   for (const item of specs) {
@@ -742,13 +777,25 @@ export function readClaudeConfig(models: HarnessSettingOption[]): HarnessConfigR
         value: decodeValue(item, locked) ?? (locked as HarnessSettingValue),
         by: MANAGED,
       }
+    if (path[0] === CONTEXT_WINDOWS_KEY) {
+      const global = globalWindowOverride(settings, managed)
+      const lockedWindow =
+        getAtPath(managed, ['modelSettings', path[2]!, 'autoCompactWindow']) ??
+        managed.autoCompactWindow
+      if (global) overridden[item.key] = global
+      else if (typeof lockedWindow === 'number')
+        overridden[item.key] = { value: lockedWindow, by: MANAGED }
+    }
   }
+  const global = globalWindowOverride(settings, managed)
+  const globalKey = `env.${AUTO_COMPACT_ENV}`
+  if (global && !(globalKey in values)) overridden[globalKey] = global
   return {
     groups: GROUPS,
     settings: specs,
     values,
     ...(Object.keys(overridden).length ? { overridden } : {}),
-    actions: [],
+    actions: windowOverrideActions(settings),
     version,
     files: settingsFiles(),
   }
@@ -812,6 +859,7 @@ export function writeClaudeConfig(
   edits: unknown,
   expectedVersion: unknown,
   models: HarnessSettingOption[],
+  contextModels: ContextModelOption[] = [],
 ): ClaudeConfigWriteResult {
   if (!Array.isArray(edits) || edits.length === 0)
     throw new HarnessConfigError(
@@ -823,7 +871,7 @@ export function writeClaudeConfig(
       'invalidValue',
       text('缺少 expectedVersion', 'expectedVersion is required'),
     )
-  const { settings, version, specs, managed } = loadSettings(models)
+  const { settings, version, specs, managed } = loadSettings(models, contextModels)
   if (expectedVersion !== version)
     throw new HarnessConfigError(
       'versionConflict',
@@ -867,16 +915,30 @@ export function writeClaudeConfig(
     setAtPath(next, path, encodeValue(key, value))
     if (getAtPath(managed, path) !== undefined) overriddenKeys.push(key)
   }
-  let nextVersion = version
+  const { [CONTEXT_WINDOWS_KEY]: nextWindows, ...nextNative } = next
+  const { [CONTEXT_WINDOWS_KEY]: oldWindows, ...oldNative } = settings
+  const changedWindows = JSON.stringify(nextWindows) !== JSON.stringify(oldWindows)
   if (JSON.stringify(next) !== JSON.stringify(settings)) {
     try {
-      writeJsonObject(claudeSettingsPath(), next)
-      nextVersion = contentHash(readTextFile(claudeSettingsPath()) ?? '')
+      if (changedWindows)
+        writeJsonObject(contextWindowsPath(), nextWindows as Record<string, unknown>, 0o600)
+      try {
+        if (JSON.stringify(nextNative) !== JSON.stringify(oldNative))
+          writeJsonObject(claudeSettingsPath(), nextNative)
+      } catch (error) {
+        if (changedWindows)
+          writeJsonObject(contextWindowsPath(), oldWindows as Record<string, unknown>, 0o600)
+        throw error
+      }
     } catch (error) {
       fileError(error)
     }
   }
-  return { version: nextVersion, overriddenKeys, restartRequired: false, defaultsChanged }
+  const after = readClaudeConfig(models, contextModels)
+  for (const edit of edits)
+    if (after.overridden?.[edit.key] && !overriddenKeys.includes(edit.key))
+      overriddenKeys.push(edit.key)
+  return { version: after.version, overriddenKeys, restartRequired: false, defaultsChanged }
 }
 
 // ---------- MCP：~/.claude.json 顶层的 mcpServers ----------
@@ -1119,6 +1181,7 @@ export function writeClaudeInstructions(
 export interface HarnessConfigHost extends ProvidersHost {
   /** 当前可选的模型，给“默认模型”一项做下拉 */
   modelOptions(): HarnessSettingOption[]
+  contextModels?(): ContextModelOption[]
   /** settings.json 里的默认模型或强度经这里改了：适配器重读 */
   defaultsChanged(): void
   /** 现有的 MCP OAuth（mcp-oauth.mts）：开始授权，回授权链接；结局经 complete 报 */
@@ -1155,18 +1218,45 @@ export class ClaudeHarnessConfig {
   async dispatch(method: string, params: Record<string, unknown>): Promise<unknown> {
     switch (method) {
       case HARNESS_CONFIG_METHOD.configRead:
-        return readClaudeConfig(this.host.modelOptions())
+        return readClaudeConfig(this.host.modelOptions(), this.host.contextModels?.())
       case HARNESS_CONFIG_METHOD.configWrite: {
         const { defaultsChanged, ...result } = writeClaudeConfig(
           params.edits,
           params.expectedVersion,
           this.host.modelOptions(),
+          this.host.contextModels?.(),
         )
         if (defaultsChanged) this.host.defaultsChanged()
         this.changed('config')
         return result
       }
       case HARNESS_CONFIG_METHOD.configAction:
+        if (
+          params.actionId === 'context-window.use-default' ||
+          params.actionId === 'context-window.clear-global'
+        ) {
+          const current = readClaudeConfig(this.host.modelOptions(), this.host.contextModels?.())
+          if (!current.actions.some((action) => action.id === params.actionId))
+            throw new HarnessConfigError(
+              'notFound',
+              text('全局覆盖已变化，请重新读取', 'Global override changed; reload it'),
+            )
+          const key = `env.${AUTO_COMPACT_ENV}`
+          const edits = [
+            ...(params.actionId === 'context-window.use-default'
+              ? [{ key: 'autoCompactWindow', value: current.values[key] }]
+              : []),
+            { key, value: null },
+          ]
+          writeClaudeConfig(
+            edits,
+            params.expectedVersion,
+            this.host.modelOptions(),
+            this.host.contextModels?.(),
+          )
+          this.changed('config')
+          return {}
+        }
         throw new HarnessConfigError(
           'notFound',
           text('没有这个动作', 'Unknown action'),

@@ -184,8 +184,8 @@ function gatewayTemplate(): HarnessProviderTemplate {
       }),
       field('models', 'stringList', text('型号', 'Models'), {
         description: text(
-          '每行一个型号 ID，要显示别的名字写成“ID = 名字”，上下文窗口加在后面写成“| 1M”（如 deepseek-v4 = DeepSeek | 1M；不写时 Claude Code 按 200K 算）。从网关拉取时带上它声明的窗口。Claude 自家型号名的窗口由 Claude Code 自己定，这里写了不生效，要 1M 在 ID 后加 [1m]。',
-          'One model ID per line; write "ID = Name" for a display name and append "| 1M" for the context window (e.g. deepseek-v4 = DeepSeek | 1M; without it Claude Code assumes 200K). Fetching from the gateway fills in the window it declares. For Claude model names Claude Code uses its own window and ignores this; append [1m] to the ID for 1M.',
+          '每行一个型号 ID，显示名写成“ID = 名字”，模型容量声明写成“| 1M”。未识别的自定义型号通常默认 200K；CLI 已识别的 Claude 型号按自身容量，部分型号原生支持 1M，部分需 [1m] 变体。自动压缩窗口在“配置 → 上下文窗口”按供应商与模型设置。',
+          'One model ID per line; use "ID = Name" for a display name and "| 1M" to declare capacity. Unrecognized custom IDs usually default to 200K. Recognized Claude models use their own capacity; some support 1M natively, others require a [1m] variant. Set provider and model auto-compact windows under Config → Context window.',
         ),
       }),
       field('smallModel', 'string', text('小模型', 'Small model'), {

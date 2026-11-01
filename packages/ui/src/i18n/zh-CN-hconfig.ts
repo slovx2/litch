@@ -3,6 +3,8 @@
 import type { Entry } from './types.ts'
 
 export const zhHconfig = {
+  'hc.action.unsaved': '请先保存或放弃未保存的修改',
+  'hc.context.overridden': '窗口覆盖：{value}（来源：{by}；最终受模型容量限制）',
   'hc.entry': '详情设置',
   'hc.entry.unsupported': '此 harness 暂不支持详情设置',
   'hc.title': '{name} 详情设置',

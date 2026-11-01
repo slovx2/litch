@@ -75,6 +75,7 @@ import {
   validateConfigTarget,
   writeConfigFile,
 } from './config-store.mjs'
+import { modelWindowCacheKey } from './context-windows.mjs'
 import { dynamicToolResult } from './dynamic-tool-result.mjs'
 import { dynamicToolInstructions } from './dynamic-tools.mjs'
 import { experimentalFeatureList, experimentalFeatureSet } from './experimental-features.mjs'
@@ -470,6 +471,12 @@ export class CodexClaudeAppServer {
   // harness 详情设置（litch/harness/*）：读写 Claude Code 自己的 settings.json、~/.claude.json、CLAUDE.md 与账号
   private readonly harnessConfig = new ClaudeHarnessConfig({
     broadcast: (method, params) => this.broadcastHarnessConfig(method, params),
+    contextModels: () =>
+      allSelectableModelOptions().flatMap((option) => {
+        const ref = splitModelRef(option.id)
+        const model = option.resolved ?? option.sdkModel
+        return model ? [{ provider: ref.provider, model }] : []
+      }),
     modelOptions: () =>
       allSelectableModelOptions().map((option) => ({
         value: option.id,
@@ -797,6 +804,7 @@ export class CodexClaudeAppServer {
     }
     if (this.powerObservers.has(peer) && method !== 'initialize')
       throw new ProtocolError(-32601, `method not implemented: ${method}`)
+    if (method === 'litch/harness/config/read') await loadRuntimeModelCatalog(this.runtime)
     if (method.startsWith('litch/harness/'))
       return this.harnessConfig.dispatch(method, asRecord(params))
     if (
@@ -1806,8 +1814,8 @@ export class CodexClaudeAppServer {
     }
     if (facts.usage) {
       const stored = this.store.threadUsage(threadId)?.tokenUsage
-      // 窗口只认入口自己跑回合时记下的“模型 → 窗口”，查不到就只报用了多少
-      const window = facts.usage.model ? this.store.modelWindow(facts.usage.model) : null
+      // 原生记录没有供应商和当时的压缩策略快照，不能借用其他会话的窗口。
+      const window = null
       const tokenUsage: ThreadTokenUsage = {
         total: stored?.total ?? emptyTokenBreakdown(),
         last: facts.usage.last,
@@ -5791,24 +5799,31 @@ export class CodexClaudeAppServer {
               add: event.usage,
               window: event.contextWindow ?? null,
             })
-            if (event.model && event.contextWindow)
-              this.store.saveModelWindow(event.model, event.contextWindow)
+            if (event.model && event.contextWindow && event.windowScope)
+              this.store.saveModelWindow(
+                modelWindowCacheKey(event.windowScope, event.model),
+                event.contextWindow,
+              )
             return
           }
           if (event.type === 'context_usage') {
             const last = tokenBreakdownFromClaudeUsage(event.usage)
-            // 窗口要等回合结束才报：第一个回合（派出的子会话常常一跑很久）里先按模型查以前记下的
-            const known = event.model ? this.store.modelWindow(event.model) : null
+            // 主请求先用 CLI summary 的观测；取不到时只借同供应商、配置快照和真实模型的窗口。
+            const known =
+              event.contextWindow ??
+              (event.model && event.windowScope
+                ? this.store.modelWindow(modelWindowCacheKey(event.windowScope, event.model))
+                : null)
             if (!event.agentToolUseId) {
               this.recordTokenUsage(peer, thread.id, turn.id, { last, window: known })
               return
             }
-            // 子代理自己的请求：记在它的子线程上，窗口先借父线程的
+            // 子代理自己的请求：没有它的实际窗口时只报占用，不能拿父模型窗口充数。
             const ctx = subagentContexts.get(event.agentToolUseId)
             if (ctx)
               this.recordTokenUsage(peer, ctx.childThreadId, ctx.childTurnId, {
                 last,
-                window: this.store.threadUsage(thread.id)?.tokenUsage.modelContextWindow ?? known,
+                window: null,
               })
             return
           }
@@ -7249,7 +7264,8 @@ export class CodexClaudeAppServer {
         }
       : prior
     const last = change.last ?? stored?.last ?? emptyTokenBreakdown()
-    const modelContextWindow = change.window ?? stored?.modelContextWindow ?? null
+    const modelContextWindow =
+      change.window === undefined ? (stored?.modelContextWindow ?? null) : change.window
     if (
       stored &&
       total === prior &&

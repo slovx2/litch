@@ -46,6 +46,7 @@ import {
   ACCOUNT_PROVIDER,
   contextLaunch,
   NATIVE_PROVIDER,
+  type ProviderLaunch,
   plainProvider,
   withFlagSettings,
 } from './claude-provider.mjs'
@@ -59,6 +60,7 @@ import {
   mergeRequestUsage,
   type RequestUsage,
 } from './context-usage.mjs'
+import { contextFilesScope } from './context-windows.mjs'
 import { dynamicToolCliNames, dynamicToolServer } from './dynamic-tools.mjs'
 import { goalToolServer, isGoalTool } from './goal-tools.mjs'
 import {
@@ -66,6 +68,7 @@ import {
   hostClaudeEnvOverrides,
   hostClaudeExecutable,
   hostClaudeSessionEnv,
+  hostClaudeVersion,
 } from './host-claude.mjs'
 import { jsonSchemaValidator } from './json-schema.mjs'
 import { sdkMcpStartupEnvironment } from './mcp-config.mjs'
@@ -185,7 +188,7 @@ function rateScope(context: RuntimeTurnContext): string | null {
 // 供应商没填密钥、被删了时算不出来：给一个不会和任何进程对上的值，新进程起的时候再正式报错
 function providerScope(context: RuntimeTurnContext): string {
   try {
-    return contextLaunch(context.provider, context.model).scope
+    return `${contextLaunch(context.provider, context.model).scope}:${contextFilesScope(context.cwd)}`
   } catch {
     return 'unavailable'
   }
@@ -209,6 +212,7 @@ interface NativeSession {
   credentialScope: string | null
   // 进程起来时的供应商、它的定义和密钥（claude-provider.mts 的 scope），变了也不再复用
   providerScope: string
+  routingScope: string
   strictSkillShell: boolean
   sessionId: string | null
   // 当前回合的上下文；没有回合时是最近一个回合的。
@@ -257,6 +261,8 @@ interface NativeSession {
 }
 
 interface PendingTurn {
+  /** 同一回合每个主模型只问一次 summary，长工具循环不必等回合结束才有分母。 */
+  observedContextWindow?: { model: string | null; window: number | null }
   credentialScope: string | null
   session: NativeSession
   context: RuntimeTurnContext
@@ -473,6 +479,18 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         throw new ProtocolError(-32009, '上一个 Claude CLI 尚未确认退出，禁止启动新回合')
       reason = this.incompatibility(existing, context)
       if (!reason) return this.runOnSession(existing, context, handlers)
+      // 窗口是下一安全回合的设置；后台任务尚未结束时保留其 CLI，不能为更新窗口把它们杀掉。
+      if (
+        reason === '自动压缩窗口已改变' &&
+        (hasBackgroundWork(existing) || existing.backgroundTasks.size > 0)
+      ) {
+        await handlers.onEvent({
+          type: 'notice',
+          level: 'warning',
+          message: '自动压缩窗口已保存，将在后台任务结束后的下一回合生效。',
+        })
+        return this.runOnSession(existing, context, handlers)
+      }
       if (hasBackgroundWork(existing)) restarted = reason
     }
     if (existing) {
@@ -507,7 +525,13 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     if (sessionFingerprint(context) !== session.fingerprint) return '工作目录、工具或指令配置已改变'
     // 进程起来时读的登录、模型服务设置（环境变量、settings.json 里的凭据）之后不再重读
     if (rateScope(context) !== session.credentialScope) return 'Claude 的登录或模型服务设置已改变'
-    if (providerScope(context) !== session.providerScope) return '模型供应商或它的设置已改变'
+    if (providerScope(context) !== session.providerScope) {
+      try {
+        if (contextLaunch(context.provider, context.model).routingScope === session.routingScope)
+          return '自动压缩窗口已改变'
+      } catch {}
+      return '模型供应商或它的设置已改变'
+    }
     if (needsStrictSkillShell(context) && !session.strictSkillShell) return '权限设置已收紧'
     if ((!context.model && session.applied.model) || (!context.effort && session.applied.effort))
       return '模型设置已改变'
@@ -786,6 +810,9 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     context: RuntimeTurnContext,
     handlers: RuntimeHandlers,
   ): Promise<void> {
+    // 与传给 SDK 的模型窗口表一起取快照；等待 MCP 期间用户可继续修改配置。
+    const launch = contextLaunch(context.provider, context.model)
+    const launchedScope = `${launch.scope}:${contextFilesScope(context.cwd)}`
     let cleaned!: () => void
     const done = new Promise<void>((resolve) => {
       cleaned = resolve
@@ -827,7 +854,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       const inboxSocket = claudeCrossSessionInbox()
         ? await claimPeerInboxSocket(key, process.env)
         : null
-      const options = this.buildOptions(sdk, live, abort, current, key, inboxSocket)
+      const options = this.buildOptions(sdk, live, abort, current, key, inboxSocket, launch)
       options.spawnClaudeCodeProcess = nativeProcess.spawn.bind(nativeProcess)
       options.mcpServers = await mcp.connect(
         context.mcpServers,
@@ -849,7 +876,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         key,
         fingerprint: sessionFingerprint(context),
         credentialScope: rateScope(context),
-        providerScope: providerScope(context),
+        providerScope: launchedScope,
+        routingScope: launch.routingScope,
         strictSkillShell: needsStrictSkillShell(context),
         sessionId: null,
         context,
@@ -1552,11 +1580,13 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     current: () => Promise<PendingTurn | null>,
     sessionKey: string,
     inboxSocket: string | null = null,
+    launch: ProviderLaunch = contextLaunch(context.provider, context.model),
   ): Record<string, unknown> {
     const originalBashInputs: OriginalBashInputs = new Map()
     const reservedGoalTools = new Set<string>()
     // 会话所选型号的供应商：没填密钥、供应商被删了在这里报错，回合失败，绝不退回账号
-    const launch = contextLaunch(context.provider, context.model)
+    if (Object.keys(launch.flagSettings?.modelSettings ?? {}).length)
+      hostClaudeVersion(hostClaudeExecutable(), '2.1.299')
     const childEnv = launch.env
     // 开着线程号开关时要给的 ANTHROPIC_CUSTOM_HEADERS：以 CLI 本来会用的那份为底（设置的 env 里配了的优先，
     // 没配用进程环境），下面同时放进进程环境和入口传的设置的 env。CLI 起来后会拿设置里的 env 盖进程环境，
@@ -3414,6 +3444,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         type: 'usage',
         usage,
         contextWindow,
+        windowScope: pending.session?.providerScope,
         model: pending.contextModel,
       })
     }
@@ -3455,11 +3486,18 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     const tokens = contextTokens(entry.usage)
     if (tokens === 0 || tokens === entry.reported) return
     entry.reported = tokens
+    if (!lane && pending.observedContextWindow?.model !== pending.contextModel)
+      pending.observedContextWindow = {
+        model: pending.contextModel,
+        window: await compactWindow(pending.query, null),
+      }
     await pending.handlers.onEvent({
       type: 'context_usage',
       usage: { ...entry.usage },
       agentToolUseId: lane || null,
       model: pending.contextModel,
+      windowScope: pending.session?.providerScope,
+      ...(!lane ? { contextWindow: pending.observedContextWindow?.window ?? null } : {}),
     })
   }
 

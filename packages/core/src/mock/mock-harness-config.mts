@@ -27,7 +27,7 @@ import type {
   InstructionsOverview,
 } from '../model-harness-config.mjs'
 import { copyValue } from '../value.mjs'
-import { sampleClaude } from './sample-hc-claude.mjs'
+import { refreshClaudeContext, sampleClaude } from './sample-hc-claude.mjs'
 import { CODEX_CALLBACK_PORT, sampleCodex } from './sample-hc-codex.mjs'
 import { hashOf, type SampleHc, type SampleHome, t } from './sample-hc-kit.mjs'
 import { DSH_CALLBACK_PORT, sampleDsh, sampleOpencode, samplePi } from './sample-hc-others.mjs'
@@ -625,6 +625,7 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
         delete config.overridden[edit.key]
         if (one?.effect === 'harness') restart = true
       }
+      if (state.harness === 'claude') refreshClaudeContext(config)
       bump(state, 'config')
       if (restart) state.restartRequired = true
       publish(state)
@@ -635,6 +636,18 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
       const state = of(p)
       if (!state.sample.config.actions.some((one) => one.id === p.actionId)) {
         throw new ChannelError('notFound', `没有这个动作：${p.actionId}`)
+      }
+      if (state.harness === 'claude' && p.actionId.startsWith('context-window.')) {
+        checkVersion(state, 'config', p.expectedVersion ?? '')
+        const config = state.sample.config
+        if (p.actionId === 'context-window.use-default')
+          config.values.autoCompactWindow =
+            config.values['env.CLAUDE_CODE_AUTO_COMPACT_WINDOW'] ?? null
+        delete config.values['env.CLAUDE_CODE_AUTO_COMPACT_WINDOW']
+        refreshClaudeContext(config)
+        bump(state, 'config')
+        publish(state)
+        return {}
       }
       return new Promise((done) => later(() => done({}), 10))
     },

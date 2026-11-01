@@ -159,8 +159,8 @@ export class SessionStore {
       CREATE TABLE IF NOT EXISTS native_lineage (
         session_id TEXT PRIMARY KEY, app TEXT
       );
-      -- 模型的上下文窗口：入口自己跑回合时从 CLI 的结果里记下（model 是请求里的模型名），
-      -- 导进来的会话算用量时按模型查（native-sessions.mts 不跑 CLI，拿不到窗口）
+      -- CLI 观测的上下文窗口；model 键包含供应商/窗口配置作用域及真实型号。
+      -- 原生导入历史没有此作用域，不复用该缓存。
       CREATE TABLE IF NOT EXISTS model_windows (
         model TEXT PRIMARY KEY, window INTEGER NOT NULL
       );
@@ -478,7 +478,7 @@ export class SessionStore {
     return found
   }
 
-  /** 记下一个模型的上下文窗口（后记的盖掉先记的） */
+  /** 键是供应商/启动配置作用域与真实模型的组合，不接受裸模型的跨会话推断。 */
   saveModelWindow(model: string, window: number): void {
     this.db
       .prepare(

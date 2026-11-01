@@ -1245,7 +1245,7 @@ export interface Commands {
   }
   /** 执行配置里列着的一个动作（清空记忆之类）。确认由界面先问 */
   'harnessConfig.action': {
-    params: { deviceId: string; harness: string; actionId: string }
+    params: { deviceId: string; harness: string; actionId: string; expectedVersion?: string }
     result: Record<string, never>
   }
   /** 手动重读。part 不给是全部 */
