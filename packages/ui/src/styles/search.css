@@ -1,0 +1,136 @@
+/* 搜索使用皮肤现有的强调、面板和边框颜色。 */
+.search-entry {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px var(--tr-gut);
+  color: var(--ink-3);
+  font-size: inherit;
+}
+.search-entry button:hover {
+  color: var(--accent);
+}
+.search-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px var(--tr-gut);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line-2);
+  flex-shrink: 0;
+}
+.search-bar input,
+.search-controls input {
+  flex: 1;
+  min-width: 100px;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  padding: 6px 8px;
+  font: inherit;
+}
+.search-bar button {
+  padding: 4px 8px;
+  border-radius: var(--r1);
+}
+.search-bar button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.search-count,
+.search-note {
+  color: var(--ink-3);
+}
+.search-note {
+  flex-basis: 100%;
+}
+::highlight(litch-find) {
+  background-color: var(--sel);
+  color: var(--ink);
+}
+::highlight(litch-find-current) {
+  background-color: var(--accent-solid);
+  color: var(--on-accent);
+}
+.search-sidebar {
+  margin: 4px 12px;
+  padding: 8px;
+  text-align: left;
+  color: var(--ink-2);
+  border-radius: var(--r1);
+}
+.search-sidebar:hover {
+  background: var(--sel);
+}
+.search-dialog {
+  width: min(740px, 90vw);
+  max-height: 82vh;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  padding: 20px;
+  overflow: auto;
+  font-family: var(--ui);
+}
+.search-dialog::backdrop {
+  background: var(--press);
+}
+.search-dialog header,
+.search-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.search-dialog h2 {
+  flex: 1;
+  margin: 0 0 12px;
+  font: inherit;
+  font-weight: 600;
+}
+.search-dialog header button {
+  padding: 8px;
+}
+.search-controls select {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  padding: 6px;
+  font: inherit;
+}
+.search-results {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+}
+.search-results li {
+  border-bottom: 1px solid var(--line-2);
+}
+.search-results button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 4px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.search-results button:hover {
+  background: var(--sel);
+}
+.search-results mark {
+  background: var(--sel);
+  color: var(--ink);
+}
+.search-coverage {
+  color: var(--ink-3);
+}
+
+.search-gap {
+  color: var(--ink-3);
+  text-align: center;
+  padding: 8px;
+  border-block: 1px dashed var(--line-2);
+}

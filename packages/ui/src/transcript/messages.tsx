@@ -27,6 +27,7 @@ import { PeerHead } from './PeerHead.tsx'
 import { MentionedText } from './SessionMentions.tsx'
 import { SystemCard } from './SystemCard.tsx'
 import { usePin } from './scroll.ts'
+import { SearchCodeContext } from './search/context.ts'
 import { useSmoothText, useToggle } from './state.ts'
 import { TurnActions } from './TurnActions.tsx'
 
@@ -169,7 +170,13 @@ export const UserMessage = memo(function UserMessage({
   }
   if (peer)
     return (
-      <div className="sev sysm" data-peer="" data-anchor={`u:${ref.itemId}`} ref={bubble}>
+      <div
+        className="sev sysm"
+        data-peer=""
+        data-search-item={ref.itemId}
+        data-anchor={`u:${ref.itemId}`}
+        ref={bubble}
+      >
         <CompactRow
           icon={<Icon name="note" small />}
           source={peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')}
@@ -193,7 +200,12 @@ export const UserMessage = memo(function UserMessage({
   const message = item.system ? (
     <SystemCard {...ref} item={item} system={item.system} />
   ) : (
-    <div className="umsg" data-anchor={`u:${ref.itemId}`} ref={bubble}>
+    <div
+      className="umsg"
+      data-search-item={ref.itemId}
+      data-anchor={`u:${ref.itemId}`}
+      ref={bubble}
+    >
       {item.delivery ? (
         <div className="muted" data-input-delivery={item.delivery}>
           {t(`inputDelivery.${item.delivery}`)}
@@ -245,13 +257,16 @@ export const UserMessage = memo(function UserMessage({
 /** 助手回答。还在往外出字时文字匀速放出，结尾带一个光标 */
 export const AgentAnswer = memo(function AgentAnswer(ref: ItemRef) {
   const item = useItem<AgentMessageItem>(ref)
+  const [searchCode] = useToggle(sessionKeyOf(ref), `search-code:${ref.itemId}`, false)
   const { text, revealing } = useSmoothText(item?.kind === 'agentMessage' ? item.text : '')
   if (item?.kind !== 'agentMessage') return null
   // 条目已经定稿但字还没放完时，继续按“输出中”画，放完那一刻才换成定稿的样子，中间没有跳变
   const streaming = item.status === 'inProgress' || revealing
   return (
-    <div className="agent-message">
-      <Markdown text={text} streaming={streaming} anchor={`a:${ref.itemId}`} item={ref.itemId} />
+    <div className="agent-message" data-search-item={ref.itemId}>
+      <SearchCodeContext.Provider value={searchCode}>
+        <Markdown text={text} streaming={streaming} anchor={`a:${ref.itemId}`} item={ref.itemId} />
+      </SearchCodeContext.Provider>
       <div className="message-acts">
         <MessageCopy item={item} />
       </div>
@@ -262,14 +277,17 @@ export const AgentAnswer = memo(function AgentAnswer(ref: ItemRef) {
 /** 计划：一张卡片，内容按 Markdown 画 */
 export const PlanCard = memo(function PlanCard(ref: ItemRef) {
   const item = useItem<PlanItem>(ref)
+  const [searchCode] = useToggle(sessionKeyOf(ref), `search-code:${ref.itemId}`, false)
   const t = useT()
   if (item?.kind !== 'plan') return null
   return (
     // 标记打在里面的每一块上，卡片自己不带：带标记的行不能互相套着
-    <div className="plan">
+    <div className="plan" data-search-item={ref.itemId}>
       <div className="plan-head">{t('plan.title')}</div>
       <div className="plan-body">
-        <Markdown text={item.text} streaming={false} anchor={`p:${ref.itemId}`} />
+        <SearchCodeContext.Provider value={searchCode}>
+          <Markdown text={item.text} streaming={false} anchor={`p:${ref.itemId}`} />
+        </SearchCodeContext.Provider>
       </div>
     </div>
   )

@@ -22,6 +22,7 @@ import { nameOf } from '../app/device.ts'
 import { Icon } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import type { ItemRef } from '../transcript/messages.tsx'
+import { useToggle } from '../transcript/state.ts'
 import { useWorktreesOn, WorktreeCheck } from '../worktrees/WorktreeCheck.tsx'
 import { findOffer, offerState } from './offer.ts'
 import { Brief, ProposalActs, ProposalMeta, StartedChild } from './ProposalCard.tsx'
@@ -82,6 +83,7 @@ export function OfferActs({
 /** litch_sessions.start（initiation offer）的那一条 */
 export function OfferCard({ deviceId, sessionId, itemId, item }: ItemRef & { item: ToolCallItem }) {
   const t = useT()
+  const [searchOpen] = useToggle(`${deviceId}:${sessionId}`, `search-brief:${itemId}`, false)
   const spawned = item.spawned
   const list = useProposalList(deviceId, sessionId)
   const now = useProposalClock(list)
@@ -116,6 +118,7 @@ export function OfferCard({ deviceId, sessionId, itemId, item }: ItemRef & { ite
       data-card="offer"
       data-proposal={proposalId || undefined}
       data-item={itemId}
+      data-search-item={itemId}
       data-state={state ?? ''}
       data-anchor={`i:${itemId}`}
     >
@@ -140,7 +143,11 @@ export function OfferCard({ deviceId, sessionId, itemId, item }: ItemRef & { ite
           />
         ) : null}
         {status === 'started' || held ? (
-          <Brief prompt={proposal?.prompt ?? ''} background={proposal?.background ?? ''} />
+          <Brief
+            prompt={proposal?.prompt ?? ''}
+            background={proposal?.background ?? ''}
+            expanded={searchOpen}
+          />
         ) : null}
         {held ? (
           <p className="prop-wider" data-held="true" data-wider={held.widerSandbox ?? ''}>

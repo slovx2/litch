@@ -1,0 +1,28 @@
+export const enSearch = {
+  'search.inConversation': 'Find in conversation',
+  'search.refresh': 'Refresh directory',
+  'search.titles': 'Search conversations',
+  'search.query': 'Search query',
+  'search.titlePlaceholder': 'Search conversation titles',
+  'search.previous': 'Previous match (Shift+Enter)',
+  'search.next': 'Next match (Enter)',
+  'search.close': 'Close search',
+  'search.gap': '{count} more turns in this gap',
+  'search.count': '{current} / {total}',
+  'search.empty': 'No matches found',
+  'search.busy': 'Searching…',
+  'search.failed': 'Search failed. Close and reopen to retry.',
+  'search.changed': 'The match is not displayed or has changed. Search again.',
+  'search.capped': 'Showing the first {count} matches. Refine your search.',
+  'search.available':
+    'Searches loaded content, including collapsed reasoning and cards; excludes tool calls',
+  'search.titleScope':
+    'Searches titles across devices, including archived conversations; excludes subagents and temporary conversations',
+  'search.offline': 'Offline · cached titles only',
+  'search.incomplete': 'Directory incomplete · results may be missing',
+  'search.ready': 'Directory loaded',
+  'search.device': 'Device scope',
+  'search.allDevices': 'All devices',
+  'search.archived': 'Archived',
+  'search.titleLimit': 'Showing up to 100 results per device. Refine your query.',
+} as const

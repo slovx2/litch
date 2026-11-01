@@ -1,3 +1,7 @@
+import type { SearchHit } from '@litch/core'
+import { SearchPanel } from './search/SearchPanel.tsx'
+import { searchWindow } from './turn-window.ts'
+import '../styles/search.css'
 import {
   type Block,
   blockInput,
@@ -60,7 +64,7 @@ import { ProcessHead, ProcessParts } from './process.tsx'
 import { Recovery } from './Recovery.tsx'
 import { Stamp } from './Stamp.tsx'
 import { PinProvider, savedTurns, useTranscriptScroll } from './scroll.ts'
-import { TurnTouch, touchTurn, useFold, useTurnTouched } from './state.ts'
+import { TurnTouch, touchTurn, useFold, useToggle, useTurnTouched } from './state.ts'
 import { TodoCard } from './Todo.tsx'
 import { FIRST_TURNS, growWindow, restoreWindow, WINDOWED_TURNS } from './turn-window.ts'
 import { useTranscriptView } from './view.ts'
@@ -286,7 +290,8 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   const retry = running ? (turn?.retry ?? null) : null
   const touched = useTurnTouched(sessionKey, turnId)
   // 待办在右边的信息栏里时，对话里不再画一遍
-  const todoInRail = useRailHasTodo(sessionKey)
+  const [searchTodo] = useToggle(sessionKey, `search-todo:${turnId}`, false)
+  const todoInRail = useRailHasTodo(sessionKey) && !searchTodo
   // 回合里还有没做完的子代理时不自动收（状态以子线程为准，见 tree/agent-view.tsx）
   const agentsRunning = useAgentsUnfinished(deviceId, sessionId, turnId)
   // 详细视图里整段过程一直开着，回合结束也不收（useFold）
@@ -326,7 +331,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
     !downHarness(device, meta.harness)
   return (
     <TurnTouch.Provider value={touch}>
-      <section className="turn">
+      <section className="turn" data-search-turn={turnId}>
         {/* 后台任务结束后、目标续跑时 harness 自己开的回合：开头一行写怎么来的 */}
         {/* 别的会话发来消息、定时任务开的回合：开头那条消息（来自 X 的消息、定时任务卡片）自己写着来源，不再另写一行 */}
         {turn.origin && turn.origin !== 'peer' && turn.origin !== 'schedule' && !remind ? (
@@ -390,7 +395,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
         {/* 回合级的出错框只给失败的回合（官方桌面端也是这样）：被打断的回合对面就算带了一句错误
           （旧版 Claude Code 入口带过 interrupted），也只在结尾写“已中断”，不画红框 */}
         {turn.status === 'failed' && turn.error && !remind ? (
-          <div className="errbox">
+          <div className="errbox" data-search-item={`search-error:${turnId}`}>
             <span>{turn.error}</span>
           </div>
         ) : null}
@@ -496,7 +501,11 @@ interface TranscriptProps extends SessionRef {
  * 这一刻画最后几个回合（turn-window.ts）：先画一截，之后每次让出主线程再往前补一批，补的渲染可被打断（transition），
  * 打字、点按不用等它。换了会话从头来
  */
-function useTurnWindow(sessionKey: string, total: number): { span: number; restoring: boolean } {
+function useTurnWindow(
+  sessionKey: string,
+  total: number,
+  searching = false,
+): { span: number; restoring: boolean } {
   const [state, setState] = useState(() => ({
     key: sessionKey,
     shown: FIRST_TURNS,
@@ -513,7 +522,7 @@ function useTurnWindow(sessionKey: string, total: number): { span: number; resto
   }
   const { shown, restore } = current
   useEffect(() => {
-    if (shown >= total) return
+    if (shown >= total || searching) return
     const timer = setTimeout(() =>
       startTransition(() =>
         setState((current) =>
@@ -524,7 +533,7 @@ function useTurnWindow(sessionKey: string, total: number): { span: number; resto
       ),
     )
     return () => clearTimeout(timer)
-  }, [sessionKey, shown, total])
+  }, [sessionKey, shown, total, searching])
   return { span: shown, restoring: shown < Math.min(total, restore) }
 }
 
@@ -549,11 +558,74 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
   const down = downHarness(device, listed?.harness)
   const t = useT()
   const scroll = useTranscriptScroll(`${deviceId}:${sessionId}`)
-  const { span, restoring } = useTurnWindow(`${deviceId}:${sessionId}`, turnIds?.length ?? 0)
-  const drawn = useMemo(
-    () => (turnIds && span < turnIds.length ? turnIds.slice(-span) : turnIds),
-    [turnIds, span],
+  const [finding, setFinding] = useState(false)
+  const [target, setTarget] = useState<SearchHit | null>(null)
+  const focusBeforeSearch = useRef<HTMLElement | null>(null)
+  const openFind = useCallback(() => {
+    const input = document.querySelector<HTMLInputElement>(
+      `[data-search-session="${CSS.escape(JSON.stringify([deviceId, sessionId]))}"] input`,
+    )
+    if (input) {
+      input.focus()
+      input.select()
+      return
+    }
+    focusBeforeSearch.current = document.activeElement as HTMLElement
+    setFinding(true)
+  }, [deviceId, sessionId])
+  const closeFind = useCallback(() => {
+    setFinding(false)
+    focusBeforeSearch.current?.focus({ preventScroll: true })
+  }, [])
+  const searchTarget = useCallback((hit: SearchHit | null) => {
+    if (hit) setTarget(hit)
+  }, [])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 会话身份变化时清除搜索，不沿用上个会话目标。
+  useEffect(() => {
+    setFinding(false)
+    setTarget(null)
+  }, [deviceId, sessionId])
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.shiftKey ||
+        event.altKey ||
+        !(event.metaKey || event.ctrlKey) ||
+        event.code !== 'KeyF'
+      )
+        return
+      const active = event.target instanceof Element ? event.target : null
+      if (active?.closest('.side, .terminal-slot, .xterm, [role="dialog"]')) return
+      if (aside) return
+      event.preventDefault()
+      openFind()
+    }
+    document.addEventListener('keydown', key)
+    return () => document.removeEventListener('keydown', key)
+  }, [openFind, aside])
+  const { span, restoring } = useTurnWindow(
+    `${deviceId}:${sessionId}`,
+    turnIds?.length ?? 0,
+    finding,
   )
+  const drawn = useMemo(
+    () => (turnIds ? searchWindow(turnIds, target?.turnId ?? null, span) : turnIds),
+    [turnIds, span, target?.turnId],
+  )
+  const searchGaps = useMemo(() => {
+    const gaps = new Map<string, number>()
+    if ((!finding && !target) || !turnIds || !drawn) return gaps
+    const positions = new Map(turnIds.map((id, index) => [id, index]))
+    let previous = -1
+    for (const id of drawn) {
+      const index = positions.get(id) ?? previous + 1
+      if (index > previous + 1) gaps.set(id, index - previous - 1)
+      previous = index
+    }
+    return gaps
+  }, [finding, target, turnIds, drawn])
   const { restore } = scroll
   const lastTurn = useKey<TurnView>(keys.turn(deviceId, sessionId, turnIds?.at(-1) ?? ''))
   const busy = lastTurn?.status === 'running'
@@ -569,6 +641,23 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
 
   return (
     <>
+      {finding ? (
+        <SearchPanel
+          deviceId={deviceId}
+          sessionId={sessionId}
+          skip={aside?.skip}
+          root={scroll.contentRef}
+          onTarget={searchTarget}
+          reveal={scroll.reveal}
+          onClose={closeFind}
+        />
+      ) : (
+        <div className="search-entry">
+          <button type="button" onClick={openFind}>
+            {t('search.inConversation')}
+          </button>
+        </div>
+      )}
       <div className="tr-scroll" ref={scroll.scrollerRef} aria-busy={restoring || !turnIds}>
         {restoring ? <div className="tr-loading dim">{t('transcript.loading')}</div> : null}
         <div
@@ -618,9 +707,16 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
                   )
                 ) : (
                   (drawn ?? turnIds).map((turnId) => (
-                    <TurnBoundary key={turnId} label={t('turn.broken')}>
-                      <Turn deviceId={deviceId} sessionId={sessionId} turnId={turnId} />
-                    </TurnBoundary>
+                    <Fragment key={turnId}>
+                      {searchGaps.has(turnId) ? (
+                        <div className="search-gap">
+                          {t('search.gap', { count: searchGaps.get(turnId) ?? 0 })}
+                        </div>
+                      ) : null}
+                      <TurnBoundary label={t('turn.broken')}>
+                        <Turn deviceId={deviceId} sessionId={sessionId} turnId={turnId} />
+                      </TurnBoundary>
+                    </Fragment>
                   ))
                 )}
                 {/* 这边重启设备服务时回合被打断了：最后说一句发消息继续 */}

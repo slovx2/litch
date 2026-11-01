@@ -399,6 +399,11 @@ export interface TopicOp {
 // ---------- 命令 ----------
 
 export interface Commands {
+  /** 搜当前设备目录；不启动会话、不读正文，归档目录由 loadArchived 显式加载。 */
+  'search.titles': {
+    params: { deviceId: string; query: string; limit?: number; untitled?: string }
+    result: import('../search/model.mjs').TitleSearchResult
+  }
   'projectPermission.set': {
     params: ProjectPermissionSet & { deviceId: string }
     result: ProjectPermission

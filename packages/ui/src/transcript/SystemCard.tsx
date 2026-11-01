@@ -82,7 +82,13 @@ export function SystemCard({
                 : 'sysmsg.here',
           )
   return (
-    <div className="sev sysm" data-anchor={`u:${ref.itemId}`} data-sys={system.kind} ref={card}>
+    <div
+      className="sev sysm"
+      data-anchor={`u:${ref.itemId}`}
+      data-sys={system.kind}
+      data-search-item={ref.itemId}
+      ref={card}
+    >
       <CompactRow
         icon={<Icon name={ICON[system.kind]} small />}
         source={label}

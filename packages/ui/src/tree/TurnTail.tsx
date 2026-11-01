@@ -41,7 +41,7 @@ export const TurnTail = memo(function TurnTail({
       {shown.map((item) => {
         const wrap = item.kind === 'toolCall' ? item.wrapUp : undefined
         return (
-          <div key={item.id}>
+          <div key={item.id} data-search-item={item.id}>
             {wrap?.ask ? (
               <AskSheet
                 deviceId={deviceId}

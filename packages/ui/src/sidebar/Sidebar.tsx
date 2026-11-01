@@ -44,6 +44,7 @@ import { useRestart } from '../devices/RestartService.tsx'
 import { restartItemOf, restarting, serviceFlagOf } from '../devices/service.ts'
 import { FailureNote, shownState, useReconnect } from '../devices/status.tsx'
 import { ManagerSidebar } from '../manager/ManagerSidebar.tsx'
+import { requestSearch } from '../search/actions.ts'
 import { useBrowserWants } from '../side/browser/store.ts'
 import { SpawnDialog } from '../tree/SpawnDialog.tsx'
 import { offerUndo } from './archive-undo.ts'
@@ -1913,6 +1914,9 @@ export function Sidebar(props: SidebarProps) {
   return (
     <SidebarReveal value={reveal}>
       <SidebarFrame label={t('sidebar.label')}>
+        <button type="button" className="search-sidebar" onClick={requestSearch}>
+          {t('search.titles')}
+        </button>
         <div className="sb-top mg-sidebar-top">
           <div className="mg-mode seg">
             <button

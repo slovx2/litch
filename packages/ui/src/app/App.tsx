@@ -1,4 +1,5 @@
 import { setBoardLayout } from '../manager/board-layout.ts'
+import { TitleSearch } from '../search/TitleSearch.tsx'
 import { SuggestionsPage } from '../tree/SuggestionsPage.tsx'
 import '../styles/suggestions.css'
 import { ManagerTitleBar } from '../manager/ManagerTitleBar.tsx'
@@ -330,6 +331,16 @@ export function App() {
 
   return (
     <div className={pickedManager && !page ? 'app mg-app' : 'app'}>
+      <TitleSearch
+        onOpen={(next, archived) => {
+          if (archived)
+            leaveThen(() => {
+              dispatch({ type: 'page', page: 'archived' })
+              setPeek(next)
+            })
+          else select(next)
+        }}
+      />
       {page === 'managers' || (!page && (pickedManager || owner)) ? (
         <ManagerTitleBar
           {...(page

@@ -388,6 +388,8 @@ export interface SectionView {
 export type SessionStatus = 'idle' | 'running' | 'waiting' | 'error'
 
 export interface SessionSummary {
+  /** 原生子代理与临时会话不参与全局搜索。 */
+  searchable?: boolean
   id: string
   /** null 表示不属于任何工作区 */
   workspaceId: string | null

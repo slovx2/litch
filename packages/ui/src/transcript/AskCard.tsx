@@ -59,7 +59,13 @@ export function AskSheet({
   const first = questions[0]
   if (!first) return null
   return (
-    <section className="ask" data-card="ask" data-state={state} data-anchor={anchor}>
+    <section
+      className="ask"
+      data-card="ask"
+      data-search-item={toggleId.slice(toggleId.indexOf(':') + 1)}
+      data-state={state}
+      data-anchor={anchor}
+    >
       <CompactRow
         source={`${t('ask.title')} · ${
           state === 'answered'
@@ -177,6 +183,7 @@ export const AskedCard = memo(function AskedCard({
     <section
       className="ask"
       data-card="asked"
+      data-search-item={item.id}
       data-state={state}
       data-anchor={`i:${item.id}`}
       aria-label={t('ask.title')}

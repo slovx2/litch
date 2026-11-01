@@ -446,6 +446,29 @@ export {
   type TaskRunsPage,
   type TerminalGroups,
 } from './replica/replica.mjs'
+export { searchCardItem, searchProposalItem } from './search/cards.mjs'
+export { ConversationSearch } from './search/index.mjs'
+export { itemSearchParts, type SearchPart } from './search/items.mjs'
+export type {
+  SearchHit,
+  SearchResult,
+  SearchSource,
+  SearchWorkerInput,
+  TitleHit,
+  TitleSearchResult,
+} from './search/model.mjs'
+export {
+  occurrences,
+  originalRanges,
+  SEARCH_LIMIT,
+  SEARCH_QUERY_LIMIT,
+  type SearchRange,
+  searchQuery,
+  searchText,
+} from './search/text.mjs'
+export { matchTitles } from './search/titles.mjs'
+export { searchTransferItem } from './search/transfer.mjs'
+export { searchableItems } from './search/visible.mjs'
 export {
   base64Bytes,
   decodeBase64,

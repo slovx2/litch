@@ -27,6 +27,7 @@ import { usePopover } from '../app/popover.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { useActions } from '../transcript/actions.tsx'
 import type { ItemRef } from '../transcript/messages.tsx'
+import { useToggle } from '../transcript/state.ts'
 import { useWorktreesOn, WorktreeCheck } from '../worktrees/WorktreeCheck.tsx'
 import { STATUS_TEXT, useProposalAct, useProposalClock, useProposalList } from './proposals.ts'
 import { SpawnDialog } from './SpawnDialog.tsx'
@@ -162,22 +163,31 @@ export function ProposalMeta({ deviceId, shape }: { deviceId: string; shape: Pro
  * 简报：折着时只写任务、长的折成三行；有背景的展开后分“背景”“任务”两段写全（子会话收到的也是先背景后任务）。
  * offer 卡补上简报之后也用
  */
-export function Brief({ prompt, background = '' }: { prompt: string; background?: string }) {
+export function Brief({
+  prompt,
+  background = '',
+  expanded = false,
+}: {
+  prompt: string
+  background?: string
+  expanded?: boolean
+}) {
   const t = useT()
   const [unfolded, setUnfolded] = useState(false)
+  const open = unfolded || expanded
   const context = background.trim()
   if (!prompt && !context) return null
   const long = context !== '' || prompt.length > LONG_BRIEF || prompt.split('\n').length > 3
   return (
     <>
-      {unfolded && context ? (
+      {open && context ? (
         <div className="prop-brief" data-open="true" data-part="background">
           <span className="prop-brief-label">{t('proposal.brief.background')}</span>
           {context}
         </div>
       ) : null}
-      <div className="prop-brief" data-open={unfolded || !long} data-part="task">
-        {unfolded && context ? (
+      <div className="prop-brief" data-open={open || !long} data-part="task">
+        {open && context ? (
           <span className="prop-brief-label">{t('proposal.brief.task')}</span>
         ) : null}
         {prompt}
@@ -186,10 +196,10 @@ export function Brief({ prompt, background = '' }: { prompt: string; background?
         <button
           type="button"
           className="prop-more"
-          aria-expanded={unfolded}
+          aria-expanded={open}
           onClick={() => setUnfolded(!unfolded)}
         >
-          {t(unfolded ? 'proposal.brief.less' : 'proposal.brief.more')}
+          {t(open ? 'proposal.brief.less' : 'proposal.brief.more')}
         </button>
       ) : null}
     </>
@@ -235,6 +245,7 @@ function ProposalView({
       : list === undefined || !proposalId
         ? null
         : 'unknown'
+  const [searchOpen] = useToggle(`${deviceId}:${sessionId}`, `search-brief:${anchor ?? ''}`, false)
   const title = proposal?.title ?? seed.title
   const prompt = proposal?.prompt ?? seed.prompt
   const background = proposal ? proposal.background : seed.background
@@ -250,6 +261,7 @@ function ProposalView({
       data-card="proposal"
       data-proposal={proposalId}
       data-item={anchor}
+      data-search-item={anchor}
       data-state={status ?? ''}
       data-anchor={anchor ? `x:${anchor}` : undefined}
     >
@@ -266,7 +278,7 @@ function ProposalView({
         </span>
         <b className="prop-title">{title}</b>
         <ProposalMeta deviceId={deviceId} shape={shape} />
-        <Brief prompt={prompt} background={background} />
+        <Brief prompt={prompt} background={background} expanded={searchOpen} />
         {pending && proposal.widerSandbox ? (
           <p className="prop-wider" data-wider={proposal.widerSandbox}>
             {t('proposal.wider', { level: t(SANDBOX_LEVEL[proposal.widerSandbox]) })}

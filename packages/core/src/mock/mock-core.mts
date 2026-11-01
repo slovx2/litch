@@ -1,3 +1,4 @@
+import { matchTitles } from '../search/titles.mjs'
 // 模拟核心：不连任何设备，拿示例数据实现核心对通道的两个入口。
 // 界面开发、组件测试、桌面外壳的自检都对着它跑。
 // 它会把回答按小块流出来，发送、排队、打断、审批、提问也都有个样子，让界面的每条路径真的被走到。
@@ -2965,6 +2966,22 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         const { deviceId, sessionId, title } = params as Commands['session.rename']['params']
         updateSummary(deviceId, sessionId, { title: title.trim() })
         return {}
+      }
+      if (name === 'search.titles') {
+        const { deviceId, query, limit, untitled } = params as Commands['search.titles']['params']
+        const sidebar = sidebars.get(deviceId)
+        const rows = [
+          ...(sidebar?.sessions ?? []).map((session) => ({ session, archived: false })),
+          ...(sidebar?.archived ?? []).map((session) => ({ session, archived: true })),
+        ]
+        const online = app.devices.find((device) => device.id === deviceId)?.connection === 'online'
+        return {
+          ...matchTitles(rows, query, limit, untitled),
+          online,
+          complete: online && sidebar?.archived !== null,
+          archivedLoaded: sidebar?.archived !== null,
+          missingHarnesses: [],
+        }
       }
       if (name === 'device.loadArchived') {
         const { deviceId } = params as Commands['device.loadArchived']['params']

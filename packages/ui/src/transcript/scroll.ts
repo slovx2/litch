@@ -131,6 +131,7 @@ export interface TranscriptScroll {
   /** 是否贴在底部。不在底部时显示“回到底部” */
   following: boolean
   toBottom(): void
+  reveal(element: Element): void
   /** 内容第一次画出来之后调用一次：回到上次离开这个会话时的位置。调用之后才开始记这个会话的位置 */
   restore(): void
   /** 交给点击处理函数用：接下来这次布局变化里，让这个元素在屏幕上不动 */
@@ -142,6 +143,7 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
   const contentRef = useRef<HTMLDivElement | null>(null)
   const [following, setFollowing] = useState(true)
   const follow = useRef(true)
+  const searchHold = useRef<{ element: Element; until: number } | null>(null)
   /** 视口里最靠上、最靠下的两行，以及刚被点过的那一行 */
   const upper = useRef<Hold | null>(null)
   const lower = useRef<Hold | null>(null)
@@ -167,6 +169,7 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
   // 新会话的内容可能要等一会儿才到，这段时间里滚动容器是空的；这时候要是照常记，
   // 就会把“在底部”记到新会话名下，把它上次离开时的位置盖掉
   useLayoutEffect(() => {
+    searchHold.current = null
     shown.current = sessionKey
     armed.current = false
     upper.current = null
@@ -224,6 +227,12 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
   /** 把排版变化造成的移动补回去 */
   const compensate = useCallback(() => {
     if (!armed.current) return
+    const searching = searchHold.current
+    if (searching && performance.now() < searching.until && searching.element.isConnected) {
+      searching.element.scrollIntoView({ block: 'center', behavior: 'instant' })
+      return
+    }
+    searchHold.current = null
     const pin = pinned.current
     // 外观正在变：把盯着的那一行放回它在屏幕上原来的位置（它要是已经不在页面里了，就照平时的算）。
     // 刚点过的那一行优先
@@ -360,16 +369,24 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
       const delta = transcriptWheel(scroller, event)
       if (delta === null) return
       event.preventDefault()
+      searchHold.current = null
       steadied.current = null
       pinned.current = null
       compensate()
       shift(-delta)
       observe()
     }
+    const interacted = () => {
+      searchHold.current = null
+    }
+    scroller.addEventListener('pointerdown', interacted, { passive: true })
+    scroller.addEventListener('keydown', interacted)
     scroller.addEventListener('wheel', wheel, { passive: false })
     scroller.addEventListener('scroll', scrolled, { passive: true })
     return () => {
       resize.disconnect()
+      scroller.removeEventListener('pointerdown', interacted)
+      scroller.removeEventListener('keydown', interacted)
       scroller.removeEventListener('wheel', wheel)
       scroller.removeEventListener('scroll', scrolled)
     }
@@ -447,7 +464,28 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
     [steadyOn],
   )
 
+  const reveal = useCallback(
+    (element: Element) => {
+      searchHold.current = { element, until: performance.now() + 300 }
+      follow.current = false
+      setFollowing(false)
+      pinned.current = null
+      steadied.current = null
+      written.current = null
+      element.scrollIntoView({ block: 'center', behavior: 'instant' })
+      observe()
+      const scroller = scrollerRef.current
+      if (scroller)
+        steadyOn({
+          marks: [{ element, top: element.getBoundingClientRect().top }],
+          scrollTop: scroller.scrollTop,
+        })
+    },
+    [observe, steadyOn],
+  )
+
   const toBottom = useCallback(() => {
+    searchHold.current = null
     const scroller = scrollerRef.current
     if (!scroller) return
     steadied.current = null
@@ -503,8 +541,8 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
   )
 
   return useMemo(
-    () => ({ scrollerRef, contentRef, following, toBottom, restore, pin }),
-    [following, toBottom, restore, pin],
+    () => ({ scrollerRef, contentRef, following, toBottom, restore, pin, reveal }),
+    [following, toBottom, restore, pin, reveal],
   )
 }
 

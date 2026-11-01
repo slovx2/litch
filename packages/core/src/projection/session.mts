@@ -301,6 +301,7 @@ export function projectSummary(
 ): SessionSummary {
   return {
     ...sessionPlace(thread),
+    searchable: !thread.ephemeral && !isAgentThread(thread) && !projectNativeLineage(thread),
     id: thread.id,
     workspaceId: scope.workspaceId,
     harness: scope.harness,

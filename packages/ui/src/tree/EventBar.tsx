@@ -92,7 +92,7 @@ export function SessionEventBar({
   const t = useT()
   const [open, setOpen] = useToggle(`${deviceId}:${sessionId}`, `event:${itemId}`, false)
   return (
-    <div className="sev" data-event={event.kind} data-anchor={anchor}>
+    <div className="sev" data-event={event.kind} data-anchor={anchor} data-search-item={itemId}>
       <CompactRow
         icon={<Icon name="info" small />}
         source={t(HEAD_TEXT[event.kind] ?? 'tree.event.generic')}

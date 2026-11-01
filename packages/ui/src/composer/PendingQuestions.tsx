@@ -11,6 +11,7 @@ import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
 import { Caret } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
+import { useToggle } from '../transcript/state.ts'
 import { useQuestionAge } from './question-age.ts'
 import { useRunningSend } from './send-mode.ts'
 
@@ -19,7 +20,7 @@ export function PendingQuestions({ deviceId, sessionId }: { deviceId: string; se
   const questions = useKey<PendingQuestion[]>(keys.pendingQuestions(deviceId, sessionId)) ?? []
   const meta = useKey<SessionMeta>(keys.session(deviceId, sessionId))
   const device = useKey<DeviceView>(keys.device(deviceId))
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useToggle(`${deviceId}:${sessionId}`, 'search-pending', true)
   if (questions.length === 0) return null
   // 和审批卡同一个位置、同一种卡片：和输入区一样宽，题多了在卡片里面滚，收起时只剩标题一行
   return (
@@ -113,7 +114,12 @@ function PendingCard({
   }
   // 一道题两行：题目，下面是建议的回答和自己写的一栏排在同一行，窄了再折行
   return (
-    <div className="pending-ask" data-state="open" data-pending-question={question.id}>
+    <div
+      className="pending-ask"
+      data-state="open"
+      data-pending-question={question.id}
+      data-search-item={`pending:${question.id}`}
+    >
       <div className="pending-ask-q">{question.title}</div>
       <div className="pending-ask-meta">
         <span className="grow">
@@ -146,6 +152,7 @@ function PendingCard({
             type="button"
             className={question.kind === 'wrap' && index === 0 ? 'btn primary' : 'btn'}
             data-act={index}
+            data-search-option=""
             disabled={!enabled || busy}
             onClick={() => void send(option.answer)}
           >

@@ -13,6 +13,8 @@ type ListResult = ClientRequests['thread/list']['result']
 const MAX_PAGES = 500
 
 export interface Listing {
+  /** 仍有下一页却达到上限，或游标停滞。 */
+  incomplete?: boolean
   threads: Thread[]
   /** 这一次没有包含进来的 harness（当时不可用，或者问了没成）。只有聚合面会给 */
   skipped: ThreadListSkippedHarness[]
@@ -28,6 +30,7 @@ export async function collectThreads(
   const byId = new Map<string, Thread>()
   const skipped = new Map<string, ThreadListSkippedHarness>()
   let cursor: string | null = null
+  let incomplete = true
   for (let page = 0; page < MAX_PAGES; page++) {
     const result = await fetch(cursor)
     for (const thread of result.data) {
@@ -38,10 +41,14 @@ export async function collectThreads(
     for (const entry of result.skippedHarnesses ?? []) {
       if (skipped.get(entry.harness)?.reason !== 'failed') skipped.set(entry.harness, entry)
     }
-    if (!result.nextCursor || result.nextCursor === cursor) break
+    if (!result.nextCursor) {
+      incomplete = false
+      break
+    }
+    if (result.nextCursor === cursor) break
     cursor = result.nextCursor
   }
-  return { threads: [...byId.values()], skipped: [...skipped.values()] }
+  return { threads: [...byId.values()], skipped: [...skipped.values()], incomplete }
 }
 
 /**

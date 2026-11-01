@@ -1,3 +1,5 @@
+import type { TitleSearchResult } from '../search/model.mjs'
+import { matchTitles } from '../search/titles.mjs'
 import { createProjectPermissions, type ProjectPermissions } from './project-permissions.mjs'
 // 一台设备：一条连接，加上连上之后要做的事。
 // 对面有两种：
@@ -283,6 +285,7 @@ const sshTarget = (target: RemoteTarget | null): string | null => {
 }
 
 export interface Device {
+  searchTitles(query: string, limit?: number, untitled?: string): TitleSearchResult
   readonly view: DeviceView
   readonly sidebar: SidebarView
   readonly online: boolean
@@ -886,6 +889,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     if (thread) hooks.sidebarOps([{ op: 'session.upsert', session: summaryOf(thread) }])
   }
 
+  /** 标题搜索区分目录已读、分页截断和入口缺失；离线保留的目录不算完整。 */
+  let catalogLoaded = false
+  let catalogTruncated = false
+  let archiveComplete = false
+  let archiveMissing: string[] = []
   /** 已归档的会话。null：界面还没要过，不去取 */
   let archived: Map<string, Thread> | null = null
   const archivedList = (): SessionSummary[] | null =>
@@ -1294,6 +1302,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
 
   /** 新取到的已归档列表并进那张表。没包含进来的 harness，它原来在表里的留着 */
   const setArchived = (listing: Listing, only: HarnessId | null = null) => {
+    if (only === null) {
+      archiveComplete = !listing.incomplete && listing.skipped.length === 0
+      archiveMissing = listing.skipped.map((each) => each.harness)
+    }
     archived = mergeListing(archived?.values() ?? [], listing, harnessOf, only, downHarnesses())
   }
 
@@ -1307,6 +1319,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
 
   /** 新取到的列表并进会话目录，记下这一次哪些 harness 没有包含进来 */
   const setThreads = (listing: Listing, only: HarnessId | null = null) => {
+    if (only === null) {
+      catalogLoaded = true
+      catalogTruncated = listing.incomplete === true
+    }
     const next = mergeListing(threads.values(), listing, harnessOf, only, downHarnesses())
     const before = trace ? new Map(threads) : null
     threads.clear()
@@ -2712,6 +2728,29 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       removeThread(sessionId)
       live.forget(sessionId, true)
       unshelve(sessionId)
+    },
+    searchTitles(query, limit, untitled) {
+      const missingHarnesses = [...new Set([...gaps.keys(), ...archiveMissing, ...downHarnesses()])]
+      const rows = [
+        ...[...threads.values()].map((thread) => ({ session: summaryOf(thread), archived: false })),
+        ...[...(archived?.values() ?? [])].map((thread) => ({
+          session: summaryOf(thread),
+          archived: true,
+        })),
+      ]
+      return {
+        ...matchTitles(rows, query, limit, untitled),
+        online,
+        complete:
+          online &&
+          catalogLoaded &&
+          !catalogTruncated &&
+          archiveComplete &&
+          missingHarnesses.length === 0 &&
+          !catalogError,
+        archivedLoaded: archived !== null,
+        missingHarnesses,
+      }
     },
     async loadArchived() {
       if (!online) throw new ChannelError('offline', '设备未连接')

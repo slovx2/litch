@@ -17,3 +17,16 @@ export function restoreWindow(savedTurns: number | null): number {
 export function growWindow(shown: number, total: number): number {
   return shown >= total ? shown : Math.min(total, shown + MORE_TURNS)
 }
+
+/** 搜索时先挂载目标附近两回合；不能一次扩大到目标与底部之间所有历史。 */
+export function searchWindow(
+  turnIds: readonly string[],
+  target: string | null,
+  shown: number,
+): string[] {
+  if (!target) return turnIds.slice(-shown)
+  const at = turnIds.indexOf(target)
+  if (at < 0) return turnIds.slice(-shown)
+  const keep = new Set([...turnIds.slice(-shown), ...turnIds.slice(Math.max(0, at - 1), at + 2)])
+  return turnIds.filter((id) => keep.has(id))
+}

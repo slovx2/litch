@@ -1,7 +1,8 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Close } from '../app/icons.tsx'
 import { drawMermaid, firstLine, useLook } from './mermaid.ts'
+import { SearchCodeContext } from './search/context.ts'
 
 interface MermaidBlockProps {
   bounded?: boolean
@@ -28,6 +29,7 @@ export const MermaidBlock = memo(function MermaidBlock({
   const t = useT()
   const look = useLook(bounded)
   const [source, setSource] = useState(false)
+  const searchSource = useContext(SearchCodeContext)
   const [zoomed, setZoomed] = useState(false)
   const [drawn, setDrawn] = useState<Drawn | null>(null)
   const [copied, setCopied] = useState(false)
@@ -50,7 +52,7 @@ export const MermaidBlock = memo(function MermaidBlock({
   const current = !open && drawn?.text === text ? drawn : null
   const svg = current && 'svg' in current ? current.svg : null
   const error = current && 'error' in current ? current.error : null
-  const figure = svg !== null && !source
+  const figure = svg !== null && !source && !searchSource
 
   const copy = () => {
     navigator.clipboard.writeText(text).then(

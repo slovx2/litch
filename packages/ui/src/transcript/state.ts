@@ -13,6 +13,18 @@ import { useTranscriptView } from './view.ts'
 // ---------- 展开状态 ----------
 // 按会话、按条目标识记在内存里。组件卸载再回来（切走会话、以后的虚拟化）还是原来的样子。
 const toggles = new Map<string, Map<string, boolean>>()
+const searchExpanded = new Map<string, ReadonlySet<string>>()
+
+/** 搜索临时展开覆盖，不改用户的折叠选择，也不记录为手动触碰。 */
+export function expandForSearch(sessionKey: string, ids: ReadonlySet<string>): void {
+  const before = searchExpanded.get(sessionKey) ?? new Set<string>()
+  if (ids.size) searchExpanded.set(sessionKey, ids)
+  else searchExpanded.delete(sessionKey)
+  for (const id of new Set([...before, ...ids])) {
+    if (before.has(id) === ids.has(id)) continue
+    for (const listener of toggleListeners) listener(toggleKey(sessionKey, id))
+  }
+}
 const toggleListeners = new Set<(key: string) => void>()
 const toggleKey = (sessionKey: string, id: string) => `${sessionKey}\n${id}`
 
@@ -50,7 +62,9 @@ export function useToggle(
     },
     [sessionKey, id],
   )
-  const picked = useSyncExternalStore(subscribe, () => toggles.get(sessionKey)?.get(id))
+  const picked = useSyncExternalStore(subscribe, () =>
+    searchExpanded.get(sessionKey)?.has(id) ? true : toggles.get(sessionKey)?.get(id),
+  )
   const set = useCallback((next: boolean) => pickToggle(sessionKey, id, next), [sessionKey, id])
   return [picked ?? fallback, set]
 }

@@ -55,7 +55,7 @@ function Row({ itemRef, icon, verb, target, meta, busy, detail, tone }: RowProps
   const pin = usePin()
   const touch = useContext(TurnTouch)
   return (
-    <div className="item" data-tone={tone}>
+    <div className="item" data-tone={tone} data-search-item={itemRef.itemId}>
       <button
         type="button"
         className="item-head"

@@ -615,6 +615,10 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId } = params as Commands['workspace.candidates']['params']
           return { roots: deviceOf(deviceId).rootCandidates() }
         }
+        case 'search.titles': {
+          const { deviceId, query, limit, untitled } = params as Commands['search.titles']['params']
+          return deviceOf(deviceId).searchTitles(query, limit, untitled)
+        }
         case 'device.loadArchived': {
           const { deviceId } = params as Commands['device.loadArchived']['params']
           try {

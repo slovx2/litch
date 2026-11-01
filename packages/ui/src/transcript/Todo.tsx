@@ -73,7 +73,7 @@ export const TodoCard = memo(function TodoCard(ref: ItemRef) {
   const { done, total, current } = todoProgress(item)
   return (
     // 整张卡片是一行标记：里面的步骤不单独带，带标记的行不能互相套着
-    <div className="todo" data-anchor={`d:${ref.itemId}`}>
+    <div className="todo" data-search-item={ref.itemId} data-anchor={`d:${ref.itemId}`}>
       <div className="todo-head">
         <span className="todo-title">{t('todo.title')}</span>
         <span className="todo-count">{t('todo.count', { done, total })}</span>
