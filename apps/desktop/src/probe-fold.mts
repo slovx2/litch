@@ -18,6 +18,8 @@ export interface FoldProbe {
   toggles: number
   /** 滚到最上面时收起，滚动范围确实变小到夹住了滚动位置的次数（证明量到了这种情形） */
   clamped: number
+  /** 到顶时，取整的 scrollHeight/clientHeight 与实际 scrollTop 相差多少；仅作诊断。 */
+  roundedEdgeGap: number
 }
 
 export async function foldProbe(): Promise<FoldProbe> {
@@ -81,6 +83,7 @@ export async function foldProbe(): Promise<FoldProbe> {
   let worst = ''
   let toggles = 0
   let clamped = 0
+  let roundedEdgeGap = 0
   /** 滚到要的位置：top 是滚到最上面，否则是让这一行的上边缘落在视口上方四分之一处 */
   const place = async (element: HTMLElement, where: 'top' | 'upper') => {
     const view = scroller().getBoundingClientRect()
@@ -102,7 +105,10 @@ export async function foldProbe(): Promise<FoldProbe> {
     const top = element.getBoundingClientRect().top
     const expanded = element.getAttribute('aria-expanded')
     const range = scroll.scrollHeight - scroll.clientHeight
-    const atTop = Math.abs(scroll.scrollTop + range) < 1
+    // 两个整数高度之差可能与真实极限差 1px；用顶边的实际位置认到顶，位移上限仍为 1px。
+    const atTop =
+      Math.abs(content().getBoundingClientRect().top - scroll.getBoundingClientRect().top) < 1
+    if (atTop) roundedEdgeGap = Math.max(roundedEdgeGap, Math.abs(scroll.scrollTop + range))
     const shifts: number[] = []
     const read = () => shifts.push(Math.abs(element.getBoundingClientRect().top - top))
     const observer = new ResizeObserver(read)
@@ -145,7 +151,7 @@ export async function foldProbe(): Promise<FoldProbe> {
     }
   }
   look.set({ skin: 'retro' })
-  return { ready, answerTall, answerTables, maxShift, worst, toggles, clamped }
+  return { ready, answerTall, answerTables, maxShift, worst, toggles, clamped, roundedEdgeGap }
 }
 
 /** 量到的数字合不合格。返回不合格的项，空数组就是全过 */

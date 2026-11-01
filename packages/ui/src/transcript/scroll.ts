@@ -49,6 +49,7 @@ import {
   useState,
 } from 'react'
 import { onAppearanceChange } from '../app/appearance.ts'
+import { scrollClampBase } from './scroll-clamp.ts'
 import { onViewSwitch } from './view.ts'
 import { transcriptWheel } from './wheel.ts'
 
@@ -212,14 +213,18 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
   /** 离底部再远这么多像素（负数是靠近） */
   const shift = useCallback((delta: number) => {
     const scroller = scrollerRef.current
-    if (!scroller || Math.abs(delta) < 0.01) return
+    const content = contentRef.current
+    if (!scroller || !content || Math.abs(delta) < 0.01) return
     // 内容变矮、滚动范围跟着变小时，浏览器在排版时就把滚动位置夹回了新的范围里（停在最上面），
     // 等不到这里补偿。从夹过的位置算会多补一截：离最上面越近、收起的越多，眼前的内容往上跳得越远。
     // 这时要从夹之前的位置算。用户自己滚的在这之前已经经滚动事件认过了，不会被当成夹的
     const now = scroller.scrollTop
-    const top = scroller.clientHeight - scroller.scrollHeight
-    const before = seen.current
-    const base = before !== null && before < now && Math.abs(now - top) < 1 ? before : now
+    const base = scrollClampBase(
+      seen.current,
+      now,
+      content.getBoundingClientRect().top,
+      scroller.getBoundingClientRect().top,
+    )
     // 浏览器会把滚动位置取整到设备像素。接着“上次想要的值”往下算，取整的误差才不会越积越多；
     // 上次之后用户自己滚过，就以现在的实际位置为准
     const last = written.current
