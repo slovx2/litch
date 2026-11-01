@@ -178,6 +178,16 @@ jobs:
       - run: npm run client:check:scroll
       # 输入区的验收：输入法回车不误发、发送与排队的顺序、打断、草稿、审批和提问卡片的快捷键
       - run: npm run client:check:compose
+      # 侧栏投影验收（check-sidebar-projections.mjs）要一份隔离的 headless Chrome for Testing，经 LITCH_CHROME_BINARY
+      # 交给本作业后面的步骤；版本与 chrome-e2e 的引导脚本一致。搜索验收不进 CI，见 scripts/AGENTS.md
+      - name: 准备界面验收的 Chrome for Testing
+        run: |
+          architecture="$(node -p "process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64'")"
+          directory="${RUNNER_TEMP}/chrome-for-testing"
+          mkdir -p "${directory}"
+          curl --fail --location --retry 3 -o "${directory}/chrome.zip" "https://storage.googleapis.com/chrome-for-testing-public/151.0.7922.34/${architecture}/chrome-${architecture}.zip"
+          ditto -xk "${directory}/chrome.zip" "${directory}"
+          echo "LITCH_CHROME_BINARY=${directory}/chrome-${architecture}/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" >> "${GITHUB_ENV}"
       - run: npm run client:check:projections
       # 对着真实入口的自检：在临时目录里起一个 Pi 引擎，模型请求全部走回环上的假模型
       - run: npm ci --no-audit --no-fund --prefix packages/pi
