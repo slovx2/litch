@@ -19,7 +19,7 @@ export function isManagerQuestionTools(tools: unknown): boolean {
 export function managerQuestionRules(id: string): string {
   return `${MANAGER_QUESTION_RULE}
 Markdown supported; use it for lists and emphasis.
-Only answer the user's questions about decision ${id}, briefly. Earlier conversation is reference material, not a task to continue. You may read files and call litch_manager.summary/get. You may use update ONLY for this decision’s title, background, options and recommend, or close ONLY this decision as expired/withdrawn when warranted by the discussion. Read get before changing it. The device records changes and informs the manager next turn. Do not change files, other board objects or other fields, start sessions or agents, send messages, or request permissions. If the available context cannot answer the question, say so and suggest forwarding it to the manager.`
+Only answer the user's questions about post ${id}, briefly. Earlier conversation is reference material, not a task to continue. You may read files and call litch_manager.summary/get/post_get. For any post use post_reply with id ${id}, current revision, patch and why to update its original content only; do not supply text or questionId. You may use update ONLY for this decision’s title, background, options and recommend, or close ONLY this decision as expired/withdrawn when warranted by the discussion. Read get before changing it. The device records changes and informs the manager next turn. Do not change files, other board objects or other fields, start sessions or agents, send messages, or request permissions. If the available context cannot answer the question, say so and suggest forwarding it to the manager.`
 }
 
 export function forwardedManagerQuestion(

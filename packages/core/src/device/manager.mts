@@ -1,3 +1,8 @@
+import {
+  MANAGER_POST_METHOD,
+  type ManagerPostQuestionParams,
+  type ManagerReportReadParams,
+} from '../../../protocol/src/manager-posts.mjs'
 // 经理列表常驻，看板按需读取；开启桌面通知的经理也常驻读取看板以发现新决策。
 // 设备通知使快照失效；在途读取期间再有通知则补读一次。
 
@@ -28,6 +33,7 @@ import {
   projectManagerAnswers,
   projectManagerBoard,
   projectManagerDecision,
+  projectManagerPost,
   projectManagerRequest,
 } from '../projection/manager.mjs'
 import { openedManagerDecisions } from './manager-decisions.mjs'
@@ -326,6 +332,27 @@ export function createManagers(host: ManagersHost) {
       const result = await guarded(() => host.request(MANAGER_METHOD.decisionReopen, params))
       invalidate(params.managerId)
       return { decision: projectManagerDecision(result.decision) }
+    },
+    async reference(params: { managerId: string; reference: string }) {
+      return guarded(() => host.request(MANAGER_POST_METHOD.reference, params))
+    },
+    async postForward(params: {
+      managerId: string
+      id: import('../../../protocol/src/manager-posts.mjs').ManagerPostId
+    }) {
+      const result = await guarded(() => host.request(MANAGER_POST_METHOD.forward, params))
+      invalidate(params.managerId)
+      return result
+    },
+    async postQuestion(params: ManagerPostQuestionParams) {
+      const result = await guarded(() => host.request(MANAGER_POST_METHOD.question, params))
+      invalidate(params.managerId)
+      return { post: projectManagerPost(result.post) }
+    },
+    async reportRead(params: ManagerReportReadParams) {
+      const result = await guarded(() => host.request(MANAGER_POST_METHOD.read, params))
+      invalidate(params.managerId)
+      return { post: projectManagerPost(result.post) }
     },
     async ask(params: ManagerQuestionParams) {
       await guarded(() => host.request(MANAGER_METHOD.questionAsk, params))

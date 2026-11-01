@@ -13,6 +13,9 @@
   },
   "undeclared": "litch/manager/ 方法返回 extensionRequired，data.required=[\"litchManager\"]；会话对象不带 litchManager，不发送两个经理通知。标准会话、回合及通知照常可见，未修改的官方客户端可以使用这些普通会话。",
   "rules": [
+    "第三轮：控制台投影 posts 和 relations；report/post_get/post_reply/relate 工具只授权经理，临时追问只能 patch 本帖。manager-answers.manager 新增可选 postQuestions=[{id,revision,title,question}]，旧 questions 继续只表示决策。报告 P-n 用 revision/readRevision 显式标已阅；通用追问与关联记录留存在 manager.sqlite 追加迁移 v5/v6。",
+    "D-28：v6 追加 manager_relations；新增 relate 与建对象 source/related，来源/派生/相关正反向投影，旧 blocks/blockedBy/basis/links 不迁移。reference/read 仅在经理 cwd 内读取明确 git ref，不执行模型提供命令。",
+    "第三轮：控制台统一四类议题，新增 report/post_get/post_reply 工具；post/question 复用讨论，report/read 按版本标已阅。未阅报告与已审待开始建议计入待处理；议题 author 为未来用户创建预留。manager.sqlite v5 追加报告与建议版本表，不删库。",
     "请你做：R-n 为用户亲手操作项目；add(kind=request) 需 revision=0 和 why，update/close 需当前 revision 及 why/reason。经理只能维护内容或取消，不能替用户交付。feedback/submit 可选 requests 数组，成功项进入同一 manager-answers 的 requests；delivered=true 为交付，否则非空文字为回复。允许修改已交付/已回复项目，已取消不可提交。",
     "建议审核：经理工具 endorse(proposalId,reason?)、dismiss(proposalId,reason) 只处理自己整棵工作线子树的 pending 普通卡；经理自己的卡默认审核。审核持久化并更新 suggestionInbox，忽略沿用 dismissed 并记经理忽略及理由。新线卡经既有备注/回报路径提醒经理审核。",
     "第二轮：事项 add/update 拒绝显式 owner.kind=user；旧对象保留。经理可用 start initiation=propose 提供带完整简报的建议卡。",
@@ -47,107 +50,119 @@
     {
       "kind": "ClientRequest",
       "method": "litch/manager/list",
-      "params": { "$ref": "#/definitions/Empty" },
-      "response": { "$ref": "#/definitions/ListResponse" }
+      "params": {"$ref": "#/definitions/Empty"},
+      "response": {"$ref": "#/definitions/ListResponse"}
     },
     {
       "kind": "ClientRequest",
       "method": "litch/manager/create",
-      "params": { "$ref": "#/definitions/CreateParams" },
-      "response": { "$ref": "#/definitions/CreateResponse" }
+      "params": {"$ref": "#/definitions/CreateParams"},
+      "response": {"$ref": "#/definitions/CreateResponse"}
     },
     {
       "kind": "ClientRequest",
       "method": "litch/manager/update",
-      "params": { "$ref": "#/definitions/UpdateParams" },
-      "response": { "$ref": "#/definitions/ManagerResponse" }
+      "params": {"$ref": "#/definitions/UpdateParams"},
+      "response": {"$ref": "#/definitions/ManagerResponse"}
     },
     {
       "kind": "ClientRequest",
       "method": "litch/manager/end",
-      "params": { "$ref": "#/definitions/IdParams" },
-      "response": { "$ref": "#/definitions/ManagerResponse" }
+      "params": {"$ref": "#/definitions/IdParams"},
+      "response": {"$ref": "#/definitions/ManagerResponse"}
     },
     {
       "kind": "ClientRequest",
       "method": "litch/manager/board/read",
-      "params": { "$ref": "#/definitions/IdParams" },
-      "response": { "$ref": "#/definitions/BoardResponse" }
+      "params": {"$ref": "#/definitions/IdParams"},
+      "response": {"$ref": "#/definitions/BoardResponse"}
     },
     {
       "kind": "ClientRequest",
       "method": "litch/manager/answers/submit",
-      "params": { "$ref": "#/definitions/AnswersParams" },
-      "response": { "$ref": "#/definitions/AnswersResponse" }
+      "params": {"$ref": "#/definitions/AnswersParams"},
+      "response": {"$ref": "#/definitions/AnswersResponse"}
     },
     {
       "kind": "ClientRequest",
       "method": "litch/manager/feedback/submit",
-      "params": { "$ref": "#/definitions/FeedbackSubmitParams" },
-      "response": { "$ref": "#/definitions/FeedbackSubmitResponse" }
+      "params": {"$ref": "#/definitions/FeedbackSubmitParams"},
+      "response": {"$ref": "#/definitions/FeedbackSubmitResponse"}
     },
     {
       "kind": "ClientRequest",
       "method": "litch/manager/decision/reopen",
-      "params": { "$ref": "#/definitions/ReopenParams" },
-      "response": { "$ref": "#/definitions/DecisionResponse" }
+      "params": {"$ref": "#/definitions/ReopenParams"},
+      "response": {"$ref": "#/definitions/DecisionResponse"}
     },
     {
       "kind": "ClientRequest",
       "method": "litch/manager/question/ask",
-      "params": { "$ref": "#/definitions/QuestionParams" },
-      "response": { "$ref": "#/definitions/QuestionResponse" }
+      "params": {"$ref": "#/definitions/QuestionParams"},
+      "response": {"$ref": "#/definitions/QuestionResponse"}
     },
     {
       "kind": "ClientRequest",
       "method": "litch/manager/question/forward",
-      "params": { "$ref": "#/definitions/ReopenParams" },
-      "response": { "$ref": "#/definitions/ForwardResponse" }
+      "params": {"$ref": "#/definitions/ReopenParams"},
+      "response": {"$ref": "#/definitions/ForwardResponse"}
     },
     {
       "kind": "ServerNotification",
       "method": "litch/manager/changed",
-      "params": { "$ref": "#/definitions/ManagerResponse" }
+      "params": {"$ref": "#/definitions/ManagerResponse"}
     },
     {
       "kind": "ServerNotification",
       "method": "litch/manager/board/changed",
-      "params": { "$ref": "#/definitions/IdParams" }
+      "params": {"$ref": "#/definitions/IdParams"}
     },
     {
       "kind": "ThreadField",
       "on": "thread/list、thread/read、thread/start、thread/resume、thread/started 等聚合面的会话对象",
       "name": "litchManager",
-      "schema": { "$ref": "#/definitions/SessionManagerMark" },
+      "schema": {"$ref": "#/definitions/SessionManagerMark"},
       "description": "只投递给声明本扩展的连接。"
     },
     {
       "kind": "Error",
       "description": "error.data.litch 标识原因，message 为可操作的英文说明；未声明时用已有 extensionRequired。",
       "errors": [
-        { "litch": "unknownManager", "code": -32602, "description": "managerId 不存在" },
-        {
-          "litch": "managerEnded",
-          "code": -32600,
-          "description": "经理结束中或已结束；结束中仅指定收尾回合可写，已结束后不能修改"
-        },
-        {
-          "litch": "invalidManager",
-          "code": -32602,
-          "description": "参数不合法，data.field 指明字段"
-        },
-        { "litch": "unknownDecision", "code": -32602, "description": "decisionId 不属于这个看板" },
-        {
-          "litch": "decisionNotClosed",
-          "code": -32600,
-          "description": "只能重新打开 expired/withdrawn"
-        },
+        {"litch": "unknownManager", "code": -32602, "description": "managerId 不存在"},
+        {"litch": "managerEnded", "code": -32600, "description": "经理结束中或已结束；结束中仅指定收尾回合可写，已结束后不能修改"},
+        {"litch": "invalidManager", "code": -32602, "description": "参数不合法，data.field 指明字段"},
+        {"litch": "unknownDecision", "code": -32602, "description": "decisionId 不属于这个看板"},
+        {"litch": "decisionNotClosed", "code": -32600, "description": "只能重新打开 expired/withdrawn"},
         {
           "litch": "lineLimitReached",
           "code": -32600,
           "description": "已到运行线上限，data.limit、data.runningLines 说明现状"
         }
       ]
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/post/question",
+      "params": {"$ref": "#/definitions/PostQuestionParams"},
+      "response": {"$ref": "#/definitions/PostResponse"}
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/report/read",
+      "params": {"$ref": "#/definitions/ReportReadParams"},
+      "response": {"$ref": "#/definitions/PostResponse"}
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/post/forward",
+      "params": {"$ref": "#/definitions/PostForwardParams"},
+      "response": {"$ref": "#/definitions/ForwardResponse"}
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/reference/read",
+      "params": {"$ref": "#/definitions/ReferenceParams"},
+      "response": {"$ref": "#/definitions/ReferenceResponse"}
     }
   ],
   "definitions": {
@@ -321,7 +336,9 @@
         "answer": { "type": ["string", "null"] },
         "status": { "enum": ["running", "completed", "failed"] },
         "refreshed": { "type": "boolean" },
-        "at": { "type": "number" }
+        "at": { "type": "number" },
+        "answeredAt": {"type": "integer", "minimum": 0},
+        "updatedPost": {"type": "boolean"}
       },
       "additionalProperties": false
     },
@@ -430,9 +447,10 @@
     "ItemId": { "type": "string", "pattern": "^I-[1-9][0-9]*$" },
     "ObjectId": {
       "anyOf": [
-        { "$ref": "#/definitions/DecisionId" },
-        { "$ref": "#/definitions/ItemId" },
-        { "$ref": "#/definitions/RequestId" }
+        {"$ref": "#/definitions/DecisionId"},
+        {"$ref": "#/definitions/ItemId"},
+        {"$ref": "#/definitions/RequestId"},
+        {"$ref": "#/definitions/PostId"}
       ]
     },
     "Decision": {
@@ -670,7 +688,9 @@
         "latestActivity": { "anyOf": [{ "$ref": "#/definitions/Activity" }, { "type": "null" }] },
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" },
-        "endedAt": { "type": ["number", "null"] }
+        "endedAt": { "type": ["number", "null"] },
+        "pendingReports": {"type": "integer", "minimum": 0},
+        "pendingSuggestions": {"type": "integer", "minimum": 0}
       },
       "additionalProperties": false
     },
@@ -693,7 +713,9 @@
         "items": { "type": "array", "items": { "$ref": "#/definitions/Item" } },
         "lines": { "type": "array", "items": { "$ref": "#/definitions/Line" } },
         "activities": { "type": "array", "items": { "$ref": "#/definitions/Activity" } },
-        "changes": { "type": "array", "items": { "$ref": "#/definitions/Change" } }
+        "changes": { "type": "array", "items": { "$ref": "#/definitions/Change" } },
+        "posts": {"type": "array", "items": {"$ref": "#/definitions/Post"}},
+        "relations": {"type": "array", "items": {"$ref": "#/definitions/Relation"}}
       },
       "additionalProperties": false
     },
@@ -830,6 +852,126 @@
       "type": "object",
       "required": ["decision"],
       "properties": { "decision": { "$ref": "#/definitions/Decision" } },
+      "additionalProperties": false
+    },
+    "PostId": {"type": "string", "pattern": "^(D|R|P)-[1-9][0-9]*$|^S-.+$"},
+    "PostVersion": {
+      "type": "object",
+      "properties": {
+        "revision": {"type": "integer", "minimum": 0},
+        "title": {"type": "string"},
+        "body": {"type": "string"},
+        "at": {"type": "integer", "minimum": 0},
+        "by": {"type": "string"},
+        "why": {"type": "string"}
+      },
+      "required": ["revision", "title", "body", "at", "by", "why"],
+      "additionalProperties": false
+    },
+    "Post": {
+      "type": "object",
+      "properties": {
+        "id": {"$ref": "#/definitions/PostId"},
+        "kind": {"enum": ["decision", "request", "report", "suggestion"]},
+        "author": {
+          "type": "object",
+          "properties": {"kind": {"enum": ["manager", "user"]}, "name": {"type": "string"}},
+          "required": ["kind"],
+          "additionalProperties": false
+        },
+        "title": {"type": "string"},
+        "body": {"type": "string"},
+        "revision": {"type": "integer", "minimum": 0},
+        "createdAt": {"type": "integer", "minimum": 0},
+        "updatedAt": {"type": "integer", "minimum": 0},
+        "discussion": {"$ref": "#/definitions/Discussion"},
+        "versions": {"type": "array", "items": {"$ref": "#/definitions/PostVersion"}},
+        "fields": {"type": "object"},
+        "unread": {"type": "boolean"},
+        "proposalId": {"type": "string"},
+        "sourceThreadId": {"type": "string"}
+      },
+      "required": [
+        "id",
+        "kind",
+        "title",
+        "body",
+        "revision",
+        "createdAt",
+        "updatedAt",
+        "discussion",
+        "versions",
+        "fields"
+      ],
+      "additionalProperties": false
+    },
+    "PostQuestionParams": {
+      "type": "object",
+      "properties": {
+        "managerId": {"type": "string"},
+        "id": {"$ref": "#/definitions/PostId"},
+        "revision": {"type": "integer", "minimum": 0},
+        "question": {"type": "string"},
+        "mode": {"enum": ["manager", "temporary"]}
+      },
+      "required": ["managerId", "id", "revision", "question", "mode"],
+      "additionalProperties": false
+    },
+    "ReportReadParams": {
+      "type": "object",
+      "properties": {
+        "managerId": {"type": "string"},
+        "id": {"type": "string", "pattern": "^P-[1-9][0-9]*$"},
+        "revision": {"type": "integer", "minimum": 0}
+      },
+      "required": ["managerId", "id", "revision"],
+      "additionalProperties": false
+    },
+    "PostResponse": {
+      "type": "object",
+      "properties": {"post": {"$ref": "#/definitions/Post"}},
+      "required": ["post"],
+      "additionalProperties": false
+    },
+    "PostForwardParams": {
+      "type": "object",
+      "properties": {"managerId": {"type": "string"}, "id": {"$ref": "#/definitions/PostId"}},
+      "required": ["managerId", "id"],
+      "additionalProperties": false
+    },
+    "RelationTarget": {
+      "type": "object",
+      "properties": {
+        "kind": {"enum": ["issue", "item", "thread", "file", "branch", "commit", "url"]},
+        "target": {"type": "string"},
+        "label": {"type": "string"}
+      },
+      "required": ["kind", "target"],
+      "additionalProperties": false
+    },
+    "Relation": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "string"},
+        "from": {"$ref": "#/definitions/RelationTarget"},
+        "to": {"$ref": "#/definitions/RelationTarget"},
+        "kind": {"enum": ["derived", "related"]},
+        "at": {"type": "number"},
+        "by": {"enum": ["manager", "user", "question", "projection"]}
+      },
+      "required": ["id", "from", "to", "kind", "at", "by"],
+      "additionalProperties": false
+    },
+    "ReferenceParams": {
+      "type": "object",
+      "properties": {"managerId": {"type": "string"}, "reference": {"type": "string"}},
+      "required": ["managerId", "reference"],
+      "additionalProperties": false
+    },
+    "ReferenceResponse": {
+      "type": "object",
+      "properties": {"text": {"type": "string"}},
+      "required": ["text"],
       "additionalProperties": false
     }
   }

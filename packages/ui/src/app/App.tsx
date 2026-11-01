@@ -473,7 +473,9 @@ export function App() {
             />
           ) : selection ? (
             <>
-              {owner ? <ManagerOrigin manager={owner} onOpen={select} /> : null}
+              {owner ? (
+                <ManagerOrigin manager={owner} threadId={selection.sessionId} onOpen={select} />
+              ) : null}
               <Transcript
                 onOpen={select}
                 key={`${selection.deviceId}:${selection.sessionId}`}

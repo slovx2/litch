@@ -23,3 +23,15 @@ test('只认完整编号，保留换行与标点，不截取单词或更长编�
   )
   assert.deepEqual(boardReferences('', new Set(['I-3'])), [])
 })
+
+test('议题编号支持井号和报告，链接键不包含井号', () => {
+  const parts = boardReferences('#D-1、#I-2、#P-3。', new Set(['D-1', 'I-2', 'P-3']))
+  assert.deepEqual(
+    parts.filter((p) => p.id).map((p) => [p.id, p.text]),
+    [
+      ['D-1', '#D-1'],
+      ['I-2', '#I-2'],
+      ['P-3', '#P-3'],
+    ],
+  )
+})

@@ -11,6 +11,10 @@ export const MANAGER_ENDED = '经理已结束，未完成事项与决策保留�
 export const MANAGER_SPACE = {
   namespace: 'litch_manager',
   marks: {
+    report: 'Publish a longer update, release summary or limitations as a report',
+    post_get: 'Read a decision, For you request, report or suggestion as a post,',
+    post_reply: 'Respond on a post by updating its original content',
+    relate: 'Attach source/related links to an existing issue or manager item.',
     endorse:
       'Endorse a pending suggestion from your own workline subtree so it appears by default for the user.',
     dismiss: 'Dismiss a pending suggestion from your own workline subtree as manager-ignored.',

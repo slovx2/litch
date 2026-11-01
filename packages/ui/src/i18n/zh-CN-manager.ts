@@ -1,7 +1,26 @@
+import { MANAGER_NAMES } from '../../../protocol/src/manager-posts.mts'
 // 经理界面文案。
 import type { Entry } from './types.ts'
 
 export const zhManager = {
+  'manager.inbox': MANAGER_NAMES.inbox['zh-CN'],
+  'manager.reports': '报告',
+  'manager.relations': '关联',
+  'manager.relatedIssues': '相关议题',
+  'manager.relation.source': '来源',
+  'manager.relation.derived': '派生',
+  'manager.relation.related': '相关',
+  'manager.issue': '议题',
+  'manager.reportRead': '已阅',
+  'manager.reportUnread': '未阅',
+  'manager.markRead': '标记已阅',
+  'manager.postAsk': '追问',
+  'manager.postSubmit': '提交追问',
+  'manager.postEdited': '已编辑',
+  'manager.suggestionHistory': '已处理建议',
+  'manager.postHistory': '查看旧版本',
+  'manager.postUpdatedReply': '已更新原帖',
+  'manager.postQuestionDraft': '追问已保存为本地草稿',
   'manager.source.manager': '经理',
   'manager.source.user': '用户',
   'manager.source.system': '系统',
@@ -70,10 +89,12 @@ export const zhManager = {
   'manager.event.end': '经理开始收尾',
   'manager.event.rules': '已更新经理设定',
   'manager.pending': '{n} 待处理',
-  'manager.pendingDetail': ({ decisions, requests }) =>
+  'manager.pendingDetail': ({ decisions, requests, suggestions, reports }) =>
     [
       Number(decisions) > 0 ? `${decisions} 个决策` : '',
       Number(requests) > 0 ? `${requests} 个请你做` : '',
+      Number(suggestions) > 0 ? `${suggestions} 条建议` : '',
+      Number(reports) > 0 ? `${reports} 篇未阅报告` : '',
     ]
       .filter(Boolean)
       .join(' · '),
@@ -84,7 +105,7 @@ export const zhManager = {
   'manager.prompt': '经理设定',
   'manager.overview': '概览',
   'manager.decisions': '决策',
-  'manager.items': '事项',
+  'manager.items': MANAGER_NAMES.work['zh-CN'],
   'manager.lines': '工作线',
   'manager.situation': '现状',
   'manager.activity': '最近动态',

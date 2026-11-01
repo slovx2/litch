@@ -97,7 +97,7 @@ test('副本：普通侧栏过滤整棵经理树，经理复用原有 children �
   const stop = replica.start()
   await settle()
   await settle()
-  assert.equal(replica.store.get(keys.managersPending), 4)
+  assert.equal(replica.store.get(keys.managersPending), 6)
   assert.deepEqual(replica.store.get(keys.managerIds('local')), ['m1', 'm3', 'e1', 'e2'])
   const root = replica.store.get<SessionSummary>(keys.summary('local', 'm1'))
   assert.ok(root)
@@ -372,4 +372,62 @@ test('设备返回经理领域错误时保留错误码、字段和双语提示',
     code: 'rejected',
     said: { 'zh-CN': '经理已结束，看板只读', en: 'The manager has ended' },
   })
+})
+
+test('控制台通道：报告显式已阅减少待处理，报告、请求和决策的追问独立保存，旧版本拒绝', async () => {
+  const time = fakeClock()
+  const [uiPort, corePort] = createPortPair()
+  const server = serveChannel(corePort, createMockCore({ clock: time.clock, chunkMs: 0 }), {
+    clock: time.clock,
+  })
+  const channel = connectChannel(uiPort)
+  const replica = createReplica(channel)
+  const stop = replica.start()
+  try {
+    await settle()
+    await settle()
+    replica.openManagerBoard('local', 'm1')
+    await settle()
+    const read = () =>
+      replica.store.get<ManagerBoardTopicView>(keys.managerBoard('local', 'm1'))?.board
+    assert.equal(read()?.posts?.find((p) => p.id === 'P-1')?.unread, true)
+    await channel.command('managers.report.read', {
+      deviceId: 'local',
+      managerId: 'm1',
+      id: 'P-1',
+      revision: 1,
+    })
+    await settle()
+    time.advance(20)
+    await settle()
+    assert.equal(replica.store.get<ManagerView>(keys.manager('local', 'm1'))?.pendingReports, 0)
+    for (const id of ['P-1', 'R-1', 'D-15'] as const) {
+      const post = read()?.posts?.find((p) => p.id === id)
+      assert.ok(post)
+      const result = await channel.command('managers.post.question', {
+        deviceId: 'local',
+        managerId: 'm1',
+        id,
+        revision: post.revision,
+        question: `问题 ${id}`,
+        mode: 'manager',
+      })
+      assert.equal(result.post.discussion.messages.at(-1)?.question, `问题 ${id}`)
+    }
+    await assert.rejects(
+      channel.command('managers.post.question', {
+        deviceId: 'local',
+        managerId: 'm1',
+        id: 'P-1',
+        revision: 999,
+        question: '旧草稿',
+        mode: 'manager',
+      }),
+    )
+    assert.ok(read()?.relations?.some((r) => r.from.target === 'P-1' && r.to.target === 'I-2'))
+  } finally {
+    stop()
+    channel.close()
+    server()
+  }
 })

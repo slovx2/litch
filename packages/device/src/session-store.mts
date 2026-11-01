@@ -660,6 +660,13 @@ export class SessionStore {
     return Number(result?.changes ?? 0) > 0
   }
 
+  /** 经理追问仅调整待开始建议的标题和简报，执行设置与权限不变。 */
+  editSuggestion(id: string, title: string, prompt: string): boolean {
+    const result = this.db
+      .prepare("UPDATE proposals SET title=?, prompt=? WHERE id=? AND status='pending' AND offer=0")
+      .run(title, prompt, id)
+    return Number(result.changes) === 1
+  }
   allSuggestions(): SessionProposal[] {
     return (this.statements.allSuggestions?.all() ?? []).map(proposalOf)
   }

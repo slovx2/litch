@@ -16,6 +16,16 @@ if (inFrame) applyPrefs(params)
 
 function PreviewApp() {
   useEffect(() => {
+    Object.assign(window, {
+      __litchLook: {
+        set: (patch: Record<string, string>) => {
+          const next = new URLSearchParams(location.search)
+          for (const [key, value] of Object.entries(patch))
+            next.set(key === 'theme' ? 'appearance' : key, value)
+          location.search = next.toString()
+        },
+      },
+    })
     void runScene(params.get('scene'))
     return startScrollNudge()
   }, [])

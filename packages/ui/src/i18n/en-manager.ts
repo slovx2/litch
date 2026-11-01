@@ -1,7 +1,26 @@
+import { MANAGER_NAMES } from '../../../protocol/src/manager-posts.mts'
 // 经理界面文案。
 import type { Entry } from './types.ts'
 
 export const enManager = {
+  'manager.inbox': MANAGER_NAMES.inbox.en,
+  'manager.reports': 'Reports',
+  'manager.relations': 'Links',
+  'manager.relatedIssues': 'Related issues',
+  'manager.relation.source': 'Sources',
+  'manager.relation.derived': 'Derived',
+  'manager.relation.related': 'Related',
+  'manager.issue': 'Issue',
+  'manager.reportRead': 'Read',
+  'manager.reportUnread': 'Unread',
+  'manager.markRead': 'Mark as read',
+  'manager.postAsk': 'Ask a question',
+  'manager.postSubmit': 'Submit question',
+  'manager.postEdited': 'Edited',
+  'manager.suggestionHistory': 'Handled suggestions',
+  'manager.postHistory': 'View previous versions',
+  'manager.postUpdatedReply': 'Original post updated',
+  'manager.postQuestionDraft': 'Question saved as a local draft',
   'manager.source.manager': 'Manager',
   'manager.source.user': 'User',
   'manager.source.system': 'System',
@@ -74,13 +93,19 @@ export const enManager = {
   'manager.event.end': 'Manager started final tasks',
   'manager.event.rules': 'Manager settings updated',
   'manager.pending': '{n} to handle',
-  'manager.pendingDetail': ({ decisions, requests }) =>
+  'manager.pendingDetail': ({ decisions, requests, suggestions, reports }) =>
     [
       Number(decisions) > 0
         ? `${decisions} ${Number(decisions) === 1 ? 'decision' : 'decisions'}`
         : '',
       Number(requests) > 0
         ? `${requests} ${Number(requests) === 1 ? 'request' : 'requests'} for you`
+        : '',
+      Number(suggestions) > 0
+        ? `${suggestions} ${Number(suggestions) === 1 ? 'suggestion' : 'suggestions'}`
+        : '',
+      Number(reports) > 0
+        ? `${reports} unread ${Number(reports) === 1 ? 'report' : 'reports'}`
         : '',
     ]
       .filter(Boolean)
@@ -92,7 +117,7 @@ export const enManager = {
   'manager.prompt': 'Manager settings',
   'manager.overview': 'Overview',
   'manager.decisions': 'Decisions',
-  'manager.items': 'Items',
+  'manager.items': MANAGER_NAMES.work.en,
   'manager.lines': 'Work lines',
   'manager.situation': 'Current status',
   'manager.activity': 'Recent activity',

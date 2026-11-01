@@ -28,6 +28,13 @@ const say = (prompt: string) =>
 
 export const SCENES: Scene[] = [
   {
+    id: 'manager-console',
+    group: '经理',
+    name: '控制台与议题',
+    note: '四类议题、原帖操作、讨论与双向关联，复用正式页面',
+    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' })],
+  },
+  {
     id: 'cjk-emphasis',
     group: '对话',
     name: '中文强调定界符',

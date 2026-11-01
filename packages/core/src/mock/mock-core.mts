@@ -499,6 +499,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     }
   }
   const publishSuggestions = (deviceId: string) => {
+    managers.refreshSuggestions(deviceId)
     for (const sink of suggestionSinks.get(deviceId) ?? [])
       sink.delta([{ op: 'suggestions.set', view: suggestionsView(deviceId) }])
   }
@@ -2101,6 +2102,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
   })
   const managers = createMockManagers({
+    suggestions: (deviceId) => suggestionsView(deviceId).suggestions,
     ...tasksHost,
     say(deviceId, threadId, prompt, answer) {
       const view = loadSession(deviceId, threadId)

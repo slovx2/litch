@@ -155,3 +155,34 @@ test('经理事件拒绝缺来源、错误载荷、kind 不一致和未知 kind�
   ])
     assert.deepEqual(parseSessionEvent(bad), { event: null, rest: bad })
 })
+
+test('通用议题追问沿用经理事件，正文与摘要显示编号和问题而不泄漏结构标签', () => {
+  const event: SessionEvent = {
+    kind: 'manager-answers',
+    notes: [],
+    manager: {
+      managerId: 'm1',
+      text: '请查看原帖',
+      answers: [],
+      postQuestions: [{ id: 'P-1', revision: 2, title: '报告', question: '还有哪些限制？' }],
+    },
+  }
+  const text = formatSessionEvent(event)
+  assert.deepEqual(parseSessionEvent(text).event, event)
+  const projected = projectMessage(text)
+  assert.equal(projected.event?.summary, 'P-1')
+  assert.match(projected.event?.body ?? '', /还有哪些限制/)
+  assert.doesNotMatch(projected.event?.body ?? '', /litch-session-event/)
+  assert.throws(() =>
+    formatSessionEvent({
+      ...event,
+      manager: {
+        ...event.manager,
+        managerId: 'm1',
+        text: '请查看原帖',
+        answers: [],
+        postQuestions: [{ id: 'P-1', revision: 0, title: '报告', question: '错版本' }],
+      },
+    }),
+  )
+})

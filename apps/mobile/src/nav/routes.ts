@@ -2,6 +2,8 @@
 import type { DiffScope } from '@litch/core'
 
 export type RootStackParamList = {
+  Managers: undefined
+  ManagerConsole: { deviceId: string; managerId: string }
   /** 首页：设备列表。每台设备一行（连接状态、忙闲、待处理数），点进去是这台设备的会话 */
   Devices: undefined
   /** 加一台设备：填主机、端口、用户，生成或导入密钥，核对主机指纹 */

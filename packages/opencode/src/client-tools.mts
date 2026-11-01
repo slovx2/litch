@@ -275,7 +275,7 @@ export class ClientTools {
             .filter(
               (spec) =>
                 spec.namespace === 'litch_manager' &&
-                ['summary', 'get', 'update', 'close'].includes(spec.tool),
+                ['summary', 'get', 'update', 'close', 'post_get', 'post_reply'].includes(spec.tool),
             )
             .map((spec) => [`${serverName(threadId)}_${spec.mcpName}`, true]),
         ),

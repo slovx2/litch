@@ -1,3 +1,5 @@
+import type { SuggestionView } from '../model-suggestions.mjs'
+import { mockPosts, sampleReport } from './manager-posts.mjs'
 // 模拟经理：与真实通道同形的快照、增量和命令，答复按项校验版本。
 
 import { forwardedManagerQuestion } from '../../../protocol/src/manager-question.mjs'
@@ -17,6 +19,7 @@ const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 
 export interface MockManagerHost
   extends Pick<MockTasksHost, 'clock' | 'lang' | 'devices' | 'device' | 'spawn'> {
+  suggestions?(deviceId: string): readonly SuggestionView[]
   say(deviceId: string, threadId: string, prompt: string, answer: string): void
   add(deviceId: string, session: ManagerSessionSummary): void
   mark(deviceId: string, threadId: string, manager: ManagerView): void
@@ -43,6 +46,14 @@ export function createMockManagers(host: MockManagerHost) {
         available(id) === true
           ? sampleManagers(id, host.clock.now(), host.lang)
           : { managers: [], boards: [], sessions: [] }
+      for (const board of value.boards) {
+        if (board.managerId === 'm1') board.posts = [sampleReport(host.clock.now(), host.lang)]
+        board.posts = mockPosts(board)
+      }
+      for (const manager of value.managers)
+        manager.pendingReports =
+          value.boards.find((b) => b.managerId === manager.id)?.posts?.filter((p) => p.unread)
+            .length ?? 0
       states.set(id, value)
       for (const session of value.sessions) host.add(id, session)
       for (const manager of value.managers) {
@@ -54,15 +65,25 @@ export function createMockManagers(host: MockManagerHost) {
     return value
   }
   const key = (deviceId: string, managerId: string) => JSON.stringify([deviceId, managerId])
-  const boardView = (deviceId: string, managerId: string) => ({
-    deviceId,
-    managerId,
-    available: available(deviceId),
-    board: state(deviceId).boards.find((b) => b.managerId === managerId) ?? null,
-  })
+  const boardView = (deviceId: string, managerId: string) => {
+    const board = state(deviceId).boards.find((b) => b.managerId === managerId) ?? null
+    if (board)
+      board.posts = mockPosts(
+        board,
+        host.suggestions?.(deviceId).filter((s) => s.managerId === managerId) ?? [],
+      )
+    return { deviceId, managerId, available: available(deviceId), board }
+  }
   const publish = (deviceId: string, manager: ManagerView, board: ManagerBoardView) => {
     manager.pendingDecisions = board.decisions.filter((d) => d.status === 'open').length
     manager.pendingRequests = (board.requests ?? []).filter((r) => r.status === 'open').length
+    boardView(deviceId, manager.id)
+    manager.pendingReports = board.posts?.filter((p) => p.unread).length ?? 0
+    manager.pendingSuggestions =
+      host
+        .suggestions?.(deviceId)
+        .filter((s) => s.managerId === manager.id && s.managerReview?.state === 'endorsed')
+        .length ?? 0
     manager.latestActivity = board.activities[0] ?? null
     manager.updatedAt = host.clock.now()
     host.mark(deviceId, manager.threadId, manager)
@@ -158,6 +179,80 @@ export function createMockManagers(host: MockManagerHost) {
           ? t('经理正在收尾，看板只读', 'The manager is wrapping up; the board is read-only')
           : t('经理已结束，看板只读', 'The manager has ended; the board is read-only'),
       )
+    boardView(deviceId, managerId)
+    if (name === 'managers.reference.read')
+      return {
+        text: 'commit a9a85c1\n\n    Manager console update\n\n--- a/README.md\n+++ b/README.md\n@@ -1 +1 @@\n-Litch\n+Litch Console',
+      }
+    if (
+      name === 'managers.post.forward' ||
+      name === 'managers.report.read' ||
+      name === 'managers.post.question'
+    ) {
+      const given = params as Commands['managers.post.question']['params']
+      const post = board.posts?.find((p) => p.id === given.id)
+      if (!post || (name !== 'managers.post.forward' && post.revision !== given.revision))
+        throw new ChannelError('invalid', 'The post changed; review it again.')
+      if (name === 'managers.post.forward') {
+        post.discussion.forwarded = post.discussion.messages.length
+        host.say(
+          deviceId,
+          manager.threadId,
+          JSON.stringify(post.discussion),
+          t('已收到追问记录。', 'Received the discussion.'),
+        )
+        publish(deviceId, manager, board)
+        return { queued: true }
+      }
+      if (name === 'managers.report.read') {
+        if (post.kind !== 'report') throw new ChannelError('invalid', 'Expected a report.')
+        post.unread = false
+      } else {
+        if (!given.question?.trim()) throw new ChannelError('invalid', 'Question required.')
+        post.discussion.messages.push({
+          id: `post-question-${++seq}`,
+          question: given.question,
+          answer: t(
+            '已核对这条内容。可以继续追问具体范围。',
+            'I checked this post. You can ask about its specific scope.',
+          ),
+          mode: given.mode,
+          at: host.clock.now(),
+          answeredAt: host.clock.now(),
+          status: 'completed',
+          refreshed: false,
+        })
+        if (post.kind === 'decision') {
+          const d = board.decisions.find((d) => d.id === post.id)
+          if (d) d.discussion = post.discussion
+        }
+        if (given.mode === 'manager')
+          host.say(
+            deviceId,
+            manager.threadId,
+            formatSessionEvent({
+              kind: 'manager-answers',
+              notes: [],
+              manager: {
+                managerId,
+                answers: [],
+                postQuestions: [
+                  {
+                    id: post.id,
+                    revision: post.revision,
+                    title: post.title,
+                    question: given.question,
+                  },
+                ],
+                text: '',
+              },
+            }),
+            t('已在帖子中回复。', 'Replied on the post.'),
+          )
+      }
+      publish(deviceId, manager, board)
+      return { post: copy(post) }
+    }
     let result: unknown
     if (name === 'managers.update') {
       const { patch } = params as Commands['managers.update']['params']
@@ -464,6 +559,21 @@ export function createMockManagers(host: MockManagerHost) {
       : t('经理已结束，对话和看板只读', 'This manager has ended. Chat and board are read-only.')
   }
   return {
+    refreshSuggestions(deviceId: string) {
+      for (const manager of state(deviceId).managers) {
+        const board = boardView(deviceId, manager.id).board
+        if (!board) continue
+        manager.pendingSuggestions =
+          host
+            .suggestions?.(deviceId)
+            .filter((s) => s.managerId === manager.id && s.managerReview?.state === 'endorsed')
+            .length ?? 0
+        for (const sink of lists.get(deviceId) ?? [])
+          sink.delta([{ op: 'manager.upsert', manager: copy(manager) }])
+        for (const sink of boards.get(key(deviceId, manager.id)) ?? [])
+          sink.delta([{ op: 'managerBoard.set', view: copy(boardView(deviceId, manager.id)) }])
+      }
+    },
     readOnlyNote,
     history(deviceId: string, threadId: string) {
       const history = histories.get(key(deviceId, threadId))
@@ -504,6 +614,10 @@ export function createMockManagers(host: MockManagerHost) {
     },
     command(name: string, params: unknown): Promise<unknown> | undefined {
       return [
+        'managers.reference.read',
+        'managers.post.forward',
+        'managers.post.question',
+        'managers.report.read',
         'managers.create',
         'managers.update',
         'managers.end',

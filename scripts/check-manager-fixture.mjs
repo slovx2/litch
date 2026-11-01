@@ -195,6 +195,97 @@ async function checkManager(t, client, cwd, harness) {
   }
   t.diagnostic(`${harness}：临时对话 update/close 仅修改目标决策，历史记录来源`)
 
+  const invoke = async (tool, args) =>
+    JSON.parse(
+      (await say(client, threadId, `经理：${tool} ${JSON.stringify(args)}`, MANAGER_HEARD))
+        .slice(MANAGER_HEARD.length)
+        .trim(),
+    )
+  const published = (
+    await invoke('report', {
+      title: '阶段报告',
+      body: '## 已验收\n- 工具注册',
+      why: '阶段汇报',
+      source: [{ kind: 'issue', target: saved.id }],
+    })
+  ).post
+  assert.equal(published.unread, true)
+  await client.call(MANAGER_METHOD.read, {
+    ...params,
+    id: published.id,
+    revision: published.revision,
+  })
+  await client.call(MANAGER_METHOD.question, {
+    ...params,
+    id: published.id,
+    revision: published.revision,
+    question: '报告还缺哪些内容？',
+    mode: 'manager',
+  })
+  const questionTurn = await until(
+    `${harness} 通用追问实际进入经理回合`,
+    () => client.call('thread/read', { threadId, includeTurns: true }),
+    ({ thread }) =>
+      thread.turns.some((turn) =>
+        turn.items.some(
+          (item) =>
+            item.type === 'userMessage' &&
+            JSON.stringify(item.content).includes('报告还缺哪些内容'),
+        ),
+      ),
+  )
+  const receivedTurn = questionTurn.thread.turns.find((turn) =>
+    turn.items.some(
+      (item) =>
+        item.type === 'userMessage' && JSON.stringify(item.content).includes('报告还缺哪些内容'),
+    ),
+  )
+  await replied(client, threadId, MANAGER_ANSWERS_HEARD, 'manager-answers', receivedTurn.id)
+  const rewritten = (
+    await invoke('post_reply', {
+      id: published.id,
+      revision: 1,
+      patch: { body: '## 已验收\n- 通用议题' },
+      text: '已补范围',
+      why: '澄清',
+    })
+  ).post
+  assert.equal(rewritten.unread, true)
+  assert.equal(rewritten.discussion.messages.at(-1).answer, '已补范围')
+  assert.equal(
+    (await invoke('post_get', { id: published.id })).post.versions[0].body,
+    published.body,
+  )
+  await invoke('relate', {
+    id: published.id,
+    related: [{ kind: 'file', target: 'README.md' }],
+    why: '补充依据',
+  })
+  assert.ok(
+    (await board()).relations.some(
+      (r) => r.from.target === published.id && r.to.target === 'README.md',
+    ),
+  )
+  await client.call(MANAGER_METHOD.question, {
+    ...params,
+    id: published.id,
+    revision: 2,
+    mode: 'temporary',
+    question: `经理：post_reply ${JSON.stringify({ id: published.id, revision: 2, patch: { body: '临时对话核对后的范围' }, why: '追问核对' })}`,
+  })
+  const revised = await until(
+    `${harness} 临时更新报告`,
+    board,
+    (value) =>
+      value.posts.find((p) => p.id === published.id)?.discussion.messages.at(-1)?.status !==
+      'running',
+  )
+  const reportPost = revised.posts.find((p) => p.id === published.id)
+  assert.equal(reportPost.body, '临时对话核对后的范围', JSON.stringify(reportPost.discussion))
+  assert.equal(reportPost.revision, 3)
+  assert.ok(revised.changes.some((c) => c.objectId === published.id && c.by === 'question'))
+  t.diagnostic(`${harness}：报告发布/已阅/经理回复/临时原帖更新与关系工具通过`)
+
   const requestAdded = await say(
     client,
     threadId,

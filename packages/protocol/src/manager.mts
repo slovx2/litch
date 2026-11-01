@@ -1,3 +1,4 @@
+import { MANAGER_POST_METHOD } from './manager-posts.mjs'
 // 经理（litchManager）：设备持久化看板，客户端只经协议读写。定义见 protocol/extensions/manager.json。
 // 本文件自包含，不引用 codex.mts。时间一律为 Unix 秒；id 在一块看板内唯一，经理 id 在设备内唯一。
 
@@ -12,6 +13,7 @@ export const MANAGER_METHOD = {
   decisionReopen: 'litch/manager/decision/reopen',
   questionAsk: 'litch/manager/question/ask',
   questionForward: 'litch/manager/question/forward',
+  ...MANAGER_POST_METHOD,
 } as const
 
 export const MANAGER_NOTIFICATION = {
@@ -24,7 +26,11 @@ export type ManagerStatus = 'active' | 'ending' | 'ended'
 export type ManagerDecisionId = `D-${number}`
 export type ManagerItemId = `I-${number}`
 export type ManagerRequestId = `R-${number}`
-export type ManagerObjectId = ManagerDecisionId | ManagerItemId | ManagerRequestId
+export type ManagerObjectId =
+  | ManagerDecisionId
+  | ManagerItemId
+  | ManagerRequestId
+  | import('./manager-posts.mjs').ManagerPostId
 
 /** null 表示跟经理相同；换 harness 而未指定型号、强度时用目标 harness 默认值。 */
 export interface ManagerDispatchSettings {
@@ -141,6 +147,8 @@ export interface ManagerDecision extends ManagerDecisionFields {
 }
 export interface ManagerQuestion {
   mode?: 'manager' | 'temporary'
+  answeredAt?: number
+  updatedPost?: boolean
   id: string
   question: string
   answer: string | null
@@ -236,6 +244,8 @@ export interface Manager {
   pendingDecisions: number
   /** 仍待用户操作的请你做；已回复、已交付及已取消不计入。 */
   pendingRequests?: number
+  pendingReports?: number
+  pendingSuggestions?: number
   runningLines: number
   latestActivity: ManagerActivity | null
   createdAt: number
@@ -271,6 +281,8 @@ export interface ManagerRequestFailure {
   request: ManagerRequest | null
 }
 export interface ManagerBoard {
+  relations?: import('./manager-posts.mjs').ManagerRelation[]
+  posts?: import('./manager-posts.mjs').ManagerPost[]
   managerId: string
   situation: ManagerSituation | null
   decisions: ManagerDecision[]
@@ -381,6 +393,13 @@ export interface ManagerBoardChangedNotification extends ManagerIdParams {}
 
 /** session-tree 的经理事件共同携带此来源；答复只传本次写成功的那些，不重复背景。 */
 export interface ManagerEventData {
+  /** 通用议题追问；旧 questions 字段仍只表示决策。 */
+  postQuestions?: {
+    id: import('./manager-posts.mjs').ManagerPostId
+    revision: number
+    title: string
+    question: string
+  }[]
   managerId: string
   text: string
   requests?: (ManagerSubmittedRequest & { title: string; buttonLabel: string | null })[]

@@ -399,6 +399,30 @@ export interface TopicOp {
 // ---------- 命令 ----------
 
 export interface Commands {
+  'managers.reference.read': {
+    params: { deviceId: string; managerId: string; reference: string }
+    result: { text: string }
+  }
+  'managers.post.forward': {
+    params: {
+      deviceId: string
+      managerId: string
+      id: import('../../../protocol/src/manager-posts.mjs').ManagerPostId
+    }
+    result: { queued: boolean }
+  }
+  'managers.post.question': {
+    params: import('../../../protocol/src/manager-posts.mjs').ManagerPostQuestionParams & {
+      deviceId: string
+    }
+    result: { post: import('../../../protocol/src/manager-posts.mjs').ManagerPost }
+  }
+  'managers.report.read': {
+    params: import('../../../protocol/src/manager-posts.mjs').ManagerReportReadParams & {
+      deviceId: string
+    }
+    result: { post: import('../../../protocol/src/manager-posts.mjs').ManagerPost }
+  }
   /** 搜当前设备目录；不启动会话、不读正文，归档目录由 loadArchived 显式加载。 */
   'search.titles': {
     params: { deviceId: string; query: string; limit?: number; untitled?: string }

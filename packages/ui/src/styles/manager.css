@@ -821,3 +821,96 @@
   align-items: flex-end;
   gap: 2px;
 }
+
+.mg-inbox-tabs {
+  margin: 8px 12px;
+  flex-wrap: wrap;
+}
+.mg-post-discussion {
+  margin-top: 16px;
+  border-top: 1px solid var(--line-1);
+  padding-top: 12px;
+}
+.mg-post-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 12px;
+  border-left: 2px solid var(--line-1);
+}
+.mg-post-entry {
+  padding: 8px 0 16px;
+}
+.mg-post-timeline header {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--ink-3);
+}
+.mg-post-compose {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+.mg-post-compose .btn {
+  justify-self: start;
+}
+.mg-post-history {
+  color: var(--ink-3);
+  margin-block: 8px;
+}
+.mg-post-history article {
+  padding: 12px;
+  border: 1px solid var(--line-1);
+  margin-block: 8px;
+}
+
+.mg-relations {
+  margin: 8px 0 12px;
+  padding: 10px;
+  border: 1px solid var(--line-1);
+}
+.mg-relations section {
+  margin-block: 8px;
+}
+.mg-relations .btn,
+.mg-related-issues .btn {
+  white-space: normal;
+  height: auto;
+  min-height: 28px;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.mg-related-issues {
+  margin-block: 8px;
+  color: var(--ink-3);
+}
+.mg-reference-preview {
+  position: fixed;
+  inset: 10vh 10vw;
+  z-index: 20;
+  width: 80vw;
+  max-height: 80vh;
+  overflow: auto;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+}
+.mg-board {
+  container-type: inline-size;
+}
+@container (min-width: 720px) {
+  .mg-relations {
+    float: right;
+    width: 200px;
+    margin-left: 16px;
+  }
+  .mg-request:has(> .mg-relations) {
+    display: block;
+  }
+  .mg-request:has(> .mg-relations) > * {
+    margin-bottom: 12px;
+  }
+}
+.mg-post-discussion {
+  clear: both;
+}

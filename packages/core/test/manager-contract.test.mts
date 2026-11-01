@@ -157,6 +157,19 @@ test('经理工具登记完整，通过原生 Codex 约束，命名空间说明�
 
 test('工具 schema 校验字段形状，拒绝写系统字段、工作线和跨板 id；kind 对应关系由设备校验', () => {
   const cases: Record<string, { valid: unknown; invalid: unknown[] }> = {
+    relate: {
+      valid: { id: 'D-1', related: [{ kind: 'item', target: 'I-1' }], why: '来源' },
+      invalid: [{ id: 'D-1' }],
+    },
+    report: {
+      valid: { title: '报告', body: '**说明**', why: '汇报' },
+      invalid: [{ title: '缺正文' }],
+    },
+    post_get: { valid: { id: 'P-1' }, invalid: [{}] },
+    post_reply: {
+      valid: { id: 'P-1', revision: 1, text: '回复', why: '说明' },
+      invalid: [{ id: 'P-1', text: '缺版本' }],
+    },
     reply: {
       valid: { id: 'D-1', revision: 2, text: '说明' },
       invalid: [{ id: 'D-1', text: '缺版本' }],

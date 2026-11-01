@@ -1283,6 +1283,22 @@ export function createCore(options: CoreOptions): Core {
             params as Commands['managers.decision.reopen']['params']
           return await deviceOf(deviceId).managers.reopen({ managerId, decisionId })
         }
+        case 'managers.reference.read': {
+          const { deviceId, ...given } = params as Commands['managers.reference.read']['params']
+          return await deviceOf(deviceId).managers.reference(given)
+        }
+        case 'managers.post.forward': {
+          const { deviceId, ...given } = params as Commands['managers.post.forward']['params']
+          return await deviceOf(deviceId).managers.postForward(given)
+        }
+        case 'managers.post.question': {
+          const { deviceId, ...question } = params as Commands['managers.post.question']['params']
+          return await deviceOf(deviceId).managers.postQuestion(question)
+        }
+        case 'managers.report.read': {
+          const { deviceId, ...read } = params as Commands['managers.report.read']['params']
+          return await deviceOf(deviceId).managers.reportRead(read)
+        }
         case 'managers.question.ask': {
           const { deviceId, ...question } = params as Commands['managers.question.ask']['params']
           return await deviceOf(deviceId).managers.ask(question)

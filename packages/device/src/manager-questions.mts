@@ -1,7 +1,8 @@
 // 旁问由设备持有连接与记录，窗口关闭不丢问答；分叉不登记为工作线。
 import { randomUUID } from 'node:crypto'
 import { MANAGER_TOOLS } from '../../protocol/src/client-tools-manager.mjs'
-import type { Manager, ManagerDecision, ManagerDecisionId } from '../../protocol/src/manager.mjs'
+import type { Manager } from '../../protocol/src/manager.mjs'
+import type { ManagerPost, ManagerPostId } from '../../protocol/src/manager-posts.mjs'
 import {
   forwardedManagerQuestion,
   managerQuestionRules,
@@ -60,21 +61,23 @@ export class ManagerQuestions {
     return (
       !this.restricted.has(threadId) ||
       (namespace === 'litch_manager' &&
-        ['summary', 'get', 'update', 'close'].includes(String(tool)))
+        ['summary', 'get', 'update', 'close', 'post_get', 'post_reply'].includes(String(tool)))
     )
   }
   validateWrite(threadId: string, tool: string, given: unknown): void {
-    if (!['update', 'close'].includes(tool)) return
+    if (!['update', 'close', 'post_reply'].includes(tool)) return
     const managerId = this.restricted.get(threadId)
     const state = this.owner.store.questions(managerId).find((one) => one.threadId === threadId)
     const args = fields(given)
     if (
       !state ||
       this.retired.has(threadId) ||
-      args.kind !== 'decision' ||
+      (tool !== 'post_reply' && args.kind !== 'decision') ||
       args.id !== state.decisionId
     )
       invalid('A temporary question may change only its own decision while its session is active.')
+    if (tool === 'post_reply' && (args.text !== undefined || args.questionId !== undefined))
+      invalid('Temporary conversations may only update the original post; return replies normally.')
     if (
       tool === 'update' &&
       Object.keys(fields(args.patch)).some(
@@ -89,15 +92,15 @@ export class ManagerQuestions {
     const managerId = this.restricted.get(threadId)
     if (!managerId) return
     const manager = this.owner.manager(managerId)
-    const object = fields(fields(result).object)
+    const object = fields(fields(result).post ?? fields(result).object)
     // 不调用 check/wake；未唤醒的普通备注在经理下一回合开始时带入。
     this.owner.tree.store.addNote(
       manager.threadId,
       {
         threadId,
-        title: `Decision ${object.id} updated in a temporary question`,
+        title: `Issue ${object.id} updated in a temporary question`,
         status: 'completed',
-        excerpt: `The user’s temporary decision conversation changed ${object.id}. Read litch_manager.get for the current decision and history. ${JSON.stringify(object)}`,
+        excerpt: `The user’s temporary conversation changed ${object.id}. Read litch_manager.post_get for the current post and history. ${JSON.stringify(object)}`,
       },
       false,
     )
@@ -124,14 +127,11 @@ export class ManagerQuestions {
     }
     return pending
   }
-  private decision(managerId: string, id: ManagerDecisionId): ManagerDecision {
+  private decision(managerId: string, id: ManagerPostId): ManagerPost {
     this.owner.writer.active(managerId)
-    const decision = this.owner.writer.object(managerId, id)
-    if (!decision.id.startsWith('D-'))
-      throw new ManagerError('invalidManager', 'Background questions require a decision.')
-    return decision as ManagerDecision
+    return this.owner.posts.get(managerId, id)
   }
-  async ask(managerId: string, id: ManagerDecisionId, revision: number, question: string) {
+  async ask(managerId: string, id: ManagerPostId, revision: number, question: string) {
     const decision = this.decision(managerId, id)
     if (decision.revision !== revision)
       throw new ManagerError('invalidManager', 'The decision changed; read it before asking again.')
@@ -198,7 +198,7 @@ export class ManagerQuestions {
     })
     this.owner.changed(state.managerId)
   }
-  private async run(state: QuestionState, decision: ManagerDecision): Promise<void> {
+  private async run(state: QuestionState, decision: ManagerPost): Promise<void> {
     const manager = this.owner.manager(state.managerId)
     const link = await this.link(manager)
     const features = isObject(link.runtime?.features) ? link.runtime.features : {}
@@ -230,10 +230,10 @@ export class ManagerQuestions {
         {
           ...MANAGER_TOOLS,
           description:
-            'Explain this decision. Read summary/get; update only this decision title/background/options/recommend or close it as expired/withdrawn.',
+            'Explain this post. Read post_get; use post_reply patch only to update the current post. Do not change other objects.',
           instructions: managerQuestionRules(decision.id),
           tools: MANAGER_TOOLS.tools.filter((tool) =>
-            ['summary', 'get', 'update', 'close'].includes(tool.name),
+            ['summary', 'get', 'update', 'close', 'post_get', 'post_reply'].includes(tool.name),
           ),
         },
       ]
@@ -270,7 +270,7 @@ export class ManagerQuestions {
           objects: fork
             ? undefined
             : this.owner.store.objects(manager.id).map((object) => {
-                const { discussion: _history, ...fields } = object as ManagerDecision
+                const { discussion: _history, ...fields } = object as unknown as ManagerPost
                 return fields
               }),
         })}`,
@@ -300,6 +300,7 @@ export class ManagerQuestions {
       ).catch(() => null)
     }
     entry.status = 'completed'
+    entry.answeredAt = managerNow()
     this.save(state)
   }
   private async nativeConfig(link: EngineLink, cwd: string): Promise<Record<string, unknown>> {
@@ -412,12 +413,14 @@ export class ManagerQuestions {
         (manager.status === 'active' && this.jobs.has(`${managerId}/${state.decisionId}`))
       )
         continue
-      const decision = this.owner.store.object(managerId, state.decisionId)
-      if (
-        manager.status === 'active' &&
-        (decision?.status === 'open' || decision?.revision === state.revision)
-      )
-        continue
+      const decision = (() => {
+        try {
+          return this.owner.posts.get(managerId, state.decisionId)
+        } catch {
+          return null
+        }
+      })()
+      if (manager.status === 'active' && decision?.revision === state.revision) continue
       this.releasing.add(id)
       state.threadId = null
       this.owner.store.saveQuestion(state)
@@ -429,7 +432,7 @@ export class ManagerQuestions {
         .finally(() => this.releasing.delete(id))
     }
   }
-  forward(managerId: string, id: ManagerDecisionId): { queued: boolean } {
+  forward(managerId: string, id: ManagerPostId): { queued: boolean } {
     const decision = this.decision(managerId, id)
     const state = this.owner.store.question(managerId, id)
     if (!state || state.discussion.messages.some((entry) => entry.status === 'running'))

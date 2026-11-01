@@ -102,7 +102,7 @@ test('两轮旁问共用分叉；不同决策隔离；设备拒绝开线、越�
     assert.equal(created.params.sandbox, 'read-only')
     assert.deepEqual(
       created.params.dynamicTools[0].tools.map((tool: { name: string }) => tool.name),
-      ['summary', 'get', 'update', 'close'],
+      ['post_get', 'post_reply', 'summary', 'get', 'update', 'close'],
     )
     for (const [namespace, tool, args] of [
       ['litch_sessions', 'start', { title: '不能开线' }],

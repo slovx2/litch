@@ -163,7 +163,16 @@ export function DevicesScreen({ navigation }: Props) {
         data={ids}
         keyExtractor={(id) => id}
         ListHeaderComponent={
-          ids.length > 0 ? <TasksEntry onPress={() => navigation.navigate('Tasks', {})} /> : null
+          ids.length > 0 ? (
+            <>
+              <Row
+                title={t('manager.inbox')}
+                testID="devices:managers"
+                onPress={() => navigation.navigate('Managers')}
+              />
+              <TasksEntry onPress={() => navigation.navigate('Tasks', {})} />
+            </>
+          ) : null
         }
         renderItem={({ item }) => (
           <DeviceRow

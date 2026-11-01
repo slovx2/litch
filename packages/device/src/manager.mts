@@ -1,5 +1,7 @@
+import { execFile } from 'node:child_process'
 // litchManager 的设备入口：建会话、读看板、投递持久事件，以及只向声明过的连接广播。
 import { randomUUID } from 'node:crypto'
+import { promisify } from 'node:util'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import {
   managerEndText,
@@ -17,13 +19,16 @@ import {
   type ManagerBoard,
   type ManagerObjectId,
 } from '../../protocol/src/manager.mjs'
+import { MANAGER_POST_METHOD, type ManagerPostId } from '../../protocol/src/manager-posts.mjs'
 import { formatSessionEvent, parseSessionEvent } from '../../protocol/src/session-tree.mjs'
 import type { DeviceToolCall } from './device-tools.mjs'
 import { isDecision, ManagerBoardWriter } from './manager-board.mjs'
 import { ManagerEndings } from './manager-ending.mjs'
 import { submitManagerFeedback } from './manager-feedback.mjs'
 import { ManagerLines } from './manager-lines.mjs'
+import { ManagerPosts } from './manager-posts.mjs'
 import { ManagerQuestions } from './manager-questions.mjs'
+import { projectedRelations } from './manager-relations.mjs'
 import { isRequest } from './manager-requests.mjs'
 import { managerTools } from './manager-rules.mjs'
 import { ManagerStore, managerNow, openManagerDatabase } from './manager-store.mjs'
@@ -45,6 +50,7 @@ export class DeviceManagers {
   readonly lines: ManagerLines
   readonly endings: ManagerEndings
   readonly writer: ManagerBoardWriter
+  readonly posts: ManagerPosts
   readonly questions: ManagerQuestions
   private readonly draining = new Map<string, Promise<void>>()
   private readonly timer: NodeJS.Timeout
@@ -67,7 +73,12 @@ export class DeviceManagers {
       (managerId, threadId) =>
         this.lines.mark(threadId)?.managerId === managerId &&
         this.lines.mark(threadId)?.role === 'line',
+      (managerId, id) => {
+        const proposal = this.tree.store.proposal(id)
+        return !!proposal && this.lines.mark(proposal.threadId)?.managerId === managerId
+      },
     )
+    this.posts = new ManagerPosts(this)
     this.questions = new ManagerQuestions(this)
     this.unlisten = tree.onTurnEnded((threadId) => {
       const manager = this.lines.managerFor(threadId)
@@ -96,6 +107,17 @@ export class DeviceManagers {
       ...manager,
       pendingDecisions: board.decisions.filter((decision) => decision.status === 'open').length,
       pendingRequests: (board.requests ?? []).filter((request) => request.status === 'open').length,
+      pendingReports:
+        board.posts?.filter((post) => post.kind === 'report' && post.unread).length ?? 0,
+      pendingSuggestions: this.posts
+        .list(id)
+        .filter(
+          (post) =>
+            post.kind === 'suggestion' &&
+            post.fields.status === 'pending' &&
+            (post.sourceThreadId === manager.threadId ||
+              this.store.suggestionReview(id, post.proposalId ?? '')?.state === 'endorsed'),
+        ).length,
       runningLines: board.lines.filter((line) => line.running).length,
       latestActivity: board.activities[0] ?? null,
       updatedAt: Math.max(manager.updatedAt, board.activities[0]?.at ?? 0),
@@ -149,6 +171,8 @@ export class DeviceManagers {
     activities.sort((a, b) => b.at - a.at)
     return {
       managerId: id,
+      posts: this.posts.list(id),
+      relations: projectedRelations(this.store, id),
       situation: this.store.situation(id),
       decisions: objects.filter(isDecision).map((decision) => {
         const state = this.store.question(id, decision.id)
@@ -244,6 +268,60 @@ export class DeviceManagers {
     const id = text(params.managerId, 'managerId')
     this.manager(id)
     switch (method) {
+      case MANAGER_POST_METHOD.question: {
+        keys(params, ['managerId', 'id', 'revision', 'question', 'mode'])
+        const postId = text(params.id, 'id') as ManagerPostId
+        const revision = typeof params.revision === 'number' ? params.revision : NaN
+        const question = text(params.question, 'question')
+        if (params.mode === 'manager') return this.posts.ask(id, postId, revision, question)
+        if (params.mode !== 'temporary')
+          throw new ManagerError('invalidManager', 'Invalid question mode.')
+        await this.questions.ask(id, postId, revision, question)
+        return { post: this.posts.get(id, postId) }
+      }
+      case MANAGER_POST_METHOD.reference: {
+        keys(params, ['managerId', 'reference'])
+        const reference = text(params.reference, 'reference')
+        const cwd = this.store.manager(id)?.cwd
+        const run = promisify(execFile)
+        const options = {
+          cwd,
+          encoding: 'utf8' as const,
+          timeout: 15000,
+          maxBuffer: 2 * 1024 * 1024,
+          env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' },
+        }
+        const resolved = await run(
+          'git',
+          ['rev-parse', '--verify', '--end-of-options', `${reference}^{commit}`],
+          options,
+        )
+        const sha = resolved.stdout.trim()
+        if (!/^[0-9a-f]{40,64}$/.test(sha))
+          throw new ManagerError('invalidManager', 'Invalid repository reference.')
+        const shown = await run(
+          'git',
+          [
+            '--no-pager',
+            'show',
+            '--no-ext-diff',
+            '--no-textconv',
+            '--format=fuller',
+            '--stat',
+            '--patch',
+            sha,
+            '--',
+          ],
+          options,
+        )
+        return { text: shown.stdout }
+      }
+      case MANAGER_POST_METHOD.forward:
+        keys(params, ['managerId', 'id'])
+        return this.questions.forward(id, text(params.id, 'id') as ManagerPostId)
+      case MANAGER_POST_METHOD.read:
+        keys(params, ['managerId', 'id', 'revision'])
+        return this.posts.read(id, text(params.id, 'id'), Number(params.revision))
       case MANAGER_METHOD.questionAsk:
         keys(params, ['managerId', 'decisionId', 'revision', 'question'])
         return this.questions.ask(
@@ -459,7 +537,18 @@ export class DeviceManagers {
           'litch_manager is available only in its owning manager session.',
         )
       let result: unknown
-      if (call.tool === 'endorse' || call.tool === 'dismiss') {
+      if (['report', 'post_get', 'post_reply', 'relate'].includes(call.tool)) {
+        if (questionManager) this.questions.validateWrite(call.threadId, call.tool, call.arguments)
+        result = this.posts.tool(
+          manager.id,
+          call.tool,
+          call.arguments,
+          questionManager ? 'question' : 'manager',
+        )
+        if (questionManager && call.tool === 'post_reply')
+          this.questions.noteChange(call.threadId, result)
+        if (call.tool !== 'post_get') this.changed(manager.id)
+      } else if (call.tool === 'endorse' || call.tool === 'dismiss') {
         this.writer.active(manager.id)
         const args = validateTool(call.tool, call.arguments)
         const proposalId = text(args.proposalId, 'proposalId')
@@ -504,6 +593,13 @@ export class DeviceManagers {
         await this.lines.refresh(manager.id)
         const board = this.board(manager.id)
         result = {
+          posts: board.posts?.map(({ id, kind, title, revision, unread }) => ({
+            id,
+            kind,
+            title,
+            revision,
+            unread,
+          })),
           situation: board.situation,
           decisions: board.decisions
             .filter((decision) => decision.status === 'open')

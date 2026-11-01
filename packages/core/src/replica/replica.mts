@@ -551,7 +551,15 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
         sum +
         [...entry.rows.values()]
           .filter((m) => m.status === 'active')
-          .reduce((n, m) => n + m.pendingDecisions, 0),
+          .reduce(
+            (n, m) =>
+              n +
+              m.pendingDecisions +
+              (m.pendingRequests ?? 0) +
+              (m.pendingReports ?? 0) +
+              (m.pendingSuggestions ?? 0),
+            0,
+          ),
       0,
     )
     if (store.get<number>(keys.managersPending) !== total) store.set(keys.managersPending, total)

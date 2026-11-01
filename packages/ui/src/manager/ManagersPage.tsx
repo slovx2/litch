@@ -48,15 +48,26 @@ export function ManagersPage({
         ) : manager.status === 'ending' ? (
           <span className="dim">{t('manager.ending')}</span>
         ) : null}
-        {manager.pendingDecisions + (manager.pendingRequests ?? 0) ? (
+        {manager.pendingDecisions +
+        (manager.pendingRequests ?? 0) +
+        (manager.pendingReports ?? 0) +
+        (manager.pendingSuggestions ?? 0) ? (
           <span
             className="pill wait"
             title={t('manager.pendingDetail', {
               decisions: manager.pendingDecisions,
               requests: manager.pendingRequests ?? 0,
+              reports: manager.pendingReports ?? 0,
+              suggestions: manager.pendingSuggestions ?? 0,
             })}
           >
-            {t('manager.pending', { n: manager.pendingDecisions + (manager.pendingRequests ?? 0) })}
+            {t('manager.pending', {
+              n:
+                manager.pendingDecisions +
+                (manager.pendingRequests ?? 0) +
+                (manager.pendingReports ?? 0) +
+                (manager.pendingSuggestions ?? 0),
+            })}
           </span>
         ) : null}
       </button>

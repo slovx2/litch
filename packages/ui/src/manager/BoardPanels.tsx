@@ -9,6 +9,7 @@ import { Activity } from './Activity.tsx'
 import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
+import { Relations } from './Relations.tsx'
 
 function Item({ item }: { item: ManagerItemView }) {
   const t = useT()
@@ -24,6 +25,7 @@ function Item({ item }: { item: ManagerItemView }) {
           <span className="mg-item-owner">{t(`manager.${item.owner.kind}`)}</span>
         </div>
       </header>
+      <Relations id={item.id} kind="item" reverse />
       {item.why ? (
         <div className="mg-item-reason">
           <BoardMarkdown text={item.why} />

@@ -5,20 +5,25 @@ import type {
   ManagerSubmittedRequest,
   ManagerView,
 } from '../../../core/src/model-manager.mts'
+import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
 import { useT } from '../app/appearance.ts'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
+import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
+import { Relations } from './Relations.tsx'
 import { useRequestDrafts } from './request-drafts.ts'
 
 export function Requests({
   manager,
+  posts,
   requests,
   disabled,
   target,
   onLocated,
 }: {
   manager: ManagerView
+  posts: ManagerPost[]
   requests: ManagerRequestView[]
   disabled: boolean
   target: { id: ManagerRequestId } | null
@@ -58,6 +63,7 @@ export function Requests({
     <div className="mg-stack" ref={root}>
       {!requests.length ? <p className="mg-empty">{t('manager.none')}</p> : null}
       {requests.map((request) => {
+        const post = posts.find((post) => post.id === request.id)
         const draft = drafts[request.id]
         const editing = request.status === 'open' || Boolean(draft)
         const locked = disabled || request.status === 'cancelled'
@@ -76,7 +82,9 @@ export function Requests({
               </span>
               {draft ? <span className="pill wait">{t('manager.draft')}</span> : null}
             </header>
+            <Relations id={request.id} />
             <BoardMarkdown text={request.description} />
+            <PostHistory post={post} />
             {request.response ? (
               <section className="mg-request-response">
                 <header>
@@ -160,6 +168,7 @@ export function Requests({
                 {t('manager.requestEdit')}
               </button>
             ) : null}
+            <PostDiscussion manager={manager} post={post} disabled={locked} />
             {request.basis.length || request.links.length ? (
               <footer className="mg-item-meta">
                 {request.basis.length ? (

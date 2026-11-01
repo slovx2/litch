@@ -271,7 +271,7 @@ test('经理库从版本 1 升级：保留看板、历史、编号和待投递�
     const changes = store.changes('a')
     const events = store.deliveries('a')
     store.db.exec(
-      'DROP TABLE endings; DROP TABLE questions; DROP TABLE suggestion_reviews; PRAGMA user_version=1',
+      'DROP TABLE endings; DROP TABLE questions; DROP TABLE suggestion_reviews; DROP TABLE manager_reports; DROP TABLE manager_suggestion_versions; DROP TABLE manager_relations; PRAGMA user_version=1',
     )
     store.close()
     store = new ManagerStore(openManagerDatabase(dir))
@@ -282,6 +282,46 @@ test('经理库从版本 1 升级：保留看板、历史、编号和待投递�
     store.beginEnding('a', 'end-event', '收尾')
     store.setEndingTurn('a', 'end-turn')
     assert.deepEqual(store.ending('a'), { eventId: 'end-event', text: '收尾', turnId: 'end-turn' })
+    assert.equal(
+      store.db.prepare('PRAGMA user_version').get()?.user_version,
+      MANAGER_SCHEMA_VERSION,
+    )
+  } finally {
+    store.close()
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('经理库 v4 升 v6 保留看板、问答与审核，报告重开后仍在', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'manager-v6-'))
+  let store = new ManagerStore(openManagerDatabase(dir))
+  try {
+    store.saveManager(manager('keep'))
+    const writer = new ManagerBoardWriter(store, () => false)
+    writer.tool('keep', 'add', {
+      kind: 'decision',
+      decision: { title: '旧决策', background: '不能丢' },
+    })
+    store.saveSuggestionReview('keep', 'proposal', { state: 'endorsed', reason: '保留', at: 1 })
+    store.db.exec(
+      'DROP TABLE manager_reports; DROP TABLE manager_suggestion_versions; DROP TABLE manager_relations; PRAGMA user_version=4',
+    )
+    store.close()
+    store = new ManagerStore(openManagerDatabase(dir))
+    assert.equal(store.object('keep', 'D-1')?.title, '旧决策')
+    assert.equal(store.suggestionReview('keep', 'proposal')?.reason, '保留')
+    store.savePublishedReport('keep', {
+      id: 'P-1',
+      title: '报告',
+      body: '内容',
+      revision: 2,
+      readRevision: 1,
+      createdAt: 1,
+      updatedAt: 2,
+    })
+    store.close()
+    store = new ManagerStore(openManagerDatabase(dir))
+    assert.equal(store.publishedReports('keep')[0]?.readRevision, 1)
     assert.equal(
       store.db.prepare('PRAGMA user_version').get()?.user_version,
       MANAGER_SCHEMA_VERSION,

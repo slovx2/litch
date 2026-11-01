@@ -6,6 +6,7 @@ import type {
   ManagerDecision,
   ManagerRequest,
 } from '../../../protocol/src/manager.mjs'
+import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
 import type { SessionSummary } from '../model.mjs'
 import type {
   ManagerAnswersResult,
@@ -57,9 +58,26 @@ export function projectManagerRequest(request: ManagerRequest): ManagerRequest {
     cancelled: request.cancelled ? timed(request.cancelled) : null,
   }
 }
+export function projectManagerPost(post: ManagerPost): ManagerPost {
+  return {
+    ...post,
+    createdAt: post.createdAt * 1000,
+    updatedAt: post.updatedAt * 1000,
+    versions: post.versions.map(timed),
+    discussion: {
+      ...post.discussion,
+      messages: post.discussion.messages.map((q) => ({
+        ...timed(q),
+        ...(q.answeredAt === undefined ? {} : { answeredAt: q.answeredAt * 1000 }),
+      })),
+    },
+  }
+}
 export function projectManagerBoard(deviceId: string, board: ManagerBoard): ManagerBoardView {
   return {
     ...board,
+    ...(board.relations ? { relations: board.relations.map(timed) } : {}),
+    ...(board.posts ? { posts: board.posts.map(projectManagerPost) } : {}),
     deviceId,
     situation: board.situation ? timed(board.situation) : null,
     requests: (board.requests ?? []).map(projectManagerRequest),

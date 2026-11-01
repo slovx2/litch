@@ -413,7 +413,7 @@ export function formatSessionEvent(event: SessionEvent): string {
     const manager = event.manager as ManagerEventData
     const head =
       event.kind === 'manager-answers'
-        ? manager.questions?.length || manager.requests?.length
+        ? manager.questions?.length || manager.requests?.length || manager.postQuestions?.length
           ? 'The user submitted these board entries.'
           : 'The user submitted these board answers.'
         : event.kind === 'manager-open'
@@ -440,6 +440,10 @@ export function formatSessionEvent(event: SessionEvent): string {
       ...(manager.questions ?? []).map(
         (question) =>
           `Follow-up ${question.decisionId} (revision ${question.revision}) ${JSON.stringify(question.title)}: ${JSON.stringify(question.question)}`,
+      ),
+      ...(manager.postQuestions ?? []).map(
+        (question) =>
+          `Issue follow-up ${question.id} (revision ${question.revision}) ${JSON.stringify(question.title)}: ${JSON.stringify(question.question)}`,
       ),
       ...(manager.requests ?? []).map(
         (request) =>
@@ -538,7 +542,19 @@ function validManagerEvent(event: SessionEvent): boolean {
     Array.isArray(data.answers) &&
     (data.answers.length > 0 ||
       (Array.isArray(data.questions) && data.questions.length > 0) ||
-      (Array.isArray(data.requests) && data.requests.length > 0)) &&
+      (Array.isArray(data.requests) && data.requests.length > 0) ||
+      (Array.isArray(data.postQuestions) && data.postQuestions.length > 0)) &&
+    (data.postQuestions === undefined ||
+      (Array.isArray(data.postQuestions) &&
+        data.postQuestions.every(
+          (q) =>
+            q &&
+            /^(?:[DRP]-[1-9]\d*|S-.+)$/.test(q.id) &&
+            Number.isSafeInteger(q.revision) &&
+            q.revision > 0 &&
+            typeof q.title === 'string' &&
+            typeof q.question === 'string',
+        ))) &&
     (data.requests === undefined ||
       (Array.isArray(data.requests) &&
         data.requests.every(

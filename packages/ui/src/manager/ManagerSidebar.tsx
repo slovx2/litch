@@ -10,6 +10,7 @@ import { useKey } from '../app/services.tsx'
 import { containsSession, revealRow } from '../sidebar/reveal.ts'
 import { useSidebarReveal } from '../sidebar/reveal-context.ts'
 import { answeredDrafts, questionDrafts, useAnswerDrafts } from './drafts.ts'
+import { usePostDrafts } from './post-drafts.ts'
 import { submittedRequests, useRequestDrafts } from './request-drafts.ts'
 
 function ManagerRow({
@@ -40,11 +41,17 @@ function ManagerRow({
   }, [reveal, manager.threadId])
   const { drafts } = useAnswerDrafts(manager.deviceId, manager.id)
   const { drafts: requests } = useRequestDrafts(manager.deviceId, manager.id)
+  const { drafts: posts } = usePostDrafts(manager.deviceId, manager.id)
   const count =
+    Object.values(posts).filter((p) => p.question.trim()).length +
     submittedRequests(requests).length +
     new Set([...answeredDrafts(drafts), ...questionDrafts(drafts)].map((draft) => draft.decisionId))
       .size
-  const attention = manager.pendingDecisions + (manager.pendingRequests ?? 0)
+  const attention =
+    manager.pendingDecisions +
+    (manager.pendingRequests ?? 0) +
+    (manager.pendingReports ?? 0) +
+    (manager.pendingSuggestions ?? 0)
   const picked =
     selection?.deviceId === manager.deviceId && selection.sessionId === manager.threadId
   return (
@@ -86,6 +93,8 @@ function ManagerRow({
                 title={t('manager.pendingDetail', {
                   decisions: manager.pendingDecisions,
                   requests: manager.pendingRequests ?? 0,
+                  reports: manager.pendingReports ?? 0,
+                  suggestions: manager.pendingSuggestions ?? 0,
                 })}
               >
                 {t('manager.pending', { n: attention })}

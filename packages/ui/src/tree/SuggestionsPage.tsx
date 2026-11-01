@@ -10,12 +10,16 @@ import {
   type WorkspaceView,
 } from '@litch/core'
 import type { ManagerView } from '../../../core/src/model-manager.mts'
+import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
 import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { useNow } from '../app/clock.ts'
 import { ago } from '../app/format.ts'
 import { Close, Forward } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
+import { BoardMarkdown } from '../manager/BoardMarkdown.tsx'
+import { PostDiscussion, PostHistory } from '../manager/PostDiscussion.tsx'
+import { Relations } from '../manager/Relations.tsx'
 import { Brief, ProposalActs } from './ProposalCard.tsx'
 import { SANDBOX_LEVEL } from './sandbox.ts'
 
@@ -23,9 +27,13 @@ const NONE: readonly SuggestionView[] = []
 
 function SuggestionRow({
   row,
+  manager,
+  post,
   onOpen,
 }: {
   row: SuggestionView
+  manager?: ManagerView
+  post?: ManagerPost | undefined
   onOpen(selection: Selection, archived: boolean): void
 }) {
   const t = useT()
@@ -40,6 +48,7 @@ function SuggestionRow({
       className="tree-card prop-card suggestion-row"
       data-state={proposal.status}
       data-proposal={proposal.id}
+      tabIndex={-1}
     >
       <div className="prop-body">
         <b className="prop-title">{proposal.title}</b>
@@ -70,7 +79,16 @@ function SuggestionRow({
             {ago(proposal.createdAt, now, t)}
           </time>
         </div>
-        <Brief prompt={proposal.prompt} background={proposal.background} />
+        {manager ? <Relations id={`S-${proposal.id}`} /> : null}
+        {manager ? (
+          <>
+            {proposal.background ? <BoardMarkdown text={proposal.background} /> : null}
+            <BoardMarkdown text={proposal.prompt} />
+          </>
+        ) : (
+          <Brief prompt={proposal.prompt} background={proposal.background} />
+        )}
+        <PostHistory post={post} />
         {proposal.widerSandbox ? (
           <p className="prop-wider">
             {t('proposal.wider', { level: t(SANDBOX_LEVEL[proposal.widerSandbox]) })}
@@ -91,6 +109,7 @@ function SuggestionRow({
             workspaceId: workspace?.id ?? null,
           }}
         />
+        {manager ? <PostDiscussion manager={manager} post={post} disabled={!online} /> : null}
       </div>
     </li>
   )
@@ -98,9 +117,11 @@ function SuggestionRow({
 
 export function ManagerSuggestions({
   manager,
+  posts,
   onOpen,
 }: {
   manager: ManagerView
+  posts: ManagerPost[]
   onOpen(selection: Selection, archived: boolean): void
 }) {
   const all = useKey<readonly SuggestionView[]>(keys.suggestions) ?? NONE
@@ -108,10 +129,20 @@ export function ManagerSuggestions({
   const t = useT()
   const reviewed = rows.filter(reviewedSuggestion)
   const pending = rows.filter((row) => !reviewedSuggestion(row))
+  const history = posts.filter(
+    (post) =>
+      post.kind === 'suggestion' && !rows.some((row) => row.proposal.id === post.proposalId),
+  )
   const cards = (entries: readonly SuggestionView[]) => (
     <ul className="suggestions-list mg-suggestions-list">
       {entries.map((row) => (
-        <SuggestionRow key={row.proposal.id} row={row} onOpen={onOpen} />
+        <SuggestionRow
+          key={row.proposal.id}
+          row={row}
+          manager={manager}
+          post={posts.find((p) => p.proposalId === row.proposal.id)}
+          onOpen={onOpen}
+        />
       ))}
     </ul>
   )
@@ -128,6 +159,27 @@ export function ManagerSuggestions({
             {t('suggestions.unreviewed')} {pending.length}
           </summary>
           {cards(pending)}
+        </details>
+      ) : null}
+      {history.length ? (
+        <details className="mg-suggestion-history">
+          <summary>
+            {t('manager.suggestionHistory')} · {history.length}
+          </summary>
+          {history.map((post) => (
+            <article
+              className="mg-card"
+              key={post.id}
+              data-proposal={post.proposalId}
+              tabIndex={-1}
+            >
+              <h3>{post.title}</h3>
+              <Relations id={post.id} />
+              <BoardMarkdown text={post.body} />
+              <PostHistory post={post} />
+              <PostDiscussion manager={manager} post={post} />
+            </article>
+          ))}
         </details>
       ) : null}
     </div>

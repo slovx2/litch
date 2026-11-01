@@ -4,6 +4,7 @@ import { requestOpenSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
+import { Relations } from './Relations.tsx'
 
 export function Activity({
   activity,
@@ -44,6 +45,7 @@ export function Activity({
         )}
         <Stamp className="dim" at={activity.at} />
       </header>
+      {source.kind === 'line' ? <Relations id={source.threadId} kind="thread" reverse /> : null}
       <div className="mg-activity-content" data-expanded={expanded} ref={body}>
         <BoardMarkdown text={activity.text} />
       </div>

@@ -1,5 +1,7 @@
 // 经理冒烟只操作正式界面，模拟核心负责写答案和生成答复回合。
 export interface ManagerSeen {
+  consoleReports: boolean
+  issueRelations: boolean
   managerQuestionDrafts: boolean
   userRequests: boolean
   backgroundQuestions: boolean
@@ -56,8 +58,15 @@ export interface ManagerSeen {
 export async function managerProbe(captureQuestions = false): Promise<ManagerSeen> {
   const one = <T extends Element = HTMLElement>(selector: string) =>
     document.querySelector<T>(selector)
-  const click = (selector: string) =>
-    until(selector, () => one<HTMLButtonElement>(selector)).then((button) => button.click())
+  const click = async (selector: string) => {
+    const category = selector.match(
+      /^\[data-board-tab="(decisions|suggestions|requests|reports)"\]$/,
+    )
+    if (category && !one(selector)) {
+      ;(await until('控制台', () => one<HTMLButtonElement>('[data-board-tab="inbox"]'))).click()
+    }
+    return until(selector, () => one<HTMLButtonElement>(selector)).then((button) => button.click())
+  }
   const fill = (input: HTMLInputElement | HTMLTextAreaElement, value: string) => {
     Object.getOwnPropertyDescriptor(
       input instanceof HTMLTextAreaElement
@@ -138,7 +147,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       '切回原经理与看板页签',
       () =>
         one('[data-manager="session"][data-manager-id="m1"]') &&
-        one('[data-board-tab="suggestions"][aria-selected="true"]'),
+        one('[data-board-tab="suggestions"][aria-pressed="true"]'),
     ),
   )
   // 顶栏的全局活动入口走 requestOpenSession，目标普通会话不在经理侧栏里。
@@ -158,7 +167,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       '外部跳转后仍恢复原经理和页签',
       () =>
         one('[data-manager="session"][data-manager-id="m1"]') &&
-        one('[data-board-tab="suggestions"][aria-selected="true"]'),
+        one('[data-board-tab="suggestions"][aria-pressed="true"]'),
     ),
   )
   await click('[data-sidebar-mode="chat"]')
@@ -194,33 +203,34 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     '定位到关联决策',
     () =>
       document.activeElement?.getAttribute('data-decision') === 'D-16' &&
-      one('[data-board-tab="decisions"]')?.getAttribute('aria-selected') === 'true',
+      one('[data-board-tab="decisions"]')?.getAttribute('aria-pressed') === 'true',
   )
   ;(await until('决策页签', () => one<HTMLButtonElement>('[data-board-tab="decisions"]'))).click()
-  await click('[data-decision="D-15"] [data-decision-tab="question"]')
+  await click('[data-decision="D-15"] [data-act="post-ask"]')
   await click('[data-decision="D-15"] [data-question-mode="temporary"]')
   const askBackground = async (value: string, count: number) => {
     const input = await until('背景问题输入框', () =>
-      one<HTMLTextAreaElement>('[data-decision="D-15"] .mg-questions textarea'),
+      one<HTMLTextAreaElement>('[data-decision="D-15"] .mg-post-discussion textarea'),
     )
     fill(input, value)
     await until(
       '背景提问按钮可用',
       () =>
-        !one<HTMLButtonElement>('[data-decision="D-15"] [data-act="manager-question-send"]')
-          ?.disabled,
+        !one<HTMLButtonElement>('[data-decision="D-15"] [data-act="post-question-send"]')?.disabled,
     )
-    await click('[data-decision="D-15"] [data-act="manager-question-send"]')
+    await click('[data-decision="D-15"] [data-act="post-question-send"]')
     await until(
       '背景问答完成',
-      () => document.querySelectorAll('[data-decision="D-15"] .mg-question-round').length === count,
+      () =>
+        document.querySelectorAll('[data-decision="D-15"] .mg-post-timeline li').length ===
+        count * 2,
     )
   }
   const turnsBeforeQuestions = document.querySelectorAll('.mg-chat .turn').length
   await askBackground('为什么推荐这个选项？', 1)
   await askBackground('还有哪些影响需要确认？', 2)
   if (captureQuestions) {
-    one('[data-decision="D-15"] .mg-questions')?.scrollIntoView({ block: 'center' })
+    one('[data-decision="D-15"] .mg-post-discussion')?.scrollIntoView({ block: 'center' })
     await new Promise<void>((resolve) => {
       window.addEventListener('litch-manager-questions-captured', () => resolve(), { once: true })
       document.documentElement.dataset.managerQuestionsReady = 'true'
@@ -234,7 +244,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       one('[data-act="manager-question-forward"]')?.textContent?.includes('已转给经理'),
     ),
   )
-  await click('[data-decision="D-15"] [data-decision-tab="answer"]')
+
   ;(await until('按推荐', () => one<HTMLButtonElement>('[data-act="manager-recommend"]'))).click()
   const draft = Boolean(await until('本地草稿', () => one('.mg-decision[data-draft="true"]')))
   await click('[data-manager-id="m3"] .mg-pick')
@@ -282,7 +292,9 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
         !one('.mg-send') && one('[data-decision="D-15"]')?.textContent?.includes('修改后的答案'),
     ),
   )
-  await click('[data-decision="D-15"] [data-decision-tab="question"]')
+  if (!one('[data-decision="D-15"] [data-act="manager-question-input"]'))
+    await click('[data-decision="D-15"] [data-act="post-ask"]')
+  await click('[data-decision="D-15"] [data-question-mode="manager"]')
   fill(
     await until('经理追问草稿', () =>
       one<HTMLTextAreaElement>('[data-decision="D-15"] [data-act="manager-question-input"]'),
@@ -296,6 +308,13 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     ),
     '真机已复验',
   )
+  await click('[data-manager-request="R-1"] [data-act="post-ask"]')
+  fill(
+    await until('交付与追问同批草稿', () =>
+      one<HTMLTextAreaElement>('[data-manager-request="R-1"] [data-act="manager-question-input"]'),
+    ),
+    '交付后还需哪些验证？',
+  )
   await click('[data-manager-request="R-1"] [data-act="manager-request-deliver"]')
   await click('[data-act="manager-submit"]')
   const userRequests = Boolean(
@@ -303,7 +322,10 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       '交付写回请你做',
       () =>
         !one('.mg-send') &&
-        one('[data-manager-request="R-1"]')?.textContent?.includes('真机已复验'),
+        one('[data-manager-request="R-1"]')?.textContent?.includes('真机已复验') &&
+        one('[data-manager-request="R-1"] .mg-post-timeline')?.textContent?.includes(
+          '交付后还需哪些验证',
+        ),
     ),
   )
   await click('[data-board-tab="decisions"]')
@@ -311,11 +333,11 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     await until(
       '经理回复写回记录',
       () =>
-        one('[data-decision="D-15"] .mg-question-log')?.textContent?.includes('请补充影响范围') &&
-        one('[data-decision="D-15"] .mg-question-log')?.textContent?.includes('经理回复'),
+        one('[data-decision="D-15"] .mg-post-timeline')?.textContent?.includes('请补充影响范围') &&
+        one('[data-decision="D-15"] .mg-post-timeline')?.textContent?.includes('经理回复'),
     ),
   )
-  await click('[data-decision="D-15"] [data-decision-tab="answer"]')
+
   await click('.mg-decision-filter button:last-child')
   await until('已关闭的决策', () => one('[data-decision="D-12"]'))
   await click('[data-decision="D-12"] [data-act="manager-reopen"]')
@@ -324,6 +346,25 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   )
   const omittedActions = ![...document.querySelectorAll('.mg-board button')].some((button) =>
     /^(仍然有效|推迟)$/.test(button.textContent?.trim() ?? ''),
+  )
+  await click('[data-board-tab="reports"]')
+  await until('报告原帖', () => one('[data-report="P-1"]'))
+  const issueRelations = Boolean(
+    one('[data-report="P-1"] [data-relations="P-1"] [data-relation-target="D-15"]') &&
+      one('[data-report="P-1"] [data-board-reference="I-2"]')?.getAttribute('title'),
+  )
+  await click('[data-act="report-read"]')
+  await until('报告已阅', () => !one('[data-act="report-read"]'))
+  await click('[data-report="P-1"] [data-act="post-ask"]')
+  fill(
+    await until('报告追问框', () => one<HTMLTextAreaElement>('[data-report="P-1"] textarea')),
+    '报告还有什么限制？',
+  )
+  await click('[data-report="P-1"] [data-act="post-question-send"]')
+  const consoleReports = Boolean(
+    await until('报告帖子记录', () =>
+      one('[data-report="P-1"] .mg-post-timeline')?.textContent?.includes('报告还有什么限制'),
+    ),
   )
   await click('[data-board-tab="items"]')
   await until('事项分组', () => one('.mg-body details .mg-item'))
@@ -334,7 +375,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     '已答决策也能定位',
     () =>
       document.activeElement?.getAttribute('data-decision') === 'D-15' &&
-      !one('[data-decision="D-15"] textarea'),
+      !one('[data-decision="D-15"] [data-act="manager-answer"]'),
   )
   await click('[data-board-tab="suggestions"]')
   const panels =
@@ -700,6 +741,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('[data-sidebar-mode="chat"]')
   const archivedFallback = Boolean(await until('切回对话默认页', () => one('.new-page')))
   return {
+    consoleReports,
+    issueRelations,
     managerQuestionDrafts,
     userRequests,
     backgroundQuestions,
@@ -756,6 +799,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
 
 export function judgeManager(seen: ManagerSeen): string[] {
   const messages: Record<keyof ManagerSeen, string> = {
+    consoleReports: '控制台报告与帖子追问未完成',
+    issueRelations: '议题关联与编号预览未完成',
     managerQuestionDrafts: '经理追问草稿与回复记录未完成',
     userRequests: '请你做交付未写回',
     backgroundQuestions: '两轮背景问答没有保持在独立线程',

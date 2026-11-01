@@ -15,7 +15,7 @@ function save(
   managerId: string,
   before: ManagerRequest | null,
   after: ManagerRequest,
-  by: 'manager' | 'user',
+  by: import('../../protocol/src/manager.mjs').ManagerActor,
   why: string,
 ) {
   text(after.title, 'title')
@@ -29,6 +29,7 @@ export function requestTool(
   managerId: string,
   tool: string,
   args: Record<string, unknown>,
+  actor: import('../../protocol/src/manager.mjs').ManagerActor = 'manager',
 ) {
   if (args.kind !== 'request') invalid('kind must match the R-n request.')
   const at = managerNow()
@@ -69,7 +70,7 @@ export function requestTool(
     managerId,
     before,
     { ...before, ...patch, revision: before.revision + 1, updatedAt: at },
-    'manager',
+    actor,
     text(tool === 'close' ? args.reason : args.why, 'why'),
   )
 }

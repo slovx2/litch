@@ -3,6 +3,7 @@ import { type BoardReference, boardReferences } from './references.ts'
 
 export const BoardReferencesContext = createContext<{
   ids: ReadonlySet<BoardReference>
+  titles?: ReadonlyMap<string, string>
   open(id: BoardReference): void
 } | null>(null)
 
@@ -26,6 +27,7 @@ export function BoardReferences({ text }: { text: string }) {
             <button
               type="button"
               className="mg-decision-link"
+              title={context.titles?.get(part.id)}
               data-board-reference={part.id}
               data-decision-link={part.id.startsWith('D-') ? part.id : undefined}
               onClick={() => part.id && context.open(part.id)}

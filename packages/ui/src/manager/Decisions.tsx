@@ -6,6 +6,7 @@ import type {
   ManagerRequestView,
   ManagerView,
 } from '../../../core/src/model-manager.mts'
+import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useServices } from '../app/services.tsx'
@@ -13,7 +14,6 @@ import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
-import { DecisionQuestions } from './DecisionQuestions.tsx'
 import {
   type AnswerDrafts,
   answeredDrafts,
@@ -22,10 +22,14 @@ import {
   questionDrafts,
   useAnswerDrafts,
 } from './drafts.ts'
+import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
+import { advancePostDrafts, usePostDrafts } from './post-drafts.ts'
+import { Relations } from './Relations.tsx'
 import { submittedRequests, useRequestDrafts } from './request-drafts.ts'
 
 export function Decisions({
   manager,
+  posts,
   onBusy,
   decisions,
   requests,
@@ -36,6 +40,7 @@ export function Decisions({
   onLocated,
 }: {
   manager: ManagerView
+  posts: ManagerPost[]
   onBusy(value: boolean): void
   decisions: ManagerDecisionView[]
   requests: ManagerRequestView[]
@@ -52,9 +57,10 @@ export function Decisions({
     manager.deviceId,
     manager.id,
   )
+  const { drafts: postDrafts, write: writePosts } = usePostDrafts(manager.deviceId, manager.id)
+  const postQuestions = Object.values(postDrafts).filter((p) => p.question.trim())
   const requestReplies = submittedRequests(requestDrafts)
   const [filter, setFilter] = useState<'open' | 'answered' | 'closed'>('open')
-  const [tabs, setTabs] = useState<Record<string, 'answer' | 'question'>>({})
   const [editing, setEditing] = useState<Set<string>>(new Set())
   const cards = useRef<HTMLDivElement>(null)
   const targetDecision = target
@@ -103,6 +109,7 @@ export function Decisions({
       ),
   )
   const conflict =
+    postQuestions.some((p) => posts.find((post) => post.id === p.id)?.revision !== p.revision) ||
     requestConflict ||
     pending.some(
       (draft) =>
@@ -132,18 +139,35 @@ export function Decisions({
     })
   }
   const submit = async () => {
-    if (busy || disabled || conflict || asking || (!pending.length && !requestReplies.length))
+    if (
+      busy ||
+      disabled ||
+      conflict ||
+      asking ||
+      (!pending.length && !requestReplies.length && !postQuestions.length)
+    )
       return
     setBusy(true)
     setError('')
     try {
-      const result = await channel.command('managers.feedback.submit', {
-        deviceId: manager.deviceId,
-        managerId: manager.id,
-        answers,
-        questions,
-        requests: requestReplies,
-      })
+      const result =
+        pending.length || requestReplies.length
+          ? await channel.command('managers.feedback.submit', {
+              deviceId: manager.deviceId,
+              managerId: manager.id,
+              answers,
+              questions,
+              requests: requestReplies,
+            })
+          : {
+              accepted: [],
+              rejected: [],
+              acceptedRequests: [],
+              rejectedRequests: [],
+              acceptedQuestions: [],
+              rejectedQuestions: [],
+              delivery: 'none',
+            }
       const next = { ...drafts }
       for (const decision of result.accepted) {
         const draft = next[decision.id]
@@ -160,6 +184,18 @@ export function Decisions({
       const nextRequests = { ...requestDrafts }
       for (const request of result.acceptedRequests) delete nextRequests[request.id]
       writeRequests(nextRequests)
+      const postNext = advancePostDrafts(postDrafts, result.acceptedRequests)
+      writePosts(postNext)
+      for (const draft of Object.values(postNext).filter((draft) => draft.question.trim())) {
+        await channel.command('managers.post.question', {
+          deviceId: manager.deviceId,
+          managerId: manager.id,
+          ...draft,
+          mode: 'manager',
+        })
+        delete postNext[draft.id]
+        writePosts({ ...postNext })
+      }
       const rejected = [...result.rejected, ...result.rejectedQuestions]
       if (rejected.length || result.rejectedRequests.length)
         setError(
@@ -214,8 +250,7 @@ export function Decisions({
           {grouped[filter].length === 0 ? <p className="mg-empty">{t('manager.none')}</p> : null}
           {grouped[filter].map((decision) => {
             const draft = drafts[decision.id]
-            const selectedTab = tabs[decision.id] ?? 'answer'
-            const tabId = `manager-response-${manager.id}-${decision.id}`
+            const post = posts.find((post) => post.id === decision.id)
             const stale = draft && draft.revision !== decision.revision
             return (
               <article
@@ -230,6 +265,7 @@ export function Decisions({
                   <h3>{decision.title}</h3>
                   {draft ? <span className="pill wait">{t('manager.draft')}</span> : null}
                 </header>
+                <Relations id={decision.id} />
                 <BoardMarkdown text={decision.background} />
                 {decision.blocks.length ? (
                   <div className="mg-item-meta mg-decision-meta">
@@ -243,58 +279,8 @@ export function Decisions({
                     </div>
                   </div>
                 ) : null}
-                <div
-                  className="seg mg-response-tabs"
-                  role="tablist"
-                  aria-label={t('manager.responseTabs')}
-                >
-                  {(['answer', 'question'] as const).map((tab) => (
-                    <button
-                      type="button"
-                      role="tab"
-                      key={tab}
-                      id={`${tabId}-${tab}`}
-                      aria-selected={selectedTab === tab}
-                      aria-controls={`${tabId}-${tab}-panel`}
-                      tabIndex={selectedTab === tab ? 0 : -1}
-                      onKeyDown={(event) => {
-                        const next =
-                          event.key === 'Home'
-                            ? 'answer'
-                            : event.key === 'End'
-                              ? 'question'
-                              : ['ArrowLeft', 'ArrowRight'].includes(event.key)
-                                ? tab === 'answer'
-                                  ? 'question'
-                                  : 'answer'
-                                : null
-                        if (!next) return
-                        event.preventDefault()
-                        setTabs({ ...tabs, [decision.id]: next })
-                        document.getElementById(`${tabId}-${next}`)?.focus()
-                      }}
-                      data-decision-tab={tab}
-                      onClick={() => setTabs({ ...tabs, [decision.id]: tab })}
-                    >
-                      {t(tab === 'answer' ? 'manager.answerTab' : 'manager.questionTab')}
-                      {tab === 'question' && draft?.question?.trim() ? (
-                        <span
-                          role="img"
-                          className="mg-question-draft"
-                          aria-label={t('manager.draft')}
-                        >
-                          •
-                        </span>
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-                <div
-                  id={`${tabId}-answer-panel`}
-                  role="tabpanel"
-                  aria-labelledby={`${tabId}-answer`}
-                  hidden={selectedTab !== 'answer'}
-                >
+                <PostHistory post={post} />
+                <div>
                   {decision.status === 'open' ||
                   editing.has(decision.id) ||
                   draft?.optionId ||
@@ -476,35 +462,13 @@ export function Decisions({
                     </>
                   )}
                 </div>
-                <div
-                  id={`${tabId}-question-panel`}
-                  role="tabpanel"
-                  aria-labelledby={`${tabId}-question`}
-                  hidden={selectedTab !== 'question'}
-                >
-                  {stale ? (
-                    <div className="mg-conflict" role="alert">
-                      <p>{t('manager.conflict')}</p>
-                      <button
-                        type="button"
-                        className="btn"
-                        disabled={disabled || busy}
-                        onClick={() => change(decision, { revision: decision.revision })}
-                      >
-                        {t('manager.confirm')}
-                      </button>
-                    </div>
-                  ) : null}
-                  {selectedTab === 'question' ? (
-                    <DecisionQuestions
-                      question={draft?.question ?? ''}
-                      onQuestion={(question) => change(decision, { question })}
-                      manager={manager}
-                      decision={decision}
-                      disabled={disabled || busy}
-                    />
-                  ) : null}
-                </div>
+                <PostDiscussion
+                  manager={manager}
+                  post={post}
+                  disabled={disabled || busy}
+                  question={draft?.question ?? ''}
+                  onQuestion={(question) => change(decision, { question })}
+                />
                 <footer className="mg-item-meta">
                   <div className="mg-item-meta-row">
                     <span className="mg-meta-label">{t('manager.basis')}</span>
@@ -530,11 +494,14 @@ export function Decisions({
           {error}
         </p>
       ) : null}
-      {pending.length || requestReplies.length ? (
+      {pending.length || requestReplies.length || postQuestions.length ? (
         <footer className="mg-send">
           <span className="grow">
             {t('manager.unsent', {
-              n: new Set(pending.map((entry) => entry.decisionId)).size + requestReplies.length,
+              n:
+                new Set(pending.map((entry) => entry.decisionId)).size +
+                requestReplies.length +
+                postQuestions.length,
             })}
           </span>
           <button
@@ -545,6 +512,7 @@ export function Decisions({
               save({})
               try {
                 writeRequests({})
+                writePosts({})
               } catch {
                 setError(t('manager.savedFail'))
               }

@@ -1,5 +1,6 @@
 // 经理工具与英文规则。只声明契约和拼接文字，不执行看板、会话或文件操作。
 import { CLIENT_TOOL_NAMESPACE, type ClientToolNamespaceSpec } from './client-tools.mjs'
+import { MANAGER_POST_TOOLS, RELATION_INPUTS } from './client-tools-manager-posts.mjs'
 import { FRESH_BRIEF, outsideLitch, TITLE_LINE, WORKTREE_RULE } from './client-tools-sessions.mjs'
 import type {
   ManagerBoard,
@@ -19,8 +20,13 @@ import type {
   ManagerSituation,
   ManagerTemplate,
 } from './manager.mjs'
+import { MANAGER_NAMES } from './manager-posts.mjs'
 
 export const MANAGER_TOOL = {
+  report: 'report',
+  relate: 'relate',
+  postGet: 'post_get',
+  postReply: 'post_reply',
   summary: 'summary',
   get: 'get',
   add: 'add',
@@ -41,14 +47,15 @@ export const MANAGER_ANSWERS_TEXT =
 /** 第 1 层：固定部分约 800 token；scope 原样插入，用户经理设定另放最后。 */
 export function managerRoleRules(scope: string): string {
   return [
-    `You are a Litch manager. The user discusses and decides here; delegate implementation to sub-sessions. ${scope.trim() ? `Your scope: ${scope}. ` : ''}This is a long-lived conversation: keep lasting information in the board or repository, not only in chat.`,
-    'Your work: clarify intent, split and prioritize items, start lines, follow up, check reports, finish work, record decisions for the user and maintain the board. Read code and documents to brief and review. Do not implement code yourself; start a line. Follow the user’s stated division of decisions; when unclear, create a decision. Answer small questions yourself after checking; record any resulting work as items.',
-    'Each turn: identify what arrived (user message, board answers, line reports, Litch events). Apply answers to the plan, notify affected lines with litch_sessions.send, land lasting decisions in the repository under project rules and record their location with update. Check reports before changing item status. Split new requests into items; start in-scope work and raise out-of-scope work as decisions. Update items and use status when the situation materially changes. On user turns, say what changed, what is blocked and what the user needs to do. When mentioning decisions, you may include options and recommendations; the user submits answers on the board or explicitly in chat. For report-only or event-only turns, update the ledger and reply in one or two sentences.',
-    'Ask the user through board decisions, not question lists or suggestion cards in chat. One decision asks one question, with that question as its title. Background must stand alone; give options and a recommendation when useful, what happens without an answer, and basis (files, branches, sessions). Record answers already given in chat with answer; do not ask again. If a question is no longer needed, close it with a reason; never close an answered decision. Prioritize and consolidate excessive pending questions.',
-    'Lines cannot see this conversation: make briefs self-contained. Turn scope or product questions in reports into decisions yourself. Serialize or combine lines changing the same files. If a line fails or stalls, reassign or send guidance where possible; raise decisions for the user, or mark an item blocked with a reason. Do not leave stalled lines unattended. Check branches, commits and check results rather than trusting completion claims. Record unverified work on items. Create For you objects (kind=request, R-n) for actions only the user can perform, such as device checks, changing settings or logging in. Give a clear description and optionally a buttonLabel. Read get before updates or cancellation; provide current revision and why/reason. Never deliver a request for the user; a written reply may report a blocker rather than completion. Items record manager or line progress, never assign new items to the user.',
-    'When the user submits decision follow-up questions, answer in the main conversation and use litch_manager.reply with the decision id, current revision and reply text to save the answer in its question log. Read get on revision conflicts. You may also update or close the decision when appropriate.',
-    'Review suggestion cards from your workline subtree when notified: endorse useful work for the user, or dismiss it with a reason. Your own cards are already reviewed. Users can still start unreviewed cards directly.',
-    'The board records the process; the repository is authoritative. Check the recorded basis before acting; reconcile the board with the repository. Use verify after checking that an object remains valid.',
+    `You are a Litch manager. Delegate implementation to sub-sessions. ${scope.trim() ? `Your scope: ${scope}. ` : ''}Keep lasting information in the board or repository. Do not implement code yourself; start a line. Read code and documents to brief and review.`,
+    `The progress-only item ledger is ${MANAGER_NAMES.work.en} (${MANAGER_NAMES.work['zh-CN']}); never assign new items to users. ${MANAGER_NAMES.inbox.en} contains issues: decisions, suggestions for agent work, For you for human actions, and reports. Publish long updates, limitations and release notes with report, not long chat messages. Link derived work using source/related on creation, or relate later; keep provenance on issues and manager items.`,
+    'Each turn: identify user messages, board answers, line reports or Litch events. Apply answers, notify affected lines with litch_sessions.send, land lasting decisions under repository rules and record locations with update. Check reports before updating progress. Start in-scope work; raise out-of-scope work as decisions. Use status when the situation changes. On user turns explain changes, blockers and user actions; on event-only turns keep chat brief.',
+    'You may include options and recommendations in chat; the user submits answers on the board or explicitly in chat. Ask through board decisions. One decision asks one question as its title, with self-contained background, useful options, recommendation, consequences and basis. Record explicit answers already given in chat with answer; never ask again. Close obsolete open decisions with a reason; never close an answered decision. Consolidate excessive pending questions.',
+    'Lines cannot see this conversation: make briefs self-contained. Turn scope or product questions in reports into decisions. Serialize lines touching the same files. Reassign stalled work or send guidance; do not leave stalled lines unattended. Check branches, commits and check results, and record unverified work in manager items.',
+    'Create For you objects (kind=request, R-n) for actions only the user can perform: device checks, settings or login. Give a clear description and optional buttonLabel. Read get before updates/cancellation; provide current revision and why/reason. Never deliver for the user; a written reply can describe a blocker.',
+    'For follow-up questions use post_get and post_reply with current revision and why. Reply text, original-content patch, or both are allowed. Save answers to the issue, not only chat. questionId selects one pending question; omission resolves all pending manager questions. Legacy litch_manager.reply remains available for decision questions. Questions are not authorization; never answer or deliver for users.',
+    'Review workline suggestions: endorse useful work for the user, or dismiss with a reason. Your own cards are reviewed; users can still start unreviewed cards. Never substitute cards for already-authorized work.',
+    'The repository is authoritative. Check the recorded basis before acting and reconcile the board. Use verify after checking that an object remains valid.',
   ].join('\n\n')
 }
 
@@ -141,18 +148,25 @@ export function managerEndText(template: ManagerTemplate): string {
     .join('\n')
 }
 
-export type ManagerAddArguments =
-  | {
-      kind: 'request'
-      request: Pick<ManagerRequestFields, 'title' | 'description'> & Partial<ManagerRequestFields>
-      revision: 0
-      why: string
-    }
-  | {
-      kind: 'decision'
-      decision: Pick<ManagerDecisionFields, 'title' | 'background'> & Partial<ManagerDecisionFields>
-    }
-  | { kind: 'item'; item: Pick<ManagerItemFields, 'title'> & Partial<ManagerItemFields> }
+export interface ManagerRelationInputs {
+  source?: import('./manager-posts.mjs').ManagerRelationTarget[]
+  related?: import('./manager-posts.mjs').ManagerRelationTarget[]
+}
+export type ManagerAddArguments = ManagerRelationInputs &
+  (
+    | {
+        kind: 'request'
+        request: Pick<ManagerRequestFields, 'title' | 'description'> & Partial<ManagerRequestFields>
+        revision: 0
+        why: string
+      }
+    | {
+        kind: 'decision'
+        decision: Pick<ManagerDecisionFields, 'title' | 'background'> &
+          Partial<ManagerDecisionFields>
+      }
+    | { kind: 'item'; item: Pick<ManagerItemFields, 'title'> & Partial<ManagerItemFields> }
+  )
 export type ManagerUpdateArguments =
   | {
       kind: 'request'
@@ -180,6 +194,22 @@ export interface ManagerAnswerArguments {
 
 /** 工具的请求与 JSON 结果；执行器以调用会话识别看板，所有方法均不接收 managerId。 */
 export interface ManagerToolArguments {
+  relate: {
+    id: ManagerObjectId
+    source?: import('./manager-posts.mjs').ManagerRelationTarget[]
+    related?: import('./manager-posts.mjs').ManagerRelationTarget[]
+    why: string
+  }
+  report: ManagerRelationInputs & { title: string; body: string; why: string }
+  post_get: { id: import('./manager-posts.mjs').ManagerPostId }
+  post_reply: {
+    id: import('./manager-posts.mjs').ManagerPostId
+    revision: number
+    text?: string
+    patch?: import('./manager-posts.mjs').ManagerPostPatch
+    questionId?: string
+    why: string
+  }
   summary: Record<string, never>
   get: { id: ManagerObjectId }
   add: ManagerAddArguments
@@ -193,6 +223,10 @@ export interface ManagerToolArguments {
   status: { text: string }
 }
 export interface ManagerToolResults {
+  relate: { relations: import('./manager-posts.mjs').ManagerRelation[] }
+  report: { post: import('./manager-posts.mjs').ManagerPost }
+  post_get: { post: import('./manager-posts.mjs').ManagerPost }
+  post_reply: { post: import('./manager-posts.mjs').ManagerPost }
   summary: Pick<ManagerBoard, 'situation' | 'decisions' | 'items' | 'lines' | 'requests'>
   get: { object: ManagerDecision | ManagerItem | ManagerRequest; changes: ManagerChange[] }
   add: { id: ManagerObjectId; object: ManagerDecision | ManagerItem | ManagerRequest }
@@ -289,6 +323,7 @@ export const MANAGER_TOOLS: ClientToolNamespaceSpec = {
   description:
     'The current Litch manager’s device-local board. Read a summary or object; record decisions, items, checks, user answers and the situation. The repository is authoritative. Lines and activity are derived by Litch; use litch_sessions for delegation. This namespace belongs only to the manager, not its lines. Long-lived role and session rules are supplied separately in instructions.',
   tools: [
+    ...MANAGER_POST_TOOLS,
     {
       type: 'function',
       name: MANAGER_TOOL.summary,
@@ -308,6 +343,7 @@ export const MANAGER_TOOLS: ClientToolNamespaceSpec = {
         'Add a decision or item; returns its id and object. Items must belong to the manager or a line; use a suggestion card for work awaiting user initiation. Decision basis: the files, commits, branches or sessions it relies on. Defaults: arrays empty; decision open, recommend null, default ask; item backlog, owner manager, why empty.',
       inputSchema: object(
         {
+          ...RELATION_INPUTS,
           kind: {
             ...KIND,
             description:

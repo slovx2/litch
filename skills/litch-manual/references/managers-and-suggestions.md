@@ -5,8 +5,8 @@
 A manager is a conversation that coordinates worklines (sub-sessions), maintains decisions and items
 on a board stored on its device, and reports progress. Repository changes remain the evidence for
 what has landed. Managers and their worklines appear in the desktop sidebar's **Managers** view;
-ordinary sessions appear in **Chat**. The phone can read manager events and workline conversations,
-but has no manager board or manager settings page.
+ordinary sessions appear in **Chat**. The phone has a **Console** entry for manager issues and read-only
+manager items. Creating managers and editing dispatch settings remain desktop actions.
 
 ### Where and how to create one
 
@@ -91,9 +91,10 @@ instead of overwriting them; read again and retry the intended change.
 
 ### Board and decisions
 
-The manager page has the conversation beside **Overview**, **Decisions**, **Items**, **For you**
-and **Suggestions**. The Suggestions tab shows the pending count and lets you start, edit or dismiss
-suggestions from this manager and its entire workline subtree directly on the board.
+The manager page has the conversation beside **Overview**, **Manager items** and **Console**.
+Console contains four kinds of issue: **Decisions**, **Suggestions**, **For you** and **Reports**.
+Suggestions shows the reviewed pending count and lets you start, edit or dismiss cards from the
+manager and its entire workline subtree. Unreviewed cards remain in their collapsed group.
 Use **Hide board** to give the conversation the full area, and **Show board** to bring it back.
 Drag the divider to resize the board, or focus it and use the arrow keys (Home/End reach its limits).
 Board width and visibility are saved on this computer. The board stays between 360 and 900 pixels
@@ -115,7 +116,7 @@ needs the user to initiate it, the manager creates a suggestion with `litch_sess
 Already-authorized work still starts directly; questions requiring an answer remain decisions.
 Only the user can perform some tasks, such as device checks, settings changes or login. These belong
 in **For you** (`R-n`), not items or suggestion cards. Each has a Markdown description and a delivery
-button defined by the manager (default **Done**). Click the button, write a reply, or add a note with
+button defined by the manager (default **Mark as done**). Click the button, write a reply, or add a note with
 delivery; all are local drafts until **Submit to manager**. Responses can be submitted in the same
 batch as decision answers and questions. Text alone means Replied, not Delivered. Use **Edit reply**
 after submission to correct it. A cancelled request cannot be submitted. The overview lists open
@@ -141,21 +142,37 @@ moves to Answered. Decisions under an ending or ended manager remain read-only.
 You may also answer explicitly in the manager conversation. Recorded links and evidence do not
 automatically become stale or verified; there is no automatic deadline/default-answer execution.
 
-Every decision has **Answer** and **Ask** tabs, starting on Answer. In Ask, **Ask manager** is the
-default: type a question as a local draft, combine drafts across decisions and use **Submit to manager**
-for answers and questions together. Failed or conflicting drafts remain for review. Questions do not
-answer the decision. The manager responds in its main conversation and saves each reply back to the
-question log with `litch_manager.reply`, using the decision id, current revision and reply text.
-Replies and newly submitted questions advance the revision to protect against stale responses.
+Every issue keeps its original content and actions at the top, followed by a chronological discussion.
+The former Answer/Ask tabs are replaced by this single post. **Ask manager** is the default: save a
+local question draft, combine it with answers, request deliveries and questions on other issues,
+and use **Submit to manager**. Failed drafts remain. The manager uses `post_get` and `post_reply`
+with the current revision to append a reply, edit the original post, or both. **Edited** opens prior
+versions and the edit reason. A question does not grant permission to act or answer a decision.
 
-**Temporary chat** is an alternative on Claude Code, Codex, Pi and OpenCode. Each decision has its
-own thread, stored on the device and shared between windows. It can read files and the board, and
-update only that decision’s title, background, options or recommendation, or close it as withdrawn
-or expired. It cannot modify files, other board objects or fields, start lines, or send messages.
-Changes are recorded as coming from the question conversation and reach the manager on its next turn.
-A running manager is not interrupted: questions use its latest finished turn. If the manager advances
-or the decision changes, the next question uses fresh context with the earlier Q&A quoted.
-OpenCode uses a light conversation with board context. ACP and DSH offer only Ask manager.
+Reports contain longer progress summaries, limitations or release notes. The manager publishes them
+with `litch_manager.report` and edits them with `post_reply`. **Mark as read** clears the unread state;
+opening the report does not. Editing its original content makes it unread again. Pending decisions,
+open For you requests, reviewed pending suggestions and unread reports count towards **N to handle**.
+
+**Temporary chat** is an alternative on Claude Code, Codex, Pi and OpenCode. Each issue has its own
+device-stored thread shared between clients. It may read files and the board, and update only that
+issue's original content. For a decision it may also withdraw or expire it. It cannot modify files,
+other objects, start lines or send messages. Changes are recorded as coming from the temporary
+conversation and reach the manager on its next turn. Questions use the manager's latest finished
+turn; newer progress or an edited post rebuilds the context with earlier Q&A quoted. OpenCode uses
+a light conversation with board context. ACP and DSH offer only Ask manager.
+
+The **Links** area groups Sources, Derived and Related targets. It sits on the right of wide cards,
+and collapses above the post in narrow layouts. Issue links open the corresponding post; manager
+item links locate the item; worklines open their conversation. Files use the file viewer, while
+branches and commits open a read-only repository preview. Manager items and worklines provide
+reverse links to related issues. Existing blocking links, evidence and repository links are included.
+The manager supplies source/related when creating objects, or uses `relate` later. References such
+as #D-30, #I-12 and #P-3 become links; desktop hover and phone long press show title and status.
+
+The phone supports all four issue kinds, questions, edit history and links, with per-card submission.
+Phone drafts stay on the phone; desktop drafts support mixed submission across cards. User-created
+issues, derived-event cards in the timeline and embedded quick decisions are not part of this version.
 
 Submitting an answer includes the saved Q&A; long temporary conversations include a summary followed
 by the full text. Wait for a running temporary reply before submitting. **Forward to manager** sends
@@ -195,8 +212,7 @@ multi-column grid when space allows and return to one column in narrow windows. 
 title, brief, source conversation, project/device and creation time, with the
 same actions as the original card. Suggestions belonging to a manager, including its entire
 workline subtree, are grouped into one summary card per manager with its name, pending count and
-the latest suggestion's title and excerpt. Select it to open that manager's **Suggestions** board
-tab. Cards created by the manager are already reviewed. Cards from its workline subtree start in a
+the latest suggestion's title and excerpt. Select it to open that manager's **Console → Suggestions**. Cards created by the manager are already reviewed. Cards from its workline subtree start in a
 collapsed **Not reviewed by manager** group, with a matching label on every card. Expanding the group
 still allows Start, edit-and-start or dismiss without manager approval. The manager is notified of
 new line cards and uses `litch_manager.endorse` for useful work, or `dismiss` with a reason. Both
@@ -205,9 +221,10 @@ the default list. Global manager summaries show the reviewed count and latest re
 with a separate muted unreviewed count; sidebar counts exclude unreviewed cards. Ordinary suggestions
 remain individual cards and are unaffected.
 Instant “New session / Do it here” offers are not included. The side panel also lists suggestions
-for the current session; the phone has only the per-session list.
+for the current session; the phone also exposes manager issues through Console.
 
-Handled, withdrawn and expired suggestions leave the list; history stays in the source conversation.
+Handled, withdrawn and expired suggestions leave the pending list; history stays in the source conversation.
+Manager issues with discussions also remain under **Handled suggestions** in Console.
 Offline devices keep the last snapshot, but actions need a connection. An archived source is marked
 and opens as a read-only preview. Click the source conversation's name and arrow to open it;
 **Back to list** or Escape returns from an archived preview to the originating global list or
@@ -227,21 +244,39 @@ and whether the cards were handled or expired. Increasing retention does not res
 
 ### 看板答复与待办提示
 
-侧栏、窄窗口的“看板”和收起后的“展开看板”数字，合计待定决策与待做的“请你做”。
+侧栏、窄窗口的“看板”和收起后的“展开看板”数字，合计待定决策、待做的“请你做”、已审核待开始建议与未阅报告。
 已回复、已交付或已取消的请求不重复计入；已回复但尚未交付的请求仍保留在概览中。
 “请你做”的默认交付按钮是“标记完成 / Mark as done”，经理可以指定其他文案。
 提交后的回复按 Markdown 展示，并标明回复时间。
 
 修改已提交的答案或请求回复时，可以点“取消修改”放弃当前修改，其他草稿不受影响；
-取消答案修改也保留同一决策的追问草稿。“追问”页签上的圆点表示有尚未提交的追问。
-“回答 / 追问”支持方向键和 Home、End 切换；追问方式使用次级文字切换，记录标明发言人。
+取消答案修改也保留同一决策的追问草稿。追问入口旁的草稿标记表示有尚未提交的追问。
+原帖操作与追问时间线在同一张议题卡中，追问方式可切换，记录标明发言人。
 动态时间沿用消息时间格式，非当天显示星期或日期，悬停查看完整日期与时刻。
 
 看板挤压对话时，输入框的模型、权限等选项按整项换行，避免按钮文字缩成单字。
 矮窗口中长草稿在输入框内滚动，为请求卡片按钮和终端保留空间。
 全局建议汇总卡的已审核数量与未审核数量并列在标题行；未审核卡的标签只占文字所需宽度。
 
-侧栏、收起入口及窄窗口中的合计统一标为“N 待处理 / N to handle”，悬停可查看决策与
-“请你做”的数量明细，数量为零的部分省略。收起入口的按钮与数量标签提供相同明细。侧栏同时保留待处理数与草稿数；看板内“待定”仍只表示决策。
+侧栏、收起入口及窄窗口中的合计统一标为“N 待处理 / N to handle”，悬停可查看四类议题的数量明细，数量为零的部分省略。收起入口的按钮与数量标签提供相同明细。侧栏同时保留待处理数与草稿数；看板内“待定”仍只表示决策。
 已答复决策先展示答案，再提供“修改答案”；答复与核对时间沿用消息时间格式。
 临时追问的回复标为“助手（临时对话）”；请求卡的回复行仅显示“你的回复”和时间，状态保留在卡片头部。
+
+### 控制台与议题（0.28）
+
+经理看板的“事项”改名为“经理事项 / Manager items”，仍只记录经理与工作线进展。
+需要用户关注的内容统一进入“控制台 / Console”，每一条称为“议题 / issue”，分为决策、建议、请你做和报告。
+建议仍可开始、编辑后开始或忽略；工作线建议仍先归入默认收起的未审核组。请你做仍支持交付与文字回复。
+报告承载较长的阶段说明、范围限制或版本小结，阅读后可点“标记已阅”。未阅报告计入待处理，正文更新后重新提醒。
+
+每类议题都可追问。原帖和操作区始终在上方，问答记录在下方按时间排列；不再切换“回答/追问”两套视图。
+默认交给经理主对话，也可选受限的临时对话（支持该能力的 harness）；临时助手可更新当前原帖，但不能改其他议题、文件或开工作线。
+经理可只编辑原帖、只回复或两者同时做；“已编辑”可展开旧版本、编辑时间与原因。
+控制台合计待定决策、待做请你做、已审核待开始建议及未阅报告；悬停显示各类数量。
+
+手机首页新增控制台入口，可选择经理，阅读和操作四类议题，并提交经理或临时追问。
+手机沿用建议的开始/编辑/忽略，支持请求交付/文字回复、决策答复、报告已阅和讨论历史；创建经理、派活设置及完整经理事项看板仍在桌面。
+用户主动新建议题尚未开放。手机也提供只读经理事项供关联定位；目前按卡提交，桌面支持跨卡混合提交。
+
+议题关联栏按来源、派生、相关分组，宽卡在右侧，窄卡在顶部折叠。编号链接可跳到议题或经理事项，桌面悬停显示标题与状态；手机长按可查看。工作线打开会话，文件进入文件查看器，分支与提交打开只读仓库内容。经理事项和工作线也能回到相关议题。经理创建对象时可填写 source/related，之后可用 relate 补充。已有的阻塞关系、依据和链接也显示在关联栏。
+桌面经理模式的追问存为本地草稿，可与答案和交付同批提交；临时对话立即发起。问答、旧版本与关联存储在设备上，跨客户端可读；已处理建议的讨论保留在“已处理建议”分组。

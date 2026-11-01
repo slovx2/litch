@@ -1662,8 +1662,10 @@ export class SessionTree {
   }
 
   /** 提案变了：带上这个会话现在全部 pending 的，和刚变的那几条 */
-  private proposalsChanged(threadId: string, changed: SessionProposal[]): void {
+  proposalsChanged(threadId: string, changed: SessionProposal[]): void {
     this.suggestions.changed()
+    const manager = this.managers?.lines.managerFor(threadId)
+    if (manager) this.managers?.changed(manager.id)
     this.host.announce(
       SESSION_TREE_NOTIFICATION.proposalChanged,
       { threadId, proposals: this.store.pending(threadId), changed },

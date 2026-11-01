@@ -1,3 +1,4 @@
+import { addRelations } from './manager-relations.mjs'
 import { isRequest, requestTool } from './manager-requests.mjs'
 // 看板对象的原子修改和状态流转；不接受模型写入运行事实。
 
@@ -20,10 +21,16 @@ export const isDecision = (object: BoardObject): object is ManagerDecision =>
   object.id.startsWith('D-')
 export class ManagerBoardWriter {
   readonly store: ManagerStore
+  readonly suggestionBelongs: (managerId: string, id: string) => boolean
   readonly belongs: (managerId: string, threadId: string) => boolean
-  constructor(store: ManagerStore, belongs: (managerId: string, threadId: string) => boolean) {
+  constructor(
+    store: ManagerStore,
+    belongs: (managerId: string, threadId: string) => boolean,
+    suggestionBelongs: (managerId: string, id: string) => boolean = () => false,
+  ) {
     this.store = store
     this.belongs = belongs
+    this.suggestionBelongs = suggestionBelongs
   }
   active(managerId: string): void {
     const manager = this.store.manager(managerId)
@@ -142,8 +149,19 @@ export class ManagerBoardWriter {
         this.store.saveSituation(managerId, situation)
         return { situation }
       }
-      if ((tool === 'add' && args.kind === 'request') || String(args.id).startsWith('R-'))
-        return requestTool(this.store, managerId, tool, args)
+      if ((tool === 'add' && args.kind === 'request') || String(args.id).startsWith('R-')) {
+        const result = requestTool(this.store, managerId, tool, args, actor)
+        if (tool === 'add')
+          addRelations(
+            this.store,
+            managerId,
+            result.object.id,
+            args,
+            (threadId) => this.belongs(managerId, threadId),
+            (id) => this.suggestionBelongs(managerId, id),
+          )
+        return result
+      }
       if (tool === 'add') {
         const at = managerNow()
         const common = { revision: 1, checked: null, createdAt: at, updatedAt: at }
@@ -180,6 +198,14 @@ export class ManagerBoardWriter {
                 id: this.store.nextId(managerId, 'I') as ManagerItemId,
               } as ManagerItem)
         this.save(managerId, null, object, 'manager', 'Object added')
+        addRelations(
+          this.store,
+          managerId,
+          object.id,
+          args,
+          (threadId) => this.belongs(managerId, threadId),
+          (id) => this.suggestionBelongs(managerId, id),
+        )
         return {
           id: object.id,
           object,
@@ -226,6 +252,7 @@ export class ManagerBoardWriter {
           if (!state || !pending.length) invalid('This decision has no pending manager questions.')
           const answer = text(args.text, 'text')
           for (const entry of pending) {
+            entry.answeredAt = managerNow()
             entry.answer = answer
             entry.status = 'completed'
           }

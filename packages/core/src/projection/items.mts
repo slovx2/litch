@@ -204,13 +204,22 @@ function sessionEvent(event: SessionEvent): SessionEventView {
     return {
       kind: event.kind,
       notes,
-      body: [manager.text, ...answers, ...questions, ...requests].filter(Boolean).join('\n\n'),
+      body: [
+        manager.text,
+        ...answers,
+        ...questions,
+        ...requests,
+        ...(manager.postQuestions ?? []).map((q) => [q.id, q.title, q.question].join(' · ')),
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
       ...(manager.answers
         ? // 核心不认识语言：和回报摘要一样用“ · ”隔开，中英文都通
           {
             summary: [
               ...new Set([
                 ...manager.answers.map((answer) => answer.decisionId),
+                ...(manager.postQuestions ?? []).map((q) => q.id),
                 ...(manager.questions ?? []).map((question) => question.decisionId),
                 ...(manager.requests ?? []).map((request) => request.requestId),
               ]),

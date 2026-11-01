@@ -11,6 +11,8 @@ import { DevicesScreen } from '../screens/devices/DevicesScreen'
 import { HarnessSettingsScreen } from '../screens/devices/hconfig/HarnessSettingsScreen'
 import { PairDeviceScreen } from '../screens/devices/PairDeviceScreen'
 import { FilesScreen } from '../screens/files/FilesScreen'
+import { ManagerConsoleScreen } from '../screens/managers/ManagerConsoleScreen'
+import { ManagersScreen } from '../screens/managers/ManagersScreen'
 import { NewSessionScreen } from '../screens/new-session/NewSessionScreen'
 import { ProposalStartScreen } from '../screens/proposals/ProposalStartScreen'
 import { ProposalsScreen } from '../screens/proposals/ProposalsScreen'
@@ -36,6 +38,8 @@ export function Navigator() {
         orientation: 'portrait_up',
       }}
     >
+      <Stack.Screen name="Managers" component={ManagersScreen} />
+      <Stack.Screen name="ManagerConsole" component={ManagerConsoleScreen} />
       <Stack.Screen name="Devices" component={DevicesScreen} />
       <Stack.Screen name="AddDevice" component={AddDeviceScreen} />
       <Stack.Screen name="PairDevice" component={PairDeviceScreen} />

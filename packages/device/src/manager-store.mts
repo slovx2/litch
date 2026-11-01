@@ -29,6 +29,9 @@ const MIGRATIONS = [
   `CREATE TABLE endings(manager_id TEXT PRIMARY KEY, event_id TEXT NOT NULL, text TEXT NOT NULL, turn_id TEXT);`,
   `CREATE TABLE questions(manager_id TEXT NOT NULL, decision_id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(manager_id,decision_id));`,
   `CREATE TABLE suggestion_reviews(proposal_id TEXT PRIMARY KEY, manager_id TEXT NOT NULL, body TEXT NOT NULL);`,
+  `CREATE TABLE manager_reports(manager_id TEXT NOT NULL, id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(manager_id,id));
+   CREATE TABLE manager_suggestion_versions(manager_id TEXT NOT NULL, id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(manager_id,id));`,
+  `CREATE TABLE manager_relations(manager_id TEXT NOT NULL, id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(manager_id,id));`,
 ] as const
 export const MANAGER_SCHEMA_VERSION = MIGRATIONS.length
 export const managerNow = () => Math.floor(Date.now() / 1000)
@@ -45,7 +48,7 @@ export interface ManagerEnding {
 }
 export interface QuestionState {
   managerId: string
-  decisionId: import('../../protocol/src/manager.mjs').ManagerDecisionId
+  decisionId: import('../../protocol/src/manager-posts.mjs').ManagerPostId
   discussion: import('../../protocol/src/manager.mjs').ManagerDiscussion
   threadId: string | null
   /** 退休分叉的身份仍保留，迟到调用和重启都不能恢复写权限。 */
@@ -167,6 +170,54 @@ export class ManagerStore {
       )
       .run(proposalId, managerId, JSON.stringify(review))
   }
+  relations(managerId: string): import('../../protocol/src/manager-posts.mjs').ManagerRelation[] {
+    return this.db
+      .prepare('SELECT body FROM manager_relations WHERE manager_id=? ORDER BY rowid')
+      .all(managerId)
+      .map((row) => JSON.parse(String(row.body)))
+  }
+  saveRelation(
+    managerId: string,
+    relation: import('../../protocol/src/manager-posts.mjs').ManagerRelation,
+  ): void {
+    this.db
+      .prepare(
+        'INSERT INTO manager_relations VALUES(?,?,?) ON CONFLICT(manager_id,id) DO UPDATE SET body=excluded.body',
+      )
+      .run(managerId, relation.id, JSON.stringify(relation))
+  }
+  publishedReports(
+    managerId: string,
+  ): import('../../protocol/src/manager-posts.mjs').ManagerReport[] {
+    return this.db
+      .prepare('SELECT body FROM manager_reports WHERE manager_id=? ORDER BY rowid')
+      .all(managerId)
+      .map((row) => JSON.parse(String(row.body)))
+  }
+  savePublishedReport(
+    managerId: string,
+    report: import('../../protocol/src/manager-posts.mjs').ManagerReport,
+  ): void {
+    this.db
+      .prepare(
+        'INSERT INTO manager_reports VALUES(?,?,?) ON CONFLICT(manager_id,id) DO UPDATE SET body=excluded.body',
+      )
+      .run(managerId, report.id, JSON.stringify(report))
+  }
+  suggestionVersion(managerId: string, id: string): { revision: number; updatedAt: number } | null {
+    return body(
+      this.db
+        .prepare('SELECT body FROM manager_suggestion_versions WHERE manager_id=? AND id=?')
+        .get(managerId, id),
+    )
+  }
+  saveSuggestionVersion(managerId: string, id: string, revision: number): void {
+    this.db
+      .prepare(
+        'INSERT INTO manager_suggestion_versions VALUES(?,?,?) ON CONFLICT(manager_id,id) DO UPDATE SET body=excluded.body',
+      )
+      .run(managerId, id, JSON.stringify({ revision, updatedAt: managerNow() }))
+  }
   questions(managerId?: string): QuestionState[] {
     return this.db
       .prepare(`SELECT body FROM questions ${managerId ? 'WHERE manager_id=?' : ''}`)
@@ -187,7 +238,7 @@ export class ManagerStore {
       )
       .run(state.managerId, state.decisionId, JSON.stringify(state))
   }
-  nextId(managerId: string, kind: 'D' | 'I' | 'R'): ManagerObjectId {
+  nextId(managerId: string, kind: 'D' | 'I' | 'R' | 'P'): ManagerObjectId {
     const row = this.db
       .prepare(
         'INSERT INTO counters VALUES(?,?,1) ON CONFLICT(manager_id,kind) DO UPDATE SET value=value+1 RETURNING value',

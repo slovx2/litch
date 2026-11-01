@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { answeredDrafts, cancelAnswerEdit, questionDrafts } from '../src/manager/drafts.ts'
+import { advancePostDrafts } from '../src/manager/post-drafts.ts'
 import { boardReferences } from '../src/manager/references.ts'
 import { submittedRequests } from '../src/manager/request-drafts.ts'
 
@@ -48,4 +49,16 @@ test('取消答案修改保留同一决策追问与其他草稿，不修改原�
   assert.equal(questionDrafts(next)[0].question, '依据？')
   assert.equal(drafts['D-1'].text, '修改')
   assert.deepEqual(Object.keys(cancelAnswerEdit(next, 'D-2')), ['D-1'])
+})
+
+test('交付与同帖追问混合提交：只推进已成功对象版本，失败项保留原草稿', () => {
+  const drafts = {
+    'R-1': { id: 'R-1', revision: 1, question: '交付后还要验证吗' },
+    'P-1': { id: 'P-1', revision: 2, question: '范围' },
+  }
+  const next = advancePostDrafts(drafts, [{ id: 'R-1', revision: 2 }])
+  assert.equal(next['R-1'].revision, 2)
+  assert.equal(next['R-1'].question, drafts['R-1'].question)
+  assert.equal(next['P-1'], drafts['P-1'])
+  assert.equal(drafts['R-1'].revision, 1)
 })

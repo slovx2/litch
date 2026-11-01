@@ -21,6 +21,25 @@ import type {
 } from '../../../protocol/src/manager.mjs'
 
 export interface ManagerRequests {
+  'litch/manager/reference/read': {
+    params: { managerId: string; reference: string }
+    result: { text: string }
+  }
+  'litch/manager/post/forward': {
+    params: {
+      managerId: string
+      id: import('../../../protocol/src/manager-posts.mjs').ManagerPostId
+    }
+    result: { queued: boolean }
+  }
+  'litch/manager/post/question': {
+    params: import('../../../protocol/src/manager-posts.mjs').ManagerPostQuestionParams
+    result: { post: import('../../../protocol/src/manager-posts.mjs').ManagerPost }
+  }
+  'litch/manager/report/read': {
+    params: import('../../../protocol/src/manager-posts.mjs').ManagerReportReadParams
+    result: { post: import('../../../protocol/src/manager-posts.mjs').ManagerPost }
+  }
   'litch/manager/feedback/submit': {
     params: ManagerFeedbackSubmitParams
     result: ManagerFeedbackSubmitResponse

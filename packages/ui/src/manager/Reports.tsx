@@ -1,0 +1,75 @@
+import { useState } from 'react'
+import type { ManagerView } from '../../../core/src/model-manager.mts'
+import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
+import { useT } from '../app/appearance.ts'
+import { reasonOf } from '../app/errors.ts'
+import { useServices } from '../app/services.tsx'
+import { BoardMarkdown } from './BoardMarkdown.tsx'
+import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
+import { Relations } from './Relations.tsx'
+export function Reports({
+  manager,
+  posts,
+  disabled,
+}: {
+  manager: ManagerView
+  posts: ManagerPost[]
+  disabled: boolean
+}) {
+  const t = useT()
+  const { channel } = useServices()
+  const [busy, setBusy] = useState('')
+  const [error, setError] = useState('')
+  const read = async (post: ManagerPost) => {
+    setBusy(post.id)
+    try {
+      await channel.command('managers.report.read', {
+        deviceId: manager.deviceId,
+        managerId: manager.id,
+        id: post.id as `P-${number}`,
+        revision: post.revision,
+      })
+      setError('')
+    } catch (e) {
+      setError(reasonOf(e, t))
+    } finally {
+      setBusy('')
+    }
+  }
+  return (
+    <div className="mg-stack">
+      {!posts.length ? <p className="mg-empty">{t('manager.none')}</p> : null}
+      {posts.map((post) => (
+        <article className="mg-card" data-report={post.id} tabIndex={-1} key={post.id}>
+          <header>
+            <span className="mono dim">{post.id}</span>
+            <h3 className="grow">{post.title}</h3>
+            <span className={post.unread ? 'pill wait' : 'pill mute'}>
+              {t(post.unread ? 'manager.reportUnread' : 'manager.reportRead')}
+            </span>
+          </header>
+          <Relations id={post.id} />
+          <BoardMarkdown text={post.body} />
+          <PostHistory post={post} />
+          {post.unread ? (
+            <button
+              type="button"
+              className="btn"
+              disabled={disabled || !!busy}
+              data-act="report-read"
+              onClick={() => void read(post)}
+            >
+              {t('manager.markRead')}
+            </button>
+          ) : null}
+          <PostDiscussion manager={manager} post={post} disabled={disabled} />
+        </article>
+      ))}
+      {error ? (
+        <p className="err" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  )
+}
