@@ -282,3 +282,18 @@ and whether the cards were handled or expired. Increasing retention does not res
 
 议题关联栏按来源、派生、相关分组，宽卡在右侧，窄卡在顶部折叠。编号链接可跳到议题或经理事项，桌面悬停显示标题与状态；手机长按可查看。工作线打开会话，文件进入文件查看器，分支与提交打开只读仓库内容。经理事项和工作线也能回到相关议题。经理创建对象时可填写 source/related，之后可用 relate 补充。已有的阻塞关系、依据和链接也显示在关联栏。
 桌面经理模式的追问存为本地草稿，可与答案和交付同批提交；临时对话立即发起。问答、旧版本与关联存储在设备上，跨客户端可读；已处理建议的讨论保留在“已处理建议”分组。
+
+
+### 议题显示与操作
+
+决策状态使用文字筛选（○ 待定、✓ 已答复、⊘ 已关闭），与控制台分类分开。追问展开后有独立输入区、模式占位和“收起追问”，成功提交后自动收起。编号统一显示 #X-n；桌面鼠标悬停或键盘聚焦会显示标题、状态卡片，手机长按预览。
+
+关联按卡片宽度切换：达到 520px 放在右侧，否则顶部折叠。每项显示类型和标题，工作线不显示内部编号。手机的经理事项在控制台之外；决策待定优先，已答复和已关闭默认不显示输入区，可点“修改答案”。请你做的交付按钮为唯一主操作，只有输入文字才出现次要提交按钮；已交付或已回复后通过“修改回复”再编辑。
+
+Decision status filters are lightweight text links beneath the issue categories. Questions have a
+labelled composer, mode-specific placeholder and a collapse toggle; successful submission closes it.
+Hover or keyboard-focus an object reference for its title and status. Links show their type and title
+on separate rows; wide cards put them on the right. On phone, Manager items is separate from Console.
+Open decisions come first; answered and closed ones show their result and an explicit Edit answer
+entry. For you cards use the delivery action as their only primary button; a secondary submit action
+appears only when a text reply exists. Submitted replies can be edited explicitly.

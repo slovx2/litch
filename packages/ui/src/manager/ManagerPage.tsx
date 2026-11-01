@@ -380,19 +380,36 @@ export function ManagerPage({
                     ...board.items.map((item) => item.id),
                     ...board.decisions.map((decision) => decision.id),
                   ]),
-                  titles: new Map([
+                  previews: new Map([
                     ...board.items.map(
-                      (i) => [i.id, `${i.title} · ${t(`manager.status.${i.status}`)}`] as const,
+                      (i) =>
+                        [
+                          i.id,
+                          { title: i.title, status: t(`manager.status.${i.status}`) },
+                        ] as const,
                     ),
                     ...board.decisions.map(
                       (d) =>
                         [
                           d.id,
-                          `${d.title} · ${t(d.status === 'open' ? 'manager.open' : d.status === 'answered' ? 'manager.answered' : 'manager.closed')}`,
+                          {
+                            title: d.title,
+                            status: t(
+                              d.status === 'open'
+                                ? 'manager.open'
+                                : d.status === 'answered'
+                                  ? 'manager.answered'
+                                  : 'manager.closed',
+                            ),
+                          },
                         ] as const,
                     ),
                     ...(board.requests ?? []).map(
-                      (r) => [r.id, `${r.title} · ${t(`manager.request.${r.status}`)}`] as const,
+                      (r) =>
+                        [
+                          r.id,
+                          { title: r.title, status: t(`manager.request.${r.status}`) },
+                        ] as const,
                     ),
                     ...(board.posts ?? [])
                       .filter((p) => p.kind === 'report' || p.kind === 'suggestion')
@@ -400,7 +417,13 @@ export function ManagerPage({
                         (p) =>
                           [
                             p.id,
-                            `${p.title}${p.kind === 'report' ? ` · ${t(p.unread ? 'manager.reportUnread' : 'manager.reportRead')}` : ''}`,
+                            {
+                              title: p.title,
+                              status:
+                                p.kind === 'report'
+                                  ? t(p.unread ? 'manager.reportUnread' : 'manager.reportRead')
+                                  : '',
+                            },
                           ] as const,
                       ),
                   ]),
@@ -507,7 +530,9 @@ export function ManagerOrigin({
                   )
                 }}
               >
-                {target.target}
+                {/^[DIRP]-\d+$/.test(target.target) ? `#${target.target} · ` : ''}
+                {view?.board?.posts?.find((post) => post.id === target.target)?.title ??
+                  t('manager.issue')}
               </button>
             ))}
           </span>

@@ -234,7 +234,7 @@ export function Decisions({
   return (
     <>
       <div hidden={!visible}>
-        <div className="mg-decision-filter seg">
+        <div className="mg-decision-filter">
           {(['open', 'answered', 'closed'] as const).map((key) => (
             <button
               type="button"
@@ -242,7 +242,10 @@ export function Decisions({
               aria-pressed={filter === key}
               onClick={() => setFilter(key)}
             >
-              {t(`manager.${key}`)} {grouped[key].length}
+              <span aria-hidden="true">
+                {key === 'open' ? '○' : key === 'answered' ? '✓' : '⊘'}
+              </span>{' '}
+              {grouped[key].length} {t(`manager.${key}`)}
             </button>
           ))}
         </div>
@@ -522,7 +525,7 @@ export function Decisions({
           </button>
           <button
             type="button"
-            className="btn primary"
+            className={requestReplies.length && !pending.length ? 'btn' : 'btn primary'}
             data-act="manager-submit"
             disabled={disabled || busy || conflict || asking}
             title={

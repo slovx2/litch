@@ -3,6 +3,16 @@ import { MANAGER_NAMES } from '../../../protocol/src/manager-posts.mts'
 import type { Entry } from './types.ts'
 
 export const enManager = {
+  'manager.postAskClose': 'Hide question',
+  'manager.questionManagerPlaceholder': 'Ask the manager a follow-up question…',
+  'manager.questionTemporaryPlaceholder': 'Ask the temporary assistant…',
+  'manager.relationKind.issue': 'Issue',
+  'manager.relationKind.item': 'Manager item',
+  'manager.relationKind.thread': 'Work line',
+  'manager.relationKind.file': 'File',
+  'manager.relationKind.branch': 'Branch',
+  'manager.relationKind.commit': 'Commit',
+  'manager.relationKind.url': 'Link',
   'manager.inbox': MANAGER_NAMES.inbox.en,
   'manager.reports': 'Reports',
   'manager.relations': 'Links',

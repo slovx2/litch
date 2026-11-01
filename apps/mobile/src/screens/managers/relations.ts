@@ -7,7 +7,7 @@ export function issueLinks(text: string, ids: ReadonlySet<string>): string {
         ? part
         : part.replace(/(?<!\w)#?[DIRP]-\d+(?!\w)/g, (word) => {
             const id = word.replace(/^#/, '')
-            return ids.has(id) ? `[${word}](litch-issue:${id})` : word
+            return ids.has(id) ? `[#${id}](litch-issue:${id})` : word
           }),
     )
     .join('')

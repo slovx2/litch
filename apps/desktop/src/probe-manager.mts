@@ -210,6 +210,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('[data-decision="D-15"] [data-act="post-ask"]')
   await click('[data-decision="D-15"] [data-question-mode="temporary"]')
   const askBackground = async (value: string, count: number) => {
+    if (!one('[data-decision="D-15"] .mg-post-discussion textarea'))
+      await click('[data-decision="D-15"] [data-act="post-ask"]')
     const input = await until('背景问题输入框', () =>
       one<HTMLTextAreaElement>('[data-decision="D-15"] .mg-post-discussion textarea'),
     )
@@ -352,7 +354,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await until('报告原帖', () => one('[data-report="P-1"]'))
   const issueRelations = Boolean(
     one('[data-report="P-1"] [data-relations="P-1"] [data-relation-target="D-15"]') &&
-      one('[data-report="P-1"] [data-board-reference="I-2"]')?.getAttribute('title'),
+      one('[data-report="P-1"] [data-board-reference="I-2"]'),
   )
   const attentionBeforeRead = one('[data-board-tab="inbox"] .pill')?.textContent
   const unreadBadgeBeforeRead = one('[data-board-tab="reports"] .pill')?.textContent === '1'

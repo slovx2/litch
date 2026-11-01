@@ -1,7 +1,7 @@
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { createContext, useContext, useState } from 'react'
-import { Linking, Text, View } from 'react-native'
+import { Linking, Pressable, Text, View } from 'react-native'
 import type {
   ManagerBoardView,
   ManagerView,
@@ -13,6 +13,16 @@ import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
+
+const ICONS = {
+  issue: '○',
+  item: '▤',
+  thread: '↗',
+  file: '▱',
+  branch: '⑂',
+  commit: '◇',
+  url: '↗',
+} as const
 export const IssueContext = createContext<{
   board: ManagerBoardView
   manager: ManagerView
@@ -37,12 +47,20 @@ export function IssueRelations({
   const { board, manager } = context
   const groups = relationGroups(board.relations ?? [], { kind, target: id })
   if (!Object.values(groups).some((g) => g.length)) return null
-  const title = (target: ManagerRelationTarget) =>
-    board.posts?.find((p) => p.id === target.target)?.title ??
-    board.items.find((i) => i.id === target.target)?.title ??
-    board.lines.find((l) => l.threadId === target.target)?.title ??
-    target.label ??
-    target.target
+  const title = (target: ManagerRelationTarget) => {
+    if (target.kind === 'thread')
+      return (
+        board.lines.find((l) => l.threadId === target.target)?.title ??
+        target.label ??
+        t('manager.source.line')
+      )
+    return (
+      board.posts?.find((p) => p.id === target.target)?.title ??
+      board.items.find((i) => i.id === target.target)?.title ??
+      target.label ??
+      (target.kind === 'issue' ? t('manager.issue') : target.target)
+    )
+  }
   const open = async (target: ManagerRelationTarget) => {
     if (target.kind === 'issue' || target.kind === 'item') return context.open(target.target)
     if (target.kind === 'thread')
@@ -80,11 +98,18 @@ export function IssueRelations({
   }
   return (
     <View>
-      <Button
-        kind="plain"
-        label={t(kind === 'issue' ? 'manager.relations' : 'manager.relatedIssues')}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
         onPress={() => setExpanded(!expanded)}
-      />
+        style={{ alignSelf: 'flex-start', paddingVertical: 8 }}
+      >
+        <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
+          {expanded ? '▾' : '▸'}{' '}
+          {t(kind === 'issue' ? 'manager.relations' : 'manager.relatedIssues')}{' '}
+          {Object.values(groups).flat().length}
+        </Text>
+      </Pressable>
       {expanded
         ? (Object.entries(groups) as [keyof typeof groups, ManagerRelationTarget[]][]).map(
             ([group, targets]) =>
@@ -92,12 +117,22 @@ export function IssueRelations({
                 <View key={group}>
                   <Text style={{ color: c.ink3 }}>{t(`manager.relation.${group}`)}</Text>
                   {targets.map((target) => (
-                    <Button
-                      kind="plain"
+                    <Pressable
                       key={`${target.kind}:${target.target}`}
-                      label={`${target.target} · ${title(target)}`}
+                      accessibilityRole="button"
                       onPress={() => void open(target)}
-                    />
+                      style={{ paddingVertical: 8, gap: 3 }}
+                    >
+                      <Text style={{ color: c.ink3, fontSize: font.size.small }}>
+                        {ICONS[target.kind]} {t(`manager.relationKind.${target.kind}`)}
+                      </Text>
+                      <Text style={{ color: c.ink2, fontSize: font.size.meta }}>
+                        {target.kind === 'issue' || target.kind === 'item'
+                          ? `#${target.target} · `
+                          : ''}
+                        {title(target)}
+                      </Text>
+                    </Pressable>
                   ))}
                 </View>
               ) : null,

@@ -122,7 +122,7 @@ export function Requests({
                 />
                 <button
                   type="button"
-                  className="btn"
+                  className="btn primary"
                   data-act="manager-request-deliver"
                   disabled={locked}
                   aria-pressed={draft?.delivered ?? false}

@@ -10,6 +10,16 @@ import { openInFiles } from '../files/state.ts'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferencesContext } from './BoardReferences.tsx'
 import type { BoardReference } from './references.ts'
+
+const RELATION_ICONS = {
+  issue: '○',
+  item: '▤',
+  thread: '↗',
+  file: '▱',
+  branch: '⑂',
+  commit: '◇',
+  url: '↗',
+} as const
 export const RelationsContext = createContext<{
   board: ManagerBoardView
   manager: ManagerView
@@ -32,12 +42,13 @@ export function Relations({
   const [wide, setWide] = useState(false)
   const root = useRef<HTMLDetailsElement>(null)
   useEffect(() => {
+    if (!context || !id) return
     const parent = root.current?.parentElement
     if (!parent) return
-    const observer = new ResizeObserver(() => setWide(parent.clientWidth >= 680))
+    const observer = new ResizeObserver(() => setWide(parent.clientWidth >= 520))
     observer.observe(parent)
     return () => observer.disconnect()
-  }, [])
+  }, [context, id])
   if (!context) return null
   const { manager, board } = context
   const groups = relationGroups(board.relations ?? [], { kind, target: id })
@@ -47,7 +58,9 @@ export function Relations({
   const title = (target: ManagerRelationTarget) => {
     if (target.kind === 'issue')
       return (
-        board.posts?.find((p) => p.id === target.target)?.title ?? target.label ?? target.target
+        board.posts?.find((p) => p.id === target.target)?.title ??
+        target.label ??
+        t('manager.issue')
       )
     if (target.kind === 'item')
       return board.items.find((i) => i.id === target.target)?.title ?? target.label ?? target.target
@@ -55,7 +68,7 @@ export function Relations({
       return (
         board.lines.find((l) => l.threadId === target.target)?.title ??
         target.label ??
-        target.target
+        t('manager.source.line')
       )
     return target.label ?? target.target
   }
@@ -101,9 +114,12 @@ export function Relations({
       ref={root}
       className={reverse ? 'mg-related-issues' : 'mg-relations'}
       open={wide}
+      data-wide={wide}
       data-relations={id}
     >
-      <summary>{t(reverse ? 'manager.relatedIssues' : 'manager.relations')}</summary>
+      <summary>
+        {t(reverse ? 'manager.relatedIssues' : 'manager.relations')} {all.length}
+      </summary>
       {entries.map(([group, targets]) =>
         targets.length ? (
           <section key={group}>
@@ -118,7 +134,14 @@ export function Relations({
                   data-relation-target={target.target}
                   onClick={() => void open(target)}
                 >
-                  {target.kind === 'issue' || target.kind === 'item' ? `${target.target} · ` : ''}
+                  <span className="mg-relation-kind">
+                    <span aria-hidden="true">{RELATION_ICONS[target.kind]}</span>{' '}
+                    {t(`manager.relationKind.${target.kind}`)}
+                  </span>
+                  {/^[DIRP]-\d+$/.test(target.target) &&
+                  (target.kind === 'issue' || target.kind === 'item')
+                    ? `#${target.target} · `
+                    : ''}
                   {title(target)}
                 </button>
               ))}

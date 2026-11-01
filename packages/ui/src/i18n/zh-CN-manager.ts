@@ -3,6 +3,16 @@ import { MANAGER_NAMES } from '../../../protocol/src/manager-posts.mts'
 import type { Entry } from './types.ts'
 
 export const zhManager = {
+  'manager.postAskClose': '收起追问',
+  'manager.questionManagerPlaceholder': '向经理追问…',
+  'manager.questionTemporaryPlaceholder': '向临时助手提问…',
+  'manager.relationKind.issue': '议题',
+  'manager.relationKind.item': '经理事项',
+  'manager.relationKind.thread': '工作线',
+  'manager.relationKind.file': '文件',
+  'manager.relationKind.branch': '分支',
+  'manager.relationKind.commit': '提交',
+  'manager.relationKind.url': '链接',
   'manager.inbox': MANAGER_NAMES.inbox['zh-CN'],
   'manager.reports': '报告',
   'manager.relations': '关联',

@@ -8,11 +8,19 @@ import {
 } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useContext, useEffect, useRef, useState } from 'react'
-import { Alert, Linking, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  Alert,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native'
 import { EnrichedMarkdownText } from 'react-native-enriched-markdown'
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
 import { stamp } from '../../../../../packages/ui/src/app/format.ts'
-import { markdownStyleOf } from '../../detail/markdownStyle'
 import { ProposalActs } from '../../detail/proposals/ProposalActs'
 import type { RootStackParamList } from '../../nav/routes'
 import { jsonFile } from '../../shell/json-file'
@@ -22,6 +30,7 @@ import { Button, Empty } from '../../ui/kit/controls'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { IssueContext, IssueRelations } from './IssueRelations'
+import { issueCounts, issueMarkdownStyle, orderedIssues } from './presentation'
 import { issueLinks } from './relations'
 
 const replyFile = jsonFile<Record<string, string>>('manager-replies.json')
@@ -39,7 +48,7 @@ function Markdown({ text }: { text: string }) {
     <EnrichedMarkdownText
       markdown={issueLinks(text, ids)}
       flavor="github"
-      markdownStyle={markdownStyleOf(theme)}
+      markdownStyle={issueMarkdownStyle(theme)}
       onLinkLongPress={({ url }) => {
         if (!url.startsWith('litch-issue:')) return
         const id = url.slice('litch-issue:'.length)
@@ -83,7 +92,7 @@ function Issue({
   suggestions: readonly SuggestionView[]
 }) {
   const t = useT()
-  const { c, font } = useTheme()
+  const { c, font, radius } = useTheme()
   const channel = useChannel()
   const device = useKey<DeviceView>(keys.device(manager.deviceId))
   const draftKey = JSON.stringify([manager.deviceId, manager.id, post.id])
@@ -100,6 +109,7 @@ function Issue({
   const [mode, setMode] = useState<'manager' | 'temporary'>('manager')
   const [asking, setAsking] = useState(false)
   const [history, setHistory] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [unreviewed, setUnreviewed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -142,6 +152,7 @@ function Issue({
         })
         if (result.rejectedRequests[0]) throw new Error(result.rejectedRequests[0].message)
         writeReply('')
+        setEditing(false)
       }
     })
   const submitDecision = (optionId: string | null) =>
@@ -154,15 +165,47 @@ function Issue({
       })
       if (result.rejected[0]) throw new Error(result.rejected[0].message)
       writeReply('')
+      setEditing(false)
     })
+  const stateLabel = decision
+    ? t(
+        decision.status === 'open'
+          ? 'manager.open'
+          : decision.status === 'answered'
+            ? 'manager.answered'
+            : 'manager.closed',
+      )
+    : request
+      ? t(`manager.request.${request.status}`)
+      : post.kind === 'report'
+        ? t(post.unread ? 'manager.reportUnread' : 'manager.reportRead')
+        : ''
+  const pending = decision?.status === 'open' || request?.status === 'open' || post.unread
   return (
     <View
       style={[styles.card, { borderColor: c.line1, backgroundColor: c.panel }]}
       testID={`manager-issue:${post.id}`}
     >
-      <Text style={{ color: c.ink, fontSize: font.size.body, fontWeight: '600' }}>
-        {post.id} · {post.title}
-      </Text>
+      <View style={styles.cardHeader}>
+        <Text style={{ color: c.ink, fontSize: font.size.title, fontWeight: '600', flex: 1 }}>
+          {post.kind === 'suggestion' ? t('manager.suggestions') : post.id} · {post.title}
+        </Text>
+        {stateLabel ? (
+          <Text
+            testID={`issue-status:${post.id}`}
+            style={[
+              styles.status,
+              {
+                color: pending ? c.wait : c.ink3,
+                borderColor: pending ? c.wait : c.line1,
+                borderRadius: radius.s,
+              },
+            ]}
+          >
+            {stateLabel}
+          </Text>
+        ) : null}
+      </View>
       {pendingReview ? (
         <Button
           kind="plain"
@@ -193,7 +236,7 @@ function Issue({
                 : null}
             </>
           ) : null}
-          {post.kind === 'report' ? (
+          {post.kind === 'report' && post.unread ? (
             <Button
               label={t(post.unread ? 'manager.markRead' : 'manager.reportRead')}
               disabled={locked || !post.unread}
@@ -219,9 +262,8 @@ function Issue({
           ) : null}
           {request ? (
             <>
-              <Text style={{ color: c.ink3 }}>{t(`manager.request.${request.status}`)}</Text>
               {request.response ? <Markdown text={request.response.text} /> : null}
-              {request.status !== 'cancelled' ? (
+              {request.status !== 'cancelled' && (request.status === 'open' || editing) ? (
                 <>
                   <TextInput
                     accessibilityLabel={t('manager.requestText')}
@@ -235,39 +277,105 @@ function Issue({
                     label={request.buttonLabel ?? t('manager.requestDone')}
                     onPress={() => void submitReply(true)}
                   />
-                  <Button
-                    disabled={locked || !reply.trim()}
-                    label={t('manager.submit')}
-                    onPress={() => void submitReply(false)}
-                  />
+                  {reply.trim() ? (
+                    <Button
+                      kind="plain"
+                      disabled={locked}
+                      label={t('manager.submit')}
+                      onPress={() => void submitReply(false)}
+                    />
+                  ) : null}
+                  {request.status !== 'open' ? (
+                    <Button
+                      kind="plain"
+                      label={t('manager.cancelEdit')}
+                      onPress={() => {
+                        writeReply('')
+                        setEditing(false)
+                      }}
+                    />
+                  ) : null}
                 </>
+              ) : request.status !== 'cancelled' ? (
+                <Button
+                  kind="plain"
+                  disabled={locked}
+                  label={t('manager.requestEdit')}
+                  onPress={() => {
+                    writeReply(request.response?.text ?? '')
+                    setEditing(true)
+                  }}
+                />
               ) : null}
             </>
           ) : null}
           {decision ? (
             <>
-              {decision.answer ? <Markdown text={decision.answer.text} /> : null}
-              {decision.options.map((o) => (
+              {decision.answer ? (
+                <View style={{ gap: 6 }}>
+                  <Text style={{ color: c.ink3 }}>
+                    {t('manager.yourReply')} · {stamp(decision.answer.at, Date.now(), t.lang)}
+                  </Text>
+                  {decision.answer.optionId ? (
+                    <Text style={{ color: c.ink }}>
+                      {decision.options.find((o) => o.id === decision.answer?.optionId)?.label}
+                    </Text>
+                  ) : null}
+                  {decision.answer.text ? <Markdown text={decision.answer.text} /> : null}
+                </View>
+              ) : null}
+              {decision.closed ? <Markdown text={decision.closed.reason} /> : null}
+              {decision.status === 'open' || editing ? (
+                <>
+                  {decision.options.map((o) => (
+                    <View key={o.id} style={{ gap: 6 }}>
+                      <Button
+                        kind="plain"
+                        label={o.label}
+                        disabled={locked}
+                        onPress={() => void submitDecision(o.id)}
+                      />
+                      {o.description ? <Markdown text={o.description} /> : null}
+                    </View>
+                  ))}
+                  <TextInput
+                    accessibilityLabel={t('manager.answer')}
+                    placeholder={t('manager.answer')}
+                    placeholderTextColor={c.ink3}
+                    style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
+                    multiline
+                    value={reply}
+                    onChangeText={writeReply}
+                  />
+                  {reply.trim() ? (
+                    <Button
+                      disabled={locked}
+                      label={t('manager.submit')}
+                      onPress={() => void submitDecision(null)}
+                    />
+                  ) : null}
+                  {editing ? (
+                    <Button
+                      kind="plain"
+                      label={t('manager.cancelEdit')}
+                      onPress={() => {
+                        writeReply('')
+                        setEditing(false)
+                      }}
+                    />
+                  ) : null}
+                </>
+              ) : (
                 <Button
-                  key={o.id}
                   kind="plain"
-                  label={o.label}
                   disabled={locked}
-                  onPress={() => void submitDecision(o.id)}
+                  label={t('manager.editAnswer')}
+                  onPress={() => {
+                    writeReply(decision.answer?.text ?? '')
+                    setEditing(true)
+                  }}
                 />
-              ))}
-              <TextInput
-                accessibilityLabel={t('manager.answer')}
-                style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
-                multiline
-                value={reply}
-                onChangeText={writeReply}
-              />
-              <Button
-                disabled={locked || !reply.trim()}
-                label={t('manager.submit')}
-                onPress={() => void submitDecision(null)}
-              />
+              )}
             </>
           ) : null}
           {post.discussion.messages
@@ -303,14 +411,19 @@ function Issue({
                 <Markdown text={entry.text} />
               </View>
             ))}
-          <Button
-            kind="plain"
-            label={t('manager.postAsk')}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: asking, disabled: locked }}
             disabled={locked}
             onPress={() => setAsking(!asking)}
-          />
+            style={styles.textLink}
+          >
+            <Text style={{ color: c.ink2 }}>
+              {asking ? '▾' : '▸'} {t(asking ? 'manager.postAskClose' : 'manager.postAsk')}
+            </Text>
+          </Pressable>
           {asking ? (
-            <>
+            <View style={[styles.askComposer, { borderColor: c.line3, backgroundColor: c.sunken }]}>
               <View style={styles.actions}>
                 <Button
                   kind={mode === 'manager' ? 'solid' : 'plain'}
@@ -325,12 +438,16 @@ function Issue({
                   />
                 ) : null}
               </View>
-              <Text style={{ color: c.ink3 }}>
-                {t(mode === 'manager' ? 'manager.questionManager' : 'manager.questionTemporary')}
-              </Text>
+              <Text style={{ color: c.ink3 }}>{t('manager.postAsk')}</Text>
               <TextInput
                 multiline
                 accessibilityLabel={t('manager.questionInput')}
+                placeholder={t(
+                  mode === 'manager'
+                    ? 'manager.questionManagerPlaceholder'
+                    : 'manager.questionTemporaryPlaceholder',
+                )}
+                placeholderTextColor={c.ink3}
                 style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
                 value={question}
                 onChangeText={writeQuestion}
@@ -349,10 +466,11 @@ function Issue({
                       mode,
                     })
                     writeQuestion('')
+                    setAsking(false)
                   })
                 }
               />
-            </>
+            </View>
           ) : null}
         </>
       ) : null}
@@ -391,41 +509,66 @@ export function ManagerConsoleScreen({ route }: Props) {
     suggestion: 'manager.suggestions',
     request: 'manager.requests',
     report: 'manager.reports',
-    item: 'manager.items',
   } as const
+  const counts = issueCounts(manager)
   return (
-    <Screen title={t('manager.inbox')} subtitle={manager?.name} testID="manager-console">
-      <View style={styles.actions}>
-        {(Object.keys(kinds) as (keyof typeof kinds)[]).map((k) => (
-          <View key={k} style={styles.category}>
-            <Button
-              kind={kind === k ? 'solid' : 'plain'}
-              label={t(kinds[k])}
-              onPress={() => {
-                setSelected(null)
-                setKind(k)
-              }}
-            />
-            {k === 'report' && (manager?.pendingReports ?? 0) > 0 ? (
-              <Text
-                testID="manager-reports-unread"
-                accessibilityLabel={`${t('manager.reportUnread')} ${manager?.pendingReports}`}
-                style={[
-                  styles.badge,
-                  {
-                    color: c.wait,
-                    backgroundColor: c.panel,
-                    borderColor: c.wait,
-                    borderRadius: radius.s,
-                  },
-                ]}
-              >
-                {manager?.pendingReports}
-              </Text>
-            ) : null}
-          </View>
-        ))}
+    <Screen
+      title={t(kind === 'item' ? 'manager.items' : 'manager.inbox')}
+      subtitle={manager?.name}
+      testID="manager-console"
+    >
+      <View style={[styles.actions, { borderBottomWidth: 1, borderColor: c.line1 }]}>
+        <Button
+          kind={kind !== 'item' ? 'solid' : 'plain'}
+          label={t('manager.inbox')}
+          onPress={() => {
+            setSelected(null)
+            setKind('decision')
+          }}
+        />
+        <Button
+          kind={kind === 'item' ? 'solid' : 'plain'}
+          label={t('manager.items')}
+          onPress={() => {
+            setSelected(null)
+            setKind('item')
+          }}
+        />
       </View>
+      {kind !== 'item' ? (
+        <View style={styles.actions}>
+          {(Object.keys(kinds) as (keyof typeof kinds)[]).map((k) => (
+            <View key={k} style={styles.category}>
+              <Button
+                kind={kind === k ? 'solid' : 'plain'}
+                label={t(kinds[k])}
+                onPress={() => {
+                  setSelected(null)
+                  setKind(k)
+                }}
+              />
+              {counts[k] > 0 ? (
+                <Text
+                  testID={k === 'report' ? 'manager-reports-unread' : `manager-category-count:${k}`}
+                  pointerEvents="none"
+                  accessibilityLabel={`${t(k === 'report' ? 'manager.reportUnread' : kinds[k])} ${counts[k]}`}
+                  style={[
+                    styles.badge,
+                    {
+                      color: c.wait,
+                      backgroundColor: c.panel,
+                      borderColor: c.wait,
+                      borderRadius: radius.s,
+                    },
+                  ]}
+                >
+                  {counts[k]}
+                </Text>
+              ) : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
       {device?.connection !== 'online' || manager?.status !== 'active' ? (
         <Text style={{ color: c.ink3, padding: 12 }}>
           {t(
@@ -456,7 +599,7 @@ export function ManagerConsoleScreen({ route }: Props) {
                     </View>
                   ))
               : null}
-            {(view.board.posts ?? [])
+            {orderedIssues(view.board.posts ?? [], view.board.decisions)
               .filter((p) => p.kind === kind && (!selected || p.id === selected))
               .map((post) => (
                 <Issue
@@ -481,6 +624,10 @@ export function ManagerConsoleScreen({ route }: Props) {
   )
 }
 const styles = StyleSheet.create({
+  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  status: { borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2 },
+  textLink: { alignSelf: 'flex-start', paddingVertical: 8 },
+  askComposer: { gap: 10, borderLeftWidth: 2, padding: 12 },
   category: { position: 'relative' },
   badge: {
     position: 'absolute',

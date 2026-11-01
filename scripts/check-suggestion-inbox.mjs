@@ -150,6 +150,17 @@ try {
     '4 待处理',
   )
   await shot('manager-entry')
+  await click('[data-board-tab="reports"]')
+  assert.equal(await read("document.querySelector('.mg-board').getBoundingClientRect().width"), 560)
+  await until(
+    () =>
+      read(
+        "document.querySelector('[data-relations=P-1]').dataset.wide==='true' && getComputedStyle(document.querySelector('[data-relations=P-1]')).float==='right'",
+      ),
+    '1440 默认 560 看板关联靠右',
+  )
+  await shot('report-default-1440')
+
   await click('[data-board-tab="suggestions"]')
   assert.equal(await read("document.querySelectorAll('.suggestion-row').length"), 0)
   // 从经理的工作线产生建议，全局只留一张经理汇总卡；打开后在看板内操作。
@@ -497,10 +508,38 @@ try {
           await shot(`activity-expanded-${skin}-${theme}`)
         }
 
+        if (['decisions', 'requests', 'reports'].includes(tab)) {
+          assert.equal(
+            await read(
+              "getComputedStyle(document.querySelector('.mg-inbox-tabs [aria-pressed=true] .pill')).color",
+            ),
+            await read(
+              "getComputedStyle(document.querySelector('.mg-inbox-tabs [aria-pressed=true]')).color",
+            ),
+            '选中计数使用选中前景',
+          )
+        }
         if (tab === 'decisions') {
           await click('[data-decision="D-15"] [data-act="post-ask"]')
+          await click('[data-decision="D-15"] [data-question-mode="manager"]')
+          assert.ok(
+            await read("!document.querySelector('.mg-decision-filter').classList.contains('seg')"),
+          )
+          assert.ok(
+            await read(
+              "document.querySelector('[data-decision=\"D-15\"] .mg-post-compose textarea').placeholder.includes('经理')",
+            ),
+          )
+          await read(
+            "document.querySelector('[data-decision=\"D-15\"] .mg-post-compose').scrollIntoView({block:'center'})",
+          )
           await shot(`questions-manager-${skin}-${theme}`)
           await click('[data-decision="D-15"] [data-question-mode="temporary"]')
+          assert.ok(
+            await read(
+              "document.querySelector('[data-decision=\"D-15\"] .mg-post-compose textarea').placeholder.includes('临时')",
+            ),
+          )
           await shot(`questions-temporary-${skin}-${theme}`)
           await click('[data-decision="D-15"] [data-act="post-ask"]')
         }
@@ -529,6 +568,61 @@ try {
   await click('[data-relations="I-2"] [data-relation-target="P-1"]')
   await wait('[data-report="P-1"]')
   await shot('report-reverse-relation')
+  await size(1440)
+  await read("document.querySelector('.mg-board-grip').focus()")
+  await call('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: 'Home',
+    code: 'Home',
+    windowsVirtualKeyCode: 36,
+  })
+  for (let i = 0; i < 9; i++)
+    await call('Input.dispatchKeyEvent', {
+      type: 'keyDown',
+      key: 'ArrowLeft',
+      code: 'ArrowLeft',
+      windowsVirtualKeyCode: 37,
+    })
+  await until(
+    () =>
+      read(
+        "document.querySelector('[data-relations=P-1]').dataset.wide==='true' && getComputedStyle(document.querySelector('[data-relations=P-1]')).float==='right'",
+      ),
+    '1440 窗口常用宽度关联靠右',
+  )
+  await call('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: 'Tab',
+    code: 'Tab',
+    windowsVirtualKeyCode: 9,
+  })
+  await read("document.querySelector('[data-report=P-1] [data-board-reference=D-15]').focus()")
+  await wait('.mg-reference-card')
+  assert.ok(
+    await read(
+      "document.querySelector('[data-report=P-1] [data-board-reference=D-15]').getAttribute('aria-describedby') === document.querySelector('.info-card:has(.mg-reference-card)').id",
+    ),
+  )
+  assert.ok(
+    await read(
+      "document.querySelector('.mg-reference-card').textContent.includes('已答复') || document.querySelector('.mg-reference-card').textContent.includes('待定')",
+    ),
+  )
+  assert.equal(
+    await read(
+      "document.querySelector('[data-report=P-1] [data-board-reference=D-15]').textContent.trim()",
+    ),
+    '#D-15',
+  )
+  await shot('reference-keyboard-preview-1440')
+  await call('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: 'Escape',
+    code: 'Escape',
+    windowsVirtualKeyCode: 27,
+  })
+  await until(() => read("!document.querySelector('.mg-reference-card')"), 'Esc 收起编号预览')
+
   await size(1800)
   await read("document.querySelector('.mg-board-grip').focus()")
   await call('Input.dispatchKeyEvent', {
@@ -662,6 +756,11 @@ try {
       ),
     '临时对话标明发言人',
   )
+  assert.ok(
+    await read("!document.querySelector('[data-decision=D-15] .mg-post-compose')"),
+    '追问提交后收起',
+  )
+
   for (const skin of ['standard', 'human', 'retro']) {
     await read(`window.__litchLook.set({skin:${JSON.stringify(skin)},theme:'light',lang:'zh-CN'})`)
     await shot(`question-speakers-${skin}`)

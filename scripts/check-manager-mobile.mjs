@@ -91,26 +91,47 @@ try {
   await call('Page.navigate', { url })
   await wait('[data-testid="manager-console"]')
   const press = async (text) => {
-    assert.ok(
-      await read(
-        `(()=>{const button=[...document.querySelectorAll('[role="button"],button')].find(e=>e.textContent===${JSON.stringify(text)});if(!button)return false;button.click();return true})()`,
-      ),
+    await until(
+      () =>
+        read(
+          `(()=>{const button=[...document.querySelectorAll('[role="button"],button')].find(e=>e.getBoundingClientRect().height>0 && e.textContent.trim().replace(/^[▾▸]\\s*/, '')===${JSON.stringify(text)});if(!button)return false;button.click();return true})()`,
+        ),
       text,
     )
     await new Promise((r) => setTimeout(r, 150))
   }
-  for (const skin of ['standard', 'human', 'retro']) {
-    await read(`window.__litchLook.set({skin:${JSON.stringify(skin)},theme:'light'})`)
-    await wait('[data-testid="manager-console"]')
-    await press('报告')
-    await wait('[data-testid="manager-issue:P-1"]')
-    await shot(`mobile-report-${skin}`)
-    await press('关联')
-    await shot(`mobile-relations-${skin}`)
+  assert.ok(
+    await read(
+      '!document.querySelector(\'[data-testid="manager-issue:D-13"] textarea\') && !document.querySelector(\'[data-testid="manager-issue:D-12"] textarea\')',
+    ),
+  )
+  assert.ok(
+    await read(
+      "document.querySelector('[data-testid=\"issue-status:D-13\"]').textContent.includes('已答复')",
+    ),
+  )
+  assert.ok(
+    await read(
+      "document.querySelector('[data-testid=\"issue-status:D-12\"]').textContent.includes('已关闭')",
+    ),
+  )
+  for (const skin of ['standard', 'human', 'retro'])
+    for (const theme of ['light', 'dark']) {
+      await read(
+        `window.__litchLook.set({skin:${JSON.stringify(skin)},theme:${JSON.stringify(theme)}})`,
+      )
+      await wait('[data-testid="manager-console"]')
+      await shot(`mobile-decisions-${skin}-${theme}`)
+      await press('报告')
+      await wait('[data-testid="manager-issue:P-1"]')
+      await shot(`mobile-report-${skin}-${theme}`)
+      await press('关联 3')
+      await shot(`mobile-relations-${skin}-${theme}`)
 
-    await press('I-2 · 回退编辑：手机端跟进')
-    await shot(`mobile-related-item-${skin}`)
-  }
+      await press('▤ 经理事项#I-2 · 回退编辑：手机端跟进')
+      await shot(`mobile-related-item-${skin}-${theme}`)
+    }
+  await press('控制台')
   await press('报告')
   assert.equal(
     await read('document.querySelector(\'[data-testid="manager-reports-unread"]\').textContent'),
@@ -133,10 +154,43 @@ try {
     `(()=>{const input=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'手机追问范围');input.dispatchEvent(new Event('input',{bubbles:true}))})()`,
   )
   await new Promise((r) => setTimeout(r, 150))
+  await shot('mobile-question-compose')
   await press('提交追问')
   await until(() => read("document.body.innerText.includes('已核对这条内容')"), '经理回复')
+  assert.ok(await read("!document.querySelector('textarea')"), '提交后收起追问')
   await shot('mobile-report-discussion')
   await press('请你做')
+  assert.ok(
+    await read(
+      "!document.querySelector('[data-testid=\"manager-issue:R-1\"]').innerText.includes('提交给经理')",
+    ),
+    '无文字草稿不显示第二个提交按钮',
+  )
+  await shot('mobile-request-empty')
+  await read(
+    `(()=>{const input=document.querySelector('[data-testid="manager-issue:R-1"] textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'暂时受阻');input.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+  )
+  await until(
+    () =>
+      read(
+        "[...document.querySelectorAll('[data-testid=\"manager-issue:R-1\"] [role=button]')].some(e=>e.textContent==='提交给经理')",
+      ),
+    '文字回复按钮出现',
+  )
+  assert.ok(
+    await read(
+      "(()=>{const buttons=[...document.querySelectorAll('[data-testid=\"manager-issue:R-1\"] [role=button]')];return getComputedStyle(buttons.find(e=>e.textContent==='已复验')).backgroundColor !== getComputedStyle(buttons.find(e=>e.textContent==='提交给经理')).backgroundColor})()",
+    ),
+    '文字提交是次要按钮',
+  )
+  await shot('mobile-request-text')
+  await press('提交给经理')
+  await until(
+    () =>
+      read("document.querySelector('[data-testid=\"issue-status:R-1\"]').textContent==='已回复'"),
+    '文字回复',
+  )
+  await press('修改回复')
   await press('已复验')
   await until(() => read("document.body.innerText.includes('已交付')"), '交付请求')
   await shot('mobile-delivery')

@@ -83,7 +83,7 @@ export function useHoverCard(content: () => ReactNode): HoverCard {
     if (!shown) return
     const gone = () => setSpot(null)
     const onScroll = (event: Event) => {
-      if (event.target instanceof Element && event.target.closest('.sb')) gone()
+      if (event.target instanceof Element && event.target.closest('.sb, .mg-body')) gone()
     }
     window.addEventListener('scroll', onScroll, true)
     window.addEventListener('blur', gone)
@@ -97,7 +97,10 @@ export function useHoverCard(content: () => ReactNode): HoverCard {
   useLayoutEffect(() => {
     if (!spot || !box.current) return
     const lowest = window.innerHeight - box.current.offsetHeight - GAP
-    if (spot.top > lowest) setSpot({ ...spot, top: Math.max(GAP, lowest) })
+    const rightmost = window.innerWidth - box.current.offsetWidth - GAP
+    const top = Math.max(GAP, Math.min(spot.top, lowest))
+    const left = Math.max(GAP, Math.min(spot.left, rightmost))
+    if (top !== spot.top || left !== spot.left) setSpot({ top, left })
   }, [spot])
 
   return {

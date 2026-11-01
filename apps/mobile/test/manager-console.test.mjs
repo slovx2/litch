@@ -2,13 +2,19 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { managerAttentionCount } from '../../../packages/core/src/projection/manager.mts'
 import { relationGroups } from '../../../packages/protocol/src/manager-relations.mts'
+import {
+  issueCounts,
+  issueMarkdownStyle,
+  orderedIssues,
+} from '../src/screens/managers/presentation.ts'
 import { issueLinks } from '../src/screens/managers/relations.ts'
+import { PALETTES } from '../src/ui/palettes.ts'
 
 test('手机议题编号只链接存在对象，保留代码与明确链接', () => {
   const ids = new Set(['D-1', 'I-2', 'P-3'])
   assert.equal(
     issueLinks('#D-1、I-2 与 #P-3；#D-999 `#D-1` [原链接](https://x/#D-1)', ids),
-    '[#D-1](litch-issue:D-1)、[I-2](litch-issue:I-2) 与 [#P-3](litch-issue:P-3)；#D-999 `#D-1` [原链接](https://x/#D-1)',
+    '[#D-1](litch-issue:D-1)、[#I-2](litch-issue:I-2) 与 [#P-3](litch-issue:P-3)；#D-999 `#D-1` [原链接](https://x/#D-1)',
   )
 })
 test('同一关系正向是来源，反向是派生；相关关系双向对称', () => {
@@ -38,4 +44,45 @@ test('D-29：手机使用核心统一口径，报告未读不占待处理', () =
     }),
     0,
   )
+})
+
+test('手机决策优先未答；类别数只计待处理，报告仅显示未读', () => {
+  const posts = ['D-closed', 'D-done', 'D-open'].map((id) => ({ id, kind: 'decision' }))
+  const decisions = [
+    { id: 'D-closed', status: 'withdrawn' },
+    { id: 'D-done', status: 'answered' },
+    { id: 'D-open', status: 'open' },
+  ]
+  assert.deepEqual(
+    orderedIssues(posts, decisions).map((p) => p.id),
+    ['D-open', 'D-done', 'D-closed'],
+  )
+  assert.deepEqual(
+    posts.map((p) => p.id),
+    ['D-closed', 'D-done', 'D-open'],
+  )
+  assert.deepEqual(
+    issueCounts({
+      pendingDecisions: 3,
+      pendingRequests: 1,
+      pendingSuggestions: 2,
+      pendingReports: 7,
+    }),
+    { decision: 3, request: 1, suggestion: 2, report: 7 },
+  )
+})
+test('手机三皮肤报告正文标题不大于卡片标题', () => {
+  for (const skin of ['standard', 'human', 'retro'])
+    for (const dark of [false, true]) {
+      const theme = {
+          skin,
+          dark,
+          c: PALETTES[skin][dark ? 'dark' : 'light'],
+          font: { mono: 'monospace', size: { body: 15, title: 17, meta: 13, small: 11 } },
+          radius: { s: 0, m: 0, l: 0 },
+        },
+        style = issueMarkdownStyle(theme)
+      for (const key of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+        assert.ok(style[key].fontSize < theme.font.size.title)
+    }
 })

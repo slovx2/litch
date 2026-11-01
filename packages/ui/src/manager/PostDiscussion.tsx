@@ -1,6 +1,6 @@
 // 四类对象共用帖子记录；原帖在宿主卡片顶部，讨论区只负责历史和追问。
 import { type DeviceView, keys } from '@litch/core'
-import { useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { ManagerBoardTopicView, ManagerView } from '../../../core/src/model-manager.mts'
 import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
 import { useT } from '../app/appearance.ts'
@@ -55,6 +55,14 @@ export function PostDiscussion({
   const { channel } = useServices()
   const device = useKey<DeviceView>(keys.device(manager.deviceId))
   const [open, setOpen] = useState(false)
+  const inputId = useId()
+  const submitted = useRef(0)
+  const count = post?.discussion.messages.length ?? 0
+  // 混合提交由宿主执行；确认设备新增记录后也收起编辑区。
+  useEffect(() => {
+    if (count > submitted.current) setOpen(false)
+    submitted.current = count
+  }, [count])
   const [mode, setMode] = useState<'manager' | 'temporary'>('manager')
   const { drafts, write } = usePostDrafts(manager.deviceId, manager.id)
   const draft = post ? drafts[post.id] : undefined
@@ -103,6 +111,7 @@ export function PostDiscussion({
         mode,
       })
       change('')
+      setOpen(false)
     } catch (e) {
       setError(reasonOf(e, t))
     } finally {
@@ -173,13 +182,15 @@ export function PostDiscussion({
         className="btn ghost"
         data-act="post-ask"
         aria-expanded={open}
+        aria-controls={`${inputId}-compose`}
         onClick={() => setOpen(!open)}
       >
-        {t('manager.postAsk')}
+        <span aria-hidden="true">{open ? '▾' : '▸'}</span>{' '}
+        {t(open ? 'manager.postAskClose' : 'manager.postAsk')}
         {value.trim() ? ` · ${t('manager.draft')}` : ''}
       </button>
       {open ? (
-        <div className="mg-post-compose">
+        <div className="mg-post-compose" id={`${inputId}-compose`}>
           <fieldset className="mg-question-modes" aria-label={t('manager.questionMode')}>
             <button
               type="button"
@@ -200,8 +211,17 @@ export function PostDiscussion({
               </button>
             ) : null}
           </fieldset>
+          <label className="mg-post-label" htmlFor={inputId}>
+            {t('manager.postAsk')}
+          </label>
           <textarea
-            className="req-input"
+            id={inputId}
+            className="req-input mg-post-input"
+            placeholder={t(
+              mode === 'manager'
+                ? 'manager.questionManagerPlaceholder'
+                : 'manager.questionTemporaryPlaceholder',
+            )}
             rows={3}
             maxLength={20000}
             value={value}

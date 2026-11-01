@@ -898,19 +898,89 @@
 .mg-board {
   container-type: inline-size;
 }
-@container (min-width: 720px) {
-  .mg-relations {
-    float: right;
-    width: 200px;
-    margin-left: 16px;
-  }
-  .mg-request:has(> .mg-relations) {
-    display: block;
-  }
-  .mg-request:has(> .mg-relations) > * {
-    margin-bottom: 12px;
-  }
+/* 关联的展开与布局共用元素的 data-wide，由卡片实际宽度 >= 520px 决定。 */
+.mg-relations[data-wide="true"] {
+  float: right;
+  width: 176px;
+  margin-left: 16px;
 }
+.mg-request:has(> .mg-relations[data-wide="true"]) {
+  display: block;
+}
+.mg-request:has(> .mg-relations[data-wide="true"]) > * {
+  margin-bottom: 12px;
+}
+
 .mg-post-discussion {
   clear: both;
+}
+
+/* 顶层下划线、类别分段、状态文字切换，各自表达不同导航层次。 */
+.mg-inbox-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mg-inbox-tabs button[aria-pressed="true"] .pill {
+  color: inherit;
+  background: transparent;
+  border-color: currentColor;
+}
+.mg-decision-filter {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-block: 6px;
+  border-bottom: 1px solid var(--line-1);
+}
+.mg-decision-filter button {
+  color: var(--ink-3);
+  padding: 4px 0;
+  font-size: 12px;
+  background: transparent;
+}
+.mg-decision-filter button[aria-pressed="true"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+.mg-decision-filter button:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.mg-post-compose {
+  padding: 12px;
+  border-left: 2px solid var(--line-3);
+  background: var(--sunken);
+}
+.mg-post-label {
+  font-weight: 600;
+}
+.mg-post-compose .mg-post-input {
+  background: var(--raised);
+}
+.mg-reference-card {
+  display: grid;
+  gap: 8px;
+  white-space: normal;
+}
+.mg-reference-state {
+  justify-self: start;
+}
+.mg-relations section > div,
+.mg-related-issues section > div {
+  display: grid;
+  gap: 6px;
+}
+.mg-relations section .btn,
+.mg-related-issues section .btn {
+  display: block;
+  text-align: left;
+}
+.mg-relation-kind {
+  display: block;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+[data-act="report-read"] {
+  margin-top: 12px;
 }
