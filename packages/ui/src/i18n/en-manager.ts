@@ -88,7 +88,8 @@ export const enManager = {
   'manager.questionForward': 'Forward to manager',
   'manager.questionForwarded': 'Forwarded to manager',
   'manager.questionWait': 'Wait for the background conversation to finish before submitting.',
-  'manager.waitDecisions': 'Waiting for decisions',
+  'manager.waitDecisions': ({ n }) =>
+    Number(n) === 1 ? 'Waiting for decision' : 'Waiting for decisions',
   'manager.clearOption': 'Clear selection',
   'manager.chat': 'Chat',
   'manager.title': 'Managers',
@@ -130,7 +131,7 @@ export const enManager = {
   'manager.activity': 'Recent activity',
   'manager.blocked': 'Blocked',
   'manager.yours': 'Pending user action',
-  'manager.wait': 'Pending user decision',
+  'manager.wait': ({ n }) => (Number(n) === 1 ? 'Pending user decision' : 'Pending user decisions'),
   'manager.loading': 'Loading board…',
   'manager.unavailable': 'Managers are unavailable on this device',
   'manager.offline': 'Connect the device to make changes',

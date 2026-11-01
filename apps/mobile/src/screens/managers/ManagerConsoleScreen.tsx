@@ -198,20 +198,27 @@ function Issue({
       setChoice(null)
       setEditing(false)
     })
+  // 选了选项或写了补充说明、还没提交：卡片标“草稿”（与桌面一致），免得以为已经答复
+  const drafted = Boolean(
+    decision && (decision.status === 'open' || editing) && (choice || reply.trim()),
+  )
   const stateLabel = decision
     ? t(
-        decision.status === 'open'
-          ? 'manager.open'
-          : decision.status === 'answered'
-            ? 'manager.answered'
-            : 'manager.closed',
+        drafted
+          ? 'manager.draft'
+          : decision.status === 'open'
+            ? 'manager.open'
+            : decision.status === 'answered'
+              ? 'manager.answered'
+              : 'manager.closed',
       )
     : request
       ? t(`manager.request.${request.status}`)
       : post.kind === 'report'
         ? t(post.unread ? 'manager.reportUnread' : 'manager.reportRead')
         : ''
-  const pending = decision?.status === 'open' || request?.status === 'open' || post.unread
+  const pending =
+    drafted || decision?.status === 'open' || request?.status === 'open' || post.unread
   return (
     <View
       style={[styles.card, { borderColor: c.line1, backgroundColor: c.panel }]}
@@ -393,6 +400,12 @@ function Issue({
                       />
                     ) : null}
                   </View>
+                  {/* 按钮一直显示；不能点时写明为什么（离线、已结束由页顶那一行说） */}
+                  {!locked && !choice && !reply.trim() ? (
+                    <Text testID={`decision-submit-why:${decision.id}`} style={{ color: c.ink3 }}>
+                      {t('mgr.answer.empty')}
+                    </Text>
+                  ) : null}
                   {editing ? (
                     <Button
                       kind="plain"

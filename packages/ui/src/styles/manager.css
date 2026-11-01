@@ -1085,6 +1085,14 @@
   align-items: baseline;
   gap: 4px 8px;
 }
+/* flex 的 summary 没有浏览器自带的三角：自己补上，收起 ▸、展开 ▾ */
+.mg-closed-note > summary::before {
+  content: "▸";
+  color: var(--ink-3);
+}
+.mg-closed-note[open] > summary::before {
+  content: "▾";
+}
 .mg-closed-note[open] > summary {
   margin-bottom: 6px;
 }

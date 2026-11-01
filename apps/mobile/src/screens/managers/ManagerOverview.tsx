@@ -95,7 +95,9 @@ function BlockedItem({ item, onIssue }: { item: ManagerItemView; onIssue(id: str
       </Text>
       {item.blockedBy.length ? (
         <View style={styles.waits}>
-          <Text style={{ color: c.ink2 }}>{t('manager.waitDecisions')}</Text>
+          <Text style={{ color: c.ink2 }}>
+            {t('manager.waitDecisions', { n: item.blockedBy.length })}
+          </Text>
           {item.blockedBy.map((id) => (
             <Text
               key={id}
@@ -159,7 +161,7 @@ export function ManagerOverview({
             key={tile.key}
             testID={`manager-stat:${tile.key}`}
             accessibilityRole="button"
-            aria-label={`${tile.value} ${t(`manager.${tile.key}`)}`}
+            aria-label={`${tile.value} ${t(`manager.${tile.key}`, { n: tile.value })}`}
             onPress={tile.onPress}
             style={({ pressed }) => [
               styles.tile,
@@ -180,7 +182,7 @@ export function ManagerOverview({
             >
               {tile.value}
             </Text>
-            <Text style={{ color: c.ink2 }}>{t(`manager.${tile.key}`)}</Text>
+            <Text style={{ color: c.ink2 }}>{t(`manager.${tile.key}`, { n: tile.value })}</Text>
           </Pressable>
         ))}
       </View>

@@ -84,7 +84,8 @@ const SHAPES: Record<Skin, Shape> = {
       error: '✕',
       unread: '●',
       offline: '–',
-      background: '○',
+      // 与运行中的 ○ 形状不同（只差深浅分不开），仍是圆
+      background: '◎',
     },
     radio: { on: '●', off: '○', mixed: '◐' },
     check: { on: '☑', off: '☐', mixed: '▣' },
@@ -99,7 +100,8 @@ const SHAPES: Record<Skin, Shape> = {
       error: '✕',
       unread: '●',
       offline: '○',
-      background: '■',
+      // 空心方块，与运行中的实心方块分开（同桌面）
+      background: '□',
     },
     radio: { on: '●', off: '○', mixed: '◐' },
     check: { on: '☑', off: '☐', mixed: '▣' },

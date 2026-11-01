@@ -421,6 +421,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     history &&
       !history.open &&
       history.querySelector('summary')?.textContent?.includes('上次关闭 · 经理') &&
+      getComputedStyle(history.querySelector('summary') as Element, '::before').content === '"▸"' &&
       history.textContent?.includes('feat/mobile-mermaid'),
   )
   const omittedActions = ![...document.querySelectorAll('.mg-board button')].some((button) =>

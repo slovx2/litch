@@ -35,7 +35,9 @@ function Item({ item }: { item: ManagerItemView }) {
         <div className="mg-item-meta">
           {item.blockedBy.length ? (
             <div className="mg-item-meta-row">
-              <span className="mg-meta-label">{t('manager.waitDecisions')}</span>
+              <span className="mg-meta-label">
+                {t('manager.waitDecisions', { n: item.blockedBy.length })}
+              </span>
               <div className="mg-item-waits">
                 {item.blockedBy.map((id) => (
                   <BoardReferences key={id} text={id} />
@@ -175,7 +177,7 @@ export function BoardPanels({
       <div className="mg-stats">
         <button type="button" onClick={() => onTab('decisions')}>
           <b>{stats.pendingDecisions}</b>
-          {t('manager.wait')}
+          {t('manager.wait', { n: stats.pendingDecisions })}
         </button>
         <button type="button" onClick={() => onTab('items')}>
           <b>{stats.doneItems}</b>

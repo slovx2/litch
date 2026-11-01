@@ -18,9 +18,9 @@ import { markdownStyleOf } from '../../detail/markdownStyle'
 import type { StatusKind, Theme } from '../../ui/theme'
 
 /**
- * 经理目录一行的记号和状态文字。记号只说经理会话自己（回合在跑、等人、出错、只剩后台任务），
- * 与会话行同一套；工作线在跑另用文字写明，不借用经理自己的“运行中”（与桌面侧栏的经理行同一规则）。
- * 文字：已结束/正在结束 → N 待处理 → 运行中 → N 条工作线运行中 → N 个后台任务正在运行 → 空闲。
+ * 经理目录一行的记号、待处理数和状态文字。记号只说经理会话自己（回合在跑、等人、出错、只剩后台任务），
+ * 与会话行同一套；待处理数画成行尾等待色的计数胶囊；工作线在跑另用文字写明，不借用经理自己的“运行中”
+ * （与桌面侧栏的经理行同一规则）。文字：已结束/正在结束 → 运行中 → N 条工作线运行中 → N 个后台任务正在运行 → 空闲。
  */
 export function managerRowState(
   manager: Pick<
@@ -30,9 +30,11 @@ export function managerRowState(
   summary: Pick<SessionSummary, 'status' | 'background'> | undefined,
 ): {
   mark: StatusKind
+  /** 进行中经理的待处理合计（同 D-29 口径），0 不画胶囊 */
+  pending: number
   text:
     | { key: 'manager.ending' | 'manager.ended' | 'manager.running' | 'manager.idle' }
-    | { key: 'manager.pending' | 'manager.linesCount'; n: number }
+    | { key: 'manager.linesCount'; n: number }
     | { key: 'background.sidebar'; count: number }
 } {
   const background = summary?.background?.running ?? 0
@@ -48,14 +50,16 @@ export function managerRowState(
             : background > 0
               ? 'background'
               : 'idle'
-  if (manager.status !== 'active') return { mark, text: { key: `manager.${manager.status}` } }
+  if (manager.status !== 'active')
+    return { mark, pending: 0, text: { key: `manager.${manager.status}` } }
   const pending = managerAttentionCount(manager)
-  if (pending > 0) return { mark, text: { key: 'manager.pending', n: pending } }
-  if (mark === 'running' || mark === 'waiting') return { mark, text: { key: 'manager.running' } }
+  if (mark === 'running' || mark === 'waiting')
+    return { mark, pending, text: { key: 'manager.running' } }
   if (manager.runningLines > 0)
-    return { mark, text: { key: 'manager.linesCount', n: manager.runningLines } }
-  if (background > 0) return { mark, text: { key: 'background.sidebar', count: background } }
-  return { mark, text: { key: 'manager.idle' } }
+    return { mark, pending, text: { key: 'manager.linesCount', n: manager.runningLines } }
+  if (background > 0)
+    return { mark, pending, text: { key: 'background.sidebar', count: background } }
+  return { mark, pending, text: { key: 'manager.idle' } }
 }
 
 /** 未回答的关闭决策只能重开；有旧答案时保留修改入口，与桌面相同。 */

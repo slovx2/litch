@@ -141,10 +141,12 @@ test('经理目录行：记号只看经理会话自己，工作线在跑另写�
   const idle = { status: 'idle', background: null }
   assert.deepEqual(managerRowState(manager, idle), {
     mark: 'idle',
+    pending: 0,
     text: { key: 'manager.linesCount', n: 2 },
   })
   assert.deepEqual(managerRowState(manager, { status: 'running', background: null }), {
     mark: 'running',
+    pending: 0,
     text: { key: 'manager.running' },
   })
   assert.deepEqual(
@@ -155,18 +157,22 @@ test('经理目录行：记号只看经理会话自己，工作线在跑另写�
   const own = { status: 'idle', background: { running: 3 } }
   assert.deepEqual(managerRowState({ ...manager, runningLines: 0 }, own), {
     mark: 'background',
+    pending: 0,
     text: { key: 'background.sidebar', count: 3 },
   })
   assert.deepEqual(managerRowState(manager, own).text, { key: 'manager.linesCount', n: 2 })
   assert.deepEqual(managerRowState({ ...manager, runningLines: 0 }, idle).text, {
     key: 'manager.idle',
   })
-  assert.deepEqual(managerRowState({ ...manager, pendingDecisions: 4 }, idle).text, {
-    key: 'manager.pending',
-    n: 4,
+  // 待处理数画成行尾胶囊，记号与文字照旧只看经理自己和工作线
+  assert.deepEqual(managerRowState({ ...manager, pendingDecisions: 4, pendingRequests: 1 }, idle), {
+    mark: 'idle',
+    pending: 5,
+    text: { key: 'manager.linesCount', n: 2 },
   })
-  assert.deepEqual(managerRowState({ ...manager, status: 'ended' }, idle), {
+  assert.deepEqual(managerRowState({ ...manager, status: 'ended', pendingDecisions: 4 }, idle), {
     mark: 'offline',
+    pending: 0,
     text: { key: 'manager.ended' },
   })
 })

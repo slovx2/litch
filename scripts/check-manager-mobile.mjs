@@ -205,11 +205,10 @@ try {
   await tapId('decision-choice:D-13:a')
   assert.equal(await checked('decision-choice:D-13:a'), 'true')
   assert.equal(await checked('decision-choice:D-13:b'), 'false')
-  assert.ok(
-    await read(
-      "document.querySelector('[data-testid=\"issue-status:D-13\"]').textContent.includes('已答复')",
-    ),
-    '点选项不直接提交',
+  assert.equal(
+    await read('document.querySelector(\'[data-testid="issue-status:D-13"]\').textContent'),
+    '草稿',
+    '点选项不直接提交，卡片标草稿',
   )
   await read(
     `document.querySelector('[data-testid="manager-issue:D-13"]').scrollIntoView({block:'start'})`,
@@ -224,6 +223,18 @@ try {
   assert.equal(await checked('decision-choice:D-13:a'), 'true', '离开再回来选中项还在')
   await press('取消修改')
   await wait('[data-testid="decision-others:D-13"]')
+  assert.equal(
+    await read('document.querySelector(\'[data-testid="issue-status:D-13"]\').textContent'),
+    '已答复',
+    '取消修改后不再是草稿',
+  )
+  // 待定决策没选也没写时，“提交给经理”照样显示，旁边写明为什么不能点
+  assert.ok(
+    await read(
+      "document.querySelector('[data-testid=\"decision-submit:D-17\"]') && document.querySelector('[data-testid=\"decision-submit-why:D-17\"]').textContent==='先选一项或写补充说明'",
+    ),
+    '提交按钮不能点时说明原因',
+  )
   await press('重新打开')
   await until(
     () =>
@@ -381,6 +392,13 @@ try {
   await call('Page.navigate', { url: url.replace('scene=manager-console', 'scene=managers') })
   await wait('[data-testid="managers:device:local"]')
   assert.ok(await read('!!document.querySelector(\'[data-testid="manager:m1"]\')'), '经理目录')
+  // 有待处理的经理：行尾等待色的计数胶囊
+  assert.ok(
+    await read(
+      '(()=>{const p=document.querySelector(\'[data-testid="manager:m1:pending"]\');return !!p&&/^\\d+$/.test(p.textContent)})()',
+    ),
+    '待处理计数胶囊',
+  )
   await shot('mobile-managers')
   console.log(
     '手机经理：目录、概览、排序、已答决策分块、三皮肤报告、关联定位、已阅、追问与交付通过',
