@@ -14,7 +14,7 @@ export const zhChrome = {
   'chrome.extensionOutdated': '扩展版本过旧，与此版本的 Litch 不兼容。请在扩展页重新加载。',
   'chrome.extensionOutdatedStore':
     '扩展版本过旧，与此版本的 Litch 不兼容。请在扩展页点“更新”，或等待 Chrome 自动更新。',
-  'chrome.litchOutdated': '扩展需要更新版本的 Litch。请更新 Litch。',
+  'chrome.litchOutdated': '扩展版本较新，请升级 Litch。',
   'chrome.reloadAvailable': '扩展目录中已有 {version} 版，在扩展页重新加载即可更新。',
   'chrome.connected': '扩展已连接',
   'chrome.prepare': '准备扩展',

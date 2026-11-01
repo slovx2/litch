@@ -17,7 +17,7 @@ export const enChrome = {
     'The extension is too old for this version of Litch. Reload it on the extensions page.',
   'chrome.extensionOutdatedStore':
     'The extension is too old for this version of Litch. Click Update on the extensions page or wait for Chrome to update it.',
-  'chrome.litchOutdated': 'The extension requires a newer version of Litch. Update Litch.',
+  'chrome.litchOutdated': 'The extension is newer than this Litch supports. Update Litch.',
   'chrome.reloadAvailable':
     'Version {version} is in the extension folder. Reload the extension to update.',
   'chrome.connected': 'Extension connected',

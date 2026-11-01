@@ -382,6 +382,15 @@ async function cleanMachine(outDir, built) {
   )
   pass('TUI helper 在无 Node/Go 的系统可执行，权限桥失效退出 2，完整上游许可随包')
 
+  // Chrome 的原生宿主就是这个命令的 chrome-host 子命令（桌面端的启动脚本调它），Linux 上也要能走到读配置那一步
+  const chromeHost = sh(
+    name,
+    `${CLI} chrome-host --config /nonexistent/native-config.json chrome-extension://fakgembkgnmeknpaegnneneockbjhaai/`,
+  )
+  assert.notEqual(chromeHost.code, 0)
+  assert.match(chromeHost.all, /Chrome native host configuration is unavailable/)
+  pass('包里的命令带 Chrome 原生宿主（chrome-host），在 Linux 上可用')
+
   const offline = sh(name, 'sh /pkg/install.sh')
   assert.notEqual(offline.code, 0)
   assert.match(offline.err, /没有 curl，也没有 wget/)
