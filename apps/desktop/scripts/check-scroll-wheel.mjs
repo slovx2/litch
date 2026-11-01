@@ -1,5 +1,6 @@
 // 回到底部、轻滚、切会话再切回、再次轻滚：必须用真实滚轮输入，直接改 scrollTop 抓不到合成线程的坐标错位。
 // 先构建 UI。隐藏窗口、隔离 HOME、模拟核心；不连接真实设备。可用 LITCH_WHEEL_RESULT 保存测量结果。
+// LITCH_WHEEL_CPU=4 可在渲染进程中降速，复查绘制与取样的先后顺序。
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { mkdtempSync, writeFileSync } from 'node:fs'
@@ -25,6 +26,7 @@ if (!process.versions.electron) {
       LITCH_WHEEL_PROFILE: join(scratch, 'profile'),
       LITCH_WHEEL_URL: server.resolvedUrls.local[0],
       LITCH_WHEEL_RESULT: process.env.LITCH_WHEEL_RESULT ?? '',
+      LITCH_WHEEL_CPU: process.env.LITCH_WHEEL_CPU ?? '1',
     },
     stdio: 'inherit',
   })
@@ -51,10 +53,15 @@ if (!process.versions.electron) {
       win.webContents.executeJavaScript(
         `(${fn})(${args.map((arg) => JSON.stringify(arg)).join(',')})`,
       )
+    const painted = () =>
+      run(() => new Promise((done) => requestAnimationFrame(() => setTimeout(done, 0))))
     try {
       await win.loadURL(`${process.env.LITCH_WHEEL_URL}?lang=zh-CN&onboarding=off`)
       await run(install)
       win.webContents.debugger.attach('1.3')
+      await win.webContents.debugger.sendCommand('Emulation.setCPUThrottlingRate', {
+        rate: Number(process.env.LITCH_WHEEL_CPU),
+      })
       const wheel = async (deltaY, deltaX = 0) => {
         const point = await run(() => {
           const box = document.querySelector('.tr-scroll').getBoundingClientRect()
@@ -80,9 +87,10 @@ if (!process.versions.electron) {
             await p.sleep(50)
           })
           await wheel(-64)
-          await run(async () => {
+          const departed = await run(async () => {
             const p = window.wheelCheck
             await p.sleep(80)
+            const departed = p.mark()
             await p.open(p.small)
             await p.sleep(100)
             p.row(p.large).click()
@@ -92,7 +100,20 @@ if (!process.versions.electron) {
                 document.querySelectorAll('.turn').length > 0 &&
                 document.querySelector('.tr-scroll')?.getAttribute('aria-busy') !== 'true',
             )
+            return departed
           })
+          // aria-busy 只表示锚点所在的回合已挂载。content-visibility 的占位高度要到
+          // 本帧布局、ResizeObserver 补偿后才成为画面；不能把尚未绘制的几何当作轻滚基线。
+          // 只跨过首次绘制，不轮询到位置稳定；首帧恢复错了仍必须失败。
+          const restored = await run(async (anchor) => {
+            await new Promise((done) => requestAnimationFrame(() => setTimeout(done, 0)))
+            return window.wheelCheck.mark(anchor)
+          }, departed.anchor)
+          const restoreDrift = Math.abs(restored.offset - departed.offset)
+          assert.ok(
+            restoreDrift <= 3,
+            `切回首帧原文移动了 ${restoreDrift}px：${JSON.stringify({ departed, restored })}`,
+          )
           await run((delay) => window.wheelCheck.sleep(delay), delay)
           const before = await run(() => window.wheelCheck.mark())
           const deltaX = [0, 40, 64][round]
@@ -100,7 +121,17 @@ if (!process.versions.electron) {
           await run(() => window.wheelCheck.sleep(350))
           const after = await run((anchor) => window.wheelCheck.mark(anchor), before.anchor)
           const drift = Math.abs(after.offset - before.offset - 48)
-          const result = { round, delay, deltaX, drift, before, after }
+          const result = {
+            round,
+            delay,
+            deltaX,
+            restoreDrift,
+            drift,
+            departed,
+            restored,
+            before,
+            after,
+          }
           results.push(result)
           console.log(JSON.stringify(result))
           assert.ok(drift <= 3, `轻滚 48px 后原文多移动了 ${drift}px`)
@@ -112,6 +143,8 @@ if (!process.versions.electron) {
         }
       }
       const nestedPoint = await run(prepareNested)
+      // 新建的内层滚动区先上屏，合成线程才会把真实滚轮命中它。
+      await painted()
       await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', {
         type: 'mouseWheel',
         ...nestedPoint,
@@ -119,6 +152,8 @@ if (!process.versions.electron) {
         deltaY: 48,
       })
       await run(() => window.wheelCheck.sleep(120))
+      // 原生滚动由合成线程提交；降速时计时器可能先到，取下一次绘制后的实际位置。
+      await painted()
       const nested = await run(() => ({
         outer: document.querySelector('.tr-scroll').scrollTop,
         inner: document.querySelector('[data-wheel-inner]').scrollTop,
@@ -135,6 +170,7 @@ if (!process.versions.electron) {
         deltaY: -48,
       })
       await run(() => window.wheelCheck.sleep(120))
+      await painted()
       assert.equal(
         await run(() => document.querySelector('.tr-scroll').scrollTop),
         -248,
@@ -152,6 +188,7 @@ if (!process.versions.electron) {
         deltaY: 48,
       })
       await run(() => window.wheelCheck.sleep(120))
+      await painted()
       const diagonal = await run(() => ({
         outer: document.querySelector('.tr-scroll').scrollTop,
         inner: document.querySelector('[data-wheel-inner]').scrollLeft,
@@ -169,6 +206,7 @@ if (!process.versions.electron) {
         deltaY: -48,
       })
       await run(() => window.wheelCheck.sleep(120))
+      await painted()
       assert.equal(
         await run(() => document.querySelector('.tr-scroll').scrollTop),
         -248,
@@ -180,6 +218,7 @@ if (!process.versions.electron) {
       const beforeSmall = await run(() => document.querySelector('.tr-scroll').scrollTop)
       for (let index = 0; index < 12; index++) await wheel(-2)
       await run(() => window.wheelCheck.sleep(120))
+      await painted()
       const afterSmall = await run(() => document.querySelector('.tr-scroll').scrollTop)
       assert.equal(afterSmall - beforeSmall, -24, '连续小幅滚轮位移必须完整累计')
       console.log(
@@ -276,7 +315,8 @@ async function install() {
       : [...scroller.querySelectorAll('[data-anchor]')].find(
           (node) =>
             node.checkVisibility({ contentVisibilityAuto: true }) &&
-            node.getBoundingClientRect().bottom > box.top,
+            node.getBoundingClientRect().bottom > box.top &&
+            node.getBoundingClientRect().top < box.bottom,
         )
     if (!node) throw new Error(`锚点不存在：${anchor}`)
     return {
