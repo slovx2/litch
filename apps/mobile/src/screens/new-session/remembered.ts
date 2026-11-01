@@ -1,4 +1,4 @@
-// 新建会话页记住的几样：上次在这台设备上建在哪个工作区、用哪个 harness，各 harness 上选过的模型、强度、权限，
+// 新建会话页记住的几样：上次在这台设备上建在哪个工作区、用哪个 harness，各 harness 上选过的模型、强度，权限由设备按目录保存，
 // 各工作区上次选的“位置”（本地还是新工作树）和“起点”。
 // 存在应用文档目录的 new-session.json。计划模式不记：它只管眼前这一个新会话（和桌面端 remembered.ts 一样）。
 // 记下的东西过期了（工作区删了、harness 没了、模型换了）就当没记过，由默认值顶上。
@@ -61,8 +61,6 @@ export function recallPicks(deviceId: string, harness: string, options: ComposeO
   if (model) picks.model = model.id
   if (last.effort && (!model || model.efforts.some((effort) => effort.id === last.effort)))
     picks.effort = last.effort
-  if (last.permission && options.permissions.some((preset) => preset.id === last.permission))
-    picks.permission = last.permission
   return picks
 }
 
@@ -78,7 +76,8 @@ export function remember(
   if (harness) {
     mine.harness[spot(deviceId, workspaceId)] = harness
     mine.harness[deviceId] = harness
-    mine.picks[`${deviceId}/${harness}`] = picks
+    const { permission: _permission, ...rest } = picks
+    mine.picks[`${deviceId}/${harness}`] = rest
   }
   try {
     file.write(mine)

@@ -783,6 +783,8 @@ export function Composer(props: ComposerProps) {
           />
           {props.lead}
           <SettingsBar
+            deviceId={deviceId}
+            cwd={cwd}
             options={options}
             settings={props.settings}
             fresh={props.fresh}

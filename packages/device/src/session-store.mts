@@ -160,6 +160,7 @@ const MIGRATIONS: readonly string[] = [
   `CREATE TABLE child_starts(thread_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL) WITHOUT ROWID;`,
   `ALTER TABLE lineage ADD COLUMN report_parent INTEGER NOT NULL DEFAULT 1;
    ALTER TABLE lineage ADD COLUMN report_epoch INTEGER NOT NULL DEFAULT 0;`,
+  `ALTER TABLE proposals ADD COLUMN permission TEXT;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -254,6 +255,7 @@ function proposalOf(row: Row): SessionProposal {
     background: text(row.background),
     harness: maybe(row.harness),
     model: maybe(row.model),
+    permission: maybe(row.permission),
     effort: maybe(row.effort),
     cwd: maybe(row.cwd),
     kind: text(row.kind) as SessionLineageKind,
@@ -328,12 +330,12 @@ export class SessionStore {
       setWakeParent: prepare('UPDATE lineage SET wake_parent=? WHERE thread_id=?'),
       reported: prepare('UPDATE lineage SET reported_turn=? WHERE thread_id=?'),
       addProposal: prepare(
-        `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at, wider_sandbox, turn_id, call_id, offer, background, effort, worktree, worktree_default)
-         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at, wider_sandbox, turn_id, call_id, offer, background, effort, worktree, worktree_default, permission)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
       proposalWorktree: prepare('UPDATE proposals SET worktree=? WHERE id=?'),
       holdOffer: prepare(
-        `UPDATE proposals SET status='pending', title=?, prompt=?, background=?, harness=?, model=?, effort=?, cwd=?, kind=?, wider_sandbox=?, expires_at=?
+        `UPDATE proposals SET status='pending', title=?, prompt=?, background=?, harness=?, model=?, effort=?, cwd=?, kind=?, wider_sandbox=?, expires_at=?, permission=?
          WHERE id=? AND status='chosen'`,
       ),
       proposal: prepare('SELECT * FROM proposals WHERE id=?'),
@@ -593,6 +595,7 @@ export class SessionStore {
       proposal.effort ?? null,
       proposal.worktree == null ? null : proposal.worktree ? 1 : 0,
       proposal.worktreeDefault ? 1 : 0,
+      proposal.permission ?? null,
     )
     return {
       ...proposal,
@@ -621,7 +624,15 @@ export class SessionStore {
     id: string,
     brief: Pick<
       SessionProposal,
-      'title' | 'prompt' | 'background' | 'harness' | 'model' | 'effort' | 'cwd' | 'kind'
+      | 'title'
+      | 'prompt'
+      | 'background'
+      | 'harness'
+      | 'model'
+      | 'effort'
+      | 'cwd'
+      | 'kind'
+      | 'permission'
     > & { widerSandbox: string; expiresAt: number },
   ): boolean {
     const result = this.statements.holdOffer?.run(
@@ -635,6 +646,7 @@ export class SessionStore {
       brief.kind,
       brief.widerSandbox,
       brief.expiresAt,
+      brief.permission ?? null,
       id,
     )
     return Number(result?.changes ?? 0) > 0

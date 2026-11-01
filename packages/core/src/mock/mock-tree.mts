@@ -24,6 +24,7 @@
 // - 界面上手动派（session.spawn）、脱离（session.detach）、提案的开始和不要、列子代理（session.agents）。
 // 子会话的回报：父会话在跑就当场插进那个回合；没被插走、唤醒带走的，攒到父会话下一条用户消息前面（kind="notes"）。
 import { CLIENT_TOOL_NAMESPACE, SESSION_TREE_LIMITS } from '../../../protocol/src/index.mjs'
+import { permissionRank } from '../../../protocol/src/project-permissions.mjs'
 import { ChannelError, type Commands, type SessionOp } from '../channel/protocol.mjs'
 import type {
   HarnessView,
@@ -48,6 +49,7 @@ import { phrase } from '../phrase.mjs'
 import { projectQuestions } from '../projection/asks.mjs'
 import { projectItem } from '../projection/items.mjs'
 import { outgoing } from '../projection/outgoing.mjs'
+import { samplePresets } from './sample-harness.mjs'
 import type { SampleLang } from './sample-text.mjs'
 import {
   TREE_TEXT,
@@ -239,6 +241,18 @@ export function createMockTree(host: MockTreeHost): MockTree {
     if (options.kind === 'fork' && harness !== parent.harness) {
       throw new ChannelError('rejected', '带着上下文派出的子会话只能和父会话同一个 harness')
     }
+    const permission = options.settings?.permission ?? parent.settings.permission
+    const parentRank = permissionRank(parent.settings.permission)
+    const childRank = permissionRank(permission)
+    if (parentRank === null || childRank === null || childRank > parentRank)
+      throw new ChannelError('rejected', '子会话权限不能高于父会话')
+    const target = host.harnesses(deviceId).find((entry) => entry.id === harness)
+    const presets = samplePresets(target)
+    if (presets && !presets.some((entry) => entry.id === permission))
+      throw new ChannelError(
+        'rejected',
+        '目标 harness 不支持父会话权限，请更换 harness 或调整父会话权限',
+      )
     const live = host
       .summaries(deviceId)
       .filter(
@@ -306,7 +320,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       items: options.kind === 'fork' ? copy(parent.items) : {},
       requests: [],
       queued: [],
-      settings: { ...host.settings(deviceId, harness), ...options.settings },
+      settings: { ...host.settings(deviceId, harness), ...options.settings, permission },
       usage: null,
       can: host.can(deviceId, harness),
       forkedFrom: null,
@@ -353,8 +367,8 @@ export function createMockTree(host: MockTreeHost): MockTree {
   const spawnDemo = (view: SessionView, turnId: string) => {
     const ops: SessionOp[] = []
     text.children.forEach((child, index) => {
-      // 第一个放在 Pi 上（跨 harness 只能 fresh），第二个和父会话同一个 harness
-      const harness = index === 0 ? 'pi' : view.harness
+      // 第一个放在支持三档权限的 DSH 上，第二个和父会话同一个 harness。
+      const harness = index === 0 ? 'dsh' : view.harness
       const threadId = startChild(view, {
         title: child.title,
         prompt: child.prompt,
@@ -851,6 +865,11 @@ export function createMockTree(host: MockTreeHost): MockTree {
       settings: {
         ...(overrides.model || proposal.model ? { model: overrides.model ?? proposal.model } : {}),
         ...(overrides.effort ? { effort: overrides.effort } : {}),
+        ...(overrides.permission !== undefined
+          ? { permission: overrides.permission || view.settings.permission }
+          : proposal.permission
+            ? { permission: proposal.permission }
+            : {}),
         ...(overrides.sandbox ? { permission: PRESET_OF[overrides.sandbox] } : {}),
       },
       ...(overrides.workspaceId ? { workspaceId: overrides.workspaceId } : {}),
@@ -1345,6 +1364,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
           settings: {
             ...(rest.model ? { model: rest.model } : {}),
             ...(rest.effort ? { effort: rest.effort } : {}),
+            ...(rest.permission ? { permission: rest.permission } : {}),
             ...(rest.sandbox ? { permission: PRESET_OF[rest.sandbox] } : {}),
           },
           ...(rest.workspaceId ? { workspaceId: rest.workspaceId } : {}),

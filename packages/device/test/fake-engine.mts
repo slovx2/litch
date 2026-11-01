@@ -36,7 +36,11 @@ export class FakeEngine extends FakeUpstream {
 
   constructor(engine: string, threads: FakeThread[] = []) {
     super(engine, threads)
-    this.declaration = { extensions: ['clientTools'] }
+    // 假引擎都实现三档参数，用于验证设备协议；真实 Pi/ACP 的单档限制由专项用例声明。
+    this.declaration = {
+      extensions: ['clientTools'],
+      permissionPresets: [':read-only', ':workspace', ':danger-full-access'].map((id) => ({ id })),
+    }
     const greet = this.handlers.initialize as NonNullable<(typeof this.handlers)[string]>
     this.handlers.initialize = (params, connection) => {
       this.greetings.set(connection, params)

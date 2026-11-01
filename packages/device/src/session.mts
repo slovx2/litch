@@ -506,6 +506,11 @@ export class ClientSession implements ClientToolPeer {
     switch (route.kind) {
       case 'device':
         if (method === 'runtime/info') return this.runtimeInfo()
+        if (method.startsWith('litch/projectPermission/')) {
+          if (!this.declared.has(EXTENSION.projectPermissions))
+            throw new DeviceError('extensionRequired', 'projectPermissions must be declared')
+          return this.host.workspaces.permissions.call(method, frame.params)
+        }
         if ([RECOVERY_READ, RECOVERY_CONTINUE, RECOVERY_DISMISS].includes(method)) {
           if (!this.declared.has(EXTENSION.turnRecovery))
             throw new DeviceError('extensionRequired', `${method} requires turnRecovery`)

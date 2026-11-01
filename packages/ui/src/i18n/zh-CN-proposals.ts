@@ -37,7 +37,7 @@ export const zhProposals = {
   'proposal.brief.less': '收起简报',
   'proposal.brief.background': '背景',
   'proposal.brief.task': '任务',
-  'proposal.wider': '此 harness 不支持这么严格的沙箱，子会话将以「{level}」运行',
+  'proposal.wider': '此 harness 要求「{level}」。请更换 harness 或调整父会话权限后再开始。',
   'proposal.state.pending': '待开始',
   'proposal.state.started': '已开始',
   'proposal.state.dismissed': '已忽略',

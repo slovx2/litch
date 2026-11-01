@@ -90,7 +90,12 @@ test('OPTIONS-001：options 列每个 harness 能选的型号（隐藏的不列�
     const client = await litch(env)
     const threadId = await parentOn(env, client)
     const result = await call(env, threadId, 'options', {})
-    assert.deepEqual(result.current, { harness: 'pi', model: 'gpt-6-astra', effort: 'xhigh' })
+    assert.deepEqual(result.current, {
+      harness: 'pi',
+      model: 'gpt-6-astra',
+      effort: 'xhigh',
+      permission: ':workspace',
+    })
     const claude = result.harnesses.find((one: any) => one.harness === 'claude-code')
     assert.equal(claude.default_model, 'anthropic/opus')
     assert.deepEqual(

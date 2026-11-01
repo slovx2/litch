@@ -53,6 +53,7 @@ export type ProposalStatus =
  * 对话流里的卡片翻到老的也要写对状态，侧面板的“建议任务”列全部
  */
 export interface SessionProposalView {
+  permission?: string | null
   id: string
   title: string
   /** 起子会话时发给它的任务 */
@@ -172,6 +173,7 @@ export interface ProposalOverrides {
   prompt?: string
   /** 空串是去掉提案里的背景 */
   background?: string
+  permission?: string
   sandbox?: SandboxLevel
   /** 子会话停下后要不要唤醒父会话。不给的照提案里的 */
   wakeParent?: boolean

@@ -195,6 +195,7 @@ export interface Manager {
   harness: string
   model: string | null
   effort: string | null
+  permission?: string | null
   template: ManagerTemplate
   dispatch: ManagerDispatchSettings
   contact: ManagerContactSettings
@@ -223,6 +224,7 @@ export interface ManagerListResponse {
   managers: Manager[]
 }
 export interface ManagerCreateParams {
+  permission?: string | null
   cwd: string
   harness: string
   model: string | null

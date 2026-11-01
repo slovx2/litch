@@ -109,8 +109,8 @@ test('SESSION-PROPOSALS-002：带 widerSandbox 的提案模型不能 accept，�
     const refused = await env.pi.callTool(threadId, SESSIONS, 'accept', {
       proposal_id: proposalId,
     })
-    assert.equal(failureOf(refused?.answer), 'blocked')
-    assert.match(refused?.answer.result.contentItems[0].text, /wider sandbox/)
+    assert.equal(refused?.answer.result.success, false)
+    assert.match(refused?.answer.result.contentItems[0].text, /does not support/)
     assert.equal(env.device.sessionTree.store.proposal(proposalId)?.status, 'pending')
   } finally {
     await env.close()
@@ -378,7 +378,7 @@ function bulkOf(threadId: string, id: string) {
   }
 }
 
-test('SESSION-PROPOSALS-006：用户开始时可改 harness、模型、强度、目录、标题、简报、权限；沙箱照旧收紧；改成 fork 要同 harness', async () => {
+test('SESSION-PROPOSALS-006：用户开始时可改 harness、模型、强度、目录、标题、简报、权限；可选择较低权限；改成 fork 要同 harness', async () => {
   const env = treeRig()
   try {
     const client = await litch(env)
@@ -418,15 +418,15 @@ test('SESSION-PROPOSALS-006：用户开始时可改 harness、模型、强度、
         title: '改过的标题',
         prompt: '改过的简报',
         background: '改过的背景',
-        approvalPolicy: 'never',
-        sandbox: 'danger-full-access',
+        approvalPolicy: 'on-request',
+        sandbox: 'read-only',
       },
     })
     const started = env.pi.sent('thread/start').at(-1)
     assert.equal(started.cwd, '/work/other')
     assert.equal(started.model, 'fake', '模型清掉了，用缺省：父会话现在的（同 harness）')
     assert.equal(started.approvalPolicy, 'on-request', '审批收紧到父会话的')
-    assert.equal(started.sandbox, 'workspace-write', '沙箱收紧到父会话的')
+    assert.equal(started.permissions, ':read-only', '明确选择较低权限')
     const first = env.pi.sent('turn/start').find((params) => params.threadId === childId)
     assert.equal(first.effort, 'high')
     assert.match(first.input[0].text, /Task: 改过的标题/)

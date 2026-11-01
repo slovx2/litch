@@ -395,6 +395,7 @@ export class DeviceServer {
           log,
         })
       : null
+    info.extensions.push(EXTENSION.projectPermissions)
     if (this.worktrees) info.extensions.push(EXTENSION.worktrees)
     this.orchestrating = this.sessionTreeOn()
     this.sessionTree = new SessionTree({

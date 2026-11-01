@@ -12,6 +12,7 @@ import {
   type InitializeResponse,
   type JsonRpcId,
 } from '../../../protocol/src/index.mjs'
+import type { ProjectPermissionRequests } from '../../../protocol/src/project-permissions.mjs'
 import { type Cancel, createCancel } from '../channel/cancel.mjs'
 import type { Clock } from '../channel/protocol.mjs'
 import type { ConnectGuide, ConnectStage } from '../model.mjs'
@@ -83,11 +84,11 @@ export interface Link {
   stop(): void
   /** 暂时关闭连接并禁止重试；恢复不重开健康连接，也不销毁设备的缓存与订阅。 */
   setPaused(paused: boolean): void
-  request<M extends ClientRequestMethod | keyof ManagerRequests>(
+  request<M extends ClientRequestMethod | keyof ManagerRequests | keyof ProjectPermissionRequests>(
     method: M,
-    params: (ClientRequests & ManagerRequests)[M]['params'],
+    params: (ClientRequests & ManagerRequests & ProjectPermissionRequests)[M]['params'],
     options?: RpcRequestOptions,
-  ): Promise<(ClientRequests & ManagerRequests)[M]['result']>
+  ): Promise<(ClientRequests & ManagerRequests & ProjectPermissionRequests)[M]['result']>
 }
 
 const DEFAULT_BACKOFF = [500, 1000, 2000, 5000, 10_000, 30_000]
@@ -213,6 +214,7 @@ export function createLink(options: LinkOptions): Link {
                 // deviceTasks：声明了才收得到定时任务和运行的变化通知（litch/task/changed、litch/task/run/changed）
                 EXTENSION.deviceTasks,
                 EXTENSION.manager,
+                EXTENSION.projectPermissions,
                 // sessionTree：声明了，会话对象上才有 Litch 子会话的 litchLineage，才收得到父子关系、提案变了的通知
                 EXTENSION.sessionTree,
                 EXTENSION.suggestionInbox,

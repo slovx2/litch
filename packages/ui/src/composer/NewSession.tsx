@@ -28,6 +28,7 @@ import { UserAttachments } from '../transcript/messages.tsx'
 import { Composer } from './Composer.tsx'
 import { fitPicks, type PlaceWish } from './new-place.ts'
 import { Picker, type PickerOption } from './Picker.tsx'
+import { useProjectPermission } from './project-permission.ts'
 import {
   pickHarness,
   recallPicks,
@@ -325,6 +326,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
   const [pending, setPending] = useState<UserMessageItem | null>(null)
 
   const cwd = workspace?.roots[0] ?? null
+  const project = useProjectPermission(useServices(), deviceId, cwd)
   /** 工作区根的分支：不是 git 仓库、设备建不了工作树时是 null，不出“在哪做” */
   const branches = useBranches(device, workspace ? cwd : null)
   /** 这次在页上选的“在哪做”，连同是在哪台设备的哪个工作区选的；换了去处就回到那里记下的 */
@@ -341,18 +343,26 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
   const defaults = useNewSessionDefaults(deviceId, harness?.id, cwd)
   // 还在问的时候底栏先不出选择器：先按清单猜一个、问回来再换掉的话，底栏会跳一下，
   // 正点开的选项（比如那个模型才有的强度）会在手底下没了
-  const holding = defaults === undefined
+  const holding = defaults === undefined || project.loading
 
   const mine = chosen.harness === harnessId ? chosen.picks : {}
   const own = options ? fitPicks(mine, options) : mine
   const picks = { ...(options ? recallPicks(deviceId, harnessId, options) : {}), ...own }
+  if (cwd) {
+    delete picks.permission
+    if (project.permission) picks.permission = project.permission
+  }
+  const permissionBlocked =
+    project.permission &&
+    options &&
+    !options.permissions.some((entry) => entry.id === project.permission)
   // 底栏上显示的：选过的；没选的是对面不带设置新建时会用的，建会话时也照显示的发，显示的就是会用的
   const settled = options && !holding ? newSessionSettings(picks, defaults, options) : null
   const shown: SessionSettings = {
     model: settled?.model ?? null,
     effort: settled?.effort ?? null,
     speed: settled?.speed ?? null,
-    permission: settled?.permission ?? null,
+    permission: project.permission ?? settled?.permission ?? null,
     // 计划模式只管眼前这一个新对话，不记到下一次；这个 harness 不会的话没有这个开关
     mode: options?.plan ? (own.mode ?? 'default') : null,
   }
@@ -369,6 +379,8 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
   const missing = workspaceId !== null && !workspace
 
   const create = async (text: string, images: ImageAttachment[], extras: MessageExtra[]) => {
+    if (permissionBlocked || project.loading || project.error)
+      throw new Error(project.error ?? t('permission.project.unsupported'))
     // 第一句是 /goal 加上目标（harness 会持续目标时）：建好会话就设目标，不发消息，它空闲时自己开始做
     const goal = harness?.abilities?.goals === true ? parseGoalCommand(text) : null
     if (goal && !goal.objective) throw new Error(t('goal.needText'))
@@ -530,6 +542,9 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
       <div className="dock-wrap">
         <div className="dock" style={wireStyle(device?.wire)}>
           <div className="dock-in">
+            {permissionBlocked || project.error ? (
+              <p role="alert">{project.error ?? t('permission.project.unsupported')}</p>
+            ) : null}
             <Composer
               deviceId={deviceId}
               harness={harness?.id}
@@ -537,7 +552,15 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
               draftKey="new"
               cwd={cwd}
               placeholder={t('newSession.placeholder')}
-              blocked={blocked}
+              blocked={
+                blocked ??
+                project.error ??
+                (project.loading
+                  ? t('permission.project.loading')
+                  : permissionBlocked
+                    ? t('permission.project.unsupported')
+                    : null)
+              }
               fresh
               lead={choice}
               // 发出去之后不再让换去处，这一排收起来：输入区的高度和会话里的一样，建好切过去时不跳
@@ -560,9 +583,11 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
               queued={[]}
               settings={shown}
               holdSettings={holding}
-              onSettings={(patch) =>
-                setChosen({ harness: harnessId, picks: { ...mine, ...patch } })
-              }
+              onSettings={(patch) => {
+                const picks = { ...mine, ...patch }
+                if (cwd) delete picks.permission
+                setChosen({ harness: harnessId, picks })
+              }}
               onSend={create}
               failure={(reason) => t('newSession.failed', { reason })}
             />

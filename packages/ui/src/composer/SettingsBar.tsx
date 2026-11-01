@@ -16,6 +16,7 @@ import { useKey, useServices } from '../app/services.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 import { EFFORT_TEXT } from './efforts.ts'
 import { Picker, type PickerOption } from './Picker.tsx'
+import { useProjectPermission } from './project-permission.ts'
 
 /** 问过的记着，切会话时底栏不用等一下才出来。一台设备上每个 harness 各记各的 */
 const known = new Map<string, ComposeOptions>()
@@ -96,6 +97,8 @@ const PERMISSION_TEXT: Record<string, { title: MessageKey; note: MessageKey }> =
 }
 
 interface SettingsBarProps {
+  deviceId?: string | undefined
+  cwd?: string | null | undefined
   options: ComposeOptions | null
   settings: SessionSettings
   /** 这是在新建会话：会话建好之后换不了的那几档权限，这时可以选 */
@@ -107,7 +110,15 @@ interface SettingsBarProps {
 const FAST_SPEEDS = new Set(['priority', 'fast'])
 
 /** 输入区底栏：模型、强度、速度、权限预设、计划模式。可选值全部来自设备，这里只管显示 */
-export function SettingsBar({ options, settings, fresh, onChange }: SettingsBarProps) {
+export function SettingsBar({
+  options,
+  settings,
+  fresh,
+  onChange,
+  deviceId = '',
+  cwd,
+}: SettingsBarProps) {
+  const project = useProjectPermission(useServices(), deviceId, cwd)
   const t = useT()
   if (!options) return null
   const model = options.models.find((entry) => entry.id === settings.model)
@@ -132,7 +143,8 @@ export function SettingsBar({ options, settings, fresh, onChange }: SettingsBarP
     const title = preset.title ? t.said(preset.title) : text ? t(text.title) : preset.id
     const note = preset.note ? t.said(preset.note) : text ? t(text.note) : null
     // 会话建好之后换不了的那一档：只在新建时选得了。会话正用着的那一档照常显示
-    const locked = !fresh && !preset.switchable && preset.id !== current
+    const locked =
+      (!fresh && !preset.switchable && preset.id !== current) || project.loading || project.saving
     // 要不要先问一遍听声明的。内置的那一档问的话是界面自己的；声明的预设拿它自己的说明来问
     const asked = preset.title ? (note ?? t('permission.confirm.declared')) : null
     return {
@@ -140,8 +152,21 @@ export function SettingsBar({ options, settings, fresh, onChange }: SettingsBarP
       title,
       // 菜单里只列名字，说明在鼠标停上去的提示里；换不了的那一档在名字下面写为什么
       ...(note ? { hint: note } : {}),
-      ...(locked ? { disabled: true, note: t('permission.newOnly') } : {}),
-      ...(preset.confirm && !locked
+      ...(locked
+        ? {
+            disabled: true,
+            note: t(
+              project.loading
+                ? 'permission.project.loading'
+                : project.saving
+                  ? 'permission.project.saving'
+                  : 'permission.newOnly',
+            ),
+          }
+        : {}),
+      ...((preset.confirm || (cwd && preset.id === ':danger-full-access')) &&
+      !project.confirmed(preset.id) &&
+      !locked
         ? {
             confirm: {
               title: t('permission.confirm.title', { name: title }),
@@ -214,10 +239,18 @@ export function SettingsBar({ options, settings, fresh, onChange }: SettingsBarP
           kind="permission"
           label={t('composer.permission')}
           value={current}
+          fallback={
+            current && PERMISSION_TEXT[current] ? t(PERMISSION_TEXT[current].title) : undefined
+          }
           options={options.permissions.map(permission)}
-          onPick={(id) => onChange({ permission: id })}
+          onPick={(id) => {
+            void project.save(id, true).then((saved) => {
+              if (saved) onChange({ permission: id })
+            })
+          }}
         />
       ) : null}
+      {project.error ? <span role="alert">{project.error}</span> : null}
       {options.plan ? (
         // 计划模式：一个开关。开着的时候下一条消息先出计划，确认了再动手。
         // 画成带拨块的开关，关着的时候也一直在：光看底栏上有“计划”两个字分不出开没开（别的产品里出现计划标识就是开着）

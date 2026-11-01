@@ -180,6 +180,8 @@ export const keys = {
   /** number：各台设备上没看过的运行一共有几条。侧栏的“定时任务”入口用它 */
   tasksUnread: 'tasks:unread',
   /** 经理列表与可用性常驻；子树继续使用 summary、children、harnessOf。 */
+  projectPermission: (deviceId: string, cwd: string) => `permission:${deviceId}:${cwd}`,
+  projectPermissionError: (deviceId: string, cwd: string) => `permission-error:${deviceId}:${cwd}`,
   managersAvailable: (deviceId: string) => `managers:${deviceId}:available`,
   managerIds: (deviceId: string) => `managers:${deviceId}:ids`,
   manager: (deviceId: string, managerId: string) => `managers:${deviceId}:manager:${managerId}`,
@@ -376,6 +378,7 @@ export interface Replica {
    */
   openDiff(deviceId: string, root: string, scope: DiffScope, sessionId: string | null): () => void
   /** 看板按经理订阅，可重复打开；最后一个引用关闭后清掉快照和四页投影。 */
+  openProjectPermission(deviceId: string, cwd: string): () => void
   openManagerBoard(deviceId: string, managerId: string): () => void
   /**
    * 打开一个任务的运行记录：取头一页放进 keys.taskRuns，之后运行的变化跟着改；重连之后重新取头一页。
@@ -534,6 +537,7 @@ export function createReplica(channel: CoreChannel): Replica {
   const store = new KeyedStore()
   const decisionListeners = new Set<(manager: ManagerView, decision: ManagerDecisionView) => void>()
   const managerLists = new Map<string, { stop(): void; rows: Map<string, ManagerView> }>()
+  const permissionEntries = new Map<string, { count: number; stop(): void }>()
   const managerBoards = new Map<string, { deviceId: string; count: number; stop(): void }>()
   const pendingManagers = () => {
     const total = [...managerLists.values()].reduce(
@@ -1440,6 +1444,40 @@ export function createReplica(channel: CoreChannel): Replica {
     },
 
     files,
+
+    openProjectPermission(deviceId, cwd) {
+      const key = keys.projectPermission(deviceId, cwd)
+      let entry = permissionEntries.get(key)
+      if (!entry) {
+        const stop = channel.subscribe(
+          { kind: 'projectPermission', deviceId, cwd },
+          {
+            snapshot: (view) => {
+              store.set(key, view)
+              store.delete(keys.projectPermissionError(deviceId, cwd))
+            },
+            delta: (ops) => {
+              for (const op of ops) store.set(key, op.view)
+            },
+            error: (error) => store.set(keys.projectPermissionError(deviceId, cwd), error),
+          },
+        )
+        entry = { count: 0, stop }
+        permissionEntries.set(key, entry)
+      }
+      entry.count++
+      let released = false
+      return () => {
+        if (released) return
+        released = true
+        if (--entry.count === 0) {
+          entry.stop()
+          permissionEntries.delete(key)
+          store.delete(key)
+          store.delete(keys.projectPermissionError(deviceId, cwd))
+        }
+      }
+    },
 
     openManagerBoard(deviceId, managerId) {
       const key = keys.managerBoard(deviceId, managerId)

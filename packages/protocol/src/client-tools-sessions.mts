@@ -128,6 +128,7 @@ export interface SessionsStartArguments {
   harness?: string
   model?: string
   /** 不给是开始那一刻这个会话的（harness 不同时是那边的默认） */
+  permission?: string
   effort?: string
   /** 不给是这个会话的目录 */
   cwd?: string
@@ -149,6 +150,7 @@ export interface SessionsStartArguments {
 
 export interface SessionsAcceptArguments {
   proposal_id: string
+  permission?: string
   effort?: string
   /** 开始 offer 卡时补的简报（用户选了新会话之后）；别的卡不给，照提案里的 */
   prompt?: string
@@ -179,6 +181,7 @@ export interface SessionsSuggestion {
   title: string
   prompt: string
   /** 不给是开始那一刻这个会话的（harness 不同时是那边的默认），model 同 */
+  permission?: string
   effort?: string
   /** fresh 时必填，见 SessionsStartArguments.background */
   background?: string
@@ -278,6 +281,7 @@ export interface SessionModelOption {
 
 /** options 里的一个 harness */
 export interface SessionHarnessOptions {
+  permissions?: string[]
   harness: string
   /** 现在开不了（没装、没在运行、连不上）的原因；能开的不给，models 是空的 */
   unavailable?: string
@@ -291,7 +295,12 @@ export interface SessionHarnessOptions {
 
 export interface SessionsOptionsResult {
   /** 这个会话现在用的；读不出来的是 null */
-  current: { harness: string; model: string | null; effort: string | null }
+  current: {
+    harness: string
+    model: string | null
+    effort: string | null
+    permission?: string | null
+  }
   harnesses: SessionHarnessOptions[]
 }
 
@@ -497,7 +506,7 @@ const SESSION_PURPOSE =
   'What a separate session is for: a task of its own. It outlives this turn, a short brief is enough to start it, the user may want to open, steer or review it apart from this work, and it ends in something of its own (a branch, a pull request, a change in another repository). A piece of the task at hand is never one, however large or parallel: searching or reading widely, independent parts of one change, and testing, checking or reviewing what you built run here or in your own subagents, whose results come back to you in this turn. Quick things (a question, a read, one edit, a handful of tool calls) stay here.'
 
 function userAskedRule(taskCards: boolean): string {
-  return `- Use litch_sessions.start with initiation "user_asked" when the user has requested sub-sessions in this conversation, or approved a plan that explicitly includes splitting work into sub-sessions. You may carry out that authorization in any later turn, including wake, reminder and scheduled turns, unless the user has changed or withdrawn it. You must check the conversation for that authorization; if unsure, ${taskCards ? 'use initiation "propose"' : 'ask the user before starting'}. Approving a goal alone does not authorize splitting it into sub-sessions. Direct starts have a separate allowance of ${SESSION_TOOL_LIMITS.directStartsPerTurn} per parent per turn, with ${SESSION_TREE_LIMITS.liveChildren} direct children running or starting at once. Across the whole tree, at most ${SESSION_TREE_LIMITS.liveTree} sessions may run or start at once, including the root; maximum depth is ${SESSION_TREE_LIMITS.maxDepth}, with the root at depth 0. Wider sandbox access still requires confirmation. Do not bypass limits using cards or intermediary sessions. Pieces whose results you need for your answer in this turn go to your own subagents instead, unless the user asked for sessions.`
+  return `- Use litch_sessions.start with initiation "user_asked" when the user has requested sub-sessions in this conversation, or approved a plan that explicitly includes splitting work into sub-sessions. You may carry out that authorization in any later turn, including wake, reminder and scheduled turns, unless the user has changed or withdrawn it. You must check the conversation for that authorization; if unsure, ${taskCards ? 'use initiation "propose"' : 'ask the user before starting'}. Approving a goal alone does not authorize splitting it into sub-sessions. Direct starts have a separate allowance of ${SESSION_TOOL_LIMITS.directStartsPerTurn} per parent per turn, with ${SESSION_TREE_LIMITS.liveChildren} direct children running or starting at once. Across the whole tree, at most ${SESSION_TREE_LIMITS.liveTree} sessions may run or start at once, including the root; maximum depth is ${SESSION_TREE_LIMITS.maxDepth}, with the root at depth 0. Sub-sessions inherit the parent permission; they may use a lower supported level, never a higher one. Do not bypass limits using cards or intermediary sessions. Pieces whose results you need for your answer in this turn go to your own subagents instead, unless the user asked for sessions.`
 }
 
 const HAND_OFF =
@@ -575,6 +584,12 @@ const WRAP_UP_TOOL: ClientToolFunctionSpec = {
               description:
                 'Default: this session’s current model (the target harness’s default when the harness differs). To change it, pass a model id listed by options.',
             },
+            permission: {
+              type: 'string',
+              enum: [':read-only', ':workspace', ':danger-full-access'],
+              description:
+                'Default: the parent session’s current permission. May be lowered, never raised. The target harness must support this level.',
+            },
             effort: {
               type: 'string',
               description:
@@ -637,7 +652,7 @@ function suggestionLine(wrapUp: boolean, taskCards: boolean): string {
 
 /** start 的说明：任务卡关着时只有 user_asked */
 function startDescription(wrapUp: boolean, taskCards: boolean): string {
-  const direct = `initiation "user_asked": start work the user requested in this conversation, or in an approved plan explicitly including sub-sessions, in any turn, including wake, reminder and scheduled turns. Check that authorization still applies; if unsure, ${taskCards ? 'use "propose"' : 'ask the user before starting'}. At most ${SESSION_TOOL_LIMITS.directStartsPerTurn} direct starts per parent per turn, ${SESSION_TREE_LIMITS.liveChildren} direct children running or starting at once, ${SESSION_TREE_LIMITS.liveTree} running or starting sessions in the whole tree including the root, and depth ${SESSION_TREE_LIMITS.maxDepth} (root is 0). Direct starts do not consume card slots. Wider sandbox access still requires confirmation.`
+  const direct = `initiation "user_asked": start work the user requested in this conversation, or in an approved plan explicitly including sub-sessions, in any turn, including wake, reminder and scheduled turns. Check that authorization still applies; if unsure, ${taskCards ? 'use "propose"' : 'ask the user before starting'}. At most ${SESSION_TOOL_LIMITS.directStartsPerTurn} direct starts per parent per turn, ${SESSION_TREE_LIMITS.liveChildren} direct children running or starting at once, ${SESSION_TREE_LIMITS.liveTree} running or starting sessions in the whole tree including the root, and depth ${SESSION_TREE_LIMITS.maxDepth} (root is 0). Direct starts do not consume card slots. Sub-sessions inherit the parent permission; they may use a lower supported level, never a higher one.`
   const fresh = `A fresh sub-session knows only background and prompt: background gives the context it cannot see (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2), prompt the task. Harness, model, effort and folder default to this session's current ones (model and effort: the target harness's defaults when the harness differs). To use another harness or model, call options first and pass the ids it lists.`
   if (!taskCards) return `Start a sub-session. ${direct} ${fresh}`
   return `Start a sub-session, propose one, or offer a new session. ${direct} "propose" (default): a card the user may start; nothing runs until they do (at most ${SESSION_TOOL_LIMITS.proposalsPerTurn} cards per turn). "offer": after a task has been finished in this session, the user's latest message is a new task unrelated to it; send the title only, as the only call in that message; the card asks the user "New session" or "Do it here" and the call waits for the answer, which tells you what to do next. ${fresh}${wrapUp ? ' To suggest work at the end of a turn, use wrap_up instead.' : ''}`
@@ -715,7 +730,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
         type: 'function',
         name: SESSION_TOOL.options,
         description:
-          'List the harnesses on this device you can start sub-sessions on, with their models (the ids start takes as model), reasoning efforts and defaults, and this session’s current harness, model and effort. Call it before choosing a harness or model other than this session’s; do not guess model ids.',
+          'List the harnesses on this device you can start sub-sessions on, with their models (the ids start takes as model), reasoning efforts, permission levels and defaults, and this session’s current harness, model, effort and permission. Call it before choosing a harness or model other than this session’s; do not guess model ids.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -747,6 +762,12 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
               type: 'string',
               description:
                 'Default: this session’s current model (the target harness’s default when the harness differs). To change it, pass a model id listed by options.',
+            },
+            permission: {
+              type: 'string',
+              enum: [':read-only', ':workspace', ':danger-full-access'],
+              description:
+                'Default: the parent session’s current permission. May be lowered, never raised. The target harness must support this level.',
             },
             effort: {
               type: 'string',
@@ -852,6 +873,12 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
               type: 'string',
               description:
                 'Default: this session’s current model (the target harness’s default when the harness differs). To change it, pass a model id listed by options.',
+            },
+            permission: {
+              type: 'string',
+              enum: [':read-only', ':workspace', ':danger-full-access'],
+              description:
+                'Default: the parent session’s current permission. May be lowered, never raised. The target harness must support this level.',
             },
             effort: {
               type: 'string',

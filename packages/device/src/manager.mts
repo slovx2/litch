@@ -33,6 +33,7 @@ import {
   validatePatch,
   validateTool,
 } from './manager-validate.mjs'
+import { requireSupportedPermission } from './session-permissions.mjs'
 import type { SessionTree } from './session-tree.mjs'
 import { DeviceError, isObject } from './wire.mjs'
 
@@ -333,9 +334,16 @@ export class DeviceManagers {
       latestActivity: null,
     }
     const link = await this.tree.link(params.harness)
+    const permission =
+      params.permission ?? this.tree.host.workspaces.permissions.read(params.cwd).permission
+    if (permission) {
+      requireSupportedPermission(link, permission)
+      manager.permission = permission
+    }
     const tools = [...managerTools(manager), ...(link.native ? [] : [PRESENTATION_SPEC])]
     const created = await link.request('thread/start', {
       cwd: params.cwd,
+      ...(permission ? { permissions: permission } : {}),
       ...(params.model ? { model: params.model } : {}),
       dynamicTools: tools,
     })

@@ -1,6 +1,6 @@
 // 派一个子会话（模型的 litch_sessions.start、用户的 litch/session/start、开始提案（acceptProposal）都走这里）。
 // fresh：在目标 harness 上 thread/start（目录缺省是父会话的），再 turn/start 发简报；fork：同 harness 的 thread/fork
-// 再 turn/start。审批策略、沙箱取父会话和请求值里更严的那个；模型、强度不限，没给的取开始那一刻父会话的
+// 再 turn/start。访问权限继承父会话，显式提升或目标不支持时拒绝；模型、强度不限，没给的取开始那一刻父会话的
 //（目标 harness 和父会话不同时用那边的默认；那个模型没有这一档强度的也用默认）。建好后记父子关系、登记进会话索引
 // 和设备级工作区（跟父会话在同一个工作区，除非指定了别的），给每条客户端连接发 thread/started 和父子关系的通知。
 // 目录：worktree 为真的在设备层新建一个工作树（从宿主分支的最新提交切），为假的共用父会话的目录；没定的看宿主——
@@ -27,6 +27,11 @@ import type { Worktree, WorktreeFrom } from '../../protocol/src/worktrees.mjs'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import { lineInstructions } from './manager-rules.mjs'
+import {
+  childPermissions,
+  currentPermission,
+  supportedPermissions,
+} from './session-permissions.mjs'
 import type { SessionTree } from './session-tree.mjs'
 import { isObject } from './wire.mjs'
 import { worktreeCwd } from './worktrees.mjs'
@@ -47,6 +52,7 @@ export interface ChildSpec {
   /** 任务之前的背景（fresh 时单成一段放在任务前面；fork 不用）。不给、空串是没有 */
   background?: string | null
   wakeParent: boolean
+  permission?: string | null | undefined
   approvalPolicy?: unknown
   sandbox?: unknown
   /** 从哪个提案开始的（用户点了提案上的“开始”） */
@@ -70,25 +76,6 @@ export class StartRefused extends Error {
   }
 }
 
-/** 审批策略从松到严：never 最松，untrusted 最严；细分的（granular）和 on-request 算一档 */
-function approvalRank(value: unknown): number | null {
-  if (value === 'never') return 0
-  if (value === 'on-failure' || value === 'on-request') return 1
-  if (isObject(value) && 'granular' in value) return 1
-  if (value === 'untrusted') return 2
-  return null
-}
-
-/** 沙箱从松到严。父会话报的是策略对象（type），请求里给的是模式的名字 */
-function sandboxMode(value: unknown): string | null {
-  const type = isObject(value) ? value.type : value
-  if (type === 'dangerFullAccess' || type === 'danger-full-access') return 'danger-full-access'
-  if (type === 'workspaceWrite' || type === 'workspace-write' || type === 'externalSandbox')
-    return 'workspace-write'
-  if (type === 'readOnly' || type === 'read-only') return 'read-only'
-  return null
-}
-
 const SANDBOX_RANK: Record<string, number> = {
   'danger-full-access': 0,
   'workspace-write': 1,
@@ -104,15 +91,12 @@ const PRESET_SANDBOX: Record<string, string> = {
 
 /**
  * 这个 harness 最严给得到哪一档沙箱：看它在 runtime/info 里声明的权限预设。
- * 没声明预设的（原生 codex，照协议的沙箱参数办）、一个都不认识的是 null，当作哪档都给得了
+ * 原生 Codex 支持内置三档；其余没有可识别预设时为 null，创建路径仍会拒绝未知权限
  */
 function strictestSandbox(link: EngineLink): string | null {
-  const presets = link.runtime?.permissionPresets
-  if (!Array.isArray(presets)) return null
   let best: string | null = null
-  for (const preset of presets) {
-    const mode =
-      isObject(preset) && typeof preset.id === 'string' ? PRESET_SANDBOX[preset.id] : null
+  for (const preset of supportedPermissions(link)) {
+    const mode = PRESET_SANDBOX[preset]
     if (mode && (best === null || (SANDBOX_RANK[mode] ?? 0) > (SANDBOX_RANK[best] ?? 0)))
       best = mode
   }
@@ -130,7 +114,7 @@ export async function widerSandbox(
 ): Promise<string | null> {
   const parentHarness = await tree.owner(parentId)
   const { config } = await parentSettings(tree, parentId, parentHarness)
-  const theirs = sandboxMode(config?.sandbox)
+  const theirs = PRESET_SANDBOX[currentPermission(config) ?? ''] ?? null
   const link = await tree.link(harness)
   const best = strictestSandbox(link)
   if (theirs === null || best === null) return null
@@ -152,27 +136,6 @@ export async function parentSettings(
   const config = resumed ?? (await link.request('thread/resume', { threadId: parentId }))
   tree.releaseLater(parentHarness, parentId)
   return { link, config: isObject(config) ? config : null }
-}
-
-/** 子会话的审批策略、沙箱：不宽于父会话。父会话报不出来的那一项照请求的给（都没有就不带，用引擎的缺省） */
-export function tightened(
-  parent: Record<string, unknown> | null,
-  requested: { approvalPolicy?: unknown; sandbox?: unknown },
-): { approvalPolicy?: unknown; sandbox?: string } {
-  const out: { approvalPolicy?: unknown; sandbox?: string } = {}
-  const mine = approvalRank(parent?.approvalPolicy)
-  const asked = approvalRank(requested.approvalPolicy)
-  if (mine !== null && (asked === null || asked < mine)) out.approvalPolicy = parent?.approvalPolicy
-  else if (asked !== null) out.approvalPolicy = requested.approvalPolicy
-  const theirs = sandboxMode(parent?.sandbox)
-  const wanted = sandboxMode(requested.sandbox)
-  const rank = (mode: string | null) => (mode === null ? null : (SANDBOX_RANK[mode] ?? null))
-  const parentRank = rank(theirs)
-  const wantedRank = rank(wanted)
-  if (theirs !== null && (wantedRank === null || (parentRank !== null && wantedRank < parentRank)))
-    out.sandbox = theirs
-  else if (wanted !== null) out.sandbox = wanted
-  return out
 }
 
 /**
@@ -519,8 +482,8 @@ async function createChild(
     parentHarness,
   )
   const parentThread = isObject(parentConfig?.thread) ? parentConfig.thread : null
-  const permissions = tightened(parentConfig, spec)
   const link = harness === parentHarness ? parentLink : await tree.link(harness)
+  const permissions = childPermissions(parentConfig, spec, link)
   const managerFork = spec.kind === 'fork' && Boolean(tree.managers?.store.forThread(parentId))
   // Claude 的 thread/fork 经 saveRuntimeSettings 替换动态工具；其余现有引擎会原样继承，不能假装已经隔离。
   if (managerFork && (link.native || link.runtime?.engine !== 'claude-code'))
@@ -726,6 +689,7 @@ export interface ProposalOverrides {
   prompt?: string
   /** 空串是去掉提案里的背景 */
   background?: string
+  permission?: string | null | undefined
   approvalPolicy?: unknown
   sandbox?: unknown
   /** 子会话停下后要不要唤醒父会话。不给照提案 */
@@ -764,6 +728,12 @@ export async function acceptProposal(
       prompt: overrides.prompt ?? proposal.prompt,
       background: overrides.background ?? proposal.background ?? '',
       wakeParent: overrides.wakeParent ?? proposal.wakeParent,
+      permission:
+        overrides.permission !== undefined
+          ? overrides.permission || null
+          : overrides.sandbox == null
+            ? proposal.permission
+            : null,
       approvalPolicy: overrides.approvalPolicy,
       sandbox: overrides.sandbox,
       proposalId: proposal.id,

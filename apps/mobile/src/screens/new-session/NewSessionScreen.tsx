@@ -25,11 +25,12 @@ import { ComposeBox, useDraft } from '../../detail/composer/ComposeBox'
 import { draftKey } from '../../detail/composer/drafts'
 import { useComposeOptions, useNewSessionDefaults } from '../../detail/composer/options'
 import { PickerSheet } from '../../detail/composer/PickerSheet'
+import { useProjectPermission } from '../../detail/composer/project-permission'
 import { SettingsBar } from '../../detail/composer/SettingsBar'
 import { goalIntent } from '../../detail/goal/logic'
 import { SlashGoal } from '../../detail/goal/SlashGoal'
 import type { RootStackParamList } from '../../nav/routes'
-import { useChannel, useKey } from '../../shell/services'
+import { useChannel, useKey, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Row, SectionLabel } from '../../ui/kit/controls'
 import { Prompt } from '../../ui/kit/overlays'
@@ -87,6 +88,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
   const harnessId = harness?.id ?? ''
   const options = useComposeOptions(deviceId, harness?.id)
   const defaults = useNewSessionDefaults(deviceId, harness?.id, cwd)
+  const project = useProjectPermission(useServices(), deviceId, cwd)
   /** 工作区根的分支：不是 git 仓库、设备建不了工作树时是 null，不出“位置” */
   const branches = useBranches(device, workspace ? cwd : null)
   /** 这次在页上选的位置和起点，连同是在哪个工作区选的；换了工作区就回到那里记下的 */
@@ -108,12 +110,20 @@ export function NewSessionScreen({ navigation, route }: Props) {
   const slot = `${deviceId}/${harnessId}`
   const mine = own.slot === slot ? own.picks : {}
   const picks = { ...(options ? recallPicks(deviceId, harnessId, options) : {}), ...mine }
+  if (cwd) {
+    delete picks.permission
+    if (project.permission) picks.permission = project.permission
+  }
+  const permissionBlocked =
+    project.permission &&
+    options &&
+    !options.permissions.some((entry) => entry.id === project.permission)
   const settled = options ? newSessionSettings(picks, defaults, options) : null
   const shown: SessionSettings = {
     model: settled?.model ?? null,
     effort: settled?.effort ?? null,
     speed: settled?.speed ?? null,
-    permission: settled?.permission ?? null,
+    permission: project.permission ?? settled?.permission ?? null,
     mode: options?.plan ? (mine.mode ?? 'default') : null,
   }
   // 问到了对面的默认就把显示的几项都明着发；没问到只发选了的，免得把猜的当成选的发出去
@@ -126,17 +136,21 @@ export function NewSessionScreen({ navigation, route }: Props) {
       : picks
 
   const missing = where.kind === 'workspace' && workspaces !== undefined && !workspace
-  const blocked = !device
-    ? t('newSession.noDevice')
-    : device.connection === 'connecting' || device.connection === 'reconnecting'
-      ? t('newSession.deviceConnecting', { name: t.text(device.name) })
-      : device.connection !== 'online'
-        ? t('newSession.deviceOffline', { name: t.text(device.name) })
-        : !harness
-          ? t('newSession.noHarness')
-          : missing
-            ? t('newSession.workspaceGone')
-            : null
+  const blocked =
+    permissionBlocked || project.loading || project.error
+      ? (project.error ??
+        t(project.loading ? 'permission.project.loading' : 'permission.project.unsupported'))
+      : !device
+        ? t('newSession.noDevice')
+        : device.connection === 'connecting' || device.connection === 'reconnecting'
+          ? t('newSession.deviceConnecting', { name: t.text(device.name) })
+          : device.connection !== 'online'
+            ? t('newSession.deviceOffline', { name: t.text(device.name) })
+            : !harness
+              ? t('newSession.noHarness')
+              : missing
+                ? t('newSession.workspaceGone')
+                : null
   const imagesOff =
     harness?.abilities?.images === false
       ? t('composer.image.harness')
@@ -320,10 +334,16 @@ export function NewSessionScreen({ navigation, route }: Props) {
               top={<SlashGoal text={draft.text} able={goalsAble} onPick={draft.setText} />}
               bar={
                 <SettingsBar
+                  deviceId={deviceId}
+                  cwd={cwd}
                   fresh
                   options={options}
                   settings={shown}
-                  onChange={(patch) => setOwn({ slot, picks: { ...mine, ...patch } })}
+                  onChange={(patch) => {
+                    const picks = { ...mine, ...patch }
+                    if (cwd) delete picks.permission
+                    setOwn({ slot, picks })
+                  }}
                 />
               }
             />

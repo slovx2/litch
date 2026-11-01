@@ -1994,7 +1994,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         items: {},
         requests: [],
         queued: [],
-        settings: sampleSettings(harnessOn(deviceId, init.harness)),
+        settings: {
+          ...sampleSettings(harnessOn(deviceId, init.harness)),
+          ...(init.permission ? { permission: init.permission } : {}),
+        },
         usage: null,
         can: canOf(deviceId, summary.harness),
         forkedFrom: null,
@@ -2060,6 +2063,21 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
   }
   const tasks = createMockTasks(tasksHost)
+  const permissionRecords = new Map<
+    string,
+    import('../../../protocol/src/project-permissions.mjs').ProjectPermission
+  >()
+  const permissionSinks = new Map<string, Set<HostSink>>()
+  const permissionView = (deviceId: string, cwd: string) => ({
+    deviceId,
+    cwd,
+    available: true,
+    record: permissionRecords.get(`${deviceId}:${cwd}`) ?? {
+      cwd,
+      permission: null,
+      confirmedPermissions: [],
+    },
+  })
   const managers = createMockManagers({
     ...tasksHost,
     say(deviceId, threadId, prompt, answer) {
@@ -2806,6 +2824,21 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       }
       const tuned = harnessConfig.command(name, params)
       if (tuned !== undefined) return tuned
+      if (name === 'projectPermission.set') {
+        const { deviceId, cwd, permission, confirmed } =
+          params as Commands['projectPermission.set']['params']
+        const key = `${deviceId}:${cwd}`
+        const previous = permissionRecords.get(key)
+        const approvals = new Set(previous?.confirmedPermissions ?? [])
+        if (confirmed) approvals.add(permission)
+        if (permission === ':danger-full-access' && !approvals.has(permission))
+          throw new ChannelError('rejected', 'Permission confirmation required')
+        const record = { cwd, permission, confirmedPermissions: [...approvals] }
+        permissionRecords.set(key, record)
+        for (const sink of permissionSinks.get(key) ?? [])
+          sink.snapshot(permissionView(deviceId, cwd))
+        return record
+      }
       const managerResult = managers.command(name, params)
       if (managerResult) return managerResult
       const scheduled = tasks.command(name, params)
@@ -3527,6 +3560,17 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       // 08 号：远程会话在这台电脑上的动静（mock-machine.mts）
       if (topic.kind === 'machine') return machine.subscribe(sink)
       // 定时任务（mock-tasks.mts）
+      if (topic.kind === 'projectPermission') {
+        const key = `${topic.deviceId}:${topic.cwd}`
+        const sinks = permissionSinks.get(key) ?? new Set<HostSink>()
+        permissionSinks.set(key, sinks)
+        sinks.add(sink)
+        sink.snapshot(permissionView(topic.deviceId, topic.cwd))
+        return () => {
+          sinks.delete(sink)
+          if (!sinks.size) permissionSinks.delete(key)
+        }
+      }
       if (topic.kind === 'managers') return managers.subscribe(topic.deviceId, sink)
       if (topic.kind === 'managerBoard')
         return managers.subscribe(topic.deviceId, sink, topic.managerId)

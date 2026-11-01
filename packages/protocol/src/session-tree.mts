@@ -96,6 +96,7 @@ export interface SessionProposal {
   harness: string | null
   model: string | null
   /** 推理强度。不给是开始那一刻父会话的（目标 harness 和父会话不同时是那边的默认）。旧设备进程不带 */
+  permission?: string | null
   effort?: string | null
   cwd: string | null
   kind: SessionLineageKind
@@ -230,7 +231,8 @@ export interface SessionStartParams {
   /** 任务之前的背景（fresh 时放在任务前面单成一段；fork 不用）。可以不给 */
   background?: string
   wakeParent: boolean
-  /** 审批策略、沙箱：给了也会被收紧到不宽于父会话 */
+  /** 审批策略、沙箱：不得宽于父会话；超限或与 permission 冲突时拒绝 */
+  permission?: string
   approvalPolicy?: string
   sandbox?: string
   /** 子会话要不要自己的工作树（设备列了 worktrees 才认）。不给照缺省：父会话在 Litch 建的工作树里就开新的 */
@@ -265,7 +267,7 @@ export interface SessionProposalIdParams {
   threadId?: string
 }
 
-/** 用户从卡片开始时改的东西。不给的照提案里的；和 litch/session/start 一样，沙箱收紧到不宽于父会话 */
+/** 用户从卡片开始时改的东西。不给的照提案里的；和 litch/session/start 一样，访问权限不得宽于父会话，超限时拒绝 */
 export interface SessionProposalOverrides {
   harness?: string
   model?: string
@@ -278,6 +280,7 @@ export interface SessionProposalOverrides {
   prompt?: string
   /** 空字符串是去掉提案里的背景 */
   background?: string
+  permission?: string
   approvalPolicy?: string
   sandbox?: string
   /** 子会话停下后要不要唤醒父会话 */

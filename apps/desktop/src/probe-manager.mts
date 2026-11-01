@@ -74,6 +74,7 @@ export async function managerProbe(): Promise<ManagerSeen> {
         title: one('.mg-title')?.textContent,
         crumb: one('.crumb')?.textContent,
         error: one('.mg-form [role="alert"]')?.textContent,
+        permission: one('.mg-form [data-kind="permission"]')?.textContent,
       })}`,
     )
   }
@@ -282,7 +283,13 @@ export async function managerProbe(): Promise<ManagerSeen> {
     )
   const activeStep = (step: string) => Boolean(one(`.mg-form[data-manager-step="${step}"]`))
   const tab = (step: string) => click(`[data-form-tab="${step}"]`)
-  const next = () => click('.mg-form button[type="submit"]')
+  const next = async () => {
+    await until('创建参数已就绪', () => {
+      const button = one<HTMLButtonElement>('.mg-form button[type="submit"]')
+      return button && !button.disabled
+    })
+    await click('.mg-form button[type="submit"]')
+  }
   const input = (label: string) => {
     const target = field(label)?.querySelector<HTMLInputElement | HTMLTextAreaElement>(
       'input, textarea',
@@ -328,6 +335,55 @@ export async function managerProbe(): Promise<ManagerSeen> {
     () => activeStep('runtime') && one('.mg-form [role="alert"]'),
   )
   fill(input('工作目录'), '~/work/litch')
+  // 只对模拟核心：取消不记确认；确认后跨 harness 复用；换目录不带走项目权限。
+  const managerHarness = field('经理使用')?.querySelector('select')
+  if (!managerHarness) throw new Error('运行环境缺少 harness 选择')
+  managerHarness.value = 'claude'
+  managerHarness.dispatchEvent(new Event('change', { bubbles: true }))
+  const permissionButton = '.mg-form [data-kind="permission"] .pick-btn'
+  const permissionIs = (title: string) => one(permissionButton)?.textContent?.includes(title)
+  const pickPermission = async (id: string) => {
+    await click(permissionButton)
+    const selector = `.mg-form [data-kind="permission"] [data-option="${id}"]`
+    await until('权限可选择', () => {
+      const option = one<HTMLButtonElement>(selector)
+      return option && option.getAttribute('aria-disabled') !== 'true'
+    })
+    await click(selector)
+  }
+  await until('项目初始权限', () => permissionIs('工作区'))
+  await pickPermission(':danger-full-access')
+  await until('首次完全访问需要确认', () => one('.mg-form .pick-ask'))
+  await click('.mg-form .pick-ask .ghost')
+  if (!permissionIs('工作区')) throw new Error('取消确认改变了项目权限')
+  await click('.mg-form [data-option=":danger-full-access"]')
+  await click('.mg-form .pick-ask .danger')
+  await until('确认后记住完全访问', () => permissionIs('完全访问'))
+  await pickPermission(':read-only')
+  await until('项目默认降低', () => permissionIs('只读'))
+  await pickPermission(':danger-full-access')
+  await until(
+    '再次选择完全访问不重复确认',
+    () => permissionIs('完全访问') && !one('.mg-form .pick-ask'),
+  )
+  managerHarness.value = 'pi'
+  managerHarness.dispatchEvent(new Event('change', { bubbles: true }))
+  await until('换 harness 沿用项目权限', () => permissionIs('完全访问'))
+  managerHarness.value = 'dsh'
+  managerHarness.dispatchEvent(new Event('change', { bubbles: true }))
+  await pickPermission(':read-only')
+  await until('另一 harness 可降低项目默认', () => permissionIs('只读'))
+  await pickPermission(':danger-full-access')
+  await until(
+    '跨 harness 的确认记录复用',
+    () => permissionIs('完全访问') && !one('.mg-form .pick-ask'),
+  )
+  managerHarness.value = 'claude'
+  managerHarness.dispatchEvent(new Event('change', { bubbles: true }))
+  fill(input('工作目录'), '~/work/other-project')
+  await until('不同项目不继承确认和默认', () => permissionIs('工作区'))
+  fill(input('工作目录'), '~/work/litch')
+  await until('回到原项目恢复权限', () => permissionIs('完全访问'))
   await next()
   await until('进入任务分配', () => activeStep('dispatch'))
   if (one<HTMLInputElement>('.mg-panel:not([hidden]) input[type="checkbox"]')?.checked)

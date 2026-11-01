@@ -43,7 +43,7 @@ export function widerLevel(
   wanted: SandboxLevel | null = null,
 ): SandboxLevel | null {
   const parent = levelOf(parentPermission)
-  // 要的比父会话宽也会被收紧到父会话那一档
+  // 提示目标最低要求时按父会话上限算；越权请求由创建入口单独拒绝。
   const mine = wanted && (!parent || LEVEL_RANK[wanted] >= LEVEL_RANK[parent]) ? wanted : parent
   const levels = targetPresets.flatMap((id) => PRESET_LEVEL[id] ?? [])
   if (!mine || levels.length === 0) return null

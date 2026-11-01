@@ -2,7 +2,12 @@ import type {
   ChromeSettingsRequest,
   ChromeSettingsState,
 } from '../../../protocol/src/chrome-browser.mjs'
+import type {
+  ProjectPermission,
+  ProjectPermissionSet,
+} from '../../../protocol/src/project-permissions.mjs'
 import type { TurnRecovery } from '../../../protocol/src/turn-recovery.mjs'
+import type { ProjectPermissionView } from '../device/project-permissions.mjs'
 // 界面与核心之间那条通道的约定：有哪些主题、增量长什么样、有哪些命令、线上发什么消息。
 // 通道只有两种用法：命令（一问一答，可取消）和订阅（先快照，后增量）。
 
@@ -182,6 +187,7 @@ export type Topic =
    */
   | { kind: 'tasks'; deviceId: string }
   /** 经理列表常驻订阅，断线保留快照；可用性同 tasks。 */
+  | { kind: 'projectPermission'; deviceId: string; cwd: string }
   | { kind: 'managers'; deviceId: string }
   | { kind: 'suggestions'; deviceId: string }
   /** 只在看板打开时订阅；设备变更通知后重读整块看板。 */
@@ -241,6 +247,7 @@ export interface TopicData {
   machine: MachineActivityView
   tasks: TasksView
   suggestions: import('../model-suggestions.mjs').SuggestionsView
+  projectPermission: ProjectPermissionView
   managers: ManagersView
   managerBoard: ManagerBoardTopicView
   pairing: PairingTopicView
@@ -377,6 +384,7 @@ export interface TopicOp {
   machine: MachineOp
   tasks: TasksOp
   suggestions: { op: 'suggestions.set'; view: import('../model-suggestions.mjs').SuggestionsView }
+  projectPermission: { op: 'projectPermission.set'; view: ProjectPermissionView }
   managers: ManagersOp
   managerBoard: ManagerBoardOp
   pairing: PairingOp
@@ -391,6 +399,10 @@ export interface TopicOp {
 // ---------- 命令 ----------
 
 export interface Commands {
+  'projectPermission.set': {
+    params: ProjectPermissionSet & { deviceId: string }
+    result: ProjectPermission
+  }
   // 经理方法须设备支持 litchManager；离线回 offline，不支持回 unsupported。
   // 成功后核心先更新相应主题，通知再次到达时幂等；部分答复失败保留桌面本地草稿。
   'managers.create': {
@@ -1103,7 +1115,8 @@ export interface Commands {
       /** 任务之前的背景（全新开始时才用）。可以不给 */
       background?: string
       wakeParent: boolean
-      /** 子会话的沙箱档（审批策略跟着配）。不给是跟父会话一样；给了也收紧到不宽于父会话 */
+      /** 子会话权限默认继承父会话；显式请求只能降低，设备拒绝越权或目标不支持的档位 */
+      permission?: string
       sandbox?: SandboxLevel
       /** 要不要自己的工作树。不给照设备的缺省（父会话在设备层工作树里就开新的） */
       worktree?: boolean

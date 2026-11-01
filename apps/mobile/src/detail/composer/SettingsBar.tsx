@@ -13,11 +13,13 @@ import {
 } from '@litch/core'
 import { useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Confirm } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { effortTitle, permissionText } from './labels'
 import { type PickerOption, PickerSheet } from './PickerSheet'
+import { useProjectPermission } from './project-permission'
 
 type Open = 'model' | 'effort' | 'speed' | 'permission' | null
 
@@ -104,6 +106,8 @@ function PlanSwitch({ on, onPress }: { on: boolean; onPress(): void }) {
 }
 
 export function SettingsBar({
+  deviceId = '',
+  cwd,
   options,
   settings,
   usage,
@@ -111,6 +115,8 @@ export function SettingsBar({
   onUsage,
   onChange,
 }: {
+  deviceId?: string | undefined
+  cwd?: string | null | undefined
   options: ComposeOptions | null
   settings: SessionSettings
   usage?: ContextUsage | null
@@ -122,6 +128,12 @@ export function SettingsBar({
 }) {
   const t = useT()
   const theme = useTheme()
+  const project = useProjectPermission(useServices(), deviceId, cwd)
+  const applyPermission = (id: string) => {
+    void project.save(id, true).then((saved) => {
+      if (saved) onChange({ permission: id })
+    })
+  }
   const [open, setOpen] = useState<Open>(null)
   const [asking, setAsking] = useState<{ preset: PermissionPreset; title: string } | null>(null)
   const percent =
@@ -172,16 +184,28 @@ export function SettingsBar({
   const pickPermission = (id: string) => {
     const preset = options.permissions.find((entry) => entry.id === id)
     if (!preset) return
-    if (preset.confirm) setAsking({ preset, title: permissionText(t, preset).title })
-    else onChange({ permission: id })
+    if ((preset.confirm || (cwd && id === ':danger-full-access')) && !project.confirmed(id))
+      setAsking({ preset, title: permissionText(t, preset).title })
+    else applyPermission(id)
   }
   const permissionOptions: PickerOption[] = options.permissions.map((preset) => {
     const text = permissionText(t, preset)
-    const locked = !fresh && !preset.switchable && preset.id !== permission
+    const locked =
+      (!fresh && !preset.switchable && preset.id !== permission) ||
+      project.loading ||
+      project.saving
     return {
       id: preset.id,
       title: text.title,
-      note: locked ? t('permission.newOnly') : null,
+      note: locked
+        ? t(
+            project.loading
+              ? 'permission.project.loading'
+              : project.saving
+                ? 'permission.project.saving'
+                : 'permission.newOnly',
+          )
+        : null,
       disabled: locked,
     }
   })
@@ -271,6 +295,11 @@ export function SettingsBar({
         onPick={pickPermission}
         onClose={() => setOpen(null)}
       />
+      {project.error ? (
+        <Text accessibilityRole="alert" style={{ color: theme.c.ink }}>
+          {project.error}
+        </Text>
+      ) : null}
       <Confirm
         visible={asking !== null}
         title={t('permission.confirm.title', { name: asking?.title ?? '' })}
@@ -281,7 +310,7 @@ export function SettingsBar({
         }
         confirmLabel={t('permission.confirm.yes')}
         danger
-        onConfirm={() => asking && onChange({ permission: asking.preset.id })}
+        onConfirm={() => asking && applyPermission(asking.preset.id)}
         onClose={() => setAsking(null)}
       />
     </>

@@ -478,6 +478,10 @@ test('OFFER-007：选了新会话、模型补的简报开到收不紧沙箱的 h
     await until(() => !env.device.sessionTree.isActive(threadId), '回合结束')
     assert.equal(env.device.sessionTree.store.proposal(proposalId)?.status, 'pending')
     // 用户在卡上点开始：照简报起在 claude-code 上
+    await assert.rejects(client.call('litch/sessionProposal/accept', { proposalId, threadId }), {
+      message: /does not support/,
+    })
+    env.pi.config = { approvalPolicy: 'never', sandbox: { type: 'dangerFullAccess' } }
     const { threadId: child } = await client.call('litch/sessionProposal/accept', {
       proposalId,
       threadId,

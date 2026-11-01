@@ -1292,7 +1292,6 @@ test('设备：打开会话时连了结的一起取提案；变了的通知并�
         title: '清理旧分支',
         wakeParent: false,
         sandbox: 'read-only',
-        approvalPolicy: 'on-request',
       },
     },
   )
@@ -1558,7 +1557,7 @@ test('模拟：说“派子会话”派出两个子会话（侧栏里挂在父�
   await settle()
   await world.until(() => world.children('s6').length === 2, '两个子会话进了侧栏')
   const kids = world.children('s6')
-  assert.deepEqual(kids.map((entry) => entry.harness).sort(), ['claude', 'pi'])
+  assert.deepEqual(kids.map((entry) => entry.harness).sort(), ['claude', 'dsh'])
   const cards = Object.values(parent.view?.items ?? {}).filter(
     (item): item is ToolCallItem => item.kind === 'toolCall' && item.spawned !== undefined,
   )
@@ -1652,13 +1651,13 @@ test('模拟：说“提个子会话”出三张提案；短的那张到点过�
     deviceId: 'local',
     sessionId: 's6',
     proposalId: first.id,
-    overrides: { title: '整理更新记录', harness: 'pi' },
+    overrides: { title: '整理更新记录', harness: 'claude' },
   })) as { sessionId: string }
   await world.until(() => world.children('s6').some((entry) => entry.id === sessionId), '起出来了')
   const child = world.children('s6').find((entry) => entry.id === sessionId)
   assert.equal(child?.lineage?.origin, 'proposal')
   assert.equal(child?.title, '整理更新记录')
-  assert.equal(child?.harness, 'pi')
+  assert.equal(child?.harness, 'claude')
   // 子会话记着是哪个提案：对话里那张提案卡片据此显示“已开始”
   assert.equal(child?.lineage?.proposalId, first.id)
   assert.equal(list()[0]?.status, 'started')
@@ -1820,13 +1819,22 @@ test('模拟：说“新任务交给 Pi”选新会话后，简报开在收不�
   )
   await world.until(() => parent.view?.turns.at(-1)?.status === 'completed', '父会话回一句')
   assert.equal(world.children('s6').length, kids, '没有起子会话')
+  await assert.rejects(
+    world.channel.command('session.proposal.accept', {
+      deviceId: 'local',
+      sessionId: 's6',
+      proposalId: held?.id ?? '',
+    }),
+    /不支持父会话权限/,
+  )
   const { sessionId } = (await world.channel.command('session.proposal.accept', {
     deviceId: 'local',
     sessionId: 's6',
     proposalId: held?.id ?? '',
+    overrides: { harness: 'claude' },
   })) as { sessionId: string }
   await world.until(() => list().at(-1)?.status === 'started', '用户点了开始')
-  assert.equal(world.children('s6').find((entry) => entry.id === sessionId)?.harness, 'pi')
+  assert.equal(world.children('s6').find((entry) => entry.id === sessionId)?.harness, 'claude')
 })
 
 test('模拟：说“交接”模型把手上的任务交给分叉会话（不出卡，立刻起），再回答新消息', async () => {

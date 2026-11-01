@@ -102,6 +102,7 @@ export function createMockManagers(host: MockManagerHost) {
         cwd: draft.cwd,
         workspaceId: null,
         title: draft.name || draft.scope,
+        ...(draft.permission ? { permission: draft.permission } : {}),
       })
       const { firstTask, ...settings } = copy(draft)
       const manager: ManagerView = {

@@ -10,6 +10,10 @@
 会话提及复制显示标题，不复制内部评论指令、会话元数据或图片数据。
 折叠的长消息仍复制全文；系统和协作消息展开后的按钮复制其可见原文。
 
+## 访问权限
+
+访问权限的选择与确认按执行设备上的实际项目目录保存。同目录换 harness、新建会话或换用手机时，共用项目默认值和确认记录；不同目录与设备各自记录。降低默认权限不会抹掉此前明确确认过的档位。项目没有记录时采用 harness 默认；目标不支持项目档位时，需选择其他权限或 harness，不自动升权。
+
 ## Projects
 
 A project is a folder on one device. Sessions of every harness in that folder are listed under it, and

@@ -28,7 +28,13 @@ export interface MockTasksHost {
   /** 在设备上新建一个会话（放进侧栏），返回它的标识 */
   spawn(
     deviceId: string,
-    init: { harness: string; cwd: string; workspaceId: string | null; title: string },
+    init: {
+      harness: string
+      cwd: string
+      workspaceId: string | null
+      title: string
+      permission?: string | null
+    },
   ): string
   /** 往会话里加一个跑完了的回合：发的话和回答（失败的回合没有回答） */
   say(deviceId: string, sessionId: string, prompt: string, answer: string | null): void

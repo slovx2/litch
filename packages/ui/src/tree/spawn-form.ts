@@ -8,6 +8,7 @@ import type {
   SessionProposalView,
   SessionSettings,
 } from '@litch/core'
+import { levelOf } from './sandbox.ts'
 
 /** 弹窗里填的东西。空串是“不改、照默认” */
 export interface SpawnFields {
@@ -56,7 +57,7 @@ export function fieldsFor(
     title: proposal?.title ?? '',
     prompt: proposal?.prompt ?? '',
     background: proposal?.background ?? '',
-    sandbox: '',
+    sandbox: levelOf(proposal?.permission) ?? '',
     wake: proposal?.wakeParent ?? true,
     worktree: proposal
       ? (proposal.worktree ?? proposal.worktreeDefault)
@@ -124,6 +125,7 @@ export function overridesOf(
   if (kind === 'fresh' && background !== proposal.background.trim())
     overrides.background = background
   if (fields.sandbox) overrides.sandbox = fields.sandbox
+  else if (proposal.permission) overrides.permission = ''
   if (fields.wake !== proposal.wakeParent) overrides.wakeParent = fields.wake
   if (worktrees) overrides.worktree = fields.worktree
   return overrides

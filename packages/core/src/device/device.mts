@@ -1,3 +1,4 @@
+import { createProjectPermissions, type ProjectPermissions } from './project-permissions.mjs'
 // 一台设备：一条连接，加上连上之后要做的事。
 // 对面有两种：
 // - 一个普通的 Codex 服务（原生 codex，或适配器的一个入口）：单 harness 模式，这是基础层；
@@ -397,6 +398,7 @@ export interface Device {
   /** 设备上的普通待处理建议。 */
   readonly suggestions: Suggestions
   /** 设备上的经理列表与按需订阅的看板。 */
+  readonly projectPermissions: ProjectPermissions
   readonly managers: Managers
   /** 这台设备上的扫码绑定手机：出码、确认、已绑定的手机（pairing.mts） */
   readonly pairing: Pairing
@@ -459,16 +461,14 @@ export interface SpawnRequest {
   /** 任务之前的背景（全新开始时单成一段交给子会话；带上下文的不用）。空的不带 */
   background?: string
   wakeParent: boolean
+  permission?: string
   sandbox?: SandboxLevel
   /** 要不要自己的工作树。不给照设备的缺省（父会话在设备层工作树里就开新的） */
   worktree?: boolean
 }
 
 /** 沙箱档配的审批策略（和内置的三档权限预设一样：完全访问不问，别的按需问） */
-const sandboxParams = (sandbox: SandboxLevel | undefined) =>
-  sandbox
-    ? { sandbox, approvalPolicy: sandbox === 'danger-full-access' ? 'never' : 'on-request' }
-    : {}
+const sandboxParams = (sandbox: SandboxLevel | undefined) => (sandbox ? { sandbox } : {})
 
 // —— litch_machine：现查一台设备的情况（08 号 2.4 的 machines、说明开头那两句） ——
 
@@ -585,6 +585,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let schedulable = false
   let suggestionsOn = false
   /** 对面声明 litchManager 后才读取看板、接受经理通知与会话标记。 */
+  let projectPermissionsOn = false
   let managersOn = false
   /**
    * 对面有没有会话树（sessionTree 扩展：Litch 子会话、提案、litch_sessions）。认出来之前、对面不是设备服务时都是没有；
@@ -1662,6 +1663,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         reattachable = info.device.extensions?.includes(EXTENSION.deviceProcesses) === true
         schedulable = info.device.extensions?.includes(EXTENSION.deviceTasks) === true
         suggestionsOn = info.device.extensions?.includes(EXTENSION.suggestionInbox) === true
+        projectPermissionsOn =
+          info.device.extensions?.includes(EXTENSION.projectPermissions) === true
         managersOn = info.device.extensions?.includes(EXTENSION.manager) === true
         sessionTree = info.device.extensions?.includes(EXTENSION.sessionTree) === true
         reportControl =
@@ -1691,6 +1694,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         reattachable = false
         schedulable = false
         suggestionsOn = false
+        projectPermissionsOn = false
         managersOn = false
         sessionTree = false
         ignoreQuestions = false
@@ -1719,6 +1723,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       reattachable = false
       schedulable = false
       suggestionsOn = false
+      projectPermissionsOn = false
       managersOn = false
       sessionTree = false
       ignoreQuestions = false
@@ -1757,6 +1762,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     diffs.resync()
     tasks.resync()
     suggestions.resync()
+    projectPermissions.resync()
     managers.resync()
     pairing.resync()
     approvals.resync()
@@ -1806,6 +1812,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       manage.offline()
       tasks.offline()
       suggestions.offline()
+      projectPermissions.resync()
       managers.offline()
       pairing.offline()
       approvals.offline()
@@ -1880,6 +1887,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       }
       // 定时任务：一样和会话目录是两回事，任务模块自己对账、自己攒
       if (suggestions.notification(method, params)) return
+      if (projectPermissions.notification(method)) return
       if (managers.notification(method, params)) return
       if (tasks.notification(method, params)) return
       // 扫码绑定手机：配对的状态、已绑定的手机
@@ -2279,6 +2287,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     log,
   })
 
+  const projectPermissions = createProjectPermissions({
+    deviceId: config.id,
+    online: () => online,
+    supported: () => projectPermissionsOn,
+    request: (method, params) => link.request(method, params),
+  })
   const managers = createManagers({
     deviceId: config.id,
     online: () => online,
@@ -2573,6 +2587,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         ...(request.effort ? { effort: request.effort } : {}),
         ...(request.cwd ? { cwd: request.cwd } : {}),
         ...(projectId ? { projectId } : {}),
+        ...(request.permission ? { permission: request.permission } : {}),
         ...sandboxParams(request.sandbox),
         ...(request.worktree === undefined ? {} : { worktree: request.worktree }),
       }),
@@ -2798,6 +2813,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     diffs,
     tasks,
     suggestions,
+    projectPermissions,
     managers,
     pairing,
     approvals,

@@ -1524,7 +1524,15 @@ export class SessionTree {
     proposalId: string,
     brief: Pick<
       SessionProposal,
-      'title' | 'prompt' | 'background' | 'harness' | 'model' | 'effort' | 'cwd' | 'kind'
+      | 'title'
+      | 'prompt'
+      | 'background'
+      | 'harness'
+      | 'model'
+      | 'effort'
+      | 'cwd'
+      | 'kind'
+      | 'permission'
     > & { widerSandbox: string },
   ): SessionProposal | null {
     const expiresAt = now() + SESSION_TREE_LIMITS.proposalTtlSeconds

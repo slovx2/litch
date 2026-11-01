@@ -60,7 +60,7 @@ test('SESSION-TREE-001：用户回合里模型派一个跨 harness 的子会话�
     const [started] = env.claude.sent('thread/start')
     assert.equal(started.cwd, '/work/app')
     assert.equal(started.approvalPolicy, 'on-request')
-    assert.equal(started.sandbox, 'workspace-write')
+    assert.equal(started.permissions, ':workspace')
     assert.deepEqual(
       started.dynamicTools.map((spec: any) => spec.name),
       ['litch_echo', SESSIONS, PRESENTATION_NAMESPACE],
@@ -490,7 +490,7 @@ test('SESSION-TREE-009：脱离成独立会话：父子关系没了、通知 nul
   }
 })
 
-test('SESSION-TREE-010：用户在界面上派子会话（litch/session/start）：权限收紧到不宽于父会话，跟父会话在同一个工作区', async () => {
+test('SESSION-TREE-010：用户在界面上派子会话（litch/session/start）：明确选择不高于父会话的权限，跟父会话在同一个工作区', async () => {
   const env = treeRig()
   try {
     const client = await litch(env)
@@ -513,13 +513,13 @@ test('SESSION-TREE-010：用户在界面上派子会话（litch/session/start）
       title: '手动派的',
       prompt: '看看 README。',
       wakeParent: false,
-      approvalPolicy: 'never',
-      sandbox: 'danger-full-access',
+      approvalPolicy: 'untrusted',
+      sandbox: 'read-only',
       effort: 'high',
     })
     const [started] = env.claude.sent('thread/start')
     assert.equal(started.approvalPolicy, 'untrusted')
-    assert.equal(started.sandbox, 'read-only')
+    assert.equal(started.permissions, ':read-only')
     assert.equal(env.claude.sent('turn/start')[0].effort, 'high')
     const read = await client.call('thread/read', { threadId: childId })
     assert.equal(read.thread.projectId, project.project.id)
@@ -595,53 +595,37 @@ test('SESSION-TREE-012：子会话上挂的定时任务跑出来的回合只进�
   }
 })
 
-test('SESSION-TREE-013：目标 harness 收不到父会话那么严：用户回合里说 user_asked 也变成提案，带 widerSandbox；接受后子会话的 litchLineage 带 proposalId', async () => {
+test('SESSION-TREE-013：目标权限超过父会话时工具直接拒绝，用户接受提案也不能绕过', async () => {
   const env = treeRig()
   try {
-    // claude-code 这边只声明“完全访问”一档（像没有沙箱的 Pi），父会话（pi）报的是 workspaceWrite
     env.claude.declaration = {
       extensions: ['clientTools'],
       permissionPresets: [{ id: ':danger-full-access' }],
     }
     const client = await litch(env)
     const { threadId } = await parent(client)
-    const asked = resultOf(
+    const asked = await env.pi.callTool(threadId, SESSIONS, 'start', {
+      title: '没沙箱的',
+      ...brief('做点事。'),
+      harness: 'claude-code',
+      initiation: 'user_asked',
+    })
+    assert.equal(asked?.answer.result.success, false)
+    assert.equal(env.claude.sent('thread/start').length, 0)
+    const proposal = resultOf(
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
-          title: '没沙箱的',
+          title: '另一个目标',
           ...brief('做点事。'),
           harness: 'claude-code',
-          initiation: 'user_asked',
         })
       )?.answer,
     )
-    assert.ok(asked.proposal_id)
-    assert.match(asked.note, /cannot be sandboxed as tightly as this session/)
-    assert.equal(env.claude.sent('thread/start').length, 0, '没起任何东西')
-    const listed = await client.call('litch/sessionProposal/list', { threadId })
-    assert.equal(listed.proposals[0].widerSandbox, 'danger-full-access')
-    // 同 harness（pi 没声明预设，当作收得紧）照常直接起，提案上也没有 widerSandbox
-    const same = resultOf(
-      (
-        await env.pi.callTool(threadId, SESSIONS, 'start', {
-          title: '同一家的',
-          ...brief('也做点事。'),
-          initiation: 'user_asked',
-        })
-      )?.answer,
+    await assert.rejects(
+      client.call('litch/sessionProposal/accept', { proposalId: proposal.proposal_id }),
+      { message: /does not support/ },
     )
-    assert.ok(same.thread_id)
-    // 用户点了开始：照常起，子会话记着是哪个提案
-    const { threadId: childId } = await client.call('litch/sessionProposal/accept', {
-      proposalId: asked.proposal_id,
-    })
-    const born = await startedOn(client, childId)
-    assert.equal(born.params.thread.litchLineage.origin, 'proposal')
-    assert.equal(born.params.thread.litchLineage.proposalId, asked.proposal_id)
-    const read = await client.call('thread/read', { threadId: childId })
-    assert.equal(read.thread.litchLineage.proposalId, asked.proposal_id)
-    const direct = await client.call('thread/read', { threadId: same.thread_id })
-    assert.equal(direct.thread.litchLineage.proposalId, undefined, '不是从提案开始的没有')
+    assert.equal(env.claude.sent('thread/start').length, 0)
   } finally {
     await env.close()
   }

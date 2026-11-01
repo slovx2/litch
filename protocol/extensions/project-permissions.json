@@ -1,0 +1,36 @@
+{
+  "extension": "projectPermissions",
+  "description": "设备按真实项目目录保存跨 harness 的默认访问档位与用户确认记录，类型见 project-permissions.mts。三档排序不承诺各 harness 隔离能力等价。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "projectPermissions" }
+    }
+  },
+  "undeclared": "方法返回 extensionRequired；changed 仅发给声明了此扩展的实际连接。",
+  "rules": [
+    "cwd 是设备上存在的绝对目录，在设备上 realpath 后作为键；不沿父目录扩散，不以 projectId 或 harness 划分。",
+    "read 返回 {cwd,permission,confirmedPermissions}，未记忆 permission 为 null；set 参数为 {cwd,permission,confirmed}，permission 只能是 :read-only、:workspace、:danger-full-access。",
+    "set 只供客户端用户操作，不向模型提供对应工具。confirmed=true 表示用户明确确认；完全访问需要既有或本次明确确认。降低默认不抹掉此前确认。",
+    "写入持久化后通知所有声明连接；独立设备各自保存。引擎默认、自动继承不能写入确认记录。"
+  ],
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "method": "litch/projectPermission/read",
+      "description": "参数 {cwd}，返回 ProjectPermission。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/projectPermission/set",
+      "description": "参数 ProjectPermissionSet，返回 ProjectPermission。"
+    },
+    {
+      "kind": "ServerNotification",
+      "methods": ["litch/projectPermission/changed"],
+      "description": "参数 ProjectPermission；只发给声明过此扩展的连接。"
+    }
+  ]
+}

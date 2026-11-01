@@ -15,6 +15,7 @@ import {
 } from '../../protocol/src/client-tools-sessions.mjs'
 import type { DeviceToolCall } from './device-tools.mjs'
 import type { EngineLink } from './engine-link.mjs'
+import { currentPermission, supportedPermissions } from './session-permissions.mjs'
 import { parentSettings, StartRefused } from './session-start.mjs'
 import type { SessionTree } from './session-tree.mjs'
 import { isObject } from './wire.mjs'
@@ -105,6 +106,7 @@ async function harnessOptions(tree: SessionTree, harness: string): Promise<Sessi
   return {
     harness,
     default_model: (rows.find((row) => row.isDefault) ?? rows[0])?.id ?? null,
+    permissions: supportedPermissions(await tree.link(harness)),
     models: rows.slice(0, max).map(option),
     ...(rows.length > max ? { truncated: true } : {}),
   }
@@ -114,12 +116,16 @@ async function harnessOptions(tree: SessionTree, harness: string): Promise<Sessi
 async function currentOf(
   tree: SessionTree,
   call: DeviceToolCall,
-): Promise<{ model: string | null; effort: string | null }> {
+): Promise<{ model: string | null; effort: string | null; permission: string | null }> {
   try {
     const { config } = await parentSettings(tree, call.threadId, call.harness)
-    return { model: textOf(config?.model), effort: textOf(config?.reasoningEffort) }
+    return {
+      model: textOf(config?.model),
+      effort: textOf(config?.reasoningEffort),
+      permission: currentPermission(config),
+    }
   } catch {
-    return { model: null, effort: null }
+    return { model: null, effort: null, permission: null }
   }
 }
 

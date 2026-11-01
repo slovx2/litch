@@ -8,7 +8,6 @@ import { SESSION_TOOLS } from '../../protocol/src/client-tools-sessions.mjs'
 import { sessionMentionsBlock } from '../../protocol/src/session-mentions.mjs'
 import { parseSessionMessage } from '../../protocol/src/system-messages.mjs'
 import { DeviceServer } from '../src/device.mjs'
-import { tightened } from '../src/session-start.mjs'
 import { codexRig } from './codex-kit.mjs'
 import { codexThread } from './fake-codex.mjs'
 import { failureOf, resultOf } from './fake-engine.mjs'
@@ -471,28 +470,4 @@ test('SESSION-TOOLS-007：父子关系、提案、回报存在 sessions.sqlite �
     await again.close()
     await env.close().catch(() => {})
   }
-})
-
-test('SESSION-TOOLS-008：子会话的审批策略、沙箱取父会话和请求值里更严的那个', () => {
-  const parentOf = (approvalPolicy: unknown, sandbox: unknown) => ({ approvalPolicy, sandbox })
-  assert.deepEqual(tightened(parentOf('on-request', { type: 'workspaceWrite' }), {}), {
-    approvalPolicy: 'on-request',
-    sandbox: 'workspace-write',
-  })
-  assert.deepEqual(
-    tightened(parentOf('on-request', { type: 'workspaceWrite' }), {
-      approvalPolicy: 'never',
-      sandbox: 'danger-full-access',
-    }),
-    { approvalPolicy: 'on-request', sandbox: 'workspace-write' },
-  )
-  assert.deepEqual(
-    tightened(parentOf('never', { type: 'dangerFullAccess' }), {
-      approvalPolicy: 'untrusted',
-      sandbox: 'read-only',
-    }),
-    { approvalPolicy: 'untrusted', sandbox: 'read-only' },
-  )
-  assert.deepEqual(tightened(null, { approvalPolicy: 'never' }), { approvalPolicy: 'never' })
-  assert.deepEqual(tightened(null, {}), {})
 })

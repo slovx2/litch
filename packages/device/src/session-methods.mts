@@ -40,7 +40,15 @@ function overridesOf(value: unknown): ProposalOverrides {
   if (value == null) return {}
   if (!isObject(value)) throw new ProtocolError(-32602, 'overrides 必须是对象')
   const out: ProposalOverrides = {}
-  for (const name of ['harness', 'model', 'effort', 'cwd', 'projectId', 'background'] as const) {
+  for (const name of [
+    'harness',
+    'model',
+    'effort',
+    'cwd',
+    'projectId',
+    'background',
+    'permission',
+  ] as const) {
     const given = value[name]
     if (given == null) continue
     if (typeof given !== 'string') throw new ProtocolError(-32602, `overrides.${name} 必须是字符串`)
@@ -138,6 +146,7 @@ export async function sessionTreeCall(
             prompt: requiredString(fields.prompt, 'prompt'),
             background: optional(fields.background, 'background') ?? null,
             wakeParent,
+            permission: optional(fields.permission, 'permission') ?? null,
             approvalPolicy: fields.approvalPolicy,
             sandbox: fields.sandbox,
             worktree: flag(fields.worktree, 'worktree') ?? null,

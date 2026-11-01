@@ -27,7 +27,7 @@ export const enProposals: Record<keyof typeof zhProposals, Entry> = {
   'proposal.brief.background': 'Background',
   'proposal.brief.task': 'Task',
   'proposal.wider':
-    'This harness doesn’t support a sandbox this strict. The sub-session will run with “{level}”',
+    'This harness requires “{level}”. Change the harness or parent permission before starting.',
   'proposal.state.pending': 'Pending',
   'proposal.state.started': 'Started',
   'proposal.state.dismissed': 'Dismissed',

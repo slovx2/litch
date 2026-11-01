@@ -38,6 +38,12 @@ subtree; approvals and background work also occupy slots.
 点击会切到对应页签并定位；已完成或暂缓事项会自动展开分组，决策会切到相应状态。
 不存在的编号保留为普通文字。
 
+### 访问权限
+
+创建经理时，访问权限默认采用当前设备上该项目目录记住的权限，可在“运行环境”中修改。项目权限记录跨 harness、桌面和手机共享；不会自动改变已有经理或工作线的权限。
+
+子会话默认继承直接父会话开始派出时的访问权限，也可显式选择更低档位。设备按“只读 < 项目内 < 完全访问”校验；目标 harness 不支持该档位或请求越权时拒绝创建，用户点击任务卡也不能绕过。可以更换 harness 或先由用户调整父会话权限，再开始任务。各 harness 的同名档位仍采用各自的工具和沙箱语义。
+
 ### Editing settings
 
 Open a manager → title-bar **Settings**. The same three sections are tabs. You can change its name,

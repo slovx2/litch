@@ -8,6 +8,12 @@ const { fieldsFor, kindOf, overridesOf, spawnParams } = await import('../src/tre
 const { levelOf, widerLevel } = await import('../src/tree/sandbox.ts')
 
 const parent = { harness: 'claude', workspaceId: 'docs' }
+
+test('显式提案权限进入编辑表单，未指定时继续显示继承父会话', () => {
+  const source = { title: '只读检查', prompt: '检查', kind: 'fresh', permission: ':read-only' }
+  assert.equal(fieldsFor(parent, source).sandbox, 'read-only')
+  assert.equal(fieldsFor(parent, { ...source, permission: null }).sandbox, '')
+})
 const proposal = {
   id: 'pr1',
   title: '整理 CHANGELOG',

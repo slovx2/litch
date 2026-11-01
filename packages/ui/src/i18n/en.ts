@@ -198,6 +198,10 @@ export const en: Record<MessageKey, Entry> = {
   'workspace.unpin': 'Unpin',
   'workspace.ungroup': 'Remove from “{name}”',
   'permission.newOnly': 'Only available when starting a session',
+  'permission.project.saving': 'Saving project permission…',
+  'permission.project.loading': 'Loading project permission…',
+  'permission.project.unsupported':
+    'This harness does not support the project permission. Choose another permission or harness.',
   'permission.confirm.declared': 'Confirm before switching to this permission level.',
   'composer.steer.noImages':
     'Messages with images can’t be sent mid-turn. Send after this turn ends',
@@ -1252,7 +1256,7 @@ export const en: Record<MessageKey, Entry> = {
   'tree.level.workspace': 'In project',
   'tree.level.full': 'Full access',
   'tree.spawn.wider':
-    '{harness} has no sandbox this strict. The sub-session will use “{level}”, wider than this session',
+    '{harness} requires at least “{level}”, above the parent permission. Choose another harness or change the parent permission.',
   'tree.lineage.before': 'Started from',
   'tree.lineage.after': 'as “{title}”',
   'tree.lineage.open': 'Back to the parent session',

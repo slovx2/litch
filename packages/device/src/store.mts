@@ -2,16 +2,15 @@
 // - threads：见过的会话属于哪个 harness（路由要用），外加它的近况（更新时间、归没归档、是不是临时的）
 // - 工作区、会话到工作区的归属、分区与置顶（表由 workspaces.mts、sections.mts 建）
 // - 从各引擎导入过没有（workspace-import.mts）
-// 删掉它不丢任何引擎的数据：索引会重新积累，工作区会从各引擎现有的项目重新导入一遍。
-import { closeSync, existsSync, openSync, rmSync, statSync } from 'node:fs'
+// 项目权限确认也在本库；不能把整库当成可重建缓存删除。
+import { closeSync, existsSync, openSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { assertStoreFormat, initializeStoreFormat } from '../../shared/src/store-format.mjs'
 import { ensureParent } from '../../shared/src/util.mjs'
 
 /**
- * 库的结构版本。结构变了就加一，旧的库直接换掉不迁移：
- * 里面的东西都能重新得到（索引重新积累，工作区重新导入）。
+ * 库包含不能重建的项目权限确认；版本不匹配时拒绝打开，不删除数据。
  */
 const SCHEMA_VERSION = 2
 
@@ -31,7 +30,7 @@ export function openDeviceStore(stateDir: string): DatabaseSync {
   if (existsSync(path) && statSync(path).size > 0) {
     assertStoreFormat(path)
     if (schemaVersion(path) !== SCHEMA_VERSION)
-      for (const suffix of ['', '-wal', '-shm']) rmSync(`${path}${suffix}`, { force: true })
+      throw new Error('设备库版本不匹配，拒绝打开以保留项目权限与设备数据')
   }
   // 库文件只有属主可读写，和这个目录里别的文件一致。先把文件建出来再打开：
   // 预写日志等附带的文件会沿用主文件的权限

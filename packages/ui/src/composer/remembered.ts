@@ -1,5 +1,5 @@
 // 上次新建会话时选的：在哪台设备、这台设备上的哪个工作区、这个工作区里建在哪个 harness 上，
-// 和在那个 harness 上选的模型、强度、权限预设。下次新建时默认还是这几个。
+// 和在那个 harness 上选的模型、强度；权限由设备按项目目录保存。
 // 存在浏览器的本地存储里，读写失败就当没记过。
 import type { ComposeOptions, DeviceView, HarnessView, SessionSettings } from '@litch/core'
 import { useSyncExternalStore } from 'react'
@@ -39,7 +39,8 @@ function write<T>(storeKey: string, key: string, value: T): void {
 const slot = (deviceId: string, harness: string) => `${deviceId}/${harness}`
 
 export function rememberPicks(deviceId: string, harness: string, picks: Picks): void {
-  write(STORE_KEY, slot(deviceId, harness), picks)
+  const { permission: _permission, ...rest } = picks
+  write(STORE_KEY, slot(deviceId, harness), rest)
 }
 
 /** 会话建成了：记下这次建在哪台设备、哪个工作区。下次打开新建对话页默认还是这里 */
@@ -119,5 +120,7 @@ export function useNewHarness(
 
 /** 上次的选择里现在还选得到的那几项。对面换过模型清单之后，过期的不带出来 */
 export function recallPicks(deviceId: string, harness: string, options: ComposeOptions): Picks {
-  return fitPicks(read<Picks>(STORE_KEY)[slot(deviceId, harness)] ?? {}, options)
+  const { permission: _permission, ...picks } =
+    read<Picks>(STORE_KEY)[slot(deviceId, harness)] ?? {}
+  return fitPicks(picks, options)
 }

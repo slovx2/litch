@@ -239,6 +239,8 @@ export function Composer({
         bar={
           meta?.live ? (
             <SettingsBar
+              deviceId={deviceId}
+              cwd={meta.cwd}
               options={options}
               settings={meta.settings}
               usage={meta.usage}

@@ -12,7 +12,8 @@ import { nameOf } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { EFFORT_TEXT } from '../composer/efforts.ts'
-import { useComposeOptions } from '../composer/SettingsBar.tsx'
+import { useProjectPermission } from '../composer/project-permission.ts'
+import { SettingsBar, useComposeOptions, useNewSessionDefaults } from '../composer/SettingsBar.tsx'
 import {
   MANAGER_FORM_STEPS,
   type ManagerFormStep,
@@ -96,6 +97,12 @@ export function ManagerForm({
     form.model ? entry.id === form.model : entry.isDefault,
   )
   const cwd = workspace?.roots[0] ?? form.cwd
+  const project = useProjectPermission(useServices(), deviceId, cwd)
+  const defaults = useNewSessionDefaults(deviceId, form.harness, cwd || null)
+  const permission = project.permission ?? defaults?.permission ?? null
+  const permissionBlocked = Boolean(
+    permission && options && !options.permissions.some((entry) => entry.id === permission),
+  )
   const change = (patch: Partial<Omit<ManagerDraft, 'template' | 'scope'>>) => {
     setForm((was) => ({ ...was, ...patch }))
     setError('')
@@ -119,6 +126,13 @@ export function ManagerForm({
       setError('')
       return
     }
+    if (!manager && (permissionBlocked || project.loading || project.error)) {
+      setError(
+        project.error ??
+          t(project.loading ? 'permission.project.loading' : 'permission.project.unsupported'),
+      )
+      return
+    }
     setBusy(true)
     try {
       if (manager) {
@@ -139,7 +153,7 @@ export function ManagerForm({
       // 保留已发布的 template 字段以维持协议形状；界面固定发送 blank。
       const result = await channel.command('managers.create', {
         deviceId,
-        manager: { ...form, template: 'blank', scope: '', cwd: cwd.trim() },
+        manager: { ...form, permission, template: 'blank', scope: '', cwd: cwd.trim() },
       })
       // 创建已成功；偏好存储失败不能把它显示成创建失败，也不能重复创建。
       try {
@@ -359,6 +373,20 @@ export function ManagerForm({
                   ))}
                 </select>
               </label>
+              <div className="form-field">
+                <span>{t('composer.permission')}</span>
+                <SettingsBar
+                  deviceId={deviceId}
+                  cwd={cwd}
+                  fresh
+                  options={options ? { ...options, models: [], plan: false } : null}
+                  settings={{ model: null, effort: null, speed: null, mode: null, permission }}
+                  onChange={() => {}}
+                />
+                {permissionBlocked ? (
+                  <span role="alert">{t('permission.project.unsupported')}</span>
+                ) : null}
+              </div>
               <label className="form-field">
                 {t('manager.effort')}
                 <select
@@ -547,7 +575,7 @@ export function ManagerForm({
         <button
           type="submit"
           className="btn primary"
-          disabled={busy || disabled}
+          disabled={busy || disabled || (!manager && step === 'dispatch' && project.loading)}
           title={disabled ? t('manager.offline') : undefined}
         >
           {t(

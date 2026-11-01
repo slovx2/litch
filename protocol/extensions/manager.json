@@ -108,6 +108,7 @@
       "objectId": { "anyOf": [{ "$ref": "#/definitions/ObjectId" }, { "type": "null" }] }, "threadId": { "type": ["string", "null"] }, "changeId": { "type": ["string", "null"] }
     }, "additionalProperties": false },
     "Manager": { "type": "object", "required": ["id", "threadId", "name", "scope", "cwd", "harness", "model", "effort", "template", "dispatch", "contact", "rules", "status", "pendingDecisions", "runningLines", "latestActivity", "createdAt", "updatedAt", "endedAt"], "properties": {
+      "permission": { "enum": [":read-only", ":workspace", ":danger-full-access", null] },
       "id": { "type": "string" }, "threadId": { "type": "string" }, "name": { "type": "string" }, "scope": { "type": "string" }, "cwd": { "type": "string" }, "harness": { "type": "string" }, "model": { "type": ["string", "null"] }, "effort": { "type": ["string", "null"] },
       "template": { "$ref": "#/definitions/Template" }, "dispatch": { "$ref": "#/definitions/Dispatch" }, "contact": { "$ref": "#/definitions/Contact" }, "rules": { "type": "string" }, "status": { "enum": ["active", "ending", "ended"] }, "pendingDecisions": { "type": "integer", "minimum": 0 }, "runningLines": { "type": "integer", "minimum": 0 },
       "latestActivity": { "anyOf": [{ "$ref": "#/definitions/Activity" }, { "type": "null" }] }, "createdAt": { "type": "number" }, "updatedAt": { "type": "number" }, "endedAt": { "type": ["number", "null"] }
@@ -117,6 +118,7 @@
       "lines": { "type": "array", "items": { "$ref": "#/definitions/Line" } }, "activities": { "type": "array", "items": { "$ref": "#/definitions/Activity" } }, "changes": { "type": "array", "items": { "$ref": "#/definitions/Change" } }
     }, "additionalProperties": false },
     "CreateParams": { "type": "object", "required": ["cwd", "harness", "model", "effort", "name", "scope", "template", "dispatch", "contact", "rules", "firstTask"], "properties": {
+      "permission": { "enum": [":read-only", ":workspace", ":danger-full-access", null] },
       "cwd": { "type": "string", "minLength": 1 }, "harness": { "type": "string", "minLength": 1 }, "model": { "type": ["string", "null"] }, "effort": { "type": ["string", "null"] }, "name": { "type": "string" }, "scope": { "type": "string" },
       "template": { "$ref": "#/definitions/Template" }, "dispatch": { "$ref": "#/definitions/Dispatch" }, "contact": { "$ref": "#/definitions/Contact" }, "rules": { "type": "string" }, "firstTask": { "type": "string" }
     }, "additionalProperties": false },

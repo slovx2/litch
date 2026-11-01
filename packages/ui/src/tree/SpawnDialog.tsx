@@ -3,10 +3,11 @@
 //   上下文（带上下文只能用父会话的 harness），写标题、任务和背景（全新开始时才有，可不填），勾不勾“完成后唤醒主会话”；
 // - 提案卡片上的“改了再开始”：照提案预填，提案没写的模型、强度按父会话此刻的预填，都能改（含“完成后唤醒主会话”），
 //   确认后带着改过的那几项开始。
-// 派出去、开始都由设备进程做；沙箱收紧到不宽于父会话，目标 harness 收不紧时这里写明。
+// 派出去、开始都由设备进程做；权限不能高于父会话；目标不支持时禁用开始并说明原因。
 import {
   type DeviceView,
   keys,
+  permissionRank,
   type SessionProposalView,
   type SessionSettings,
   type SessionSummary,
@@ -37,7 +38,8 @@ interface SpawnDialogProps {
 const NO_WORKSPACES: readonly WorkspaceView[] = []
 
 export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: SpawnDialogProps) {
-  const { channel } = useServices()
+  const { channel, replica } = useServices()
+  useEffect(() => replica.openSession(deviceId, parent.id), [replica, deviceId, parent.id])
   const t = useT()
   const dialog = useRef<HTMLDialogElement>(null)
   const device = useKey<DeviceView>(keys.device(deviceId))
@@ -54,12 +56,26 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
   const options = useComposeOptions(deviceId, fields.harness)
   const models = options?.models ?? []
   const model = models.find((entry) => entry.id === fields.model)
-  // 目标 harness 收不到要的那么严（比如没有沙箱的 Pi）：照常能派，写明子会话会更宽
+  // 目标 harness 不支持父权限（比如只有完全访问的 Pi）时禁止开始，并说明原因
   const wider = widerLevel(
     parentSettings?.permission,
     (options?.permissions ?? []).map((preset) => preset.id),
     fields.sandbox || null,
   )
+  const requestedPermission = fields.sandbox
+    ? {
+        'read-only': ':read-only',
+        'workspace-write': ':workspace',
+        'danger-full-access': ':danger-full-access',
+      }[fields.sandbox]
+    : parentSettings?.permission
+  const parentRank = permissionRank(parentSettings?.permission)
+  const requestedRank = permissionRank(requestedPermission)
+  const permissionBlocked =
+    parentRank === null ||
+    requestedRank === null ||
+    requestedRank > parentRank ||
+    !options?.permissions.some((entry) => entry.id === requestedPermission)
   const sameHarness = fields.harness === parent.harness
   const shownKind = kindOf(fields, parent)
   const harnessName = (id: string) => ready.find((entry) => entry.id === id)?.name ?? id
@@ -72,7 +88,7 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
   const text = fields.prompt.trim()
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (!text || busy) return
+    if (!text || busy || permissionBlocked) return
     setBusy(true)
     setFailure(null)
     const sent = proposal
@@ -140,6 +156,9 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
               ))}
             </select>
           </div>
+          {permissionBlocked && !wider ? (
+            <p role="alert">{t('permission.project.unsupported')}</p>
+          ) : null}
           {wider ? (
             <p className="spawn-wider" data-wider={wider}>
               {t('tree.spawn.wider', {
@@ -239,7 +258,23 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
             >
               <option value="">{t('tree.dialog.sandboxParent')}</option>
               {SANDBOX_CHOICES.map((level) => (
-                <option key={level} value={level}>
+                <option
+                  key={level}
+                  value={level}
+                  disabled={
+                    parentRank === null ||
+                    SANDBOX_CHOICES.indexOf(level) > parentRank ||
+                    !options?.permissions.some(
+                      (entry) =>
+                        entry.id ===
+                        {
+                          'read-only': ':read-only',
+                          'workspace-write': ':workspace',
+                          'danger-full-access': ':danger-full-access',
+                        }[level],
+                    )
+                  }
+                >
                   {t(SANDBOX_LEVEL[level])}
                 </option>
               ))}
@@ -331,7 +366,11 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
           <button type="button" className="btn" onClick={onClose}>
             {t('tree.dialog.cancel')}
           </button>
-          <button type="submit" className="btn primary" disabled={!text || busy}>
+          <button
+            type="submit"
+            className="btn primary"
+            disabled={!text || busy || permissionBlocked}
+          >
             {proposal ? t('proposal.start') : t('tree.dialog.start')}
           </button>
         </div>

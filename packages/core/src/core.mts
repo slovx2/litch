@@ -1221,6 +1221,10 @@ export function createCore(options: CoreOptions): Core {
           return deviceOf(deviceId).diffs.requests()
         }
         // 经理与定时任务：各模块把设备结果转换为界面形状。
+        case 'projectPermission.set': {
+          const { deviceId, ...input } = params as Commands['projectPermission.set']['params']
+          return deviceOf(deviceId).projectPermissions.set(input)
+        }
         case 'managers.create': {
           const { deviceId, manager } = params as Commands['managers.create']['params']
           return await deviceOf(deviceId).managers.create(manager)
@@ -1617,6 +1621,7 @@ export function createCore(options: CoreOptions): Core {
       }
       // 经理与定时任务：断线保留快照，不支持时 available 是 false
       if (topic.kind === 'suggestions') return device.suggestions.open(sink)
+      if (topic.kind === 'projectPermission') return device.projectPermissions.open(topic.cwd, sink)
       if (topic.kind === 'managers') return device.managers.open(sink)
       if (topic.kind === 'managerBoard') return device.managers.openBoard(topic.managerId, sink)
       if (topic.kind === 'tasks') return device.tasks.open(sink)

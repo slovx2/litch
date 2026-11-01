@@ -61,13 +61,23 @@ export function validatePatch(value: Record<string, unknown>): ManagerPatch {
 }
 export function validateCreate(value: unknown): ManagerCreateParams {
   const input = fields(value)
-  keys(input, [...PATCH, 'cwd', 'harness', 'model', 'effort', 'template', 'firstTask'])
+  keys(input, [
+    ...PATCH,
+    'cwd',
+    'harness',
+    'model',
+    'effort',
+    'permission',
+    'template',
+    'firstTask',
+  ])
   for (const key of ['cwd', 'harness', 'scope', 'name', 'rules', 'firstTask'])
     text(input[key], key, ['cwd', 'harness'].includes(key))
   for (const key of ['model', 'effort']) nullable(input[key], key)
   if (!['release', 'investigation', 'research', 'blank'].includes(String(input.template)))
     invalid('Unknown manager template.', 'template')
   validatePatch(Object.fromEntries(PATCH.map((key) => [key, input[key]])))
+  if (input.permission != null) text(input.permission, 'permission')
   const cwd = input.cwd as string
   if (!isAbsolute(cwd)) invalid('cwd must be an absolute directory.', 'cwd')
   try {

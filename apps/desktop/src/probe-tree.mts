@@ -300,6 +300,13 @@ export async function treeProbe(): Promise<TreeSeen> {
     $('.spawn-dialog .spawn-wider') !== null &&
     $<HTMLInputElement>('.spawn-dialog .spawn-wake input')?.checked === true
   seen.edit = `${$<HTMLSelectElement>('#spawn-harness')?.value} ${$('.spawn-dialog .spawn-wider')?.textContent ?? '没有提醒'}`
+  const permissionBlocked =
+    $<HTMLButtonElement>('.spawn-dialog button[type="submit"]')?.disabled === true
+  const supportedHarness = $<HTMLSelectElement>('#spawn-harness')
+  if (supportedHarness) {
+    supportedHarness.value = 'claude'
+    supportedHarness.dispatchEvent(new Event('change', { bubbles: true }))
+  }
   const titleBox = $<HTMLInputElement>('#spawn-title')
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
     titleBox,
@@ -310,6 +317,7 @@ export async function treeProbe(): Promise<TreeSeen> {
   $('.spawn-dialog button[type="submit"]')?.click()
   const proposalEdited =
     filled &&
+    permissionBlocked &&
     (await until(
       () =>
         $('.spawn-dialog') === null &&
@@ -415,7 +423,7 @@ export async function treeProbe(): Promise<TreeSeen> {
   await until(() => $('.spawn-dialog[data-proposal]') !== null)
   const harnessBox = $<HTMLSelectElement>('#spawn-harness')
   if (harnessBox) {
-    harnessBox.value = 'pi'
+    harnessBox.value = 'claude'
     harnessBox.dispatchEvent(new Event('change', { bubbles: true }))
   }
   $<HTMLInputElement>('.spawn-dialog .spawn-wake input')?.click()
@@ -430,7 +438,7 @@ export async function treeProbe(): Promise<TreeSeen> {
       return (
         card?.dataset.state === 'started' &&
         meta?.dataset.actual === 'true' &&
-        meta.querySelector('[data-harness="pi"]') !== null
+        meta.querySelector('[data-harness="claude"]') !== null
       )
     }))
   seen.actual = firstWrap()?.querySelector('.prop-meta')?.textContent ?? '没有'
@@ -579,7 +587,15 @@ export async function treeProbe(): Promise<TreeSeen> {
   })
   seen.offerHeld = offerCard()?.textContent ?? '没有'
   await idle()
-  offerCard()?.querySelector<HTMLElement>('[data-act="start"]')?.click()
+  offerCard()?.querySelector<HTMLElement>('[data-act="edit"]')?.click()
+  await until(() => $('.spawn-dialog') !== null)
+  const heldHarness = $<HTMLSelectElement>('#spawn-harness')
+  if (heldHarness) {
+    heldHarness.value = 'claude'
+    heldHarness.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+  await sleep(100)
+  $('.spawn-dialog button[type="submit"]')?.click()
   const heldStarted =
     offerHeld &&
     (await until(

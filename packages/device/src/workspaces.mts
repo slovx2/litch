@@ -25,6 +25,7 @@ import {
 } from '../../shared/src/project-store.mjs'
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
 import { PINNED_SECTION_ID } from '../../shared/src/thread-sections.mjs'
+import { ProjectPermissions } from './project-permissions.mjs'
 import { SectionStore } from './sections.mjs'
 import { isObject } from './wire.mjs'
 
@@ -77,6 +78,7 @@ export type Expectation =
   | { kind: 'shelved'; threadId: string; archived: boolean }
 
 export class Workspaces {
+  readonly permissions: ProjectPermissions
   readonly projects: ProjectStore
   readonly sections: SectionStore
   private readonly db: DatabaseSync
@@ -86,6 +88,7 @@ export class Workspaces {
   private queued: Parameters<Announce>[] | null = null
 
   constructor(db: DatabaseSync, announce: Announce) {
+    this.permissions = new ProjectPermissions(db, announce)
     this.db = db
     this.announce = announce
     this.projects = new ProjectStore(db, threadsTable(db))

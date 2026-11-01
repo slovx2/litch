@@ -42,6 +42,7 @@ import {
   type SessionLineageKind,
   type SessionProposal,
 } from '../../protocol/src/session-tree.mjs'
+import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { DeviceToolCall, DeviceToolHandler } from './device-tools.mjs'
 import type { Cascade, SessionArchives } from './session-archive.mjs'
 import { checkHarness, modelFor, sessionOptions } from './session-options.mjs'
@@ -253,6 +254,7 @@ interface Spec {
   background: string
   harness: string | undefined
   model: string | undefined
+  permission: string | undefined
   effort: string | undefined
   cwd: string | undefined
   kind: SessionLineageKind
@@ -276,6 +278,7 @@ function targetOf(
   const manager = tree.managers?.lines.managerFor(call.threadId)
   const harness = string(args, 'harness') ?? manager?.dispatch.harness ?? manager?.harness
   const model = string(args, 'model')
+  const permission = string(args, 'permission')
   const effort = string(args, 'effort')
   const cwd = string(args, 'cwd')
   const kind = string(args, 'kind') ?? 'fresh'
@@ -287,7 +290,7 @@ function targetOf(
   if (harness) checkHarness(tree, harness)
   if (kind === 'fork' && harness && harness !== call.harness)
     throw new Refused('invalid', `fork only works within the same harness (${call.harness}).`)
-  return { harness, model, effort, cwd, kind, worktree }
+  return { harness, model, effort, cwd, kind, worktree, permission }
 }
 
 /** 模型这次给的 model 在目标 harness 上认不认，认的换成清单里的写法（session-options.mts 的 modelFor） */
@@ -331,7 +334,7 @@ function specOf(args: Record<string, unknown>, call: DeviceToolCall, tree: Sessi
 
 /** 目标 harness 收不到父会话那么严时子会话实际会是的那一档沙箱；收得紧、判断不了是 null */
 const widerFor = (tree: SessionTree, call: DeviceToolCall, spec: Spec) =>
-  widerSandbox(tree, call.threadId, spec.harness ?? call.harness).catch(() => null)
+  widerSandbox(tree, call.threadId, spec.harness ?? call.harness)
 
 /** 起出来的子会话在新工作树里时，结果里说一句在哪个分支上 */
 const worktreeNote = (branch: string | null) =>
@@ -355,6 +358,7 @@ function proposeOne(
     background: spec.background,
     harness: spec.harness ?? null,
     model: spec.model ?? null,
+    permission: spec.permission ?? null,
     effort: spec.effort ?? null,
     cwd: spec.cwd ?? null,
     kind: spec.kind,
@@ -386,9 +390,14 @@ async function start(
   if (initiation !== 'user_asked' && initiation !== 'propose')
     throw new Refused('invalid', 'initiation must be user_asked, propose or offer.')
   const spec = await checked(tree, call, specOf(args, call, tree))
-  // 目标 harness 收不到父会话那么严（比如没有沙箱的 Pi）：模型派的一律变成提案，由用户看过再点
+  // 目标最低档超过父权限时，直接开始拒绝；普通建议保留为需要修改目标的卡片。
   const wider = await widerFor(tree, call, spec)
-  // 用户已经要求或批准的派出计划可以在任意后续回合执行；沙箱放宽仍需确认。
+  // 用户已批准的派出计划可以在后续回合执行，但不能突破父会话权限上限。
+  if (initiation === 'user_asked' && wider)
+    throw new Refused(
+      'blocked',
+      'Target permission exceeds the parent. Change the harness or the parent permission before starting.',
+    )
   if (initiation === 'user_asked' && wider === null) {
     if (!call.turnId?.trim())
       throw new Refused('invalid', 'Direct starts require a current turn ID.')
@@ -398,6 +407,7 @@ async function start(
       {
         harness: spec.harness ?? null,
         model: spec.model ?? null,
+        permission: spec.permission ?? null,
         effort: spec.effort ?? null,
         cwd: spec.cwd ?? null,
         kind: spec.kind,
@@ -415,16 +425,7 @@ async function start(
       note: `Started sub-session ${child.threadId} on ${child.harness}${worktreeNote(child.branch)}. It runs on its own; ${wake ? 'eligible results can wake you as a <litch-session-event> message' : 'results still arrive, but do not wake you automatically'}. Use set_wake to change this. Do not poll it.`,
     }
   }
-  const why =
-    initiation !== 'user_asked'
-      ? ''
-      : `${spec.harness ?? call.harness} cannot be sandboxed as tightly as this session (it would run with ${wider}), so the request became a proposal for the user to approve. `
-  // 任务卡关着：不落卡。用户要的、只是降成了提案的，让用户自己从会话菜单开
-  if (!cards)
-    throw new Refused(
-      'blocked',
-      `${why}${cardsOff(call.harness)}${initiation === 'user_asked' ? ' Tell the user they can start it themselves from the session menu (Start a sub-session).' : ''}`,
-    )
+  if (!cards) throw new Refused('blocked', cardsOff(call.harness))
   const proposal = proposeOne(
     tree,
     call,
@@ -435,7 +436,7 @@ async function start(
   )
   return {
     proposal_id: proposal.id,
-    note: `${why}The user now sees a proposal card for "${proposal.title}". Nothing runs until they accept it; ${EXPIRES}. Do not do the work here as well.`,
+    note: `The user now sees a proposal card for "${proposal.title}". Nothing runs until they accept it; ${EXPIRES}. Do not do the work here as well.`,
   }
 }
 
@@ -475,6 +476,7 @@ async function offer(
     harness: target.harness ?? null,
     model: target.model ?? null,
     effort: target.effort ?? null,
+    permission: target.permission ?? null,
     cwd: target.cwd ?? null,
     kind: target.kind,
     // offer 卡上的工作树开关由用户定（选新会话时带回来），模型给的不认
@@ -635,6 +637,7 @@ const BRIEF_FIELDS = [
   'harness',
   'model',
   'effort',
+  'permission',
   'cwd',
   'kind',
 ] as const
@@ -683,12 +686,6 @@ async function accept(
       'invalid',
       `Proposal ${proposalId} cannot be started: ${settledWord[current.status]}. If the user wants this work now, start it with litch_sessions.start (initiation "user_asked").`,
     )
-  // 目标 harness 收不到父会话那么严：要用户在卡片上看过提醒自己点
-  if (current.widerSandbox)
-    throw new Refused(
-      'blocked',
-      `This proposal would run with a wider sandbox (${current.widerSandbox}) than this session, so only the user can start it, from the card. Tell them so.`,
-    )
   const child = await acceptProposal(tree, proposalId)
   return {
     thread_id: child.threadId,
@@ -711,10 +708,10 @@ async function acceptOffer(
     case 'chosen':
       break
     case 'pending':
-      // 补的简报开到收不紧的 harness 上、降成了普通提案卡：只能由用户在卡上开始
+      // 降成普通提案后，需要用户修改目标或父权限；开始时仍走统一校验。
       throw new Refused(
         'blocked',
-        `Proposal ${proposal.id} is now a card waiting for the user${proposal.widerSandbox ? ` (it would run with a wider sandbox, ${proposal.widerSandbox}, than this session)` : ''}; only the user can start it, from the card. Tell them so.`,
+        `Proposal ${proposal.id} is now a card waiting for the user${proposal.widerSandbox ? ` (it would run with a wider sandbox, ${proposal.widerSandbox}, than this session)` : ''}; change the target harness or parent permission before starting it. Tell the user why.`,
       )
     case 'offered':
       throw new Refused(
@@ -753,6 +750,7 @@ async function acceptOffer(
         background: args.background,
         harness: args.harness ?? proposal.harness,
         model: args.model ?? proposal.model,
+        permission: args.permission ?? proposal.permission,
         effort: args.effort ?? proposal.effort,
         cwd: args.cwd ?? proposal.cwd,
         kind: args.kind ?? proposal.kind,
@@ -770,6 +768,7 @@ async function acceptOffer(
       background: spec.background,
       harness: spec.harness ?? null,
       model: spec.model ?? null,
+      permission: spec.permission ?? null,
       effort: spec.effort ?? null,
       cwd: spec.cwd ?? null,
       kind: spec.kind,
@@ -782,7 +781,7 @@ async function acceptOffer(
       )
     return {
       proposal_id: held.id,
-      note: `${spec.harness ?? call.harness} cannot be sandboxed as tightly as this session (it would run with ${wider}), so the session was not started. The card now shows your brief as a proposal: the user reviews it and starts it themselves (they can change the harness there); nothing runs until they do, and ${EXPIRES}. Tell the user why in one line. Do not do the work here, and do not call accept for it again.`,
+      note: `${spec.harness ?? call.harness} cannot be sandboxed as tightly as this session (it would run with ${wider}), so the session was not started. The card now shows your brief as a proposal: the user must change the harness or parent permission before starting it; nothing runs until they do, and ${EXPIRES}. Tell the user why in one line. Do not do the work here, and do not call accept for it again.`,
     }
   }
   const child = await acceptProposal(
@@ -795,6 +794,7 @@ async function acceptOffer(
       // 空字符串是用缺省（这个会话的）
       harness: spec.harness ?? '',
       model: spec.model ?? '',
+      permission: spec.permission,
       effort: spec.effort ?? '',
       cwd: spec.cwd ?? '',
       kind: spec.kind,
@@ -1261,6 +1261,7 @@ export function sessionToolsHandler(
     } catch (error) {
       if (error instanceof PendingRefused)
         return { ...ok({ error: { code: error.code, message: error.message } }), success: false }
+      if (error instanceof ProtocolError) return clientToolFailure('invalid', error.message)
       if (error instanceof Refused || error instanceof StartRefused)
         return clientToolFailure(error.kind, error.message)
       return clientToolFailure('failed', messageOf(error))

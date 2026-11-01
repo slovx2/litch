@@ -198,6 +198,7 @@ export type * from './native-owner.mjs'
 export { NATIVE_OWNER_NOTIFICATION } from './native-owner.mjs'
 // 别的会话发来的消息（peerMessages 扩展）：用户消息条目上的发送方。不依赖别的文件
 export type * from './peer-messages.mjs'
+export * from './project-permissions.mjs'
 // 输入框里 @ 的会话：正文末尾那一段的写法与认回来。引用 session-tree.mts
 export type * from './session-mentions.mjs'
 export {
