@@ -1,0 +1,7 @@
+// 把仓库里的回归用例接到已打补丁的原生模块，复用它锁定的 JUnit/Robolectric 依赖。
+gradle.projectsEvaluated {
+  def markdown = gradle.rootProject.findProject(':react-native-enriched-markdown')
+  if (markdown != null) {
+    markdown.android.sourceSets.test.java.srcDir(new File(gradle.rootProject.projectDir, '../test/native'))
+  }
+}

@@ -86,6 +86,8 @@ or global Suggestions entry; it keeps its per-session suggestion list (`managers
   selected with both handles (drag them, or long-press elsewhere). Reply in the system menu opens a box
   to write a note on the passage (it can stay empty); Add puts it above the input box as a quote (the same
   comment chip as "Comment on this reply" on the desktop, sent as `<litch-comments>`).
+  安卓上滚动后仍可调整选区；拖到对话区边缘时，列表让正在调整的端点和把手保持可见，
+  不会为了另一端的选区跳动。后台任务条和输入区不属于选字区域。
   Tap the chip to change the note. Done leaves selecting. Comment, rename and message-edit dialogs,
   workspace forms and searchable pickers keep their content above the keyboard; long dialogs scroll
   within the available space, and buttons can be tapped while the keyboard is open.

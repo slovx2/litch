@@ -385,6 +385,8 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
               data={rows}
               inverted
               renderItem={renderItem}
+              // 原生获焦滚动不认识倒置变换，会把选字把手带离手指；选区由 Markdown 按屏幕坐标滚动。
+              scrollsChildToFocus={false}
               keyExtractor={keyOf}
               getItemType={typeOf}
               drawDistance={1500}
