@@ -54,6 +54,11 @@ export interface ManagerDecisionView
   checked: ManagerCheckedView | null
   answer: ManagerAnswerView | null
   closed: ManagerClosedView | null
+  /**
+   * 重新打开前的最后一次关闭：设备重开时清掉 closed，这里从看板的变更记录里找回，只在待定时有值。
+   * 客户端推出来的，不在设备契约里；答复结果等没有变更记录的来源不带它。
+   */
+  previousClosed?: ManagerClosedView | null
 }
 export interface ManagerRequestView extends ManagerRequest {}
 export interface ManagerItemView extends Omit<ManagerItem, 'checked'> {

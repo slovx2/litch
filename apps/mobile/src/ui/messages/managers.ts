@@ -6,7 +6,6 @@ export const zhCN = {
   'mgr.entry.none': '没有进行中的经理',
   'mgr.entry.active': '{count} 位经理进行中',
   'mgr.empty.detail': '经理在桌面端新建',
-  'mgr.row.lines': '{count} 条线在跑',
   'mgr.activity.more': '显示更多动态',
 } satisfies Record<string, Entry>
 
@@ -17,6 +16,5 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'mgr.entry.none': 'No active managers',
   'mgr.entry.active': plural('{count} active manager', '{count} active managers'),
   'mgr.empty.detail': 'Create managers in the desktop app.',
-  'mgr.row.lines': plural('{count} line running', '{count} lines running'),
   'mgr.activity.more': 'Show more activity',
 }

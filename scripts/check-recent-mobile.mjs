@@ -125,7 +125,33 @@ try {
     await read(
       `document.querySelector('[data-testid="recent:build:b2"]').innerText.includes('build-01 · ')`,
     ),
-    '跨设备写设备名',
+    '跨设备时远程设备写设备名',
+  )
+  assert.ok(
+    await read(
+      `!document.querySelector('[data-testid="recent:local:s4"]').innerText.includes('本机 · ')`,
+    ),
+    '本机的行不写设备名',
+  )
+  // 两节标题同一种样式；入口右边不再重复计数
+  assert.equal(
+    await read(
+      `(()=>{const a=document.querySelector('[data-testid="recent:head"]').parentElement,b=document.querySelector('[data-testid="devices:head"]').parentElement;return getComputedStyle(a).backgroundColor===getComputedStyle(b).backgroundColor&&a.getBoundingClientRect().height===b.getBoundingClientRect().height})()`,
+    ),
+    true,
+    '最近与设备的标题同样式',
+  )
+  assert.equal(
+    await read(
+      `document.querySelector('[data-testid="recent:head"]').getAttribute('aria-expanded')`,
+    ),
+    'true',
+  )
+  assert.ok(
+    await read(
+      `!/\\n\\d+$/.test(document.querySelector('[data-testid="devices:managers"]').innerText.trim())`,
+    ),
+    '经理入口不重复计数',
   )
   await tap('recent:head')
   assert.equal((await recentIds()).length, 0, '收起后不画行')
@@ -146,12 +172,27 @@ try {
     )?.[1],
   )
   assert.ok(hidden > 0, '写着还有几个')
+  assert.ok(
+    await read(
+      `document.querySelector('[data-testid="recent:more"]').getBoundingClientRect().height >= 44`,
+    ),
+    '显示更多的点击区不低于 44px',
+  )
   await shot('recent-more')
   await tap('recent:more')
   assert.equal((await recentIds()).length, 5 + hidden)
   await tap('recent:less')
   assert.equal((await recentIds()).length, 5)
   await tap('recent:menu')
+  assert.equal(
+    await read(
+      `[document.querySelector('[data-testid="recent:menu:first:5"]').getAttribute('role'),document.querySelector('[data-testid="recent:menu:first:5"]').getAttribute('aria-checked'),document.querySelector('[data-testid="recent:menu:project"]').getAttribute('role')].join()`,
+    ),
+    'radio,true,checkbox',
+    '条数单选、聚合复选',
+  )
+  await sleep(500)
+  await shot('recent-menu')
   await tap('recent:menu:first:10')
   await until(async () => (await recentIds()).length === 5 + hidden, '默认十条')
   await tap('recent:menu')

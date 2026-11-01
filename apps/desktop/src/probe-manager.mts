@@ -3,6 +3,7 @@ export interface ManagerSeen {
   linesState: boolean
   answeredSplit: boolean
   issueOrder: boolean
+  previousClosed: boolean
   consoleReports: boolean
   issueRelations: boolean
   managerQuestionDrafts: boolean
@@ -380,9 +381,14 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       .map((card) => card.getAttribute('data-decision'))
       .join(',')
   const orderSelect = await until('排序选择', () =>
-    one<HTMLSelectElement>('.mg-inbox-bar [data-act="manager-issue-order"]'),
+    one<HTMLSelectElement>('.mg-decision-filter [data-act="manager-issue-order"]'),
   )
-  const newestFirst = orderSelect.value === 'newest' && answeredOrder() === 'D-15,D-13,D-11'
+  // 决策已按状态分开，排序在状态切换那一行，不给“待处理优先”
+  const decisionChoices = [...orderSelect.options].map((option) => option.value).join(',')
+  const newestFirst =
+    decisionChoices === 'newest,oldest' &&
+    orderSelect.value === 'newest' &&
+    answeredOrder() === 'D-15,D-13,D-11'
   const choose = (value: string) => {
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(
       orderSelect,
@@ -397,7 +403,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await until('恢复最新优先', () => answeredOrder() === 'D-15,D-13,D-11')
   const issueOrder = newestFirst && oldestFirst && orderSaved
 
-  await click('.mg-decision-filter button:last-child')
+  await click('.mg-decision-filter button:last-of-type')
   await until('已关闭的决策', () => one('[data-decision="D-12"]'))
   const closedSplit = Boolean(
     one('[data-decision="D-12"] .mg-closed-note')?.textContent?.includes('已关闭 · 经理') &&
@@ -409,11 +415,26 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     closedNeedsReopen &&
       (await until('决策重新打开', () => one('[data-decision="D-12"] textarea'))),
   )
+  // 重新打开后，上次关闭的原因作历史留着，默认收起
+  const history = one<HTMLDetailsElement>('[data-decision="D-12"] [data-previous-closed]')
+  const previousClosed = Boolean(
+    history &&
+      !history.open &&
+      history.querySelector('summary')?.textContent?.includes('上次关闭 · 经理') &&
+      history.textContent?.includes('feat/mobile-mermaid'),
+  )
   const omittedActions = ![...document.querySelectorAll('.mg-board button')].some((button) =>
     /^(仍然有效|推迟)$/.test(button.textContent?.trim() ?? ''),
   )
   await click('[data-board-tab="reports"]')
   await until('报告原帖', () => one('[data-report="P-1"]'))
+  // 其他类别的排序在一行细的列表头里，三项都有
+  const listOrder = one<HTMLSelectElement>('.mg-list-head [data-act="manager-issue-order"]')
+  const orderInHead = Boolean(
+    listOrder &&
+      [...listOrder.options].map((option) => option.value).join(',') === 'newest,oldest,pending' &&
+      !one('.mg-inbox-bar [data-act="manager-issue-order"]'),
+  )
   const issueRelations = Boolean(
     one('[data-report="P-1"] [data-relations="P-1"] [data-relation-target="D-15"]') &&
       one('[data-report="P-1"] [data-board-reference="I-2"]'),
@@ -825,7 +846,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   return {
     linesState,
     answeredSplit: answeredSplit && closedSplit,
-    issueOrder,
+    issueOrder: issueOrder && orderInHead,
+    previousClosed,
     consoleReports,
     issueRelations,
     managerQuestionDrafts,
@@ -887,7 +909,9 @@ export function judgeManager(seen: ManagerSeen): string[] {
     linesState:
       '经理自己只有后台命令、工作线在跑时，经理行仍画成运行中，或没有后台记号、没写明工作线',
     answeredSplit: '已答复或已关闭的决策没有把答复、关闭记录与问题分块，或其他选项没有默认收起',
-    issueOrder: '控制台没有默认最新优先，或切换排序后顺序与本机记录不对',
+    issueOrder:
+      '控制台没有默认最新优先，或切换排序后顺序与本机记录不对，或排序不在列表头、决策里仍有待处理优先',
+    previousClosed: '重新打开的决策没有收起显示上次关闭的原因',
     consoleReports: '控制台报告与帖子追问未完成',
     issueRelations: '议题关联与编号预览未完成',
     managerQuestionDrafts: '经理追问草稿与回复记录未完成',

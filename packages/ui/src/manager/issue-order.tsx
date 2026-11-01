@@ -30,18 +30,23 @@ const subscribe = (listener: () => void) => {
 }
 export const useIssueOrder = () => useSyncExternalStore(subscribe, () => state)
 
-export function IssueOrderSelect() {
+/**
+ * 排序下拉，放在列表头那一行的右端。决策已按状态分开，组内“待处理优先”与“最新优先”结果一样，
+ * 所以决策列表不给这一项（withPending=false），存着的“待处理优先”在那里显示为最新优先。
+ */
+export function IssueOrderSelect({ withPending = true }: { withPending?: boolean }) {
   const t = useT()
   const order = useIssueOrder()
+  const choices = MANAGER_ISSUE_ORDERS.filter((key) => withPending || key !== 'pending')
   return (
     <label className="mg-issue-order">
-      <span className="dim">{t('manager.order')}</span>
+      <span className="mg-issue-order-label">{t('manager.order')}</span>
       <select
         data-act="manager-issue-order"
-        value={order}
+        value={choices.includes(order) ? order : 'newest'}
         onChange={(event) => setIssueOrder(parseManagerIssueOrder(event.target.value))}
       >
-        {MANAGER_ISSUE_ORDERS.map((key) => (
+        {choices.map((key) => (
           <option key={key} value={key}>
             {t(`manager.order.${key}`)}
           </option>

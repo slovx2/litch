@@ -359,7 +359,6 @@ export function ManagerPage({
                 </button>
               ))}
             </div>
-            <IssueOrderSelect />
           </div>
         ) : null}
         {disabled ? (
@@ -434,6 +433,14 @@ export function ManagerPage({
                   open: openReference,
                 }}
               >
+                {/* 排序在列表头右端：决策放在状态切换那一行（Decisions），其他三类一行细的列表头 */}
+                {activeTab === 'suggestions' ||
+                activeTab === 'requests' ||
+                activeTab === 'reports' ? (
+                  <div className="mg-list-head">
+                    <IssueOrderSelect />
+                  </div>
+                ) : null}
                 {/* 答复区保持挂载，切页签不丢提交状态；本地草稿独立持久化。 */}
                 {activeTab === 'suggestions' ? (
                   <ManagerSuggestions

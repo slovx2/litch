@@ -1,7 +1,10 @@
 // 手机议题的排序、分类计数与正文层级共用纯函数，保持报告未读独立于待处理；排序规则在核心，与桌面一致。
 import {
   type ManagerIssueOrder,
+  type ManagerView,
+  managerAttentionCount,
   reviewedSuggestion,
+  type SessionSummary,
   type SuggestionView,
   sortManagerIssues,
 } from '@litch/core'
@@ -12,7 +15,48 @@ import type {
 } from '../../../../../packages/protocol/src/manager.mjs'
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
 import { markdownStyleOf } from '../../detail/markdownStyle'
-import type { Theme } from '../../ui/theme'
+import type { StatusKind, Theme } from '../../ui/theme'
+
+/**
+ * 经理目录一行的记号和状态文字。记号只说经理会话自己（回合在跑、等人、出错、只剩后台任务），
+ * 与会话行同一套；工作线在跑另用文字写明，不借用经理自己的“运行中”（与桌面侧栏的经理行同一规则）。
+ * 文字：已结束/正在结束 → N 待处理 → 运行中 → N 条工作线运行中 → N 个后台任务正在运行 → 空闲。
+ */
+export function managerRowState(
+  manager: Pick<
+    ManagerView,
+    'status' | 'runningLines' | 'pendingDecisions' | 'pendingRequests' | 'pendingSuggestions'
+  >,
+  summary: Pick<SessionSummary, 'status' | 'background'> | undefined,
+): {
+  mark: StatusKind
+  text:
+    | { key: 'manager.ending' | 'manager.ended' | 'manager.running' | 'manager.idle' }
+    | { key: 'manager.pending' | 'manager.linesCount'; n: number }
+    | { key: 'background.sidebar'; count: number }
+} {
+  const background = summary?.background?.running ?? 0
+  const mark: StatusKind =
+    manager.status === 'ended'
+      ? 'offline'
+      : summary?.status === 'running'
+        ? 'running'
+        : summary?.status === 'waiting'
+          ? 'waiting'
+          : summary?.status === 'error'
+            ? 'error'
+            : background > 0
+              ? 'background'
+              : 'idle'
+  if (manager.status !== 'active') return { mark, text: { key: `manager.${manager.status}` } }
+  const pending = managerAttentionCount(manager)
+  if (pending > 0) return { mark, text: { key: 'manager.pending', n: pending } }
+  if (mark === 'running' || mark === 'waiting') return { mark, text: { key: 'manager.running' } }
+  if (manager.runningLines > 0)
+    return { mark, text: { key: 'manager.linesCount', n: manager.runningLines } }
+  if (background > 0) return { mark, text: { key: 'background.sidebar', count: background } }
+  return { mark, text: { key: 'manager.idle' } }
+}
 
 /** 未回答的关闭决策只能重开；有旧答案时保留修改入口，与桌面相同。 */
 export function decisionActions(decision: Pick<ManagerDecision, 'status' | 'answer'>) {

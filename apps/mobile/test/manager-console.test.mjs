@@ -7,6 +7,7 @@ import {
   decisionActions,
   issueCounts,
   issueMarkdownStyle,
+  managerRowState,
   orderedIssues,
   plainLine,
 } from '../src/screens/managers/presentation.ts'
@@ -127,4 +128,45 @@ test('经理目录行只显示一行纯文字；收起的长动态只取前几�
   assert.equal(collapsedMarkdown('a\nb', 5), null)
   assert.equal(collapsedMarkdown('1\n2\n3\n4\n5\n6', 5), '1\n2\n3\n4\n5')
   assert.equal(collapsedMarkdown('x\n```\ncode\nmore\nend\n```', 4), 'x\n```\ncode\nmore\n```')
+})
+
+test('经理目录行：记号只看经理会话自己，工作线在跑另写文字', () => {
+  const manager = {
+    status: 'active',
+    runningLines: 2,
+    pendingDecisions: 0,
+    pendingRequests: 0,
+    pendingSuggestions: 0,
+  }
+  const idle = { status: 'idle', background: null }
+  assert.deepEqual(managerRowState(manager, idle), {
+    mark: 'idle',
+    text: { key: 'manager.linesCount', n: 2 },
+  })
+  assert.deepEqual(managerRowState(manager, { status: 'running', background: null }), {
+    mark: 'running',
+    text: { key: 'manager.running' },
+  })
+  assert.deepEqual(
+    managerRowState(manager, { status: 'waiting', background: null }).mark,
+    'waiting',
+  )
+  assert.deepEqual(managerRowState(manager, { status: 'error', background: null }).mark, 'error')
+  const own = { status: 'idle', background: { running: 3 } }
+  assert.deepEqual(managerRowState({ ...manager, runningLines: 0 }, own), {
+    mark: 'background',
+    text: { key: 'background.sidebar', count: 3 },
+  })
+  assert.deepEqual(managerRowState(manager, own).text, { key: 'manager.linesCount', n: 2 })
+  assert.deepEqual(managerRowState({ ...manager, runningLines: 0 }, idle).text, {
+    key: 'manager.idle',
+  })
+  assert.deepEqual(managerRowState({ ...manager, pendingDecisions: 4 }, idle).text, {
+    key: 'manager.pending',
+    n: 4,
+  })
+  assert.deepEqual(managerRowState({ ...manager, status: 'ended' }, idle), {
+    mark: 'offline',
+    text: { key: 'manager.ended' },
+  })
 })

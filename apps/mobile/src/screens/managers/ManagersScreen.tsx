@@ -1,5 +1,5 @@
 // 手机经理目录：按设备分组，每组先进行中、后已结束；新建、设置和调度仍在桌面。
-import { type DeviceView, keys, type ManagerView, managerAttentionCount } from '@litch/core'
+import { type DeviceView, keys, type ManagerView, type SessionSummary } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { ScrollView, View } from 'react-native'
 import { ago } from '../../../../../packages/ui/src/app/format.ts'
@@ -8,7 +8,7 @@ import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Empty, Row, SectionLabel, StatusMark } from '../../ui/kit/controls'
 import { Screen } from '../../ui/kit/Screen'
-import { plainLine } from './presentation'
+import { managerRowState, plainLine } from './presentation'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Managers'>
 function ManagerRow({
@@ -19,34 +19,17 @@ function ManagerRow({
   navigation: Props['navigation']
 }) {
   const t = useT()
-  const count = manager.status === 'active' ? managerAttentionCount(manager) : 0
-  const state =
-    manager.status !== 'active'
-      ? t(`manager.${manager.status}`)
-      : count > 0
-        ? t('manager.pending', { n: count })
-        : manager.runningLines > 0
-          ? t('mgr.row.lines', { count: manager.runningLines })
-          : ''
+  const summary = useKey<SessionSummary>(keys.summary(manager.deviceId, manager.threadId))
+  const { mark, text } = managerRowState(manager, summary)
+  const { key, ...args } = text
+  const state = t(key, args)
   const latest = plainLine(manager.latestActivity?.text ?? manager.scope)
   return (
     <Row
       title={manager.name || t('manager.manager')}
       detail={[state, latest].filter(Boolean).join(' · ')}
       meta={manager.latestActivity ? ago(manager.latestActivity.at, Date.now(), t) : undefined}
-      left={
-        <StatusMark
-          status={
-            manager.status !== 'active'
-              ? 'offline'
-              : count > 0
-                ? 'waiting'
-                : manager.runningLines > 0
-                  ? 'running'
-                  : 'idle'
-          }
-        />
-      }
+      left={<StatusMark status={mark} />}
       testID={`manager:${manager.id}`}
       onPress={() =>
         navigation.navigate('ManagerConsole', { deviceId: manager.deviceId, managerId: manager.id })

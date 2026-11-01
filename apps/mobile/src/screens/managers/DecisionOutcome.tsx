@@ -2,9 +2,10 @@
 import { decisionAnswerParts } from '@litch/core'
 import { useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import type { ManagerDecisionView as ManagerDecision } from '../../../../../packages/core/src/model-manager.mts'
 import type {
   ManagerActor,
-  ManagerDecision,
+  ManagerClosed,
   ManagerDecisionOption,
 } from '../../../../../packages/protocol/src/manager.mjs'
 import { stamp } from '../../../../../packages/ui/src/app/format.ts'
@@ -74,42 +75,83 @@ export function DecisionAnswer({ decision }: { decision: ManagerDecision }) {
   )
 }
 
+/** 已关闭的记录。重新打开的决策只作历史：默认收起，展开看原因 */
+function ClosedNote({
+  decisionId,
+  closed,
+  previous,
+}: {
+  decisionId: string
+  closed: ManagerClosed
+  previous: boolean
+}) {
+  const t = useT()
+  const { c, radius, hit } = useTheme()
+  const [open, setOpen] = useState(!previous)
+  const head = (
+    <Text style={{ color: c.ink2 }}>
+      {previous ? `${open ? '▾' : '▸'} ` : ''}
+      <Text style={{ color: c.ink, fontWeight: '600' }}>
+        {t(previous ? 'manager.closedPrevious' : 'manager.closedBy', {
+          who: t(`manager.closer.${closerKey(closed.by)}`),
+        })}
+      </Text>
+      {' · '}
+      {stamp(closed.at, Date.now(), t.lang)}
+    </Text>
+  )
+  return (
+    <View
+      testID={`decision-${previous ? 'previous-closed' : 'closed'}:${decisionId}`}
+      style={[
+        styles.block,
+        { backgroundColor: c.sunken, borderLeftColor: c.line3, borderRadius: radius.s },
+      ]}
+    >
+      {previous ? (
+        <Pressable
+          accessibilityRole="button"
+          aria-expanded={open}
+          onPress={() => setOpen(!open)}
+          style={[styles.head, { minHeight: hit }]}
+        >
+          {head}
+        </Pressable>
+      ) : (
+        head
+      )}
+      {open ? <Markdown text={closed.reason} /> : null}
+    </View>
+  )
+}
+
+/** 重新打开的决策：作答表单上方，重开前的关闭记录（收起） */
+export function DecisionHistory({ decision }: { decision: ManagerDecision }) {
+  const parts = decisionAnswerParts(decision)
+  return parts.previousClosed ? (
+    <ClosedNote decisionId={decision.id} closed={parts.previousClosed} previous />
+  ) : null
+}
+
 export function DecisionOutcome({ decision }: { decision: ManagerDecision }) {
   const t = useT()
-  const { c, radius } = useTheme()
+  const { c, hit } = useTheme()
   const [open, setOpen] = useState(false)
   const parts = decisionAnswerParts(decision)
   return (
     <>
       <DecisionAnswer decision={decision} />
       {parts.closed ? (
-        <View
-          testID={`decision-closed:${decision.id}`}
-          style={[
-            styles.block,
-            { backgroundColor: c.sunken, borderLeftColor: c.line3, borderRadius: radius.s },
-          ]}
-        >
-          <Text style={{ color: c.ink2 }}>
-            <Text style={{ color: c.ink, fontWeight: '600' }}>
-              {t('manager.closedBy', {
-                who: t(`manager.closer.${closerKey(parts.closed.by)}`),
-              })}
-            </Text>
-            {' · '}
-            {stamp(parts.closed.at, Date.now(), t.lang)}
-          </Text>
-          <Markdown text={parts.closed.reason} />
-        </View>
+        <ClosedNote decisionId={decision.id} closed={parts.closed} previous={false} />
       ) : null}
       {parts.others.length ? (
         <>
           <Pressable
             accessibilityRole="button"
-            accessibilityState={{ expanded: open }}
+            aria-expanded={open}
             testID={`decision-others:${decision.id}`}
             onPress={() => setOpen(!open)}
-            style={styles.toggle}
+            style={[styles.toggle, { minHeight: hit }]}
           >
             <Text style={{ color: c.ink2 }}>
               {open ? '▾' : '▸'}{' '}
@@ -136,5 +178,6 @@ export function DecisionOutcome({ decision }: { decision: ManagerDecision }) {
 const styles = StyleSheet.create({
   block: { borderLeftWidth: 3, padding: 12, gap: 8 },
   option: { borderWidth: 1, padding: 10, gap: 6 },
-  toggle: { alignSelf: 'flex-start', paddingVertical: 8 },
+  toggle: { alignSelf: 'stretch', justifyContent: 'center' },
+  head: { justifyContent: 'center' },
 })

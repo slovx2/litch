@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { decisionAnswerParts, parseManagerIssueOrder, sortManagerIssues } from '../src/index.mjs'
+import {
+  decisionAnswerParts,
+  parseManagerIssueOrder,
+  reopenedClosure,
+  sortManagerIssues,
+} from '../src/index.mjs'
 
 const rows = [
   { id: 'a', at: 10, pending: false },
@@ -75,4 +80,49 @@ test('答复指向已删掉的选项：不当作选中', () => {
   })
   assert.equal(parts.chosen, null)
   assert.equal(parts.others.length, 3)
+})
+
+test('重新打开：重开前的关闭记录只在待定时给出', () => {
+  const open = decisionAnswerParts({
+    status: 'open',
+    options,
+    answer,
+    closed: null,
+    previousClosed: closed,
+  })
+  assert.equal(open.previousClosed?.reason, '不用定了')
+  const answered = decisionAnswerParts({
+    status: 'answered',
+    options,
+    answer,
+    closed: null,
+    previousClosed: closed,
+  })
+  assert.equal(answered.previousClosed, null)
+})
+
+test('从变更记录找回重开前的关闭：只看最近一次状态变化', () => {
+  const change = (
+    id: string,
+    before: Record<string, unknown> | null,
+    after: Record<string, unknown> | null,
+  ) => ({
+    id: `c-${id}`,
+    objectId: 'D-1' as const,
+    by: 'user' as const,
+    at: 3,
+    fields: [],
+    before,
+    after,
+    why: '',
+  })
+  const reopen = change('reopen', { status: 'withdrawn', closed }, { status: 'open', closed: null })
+  const close = change('close', { status: 'open', closed: null }, { status: 'withdrawn', closed })
+  const edit = change('edit', { status: 'open', title: 'a' }, { status: 'open', title: 'b' })
+  const decision = { id: 'D-1' as const, status: 'open' as const }
+  assert.deepEqual(reopenedClosure(decision, [edit, reopen, close]), closed, '重开后又改过标题')
+  assert.equal(reopenedClosure(decision, [close]), null, '最近一次状态变化不是重开')
+  assert.equal(reopenedClosure({ ...decision, status: 'answered' }, [reopen]), null, '已答不给')
+  assert.equal(reopenedClosure({ ...decision, id: 'D-2' }, [reopen]), null, '别的决策')
+  assert.equal(reopenedClosure(decision, []), null, '从没关过')
 })

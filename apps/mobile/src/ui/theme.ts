@@ -70,7 +70,7 @@ const SHAPES: Record<Skin, Shape> = {
       offline: '○',
       background: '&',
     },
-    radio: { on: '[x]', off: '[ ]', mixed: '[-]' },
+    radio: { on: '(*)', off: '( )', mixed: '(-)' },
     check: { on: '[x]', off: '[ ]', mixed: '[-]' },
     todo: { pending: '[ ]', inProgress: '[~]', completed: '[x]' },
   },

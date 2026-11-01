@@ -100,6 +100,24 @@ try {
     )
     await new Promise((r) => setTimeout(r, 150))
   }
+  // 页签（下划线式）和类别（小胶囊）带计数，按 testID 点
+  const tapId = async (id) => {
+    await wait(`[data-testid="${id}"]`)
+    await read(`document.querySelector('[data-testid="${id}"]').click()`)
+    await new Promise((r) => setTimeout(r, 150))
+  }
+  const checked = (id) =>
+    read(`document.querySelector('[data-testid="${id}"]')?.getAttribute('aria-checked')`)
+  // 页签与桌面同序：概览、经理事项、控制台；页签和类别读屏角色不同
+  assert.equal(
+    await read(
+      "[...document.querySelectorAll('[role=tab][data-testid^=\"manager-tab:\"]')].map(e=>e.dataset.testid.slice(12)).join(',')",
+    ),
+    'overview,items,console',
+    '页签顺序',
+  )
+  await tapId('manager-tab:console')
+  assert.equal(await checked('manager-category:decision'), 'true', '类别是单选')
   assert.ok(
     await read(
       '!document.querySelector(\'[data-testid="manager-issue:D-13"] textarea\') && !document.querySelector(\'[data-testid="manager-issue:D-12"] textarea\')',
@@ -114,6 +132,13 @@ try {
   const order = async (key) => {
     await read(`document.querySelector('[data-testid="manager-issue-order"]').click()`)
     await wait(`[data-testid="manager-issue-order:${key}"]`)
+    assert.equal(
+      await read(
+        `document.querySelector('[data-testid="manager-issue-order:${key}"]').getAttribute('role')`,
+      ),
+      'radio',
+      '排序是单选',
+    )
     await read(`document.querySelector('[data-testid="manager-issue-order:${key}"]').click()`)
     await new Promise((r) => setTimeout(r, 300))
   }
@@ -169,6 +194,29 @@ try {
     ),
     '从未回答的关闭决策仅提供重开',
   )
+  // 修改答案：原来的答复照样显示，原选项已选中；点另一项只是选中，不提交
+  await press('修改答案')
+  await wait('[data-testid="decision-choice:D-13:b"]')
+  assert.ok(
+    await read('!!document.querySelector(\'[data-testid="decision-answer:D-13"]\')'),
+    '修改时保留原答复',
+  )
+  assert.equal(await checked('decision-choice:D-13:b'), 'true', '原选项已选中')
+  await tapId('decision-choice:D-13:a')
+  assert.equal(await checked('decision-choice:D-13:a'), 'true')
+  assert.equal(await checked('decision-choice:D-13:b'), 'false')
+  assert.ok(
+    await read(
+      "document.querySelector('[data-testid=\"issue-status:D-13\"]').textContent.includes('已答复')",
+    ),
+    '点选项不直接提交',
+  )
+  await read(
+    `document.querySelector('[data-testid="manager-issue:D-13"]').scrollIntoView({block:'start'})`,
+  )
+  await shot('mobile-edit-answer')
+  await press('取消修改')
+  await wait('[data-testid="decision-others:D-13"]')
   await press('重新打开')
   await until(
     () =>
@@ -177,23 +225,41 @@ try {
       ),
     '重开后显示答复区',
   )
+  // 重开后，上次关闭的原因作历史保留，默认收起
+  const history = '[data-testid="decision-previous-closed:D-12"]'
+  await wait(history)
+  assert.ok(
+    await read(
+      `(()=>{const e=document.querySelector('${history}');return e.innerText.includes('上次关闭 · 经理')&&!e.innerText.includes('feat/mobile-mermaid')})()`,
+    ),
+    '上次关闭默认收起',
+  )
+  await read(`document.querySelector('${history} [role=button]').click()`)
+  await until(
+    () => read(`document.querySelector('${history}').innerText.includes('feat/mobile-mermaid')`),
+    '展开看关闭原因',
+  )
+  await read(
+    `document.querySelector('[data-testid="manager-issue:D-12"]').scrollIntoView({block:'start'})`,
+  )
+  await shot('mobile-reopened-history')
   for (const skin of ['standard', 'human', 'retro'])
     for (const theme of ['light', 'dark']) {
       await read(
         `window.__litchLook.set({skin:${JSON.stringify(skin)},theme:${JSON.stringify(theme)}})`,
       )
       await wait('[data-testid="manager-console"]')
-      await press('控制台')
-      await press('决策')
+      await tapId('manager-tab:console')
+      await tapId('manager-category:decision')
       await read(
         `document.querySelector('[data-testid="manager-issue:D-13"]')?.scrollIntoView({block:'start'})`,
       )
       await shot(`mobile-decisions-${skin}-${theme}`)
-      await press('概览')
+      await tapId('manager-tab:overview')
       await wait('[data-testid="manager-overview"]')
       await shot(`mobile-overview-${skin}-${theme}`)
-      await press('控制台')
-      await press('报告')
+      await tapId('manager-tab:console')
+      await tapId('manager-category:report')
       await wait('[data-testid="manager-issue:P-1"]')
       await shot(`mobile-report-${skin}-${theme}`)
       await press('关联 3')
@@ -208,8 +274,8 @@ try {
       await press('▤ 经理事项#I-2 · 回退编辑：手机端跟进')
       await shot(`mobile-related-item-${skin}-${theme}`)
     }
-  await press('控制台')
-  await press('报告')
+  await tapId('manager-tab:console')
+  await tapId('manager-category:report')
   assert.equal(
     await read('document.querySelector(\'[data-testid="manager-reports-unread"]\').textContent'),
     '1',
@@ -248,7 +314,7 @@ try {
   await until(() => read("document.body.innerText.includes('已核对这条内容')"), '经理回复')
   assert.ok(await read("!document.querySelector('textarea')"), '提交后收起追问')
   await shot('mobile-report-discussion')
-  await press('请你做')
+  await tapId('manager-category:request')
   assert.ok(
     await read(
       "!document.querySelector('[data-testid=\"manager-issue:R-1\"]').innerText.includes('提交给经理')",
@@ -283,16 +349,26 @@ try {
   await press('已复验')
   await until(() => read("document.body.innerText.includes('已交付')"), '交付请求')
   await shot('mobile-delivery')
-  // 概览：几个数与请你做跳转。
-  await press('概览')
+  // 概览：与桌面同样的两个数；受阻事项第二行“等待决策 #D-15”，编号可点
+  await tapId('manager-tab:overview')
   await wait('[data-testid="manager-overview"]')
   assert.ok(
     await read(
-      "['pending','blocked','lines','done'].every(k=>document.querySelector(`[data-testid=\"manager-stat:${k}\"]`))",
+      "['wait','done'].every(k=>document.querySelector(`[data-testid=\"manager-stat:${k}\"]`)) && !document.querySelector('[data-testid=\"manager-stat:lines\"]')",
     ),
-    '概览数字',
+    '概览数字与桌面一致',
   )
-  await read(`document.querySelector('[data-testid="manager-stat:pending"]').click()`)
+  assert.ok(
+    await read(
+      "document.querySelector('[data-testid=\"overview-blocked:I-2\"]').innerText.includes('等待决策')",
+    ),
+    '受阻事项写明等待决策',
+  )
+  await tapId('overview-blocked:I-2:D-15')
+  await wait('[data-testid="manager-issue:D-15"]')
+  assert.equal(await checked('manager-category:decision'), 'true', '编号跳到决策')
+  await tapId('manager-tab:overview')
+  await tapId('manager-stat:wait')
   await wait('[data-testid="manager-issue-order"]')
   // 经理目录：按设备分组。
   await call('Page.navigate', { url: url.replace('scene=manager-console', 'scene=managers') })

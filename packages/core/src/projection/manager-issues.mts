@@ -44,6 +44,8 @@ export interface DecisionAnswerParts {
   /** 没选中的选项，按原顺序 */
   others: ManagerDecisionOption[]
   closed: ManagerClosed | null
+  /** 重新打开的决策：重开前那次关闭的记录（默认收起，作历史看） */
+  previousClosed: ManagerClosed | null
 }
 
 /** 把一个决策拆成问题之外的几块：答复、关闭记录、其他选项。 */
@@ -52,6 +54,7 @@ export function decisionAnswerParts(decision: {
   options: readonly ManagerDecisionOption[]
   answer: ManagerAnswer | null
   closed: ManagerClosed | null
+  previousClosed?: ManagerClosed | null | undefined
 }): DecisionAnswerParts {
   const answer = decision.answer
   const chosen = answer?.optionId
@@ -63,5 +66,6 @@ export function decisionAnswerParts(decision: {
     chosen,
     others: decision.options.filter((option) => option !== chosen),
     closed: decision.status === 'open' ? null : decision.closed,
+    previousClosed: decision.status === 'open' ? (decision.previousClosed ?? null) : null,
   }
 }

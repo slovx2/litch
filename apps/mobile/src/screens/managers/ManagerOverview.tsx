@@ -1,13 +1,11 @@
-// 手机经理概览，照桌面概览：现状、几个数、请你做、受阻事项、最近动态。
-import {
-  type ManagerBoardTopicView,
-  type ManagerView,
-  managerAttentionCount,
-  managerBoardPages,
-} from '@litch/core'
+// 手机经理概览，照桌面概览：现状、两个数（待用户决策、已完成）、受阻事项、请你做、最近动态。
+import { type ManagerBoardTopicView, managerBoardPages } from '@litch/core'
 import { useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import type { ManagerActivityView } from '../../../../../packages/core/src/model-manager.mts'
+import type {
+  ManagerActivityView,
+  ManagerItemView,
+} from '../../../../../packages/core/src/model-manager.mts'
 import { stamp } from '../../../../../packages/ui/src/app/format.ts'
 import { useT } from '../../ui/i18n'
 import { Button, Row, SectionLabel } from '../../ui/kit/controls'
@@ -27,7 +25,7 @@ function Activity({
   onLine(threadId: string, title: string): void
 }) {
   const t = useT()
-  const { c, radius } = useTheme()
+  const { c, radius, hit } = useTheme()
   const [expanded, setExpanded] = useState(false)
   const source = activity.source ?? { kind: 'system' as const }
   const short = collapsedMarkdown(activity.text, LONG_LINES)
@@ -60,9 +58,9 @@ function Activity({
       {short ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityState={{ expanded }}
+          aria-expanded={expanded}
           onPress={() => setExpanded(!expanded)}
-          style={styles.toggle}
+          style={[styles.toggle, { minHeight: hit }]}
         >
           <Text style={{ color: c.ink2 }}>
             {expanded ? '▾' : '▸'}{' '}
@@ -74,17 +72,56 @@ function Activity({
   )
 }
 
+/** 受阻事项：标题一行，第二行“等待决策 #D-n”，编号是链接色、点了跳到那条决策 */
+function BlockedItem({ item, onIssue }: { item: ManagerItemView; onIssue(id: string): void }) {
+  const t = useT()
+  const { c, font, hit } = useTheme()
+  return (
+    <Pressable
+      accessibilityRole="button"
+      testID={`overview-blocked:${item.id}`}
+      onPress={() => onIssue(item.id)}
+      style={({ pressed }) => [
+        styles.blocked,
+        {
+          minHeight: hit,
+          borderBottomColor: c.line1,
+          backgroundColor: pressed ? c.press : c.panel,
+        },
+      ]}
+    >
+      <Text style={{ color: c.ink, fontSize: font.size.body }}>
+        #{item.id} · {item.title}
+      </Text>
+      {item.blockedBy.length ? (
+        <View style={styles.waits}>
+          <Text style={{ color: c.ink2 }}>{t('manager.waitDecisions')}</Text>
+          {item.blockedBy.map((id) => (
+            <Text
+              key={id}
+              role="link"
+              testID={`overview-blocked:${item.id}:${id}`}
+              onPress={() => onIssue(id)}
+              style={[styles.link, { color: c.accent, minHeight: hit }]}
+            >
+              #{id}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+    </Pressable>
+  )
+}
+
 export function ManagerOverview({
-  manager,
   board,
-  onConsole,
+  onDecisions,
   onItems,
   onIssue,
   onLine,
 }: {
-  manager: ManagerView
   board: NonNullable<ManagerBoardTopicView['board']>
-  onConsole(): void
+  onDecisions(): void
   onItems(): void
   onIssue(id: string): void
   onLine(threadId: string, title: string): void
@@ -93,17 +130,15 @@ export function ManagerOverview({
   const { c, font, radius } = useTheme()
   const [shown, setShown] = useState(PAGE)
   const { situation, stats, requests, blocked, activities } = managerBoardPages(board).overview
-  const attention = manager.status === 'active' ? managerAttentionCount(manager) : 0
+  // 两个数照桌面概览：待用户决策（点进控制台的决策）、已完成（点进经理事项）
   const tiles = [
-    { key: 'pending', value: String(attention), wait: attention > 0, onPress: onConsole },
     {
-      key: 'blocked',
-      value: String(stats.blockedItems),
-      wait: stats.blockedItems > 0,
-      onPress: onItems,
+      key: 'wait',
+      value: stats.pendingDecisions,
+      wait: stats.pendingDecisions > 0,
+      onPress: onDecisions,
     },
-    { key: 'lines', value: String(stats.runningLines), wait: false, onPress: undefined },
-    { key: 'done', value: `${stats.doneItems}/${stats.totalItems}`, wait: false, onPress: onItems },
+    { key: 'done', value: stats.doneItems, wait: false, onPress: onItems },
   ] as const
   return (
     <View testID="manager-overview">
@@ -123,12 +158,16 @@ export function ManagerOverview({
           <Pressable
             key={tile.key}
             testID={`manager-stat:${tile.key}`}
-            accessibilityRole={tile.onPress ? 'button' : undefined}
-            disabled={!tile.onPress}
+            accessibilityRole="button"
+            aria-label={`${tile.value} ${t(`manager.${tile.key}`)}`}
             onPress={tile.onPress}
-            style={[
+            style={({ pressed }) => [
               styles.tile,
-              { borderColor: c.line1, backgroundColor: c.panel, borderRadius: radius.s },
+              {
+                borderColor: c.line1,
+                backgroundColor: pressed ? c.press : c.panel,
+                borderRadius: radius.s,
+              },
             ]}
           >
             <Text
@@ -141,10 +180,16 @@ export function ManagerOverview({
             >
               {tile.value}
             </Text>
-            <Text style={{ color: c.ink2 }}>{t(`manager.stat.${tile.key}`)}</Text>
+            <Text style={{ color: c.ink2 }}>{t(`manager.${tile.key}`)}</Text>
           </Pressable>
         ))}
       </View>
+      <SectionLabel>{t('manager.blocked')}</SectionLabel>
+      {blocked.length ? (
+        blocked.map((item) => <BlockedItem key={item.id} item={item} onIssue={onIssue} />)
+      ) : (
+        <Text style={[styles.none, { color: c.ink3 }]}>{t('manager.none')}</Text>
+      )}
       {requests.length ? (
         <>
           <SectionLabel>{t('manager.requests')}</SectionLabel>
@@ -159,19 +204,6 @@ export function ManagerOverview({
           ))}
         </>
       ) : null}
-      <SectionLabel>{t('manager.blocked')}</SectionLabel>
-      {blocked.length ? (
-        blocked.map((item) => (
-          <Row
-            key={item.id}
-            title={`#${item.id} · ${item.title}`}
-            detail={item.blockedBy.map((id) => `#${id}`).join(' ') || undefined}
-            onPress={() => onIssue(item.id)}
-          />
-        ))
-      ) : (
-        <Text style={[styles.none, { color: c.ink3 }]}>{t('manager.none')}</Text>
-      )}
       <SectionLabel>{t('manager.activity')}</SectionLabel>
       {activities.slice(0, shown).map((activity) => (
         <Activity key={activity.id} activity={activity} onLine={onLine} />
@@ -205,7 +237,10 @@ const styles = StyleSheet.create({
   activity: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, gap: 8 },
   activityHead: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
   pill: { borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2 },
-  toggle: { alignSelf: 'flex-start', paddingVertical: 4 },
+  toggle: { alignSelf: 'stretch', justifyContent: 'center' },
+  blocked: { paddingHorizontal: 16, paddingVertical: 8, gap: 2, borderBottomWidth: 1 },
+  waits: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8 },
+  link: { textAlignVertical: 'center', paddingVertical: 12 },
   none: { paddingHorizontal: 16, paddingVertical: 12 },
   more: { padding: 12 },
 })

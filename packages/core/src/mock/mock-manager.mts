@@ -366,6 +366,8 @@ export function createMockManagers(host: MockManagerHost) {
           t('只能重开已关闭的决策', 'Only closed decisions can be reopened'),
         )
       decision.status = 'open'
+      // 真设备重开时清掉 closed，客户端从变更记录里找回；模拟核心没有变更记录，直接留下
+      decision.previousClosed = decision.closed
       decision.closed = null
       decision.revision++
       decision.updatedAt = host.clock.now()
@@ -482,6 +484,7 @@ export function createMockManagers(host: MockManagerHost) {
         }
         decision.status = 'answered'
         decision.closed = null
+        decision.previousClosed = null
         decision.revision++
         decision.updatedAt = host.clock.now()
         submitted.accepted.push(decision)

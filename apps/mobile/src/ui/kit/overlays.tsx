@@ -15,6 +15,8 @@ export interface SheetAction {
   testID?: string
   /** 开关那样的一项：给了就在前面画勾选记号，点一下换、动作单照样收起 */
   checked?: boolean
+  /** 几项里选一项（排序、条数、分钟数）：给了就画单选记号，读屏角色是 radio；与 checked 不同时用 */
+  selected?: boolean
   /** 禁用的原因，随菜单项显示。 */
   disabled?: string
 }
@@ -61,11 +63,15 @@ export function Sheet({
         {actions.map((action) => (
           <Pressable
             key={action.label}
-            accessibilityRole={action.checked === undefined ? 'button' : 'checkbox'}
-            accessibilityState={{
-              ...(action.checked === undefined ? {} : { checked: action.checked }),
-              ...(action.disabled ? { disabled: true } : {}),
-            }}
+            role={
+              action.selected !== undefined
+                ? 'radio'
+                : action.checked !== undefined
+                  ? 'checkbox'
+                  : 'button'
+            }
+            aria-checked={action.selected ?? action.checked}
+            aria-disabled={action.disabled !== undefined}
             disabled={action.disabled !== undefined}
             testID={action.testID}
             onPress={() => {
@@ -87,9 +93,11 @@ export function Sheet({
                 { color: action.disabled ? c.ink3 : action.danger ? c.err : c.ink },
               ]}
             >
-              {action.checked === undefined
-                ? action.label
-                : `${action.checked ? theme.check.on : theme.check.off} ${action.label}`}
+              {action.selected !== undefined
+                ? `${action.selected ? theme.radio.on : theme.radio.off} ${action.label}`
+                : action.checked !== undefined
+                  ? `${action.checked ? theme.check.on : theme.check.off} ${action.label}`
+                  : action.label}
             </Text>
             {action.disabled ? (
               <Text style={{ color: c.ink3, fontSize: theme.font.size.meta }}>

@@ -381,6 +381,7 @@ export {
   projectManagerAnswers,
   projectManagerBoard,
   projectManagerDecision,
+  reopenedClosure,
 } from './projection/manager.mjs'
 export {
   DEFAULT_MANAGER_ISSUE_ORDER,

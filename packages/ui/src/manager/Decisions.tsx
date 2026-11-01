@@ -14,7 +14,7 @@ import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
-import { DecisionAnswer, DecisionOutcome } from './DecisionOutcome.tsx'
+import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutcome.tsx'
 import {
   type AnswerDrafts,
   answeredDrafts,
@@ -23,7 +23,7 @@ import {
   questionDrafts,
   useAnswerDrafts,
 } from './drafts.ts'
-import { useIssueOrder } from './issue-order.tsx'
+import { IssueOrderSelect, useIssueOrder } from './issue-order.tsx'
 import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
 import { advancePostDrafts, usePostDrafts } from './post-drafts.ts'
 import { Relations } from './Relations.tsx'
@@ -257,6 +257,7 @@ export function Decisions({
               {grouped[key].length} {t(`manager.${key}`)}
             </button>
           ))}
+          <IssueOrderSelect withPending={false} />
         </div>
         <div className="mg-stack" ref={cards}>
           {grouped[filter].length === 0 ? <p className="mg-empty">{t('manager.none')}</p> : null}
@@ -320,7 +321,12 @@ export function Decisions({
                           </button>
                         </div>
                       ) : null}
-                      {decision.status === 'open' ? <DecisionAnswer decision={decision} /> : null}
+                      {decision.status === 'open' ? (
+                        <>
+                          <DecisionAnswer decision={decision} />
+                          <DecisionHistory decision={decision} />
+                        </>
+                      ) : null}
                       <fieldset
                         className="mg-options"
                         disabled={disabled || busy}

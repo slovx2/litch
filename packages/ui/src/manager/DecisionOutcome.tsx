@@ -1,5 +1,6 @@
 // 已答、已关闭、重新打开的决策：答复与关闭记录各占一块，与问题分开；没选中的选项默认收起。
 import { decisionAnswerParts } from '@litch/core'
+import { useId } from 'react'
 import type { ManagerDecisionView } from '../../../core/src/model-manager.mts'
 import type { ManagerActor, ManagerDecisionOption } from '../../../protocol/src/manager.mjs'
 import { useT } from '../app/appearance.ts'
@@ -29,16 +30,14 @@ function Option({ option, recommend }: { option: ManagerDecisionOption; recommen
 /** 答复块：已答为“你的答复”，重新打开后为“上次的答复”。 */
 export function DecisionAnswer({ decision }: { decision: ManagerDecisionView }) {
   const t = useT()
+  const head = useId()
   const parts = decisionAnswerParts(decision)
   if (!parts.answer) return null
+  // 读屏名称跟着块头走：你的答复、你在对话中的答复、上次的答复
   return (
-    <section
-      className="mg-answer"
-      data-answer={parts.answerKind}
-      aria-label={t('manager.answerYours')}
-    >
+    <section className="mg-answer" data-answer={parts.answerKind} aria-labelledby={head}>
       <header>
-        <b>
+        <b id={head}>
           {t(
             parts.answerKind === 'previous'
               ? 'manager.answerPrevious'
@@ -58,6 +57,22 @@ export function DecisionAnswer({ decision }: { decision: ManagerDecisionView }) 
         </div>
       ) : null}
     </section>
+  )
+}
+
+/** 重新打开的决策：作答表单上方，重开前那次关闭的记录，默认收起，作历史看。 */
+export function DecisionHistory({ decision }: { decision: ManagerDecisionView }) {
+  const t = useT()
+  const closed = decisionAnswerParts(decision).previousClosed
+  if (!closed) return null
+  return (
+    <details className="mg-closed-note" data-previous-closed>
+      <summary>
+        <b>{t('manager.closedPrevious', { who: t(`manager.closer.${closerKey(closed.by)}`) })}</b>
+        <Stamp className="dim" at={closed.at} />
+      </summary>
+      <BoardMarkdown text={closed.reason} />
+    </details>
   )
 }
 

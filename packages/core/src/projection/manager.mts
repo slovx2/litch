@@ -3,6 +3,8 @@ import type {
   Manager,
   ManagerAnswersSubmitResponse,
   ManagerBoard,
+  ManagerChange,
+  ManagerClosed,
   ManagerDecision,
   ManagerRequest,
 } from '../../../protocol/src/manager.mjs'
@@ -82,6 +84,29 @@ export function projectManagerPost(post: ManagerPost): ManagerPost {
     },
   }
 }
+/**
+ * 待定决策若是被重新打开的，找回重开前的关闭记录。变更记录按设备给的顺序（新的在前）：
+ * 这个决策最近一次状态变化是从已过期或已撤回变回待定，就取变化前的 closed。
+ */
+export function reopenedClosure(
+  decision: Pick<ManagerDecision, 'id' | 'status'>,
+  changes: readonly ManagerChange[],
+): ManagerClosed | null {
+  if (decision.status !== 'open') return null
+  for (const change of changes) {
+    if (change.objectId !== decision.id || !change.before || !change.after) continue
+    if (change.before.status === change.after.status) continue
+    const closed = change.before.closed as ManagerClosed | null | undefined
+    return change.after.status === 'open' &&
+      (change.before.status === 'expired' || change.before.status === 'withdrawn') &&
+      closed &&
+      typeof closed.reason === 'string' &&
+      typeof closed.at === 'number'
+      ? closed
+      : null
+  }
+  return null
+}
 export function projectManagerBoard(deviceId: string, board: ManagerBoard): ManagerBoardView {
   return {
     ...board,
@@ -90,7 +115,11 @@ export function projectManagerBoard(deviceId: string, board: ManagerBoard): Mana
     deviceId,
     situation: board.situation ? timed(board.situation) : null,
     requests: (board.requests ?? []).map(projectManagerRequest),
-    decisions: board.decisions.map(projectManagerDecision),
+    decisions: board.decisions.map((decision) => {
+      const view = projectManagerDecision(decision)
+      const previous = reopenedClosure(decision, board.changes)
+      return previous ? { ...view, previousClosed: timed(previous) } : view
+    }),
     items: board.items.map((item) => ({
       ...item,
       createdAt: item.createdAt * 1000,

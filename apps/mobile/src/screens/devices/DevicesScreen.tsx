@@ -13,7 +13,7 @@ import { ago } from '../../../../../packages/ui/src/app/format.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button, Empty, Row, SectionLabel, StatusMark } from '../../ui/kit/controls'
+import { Button, Empty, Row, StatusMark } from '../../ui/kit/controls'
 import { Prompt, Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
@@ -21,7 +21,7 @@ import { useUpdateSchedule } from '../../update/use-update'
 import { ManagersEntry } from '../managers/ManagersEntry'
 import { reasonText, type ShownState, shownState } from './failure'
 import { forgetUnusedKey } from './forget'
-import { RecentGroup } from './RecentGroup'
+import { RecentGroup, SectionHead } from './RecentGroup'
 import { RemoveDevice } from './RemoveDevice'
 import { RestartDevice } from './RestartDevice'
 import { UpdateBanner } from './UpdateBanner'
@@ -123,7 +123,7 @@ function DeviceRow({
   )
 }
 
-/** 定时任务的入口：所有设备上的任务在一页里，右边是没看过的运行一共几次 */
+/** 定时任务的入口：所有设备上的任务在一页里，第二行是没看过的运行一共几次 */
 function TasksEntry({ onPress }: { onPress(): void }) {
   const unread = useKey<number>(keys.tasksUnread) ?? 0
   const t = useT()
@@ -132,7 +132,6 @@ function TasksEntry({ onPress }: { onPress(): void }) {
       testID="devices:tasks"
       title={t('tasks.title')}
       detail={unread > 0 ? t('tasks.unread', { count: unread }) : t('timed.entry.none')}
-      meta={unread > 0 ? String(unread) : undefined}
       left={<StatusMark status={unread > 0 ? 'unread' : 'idle'} />}
       onPress={onPress}
     />
@@ -179,7 +178,7 @@ export function DevicesScreen({ navigation }: Props) {
                   })
                 }
               />
-              <SectionLabel>{t('sidebar.devices')}</SectionLabel>
+              <SectionHead label={t('sidebar.devices')} testID="devices:head" />
             </>
           ) : null
         }

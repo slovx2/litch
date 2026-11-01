@@ -84,7 +84,7 @@ export function ConnectionSection() {
         onClose={() => setChoosing(false)}
         actions={[...BACKGROUND_MINUTES, null].map((value) => ({
           label: label(value),
-          checked: minutes === value,
+          selected: minutes === value,
           testID: `settings:backgroundTimeout:${value ?? 'never'}`,
           onPress: () => setPrefs({ backgroundDisconnectMinutes: value }),
         }))}

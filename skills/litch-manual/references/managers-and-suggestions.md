@@ -6,8 +6,11 @@ A manager is a conversation that coordinates worklines (sub-sessions), maintains
 on a board stored on its device, and reports progress. Repository changes remain the evidence for
 what has landed. Managers and their worklines appear in the desktop sidebar's **Managers** view;
 ordinary sessions appear in **Chat**. The phone home screen has a **Managers** entry: managers are
-grouped by device, and each manager page has **Overview**, **Console** and read-only **Manager items**,
-plus **Chat** to open the manager conversation. Creating managers and editing dispatch settings remain
+grouped by device, and each manager page has **Overview**, read-only **Manager items** and **Console**
+(the same order as desktop), plus **Chat** to open the manager conversation. A manager row's status
+mark shows only the manager conversation itself (running, waiting, error, or background tasks still
+running); its text reads Running, then N work lines running, then N background tasks running, then
+Idle. Creating managers and editing dispatch settings remain
 desktop actions.
 
 ### Where and how to create one
@@ -285,7 +288,7 @@ lines running"; each workline shows its own mark underneath.
 经理可只编辑原帖、只回复或两者同时做；“已编辑”可展开旧版本、编辑时间与原因。
 控制台合计待定决策、待做请你做和经理已审核待开始建议；悬停也只显示这三类数量。手机采用相同口径。
 
-手机首页有“经理”入口（第二行是待处理合计），经理按设备分组、先进行中后已结束。进入经理后有“概览 | 控制台 | 经理事项”三格，默认概览：现状、待处理/受阻/在跑的线/已完成几个数、请你做、受阻事项和最近动态；右上角“对话”打开经理会话。控制台可阅读和操作四类议题，并提交经理或临时追问。
+手机首页有“经理”入口（第二行是待处理合计），经理按设备分组、先进行中后已结束。经理行前面的记号只表示经理会话自己（回合在跑、等人、出错、回合停了但后台任务还在跑）；文字依次为运行中、N 条工作线运行中、N 个后台任务正在运行、空闲，有待处理时写“N 待处理”。进入经理后有“概览 | 经理事项 | 控制台”三格（与桌面同序），默认概览，内容与桌面一致：现状、待用户决策与已完成两个数（分别点进控制台的决策和经理事项）、受阻事项（第二行写“等待决策 #D-n”，编号可点）、请你做和最近动态；长动态点“展开全文”看完整内容；右上角“对话”打开经理会话。手机作答决策时先点选一项（单选），再点“提交给经理”；修改答案时上方照样显示原来的答复，原来选的那一项已选中。控制台可阅读和操作四类议题，并提交经理或临时追问。
 手机沿用建议的开始/编辑/忽略，支持请求交付/文字回复、决策答复、报告已阅和讨论历史；创建经理、派活设置及完整经理事项看板仍在桌面。
 用户主动新建议题尚未开放。手机也提供只读经理事项供关联定位；目前按卡提交，桌面支持跨卡混合提交。
 
@@ -315,17 +318,23 @@ use the same accessible name and placeholder. Related targets use link color and
 
 ### 排序与已答复决策
 
-控制台所有列表默认最新优先（按议题发起时间），可在类别那一行切换为“最早优先”或“待处理优先”（待定决策、待做请你做、已审核待开始建议、未阅报告排在前面，同组内仍按最新）。选择保存在本机，所有经理、所有类别共用；桌面和手机各记各的。
+控制台所有列表默认最新优先（按议题发起时间），可切换为“最早优先”或“待处理优先”（待定决策、待做请你做、已审核待开始建议、未阅报告排在前面，同组内仍按最新）。桌面的排序在列表头右端：决策在“待定 / 已答复 / 已关闭”那一行，因为已按状态分开，只有最新、最早两项；其他三类在列表上方一行。手机在类别那一行的末尾，点开是单选列表。选择保存在本机，所有经理、所有类别共用；桌面和手机各记各的。
 
-已答复的决策中，问题和答案分开：答案单独一块，写“你的答复”（经理从对话里记下的写“你在对话中的答复”）和时间，内容是选中的选项和答复文字。没选中的选项收在“其他选项 N”里，点开可看。已关闭的决策另有一块“已关闭 · 关闭者”写原因；重新打开的决策照常展开所有选项供作答，上方保留“上次的答复”。桌面和手机相同。
+已答复的决策中，问题和答案分开：答案单独一块，写“你的答复”（经理从对话里记下的写“你在对话中的答复”）和时间，内容是选中的选项和答复文字。没选中的选项收在“其他选项 N”里，点开可看。已关闭的决策另有一块“已关闭 · 关闭者”写原因；重新打开的决策照常展开所有选项供作答，上方保留“上次的答复”，再下面是收起的“上次关闭 · 关闭者”，点开可看当初关闭的原因。桌面和手机相同。
 
 Console lists default to **Newest first** by issue creation time. Switch to **Oldest first** or
-**Needs action first** (open decisions, open For you requests, reviewed suggestions and unread
-reports first, newest within each group) from the category row. The choice is stored per client and
+**To handle first** (open decisions, open For you requests, reviewed suggestions and unread reports
+first, newest within each group). On desktop the sort control sits at the right of the list header:
+for decisions it is on the Open / Answered / Closed row and offers only Newest and Oldest, since the
+states are already separated; the other kinds have a thin header row above the list. On phone it is
+at the end of the category row and opens a single-choice list. The choice is stored per client and
 shared by all managers and categories.
 
 Answered decisions keep the question and the answer apart: **Your answer** is a separate block with
 the time, the chosen option and the text (**Your answer in the conversation** when the manager
 recorded it from chat). Unchosen options are collapsed under **Other options**. Closed decisions add
 a **Closed** block with who closed it and why; a reopened decision shows all options for answering,
-with the **Previous answer** above them. Desktop and phone behave the same.
+with the **Previous answer** above them and a collapsed **Previously closed** block that keeps the
+reason it was closed. Desktop and phone behave the same. On phone, answering a decision means
+choosing one option and then tapping **Submit to manager**; when editing an answer, the previous
+answer stays visible and its option is preselected.

@@ -985,7 +985,7 @@
   margin-top: 12px;
 }
 
-/* 类别分段与排序同一行；窄看板时排序换到下一行。 */
+/* 类别分段一行；排序在下面列表头的右端（决策在状态切换那一行，其他类别一行细的列表头）。 */
 .mg-inbox-bar {
   display: flex;
   flex-wrap: wrap;
@@ -996,12 +996,26 @@
 .mg-inbox-bar .mg-inbox-tabs {
   margin: 0;
 }
+.mg-list-head {
+  display: flex;
+  justify-content: flex-end;
+  padding-block: 4px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line-1);
+}
+.mg-decision-filter .mg-issue-order {
+  align-self: center;
+}
 .mg-issue-order {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin-left: auto;
-  font-size: 12px;
+  font-size: 13px;
+}
+/* 小字对比度不低于 4.5：用 --ink-2、13px */
+.mg-issue-order-label {
+  color: var(--ink-2);
 }
 .mg-issue-order select {
   min-height: 26px;
@@ -1058,11 +1072,21 @@
   margin: 8px 0;
   color: var(--ink-2);
 }
-.mg-other-options > summary {
+.mg-other-options > summary,
+.mg-closed-note > summary {
   cursor: pointer;
-  color: var(--ink-3);
-  font-size: 12px;
+  color: var(--ink-2);
+  font-size: 13px;
   padding-block: 4px;
+}
+.mg-closed-note > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+.mg-closed-note[open] > summary {
+  margin-bottom: 6px;
 }
 .mg-other-options[open] > summary {
   margin-bottom: 6px;

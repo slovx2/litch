@@ -19,7 +19,6 @@ export function ManagersEntry({ onPress }: { onPress(): void }) {
             ? t('mgr.entry.active', { count: active })
             : t('mgr.entry.none')
       }
-      meta={pending > 0 ? String(pending) : undefined}
       left={<StatusMark status={pending > 0 ? 'waiting' : 'idle'} />}
       onPress={onPress}
     />

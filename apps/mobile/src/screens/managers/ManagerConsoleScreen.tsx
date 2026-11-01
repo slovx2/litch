@@ -11,6 +11,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import type { ManagerDecisionOption } from '../../../../../packages/protocol/src/manager.mjs'
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
 import { stamp } from '../../../../../packages/ui/src/app/format.ts'
 import { ProposalActs } from '../../detail/proposals/ProposalActs'
@@ -22,7 +23,7 @@ import { Button, Empty } from '../../ui/kit/controls'
 import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
-import { DecisionAnswer, DecisionOutcome } from './DecisionOutcome'
+import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutcome'
 import { Markdown } from './IssueMarkdown'
 import { IssueContext, IssueRelations } from './IssueRelations'
 import { setIssueOrder, useIssueOrder } from './issue-order'
@@ -32,6 +33,57 @@ import { decisionActions, issueCounts, orderedIssues } from './presentation'
 const replyFile = jsonFile<Record<string, string>>('manager-replies.json')
 const draftFile = jsonFile<Record<string, string>>('manager-questions.json')
 type Props = NativeStackScreenProps<RootStackParamList, 'ManagerConsole'>
+
+/** 作答的一个选项：整块可点，选中画单选记号和强调边框；读屏角色是 radio */
+function OptionChoice({
+  decisionId,
+  option,
+  recommend,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  decisionId: string
+  option: ManagerDecisionOption
+  recommend: boolean
+  selected: boolean
+  disabled: boolean
+  onSelect(): void
+}) {
+  const t = useT()
+  const { c, radius, radio, hit } = useTheme()
+  return (
+    <Pressable
+      role="radio"
+      aria-checked={selected}
+      aria-disabled={disabled}
+      aria-label={recommend ? `${option.label} · ${t('manager.recommend')}` : option.label}
+      disabled={disabled}
+      testID={`decision-choice:${decisionId}:${option.id}`}
+      onPress={onSelect}
+      style={({ pressed }) => [
+        styles.choice,
+        {
+          minHeight: hit,
+          borderColor: selected ? c.accent : c.line1,
+          borderWidth: selected ? 2 : 1,
+          borderRadius: radius.s,
+          backgroundColor: pressed ? c.press : selected ? c.sunken : 'transparent',
+        },
+      ]}
+    >
+      <Text style={{ color: selected ? c.accent : c.ink3 }}>{selected ? radio.on : radio.off}</Text>
+      <View style={styles.choiceText}>
+        <Text style={{ color: c.ink, fontWeight: '600' }}>
+          {option.label}
+          {recommend ? <Text style={{ color: c.accent }}> · {t('manager.recommend')}</Text> : null}
+        </Text>
+        {option.description ? <Markdown text={option.description} /> : null}
+      </View>
+    </Pressable>
+  )
+}
+
 function Issue({
   manager,
   post,
@@ -62,6 +114,8 @@ function Issue({
   const [asking, setAsking] = useState(false)
   const [history, setHistory] = useState(false)
   const [editing, setEditing] = useState(false)
+  /** 作答时选中的选项：先选，再点“提交给经理”（与桌面的单选一致） */
+  const [choice, setChoice] = useState<string | null>(null)
   const [unreviewed, setUnreviewed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -123,6 +177,7 @@ function Issue({
       })
       if (result.rejected[0]) throw new Error(result.rejected[0].message)
       writeReply('')
+      setChoice(null)
       setEditing(false)
     })
   const stateLabel = decision
@@ -271,22 +326,22 @@ function Issue({
             <>
               {decision.status === 'open' || editing ? (
                 <>
-                  {decision.status === 'open' ? <DecisionAnswer decision={decision} /> : null}
-                  {decision.options.map((o) => (
-                    <View key={o.id} style={{ gap: 6 }}>
-                      <Button
-                        kind="plain"
-                        label={
-                          decision.recommend === o.id
-                            ? `${o.label} · ${t('manager.recommend')}`
-                            : o.label
-                        }
+                  {/* 修改答案时照样显示原来的答复，选项上也预先选中原来那一项 */}
+                  <DecisionAnswer decision={decision} />
+                  <DecisionHistory decision={decision} />
+                  <View role="radiogroup" aria-label={decision.title} style={styles.options}>
+                    {decision.options.map((o) => (
+                      <OptionChoice
+                        key={o.id}
+                        decisionId={decision.id}
+                        option={o}
+                        recommend={decision.recommend === o.id}
+                        selected={choice === o.id}
                         disabled={locked}
-                        onPress={() => void submitDecision(o.id)}
+                        onSelect={() => setChoice(choice === o.id ? null : o.id)}
                       />
-                      {o.description ? <Markdown text={o.description} /> : null}
-                    </View>
-                  ))}
+                    ))}
+                  </View>
                   <TextInput
                     accessibilityLabel={t('manager.answer')}
                     placeholder={t('manager.answer')}
@@ -296,19 +351,37 @@ function Issue({
                     value={reply}
                     onChangeText={writeReply}
                   />
-                  {reply.trim() ? (
+                  <View style={styles.actions}>
                     <Button
-                      disabled={locked}
+                      testID={`decision-submit:${decision.id}`}
+                      disabled={locked || (!choice && !reply.trim())}
                       label={t('manager.submit')}
-                      onPress={() => void submitDecision(null)}
+                      onPress={() => void submitDecision(choice)}
                     />
-                  ) : null}
+                    {decision.recommend && choice !== decision.recommend ? (
+                      <Button
+                        kind="plain"
+                        disabled={locked}
+                        label={t('manager.useRecommend')}
+                        onPress={() => setChoice(decision.recommend)}
+                      />
+                    ) : null}
+                    {choice ? (
+                      <Button
+                        kind="plain"
+                        disabled={locked}
+                        label={t('manager.clearOption')}
+                        onPress={() => setChoice(null)}
+                      />
+                    ) : null}
+                  </View>
                   {editing ? (
                     <Button
                       kind="plain"
                       label={t('manager.cancelEdit')}
                       onPress={() => {
                         writeReply('')
+                        setChoice(null)
                         setEditing(false)
                       }}
                     />
@@ -324,6 +397,7 @@ function Issue({
                       label={t('manager.editAnswer')}
                       onPress={() => {
                         writeReply(decision.answer?.text ?? '')
+                        setChoice(decision.answer?.optionId ?? null)
                         setEditing(true)
                       }}
                     />
@@ -454,7 +528,7 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
   const { deviceId, managerId } = route.params
   const replica = useReplica()
   const t = useT()
-  const { c, radius } = useTheme()
+  const { c, radius, font, hit } = useTheme()
   const [tab, setTab] = useState<'overview' | 'console' | 'items'>(route.params.tab ?? 'overview')
   const [kind, setKind] = useState<Category>('decision')
   const [ordering, setOrdering] = useState(false)
@@ -496,8 +570,8 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
   const counts = issueCounts(manager)
   const tabs = {
     overview: 'manager.overview',
-    console: 'manager.inbox',
     items: 'manager.items',
+    console: 'manager.inbox',
   } as const
   return (
     <Screen
@@ -516,71 +590,91 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
           : []
       }
     >
-      <View style={[styles.actions, { borderBottomWidth: 1, borderColor: c.line1 }]}>
-        {(Object.keys(tabs) as (keyof typeof tabs)[]).map((key) => (
-          <View key={key} style={styles.category}>
-            <Button
+      {/* 页签是下划线式（与桌面同序：概览、经理事项、控制台），类别是小胶囊，排序跟在类别同一行的末尾 */}
+      <View role="tablist" style={[styles.tabs, { borderColor: c.line1 }]}>
+        {(Object.keys(tabs) as (keyof typeof tabs)[]).map((key) => {
+          const count = key === 'console' && manager ? managerAttentionCount(manager) : 0
+          const on = tab === key
+          return (
+            <Pressable
+              key={key}
+              role="tab"
+              aria-selected={on}
+              aria-label={
+                count ? `${t(tabs[key])} ${t('manager.pending', { n: count })}` : undefined
+              }
               testID={`manager-tab:${key}`}
-              kind={tab === key ? 'solid' : 'plain'}
-              label={t(tabs[key])}
               onPress={() => go(key)}
-            />
-            {key === 'console' && manager && managerAttentionCount(manager) > 0 ? (
-              <Text
-                pointerEvents="none"
+              style={[
+                styles.tab,
+                { minHeight: hit, borderBottomColor: on ? c.accent : 'transparent' },
+              ]}
+            >
+              <Text style={{ color: on ? c.ink : c.ink2, fontWeight: on ? '600' : '400' }}>
+                {t(tabs[key])}
+              </Text>
+              {count ? (
+                <Text
+                  style={[
+                    styles.count,
+                    { color: c.wait, borderColor: c.wait, borderRadius: radius.s },
+                  ]}
+                >
+                  {count}
+                </Text>
+              ) : null}
+            </Pressable>
+          )
+        })}
+      </View>
+      {tab === 'console' ? (
+        <View style={styles.categories}>
+          {(Object.keys(kinds) as (keyof typeof kinds)[]).map((k) => {
+            const on = kind === k
+            const label = t(k === 'report' && counts[k] > 0 ? 'manager.reportUnread' : kinds[k])
+            return (
+              <Pressable
+                key={k}
+                role="radio"
+                aria-checked={on}
+                aria-label={counts[k] > 0 ? `${label} ${counts[k]}` : t(kinds[k])}
+                testID={`manager-category:${k}`}
+                hitSlop={{ top: 9, bottom: 9 }}
+                onPress={() => go('console', k)}
                 style={[
-                  styles.badge,
+                  styles.pill,
                   {
-                    color: c.wait,
-                    backgroundColor: c.panel,
-                    borderColor: c.wait,
-                    borderRadius: radius.s,
+                    borderRadius: radius.l,
+                    borderColor: on ? c.accent : c.line2,
+                    backgroundColor: on ? c.sunken : 'transparent',
                   },
                 ]}
               >
-                {managerAttentionCount(manager)}
-              </Text>
-            ) : null}
-          </View>
-        ))}
-      </View>
-      {tab === 'console' ? (
-        <View style={styles.actions}>
-          {(Object.keys(kinds) as (keyof typeof kinds)[]).map((k) => (
-            <View key={k} style={styles.category}>
-              <Button
-                kind={kind === k ? 'solid' : 'plain'}
-                label={t(kinds[k])}
-                onPress={() => go('console', k)}
-              />
-              {counts[k] > 0 ? (
-                <Text
-                  testID={k === 'report' ? 'manager-reports-unread' : `manager-category-count:${k}`}
-                  pointerEvents="none"
-                  accessibilityLabel={`${t(k === 'report' ? 'manager.reportUnread' : kinds[k])} ${counts[k]}`}
-                  style={[
-                    styles.badge,
-                    {
-                      color: c.wait,
-                      backgroundColor: c.panel,
-                      borderColor: c.wait,
-                      borderRadius: radius.s,
-                    },
-                  ]}
-                >
-                  {counts[k]}
+                <Text style={{ color: on ? c.ink : c.ink2, fontSize: font.size.meta + 1 }}>
+                  {t(kinds[k])}
                 </Text>
-              ) : null}
-            </View>
-          ))}
+                {counts[k] > 0 ? (
+                  <Text
+                    testID={
+                      k === 'report' ? 'manager-reports-unread' : `manager-category-count:${k}`
+                    }
+                    style={{ color: c.wait, fontSize: font.size.meta + 1, fontWeight: '600' }}
+                  >
+                    {counts[k]}
+                  </Text>
+                ) : null}
+              </Pressable>
+            )
+          })}
           <Pressable
             accessibilityRole="button"
+            aria-label={`${t('manager.order')}: ${t(`manager.order.${order}`)}`}
             testID="manager-issue-order"
             onPress={() => setOrdering(true)}
-            style={styles.order}
+            style={[styles.order, { minHeight: hit }]}
           >
-            <Text style={{ color: c.ink2 }}>
-              {t('manager.order')} · {t(`manager.order.${order}`)} ▾
+            <Text style={{ color: c.ink2, fontSize: font.size.meta + 1 }}>
+              {t(`manager.order.${order}`)} ▾
             </Text>
           </Pressable>
         </View>
@@ -601,9 +695,8 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
           <IssueContext.Provider value={{ manager, board: view.board, open: openIssue }}>
             {tab === 'overview' ? (
               <ManagerOverview
-                manager={manager}
                 board={view.board}
-                onConsole={() => go('console')}
+                onDecisions={() => go('console', 'decision')}
                 onItems={() => go('items')}
                 onIssue={openIssue}
                 onLine={openSession}
@@ -661,7 +754,7 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
         actions={MANAGER_ISSUE_ORDERS.map((key) => ({
           label: t(`manager.order.${key}`),
           testID: `manager-issue-order:${key}`,
-          checked: order === key,
+          selected: order === key,
           onPress: () => setIssueOrder(key),
         }))}
       />
@@ -673,19 +766,37 @@ const styles = StyleSheet.create({
   status: { borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2 },
   textLink: { alignSelf: 'flex-start', paddingVertical: 8 },
   askComposer: { gap: 10, borderLeftWidth: 2, padding: 12 },
-  category: { position: 'relative' },
-  badge: {
-    position: 'absolute',
-    right: -4,
-    top: -4,
-    paddingHorizontal: 4,
-    minWidth: 18,
-    textAlign: 'center',
+  tabs: { flexDirection: 'row', borderBottomWidth: 1, paddingHorizontal: 8 },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    borderBottomWidth: 2,
+  },
+  count: { borderWidth: 1, paddingHorizontal: 4, minWidth: 18, textAlign: 'center', fontSize: 11 },
+  categories: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingTop: 6,
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   card: { padding: 16, margin: 12, borderWidth: 1, gap: 12 },
-  order: { marginLeft: 'auto', alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 4 },
+  order: { marginLeft: 'auto', justifyContent: 'center', paddingHorizontal: 4 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 8 },
   input: { borderWidth: 1, minHeight: 80, padding: 10, textAlignVertical: 'top' },
+  options: { gap: 8 },
+  choice: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 10 },
+  choiceText: { flex: 1, gap: 6 },
   discussion: { borderLeftWidth: 2, paddingLeft: 12, gap: 8 },
 })
