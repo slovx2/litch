@@ -71,6 +71,7 @@ export function Row({
   onPress,
   onLongPress,
   selected,
+  label,
   testID,
 }: {
   title: string
@@ -84,6 +85,8 @@ export function Row({
   onLongPress?(): void
   /** 选中：复古是反白，另外两种是强调色的淡底 */
   selected?: boolean
+  /** 读屏念的整行名称；不给就由各段文字拼成 */
+  label?: string
   testID?: string
 }) {
   const theme = useTheme()
@@ -92,6 +95,7 @@ export function Row({
   return (
     <Pressable
       accessibilityRole={onPress ? 'button' : undefined}
+      aria-label={label}
       testID={testID}
       onPress={onPress}
       onLongPress={onLongPress}

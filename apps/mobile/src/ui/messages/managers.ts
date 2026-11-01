@@ -8,6 +8,7 @@ export const zhCN = {
   'mgr.empty.detail': '经理在桌面端新建',
   'mgr.activity.more': '显示更多动态',
   'mgr.answer.empty': '先选一项或写补充说明',
+  'mgr.answer.note': '先写补充说明',
 } satisfies Record<string, Entry>
 
 const plural = (one: string, many: string) => (args: Record<string, string | number>) =>
@@ -19,4 +20,5 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'mgr.empty.detail': 'Create managers in the desktop app.',
   'mgr.activity.more': 'Show more activity',
   'mgr.answer.empty': 'Choose an option or add a note first',
+  'mgr.answer.note': 'Add a note first',
 }

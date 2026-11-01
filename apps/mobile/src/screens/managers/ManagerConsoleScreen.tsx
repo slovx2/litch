@@ -402,8 +402,8 @@ function Issue({
                   </View>
                   {/* 按钮一直显示；不能点时写明为什么（离线、已结束由页顶那一行说） */}
                   {!locked && !choice && !reply.trim() ? (
-                    <Text testID={`decision-submit-why:${decision.id}`} style={{ color: c.ink3 }}>
-                      {t('mgr.answer.empty')}
+                    <Text testID={`decision-submit-why:${decision.id}`} style={{ color: c.ink2 }}>
+                      {t(decision.options.length ? 'mgr.answer.empty' : 'mgr.answer.note')}
                     </Text>
                   ) : null}
                   {editing ? (

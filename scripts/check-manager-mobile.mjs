@@ -228,12 +228,19 @@ try {
     '已答复',
     '取消修改后不再是草稿',
   )
-  // 待定决策没选也没写时，“提交给经理”照样显示，旁边写明为什么不能点
+  // 待定决策没选也没写时，“提交给经理”照样显示，旁边写明为什么不能点；没有选项的只提补充说明
+  const why = (id) =>
+    read(
+      `(()=>{const b=document.querySelector('[data-testid="decision-submit:${id}"]');const w=document.querySelector('[data-testid="decision-submit-why:${id}"]');return b&&w?w.textContent:null})()`,
+    )
+  assert.equal(await why('D-17'), '先写补充说明', '没有选项的决策只提补充说明')
+  assert.equal(await why('D-16'), '先选一项或写补充说明', '有选项的决策提选项和补充说明')
+  // 说明用次一级的字色（ink-2），与未选中页签的文字同色
   assert.ok(
     await read(
-      "document.querySelector('[data-testid=\"decision-submit:D-17\"]') && document.querySelector('[data-testid=\"decision-submit-why:D-17\"]').textContent==='先选一项或写补充说明'",
+      "(()=>{const w=document.querySelector('[data-testid=\"decision-submit-why:D-17\"]');const tab=document.querySelector('[role=tab][aria-selected=false] div');return !!w&&!!tab&&getComputedStyle(w).color===getComputedStyle(tab).color})()",
     ),
-    '提交按钮不能点时说明原因',
+    '不能提交的说明用 ink-2',
   )
   await press('重新打开')
   await until(
@@ -398,6 +405,13 @@ try {
       '(()=>{const p=document.querySelector(\'[data-testid="manager:m1:pending"]\');return !!p&&/^\\d+$/.test(p.textContent)})()',
     ),
     '待处理计数胶囊',
+  )
+  // 读屏念整行时带上“N 待处理”，不只放在胶囊上
+  assert.ok(
+    await read(
+      "(()=>{const row=document.querySelector('[data-testid=\"manager:m1\"]');const n=document.querySelector('[data-testid=\"manager:m1:pending\"]').textContent;return (row.getAttribute('aria-label')||'').includes(n+' 待处理')})()",
+    ),
+    '经理行的读屏名称带待处理数',
   )
   await shot('mobile-managers')
   console.log(

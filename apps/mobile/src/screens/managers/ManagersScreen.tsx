@@ -26,11 +26,18 @@ function ManagerRow({
   const { key, ...args } = text
   const state = t(key, args)
   const latest = plainLine(manager.latestActivity?.text ?? manager.scope)
+  const title = manager.name || t('manager.manager')
+  const detail = [state, latest].filter(Boolean).join(' · ')
+  const meta = manager.latestActivity ? ago(manager.latestActivity.at, Date.now(), t) : undefined
   return (
     <Row
-      title={manager.name || t('manager.manager')}
-      detail={[state, latest].filter(Boolean).join(' · ')}
-      meta={manager.latestActivity ? ago(manager.latestActivity.at, Date.now(), t) : undefined}
+      title={title}
+      detail={detail}
+      meta={meta}
+      // 胶囊只是一个数字，读屏要在整行名称里念出“N 待处理”
+      label={[title, pending > 0 ? t('manager.pending', { n: pending }) : '', detail, meta]
+        .filter(Boolean)
+        .join(' · ')}
       left={<StatusMark status={mark} />}
       right={
         pending > 0 ? (
