@@ -95,6 +95,7 @@ export type PhraseKey =
   | 'session.switchTimeout'
   | 'session.switchBusy'
   | 'session.steerQueued'
+  | 'session.steerHeld'
   // 终端
   | 'terminal.limit'
   | 'terminal.unsupported'

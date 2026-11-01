@@ -474,6 +474,7 @@ test('回合进行中连发三条：按顺序一条一条发，不丢不重；�
   )
   assert.deepEqual(inputs, ['一', '二', '四'])
   assert.deepEqual(session.texts(), [['一'], ['二'], ['四']])
+  assert.equal(sent('thread/read').length, 0, '正常完成和出队不额外重读整段历史')
   assert.deepEqual(session.seen.view?.queued, [])
   assert.deepEqual(
     session.seen.view?.turns.map((entry) => entry.status),
@@ -1265,6 +1266,219 @@ test('立即发送：消息号每次运行都不一样（入口按消息号永�
     args: { message: '消息 ID 已被不同内容使用' },
   })
 })
+
+test('历史回合残留 running：新回合完成后读取权威历史，不再向旧回合插话', async () => {
+  const { core, world, peer, command, sent } = setup([
+    thread({ id: 'a', turns: [started('ghost')] }),
+  ])
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  world.threads[0] = thread({
+    id: 'a',
+    status: { type: 'idle' },
+    turns: [finished('ghost', { status: 'interrupted' }), finished('latest')],
+  })
+  peer.last().notify('turn/started', { threadId: 'a', turn: started('latest') })
+  peer.last().notify('turn/completed', { threadId: 'a', turn: finished('latest') })
+  peer.last().notify('thread/status/changed', { threadId: 'a', status: { type: 'idle' } })
+  await settle()
+  await settle()
+  assert.ok(session.seen.view?.turns.every((entry) => entry.status !== 'running'))
+  await command('session.send', { ...where, text: '继续工作', now: true })
+  assert.equal(sent('turn/steer').length, 0)
+  assert.equal(sent('turn/start').length, 1)
+})
+
+test('插话明确拒绝 no active turn：核实已完成后原文只作为一个新回合发送', async () => {
+  const { core, world, command, sent } = setup([thread({ id: 'a', turns: [started('ghost')] })])
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  world.threads[0] = thread({ id: 'a', status: { type: 'idle' }, turns: [finished('ghost')] })
+  world.steerFailure = new RpcFailure(-32600, 'no active turn to steer')
+  await command('session.send', { ...where, text: '不能丢失的原文', now: true })
+  await settle()
+  assert.equal(sent('turn/steer').length, 1)
+  assert.equal(sent('thread/read').length, 1)
+  assert.equal(sent('turn/start').length, 1)
+  assert.equal(session.seen.view?.queued.length, 0)
+  assert.deepEqual(session.texts().at(-1), ['不能丢失的原文'])
+  assert.equal(session.seen.view?.note, null)
+})
+
+for (const status of ['completed', 'interrupted'] as const) {
+  test(`只收到 idle 广播：读取真实结局 ${status}，正常完成出队，停止仍须手动发送`, async () => {
+    const { core, world, peer, command, sent } = setup([
+      thread({ id: 'a', turns: [started('ghost')] }),
+    ])
+    core.start()
+    await settle()
+    const session = watch(core)
+    await settle()
+    await command('session.send', { ...where, text: '排队原文' })
+    world.threads[0] = thread({
+      id: 'a',
+      status: { type: 'idle' },
+      turns: [finished('ghost', { status })],
+    })
+    peer.last().notify('thread/status/changed', { threadId: 'a', status: { type: 'idle' } })
+    await settle()
+    await settle()
+    assert.equal(session.seen.view?.turns[0]?.status, status)
+    if (status === 'interrupted') {
+      assert.equal(sent('turn/start').length, 0)
+      assert.equal(session.seen.view?.queued[0]?.delivery, 'held')
+      await command('session.resumeQueue', where)
+      await settle()
+    }
+    assert.equal(sent('turn/start').length, 1)
+    assert.deepEqual(session.texts().at(-1), ['排队原文'])
+  })
+}
+
+test('no active turn 核实失败：保留原文和图片，恢复发送先重查再只发一次', async () => {
+  const { core, world, handlers, command, sent } = setup([
+    thread({ id: 'a', turns: [started('ghost')] }),
+  ])
+  const read = handlers['thread/read']
+  assert.ok(read)
+  let unavailable = true
+  handlers['thread/read'] = (params) => {
+    if (unavailable) throw new RpcFailure(-32603, 'read unavailable')
+    return read(params)
+  }
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  world.steerFailure = new RpcFailure(-32600, 'no active turn to steer')
+  const images = [{ name: '保留.png', url: 'data:image/png;base64,aGVsbG8=' }]
+  await command('session.send', { ...where, text: '保留原文', images, now: true })
+  assert.equal(sent('turn/start').length, 0)
+  assert.equal(session.seen.view?.queued[0]?.delivery, 'held')
+  assert.deepEqual(session.seen.view?.queued[0]?.images, images)
+  assert.deepEqual(session.seen.view?.note, { key: 'session.steerHeld' })
+  await command('session.resumeQueue', where)
+  assert.equal(sent('turn/start').length, 0, '核实仍失败不能解除暂停')
+  unavailable = false
+  world.threads[0] = thread({ id: 'a', status: { type: 'idle' }, turns: [finished('ghost')] })
+  await command('session.resumeQueue', where)
+  await settle()
+  assert.equal(sent('turn/start').length, 1)
+  assert.equal(session.seen.view?.queued.length, 0)
+  assert.deepEqual(session.texts().at(-1), ['保留原文'])
+  assert.match(JSON.stringify(sent('turn/start')), /data:image\/png;base64,aGVsbG8=/)
+})
+
+test('no active turn 被拒后另一回合已开始：补出新回合，原消息暂停而不重复开回合', async () => {
+  const { core, world, command, sent } = setup([thread({ id: 'a', turns: [started('ghost')] })])
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  world.steerFailure = new RpcFailure(-32600, 'no active turn to steer')
+  world.threads[0] = thread({
+    id: 'a',
+    status: { type: 'active', activeFlags: [] },
+    turns: [finished('ghost'), started('newest')],
+  })
+  await command('session.send', { ...where, text: '保留到明确恢复', now: true })
+  assert.equal(sent('turn/start').length, 0)
+  assert.equal(session.seen.view?.turns.at(-1)?.id, 'newest')
+  assert.equal(session.seen.view?.turns.at(-1)?.status, 'running')
+  assert.equal(session.seen.view?.queued[0]?.delivery, 'held')
+  await command('session.resumeQueue', where)
+  assert.equal(sent('turn/start').length, 0)
+})
+
+for (const during of ['stop', 'new-turn', 'remove'] as const) {
+  test(`no active turn 对账期间 ${during}：旧读数不得自动重发或覆盖新回合`, async () => {
+    const { core, world, handlers, peer, command, sent } = setup([
+      thread({ id: 'a', turns: [started('ghost')] }),
+    ])
+    let finish!: (value: unknown) => void
+    handlers['thread/read'] = () =>
+      new Promise((resolve) => {
+        finish = resolve
+      })
+    core.start()
+    await settle()
+    const session = watch(core)
+    await settle()
+    world.steerFailure = new RpcFailure(-32600, 'no active turn to steer')
+    const sending = command('session.send', { ...where, text: '等核实的原文', now: true })
+    for (let tick = 0; tick < 10 && !finish; tick++) await settle()
+    assert.ok(finish)
+    if (during === 'stop') await command('session.interrupt', where)
+    else if (during === 'new-turn') {
+      peer.last().notify('turn/started', { threadId: 'a', turn: started('newest') })
+      await settle()
+    } else
+      await command('session.unqueue', { ...where, messageId: session.seen.view?.queued[0]?.id })
+    finish({ thread: thread({ id: 'a', status: { type: 'idle' }, turns: [finished('ghost')] }) })
+    await sending
+    await settle()
+    assert.equal(sent('turn/start').length, 0)
+    if (during === 'remove') assert.equal(session.seen.view?.queued.length, 0)
+    else assert.equal(session.seen.view?.queued[0]?.delivery, 'held')
+    if (during === 'new-turn') assert.equal(session.seen.view?.turns.at(-1)?.status, 'running')
+    if (during === 'stop') {
+      await command('session.resumeQueue', where)
+      await settle()
+      assert.equal(sent('turn/start').length, 1, '只有显式恢复才解除停止的暂停')
+    }
+  })
+}
+
+for (const action of ['session.send', 'session.resumeQueue'] as const) {
+  test(`no active turn 暂停后 ${action} 重查途中再次停止：不得解除新的暂停`, async () => {
+    const { core, world, handlers, command, sent } = setup([
+      thread({ id: 'a', turns: [started('ghost')] }),
+    ])
+    let blocked = true
+    let finish!: (value: unknown) => void
+    handlers['thread/read'] = () => {
+      if (blocked) throw new RpcFailure(-32603, 'read unavailable')
+      return new Promise((resolve) => {
+        finish = resolve
+      })
+    }
+    core.start()
+    await settle()
+    const session = watch(core)
+    await settle()
+    world.steerFailure = new RpcFailure(-32600, 'no active turn to steer')
+    await command('session.send', { ...where, text: '第一条', now: true })
+    assert.equal(session.seen.view?.queued[0]?.delivery, 'held')
+    blocked = false
+    const retrying = command(action, {
+      ...where,
+      ...(action === 'session.send' ? { text: '第二条' } : {}),
+    })
+    for (let tick = 0; tick < 10 && !finish; tick++) await settle()
+    assert.ok(finish)
+    await command('session.interrupt', where)
+    finish({ thread: thread({ id: 'a', status: { type: 'idle' }, turns: [finished('ghost')] }) })
+    await retrying
+    await settle()
+    assert.equal(sent('turn/start').length, 0)
+    assert.deepEqual(
+      session.seen.view?.queued.map((entry) => [entry.text, entry.delivery]),
+      action === 'session.send'
+        ? [
+            ['第一条', 'held'],
+            ['第二条', 'held'],
+          ]
+        : [['第一条', 'held']],
+    )
+    await command('session.resumeQueue', where)
+    await settle()
+    assert.equal(sent('turn/start').length, 1)
+  })
+}
 
 test('引导：被打断且未回显的消息保留待发，不自动开始下一回合', async () => {
   const { core, peer, command, sent } = setup()

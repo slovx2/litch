@@ -200,6 +200,8 @@ explain it:
   不保证模型已经执行。只有明确取消的未消费输入进入待发；状态待确认的消息不会自动重发，核实后可编辑再发。
   待发原文和附件保存在当前客户端，重启后保持暂停并尽量按 Claude 历史对账；尚不在设备间同步。
   编辑时若现有草稿容纳不下附件，消息仍留在待发列表。此阶段仅 Claude 提供交付状态，其他 harness 只统一停止后暂停队列。
+  若界面误以为回合仍在运行、引擎明确拒绝插话，客户端会重新核对回合状态；确认已正常结束后，原消息作为新回合发送一次。
+  无法确认状态时，消息和附件保留为暂停待发，可在状态恢复后点击“发送”。用户在核对期间点停止，仍须明确恢复发送。
 - Child sessions show their harness in the sidebar/list, cards and details. A successful user message
   during an automated turn makes that turn user-driven.
 - **Approvals and questions** appear as cards above the composer: commands, file changes, extra

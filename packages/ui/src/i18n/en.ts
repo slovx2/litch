@@ -1848,6 +1848,8 @@ export const en: Record<MessageKey, Entry> = {
     'Queued message not sent: {message}. It will be retried with your next message.',
   'session.steerQueued':
     'Couldn’t add the message to the running turn ({message}). It’s queued and will be sent when the turn ends.',
+  'session.steerHeld':
+    'Your message hasn’t been sent and is saved in the pending queue. Check the conversation status, then choose Send. Reconnect if the status hasn’t updated.',
   'tasks.unsupported':
     'The service on this device doesn’t support scheduled tasks. Update the adapter on the device.',
   'tasks.gone': 'This task no longer exists. It may have been deleted elsewhere.',

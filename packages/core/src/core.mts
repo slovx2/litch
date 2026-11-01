@@ -708,7 +708,7 @@ export function createCore(options: CoreOptions): Core {
         case 'session.resumeQueue': {
           const { deviceId, sessionId, messageId } =
             params as Commands['session.resumeQueue']['params']
-          deviceOf(deviceId).resumeQueue(sessionId, messageId)
+          await deviceOf(deviceId).resumeQueue(sessionId, messageId)
           return {}
         }
         case 'session.respond': {

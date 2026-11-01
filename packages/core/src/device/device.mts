@@ -359,7 +359,7 @@ export interface Device {
     now?: boolean,
     pending?: 'include' | 'only',
   ): Promise<void>
-  resumeQueue(sessionId: string, messageId?: string): void
+  resumeQueue(sessionId: string, messageId?: string): Promise<void>
   steer(sessionId: string, messageId: string): Promise<void>
   interrupt(sessionId: string): Promise<void>
   recover(sessionId: string, turnId: string, text?: string): Promise<void>
@@ -1438,6 +1438,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       )
     },
     'thread/status/changed': ({ threadId, status }) => {
+      live.notification('thread/status/changed', { threadId, status })
       // 未订阅对话时可能只有状态广播，没有 turn/completed；原生资源仍须收尾。
       if (status.type !== 'active') toolCalls.closed(threadId)
       // 认出来了的子代理线程：只记状态，不去要、不进侧栏
