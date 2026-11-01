@@ -106,6 +106,8 @@ plain `.mjs` / shell.
 
 ## 搜索失败诊断
 
+`client:check:search` 不进 CI（`ci.yml`、`full.yml` 都不跑）：在 GitHub 共享 runner 上不稳定，原因未查清。改动搜索、对话滚动或回合窗口后在本地单独跑 `npm run client:check:search`。前提是 `npm run client:setup` 装好界面依赖，以及一份隔离的 Chrome for Testing：用 `LITCH_CHROME_BINARY` 指定，否则取 `~/Library/Caches/ms-playwright/chromium-*` 里最新的一份。脚本自己起回环 Vite，也可以用 `LITCH_SEARCH_UI` 指向已经起好的夹具。
+
 `client:check:search` 的功能断言不靠重试掩盖失败。`LITCH_SEARCH_FAILURE` 保留当前查询、页面身份、Worker 的创建/终止、请求序号与回包，以及页面异常；轨迹只用于隔离夹具，最多保留 200 条。若显示“正在搜索…”，先区分未投递、投递抛错、Worker 未返回和过期结果，再改对应实现。诊断不能代替根因证据，不能把故障注入复现认作 CI 原因已确认。
 
 2026-11-01：搜索输入到下一帧的计时退出门禁。`client:check:search` 仍预热并按查询记录 11 次样本、p50/p90/max，以及是否达到 100ms 参考值，但不据此失败；命中、高亮、可见性、排除工具与查询完成的断言保持不变。单次改为 p90 后，在低优先级并发压力下仍测到 114.6ms；该墙钟值混入帧调度等待，不能稳定归因到产品计算。`LITCH_SEARCH_CPU` 可供手工诊断，设计目标没有调高。
