@@ -528,6 +528,8 @@ test('native SDK parent result does not cap workflow runtime at three seconds', 
   const pending = {
     context: nativeTurnContext({ turnId: 'parent-result-workflow-turn' }),
     input: new NativeTurnInput(),
+    // 与 attachTurn 的必填状态一致；延迟收尾也必须结算尚未确认的插话。
+    pendingInputs: new Set(['deferred-steer']),
     activeSubagents: new Set<string>(),
     completedWorkflowTasks: new Set<string>(),
     workflowToolUseIds: new Set(['parent-result-workflow-launch']),
@@ -631,6 +633,16 @@ test('native SDK parent result does not cap workflow runtime at three seconds', 
     )
     assert.equal(result?.isError, false)
     assert.equal(resolved, true)
+    assert.deepEqual(
+      events.filter((event) => event.type === 'input_delivery'),
+      [{ type: 'input_delivery', messageId: 'deferred-steer', status: 'unknown' }],
+    )
+    assert.equal(pending.pendingInputs.size, 0)
+    assert.ok(
+      events.findIndex((event) => event.type === 'input_delivery') <
+        events.findIndex((event) => event.type === 'completed'),
+      '未确认的插话必须在延迟回合结束前报告，不能遗漏或当作已经送达',
+    )
     assert.ok(
       events.findIndex((event) => event.type === 'tool_result') <
         events.findIndex((event) => event.type === 'completed'),

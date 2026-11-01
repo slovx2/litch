@@ -406,15 +406,29 @@ test('STEER-CUT-004：真实 CLI 里分叉后再插话、再回退，分叉前�
   }
 })
 
-// song-debian 上那次的经过：插话还排在 CLI 里（模型等在工具上）时用户点了停止。CLI 先记一行
-// “[Request interrupted by user]”，再把排着的插话记成一行普通用户消息。回退切在它之前，分叉也一样
-test('STEER-CUT-005：插话还排着时停止回合，回退、分叉照样切在插话之前', {
-  timeout: 180_000,
+// 停止会取消 CLI 中未消费的插话，不再让它偷偷续跑；没有原生消费边界时也不能误切整个回合。
+test('STEER-CUT-005：停止保留未消费插话，拒绝虚构切口，显式发送后只消费一次', {
+  timeout: 60_000,
 }, async () => {
   const home = await mkdtemp(join(tmpdir(), 'native-steer-cut-stop-'))
   const model = new MockLLM()
   const url = await model.start()
-  const client = await ProtocolClient.start(home, url)
+  const client = await ProtocolClient.start(
+    home,
+    url,
+    false,
+    'api-key',
+    {},
+    {
+      litchExtensions: ['inputDelivery'],
+    },
+  )
+  client.standardView = (_method, _kind, payload) =>
+    JSON.parse(
+      JSON.stringify(payload, (key, value: unknown) =>
+        key === 'litchInputDelivery' ? undefined : value,
+      ),
+    )
   const entered = gate()
   const release = gate()
   try {
@@ -437,7 +451,7 @@ test('STEER-CUT-005：插话还排着时停止回合，回退、分叉照样切�
       ],
     })
     const read = async (threadId: string) =>
-      (await client.request('thread/read', { threadId, includeTurns: true })).thread
+      (await client.raw('thread/read', { threadId, includeTurns: true })).result.thread
     model.enqueue(() => [{ type: 'text', text: 'KEEP_ANSWER' }])
     const first = await client.request('turn/start', {
       threadId: thread.id,
@@ -458,44 +472,55 @@ test('STEER-CUT-005：插话还排着时停止回合，回退、分叉照样切�
       threadId: thread.id,
       input: [{ type: 'text', text: 'STOP_TURN_INPUT' }],
     })
-    await entered.promise
+    await Promise.race([
+      entered.promise,
+      new Promise<never>((_, reject) => {
+        const timer = setTimeout(() => reject(new Error('等待工具未进入')), 30_000)
+        timer.unref()
+      }),
+    ])
     await client.request('turn/steer', {
       threadId: thread.id,
       expectedTurnId: second.turn.id,
       clientUserMessageId: 'stop-steer',
       input: [{ type: 'text', text: 'STOP_STEER_INPUT' }],
     })
-    // 停下之后 CLI 把排着的插话当成下一句送给模型（这一轮不归哪个回合，界面上看不到）
-    const resent = gate()
-    model.enqueue((request) => {
-      assert.match(JSON.stringify(request.messages), /STOP_STEER_INPUT/)
-      resent.resolve()
-      return [{ type: 'text', text: 'STOP_STEER_ANSWER' }]
-    })
     await client.request('turn/interrupt', { threadId: thread.id, turnId: second.turn.id })
     release.resolve()
     assert.equal((await client.completed(second.turn.id)).status, 'interrupted')
-    await resent.promise
     model.assertConsumed()
     const before = await read(thread.id)
     const turn = before.turns[1]
     const users = turn.items.filter((item: any) => item.type === 'userMessage')
     assert.equal(users.length, 2)
     const steer = users[1]
-    const kept = turn.items.slice(0, turn.items.indexOf(steer))
+    assert.equal(steer.clientId, 'stop-steer')
+    assert.equal(steer.litchInputDelivery, 'held')
+    assert.equal(
+      steer.content.map((part: { text?: string }) => part.text ?? '').join(''),
+      'STOP_STEER_INPUT',
+      '取消回执仍保留完整原文供用户恢复',
+    )
+    assert.equal(model.requests.length, 2, '停止之后不能自动续发')
+    assert.ok(
+      model.requests.every(
+        (request) => !JSON.stringify(request.messages).includes('STOP_STEER_INPUT'),
+      ),
+      '尚未消费的插话只保留在待发副本里',
+    )
 
-    // 原生记录里找不到这条插话（CLI 没来得及记下就退了的那种）：明确报错，会话、原生记录都不动，不退整个回合
+    // 未消费的插话没有原生切口：拒绝回退、分叉，会话和原生记录都不动。
     const projects = join(home, 'claude', 'projects')
     let native = ''
     for (const dir of await readdir(projects))
       for (const file of await readdir(join(projects, dir)))
         if (
           file.endsWith('.jsonl') &&
-          (await readFile(join(projects, dir, file), 'utf8')).includes(steer.id)
+          (await readFile(join(projects, dir, file), 'utf8')).includes('STOP_TURN_INPUT')
         )
           native = join(projects, dir, file)
     const record = await readFile(native, 'utf8')
-    await writeFile(native, record.replaceAll(steer.id, 'gone-steer'))
+    assert.equal(cutBeforeSteer(record, steer.id), null)
     await client.raw(
       'thread/revert',
       { threadId: thread.id, beforeTurnId: second.turn.id, beforeItemId: steer.id },
@@ -507,49 +532,26 @@ test('STEER-CUT-005：插话还排着时停止回合，回退、分叉照样切�
       -32000,
     )
     assert.deepEqual((await read(thread.id)).turns, before.turns)
-    assert.equal(
-      (await readFile(native, 'utf8')).length,
-      record.replaceAll(steer.id, 'gone-steer').length,
-    )
-    await writeFile(native, record)
+    assert.equal(await readFile(native, 'utf8'), record)
 
-    // 分叉：带到插话之前
-    const branch = (
-      await client.request('thread/fork', {
-        threadId: thread.id,
-        beforeTurnId: second.turn.id,
-        beforeItemId: steer.id,
-      })
-    ).thread
-    assert.deepEqual(
-      (await read(branch.id)).turns[1].items.map((item: any) => item.id),
-      kept.map((item: any) => item.id),
-    )
-    // 回退：这一回合只留前半段，模型看不到插话
-    await client.request('thread/revert', {
-      threadId: thread.id,
-      beforeTurnId: second.turn.id,
-      beforeItemId: steer.id,
-    })
-    await client.notification('thread/reverted', (params) => params.threadId === thread.id)
-    const after = await read(thread.id)
-    assert.equal(after.turns.length, 2)
-    assert.deepEqual(
-      after.turns[1].items.map((item: any) => item.id),
-      kept.map((item: any) => item.id),
-    )
+    // 用户明确恢复才会送入模型，原待发副本仍然可查，不能被重复注入模型上下文。
     model.enqueue((request) => {
       const history = JSON.stringify(request.messages)
       assert.match(history, /KEEP_ANSWER/)
       assert.match(history, /STOP_TURN_INPUT/)
-      assert.doesNotMatch(history, /STOP_STEER_INPUT|STOP_STEER_ANSWER/)
-      return [{ type: 'text', text: 'STOP_NEXT_ANSWER' }]
+      assert.equal(history.split('STOP_STEER_INPUT').length - 1, 1)
+      return [{ type: 'text', text: 'STOP_STEER_ANSWER' }]
     })
     const next = await client.request('turn/start', {
       threadId: thread.id,
-      input: [{ type: 'text', text: 'STOP_NEXT_INPUT' }],
+      input: steer.content,
     })
     assert.equal((await client.completed(next.turn.id)).status, 'completed')
+    assert.equal(model.requests.length, 3, '显式恢复只新增一次模型请求')
+    const after = await read(thread.id)
+    assert.equal(after.turns.length, 3)
+    assert.deepEqual(after.turns[1], before.turns[1], '保留原待发凭据，不伪装成已经消费')
+    assert.equal(after.turns[2].items.filter((item: any) => item.type === 'userMessage').length, 1)
     model.assertConsumed()
   } finally {
     release.resolve()

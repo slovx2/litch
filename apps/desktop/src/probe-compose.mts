@@ -32,7 +32,7 @@ export interface ComposeProbe {
   interrupted: boolean
   /**
    * 插进去的话最后有没有着落：要么留在被打断的那个回合里（对面已经收下），
-   * 要么作为下一个回合发了出去（对面没来得及收）。不能凭空没了，也不能出现两遍
+   * 要么暂停留在待发托盘，再点发送才进入下一回合。不能凭空没了，也不能重复送达
    */
   steerSettled: boolean
   /** 写了一半的草稿：别的会话里看不到它，切回来还在 */
@@ -391,14 +391,41 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
       all('.turn')[turnsBefore - 1]?.querySelector('.turn-foot')?.textContent?.includes('已中断'),
     ),
   )
-  // 没送达的插话会作为下一个回合发出去：等所有回合都结束
-  let calm = 0
-  for (const end = performance.now() + 30_000; performance.now() < end; ) {
+  // 未消费的插话停止后留在待发托盘；已经消费的留在对话里。两条路径都不能丢失、重复或偷偷续跑。
+  await until('停止完成', () => !running())
+  const pendingSteer = () =>
+    all('.tray li.tray-row').filter(
+      (row) => row.querySelector('.ell')?.textContent === '插进来的话',
+    )
+  const deliveredSteer = () =>
+    all('.umsg').filter(
+      (message) =>
+        message.querySelector('.umsg-text')?.textContent === '插进来的话' &&
+        !message.querySelector('[data-input-delivery]:not([data-input-delivery="sent"])'),
+    )
+  const held = pendingSteer().length === 1
+  let steerSettled = held
+    ? Boolean(one('[data-pending-inputs]')) && deliveredSteer().length === 0
+    : deliveredSteer().length === 1
+  for (const end = performance.now() + 500; performance.now() < end; ) {
     await frame()
-    calm = running() || one('.tray-row') ? 0 : calm || performance.now()
-    if (calm && performance.now() - calm > 400) break
+    steerSettled &&= !running() && all('.turn').length === turnsBefore
   }
-  const steerSettled = users().filter((text) => text === '插进来的话').length === 1
+  if (held) {
+    steerSettled &&= pendingSteer().length === 1 && deliveredSteer().length === 0
+    const resume = await until('待发插话的发送按钮', () =>
+      one<HTMLButtonElement>('[data-pending-inputs] button'),
+    )
+    resume.click()
+    await until(
+      '显式发送的插话完成',
+      () => !running() && !one('.tray-row') && deliveredSteer().length === 1,
+    )
+    steerSettled &&= all('.turn').length === turnsBefore + 1
+    if (real)
+      steerSettled &&= Boolean(all('.turn').at(-1)?.textContent?.includes('收到：插进来的话'))
+  }
+  steerSettled &&= deliveredSteer().length === 1 && pendingSteer().length === 0
 
   // ---- 五、草稿跟着会话走；切走再回来，对话没有多也没有少 ----
   const draft = '写了一半的草稿'
@@ -1199,7 +1226,7 @@ export function judgeCompose(probe: ComposeProbe): string[] {
   if (probe.echoed === false) failed.push('有回话没有对上发出去的那一句')
   if (!probe.steered) failed.push('排着的消息没有插进正在进行的回合')
   if (!probe.interrupted) failed.push('点了停止，回合没有标成已中断')
-  if (!probe.steerSettled) failed.push('插进去的话在打断之后没了，或者出现了两遍')
+  if (!probe.steerSettled) failed.push('插话停止后丢失、重复，或未经确认自动续发')
   if (!probe.draftIsolated) failed.push('草稿串到别的会话里去了')
   if (!probe.draftKept) failed.push('切回来之后草稿没了')
   if (!probe.reopenSame) failed.push('切走再回来，对话里的用户消息变了')
