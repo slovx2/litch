@@ -10,7 +10,6 @@ import {
   assertThreadList,
   PINNED,
   rig,
-  settle,
   type TestClient,
 } from './helpers.mjs'
 
@@ -108,7 +107,10 @@ test('分区与置顶：记在设备层，形状照协议；变化的通知只�
     assert.equal(kept.section.id, done.id)
     await a.call('thread/metadata/update', { threadId: 'c1', isPinned: false })
     await a.call('thread/section/move', { threadId: 'p1', sectionId: null })
-    await settle()
+    // 等最后一条变更实际送达，不用固定延时猜测通知队列是否已排空。
+    await a.waitFor(
+      (frame) => frame.method === SECTION_UPDATED && got(a, SECTION_UPDATED).length === 6,
+    )
     const updates = got(a, SECTION_UPDATED)
     for (const update of updates) assertSectionUpdated(update)
     assert.deepEqual(
@@ -138,7 +140,16 @@ test('分区与置顶：记在设备层，形状照协议；变化的通知只�
     // 分区改了名，里面的会话带着的分区对象也变了：给它们各发一条。删分区只是把里面的会话放出来
     await a.call('threadSection/update', { sectionId: done.id, name: '完成' })
     assert.deepEqual(await a.call('threadSection/delete', { sectionId: done.id }), {})
-    await settle()
+    await Promise.all([
+      a.waitFor(
+        (frame) =>
+          frame.method === SECTION_UPDATED && got(a, SECTION_UPDATED).length === updates.length + 2,
+      ),
+      a.waitFor(
+        (frame) =>
+          frame.method === SECTIONS_CHANGED && (frame.params as any).changeType === 'deleted',
+      ),
+    ])
     assert.deepEqual(
       got(a, SECTION_UPDATED)
         .slice(updates.length)

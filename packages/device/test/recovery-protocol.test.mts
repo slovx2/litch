@@ -8,7 +8,7 @@ import {
 } from '../../protocol/src/turn-recovery.mjs'
 import { FakeControl, managed } from './fake-control.mjs'
 import { FakeUpstream } from './fake-upstream.mjs'
-import { assertRuntimeInfo, rig, settle } from './helpers.mjs'
+import { assertRuntimeInfo, rig } from './helpers.mjs'
 
 test('恢复方法与通知、运行CLI字段按投递连接声明隔离', async () => {
   const cli = {
@@ -53,7 +53,8 @@ test('恢复方法与通知、运行CLI字段按投递连接声明隔离', async
     }
     // 直接走设备的统一广播口，只验证按实际接收者过滤，不通过客户端身份猜测。
     ;(instance.device as any).announce(RECOVERY_CHANGED, notice, 'turnRecovery')
-    await settle()
+    // 通知排在 setImmediate；忙碌时 20ms 定时器可能先到，直接等目标帧。
+    await aware.waitFor((frame) => frame.method === RECOVERY_CHANGED)
     assert.equal(aware.notifications.filter((n) => n.method === RECOVERY_CHANGED).length, 1)
     assert.equal(plain.notifications.filter((n) => n.method === RECOVERY_CHANGED).length, 0)
     assertRuntimeInfo(await plain.call('runtime/info', {}))
