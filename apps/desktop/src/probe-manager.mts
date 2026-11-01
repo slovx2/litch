@@ -7,6 +7,7 @@ export interface ManagerSeen {
   revisedAnswer: boolean
   list: boolean
   selected: boolean
+  pendingTooltip: boolean
   draft: boolean
   submitted: boolean
   turnAdded: boolean
@@ -110,6 +111,15 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   )
   await click('[data-manager-id="m1"] .mg-pick')
   const selected = Boolean(await until('经理页', () => one('[data-manager="session"]')))
+  await click('[data-act="manager-board-toggle"]')
+  const boardToggle = await until('看板收起入口', () =>
+    one<HTMLButtonElement>('[data-act="manager-board-toggle"][aria-expanded="false"]'),
+  )
+  const pendingTooltip = Boolean(
+    boardToggle.title &&
+      boardToggle.title === one('[data-act="manager-board-toggle"] .pill')?.getAttribute('title'),
+  )
+  await click('[data-act="manager-board-toggle"]')
   await click('[data-board-tab="suggestions"]')
   await click('[data-sidebar-mode="chat"]')
   const chatRestored = Boolean(
@@ -679,6 +689,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     revisedAnswer,
     list,
     selected,
+    pendingTooltip,
     draft,
     submitted,
     turnAdded,
@@ -734,6 +745,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
     revisedAnswer: '已答复决策没有保存修改后的答案',
     list: '切换后没有全部经理页',
     selected: '没有打开经理页',
+    pendingTooltip: '收起看板按钮与待处理数量未提供相同悬停明细',
     draft: '答复没有标为本地草稿',
     submitted: '答复没有提交到看板',
     turnAdded: '提交后对话没有新增回合',

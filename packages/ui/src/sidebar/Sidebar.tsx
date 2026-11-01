@@ -881,7 +881,7 @@ function ProjectedDeviceBlock({
           folded={shut}
           onFold={fold}
           projectionTime={at === undefined ? undefined : { kind, at }}
-          deviceLabel={showDevice && !byProject ? t.text(device.name) : undefined}
+          deviceLabel={!byProject && device.kind !== 'local' ? t.text(device.name) : undefined}
         />
         {kids.length > 0 ? (
           <div className="tree-kids">

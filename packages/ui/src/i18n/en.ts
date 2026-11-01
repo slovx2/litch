@@ -89,7 +89,7 @@ export const en: Record<MessageKey, Entry> = {
   'sidebar.projection.recentEmpty': 'Conversations you open or interact with appear here',
   'sidebar.projection.settings': '{name} settings',
   'sidebar.projection.project': 'Group by project',
-  'sidebar.projection.count': '{n} unread conversations',
+  'sidebar.projection.count': ({ n }) => plural(n, 'unread conversation', 'unread conversations'),
   'sidebar.projection.recentTime': 'Last viewed or interacted: {time}',
   'sidebar.projection.unreadTime': 'Latest new result: {time}',
   'sidebar.projection.first': 'Show {n} by default',

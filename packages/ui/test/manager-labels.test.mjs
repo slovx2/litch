@@ -19,11 +19,36 @@ test('待处理合计与悬停明细区分决策、请你做，决策筛选仍�
   )
   assert.equal(
     translate('en', 'manager.pendingDetail', { decisions: 3, requests: 1 }),
-    '3 decisions · 1 For you request',
+    '3 decisions · 1 request for you',
   )
   assert.equal(
     translate('en', 'manager.pendingDetail', { decisions: 1, requests: 2 }),
-    '1 decision · 2 For you requests',
+    '1 decision · 2 requests for you',
   )
   assert.equal(translate('zh-CN', 'manager.open'), '待定')
+})
+
+test('待处理悬停明细省略零项，没有多余分隔符', () => {
+  for (const [decisions, requests, en, zh] of [
+    [0, 0, '', ''],
+    [1, 0, '1 decision', '1 个决策'],
+    [2, 0, '2 decisions', '2 个决策'],
+    [0, 1, '1 request for you', '1 个请你做'],
+    [0, 2, '2 requests for you', '2 个请你做'],
+  ]) {
+    assert.equal(translate('en', 'manager.pendingDetail', { decisions, requests }), en)
+    assert.equal(translate('zh-CN', 'manager.pendingDetail', { decisions, requests }), zh)
+  }
+})
+
+test('待答问题、工作线与侧栏未读计数的英文单复数', () => {
+  for (const [n, question, lines, unread] of [
+    [0, '0 questions awaiting answers', '0 work lines running', '0 unread conversations'],
+    [1, '1 question awaiting an answer', '1 work line running', '1 unread conversation'],
+    [2, '2 questions awaiting answers', '2 work lines running', '2 unread conversations'],
+  ]) {
+    assert.equal(translate('en', 'ask.pendingCount', { count: n }), question)
+    assert.equal(translate('en', 'manager.linesCount', { n }), lines)
+    assert.equal(translate('en', 'sidebar.projection.count', { n }), unread)
+  }
 })

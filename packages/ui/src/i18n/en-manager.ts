@@ -75,7 +75,16 @@ export const enManager = {
   'manager.event.rules': 'Manager settings updated',
   'manager.pending': '{n} to handle',
   'manager.pendingDetail': ({ decisions, requests }) =>
-    `${decisions} ${decisions === 1 ? 'decision' : 'decisions'} · ${requests} For you ${requests === 1 ? 'request' : 'requests'}`,
+    [
+      Number(decisions) > 0
+        ? `${decisions} ${Number(decisions) === 1 ? 'decision' : 'decisions'}`
+        : '',
+      Number(requests) > 0
+        ? `${requests} ${Number(requests) === 1 ? 'request' : 'requests'} for you`
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' · '),
   'manager.running': 'Running',
   'manager.idle': 'Idle',
   'manager.empty': 'No managers',
@@ -130,7 +139,7 @@ export const enManager = {
   'manager.unmerged': 'Not merged',
   'manager.unknown': 'Unknown',
   'manager.branches': 'Branches',
-  'manager.linesCount': '{n} work lines running',
+  'manager.linesCount': ({ n }) => `${n} ${Number(n) === 1 ? 'work line' : 'work lines'} running`,
   'manager.name': 'Name',
   'manager.optionalName': 'Leave blank for an assigned name',
   'manager.promptPlaceholder':

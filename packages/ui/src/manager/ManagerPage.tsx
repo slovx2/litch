@@ -179,6 +179,7 @@ export function ManagerPage({
           type="button"
           className="btn ghost mg-board-toggle"
           data-act="manager-board-toggle"
+          title={!layout.open && attention > 0 ? attentionTitle : undefined}
           aria-expanded={layout.open}
           aria-controls={`manager-board-${manager.id}`}
           onClick={() => setBoardLayout({ open: !layout.open })}

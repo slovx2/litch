@@ -70,7 +70,13 @@ export const zhManager = {
   'manager.event.end': '经理开始收尾',
   'manager.event.rules': '已更新经理设定',
   'manager.pending': '{n} 待处理',
-  'manager.pendingDetail': '{decisions} 个决策 · {requests} 个请你做',
+  'manager.pendingDetail': ({ decisions, requests }) =>
+    [
+      Number(decisions) > 0 ? `${decisions} 个决策` : '',
+      Number(requests) > 0 ? `${requests} 个请你做` : '',
+    ]
+      .filter(Boolean)
+      .join(' · '),
   'manager.running': '运行中',
   'manager.idle': '空闲',
   'manager.empty': '暂无经理',

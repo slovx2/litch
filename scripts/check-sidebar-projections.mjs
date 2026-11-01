@@ -207,15 +207,17 @@ try {
       () => document.querySelectorAll('[data-projection=unread] .projection-device').length,
     ),
     0,
-    '单设备投影不显示设备名',
+    '本机投影不显示设备名',
   )
   assert.ok(
     await run(() =>
       [...document.querySelectorAll('[data-projection=recent] [data-depth="0"] .ss-row')].every(
-        (row) => !!row.querySelector('.projection-device'),
+        (row) =>
+          !!row.querySelector('.projection-device') ===
+          (row.closest('[data-device]')?.dataset.device !== 'local'),
       ),
     ),
-    '多设备平铺行显示设备名',
+    '平铺行只显示远程设备名，本机行省略',
   )
   assert.equal(
     await run(() => !!document.querySelector('[data-projection=recent] .projection-count')),
@@ -517,7 +519,9 @@ try {
       assert.ok(
         await run(() =>
           [...document.querySelectorAll('[data-projection=recent] [data-depth="0"] .ss-row')].every(
-            (row) => !!row.querySelector('.projection-device'),
+            (row) =>
+              !!row.querySelector('.projection-device') ===
+              (row.closest('[data-device]')?.dataset.device !== 'local'),
           ),
         ),
       )

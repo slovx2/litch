@@ -26,7 +26,8 @@ export const enAsks: Record<keyof typeof zhAsks, Entry> = {
   'ask.delegatedSession': 'Answered by session · {name}',
   'ask.title': 'Question',
   'ask.pending': 'Pending questions',
-  'ask.pendingCount': '{count} questions awaiting answers',
+  'ask.pendingCount': ({ count }) =>
+    Number(count) === 1 ? '1 question awaiting an answer' : `${count} questions awaiting answers`,
   'ask.state.open': 'Waiting for you',
   'ask.state.answered': 'Answered',
   'ask.state.closed': 'Not answered',
