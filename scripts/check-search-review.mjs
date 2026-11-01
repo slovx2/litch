@@ -185,7 +185,8 @@ export async function checkSearchReview({ cdp, evaluate, query, report, output, 
     'Enter打开所选结果',
   )
   await pause(50)
-  assert.ok(await evaluate(`document.activeElement.classList.contains('search-entry')`))
+  // 此夹具只记录打开事件，不挂载目标会话；实际输入框焦点由完整应用复审场景验证。
+  assert.equal(await evaluate(`!!document.activeElement.closest('.search-dialog')`), false)
   await evaluate(`window.searchFixture.openTitles()`)
   await until(() => evaluate(`!!document.querySelector('.search-dialog')`), '再次打开标题搜索')
   await until(

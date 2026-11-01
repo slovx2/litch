@@ -17,7 +17,7 @@
   --line-3: rgb(var(--ink-rgb) / 0.2);
   --hover: rgb(var(--ink-rgb) / 0.045);
   --press: rgb(var(--ink-rgb) / 0.09);
-  --find: var(--L, #376ea7) var(--D, #78a8da);
+  --find: var(--L, #936200) var(--D, #78a8da);
   --on-find: var(--L, #ffffff) var(--D, #14151a);
   --sel: var(--L, rgb(42 77 115 / 0.1)) var(--D, rgb(220 189 114 / 0.13));
   --shadow: var(--L, 0 1px 2px rgb(64 52 28 / 0.08), 0 14px 36px rgb(64 52 28 / 0.14))

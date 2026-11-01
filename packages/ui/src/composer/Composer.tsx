@@ -841,6 +841,7 @@ export function Composer(props: ComposerProps) {
         ) : null}
         <div className="cmp-row">
           <textarea
+            data-composer-session={sessionId ? JSON.stringify([deviceId, sessionId]) : undefined}
             ref={input}
             className="cmp-text"
             rows={1}

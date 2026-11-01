@@ -13,9 +13,9 @@ export function FindButton({ deviceId, sessionId }: { deviceId: string; sessionI
       title={`${t('search.inConversation')} (${mac ? '⌘F' : 'Ctrl+F'})`}
       aria-label={t('search.inConversation')}
       aria-keyshortcuts={mac ? 'Meta+F' : 'Control+F'}
-      onClick={() => requestFind(deviceId, sessionId)}
+      onClick={(event) => requestFind(deviceId, sessionId, event.currentTarget)}
     >
-      <Icon name="search" />
+      <Icon name="findText" />
     </button>
   )
 }

@@ -50,7 +50,7 @@ import { PendingQuestions } from '../composer/PendingQuestions.tsx'
 import { GoalReached } from '../goal/GoalReached.tsx'
 import type { MessageKey, Translator } from '../i18n/index.ts'
 import { useRailHasTodo } from '../rail/rail-state.ts'
-import { onFind } from '../search/actions.ts'
+import { onFind, onFindPreparing, requestFind } from '../search/actions.ts'
 import { TaskNote } from '../tasks/TaskNote.tsx'
 import { useAgentsUnfinished } from '../tree/agent-view.tsx'
 import { LineageBar } from '../tree/LineageBar.tsx'
@@ -581,38 +581,57 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
     focusBeforeSearch.current = document.activeElement as HTMLElement
     setFinding(true)
   }, [deviceId, sessionId])
-  const closeFind = useCallback(() => {
-    // DOM 高亮是最后实际显示的位置；目标状态可能还在等 React 提交。
-    const range = [...(CSS.highlights.get('litch-find-current') ?? [])][0]
-    const active = range?.startContainer.parentElement?.closest('[data-search-item]')
-    const element =
-      active ??
-      (target
-        ? scroll.contentRef.current?.querySelector(
-            `[data-search-item="${CSS.escape(target.itemId)}"]`,
-          )
-        : null)
-    if (element) scroll.keepReading(element)
-    setReading(
-      element?.closest('[data-search-turn]')?.getAttribute('data-search-turn') ??
-        target?.turnId ??
-        null,
-    )
-    setFinding(false)
-    setTarget(null)
-    requestAnimationFrame(() => {
-      const previous = focusBeforeSearch.current
-      const fallback =
-        document.querySelector<HTMLElement>('.search-entry') ?? scroll.scrollerRef.current
-      ;(previous?.isConnected ? previous : fallback)?.focus({ preventScroll: true })
-    })
-  }, [target, scroll])
+  const closeFind = useCallback(
+    (restoreFocus = true) => {
+      // DOM 高亮是最后实际显示的位置；目标状态可能还在等 React 提交。
+      const range = [...(CSS.highlights.get('litch-find-current') ?? [])][0]
+      const active = range?.startContainer.parentElement?.closest('[data-search-item]')
+      const element =
+        active ??
+        (target
+          ? scroll.contentRef.current?.querySelector(
+              `[data-search-item="${CSS.escape(target.itemId)}"]`,
+            )
+          : null)
+      if (element) scroll.keepReading(element)
+      setReading(
+        element?.closest('[data-search-turn]')?.getAttribute('data-search-turn') ??
+          target?.turnId ??
+          null,
+      )
+      setFinding(false)
+      setTarget(null)
+      if (!restoreFocus) return
+      requestAnimationFrame(() => {
+        const previous = focusBeforeSearch.current
+        const fallback =
+          document.querySelector<HTMLElement>('.search-entry') ?? scroll.scrollerRef.current
+        ;(previous?.isConnected ? previous : fallback)?.focus({ preventScroll: true })
+      })
+    },
+    [target, scroll],
+  )
+  const findsHere = useCallback(
+    (device: string, session: string, origin: Element | null) =>
+      device === deviceId &&
+      session === sessionId &&
+      (origin?.closest('.aside-view, .agents-view') ?? null) ===
+        (scroll.scrollerRef.current?.closest('.aside-view, .agents-view') ?? null),
+    [deviceId, sessionId, scroll.scrollerRef],
+  )
   useEffect(
     () =>
-      onFind((device, session) => {
-        if (device === deviceId && session === sessionId) openFind()
+      onFind((device, session, origin) => {
+        if (findsHere(device, session, origin)) openFind()
       }),
-    [deviceId, sessionId, openFind],
+    [findsHere, openFind],
+  )
+  useEffect(
+    () =>
+      onFindPreparing((device, session, origin) => {
+        if (finding && !findsHere(device, session, origin)) closeFind(false)
+      }),
+    [findsHere, finding, closeFind],
   )
   const searchTarget = useCallback((hit: SearchHit | null) => {
     if (hit) setTarget(hit)
@@ -642,11 +661,11 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
       if (owner !== mine || (active?.closest('.side') && !mine)) return
       if (active?.closest('.terminal-slot, .xterm, dialog[open], [role="dialog"]')) return
       event.preventDefault()
-      openFind()
+      requestFind(deviceId, sessionId, scroll.scrollerRef.current)
     }
     document.addEventListener('keydown', key)
     return () => document.removeEventListener('keydown', key)
-  }, [openFind, scroll.scrollerRef])
+  }, [deviceId, sessionId, scroll.scrollerRef])
   const { span, restoring } = useTurnWindow(
     `${deviceId}:${sessionId}`,
     turnIds?.length ?? 0,
@@ -695,7 +714,7 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
           onTarget={searchTarget}
           reveal={scroll.reveal}
           updateRange={scroll.updateSearchRange}
-          onClose={closeFind}
+          onClose={() => closeFind()}
         />
       ) : null}
       <div

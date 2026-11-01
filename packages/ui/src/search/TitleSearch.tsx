@@ -15,6 +15,7 @@ import { Close } from '../app/icons.tsx'
 import { currentPlatform } from '../app/platform.ts'
 import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { onSearch } from './actions.ts'
+import { focusSearchSession } from './focus.ts'
 import '../styles/search.css'
 
 const EMPTY_IDS: string[] = []
@@ -47,8 +48,9 @@ export function TitleSearch({ onOpen }: { onOpen(selection: Selection, archived:
     previousFocus.current = document.activeElement as HTMLElement
     setOpen(true)
   }, [])
-  const close = useCallback(() => {
+  const close = useCallback((restoreFocus = true) => {
     setOpen(false)
+    if (!restoreFocus) return
     requestAnimationFrame(() => {
       const element = previousFocus.current
       ;(element?.isConnected
@@ -85,7 +87,7 @@ function TitleDialog({
   onClose,
 }: {
   onOpen(selection: Selection, archived: boolean): void
-  onClose(): void
+  onClose(restoreFocus?: boolean): void
 }) {
   const { channel } = useServices()
   const t = useT()
@@ -203,8 +205,9 @@ function TitleDialog({
   const choose = (index: number) => {
     const row = rows[index]
     if (!row) return
+    onClose(false)
     onOpen({ deviceId: row.deviceId, sessionId: row.session.id }, row.archived)
-    onClose()
+    if (!row.archived) focusSearchSession(row.deviceId, row.session.id)
   }
   useEffect(() => {
     dialog.current
@@ -216,8 +219,8 @@ function TitleDialog({
       ref={dialog}
       className="modal search-dialog"
       aria-labelledby="title-search-heading"
-      onCancel={onClose}
-      onClose={onClose}
+      onCancel={() => onClose()}
+      onClose={() => onClose()}
     >
       <header className="modal-head">
         <h2 id="title-search-heading">{t('search.titles')}</h2>
@@ -232,7 +235,7 @@ function TitleDialog({
         <button
           type="button"
           className="ibtn"
-          onClick={onClose}
+          onClick={() => onClose()}
           aria-label={t('search.close')}
           title={`${t('search.close')} (Esc)`}
         >
@@ -315,7 +318,6 @@ function TitleDialog({
             const title = t.text(session.title)
             const project =
               workspaces[ids.indexOf(deviceId)]?.find((w) => w.id === session.workspaceId)?.name ??
-              session.cwd.split(/[\\/]/).filter(Boolean).at(-1) ??
               t('workspace.none')
             return (
               <button
@@ -328,16 +330,16 @@ function TitleDialog({
                 tabIndex={-1}
                 onClick={() => choose(index)}
               >
-                <strong>
-                  <Highlighted text={title} query={query} />
-                </strong>
-                <span className="dim" title={session.cwd}>
+                <span className="search-result-title">
+                  <strong title={title}>
+                    <Highlighted text={title} query={query} />
+                  </strong>
+                  <span className="dim">{ago(session.updatedAt, Date.now(), t)}</span>
+                  {archived ? <span className="pill">{t('search.archived')}</span> : null}
+                </span>
+                <span className="dim search-result-meta" title={session.cwd}>
                   {device ? t.text(device.name) : deviceId} · {project} ·{' '}
                   {nameOf(device, session.harness)}
-                </span>
-                <span className="dim">
-                  {ago(session.updatedAt, Date.now(), t)}{' '}
-                  {archived ? <span className="pill">{t('search.archived')}</span> : null}
                 </span>
               </button>
             )

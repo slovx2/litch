@@ -5,7 +5,7 @@ import {
   type SuggestionView,
   suggestionCount,
 } from '@litch/core'
-import { type CSSProperties, useCallback, useRef, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 import type {
   ManagerDecisionId,
   ManagerItemId,
@@ -16,6 +16,7 @@ import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
+import { onFindPreparing } from '../search/actions.ts'
 import { Transcript } from '../transcript/Transcript.tsx'
 import { ManagerSuggestions } from '../tree/SuggestionsPage.tsx'
 import { BoardGrip } from './BoardGrip.tsx'
@@ -61,6 +62,18 @@ export function ManagerPage({
   const page = useRef<HTMLElement>(null)
   const device = useKey<DeviceView>(keys.device(manager.deviceId))
   const { tab, narrow, settings } = location
+  useEffect(
+    () =>
+      onFindPreparing((deviceId, sessionId) => {
+        if (
+          deviceId === manager.deviceId &&
+          sessionId === manager.threadId &&
+          location.narrow !== 'chat'
+        )
+          onLocation({ ...location, narrow: 'chat' })
+      }),
+    [manager.deviceId, manager.threadId, location, onLocation],
+  )
   const boardBody = useRef<HTMLDivElement>(null)
   const setTab = (tab: ManagerPageLocation['tab']) => {
     if (boardBody.current) boardBody.current.scrollTop = 0

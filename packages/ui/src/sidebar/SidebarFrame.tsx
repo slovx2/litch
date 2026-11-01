@@ -11,6 +11,7 @@ import {
 } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Icon, Plus } from '../app/icons.tsx'
+import { TitleSearchButton } from '../search/FindButton.tsx'
 import {
   drawnWidth,
   SIDEBAR_MIN,
@@ -143,15 +144,18 @@ export function SidebarToggle({ onCompose }: { onCompose(): void }) {
         <Icon name="sidebar" />
       </button>
       {open ? null : (
-        <button
-          type="button"
-          className="ibtn tb-new"
-          title={t('sidebar.newSession')}
-          aria-label={t('sidebar.newSession')}
-          onClick={onCompose}
-        >
-          <Plus />
-        </button>
+        <>
+          <button
+            type="button"
+            className="ibtn tb-new"
+            title={t('sidebar.newSession')}
+            aria-label={t('sidebar.newSession')}
+            onClick={onCompose}
+          >
+            <Plus />
+          </button>
+          <TitleSearchButton />
+        </>
       )}
     </>
   )

@@ -110,8 +110,8 @@ export const AgentDetail = memo(function AgentDetail({
       <div className="agents-head">
         <div className="agents-title">
           <h3>{agent?.description || agent?.nickname || t('tree.agent.unnamed', { n: 1 })}</h3>
-          {state ? <AgentStatus state={state} /> : null}
           <FindButton deviceId={deviceId} sessionId={agentId} />
+          {state ? <AgentStatus state={state} /> : null}
           {canStop ? (
             <button
               type="button"

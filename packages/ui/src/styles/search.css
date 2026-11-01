@@ -46,6 +46,8 @@
 ::highlight(litch-find-current) {
   background-color: var(--accent-solid);
   color: var(--on-accent);
+  text-decoration: underline 2px;
+  text-underline-offset: 2px;
 }
 .modal.search-dialog {
   width: min(740px, calc(100vw - 48px));
@@ -112,4 +114,34 @@
 /* 搜索定位与退出后的阅读锚点必须有真实布局，补画其他回合不能将它换成估算高度。 */
 .tr[data-windowed] > .turn[data-search-keep] {
   content-visibility: visible;
+}
+
+.search-bar input:focus-visible,
+.search-controls input:focus-visible,
+.search-controls select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.search-result-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.search-result-title strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-result-title > .dim,
+.search-result-title > .pill {
+  flex: none;
+}
+.search-result-meta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
