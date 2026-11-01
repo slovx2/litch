@@ -6,6 +6,7 @@ import {
   reviewedSuggestion,
   type SuggestionEntry,
   type SuggestionView,
+  sortManagerIssues,
   suggestionCount,
   type WorkspaceView,
 } from '@litch/core'
@@ -18,6 +19,7 @@ import { ago } from '../app/format.ts'
 import { Close, Forward } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { BoardMarkdown } from '../manager/BoardMarkdown.tsx'
+import { useIssueOrder } from '../manager/issue-order.tsx'
 import { PostDiscussion, PostHistory } from '../manager/PostDiscussion.tsx'
 import { Relations } from '../manager/Relations.tsx'
 import { Brief, ProposalActs } from './ProposalCard.tsx'
@@ -125,13 +127,23 @@ export function ManagerSuggestions({
   onOpen(selection: Selection, archived: boolean): void
 }) {
   const all = useKey<readonly SuggestionView[]>(keys.suggestions) ?? NONE
-  const rows = filterSuggestions(all, { deviceId: manager.deviceId, managerId: manager.id })
+  const order = useIssueOrder()
+  // 已审核与未审核各成一组，组内都待开始；排序只决定组内先后。
+  const rows = sortManagerIssues(
+    filterSuggestions(all, { deviceId: manager.deviceId, managerId: manager.id }),
+    order,
+    (row) => ({ at: row.proposal.createdAt, pending: true }),
+  )
   const t = useT()
   const reviewed = rows.filter(reviewedSuggestion)
   const pending = rows.filter((row) => !reviewedSuggestion(row))
-  const history = posts.filter(
-    (post) =>
-      post.kind === 'suggestion' && !rows.some((row) => row.proposal.id === post.proposalId),
+  const history = sortManagerIssues(
+    posts.filter(
+      (post) =>
+        post.kind === 'suggestion' && !rows.some((row) => row.proposal.id === post.proposalId),
+    ),
+    order,
+    (post) => ({ at: post.createdAt }),
   )
   const cards = (entries: readonly SuggestionView[]) => (
     <ul className="suggestions-list mg-suggestions-list">

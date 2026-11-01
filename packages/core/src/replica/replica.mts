@@ -194,6 +194,8 @@ export const keys = {
   managerIds: (deviceId: string) => `managers:${deviceId}:ids`,
   manager: (deviceId: string, managerId: string) => `managers:${deviceId}:manager:${managerId}`,
   managersPending: 'managers:pending',
+  /** 所有设备上的经理数 { active, total }（手机经理入口与空状态用） */
+  managersSummary: 'managers:summary',
   suggestions: 'suggestions:all',
   suggestionsAvailable: (deviceId: string) => `suggestions:${deviceId}:available`,
   managerBoard: (deviceId: string, managerId: string) => `managers:${deviceId}:board:${managerId}`,
@@ -559,6 +561,11 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
       0,
     )
     if (store.get<number>(keys.managersPending) !== total) store.set(keys.managersPending, total)
+    const rows = [...managerLists.values()].flatMap((entry) => [...entry.rows.values()])
+    const summary = { active: rows.filter((m) => m.status === 'active').length, total: rows.length }
+    const before = store.get<{ active: number; total: number }>(keys.managersSummary)
+    if (before?.active !== summary.active || before.total !== summary.total)
+      store.set(keys.managersSummary, summary)
   }
   const suggestionLists = new Map<string, { rows: SuggestionView[]; stop(): void }>()
   const publishSuggestions = () =>

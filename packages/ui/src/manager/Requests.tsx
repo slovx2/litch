@@ -1,3 +1,4 @@
+import { sortManagerIssues } from '@litch/core'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type {
   ManagerRequestId,
@@ -10,6 +11,7 @@ import { useT } from '../app/appearance.ts'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
+import { useIssueOrder } from './issue-order.tsx'
 import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
 import { Relations } from './Relations.tsx'
 import { useRequestDrafts } from './request-drafts.ts'
@@ -33,6 +35,7 @@ export function Requests({
   const { drafts, write } = useRequestDrafts(manager.deviceId, manager.id)
   const [error, setError] = useState('')
   const root = useRef<HTMLDivElement>(null)
+  const order = useIssueOrder()
   useLayoutEffect(() => {
     if (!target) return
     const card = root.current?.querySelector<HTMLElement>(`[data-manager-request="${target.id}"]`)
@@ -62,7 +65,10 @@ export function Requests({
   return (
     <div className="mg-stack" ref={root}>
       {!requests.length ? <p className="mg-empty">{t('manager.none')}</p> : null}
-      {requests.map((request) => {
+      {sortManagerIssues(requests, order, (r) => ({
+        at: r.createdAt,
+        pending: r.status === 'open',
+      })).map((request) => {
         const post = posts.find((post) => post.id === request.id)
         const draft = drafts[request.id]
         const editing = request.status === 'open' || Boolean(draft)

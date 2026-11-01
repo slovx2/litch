@@ -22,7 +22,7 @@ const binary =
 if (!binary) throw new Error('需要 LITCH_CHROME_BINARY 指向 Chrome for Testing')
 const work = mkdtempSync(join(tmpdir(), 'litch-suggestions-'))
 const output =
-  process.env.LITCH_SUGGESTION_SHOTS ?? join(process.cwd(), '.artifacts/manager-v3-mobile')
+  process.env.LITCH_SUGGESTION_SHOTS ?? join(process.cwd(), '.artifacts/manager-v4-mobile')
 mkdirSync(output, { recursive: true })
 const child = spawn(
   binary,
@@ -105,6 +105,54 @@ try {
       '!document.querySelector(\'[data-testid="manager-issue:D-13"] textarea\') && !document.querySelector(\'[data-testid="manager-issue:D-12"] textarea\')',
     ),
   )
+  // 排序：默认最新优先，切到最早优先后顺序反过来，再切回。
+  const decisionOrder = () =>
+    read(
+      "[...document.querySelectorAll('[data-testid^=\"manager-issue:D-\"]')].map(e=>e.dataset.testid.slice(14)).join(',')",
+    )
+  assert.equal(await decisionOrder(), 'D-17,D-16,D-15,D-13,D-12,D-11', '默认最新优先')
+  const order = async (key) => {
+    await read(`document.querySelector('[data-testid="manager-issue-order"]').click()`)
+    await wait(`[data-testid="manager-issue-order:${key}"]`)
+    await read(`document.querySelector('[data-testid="manager-issue-order:${key}"]').click()`)
+    await new Promise((r) => setTimeout(r, 300))
+  }
+  await order('oldest')
+  assert.equal(await decisionOrder(), 'D-11,D-12,D-13,D-15,D-16,D-17', '最早优先')
+  await shot('mobile-order-oldest')
+  await order('pending')
+  assert.equal(await decisionOrder(), 'D-17,D-16,D-15,D-13,D-12,D-11', '待处理优先')
+  await order('newest')
+  // 已答决策：答复单独一块，其他选项默认收起；已关闭另有关闭记录。
+  assert.ok(
+    await read(
+      "(()=>{const a=document.querySelector('[data-testid=\"decision-answer:D-13\"]');return !!a&&a.innerText.includes('你的答复')&&a.innerText.includes('子会话不算，子代理照算')&&a.innerText.includes('子会话已有回报')&&!a.innerText.includes('后台任务页要列出')})()",
+    ),
+    '答复与问题分块',
+  )
+  assert.ok(
+    await read(
+      "document.querySelector('[data-testid=\"decision-answer:D-11\"]').innerText.includes('你在对话中的答复')",
+    ),
+  )
+  assert.ok(
+    await read(
+      'document.querySelector(\'[data-testid="decision-others:D-13"]\').innerText.includes(\'其他选项 2\') && !document.querySelector(\'[data-testid="manager-issue:D-13"] [data-testid="decision-option:a"]\')',
+    ),
+    '其他选项默认收起',
+  )
+  await read(`document.querySelector('[data-testid="decision-others:D-13"]').click()`)
+  await wait('[data-testid="manager-issue:D-13"] [data-testid="decision-option:a"]')
+  assert.ok(
+    await read(
+      "document.querySelector('[data-testid=\"decision-closed:D-12\"]').innerText.includes('已关闭 · 经理')",
+    ),
+    '关闭记录单独一块',
+  )
+  await read(
+    `document.querySelector('[data-testid="manager-issue:D-13"]').scrollIntoView({block:'start'})`,
+  )
+  await shot('mobile-answered-decision')
   assert.ok(
     await read(
       "document.querySelector('[data-testid=\"issue-status:D-13\"]').textContent.includes('已答复')",
@@ -135,7 +183,16 @@ try {
         `window.__litchLook.set({skin:${JSON.stringify(skin)},theme:${JSON.stringify(theme)}})`,
       )
       await wait('[data-testid="manager-console"]')
+      await press('控制台')
+      await press('决策')
+      await read(
+        `document.querySelector('[data-testid="manager-issue:D-13"]')?.scrollIntoView({block:'start'})`,
+      )
       await shot(`mobile-decisions-${skin}-${theme}`)
+      await press('概览')
+      await wait('[data-testid="manager-overview"]')
+      await shot(`mobile-overview-${skin}-${theme}`)
+      await press('控制台')
       await press('报告')
       await wait('[data-testid="manager-issue:P-1"]')
       await shot(`mobile-report-${skin}-${theme}`)
@@ -226,7 +283,25 @@ try {
   await press('已复验')
   await until(() => read("document.body.innerText.includes('已交付')"), '交付请求')
   await shot('mobile-delivery')
-  console.log('手机控制台正式页面：三皮肤报告、关联定位、已阅、追问与交付通过')
+  // 概览：几个数与请你做跳转。
+  await press('概览')
+  await wait('[data-testid="manager-overview"]')
+  assert.ok(
+    await read(
+      "['pending','blocked','lines','done'].every(k=>document.querySelector(`[data-testid=\"manager-stat:${k}\"]`))",
+    ),
+    '概览数字',
+  )
+  await read(`document.querySelector('[data-testid="manager-stat:pending"]').click()`)
+  await wait('[data-testid="manager-issue-order"]')
+  // 经理目录：按设备分组。
+  await call('Page.navigate', { url: url.replace('scene=manager-console', 'scene=managers') })
+  await wait('[data-testid="managers:device:local"]')
+  assert.ok(await read('!!document.querySelector(\'[data-testid="manager:m1"]\')'), '经理目录')
+  await shot('mobile-managers')
+  console.log(
+    '手机经理：目录、概览、排序、已答决策分块、三皮肤报告、关联定位、已阅、追问与交付通过',
+  )
 } catch (error) {
   console.error(error)
   throw error

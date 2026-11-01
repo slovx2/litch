@@ -5,8 +5,10 @@
 A manager is a conversation that coordinates worklines (sub-sessions), maintains decisions and items
 on a board stored on its device, and reports progress. Repository changes remain the evidence for
 what has landed. Managers and their worklines appear in the desktop sidebar's **Managers** view;
-ordinary sessions appear in **Chat**. The phone has a **Console** entry for manager issues and read-only
-manager items. Creating managers and editing dispatch settings remain desktop actions.
+ordinary sessions appear in **Chat**. The phone home screen has a **Managers** entry: managers are
+grouped by device, and each manager page has **Overview**, **Console** and read-only **Manager items**,
+plus **Chat** to open the manager conversation. Creating managers and editing dispatch settings remain
+desktop actions.
 
 ### Where and how to create one
 
@@ -283,7 +285,7 @@ lines running"; each workline shows its own mark underneath.
 经理可只编辑原帖、只回复或两者同时做；“已编辑”可展开旧版本、编辑时间与原因。
 控制台合计待定决策、待做请你做和经理已审核待开始建议；悬停也只显示这三类数量。手机采用相同口径。
 
-手机首页新增控制台入口，可选择经理，阅读和操作四类议题，并提交经理或临时追问。
+手机首页有“经理”入口（第二行是待处理合计），经理按设备分组、先进行中后已结束。进入经理后有“概览 | 控制台 | 经理事项”三格，默认概览：现状、待处理/受阻/在跑的线/已完成几个数、请你做、受阻事项和最近动态；右上角“对话”打开经理会话。控制台可阅读和操作四类议题，并提交经理或临时追问。
 手机沿用建议的开始/编辑/忽略，支持请求交付/文字回复、决策答复、报告已阅和讨论历史；创建经理、派活设置及完整经理事项看板仍在桌面。
 用户主动新建议题尚未开放。手机也提供只读经理事项供关联定位；目前按卡提交，桌面支持跨卡混合提交。
 
@@ -295,13 +297,13 @@ lines running"; each workline shows its own mark underneath.
 
 决策状态使用文字筛选（○ 待定、✓ 已答复、⊘ 已关闭），与控制台分类分开。追问展开后有独立输入区、模式占位和“收起追问”，成功提交后自动收起。编号统一显示 #X-n；桌面鼠标悬停或键盘聚焦会显示标题、状态卡片，手机长按预览。
 
-关联按卡片宽度切换：达到 520px 放在右侧，否则顶部折叠。每项显示类型和标题，工作线不显示内部编号。手机的经理事项在控制台之外；决策待定优先，已答复和已关闭默认不显示输入区；有旧答案的可点“修改答案”，从未答复的关闭决策先“重新打开”。请你做的交付按钮为唯一主操作，只有输入文字才出现次要提交按钮；已交付或已回复后通过“修改回复”再编辑。
+关联按卡片宽度切换：达到 520px 放在右侧，否则顶部折叠。每项显示类型和标题，工作线不显示内部编号。手机的经理事项在控制台之外；已答复和已关闭默认不显示输入区；有旧答案的可点“修改答案”，从未答复的关闭决策先“重新打开”。请你做的交付按钮为唯一主操作，只有输入文字才出现次要提交按钮；已交付或已回复后通过“修改回复”再编辑。
 
 Decision status filters are lightweight text links beneath the issue categories. Questions have a
 labelled composer, mode-specific placeholder and a collapse toggle; successful submission closes it.
 Hover or keyboard-focus an object reference for its title and status. Links show their type and title
 on separate rows; wide cards put them on the right. On phone, Manager items is separate from Console.
-Open decisions come first; answered and closed ones show their result. Edit answer is available
+Answered and closed decisions show their result. Edit answer is available
 when an answer exists; closed decisions can be reopened. For you cards use the delivery action as their only primary button; a secondary submit action
 appears only when a text reply exists. Submitted replies can be edited explicitly.
 
@@ -310,3 +312,20 @@ appears only when a text reply exists. Submitted replies can be edited explicitl
 Closed decisions without an answer offer Reopen on both desktop and phone. Those with a previous
 answer retain Edit answer as well; answered decisions only offer editing. Phone question inputs
 use the same accessible name and placeholder. Related targets use link color and underlining.
+
+### 排序与已答复决策
+
+控制台所有列表默认最新优先（按议题发起时间），可在类别那一行切换为“最早优先”或“待处理优先”（待定决策、待做请你做、已审核待开始建议、未阅报告排在前面，同组内仍按最新）。选择保存在本机，所有经理、所有类别共用；桌面和手机各记各的。
+
+已答复的决策中，问题和答案分开：答案单独一块，写“你的答复”（经理从对话里记下的写“你在对话中的答复”）和时间，内容是选中的选项和答复文字。没选中的选项收在“其他选项 N”里，点开可看。已关闭的决策另有一块“已关闭 · 关闭者”写原因；重新打开的决策照常展开所有选项供作答，上方保留“上次的答复”。桌面和手机相同。
+
+Console lists default to **Newest first** by issue creation time. Switch to **Oldest first** or
+**Needs action first** (open decisions, open For you requests, reviewed suggestions and unread
+reports first, newest within each group) from the category row. The choice is stored per client and
+shared by all managers and categories.
+
+Answered decisions keep the question and the answer apart: **Your answer** is a separate block with
+the time, the chosen option and the text (**Your answer in the conversation** when the manager
+recorded it from chat). Unchosen options are collapsed under **Other options**. Closed decisions add
+a **Closed** block with who closed it and why; a reopened decision shows all options for answering,
+with the **Previous answer** above them. Desktop and phone behave the same.

@@ -414,6 +414,15 @@ export function sampleManagers(
       decision(
         'D-13',
         t('子会话要不要算进后台任务', 'Should child sessions count as background tasks?'),
+        t(
+          '后台任务页要列出回合结束后还在跑的工作。子会话有自己的页面和回报，子代理没有。',
+          'The background tasks page lists work that continues after a turn. Child sessions have their own pages and reports; subagents do not.',
+        ),
+        [
+          t('都算', 'Count both'),
+          t('子会话不算，子代理照算', 'Count subagents only'),
+          t('都不算，只在侧栏标记', 'Count neither; mark them in the sidebar'),
+        ],
       ),
       decision(
         'D-11',
@@ -422,6 +431,21 @@ export function sampleManagers(
       decision('D-12', t('手机端要不要画 mermaid', 'Should mobile render Mermaid?')),
     ]
     const [d15, d16, d17, d13, d11, d12] = main.decisions
+    // 发起时间各不相同，控制台排序看得出先后。
+    for (const [entry, minutes] of [
+      [d17, 30],
+      [d16, 95],
+      [d15, 150],
+      [d13, 420],
+      [d12, 600],
+      [d11, 900],
+    ] as const)
+      if (entry) entry.createdAt = ago(minutes)
+    if (d13?.options[1])
+      d13.options[1].description = t(
+        '子代理随回合结束，留在后台任务里；子会话走会话树。',
+        'Subagents end with the turn and stay in background tasks; child sessions use the session tree.',
+      )
     if (d15) {
       d15.background += t(
         ' 对应事项 I-1、I-2；已完成的手机渲染见 I-8，已答复的任务范围见 D-13。',
@@ -453,7 +477,11 @@ export function sampleManagers(
       d17.checked = { commit: null, at: ago(1440) }
     }
     for (const [entry, text, file] of [
-      [d13, t('不算，子代理照算', 'No; subagents still count'), '23-background-tasks.md'],
+      [
+        d13,
+        t('子会话已有回报，不再重复列出。', 'Child sessions already report back.'),
+        '23-background-tasks.md',
+      ],
       [
         d11,
         t('30 分钟后拒绝并记进运行记录', 'Decline after 30 minutes and record it in run history'),
@@ -462,7 +490,12 @@ export function sampleManagers(
     ] as const)
       if (entry) {
         entry.status = 'answered'
-        entry.answer = { optionId: null, text, by: 'user', at: ago(19) }
+        entry.answer = {
+          optionId: entry === d13 ? 'b' : null,
+          text,
+          by: entry === d13 ? 'user' : 'user-conversation',
+          at: ago(entry === d13 ? 19 : 300),
+        }
         entry.landed = [{ kind: 'file', target: file, label: null }]
       }
     if (d12) {

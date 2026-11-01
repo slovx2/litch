@@ -28,11 +28,25 @@ const say = (prompt: string) =>
 
 export const SCENES: Scene[] = [
   {
+    id: 'managers',
+    group: '经理',
+    name: '经理目录',
+    note: '首页经理入口进入：按设备分组，先进行中、后已结束',
+    steps: [nav('Managers', undefined)],
+  },
+  {
+    id: 'manager-overview',
+    group: '经理',
+    name: '经理概览',
+    note: '现状、几个数、请你做、受阻事项与最近动态',
+    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' })],
+  },
+  {
     id: 'manager-console',
     group: '经理',
     name: '控制台与议题',
-    note: '四类议题、原帖操作、讨论与双向关联，复用正式页面',
-    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' })],
+    note: '四类议题、排序、已答决策分块、原帖操作、讨论与双向关联，复用正式页面',
+    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1', tab: 'console' })],
   },
   {
     id: 'cjk-emphasis',

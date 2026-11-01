@@ -689,10 +689,24 @@ try {
   )
   assert.ok(
     await read(
-      `(()=>{const card=document.querySelector('[data-decision="D-13"]');const answer=card.querySelector('p:has(time)');const edit=card.querySelector('[data-act="manager-edit-answer"]');return !!answer.querySelector('time[datetime][title]')&&!!card.querySelector('footer time[datetime][title]')&&!!(answer.compareDocumentPosition(edit)&Node.DOCUMENT_POSITION_FOLLOWING)})()`,
+      `(()=>{const card=document.querySelector('[data-decision="D-13"]');const answer=card.querySelector('.mg-answer');const edit=card.querySelector('[data-act="manager-edit-answer"]');return !!answer.querySelector('time[datetime][title]')&&!!card.querySelector('footer time[datetime][title]')&&!!(answer.compareDocumentPosition(edit)&Node.DOCUMENT_POSITION_FOLLOWING)})()`,
     ),
   )
   await shot('answered-landed-metadata')
+  // 第四轮：已答决策的答复块、收起的其他选项与排序，三皮肤加窄窗口。
+  for (const width of [1600, 1000])
+    for (const skin of ['standard', 'human', 'retro']) {
+      await size(width)
+      await read(`window.__litchLook.set({skin:${JSON.stringify(skin)},lang:'zh-CN'})`)
+      await wait('[data-decision="D-13"] .mg-answer')
+      await read(
+        `document.querySelector('[data-decision="D-13"] details[data-other-options]').open=${width === 1000}`,
+      )
+      await read(`document.querySelector('[data-decision="D-13"]').scrollIntoView({block:'start'})`)
+      await shot(`answered-split-${skin}-${width}`)
+    }
+  await read("window.__litchLook.set({skin:'standard'})")
+  await size(1600)
   if (!(await read(`!!document.querySelector(${JSON.stringify(question)})`)))
     await click(questionTab)
   await fill(question, '保留的追问草稿')

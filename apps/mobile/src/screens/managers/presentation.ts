@@ -1,5 +1,15 @@
-// 手机议题的排序、分类计数与正文层级共用纯函数，保持报告未读独立于待处理。
-import type { Manager, ManagerDecision } from '../../../../../packages/protocol/src/manager.mjs'
+// 手机议题的排序、分类计数与正文层级共用纯函数，保持报告未读独立于待处理；排序规则在核心，与桌面一致。
+import {
+  type ManagerIssueOrder,
+  reviewedSuggestion,
+  type SuggestionView,
+  sortManagerIssues,
+} from '@litch/core'
+import type {
+  Manager,
+  ManagerBoard,
+  ManagerDecision,
+} from '../../../../../packages/protocol/src/manager.mjs'
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
 import { markdownStyleOf } from '../../detail/markdownStyle'
 import type { Theme } from '../../ui/theme'
@@ -20,18 +30,51 @@ export function issueCounts(manager: Manager | undefined) {
     report: manager?.pendingReports ?? 0,
   }
 }
+/** 议题是否需要处理：待定决策、待做请你做、未阅报告、经理已审核待开始的建议。 */
+export function issuePending(
+  post: ManagerPost,
+  board: Pick<ManagerBoard, 'decisions' | 'requests'>,
+  suggestions: readonly SuggestionView[],
+): boolean {
+  if (post.kind === 'decision')
+    return board.decisions.some((d) => d.id === post.id && d.status === 'open')
+  if (post.kind === 'request')
+    return (board.requests ?? []).some((r) => r.id === post.id && r.status === 'open')
+  if (post.kind === 'report') return Boolean(post.unread)
+  const row = suggestions.find((s) => s.proposal.id === post.proposalId)
+  return row ? reviewedSuggestion(row) : false
+}
+/** 按用户选的排序排列议题；时间取发起时间（与桌面同一个纯函数）。 */
 export function orderedIssues(
   posts: readonly ManagerPost[],
-  decisions: readonly ManagerDecision[],
+  board: Pick<ManagerBoard, 'decisions' | 'requests'>,
+  order: ManagerIssueOrder,
+  suggestions: readonly SuggestionView[] = [],
 ) {
-  const order = (id: string) => {
-    const status = decisions.find((d) => d.id === id)?.status
-    return status === 'open' ? 0 : status === 'answered' ? 1 : 2
-  }
-  return [...posts].sort((a, b) =>
-    a.kind === 'decision' && b.kind === 'decision' ? order(a.id) - order(b.id) : 0,
-  )
+  return sortManagerIssues(posts, order, (post) => ({
+    at: post.createdAt,
+    pending: issuePending(post, board, suggestions),
+  }))
 }
+/** 列表行里只放一行纯文字：取第一行非空内容，去掉常见 Markdown 记号。 */
+export function plainLine(text: string): string {
+  const line = text.split('\n').find((l) => l.trim()) ?? ''
+  return line
+    .replace(/^\s*(#{1,6}\s+|[-*+]\s+|\d+\.\s+|>\s*)/, '')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/(\*\*|__|\*|_|~~|`)/g, '')
+    .trim()
+}
+
+/** 收起的长动态只渲染前几行源文字；切在代码块中间时补上结束标记。 */
+export function collapsedMarkdown(text: string, lines: number): string | null {
+  const all = text.split('\n')
+  if (all.length <= lines) return null
+  const head = all.slice(0, lines)
+  const fences = head.filter((l) => l.trimStart().startsWith('```')).length
+  return `${head.join('\n')}${fences % 2 ? '\n```' : ''}`
+}
+
 export function issueMarkdownStyle(theme: Theme) {
   const base = markdownStyleOf(theme)
   const max = theme.font.size.title - 1

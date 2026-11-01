@@ -382,6 +382,15 @@ export {
   projectManagerBoard,
   projectManagerDecision,
 } from './projection/manager.mjs'
+export {
+  DEFAULT_MANAGER_ISSUE_ORDER,
+  type DecisionAnswerParts,
+  decisionAnswerParts,
+  MANAGER_ISSUE_ORDERS,
+  type ManagerIssueOrder,
+  parseManagerIssueOrder,
+  sortManagerIssues,
+} from './projection/manager-issues.mjs'
 export { type CopyMessage, messageCopyText } from './projection/message-copy.mjs'
 export { localUserMessage, MAX_EXTRA_TEXT, MAX_IMAGES } from './projection/outgoing.mjs'
 export {

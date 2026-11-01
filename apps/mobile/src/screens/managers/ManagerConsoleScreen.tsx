@@ -1,24 +1,16 @@
-// 手机复用核心经理契约；正文沿用对话 Markdown，提案沿用正式操作组件。
+// 手机经理页：概览、控制台、经理事项（只读）三格；复用核心经理契约，正文沿用对话 Markdown，提案沿用正式操作组件。
 import {
   type DeviceView,
   keys,
+  MANAGER_ISSUE_ORDERS,
   type ManagerBoardTopicView,
   type ManagerView,
+  managerAttentionCount,
   type SuggestionView,
 } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { useContext, useEffect, useRef, useState } from 'react'
-import {
-  Alert,
-  Linking,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native'
-import { EnrichedMarkdownText } from 'react-native-enriched-markdown'
+import { useEffect, useRef, useState } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
 import { stamp } from '../../../../../packages/ui/src/app/format.ts'
 import { ProposalActs } from '../../detail/proposals/ProposalActs'
@@ -27,59 +19,19 @@ import { jsonFile } from '../../shell/json-file'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Empty } from '../../ui/kit/controls'
+import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
+import { DecisionAnswer, DecisionOutcome } from './DecisionOutcome'
+import { Markdown } from './IssueMarkdown'
 import { IssueContext, IssueRelations } from './IssueRelations'
-import { decisionActions, issueCounts, issueMarkdownStyle, orderedIssues } from './presentation'
-import { issueLinks } from './relations'
+import { setIssueOrder, useIssueOrder } from './issue-order'
+import { ManagerOverview } from './ManagerOverview'
+import { decisionActions, issueCounts, orderedIssues } from './presentation'
 
 const replyFile = jsonFile<Record<string, string>>('manager-replies.json')
 const draftFile = jsonFile<Record<string, string>>('manager-questions.json')
 type Props = NativeStackScreenProps<RootStackParamList, 'ManagerConsole'>
-function Markdown({ text }: { text: string }) {
-  const theme = useTheme()
-  const t = useT()
-  const context = useContext(IssueContext)
-  const ids = new Set([
-    ...(context?.board.posts ?? []).map((p) => p.id),
-    ...(context?.board.items ?? []).map((i) => i.id),
-  ])
-  return (
-    <EnrichedMarkdownText
-      markdown={issueLinks(text, ids)}
-      flavor="github"
-      markdownStyle={issueMarkdownStyle(theme)}
-      onLinkLongPress={({ url }) => {
-        if (!url.startsWith('litch-issue:')) return
-        const id = url.slice('litch-issue:'.length)
-        const item = context?.board.items.find((i) => i.id === id)
-        const post = context?.board.posts?.find((p) => p.id === id)
-        const decision = context?.board.decisions.find((d) => d.id === id)
-        const request = context?.board.requests?.find((r) => r.id === id)
-        const status = item
-          ? t(`manager.status.${item.status}`)
-          : request
-            ? t(`manager.request.${request.status}`)
-            : decision
-              ? t(
-                  decision.status === 'open'
-                    ? 'manager.open'
-                    : decision.status === 'answered'
-                      ? 'manager.answered'
-                      : 'manager.closed',
-                )
-              : post?.kind === 'report'
-                ? t(post.unread ? 'manager.reportUnread' : 'manager.reportRead')
-                : ''
-        Alert.alert(`${id} · ${post?.title ?? item?.title ?? ''}`, status)
-      }}
-      onLinkPress={({ url }) => {
-        if (url.startsWith('litch-issue:')) context?.open(url.slice('litch-issue:'.length))
-        else if (/^https?:\/\//.test(url)) void Linking.openURL(url)
-      }}
-    />
-  )
-}
 function Issue({
   manager,
   post,
@@ -317,27 +269,18 @@ function Issue({
           ) : null}
           {decision ? (
             <>
-              {decision.answer ? (
-                <View style={{ gap: 6 }}>
-                  <Text style={{ color: c.ink3 }}>
-                    {t('manager.yourReply')} · {stamp(decision.answer.at, Date.now(), t.lang)}
-                  </Text>
-                  {decision.answer.optionId ? (
-                    <Text style={{ color: c.ink }}>
-                      {decision.options.find((o) => o.id === decision.answer?.optionId)?.label}
-                    </Text>
-                  ) : null}
-                  {decision.answer.text ? <Markdown text={decision.answer.text} /> : null}
-                </View>
-              ) : null}
-              {decision.closed ? <Markdown text={decision.closed.reason} /> : null}
               {decision.status === 'open' || editing ? (
                 <>
+                  {decision.status === 'open' ? <DecisionAnswer decision={decision} /> : null}
                   {decision.options.map((o) => (
                     <View key={o.id} style={{ gap: 6 }}>
                       <Button
                         kind="plain"
-                        label={o.label}
+                        label={
+                          decision.recommend === o.id
+                            ? `${o.label} · ${t('manager.recommend')}`
+                            : o.label
+                        }
                         disabled={locked}
                         onPress={() => void submitDecision(o.id)}
                       />
@@ -373,6 +316,7 @@ function Issue({
                 </>
               ) : (
                 <>
+                  <DecisionOutcome decision={decision} />
                   {decisionButtons?.edit ? (
                     <Button
                       kind="plain"
@@ -505,12 +449,16 @@ function Issue({
     </View>
   )
 }
-export function ManagerConsoleScreen({ route }: Props) {
+type Category = ManagerPost['kind']
+export function ManagerConsoleScreen({ route, navigation }: Props) {
   const { deviceId, managerId } = route.params
   const replica = useReplica()
   const t = useT()
   const { c, radius } = useTheme()
-  const [kind, setKind] = useState<ManagerPost['kind'] | 'item'>('decision')
+  const [tab, setTab] = useState<'overview' | 'console' | 'items'>(route.params.tab ?? 'overview')
+  const [kind, setKind] = useState<Category>('decision')
+  const [ordering, setOrdering] = useState(false)
+  const order = useIssueOrder()
   useEffect(() => replica.openManagerBoard(deviceId, managerId), [replica, deviceId, managerId])
   const manager = useKey<ManagerView>(keys.manager(deviceId, managerId))
   const device = useKey<DeviceView>(keys.device(deviceId))
@@ -521,12 +469,24 @@ export function ManagerConsoleScreen({ route }: Props) {
   const openIssue = (id: string) => {
     setSelected(id)
     scroll.current?.scrollTo({ y: 0, animated: true })
-    setKind(
-      id.startsWith('I-')
-        ? 'item'
-        : (view?.board?.posts?.find((p) => p.id === id)?.kind ?? 'decision'),
-    )
+    if (id.startsWith('I-')) setTab('items')
+    else {
+      setTab('console')
+      setKind(
+        id.startsWith('R-')
+          ? 'request'
+          : (view?.board?.posts?.find((p) => p.id === id)?.kind ?? 'decision'),
+      )
+    }
   }
+  const go = (next: typeof tab, category?: Category) => {
+    setSelected(null)
+    setTab(next)
+    if (category) setKind(category)
+    scroll.current?.scrollTo({ y: 0, animated: false })
+  }
+  const openSession = (sessionId: string, title?: string) =>
+    navigation.navigate('Detail', { deviceId, sessionId, ...(title ? { title } : {}) })
   const kinds = {
     decision: 'manager.decisions',
     suggestion: 'manager.suggestions',
@@ -534,41 +494,64 @@ export function ManagerConsoleScreen({ route }: Props) {
     report: 'manager.reports',
   } as const
   const counts = issueCounts(manager)
+  const tabs = {
+    overview: 'manager.overview',
+    console: 'manager.inbox',
+    items: 'manager.items',
+  } as const
   return (
     <Screen
-      title={t(kind === 'item' ? 'manager.items' : 'manager.inbox')}
+      title={t(tabs[tab])}
       subtitle={manager?.name}
       testID="manager-console"
+      actions={
+        manager
+          ? [
+              {
+                label: t('manager.chat'),
+                testID: 'manager:chat',
+                onPress: () => openSession(manager.threadId, manager.name || undefined),
+              },
+            ]
+          : []
+      }
     >
       <View style={[styles.actions, { borderBottomWidth: 1, borderColor: c.line1 }]}>
-        <Button
-          kind={kind !== 'item' ? 'solid' : 'plain'}
-          label={t('manager.inbox')}
-          onPress={() => {
-            setSelected(null)
-            setKind('decision')
-          }}
-        />
-        <Button
-          kind={kind === 'item' ? 'solid' : 'plain'}
-          label={t('manager.items')}
-          onPress={() => {
-            setSelected(null)
-            setKind('item')
-          }}
-        />
+        {(Object.keys(tabs) as (keyof typeof tabs)[]).map((key) => (
+          <View key={key} style={styles.category}>
+            <Button
+              testID={`manager-tab:${key}`}
+              kind={tab === key ? 'solid' : 'plain'}
+              label={t(tabs[key])}
+              onPress={() => go(key)}
+            />
+            {key === 'console' && manager && managerAttentionCount(manager) > 0 ? (
+              <Text
+                pointerEvents="none"
+                style={[
+                  styles.badge,
+                  {
+                    color: c.wait,
+                    backgroundColor: c.panel,
+                    borderColor: c.wait,
+                    borderRadius: radius.s,
+                  },
+                ]}
+              >
+                {managerAttentionCount(manager)}
+              </Text>
+            ) : null}
+          </View>
+        ))}
       </View>
-      {kind !== 'item' ? (
+      {tab === 'console' ? (
         <View style={styles.actions}>
           {(Object.keys(kinds) as (keyof typeof kinds)[]).map((k) => (
             <View key={k} style={styles.category}>
               <Button
                 kind={kind === k ? 'solid' : 'plain'}
                 label={t(kinds[k])}
-                onPress={() => {
-                  setSelected(null)
-                  setKind(k)
-                }}
+                onPress={() => go('console', k)}
               />
               {counts[k] > 0 ? (
                 <Text
@@ -590,6 +573,16 @@ export function ManagerConsoleScreen({ route }: Props) {
               ) : null}
             </View>
           ))}
+          <Pressable
+            accessibilityRole="button"
+            testID="manager-issue-order"
+            onPress={() => setOrdering(true)}
+            style={styles.order}
+          >
+            <Text style={{ color: c.ink2 }}>
+              {t('manager.order')} · {t(`manager.order.${order}`)} ▾
+            </Text>
+          </Pressable>
         </View>
       ) : null}
       {device?.connection !== 'online' || manager?.status !== 'active' ? (
@@ -606,7 +599,17 @@ export function ManagerConsoleScreen({ route }: Props) {
       <ScrollView ref={scroll}>
         {manager && view?.board ? (
           <IssueContext.Provider value={{ manager, board: view.board, open: openIssue }}>
-            {kind === 'item'
+            {tab === 'overview' ? (
+              <ManagerOverview
+                manager={manager}
+                board={view.board}
+                onConsole={() => go('console')}
+                onItems={() => go('items')}
+                onIssue={openIssue}
+                onLine={openSession}
+              />
+            ) : null}
+            {tab === 'items'
               ? view.board.items
                   .filter((i) => !selected || i.id === selected)
                   .map((item) => (
@@ -622,18 +625,26 @@ export function ManagerConsoleScreen({ route }: Props) {
                     </View>
                   ))
               : null}
-            {orderedIssues(view.board.posts ?? [], view.board.decisions)
-              .filter((p) => p.kind === kind && (!selected || p.id === selected))
-              .map((post) => (
-                <Issue
-                  key={post.id}
-                  manager={manager}
-                  post={post}
-                  board={view.board}
-                  suggestions={suggestions}
-                />
-              ))}
-            {!(kind === 'item'
+            {tab === 'console'
+              ? orderedIssues(
+                  (view.board.posts ?? []).filter(
+                    (p) => p.kind === kind && (!selected || p.id === selected),
+                  ),
+                  view.board,
+                  order,
+                  suggestions,
+                ).map((post) => (
+                  <Issue
+                    key={post.id}
+                    manager={manager}
+                    post={post}
+                    board={view.board}
+                    suggestions={suggestions}
+                  />
+                ))
+              : null}
+            {tab !== 'overview' &&
+            !(tab === 'items'
               ? view.board.items.length
               : (view.board.posts ?? []).some((p) => p.kind === kind)) ? (
               <Text style={{ color: c.ink3, padding: 16 }}>{t('manager.none')}</Text>
@@ -643,6 +654,17 @@ export function ManagerConsoleScreen({ route }: Props) {
           <Empty title={t('manager.loading')} />
         )}
       </ScrollView>
+      <Sheet
+        visible={ordering}
+        title={t('manager.order')}
+        onClose={() => setOrdering(false)}
+        actions={MANAGER_ISSUE_ORDERS.map((key) => ({
+          label: t(`manager.order.${key}`),
+          testID: `manager-issue-order:${key}`,
+          checked: order === key,
+          onPress: () => setIssueOrder(key),
+        }))}
+      />
     </Screen>
   )
 }
@@ -662,6 +684,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   card: { padding: 16, margin: 12, borderWidth: 1, gap: 12 },
+  order: { marginLeft: 'auto', alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 4 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 8 },
   input: { borderWidth: 1, minHeight: 80, padding: 10, textAlignVertical: 'top' },
   discussion: { borderLeftWidth: 2, paddingLeft: 12, gap: 8 },

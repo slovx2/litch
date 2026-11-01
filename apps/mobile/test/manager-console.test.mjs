@@ -3,10 +3,12 @@ import test from 'node:test'
 import { managerAttentionCount } from '../../../packages/core/src/projection/manager.mts'
 import { relationGroups } from '../../../packages/protocol/src/manager-relations.mts'
 import {
+  collapsedMarkdown,
   decisionActions,
   issueCounts,
   issueMarkdownStyle,
   orderedIssues,
+  plainLine,
 } from '../src/screens/managers/presentation.ts'
 import { issueLinks } from '../src/screens/managers/relations.ts'
 import { PALETTES } from '../src/ui/palettes.ts'
@@ -47,20 +49,33 @@ test('D-29：手机使用核心统一口径，报告未读不占待处理', () =
   )
 })
 
-test('手机决策优先未答；类别数只计待处理，报告仅显示未读', () => {
-  const posts = ['D-closed', 'D-done', 'D-open'].map((id) => ({ id, kind: 'decision' }))
-  const decisions = [
-    { id: 'D-closed', status: 'withdrawn' },
-    { id: 'D-done', status: 'answered' },
-    { id: 'D-open', status: 'open' },
+test('手机议题默认最新优先，可切最早、待处理优先；类别数只计待处理，报告仅显示未读', () => {
+  const posts = [
+    { id: 'D-closed', kind: 'decision', createdAt: 3 },
+    { id: 'D-done', kind: 'decision', createdAt: 2 },
+    { id: 'D-open', kind: 'decision', createdAt: 1 },
+    { id: 'R-1', kind: 'request', createdAt: 4 },
+    { id: 'P-1', kind: 'report', createdAt: 0, unread: true },
+    { id: 'S-x', kind: 'suggestion', createdAt: 5, proposalId: 'x' },
   ]
-  assert.deepEqual(
-    orderedIssues(posts, decisions).map((p) => p.id),
-    ['D-open', 'D-done', 'D-closed'],
-  )
+  const board = {
+    decisions: [
+      { id: 'D-closed', status: 'withdrawn' },
+      { id: 'D-done', status: 'answered' },
+      { id: 'D-open', status: 'open' },
+    ],
+    requests: [{ id: 'R-1', status: 'replied' }],
+  }
+  const suggestions = [
+    { proposal: { id: 'x' }, managerId: 'm1', managerReview: { state: 'endorsed' } },
+  ]
+  const ids = (order) => orderedIssues(posts, board, order, suggestions).map((p) => p.id)
+  assert.deepEqual(ids('newest'), ['S-x', 'R-1', 'D-closed', 'D-done', 'D-open', 'P-1'])
+  assert.deepEqual(ids('oldest'), ['P-1', 'D-open', 'D-done', 'D-closed', 'R-1', 'S-x'])
+  assert.deepEqual(ids('pending'), ['S-x', 'D-open', 'P-1', 'R-1', 'D-closed', 'D-done'])
   assert.deepEqual(
     posts.map((p) => p.id),
-    ['D-closed', 'D-done', 'D-open'],
+    ['D-closed', 'D-done', 'D-open', 'R-1', 'P-1', 'S-x'],
   )
   assert.deepEqual(
     issueCounts({
@@ -104,4 +119,12 @@ test('关闭决策无答案时仅可重开，有答案时保留修改与重开�
     edit: false,
     reopen: false,
   })
+})
+
+test('经理目录行只显示一行纯文字；收起的长动态只取前几行并补齐代码块', () => {
+  assert.equal(plainLine('\n**工作线回报**\n\n- 完成'), '工作线回报')
+  assert.equal(plainLine('- 见 [核对记录](https://x) 与 `revision`'), '见 核对记录 与 revision')
+  assert.equal(collapsedMarkdown('a\nb', 5), null)
+  assert.equal(collapsedMarkdown('1\n2\n3\n4\n5\n6', 5), '1\n2\n3\n4\n5')
+  assert.equal(collapsedMarkdown('x\n```\ncode\nmore\nend\n```', 4), 'x\n```\ncode\nmore\n```')
 })

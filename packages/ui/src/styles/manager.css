@@ -984,3 +984,89 @@
 [data-act="report-read"] {
   margin-top: 12px;
 }
+
+/* 类别分段与排序同一行；窄看板时排序换到下一行。 */
+.mg-inbox-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 8px 12px;
+}
+.mg-inbox-bar .mg-inbox-tabs {
+  margin: 0;
+}
+.mg-issue-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12px;
+}
+.mg-issue-order select {
+  min-height: 26px;
+  padding: 2px 6px;
+  color: var(--ink);
+  background: var(--raised);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  font: inherit;
+}
+
+/* 答复、关闭记录与问题分块：浅底加左侧强调线，块头写明是谁的答复与时间。 */
+.mg-answer,
+.mg-closed-note {
+  margin: 12px 0;
+  padding: 10px 12px;
+  background: var(--sunken);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r1);
+}
+.mg-answer[data-answer="previous"] {
+  border-left-color: var(--line-3);
+}
+.mg-closed-note {
+  border-left-color: var(--line-3);
+}
+.mg-answer > header,
+.mg-closed-note > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin-bottom: 6px;
+}
+.mg-option-static {
+  padding: 8px 10px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r1);
+}
+.mg-answer .mg-option-static {
+  padding: 8px 10px;
+  background: var(--raised);
+  border: 1px solid var(--line-2);
+}
+.mg-answer-text {
+  margin-top: 8px;
+}
+.mg-option-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.mg-other-options {
+  margin: 8px 0;
+  color: var(--ink-2);
+}
+.mg-other-options > summary {
+  cursor: pointer;
+  color: var(--ink-3);
+  font-size: 12px;
+  padding-block: 4px;
+}
+.mg-other-options[open] > summary {
+  margin-bottom: 6px;
+}
+.mg-other-options .mg-option-static + .mg-option-static {
+  margin-top: 6px;
+}

@@ -1,6 +1,8 @@
 // 经理冒烟只操作正式界面，模拟核心负责写答案和生成答复回合。
 export interface ManagerSeen {
   linesState: boolean
+  answeredSplit: boolean
+  issueOrder: boolean
   consoleReports: boolean
   issueRelations: boolean
   managerQuestionDrafts: boolean
@@ -254,7 +256,11 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     ),
   )
 
-  ;(await until('按推荐', () => one<HTMLButtonElement>('[data-act="manager-recommend"]'))).click()
+  ;(
+    await until('按推荐', () =>
+      one<HTMLButtonElement>('[data-decision="D-15"] [data-act="manager-recommend"]'),
+    )
+  ).click()
   const draft = Boolean(await until('本地草稿', () => one('.mg-decision[data-draft="true"]')))
   await click('[data-manager-id="m3"] .mg-pick')
   await until('另一位经理', () => one('[data-manager="session"][data-manager-id="m3"]'))
@@ -352,8 +358,51 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     ),
   )
 
+  // 已答复：答复单独一块（选中项与文字），其他选项默认收起；排序默认最新优先，切换后记在本机。
+  await click('.mg-decision-filter button:nth-child(2)')
+  const d13 = await until('已答复的决策', () => one('[data-decision="D-13"]'))
+  const answer = d13.querySelector('.mg-answer[data-answer="current"]')
+  const others = d13.querySelector<HTMLDetailsElement>('details[data-other-options]')
+  const answeredSplit = Boolean(
+    answer?.querySelector('[data-option="b"]') &&
+      answer.textContent?.includes('你的答复') &&
+      answer.textContent.includes('子会话已有回报') &&
+      !answer.textContent.includes('后台任务页要列出') &&
+      others &&
+      !others.open &&
+      others.querySelector('summary')?.textContent?.includes('其他选项 2') &&
+      others.querySelectorAll('[data-option]').length === 2 &&
+      !others.querySelector('[data-option="b"]') &&
+      one('[data-decision="D-11"] .mg-answer')?.textContent?.includes('你在对话中的答复'),
+  )
+  const answeredOrder = () =>
+    [...document.querySelectorAll('.mg-stack > .mg-decision')]
+      .map((card) => card.getAttribute('data-decision'))
+      .join(',')
+  const orderSelect = await until('排序选择', () =>
+    one<HTMLSelectElement>('.mg-inbox-bar [data-act="manager-issue-order"]'),
+  )
+  const newestFirst = orderSelect.value === 'newest' && answeredOrder() === 'D-15,D-13,D-11'
+  const choose = (value: string) => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(
+      orderSelect,
+      value,
+    )
+    orderSelect.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+  choose('oldest')
+  const oldestFirst = Boolean(await until('最早优先', () => answeredOrder() === 'D-11,D-13,D-15'))
+  const orderSaved = localStorage.getItem('litch.managerIssueOrder') === 'oldest'
+  choose('newest')
+  await until('恢复最新优先', () => answeredOrder() === 'D-15,D-13,D-11')
+  const issueOrder = newestFirst && oldestFirst && orderSaved
+
   await click('.mg-decision-filter button:last-child')
   await until('已关闭的决策', () => one('[data-decision="D-12"]'))
+  const closedSplit = Boolean(
+    one('[data-decision="D-12"] .mg-closed-note')?.textContent?.includes('已关闭 · 经理') &&
+      one('[data-decision="D-12"] .mg-closed-note')?.textContent?.includes('feat/mobile-mermaid'),
+  )
   const closedNeedsReopen = !one('[data-decision="D-12"] [data-act="manager-edit-answer"]')
   await click('[data-decision="D-12"] [data-act="manager-reopen"]')
   const reopened = Boolean(
@@ -775,6 +824,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const archivedFallback = Boolean(await until('切回对话默认页', () => one('.new-page')))
   return {
     linesState,
+    answeredSplit: answeredSplit && closedSplit,
+    issueOrder,
     consoleReports,
     issueRelations,
     managerQuestionDrafts,
@@ -835,6 +886,8 @@ export function judgeManager(seen: ManagerSeen): string[] {
   const messages: Record<keyof ManagerSeen, string> = {
     linesState:
       '经理自己只有后台命令、工作线在跑时，经理行仍画成运行中，或没有后台记号、没写明工作线',
+    answeredSplit: '已答复或已关闭的决策没有把答复、关闭记录与问题分块，或其他选项没有默认收起',
+    issueOrder: '控制台没有默认最新优先，或切换排序后顺序与本机记录不对',
     consoleReports: '控制台报告与帖子追问未完成',
     issueRelations: '议题关联与编号预览未完成',
     managerQuestionDrafts: '经理追问草稿与回复记录未完成',

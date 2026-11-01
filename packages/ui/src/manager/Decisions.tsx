@@ -1,4 +1,4 @@
-import type { ManagerBoardPages } from '@litch/core'
+import { type ManagerBoardPages, sortManagerIssues } from '@litch/core'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type {
   ManagerDecisionId,
@@ -14,6 +14,7 @@ import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
+import { DecisionAnswer, DecisionOutcome } from './DecisionOutcome.tsx'
 import {
   type AnswerDrafts,
   answeredDrafts,
@@ -22,6 +23,7 @@ import {
   questionDrafts,
   useAnswerDrafts,
 } from './drafts.ts'
+import { useIssueOrder } from './issue-order.tsx'
 import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
 import { advancePostDrafts, usePostDrafts } from './post-drafts.ts'
 import { Relations } from './Relations.tsx'
@@ -230,7 +232,14 @@ export function Decisions({
       setBusy(false)
     }
   }
-  const grouped = { open: groups.pending, answered: groups.answered, closed: groups.closed }
+  const order = useIssueOrder()
+  const sorted = (rows: ManagerDecisionView[]) =>
+    sortManagerIssues(rows, order, (d) => ({ at: d.createdAt, pending: d.status === 'open' }))
+  const grouped = {
+    open: sorted(groups.pending),
+    answered: sorted(groups.answered),
+    closed: sorted(groups.closed),
+  }
   return (
     <>
       <div hidden={!visible}>
@@ -311,6 +320,7 @@ export function Decisions({
                           </button>
                         </div>
                       ) : null}
+                      {decision.status === 'open' ? <DecisionAnswer decision={decision} /> : null}
                       <fieldset
                         className="mg-options"
                         disabled={disabled || busy}
@@ -413,20 +423,7 @@ export function Decisions({
                     </>
                   ) : (
                     <>
-                      {decision.answer ? (
-                        <p>
-                          {
-                            decision.options.find(
-                              (option) => option.id === decision.answer?.optionId,
-                            )?.label
-                          }{' '}
-                          {decision.answer.text}
-                          <small className="dim">
-                            {' '}
-                            · <Stamp at={decision.answer.at} />
-                          </small>
-                        </p>
-                      ) : null}
+                      <DecisionOutcome decision={decision} />
                       {decision.answer || decision.status === 'answered' ? (
                         <button
                           type="button"
@@ -444,7 +441,6 @@ export function Decisions({
                           {t('manager.editAnswer')}
                         </button>
                       ) : null}
-                      {decision.closed ? <p>{decision.closed.reason}</p> : null}
                       {decision.landed.length ? (
                         <div className="mg-item-meta">
                           <div className="mg-item-meta-row">

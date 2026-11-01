@@ -26,6 +26,7 @@ import { BoardReferencesContext } from './BoardReferences.tsx'
 import { BOARD_GRIP, CHAT_MIN, setBoardLayout, useBoardLayout } from './board-layout.ts'
 import { Decisions } from './Decisions.tsx'
 import { useManagerBoard } from './data.ts'
+import { IssueOrderSelect } from './issue-order.tsx'
 import { ManagerForm } from './ManagerForm.tsx'
 import { RelationsContext } from './Relations.tsx'
 import { Reports } from './Reports.tsx'
@@ -339,23 +340,26 @@ export function ManagerPage({
           </div>
         </div>
         {['inbox', 'decisions', 'requests', 'suggestions', 'reports'].includes(tab) ? (
-          <div className="mg-inbox-tabs seg">
-            {(['decisions', 'suggestions', 'requests', 'reports'] as const).map((kind) => (
-              <button
-                type="button"
-                data-inbox-tab={kind}
-                data-board-tab={kind}
-                key={kind}
-                aria-pressed={activeTab === kind}
-                onClick={() => {
-                  setInboxTab(kind)
-                  setTab(kind)
-                }}
-              >
-                {t(`manager.${kind}`)}
-                {counts[kind] ? <span className="pill wait">{counts[kind]}</span> : null}
-              </button>
-            ))}
+          <div className="mg-inbox-bar">
+            <div className="mg-inbox-tabs seg">
+              {(['decisions', 'suggestions', 'requests', 'reports'] as const).map((kind) => (
+                <button
+                  type="button"
+                  data-inbox-tab={kind}
+                  data-board-tab={kind}
+                  key={kind}
+                  aria-pressed={activeTab === kind}
+                  onClick={() => {
+                    setInboxTab(kind)
+                    setTab(kind)
+                  }}
+                >
+                  {t(`manager.${kind}`)}
+                  {counts[kind] ? <span className="pill wait">{counts[kind]}</span> : null}
+                </button>
+              ))}
+            </div>
+            <IssueOrderSelect />
           </div>
         ) : null}
         {disabled ? (
