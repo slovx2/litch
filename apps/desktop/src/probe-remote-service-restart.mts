@@ -188,9 +188,9 @@ export function judgeServiceRestart(seen: ServiceRestart, svc: string, opening: 
     `打断回合之后的提示不对：${seen.forcedToast}`,
   )
   must(
-    seen.note === '设备服务已重启，回合被打断。发送消息即可继续。',
+    seen.note === '设备服务已重启。符合条件的回合将自动继续；未恢复的回合可手动继续。',
     `被打断的会话末尾那一句不对：${seen.note}`,
   )
-  must(seen.continued && seen.noteGone, '再发一句之后“发消息继续”那一句还在')
+  must(seen.continued && seen.noteGone, '再发一句之后重启提示还在')
   return failed
 }

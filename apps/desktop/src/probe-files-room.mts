@@ -83,16 +83,23 @@ export async function roomSeen(
     if (document.elementFromPoint(at.left + at.width / 2, at.top + at.height / 2) !== field) {
       found.push('输入框被盖住了')
     }
-    // 输入框底下那一排（加图片、模型、强度、权限、发送）：地方再窄也不能互相压住
+    // 窄窗口允许选项条换行；只有横纵方向都相交才算按钮互相压住。
     const boxes = kit
       .all('.dock .cmp-bar :is(.pick-btn, .ibtn, .send)')
       .map((entry) => entry.getBoundingClientRect())
-      .filter((entry) => entry.width > 0)
-      .sort((a, b) => a.left - b.left)
+      .filter((entry) => entry.width > 0 && entry.height > 0)
     if (
-      boxes.some((entry, index) => index > 0 && entry.left < (boxes[index - 1]?.right ?? 0) - 0.5)
+      boxes.some((entry, index) =>
+        boxes
+          .slice(index + 1)
+          .some(
+            (other) =>
+              Math.min(entry.right, other.right) - Math.max(entry.left, other.left) > 0.5 &&
+              Math.min(entry.bottom, other.bottom) - Math.max(entry.top, other.top) > 0.5,
+          ),
+      )
     )
-      found.push('输入框底下那一排互相压住了')
+      found.push(`输入框底下那一排互相压住了：${JSON.stringify(boxes)}`)
     if (card) {
       const frameBox = card.getBoundingClientRect()
       if (frameBox.bottom > box.top + 0.5) found.push('卡片压着输入框')

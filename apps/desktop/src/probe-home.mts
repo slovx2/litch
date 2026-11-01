@@ -101,7 +101,16 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
       if (value) return value
       await sleep(16)
     }
-    throw new Error(`新建对话页：等不到${what}`)
+    throw new Error(
+      `新建对话页：等不到${what}；${JSON.stringify({
+        home: Boolean(home()),
+        draft: area()?.value,
+        sendDisabled: one<HTMLButtonElement>('.cmp .send')?.disabled,
+        hint: text(one('.dock .cmp-hint')),
+        users: users(),
+        selected: text(one('.ss-row:not(.projection-group *).sel')),
+      })}`,
+    )
   }
   const one = <E extends Element = HTMLElement>(selector: string, root: ParentNode = document) =>
     root.querySelector<E>(selector)
@@ -305,7 +314,11 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
   const opening = '从新建对话页开的头一句'
   const fresh = await until('输入框', area)
   write(fresh, opening)
-  await frame()
+  // 合成 input 后等组件接受草稿并允许发送；一帧结束不代表 React 已提交这次状态。
+  await until(
+    '草稿可发送',
+    () => area()?.value === opening && one<HTMLButtonElement>('.cmp .send')?.disabled === false,
+  )
   const sentAt = performance.now()
   press(fresh, 'Enter')
   await until('第一条消息出现', () => users().includes(opening))

@@ -28,6 +28,8 @@ export interface ComposeProbe {
   echoed: boolean | null
   /** 引导：排着的那条点“现在就说”，它从托盘里出来、进了正在进行的回合，没有多出一个回合 */
   steered: boolean
+  /** 插话取样时的回合与托盘，供失败时区分模型边界和页面状态。 */
+  steerDetail: string
   /** 点了停止之后回合有没有停下来、有没有标成已中断 */
   interrupted: boolean
   /**
@@ -380,13 +382,29 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
 
   // ---- 四、引导，然后打断 ----
   const interruptProbeAt = performance.now()
+  const historyBeforeInterrupt = all('.turn').map((turn) => turn.getAttribute('data-search-turn'))
   await say('这一条会被打断')
   await until('回合开始', running)
-  await until('回话开始输出', liveLength)
-  const turnsBefore = all('.turn').length
   const interruptTurnId = await until('正在输出的回合标识', () =>
     one('.running-line')?.closest('.turn')?.getAttribute('data-search-turn'),
   )
+  // 新回合先进入现有显示窗口，较早的历史下一批才补回；不能把暂时少一条的 DOM 当作总数。
+  const expectedTurns = [...historyBeforeInterrupt, interruptTurnId]
+  await until(
+    '新回合与原有历史全部挂载',
+    () =>
+      JSON.stringify(all('.turn').map((turn) => turn.getAttribute('data-search-turn'))) ===
+      JSON.stringify(expectedTurns),
+  )
+  // 上一条回答还可能在逐字显示；只认本回合的流式正文。
+  await until(
+    '本回合的回话开始输出',
+    () =>
+      all('.turn')
+        .find((turn) => turn.getAttribute('data-search-turn') === interruptTurnId)
+        ?.querySelector('.md.live')?.textContent?.length,
+  )
+  const turnsBefore = all('.turn').length
   await say('插进来的话')
   const steerButton = await until('托盘里的“立即插入”', () =>
     one<HTMLButtonElement>('.tray-row .mini.steer'),
@@ -398,6 +416,17 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     !one('.tray-row') &&
     all('.turn').length === turnsBefore &&
     Boolean(all('.turn').at(-1)?.textContent?.includes('插进来的话'))
+  const steerDetail = JSON.stringify({
+    turnsBefore,
+    target: interruptTurnId,
+    turns: all('.turn').map((turn) => ({
+      id: turn.getAttribute('data-search-turn'),
+      users: [...turn.querySelectorAll('.umsg-text')].map((node) => node.textContent),
+      running: Boolean(turn.querySelector('.running-line')),
+      foot: turn.querySelector('.turn-foot')?.textContent,
+    })),
+    tray: all('.tray-row').map((node) => node.textContent),
+  })
   const stop = await until('停止按钮', () => one<HTMLButtonElement>('.send.stop'))
   const interruptClick = {
     ms: performance.now() - interruptProbeAt,
@@ -1250,6 +1279,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     queuedMax,
     echoed,
     steered,
+    steerDetail,
     interrupted,
     steerSettled,
     draftIsolated,
@@ -1306,7 +1336,7 @@ export function judgeCompose(probe: ComposeProbe): string[] {
     failed.push(`排队的消息顺序不对：${probe.order.join('、')}`)
   if (probe.queuedMax !== 3) failed.push(`托盘里最多同时有 ${probe.queuedMax} 条，应该是 3 条`)
   if (probe.echoed === false) failed.push('有回话没有对上发出去的那一句')
-  if (!probe.steered) failed.push('排着的消息没有插进正在进行的回合')
+  if (!probe.steered) failed.push(`排着的消息没有插进正在进行的回合：${probe.steerDetail}`)
   if (!probe.interrupted) failed.push('点了停止，回合没有标成已中断')
   if (!probe.steerSettled) failed.push('插话停止后丢失、重复，或未经确认自动续发')
   if (!probe.draftIsolated) failed.push('草稿串到别的会话里去了')
