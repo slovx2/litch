@@ -28,7 +28,7 @@ export interface PageSeen {
 export async function pageSeen(): Promise<PageSeen> {
   const kit = (window as unknown as { __setKit: SettingsKit }).__setKit
   const { until, seen, one, all, text } = kit
-  await until('侧栏', () => one('.sb-settings') && one('.ss-row'))
+  await until('侧栏', () => one('.sb-settings') && one('.ss-row:not(.projection-group *)'))
   await kit.openSettings()
   const crumb = text(one('.crumb'))
   const sections = all('.set-nav [data-section]').map((entry) => entry.dataset.section ?? '')
@@ -148,7 +148,7 @@ export async function controlsSeen(): Promise<ControlsSeen> {
     choice('density', density)?.click()
     steps.push(`密度 ${density}→${now()}`)
     await until(`密度“${density}”标成选中`, () => pressed('density') === density)
-    rowHeights.push(one('.ss-row')?.offsetHeight ?? 0)
+    rowHeights.push(one('.ss-row:not(.projection-group *)')?.offsetHeight ?? 0)
   }
   const widths: string[] = []
   for (const width of ['compact', 'wide']) {

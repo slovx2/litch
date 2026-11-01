@@ -204,14 +204,19 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
       ),
     )
     const line = await wait('侧栏经理的工作线', () =>
-      all('[data-session]', row()).find((entry) => text(entry).includes(title)),
+      all('[data-session]:not(.projection-group *)', row()).find((entry) =>
+        text(entry).includes(title),
+      ),
     )
     state.lineId = line.dataset.session ?? ''
     assert(state.lineId, '侧栏工作线没有会话标识')
     const shown = text(card)
     await click('[data-sidebar-mode="chat"]')
     await wait('普通对话侧栏', () => !one('.mg-sidebar-group'))
-    assert(!one(`.sb-scroll [data-session="${CSS.escape(state.lineId)}"]`), '工作线漏入普通对话')
+    assert(
+      !one(`.sb-scroll [data-session="${CSS.escape(state.lineId)}"]:not(.projection-group *)`),
+      '工作线漏入普通对话',
+    )
     assert(!text(one('.sb-scroll')).includes(`${harness} 真实界面经理`), '经理漏入普通对话')
     await click('[data-sidebar-mode="manager"]')
     await click(`.mg-sidebar-manager[data-manager-id="${CSS.escape(state.managerId)}"] .mg-pick`)

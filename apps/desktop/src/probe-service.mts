@@ -144,16 +144,16 @@ export async function mockServiceProbe(): Promise<MockServiceProbe> {
   // 本机上一个闲着的 DeepSeek Harness 会话：后面的话都在它里面说
   const local = () => one('.dev-group') as HTMLElement
   const engaged = (entry: Element) => Boolean(one('.st.run, .st.wait, .pill.wait', entry))
-  await until('侧栏里的会话', () => all('.ss-row', local()).length >= 4)
-  const engagedBefore = all('.ss-row', local()).filter(engaged).length
-  const mine = all('.ss-row', local()).find(
+  await until('侧栏里的会话', () => all('.ss-row:not(.projection-group *)', local()).length >= 4)
+  const engagedBefore = all('.ss-row:not(.projection-group *)', local()).filter(engaged).length
+  const mine = all('.ss-row:not(.projection-group *)', local()).find(
     (entry) =>
       text(one('.chip', entry)) === 'DS' && !entry.classList.contains('down') && !engaged(entry),
   )
   if (!mine) throw new Error('本机上没有闲着的 DeepSeek Harness 会话')
   const title = text(one('.title', mine))
   const openSession = async () => {
-    all('.ss-row', local())
+    all('.ss-row:not(.projection-group *)', local())
       .find((entry) => text(one('.title', entry)) === title)
       ?.click()
     await until('打开这个会话', () => text(one('.crumb b')) === title)

@@ -29,7 +29,9 @@ export async function serviceGrow(aliases: ServiceAliases, opening: string): Pro
   const kit = (window as unknown as { __termKit: TerminalKit }).__termKit
   const { until, one, all, text } = kit
   const group = (name: string) =>
-    all('.dev-group').find((element) => text(one('.dev-row .name', element)) === name)
+    all('.dev-group').find(
+      (element) => text(one('.dev-row:not(.projection-group *) .name', element)) === name,
+    )
   const item = (name: string) =>
     all('.devp-item').find((element) => text(one('.devp-name', element)) === name)
   const online = (name: string) => {
@@ -96,7 +98,12 @@ export async function serviceGrow(aliases: ServiceAliases, opening: string): Pro
       '它名下列出设备服务上的会话',
       () => {
         const element = group(aliases.grow)
-        return element && all('.ss-row', element).some((row) => text(row).includes(opening))
+        return (
+          element &&
+          all('.ss-row:not(.projection-group *)', element).some((row) =>
+            text(row).includes(opening),
+          )
+        )
       },
       60_000,
     ).catch(() => null),
@@ -162,7 +169,9 @@ export async function serviceFailures(aliases: ServiceAliases): Promise<ServiceF
   const kit = (window as unknown as { __termKit: TerminalKit }).__termKit
   const { until, one, all, text, frame } = kit
   const group = (name: string) =>
-    all('.dev-group').find((element) => text(one('.dev-row .name', element)) === name)
+    all('.dev-group').find(
+      (element) => text(one('.dev-row:not(.projection-group *) .name', element)) === name,
+    )
   const item = (name: string) =>
     all('.devp-item').find((element) => text(one('.devp-name', element)) === name)
   const noPassword = () => !one('input[type="password"]')

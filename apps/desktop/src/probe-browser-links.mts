@@ -34,7 +34,7 @@ function driver(window: BrowserWindow) {
     }
     return false
   }
-  const row = `[...document.querySelectorAll('.ss-row')].find((r) => r.textContent.includes(${JSON.stringify(SESSION_TITLE)}))`
+  const row = `[...document.querySelectorAll('.ss-row:not(.projection-group *)')].find((r) => r.textContent.includes(${JSON.stringify(SESSION_TITLE)}))`
   return {
     page,
     until,

@@ -94,10 +94,10 @@ export function installSidebarKit(): void {
   // 设备那一组还没画出来就是一条都没有，不抛错：这个是拿来等的（页面刚起来、核心刚重启的那一刻）
   const titles: SidebarKit['titles'] = (deviceId) => {
     const group = one(`.dev-group[data-device="${deviceId}"]`)
-    return group ? all('.ss-row .title', group).map(text) : []
+    return group ? all('.ss-row:not(.projection-group *) .title', group).map(text) : []
   }
   const row: SidebarKit['row'] = (title) =>
-    all('.ss-row').find((entry) => text(one('.title', entry)) === title)
+    all('.ss-row:not(.projection-group *)').find((entry) => text(one('.title', entry)) === title)
   const open: SidebarKit['open'] = async (title) => {
     ;(await until(`侧栏里的“${title}”`, () => row(title))).click()
     await until(`“${title}”的内容`, () => text(one('.crumb b')) === title && one('.turn'))

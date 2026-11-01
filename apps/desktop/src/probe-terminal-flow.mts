@@ -68,12 +68,14 @@ export async function mockFlow(): Promise<MockFlow> {
   // 换到别的项目的会话：面板里换成那个项目的一组
   const group = () => kit.panel()?.dataset.group ?? ''
   const home = group()
-  const homeTitle = text(one('.ss-row[aria-current="true"] .title'))
+  const homeTitle = text(one('.ss-row:not(.projection-group *)[aria-current="true"] .title'))
   /** 侧栏里原来选着的那一行（行可能重画过，按标题现找） */
-  const homeRow = () => all('.ss-row').find((row) => text(one('.title', row)) === homeTitle) ?? null
+  const homeRow = () =>
+    all('.ss-row:not(.projection-group *)').find((row) => text(one('.title', row)) === homeTitle) ??
+    null
   let otherGroupEmpty = false
   let keptAcrossSession = false
-  for (const row of all('.ss-row')) {
+  for (const row of all('.ss-row:not(.projection-group *)')) {
     if (row === homeRow()) continue
     row.click()
     // 这一行选中了，面板也就跟着换了组（同一次重画里的事）。会话的摘要晚到一拍的话面板会先收着，再等它出来

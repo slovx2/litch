@@ -46,7 +46,7 @@ export interface RealTree {
 export async function realTree(session: string, outside: string): Promise<RealTree> {
   const kit = (window as unknown as { __filesKit: FilesKit }).__filesKit
   const { until, one, all, text, frame } = kit
-  await until('侧栏里有会话', () => one('.ss-row'), 60_000)
+  await until('侧栏里有会话', () => one('.ss-row:not(.projection-group *)'), 60_000)
   await kit.openSession(session)
   if (!kit.sideOpen()) {
     kit.toggle()

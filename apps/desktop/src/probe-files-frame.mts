@@ -200,7 +200,7 @@ export interface ReloadSeen {
 export async function reloadSeen(session: string): Promise<ReloadSeen> {
   const kit = (window as unknown as { __filesKit: FilesKit }).__filesKit
   const { until, one } = kit
-  await until('侧栏里有会话', () => one('.ss-row'), 40_000)
+  await until('侧栏里有会话', () => one('.ss-row:not(.projection-group *)'), 40_000)
   // 面板是用到时才装载的那一块：上次开着的话，启动之后它自己会出来
   const openAtStart = await kit.seen(() => kit.sideOpen(), 5000)
   const widthAtStart = kit.side()?.offsetWidth ?? 0

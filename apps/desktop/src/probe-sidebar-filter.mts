@@ -62,7 +62,7 @@ export async function filterSeen(session: string): Promise<FilterSeen> {
     Object.fromEntries(DEVICES.map((deviceId) => [deviceId, read(deviceId)]))
   const rows = () =>
     each((deviceId) =>
-      all('.ss-row', kit.device(deviceId)).map((row) =>
+      all('.ss-row:not(.projection-group *)', kit.device(deviceId)).map((row) =>
         [
           text(one('.title', row)),
           text(one('.chip', row)),
@@ -88,7 +88,10 @@ export async function filterSeen(session: string): Promise<FilterSeen> {
     document.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, bubbles: true }),
     )
-    await until('新建对话页', () => one('.new-hero') && !one('.ss-row.sel'))
+    await until(
+      '新建对话页',
+      () => one('.new-hero') && !one('.ss-row:not(.projection-group *).sel'),
+    )
     await kit.frame()
   }
   const openChoices = async () => {
@@ -274,7 +277,7 @@ export async function filterKept(): Promise<FilterKept> {
   const line = bar ? `${bar.dataset.harness}｜${text(one('.ell', bar))}` : ''
   await until('侧栏里的会话', () => kit.titles('local').length >= 3)
   await kit.frame()
-  const rows = all('.ss-row', kit.device('local')).map((row) =>
+  const rows = all('.ss-row:not(.projection-group *)', kit.device('local')).map((row) =>
     [text(one('.title', row)), text(one('.chip', row)), one('.pill.wait', row) ? '等人' : ''].join(
       '｜',
     ),

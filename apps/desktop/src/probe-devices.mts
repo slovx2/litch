@@ -153,14 +153,14 @@ export async function devicesProbe(): Promise<DevicesProbe> {
   const [running = 0, waiting = 0] = counts().split('/').map(Number)
   mark()
   // 挑一个闲着的会话：不在跑、没在等人
-  const idle = all('.ss-row', build()).find(
+  const idle = all('.ss-row:not(.projection-group *)', build()).find(
     (entry) =>
       !entry.classList.contains('down') && !one('.st.run, .st.wait, .st.err, .pill.wait', entry),
   )
   if (!idle) throw new Error('build 上没有闲着的会话')
   const title = text(one('.title', idle))
   const open = async () => {
-    all('.ss-row', build())
+    all('.ss-row:not(.projection-group *)', build())
       .find((entry) => text(one('.title', entry)) === title)
       ?.click()
     await until('打开这个会话', () => text(one('.crumb b')) === title)

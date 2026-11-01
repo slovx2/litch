@@ -55,7 +55,7 @@ export async function enginesSkill(name: string, words: string): Promise<SkillSe
       bubble: '',
       foot: '',
       answer: '',
-      rowTitle: text(one('.ss-row.sel .title')),
+      rowTitle: text(one('.ss-row:not(.projection-group *).sel .title')),
     }
   }
   target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
@@ -74,7 +74,7 @@ export async function enginesSkill(name: string, words: string): Promise<SkillSe
     bubble: text(kit.sub(bubble, '.umsg-text')),
     foot: kit.foot(),
     answer: kit.lastAnswer(),
-    rowTitle: text(one('.ss-row.sel .title')),
+    rowTitle: text(one('.ss-row:not(.projection-group *).sel .title')),
   }
 }
 
@@ -90,6 +90,10 @@ export interface InterruptSeen {
   errorBox: string
   /** 停下之后回答里最后一段的序号；再过一秒半是不是还是它（没有接着长） */
   endedAt: number
+  afterWait: number
+  renderedAtStop: number
+  revealingAtStop: boolean
+  settleMs: number
   still: boolean
   /** 停下之后输入框在、能写，发送按钮不再是停止 */
   ready: boolean
@@ -119,9 +123,18 @@ export async function enginesInterrupt(slow: string, next: string): Promise<Inte
   const stopped = await files.seen(() => !kit.running(), 20_000)
   const stopMs = stopped ? Math.round(performance.now() - clicked) : null
   const foot = kit.foot()
+  const renderedAtStop = piece()
+  const revealing = () => Boolean(kit.sub(kit.turns().at(-1), '.agent-message > .md.live'))
+  const revealingAtStop = revealing()
+  const settling = performance.now()
+  // 回合状态先结束，useSmoothText 还可能在显示已收到的尾部；等光标消失再守住不增长。
+  // 保留停止耗时、最多多五段和再等一秒半不变的断言；持续流式输出会在这里超时。
+  await until('停止后已收到的回答显示完', () => !revealing(), 5000)
+  const settleMs = Math.round(performance.now() - settling)
   const endedAt = piece()
   await sleep(1500)
-  const still = piece() === endedAt
+  const afterWait = piece()
+  const still = afterWait === endedAt
   const errorBox = files.text(kit.sub(kit.turns().at(-1), '.errbox'))
   const input = kit.area()
   const ready = Boolean(input) && input?.disabled === false && !stop()
@@ -136,6 +149,10 @@ export async function enginesInterrupt(slow: string, next: string): Promise<Inte
     foot,
     errorBox,
     endedAt,
+    afterWait,
+    renderedAtStop,
+    revealingAtStop,
+    settleMs,
     still,
     ready,
     next: { foot: kit.foot(), answer: kit.lastAnswer() },
@@ -159,7 +176,10 @@ export async function enginesOpen(title: string, has?: string): Promise<number> 
   const { one, all, text, until } = files
   // 收在“展示更多”后面的也算
   for (const more of all('.ss-more .more')) more.click()
-  const rows = () => all('.ss-row').filter((row) => text(one('.title', row)).includes(title))
+  const rows = () =>
+    all('.ss-row:not(.projection-group *)').filter((row) =>
+      text(one('.title', row)).includes(title),
+    )
   await until(`侧栏里的“${title}”`, () => rows().length > 0, 40_000)
   /** 等内容读完：先画手上有的，读到了再换，所以等它连着一秒不再变 */
   const loaded = async () => {

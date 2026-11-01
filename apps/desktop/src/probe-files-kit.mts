@@ -188,7 +188,10 @@ export function installFilesKit(): boolean {
     note(`点会话：${title}`)
     const row = await until(
       `侧栏里的“${title}”`,
-      () => all('.ss-row').find((element) => element.textContent?.includes(title)),
+      () =>
+        all('.ss-row:not(.projection-group *)').find((element) =>
+          element.textContent?.includes(title),
+        ),
       40_000,
     )
     row.click()

@@ -83,7 +83,7 @@ export async function tallySeen(): Promise<TallySeen> {
     more.click()
     const pop = await until(`${what}的菜单`, () => one('.row-more .pick-pop', line))
     await frame()
-    const buttons = all(':scope > .row-add, :scope > .row-more', line)
+    const buttons = all(':scope > .row-add:not(.projection-group *), :scope > .row-more', line)
     const tally = one('.tally', line) as HTMLElement
     clearance.push(
       Math.round(
@@ -98,7 +98,8 @@ export async function tallySeen(): Promise<TallySeen> {
   await withMenu(litch(), '项目')
 
   // ---- 三、六套皮肤：汇总不把行撑高、不溢出，名字还在，小标看得清 ----
-  const plain = () => one('.ws-row', kit.workspaceLine('local', 'docs-site')) as HTMLElement
+  const plain = () =>
+    one('.ws-row:not(.projection-group *)', kit.workspaceLine('local', 'docs-site')) as HTMLElement
   const look = (where: string, line: Element, level: HTMLElement) => {
     const button = one('[aria-expanded]', line) as HTMLElement
     const pill = one('.tally .pill.wait', line) as HTMLElement
@@ -127,7 +128,7 @@ export async function tallySeen(): Promise<TallySeen> {
   const device = read(localLine)
   const deviceCard = await fact(localLine, '收起的设备')
   await withMenu(localLine, '设备')
-  const level = one('.dev-row', kit.deviceLine('build')) as HTMLElement
+  const level = one('.dev-row:not(.projection-group *)', kit.deviceLine('build')) as HTMLElement
   skins.push(...(await kit.eachSkin((where) => look(`设备 ${where}`, localLine, level))))
   await kit.fold(localLine, true)
 

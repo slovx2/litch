@@ -197,7 +197,7 @@ void app.whenReady().then(async () => {
     })
     browser.host.show(elsewhere.id)
     const rowOf =
-      "[...document.querySelectorAll('.ss-row')].find((r) => r.textContent.includes('设备进程的转发开销基准'))"
+      "[...document.querySelectorAll('.ss-row:not(.projection-group *)')].find((r) => r.textContent.includes('设备进程的转发开销基准'))"
     check('show 别的会话：侧栏那一行出记号', await until(`${rowOf}?.querySelector('.web-mark')`))
     check(
       'show 别的会话：出提示',

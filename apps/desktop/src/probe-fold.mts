@@ -54,7 +54,7 @@ export async function foldProbe(): Promise<FoldProbe> {
 
   const title = '发版前的检查清单'
   const row = await until(`侧栏里的“${title}”`, () =>
-    all('.ss-row').find((entry) => text(entry).includes(title)),
+    all('.ss-row:not(.projection-group *)').find((entry) => text(entry).includes(title)),
   )
   row.click()
   await until('会话的内容', () => text(one('.crumb')).includes(title) && area())

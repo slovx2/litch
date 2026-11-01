@@ -155,22 +155,25 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
     await until(`“${kind}”换成“${title}”`, () => shown(kind) === title)
     await frame()
   }
-  const rowOf = (title: string) => all('.ss-row').find((row) => text(row).includes(title))
+  const rowOf = (title: string) =>
+    all('.ss-row:not(.projection-group *)').find((row) => text(row).includes(title))
   /** 侧栏里一行会话在哪：“设备/项目”。不属于任何项目的那一组，名字就是它上面那个小标题 */
   const placeOf = (row: Element | undefined) => {
     const group = row?.closest('[data-group]')
-    const device = text(one('.dev-row .name', row?.closest('.dev-group') ?? document))
-    return `${device}/${text(one('.ws-row .name, .sec-label', group ?? document))}`
+    const device = text(
+      one('.dev-row:not(.projection-group *) .name', row?.closest('.dev-group') ?? document),
+    )
+    return `${device}/${text(one('.ws-row:not(.projection-group *) .name, .sec-label', group ?? document))}`
   }
 
   // ---- 一、启动落在新建对话页 ----
-  await until('侧栏里的会话', () => one('.ss-row'))
+  await until('侧栏里的会话', () => one('.ss-row:not(.projection-group *)'))
   await until('新建对话页的提示语和输入框', () => home() && area())
   // 等一会儿再看：要是还会自动选中哪个会话，这时也该选上了
   await sleep(600)
   // 只读那句提示语，标题下的“配置助手”按钮不算
   const hero = text(one('.new-hero h1'))
-  const nothingPicked = !one('.ss-row.sel') && !one('.turn')
+  const nothingPicked = !one('.ss-row:not(.projection-group *).sel') && !one('.turn')
   const entryCurrent = one('.sb-link.new')?.getAttribute('aria-current') === 'page'
   const title = text(one('.crumb b'))
   const focused = document.activeElement === area()
@@ -207,7 +210,9 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
     await choose('workspace', 'docs-site')
     const titleWorkspace = text(one('.crumb span.ell'))
     const addLit = Boolean(
-      all('.row-add.on').find((button) => text(button.parentElement).includes('docs-site')),
+      all('.row-add:not(.projection-group *).on').find((button) =>
+        text(button.parentElement).includes('docs-site'),
+      ),
     )
     const modelsBefore = (await listed('model')).join('|')
     await choose('harness', 'Pi')
@@ -279,7 +284,10 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
     failed = {
       hint: failure,
       textBack: area()?.value === refused,
-      stayed: Boolean(home()) && !one('.ss-row.sel') && place() === 'build-01/infra',
+      stayed:
+        Boolean(home()) &&
+        !one('.ss-row:not(.projection-group *).sel') &&
+        place() === 'build-01/infra',
     }
   }
 
@@ -302,7 +310,10 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
   press(fresh, 'Enter')
   await until('第一条消息出现', () => users().includes(opening))
   const bubbleMs = performance.now() - sentAt
-  await until('落到新会话里', () => !home() && text(one('.ss-row.sel')).includes(opening))
+  await until(
+    '落到新会话里',
+    () => !home() && text(one('.ss-row:not(.projection-group *).sel')).includes(opening),
+  )
   await until('标题栏换成新会话', () => text(one('.crumb b')).includes(opening), 5000).catch(
     () => null,
   )
@@ -310,7 +321,7 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
   const created: HomeProbe['created'] = {
     bubbleMs,
     crumb,
-    place: placeOf(one('.ss-row.sel') ?? undefined),
+    place: placeOf(one('.ss-row:not(.projection-group *).sel') ?? undefined),
     chip: text(one('.crumb .chip')),
     echoed: null,
   }
@@ -335,8 +346,13 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
   // 模拟核心点本机上另一个项目的；真实入口点设备行上的（不属于任何项目）。都和记住的默认值不一样
   const rowAddWanted = real ? '本机/无项目' : '本机/docs-site'
   const add = real
-    ? one<HTMLButtonElement>('.row-add', one('.dev-row')?.parentElement ?? document)
-    : all('.row-add').find((button) => text(button.parentElement).includes('docs-site'))
+    ? one<HTMLButtonElement>(
+        '.row-add:not(.projection-group *)',
+        one('.dev-row:not(.projection-group *)')?.parentElement ?? document,
+      )
+    : all('.row-add:not(.projection-group *)').find((button) =>
+        text(button.parentElement).includes('docs-site'),
+      )
   add?.click()
   await until('加号带来的去处', () => home() && place() === rowAddWanted, 5000).catch(() => null)
   const rowAdd = home() ? place() : ''
@@ -356,7 +372,9 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
   const shortcutBare = home() ? place() : ''
   // 开着一个会话：去处是它所在的设备和项目。挑一个和默认值不在一处的
   const shortcutFromWanted = real ? '本机/无项目' : '本机/docs-site'
-  const from = real ? one('.ss-row', one('[data-group=""]') ?? document) : rowOf('首页文案')
+  const from = real
+    ? one('.ss-row:not(.projection-group *)', one('[data-group=""]') ?? document)
+    : rowOf('首页文案')
   from?.click()
   await until('点开的会话', () => from?.classList.contains('sel') && !home(), 10_000).catch(
     () => null,
@@ -381,9 +399,11 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
   yes.click()
   await until('删掉的那一行消失', () => !rowOf(opening))
   const deletedHome = Boolean(
-    await until('回到新建对话页', () => home() && !one('.ss-row.sel') && !one('.turn'), 5000).catch(
-      () => null,
-    ),
+    await until(
+      '回到新建对话页',
+      () => home() && !one('.ss-row:not(.projection-group *).sel') && !one('.turn'),
+      5000,
+    ).catch(() => null),
   )
   // 不给后面的验收留东西：输入框是空的
   const left = area()

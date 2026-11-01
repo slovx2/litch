@@ -223,13 +223,15 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   /** 本机侧栏里某个 harness 的会话（按徽标认） */
   const local = () => one('.dev-group') as HTMLElement
   const rowsOf = (badge: string) =>
-    all('.ss-row', local()).filter((entry) => text(one('.chip', entry)) === badge)
+    all('.ss-row:not(.projection-group *)', local()).filter(
+      (entry) => text(one('.chip', entry)) === badge,
+    )
   /** 打开一个会话说一句，等这个回合结束 */
   const sayIn = async (badge: string, words: string) => {
     ;(await until(`${badge} 的会话`, () => rowsOf(badge)[0])).click()
     const area = await until('输入框', () => {
       const found = one<HTMLTextAreaElement>('textarea.cmp-text')
-      return found && one('.ss-row.sel') ? found : null
+      return found && one('.ss-row:not(.projection-group *).sel') ? found : null
     })
     await until('历史加载完成', () => one('.tr-scroll[aria-busy="false"]') && !one('.send.stop'))
     fill(area, words)
@@ -246,7 +248,10 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   const pickerOptions = async () => {
     ;(
       await until('设备行上的新建按钮', () =>
-        one<HTMLButtonElement>('.dev-row ~ .row-add', local()),
+        one<HTMLButtonElement>(
+          '.dev-row:not(.projection-group *) ~ .row-add:not(.projection-group *)',
+          local(),
+        ),
       )
     ).click()
     const button = await until('选 harness 的选择器', () =>
@@ -264,7 +269,7 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   }
 
   // ---- 一、设备页：每台设备都点得开；没有设置接口的、没连上的各是什么样 ----
-  await until('侧栏里的会话', () => all('.ss-row').length >= 10)
+  await until('侧栏里的会话', () => all('.ss-row:not(.projection-group *)').length >= 10)
   one<HTMLButtonElement>('.sb-settings')?.click()
   ;(
     await until('设置页上进设备页的入口', () =>

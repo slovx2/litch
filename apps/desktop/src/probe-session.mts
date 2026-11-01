@@ -182,7 +182,9 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   const running = () => Boolean(one('.running-line'))
   const open = async (title: string) => {
     const row = await until(`侧栏里的“${title}”`, () =>
-      all('.ss-row').find((element) => element.textContent?.includes(title)),
+      all('.ss-row:not(.projection-group *)').find((element) =>
+        element.textContent?.includes(title),
+      ),
     )
     row.click()
     await until(
@@ -262,7 +264,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   // ---- 二、会话行的右键菜单 ----
   const other = real ? '连接层的重连与对账' : '远程设备安装指引'
   const rowOf = (title: string) =>
-    all('.ss-row').find((element) => element.textContent?.includes(title))
+    all('.ss-row:not(.projection-group *)').find((element) => element.textContent?.includes(title))
   const menu = () => one('.row-more .pick-pop.at')
   /** 在某一行上点右键。返回页面有没有拦下系统自己的菜单 */
   const rightClick = (title: string, x?: number, y?: number) => {
@@ -280,6 +282,19 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   }
   /** 从右键菜单里选一项 */
   const pickFromMenu = async (title: string, item: string) => {
+    // 目录行可能在投影组下面、已滚出视口；先像用户一样滚到它，并让焦点回位等滚动完成。
+    // 固定位置的右键菜单遇到任何滚动都会关闭，不能在上一轮归档/恢复的滚动尚未结束时打开。
+    let moved = performance.now()
+    const mark = () => {
+      moved = performance.now()
+    }
+    window.addEventListener('scroll', mark, true)
+    try {
+      rowOf(title)?.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+      await until('归档操作前页面停止滚动', () => performance.now() - moved > 300)
+    } finally {
+      window.removeEventListener('scroll', mark, true)
+    }
     rightClick(title)
     const entry = await until(`右键菜单里的“${item}”`, () =>
       [...(menu()?.querySelectorAll<HTMLElement>('.pick-opt') ?? [])].find((element) =>
@@ -589,7 +604,9 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   const act = (text: string, kind: 'fork' | 'edit') =>
     bubble(text)?.querySelector<HTMLButtonElement>(`.act-${kind}`) ?? null
   const actionToast = () => one('.toast[data-toast="turn-action"]')
-  const mainRows = () => all('.ss-row').filter((element) => element.textContent?.includes(main))
+  // 最近、未读会重复展示同一会话；分叉增加的是目录中的会话，不是所有展示行。
+  const mainRows = () =>
+    all('.ss-row:not(.projection-group *)').filter((element) => element.textContent?.includes(main))
   const earlier = '分叉从这一句开始'
   const later = '这一句不该进新会话'
   await sayAndWait(earlier)
@@ -620,7 +637,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   await until('新会话的内容', () => turns() === turnsBefore - 1 && bubble(earlier))
   await frame()
   fork.opened =
-    Boolean(one('.ss-row.sel')?.textContent?.includes(main)) &&
+    Boolean(one('.ss-row:not(.projection-group *).sel')?.textContent?.includes(main)) &&
     Boolean(one('.crumb')?.textContent?.includes(main))
   fork.cut = Boolean(bubble(earlier)) && !bubble(later)
   fork.told = Boolean(actionToast()?.textContent?.includes('分叉'))

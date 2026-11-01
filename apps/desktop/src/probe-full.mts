@@ -111,7 +111,8 @@ export async function fullProbe(): Promise<FullProbe> {
     }
     return true
   }
-  const rowOf = (title: string) => all('.ss-row').find((row) => text(one('.title', row)) === title)
+  const rowOf = (title: string) =>
+    all('.ss-row:not(.projection-group *)').find((row) => text(one('.title', row)) === title)
   /** 一个徽标说的是哪个 harness：它的提示里写着名字 */
   const harnessOn = (root: Element | null | undefined) =>
     (root ? one('.chip', root) : null)?.title ?? ''
@@ -170,7 +171,10 @@ export async function fullProbe(): Promise<FullProbe> {
   }
 
   // ---- 一、连上了：两个 harness 的会话都在侧栏里，各带各的徽标 ----
-  await until('两个 harness 的会话都列出来', () => all('.ss-row').length >= 5)
+  await until(
+    '两个 harness 的会话都列出来',
+    () => all('.ss-row:not(.projection-group *)').length >= 5,
+  )
   await until('侧栏底部的齿轮', () => one('.sb-settings'))
   await openDetail()
   const harnesses = await until('设备详情里的两个 harness', () => {
@@ -178,7 +182,7 @@ export async function fullProbe(): Promise<FullProbe> {
     return seen.length >= 2 && seen.every((entry) => entry.state === 'ready') ? seen : null
   })
   const [first, second] = harnesses as [HarnessSeen, HarnessSeen]
-  const rows = all('.ss-row').map((row) => ({
+  const rows = all('.ss-row:not(.projection-group *)').map((row) => ({
     title: text(one('.title', row)),
     harness: harnessOn(row),
     badge: text(one('.chip', row)),
@@ -196,7 +200,8 @@ export async function fullProbe(): Promise<FullProbe> {
   const secondEchoed = await converse(second.id, '第二个 harness 的一句', '第二个 harness 的回话')
 
   // ---- 三、新建会话：选第二个 harness，建在它上面 ----
-  const add = () => one<HTMLButtonElement>('.dev-row ~ .row-add')
+  const add = () =>
+    one<HTMLButtonElement>('.dev-row:not(.projection-group *) ~ .row-add:not(.projection-group *)')
   ;(await until('设备行上的新建按钮', add)).click()
   await until('新建会话的页面', () => one('.new-hero'))
   const pickerShown = Boolean(await until('选 harness 的选择器', picker))
@@ -212,10 +217,13 @@ export async function fullProbe(): Promise<FullProbe> {
   const titleHarness = harnessOn(one('.crumb'))
   const opening = '建在第二个上的新会话'
   await say(opening)
-  await until('落到新会话里', () => !one('.new-hero') && one('.ss-row.sel'))
+  await until(
+    '落到新会话里',
+    () => !one('.new-hero') && one('.ss-row:not(.projection-group *).sel'),
+  )
   await until('新会话的回话', () => echoed(second.id, opening))
   const createdEchoed = true
-  const createdOn = harnessOn(one('.ss-row.sel'))
+  const createdOn = harnessOn(one('.ss-row:not(.projection-group *).sel'))
   // 再点一次新建：默认已经是上次用的那个。看完回到刚建的会话
   add()?.click()
   await until('新建会话的页面', () => one('.new-hero') && picker())
@@ -453,7 +461,7 @@ export async function mockFullProbe(): Promise<MockFullProbe> {
   const leftNote = text(one('[data-stranded]', card))
   line.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
   await until('信息卡收起', () => !one('.info-card'))
-  const downRow = all('.ss-row.down', local)
+  const downRow = all('.ss-row:not(.projection-group *).down', local)
   const downRows = downRow.length
   let downRowMenu = ''
   const downLine = downRow[0]?.parentElement
@@ -469,7 +477,12 @@ export async function mockFullProbe(): Promise<MockFullProbe> {
   }
   // ---- 二、新建会话：选 harness ----
   ;(
-    await until('设备行上的新建按钮', () => one<HTMLButtonElement>('.dev-row ~ .row-add', local))
+    await until('设备行上的新建按钮', () =>
+      one<HTMLButtonElement>(
+        '.dev-row:not(.projection-group *) ~ .row-add:not(.projection-group *)',
+        local,
+      ),
+    )
   ).click()
   await until('新建会话的页面', () => one('.new-hero') && picker() && model())
   const defaultHarness = text(picker())
@@ -494,9 +507,12 @@ export async function mockFullProbe(): Promise<MockFullProbe> {
 
   // ---- 三、建出来，并让它的 harness 掉线再回来 ----
   await say('掉线试试看')
-  const mine = await until('落到新会话里', () => !one('.new-hero') && one('.ss-row.sel'))
+  const mine = await until(
+    '落到新会话里',
+    () => !one('.new-hero') && one('.ss-row:not(.projection-group *).sel'),
+  )
   const createdBadge = text(one('.chip', mine))
-  const selected = () => one('.ss-row.sel')
+  const selected = () => one('.ss-row:not(.projection-group *).sel')
   await until('这一行显示成用不了', () => selected()?.classList.contains('down'))
   const dropSeen = Boolean(one('.chip.off', selected() as HTMLElement))
   const dropHint = text(await until('输入区说了发不了', () => one('.dock .cmp-hint.err')))

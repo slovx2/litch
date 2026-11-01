@@ -69,7 +69,9 @@ export async function serviceConnect(
   }
   /** 侧栏里的一台设备 */
   const group = (name: string) =>
-    all('.dev-group').find((element) => text(one('.dev-row .name', element)) === name)
+    all('.dev-group').find(
+      (element) => text(one('.dev-row:not(.projection-group *) .name', element)) === name,
+    )
   /** 设备列表里的一台设备 */
   const item = (name: string) =>
     all('.devp-item').find((element) => text(one('.devp-name', element)) === name)
@@ -133,7 +135,11 @@ export async function serviceConnect(
     '只有 codex 的那台连上并列出会话',
     () => {
       const element = group(aliases.grow)
-      return element && online(aliases.grow) && all('.ss-row', element).length > 0
+      return (
+        element &&
+        online(aliases.grow) &&
+        all('.ss-row:not(.projection-group *)', element).length > 0
+      )
     },
     90_000,
   )

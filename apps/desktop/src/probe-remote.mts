@@ -104,7 +104,9 @@ export async function remoteProbe(aliases: {
     target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
   /** 侧栏里的一台设备 */
   const group = (name: string) =>
-    all('.dev-group').find((element) => one('.dev-row .name', element)?.textContent === name)
+    all('.dev-group').find(
+      (element) => one('.dev-row:not(.projection-group *) .name', element)?.textContent === name,
+    )
   /** 设备列表里的一台设备 */
   const item = (name: string) =>
     all('.devp-item').find((element) => one('.devp-name', element)?.textContent === name)
@@ -165,11 +167,11 @@ export async function remoteProbe(aliases: {
     const element = group(aliases.ok)
     const note = element && one('.dev-note', element)?.textContent
     if (note && notes[notes.length - 1] !== note) notes.push(note)
-    return online(aliases.ok) && all('.ss-row', element).length > 0
+    return online(aliases.ok) && all('.ss-row:not(.projection-group *)', element).length > 0
   })
   const connected = true
   const remote = group(aliases.ok) as HTMLElement
-  const rows = all('.ss-row', remote).length
+  const rows = all('.ss-row:not(.projection-group *)', remote).length
 
   // ---- 三、什么都没装的那台：原因和安装指引 ----
   const bare = await until('什么都没装的那台停在失败上', () => {
@@ -205,7 +207,7 @@ export async function remoteProbe(aliases: {
   )
   await frame()
   const homeSwitched = `${one('.new-why')?.textContent ?? ''}${one('.dock .cmp-hint.err')?.textContent ?? ''}`
-  all('.ss-row', remote)[0]?.click()
+  all('.ss-row:not(.projection-group *)', remote)[0]?.click()
   await until('会话的内容', () => one('.turn'))
   const opened = true
   const area = () => one<HTMLTextAreaElement>('textarea.cmp-text')

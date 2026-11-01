@@ -158,7 +158,7 @@ export async function cardsProbe(real: boolean): Promise<CardsProbe> {
   const main = real ? '给首页加一个状态条' : '首页文案'
   const ask = real ? '再问我两个问题' : '问一句就行'
   const row = await until(`侧栏里的“${main}”`, () =>
-    all('.ss-row').find((entry) => text(entry).includes(main)),
+    all('.ss-row:not(.projection-group *)').find((entry) => text(entry).includes(main)),
   )
   row.click()
   await until(`“${main}”的内容`, () => text(one('.crumb')).includes(main) && one('.turn'))

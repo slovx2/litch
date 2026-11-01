@@ -31,14 +31,14 @@ export async function serviceRestart(svc: string, opening: string): Promise<Serv
   const kit = (window as unknown as { __termKit: TerminalKit }).__termKit
   const { until, one, all, text, frame } = kit
   const group = () =>
-    all('.dev-group').find((element) => text(one('.dev-row .name', element)) === svc) as
-      | HTMLElement
-      | undefined
+    all('.dev-group').find(
+      (element) => text(one('.dev-row:not(.projection-group *) .name', element)) === svc,
+    ) as HTMLElement | undefined
   const online = () => {
     const element = group()
     return Boolean(element && !element.classList.contains('off'))
   }
-  const pill = () => text(one('.dev-row .pill', group() as HTMLElement))
+  const pill = () => text(one('.dev-row:not(.projection-group *) .pill', group() as HTMLElement))
   const toast = () => one('.toast[data-toast^="restart:"]')
   /** 点开这台设备的“⋯”，点其中一项 */
   const pick = async (action: string) => {
@@ -88,11 +88,15 @@ export async function serviceRestart(svc: string, opening: string): Promise<Serv
   const lastTurn = () => text(all('.turn').at(-1))
   const running = () => Boolean(one('.running-line:not([data-hidden])') || one('.md.live'))
   const openSession = async () => {
-    const row = all('.ss-row', group() as HTMLElement).find((entry) =>
+    const row = all('.ss-row:not(.projection-group *)', group() as HTMLElement).find((entry) =>
       text(entry).includes(opening),
     )
     row?.click()
-    await until('打开那个会话', () => text(one('.ss-row.sel')).includes(opening), 10_000)
+    await until(
+      '打开那个会话',
+      () => text(one('.ss-row:not(.projection-group *).sel')).includes(opening),
+      10_000,
+    )
   }
 
   // ---- 一、“设置”进详情，记下进程号 ----

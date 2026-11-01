@@ -42,7 +42,10 @@ async function arrange(scene: string): Promise<void> {
   await document.fonts.ready
   // 启动落在新建对话页：截的是对话，先点开第一个工作区里排最前面的那个会话（示例里一打开就在流的那个）。
   // 两种语言下标题不一样，所以按位置找，不按标题找
-  const first = () => one('.ws-row')?.closest('[data-group]')?.querySelector<HTMLElement>('.ss-row')
+  const first = () =>
+    one('.ws-row:not(.projection-group *)')
+      ?.closest('[data-group]')
+      ?.querySelector<HTMLElement>('.ss-row:not(.projection-group *)')
   await until('侧栏里的会话', first)
   first()?.click()
   await until('会话内容', () => one('.turn'))

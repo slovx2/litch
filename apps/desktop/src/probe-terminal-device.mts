@@ -25,11 +25,13 @@ export async function realBasics(): Promise<RealBasics> {
   const kit = (window as unknown as { __termKit: TerminalKit }).__termKit
   const { until, one, text } = kit
   // 有会话就选第一个：终端开在它的项目里。没有会话的话用的是设备主目录的那一组
-  await until('侧栏里有会话', () => one('.ss-row'), 30_000).catch(() => null)
-  const first = one<HTMLElement>('.ss-row')
+  await until('侧栏里有会话', () => one('.ss-row:not(.projection-group *)'), 30_000).catch(
+    () => null,
+  )
+  const first = one<HTMLElement>('.ss-row:not(.projection-group *)')
   first?.click()
   if (first) await kit.seen(() => first.getAttribute('aria-current') === 'true')
-  const session = text(one('.ss-row[aria-current="true"] .title'))
+  const session = text(one('.ss-row:not(.projection-group *)[aria-current="true"] .title'))
   kit.toggle()
   await until('面板打开', () => kit.panelOpen())
   await until('顺手开出一个终端', () => kit.tabs().length === 1, 30_000)
@@ -219,7 +221,10 @@ export async function deviceRestored(session: string): Promise<Restored> {
   const { until, one, all, text } = kit
   const row = await until(
     '侧栏里原来那个会话',
-    () => all('.ss-row').find((entry) => text(one('.title', entry)) === session),
+    () =>
+      all('.ss-row:not(.projection-group *)').find(
+        (entry) => text(one('.title', entry)) === session,
+      ),
     60_000,
   )
   row.click()

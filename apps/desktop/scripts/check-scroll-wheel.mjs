@@ -247,7 +247,9 @@ async function install() {
     throw new Error(`等待超时：${check}`)
   }
   const row = (title) =>
-    [...document.querySelectorAll('.ss-row')].find((node) => node.textContent.includes(title))
+    [...document.querySelectorAll('.ss-row:not(.projection-group *)')].find((node) =>
+      node.textContent.includes(title),
+    )
   const large = '远程设备安装指引'
   const small = '发版前的检查清单'
   const open = async (title) => {

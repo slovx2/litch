@@ -70,7 +70,7 @@ export async function backgroundProbe(sessionId: string): Promise<BackgroundSeen
     document.querySelector<T & HTMLElement>(selector)
   const $$ = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)]
   const seen: Record<string, string> = {}
-  const rowMark = () => $(`.row-line[data-session="${sessionId}"] .st`)
+  const rowMark = () => $(`.row-line[data-session="${sessionId}"]:not(.projection-group *) .st`)
   const say = async (text: string) => {
     const box = $<HTMLTextAreaElement>('.main .dock textarea.cmp-text')
     if (!box) throw new Error('找不到输入框')
@@ -82,8 +82,13 @@ export async function backgroundProbe(sessionId: string): Promise<BackgroundSeen
   /** 回合在跑：对话末尾那一格“正在工作”在 */
   const turnRunning = () => $('.main .running-line') !== null
 
-  await until(() => $(`.row-line[data-session="${sessionId}"]`) !== null, 20000)
-  $(`.row-line[data-session="${sessionId}"] .ss-row`)?.click()
+  await until(
+    () => $(`.row-line[data-session="${sessionId}"]:not(.projection-group *)`) !== null,
+    20000,
+  )
+  $(
+    `.row-line[data-session="${sessionId}"]:not(.projection-group *) .ss-row:not(.projection-group *)`,
+  )?.click()
   await until(() => $('.main .dock textarea.cmp-text') !== null)
   await sleep(200)
   await say('起两个后台任务')

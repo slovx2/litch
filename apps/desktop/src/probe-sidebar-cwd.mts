@@ -39,11 +39,13 @@ export async function cwdSeen(): Promise<CwdSeen> {
   // ---- 一、哪些行有记号，写的是什么 ----
   // 只看子目录、不在项目里这两种；在工作树里的会话也用这个位置画一个工作树记号（data-cwd="worktree"），不归这里验
   const marks = () =>
-    all('.ss-row .cwd-mark').filter((mark) => (mark as HTMLElement).dataset.cwd !== 'worktree')
+    all('.ss-row:not(.projection-group *) .cwd-mark').filter(
+      (mark) => (mark as HTMLElement).dataset.cwd !== 'worktree',
+    )
   const marked = marks().map((mark) =>
     [
       mark.closest<HTMLElement>('.dev-group')?.dataset.device,
-      text(one('.title', mark.closest('.ss-row') as HTMLElement)),
+      text(one('.title', mark.closest('.ss-row:not(.projection-group *)') as HTMLElement)),
       mark.dataset.cwd,
       mark.title,
     ].join('｜'),
@@ -84,7 +86,10 @@ export async function cwdSeen(): Promise<CwdSeen> {
   }
   const each = () =>
     marks().map((mark) => {
-      const title = one('.title', mark.closest('.ss-row') as HTMLElement) as HTMLElement
+      const title = one(
+        '.title',
+        mark.closest('.ss-row:not(.projection-group *)') as HTMLElement,
+      ) as HTMLElement
       return `${text(title)}｜${title.scrollWidth > title.clientWidth ? '截断' : '全'}｜${shape(mark)}`
     })
   const wide = each()
@@ -106,9 +111,9 @@ export async function cwdSeen(): Promise<CwdSeen> {
     )
   const yielded = marks()
     .filter((mark) => shape(mark).startsWith('没有'))
-    .map((mark) => gap(mark.closest('.ss-row') as HTMLElement))
+    .map((mark) => gap(mark.closest('.ss-row:not(.projection-group *)') as HTMLElement))
   // 拿来比的是标题和徽标之间什么记号都没有的行：带定时任务小钟的行中间本来就多一个记号
-  const others = all('.ss-row')
+  const others = all('.ss-row:not(.projection-group *)')
     .filter((row) => !one('.cwd-mark', row) && !one('.task-mark', row))
     .map(gap)
   await turn('ArrowRight', Math.round((widthBefore - panel.offsetWidth) / 24))
@@ -117,7 +122,7 @@ export async function cwdSeen(): Promise<CwdSeen> {
   const level = (await need(AT_ROOT)).offsetHeight
   const skins = await kit.eachSkin((where) => {
     const mark = marks()[0] as HTMLElement
-    const row = mark.closest('.ss-row') as HTMLElement
+    const row = mark.closest('.ss-row:not(.projection-group *)') as HTMLElement
     return [
       where,
       kit.contrast(getComputedStyle(mark).color, kit.backdrop(row)).toFixed(1),

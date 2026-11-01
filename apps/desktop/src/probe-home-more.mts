@@ -101,7 +101,8 @@ export async function homeMoreProbe(): Promise<HomeMoreProbe> {
     await until('新建对话页', () => home() && picker('device') && area())
     await frame()
   }
-  const rowOf = (title: string) => all('.ss-row').find((row) => text(row).includes(title))
+  const rowOf = (title: string) =>
+    all('.ss-row:not(.projection-group *)').find((row) => text(row).includes(title))
   /** 一行（会话或者项目）行尾的“更多”里点“删除”，再确认 */
   const removeVia = async (line: Element | null | undefined, what: string) => {
     line?.querySelector<HTMLButtonElement>('.row-more > .ibtn')?.click()
@@ -128,7 +129,10 @@ export async function homeMoreProbe(): Promise<HomeMoreProbe> {
   write(input, second)
   await frame()
   press(input, 'Enter')
-  await until('落到新会话里', () => !home() && text(one('.ss-row.sel')).includes(second))
+  await until(
+    '落到新会话里',
+    () => !home() && text(one('.ss-row:not(.projection-group *).sel')).includes(second),
+  )
   // 回话不用等它写完：停掉
   const stop = await until('停止按钮', () => one<HTMLButtonElement>('.send.stop'), 10_000).catch(
     () => null,
@@ -229,12 +233,12 @@ export async function homeMoreProbe(): Promise<HomeMoreProbe> {
   // 收拾：新加的项目删掉，写了一半的字清掉
   await choose('device', '本机')
   const line = all('.row-line[data-workspace]').find(
-    (entry) => text(one('.ws-row .name', entry)) === 'probe-space',
+    (entry) => text(one('.ws-row:not(.projection-group *) .name', entry)) === 'probe-space',
   )
   if (line) {
     await removeVia(line, '项目')
     await until('新加的项目没了', () =>
-      all('.ws-row .name').every((entry) => text(entry) !== 'probe-space'),
+      all('.ws-row:not(.projection-group *) .name').every((entry) => text(entry) !== 'probe-space'),
     )
   }
   await toHome()

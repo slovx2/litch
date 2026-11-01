@@ -96,7 +96,7 @@ export async function mentionProbe(real: boolean): Promise<MentionProbe> {
   }
   const open = async (title: string) => {
     const row = await until(`侧栏里的“${title}”`, () =>
-      all('.ss-row').find((entry) => text(entry).includes(title)),
+      all('.ss-row:not(.projection-group *)').find((entry) => text(entry).includes(title)),
     )
     row.click()
     await until(`“${title}”的内容`, () => text(one('.crumb')).includes(title) && area())

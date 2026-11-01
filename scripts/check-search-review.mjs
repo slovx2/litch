@@ -250,7 +250,7 @@ export async function checkSearchReview({ cdp, evaluate, query, report, output, 
     `document.querySelector('[data-act="onboard-close"]')?.click();window.__litchLook.set({skin:'standard',theme:'light'})`,
   )
   await evaluate(
-    `[...document.querySelectorAll('.ss-row')].find(el=>el.textContent.includes('把运行时')).click()`,
+    `[...document.querySelectorAll('.ss-row:not(.projection-group *)')].find(el=>el.textContent.includes('把运行时')).click()`,
   )
   await until(() => evaluate(`!!document.querySelector('.tb .search-entry')`), '标题栏查找入口')
   assert.ok(

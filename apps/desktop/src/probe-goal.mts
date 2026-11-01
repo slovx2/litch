@@ -40,8 +40,13 @@ export async function goalProbe(sessionId: string): Promise<GoalSeen> {
   const $$ = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)]
   const seen: Record<string, string> = {}
 
-  await until(() => $(`.row-line[data-session="${sessionId}"]`) !== null, 20000)
-  $(`.row-line[data-session="${sessionId}"] .ss-row`)?.click()
+  await until(
+    () => $(`.row-line[data-session="${sessionId}"]:not(.projection-group *)`) !== null,
+    20000,
+  )
+  $(
+    `.row-line[data-session="${sessionId}"]:not(.projection-group *) .ss-row:not(.projection-group *)`,
+  )?.click()
   await until(() => $('.main .dock textarea.cmp-text') !== null)
   await sleep(200)
   const box = $<HTMLTextAreaElement>('.main .dock textarea.cmp-text')

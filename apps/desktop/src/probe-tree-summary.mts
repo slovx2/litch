@@ -16,14 +16,14 @@ async function summaryProbe(phase: Phase) {
     }
     throw new Error(`子会话汇总验收等待超时：${phase}`)
   }
-  const parentRow = () => $(`[data-session="${parent}"]`)
+  const parentRow = () => $(`[data-session="${parent}"]:not(.projection-group *)`)
   const node = () => parentRow()?.closest('.tree-node')
   const kids = () => [...document.querySelectorAll<HTMLElement>(`[data-parent="${parent}"]`)]
   const rows = () => kids().filter((row) => row.classList.contains('row-line'))
   const summary = () => node()?.querySelector<HTMLElement>(':scope > .tree-kids > .tree-sum')
   const fold = () => parentRow()?.querySelector<HTMLElement>('.tree-fold')
   const select = async (row: HTMLElement | null | undefined) => {
-    row?.querySelector<HTMLElement>('.ss-row')?.click()
+    row?.querySelector<HTMLElement>('.ss-row:not(.projection-group *)')?.click()
     await sleep(200)
   }
   const setFold = async (shut: boolean) => {
@@ -66,7 +66,7 @@ async function summaryProbe(phase: Phase) {
     await setFold(true)
     ok =
       rows().length === 1 &&
-      rows()[0]?.querySelector('.ss-row.sel') !== null &&
+      rows()[0]?.querySelector('.ss-row:not(.projection-group *).sel') !== null &&
       summary()?.textContent?.trim() === '还有 1 个子会话'
   } else if (phase === 'pending') {
     await select(parentRow())
@@ -90,7 +90,7 @@ async function summaryLook(skin: string, theme: string) {
   ).__litchLook
   look.set({ skin, theme })
   await new Promise((resolve) => setTimeout(resolve, 150))
-  const row = document.querySelector<HTMLElement>('[data-session="s7"]')
+  const row = document.querySelector<HTMLElement>('[data-session="s7"]:not(.projection-group *)')
   row?.scrollIntoView({ block: 'center' })
   const node = row?.closest('.tree-node')
   const summary = node?.querySelector<HTMLElement>(':scope > .tree-kids > .tree-sum')

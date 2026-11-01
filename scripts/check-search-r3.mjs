@@ -23,12 +23,15 @@ export async function checkSearchR3({ cdp, evaluate, query, report, output, base
     )
   const shot = async (name) => {
     const r = await cdp.call('Page.captureScreenshot', { format: 'png' })
-    writeFileSync(join(output, name + '.png'), Buffer.from(r.data, 'base64'))
+    writeFileSync(join(output, `${name}.png`), Buffer.from(r.data, 'base64'))
   }
   await cdp.call('Page.navigate', { url: `${base}/?lang=zh-CN` })
-  await until(() => evaluate(`!!document.querySelector('.ss-row')`), '完整应用')
+  await until(
+    () => evaluate(`!!document.querySelector('.ss-row:not(.projection-group *)')`),
+    '完整应用',
+  )
   await evaluate(
-    `document.querySelector('[data-act="onboard-close"]')?.click();window.__litchLook.set({skin:'standard',theme:'light'});[...document.querySelectorAll('.ss-row')].find(el=>el.textContent.includes('远程设备安装指引')).click()`,
+    `document.querySelector('[data-act="onboard-close"]')?.click();window.__litchLook.set({skin:'standard',theme:'light'});[...document.querySelectorAll('.ss-row:not(.projection-group *)')].find(el=>el.textContent.includes('远程设备安装指引')).click()`,
   )
   await until(
     () => evaluate(`document.querySelector('.crumb').textContent.includes('远程设备安装指引')`),

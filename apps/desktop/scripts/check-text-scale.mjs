@@ -209,9 +209,11 @@ async function install() {
   }
   const open = async (title) => {
     await until(() =>
-      [...document.querySelectorAll('.ss-row')].some((row) => row.textContent.includes(title)),
+      [...document.querySelectorAll('.ss-row:not(.projection-group *)')].some((row) =>
+        row.textContent.includes(title),
+      ),
     )
-    ;[...document.querySelectorAll('.ss-row')]
+    ;[...document.querySelectorAll('.ss-row:not(.projection-group *)')]
       .find((row) => row.textContent.includes(title))
       .click()
     await until(
@@ -247,7 +249,9 @@ async function install() {
     await settle()
   }
   window.m7 = { until, settle, open, say, comment }
-  await until(() => window.__litchLook && document.querySelector('.ss-row'))
+  await until(
+    () => window.__litchLook && document.querySelector('.ss-row:not(.projection-group *)'),
+  )
 }
 
 function measure() {

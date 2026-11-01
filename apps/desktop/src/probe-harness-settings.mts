@@ -158,12 +158,14 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
   const sayIn = async (badge: string, words: string) => {
     const local = one('.dev-group') as HTMLElement
     const row = await until(`${badge} 的会话`, () =>
-      all('.ss-row', local).find((entry) => text(one('.chip', entry)) === badge),
+      all('.ss-row:not(.projection-group *)', local).find(
+        (entry) => text(one('.chip', entry)) === badge,
+      ),
     )
     row.click()
     const area = await until('输入框', () => {
       const found = one<HTMLTextAreaElement>('textarea.cmp-text')
-      return found && one('.ss-row.sel') ? found : null
+      return found && one('.ss-row:not(.projection-group *).sel') ? found : null
     })
     await until('历史加载完成', () => one('.tr-scroll[aria-busy="false"]') && !one('.send.stop'))
     fill(area, words)

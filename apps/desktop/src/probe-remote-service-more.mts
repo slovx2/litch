@@ -50,7 +50,9 @@ export async function serviceSession(svc: string, opening: string): Promise<Serv
     target.dispatchEvent(new Event('input', { bubbles: true }))
   }
   const group = (name: string) =>
-    all('.dev-group').find((element) => text(one('.dev-row .name', element)) === name)
+    all('.dev-group').find(
+      (element) => text(one('.dev-row:not(.projection-group *) .name', element)) === name,
+    )
   const online = (name: string) => {
     const element = group(name)
     return Boolean(element && !element.classList.contains('off'))
@@ -98,12 +100,12 @@ export async function serviceSession(svc: string, opening: string): Promise<Serv
   await say(opening)
   await until(
     '落到新会话里',
-    () => !one('.new-hero') && text(one('.ss-row.sel')).includes(opening),
+    () => !one('.new-hero') && text(one('.ss-row:not(.projection-group *).sel')).includes(opening),
     60_000,
   )
   await until('头一句的回话', () => settled(opening), 90_000)
   const created = true
-  const row = one('.ss-row.sel') as HTMLElement
+  const row = one('.ss-row:not(.projection-group *).sel') as HTMLElement
   const zone = all('[data-workspace]', group(svc) as HTMLElement).find(
     (line) => text(one('.name', line)) === '远程区',
   )

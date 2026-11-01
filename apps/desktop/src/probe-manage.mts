@@ -167,7 +167,7 @@ export async function manageProbe(): Promise<ManageProbe> {
       () => block('pi')?.dataset.state === 'ready' && block('pi').dataset.pending === 'false',
       ms,
     )
-  const rows = () => all('.ss-row')
+  const rows = () => all('.ss-row:not(.projection-group *)')
   const isDown = (entry: HTMLElement) => entry.classList.contains('down')
   const rowOf = (title: string) => rows().find((entry) => text(one('.title', entry)) === title)
   const area = () => one<HTMLTextAreaElement>('textarea.cmp-text')
@@ -275,7 +275,13 @@ export async function manageProbe(): Promise<ManageProbe> {
   // 停用之后核心会重新对一次账：等它对完，会话应该还在
   await sleep(2500)
   const disabledRows = `${rows().filter(isDown).length}/${rows().length}/${before}`
-  ;(await until('设备行上的新建按钮', () => one<HTMLButtonElement>('.dev-row ~ .row-add'))).click()
+  ;(
+    await until('设备行上的新建按钮', () =>
+      one<HTMLButtonElement>(
+        '.dev-row:not(.projection-group *) ~ .row-add:not(.projection-group *)',
+      ),
+    )
+  ).click()
   await until('新建会话的页面', () => one('.new-hero'))
   const newSessionBlocked = text(
     await until('说了建不了', () => one('.dock .cmp-hint.err'), 10_000),

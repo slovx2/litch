@@ -136,7 +136,7 @@ export async function slashProbe(real: boolean): Promise<SlashProbe> {
   const idle = () => until('这一轮结束', () => !running() && !one('.req') && area(), 120_000)
   const open = async (title: string) => {
     const row = await until(`侧栏里的“${title}”`, () =>
-      all('.ss-row').find((entry) => text(entry).includes(title)),
+      all('.ss-row:not(.projection-group *)').find((entry) => text(entry).includes(title)),
     )
     row.click()
     await until(`“${title}”的内容`, () => text(one('.crumb')).includes(title) && one('.turn'))
@@ -629,7 +629,7 @@ export async function slashLook(sheet: 'slash' | 'at' = 'slash'): Promise<SlashL
   }
   const title = '首页文案'
   const row = await until(`侧栏里的“${title}”`, () =>
-    all('.ss-row').find((entry) => text(entry).includes(title)),
+    all('.ss-row:not(.projection-group *)').find((entry) => text(entry).includes(title)),
   )
   row.click()
   await until(`“${title}”的内容`, () => text(one('.crumb')).includes(title) && one('.turn'))

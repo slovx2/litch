@@ -91,8 +91,10 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     if (!one(`${selector} .sev-body`)) await click(`${selector} button`)
     return until(`${kind} 事件正文`, () => one(`${selector} .sev-body`))
   }
-  await click('[data-session="p1"] .ss-row')
-  await until('普通会话选中', () => one('[data-session="p1"] .ss-row.sel'))
+  await click('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *)')
+  await until('普通会话选中', () =>
+    one('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *).sel'),
+  )
   await click('.tb-side')
   await until('会话侧面板打开', () => one('.tb-side[aria-pressed="true"]'))
   await click('[data-sidebar-mode="manager"]')
@@ -125,7 +127,9 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const chatRestored = Boolean(
     await until(
       '切回普通会话和侧面板',
-      () => one('[data-session="p1"] .ss-row.sel') && one('.tb-side[aria-pressed="true"]'),
+      () =>
+        one('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *).sel') &&
+        one('.tb-side[aria-pressed="true"]'),
     ),
   )
   await click('[data-sidebar-mode="manager"]')
@@ -145,7 +149,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       '外部入口打开普通会话并切回对话栏',
       () =>
         one('[data-sidebar-mode="chat"][aria-pressed="true"]') &&
-        one('[data-session="b3"] .ss-row.sel'),
+        one('[data-session="b3"]:not(.projection-group *) .ss-row:not(.projection-group *).sel'),
     ),
   )
   await click('[data-sidebar-mode="manager"]')
@@ -158,12 +162,14 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     ),
   )
   await click('[data-sidebar-mode="chat"]')
-  await click('[data-session="p1"] .ss-row')
+  await click('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *)')
   await click('[data-sidebar-mode="manager"]')
   await click('[data-act="manager-settings"]')
   await until('经理设置页', () => one('[data-manager="settings"]'))
   await click('[data-sidebar-mode="chat"]')
-  await until('设置页切到对话', () => one('[data-session="p1"] .ss-row.sel'))
+  await until('设置页切到对话', () =>
+    one('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *).sel'),
+  )
   await click('[data-sidebar-mode="manager"]')
   const settingsRestored = Boolean(
     await until('恢复经理设置页', () => one('[data-manager="settings"]')),
@@ -335,14 +341,18 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     !one('[data-board-tab="lines"]') &&
     !one('[data-overview="yours"]') &&
     Boolean(one('[data-board-tab="suggestions"]'))
-  const branchFacts = Boolean(one('.mg-tree [data-session="manager-k1"]'))
-  await click('.mg-tree [data-session="manager-k1"] .ss-row')
+  const branchFacts = Boolean(one('.mg-tree [data-session="manager-k1"]:not(.projection-group *)'))
+  await click(
+    '.mg-tree [data-session="manager-k1"]:not(.projection-group *) .ss-row:not(.projection-group *)',
+  )
   await until('子会话来源', () => one('.mg-origin'))
-  const selectedLine = one('.mg-tree .ss-row.sel')
-    ?.closest('[data-session]')
+  const selectedLine = one('.mg-tree .ss-row:not(.projection-group *).sel')
+    ?.closest('[data-session]:not(.projection-group *)')
     ?.getAttribute('data-session')
   await click('[data-sidebar-mode="chat"]')
-  await until('工作线切回对话', () => one('[data-session="p1"] .ss-row.sel'))
+  await until('工作线切回对话', () =>
+    one('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *).sel'),
+  )
   await click('[data-sidebar-mode="manager"]')
   const lineRestored = Boolean(
     await until(
@@ -350,14 +360,18 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       () =>
         one('.mg-origin') &&
         selectedLine &&
-        one(`.mg-tree [data-session="${CSS.escape(selectedLine)}"] .ss-row.sel`),
+        one(
+          `.mg-tree [data-session="${CSS.escape(selectedLine)}"]:not(.projection-group *) .ss-row:not(.projection-group *).sel`,
+        ),
     ),
   )
   await click('.mg-origin button')
   const childReturn = Boolean(
     await until('回到经理', () => one('[data-manager="session"][data-manager-id="m1"]')),
   )
-  const childIds = [...document.querySelectorAll('.mg-tree [data-session]')]
+  const childIds = [
+    ...document.querySelectorAll('.mg-tree [data-session]:not(.projection-group *)'),
+  ]
     .map((row) => row.getAttribute('data-session'))
     .filter(Boolean)
   // 经理工作线沿用普通会话行的用户回报开关，切栏后设置和标记仍在。
@@ -372,6 +386,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const isolated =
     childIds.length > 0 &&
     childIds.every(
+      // 隔离断言同时检查目录和投影，不能让经理工作线泄漏到任何普通会话入口。
       (id) => !document.querySelector(`.sb-scroll [data-session="${CSS.escape(id ?? '')}"]`),
     )
   await click('[data-sidebar-mode="manager"]')
@@ -536,7 +551,9 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   )
   await click('[data-sidebar-mode="chat"]')
   const createdKeepsChat = Boolean(
-    await until('新建经理不覆盖原对话', () => one('[data-session="p1"] .ss-row.sel')),
+    await until('新建经理不覆盖原对话', () =>
+      one('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *).sel'),
+    ),
   )
   await click('[data-sidebar-mode="manager"]')
   await until('恢复新建的经理', () =>
@@ -674,8 +691,9 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   )
   eventsClean = cleanChat() && eventsClean
   await click('[data-sidebar-mode="chat"]')
-  await click('[data-session="p1"] [aria-haspopup="menu"]')
+  await click('[data-session="p1"]:not(.projection-group *) [aria-haspopup="menu"]')
   await click('[data-action="archive"]')
+  // 归档后目录与投影都应移除。
   await until('已归档的会话从目录移除', () => !one('[data-session="p1"]'))
   await click('[data-sidebar-mode="manager"]')
   await until('归档普通会话不影响经理', () => one('[data-manager="session"][data-manager-id="m1"]'))

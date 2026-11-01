@@ -106,7 +106,9 @@ try {
   await wait('.sb-btn.suggestions')
   await read("document.querySelector('.onb .ibtn')?.click()")
   await read("window.__litchLook.set({skin:'standard',theme:'light',lang:'zh-CN'})")
-  await click('.row-line[data-session="s6"] .ss-row')
+  await click(
+    '.row-line[data-session="s6"]:not(.projection-group *) .ss-row:not(.projection-group *)',
+  )
   await say('收尾建议')
   await click('.sb-btn.suggestions')
   await wait('.suggestion-row')
@@ -144,9 +146,11 @@ try {
   await click('[data-board-tab="suggestions"]')
   assert.equal(await read("document.querySelectorAll('.suggestion-row').length"), 0)
   // 从经理的工作线产生建议，全局只留一张经理汇总卡；打开后在看板内操作。
-  await click('[data-session="manager-k2"] .ss-row')
+  await click(
+    '[data-session="manager-k2"]:not(.projection-group *) .ss-row:not(.projection-group *)',
+  )
   await say('收尾建议')
-  await click('[data-session="manager-k2"] [aria-haspopup="menu"]')
+  await click('[data-session="manager-k2"]:not(.projection-group *) [aria-haspopup="menu"]')
   await click('[data-action="archive"]')
   await click('.sb-btn.suggestions')
   await wait('[data-suggestion-manager="m1"]')
@@ -653,13 +657,17 @@ try {
   await read("window.__litchLook.set({lang:'zh-CN'})")
   // 刷新后模拟核心重新开始，在普通会话再生成建议，继续核对来源导航。
   await click('[data-sidebar-mode="chat"]')
-  await click('.row-line[data-session="s6"] .ss-row')
+  await click(
+    '.row-line[data-session="s6"]:not(.projection-group *) .ss-row:not(.projection-group *)',
+  )
   await say('收尾建议')
   await click('.sb-btn.suggestions')
   await wait('.suggestion-row')
   // 来源点击沿用会话导航；不能留在集中页面。
   await click('.suggestion-row .prop-meta button')
-  await wait('.row-line[data-session="s6"] .ss-row.sel')
+  await wait(
+    '.row-line[data-session="s6"]:not(.projection-group *) .ss-row:not(.projection-group *).sel',
+  )
   await click('.sb-settings')
   await click('.set-go[data-page="devices"]')
   await click('.devp-item[data-device="local"] .devp-row')

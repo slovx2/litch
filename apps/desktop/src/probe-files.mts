@@ -76,7 +76,7 @@ export interface TreeSeen {
 export async function mockTree(session: string): Promise<TreeSeen> {
   const kit = (window as unknown as { __filesKit: FilesKit }).__filesKit
   const { until, one, all, text, frame, sleep } = kit
-  await until('侧栏里有会话', () => one('.ss-row'), 40_000)
+  await until('侧栏里有会话', () => one('.ss-row:not(.projection-group *)'), 40_000)
   await kit.openSession(session)
   const startsClosed = !kit.sideOpen()
   kit.toggle()

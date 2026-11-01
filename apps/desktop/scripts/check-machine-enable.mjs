@@ -78,11 +78,13 @@ async function runWindow() {
   try {
     for (const lang of ['zh-CN', 'en']) {
       await win.loadFile(join(folder, 'index.html'), { query: { lang } })
-      await until('window.__litchLook && document.querySelector(".ss-row")')
+      await until(
+        'window.__litchLook && document.querySelector(".ss-row:not(.projection-group *)")',
+      )
       await js(
         `window.__litchLook.set({skin:'standard', theme:'light', lang:${JSON.stringify(lang)}})`,
       )
-      await click('.ss-row')
+      await click('.ss-row:not(.projection-group *)')
       await until('document.querySelector(".turn")')
       await js('window.m13.call()')
       await until('document.querySelector(".mach-card")')
@@ -112,7 +114,7 @@ async function runWindow() {
           await js('window.m13.state().persisted?.tools?.remote?.machine ?? false'),
           false,
         )
-        await click('.ss-row')
+        await click('.ss-row:not(.projection-group *)')
         await until('document.querySelector(".mach-card")')
         await click(`${card} [data-option="once"]`)
         await until('window.m13.state().persisted?.tools?.remote?.machine === true')

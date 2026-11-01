@@ -14,15 +14,19 @@ async function revealProbe() {
     return check()
   }
   const parent = 's6'
-  const parentRow = () => $(`[data-session="${parent}"]`)
-  parentRow()?.querySelector<HTMLElement>('.ss-row')?.click()
+  const parentRow = () => $(`[data-session="${parent}"]:not(.projection-group *)`)
+  parentRow()?.querySelector<HTMLElement>('.ss-row:not(.projection-group *)')?.click()
   await until(() => $('.main .tree-card[data-card="spawn"]') !== null)
   const card = [
     ...document.querySelectorAll<HTMLElement>('.main .tree-card[data-card="spawn"]'),
-  ].find((entry) => $(`[data-session="${entry.dataset.child}"]`)?.dataset.parent === parent)
+  ].find(
+    (entry) =>
+      $(`[data-session="${entry.dataset.child}"]:not(.projection-group *)`)?.dataset.parent ===
+      parent,
+  )
   const child = card?.dataset.child
   if (!child) throw new Error('定位验收缺少仍挂在父会话下的派出卡片')
-  const childRow = () => $(`[data-session="${child}"]`)
+  const childRow = () => $(`[data-session="${child}"]:not(.projection-group *)`)
   const scroll = $('.sb-scroll')
   if (!scroll) throw new Error('找不到侧栏滚动区')
   const visible = () => {
@@ -36,14 +40,16 @@ async function revealProbe() {
   const fold = () => parentRow()?.querySelector<HTMLElement>('.tree-fold')
   const collapsed = () => fold()?.getAttribute('aria-expanded') === 'false'
   const chooseParent = async () => {
-    parentRow()?.querySelector<HTMLElement>('.ss-row')?.click()
+    parentRow()?.querySelector<HTMLElement>('.ss-row:not(.projection-group *)')?.click()
     await until(() => $('.main .tree-card[data-card="spawn"]') !== null)
     await sleep(150)
   }
 
   // 未读行按产品规则不能折叠隐藏；先读过目标，再回父会话准备折叠场景。
-  childRow()?.querySelector<HTMLElement>('.ss-row')?.click()
-  await until(() => childRow()?.querySelector('.ss-row.is-unread') === null)
+  childRow()?.querySelector<HTMLElement>('.ss-row:not(.projection-group *)')?.click()
+  await until(
+    () => childRow()?.querySelector('.ss-row:not(.projection-group *).is-unread') === null,
+  )
   await chooseParent()
   if (!collapsed()) fold()?.click()
   await sleep(150)
@@ -57,7 +63,11 @@ async function revealProbe() {
         .querySelector<HTMLElement>(':scope > .head-line .head-toggle[aria-expanded="true"]')
         ?.click()
   }
-  device?.querySelector<HTMLElement>(':scope > .row-line .dev-row[aria-expanded="true"]')?.click()
+  device
+    ?.querySelector<HTMLElement>(
+      ':scope > .row-line .dev-row:not(.projection-group *)[aria-expanded="true"]',
+    )
+    ?.click()
   await sleep(150)
   scroll.scrollTop = scroll.scrollHeight
   const before = scroll.scrollTop
@@ -67,14 +77,14 @@ async function revealProbe() {
     hiddenBefore &&
     expanded &&
     before !== scroll.scrollTop &&
-    childRow()?.querySelector('.ss-row[aria-current="true"]') !== null
+    childRow()?.querySelector('.ss-row:not(.projection-group *)[aria-current="true"]') !== null
 
   // 程序化点击离开视口的树行，可明确检测有没有偷偷触发自动滚动。
   await chooseParent()
   scroll.scrollTop = scroll.scrollHeight
   const directBefore = scroll.scrollTop
   const foldsBefore = JSON.parse(localStorage.getItem('litch.sidebar') ?? '{}').folds
-  childRow()?.querySelector<HTMLElement>('.ss-row')?.click()
+  childRow()?.querySelector<HTMLElement>('.ss-row:not(.projection-group *)')?.click()
   await sleep(250)
   const direct =
     scroll.scrollTop === directBefore &&

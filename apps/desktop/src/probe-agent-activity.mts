@@ -14,9 +14,16 @@ async function probe() {
   const latest = () => [...document.querySelectorAll<HTMLElement>('.main .tr > .turn')].at(-1)
   const rows = () => [...(latest()?.querySelectorAll<HTMLElement>('.agent-row') ?? [])]
   const select = async (id: string) => {
-    document.querySelector<HTMLElement>(`.row-line[data-session="${id}"] .ss-row`)?.click()
+    document
+      .querySelector<HTMLElement>(
+        `.row-line[data-session="${id}"]:not(.projection-group *) .ss-row:not(.projection-group *)`,
+      )
+      ?.click()
     await until(
-      () => document.querySelector(`.row-line[data-session="${id}"] .ss-row.sel`) !== null,
+      () =>
+        document.querySelector(
+          `.row-line[data-session="${id}"]:not(.projection-group *) .ss-row:not(.projection-group *).sel`,
+        ) !== null,
     )
     await sleep(200)
   }

@@ -58,7 +58,11 @@ export async function enginesApproval(
   // 侧栏的记号和卡片走两条订阅，各按各的帧到，谁先到不一定（流水线上 dsh 卡片先到、记号晚一帧，量空过一次）。
   // 卡片这时一直开着，等记号出现再下结论，不在卡片刚出现的那一帧就读
   const flagged = shown
-    ? await until('侧栏这一行上“等你”的记号', () => one('.ss-row.sel .pill.wait'), 5000).then(
+    ? await until(
+        '侧栏这一行上“等你”的记号',
+        () => one('.ss-row:not(.projection-group *).sel .pill.wait'),
+        5000,
+      ).then(
         () => true,
         () => false,
       )

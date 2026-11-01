@@ -131,7 +131,7 @@ export async function commentsProbe(session: string): Promise<CommentsProbe> {
 
   // 打开会话、清掉上一次留下的片
   const row = await until(`侧栏里的“${session}”`, () =>
-    all('.ss-row').find((entry) => text(entry).includes(session)),
+    all('.ss-row:not(.projection-group *)').find((entry) => text(entry).includes(session)),
   )
   row.click()
   await until(`“${session}”的内容`, () => text(one('.crumb')).includes(session) && area())
@@ -373,7 +373,7 @@ export async function commentsReloaded(session: string): Promise<CommentsReloade
   ]
   const text = (element: Element | null | undefined) => element?.textContent?.trim() ?? ''
   const row = await until(`侧栏里的“${session}”`, () =>
-    all('.ss-row').find((entry) => text(entry).includes(session)),
+    all('.ss-row:not(.projection-group *)').find((entry) => text(entry).includes(session)),
   )
   row.click()
   await until('内容', () => all('.main .tr .ucmt').length > 0)

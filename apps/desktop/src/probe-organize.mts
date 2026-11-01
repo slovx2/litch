@@ -62,7 +62,8 @@ export async function organizeProbe(second: string): Promise<OrganizeProbe> {
   }
   const seen: Record<string, string> = {}
   const local = () => one('.dev-group') as HTMLElement
-  const rowOf = (title: string) => all('.ss-row').find((row) => text(one('.title', row)) === title)
+  const rowOf = (title: string) =>
+    all('.ss-row:not(.projection-group *)').find((row) => text(one('.title', row)) === title)
   const lineOf = (title: string) => rowOf(title)?.closest('.row-line')
   const groupOf = (title: string) =>
     rowOf(title)?.closest<HTMLElement>('[data-group]')?.dataset.group
@@ -141,7 +142,9 @@ export async function organizeProbe(second: string): Promise<OrganizeProbe> {
   const appKey = keyOf('应用')
   await until('目录在它下面的会话归了进去', () => groupOf(LIST) === appKey)
   const inApp = [LIST, BUILD, RELEASE, TIMEOUT].map(groupOf)
-  const badges = new Set(all(`[data-group="${appKey}"] .ss-row .chip`, local()).map(text))
+  const badges = new Set(
+    all(`[data-group="${appKey}"] .ss-row:not(.projection-group *) .chip`, local()).map(text),
+  )
   seen.badges = [...badges].join('|')
   const added = dotOf('应用').includes('blue') && inApp.every((group) => group === appKey)
   const mixed = badges.size >= 2

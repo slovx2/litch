@@ -129,7 +129,9 @@ export async function enginesStart(spec: EngineSpec, place: EnginesPlace): Promi
 
   // ---- 一、新建对话页：从项目那一行的加号进，选这个 harness ----
   const add = await until('项目行上的新建按钮', () =>
-    all('.row-add').find((button) => button.parentElement?.textContent?.includes(place.workspace)),
+    all('.row-add:not(.projection-group *)').find((button) =>
+      button.parentElement?.textContent?.includes(place.workspace),
+    ),
   )
   add.click()
   await until('新建会话的页面', () => one('.new-hero'))
@@ -168,7 +170,10 @@ export async function enginesStart(spec: EngineSpec, place: EnginesPlace): Promi
     () => all('.umsg-text').some((entry) => text(entry) === spec.opening),
     5000,
   )
-  const landed = await files.seen(() => !one('.new-hero') && one('.ss-row.sel'), 60_000)
+  const landed = await files.seen(
+    () => !one('.new-hero') && one('.ss-row:not(.projection-group *).sel'),
+    60_000,
+  )
   await kit.idle()
   observer.disconnect()
   sample()
@@ -176,7 +181,8 @@ export async function enginesStart(spec: EngineSpec, place: EnginesPlace): Promi
   const stray = shapes
     .filter((shape) => !final.startsWith(shape))
     .map((shape) => shape.slice(0, 60))
-  const row = one('.ss-row.sel')
+  // 投影副本也带选中态，但平铺时没有项目头；项目归属只从设备目录读取。
+  const row = one('.ss-row:not(.projection-group *).sel')
   return {
     harness,
     crumbHarness,

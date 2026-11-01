@@ -257,7 +257,7 @@ const interrupt: StepJudge = (id, _spec, raw, v) => {
     seen.endedAt - seen.stoppedAt <= 5,
     `点停止时在第 ${seen.stoppedAt} 段，停下时到了第 ${seen.endedAt} 段`,
   )
-  v.check(seen.still, '回合停下之后回答还在长')
+  v.check(seen.still, `回合停下之后回答段数改变：${seen.endedAt} → ${seen.afterWait}`)
   v.check(seen.ready, '回合停下之后输入框没有回到能发的样子')
   v.check(seen.next.foot === '完成', `打断之后再发一句，回合的结尾是“${seen.next.foot}”`)
   v.check(

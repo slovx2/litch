@@ -1,5 +1,5 @@
-// 侧栏验收：底部横排的三个小按钮（定时任务、外观、设置）。侧栏拖到最窄，六套皮肤明暗、中英文各量一遍，
-// 三个都画得出来、一样宽、名字没被截断、和底色分得开；“外观”的小弹层改得了皮肤，“更多外观设置”通到设置页的“外观”。
+// 侧栏验收：底部横排四个按钮（建议、定时任务、外观、设置）。侧栏最窄时按六套皮肤明暗、中英文各量一遍，
+// 四项同排、等宽、不溢出；长名称允许省略但必须有提示。外观弹层仍能改皮肤并打开外观设置。
 // 和别的验收一样，这里的函数会被原样送进页面里执行，不能引用函数外面的东西。
 import type { SidebarKit } from './probe-sidebar-kit.mjs'
 
@@ -8,6 +8,7 @@ export interface FootSeen {
   width: number
   /** 每套外观一行：“皮肤/明暗/语言｜名字:宽x高:图标宽:截断没有:对比度｜…” */
   looks: string[]
+  geometryFaults: string[]
   /** 点开“外观”：弹层出来了、整块在窗口里，点“文艺”皮肤当场换上 */
   popOpened: boolean
   popInside: boolean
@@ -30,14 +31,35 @@ export async function footSeen(): Promise<FootSeen> {
   ).__litchLook
   const was = appearance.get()
   const looks: string[] = []
+  const geometryFaults: string[] = []
   for (const lang of ['zh-CN', 'en']) {
     appearance.set({ lang })
     await sleep(200)
     looks.push(
-      ...(await kit.eachSkin((where) =>
-        [
+      ...(await kit.eachSkin((where) => {
+        const footer = one('.sb-foot') as HTMLElement
+        const bounds = footer.getBoundingClientRect()
+        const buttons = all('.sb-foot .sb-btn')
+        const boxes = buttons.map((button) => button.getBoundingClientRect())
+        if (
+          boxes.length !== 4 ||
+          Math.max(...boxes.map((b) => b.top)) - Math.min(...boxes.map((b) => b.top)) > 1
+        )
+          geometryFaults.push(`${where}/${lang} 下底部四项不在同一行`)
+        if (
+          footer.scrollWidth > footer.clientWidth + 1 ||
+          boxes.some(
+            (b) =>
+              b.left < bounds.left - 1 ||
+              b.right > bounds.right + 1 ||
+              b.top < bounds.top - 1 ||
+              b.bottom > bounds.bottom + 1,
+          )
+        )
+          geometryFaults.push(`${where}/${lang} 下底部按钮溢出`)
+        return [
           `${where}/${lang}`,
-          ...all('.sb-foot .sb-btn').map((button) => {
+          ...buttons.map((button) => {
             const name = one('.sb-btn-name', button) as HTMLElement
             const icon = one('svg', button)?.getBoundingClientRect()
             return [
@@ -46,10 +68,11 @@ export async function footSeen(): Promise<FootSeen> {
               Math.round(icon?.width ?? 0),
               name.scrollWidth > name.clientWidth ? '截断' : '全',
               kit.contrast(getComputedStyle(button).color, kit.backdrop(button)).toFixed(1),
+              button.getAttribute('title') ? '有提示' : '',
             ].join(':')
           }),
-        ].join('｜'),
-      )),
+        ].join('｜')
+      })),
     )
   }
   appearance.set({ lang: was.lang })
@@ -75,6 +98,7 @@ export async function footSeen(): Promise<FootSeen> {
   return {
     width: (one('.sb') as HTMLElement).offsetWidth,
     looks,
+    geometryFaults,
     popOpened: Boolean(pop),
     popInside,
     skinPicked,
@@ -84,7 +108,7 @@ export async function footSeen(): Promise<FootSeen> {
 }
 
 export function judgeFoot(seen: FootSeen): string[] {
-  const failed: string[] = []
+  const failed: string[] = [...seen.geometryFaults]
   const must = (ok: boolean, what: string) => {
     if (!ok) failed.push(what)
   }
@@ -95,16 +119,15 @@ export function judgeFoot(seen: FootSeen): string[] {
     must(buttons.length === 4, `${where} 下底部不是四个按钮：${buttons.length}`)
     const widths = new Set<string>()
     for (const button of buttons) {
-      const [name, size = '', icon, cut, contrast] = button.split(':')
+      const [name, size = '', icon, cut, contrast, hint] = button.split(':')
       const [width = 0, height = 0] = size.split('x').map(Number)
-      if (button !== buttons[0]) widths.add(String(width))
-      else must(width >= 200, `${where} 下建议入口没有独占一行：${size}`)
-      must(width >= 60 && height >= 28, `${where} 下“${name}”太小：${size}`)
+      widths.add(String(width))
+      must(width >= 53 && height >= 39, `${where} 下“${name}”点击区域小于现行尺寸：${size}`)
       must(Number(icon) >= 14, `${where} 下“${name}”的图标没画出来：${icon}`)
-      must(cut === '全', `${where} 下“${name}”的名字被截断了`)
+      must(cut === '全' || hint === '有提示', `${where} 下“${name}”省略后没有完整提示`)
       must(Number(contrast) >= 4.5, `${where} 下“${name}”和底色分不开（对比度 ${contrast}）`)
     }
-    must(widths.size === 1, `${where} 下三个按钮不一样宽：${[...widths].join('、')}`)
+    must(widths.size === 1, `${where} 下四个按钮不一样宽：${[...widths].join('、')}`)
   }
   must(seen.popOpened && seen.popInside, '“外观”的小弹层没出来，或者伸到了窗口外面')
   must(seen.skinPicked === 'human', `在“外观”弹层里选“文艺”，皮肤没换上：${seen.skinPicked}`)

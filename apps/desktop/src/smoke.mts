@@ -606,8 +606,8 @@ interface Probe {
  * 后面看的是它的内容
  */
 const probeOf = (title: string) => `(() => {
-  const rows = [...document.querySelectorAll('.ss-row')]
-  const picked = () => Boolean(document.querySelector('.ss-row.sel'))
+  const rows = [...document.querySelectorAll('.ss-row:not(.projection-group *)')]
+  const picked = () => Boolean(document.querySelector('.ss-row:not(.projection-group *).sel'))
   if (rows.length > 0 && window.__litchLanded === undefined) {
     window.__litchLanded = Boolean(document.querySelector('.new-hero')) && !picked()
   }

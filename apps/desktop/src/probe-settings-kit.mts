@@ -64,7 +64,7 @@ export function installSettingsKit(): boolean {
   const where = () =>
     [
       `设置页在${one('.set-page') ? `“${one('.set-content')?.dataset.section}”` : '没开'}`,
-      `选中的会话“${text(one('.ss-row.sel .title'))}”`,
+      `选中的会话“${text(one('.ss-row:not(.projection-group *).sel .title'))}”`,
       `外观 ${JSON.stringify(look.get())}`,
       `页面 ${window.innerWidth}×${window.innerHeight}，像素比 ${window.devicePixelRatio}`,
     ].join('；')
@@ -103,7 +103,7 @@ export function installSettingsKit(): boolean {
   }
   const openSession = async (title: string) => {
     const row = await until(`侧栏里的会话“${title}”`, () =>
-      all('.ss-row').find((entry) => entry.textContent?.includes(title)),
+      all('.ss-row:not(.projection-group *)').find((entry) => entry.textContent?.includes(title)),
     )
     row.click()
     await until(`“${title}”的内容`, () => row.classList.contains('sel') && one('.tr .turn'))

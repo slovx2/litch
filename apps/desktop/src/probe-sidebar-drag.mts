@@ -140,7 +140,7 @@ export async function dragSeen(): Promise<DragSeen> {
     .map((group) => group.dataset.group ?? '')
   const projects = head(':projects')
   const projectsLabel = text(one('.sec-label', projects ?? undefined))
-  const add = one<HTMLButtonElement>('.row-add', projects ?? undefined)
+  const add = one<HTMLButtonElement>('.row-add:not(.projection-group *)', projects ?? undefined)
   const addLabel = add?.getAttribute('aria-label') ?? ''
   add?.click()
   const dialog = await until('添加项目的对话框', () => one('dialog.ws-dialog[open]'), 5000)
@@ -204,7 +204,10 @@ export async function dragSeen(): Promise<DragSeen> {
   const backInProjects = namesIn(':projects')
 
   // 五、会话只有“放进”：拖着一个会话停在组的标题上，再松手不放
-  const session = one<HTMLElement>('[data-group="docs"] .row-line[data-session]', local())
+  const session = one<HTMLElement>(
+    '[data-group="docs"] .row-line[data-session]:not(.projection-group *)',
+    local(),
+  )
   await lift(session as HTMLElement)
   const sessionInto = await hover(head(SECTION) as HTMLElement, 0.5)
   window.dispatchEvent(new DragEvent('dragend'))

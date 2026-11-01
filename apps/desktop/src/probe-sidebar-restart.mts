@@ -66,7 +66,7 @@ export async function restartSeen(title: string): Promise<RestartSeen> {
       .join('|')
   const pick = (pop: HTMLElement, action: string) =>
     one<HTMLButtonElement>(`.pick-opt[data-action="${action}"]`, pop)?.click()
-  const pill = () => text(one('.dev-row .pill', line('local')))
+  const pill = () => text(one('.dev-row:not(.projection-group *) .pill', line('local')))
   const toast = () => text(one('[data-toast="restart:local"] .toast-text'))
   const dialog = () => one('dialog.confirm')
   /** 说了一句之后：等回合开始，再等它结束（回复是过一会儿才来的，光看“没在跑”会抢在它前面） */
@@ -225,7 +225,7 @@ export function judgeRestart(seen: RestartSeen, title: string): string[] {
     `做完的提示不对：${seen.doneToast}`,
   )
   must(
-    seen.note === '设备服务已重启，回合被打断。发送消息即可继续。',
+    seen.note === '设备服务已重启。符合条件的回合将自动继续；未恢复的回合可手动继续。',
     `被打断的会话末尾那一句不对：${seen.note}`,
   )
   must(!seen.noteAfter, '再说一句之后，“发消息继续”那一句还在')

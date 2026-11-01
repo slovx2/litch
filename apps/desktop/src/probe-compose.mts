@@ -208,7 +208,9 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   const liveLength = () => one('.md.live')?.textContent?.length ?? 0
   const open = async (title: string) => {
     const row = await until(`侧栏里的“${title}”`, () =>
-      all('.ss-row').find((element) => element.textContent?.includes(title)),
+      all('.ss-row:not(.projection-group *)').find((element) =>
+        element.textContent?.includes(title),
+      ),
     )
     row.click()
     await until(
@@ -298,11 +300,11 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     const group = await until(
       'docs-site 这个项目',
       () =>
-        all('.ws-row')
+        all('.ws-row:not(.projection-group *)')
           .find((row) => row.textContent?.includes('docs-site'))
           ?.closest('.row-line')?.parentElement,
     )
-    const shown = () => group.querySelectorAll('.ss-row').length
+    const shown = () => group.querySelectorAll('.ss-row:not(.projection-group *)').length
     await until('项目里的会话', () => shown() > 0)
     const first =
       shown() === 5 && Boolean(group.querySelector('.ss-more')?.textContent?.includes('7'))
@@ -311,14 +313,20 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     const expanded =
       !group.querySelector('.ss-more .more') && Boolean(group.querySelector('.ss-more .less'))
     // 选中排在最后的那个，再收起
-    const oldest = [...group.querySelectorAll<HTMLElement>('.ss-row')].at(-1)
+    const oldest = [...group.querySelectorAll<HTMLElement>('.ss-row:not(.projection-group *)')].at(
+      -1,
+    )
     oldest?.click()
     await until('排在最后的那个会话被选中', () => oldest?.classList.contains('sel'))
     group.querySelector<HTMLButtonElement>('.ss-more .less')?.click()
     await until('折回去', () => shown() < 12)
     const keptSelected =
       shown() === 6 &&
-      Boolean([...group.querySelectorAll('.ss-row')].at(-1)?.classList.contains('sel'))
+      Boolean(
+        [...group.querySelectorAll('.ss-row:not(.projection-group *)')]
+          .at(-1)
+          ?.classList.contains('sel'),
+      )
     folded = { first, expanded, keptSelected }
   }
 
@@ -460,11 +468,14 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   write(await until('输入框', area), draft)
   await frame()
   const before = users()
+  const drawnBefore = all('.turn').length
   await open(other)
   const draftIsolated = (await until('输入框', area)).value === ''
   await open(main)
   const back = await until('输入框', area)
   const draftKept = back.value === draft
+  // 历史分批挂载，输入框和最后几轮先出现；不能把首批 DOM 当成完整重读结果。
+  await until('切回会话的历史回合补齐', () => all('.turn').length >= drawnBefore, 5000)
   const after = users()
   const reopenSame = JSON.stringify(after) === JSON.stringify(before)
   const reopenDiff = reopenSame ? null : { before: before.slice(base), after: after.slice(base) }
@@ -633,7 +644,9 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   // ---- 七、新建会话：第一条消息立刻出现，建好之后落在新会话里 ----
   const home = real ? 'app' : 'docs-site'
   const add = await until('项目行上的新建按钮', () =>
-    all('.row-add').find((button) => button.parentElement?.textContent?.includes(home)),
+    all('.row-add:not(.projection-group *)').find((button) =>
+      button.parentElement?.textContent?.includes(home),
+    ),
   )
   add.click()
   await until('新建会话的页面', () => one('.new-hero'))
@@ -645,17 +658,20 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   press(fresh, 'Enter')
   await until('第一条消息出现', () => users().includes(opening))
   const newBubbleMs = performance.now() - createdAt
-  await until('落到新会话里', () => !one('.new-hero') && one('.ss-row.sel'))
+  await until(
+    '落到新会话里',
+    () => !one('.new-hero') && one('.ss-row:not(.projection-group *).sel'),
+  )
   await until('新会话的回话结束', () => !running() && one('.turn-foot'), 60_000)
   const newLanded =
     JSON.stringify(users()) === JSON.stringify([opening]) &&
-    Boolean(one('.ss-row.sel')?.textContent?.includes(opening)) &&
+    Boolean(one('.ss-row:not(.projection-group *).sel')?.textContent?.includes(opening)) &&
     Boolean(one('.crumb b')?.textContent?.includes(opening))
   const newEchoed = real ? Boolean(one('.turn')?.textContent?.includes(`收到：${opening}`)) : null
 
   // ---- 八、侧栏上的会话操作：改名、删除（用的是刚建的那个会话）----
   const rowOf = (title: string) =>
-    all('.ss-row').find((element) => element.textContent?.includes(title))
+    all('.ss-row:not(.projection-group *)').find((element) => element.textContent?.includes(title))
   /** “已归档对话”那一页里的一行 */
   const shelvedOf = (title: string) =>
     all('.arch-item').find((element) => element.textContent?.includes(title))
@@ -706,7 +722,10 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   one<HTMLButtonElement>('.row-more .pick-ask .btn.danger')?.click()
   await until('删掉的那一行消失', () => !rowOf(newName))
   const deletedHome = Boolean(
-    await until('回到新建对话页', () => one('.new-hero') && !one('.ss-row.sel') && !one('.turn')),
+    await until(
+      '回到新建对话页',
+      () => one('.new-hero') && !one('.ss-row:not(.projection-group *).sel') && !one('.turn'),
+    ),
   )
 
   // ---- 输入历史、上下文占用 ----
@@ -742,7 +761,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     const approvalFocus = document.activeElement === firstCard
     await open(main)
     const marked = Boolean(
-      all('.ss-row')
+      all('.ss-row:not(.projection-group *)')
         .find((element) => element.textContent?.includes('聚合面'))
         ?.querySelector('.pill.wait'),
     )
@@ -750,7 +769,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     const approval = await until('切回来之后的审批卡片', () => one<HTMLElement>('.req'))
     await frame()
     const keptAway = marked && document.activeElement === approval
-    const row = all('.ss-row')[0]
+    const row = all('.ss-row:not(.projection-group *)')[0]
     row?.focus()
     if (row) press(row, 'Enter')
     await sleep(200)
@@ -824,7 +843,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
       wizard.act('next')?.disabled === false &&
       document.activeElement === ask
 
-    const aside = all('.ss-row')[0]
+    const aside = all('.ss-row:not(.projection-group *)')[0]
     aside?.focus()
     if (aside) {
       press(aside, 'ArrowRight')
@@ -1185,7 +1204,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     // 记号还没画出来。卡片这时一直开着，等记号出现再往下走，不在卡片刚出现的那一帧就下结论。
     const marked = await until(
       '侧栏上“待回答”的记号',
-      () => one('.ss-row.sel .pill.wait'),
+      () => one('.ss-row:not(.projection-group *).sel .pill.wait'),
       5000,
     ).then(
       () => true,

@@ -179,7 +179,7 @@ export async function tasksProbe(name: string): Promise<TasksProbe> {
   const note = await until('会话顶上那一条', () => one<HTMLElement>('.task-note'))
   await until('会话的内容', () => one('.tr .turn'))
   const crumb = text(one('.tb'))
-  const selected = text(one('.ss-row.sel .title'))
+  const selected = text(one('.ss-row:not(.projection-group *).sel .title'))
   const noteKind = note.dataset.taskNote ?? ''
   const noteText = text(note)
 

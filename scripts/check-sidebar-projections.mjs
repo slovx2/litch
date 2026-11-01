@@ -263,6 +263,30 @@ try {
     ),
     false,
   )
+  const selectedCopies = await run(() => ({
+    tree: [...document.querySelectorAll('.ss-row:not(.projection-group *).sel')].map(
+      (row) => row.closest('[data-session]').dataset.session,
+    ),
+    projections: [...document.querySelectorAll('.projection-group .ss-row.sel')].map(
+      (row) => row.closest('[data-session]').dataset.session,
+    ),
+    unreadCount: Number(
+      document.querySelector('[data-projection=unread] .projection-count').textContent,
+    ),
+    unreadRows: document.querySelectorAll('[data-projection=unread] .ss-row.is-unread').length,
+  }))
+  assert.deepEqual(selectedCopies.tree, ['s3'], '目录只保留一条选中会话')
+  assert.ok(selectedCopies.projections.length >= 2, '同一会话同时出现在最近、原位保留的未读组')
+  assert.ok(
+    selectedCopies.projections.every((id) => id === 's3'),
+    '投影选中态与目录一致',
+  )
+  assert.equal(
+    selectedCopies.unreadCount,
+    selectedCopies.unreadRows,
+    '未读计数不包含已读的原位保留副本',
+  )
+  report.checks.push('投影副本选中态一致，目录查询不重复，未读计数不受副本影响')
   assert.equal(
     await run(
       () =>

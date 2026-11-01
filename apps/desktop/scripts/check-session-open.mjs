@@ -109,7 +109,9 @@ async function install() {
     throw new Error(`等待超时：${check}`)
   }
   const row = (title) =>
-    [...document.querySelectorAll('.ss-row')].find((entry) => entry.textContent.includes(title))
+    [...document.querySelectorAll('.ss-row:not(.projection-group *)')].find((entry) =>
+      entry.textContent.includes(title),
+    )
   const click = (title) => {
     const entry = row(title)
     if (!entry) throw new Error(`会话不存在：${title}`)
@@ -145,7 +147,7 @@ async function install() {
   new PerformanceObserver((list) => {
     window.openCheck.tasks.push(...list.getEntries().map((entry) => entry.duration))
   }).observe({ type: 'longtask' })
-  await until(() => document.querySelector('.ss-row'))
+  await until(() => document.querySelector('.ss-row:not(.projection-group *)'))
 }
 
 async function measure(where) {
@@ -220,7 +222,7 @@ async function rapidSwitch() {
   return {
     maxDelay: Math.max(...delays),
     foldDelay,
-    finalTitle: document.querySelector('.ss-row.sel .title')?.textContent,
+    finalTitle: document.querySelector('.ss-row:not(.projection-group *).sel .title')?.textContent,
   }
 }
 

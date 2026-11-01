@@ -110,8 +110,8 @@ export async function scrollProbe(): Promise<ScrollProbe> {
     )
   }
   const row = (title: string) =>
-    [...document.querySelectorAll<HTMLElement>('.ss-row')].find((element) =>
-      element.textContent?.includes(title),
+    [...document.querySelectorAll<HTMLElement>('.ss-row:not(.projection-group *)')].find(
+      (element) => element.textContent?.includes(title),
     )
   /** 打开那个会重新流一遍的会话，等它开始出字 */
   const openStreaming = async () => {

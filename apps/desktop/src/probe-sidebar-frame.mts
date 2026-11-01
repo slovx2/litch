@@ -106,7 +106,7 @@ export async function keysSeen(): Promise<KeysSeen> {
   const { one, all, frame } = kit
   const panel = one('.sb') as HTMLElement
   const handle = one('.sb-grip') as HTMLElement
-  const rows = all('.ss-row')
+  const rows = all('.ss-row:not(.projection-group *)')
   handle.focus()
   const widths = [panel.offsetWidth]
   for (const key of ['ArrowRight', 'ArrowRight', 'ArrowLeft']) {
@@ -115,7 +115,7 @@ export async function keysSeen(): Promise<KeysSeen> {
     await frame()
     widths.push(panel.offsetWidth)
   }
-  const after = all('.ss-row')
+  const after = all('.ss-row:not(.projection-group *)')
   return {
     widths,
     role: `${handle.getAttribute('role')}/${handle.getAttribute('aria-orientation')}/${handle.tabIndex}`,

@@ -42,8 +42,8 @@ export async function entryProbe(): Promise<EntryProbe> {
   const content = () => one('.tr') as HTMLElement
   const open = async (title: string) => {
     const row = await until(`侧栏里的“${title}”`, () =>
-      [...document.querySelectorAll<HTMLElement>('.ss-row')].find((element) =>
-        element.textContent?.includes(title),
+      [...document.querySelectorAll<HTMLElement>('.ss-row:not(.projection-group *)')].find(
+        (element) => element.textContent?.includes(title),
       ),
     )
     row.click()
@@ -140,7 +140,9 @@ export async function entryProbe(): Promise<EntryProbe> {
     diffLines,
     longTurns,
     restoreShift,
-    looseListed: Boolean(looseLabel?.closest('[data-group]')?.querySelector('.ss-row')),
+    looseListed: Boolean(
+      looseLabel?.closest('[data-group]')?.querySelector('.ss-row:not(.projection-group *)'),
+    ),
   }
 }
 

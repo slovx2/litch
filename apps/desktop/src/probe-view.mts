@@ -76,7 +76,7 @@ export async function viewProbe(): Promise<ViewProbe> {
   }
   const title = '发版前的检查清单'
   const row = await until(`侧栏里的“${title}”`, () =>
-    all('.ss-row').find((entry) => text(entry).includes(title)),
+    all('.ss-row:not(.projection-group *)').find((entry) => text(entry).includes(title)),
   )
   row.click()
   await until('会话的内容', () => text(one('.crumb')).includes(title) && one('.proc-head'))
@@ -174,7 +174,7 @@ export async function viewProbe(): Promise<ViewProbe> {
 
   // 别的会话还是精简
   const other = await until('侧栏里别的会话', () =>
-    all('.ss-row').find((entry) => !text(entry).includes(title)),
+    all('.ss-row:not(.projection-group *)').find((entry) => !text(entry).includes(title)),
   )
   other.click()
   await until('另一个会话', () => !text(one('.crumb')).includes(title))

@@ -143,17 +143,24 @@ export async function treeProbe(): Promise<TreeSeen> {
     await sleep(200)
   }
   const select = async (sessionId: string) => {
-    $(`.row-line[data-session="${sessionId}"] .ss-row`)?.click()
+    $(
+      `.row-line[data-session="${sessionId}"]:not(.projection-group *) .ss-row:not(.projection-group *)`,
+    )?.click()
     await until(() => $('.main .dock textarea.cmp-text') !== null || $('.main .cmp.off') !== null)
     await sleep(200)
   }
 
   // —— 派子会话 ——
-  await until(() => $(`.row-line[data-session="${PARENT}"]`) !== null, 20000)
+  await until(
+    () => $(`.row-line[data-session="${PARENT}"]:not(.projection-group *)`) !== null,
+    20000,
+  )
   await select(PARENT)
   await say('派子会话去查一下')
   const nested = await until(() => kids().length === 2)
-  const node = $(`.row-line[data-session="${PARENT}"]`)?.closest('.tree-node')
+  const node = $(`.row-line[data-session="${PARENT}"]:not(.projection-group *)`)?.closest(
+    '.tree-node',
+  )
   const inside = kids().every((row) => node?.contains(row) && row.closest('.tree-kids') !== null)
   const bareRows = kids().every(
     (row) => row.querySelector('.chip[title]') && !row.querySelector('.time, .pill'),
@@ -162,7 +169,7 @@ export async function treeProbe(): Promise<TreeSeen> {
     .map((row) => row.textContent ?? '')
     .join(' | ')
 
-  const fold = $(`.row-line[data-session="${PARENT}"] .tree-fold`)
+  const fold = $(`.row-line[data-session="${PARENT}"]:not(.projection-group *) .tree-fold`)
   fold?.click()
   await sleep(150)
   // 收起之后父会话下面一行写着还收着几个，画在竖线里面
@@ -197,7 +204,10 @@ export async function treeProbe(): Promise<TreeSeen> {
   const childId = cards[0]?.dataset.child ?? ''
   cards[0]?.querySelector<HTMLElement>('button.tree-card-main')?.click()
   const jumped = await until(
-    () => $('.ss-row.sel')?.closest('.row-line')?.getAttribute('data-session') === childId,
+    () =>
+      $('.ss-row:not(.projection-group *).sel')
+        ?.closest('.row-line')
+        ?.getAttribute('data-session') === childId,
   )
   const lineageBar = await until(
     () => $(`.main .lineage[data-parent="${PARENT}"] .forked-link`) !== null,
@@ -205,12 +215,15 @@ export async function treeProbe(): Promise<TreeSeen> {
   seen.lineage = $('.main .lineage')?.textContent ?? '没有'
   $('.main .lineage .forked-link')?.click()
   const jumpedBack = await until(
-    () => $('.ss-row.sel')?.closest('.row-line')?.getAttribute('data-session') === PARENT,
+    () =>
+      $('.ss-row:not(.projection-group *).sel')
+        ?.closest('.row-line')
+        ?.getAttribute('data-session') === PARENT,
   )
   await sleep(200)
 
   // —— 从菜单派一个不唤醒的 ——
-  const row = $(`.row-line[data-session="${PARENT}"]`)
+  const row = $(`.row-line[data-session="${PARENT}"]:not(.projection-group *)`)
   row?.querySelector<HTMLElement>('.row-more .ibtn')?.click()
   await sleep(200)
   const item = [...(row?.querySelectorAll<HTMLElement>('.pick-pop button') ?? [])].find((entry) =>
@@ -242,7 +255,9 @@ export async function treeProbe(): Promise<TreeSeen> {
     () =>
       $('.spawn-dialog') === null &&
       kids().length === 3 &&
-      $('.ss-row.sel')?.closest('.row-line')?.getAttribute('data-parent') === PARENT,
+      $('.ss-row:not(.projection-group *).sel')
+        ?.closest('.row-line')
+        ?.getAttribute('data-parent') === PARENT,
   )
   // 它回完话（模拟核心照常回一句）之后回到父会话，再说一句
   await sleep(2500)
@@ -536,7 +551,7 @@ export async function treeProbe(): Promise<TreeSeen> {
         child !== '' &&
         card.querySelector('.prop-brief') !== null &&
         kids().length === offerKids + 1 &&
-        $(`.row-line[data-session="${child}"]`) !== null
+        $(`.row-line[data-session="${child}"]:not(.projection-group *)`) !== null
       )
     }))
   seen.offerStarted = `${offerCard()?.dataset.state} ${offerCard()?.textContent ?? ''}`
@@ -616,7 +631,7 @@ export async function treeProbe(): Promise<TreeSeen> {
       child !== '' &&
       card?.querySelector('button.tree-card-main') !== null &&
       kids().length === handKids + 1 &&
-      $(`.row-line[data-session="${child}"]`) !== null
+      $(`.row-line[data-session="${child}"]:not(.projection-group *)`) !== null
     )
   })
   seen.handOff = $$('.main [data-card="hand-off"]').at(-1)?.textContent ?? '没有'
@@ -675,7 +690,9 @@ export async function treeProbe(): Promise<TreeSeen> {
   const agentOpen = await until(
     () => $(`.side .agents-view[data-agent="${ids[0]}"] .dock textarea`) !== null,
   )
-  const agentsHidden = ids.every((id) => $(`.row-line[data-session="${id}"]`) === null)
+  const agentsHidden = ids.every(
+    (id) => $(`.row-line[data-session="${id}"]:not(.projection-group *)`) === null,
+  )
   $('.side [data-tool="hide"]')?.click()
 
   // —— 脱离 ——
@@ -688,8 +705,10 @@ export async function treeProbe(): Promise<TreeSeen> {
   const detached = await until(
     () =>
       $('.main .lineage') === null &&
-      $(`.row-line[data-session="${target}"]`) !== null &&
-      $(`.row-line[data-session="${target}"]`)?.getAttribute('data-parent') === null,
+      $(`.row-line[data-session="${target}"]:not(.projection-group *)`) !== null &&
+      $(`.row-line[data-session="${target}"]:not(.projection-group *)`)?.getAttribute(
+        'data-parent',
+      ) === null,
   )
 
   // —— 未答问题跨回合保留：用刚脱离的会话，避免前面提案数量的断言互相影响 ——
@@ -781,7 +800,11 @@ export interface TreeLooks {
 /** 三种皮肤乘深浅：卡片、提示条、子会话那一行、侧栏里嵌套的行。先把父会话打开，留着上面演过的东西 */
 export async function treeLooks(parent: string): Promise<TreeLooks> {
   const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms))
-  document.querySelector<HTMLElement>(`.row-line[data-session="${parent}"] .ss-row`)?.click()
+  document
+    .querySelector<HTMLElement>(
+      `.row-line[data-session="${parent}"]:not(.projection-group *) .ss-row:not(.projection-group *)`,
+    )
+    ?.click()
   await sleep(600)
   // 回合结束后整段过程收成一行，子代理那一行在过程里跟着收起：先把收起的过程都点开
   for (const head of document.querySelectorAll<HTMLElement>(

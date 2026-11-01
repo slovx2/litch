@@ -61,7 +61,9 @@ export async function toolsProbe(): Promise<ToolsProbe> {
   }
 
   const row = await until('侧栏里的“远程设备安装指引”', () =>
-    all('.ss-row').find((entry) => text(entry).includes('远程设备安装指引')),
+    all('.ss-row:not(.projection-group *)').find((entry) =>
+      text(entry).includes('远程设备安装指引'),
+    ),
   )
   row.click()
   await until('会话的内容', () => text(one('.crumb')).includes('远程设备安装指引') && area())

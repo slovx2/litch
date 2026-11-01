@@ -80,14 +80,16 @@ export async function enginesFork(
     all('.umsg').findLast((entry) => text(one('.umsg-text', entry)).includes(words))
 
   await kit.idle()
-  const source = one('.ss-row.sel')
-  const rowsBefore = all('.ss-row').length
+  const source = one('.ss-row:not(.projection-group *).sel')
+  const rowsBefore = all('.ss-row:not(.projection-group *)').length
   const turnsBefore = kit.turns().length
   const button = kit.sub<HTMLButtonElement>(bubble(earlier), '.act-fork')
   if (!button) throw new Error('先发的那一句上没有分叉的入口')
   button.click()
   const opened = await files.seen(
-    () => all('.ss-row').length === rowsBefore + 1 && one('.ss-row.sel') !== source,
+    () =>
+      all('.ss-row:not(.projection-group *)').length === rowsBefore + 1 &&
+      one('.ss-row:not(.projection-group *).sel') !== source,
     30_000,
   )
   if (!opened) {
@@ -96,7 +98,7 @@ export async function enginesFork(
   await until('分叉出来的会话的内容', () => kit.turns().length > 0 && bubble(earlier), 30_000)
   await kit.idle()
   await frame()
-  const row = one('.ss-row.sel')
+  const row = one('.ss-row:not(.projection-group *).sel')
   const seen = {
     opened,
     turns: kit.turns().length,
@@ -113,7 +115,11 @@ export async function enginesFork(
   // 回到原来那个会话：分叉之前选中的那一行
   if (!source?.isConnected) throw new Error('原来那个会话的那一行不在侧栏里了')
   source.click()
-  await until('原来的会话', () => one('.ss-row.sel') === source && bubble(later), 30_000)
+  await until(
+    '原来的会话',
+    () => one('.ss-row:not(.projection-group *).sel') === source && bubble(later),
+    30_000,
+  )
   // 对话区先画最后几个回合、更早的分批往前补（ui 的 turn-window.ts）：等画全了再数，等不到照实数
   await files.seen(() => kit.turns().length >= turnsBefore, 10_000)
   await frame()

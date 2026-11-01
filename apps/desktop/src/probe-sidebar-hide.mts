@@ -149,7 +149,7 @@ export async function reloadSeen(): Promise<ReloadSeen> {
   const { one } = kit
   const shown = () => (one('.sb')?.getClientRects().length ?? 0) > 0
   // 侧栏收着，里面的行照样在（只是不显示）：等数据到了再看
-  await kit.until('侧栏里有会话', () => one('.ss-row'), 40_000)
+  await kit.until('侧栏里有会话', () => one('.ss-row:not(.projection-group *)'), 40_000)
   const closedAtStart = !shown()
   const newShown = Boolean(one('.tb-new'))
   one<HTMLButtonElement>('.tb-sidebar')?.click()

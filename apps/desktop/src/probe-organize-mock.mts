@@ -122,7 +122,7 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   /** 侧栏里的本机 */
   const local = () => one('.dev-group') as HTMLElement
   const rowsOf = (title: string) =>
-    all('.ss-row').filter((row) => text(one('.title', row)) === title)
+    all('.ss-row:not(.projection-group *)').filter((row) => text(one('.title', row)) === title)
   const rowOf = (title: string) => rowsOf(title)[0]
   /** 这个会话现在画在哪一组里（和数据副本里分组的键一样）。不在侧栏里是 undefined */
   const groupOf = (title: string) =>
@@ -130,7 +130,7 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   /** 本机下面各组的键，从上到下 */
   const groupKeys = () => all('[data-group]', local()).map((group) => group.dataset.group ?? '')
   const titlesIn = (group: string) =>
-    all(`[data-group="${group}"] .ss-row .title`, local()).map(text)
+    all(`[data-group="${group}"] .ss-row:not(.projection-group *) .title`, local()).map(text)
   /** 项目那一行（按名字找） */
   const workspaceLine = (name: string) =>
     all('[data-workspace]', local()).find((line) => text(one('.name', line)) === name)
@@ -349,7 +349,7 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   await until('别处建的项目', () => workspaceLine('别处建的'))
   await until('这个回合结束', () => !one('.running-line'))
   const elsewhere: OrganizeMockProbe['elsewhere'] = {
-    pinned: one('.ss-row.sel') === rowOf(S6),
+    pinned: one('.ss-row:not(.projection-group *).sel') === rowOf(S6),
     workspace: dotOf('别处建的').includes('orange'),
   }
 
@@ -446,7 +446,12 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   look.set({ lang: 'zh-CN' })
   await until('界面换回中文', () => settingsLabel() === '设置')
   ;(
-    await until('设备行上的新建按钮', () => one<HTMLButtonElement>('.dev-row ~ .row-add', local()))
+    await until('设备行上的新建按钮', () =>
+      one<HTMLButtonElement>(
+        '.dev-row:not(.projection-group *) ~ .row-add:not(.projection-group *)',
+        local(),
+      ),
+    )
   ).click()
   const harnessPicker = await until('选 harness 的选择器', () =>
     one<HTMLButtonElement>('.pick[data-kind="harness"] .pick-btn'),
