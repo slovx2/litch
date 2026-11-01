@@ -1,9 +1,13 @@
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { existsSync } from 'node:fs'
 import type { SDKControlGetUsageResponse, SDKRateLimitInfo } from '@anthropic-ai/claude-agent-sdk'
-import { claudeSettingSources } from './runtime-config.mjs'
+import {
+  credentialSettingsLayers,
+  ignoresProjectSignIn,
+  isClaudeSignInKey,
+} from './claude-credential-settings.mjs'
+import { contextLaunch, type ProviderLaunch } from './claude-provider.mjs'
+import { hostClaudeRelease } from './host-claude.mjs'
 
 // CLI 的 get_usage 控制请求（/usage 背后的数据）。用钥匙串或凭据文件登录的订阅账号才有额度，
 // 用 API key、第三方 provider、只带推理权限的令牌时 rate_limits_available 是 false
@@ -13,7 +17,7 @@ export type NativeAccountUsage = Pick<
 >
 
 const identityKeys =
-  /^(ANTHROPIC_|CLAUDE_CODE_OAUTH_TOKEN$|CLAUDE_CODE_USE_|AWS_|GOOGLE_|AZURE_|CLOUD_ML_)/
+  /^(ANTHROPIC_|CLAUDE_CODE_OAUTH_(?:TOKEN|REFRESH_TOKEN|SCOPES|CLIENT_ID)$|CLAUDE_CODE_USE_|AWS_|GOOGLE_|AZURE_|CLOUD_ML_)/
 const dynamicSettings = ['apiKeyHelper', 'awsAuthRefresh', 'awsCredentialExport']
 const limitTypes = new Set([
   'five_hour',
@@ -31,51 +35,47 @@ export type NativeRateLimitInfo = SDKRateLimitInfo & {
 
 // 只接受能识别变化的显式凭据。动态 helper、系统托管配置和 keychain 不冒充稳定账户。
 // 指纹只保留在内存中，凭据和配置正文不能进入协议、日志或持久化。
-export function rateLimitCredentialScope(cwd: string): string | null {
+export function rateLimitCredentialScope(
+  cwd: string,
+  launch?: Pick<ProviderLaunch, 'env' | 'flagSettings'>,
+): string | null {
   if (
     existsSync('/Library/Application Support/ClaudeCode/managed-settings.json') ||
     existsSync('/etc/claude-code/managed-settings.json')
   )
     return null
   const env: Record<string, string> = {}
-  for (const [key, value] of Object.entries(process.env))
-    if (identityKeys.test(key) && value !== undefined) env[key] = value
-  const directories: string[] = []
-  for (let directory = resolve(cwd); ; directory = dirname(directory)) {
-    directories.unshift(directory)
-    if (directory === dirname(directory)) break
-  }
-  // 只看 CHA_CLAUDE_SETTING_SOURCES 选中的几层，和 CLI 读的一致
-  const layers = claudeSettingSources()
-  const paths = [
-    ...(layers.includes('user')
-      ? [join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'settings.json')]
-      : []),
-    ...directories.flatMap((directory) => [
-      ...(layers.includes('project') ? [join(directory, '.claude', 'settings.json')] : []),
-      ...(layers.includes('local') ? [join(directory, '.claude', 'settings.local.json')] : []),
-    ]),
-  ]
   const constraints: Record<string, unknown> = {}
+  const helpers: Record<string, unknown> = {}
   try {
-    for (const path of paths) {
-      if (!existsSync(path)) continue
-      const settings: unknown = JSON.parse(readFileSync(path, 'utf8'))
-      if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return null
-      const record = settings as Record<string, unknown>
-      if (dynamicSettings.some((key) => record[key])) return null
+    const actual = launch ?? contextLaunch(null, null)
+    for (const [key, value] of Object.entries(actual.env))
+      if (identityKeys.test(key) && value !== undefined) env[key] = value
+    const layers = credentialSettingsLayers(cwd, actual.env)
+    if (actual.flagSettings)
+      layers.push({ path: '--settings', project: false, settings: actual.flagSettings })
+    let ignoreProjectSignIn: boolean | undefined
+    for (const { settings: record, project } of layers) {
+      for (const key of dynamicSettings) if (record[key] !== undefined) helpers[key] = record[key]
       for (const key of ['forceLoginMethod', 'forceLoginOrgUUID'])
         if (record[key] !== undefined) constraints[key] = record[key]
       if (record.env !== undefined) {
         if (!record.env || typeof record.env !== 'object' || Array.isArray(record.env)) return null
-        for (const [key, value] of Object.entries(record.env))
+        for (const [key, value] of Object.entries(record.env)) {
+          if (project && isClaudeSignInKey(key)) {
+            ignoreProjectSignIn ??= ignoresProjectSignIn(hostClaudeRelease(actual.env))
+            if (ignoreProjectSignIn) continue
+          }
           if (identityKeys.test(key)) {
             if (typeof value !== 'string') return null
             env[key] = value
           }
+        }
       }
     }
+    if (dynamicSettings.some((key) => helpers[key])) return null
   } catch {
+    // 配置或 CLI 版本不可确认时，不猜测账号归属。
     return null
   }
   if (
@@ -89,7 +89,12 @@ export function rateLimitCredentialScope(cwd: string): string | null {
   return createHash('sha256')
     .update(
       JSON.stringify({
-        env: Object.fromEntries(Object.entries(env).sort(([a], [b]) => a.localeCompare(b))),
+        env: Object.fromEntries(
+          Object.entries(env)
+            // 账号启动参数用空串清除网关变量；清除后与未配置属于同一身份。
+            .filter(([, value]) => value !== '')
+            .sort(([a], [b]) => a.localeCompare(b)),
+        ),
         constraints,
       }),
     )

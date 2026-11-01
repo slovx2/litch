@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { statSync } from 'node:fs'
 import { cliCommand, resolveHostCli } from '../../shared/src/host-cli.mjs'
 import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
 
@@ -33,15 +34,28 @@ export function hostClaudeExecutable(env: NodeJS.ProcessEnv = process.env): stri
   }
 }
 
-export function hostClaudeVersion(cli: string, minimum: string): string {
+export function hostClaudeVersion(cli: string, minimum: string, env = process.env): string {
   let actual: string
   try {
     const [command, ...args] = cliCommand(cli, ['--version'])
-    actual = execFileSync(command!, args, { encoding: 'utf8', timeout: 10_000 }).trim()
+    actual = execFileSync(command!, args, { env, encoding: 'utf8', timeout: 10_000 }).trim()
   } catch {
     throw new Error(`无法读取宿主 Claude CLI 版本: ${cli}`)
   }
   if (!isVersionAtLeast(/^(\S+) \(Claude Code\)$/.exec(actual)?.[1], minimum))
     throw new Error(`宿主 Claude CLI 版本不符: 需要 >= ${minimum} (Claude Code)，实际 ${actual}`)
   return actual
+}
+
+let releaseCache: { key: string; version: string } | undefined
+
+/** 版本参与凭据规则；只缓存同一份可执行文件，原地更新 CLI 后重新读取。 */
+export function hostClaudeRelease(env = process.env): string {
+  const cli = hostClaudeExecutable(env)
+  const file = statSync(cli)
+  const key = `${cli}:${file.size}:${file.mtimeMs}:${file.ctimeMs}`
+  if (releaseCache?.key === key) return releaseCache.version
+  const version = hostClaudeVersion(cli, '0.0.0', env).split(' ')[0]!
+  releaseCache = { key, version }
+  return version
 }

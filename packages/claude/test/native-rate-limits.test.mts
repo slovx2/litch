@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import { ignoresProjectSignIn } from '../src/claude-credential-settings.mjs'
+import { hostClaudeRelease } from '../src/host-claude.mjs'
 import { MockLLM } from './fixtures/mock-llm.mjs'
 import { ProtocolClient } from './fixtures/protocol-client.mjs'
 
@@ -133,6 +135,7 @@ test('ACCOUNT-002：凭据变更清空观测，旧回合和不同项目 provider
   const url = await llm.start()
   const client = await ProtocolClient.start(home, url, false, 'oauth')
   const settingsPath = join(home, 'claude', 'settings.json')
+  const ignoresProject = ignoresProjectSignIn(hostClaudeRelease())
   let releaseOld = () => {}
   try {
     const { thread } = await client.request('thread/start', { cwd: home })
@@ -199,14 +202,31 @@ test('ACCOUNT-002：凭据变更清空观测，旧回合和不同项目 provider
     )
     const { thread: other } = await client.request('thread/start', { cwd: project })
     llm.enqueue((_body, headers) => {
-      assert.equal(headers.authorization, 'Bearer sk-ant-oat01-project-test-not-a-secret')
+      assert.equal(
+        headers.authorization,
+        ignoresProject
+          ? 'Bearer sk-ant-oat01-new-test-not-a-secret'
+          : 'Bearer sk-ant-oat01-project-test-not-a-secret',
+      )
       return reply(0.7)
     })
     assert.equal(await modelTurn(client, other.id), 'completed')
     assert.equal(
       (await client.request('account/rateLimits/read', null)).rateLimits.primary.usedPercent,
-      30,
-      '项目账户不能覆盖默认账户',
+      ignoresProject ? 70 : 30,
+      ignoresProject
+        ? '项目凭据被忽略时，用户账户的真实额度必须进入同一快照'
+        : '项目账户不能覆盖默认账户',
+    )
+    // 用户账户的另一条会话仍属同一账号；项目路径不能把快照拆成一份虚假的项目账号。
+    llm.enqueue((_body, headers) => {
+      assert.equal(headers.authorization, 'Bearer sk-ant-oat01-new-test-not-a-secret')
+      return reply(0.4)
+    })
+    assert.equal(await modelTurn(client, thread.id), 'completed')
+    assert.equal(
+      (await client.request('account/rateLimits/read', null)).rateLimits.primary.usedPercent,
+      40,
     )
     await writeFile(
       settingsPath,

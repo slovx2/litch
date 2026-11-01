@@ -182,7 +182,7 @@ interface BackgroundShellState {
 function rateScope(context: RuntimeTurnContext): string | null {
   const provider = context.provider ?? plainProvider()
   return provider === ACCOUNT_PROVIDER || provider === NATIVE_PROVIDER
-    ? rateLimitCredentialScope(context.cwd)
+    ? rateLimitCredentialScope(context.cwd, contextLaunch(context.provider, context.model))
     : null
 }
 
@@ -3550,7 +3550,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         info &&
         ['allowed', 'allowed_warning', 'rejected'].includes(String(info.status)) &&
         pending.credentialScope &&
-        pending.credentialScope === rateLimitCredentialScope(pending.context.cwd)
+        pending.credentialScope === rateScope(pending.context)
       )
         await pending.handlers.onEvent({
           type: 'rate_limits',

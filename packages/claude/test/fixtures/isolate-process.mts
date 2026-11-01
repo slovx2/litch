@@ -19,7 +19,7 @@ for (const name of Object.keys(process.env))
   if (
     /^ANTHROPIC_/.test(name) ||
     /^CLAUDE_CODE_USE_/.test(name) ||
-    name === 'CLAUDE_CODE_OAUTH_TOKEN' ||
+    /^CLAUDE_CODE_OAUTH_(TOKEN|REFRESH_TOKEN|SCOPES|CLIENT_ID)$/.test(name) ||
     name === 'CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST'
   )
     delete process.env[name]

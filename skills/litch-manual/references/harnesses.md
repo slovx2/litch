@@ -60,9 +60,10 @@ harness row has a **Settings** button (详情设置) that opens these tabs. Runt
 harness's own config files on that device (shared with its CLI there):
 
 - **Claude Code 账号与网关并用**：另配 API key 不会隐藏已配置的官方账号模型。
-  Claude Code 2.1.316 不再从项目的 `.claude/settings.json` 或 `settings.local.json` 读取
+  Claude Code 2.1.312 起不再从项目的 `.claude/settings.json` 或 `settings.local.json` 读取
   claude.ai 登录凭据；请在设备的启动环境、用户级设置或 Litch 的账号设置中配置。
-  项目中的其他设置仍按 CLI 的设置层级生效。
+  Litch 按 CLI 实际生效的凭据归属账号额度，不把被忽略的项目令牌当成独立账号。
+  旧版 CLI 仍沿用项目凭据覆盖规则；项目 API key、apiKeyHelper 和第三方服务地址不受这项限制。
 - **Claude Code 子代理与工具发现**：子代理回答不显示 CLI 附加的工具清单和用量包装。
   计划和只读模式允许加载延迟工具的定义，实际调用仍受原有权限边界限制。计划确认在对应正文处理后显示。
 
