@@ -75,7 +75,7 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
   const pending = () => Number(text(one('[data-sidebar-mode="manager"] .pill')) || 0)
   const reply = async (expected: string, event?: string) => {
     await wait(expected, () =>
-      all('.mg-chat .turn > .md').some((entry) => text(entry).includes(expected)),
+      all('.mg-chat .turn > .agent-message > .md').some((entry) => text(entry).includes(expected)),
     )
     await kit.idle()
     assert(kit.foot().includes('完成'), `回合未完成：${kit.where()}`)

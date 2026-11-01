@@ -155,7 +155,7 @@ export async function enginesStart(spec: EngineSpec, place: EnginesPlace): Promi
   // ---- 二、发头一句：盯着回答从头到尾显示成过什么样子 ----
   const shapes: string[] = []
   const sample = () => {
-    const shown = text(all('.turn > .md').at(-1))
+    const shown = kit.lastAnswer()
     if (shown && shapes.at(-1) !== shown) shapes.push(shown)
   }
   const observer = new MutationObserver(sample)

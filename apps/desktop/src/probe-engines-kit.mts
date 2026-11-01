@@ -82,7 +82,8 @@ export function installEnginesKit(): boolean {
   const running = () => Boolean(one('.running-line'))
   const turns = () => all('.turn')
   const lastTurn = () => text(turns().at(-1))
-  const lastAnswer = () => text(subs(turns().at(-1), ':scope > .md').at(-1))
+  // 消息操作区和正文同属 agent-message；只取正文，且不把过程区里的说明当最终回答。
+  const lastAnswer = () => text(subs(turns().at(-1), ':scope > .agent-message > .md').at(-1))
   const foot = () => text(sub(turns().at(-1), '.turn-foot span'))
   const where = () =>
     JSON.stringify({
@@ -262,7 +263,7 @@ export function installEnginesKit(): boolean {
         // 过程：说明段、步骤组里的每一条、子代理那一行
         if (block.matches('.proc')) {
           return [...(one('.proc-body', block)?.children ?? [])].flatMap((part): string[] => {
-            if (part.matches('.md')) return [`说明：${text(part)}`]
+            if (part.matches('.agent-message')) return [`说明：${text(one('.md', part))}`]
             if (part.matches('.steps')) {
               return all('.item', part).map((item) =>
                 `${text(one('.verb', item))} ${text(one('.tgt', item))}｜${stateOf(item)}`.trim(),
@@ -280,7 +281,7 @@ export function installEnginesKit(): boolean {
         // 压缩那一条（正在压缩、已压缩、没压成）单独一块
         if (block.matches('.compaction')) return [text(block)]
         if (block.matches('.plan')) return [`计划：${text(one('.plan-body', block))}`]
-        if (block.matches('.md')) return [`回答：${text(block)}`]
+        if (block.matches('.agent-message')) return [`回答：${text(one('.md', block))}`]
         if (block.matches('.turn-foot')) return [`结束：${text(one('span', block))}`]
         if (block.matches('.running-line')) return ['还在跑']
         if (block.matches('.errbox')) return [`出错：${text(block)}`]
