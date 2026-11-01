@@ -290,7 +290,8 @@
   /* 跟着内容长高由浏览器做（field-sizing）。以前每打一个字先收成 auto 再量 scrollHeight，
      会让整页重新布局两次，会话很长时打字跟着卡 */
   field-sizing: content;
-  max-height: 220px;
+  /* 矮窗口里给换行的选项条、请求卡片和终端留空间；长草稿在输入框内滚动。 */
+  max-height: min(220px, 30vh);
 }
 .cmp-text::placeholder {
   color: var(--ink-3);
