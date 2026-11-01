@@ -690,8 +690,18 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   for (const skin of ['retro', 'human', 'standard']) {
     for (const theme of ['light', 'dark']) {
       look.set({ skin, theme })
-      // 开关换颜色有一小段过渡，等它走完再量
-      await sleep(250)
+      // 开关换颜色有一小段过渡，等它走完再量：先让样式算一遍（过渡这时才开始），再等页面上没有在走的过渡。
+      // 不按固定时长等，慢机器上过渡走得比定的时长久
+      await frame()
+      getComputedStyle(one('.switch[aria-checked="true"]') as HTMLElement).backgroundColor
+      await until(
+        '换皮肤的过渡走完',
+        () =>
+          !document
+            .getAnimations()
+            .some((entry) => entry instanceof CSSTransition && entry.playState === 'running'),
+        10_000,
+      )
       const card = style('.mng-h').backgroundColor
       const numbers = [
         contrast(style('.mng-row-title').color, card),

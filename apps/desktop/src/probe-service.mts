@@ -158,18 +158,23 @@ export async function mockServiceProbe(): Promise<MockServiceProbe> {
       ?.click()
     await until('打开这个会话', () => text(one('.crumb b')) === title)
   }
-  /** 在那个会话里说一句。不等回合结束 */
+  /**
+   * 在那个会话里说一句。不等回合结束，等到这句话出现在对话的某个回合里：模拟核心是在加这个回合的同一步里演那一出的。
+   * 不数画了几个回合：刚切回来时回合列表是延后取的，旧回合又分批补画（turn-window.ts），数目会自己涨。
+   * 每次说的话都不一样
+   */
   const say = async (words: string) => {
     await openSession()
     const area = await until('输入框', () => one<HTMLTextAreaElement>('textarea.cmp-text'))
-    const before = all('.turn').length
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(area, words)
     area.dispatchEvent(new Event('input', { bubbles: true }))
     await frame()
     area.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
     )
-    await until('这一句发出去', () => all('.turn').length > before)
+    await until('这一句发出去', () =>
+      all('.turn .umsg-text').some((entry) => text(entry).includes(words)),
+    )
   }
   const settled = () => until('这个回合结束', () => !one('.req') && !one('.running-line'))
 
