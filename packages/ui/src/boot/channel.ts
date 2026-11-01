@@ -17,6 +17,8 @@ export interface ShellBridge {
   platform: string
   /** 请外壳把一个连着核心的消息端口发到这个页面来 */
   requestCorePort(): void
+  /** 原生窗口可见、未最小化且在前台；订阅后先回报当前值。 */
+  onForeground(handler: (foreground: boolean) => void): () => void
   /** 请外壳用系统的浏览器打开一个网址。外壳只接受 http 和 https */
   openExternal(url: string): void
   /** 用系统的文件管理器打开日志目录：desktop 是桌面端自己的，device 是本机设备服务的 */

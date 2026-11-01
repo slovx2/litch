@@ -5,7 +5,7 @@ import '../styles/suggestions.css'
 import { ManagerTitleBar } from '../manager/ManagerTitleBar.tsx'
 import '../styles/manager.css'
 import { keys, managerMark, type SessionSummary } from '@litch/core'
-import { useCallback, useEffect, useReducer, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useReducer, useState } from 'react'
 import { ArchivedPage } from '../archived/ArchivedPage.tsx'
 import { ArchivedSession } from '../archived/ArchivedSession.tsx'
 import { ConfigAgent } from '../assist/ConfigAgent.tsx'
@@ -117,9 +117,17 @@ export function App() {
   const selection = page ? null : picked
 
   // 只记实际呈现在主区域的会话；预取、打开侧面板和后台订阅不算查看。
-  useEffect(() => {
-    if (selection) replica.visitSession(selection.deviceId, selection.sessionId)
-  }, [selection, replica])
+  const viewingDevice = selection?.deviceId
+  const viewingSession = selection?.sessionId
+  // 随画面提交即取消旧计时，不能等下一轮被动 effect 才处理切走。
+  useLayoutEffect(() => {
+    replica.viewSession(
+      viewingDevice && viewingSession
+        ? { deviceId: viewingDevice, sessionId: viewingSession }
+        : null,
+    )
+    return () => replica.viewSession(null)
+  }, [viewingDevice, viewingSession, replica])
 
   // 开着一个会话就算读过了：摘要上的未读一出现就清（摘要比选中晚到的也算）
   useEffect(() => {
@@ -148,7 +156,6 @@ export function App() {
             (manager) => manager.deviceId === next.deviceId && manager.threadId === next.sessionId,
           )
         dispatch({ type: 'select', mode: mode ?? (managed ? 'manager' : 'chat'), selection: next })
-        replica.visitSession(next.deviceId, next.sessionId)
         setPeek(null)
       }),
     [replica, managerData.managers],

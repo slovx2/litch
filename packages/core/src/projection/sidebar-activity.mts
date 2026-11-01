@@ -9,7 +9,10 @@ export interface SessionInteraction {
 
 export interface SidebarActivity {
   channel: CoreChannel
-  visit(deviceId: string, sessionId: string): void
+  /** 当前真正显示的会话；离开对话页时传 null，订阅/预取不调用。 */
+  view(selection: { deviceId: string; sessionId: string } | null): void
+  /** 由平台报告窗口/应用是否处于可见前台，默认不是。 */
+  setForeground(foreground: boolean): void
   time(deviceId: string, sessionId: string): number
   subscribe(listener: (deviceId: string) => void): () => void
   flush(): void
@@ -70,7 +73,11 @@ export function createSidebarActivity(
   const times = new Map<string, Map<string, SessionInteraction>>()
   const listeners = new Set<(deviceId: string) => void>()
   let latest = 0
-  let lastVisit: SessionInteraction | null = null
+  let viewed: { deviceId: string; sessionId: string } | null = null
+  let foreground = false
+  let closed = false
+  let cancelVisit: (() => void) | null = null
+  let visitEpoch = 0
   let cancelSave: (() => void) | null = null
   const put = (entry: SessionInteraction) => {
     let device = times.get(entry.deviceId)
@@ -114,6 +121,19 @@ export function createSidebarActivity(
     if (storage && !cancelSave) cancelSave = clock.setTimer(flush, 1000)
     for (const listener of listeners) listener(deviceId)
   }
+  const restartVisit = () => {
+    cancelVisit?.()
+    cancelVisit = null
+    const epoch = ++visitEpoch
+    const selected = viewed
+    if (closed || !foreground || !selected) return
+    // 每段连续的前台查看只记一次；失去前台或切走清零，不累计碎片时间。
+    cancelVisit = clock.setTimer(() => {
+      if (epoch !== visitEpoch || closed || !foreground) return
+      cancelVisit = null
+      record(selected.deviceId, selected.sessionId, stamp())
+    }, 5000)
+  }
   return {
     channel: {
       async command(name, params, options) {
@@ -139,21 +159,22 @@ export function createSidebarActivity(
       },
       subscribe: (topic, sink) => channel.subscribe(topic, sink),
       close() {
+        closed = true
+        restartVisit()
         flush()
         channel.close()
       },
     },
-    visit(deviceId, sessionId) {
-      const now = clock.now()
-      if (
-        lastVisit?.deviceId === deviceId &&
-        lastVisit.sessionId === sessionId &&
-        now >= lastVisit.at &&
-        now - lastVisit.at < 1000
-      )
+    view(selection) {
+      if (viewed?.deviceId === selection?.deviceId && viewed?.sessionId === selection?.sessionId)
         return
-      lastVisit = { deviceId, sessionId, at: now }
-      record(deviceId, sessionId, stamp())
+      viewed = selection
+      restartVisit()
+    },
+    setForeground(value) {
+      if (foreground === value) return
+      foreground = value
+      restartVisit()
     },
     time: (deviceId, sessionId) => times.get(deviceId)?.get(sessionId)?.at ?? 0,
     subscribe(listener) {

@@ -4,6 +4,9 @@
 
 /** 界面 → 主进程：请给我一个连着核心的消息端口 */
 export const REQUEST_CORE_PORT = 'litch:request-core-port'
+/** 界面请求一次当前窗口前台状态；后续变化主动投递，不含会话数据。 */
+export const REQUEST_WINDOW_FOREGROUND = 'litch:request-window-foreground'
+export const WINDOW_FOREGROUND = 'litch:window-foreground'
 /** 主进程 → 界面：端口来了（端口随消息一起转移） */
 export const CORE_PORT = 'litch:core-port'
 /** 主进程 → 工具进程：这是一个新窗口的端口，请在上面提供服务 */

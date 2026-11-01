@@ -97,7 +97,7 @@ export const zhCN = {
   'sidebar.projection.unread': '未读',
   'sidebar.projection.recent': '最近',
   'sidebar.projection.unreadEmpty': '暂无未读结果',
-  'sidebar.projection.recentEmpty': '打开或操作的对话会显示在这里',
+  'sidebar.projection.recentEmpty': '前台查看满 5 秒或主动操作的对话会显示在这里',
   'sidebar.projection.settings': '{name}设置',
   'sidebar.projection.project': '按项目聚合',
   'sidebar.projection.count': '{n} 个未读对话',

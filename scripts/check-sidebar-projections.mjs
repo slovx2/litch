@@ -88,6 +88,8 @@ try {
   cdp = await Cdp.connect(tabs.find((t) => t.type === 'page').webSocketDebuggerUrl)
   await cdp.call('Runtime.enable')
   await cdp.call('Page.enable')
+  // 隔离的无头页面模拟前台窗口，不激活用户的浏览器。
+  await cdp.call('Emulation.setFocusEmulationEnabled', { enabled: true })
   const errors = []
   cdp.listeners.add((message) => {
     if (message.method === 'Runtime.exceptionThrown')
@@ -329,10 +331,26 @@ try {
     false,
     '重新打开已读项不重新放进未读',
   )
+  assert.notEqual((await roots())[0], 's3', '短暂打开和清未读不应刷新最近排序')
+  assert.ok(await run(() => document.hasFocus() && document.visibilityState === 'visible'))
   report.checks.push(
     '未读原位暂留、已读样式、鼠标连点不串项、切走移除、已读不回填、设备名与时间口径',
   )
-  await until(async () => (await roots())[0] === 's3', '查看更新最近排序')
+  const dwellStarted = await run(() => Date.now())
+  await until(async () => (await roots())[0] === 's3', '连续前台停留满五秒更新最近排序')
+  // 稍早的查看已切走清零；此时的时间戳来自本次达标，而不是初次点开。
+  await until(
+    () =>
+      run(
+        (since) =>
+          JSON.parse(localStorage.getItem('litch.sidebar.activity')).some(
+            (row) => row.deviceId === 'local' && row.sessionId === 's3' && row.at >= since,
+          ),
+        dwellStarted,
+      ),
+    '达标时刻持久化',
+  )
+  report.checks.push('打开立即清未读、短暂查看不刷新最近、连续前台五秒后记录达标时刻')
   await click(`${recent} .projection-head .dev-row`)
   assert.equal(
     await run(() => !!document.querySelector('[data-projection=recent] .projection-body')),

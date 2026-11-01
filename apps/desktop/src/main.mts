@@ -52,6 +52,7 @@ import {
   OPEN_LOGS,
   PICK_FOLDER,
   REQUEST_CORE_PORT,
+  REQUEST_WINDOW_FOREGROUND,
   SERVICE,
   SET_BADGE,
   SET_LANGUAGE,
@@ -62,6 +63,7 @@ import {
   UPDATE_INSTALL,
   UPDATE_SET_AUTO,
   UPDATE_STATE,
+  WINDOW_FOREGROUND,
 } from './ipc.mjs'
 import { guardQuit, guardWindow, installLeaveGuard } from './leave-guard.mjs'
 import {
@@ -408,6 +410,9 @@ function dressWindow(window: BrowserWindow): void {
   window.setBackgroundColor(backdropOf(look, nativeTheme.shouldUseDarkColors))
 }
 
+const foregroundOf = (window: BrowserWindow): boolean =>
+  !window.isDestroyed() && window.isVisible() && !window.isMinimized() && window.isFocused()
+
 function createWindow(): BrowserWindow {
   const least = minSizeOf(look.zoom, workArea())
   const backdrop = backdropOf(look, nativeTheme.shouldUseDarkColors)
@@ -435,6 +440,16 @@ function createWindow(): BrowserWindow {
     },
   })
   // 界面不开新窗口，也不跳到别的地址
+  const reportForeground = () => {
+    if (!window.webContents.isDestroyed())
+      window.webContents.send(WINDOW_FOREGROUND, foregroundOf(window))
+  }
+  window.on('focus', reportForeground)
+  window.on('blur', reportForeground)
+  window.on('show', reportForeground)
+  window.on('hide', reportForeground)
+  window.on('minimize', reportForeground)
+  window.on('restore', reportForeground)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event, url) => {
     if (!isUiUrl(url)) event.preventDefault()
@@ -462,6 +477,13 @@ ipcMain.on(REQUEST_CORE_PORT, (event) => {
   const { port1, port2 } = new MessageChannelMain()
   core.postMessage({ type: ATTACH }, [port1])
   event.sender.postMessage(CORE_PORT, null, [port2])
+})
+
+ipcMain.on(REQUEST_WINDOW_FOREGROUND, (event) => {
+  const frame = event.senderFrame
+  if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return
+  const window = BrowserWindow.fromWebContents(event.sender)
+  event.sender.send(WINDOW_FOREGROUND, window !== null && foregroundOf(window))
 })
 
 // Claude 桌面端会话的深链：别的 Claude 会话发来的消息上“在 Claude 桌面端打开”用（只认这一种形状）

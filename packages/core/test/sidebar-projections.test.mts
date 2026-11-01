@@ -175,7 +175,7 @@ test('一万层父链归并不递归、不读取正文；最近没有数量上�
   assert.ok(performance.now() - started < 3000)
 })
 
-test('查看去重、同毫秒跨会话排序、持久化合并与重启恢复', () => {
+test('连续前台查看满五秒记一次，时间取达标时刻，持久化和重启恢复', () => {
   const time = fakeClock()
   const writes: SessionInteraction[][] = []
   const channel = {
@@ -189,24 +189,99 @@ test('查看去重、同毫秒跨会话排序、持久化合并与重启恢复',
   })
   let changes = 0
   activity.subscribe(() => changes++)
-  activity.visit('d', 'a')
+  activity.setForeground(true)
+  activity.view({ deviceId: 'd', sessionId: 'a' })
+  time.advance(4999)
+  assert.equal(activity.time('d', 'a'), 0)
+  activity.view({ deviceId: 'd', sessionId: 'a' })
+  time.advance(1)
   const first = activity.time('d', 'a')
-  activity.visit('d', 'a')
+  assert.equal(first, time.clock.now())
   assert.equal(changes, 1)
-  activity.visit('d', 'b')
-  activity.visit('d', 'a')
-  assert.ok(activity.time('d', 'a') > activity.time('d', 'b'))
-  assert.ok(activity.time('d', 'a') > first)
   assert.equal(time.pending(), 1)
   assert.equal(writes.length, 0)
   time.advance(1000)
   assert.equal(writes.length, 1)
+  time.advance(60_000)
+  assert.equal(activity.time('d', 'a'), first, '一直停留不重复更新')
+  assert.equal(changes, 1)
+  assert.equal(time.pending(), 0)
   const restored = createSidebarActivity(channel, time.clock, { load: () => writes[0], save() {} })
   assert.equal(restored.time('d', 'a'), activity.time('d', 'a'))
-  activity.visit('d', 'a')
+  activity.view(null)
+  activity.view({ deviceId: 'd', sessionId: 'a' })
+  time.advance(5000)
   activity.flush()
   assert.equal(writes.length, 2)
   assert.equal(time.pending(), 0)
+})
+
+test('短暂查看、切走、失去前台都清零；默认后台不计时，关闭后不遗留计时', () => {
+  const time = fakeClock()
+  const channel = {
+    command: async () => ({}),
+    subscribe: () => () => {},
+    close() {},
+  } as CoreChannel
+  const activity = createSidebarActivity(channel, time.clock)
+  const a = { deviceId: 'd', sessionId: 'a' }
+  activity.view(a)
+  time.advance(10_000)
+  assert.equal(activity.time('d', 'a'), 0)
+  activity.setForeground(true)
+  time.advance(4999)
+  activity.view({ deviceId: 'd', sessionId: 'b' })
+  time.advance(1000)
+  activity.view(a)
+  time.advance(4999)
+  assert.equal(activity.time('d', 'a'), 0)
+  assert.equal(activity.time('d', 'b'), 0)
+  activity.setForeground(false)
+  time.advance(10_000)
+  assert.equal(activity.time('d', 'a'), 0)
+  activity.setForeground(true)
+  time.advance(4999)
+  assert.equal(activity.time('d', 'a'), 0)
+  time.advance(1)
+  assert.equal(activity.time('d', 'a'), time.clock.now())
+  activity.view({ deviceId: 'other-device', sessionId: 'a' })
+  time.advance(4999)
+  activity.view(null)
+  time.advance(1)
+  assert.equal(activity.time('other-device', 'a'), 0)
+  activity.view(a)
+  activity.channel.close()
+  assert.equal(time.pending(), 0)
+})
+
+test('主动发送、回答和停止立即计入，不用等待查看达标', async () => {
+  const time = fakeClock()
+  const channel = {
+    command: async () => ({}),
+    subscribe: () => () => {},
+    close() {},
+  } as CoreChannel
+  const activity = createSidebarActivity(channel, time.clock)
+  const where = { deviceId: 'd', sessionId: 'a' }
+  activity.setForeground(true)
+  activity.view(where)
+  time.advance(1000)
+  await activity.channel.command('session.send', { ...where, text: '主动消息' })
+  assert.equal(activity.time('d', 'a'), time.clock.now())
+  time.advance(1000)
+  await activity.channel.command('session.respond', {
+    ...where,
+    requestId: 'r',
+    optionId: 'reject',
+  })
+  assert.equal(activity.time('d', 'a'), time.clock.now())
+  time.advance(1000)
+  await activity.channel.command('session.interrupt', where)
+  const at = activity.time('d', 'a')
+  assert.equal(at, time.clock.now())
+  activity.view(null)
+  time.advance(10_000)
+  assert.equal(activity.time('d', 'a'), at)
 })
 
 test('仅成功用户命令计入；读取、已读、订阅不计；慢应答不覆盖后来的操作', async () => {
@@ -225,6 +300,7 @@ test('仅成功用户命令计入；读取、已读、订阅不计；慢应答�
     close() {},
   } as CoreChannel
   const activity = createSidebarActivity(channel, time.clock)
+  activity.setForeground(true)
   const where = { deviceId: 'd', sessionId: 'a' }
   await activity.channel.command('session.markRead', where)
   await activity.channel.command('session.peek', where)
@@ -234,7 +310,8 @@ test('仅成功用户命令计入；读取、已读、订阅不计；慢应答�
   assert.equal(activity.time('d', 'a'), 0)
   const sending = activity.channel.command('session.send', { ...where, text: 'hello' })
   time.advance(50)
-  activity.visit('d', 'a')
+  activity.view(where)
+  time.advance(5000)
   const after = activity.time('d', 'a')
   finish?.()
   await sending
@@ -251,12 +328,13 @@ test('仅成功用户命令计入；读取、已读、订阅不计；慢应答�
   assert.ok(activity.time('d', 'new') > 0)
 })
 
-test('副本订阅投影：查看马上入最近、已读移出未读、归档移除、后台进展不更新时间', async () => {
+test('副本订阅投影：打开即清未读但五秒后才进最近，归档移除，后台进展不刷新', async () => {
   const time = fakeClock()
   const [ui, server] = createPortPair()
   const host = createMockCore({ clock: time.clock, chunkMs: 0 })
   serveChannel(server, host, { clock: time.clock })
   const activity = createSidebarActivity(connectChannel(ui), time.clock)
+  activity.setForeground(true)
   const replica = createReplica(activity.channel, activity)
   const stop = replica.start()
   await settle()
@@ -268,12 +346,15 @@ test('副本订阅投影：查看马上入最近、已读移出未读、归档�
   }
   assert.equal(view().recent.length, 0)
   assert.ok(view().unread.some((row) => row.sessionId === 's3'))
-  replica.visitSession('local', 's3')
-  assert.equal(view().recent[0]?.sessionId, 's3')
+  replica.viewSession({ deviceId: 'local', sessionId: 's3' })
+  assert.equal(view().recent.length, 0)
   await activity.channel.command('session.markRead', { deviceId: 'local', sessionId: 's3' })
   time.advance(20)
   await settle()
   assert.ok(!view().unread.some((row) => row.sessionId === 's3'))
+  assert.equal(view().recent.length, 0)
+  time.advance(4980)
+  assert.equal(view().recent[0]?.sessionId, 's3')
   const at = view().recent[0]?.at
   // 绕过 UI 通道的后台消息不会写主动交互表。
   await host.command(

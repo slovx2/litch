@@ -368,8 +368,8 @@ export interface SessionMeta {
 
 export interface Replica {
   readonly store: KeyedStore
-  /** 用户显式打开、切到会话；预取和 openSession 订阅不记浏览。 */
-  visitSession(deviceId: string, sessionId: string): void
+  /** 当前显示的会话；核心按前台连续停留时间计入最近，离开时传 null。 */
+  viewSession(selection: { deviceId: string; sessionId: string } | null): void
   /** 开始订阅应用和各设备的侧栏。返回停止函数 */
   start(): () => void
   /** 打开一个会话：订阅它的内容。同一个会话可以被打开多次，全部关掉后才退订并清掉内容 */
@@ -1285,7 +1285,7 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
 
   return {
     store,
-    visitSession: (deviceId, sessionId) => activity?.visit(deviceId, sessionId),
+    viewSession: (selection) => activity?.view(selection),
 
     start() {
       const stopActivity = activity?.subscribe((deviceId) => {
@@ -1314,6 +1314,7 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
       )
       return () => {
         stopActivity?.()
+        activity?.view(null)
         activity?.flush()
         stopApp()
         for (const deviceId of [...sidebars.keys()]) dropSidebar(deviceId)

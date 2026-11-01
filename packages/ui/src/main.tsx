@@ -21,6 +21,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './app/App.tsx'
 import { currentLang } from './app/appearance.ts'
+import { watchForeground } from './app/foreground.ts'
 import { currentPlatform } from './app/platform.ts'
 import { ServicesProvider } from './app/services.tsx'
 import { browserClock, openChannel } from './boot/channel.ts'
@@ -32,6 +33,19 @@ const activity = createSidebarActivity(transport, browserClock, {
 })
 const channel = activity.channel
 const replica = createReplica(channel, activity)
+watchForeground(
+  {
+    visible: () => document.visibilityState === 'visible',
+    focused: () => document.hasFocus(),
+    listen(event, changed) {
+      const target = event === 'visibilitychange' ? document : window
+      target.addEventListener(event, changed)
+      return () => target.removeEventListener(event, changed)
+    },
+    ...(window.litchShell ? { native: window.litchShell.onForeground } : {}),
+  },
+  activity.setForeground,
+)
 window.addEventListener('pagehide', () => activity.flush())
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') activity.flush()

@@ -22,6 +22,7 @@ import {
   OPEN_LOGS,
   PICK_FOLDER,
   REQUEST_CORE_PORT,
+  REQUEST_WINDOW_FOREGROUND,
   SET_BADGE,
   SET_LANGUAGE,
   SET_LOOK,
@@ -31,6 +32,7 @@ import {
   UPDATE_INSTALL,
   UPDATE_SET_AUTO,
   UPDATE_STATE,
+  WINDOW_FOREGROUND,
 } from './ipc.mjs'
 import { MANUAL_SET_ENABLED, MANUAL_STATUS } from './manual-ipc.mjs'
 
@@ -43,6 +45,14 @@ contextBridge.exposeInMainWorld('litchShell', {
   kind: 'electron',
   platform: process.platform,
   requestCorePort: () => ipcRenderer.send(REQUEST_CORE_PORT),
+  onForeground(handler: (foreground: boolean) => void) {
+    const listener = (_event: unknown, value: unknown) => {
+      if (typeof value === 'boolean') handler(value)
+    }
+    ipcRenderer.on(WINDOW_FOREGROUND, listener)
+    ipcRenderer.send(REQUEST_WINDOW_FOREGROUND)
+    return () => ipcRenderer.removeListener(WINDOW_FOREGROUND, listener)
+  },
   openExternal: (url: string) => ipcRenderer.send(OPEN_EXTERNAL, url),
   // 用系统的文件管理器打开日志目录：desktop 是桌面端自己的，device 是本机设备服务的
   openLogs: (which: 'desktop' | 'device') => ipcRenderer.send(OPEN_LOGS, which),
