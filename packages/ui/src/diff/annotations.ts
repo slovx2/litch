@@ -93,6 +93,11 @@ export function clearNotes(key: string): void {
   if (all.has(key)) set(key, [])
 }
 
+/** 撤销清空草稿时恢复原有批注，保留标识和原文。 */
+export function restoreNotes(key: string, notes: readonly DiffNote[]): void {
+  set(key, [...notes])
+}
+
 /** 写给模型看的那一段用哪种语言的字 */
 export interface NoteWords {
   /** “对改动的批注（{n} 条）：” */

@@ -89,6 +89,8 @@ export interface ComposeProbe {
   deletedHome: boolean
   /** 输入历史：光标在最前面按上箭头翻出上一次发的话，再按是更早的一条，下箭头翻回到空 */
   historyRecalled: boolean
+  /** macOS 的 Ctrl+C 清空整份草稿，组字时不处理，Cmd+Z 恢复文字和片。 */
+  draftClearUndo: boolean | null
   /** 底栏上有上下文占用的百分比 */
   contextShown: boolean
   /** 请求卡片。只在模拟核心上量 */
@@ -475,6 +477,40 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   await open(main)
   await until('输入框', area)
   const imageDraftKept = imageHidden && thumbs() === 1
+  let draftClearUndo: boolean | null = null
+  if (/mac/i.test(navigator.platform)) {
+    const draftArea = await until('输入框', area)
+    const pasted = new DataTransfer()
+    pasted.setData('text/plain', '草稿附带文字\n'.repeat(40))
+    draftArea.dispatchEvent(
+      new ClipboardEvent('paste', { clipboardData: pasted, bubbles: true, cancelable: true }),
+    )
+    await until('文字片', () => one('.cmp-chip'))
+    write(draftArea, '可撤销的草稿')
+    await frame()
+    draftArea.setSelectionRange(1, 4)
+    press(draftArea, 'c', { ctrlKey: true, isComposing: true })
+    await frame()
+    const composingKept = draftArea.value === '可撤销的草稿' && thumbs() === 1
+    press(draftArea, 'c', { ctrlKey: true })
+    await frame()
+    const emptied = draftArea.value === '' && thumbs() === 0 && !one('.cmp-chip')
+    // 空草稿再清一次不覆盖撤销记录。
+    press(draftArea, 'c', { ctrlKey: true })
+    press(draftArea, 'z', { metaKey: true })
+    await frame()
+    draftClearUndo =
+      composingKept &&
+      emptied &&
+      draftArea.value === '可撤销的草稿' &&
+      thumbs() === 1 &&
+      Boolean(one('.cmp-chip')) &&
+      draftArea.selectionStart === 1 &&
+      draftArea.selectionEnd === 4
+    one<HTMLButtonElement>('.cmp-chip-x')?.click()
+    write(draftArea, '')
+    await frame()
+  }
   const withImage = '带图的一句'
   const pictured = () =>
     all('.umsg')
@@ -1197,6 +1233,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     deleteAsked,
     deletedHome,
     historyRecalled,
+    draftClearUndo,
     contextShown,
     cards,
     wizardSkins: skins,
@@ -1262,6 +1299,7 @@ export function judgeCompose(probe: ComposeProbe): string[] {
   if (!probe.deleteAsked) failed.push('删除会话没有先问一句')
   if (!probe.deletedHome) failed.push('会话删掉之后没有回到新建对话页')
   if (!probe.historyRecalled) failed.push('上下箭头没有翻出这个会话里发过的话')
+  if (probe.draftClearUndo === false) failed.push('Ctrl+C 清空草稿或 Cmd+Z 恢复文字与附件失败')
   if (!probe.contextShown) failed.push('底栏上没有上下文占用')
   for (const [name, ok] of Object.entries(probe.cards ?? {})) {
     if (!ok) failed.push(`请求卡片：${name} 不对`)

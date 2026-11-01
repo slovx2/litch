@@ -361,6 +361,7 @@ export {
   summarize,
 } from './projection/git-output.mjs'
 export { goalPursuing, goalReachedIn, goalStalled, projectGoal } from './projection/goal.mjs'
+export { inputHistory } from './projection/input-history.mjs'
 export { countDiffLines, isInlineImage, projectItem, showJson } from './projection/items.mjs'
 export {
   bilingual,

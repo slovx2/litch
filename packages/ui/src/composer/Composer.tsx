@@ -3,6 +3,7 @@ import {
   type DeviceView,
   type ImageAttachment,
   type ItemView,
+  inputHistory,
   keys,
   type MessageExtra,
   pathTwin,
@@ -31,10 +32,16 @@ import { reasonOf } from '../app/errors.ts'
 import { Clip, Close, Send, Stop } from '../app/icons.tsx'
 import { currentPlatform } from '../app/platform.ts'
 import { useKey, useServices } from '../app/services.tsx'
-import { notesKey, takeNotes, withNotes } from '../diff/annotations.ts'
+import {
+  clearNotes,
+  notesKey,
+  notesOf,
+  restoreNotes,
+  takeNotes,
+  withNotes,
+} from '../diff/annotations.ts'
 import { noteWords, PendingNotes } from '../diff/Notes.tsx'
 import { useGoalSend } from '../goal/send.ts'
-import { commentsOf } from '../transcript/comments/Cite.tsx'
 import { revealOrigin } from '../transcript/comments/locate.ts'
 import {
   commentExtra,
@@ -45,6 +52,7 @@ import {
 } from '../transcript/comments/model.ts'
 import { CommentChip, ExtraChip, useExtraLabel } from './Chips.tsx'
 import { type Compaction, ContextMeter } from './ContextMeter.tsx'
+import { type DraftSnapshot, draftShortcut, hasDraft } from './clear-draft.ts'
 import {
   dropDraft,
   insertIntoDraft,
@@ -172,6 +180,9 @@ export function Composer(props: ComposerProps) {
   const picker = useRef<HTMLInputElement>(null)
   /** 正在翻输入历史：翻到倒数第几条，以及翻之前写了一半的字。没在翻就是 null */
   const recalling = useRef<{ back: number; draft: string } | null>(null)
+  const cleared = useRef<{ key: string; draft: DraftSnapshot; start: number; end: number } | null>(
+    null,
+  )
   /** 字换好之后光标该落在哪（从单子里选了一项，触发词拿掉了） */
   const landing = useRef<number | null>(null)
   useGrabFocus(input)
@@ -407,6 +418,7 @@ export function Composer(props: ComposerProps) {
     const commented = comments
     if (!content && attached.length === 0 && carried.length === 0 && commented.length === 0) return
     // 先清空：消息已经显示在对话里了。没发成功再把文字、图片和附带项还回来
+    cleared.current = null
     recalling.current = null
     disarm()
     setText('')
@@ -512,6 +524,50 @@ export function Composer(props: ComposerProps) {
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    const shortcut = draftShortcut(currentPlatform(), event.nativeEvent)
+    if (shortcut) {
+      const noteKey = sessionId ? notesKey(deviceId, sessionId) : null
+      const draft: DraftSnapshot = {
+        text,
+        images,
+        extras,
+        comments,
+        notes: noteKey ? notesOf(noteKey) : [],
+      }
+      const area = event.currentTarget
+      if (shortcut === 'clear' && hasDraft(draft)) {
+        event.preventDefault()
+        cleared.current = {
+          key: draftKey,
+          draft,
+          start: area.selectionStart,
+          end: area.selectionEnd,
+        }
+        recalling.current = null
+        disarm()
+        setText('')
+        setImages([])
+        setExtras([])
+        saveDraftComments(draftKey, [])
+        if (noteKey) clearNotes(noteKey)
+        suggest.typed('', 0)
+        setError(null)
+        return
+      }
+      const back = cleared.current
+      // 后来输入的文字先由原生撤销处理，回到空草稿后才撤销这次清空。
+      if (shortcut === 'undo' && !hasDraft(draft) && back?.key === draftKey) {
+        event.preventDefault()
+        cleared.current = null
+        setText(back.draft.text)
+        setImages(back.draft.images)
+        setExtras(back.draft.extras)
+        saveDraftComments(draftKey, back.draft.comments)
+        if (noteKey) restoreNotes(noteKey, back.draft.notes)
+        requestAnimationFrame(() => area.setSelectionRange(back.start, back.end))
+        return
+      }
+    }
     // 单子开着：上下键、回车、Tab、Esc 先归它
     if (suggest.onKeyDown(event)) return
     if (lineJump(event)) return
@@ -992,20 +1048,11 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
   // 输入历史就是这个会话里发过的话：不另外存，翻的时候从对话里现找
   const history = useCallback(() => {
     const { store } = replica
-    const sent: string[] = []
-    for (const turnId of store.get<string[]>(keys.turnIds(deviceId, sessionId)) ?? []) {
-      const turn = store.get<TurnView>(keys.turn(deviceId, sessionId, turnId))
-      for (const itemId of turn?.itemIds ?? []) {
-        const item = store.get<ItemView>(keys.item(deviceId, sessionId, itemId))
-        // 带评论的只算打的字（评论那一段不是用户自己写的）
-        const said = commentsOf(item?.kind === 'userMessage' ? item.text : '')?.rest
-        const words = said ?? (item?.kind === 'userMessage' ? item.text : '')
-        if (!words.trim()) continue
-        // 连着发了两遍一样的只算一条
-        if (sent[sent.length - 1] !== words) sent.push(words)
-      }
-    }
-    return sent
+    const turns = (store.get<string[]>(keys.turnIds(deviceId, sessionId)) ?? []).flatMap((id) => {
+      const turn = store.get<TurnView>(keys.turn(deviceId, sessionId, id))
+      return turn ? [turn] : []
+    })
+    return inputHistory(turns, (id) => store.get<ItemView>(keys.item(deviceId, sessionId, id)))
   }, [replica, deviceId, sessionId])
   return (
     <>
