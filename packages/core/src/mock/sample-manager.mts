@@ -381,6 +381,10 @@ export function sampleManagers(
     ]
     const [d15, d16, d17, d13, d11, d12] = main.decisions
     if (d15) {
+      d15.background += t(
+        ' 对应事项 I-1、I-2；已完成的手机渲染见 I-8，已答复的任务范围见 D-13。',
+        ' Related items: I-1 and I-2. See I-8 for completed mobile rendering and D-13 for the answered scope decision.',
+      )
       d15.blocks = ['I-1', 'I-2']
       d15.default = { kind: 'option', optionId: 'a' }
       d15.basis = [

@@ -9,6 +9,7 @@ import type {
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useServices } from '../app/services.tsx'
+import { BoardReferences } from './BoardReferences.tsx'
 import { type AnswerDrafts, answeredDrafts, useAnswerDrafts } from './drafts.ts'
 
 export function Decisions({
@@ -164,7 +165,9 @@ export function Decisions({
                   <h3>{decision.title}</h3>
                   {draft ? <span className="pill wait">{t('manager.draft')}</span> : null}
                 </header>
-                <p>{decision.background}</p>
+                <p>
+                  <BoardReferences text={decision.background} />
+                </p>
                 {decision.blocks.length ? (
                   <p className="dim">
                     {t('manager.blocked')} · {decision.blocks.join(', ')}

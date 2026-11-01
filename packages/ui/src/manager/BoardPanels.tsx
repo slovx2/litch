@@ -1,41 +1,23 @@
 import { type DeviceView, keys, type ManagerBoardPages } from '@litch/core'
-import type { ManagerDecisionId, ManagerItemView } from '../../../core/src/model-manager.mts'
+import { useLayoutEffect, useRef } from 'react'
+import type { ManagerItemId, ManagerItemView } from '../../../core/src/model-manager.mts'
 import { requestOpenSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { badgeOf, nameOf } from '../app/device.ts'
 import { useKey } from '../app/services.tsx'
+import { BoardReferences } from './BoardReferences.tsx'
 
-function Item({
-  item,
-  onDecision,
-}: {
-  item: ManagerItemView
-  onDecision(id: ManagerDecisionId): void
-}) {
+function Item({ item }: { item: ManagerItemView }) {
   const t = useT()
   const parts = item.why.split(/(D-\d+)/)
-  const link = (id: ManagerDecisionId, key: string | number) => (
-    <button
-      type="button"
-      key={key}
-      className="mg-decision-link"
-      data-decision-link={id}
-      onClick={() => onDecision(id)}
-    >
-      {id}
-    </button>
-  )
   const missing = item.blockedBy.filter((id) => !parts.includes(id))
   return (
-    <div className="mg-item" data-manager-item={item.id}>
+    <div className="mg-item" data-manager-item={item.id} tabIndex={-1}>
       <div className="grow">
-        <b>{item.title}</b>
+        <span className="mono dim">{item.id}</span> <b>{item.title}</b>
         {item.why || missing.length ? (
           <p className="mg-item-reason">
-            {parts.map((part, index) => {
-              const id = item.blockedBy.find((id) => id === part)
-              return id ? link(id, index) : part
-            })}
+            <BoardReferences text={item.why} />
             {missing.length ? (
               <>
                 {item.why ? ' · ' : ''}
@@ -43,7 +25,7 @@ function Item({
                 {missing.map((id, index) => (
                   <span key={id}>
                     {index ? ' · ' : ''}
-                    {link(id, id)}
+                    <BoardReferences text={id} />
                   </span>
                 ))}
               </>
@@ -71,19 +53,33 @@ export function BoardPanels({
   deviceId,
   tab,
   onTab,
-  onDecision,
+  target,
+  onLocated,
 }: {
   pages: ManagerBoardPages
   deviceId: string
   tab: 'overview' | 'items' | 'lines'
   onTab(tab: 'decisions' | 'items' | 'lines'): void
-  onDecision(id: ManagerDecisionId): void
+  target: { id: ManagerItemId } | null
+  onLocated(): void
 }) {
   const t = useT()
   const device = useKey<DeviceView>(keys.device(deviceId))
+  const list = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (tab !== 'items' || !target) return
+    const item = list.current?.querySelector<HTMLElement>(`[data-manager-item="${target.id}"]`)
+    if (!item) return
+    // 已完成、暂缓默认折叠；先展开所在分组，再滚动和聚焦。
+    const group = item.closest('details')
+    if (group) group.open = true
+    item.scrollIntoView({ block: 'start' })
+    item.focus({ preventScroll: true })
+    onLocated()
+  }, [tab, target, onLocated])
   if (tab === 'items')
     return (
-      <div className="mg-stack">
+      <div className="mg-stack" ref={list}>
         {(['blocked', 'running', 'review', 'backlog', 'deferred', 'done'] as const).map(
           (status) => {
             const items = pages.items[status]
@@ -93,7 +89,7 @@ export function BoardPanels({
                   {t(`manager.${status}`)} {items.length}
                 </summary>
                 {items.map((item) => (
-                  <Item key={item.id} item={item} onDecision={onDecision} />
+                  <Item key={item.id} item={item} />
                 ))}
               </details>
             ) : null
@@ -173,7 +169,7 @@ export function BoardPanels({
       <section data-overview="blocked">
         <h3>{t('manager.blocked')}</h3>
         {blocked.length ? (
-          blocked.map((item) => <Item key={item.id} item={item} onDecision={onDecision} />)
+          blocked.map((item) => <Item key={item.id} item={item} />)
         ) : (
           <p className="dim">{t('manager.none')}</p>
         )}
@@ -181,7 +177,7 @@ export function BoardPanels({
       <section data-overview="yours">
         <h3>{t('manager.yours')}</h3>
         {yours.length ? (
-          yours.map((item) => <Item key={item.id} item={item} onDecision={onDecision} />)
+          yours.map((item) => <Item key={item.id} item={item} />)
         ) : (
           <p className="dim">{t('manager.none')}</p>
         )}

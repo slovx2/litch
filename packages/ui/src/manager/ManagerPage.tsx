@@ -1,15 +1,21 @@
 import { type DeviceView, keys } from '@litch/core'
 import { useCallback, useState } from 'react'
-import type { ManagerDecisionId, ManagerView } from '../../../core/src/model-manager.mts'
+import type {
+  ManagerDecisionId,
+  ManagerItemId,
+  ManagerView,
+} from '../../../core/src/model-manager.mts'
 import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { Transcript } from '../transcript/Transcript.tsx'
 import { BoardPanels } from './BoardPanels.tsx'
+import { BoardReferencesContext } from './BoardReferences.tsx'
 import { Decisions } from './Decisions.tsx'
 import { useManagerBoard } from './data.ts'
 import { ManagerForm } from './ManagerForm.tsx'
+import type { BoardReference } from './references.ts'
 
 /** 放在应用导航层，离开经理视图后仍能恢复看板页签和设置页。 */
 export interface ManagerPageLocation {
@@ -42,9 +48,13 @@ export function ManagerPage({
   const setSettings = (settings: boolean) => onLocation({ ...location, settings })
   const [decisionTarget, setDecisionTarget] = useState<{ id: ManagerDecisionId } | null>(null)
   const decisionLocated = useCallback(() => setDecisionTarget(null), [])
-  const openDecision = (id: ManagerDecisionId) => {
-    onLocation({ ...location, tab: 'decisions', narrow: 'board' })
-    setDecisionTarget({ id })
+  const [itemTarget, setItemTarget] = useState<{ id: ManagerItemId } | null>(null)
+  const itemLocated = useCallback(() => setItemTarget(null), [])
+  const openReference = (id: BoardReference) => {
+    const item = id.startsWith('I-')
+    onLocation({ ...location, tab: item ? 'items' : 'decisions', narrow: 'board' })
+    setItemTarget(item ? { id: id as ManagerItemId } : null)
+    setDecisionTarget(item ? null : { id: id as ManagerDecisionId })
   }
   const [ending, setEnding] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -221,7 +231,15 @@ export function ManagerPage({
           ) : !board || !pages ? (
             <p>{t('manager.loading')}</p>
           ) : (
-            <>
+            <BoardReferencesContext.Provider
+              value={{
+                ids: new Set<BoardReference>([
+                  ...board.items.map((item) => item.id),
+                  ...board.decisions.map((decision) => decision.id),
+                ]),
+                open: openReference,
+              }}
+            >
               {/* 答复区保持挂载，切页签不丢提交状态；本地草稿独立持久化。 */}
               {tab !== 'decisions' ? (
                 <BoardPanels
@@ -229,7 +247,8 @@ export function ManagerPage({
                   deviceId={manager.deviceId}
                   tab={tab}
                   onTab={setTab}
-                  onDecision={openDecision}
+                  target={itemTarget}
+                  onLocated={itemLocated}
                 />
               ) : null}
               <Decisions
@@ -241,7 +260,7 @@ export function ManagerPage({
                 target={decisionTarget}
                 onLocated={decisionLocated}
               />
-            </>
+            </BoardReferencesContext.Provider>
           )}
         </div>
         <footer className="mg-foot">{t('manager.process')}</footer>

@@ -1,0 +1,23 @@
+import type { ManagerDecisionId, ManagerItemId } from '../../../core/src/model-manager.mts'
+
+export type BoardReference = ManagerItemId | ManagerDecisionId
+export interface ReferencePart {
+  text: string
+  id?: BoardReference
+}
+
+/** 只链接当前看板实际存在的完整编号，避免把单词或更长编号的一部分变成链接。 */
+export function boardReferences(text: string, ids: ReadonlySet<BoardReference>): ReferencePart[] {
+  const parts: ReferencePart[] = []
+  const pattern = /(?<!\w)[ID]-\d+(?!\w)/g
+  let start = 0
+  for (const match of text.matchAll(pattern)) {
+    const id = match[0] as BoardReference
+    if (!ids.has(id)) continue
+    if (match.index > start) parts.push({ text: text.slice(start, match.index) })
+    parts.push({ text: id, id })
+    start = match.index + id.length
+  }
+  if (start < text.length) parts.push({ text: text.slice(start) })
+  return parts
+}

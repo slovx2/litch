@@ -32,6 +32,12 @@ subtree; approvals and background work also occupy slots.
 
 工作线执行期间仅在出现重大变更、重大发现，或需要经理决策才能继续时发送中途消息；其余结果在每回合结束时集中回报。
 
+### 看板编号
+
+看板的事项和决策标题前显示淡色编号（`I-n`、`D-n`）。说明中引用当前看板已有的编号时，
+点击会切到对应页签并定位；已完成或暂缓事项会自动展开分组，决策会切到相应状态。
+不存在的编号保留为普通文字。
+
 ### Editing settings
 
 Open a manager → title-bar **Settings**. The same three sections are tabs. You can change its name,
