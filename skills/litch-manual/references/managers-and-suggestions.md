@@ -288,7 +288,7 @@ lines running"; each workline shows its own mark underneath.
 经理可只编辑原帖、只回复或两者同时做；“已编辑”可展开旧版本、编辑时间与原因。
 控制台合计待定决策、待做请你做和经理已审核待开始建议；悬停也只显示这三类数量。手机采用相同口径。
 
-手机首页有“经理”入口（第二行是待处理合计），经理按设备分组、先进行中后已结束。经理行前面的记号只表示经理会话自己（回合在跑、等人、出错、回合停了但后台任务还在跑）；文字依次为运行中、N 条工作线运行中、N 个后台任务正在运行、空闲，有待处理时写“N 待处理”。进入经理后有“概览 | 经理事项 | 控制台”三格（与桌面同序），默认概览，内容与桌面一致：现状、待用户决策与已完成两个数（分别点进控制台的决策和经理事项）、受阻事项（第二行写“等待决策 #D-n”，编号可点）、请你做和最近动态；长动态点“展开全文”看完整内容；右上角“对话”打开经理会话。手机作答决策时先点选一项（单选），再点“提交给经理”；修改答案时上方照样显示原来的答复，原来选的那一项已选中。控制台可阅读和操作四类议题，并提交经理或临时追问。
+手机首页有“经理”入口（第二行是待处理合计），经理按设备分组、先进行中后已结束。经理行前面的记号只表示经理会话自己（回合在跑、等人、出错、回合停了但后台任务还在跑）；文字依次为运行中、N 条工作线运行中、N 个后台任务正在运行、空闲，有待处理时写“N 待处理”。进入经理后有“概览 | 经理事项 | 控制台”三格（与桌面同序），默认概览，内容与桌面一致：现状、待用户决策与已完成两个数（分别点进控制台的决策和经理事项）、受阻事项（第二行写“等待决策 #D-n”，编号可点）、请你做和最近动态；长动态点“展开全文”看完整内容；右上角“对话”打开经理会话。手机作答决策时先点选一项（单选），再点“提交给经理”；选中项和补充文字都存为本机草稿，离开再回来还在。修改答案时上方照样显示原来的答复，原来选的那一项已选中。控制台可阅读和操作四类议题，并提交经理或临时追问。
 手机沿用建议的开始/编辑/忽略，支持请求交付/文字回复、决策答复、报告已阅和讨论历史；创建经理、派活设置及完整经理事项看板仍在桌面。
 用户主动新建议题尚未开放。手机也提供只读经理事项供关联定位；目前按卡提交，桌面支持跨卡混合提交。
 
@@ -336,5 +336,6 @@ recorded it from chat). Unchosen options are collapsed under **Other options**. 
 a **Closed** block with who closed it and why; a reopened decision shows all options for answering,
 with the **Previous answer** above them and a collapsed **Previously closed** block that keeps the
 reason it was closed. Desktop and phone behave the same. On phone, answering a decision means
-choosing one option and then tapping **Submit to manager**; when editing an answer, the previous
-answer stays visible and its option is preselected.
+choosing one option and then tapping **Submit to manager**; the chosen option and the text are kept
+as local drafts if you leave. When editing an answer, the previous answer stays visible and its
+option is preselected.

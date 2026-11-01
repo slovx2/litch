@@ -23,6 +23,7 @@ import { Button, Empty } from '../../ui/kit/controls'
 import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
+import { readChoice, writeChoice } from './choice-drafts'
 import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutcome'
 import { Markdown } from './IssueMarkdown'
 import { IssueContext, IssueRelations } from './IssueRelations'
@@ -110,12 +111,29 @@ function Issue({
       setError(String(e))
     }
   }
+  const setChoice = (optionId: string | null) => {
+    try {
+      writeChoice(draftKey, optionId)
+    } catch (e) {
+      setError(String(e))
+    }
+    setChoiceState(optionId)
+  }
   const [mode, setMode] = useState<'manager' | 'temporary'>('manager')
   const [asking, setAsking] = useState(false)
   const [history, setHistory] = useState(false)
-  const [editing, setEditing] = useState(false)
-  /** 作答时选中的选项：先选，再点“提交给经理”（与桌面的单选一致） */
-  const [choice, setChoice] = useState<string | null>(null)
+  const options = board?.decisions.find((d) => d.id === post.id)?.options ?? []
+  /** 作答时选中的选项：先选，再点“提交给经理”（与桌面的单选一致）；和补充文字一样存成草稿 */
+  const [choice, setChoiceState] = useState(() => readChoice(draftKey, options))
+  // 已答或已关闭的决策留着改了一半的草稿：回来时直接回到修改状态
+  const [editing, setEditing] = useState(() => {
+    const found = board?.decisions.find((d) => d.id === post.id)
+    return Boolean(
+      found &&
+        found.status !== 'open' &&
+        (readChoice(draftKey, found.options) || replyFile.read()?.[draftKey]?.trim()),
+    )
+  })
   const [unreviewed, setUnreviewed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')

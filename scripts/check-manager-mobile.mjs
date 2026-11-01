@@ -215,6 +215,13 @@ try {
     `document.querySelector('[data-testid="manager-issue:D-13"]').scrollIntoView({block:'start'})`,
   )
   await shot('mobile-edit-answer')
+  // 选中项是草稿：离开控制台再回来，仍在修改状态、仍选着刚才那项
+  await tapId('manager-tab:overview')
+  await wait('[data-testid="manager-overview"]')
+  await tapId('manager-tab:console')
+  await tapId('manager-category:decision')
+  await wait('[data-testid="decision-choice:D-13:a"]')
+  assert.equal(await checked('decision-choice:D-13:a'), 'true', '离开再回来选中项还在')
   await press('取消修改')
   await wait('[data-testid="decision-others:D-13"]')
   await press('重新打开')
