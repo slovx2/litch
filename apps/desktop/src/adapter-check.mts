@@ -11,6 +11,7 @@
 //   --abort-after：过这么久就放弃这次连接（验“取消了不留下等待中的命令”用）。
 //   --shell-timeout：问登录 shell（环境变量 SHELL）最多等多久（验“shell 不返回也照样启动”用）。
 //   --stop-timeout：换版本时等 device-stop 最多等多久（验“停不下来也照样连上旧的”用）。
+//   --stop：只按退出应用时的方式停止服务，不安排重启续跑；加 --if-idle 则只在空闲时停。
 //   --restart：连上、打完结果之后照“重启设备服务”做一遍：这条连接还连着时请服务空闲时停（stopService），
 //     再打开一次本机设备的传输（开了就关），把停的结果、前后两份服务的来历打成 {"restarted": …}。
 //   --reopen：连上、打完结果之后再打开一次本机设备的传输（不握手，开了就关），把这一次的结果打成 {"reopened": …}。
@@ -28,7 +29,13 @@
 //     --turn-timeout <毫秒>  等回合结束最多等多久，默认 60000
 import { type Clock, compareVersions, createLink, describeText, projectUpgrade } from '@litch/core'
 import { compareService, parseCliFacts, parseServiceFacts } from './adapter-upgrade.mjs'
-import { localDevice, upgradeReport } from './local-adapter.mjs'
+import {
+  bundledAdapter,
+  localDevice,
+  serviceEnv,
+  stopDevice,
+  upgradeReport,
+} from './local-adapter.mjs'
 import { loginEnvironment } from './login-env.mjs'
 
 const clock: Clock = {
@@ -143,6 +150,21 @@ if (comparing !== undefined) {
     }),
   })
   process.exit(0)
+}
+
+if (process.argv.includes('--stop')) {
+  const root = process.env.LITCH_ADAPTER_ROOT
+  const home = process.env.LITCH_ADAPTER_HOME
+  if (!root || !home) throw new Error('停止自检必须指定适配器和隔离状态目录')
+  const stop = await stopDevice(
+    bundledAdapter(root),
+    home,
+    serviceEnv(process.env.LITCH_LANG === 'en' ? 'en' : 'zh-CN', null),
+    new AbortController().signal,
+    process.argv.includes('--if-idle'),
+  )
+  say({ stop })
+  process.exit(stop.kind === 'stopped' ? 0 : 1)
 }
 
 const local = localDevice({

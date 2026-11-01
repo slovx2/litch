@@ -198,7 +198,8 @@ const startArgs = (home, ...options) => [
   ...['--home', home, '--root', root, '--node', node],
   ...options,
 ]
-const stopArgs = (home) => ['device-stop', '--home', home, '--if-idle']
+// 换版本是刻意重启，停止时需要登记中断回合。
+const stopArgs = (home) => ['device-stop', '--home', home, '--if-idle', '--resume-after-restart']
 
 /** 没连上：阶段、那句话、还会不会自己再试 */
 async function fails(options, stage, text, retriable) {
@@ -879,6 +880,28 @@ try {
     assert.equal(last.args[0], 'device-stop', '取消的时候应当正等着 device-stop')
     assert.equal(alive(last.pid), false, '取消之后命令还留着')
     assert.ok(alive(old.pid), '服务不该被动到')
+  })
+
+  await check('主动重启设备服务：停止时登记续跑，随后重新拉起', async () => {
+    const old = seed('restart', {})
+    const { lines } = await run({ home: old.home, flags: ['--restart'] })
+    assert.deepEqual(lines.find((line) => line.restarted)?.restarted.stop, { result: 'stopped' })
+    assert.deepEqual(callsSince(old.before), [
+      startArgs(old.home, '--ssh=off'),
+      stopArgs(old.home),
+      startArgs(old.home, '--ssh=off'),
+    ])
+    assert.equal(alive(old.pid), false)
+  })
+
+  await check('普通停止及退出关闭服务：空闲停止和强制停止都不登记续跑', async () => {
+    for (const flags of [['--if-idle'], []]) {
+      const old = seed(`stop-only-${flags.length}`, {})
+      const { lines } = await run({ home: old.home, flags: ['--stop', ...flags] })
+      assert.deepEqual(lines, [{ stop: { kind: 'stopped' } }])
+      assert.deepEqual(callsSince(old.before), [['device-stop', '--home', old.home, ...flags]])
+      assert.equal(alive(old.pid), false)
+    }
   })
 
   console.log(`本机内置适配器的自检通过：${passed.length} 项`)
