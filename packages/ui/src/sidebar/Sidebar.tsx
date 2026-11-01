@@ -75,6 +75,7 @@ import { SectionDialog } from './SectionDialog.tsx'
 import { SidebarFoot } from './SidebarFoot.tsx'
 import { SidebarFrame } from './SidebarFrame.tsx'
 import { SidebarMore } from './SidebarMore.tsx'
+import { sessionMark } from './session-mark.ts'
 import {
   pruneSidebarFolds,
   setSidebarBands,
@@ -226,19 +227,8 @@ const SessionRow = memo(function SessionRow({
       </div>
     )
   }
-  const mark =
-    summary.status === 'running'
-      ? 'run'
-      : summary.status === 'waiting'
-        ? 'wait'
-        : summary.status === 'error'
-          ? 'err'
-          : // 回合停了、后台任务还在跑：慢呼吸的空心记号，和前台在跑的转圈分开
-            (summary.background?.running ?? 0) > 0
-            ? 'bg'
-            : summary.unread
-              ? 'unread'
-              : ''
+  // 回合停了、后台任务还在跑：慢呼吸的空心记号，和前台在跑的转圈分开
+  const mark = sessionMark(summary)
   // 工作目录不是它所在工作区的根（在子目录里开的，或者从别处挪进来的）：标题后面一个小记号。
   // 行上只有记号；是哪个目录在记号的提示和信息卡里
   const home = workspaces.find((entry) => entry.id === summary.workspaceId)

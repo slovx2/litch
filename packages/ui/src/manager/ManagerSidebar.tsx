@@ -1,4 +1,10 @@
-import { type DeviceView, keys, managerAttentionCount, type SessionChildren } from '@litch/core'
+import {
+  type DeviceView,
+  keys,
+  managerAttentionCount,
+  type SessionChildren,
+  type SessionSummary,
+} from '@litch/core'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import type { ManagerView } from '../../../core/src/model-manager.mts'
 import type { Selection } from '../app/App.tsx'
@@ -9,6 +15,7 @@ import { Caret, Forward } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { containsSession, revealRow } from '../sidebar/reveal.ts'
 import { useSidebarReveal } from '../sidebar/reveal-context.ts'
+import { sessionMark } from '../sidebar/session-mark.ts'
 import { answeredDrafts, questionDrafts, useAnswerDrafts } from './drafts.ts'
 import { usePostDrafts } from './post-drafts.ts'
 import { submittedRequests, useRequestDrafts } from './request-drafts.ts'
@@ -48,6 +55,19 @@ function ManagerRow({
     new Set([...answeredDrafts(drafts), ...questionDrafts(drafts)].map((draft) => draft.decisionId))
       .size
   const attention = managerAttentionCount(manager)
+  // 记号只说经理会话自己（回合、后台任务），和普通会话行同一套；工作线在跑另用文字写明，
+  // 不借用经理自己的“运行中”（工作线各自的记号在下面的子行上）。
+  const summary = useKey<SessionSummary>(keys.summary(manager.deviceId, manager.threadId))
+  const mark = sessionMark(summary)
+  const background = summary?.background?.running ?? 0
+  const state =
+    mark === 'run' || mark === 'wait'
+      ? t('manager.running')
+      : manager.runningLines
+        ? t('manager.linesCount', { n: manager.runningLines })
+        : background
+          ? t('background.sidebar', { count: background })
+          : t('manager.idle')
   const picked =
     selection?.deviceId === manager.deviceId && selection.sessionId === manager.threadId
   return (
@@ -76,7 +96,15 @@ function ManagerRow({
             onSelect(next)
           }}
         >
-          <i className={manager.runningLines ? 'st run' : 'st'} />
+          <i
+            className={mark && mark !== 'unread' ? `st ${mark}` : 'st'}
+            {...(mark === 'bg'
+              ? {
+                  title: t('background.sidebar', { count: background }),
+                  'data-background': background,
+                }
+              : {})}
+          />
           <span className="ell grow">{manager.name || t('manager.manager')}</span>
           <i className="wire-sq" title={device ? t.text(device.name) : manager.deviceId} />
           <small className="mg-sidebar-counts">
@@ -95,8 +123,8 @@ function ManagerRow({
                 {t('manager.pending', { n: attention })}
               </span>
             ) : manager.status !== 'ending' ? (
-              <span className="dim">
-                {t(manager.runningLines ? 'manager.running' : 'manager.idle')}
+              <span className="dim" data-manager-state>
+                {state}
               </span>
             ) : null}
             {count ? (

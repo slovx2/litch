@@ -6,7 +6,8 @@
 //               codex 跑完不会自己接着做
 // 命令只是睡一会儿再说一句话，什么都不改。
 export const BG_TRIGGER = /后台跑/
-export const BG_SECONDS = 12
+// 默认 12 秒；要在回合结束后留出更长的观察窗口时（经理后台状态验收），由夹具环境 LITCH_FIXTURE_BG_SECONDS 指定
+export const BG_SECONDS = Number(process.env.LITCH_FIXTURE_BG_SECONDS) || 12
 export const BG_COMMAND = `sleep ${BG_SECONDS}; echo litch-bg-done`
 export const BG_REPLY = '在后台跑着了，跑完再说。'
 

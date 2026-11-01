@@ -1,5 +1,6 @@
 // 经理冒烟只操作正式界面，模拟核心负责写答案和生成答复回合。
 export interface ManagerSeen {
+  linesState: boolean
   consoleReports: boolean
   issueRelations: boolean
   managerQuestionDrafts: boolean
@@ -451,6 +452,18 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       (id) => !document.querySelector(`.sb-scroll [data-session="${CSS.escape(id ?? '')}"]`),
     )
   await click('[data-sidebar-mode="manager"]')
+  // 示例里的 sub2api：经理自己回合已停、挂着后台命令，另有一条工作线在跑。记号是后台记号而不是运行中，文字写明工作线
+  const linesRow = await until('只有工作线在跑的经理行', () =>
+    [...document.querySelectorAll<HTMLElement>('.mg-sidebar-manager')].find((row) =>
+      row.querySelector('.mg-pick')?.textContent?.includes('sub2api'),
+    ),
+  )
+  const linesState =
+    !linesRow.querySelector('.mg-pick > i.st.run') &&
+    Boolean(linesRow.querySelector('.mg-pick > i.st.bg[data-background="1"]')) &&
+    Boolean(
+      linesRow.querySelector('[data-manager-state]')?.textContent?.includes('1 条工作线运行中'),
+    )
   await until('切栏后保留停报标记', () => one(`${childRow} [data-report="off"]`))
   await click(`${childRow} [aria-haspopup="menu"]`)
   await click('[data-action="report"]')
@@ -761,6 +774,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('[data-sidebar-mode="chat"]')
   const archivedFallback = Boolean(await until('切回对话默认页', () => one('.new-page')))
   return {
+    linesState,
     consoleReports,
     issueRelations,
     managerQuestionDrafts,
@@ -819,6 +833,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
 
 export function judgeManager(seen: ManagerSeen): string[] {
   const messages: Record<keyof ManagerSeen, string> = {
+    linesState:
+      '经理自己只有后台命令、工作线在跑时，经理行仍画成运行中，或没有后台记号、没写明工作线',
     consoleReports: '控制台报告与帖子追问未完成',
     issueRelations: '议题关联与编号预览未完成',
     managerQuestionDrafts: '经理追问草稿与回复记录未完成',

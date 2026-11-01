@@ -277,7 +277,27 @@ export function sampleManagers(
     }
     managers.push(manager)
     boards.push(board)
-    sessions.push(session(id, name, 'claude', id, null, id === 'm2'))
+    const own = session(id, name, 'claude', id, null, false)
+    // m2：经理自己回合已结束、挂着一条等 CI 的后台命令，另有一条工作线在跑（侧栏记号与文字分开表达）
+    if (id === 'm2')
+      own.background = {
+        tasks: [
+          {
+            id: 'm2-watch',
+            kind: 'shell',
+            title: 'gh run watch 41333078273 --exit-status',
+            status: 'running',
+            itemId: null,
+            turnId: null,
+            agentThreadId: null,
+            startedAt: ago(25),
+            endedAt: null,
+          },
+        ],
+        running: 1,
+        wakesOnFinish: true,
+      }
+    sessions.push(own)
     for (const [kid, parent, title, harness, running] of children) {
       if (parent !== id) continue
       sessions.push(session(kid, title, harness, id, id, running))

@@ -246,6 +246,13 @@ and whether the cards were handled or expired. Increasing retention does not res
 
 ### 看板答复与待办提示
 
+侧栏经理行前面的记号只表示经理会话自己：回合在跑是“运行中”的记号，回合结束但它的后台命令还在跑是后台任务的呼吸记号（写“N 个后台任务正在运行”），与普通会话行相同；只有工作线在跑时不画记号，文字写“N 条工作线运行中”，各条工作线的记号在其子行上。经理页和工作线页的输入框上方都有“N 个后台任务正在运行”，点开可看命令、用时并停止。
+
+The dot on a manager's sidebar row describes the manager session itself, as on ordinary rows: a running
+turn, or the breathing background mark with "N background tasks running" when its turn has ended but a
+background command continues. When only worklines are running, the row shows no dot and says "N work
+lines running"; each workline shows its own mark underneath.
+
 侧栏、窄窗口的“看板”和收起后的“展开看板”数字，合计待定决策、待做的“请你做”和经理已审核待开始建议；报告未读不计入。
 已回复、已交付或已取消的请求不重复计入；已回复但尚未交付的请求仍保留在概览中。
 “请你做”的默认交付按钮是“标记完成 / Mark as done”，经理可以指定其他文案。

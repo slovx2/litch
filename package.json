@@ -111,6 +111,7 @@
     "client:check:sidebar": "npm run build --prefix packages/ui && npm run check:sidebar --prefix apps/desktop",
     "client:check:manager": "npm run build --prefix packages/ui && npm run build --prefix apps/desktop && node apps/desktop/scripts/smoke.mjs --manager",
     "client:check:manager-real": "npm run build && npm run build --prefix packages/ui && npm run build --prefix apps/desktop && node apps/desktop/scripts/check-manager-real.mjs",
+    "client:check:manager-background-real": "npm run build && npm run client:build && node apps/desktop/scripts/check-manager-background-real.mjs",
     "client:check:tree": "npm run build --prefix packages/ui && npm run check:tree --prefix apps/desktop",
     "client:check:background": "npm run build --prefix packages/ui && npm run check:background --prefix apps/desktop",
     "client:check:background-tools-real": "npm run build --prefix packages/device && npm run build --prefix packages/pi && npm run build --prefix packages/claude && npm run client:build && node apps/desktop/scripts/check-background-tools-real.mjs",
