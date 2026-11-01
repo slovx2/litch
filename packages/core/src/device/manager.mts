@@ -7,6 +7,7 @@ import {
   type Manager,
   type ManagerChangedNotification,
   type ManagerDecisionReopenParams,
+  type ManagerFeedbackSubmitParams,
   type ManagerQuestionParams,
   type ManagerSubmittedAnswer,
 } from '../../../protocol/src/manager.mjs'
@@ -27,6 +28,7 @@ import {
   projectManagerAnswers,
   projectManagerBoard,
   projectManagerDecision,
+  projectManagerRequest,
 } from '../projection/manager.mjs'
 import { openedManagerDecisions } from './manager-decisions.mjs'
 
@@ -297,6 +299,21 @@ export function createManagers(host: ManagersHost) {
     async end(managerId: string) {
       const result = await guarded(() => host.request(MANAGER_METHOD.end, { managerId }))
       return { manager: settle(result.manager) }
+    },
+    async feedback(params: ManagerFeedbackSubmitParams) {
+      const result = await guarded(() => host.request(MANAGER_METHOD.feedbackSubmit, params))
+      invalidate(params.managerId)
+      return {
+        ...projectManagerAnswers(result),
+        acceptedRequests: result.acceptedRequests.map(projectManagerRequest),
+        rejectedRequests: result.rejectedRequests.map((entry) => ({
+          ...entry,
+          request: entry.request ? projectManagerRequest(entry.request) : null,
+        })),
+        acceptedQuestions: result.acceptedQuestions.map(projectManagerDecision),
+        rejectedQuestions: projectManagerAnswers({ ...result, rejected: result.rejectedQuestions })
+          .rejected,
+      }
     },
     async submit(managerId: string, answers: ManagerSubmittedAnswer[]) {
       const result = await guarded(() =>

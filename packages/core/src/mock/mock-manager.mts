@@ -4,7 +4,7 @@ import { forwardedManagerQuestion } from '../../../protocol/src/manager-question
 import { formatSessionEvent } from '../../../protocol/src/session-tree.mjs'
 import { ChannelError, type Commands } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
-import type { ManagerAnswersResult, ManagerBoardView, ManagerView } from '../model-manager.mjs'
+import type { ManagerBoardView, ManagerView } from '../model-manager.mjs'
 import type { MockTasksHost } from './mock-tasks.mjs'
 import {
   type ManagerSessionSummary,
@@ -74,6 +74,7 @@ export function createMockManagers(host: MockManagerHost) {
     board.activities.unshift({
       id: `mock-activity-${++seq}`,
       kind: 'manager',
+      source: { kind: 'user' },
       at: host.clock.now(),
       text,
       objectId: null,
@@ -275,8 +276,80 @@ export function createMockManagers(host: MockManagerHost) {
       activity(board, t(`你重开了 ${decisionId}`, `You reopened ${decisionId}`))
       result = { decision }
     } else {
-      const { answers } = params as Commands['managers.answers.submit']['params']
-      const submitted: ManagerAnswersResult = { accepted: [], rejected: [], delivery: 'none' }
+      const {
+        answers,
+        questions = [],
+        requests = [],
+      } = params as Commands['managers.feedback.submit']['params']
+      const submitted: Commands['managers.feedback.submit']['result'] = {
+        accepted: [],
+        rejected: [],
+        acceptedQuestions: [],
+        rejectedQuestions: [],
+        acceptedRequests: [],
+        rejectedRequests: [],
+        delivery: 'none',
+      }
+      for (const entry of requests) {
+        const request = board.requests?.find((one) => one.id === entry.requestId)
+        if (
+          !request ||
+          request.revision !== entry.revision ||
+          request.status === 'cancelled' ||
+          (!entry.delivered && !entry.text.trim())
+        ) {
+          submitted.rejectedRequests.push({
+            requestId: entry.requestId,
+            code:
+              request?.status === 'cancelled'
+                ? 'requestCancelled'
+                : request
+                  ? 'requestConflict'
+                  : 'unknownRequest',
+            message: t('请核对最新请求', 'Review the current request'),
+            request: request ? copy(request) : null,
+          })
+          continue
+        }
+        request.response = { delivered: entry.delivered, text: entry.text, at: host.clock.now() }
+        request.status = entry.delivered ? 'delivered' : 'replied'
+        request.revision++
+        request.updatedAt = host.clock.now()
+        submitted.acceptedRequests.push(request)
+      }
+      for (const question of questions) {
+        const decision = board.decisions.find((one) => one.id === question.decisionId)
+        if (
+          !decision ||
+          decision.revision !== question.revision ||
+          !question.question.trim() ||
+          questions.filter((one) => one.decisionId === question.decisionId).length !== 1
+        ) {
+          submitted.rejectedQuestions.push({
+            decisionId: question.decisionId,
+            code: decision ? 'decisionConflict' : 'unknownDecision',
+            message: t('决策已变化，请核对后重交', 'Review the changed decision and resubmit.'),
+            decision: decision ? copy(decision) : null,
+          })
+          continue
+        }
+        const discussion = (decision.discussion ??= {
+          messages: [],
+          light: false,
+          summary: null,
+          forwarded: 0,
+        })
+        discussion.messages.push({
+          id: `manager-question-${discussion.messages.length + 1}`,
+          mode: 'manager',
+          question: question.question,
+          answer: t(`经理回复：${decision.background}`, `Manager reply: ${decision.background}`),
+          status: 'completed',
+          refreshed: false,
+          at: host.clock.now(),
+        })
+        submitted.acceptedQuestions.push(decision)
+      }
       const seen = new Set<string>()
       for (const answer of answers) {
         const decision = board.decisions.find((d) => d.id === answer.decisionId)
@@ -317,7 +390,15 @@ export function createMockManagers(host: MockManagerHost) {
         decision.updatedAt = host.clock.now()
         submitted.accepted.push(decision)
       }
-      if (submitted.accepted.length) {
+      for (const decision of submitted.acceptedQuestions) {
+        decision.revision += 2
+        decision.updatedAt = host.clock.now()
+      }
+      if (
+        submitted.accepted.length ||
+        submitted.acceptedQuestions.length ||
+        submitted.acceptedRequests.length
+      ) {
         submitted.delivery = 'queued'
         const text = t(
           `你在看板上答复了 ${submitted.accepted.length} 项决策`,
@@ -332,6 +413,20 @@ export function createMockManagers(host: MockManagerHost) {
             manager: {
               managerId,
               text,
+              requests: submitted.acceptedRequests.map((request) => ({
+                requestId: request.id,
+                revision: request.revision,
+                title: request.title,
+                buttonLabel: request.buttonLabel,
+                delivered: request.response?.delivered ?? false,
+                text: request.response?.text ?? '',
+              })),
+              questions: submitted.acceptedQuestions.map((decision) => ({
+                decisionId: decision.id,
+                revision: decision.revision,
+                title: decision.title,
+                question: questions.find((one) => one.decisionId === decision.id)?.question ?? '',
+              })),
               answers: submitted.accepted.map((decision) => ({
                 decisionId: decision.id,
                 title: decision.title,
@@ -412,6 +507,7 @@ export function createMockManagers(host: MockManagerHost) {
         'managers.update',
         'managers.end',
         'managers.answers.submit',
+        'managers.feedback.submit',
         'managers.decision.reopen',
         'managers.question.ask',
         'managers.question.forward',

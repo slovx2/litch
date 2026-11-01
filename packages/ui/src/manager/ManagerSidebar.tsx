@@ -9,7 +9,8 @@ import { Caret, Forward } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { containsSession, revealRow } from '../sidebar/reveal.ts'
 import { useSidebarReveal } from '../sidebar/reveal-context.ts'
-import { answeredDrafts, useAnswerDrafts } from './drafts.ts'
+import { answeredDrafts, questionDrafts, useAnswerDrafts } from './drafts.ts'
+import { submittedRequests, useRequestDrafts } from './request-drafts.ts'
 
 function ManagerRow({
   manager,
@@ -38,7 +39,11 @@ function ManagerRow({
     if (row.current && scroll) revealRow(row.current, scroll)
   }, [reveal, manager.threadId])
   const { drafts } = useAnswerDrafts(manager.deviceId, manager.id)
-  const count = answeredDrafts(drafts).length
+  const { drafts: requests } = useRequestDrafts(manager.deviceId, manager.id)
+  const count =
+    submittedRequests(requests).length +
+    new Set([...answeredDrafts(drafts), ...questionDrafts(drafts)].map((draft) => draft.decisionId))
+      .size
   const picked =
     selection?.deviceId === manager.deviceId && selection.sessionId === manager.threadId
   return (

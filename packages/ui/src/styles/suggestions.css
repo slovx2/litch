@@ -45,21 +45,12 @@
   grid-template-columns: minmax(0, 1fr);
 }
 .suggestion-manager {
-  border: 1px solid var(--line-2);
-  border-radius: var(--r2);
-  background: var(--raised);
   min-width: 0;
 }
-.suggestion-manager > button {
+.suggestion-manager .prop-body {
   display: grid;
-  gap: 12px;
-  width: 100%;
-  padding: 18px;
-  text-align: left;
-  border-radius: inherit;
-}
-.suggestion-manager > button:hover {
-  background: var(--hover);
+  gap: 8px;
+  min-width: 0;
 }
 .suggestion-manager header {
   display: flex;
@@ -88,4 +79,9 @@
 .suggestion-manager-open {
   color: var(--accent);
   font-size: 12px;
+  justify-self: start;
+}
+
+.suggestion-review-label {
+  justify-self: start;
 }

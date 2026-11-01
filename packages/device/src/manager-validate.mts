@@ -96,7 +96,7 @@ const addProperties = fields(
   MANAGER_TOOLS.tools.find((tool) => tool.name === 'add')?.inputSchema.properties,
 )
 const patchKeys = new Map(
-  ['decision', 'item'].map((kind) => [
+  ['decision', 'item', 'request'].map((kind) => [
     kind,
     Object.keys(fields(fields(addProperties[kind]).properties)),
   ]),
@@ -109,9 +109,10 @@ export function validateTool(tool: string, args: unknown): Record<string, unknow
   // 工具顶层不能使用组合关键字；设备补齐原先分支 schema 的 kind 约束。
   if (tool === 'add') {
     const kind = input.kind as string
-    const other = kind === 'decision' ? 'item' : 'decision'
+    const others = ['decision', 'item', 'request'].filter((one) => one !== kind)
     if (!(kind in input)) invalid(`For kind=${kind}, ${kind} is required.`, kind)
-    if (other in input) invalid(`For kind=${kind}, omit ${other}.`, other)
+    for (const other of others)
+      if (other in input) invalid(`For kind=${kind}, omit ${other}.`, other)
   }
   if (tool === 'update') {
     const allowed = patchKeys.get(input.kind as string) ?? []
@@ -120,9 +121,31 @@ export function validateTool(tool: string, args: unknown): Record<string, unknow
         invalid(`patch.${key} is not allowed for kind=${input.kind}.`, `patch.${key}`)
   }
   if (tool === 'close') {
-    const statuses = input.kind === 'decision' ? ['expired', 'withdrawn'] : ['done', 'deferred']
+    const statuses =
+      input.kind === 'decision'
+        ? ['expired', 'withdrawn']
+        : input.kind === 'request'
+          ? ['cancelled']
+          : ['done', 'deferred']
     if (!statuses.includes(input.status as string))
       invalid(`For kind=${input.kind}, status must be ${statuses.join(' or ')}.`, 'status')
+  }
+  if (['add', 'update'].includes(tool) && input.kind === 'item') {
+    const owner = fields(tool === 'add' ? input.item : input.patch).owner
+    if (owner && fields(owner).kind === 'user')
+      invalid(
+        'Items record manager or line progress. Use litch_sessions.start with initiation propose for work requiring user initiation; owner.kind=user is not allowed.',
+      )
+  }
+  if (input.kind === 'request') {
+    if (
+      !Number.isSafeInteger(input.revision) ||
+      (tool === 'add' ? input.revision !== 0 : Number(input.revision) < 1)
+    )
+      invalid(
+        'For request, supply revision=0 when adding or the current revision when updating/cancelling.',
+      )
+    text(tool === 'close' ? input.reason : input.why, tool === 'close' ? 'reason' : 'why')
   }
   return input
 }

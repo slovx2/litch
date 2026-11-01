@@ -9,7 +9,7 @@ import {
 import type { EngineLink } from './engine-link.mjs'
 import type { DeviceManagers } from './manager.mjs'
 import { managerNow, type QuestionState } from './manager-store.mjs'
-import { ManagerError } from './manager-validate.mjs'
+import { fields, invalid, ManagerError } from './manager-validate.mjs'
 import { lastAnswer } from './session-tree.mjs'
 import { isObject } from './wire.mjs'
 
@@ -49,7 +49,7 @@ export class ManagerQuestions {
       for (const id of state.threads) this.restricted.set(id, state.managerId)
       state.threadId = null
       for (const entry of state.discussion.messages)
-        if (entry.status === 'running') entry.status = 'failed'
+        if (entry.status === 'running' && entry.mode !== 'manager') entry.status = 'failed'
       owner.store.saveQuestion(state)
     }
   }
@@ -59,7 +59,47 @@ export class ManagerQuestions {
   allowed(threadId: string, namespace: unknown, tool: unknown): boolean {
     return (
       !this.restricted.has(threadId) ||
-      (namespace === 'litch_manager' && (tool === 'summary' || tool === 'get'))
+      (namespace === 'litch_manager' &&
+        ['summary', 'get', 'update', 'close'].includes(String(tool)))
+    )
+  }
+  validateWrite(threadId: string, tool: string, given: unknown): void {
+    if (!['update', 'close'].includes(tool)) return
+    const managerId = this.restricted.get(threadId)
+    const state = this.owner.store.questions(managerId).find((one) => one.threadId === threadId)
+    const args = fields(given)
+    if (
+      !state ||
+      this.retired.has(threadId) ||
+      args.kind !== 'decision' ||
+      args.id !== state.decisionId
+    )
+      invalid('A temporary question may change only its own decision while its session is active.')
+    if (
+      tool === 'update' &&
+      Object.keys(fields(args.patch)).some(
+        (key) => !['title', 'background', 'options', 'recommend'].includes(key),
+      )
+    )
+      invalid('Temporary questions may update only title, background, options and recommend.')
+    if (tool === 'close' && !['expired', 'withdrawn'].includes(String(args.status)))
+      invalid('Temporary questions may only expire or withdraw their own decision.')
+  }
+  noteChange(threadId: string, result: unknown): void {
+    const managerId = this.restricted.get(threadId)
+    if (!managerId) return
+    const manager = this.owner.manager(managerId)
+    const object = fields(fields(result).object)
+    // 不调用 check/wake；未唤醒的普通备注在经理下一回合开始时带入。
+    this.owner.tree.store.addNote(
+      manager.threadId,
+      {
+        threadId,
+        title: `Decision ${object.id} updated in a temporary question`,
+        status: 'completed',
+        excerpt: `The user’s temporary decision conversation changed ${object.id}. Read litch_manager.get for the current decision and history. ${JSON.stringify(object)}`,
+      },
+      false,
     )
   }
   private async link(manager: Manager): Promise<EngineLink> {
@@ -96,7 +136,12 @@ export class ManagerQuestions {
     if (decision.revision !== revision)
       throw new ManagerError('invalidManager', 'The decision changed; read it before asking again.')
     const key = `${managerId}/${id}`
-    if (this.jobs.has(key))
+    if (
+      this.jobs.has(key) ||
+      this.owner.store
+        .question(managerId, id)
+        ?.discussion.messages.some((entry) => entry.status === 'running')
+    )
       throw new ManagerError('invalidManager', 'A background answer is still running.')
     if (question.length > 20000)
       throw new ManagerError('invalidManager', 'The question is too long.')
@@ -111,6 +156,7 @@ export class ManagerQuestions {
     }
     state.discussion.messages.push({
       id: randomUUID(),
+      mode: 'temporary',
       question,
       answer: null,
       status: 'running',
@@ -129,7 +175,10 @@ export class ManagerQuestions {
         else state.threadId = null
         this.save(state)
       })
-      .finally(() => this.jobs.delete(key))
+      .finally(() => {
+        this.jobs.delete(key)
+        this.releaseClosed(managerId)
+      })
     this.jobs.set(key, job)
     this.owner.changed(managerId)
     return { discussion: state.discussion }
@@ -181,9 +230,11 @@ export class ManagerQuestions {
         {
           ...MANAGER_TOOLS,
           description:
-            'Read the manager board to explain this decision. Only summary and get are available.',
+            'Explain this decision. Read summary/get; update only this decision title/background/options/recommend or close it as expired/withdrawn.',
           instructions: managerQuestionRules(decision.id),
-          tools: MANAGER_TOOLS.tools.filter((tool) => ['summary', 'get'].includes(tool.name)),
+          tools: MANAGER_TOOLS.tools.filter((tool) =>
+            ['summary', 'get', 'update', 'close'].includes(tool.name),
+          ),
         },
       ]
       const nativeConfig = link.native ? await this.nativeConfig(link, manager.cwd) : undefined
@@ -355,7 +406,12 @@ export class ManagerQuestions {
     if (!manager) return
     for (const state of this.owner.store.questions(managerId)) {
       const id = state.threadId
-      if (!id || this.releasing.has(id)) continue
+      if (
+        !id ||
+        this.releasing.has(id) ||
+        (manager.status === 'active' && this.jobs.has(`${managerId}/${state.decisionId}`))
+      )
+        continue
       const decision = this.owner.store.object(managerId, state.decisionId)
       if (
         manager.status === 'active' &&

@@ -381,6 +381,11 @@ test('经理扩展：声明、路由、创建工具/规则、每条投递连接�
     )
     const sessions = specs.find((spec) => spec.name === 'litch_sessions')
     assert.ok(sessions.instructions.includes('Manager sessions'))
+    assert.ok(
+      sessions.tools
+        .find((item: any) => item.name === 'start')
+        .inputSchema.properties.initiation.enum.includes('propose'),
+    )
     const archiveDescription = sessions.tools.find(
       (item: any) => item.name === 'archive',
     ).description
@@ -502,6 +507,10 @@ test('经理：事件回合直接派线、子树标记、默认 harness、并发
     const board = (await connection.call(MANAGER_METHOD.boardRead, { managerId: manager.id })).board
     assert.equal(board.lines[0].report.text, report)
     assert.deepEqual(board.lines[0].unverified, ['没验：真机', 'Unverified: packaging'])
+    assert.equal(
+      board.activities.find((activity: any) => activity.kind === 'report')?.source?.kind,
+      'line',
+    )
     const next = await startChild(
       env.device.sessionTree,
       childId,
@@ -678,6 +687,36 @@ test('经理工作线停报：保留归属和运行状态，不入父队列或�
     env.pi.end(child.threadId, 'completed', '新的工作线结果')
     await until(() => tree.queuedNotes(threadId).length === 1, '恢复后的回报进入队列')
     assert.equal(env.device.managers.store.report(child.threadId)?.text, '新的工作线结果')
+  } finally {
+    await env.close()
+  }
+})
+
+test('经理提案：点击前不派线，点击后从完整简报建立本经理名下工作线', async () => {
+  const env = treeRig()
+  try {
+    const connection = await client(env, ['harness', 'litchManager', 'sessionTree', 'clientTools'])
+    const { manager, threadId } = await create(env, connection)
+    const proposed = value(
+      await tool(
+        env,
+        threadId,
+        'start',
+        {
+          title: '待用户发起的工作',
+          ...brief('完整工作简报'),
+          initiation: 'propose',
+          worktree: false,
+        },
+        'litch_sessions',
+      ),
+    )
+    assert.equal(env.device.managers.board(manager.id).lines.length, 0)
+    const started = await connection.call('litch/sessionProposal/accept', {
+      proposalId: proposed.proposal_id,
+    })
+    assert.equal(env.device.managers.lines.managerFor(started.threadId)?.id, manager.id)
+    assert.equal(env.device.sessionTree.store.parentOf(started.threadId)?.parentThreadId, threadId)
   } finally {
     await env.close()
   }

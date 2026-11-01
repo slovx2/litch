@@ -107,6 +107,18 @@ export class SuggestionInbox {
         proposal,
         source,
         managerId: mark?.managerId ?? null,
+        ...(mark
+          ? {
+              managerReview:
+                mark.role === 'manager'
+                  ? { state: 'endorsed' as const, reason: null, at: null }
+                  : (this.tree.managers?.store.suggestionReview(mark.managerId, proposal.id) ?? {
+                      state: 'pending' as const,
+                      reason: null,
+                      at: null,
+                    }),
+            }
+          : {}),
       })
     }
     const upserts = [...next.values()].filter(

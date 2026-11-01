@@ -1049,12 +1049,17 @@ export class SessionTree {
     // 设备进程的连接要订阅着它才插得进（有的引擎只认装着这个会话的连接），回合结束时 turnEvent 退订
     await this.watch(harness, parentId)
     const link = await this.link(harness)
-    const notes = this.store.notes(parentId)
+    const notes = this.store
+      .notes(parentId)
+      .filter((note) => !this.managers?.questions.managerFor(note.threadId))
     if (notes.length === 0 || this.active.get(parentId) !== running) return
     const latest = latestPerSession(notes)
     const current = latest.flatMap((note) => this.pendingNote(note))
     if (current.length === 0) {
-      this.store.dropNotes(parentId, Math.max(...notes.map((note) => note.seq)))
+      this.store.dropNoteSequences(
+        parentId,
+        notes.map((note) => note.seq),
+      )
       this.notesChanged(parentId)
       return
     }
@@ -1076,7 +1081,10 @@ export class SessionTree {
       )
       return
     }
-    this.store.dropNotes(parentId, Math.max(...notes.map((note) => note.seq)))
+    this.store.dropNoteSequences(
+      parentId,
+      notes.map((note) => note.seq),
+    )
     this.notesChanged(parentId)
     this.host.log(`把 ${latest.length} 条回报插进了 ${parentId}（${harness}）在跑的回合 ${running}`)
   }
@@ -1391,6 +1399,24 @@ export class SessionTree {
         : suggestionExpiry(createdAt, this.retentionDays),
     })
     this.proposalsChanged(fields.threadId, [proposal])
+    const mark = this.managers?.lines.mark(fields.threadId)
+    if (!fields.offer && mark?.role === 'line') {
+      const manager = this.managers?.store.manager(mark.managerId)
+      if (manager?.status === 'active') {
+        this.store.addNote(
+          manager.threadId,
+          {
+            threadId: fields.threadId,
+            title: proposal.title,
+            status: 'completed',
+            excerpt: `Workline suggestion awaiting manager review. Use litch_manager.endorse or dismiss with a reason. ${JSON.stringify(proposal)}`,
+          },
+          true,
+        )
+        this.notesChanged(manager.threadId)
+        this.check(manager.threadId)
+      }
+    }
     this.scheduleExpiry()
     return proposal
   }

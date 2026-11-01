@@ -37,6 +37,14 @@ export function createSuggestions(host: SuggestionsHost) {
         proposal,
         source: row.source,
         managerId: row.managerId,
+        ...(row.managerReview
+          ? {
+              managerReview: {
+                ...row.managerReview,
+                at: row.managerReview.at === null ? null : row.managerReview.at * 1000,
+              },
+            }
+          : {}),
       })
   }
   const apply = (change: SuggestionsChanged) => {

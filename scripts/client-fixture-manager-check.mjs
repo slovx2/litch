@@ -235,6 +235,7 @@ export async function managerClient(t, socket, namespaces = []) {
         'sessionTree',
         'clientTools',
         'litchManager',
+        'suggestionInbox',
       ],
       litchClientTools: { namespaces },
     },

@@ -26,7 +26,7 @@ function tagged(text: string, settings: RuleSettings): string {
   return `${text}${MARK}${JSON.stringify(settings)} -->`
 }
 export function managerTools(manager: RuleSettings): ClientToolNamespaceSpec[] {
-  const sessions = sessionTools(false, false)
+  const sessions = sessionTools(false)
   return [
     {
       ...sessions,
@@ -40,7 +40,7 @@ export function managerTools(manager: RuleSettings): ClientToolNamespaceSpec[] {
             ? {
                 ...tool,
                 description:
-                  'Start an in-scope line with initiation user_asked, including on manager event turns. Supply a self-contained brief. Out-of-scope work requires a board decision first. Permissions and the running-line limit are enforced by the device.',
+                  'Start an in-scope line with initiation user_asked, including on manager event turns. Use initiation propose with a complete brief for a suggestion card that starts only after the user clicks Start. Do not use cards for already-authorized work. Supply a self-contained brief. Out-of-scope work requires a board decision first. Permissions and the running-line limit are enforced by the device.',
               }
             : tool.name === SESSION_TOOL.archive
               ? {

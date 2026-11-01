@@ -10,6 +10,7 @@ import type {
   ManagerDecision,
   ManagerItem,
   ManagerObjectId,
+  ManagerRequest,
   ManagerSituation,
 } from '../../protocol/src/manager.mjs'
 import { assertStoreFormat, initializeStoreFormat } from '../../shared/src/store-format.mjs'
@@ -27,10 +28,11 @@ const MIGRATIONS = [
   // 收尾回合与投递事件一起留存；重启后按事件原文找回回合，不能把普通回合误认作收尾。
   `CREATE TABLE endings(manager_id TEXT PRIMARY KEY, event_id TEXT NOT NULL, text TEXT NOT NULL, turn_id TEXT);`,
   `CREATE TABLE questions(manager_id TEXT NOT NULL, decision_id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(manager_id,decision_id));`,
+  `CREATE TABLE suggestion_reviews(proposal_id TEXT PRIMARY KEY, manager_id TEXT NOT NULL, body TEXT NOT NULL);`,
 ] as const
 export const MANAGER_SCHEMA_VERSION = MIGRATIONS.length
 export const managerNow = () => Math.floor(Date.now() / 1000)
-export type BoardObject = ManagerDecision | ManagerItem
+export type BoardObject = ManagerDecision | ManagerItem | ManagerRequest
 export interface ManagerDelivery {
   id: string
   managerId: string
@@ -144,6 +146,27 @@ export class ManagerStore {
       )
       .run(managerId, object.id, JSON.stringify(object))
   }
+  suggestionReview(
+    managerId: string,
+    proposalId: string,
+  ): import('../../protocol/src/suggestion-inbox.mjs').SuggestionReview | null {
+    return body(
+      this.db
+        .prepare('SELECT body FROM suggestion_reviews WHERE proposal_id=? AND manager_id=?')
+        .get(proposalId, managerId),
+    )
+  }
+  saveSuggestionReview(
+    managerId: string,
+    proposalId: string,
+    review: import('../../protocol/src/suggestion-inbox.mjs').SuggestionReview,
+  ): void {
+    this.db
+      .prepare(
+        'INSERT INTO suggestion_reviews VALUES(?,?,?) ON CONFLICT(proposal_id) DO UPDATE SET manager_id=excluded.manager_id, body=excluded.body',
+      )
+      .run(proposalId, managerId, JSON.stringify(review))
+  }
   questions(managerId?: string): QuestionState[] {
     return this.db
       .prepare(`SELECT body FROM questions ${managerId ? 'WHERE manager_id=?' : ''}`)
@@ -164,7 +187,7 @@ export class ManagerStore {
       )
       .run(state.managerId, state.decisionId, JSON.stringify(state))
   }
-  nextId(managerId: string, kind: 'D' | 'I'): ManagerObjectId {
+  nextId(managerId: string, kind: 'D' | 'I' | 'R'): ManagerObjectId {
     const row = this.db
       .prepare(
         'INSERT INTO counters VALUES(?,?,1) ON CONFLICT(manager_id,kind) DO UPDATE SET value=value+1 RETURNING value',

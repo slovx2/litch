@@ -167,6 +167,20 @@ test('经理工具：字段和引用校验、修订号、核对、关闭、口�
       'abc',
     )
     call('close', { kind: 'item', id: 'I-1', status: 'done', reason: '通过验收' })
+    assert.throws(
+      () => call('add', { kind: 'item', item: { title: '用户待办', owner: { kind: 'user' } } }),
+      /suggestion|initiation propose/,
+    )
+    assert.throws(
+      () =>
+        call('update', {
+          kind: 'item',
+          id: 'I-1',
+          patch: { owner: { kind: 'user' } },
+          why: '转交用户',
+        }),
+      /initiation propose/,
+    )
     const answered = call('answer', { id: 'D-1', optionId: 'yes', text: '照办' }).object
     assert.equal(answered.answer.by, 'user-conversation')
     assert.throws(() =>
@@ -256,7 +270,9 @@ test('经理库从版本 1 升级：保留看板、历史、编号和待投递�
     writer.answers('a', [{ decisionId: 'D-1', revision: 1, optionId: null, text: '保留' }])
     const changes = store.changes('a')
     const events = store.deliveries('a')
-    store.db.exec('DROP TABLE endings; DROP TABLE questions; PRAGMA user_version=1')
+    store.db.exec(
+      'DROP TABLE endings; DROP TABLE questions; DROP TABLE suggestion_reviews; PRAGMA user_version=1',
+    )
     store.close()
     store = new ManagerStore(openManagerDatabase(dir))
     assert.deepEqual(store.changes('a'), changes)

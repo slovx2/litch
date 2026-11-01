@@ -5,10 +5,19 @@
   "declaration": {
     "description": "设备在 runtime/info.device.extensions 列出 litchManager 表示支持；客户端在初始化时声明才可调用方法并接收字段、通知。按实际投递的连接校验，不能沿用发起连接的声明。",
     "where": "initialize.params.capabilities.litchExtensions",
-    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "litchManager" } }
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "litchManager" }
+    }
   },
   "undeclared": "litch/manager/ 方法返回 extensionRequired，data.required=[\"litchManager\"]；会话对象不带 litchManager，不发送两个经理通知。标准会话、回合及通知照常可见，未修改的官方客户端可以使用这些普通会话。",
   "rules": [
+    "请你做：R-n 为用户亲手操作项目；add(kind=request) 需 revision=0 和 why，update/close 需当前 revision 及 why/reason。经理只能维护内容或取消，不能替用户交付。feedback/submit 可选 requests 数组，成功项进入同一 manager-answers 的 requests；delivered=true 为交付，否则非空文字为回复。允许修改已交付/已回复项目，已取消不可提交。",
+    "建议审核：经理工具 endorse(proposalId,reason?)、dismiss(proposalId,reason) 只处理自己整棵工作线子树的 pending 普通卡；经理自己的卡默认审核。审核持久化并更新 suggestionInbox，忽略沿用 dismissed 并记经理忽略及理由。新线卡经既有备注/回报路径提醒经理审核。",
+    "第二轮：事项 add/update 拒绝显式 owner.kind=user；旧对象保留。经理可用 start initiation=propose 提供带完整简报的建议卡。",
+    "feedback/submit 将答案和经理追问同批保存，追问不改变决策状态；仅成功项合为一条 manager-answers 事件，questions 字段携带 decisionId/revision/title/question。reply 工具校验当前决策 revision，将文字回写待答追问并增加 revision。",
+    "临时追问的文件访问仍只读，额外授权 update 本决策 title/background/options/recommend、close 本决策为 expired/withdrawn；设备检查目标及字段，历史 by=question，经理下一回合收到变更备注。",
     "存储：经理、决策、事项、现状、变更记录存在设备状态目录，不写进仓库。数据库重启后保留，无法识别的结构直接拒绝，不迁就旧格式。看板记过程，以仓库为准；决定落地的位置写进 landed，不规定仓库文档格式。",
     "时间：协议所有 at、createdAt、updatedAt、startedAt、endedAt 为 Unix 秒；elapsedSeconds 为秒时长。核心投影把时间戳转毫秒，时长和审计 before/after 原文不变。",
     "标记：经理本人 litchManager={managerId,role:manager}，由其开出的整棵会话子树 role=line；无关系的会话不带字段。各层不能嵌套另一个经理，脱离树后重新计算标记。每次 thread/list、read、resume、started 和其他携带会话对象的投递都按该连接声明过滤。",
@@ -29,126 +38,798 @@
     "工具结果为 JSON 文本：summary={situation,decisions,items,lines}，只含 open 决策、未完事项、在跑线；get={object,changes}；add={id,object}；update/verify/close/answer={object}；status={situation}。设备验证对象种类与 id 前缀。失败 success=false，以 [litch:invalid] 或 [litch:failed] 开头解释原因。",
     "规则注入：第 1/2/3 层在创建、恢复、fork、压缩后恢复，并在每回合保持可用。第 4 层摘要只在上下文建立/恢复/压缩后补，约 2000 token，截断后提示用 summary 查完整内容；第 1 层固定文案约 800 token。第 6/9 层统一用 litch-session-event，manager-* 载荷必须带 manager，notes=[]。",
     "不提供删除、接手、手机推送、到期自动推荐、巡检、提醒或草稿存储方法。模板仅决定初始规矩，建立后对象行为无区别。",
-    "旁问：question/ask 按经理及决策保存独立 discussion，不改变决策 revision，通知沿用 board/changed。所有状态的决策可问，结束中的或已结束的经理不可问。设备复用最新已结束回合的临时分叉，有新的已结束回合或决策版本就重建、带旧问答引文；轻会话没有经理历史，决策变化时补新版本。只向声明 managerQuestions 的引擎或可由设备执行只读沙箱约束的原生 Codex 发起。设备只允许 summary/get，客户端不能直接操纵旁问会话。question/forward 将问答送入持久消息队列，不写答案，同一问答条数只转一次。答复/关闭释放分叉，文本留存，之后仍可追问；设备重启保留文字并重建分叉。",
+    "旁问：question/ask 按经理及决策保存独立 discussion，不改变决策 revision，通知沿用 board/changed。所有状态的决策可问，结束中的或已结束的经理不可问。设备复用最新已结束回合的临时分叉，有新的已结束回合或决策版本就重建、带旧问答引文；轻会话没有经理历史，决策变化时补新版本。只向声明 managerQuestions 的引擎或可由设备执行只读沙箱约束的原生 Codex 发起。设备只允许 summary/get 及受限的本决策 update/close，客户端不能直接操纵旁问会话。question/forward 将问答送入持久消息队列，不写答案，同一问答条数只转一次。答复/关闭释放分叉，文本留存，之后仍可追问；设备重启保留文字并重建分叉。",
     "设备实现补充：manager.sqlite 使用只追加迁移和变更记录；成功答案及对应待投递事件同事务提交。事件在设备重启后继续重试；插话使用稳定事件 id，不支持 turn/steer 时保留到空闲回合。最近完整回报另存，不随会话树的待投递回报出队而删除，并识别 Unverified: 前缀。",
     "范围与规矩变更：scope 或 rules 的实际内容变化时，同更新事务排入一条 manager-rules 事件，manager.text 带完整新范围和规矩；清空规矩时明确旧规矩不再生效。事件沿用持久队列，忙时插入、闲时开回合，失败后重试；修改其他字段或提交相同内容不产生该事件。Codex 继续按最新设置重拼开发者指令。",
     "当前分叉限制：经理派 fresh 线会移除 litch_manager 并加入线规则；Claude Code 的 thread/fork 支持替换动态工具，经理 fork/hand_off 成线也执行同样的隔离。其余现有 harness 没有这项替换能力，经理直接 fork/hand_off 成线暂时拒绝并提示 fresh；已有工作线之间的 fork 不受这项限制。Codex 的开发者规则重拼保留经理版本，不降回任务卡版本。"
   ],
   "parts": [
-    { "kind": "ClientRequest", "method": "litch/manager/list", "params": { "$ref": "#/definitions/Empty" }, "response": { "$ref": "#/definitions/ListResponse" } },
-    { "kind": "ClientRequest", "method": "litch/manager/create", "params": { "$ref": "#/definitions/CreateParams" }, "response": { "$ref": "#/definitions/CreateResponse" } },
-    { "kind": "ClientRequest", "method": "litch/manager/update", "params": { "$ref": "#/definitions/UpdateParams" }, "response": { "$ref": "#/definitions/ManagerResponse" } },
-    { "kind": "ClientRequest", "method": "litch/manager/end", "params": { "$ref": "#/definitions/IdParams" }, "response": { "$ref": "#/definitions/ManagerResponse" } },
-    { "kind": "ClientRequest", "method": "litch/manager/board/read", "params": { "$ref": "#/definitions/IdParams" }, "response": { "$ref": "#/definitions/BoardResponse" } },
-    { "kind": "ClientRequest", "method": "litch/manager/answers/submit", "params": { "$ref": "#/definitions/AnswersParams" }, "response": { "$ref": "#/definitions/AnswersResponse" } },
-    { "kind": "ClientRequest", "method": "litch/manager/decision/reopen", "params": { "$ref": "#/definitions/ReopenParams" }, "response": { "$ref": "#/definitions/DecisionResponse" } },
-    { "kind": "ClientRequest", "method": "litch/manager/question/ask", "params": { "$ref": "#/definitions/QuestionParams" }, "response": { "$ref": "#/definitions/QuestionResponse" } },
-    { "kind": "ClientRequest", "method": "litch/manager/question/forward", "params": { "$ref": "#/definitions/ReopenParams" }, "response": { "$ref": "#/definitions/ForwardResponse" } },
-    { "kind": "ServerNotification", "method": "litch/manager/changed", "params": { "$ref": "#/definitions/ManagerResponse" } },
-    { "kind": "ServerNotification", "method": "litch/manager/board/changed", "params": { "$ref": "#/definitions/IdParams" } },
-    { "kind": "ThreadField", "on": "thread/list、thread/read、thread/start、thread/resume、thread/started 等聚合面的会话对象", "name": "litchManager", "schema": { "$ref": "#/definitions/SessionManagerMark" }, "description": "只投递给声明本扩展的连接。" },
-    { "kind": "Error", "description": "error.data.litch 标识原因，message 为可操作的英文说明；未声明时用已有 extensionRequired。", "errors": [
-      { "litch": "unknownManager", "code": -32602, "description": "managerId 不存在" },
-      { "litch": "managerEnded", "code": -32600, "description": "经理结束中或已结束；结束中仅指定收尾回合可写，已结束后不能修改" },
-      { "litch": "invalidManager", "code": -32602, "description": "参数不合法，data.field 指明字段" },
-      { "litch": "unknownDecision", "code": -32602, "description": "decisionId 不属于这个看板" },
-      { "litch": "decisionNotClosed", "code": -32600, "description": "只能重新打开 expired/withdrawn" },
-      { "litch": "lineLimitReached", "code": -32600, "description": "已到运行线上限，data.limit、data.runningLines 说明现状" }
-    ] }
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/list",
+      "params": { "$ref": "#/definitions/Empty" },
+      "response": { "$ref": "#/definitions/ListResponse" }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/create",
+      "params": { "$ref": "#/definitions/CreateParams" },
+      "response": { "$ref": "#/definitions/CreateResponse" }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/update",
+      "params": { "$ref": "#/definitions/UpdateParams" },
+      "response": { "$ref": "#/definitions/ManagerResponse" }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/end",
+      "params": { "$ref": "#/definitions/IdParams" },
+      "response": { "$ref": "#/definitions/ManagerResponse" }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/board/read",
+      "params": { "$ref": "#/definitions/IdParams" },
+      "response": { "$ref": "#/definitions/BoardResponse" }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/answers/submit",
+      "params": { "$ref": "#/definitions/AnswersParams" },
+      "response": { "$ref": "#/definitions/AnswersResponse" }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/feedback/submit",
+      "params": { "$ref": "#/definitions/FeedbackSubmitParams" },
+      "response": { "$ref": "#/definitions/FeedbackSubmitResponse" }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/decision/reopen",
+      "params": { "$ref": "#/definitions/ReopenParams" },
+      "response": { "$ref": "#/definitions/DecisionResponse" }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/question/ask",
+      "params": { "$ref": "#/definitions/QuestionParams" },
+      "response": { "$ref": "#/definitions/QuestionResponse" }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/question/forward",
+      "params": { "$ref": "#/definitions/ReopenParams" },
+      "response": { "$ref": "#/definitions/ForwardResponse" }
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/manager/changed",
+      "params": { "$ref": "#/definitions/ManagerResponse" }
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/manager/board/changed",
+      "params": { "$ref": "#/definitions/IdParams" }
+    },
+    {
+      "kind": "ThreadField",
+      "on": "thread/list、thread/read、thread/start、thread/resume、thread/started 等聚合面的会话对象",
+      "name": "litchManager",
+      "schema": { "$ref": "#/definitions/SessionManagerMark" },
+      "description": "只投递给声明本扩展的连接。"
+    },
+    {
+      "kind": "Error",
+      "description": "error.data.litch 标识原因，message 为可操作的英文说明；未声明时用已有 extensionRequired。",
+      "errors": [
+        { "litch": "unknownManager", "code": -32602, "description": "managerId 不存在" },
+        {
+          "litch": "managerEnded",
+          "code": -32600,
+          "description": "经理结束中或已结束；结束中仅指定收尾回合可写，已结束后不能修改"
+        },
+        {
+          "litch": "invalidManager",
+          "code": -32602,
+          "description": "参数不合法，data.field 指明字段"
+        },
+        { "litch": "unknownDecision", "code": -32602, "description": "decisionId 不属于这个看板" },
+        {
+          "litch": "decisionNotClosed",
+          "code": -32600,
+          "description": "只能重新打开 expired/withdrawn"
+        },
+        {
+          "litch": "lineLimitReached",
+          "code": -32600,
+          "description": "已到运行线上限，data.limit、data.runningLines 说明现状"
+        }
+      ]
+    }
   ],
   "definitions": {
-    "QuestionParams": { "type": "object", "required": ["managerId", "decisionId", "revision", "question"], "properties": {
-      "managerId": { "type": "string" }, "decisionId": { "$ref": "#/definitions/DecisionId" }, "revision": { "type": "integer", "minimum": 1 }, "question": { "type": "string", "minLength": 1, "maxLength": 20000 }
-    }, "additionalProperties": false },
-    "QuestionResponse": { "type": "object", "required": ["discussion"], "properties": { "discussion": { "$ref": "#/definitions/Discussion" } }, "additionalProperties": false },
-    "ForwardResponse": { "type": "object", "required": ["queued"], "properties": { "queued": { "type": "boolean" } }, "additionalProperties": false },
-    "Discussion": { "type": "object", "required": ["messages", "light", "summary", "forwarded"], "properties": {
-      "messages": { "type": "array", "items": { "$ref": "#/definitions/Question" } }, "light": { "type": "boolean" }, "summary": { "type": ["string", "null"] }, "forwarded": { "type": "integer", "minimum": 0 }
-    }, "additionalProperties": false },
-    "Question": { "type": "object", "required": ["id", "question", "answer", "status", "refreshed", "at"], "properties": {
-      "id": { "type": "string" }, "question": { "type": "string" }, "answer": { "type": ["string", "null"] }, "status": { "enum": ["running", "completed", "failed"] }, "refreshed": { "type": "boolean" }, "at": { "type": "number" }
-    }, "additionalProperties": false },
+    "RequestId": { "type": "string", "pattern": "^R-[1-9][0-9]*$" },
+    "RequestResponse": {
+      "type": "object",
+      "required": ["delivered", "text", "at"],
+      "properties": {
+        "delivered": { "type": "boolean" },
+        "text": { "type": "string" },
+        "at": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "Request": {
+      "type": "object",
+      "required": [
+        "id",
+        "revision",
+        "title",
+        "description",
+        "buttonLabel",
+        "basis",
+        "links",
+        "status",
+        "response",
+        "cancelled",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/definitions/RequestId" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "buttonLabel": { "type": ["string", "null"] },
+        "basis": { "$ref": "#/definitions/Links" },
+        "links": { "$ref": "#/definitions/Links" },
+        "status": { "enum": ["open", "delivered", "replied", "cancelled"] },
+        "response": { "anyOf": [{ "$ref": "#/definitions/RequestResponse" }, { "type": "null" }] },
+        "cancelled": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["reason", "at"],
+              "properties": { "reason": { "type": "string" }, "at": { "type": "number" } },
+              "additionalProperties": false
+            },
+            { "type": "null" }
+          ]
+        },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "SubmittedRequest": {
+      "type": "object",
+      "required": ["requestId", "revision", "delivered", "text"],
+      "properties": {
+        "requestId": { "$ref": "#/definitions/RequestId" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "delivered": { "type": "boolean" },
+        "text": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "RequestFailure": {
+      "type": "object",
+      "required": ["requestId", "code", "message", "request"],
+      "properties": {
+        "requestId": { "$ref": "#/definitions/RequestId" },
+        "code": {
+          "enum": ["unknownRequest", "requestConflict", "requestCancelled", "invalidRequest"]
+        },
+        "message": { "type": "string" },
+        "request": { "anyOf": [{ "$ref": "#/definitions/Request" }, { "type": "null" }] }
+      },
+      "additionalProperties": false
+    },
+    "SubmittedQuestion": {
+      "type": "object",
+      "required": ["decisionId", "revision", "question"],
+      "properties": {
+        "decisionId": { "$ref": "#/definitions/DecisionId" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "question": { "type": "string", "minLength": 1, "maxLength": 20000 }
+      },
+      "additionalProperties": false
+    },
+    "FeedbackSubmitParams": {
+      "type": "object",
+      "required": ["managerId", "answers", "questions"],
+      "properties": {
+        "managerId": { "type": "string" },
+        "answers": { "type": "array", "items": { "$ref": "#/definitions/SubmittedAnswer" } },
+        "requests": { "type": "array", "items": { "$ref": "#/definitions/SubmittedRequest" } },
+        "questions": { "type": "array", "items": { "$ref": "#/definitions/SubmittedQuestion" } }
+      },
+      "additionalProperties": false
+    },
+    "FeedbackSubmitResponse": {
+      "type": "object",
+      "required": [
+        "accepted",
+        "rejected",
+        "acceptedQuestions",
+        "rejectedQuestions",
+        "acceptedRequests",
+        "rejectedRequests",
+        "delivery"
+      ],
+      "properties": {
+        "accepted": { "type": "array", "items": { "$ref": "#/definitions/Decision" } },
+        "rejected": { "type": "array", "items": { "$ref": "#/definitions/AnswerFailure" } },
+        "acceptedRequests": { "type": "array", "items": { "$ref": "#/definitions/Request" } },
+        "rejectedRequests": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/RequestFailure" }
+        },
+        "acceptedQuestions": { "type": "array", "items": { "$ref": "#/definitions/Decision" } },
+        "rejectedQuestions": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/AnswerFailure" }
+        },
+        "delivery": { "enum": ["queued", "none"] }
+      },
+      "additionalProperties": false
+    },
+    "QuestionParams": {
+      "type": "object",
+      "required": ["managerId", "decisionId", "revision", "question"],
+      "properties": {
+        "managerId": { "type": "string" },
+        "decisionId": { "$ref": "#/definitions/DecisionId" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "question": { "type": "string", "minLength": 1, "maxLength": 20000 }
+      },
+      "additionalProperties": false
+    },
+    "QuestionResponse": {
+      "type": "object",
+      "required": ["discussion"],
+      "properties": { "discussion": { "$ref": "#/definitions/Discussion" } },
+      "additionalProperties": false
+    },
+    "ForwardResponse": {
+      "type": "object",
+      "required": ["queued"],
+      "properties": { "queued": { "type": "boolean" } },
+      "additionalProperties": false
+    },
+    "Discussion": {
+      "type": "object",
+      "required": ["messages", "light", "summary", "forwarded"],
+      "properties": {
+        "messages": { "type": "array", "items": { "$ref": "#/definitions/Question" } },
+        "light": { "type": "boolean" },
+        "summary": { "type": ["string", "null"] },
+        "forwarded": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "Question": {
+      "type": "object",
+      "required": ["id", "question", "answer", "status", "refreshed", "at"],
+      "properties": {
+        "mode": { "enum": ["manager", "temporary"] },
+        "id": { "type": "string" },
+        "question": { "type": "string" },
+        "answer": { "type": ["string", "null"] },
+        "status": { "enum": ["running", "completed", "failed"] },
+        "refreshed": { "type": "boolean" },
+        "at": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
     "Empty": { "type": "object", "properties": {}, "additionalProperties": false },
-    "IdParams": { "type": "object", "required": ["managerId"], "properties": { "managerId": { "type": "string" } }, "additionalProperties": false },
-    "SessionManagerMark": { "type": "object", "required": ["managerId", "role"], "properties": { "managerId": { "type": "string" }, "role": { "enum": ["manager", "line"] } }, "additionalProperties": false },
-    "Dispatch": { "type": "object", "required": ["harness", "model", "effort", "worktree", "merge", "maxRunningLines"], "properties": {
-      "harness": { "type": ["string", "null"] }, "model": { "type": ["string", "null"] }, "effort": { "type": ["string", "null"] },
-      "worktree": { "type": "boolean" }, "merge": { "enum": ["manager", "user"] }, "maxRunningLines": { "type": "integer", "minimum": 1 }
-    }, "additionalProperties": false },
-    "Contact": { "type": "object", "required": ["desktopNotification", "unanswered"], "properties": { "desktopNotification": { "type": "boolean" }, "unanswered": { "const": "wait" } }, "additionalProperties": false },
+    "IdParams": {
+      "type": "object",
+      "required": ["managerId"],
+      "properties": { "managerId": { "type": "string" } },
+      "additionalProperties": false
+    },
+    "SessionManagerMark": {
+      "type": "object",
+      "required": ["managerId", "role"],
+      "properties": { "managerId": { "type": "string" }, "role": { "enum": ["manager", "line"] } },
+      "additionalProperties": false
+    },
+    "Dispatch": {
+      "type": "object",
+      "required": ["harness", "model", "effort", "worktree", "merge", "maxRunningLines"],
+      "properties": {
+        "harness": { "type": ["string", "null"] },
+        "model": { "type": ["string", "null"] },
+        "effort": { "type": ["string", "null"] },
+        "worktree": { "type": "boolean" },
+        "merge": { "enum": ["manager", "user"] },
+        "maxRunningLines": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "Contact": {
+      "type": "object",
+      "required": ["desktopNotification", "unanswered"],
+      "properties": {
+        "desktopNotification": { "type": "boolean" },
+        "unanswered": { "const": "wait" }
+      },
+      "additionalProperties": false
+    },
     "Template": { "enum": ["release", "investigation", "research", "blank"] },
-    "Link": { "type": "object", "required": ["kind", "target", "label"], "properties": { "kind": { "enum": ["file", "branch", "commit", "thread", "url"] }, "target": { "type": "string" }, "label": { "type": ["string", "null"] } }, "additionalProperties": false },
+    "Link": {
+      "type": "object",
+      "required": ["kind", "target", "label"],
+      "properties": {
+        "kind": { "enum": ["file", "branch", "commit", "thread", "url"] },
+        "target": { "type": "string" },
+        "label": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
     "Links": { "type": "array", "items": { "$ref": "#/definitions/Link" } },
-    "Checked": { "type": "object", "required": ["commit", "at"], "properties": { "commit": { "type": ["string", "null"] }, "at": { "type": "number" } }, "additionalProperties": false },
-    "Option": { "type": "object", "required": ["id", "label", "description"], "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "description": { "type": "string" } }, "additionalProperties": false },
-    "Default": { "oneOf": [
-      { "type": "object", "required": ["kind"], "properties": { "kind": { "const": "ask" } }, "additionalProperties": false },
-      { "type": "object", "required": ["kind", "optionId"], "properties": { "kind": { "const": "option" }, "optionId": { "type": "string" } }, "additionalProperties": false }
-    ] },
-    "Answer": { "type": "object", "required": ["optionId", "text", "by", "at"], "properties": { "optionId": { "type": ["string", "null"] }, "text": { "type": "string" }, "by": { "enum": ["user", "user-conversation"] }, "at": { "type": "number" } }, "additionalProperties": false },
-    "Actor": { "enum": ["manager", "user", "user-conversation", "device"] },
-    "Closed": { "type": "object", "required": ["reason", "by", "at"], "properties": { "reason": { "type": "string", "minLength": 1 }, "by": { "$ref": "#/definitions/Actor" }, "at": { "type": "number" } }, "additionalProperties": false },
+    "Checked": {
+      "type": "object",
+      "required": ["commit", "at"],
+      "properties": { "commit": { "type": ["string", "null"] }, "at": { "type": "number" } },
+      "additionalProperties": false
+    },
+    "Option": {
+      "type": "object",
+      "required": ["id", "label", "description"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Default": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind"],
+          "properties": { "kind": { "const": "ask" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "optionId"],
+          "properties": { "kind": { "const": "option" }, "optionId": { "type": "string" } },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Answer": {
+      "type": "object",
+      "required": ["optionId", "text", "by", "at"],
+      "properties": {
+        "optionId": { "type": ["string", "null"] },
+        "text": { "type": "string" },
+        "by": { "enum": ["user", "user-conversation"] },
+        "at": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "Actor": { "enum": ["manager", "user", "user-conversation", "device", "question"] },
+    "Closed": {
+      "type": "object",
+      "required": ["reason", "by", "at"],
+      "properties": {
+        "reason": { "type": "string", "minLength": 1 },
+        "by": { "$ref": "#/definitions/Actor" },
+        "at": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
     "DecisionId": { "type": "string", "pattern": "^D-[1-9][0-9]*$" },
     "ItemId": { "type": "string", "pattern": "^I-[1-9][0-9]*$" },
-    "ObjectId": { "anyOf": [{ "$ref": "#/definitions/DecisionId" }, { "$ref": "#/definitions/ItemId" }] },
-    "Decision": { "type": "object", "required": ["id", "revision", "title", "background", "options", "recommend", "default", "blocks", "links", "basis", "checked", "answer", "closed", "landed", "status", "createdAt", "updatedAt"], "properties": {
-      "discussion": { "$ref": "#/definitions/Discussion" },
-      "id": { "$ref": "#/definitions/DecisionId" }, "revision": { "type": "integer", "minimum": 1 }, "title": { "type": "string" }, "background": { "type": "string" },
-      "options": { "type": "array", "items": { "$ref": "#/definitions/Option" } }, "recommend": { "type": ["string", "null"] }, "default": { "$ref": "#/definitions/Default" },
-      "blocks": { "type": "array", "items": { "$ref": "#/definitions/ItemId" } }, "links": { "$ref": "#/definitions/Links" }, "basis": { "$ref": "#/definitions/Links" }, "landed": { "$ref": "#/definitions/Links" },
-      "checked": { "anyOf": [{ "$ref": "#/definitions/Checked" }, { "type": "null" }] }, "answer": { "anyOf": [{ "$ref": "#/definitions/Answer" }, { "type": "null" }] }, "closed": { "anyOf": [{ "$ref": "#/definitions/Closed" }, { "type": "null" }] },
-      "status": { "enum": ["open", "answered", "expired", "withdrawn"] }, "createdAt": { "type": "number" }, "updatedAt": { "type": "number" }
-    }, "additionalProperties": false },
-    "Owner": { "oneOf": [
-      { "type": "object", "required": ["kind"], "properties": { "kind": { "enum": ["manager", "user"] } }, "additionalProperties": false },
-      { "type": "object", "required": ["kind", "threadId"], "properties": { "kind": { "const": "line" }, "threadId": { "type": "string" } }, "additionalProperties": false }
-    ] },
-    "Item": { "type": "object", "required": ["id", "revision", "title", "status", "owner", "blockedBy", "why", "links", "basis", "unverified", "checked", "createdAt", "updatedAt"], "properties": {
-      "id": { "$ref": "#/definitions/ItemId" }, "revision": { "type": "integer", "minimum": 1 }, "title": { "type": "string" }, "status": { "enum": ["backlog", "running", "review", "done", "deferred", "blocked"] }, "owner": { "$ref": "#/definitions/Owner" },
-      "blockedBy": { "type": "array", "items": { "$ref": "#/definitions/DecisionId" } }, "why": { "type": "string" }, "links": { "$ref": "#/definitions/Links" }, "basis": { "$ref": "#/definitions/Links" }, "unverified": { "type": "array", "items": { "type": "string" } },
-      "checked": { "anyOf": [{ "$ref": "#/definitions/Checked" }, { "type": "null" }] }, "createdAt": { "type": "number" }, "updatedAt": { "type": "number" }
-    }, "additionalProperties": false },
-    "Situation": { "type": "object", "required": ["text", "at"], "properties": { "text": { "type": "string" }, "at": { "type": "number" } }, "additionalProperties": false },
-    "Change": { "type": "object", "required": ["id", "objectId", "by", "at", "fields", "before", "after", "why"], "properties": {
-      "id": { "type": "string" }, "objectId": { "anyOf": [{ "$ref": "#/definitions/ObjectId" }, { "enum": ["manager", "status"] }] }, "by": { "$ref": "#/definitions/Actor" }, "at": { "type": "number" },
-      "fields": { "type": "array", "items": { "type": "string" } }, "before": { "type": ["object", "null"] }, "after": { "type": ["object", "null"] }, "why": { "type": "string" }
-    }, "additionalProperties": false },
-    "Line": { "type": "object", "required": ["threadId", "parentThreadId", "title", "harness", "cwd", "status", "running", "startedAt", "elapsedSeconds", "branch", "ahead", "merged", "worktreeExists", "report", "unverified"], "properties": {
-      "threadId": { "type": "string" }, "parentThreadId": { "type": "string" }, "title": { "type": "string" }, "harness": { "type": "string" }, "cwd": { "type": "string" }, "status": { "enum": ["running", "idle", "waiting", "error"] }, "running": { "type": "boolean" },
-      "startedAt": { "type": ["number", "null"] }, "elapsedSeconds": { "type": ["number", "null"] }, "branch": { "type": ["string", "null"] }, "ahead": { "type": ["integer", "null"] }, "merged": { "type": ["boolean", "null"] }, "worktreeExists": { "type": ["boolean", "null"] },
-      "report": { "anyOf": [{ "$ref": "#/definitions/Situation" }, { "type": "null" }] }, "unverified": { "type": "array", "items": { "type": "string" } }
-    }, "additionalProperties": false },
-    "Activity": { "type": "object", "required": ["id", "kind", "at", "text", "objectId", "threadId", "changeId"], "properties": {
-      "id": { "type": "string" }, "kind": { "enum": ["report", "merged", "decision", "item", "status", "manager"] }, "at": { "type": "number" }, "text": { "type": "string" },
-      "objectId": { "anyOf": [{ "$ref": "#/definitions/ObjectId" }, { "type": "null" }] }, "threadId": { "type": ["string", "null"] }, "changeId": { "type": ["string", "null"] }
-    }, "additionalProperties": false },
-    "Manager": { "type": "object", "required": ["id", "threadId", "name", "scope", "cwd", "harness", "model", "effort", "template", "dispatch", "contact", "rules", "status", "pendingDecisions", "runningLines", "latestActivity", "createdAt", "updatedAt", "endedAt"], "properties": {
-      "permission": { "enum": [":read-only", ":workspace", ":danger-full-access", null] },
-      "id": { "type": "string" }, "threadId": { "type": "string" }, "name": { "type": "string" }, "scope": { "type": "string" }, "cwd": { "type": "string" }, "harness": { "type": "string" }, "model": { "type": ["string", "null"] }, "effort": { "type": ["string", "null"] },
-      "template": { "$ref": "#/definitions/Template" }, "dispatch": { "$ref": "#/definitions/Dispatch" }, "contact": { "$ref": "#/definitions/Contact" }, "rules": { "type": "string" }, "status": { "enum": ["active", "ending", "ended"] }, "pendingDecisions": { "type": "integer", "minimum": 0 }, "runningLines": { "type": "integer", "minimum": 0 },
-      "latestActivity": { "anyOf": [{ "$ref": "#/definitions/Activity" }, { "type": "null" }] }, "createdAt": { "type": "number" }, "updatedAt": { "type": "number" }, "endedAt": { "type": ["number", "null"] }
-    }, "additionalProperties": false },
-    "Board": { "type": "object", "required": ["managerId", "situation", "decisions", "items", "lines", "activities", "changes"], "properties": {
-      "managerId": { "type": "string" }, "situation": { "anyOf": [{ "$ref": "#/definitions/Situation" }, { "type": "null" }] }, "decisions": { "type": "array", "items": { "$ref": "#/definitions/Decision" } }, "items": { "type": "array", "items": { "$ref": "#/definitions/Item" } },
-      "lines": { "type": "array", "items": { "$ref": "#/definitions/Line" } }, "activities": { "type": "array", "items": { "$ref": "#/definitions/Activity" } }, "changes": { "type": "array", "items": { "$ref": "#/definitions/Change" } }
-    }, "additionalProperties": false },
-    "CreateParams": { "type": "object", "required": ["cwd", "harness", "model", "effort", "name", "scope", "template", "dispatch", "contact", "rules", "firstTask"], "properties": {
-      "permission": { "enum": [":read-only", ":workspace", ":danger-full-access", null] },
-      "cwd": { "type": "string", "minLength": 1 }, "harness": { "type": "string", "minLength": 1 }, "model": { "type": ["string", "null"] }, "effort": { "type": ["string", "null"] }, "name": { "type": "string" }, "scope": { "type": "string" },
-      "template": { "$ref": "#/definitions/Template" }, "dispatch": { "$ref": "#/definitions/Dispatch" }, "contact": { "$ref": "#/definitions/Contact" }, "rules": { "type": "string" }, "firstTask": { "type": "string" }
-    }, "additionalProperties": false },
-    "UpdateParams": { "type": "object", "required": ["managerId"], "properties": {
-      "managerId": { "type": "string" }, "name": { "type": "string" }, "scope": { "type": "string" }, "rules": { "type": "string" }, "dispatch": { "$ref": "#/definitions/Dispatch" }, "contact": { "$ref": "#/definitions/Contact" }
-    }, "additionalProperties": false },
-    "SubmittedAnswer": { "type": "object", "required": ["decisionId", "revision", "optionId", "text"], "properties": { "decisionId": { "$ref": "#/definitions/DecisionId" }, "revision": { "type": "integer", "minimum": 1 }, "optionId": { "type": ["string", "null"] }, "text": { "type": "string" } }, "additionalProperties": false },
-    "AnswersParams": { "type": "object", "required": ["managerId", "answers"], "properties": { "managerId": { "type": "string" }, "answers": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/SubmittedAnswer" } } }, "additionalProperties": false },
-    "AnswerFailure": { "type": "object", "required": ["decisionId", "code", "message", "decision"], "properties": { "decisionId": { "$ref": "#/definitions/DecisionId" }, "code": { "enum": ["unknownDecision", "decisionConflict", "decisionNotOpen", "invalidAnswer"] }, "message": { "type": "string" }, "decision": { "anyOf": [{ "$ref": "#/definitions/Decision" }, { "type": "null" }] } }, "additionalProperties": false },
-    "AnswersResponse": { "type": "object", "required": ["accepted", "rejected", "delivery"], "properties": { "accepted": { "type": "array", "items": { "$ref": "#/definitions/Decision" } }, "rejected": { "type": "array", "items": { "$ref": "#/definitions/AnswerFailure" } }, "delivery": { "enum": ["queued", "none"] } }, "additionalProperties": false },
-    "ReopenParams": { "type": "object", "required": ["managerId", "decisionId"], "properties": { "managerId": { "type": "string" }, "decisionId": { "$ref": "#/definitions/DecisionId" } }, "additionalProperties": false },
-    "ListResponse": { "type": "object", "required": ["managers"], "properties": { "managers": { "type": "array", "items": { "$ref": "#/definitions/Manager" } } }, "additionalProperties": false },
-    "ManagerResponse": { "type": "object", "required": ["manager"], "properties": { "manager": { "$ref": "#/definitions/Manager" } }, "additionalProperties": false },
-    "CreateResponse": { "type": "object", "required": ["manager", "threadId"], "properties": { "manager": { "$ref": "#/definitions/Manager" }, "threadId": { "type": "string" } }, "additionalProperties": false },
-    "BoardResponse": { "type": "object", "required": ["board"], "properties": { "board": { "$ref": "#/definitions/Board" } }, "additionalProperties": false },
-    "DecisionResponse": { "type": "object", "required": ["decision"], "properties": { "decision": { "$ref": "#/definitions/Decision" } }, "additionalProperties": false }
+    "ObjectId": {
+      "anyOf": [
+        { "$ref": "#/definitions/DecisionId" },
+        { "$ref": "#/definitions/ItemId" },
+        { "$ref": "#/definitions/RequestId" }
+      ]
+    },
+    "Decision": {
+      "type": "object",
+      "required": [
+        "id",
+        "revision",
+        "title",
+        "background",
+        "options",
+        "recommend",
+        "default",
+        "blocks",
+        "links",
+        "basis",
+        "checked",
+        "answer",
+        "closed",
+        "landed",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "discussion": { "$ref": "#/definitions/Discussion" },
+        "id": { "$ref": "#/definitions/DecisionId" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string" },
+        "background": { "type": "string" },
+        "options": { "type": "array", "items": { "$ref": "#/definitions/Option" } },
+        "recommend": { "type": ["string", "null"] },
+        "default": { "$ref": "#/definitions/Default" },
+        "blocks": { "type": "array", "items": { "$ref": "#/definitions/ItemId" } },
+        "links": { "$ref": "#/definitions/Links" },
+        "basis": { "$ref": "#/definitions/Links" },
+        "landed": { "$ref": "#/definitions/Links" },
+        "checked": { "anyOf": [{ "$ref": "#/definitions/Checked" }, { "type": "null" }] },
+        "answer": { "anyOf": [{ "$ref": "#/definitions/Answer" }, { "type": "null" }] },
+        "closed": { "anyOf": [{ "$ref": "#/definitions/Closed" }, { "type": "null" }] },
+        "status": { "enum": ["open", "answered", "expired", "withdrawn"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "Owner": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind"],
+          "properties": { "kind": { "enum": ["manager", "user"] } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "threadId"],
+          "properties": { "kind": { "const": "line" }, "threadId": { "type": "string" } },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Item": {
+      "type": "object",
+      "required": [
+        "id",
+        "revision",
+        "title",
+        "status",
+        "owner",
+        "blockedBy",
+        "why",
+        "links",
+        "basis",
+        "unverified",
+        "checked",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/definitions/ItemId" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string" },
+        "status": { "enum": ["backlog", "running", "review", "done", "deferred", "blocked"] },
+        "owner": { "$ref": "#/definitions/Owner" },
+        "blockedBy": { "type": "array", "items": { "$ref": "#/definitions/DecisionId" } },
+        "why": { "type": "string" },
+        "links": { "$ref": "#/definitions/Links" },
+        "basis": { "$ref": "#/definitions/Links" },
+        "unverified": { "type": "array", "items": { "type": "string" } },
+        "checked": { "anyOf": [{ "$ref": "#/definitions/Checked" }, { "type": "null" }] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "Situation": {
+      "type": "object",
+      "required": ["text", "at"],
+      "properties": { "text": { "type": "string" }, "at": { "type": "number" } },
+      "additionalProperties": false
+    },
+    "Change": {
+      "type": "object",
+      "required": ["id", "objectId", "by", "at", "fields", "before", "after", "why"],
+      "properties": {
+        "id": { "type": "string" },
+        "objectId": {
+          "anyOf": [{ "$ref": "#/definitions/ObjectId" }, { "enum": ["manager", "status"] }]
+        },
+        "by": { "$ref": "#/definitions/Actor" },
+        "at": { "type": "number" },
+        "fields": { "type": "array", "items": { "type": "string" } },
+        "before": { "type": ["object", "null"] },
+        "after": { "type": ["object", "null"] },
+        "why": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Line": {
+      "type": "object",
+      "required": [
+        "threadId",
+        "parentThreadId",
+        "title",
+        "harness",
+        "cwd",
+        "status",
+        "running",
+        "startedAt",
+        "elapsedSeconds",
+        "branch",
+        "ahead",
+        "merged",
+        "worktreeExists",
+        "report",
+        "unverified"
+      ],
+      "properties": {
+        "threadId": { "type": "string" },
+        "parentThreadId": { "type": "string" },
+        "title": { "type": "string" },
+        "harness": { "type": "string" },
+        "cwd": { "type": "string" },
+        "status": { "enum": ["running", "idle", "waiting", "error"] },
+        "running": { "type": "boolean" },
+        "startedAt": { "type": ["number", "null"] },
+        "elapsedSeconds": { "type": ["number", "null"] },
+        "branch": { "type": ["string", "null"] },
+        "ahead": { "type": ["integer", "null"] },
+        "merged": { "type": ["boolean", "null"] },
+        "worktreeExists": { "type": ["boolean", "null"] },
+        "report": { "anyOf": [{ "$ref": "#/definitions/Situation" }, { "type": "null" }] },
+        "unverified": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "ActivitySource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind"],
+          "properties": { "kind": { "enum": ["manager", "user", "system"] } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "threadId", "title"],
+          "properties": {
+            "kind": { "const": "line" },
+            "threadId": { "type": "string" },
+            "title": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Activity": {
+      "type": "object",
+      "required": ["id", "kind", "at", "text", "objectId", "threadId", "changeId"],
+      "properties": {
+        "source": { "$ref": "#/definitions/ActivitySource" },
+        "id": { "type": "string" },
+        "kind": {
+          "enum": ["report", "merged", "decision", "item", "request", "status", "manager"]
+        },
+        "at": { "type": "number" },
+        "text": { "type": "string" },
+        "objectId": { "anyOf": [{ "$ref": "#/definitions/ObjectId" }, { "type": "null" }] },
+        "threadId": { "type": ["string", "null"] },
+        "changeId": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "Manager": {
+      "type": "object",
+      "required": [
+        "id",
+        "threadId",
+        "name",
+        "scope",
+        "cwd",
+        "harness",
+        "model",
+        "effort",
+        "template",
+        "dispatch",
+        "contact",
+        "rules",
+        "status",
+        "pendingDecisions",
+        "runningLines",
+        "latestActivity",
+        "createdAt",
+        "updatedAt",
+        "endedAt"
+      ],
+      "properties": {
+        "permission": { "enum": [":read-only", ":workspace", ":danger-full-access", null] },
+        "id": { "type": "string" },
+        "threadId": { "type": "string" },
+        "name": { "type": "string" },
+        "scope": { "type": "string" },
+        "cwd": { "type": "string" },
+        "harness": { "type": "string" },
+        "model": { "type": ["string", "null"] },
+        "effort": { "type": ["string", "null"] },
+        "template": { "$ref": "#/definitions/Template" },
+        "dispatch": { "$ref": "#/definitions/Dispatch" },
+        "contact": { "$ref": "#/definitions/Contact" },
+        "rules": { "type": "string" },
+        "status": { "enum": ["active", "ending", "ended"] },
+        "pendingDecisions": { "type": "integer", "minimum": 0 },
+        "runningLines": { "type": "integer", "minimum": 0 },
+        "latestActivity": { "anyOf": [{ "$ref": "#/definitions/Activity" }, { "type": "null" }] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "endedAt": { "type": ["number", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "Board": {
+      "type": "object",
+      "required": [
+        "managerId",
+        "situation",
+        "decisions",
+        "items",
+        "lines",
+        "activities",
+        "changes"
+      ],
+      "properties": {
+        "requests": { "type": "array", "items": { "$ref": "#/definitions/Request" } },
+        "managerId": { "type": "string" },
+        "situation": { "anyOf": [{ "$ref": "#/definitions/Situation" }, { "type": "null" }] },
+        "decisions": { "type": "array", "items": { "$ref": "#/definitions/Decision" } },
+        "items": { "type": "array", "items": { "$ref": "#/definitions/Item" } },
+        "lines": { "type": "array", "items": { "$ref": "#/definitions/Line" } },
+        "activities": { "type": "array", "items": { "$ref": "#/definitions/Activity" } },
+        "changes": { "type": "array", "items": { "$ref": "#/definitions/Change" } }
+      },
+      "additionalProperties": false
+    },
+    "CreateParams": {
+      "type": "object",
+      "required": [
+        "cwd",
+        "harness",
+        "model",
+        "effort",
+        "name",
+        "scope",
+        "template",
+        "dispatch",
+        "contact",
+        "rules",
+        "firstTask"
+      ],
+      "properties": {
+        "permission": { "enum": [":read-only", ":workspace", ":danger-full-access", null] },
+        "cwd": { "type": "string", "minLength": 1 },
+        "harness": { "type": "string", "minLength": 1 },
+        "model": { "type": ["string", "null"] },
+        "effort": { "type": ["string", "null"] },
+        "name": { "type": "string" },
+        "scope": { "type": "string" },
+        "template": { "$ref": "#/definitions/Template" },
+        "dispatch": { "$ref": "#/definitions/Dispatch" },
+        "contact": { "$ref": "#/definitions/Contact" },
+        "rules": { "type": "string" },
+        "firstTask": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "UpdateParams": {
+      "type": "object",
+      "required": ["managerId"],
+      "properties": {
+        "managerId": { "type": "string" },
+        "name": { "type": "string" },
+        "scope": { "type": "string" },
+        "rules": { "type": "string" },
+        "dispatch": { "$ref": "#/definitions/Dispatch" },
+        "contact": { "$ref": "#/definitions/Contact" }
+      },
+      "additionalProperties": false
+    },
+    "SubmittedAnswer": {
+      "type": "object",
+      "required": ["decisionId", "revision", "optionId", "text"],
+      "properties": {
+        "decisionId": { "$ref": "#/definitions/DecisionId" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "optionId": { "type": ["string", "null"] },
+        "text": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "AnswersParams": {
+      "type": "object",
+      "required": ["managerId", "answers"],
+      "properties": {
+        "managerId": { "type": "string" },
+        "answers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/SubmittedAnswer" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "AnswerFailure": {
+      "type": "object",
+      "required": ["decisionId", "code", "message", "decision"],
+      "properties": {
+        "decisionId": { "$ref": "#/definitions/DecisionId" },
+        "code": {
+          "enum": ["unknownDecision", "decisionConflict", "decisionNotOpen", "invalidAnswer"]
+        },
+        "message": { "type": "string" },
+        "decision": { "anyOf": [{ "$ref": "#/definitions/Decision" }, { "type": "null" }] }
+      },
+      "additionalProperties": false
+    },
+    "AnswersResponse": {
+      "type": "object",
+      "required": ["accepted", "rejected", "delivery"],
+      "properties": {
+        "accepted": { "type": "array", "items": { "$ref": "#/definitions/Decision" } },
+        "rejected": { "type": "array", "items": { "$ref": "#/definitions/AnswerFailure" } },
+        "delivery": { "enum": ["queued", "none"] }
+      },
+      "additionalProperties": false
+    },
+    "ReopenParams": {
+      "type": "object",
+      "required": ["managerId", "decisionId"],
+      "properties": {
+        "managerId": { "type": "string" },
+        "decisionId": { "$ref": "#/definitions/DecisionId" }
+      },
+      "additionalProperties": false
+    },
+    "ListResponse": {
+      "type": "object",
+      "required": ["managers"],
+      "properties": {
+        "managers": { "type": "array", "items": { "$ref": "#/definitions/Manager" } }
+      },
+      "additionalProperties": false
+    },
+    "ManagerResponse": {
+      "type": "object",
+      "required": ["manager"],
+      "properties": { "manager": { "$ref": "#/definitions/Manager" } },
+      "additionalProperties": false
+    },
+    "CreateResponse": {
+      "type": "object",
+      "required": ["manager", "threadId"],
+      "properties": {
+        "manager": { "$ref": "#/definitions/Manager" },
+        "threadId": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "BoardResponse": {
+      "type": "object",
+      "required": ["board"],
+      "properties": { "board": { "$ref": "#/definitions/Board" } },
+      "additionalProperties": false
+    },
+    "DecisionResponse": {
+      "type": "object",
+      "required": ["decision"],
+      "properties": { "decision": { "$ref": "#/definitions/Decision" } },
+      "additionalProperties": false
+    }
   }
 }

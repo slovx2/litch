@@ -248,6 +248,28 @@ export function sampleManagers(
       managerId: id,
       situation: null,
       decisions: [],
+      requests:
+        id === 'm1'
+          ? [
+              {
+                id: 'R-1',
+                revision: 1,
+                title: t('请在真机复验编辑流程', 'Verify editing on your device'),
+                description: t(
+                  '按 I-2 的步骤检查：\n\n- 打开 **编辑原消息**\n- 核对 D-15 的范围\n\n遇到问题请描述现象。',
+                  'Follow I-2:\n\n- Open **Edit original message**\n- Check the scope in D-15\n\nDescribe any issue you encounter.',
+                ),
+                buttonLabel: t('已复验', 'Verified'),
+                basis: [],
+                links: [],
+                status: 'open',
+                response: null,
+                cancelled: null,
+                createdAt: ago(60),
+                updatedAt: ago(60),
+              },
+            ]
+          : [],
       items: [],
       lines: [],
       activities: [],
@@ -543,8 +565,8 @@ export function sampleManagers(
     }))
     const feed = [
       t(
-        '线「回退改成编辑原消息」回报：3 个提交，手机和 Codex 没验',
-        'Rewind editing reported: 3 commits; mobile and Codex not verified',
+        '**工作线回报**\n\n- 完成原消息编辑与回退\n- 保留 `revision` 校验\n- 核对 I-1 的边界\n- 补齐异常提示\n- 已通过局部测试\n\n手机与 Codex 尚未验证，范围见 D-15。\n\n请按 R-1 在真机上核对；无法完成时填写原因。',
+        '**Work line report**\n\n- Implemented editing and rewind\n- Kept `revision` validation\n- Checked boundaries in I-1\n- Added failure messages\n- Local tests passed\n\nMobile and Codex remain unverified; see D-15.\n\nFollow R-1 on a real device, or explain any blocker.',
       ),
       t(
         '你答复了 D-13：子会话不算后台任务',
@@ -557,6 +579,15 @@ export function sampleManagers(
     ]
     main.activities = feed.map((text, i) => ({
       id: `activity-${i}`,
+      source:
+        i === 0
+          ? {
+              kind: 'line',
+              threadId: 'manager-k1',
+              title:
+                main.lines.find((line) => line.threadId === 'manager-k1')?.title ?? 'manager-k1',
+            }
+          : { kind: i === 1 || i === 5 ? 'user' : i === 3 ? 'system' : 'manager' },
       text,
       kind: i === 0 ? 'report' : i === 3 ? 'merged' : 'decision',
       at: ago([12, 19, 28, 40, 55, 70][i] ?? 0),
@@ -582,6 +613,7 @@ export function sampleManagers(
   if (mobile)
     mobile.activities.push({
       id: 'mobile-decision',
+      source: { kind: 'manager' },
       kind: 'decision',
       at: ago(1440),
       text: t('经理提了 1 项决策', 'Manager opened one decision'),
@@ -592,6 +624,7 @@ export function sampleManagers(
   if (gateway)
     gateway.activities.push({
       id: 'gateway-status',
+      source: { kind: 'manager' },
       kind: 'status',
       at: ago(90),
       text: t('经理更新了现状', 'Manager updated the situation'),

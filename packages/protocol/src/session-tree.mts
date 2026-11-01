@@ -413,7 +413,9 @@ export function formatSessionEvent(event: SessionEvent): string {
     const manager = event.manager as ManagerEventData
     const head =
       event.kind === 'manager-answers'
-        ? 'The user submitted these board answers.'
+        ? manager.questions?.length || manager.requests?.length
+          ? 'The user submitted these board entries.'
+          : 'The user submitted these board answers.'
         : event.kind === 'manager-open'
           ? 'The user created this manager.'
           : event.kind === 'manager-rules'
@@ -434,6 +436,14 @@ export function formatSessionEvent(event: SessionEvent): string {
               `Original questions and answers: ${JSON.stringify(answer.discussion.messages)}`,
             ].filter(Boolean)
           : [],
+      ),
+      ...(manager.questions ?? []).map(
+        (question) =>
+          `Follow-up ${question.decisionId} (revision ${question.revision}) ${JSON.stringify(question.title)}: ${JSON.stringify(question.question)}`,
+      ),
+      ...(manager.requests ?? []).map(
+        (request) =>
+          `For you ${request.requestId} ${JSON.stringify(request.title)}: delivered=${request.delivered}; ${JSON.stringify(request.text)}`,
       ),
       manager.text,
       `<!-- ${JSON.stringify(event).replace(/>/g, '\\u003e')} -->`,
@@ -526,7 +536,33 @@ function validManagerEvent(event: SessionEvent): boolean {
   if (event.kind !== 'manager-answers') return data.answers === undefined
   return (
     Array.isArray(data.answers) &&
-    data.answers.length > 0 &&
+    (data.answers.length > 0 ||
+      (Array.isArray(data.questions) && data.questions.length > 0) ||
+      (Array.isArray(data.requests) && data.requests.length > 0)) &&
+    (data.requests === undefined ||
+      (Array.isArray(data.requests) &&
+        data.requests.every(
+          (request) =>
+            request &&
+            /^R-[1-9]\d*$/.test(request.requestId) &&
+            Number.isSafeInteger(request.revision) &&
+            request.revision > 0 &&
+            typeof request.title === 'string' &&
+            (request.buttonLabel === null || typeof request.buttonLabel === 'string') &&
+            typeof request.text === 'string' &&
+            typeof request.delivered === 'boolean',
+        ))) &&
+    (data.questions === undefined ||
+      (Array.isArray(data.questions) &&
+        data.questions.every(
+          (question) =>
+            question &&
+            /^D-[1-9]\d*$/.test(question.decisionId) &&
+            Number.isSafeInteger(question.revision) &&
+            question.revision > 0 &&
+            typeof question.title === 'string' &&
+            typeof question.question === 'string',
+        ))) &&
     data.answers.every(
       (answer) =>
         answer &&

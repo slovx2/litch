@@ -274,7 +274,8 @@ export class ClientTools {
           this.specs(threadId)
             .filter(
               (spec) =>
-                spec.namespace === 'litch_manager' && ['summary', 'get'].includes(spec.tool),
+                spec.namespace === 'litch_manager' &&
+                ['summary', 'get', 'update', 'close'].includes(spec.tool),
             )
             .map((spec) => [`${serverName(threadId)}_${spec.mcpName}`, true]),
         ),

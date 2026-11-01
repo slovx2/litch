@@ -36,9 +36,9 @@ const ALL: HarnessAbilities = {
 
 const DECLARED: Record<string, HarnessAbilities> = {
   // 引导只把文字交给模型，图片到不了
-  claude: { ...ALL, goals: true, cutInTurn: true, ephemeralFork: true },
+  claude: { ...ALL, goals: true, cutInTurn: true, ephemeralFork: true, managerQuestions: true },
   // Pi 和 dsh 不发本回合的差异：工作目录不是 git 仓库时，差异面板在它们的会话里没有东西可看
-  pi: { ...ALL, turnDiff: false, ephemeralFork: true },
+  pi: { ...ALL, turnDiff: false, ephemeralFork: true, managerQuestions: true },
   // dsh 的后台作业只列得出（job/list），停不了
   dsh: {
     ...ALL,
@@ -51,9 +51,16 @@ const DECLARED: Record<string, HarnessAbilities> = {
   },
   // 原生 codex 的消息一开始就带着准的阶段值：最终回答一开始活动区就收。
   // 它的 mention 不是给文件用的：提到的文件写进正文
-  codex: { ...ALL, finalOnStart: true, mentions: false, goals: true, ephemeralFork: true },
+  codex: {
+    ...ALL,
+    finalOnStart: true,
+    mentions: false,
+    goals: true,
+    ephemeralFork: true,
+    managerQuestions: true,
+  },
   // OpenCode：回退时连文件一起恢复
-  opencode: { ...ALL, rollbackRestoresFiles: true, turnDiff: false },
+  opencode: { managerQuestions: true, ...ALL, rollbackRestoresFiles: true, turnDiff: false },
 }
 
 /** 声明了认识“拒绝并附说明”的 harness */

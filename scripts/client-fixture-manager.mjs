@@ -1,5 +1,5 @@
 // 经理夹具：行首“经理：<操作> <JSON 参数>”调用 litch_manager，结果加 MANAGER_HEARD 原样回显。
-// summary、get、add、update、verify、close、answer、status 的说明前缀来自 client-tools-manager.mts。
+// summary、get、add、update、verify、close、answer、reply、status 的说明前缀来自 client-tools-manager.mts。
 // manager-open、manager-answers、manager-end 事件只回固定文字，不调工具；答复附本次决策编号。
 // manager-rules 尚未进入 session-tree.mts 的契约，合入后在这里补充。
 
@@ -11,6 +11,10 @@ export const MANAGER_ENDED = '经理已结束，未完成事项与决策保留�
 export const MANAGER_SPACE = {
   namespace: 'litch_manager',
   marks: {
+    endorse:
+      'Endorse a pending suggestion from your own workline subtree so it appears by default for the user.',
+    dismiss: 'Dismiss a pending suggestion from your own workline subtree as manager-ignored.',
+    reply: 'Reply to pending user follow-up questions on one decision.',
     summary: 'Read current situation, open decisions, unfinished items and running lines.',
     get: 'Read one decision or item with full fields and change history.',
     add: 'Add a decision or item; returns its id and object.',

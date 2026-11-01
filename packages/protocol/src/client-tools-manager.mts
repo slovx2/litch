@@ -13,6 +13,9 @@ import type {
   ManagerItemFields,
   ManagerItemId,
   ManagerObjectId,
+  ManagerRequest,
+  ManagerRequestFields,
+  ManagerRequestId,
   ManagerSituation,
   ManagerTemplate,
 } from './manager.mjs'
@@ -26,6 +29,9 @@ export const MANAGER_TOOL = {
   close: 'close',
   answer: 'answer',
   status: 'status',
+  reply: 'reply',
+  endorse: 'endorse',
+  dismiss: 'dismiss',
 } as const
 
 /** 第 6 层答复事件的指令；实际成功项由设备放到 SessionEvent.manager.answers。 */
@@ -39,7 +45,9 @@ export function managerRoleRules(scope: string): string {
     'Your work: clarify intent, split and prioritize items, start lines, follow up, check reports, finish work, record decisions for the user and maintain the board. Read code and documents to brief and review. Do not implement code yourself; start a line. Follow the user’s stated division of decisions; when unclear, create a decision. Answer small questions yourself after checking; record any resulting work as items.',
     'Each turn: identify what arrived (user message, board answers, line reports, Litch events). Apply answers to the plan, notify affected lines with litch_sessions.send, land lasting decisions in the repository under project rules and record their location with update. Check reports before changing item status. Split new requests into items; start in-scope work and raise out-of-scope work as decisions. Update items and use status when the situation materially changes. On user turns, say what changed, what is blocked and what the user needs to do. When mentioning decisions, you may include options and recommendations; the user submits answers on the board or explicitly in chat. For report-only or event-only turns, update the ledger and reply in one or two sentences.',
     'Ask the user through board decisions, not question lists or suggestion cards in chat. One decision asks one question, with that question as its title. Background must stand alone; give options and a recommendation when useful, what happens without an answer, and basis (files, branches, sessions). Record answers already given in chat with answer; do not ask again. If a question is no longer needed, close it with a reason; never close an answered decision. Prioritize and consolidate excessive pending questions.',
-    'Lines cannot see this conversation: make briefs self-contained. Turn scope or product questions in reports into decisions yourself. Serialize or combine lines changing the same files. If a line fails or stalls, reassign or send guidance where possible; raise decisions for the user, or mark an item blocked with a reason. Do not leave stalled lines unattended. Check branches, commits and check results rather than trusting completion claims. Record unverified work on items; create user-owned items for checks only the user can do (real devices, windows, login), instead of marking them done.',
+    'Lines cannot see this conversation: make briefs self-contained. Turn scope or product questions in reports into decisions yourself. Serialize or combine lines changing the same files. If a line fails or stalls, reassign or send guidance where possible; raise decisions for the user, or mark an item blocked with a reason. Do not leave stalled lines unattended. Check branches, commits and check results rather than trusting completion claims. Record unverified work on items. Create For you objects (kind=request, R-n) for actions only the user can perform, such as device checks, changing settings or logging in. Give a clear description and optionally a buttonLabel. Read get before updates or cancellation; provide current revision and why/reason. Never deliver a request for the user; a written reply may report a blocker rather than completion. Items record manager or line progress, never assign new items to the user.',
+    'When the user submits decision follow-up questions, answer in the main conversation and use litch_manager.reply with the decision id, current revision and reply text to save the answer in its question log. Read get on revision conflicts. You may also update or close the decision when appropriate.',
+    'Review suggestion cards from your workline subtree when notified: endorse useful work for the user, or dismiss it with a reason. Your own cards are already reviewed. Users can still start unreviewed cards directly.',
     'The board records the process; the repository is authoritative. Check the recorded basis before acting; reconcile the board with the repository. Use verify after checking that an object remains valid.',
   ].join('\n\n')
 }
@@ -49,7 +57,7 @@ export function managerSessionRules(maxRunningLines: number): string {
   return [
     'Manager sessions (Litch). For in-scope items, call litch_sessions.start with initiation "user_asked" directly: creating this manager authorized this delegation, including event turns. Raise out-of-scope work as a board decision first.',
     `Keep at most ${maxRunningLines} lines running across your entire subtree, including waiting approvals and background work. The device rejects starts or resumes beyond this limit; finish or stop an existing line first.`,
-    'Do not call wrap_up or offer suggestion cards. Put decisions on the board and follow-up work in items. When the user asks to move the current task to another session, retain litch_sessions.hand_off.',
+    'Do not call wrap_up. For work that needs the user to initiate or approve before it starts, call start with initiation "propose" and a full brief: the card appears in the board Suggestions tab and starts a line only when the user clicks Start. Never replace already-authorized direct delegation with a card. Items record progress; questions belong in decisions; actions only the user can perform belong in For you requests (kind=request). When the user asks to move the current task to another session, retain litch_sessions.hand_off.',
     FRESH_BRIEF,
     WORKTREE_RULE,
     TITLE_LINE,
@@ -89,7 +97,7 @@ export function managerLineRules(name: string, dispatch: ManagerDispatchSettings
     `You are a line started by manager "${name}". The manager works with the user; you finish this assignment.`,
     'For unclear scope or product details, do not stop waiting for the user: complete what you safely can and report the questions to the manager. Permission approvals still go through the normal user approval path.',
     'Do not send progress messages to the manager during work unless there is a major change, a major finding, or a decision needed to continue. Otherwise, report once at the end of the turn.',
-    'At the end of each turn, report: what you did; branch, commits and whether you pushed; checks and results; each unverified part on its own line starting exactly with "没验："; decisions needed from the manager.',
+    'At the end of each turn, report using Markdown (supported in Litch; use it for lists and emphasis): what you did; branch, commits and whether you pushed; checks and results; each unverified part on its own line starting exactly with "没验："; decisions needed from the manager.',
     'Do not merge, push or release unless the brief explicitly authorizes it. You do not inherit litch_manager; report board changes to the manager.',
     'Use the folder or worktree assigned in your brief; do not create another worktree on your own. When sharing a folder, respect the brief’s file ownership and preserve other lines’ edits.',
     dispatch.merge === 'manager'
@@ -135,11 +143,24 @@ export function managerEndText(template: ManagerTemplate): string {
 
 export type ManagerAddArguments =
   | {
+      kind: 'request'
+      request: Pick<ManagerRequestFields, 'title' | 'description'> & Partial<ManagerRequestFields>
+      revision: 0
+      why: string
+    }
+  | {
       kind: 'decision'
       decision: Pick<ManagerDecisionFields, 'title' | 'background'> & Partial<ManagerDecisionFields>
     }
   | { kind: 'item'; item: Pick<ManagerItemFields, 'title'> & Partial<ManagerItemFields> }
 export type ManagerUpdateArguments =
+  | {
+      kind: 'request'
+      id: ManagerRequestId
+      patch: Partial<ManagerRequestFields>
+      revision: number
+      why: string
+    }
   | { kind: 'decision'; id: ManagerDecisionId; patch: Partial<ManagerDecisionFields>; why: string }
   | { kind: 'item'; id: ManagerItemId; patch: Partial<ManagerItemFields>; why: string }
 export interface ManagerVerifyArguments {
@@ -148,6 +169,7 @@ export interface ManagerVerifyArguments {
   why: string
 }
 export type ManagerCloseArguments =
+  | { kind: 'request'; id: ManagerRequestId; status: 'cancelled'; revision: number; reason: string }
   | { kind: 'decision'; id: ManagerDecisionId; status: 'expired' | 'withdrawn'; reason: string }
   | { kind: 'item'; id: ManagerItemId; status: 'done' | 'deferred'; reason: string }
 export interface ManagerAnswerArguments {
@@ -164,26 +186,33 @@ export interface ManagerToolArguments {
   update: ManagerUpdateArguments
   verify: ManagerVerifyArguments
   close: ManagerCloseArguments
+  endorse: { proposalId: string; reason?: string }
+  dismiss: { proposalId: string; reason: string }
+  reply: { id: ManagerDecisionId; revision: number; text: string }
   answer: ManagerAnswerArguments
   status: { text: string }
 }
 export interface ManagerToolResults {
-  summary: Pick<ManagerBoard, 'situation' | 'decisions' | 'items' | 'lines'>
-  get: { object: ManagerDecision | ManagerItem; changes: ManagerChange[] }
-  add: { id: ManagerObjectId; object: ManagerDecision | ManagerItem }
-  update: { object: ManagerDecision | ManagerItem }
-  verify: { object: ManagerDecision | ManagerItem }
-  close: { object: ManagerDecision | ManagerItem }
+  summary: Pick<ManagerBoard, 'situation' | 'decisions' | 'items' | 'lines' | 'requests'>
+  get: { object: ManagerDecision | ManagerItem | ManagerRequest; changes: ManagerChange[] }
+  add: { id: ManagerObjectId; object: ManagerDecision | ManagerItem | ManagerRequest }
+  update: { object: ManagerDecision | ManagerItem | ManagerRequest }
+  verify: { object: ManagerDecision | ManagerItem | ManagerRequest }
+  close: { object: ManagerDecision | ManagerItem | ManagerRequest }
+  endorse: { proposalId: string; review: import('./suggestion-inbox.mjs').SuggestionReview }
+  dismiss: { proposalId: string; review: import('./suggestion-inbox.mjs').SuggestionReview }
+  reply: { object: ManagerDecision }
   answer: { object: ManagerDecision }
   status: { situation: ManagerSituation }
 }
 
 // 顶层保持普通对象，避免 Claude 丢弃工具；kind 对应关系、跨字段引用与状态流转由设备校验。
 const STRING = { type: 'string' }
-const KIND = { type: 'string', enum: ['decision', 'item'] }
+const MARKDOWN = { ...STRING, description: 'Markdown supported; use it for lists and emphasis.' }
+const KIND = { type: 'string', enum: ['decision', 'item', 'request'] }
 const NULLABLE_STRING = { type: ['string', 'null'] }
 const STRINGS = { type: 'array', items: STRING }
-const ID = { type: 'string', description: 'Board object id: D-<n> or I-<n>.' }
+const ID = { type: 'string', description: 'Board object id: D-<n>, I-<n> or R-<n>.' }
 const object = (properties: Record<string, unknown>, required: string[] = []) => ({
   type: 'object',
   properties,
@@ -209,10 +238,10 @@ const OWNER = {
 }
 const DECISION_FIELDS = {
   title: STRING,
-  background: STRING,
+  background: MARKDOWN,
   options: {
     type: 'array',
-    items: object({ id: STRING, label: STRING, description: STRING }, [
+    items: object({ id: STRING, label: STRING, description: MARKDOWN }, [
       'id',
       'label',
       'description',
@@ -240,10 +269,18 @@ const ITEM_FIELDS = {
   },
   owner: OWNER,
   blockedBy: { ...STRINGS, description: 'Decision ids. Set why for a blocked item.' },
-  why: STRING,
+  why: MARKDOWN,
   links: LINKS,
   basis: LINKS,
-  unverified: STRINGS,
+  unverified: { type: 'array', items: MARKDOWN },
+}
+
+const REQUEST_FIELDS = {
+  title: STRING,
+  description: MARKDOWN,
+  buttonLabel: NULLABLE_STRING,
+  basis: LINKS,
+  links: LINKS,
 }
 
 export const MANAGER_TOOLS: ClientToolNamespaceSpec = {
@@ -268,15 +305,19 @@ export const MANAGER_TOOLS: ClientToolNamespaceSpec = {
       type: 'function',
       name: MANAGER_TOOL.add,
       description:
-        'Add a decision or item; returns its id and object. Decision basis: the files, commits, branches or sessions it relies on. Defaults: arrays empty; decision open, recommend null, default ask; item backlog, owner manager, why empty.',
+        'Add a decision or item; returns its id and object. Items must belong to the manager or a line; use a suggestion card for work awaiting user initiation. Decision basis: the files, commits, branches or sessions it relies on. Defaults: arrays empty; decision open, recommend null, default ask; item backlog, owner manager, why empty.',
       inputSchema: object(
         {
           kind: {
             ...KIND,
-            description: 'For decision, supply only decision; for item, supply only item.',
+            description:
+              'Supply only the matching decision, item or request field. For request, also provide revision=0 and why.',
           },
           decision: object(DECISION_FIELDS, ['title', 'background']),
           item: object(ITEM_FIELDS, ['title']),
+          request: object(REQUEST_FIELDS, ['title', 'description']),
+          revision: { type: 'integer', minimum: 0 },
+          why: MARKDOWN,
         },
         ['kind'],
       ),
@@ -285,17 +326,18 @@ export const MANAGER_TOOLS: ClientToolNamespaceSpec = {
       type: 'function',
       name: MANAGER_TOOL.update,
       description:
-        'Patch supplied fields and record why. Arrays replace whole arrays; null clears recommend. Use answer/close for decision transitions and verify for checked. Cannot write line facts.',
+        'Patch supplied fields and record why. Arrays replace whole arrays; null clears recommend. Use answer/close for decision transitions and verify for checked. Cannot write line facts. For request, supply current revision; only title, description, buttonLabel, basis and links can change.',
       inputSchema: object(
         {
           kind: KIND,
           id: ID,
+          revision: { type: 'integer', minimum: 1 },
           patch: {
             description:
               'Nonempty fields for the selected kind: decision uses the first shape, item the second. Do not mix them.',
-            anyOf: [object(DECISION_FIELDS), object(ITEM_FIELDS)],
+            anyOf: [object(DECISION_FIELDS), object(ITEM_FIELDS), object(REQUEST_FIELDS)],
           },
-          why: STRING,
+          why: MARKDOWN,
         },
         ['kind', 'id', 'patch', 'why'],
       ),
@@ -305,7 +347,7 @@ export const MANAGER_TOOLS: ClientToolNamespaceSpec = {
       name: MANAGER_TOOL.verify,
       description:
         'Record that you checked the basis and it is still valid. Device timestamps checked.',
-      inputSchema: object({ id: ID, commit: NULLABLE_STRING, why: STRING }, [
+      inputSchema: object({ id: ID, commit: NULLABLE_STRING, why: MARKDOWN }, [
         'id',
         'commit',
         'why',
@@ -315,17 +357,18 @@ export const MANAGER_TOOLS: ClientToolNamespaceSpec = {
       type: 'function',
       name: MANAGER_TOOL.close,
       description:
-        'Close an open decision as expired/withdrawn, or finish/defer an item. Give a nonempty reason. Never close an answered decision.',
+        'Close an open decision as expired/withdrawn, or finish/defer an item. Give a nonempty reason. Never close an answered decision. For request, supply current revision and status cancelled.',
       inputSchema: object(
         {
           kind: KIND,
           id: ID,
+          revision: { type: 'integer', minimum: 1 },
           status: {
             type: 'string',
-            enum: ['expired', 'withdrawn', 'done', 'deferred'],
+            enum: ['expired', 'withdrawn', 'done', 'deferred', 'cancelled'],
             description: 'For decision: expired or withdrawn. For item: done or deferred.',
           },
-          reason: STRING,
+          reason: MARKDOWN,
         },
         ['kind', 'id', 'status', 'reason'],
       ),
@@ -346,7 +389,32 @@ export const MANAGER_TOOLS: ClientToolNamespaceSpec = {
       name: MANAGER_TOOL.status,
       description:
         'Replace the current situation with a short account of material progress; device timestamps it.',
-      inputSchema: object({ text: STRING }, ['text']),
+      inputSchema: object({ text: MARKDOWN }, ['text']),
+    },
+    {
+      type: 'function',
+      name: MANAGER_TOOL.reply,
+      description:
+        'Reply to pending user follow-up questions on one decision. Read get first and supply its current revision; reply text is saved in the question log. This does not answer or close the decision.',
+      inputSchema: object({ id: ID, revision: { type: 'integer', minimum: 1 }, text: MARKDOWN }, [
+        'id',
+        'revision',
+        'text',
+      ]),
+    },
+    {
+      type: 'function',
+      name: MANAGER_TOOL.endorse,
+      description:
+        'Endorse a pending suggestion from your own workline subtree so it appears by default for the user. Optional reason explains its value.',
+      inputSchema: object({ proposalId: STRING, reason: MARKDOWN }, ['proposalId']),
+    },
+    {
+      type: 'function',
+      name: MANAGER_TOOL.dismiss,
+      description:
+        'Dismiss a pending suggestion from your own workline subtree as manager-ignored. Supply a nonempty reason; the audit records it.',
+      inputSchema: object({ proposalId: STRING, reason: MARKDOWN }, ['proposalId', 'reason']),
     },
   ],
 }

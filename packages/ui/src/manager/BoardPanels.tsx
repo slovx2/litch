@@ -1,33 +1,17 @@
 import { type DeviceView, keys, type ManagerBoardPages } from '@litch/core'
 import { useLayoutEffect, useRef } from 'react'
-import type {
-  ManagerItemId,
-  ManagerItemView,
-  ManagerLink,
-} from '../../../core/src/model-manager.mts'
+import type { ManagerItemId, ManagerItemView } from '../../../core/src/model-manager.mts'
 import { requestOpenSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { badgeOf, nameOf } from '../app/device.ts'
 import { useKey } from '../app/services.tsx'
-import { ExternalLink } from '../transcript/ExternalLink.tsx'
+import { Activity } from './Activity.tsx'
+import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
 
 function Item({ item }: { item: ManagerItemView }) {
   const t = useT()
-  const links = (entries: ManagerLink[]) => (
-    <ul className="mg-item-links">
-      {entries.map((link) => (
-        <li key={`${link.kind}:${link.target}:${link.label}`}>
-          {link.kind === 'url' ? (
-            <ExternalLink href={link.target}>{link.label ?? link.target}</ExternalLink>
-          ) : (
-            <span title={link.target}>{link.label ?? link.target}</span>
-          )}
-        </li>
-      ))}
-    </ul>
-  )
   return (
     <article className="mg-item" data-manager-item={item.id} tabIndex={-1}>
       <header className="mg-item-heading">
@@ -35,7 +19,7 @@ function Item({ item }: { item: ManagerItemView }) {
         <h3>{item.title}</h3>
         <div className="mg-item-badges">
           <span className={`pill ${item.status === 'blocked' ? 'wait' : 'mute'}`}>
-            {t(`manager.${item.status}`)}
+            {t(`manager.status.${item.status}`)}
           </span>
           <span className="mg-item-owner">{t(`manager.${item.owner.kind}`)}</span>
         </div>
@@ -72,13 +56,13 @@ function Item({ item }: { item: ManagerItemView }) {
           {item.basis.length ? (
             <div className="mg-item-meta-row">
               <span className="mg-meta-label">{t('manager.basis')}</span>
-              {links(item.basis)}
+              <BoardLinks links={item.basis} />
             </div>
           ) : null}
           {item.links.length ? (
             <div className="mg-item-meta-row">
               <span className="mg-meta-label">{t('manager.links')}</span>
-              {links(item.links)}
+              <BoardLinks links={item.links} />
             </div>
           ) : null}
         </div>
@@ -176,8 +160,7 @@ export function BoardPanels({
         {!pages.lines.length ? <p>{t('manager.none')}</p> : null}
       </div>
     )
-  const { blocked, waitingForYou, situation, stats, activities } = pages.overview
-  const yours = waitingForYou.filter((item) => item.status !== 'blocked')
+  const { blocked, situation, stats, activities, requests } = pages.overview
   return (
     <div className="mg-stack">
       <article className="mg-card">
@@ -185,20 +168,12 @@ export function BoardPanels({
           <b className="grow">{t('manager.situation')}</b>
           <small className="dim">{situation ? new Date(situation.at).toLocaleString() : ''}</small>
         </header>
-        <p>{situation?.text ?? t('manager.none')}</p>
+        <BoardMarkdown text={situation?.text ?? t('manager.none')} />
       </article>
       <div className="mg-stats">
         <button type="button" onClick={() => onTab('decisions')}>
           <b>{stats.pendingDecisions}</b>
           {t('manager.wait')}
-        </button>
-        <button type="button" onClick={() => onTab('items')}>
-          <b>{yours.length}</b>
-          {t('manager.yours')}
-        </button>
-        <button type="button" onClick={() => onTab('lines')}>
-          <b>{stats.runningLines}</b>
-          {t('manager.running')}
         </button>
         <button type="button" onClick={() => onTab('items')}>
           <b>{stats.doneItems}</b>
@@ -213,21 +188,24 @@ export function BoardPanels({
           <p className="dim">{t('manager.none')}</p>
         )}
       </section>
-      <section data-overview="yours">
-        <h3>{t('manager.yours')}</h3>
-        {yours.length ? (
-          yours.map((item) => <Item key={item.id} item={item} />)
-        ) : (
-          <p className="dim">{t('manager.none')}</p>
-        )}
-      </section>
+      {requests.length ? (
+        <section data-overview="requests">
+          <h3>{t('manager.requests')}</h3>
+          {requests.map((request) => (
+            <article className="mg-card" key={request.id}>
+              <header>
+                <BoardReferences text={request.id} />
+                <b>{request.title}</b>
+              </header>
+              <BoardMarkdown text={request.description} />
+            </article>
+          ))}
+        </section>
+      ) : null}
       <section>
         <h3>{t('manager.activity')}</h3>
         {activities.map((activity) => (
-          <div className="mg-activity" key={activity.id}>
-            <time className="dim">{new Date(activity.at).toLocaleTimeString()}</time>
-            <span>{activity.text}</span>
-          </div>
+          <Activity key={activity.id} activity={activity} deviceId={deviceId} />
         ))}
       </section>
     </div>

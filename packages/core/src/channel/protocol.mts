@@ -404,6 +404,17 @@ export interface Commands {
     params: { deviceId: string; query: string; limit?: number; untitled?: string }
     result: import('../search/model.mjs').TitleSearchResult
   }
+  'managers.feedback.submit': {
+    params: import('../../../protocol/src/manager.mjs').ManagerFeedbackSubmitParams & {
+      deviceId: string
+    }
+    result: ManagerAnswersResult & {
+      acceptedRequests: import('../../../protocol/src/manager.mjs').ManagerRequest[]
+      rejectedRequests: import('../../../protocol/src/manager.mjs').ManagerRequestFailure[]
+      acceptedQuestions: ManagerDecisionView[]
+      rejectedQuestions: ManagerAnswersResult['rejected']
+    }
+  }
   'projectPermission.set': {
     params: ProjectPermissionSet & { deviceId: string }
     result: ProjectPermission

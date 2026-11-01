@@ -167,7 +167,7 @@ function anthropic(harness, said, result) {
 }
 
 for (const [harness, reply] of Object.entries(adapters)) {
-  test(`${harness}：八种经理操作按契约识别，结果原样回显`, () => {
+  test(`${harness}：经理工具操作按契约识别，结果原样回显`, () => {
     for (const tool of MANAGER_TOOLS.tools) {
       const args = { marker: '原样参数' }
       const said = `经理：${tool.name} ${JSON.stringify(args)}`

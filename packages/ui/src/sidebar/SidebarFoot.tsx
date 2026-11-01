@@ -1,4 +1,4 @@
-import { keys, type SuggestionView } from '@litch/core'
+import { keys, type SuggestionView, suggestionCount } from '@litch/core'
 import { useEffect, useState } from 'react'
 import type { Page } from '../app/App.tsx'
 import { requestSettings } from '../app/actions.ts'
@@ -10,7 +10,7 @@ import { Choice, LANG_NAMES } from '../settings/Look.tsx'
 
 function SuggestionsButton({ on, onOpen }: { on: boolean; onOpen(): void }) {
   const t = useT()
-  const count = useKey<readonly SuggestionView[]>(keys.suggestions)?.length ?? 0
+  const count = suggestionCount(useKey<readonly SuggestionView[]>(keys.suggestions) ?? [])
   return (
     <button
       type="button"
@@ -79,7 +79,6 @@ function LookButton() {
         <span className="sb-btn-name">{t('sidebar.look')}</span>
       </button>
       {open ? (
-        // biome-ignore lint/a11y/noStaticElementInteractions: 键盘事件是从里面的按钮冒上来的
         <div
           className="pick-pop sb-look-pop"
           role="dialog"

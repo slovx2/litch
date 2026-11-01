@@ -11,6 +11,8 @@ import type {
   ManagerDiscussion,
   ManagerEndParams,
   ManagerEndResponse,
+  ManagerFeedbackSubmitParams,
+  ManagerFeedbackSubmitResponse,
   ManagerListParams,
   ManagerListResponse,
   ManagerQuestionParams,
@@ -19,6 +21,10 @@ import type {
 } from '../../../protocol/src/manager.mjs'
 
 export interface ManagerRequests {
+  'litch/manager/feedback/submit': {
+    params: ManagerFeedbackSubmitParams
+    result: ManagerFeedbackSubmitResponse
+  }
   'litch/manager/question/ask': {
     params: ManagerQuestionParams
     result: { discussion: ManagerDiscussion }

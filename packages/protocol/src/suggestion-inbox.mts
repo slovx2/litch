@@ -7,7 +7,13 @@ export const SUGGESTION_RETENTION_SETTING = 'sessions.suggestionRetentionDays'
 /** 有限值保证 JSON 和现有 expiresAt 协议不变，单位为秒。 */
 export const SUGGESTION_NEVER = 8_640_000_000_000
 
+export interface SuggestionReview {
+  state: 'pending' | 'endorsed' | 'dismissed'
+  reason: string | null
+  at: number | null
+}
 export interface SuggestionEntry {
+  managerReview?: SuggestionReview
   proposal: SessionProposal
   source: {
     threadId: string

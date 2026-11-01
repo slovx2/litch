@@ -21,8 +21,10 @@ import { formatSessionEvent, parseSessionEvent } from '../../protocol/src/sessio
 import type { DeviceToolCall } from './device-tools.mjs'
 import { isDecision, ManagerBoardWriter } from './manager-board.mjs'
 import { ManagerEndings } from './manager-ending.mjs'
+import { submitManagerFeedback } from './manager-feedback.mjs'
 import { ManagerLines } from './manager-lines.mjs'
 import { ManagerQuestions } from './manager-questions.mjs'
+import { isRequest } from './manager-requests.mjs'
 import { managerTools } from './manager-rules.mjs'
 import { ManagerStore, managerNow, openManagerDatabase } from './manager-store.mjs'
 import {
@@ -106,6 +108,14 @@ export class DeviceManagers {
     const lines = this.lines.lines(id)
     const activities: ManagerActivity[] = changes.map((change) => ({
       id: change.id,
+      source: {
+        kind:
+          change.by === 'manager'
+            ? 'manager'
+            : ['user', 'user-conversation'].includes(change.by)
+              ? 'user'
+              : 'system',
+      },
       kind:
         change.objectId === 'manager'
           ? 'manager'
@@ -113,7 +123,9 @@ export class DeviceManagers {
             ? 'status'
             : change.objectId.startsWith('D-')
               ? 'decision'
-              : 'item',
+              : change.objectId.startsWith('R-')
+                ? 'request'
+                : 'item',
       at: change.at,
       text: change.why,
       objectId:
@@ -126,6 +138,7 @@ export class DeviceManagers {
         activities.push({
           id: `report:${line.threadId}:${this.store.report(line.threadId)?.turnId}`,
           kind: 'report',
+          source: { kind: 'line', threadId: line.threadId, title: line.title },
           at: line.report.at,
           text: line.report.text,
           objectId: null,
@@ -140,7 +153,11 @@ export class DeviceManagers {
         const state = this.store.question(id, decision.id)
         return state ? { ...decision, discussion: state.discussion } : decision
       }),
-      items: objects.filter((object) => !isDecision(object)),
+      items: objects.filter(
+        (object): object is import('../../protocol/src/manager.mjs').ManagerItem =>
+          !isDecision(object) && !isRequest(object),
+      ),
+      requests: objects.filter(isRequest),
       lines,
       activities,
       changes,
@@ -311,6 +328,21 @@ export class DeviceManagers {
         }
         return { manager: this.manager(id) }
       }
+      case MANAGER_METHOD.feedbackSubmit: {
+        keys(params, ['managerId', 'answers', 'questions', 'requests'])
+        const result = submitManagerFeedback(
+          this.writer,
+          id,
+          params.answers,
+          params.questions,
+          params.requests ?? [],
+        )
+        if (result.delivery === 'queued') {
+          this.changed(id)
+          this.kick(id)
+        }
+        return result
+      }
       case MANAGER_METHOD.answersSubmit: {
         keys(params, ['managerId', 'answers'])
         const result = this.writer.answers(id, params.answers)
@@ -416,14 +448,57 @@ export class DeviceManagers {
         ? this.store.manager(questionManager)
         : this.store.forThread(call.threadId)
       if (!this.questions.allowed(call.threadId, call.namespace, call.tool))
-        throw new ManagerError('invalidManager', 'Background questions are read-only.')
+        throw new ManagerError(
+          'invalidManager',
+          'This operation is not available in a temporary decision conversation.',
+        )
       if (!manager || manager.harness !== call.harness)
         throw new ManagerError(
           'invalidManager',
           'litch_manager is available only in its owning manager session.',
         )
       let result: unknown
-      if (call.tool === 'summary') {
+      if (call.tool === 'endorse' || call.tool === 'dismiss') {
+        this.writer.active(manager.id)
+        const args = validateTool(call.tool, call.arguments)
+        const proposalId = text(args.proposalId, 'proposalId')
+        const proposal = this.tree.pendingProposal(proposalId)
+        const mark = this.lines.mark(proposal.threadId)
+        if (proposal.offer || mark?.managerId !== manager.id || mark.role !== 'line')
+          throw new ManagerError(
+            'invalidManager',
+            'Only pending suggestions from your own workline subtree can be reviewed.',
+          )
+        if (this.tree.accepting.has(proposalId))
+          throw new ManagerError('invalidManager', 'This suggestion is already starting.')
+        const reason =
+          call.tool === 'dismiss'
+            ? text(args.reason, 'reason')
+            : typeof args.reason === 'string'
+              ? args.reason
+              : null
+        const review = {
+          state: call.tool === 'endorse' ? ('endorsed' as const) : ('dismissed' as const),
+          reason,
+          at: managerNow(),
+        }
+        this.store.transaction(() => {
+          const before = this.store.suggestionReview(manager.id, proposalId)
+          this.store.saveSuggestionReview(manager.id, proposalId, review)
+          this.store.record(
+            manager.id,
+            'manager',
+            'manager',
+            before,
+            { proposalId, ...review },
+            `${call.tool === 'dismiss' ? '经理忽略' : '经理审核'}：${proposal.title}${reason ? ` · ${reason}` : ''}`,
+          )
+          if (call.tool === 'dismiss') this.tree.settleProposal(proposalId, 'dismissed', null)
+        })
+        this.tree.suggestions.changed()
+        this.changed(manager.id)
+        result = { proposalId, review }
+      } else if (call.tool === 'summary') {
         validateTool(call.tool, call.arguments)
         await this.lines.refresh(manager.id)
         const board = this.board(manager.id)
@@ -436,6 +511,7 @@ export class DeviceManagers {
               const { discussion: _discussion, ...fields } = decision
               return fields
             }),
+          requests: board.requests?.filter((request) => request.status === 'open'),
           items: board.items.filter((item) => !['done', 'deferred'].includes(item.status)),
           lines: board.lines.filter((line) => line.running),
         }
@@ -449,7 +525,16 @@ export class DeviceManagers {
             'managerEnded',
             'Only the manager-end finalization turn can write while this manager is ending.',
           )
-        result = this.writer.tool(manager.id, call.tool, call.arguments, call.turnId)
+        if (questionManager) this.questions.validateWrite(call.threadId, call.tool, call.arguments)
+        result = this.writer.tool(
+          manager.id,
+          call.tool,
+          call.arguments,
+          call.turnId,
+          questionManager ? 'question' : 'manager',
+        )
+        if (questionManager && ['update', 'close'].includes(call.tool))
+          this.questions.noteChange(call.threadId, result)
         if (call.tool !== 'get') this.changed(manager.id)
       }
       return { success: true, contentItems: [{ type: 'inputText', text: JSON.stringify(result) }] }

@@ -4,8 +4,13 @@
 import type { Entry } from './types.ts'
 
 export const zhProposals = {
+  'suggestions.count': '{n} 条建议',
+  'suggestions.managerLoading': '正在读取经理信息…',
+  'suggestions.openManagerNamed': '打开 {name} 的看板（{n} 条建议）',
+  'suggestions.unreviewed': '经理未审核',
+  'suggestions.noReviewed': '暂无已审核建议',
   'suggestions.title': '建议',
-  'suggestions.openManager': '到经理看板处理',
+  'suggestions.openManager': '打开经理看板',
   'suggestions.all': '全部建议',
   'suggestions.empty': '没有待处理建议',
   'suggestions.archived': '来源已归档',

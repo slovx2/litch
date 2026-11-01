@@ -91,19 +91,38 @@ instead of overwriting them; read again and retry the intended change.
 
 ### Board and decisions
 
-The manager page has the conversation beside **Overview**, **Decisions**, **Items**, **Work lines**
+The manager page has the conversation beside **Overview**, **Decisions**, **Items**, **For you**
 and **Suggestions**. The Suggestions tab shows the pending count and lets you start, edit or dismiss
 suggestions from this manager and its entire workline subtree directly on the board.
 Use **Hide board** to give the conversation the full area, and **Show board** to bring it back.
 Drag the divider to resize the board, or focus it and use the arrow keys (Home/End reach its limits).
 Board width and visibility are saved on this computer. The board stays between 360 and 900 pixels
-while reserving at least 380 pixels for chat; smaller spaces compress the board without changing
+while reserving at least 460 pixels for chat; smaller spaces compress the board without changing
 the saved preference. Both chat width settings continue to apply inside the available space.
 Narrow windows keep the Chat/Board switch, independently of desktop board visibility.
 Opening Files covers the board; the info rail is hidden.
-Overview separates blocked items from unblocked items assigned to the user. Work lines open their
-conversations; **Back to manager** returns. Clicking an item's decision id opens that decision,
-including the appropriate answered or closed group.
+Overview shows progress and blocked items. Work lines are managed from the left conversation tree;
+the duplicate board tab is hidden. Opening a work line shows its conversation; **Back to manager** returns. Clicking an item's decision id opens that decision,
+including the appropriate answered or closed group. Recent activity uses Markdown and clickable
+board references, with long reports collapsed to about five lines. Expand or collapse each report
+independently. Source labels distinguish manager, user, system and work lines; selecting a line’s
+source opens that conversation.
+
+Items are the manager’s own progress records, owned by the manager or a work line. New add/update
+operations reject an explicit user owner; existing user-owned items remain unchanged. For work that
+needs the user to initiate it, the manager creates a suggestion with `litch_sessions.start` and
+`initiation: "propose"`, including the complete brief. Clicking Start creates a line under that manager.
+Already-authorized work still starts directly; questions requiring an answer remain decisions.
+Only the user can perform some tasks, such as device checks, settings changes or login. These belong
+in **For you** (`R-n`), not items or suggestion cards. Each has a Markdown description and a delivery
+button defined by the manager (default **Done**). Click the button, write a reply, or add a note with
+delivery; all are local drafts until **Submit to manager**. Responses can be submitted in the same
+batch as decision answers and questions. Text alone means Replied, not Delivered. Use **Edit reply**
+after submission to correct it. A cancelled request cannot be submitted. The overview lists open
+requests and replies that have not been delivered. R-n references navigate like I-n/D-n.
+The manager creates requests with add (kind=request, revision=0, why), reads them with get, and uses
+update or close with the current revision and a reason. It can maintain content or cancel requests,
+but cannot submit a delivery on the user’s behalf; previous responses remain in history.
 
 Items separate their title, status and owner from the explanation and supporting metadata.
 Unverified points have a distinct label and accent stripe; waiting decisions, evidence and related
@@ -115,27 +134,34 @@ links keep their stated targets; HTML is displayed as text and images are not lo
 Choose an option or write an answer. Answers are local drafts until **Submit to manager**; they do
 not sync before submission. Submitting saves them to the device and asks the manager to handle them.
 Successful drafts clear; failed ones remain. If a decision changed, review its new version before
-confirming. **Clear drafts** only clears local unsent answers. Closed decisions can be reopened.
+confirming. **Clear drafts** clears local unsent answers, questions and For you responses. Closed decisions can be reopened.
 Answered and closed decisions also offer **Edit answer**. Submit the revised answer to notify the
 manager; the previous answer and closure remain in the change history. A revised closed decision
 moves to Answered. Decisions under an ending or ended manager remain read-only.
 You may also answer explicitly in the manager conversation. Recorded links and evidence do not
 automatically become stale or verified; there is no automatic deadline/default-answer execution.
 
-**Ask for context** opens a separate conversation below any decision, including answered and closed
-decisions. Each decision has its own thread, saved on the device and shared between windows. The
-assistant can read files and the board but cannot change files, edit the board, start worklines or
-send messages. A running manager is not interrupted: questions use its latest finished turn. If the
-manager completes another turn or the decision changes, the next question uses fresh context with
-the earlier Q&A quoted; a notice explains the change. OpenCode uses a separate light conversation
-with board context instead of manager history. ACP and DSH cannot yet enforce this read-only tool
-boundary, so questions must be asked in the manager conversation.
+Every decision has **Answer** and **Ask** tabs, starting on Answer. In Ask, **Ask manager** is the
+default: type a question as a local draft, combine drafts across decisions and use **Submit to manager**
+for answers and questions together. Failed or conflicting drafts remain for review. Questions do not
+answer the decision. The manager responds in its main conversation and saves each reply back to the
+question log with `litch_manager.reply`, using the decision id, current revision and reply text.
+Replies and newly submitted questions advance the revision to protect against stale responses.
 
-Submitting an answer includes the saved Q&A; long conversations include a summary followed by the
-full text. Wait for a running answer before submitting. **Forward to manager** sends the Q&A without
-answering the decision. Sending the same conversation twice does not send another message. Questions
-and answers remain in the decision history after submission or closure; further questions remain
-available while the manager is active. A device restart retains the text and recreates its helper.
+**Temporary chat** is an alternative on Claude Code, Codex, Pi and OpenCode. Each decision has its
+own thread, stored on the device and shared between windows. It can read files and the board, and
+update only that decision’s title, background, options or recommendation, or close it as withdrawn
+or expired. It cannot modify files, other board objects or fields, start lines, or send messages.
+Changes are recorded as coming from the question conversation and reach the manager on its next turn.
+A running manager is not interrupted: questions use its latest finished turn. If the manager advances
+or the decision changes, the next question uses fresh context with the earlier Q&A quoted.
+OpenCode uses a light conversation with board context. ACP and DSH offer only Ask manager.
+
+Submitting an answer includes the saved Q&A; long temporary conversations include a summary followed
+by the full text. Wait for a running temporary reply before submitting. **Forward to manager** sends
+the Q&A without answering the decision. Questions remain available on answered and closed decisions
+while the manager is active. Restarting the device retains submitted questions and replies; temporary
+helpers are recreated, while pending manager questions remain pending. Unsubmitted drafts stay local.
 
 **End manager** asks for confirmation, makes chat and board read-only during final tasks, then moves
 the manager into Ended when its final turn stops. Unfinished items remain recorded. The manager may
@@ -170,7 +196,14 @@ title, brief, source conversation, project/device and creation time, with the
 same actions as the original card. Suggestions belonging to a manager, including its entire
 workline subtree, are grouped into one summary card per manager with its name, pending count and
 the latest suggestion's title and excerpt. Select it to open that manager's **Suggestions** board
-tab. Ordinary suggestions remain individual cards in the global list.
+tab. Cards created by the manager are already reviewed. Cards from its workline subtree start in a
+collapsed **Not reviewed by manager** group, with a matching label on every card. Expanding the group
+still allows Start, edit-and-start or dismiss without manager approval. The manager is notified of
+new line cards and uses `litch_manager.endorse` for useful work, or `dismiss` with a reason. Both
+operations are limited to its own subtree and recorded on the device. A reviewed card moves into
+the default list. Global manager summaries show the reviewed count and latest reviewed excerpt,
+with a separate muted unreviewed count; sidebar counts exclude unreviewed cards. Ordinary suggestions
+remain individual cards and are unaffected.
 Instant “New session / Do it here” offers are not included. The side panel also lists suggestions
 for the current session; the phone has only the per-session list.
 

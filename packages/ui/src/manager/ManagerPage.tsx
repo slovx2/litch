@@ -1,8 +1,15 @@
-import { type DeviceView, filterSuggestions, keys, type SuggestionView } from '@litch/core'
+import {
+  type DeviceView,
+  filterSuggestions,
+  keys,
+  type SuggestionView,
+  suggestionCount,
+} from '@litch/core'
 import { type CSSProperties, useCallback, useRef, useState } from 'react'
 import type {
   ManagerDecisionId,
   ManagerItemId,
+  ManagerRequestId,
   ManagerView,
 } from '../../../core/src/model-manager.mts'
 import type { Selection } from '../app/App.tsx'
@@ -14,15 +21,16 @@ import { ManagerSuggestions } from '../tree/SuggestionsPage.tsx'
 import { BoardGrip } from './BoardGrip.tsx'
 import { BoardPanels } from './BoardPanels.tsx'
 import { BoardReferencesContext } from './BoardReferences.tsx'
-import { setBoardLayout, useBoardLayout } from './board-layout.ts'
+import { BOARD_GRIP, CHAT_MIN, setBoardLayout, useBoardLayout } from './board-layout.ts'
 import { Decisions } from './Decisions.tsx'
 import { useManagerBoard } from './data.ts'
 import { ManagerForm } from './ManagerForm.tsx'
+import { Requests } from './Requests.tsx'
 import type { BoardReference } from './references.ts'
 
 /** 放在应用导航层，离开经理视图后仍能恢复看板页签和设置页。 */
 export interface ManagerPageLocation {
-  tab: 'overview' | 'decisions' | 'items' | 'lines' | 'suggestions'
+  tab: 'overview' | 'decisions' | 'items' | 'lines' | 'suggestions' | 'requests'
   narrow: 'chat' | 'board'
   settings: boolean
 }
@@ -53,30 +61,44 @@ export function ManagerPage({
   const page = useRef<HTMLElement>(null)
   const device = useKey<DeviceView>(keys.device(manager.deviceId))
   const { tab, narrow, settings } = location
-  const setTab = (tab: ManagerPageLocation['tab']) => onLocation({ ...location, tab })
+  const boardBody = useRef<HTMLDivElement>(null)
+  const setTab = (tab: ManagerPageLocation['tab']) => {
+    if (boardBody.current) boardBody.current.scrollTop = 0
+    onLocation({ ...location, tab })
+  }
   const setNarrow = (narrow: ManagerPageLocation['narrow']) => onLocation({ ...location, narrow })
   const setSettings = (settings: boolean) => onLocation({ ...location, settings })
   const [decisionTarget, setDecisionTarget] = useState<{ id: ManagerDecisionId } | null>(null)
   const decisionLocated = useCallback(() => setDecisionTarget(null), [])
   const [itemTarget, setItemTarget] = useState<{ id: ManagerItemId } | null>(null)
   const itemLocated = useCallback(() => setItemTarget(null), [])
+  const [requestTarget, setRequestTarget] = useState<{ id: ManagerRequestId } | null>(null)
+  const requestLocated = useCallback(() => setRequestTarget(null), [])
   const openReference = (id: BoardReference) => {
+    if (boardBody.current) boardBody.current.scrollTop = 0
     setBoardLayout({ open: true })
+    if (id.startsWith('R-')) {
+      onLocation({ ...location, tab: 'requests', narrow: 'board' })
+      setRequestTarget({ id: id as ManagerRequestId })
+      return
+    }
     const item = id.startsWith('I-')
     onLocation({ ...location, tab: item ? 'items' : 'decisions', narrow: 'board' })
     setItemTarget(item ? { id: id as ManagerItemId } : null)
     setDecisionTarget(item ? null : { id: id as ManagerDecisionId })
   }
+  const [responding, setResponding] = useState(false)
   const [ending, setEnding] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState('')
   const board = view?.board
   const counts = {
     overview: 0,
+    requests: pages?.overview.requests.length ?? 0,
     decisions: manager.pendingDecisions,
     items: (pages?.overview.stats.totalItems ?? 0) - (pages?.overview.stats.doneItems ?? 0),
     lines: manager.runningLines,
-    suggestions: suggestions.length,
+    suggestions: suggestionCount(suggestions),
   }
   const readOnly = manager.status !== 'active'
   const readOnlyText = t(manager.status === 'ending' ? 'manager.endingNote' : 'manager.readOnly')
@@ -124,7 +146,13 @@ export function ManagerPage({
       data-narrow={narrow}
       data-board-open={layout.open}
       ref={page}
-      style={{ '--mg-board-width': `${layout.width}px` } as CSSProperties}
+      style={
+        {
+          '--mg-board-width': `${layout.width}px`,
+          '--mg-chat-min': `${CHAT_MIN}px`,
+          '--mg-grip-width': `${BOARD_GRIP}px`,
+        } as CSSProperties
+      }
     >
       <header className="mg-title">
         <span className="pill mute">{t('manager.manager')}</span>
@@ -134,9 +162,13 @@ export function ManagerPage({
           className="btn ghost mg-board-toggle"
           data-act="manager-board-toggle"
           aria-expanded={layout.open}
+          aria-controls={`manager-board-${manager.id}`}
           onClick={() => setBoardLayout({ open: !layout.open })}
         >
           {t(layout.open ? 'manager.hideBoard' : 'manager.showBoard')}
+          {!layout.open && manager.pendingDecisions ? (
+            <span className="pill wait">{manager.pendingDecisions}</span>
+          ) : null}
         </button>
         {manager.status === 'active' ? (
           <>
@@ -204,7 +236,11 @@ export function ManagerPage({
         />
       </div>
       <BoardGrip page={page} />
-      <section className="mg-board" aria-label={t('manager.board')}>
+      <section
+        id={`manager-board-${manager.id}`}
+        className="mg-board"
+        aria-label={t('manager.board')}
+      >
         {manager.rules ? (
           <div className="mg-scope">
             <span className="dim">{t('manager.prompt')}</span>
@@ -215,7 +251,7 @@ export function ManagerPage({
         ) : null}
         <div className="side-tabs">
           <div className="side-tablist" role="tablist">
-            {(['overview', 'decisions', 'items', 'lines', 'suggestions'] as const).map((key) => (
+            {(['overview', 'decisions', 'items', 'requests', 'suggestions'] as const).map((key) => (
               <button
                 type="button"
                 role="tab"
@@ -226,7 +262,7 @@ export function ManagerPage({
                 onClick={() => setTab(key)}
               >
                 {t(`manager.${key}`)}
-                {counts[key] || key === 'suggestions' ? (
+                {counts[key] ? (
                   <span className={key === 'decisions' ? 'pill wait' : 'pill mute'}>
                     {counts[key]}
                   </span>
@@ -238,7 +274,7 @@ export function ManagerPage({
         {disabled ? (
           <p className="mg-readonly">{readOnly ? readOnlyText : t('manager.offline')}</p>
         ) : null}
-        <div className="mg-body">
+        <div className="mg-body" ref={boardBody}>
           {error ? (
             <p className="err" role="alert">
               {reasonOf(error, t)}
@@ -251,6 +287,7 @@ export function ManagerPage({
             <BoardReferencesContext.Provider
               value={{
                 ids: new Set<BoardReference>([
+                  ...(board.requests ?? []).map((request) => request.id),
                   ...board.items.map((item) => item.id),
                   ...board.decisions.map((decision) => decision.id),
                 ]),
@@ -261,7 +298,16 @@ export function ManagerPage({
               {tab === 'suggestions' ? (
                 <ManagerSuggestions manager={manager} onOpen={onSuggestionSource} />
               ) : null}
-              {tab !== 'decisions' && tab !== 'suggestions' ? (
+              {tab === 'requests' ? (
+                <Requests
+                  manager={manager}
+                  requests={board.requests ?? []}
+                  disabled={disabled || responding}
+                  target={requestTarget}
+                  onLocated={requestLocated}
+                />
+              ) : null}
+              {tab !== 'decisions' && tab !== 'suggestions' && tab !== 'requests' ? (
                 <BoardPanels
                   pages={pages}
                   deviceId={manager.deviceId}
@@ -273,7 +319,9 @@ export function ManagerPage({
               ) : null}
               <Decisions
                 manager={manager}
+                onBusy={setResponding}
                 decisions={board.decisions}
+                requests={board.requests ?? []}
                 groups={pages.decisions}
                 disabled={disabled}
                 visible={tab === 'decisions'}

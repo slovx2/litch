@@ -7,24 +7,10 @@
   },
   "response": {
     "type": "object",
-    "required": [
-      "engine",
-      "protocolVersion",
-      "cliBuild",
-      "capabilities",
-      "releaseReady"
-    ],
+    "required": ["engine", "protocolVersion", "cliBuild", "capabilities", "releaseReady"],
     "properties": {
       "engine": {
-        "enum": [
-          "claude-code",
-          "pi",
-          "dsh",
-          "opencode",
-          "gemini",
-          "qwen",
-          "acp"
-        ]
+        "enum": ["claude-code", "pi", "dsh", "opencode", "gemini", "qwen", "acp"]
       },
       "protocolVersion": {
         "const": "0.163.0"
@@ -58,11 +44,7 @@
       },
       "pluginVersions": {
         "type": "object",
-        "required": [
-          "@narumitw/pi-plan-mode",
-          "@narumitw/pi-tui-kit",
-          "@gotgenes/pi-subagents"
-        ],
+        "required": ["@narumitw/pi-plan-mode", "@narumitw/pi-tui-kit", "@gotgenes/pi-subagents"],
         "properties": {
           "@narumitw/pi-plan-mode": {
             "type": "string",
@@ -119,11 +101,7 @@
             "const": "claude-code"
           }
         },
-        "required": [
-          "nodeVersion",
-          "sdkVersion",
-          "cliSha256"
-        ]
+        "required": ["nodeVersion", "sdkVersion", "cliSha256"]
       },
       {
         "properties": {
@@ -135,11 +113,7 @@
             "pattern": "^\\d+\\.\\d+\\.\\d+$"
           }
         },
-        "required": [
-          "nodeVersion",
-          "sdkVersion",
-          "pluginVersions"
-        ]
+        "required": ["nodeVersion", "sdkVersion", "pluginVersions"]
       },
       {
         "properties": {
@@ -151,9 +125,7 @@
             "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
           }
         },
-        "required": [
-          "nodeVersion"
-        ]
+        "required": ["nodeVersion"]
       },
       {
         "properties": {
@@ -165,23 +137,15 @@
             "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
           }
         },
-        "required": [
-          "nodeVersion"
-        ]
+        "required": ["nodeVersion"]
       },
       {
         "properties": {
           "engine": {
-            "enum": [
-              "gemini",
-              "qwen",
-              "acp"
-            ]
+            "enum": ["gemini", "qwen", "acp"]
           }
         },
-        "required": [
-          "nodeVersion"
-        ]
+        "required": ["nodeVersion"]
       }
     ],
     "additionalProperties": false,
@@ -190,10 +154,7 @@
         "description": "给人看的字，中文和英文各一份",
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "zh-CN",
-          "en"
-        ],
+        "required": ["zh-CN", "en"],
         "properties": {
           "zh-CN": {
             "type": "string",
@@ -207,13 +168,7 @@
       },
       "HarnessInputType": {
         "description": "协议里用户输入的种类（UserInput 的 type）",
-        "enum": [
-          "text",
-          "image",
-          "localImage",
-          "skill",
-          "mention"
-        ]
+        "enum": ["text", "image", "localImage", "skill", "mention"]
       },
       "HarnessFeatures": {
         "description": "能力位。每一位说的是经适配器实际做得到，不是协议里有这个方法",
@@ -260,11 +215,7 @@
             "description": "回退：把会话退回到某一轮之前",
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "byTurnId",
-              "byCount",
-              "restoresFiles"
-            ],
+            "required": ["byTurnId", "byCount", "restoresFiles"],
             "properties": {
               "byTurnId": {
                 "description": "thread/revert 带 beforeTurnId",
@@ -299,20 +250,13 @@
           "approvals": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "kinds",
-              "uncovered"
-            ],
+            "required": ["kinds", "uncovered"],
             "properties": {
               "kinds": {
                 "description": "会发起哪几类审批：command 是 item/commandExecution/requestApproval，fileChange 是 item/fileChange/requestApproval，permissions 是 item/permissions/requestApproval。空数组表示这个引擎从不来问",
                 "type": "array",
                 "items": {
-                  "enum": [
-                    "command",
-                    "fileChange",
-                    "permissions"
-                  ]
+                  "enum": ["command", "fileChange", "permissions"]
                 },
                 "uniqueItems": true
               },
@@ -368,11 +312,7 @@
           },
           "agentMessagePhase": {
             "description": "助手消息的过程说明和最终回答什么时候分得清：onStart 是消息一开始就准，onCompleted 是消息结束时才准（开始时的阶段值不能信），none 是不区分",
-            "enum": [
-              "onStart",
-              "onCompleted",
-              "none"
-            ]
+            "enum": ["onStart", "onCompleted", "none"]
           },
           "stopAgent": {
             "description": "后加的位，可以不报（不报就是不会）：对引擎自己派出的子代理线程发 turn/interrupt，只停掉这一个子代理、父会话的回合照常（客户端子代理页上的“停止”）",
@@ -395,7 +335,7 @@
             "type": "boolean"
           },
           "managerQuestions": {
-            "description": "后加的位，未声明即不支持：能强制决策旁问只读。适配器识别带 Litch decision background question (read-only). 规则的 litch_manager 动态工具，限制为读文件及 summary/get，拒绝命令、写入、其它 MCP、子代理和提权；支持上下文分叉的适配器还可替换该工具集。设备替原生 Codex 声明时用只读断网沙箱限制文件命令、关闭外部工具并在设备拒绝写工具调用。",
+            "description": "后加的位，未声明即不支持：能强制决策旁问只读。适配器识别带 Litch decision background question (read-only). 规则的 litch_manager 动态工具，限制为读文件及 summary/get 和限定本决策的 update/close，拒绝命令、文件写入、其它 MCP、子代理和提权；支持上下文分叉的适配器还可替换该工具集。设备替原生 Codex 声明时用只读断网沙箱限制文件命令、关闭外部工具并在设备检查决策修改的目标及字段。",
             "type": "boolean"
           }
         }
@@ -426,11 +366,7 @@
             "description": "一句话说明"
           },
           "risk": {
-            "enum": [
-              "low",
-              "medium",
-              "high"
-            ]
+            "enum": ["low", "medium", "high"]
           },
           "requiresConfirmation": {
             "description": "选它之前要不要再问用户一遍",

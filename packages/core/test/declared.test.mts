@@ -90,6 +90,7 @@ test('声明到了界面看得到的地方：harness 上带着它会什么；没
     stopBackground: false,
     goals: false,
     ephemeralFork: false,
+    managerQuestions: false,
   })
   assert.equal(abilities.codex?.fork, true)
   assert.equal(abilities.old, null)

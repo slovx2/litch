@@ -131,6 +131,8 @@ export interface HarnessAbilities {
   goals: boolean
   /** 临时分叉带着上下文（声明里的 ephemeralFork）。侧聊靠它，不会的不出侧聊的入口 */
   ephemeralFork: boolean
+  /** 可强制临时决策对话的文件与工具权限。 */
+  managerQuestions?: boolean
 }
 
 /** 设备服务给的一段话的两种语言版本。核心不认识语言，原样交给界面，界面按当前的语言取 */

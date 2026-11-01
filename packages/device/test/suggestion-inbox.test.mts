@@ -26,7 +26,8 @@ async function setup(values?: Record<string, unknown>) {
       threadId: source,
       title: '检查边界',
       prompt: '验证数据来源',
-      background: '',
+      background:
+        '这是一条隔离环境中的后续检查建议，任务仅在临时目录执行，不访问个人配置，不修改真实项目，也不执行任何发布。请核对当前样例并汇报结果。',
       harness: null,
       model: null,
       cwd: null,
@@ -168,6 +169,44 @@ test('经理筛选归属覆盖工作线的子孙，脱离后移除归属', async
     const find = async () =>
       (await client.call(SUGGESTIONS_LIST, {})).suggestions.find((r: any) => r.proposal.id === p.id)
     assert.equal((await find()).managerId, manager.id)
+    assert.equal((await find()).managerReview.state, 'pending')
+    const ownRow = (await client.call(SUGGESTIONS_LIST, {})).suggestions.find(
+      (r: any) => r.proposal.id === own.id,
+    )
+    assert.equal(ownRow.managerReview.state, 'endorsed')
+    const endorse = await env.pi.callTool(manager.threadId, 'litch_manager', 'endorse', {
+      proposalId: p.id,
+      reason: '值得执行',
+    })
+    assert.equal(endorse?.answer.result.success, true)
+    assert.equal((await find()).managerReview.state, 'endorsed')
+    assert.equal(env.device.managers.store.suggestionReview(manager.id, p.id)?.reason, '值得执行')
+    const ignored = propose(child.threadId)
+    const dismiss = await env.pi.callTool(manager.threadId, 'litch_manager', 'dismiss', {
+      proposalId: ignored.id,
+      reason: '范围重复',
+    })
+    assert.equal(dismiss?.answer.result.success, true)
+    assert.equal(tree.store.proposal(ignored.id)?.status, 'dismissed')
+    assert.equal(
+      env.device.managers.store.suggestionReview(manager.id, ignored.id)?.state,
+      'dismissed',
+    )
+    assert.ok(
+      env.device.managers.store
+        .changes(manager.id)
+        .some((change) => change.why.includes('经理忽略') && change.why.includes('范围重复')),
+    )
+    const foreign = propose()
+    const refused = await env.pi.callTool(manager.threadId, 'litch_manager', 'endorse', {
+      proposalId: foreign.id,
+    })
+    assert.equal(refused?.answer.result.success, false)
+    const unreviewed = propose(child.threadId)
+    const started = await client.call('litch/sessionProposal/accept', { proposalId: unreviewed.id })
+    assert.equal(tree.store.proposal(unreviewed.id)?.status, 'started')
+    assert.equal(env.device.managers.lines.managerFor(started.threadId)?.id, manager.id)
+
     tree.detach(line.threadId)
     assert.equal((await find()).managerId, null)
   } finally {

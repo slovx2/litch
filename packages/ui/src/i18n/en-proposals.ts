@@ -3,6 +3,11 @@ import type { Entry } from './types.ts'
 import type { zhProposals } from './zh-CN-proposals.ts'
 
 export const enProposals: Record<keyof typeof zhProposals, Entry> = {
+  'suggestions.count': '{n} suggestions',
+  'suggestions.managerLoading': 'Loading manager…',
+  'suggestions.openManagerNamed': 'Open {name}’s board ({n} suggestions)',
+  'suggestions.unreviewed': 'Not reviewed by manager',
+  'suggestions.noReviewed': 'No reviewed suggestions',
   'suggestions.title': 'Suggestions',
   'suggestions.openManager': 'Open manager board',
   'suggestions.all': 'All suggestions',

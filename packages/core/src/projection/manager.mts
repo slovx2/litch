@@ -4,6 +4,7 @@ import type {
   ManagerAnswersSubmitResponse,
   ManagerBoard,
   ManagerDecision,
+  ManagerRequest,
 } from '../../../protocol/src/manager.mjs'
 import type { SessionSummary } from '../model.mjs'
 import type {
@@ -47,11 +48,21 @@ export function projectManagerDecision(decision: ManagerDecision): ManagerDecisi
     closed: decision.closed ? timed(decision.closed) : null,
   }
 }
+export function projectManagerRequest(request: ManagerRequest): ManagerRequest {
+  return {
+    ...request,
+    createdAt: request.createdAt * 1000,
+    updatedAt: request.updatedAt * 1000,
+    response: request.response ? timed(request.response) : null,
+    cancelled: request.cancelled ? timed(request.cancelled) : null,
+  }
+}
 export function projectManagerBoard(deviceId: string, board: ManagerBoard): ManagerBoardView {
   return {
     ...board,
     deviceId,
     situation: board.situation ? timed(board.situation) : null,
+    requests: (board.requests ?? []).map(projectManagerRequest),
     decisions: board.decisions.map(projectManagerDecision),
     items: board.items.map((item) => ({
       ...item,
@@ -109,6 +120,9 @@ export function managerBoardPages(board: ManagerBoardView) {
         doneItems: items.done.length,
         totalItems: board.items.length,
       },
+      requests: (board.requests ?? []).filter((request) =>
+        ['open', 'replied'].includes(request.status),
+      ),
       blocked: items.blocked,
       waitingForYou,
       activities: [...board.activities].sort((a, b) => b.at - a.at),

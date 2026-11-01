@@ -485,6 +485,15 @@ export function createMockCore(options: MockCoreOptions): MockCore {
                 archived: shelved.get(deviceId)?.some((s) => s.id === source.id) === true,
               },
               managerId: mark?.managerId ?? null,
+              ...(mark
+                ? {
+                    managerReview: {
+                      state: mark.role === 'manager' ? ('endorsed' as const) : ('pending' as const),
+                      reason: null,
+                      at: null,
+                    },
+                  }
+                : {}),
             }))
         }),
     }

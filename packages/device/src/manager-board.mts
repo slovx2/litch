@@ -1,3 +1,4 @@
+import { isRequest, requestTool } from './manager-requests.mjs'
 // 看板对象的原子修改和状态流转；不接受模型写入运行事实。
 
 import { MANAGER_ANSWERS_TEXT } from '../../protocol/src/client-tools-manager.mjs'
@@ -63,7 +64,7 @@ export class ManagerBoardWriter {
       if (object.answer?.optionId && !ids.has(object.answer.optionId))
         invalid('The answered option cannot be removed.')
       for (const id of object.blocks) reference(id, 'I-')
-    } else {
+    } else if (!isRequest(object)) {
       for (const id of object.blockedBy) reference(id, 'D-')
       if (object.status === 'blocked') text(object.why, 'why')
       if (object.owner.kind === 'line' && !this.belongs(managerId, object.owner.threadId))
@@ -97,10 +98,20 @@ export class ManagerBoardWriter {
       why,
     )
   }
-  tool(managerId: string, tool: string, given: unknown, turnId?: string): unknown {
+  tool(
+    managerId: string,
+    tool: string,
+    given: unknown,
+    turnId?: string,
+    actor: ManagerActor = 'manager',
+  ): unknown {
     const args = validateTool(tool, given)
     if (tool === 'get') {
-      const object = this.object(managerId, args.id)
+      const found = this.object(managerId, args.id)
+      const discussion = isDecision(found)
+        ? this.store.question(managerId, found.id)?.discussion
+        : undefined
+      const object = discussion ? { ...found, discussion } : found
       return {
         object,
         changes: this.store.changes(managerId).filter((change) => change.objectId === object.id),
@@ -131,6 +142,8 @@ export class ManagerBoardWriter {
         this.store.saveSituation(managerId, situation)
         return { situation }
       }
+      if ((tool === 'add' && args.kind === 'request') || String(args.id).startsWith('R-'))
+        return requestTool(this.store, managerId, tool, args)
       if (tool === 'add') {
         const at = managerNow()
         const common = { revision: 1, checked: null, createdAt: at, updatedAt: at }
@@ -182,7 +195,7 @@ export class ManagerBoardWriter {
         invalid('kind does not match the object id.')
       let patch: object
       let why: string
-      let by: ManagerActor = 'manager'
+      let by: ManagerActor = actor
       switch (tool) {
         case 'update':
           patch = fields(args.patch)
@@ -202,6 +215,26 @@ export class ManagerBoardWriter {
             ...(isDecision(before) ? { closed: { reason: why, by, at: managerNow() } } : {}),
           }
           break
+        case 'reply': {
+          if (!isDecision(before) || before.revision !== args.revision)
+            invalid('The decision changed; read get and use the current revision before replying.')
+          const state = this.store.question(managerId, before.id)
+          const pending =
+            state?.discussion.messages.filter(
+              (entry) => entry.mode === 'manager' && entry.status === 'running',
+            ) ?? []
+          if (!state || !pending.length) invalid('This decision has no pending manager questions.')
+          const answer = text(args.text, 'text')
+          for (const entry of pending) {
+            entry.answer = answer
+            entry.status = 'completed'
+          }
+          state.discussion.summary = null
+          this.store.saveQuestion(state)
+          patch = { discussion: state.discussion }
+          why = 'Manager replied to user follow-up questions'
+          break
+        }
         case 'answer': {
           if (!isDecision(before)) invalid('Only decisions can be answered.')
           const error = this.answerFailure(before, {
@@ -241,7 +274,7 @@ export class ManagerBoardWriter {
       return 'Choose an option or enter an answer.'
     return null
   }
-  answers(managerId: string, given: unknown): ManagerAnswersSubmitResponse {
+  answers(managerId: string, given: unknown, enqueue = true): ManagerAnswersSubmitResponse {
     this.active(managerId)
     if (!Array.isArray(given) || !given.length) invalid('answers must be a nonempty array.')
     const answers = given.map((value) => fields(value))
@@ -251,7 +284,7 @@ export class ManagerBoardWriter {
     const counts = new Map<string, number>()
     for (const answer of answers)
       counts.set(String(answer.decisionId), (counts.get(String(answer.decisionId)) ?? 0) + 1)
-    return this.store.transaction(() => {
+    const apply = () => {
       const result: ManagerAnswersSubmitResponse = { accepted: [], rejected: [], delivery: 'none' }
       for (const raw of answers) {
         const answer = raw as unknown as ManagerSubmittedAnswer
@@ -260,7 +293,9 @@ export class ManagerBoardWriter {
         const discussion = this.store.question(managerId, answer.decisionId)?.discussion
         const asking = this.store
           .question(managerId, answer.decisionId)
-          ?.discussion.messages.some((entry) => entry.status === 'running')
+          ?.discussion.messages.some(
+            (entry) => entry.status === 'running' && entry.mode !== 'manager',
+          )
         const code =
           asking || counts.get(answer.decisionId) !== 1
             ? 'invalidAnswer'
@@ -308,7 +343,7 @@ export class ManagerBoardWriter {
           ) as ManagerDecision,
         )
       }
-      if (result.accepted.length) {
+      if (enqueue && result.accepted.length) {
         this.store.enqueue(
           managerId,
           formatSessionEvent({
@@ -333,7 +368,9 @@ export class ManagerBoardWriter {
         result.delivery = 'queued'
       }
       return result
-    })
+    }
+    // 混合提交已持有事务；单独交答复仍由这里开启事务。
+    return enqueue ? this.store.transaction(apply) : apply()
   }
   reopen(managerId: string, id: ManagerObjectId): ManagerDecision {
     this.active(managerId)

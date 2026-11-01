@@ -142,7 +142,7 @@ try {
   )
   assert.equal(await read("document.querySelectorAll('[data-suggestion-manager]').length"), 1)
   await shot('manager-summary')
-  await click('[data-suggestion-manager="m1"] > button')
+  await click('[data-suggestion-manager="m1"] button')
   await wait('.mg-board .suggestion-row')
   assert.equal(
     await read(
@@ -151,6 +151,13 @@ try {
     'true',
   )
   assert.equal(await read("document.querySelectorAll('.mg-board .suggestion-row').length"), 2)
+  assert.equal(await read("document.querySelector('[data-suggestions-unreviewed]').open"), false)
+  assert.equal(
+    await read('document.querySelector(\'[data-board-tab="suggestions"] .pill\') === null'),
+    true,
+  )
+  await click('[data-suggestions-unreviewed] > summary')
+
   await click('.mg-board .suggestion-row [data-act="open-source"]')
   await wait('.arch-bar')
   await call('Input.dispatchKeyEvent', {
@@ -167,6 +174,7 @@ try {
     'true',
     '归档预览返回建议页签',
   )
+  await click('[data-suggestions-unreviewed] > summary')
   await click('.mg-board .suggestion-row [data-act="edit"]')
   await wait('.spawn-dialog')
   await read(
@@ -178,6 +186,32 @@ try {
     '看板忽略建议',
   )
   await shot('manager-suggestions')
+  await say('收尾建议')
+  await until(
+    () => read("document.querySelectorAll('.mg-board .suggestion-row').length === 3"),
+    '经理自己的建议默认审核',
+  )
+  assert.equal(
+    await read('document.querySelector(\'[data-board-tab="suggestions"] .pill\').textContent'),
+    '2',
+  )
+  for (const skin of ['standard', 'human', 'retro']) {
+    await read(`window.__litchLook.set({skin:${JSON.stringify(skin)}})`)
+    await read("document.querySelector('[data-suggestions-unreviewed]').open=false")
+    await shot(`review-collapsed-${skin}`)
+    await click('[data-suggestions-unreviewed] > summary')
+    await shot(`review-expanded-${skin}`)
+  }
+  await click('.sb-btn.suggestions')
+  await wait('[data-suggestion-manager="m1"]')
+  assert.equal(
+    await read(
+      'document.querySelector(\'[data-suggestion-manager="m1"] header .pill:last-of-type\').textContent',
+    ),
+    '2 条建议',
+  )
+  await shot('manager-reviewed-summary')
+  await click('[data-suggestion-manager="m1"] button')
 
   // 事项与决策共享正式 Markdown，编号、列表、代码、外链均从真实渲染节点核对。
   await click('[data-board-tab="items"]')
@@ -200,6 +234,50 @@ try {
   await click('[data-decision="D-15"] > .mg-markdown [data-board-reference="I-1"]')
   assert.equal(await read("document.activeElement?.getAttribute('data-manager-item')"), 'I-1')
   assert.equal(await read("!!document.querySelector('.mg-foot')"), false)
+
+  // 审核回归：整张选项可点，说明关联给读屏，编号链接不能顺带选择选项。
+  await click('[data-board-tab="decisions"]')
+  await click('[data-decision="D-15"] .mg-option:first-child .mg-markdown')
+  assert.equal(
+    await read(
+      'document.querySelector(\'[data-decision="D-15"] .mg-option:first-child input\').checked',
+    ),
+    true,
+  )
+  assert.ok(
+    await read(
+      "document.querySelector('[data-decision=\"D-15\"] .mg-option:first-child input').getAttribute('aria-describedby')",
+    ),
+  )
+  await click('[data-decision="D-15"] .mg-option:nth-child(2)')
+  assert.equal(
+    await read(
+      'document.querySelector(\'[data-decision="D-15"] .mg-option:nth-child(2) input\').checked',
+    ),
+    true,
+  )
+  await click('[data-decision="D-15"] .mg-option:first-child [data-board-reference="I-1"]')
+  await click('[data-board-tab="decisions"]')
+  assert.equal(
+    await read(
+      'document.querySelector(\'[data-decision="D-15"] .mg-option:nth-child(2) input\').checked',
+    ),
+    true,
+  )
+  await click('[data-decision="D-15"] .mg-decision-meta [data-board-reference="I-2"]')
+  assert.equal(await read("document.activeElement?.getAttribute('data-manager-item')"), 'I-2')
+  assert.equal(
+    await read(
+      'getComputedStyle(document.querySelector(\'[data-manager-item="I-3"] .mg-markdown p\')).whiteSpace',
+    ),
+    'pre-line',
+  )
+  await read("document.querySelector('.mg-body').scrollTop=500")
+  await click('[data-board-tab="overview"]')
+  assert.equal(await read("document.querySelector('.mg-body').scrollTop"), 0)
+  await click('[data-overview="requests"] [data-board-reference="R-1"]')
+  assert.equal(await read("document.activeElement?.getAttribute('data-manager-request')"), 'R-1')
+  await click('[data-board-tab="items"]')
 
   const size = async (width) => {
     await call('Emulation.setDeviceMetricsOverride', {
@@ -276,7 +354,9 @@ try {
     code: 'End',
     windowsVirtualKeyCode: 35,
   })
-  const maximum = Math.min(900, (await widthOf('.mg-page')) - 386)
+  const maximum = await read(
+    "Number(document.querySelector('.mg-board-grip').getAttribute('aria-valuemax'))",
+  )
   await until(async () => {
     const actual = await widthOf('.mg-board')
     if (Math.abs(actual - maximum) < 1) return true
@@ -288,6 +368,7 @@ try {
       ),
     )
   }, '键盘调整到最大宽度')
+  assert.ok((await widthOf('.mg-chat')) >= 460, '对话保留足够宽度')
   await noOverflow()
   const restoreGrip = await read(
     "(()=>{const r=document.querySelector('.mg-board-grip').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+100}})()",
@@ -340,10 +421,40 @@ try {
       await read(
         `window.__litchLook.set({skin:${JSON.stringify(skin)},theme:${JSON.stringify(theme)}})`,
       )
-      for (const tab of ['items', 'decisions']) {
+      for (const tab of ['overview', 'items', 'decisions', 'requests']) {
         await click(`[data-board-tab="${tab}"]`)
         await noOverflow()
         await shot(`board-${tab}-${skin}-${theme}`)
+        if (tab === 'overview') {
+          assert.ok(
+            await read('document.querySelector(\'[data-activity="activity-0"] strong\') !== null'),
+          )
+          assert.ok(
+            await read(
+              "document.querySelector('[data-activity=\"activity-0\"] .mg-activity-source').textContent.includes('工作线')",
+            ),
+          )
+          await read(
+            "document.querySelector('[data-activity=\"activity-0\"]').scrollIntoView({block:'center'})",
+          )
+          await shot(`activity-collapsed-${skin}-${theme}`)
+          await click('[data-activity="activity-0"] [data-act="manager-activity-expand"]')
+          assert.equal(
+            await read(
+              'document.querySelector(\'[data-activity="activity-0"] .mg-activity-content\').dataset.expanded',
+            ),
+            'true',
+          )
+          await shot(`activity-expanded-${skin}-${theme}`)
+        }
+
+        if (tab === 'decisions') {
+          await click('[data-decision="D-15"] [data-decision-tab="question"]')
+          await shot(`questions-manager-${skin}-${theme}`)
+          await click('[data-decision="D-15"] [data-question-mode="temporary"]')
+          await shot(`questions-temporary-${skin}-${theme}`)
+          await click('[data-decision="D-15"] [data-decision-tab="answer"]')
+        }
       }
       await click('[data-board-tab="items"]')
       await click('[data-act="manager-board-toggle"]')

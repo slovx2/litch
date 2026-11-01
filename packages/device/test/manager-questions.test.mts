@@ -93,7 +93,7 @@ test('旁问快照：经理忙时只取此前回合，没有历史也不复制�
   assert.deepEqual(questionSnapshot([]), { source: '', position: {} })
 })
 
-test('两轮旁问共用分叉；不同决策隔离；设备拒绝开线、改板及客户端工具', async () => {
+test('两轮旁问共用分叉；不同决策隔离；设备拒绝开线、越权改板及客户端工具', async () => {
   const { env, client, manager, id, add, state, ask, finish } = await setup()
   try {
     const fork = await ask('为什么？')
@@ -102,7 +102,7 @@ test('两轮旁问共用分叉；不同决策隔离；设备拒绝开线、改�
     assert.equal(created.params.sandbox, 'read-only')
     assert.deepEqual(
       created.params.dynamicTools[0].tools.map((tool: { name: string }) => tool.name),
-      ['summary', 'get'],
+      ['summary', 'get', 'update', 'close'],
     )
     for (const [namespace, tool, args] of [
       ['litch_sessions', 'start', { title: '不能开线' }],
@@ -401,6 +401,143 @@ test('Codex 旁问覆盖自治规则、禁用 MCP 和提权，不发上游未知
         'completed',
       'Codex 旁问结束',
     )
+  } finally {
+    await env.close()
+  }
+})
+
+test('经理追问混合提交：单事件、版本冲突、reply 入记录并保留另一项待答', async () => {
+  const { env, client, manager, id, add } = await setup()
+  try {
+    const second = add()
+    const result = await client.call(MANAGER_METHOD.feedbackSubmit, {
+      managerId: manager.id,
+      answers: [{ decisionId: id, revision: 1, optionId: null, text: '采用' }],
+      questions: [
+        { decisionId: id, revision: 1, question: '还有什么影响？' },
+        { decisionId: second, revision: 1, question: '说明依据' },
+      ],
+    })
+    assert.equal(result.accepted.length, 1)
+    assert.equal(result.acceptedQuestions.length, 2)
+    assert.equal(result.rejectedQuestions.length, 0)
+    const writer = env.device.managers.writer
+    const get = (decisionId: string) =>
+      (writer.tool(manager.id, 'get', { id: decisionId }) as any).object
+    assert.equal(get(id).status, 'answered')
+    assert.equal(get(second).status, 'open')
+    assert.equal(get(id).discussion.messages[0].mode, 'manager')
+    assert.throws(
+      () => writer.tool(manager.id, 'reply', { id, revision: 1, text: '旧背景' }),
+      /current revision/,
+    )
+    writer.tool(manager.id, 'reply', { id, revision: get(id).revision, text: '影响已核实' })
+    assert.equal(get(id).discussion.messages[0].answer, '影响已核实')
+    assert.equal(get(id).discussion.messages[0].status, 'completed')
+    assert.equal(get(second).discussion.messages[0].status, 'running')
+    const conflict = await client.call(MANAGER_METHOD.feedbackSubmit, {
+      managerId: manager.id,
+      answers: [],
+      questions: [{ decisionId: id, revision: 1, question: '旧草稿' }],
+    })
+    assert.equal(conflict.rejectedQuestions[0].code, 'decisionConflict')
+    assert.equal(conflict.delivery, 'none')
+  } finally {
+    await env.close()
+  }
+})
+
+test('临时追问只可改本决策指定字段，历史有来源且备注不唤醒经理', async () => {
+  const { env, manager, threadId, id, add, ask, finish } = await setup()
+  try {
+    const other = add()
+    const fork = await ask('请修正背景')
+    for (const args of [
+      { kind: 'decision', id: other, patch: { title: '越权' }, why: '测试' },
+      { kind: 'decision', id, patch: { landed: [] }, why: '越权' },
+      { kind: 'item', id: 'I-1', patch: { title: '越权' }, why: '测试' },
+    ]) {
+      const result = await env.pi.callTool(fork, 'litch_manager', 'update', args)
+      assert.equal(result?.answer.result.success, false)
+    }
+    const updated = await env.pi.callTool(fork, 'litch_manager', 'update', {
+      kind: 'decision',
+      id,
+      patch: { background: '追问核实后的背景' },
+      why: '核对依据',
+    })
+    assert.equal(updated?.answer.result.success, true)
+    assert.equal(env.device.managers.store.object(manager.id, id)?.revision, 2)
+    assert.equal(env.device.managers.store.changes(manager.id)[0]?.by, 'question')
+    assert.equal(env.pi.running(threadId), false)
+    assert.match(
+      JSON.stringify(env.device.sessionTree.store.notes(threadId)),
+      /temporary question|temporary decision/,
+    )
+    const closed = await env.pi.callTool(fork, 'litch_manager', 'close', {
+      kind: 'decision',
+      id,
+      status: 'withdrawn',
+      reason: '已不需要决定',
+    })
+    assert.equal(closed?.answer.result.success, true)
+    await finish('已修正背景并撤回。')
+    assert.equal(env.device.managers.store.object(manager.id, id)?.status, 'withdrawn')
+    assert.equal(
+      env.device.managers.store
+        .changes(manager.id)
+        .find((change) => change.fields.includes('status'))?.by,
+      'question',
+    )
+  } finally {
+    await env.close()
+  }
+})
+
+test('临时修改备注不插入当前回合，其他线的回报插话不能将它一并丢弃', async () => {
+  const { env, client, manager, threadId, id, ask, finish } = await setup()
+  try {
+    const fork = await ask('修正背景')
+    await client.call('turn/start', {
+      threadId,
+      input: [{ type: 'text', text: '经理正在处理另一项工作' }],
+    })
+    const result = await env.pi.callTool(fork, 'litch_manager', 'update', {
+      kind: 'decision',
+      id,
+      patch: { background: '临时讨论更新' },
+      why: '核对',
+    })
+    assert.equal(result?.answer.result.success, true)
+    env.device.sessionTree.store.addNote(
+      threadId,
+      { threadId: 'another-line', title: '另一条线', status: 'completed', excerpt: '普通线回报' },
+      false,
+    )
+    env.device.sessionTree.checkAll()
+    await until(
+      () =>
+        env.pi.seen.some(
+          (entry) =>
+            entry.method === 'turn/steer' && JSON.stringify(entry.params).includes('普通线回报'),
+        ),
+      '普通回报插入当前回合',
+    )
+    assert.ok(
+      !env.pi.seen.some(
+        (entry) =>
+          entry.method === 'turn/steer' &&
+          JSON.stringify(entry.params).includes('temporary question'),
+      ),
+    )
+    assert.ok(env.device.sessionTree.store.notes(threadId).some((note) => note.threadId === fork))
+    const next = env.device.sessionTree.beforeDeviceTurn(threadId, [
+      { type: 'text', text: '下一回合' },
+    ])
+    assert.match(JSON.stringify(next), /temporary question/)
+    assert.equal(env.device.sessionTree.store.notes(threadId).length, 0)
+    assert.equal(env.device.managers.store.changes(manager.id)[0]?.by, 'question')
+    await finish('已修改')
   } finally {
     await env.close()
   }

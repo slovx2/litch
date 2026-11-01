@@ -14,8 +14,10 @@ import {
 import {
   filterSuggestions,
   groupSuggestions,
+  reviewedSuggestion,
   type SuggestionsView,
   type SuggestionView,
+  suggestionCount,
 } from '../src/model-suggestions.mjs'
 import { projectProposal } from '../src/projection/tree.mjs'
 import { fakeClock, settle } from './helpers.mjs'
@@ -203,4 +205,34 @@ test('副本跨设备合并；模拟归档保留，执行时恢复，删除来�
     channel.close()
     server()
   }
+})
+
+test('建议数量只计普通卡和已审核经理卡，未审核卡仍保留可操作条目', () => {
+  const view = (
+    id: string,
+    managerId: string | null,
+    state?: 'pending' | 'endorsed',
+  ): SuggestionView => {
+    const proposal = projectProposal(row(id).proposal, 1000)
+    assert.ok(proposal)
+    return {
+      ...row(id),
+      deviceId: 'local',
+      managerId,
+      proposal,
+      ...(state ? { managerReview: { state, reason: null, at: null } } : {}),
+    }
+  }
+  const rows = [
+    view('ordinary', null),
+    view('line', 'm1', 'pending'),
+    view('reviewed', 'm1', 'endorsed'),
+  ]
+  assert.equal(suggestionCount(rows), 2)
+  const pending = rows[1]
+  assert.ok(pending)
+  assert.equal(reviewedSuggestion(pending), false)
+  const group = groupSuggestions(rows).find((entry) => entry.kind === 'manager')
+  assert.equal(group?.kind === 'manager' && group.rows.length, 2)
+  assert.equal(filterSuggestions(rows, { deviceId: 'local', managerId: 'm1' }).length, 2)
 })

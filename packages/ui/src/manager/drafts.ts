@@ -1,7 +1,10 @@
 import { useSyncExternalStore } from 'react'
 import type { ManagerSubmittedAnswer } from '../../../core/src/model-manager.mts'
 
-export type AnswerDrafts = Record<string, ManagerSubmittedAnswer>
+export interface DecisionDraft extends ManagerSubmittedAnswer {
+  question?: string
+}
+export type AnswerDrafts = Record<string, DecisionDraft>
 const cache = new Map<string, AnswerDrafts>()
 const listeners = new Set<() => void>()
 const keyOf = (deviceId: string, managerId: string) =>
@@ -22,13 +25,14 @@ function read(key: string): AnswerDrafts {
     if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
       for (const [id, value] of Object.entries(raw)) {
         if (!value || typeof value !== 'object') continue
-        const draft = value as Partial<ManagerSubmittedAnswer>
+        const draft = value as Partial<DecisionDraft>
         if (
           draft.decisionId === id &&
           /^D-\d+$/.test(id) &&
           Number.isInteger(draft.revision) &&
           (draft.optionId === null || typeof draft.optionId === 'string') &&
-          typeof draft.text === 'string'
+          typeof draft.text === 'string' &&
+          (draft.question === undefined || typeof draft.question === 'string')
         ) {
           drafts[id] = draft as ManagerSubmittedAnswer
         }
@@ -54,5 +58,17 @@ export function useAnswerDrafts(deviceId: string, managerId: string) {
 }
 
 export function answeredDrafts(drafts: AnswerDrafts): ManagerSubmittedAnswer[] {
-  return Object.values(drafts).filter((draft) => draft.optionId !== null || draft.text.trim())
+  return Object.values(drafts)
+    .filter((draft) => draft.optionId !== null || draft.text.trim())
+    .map(({ question: _question, ...answer }) => answer)
+}
+
+export function questionDrafts(drafts: AnswerDrafts) {
+  return Object.values(drafts)
+    .filter((draft) => draft.question?.trim())
+    .map((draft) => ({
+      decisionId: draft.decisionId,
+      revision: draft.revision,
+      question: draft.question?.trim() ?? '',
+    }))
 }

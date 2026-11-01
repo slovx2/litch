@@ -293,3 +293,38 @@ for (const interrupted of [false, true])
     assert.equal(read().live, false)
     close()
   })
+
+test('模拟看板混合提交答案、追问与请你做，事件保留三类条目', async () => {
+  const { clock } = fakeClock()
+  const devices = sampleApp('zh-CN', clock.now()).devices
+  const turns: string[] = []
+  const service = createMockManagers({
+    clock,
+    lang: 'zh-CN',
+    devices: () => devices,
+    device: (id) => devices.find((d) => d.id === id),
+    add() {},
+    mark() {},
+    ending() {
+      return 'end'
+    },
+    spawn: () => 'new',
+    say: (_device, _thread, prompt) => {
+      turns.push(prompt)
+    },
+  })
+  const result = (await service.command('managers.feedback.submit', {
+    deviceId: 'local',
+    managerId: 'm1',
+    answers: [{ decisionId: 'D-15', revision: 1, optionId: null, text: '同意' }],
+    questions: [{ decisionId: 'D-15', revision: 1, question: '影响？' }],
+    requests: [{ requestId: 'R-1', revision: 1, delivered: true, text: '已复验' }],
+  })) as import('../src/channel/protocol.mjs').Commands['managers.feedback.submit']['result']
+  assert.equal(result.accepted.length, 1)
+  assert.equal(result.acceptedQuestions[0]?.discussion?.messages.at(-1)?.mode, 'manager')
+  assert.equal(result.acceptedRequests[0]?.status, 'delivered')
+  const event = parseSessionEvent(turns[0] ?? '').event
+  assert.equal(event?.manager?.answers?.length, 1)
+  assert.equal(event?.manager?.questions?.length, 1)
+  assert.equal(event?.manager?.requests?.[0]?.text, '已复验')
+})

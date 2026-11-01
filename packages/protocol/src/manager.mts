@@ -8,6 +8,7 @@ export const MANAGER_METHOD = {
   end: 'litch/manager/end',
   boardRead: 'litch/manager/board/read',
   answersSubmit: 'litch/manager/answers/submit',
+  feedbackSubmit: 'litch/manager/feedback/submit',
   decisionReopen: 'litch/manager/decision/reopen',
   questionAsk: 'litch/manager/question/ask',
   questionForward: 'litch/manager/question/forward',
@@ -22,7 +23,8 @@ export type ManagerTemplate = 'release' | 'investigation' | 'research' | 'blank'
 export type ManagerStatus = 'active' | 'ending' | 'ended'
 export type ManagerDecisionId = `D-${number}`
 export type ManagerItemId = `I-${number}`
-export type ManagerObjectId = ManagerDecisionId | ManagerItemId
+export type ManagerRequestId = `R-${number}`
+export type ManagerObjectId = ManagerDecisionId | ManagerItemId | ManagerRequestId
 
 /** null 表示跟经理相同；换 harness 而未指定型号、强度时用目标 harness 默认值。 */
 export interface ManagerDispatchSettings {
@@ -73,7 +75,7 @@ export interface ManagerChecked {
   commit: string | null
   at: number
 }
-export type ManagerActor = 'manager' | 'user' | 'user-conversation' | 'device'
+export type ManagerActor = 'manager' | 'user' | 'user-conversation' | 'device' | 'question'
 export interface ManagerChange {
   id: string
   objectId: ManagerObjectId | 'status' | 'manager'
@@ -138,6 +140,7 @@ export interface ManagerDecision extends ManagerDecisionFields {
   updatedAt: number
 }
 export interface ManagerQuestion {
+  mode?: 'manager' | 'temporary'
   id: string
   question: string
   answer: string | null
@@ -165,7 +168,7 @@ export interface ManagerItemFields {
   why: string
   links: ManagerLink[]
   basis: ManagerLink[]
-  /** 从线的回报核对后记下的未验证项；只有用户能验的另建 owner=user 的事项。 */
+  /** 从线的回报核对后记下的未验证项；只能由用户完成的检查保留说明，不新建用户事项。 */
   unverified: string[]
 }
 export interface ManagerItem extends ManagerItemFields {
@@ -200,9 +203,13 @@ export interface ManagerLine {
   /** 从最近 wrap_up 回报中逐行取“没验：”开头的内容，保留前缀。 */
   unverified: string[]
 }
+export type ManagerActivitySource =
+  | { kind: 'manager' | 'user' | 'system' }
+  | { kind: 'line'; threadId: string; title: string }
 export interface ManagerActivity {
+  source?: ManagerActivitySource
   id: string
-  kind: 'report' | 'merged' | 'decision' | 'item' | 'status' | 'manager'
+  kind: 'report' | 'merged' | 'decision' | 'item' | 'request' | 'status' | 'manager'
   at: number
   text: string
   objectId: ManagerObjectId | null
@@ -233,11 +240,40 @@ export interface Manager {
   updatedAt: number
   endedAt: number | null
 }
+export interface ManagerRequestFields {
+  title: string
+  description: string
+  buttonLabel: string | null
+  basis: ManagerLink[]
+  links: ManagerLink[]
+}
+export interface ManagerRequest extends ManagerRequestFields {
+  id: ManagerRequestId
+  revision: number
+  status: 'open' | 'delivered' | 'replied' | 'cancelled'
+  response: { delivered: boolean; text: string; at: number } | null
+  cancelled: { reason: string; at: number } | null
+  createdAt: number
+  updatedAt: number
+}
+export interface ManagerSubmittedRequest {
+  requestId: ManagerRequestId
+  revision: number
+  delivered: boolean
+  text: string
+}
+export interface ManagerRequestFailure {
+  requestId: ManagerRequestId
+  code: 'unknownRequest' | 'requestConflict' | 'requestCancelled' | 'invalidRequest'
+  message: string
+  request: ManagerRequest | null
+}
 export interface ManagerBoard {
   managerId: string
   situation: ManagerSituation | null
   decisions: ManagerDecision[]
   items: ManagerItem[]
+  requests?: ManagerRequest[]
   lines: ManagerLine[]
   activities: ManagerActivity[]
   changes: ManagerChange[]
@@ -300,6 +336,21 @@ export interface ManagerSubmittedAnswer {
 export interface ManagerAnswersSubmitParams extends ManagerIdParams {
   answers: ManagerSubmittedAnswer[]
 }
+export interface ManagerSubmittedQuestion {
+  decisionId: ManagerDecisionId
+  revision: number
+  question: string
+}
+export interface ManagerFeedbackSubmitParams extends ManagerAnswersSubmitParams {
+  requests?: ManagerSubmittedRequest[]
+  questions: ManagerSubmittedQuestion[]
+}
+export interface ManagerFeedbackSubmitResponse extends ManagerAnswersSubmitResponse {
+  acceptedRequests: ManagerRequest[]
+  rejectedRequests: ManagerRequestFailure[]
+  acceptedQuestions: ManagerDecision[]
+  rejectedQuestions: ManagerAnswerFailure[]
+}
 export interface ManagerAnswerFailure {
   decisionId: ManagerDecisionId
   code: 'unknownDecision' | 'decisionConflict' | 'decisionNotOpen' | 'invalidAnswer'
@@ -330,6 +381,8 @@ export interface ManagerBoardChangedNotification extends ManagerIdParams {}
 export interface ManagerEventData {
   managerId: string
   text: string
+  requests?: (ManagerSubmittedRequest & { title: string; buttonLabel: string | null })[]
+  questions?: (ManagerSubmittedQuestion & { title: string })[]
   answers?: {
     decisionId: ManagerDecisionId
     title: string

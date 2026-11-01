@@ -242,7 +242,12 @@ export type * from './model-preview.mjs'
 export { PREVIEW_LIMIT, previewKind } from './model-preview.mjs'
 export type * from './model-service.mjs'
 export type { SuggestionEntry, SuggestionsView, SuggestionView } from './model-suggestions.mjs'
-export { filterSuggestions, groupSuggestions } from './model-suggestions.mjs'
+export {
+  filterSuggestions,
+  groupSuggestions,
+  reviewedSuggestion,
+  suggestionCount,
+} from './model-suggestions.mjs'
 export type * from './model-tasks.mjs'
 export type * from './model-terminal.mjs'
 export type * from './model-tree.mjs'

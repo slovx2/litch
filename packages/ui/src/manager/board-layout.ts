@@ -3,8 +3,8 @@ import { useSyncExternalStore } from 'react'
 
 export const BOARD_MIN = 360
 export const BOARD_MAX = 900
-export const CHAT_MIN = 380
-export const BOARD_GRIP = 6
+export const CHAT_MIN = 460
+export const BOARD_GRIP = 1
 export const BOARD_DEFAULT = 560
 const KEY = 'litch.managerBoardLayout'
 export const boardWidth = (width: number) =>

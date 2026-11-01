@@ -110,8 +110,9 @@ async function checkManager(t, client, cwd, harness) {
     saved = current
   }
   t.diagnostic(`${harness}：answer 工具完成记录与修改，结果与看板一致`)
-  const submitted = await client.call(MANAGER_METHOD.answersSubmit, {
+  const submitted = await client.call(MANAGER_METHOD.feedbackSubmit, {
     ...params,
+    questions: [{ decisionId: saved.id, revision: saved.revision, question: '请核对实现范围' }],
     answers: [
       { decisionId: saved.id, revision: saved.revision, optionId: 'go', text: '按此方案执行' },
     ],
@@ -125,6 +126,140 @@ async function checkManager(t, client, cwd, harness) {
   await replied(client, threadId, `${MANAGER_ANSWERS_HEARD}${saved.id}`, 'manager-answers')
   assert.equal((await board()).decisions[0].answer.text, '按此方案执行')
   t.diagnostic(`${harness}：决策入看板，答复入库并收到 manager-answers`)
+  const current = (await board()).decisions.find((entry) => entry.id === saved.id)
+  const reply = await say(
+    client,
+    threadId,
+    `经理：reply ${JSON.stringify({ id: saved.id, revision: current.revision, text: '已核对，范围是隔离夹具' })}`,
+    MANAGER_HEARD,
+  )
+  assert.equal(
+    JSON.parse(reply.slice(MANAGER_HEARD.length).trim()).object.discussion.messages.at(-1).answer,
+    '已核对，范围是隔离夹具',
+  )
+  assert.equal(
+    (await board()).decisions.find((entry) => entry.id === saved.id).discussion.messages.at(-1)
+      .status,
+    'completed',
+  )
+  t.diagnostic(`${harness}：混合提交后 reply 写回追问记录`)
+
+  const temporaryAdded = await say(
+    client,
+    threadId,
+    `经理：add ${JSON.stringify({ kind: 'decision', decision: { title: '待追问修正', background: '旧背景' } })}`,
+    MANAGER_HEARD,
+  )
+  const temporaryId = JSON.parse(temporaryAdded.slice(MANAGER_HEARD.length).trim()).id
+  for (const [operation, args] of [
+    [
+      'update',
+      {
+        kind: 'decision',
+        id: temporaryId,
+        patch: { background: '临时对话核实的新背景' },
+        why: '已核对',
+      },
+    ],
+    [
+      'close',
+      { kind: 'decision', id: temporaryId, status: 'withdrawn', reason: '追问后不再需要决定' },
+    ],
+  ]) {
+    const before = (await board()).decisions.find((entry) => entry.id === temporaryId)
+    await client.call(MANAGER_METHOD.questionAsk, {
+      ...params,
+      decisionId: temporaryId,
+      revision: before.revision,
+      question: `经理：${operation} ${JSON.stringify(args)}`,
+    })
+    const updated = await until(
+      `${harness} 临时对话 ${operation}`,
+      board,
+      (value) =>
+        value.decisions.find((entry) => entry.id === temporaryId)?.discussion?.messages.at(-1)
+          ?.status !== 'running',
+    )
+    const after = updated.decisions.find((entry) => entry.id === temporaryId)
+    assert.equal(
+      after.discussion.messages.at(-1).status,
+      'completed',
+      JSON.stringify(after.discussion),
+    )
+    assert.equal(after.revision, before.revision + 1, JSON.stringify(after.discussion))
+    assert.ok(
+      updated.changes.some((change) => change.objectId === temporaryId && change.by === 'question'),
+    )
+    if (operation === 'update') assert.equal(after.background, '临时对话核实的新背景')
+    else assert.equal(after.status, 'withdrawn')
+  }
+  t.diagnostic(`${harness}：临时对话 update/close 仅修改目标决策，历史记录来源`)
+
+  const requestAdded = await say(
+    client,
+    threadId,
+    `经理：add ${JSON.stringify({ kind: 'request', revision: 0, why: '需要真机验证', request: { title: '请复验界面', description: '**核对**实际窗口' } })}`,
+    MANAGER_HEARD,
+  )
+  const requestId = JSON.parse(requestAdded.slice(MANAGER_HEARD.length).trim()).id
+  const requestUpdated = await say(
+    client,
+    threadId,
+    `经理：update ${JSON.stringify({ kind: 'request', id: requestId, revision: 1, patch: { buttonLabel: '已复验' }, why: '明确交付文案' })}`,
+    MANAGER_HEARD,
+  )
+  assert.equal(
+    JSON.parse(requestUpdated.slice(MANAGER_HEARD.length).trim()).object.buttonLabel,
+    '已复验',
+  )
+  for (const [revision, delivered, response] of [
+    [2, false, '暂时无法复验'],
+    [3, true, '已完成核对'],
+  ]) {
+    const feedback = await client.call(MANAGER_METHOD.feedbackSubmit, {
+      ...params,
+      answers: [],
+      questions: [],
+      requests: [{ requestId, revision, delivered, text: response }],
+    })
+    assert.equal(feedback.acceptedRequests[0].status, delivered ? 'delivered' : 'replied')
+    await replied(client, threadId, MANAGER_ANSWERS_HEARD, 'manager-answers')
+    await until(
+      `${harness} 收到用户请求回应`,
+      () => client.call('thread/read', { threadId, includeTurns: true }),
+      ({ thread }) =>
+        thread.turns.some(
+          (turn) =>
+            turn.status === 'completed' &&
+            turn.items.some(
+              (item) =>
+                item.type === 'userMessage' && JSON.stringify(item.content).includes(response),
+            ),
+        ),
+    )
+  }
+  await say(
+    client,
+    threadId,
+    `经理：close ${JSON.stringify({ kind: 'request', id: requestId, revision: 4, status: 'cancelled', reason: '无需进一步复验' })}`,
+    MANAGER_HEARD,
+  )
+  assert.equal((await board()).requests.find((entry) => entry.id === requestId).status, 'cancelled')
+  t.diagnostic(`${harness}：请你做新建/更新/文字回复/交付/取消及事件均通过`)
+
+  const ownProposal = await say(
+    client,
+    threadId,
+    `会话：start ${JSON.stringify({ title: '经理建议检查', background: '这是经理自己的建议，只有用户点击才开始，工作仅在隔离环境内进行。检查样例的字段和边界，完成后汇报，不修改真实项目、不访问个人配置、不执行外部发布。', prompt: '检查样例字段', initiation: 'propose', worktree: false })}`,
+    SESSIONS_HEARD,
+  )
+  const ownProposalId = JSON.parse(ownProposal.slice(SESSIONS_HEARD.length).trim()).proposal_id
+  const ownRow = (await client.call('litch/suggestions/list', {})).suggestions.find(
+    (entry) => entry.proposal.id === ownProposalId,
+  )
+  assert.equal(ownRow.managerReview.state, 'endorsed')
+  assert.equal((await board()).lines.length, 0, '经理建议在用户点击前不启动工作线')
+  t.diagnostic(`${harness}：经理可创建提案卡，默认已审核且不自动开线`)
 
   const reportMark = '经理夹具工作线回报'
   const prompt = `${reportMark}：这是回环假模型的隔离验收，所有工作只在当前临时目录内完成。请核对任务背景、汇报完成情况和检查结果，不改任何真实项目文件，不访问个人配置，不执行外部发布。\n没验：真实窗口由集成验收执行。`
@@ -157,6 +292,42 @@ async function checkManager(t, client, cwd, harness) {
   const read = await client.call('thread/read', { threadId: line.threadId })
   assert.deepEqual(read.thread.litchManager, { managerId: manager.id, role: 'line' })
   t.diagnostic(`${harness}：开线完成，工作线页数据含回报及“没验”项`)
+  // 实际工作线出卡，经理审核；用户默认列表才计入它。
+  const proposalBrief = {
+    title: '值得用户开始的后续检查',
+    background:
+      '这是经理夹具中的后续检查建议。任务只在隔离临时目录执行，不修改真实项目，不访问用户配置，不发布任何内容。完成时核对隔离数据并给出简短结果。',
+    prompt: '检查隔离样例并报告',
+    initiation: 'propose',
+    worktree: false,
+  }
+  const proposed = await say(
+    client,
+    line.threadId,
+    `会话：start ${JSON.stringify(proposalBrief)}`,
+    SESSIONS_HEARD,
+  )
+  const proposalId = JSON.parse(proposed.slice(SESSIONS_HEARD.length).trim()).proposal_id
+  const suggestion = async () =>
+    (await client.call('litch/suggestions/list', {})).suggestions.find(
+      (entry) => entry.proposal.id === proposalId,
+    )
+  assert.equal((await suggestion()).managerReview.state, 'pending')
+  // 工作线出卡会触发经理回报；等这轮处理停稳再发审核指令。
+  await until(
+    `${harness} 经理处理线卡通知`,
+    () => client.call('thread/read', { threadId, includeTurns: true }),
+    ({ thread }) =>
+      thread.status.type !== 'active' && !thread.turns.some((turn) => turn.status === 'inProgress'),
+  )
+  await say(
+    client,
+    threadId,
+    `经理：endorse ${JSON.stringify({ proposalId, reason: '值得用户发起' })}`,
+    MANAGER_HEARD,
+  )
+  assert.equal((await suggestion()).managerReview.state, 'endorsed')
+  t.diagnostic(`${harness}：工作线提案经 endorse 进入默认展示`)
 
   const ended = await client.call(MANAGER_METHOD.end, params)
   assert.equal(ended.manager.status, 'ending')

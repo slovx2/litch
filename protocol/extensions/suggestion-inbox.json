@@ -12,6 +12,7 @@
   },
   "undeclared": "方法返回 extensionRequired，不发送 changed；按实际接收连接的声明判断。",
   "rules": [
+    "经理建议增加可选 managerReview={state:pending|endorsed|dismissed,reason:string|null,at:秒|null}；经理自己出卡默认为 endorsed，整棵工作线子树出卡为 pending。经理审核与忽略记录持久化。未审核不限制用户开始或忽略；客户端默认折叠并从徽标数量、经理汇总摘要中排除，汇总仍显示未审核数量。",
     "只列 status=pending 且 offer=false 的建议，包含归档来源。每项是原 proposal、source={threadId,title,harness,cwd,archived,project（id/name 或 null）} 和 managerId（不属于经理的为 null）。经理归属覆盖经理本人及其工作线整个子树。",
     "list 返回 {suggestions:SuggestionEntry[]}；changed 返回 {upserts:SuggestionEntry[],removed:string[]}，removed 是提案 id。来源元数据变化同样推增量；重连取新快照。时间单位沿用 sessionTree 的秒。",
     "来源删除时待处理提案撤回；来源归档时保留。普通提案 here/markHere 在来源已归档时先恢复来源（含工作树），失败不结算提案。",

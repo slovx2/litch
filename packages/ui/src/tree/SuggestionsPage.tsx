@@ -3,8 +3,10 @@ import {
   filterSuggestions,
   groupSuggestions,
   keys,
+  reviewedSuggestion,
   type SuggestionEntry,
   type SuggestionView,
+  suggestionCount,
   type WorkspaceView,
 } from '@litch/core'
 import type { ManagerView } from '../../../core/src/model-manager.mts'
@@ -34,9 +36,16 @@ function SuggestionRow({
   const workspace = source.project ?? workspaces.find((entry) => entry.roots.includes(source.cwd))
   const online = device?.connection === 'online'
   return (
-    <li className="tree-card prop-card suggestion-row" data-proposal={proposal.id}>
+    <li
+      className="tree-card prop-card suggestion-row"
+      data-state={proposal.status}
+      data-proposal={proposal.id}
+    >
       <div className="prop-body">
         <b className="prop-title">{proposal.title}</b>
+        {!reviewedSuggestion(row) ? (
+          <span className="pill mute suggestion-review-label">{t('suggestions.unreviewed')}</span>
+        ) : null}
         <div className="prop-meta">
           <button
             type="button"
@@ -97,14 +106,31 @@ export function ManagerSuggestions({
   const all = useKey<readonly SuggestionView[]>(keys.suggestions) ?? NONE
   const rows = filterSuggestions(all, { deviceId: manager.deviceId, managerId: manager.id })
   const t = useT()
-  return rows.length ? (
+  const reviewed = rows.filter(reviewedSuggestion)
+  const pending = rows.filter((row) => !reviewedSuggestion(row))
+  const cards = (entries: readonly SuggestionView[]) => (
     <ul className="suggestions-list mg-suggestions-list">
-      {rows.map((row) => (
+      {entries.map((row) => (
         <SuggestionRow key={row.proposal.id} row={row} onOpen={onOpen} />
       ))}
     </ul>
-  ) : (
-    <p className="mg-empty">{t('suggestions.empty')}</p>
+  )
+  return (
+    <div className="mg-stack">
+      {reviewed.length ? (
+        cards(reviewed)
+      ) : (
+        <p className="mg-empty">{t('suggestions.noReviewed')}</p>
+      )}
+      {pending.length ? (
+        <details className="mg-suggestion-review" data-suggestions-unreviewed>
+          <summary>
+            {t('suggestions.unreviewed')} {pending.length}
+          </summary>
+          {cards(pending)}
+        </details>
+      ) : null}
+    </div>
   )
 }
 
@@ -117,7 +143,10 @@ function ManagerSuggestionCard({
 }) {
   const manager = useKey<ManagerView>(keys.manager(entry.deviceId, entry.managerId))
   const device = useKey<DeviceView>(keys.device(entry.deviceId))
-  const latest = entry.rows[0]
+  const reviewed = entry.rows.filter(reviewedSuggestion)
+  const pending = entry.rows.length - reviewed.length
+  const latest = reviewed[0]
+  const now = useNow()
   const t = useT()
   return (
     <li
@@ -125,23 +154,49 @@ function ManagerSuggestionCard({
       data-suggestion-manager={entry.managerId}
       data-device={entry.deviceId}
     >
-      <button
-        type="button"
-        disabled={!manager}
-        onClick={() => manager && onOpen(manager)}
-        title={!manager ? t('manager.unavailable') : t('suggestions.openManager')}
-      >
-        <header>
-          <span className="pill mute">{t('manager.manager')}</span>
-          <b>{manager?.name || t('manager.loading')}</b>
-          <span className="pill mute">{entry.rows.length}</span>
-          <Forward />
-        </header>
-        <span className="dim">{device ? t.text(device.name) : entry.deviceId}</span>
-        <strong>{latest?.proposal.title}</strong>
-        <p>{latest?.proposal.prompt}</p>
-        <span className="suggestion-manager-open">{t('suggestions.openManager')}</span>
-      </button>
+      <article className="tree-card prop-card" data-state="pending">
+        <div className="prop-body">
+          <header>
+            <span className="pill mute">{t('manager.manager')}</span>
+            <b>{manager?.name || t('suggestions.managerLoading')}</b>
+            <span className="pill mute">{t('suggestions.count', { n: reviewed.length })}</span>
+          </header>
+          <div className="prop-meta">
+            <span>{device ? t.text(device.name) : entry.deviceId}</span>
+            {latest ? (
+              <time title={new Date(latest.proposal.createdAt).toLocaleString()}>
+                {ago(latest.proposal.createdAt, now, t)}
+              </time>
+            ) : null}
+          </div>
+          {pending ? (
+            <span className="dim">
+              {t('suggestions.unreviewed')} {pending}
+            </span>
+          ) : null}
+          {latest ? (
+            <>
+              <strong>{latest.proposal.title}</strong>
+              <p>{latest.proposal.prompt}</p>
+            </>
+          ) : null}
+          <button
+            type="button"
+            className="btn ghost suggestion-manager-open"
+            disabled={!manager}
+            onClick={() => manager && onOpen(manager)}
+            title={!manager ? t('suggestions.managerLoading') : t('suggestions.openManager')}
+            aria-label={
+              manager
+                ? t('suggestions.openManagerNamed', { name: manager.name, n: reviewed.length })
+                : t('suggestions.managerLoading')
+            }
+          >
+            {t('suggestions.openManager')}
+            <Forward />
+          </button>
+        </div>
+      </article>
     </li>
   )
 }
@@ -162,7 +217,7 @@ export function SuggestionsPage({
     <section className="arch-page" data-page="suggestions">
       <header className="arch-head">
         <h1>
-          {t('suggestions.title')} <span className="pill mute">{all.length}</span>
+          {t('suggestions.title')} <span className="pill mute">{suggestionCount(all)}</span>
         </h1>
         <button
           type="button"

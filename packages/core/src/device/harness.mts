@@ -62,6 +62,7 @@ export function abilitiesOf(
     stopBackground: features.stopBackground === true,
     goals: features.goals === true,
     ephemeralFork: features.ephemeralFork === true,
+    managerQuestions: features.managerQuestions === true,
   }
 }
 

@@ -1253,6 +1253,10 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId, managerId } = params as Commands['managers.end']['params']
           return await deviceOf(deviceId).managers.end(managerId)
         }
+        case 'managers.feedback.submit': {
+          const { deviceId, ...feedback } = params as Commands['managers.feedback.submit']['params']
+          return await deviceOf(deviceId).managers.feedback(feedback)
+        }
         case 'managers.answers.submit': {
           const { deviceId, managerId, answers } =
             params as Commands['managers.answers.submit']['params']

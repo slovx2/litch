@@ -157,6 +157,12 @@ test('经理工具登记完整，通过原生 Codex 约束，命名空间说明�
 
 test('工具 schema 校验字段形状，拒绝写系统字段、工作线和跨板 id；kind 对应关系由设备校验', () => {
   const cases: Record<string, { valid: unknown; invalid: unknown[] }> = {
+    reply: {
+      valid: { id: 'D-1', revision: 2, text: '说明' },
+      invalid: [{ id: 'D-1', text: '缺版本' }],
+    },
+    endorse: { valid: { proposalId: 'p1' }, invalid: [{ proposalId: 'p1', managerId: 'other' }] },
+    dismiss: { valid: { proposalId: 'p1', reason: '重复' }, invalid: [{ proposalId: 'p1' }] },
     summary: { valid: {}, invalid: [{ managerId: 'other' }] },
     get: { valid: { id: 'D-1' }, invalid: [{}] },
     add: {
@@ -213,7 +219,10 @@ test('角色规则保持预算，允许说明选项推荐；经理自行归档�
   assert.match(role, /Check the recorded basis before acting/)
   assert.match(role, /repository is authoritative/)
   assert.match(role, /Use verify after checking that an object remains valid/)
-  assert.match(role, /only the user can do/)
+  assert.match(role, /only the user can perform/)
+  assert.match(role, /kind=request/)
+  assert.match(role, /litch_manager.reply/)
+  assert.match(role, /endorse useful work/)
   assert.match(role, /may include options and recommendations/)
   assert.match(role, /submits answers on the board or explicitly in chat/)
   assert.doesNotMatch(role, /mention decision titles only/)
@@ -233,7 +242,8 @@ test('角色规则保持预算，允许说明选项推荐；经理自行归档�
     sessions,
     /Other sessions still require explicit user agreement on the board or in chat/,
   )
-  assert.doesNotMatch(sessions, /initiation "propose"|initiation "offer"/)
+  assert.match(sessions, /initiation "propose"/)
+  assert.match(sessions, /Never replace already-authorized direct delegation/)
 })
 
 test('线的回报和首次、结束回合遵守草稿约束', () => {
@@ -296,4 +306,25 @@ test('工作树开关只设默认值，两种状态都允许经理按任务覆�
     assert.match(line, /preserve other lines’ edits/)
     assert.doesNotMatch(line, /Code work shares a folder|Code work uses the worktree/)
   }
+})
+
+test('Markdown 字段说明与看板渲染对应，标题及按钮文案仍是纯文本', () => {
+  const fields = (name: string): any =>
+    MANAGER_TOOLS.tools.find((tool) => tool.name === name)?.inputSchema.properties
+  const add = fields('add')
+  for (const schema of [
+    add.decision.properties.background,
+    add.decision.properties.options.items.properties.description,
+    add.item.properties.why,
+    add.item.properties.unverified.items,
+    add.request.properties.description,
+    add.why,
+    fields('update').why,
+    fields('close').reason,
+    fields('status').text,
+    fields('reply').text,
+  ])
+    assert.match(schema.description, /Markdown supported/)
+  assert.doesNotMatch(add.request.properties.title.description ?? '', /Markdown supported/)
+  assert.doesNotMatch(add.request.properties.buttonLabel.description ?? '', /Markdown supported/)
 })

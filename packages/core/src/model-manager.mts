@@ -15,6 +15,7 @@ import type {
   ManagerItem,
   ManagerLine,
   ManagerPatch,
+  ManagerRequest,
   ManagerSituation,
 } from '../../protocol/src/manager.mjs'
 
@@ -31,8 +32,11 @@ export type {
   ManagerLink,
   ManagerObjectId,
   ManagerPatch,
+  ManagerRequestId,
   ManagerStatus,
   ManagerSubmittedAnswer,
+  ManagerSubmittedQuestion,
+  ManagerSubmittedRequest,
   ManagerTemplate,
   SessionManagerMark,
 } from '../../protocol/src/manager.mjs'
@@ -51,6 +55,7 @@ export interface ManagerDecisionView
   answer: ManagerAnswerView | null
   closed: ManagerClosedView | null
 }
+export interface ManagerRequestView extends ManagerRequest {}
 export interface ManagerItemView extends Omit<ManagerItem, 'checked'> {
   checked: ManagerCheckedView | null
 }

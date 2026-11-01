@@ -186,13 +186,36 @@ function sessionEvent(event: SessionEvent): SessionEventView {
           .filter(Boolean)
           .join(' · '),
       ) ?? []
+    const requests =
+      manager.requests?.map((request) =>
+        [
+          request.requestId,
+          request.title,
+          request.delivered ? request.buttonLabel : null,
+          request.text,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      ) ?? []
+    const questions =
+      manager.questions?.map((question) =>
+        [question.decisionId, question.title, question.question].join(' · '),
+      ) ?? []
     return {
       kind: event.kind,
       notes,
-      body: [manager.text, ...answers].filter(Boolean).join('\n\n'),
+      body: [manager.text, ...answers, ...questions, ...requests].filter(Boolean).join('\n\n'),
       ...(manager.answers
         ? // 核心不认识语言：和回报摘要一样用“ · ”隔开，中英文都通
-          { summary: manager.answers.map((answer) => answer.decisionId).join(' · ') }
+          {
+            summary: [
+              ...new Set([
+                ...manager.answers.map((answer) => answer.decisionId),
+                ...(manager.questions ?? []).map((question) => question.decisionId),
+                ...(manager.requests ?? []).map((request) => request.requestId),
+              ]),
+            ].join(' · '),
+          }
         : {}),
     }
   }

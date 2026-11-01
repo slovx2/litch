@@ -373,6 +373,9 @@ export class SessionStore {
       muteNotes: prepare('UPDATE notes SET wake=0, user_stopped=? WHERE thread_id=?'),
       notes: prepare('SELECT * FROM notes WHERE parent_thread_id=? ORDER BY seq'),
       noteParents: prepare('SELECT DISTINCT parent_thread_id FROM notes'),
+      dropNoteSequences: prepare(
+        'DELETE FROM notes WHERE parent_thread_id=? AND seq IN (SELECT value FROM json_each(?))',
+      ),
       dropNotes: prepare('DELETE FROM notes WHERE parent_thread_id=? AND seq<=?'),
       wakes: prepare('SELECT count FROM wakes WHERE thread_id=?'),
       setWakes: prepare(
@@ -777,6 +780,10 @@ export class SessionStore {
     return (this.statements.noteParents?.all() ?? []).map((row) => text(row.parent_thread_id))
   }
 
+  /** 插话只删除已选中的回报，保留需要等下一回合的经理追问变更。 */
+  dropNoteSequences(parentThreadId: string, sequences: number[]): void {
+    this.run('dropNoteSequences', parentThreadId, JSON.stringify(sequences))
+  }
   /** 交出去了：到 seq 为止的都删掉 */
   dropNotes(parentThreadId: string, seq: number): void {
     this.run('dropNotes', parentThreadId, seq)

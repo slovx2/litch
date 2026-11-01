@@ -1,6 +1,7 @@
 import type { SessionProposalView } from './model-tree.mjs'
 
 export interface SuggestionView {
+  managerReview?: import('../../protocol/src/suggestion-inbox.mjs').SuggestionReview
   deviceId: string
   proposal: SessionProposalView
   source: {
@@ -53,3 +54,9 @@ export function groupSuggestions(rows: readonly SuggestionView[]): SuggestionEnt
   }
   return entries
 }
+
+/** 普通会话照常计数；经理卡只有明确审核后进入默认列表。 */
+export const reviewedSuggestion = (row: SuggestionView): boolean =>
+  row.managerId === null || row.managerReview?.state === 'endorsed'
+export const suggestionCount = (rows: readonly SuggestionView[]): number =>
+  rows.filter(reviewedSuggestion).length
