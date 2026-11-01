@@ -371,10 +371,14 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     : null
 
   // ---- 四、引导，然后打断 ----
+  const interruptProbeAt = performance.now()
   await say('这一条会被打断')
   await until('回合开始', running)
   await until('回话开始输出', liveLength)
   const turnsBefore = all('.turn').length
+  const interruptTurnId = await until('正在输出的回合标识', () =>
+    one('.running-line')?.closest('.turn')?.getAttribute('data-search-turn'),
+  )
   await say('插进来的话')
   const steerButton = await until('托盘里的“立即插入”', () =>
     one<HTMLButtonElement>('.tray-row .mini.steer'),
@@ -387,11 +391,33 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     all('.turn').length === turnsBefore &&
     Boolean(all('.turn').at(-1)?.textContent?.includes('插进来的话'))
   const stop = await until('停止按钮', () => one<HTMLButtonElement>('.send.stop'))
+  const interruptClick = {
+    ms: performance.now() - interruptProbeAt,
+    connected: stop.isConnected,
+    disabled: stop.disabled,
+    target: interruptTurnId,
+    count: turnsBefore,
+  }
   stop.click()
   const interrupted = Boolean(
     await until('被打断的回合停下来', () =>
-      all('.turn')[turnsBefore - 1]?.querySelector('.turn-foot')?.textContent?.includes('已中断'),
-    ),
+      all('.turn')
+        .find((turn) => turn.getAttribute('data-search-turn') === interruptTurnId)
+        ?.querySelector('.turn-foot')
+        ?.textContent?.includes('已中断'),
+    ).catch((error: unknown) => {
+      throw new Error(
+        `${String(error)} ${JSON.stringify({
+          click: interruptClick,
+          turns: all('.turn').map((turn) => ({
+            id: turn.getAttribute('data-search-turn'),
+            foot: turn.querySelector('.turn-foot')?.textContent,
+            running: Boolean(turn.querySelector('.running-line')),
+          })),
+          errors: all('.errbox, .cmp-error').map((node) => node.textContent),
+        })}`,
+      )
+    }),
   )
   // 未消费的插话停止后留在待发托盘；已经消费的留在对话里。两条路径都不能丢失、重复或偷偷续跑。
   await until('停止完成', () => !running())

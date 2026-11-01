@@ -121,6 +121,12 @@ const model = createServer(async (req, res) => {
       if (res.destroyed) return
     }
   }
+  // 停止验收必须先有一个仍在运行的请求，不能赌界面在 1.2 秒的普通回复里来得及点停止。
+  // 只给这条探针消息留住流；真正中断会关闭连接，恢复发送的插话仍按普通回复自然结束。
+  if (paced && lastUserText(body) === '这一条会被打断') {
+    if (!res.destroyed) await new Promise((done) => res.once('close', done))
+    return
+  }
   chunk({}, calls ? 'tool_calls' : 'stop', {
     usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
   })
