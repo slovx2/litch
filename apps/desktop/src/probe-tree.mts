@@ -130,7 +130,7 @@ export async function treeProbe(): Promise<TreeSeen> {
   const $$ = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)]
   const seen: Record<string, string> = {}
   const PARENT = 's6'
-  const kids = () => $$(`.row-line[data-parent="${PARENT}"]`)
+  const kids = () => $$(`.row-line[data-parent="${PARENT}"]:not(.projection-group *)`)
   const idle = () => until(() => !$('.main .running-line'), 15000)
   const say = async (text: string) => {
     const box = $<HTMLTextAreaElement>('.main .dock textarea.cmp-text')
@@ -233,7 +233,8 @@ export async function treeProbe(): Promise<TreeSeen> {
   await until(() => $('.spawn-dialog') !== null)
   const harness = $<HTMLSelectElement>('#spawn-harness')
   const choose = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
-  const other = [...(harness?.options ?? [])].find((option) => option.value !== harness?.value)
+  // 父会话只有项目权限；换到同样支持项目权限的 DSH，后面另验 Pi 越权时禁止提交。
+  const other = [...(harness?.options ?? [])].find((option) => option.value === 'dsh')
   if (harness && other) {
     choose?.call(harness, other.value)
     harness.dispatchEvent(new Event('change', { bubbles: true }))

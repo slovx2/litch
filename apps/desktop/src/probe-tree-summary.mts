@@ -18,7 +18,11 @@ async function summaryProbe(phase: Phase) {
   }
   const parentRow = () => $(`[data-session="${parent}"]:not(.projection-group *)`)
   const node = () => parentRow()?.closest('.tree-node')
-  const kids = () => [...document.querySelectorAll<HTMLElement>(`[data-parent="${parent}"]`)]
+  const kids = () => [
+    ...document.querySelectorAll<HTMLElement>(
+      `.row-line[data-parent="${parent}"]:not(.projection-group *)`,
+    ),
+  ]
   const rows = () => kids().filter((row) => row.classList.contains('row-line'))
   const summary = () => node()?.querySelector<HTMLElement>(':scope > .tree-kids > .tree-sum')
   const fold = () => parentRow()?.querySelector<HTMLElement>('.tree-fold')
