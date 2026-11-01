@@ -3,16 +3,17 @@
 // - 工作区、会话到工作区的归属、分区与置顶（表由 workspaces.mts、sections.mts 建）
 // - 从各引擎导入过没有（workspace-import.mts）
 // 项目权限确认也在本库；不能把整库当成可重建缓存删除。
-import { closeSync, existsSync, openSync, statSync } from 'node:fs'
+import { closeSync, existsSync, openSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { assertStoreFormat, initializeStoreFormat } from '../../shared/src/store-format.mjs'
 import { ensureParent } from '../../shared/src/util.mjs'
 
 /**
- * 库包含不能重建的项目权限确认；版本不匹配时拒绝打开，不删除数据。
+ * v3 起包含不能重建的项目权限确认；以后升结构版本必须为 v3 及以上的库写迁移，不能删库。
+ * v3 以前只有可重建的数据（索引重新积累，工作区重新导入），保留旧行为直接重建。
  */
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 
 function schemaVersion(path: string): number {
   const db = new DatabaseSync(path, { readOnly: true })
@@ -29,8 +30,13 @@ export function openDeviceStore(stateDir: string): DatabaseSync {
   // 空文件就是一个还没写过的新库（上一次刚建出来就被打断也会留下它），不算旧格式
   if (existsSync(path) && statSync(path).size > 0) {
     assertStoreFormat(path)
-    if (schemaVersion(path) !== SCHEMA_VERSION)
-      throw new Error('设备库版本不匹配，拒绝打开以保留项目权限与设备数据')
+    const version = schemaVersion(path)
+    if (version > SCHEMA_VERSION)
+      throw new Error(
+        `设备库是更新的版本（${version}）建的，这一版设备服务只支持到 ${SCHEMA_VERSION}，拒绝降级打开`,
+      )
+    if (version < 3)
+      for (const suffix of ['', '-wal', '-shm']) rmSync(`${path}${suffix}`, { force: true })
   }
   // 库文件只有属主可读写，和这个目录里别的文件一致。先把文件建出来再打开：
   // 预写日志等附带的文件会沿用主文件的权限

@@ -21,6 +21,8 @@ Start every investigation with `scripts/litch status`, then narrow down.
 
 ## Common problems
 
+**设备提示“设备库是更新的版本建的，拒绝降级打开”。** 使用创建该设备库时的版本或更新的设备服务；不要删除设备库，其中保存了项目访问权限和确认记录。没有项目权限数据的旧版缓存库在升级时会自动重建。
+
 **`scripts/litch` says the Litch desktop app is not running.** Ask the user to open Litch; retry. The
 command never starts Litch.
 
