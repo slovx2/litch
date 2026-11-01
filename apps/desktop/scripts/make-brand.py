@@ -16,6 +16,7 @@
     apps/desktop/assets/icon-dock.png   开发时 macOS 程序坞上的图标（没打包的时候系统给的是 Electron 自己的）
     docs/images/litch-logo.png      README 开头的标志
     packages/ui/src/settings/litch-icon.png   设置页“关于”里的图标（方的，圆角由界面按皮肤裁）
+    apps/chrome-extension/icons/icon-*.png    Chrome 扩展的图标（16、32、48、128）
 
 macOS 的图标按系统的规矩来：1024 的画布，正中 824 见方的圆角底板，四周留空，底板下面一层很淡的投影。
 Windows 和 Linux 的图标不留空，底板铺满。两张原图的底都是黑的，底板也用黑的，图形原样放上去。
@@ -106,6 +107,16 @@ def about_icon(source: Image.Image) -> Image.Image:
     return centered_crop(source, window, window).resize((192, 192), Image.Resampling.LANCZOS)
 
 
+def chrome_icons(source: Image.Image) -> dict[int, Image.Image]:
+    """Chrome 扩展的图标。128 照应用商店的规矩：96 见方的图形，四周各留 16 透明；小尺寸铺满。"""
+    base = linux_icon(source)
+    icons = {side: base.resize((side, side), Image.Resampling.LANCZOS) for side in (16, 32, 48)}
+    store = Image.new("RGBA", (128, 128), (0, 0, 0, 0))
+    store.alpha_composite(base.resize((96, 96), Image.Resampling.LANCZOS), (16, 16))
+    icons[128] = store
+    return icons
+
+
 def readme_logo(source: Image.Image) -> Image.Image:
     left, top, right, bottom = content_box(source)
     width, height = right - left, bottom - top
@@ -131,6 +142,10 @@ def main() -> None:
     about_icon(icon_source).save(
         REPO / "packages" / "ui" / "src" / "settings" / "litch-icon.png", optimize=True
     )
+    chrome = REPO / "apps" / "chrome-extension" / "icons"
+    chrome.mkdir(exist_ok=True)
+    for side, icon in chrome_icons(icon_source).items():
+        icon.save(chrome / f"icon-{side}.png", optimize=True)
     logo = readme_logo(Image.open(LOGO_SOURCE))
     logo.save(REPO / "docs" / "images" / "litch-logo.png", optimize=True)
     print(f"图标和标志已生成（标志 {logo.width}×{logo.height}）")

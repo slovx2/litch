@@ -1,9 +1,11 @@
 // 构建自己的固定 ID Chrome 扩展；私钥不生成、不打包。
 
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
+
+const ICON_SIZES = [16, 32, 48, 128]
 
 export async function buildChromeExtension(
   output = fileURLToPath(new URL('../dist/chrome-extension', import.meta.url)),
@@ -44,6 +46,13 @@ export async function buildChromeExtension(
     target: 'chrome125',
     logLevel: 'warning',
   })
+  // 图标由 make-brand.py 生成后提交；产物目录保持平铺（安装时逐个文件拷，见 installer.mts）
+  const icons = Object.fromEntries(ICON_SIZES.map((side) => [String(side), `icon-${side}.png`]))
+  for (const file of Object.values(icons))
+    await copyFile(
+      new URL(`../../chrome-extension/icons/${file}`, import.meta.url),
+      `${output}/${file}`,
+    )
   await writeFile(
     `${output}/manifest.json`,
     `${JSON.stringify(
@@ -54,9 +63,10 @@ export async function buildChromeExtension(
         version,
         minimum_chrome_version: '125',
         key: identity.key,
+        icons,
         background: { service_worker: 'background.js', type: 'module' },
         permissions: ['debugger', 'nativeMessaging', 'tabs', 'storage', 'webNavigation'],
-        action: { default_title: 'Litch — Stop browser control' },
+        action: { default_title: 'Litch — Stop browser control', default_icon: icons },
       },
       null,
       2,
