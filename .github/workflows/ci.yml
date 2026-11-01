@@ -90,7 +90,7 @@ jobs:
   # 跑头一个回合（0.8.0 在 Codex 上一个会话都建不成，就是这一条该拦住的），codex 收不收 Litch 的工具定义，
   # 本机内置适配器的拉起与换版本。其余的桌面验收在 full.yml
   client:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

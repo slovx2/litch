@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-14]
+        os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -148,7 +148,7 @@ jobs:
   # 客户端：核心的单元测试、三个包的类型检查、界面构建，再起真的 Electron 做自检、对话区的滚动验收、输入区的验收、终端面板的验收和远程设备的验收（窗口不显示）。
   # 代码规范检查由上面 adapters 里的 npm run check 一并覆盖。
   client:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -230,7 +230,7 @@ jobs:
   # dsh 本体不随适配器分发，测试需要一份真实的 dsh：按 protocol/versions.json 登记的下限版本装到临时前缀。
   # 模型端是回环 mock，SSH 实例发往回环之外的 HTTP(S) 请求都落到陷阱代理上，验收要求一次也没有。
   dsh:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -255,7 +255,7 @@ jobs:
   # OpenCode 本体不随适配器分发，测试要一份真实的 opencode：按 protocol/versions.json 登记的验证过的版本
   # （opencodeVerified 的第一个）装到临时前缀。模型端是回环上的假模型，数据目录按 HOME/XDG 隔离在临时目录里。
   opencode:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -281,7 +281,7 @@ jobs:
   # 缺哪一个这一步都会直接失败，不会跳过。单独一个 job：它要的依赖比 client 多（引擎包都要装、都要构建；
   # OpenCode 和 ACP 的两个包也在里面，只因为 npm run build 要构建它们，验收还不走这两个引擎）
   client-engines:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -314,7 +314,7 @@ jobs:
   # codex 收不收、客户端工具调用由设备进程挑执行方，再在各家真的命令行上从界面建会话跑头一个回合。
   # 模型都是回环上的假模型，各家的数据目录隔离在临时目录里。门禁只跑其中 codex 和 Pi 的首回合
   real-engines:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
