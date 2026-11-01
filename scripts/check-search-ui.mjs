@@ -303,7 +303,7 @@ try {
   report.consoleErrors = consoleErrors
   if (cdp) {
     report.debug = await cdp.call('Runtime.evaluate', {
-      expression: `(()=>{const s=document.querySelector('.tr-scroll');const r=[...(CSS.highlights.get('litch-find-current')??[])][0];return {trace:window.__litchSearchTrace,url:location.href,ready:document.readyState,language:document.documentElement.lang,browserLanguage:navigator.language,query:document.querySelector('.search-bar input')?.value,scroll:s?{top:s.scrollTop,height:s.clientHeight,total:s.scrollHeight}:null,rect:r?.getBoundingClientRect().toJSON(),body:document.body.getBoundingClientRect().toJSON(),html:document.querySelector('.search-bar')?.textContent}})()`,
+      expression: `(()=>{const s=document.querySelector('.tr-scroll');const r=[...(CSS.highlights.get('litch-find-current')??[])][0];return {trace:window.__litchSearchTrace,visibility:document.visibilityState,focus:document.hasFocus(),url:location.href,ready:document.readyState,language:document.documentElement.lang,browserLanguage:navigator.language,query:document.querySelector('.search-bar input')?.value,scroll:s?{top:s.scrollTop,height:s.clientHeight,total:s.scrollHeight}:null,rect:r?.getBoundingClientRect().toJSON(),body:document.body.getBoundingClientRect().toJSON(),html:document.querySelector('.search-bar')?.textContent}})()`,
       returnByValue: true,
     })
     const shot = await cdp.call('Page.captureScreenshot', { format: 'png' })

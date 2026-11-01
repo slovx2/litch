@@ -14,13 +14,17 @@ export function installSearchTrace() {
       this.traceId = ++sequence
       record({ worker: this.traceId, kind: 'create', url: String(args[0]) })
       this.addEventListener('message', ({ data }) =>
-        record({
-          worker: this.traceId,
-          kind: 'result',
-          query: data?.query,
-          revision: data?.revision,
-          count: data?.count,
-        }),
+        record(
+          data?.type === 'ready'
+            ? { worker: this.traceId, kind: 'ready' }
+            : {
+                worker: this.traceId,
+                kind: 'result',
+                query: data?.query,
+                revision: data?.revision,
+                count: data?.count,
+              },
+        ),
       )
       this.addEventListener('error', (event) =>
         record({ worker: this.traceId, kind: 'error', message: event.message }),
@@ -45,6 +49,11 @@ export function installSearchTrace() {
       return super.terminate()
     }
   }
+  // 页面不可见时定时器每秒一次、动画帧停止，失败轨迹要能看出这一点
+  record({ kind: 'visibility', state: document.visibilityState, focus: document.hasFocus() })
+  document.addEventListener('visibilitychange', () =>
+    record({ kind: 'visibility', state: document.visibilityState, focus: document.hasFocus() }),
+  )
   window.addEventListener('unhandledrejection', (event) =>
     record({ kind: 'unhandledrejection', message: String(event.reason?.stack ?? event.reason) }),
   )

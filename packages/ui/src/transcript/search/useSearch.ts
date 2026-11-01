@@ -5,6 +5,7 @@ import {
   type PendingQuestion,
   type SearchResult,
   type SearchSource,
+  type SearchWorkerOutput,
   type SessionProposalView,
   searchableItems,
   searchCardItem,
@@ -22,6 +23,23 @@ const EMPTY: SearchResult = { hits: [], count: 0, query: '', revision: 0 }
 const NO_ANSWERS: AskAnswers = {}
 const NO_PENDING: PendingQuestion[] = []
 const NO_PROPOSALS: SessionProposalView[] = []
+/** Worker 在这段时间内没报 ready（模块加载挂起、失败却没触发 onerror），按搜索失败处理。 */
+export const SEARCH_WORKER_READY_MS = 10_000
+
+/**
+ * 分批投递之间让出主线程。不用 setTimeout(0)：页面不可见时（窗口在后台、被遮住）Chrome 把定时器
+ * 对齐到每秒一次，一万条目的会话要一分多钟才发得出查询，界面一直停在“正在搜索”。
+ */
+function nextTask(): Promise<void> {
+  return new Promise((resolve) => {
+    const channel = new window.MessageChannel()
+    channel.port1.onmessage = () => {
+      channel.port1.close()
+      resolve()
+    }
+    channel.port2.postMessage(null)
+  })
+}
 
 /** 投影订阅不依赖挂载。解析/查询在 Worker，流式数据按时间窗合并，不等它停止才搜索。 */
 export function useSearch(
@@ -196,7 +214,7 @@ export function useSearch(
         size += 'text' in source.item ? source.item.text.length : 1024
         if (batch.length >= 128 || size >= 128 * 1024) {
           send()
-          await new Promise<void>((resolve) => window.setTimeout(resolve, 0))
+          await nextTask()
         }
       }
       if (stopped || mine !== revision) return
@@ -239,11 +257,30 @@ export function useSearch(
           })
       }, 180)
     }
-    worker.onmessage = (event: MessageEvent<SearchResult>) => {
-      if (stopped || event.data.revision !== revision) return
-      if (event.data.query !== searchQuery(input.current)) return
+    const fail = () => {
+      if (stopped) return
+      setFailed(true)
+      setBusy(false)
+    }
+    // 投递不等 ready（Worker 会排队），只用它判断加载是否卡住
+    let ready = false
+    const readyTimer = window.setTimeout(() => {
+      if (!ready) {
+        console.error('对话搜索 Worker 没有在限时内就绪')
+        fail()
+      }
+    }, SEARCH_WORKER_READY_MS)
+    worker.onmessage = (event: MessageEvent<SearchWorkerOutput>) => {
+      const data = event.data
+      if ('type' in data) {
+        ready = true
+        window.clearTimeout(readyTimer)
+        return
+      }
+      if (stopped || data.revision !== revision) return
+      if (data.query !== searchQuery(input.current)) return
       setResult((previous) => {
-        const next = event.data
+        const next = data
         if (
           previous.query === next.query &&
           previous.count === next.count &&
@@ -264,12 +301,7 @@ export function useSearch(
       })
       setBusy(false)
     }
-    worker.onerror = () => {
-      if (!stopped) {
-        setFailed(true)
-        setBusy(false)
-      }
-    }
+    worker.onerror = fail
     request.current = () => {
       setBusy(true)
       revision++
@@ -284,6 +316,7 @@ export function useSearch(
       stopped = true
       request.current = null
       window.clearTimeout(timer)
+      window.clearTimeout(readyTimer)
       worker.terminate()
       for (const off of bindings.values()) off()
     }

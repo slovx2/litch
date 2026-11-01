@@ -477,6 +477,7 @@ export type {
   SearchResult,
   SearchSource,
   SearchWorkerInput,
+  SearchWorkerOutput,
   TitleHit,
   TitleSearchResult,
 } from './search/model.mjs'

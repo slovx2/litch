@@ -42,3 +42,5 @@ export type SearchWorkerInput =
       order: string[]
       anchor?: { itemId: string; start: number }
     }
+/** Worker 加载完先报 ready，之后只回查询结果；主线程据此判断加载是否卡住。 */
+export type SearchWorkerOutput = { type: 'ready' } | SearchResult

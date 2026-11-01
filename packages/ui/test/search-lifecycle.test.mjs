@@ -5,7 +5,7 @@ import { build } from '../../../node_modules/esbuild/lib/main.js'
 // 只替换浏览器调度与 React 生命周期；索引投影、查询、取消逻辑均运行正式实现。
 const bundle = await build({
   stdin: {
-    contents: `export { useSearch } from './src/transcript/search/useSearch.ts';
+    contents: `export { useSearch, SEARCH_WORKER_READY_MS } from './src/transcript/search/useSearch.ts';
       export { keys, ConversationSearch } from '@litch/core';`,
     resolveDir: new URL('..', import.meta.url).pathname,
   },
@@ -41,11 +41,11 @@ const bundle = await build({
     },
   ],
 })
-const { useSearch, keys, ConversationSearch } = await import(
+const { useSearch, SEARCH_WORKER_READY_MS, keys, ConversationSearch } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`
 )
 
-function fixture() {
+function fixture({ ready = true } = {}) {
   const original = { window: globalThis.window, Worker: globalThis.Worker }
   const slots = [],
     effects = [],
@@ -96,14 +96,28 @@ function fixture() {
     },
   }
   globalThis.__searchLifecycle = state
+  const delays = []
   globalThis.window = {
     setTimeout(fn, ms) {
       const id = ++timerId
+      delays.push(ms)
       timers.set(id, { fn, ms })
       return id
     },
     clearTimeout(id) {
       timers.delete(id)
+    },
+    // 让出主线程的任务（不是定时器）；tick('task') 推进
+    MessageChannel: class {
+      constructor() {
+        const port1 = { onmessage: null, close() {} }
+        this.port1 = port1
+        this.port2 = {
+          postMessage() {
+            timers.set(++timerId, { fn: () => port1.onmessage?.({ data: null }), ms: 'task' })
+          },
+        }
+      }
     },
   }
   globalThis.Worker = class {
@@ -113,6 +127,8 @@ function fixture() {
     terminated = false
     constructor() {
       workers.push(this)
+      // 正式 Worker 加载完先报 ready；ready:false 模拟加载挂起
+      if (ready) queueMicrotask(() => this.onmessage?.({ data: { type: 'ready' } }))
     }
     postMessage(message) {
       if (this.failure) throw this.failure
@@ -168,6 +184,7 @@ function fixture() {
     workers,
     put,
     timers,
+    delays,
     close() {
       for (const slot of slots) {
         slot.cleanup?.()
@@ -291,4 +308,66 @@ test('旧批次拒绝前已有新查询，旧错误不能覆盖新查询的结�
   } finally {
     f.close()
   }
+})
+
+test('分批投递之间不用定时器让出：页面不可见时定时器每秒一次，查询会迟迟发不出去', async () => {
+  const f = fixture()
+  try {
+    f.render('用户消息')
+    await f.tick(180)
+    // 300 条分三批，第一批后等的是任务而不是 setTimeout
+    assert.ok([...f.timers.values()].some((timer) => timer.ms === 'task'))
+    await f.drain()
+    assert.equal(f.workers[0].results.at(-1).query, '用户消息')
+    assert.deepEqual(
+      f.delays.filter((ms) => ms !== 180 && ms !== SEARCH_WORKER_READY_MS),
+      [],
+      '索引与查询路径上只有防抖和就绪限时两种定时器',
+    )
+  } finally {
+    f.close()
+  }
+})
+
+test('Worker 限时内没有报 ready（模块加载挂起且没有 onerror）时结束忙状态并显示失败', async (t) => {
+  const errors = []
+  t.mock.method(console, 'error', (...args) => errors.push(args))
+  const f = fixture({ ready: false })
+  try {
+    f.render('用户消息')
+    await f.tick(180)
+    await f.tick('task')
+    await f.tick('task')
+    assert.equal(f.render().busy, true)
+    await f.tick(SEARCH_WORKER_READY_MS)
+    assert.equal(f.render().busy, false)
+    assert.equal(f.render().failed, true)
+    assert.equal(errors.length, 1)
+  } finally {
+    f.close()
+  }
+})
+
+test('报过 ready 后查询再慢也不按加载失败处理；关闭时撤销就绪限时', async () => {
+  const f = fixture()
+  try {
+    f.render('用户消息')
+    await Promise.resolve()
+    assert.equal(
+      [...f.timers.values()].some((timer) => timer.ms === SEARCH_WORKER_READY_MS),
+      false,
+      'ready 后不再留就绪限时',
+    )
+    await f.drain()
+    assert.equal(f.render().failed, false)
+    assert.equal(f.render().busy, true, '回包未到前保持忙状态')
+    f.workers[0].deliver()
+    assert.equal(f.render().busy, false)
+  } finally {
+    f.close()
+  }
+  const g = fixture({ ready: false })
+  g.render('用户消息')
+  g.close()
+  assert.equal(g.timers.size, 0, '关闭后不留任何定时器')
 })

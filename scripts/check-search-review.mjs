@@ -26,6 +26,8 @@ export async function checkSearchReview({ cdp, evaluate, query, report, output, 
     })
   }
   const open = async (suffix = '') => {
+    // 下面的断言要看高亮，依赖动画帧；先确保夹具页在前台（后台页单独在 S6 验）
+    await cdp.call('Page.bringToFront')
     await cdp.call('Page.navigate', { url: `${base}/test/search-fixture.html?lang=zh-CN${suffix}` })
     await until(() => evaluate(`!!document.querySelector('.search-entry')`), '夹具入口')
     await evaluate(
@@ -282,4 +284,31 @@ export async function checkSearchReview({ cdp, evaluate, query, report, output, 
       )
     }
   report.checks.push({ name: 'S5 完整应用两个图标入口位置和快捷键提示；六种外观标题高亮截图' })
+
+  // 页面不可见时 Chrome 把定时器对齐到每秒一次、停掉动画帧。一万条目的索引不能因此迟迟发不出查询；
+  // 回到前台后高亮照常出现。
+  await open()
+  const background = await cdp.call('Target.createTarget', { url: 'about:blank' })
+  try {
+    await until(() => evaluate(`document.visibilityState === 'hidden'`), '夹具页转入后台')
+    const started = Date.now()
+    await evaluate(
+      `(()=>{const input=document.querySelector('.search-bar input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'用户消息');input.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+    )
+    await until(
+      () => evaluate(`document.querySelector('.search-count')?.textContent === '500 / 500'`),
+      '后台页完成搜索',
+    )
+    const hiddenMs = Date.now() - started
+    await cdp.call('Target.closeTarget', { targetId: background.targetId })
+    await cdp.call('Page.bringToFront')
+    await until(() => evaluate(`document.visibilityState === 'visible'`), '夹具页回到前台')
+    await until(
+      () => evaluate(`!!CSS.highlights.get('litch-find-current')?.size`),
+      '回到前台后显示高亮',
+    )
+    report.checks.push({ name: '后台页一万条目搜索仍完成，回到前台显示高亮', hiddenMs })
+  } finally {
+    await cdp.call('Target.closeTarget', { targetId: background.targetId }).catch(() => {})
+  }
 }

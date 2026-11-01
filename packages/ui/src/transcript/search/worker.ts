@@ -1,4 +1,4 @@
-import { ConversationSearch, type SearchWorkerInput } from '@litch/core'
+import { ConversationSearch, type SearchWorkerInput, type SearchWorkerOutput } from '@litch/core'
 import { markdownSearchText } from './markdown.ts'
 
 const create = () =>
@@ -12,3 +12,5 @@ self.addEventListener('message', (event: MessageEvent<SearchWorkerInput>) => {
   else if (message.type === 'update') index.update(message.sources, message.removed)
   else self.postMessage(index.query(message.query, message.revision, message.order, message.anchor))
 })
+// 模块（含依赖）加载、求值完才走到这里；主线程等不到它就当作加载失败
+self.postMessage({ type: 'ready' } satisfies SearchWorkerOutput)
