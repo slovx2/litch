@@ -83,7 +83,13 @@ test('达成那一句：排在达成它的回合最后一条回答下面、收�
     ],
     items: {
       a1: { id: 'a1', kind: 'agentMessage', text: '第一轮', phase: 'final', status: 'completed' },
-      a2: { id: 'a2', kind: 'agentMessage', text: '先看看', phase: 'final', status: 'completed' },
+      a2: {
+        id: 'a2',
+        kind: 'agentMessage',
+        text: '先看看',
+        phase: 'commentary',
+        status: 'completed',
+      },
       c: {
         id: 'c',
         kind: 'command',
@@ -103,12 +109,32 @@ test('达成那一句：排在达成它的回合最后一条回答下面、收�
   const rows = new RowBuilder().build(view, 'all')
   assert.deepEqual(
     rows.map((row) => row.type),
-    // 第二轮里先说的那句是过程里的说明，回合结束跟着过程收成一行（照桌面端）
+    // commentary 是过程说明，回合结束跟着工具过程收起；不能用 final 冒充说明。
     ['md', 'status', 'origin', 'process', 'md', 'goalReached', 'status'],
   )
   const line = rows.find((row) => row.type === 'goalReached')
   assert.equal(line.turnId, 't2')
   assert.equal(line.ms, 125_000)
+  assert.deepEqual(
+    rows.filter((row) => row.type === 'md').map((row) => row.itemId),
+    ['a1', 'a3'],
+  )
+
+  // 同回合明确标为 final 的结论都应保留；达成提示仍只跟在最后一条回答后面。
+  // 这也覆盖后来补充一条短答时，不能把先前的正式结论降为折叠说明的规则。
+  view.items.a2.phase = 'final'
+  const finals = new RowBuilder().build(view, 'all')
+  assert.deepEqual(
+    finals.map((row) => row.type),
+    ['md', 'status', 'origin', 'md', 'process', 'md', 'goalReached', 'status'],
+  )
+  assert.deepEqual(
+    finals.filter((row) => row.type === 'md').map((row) => row.itemId),
+    ['a1', 'a2', 'a3'],
+  )
+  const reached = finals.findIndex((row) => row.type === 'goalReached')
+  assert.equal(finals[reached - 1].itemId, 'a3')
+  assert.equal(finals.filter((row) => row.type === 'goalReached').length, 1)
   view.turns[1].status = 'running'
   assert.ok(!new RowBuilder().build(view, 'all').some((row) => row.type === 'goalReached'))
 })
