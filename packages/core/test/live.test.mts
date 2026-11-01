@@ -1354,6 +1354,39 @@ test('立即发送：消息号每次运行都不一样（入口按消息号永�
   })
 })
 
+test('立即发送：回合刚发出、对面还没回 turn/start 时说的话，等回合有了对面的标识再插进去，不进托盘、不另起回合', async () => {
+  const { core, handlers, command, sent } = setup()
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  // 慢机器：turn/start 的应答迟迟不到，界面上已经是一个进行中的本地回合
+  const start = handlers['turn/start'] as Handler
+  let release = () => {}
+  handlers['turn/start'] = (params) =>
+    new Promise((done) => {
+      release = () => done(start(params))
+    })
+  const first = command('session.send', { ...where, text: '一' })
+  await settle()
+  assert.equal(session.seen.view?.turns.at(-1)?.status, 'running')
+  const second = command('session.send', { ...where, text: '二', now: true })
+  await settle()
+  assert.deepEqual(session.seen.view?.queued ?? [], [], '等对面标识的时候不进托盘')
+  release()
+  await first
+  await second
+  await settle()
+  const steer = sent('turn/steer') as { expectedTurnId: string; input: { text: string }[] }[]
+  assert.equal(steer.length, 1)
+  assert.equal(steer[0]?.expectedTurnId, 'srv-1')
+  assert.equal(steer[0]?.input[0]?.text, '二')
+  assert.equal(sent('turn/start').length, 1, '没有另起回合')
+  assert.deepEqual(session.seen.view?.queued ?? [], [])
+  assert.deepEqual(session.texts(), [['一', '二']])
+  assert.equal(session.seen.view?.note ?? null, null)
+})
+
 test('历史回合残留 running：新回合完成后读取权威历史，不再向旧回合插话', async () => {
   const { core, world, peer, command, sent } = setup([
     thread({ id: 'a', turns: [started('ghost')] }),

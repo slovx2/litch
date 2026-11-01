@@ -11,6 +11,8 @@ export interface SendModeProbe {
   steerHint: string
   steerButton: string
   steered: boolean
+  /** 没插进去时看的：在跑的回合、按下时还在不在跑、进没进过托盘、这句话在哪些回合里、按下前后各回合 */
+  steerDetail: string
   /** 排队：提示、按钮；发出去进了托盘；托盘里点“现在就说”插进同一个回合 */
   queueHint: string
   queueButton: string
@@ -58,8 +60,28 @@ export async function sendModeProbe(real: boolean): Promise<SendModeProbe | null
     input.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
     )
-  const said = (words: string) => all('.umsg-text').some((entry) => text(entry).includes(words))
-  const inLastTurn = (words: string) => text(all('.turn').at(-1)).includes(words)
+  // 认准正在跑的那个回合本身，不数对话里画了几个回合：长对话打开后旧回合是分批补画的（turn-window.ts），
+  // 慢机器上回合开始之后数目还会涨，数目对不上不等于另起了回合
+  const turnOf = (entry: HTMLElement | undefined) => entry?.dataset.searchTurn ?? ''
+  const runningTurn = async () =>
+    turnOf(await until('回合开始', () => all('.turn').find((entry) => one('.running-line', entry))))
+  /** 说的话出现在哪些回合里 */
+  const holders = (words: string) =>
+    all('.turn')
+      .filter((entry) => all('.umsg-text', entry).some((m) => text(m).includes(words)))
+      .map(turnOf)
+  /** 插进去了：除了发之前就有这句话的回合（had），这句话只出现在那个回合里，那个回合后面没有新回合 */
+  const landedIn = (words: string, turn: string, had: string[]) => {
+    const found = holders(words).filter((id) => !had.includes(id))
+    return found.length === 1 && found[0] === turn && turnOf(all('.turn').at(-1)) === turn
+  }
+  /** 没插进去时看的：各回合的标识、用户消息、是否在跑 */
+  const turnsNow = () =>
+    all('.turn').map((entry) => ({
+      id: turnOf(entry),
+      users: all('.umsg-text', entry).map(text),
+      running: Boolean(one('.running-line', entry)),
+    }))
 
   const title = '发版前的检查清单'
   const open = async () => {
@@ -90,28 +112,38 @@ export async function sendModeProbe(real: boolean): Promise<SendModeProbe | null
   const choices = await pick('now')
   await idle()
   enter(await write('跑一会儿：先开个头'))
-  await until('回合开始', running)
-  const turns = all('.turn').length
+  const target = await runningTurn()
   const steerInput = await write('直接插进去的话')
   const steerHint = steerInput.placeholder
   const steerButton = one('.dock .send')?.getAttribute('title') ?? ''
+  const beforeSteer = turnsNow()
+  const hadSteer = holders('直接插进去的话')
+  const runningAtEnter = running()
   enter(steerInput)
   let trayed = false
   await until('插进去的话出现在对话里', () => {
     trayed ||= Boolean(one('.tray-row'))
-    return said('直接插进去的话')
+    return holders('直接插进去的话').some((id) => !hadSteer.includes(id))
   })
   await frame()
   trayed ||= Boolean(one('.tray-row'))
-  const steered = !trayed && all('.turn').length === turns && inLastTurn('直接插进去的话')
+  const steered = !trayed && landedIn('直接插进去的话', target, hadSteer)
+  const steerDetail = JSON.stringify({
+    target,
+    runningAtEnter,
+    trayed,
+    holders: holders('直接插进去的话'),
+    before: beforeSteer,
+    after: turnsNow(),
+  })
   await idle()
 
   // ---- 二、排队：进托盘，点“现在就说”照样插进去 ----
   await pick('queue')
   await idle()
   enter(await write('跑一会儿：再开个头'))
-  await until('回合开始', running)
-  const before = all('.turn').length
+  const queueTurn = await runningTurn()
+  const hadQueue = holders('排着的话')
   const queueInput = await write('排着的话')
   const queueHint = queueInput.placeholder
   const queueButton = one('.dock .send')?.getAttribute('title') ?? ''
@@ -124,7 +156,7 @@ export async function sendModeProbe(real: boolean): Promise<SendModeProbe | null
   const manualSteered = Boolean(
     await until(
       '点“立即插入”之后插进同一个回合',
-      () => !one('.tray-row') && said('排着的话') && all('.turn').length === before,
+      () => !one('.tray-row') && landedIn('排着的话', queueTurn, hadQueue),
       10_000,
     ).catch(() => null),
   )
@@ -140,6 +172,7 @@ export async function sendModeProbe(real: boolean): Promise<SendModeProbe | null
     steerHint,
     steerButton,
     steered,
+    steerDetail,
     queueHint,
     queueButton,
     queued,
@@ -162,7 +195,7 @@ export function judgeSendMode(probe: SendModeProbe | null): string[] {
   check(probe.steerButton === '发送', `立即发送时按钮上写的是“${probe.steerButton}”`)
   check(
     probe.steered,
-    '立即发送：回合进行中发的消息没有直接插进同一个回合（进了托盘或者另起了回合）',
+    `立即发送：回合进行中发的消息没有直接插进同一个回合（进了托盘或者另起了回合）：${probe.steerDetail}`,
   )
   check(probe.queueHint.includes('排队'), `排队时的提示不对：“${probe.queueHint}”`)
   check(probe.queueButton === '排队', `排队时按钮上写的是“${probe.queueButton}”`)
