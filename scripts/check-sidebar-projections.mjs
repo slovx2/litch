@@ -84,8 +84,12 @@ try {
       `${work}/profile`,
     ),
   )
-  const tabs = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
-  cdp = await Cdp.connect(tabs.find((t) => t.type === 'page').webSocketDebuggerUrl)
+  // 调试端口先就绪，初始页面可能还没建好。
+  const page = await until(async () => {
+    const tabs = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
+    return tabs.find((tab) => tab.type === 'page')?.webSocketDebuggerUrl
+  }, '浏览器页面')
+  cdp = await Cdp.connect(page)
   await cdp.call('Runtime.enable')
   await cdp.call('Page.enable')
   // 隔离的无头页面模拟前台窗口，不激活用户的浏览器。

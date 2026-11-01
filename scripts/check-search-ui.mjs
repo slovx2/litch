@@ -86,9 +86,18 @@ try {
       `${work}/profile`,
     ),
   )
-  const tabs = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
-  cdp = await Cdp.connect(tabs.find((t) => t.type === 'page').webSocketDebuggerUrl)
+  // 调试端口先就绪，初始页面可能还没建好；不能把端口文件当成页面就绪信号。
+  const page = await until(async () => {
+    const tabs = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
+    return tabs.find((tab) => tab.type === 'page')?.webSocketDebuggerUrl
+  }, '浏览器页面')
+  cdp = await Cdp.connect(page)
   await cdp.call('Runtime.enable')
+  // 用英文浏览器复查 CI 的语言差异，避免本机中文环境掩盖夹具漏设语言。
+  await cdp.call('Emulation.setUserAgentOverride', {
+    userAgent: (await cdp.call('Browser.getVersion')).userAgent,
+    acceptLanguage: 'en-US,en',
+  })
   const errors = []
   cdp.listeners.add((message) => {
     if (message.method === 'Runtime.exceptionThrown')
@@ -108,8 +117,12 @@ try {
       throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text)
     return r.result.value
   }
-  await cdp.call('Page.navigate', { url: `${base}/test/search-fixture.html` })
+  // 后续文案与按钮断言使用中文，必须与浏览器的默认语言解耦。
+  await cdp.call('Page.navigate', { url: `${base}/test/search-fixture.html?lang=zh-CN` })
   await until(() => evaluate(`!!document.querySelector('.search-entry')`), '对话入口')
+  assert.equal(await evaluate('navigator.language'), 'en-US')
+  assert.equal(await evaluate('window.__litchLook.get().lang'), 'zh-CN')
+  report.checks.push({ name: '英文浏览器下夹具固定中文' })
   await evaluate(`document.querySelector('.search-entry').click()`)
   await until(() => evaluate(`!!document.querySelector('.search-bar input')`), '搜索框')
   const before = await evaluate(
@@ -244,12 +257,17 @@ try {
   report.error = String(error)
   if (cdp) {
     report.debug = await cdp.call('Runtime.evaluate', {
-      expression: `(()=>{const s=document.querySelector('.tr-scroll');const r=[...(CSS.highlights.get('litch-find-current')??[])][0];return {scroll:s?{top:s.scrollTop,height:s.clientHeight,total:s.scrollHeight}:null,rect:r?.getBoundingClientRect().toJSON(),body:document.body.getBoundingClientRect().toJSON(),html:document.querySelector('.search-bar')?.textContent}})()`,
+      expression: `(()=>{const s=document.querySelector('.tr-scroll');const r=[...(CSS.highlights.get('litch-find-current')??[])][0];return {language:document.documentElement.lang,browserLanguage:navigator.language,query:document.querySelector('.search-bar input')?.value,scroll:s?{top:s.scrollTop,height:s.clientHeight,total:s.scrollHeight}:null,rect:r?.getBoundingClientRect().toJSON(),body:document.body.getBoundingClientRect().toJSON(),html:document.querySelector('.search-bar')?.textContent}})()`,
       returnByValue: true,
     })
     const shot = await cdp.call('Page.captureScreenshot', { format: 'png' })
     writeFileSync(join(output, 'failure.png'), Buffer.from(shot.data, 'base64'))
   }
+  // CI 不一定上传报告文件，失败日志也要保留实际语言、查询和界面状态。
+  console.error(
+    'LITCH_SEARCH_FAILURE',
+    JSON.stringify({ error: report.error, debug: report.debug }),
+  )
   throw error
 } finally {
   writeFileSync(join(output, 'report.json'), JSON.stringify(report, null, 2))
