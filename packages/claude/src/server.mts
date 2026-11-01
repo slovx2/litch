@@ -226,6 +226,7 @@ import { threadQueueRequest } from './thread-queue.mjs'
 import { ThreadSubscribers } from './thread-subscribers.mjs'
 import { threadTimelineList } from './thread-timeline.mjs'
 import { readImageView, toolUseItem, withPeerTarget } from './tool-items.mjs'
+import { claudeBackendMode } from './tui-config.mjs'
 import { parseTurnSettings } from './turn-settings.mjs'
 import type {
   ClaudeRuntime,
@@ -1215,7 +1216,9 @@ export class CodexClaudeAppServer {
         return {
           data: [
             { name: '直接执行', mode: 'default', model: null, reasoning_effort: null },
-            { name: '先做计划', mode: 'plan', model: null, reasoning_effort: null },
+            ...(claudeBackendMode() === 'tui'
+              ? []
+              : [{ name: '先做计划', mode: 'plan', model: null, reasoning_effort: null }]),
           ],
         }
       case 'mock/experimentalMethod':
@@ -4166,6 +4169,7 @@ export class CodexClaudeAppServer {
     // 下面取 diff 基线要起 git，会等；等的时候会话换了权限档的话，晚读的沙箱策略已经是新的一档，
     // 和开始时的权限模式凑不到一起：工作区档配上没有可写目录的完全访问策略，回合里写文件全被当成越界。
     this.saveRuntimeSettings(thread.id, params)
+    const claudeBackend = claudeBackendMode()
     const turnSettings = this.store.threadSettings(thread.id)
     // 回合开始前的工作区即 diff 基线，既有未提交改动与此前回合的结果都不属于本回合。
     const diffBase = await gitWorktreeTree(thread.cwd)
@@ -4723,6 +4727,7 @@ export class CodexClaudeAppServer {
         threadId: thread.id,
         turnId: turn.id,
         purpose: turnPurpose,
+        claudeBackend,
         goalTools: turnPurpose === 'normal',
         permissionTools: turnPurpose === 'normal',
         permissionGrants: copyPermissionOverlay(this.permissionSessionGrants.get(thread.id)),

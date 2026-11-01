@@ -214,3 +214,33 @@ func TestClaudeIdleSetting(t *testing.T) {
 	}
 	cfg.userEnv = nil
 }
+
+func TestClaudeBackendSwitchNeedsNoRestart(t *testing.T) {
+	cfg := settingsTestConfiguration(t)
+	schema := buildSettingsSchema(cfg)
+	spec, ok := schema.spec(claudeBackendKey)
+	if !ok || spec.Default != "sdk" || spec.Restart != restartNone || len(spec.Options) != 2 {
+		t.Fatalf("后端设置应默认 SDK、无需重启：%+v", spec)
+	}
+	before := cfg.runtimeFingerprint(claudeHarness, true)
+	if _, problem, err := cfg.settings.apply(0, []settingEdit{edit(claudeBackendKey, "tui")}, schema, cfg.validateSettings); err != nil || problem != nil {
+		t.Fatalf("不能切换 TUI：%v %+v", err, problem)
+	}
+	if cfg.runtimeFingerprint(claudeHarness, true) != before {
+		t.Fatal("后端切换不能重启活动运行时")
+	}
+	env := cfg.forHarness(claudeHarness).baseEnvironment()
+	expected := claudeBackendSettingsVariable + "=" + settingsPath(cfg.home)
+	found := false
+	for _, entry := range env {
+		if entry == expected {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("没有将权威设置路径交给引擎：%s", expected)
+	}
+	if _, problem, _ := cfg.settings.apply(1, []settingEdit{edit(claudeBackendKey, "auto")}, schema, cfg.validateSettings); problem == nil {
+		t.Fatal("不能允许隐式自动回落后端")
+	}
+}

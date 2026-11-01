@@ -10,6 +10,7 @@ import type {
 import { HARNESS_IDENTITY } from '../../protocol/src/harness-identity.mjs'
 import { builtinPreset, PRESET } from '../../shared/src/harness-declaration.mjs'
 import type { RuntimeBackendType } from './runtime-config.mjs'
+import { claudeBackendMode } from './tui-config.mjs'
 
 const features: HarnessFeatures = {
   steer: true,
@@ -122,12 +123,27 @@ export function harnessDeclaration(runtime: RuntimeBackendType): HarnessDeclarat
       EXTENSION.filePreview,
       EXTENSION.inputDelivery,
       EXTENSION.declineWithNote,
-      EXTENSION.planConfirmation,
+      ...(claudeBackendMode() === 'tui' ? [] : [EXTENSION.planConfirmation]),
       EXTENSION.clientTools,
       EXTENSION.harnessConfig,
       EXTENSION.backgroundTasks,
     ],
-    features,
+    features:
+      claudeBackendMode() === 'tui'
+        ? {
+            ...features,
+            steer: false,
+            steerInputTypes: [],
+            compact: false,
+            fork: false,
+            revert: { byTurnId: false, byCount: false, restoresFiles: false, byItemId: false },
+            backgroundTasks: false,
+            stopAgent: false,
+            stopBackground: false,
+            goals: false,
+            ephemeralFork: false,
+          }
+        : features,
     permissionPresets,
   }
 }

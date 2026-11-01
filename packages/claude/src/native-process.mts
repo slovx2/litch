@@ -32,6 +32,14 @@ export function ownCliPids(): ReadonlySet<number> {
   return new Set(ownProcesses.keys())
 }
 
+/** TUI 的 exec hook 直接由 CLI 派生，用其父 PID 登记实际 CLI，关闭桥时撤销。 */
+export function registerTuiCli(pid: number, threadId: string): () => void {
+  ownProcesses.set(pid, threadId)
+  return () => {
+    if (ownProcesses.get(pid) === threadId) ownProcesses.delete(pid)
+  }
+}
+
 /** 入口此刻有没有为这个会话开着 CLI */
 export function ownCliAlive(threadId: string): boolean {
   for (const owner of ownProcesses.values()) if (owner === threadId) return true

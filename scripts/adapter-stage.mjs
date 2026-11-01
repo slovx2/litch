@@ -273,11 +273,23 @@ function stagePackage(spec, out, guardTarget, from = join(repo, 'packages', spec
     if (parts[1] === 'test') return false
     return !(
       parts[1] === 'src' &&
-      parts[2] === 'process-guard' &&
+      (parts[2] === 'process-guard' || parts[2] === 'tui-helper') &&
       parts[3] &&
-      parts[3] !== guardTarget
+      parts[3] !== guardTarget &&
+      parts[3] !== 'licenses'
     )
   })
+  if (spec.name === 'claude') {
+    const helper = join(to, 'dist/claude/src/tui-helper')
+    for (const file of [
+      `${guardTarget}/claude-tui-helper${guardTarget.startsWith('windows-') ? '.exe' : ''}`,
+      'licenses/github.com/yetone/magpie/LICENSE',
+      'licenses/github.com/yetone/magpie/THIRD_PARTY_NOTICES',
+      'licenses/UPSTREAM.json',
+    ])
+      if (!existsSync(join(helper, file)))
+        throw new Error(`暂存缺少 TUI helper 或许可材料：${file}`)
+  }
   // .npmrc 里有裁剪依赖时要用的设置（Pi 的插件把 Pi 本体声明成了对等依赖）
   for (const file of ['package.json', 'package-lock.json', '.npmrc']) {
     if (existsSync(join(from, file))) cpSync(join(from, file), join(to, file))

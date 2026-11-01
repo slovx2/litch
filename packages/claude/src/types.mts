@@ -276,6 +276,8 @@ export interface FileUpdateChange {
 }
 
 export interface RuntimeTurnContext {
+  /** 当前回合选定的 Claude 后端；设备设置变化不改变活动回合。 */
+  claudeBackend?: 'sdk' | 'tui'
   // 子代理追问回合：主会话只负责用 SendMessage 把用户原文转给该子代理。
   subagentRelay?: { agentId: string; message: string }
   // CLI 会话所属的线程；追问回合跑在父线程的会话上。缺省即 threadId。

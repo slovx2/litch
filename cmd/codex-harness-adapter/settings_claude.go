@@ -182,3 +182,18 @@ func claudeIdleSetting(c configuration, group string) settingSpec {
 		),
 	}
 }
+
+const claudeBackendKey = "harness.claude-code.backend"
+const claudeBackendSettingsVariable = "CHA_CLAUDE_BACKEND_SETTINGS"
+
+func claudeBackendSetting(group string) settingSpec {
+	return settingSpec{
+		Key: claudeBackendKey, Group: group, Type: settingEnum, Scope: harnessScope(claudeHarness), Restart: restartNone,
+		Default: "sdk", Title: both("驱动后端", "Backend"),
+		Options: []settingOption{{Value: "sdk", Title: both("SDK", "SDK")}, {Value: "tui", Title: both("TUI", "TUI")}},
+		Description: both(
+			"下一回合生效，已有会话沿用原生历史。TUI 需要 Claude Code 2.1.316 或更新版本；版本不足时，请在本页的安装与更新中选择“更新到最新”。TUI 暂不支持计划模式、子代理、后台任务、PowerShell 工具、插话、分叉、手动压缩和持续目标；切换前请先结束这些任务。",
+			"Applies from the next turn, preserving existing session history. TUI requires Claude Code 2.1.316 or later; use Update to latest in installation settings. TUI does not yet support plan mode, subagents, background tasks, PowerShell tools, steering, forks, manual compaction or goals. Finish active tasks before switching.",
+		),
+	}
+}

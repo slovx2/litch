@@ -134,6 +134,8 @@ import {
   runtimePermissionOptions,
   sandboxedBashInput,
 } from './runtime-permissions.mjs'
+import { claudeBackendMode } from './tui-config.mjs'
+import { TuiQuery } from './tui-query.mjs'
 import type { RuntimeTurnSettings } from './turn-settings.mjs'
 import type {
   ClaudeRuntime,
@@ -166,6 +168,7 @@ import {
   type WorkflowLaunchInfo,
 } from './workflow-subagents.mjs'
 
+type SessionQuery = Query | TuiQuery
 type ClaudeSdk = typeof import('@anthropic-ai/claude-agent-sdk')
 
 // background_tasks_changed 先于 task_started 到达，列出时再关联工具调用与命令。
@@ -219,7 +222,7 @@ interface NativeSession {
   // 当前回合的上下文；没有回合时是最近一个回合的。
   context: RuntimeTurnContext
   turn: PendingTurn | null
-  query: Query
+  query: SessionQuery
   input: NativeTurnInput
   abort: AbortController
   mcp: NativeMcpBridge
@@ -268,7 +271,7 @@ interface PendingTurn {
   session: NativeSession
   context: RuntimeTurnContext
   handlers: RuntimeHandlers
-  query: Query
+  query: SessionQuery
   abort: AbortController
   input: NativeTurnInput
   resolved: boolean
@@ -459,6 +462,45 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   async runTurn(context: RuntimeTurnContext, handlers: RuntimeHandlers): Promise<void> {
     const key = context.sessionThreadId ?? context.threadId
     const existing = this.sessions.get(key)
+    // 原进程的后台续跑仍归原后端；显式新回合才用设置快照，不能让切换吞掉完成通知或审批。
+    context = {
+      ...context,
+      claudeBackend:
+        context.spontaneous && existing
+          ? (existing.context.claudeBackend ?? 'sdk')
+          : (context.claudeBackend ?? claudeBackendMode()),
+    }
+    if (context.claudeBackend === 'tui' && context.planMode)
+      throw new ProtocolError(
+        -32004,
+        'TUI 后端暂不支持计划模式；请选择直接执行，或在设备设置切回 SDK 后重试',
+      )
+    if (
+      context.claudeBackend === 'tui' &&
+      (context.purpose === 'compact' ||
+        context.forkSession ||
+        context.subagentRelay ||
+        context.wake ||
+        context.spontaneous ||
+        context.trackGoalTools)
+    )
+      throw new ProtocolError(
+        -32004,
+        'TUI 后端暂不支持压缩、分叉、子代理、会话唤醒或持续目标；请在设备设置切回 SDK 后重试',
+      )
+    if (context.claudeBackend === 'tui') context = { ...context, goalTools: false }
+    if (
+      existing &&
+      existing.context.claudeBackend !== context.claudeBackend &&
+      (existing.turn ||
+        existing.attach ||
+        hasBackgroundWork(existing) ||
+        existing.backgroundTasks.size > 0)
+    )
+      throw new ProtocolError(
+        -32009,
+        'Claude 后端已切换；请先切回 SDK 结束原后端的回合、挂起审批和后台任务，再发送下一条消息',
+      )
     if (context.spontaneous) {
       // 为别的会话发来的消息唤醒：没有进程就起一个（不送用户消息），等收件箱里的消息开这一轮
       if (context.wake && (!existing || existing.closing)) {
@@ -518,6 +560,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
 
   // 新回合能否直接用现有进程；不能时返回要告诉用户的原因。
   private incompatibility(session: NativeSession, context: RuntimeTurnContext): string | null {
+    if (session.context.claudeBackend !== context.claudeBackend) return 'Claude 驱动后端已改变'
     // 压缩只是往会话里送一条命令，不依赖启动配置。
     if (context.purpose === 'compact') return null
     if (context.forkSession || (context.claudeSessionId ?? null) !== session.sessionId)
@@ -852,9 +895,10 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         },
       })
       const liveHandlers = this.liveHandlers(current)
-      const inboxSocket = claudeCrossSessionInbox()
-        ? await claimPeerInboxSocket(key, process.env)
-        : null
+      const inboxSocket =
+        context.claudeBackend !== 'tui' && claudeCrossSessionInbox()
+          ? await claimPeerInboxSocket(key, process.env)
+          : null
       const options = this.buildOptions(sdk, live, abort, current, key, inboxSocket, launch)
       options.spawnClaudeCodeProcess = nativeProcess.spawn.bind(nativeProcess)
       options.mcpServers = await mcp.connect(
@@ -872,7 +916,10 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           deniedMcpServers: denied,
         }
       this.addInternalServers(options, live, liveHandlers, abort)
-      const query = sdk.query({ prompt: input, options })
+      const query =
+        context.claudeBackend === 'tui'
+          ? new TuiQuery(input, options)
+          : sdk.query({ prompt: input, options })
       session = {
         key,
         fingerprint: sessionFingerprint(context),
@@ -1204,6 +1251,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     const pending = starting ? await starting.ready : (this.sessionFor(threadId)?.turn ?? null)
     if (!pending || pending.resolved || pending.context.threadId !== threadId)
       throw new ProtocolError(-32009, '原生回合未启动或已结束')
+    if (pending.context.claudeBackend === 'tui')
+      throw new ProtocolError(-32004, 'TUI 后端暂不支持运行中插话，请等本回合结束')
     const uuid = messageId ?? randomUUID()
     pending.input.send(steerMessage(workflowRuntimePrompt(prompt), uuid, images))
     pending.pendingInputs.add(uuid)
@@ -1213,6 +1262,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   }
 
   async appendContext(context: ContextInjection): Promise<{ boundary: string }> {
+    if (claudeBackendMode() === 'tui')
+      throw new ProtocolError(-32004, 'TUI 后端暂不支持追加上下文，请切回 SDK')
     const session = this.sessions.get(context.threadId)
     if (session && !session.closing) return this.appendToSession(session, context)
     if (this.processes.has(context.threadId))
@@ -1293,6 +1344,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     cwd: string,
     upToMessageId?: string,
   ): Promise<NativeSessionFork> {
+    if (claudeBackendMode() === 'tui')
+      throw new ProtocolError(-32004, 'TUI 后端暂不支持分叉，请切回 SDK')
     const sdk = await this.loadSdk()
     return forkNativeSession(sdk, sessionId, cwd, upToMessageId)
   }
@@ -1620,7 +1673,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       },
       context.sessionThreadId ?? context.threadId,
     )
-    const inbox = claudeCrossSessionInbox()
+    const inbox = context.claudeBackend !== 'tui' && claudeCrossSessionInbox()
     const opts: Record<string, unknown> = {
       abortController: abort,
       pathToClaudeCodeExecutable: hostClaudeExecutable(),
@@ -1758,7 +1811,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     })
 
     // 发给本机没在跑的 Litch 会话：先把对方拉起来（wakePeer）。追问回合的 SendMessage 发给子代理，不走这里
-    if (claudeCrossSessionInbox())
+    if (inbox)
       permissionHooks.PreToolUse.push({
         hooks: [
           async (event: Record<string, unknown>) => {
@@ -3360,7 +3413,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   // 其他文字表示本该留下却留不了，要告诉用户后台命令为什么停了。
   // 没有后台命令时只有开了空闲保留才留，满额时先回收闲得最久的空闲会话，回收不出位置就不留。
   private keepAlive(session: NativeSession, handoff = false): string | null {
-    if (session.closing || session.process.hasExited) return ''
+    if (session.closing || session.process.hasExited || session.context.claudeBackend === 'tui')
+      return ''
     const shells = hasBackgroundWork(session)
     // 临时会话没人会接着聊、也不该被别的会话找到：只为后台命令留
     // 压缩刚交还回合时，后台任务的通知可能已经排队。即使关了空闲保留，
@@ -3651,7 +3705,10 @@ function workflowAgentToolUseId(taskId: string, agentId: string): string {
  * CLI 自己 /context 量占用用的窗口（解析后的自动压缩窗口）。summary 档只用上次请求的用量和本地估算，
  * 不调计数接口；CLI 不答（会话已经收了）或答得慢就算了，退回模型窗口
  */
-async function compactWindow(query: Query, modelWindow: number | null): Promise<number | null> {
+async function compactWindow(
+  query: SessionQuery,
+  modelWindow: number | null,
+): Promise<number | null> {
   try {
     const usage = await Promise.race([
       query.getContextUsage({ detail: 'summary' }),

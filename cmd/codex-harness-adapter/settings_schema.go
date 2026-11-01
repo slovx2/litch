@@ -346,7 +346,7 @@ func buildSettingsSchema(c configuration) settingsSchema {
 			schema.Settings = append(schema.Settings, backgroundShellSetting(c, id, group))
 		}
 		if id == claudeHarness {
-			schema.Settings = append(schema.Settings, claudeCacheTTLSetting(c, group), claudeInboxSetting(c, group), claudeIdleSetting(c, group))
+			schema.Settings = append(schema.Settings, claudeBackendSetting(group), claudeCacheTTLSetting(c, group), claudeInboxSetting(c, group), claudeIdleSetting(c, group))
 		}
 	}
 	description := both(

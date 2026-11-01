@@ -407,6 +407,9 @@ func (c configuration) baseEnvironment() []string {
 		"CODEX_HOME":              filepath.Join(c.directory(), "codex"),
 		"CHA_CLAUDE_IDLE_EXIT_MS": "0",
 	}
+	if c.harness == claudeHarness {
+		values[claudeBackendSettingsVariable] = settingsPath(c.home)
+	}
 	// 每个引擎的状态目录变量都给成这个入口的目录，不让外面的同名变量漏进来。
 	for _, spec := range harnessTable {
 		if spec.homeVariable != "" {

@@ -67,6 +67,21 @@ for target in $GUARD_TARGETS; do
   GOOS="${target%-*}" GOARCH="${target#*-}" CGO_ENABLED=0 \
     go build -trimpath -buildvcs=false -ldflags='-s -w' -o "$out" ./cmd/claude-process-guard
   chmod 0755 "$out"
+  (cd cmd/claude-tui-helper && GOOS="${target%-*}" GOARCH="${target#*-}" CGO_ENABLED=0 \
+    go build -trimpath -buildvcs=false -ldflags='-s -w' -o "/work/tui/$target/claude-tui-helper" .)
+done
+mkdir -p /work/tui/licenses/github.com/yetone/magpie
+cp third_party/magpie/LICENSE third_party/magpie/THIRD_PARTY_NOTICES /work/tui/licenses/github.com/yetone/magpie/
+cp third_party/magpie/UPSTREAM.json /work/tui/licenses/
+cp "$(go env GOROOT)/LICENSE" /work/tui/licenses/GO-LICENSE
+(cd cmd/claude-tui-helper && CGO_ENABLED=0 go list -deps -f '{{if .Module}}{{.Module.Path}}|{{.Module.Dir}}{{end}}' .) | sort -u | while IFS='|' read -r module directory; do
+  [ -n "$module" ] || continue
+  [ "$module" != github.com/yetone/magpie/litch ] || continue
+  mkdir -p "/work/tui/licenses/$module"
+  for file in "$directory"/LICENSE* "$directory"/NOTICE* "$directory"/THIRD_PARTY_NOTICES* "$directory"/COPYING*; do
+    [ -f "$file" ] && cp "$file" "/work/tui/licenses/$module/"
+  done
+  true
 done
 SH
 cat > "$work/build.sh" <<'SH'
@@ -81,6 +96,9 @@ package=/build/src/packages/claude
 (cd "$package" && npx --no-install tsc -p tsconfig.json)
 mkdir -p "$package/dist/claude/src/process-guard"
 cp -R /work/guard/. "$package/dist/claude/src/process-guard/"
+mkdir -p "$package/dist/claude/src/tui-helper"
+cp -R /work/tui/. "$package/dist/claude/src/tui-helper/"
+cp /build/src/LICENSE /build/src/THIRD_PARTY_NOTICES.md /build/stage/
 cp "$package/package.json" "$package/package-lock.json" /build/stage/
 for part in claude shared protocol; do
   mkdir -p "/build/stage/dist/$part"

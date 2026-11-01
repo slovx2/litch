@@ -51,6 +51,10 @@ jobs:
         run: |
           npm install --prefix .artifacts/context-cli --save-exact "@anthropic-ai/claude-code@$(node -p 'require("./protocol/versions.json").claudeContextCli')" --no-audit --no-fund
           CHA_CLAUDE_CLI="${GITHUB_WORKSPACE}/.artifacts/context-cli/node_modules/.bin/claude" node --import ./packages/claude/dist/claude/test/fixtures/isolate-process.mjs --test --test-force-exit packages/claude/dist/claude/test/context-window-cli/*.mjs
+      - name: Claude TUI 后端（隔离新版 CLI 和回环假模型）
+        run: |
+          npm install --prefix .artifacts/tui-cli --save-exact @anthropic-ai/claude-code@2.1.316 --no-audit --no-fund
+          CHA_CLAUDE_CLI="${GITHUB_WORKSPACE}/.artifacts/tui-cli/node_modules/.bin/claude" npm run test:claude-tui
       # 这里只跑手机纯逻辑单测；需要手机和 UI 依赖的 Markdown 测试在下面的 mobile 作业执行
       - run: npm run mobile:test
       - run: npm run test:local-ssh

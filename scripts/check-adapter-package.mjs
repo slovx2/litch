@@ -372,6 +372,16 @@ async function cleanMachine(outDir, built) {
   assert.equal(must(name, `${CLI} version`), `${NAME} ${built.version}`)
   pass(`从本地文件安装（核对了校验和），version 报 ${built.version}`)
 
+  const tui = `${BASE}/current/libexec/packages/claude/dist/claude/src/tui-helper`
+  const helper = `${tui}/linux-${arch === 'x64' ? 'amd64' : arch}/claude-tui-helper`
+  const hookFailure = sh(name, `${helper} hook http://127.0.0.1:1/hook isolated-token </dev/null`)
+  assert.equal(hookFailure.code, 2, hookFailure.all)
+  must(
+    name,
+    `test -s ${tui}/licenses/github.com/yetone/magpie/LICENSE && test -s ${tui}/licenses/github.com/yetone/magpie/THIRD_PARTY_NOTICES && test -s ${tui}/licenses/UPSTREAM.json`,
+  )
+  pass('TUI helper 在无 Node/Go 的系统可执行，权限桥失效退出 2，完整上游许可随包')
+
   const offline = sh(name, 'sh /pkg/install.sh')
   assert.notEqual(offline.code, 0)
   assert.match(offline.err, /没有 curl，也没有 wget/)

@@ -20,7 +20,7 @@ const (
 // 适配器自己定死的环境变量：每个运行时的状态目录靠它们隔开，命令行自己的路径也在里面，不许在设置里改。
 // 各引擎的状态目录变量出自登记表（harness_table.go），和 environment() 给的是同一份。
 var fixedEnvironmentNames = func() []string {
-	names := []string{"CODEX_HOME", "CHA_CLAUDE_IDLE_EXIT_MS", adapterCLIEnvironment, acpAgentVariable}
+	names := []string{"CODEX_HOME", "CHA_CLAUDE_IDLE_EXIT_MS", adapterCLIEnvironment, acpAgentVariable, claudeBackendSettingsVariable}
 	for _, spec := range harnessTable {
 		if spec.homeVariable != "" {
 			names = append(names, spec.homeVariable)

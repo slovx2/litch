@@ -32,6 +32,12 @@ cp "$adapter_source/THIRD_PARTY_NOTICES.md" "$stage/claude-runtime/THIRD_PARTY_N
 cp -R "$adapter_source/packages/claude/dist" "$adapter_source/packages/claude/node_modules" "$stage/claude-runtime/lib/"
 cp "$adapter_source/packages/claude/package.json" "$adapter_source/packages/claude/package-lock.json" "$adapter_source/LICENSE" "$stage/claude-runtime/lib/"
 # 入口的守护进程（Go）各平台都编了一份（scripts/build-process-guard.mjs），制品只留 linux-amd64
+# TUI helper 和许可材料随包，其他平台的二进制不带。
+tui_helpers="${stage:?}/claude-runtime/lib/dist/claude/src/tui-helper"
+test -x "$tui_helpers/linux-amd64/claude-tui-helper" || { echo '缺少 linux-amd64 的 TUI helper' >&2; exit 1; }
+for target in linux-arm64 darwin-amd64 darwin-arm64 windows-amd64 windows-arm64; do
+  rm -rf "${tui_helpers:?}/$target"
+done
 guards="${stage:?}/claude-runtime/lib/dist/claude/src/process-guard"
 test -x "$guards/linux-amd64/claude-process-guard" || { echo '缺少 linux-amd64 的守护进程' >&2; exit 1; }
 for target in "$guards"/*; do

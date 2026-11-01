@@ -20,7 +20,7 @@ Adapter internals. All files are `.mts` ESM, compiled to `dist/*.mjs`. See the
 Claude backends sit behind the `ClaudeRuntime` interface and are constructed in
 `runtime-factory.mts` from `runtime-config.mts`:
 
-- `native-runtime.mts` — default, in-process Claude Agent SDK.
+- `native-runtime.mts` — 默认 SDK；设备 backend 设置在每回合开头取快照，TUI 走 `tui-query.mts`，通过 Go exec hooks 与 stdio MCP 复用宿主权限。原样 magpie 在 `third_party/magpie`，胶水在镜像之外；TUI 要求 CLI ≥2.1.316 与 onFailure:block，不可隐式回落 SDK。
 - `http-agent-runtime.mts` — `agent-http` / `agentapi` HTTP/SSE bridges.
 - `claude-p-runtime.mts` — one-shot `claude-p` transcript wrapper.
 - `codex-proxy-runtime.mts` — native Codex passthrough (`codex exec`).
