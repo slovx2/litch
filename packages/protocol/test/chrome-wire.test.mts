@@ -1,10 +1,29 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
+  CHROME_STORE_EXTENSION_ID,
+  CHROME_UNPACKED_EXTENSION_ID,
   CHROME_WIRE_MIN,
   CHROME_WIRE_VERSION,
+  chromeExtensionIds,
   negotiateChromeWire,
 } from '../src/chrome-browser.mts'
+
+test('允许的扩展 ID：开发版来自 identity.json，商店版填了才加，自定义只收合法 ID', () => {
+  const identity = JSON.parse(
+    readFileSync(new URL('../../../apps/chrome-extension/identity.json', import.meta.url), 'utf8'),
+  )
+  assert.equal(identity.id, CHROME_UNPACKED_EXTENSION_ID)
+  const ids = chromeExtensionIds()
+  assert.equal(ids[0], CHROME_UNPACKED_EXTENSION_ID)
+  assert.equal(ids.length, CHROME_STORE_EXTENSION_ID ? 2 : 1)
+  const custom = 'abcdefghijklmnopabcdefghijklmnop'
+  assert.deepEqual(
+    chromeExtensionIds([custom, 'not-an-id', CHROME_UNPACKED_EXTENSION_ID]).slice(-1),
+    [custom],
+  )
+})
 
 test('两边范围重叠时取双方都会说的最高协议号', () => {
   const own = { protocol: 3, minProtocol: 2 }

@@ -158,6 +158,9 @@ export function ChromeSection() {
               <span key={instance.id}>{` · ${instance.name} ${instance.version}`}</span>
             ))}
           </p>
+          {state?.platform ? (
+            <p className="set-note">{t(`chrome.browsers.${state.platform}`)}</p>
+          ) : null}
           {reload ? (
             <p className="set-note" data-chrome-reload>
               {t('chrome.reloadAvailable', { version: state?.bundledVersion ?? '' })}

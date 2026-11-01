@@ -255,7 +255,7 @@ is using” means wait for the user to finish, then retry; an explicit Stop mean
 for this turn. Element missing or expired: use the latest action result or get_app_state. A batch
 failure is not a reason to replay all its actions.
 
-## Chrome on the controlling Mac
+## Chrome on the controlling computer
 
 `scripts/litch chrome get` reads the control switch, connected instances and allowed remote devices.
 `scripts/litch chrome set on|off` changes the global switch; add `--device <device>` for one remote
@@ -265,9 +265,11 @@ website or sign-in approval. Extension preparation/loading stays in Settings →
 
 Chrome uses the `litch_browser` tools with an explicit Chrome target. In **Settings → Chrome**, choose **Prepare extension** first: it registers the Native Messaging host and prepares an unpacked copy of the extension. When Settings shows **Open in Chrome Web Store**, install the extension from the store; otherwise (and as the alternative for development or self-built copies) open the extensions page, enable Developer mode and load the displayed unpacked extension folder. Keep that folder in place.
 
+Platforms: macOS, Windows and Linux desktops. **Prepare extension** registers the host for Google Chrome: on macOS in `~/Library/Application Support/Google/Chrome/NativeMessagingHosts`, on Windows in the registry key `HKCU\Software\Google\Chrome\NativeMessagingHosts\ai.litch.chrome` (the Litch uninstaller removes it), on Linux in `~/.config/google-chrome/NativeMessagingHosts` and also `~/.config/chromium/NativeMessagingHosts` when Chromium is installed. Edge, Brave and other Chromium-based browsers, and Chrome Beta/Canary, are not registered. The unpacked folder is under Litch's data folder (`~/Library/Application Support/Litch/chrome/extension`, `%APPDATA%\Litch\chrome\extension`, `~/.config/Litch/chrome/extension`). Litch must be running for the extension to connect; the extension retries on its own.
+
 The extension and Litch check a wire protocol range instead of requiring the same version, so a store copy that updates on its own schedule keeps working with adjacent Litch versions. Settings shows connected instances and, when they do not fit, which side to update: **The extension is too old** (store copy: click Update on the extensions page or wait for Chrome; unpacked copy: reload it) or **requires a newer version of Litch** (update Litch). An unpacked copy that still works but is older than the folder shows a reload hint. The toolbar icon shows `!` while incompatible.
 
-Chrome control is off by default. Enable it separately and choose which remote devices may request access to this Mac. Browser feature switches for the device and harness still apply. Each source requires approval, including localhost; Chrome does not inherit the built-in browser's saved site approvals or “trust all” setting. Remote sessions operate Chrome on the controlling Mac: localhost refers to that Mac. Operating Chrome on the remote execution device is not supported in this version.
+Chrome control is off by default. Enable it separately and choose which remote devices may request access to this computer. Browser feature switches for the device and harness still apply. Each source requires approval, including localhost; Chrome does not inherit the built-in browser's saved site approvals or “trust all” setting. Remote sessions operate Chrome on the controlling computer: localhost refers to that computer. Operating Chrome on the remote execution device is not supported in this version.
 
 The agent lists targets, asks permission to list tab titles and URLs in one Chrome instance, and then explicitly claims a tab with a short-lived claim token. Instance permission and website origin approval are separate; reconnecting requires a new instance permission. User tabs are released when the turn ends and are never closed by the agent. New agent tabs are temporary unless kept. Reconnection, extension reload and ended turns invalidate leases and references; list and claim again. If a debugger cannot attach, close that tab's DevTools or other debugger and retry. Click the extension toolbar action or **Stop all Chrome control** in Litch to revoke control.
 

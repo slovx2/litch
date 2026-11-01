@@ -121,13 +121,14 @@ try {
     assets,
     nativeBinary,
     socketPath,
-    manifestDirectory: join(profile, 'NativeMessagingHosts'),
+    extensionIds: [identity.id],
+    manifestDirectories: [join(profile, 'NativeMessagingHosts')],
   })
   await installer.prepare()
   bridge = new ChromeBridge({
     socketPath,
     token: installer.token,
-    extensionId: identity.id,
+    extensionIds: [identity.id],
     version: identity.version,
   })
   await bridge.start()

@@ -10,30 +10,58 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strings"
+
+	"github.com/slovx2/litch/internal/hostplatform"
 )
 
+// 桌面端在 macOS、Linux 上监听 Unix 套接字，Windows 上是命名管道。
+func chromeSocketPathValid(path string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.HasPrefix(path, `\\.\pipe\`) && len(path) > len(`\\.\pipe\`)
+	}
+	return filepath.IsAbs(path)
+}
+
 type chromeHostConfig struct {
-	SocketPath  string `json:"socketPath"`
-	Token       string `json:"token"`
-	ExtensionID string `json:"extensionId"`
+	SocketPath   string   `json:"socketPath"`
+	Token        string   `json:"token"`
+	ExtensionIDs []string `json:"extensionIds"`
+}
+
+var chromeExtensionIDPattern = regexp.MustCompile(`^[a-p]{32}$`)
+var chromeParentWindowPattern = regexp.MustCompile(`^--parent-window=\d+$`)
+
+// Chrome 起宿主时第一个参数是调用方扩展的来源；Windows 上还会在后面带 --parent-window=<句柄>。
+func chromeHostOrigin(args []string) (string, error) {
+	if len(args) == 0 || len(args) > 2 || (len(args) == 2 && !chromeParentWindowPattern.MatchString(args[1])) {
+		return "", errors.New("invalid Chrome native host arguments")
+	}
+	return args[0], nil
 }
 
 func runChromeHost(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet("chrome-host", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	configPath := flags.String("config", "", "")
-	if err := flags.Parse(args); err != nil || len(flags.Args()) != 1 {
+	if err := flags.Parse(args); err != nil {
 		return errors.New("invalid Chrome native host arguments")
 	}
-	if runtime.GOOS != "darwin" || !filepath.IsAbs(*configPath) {
-		return errors.New("Chrome native host requires macOS and an absolute config path")
+	origin, err := chromeHostOrigin(flags.Args())
+	if err != nil {
+		return err
+	}
+	if !filepath.IsAbs(*configPath) {
+		return errors.New("Chrome native host requires an absolute config path")
 	}
 	info, err := os.Lstat(*configPath)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 8192 {
+	// Windows 的文件权限位不反映访问控制，配置放在用户自己的应用数据目录里，靠目录的权限
+	private := runtime.GOOS == "windows" || info != nil && info.Mode().Perm()&0077 == 0
+	if err != nil || !info.Mode().IsRegular() || !private || info.Size() > 8192 {
 		return errors.New("Chrome native host configuration is unavailable or not private")
 	}
 	data, err := os.ReadFile(*configPath)
@@ -41,14 +69,19 @@ func runChromeHost(ctx context.Context, args []string) error {
 		return errors.New("cannot read Chrome native host configuration")
 	}
 	var config chromeHostConfig
-	if json.Unmarshal(data, &config) != nil || len(config.Token) != 64 || !filepath.IsAbs(config.SocketPath) || len(config.ExtensionID) != 32 {
+	if json.Unmarshal(data, &config) != nil || len(config.Token) != 64 || !chromeSocketPathValid(config.SocketPath) || len(config.ExtensionIDs) == 0 {
 		return errors.New("invalid Chrome native host configuration")
 	}
-	origin := flags.Args()[0]
-	if origin != "chrome-extension://"+config.ExtensionID+"/" {
+	allowed := false
+	for _, id := range config.ExtensionIDs {
+		if chromeExtensionIDPattern.MatchString(id) && origin == "chrome-extension://"+id+"/" {
+			allowed = true
+		}
+	}
+	if !allowed {
 		return errors.New("Chrome extension origin was not authorized")
 	}
-	conn, err := net.Dial("unix", config.SocketPath)
+	conn, err := hostplatform.Dial(config.SocketPath)
 	if err != nil {
 		return errors.New("Litch Chrome bridge is not running")
 	}

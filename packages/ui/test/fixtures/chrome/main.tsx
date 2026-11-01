@@ -12,10 +12,12 @@ import '../../../src/app/appearance.ts'
 
 let state: ChromeSettingsState = {
   supported: true,
+  platform: 'darwin',
   prepared: true,
   enabled: true,
   allowedDevices: ['remote'],
   extensionId: 'fakgembkgnmeknpaegnneneockbjhaai',
+  allowedExtensionIds: ['fakgembkgnmeknpaegnneneockbjhaai'],
   bundledVersion: '0.25.0',
   extensionDirectory: '/Users/fixture/Library/Application Support/Litch/chrome/extension',
   storeUrl: null,
@@ -28,6 +30,7 @@ let state: ChromeSettingsState = {
       protocol: 1,
       incompatible: null,
       source: 'unpacked',
+      extensionId: 'fakgembkgnmeknpaegnneneockbjhaai',
     },
   ],
   lastError: null,
@@ -43,6 +46,7 @@ if (requested === 'litch-outdated') {
   state.instances[0].protocol = null
 }
 if (requested === 'reload') state.instances[0].version = '0.24.0'
+if (requested === 'windows') state.platform = 'win32'
 if (requested === 'store') {
   state.storeUrl = 'https://chromewebstore.google.com/detail/fixture'
   state.instances[0].source = 'store'

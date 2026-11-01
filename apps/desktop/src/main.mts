@@ -28,6 +28,7 @@ import { startApprovalsMain } from './approvals/main.mjs'
 import { AUTOMATION_PREVIEW, createAutomationPreviewHost } from './automation-preview/host.mjs'
 import { type InstalledBrowser, installBrowser } from './browser/install.mjs'
 import { BrowserTargets } from './chrome-browser/browser-targets.mjs'
+import { openInChrome } from './chrome-browser/open-chrome.mjs'
 import { createClientToolHost } from './client-tools/host.mjs'
 import { showMachineNotice } from './client-tools/notice.mjs'
 import { createExecutors } from './client-tools/registry.mjs'
@@ -1097,14 +1098,7 @@ if (!smoke && !app.requestSingleInstanceLock()) {
       root: join(app.getPath('userData'), 'chrome'),
       assets: fileURLToPath(new URL('./chrome-extension', import.meta.url)),
       nativeBinary: adapterRoot ? bundledAdapter(adapterRoot).bin : '',
-      openInChrome: (url) =>
-        new Promise<void>((resolve, reject) => {
-          const child = spawn('/usr/bin/open', ['-a', 'Google Chrome', url])
-          child.once('error', reject)
-          child.once('exit', (code) =>
-            code === 0 ? resolve() : reject(new Error('Could not open Chrome.')),
-          )
-        }),
+      openInChrome,
       openDirectory: async (directory) => {
         const error = await shell.openPath(directory)
         if (error) throw new Error(error)

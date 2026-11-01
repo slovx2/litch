@@ -144,7 +144,7 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
   tools: [
     fn(
       'targets',
-      'List connected Chrome instances. Chrome: call targets, then tabs(action:list,targetId), then claim(claimToken) for a user tab. For a new Chrome tab use navigate(targetId,url). Always keep the returned chrome: tabId in subsequent calls. Chrome runs on the controlling Mac; localhost refers to that Mac even in a remote session. Chrome requires separate source approval, including localhost. Popups are unclaimed; list and claim them separately. release returns a user tab without closing it. Old leases and refs expire on reconnect or turn end; list and claim again. request_sign_in pauses all observation while the user signs in manually, then requires a fresh claim. Do not switch browser or tab to bypass a refusal.',
+      'List connected Chrome instances. Chrome: call targets, then tabs(action:list,targetId), then claim(claimToken) for a user tab. For a new Chrome tab use navigate(targetId,url). Always keep the returned chrome: tabId in subsequent calls. Chrome runs on the controlling computer; localhost refers to that computer even in a remote session. Chrome requires separate source approval, including localhost. Popups are unclaimed; list and claim them separately. release returns a user tab without closing it. Old leases and refs expire on reconnect or turn end; list and claim again. request_sign_in pauses all observation while the user signs in manually, then requires a fresh claim. Do not switch browser or tab to bypass a refusal.',
       {},
     ),
     fn(

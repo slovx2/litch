@@ -37,9 +37,12 @@ interface Pending {
 export interface BridgeOptions {
   socketPath: string
   token: string
-  extensionId: string
+  /** 允许连进来的扩展 ID（chromeExtensionIds）。 */
+  extensionIds: readonly string[]
   version: string
 }
+
+const isPipe = (path: string): boolean => path.startsWith('\\\\.\\pipe\\')
 
 /** 给模型和用户的说明：哪一边要更新、怎么更新。 */
 export function incompatibleMessage(instance: ChromeInstance): string {
@@ -77,7 +80,9 @@ export class ChromeBridge {
   }
 
   async start(): Promise<void> {
-    await mkdir(dirname(this.options.socketPath), { recursive: true, mode: 0o700 })
+    // Windows 上是命名管道，不是文件：不建目录、不改权限，靠连接令牌鉴权
+    const pipe = isPipe(this.options.socketPath)
+    if (!pipe) await mkdir(dirname(this.options.socketPath), { recursive: true, mode: 0o700 })
     // socketPath 属于本次桌面实例，安装配置始终指向这一份；不删除别的服务路径。
     const server = createServer((socket) => this.accept(socket))
     this.server = server
@@ -85,14 +90,14 @@ export class ChromeBridge {
       server.once('error', reject)
       server.listen(this.options.socketPath, resolve)
     })
-    await chmod(this.options.socketPath, 0o600)
+    if (!pipe) await chmod(this.options.socketPath, 0o600)
   }
 
   private accept(socket: Socket): void {
     this.sockets.add(socket)
     socket.setEncoding('utf8')
     let buffer = ''
-    let authenticated = false
+    let extensionId: string | null = null
     let peer: Peer | null = null
     const timeout = setTimeout(() => socket.destroy(), 5000)
     socket.on('data', (part: string) => {
@@ -108,19 +113,22 @@ export class ChromeBridge {
         buffer = buffer.slice(end + 1)
         try {
           const message = JSON.parse(line)
-          if (!authenticated) {
+          if (!extensionId) {
             const actual = Buffer.from(typeof message.token === 'string' ? message.token : '')
             const expected = Buffer.from(this.options.token)
+            const allowed = this.options.extensionIds.find(
+              (id) => message.origin === `chrome-extension://${id}/`,
+            )
             if (
               message.kind !== 'nativeHello' ||
-              message.origin !== `chrome-extension://${this.options.extensionId}/` ||
+              !allowed ||
               actual.length !== expected.length ||
               !timingSafeEqual(actual, expected)
             ) {
               socket.destroy()
               return
             }
-            authenticated = true
+            extensionId = allowed
             continue
           }
           if (!peer) {
@@ -156,6 +164,7 @@ export class ChromeBridge {
                   message.source === 'store' || message.source === 'unpacked'
                     ? message.source
                     : null,
+                extensionId,
               },
             }
             const welcome: ChromeWelcome = {
@@ -278,6 +287,6 @@ export class ChromeBridge {
     const server = this.server
     this.server = null
     if (server) await new Promise<void>((resolve) => server.close(() => resolve()))
-    await rm(this.options.socketPath, { force: true })
+    if (!isPipe(this.options.socketPath)) await rm(this.options.socketPath, { force: true })
   }
 }

@@ -6,12 +6,17 @@ import {
   CHROME_STORE_URL,
   type ChromeSettingsRequest,
   type ChromeSettingsState,
+  chromeExtensionIds,
 } from '../../../../packages/protocol/src/chrome-browser.mjs'
 import type { BrowserExecutor } from '../browser/executor.mjs'
 import type { ClientToolExecutor, ClientToolInvocation } from '../client-tools/types.mjs'
 import { ChromeBridge } from './bridge.mjs'
 import { ChromeExecutor, chromeFailure } from './executor.mjs'
 import { ChromeInstaller, chromeIdentity } from './installer.mjs'
+
+const SUPPORTED = ['darwin', 'win32', 'linux'].includes(process.platform)
+/** 这一版只认随 Litch 发布的扩展；用户自编扩展的 ID 以后由设置里的显式操作加进来。 */
+const extensionIds = chromeExtensionIds()
 
 export interface BrowserTargetsOptions {
   root: string
@@ -38,7 +43,7 @@ export class BrowserTargets {
     })
   }
   private async initialize(): Promise<void> {
-    if (process.platform !== 'darwin') return
+    if (!SUPPORTED) return
     this.identity = await chromeIdentity(this.options.assets)
     try {
       const prefs = JSON.parse(await readFile(join(this.options.root, 'settings.json'), 'utf8'))
@@ -51,12 +56,16 @@ export class BrowserTargets {
     } catch {
       /* 首次安装保持关闭。 */
     }
-    const socketPath = join(this.options.root, `${randomUUID().slice(0, 8)}.sock`)
-    this.installer = new ChromeInstaller({ ...this.options, socketPath })
+    // Windows 上 Node 的本地套接字是命名管道；原生宿主照配置里的地址连
+    const socketPath =
+      process.platform === 'win32'
+        ? `\\\\.\\pipe\\litch-chrome-${randomUUID()}`
+        : join(this.options.root, `${randomUUID().slice(0, 8)}.sock`)
+    this.installer = new ChromeInstaller({ ...this.options, socketPath, extensionIds })
     this.bridge = new ChromeBridge({
       socketPath,
       token: this.installer.token,
-      extensionId: this.identity.id,
+      extensionIds,
       version: this.identity.version,
     })
     await this.bridge.start()
@@ -84,7 +93,7 @@ export class BrowserTargets {
     await this.initialized
     if (request.kind !== 'chrome.status') {
       if (!this.installer || !this.chrome)
-        throw new Error(this.lastError ?? 'Chrome control is available on macOS only.')
+        throw new Error(this.lastError ?? 'Chrome control is not available on this platform.')
       if (request.kind === 'chrome.prepare') {
         await this.installer.prepare()
         this.lastError = null
@@ -113,11 +122,13 @@ export class BrowserTargets {
       if (request.kind === 'chrome.stop') this.chrome.stop()
     }
     return {
-      supported: process.platform === 'darwin',
+      supported: SUPPORTED,
+      platform: SUPPORTED ? (process.platform as 'darwin' | 'win32' | 'linux') : null,
       prepared: (await this.installer?.prepared()) ?? false,
       enabled: this.enabled,
       allowedDevices: [...this.devices],
       extensionId: this.identity.id,
+      allowedExtensionIds: extensionIds,
       bundledVersion: this.identity.version,
       extensionDirectory: this.installer?.extensionDirectory ?? '',
       storeUrl: CHROME_STORE_URL,

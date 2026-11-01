@@ -4,9 +4,13 @@ export const enChrome = {
   'chrome.instanceNote':
     'Allow the agent to list tab titles and URLs in this Chrome instance. Page content still requires origin approval.',
   'chrome.title': 'Chrome',
-  'chrome.note': 'Use signed-in websites in Chrome on this Mac. Each origin requires approval.',
+  'chrome.note':
+    'Use signed-in websites in Chrome on this computer. Each origin requires approval.',
   'chrome.enable': 'Allow agents to use Chrome',
-  'chrome.unsupported': 'Currently available on macOS only.',
+  'chrome.unsupported': 'Not available on this platform.',
+  'chrome.browsers.darwin': 'Supports Google Chrome.',
+  'chrome.browsers.win32': 'Supports Google Chrome. Edge and other browsers are not supported yet.',
+  'chrome.browsers.linux': 'Supports Google Chrome, and Chromium when it is installed.',
   'chrome.unprepared': 'Extension not prepared',
   'chrome.disconnected': 'Extension disconnected. Load or reload it to connect.',
   'chrome.extensionOutdated':
@@ -30,7 +34,7 @@ export const enChrome = {
   'chrome.version': 'Folder version {version}',
   'chrome.remote': 'Remote devices',
   'chrome.remoteNote':
-    'Selected devices may request control of Chrome on this Mac. Each origin still requires approval.',
+    'Selected devices may request control of Chrome on this computer. Each origin still requires approval.',
   'chrome.signIn': 'Sign in with Chrome',
   'chrome.signInNote':
     'Complete sign-in in Chrome. The agent cannot read or operate this tab while you sign in. Returning control reloads the page.',

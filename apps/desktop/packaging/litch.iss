@@ -64,6 +64,10 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 Name: "{autoprograms}\Litch"; Filename: "{app}\Litch.exe"
 Name: "{autodesktop}\Litch"; Filename: "{app}\Litch.exe"; Tasks: desktopicon
 
+; Chrome 的原生消息宿主由应用在“准备扩展”时登记（src/chrome-browser/installer.mts），安装时不建，卸载时删掉
+[Registry]
+Root: HKCU; Subkey: "Software\Google\Chrome\NativeMessagingHosts\ai.litch.chrome"; Flags: uninsdeletekey dontcreatekey
+
 [Run]
 Filename: "{app}\Litch.exe"; Description: "{cm:LaunchProgram,Litch}"; Flags: nowait postinstall skipifsilent
 Filename: "{app}\Litch.exe"; Flags: nowait; Check: RelaunchAfterUpdate

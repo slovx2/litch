@@ -50,3 +50,17 @@ func TestChromeRejectsMalformedFrames(t *testing.T) {
 		t.Fatal("forwarded invalid bridge input")
 	}
 }
+
+func TestChromeHostOrigin(t *testing.T) {
+	origin := "chrome-extension://fakgembkgnmeknpaegnneneockbjhaai/"
+	for _, args := range [][]string{{origin}, {origin, "--parent-window=0"}, {origin, "--parent-window=133742"}} {
+		if got, err := chromeHostOrigin(args); err != nil || got != origin {
+			t.Fatalf("%v: %q %v", args, got, err)
+		}
+	}
+	for _, args := range [][]string{{}, {origin, "--other"}, {origin, "--parent-window=x"}, {origin, "--parent-window=1", "x"}} {
+		if _, err := chromeHostOrigin(args); err == nil {
+			t.Fatalf("accepted %v", args)
+		}
+	}
+}

@@ -11,8 +11,27 @@ export const CHROME_WIRE_VERSION = 1
 export const CHROME_WIRE_MIN = 1
 export const CHROME_HOST_NAME = 'ai.litch.chrome'
 export const CHROME_TAB_PREFIX = 'chrome:'
-/** 应用商店的扩展页；上架前为 null，设置页只给开发者模式加载这一条路。 */
-export const CHROME_STORE_URL: string | null = null
+/** 开发者模式加载用的扩展 ID，由 apps/chrome-extension/identity.json 的公钥算出。 */
+export const CHROME_UNPACKED_EXTENSION_ID = 'fakgembkgnmeknpaegnneneockbjhaai'
+/**
+ * 应用商店分配的扩展 ID。要先在开发者控制台上传一个不公开的草稿才知道，拿到后只改这一处；
+ * 为 null 时只认开发者模式加载的扩展，设置页也只给开发者模式这一条路。
+ */
+export const CHROME_STORE_EXTENSION_ID: string | null = null
+export const CHROME_STORE_URL: string | null = CHROME_STORE_EXTENSION_ID
+  ? `https://chromewebstore.google.com/detail/${CHROME_STORE_EXTENSION_ID}`
+  : null
+const EXTENSION_ID = /^[a-p]{32}$/
+/**
+ * 宿主清单 allowed_origins、原生宿主和桌面端都认的扩展 ID。每个 ID 都能驱动代理使用 Chrome，
+ * 所以只放随 Litch 发布的两个；以后加用户自编扩展的 ID 只能来自用户在设置里的显式操作（custom）。
+ */
+export function chromeExtensionIds(custom: readonly string[] = []): string[] {
+  const ids = [CHROME_UNPACKED_EXTENSION_ID, CHROME_STORE_EXTENSION_ID, ...custom]
+  return [
+    ...new Set(ids.filter((id): id is string => typeof id === 'string' && EXTENSION_ID.test(id))),
+  ]
+}
 
 /** 不兼容时该更新哪一边。 */
 export type ChromeIncompatibility = 'extensionOutdated' | 'litchOutdated'
@@ -41,6 +60,8 @@ export interface ChromeInstance {
   incompatible: ChromeIncompatibility | null
   /** 扩展怎么装的；扩展没报时为 null。 */
   source: ChromeExtensionSource | null
+  /** 连上来的扩展 ID（允许列表中的一个）。 */
+  extensionId: string
 }
 
 export interface ChromeLeaseOwner {
@@ -146,10 +167,15 @@ export type ChromeEvent =
 
 export interface ChromeSettingsState {
   supported: boolean
+  /** 宿主登记方式和支持的浏览器按平台不同；不支持的平台为 null。 */
+  platform: 'darwin' | 'win32' | 'linux' | null
   prepared: boolean
   enabled: boolean
   allowedDevices: string[]
+  /** 开发者模式加载的扩展 ID。 */
   extensionId: string
+  /** 宿主认的全部扩展 ID。 */
+  allowedExtensionIds: string[]
   /** 这个 Litch 自带（扩展目录里）的扩展版本，只用于开发者模式加载。 */
   bundledVersion: string
   extensionDirectory: string
