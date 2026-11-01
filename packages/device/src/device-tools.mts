@@ -3,7 +3,7 @@
 //   - 客户端连接对应的上游连接上发来的 item/tool/call：不分适配器的引擎还是原生 codex，都在 relay.mts 的
 //     serverRequest 开头按 has(namespace) 截下（原生 codex 把同一次调用发给每条订阅着会话的连接，几份都到这里）；
 //   - 设备进程自己开的内部连接（engine-link.mts）。
-// 设备进程替每条通往引擎的连接在握手里声明这些命名空间（declareDeviceTools），引擎挑执行方时挑得中它。
+// 通用命名空间在握手里声明（declareDeviceTools），引擎据此挑执行方；原生专用的仅注册接管，不向适配器声明。
 // 同一次调用（harness + 会话 + callId）只执行一次，答复从最先到的那份所在的连接回（它断了换下一份）：
 // 原生 codex 的答复从哪条连接回去都算数。处理函数抛错时替它回 failed；回合结束（turn/completed）时
 // 它拿到的 signal 作废（litch_sessions.wait 这种会等的工具要看它），设备进程关的时候也作废。
@@ -34,9 +34,9 @@ export type DeviceToolHandler = (
 ) => Promise<ClientToolCallResponse>
 
 export interface DeviceToolRegistry {
-  /** 命名空间必须以 litch_ 开头；同一个注册两次抛错 */
-  register(namespace: string, handler: DeviceToolHandler): void
-  /** 已注册的命名空间：设备进程替每条通往引擎的连接在 litchClientTools.namespaces 里声明这些 */
+  /** 命名空间必须以 litch_ 开头；同一个注册两次抛错。declare=false 只接管原生动态调用，不声明给适配器。 */
+  register(namespace: string, handler: DeviceToolHandler, options?: { declare?: boolean }): void
+  /** 需要声明的命名空间（不包含 declare=false）：给通往引擎的连接补 litchClientTools.namespaces。 */
   namespaces(): string[]
   has(namespace: string): boolean
 }
@@ -63,6 +63,8 @@ export class DeviceTools implements DeviceToolRegistry {
   /** 设备拥有的只读旁问对所有动态工具统一把关，包含客户端工具。 */
   allowed: (threadId: string, namespace: unknown, tool: unknown) => boolean = () => true
   private readonly handlers = new Map<string, DeviceToolHandler>()
+  /** 原生动态工具由设备直接接管，不向适配器宣称能执行这类命名空间。 */
+  private readonly localOnly = new Set<string>()
   /** 正在执行的调用。键：harness + 会话 + callId */
   private readonly running = new Map<string, Running>()
   /** 已经答过的调用到它的回合。之后再到的副本（原生 codex 恢复会话时补发的）直接丢掉；回合结束时清 */
@@ -74,15 +76,16 @@ export class DeviceTools implements DeviceToolRegistry {
     this.log = log
   }
 
-  register(namespace: string, handler: DeviceToolHandler): void {
+  register(namespace: string, handler: DeviceToolHandler, options?: { declare?: boolean }): void {
     if (!namespace.startsWith(CLIENT_TOOL_NAMESPACE_PREFIX))
       throw new Error(`设备工具的命名空间要以 ${CLIENT_TOOL_NAMESPACE_PREFIX} 开头：${namespace}`)
     if (this.handlers.has(namespace)) throw new Error(`设备工具 ${namespace} 已经注册过了`)
     this.handlers.set(namespace, handler)
+    if (options?.declare === false) this.localOnly.add(namespace)
   }
 
   namespaces(): string[] {
-    return [...this.handlers.keys()]
+    return [...this.handlers.keys()].filter((name) => !this.localOnly.has(name))
   }
 
   has(namespace: unknown): boolean {

@@ -474,8 +474,10 @@ export class DeviceServer {
       log,
     })
     this.background.continuation = (id) => this.nativeBackground.working(id)
-    this.deviceTools.register(NATIVE_BACKGROUND_NAMESPACE, (call) =>
-      this.nativeBackground.tool(call),
+    this.deviceTools.register(
+      NATIVE_BACKGROUND_NAMESPACE,
+      (call) => this.nativeBackground.tool(call),
+      { declare: false },
     )
     this.sessionTree.onTurnEnded((id) => this.nativeBackground.schedule(id))
     info.extensions.push(EXTENSION.nativeBackgroundWake)

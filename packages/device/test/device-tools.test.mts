@@ -25,6 +25,30 @@ const ok = (text: string): ClientToolCallResponse => ({
 const internal = (engine: TaskEngine): FakeConnection[] =>
   engine.live.filter((connection) => connection.raw[0]?.includes('"name":"litch-device"'))
 
+test('原生专用设备工具只接管调用，不向适配器声明命名空间', async () => {
+  const tools = new DeviceTools()
+  tools.register('litch_native', async () => ok('native'), { declare: false })
+  assert.equal(tools.has('litch_native'), true)
+  assert.deepEqual(tools.namespaces(), [])
+  const response = await new Promise<ClientToolCallResponse>((resolve) => {
+    tools.dispatch(
+      'codex',
+      {
+        namespace: 'litch_native',
+        tool: 'read',
+        threadId: 't',
+        turnId: 'u',
+        callId: 'c',
+      },
+      (value) => {
+        resolve(value)
+        return true
+      },
+    )
+  })
+  assert.deepEqual(response, ok('native'))
+})
+
 test('注册表：命名空间要以 litch_ 开头、不能注册两次；同一次调用只答一份；处理函数抛错、没注册的回失败', async () => {
   const tools = new DeviceTools()
   const seen: DeviceToolCall[] = []

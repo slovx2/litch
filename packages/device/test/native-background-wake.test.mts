@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import { setImmediate } from 'node:timers/promises'
 import { NATIVE_BACKGROUND_TOOLS } from '../../protocol/src/native-background-wake.mjs'
 import type { EngineLink } from '../src/engine-link.mjs'
 import { NativeBackgroundStore } from '../src/native-background-store.mjs'
@@ -149,22 +150,28 @@ test('NATIVE-WAKE-011 原生 processId 重用按条目识别；登记等待中�
   }
 })
 
-test('NATIVE-WAKE-012 连续完成按时间节流，不丢弃下一轮任务', async () => {
+test('NATIVE-WAKE-012 连续完成按时间节流，不丢弃下一轮任务', async (t) => {
+  // 整包并发运行会让真实 sleep 超过节流窗口；固定时钟验证边界而不依赖机器负载。
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 10_000 })
+  const advance = async (ms: number) => {
+    t.mock.timers.tick(ms)
+    await setImmediate()
+  }
   const f = fixture(100)
   try {
     f.command('1')
     await f.watch('1')
     f.finish('1')
-    await pause()
+    await advance(1)
     assert.equal(f.starts.length, 1)
     f.command('2')
     await f.watch('2')
     f.finish('2')
     f.idle(true)
     f.event('turn/completed', { turn: { id: 'wake-1', status: 'completed' } })
-    await pause()
+    await advance(99)
     assert.equal(f.starts.length, 1)
-    await pause(120)
+    await advance(1)
     assert.equal(f.starts.length, 2)
   } finally {
     f.close()
