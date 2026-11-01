@@ -479,6 +479,10 @@ test('经理：事件回合直接派线、子树标记、默认 harness、并发
         .find((spec) => spec.name === 'litch_sessions')
         .instructions.includes('You are a line started by manager'),
     )
+    assert.match(
+      childTools.find((spec) => spec.name === 'litch_sessions').instructions,
+      /Do not send progress messages to the manager during work unless/,
+    )
     assert.deepEqual(
       (await connection.call('thread/read', { threadId: childId })).thread.litchManager,
       { managerId: manager.id, role: 'line' },

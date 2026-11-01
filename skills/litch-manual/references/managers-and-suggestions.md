@@ -30,6 +30,8 @@ notifications are on, and unanswered decisions wait indefinitely. Changing workl
 choosing a model or effort uses that harness's defaults. Workline concurrency includes the entire
 subtree; approvals and background work also occupy slots.
 
+工作线执行期间仅在出现重大变更、重大发现，或需要经理决策才能继续时发送中途消息；其余结果在每回合结束时集中回报。
+
 ### Editing settings
 
 Open a manager → title-bar **Settings**. The same three sections are tabs. You can change its name,
