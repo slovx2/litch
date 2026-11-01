@@ -1437,50 +1437,80 @@ test('设备：设备进程旧、没有 markHere 时退回 here，由设备进�
   watched.close()
 })
 
-test('模拟：回合在跑时点提案卡上的“在这里做”，那句话进输入队列（看得见），回合结束后发出', async () => {
-  const world = mockWorld()
-  await settle()
-  const parent = world.watch('s6')
-  await settle()
-  await world.channel.command('session.send', {
-    deviceId: 'local',
-    sessionId: 's6',
-    text: '提个子会话',
+for (const interrupted of [false, true]) {
+  test(`模拟：回合在跑时点提案卡上的“在这里做”，${interrupted ? '停止后暂停，明确恢复才发出' : '正常完成后自动发出'}`, async () => {
+    const world = mockWorld()
+    await settle()
+    const parent = world.watch('s6')
+    await settle()
+    await world.channel.command('session.send', {
+      deviceId: 'local',
+      sessionId: 's6',
+      text: '提个子会话',
+    })
+    const list = () => parent.view?.proposals ?? []
+    await world.until(() => list().length === 3, '三张提案')
+    await world.until(() => parent.view?.turns.at(-1)?.status === 'completed', '提案的回合结束')
+    const proposal = list()[2]
+    assert.ok(proposal)
+    // 说一件新任务：模型发 offer 卡等用户选，回合一直在跑
+    await world.channel.command('session.send', {
+      deviceId: 'local',
+      sessionId: 's6',
+      text: '新任务：给设置页加个导出按钮',
+    })
+    await world.until(() => list().some((entry) => entry.offer), '出了一张 offer 卡')
+    const offer = list().find((entry) => entry.offer)
+    assert.ok(offer)
+    const running = parent.view?.turns.at(-1)
+    const turnsBeforeStop = parent.view?.turns.length
+    assert.equal(running?.status, 'running', '回合在跑')
+    await world.channel.command('session.proposal.here', {
+      deviceId: 'local',
+      sessionId: 's6',
+      proposalId: proposal.id,
+      lead: '在这里做：',
+    })
+    await world.until(() => list()[2]?.status === 'here', '提案记成在这里做')
+    const text = `在这里做：${proposal.title}`
+    assert.ok(
+      parent.view?.queued.some((message) => message.text.startsWith(text)),
+      '排在输入队列里',
+    )
+    if (interrupted) {
+      await world.channel.command('session.interrupt', { deviceId: 'local', sessionId: 's6' })
+      await world.until(() => parent.view?.turns.at(-1)?.status === 'interrupted', '回合已停止')
+      // 拨过正常回复所需时间，排队项仍应暂停，不能把中断当成正常完成。
+      world.time.advance(20_000)
+      await settle()
+      assert.equal(parent.view?.turns.length, turnsBeforeStop, '停止后没有自动开启下一回合')
+      assert.equal(
+        parent.view?.queued.find((message) => message.text.startsWith(text))?.delivery,
+        'held',
+      )
+      assert.ok(!userItems(parent.view).some((item) => item.text.startsWith(text)))
+      await world.channel.command('session.resumeQueue', { deviceId: 'local', sessionId: 's6' })
+    } else {
+      // 回答 offer，让真实模拟回合自然完成；不能用 interrupt 代替正常结束。
+      await world.channel.command('session.proposal.answer', {
+        deviceId: 'local',
+        sessionId: 's6',
+        proposalId: offer.id,
+        choice: 'here',
+      })
+    }
+    await world.until(
+      () =>
+        (parent.view?.queued.length ?? 1) === 0 &&
+        userItems(parent.view).some((item) => item.text.startsWith(text)),
+      interrupted ? '明确恢复后发出' : '正常完成后发出',
+    )
+    assert.equal(
+      parent.view?.turns.find((turn) => turn.id === running?.id)?.status,
+      interrupted ? 'interrupted' : 'completed',
+    )
   })
-  const list = () => parent.view?.proposals ?? []
-  await world.until(() => list().length === 3, '三张提案')
-  await world.until(() => parent.view?.turns.at(-1)?.status === 'completed', '提案的回合结束')
-  const proposal = list()[2]
-  assert.ok(proposal)
-  // 说一件新任务：模型发 offer 卡等用户选，回合一直在跑
-  await world.channel.command('session.send', {
-    deviceId: 'local',
-    sessionId: 's6',
-    text: '新任务：给设置页加个导出按钮',
-  })
-  await world.until(() => list().some((entry) => entry.offer), '出了一张 offer 卡')
-  const running = parent.view?.turns.at(-1)
-  assert.equal(running?.status, 'running', '回合在跑')
-  await world.channel.command('session.proposal.here', {
-    deviceId: 'local',
-    sessionId: 's6',
-    proposalId: proposal.id,
-    lead: '在这里做：',
-  })
-  await world.until(() => list()[2]?.status === 'here', '提案记成在这里做')
-  const text = `在这里做：${proposal.title}`
-  assert.ok(
-    parent.view?.queued.some((message) => message.text.startsWith(text)),
-    '排在输入队列里',
-  )
-  await world.channel.command('session.interrupt', { deviceId: 'local', sessionId: 's6' })
-  await world.until(
-    () =>
-      (parent.view?.queued.length ?? 1) === 0 &&
-      userItems(parent.view).some((item) => item.text.startsWith(text)),
-    '回合结束后发出',
-  )
-})
+}
 
 // —— 模拟核心里的演示 ——
 
