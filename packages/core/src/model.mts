@@ -491,10 +491,11 @@ export interface UserMessageItem {
    */
   sessions?: SessionMentionView[]
   /**
-   * 本机先显示出来、对面还没回显的插话：还没有对面的条目标识，回退、分叉切不到它（界面不出这两个按钮）。
-   * 对面回显后条目照对面的重建，就没有这一项了
+   * 未确认原生接纳的插话：不能保证原生历史有对应位置，界面不出回退、分叉按钮。
    */
   unconfirmed?: true
+  /** 插话的原生接纳状态，不表示模型已经执行。 */
+  delivery?: 'queued' | 'sent' | 'held' | 'unknown'
 }
 
 /** Litch 替用户发的话认出来的样子（protocol/src/system-messages.mts） */
@@ -1046,6 +1047,9 @@ export interface SessionPeekPending {
 /** 回合进行中发的消息先排着，回合结束后按顺序发出去 */
 export interface QueuedMessage extends OutgoingMessage {
   id: string
+  delivery?: 'held' | 'unknown'
+  /** 已发起过的插话：用稳定标识对账，不按文字匹配。 */
+  clientId?: string
 }
 
 /** 一档思考强度 */

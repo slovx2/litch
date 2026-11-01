@@ -236,6 +236,7 @@ export function createLink(options: LinkOptions): Link {
                 // peerMessages：声明了，别的会话发来的消息（Claude 的本机收件箱）在用户消息条目上带 litchPeer，
                 // 对话里画成“来自 X 的消息”
                 EXTENSION.peerMessages,
+                EXTENSION.inputDelivery,
                 // harnessConfig：声明了才收得到 harness 详情设置的变化和登录进展的通知
                 // （litch/harness/config/changed、litch/harness/auth/updated）
                 EXTENSION.harnessConfig,

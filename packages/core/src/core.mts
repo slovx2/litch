@@ -254,6 +254,7 @@ export function createCore(options: CoreOptions): Core {
       ...(store?.terminals ? { terminalNotes: store.terminals(config.id) } : {}),
       ...(store?.codexThreads ? { codexThreads: store.codexThreads(config.id) } : {}),
       ...(store?.views ? { views: store.views(config.id) } : {}),
+      ...(store?.pendingInputs ? { pendingInputs: store.pendingInputs(config.id) } : {}),
       tools: hub,
       toolSwitches: (harness) => switchesOf(config.id, harness),
       ...(options.pairing ? { pairing: options.pairing } : {}),
@@ -434,10 +435,15 @@ export function createCore(options: CoreOptions): Core {
           }
         }
         case 'session.send': {
-          const { deviceId, sessionId, text, images, extras, now } =
+          const { deviceId, sessionId, text, images, extras, now, pending } =
             params as Commands['session.send']['params']
           try {
-            await deviceOf(deviceId).send(sessionId, outgoing(text, images, extras), now === true)
+            await deviceOf(deviceId).send(
+              sessionId,
+              outgoing(text, images, extras),
+              now === true,
+              pending,
+            )
           } catch (error) {
             throw toChannelFailure(error)
           }
@@ -693,6 +699,12 @@ export function createCore(options: CoreOptions): Core {
         case 'session.unqueue': {
           const { deviceId, sessionId, messageId } = params as Commands['session.unqueue']['params']
           deviceOf(deviceId).unqueue(sessionId, messageId)
+          return {}
+        }
+        case 'session.resumeQueue': {
+          const { deviceId, sessionId, messageId } =
+            params as Commands['session.resumeQueue']['params']
+          deviceOf(deviceId).resumeQueue(sessionId, messageId)
           return {}
         }
         case 'session.respond': {

@@ -11,6 +11,8 @@ import {
   type DeviceView,
   type ImageAttachment,
   keys,
+  MAX_COMMENTS,
+  MAX_IMAGES,
   type MessageExtra,
   type QueuedMessage,
 } from '@litch/core'
@@ -69,6 +71,11 @@ export function Composer({
   const draft = useDraft(draftKey(deviceId, sessionId))
   const options = useComposeOptions(deviceId, meta?.harness)
   const [error, setError] = useState<string | null>(null)
+  const [pendingSend, setPendingSend] = useState<'include' | 'only'>('include')
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 切换会话时恢复默认选择，不沿用另一个会话的选择
+  useEffect(() => {
+    setPendingSend('include')
+  }, [sessionId])
   // 输入框上方的浮窗：待办或排着的回报，同时只开一个
   const [panel, setPanel] = useState<'todo' | 'notes' | null>(null)
   const toggle = (which: 'todo' | 'notes') => setPanel((open) => (open === which ? null : which))
@@ -123,7 +130,9 @@ export function Composer({
       images,
       extras,
       ...sendFlags(onRunning),
+      pending: pendingSend,
     })
+    setPendingSend('include')
   }
   // 输入框里的 /goal 截在这里设目标（harness 会才截），换掉没做完的目标前问的那个对话框也在这里画
   const goal = useGoalSend(deviceId, sessionId, meta, send)
@@ -145,6 +154,15 @@ export function Composer({
       )
   }
   const unqueue = (message: QueuedMessage, edit: boolean) => {
+    if (
+      edit &&
+      (draft.images.length + message.images.length > MAX_IMAGES ||
+        draft.comments.length + commentsIn(message.extras).length > MAX_COMMENTS ||
+        message.extras.some((extra) => extra.kind !== 'comment' && extra.kind !== 'session'))
+    ) {
+      setError(t('composer.pendingDraftFull'))
+      return
+    }
     channel
       .command('session.unqueue', { deviceId, sessionId, messageId: message.id })
       .catch(() => {})
@@ -225,6 +243,17 @@ export function Composer({
               />
               <QueueTray
                 queued={meta.queued}
+                pendingSend={pendingSend}
+                onPendingSend={setPendingSend}
+                onResume={(messageId) => {
+                  channel
+                    .command('session.resumeQueue', {
+                      deviceId,
+                      sessionId,
+                      ...(messageId ? { messageId } : {}),
+                    })
+                    .catch((reason: unknown) => setError(whyNot(reason, t)))
+                }}
                 running={running}
                 canSteer={meta.can.steer}
                 steerImages={meta.can.steerImages}

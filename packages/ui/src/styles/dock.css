@@ -687,6 +687,16 @@
 .tray-row .mini {
   align-self: center;
 }
+.tray-row select {
+  max-width: 100%;
+  min-height: 30px;
+  padding: 4px 8px;
+  color: var(--ink);
+  background: var(--raised);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  font: inherit;
+}
 
 /* ---------- 审批与提问：排在输入框上面，输入框照常在 ---------- */
 /* 卡片自己占一行，夹在对话区和输入区之间（transcript.css 的 .tr-tail 里）。主区域从上到下是：

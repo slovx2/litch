@@ -11,6 +11,8 @@ import {
 import {
   type ComposeOptions,
   createCore,
+  createPendingInputStore,
+  type PendingInputStore,
   type SessionView,
   type SidebarOp,
   type SidebarView,
@@ -29,7 +31,10 @@ const where = { deviceId: 'local', sessionId: 'a' }
 const statusOf = (view: SessionView | null, itemId: string): unknown =>
   (view?.items[itemId] as { status?: string } | undefined)?.status
 
-function setup(threads: Thread[] = [thread({ id: 'a', turns: [] })]) {
+function setup(
+  threads: Thread[] = [thread({ id: 'a', turns: [] })],
+  pendingInputs?: PendingInputStore,
+) {
   const world = {
     threads,
     /** 对面已经归档的会话 */
@@ -141,6 +146,17 @@ function setup(threads: Thread[] = [thread({ id: 'a', turns: [] })]) {
     clock: time.clock,
     version: '9.9.9',
     log: (line) => logs.push(line),
+    ...(pendingInputs
+      ? {
+          store: {
+            load: () => ({ localWire: null, remotes: [] }),
+            save() {},
+            forget() {},
+            snapshot: () => ({ load: () => null, save() {} }),
+            pendingInputs: () => pendingInputs,
+          },
+        }
+      : {}),
     devices: [
       {
         id: 'local',
@@ -1250,7 +1266,7 @@ test('立即发送：消息号每次运行都不一样（入口按消息号永�
   })
 })
 
-test('引导：话插进去了但回合被打断、对面一直没回显，就放回队首接着发，不悄悄丢掉', async () => {
+test('引导：被打断且未回显的消息保留待发，不自动开始下一回合', async () => {
   const { core, peer, command, sent } = setup()
   core.start()
   await settle()
@@ -1268,13 +1284,178 @@ test('引导：话插进去了但回合被打断、对面一直没回显，就�
     turn: finished('srv-1', { status: 'interrupted' }),
   })
   await settle()
-  // 从被打断的回合里撤掉，作为下一个回合发出去
-  assert.deepEqual(session.texts(), [['一'], ['二']])
-  assert.deepEqual(session.seen.view?.queued, [])
+  assert.deepEqual(session.texts(), [['一']])
+  assert.equal(session.seen.view?.queued[0]?.delivery, 'held')
   assert.deepEqual(
     sent('turn/start').map((params) => (params as { input: { text: string }[] }).input[0]?.text),
-    ['一', '二'],
+    ['一'],
   )
+  await command('session.resumeQueue', where)
+  await settle()
+  assert.deepEqual(session.texts(), [['一'], ['二']])
+})
+
+test('停止先冻结发送泵：即使竞态收到正常完成，也不启动已排队消息', async () => {
+  const { core, peer, command, sent } = setup()
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  await command('session.send', { ...where, text: '长命令' })
+  await command('session.send', { ...where, text: '已排队' })
+  await command('session.interrupt', where)
+  assert.equal(session.seen.view?.queued[0]?.delivery, 'held')
+  peer.last().notify('turn/completed', { threadId: 'a', turn: finished('srv-1') })
+  await settle()
+  assert.equal(sent('turn/start').length, 1)
+})
+
+test('交付：明确取消才待发，未知不自动重发；新消息可选择不带待发', async () => {
+  const { core, peer, command, sent } = setup()
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  await command('session.send', { ...where, text: '长命令' })
+  for (const text of ['明确取消', '状态不明'])
+    await command('session.send', { ...where, text, now: true })
+  const steers = sent('turn/steer') as { clientUserMessageId: string; input: { text: string }[] }[]
+  for (const [index, status] of ['held', 'unknown'].entries()) {
+    const steer = steers[index]!
+    const item = {
+      ...userText(`input-${index}`, steer.input[0]!.text),
+      clientId: steer.clientUserMessageId,
+      litchInputDelivery: status,
+    }
+    peer.last().notify('item/completed', { threadId: 'a', turnId: 'srv-1', item, completedAtMs: 0 })
+  }
+  peer
+    .last()
+    .notify('turn/completed', { threadId: 'a', turn: finished('srv-1', { status: 'interrupted' }) })
+  await settle()
+  assert.deepEqual(
+    session.seen.view?.queued.map((entry) => entry.delivery),
+    ['held', 'unknown'],
+  )
+  assert.equal(sent('turn/start').length, 1)
+  await command('session.send', { ...where, text: '只发这条', pending: 'only' })
+  await settle()
+  assert.equal((sent('turn/start')[1] as { input: { text: string }[] }).input[0]?.text, '只发这条')
+  assert.equal(session.seen.view?.queued.length, 2)
+  peer.last().notify('turn/completed', { threadId: 'a', turn: finished('srv-2') })
+  await settle()
+  assert.equal(sent('turn/start').length, 2)
+  await command('session.send', { ...where, text: '继续', pending: 'include' })
+  await settle()
+  assert.equal((sent('turn/start')[2] as { input: { text: string }[] }).input[0]?.text, '明确取消')
+  peer.last().notify('turn/completed', { threadId: 'a', turn: finished('srv-3') })
+  await settle()
+  assert.equal((sent('turn/start')[3] as { input: { text: string }[] }).input[0]?.text, '继续')
+  assert.deepEqual(
+    session.seen.view?.queued.map((entry) => entry.text),
+    ['状态不明'],
+  )
+})
+
+test('交付：queued 回显不算已发送，中断没有取消回执时保留待确认', async () => {
+  const { core, peer, command, sent } = setup()
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  await command('session.send', { ...where, text: '长命令' })
+  await command('session.send', { ...where, text: '插话', now: true })
+  const steer = sent('turn/steer')[0] as { clientUserMessageId: string }
+  peer.last().notify('item/completed', {
+    threadId: 'a',
+    turnId: 'srv-1',
+    item: {
+      ...userText('pending', '插话'),
+      clientId: steer.clientUserMessageId,
+      litchInputDelivery: 'queued',
+    },
+    completedAtMs: 0,
+  })
+  await settle()
+  await command('session.send', { ...where, text: '后排消息' })
+  await command('session.interrupt', where)
+  peer
+    .last()
+    .notify('turn/completed', { threadId: 'a', turn: finished('srv-1', { status: 'interrupted' }) })
+  await settle()
+  assert.equal(sent('turn/start').length, 1)
+  assert.deepEqual(
+    session.seen.view?.queued.map((entry) => [entry.text, entry.delivery]),
+    [
+      ['插话', 'unknown'],
+      ['后排消息', 'held'],
+    ],
+  )
+  await command('session.resumeQueue', { ...where, messageId: session.seen.view?.queued[0]?.id })
+  await settle()
+  assert.equal(sent('turn/start').length, 1)
+  // 迟来的明确接纳回执只对账，不再让用户发送第二遍。
+  peer.last().notify('item/completed', {
+    threadId: 'a',
+    turnId: 'srv-1',
+    item: {
+      ...userText('pending', '插话'),
+      clientId: steer.clientUserMessageId,
+      litchInputDelivery: 'sent',
+    },
+    completedAtMs: 0,
+  })
+  await settle()
+  assert.deepEqual(
+    session.seen.view?.queued.map((entry) => entry.text),
+    ['后排消息'],
+  )
+})
+
+test('交付：重启后按原生历史对账，取消消息保留附件待发，已接纳消息不重发', async () => {
+  let raw: unknown = null
+  const file = {
+    read: () => raw,
+    write: (value: unknown) => {
+      raw = structuredClone(value)
+    },
+  }
+  const first = setup(undefined, createPendingInputStore(file))
+  first.core.start()
+  await settle()
+  watch(first.core)
+  await settle()
+  await first.command('session.send', { ...where, text: '长命令' })
+  for (const text of ['甲', '乙'])
+    await first.command('session.send', {
+      ...where,
+      text,
+      now: true,
+      images: [{ url: PNG, name: '保留.png' }],
+    })
+  const ids = (first.sent('turn/steer') as { clientUserMessageId: string }[]).map(
+    (entry) => entry.clientUserMessageId,
+  )
+  const history = thread({
+    id: 'a',
+    turns: [
+      turn('srv-1', [
+        Object.assign(userText('a', '甲'), { clientId: ids[0], litchInputDelivery: 'held' }),
+        Object.assign(userText('b', '乙'), { clientId: ids[1], litchInputDelivery: 'sent' }),
+      ] as ThreadItem[]),
+    ],
+  })
+  const reopened = setup([history], createPendingInputStore(file))
+  reopened.core.start()
+  await settle()
+  const session = watch(reopened.core)
+  await settle()
+  assert.deepEqual(
+    session.seen.view?.queued.map((entry) => [entry.text, entry.delivery]),
+    [['甲', 'held']],
+  )
+  assert.deepEqual(session.seen.view?.queued[0]?.images, [{ url: PNG, name: '保留.png' }])
+  assert.equal(reopened.sent('turn/start').length, 0)
 })
 
 test('引导：回合正常结束时没回显的话留在对话里，不重发', async () => {
@@ -1380,6 +1561,10 @@ test('图片：引导时一起插进去；回合被打断没送达的，连图�
     threadId: 'a',
     turn: finished('srv-1', { status: 'interrupted' }),
   })
+  await settle()
+  assert.equal(sent('turn/start').length, 1)
+  assert.deepEqual(session.seen.view?.queued[0]?.images, [{ url: PNG, name: 'a.png' }])
+  await command('session.resumeQueue', where)
   await settle()
   assert.deepEqual((sent('turn/start')[1] as { input: unknown }).input, [
     { type: 'text', text: '二', text_elements: [] },

@@ -462,6 +462,7 @@ export interface Commands {
       images?: ImageAttachment[]
       extras?: MessageExtra[]
       now?: boolean
+      pending?: 'include' | 'only'
     }
     result: Record<string, never>
   }
@@ -735,6 +736,10 @@ export interface Commands {
   /** 把一条排着队的消息拿掉 */
   'session.unqueue': {
     params: { deviceId: string; sessionId: string; messageId: string }
+    result: Record<string, never>
+  }
+  'session.resumeQueue': {
+    params: { deviceId: string; sessionId: string; messageId?: string }
     result: Record<string, never>
   }
   /**

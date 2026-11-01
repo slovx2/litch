@@ -194,6 +194,11 @@ export const UserMessage = memo(function UserMessage({
     <SystemCard {...ref} item={item} system={item.system} />
   ) : (
     <div className="umsg" data-anchor={`u:${ref.itemId}`} ref={bubble}>
+      {item.delivery ? (
+        <div className="muted" data-input-delivery={item.delivery}>
+          {t(`inputDelivery.${item.delivery}`)}
+        </div>
+      ) : null}
       <UserAttachments attachments={item.attachments} />
       {comments ? <SentComments {...ref} comments={comments.comments} /> : null}
       {replies ? (

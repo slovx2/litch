@@ -120,6 +120,7 @@ export function harnessDeclaration(runtime: RuntimeBackendType): HarnessDeclarat
     // 后台任务的集合、回合的来历只给声明了 backgroundTasks 的连接（server.mts 的 withBackground）
     extensions: [
       EXTENSION.filePreview,
+      EXTENSION.inputDelivery,
       EXTENSION.declineWithNote,
       EXTENSION.planConfirmation,
       EXTENSION.clientTools,

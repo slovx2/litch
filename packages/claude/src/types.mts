@@ -130,6 +130,7 @@ export type ThreadItem =
       id: string
       content: UserInput[]
       clientId?: string | null
+      litchInputDelivery?: import('../../protocol/src/input-delivery.mjs').InputDelivery
       /** 别的会话发来的消息（peerMessages 扩展）：只发给声明过的连接，别的连接上去掉 */
       litchPeer?: LitchPeer
     }
@@ -350,6 +351,7 @@ export interface ImageInput {
 }
 
 export type RuntimeEvent =
+  | { type: 'input_delivery'; messageId: string; status: 'queued' | 'sent' | 'held' | 'unknown' }
   | {
       type: 'rate_limits'
       credentialScope: string | null

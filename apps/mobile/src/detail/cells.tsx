@@ -106,6 +106,11 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
         ]}
         testID="user-message"
       >
+        {row.delivery ? (
+          <Text style={{ color: c.ink3, fontSize: font.size.small }}>
+            {t(`inputDelivery.${row.delivery}`)}
+          </Text>
+        ) : null}
         <UserAttachments row={row} />
         {comments ? (
           <CommentCards comments={comments.comments} turnId={row.turnId} onLongPress={menu} />

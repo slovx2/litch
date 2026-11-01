@@ -11,6 +11,27 @@ const fresh = (path) => import(`${path}?run=${++generation}`)
 
 beforeEach(() => files.clear())
 
+test('待发：手机重启保留原文和图片，未确认交付不变成自动待发，忘掉设备一起删除', async () => {
+  const { fileDeviceStore } = await fresh('../src/platform/device-store.ts')
+  const store = fileDeviceStore()
+  store.pendingInputs('dev').save('s1', [
+    {
+      id: 'm1',
+      clientId: 'input-1',
+      delivery: 'unknown',
+      text: '插话',
+      images: [{ url: 'data:image/png;base64,AA', name: '保留.png' }],
+      extras: [],
+    },
+  ])
+  const reopened = (await fresh('../src/platform/device-store.ts')).fileDeviceStore()
+  const back = reopened.pendingInputs('dev').load('s1')
+  assert.equal(back[0].delivery, 'unknown')
+  assert.equal(back[0].images[0].name, '保留.png')
+  reopened.forget('dev')
+  assert.deepEqual(fileDeviceStore().pendingInputs('dev').load('s1'), [])
+})
+
 test('草稿：攒一下才写文件，离开时当场写；重开应用还在；清空的不留', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const drafts = await fresh('../src/detail/composer/drafts.ts')

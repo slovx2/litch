@@ -1,3 +1,4 @@
+import { inputDelivery } from '../../../protocol/src/input-delivery.mjs'
 import { wrapQuestionFields } from '../../../protocol/src/pending-history.mjs'
 // 投影的第一步：协议条目 → 显示条目。纯函数，不碰连接，不碰状态。
 // 各种 harness 的差异在这里消化掉，界面拿到的条目和 harness 无关。
@@ -668,8 +669,14 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
   const id = item.id
   const open: ItemStatus = streaming ? 'inProgress' : 'completed'
   switch (item.type) {
-    case 'userMessage':
-      return userMessage(id, item.content, (item as { litchPeer?: unknown }).litchPeer)
+    case 'userMessage': {
+      const delivery = inputDelivery(item)
+      return {
+        ...userMessage(id, item.content, (item as { litchPeer?: unknown }).litchPeer),
+        ...(delivery ? { delivery } : {}),
+        ...(delivery && delivery !== 'sent' ? { unconfirmed: true as const } : {}),
+      }
+    }
     case 'agentMessage': {
       // 题目标识用协议条目自己的标识：显示条目的标识可能是本机另起的
       const questions = projectQuestions(item.id, item.questions)

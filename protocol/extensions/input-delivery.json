@@ -1,0 +1,27 @@
+{
+  "extension": "inputDelivery",
+  "description": "插话交付状态；sent 是原生运行时已接纳，不承诺模型执行。止损版仅 Claude 报告。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "inputDelivery" }
+    }
+  },
+  "undeclared": "不添加 litchInputDelivery 字段；未接纳插话不发标准用户消息回显。",
+  "rules": [
+    "userMessage 可带 litchInputDelivery: queued、sent、held、unknown；状态更新经同 ID 的 item/completed 发送。",
+    "queued 仅表示已提交运行时队列；sent 表示原生接纳；held 只用于明确取消未消费输入；unknown 不得自动重发。",
+    "按实际投递连接裁剪字段，历史读回也裁剪；标准 turn/steer 的 turnId 返回值不变。",
+    "held 不是设备权威待发队列；止损版由发送客户端保留完整输入并暂停。本地持久不提供跨设备领取或自动重发保证。"
+  ],
+  "parts": [
+    {
+      "kind": "Field",
+      "on": "ThreadItem.userMessage",
+      "name": "litchInputDelivery",
+      "schema": { "enum": ["queued", "sent", "held", "unknown"] }
+    }
+  ]
+}

@@ -120,6 +120,8 @@ interface ComposerProps {
   /** 回合进行中发的消息直接插进这个回合（设置里选了立即发送、这个会话也插得了话）：主按钮照常是“发送” */
   steerNow?: boolean
   queued: QueuedMessage[]
+  pendingSend?: { value: 'include' | 'only'; change(value: 'include' | 'only'): void }
+  onResumeQueue?(messageId?: string): Promise<unknown>
   settings: SessionSettings
   onSettings(patch: Partial<SessionSettings>): void
   /** 上下文占用。新建会话还没有，不给 */
@@ -587,12 +589,25 @@ export function Composer(props: ComposerProps) {
   const stuck = (message: QueuedMessage) => props.steerImages === false && message.images.length > 0
 
   const unqueue = (message: QueuedMessage, edit: boolean) => {
+    if (
+      edit &&
+      (extras.length + comments.length + message.extras.length > EXTRAS_LIMIT ||
+        (extras.some((extra) => extra.kind === 'skill') &&
+          message.extras.some((extra) => extra.kind === 'skill')))
+    ) {
+      setError(t('composer.pendingDraftFull'))
+      return
+    }
+    if (edit && images.length + message.images.length > MAX_IMAGES) {
+      setError(t('composer.image.count', { max: MAX_IMAGES }))
+      return
+    }
     onUnqueue?.(message.id)
     if (!edit) return
     setText((current) =>
       current && message.text ? `${current}\n${message.text}` : current || message.text,
     )
-    setImages((current) => [...current, ...message.images].slice(0, MAX_IMAGES))
+    setImages((current) => [...current, ...message.images])
     setExtras((current) => mergeExtras(current, message.extras))
     input.current?.focus()
   }
@@ -601,8 +616,33 @@ export function Composer(props: ComposerProps) {
   const queuing = running === true && !props.steerNow
   // 有字、有图或带着东西的时候主按钮是发送（回合进行中就是排队）；什么都没写而回合在跑，主按钮是停止
   const mode = filled ? (queuing ? 'queue' : 'send') : running && onStop ? 'stop' : 'send'
+  const heldCount = queued.filter((entry) => entry.delivery === 'held').length
+  const resume = (id?: string) =>
+    props.onResumeQueue?.(id).catch((error: unknown) => setError(String(error)))
   return (
     <>
+      {heldCount > 0 ? (
+        <div className="tray-row" data-pending-inputs="">
+          <span className="grow">{t('composer.pendingStopped', { n: heldCount })}</span>
+          <button type="button" className="mini" disabled={!!blocked} onClick={() => resume()}>
+            {t('composer.pendingSend')}
+          </button>
+        </div>
+      ) : null}
+      {heldCount > 0 && props.pendingSend ? (
+        <label className="tray-row">
+          <select
+            aria-label={t('composer.pendingChoice')}
+            value={props.pendingSend.value}
+            onChange={(event) =>
+              props.pendingSend?.change(event.target.value === 'only' ? 'only' : 'include')
+            }
+          >
+            <option value="include">{t('composer.pendingInclude', { n: heldCount })}</option>
+            <option value="only">{t('composer.pendingOnly')}</option>
+          </select>
+        </label>
+      ) : null}
       {queued.length > 0 ? (
         <ul className="tray" aria-label={t('composer.queued')}>
           {queued.map((message) => (
@@ -622,7 +662,20 @@ export function Composer(props: ComposerProps) {
                 </span>
               ) : null}
               <span className="ell grow">{message.text}</span>
-              {running && onSteer ? (
+              {message.delivery ? (
+                <span className="muted">{t(`inputDelivery.${message.delivery}`)}</span>
+              ) : null}
+              {message.delivery === 'held' ? (
+                <button
+                  type="button"
+                  className="mini"
+                  disabled={!!blocked}
+                  onClick={() => resume(message.id)}
+                >
+                  {t('composer.send')}
+                </button>
+              ) : null}
+              {running && onSteer && !message.delivery ? (
                 // 带着图而图插不进去的那一条：留着能点，点了说为什么（等回合结束它会照常发出去）
                 <button
                   type="button"
@@ -650,6 +703,9 @@ export function Composer(props: ComposerProps) {
               </button>
             </li>
           ))}
+          {queued.some((entry) => entry.delivery === 'unknown') ? (
+            <li className="muted">{t('composer.pendingUnknown')}</li>
+          ) : null}
         </ul>
       ) : null}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: 拖放没有键盘的对应操作，加附件另有按钮 */}
@@ -861,6 +917,11 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
   const last = turnIds?.[turnIds.length - 1] ?? ''
   const running = useKey<TurnView>(keys.turn(deviceId, sessionId, last))?.status === 'running'
   const queued = useKey<QueuedMessage[]>(keys.queued(deviceId, sessionId)) ?? NO_QUEUE
+  const [pendingSend, setPendingSend] = useState<'include' | 'only'>('include')
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 切换会话时恢复默认选择，不沿用另一个会话的选择
+  useEffect(() => {
+    setPendingSend('include')
+  }, [sessionId])
   const asking = (useKey<RequestView[]>(keys.requests(deviceId, sessionId))?.length ?? 0) > 0
   const settings = useKey<SessionSettings>(keys.settings(deviceId, sessionId)) ?? NO_SETTINGS
   const usage = useKey<ContextUsage | null>(keys.usage(deviceId, sessionId))
@@ -897,14 +958,19 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
           text: withNotes(text, notes.text),
           images,
           extras,
+          pending: pendingSend,
           ...(whenRunning === 'steer' ? { now: true } : {}),
+        })
+        .then((result) => {
+          setPendingSend('include')
+          return result
         })
         .catch((error: unknown) => {
           notes.restore()
           throw error
         })
     },
-    [channel, deviceId, sessionId, t, whenRunning],
+    [channel, deviceId, sessionId, t, whenRunning, pendingSend],
   )
   // 打的是 /goal 加上目标：设成持续目标，不当消息发（goal/send.ts）
   const sendOrGoal = useGoalSend(deviceId, sessionId, onSend)
@@ -977,6 +1043,14 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
         asking={asking}
         steerNow={whenRunning === 'steer'}
         queued={queued}
+        pendingSend={{ value: pendingSend, change: setPendingSend }}
+        onResumeQueue={(messageId) =>
+          channel.command('session.resumeQueue', {
+            deviceId,
+            sessionId,
+            ...(messageId ? { messageId } : {}),
+          })
+        }
         settings={settings}
         usage={usage ?? null}
         {...(compact ? { compact } : {})}

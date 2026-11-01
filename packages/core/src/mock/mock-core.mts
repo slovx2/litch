@@ -767,9 +767,21 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     goal.turnEnded(view, turnId, status)
     managers.turnEnded(view.deviceId, view.sessionId, turnId)
     if (managers.readOnly(view.deviceId, view.sessionId)) return
-    const next = view.queued[0]
+    if (status !== 'completed') {
+      applySessionOps(view, [
+        {
+          op: 'queue.set',
+          queued: view.queued.map((entry) => ({ ...entry, delivery: entry.delivery ?? 'held' })),
+        },
+      ])
+      tree.ended(view, status)
+      return
+    }
+    const next = view.queued.find((entry) => !entry.delivery)
     if (next) {
-      applySessionOps(view, [{ op: 'queue.set', queued: view.queued.slice(1) }])
+      applySessionOps(view, [
+        { op: 'queue.set', queued: view.queued.filter((entry) => entry !== next) },
+      ])
       startTurn(view, next)
       return
     }
@@ -2879,13 +2891,28 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         return peekOf(view.turns.at(-1), (id) => view.items[id], view.requests)
       }
       if (name === 'session.send') {
-        const { text, images, extras, now, ...where } = params as Commands['session.send']['params']
+        const { text, images, extras, now, pending, ...where } =
+          params as Commands['session.send']['params']
         const message = outgoing(text, images, extras)
         const view = reachView(where)
         if (SEND_FAILS.test(text)) throw new ChannelError('remote', '模拟：这条消息没发出去')
         // 和真的核心一样：只读的会话（不接受直接输入的子代理、归档着的）发不了
         if (!view.live) throw new ChannelError('rejected', '这个会话是只读的')
         const turn = running(view)
+        if (view.queued.some((entry) => entry.delivery === 'held')) {
+          const armed: SessionView['queued'] = view.queued.map((entry) => {
+            if (entry.delivery !== 'held' || pending === 'only') return entry
+            const { delivery: _delivery, ...ready } = entry
+            return ready
+          })
+          armed.push({ id: `q${++seq}`, ...message })
+          const next = turn ? undefined : armed.find((entry) => !entry.delivery)
+          applySessionOps(view, [
+            { op: 'queue.set', queued: armed.filter((entry) => entry !== next) },
+          ])
+          if (next) startTurn(view, next)
+          return {}
+        }
         // 和真的核心一样：要求直接插进去、插得进去的不排队（插不进去的照常排着）
         if (
           now &&
@@ -3169,6 +3196,21 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         applySessionOps(view, [
           { op: 'queue.set', queued: view.queued.filter((message) => message.id !== messageId) },
         ])
+        return {}
+      }
+      if (name === 'session.resumeQueue') {
+        const { messageId, ...where } = params as Commands['session.resumeQueue']['params']
+        const view = reachView(where)
+        const armed: SessionView['queued'] = view.queued.map((entry) => {
+          if (entry.delivery !== 'held' || (messageId && messageId !== entry.id)) return entry
+          const { delivery: _delivery, ...ready } = entry
+          return ready
+        })
+        const next = running(view) ? undefined : armed.find((entry) => !entry.delivery)
+        applySessionOps(view, [
+          { op: 'queue.set', queued: armed.filter((entry) => entry !== next) },
+        ])
+        if (next) startTurn(view, next)
         return {}
       }
       if (name === 'session.respond') {

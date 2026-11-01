@@ -8,6 +8,7 @@ import {
   checkNotes,
   checkSaved,
   checkSnapshot,
+  createPendingInputStore,
   type DeviceStore,
   type SavedDevices,
   type SnapshotStore,
@@ -24,6 +25,7 @@ const snapshotFile = (deviceId: string) => jsonFile<unknown>(`snapshot-${safe(de
 const terminalFile = (deviceId: string) => jsonFile<unknown>(`terminals-${safe(deviceId)}.json`)
 // 直连原生 codex 时哪些会话带了哪几个命名空间的规则，恢复、分叉时核心照它补开发者指令
 const codexFile = (deviceId: string) => jsonFile<unknown>(`codex-threads-${safe(deviceId)}.json`)
+const inputFile = (deviceId: string) => jsonFile<unknown>(`pending-inputs-${safe(deviceId)}.json`)
 
 export function fileDeviceStore(): DeviceStore {
   return {
@@ -56,11 +58,13 @@ export function fileDeviceStore(): DeviceStore {
       }
     },
     forget(deviceId) {
+      inputFile(deviceId).remove()
       snapshotFile(deviceId).remove()
       terminalFile(deviceId).remove()
       codexFile(deviceId).remove()
       forgetViews(deviceId)
     },
+    pendingInputs: (deviceId) => createPendingInputStore(inputFile(deviceId)),
   }
 }
 

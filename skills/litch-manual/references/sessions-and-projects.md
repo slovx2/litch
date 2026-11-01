@@ -174,6 +174,13 @@ explain it:
   (the composer's placeholder says which). Codex, Claude Code, Pi, DSH and OpenCode take images
   mid-turn; ACP agents (Gemini, Qwen and the generic ACP entry) take no messages mid-turn. "Send now"
   on a queued message puts it into the running turn. With nothing typed the button is Stop, which interrupts the turn.
+  停止或回合失败后，本客户端尚未发送的消息暂停，不会自动开启下一回合。桌面和手机输入框上方显示
+  “已停止，N 条待发”，可发送全部或单条、编辑回输入框、移除。再次输入消息时，发送处先选择
+  “连同 N 条待发一起发”（默认）或“只发这条”，一次提交；前者保持各条消息的顺序与附件归属，后者保留原待发。
+  Claude Code 的插话气泡区分“排队中”“已发送”“已停止待发送”“状态待确认”；“已发送”只表示运行时已接纳，
+  不保证模型已经执行。只有明确取消的未消费输入进入待发；状态待确认的消息不会自动重发，核实后可编辑再发。
+  待发原文和附件保存在当前客户端，重启后保持暂停并尽量按 Claude 历史对账；尚不在设备间同步。
+  编辑时若现有草稿容纳不下附件，消息仍留在待发列表。此阶段仅 Claude 提供交付状态，其他 harness 只统一停止后暂停队列。
 - Child sessions show their harness in the sidebar/list, cards and details. A successful user message
   during an automated turn makes that turn user-driven.
 - **Approvals and questions** appear as cards above the composer: commands, file changes, extra

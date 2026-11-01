@@ -18,6 +18,7 @@ export const EXTENSIONS_CAPABILITY = 'litchExtensions'
 /** 扩展名。以后每加一个扩展在这里加一个名字，并在 protocol/extensions/ 下写一份定义 */
 export const EXTENSION = {
   projectPermissions: 'projectPermissions',
+  inputDelivery: 'inputDelivery',
   /** 设备上的经理、看板和工作线；字段与通知只发给声明过 litchManager 的连接（manager.mts）。 */
   manager: 'litchManager',
   suggestionInbox: 'suggestionInbox',

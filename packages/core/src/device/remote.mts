@@ -193,6 +193,7 @@ export interface MachineLogStore {
 
 /** 设备配置和各台设备的侧栏快照存在哪，由外壳定 */
 export interface DeviceStore {
+  pendingInputs?(deviceId: string): import('./pending-inputs.mjs').PendingInputStore
   load(): SavedDevices
   save(devices: SavedDevices): void
   /** 一台设备的侧栏快照 */

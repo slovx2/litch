@@ -83,6 +83,7 @@ export type Row =
       sessions?: SessionMentionView[]
       /** 发送的时刻（回合开始的时刻），只有回合开头那条有：插进来的话条目上不带时刻 */
       sentAt?: number
+      delivery?: 'queued' | 'sent' | 'held' | 'unknown'
       /** 同一回合进行中补充的用户输入。 */
       addition?: boolean
     }
@@ -577,6 +578,7 @@ export class RowBuilder {
           turnId: turn.id,
           text: item.text,
           attachments: item.attachments,
+          ...(item.delivery ? { delivery: item.delivery } : {}),
           ...(turnAddition(turn, item.id) ? { addition: true } : {}),
           ...(item.peer ? { peer: item.peer, expanded: this.expanded.has(item.id) } : {}),
           ...(item.sessions ? { sessions: item.sessions } : {}),

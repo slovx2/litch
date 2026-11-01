@@ -1018,7 +1018,7 @@ export class CodexClaudeAppServer {
         )
       }
       case 'thread/fork':
-        return this.threadFork(peer, asRecord(params))
+        return this.withPeerMessages(peer, await this.threadFork(peer, asRecord(params)))
       case 'thread/list':
         await this.refreshNative()
         return this.withNativeOwner(
@@ -1093,7 +1093,7 @@ export class CodexClaudeAppServer {
         return {}
       }
       case 'thread/turns/items/list':
-        return this.threadTurnItemsList(asRecord(params))
+        return this.withPeerItems(peer, this.threadTurnItemsList(asRecord(params)))
       case 'thread/name/set':
         return this.threadNameSet(asRecord(params))
       case 'thread/archive':
@@ -1159,9 +1159,9 @@ export class CodexClaudeAppServer {
       case 'thread/backgroundTerminals/terminate':
         return this.threadBackgroundTerminalsTerminate(peer, asRecord(params))
       case 'thread/rollback':
-        return this.threadRollback(asRecord(params))
+        return this.withPeerMessages(peer, await this.threadRollback(asRecord(params)))
       case 'thread/revert':
-        return this.threadRevert(asRecord(params))
+        return this.withPeerMessages(peer, await this.threadRevert(asRecord(params)))
       case 'thread/loaded/list':
         return this.threadLoadedList(asRecord(params))
       case 'thread/inject_items':
@@ -4956,6 +4956,14 @@ export class CodexClaudeAppServer {
           }
         },
         onEvent: relayRuntimeEvents(relay !== null, async (event) => {
+          // 取消回执在回合先落 interrupted 后到达，不能被迟到工具事件的过滤挡掉。
+          if (event.type === 'input_delivery') {
+            const item = this.store.updateItem(turn.id, event.messageId, (entry) =>
+              entry.type === 'userMessage' ? { ...entry, litchInputDelivery: event.status } : entry,
+            )
+            if (item) this.sendInputItem(peer, thread.id, turn.id, item)
+            return
+          }
           // Interrupts, watchdog expiry, and a peer reconnect can leave a few
           // SDK messages queued after the server has terminalized the turn.
           // They are stale and must never resurrect a child or an inProgress
@@ -6857,7 +6865,7 @@ export class CodexClaudeAppServer {
       throw new ProtocolError(-32009, '回合已终结')
     const input = Array.isArray(params.input) ? (params.input as UserInput[]) : []
     const { prompt, images } = this.steerInput(threadId, input)
-    // 插的话留在回合里（thread/read），送进去之后和上游一样发给全部订阅者（上游在交给模型时发这条用户消息）
+    // 原文先留在回合里；原生运行时另报交付状态，SDK 队列受理不能当消费确认。
     const item: ThreadItem = {
       type: 'userMessage',
       id: newId(),
@@ -6873,7 +6881,9 @@ export class CodexClaudeAppServer {
       this.store.withdrawSteeredMessage(activeTurnId, item.id, messageId)
       throw error
     }
-    this.sendInputItem(peer, threadId, activeTurnId, item)
+    // SDK 队列受理不是消费确认；回显带 queued，标准连接等原生接纳后才看到用户消息。
+    const queued = this.store.getItem(activeTurnId, item.id)
+    if (queued) this.sendInputItem(peer, threadId, activeTurnId, queued)
     return { turnId: activeTurnId }
   }
 
@@ -7883,6 +7893,14 @@ export class CodexClaudeAppServer {
     notification: { method: string; params: unknown },
     origin: RpcPeer,
   ): void {
+    const delivery = asRecord(asRecord(notification.params).item).litchInputDelivery
+    if (
+      (notification.method === 'item/started' || notification.method === 'item/completed') &&
+      delivery &&
+      delivery !== 'sent' &&
+      !this.peerFeatures.get(target)?.extensions.has(EXTENSION.inputDelivery)
+    )
+      return
     debugLog('rpc.notify', {
       peerId: target.id,
       originalPeerId: target.id === origin.id ? null : origin.id,
@@ -7908,19 +7926,25 @@ export class CodexClaudeAppServer {
   // item/started、item/completed 上的用户消息：没声明的连接去掉 litchPeer（另拷一份，别的连接看到的不变）
   private withPeerItem(target: RpcPeer, params: unknown): unknown {
     const item = asRecord(asRecord(params).item)
-    if (!('litchPeer' in item) || this.declaresPeerMessages(target)) return params
-    const { litchPeer: _, ...rest } = item
+    const rest = { ...item }
+    this.stripInputFields(target, rest)
     return { ...asRecord(params), item: rest }
+  }
+
+  private stripInputFields(peer: RpcPeer, item: Record<string, unknown>): void {
+    if (!this.declaresPeerMessages(peer)) delete item.litchPeer
+    if (!this.peerFeatures.get(peer)?.extensions.has(EXTENSION.inputDelivery))
+      delete item.litchInputDelivery
   }
 
   // thread/items/list、thread/items/read 的 data[].item：没声明的连接去掉 litchPeer
   private withPeerItems<T>(peer: RpcPeer, result: T): T {
-    if (this.declaresPeerMessages(peer)) return result
     const data = (result as { data?: unknown } | null)?.data
     if (Array.isArray(data))
       for (const entry of data) {
-        const item = (entry as { item?: unknown } | null)?.item
-        if (item && typeof item === 'object') delete (item as { litchPeer?: unknown }).litchPeer
+        const item = (entry as { item?: unknown } | null)?.item ?? entry
+        if (item && typeof item === 'object')
+          this.stripInputFields(peer, item as Record<string, unknown>)
       }
     return result
   }
@@ -7930,14 +7954,14 @@ export class CodexClaudeAppServer {
    * litchPeer。应答是现拼的，直接改
    */
   private withPeerMessages<T>(peer: RpcPeer, result: T, turnsPage = false): T {
-    if (this.declaresPeerMessages(peer)) return result
     const strip = (turns: unknown) => {
       if (!Array.isArray(turns)) return
       for (const turn of turns) {
         const items = (turn as { items?: unknown } | null)?.items
         if (Array.isArray(items))
           for (const item of items)
-            if (item && typeof item === 'object') delete (item as { litchPeer?: unknown }).litchPeer
+            if (item && typeof item === 'object')
+              this.stripInputFields(peer, item as Record<string, unknown>)
       }
     }
     const body = result && typeof result === 'object' ? (result as Record<string, unknown>) : {}
@@ -8113,6 +8137,19 @@ export class CodexClaudeAppServer {
 
   // turn/started、turn/completed 上的回合：给声明了的连接补 litchOrigin（另拷一份，别的连接看到的不变）
   private withTurnOrigin(target: RpcPeer, params: unknown): unknown {
+    const originalTurn = asRecord(asRecord(params).turn)
+    if (Array.isArray(originalTurn.items))
+      params = {
+        ...asRecord(params),
+        turn: {
+          ...originalTurn,
+          items: originalTurn.items.map((entry) => {
+            const item = { ...asRecord(entry) }
+            this.stripInputFields(target, item)
+            return item
+          }),
+        },
+      }
     if (!this.declaresBackground(target)) return params
     const turn = asRecord(asRecord(params).turn)
     if (typeof turn.id !== 'string') return params

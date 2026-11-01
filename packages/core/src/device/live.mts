@@ -1,3 +1,4 @@
+import { inputDelivery } from '../../../protocol/src/input-delivery.mjs'
 import { questionSource } from '../../../protocol/src/pending-asks.mjs'
 // 一台设备上“打开着”的会话：订阅它的事件，把通知变成会话增量，受理发送、打断和答复。
 // 这里维护每个会话当前的完整视图：后来的订阅者拿到的快照已经包含之前的增量。
@@ -139,6 +140,7 @@ export interface LiveHost {
   speeds?: SpeedStore
   /** 会话视图存在这台电脑上的那一份（view-store.mts）：离开、回合结束时存，打开时先摆出来。不给就不存 */
   views?: ViewStore
+  pendingInputs?: import('./pending-inputs.mjs').PendingInputStore
   log(line: string): void
 }
 
@@ -207,7 +209,13 @@ export interface LiveSessions {
   /** 执行计划：退出计划模式，并以 text 这句话发起一个回合。回合还在进行的时候做不了 */
   implementPlan(sessionId: string, text: string): Promise<void>
   /** now：有回合在进行时直接插进去（引导），插不进去就照常排队 */
-  send(sessionId: string, message: OutgoingMessage, now?: boolean): Promise<void>
+  send(
+    sessionId: string,
+    message: OutgoingMessage,
+    now?: boolean,
+    pending?: 'include' | 'only',
+  ): Promise<void>
+  resumeQueue(sessionId: string, messageId?: string): void
   /** 发不出去的消息放进队尾、写一句为什么，等用户处理（同排队的消息发不出去时） */
   hold(sessionId: string, message: OutgoingMessage, error: unknown): void
   /** 把一条排着队的消息现在就插进正在进行的回合里 */
@@ -274,13 +282,15 @@ interface Live {
   summarized: Set<string>
   requests: Map<string, Waiting>
   queued: QueuedMessage[]
+  paused: boolean
+  dispatching: QueuedMessage[]
   /** 用户改了、还没告诉对面的设置 */
   pending: Partial<SessionSettings>
   /**
    * 插进回合里、对面还没回显的话：发出去时带的客户端标识 → 先显示出来的那个条目。
-   * 对面真的把它交给模型时会带着这个标识回显一条用户消息，那时落在同一个条目上
+   * 声明交付状态的引擎在 sent 才移除；queued 仍保留原文，停止时按明确回执结算。
    */
-  steered: Map<string, { key: string; turnId: string; message: OutgoingMessage }>
+  steered: Map<string, { key: string; turnId: string; message: OutgoingMessage; tracked?: boolean }>
   /** 我们自己发出的回退还没回来。这期间对面的“历史被改写了”通知说的就是这一次，不用重新载入 */
   reverting: boolean
   /** 回退途中已经收到了对面的“历史被改写了” */
@@ -475,6 +485,67 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       return stamped
     })
     for (const sink of live.sinks) sink.delta(ops)
+    if (
+      ops.some(
+        (op) => op.op === 'queue.set' || (op.op === 'item.add' && op.item.kind === 'userMessage'),
+      )
+    )
+      persistInputs(live)
+  }
+
+  const persistInputs = (live: Live) => {
+    if (!host.pendingInputs) return
+    const inFlight: QueuedMessage[] = [...live.steered]
+      .filter(([clientId]) => !live.queued.some((entry) => entry.clientId === clientId))
+      .map(([clientId, entry]) => ({
+        ...entry.message,
+        id: clientId,
+        clientId,
+        delivery: 'unknown',
+      }))
+    try {
+      host.pendingInputs.save(live.id, [...inFlight, ...live.dispatching, ...live.queued])
+    } catch (error) {
+      setNote(live, phrase('session.queueFailed', { message: String(error) }))
+    }
+  }
+
+  const pauseQueue = (live: Live) => {
+    live.paused = true
+    // 先按插话原顺序占位，取消回执只改状态；否则后排的普通消息会跑到退回插话前面。
+    const uncertain: QueuedMessage[] = [...live.steered]
+      .filter(
+        ([clientId, entry]) =>
+          entry.tracked && !live.queued.some((message) => message.clientId === clientId),
+      )
+      .map(([clientId, entry]) => ({
+        ...entry.message,
+        id: clientId,
+        clientId,
+        delivery: 'unknown',
+      }))
+    live.queued = [...uncertain, ...live.queued]
+    live.queued = live.queued.map((entry) => ({ ...entry, delivery: entry.delivery ?? 'held' }))
+    emit(live, [{ op: 'queue.set', queued: live.queued }])
+  }
+
+  const releaseInput = (entry: QueuedMessage): QueuedMessage => {
+    const { delivery: _delivery, clientId: _clientId, ...message } = entry
+    return message
+  }
+
+  const reconcileInput = (live: Live, item: ThreadItem) => {
+    if (item.type !== 'userMessage' || !item.clientId) return
+    const status = inputDelivery(item)
+    const existing = live.queued.find((entry) => entry.clientId === item.clientId)
+    if (status === 'sent' && existing) {
+      live.queued = live.queued.filter((entry) => entry !== existing)
+    } else if (existing && (status === 'held' || status === 'unknown')) {
+      live.queued = live.queued.map((entry) =>
+        entry === existing ? { ...entry, delivery: status } : entry,
+      )
+    } else return
+    emit(live, [{ op: 'queue.set', queued: live.queued }])
   }
 
   const viewTurn = (live: Live, turnId: string): string => live.alias.get(turnId) ?? turnId
@@ -646,11 +717,26 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     // 插进回合里的话按发出去时带的标识认；回合的第一条消息按“这个回合里第一条用户消息”认
     let echoed: string | undefined
     if (item.type === 'userMessage') {
+      reconcileInput(live, item)
       const own = itemKey(viewId, item.id, position)
       const steered = item.clientId ? live.steered.get(item.clientId) : undefined
       if (steered && item.clientId) {
         echoed = steered.key
-        live.steered.delete(item.clientId)
+        const status = inputDelivery(item)
+        if (status) steered.tracked = true
+        if (status !== 'queued') live.steered.delete(item.clientId)
+        if (
+          (status === 'held' || status === 'unknown') &&
+          !live.queued.some((entry) => entry.clientId === item.clientId)
+        ) {
+          live.paused = true
+          live.queued = [
+            ...live.queued.filter((entry) => entry.delivery),
+            { ...steered.message, id: item.clientId, clientId: item.clientId, delivery: status },
+            ...live.queued.filter((entry) => !entry.delivery),
+          ]
+          emit(live, [{ op: 'queue.set', queued: live.queued }])
+        }
       } else if (!live.itemAlias.has(own)) {
         // 已经对上过的条目（开始、完成各来一次）不再去认领别的
         echoed = live.echo.get(viewId)
@@ -743,10 +829,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   }
 
   /**
-   * 回合结束时，插进去却一直没被回显的话：
-   * 回合是被打断或者出错结束的，说明它没来得及交给模型（引擎是在下一步开始前才交的）——
-   * 从对话里撤掉，放回队首，照常作为下一条发出去，不让它悄悄丢了；
-   * 回合正常结束的就留在对话里（有的引擎交了但不回显，再发一遍反而重复）。
+   * 声明交付状态但没有最终回执的插话保留待确认，禁止自动重发。
+   * 其他引擎保留既有的未回显恢复判据，但改为暂停待发；正常结束不猜测重发。
    */
   const settleSteered = (live: Live, viewId: string, completed: boolean) => {
     const back: QueuedMessage[] = []
@@ -754,12 +838,22 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     for (const [clientId, entry] of live.steered) {
       if (entry.turnId !== viewId) continue
       live.steered.delete(clientId)
-      if (completed) continue
-      ops.push({ op: 'item.remove', turnId: viewId, itemId: entry.key })
-      back.push({ id: `q${++localSeq}`, ...entry.message })
+      if (completed && !entry.tracked) continue
+      const delivery = entry.tracked ? 'unknown' : 'held'
+      const item = live.view?.items[entry.key]
+      if (entry.tracked && item?.kind === 'userMessage')
+        ops.push({ op: 'item.add', turnId: viewId, item: { ...item, delivery } })
+      else ops.push({ op: 'item.remove', turnId: viewId, itemId: entry.key })
+      if (!live.queued.some((message) => message.clientId === clientId))
+        back.push({ id: clientId, clientId, ...entry.message, delivery })
     }
-    if (back.length === 0) return
+    if (back.length === 0) {
+      if (ops.length) emit(live, ops)
+      else persistInputs(live)
+      return
+    }
     live.queued = [...back, ...live.queued]
+    live.paused = true
     emit(live, [...ops, { op: 'queue.set', queued: live.queued }])
   }
 
@@ -844,6 +938,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       putTurn(live, turn)
     },
     'turn/completed': (live, { turn }) => {
+      if (turn.status !== 'completed') pauseQueue(live)
       putTurn(live, turn)
       // 回合结束了，还在重试的那一句不留着（对面一般在结束前已经说过重试结束了）
       const viewId = viewTurn(live, turn.id)
@@ -1035,6 +1130,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     }
     try {
       const resumed = await withSpeed('thread/resume', { threadId: live.id }, options)
+      for (const turn of resumed.thread.turns ?? [])
+        for (const item of turn.items) reconcileInput(live, item)
       const view = projectThread(resumed.thread, scope(resumed.thread))
       return {
         ...view,
@@ -1109,6 +1206,12 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
   /** 重新载入会话。返回的承诺在载入完（或放弃）时落定，不会失败 */
   const load = (live: Live): Promise<void> => {
+    for (const [clientId, entry] of live.steered) {
+      if (!entry.tracked) continue
+      live.steered.delete(clientId)
+      if (!live.queued.some((message) => message.clientId === clientId))
+        live.queued.push({ ...entry.message, id: clientId, clientId, delivery: 'unknown' })
+    }
     live.loading?.abort()
     const cancel = createCancel()
     live.loading = cancel
@@ -1166,6 +1269,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           clearReached(live)
         }
         for (const sink of live.sinks) sink.snapshot(live.view)
+        persistInputs(live)
         const held = live.held
         live.held = []
         for (const entry of held) deliver(live, entry.method, entry.params, true)
@@ -1337,19 +1441,31 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   /** 空下来了就把排着队的第一条发出去 */
   const pump = (live: Live) => {
     // 摆着旧的、正在重新载入的：等载入完（load 成功时再 pump）
-    if (live.stale || live.loading || live.compactSwitch) return
+    if (live.stale || live.loading || live.compactSwitch || live.paused || live.dispatching.length)
+      return
     if (!live.view?.live || !reachable(live) || isRunning(live.view)) return
-    const next = live.queued[0]
+    const next = live.queued.find((entry) => !entry.delivery)
     if (!next) return
-    live.queued = live.queued.slice(1)
+    const dispatch = { ...next, delivery: 'unknown' as const }
+    live.dispatching.push(dispatch)
+    live.queued = live.queued.filter((entry) => entry !== next)
     emit(live, [{ op: 'queue.set', queued: live.queued }])
     startTurn(live, next).then(
       () => {
+        live.dispatching = live.dispatching.filter((entry) => entry !== dispatch)
+        persistInputs(live)
         if (live.view?.note) setNote(live, null)
+        pump(live)
       },
       (error: unknown) => {
+        live.dispatching = live.dispatching.filter((entry) => entry !== dispatch)
         // 没发出去：放回队首，停下来等用户处理，不自己反复重试
-        live.queued = [next, ...live.queued]
+        live.paused = true
+        const code = failure(error).code
+        live.queued = [
+          { ...next, delivery: code === 'timeout' || code === 'offline' ? 'unknown' : 'held' },
+          ...live.queued,
+        ]
         emit(live, [{ op: 'queue.set', queued: live.queued }])
         setNote(live, phrase('session.queueFailed', { message: failure(error).message }))
       },
@@ -1401,7 +1517,12 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     itemAlias: new Map(),
     summarized: new Set(),
     requests: new Map(),
-    queued: [],
+    queued: (host.pendingInputs?.load(id) ?? []).map((entry) => ({
+      ...entry,
+      id: entry.clientId ?? `restored-${runMark}-${++localSeq}`,
+    })),
+    paused: false,
+    dispatching: [],
     pending: {},
     steered: new Map(),
     reverting: false,
@@ -1579,6 +1700,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
     forget(sessionId, erased = false) {
       if (erased) todos.delete(sessionId)
+      if (erased) host.pendingInputs?.save(sessionId, [])
       unlinger(sessionId)
       host.views?.forget(sessionId)
       const live = sessions.get(sessionId)
@@ -1824,10 +1946,22 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       await startTurn(live, outgoing(text), `plan:${host.clock.now()}-${++localSeq}`)
     },
 
-    async send(sessionId, message, now) {
+    async send(sessionId, message, now, pending = 'include') {
       const live = need(sessionId)
       if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
       mustReach(live)
+      const held = live.queued.some((entry) => entry.delivery === 'held')
+      if (held || live.paused) {
+        live.paused = false
+        if (pending === 'include')
+          live.queued = live.queued.map((entry) =>
+            entry.delivery === 'held' ? releaseInput(entry) : entry,
+          )
+        live.queued = [...live.queued, { id: `q${++localSeq}`, ...message }]
+        emit(live, [{ op: 'queue.set', queued: live.queued }])
+        pump(live)
+        return
+      }
       // 摆着旧的、正在载入的、回合在跑的、前面还有排着的：排上，载入完或者回合结束再发
       if (
         live.stale ||
@@ -1861,10 +1995,26 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       setNote(live, phrase('session.queueFailed', { message: failure(error).message }))
     },
 
+    resumeQueue(sessionId, messageId) {
+      const live = need(sessionId)
+      if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
+      mustReach(live)
+      live.queued = live.queued.map((entry) =>
+        entry.delivery === 'held' && (!messageId || messageId === entry.id)
+          ? releaseInput(entry)
+          : entry,
+      )
+      live.paused = false
+      emit(live, [{ op: 'queue.set', queued: live.queued }])
+      pump(live)
+    },
+
     async steer(sessionId, messageId) {
       const live = need(sessionId)
       const message = live.queued.find((entry) => entry.id === messageId)
       if (!message) throw new ChannelError('rejected', '该消息已不在队列中')
+      if (message.delivery)
+        throw new ChannelError('rejected', '该消息已暂停，请使用待发消息的发送或编辑操作')
       const running = isRunning(live.view)
       const turnId = running ? serverTurn(live, running.id) : null
       if (!running || !turnId) throw new ChannelError('rejected', '当前没有可插入消息的回合')
@@ -1885,13 +2035,18 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       live.queued = live.queued.filter((entry) => entry !== message)
       const { id: _queueId, ...said } = message
       const mentions = mentionsIn(live)
-      live.steered.set(clientId, { key, turnId: running.id, message: said })
+      const tracked = host.terms(harness)?.extensions.includes(EXTENSION.inputDelivery) === true
+      live.steered.set(clientId, { key, turnId: running.id, message: said, tracked })
       emit(live, [
         { op: 'queue.set', queued: live.queued },
         {
           op: 'item.add',
           turnId: running.id,
-          item: { ...localUserMessage(key, said, mentions), unconfirmed: true },
+          item: {
+            ...localUserMessage(key, said, mentions),
+            unconfirmed: true,
+            ...(tracked ? { delivery: 'queued' as const } : {}),
+          },
         },
       ])
       try {
@@ -1946,6 +2101,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       const running = isRunning(live.view)
       const turnId = running ? serverTurn(live, running.id) : null
       if (!turnId) throw new ChannelError('rejected', '当前没有可中断的回合')
+      pauseQueue(live)
       host.interrupting?.(sessionId)
       // 目标在做的时候按停止：先把目标暂停（照官方桌面端和终端界面），不然这一轮停下、空闲了它又接着续跑。
       // 暂停只等一小会儿，没成也照样打断：停下回合要紧

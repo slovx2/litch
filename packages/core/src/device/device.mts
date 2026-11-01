@@ -222,6 +222,7 @@ export interface DeviceOptions {
   codexThreads?: CodexThreadNotesStore
   /** 会话视图存在这台电脑上的哪（view-store.mts）：打开时先摆出来。不给就不存 */
   views?: ViewStore
+  pendingInputs?: import('./pending-inputs.mjs').PendingInputStore
   /** 通往主进程的客户端工具那一头（tool-hub.mts）。不给就是这台桌面什么都执行不了 */
   tools?: ToolHub
   /**
@@ -349,7 +350,13 @@ export interface Device {
   /** 这个 harness 在 cwd 这个工作目录下能用的技能。它带不了技能、对面不认识这个方法时抛 unsupported */
   skills(harness: HarnessId | undefined, cwd: string | null): Promise<SkillCatalog>
   /** now：有回合在进行时直接插进去，插不进去就照常排队 */
-  send(sessionId: string, message: OutgoingMessage, now?: boolean): Promise<void>
+  send(
+    sessionId: string,
+    message: OutgoingMessage,
+    now?: boolean,
+    pending?: 'include' | 'only',
+  ): Promise<void>
+  resumeQueue(sessionId: string, messageId?: string): void
   steer(sessionId: string, messageId: string): Promise<void>
   interrupt(sessionId: string): Promise<void>
   recover(sessionId: string, turnId: string, text?: string): Promise<void>
@@ -1994,6 +2001,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     started: (thread) => upsertThread(thread),
     ...(options.views ? { views: options.views } : {}),
+    ...(options.pendingInputs ? { pendingInputs: options.pendingInputs } : {}),
     speeds: {
       speed: (sessionId) => speeds.get(sessionId) ?? null,
       setSpeed(sessionId, speed) {
@@ -2757,12 +2765,13 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     skills: (harness, cwd) => aids.skills(harness, cwd),
     // 提到了会话的先补上 ref（读不到时要等替模型读的那一次，最多 MENTION_READ_MS）；别的消息照旧当场显示
-    send: (sessionId, message, now) =>
+    send: (sessionId, message, now, pending) =>
       mentionsSessions(message)
         ? withMentionRefs(message, readsSessions(threads.get(sessionId)), mentionHost).then(
-            (said) => live.send(sessionId, said, now),
+            (said) => live.send(sessionId, said, now, pending),
           )
-        : live.send(sessionId, message, now),
+        : live.send(sessionId, message, now, pending),
+    resumeQueue: (sessionId, messageId) => live.resumeQueue(sessionId, messageId),
     steer: (sessionId, messageId) => live.steer(sessionId, messageId),
     interrupt: (sessionId) => live.interrupt(sessionId),
     recover: (sessionId, turnId, text) => live.recover(sessionId, turnId, text),

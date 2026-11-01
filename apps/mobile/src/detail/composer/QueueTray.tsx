@@ -46,6 +46,9 @@ export function QueueTray({
   onEdit,
   onRemove,
   onRefused,
+  onResume,
+  pendingSend,
+  onPendingSend,
 }: {
   queued: QueuedMessage[]
   running: boolean
@@ -58,16 +61,43 @@ export function QueueTray({
   onRemove(message: QueuedMessage): void
   /** 带图的那条插不进去：说一句为什么 */
   onRefused(): void
+  onResume(messageId?: string): void
+  pendingSend: 'include' | 'only'
+  onPendingSend(value: 'include' | 'only'): void
 }) {
   const t = useT()
   const theme = useTheme()
   const { c } = theme
   if (queued.length === 0) return null
+  const heldCount = queued.filter((entry) => entry.delivery === 'held').length
   return (
     <View testID="queue" style={[styles.tray, { borderBottomColor: c.line1 }]}>
       <Text style={[styles.head, { color: c.ink3, fontFamily: theme.font.mono }]}>
-        {t('composer.queued')}
+        {heldCount ? t('composer.pendingStopped', { n: heldCount }) : t('composer.queued')}
       </Text>
+      {heldCount ? (
+        <>
+          <Mini testID="queue:send" label={t('composer.pendingSend')} onPress={() => onResume()} />
+          <View accessibilityRole="radiogroup" style={styles.choices}>
+            {(['include', 'only'] as const).map((choice) => (
+              <Pressable
+                key={choice}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: pendingSend === choice }}
+                testID={`queue:choice:${choice}`}
+                onPress={() => onPendingSend(choice)}
+              >
+                <Text style={{ color: pendingSend === choice ? c.ink : c.ink3 }}>
+                  {pendingSend === choice ? '◉ ' : '○ '}
+                  {t(choice === 'include' ? 'composer.pendingInclude' : 'composer.pendingOnly', {
+                    n: heldCount,
+                  })}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : null}
       {queued.map((message, index) => {
         const stuck = !steerImages && message.images.length > 0
         const notes = message.extras.filter((extra) => extra.kind === 'comment').length
@@ -84,7 +114,17 @@ export function QueueTray({
                 ? `${text}  [${t('composer.imageCount', { n: message.images.length })}]`
                 : text}
             </Text>
-            {running && canSteer ? (
+            {message.delivery ? (
+              <Text style={{ color: c.ink3 }}>{t(`inputDelivery.${message.delivery}`)}</Text>
+            ) : null}
+            {message.delivery === 'held' ? (
+              <Mini
+                testID={`queue:${index}:send`}
+                label={t('composer.send')}
+                onPress={() => onResume(message.id)}
+              />
+            ) : null}
+            {running && canSteer && !message.delivery ? (
               <Mini
                 testID={`queue:${index}:steer`}
                 label={t('composer.steer')}
@@ -101,11 +141,15 @@ export function QueueTray({
           </View>
         )
       })}
+      {queued.some((entry) => entry.delivery === 'unknown') ? (
+        <Text style={{ color: c.ink3 }}>{t('composer.pendingUnknown')}</Text>
+      ) : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
+  choices: { gap: 8, paddingVertical: 6 },
   tray: { paddingHorizontal: 12, paddingBottom: 6, marginBottom: 6, borderBottomWidth: 1, gap: 4 },
   head: { fontSize: 11 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 6 },

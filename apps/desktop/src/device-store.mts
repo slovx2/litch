@@ -9,6 +9,7 @@ import {
   checkNotes,
   checkSaved,
   checkSnapshot,
+  createPendingInputStore,
   type DeviceSnapshot,
   type DeviceStore,
   type MachineLogStore,
@@ -53,6 +54,7 @@ export function fileDeviceStore(dir: string, version = '0.0.0'): DeviceStore {
   const codexFile = (deviceId: string) => join(codexDir, `${safe(deviceId)}.json`)
   // 打开过的会话的视图（核心的 view-store.mts）：再打开时先摆出来，最新的到了再换
   const views = viewFiles(join(dir, 'views'), version)
+  const inputFile = (deviceId: string) => join(dir, `pending-inputs-${safe(deviceId)}.json`)
 
   return {
     load(): SavedDevices {
@@ -107,9 +109,18 @@ export function fileDeviceStore(dir: string, version = '0.0.0'): DeviceStore {
     },
 
     views: (deviceId) => views.views(deviceId),
+    pendingInputs: (deviceId) =>
+      createPendingInputStore({
+        read: () => readJson(inputFile(deviceId)),
+        write(value) {
+          mkdirSync(dir, { recursive: true, mode: 0o700 })
+          writeJson(inputFile(deviceId), value)
+        },
+      }),
 
     forget(deviceId) {
       views.forgetDevice(deviceId)
+      rmSync(inputFile(deviceId), { force: true })
       rmSync(snapshotFile(deviceId), { force: true })
       rmSync(terminalFile(deviceId), { force: true })
       rmSync(machineFile(deviceId), { force: true })

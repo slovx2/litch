@@ -278,6 +278,8 @@ interface PendingTurn {
   // 本回合最后送入的用户消息；它被某条 result 确认之后回合才能结束。自行续跑的回合没有。
   awaited: string | null
   awaitedSeen: boolean
+  // 逐条保留尚未得到原生接纳或取消回执的插话，不能只跟踪最后一条 awaited。
+  pendingInputs: Set<string>
   // SDK assistant envelopes can deliver one content block at a time. Keep
   // dedup scoped to a model response, preserving unstreamed blocks alongside
   // streamed ones and emitting a boundary only when the message id changes.
@@ -575,6 +577,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       settled: outcome.catch(() => {}),
       awaited: null,
       awaitedSeen: false,
+      pendingInputs: new Set(),
       assistantMessageId: null,
       usageMessageIds: new Map(),
       usageByMessage: new Map(),
@@ -1205,6 +1208,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       throw new ProtocolError(-32009, '原生回合未启动或已结束')
     const uuid = messageId ?? randomUUID()
     pending.input.send(steerMessage(workflowRuntimePrompt(prompt), uuid, images))
+    pending.pendingInputs.add(uuid)
+    await pending.handlers.onEvent({ type: 'input_delivery', messageId: uuid, status: 'queued' })
     pending.awaited = uuid
     pending.awaitedSeen = false
   }
@@ -1371,13 +1376,27 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   private async interruptRound(pending: PendingTurn): Promise<boolean> {
     const interrupt = pending.query.interrupt.bind(pending.query) as (options?: {
       cancelQueued?: boolean
-    }) => Promise<{ still_queued?: string[] } | undefined>
-    let receipt: { still_queued?: string[] } | undefined
-    const done = interrupt({ cancelQueued: true }).then((value) => {
+    }) => Promise<{ still_queued?: string[]; cancelled?: string[] } | undefined>
+    let receipt: { still_queued?: string[]; cancelled?: string[] } | undefined
+    const done = interrupt({ cancelQueued: true }).then(async (value) => {
       receipt = value
+      for (const id of value?.cancelled ?? []) await this.inputDelivery(pending, id, 'held')
     })
     if (!(await succeedsWithin(done, 1_500))) return false
-    return !receipt?.still_queued?.length
+    return receipt !== undefined && !receipt.still_queued?.length
+  }
+
+  private async inputDelivery(
+    pending: PendingTurn,
+    messageId: string,
+    status: 'sent' | 'held' | 'unknown',
+  ): Promise<void> {
+    if (!pending.pendingInputs.delete(messageId)) return
+    await pending.handlers.onEvent({ type: 'input_delivery', messageId, status })
+  }
+
+  private async uncertainInputs(pending: PendingTurn): Promise<void> {
+    for (const id of [...pending.pendingInputs]) await this.inputDelivery(pending, id, 'unknown')
   }
 
   private async interruptAndClose(session: NativeSession): Promise<void> {
@@ -1388,7 +1407,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     // SDK 的 abort 先关闭 stdin，CLI 仍有退出宽限期；此时释放 MCP
     // 会把错误工具结果送回尚未中断的模型循环。先等待 CLI 确认中断。
     if (pending) {
-      if (await succeedsWithin(pending.query.interrupt(), 1_500)) nativeProcess.allowGracefulClose()
+      if (await this.interruptRound(pending)) nativeProcess.allowGracefulClose()
       else await nativeProcess.terminate()
     }
     session.input.close()
@@ -1396,6 +1415,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     if (pending) await this.stopWorkflowTasks(pending)
     if (!(await nativeProcess.wait(2_500))) await nativeProcess.terminate()
     await session.done
+    if (pending) await this.uncertainInputs(pending)
   }
 
   async stop(): Promise<void> {
@@ -1651,17 +1671,12 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         // 别的会话发来的消息一律直接投递：不设时 CLI 按权限档位扣住不一致的，SDK 起的会话批不了，过期就丢了
         ...(inbox ? { crossSessionInbound: 'accept' } : {}),
       },
-      // 收件箱开着时让 CLI 回显进模型的用户消息（照 Claude 桌面端）：别的会话发来的那条带 origin.kind=peer，
-      // 认出来画进对话（handlePeerReplay）；自己发的、后台通知的回显丢掉。
+      // 自己发的插话按 UUID 确认原生接纳；peer 回显另画来历。回显不承诺模型已经执行。
       // 收件箱用会话的固定地址（peer-inbox-socket.mts）：换了进程，别处记下的地址照样发得到
-      ...(inbox
-        ? {
-            extraArgs: {
-              'replay-user-messages': null,
-              ...(inboxSocket ? { 'messaging-socket-path': inboxSocket } : {}),
-            },
-          }
-        : {}),
+      extraArgs: {
+        'replay-user-messages': null,
+        ...(inbox && inboxSocket ? { 'messaging-socket-path': inboxSocket } : {}),
+      },
       disallowedTools: ['CronCreate', 'CronDelete', 'CronList', 'ScheduleWakeup'],
       stderr: (data: string) => process.stderr.write(data),
       onElicitation: (async (request, { signal }) => {
@@ -2070,8 +2085,10 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           pending = await this.currentTurn(session)
           if (!pending) continue
         }
-        // 回显的用户消息（收件箱开着时才有）：别的会话发来的画进对话，别的丢掉；都不当原生边界
+        // 回显不当原生边界：自己的插话只更新交付状态，peer 消息另画来历。
         if (message.type === 'user' && message.isReplay === true) {
+          if (typeof message.uuid === 'string')
+            await this.inputDelivery(pending, message.uuid, 'sent')
           const peer = peerMessageOf(message)
           if (peer) await pending.handlers.onEvent({ type: 'peer_message', ...peer })
           continue
@@ -3299,6 +3316,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       return
 
     pending.deferredResult = null
+    await this.uncertainInputs(pending)
     this.detach(pending)
     const refusal = session && !force ? this.keepAlive(session, compact && deferred.success) : null
     // 进程要退出了：请它起的标题还没写进会话记录的话，等一会儿（标题用的是小模型，一般早就起完了）
