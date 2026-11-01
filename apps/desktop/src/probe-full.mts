@@ -518,9 +518,18 @@ export async function mockFullProbe(): Promise<MockFullProbe> {
   const dropHint = text(await until('输入区说了发不了', () => one('.dock .cmp-hint.err')))
   await until('它自己回来', () => !selected()?.classList.contains('down'))
   const dropRecovered = !one('.dock .cmp-hint.err')
-  const before = all('.turn').length
+  // 不数回合：旧回合分批补画在前面，数目会自己涨。认最后一个回合：按下发送之后才有、里面有这句话
+  const turnOf = (entry: HTMLElement | undefined) => entry?.dataset.searchTurn ?? ''
+  const lastBefore = turnOf(all('.turn').at(-1))
   await say('回来之后再说一句')
-  await until('回来之后的回合结束', () => all('.turn').length > before && !one('.running-line'))
+  await until('回来之后的回合结束', () => {
+    const last = all('.turn').at(-1)
+    return (
+      turnOf(last) !== lastBefore &&
+      all('.umsg-text', last).some((entry) => text(entry).includes('回来之后再说一句')) &&
+      !one('.running-line')
+    )
+  })
   const sentAfter = true
 
   return {

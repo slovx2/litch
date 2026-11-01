@@ -60,6 +60,20 @@ export async function activityProbe(): Promise<ActivityProbe> {
     ...root.querySelectorAll<HTMLElement>(selector),
   ]
   const text = (element: Element | null | undefined) => element?.textContent?.trim() ?? ''
+  /** 回合的标识 */
+  const turnOf = (entry: HTMLElement | undefined) => entry?.dataset.searchTurn ?? ''
+  /**
+   * 发出去的话落进了新回合：最后一个回合是按下发送之后才有的，里面的用户消息有这句话。给出那个回合。
+   * 不数回合：刚切过来时回合列表延后取，旧回合又分批补画在前面（turn-window.ts），数目会自己涨；最后一个总是最新的
+   */
+  const landed = (words: string, lastBefore: string) => {
+    const last = all('.turn').at(-1)
+    return last &&
+      turnOf(last) !== lastBefore &&
+      all('.umsg-text', last).some((entry) => text(entry).includes(words))
+      ? last
+      : null
+  }
   const area = () => one<HTMLTextAreaElement>('.dock textarea.cmp-text')
   const running = () => Boolean(one('.running-line'))
   const write = (target: HTMLTextAreaElement, words: string) => {
@@ -119,9 +133,9 @@ export async function activityProbe(): Promise<ActivityProbe> {
    * finish：等回答写完、回合自己结束（要十几秒）；不给就看到回答出字后停掉
    */
   const runAWhile = async (touch = false, finish = false) => {
-    const before = all('.turn').length
+    const lastBefore = turnOf(all('.turn').at(-1))
     await say('跑一会儿')
-    await until('新的回合', () => all('.turn').length > before)
+    await until('新的回合', () => landed('跑一会儿', lastBefore))
     await until('那条命令', () => text(one('.now', group() ?? undefined)).includes('npm test'))
     if (touch) group()?.click()
     const elapsed: string[] = []

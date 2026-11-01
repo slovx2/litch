@@ -108,8 +108,13 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await until('会话侧面板打开', () => one('.tb-side[aria-pressed="true"]'))
   await click('[data-sidebar-mode="manager"]')
   const list = Boolean(await until('全部经理页', () => one('[data-manager="list"]')))
-  const ended = one('[data-manager-row="e1"] .mg-list-open')
-  const summary = one('[data-manager-row="e1"] > button.btn')
+  // 列表页先出来，经理那几行是随后到的：等已结束的那一行和它的总结按钮都在了再量
+  const ended = await until('已结束的经理那一行', () =>
+    one('[data-manager-row="e1"] .mg-list-open'),
+  )
+  const summary = await until('已结束经理的总结按钮', () =>
+    one('[data-manager-row="e1"] > button.btn'),
+  )
   const rowBox = ended?.getBoundingClientRect()
   const summaryBox = summary?.getBoundingClientRect()
   const endedRow = Boolean(
@@ -259,7 +264,10 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     await until('切页保留草稿', () => one('.mg-decision[data-draft="true"] input:checked')),
   )
   await until('已有对话回合', () => one('.mg-chat .turn'))
-  const before = document.querySelectorAll('.mg-chat .turn').length
+  // 不数回合：刚切回这位经理时回合列表延后取，旧回合又分批补画在前面，数目会自己涨。
+  // 认提交前最后那个回合后面新出的回合里有答复的事件卡（补画的旧回合都在它前面）
+  const chatTurns = () => [...document.querySelectorAll<HTMLElement>('.mg-chat .turn')]
+  const lastBefore = chatTurns().at(-1)?.dataset.searchTurn ?? ''
   ;(
     await until('提交按钮', () => {
       const button = one<HTMLButtonElement>('[data-act="manager-submit"]')
@@ -270,10 +278,12 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     '答复写入看板',
     () => !one('.mg-send') && Boolean(one('.mg-decision')),
   )
-  const turnAdded = await until(
-    '对话新增一回合',
-    () => document.querySelectorAll('.mg-chat .turn').length > before,
-  )
+  const turnAdded = await until('对话新增一回合', () => {
+    const turns = chatTurns()
+    return turns
+      .slice(turns.findIndex((entry) => entry.dataset.searchTurn === lastBefore) + 1)
+      .some((entry) => entry.querySelector('[data-event="manager-answers"]'))
+  })
   const answerEvent = Boolean((await eventBody('manager-answers')).textContent?.includes('D-15'))
   eventsClean = cleanChat() && eventsClean
   await click('[data-decision="D-15"] [data-act="manager-edit-answer"]')
