@@ -45,7 +45,7 @@ var (
 	// 服务答应停之后等它退出最多等这么久：每个运行时、设备进程各有 5 秒的收尾时间，是先后收的。
 	deviceStopTimeout = 45 * time.Second
 	// 等服务答 service.stop 最多等这么久。带 --if-idle 时它要先问一圈忙不忙（activityTimeout）。
-	deviceStopReplyTimeout = 40 * time.Second
+	deviceStopReplyTimeout = 65 * time.Second
 	// 设备锁有人拿着、控制通道却还连不上时再等这么久：服务可能刚拿到锁，通道还没开；
 	// 也可能只是另一条命令在探测锁（探测时会短暂占住它）。
 	deviceStopControlWait = 2 * time.Second
@@ -125,7 +125,7 @@ func deviceStop(ctx context.Context, c configuration) error {
 	defer connection.Close()
 	stop := context.AfterFunc(ctx, func() { _ = connection.Close() })
 	defer stop()
-	reply, known, err := requestServiceStop(connection, c.ifIdle)
+	reply, known, err := requestServiceStop(connection, c.ifIdle, c.resumeAfterRestart)
 	if err != nil {
 		if ctx.Err() != nil {
 			return errors.New(tr("已中断", "interrupted"))
@@ -182,8 +182,8 @@ func dialServiceControl(ctx context.Context, c configuration) (connection net.Co
 }
 
 // 发 service.stop，等它的应答。known 为 false：对面答的是 error，它不认识这个请求。
-func requestServiceStop(connection net.Conn, ifIdle bool) (reply stopReply, known bool, err error) {
-	request, err := json.Marshal(map[string]any{"id": 1, "method": "service.stop", "params": map[string]any{"ifIdle": ifIdle}})
+func requestServiceStop(connection net.Conn, ifIdle bool, resume bool) (reply stopReply, known bool, err error) {
+	request, err := json.Marshal(map[string]any{"id": 1, "method": "service.stop", "params": map[string]any{"ifIdle": ifIdle, "resumeAfterRestart": resume}})
 	if err != nil {
 		return reply, false, err
 	}

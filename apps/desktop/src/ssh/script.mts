@@ -347,7 +347,7 @@ export function stopScript(options: { ifIdle: boolean; lang: RemoteLang }): Remo
     'export CHA_LANG',
     // 标准输出和标准错误分开收：前者是给程序读的那一行，后者是给人看的那一句
     'note=$(mktemp 2>/dev/null || mktemp -t litch-stop 2>/dev/null) || note=',
-    `out=$(${adapter} device-stop${flag} </dev/null 2>"\${note:-/dev/null}")`,
+    `out=$(${adapter} device-stop --resume-after-restart${flag} </dev/null 2>"\${note:-/dev/null}")`,
     'code=$?',
     // 服务把连着的客户端也算“不闲”，发请求的这个应用自己就连着，光凭它永远等不到闲。
     // 客户端断了会自己重连（连上的就是新版），不算要等的事：不闲的原因只有客户端时，紧接着不带 --if-idle 再停一次
@@ -355,7 +355,7 @@ export function stopScript(options: { ifIdle: boolean; lang: RemoteLang }): Remo
       ? [
           `if [ "$code" = 4 ] && printf '%s' "$out" | grep -q '"reason":"clients"' &&`,
           `  ! printf '%s' "$out" | grep -o '"reason":"[A-Za-z]*"' | grep -qv '"reason":"clients"'; then`,
-          `  out=$(${adapter} device-stop </dev/null 2>"\${note:-/dev/null}")`,
+          `  out=$(${adapter} device-stop --resume-after-restart </dev/null 2>"\${note:-/dev/null}")`,
           '  code=$?',
           'fi',
         ]

@@ -3,6 +3,7 @@
 // 定时任务触发（来历 schedule）、新会话的简报（带背景）、交接的计划、提案卡上的“在这里做”（前面攒着一条回报）、
 // 别的会话用 litch_sessions.send 发来的一句。条目从原文经真的投影出来，认不认得出和真的一样。
 import { formatSessionEvent, type ThreadItem } from '../../../protocol/src/index.mjs'
+import { restartMessage } from '../../../protocol/src/system-messages.mjs'
 import type { SessionOp } from '../channel/protocol.mjs'
 import type { OutgoingMessage, SessionView } from '../model.mjs'
 import { projectItem } from '../projection/items.mjs'
@@ -159,6 +160,7 @@ export function createMockSystem(host: MockSystemHost): MockSystem {
         ...turn(handOff),
         ...turn(here),
         ...turn(send),
+        ...turn(restartMessage('10203040-5060-4070-8080-102030405060')),
       ])
       return true
     },

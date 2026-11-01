@@ -46,7 +46,11 @@ export interface EngineLink {
    * 发一个请求等应答。上游回了错误时抛 UpstreamRpcError；超时、断开抛普通的 Error。
    * timeoutMs 不给用开连接时定的默认时限
    */
-  request(method: string, params: unknown, options?: { timeoutMs?: number }): Promise<any>
+  request(
+    method: string,
+    params: unknown,
+    options?: { timeoutMs?: number; beforeSend?(): void },
+  ): Promise<any>
   /** 收通知；返回取消订阅 */
   onNotification(listener: (method: string, params: any) => void): () => void
   /** 对面发来、要答复的请求（设备工具的调用除外）：只给看，不由订阅者答（claimRequests 之后由调用方答）。返回取消订阅 */
@@ -340,6 +344,8 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
             : null
         const release = threadId ? await options.reserveTurn?.(threadId) : undefined
         try {
+          // 所有异步准备结束后、写入协议前同步检查；恢复票可在排队期间被用户停止撤销。
+          requestOptions?.beforeSend?.()
           const result = await call(
             method,
             (isObject(ready) ? dialect.outgoing(method, ready) : null) ?? ready,

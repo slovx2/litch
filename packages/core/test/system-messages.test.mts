@@ -3,7 +3,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { formatSessionEvent, recoverMessage, type ThreadItem } from '../../protocol/src/index.mjs'
+import { restartMessage } from '../../protocol/src/system-messages.mjs'
 import { localUserMessage, projectItem } from '../src/index.mjs'
+import { createMockSystem } from '../src/mock/mock-system.mjs'
 import { isUserReply } from '../src/projection/user-reply.mjs'
 
 const user = (text: string) =>
@@ -26,6 +28,41 @@ test('中断后继续：原生文本和历史投影认作recover系统消息，�
     user(recoverMessage('')).kind === 'userMessage' && 'system' in user(recoverMessage('')),
     false,
   )
+})
+
+test('计划重启的自动继续是机器来源，历史重读后也不当作用户回答或审批', () => {
+  const ticket = '10203040-5060-4070-8080-102030405060'
+  const item = user(restartMessage(ticket))
+  assert.equal(item.kind, 'userMessage')
+  if (item.kind !== 'userMessage') return
+  assert.equal(item.system?.kind, 'restart')
+  assert.equal(isUserReply(item, undefined, 0), false)
+  assert.equal(
+    localUserMessage('local', { text: restartMessage(ticket), images: [], extras: [] }, false)
+      .system?.kind,
+    'restart',
+  )
+})
+
+test('模拟核心系统消息场景包含重启来源卡片', () => {
+  let serial = 0
+  let shown = false
+  const demo = createMockSystem({
+    lang: 'zh-CN',
+    now: () => 1,
+    nextId: (prefix) => `${prefix}${++serial}`,
+    reply: (_view, _turnId, _text, tail) => {
+      shown =
+        tail?.().some(
+          (op) =>
+            op.op === 'item.add' &&
+            op.item.kind === 'userMessage' &&
+            op.item.system?.kind === 'restart',
+        ) ?? false
+    },
+  })
+  assert.equal(demo.claim({} as any, 't', { text: '系统消息', images: [], extras: [] }), true)
+  assert.equal(shown, true)
 })
 
 const TASK = [

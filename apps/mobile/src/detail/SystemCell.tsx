@@ -12,7 +12,7 @@ import type { Props } from './cells'
 import { useToggleInPlace, useTranscript } from './context'
 import { MessageCopy } from './MessageCopy'
 
-const MARK = { scheduledTask: '◷', briefing: '⑂', here: '↳', recover: '↻' } as const
+const MARK = { scheduledTask: '◷', briefing: '⑂', here: '↳', recover: '↻', restart: '↻' } as const
 
 /** 展开后补一行：手动运行，启动指令来自哪个会话（还在列表里的点了过去）。没有就不画 */
 function Detail({ system }: { system: SystemMessageView }) {
@@ -52,7 +52,13 @@ export const SystemCell = memo(function SystemCell({ row }: Props<'system'>) {
       ? t('sysmsg.scheduledTask', { name: system.task })
       : system.kind === 'briefing'
         ? t(`sysmsg.briefing.${system.mode}`)
-        : t(system.kind === 'recover' ? 'sysmsg.recover' : 'sysmsg.here')
+        : t(
+            system.kind === 'restart'
+              ? 'sysmsg.restart'
+              : system.kind === 'recover'
+                ? 'sysmsg.recover'
+                : 'sysmsg.here',
+          )
   return (
     <CompactRow
       testID={`system-message:${system.kind}`}

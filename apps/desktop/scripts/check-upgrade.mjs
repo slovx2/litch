@@ -92,7 +92,7 @@ function makeReleases(work) {
     `      0) echo '{"result":"stopped","pid":4242}'; echo '已停止常驻服务（进程 4242）。' >&2; exit 0 ;;`,
     `      4) echo '{"result":"busy","pid":4242,"busy":[{"reason":"activeTurns","harnesses":["pi"]},{"reason":"deviceProcesses","count":2},{"reason":"clients","count":1}]}'; echo '没有停：服务不闲' >&2; exit 4 ;;`,
     // c：只因为连着的客户端不闲，带 --if-idle 时不停，不带就停
-    `      c) if [ "$2" = --if-idle ]; then echo '{"result":"busy","pid":4242,"busy":[{"reason":"clients","count":2}]}'; exit 4; fi`,
+    `      c) if [ "$3" = --if-idle ]; then echo '{"result":"busy","pid":4242,"busy":[{"reason":"clients","count":2}]}'; exit 4; fi`,
     `         echo '{"result":"stopped","pid":4242}'; exit 0 ;;`,
     `      5) echo '{"result":"unsupported"}'; echo '这个状态目录上有服务在运行，但这条命令停不了它：它不认识停止的请求' >&2; exit 5 ;;`,
     '    esac ;;',
@@ -179,7 +179,7 @@ try {
     assert.deepEqual(stop, { result: 'stopped' })
     assert.equal(
       readFileSync(join(home, 'stop.log'), 'utf8').trim().split('\n').at(-1),
-      'device-stop --if-idle',
+      'device-stop --resume-after-restart --if-idle',
     )
   })
 
@@ -202,8 +202,8 @@ try {
     const { stop } = run('--stop')
     assert.deepEqual(stop, { result: 'stopped' })
     assert.deepEqual(readFileSync(join(home, 'stop.log'), 'utf8').trim().split('\n').slice(-2), [
-      'device-stop --if-idle',
-      'device-stop',
+      'device-stop --resume-after-restart --if-idle',
+      'device-stop --resume-after-restart',
     ])
   })
 
@@ -212,7 +212,7 @@ try {
     run('--stop', '--force')
     assert.equal(
       readFileSync(join(home, 'stop.log'), 'utf8').trim().split('\n').at(-1),
-      'device-stop',
+      'device-stop --resume-after-restart',
     )
   })
 

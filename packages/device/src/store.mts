@@ -13,7 +13,7 @@ import { ensureParent } from '../../shared/src/util.mjs'
  * v3 起包含不能重建的项目权限确认；以后升结构版本必须为 v3 及以上的库写迁移，不能删库。
  * v3 以前只有可重建的数据（索引重新积累，工作区重新导入），保留旧行为直接重建。
  */
-const SCHEMA_VERSION = 3
+const SCHEMA_VERSION = 4
 
 function schemaVersion(path: string): number {
   const db = new DatabaseSync(path, { readOnly: true })
@@ -43,10 +43,29 @@ export function openDeviceStore(stateDir: string): DatabaseSync {
   if (!existsSync(path)) closeSync(openSync(path, 'a', 0o600))
   const db = new DatabaseSync(path)
   initializeStoreFormat(db)
+  // v3 起的库含权限确认，结构升级只做事务迁移，不能删除或重建。
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS restart_turns(
+      thread_id TEXT PRIMARY KEY,
+      harness TEXT NOT NULL,
+      token TEXT NOT NULL,
+      turn_id TEXT,
+      state TEXT NOT NULL,
+      service TEXT NOT NULL DEFAULT '',
+      prepared_at INTEGER,
+      resume_turn_id TEXT
+    ) WITHOUT ROWID;
+    PRAGMA user_version=${SCHEMA_VERSION};`)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    db.close()
+    throw error
+  }
   // 表名和列名要和 packages/shared 项目存储的 threadsTable 对得上：算工作区的最近活动时间、
   // 判断会话存不存在、是不是临时的，查的就是这张表
   db.exec(`PRAGMA journal_mode=WAL;
-    PRAGMA user_version=${SCHEMA_VERSION};
     CREATE TABLE IF NOT EXISTS threads(
       id TEXT PRIMARY KEY,
       harness TEXT NOT NULL,

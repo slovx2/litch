@@ -41,7 +41,8 @@ type configuration struct {
 	// 不掺设置里的值。device-start 照它拉起常驻服务，服务把它报出来，换版本重新拉起时原样带上。
 	launch []string
 	// device-stop --if-idle：有回合、属于设备的终端在跑，或者有客户端连着时不停。
-	ifIdle bool
+	ifIdle             bool
+	resumeAfterRestart bool
 	// 官方桌面端经 SSH 入口连着几条。常驻服务据此判断忙不忙；可以为 nil（单独 serve 一个入口时没人问）。
 	desktops *atomic.Int64
 }
@@ -252,6 +253,7 @@ func parseConfiguration(args []string) (configuration, error) {
 	}
 	sshMode := "on"
 	flags.StringVar(&sshMode, "ssh", sshMode, tr("给 Codex 桌面端的内置 SSH 入口：on 或 off", "built-in SSH entries for the Codex desktop app: on or off"))
+	flags.BoolVar(&cfg.resumeAfterRestart, "resume-after-restart", false, tr("device-stop：为明确重启准备一次自动续跑", "device-stop: prepare one automatic continuation after a planned restart"))
 	flags.BoolVar(&cfg.ifIdle, "if-idle", false, tr("device-stop：有回合或终端在跑、有客户端连着时不停", "device-stop: leave the service alone while a turn or a terminal is running or a client is connected"))
 	flags.BoolVar(&cfg.detached, "detached", false, tr("内部使用：device-start 拉起常驻服务时带上", "internal: set by device-start on the service it launches"))
 	flags.BoolVar(&cfg.localService, "local-service", false, tr("device-start：将该服务登记为本机设备并启用本机电源设置", "device-start: register this service as local and make local power settings available"))

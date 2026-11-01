@@ -162,13 +162,13 @@ export function stopScript(names: ScriptNames, ifIdle: boolean): RemoteScript {
     `printf '%s\\n' ${quote(marker)}`,
     `${has(adapter)} || exit ${EXIT.notFound}`,
     'note=$(mktemp 2>/dev/null || mktemp -t litch-stop 2>/dev/null) || note=',
-    `out=$(${adapter} device-stop${flag} </dev/null 2>"\${note:-/dev/null}")`,
+    `out=$(${adapter} device-stop --resume-after-restart${flag} </dev/null 2>"\${note:-/dev/null}")`,
     'code=$?',
     ...(ifIdle
       ? [
           `if [ "$code" = 4 ] && printf '%s' "$out" | grep -q '"reason":"clients"' &&`,
           `  ! printf '%s' "$out" | grep -o '"reason":"[A-Za-z]*"' | grep -qv '"reason":"clients"'; then`,
-          `  out=$(${adapter} device-stop </dev/null 2>"\${note:-/dev/null}")`,
+          `  out=$(${adapter} device-stop --resume-after-restart </dev/null 2>"\${note:-/dev/null}")`,
           '  code=$?',
           'fi',
         ]

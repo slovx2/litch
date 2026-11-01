@@ -1,5 +1,18 @@
 # Devices
 
+## 计划重启后的对话恢复
+
+Litch 发起升级、重启设备服务或强制重启一个 harness 时，会为符合条件的普通用户回合准备一次自动继续。
+设备先中断旧回合并保存恢复记录；新服务启动后在原会话发消息，对话中显示“重启后自动继续”。桌面和手机都能看到，关闭客户端不影响已经准备好的恢复。
+
+工具结果未知也会继续，但自动消息要求模型先核实文件、进程与外部副作用，不得盲目重做；它不代表新的批准。
+用户停止、等待审批或回答、定时任务、子会话、经理、目标／队列续做和仍有后台任务的会话不自动恢复。
+不支持接回旧会话的 harness 保留中断状态；不能恢复的回合可由用户发送消息继续。
+
+每条用户工作最多自动续一次，恢复记录 24 小时过期。发送结果不明时不重试，避免重复执行。
+普通停止服务、退出应用时关闭后台服务、意外崩溃、强杀或断电不会新建恢复记录。
+命令行明确要在随后启动时恢复，可使用 `device-stop --resume-after-restart`；普通 `device-stop` 不续跑。
+
 ## Local and remote
 
 - **Local** is this computer. It is always there; Litch starts its bundled device service on launch.
@@ -87,8 +100,8 @@ computer" 0.10.0, session trees and scheduled tasks 0.11.0, phone pairing 0.12.0
   opens the device's detail page) and in the phone's device-list menu, for local and remote devices.
   It asks the service to stop, waits until the old process has exited, starts it again and reconnects;
   the row shows "Restarting" and a note says whether it worked and why not. If any session is running a
-  turn or a background task, Litch first lists the sessions that will be interrupted; those turns are
-  not resumed automatically, the session ends with a line saying so, and sending a message continues.
+  turn or a background task, Litch first lists the sessions that will be interrupted. 符合条件的普通回合
+  会自动继续；用户停止、待答与自动任务不恢复。具体范围和工具结果核对要求见上方“计划重启后的对话恢复”。
   If the service reports other work (terminals, device processes), Litch lists it and asks again. Not
   offered while the device is offline, connected to a single harness only, run in the foreground or by
   a service manager (restart it the way it was started), or upgrading. It never upgrades. This is

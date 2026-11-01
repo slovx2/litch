@@ -348,7 +348,7 @@ export function stopIdleDevice(
   signal: AbortSignalLike,
   timeoutMs: number = STOP_TIMEOUT_MS,
 ): Promise<StopOutcome> {
-  return stopDevice(adapter, home, env, signal, true, timeoutMs)
+  return stopDevice(adapter, home, env, signal, true, timeoutMs, true)
 }
 
 /**
@@ -362,10 +362,17 @@ export async function stopDevice(
   signal: AbortSignalLike,
   ifIdle: boolean,
   timeoutMs: number = STOP_TIMEOUT_MS,
+  resumeAfterRestart = false,
 ): Promise<StopOutcome> {
   const end = await runCommand(
     adapter,
-    ['device-stop', '--home', home, ...(ifIdle ? ['--if-idle'] : [])],
+    [
+      'device-stop',
+      '--home',
+      home,
+      ...(ifIdle ? ['--if-idle'] : []),
+      ...(resumeAfterRestart ? ['--resume-after-restart'] : []),
+    ],
     env,
     signal,
     timeoutMs,
@@ -554,13 +561,14 @@ export function localDevice(options: LocalDeviceOptions): LocalDevice {
     const env = await environment()
     const kept = last?.service?.options ?? []
     const timeout = options.stopTimeoutMs
-    let stop = await stopDevice(adapter, home, env, signal, ifIdle, timeout)
+    let stop = await stopDevice(adapter, home, env, signal, ifIdle, timeout, true)
     // 服务把连着的客户端也算不闲，这个应用自己就连着：不闲的原因只有客户端时，紧接着直接停（它们会自己重连）
     const onlyClients =
       stop.kind === 'busy' &&
       stop.busy.length > 0 &&
       stop.busy.every((entry) => entry.reason === 'clients')
-    if (ifIdle && onlyClients) stop = await stopDevice(adapter, home, env, signal, false, timeout)
+    if (ifIdle && onlyClients)
+      stop = await stopDevice(adapter, home, env, signal, false, timeout, true)
     switch (stop.kind) {
       case 'stopped':
         relaunch = kept.length > 0 ? kept : null

@@ -175,7 +175,8 @@ func (s *controlServer) busy(requester net.Conn) []busyReason {
 // stopService 处理 service.stop：答完话再停。答话在前，对面才知道停的是谁、该等哪个进程退出。
 func (s *controlServer) stopService(connection net.Conn, lock *sync.Mutex, request controlRequest) {
 	var params struct {
-		IfIdle bool `json:"ifIdle"`
+		IfIdle             bool `json:"ifIdle"`
+		ResumeAfterRestart bool `json:"resumeAfterRestart"`
 	}
 	if failure := decodeControlParams(request.Params, &params); failure != nil {
 		s.send(connection, lock, map[string]any{"id": request.ID, "error": failure})
@@ -186,6 +187,15 @@ func (s *controlServer) stopService(connection net.Conn, lock *sync.Mutex, reque
 		reply.Busy = s.busy(connection)
 	}
 	reply.Stopping = len(reply.Busy) == 0
+	if reply.Stopping && params.ResumeAfterRestart {
+		// 恢复意图只来自明确重启。设备先撤销旧回合并落盘，再结束旧引擎。
+		if _, ok := s.ask("restart.prepare", connection, 35*time.Second); !ok {
+			fmt.Fprintln(os.Stderr, tr("自动恢复准备未确认；服务仍将重启，未确认的会话请手动继续。", "Automatic continuation preparation was not confirmed; restart will proceed. Continue unconfirmed sessions manually."))
+		}
+	} else if reply.Stopping {
+		// 普通停止／退出关闭服务会撤回之前尚未发送的恢复票。
+		s.ask("restart.cancel", connection, 2*time.Second)
+	}
 	s.send(connection, lock, map[string]any{"id": request.ID, "result": reply})
 	if reply.Stopping {
 		fmt.Println(tr("收到停止请求（device-stop），正在停止服务。", "Stop requested (device-stop); shutting the service down."))

@@ -20,6 +20,7 @@ const ICON = {
   briefing: 'tree',
   here: 'suggest',
   recover: 'reload',
+  restart: 'reload',
 } as const
 
 /** 派出它的会话：还在侧栏里的可以点开，不在的只写标题（没有标题写会话号） */
@@ -73,7 +74,13 @@ export function SystemCard({
       ? t('sysmsg.scheduledTask', { name: system.task })
       : system.kind === 'briefing'
         ? t(`sysmsg.briefing.${system.mode}`)
-        : t(system.kind === 'recover' ? 'sysmsg.recover' : 'sysmsg.here')
+        : t(
+            system.kind === 'restart'
+              ? 'sysmsg.restart'
+              : system.kind === 'recover'
+                ? 'sysmsg.recover'
+                : 'sysmsg.here',
+          )
   return (
     <div className="sev sysm" data-anchor={`u:${ref.itemId}`} data-sys={system.kind} ref={card}>
       <CompactRow

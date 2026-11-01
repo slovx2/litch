@@ -237,6 +237,7 @@ export {
   parseSessionMessage,
   parseSystemMessage,
   recoverMessage,
+  restartMessage,
 } from './system-messages.mjs'
 // 定时任务的日程：校验、下一次、错过了几次。只用标准库
 export type * from './task-schedule.mjs'

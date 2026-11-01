@@ -42,7 +42,19 @@ export interface RecoverMessage {
   prompt: string
 }
 
-export type SystemMessage = ScheduledTaskMessage | BriefingMessage | HereMessage | RecoverMessage
+/** 明确重启后设备自动发起的回合；ticket 只作身份，不是新的权限授权。 */
+export interface RestartMessage {
+  kind: 'restart'
+  ticket: string
+  prompt: string
+}
+
+export type SystemMessage =
+  | ScheduledTaskMessage
+  | BriefingMessage
+  | HereMessage
+  | RecoverMessage
+  | RestartMessage
 
 /** 别的会话用 litch_sessions.send 发来的一句 */
 export interface SessionMessage {
@@ -60,6 +72,14 @@ const RECOVER_HEAD = '[Litch] Continue after interruption, not typed by the user
 /** 标记留在标准文本输入里，历史重读也能识别；不向原生协议增加字段。 */
 export function recoverMessage(prompt: string): string {
   return RECOVER_HEAD + prompt
+}
+
+const RESTART_HEAD =
+  '[Litch] Automatic continuation after a planned service restart, not typed by the user. Ticket: '
+
+/** 各 harness 都接收标准文本输入；机器来历随原生历史持久保存，官方客户端无需认识新字段。 */
+export function restartMessage(ticket: string): string {
+  return `${RESTART_HEAD}${ticket}\n\nThe previous turn was interrupted by a planned restart. Continue the existing task within its original scope and permissions. Before continuing, verify the actual outcome of the last tool calls: inspect files, running processes, and any external side effects. An interrupted or missing result does not mean the operation never ran; it may have completed or run partially. Do not blindly repeat it. If the outcome cannot be established safely, explain the uncertainty and ask the user. This message grants no new approval and does not override a user stop or refusal.`
 }
 
 /** 父会话那一段：`"标题或会话号" (会话号, harness)` */
@@ -144,6 +164,13 @@ function here(text: string): HereMessage | null {
 
 /** 这条用户消息是不是 Litch 替用户发的（定时任务、子会话的简报、在这里做）。不是的返回 null */
 export function parseSystemMessage(text: string): SystemMessage | null {
+  if (text.startsWith(RESTART_HEAD)) {
+    const [ticket, ...rest] = text.slice(RESTART_HEAD.length).split('\n\n')
+    const prompt = rest.join('\n\n')
+    return ticket && /^[a-f0-9-]{36}$/.test(ticket) && prompt.trim()
+      ? { kind: 'restart', ticket, prompt }
+      : null
+  }
   if (text.startsWith(RECOVER_HEAD)) {
     const prompt = text.slice(RECOVER_HEAD.length)
     return prompt.trim() ? { kind: 'recover', prompt } : null

@@ -14,7 +14,7 @@ export const enRestart: Record<keyof typeof zhRestart, Entry> = {
   'restart.pill': 'Restarting',
   'restart.confirm.title': 'Restart the device service on {name}?',
   'restart.confirm.note':
-    'Work in progress in these conversations will be interrupted and won’t resume on its own:',
+    'This work will be interrupted. Eligible ordinary turns resume automatically; stopped turns, pending questions and automated tasks do not:',
   'restart.confirm.turn': 'Turn in progress',
   'restart.confirm.background': ({ count }) =>
     count === 1 ? '1 background task' : `${count} background tasks`,
@@ -42,5 +42,5 @@ export const enRestart: Record<keyof typeof zhRestart, Entry> = {
   'restart.failed.stale': 'After reconnecting, the same service is still running',
   'restart.again': 'Retry',
   'restart.note':
-    'The device service restarted and interrupted this turn. Send a message to continue.',
+    'The device service restarted. Eligible turns resume automatically; you can continue other interrupted turns manually.',
 } satisfies Record<string, Entry>

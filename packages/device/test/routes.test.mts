@@ -309,7 +309,7 @@ test('设备库：v3 以前的可重建旧库直接换掉，不是我们的库�
     db.close()
     db = openDeviceStore(dir)
     assert.equal(new ThreadIndex(db).lookup('t1'), null)
-    assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 3)
+    assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 4)
     db.close()
     // 空文件就是还没写过的新库
     rmSync(join(dir, 'device.sqlite'))

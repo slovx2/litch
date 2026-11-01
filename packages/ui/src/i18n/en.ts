@@ -323,7 +323,7 @@ export const en: Record<MessageKey, Entry> = {
   'manage.restart.failed': 'Couldn’t restart {name}: {reason}',
   'manage.restart.busy.title': '{name} has a turn in progress',
   'manage.restart.busy.note':
-    'Restarting now interrupts it and drops any requests waiting for your answer. You can also restart later when it’s idle.',
+    'Restarting interrupts these turns. Eligible ordinary turns resume automatically; pending requests are dropped and do not resume. You can also restart later when idle.',
   'manage.restart.busy.yes': 'Restart anyway',
   'manage.restart.busy.no': 'Not now',
   'manage.restartTag': 'needs restart',

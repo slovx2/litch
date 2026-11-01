@@ -62,9 +62,9 @@ command is written `scripts/litch …`; always call it by its absolute path.
    and do not retry in a loop.
 5. **Prefer the narrowest change.** Turn on a capability for the one device that needs it, allow one
    site rather than many, keep "operate this computer" on its default approval unless the user asks.
-6. **Settings that restart a harness interrupt it.** Changing a harness's enabled flag, CLI path or
-   environment restarts that harness on that device; running turns in it stop. Warn the user if they have
-   work running there (`scripts/litch status` shows it).
+6. **需要重启的设置会打断工作。** 修改 harness 的启用状态、CLI 路径或环境前，先用
+   `scripts/litch status` 检查正在进行的工作并说明影响。明确重启时，符合条件的普通回合会在原会话
+   自动继续一次；用户停止、待答、自动任务和仍有后台工作的会话不会自动恢复。详见设备章节。
 7. **Secrets.** Only write an API key into a harness's environment when the user gives it to you for
    that purpose. Do not echo keys back in full.
 8. If a command answers that this Litch version does not have an operation, trust that answer, run

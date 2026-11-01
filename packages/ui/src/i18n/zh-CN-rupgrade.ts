@@ -62,7 +62,8 @@ export const zhRupgrade = {
   'service.remote.confirm.swapYes': '换上',
   'service.remote.confirm.no': '取消',
   'service.remote.force.title': '立即换上新版？',
-  'service.remote.force.note': '将立即停止 {name} 上的设备服务，以下正在进行的事会被中断：',
+  'service.remote.force.note':
+    '将立即重启 {name} 上的设备服务。符合条件的普通回合将自动继续；以下工作会被中断：',
   'service.remote.force.clients': '连接该设备的其他客户端会断开并自动重连。',
   'service.remote.force.yes': '立即换上',
 } satisfies Record<string, Entry>

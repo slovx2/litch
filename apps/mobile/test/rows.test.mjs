@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { projectItem } from '@litch/core'
 import { formatSessionEvent } from '../../../packages/protocol/src/session-tree.mts'
-import { recoverMessage } from '../../../packages/protocol/src/system-messages.mts'
+import { recoverMessage, restartMessage } from '../../../packages/protocol/src/system-messages.mts'
 import { RowBuilder } from '../src/core/rows.ts'
 import { experiment } from '../src/experiment.ts'
 
@@ -187,6 +187,29 @@ test('中断后继续走系统行，不画成右侧用户气泡，展开后仍�
   const expanded = builder.build(view, 'all').find((row) => row.type === 'system')
   assert.equal(expanded.expanded, true)
   assert.equal(expanded.text, text)
+})
+
+test('重启续跑在手机上显示独立系统来源，展开保留核对副作用的完整指令', () => {
+  const text = restartMessage('10203040-5060-4070-8080-102030405060')
+  const item = projectItem({
+    type: 'userMessage',
+    id: 'restart',
+    content: [{ type: 'text', text }],
+  })
+  const view = viewOf([{ id: 't', status: 'running', itemIds: ['restart'] }], [item])
+  const builder = new RowBuilder()
+  const rows = builder.build(view, 'all')
+  assert.equal(
+    rows.some((row) => row.type === 'user'),
+    false,
+  )
+  const system = rows.find((row) => row.type === 'system')
+  assert.equal(system.system.kind, 'restart')
+  builder.toggle(system.key, 't')
+  assert.match(
+    builder.build(view, 'all').find((row) => row.type === 'system').text,
+    /external side effects/,
+  )
 })
 
 /** 回合结束后整段过程收成一行：点开它（第一次建行之前点就是展开），看过程里的各段 */

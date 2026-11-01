@@ -226,12 +226,15 @@ test('停服务（重启设备服务）：停了、不闲（只有客户端连�
 
   stopper('echo \'{"stopped":true}\'')
   assert.deepEqual(await stopPeer(config, names, true, live), { result: 'stopped' })
-  assert.deepEqual(called(), ['device-stop --if-idle'])
+  assert.deepEqual(called(), ['device-stop --resume-after-restart --if-idle'])
 
   // 只有客户端连着（就是手机自己这条）：去掉 --if-idle 再停一次
-  stopper(`if [ "$2" = --if-idle ]; then echo '${clients}'; exit 4; fi; echo '{"stopped":true}'`)
+  stopper(`if [ "$3" = --if-idle ]; then echo '${clients}'; exit 4; fi; echo '{"stopped":true}'`)
   assert.deepEqual(await stopPeer(config, names, true, live), { result: 'stopped' })
-  assert.deepEqual(called(), ['device-stop --if-idle', 'device-stop'])
+  assert.deepEqual(called(), [
+    'device-stop --resume-after-restart --if-idle',
+    'device-stop --resume-after-restart',
+  ])
 
   // 还有别的在忙：列出来，客户端那条不列
   stopper(`echo '${terminals}'; exit 4`)
@@ -239,11 +242,11 @@ test('停服务（重启设备服务）：停了、不闲（只有客户端连�
     result: 'busy',
     busy: [{ reason: 'terminals', harnesses: [], count: 2 }],
   })
-  assert.deepEqual(called(), ['device-stop --if-idle'])
+  assert.deepEqual(called(), ['device-stop --resume-after-restart --if-idle'])
 
   stopper('echo "旧服务" >&2; exit 3')
   assert.deepEqual(await stopPeer(config, names, false, live), { result: 'legacy', said: '旧服务' })
-  assert.deepEqual(called(), ['device-stop'])
+  assert.deepEqual(called(), ['device-stop --resume-after-restart'])
   stopper('echo "不认这个控制命令" >&2; exit 5')
   assert.deepEqual(await stopPeer(config, names, false, live), {
     result: 'unsupported',

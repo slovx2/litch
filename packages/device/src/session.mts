@@ -73,6 +73,7 @@ import { type DevicePairing, PAIR_PREFIX, PairingError } from './pairing.mjs'
 import type { PowerActivity } from './power-activity.mjs'
 import type { RecoveryActions } from './recovery-actions.mjs'
 import { Relay } from './relay.mjs'
+import type { RestartResume } from './restart-resume.mjs'
 import { classify } from './routes.mjs'
 import { describeDevice } from './service-info.mjs'
 import type { SessionArchives } from './session-archive.mjs'
@@ -134,6 +135,7 @@ export interface HarnessSource extends UpstreamConfig {
 
 /** 设备进程里各条连接共用的东西 */
 export interface SessionHost {
+  restart?: RestartResume
   recovery?: TurnRecoveryObserver
   recoveryActions?: RecoveryActions
   power(): PowerActivity | null
@@ -264,6 +266,7 @@ export class ClientSession implements ClientToolPeer {
           ? (host.nativeBackground?.decorate(threadId ?? '', value) ?? false)
           : false,
       observe: (link, method, params) => {
+        this.host.restart?.observe(method, params)
         this.host.managers?.observe(method, params)
         if (method === 'thread/name/updated') this.host.sessionTree.suggestions.changed()
         this.host.recovery?.observe(link.harness, method, params)
@@ -768,6 +771,21 @@ export class ClientSession implements ClientToolPeer {
     // 回合里插话、打断：模型在等用户选的 offer 卡当作在这里做
     if (params && method === 'turn/steer' && typeof params.threadId === 'string')
       this.host.sessionTree.userSpoke(params.threadId)
+    if (
+      params &&
+      typeof params.threadId === 'string' &&
+      [
+        'turn/interrupt',
+        'turn/steer',
+        'thread/archive',
+        'thread/delete',
+        'thread/rollback',
+        'thread/goal/set',
+        'thread/queue/add',
+        'thread/queue/start',
+      ].includes(method)
+    )
+      this.host.restart?.cancel(params.threadId, method === 'turn/interrupt')
     if (params && method === 'turn/interrupt' && typeof params.threadId === 'string')
       this.host.sessionTree.interrupted(params.threadId)
     // 用户在后台任务页上停命令：原生 codex 派生的集合把它记成 stopped（不是 failed），子会话补的回报写明是用户停的
@@ -863,6 +881,16 @@ export class ClientSession implements ClientToolPeer {
       })
     }
     const send = (ready: Record<string, unknown> | null): typeof HANDLED => {
+      const threadId = typeof ready?.threadId === 'string' ? ready.threadId : null
+      if (threadId && method === 'turn/start') {
+        const token = this.host.restart?.input(link.harness, threadId)
+        if (token) afterwards.push((result) => this.host.restart?.accepted(threadId, token, result))
+      } else if (
+        ['turn/steer', 'thread/resume'].includes(method) &&
+        this.host.restart?.blocked(link.harness, threadId ?? undefined)
+      ) {
+        throw new Error('设备正在重启或恢复此会话，请稍后重试')
+      }
       // 先准备参数，再拿短期工作来源；准备失败不能遗留保活。
       let outgoing = ready
       if (outgoing) outgoing = link.dialect.outgoing(method, outgoing) ?? outgoing

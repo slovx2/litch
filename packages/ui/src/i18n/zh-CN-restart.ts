@@ -12,7 +12,8 @@ export const zhRestart = {
   'restart.blocked.upgrading': '正在升级设备服务',
   'restart.pill': '重启中',
   'restart.confirm.title': '重启 {name} 的设备服务？',
-  'restart.confirm.note': '以下会话中进行的工作会被打断，重启后不会自动继续：',
+  'restart.confirm.note':
+    '以下工作会被打断。符合条件的普通回合将在重启后自动继续；已停止、待答和自动任务不会恢复：',
   'restart.confirm.turn': '回合进行中',
   'restart.confirm.background': '{count} 个后台任务',
   'restart.confirm.more': '另有 {count} 个会话',
@@ -32,5 +33,5 @@ export const zhRestart = {
   'restart.failed.start': '设备服务已停止，但未能重新连接',
   'restart.failed.stale': '重新连接后运行的仍是原来的服务',
   'restart.again': '重试',
-  'restart.note': '设备服务已重启，回合被打断。发送消息即可继续。',
+  'restart.note': '设备服务已重启。符合条件的回合将自动继续；未恢复的回合可手动继续。',
 } satisfies Record<string, Entry>

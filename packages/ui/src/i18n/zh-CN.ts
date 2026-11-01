@@ -316,7 +316,7 @@ export const zhCN = {
   'manage.restart.failed': '{name} 重启失败：{reason}',
   'manage.restart.busy.title': '{name} 有回合正在运行',
   'manage.restart.busy.note':
-    '现在重启会中断这些回合，待答复的请求也会作废。也可以等空闲后再重启。',
+    '现在重启会中断这些回合。符合条件的普通回合将自动继续，待答复的请求会作废且不会自动恢复。也可以等空闲后再重启。',
   'manage.restart.busy.yes': '仍然重启',
   'manage.restart.busy.no': '暂不重启',
   'manage.restartTag': '需重启',

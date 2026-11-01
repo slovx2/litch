@@ -42,6 +42,8 @@ import { DevicePairing, type PairingConfig } from './pairing.mjs'
 import { PowerActivity } from './power-activity.mjs'
 import { hasActiveTurn } from './probe.mjs'
 import { RecoveryActions } from './recovery-actions.mjs'
+import { RestartResume } from './restart-resume.mjs'
+import { RestartStore } from './restart-store.mjs'
 import { ACTIVITY_METHOD, type DeviceActivity, serviceInfo } from './service-info.mjs'
 import {
   ClientSession,
@@ -249,6 +251,7 @@ export class DeviceServer {
   /** 每个会话的后台任务（backgroundTasks 扩展） */
   readonly background: DeviceBackground
   readonly nativeBackground: NativeBackgroundWake
+  readonly restart: RestartResume
   /** 上一次看到的“会话编排”开关，变了才动 */
   private orchestrating: boolean
   /** 扫码绑定手机。没给配置时是 null */
@@ -552,7 +555,24 @@ export class DeviceServer {
       graceMs: options.timing?.clientToolGraceMs ?? DEFAULT_TIMING.clientToolGraceMs,
       log,
     })
+    this.restart = new RestartResume({
+      store: new RestartStore(this.db),
+      service: () => {
+        const service = this.control?.state?.service
+        return service ? JSON.stringify([service.pid, service.startedAt]) : ''
+      },
+      open: (harness) => this.openEngineLink(harness, { waitMs: 20000, restarting: true }),
+      excluded: (id) =>
+        this.index.recent(id)?.archived === true ||
+        this.sessionTree.store.parentOf(id) !== null ||
+        this.managers.lines.mark(id) !== null ||
+        this.sessionTree.pending.list(id).length > 0 ||
+        this.approvals.list(id).length > 0 ||
+        this.background.running(id) > 0,
+      log,
+    })
     this.host = {
+      restart: this.restart,
       power: () => this.power,
       recovery: this.recovery,
       recoveryActions: this.recoveryActions,
@@ -560,6 +580,7 @@ export class DeviceServer {
       harnesses: () => this.harnesses(),
       management: new DeviceManagement({
         control: this.control,
+        restart: this.restart,
         busy: (harness) => this.busy(harness),
         settling: () => this.holdSettings(),
         log,
@@ -628,6 +649,7 @@ export class DeviceServer {
     // 运行时已经在跑的话现在就导入，不等第一个客户端连进来
     this.importer?.kick()
     this.syncPower()
+    void this.restart.recover()
     if (!this.control) this.tasks?.begin()
     else if (this.control.state) this.tasks?.begin(taskSettings(this.control.state))
     else if (this.tasks) {
@@ -701,6 +723,7 @@ export class DeviceServer {
 
   /** 主进程推来了新的状态：各条连接跟着调整上游，设置真的变了就通知声明过的客户端 */
   private controlChanged(state: ControlState): void {
+    void this.restart?.recover()
     this.recovery.resumed(state.wake)
     this.syncPower()
     this.applyProcessLimits(state)
@@ -817,6 +840,11 @@ export class DeviceServer {
   /** 主进程经控制通道来问一件事。现在只有一件：忙不忙 */
   private asked(method: string): Promise<unknown> {
     if (method === ACTIVITY_METHOD) return this.activity()
+    if (method === 'restart.prepare') return this.restart.prepare()
+    if (method === 'restart.cancel') {
+      this.restart.stop()
+      return Promise.resolve({})
+    }
     return Promise.reject(new Error(`不认识 ${method}`))
   }
 
@@ -853,7 +881,12 @@ export class DeviceServer {
    */
   async openEngineLink(
     harness: string,
-    options: { waitMs?: number; handshakeTimeoutMs?: number; observeSnapshots?: boolean } = {},
+    options: {
+      waitMs?: number
+      handshakeTimeoutMs?: number
+      observeSnapshots?: boolean
+      restarting?: boolean
+    } = {},
   ): Promise<EngineLink> {
     const deadline = Date.now() + (options.waitMs ?? 0)
     for (;;) {
@@ -901,6 +934,7 @@ export class DeviceServer {
                 ),
             }),
             options.observeSnapshots,
+            options.restarting,
           )
         } catch (error) {
           failure =
@@ -918,7 +952,7 @@ export class DeviceServer {
     if (disconnected || this.power?.needsRecovery(harness)) void this.power?.reconnected(harness)
   }
 
-  private keep(link: EngineLink, observeSnapshots = true): EngineLink {
+  private keep(link: EngineLink, observeSnapshots = true, restarting = false): EngineLink {
     if (this.closed) {
       link.close()
       throw new EngineUnavailable(link.harness, 'the device service is shutting down')
@@ -939,6 +973,7 @@ export class DeviceServer {
     // 设备进程自己的连接上看到的也算：没有客户端连着时跑的定时任务、子会话，回报里也要数得出后台任务
     link.onNotification((method, params) => {
       if (!params || typeof params !== 'object') return
+      this.restart?.observe(method, params)
       if (link.native) {
         this.nativeBackground.observe(link.harness, method, params)
         this.nativeBackground.decorate(
@@ -956,6 +991,15 @@ export class DeviceServer {
       if (isObject(params)) this.recovery.observe(link.harness, method, params)
     })
     link.request = async (method, params, options) => {
+      if (
+        !restarting &&
+        (method === 'turn/start' || method === 'thread/resume') &&
+        this.restart?.blocked(
+          link.harness,
+          isObject(params) ? String(params.threadId ?? '') : undefined,
+        )
+      )
+        throw new Error('设备正在准备重启，暂不启动工作')
       const release = method === 'turn/start' ? this.power?.begin(link.harness) : undefined
       try {
         const ready =
@@ -997,6 +1041,7 @@ export class DeviceServer {
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
+    this.restart.close()
     this.nativeBackground.close()
     this.recovery.close()
     this.power?.close()

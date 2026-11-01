@@ -76,7 +76,7 @@ export const enRupgrade: Record<keyof typeof zhRupgrade, Entry> = {
   'service.remote.confirm.no': 'Cancel',
   'service.remote.force.title': 'Switch to the new version now?',
   'service.remote.force.note':
-    'This stops the device service on {name} right away and interrupts the following:',
+    'This restarts the device service on {name} now. Eligible ordinary turns resume automatically; the following work is interrupted:',
   'service.remote.force.clients':
     'Other clients connected to this device are disconnected and reconnect on their own.',
   'service.remote.force.yes': 'Switch Now',

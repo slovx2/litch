@@ -23,6 +23,7 @@ import {
   type LocalizedText,
 } from '../../protocol/src/device-settings.mjs'
 import { type ControlChannel, ControlFailure } from './control.mjs'
+import type { RestartResume } from './restart-resume.mjs'
 import { DeviceError, isObject } from './wire.mjs'
 
 /** 这个扩展的方法都在这个前缀下，由设备进程自己处理，不转给任何运行时 */
@@ -45,6 +46,7 @@ export class ManagementError extends Error {
 }
 
 export interface ManagementHost {
+  restart?: RestartResume
   /** 和适配器主进程之间的控制通道。null：没有主进程在管这个设备进程 */
   control: ControlChannel | null
   /** 这个 harness 是不是有回合在跑。判断不了的时候返回 true */
@@ -196,7 +198,7 @@ export class DeviceManagement {
       return null
     }
     try {
-      const applied = (await this.ask('harness.apply', { harness }, WAIT.apply)) as {
+      const applied = (await this.apply(harness)) as {
         snapshot: DeviceSettingsSnapshot
       }
       return applied.snapshot
@@ -229,6 +231,17 @@ export class DeviceManagement {
         },
         { harness },
       )
-    return this.ask('harness.apply', { harness }, WAIT.apply)
+    return this.apply(harness)
+  }
+
+  private async apply(harness: string): Promise<unknown> {
+    await this.host.restart?.prepare(harness)
+    try {
+      const result = await this.ask('harness.apply', { harness }, WAIT.apply)
+      if (isObject(result) && result.state === 'running') await this.host.restart?.recover(harness)
+      return result
+    } finally {
+      this.host.restart?.release(harness)
+    }
   }
 }
