@@ -223,11 +223,20 @@ export function useSearch(
         timer = 0
         building = true
         again = false
-        revision++
-        void post().finally(() => {
-          building = false
-          if (again) schedule()
-        })
+        const mine = ++revision
+        void post()
+          .catch((error: unknown) => {
+            // 主线程的投影与 postMessage 也可能失败，不会触发 Worker 的 onerror。
+            // 已取消的批次不能覆盖新查询或已经关闭的查找栏。
+            if (stopped || mine !== revision) return
+            console.error('对话搜索索引失败', error)
+            setFailed(true)
+            setBusy(false)
+          })
+          .finally(() => {
+            building = false
+            if (again) schedule()
+          })
       }, 180)
     }
     worker.onmessage = (event: MessageEvent<SearchResult>) => {
