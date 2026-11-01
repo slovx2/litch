@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { chmod, cp, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { CHROME_HOST_NAME } from '../../../../packages/protocol/src/chrome-browser.mjs'
@@ -19,6 +19,18 @@ async function privateJson(file: string, value: unknown): Promise<void> {
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 })
   await chmod(temporary, 0o600)
   await rename(temporary, file)
+}
+
+/**
+ * 打包后扩展在 app.asar 里，Electron 的 asar 补丁不支持 fs.cp，只能逐个文件读写。
+ * 构建产物是平铺的几个文件，遇到子目录直接报错，免得漏拷。
+ */
+async function copyExtension(from: string, to: string): Promise<void> {
+  await mkdir(to, { recursive: true, mode: 0o700 })
+  for (const entry of await readdir(from, { withFileTypes: true })) {
+    if (!entry.isFile()) throw new Error(`Unexpected entry in Chrome extension: ${entry.name}`)
+    await writeFile(join(to, entry.name), await readFile(join(from, entry.name)))
+  }
 }
 
 export async function chromeIdentity(assets: string): Promise<{ id: string; version: string }> {
@@ -47,7 +59,7 @@ export class ChromeInstaller {
     if (!(await stat(nativeBinary)).isFile())
       throw new Error('Litch native host executable is missing.')
     await mkdir(root, { recursive: true, mode: 0o700 })
-    await cp(assets, this.extensionDirectory, { recursive: true })
+    await copyExtension(assets, this.extensionDirectory)
     await privateJson(this.configPath, { socketPath, token: this.token, extensionId: identity.id })
     const launcher = join(root, 'native-host')
     await writeFile(
