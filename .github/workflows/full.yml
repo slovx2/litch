@@ -377,16 +377,6 @@ jobs:
       # 手机批准的验签与批准钥匙：伪造、篡改、重放、过期、换钥匙都不认
       - run: npm run test:approvals --prefix apps/desktop
         id: phase-27
-      - run: npm run client:build
-        id: phase-26
-      - run: npm run client:smoke
-        id: phase-25
-      # 对话区“不飘”的验收：在不显示的窗口里真的去滚、去点，逐帧量位置
-      - run: npm run client:check:scroll
-        id: phase-24
-      # 输入区的验收：输入法回车不误发、发送与排队的顺序、打断、草稿、审批和提问卡片的快捷键
-      - run: npm run client:check:compose
-        id: phase-23
       # 侧栏投影验收（check-sidebar-projections.mjs）要一份隔离的 headless Chrome for Testing，经 LITCH_CHROME_BINARY
       # 交给本作业后面的步骤；版本与 chrome-e2e 的引导脚本一致。搜索验收不进 CI，见 scripts/AGENTS.md
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -407,66 +397,19 @@ jobs:
           fi
           "${binary}" --version | grep -F '151.0.7922.34'
           echo "LITCH_CHROME_BINARY=${binary}" >> "${GITHUB_ENV}"
-      - run: npm run client:check:projections
-        id: phase-21
-      # 对着真实入口的自检：在临时目录里起一个 Pi 引擎，模型请求全部走回环上的假模型
+      # nightly 自己只构建一次 UI/桌面；先准备真实入口、设备和伪终端桥。
       - run: npm ci --no-audit --no-fund --prefix packages/pi
         id: phase-20
       - run: npm run build --prefix packages/pi
         id: phase-19
-      # 这里的引擎和设备进程是直接用 node 起的，没有命令行那一层：把命令行编到 bin/ 下，它们才找得到伪终端桥
       - run: node scripts/build-cli.mjs
         id: phase-18
-      - run: npm run client:smoke:entry
-        id: phase-17
-      - run: npm run client:check:scroll:entry
-        id: phase-16
-      - run: npm run client:check:compose:entry
-        id: phase-15
-      # 终端面板的验收：模拟核心、多 harness 的隔离设备（可重连的终端）、单个 harness 的入口（随连接结束的终端）。
-      # 流水线上时间的线按宽的算（回显和帧间隔只报数），功能对不对照旧严
       - run: npm run build --prefix packages/device
         id: phase-14
-      - run: npm run client:check:terminal
-        id: phase-13
-      # 侧面板和文件标签的验收：模拟核心、多 harness 的隔离设备、单个 harness 的入口（后两种是真的文件系统）。
-      # 流水线上时间的线按宽的算（展开大目录、帧间隔、开大文件只报数），功能对不对照旧严
-      - run: npm run client:check:files
-        id: phase-12
-      # 设置页与外观的验收（只对着模拟核心）：设置页的五组与入口、皮肤明暗密度缩放语言当场生效并记得住、
-      # 快捷键一览和真的应用菜单对账、关于与许可、回合正在跑的时候换外观、六套皮肤组合下各屏的溢出与对比度、
-      # 缩放到最小最大时的终端行列数；再用同一份用户数据目录冷启动一遍，看窗口一建出来的底色和缩放
-      - run: npm run client:check:settings
-        id: phase-11
-      - run: npm run client:check:navigation
-        id: phase-10
-      # 对话字号：三套皮肤的评论 portal、窄窗口定位、输入浮层和侧面板边界。
-      - run: npm run client:check:text-scale
-        id: phase-9
-      # 完整模式（多 harness 的会话目录、工作区、置顶与分区、新建时选 harness、提问向导）和设备管理页的验收：
-      # 各跑两遍，模拟核心一遍、多 harness 的隔离设备一遍
-      - run: npm run client:check:full
-        id: phase-8
-      - run: npm run client:check:manage
-        id: phase-7
-      - run: npm run client:check:harness-settings
-        id: phase-6
-      # 本机内置适配器的打开方式（拿假的适配器，不起界面）：拉起、已经在跑就复用、换版本的各种情形、每一种没连上
-      - run: npm run client:check:adapter
-        id: phase-5
-      # 侧面板里“差异”标签的验收：模拟核心（示例仓库）、多 harness 的隔离设备、单个 harness 的入口
-      # （后两种是脚本在夹具的临时目录里现建的 git 仓库，暂存、还原只对它做）。时间的线同样按宽的算
-      - run: npm run client:check:diff
-        id: phase-4
-      # 远程设备：在回环上起一个用户态的 sshd 当假的远程机器（临时密钥、临时主目录，跑完就删），
-      # 先不起界面把每一种连接情形过一遍，再在真的外壳里走添加、连接、断线重连、移除
-      - run: npm run client:check:ssh
-        id: phase-3
-      - run: npm run client:check:remote
-        id: phase-2
-      # 远程操作本机的开启确认：隔离状态、隐藏窗口、中英文卡片及继续执行。
-      - run: npm run check:machine-enable --prefix apps/desktop
-        id: phase-1
+      # 同一套 25 个窗口/连接子检查；逐项计时，不重试，任一失败则本步骤失败。
+      - name: 完整桌面窗口与连接检查（一次构建）
+        id: nightly
+        run: npm run check:nightly --prefix apps/desktop
 
       - name: 缓存与首次失败
         id: stage-41

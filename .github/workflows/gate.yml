@@ -61,7 +61,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # 必跑 CI（所有包单测、契约、类型、原生首回合及关键审批/发送）与受影响完整领域。
-  # 窗口清单的入口由 ci.yml client 维护，避免在两个工作流里复制命令。
+  # ci.yml client 统一跑 smoke、critical 和六入口 first-turn，不允许 skip-missing。
+  # 签名包 smoke 由 Release 在签名后跑，完整 packed 按影响范围加跑。
   tests:
     needs: impact
     permissions:

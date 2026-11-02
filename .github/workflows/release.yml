@@ -73,10 +73,12 @@ jobs:
     timeout-minutes: 5
     outputs:
       sha: ${{ steps.freeze.outputs.sha }}
+      packed-check: ${{ contains(fromJSON(steps.impact.outputs.domains), 'client') || contains(fromJSON(steps.impact.outputs.domains), 'adapters') || contains(fromJSON(steps.impact.outputs.domains), 'client-engines') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ env.REF }}
+          fetch-depth: 0
       - name: 冻结候选源码与工作流提交
         id: freeze
         env:
@@ -88,6 +90,27 @@ jobs:
             exit 1
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      # 在候选阶段按同一规则计算，不等完整 Gate 结束，保持测试和出包并行。
+      # 桌面、入口或未知影响加跑完整 packed；无可信夜间基线时规则会扩大到全量。
+      - name: 判断完整签名包检查的影响范围
+        id: impact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ steps.freeze.outputs.sha }}
+          NIGHTLY_RUNS_PATH: nightly-runs.json
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/full.yml/runs?event=schedule&status=success&per_page=100" \
+            --jq '.workflow_runs | map({id, head_sha, status, conclusion, event, updated_at, html_url, path, run_attempt})' > nightly-runs.json
+          node scripts/ci-impact.mjs | tee packed-impact.json
+          {
+            echo '### 签名包完整检查的影响范围'
+            echo '```json'
+            cat packed-impact.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   gate:
     needs: candidate
@@ -298,7 +321,10 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           ditto -c -k --sequesterRsrc --keepParent "apps/desktop/out/Litch-darwin-arm64/Litch.app" "apps/desktop/out/installer/Litch-${version}-macos-arm64.zip"
       # 签过、钉过票的应用照样起得来：对着模拟核心起一次，界面和核心打通
-      - name: 签好的应用、发送和远程连接验收
+      - name: 签好的应用启动（每个候选必跑）
+        run: node apps/desktop/scripts/smoke.mjs --packed
+      - name: 签名包完整发送与远程连接验收（按影响范围）
+        if: needs.candidate.outputs.packed-check == 'true'
         run: npm run client:check:packed
       - name: 核对最终 dmg 和自动更新 zip
         run: node apps/desktop/scripts/verify-macos-distribution.mjs
