@@ -410,6 +410,25 @@ export function auditPlatform(out, platform, arch) {
 }
 
 /**
+ * 暂存出来的东西（以及打好的应用）所有者都能写。只读文件进了桌面应用，Squirrel.Mac（ShipIt）装更新时改不了它们的扩展属性，
+ * 更新会一直装不上（0.28.0 就是 Go 模块缓存里带出来的只读许可文件）。Windows 上的权限位是模拟的，不查
+ */
+export function auditWritable(out) {
+  if (process.platform === 'win32') return
+  const locked = []
+  walk(out, (path, entry) => {
+    if (entry.isSymbolicLink()) return false
+    if ((lstatSync(path).mode & 0o200) === 0) locked.push(relative(out, path).split(sep).join('/'))
+    return true
+  })
+  if (locked.length > 0) {
+    throw new Error(
+      `${out} 里有所有者不可写的文件（应用的自动更新会装不上）：\n  ${locked.slice(0, 20).join('\n  ')}`,
+    )
+  }
+}
+
+/**
  * 把适配器暂存到 out（必须不存在或是空目录；清不清旧的、半成品留不留由调用方管），返回它在哪、各部分多大。
  * 默认给本机的系统和架构；给别的时 Go 交叉编译，Node 取对应的官方包（不在本机试运行）。
  *   goFrom       命令行从哪份源码编译（里面要有 go.mod 和 cmd/codex-harness-adapter），默认是这个仓库
@@ -489,6 +508,7 @@ export async function stageAdapterTree(
   }
 
   auditPlatform(out, platform, arch)
+  auditWritable(out)
 
   // 给的是本机的系统和架构时试运行一下：Node 报得出预期的版本；
   // 命令行起得来，而且报得出版本号（它是从暂存目录里的 package.json 读的，这个文件不能少）
