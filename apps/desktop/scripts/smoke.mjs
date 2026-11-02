@@ -188,9 +188,20 @@ function startDevice(managed) {
         socket: JSON.parse(line.slice('LITCH_DEVICE_FIXTURE '.length)).socket,
         command,
         log: () => output,
-        stop: () => {
+        stop: async () => {
           child.kill('SIGTERM')
-          return Promise.race([exited, new Promise((done) => setTimeout(done, 15_000))])
+          let timer
+          try {
+            await Promise.race([
+              exited,
+              new Promise((done) => {
+                timer = setTimeout(done, 15_000)
+              }),
+            ])
+          } finally {
+            // 夹具提前退出时撤掉兜底定时器，否则它仍会让验收进程空等到十五秒。
+            clearTimeout(timer)
+          }
         },
       })
     }
