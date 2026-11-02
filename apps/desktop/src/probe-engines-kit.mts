@@ -37,6 +37,8 @@ export interface EnginesKit {
   lastAnswer(): string
   /** 等这一轮完全结束：不在跑、没有卡片、没有排着的消息、输入框在 */
   idle(ms?: number): Promise<void>
+  /** 经界面的“加载更早消息”逐页补齐，等分批绘制完成；读失败要报错，不能把首屏当全历史。 */
+  history(): Promise<void>
   /** 在输入框里写一句发出去，等这句话的气泡出来（对面回显的可能比发的多：按“里面有这句话”找） */
   send(words: string): Promise<void>
   /** 发出去之后等着：来了请求卡片就返回它，没来卡片回合就结束了是 null */
@@ -122,6 +124,32 @@ export function installEnginesKit(): boolean {
       },
       ms,
     )
+  }
+  const history = async () => {
+    let size = -1
+    let calm = 0
+    await wait(
+      '全部历史加载并画完',
+      () => {
+        const more = one<HTMLButtonElement>('.history-more')
+        if (more?.title) throw new Error(`历史加载失败：${more.title}`)
+        if (more) {
+          calm = 0
+          if (!more.disabled) more.click()
+          return false
+        }
+        const now = turns().length
+        if (now !== size || one('.tr-scroll[aria-busy="true"]')) {
+          size = now
+          calm = 0
+        } else {
+          calm ||= performance.now()
+        }
+        return calm > 0 && performance.now() - calm > 300
+      },
+      60_000,
+    )
+    await frame()
   }
   const card = async (ms = 60_000) => {
     const found = await wait('请求卡片', () => one<HTMLElement>('.req'), ms)
@@ -296,6 +324,7 @@ export function installEnginesKit(): boolean {
     lastTurn,
     lastAnswer,
     idle,
+    history,
     send,
     cardOrEnd,
     card,

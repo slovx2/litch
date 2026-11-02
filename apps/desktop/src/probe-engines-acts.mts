@@ -57,6 +57,8 @@ export interface ForkSeen {
   turnsBefore: number
   hasEarlier: boolean
   hasLater: boolean
+  /** 分叉带走的全部历史逐条等于原会话截至目标的历史 */
+  historyKept: boolean
   /** 提示里说了什么；新会话那一行的标题和徽标 */
   told: string
   rowTitle: string
@@ -80,9 +82,11 @@ export async function enginesFork(
     all('.umsg').findLast((entry) => text(one('.umsg-text', entry)).includes(words))
 
   await kit.idle()
+  await kit.history()
   const source = one('.ss-row:not(.projection-group *).sel')
   const rowsBefore = all('.ss-row:not(.projection-group *)').length
   const turnsBefore = kit.turns().length
+  const sourceHistory = await kit.outline()
   const button = kit.sub<HTMLButtonElement>(bubble(earlier), '.act-fork')
   if (!button) throw new Error('先发的那一句上没有分叉的入口')
   button.click()
@@ -97,6 +101,7 @@ export async function enginesFork(
   }
   await until('分叉出来的会话的内容', () => kit.turns().length > 0 && bubble(earlier), 30_000)
   await kit.idle()
+  await kit.history()
   await frame()
   const row = one('.ss-row:not(.projection-group *).sel')
   const seen = {
@@ -105,6 +110,7 @@ export async function enginesFork(
     turnsBefore,
     hasEarlier: Boolean(bubble(earlier)),
     hasLater: Boolean(bubble(later)),
+    historyKept: JSON.stringify(await kit.outline()) === JSON.stringify(sourceHistory.slice(0, -1)),
     told: text(one('.toast[data-toast="turn-action"]')),
     rowTitle: text(kit.sub(row, '.title')),
     rowHarness: kit.sub(row, '.chip')?.title ?? '',
@@ -120,13 +126,12 @@ export async function enginesFork(
     () => one('.ss-row:not(.projection-group *).sel') === source && bubble(later),
     30_000,
   )
-  // 对话区先画最后几个回合、更早的分批往前补（ui 的 turn-window.ts）：等画全了再数，等不到照实数
-  await files.seen(() => kit.turns().length >= turnsBefore, 10_000)
+  await kit.history()
   await frame()
   return {
     ...seen,
     next,
-    sourceKept: kit.turns().length === turnsBefore && !bubble(aside),
+    sourceKept: JSON.stringify(await kit.outline()) === JSON.stringify(sourceHistory),
   }
 }
 
@@ -138,6 +143,8 @@ export interface EditSeen {
   replaced: boolean
   turns: number
   turnsBefore: number
+  /** 替换消息之前的全部历史保持不变 */
+  historyKept: boolean
   /** 提示里说了什么（没做成的时候） */
   told: string
   /** 改过的那句开的回合 */
@@ -154,7 +161,9 @@ export async function enginesEdit(later: string, again: string): Promise<EditSee
   const editor = () => one<HTMLTextAreaElement>('.umsg.editing textarea.umsg-edit')
 
   await kit.idle()
+  await kit.history()
   const turnsBefore = kit.turns().length
+  const historyBefore = await kit.outline()
   const button = kit.sub<HTMLButtonElement>(bubble(later), '.act-edit')
   if (!button) throw new Error('后发的那一句上没有编辑的入口')
   button.click()
@@ -172,12 +181,17 @@ export async function enginesEdit(later: string, again: string): Promise<EditSee
   await frame()
   const told = all('.toast').map(text).join('｜')
   await kit.idle()
+  // 回退会重新获取首屏；原来已显示的早期页也要重新补齐再比较。
+  await kit.history()
   return {
     original,
     note,
     replaced,
     turns: kit.turns().length,
     turnsBefore,
+    historyKept:
+      JSON.stringify((await kit.outline()).slice(0, -1)) ===
+      JSON.stringify(historyBefore.slice(0, -1)),
     told,
     next: { foot: kit.foot(), answer: kit.lastAnswer() },
   }

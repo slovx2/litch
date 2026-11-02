@@ -215,6 +215,59 @@ test('断线重连不沿用旧页请求；重连后的快照不会被迟到页�
   app.core.stop()
 })
 
+test('重连先取十回合，再向前翻页可还原全部历史及顺序', async () => {
+  const app = paging()
+  app.core.start()
+  await settle()
+  const session = watch(app.core)
+  await settle()
+  await app.command('session.loadOlder', where)
+  await app.command('session.loadOlder', where)
+  await settle()
+  const original = structuredClone(session.seen.view?.turns)
+  app.peer.last().drop()
+  await settle()
+  app.time.advance(1000)
+  await settle()
+  assert.equal(session.seen.view?.turns.length, 10)
+  assert.equal(session.seen.view?.history?.hasMore, true)
+  await app.command('session.loadOlder', where)
+  await app.command('session.loadOlder', where)
+  await settle()
+  assert.deepEqual(session.seen.view?.turns, original)
+  assert.equal(session.seen.view?.history?.hasMore, false)
+  session.close()
+  app.core.stop()
+})
+
+test('编辑首屏之外的早期消息：翻到目标页后按服务端 ID 回退，只保留目标之前的历史', async () => {
+  const app = paging()
+  app.core.start()
+  await settle()
+  const session = watch(app.core)
+  await settle()
+  assert.ok(!session.seen.view?.turns.some((turn) => turn.id === 't12'))
+  await app.command('session.loadOlder', where)
+  await settle()
+  assert.equal(session.seen.view?.turns[0]?.id, 't10')
+  await app.command('session.edit', { ...where, turnId: 't12', text: '替换第十二条' })
+  await settle()
+  assert.deepEqual(app.sent('thread/revert'), [{ threadId: 'a', beforeTurnId: 't12' }])
+  assert.equal(app.turns().at(-1)?.id, 't11')
+  assert.equal(app.sent('turn/start').length, 1)
+  assert.match(JSON.stringify(app.sent('turn/start')), /替换第十二条/)
+  // 回退重新取首屏；继续向前翻到头，不能少掉此前未显示的 t0、t1。
+  await app.command('session.loadOlder', where)
+  await settle()
+  assert.deepEqual(
+    session.seen.view?.turns.filter((turn) => !turn.id.startsWith('local:')).map((turn) => turn.id),
+    app.turns().map((turn) => turn.id),
+  )
+  assert.equal(session.seen.view?.history?.hasMore, false)
+  session.close()
+  app.core.stop()
+})
+
 test('旧端拒绝分页参数：重试标准 resume，仍显示完整历史', async () => {
   const full = thread({ id: 'a', turns: [turn('old', [userText('u', '完整历史')])] })
   const app = setup([full], {

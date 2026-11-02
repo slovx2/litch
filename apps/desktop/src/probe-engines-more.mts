@@ -163,6 +163,7 @@ export async function enginesInterrupt(slow: string, next: string): Promise<Inte
 export async function enginesOutline(): Promise<string[][]> {
   const kit = (window as unknown as { __enginesKit: EnginesKit }).__enginesKit
   await kit.idle()
+  await kit.history()
   return kit.outline()
 }
 
@@ -203,6 +204,7 @@ export async function enginesOpen(title: string, has?: string): Promise<number> 
     row.click()
     await until(`“${title}”成了眼前的会话`, () => row.classList.contains('sel'), 20_000)
     await loaded()
+    await kit.history()
     if (!has || text(one('.tr')).includes(has)) return kit.turns().length
     if (index === rows().length - 1) break
   }

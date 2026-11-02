@@ -150,6 +150,7 @@ const fork: StepJudge = (id, spec, raw, v) => {
     `新会话里有 ${seen.turns} 个回合，原来的有 ${seen.turnsBefore} 个`,
   )
   v.check(seen.hasEarlier && !seen.hasLater, '新会话里该有先发的那一句、没有后发的那一句')
+  v.check(seen.historyKept, '分叉出来的完整历史与原会话截至目标回合的内容不同')
   v.check(seen.told.includes('分叉'), `分叉之后的提示是“${seen.told}”`)
   v.check(seen.rowHarness === spec.name, `新会话那一行的徽标是“${seen.rowHarness}”`)
   v.check(seen.next.foot === '完成', `在新会话里再发一句，回合的结尾是“${seen.next.foot}”`)
@@ -163,6 +164,7 @@ const fork: StepJudge = (id, spec, raw, v) => {
 const edit: StepJudge = (id, _spec, raw, v) => {
   const seen = raw as EditSeen
   v.check(seen.original === WORDS.later, `编辑框里原来是“${seen.original.slice(0, 40)}”`)
+  v.check(seen.historyKept, '编辑重发后，目标消息之前的完整历史发生了变化')
   v.check(seen.note.includes('无法恢复'), `编辑框下面的说明是“${seen.note.slice(0, 40)}”`)
   v.check(
     seen.replaced && seen.turns === seen.turnsBefore,
