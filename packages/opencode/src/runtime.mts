@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import type { ReadableStream } from 'node:stream/web'
 import { cliCommand } from '../../shared/src/host-cli.mjs'
 import { sleep } from '../../shared/src/util.mjs'
 import { OpencodeApi } from './api.mjs'
@@ -100,11 +101,13 @@ export class OpencodeRuntime {
     const guard = watchdog(child.pid)
     child.once('exit', () => guard?.kill('SIGKILL'))
     let stderr = ''
+    let transport: OpencodeApi | null = null
     child.stderr.on('data', (chunk: Buffer) => {
       stderr = (stderr + chunk.toString()).slice(-4000)
       process.stderr.write(redact(chunk.toString()))
     })
     child.once('exit', (code, signal) => {
+      void transport?.close()
       if (this.child !== child) return
       this.child = null
       this.starting = null
@@ -115,6 +118,7 @@ export class OpencodeRuntime {
     try {
       const url = await this.listening(child, () => stderr)
       const api = new OpencodeApi(url, password, host.version)
+      transport = api
       const health = await api.request('GET', '/global/health', { timeoutMs: 15000 })
       // 真正跑起来的那个也得过下限：报不出版本的当作不兼容
       assertOpencodeVersion(
@@ -142,6 +146,7 @@ export class OpencodeRuntime {
         this.stream?.abort()
       }
       child.kill('SIGKILL')
+      await transport?.close()
       throw error
     }
   }
@@ -184,10 +189,7 @@ export class OpencodeRuntime {
       }
       try {
         alive()
-        const response = await fetch(`${api.url}/global/event`, {
-          headers: api.headers(),
-          signal: controller.signal,
-        })
+        const response = await api.events(controller.signal)
         if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
         for await (const frame of frames(response.body, alive)) {
           const payload = frame?.payload
@@ -225,7 +227,10 @@ export class OpencodeRuntime {
     this.stream?.abort()
     const child = this.child
     this.child = null
-    if (!child || child.exitCode !== null || child.signalCode !== null) return
+    if (!child || child.exitCode !== null || child.signalCode !== null) {
+      await api?.close()
+      return
+    }
     const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()))
     // 先请它把各目录实例收拾掉（会停掉还在跑的回合和工具进程），再发结束信号；到点还没退的强杀。
     if (api && !signalled)
@@ -237,6 +242,7 @@ export class OpencodeRuntime {
     )
     await exited
     clearTimeout(timer)
+    await api?.close()
   }
 }
 

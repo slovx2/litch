@@ -161,6 +161,13 @@ running in that harness on that device. Check `scripts/litch status` first and w
 
 ## "Not installed" or "Unavailable"
 
+OpenCode startup and restart establish fresh connections to the current serve process. Failed
+requests are reported without automatically repeating operations. If a connection error persists,
+check the harness Runtime tab and device logs before restarting.
+
+OpenCode 启动或重启时重新连接当前 serve 进程，不沿用旧进程的连接。请求失败会直接报告，不自动重复操作。
+若持续出现连接错误，先检查 harness 的 Runtime 页与设备日志，再重启。
+
 1. Is it installed for the user's login shell? Run its version command in a login shell on that device
    (`claude --version`, `codex --version`, …); `scripts/litch harness list <device>` shows Litch's view.
 2. Installed somewhere unusual: set its command explicitly,

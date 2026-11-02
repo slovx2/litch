@@ -1,3 +1,4 @@
+import { fetch, Pool, type Response } from 'undici'
 import { compatibilityHint } from './versions.mjs'
 
 // opencode serve 的 v1 HTTP 接口的最小客户端。本文件和 runtime.mts 是仅有的两处直接接触线路形状的地方。
@@ -42,11 +43,26 @@ export class OpencodeApi {
   readonly url: string
   readonly version: string
   private readonly authorization: string
+  private readonly pool: Pool
 
   constructor(url: string, password: string, version: string) {
     this.url = url.replace(/\/$/, '')
     this.version = version
     this.authorization = `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}`
+    // serve 的 --port 0 会优先复用 4096；不能复用上一代进程在全局 fetch 池里的连接。
+    this.pool = new Pool(this.url)
+  }
+
+  close(): Promise<void> {
+    return this.pool.destroy()
+  }
+
+  events(signal: AbortSignal): Promise<Response> {
+    return fetch(`${this.url}/global/event`, {
+      headers: this.headers(),
+      signal,
+      dispatcher: this.pool,
+    })
   }
 
   // 头里的目录 OpenCode 按 URL 编码读（它的 instance-context 中间件先解码），中文、空格都要编码，和它的 SDK 一样。
@@ -68,6 +84,7 @@ export class OpencodeApi {
     const signal = AbortSignal.any(signals.filter((value): value is AbortSignal => Boolean(value)))
     const what = `${method} ${path}`
     const response = await fetch(url, {
+      dispatcher: this.pool,
       method,
       headers: {
         ...this.headers(options.directory),
