@@ -20,16 +20,27 @@ import {
   managerStepError,
   managerTabTarget,
 } from './form-steps.ts'
+import {
+  fitManagerHarness,
+  fitManagerModels,
+  type ManagerFormDraft,
+  managerDevice,
+  managerWorkspace,
+  recallManager,
+  rememberManager,
+} from './remembered.ts'
 
-function remembered(deviceId: string) {
-  try {
-    return JSON.parse(localStorage.getItem(`litch.manager.defaults:${deviceId}`) ?? '{}') as {
-      harness?: string
-      model?: string | null
-      effort?: string | null
-    }
-  } catch {
-    return {}
+function emptyDraft(): ManagerFormDraft {
+  return {
+    name: '',
+    cwd: '',
+    harness: '',
+    model: null,
+    effort: null,
+    dispatch: { ...MANAGER_DEFAULT_DISPATCH },
+    contact: { ...MANAGER_DEFAULT_CONTACT },
+    rules: '',
+    firstTask: '',
   }
 }
 export function ManagerForm({
@@ -49,40 +60,34 @@ export function ManagerForm({
 }) {
   const t = useT()
   const { channel } = useServices()
-  const [deviceId, setDeviceId] = useState(
-    devices.find((entry) => entry.id === initial.deviceId)?.id ?? devices[0]?.id ?? '',
-  )
+  const [deviceId, setDeviceId] = useState(() => managerDevice(devices, initial.deviceId))
   const device = devices.find((entry) => entry.id === deviceId)
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? []
-  const [workspaceId, setWorkspaceId] = useState(
-    initial.deviceId === deviceId ? (initial.workspaceId ?? '') : '',
+  const [workspaceId, setWorkspaceId] = useState(() =>
+    initial.deviceId === deviceId && initial.workspaceId !== undefined
+      ? (initial.workspaceId ?? '')
+      : managerWorkspace(deviceId),
   )
   const workspace = workspaces.find((entry) => entry.id === workspaceId)
-  const [form, setForm] = useState<Omit<ManagerDraft, 'template' | 'scope'>>(() => {
+  const [draft, setForm] = useState<ManagerFormDraft>(() => {
     if (manager) return { ...manager, firstTask: '' }
-    const last = remembered(deviceId)
-    return {
-      name: '',
-      cwd: '',
-      harness:
-        device?.harnesses.find((entry) => entry.id === last.harness && entry.state === 'ready')
-          ?.id ??
-        device?.harnesses.find((entry) => entry.state === 'ready')?.id ??
-        '',
-      model: last.model ?? null,
-      effort: last.effort ?? null,
-      dispatch: { ...MANAGER_DEFAULT_DISPATCH },
-      contact: { ...MANAGER_DEFAULT_CONTACT },
-      rules: '',
-      firstTask: '',
-    }
+    return recallManager(device, emptyDraft())
   })
   const [step, setStep] = useState<ManagerFormStep>('basic')
   const stepIndex = MANAGER_FORM_STEPS.findIndex((entry) => entry.id === step)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const options = useComposeOptions(deviceId, form.harness || undefined)
-  const lineOptions = useComposeOptions(deviceId, form.dispatch.harness ?? form.harness)
+  const environment = manager ? draft : fitManagerHarness(draft, device)
+  const options = useComposeOptions(deviceId, environment.harness || undefined)
+  const lineOptions = useComposeOptions(
+    deviceId,
+    environment.dispatch.harness ?? environment.harness,
+  )
+  const form = manager ? draft : fitManagerModels(environment, options, lineOptions)
+  const optionsLoading =
+    !manager &&
+    ((!options && Boolean(form.model || form.effort)) ||
+      (!lineOptions && Boolean(form.dispatch.model || form.dispatch.effort)))
   const sameHarness = !form.dispatch.harness || form.dispatch.harness === form.harness
   const lineModel = lineOptions?.models.find((entry) =>
     form.dispatch.model
@@ -108,7 +113,7 @@ export function ManagerForm({
     setError('')
   }
   const save = async () => {
-    if (busy || disabled) return
+    if (busy || disabled || (step === 'dispatch' && optionsLoading)) return
     const issue = managerStepError(manager ? 'dispatch' : step, {
       cwd,
       harnessReady: Boolean(
@@ -155,15 +160,7 @@ export function ManagerForm({
         deviceId,
         manager: { ...form, permission, template: 'blank', scope: '', cwd: cwd.trim() },
       })
-      // 创建已成功；偏好存储失败不能把它显示成创建失败，也不能重复创建。
-      try {
-        localStorage.setItem(
-          `litch.manager.defaults:${deviceId}`,
-          JSON.stringify({ harness: form.harness, model: form.model, effort: form.effort }),
-        )
-      } catch {
-        /* 偏好不影响设备上已经创建的经理。 */
-      }
+      rememberManager(deviceId, workspace?.id ?? '', { ...form, cwd: cwd.trim() })
       onCreated({ deviceId, sessionId: result.threadId })
     } catch (cause) {
       setError(reasonOf(cause, t))
@@ -295,19 +292,16 @@ export function ManagerForm({
                   onChange={(event) => {
                     const id = event.target.value
                     const next = devices.find((entry) => entry.id === id)
-                    const last = remembered(id)
                     setDeviceId(id)
-                    setWorkspaceId('')
+                    setWorkspaceId(managerWorkspace(id))
+                    const last = recallManager(next, emptyDraft())
+                    // 换设备只换运行参数，保留前一步已经写好的内容和通知选择。
                     change({
-                      cwd: '',
-                      harness:
-                        next?.harnesses.find(
-                          (entry) => entry.state === 'ready' && entry.id === last.harness,
-                        )?.id ??
-                        next?.harnesses.find((entry) => entry.state === 'ready')?.id ??
-                        '',
-                      model: last.model ?? null,
-                      effort: last.effort ?? null,
+                      cwd: last.cwd,
+                      harness: last.harness,
+                      model: last.model,
+                      effort: last.effort,
+                      dispatch: last.dispatch,
                     })
                   }}
                 >
@@ -321,7 +315,7 @@ export function ManagerForm({
               <label className="form-field">
                 {t('manager.workspace')}
                 <select
-                  value={workspaceId}
+                  value={workspace?.id ?? ''}
                   onChange={(event) => setWorkspaceId(event.target.value)}
                 >
                   <option value="">{t('workspace.none')}</option>
@@ -582,8 +576,18 @@ export function ManagerForm({
         <button
           type="submit"
           className="btn primary"
-          disabled={busy || disabled || (!manager && step === 'dispatch' && project.loading)}
-          title={disabled ? t('manager.offline') : undefined}
+          disabled={
+            busy ||
+            disabled ||
+            (!manager && step === 'dispatch' && (project.loading || optionsLoading))
+          }
+          title={
+            disabled
+              ? t('manager.offline')
+              : optionsLoading
+                ? t('manager.optionsLoading')
+                : undefined
+          }
         >
           {t(
             manager

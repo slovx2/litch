@@ -136,6 +136,7 @@ export const enManager = {
   'manager.loading': 'Loading board…',
   'manager.unavailable': 'Managers are unavailable on this device',
   'manager.offline': 'Connect the device to make changes',
+  'manager.optionsLoading': 'Loading models and reasoning efforts; wait or select defaults',
   'manager.none': 'No entries',
   'manager.open': 'Open',
   'manager.answered': 'Answered',

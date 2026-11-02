@@ -3,6 +3,7 @@
 // 存在浏览器的本地存储里，读写失败就当没记过。
 import type { ComposeOptions, DeviceView, HarnessView, SessionSettings } from '@litch/core'
 import { useSyncExternalStore } from 'react'
+import { readRemembered as read, writeRemembered as write } from '../app/remembered.ts'
 import { defaultHarness, fitPicks } from './new-place.ts'
 
 const STORE_KEY = 'litch.lastSettings'
@@ -17,23 +18,6 @@ const DEVICE_KEY = 'litch.lastDevice'
 const WORKSPACE_KEY = 'litch.lastWorkspace'
 
 type Picks = Partial<SessionSettings>
-
-function read<T>(storeKey: string): Record<string, T> {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(storeKey) ?? '{}')
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, T>) : {}
-  } catch {
-    return {}
-  }
-}
-
-function write<T>(storeKey: string, key: string, value: T): void {
-  try {
-    localStorage.setItem(storeKey, JSON.stringify({ ...read<T>(storeKey), [key]: value }))
-  } catch {
-    // 存不进去不影响这次使用
-  }
-}
 
 /** 模型这些是 harness 自己的东西：一台设备上每个 harness 各记各的 */
 const slot = (deviceId: string, harness: string) => `${deviceId}/${harness}`

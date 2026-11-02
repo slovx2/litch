@@ -36,6 +36,7 @@ export interface ManagerSeen {
   reportsStopped: boolean
   reportsResumed: boolean
   created: boolean
+  creationRemembered: boolean
   promptKept: boolean
   endedReadOnly: boolean
   endingReadOnly: boolean
@@ -754,6 +755,28 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     if (!target) throw new Error(`缺少当前步骤字段：${label}`)
     return target
   }
+  const select = async (label: string, value: string) => {
+    const input = field(label)?.querySelector('select')
+    if (!input) throw new Error(`缺少设置选项：${label}`)
+    input.value = value
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await new Promise((resolve) => setTimeout(resolve, 40))
+  }
+  const chooseFirst = async (label: string) => {
+    const value = await until(
+      `${label}选项`,
+      () => field(label)?.querySelector('select')?.options[1]?.value,
+    )
+    await select(label, value)
+  }
+  const parameterValues = () =>
+    [
+      ...document.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
+        '#manager-panel-runtime input.req-input, #manager-panel-runtime select, #manager-panel-dispatch input, #manager-panel-dispatch select',
+      ),
+    ].map((entry) =>
+      entry instanceof HTMLInputElement && entry.type === 'checkbox' ? entry.checked : entry.value,
+    )
   if (!activeStep('basic') || field('工作目录') || field('最大并行工作线数'))
     throw new Error('基本信息步骤显示了参数设置')
   if (!one<HTMLButtonElement>('[data-form-tab="dispatch"]')?.disabled)
@@ -780,6 +803,14 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await until('恢复中文', () => document.documentElement.lang === 'zh-CN')
   await next()
   await until('进入运行环境', () => activeStep('runtime'))
+  const devices = field('设备')?.querySelector('select')
+  const firstDevice = devices?.value
+  const otherDevice = [...(devices?.options ?? [])].find(
+    (entry) => entry.value !== firstDevice,
+  )?.value
+  if (!firstDevice || !otherDevice) throw new Error('缺少切换设备的夹具')
+  await select('设备', otherDevice)
+  await select('设备', firstDevice)
   // 视图恢复后可能带入当前会话的项目，先明确改为无项目，再验空目录的校验。
   const workspace = field('项目')?.querySelector('select')
   if (!workspace) throw new Error('运行环境缺少项目选择')
@@ -866,16 +897,27 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       input('经理设定').value === '仅执行冒烟验收范围内的任务。' &&
       input('首个任务').value === '保留首个任务草稿',
   )
-  // 空经理设定与首个任务仍可创建，跨步骤保留任务分配设置。
-  fill(input('经理设定'), '')
+  // 首个任务留空仍可创建；经理规则与运行参数要在下次新建时预填。
+  fill(input('经理设定'), '记住的经理规则')
   fill(input('首个任务'), '')
   await next()
   await until('再次进入运行环境', () => activeStep('runtime'))
+  await chooseFirst('模型')
+  await chooseFirst('强度')
   await next()
   await until(
     '再次进入任务分配',
     () => activeStep('dispatch') && input('最大并行工作线数').value === '2',
   )
+  await select('子会话使用', 'pi')
+  await chooseFirst('子会话模型')
+  await chooseFirst('子会话强度')
+  await select('合并方式', 'user')
+  for (const checkbox of document.querySelectorAll<HTMLInputElement>(
+    '.mg-fields input[type="checkbox"]',
+  ))
+    checkbox.click()
+  const rememberedParameters = parameterValues()
   await next()
   const created = await until('建好后进入经理', () =>
     one('.mg-title')?.textContent?.includes('经理冒烟验收'),
@@ -883,6 +925,20 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const createdId = one('[data-manager="session"]')?.getAttribute('data-manager-id')
   const createdEvent = Boolean(
     (await eventBody('manager-open')).textContent?.includes('经理冒烟验收'),
+  )
+  await click('.sb-top .new')
+  await until('再次新建经理', () => one('[data-manager-mode="create"]'))
+  const creationRemembered = Boolean(
+    input('名称').value === '' &&
+      input('首个任务').value === '' &&
+      input('经理设定').value === '记住的经理规则' &&
+      JSON.stringify(parameterValues()) === JSON.stringify(rememberedParameters),
+  )
+  fill(input('经理设定'), '取消的新建不记住')
+  await click('.mg-form-foot button[type="button"]')
+  await click(`[data-manager-id="${createdId}"] .mg-pick`)
+  await until('回到新建的经理', () =>
+    one(`[data-manager="session"][data-manager-id="${createdId}"]`),
   )
   await click('[data-sidebar-mode="chat"]')
   const createdKeepsChat = Boolean(
@@ -924,13 +980,6 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     ),
   )
   fill(editField('最大并行工作线数'), '5')
-  const select = async (label: string, value: string) => {
-    const input = field(label)?.querySelector('select')
-    if (!input) throw new Error(`缺少设置选项：${label}`)
-    input.value = value
-    input.dispatchEvent(new Event('change', { bubbles: true }))
-    await new Promise((resolve) => setTimeout(resolve, 40))
-  }
   const lineModel = await until(
     '子会话模型选项',
     () => field('子会话模型')?.querySelector('select')?.options[1]?.value,
@@ -971,7 +1020,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     field('子会话模型')?.querySelector('select')?.value === lineModel &&
     field('合并方式')?.querySelector('select')?.value === 'user' &&
     [...document.querySelectorAll<HTMLInputElement>('.mg-fields input[type="checkbox"]')].every(
-      (input, index) => input.checked === (index === 0),
+      (input, index) => input.checked === (index !== 0),
     )
   await tab('basic')
   fill(editField('经理设定'), '取消的修改不应保存')
@@ -979,6 +1028,16 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const settingsCancelled = await until('取消不保存', () =>
     one('.mg-scope')?.textContent?.includes('修改后的经理设定'),
   )
+  await click('.sb-top .new')
+  await until(
+    '编辑与取消不覆盖新建记忆',
+    () =>
+      one('[data-manager-mode="create"]') &&
+      input('经理设定').value === '记住的经理规则' &&
+      JSON.stringify(parameterValues()) === JSON.stringify(rememberedParameters),
+  )
+  await click('.mg-form-foot button[type="button"]')
+  await click(`[data-manager-id="${createdId}"] .mg-pick`)
   await click('.mg-sidebar-group header .ibtn')
   await click('[data-manager-row="e1"] .mg-list-open')
   await click('[data-board-tab="decisions"]')
@@ -1167,6 +1226,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     reportsStopped,
     reportsResumed,
     created,
+    creationRemembered,
     promptKept,
     endedReadOnly,
     endingReadOnly,
@@ -1242,6 +1302,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
     reportsStopped: '经理子会话停止回报后没有显示标记',
     reportsResumed: '经理子会话恢复回报后标记没有移除',
     created: '新建经理没有进入经理页',
+    creationRemembered: '再次新建经理没有预填上次成功创建的参数，或名称、首个任务没有留空',
     promptKept: '经理设定被任务分配选项覆盖',
     endedReadOnly: '已结束经理没有转只读',
     endingReadOnly: '结束中经理未标明状态或仍能写入',

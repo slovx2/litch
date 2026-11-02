@@ -28,6 +28,20 @@ task asks it to plan and wait for the user to say to start. Manager settings can
 preferences and project rules, or stay empty. Litch generates its operating rules from the current
 dispatch and waiting settings; those generated rules are not a text field to edit.
 
+After a manager is created successfully, this desktop remembers the device and, for each device,
+the folder/project, manager harness/model/effort, workline settings, notifications and custom rules.
+The next creation form prefills them; name and first task stay blank. An explicitly chosen device
+or project takes priority. Missing devices, harnesses, models or effort levels fall back to defaults;
+a removed project becomes a custom folder using the saved path. Cancelled or failed creation and
+edits to an existing manager do not replace these defaults. Like ordinary new-session choices,
+this memory stays on the client and is not shared with the phone (which has no manager creation form).
+
+成功创建经理后，本机记住上次的设备，并按设备保存目录/工作区、经理 harness/模型/强度、派线设置、
+通知及自定义规则。下次新建时预填，名称和首个任务留空；入口明确指定的设备或工作区优先。
+已移除的设备、harness、模型或强度退回默认值；工作区被删除后保留原目录，改为自定义目录。
+取消、创建失败或编辑已有经理不覆盖新建偏好。与普通新建对话一样，记忆只保存在当前客户端；
+手机目前没有新建经理表单。
+
 Defaults: worklines inherit the manager's harness/model/effort, share its folder, and are reviewed and
 merged by the manager; separate worktrees are off, maximum running worklines is **4**, desktop
 notifications are on, and unanswered decisions wait indefinitely. Changing workline harness without

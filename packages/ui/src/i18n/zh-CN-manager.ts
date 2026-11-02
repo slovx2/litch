@@ -125,6 +125,7 @@ export const zhManager = {
   'manager.loading': '正在读取看板…',
   'manager.unavailable': '设备未提供经理功能',
   'manager.offline': '设备未连接，暂时无法修改',
+  'manager.optionsLoading': '正在加载模型与强度，请稍候或选择默认值',
   'manager.none': '暂无记录',
   'manager.open': '待定',
   'manager.answered': '已答复',
