@@ -24,6 +24,10 @@ env:
 jobs:
   gate:
     if: ${{ toJSON(inputs.run-ci) != 'false' }}
+    # 被调用的 CI 汇总需要读 Actions；可复用工作流不能提升调用方的权限。
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/ci.yml
     with:
       sha: ${{ inputs.sha || github.sha }}
