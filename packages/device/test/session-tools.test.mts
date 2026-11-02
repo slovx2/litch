@@ -392,8 +392,8 @@ test('SESSION-TOOLS-005：设备进程替每条通往适配器的连接声明 li
     )
     // 定时任务的 litch_tasks 先注册，排在前面
     assert.deepEqual(namespaces, [
-      ['litch_echo', 'litch_tasks', 'litch_manager', SESSIONS],
-      ['litch_tasks', 'litch_manager', SESSIONS],
+      ['litch_echo', 'litch_tasks', 'litch_manager', 'litch_repository', SESSIONS],
+      ['litch_tasks', 'litch_manager', 'litch_repository', SESSIONS],
     ])
     // 设备进程自己的连接（第一次用到时才开）也声明
     const { threadId } = await parent(client)
@@ -401,10 +401,10 @@ test('SESSION-TOOLS-005：设备进程替每条通往适配器的连接声明 li
     const own = [...env.pi.greetings.values()].find(
       (greeting) => greeting.clientInfo.name === 'litch-device',
     )
-    assert.deepEqual(
-      own.capabilities.litchClientTools.namespaces,
-      Object.values(CLIENT_TOOL_NAMESPACE),
-    )
+    assert.deepEqual(own.capabilities.litchClientTools.namespaces, [
+      ...Object.values(CLIENT_TOOL_NAMESPACE),
+      'litch_repository',
+    ])
     assert.deepEqual(SESSION_TOOLS.name, SESSIONS)
   } finally {
     await env.close()

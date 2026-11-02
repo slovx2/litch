@@ -116,8 +116,20 @@ test('另注册一个命名空间：每条通往引擎的连接都替它声明�
     const greeting = engine.seen.findLast((item) => item.method === 'initialize')?.params
     // 设备进程自己执行的不看会话：都列进 anyThread
     assert.deepEqual(greeting.capabilities.litchClientTools, {
-      namespaces: ['litch_tasks', 'litch_manager', 'litch_sessions', 'litch_demo'],
-      anyThread: ['litch_tasks', 'litch_manager', 'litch_sessions', 'litch_demo'],
+      namespaces: [
+        'litch_tasks',
+        'litch_manager',
+        'litch_repository',
+        'litch_sessions',
+        'litch_demo',
+      ],
+      anyThread: [
+        'litch_tasks',
+        'litch_manager',
+        'litch_repository',
+        'litch_sessions',
+        'litch_demo',
+      ],
     })
     const upstream = engine.live.at(-1) as FakeConnection
     upstream.send({
@@ -145,8 +157,14 @@ test('另注册一个命名空间：每条通往引擎的连接都替它声明�
     const own = internal(engine)[0]
     assert.ok(own, '内部连接连上了')
     assert.deepEqual(JSON.parse(own.raw[0] as string).params.capabilities.litchClientTools, {
-      namespaces: [...Object.values(CLIENT_TOOL_NAMESPACE), 'litch_demo'],
-      anyThread: ['litch_tasks', 'litch_manager', 'litch_sessions', 'litch_demo'],
+      namespaces: [...Object.values(CLIENT_TOOL_NAMESPACE), 'litch_repository', 'litch_demo'],
+      anyThread: [
+        'litch_tasks',
+        'litch_manager',
+        'litch_repository',
+        'litch_sessions',
+        'litch_demo',
+      ],
       computerActions: true,
     })
     link.close()

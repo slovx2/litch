@@ -8,6 +8,7 @@ import {
   managerSessionRules,
   managerSettingsRules,
 } from '../../protocol/src/client-tools-manager.mjs'
+import { REPOSITORY_TOOLS } from '../../protocol/src/client-tools-repository.mjs'
 import { SESSION_TOOL, sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
 import type { Manager } from '../../protocol/src/manager.mjs'
 
@@ -52,6 +53,7 @@ export function managerTools(manager: RuleSettings): ClientToolNamespaceSpec[] {
         ),
     },
     { ...MANAGER_TOOLS, instructions: managerInstructions(manager) },
+    REPOSITORY_TOOLS,
   ]
 }
 export function managerInstructions(manager: RuleSettings): string {

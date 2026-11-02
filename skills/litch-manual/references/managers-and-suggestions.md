@@ -190,6 +190,23 @@ when they share a folder or their IDs appear in references. List filters only na
 Retired helpers cannot regain tool access after refresh or restart. Tools must not use the network
 or run tests. ACP and DSH offer only Ask manager.
 
+Temporary helpers also have `litch_repository.log/show/diff/blame/status`. Select an absolute directory
+inside the manager's or an owned workline's folder; for an outer non-Git folder, specify a repository
+subdirectory. New Codex managers register these tools before forking; older parents retain their
+existing read-only shell. Availability is determined by the current tool list.
+`show` can read a historical file, `diff` covers working/index or two commits, and `blame` reads committed
+lines. Only structured arguments are accepted. Queries copy bounded HEAD/refs/index metadata and
+ignore source configuration/hooks/filters; custom transformations are not reproduced. Git objects
+are read locally, never fetched. Working files can change during a query; results include captured
+time and commit IDs. macOS/Linux require an OS read-only, no-network sandbox; Windows provides
+controlled methods without claiming an OS sandbox. Git is required at `/usr/bin/git` or
+`C:/Program Files/Git/cmd/git.exe` and must support `--no-lazy-fetch`.
+Output is capped at 512 KiB, returned in 12,000-character pages. Supply only `cursor` for the next
+page of the same snapshot; cursors are session-bound and expire after two minutes (eight retained
+snapshots maximum). Large/binary files return metadata. Queries allow two concurrent jobs and time
+out after 15 seconds. Bare/separate-Git-dir repositories, alternate object stores, reftable and
+symbolic Git metadata are not supported; metadata is capped at 32 MiB and 10,000 entries.
+
 This is a scoped session-tool boundary, not complete filesystem isolation. Claude Code and Pi also
 block known raw session-storage paths and direct symbolic links to them; Pi temporary helpers do
 not load user extensions. Unknown copies, hard links, recursive search links and path replacement
@@ -323,6 +340,10 @@ the running mark a single ring.
 默认交给经理主对话，也可选受限的临时对话（支持该能力的 harness）；临时助手可更新当前原帖，但不能改其他议题、文件或开工作线。
 
 临时助手可通过 `litch_sessions.list/read` 读取当前经理主会话及归属仍有效的工作线，含跨引擎后代。其他经理、脱离归属的工作线和无关会话均拒绝，同目录、已知编号或引用不会授权；筛选参数只能缩小范围，`scope: mine` 不含经理自身。结果是有限的最近回合快照，不含完整工具过程。OpenCode 轻会话收到经理会话编号后可补读背景。已退役的助手不能在刷新或重启后重新取得权限。工具不得联网或运行测试；ACP、DSH 本轮不支持。
+
+临时助手另有 `litch_repository.log/show/diff/blame/status`：选择经理或有效工作线目录内的仓库绝对路径；外层不是 Git 目录时指定其仓库子目录。新建 Codex 经理预登记工具，临时分叉继承；旧父会话保留现有只读 shell，是否提供 Git 工具以当前工具表为准。支持历史文件、工作区／索引／两提交差异及已提交行的归属。仅接受结构化参数；复制有限 HEAD/refs/index 元数据供查询，不加载源配置、钩子、过滤器，不复现自定义转换，也不自动拉取对象。工作文件可能并行变化，结果带时间和提交编号。macOS/Linux 必须有只读禁网 OS 沙箱；Windows 仅为受控方法。Git 固定在 `/usr/bin/git` 或 `C:/Program Files/Git/cmd/git.exe`，需支持 `--no-lazy-fetch`。
+
+输出最多 512 KiB，每页 12000 字符；续页只传 `cursor`，游标绑定调用会话、两分钟过期，最多保留八份快照。大文件／二进制返回元数据；并发上限 2、超时 15 秒。裸库、独立 git-dir、对象 alternates、reftable 和符号链接 Git 元数据不支持；元数据限制 32 MiB／10000 项。
 
 上述范围由会话工具强制执行，不代表文件系统完全隔离。Claude Code、Pi 另拦截已知原始会话存储路径及直接指向它们的符号链接；Pi 临时助手不加载用户扩展。未知副本、硬链接、递归搜索中的链接和检查后的路径替换仍未完整隔离。Codex 保留现有只读禁网 shell，仍可能读取原始记录或运行不写文件的命令；OpenCode 原生文件工具没有同等的逐路径闸。不得用直接翻原始存储绕过会话范围。
 经理可只编辑原帖、只回复或两者同时做；“已编辑”可展开旧版本、编辑时间与原因。

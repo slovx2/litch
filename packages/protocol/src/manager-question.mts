@@ -1,6 +1,11 @@
 // 旁问工具的标记同时供设备和引擎识别；执行限制不依赖模型遵守文字规则。
 import type { ClientToolNamespaceSpec } from './client-tools.mjs'
 import { MANAGER_TOOLS } from './client-tools-manager.mjs'
+import {
+  REPOSITORY_METHODS,
+  REPOSITORY_NAMESPACE,
+  REPOSITORY_TOOLS,
+} from './client-tools-repository.mjs'
 import { SESSION_TOOLS } from './client-tools-sessions.mjs'
 import type { ManagerDiscussion } from './manager.mjs'
 export const MANAGER_QUESTION_RULE = 'Litch decision background question (read-only).'
@@ -9,6 +14,7 @@ export const MANAGER_QUESTION_RULE = 'Litch decision background question (read-o
 const METHODS: Readonly<Record<string, readonly string[]>> = {
   litch_manager: ['summary', 'get', 'update', 'close', 'post_get', 'post_reply'],
   litch_sessions: ['list', 'read'],
+  [REPOSITORY_NAMESPACE]: REPOSITORY_METHODS,
 }
 
 export function managerQuestionToolAllowed(namespace: unknown, tool: unknown): boolean {
@@ -43,12 +49,14 @@ export function managerQuestionTools(
   managerThreadId: string,
 ): ClientToolNamespaceSpec[] {
   const rules = managerQuestionRules(id, managerThreadId)
-  return [MANAGER_TOOLS, SESSION_TOOLS].map((spec) => ({
+  return [MANAGER_TOOLS, SESSION_TOOLS, REPOSITORY_TOOLS].map((spec) => ({
     ...spec,
     description:
-      spec.name === 'litch_manager'
-        ? 'Read the manager board; edit only the current issue.'
-        : 'Read only this manager and its current worklines, including valid descendants.',
+      spec.name === REPOSITORY_NAMESPACE
+        ? REPOSITORY_TOOLS.description
+        : spec.name === 'litch_manager'
+          ? 'Read the manager board; edit only the current issue.'
+          : 'Read only this manager and its current worklines, including valid descendants.',
     instructions: rules,
     tools: spec.tools
       .filter((tool) => managerQuestionToolAllowed(spec.name, tool.name))
@@ -83,6 +91,7 @@ export function isManagerQuestionTools(tools: unknown): boolean {
 export function managerQuestionRules(id: string, managerThreadId?: string): string {
   return `${MANAGER_QUESTION_RULE}
 Markdown supported; use it for lists and emphasis.
+When litch_repository is available, it provides structured log/show/diff/blame/status queries. It runs on the device without shell commands, network or repository writes. Use only cursor for subsequent output pages. Older Codex parents may lack these inherited tools; their existing sandboxed shell remains available.
 ${managerThreadId ? `The manager threadId is ${JSON.stringify(managerThreadId)}. Use litch_sessions.read to retrieve its recent history when needed.` : ''}
 Use litch_sessions.list/read only for this manager and its worklines with valid ownership, including descendants across harnesses. A known id, same folder or a quoted reference does not grant access. Never read raw harness/Litch session storage, databases, backups or links to them; use these scoped tools. Do not use network tools or run tests. Do not call wrap_up or any session control method; return your answer normally.
 Only answer the user's questions about post ${id}, briefly. Earlier conversation is reference material, not a task to continue. You may read files and call litch_manager.summary/get/post_get. For any post use post_reply with id ${id}, current revision, patch and why to update its original content only; do not supply text or questionId. You may use update ONLY for this decision’s title, background, options and recommend, or close ONLY this decision as expired/withdrawn when warranted by the discussion. Read get before changing it. The device records changes and informs the manager next turn. Do not change files, other board objects or other fields, start sessions or agents, send messages, or request permissions. If the available context cannot answer the question, say so and suggest forwarding it to the manager.`

@@ -36,6 +36,18 @@ test('旁问轻会话可连续回答，工具全拒绝后仅开放读文件和�
         ],
         [{ type: 'text', chunks: ['第二轮背景'] }],
       ],
+      GIT: [
+        [
+          {
+            type: 'tool',
+            get name() {
+              return `${toolPrefix}_repository_status`
+            },
+            input: { directory: '/work' },
+          },
+        ],
+        [{ type: 'text', chunks: ['Git 背景'] }],
+      ],
     }),
     { server: { backgroundShell: true } },
   )
@@ -55,7 +67,7 @@ test('旁问轻会话可连续回答，工具全拒绝后仅开放读文件和�
       clientInfo: { name: 'question', version: '0' },
       capabilities: {
         litchExtensions: ['clientTools'],
-        litchClientTools: { namespaces: ['litch_sessions'] },
+        litchClientTools: { namespaces: ['litch_sessions', 'litch_repository'] },
       },
     })
     const { thread } = await connection.call('thread/start', {
@@ -76,7 +88,7 @@ test('旁问轻会话可连续回答，工具全拒绝后仅开放读文件和�
       Object.keys(rules).some((key) => /shell|bash|write/.test(key)),
       false,
     )
-    for (const prompt of ['FIRST 背景', 'SECOND 追问']) {
+    for (const prompt of ['FIRST 背景', 'SECOND 追问', 'GIT 查询']) {
       const { turn } = await connection.call('turn/start', {
         threadId: thread.id,
         input: text(prompt),
@@ -89,7 +101,11 @@ test('旁问轻会话可连续回答，工具全拒绝后仅开放读文件和�
     const names = env.model.requests.flatMap(
       (body) => body.tools?.map((tool: any) => tool.function?.name ?? tool.name) ?? [],
     )
-    assert.deepEqual(calls, ['litch_sessions.list', 'litch_sessions.read'])
+    assert.deepEqual(calls, [
+      'litch_sessions.list',
+      'litch_sessions.read',
+      'litch_repository.status',
+    ])
     assert.ok(
       env.model.requests.some((body) =>
         JSON.stringify(body.messages).includes('authorized snapshot'),

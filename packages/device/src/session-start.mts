@@ -200,6 +200,7 @@ function childTools(
       (!isObject(spec) ||
         (spec.name !== SESSION_TOOLS.name &&
           spec.name !== CLIENT_TOOL_NAMESPACE.manager &&
+          spec.name !== 'litch_repository' &&
           spec.name !== NATIVE_BACKGROUND_NAMESPACE)),
   )
   const manager = tree.managers?.lines.managerFor(parentId)

@@ -49,16 +49,29 @@ test('旁问即使关闭审批也拦写文件与命令，分叉替换经理工�
       clientInfo: { name: 'question', version: '0' },
       capabilities: {
         litchExtensions: ['clientTools'],
-        litchClientTools: { namespaces: ['litch_sessions'] },
+        litchClientTools: { namespaces: ['litch_sessions', 'litch_repository'] },
       },
     })
-    for (const method of ['list', 'read']) {
+    for (const method of ['list', 'read', 'status']) {
+      const namespace = method === 'status' ? 'litch_repository' : 'litch_sessions'
       const tool = clientTools(dynamicTools).find(
-        (one) => one.namespace === 'litch_sessions' && one.name === method,
+        (one) => one.namespace === namespace && one.name === method,
       )
       assert.ok(tool)
       env.steps.push(
-        { tools: [{ name: tool.piName, args: method === 'read' ? { thread_id: thread.id } : {} }] },
+        {
+          tools: [
+            {
+              name: tool.piName,
+              args:
+                method === 'read'
+                  ? { thread_id: thread.id }
+                  : method === 'status'
+                    ? { directory: env.cwd }
+                    : {},
+            },
+          ],
+        },
         (body) => {
           assert.match(toolResults(body).at(-1) ?? '', /authorized snapshot/)
           return { text: '读到经理背景' }

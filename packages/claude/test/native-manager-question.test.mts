@@ -23,7 +23,7 @@ test('真实 Claude 临时分叉：list/read 到执行器，Bash 在 PreToolUse 
     {},
     {
       litchExtensions: ['clientTools'],
-      litchClientTools: { namespaces: ['litch_sessions', 'litch_manager'] },
+      litchClientTools: { namespaces: ['litch_sessions', 'litch_manager', 'litch_repository'] },
     },
   )
   try {
@@ -72,6 +72,17 @@ test('真实 Claude 临时分叉：list/read 到执行器，Bash 在 PreToolUse 
       return [
         {
           type: 'tool_use',
+          id: 'toolu_git',
+          name: `mcp__${DYNAMIC_TOOL_SERVER}__${dynamicToolName('litch_repository', 'status')}`,
+          input: { directory: home },
+        },
+      ]
+    })
+    model.enqueue((request) => {
+      assert.match(JSON.stringify(request.messages.at(-1)), /authorized snapshot/)
+      return [
+        {
+          type: 'tool_use',
           id: 'toolu_bash',
           name: 'Bash',
           input: { command: 'echo must-not-run' },
@@ -100,7 +111,11 @@ test('真实 Claude 临时分叉：list/read 到执行器，Bash 在 PreToolUse 
       input: [{ type: 'text', text: '查经理和工作线背景' }],
     })
     assert.equal((await client.completed(turn.id)).status, 'completed')
-    assert.deepEqual(calls, ['litch_sessions.list', 'litch_sessions.read'])
+    assert.deepEqual(calls, [
+      'litch_sessions.list',
+      'litch_sessions.read',
+      'litch_repository.status',
+    ])
     model.assertConsumed()
   } finally {
     await client.close()

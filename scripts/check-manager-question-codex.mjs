@@ -4,10 +4,12 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { runTurn } from '../packages/device/dist/device/src/engine-link.mjs'
 import { unixConnector } from '../packages/device/dist/device/src/sockets.mjs'
 import { FakeControl, managed } from '../packages/device/dist/device/test/fake-control.mjs'
 import { FakeEngine } from '../packages/device/dist/device/test/fake-engine.mjs'
 import { rig } from '../packages/device/dist/device/test/helpers.mjs'
+import { makeRepo } from '../packages/device/dist/device/test/worktree-kit.mjs'
 import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
@@ -43,12 +45,27 @@ const operations = [
   ['read', () => ({ thread_id: outsideId })],
   ['start', { title: 'forbidden' }],
   ['send', () => ({ thread_id: lineId, message: 'forbidden' })],
+  ...['log', 'show', 'diff', 'blame', 'status'].map((method) => [
+    method,
+    { directory: work, ...(method === 'blame' ? { path: 'README.md' } : {}) },
+    'litch_repository',
+  ]),
+  ['commit', { directory: work }, 'litch_repository'],
 ]
 let index = 0
 let active = false
 let inherited = false
+let ordinaryShell = false
+let evaluationTools = null
 const model = await startResponsesModel((body) => {
+  if (userText(body).includes('SHELL_TOOL_EVALUATION')) {
+    evaluationTools = (body.tools ?? []).map((tool) => tool.name ?? tool.type)
+    return { text: 'SHELL_TOOL_EVALUATED' }
+  }
   if (!userText(body).includes('QUESTION_READ_PROBE')) return { text: 'manager ready' }
+  ordinaryShell ||= (body.tools ?? []).some((tool) =>
+    ['exec_command', 'shell', 'shell_command'].includes(tool.name),
+  )
   const namespace = body.tools?.find((tool) => tool.name === 'litch_sessions')
   inherited ||= namespace?.tools?.some((tool) => tool.name === 'start') === true
   const last = body.input?.at(-1)
@@ -56,10 +73,10 @@ const model = await startResponsesModel((body) => {
   active = true
   const operation = operations[index++]
   if (!operation) return { text: 'QUESTION_READ_DONE' }
-  const [name, args] = operation
+  const [name, args, space = 'litch_sessions'] = operation
   return {
     call: {
-      namespace: 'litch_sessions',
+      namespace: space,
       name,
       arguments: JSON.stringify(typeof args === 'function' ? args() : args),
     },
@@ -73,6 +90,7 @@ const wait = async (predicate, what) => {
   }
 }
 try {
+  makeRepo(root, 'work')
   writeFileSync(join(config, 'config.toml'), codexConfig(model.baseUrl))
   const socket = join(root, 'codex.sock')
   child = spawn(codex, ['app-server', '--listen', `unix://${socket}`], {
@@ -165,10 +183,44 @@ try {
   assert.ok(!strings[0].includes(outsideId))
   assert.match(strings[1], new RegExp(managerId))
   assert.match(strings[2], new RegExp(lineId))
-  for (const result of strings.slice(3)) assert.match(result, /litch:blocked/)
+  for (const result of strings.slice(3, 6)) assert.match(result, /litch:blocked/)
+  assert.match(strings.at(-1), /unsupported call/)
+  for (const result of strings.slice(6, 11)) {
+    assert.match(result, /captured_at/)
+    assert.doesNotMatch(result, /litch:|query_failed/)
+  }
   assert.equal(cross.seen.filter((call) => call.method === 'turn/start').length, 0)
   console.log(
-    'PASS 真 Codex：继承工具、list、经理/跨引擎线 read；同 cwd 越权 read、start、send 拒绝',
+    'PASS 真 Codex：继承工具、list/read、五个真实 Git 查询；越权会话读/写和不存在的 Git 写方法拒绝',
+  )
+  // 仅隔离探针评估上游开关，不改变经理旁问的生产配置。
+  const link = await tree.link('codex')
+  const probe = await link.request('thread/fork', {
+    threadId: managerId,
+    ephemeral: true,
+    excludeTurns: true,
+    sandbox: 'read-only',
+    approvalPolicy: 'never',
+    config: { 'features.shell_tool': false },
+  })
+  await runTurn(
+    link,
+    {
+      threadId: probe.thread.id,
+      input: [{ type: 'text', text: 'SHELL_TOOL_EVALUATION', text_elements: [] }],
+    },
+    { timeoutMs: 30000 },
+  )
+  assert.ok(evaluationTools)
+  assert.equal(
+    evaluationTools.some((name) =>
+      ['exec_command', 'shell', 'shell_command', 'write_stdin'].includes(name),
+    ),
+    false,
+  )
+  await link.request('thread/unsubscribe', { threadId: probe.thread.id })
+  console.log(
+    `EVAL shell_tool=false: production-shell=${ordinaryShell}; remaining=${evaluationTools.join(',')}`,
   )
 } finally {
   await env?.close()

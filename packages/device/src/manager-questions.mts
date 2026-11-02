@@ -79,6 +79,10 @@ export class ManagerQuestions {
     if (!managerId) return null
     const result = new Set<string>()
     if (!this.active(threadId)) return result
+    return this.ownedSessions(managerId)
+  }
+  ownedSessions(managerId: string): Set<string> {
+    const result = new Set<string>()
     const manager = this.owner.manager(managerId)
     result.add(manager.threadId)
     const visit = (parent: string) => {

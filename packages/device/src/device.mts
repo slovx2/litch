@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { BACKGROUND_TASKS_NOTIFICATION } from '../../protocol/src/background-tasks.mjs'
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
+import { REPOSITORY_NAMESPACE } from '../../protocol/src/client-tools-repository.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import { HARNESS_INSTALL_NOTIFICATION } from '../../protocol/src/device-harness-install.mjs'
 import { DEVICE_POWER_CHANGED } from '../../protocol/src/device-power.mjs'
@@ -42,6 +43,7 @@ import { DevicePairing, type PairingConfig } from './pairing.mjs'
 import { PowerActivity } from './power-activity.mjs'
 import { hasActiveTurn } from './probe.mjs'
 import { RecoveryActions } from './recovery-actions.mjs'
+import { RepositoryTools } from './repository-tools.mjs'
 import { RestartResume } from './restart-resume.mjs'
 import { RestartStore } from './restart-store.mjs'
 import { ACTIVITY_METHOD, type DeviceActivity, serviceInfo } from './service-info.mjs'
@@ -496,6 +498,7 @@ export class DeviceServer {
     )
     this.index.onChanged = () => this.sessionTree.suggestions.changed()
     this.deviceTools.register(CLIENT_TOOL_NAMESPACE.manager, (call) => this.managers.tool(call))
+    this.deviceTools.register(REPOSITORY_NAMESPACE, new RepositoryTools(this.managers).handle)
     // 以前删会话时没删它带的动态工具（每个几十 KB）：设备不认识的会话的那一行清一次。
     // 索引是空的（device.sqlite 刚建、刚换过）时分不出哪些会话还在，留到下次启动
     const sessionStore = this.sessionTree.store
