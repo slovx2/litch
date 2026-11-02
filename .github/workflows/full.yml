@@ -19,7 +19,7 @@ on:
 
 env:
   npm_config_cache: ${{ github.workspace }}/.artifacts/npm-cache
-  ELECTRON_CACHE: ${{ github.workspace }}/.artifacts/electron-cache
+  electron_config_cache: ${{ github.workspace }}/.artifacts/electron-cache
 
 jobs:
   gate:
@@ -180,8 +180,13 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: cache-electron
         with:
-          path: ${{ github.workspace }}/.artifacts/electron-cache
-          key: electron-v1-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
+          # 安装器用 electron_config_cache；packager 用 @electron/get 的平台默认目录。
+          path: |
+            ${{ github.workspace }}/.artifacts/electron-cache
+            ~/Library/Caches/electron
+            ~/.cache/electron
+            ~/AppData/Local/electron/Cache
+          key: electron-v2-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         id: stage-3
         with:
@@ -227,8 +232,13 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: cache-electron
         with:
-          path: ${{ github.workspace }}/.artifacts/electron-cache
-          key: electron-v1-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
+          # 安装器用 electron_config_cache；packager 用 @electron/get 的平台默认目录。
+          path: |
+            ${{ github.workspace }}/.artifacts/electron-cache
+            ~/Library/Caches/electron
+            ~/.cache/electron
+            ~/AppData/Local/electron/Cache
+          key: electron-v2-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         id: stage-3
         with:
@@ -325,8 +335,13 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: cache-electron
         with:
-          path: ${{ github.workspace }}/.artifacts/electron-cache
-          key: electron-v1-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
+          # 安装器用 electron_config_cache；packager 用 @electron/get 的平台默认目录。
+          path: |
+            ${{ github.workspace }}/.artifacts/electron-cache
+            ~/Library/Caches/electron
+            ~/.cache/electron
+            ~/AppData/Local/electron/Cache
+          key: electron-v2-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         id: stage-3
         with:
@@ -567,8 +582,13 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: cache-electron
         with:
-          path: ${{ github.workspace }}/.artifacts/electron-cache
-          key: electron-v1-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
+          # 安装器用 electron_config_cache；packager 用 @electron/get 的平台默认目录。
+          path: |
+            ${{ github.workspace }}/.artifacts/electron-cache
+            ~/Library/Caches/electron
+            ~/.cache/electron
+            ~/AppData/Local/electron/Cache
+          key: electron-v2-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         id: stage-3
         with:
@@ -632,8 +652,13 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: cache-electron
         with:
-          path: ${{ github.workspace }}/.artifacts/electron-cache
-          key: electron-v1-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
+          # 安装器用 electron_config_cache；packager 用 @electron/get 的平台默认目录。
+          path: |
+            ${{ github.workspace }}/.artifacts/electron-cache
+            ~/Library/Caches/electron
+            ~/.cache/electron
+            ~/AppData/Local/electron/Cache
+          key: electron-v2-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         id: stage-3
         with:

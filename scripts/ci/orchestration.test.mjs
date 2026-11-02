@@ -9,6 +9,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import { createServer } from 'node:http'
@@ -274,4 +275,34 @@ test('外部下载只重试已识别的瞬态错误，404 立即失败且逐次�
   assert.equal(readFileSync(count, 'utf8'), '2')
   assert.match(readFileSync(summary, 'utf8'), /尝试 1，退出码 22，HTTP 502/)
   assert.match(readFileSync(summary, 'utf8'), /尝试 2，退出码 0，HTTP 200/)
+})
+
+test('只读缓存能收尾，且不跟随符号链接修改片外目录', (t) => {
+  const directory = temporary(t)
+  const tests = join(directory, 'packages/device/dist/device/test')
+  const outside = join(directory, 'outside')
+  const recorded = join(directory, 'test-home')
+  mkdirSync(tests, { recursive: true })
+  mkdirSync(outside, { mode: 0o555 })
+  writeFileSync(
+    join(tests, 'cache.test.mjs'),
+    `
+    import { mkdirSync, writeFileSync, chmodSync, symlinkSync } from 'node:fs';
+    import { join } from 'node:path';
+    const cache = join(process.env.HOME, 'go/pkg/mod/module@1');
+    mkdirSync(cache, {recursive:true});
+    writeFileSync(join(cache,'go.mod'), 'module fake');
+    chmodSync(cache, 0o555);
+    symlinkSync(process.env.OUTSIDE, join(process.env.HOME, 'outside'));
+    writeFileSync(process.env.RECORDED, process.env.HOME);
+  `,
+  )
+  const result = spawnSync(process.execPath, [script('test-shard.mjs'), 'device'], {
+    cwd: directory,
+    env: { ...process.env, OUTSIDE: outside, RECORDED: recorded },
+    encoding: 'utf8',
+  })
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(existsSync(readFileSync(recorded, 'utf8')), false)
+  assert.equal(statSync(outside).mode & 0o777, 0o555)
 })

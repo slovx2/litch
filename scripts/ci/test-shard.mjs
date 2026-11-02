@@ -1,6 +1,6 @@
 // CI 按测试文件分片；构建在外面完成。每片独立 HOME，不改变包内的隔离预加载与超时。
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { chmodSync, lstatSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -43,9 +43,20 @@ const selected = files
 if (!selected.length) throw new Error('空测试分片')
 console.log(`${suite} ${shard}: ${selected.length}/${files.length} files\n${selected.join('\n')}`)
 const testHome = mkdtempSync(join(tmpdir(), `litch-ci-${suite}-${index}-`))
+// Go 下载的 module 目录只读；清理本片临时目录前恢复目录写权限，不跟随符号链接。
+function writableDirectories(directory) {
+  const stat = lstatSync(directory)
+  if (!stat.isDirectory()) return
+  chmodSync(directory, stat.mode | 0o700)
+  for (const entry of readdirSync(directory)) writableDirectories(join(directory, entry))
+}
 try {
+  // 只隔离用户配置，保留 setup-go 已预热的工具缓存，避免每个 HOME 再下载依赖。
+  const go = spawnSync('go', ['env', '-json', 'GOCACHE', 'GOMODCACHE'], { encoding: 'utf8' })
+  const goCache = go.status === 0 ? JSON.parse(go.stdout) : {}
   const env = {
     ...process.env,
+    ...goCache,
     HOME: testHome,
     USERPROFILE: testHome,
     CODEX_HOME: join(testHome, '.codex'),
@@ -68,5 +79,6 @@ try {
   if (result.error) throw result.error
   process.exitCode = result.status ?? 1
 } finally {
+  writableDirectories(testHome)
   rmSync(testHome, { recursive: true, force: true })
 }
