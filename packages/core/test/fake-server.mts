@@ -110,7 +110,16 @@ export function fakeOpener(handlers: Record<string, Handler>) {
     const failure = failures.shift()
     if (failure) throw failure
     const [client, server] = createTransportPair()
-    servers.push(serveFake(server, { initialize: () => INIT, ...handlers }))
+    servers.push(
+      serveFake(
+        server,
+        new Proxy(handlers, {
+          get(target, method: string) {
+            return target[method] ?? (method === 'initialize' ? () => INIT : undefined)
+          },
+        }),
+      ),
+    )
     return client
   }
   return {

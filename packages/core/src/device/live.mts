@@ -301,6 +301,8 @@ interface Live {
   /** 插话被明确拒为没有活动回合；核实状态前不能再按旧视图发送。 */
   needsTurnCheck: boolean
   dispatching: QueuedMessage[]
+  /** 回合号到达之前的停止在这里等待；本地回合已保留输入正文。 */
+  startingInput: Map<string, { ready: Promise<string | null>; resolve(id: string | null): void }>
   /** 用户改了、还没告诉对面的设置 */
   pending: Partial<SessionSettings>
   /**
@@ -661,6 +663,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       live.alias.set(turnId, live.starting)
       const viewId = live.starting
       live.starting = null
+      live.startingInput.get(viewId)?.resolve(turnId)
       return viewId
     }
     return turnId
@@ -1487,6 +1490,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     const viewId = `local:${++localSeq}`
     const userKey = `${viewId}:user`
     const mentions = mentionsIn(live)
+    let resolve!: (id: string | null) => void
+    const ready = new Promise<string | null>((done) => {
+      resolve = done
+    })
+    live.startingInput.set(viewId, { ready, resolve })
     live.starting = viewId
     live.echo.set(viewId, userKey)
     emit(live, [
@@ -1535,10 +1543,14 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (turn.status !== 'inProgress') putTurn(live, turn)
       host.touched(live.id, bodyOf(message, mentions))
     } catch (error) {
+      resolve(null)
       if (live.starting === viewId) live.starting = null
       live.echo.delete(viewId)
       emit(live, [{ op: 'turn.remove', turnId: viewId }])
       throw failure(error)
+    } finally {
+      resolve(null)
+      live.startingInput.delete(viewId)
     }
   }
 
@@ -1707,6 +1719,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     pauseRevision: 0,
     needsTurnCheck: false,
     dispatching: [],
+    startingInput: new Map(),
     pending: {},
     steered: new Map(),
     reverting: false,
@@ -2242,6 +2255,20 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         // 插不进去时 steer 已经把它放回了队列：消息照常排着，等这个回合结束再发，不算没发成。
         // 它不会插话的（界面跟着退回排队，提示里写着）不用再说；别的原因写一句，不然只看得到消息躺在队列里
         if (now && !live.stale && !live.loading && !live.compactSwitch && isRunning(live.view)) {
+          const starting = live.starting ? live.startingInput.get(live.starting) : undefined
+          if (starting) {
+            const pauseRevision = live.pauseRevision
+            const turnId = await starting.ready
+            if (!turnId) pauseQueue(live)
+            // 等回合号期间可能按了停止、移除了消息或回合已结束，不能再插入或自动续跑。
+            if (
+              live.paused ||
+              live.pauseRevision !== pauseRevision ||
+              !live.queued.some((entry) => entry.id === id && !entry.delivery) ||
+              !isRunning(live.view)
+            )
+              return
+          }
           await sessionsApi.steer(sessionId, id).catch((error: unknown) => {
             if (error instanceof ChannelError && error.code === 'unsupported') return
             setNote(live, phrase('session.steerQueued', { message: failure(error).message }))
@@ -2331,6 +2358,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         })
       } catch (error) {
         // 没插成：原样退回队首；明确没有活动回合时先核实，不能无限等一个不会到来的结束通知。
+        // 停止收尾或回显已经接管此输入，迟到的失败不能再恢复第二份。
+        if (!live.steered.has(clientId)) return
         const noActiveTurn =
           error instanceof RpcError && error.message === 'no active turn to steer'
         if (noActiveTurn) live.needsTurnCheck = true
@@ -2388,10 +2417,21 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       }
       const live = need(sessionId)
       const running = isRunning(live.view)
-      const turnId = running ? serverTurn(live, running.id) : null
-      if (!turnId) throw new ChannelError('rejected', '当前没有可中断的回合')
+      let turnId = running ? serverTurn(live, running.id) : null
+      const starting = running ? live.startingInput.get(running.id) : undefined
+      if (!turnId && !starting) throw new ChannelError('rejected', '当前没有可中断的回合')
       pauseQueue(live)
       host.interrupting?.(sessionId)
+      if (!turnId && starting) {
+        turnId = await starting.ready
+        // 开始失败或回合已收尾，无须向其他回合补发停止。
+        if (
+          !turnId ||
+          !live.view.turns.some((entry) => entry.id === running?.id && entry.status === 'running')
+        )
+          return
+      }
+      if (!turnId) return
       // 目标在做的时候按停止：先把目标暂停（照官方桌面端和终端界面），不然这一轮停下、空闲了它又接着续跑。
       // 暂停只等一小会儿，没成也照样打断：停下回合要紧
       if (live.view.goal?.status === 'active' && abilities(live.view.harness).goals) {

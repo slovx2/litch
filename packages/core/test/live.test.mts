@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
+  EXTENSION,
   formatSessionEvent,
   type JsonRpcMessage,
   type Thread,
@@ -191,6 +192,175 @@ function setup(
 
 /** 订阅一个会话，并像界面那样把增量落到快照上。经真的通道，见 wire.mts */
 const watch = watchSession
+
+function runtime(handlers: Record<string, Handler>, engine: string) {
+  handlers['runtime/info'] = () => {
+    if (engine === 'codex') throw new RpcFailure(-32601, 'Method not found')
+    return {
+      engine: engine === 'claude' ? 'claude-code' : engine,
+      protocolVersion: '0.163.0',
+      capabilities: [],
+      extensions: engine === 'claude' ? [EXTENSION.inputDelivery] : [],
+      features: { steer: true, inputTypes: ['text', 'image'], steerInputTypes: ['text', 'image'] },
+    }
+  }
+}
+
+for (const engine of ['claude', 'codex', 'pi']) {
+  test(`立即停止 ${engine}：首条应答未到时冻结后排，取得回合号后停止`, async () => {
+    const { core, handlers, command, sent, peer } = setup()
+    runtime(handlers, engine)
+    let release!: () => void
+    handlers['turn/start'] = () =>
+      new Promise((done) => {
+        release = () => done({ turn: started('slow') })
+      })
+    core.start()
+    await settle()
+    const session = watch(core)
+    await settle()
+    assert.equal(session.seen.view?.harness, engine)
+    const first = command('session.send', { ...where, text: '第一条' })
+    await settle()
+    const second = command('session.send', { ...where, text: '第二条', now: true })
+    const stopping = command('session.interrupt', where).then(
+      () => null,
+      (error) => error,
+    )
+    await settle()
+    release()
+    await first
+    await second
+    assert.equal(await stopping, null, '停止不能因为 turn/start 尚未应答而被拒绝')
+    assert.deepEqual(sent('turn/interrupt'), [{ threadId: 'a', turnId: 'slow' }])
+    peer.last().notify('turn/completed', {
+      threadId: 'a',
+      turn: finished('slow', { status: 'interrupted' }),
+    })
+    await settle()
+    assert.deepEqual(session.texts(), [['第一条']])
+    assert.deepEqual(
+      session.seen.view?.queued.map(({ text, delivery }) => [text, delivery]),
+      [['第二条', 'held']],
+    )
+    assert.equal(sent('turn/start').length, 1)
+    core.stop()
+  })
+
+  for (const phase of ['first', 'queue', 'steer', 'echo', 'reject'] as const) {
+    test(`停止保留 ${engine}/${phase}：原文和附件只保留一份，不自动续发`, async () => {
+      const { core, handlers, peer, command, sent } = setup()
+      runtime(handlers, engine)
+      let finish!: (value: unknown) => void
+      let reject!: (error: unknown) => void
+      handlers['turn/steer'] = () =>
+        new Promise((resolve, fail) => {
+          finish = resolve
+          reject = fail
+        })
+      core.start()
+      await settle()
+      const session = watch(core)
+      await settle()
+      await command('session.send', { ...where, text: '首条' })
+      const base = { threadId: 'a', turnId: 'srv-1' }
+      peer
+        .last()
+        .notify('item/completed', { ...base, item: userText('first', '首条'), completedAtMs: 0 })
+      await settle()
+      let sending: Promise<unknown> | undefined
+      if (phase !== 'first') {
+        sending = command('session.send', {
+          ...where,
+          text: '不能丢的原文',
+          images: [{ url: PNG, name: '图片' }],
+          now: phase !== 'queue',
+        })
+        await settle()
+      }
+      const steer = sent('turn/steer')[0] as { clientUserMessageId: string } | undefined
+      if (phase === 'echo') {
+        assert.ok(steer)
+        peer.last().notify('item/completed', {
+          ...base,
+          completedAtMs: 0,
+          item: {
+            ...userText('echo', '不能丢的原文'),
+            clientId: steer.clientUserMessageId,
+            ...(engine === 'claude' ? { litchInputDelivery: 'sent' } : {}),
+          },
+        })
+        await settle()
+      }
+      await command('session.interrupt', where)
+      peer.last().notify('turn/completed', {
+        threadId: 'a',
+        turn: finished('srv-1', { status: 'interrupted' }),
+      })
+      await settle()
+      if (steer) {
+        if (phase === 'reject') reject(new RpcFailure(-32600, 'turn interrupted'))
+        else finish({ turnId: 'srv-1' })
+      }
+      await sending
+      await settle()
+      const view = session.seen.view
+      assert.ok(view)
+      assert.equal(sent('turn/start').length, 1)
+      assert.equal(view.turns.at(-1)?.status, 'interrupted')
+      if (phase === 'first') assert.deepEqual(session.texts(), [['首条']])
+      else if (phase === 'echo') {
+        assert.deepEqual(session.texts(), [['首条', '不能丢的原文']])
+        assert.deepEqual(view.queued, [])
+      } else {
+        assert.equal(view.queued.length, 1)
+        assert.equal(view.queued[0]?.text, '不能丢的原文')
+        assert.deepEqual(view.queued[0]?.images, [{ url: PNG, name: '图片' }])
+        assert.equal(
+          view.queued[0]?.delivery,
+          engine === 'claude' && phase !== 'queue' ? 'unknown' : 'held',
+        )
+      }
+      core.stop()
+    })
+  }
+}
+
+for (const ending of ['failed', 'completed', 'notified'] as const) {
+  test(`开始期间停止：${ending} 不遗留等待、不误停后续回合`, async () => {
+    const { core, handlers, peer, command, sent } = setup()
+    let complete!: () => void
+    handlers['turn/start'] = () =>
+      new Promise((resolve, reject) => {
+        complete = () =>
+          ending === 'failed'
+            ? reject(new RpcFailure(-32603, 'start failed'))
+            : resolve({ turn: ending === 'completed' ? finished('first') : started('first') })
+      })
+    core.start()
+    await settle()
+    const session = watch(core)
+    await settle()
+    const sending = command('session.send', { ...where, text: '保存原文' }).catch(
+      (error: unknown) => error,
+    )
+    await settle()
+    const stopping = command('session.interrupt', where)
+    await settle()
+    if (ending === 'notified') {
+      peer.last().notify('turn/started', { threadId: 'a', turn: started('first') })
+      await settle()
+      assert.equal(sent('turn/interrupt').length, 1, '通知到达即可停止，不必等开始 RPC 回应')
+    }
+    complete()
+    await sending
+    await stopping
+    await settle()
+    assert.equal(sent('turn/interrupt').length, ending === 'notified' ? 1 : 0)
+    assert.equal(session.seen.view?.turns.length, ending === 'failed' ? 0 : 1)
+    core.stop()
+  })
+}
 
 test('重连撞上设备恢复：保持可写视图，输入先排队，订阅恢复后只发送一次', async () => {
   const { core, peer, time, handlers, command, sent } = setup()
@@ -1385,7 +1555,7 @@ test('排队：上一条还在发（turn/start 没回）时接连再发两条，
   assert.deepEqual(session.texts(), [['一']])
 })
 
-test('立即发送：回合刚发出、对面还没回 turn/start 时说的话，等回合有了对面的标识再插进去，不进托盘、不另起回合', async () => {
+test('立即发送：回合刚发出时保留待发，等回合有了对面的标识再插进去，不另起回合', async () => {
   const { core, handlers, command, sent } = setup()
   core.start()
   await settle()
@@ -1403,7 +1573,11 @@ test('立即发送：回合刚发出、对面还没回 turn/start 时说的话�
   assert.equal(session.seen.view?.turns.at(-1)?.status, 'running')
   const second = command('session.send', { ...where, text: '二', now: true })
   await settle()
-  assert.deepEqual(session.seen.view?.queued ?? [], [], '等对面标识的时候不进托盘')
+  assert.deepEqual(
+    session.seen.view?.queued.map((entry) => entry.text),
+    ['二'],
+    '等对面标识的时候保留待发原文',
+  )
   release()
   await first
   await second
