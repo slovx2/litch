@@ -127,7 +127,9 @@ func TestSSHListenFailureKeepsRuntime(t *testing.T) {
 		}
 		_ = blocker.Close()
 		waitStartedHarness(t, entries[0], done)
-		if status := readSSHEntryStatus(entries[0]); status.State != "listening" {
+		// 监听起来、连得上之后才写状况，所以状况比能连晚一点，慢机器上晚得更明显
+		waitUntil(t, "入口接上后状况更新为监听中", func() bool { return readSSHEntryStatus(entries[0]).State == "listening" })
+		if status := readSSHEntryStatus(entries[0]); status.Reason != "" || status.Detail != "" || status.Port != cfg.portOf("claude-code") {
 			t.Fatalf("入口接上后状况没有更新: %+v", status)
 		}
 		stopStarted(t, cancel, done)
