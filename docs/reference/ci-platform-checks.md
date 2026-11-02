@@ -5,6 +5,7 @@
 | 集合 | 覆盖来源 | 必要前置 |
 |---|---|---|
 | desktop-unit | CI/client类型、core/UI及桌面六组单测 | 各包依赖 |
+| desktop-portable-unit | desktop-unit除去浏览器整组；浏览器保留原Mac覆盖 | 各包依赖 |
 | desktop-required | smoke、真实Pi冒烟、critical两种模式、六入口首回合、原生Codex/客户端工具、adapter | 引擎/设备/Go产物、全部隔离CLI |
 | dsh | Full/dsh单测、真实SSH | DSH依赖与隔离CLI |
 | opencode | Full/opencode完整单测 | OpenCode依赖与隔离CLI |
@@ -18,3 +19,5 @@
 `mac-equivalence.yml`在同一SHA的Mac ARM和Linux x64上执行相同集合，再校验命令、实际Node用例名称/数量、来源与版本。它不签名、不发布，也不会自动改变Full/Gate的覆盖。未登记到默认分支的新工作流，需要维护者安排一个已登记的分支专用入口才能首次实跑。
 
 对照成功仅证明这次执行的命令与可观察用例一致，不能证明所有操作系统行为相同。迁移前仍要审阅平台条件、原生调用和skip分支。完整窗口集合包含macOS快捷键、标题栏/侧栏留白、Computer Use设置等差异，仍由原Full/client在Mac覆盖；Swift、LaunchServices、签名/公证和Darwin原生行为不因Linux绿灯被删除。当前引入共享入口和对照工具，正式工作流尚未迁移。
+
+浏览器组中的mac-keychain有三个仅macOS执行的原生用例，另有一个显式环境开关启用的可选NSS用例。整组不能按纯JS迁移。对照工作流选择明确命名的`desktop-portable-unit`，不改`desktop-unit`原清单，不修改浏览器测试断言或既有skip条件；这部分继续由原Mac命令执行。严格对照器不会把带skip的完整集合误报为可迁移。

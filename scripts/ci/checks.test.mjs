@@ -25,6 +25,17 @@ test('多领域复用首回合/原生工具检查，不允许未知、空或重�
   for (const names of [[], ['typo'], ['dsh', 'dsh']]) assert.throws(() => checkPlan(names))
 })
 
+test('可移植子集明确排除浏览器，原完整桌面集合仍包含所有九项', () => {
+  const full = checkPlan(['desktop-unit']).checks.map((check) => check.id)
+  const portable = checkPlan(['desktop-portable-unit']).checks.map((check) => check.id)
+  assert.equal(full.length, 9)
+  assert.ok(full.includes('desktop:test:browser'))
+  assert.deepEqual(
+    portable,
+    full.filter((id) => id !== 'desktop:test:browser'),
+  )
+})
+
 test('读取真实 reporter 形态，保留重名用例、跳过和失败数量，去除耗时与ANSI', () => {
   assert.deepEqual(
     coverage(

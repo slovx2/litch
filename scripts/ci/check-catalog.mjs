@@ -48,6 +48,12 @@ export const checks = [
 const units = checks.slice(0, 9).map((check) => check.id)
 export const suites = {
   'desktop-unit': { checks: units, desktopBuild: false, clis: [] },
+  // 浏览器组包含真实 macOS Keychain/Node-API 测试，必须留在 Mac；原完整集合不缩减。
+  'desktop-portable-unit': {
+    checks: units.filter((id) => id !== 'desktop:test:browser'),
+    desktopBuild: false,
+    clis: [],
+  },
   'desktop-required': {
     checks: [
       'smoke',
