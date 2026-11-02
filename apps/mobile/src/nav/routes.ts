@@ -4,8 +4,16 @@ import type { DiffScope } from '@litch/core'
 export type RootStackParamList = {
   /** 经理目录：按设备分组，先进行中、后已结束 */
   Managers: undefined
-  /** 一位经理：概览、控制台、经理事项三格；tab 不给时进概览 */
-  ManagerConsole: { deviceId: string; managerId: string; tab?: 'overview' | 'console' }
+  /**
+   * 一位经理的工作台：对话、控制台、工作线、概览四格；tab 不给时进对话。
+   * issue 给了就落到控制台（经理事项落到概览）并定位到那一项（#D-n 等编号、受阻事项、经理事件）
+   */
+  ManagerConsole: {
+    deviceId: string
+    managerId: string
+    tab?: ManagerTab
+    issue?: string
+  }
   /** 首页：设备列表。每台设备一行（连接状态、忙闲、待处理数），点进去是这台设备的会话 */
   Devices: undefined
   /** 加一台设备：填主机、端口、用户，生成或导入密钥，核对主机指纹 */
@@ -58,3 +66,4 @@ export type RootStackParamList = {
 }
 
 export type RouteName = keyof RootStackParamList
+export type ManagerTab = 'chat' | 'console' | 'lines' | 'overview'

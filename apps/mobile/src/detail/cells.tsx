@@ -35,6 +35,7 @@ import { notePressed } from './comments/hub'
 import { linkCommentRefs, parseCommentHref } from './comments/refs'
 import { useToggleInPlace, useTranscript } from './context'
 import { DeliveryMark } from './DeliveryMark'
+import { linkIssues } from './issue-links'
 import { linkify } from './links'
 import { MessageCopy } from './MessageCopy'
 import { markdownStyleOf } from './markdownStyle'
@@ -218,7 +219,7 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
   const theme = useTheme()
   const { c, font } = theme
   const t = useT()
-  const { scope, openLink, turnMenu } = useTranscript()
+  const { scope, issues, openLink, turnMenu } = useTranscript()
   const hub = useComments()
   const flashed = useFlashedRow(row.key)
   // 长按菜单里点了“选择文字”：这条回答的每一块都能选字，长按不再出回合的菜单（长按是系统的选字）
@@ -226,7 +227,7 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
   // 紧跟在带评论的用户消息之后、同一回合里的回答：[N] 画成能点的“评论 N”
   const comments = hub && !row.plan ? hub.commentsOf(row.turnId) : null
   const refs = comments ? { count: comments.comments.length, t } : null
-  const markdown = linkedText(row, scope, refs)
+  const markdown = linkedText(row, scope, refs, issues)
   // 写完的 mermaid 块拆出来画成卡片，前后的字照旧交给 Markdown 组件
   const segments = useMemo(() => splitMermaid(markdown), [markdown])
   const whole = segments.length === 1 && segments[0]?.kind === 'md'
@@ -328,7 +329,13 @@ const streamingConfig = { tableMode: 'progressive', codeBlockMode: 'progressive'
 /** 改写过链接的字，按行对象记着：滑回来的行、流式时没变的块不用再扫一遍 */
 const linked = new WeakMap<
   Row,
-  { scope: FileScope | null; count: number; lang: string; text: string }
+  {
+    scope: FileScope | null
+    count: number
+    lang: string
+    issues: ReadonlySet<string> | null
+    text: string
+  }
 >()
 
 /** refs：这一回合的用户消息带了几条评论（回答里的 [N] 改成记号，记号上的字随语言） */
@@ -336,15 +343,23 @@ function linkedText(
   row: Extract<Row, { type: 'md' }>,
   scope: FileScope | null,
   refs: { count: number; t: ReturnType<typeof useT> } | null,
+  issues: ReadonlySet<string> | null,
 ): string {
   const count = refs?.count ?? 0
   const lang = refs?.t.lang ?? ''
   const known = linked.get(row)
-  if (known?.scope === scope && known.count === count && known.lang === lang) return known.text
-  // 先认路径和网址：它跳过已经有链接的行，评论的记号要后加
+  if (
+    known?.scope === scope &&
+    known.count === count &&
+    known.lang === lang &&
+    known.issues === issues
+  )
+    return known.text
+  // 先认路径和网址：它跳过已经有链接的行，看板编号和评论的记号要后加
   let text = linkify(row.text, scope)
+  if (issues) text = linkIssues(text, issues)
   if (refs) text = linkCommentRefs(text, count, (n) => refs.t('comment.ref', { n }))
-  linked.set(row, { scope, count, lang, text })
+  linked.set(row, { scope, count, lang, issues, text })
   return text
 }
 

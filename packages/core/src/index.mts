@@ -372,9 +372,12 @@ export {
 } from './projection/manage.mjs'
 export {
   type ManagerBoardPages,
+  type ManagerLineRow,
+  type ManagerLineState,
   type ManagerSessionSummary,
   managerAttentionCount,
   managerBoardPages,
+  managerLineRows,
   managerMark,
   managerReopen,
   managerSessionIds,

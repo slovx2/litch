@@ -108,12 +108,12 @@ try {
   }
   const checked = (id) =>
     read(`document.querySelector('[data-testid="${id}"]')?.getAttribute('aria-checked')`)
-  // 页签与桌面同序：概览、经理事项、控制台；页签和类别读屏角色不同
+  // 工作台四格：对话、控制台、工作线、概览（经理事项并进概览）；页签和类别读屏角色不同
   assert.equal(
     await read(
       "[...document.querySelectorAll('[role=tab][data-testid^=\"manager-tab:\"]')].map(e=>e.dataset.testid.slice(12)).join(',')",
     ),
-    'overview,items,console',
+    'chat,console,lines,overview',
     '页签顺序',
   )
   await tapId('manager-tab:console')
@@ -534,19 +534,27 @@ try {
   await dragDrawer(100)
   await until(async () => (await drawerHeight()) < viewport * 0.7, '拖动收回半屏')
   assert.equal(
-    await read("document.querySelector('textarea').getAttribute('aria-label')"),
-    await read("document.querySelector('textarea').placeholder"),
+    await read(
+      "document.querySelector('textarea:not([data-testid=manager-chat] textarea)').getAttribute('aria-label')",
+    ),
+    await read(
+      "document.querySelector('textarea:not([data-testid=manager-chat] textarea)').placeholder",
+    ),
     '读屏名称与经理模式占位一致',
   )
   await press('临时对话')
   assert.equal(
-    await read("document.querySelector('textarea').getAttribute('aria-label')"),
-    await read("document.querySelector('textarea').placeholder"),
+    await read(
+      "document.querySelector('textarea:not([data-testid=manager-chat] textarea)').getAttribute('aria-label')",
+    ),
+    await read(
+      "document.querySelector('textarea:not([data-testid=manager-chat] textarea)').placeholder",
+    ),
     '读屏名称与临时模式占位一致',
   )
   await press('经理对话')
   await read(
-    `(()=>{const input=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'手机追问范围');input.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+    `(()=>{const input=document.querySelector('textarea:not([data-testid=manager-chat] textarea)');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'手机追问范围');input.dispatchEvent(new Event('input',{bubbles:true}))})()`,
   )
   await new Promise((r) => setTimeout(r, 150))
   await shot('mobile-question-compose')
@@ -577,7 +585,7 @@ try {
   await until(() => read(`!document.querySelector('${drawer}')`), '抽屉关闭')
   assert.ok(
     await read(
-      `!document.querySelector('${reportCard}').innerText.includes('已核对这条内容') && !document.querySelector('textarea')`,
+      `!document.querySelector('${reportCard}').innerText.includes('已核对这条内容') && !document.querySelector('textarea:not([data-testid=manager-chat] textarea)')`,
     ),
     '回复只在抽屉里，卡片不含讨论',
   )
@@ -720,6 +728,74 @@ try {
     '设备服务较旧：决策答复照常交上',
   )
   await shot('mobile-old-device')
+  // 工作台：默认落在对话；正文编号点了拉起半屏议题卡，↗ 到控制台定位；切页签对话不卸载，草稿还在
+  await call('Page.navigate', { url: url.replace('scene=manager-console', 'scene=manager-chat') })
+  await wait('[data-testid="manager-chat"] textarea')
+  assert.equal(
+    await read(
+      "document.querySelector('[data-testid=\"manager-tab:chat\"]').getAttribute('aria-selected')",
+    ),
+    'true',
+    '默认落在对话',
+  )
+  assert.ok(
+    await read(
+      "/^\\d+$/.test(document.querySelector('[data-testid=\"manager-tab-badge:console\"]')?.textContent??'')",
+    ),
+    '控制台页签挂待处理数',
+  )
+  await until(
+    () =>
+      read(
+        "(()=>{const a=[...document.querySelectorAll('[data-testid=\"manager-chat\"] a')].find(e=>e.getAttribute('href')==='litch-issue:D-16');if(!a)return false;a.click();return true})()",
+      ),
+    '对话里的 D-16 链接',
+  )
+  await wait('[data-testid="issue-sheet:D-16"]')
+  assert.ok(
+    await read(
+      '!!document.querySelector(\'[data-testid="issue-sheet:D-16"] [data-testid="manager-issue:D-16"]\')',
+    ),
+    '半屏里是那张议题卡',
+  )
+  await tapId('issue-sheet:D-16:open')
+  await wait('[data-testid="manager-issue:D-16"]')
+  assert.equal(await checked('manager-category:decision'), 'true', '在控制台打开并定位')
+  await tapId('manager-tab:chat')
+  await read(
+    "(()=>{const t=document.querySelector('[data-testid=\"manager-chat\"] textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'草稿');t.dispatchEvent(new Event('input',{bubbles:true}))})()",
+  )
+  await tapId('manager-tab:lines')
+  await wait('[data-testid="manager-lines"]')
+  // 等人、出错在前，运行中、空闲依次；已合并的收在“已结束”
+  assert.ok(
+    await read('!!document.querySelector(\'[data-testid="manager-lines:ended"]\')'),
+    '已结束一组',
+  )
+  assert.ok(
+    await read('!!document.querySelector(\'[data-testid="manager-line:manager-k1:unverified"]\')'),
+    '没验计数',
+  )
+  await tapId('manager-tab:chat')
+  assert.equal(
+    await read('document.querySelector(\'[data-testid="manager-chat"] textarea\').value'),
+    '草稿',
+    '切页签草稿还在',
+  )
+  await shot('mobile-workbench-chat')
+  // 工作线直达：副标题“↰ 经理名”，点了到经理页的工作线页签
+  await call('Page.navigate', {
+    url: url.replace('scene=manager-console', 'scene=manager-line-origin'),
+  })
+  await tapId('detail:manager')
+  await wait('[data-testid="manager-lines"]')
+  assert.equal(
+    await read(
+      "document.querySelector('[data-testid=\"manager-tab:lines\"]').getAttribute('aria-selected')",
+    ),
+    'true',
+    '工作线回经理落在工作线页签',
+  )
   // 经理目录：按设备分组。
   await call('Page.navigate', { url: url.replace('scene=manager-console', 'scene=managers') })
   await wait('[data-testid="managers:device:local"]')
@@ -747,7 +823,7 @@ try {
   )
   await shot('mobile-managers')
   console.log(
-    '手机经理：目录、概览、排序、已答决策分块、三皮肤报告、关联定位、已阅、追问与交付、设备服务较旧通过',
+    '手机经理：工作台四格、编号半屏议题卡、工作线与回经理、目录、概览、排序、已答决策分块、三皮肤报告、关联定位、已阅、追问与交付、设备服务较旧通过',
   )
 } catch (error) {
   console.error(error)

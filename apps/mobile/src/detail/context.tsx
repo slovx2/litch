@@ -25,7 +25,9 @@ export interface TranscriptActions {
   /** 文件页开在哪个根下（工作区的主目录，不属于工作区的是会话的工作目录） */
   root: string | null
   toggle(key: string, turnId: string): void
-  /** 点了链接：litch-file: 到文件页，http(s) 交给系统浏览器，别的不理 */
+  /** 经理看板上的编号（经理和工作线的对话才有）：正文里的这些编号改写成链接 */
+  issues: ReadonlySet<string> | null
+  /** 点了链接：litch-file: 到文件页，litch-issue: 交给页面（半屏议题卡或经理页），http(s) 交给系统浏览器，别的不理 */
   openLink(url: string): void
   /** 长按一个回合里的东西。itemId 是被按的那条回答（复制它的全文），按的是别处时是 null */
   turnMenu(turnId: string): void

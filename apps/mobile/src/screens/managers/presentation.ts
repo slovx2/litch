@@ -1,6 +1,8 @@
 // 手机议题的排序、分类计数与正文层级共用纯函数，保持报告未读独立于待处理；排序规则在核心，与桌面一致。
 import {
   type ManagerIssueOrder,
+  type ManagerLineRow,
+  type ManagerLineState,
   type ManagerView,
   managerAttentionCount,
   reviewedSuggestion,
@@ -141,5 +143,46 @@ export function issueMarkdownStyle(theme: Theme) {
     h4: { ...base.h4, fontSize: theme.font.size.body },
     h5: { ...base.h5, fontSize: theme.font.size.body },
     h6: { ...base.h6, fontSize: theme.font.size.body },
+  }
+}
+
+const LINE_MARK: Record<ManagerLineState, StatusKind> = {
+  waiting: 'waiting',
+  error: 'error',
+  running: 'running',
+  background: 'background',
+  idle: 'idle',
+}
+const LINE_STATE = {
+  waiting: 'manager.waiting',
+  error: 'manager.error',
+  running: 'manager.running',
+  background: 'mgr.lines.background',
+  idle: 'manager.idle',
+} as const
+
+/**
+ * 工作线页签一行（35-manager 17.5）：记号、第二行的几段（状态 · 分支 +领先数 / 已合并，没有分支时换成回报第一句）、
+ * 行尾等待色的“没验 N”。回报开头的标题行（# 或整行加粗）跳过，取第一句正文。
+ */
+export function lineRowParts(row: ManagerLineRow): {
+  mark: StatusKind
+  state: (typeof LINE_STATE)[ManagerLineState]
+  branch: string | null
+  merged: boolean
+  report: string | null
+  unverified: number
+} {
+  const { line } = row
+  const body = line.report?.text
+    .split('\n')
+    .find((l) => l.trim() && !/^\s*(#{1,6}\s|\*\*[^*]+\*\*\s*$|__[^_]+__\s*$)/.test(l))
+  return {
+    mark: LINE_MARK[row.state],
+    state: LINE_STATE[row.state],
+    branch: line.branch ? `${line.branch}${line.ahead ? ` +${line.ahead}` : ''}` : null,
+    merged: line.merged === true,
+    report: line.branch || !body ? null : plainLine(body),
+    unverified: line.unverified.length,
   }
 }

@@ -38,7 +38,10 @@ export function sampleManagerHistory(
   const turnId = `${manager.id}-opening`
   const userId = `${turnId}-user`
   const answerId = `${turnId}-answer`
-  const pending = board.decisions.filter((decision) => decision.status === 'open').length
+  const open = board.decisions.filter((decision) => decision.status === 'open')
+  const pending = open.length
+  // 写出编号：手机经理页的对话里点编号拉起半屏议题卡（预览要用）
+  const ids = open.map((decision) => decision.id).join(zh ? '、' : ', ')
   const progress =
     board.situation?.text ??
     (manager.status === 'ending'
@@ -53,7 +56,7 @@ export function sampleManagerHistory(
           ? '我会先按范围梳理事项和验收条件，列出计划，等待你确认开始。'
           : 'I will outline the items and acceptance criteria, present a plan, and wait for you to start.')
   const answer = pending
-    ? `${progress}\n\n${zh ? `看板上有 ${pending} 项决策需要你确认，背景与选项已列出。` : `There are ${pending} decisions for you on the board, with their background and options.`}`
+    ? `${progress}\n\n${zh ? `看板上有 ${pending} 项决策需要你确认（${ids}），背景与选项已列出。` : `There are ${pending} decisions for you on the board (${ids}), with their background and options.`}`
     : progress
   return {
     turns: [

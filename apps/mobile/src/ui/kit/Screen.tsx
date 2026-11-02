@@ -18,9 +18,18 @@ export interface HeaderAction {
   accessibilityLabel?: string
 }
 
+/** 副标题前半段的链接（工作线的“↰ 经理名”）：整块标题都可点，点击区不小于标题栏高度，不另占一行 */
+export interface HeaderLink {
+  label: string
+  onPress(): void
+  accessibilityLabel: string
+  testID?: string
+}
+
 export function Screen({
   title,
   subtitle,
+  subtitleLink,
   back = true,
   actions = [],
   trailing,
@@ -30,7 +39,8 @@ export function Screen({
   testID,
 }: {
   title: string
-  subtitle?: string
+  subtitle?: string | undefined
+  subtitleLink?: HeaderLink | undefined
   /** 左上角返回。首页不要 */
   back?: boolean
   actions?: HeaderAction[]
@@ -92,7 +102,22 @@ export function Screen({
             ) : null}
           </Text>
         ) : (
-          <View style={styles.titles}>
+          <Pressable
+            disabled={!subtitleLink}
+            {...(subtitleLink
+              ? {
+                  accessibilityRole: 'link' as const,
+                  accessibilityLabel: `${title} · ${subtitleLink.accessibilityLabel}`,
+                  testID: subtitleLink.testID,
+                  onPress: subtitleLink.onPress,
+                }
+              : {})}
+            style={({ pressed }) => [
+              styles.titles,
+              subtitleLink ? styles.titlesLink : null,
+              pressed ? { backgroundColor: c.press } : null,
+            ]}
+          >
             <Text
               numberOfLines={1}
               style={[
@@ -102,7 +127,7 @@ export function Screen({
             >
               {title}
             </Text>
-            {subtitle ? (
+            {subtitle || subtitleLink ? (
               <Text
                 numberOfLines={1}
                 style={[
@@ -110,10 +135,14 @@ export function Screen({
                   { color: c.ink3, fontSize: theme.font.size.small, fontFamily: theme.font.mono },
                 ]}
               >
+                {subtitleLink ? (
+                  <Text style={{ color: c.accent }}>{subtitleLink.label}</Text>
+                ) : null}
+                {subtitleLink && subtitle ? ' · ' : ''}
                 {subtitle}
               </Text>
             ) : null}
-          </View>
+          </Pressable>
         )}
         {trailing}
         {actions.map((action) => (
@@ -167,6 +196,7 @@ const styles = StyleSheet.create({
   pad: { width: 16 },
   backText: { fontSize: 30, lineHeight: 34, marginTop: -4 },
   titles: { flex: 1, minWidth: 0 },
+  titlesLink: { alignSelf: 'stretch', justifyContent: 'center' },
   title: { fontWeight: '600' },
   subtitle: { marginTop: 1 },
   action: { minHeight: 44, paddingHorizontal: 10, justifyContent: 'center' },

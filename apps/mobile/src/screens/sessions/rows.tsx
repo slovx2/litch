@@ -6,6 +6,7 @@ import {
   type DeviceView,
   type GroupTallies,
   keys,
+  managerMark,
   type SessionSummary,
   type WireColor,
 } from '@litch/core'
@@ -133,6 +134,23 @@ export function SummaryLine({
           >
             {badgeOf(device, summary.harness)}
           </Text>
+          {/* 经理（「最近」里它和普通会话混排）：和 harness 徽标同样式的“经理”小标签，一眼分开 */}
+          {managerMark(summary)?.role === 'manager' ? (
+            <Text
+              testID={`${testID}:manager`}
+              style={[
+                styles.badge,
+                {
+                  color: c.ink2,
+                  borderColor: c.line2,
+                  fontFamily: theme.font.mono,
+                  borderRadius: theme.radius.s,
+                },
+              ]}
+            >
+              {t('mgr.tag')}
+            </Text>
+          ) : null}
           {summary.task ? (
             <Text
               testID={`${testID}:task`}

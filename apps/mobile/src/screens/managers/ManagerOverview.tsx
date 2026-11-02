@@ -1,6 +1,7 @@
-// 手机经理概览，照桌面概览：现状、两个数（待用户决策、已完成）、受阻事项、请你做、最近动态。
+// 手机经理概览，照桌面概览：现状、两个数（待用户决策、已完成）、受阻事项、请你做、最近动态；
+// 末尾“经理事项 N”一节默认收起（原来单独的页签并进来，35-manager 17.3），“已完成”和 #I-n 展开它并定位到那一项。
 import { type ManagerBoardTopicView, managerBoardPages } from '@litch/core'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type {
   ManagerActivityView,
@@ -11,6 +12,7 @@ import { useT } from '../../ui/i18n'
 import { Button, Row, SectionLabel } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
 import { Markdown } from './IssueMarkdown'
+import { IssueRelations } from './IssueRelations'
 import { collapsedMarkdown } from './presentation'
 
 const PAGE = 10
@@ -115,22 +117,77 @@ function BlockedItem({ item, onIssue }: { item: ManagerItemView; onIssue(id: str
   )
 }
 
+/** 经理事项一行：编号、标题、状态；点开看理由和关联。定位到的那一项展开并画强调边 */
+function ItemRow({ item, focused }: { item: ManagerItemView; focused: boolean }) {
+  const t = useT()
+  const { c, font, hit } = useTheme()
+  const [open, setOpen] = useState(focused)
+  useEffect(() => {
+    if (focused) setOpen(true)
+  }, [focused])
+  return (
+    <View
+      testID={`overview-item:${item.id}`}
+      style={[
+        styles.item,
+        { borderBottomColor: c.line1, borderLeftColor: focused ? c.accent : 'transparent' },
+      ]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        aria-expanded={open}
+        onPress={() => setOpen(!open)}
+        style={({ pressed }) => [
+          styles.itemHead,
+          { minHeight: hit, backgroundColor: pressed ? c.press : 'transparent' },
+        ]}
+      >
+        <Text style={{ color: c.ink2 }}>{open ? '▾' : '▸'}</Text>
+        <Text
+          style={{ color: c.ink, fontSize: font.size.body, flex: 1 }}
+          numberOfLines={open ? 0 : 1}
+        >
+          #{item.id} · {item.title}
+        </Text>
+        <Text style={{ color: c.ink3 }}>{t(`manager.status.${item.status}`)}</Text>
+      </Pressable>
+      {open ? (
+        <View style={styles.itemBody}>
+          <IssueRelations id={item.id} kind="item" />
+          <Markdown text={item.why} />
+        </View>
+      ) : null}
+    </View>
+  )
+}
+
 export function ManagerOverview({
   board,
   onDecisions,
   onItems,
   onIssue,
   onLine,
+  focusItem,
+  onItemsAt,
 }: {
   board: NonNullable<ManagerBoardTopicView['board']>
   onDecisions(): void
+  /** “已完成”：展开经理事项一节，页面滚到那里 */
   onItems(): void
   onIssue(id: string): void
   onLine(threadId: string, title: string): void
+  /** 要定位的经理事项（#I-n）：展开这一节和那一项；'*' 只展开这一节 */
+  focusItem: string | null
+  /** 经理事项一节在概览里的纵向位置，页面据此滚过去 */
+  onItemsAt(y: number): void
 }) {
   const t = useT()
-  const { c, font, radius } = useTheme()
+  const { c, font, radius, hit } = useTheme()
   const [shown, setShown] = useState(PAGE)
+  const [itemsOpen, setItemsOpen] = useState(Boolean(focusItem))
+  useEffect(() => {
+    if (focusItem) setItemsOpen(true)
+  }, [focusItem])
   const { situation, stats, requests, blocked, activities } = managerBoardPages(board).overview
   // 两个数照桌面概览：待用户决策（点进控制台的决策）、已完成（点进经理事项）
   const tiles = [
@@ -222,6 +279,24 @@ export function ManagerOverview({
           />
         </View>
       ) : null}
+      <View onLayout={(event) => onItemsAt(event.nativeEvent.layout.y)}>
+        <Pressable
+          accessibilityRole="button"
+          aria-expanded={itemsOpen}
+          testID="overview-items"
+          onPress={() => setItemsOpen(!itemsOpen)}
+          style={[styles.itemsHead, { minHeight: hit, backgroundColor: c.win }]}
+        >
+          <Text style={{ color: c.ink2, fontSize: font.size.meta + 1, fontWeight: '600' }}>
+            {itemsOpen ? '▾' : '▸'} {t('mgr.items.count', { count: board.items.length })}
+          </Text>
+        </Pressable>
+        {itemsOpen
+          ? board.items.map((item) => (
+              <ItemRow key={item.id} item={item} focused={focusItem === item.id} />
+            ))
+          : null}
+      </View>
     </View>
   )
 }
@@ -245,4 +320,8 @@ const styles = StyleSheet.create({
   link: { textAlignVertical: 'center', paddingVertical: 12 },
   none: { paddingHorizontal: 16, paddingVertical: 12 },
   more: { padding: 12 },
+  itemsHead: { justifyContent: 'center', paddingHorizontal: 16 },
+  item: { borderBottomWidth: 1, borderLeftWidth: 3 },
+  itemHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 13 },
+  itemBody: { paddingHorizontal: 16, paddingBottom: 12, gap: 8 },
 })

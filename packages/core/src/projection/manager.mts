@@ -16,6 +16,7 @@ import type {
   ManagerDecisionView,
   ManagerItemStatus,
   ManagerItemView,
+  ManagerLineView,
   ManagerView,
   SessionManagerMark,
 } from '../model-manager.mjs'
@@ -234,4 +235,53 @@ export function managerSessionIds(sessions: Iterable<SessionSummary>): Set<strin
     }
   }
   return excluded
+}
+
+/** 工作线现在怎样：会话摘要在时以它为准（更新得更快），没有时用看板上的线状态 */
+export type ManagerLineState = 'waiting' | 'error' | 'running' | 'background' | 'idle'
+export interface ManagerLineRow {
+  line: ManagerLineView
+  state: ManagerLineState
+  /** 最近动静：回报时间、会话更新时间、开线时间取最晚的；都没有是 null */
+  at: number | null
+}
+const LINE_RANK: Record<ManagerLineState, number> = {
+  waiting: 0,
+  error: 0,
+  running: 1,
+  background: 2,
+  idle: 3,
+}
+
+/**
+ * 手机经理页“工作线”页签的行（35-manager 17.5）：等人、出错 → 运行中 → 后台任务 → 空闲，同组最近动静新的在前；
+ * 已合并的进 ended（默认收起的“已结束”组），同样按最近动静排。
+ */
+export function managerLineRows(
+  lines: readonly ManagerLineView[],
+  summaryOf: (
+    threadId: string,
+  ) => Pick<SessionSummary, 'status' | 'background' | 'updatedAt'> | undefined,
+): { active: ManagerLineRow[]; ended: ManagerLineRow[] } {
+  const rows = lines.map((line): ManagerLineRow => {
+    const summary = summaryOf(line.threadId)
+    const state: ManagerLineState = summary
+      ? summary.status !== 'idle'
+        ? summary.status
+        : (summary.background?.running ?? 0) > 0
+          ? 'background'
+          : 'idle'
+      : line.status
+    const times = [line.report?.at, summary?.updatedAt, line.startedAt].filter(
+      (value): value is number => typeof value === 'number',
+    )
+    return { line, state, at: times.length ? Math.max(...times) : null }
+  })
+  const recent = (a: ManagerLineRow, b: ManagerLineRow) => (b.at ?? 0) - (a.at ?? 0)
+  return {
+    active: rows
+      .filter((row) => row.line.merged !== true)
+      .sort((a, b) => LINE_RANK[a.state] - LINE_RANK[b.state] || recent(a, b)),
+    ended: rows.filter((row) => row.line.merged === true).sort(recent),
+  }
 }

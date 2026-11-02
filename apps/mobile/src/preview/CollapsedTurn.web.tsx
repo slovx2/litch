@@ -82,6 +82,7 @@ export function CollapsedTurnPreview({ params }: { params: URLSearchParams }) {
                 builder.toggle(key, turnId)
                 setExpanded((current) => !current)
               },
+              issues: null,
               openLink: noop,
               turnMenu: noop,
               copyMessage: noop,

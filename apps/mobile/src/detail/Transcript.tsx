@@ -12,6 +12,7 @@ import {
   forwardRef,
   type RefObject,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -54,6 +55,7 @@ import {
   useFileScope,
 } from './context'
 import { GoalReachedCell } from './goal/GoalReachedCell'
+import { IssueLinksContext, parseIssueHref } from './issue-links'
 import { isWebUrl, parseFileHref } from './links'
 import { InView, InViewContext } from './mermaid/in-view'
 import { type MermaidShown, MermaidViewer } from './mermaid/MermaidViewer'
@@ -171,6 +173,7 @@ function useActions(store: SessionStore) {
   const harnessId = useSyncExternalStore(store.subscribeMeta, () => store.getMeta()?.harness ?? '')
   const harness = nameOf(useKey<DeviceView>(keys.device(deviceId)), harnessId)
   const { scope, root } = useFileScope(deviceId, sessionId, cwd)
+  const issues = useContext(IssueLinksContext)
   const [menu, setMenu] = useState<string | null>(null)
   const [image, setImage] = useState<string | null>(null)
   const [diagram, setDiagram] = useState<MermaidShown | null>(null)
@@ -187,8 +190,11 @@ function useActions(store: SessionStore) {
       harness,
       scope,
       root,
+      issues: issues?.ids ?? null,
       toggle: (key, turnId) => store.toggle(key, turnId),
       openLink: (url) => {
+        const issue = parseIssueHref(url)
+        if (issue !== null) return issues?.open(issue)
         const file = parseFileHref(url)
         if (file) {
           if (!root) return setFlash(t('detail.link.noFiles'))
@@ -221,7 +227,7 @@ function useActions(store: SessionStore) {
       viewImage: setImage,
       viewMermaid: (source, svg) => setDiagram({ source, svg }),
     }),
-    [store, deviceId, sessionId, harness, scope, root, cwd, navigation, openSession, t],
+    [store, deviceId, sessionId, harness, scope, root, issues, cwd, navigation, openSession, t],
   )
   const overlays = (
     <>
