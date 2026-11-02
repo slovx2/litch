@@ -200,45 +200,66 @@ export const UserMessage = memo(function UserMessage({
   const message = item.system ? (
     <SystemCard {...ref} item={item} system={item.system} />
   ) : (
-    <div
-      className="umsg"
-      data-search-item={ref.itemId}
-      data-anchor={`u:${ref.itemId}`}
-      ref={bubble}
-    >
-      {item.delivery ? (
-        <div className="muted" data-input-delivery={item.delivery}>
-          {t(`inputDelivery.${item.delivery}`)}
-        </div>
-      ) : null}
-      <UserAttachments attachments={item.attachments} />
-      {comments ? <SentComments {...ref} comments={comments.comments} /> : null}
-      {replies ? (
-        <AskReplyBody replies={replies} />
-      ) : text ? (
-        <div className={open ? 'umsg-text' : 'umsg-text clamp'} ref={body}>
-          <MentionedText deviceId={ref.deviceId} text={text} sessions={item.sessions} />
-        </div>
-      ) : null}
-      {long ? (
-        <button
-          type="button"
-          className="mini"
-          onClick={() => {
-            pin(bubble.current)
-            setOpen(!open)
-          }}
-        >
-          {t(open ? 'message.collapse' : 'message.expand')}
-        </button>
-      ) : null}
-      <div className="umsg-acts">
-        <MessageCopy item={item} />
-        {turnId ? (
-          <TurnActions {...ref} turnId={turnId} steered={steered} onEdit={() => setEditing(true)} />
+    <>
+      {/* biome-ignore lint/a11y/useSemanticElements: 消息不是表单字段；分组名称补充交付状态，子内容仍可单独读取。 */}
+      <div
+        className="umsg"
+        role="group"
+        aria-label={
+          item.delivery
+            ? t('inputDelivery.message', { status: t(`inputDelivery.${item.delivery}`) })
+            : undefined
+        }
+        data-input-delivery={item.delivery}
+        data-search-item={ref.itemId}
+        data-anchor={`u:${ref.itemId}`}
+        ref={bubble}
+      >
+        <UserAttachments attachments={item.attachments} />
+        {comments ? <SentComments {...ref} comments={comments.comments} /> : null}
+        {replies ? (
+          <AskReplyBody replies={replies} />
+        ) : text ? (
+          <div className={open ? 'umsg-text' : 'umsg-text clamp'} ref={body}>
+            <MentionedText deviceId={ref.deviceId} text={text} sessions={item.sessions} />
+          </div>
         ) : null}
+        {long ? (
+          <button
+            type="button"
+            className="mini"
+            onClick={() => {
+              pin(bubble.current)
+              setOpen(!open)
+            }}
+          >
+            {t(open ? 'message.collapse' : 'message.expand')}
+          </button>
+        ) : null}
+        <div className="umsg-acts">
+          <MessageCopy item={item} />
+          {turnId ? (
+            <TurnActions
+              {...ref}
+              turnId={turnId}
+              steered={steered}
+              onEdit={() => setEditing(true)}
+            />
+          ) : null}
+        </div>
       </div>
-    </div>
+      {item.delivery && item.delivery !== 'sent' ? (
+        <div className="umsg-delivery" data-delivery-status={item.delivery} aria-hidden="true">
+          <Icon
+            name={
+              item.delivery === 'queued' ? 'clock' : item.delivery === 'held' ? 'pause' : 'info'
+            }
+            small
+          />
+          <span>{t(`inputDelivery.${item.delivery}`)}</span>
+        </div>
+      ) : null}
+    </>
   )
   if (!event) return message
   return (

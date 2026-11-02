@@ -75,6 +75,13 @@ import { SectionDialog } from './SectionDialog.tsx'
 import { SidebarFoot } from './SidebarFoot.tsx'
 import { SidebarFrame } from './SidebarFrame.tsx'
 import { SidebarMore } from './SidebarMore.tsx'
+import {
+  navigatedRow,
+  type RowSelection,
+  type RowSource,
+  reconcileProjection,
+  sameSession,
+} from './selection.ts'
 import { sessionMark } from './session-mark.ts'
 import {
   pruneSidebarFolds,
@@ -117,7 +124,7 @@ function beginDrag(event: DragEvent, item: DragItem) {
 interface RowProps {
   deviceId: string
   sessionId: string
-  selected: boolean
+  source?: RowSource
   onSelect(selection: Selection): void
   /** 挂在父会话下面的子会话：行上显示状态点、名字与 harness，别的在信息卡里 */
   nested?: boolean
@@ -133,7 +140,7 @@ interface RowProps {
 const SessionRow = memo(function SessionRow({
   deviceId,
   sessionId,
-  selected,
+  source = 'tree',
   onSelect,
   nested = false,
   kids = 0,
@@ -143,7 +150,9 @@ const SessionRow = memo(function SessionRow({
   deviceLabel,
 }: RowProps) {
   const { channel, replica } = useServices()
-  const { fromTree } = useSidebarReveal()
+  const { fromTree, selected: selectedRow } = useSidebarReveal()
+  const selected =
+    selectedRow?.source === source && sameSession(selectedRow, { deviceId, sessionId })
   const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
@@ -211,7 +220,7 @@ const SessionRow = memo(function SessionRow({
   }
   if (naming !== null) {
     return (
-      <div className="ss-row sel editing">
+      <div className={`ss-row${selected ? ' sel' : ''} editing`}>
         <input
           ref={field}
           className="ss-name"
@@ -436,10 +445,37 @@ const SessionRow = memo(function SessionRow({
           aria-current={selected ? 'true' : undefined}
           onClick={() => {
             const next = { deviceId, sessionId }
-            fromTree(next)
+            fromTree(next, source)
             onSelect(next)
           }}
           {...info.anchor}
+          onBlur={(event) => {
+            delete event.currentTarget.dataset.sidebarKeyboard
+            info.anchor.onBlur()
+          }}
+          onPointerDown={(event) => {
+            delete event.currentTarget.dataset.sidebarKeyboard
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+              info.anchor.onKeyDown(event)
+              return
+            }
+            event.preventDefault()
+            const rows = [
+              ...(event.currentTarget
+                .closest('.sb-scroll')
+                ?.querySelectorAll<HTMLButtonElement>('.ss-row:not(.editing)') ?? []),
+            ].filter((row) => row.getClientRects().length > 0)
+            const index = rows.findIndex((row) => row.getAttribute('aria-current') === 'true')
+            const start = index < 0 ? rows.indexOf(event.currentTarget) : index
+            const next = rows[start + (event.key === 'ArrowDown' ? 1 : -1)]
+            if (next) {
+              next.dataset.sidebarKeyboard = ''
+              next.focus()
+              next.click()
+            }
+          }}
         >
           <i
             className={mark ? `st ${mark}` : 'st'}
@@ -804,14 +840,12 @@ function below(event: DragEvent): boolean {
 /** 投影只挂载当前页的行，不为每个主项重算整台设备的分组、筛选与拖放目录。 */
 function ProjectedDeviceBlock({
   projection,
-  selection,
   draft,
   onSelect,
   onCompose,
   onFocus,
 }: {
   projection: ProjectedBlock
-  selection: Selection | null
   draft: Draft | null
   onSelect(selection: Selection): void
   onCompose(draft: Draft): void
@@ -866,7 +900,7 @@ function ProjectedDeviceBlock({
           deviceId={deviceId}
           sessionId={sessionId}
           onSelect={onSelect}
-          selected={selection?.deviceId === deviceId && selection.sessionId === sessionId}
+          source={kind}
           nested={depth > 0}
           kids={kids.length}
           folded={shut}
@@ -1182,7 +1216,6 @@ function DeviceGroup(props: GroupProps) {
         <SessionRow
           deviceId={deviceId}
           sessionId={sessionId}
-          selected={sessionId === picked}
           onSelect={onSelect}
           nested={depth > 0}
           kids={kids.length}
@@ -1989,19 +2022,36 @@ export function Sidebar(props: SidebarProps) {
   const open = useSidebarOpen()
   const autoLocate = useSidebarAutoLocate()
   const treeSelection = useRef<Selection | null>(null)
+  const [selectedRow, setSelectedRow] = useState<RowSelection | null>(null)
   const [request, setRequest] = useState<Selection | null>(null)
-  const fromTree = useCallback((next: Selection) => {
+  const fromTree = useCallback((next: Selection, source: RowSource) => {
     treeSelection.current = next
+    setSelectedRow({ ...next, source })
   }, [])
   useEffect(() => {
-    const direct = treeSelection.current === selection
+    const direct = selection !== null && treeSelection.current === selection
     treeSelection.current = null
     setRequest(direct || !autoLocate ? null : selection)
+    if (!direct) setSelectedRow((was) => navigatedRow(was, selection, autoLocate))
     if (selection && !direct && autoLocate) setFocus(null)
   }, [selection, autoLocate])
+  const checkProjection = useCallback<React.ContextType<typeof SidebarReveal>['checkProjection']>(
+    (kind, rows, children) => {
+      const next = reconcileProjection(selectedRow, kind, rows, children)
+      if (next === selectedRow) return
+      setSelectedRow(next)
+      if (autoLocate && sameSession(next, selection)) setRequest(selection)
+    },
+    [selectedRow, selection, autoLocate],
+  )
   const reveal = useMemo(
-    () => ({ request: autoLocate && open && request === selection ? request : null, fromTree }),
-    [autoLocate, open, request, selection, fromTree],
+    () => ({
+      request: autoLocate && open && request === selection ? request : null,
+      selected: selectedRow,
+      fromTree,
+      checkProjection,
+    }),
+    [autoLocate, open, request, selection, selectedRow, fromTree, checkProjection],
   )
   const focusOn = useCallback(
     (deviceId: string) => (group: string | null) =>
@@ -2110,7 +2160,6 @@ export function Sidebar(props: SidebarProps) {
                   render={(projection) => (
                     <ProjectedDeviceBlock
                       projection={projection}
-                      selection={selection}
                       draft={draft}
                       onSelect={onSelect}
                       onCompose={onCompose}

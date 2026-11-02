@@ -1343,6 +1343,7 @@ export const zhCN = {
   'composer.pendingInclude': '连同 {n} 条待发一起发',
   'composer.pendingOnly': '只发这条',
   'inputDelivery.queued': '排队中',
+  'inputDelivery.message': '用户消息，{status}',
   'inputDelivery.sent': '已发送',
   'inputDelivery.held': '已停止待发送',
   'inputDelivery.unknown': '状态待确认',

@@ -8,13 +8,14 @@ import {
   type SidebarProjectionKind,
   type SidebarProjections,
 } from '@litch/core'
-import { type ReactNode, useId, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useId, useMemo, useState } from 'react'
 import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { Caret } from '../app/icons.tsx'
 import { useKey, useKeys } from '../app/services.tsx'
 import { setProjectionSettings, useProjectionSettings } from './projection-state.ts'
 import { RowMenu } from './RowMenu.tsx'
+import { useSidebarReveal } from './reveal-context.ts'
 
 const NONE: string[] = []
 export interface ProjectedBlock {
@@ -86,6 +87,11 @@ function ProjectionGroup({
     [projections, kind],
   )
   const selected = selection ? JSON.stringify([selection.deviceId, selection.sessionId]) : null
+  const { selected: selectedRow, checkProjection } = useSidebarReveal()
+  const selectedProjection = useKey<SidebarProjections>(
+    keys.sidebarProjections(selectedRow?.deviceId ?? ''),
+  )
+  const selectedChildren = useKey<SessionChildren>(keys.children(selectedRow?.deviceId ?? ''))
   const [held, setHeld] = useState<{ selected: string | null; opened: OpenedUnread | null }>({
     selected: null,
     opened: null,
@@ -101,6 +107,10 @@ function ProjectionGroup({
     setHeld({ selected, opened })
   }
   const shownRows = useMemo(() => retainOpenedUnread(rows, opened), [rows, opened])
+  useEffect(() => {
+    // 快照尚未到达不等于投影移除了会话；按完整列表判断，折叠或分页不会挪动选择。
+    if (selectedProjection && selectedChildren) checkProjection(kind, shownRows, selectedChildren)
+  }, [kind, shownRows, selectedProjection, selectedChildren, checkProjection])
   const page = useMemo(
     () => pageSidebarProjection(rows, settings.byProject, settings.first + extra, opened),
     [rows, settings.byProject, settings.first, extra, opened],

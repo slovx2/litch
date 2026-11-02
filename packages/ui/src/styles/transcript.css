@@ -142,6 +142,20 @@
   color: var(--ink-3);
   white-space: nowrap;
 }
+/* 交付状态属于气泡外的辅助信息；正常送达后不留标记。 */
+.umsg-delivery {
+  align-self: flex-end;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: -8px;
+  color: var(--ink-3);
+  font-size: calc(11px * var(--fs));
+  line-height: round(calc(16px * var(--fs)), 1px);
+}
+.umsg-delivery[data-delivery-status="unknown"] {
+  color: var(--wait);
+}
 .umsg-acts .ibtn[aria-disabled="true"] {
   color: var(--ink-3);
   opacity: 0.55;

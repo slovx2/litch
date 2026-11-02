@@ -95,6 +95,11 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
     <View style={styles.userWrap}>
       <Pressable
         onLongPress={menu}
+        accessibilityLabel={
+          row.delivery
+            ? `${t('inputDelivery.message', { status: t(`inputDelivery.${row.delivery}`) })}. ${row.text}`
+            : undefined
+        }
         style={({ pressed: down }) => [
           styles.userBubble,
           // 气泡右下角收小一点，像从右边说出来的；人文皮肤是强调色的淡底、不画线
@@ -106,11 +111,6 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
         ]}
         testID="user-message"
       >
-        {row.delivery ? (
-          <Text style={{ color: c.ink3, fontSize: font.size.small }}>
-            {t(`inputDelivery.${row.delivery}`)}
-          </Text>
-        ) : null}
         <UserAttachments row={row} />
         {comments ? (
           <CommentCards comments={comments.comments} turnId={row.turnId} onLongPress={menu} />
@@ -129,6 +129,17 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
         ) : null}
       </Pressable>
       <View style={styles.userActions}>
+        {row.delivery && row.delivery !== 'sent' ? (
+          <Text
+            testID={`input-delivery-${row.delivery}`}
+            style={{
+              color: row.delivery === 'unknown' ? c.wait : c.ink3,
+              fontSize: font.size.small,
+            }}
+          >
+            {t(`inputDelivery.${row.delivery}`)}
+          </Text>
+        ) : null}
         <MessageCopy itemId={row.key} />
         {/* 发送的时刻与复制按钮常显在气泡下面。 */}
         {row.sentAt === undefined ? null : (
@@ -635,7 +646,7 @@ export const styles = StyleSheet.create({
   meta: { fontSize: 13 },
   userWrap: { paddingHorizontal: 16, paddingVertical: 6, alignItems: 'flex-end' },
   userTime: { marginTop: 3, marginRight: 2 },
-  userActions: { flexDirection: 'row', alignItems: 'center' },
+  userActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   answerActions: { paddingHorizontal: 8 },
   userBubble: {
     borderWidth: 1,

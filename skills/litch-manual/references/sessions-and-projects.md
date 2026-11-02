@@ -17,6 +17,10 @@
 ## 侧栏「未读 / 最近」
 
 桌面「对话」视图在各设备前显示「未读」「最近」，两组可独立收起。
+点击会话时只高亮实际点击的那一行；同一会话在其他投影和对话树中的副本不高亮。上下方向键与读屏当前项跟随这一行。
+刷新列表、排序或新增副本不会转移选择；选中的投影项移除后，选择回到同一会话的对话树行。
+Only the clicked row is selected, including for keyboard navigation and screen readers. Other copies stay unselected.
+List updates preserve the selected location; removing that projection item selects the same conversation in the tree.
 未读沿用本机的新结果标记：未查看的对话从运行转为停止时标记，打开后清除；随侧栏缓存保存，重启保留。
 从未读组打开后，当前主项保留在原位置并恢复已读样式，切到其他主会话或离开对话后才移出，避免连续点击打开下一项。未读计数只计算仍未读的主项，最近组不显示总数。
 这不是逐条消息的已读计数，客户端离线期间结束的回合不保证标记；不同电脑和手机的已读状态不互相同步。
@@ -236,8 +240,11 @@ explain it:
   停止或回合失败后，本客户端尚未发送的消息暂停，不会自动开启下一回合。桌面和手机输入框上方显示
   “已停止，N 条待发”，可发送全部或单条、编辑回输入框、移除。再次输入消息时，发送处先选择
   “连同 N 条待发一起发”（默认）或“只发这条”，一次提交；前者保持各条消息的顺序与附件归属，后者保留原待发。
-  Claude Code 的插话气泡区分“排队中”“已发送”“已停止待发送”“状态待确认”；“已发送”只表示运行时已接纳，
+  桌面和手机的插话状态放在气泡外下方，不混入正文；排队、停止待发、状态待确认仍分别显示，桌面配有状态图标。
+  正常已发送消息不显示状态文字或图标，读屏名称仍包含状态。“已发送”只表示运行时已接纳，
   不保证模型已经执行。只有明确取消的未消费输入进入待发；状态待确认的消息不会自动重发，核实后可编辑再发。
+  Delivery status appears below the bubble on desktop and phone. Queued, stopped pending, and unconfirmed messages remain distinct.
+  Sent messages have no visible status; their accessible name still includes it. Sent means accepted by the runtime, not necessarily acted on by the model.
   待发原文和附件保存在当前客户端，重启后保持暂停并尽量按 Claude 历史对账；尚不在设备间同步。
   编辑时若现有草稿容纳不下附件，消息仍留在待发列表。此阶段仅 Claude 提供交付状态，其他 harness 只统一停止后暂停队列。
   若界面误以为回合仍在运行、引擎明确拒绝插话，客户端会重新核对回合状态；确认已正常结束后，原消息作为新回合发送一次。
@@ -559,5 +566,6 @@ control; set_wake only controls waking. There is no litch config command for it.
 
 对话树顶部“更多”里的“自动定位对话”（Automatically locate conversation）默认打开，设置保存在这台电脑。
 打开时，前进、后退、通知、搜索或其他入口切换对话，都会展开设备、组、项目和父会话，滚到对应行并选中。
-关闭时只切换对话和选中已有行，不自动展开或滚动；通知打开也遵守这个开关。
+关闭时只切换对话，不新增侧栏选中，也不自动展开或滚动；通知打开也遵守这个开关。直接点击侧栏行始终选中该行。
+External navigation selects the tree row when automatic location is enabled. When disabled, it adds no sidebar selection; direct row clicks still select that row.
 侧栏整体收起时不会自动弹开；开启自动定位后，重新显示侧栏会完成定位。

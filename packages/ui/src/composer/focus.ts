@@ -26,7 +26,7 @@ export const busyWriting = (active: Element | null): boolean => {
 export function useGrabFocus(target: RefObject<HTMLElement | null>): void {
   useEffect(() => {
     const active = document.activeElement
-    if (typing(active) || active?.closest('.req')) return
+    if (typing(active) || active?.closest('.req, [data-sidebar-keyboard]')) return
     target.current?.focus({ preventScroll: true })
   }, [target])
 }
@@ -37,7 +37,11 @@ export function useGrabFocus(target: RefObject<HTMLElement | null>): void {
  */
 export function useCardFocus(card: RefObject<HTMLElement | null>): void {
   useEffect(() => {
-    if (busyWriting(document.activeElement)) return
+    if (
+      busyWriting(document.activeElement) ||
+      document.activeElement?.closest('[data-sidebar-keyboard]')
+    )
+      return
     card.current?.focus({ preventScroll: true })
   }, [card])
 }

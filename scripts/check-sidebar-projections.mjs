@@ -22,9 +22,9 @@ if (!binary?.includes('for Testing')) throw new Error('需要隔离 Chrome for T
 let base = process.env.LITCH_PROJECTIONS_UI
 if (base && !/^http:\/\/127\.0\.0\.1:\d+$/.test(base)) throw new Error('只接受回环夹具')
 const work = mkdtempSync(join(tmpdir(), 'litch-projections-ui-'))
-const outputBase = resolve('.local/sidebar-projections')
-const output = join(outputBase, `${Date.now()}-${process.pid}`)
-mkdirSync(output, { recursive: true })
+const outputBase = process.env.LITCH_PROJECTIONS_OUTPUT
+const output = outputBase ? join(resolve(outputBase), `${Date.now()}-${process.pid}`) : null
+if (output) mkdirSync(output, { recursive: true })
 const report = { checks: [], success: false, work, output }
 let vite
 if (!base) {
@@ -69,6 +69,11 @@ const child = spawn(
   },
 )
 let cdp
+async function screenshot(name) {
+  if (!output) return
+  const shot = await cdp.call('Page.captureScreenshot', { format: 'png' })
+  writeFileSync(join(output, name), Buffer.from(shot.data, 'base64'))
+}
 let log = ''
 child.stderr.on('data', (data) => {
   log += data.toString()
@@ -281,18 +286,14 @@ try {
     ),
     unreadRows: document.querySelectorAll('[data-projection=unread] .ss-row.is-unread').length,
   }))
-  assert.deepEqual(selectedCopies.tree, ['s3'], '目录只保留一条选中会话')
-  assert.ok(selectedCopies.projections.length >= 2, '同一会话同时出现在最近、原位保留的未读组')
-  assert.ok(
-    selectedCopies.projections.every((id) => id === 's3'),
-    '投影选中态与目录一致',
-  )
+  assert.deepEqual(selectedCopies.tree, [], '点未读行不选中树里的副本')
+  assert.deepEqual(selectedCopies.projections, ['s3'], '只选中被点击的未读行')
   assert.equal(
     selectedCopies.unreadCount,
     selectedCopies.unreadRows,
     '未读计数不包含已读的原位保留副本',
   )
-  report.checks.push('投影副本选中态一致，目录查询不重复，未读计数不受副本影响')
+  report.checks.push('只高亮点击的投影行，目录和其他投影不高亮，未读计数不受副本影响')
   assert.equal(
     await run(
       () =>
@@ -319,15 +320,44 @@ try {
   assert.ok(
     await run(() => !!document.querySelector('[data-projection=unread] [data-session=s3] .sel')),
   )
-  const heldShot = await cdp.call('Page.captureScreenshot', { format: 'png' })
-  writeFileSync(
-    join(output, 'unread-held-after-double-click.png'),
-    Buffer.from(heldShot.data, 'base64'),
-  )
+  await screenshot('unread-held-after-double-click.png')
   await click(`${recent} [data-session=s4] .ss-row`)
   await until(
     () => run(() => !document.querySelector('[data-projection=unread] [data-session=s3]')),
     '切走移除已读暂留项',
+  )
+  await click(`${recent} [data-session=s3] .ss-row`)
+  const currentRows = () =>
+    run(() =>
+      [...document.querySelectorAll('.ss-row[aria-current="true"]')].map((row) => ({
+        sessionId: row.closest('[data-session]').dataset.session,
+        source: row.closest('[data-projection]')?.dataset.projection ?? 'tree',
+        selected: row.classList.contains('sel'),
+      })),
+    )
+  await until(async () => (await currentRows())[0]?.source === 'recent', '最近行唯一选中')
+  assert.deepEqual(await currentRows(), [{ sessionId: 's3', source: 'recent', selected: true }])
+  await click('.dev-group[data-device=local] [data-session=s3] .ss-row')
+  await until(async () => (await currentRows())[0]?.source === 'tree', '树行唯一选中')
+  assert.deepEqual(await currentRows(), [{ sessionId: 's3', source: 'tree', selected: true }])
+  assert.equal(
+    await run(() => document.querySelectorAll('.projection-group .ss-row.sel').length),
+    0,
+  )
+  await click(`${recent} [data-session=s3] .ss-row`)
+  await run(() => {
+    const row = document.querySelector('[data-projection=recent] [data-session=s3] .ss-row')
+    row.focus()
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+  })
+  await until(
+    () => run(() => document.activeElement?.getAttribute('aria-current') === 'true'),
+    '方向键跟随唯一当前项',
+  )
+  assert.equal((await currentRows()).length, 1)
+  assert.equal(
+    await run(() => document.activeElement.closest('[data-projection]')?.dataset.projection),
+    'recent',
   )
   await click(`${recent} [data-session=s3] .ss-row`)
   assert.equal(
@@ -355,6 +385,29 @@ try {
     '达标时刻持久化',
   )
   report.checks.push('打开立即清未读、短暂查看不刷新最近、连续前台五秒后记录达标时刻')
+  await run(() =>
+    import('/src/app/actions.ts').then((m) =>
+      m.requestOpenSession({ deviceId: 'local', sessionId: 's3' }),
+    ),
+  )
+  await until(
+    async () => (await currentRows())[0]?.source === 'tree',
+    '外部重新打开当前对话选中树行',
+  )
+  assert.deepEqual(await currentRows(), [{ sessionId: 's3', source: 'tree', selected: true }])
+  await run(() => import('/src/sidebar/state.ts').then((m) => m.setSidebarAutoLocate(false)))
+  await run(() =>
+    import('/src/app/actions.ts').then((m) =>
+      m.requestOpenSession({ deviceId: 'local', sessionId: 's4' }),
+    ),
+  )
+  await until(async () => (await currentRows()).length === 0, '关闭自动定位后外部切换不新增选中')
+  assert.equal(await run(() => document.querySelectorAll('.ss-row.sel').length), 0)
+  await click(`${recent} [data-session=s3] .ss-row`)
+  await until(async () => (await currentRows())[0]?.source === 'recent', '关闭定位仍可直接点击选中')
+  await run(() => import('/src/sidebar/state.ts').then((m) => m.setSidebarAutoLocate(true)))
+  await until(async () => (await currentRows())[0]?.source === 'tree', '开启自动定位定位树行')
+  report.checks.push('外部重新打开选树行，关闭自动定位不新增选中，直接点击不受定位开关影响')
   await click(`${recent} .projection-head .dev-row`)
   assert.equal(
     await run(() => !!document.querySelector('[data-projection=recent] .projection-body')),
@@ -545,8 +598,7 @@ try {
         ),
         '400',
       )
-      const shot = await cdp.call('Page.captureScreenshot', { format: 'png' })
-      writeFileSync(join(output, `${skin}-${theme}-240.png`), Buffer.from(shot.data, 'base64'))
+      await screenshot(`${skin}-${theme}-240.png`)
       report.checks.push({ skin, theme, ...geometry })
       await click(`${recent} .projection-head .row-more button`)
       await option('按项目聚合')
@@ -579,11 +631,7 @@ try {
         ),
         false,
       )
-      const flatShot = await cdp.call('Page.captureScreenshot', { format: 'png' })
-      writeFileSync(
-        join(output, `${skin}-${theme}-flat-240.png`),
-        Buffer.from(flatShot.data, 'base64'),
-      )
+      await screenshot(`${skin}-${theme}-flat-240.png`)
       await click(`${recent} .projection-head .row-more button`)
       await option('按项目聚合')
     }
@@ -598,14 +646,15 @@ try {
         'JSON.stringify({storage:{...localStorage},rows:[...document.querySelectorAll("[data-projection=recent] [data-session]")].map(e=>e.dataset.session)})',
       returnByValue: true,
     })
-    const shot = await cdp.call('Page.captureScreenshot', { format: 'png' })
-    writeFileSync(join(output, 'failure.png'), Buffer.from(shot.data, 'base64'))
+    await screenshot('failure.png')
   }
   throw error
 } finally {
-  writeFileSync(join(output, 'report.json'), JSON.stringify(report, null, 2))
-  writeFileSync(join(outputBase, 'report.json'), JSON.stringify(report, null, 2))
-  writeFileSync(join(output, 'browser.log'), log)
+  if (output) {
+    writeFileSync(join(output, 'report.json'), JSON.stringify(report, null, 2))
+    writeFileSync(join(outputBase, 'report.json'), JSON.stringify(report, null, 2))
+    writeFileSync(join(output, 'browser.log'), log)
+  }
   cdp?.close()
   child.kill('SIGTERM')
   await Promise.race([

@@ -92,7 +92,7 @@ function ManagerRow({
           aria-current={picked ? 'page' : undefined}
           onClick={() => {
             const next = { deviceId: manager.deviceId, sessionId: manager.threadId }
-            fromTree(next)
+            fromTree(next, 'tree')
             onSelect(next)
           }}
         >

@@ -20,6 +20,7 @@ import { type FrameChecks, judgeFrame } from './probe-sidebar-judge.mjs'
 import { installSidebarKit, type SidebarKit } from './probe-sidebar-kit.mjs'
 import { judgeNative, NATIVE_PARENT, NATIVE_TITLE, nativeSeen } from './probe-sidebar-native.mjs'
 import { judgeRestart, RESTART_SESSION, restartSeen } from './probe-sidebar-restart.mjs'
+import { checkSidebarSelection } from './probe-sidebar-selection.mjs'
 import type { SmokeHooks } from './smoke.mjs'
 
 /** 模拟核心里用的那个会话（示例数据里的标题）：本机、docs-site 项目，闲着的 */
@@ -208,6 +209,7 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
   const drag = await inPage(window, dragSeen)
   // 设备行菜单里的“设置”和“重启设备服务”：会打断本机的会话，排在最后
   const restart = await inPage(window, restartSeen, RESTART_SESSION)
+  const selection = await checkSidebarSelection(window)
 
   const shots = process.env.LITCH_SIDEBAR_SHOTS
   if (shots) await shoot(window, shots)
@@ -223,6 +225,7 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
       native,
       drag,
       restart,
+      selection,
     },
     [
       ...judgeTally(tally),

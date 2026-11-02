@@ -1397,6 +1397,7 @@ export const en: Record<MessageKey, Entry> = {
   'composer.pendingInclude': 'Include {n} pending messages',
   'composer.pendingOnly': 'Send this message only',
   'inputDelivery.queued': 'Queued',
+  'inputDelivery.message': 'Your message, {status}',
   'inputDelivery.sent': 'Sent',
   'inputDelivery.held': 'Stopped · pending',
   'inputDelivery.unknown': 'Delivery unconfirmed',
