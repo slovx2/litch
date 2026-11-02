@@ -268,19 +268,19 @@ try {
     `document.querySelector('[data-testid="manager-issue:D-12"]').scrollIntoView({block:'start'})`,
   )
   await shot('mobile-reopened-history')
-  // 经理把你忽略过的 D-16 重新打开：经理写的理由同样默认收起，展开可看
+  // 经理把你忽略过的 D-16 重新打开：经理写的理由默认展开（是请你重看的原因），可以收起
   const reopenedNote = '[data-testid="decision-reopened:D-16"]'
   await wait(reopenedNote)
   assert.ok(
     await read(
-      `(()=>{const e=document.querySelector('${reopenedNote}');return e.innerText.includes('经理重新打开')&&!e.innerText.includes('song-pc')})()`,
+      `(()=>{const e=document.querySelector('${reopenedNote}');return e.innerText.includes('经理重新打开')&&e.innerText.includes('song-pc')})()`,
     ),
-    '经理重开的理由默认收起',
+    '经理重开的理由默认展开',
   )
   await read(`document.querySelector('${reopenedNote} [role=button]').click()`)
   await until(
-    () => read(`document.querySelector('${reopenedNote}').innerText.includes('song-pc')`),
-    '展开看经理重开的理由',
+    () => read(`!document.querySelector('${reopenedNote}').innerText.includes('song-pc')`),
+    '收起经理重开的理由',
   )
   // 忽略 D-17：选填理由确认后标“已忽略”、不计待处理、默认收起；展开看理由，撤销忽略回到待定
   const pendingDecisions = () =>
@@ -290,6 +290,13 @@ try {
   const pendingBefore = await pendingDecisions()
   await tapId('decision-ignore:D-17')
   await wait('[data-testid="decision-ignore-form:D-17"]')
+  // 确认忽略时作答区收起，卡上只有“确认忽略”一个主按钮
+  assert.ok(
+    await read(
+      `!document.querySelector('[data-testid="decision-submit:D-17"]') && !document.querySelector('[data-testid="manager-issue:D-17"] textarea')`,
+    ),
+    '确认忽略时收起作答区',
+  )
   assert.ok(
     await read(
       `document.querySelector('[data-testid="decision-ignore-form:D-17"]').innerText.includes('经理会收到通知')`,
@@ -308,6 +315,13 @@ try {
     '忽略后标已忽略、收起',
   )
   await until(async () => (await pendingDecisions()) === pendingBefore - 1, '忽略后不计待处理')
+  // “展开详情”整行可点、不矮于 44
+  assert.ok(
+    await read(
+      `(()=>{const e=document.querySelector('[data-testid="decision-ignored-toggle:D-17"]');const card=document.querySelector('[data-testid="manager-issue:D-17"]').getBoundingClientRect();const r=e.getBoundingClientRect();return e.textContent.trim()==='▸ 展开详情'&&r.height>=44&&r.width>=card.width-48})()`,
+    ),
+    '已忽略卡片“展开详情”整行可点、高度够',
+  )
   await tapId('decision-ignored-toggle:D-17')
   await until(
     () =>
@@ -353,6 +367,12 @@ try {
     ),
     '忽略后说明草稿还在、不显示作答区',
   )
+  assert.ok(
+    await read(
+      `!!(document.querySelector('[data-testid="decision-ignored:D-17"]').compareDocumentPosition(document.querySelector('[data-testid="draft-ended:D-17"]')) & Node.DOCUMENT_POSITION_FOLLOWING)`,
+    ),
+    '先是“你已忽略”的记录，再是草稿说明',
+  )
   await tapId('draft-ended-view:D-17')
   await until(
     () =>
@@ -378,6 +398,15 @@ try {
   )
   await ignore17()
   await tapId('draft-ended-discard:D-17')
+  // 丢弃要再确认一次，写明不能恢复；确认前草稿还在
+  await wait('[data-testid="draft-ended-discarding:D-17"]')
+  assert.ok(
+    await read(
+      `document.querySelector('[data-testid="draft-ended-discarding:D-17"]').innerText.includes('丢弃后不能恢复') && !!document.querySelector('[data-testid="draft-ended:D-17"]')`,
+    ),
+    '丢弃前确认、写明不能恢复',
+  )
+  await tapId('draft-ended-discard-confirm:D-17')
   await until(
     () => read(`!document.querySelector('[data-testid="draft-ended:D-17"]')`),
     '丢弃后说明消失',

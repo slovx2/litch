@@ -1,6 +1,6 @@
 // 已答、已关闭、重新打开的决策：答复与关闭记录各占一块，与问题分开；没选中的选项默认收起。
 import { decisionAnswerParts } from '@litch/core'
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import type { ManagerDecisionView } from '../../../core/src/model-manager.mts'
 import type { ManagerActor, ManagerDecisionOption } from '../../../protocol/src/manager.mjs'
 import { useT } from '../app/appearance.ts'
@@ -61,15 +61,22 @@ export function DecisionAnswer({ decision }: { decision: ManagerDecisionView }) 
 }
 
 /**
- * 重新打开的决策：作答表单上方，重开前那次关闭的记录；经理把你忽略的重新打开时是经理写的理由。都默认收起。
+ * 重新打开的决策：作答表单上方。经理把你忽略的重新打开时写的理由默认展开（那是请你重看的原因）；
+ * 重开前那次关闭的记录只作历史，默认收起。
  */
 export function DecisionHistory({ decision }: { decision: ManagerDecisionView }) {
   const t = useT()
   const { previousClosed: closed, reopened } = decisionAnswerParts(decision)
+  const [reasonOpen, setReasonOpen] = useState(true)
   return (
     <>
       {reopened ? (
-        <details className="mg-closed-note" data-reopened>
+        <details
+          className="mg-closed-note"
+          data-reopened
+          open={reasonOpen}
+          onToggle={(event) => setReasonOpen(event.currentTarget.open)}
+        >
           <summary>
             <b>{t('manager.reopenedBy')}</b>
             <Stamp className="dim" at={reopened.at} />

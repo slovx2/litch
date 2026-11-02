@@ -171,6 +171,8 @@ export const enManager = {
   'manager.draftView': 'View draft',
   'manager.draftHide': 'Hide draft',
   'manager.draftDiscard': 'Discard',
+  'manager.draftDiscardNote': 'A discarded draft cannot be restored.',
+  'manager.draftDiscardConfirm': 'Discard draft',
   'manager.unsent': ({ n }) => (n === 1 ? '1 draft' : `${n} drafts`),
   'manager.clear': 'Clear drafts',
   'manager.submit': 'Submit to manager',

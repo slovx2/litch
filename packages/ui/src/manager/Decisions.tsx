@@ -297,6 +297,35 @@ export function Decisions({
             const stale =
               draft && decisionDraftState(board, decision.id, draft.revision).state === 'conflict'
             const chosen = decision.options.find((option) => option.id === draft?.optionId)
+            const endedNote =
+              ended && draft ? (
+                <DraftEnded
+                  text={t(
+                    decision.status === 'answered'
+                      ? 'manager.draftEnded.answered'
+                      : decision.status === 'ignored'
+                        ? 'manager.draftEnded.ignored'
+                        : 'manager.draftEnded.closed',
+                  )}
+                  disabled={busy}
+                  onDiscard={() => {
+                    const { [decision.id]: _discarded, ...rest } = drafts
+                    save(rest)
+                  }}
+                >
+                  {chosen ? (
+                    <p>
+                      <b>{chosen.label}</b>
+                    </p>
+                  ) : null}
+                  {draft.text.trim() ? <BoardMarkdown text={draft.text} /> : null}
+                  {draft.question?.trim() ? (
+                    <p>
+                      {t('manager.questionYou')} {draft.question}
+                    </p>
+                  ) : null}
+                </DraftEnded>
+              ) : null
             return (
               <article
                 className="mg-decision"
@@ -325,34 +354,6 @@ export function Decisions({
                   </div>
                 ) : null}
                 <PostHistory post={post} />
-                {ended && draft ? (
-                  <DraftEnded
-                    text={t(
-                      decision.status === 'answered'
-                        ? 'manager.draftEnded.answered'
-                        : decision.status === 'ignored'
-                          ? 'manager.draftEnded.ignored'
-                          : 'manager.draftEnded.closed',
-                    )}
-                    disabled={busy}
-                    onDiscard={() => {
-                      const { [decision.id]: _discarded, ...rest } = drafts
-                      save(rest)
-                    }}
-                  >
-                    {chosen ? (
-                      <p>
-                        <b>{chosen.label}</b>
-                      </p>
-                    ) : null}
-                    {draft.text.trim() ? <BoardMarkdown text={draft.text} /> : null}
-                    {draft.question?.trim() ? (
-                      <p>
-                        {t('manager.questionYou')} {draft.question}
-                      </p>
-                    ) : null}
-                  </DraftEnded>
-                ) : null}
                 <div>
                   {decision.status === 'open' ||
                   editing.has(decision.id) ||
@@ -536,6 +537,8 @@ export function Decisions({
                   ) : (
                     <>
                       <DecisionOutcome decision={decision} />
+                      {/* 先是答复、关闭或忽略的记录，再说留着的草稿怎么办 */}
+                      {endedNote}
                       {decision.answer || decision.status === 'answered' ? (
                         <button
                           type="button"
@@ -544,7 +547,9 @@ export function Decisions({
                           disabled={disabled || busy}
                           onClick={() => {
                             setEditing(new Set([...editing, decision.id]))
+                            // 对着当前这一版改：留着的旧草稿版本不算数
                             change(decision, {
+                              revision: decision.revision,
                               optionId: decision.answer?.optionId ?? null,
                               text: decision.answer?.text ?? '',
                             })

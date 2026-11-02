@@ -103,7 +103,7 @@ function Issue({
   suggestions: readonly SuggestionView[]
 }) {
   const t = useT()
-  const { c, font, radius } = useTheme()
+  const { c, font, radius, hit } = useTheme()
   const channel = useChannel()
   const device = useKey<DeviceView>(keys.device(manager.deviceId))
   const draftKey = JSON.stringify([manager.deviceId, manager.id, post.id])
@@ -334,7 +334,7 @@ function Issue({
           aria-expanded={shown}
           testID={`decision-ignored-toggle:${decision.id}`}
           onPress={() => setShown(!shown)}
-          style={styles.textLink}
+          style={[styles.detailsRow, { minHeight: hit }]}
         >
           <Text style={{ color: c.ink2 }}>
             {shown ? '▾' : '▸'} {t(shown ? 'mgr.ignored.hide' : 'mgr.ignored.show')}
@@ -388,10 +388,12 @@ function Issue({
               worktree={suggestion.proposal.worktree ?? false}
             />
           ) : null}
-          {endedNote}
+          {decision || request ? null : endedNote}
           {request ? (
             <>
               {request.response ? <Markdown text={request.response.text} /> : null}
+              {/* 先是你的回复，再说留着的草稿怎么办 */}
+              {endedNote}
               {request.status !== 'cancelled' &&
               !replyEnded &&
               (request.status === 'open' || editing) ? (
@@ -447,61 +449,66 @@ function Issue({
                   {/* 修改答案时照样显示原来的答复，选项上也预先选中原来那一项 */}
                   <DecisionAnswer decision={decision} />
                   <DecisionHistory decision={decision} />
-                  <View role="radiogroup" aria-label={decision.title} style={styles.options}>
-                    {decision.options.map((o) => (
-                      <OptionChoice
-                        key={o.id}
-                        decisionId={decision.id}
-                        option={o}
-                        recommend={decision.recommend === o.id}
-                        selected={choice === o.id}
-                        disabled={locked}
-                        onSelect={() => setChoice(choice === o.id ? null : o.id)}
+                  {/* 确认忽略时收起作答区：一张卡上只留“确认忽略”一个主按钮 */}
+                  {ignoring === null ? (
+                    <>
+                      <View role="radiogroup" aria-label={decision.title} style={styles.options}>
+                        {decision.options.map((o) => (
+                          <OptionChoice
+                            key={o.id}
+                            decisionId={decision.id}
+                            option={o}
+                            recommend={decision.recommend === o.id}
+                            selected={choice === o.id}
+                            disabled={locked}
+                            onSelect={() => setChoice(choice === o.id ? null : o.id)}
+                          />
+                        ))}
+                      </View>
+                      <TextInput
+                        accessibilityLabel={t('manager.answer')}
+                        placeholder={t('manager.answer')}
+                        placeholderTextColor={c.ink3}
+                        style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
+                        multiline
+                        value={reply}
+                        onChangeText={writeReply}
                       />
-                    ))}
-                  </View>
-                  <TextInput
-                    accessibilityLabel={t('manager.answer')}
-                    placeholder={t('manager.answer')}
-                    placeholderTextColor={c.ink3}
-                    style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
-                    multiline
-                    value={reply}
-                    onChangeText={writeReply}
-                  />
-                  <View style={styles.actions}>
-                    <Button
-                      testID={`decision-submit:${decision.id}`}
-                      disabled={locked || (!choice && !reply.trim())}
-                      label={t('manager.submit')}
-                      onPress={() => void submitDecision(choice)}
-                    />
-                    {decision.recommend && choice !== decision.recommend ? (
-                      <Button
-                        kind="plain"
-                        disabled={locked}
-                        label={t('manager.useRecommend')}
-                        onPress={() => setChoice(decision.recommend)}
-                      />
-                    ) : null}
-                    {choice ? (
-                      <Button
-                        kind="plain"
-                        disabled={locked}
-                        label={t('manager.clearOption')}
-                        onPress={() => setChoice(null)}
-                      />
-                    ) : null}
-                    {decisionButtons?.ignore && ignoring === null ? (
-                      <Button
-                        kind="plain"
-                        testID={`decision-ignore:${decision.id}`}
-                        disabled={locked}
-                        label={t('manager.ignore')}
-                        onPress={() => setIgnoring('')}
-                      />
-                    ) : null}
-                  </View>
+                      <View style={styles.actions}>
+                        <Button
+                          testID={`decision-submit:${decision.id}`}
+                          disabled={locked || (!choice && !reply.trim())}
+                          label={t('manager.submit')}
+                          onPress={() => void submitDecision(choice)}
+                        />
+                        {decision.recommend && choice !== decision.recommend ? (
+                          <Button
+                            kind="plain"
+                            disabled={locked}
+                            label={t('manager.useRecommend')}
+                            onPress={() => setChoice(decision.recommend)}
+                          />
+                        ) : null}
+                        {choice ? (
+                          <Button
+                            kind="plain"
+                            disabled={locked}
+                            label={t('manager.clearOption')}
+                            onPress={() => setChoice(null)}
+                          />
+                        ) : null}
+                        {decisionButtons?.ignore ? (
+                          <Button
+                            kind="plain"
+                            testID={`decision-ignore:${decision.id}`}
+                            disabled={locked}
+                            label={t('manager.ignore')}
+                            onPress={() => setIgnoring('')}
+                          />
+                        ) : null}
+                      </View>
+                    </>
+                  ) : null}
                   {decisionButtons?.ignore && ignoring !== null ? (
                     <View
                       testID={`decision-ignore-form:${decision.id}`}
@@ -549,7 +556,7 @@ function Issue({
                     </View>
                   ) : null}
                   {/* 按钮一直显示；不能点时写明为什么（离线、已结束由页顶那一行说） */}
-                  {!locked && !choice && !reply.trim() ? (
+                  {!locked && ignoring === null && !choice && !reply.trim() ? (
                     <Text testID={`decision-submit-why:${decision.id}`} style={{ color: c.ink2 }}>
                       {t(decision.options.length ? 'mgr.answer.empty' : 'mgr.answer.note')}
                     </Text>
@@ -569,12 +576,16 @@ function Issue({
               ) : (
                 <>
                   <DecisionOutcome decision={decision} />
+                  {/* 先是答复、关闭或忽略的记录，再说留着的草稿怎么办 */}
+                  {endedNote}
                   {decisionButtons?.edit ? (
                     <Button
                       kind="plain"
                       disabled={locked}
                       label={t('manager.editAnswer')}
                       onPress={() => {
+                        // 对着当前这一版改：留着的旧草稿版本不算数
+                        baseFile.write({ ...baseFile.read(), [draftKey]: decision.revision })
                         writeReply(decision.answer?.text ?? '')
                         setChoice(decision.answer?.optionId ?? null)
                         setEditing(true)
@@ -945,6 +956,7 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   status: { borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2 },
   textLink: { alignSelf: 'flex-start', paddingVertical: 8 },
+  detailsRow: { alignSelf: 'stretch', justifyContent: 'center' },
   askComposer: { gap: 10, borderLeftWidth: 2, padding: 12 },
   tabs: { flexDirection: 'row', borderBottomWidth: 1, paddingHorizontal: 8 },
   tab: {

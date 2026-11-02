@@ -19,6 +19,8 @@ export function DraftEndedNote({
   const t = useT()
   const { c, radius } = useTheme()
   const [open, setOpen] = useState(false)
+  /** 点了“丢弃”，等再确认一次：丢了不能恢复 */
+  const [discarding, setDiscarding] = useState(false)
   return (
     <View
       testID={`draft-ended:${id}`}
@@ -36,13 +38,28 @@ export function DraftEndedNote({
           label={t(open ? 'manager.draftHide' : 'manager.draftView')}
           onPress={() => setOpen(!open)}
         />
-        <Button
-          kind="plain"
-          testID={`draft-ended-discard:${id}`}
-          label={t('manager.draftDiscard')}
-          onPress={onDiscard}
-        />
+        {discarding ? null : (
+          <Button
+            kind="plain"
+            testID={`draft-ended-discard:${id}`}
+            label={t('manager.draftDiscard')}
+            onPress={() => setDiscarding(true)}
+          />
+        )}
       </View>
+      {discarding ? (
+        <View testID={`draft-ended-discarding:${id}`} style={styles.discard}>
+          <Text style={{ color: c.ink2 }}>{t('manager.draftDiscardNote')}</Text>
+          <View style={styles.actions}>
+            <Button kind="plain" label={t('manager.cancel')} onPress={() => setDiscarding(false)} />
+            <Button
+              testID={`draft-ended-discard-confirm:${id}`}
+              label={t('manager.draftDiscardConfirm')}
+              onPress={onDiscard}
+            />
+          </View>
+        </View>
+      ) : null}
       {open ? (
         <View
           testID={`draft-ended-preview:${id}`}
@@ -59,4 +76,5 @@ const styles = StyleSheet.create({
   note: { borderLeftWidth: 3, padding: 12, gap: 8 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   preview: { borderTopWidth: 1, paddingTop: 8, gap: 6 },
+  discard: { gap: 8 },
 })

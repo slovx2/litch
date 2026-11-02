@@ -76,8 +76,8 @@ export function DecisionAnswer({ decision }: { decision: ManagerDecision }) {
 }
 
 /**
- * 关闭记录。closed：已关闭；ignored：你忽略的（理由可空）。重新打开的决策只作历史，默认收起展开看原因：
- * previous 是重开前那次关闭，reopened 是经理把你忽略的重新打开时写的理由。
+ * 关闭记录。closed：已关闭；ignored：你忽略的（理由可空）。重新打开的决策可收起：
+ * previous 是重开前那次关闭（默认收起），reopened 是经理把你忽略的重新打开时写的理由（默认展开）。
  */
 function ClosedNote({
   decisionId,
@@ -91,7 +91,8 @@ function ClosedNote({
   const t = useT()
   const { c, radius, hit } = useTheme()
   const previous = kind === 'previous' || kind === 'reopened'
-  const [open, setOpen] = useState(!previous)
+  // 经理重开的理由是请你重看的原因，默认展开；上次关闭只作历史，默认收起
+  const [open, setOpen] = useState(kind !== 'previous')
   const who = { who: t(`manager.closer.${closerKey(closed.by)}`) }
   const head = (
     <Text style={{ color: c.ink2 }}>

@@ -153,6 +153,8 @@ export const zhManager = {
   'manager.draftView': '查看草稿',
   'manager.draftHide': '收起草稿',
   'manager.draftDiscard': '丢弃',
+  'manager.draftDiscardNote': '丢弃后不能恢复。',
+  'manager.draftDiscardConfirm': '确认丢弃',
   'manager.unsent': '{n} 项草稿，尚未提交',
   'manager.clear': '清除草稿',
   'manager.submit': '提交给经理',

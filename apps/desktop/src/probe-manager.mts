@@ -5,7 +5,7 @@ export interface ManagerSeen {
   answeredSplit: boolean
   issueOrder: boolean
   previousClosed: boolean
-  /** 经理重开用户忽略过的决策：收起显示经理写的理由 */
+  /** 经理重开用户忽略过的决策：默认展开显示经理写的理由（上次关闭仍收起） */
   managerReopened: boolean
   /** 忽略：填选填理由确认，离开待定、不计待处理，单独一组显示理由；撤销忽略回到待定 */
   ignored: boolean
@@ -436,7 +436,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const reopenedNote = one<HTMLDetailsElement>('[data-decision="D-16"] [data-reopened]')
   const managerReopened = Boolean(
     reopenedNote &&
-      !reopenedNote.open &&
+      reopenedNote.open &&
       reopenedNote.querySelector('summary')?.textContent?.includes('经理重新打开') &&
       reopenedNote.textContent?.includes('song-pc'),
   )
@@ -516,6 +516,11 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const note = await ignoreD17()
   const endedCounts = { bar: sendBar(), side: sideDrafts() }
   const noteText = note.textContent ?? ''
+  // 先是“你已忽略”的记录，再是草稿说明
+  const ignoredRecord = one('[data-decision="D-17"] [data-ignored]')
+  const recordFirst = Boolean(
+    ignoredRecord && ignoredRecord.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING,
+  )
   await click('[data-decision="D-17"] [data-act="manager-draft-view"]')
   const preview = (
     await until('查看草稿', () => one('[data-decision="D-17"] [data-draft-preview]'))
@@ -535,6 +540,13 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const revivedSide = sideDrafts()
   await ignoreD17()
   await click('[data-decision="D-17"] [data-act="manager-draft-discard"]')
+  // 丢弃要再确认一次，写明不能恢复；确认前草稿还在
+  const discardAsk =
+    (
+      await until('丢弃的确认', () => one('[data-decision="D-17"] [data-draft-discard]'))
+    ).textContent?.includes('丢弃后不能恢复') === true &&
+    Boolean(one('[data-decision="D-17"] [data-draft-ended]'))
+  await click('[data-decision="D-17"] [data-act="manager-draft-discard-confirm"]')
   await until('丢弃后说明消失', () => !one('[data-decision="D-17"] [data-draft-ended]'))
   await click('[data-decision="D-17"] [data-act="manager-unignore"]')
   const discarded = Boolean(
@@ -552,6 +564,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     noteText.includes('草稿还在') &&
     Boolean(preview?.includes('先放着的草稿')) &&
     formHidden &&
+    recordFirst &&
+    discardAsk &&
     revived &&
     revivedSide === '1 项草稿' &&
     discarded
@@ -562,6 +576,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     noteText,
     preview,
     formHidden,
+    recordFirst,
+    discardAsk,
     revived,
     revivedSide,
     discarded,
@@ -1081,7 +1097,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
     issueOrder:
       '控制台没有默认最新优先，或切换排序后顺序与本机记录不对，或排序不在列表头、决策里仍有待处理优先',
     previousClosed: '重新打开的决策没有收起显示上次关闭的原因',
-    managerReopened: '经理重开的决策没有收起显示经理写的理由',
+    managerReopened: '经理重开的决策没有默认展开显示经理写的理由',
     endedDraft: `决策不再待定后草稿仍计数或可提交、卡片没有查看与丢弃，或重开后草稿没有恢复：${seen.endedDraftDetail}`,
     ignored: `忽略决策没有离开待定、单独成组显示理由，或撤销忽略没有回到待定：${seen.ignoreDetail}`,
     consoleReports: '控制台报告与帖子追问未完成',

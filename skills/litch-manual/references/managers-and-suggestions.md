@@ -268,7 +268,7 @@ the running mark a single ring.
 
 修改已提交的答案或请求回复时，可以点“取消修改”放弃当前修改，其他草稿不受影响；
 取消答案修改也保留同一决策的追问草稿。追问入口旁的草稿标记表示有尚未提交的追问。
-写了草稿还没提交，议题却在别处结束了（决策被经理记下答复、关闭、忽略或撤回，请你做在别处交付、回复或被取消，建议已处理），草稿不删，但不再计入底部“N 项草稿，尚未提交”和侧栏的草稿数，也不会随“提交给经理”发出。卡片上写明草稿还在，可“查看草稿”或“丢弃”。决策重新打开（含撤销忽略）且问题本身没改时，草稿自动恢复、可直接提交；问题改过的仍要先确认。手机相同。
+写了草稿还没提交，议题却在别处结束了（决策被经理记下答复、关闭、忽略或撤回，请你做在别处交付、回复或被取消，建议已处理），草稿不删，但不再计入底部“N 项草稿，尚未提交”和侧栏的草稿数，也不会随“提交给经理”发出。卡片上先是答复、关闭或忽略的记录，再写明草稿还在，可“查看草稿”或“丢弃”；丢弃要再点一次“确认丢弃”，丢了不能恢复。决策重新打开（含撤销忽略）且问题本身没改时，草稿自动恢复、可直接提交；问题改过的仍要先确认。手机相同。
 原帖操作与追问时间线在同一张议题卡中，追问方式可切换，记录标明发言人。
 动态时间沿用消息时间格式，非当天显示星期或日期，悬停查看完整日期与时刻。
 
@@ -328,9 +328,9 @@ use the same accessible name and placeholder. Related targets use link color and
 
 ### 忽略决策
 
-不想答的待定决策可以点“忽略”，理由选填。忽略后它不计入待处理，不再提醒，也不唤醒经理；经理在下一个回合会得知你忽略了哪一项（经理正在运行时直接插入）。桌面把忽略的决策放在“已忽略”一栏，手机在列表里标“已忽略”并默认收起，展开可看理由。点“撤销忽略”回到待定。
+不想答的待定决策可以点“忽略”，理由选填。忽略后它不计入待处理，不再提醒，也不唤醒经理；经理在下一个回合会得知你忽略了哪一项（经理正在运行时直接插入）。桌面把忽略的决策放在“已忽略”一栏，手机在列表里标“已忽略”并默认收起，点“展开详情”可看理由。手机上点“忽略”后作答区先收起，只留确认忽略那一块。点“撤销忽略”回到待定。
 
-“忽略”是你不处理这个问题；“已关闭”是经理认为问题不在了（失效或撤回）。经理不能直接把忽略的决策记成已答复，只能在情况有变、确实需要你再看时写明理由重新打开；这时卡片上多一块收起的“经理重新打开”，点开可看理由。
+“忽略”是你不处理这个问题；“已关闭”是经理认为问题不在了（失效或撤回）。经理不能直接把忽略的决策记成已答复，只能在情况有变、确实需要你再看时写明理由重新打开；这时卡片上多一块默认展开的“经理重新打开”写着理由（可收起）；“上次关闭”仍默认收起。
 
 Console lists default to **Newest first** by issue creation time. Switch to **Oldest first** or
 **To handle first** (open decisions, open For you requests, reviewed suggestions and unread reports
@@ -354,15 +354,17 @@ option is preselected.
 If an issue ends elsewhere while you still have an unsent draft (the decision is answered, closed,
 ignored or withdrawn; the request is delivered, replied to or cancelled elsewhere; the suggestion is
 handled), the draft is kept but no longer counts toward the unsent bar or the sidebar draft count and
-is not sent with **Submit to manager**. The card says the draft is still there, with **View draft** and
-**Discard**. If the decision is reopened (including undoing an ignore) and the question itself did not
+is not sent with **Submit to manager**. After the answer, closure or ignore record, the card says the draft is still
+there, with **View draft** and **Discard**; discarding asks once more (**Discard draft**) because it
+cannot be undone. If the decision is reopened (including undoing an ignore) and the question itself did not
 change, the draft comes back and can be submitted directly. Phone behaves the same.
 
 **Ignore** an open decision you do not want to answer; a reason is optional. Ignored decisions no
 longer count as pending, send no reminders and do not wake the manager; the manager learns about it
 in its next turn (or immediately if it is running). Desktop lists them under **Ignored**; on phone
-they are labeled **Ignored** and collapsed until opened. **Undo ignore** makes the decision open
+they are labeled **Ignored** and collapsed until you tap **Show details**; tapping **Ignore** on
+phone hides the answer area until you confirm or cancel. **Undo ignore** makes the decision open
 again. Ignoring means you are not handling the question; **Closed** means the manager decided the
 question no longer applies. The manager cannot record an answer for an ignored decision; it can only
-reopen it with a reason when things have changed, which then shows as a collapsed **Reopened by the
-manager** block.
+reopen it with a reason when things have changed, which then shows as a **Reopened by the manager**
+block, expanded by default; **Previously closed** stays collapsed.
