@@ -14,6 +14,9 @@ export interface TasksProbe {
   sections: string[]
   rows: number
   unsupported: string
+  /** 列表头：每节一行“下次 / 上次”、和行里的栏对齐，行里不再重复写；没看过的数是标题旁的徽标，不混在说明里 */
+  columns: string
+  headBadge: string
   /** 等人处理：列表那一行的记号、详情里运行那一行的记号、那条审批说的话；自动拒绝了的那条说的话 */
   askingRow: boolean
   askingRun: boolean
@@ -95,6 +98,21 @@ export async function tasksProbe(name: string): Promise<TasksProbe> {
   )
   const rows = all('.tk-row').length
   const unsupported = text(one('.tk-dev[data-device="nas"] .arch-note'))
+  const columns = all('.tk-list')
+    .map((list) => {
+      const heads = all('.tk-cols', list)
+      const next = one('.tk-col-next', list)?.getBoundingClientRect()
+      const cell = one('.tk-row-next', list)?.getBoundingClientRect()
+      // 行里不再写栏名，读屏念的整句里带着
+      const hidden =
+        all('.tk-row-label', list).length === 0 &&
+        all('.tk-row-btn', list).every((row) =>
+          /下次 .+，上次 .+/.test(row.getAttribute('aria-label') ?? ''),
+        )
+      return `${heads.length}:${text(heads[0])}:${next && cell ? Math.round(next.left - cell.left) : 'x'}:${hidden}`
+    })
+    .join(' ')
+  const headBadge = `${text(one('[data-tasks="list"] h1 .tk-head-unread'))}|${text(one('[data-tasks="list"] .arch-head p'))}`
 
   // 等人处理的和自动拒绝了的
   const openTask = async (id: string) => {
@@ -196,6 +214,8 @@ export async function tasksProbe(name: string): Promise<TasksProbe> {
     sections,
     rows,
     unsupported,
+    columns,
+    headBadge,
     askingRow,
     askingRun,
     askWaiting,
@@ -231,6 +251,15 @@ export function judgeTasks(seen: TasksProbe, name: string): string[] {
   )
   must(seen.rows >= 7, `列表只有 ${seen.rows} 行`)
   must(seen.unsupported.includes('不支持'), `不支持的那台没说清楚：“${seen.unsupported}”`)
+  must(
+    seen.columns.split(' ').length >= 2 &&
+      seen.columns.split(' ').every((entry) => entry === '1:下次上次:0:true'),
+    `每节的列表头不是一行“下次 / 上次”、没和行对齐，或行里仍看得到栏名：${seen.columns}`,
+  )
+  must(
+    /^\d+\|/.test(seen.headBadge) && !seen.headBadge.includes('未读'),
+    `没看过的运行数不是标题旁的徽标，或仍写在说明里：${seen.headBadge}`,
+  )
   must(seen.askingRow, '回合停在审批上的任务，列表那一行没标“等你处理”')
   must(seen.askingRun, '回合停在审批上的那次运行没标“等你处理”')
   must(

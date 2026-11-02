@@ -322,6 +322,20 @@
 .mach-mark:hover {
   filter: brightness(1.05);
 }
+/* 宽窗口写整句；窄了（标题栏要让给标题和导航）只留图标加数字 */
+.mach-mark-short {
+  display: none;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 1100px) {
+  .mach-mark:has(.mach-mark-short) .mach-mark-text {
+    display: none;
+  }
+  .mach-mark-short {
+    display: inline;
+  }
+}
 .mach-mark[aria-expanded="true"] {
   box-shadow: 0 0 0 1px currentColor;
 }

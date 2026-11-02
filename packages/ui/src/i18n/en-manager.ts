@@ -5,6 +5,7 @@ import type { Entry } from './types.ts'
 export const enManager = {
   'manager.postAskClose': 'Hide question',
   'manager.questionManagerPlaceholder': 'Ask the manager a follow-up question…',
+  'manager.questionDraftPlaceholder': 'Ask the manager… (submitted with your other answers)',
   'manager.questionTemporaryPlaceholder': 'Ask the temporary assistant…',
   'manager.relationKind.issue': 'Issue',
   'manager.relationKind.item': 'Manager item',
@@ -73,7 +74,6 @@ export const enManager = {
   'manager.showBoard': 'Show board',
   'manager.resizeBoard': 'Resize board',
   'manager.editAnswer': 'Edit answer',
-  'manager.questionBackground': 'Ask for context',
   'manager.questionNote':
     'This chat can update the current decision. Changes reach the manager on its next turn.',
   'manager.questionLight':

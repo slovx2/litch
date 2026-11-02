@@ -111,6 +111,12 @@ export function MachineMarker() {
       >
         <Icon name="machine" small />
         <span className="mach-mark-text">{parts.join(' · ')}</span>
+        {/* 窄窗口只留数字（命令数 · 待处理数），整句在悬停提示和读屏名称里 */}
+        {facts.running > 0 || facts.pending > 0 ? (
+          <span className="mach-mark-short" aria-hidden="true">
+            {[facts.running, facts.pending].filter((n) => n > 0).join(' · ')}
+          </span>
+        ) : null}
       </button>
       {open && activity ? (
         // 键盘事件是从里面的按钮冒上来的（上下键在按钮之间走，Esc 收起）

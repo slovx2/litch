@@ -218,8 +218,8 @@ export function PostDiscussion({
         title={old ? t('manager.oldDeviceShort') : undefined}
         onClick={() => setOpen(!open)}
       >
-        <span aria-hidden="true">{open && !old ? '▾' : '▸'}</span>{' '}
-        {t(open && !old ? 'manager.postAskClose' : 'manager.postAsk')}
+        {/* 展开收起只看箭头和 aria-expanded，文字一直是“追问”：下面不再另写标签 */}
+        <span aria-hidden="true">{open && !old ? '▾' : '▸'}</span> {t('manager.postAsk')}
         {value.trim() && !ended ? ` · ${t('manager.draft')}` : ''}
       </button>
       {old ? (
@@ -250,16 +250,16 @@ export function PostDiscussion({
               </button>
             ) : null}
           </fieldset>
-          <label className="mg-post-label" htmlFor={inputId}>
-            {t('manager.postAsk')}
-          </label>
           <textarea
             id={inputId}
             className="req-input mg-post-input"
+            // 决策上的追问随“提交给经理”一起交：说明压进占位，不另起一行
             placeholder={t(
-              mode === 'manager'
-                ? 'manager.questionManagerPlaceholder'
-                : 'manager.questionTemporaryPlaceholder',
+              mode === 'temporary'
+                ? 'manager.questionTemporaryPlaceholder'
+                : onQuestion
+                  ? 'manager.questionDraftPlaceholder'
+                  : 'manager.questionManagerPlaceholder',
             )}
             rows={3}
             maxLength={20000}
@@ -269,9 +269,7 @@ export function PostDiscussion({
             data-act="manager-question-input"
             onChange={(e) => change(e.target.value)}
           />
-          {mode === 'manager' && onQuestion ? (
-            <p className="dim">{t('manager.questionDraftNote')}</p>
-          ) : (
+          {mode === 'manager' && onQuestion ? null : (
             <button
               type="button"
               className="btn"

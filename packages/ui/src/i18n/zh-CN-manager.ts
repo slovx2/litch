@@ -5,6 +5,7 @@ import type { Entry } from './types.ts'
 export const zhManager = {
   'manager.postAskClose': '收起追问',
   'manager.questionManagerPlaceholder': '向经理追问…',
+  'manager.questionDraftPlaceholder': '向经理追问…（与其他回答一起提交）',
   'manager.questionTemporaryPlaceholder': '向临时助手提问…',
   'manager.relationKind.issue': '议题',
   'manager.relationKind.item': '经理事项',
@@ -72,7 +73,6 @@ export const zhManager = {
   'manager.showBoard': '展开看板',
   'manager.resizeBoard': '调整看板宽度',
   'manager.editAnswer': '修改答案',
-  'manager.questionBackground': '先问背景',
   'manager.questionNote': '临时对话可更新当前决策；变更在经理下一回合送达。',
   'manager.questionLight': '当前问答仅有看板背景，不包含经理的对话记录。',
   'manager.questionRefreshed': '经理之后有了新进展，这次按最新的状态答。',

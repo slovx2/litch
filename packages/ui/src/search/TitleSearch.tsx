@@ -11,7 +11,7 @@ import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { nameOf } from '../app/device.ts'
 import { ago } from '../app/format.ts'
-import { Close } from '../app/icons.tsx'
+import { Close, Icon } from '../app/icons.tsx'
 import { currentPlatform } from '../app/platform.ts'
 import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { onSearch } from './actions.ts'
@@ -224,13 +224,16 @@ function TitleDialog({
     >
       <header className="modal-head">
         <h2 id="title-search-heading">{t('search.titles')}</h2>
+        {/* 不常用：一个图标，悬停写明做什么 */}
         <button
           type="button"
-          className="btn ghost"
+          className="ibtn search-refresh"
           disabled={refreshing}
+          aria-label={t(refreshing ? 'search.refreshing' : 'search.refresh')}
+          title={t(refreshing ? 'search.refreshing' : 'search.refresh')}
           onClick={() => setAttempt((n) => n + 1)}
         >
-          {t(refreshing ? 'search.refreshing' : 'search.refresh')}
+          <Icon name="reload" />
         </button>
         <button
           type="button"
@@ -289,24 +292,6 @@ function TitleDialog({
             )}
           </select>
         </div>
-        <div className="search-coverage" role="status">
-          {devices.map((device) => {
-            if (!device || (chosen && device.id !== chosen)) return null
-            const message =
-              device.connection !== 'online'
-                ? t('search.offline')
-                : failed.has(device.id)
-                  ? t('search.refreshFailed')
-                  : results[device.id] && !results[device.id]?.complete
-                    ? t('search.incomplete')
-                    : ''
-            return message ? (
-              <span key={device.id}>
-                {t.text(device.name)} · {message}
-              </span>
-            ) : null
-          })}
-        </div>
         <div
           className="search-results"
           id="title-search-results"
@@ -349,6 +334,25 @@ function TitleDialog({
         {Object.values(results).some((result) => result.hasMore) ? (
           <p>{t('search.titleLimit')}</p>
         ) : null}
+        {/* 离线、没读全、读取失败：写在结果后面，不在输入框下面单占一行 */}
+        <div className="search-coverage" role="status">
+          {devices.map((device) => {
+            if (!device || (chosen && device.id !== chosen)) return null
+            const message =
+              device.connection !== 'online'
+                ? t('search.offline')
+                : failed.has(device.id)
+                  ? t('search.refreshFailed')
+                  : results[device.id] && !results[device.id]?.complete
+                    ? t('search.incomplete')
+                    : ''
+            return message ? (
+              <span key={device.id}>
+                {t.text(device.name)} · {message}
+              </span>
+            ) : null
+          })}
+        </div>
       </div>
     </dialog>
   )

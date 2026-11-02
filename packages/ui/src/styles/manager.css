@@ -952,9 +952,6 @@
   border-left: 2px solid var(--line-3);
   background: var(--sunken);
 }
-.mg-post-label {
-  font-weight: 600;
-}
 .mg-post-compose .mg-post-input {
   background: var(--raised);
 }

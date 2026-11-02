@@ -128,7 +128,10 @@ export function Relations({
       {entries.map(([group, targets]) =>
         targets.length ? (
           <section key={group}>
-            <b>{t(`manager.relation.${group}`)}</b>
+            {/* 只有一种关系时不写分组名：上面的“关联 N”已经说了 */}
+            {entries.filter(([, list]) => list.length).length > 1 ? (
+              <b>{t(`manager.relation.${group}`)}</b>
+            ) : null}
             <div>
               {targets.map((target) => (
                 <button

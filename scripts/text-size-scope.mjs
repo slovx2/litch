@@ -38,7 +38,7 @@ const following = {
 const fixed = {
   'base.css': /^(harness-off-label)$/,
   'shell.css':
-    /^(crumb|sb-btn|sb-btn-ic|sb-look-row|sb-look-more|sb-filter-on|sb-link|info-card|info-head|toast)$/,
+    /^(crumb|sb-btn|sb-btn-ic|sb-look-row|sb-look-more|sb-filter-on|sb-link|info-card|info-head|toast|page-empty)$/,
   'organize.css':
     /^(head-rename|head-count|head-toggle|head-more|band-empty|focus-back|focus-device)$/,
   'devices.css':

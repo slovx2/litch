@@ -1,5 +1,5 @@
 import { type SearchHit, searchQuery } from '@litch/core'
-import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
+import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { Close, Icon } from '../../app/icons.tsx'
 import { useServices } from '../../app/services.tsx'
@@ -36,6 +36,18 @@ export function SearchPanel({
   const [anchor, setAnchor] = useState(() => viewportAnchor(root.current))
   const [missing, setMissing] = useState(false)
   const input = useRef<HTMLInputElement>(null)
+  const float = useRef<HTMLDivElement>(null)
+  // 内容最上面留出的空跟着查找条的实际高度走（窄的对话区里它会折成两行），最早的几行才不会被盖住
+  useLayoutEffect(() => {
+    const bar = float.current
+    if (!bar) return
+    const measure = () =>
+      root.current?.style.setProperty('--find-room', `${bar.offsetTop + bar.offsetHeight + 8}px`)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(bar)
+    return () => observer.disconnect()
+  }, [root])
   const repaintCurrent = useRef<(() => void) | null>(null)
   const lastPosition = useRef('')
   const { result, busy, failed, searchable } = useSearch(deviceId, sessionId, query, skip, anchor)
@@ -200,85 +212,88 @@ export function SearchPanel({
       data-search-bar=""
       data-search-session={JSON.stringify([deviceId, sessionId])}
     >
-      <input
-        ref={input}
-        type="text"
-        value={query}
-        maxLength={256}
-        aria-label={t('search.query')}
-        placeholder={t('search.inConversation')}
-        onChange={(e) => {
-          setAnchor(viewportAnchor(root.current, e.target.value))
-          setQuery(e.target.value)
-          setSelected('')
-        }}
-        onKeyDown={(e) => {
-          if (e.nativeEvent.isComposing) return
-          if (e.key === 'Escape') {
-            e.stopPropagation()
-            onClose()
+      {/* 浮在对话区右上角的一条，不占一整行、不把内容往下推 */}
+      <div className="search-float" ref={float}>
+        <input
+          ref={input}
+          type="text"
+          value={query}
+          maxLength={256}
+          aria-label={t('search.query')}
+          placeholder={t('search.inConversation')}
+          onChange={(e) => {
+            setAnchor(viewportAnchor(root.current, e.target.value))
+            setQuery(e.target.value)
+            setSelected('')
+          }}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return
+            if (e.key === 'Escape') {
+              e.stopPropagation()
+              onClose()
+            }
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              move(e.shiftKey ? -1 : 1)
+            }
+          }}
+        />
+        <span
+          className="search-count"
+          role="status"
+          aria-live="polite"
+          aria-label={
+            result.count && !busy
+              ? t('search.countSpoken', { current: at + 1, total: result.hits.length })
+              : undefined
           }
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            move(e.shiftKey ? -1 : 1)
-          }
-        }}
-      />
-      <span
-        className="search-count"
-        role="status"
-        aria-live="polite"
-        aria-label={
-          result.count && !busy
-            ? t('search.countSpoken', { current: at + 1, total: result.hits.length })
-            : undefined
-        }
-      >
-        {failed
-          ? t('search.failed')
-          : busy
-            ? t('search.busy')
-            : query
-              ? result.count
-                ? t('search.count', { current: at + 1, total: result.hits.length })
-                : t('search.empty')
-              : ''}
-      </span>
-      <button
-        type="button"
-        disabled={!hit}
-        onClick={() => move(-1)}
-        aria-label={t('search.previous')}
-        title={t('search.previous')}
-      >
-        <Icon name="up" />
-      </button>
-      <button
-        type="button"
-        disabled={!hit}
-        onClick={() => move(1)}
-        aria-label={t('search.next')}
-        title={t('search.next')}
-      >
-        <Icon name="down" />
-      </button>
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label={t('search.close')}
-        title={`${t('search.close')} (Esc)`}
-      >
-        <Close />
-      </button>
-      {missing || result.count > result.hits.length ? (
-        <span className="search-note">
-          {missing
-            ? t('search.changed')
-            : result.count > result.hits.length
-              ? t('search.capped', { count: result.hits.length })
-              : null}
+        >
+          {failed
+            ? t('search.failed')
+            : busy
+              ? t('search.busy')
+              : query
+                ? result.count
+                  ? t('search.count', { current: at + 1, total: result.hits.length })
+                  : t('search.empty')
+                : ''}
         </span>
-      ) : null}
+        <button
+          type="button"
+          disabled={!hit}
+          onClick={() => move(-1)}
+          aria-label={t('search.previous')}
+          title={t('search.previous')}
+        >
+          <Icon name="up" />
+        </button>
+        <button
+          type="button"
+          disabled={!hit}
+          onClick={() => move(1)}
+          aria-label={t('search.next')}
+          title={t('search.next')}
+        >
+          <Icon name="down" />
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t('search.close')}
+          title={`${t('search.close')} (Esc)`}
+        >
+          <Close />
+        </button>
+        {missing || result.count > result.hits.length ? (
+          <span className="search-note">
+            {missing
+              ? t('search.changed')
+              : result.count > result.hits.length
+                ? t('search.capped', { count: result.hits.length })
+                : null}
+          </span>
+        ) : null}
+      </div>
     </section>
   )
 }

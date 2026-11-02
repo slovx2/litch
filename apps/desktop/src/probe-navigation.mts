@@ -101,6 +101,25 @@ export async function navigationProbe() {
     const before = picked()
     must(modal.dataset.pageWindow === kind, `${kind} 未进入模态层`)
     must(modal.contains(document.activeElement), `${kind} 打开后焦点未进入窗口`)
+    // 设置固定大小（左右两栏切换不跳）；建议、定时任务按内容定高
+    must(modal.hasAttribute('data-fit') === (kind !== 'settings'), `${kind} 窗口定高方式不对`)
+    if (kind === 'settings')
+      must(
+        document.activeElement?.getAttribute('aria-current') === 'page',
+        '设置打开后初始焦点不在当前分区',
+      )
+    if (kind === 'suggestions' && modal.querySelector('.page-empty'))
+      must(
+        modal.getBoundingClientRect().height <= 300 &&
+          !modal.querySelector('h1 .pill') &&
+          (() => {
+            // 空状态在窗口里居中
+            const box = modal.getBoundingClientRect()
+            const empty = modal.querySelector('.page-empty p')?.getBoundingClientRect()
+            return !!empty && Math.abs(empty.x + empty.width / 2 - (box.x + box.width / 2)) <= 2
+          })(),
+        '没有建议时窗口没收矮、空状态没居中，或标题旁仍写 0',
+      )
     one<HTMLElement>('.sb-link.new')?.focus()
     must(modal.contains(document.activeElement), `${kind} 允许焦点移到背景`)
     await back()
@@ -120,6 +139,32 @@ export async function navigationProbe() {
     await until(() => !one('.page-window'))
     must(picked() === before, `${kind} 关闭后丢失主会话`)
     must(document.activeElement === opener, `${kind} 关闭后未恢复打开前的焦点`)
+  }
+  // 鼠标打开设置：初始焦点不画框，按了键再画；键盘打开照常画
+  {
+    const opener = one<HTMLElement>('.sb-settings')!
+    opener.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    opener.click()
+    await until(() => one('.page-window:modal'))
+    const modal = one<HTMLDialogElement>('.page-window')!
+    const active = document.activeElement as HTMLElement
+    must(
+      modal.hasAttribute('data-quiet-focus') &&
+        active.getAttribute('aria-current') === 'page' &&
+        getComputedStyle(active).outlineStyle === 'none',
+      '鼠标打开设置后初始焦点仍画了焦点框，或焦点不在当前分区',
+    )
+    await key('ArrowDown')
+    must(!modal.hasAttribute('data-quiet-focus'), '鼠标打开后按键没有恢复焦点框')
+    await key('Escape')
+    await until(() => !one('.page-window'))
+    opener.focus()
+    await key('Shift')
+    opener.click()
+    await until(() => one('.page-window:modal'))
+    must(!one('.page-window')?.hasAttribute('data-quiet-focus'), '键盘打开设置时去掉了焦点框')
+    await key('Escape')
+    await until(() => !one('.page-window'))
   }
   // 模态开关不入历史：仍能一步回到 a。
   await back()
@@ -162,6 +207,22 @@ export async function navigationProbe() {
   await click('.sb-more > button')
   const option = one<HTMLButtonElement>('[data-option="autoLocate"]')!
   must(option.getAttribute('aria-checked') === 'true', '自动定位默认未打开')
+  // “更多”菜单：标题和说明左对齐，紧跟勾选列（量文字的位置，不看样式）
+  for (const item of document.querySelectorAll<HTMLElement>('.sb-more .pick-opt')) {
+    const mark = item.querySelector('.pick-mark')!.getBoundingClientRect()
+    const title = document.createRange()
+    title.selectNodeContents(item.querySelector('b')!)
+    const text = [...title.getClientRects()].filter((r) => r.left >= mark.right - 1)
+    const left = Math.min(...text.map((r) => r.left))
+    const noteNode = item.querySelector(':scope > span')
+    const noteRange = document.createRange()
+    if (noteNode) noteRange.selectNodeContents(noteNode)
+    const note = noteNode ? Math.min(...[...noteRange.getClientRects()].map((r) => r.left)) : null
+    must(
+      left - mark.right <= 8 && (note === null || Math.abs(note - left) <= 2),
+      `“更多”菜单的 ${item.dataset.option} 没有紧跟勾选列左对齐`,
+    )
+  }
   option.click()
   await sleep()
   await click('.sb-more > button')

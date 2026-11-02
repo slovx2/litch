@@ -1,13 +1,35 @@
-/* 搜索范围使用专用皮肤色，当前项仍使用强调色。 */
+/* 对话内查找：在流里不占高度，里面那一条浮在对话区右上角（像浏览器和编辑器的查找条），不推内容。
+   搜索范围使用专用皮肤色，当前项仍使用强调色。 */
 .search-bar {
+  position: relative;
+  z-index: 5;
+  height: 0;
+  flex-shrink: 0;
+}
+/* 查找时，内容最上面多留出查找条的高度：最早的那几行也能滚到它下面，不被盖住。
+   滚动区贴底排列，这段空只在翻到最顶上时看得到 */
+.tr-scroll[data-find-room] > .tr {
+  padding-top: var(--find-room, 60px);
+}
+.search-float {
+  position: absolute;
+  top: 8px;
+  right: var(--tr-gut);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 8px var(--tr-gut);
+  gap: 2px 4px;
+  max-width: calc(100% - 2 * var(--tr-gut));
+  padding: 4px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
   background: var(--panel);
-  border-bottom: 1px solid var(--line-2);
-  flex-shrink: 0;
+  box-shadow: var(--shadow);
+}
+.search-bar .search-float input {
+  flex: 0 1 240px;
+  width: 240px;
+  min-width: 120px;
 }
 .search-bar input,
 .search-controls input {
@@ -23,10 +45,17 @@
 .search-bar button {
   display: grid;
   place-items: center;
-  min-width: 32px;
-  min-height: 32px;
-  padding: 4px 8px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 4px;
   border-radius: var(--r1);
+}
+.search-float .search-count {
+  min-width: 3.5em;
+  padding: 0 4px;
+  font-size: 12px;
+  text-align: center;
+  white-space: nowrap;
 }
 .search-bar button:disabled {
   opacity: 0.45;
@@ -38,6 +67,9 @@
 }
 .search-note {
   flex-basis: 100%;
+  max-width: 360px;
+  padding: 2px 4px;
+  font-size: 12px;
 }
 ::highlight(litch-find) {
   background-color: var(--find);
@@ -98,7 +130,8 @@
   color: var(--on-find);
 }
 .search-coverage {
-  color: var(--ink-2);
+  color: var(--ink-3);
+  font-size: 12px;
   display: flex;
   flex-wrap: wrap;
   gap: 4px 16px;

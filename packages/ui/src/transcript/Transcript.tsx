@@ -566,6 +566,25 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
   const t = useT()
   const scroll = useTranscriptScroll(`${deviceId}:${sessionId}`)
   const [finding, setFinding] = useState(false)
+  // 查找条浮在右上角：查找时内容最上面多留一段，最早的几行也能滚到它下面。关掉之后先留着，
+  // 等最上面滚出视口再去掉（滚动区贴底，那时去掉看不出来），免得关的那一下内容往上跳；不满一屏的直接去掉
+  const [findRoom, setFindRoom] = useState(false)
+  useEffect(() => {
+    if (finding) setFindRoom(true)
+  }, [finding])
+  useEffect(() => {
+    if (finding || !findRoom) return
+    const scroller = scroll.scrollerRef.current
+    if (!scroller) return
+    const check = () => {
+      const overflow = scroller.scrollHeight - scroller.clientHeight
+      // 反向列：scrollTop 在底部是 0，往上是负的，到顶是 -overflow
+      if (overflow <= 1 || overflow + scroller.scrollTop > 80) setFindRoom(false)
+    }
+    check()
+    scroller.addEventListener('scroll', check, { passive: true })
+    return () => scroller.removeEventListener('scroll', check)
+  }, [finding, findRoom, scroll.scrollerRef])
   const [target, setTarget] = useState<SearchHit | null>(null)
   const [reading, setReading] = useState<string | null>(null)
   const focusBeforeSearch = useRef<HTMLElement | null>(null)
@@ -721,6 +740,7 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
         className="tr-scroll"
         tabIndex={-1}
         ref={scroll.scrollerRef}
+        data-find-room={finding || findRoom ? '' : undefined}
         aria-busy={restoring || !turnIds}
       >
         {restoring ? <div className="tr-loading dim">{t('transcript.loading')}</div> : null}

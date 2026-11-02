@@ -18,6 +18,49 @@
   background: var(--panel);
   overflow: hidden;
 }
+/* 按内容定高：内容少时收矮（最矮 240），多了到原来的高度为止、里面滚动 */
+.page-window[data-fit] {
+  /* 模态对话框四边定位（inset: 0），height: auto 会撑满，要用 fit-content */
+  height: fit-content;
+  /* 页内内容最宽 880（.arch-head、.arch-dev），窗口不再留两边的空白 */
+  width: min(880px, calc(100vw - 40px));
+  min-height: min(240px, calc(100vh - 64px));
+  max-height: min(820px, calc(100vh - 64px));
+}
+.page-window[data-fit] .page-window-content {
+  height: auto;
+  min-height: min(240px, calc(100vh - 64px));
+  max-height: min(820px, calc(100vh - 64px));
+}
+/* 页内的主体照内容取高（.arch-body 平时按剩余高度伸缩，在不定高的窗口里会被压成 0） */
+.page-window[data-fit] .arch-body {
+  flex: 1 1 auto;
+}
+/* 窗口里没有内容时：图标加一句话，居中 */
+.page-empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 140px;
+  padding: 16px 24px 32px;
+  font-size: 13px;
+  color: var(--ink-3);
+  text-align: center;
+}
+.page-empty svg.ic {
+  width: 20px;
+  height: 20px;
+}
+.page-empty p {
+  margin: 0;
+}
+/* 用鼠标打开的窗口：初始焦点不画框，按了键再画（PageWindow 管 data-quiet-focus） */
+.page-window[data-quiet-focus] :focus-visible {
+  outline: none;
+}
 .page-window::backdrop {
   background: color-mix(in srgb, var(--ink) 28%, transparent);
 }
@@ -322,9 +365,14 @@
   color: var(--accent);
 }
 .sb-filter .pick-opt b,
-.sb-more .pick-opt b {
+.sb-more .pick-opt b,
+/* 勾在前面：标题紧跟勾选列左对齐，不用投影菜单那种勾在行尾的两端对齐（projections.css） */
+  .sb-more
+  .pick-opt[aria-checked]
+  > b {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 6px;
 }
 .sb-filter .pick-mark,

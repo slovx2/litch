@@ -31,26 +31,44 @@ function TaskRow({
   if (!task) return null
   const last = task.lastRun
   const quiet = task.status !== 'active'
+  const schedule = scheduleLine(task, t, undefined, now)
+  const next =
+    task.status === 'paused'
+      ? t('tasks.status.paused')
+      : task.nextRunAt !== null
+        ? whenText(task.nextRunAt, now, t)
+        : t('tasks.row.noNext')
+  const asking = last ? waitingAsks(last).length > 0 : false
+  const lastWhen = last
+    ? whenText(last.finishedAt ?? last.startedAt ?? last.scheduledFor, now, t)
+    : ''
+  const lastText = asking
+    ? t('tasks.ask.mark')
+    : last
+      ? `${runStatusText(last.status, t)} ${lastWhen}`
+      : t('tasks.row.never')
+  // “下次 / 上次”每节只在列表头写一次，读屏念的整句里带上
+  const spoken = [
+    task.name,
+    schedule,
+    `${t('tasks.row.next')} ${next}`,
+    `${t('tasks.row.last')} ${lastText}`,
+    task.unreadRuns > 0 ? t('tasks.unread', { count: task.unreadRuns }) : '',
+  ]
+    .filter(Boolean)
+    .join('，')
   return (
     <li className={quiet ? 'tk-row off' : 'tk-row'} data-task={task.id} data-status={task.status}>
-      <button type="button" className="tk-row-btn" onClick={onOpen}>
+      <button type="button" className="tk-row-btn" aria-label={spoken} onClick={onOpen}>
         <span className="tk-row-main">
           <span className="tk-row-name ell">{task.name}</span>
-          <span className="tk-row-sched ell">{scheduleLine(task, t, undefined, now)}</span>
+          <span className="tk-row-sched ell">{schedule}</span>
         </span>
         <span className="tk-row-next">
-          <span className="tk-row-label">{t('tasks.row.next')}</span>
-          <span className="ell">
-            {task.status === 'paused'
-              ? t('tasks.status.paused')
-              : task.nextRunAt !== null
-                ? whenText(task.nextRunAt, now, t)
-                : t('tasks.row.noNext')}
-          </span>
+          <span className="ell">{next}</span>
         </span>
         <span className="tk-row-last">
-          <span className="tk-row-label">{t('tasks.row.last')}</span>
-          {last && waitingAsks(last).length > 0 ? (
+          {asking ? (
             <span className="tk-st ell" data-tone="wait" data-mark="asking">
               <i className="tk-dot" />
               {t('tasks.ask.mark')}
@@ -59,9 +77,7 @@ function TaskRow({
             <span className="tk-st ell" data-tone={runTone(last.status)}>
               <i className="tk-dot" />
               {runStatusText(last.status, t)}
-              <span className="tk-st-when">
-                {whenText(last.finishedAt ?? last.startedAt ?? last.scheduledFor, now, t)}
-              </span>
+              <span className="tk-st-when">{lastWhen}</span>
             </span>
           ) : (
             <span className="tk-st ell">{t('tasks.row.never')}</span>
@@ -103,6 +119,11 @@ function DeviceTasks({ deviceId, onOpen }: { deviceId: string; onOpen(taskId: st
       {note ? <div className="arch-note">{note}</div> : null}
       {ids.length > 0 ? (
         <ul className="tk-list">
+          <li className="tk-cols" aria-hidden="true">
+            <span />
+            <span className="tk-col-next">{t('tasks.row.next')}</span>
+            <span>{t('tasks.row.last')}</span>
+          </li>
           {ids.map((taskId) => (
             <TaskRow
               key={taskId}
@@ -197,13 +218,20 @@ export function TasksPage({ initial, onClose, onOpenSession, onDeviceChange }: T
     <div className="arch-page tk-page" data-tasks="list">
       <header className="arch-head">
         <div>
-          <h1>{t('tasks.title')}</h1>
-          <p>
-            {t('tasks.intro')}
+          <h1>
+            {t('tasks.title')}
             {unread > 0 ? (
-              <span className="tk-head-unread"> {t('tasks.unread', { count: unread })}</span>
+              <span
+                className="tk-badge tk-head-unread"
+                role="img"
+                title={t('tasks.unread', { count: unread })}
+                aria-label={t('tasks.unread', { count: unread })}
+              >
+                {unread}
+              </span>
             ) : null}
-          </p>
+          </h1>
+          <p>{t('tasks.intro')}</p>
         </div>
         <button
           type="button"

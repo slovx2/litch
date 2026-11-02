@@ -6,7 +6,7 @@ itself is off; it does not start up for them). Remote devices need adapter 0.11.
 
 In the UI: sidebar → **Scheduled tasks** (tasks grouped by device, New task, details with past runs);
 or a session's menu → "Schedule a task for this session". `scripts/litch open tasks` opens the page.
-The Android app can manage them too.
+The Android app can manage them too. 桌面列表每台设备一张表，表头写“下次 / 上次”两列（窄窗口只留“上次”）；有未读运行时，标题旁和对应任务行上显示数字徽标。
 
 ## Commands
 

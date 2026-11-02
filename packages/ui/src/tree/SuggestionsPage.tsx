@@ -16,7 +16,7 @@ import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { useNow } from '../app/clock.ts'
 import { ago } from '../app/format.ts'
-import { Close, Forward } from '../app/icons.tsx'
+import { Close, Forward, Icon } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { BoardMarkdown } from '../manager/BoardMarkdown.tsx'
 import { useIssueOrder } from '../manager/issue-order.tsx'
@@ -281,7 +281,10 @@ export function SuggestionsPage({
     <section className="arch-page" data-page="suggestions">
       <header className="arch-head">
         <h1>
-          {t('suggestions.title')} <span className="pill mute">{suggestionCount(all)}</span>
+          {t('suggestions.title')} {/* 没有时不写 0：空状态那句话已经说了 */}
+          {suggestionCount(all) > 0 ? (
+            <span className="pill mute">{suggestionCount(all)}</span>
+          ) : null}
         </h1>
         <button
           type="button"
@@ -312,7 +315,10 @@ export function SuggestionsPage({
             )}
           </ul>
         ) : (
-          <p className="arch-note">{t('suggestions.empty')}</p>
+          <div className="page-empty" data-empty="suggestions">
+            <Icon name="suggest" />
+            <p>{t('suggestions.empty')}</p>
+          </div>
         )}
       </div>
     </section>

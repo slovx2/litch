@@ -201,14 +201,14 @@ export async function checkSearchReview({ cdp, evaluate, query, report, output, 
   await evaluate(`window.searchFixture.openTitles()`)
   await until(() => evaluate(`!!document.querySelector('.search-dialog')`), '再次打开标题搜索')
   await until(
-    () => evaluate(`!document.querySelector('.search-dialog .btn').disabled`),
+    () => evaluate(`!document.querySelector('.search-dialog .search-refresh').disabled`),
     '首次读取完成',
   )
   await evaluate(
-    `window.searchFixture.failRefresh(true);document.querySelector('.search-dialog .btn').click()`,
+    `window.searchFixture.failRefresh(true);document.querySelector('.search-dialog .search-refresh').click()`,
   )
   await until(
-    () => evaluate(`document.querySelector('.search-dialog .btn').disabled`),
+    () => evaluate(`document.querySelector('.search-dialog .search-refresh').disabled`),
     '读取中禁用按钮',
   )
   await until(
@@ -216,12 +216,12 @@ export async function checkSearchReview({ cdp, evaluate, query, report, output, 
     '读取失败单独提示',
   )
   await evaluate(
-    `window.searchFixture.failRefresh(false);document.querySelector('.search-dialog .btn').click()`,
+    `window.searchFixture.failRefresh(false);document.querySelector('.search-dialog .search-refresh').click()`,
   )
   await until(
     () =>
       evaluate(
-        `!document.querySelector('.search-dialog .btn').disabled && !document.querySelector('.search-coverage').textContent.includes('读取失败')`,
+        `!document.querySelector('.search-dialog .search-refresh').disabled && !document.querySelector('.search-coverage').textContent.includes('读取失败')`,
       ),
     '重试成功清除失败',
   )

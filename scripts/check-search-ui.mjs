@@ -157,10 +157,12 @@ try {
       `查询 ${text}`,
     )
     const result = await evaluate(
-      `(()=>{const range=[...CSS.highlights.get('litch-find-current')][0];const rect=range.getBoundingClientRect();return {text:range.toString(),count:document.querySelector('.search-count').textContent,visible:rect.bottom>0&&rect.top<innerHeight,mounted:document.querySelectorAll('.turn').length};})()`,
+      `(()=>{const range=[...CSS.highlights.get('litch-find-current')][0];const rect=range.getBoundingClientRect();const bar=document.querySelector('.search-float').getBoundingClientRect();return {text:range.toString(),count:document.querySelector('.search-count').textContent,visible:rect.bottom>0&&rect.top<innerHeight,covered:rect.right>bar.left&&rect.left<bar.right&&rect.bottom>bar.top&&rect.top<bar.bottom,where:[Math.round(rect.left),Math.round(rect.top),Math.round(bar.left),Math.round(bar.top),Math.round(bar.right),Math.round(bar.bottom),document.querySelector('.search-float').textContent],mounted:document.querySelectorAll('.turn').length};})()`,
     )
     if (record) report.checks.push({ name: text, frameMs, ...result })
     assert.ok(result.visible, `${text} 不在视口`)
+    // 查找条浮在右上角：当前命中不能被它盖住
+    assert.equal(result.covered, false, `${text} 被查找条盖住：${JSON.stringify(result.where)}`)
     assert.equal(
       result.text.normalize('NFKC').toLowerCase().replace(/\s+/g, ' '),
       text.normalize('NFKC').toLowerCase().replace(/\s+/g, ' '),
@@ -170,6 +172,17 @@ try {
     return { ...result, frameMs }
   }
   assert.equal((await query('跨节点匹配')).text, '跨节点匹配')
+  // 查找条是右上角浮着的紧凑一条：不占一行、不推内容，靠右，输入框约 240
+  const bar = await evaluate(
+    `(()=>{const host=document.querySelector('.search-bar').getBoundingClientRect();const f=document.querySelector('.search-float').getBoundingClientRect();const s=document.querySelector('.tr-scroll').getBoundingClientRect();const i=document.querySelector('.search-float input').getBoundingClientRect();return {host:host.height,width:f.width,input:i.width,right:Math.round(s.right-f.right),top:Math.round(f.top-s.top)}})()`,
+  )
+  report.checks.push({ name: '查找条浮在右上角', ...bar })
+  assert.equal(bar.host, 0, '查找条仍占一行高度')
+  assert.ok(bar.width <= 480 && bar.input <= 260, `查找条不紧凑：${JSON.stringify(bar)}`)
+  assert.ok(
+    bar.right >= 0 && bar.right <= 48 && bar.top >= 0 && bar.top <= 16,
+    `查找条不在右上角：${JSON.stringify(bar)}`,
+  )
   await query('ThoughtNeedle')
   await query('ProcessNeedle')
   await query('CodeNeedle')
@@ -288,6 +301,18 @@ try {
   report.checks.push({
     name: '跨设备全局入口与归档标题',
     status: await evaluate(`document.querySelector('.search-coverage').textContent`),
+  })
+  // 重新读取是标题行里关闭按钮左边的图标，悬停写明；设备状态在结果后面，不在输入框下面占一行
+  const titles = await evaluate(
+    `(()=>{const d=document.querySelector('.search-dialog');const r=d.querySelector('.modal-head .search-refresh');const close=r?.nextElementSibling;const cov=d.querySelector('.search-coverage');const res=d.querySelector('.search-results');return {icon:!!r?.querySelector('svg')&&r.textContent.trim()==='',title:r?.title,label:r?.getAttribute('aria-label'),beforeClose:close?.getAttribute('aria-label')?.startsWith('关闭'),after:!!cov&&!!(res.compareDocumentPosition(cov)&Node.DOCUMENT_POSITION_FOLLOWING)}})()`,
+  )
+  report.checks.push({ name: '全局搜索标题行与设备状态', ...titles })
+  assert.deepEqual(titles, {
+    icon: true,
+    title: '重新读取会话列表',
+    label: '重新读取会话列表',
+    beforeClose: true,
+    after: true,
   })
   await evaluate(`window.__litchLook?.set({skin:'standard',theme:'light'})`)
   await cdp
