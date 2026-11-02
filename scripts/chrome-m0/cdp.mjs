@@ -24,10 +24,13 @@ export class Cdp {
   }
   call(method, params = {}, sessionId) {
     const id = ++this.next
+    // 在发请求的位置留调用栈，不能等计时器触发后才创建错误，那时只剩 timers 的栈。
+    const timeoutError = new Error(`CDP 超时：${method}`)
+    timeoutError.request = { id, method, params, sessionId }
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
-        reject(new Error(`CDP 超时：${method}`))
+        reject(timeoutError)
       }, 15000)
       this.pending.set(id, { resolve, reject, timer })
       this.ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }))
@@ -55,5 +58,5 @@ export async function until(fn, label, timeout = 15000) {
     }
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
-  throw new Error(`${label} 超时${last ? `：${last.message}` : ''}`)
+  throw new Error(`${label} 超时${last ? `：${last.message}` : ''}`, { cause: last })
 }

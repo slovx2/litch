@@ -7,6 +7,7 @@ import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
+import { diagnoseFailure } from './chrome-m0/diagnostics.mjs'
 
 const binary =
   process.env.LITCH_CHROME_BINARY ??
@@ -25,7 +26,19 @@ const work = mkdtempSync(join(tmpdir(), 'litch-projections-ui-'))
 const outputBase = process.env.LITCH_PROJECTIONS_OUTPUT
 const output = outputBase ? join(resolve(outputBase), `${Date.now()}-${process.pid}`) : null
 if (output) mkdirSync(output, { recursive: true })
-const report = { checks: [], success: false, work, output }
+const report = { checks: [], success: false, work, output, stages: [], browserEvents: [] }
+const startedAt = Date.now()
+const stage = (name) => {
+  report.phase = name
+  const entry = { name, elapsedMs: Date.now() - startedAt }
+  report.stages.push(entry)
+  console.log(`PROJECTIONS_STAGE ${JSON.stringify(entry)}`)
+}
+const checkpoint = (...checks) => {
+  report.checks.push(...checks)
+  stage(typeof checks[0] === 'string' ? checks[0] : '布局与记号检查完成')
+}
+stage('启动隔离 Vite 与 Chrome')
 let vite
 if (!base) {
   const reserve = createServer()
@@ -75,6 +88,9 @@ async function screenshot(name) {
   writeFileSync(join(output, name), Buffer.from(shot.data, 'base64'))
 }
 let log = ''
+child.on('exit', (code, signal) => {
+  report.browserExit = { code, signal, elapsedMs: Date.now() - startedAt }
+})
 child.stderr.on('data', (data) => {
   log += data.toString()
 })
@@ -96,6 +112,17 @@ try {
     return tabs.find((tab) => tab.type === 'page')?.webSocketDebuggerUrl
   }, '浏览器页面')
   cdp = await Cdp.connect(page)
+  cdp.listeners.add((message) => {
+    if (
+      ['Runtime.exceptionThrown', 'Inspector.targetCrashed', 'Inspector.detached'].includes(
+        message.method,
+      )
+    ) {
+      report.browserEvents.push({ ...message, elapsedMs: Date.now() - startedAt })
+      if (report.browserEvents.length > 50) report.browserEvents.shift()
+    }
+  })
+  await cdp.call('Inspector.enable')
   await cdp.call('Runtime.enable')
   await cdp.call('Page.enable')
   // 隔离的无头页面模拟前台窗口，不激活用户的浏览器。
@@ -110,6 +137,7 @@ try {
       )
   })
   const evaluate = async (expression) => {
+    report.expression = expression
     const r = await cdp.call('Runtime.evaluate', {
       expression,
       returnByValue: true,
@@ -184,6 +212,7 @@ try {
       }).toString() +
       ')()',
   })
+  stage('打开模拟核心页面，等待两个投影组')
   await cdp.call('Page.navigate', { url: `${base}/` })
   await until(
     () => run(() => document.querySelectorAll('[data-projection]').length === 2),
@@ -194,8 +223,9 @@ try {
   // 探针要直接调界面模块（外部打开会话、定位开关、侧栏宽度）。在 CDP 里等页面动态 import 的结果，Chrome 偶尔在它落定前
   // 回收这个 promise（Promise was collected；冷启动的 CI 上常见，没有导航、没有请求）。所以只在 until 里取，取到挂在
   // window 上，之后同步调用；页面重载后重取
-  const modules = () =>
-    until(
+  const modules = () => {
+    stage('读取界面探针模块')
+    return until(
       () =>
         run(() =>
           Promise.all([import('/src/app/actions.ts'), import('/src/sidebar/state.ts')]).then(
@@ -207,6 +237,7 @@ try {
         ),
       '界面模块',
     )
+  }
   await modules()
   const recent = '[data-projection=recent]'
   const unread = '[data-projection=unread]'
@@ -230,7 +261,7 @@ try {
   await click(`${recent} [data-session=s1] .tree-fold`)
   await click(`${recent} .ss-more .more`)
   await until(async () => (await roots()).length === 15, '增加十个主项')
-  report.checks.push('主项归并、默认五项、展开子树、更多增加十项')
+  checkpoint('主项归并、默认五项、展开子树、更多增加十项')
   assert.equal(
     await run(
       () => document.querySelectorAll('[data-projection=unread] .projection-device').length,
@@ -311,7 +342,7 @@ try {
     selectedCopies.unreadRows,
     '未读计数不包含已读的原位保留副本',
   )
-  report.checks.push('只高亮点击的投影行，目录和其他投影不高亮，未读计数不受副本影响')
+  checkpoint('只高亮点击的投影行，目录和其他投影不高亮，未读计数不受副本影响')
   assert.equal(
     await run(
       () =>
@@ -352,9 +383,7 @@ try {
   )
   assert.notEqual((await roots())[0], 's3', '短暂打开和清未读不应刷新最近排序')
   assert.ok(await run(() => document.hasFocus() && document.visibilityState === 'visible'))
-  report.checks.push(
-    '未读原位暂留、已读样式、鼠标连点不串项、切走移除、已读不回填、设备名与时间口径',
-  )
+  checkpoint('未读原位暂留、已读样式、鼠标连点不串项、切走移除、已读不回填、设备名与时间口径')
   const dwellStarted = await run(() => Date.now())
   await until(async () => (await roots())[0] === 's3', '连续前台停留满五秒更新最近排序')
   // 稍早的查看已切走清零；此时的时间戳来自本次达标，而不是初次点开。
@@ -369,7 +398,7 @@ try {
       ),
     '达标时刻持久化',
   )
-  report.checks.push('打开立即清未读、短暂查看不刷新最近、连续前台五秒后记录达标时刻')
+  checkpoint('打开立即清未读、短暂查看不刷新最近、连续前台五秒后记录达标时刻')
   // 唯一选中：放在停留计时之后。夹在点开 s3 和“短暂打开”的断言之间，慢的机器上会让 s3 停留满五秒
   const currentRows = () =>
     run(() =>
@@ -457,7 +486,7 @@ try {
   await until(async () => (await currentRows())[0]?.source === 'recent', '关闭定位仍可直接点击选中')
   await run(() => window.__projectionProbe.state.setSidebarAutoLocate(true))
   await until(async () => (await currentRows())[0]?.source === 'tree', '开启自动定位定位树行')
-  report.checks.push('外部重新打开选树行，关闭自动定位不新增选中，直接点击不受定位开关影响')
+  checkpoint('外部重新打开选树行，关闭自动定位不新增选中，直接点击不受定位开关影响')
   await click(`${recent} .projection-head .dev-row`)
   assert.equal(
     await run(() => !!document.querySelector('[data-projection=recent] .projection-body')),
@@ -520,7 +549,7 @@ try {
         !!document.querySelector('[data-projection=recent] .projection-block.off[data-device=gpu]'),
     ),
   )
-  report.checks.push('查看清未读并更新最近、独立折叠、跨设备项目聚合、离线缓存、设备色一致')
+  checkpoint('查看清未读并更新最近、独立折叠、跨设备项目聚合、离线缓存、设备色一致')
   await click(`${recent} [data-workspace=litch] .row-more button`)
   await option('重命名与颜色…')
   await until(() => run(() => !!document.querySelector('.ws-dialog[open]')), '原项目编辑对话框')
@@ -544,7 +573,7 @@ try {
   )
   await click(`${recent} [data-workspace=litch] .row-add`)
   await until(() => run(() => !document.querySelector('.tr-scroll')), '项目新建对话入口')
-  report.checks.push('投影项目可改名并同步原树、新建对话入口')
+  checkpoint('投影项目可改名并同步原树、新建对话入口')
   await click(`${recent} .projection-head .row-more button`)
   await option('默认显示 5 条')
   assert.equal(
@@ -583,7 +612,7 @@ try {
     false,
   )
   assert.equal((await roots())[0], 's3')
-  report.checks.push('浏览记录、聚合、默认条数和折叠本机持久化')
+  checkpoint('浏览记录、聚合、默认条数和折叠本机持久化')
   await click(`${unread} .projection-head .dev-row`)
   await click('[data-sidebar-mode=manager]')
   await until(
@@ -612,7 +641,7 @@ try {
       (node) => node.role?.value === 'button' && node.name?.value.includes('个未读对话'),
     ),
   )
-  report.checks.push('可访问命名分组、带单位的未读计数、最近无总数、菜单勾选及 radio/checkbox 状态')
+  checkpoint('可访问命名分组、带单位的未读计数、最近无总数、菜单勾选及 radio/checkbox 状态')
   await click(`${unread} [data-session=s3] .ss-row`)
   await until(
     () =>
@@ -651,7 +680,7 @@ try {
         '400',
       )
       await screenshot(`${skin}-${theme}-240.png`)
-      report.checks.push({ skin, theme, ...geometry })
+      checkpoint({ skin, theme, ...geometry })
       await click(`${recent} .projection-head .row-more button`)
       await option('按项目聚合')
       await until(
@@ -689,6 +718,7 @@ try {
     }
   }
   // 新的一份活动记录只含经理与工作线，验证主项归并及跨模式入口。
+  stage('重载活动记录，等待经理与工作线归并')
   await run(() =>
     localStorage.setItem(
       'litch.sidebar.activity',
@@ -752,7 +782,7 @@ try {
       marks.some((mark) => mark.framed && mark.unread),
     `经理主项的记号列没有经理框，或框改变了记号与行的尺寸：${JSON.stringify({ marks, plain })}`,
   )
-  report.checks.push({ managerMarks: marks, plainRow: plain })
+  checkpoint({ managerMarks: marks, plainRow: plain })
   assert.equal(
     await run(() => !!document.querySelector('[data-projection=recent] [data-session=manager-k1]')),
     false,
@@ -820,9 +850,7 @@ try {
   assert.deepEqual(await currentRows(), [
     { sessionId: 'manager-k1', source: 'recent', selected: true },
   ])
-  report.checks.push(
-    '经理进入最近与未读，工作线默认收起且不单列，经理与工作线跳转保留各模式的唯一选中',
-  )
+  checkpoint('经理进入最近与未读，工作线默认收起且不单列，经理与工作线跳转保留各模式的唯一选中')
   await click(`${unread} [data-session=m1] .ss-row`)
   await until(() => run(() => !document.querySelector('[data-projection]')), '未读经理进入经理模式')
   await click('[data-sidebar-mode=chat]')
@@ -847,10 +875,10 @@ try {
     '最后一个工作线读完并切到经理模式后，返回对话不恢复已读暂留树',
   )
   assert.ok(await run(() => !!document.querySelector('[data-projection=recent] [data-session=m1]')))
-  report.checks.push('经理和工作线从未读进入经理模式，读完后不回填未读，最近仍保留')
+  checkpoint('经理和工作线从未读进入经理模式，读完后不回填未读，最近仍保留')
   // 当前父会话打开时，子会话完成才让整棵树进入未读；点最后一个未读子会话不能让树消失。
   for (const leave of ['tree', 'page', 'manager', 'settings']) {
-    console.log(`检查子会话晚到未读：${leave}`)
+    stage(`检查子会话晚到未读：${leave}`)
     await run(() => {
       document.documentElement.dataset.unreadReload = 'old'
     })
@@ -1036,22 +1064,20 @@ try {
       false,
       '返回已读子会话不重新进入未读',
     )
-    report.checks.push(
-      '普通子树晚到未读：原位暂留、已读样式、展开保持、树内切换；离开释放：' + leave,
-    )
+    checkpoint('普通子树晚到未读：原位暂留、已读样式、展开保持、树内切换；离开释放：' + leave)
   }
   assert.deepEqual(errors, [])
   report.success = true
 } catch (error) {
-  report.failure = String(error?.stack ?? error)
-  if (cdp) {
+  await diagnoseFailure(report, error, async () => {
+    if (!cdp) return
     report.debug = await cdp.call('Runtime.evaluate', {
       expression:
         'JSON.stringify({storage:{...localStorage},rows:[...document.querySelectorAll("[data-projection=recent] [data-session]")].map(e=>e.dataset.session)})',
       returnByValue: true,
     })
     await screenshot('failure.png')
-  }
+  })
   throw error
 } finally {
   if (output) {

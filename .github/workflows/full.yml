@@ -450,7 +450,20 @@ jobs:
       # 同一套 25 个窗口/连接子检查；逐项计时，不重试，任一失败则本步骤失败。
       - name: 完整桌面窗口与连接检查（一次构建）
         id: nightly
-        run: npm run check:nightly --prefix apps/desktop
+        run: |
+          node --test scripts/chrome-m0/diagnostics.test.mjs
+          npm run check:nightly --prefix apps/desktop
+        env:
+          LITCH_PROJECTIONS_OUTPUT: ${{ runner.temp }}/sidebar-projections
+
+      - name: 保存侧栏投影失败现场
+        if: ${{ failure() && steps.nightly.outcome == 'failure' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: sidebar-projections-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sidebar-projections
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: 缓存与首次失败
         id: stage-41
