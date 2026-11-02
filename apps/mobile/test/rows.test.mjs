@@ -318,6 +318,92 @@ test('回合在跑、紧挨在上面的是这一回合的活动：状态行不�
   assert.equal(new RowBuilder().build(done, 'all').at(-1).merged, false)
 })
 
+test('最下面的活动、没有一步在跑（模型在想下一步）：“正在工作”接在那一组摘要末尾，从回合开始走秒；行对象照常复用', () => {
+  const build = (items, builder = new RowBuilder(), turn = {}) => {
+    const view = viewOf(
+      [
+        {
+          id: 't',
+          status: 'running',
+          startedAt: 1000,
+          itemIds: items.map((item) => item.id),
+          ...turn,
+        },
+      ],
+      items,
+    )
+    return builder.build(view, 'all')
+  }
+  const groups = (rows) => rows.filter((row) => row.type === 'group')
+  const done = (id) => ({ ...command(id), status: 'completed', exitCode: 0 })
+  // 一步跑完、下一步还没来：在想
+  const thinking = build([user('u', '跑'), done('c1')])
+  assert.equal(groups(thinking)[0].working, true)
+  assert.equal(groups(thinking)[0].turnStartedAt, 1000)
+  assert.equal(thinking.at(-1).merged, true)
+  // 有一步在跑：摘要写在跑什么，不写“正在工作”
+  assert.equal(
+    groups(build([user('u', '跑'), { ...command('c'), status: 'inProgress' }]))[0].working,
+    false,
+  )
+  // 活动后面接着出正文：“正在工作”回到状态行（正文出字时留空）
+  const writing = build([user('u', '跑'), done('c1'), answer('a', '正在写', 'inProgress')])
+  assert.ok(groups(writing).every((row) => !row.working))
+  assert.equal(writing.at(-1).merged, false)
+  assert.equal(writing.at(-1).working, false)
+  const afterWriting = build([
+    user('u', '跑'),
+    done('c1'),
+    { ...answer('n', '先看看'), phase: 'commentary' },
+  ])
+  assert.equal(groups(afterWriting)[0].working, false)
+  assert.equal(afterWriting.at(-1).merged, false)
+  assert.equal(afterWriting.at(-1).working, true)
+  // 前面一组、中间一段说明、最下面又一组：只有最下面那组写
+  const two = build([
+    user('u', '跑'),
+    done('c1'),
+    { ...answer('n', '先看看'), phase: 'commentary' },
+    done('c2'),
+  ])
+  assert.deepEqual(
+    groups(two).map((row) => row.working),
+    [false, true],
+  )
+  // 等人答复时不写
+  const asking = viewOf(
+    [{ id: 't', status: 'running', startedAt: 1000, itemIds: ['u', 'c1'] }],
+    [user('u', '跑'), done('c1')],
+  )
+  asking.requests = [{ id: 'r', kind: 'approval' }]
+  assert.equal(groups(new RowBuilder().build(asking, 'all'))[0].working, false)
+  // 重试时状态行照写，摘要不写
+  assert.equal(
+    groups(
+      build([user('u', '跑'), done('c1')], new RowBuilder(), {
+        retry: { attempt: 2, maxRetries: 5, reason: 'rateLimit', httpStatus: 429 },
+      }),
+    )[0].working,
+    false,
+  )
+  // 同一份内容再排一次：同一个行对象（只 keep 一次，不来回换）
+  const builder = new RowBuilder()
+  const items = [user('u', '跑'), done('c1')]
+  const first = groups(build(items, builder))[0]
+  assert.equal(groups(build(items, builder))[0], first)
+  builder.toggle(first.key, 't')
+  const expanded = build(items, builder)
+  assert.equal(groups(expanded)[0].working, true)
+  assert.equal(expanded.at(-2).type, 'groupEnd')
+  assert.equal(expanded.at(-1).merged, true)
+  // 回合结束：不再写
+  const ended = viewOf(
+    [{ id: 't', status: 'completed', startedAt: 1000, itemIds: ['u', 'c1'] }],
+    [user('u', '跑'), done('c1')],
+  )
+  assert.equal(groups(new RowBuilder().build(ended, 'all'))[0].working, false)
+})
+
 test('展开一组：摘要在前，每一步各一行排在它后面，最后一行“收起”（倒置后往下展开）', () => {
   const items = [user('u', '跑'), { ...command('c1'), status: 'completed', exitCode: 0 }]
   const view = viewOf([{ id: 't', status: 'completed', itemIds: ['u', 'c1'] }], items)

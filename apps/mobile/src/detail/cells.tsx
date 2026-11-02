@@ -380,10 +380,13 @@ export const ReasoningCell = memo(function ReasoningCell({ row }: Props<'reasoni
   )
 })
 
-/** 留空之后要持续这么久才再写“正在工作”：两段正文挨着出字时不来回闪（和桌面端一样） */
+/**
+ * 留空之后要持续这么久才再写“正在工作”：两段正文挨着出字时不来回闪（和桌面端一样）。
+ * 活动摘要末尾的“正在工作”也用它：一步刚跑完、下一步紧接着开始时不闪
+ */
 const WORKING_DELAY_MS = 300
 
-function useLasting(on: boolean): boolean {
+export function useLasting(on: boolean): boolean {
   const [lasted, setLasted] = useState(false)
   useEffect(() => {
     setLasted(false)

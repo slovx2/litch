@@ -16,7 +16,7 @@ import { processSummary, suggestTitles } from '../../../../packages/ui/src/trans
 import type { Row, StepState } from '../core/rows'
 import { type Translator, useT } from '../ui/i18n'
 import { type Palette, useTheme } from '../ui/theme'
-import { styles as cellStyles, type Props, useTicking } from './cells'
+import { styles as cellStyles, type Props, useLasting, useTicking } from './cells'
 import { useBackgroundView, useToggleInPlace, useTranscript } from './context'
 import { keepPlace, rowBelow } from './keep-place'
 import { fileHref, isWebUrl } from './links'
@@ -113,12 +113,18 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
   const steps = t('activity.steps', { n: row.count })
   // 有一步在跑：这一组到现在的累计用时，一秒一秒地走
   const spent = useTicking(row.running ? row.since : null)
+  // 回合最下面的活动、模型在想下一步：“正在工作”和回合到现在的用时（代替回合末尾那一行）。用时只写这一个，
+  // 不再写这一组的用时。和状态行一样过 300 毫秒才写，步骤一个接一个时不闪
+  const working = useLasting(row.working)
+  const busy = useTicking(working ? row.turnStartedAt : null)
   // 失败的条数不写（每一步自己的退出码、失败照写）；跑完了写这一组从第一条开始到最后一条结束的用时
   const tail = row.running
     ? runningTail(row, t, spent)
-    : row.durationMs
-      ? ` · ${duration(row.durationMs, t)}`
-      : ''
+    : working
+      ? ` · ${t('detail.group.working')}${busy !== null && busy >= 1000 ? ` · ${elapsed(busy, t)}` : ''}`
+      : row.durationMs
+        ? ` · ${duration(row.durationMs, t)}`
+        : ''
   return (
     <View style={styles.group}>
       <Pressable

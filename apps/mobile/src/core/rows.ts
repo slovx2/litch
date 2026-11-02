@@ -7,7 +7,8 @@
 //   或者还有子代理没做完时不自动收；点那一行开合。
 // - 启动子代理的那次调用不进步骤组，单独一行，每个子代理一条（照桌面端）；等待、发输入这些协作调用还是组里的一步。
 // - 每个回合末尾一行状态，从回合开始到结束一直在，只换字不换高度。回合在跑时写“{name} 正在工作”和已用的时间，只在正文出字、等人答复时留空（workingShown）。
-//   紧挨在上面的是这一回合的活动时不另占一行（merged），活动那一行就是“正在做什么”。
+//   紧挨在上面的是这一回合的活动时不另占一行（merged），活动那一行就是“正在做什么”；没有一步在跑时，
+//   “正在工作”和用时接在那一组摘要的末尾（group 的 working）。
 // - 建议任务的卡片（收尾带的、start 提的）和收尾留的问题排在回合最下方（回答下面、状态行上面），过程里调用的位置只留一步；
 //   offer 卡挂在回合中间等人选，不挪。没字的思考不画。
 // - 行里放条目对象本身（单元格从它取要画的东西），再加上条目里会被原地改掉的那几项（核心对文字、状态是原地改的，
@@ -232,6 +233,13 @@ export type Row =
       expanded: boolean
       ids: string
       ended: boolean
+      /**
+       * 回合在跑、这一组是回合最下面的活动、没有一步在跑（模型在想下一步）：摘要末尾写“正在工作”和回合到现在的用时，
+       * 不另占一行（状态行这时不画，见 status 的 merged）
+       */
+      working: boolean
+      /** 回合开始的时刻：working 时从它走秒。对面没给是 null */
+      turnStartedAt: number | null
     }
   /** 展开的一组末尾那一行“收起”。group 是那一组的键 */
   | { type: 'groupEnd'; key: string; turnId: string; group: string }
@@ -521,17 +529,27 @@ export class RowBuilder {
     // 回合最下方的收尾区：收尾留的问题（最后一个）在前，收尾带的建议卡片在后（核心等回合结束才排进来）
     const tail = blocks.find((block) => block.type === 'tail')
     if (tail) out.push(...this.tail(view, turn, tail.itemIds))
-    if (remind) return out
-    if (turn.status === 'failed' && turn.error)
-      out.push(this.keep({ type: 'error', key: `${turn.id}:error`, text: turn.error }))
+    const working = running && workingShown(running, items, view.requests.length)
     const above = out.at(-1)
     const merged =
+      !remind &&
       running &&
       !turn.retry &&
       !turn.recovery &&
       above !== undefined &&
       (above.type === 'group' || above.type === 'groupEnd' || above.type === 'step') &&
       above.turnId === turn.id
+    // 最下面的活动所在的那一组（展开时它下面是各步和“收起”）：没有一步在跑时，“正在工作”写在它的摘要末尾
+    let last = -1
+    if (merged)
+      for (let i = out.length - 1; i >= 0 && last < 0; i--) if (out[i]?.type === 'group') last = i
+    out.forEach((row, index) => {
+      if (row.type !== 'group') return
+      out[index] = this.keep({ ...row, working: index === last && working && !row.running })
+    })
+    if (remind) return out
+    if (turn.status === 'failed' && turn.error)
+      out.push(this.keep({ type: 'error', key: `${turn.id}:error`, text: turn.error }))
     out.push(
       this.keep({
         type: 'status',
@@ -540,7 +558,7 @@ export class RowBuilder {
         status: turn.status,
         durationMs: turn.durationMs,
         startedAt: turn.startedAt,
-        working: running && workingShown(running, items, view.requests.length),
+        working,
         retry: running ? (turn.retry ?? null) : null,
         recovery: running ? (turn.recovery ?? null) : null,
         merged,
@@ -833,23 +851,24 @@ export class RowBuilder {
         }),
       )
     }
-    out.push(
-      this.keep({
-        type: 'group',
-        key,
-        turnId: turn.id,
-        count,
-        failed,
-        durationMs: spanOf(items),
-        current,
-        thinking,
-        since: current === null ? null : spanFrom(items),
-        running: current !== null,
-        expanded,
-        ids: items.map((item) => item.id).join(' '),
-        ended: turn.status !== 'running',
-      }),
-    )
+    // 先不 keep：是不是回合最下面的活动要等整个回合排完才知道，turnRows 末尾定了 working 再 keep（只 keep 一次，行对象照常复用）
+    out.push({
+      type: 'group',
+      key,
+      turnId: turn.id,
+      count,
+      failed,
+      durationMs: spanOf(items),
+      current,
+      thinking,
+      since: current === null ? null : spanFrom(items),
+      running: current !== null,
+      expanded,
+      ids: items.map((item) => item.id).join(' '),
+      ended: turn.status !== 'running',
+      working: false,
+      turnStartedAt: turn.startedAt,
+    })
     if (!expanded) return
     out.push(...shown)
     out.push(this.keep({ type: 'groupEnd', key: `${key}:end`, turnId: turn.id, group: key }))

@@ -332,33 +332,65 @@ try {
 
   /**
    * 回合在跑、紧挨在下面没有正文时，活动那一行就是“正在做什么”：不再另起一行“{name} 正在工作”。
-   * 新会话里说“跑一会儿”，模拟核心先跑一条两秒多的命令
+   * 新会话里说“跑一会儿，想一会儿”：命令运行 → 活动行内等待 → 正文后的独立等待状态。
    */
   const checkWorking = async (look, where) => {
     await call('Page.navigate', { url: url('new-session', look) })
     await wait('new-input')
     await sleep(500)
     await read(
-      `(()=>{const i=document.querySelector('${sel('new-input')}');const set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;set.call(i,'跑一会儿：看状态行');i.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+      `(()=>{const i=document.querySelector('${sel('new-input')}');const set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;set.call(i,'跑一会儿，想一会儿：看状态行');i.dispatchEvent(new Event('input',{bubbles:true}))})()`,
     )
     await sleep(250)
     await tap('new-send')
     let live = 0
-    for (let i = 0; i < 40; i++) {
+    let afterText = 0
+    let runningHeight = null
+    let accessible = false
+    const seconds = new Set()
+    for (let i = 0; i < 80; i++) {
       const state = await read(
-        `(()=>{const leaf=(re)=>[...document.querySelectorAll('div,span')].filter(e=>e.childElementCount===0&&re.test(e.textContent)).at(-1);return {group:leaf(/^▸ 活动.*正在运行/)?.textContent??null,working:leaf(/正在工作/)?.textContent??null}})()`,
+        `(()=>{const group=[...document.querySelectorAll('${sel('process-toggle')}')].at(-1);const working=[...document.querySelectorAll('div,span')].filter(e=>e.childElementCount===0&&/正在工作/.test(e.textContent));const text=group?.firstElementChild;return {group:group?.textContent??'',height:group?.getBoundingClientRect().height,whiteSpace:text&&getComputedStyle(text).whiteSpace,textWidth:text?.scrollWidth,textRoom:text?.clientWidth,working:working.map(e=>({text:e.textContent,inside:group?.contains(e)??false}))}})()`,
       )
-      if (state.group) {
+      if (/正在运行/.test(state.group)) {
         live++
-        assert.equal(
-          state.working,
-          null,
-          `${where} 活动行在跑时不另起“正在工作”（${state.working}）`,
+        runningHeight = state.height
+        assert.deepEqual(state.working, [], `${where} 活动行在跑时不出“正在工作”`)
+      }
+      const match = state.group.match(/正在工作 · (\d+) 秒$/)
+      if (match) {
+        seconds.add(Number(match[1]))
+        assert.equal(state.working.length, 1, `${where} 只有一个“正在工作”提示`)
+        assert.ok(state.working[0].inside, `${where} “正在工作”在活动行内`)
+        assert.equal(state.height, runningHeight, `${where} 等待时活动行不增高`)
+        assert.equal(state.whiteSpace, 'nowrap', `${where} 活动文字仍只有一行`)
+        assert.ok(state.textWidth <= state.textRoom, `${where} 活动行内的等待提示没有被截断`)
+        if (!accessible) {
+          const tree = await call('Accessibility.getFullAXTree')
+          accessible = tree.nodes.some(
+            (node) =>
+              node.role?.value === 'button' && /活动.*正在工作/.test(node.name?.value ?? ''),
+          )
+          assert.ok(accessible, `${where} 活动按钮的读屏名称包含“正在工作”`)
+        }
+      }
+      if (seconds.size && state.working.some((entry) => !entry.inside)) {
+        afterText++
+        assert.doesNotMatch(state.group, /正在工作/, `${where} 正文出现后活动行不再显示等待`)
+        assert.match(
+          state.working.find((entry) => !entry.inside).text,
+          /正在工作/,
+          `${where} 正文后的空档恢复原来的状态行`,
         )
       }
       await sleep(100)
     }
     assert.ok(live > 0, `${where} 量到了活动行在跑的时候`)
+    assert.ok(seconds.size >= 2, `${where} 活动行内秒数持续递增：${[...seconds]}`)
+    assert.ok(afterText > 0, `${where} 量到了正文之后的独立状态行`)
+    console.log(
+      `${where} 活动行 ${runningHeight}px，等待秒数 ${[...seconds].join(' → ')}，读屏和正文后的状态行通过`,
+    )
   }
   /** 建议卡：写明开不成的那张，“开始”是不能点的边框样式，读屏名称带原因；点了不报错 */
   const checkProposal = async (look, where) => {

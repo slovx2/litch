@@ -229,6 +229,7 @@ const ASKS_ONE = /问一句|ask one/i
 /**
  * 发的话里带“跑一会儿”时，回合里先跑一条不出输出的命令，两秒多之后结束，再照常回话。
  * 对面不增量给输出的时候，界面靠那一行上“已经跑了多久”让人看出它还活着——给这个用。
+ * 同时带“想一会儿”时，命令结束后先空等、再出说明，检查活动行里的等待状态。
  */
 const RUNS_A_WHILE = /跑一会儿|run a while/i
 /** “跑一会儿”那条命令跑多久。按真的时间走，不跟着出字的快慢变：界面上的秒数要来得及跳 */
@@ -893,7 +894,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       return turnId
     }
     if (RUNS_A_WHILE.test(message.text)) {
-      runAWhile(view, turnId)
+      runAWhile(view, turnId, RUN_MS, THINKS_A_WHILE.test(message.text))
       return turnId
     }
     if (THINKS_A_WHILE.test(message.text)) {
@@ -1203,7 +1204,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   }
 
   /** 回合里跑一条不出输出的命令，过一会儿结束（这时输出一次给全），再照常回话 */
-  const runAWhile = (view: SessionView, turnId: string, ms = RUN_MS) => {
+  const runAWhile = (view: SessionView, turnId: string, ms = RUN_MS, thenThink = false) => {
     const startedAt = clock.now()
     const item = {
       id: runKey(turnId),
@@ -1232,7 +1233,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           },
         },
       ])
-      replyHeard(view, turnId)
+      if (thenThink) thinkAWhile(view, turnId)
+      else replyHeard(view, turnId)
     }
     replies.set(sessionKey(view), clock.setTimer(finish, ms))
   }

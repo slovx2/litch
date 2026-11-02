@@ -110,9 +110,14 @@ or global Suggestions entry; it keeps its per-session suggestion list (`managers
   subagent's page with its task, the failure reason and its own transcript (read only). Tapping an
   activity group opens its steps below it, with **Collapse** at the end; the tapped line stays in place.
   While the activity line is the last thing in a running turn it is the turn's status; there is no
-  separate "… is working" line under it. After the turn, the folded summary reads "Processed · N steps"
+  separate "… is working" line under it. Between steps, it ends with "Working · N s", with the elapsed
+  time updating every second; while a step runs, it shows "Running: …". Screen readers announce the
+  same status. Once text follows the activity, the usual turn status line applies.
+  After the turn, the folded summary reads "Processed · N steps"
   and the time is written once, on the turn's last line ("Done · 41 s · 15:34").
-  回合在跑、活动行在最下面时不再另起“正在工作”一行；回合结束后摘要写“已处理 · N 步”，用时只写在回合尾。
+  回合在跑、活动行在最下面时不再另起状态行；步骤之间在活动行末尾显示“正在工作 · N 秒”，用时每秒更新，
+  有步骤在跑时显示“正在运行：…”，读屏同样可读到状态。正文接着出来后沿用原有状态行规则。
+  回合结束后摘要写“已处理 · N 步”，用时只写在回合尾。
 - **Quote part of a reply**: long-press a reply → Select text; the word under the finger is already
   selected with both handles (drag them, or long-press elsewhere). Reply in the system menu opens a box
   to write a note on the passage (it can stay empty); Add puts it above the input box as a quote (the same

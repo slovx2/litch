@@ -5,6 +5,7 @@ import type { Entry } from '../../../../../packages/ui/src/i18n/types.ts'
 export const zhCN = {
   'detail.activity': '活动',
   'detail.group.running': '正在运行：{label}',
+  'detail.group.working': '正在工作',
   'detail.group.collapse': '收起',
   'detail.step.declined': '已拒绝',
   'detail.step.failed': '失败',
@@ -40,6 +41,7 @@ export const zhCN = {
 export const en: Record<keyof typeof zhCN, Entry> = {
   'detail.activity': 'Activity',
   'detail.group.running': 'Running: {label}',
+  'detail.group.working': 'Working',
   'detail.group.collapse': 'Collapse',
   'detail.step.declined': 'Declined',
   'detail.step.failed': 'Failed',
