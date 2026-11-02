@@ -19,7 +19,8 @@ import { useT } from '../../ui/i18n'
 import { Sheet } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { SummaryLine, titleOf } from '../sessions/rows'
-import { FIRST_CHOICES, MORE_STEP, setRecentSettings, useRecentSettings } from './recent-state'
+import { FIRST_CHOICES, MORE_STEP } from './recent-settings'
+import { setRecentSettings, useRecentSettings } from './recent-state'
 
 const NONE: string[] = []
 
