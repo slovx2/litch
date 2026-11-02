@@ -412,6 +412,7 @@ export class DeviceServer {
     if (this.worktrees) info.extensions.push(EXTENSION.worktrees)
     this.orchestrating = this.sessionTreeOn()
     this.sessionTree = new SessionTree({
+      toolsBusy: (threadId) => this.deviceTools.busy(threadId),
       clientRequests: (threadId) =>
         this.approvals.list(threadId).map((card) => ({
           id: `client:${card.id}`,
@@ -488,7 +489,9 @@ export class DeviceServer {
     })
     this.sessionTree.managers = this.managers
     this.deviceTools.allowed = (threadId, namespace, tool) =>
-      this.managers.questions.allowed(threadId, namespace, tool)
+      this.managers.questions.allowed(threadId, namespace, tool) &&
+      this.managers.resets.toolsAllowed(threadId, namespace, tool)
+    this.deviceTools.refusal = (threadId) => this.managers.resets.refusal(threadId)
     info.extensions.push(
       EXTENSION.manager,
       EXTENSION.managerFeedback,

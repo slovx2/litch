@@ -1,11 +1,12 @@
 import { setBoardLayout } from '../manager/board-layout.ts'
 import { TitleSearch } from '../search/TitleSearch.tsx'
 import { SuggestionsPage } from '../tree/SuggestionsPage.tsx'
+import { useT } from './appearance.ts'
 import '../styles/suggestions.css'
 import { ManagerTitleBar } from '../manager/ManagerTitleBar.tsx'
 import '../styles/manager.css'
 import { keys, managerMark, type SessionSummary } from '@litch/core'
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArchivedPage } from '../archived/ArchivedPage.tsx'
 import { ArchivedSession } from '../archived/ArchivedSession.tsx'
 import { ConfigAgent } from '../assist/ConfigAgent.tsx'
@@ -40,6 +41,7 @@ import {
   onSettingsRequest,
   onSuggestionsRequest,
   onTasksRequest,
+  requestOpenSession,
   type TasksRoute,
 } from './actions.ts'
 import { LeaveGuardHost, leaveThen } from './leave-guard.tsx'
@@ -70,7 +72,9 @@ export interface Draft {
 export function App() {
   const { channel, replica } = useServices()
   useUpdateToast()
+  const t = useT()
   const managerData = useManagers()
+  const bindings = useRef(new Map<string, string>())
   const validLocation = useCallback(
     (state: ViewNavigation) => {
       const location = state[state.mode]
@@ -107,6 +111,10 @@ export function App() {
     keys.summary(picked?.deviceId ?? '', picked?.sessionId ?? ''),
   )
   const mark = pickedSummary ? managerMark(pickedSummary) : null
+  const historicalManager = managerData.managers.find(
+    (manager) =>
+      manager.deviceId === picked?.deviceId && manager.historyThreadIds?.includes(picked.sessionId),
+  )
   const pickedManager = managerData.managers.find(
     (manager) => manager.deviceId === picked?.deviceId && manager.threadId === picked.sessionId,
   )
@@ -116,6 +124,20 @@ export function App() {
           (manager) => manager.deviceId === picked?.deviceId && manager.id === mark.managerId,
         )
       : undefined
+  useEffect(() => {
+    for (const manager of managerData.managers) {
+      const key = `${manager.deviceId}:${manager.id}`
+      const previous = bindings.current.get(key)
+      bindings.current.set(key, manager.threadId)
+      if (
+        previous &&
+        previous !== manager.threadId &&
+        picked?.deviceId === manager.deviceId &&
+        picked.sessionId === previous
+      )
+        requestOpenSession({ deviceId: manager.deviceId, sessionId: manager.threadId })
+    }
+  }, [managerData.managers, picked])
   const forgetChat = useCallback(
     (selection: Selection) => dispatch({ type: 'missing', mode: 'chat', selection }),
     [dispatch],
@@ -475,6 +497,9 @@ export function App() {
                 key={`${selection.deviceId}:${selection.sessionId}`}
                 deviceId={selection.deviceId}
                 sessionId={selection.sessionId}
+                {...(historicalManager
+                  ? { footer: <div className="empty">{t('manager.resetHistoryReadOnly')}</div> }
+                  : {})}
               />
             </>
           ) : (

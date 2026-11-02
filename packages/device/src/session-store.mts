@@ -413,6 +413,45 @@ export class SessionStore {
     }
   }
 
+  /** 只改路由，不重建 lineage，保留报告代次、停报和唤醒偏好。可在崩溃恢复时重复执行。 */
+  rebindManager(oldId: string, newId: string): void {
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.db
+        .prepare('UPDATE lineage SET parent_thread_id=? WHERE parent_thread_id=?')
+        .run(newId, oldId)
+      this.db
+        .prepare('UPDATE notes SET parent_thread_id=? WHERE parent_thread_id=?')
+        .run(newId, oldId)
+      this.db.prepare('UPDATE child_starts SET parent_id=? WHERE parent_id=?').run(newId, oldId)
+      this.db
+        .prepare('INSERT OR IGNORE INTO wakes SELECT ?,count FROM wakes WHERE thread_id=?')
+        .run(newId, oldId)
+      this.db
+        .prepare(
+          'INSERT OR IGNORE INTO direct_starts SELECT ?,turn_id,count FROM direct_starts WHERE thread_id=?',
+        )
+        .run(newId, oldId)
+      for (const child of this.childrenOf(oldId)) this.addContact(newId, child.threadId)
+      for (const contact of this.db
+        .prepare('SELECT a,b,created_at FROM contacts WHERE a=? OR b=?')
+        .all(oldId, oldId)) {
+        const other = String(contact.a === oldId ? contact.b : contact.a)
+        if (other !== newId)
+          this.db
+            .prepare('INSERT OR IGNORE INTO contacts(a,b,created_at) VALUES(?,?,?)')
+            .run(...[newId, other].sort(), Number(contact.created_at))
+      }
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+    this.lineage.clear()
+    for (const row of this.db.prepare('SELECT * FROM lineage').all())
+      this.lineage.set(text(row.thread_id), lineageOf(row))
+  }
+
   private run(name: string, ...values: (string | number | null)[]): void {
     this.statements[name]?.run(...values)
   }

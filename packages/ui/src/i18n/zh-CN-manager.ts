@@ -3,6 +3,20 @@ import { MANAGER_NAMES } from '../../../protocol/src/manager-posts.mts'
 import type { Entry } from './types.ts'
 
 export const zhManager = {
+  'manager.resetHistory': '查看旧会话 {n}',
+  'manager.resetHistoryReadOnly': '此经理会话已重置，旧对话仅供查阅。',
+
+  'manager.reset': '重置经理会话',
+  'manager.resetWaiting': '等待经理回合和后台任务结束',
+  'manager.resetOutdated': '重置经理会话：有新版本能力可用',
+  'manager.resetNote':
+    '重置可让经理获得新版本的工具和指令。经理忙碌时会等待回合和后台任务结束，工作线继续运行。',
+  'manager.resetRefresh': '保留当前会话和完整历史，新能力将在下一轮生效。',
+  'manager.resetReplace':
+    '将创建新会话，旧对话保留为只读历史。新经理只接收交接摘要和看板，其余对话细节不会传入新会话。',
+  'manager.resetSummaryFailed': '交接摘要生成失败。是否仅根据看板接手？',
+  'manager.resetBoardOnly': '仅根据看板接手',
+
   'manager.selectionReset': '已更新，原选项已清除',
   'manager.discussion': '讨论',
   'manager.discussionOpen': '打开讨论',

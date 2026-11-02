@@ -3,6 +3,22 @@ import { MANAGER_NAMES } from '../../../protocol/src/manager-posts.mts'
 import type { Entry } from './types.ts'
 
 export const enManager = {
+  'manager.resetHistory': 'View previous session {n}',
+  'manager.resetHistoryReadOnly':
+    'This manager session was reset. This conversation is read-only history.',
+
+  'manager.reset': 'Reset manager session',
+  'manager.resetWaiting': 'Waiting for the manager turn and background tasks to finish',
+  'manager.resetOutdated': 'Reset manager session: new capabilities available',
+  'manager.resetNote':
+    'Reset to install the latest tools and instructions. The reset waits for the manager’s turn and background tasks to finish. Worklines keep running.',
+  'manager.resetRefresh':
+    'The current conversation and full history are preserved. New capabilities take effect on the next turn.',
+  'manager.resetReplace':
+    'A new session will take over. The old conversation remains as read-only history. Only the handover summary and board carry over; other conversation details will not be included.',
+  'manager.resetSummaryFailed': 'The handover summary failed. Continue using only the board?',
+  'manager.resetBoardOnly': 'Continue with board only',
+
   'manager.selectionReset': 'Updated; selection cleared',
   'manager.discussion': 'Discussion',
   'manager.discussionOpen': 'Open discussion',

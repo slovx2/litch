@@ -2338,6 +2338,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     request: (method, params) => link.request(method, params),
     fail,
     changed(manager) {
+      for (const oldId of manager.historyThreadIds ?? []) {
+        const previous = threads.get(oldId) as (Thread & ManagerThreadFields) | undefined
+        if (!previous?.litchManager) continue
+        const { litchManager: _mark, ...history } = previous
+        upsertThread(history)
+      }
       const thread = threads.get(manager.threadId)
       if (thread)
         upsertThread({

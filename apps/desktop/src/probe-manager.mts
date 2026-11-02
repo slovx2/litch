@@ -404,6 +404,23 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     }
   ).__litchLook
   const oldLook = fontLook.get()
+  // 三种皮肤都经过同一个二次确认，取消不发重置命令；读屏名称和新版提示共用入口。
+  for (const skin of ['retro', 'human', 'standard']) {
+    fontLook.set({ skin })
+    await click('[data-act="manager-reset"]')
+    const dialog = await until('重置二次确认', () =>
+      one<HTMLDialogElement>('dialog[open][aria-label="重置经理会话"]'),
+    )
+    if (!dialog.textContent?.includes('新版本的工具和指令'))
+      throw new Error(`重置确认缺说明：${skin}`)
+    if (!one('[data-act="manager-reset"][aria-label="重置经理会话"]'))
+      throw new Error('重置按钮缺读屏名称')
+    const rect = dialog.getBoundingClientRect()
+    if (rect.left < 0 || rect.right > innerWidth || dialog.scrollWidth > dialog.clientWidth)
+      throw new Error(`重置确认溢出：${skin}`)
+    dialog.querySelector<HTMLButtonElement>('.btn.ghost')?.click()
+    await until('取消重置', () => !one('dialog[open]'))
+  }
   let boardFont = true
   const fontMeasurements: unknown[] = []
   for (const skin of ['retro', 'human', 'standard']) {

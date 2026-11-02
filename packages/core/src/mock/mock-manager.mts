@@ -394,6 +394,15 @@ export function createMockManagers(host: MockManagerHost) {
         )
       }
       result = { manager }
+    } else if (name === 'managers.reset') {
+      manager.reset = {
+        mode: manager.reset?.mode ?? (manager.harness === 'claude-code' ? 'refresh' : 'replace'),
+        current: 'mock-current',
+        applied: 'mock-current',
+        outdated: false,
+        phase: 'ready',
+      }
+      result = { manager }
     } else if (name === 'managers.end') {
       manager.status = 'ending'
       activity(board, t('经理正在收尾', 'Manager is wrapping up'))
@@ -787,6 +796,7 @@ export function createMockManagers(host: MockManagerHost) {
         'managers.create',
         'managers.update',
         'managers.end',
+        'managers.reset',
         'managers.answers.submit',
         'managers.feedback.submit',
         'managers.decision.reopen',

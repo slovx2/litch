@@ -226,6 +226,13 @@ export function sampleManagers(
       scope,
       cwd,
       harness: 'claude',
+      reset: {
+        mode: 'refresh',
+        current: 'mock-current',
+        applied: 'mock-old',
+        outdated: true,
+        phase: 'idle',
+      },
       model: null,
       effort: null,
       template: 'release',

@@ -500,6 +500,18 @@ export class ClientSession implements ClientToolPeer {
     if (method === CLIENT_TOOL_METHOD.desktops && this.state !== 'closed')
       return this.host.clientInvoke.desktops()
     if (method === CLIENT_TOOL_METHOD.invoke && this.state !== 'closed')
+      if (
+        isObject(frame.params) &&
+        typeof frame.params.threadId === 'string' &&
+        (this.host.managers?.resets.refusal(frame.params.threadId) ||
+          this.host.managers?.resets.held(frame.params.threadId))
+      )
+        throw new ProtocolError(
+          -32600,
+          this.host.managers?.resets.refusal(frame.params.threadId) ??
+            'Manager reset is in progress.',
+        )
+    if (method === CLIENT_TOOL_METHOD.invoke && this.state !== 'closed')
       return this.host.clientInvoke.invoke(this, frame.params).then((outcome) => {
         if ('error' in outcome) throw new UpstreamRpcError(outcome.error)
         return outcome.result
@@ -511,6 +523,14 @@ export class ClientSession implements ClientToolPeer {
       return this.host.pairing.call(method, frame.params)
     }
     if (this.state !== 'ready') throw new ProtocolError(-32600, 'Not initialized')
+    if (isObject(frame.params) && typeof frame.params.threadId === 'string') {
+      const threadId = frame.params.threadId
+      const readOnly = ['thread/read', 'thread/turns/list', 'thread/unsubscribe'].includes(method)
+      const refusal = this.host.managers?.resets.refusal(threadId)
+      if (refusal && !readOnly) throw new ProtocolError(-32600, refusal)
+      if (this.host.managers?.resets.held(threadId) && !readOnly && method !== 'turn/interrupt')
+        throw new ProtocolError(-32600, 'Manager reset is waiting for this session to settle.')
+    }
     // 旁问只由设备编排；普通客户端不能绕过卡片提升权限、发任意回合或复制成可写会话。
     if (
       isObject(frame.params) &&
@@ -917,6 +937,20 @@ export class ClientSession implements ClientToolPeer {
               }
             : undefined,
         )
+      // owner、额度等异步等待期间也可能完成换绑；实际发给引擎前再核一次，不能迟到启动旧经理。
+      if (
+        typeof fields?.threadId === 'string' &&
+        !['thread/read', 'thread/turns/list', 'thread/unsubscribe'].includes(method)
+      ) {
+        const refusal = this.host.managers?.resets.refusal(fields.threadId)
+        if (
+          refusal ||
+          (this.host.managers?.resets.held(fields.threadId) && method !== 'turn/interrupt')
+        ) {
+          done()
+          throw new ProtocolError(-32600, refusal ?? 'Manager reset is in progress.')
+        }
+      }
       if (link.dialect === NATIVE_CODEX_DIALECT && readsCodexHistory(method, outgoing)) {
         if (expectation) this.relay.expect(link, id, expectation)
         // 仍走同一条 relay：恢复的订阅记账、后台来源和扩展声明过滤都不能绕开。

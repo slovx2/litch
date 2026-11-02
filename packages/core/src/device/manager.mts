@@ -327,6 +327,15 @@ export function createManagers(host: ManagersHost) {
       )
       return { manager: settle(result.manager) }
     },
+    async reset(managerId: string, boardOnly?: boolean) {
+      const result = await guarded(() =>
+        host.request(MANAGER_METHOD.reset, {
+          managerId,
+          ...(boardOnly === undefined ? {} : { boardOnly }),
+        }),
+      )
+      return { manager: settle(result.manager) }
+    },
     async end(managerId: string) {
       const result = await guarded(() => host.request(MANAGER_METHOD.end, { managerId }))
       return { manager: settle(result.manager) }

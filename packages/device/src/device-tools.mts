@@ -62,6 +62,7 @@ const message = (error: unknown): string => (error instanceof Error ? error.mess
 export class DeviceTools implements DeviceToolRegistry {
   /** 设备拥有的临时旁问对所有动态工具统一把关，包含客户端工具。 */
   allowed: (threadId: string, namespace: unknown, tool: unknown) => boolean = () => true
+  refusal: (threadId: string) => string | null = () => null
   private readonly handlers = new Map<string, DeviceToolHandler>()
   /** 原生动态工具由设备直接接管，不向适配器宣称能执行这类命名空间。 */
   private readonly localOnly = new Set<string>()
@@ -71,6 +72,9 @@ export class DeviceTools implements DeviceToolRegistry {
   private readonly done = new Map<string, { harness: string; turnId: string }>()
   private closed = false
   private readonly log: (line: string) => void
+  busy(threadId: string): boolean {
+    return [...this.running.keys()].some((key) => key.split(sep)[1] === threadId)
+  }
 
   constructor(log: (line: string) => void = () => {}) {
     this.log = log
@@ -99,7 +103,13 @@ export class DeviceTools implements DeviceToolRegistry {
    */
   dispatch(harness: string, params: Record<string, unknown>, reply: DeviceToolReply): void {
     if (!this.allowed(text(params.threadId), params.namespace, params.tool)) {
-      reply(clientToolFailure('blocked', 'Decision background questions are read-only.'))
+      reply(
+        clientToolFailure(
+          'blocked',
+          this.refusal(text(params.threadId)) ??
+            'This session cannot change state during manager reset.',
+        ),
+      )
       return
     }
     const call: DeviceToolCall = {

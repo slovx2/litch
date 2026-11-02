@@ -33,6 +33,7 @@ import { ManagerForm } from './ManagerForm.tsx'
 import { RelationsContext } from './Relations.tsx'
 import { Reports } from './Reports.tsx'
 import { Requests } from './Requests.tsx'
+import { ResetManager } from './ResetManager.tsx'
 import type { BoardReference } from './references.ts'
 
 /** 放在应用导航层，离开经理视图后仍能恢复看板页签和设置页。 */
@@ -296,6 +297,7 @@ export function ManagerPage({
         </button>
         {manager.status === 'active' ? (
           <>
+            <ResetManager manager={manager} disabled={disabled} />
             <button
               type="button"
               className="btn ghost"

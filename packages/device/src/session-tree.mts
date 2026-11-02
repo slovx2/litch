@@ -83,6 +83,7 @@ export interface SessionTreeHost {
   /** 会话里还有几个后台任务在跑（background.mts） */
   backgroundRunning(threadId: string): number
   backgroundWorking?(threadId: string): number
+  toolsBusy?(threadId: string): boolean
   continuationPending?(threadId: string): boolean
   /** 会话的后台任务集合（background.mts） */
   backgroundTasks(threadId: string): LitchBackgroundTask[]
@@ -823,8 +824,8 @@ export class SessionTree {
     }
     // 出错、被打断的回合不唤醒（同 Claude 桌面端：被截断的回合不算），等父会话下一回合带上，
     // 或者别的子会话的回报唤醒父会话时一起交出去。父会话正在跑的话不分结局都当场插进去（check 里的 steerNotes）
-    this.store.addNote(lineage.parentThreadId, note, wakeable && status === 'completed')
-    this.notesChanged(lineage.parentThreadId)
+    this.store.addNote(current.parentThreadId, note, wakeable && status === 'completed')
+    this.notesChanged(current.parentThreadId)
     this.host.log(`子会话 ${threadId}（${harness}）的回合 ${String(turn.id)} 已进父会话的回报队列`)
     if (background > 0) {
       const running = this.host
@@ -837,7 +838,7 @@ export class SessionTree {
         this.host.log(`盯子会话 ${threadId} 的后台任务没成：${String(error)}`),
       )
     } else this.backgroundOwed.delete(threadId)
-    this.check(lineage.parentThreadId)
+    this.check(current.parentThreadId)
   }
 
   /** 用户在后台任务页上停了这个会话的命令（客户端的 thread/backgroundTerminals/terminate、clean） */
@@ -939,6 +940,7 @@ export class SessionTree {
    * 再提醒，最后唤醒：前一样开出回合之后会话就不闲了，后面的等它结束（turnEvent 再查）
    */
   check(parentId: string): void {
+    if (this.managers?.resets.held(parentId) || this.managers?.resets.refusal(parentId)) return
     const previous = this.checks.get(parentId) ?? Promise.resolve()
     const next = previous
       .then(() =>
@@ -977,7 +979,12 @@ export class SessionTree {
     const next = previous
       .catch(() => {})
       .then(async () => {
-        if (this.closed) return
+        if (
+          this.closed ||
+          this.managers?.resets.held(threadId) ||
+          this.managers?.resets.refusal(threadId)
+        )
+          return
         const harness = await this.owner(threadId)
         await this.watch(harness, threadId)
         const link = await this.link(harness)
@@ -1041,6 +1048,7 @@ export class SessionTree {
    * 回合正好在收尾、引擎不会插话的，留在队列里照旧等下一回合或唤醒
    */
   private async steerNotes(parentId: string): Promise<void> {
+    if (this.managers?.resets.held(parentId) || this.managers?.resets.refusal(parentId)) return
     if (this.closed || !this.enabledFor(parentId)) return
     const running = this.active.get(parentId)
     if (running === undefined || this.store.notes(parentId).length === 0) return
@@ -1216,12 +1224,17 @@ export class SessionTree {
    * （设备进程的连接断过、重启过），以引擎为准。读不到的只看通知
    */
   private async idle(threadId: string): Promise<boolean> {
+    if (this.managers?.resets.held(threadId) || this.managers?.resets.refusal(threadId))
+      return false
     const before = this.active.get(threadId)
     const { thread } = await this.read(threadId, false).catch(() => ({ thread: null }))
     if (thread === null) return before === undefined
     if (busy(thread)) return false
     if (before !== undefined && this.active.get(threadId) === before) this.active.delete(threadId)
     return !this.active.has(threadId)
+  }
+  async settleManagerQueue(threadId: string): Promise<void> {
+    await this.checks.get(threadId)
   }
 
   /**

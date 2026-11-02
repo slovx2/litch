@@ -640,7 +640,10 @@ function ownProposal(tree: SessionTree, proposalId: string, call: DeviceToolCall
       'invalid',
       `There is no proposal ${proposalId}. Use the proposal_id returned by start.`,
     )
-  if (proposal.threadId !== call.threadId)
+  if (
+    proposal.threadId !== call.threadId &&
+    tree.managers?.store.historical(proposal.threadId)?.threadId !== call.threadId
+  )
     throw new Refused(
       'blocked',
       `Proposal ${proposalId} belongs to another session; you can only act on proposals you made in this session.`,
@@ -939,6 +942,10 @@ async function writable(
   call: DeviceToolCall,
   message: boolean,
 ): Promise<string> {
+  const refusal = tree.managers?.resets.refusal(threadId)
+  if (refusal) throw new Refused('blocked', refusal)
+  if (tree.managers?.resets.held(threadId) && !message)
+    throw new Refused('blocked', 'Wait for manager reset to finish.')
   if (threadId === call.threadId) throw new Refused('blocked', 'This is your own session.')
   if (tree.store.descends(threadId, call.threadId)) return tree.owner(threadId)
   const { thread } = await found(tree, threadId, false)
@@ -958,7 +965,8 @@ async function writable(
 }
 
 async function send(tree: SessionTree, args: Record<string, unknown>, call: DeviceToolCall) {
-  const threadId = string(args, 'thread_id', true)
+  const requestedId = string(args, 'thread_id', true)
+  const threadId = tree.managers?.store.historical(requestedId)?.threadId ?? requestedId
   const message = string(args, 'message', true)
   if (message.length > SESSION_TOOL_LIMITS.messageChars)
     throw new Refused(
@@ -970,6 +978,21 @@ async function send(tree: SessionTree, args: Record<string, unknown>, call: Devi
   // 发过一次，两边之后一直可以互相发：告诉对面怎么回（回答写在它自己的对话里，这边看不到）
   const reply = `\n\n(To answer, send a message back with litch_sessions.send to thread_id ${call.threadId}; your reply in this conversation does not reach that session.)`
   const text = `[Litch] Message from session ${caller ? `"${caller}" ` : ''}(${call.threadId}), not typed by the user:\n\n${message}${reply}`
+  const manager =
+    tree.managers?.store.forThread(threadId) ?? tree.managers?.store.historical(threadId)
+  if (manager && tree.managers) {
+    const forwarded =
+      requestedId !== manager.threadId
+        ? `[Forwarded from previous manager session ${requestedId}]\n`
+        : ''
+    tree.managers.store.enqueue(manager.id, forwarded + text)
+    tree.store.addContact(call.threadId, manager.threadId)
+    tree.managers.kick(manager.id)
+    return {
+      thread_id: manager.threadId,
+      note: 'Queued for the current manager; delivery waits while its session is being reset.',
+    }
+  }
   const input = [{ type: 'text', text, text_elements: [] }]
   // 订阅它，它这一回合结束时设备进程收得到（回报、wait）
   await tree.watch(harness, threadId)
@@ -1188,6 +1211,8 @@ export function sessionToolsHandler(
   archives: SessionArchives,
 ): DeviceToolHandler {
   return async (call, { signal }) => {
+    const refusal = tree.managers?.resets.refusal(call.threadId)
+    if (refusal) return clientToolFailure('blocked', refusal)
     if (
       tree.managers &&
       !tree.managers.questions.allowed(call.threadId, 'litch_sessions', call.tool)

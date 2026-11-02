@@ -30,7 +30,11 @@ export class ManagerPosts {
       .map((o) => o.id as ManagerPostId)
     ids.push(...this.store.publishedReports(managerId).map((r) => r.id))
     for (const proposal of this.owner.tree.store.allSuggestions())
-      if (!proposal.offer && this.owner.lines.mark(proposal.threadId)?.managerId === managerId)
+      if (
+        !proposal.offer &&
+        (this.owner.store.historical(proposal.threadId)?.id ??
+          this.owner.lines.mark(proposal.threadId)?.managerId) === managerId
+      )
         ids.push(`S-${proposal.id}`)
     // 已了结建议仍可读既有讨论，历史不因卡片开始或忽略而消失。
     for (const state of this.store.questions(managerId))
@@ -59,7 +63,8 @@ export class ManagerPosts {
       if (
         !proposal ||
         proposal.offer ||
-        this.owner.lines.mark(proposal.threadId)?.managerId !== managerId
+        (this.owner.store.historical(proposal.threadId)?.id ??
+          this.owner.lines.mark(proposal.threadId)?.managerId) !== managerId
       )
         invalid('This suggestion does not belong to this manager.')
       const version = this.store.suggestionVersion(managerId, id)

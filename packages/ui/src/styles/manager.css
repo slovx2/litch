@@ -1336,3 +1336,16 @@
 .mg-talk-body .mg-post-compose .mg-question-modes {
   margin-bottom: 4px;
 }
+
+.manager-reset {
+  position: relative;
+}
+.manager-reset-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--wait);
+}

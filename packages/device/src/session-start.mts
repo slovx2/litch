@@ -719,7 +719,7 @@ export async function acceptProposal(
     value === undefined ? fallback : value || null
   const started = startChild(
     tree,
-    proposal.threadId,
+    tree.managers?.store.historical(proposal.threadId)?.threadId ?? proposal.threadId,
     {
       harness: pick(overrides.harness, proposal.harness),
       model: pick(overrides.model, proposal.model),

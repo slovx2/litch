@@ -32,6 +32,8 @@ const MIGRATIONS = [
   `CREATE TABLE manager_reports(manager_id TEXT NOT NULL, id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(manager_id,id));
    CREATE TABLE manager_suggestion_versions(manager_id TEXT NOT NULL, id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(manager_id,id));`,
   `CREATE TABLE manager_relations(manager_id TEXT NOT NULL, id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(manager_id,id));`,
+  `CREATE TABLE manager_resets(manager_id TEXT PRIMARY KEY, body TEXT NOT NULL);
+   CREATE TABLE manager_history(thread_id TEXT PRIMARY KEY, manager_id TEXT NOT NULL);`,
 ] as const
 export const MANAGER_SCHEMA_VERSION = MIGRATIONS.length
 export const managerNow = () => Math.floor(Date.now() / 1000)
@@ -61,6 +63,17 @@ export interface LineReport {
   at: number
   turnId: string
   status: string
+}
+export interface ResetRecord {
+  managerId: string
+  oldThreadId: string
+  phase: import('../../protocol/src/manager.mjs').ManagerResetState['phase']
+  applied: string | null
+  error?: string
+  /** 已提交的换绑意图；跨库重放幂等，不声称 WAL 跨库原子。 */
+  committed?: { manager: Manager; input: string }
+  summaryTurnId?: string
+  oldTools?: unknown[]
 }
 
 export function openManagerDatabase(stateDir: string): DatabaseSync {
@@ -130,6 +143,66 @@ export class ManagerStore {
         'INSERT INTO managers VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body',
       )
       .run(manager.id, manager.threadId, JSON.stringify(manager))
+  }
+  reset(id: string): ResetRecord | null {
+    return body(this.db.prepare('SELECT body FROM manager_resets WHERE manager_id=?').get(id))
+  }
+  saveReset(record: ResetRecord): void {
+    this.db
+      .prepare(
+        'INSERT INTO manager_resets VALUES(?,?) ON CONFLICT(manager_id) DO UPDATE SET body=excluded.body',
+      )
+      .run(record.managerId, JSON.stringify(record))
+  }
+  historical(threadId: string): Manager | null {
+    const row = this.db
+      .prepare('SELECT manager_id FROM manager_history WHERE thread_id=?')
+      .get(threadId)
+    return row ? this.manager(String(row.manager_id)) : null
+  }
+  history(id: string): string[] {
+    return this.db
+      .prepare('SELECT thread_id FROM manager_history WHERE manager_id=? ORDER BY rowid')
+      .all(id)
+      .map((row) => String(row.thread_id))
+  }
+  /** 会话树已按提交意图重放后，一笔事务更新索引、正文、临时追问和接班事件。 */
+  finishRebind(record: ResetRecord): void {
+    const committed = record.committed
+    if (!committed) throw new Error('Missing committed manager rebind')
+    this.transaction(() => {
+      const after = committed.manager
+      this.db
+        .prepare('INSERT OR IGNORE INTO manager_history VALUES(?,?)')
+        .run(record.oldThreadId, after.id)
+      this.db
+        .prepare('UPDATE managers SET thread_id=?, body=? WHERE id=?')
+        .run(after.threadId, JSON.stringify(after), after.id)
+      for (const state of this.questions(after.id)) {
+        state.threadId = null
+        this.saveQuestion(state)
+      }
+      // 接班提示必须是新经理首轮，重置期间用户答复等既有事件保持原顺序随后投递。
+      this.db
+        .prepare(
+          'INSERT INTO deliveries(seq,id,manager_id,text) VALUES((SELECT coalesce(min(seq),1)-1 FROM deliveries),?,?,?)',
+        )
+        .run(randomUUID(), after.id, committed.input)
+      this.record(
+        after.id,
+        'manager',
+        'user',
+        { threadId: record.oldThreadId },
+        after,
+        'Manager session reset',
+      )
+      this.saveReset({
+        managerId: after.id,
+        oldThreadId: after.threadId,
+        phase: 'ready',
+        applied: record.applied,
+      })
+    })
   }
   objects(managerId: string): BoardObject[] {
     return this.db

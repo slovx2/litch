@@ -271,7 +271,7 @@ test('经理库从版本 1 升级：保留看板、历史、编号和待投递�
     const changes = store.changes('a')
     const events = store.deliveries('a')
     store.db.exec(
-      'DROP TABLE endings; DROP TABLE questions; DROP TABLE suggestion_reviews; DROP TABLE manager_reports; DROP TABLE manager_suggestion_versions; DROP TABLE manager_relations; PRAGMA user_version=1',
+      'DROP TABLE endings; DROP TABLE questions; DROP TABLE suggestion_reviews; DROP TABLE manager_reports; DROP TABLE manager_suggestion_versions; DROP TABLE manager_relations; DROP TABLE manager_resets; DROP TABLE manager_history; PRAGMA user_version=1',
     )
     store.close()
     store = new ManagerStore(openManagerDatabase(dir))
@@ -304,7 +304,7 @@ test('经理库 v4 升 v6 保留看板、问答与审核，报告重开后仍在
     })
     store.saveSuggestionReview('keep', 'proposal', { state: 'endorsed', reason: '保留', at: 1 })
     store.db.exec(
-      'DROP TABLE manager_reports; DROP TABLE manager_suggestion_versions; DROP TABLE manager_relations; PRAGMA user_version=4',
+      'DROP TABLE manager_reports; DROP TABLE manager_suggestion_versions; DROP TABLE manager_relations; DROP TABLE manager_resets; DROP TABLE manager_history; PRAGMA user_version=4',
     )
     store.close()
     store = new ManagerStore(openManagerDatabase(dir))

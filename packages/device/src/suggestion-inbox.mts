@@ -102,7 +102,10 @@ export class SuggestionInbox {
         this.dirty = true
         return
       }
-      const mark = this.tree.managers?.lines.mark(proposal.threadId)
+      const historical = this.tree.managers?.store.historical(proposal.threadId)
+      const mark = historical
+        ? { managerId: historical.id, role: 'manager' }
+        : this.tree.managers?.lines.mark(proposal.threadId)
       next.set(proposal.id, {
         proposal,
         source,

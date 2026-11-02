@@ -57,6 +57,10 @@ export interface ManagerRequests {
   'litch/manager/list': { params: ManagerListParams; result: ManagerListResponse }
   'litch/manager/create': { params: ManagerCreateParams; result: ManagerCreateResponse }
   'litch/manager/update': { params: ManagerUpdateParams; result: ManagerUpdateResponse }
+  'litch/manager/reset': {
+    params: import('../../../protocol/src/manager.mjs').ManagerResetParams
+    result: ManagerEndResponse
+  }
   'litch/manager/end': { params: ManagerEndParams; result: ManagerEndResponse }
   'litch/manager/board/read': { params: ManagerBoardReadParams; result: ManagerBoardReadResponse }
   'litch/manager/answers/submit': {

@@ -1,5 +1,6 @@
 // 工具形状和可重拼的规则：参数放在规则末尾的 JSON 注释中，避免从自然语言反解范围和派活设置。
 
+import { createHash } from 'node:crypto'
 import type { ClientToolNamespaceSpec } from '../../protocol/src/client-tools.mjs'
 import {
   MANAGER_TOOLS,
@@ -8,6 +9,7 @@ import {
   managerSessionRules,
   managerSettingsRules,
 } from '../../protocol/src/client-tools-manager.mjs'
+import { PRESENTATION_SPEC } from '../../protocol/src/client-tools-presentation.mjs'
 import { REPOSITORY_TOOLS } from '../../protocol/src/client-tools-repository.mjs'
 import { SESSION_TOOL, sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
 import type { Manager } from '../../protocol/src/manager.mjs'
@@ -24,8 +26,32 @@ export function ruleSettings(recorded: string): RuleSettings | null {
   }
 }
 function tagged(text: string, settings: RuleSettings): string {
-  return `${text}${MARK}${JSON.stringify(settings)} -->`
+  const { name, scope, rules, dispatch, contact } = settings
+  return `${text}${MARK}${JSON.stringify({ name, scope, rules, dispatch, contact })} -->`
 }
+/** 创建、检测和重置共用一份生成器，不把线程号和运行计数混进能力版本。 */
+export function managerBundle(manager: RuleSettings, native: boolean) {
+  return [...managerTools(manager), ...(native ? [] : [PRESENTATION_SPEC])]
+}
+export function managerFingerprint(tools: unknown): string {
+  const canonical = (value: unknown): unknown =>
+    Array.isArray(value)
+      ? value.map(canonical)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(
+            Object.entries(value)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([key, entry]) => [key, canonical(entry)]),
+          )
+        : value
+  return createHash('sha256')
+    .update(JSON.stringify(canonical(tools)))
+    .digest('hex')
+}
+export const MANAGER_HANDOVER_PROMPT =
+  '你接手了这个经理的工作。先用 litch_manager 读取看板，了解当前情况，再根据交接摘要继续。You are taking over this manager. Read the board with litch_manager first, then continue using the handover summary below.'
+export const MANAGER_SUMMARY_PROMPT =
+  '用户正在重置经理会话。请只写交接摘要：在做的事、待验收的工作线、等用户答复的事、下一步。不要调用改变状态的工具。The user is resetting this manager session. Write only a handover summary: ongoing work, lines awaiting acceptance, pending user decisions, and next steps. Do not call tools that change state.'
 export function managerTools(manager: RuleSettings): ClientToolNamespaceSpec[] {
   const sessions = sessionTools(false)
   return [

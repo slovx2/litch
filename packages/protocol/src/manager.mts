@@ -7,6 +7,7 @@ export const MANAGER_METHOD = {
   create: 'litch/manager/create',
   update: 'litch/manager/update',
   end: 'litch/manager/end',
+  reset: 'litch/manager/reset',
   boardRead: 'litch/manager/board/read',
   answersSubmit: 'litch/manager/answers/submit',
   feedbackSubmit: 'litch/manager/feedback/submit',
@@ -230,6 +231,9 @@ export interface ManagerActivity {
 }
 
 export interface Manager {
+  /** 设备生成的能力指纹；旧快照未核验时 applied 为 null。 */
+  reset?: ManagerResetState
+  historyThreadIds?: string[]
   id: string
   threadId: string
   name: string
@@ -255,6 +259,19 @@ export interface Manager {
   createdAt: number
   updatedAt: number
   endedAt: number | null
+}
+export interface ManagerResetState {
+  mode: 'refresh' | 'replace'
+  current: string
+  applied: string | null
+  outdated: boolean
+  phase: 'idle' | 'waiting' | 'summarizing' | 'applying' | 'ready' | 'failed' | 'summaryFailed'
+  error?: string
+}
+export interface ManagerResetParams {
+  managerId: string
+  /** 仅摘要失败后二次确认允许；默认必须取得摘要。 */
+  boardOnly?: boolean
 }
 export interface ManagerRequestFields {
   title: string

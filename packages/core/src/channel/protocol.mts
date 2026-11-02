@@ -463,6 +463,10 @@ export interface Commands {
     params: { deviceId: string; managerId: string; patch: ManagerEdit }
     result: { manager: ManagerView }
   }
+  'managers.reset': {
+    params: { deviceId: string; managerId: string; boardOnly?: boolean }
+    result: { manager: ManagerView }
+  }
   'managers.end': {
     params: { deviceId: string; managerId: string }
     result: { manager: ManagerView }

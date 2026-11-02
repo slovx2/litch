@@ -34,6 +34,10 @@ export const MANAGER_SPACE = {
 
 /** 只识别整条事件，避免引用或事件后面的用户指令被当作事件回合吞掉。 */
 export function managerEventReply(said) {
+  if (said.startsWith('用户正在重置经理会话。'))
+    return { text: '交接摘要：核验重置能力，待验收工作线仍在看板，下一步先读取看板。' }
+  if (said.startsWith('你接手了这个经理的工作。'))
+    return { text: '已接手经理，交接摘要和看板可用。' }
   const event = said
     .trim()
     .match(

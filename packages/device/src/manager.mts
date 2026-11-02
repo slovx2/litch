@@ -8,7 +8,6 @@ import {
   managerOpenText,
   managerRulesText,
 } from '../../protocol/src/client-tools-manager.mjs'
-import { PRESENTATION_SPEC } from '../../protocol/src/client-tools-presentation.mjs'
 import { ruledNamespaces } from '../../protocol/src/codex-developer-instructions.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import {
@@ -30,7 +29,8 @@ import { ManagerPosts } from './manager-posts.mjs'
 import { ManagerQuestions } from './manager-questions.mjs'
 import { projectedRelations } from './manager-relations.mjs'
 import { isRequest } from './manager-requests.mjs'
-import { managerTools } from './manager-rules.mjs'
+import { ManagerResets } from './manager-reset.mjs'
+import { managerBundle, managerFingerprint, managerTools } from './manager-rules.mjs'
 import { ManagerStore, managerNow, openManagerDatabase } from './manager-store.mjs'
 import {
   fields,
@@ -52,6 +52,7 @@ export class DeviceManagers {
   readonly writer: ManagerBoardWriter
   readonly posts: ManagerPosts
   readonly questions: ManagerQuestions
+  readonly resets: ManagerResets
   private readonly draining = new Map<string, Promise<void>>()
   private readonly timer: NodeJS.Timeout
   private closed = false
@@ -80,6 +81,7 @@ export class DeviceManagers {
     )
     this.posts = new ManagerPosts(this)
     this.questions = new ManagerQuestions(this)
+    this.resets = new ManagerResets(this)
     this.unlisten = tree.onTurnEnded((threadId) => {
       const manager = this.lines.managerFor(threadId)
       if (manager) {
@@ -88,6 +90,7 @@ export class DeviceManagers {
       }
     })
     this.timer = setInterval(() => {
+      for (const manager of this.store.managers()) this.resets.tick(manager.id)
       for (const id of new Set([
         ...this.store.deliveries().map((event) => event.managerId),
         ...this.store
@@ -105,6 +108,8 @@ export class DeviceManagers {
     const board = this.board(id)
     return {
       ...manager,
+      reset: this.resets.state(manager),
+      historyThreadIds: this.store.history(id),
       pendingDecisions: board.decisions.filter((decision) => decision.status === 'open').length,
       pendingRequests: (board.requests ?? []).filter((request) => request.status === 'open').length,
       pendingReports:
@@ -116,6 +121,7 @@ export class DeviceManagers {
             post.kind === 'suggestion' &&
             post.fields.status === 'pending' &&
             (post.sourceThreadId === manager.threadId ||
+              this.store.history(id).includes(post.sourceThreadId ?? '') ||
               this.store.suggestionReview(id, post.proposalId ?? '')?.state === 'endorsed'),
         ).length,
       runningLines: board.lines.filter((line) => line.running).length,
@@ -271,6 +277,10 @@ export class DeviceManagers {
     const id = text(params.managerId, 'managerId')
     this.manager(id)
     switch (method) {
+      case MANAGER_METHOD.reset:
+        keys(params, ['managerId', 'boardOnly'])
+        this.resets.request(id, params.boardOnly === true)
+        return { manager: this.manager(id) }
       case MANAGER_POST_METHOD.question: {
         keys(params, ['managerId', 'id', 'revision', 'question', 'mode'])
         const postId = text(params.id, 'id') as ManagerPostId
@@ -341,6 +351,11 @@ export class DeviceManagers {
         await this.lines.refresh(id)
         return { board: this.board(id) }
       case MANAGER_METHOD.update: {
+        if (this.resets.held(this.store.manager(id)?.threadId ?? ''))
+          throw new ManagerError(
+            'invalidManager',
+            'Wait for the manager reset to finish before changing settings.',
+          )
         this.writer.active(id)
         const { managerId: _id, ...givenPatch } = params
         const patch = validatePatch(givenPatch)
@@ -378,6 +393,11 @@ export class DeviceManagers {
         return { manager: this.manager(id) }
       }
       case MANAGER_METHOD.end: {
+        if (this.resets.held(this.store.manager(id)?.threadId ?? ''))
+          throw new ManagerError(
+            'invalidManager',
+            'Wait for the manager reset to finish before ending it.',
+          )
         keys(params, ['managerId'])
         const before = this.store.manager(id) as Manager
         if (before.status === 'active') {
@@ -484,7 +504,7 @@ export class DeviceManagers {
       requireSupportedPermission(link, permission)
       manager.permission = permission
     }
-    const tools = [...managerTools(manager), ...(link.native ? [] : [PRESENTATION_SPEC])]
+    const tools = managerBundle(manager, link.native)
     const created = await link.request('thread/start', {
       cwd: params.cwd,
       ...(permission ? { permissions: permission } : {}),
@@ -502,6 +522,12 @@ export class DeviceManagers {
     this.tree.noteSubscribed(params.harness, thread.id)
     this.store.transaction(() => {
       this.store.saveManager(manager)
+      this.store.saveReset({
+        managerId: manager.id,
+        oldThreadId: manager.threadId,
+        phase: 'idle',
+        applied: managerFingerprint(tools),
+      })
       this.store.record(manager.id, 'manager', 'user', null, manager, 'Manager created')
       this.store.enqueue(
         manager.id,
@@ -540,6 +566,8 @@ export class DeviceManagers {
   }
   async tool(call: DeviceToolCall): Promise<ClientToolCallResponse> {
     try {
+      const refusal = this.resets.refusal(call.threadId)
+      if (refusal) throw new ManagerError('invalidManager', refusal)
       const questionManager = this.questions.managerFor(call.threadId)
       const manager = questionManager
         ? this.store.manager(questionManager)
@@ -664,7 +692,12 @@ export class DeviceManagers {
     }
   }
   kick(id: string): void {
-    if (this.closed || this.draining.has(id)) return
+    if (
+      this.closed ||
+      this.draining.has(id) ||
+      this.resets.held(this.store.manager(id)?.threadId ?? '')
+    )
+      return
     const pending = this.drain(id)
       .catch((error) => this.tree.host.log(`经理事件留待重试：${String(error)}`))
       .finally(() => {
@@ -678,7 +711,7 @@ export class DeviceManagers {
     if (manager.status === 'ending') await this.endings.recover(id)
     const deliveries = this.store.deliveries(id)
     for (const [index, event] of deliveries.entries()) {
-      if (this.closed) return
+      if (this.closed || this.resets.held(manager.threadId)) return
       const parsed = parseSessionEvent(event.text)
       // 结束回合单独开，避免结束请求把当前回合冒充成收尾回合。
       if (parsed.event?.kind === 'manager-end' && this.tree.isActive(manager.threadId)) return
@@ -721,8 +754,12 @@ export class DeviceManagers {
     this.closed = true
     clearInterval(this.timer)
     this.unlisten()
+    await this.resets.close()
     await this.questions.close()
     await Promise.allSettled(this.draining.values())
     this.store.close()
+  }
+  async settleDeliveries(id: string): Promise<void> {
+    await this.draining.get(id)
   }
 }

@@ -58,6 +58,18 @@ export class ManagerQuestions {
   managerFor(threadId: string): string | undefined {
     return this.restricted.get(threadId)
   }
+  busy(managerId: string): boolean {
+    return [...this.jobs.keys()].some((key) => key.startsWith(`${managerId}/`))
+  }
+  async retire(managerId: string): Promise<void> {
+    const manager = this.owner.store.manager(managerId)
+    if (!manager) return
+    const ids = this.owner.store.questions(managerId).flatMap((state) => state.threads)
+    for (const id of ids) this.retired.add(id)
+    if (!ids.length) return
+    const link = await this.link(manager).catch(() => null)
+    if (link) await Promise.all(ids.map((id) => this.disposeThread(id, link)))
+  }
   allowed(threadId: string, namespace: unknown, tool: unknown): boolean {
     return (
       !this.restricted.has(threadId) ||
@@ -165,6 +177,11 @@ export class ManagerQuestions {
     return this.owner.posts.get(managerId, id)
   }
   async ask(managerId: string, id: ManagerPostId, revision: number, question: string) {
+    if (this.owner.resets.held(this.owner.store.manager(managerId)?.threadId ?? ''))
+      throw new ManagerError(
+        'invalidManager',
+        'Wait for the manager reset before asking a temporary question.',
+      )
     const decision = this.decision(managerId, id)
     if (decision.revision !== revision)
       throw new ManagerError('invalidManager', 'The decision changed; read it before asking again.')

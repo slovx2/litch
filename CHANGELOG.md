@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 经理页新增「重置经理会话」和能力更新提示，点击后统一二次确认。Claude 保留原会话与完整历史，在下一轮加载新工具和指令；其他引擎先生成交接摘要，再新建同引擎会话接手原看板与工作线。旧经理对话保留为只读历史，回报在重置期间排队，提交前失败不改变经理绑定。
+
 ## 0.29.0（2026-11-02）
 
 ### 经理与工作线

@@ -13,6 +13,7 @@
   },
   "undeclared": "litch/manager/ 方法返回 extensionRequired，data.required=[\"litchManager\"]；会话对象不带 litchManager，不发送两个经理通知。标准会话、回合及通知照常可见，未修改的官方客户端可以使用这些普通会话。",
   "rules": [
+    "重置经理会话仅由客户端用户操作：reset 可选 boardOnly 只在摘要失败再次确认后使用。Manager.reset 返回当前/已安装工具与规则指纹、outdated、mode 和 phase；ready 表示设置已保存，Claude 下一轮加载。其他 harness 同引擎新建，交接提示优先于待投递事件；managerId 与看板不变，直接工作线和未投递回报改挂，旧临时追问退役。historyThreadIds 是只读历史，旧线程的改变状态操作在设备拒绝并给出当前经理线程。",
     "第三轮：控制台投影 posts 和 relations；report/post_get/post_reply/relate 工具只授权经理，临时追问只能 patch 本帖。manager-answers.manager 新增可选 postQuestions=[{id,revision,title,question}]，旧 questions 继续只表示决策。报告 P-n 用 revision/readRevision 显式标已阅；通用追问与关联记录留存在 manager.sqlite 追加迁移 v5/v6。",
     "D-28：v6 追加 manager_relations；新增 relate 与建对象 source/related，来源/派生/相关正反向投影，旧 blocks/blockedBy/basis/links 不迁移。reference/read 仅在经理 cwd 内读取明确 git ref，不执行模型提供命令。",
     "第三轮：控制台统一四类议题，新增 report/post_get/post_reply 工具；post/question 复用讨论，report/read 按版本标已阅。未阅报告与已审待开始建议计入待处理；议题 author 为未来用户创建预留。manager.sqlite v5 追加报告与建议版本表，不删库。",
@@ -69,6 +70,12 @@
       "kind": "ClientRequest",
       "method": "litch/manager/end",
       "params": {"$ref": "#/definitions/IdParams"},
+      "response": {"$ref": "#/definitions/ManagerResponse"}
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/manager/reset",
+      "params": {"$ref": "#/definitions/ResetParams"},
       "response": {"$ref": "#/definitions/ManagerResponse"}
     },
     {
@@ -671,6 +678,19 @@
       },
       "additionalProperties": false
     },
+    "ResetParams": {
+      "type": "object", "required": ["managerId"], "additionalProperties": false,
+      "properties": {"managerId": {"type": "string"}, "boardOnly": {"type": "boolean"}}
+    },
+    "ResetState": {
+      "type": "object", "required": ["mode", "current", "applied", "outdated", "phase"], "additionalProperties": false,
+      "properties": {
+        "mode": {"enum": ["refresh", "replace"]},
+        "current": {"type": "string"}, "applied": {"type": ["string", "null"]}, "outdated": {"type": "boolean"},
+        "phase": {"enum": ["idle", "waiting", "summarizing", "applying", "ready", "failed", "summaryFailed"]},
+        "error": {"type": "string"}
+      }
+    },
     "Manager": {
       "type": "object",
       "required": [
@@ -695,6 +715,8 @@
         "endedAt"
       ],
       "properties": {
+        "reset": {"$ref": "#/definitions/ResetState"},
+        "historyThreadIds": {"type": "array", "items": {"type": "string"}},
         "permission": { "enum": [":read-only", ":workspace", ":danger-full-access", null] },
         "id": { "type": "string" },
         "threadId": { "type": "string" },
