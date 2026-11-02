@@ -24,6 +24,7 @@ import { termStats } from '../screens/tools/tool-flags'
 import { setFeedOverride } from '../update/override'
 import type { BootMode } from './boot'
 import type { Services } from './services'
+import { injectTestAnr } from './test-anr'
 import { reportTestClipboard } from './test-clipboard'
 import { testScenario } from './test-clock'
 
@@ -82,6 +83,9 @@ export function handleDevLink(url: string, services: Services | null): BootMode 
     return ids[0] ?? null
   }
   switch (parsed.hostname) {
+    case 'test-anr':
+      injectTestAnr(booted.mode)
+      return null
     case 'test-clipboard':
       if (booted.mode === 'mock') void reportTestClipboard(params).catch(console.warn)
       return null

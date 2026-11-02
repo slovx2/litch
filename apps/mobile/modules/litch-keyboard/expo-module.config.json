@@ -1,6 +1,9 @@
 {
   "platforms": ["android"],
   "android": {
-    "modules": ["dev.litch.keyboard.LitchKeyboardModule"]
+    "modules": [
+      "dev.litch.keyboard.LitchKeyboardModule",
+      "dev.litch.keyboard.LitchTestControlModule"
+    ]
   }
 }

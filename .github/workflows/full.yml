@@ -923,11 +923,15 @@ jobs:
           emulator-build: '16740729'
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot${{ inputs.mobile-disable-vulkan && ' -feature -Vulkan' || '' }}
-          pre-emulator-launch-script: node scripts/ci/android-diagnostics.mjs host
+          emulator-boot-timeout: 600
+          pre-emulator-launch-script: |
+            node scripts/ci/android-diagnostics.mjs host
+            node scripts/ci/android-health.mjs mark-start
           script: node apps/mobile/scripts/e2e.mjs --serial emulator-5554 --shard ${{ matrix.shard }}/3 --apk "${RUNNER_TEMP}/mobile-apk/app-release.apk"
         env:
           LITCH_E2E_ARTIFACTS: ${{ runner.temp }}/maestro-out
           LITCH_E2E_DIAGNOSTICS: '1'
+          LITCH_E2E_BOOT_MARKER: '1'
           # 记录传输与服务生命周期以对齐并发命令；不启用 packets/rwx、不主动 kill/restart ADB。
           ADB_TRACE: transport,services
       - name: 保留 ADB 宿主传输日志

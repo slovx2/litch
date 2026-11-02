@@ -1,0 +1,14 @@
+# 手工反例，不在 mock/fixture 默认枚举里。执行器必须非零，anr-first-failure 必须归属 litch。
+appId: dev.litch.app
+name: negative-Litch主线程ANR必须失败
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- openLink: litch://test-anr
+# 让 InputDispatcher 在主线程阻塞期间投递事件，触发真实的 input dispatch ANR。
+- pressKey: BACK
+- assertVisible:
+    id: devices

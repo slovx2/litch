@@ -14,6 +14,8 @@
 //   --screen 320x640@160              把模拟器的屏幕改成这个尺寸和密度（wm size/density）再跑；CI 的模拟器就是这个，本地复现 CI 用
 //   --shard N/3                       CI 分片，每片独立 runner；只对有掉线证据的 launchApp 失败重跑一次
 //   --keep                            跑完不关模拟器、留下 Maestro 的调试输出（截图、日志），排查失败用，用完自己删
+// 启动前必须通过系统健康预检；给 --serial 时该设备也要处于 HOME。ANR/监测缺口停止整片，不重跑。
+// 手工故障反例：--only e2e/flows/negative/litch-anr.yaml，预期退出码 1；默认全量不枚举 negative。
 // 要的环境：ANDROID_HOME（默认 ~/Library/Android/sdk）、JDK 17 以上（JAVA_HOME，Maestro 和 gradle 都要）、
 // Maestro 2.3.0（MAESTRO 指过去，或者在 PATH 里）；跑夹具的流程要先在仓库根目录 npm run build（适配器、Pi、设备进程）。
 // LITCH_E2E_ARTIFACTS=<目录>：Maestro 的调试输出（失败时的截图、日志）放到这里并留着（CI 上传用）；不给就放临时目录、跑完删掉。
@@ -37,6 +39,13 @@ import { fileURLToPath } from 'node:url'
 import { approvalSignedText } from '../../../packages/protocol/src/client-approvals.mts'
 import { encodePairPayload } from '../../../packages/protocol/src/device-pairing.mts'
 import { startAndroidDiagnostics } from '../../../scripts/ci/android-diagnostics.mjs'
+import {
+  adbCommand,
+  bootDeadline,
+  captureAndroidHealth,
+  startAnrWatch,
+  waitAndroidReady,
+} from '../../../scripts/ci/android-health.mjs'
 import {
   infrastructureRetryReason,
   recoverAdb,
@@ -74,6 +83,7 @@ const debugDir = artifacts ?? join(work, 'debug')
 // 每条尝试记起点，只使用这次尝试中观察到的 reverse 丢失，避免沿用旧故障。
 const reverseLosses = []
 let diagnostics = null
+let anrWatch = null
 const log = (line) => console.log(`[e2e] ${line}`)
 const summary = (text) => {
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${text}\n`)
@@ -162,9 +172,11 @@ function devices() {
 }
 
 async function startEmulator() {
+  const deadline =
+    process.env.LITCH_E2E_BOOT_MARKER === '1' ? bootDeadline(debugDir) : Date.now() + 240000
   const given = arg('--serial')
   if (given) {
-    if (devices().get(given) !== 'device') throw new Error(`没有连着的 ${given}`)
+    await checkAndroidReady(given, deadline)
     return given
   }
   const port = Number(arg('--port', '5590'))
@@ -209,14 +221,23 @@ async function startEmulator() {
   })
   for (;;) {
     if (child.exitCode !== null) throw new Error(`模拟器没起来（退出码 ${child.exitCode}）`)
-    if (Date.now() - start > 240_000) throw new Error('模拟器四分钟还没开好机')
+    if (Date.now() >= deadline) throw new Error('模拟器四分钟还没开好机')
     try {
-      if (adb(serial, 'shell', 'getprop', 'sys.boot_completed').trim() === '1') break
+      if (
+        (
+          await adbCommand(adbBin, serial)(
+            ['shell', 'getprop', 'sys.boot_completed'],
+            Math.min(5000, deadline - Date.now()),
+          )
+        ).trim() === '1'
+      )
+        break
     } catch {
       // 还没连上
     }
     await sleep(1000)
   }
+  await checkAndroidReady(serial, deadline)
   // 关掉动画：等待和点击都更稳
   for (const name of [
     'window_animation_scale',
@@ -226,6 +247,28 @@ async function startEmulator() {
     adb(serial, 'shell', 'settings', 'put', 'global', name, '0')
   log(`模拟器开好了（${since(start)}）`)
   return serial
+}
+
+async function checkAndroidReady(serial, deadline) {
+  anrWatch = startAnrWatch({ adbBin, serial, directory: debugDir })
+  cleanups.push(async () => {
+    try {
+      await anrWatch.checkpoint()
+    } finally {
+      anrWatch.stop()
+    }
+  })
+  try {
+    await waitAndroidReady({ run: adbCommand(adbBin, serial), deadline, watch: anrWatch })
+    log('系统预检通过：ADB、boot_completed、包管理器、HOME 焦点、无 ANR')
+  } catch (error) {
+    const category =
+      anrWatch.failure?.owner === 'system' ? '已确认系统 ANR，基础设施失败' : '未通过健康检查'
+    summary(`\n系统预检首败（${category}；尝试 1，不重试）：${error.message}`)
+    await captureAndroidHealth(adbCommand(adbBin, serial), debugDir)
+    captureFailure(serial, debugDir)
+    throw error
+  }
 }
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
@@ -760,6 +803,11 @@ async function runMaestro(serial, flows, fixture, report, attemptDir, helper) {
       MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: 'true',
     },
   })
+  // ANR 或监测缺口立即终止当前流程；不能等断言超时后进入掉线恢复。
+  let finished = false
+  void anrWatch.failed.then(() => {
+    if (!finished) child.kill('SIGTERM')
+  })
   cleanups.push(() => {
     if (child.exitCode === null) child.kill('SIGTERM')
   })
@@ -769,6 +817,7 @@ async function runMaestro(serial, flows, fixture, report, attemptDir, helper) {
     )
     child.on('exit', (code) => done(code ?? 1))
   })
+  finished = true
   // 每个流程的结果和耗时 Maestro 自己已经打出来了
   log(`流程跑完（${since(start)}）`)
   return status
@@ -850,6 +899,7 @@ async function main() {
   let retries = 0
   for (const flow of flows) {
     if (interrupted) break
+    anrWatch.assert()
     const name = relative(flowsDir, flow)
     let status = 1
     let retryReason = null
@@ -866,6 +916,7 @@ async function main() {
       }
       try {
         status = await runMaestro(serial, [flow], fixture, report, attemptDir, helper)
+        await anrWatch.checkpoint()
       } catch (error) {
         status = 1
         writeFileSync(join(attemptDir, 'runner-error.txt'), error.message)
@@ -893,7 +944,7 @@ async function main() {
       if (status === 0) break
       firstFailure ??= `${name}（尝试 ${attempt}）`
       captureFailure(serial, attemptDir)
-      if (attempt === 2 || interrupted) break
+      if (attempt === 2 || interrupted || anrWatch.failure) break
       retryReason = infrastructureRetryReason(attemptDir, PKG, reverseLost)
       if (!retryReason) break
       // 首次诊断文件完全保留，恢复后从这条 flow 开头再跑，最多一次。
@@ -918,8 +969,13 @@ async function main() {
       if (!recovery.recovered) break
     }
     if (status !== 0) code = status
+    if (anrWatch.failure) {
+      summary(`\nANR/监测首败，停止整片，不重试：${JSON.stringify(anrWatch.failure)}`)
+      break
+    }
   }
   summary(`\n首次失败：${firstFailure ?? '无'}；基础设施重试：${retries} 次；产品断言重试：0。\n`)
+  await anrWatch.checkpoint()
   log(`${code === 0 ? '全部通过' : '有流程没过'}（总共 ${since(total)}）`)
   return code
 }
@@ -938,6 +994,10 @@ try {
   summary(`\n执行器失败（尝试 1，无重试）：${error.message}`)
 } finally {
   await cleanup()
+}
+if (anrWatch?.failure) {
+  code = 1
+  summary(`\n最终 ANR/监测判定：${JSON.stringify(anrWatch.failure)}；不重试。`)
 }
 if (artifacts) log(`Maestro 的调试输出在 ${artifacts}`)
 process.exit(interrupted ? 130 : code)
