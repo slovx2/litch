@@ -228,8 +228,13 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
 
   // 运行设置：默认值、保存、恢复默认，以及离开时保存/放弃/取消。
   await openDetail('local')
-  act('harness-settings', one('[data-harness-block="claude"]') ?? document)?.click()
+  await click('Claude 的详情设置', () =>
+    act('harness-settings', one('[data-harness-block="claude"]') ?? document),
+  )
   await until('Claude 运行设置', () => one('[data-runtime-settings="claude"]'))
+  // 配置等标签要等 harness 配置读回来才出现；没出现时点它什么都不会发生，也就不会问
+  const tabButton = (tab: string) => one<HTMLButtonElement>(`.hc-tabs [data-tab="${tab}"]`)
+  await until('配置标签出现', () => tabButton('config'))
   const ttl = () => one<HTMLSelectElement>('[data-setting="harness.claude.promptCacheTtl"] select')
   const runtimeFlow = [ttl()?.value ?? 'missing']
   const changeTtl = async (value: string) => {
@@ -239,29 +244,33 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
     await until('运行设置草稿', () => one('.mng-save'))
   }
   await changeTtl('default')
-  one<HTMLButtonElement>('.hc-tabs [data-tab="config"]')?.click()
+  await click('配置标签', () => tabButton('config'))
   await until('运行设置离开确认', () => one('[data-leave-ask]'))
-  act('leave-cancel')?.click()
+  await click('离开确认里的取消', () => act('leave-cancel'))
   await until('取消后继续编辑', () => !one('[data-leave-ask]'))
   runtimeFlow.push(ttl()?.value ?? 'missing')
-  one<HTMLButtonElement>('.hc-tabs [data-tab="config"]')?.click()
+  await click('配置标签', () => tabButton('config'))
   await until('放弃前确认', () => one('[data-leave-ask]'))
-  act('leave-discard')?.click()
+  await click('离开确认里的放弃', () => act('leave-discard'))
   await until('配置标签', () => one('[data-hc-tab="config"]'))
-  one<HTMLButtonElement>('.hc-tabs [data-tab="runtime"]')?.click()
+  await click('运行设置标签', () => tabButton('runtime'))
   await until('运行设置回来', () => ttl())
   runtimeFlow.push(ttl()?.value ?? 'missing')
   await changeTtl('default')
-  act('hc-back')?.click()
+  await click('返回', () => act('hc-back'))
   await until('保存后返回确认', () => one('[data-leave-ask]'))
-  act('leave-save')?.click()
+  await click('离开确认里的保存', () => act('leave-save'))
   await until('返回设备页', () => one('[data-detail="local"]'))
-  act('harness-settings', one('[data-harness-block="claude"]') ?? document)?.click()
+  await click('Claude 的详情设置', () =>
+    act('harness-settings', one('[data-harness-block="claude"]') ?? document),
+  )
   await until('运行设置再次打开', () => ttl())
   runtimeFlow.push(ttl()?.value ?? 'missing')
-  act('reset', one('[data-setting="harness.claude.promptCacheTtl"]') ?? document)?.click()
+  await click('恢复默认', () =>
+    act('reset', one('[data-setting="harness.claude.promptCacheTtl"]') ?? document),
+  )
   await until('恢复默认草稿', () => one('.mng-save'))
-  act('save', one('.mng-save') ?? document)?.click()
+  await click('运行设置的保存', () => act('save', one('.mng-save') ?? document))
   await until('默认值保存', () => !one('.mng-save'))
   runtimeFlow.push(ttl()?.value ?? 'missing')
 
