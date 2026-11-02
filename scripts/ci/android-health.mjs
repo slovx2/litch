@@ -1,28 +1,24 @@
 // 就绪预检和 ANR 判定不能随普通诊断日志的容量上限停止，也不能重试到绿。
-import { execFile, spawn } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { startEventMonitor } from './android-event-monitor.mjs'
 
 const appId = 'dev.litch.app'
-const filters = [
-  '-b',
-  'events',
-  '-b',
-  'system',
-  '-v',
-  'brief',
-  'am_anr:I',
-  'ActivityManager:E',
-  '*:S',
-]
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 
 export function anrEvent(line) {
-  if (!/\bam_anr\s*[:(]|\bANR in\b/.test(line)) return null
+  // 现在读完整 events 缓冲区，只认日志标签；普通事件正文提到 ANR 不算 ANR。
+  const parsed = line.match(
+    /^(?:[A-Z]\/([\w]+)\s*\([^)]*\)|\s*\d+\.\d+\s+\d+\s+\d+\s+[A-Z]\s+([\w]+))\s*:\s*(.*)$/,
+  )
+  if (!parsed) return null
+  const tag = parsed[1] ?? parsed[2]
+  const payload = parsed[3]
+  if (tag !== 'am_anr' && !(tag === 'ActivityManager' && /^ANR in\b/.test(payload))) return null
   const process =
-    line.match(/\bam_anr\s*\([^)]*\):\s*\[\d+,\d+,([^,\]]+)/)?.[1]?.trim() ??
-    line.match(/\bANR in\s+([\w.:]+)/)?.[1]
+    payload.match(/^\[\d+,\d+,([^,\]]+)/)?.[1]?.trim() ?? payload.match(/^ANR in\s+([\w.:]+)/)?.[1]
   const owner =
     process === appId || process?.startsWith(`${appId}:`)
       ? 'litch'
@@ -48,11 +44,10 @@ export function adbCommand(adbBin, serial) {
 }
 
 /** ANR 和监测缺口均锁存为失败；后续成功不能覆盖。只保存首败，流仍持续消费。 */
-export function startAnrWatch({ adbBin, serial, directory }) {
+export function startAnrWatch({ adbBin, serial, directory, deadline, onRecovery = () => {} }) {
   mkdirSync(directory, { recursive: true })
   const run = adbCommand(adbBin, serial)
   let failure = null
-  let stopped = false
   let settle
   const seen = new Set()
   const failed = new Promise((done) => {
@@ -81,39 +76,23 @@ export function startAnrWatch({ adbBin, serial, directory }) {
     writeFileSync(join(directory, 'anr-status.json'), `${JSON.stringify(failure, null, 2)}\n`)
     settle(failure)
   }
-  const consume = (text) => {
-    for (const line of text.split(/\r?\n/)) {
+  const monitor = startEventMonitor({
+    adbBin,
+    serial,
+    run,
+    startupDeadline: deadline,
+    onLine(line) {
       const event = anrEvent(line)
       if (event) fail({ kind: 'anr', ...event })
-    }
-  }
-  const child = spawn(adbBin, ['-s', serial, 'logcat', ...filters], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-  child.stdout.setEncoding('utf8')
-  let pending = ''
-  child.stdout.on('data', (chunk) => {
-    pending += chunk.toString()
-    const end = pending.lastIndexOf('\n')
-    if (end >= 0) {
-      consume(pending.slice(0, end))
-      pending = pending.slice(end + 1)
-    }
-    if (pending.length > 65536) {
-      fail({ kind: 'monitor', owner: 'unknown', line: 'ANR 日志行过长，无法可靠解析' })
-      pending = ''
-    }
-  })
-  child.stderr.on('data', () => {})
-  child.on('error', (error) => fail({ kind: 'monitor', owner: 'unknown', line: error.message }))
-  child.on('close', (code) => {
-    consume(pending)
-    if (!stopped)
-      fail({
-        kind: 'monitor',
-        owner: 'unknown',
-        line: `ANR 日志流意外中断（${code}），不能证明监测完整`,
-      })
+    },
+    onFailure(line) {
+      fail({ kind: 'monitor', owner: 'unknown', line })
+    },
+    record(kind, detail) {
+      const event = { at: new Date().toISOString(), kind, ...detail }
+      appendFileSync(join(directory, 'anr-monitor.jsonl'), `${JSON.stringify(event)}\n`)
+      if (kind === 'stream-close' || kind === 'recovered') onRecovery(event)
+    },
   })
   return {
     failed,
@@ -129,16 +108,11 @@ export function startAnrWatch({ adbBin, serial, directory }) {
     },
     // 开始、每条 flow 结束及最终成功前再读取，避免流的缓冲尚未送达就假绿。
     async checkpoint(timeout = 15000) {
-      try {
-        consume(await run(['logcat', '-d', ...filters], timeout))
-      } catch (error) {
-        fail({ kind: 'monitor', owner: 'unknown', line: `ANR 检查失败：${error.message}` })
-      }
+      await monitor.checkpoint(timeout)
       this.assert()
     },
     stop() {
-      stopped = true
-      child.kill('SIGTERM')
+      return monitor.stop()
     },
   }
 }

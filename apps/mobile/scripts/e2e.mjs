@@ -84,6 +84,7 @@ const debugDir = artifacts ?? join(work, 'debug')
 const reverseLosses = []
 let diagnostics = null
 let anrWatch = null
+const anrMonitorMessages = []
 const log = (line) => console.log(`[e2e] ${line}`)
 const summary = (text) => {
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${text}\n`)
@@ -250,12 +251,25 @@ async function startEmulator() {
 }
 
 async function checkAndroidReady(serial, deadline) {
-  anrWatch = startAnrWatch({ adbBin, serial, directory: debugDir })
+  anrWatch = startAnrWatch({
+    adbBin,
+    serial,
+    directory: debugDir,
+    deadline,
+    onRecovery: (event) => {
+      const message =
+        event.kind === 'recovered'
+          ? `ANR 监测恢复：断点 ${event.from} → ${event.to}，补读 ${event.replayed} 条事件，${event.seconds.toFixed(2)}s；未重跑 flow`
+          : `ANR 监测流中断：${event.code ?? event.signal}；从 ${event.from} 补读验证连续性`
+      log(message)
+      anrMonitorMessages.push(message)
+    },
+  })
   cleanups.push(async () => {
     try {
       await anrWatch.checkpoint()
     } finally {
-      anrWatch.stop()
+      await anrWatch.stop()
     }
   })
   try {
@@ -999,5 +1013,9 @@ if (anrWatch?.failure) {
   code = 1
   summary(`\n最终 ANR/监测判定：${JSON.stringify(anrWatch.failure)}；不重试。`)
 }
+if (anrMonitorMessages.length)
+  summary(
+    `\nANR 观察流恢复记录（不是 flow 重试）：\n\n${anrMonitorMessages.map((message) => `- ${message}`).join('\n')}`,
+  )
 if (artifacts) log(`Maestro 的调试输出在 ${artifacts}`)
 process.exit(interrupted ? 130 : code)
