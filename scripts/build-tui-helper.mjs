@@ -1,6 +1,14 @@
 // 原样 magpie helper 的六平台产物；只在外部模块加入口，不改第三方镜像。
 import { execFileSync, spawn } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -42,6 +50,8 @@ for (const target of targets) {
   }
 }
 const licenses = join(out, 'licenses')
+// 每次重建：旧产物里可能留着只读的许可文件，直接覆盖会失败
+rmSync(licenses, { recursive: true, force: true })
 mkdirSync(licenses, { recursive: true })
 for (const [path, { dir }] of modules) {
   const target = join(licenses, path)
@@ -60,6 +70,11 @@ const goLicense = goLicenses.find((path) => existsSync(path))
 if (!goLicense) throw new Error(`找不到 Go 的许可文件，查过：${goLicenses.join('、')}`)
 cpSync(goLicense, join(licenses, 'GO-LICENSE'))
 cpSync(join(repo, 'third_party/magpie/UPSTREAM.json'), join(licenses, 'UPSTREAM.json'))
+// Go 模块缓存里的文件是只读的，cpSync 会把权限原样带过来；应用里留着只读文件，
+// Squirrel.Mac（ShipIt）安装更新时改不了它们的扩展属性，更新就装不上。统一成文件 0644、目录 0755
+chmodSync(licenses, 0o755)
+for (const entry of readdirSync(licenses, { recursive: true, withFileTypes: true }))
+  chmodSync(join(entry.parentPath, entry.name), entry.isDirectory() ? 0o755 : 0o644)
 writeFileSync(
   join(licenses, 'MODULES.json'),
   `${JSON.stringify(Object.fromEntries([...modules].map(([path, value]) => [path, value.version])), null, 2)}\n`,

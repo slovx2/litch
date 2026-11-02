@@ -27,6 +27,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from 'node:f
 import { basename, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { sign } from '@electron/osx-sign'
+import { auditWritable } from '../../../scripts/adapter-stage.mjs'
 import { HELPER_APP_NAME, helperTeam, signHelper } from '../../computer-use/build-app.mjs'
 import { OUT_DIR } from './packed.mjs'
 import { machOFiles } from './sign.mjs'
@@ -171,6 +172,9 @@ async function macos() {
       '没有给开发者身份：应用只有本机的临时签名，dmg 不签名也不公证，换一台机器打开会被系统拦下',
     )
   }
+
+  // 自动更新的 zip 也从这份应用打：里面有只读文件的话 ShipIt 装不上更新
+  auditWritable(app)
 
   // dmg 里放应用和一个指向“应用程序”文件夹的链接，打开后拖过去就装好了
   const content = join(OUT_DIR, 'dmg')
