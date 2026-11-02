@@ -88,7 +88,7 @@ if (!process.versions.electron) {
             `${skin} ${selector} 字号没有跟随`,
           )
         }
-        assert.ok(large.inside, `${skin} 评论编辑框越界`)
+        assert.ok(large.inside, `${skin} 评论编辑框越界：${large.box}`)
         assert.ok(large.buttonsFit, `${skin} 评论按钮裁字`)
         results.push({ skin, normal, large })
         await shot(`comment-max-${skin}`)
@@ -103,7 +103,8 @@ if (!process.versions.electron) {
       await run(() => window.m7.comment())
       await run(() => document.querySelector('.cmt-edit-more')?.click())
       await run(() => window.m7.settle())
-      assert.ok((await run(measure)).inside, '窄窗口评论框越界')
+      const narrow = await run(measure)
+      assert.ok(narrow.inside, `窄窗口评论框越界：${narrow.box}`)
       await shot('comment-max-narrow')
       await run(() => document.querySelector('.cmt-edit [data-act="save"]').click())
       win.setSize(1200, 950)
@@ -276,6 +277,8 @@ function measure() {
   }
   const rect = document.querySelector('.cmt-edit').getBoundingClientRect()
   return {
+    // 越界时写进报错，CI 上没有截图也看得出偏在哪
+    box: `${innerWidth}×${innerHeight} 里 [${Math.round(rect.left)}, ${Math.round(rect.top)}, ${Math.round(rect.right)}, ${Math.round(rect.bottom)}]`,
     fonts,
     inside:
       rect.left >= 7 &&
