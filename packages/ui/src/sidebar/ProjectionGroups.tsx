@@ -1,6 +1,5 @@
 import {
   keys,
-  type OpenedUnread,
   pageSidebarProjection,
   retainOpenedUnread,
   type SessionChildren,
@@ -16,6 +15,7 @@ import { useKey, useKeys } from '../app/services.tsx'
 import { setProjectionSettings, useProjectionSettings } from './projection-state.ts'
 import { RowMenu } from './RowMenu.tsx'
 import { useSidebarReveal } from './reveal-context.ts'
+import { projectionRoot, rememberUnread, type UnreadMemory } from './selection.ts'
 
 const NONE: string[] = []
 export interface ProjectedBlock {
@@ -35,21 +35,10 @@ export function ProjectionGroups({
   const projections = useKeys<SidebarProjections>(devices.map(keys.sidebarProjections))
   const children = useKey<SessionChildren>(keys.children(selection?.deviceId ?? ''))
   // 原生子会话和 Litch 子会话都归到同一个主项，切换同棵子树时保留它。
-  const selectedRoot = useMemo(() => {
-    if (!selection) return null
-    const parents = new Map(
-      Object.entries(children ?? {}).flatMap(([parent, kids]) =>
-        kids.map((id) => [id, parent] as const),
-      ),
-    )
-    let id = selection.sessionId
-    const seen = new Set<string>()
-    while (parents.has(id) && !seen.has(id)) {
-      seen.add(id)
-      id = parents.get(id) ?? id
-    }
-    return { deviceId: selection.deviceId, sessionId: id }
-  }, [selection, children])
+  const selectedRoot = useMemo(
+    () => projectionRoot(selection, children ?? {}),
+    [selection, children],
+  )
   return (
     <>
       <ProjectionGroup
@@ -86,26 +75,19 @@ function ProjectionGroup({
       ),
     [projections, kind],
   )
-  const selected = selection ? JSON.stringify([selection.deviceId, selection.sessionId]) : null
   const { selected: selectedRow, checkProjection } = useSidebarReveal()
   const selectedProjection = useKey<SidebarProjections>(
     keys.sidebarProjections(selectedRow?.deviceId ?? ''),
   )
   const selectedChildren = useKey<SessionChildren>(keys.children(selectedRow?.deviceId ?? ''))
-  const [held, setHeld] = useState<{ selected: string | null; opened: OpenedUnread | null }>({
-    selected: null,
+  const [held, setHeld] = useState<UnreadMemory>({
+    root: null,
     opened: null,
   })
-  let opened = held.opened
-  if (held.selected !== selected) {
-    const index = rows.findIndex(
-      (row) => row.deviceId === selection?.deviceId && row.sessionId === selection.sessionId,
-    )
-    const row = rows[index]
-    opened = row ? { row, index } : null
-    // 在提交画面前固定原位置，避免读标记的下一帧把下一项顶到鼠标下。
-    setHeld({ selected, opened })
-  }
+  const next = rememberUnread(held, selection, rows)
+  // 在提交画面前固定原位置，避免读标记的下一帧把下一项顶到鼠标下。
+  if (next !== held) setHeld(next)
+  const opened = next.opened
   const shownRows = useMemo(() => retainOpenedUnread(rows, opened), [rows, opened])
   useEffect(() => {
     // 快照尚未到达不等于投影移除了会话；按完整列表判断，折叠或分页不会挪动选择。

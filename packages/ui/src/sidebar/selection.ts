@@ -1,4 +1,4 @@
-import type { SessionChildren, SidebarProjectionRow } from '@litch/core'
+import type { OpenedUnread, SessionChildren, SidebarProjectionRow } from '@litch/core'
 import type { Selection } from '../app/App.tsx'
 import { containsSession } from './reveal.ts'
 
@@ -64,6 +64,46 @@ export function navigateRows(
 
 export function sameSession(a: Selection | null, b: Selection | null): boolean {
   return !!a && !!b && a.deviceId === b.deviceId && a.sessionId === b.sessionId
+}
+
+/** 未读暂留跟随整棵会话树；原生子会话和 Litch 子会话都用目录里的父链。 */
+export function projectionRoot(
+  selection: Selection | null,
+  children: SessionChildren,
+): Selection | null {
+  if (!selection) return null
+  const parents = new Map(
+    Object.entries(children).flatMap(([parent, kids]) => kids.map((id) => [id, parent] as const)),
+  )
+  let id = selection.sessionId
+  const seen = new Set<string>()
+  while (parents.has(id) && !seen.has(id)) {
+    seen.add(id)
+    id = parents.get(id) ?? id
+  }
+  return { deviceId: selection.deviceId, sessionId: id }
+}
+
+export interface UnreadMemory {
+  root: Selection | null
+  opened: OpenedUnread | null
+}
+
+/**
+ * 根项没换也可能刚进入未读（正在看的父会话有子会话完成），第一次出现时同样记住位置。
+ * 清未读、更新排序或在同棵树内切换不重记；切到别的树或离开对话才释放。
+ */
+export function rememberUnread(
+  was: UnreadMemory,
+  root: Selection | null,
+  rows: readonly SidebarProjectionRow[],
+): UnreadMemory {
+  const staying = sameSession(was.root, root) || (was.root === null && root === null)
+  if (staying && was.opened) return was
+  const index = rows.findIndex((row) => sameSession(row, root))
+  const row = rows[index]
+  if (staying && !row) return was
+  return { root, opened: row ? { row, index } : null }
 }
 
 /** 外部导航可以定位树行；关掉定位时只保留同一会话已有的选择，不新增高亮。 */

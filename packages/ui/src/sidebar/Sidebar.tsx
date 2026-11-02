@@ -2187,7 +2187,7 @@ export function Sidebar(props: SidebarProps) {
             <>
               {!focus ? (
                 <ProjectionGroups
-                  selection={selection}
+                  selection={page ? null : selection}
                   render={(projection) => (
                     <ProjectedDeviceBlock
                       projection={projection}

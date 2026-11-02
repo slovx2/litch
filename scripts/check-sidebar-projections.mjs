@@ -823,6 +823,193 @@ try {
   report.checks.push(
     '经理进入最近与未读，工作线默认收起且不单列，经理与工作线跳转保留各模式的唯一选中',
   )
+  await click(`${unread} [data-session=m1] .ss-row`)
+  await until(() => run(() => !document.querySelector('[data-projection]')), '未读经理进入经理模式')
+  await click('[data-sidebar-mode=chat]')
+  await until(
+    () => run(() => !!document.querySelector('[data-projection=unread] [data-session=m1]')),
+    '经理工作线仍未读，返回后根项还在',
+  )
+  await click(`${unread} [data-session=m1] .tree-fold`)
+  await click(`${unread} [data-session=manager-k2] .ss-row`)
+  await until(
+    () => run(() => !document.querySelector('[data-projection]')),
+    '未读工作线进入经理模式',
+  )
+  await click('[data-sidebar-mode=chat]')
+  await until(
+    () => run(() => !!document.querySelector('[data-projection=unread]')),
+    '工作线读完返回对话模式',
+  )
+  assert.equal(
+    await run(() => !!document.querySelector('[data-projection=unread] [data-session=m1]')),
+    false,
+    '最后一个工作线读完并切到经理模式后，返回对话不恢复已读暂留树',
+  )
+  assert.ok(await run(() => !!document.querySelector('[data-projection=recent] [data-session=m1]')))
+  report.checks.push('经理和工作线从未读进入经理模式，读完后不回填未读，最近仍保留')
+  // 当前父会话打开时，子会话完成才让整棵树进入未读；点最后一个未读子会话不能让树消失。
+  for (const leave of ['tree', 'page', 'manager', 'settings']) {
+    console.log(`检查子会话晚到未读：${leave}`)
+    await run(() => {
+      document.documentElement.dataset.unreadReload = 'old'
+    })
+    await cdp.call('Page.reload')
+    await until(
+      () =>
+        run(
+          () =>
+            !document.documentElement.dataset.unreadReload &&
+            !!document.querySelector('[data-projection=unread]'),
+        ),
+      '新的模拟核心页面',
+    )
+    await modules()
+    await run(() =>
+      window.__projectionProbe.actions.requestOpenSession({ deviceId: 'local', sessionId: 's4' }),
+    )
+    await until(
+      () =>
+        run(
+          () =>
+            document.querySelector('.cmp-text')?.dataset.composerSession ===
+            JSON.stringify(['local', 's4']),
+        ),
+      '打开普通父会话',
+    )
+    await until(() => run(() => !document.querySelector('.send.stop')), '父会话空闲')
+    await run(() => {
+      const input = document.querySelector('.cmp-text')
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(
+        input,
+        '派子会话',
+      )
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await run(() =>
+      document
+        .querySelector('.cmp-text')
+        .dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }),
+        ),
+    )
+    await until(
+      () => run(() => !!document.querySelector('[data-projection=unread] [data-session=s4]')),
+      '子会话完成后父项进入未读',
+      30000,
+    )
+    // 展开偏好会跨重载保存；这一轮只在尚未展开时点开，不能把上一轮的展开状态关掉。
+    if (
+      await run(
+        () =>
+          document
+            .querySelector('[data-projection=unread] [data-session=s4] .tree-fold')
+            .getAttribute('aria-expanded') === 'false',
+      )
+    )
+      await click(`${unread} [data-session=s4] .tree-fold`)
+    const childRows = () =>
+      run(() =>
+        [
+          ...document.querySelectorAll(
+            '[data-projection=unread] [data-parent=s4] .ss-row.is-unread',
+          ),
+        ].map((e) => e.closest('[data-session]').dataset.session),
+      )
+    await until(async () => (await childRows()).length === 2, '两个普通子会话未读', 30000)
+    const childIds = await childRows()
+    const position = () =>
+      run(() =>
+        [
+          ...document.querySelectorAll(
+            '[data-projection=unread] .tree-node[data-depth="0"] > [data-session]',
+          ),
+        ].map((e) => e.dataset.session),
+      )
+    const before = await position()
+    for (const id of childIds) {
+      await click(unread + ' [data-session="' + id + '"] .ss-row')
+      await until(
+        () =>
+          run(
+            (id) =>
+              !document.querySelector(
+                '[data-projection=unread] [data-session="' + id + '"] .ss-row.is-unread',
+              ),
+            id,
+          ),
+        '子会话已读',
+      )
+    }
+    assert.ok(
+      await run(() => !!document.querySelector('[data-projection=unread] [data-session=s4]')),
+      '读完最后一个普通子会话后，整棵树应留在未读原位置',
+    )
+    const held = await run(() => {
+      const root = document.querySelector('[data-projection=unread] [data-session=s4]')
+      return {
+        unread: root.querySelector('.ss-row').classList.contains('is-unread'),
+        weight: getComputedStyle(root.querySelector('.title')).fontWeight,
+        children: [...document.querySelectorAll('[data-projection=unread] [data-parent=s4]')].map(
+          (e) => e.dataset.session,
+        ),
+        unreadChildren: document.querySelectorAll(
+          '[data-projection=unread] [data-parent=s4] .ss-row.is-unread',
+        ).length,
+        count: Number(
+          document.querySelector('[data-projection=unread] .projection-count').textContent,
+        ),
+      }
+    })
+    assert.deepEqual(await position(), before, '清完子会话未读后根项仍在原位置')
+    assert.equal(held.unread, false, '根行恢复已读样式')
+    assert.equal(held.weight, '400', '根行恢复普通字重')
+    assert.equal(held.unreadChildren, 0)
+    assert.deepEqual(held.children, childIds, '子树保持展开，子会话仍在原顺序')
+    assert.equal(held.count, before.length - 1, '真实未读计数不包含暂留树')
+    // 同棵树内回根和切兄弟都不能释放暂留。
+    await click(unread + ' [data-session=s4] .ss-row')
+    await click(unread + ' [data-session="' + childIds[0] + '"] .ss-row')
+    assert.deepEqual(await position(), before)
+    if (leave === 'tree') {
+      await run(() =>
+        window.__projectionProbe.actions.requestOpenSession({ deviceId: 'local', sessionId: 's3' }),
+      )
+    } else if (leave === 'page') {
+      await run(() => window.__projectionProbe.actions.requestNewSession())
+    } else if (leave === 'settings') {
+      await run(() => window.__projectionProbe.actions.requestSettings('look'))
+    } else {
+      await click('[data-sidebar-mode=manager]')
+      await until(() => run(() => !document.querySelector('[data-projection]')), '经理模式隐藏投影')
+      await click('[data-sidebar-mode=chat]')
+      await until(
+        () => run(() => !!document.querySelector('[data-projection=unread]')),
+        '回到对话模式',
+      )
+    }
+    await until(
+      () => run(() => !document.querySelector('[data-projection=unread] [data-session=s4]')),
+      '离开树后移出暂留项：' + leave,
+    )
+    assert.ok(
+      await run(() => !!document.querySelector('[data-projection=recent] [data-session=s4]')),
+      '清未读不移除最近中的主项',
+    )
+    await run(
+      (id) =>
+        window.__projectionProbe.actions.requestOpenSession({ deviceId: 'local', sessionId: id }),
+      childIds[0],
+    )
+    assert.equal(
+      await run(() => !!document.querySelector('[data-projection=unread] [data-session=s4]')),
+      false,
+      '返回已读子会话不重新进入未读',
+    )
+    report.checks.push(
+      '普通子树晚到未读：原位暂留、已读样式、展开保持、树内切换；离开释放：' + leave,
+    )
+  }
   assert.deepEqual(errors, [])
   report.success = true
 } catch (error) {

@@ -4,7 +4,9 @@ import {
   clickedRow,
   navigatedRow,
   navigateRows,
+  projectionRoot,
   reconcileProjection,
+  rememberUnread,
   rowMemory,
   sameSession,
 } from '../src/sidebar/selection.ts'
@@ -86,4 +88,54 @@ test('投影中展开的子会话按父链保留，子会话移出投影子树�
   const roots = [{ ...session, sessionId: 'parent' }]
   assert.equal(reconcileProjection(recent, 'recent', roots, { parent: ['a'] }), recent)
   assert.deepEqual(reconcileProjection(recent, 'recent', roots, { parent: [] }), tree)
+})
+
+test('未读暂留按整棵树认当前会话：根、子会话、深层后代和经理工作线', () => {
+  const children = { parent: ['child', 'sibling'], child: ['grandchild'], manager: ['line'] }
+  const at = (sessionId, deviceId = 'local') => ({ deviceId, sessionId })
+  for (const id of ['parent', 'child', 'sibling', 'grandchild'])
+    assert.deepEqual(projectionRoot(at(id), children), at('parent'))
+  assert.deepEqual(projectionRoot(at('line'), children), at('manager'))
+  assert.deepEqual(projectionRoot(at('child', 'remote'), children), at('parent', 'remote'))
+  assert.equal(projectionRoot(null, children), null)
+  assert.deepEqual(projectionRoot(at('missing'), children), at('missing'))
+  assert.ok(projectionRoot(at('a'), { a: ['b'], b: ['a'] }), '错误父链不死循环')
+})
+
+test('正在看的树后来才出现未读：点子会话清完未读后仍保持第一次出现的位置', () => {
+  const children = { parent: ['child', 'sibling'], child: ['grandchild'] }
+  const at = (sessionId) => projectionRoot({ deviceId: 'local', sessionId }, children)
+  const parent = { ...at('parent'), workspaceId: 'w', at: 200 }
+  const other = { ...parent, sessionId: 'other', at: 300 }
+  const rows = [other, parent]
+  let memory = rememberUnread({ root: null, opened: null }, at('parent'), [])
+  assert.equal(memory.opened, null)
+  // 父项已打开时子会话完成；根项没变，这一帧也必须记住位置。
+  memory = rememberUnread(memory, at('parent'), rows)
+  assert.deepEqual(memory.opened, { row: parent, index: 1 })
+  const held = memory
+  for (const id of ['child', 'sibling', 'grandchild', 'parent']) {
+    memory = rememberUnread(memory, at(id), [other])
+    assert.equal(memory, held, '清已读和树内切换不丢掉暂留项')
+  }
+  assert.equal(
+    rememberUnread(memory, at('child'), [{ ...parent, at: 400 }, other]),
+    held,
+    '新结果引起排序变化也不挪动当前项',
+  )
+  assert.deepEqual(rows, [other, parent], '暂留不修改真实未读集合')
+  assert.equal(rememberUnread(memory, at('read-elsewhere'), [other]).opened, null)
+  assert.equal(rememberUnread(memory, null, [other]).opened, null, '离开对话释放暂留')
+  const left = rememberUnread(memory, null, [other])
+  assert.equal(rememberUnread(left, at('child'), [other]).opened, null, '返回已读子会话不回填')
+})
+
+test('从别的树直接打开未读子会话也暂留根项，跨设备同标识不能沿用', () => {
+  const root = { deviceId: 'local', sessionId: 'parent' }
+  const row = { ...root, workspaceId: null, at: 1 }
+  const chosen = projectionRoot({ ...root, sessionId: 'child' }, { parent: ['child'] })
+  const memory = rememberUnread({ root: null, opened: null }, chosen, [row])
+  assert.deepEqual(memory.opened, { row, index: 0 })
+  assert.equal(rememberUnread(memory, { ...root, deviceId: 'remote' }, []).opened, null)
+  assert.equal(rememberUnread(memory, null, []).opened, null)
 })

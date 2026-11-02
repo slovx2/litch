@@ -27,6 +27,8 @@ Only the clicked row is selected, including for keyboard navigation and screen r
 List updates preserve the selected location; removing that projection item selects the same conversation in the tree.
 未读沿用本机的新结果标记：未查看的对话从运行转为停止时标记，打开后清除；随侧栏缓存保存，重启保留。
 从未读组打开后，当前主项保留在原位置并恢复已读样式，切到其他主会话或离开对话后才移出，避免连续点击打开下一项。未读计数只计算仍未读的主项，最近组不显示总数。
+这条规则也适用于子会话：父会话已打开、子会话完成后才进入未读时，读完子会话仍保留整棵树和展开状态；在同棵树内切换不移出。切到其他树、新建对话、设置页或经理模式后释放暂留；清未读不会移除「最近」中的主项。
+Opening a child keeps its whole tree in the Unread group, at the same position and with its expansion unchanged, even when the child finishes after the parent was opened. Read rows use the normal style. The tree stays while you browse within it and leaves when you switch trees or leave the conversation. Marking it read does not remove it from Recent.
 这不是逐条消息的已读计数，客户端离线期间结束的回合不保证标记；不同电脑和手机的已读状态不互相同步。
 
 最近的空状态提示为“查看满 5 秒或有过操作的对话会出现在这里”（Conversations you view for 5 seconds or interact with appear here）。

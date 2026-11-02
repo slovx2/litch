@@ -309,6 +309,15 @@ test('接上 replica：主动操作（改名）立即进「最近」投影，点
   assert.equal(recent()[0], 'm1')
   assert.equal(recent().includes('manager-k2'), false)
   assert.ok(replica.store.get(keys.children('local')).m1.includes('manager-k2'))
+  await activity.channel.command('session.markRead', {
+    deviceId: 'local',
+    sessionId: 'manager-k2',
+  })
+  await until(() => !replica.store.get(keys.summary('local', 'manager-k2')).unread, {
+    what: '工作线清未读',
+  })
+  assert.equal(recent()[0], 'm1', '清掉最后一个工作线未读不移除最近中的经理主项')
+  assert.ok(recent().includes('s3'), '普通已读会话也仍在最近')
 })
 
 test('快捷设置：默认不聚合、显示 5 条，只认 5/10/20', () => {
