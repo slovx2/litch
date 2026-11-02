@@ -799,9 +799,9 @@ jobs:
           path: |
             ${{ runner.temp }}/gradle/caches
             ${{ runner.temp }}/gradle/wrapper
-          key: gradle-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-go1.26.10-jdk${{ steps.android-tools.outputs.jdk }}-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'apps/mobile/android/*.gradle', 'apps/mobile/android/gradle.properties', 'apps/mobile/node_modules/react-native/gradle/libs.versions.toml', 'apps/mobile/plugins/**', 'apps/mobile/modules/**', 'mobile/**', 'scripts/ci/**') }}-${{ inputs.sha || github.sha }}
+          key: gradle-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-go1.26.10-jdk${{ steps.android-tools.outputs.jdk }}-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'apps/mobile/android/*.gradle', 'apps/mobile/android/gradle.properties', 'apps/mobile/node_modules/react-native/gradle/libs.versions.toml', 'apps/mobile/plugins/**', 'apps/mobile/modules/**', 'mobile/**') }}-${{ inputs.sha || github.sha }}
           restore-keys: |
-            gradle-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-go1.26.10-jdk${{ steps.android-tools.outputs.jdk }}-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'apps/mobile/android/*.gradle', 'apps/mobile/android/gradle.properties', 'apps/mobile/node_modules/react-native/gradle/libs.versions.toml', 'apps/mobile/plugins/**', 'apps/mobile/modules/**', 'mobile/**', 'scripts/ci/**') }}-
+            gradle-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-go1.26.10-jdk${{ steps.android-tools.outputs.jdk }}-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'apps/mobile/android/*.gradle', 'apps/mobile/android/gradle.properties', 'apps/mobile/node_modules/react-native/gradle/libs.versions.toml', 'apps/mobile/plugins/**', 'apps/mobile/modules/**', 'mobile/**') }}-
       # Expo 在 CI 下不执行 RN 传来的 --reset-cache；Metro 自身按源码内容失效转换结果。
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: cache-metro
