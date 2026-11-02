@@ -74,6 +74,8 @@ function staplerCommand(
   { summary = process.env.GITHUB_STEP_SUMMARY, tcp = process.env.LITCH_STAPLER_TCP === '1' } = {},
 ) {
   // ARM 托管 runner 对照满足启用条件；仅票据命令临时阻断 UDP443，退出立即撤销。
+  // 两台 ARM 样本：默认网络 -1005 为 1/31，TCP 为 0/32；不是零故障保证，保留三次重试。
+  // 复核数据：https://github.com/slovx2/litch/actions/runs/41514458534（attempt 3、4）。
   // https://github.com/actions/runner-images/issues/14924
   const command = tcp ? 'bash' : 'xcrun'
   const args = tcp
