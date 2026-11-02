@@ -135,7 +135,7 @@ async function runWindow() {
         assert.match(await js('JSON.stringify(window.m13.state().result)'), /litch:disabled/)
       }
       assert.deepEqual(errors, [], '界面控制台不应报错')
-      console.log(`M13 ${lang}：卡片、按钮、状态与截图通过`)
+      console.log(`M13 ${lang}：卡片、按钮、状态通过${shots ? '，已保存截图' : ''}`)
     }
   } catch (error) {
     console.error(error)
