@@ -1514,10 +1514,10 @@ for (const interrupted of [false, true]) {
 
 // —— 模拟核心里的演示 ——
 
-function mockWorld() {
+function mockWorld(chunkMs = 0) {
   const time = fakeClock(NOW)
   const [uiPort, corePort] = createPortPair()
-  serveChannel(corePort, createMockCore({ clock: time.clock, chunkMs: 0 }), { clock: time.clock })
+  serveChannel(corePort, createMockCore({ clock: time.clock, chunkMs }), { clock: time.clock })
   const channel = connectChannel(uiPort)
   const sidebar = { view: null as SidebarView | null }
   channel.subscribe(
@@ -1573,6 +1573,50 @@ const userItems = (view: SessionView | null): UserMessageItem[] =>
   Object.values(view?.items ?? {}).filter(
     (item): item is UserMessageItem => item.kind === 'userMessage',
   )
+
+test('模拟：子会话均未读时父会话仍在续跑；等唤醒回合结束再离开才不会新增未读', async () => {
+  for (const leaveEarly of [true, false]) {
+    const world = mockWorld(60)
+    const stop = world.channel.subscribe(
+      { kind: 'session', deviceId: 'local', sessionId: 's4' },
+      { snapshot() {}, delta() {} },
+    )
+    try {
+      await settle()
+      await world.channel.command('session.send', {
+        deviceId: 'local',
+        sessionId: 's4',
+        text: '派子会话',
+      })
+      const parent = () => world.sidebar.view?.sessions.find((entry) => entry.id === 's4')
+      await world.until(
+        () =>
+          world.children('s4').length === 2 &&
+          world.children('s4').every((entry) => entry.unread && entry.status === 'idle'),
+        '两个子会话结束并有未读结果',
+      )
+      assert.equal(parent()?.status, 'running', '子会话结束后父会话被唤醒，仍在流式输出')
+      assert.equal(parent()?.unread, false)
+      if (!leaveEarly)
+        await world.until(() => parent()?.status === 'idle', '保持父会话打开直到唤醒回合结束')
+      stop()
+      for (const child of world.children('s4'))
+        await world.channel.command('session.markRead', { deviceId: 'local', sessionId: child.id })
+      world.time.advance(20)
+      await settle()
+      assert.ok(world.children('s4').every((entry) => !entry.unread))
+      await world.until(() => parent()?.status === 'idle', '整棵树完成')
+      assert.equal(
+        parent()?.unread,
+        leaveEarly,
+        '离开后完成的父回合产生真实的新未读；先等完成再离开则没有新未读',
+      )
+    } finally {
+      stop()
+      world.channel.close()
+    }
+  }
+})
 
 test('模拟：说“派子会话”派出两个子会话（侧栏里挂在父会话下），都做完后唤醒父会话', async () => {
   const world = mockWorld()

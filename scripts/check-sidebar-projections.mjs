@@ -918,6 +918,26 @@ try {
       )
     await until(async () => (await childRows()).length === 2, '两个普通子会话未读', 30000)
     const childIds = await childRows()
+    // 子会话结束还会唤醒父会话，不能把“两个子会话未读”当成整棵树已经结束。
+    // 保持父会话打开直到唤醒回合结束：否则离开后父会话的新结果会合法地再次进入未读。
+    await until(
+      () =>
+        run(
+          (ids) =>
+            document.querySelector('.cmp-text')?.dataset.composerSession ===
+              JSON.stringify(['local', 's4']) &&
+            !document.querySelector('.send.stop') &&
+            ['s4', ...ids].every(
+              (id) =>
+                !!document.querySelector(
+                  '[data-projection=unread] [data-session="' + id + '"] .ss-row > .st.unread',
+                ),
+            ),
+          childIds,
+        ),
+      '父会话的唤醒回合和子会话全部结束',
+      30000,
+    )
     const position = () =>
       run(() =>
         [
@@ -1000,6 +1020,16 @@ try {
       (id) =>
         window.__projectionProbe.actions.requestOpenSession({ deviceId: 'local', sessionId: id }),
       childIds[0],
+    )
+    await until(
+      () =>
+        run(
+          (id) =>
+            document.querySelector('.cmp-text')?.dataset.composerSession ===
+            JSON.stringify(['local', id]),
+          childIds[0],
+        ),
+      '已读子会话已重新打开',
     )
     assert.equal(
       await run(() => !!document.querySelector('[data-projection=unread] [data-session=s4]')),
