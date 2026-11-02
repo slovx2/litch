@@ -1,0 +1,6 @@
+appId: dev.litch.app
+---
+- evalScript: ${output.clipboardRequest = Date.now().toString()}
+- openLink: litch://test-clipboard?action=${ACTION}&port=${HELPER_PORT}&id=${output.clipboardRequest}
+- runScript: read-clipboard.js
+- assertTrue: ${output.clipboardOk}

@@ -1,7 +1,7 @@
-# 复制在长按菜单里（用户消息长按、回合状态行的 ⋯），核对原生剪贴板写入成功后的反馈；全文规则由单测守住。
+# 长按菜单写入原生剪贴板，经测试专用只读探针读回全文；不依赖短暂 toast。
 appId: dev.litch.app
 name: mock-复制整条消息
-tags: [mock]
+tags: [mock, clipboard]
 ---
 - runFlow:
     file: ../_shared/fresh.yaml
@@ -13,20 +13,29 @@ tags: [mock]
     visible:
       id: user-message
     timeout: 30000
-# 用户消息：长按出菜单，点“复制消息”
+# 原生剪贴板先写哨兵，防止上轮残留让失败的复制假通过。
+- runFlow:
+    file: ../_shared/read-clipboard.yaml
+    env:
+      ACTION: seed
+- assertTrue: ${output.clipboard === 'e2e-clipboard-sentinel'}
+# 用户消息的正式复制入口。
 - longPressOn:
     id: user-message
 - tapOn:
     id: menu:copy-message
-    waitToSettleTimeoutMs: 250
-- assertVisible: (已复制|Copied)
-- extendedWaitUntil:
-    notVisible: (已复制|Copied)
-    timeout: 10000
-# 回答：回合状态行的 ⋯（读屏也走这里），点“复制回答”
+- runFlow:
+    file: ../_shared/read-clipboard.yaml
+    env:
+      ACTION: read
+- assertTrue: ${output.clipboard === 'Pi entry reports the final answer too early' || output.clipboard === 'Pi 入口过早上报最终回答'}
+# 回答的正式复制入口，不触碰 Android 剪贴板浮层。
 - tapOn:
     id: turn-menu
 - tapOn:
     id: menu:copy-answer
-    waitToSettleTimeoutMs: 250
-- assertVisible: (已复制|Copied)
+- runFlow:
+    file: ../_shared/read-clipboard.yaml
+    env:
+      ACTION: read
+- assertTrue: ${output.clipboard === 'This is a placeholder answer from the mock core. Once a real device is connected, the history of this session shows up here.' || output.clipboard === '这是模拟核心给的占位回答。接上真实的设备之后，这里显示这个会话的历史。'}

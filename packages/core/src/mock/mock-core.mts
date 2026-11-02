@@ -118,6 +118,8 @@ import { dumpCall, shotsCall } from './sample-tools.mjs'
 
 export interface MockCoreOptions {
   clock: Clock
+  /** E2E 显式推进后台任务、目标和提案过期；缺省仍按真实场景计时。 */
+  scenarioClock?: Clock
   version?: string
   /** 流式回答每一小块之间隔多久，默认 60 毫秒。设成 0 表示不流，一开始就是完整的 */
   chunkMs?: number
@@ -444,7 +446,12 @@ export interface MockCore extends CoreHost {
 }
 
 export function createMockCore(options: MockCoreOptions): MockCore {
-  const { clock } = options
+  const scenarioClock = options.scenarioClock ?? options.clock
+  const clock: Clock = {
+    now: () => scenarioClock.now(),
+    setTimer: (run, ms) => options.clock.setTimer(run, ms),
+  }
+  let proposalSeq = 0
   const chunkMs = options.chunkMs ?? 60
   const lang = options.lang ?? 'zh-CN'
   const app: AppView = sampleApp(lang, clock.now())
@@ -2319,6 +2326,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   // 会话树：Litch 子会话、提案、回报与唤醒，引擎自己的子代理线程（mock-tree.mts）
   const tree = createMockTree({
     lang,
+    setProposalTimer: (run, ms) => scenarioClock.setTimer(run, ms),
     now: () => clock.now(),
     setTimer: (run, ms) => clock.setTimer(run, ms),
     summary: (deviceId, sessionId) =>
@@ -2362,7 +2370,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     harnesses: (deviceId) => app.devices.find((device) => device.id === deviceId)?.harnesses ?? [],
     settings: (deviceId, harness) => sampleSettings(harnessOn(deviceId, harness)),
     can: (deviceId, harness) => canOf(deviceId, harness),
-    nextId: (prefix) => `${prefix}${++seq}`,
+    nextId: (prefix) =>
+      options.scenarioClock && prefix === 'pr' ? `e2e-pr${++proposalSeq}` : `${prefix}${++seq}`,
     childWorktree(deviceId, sessionId, cwd, from, title) {
       // 建不成（不在工作区里之类）就共用父会话的目录，和设备进程照缺省开的一样
       worktrees
@@ -2382,7 +2391,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   const background = createMockBackground({
     lang,
     now: () => clock.now(),
-    setTimer: (run, ms) => clock.setTimer(run, ms),
+    setTimer: (run, ms) => scenarioClock.setTimer(run, ms),
     summary: (deviceId, sessionId) =>
       sidebars.get(deviceId)?.sessions.find((session) => session.id === sessionId),
     updateSummary,
@@ -2414,7 +2423,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   const goal = createMockGoal({
     lang,
     now: () => clock.now(),
-    setTimer: (run, ms) => clock.setTimer(run, ms),
+    setTimer: (run, ms) => scenarioClock.setTimer(run, ms),
     apply: applySessionOps,
     reply,
     busy: (view) => running(view) !== undefined,

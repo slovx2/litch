@@ -9,7 +9,7 @@ globalThis.cancelAnimationFrame ??= (id) => clearTimeout(id)
  * 模拟核心加一对内存端口，和 src/shell/boot.ts 的 mock 装法一样。chunkMs 小一点让流式回答快点出完。
  * 模拟核心定的计时器关的时候一起清掉：提案七天后过期的那种不清，测试进程要等七天才退
  */
-export function mockChannel({ chunkMs = 2, lang = 'zh-CN' } = {}) {
+export function mockChannel({ chunkMs = 2, lang = 'zh-CN', scenarioClock } = {}) {
   const timers = new Set()
   const clock = {
     now: () => Date.now(),
@@ -26,7 +26,11 @@ export function mockChannel({ chunkMs = 2, lang = 'zh-CN' } = {}) {
     },
   }
   const [uiPort, corePort] = createPortPair()
-  const unserve = serveChannel(corePort, createMockCore({ clock, chunkMs, lang }), { clock })
+  const unserve = serveChannel(
+    corePort,
+    createMockCore({ clock, chunkMs, lang, ...(scenarioClock ? { scenarioClock } : {}) }),
+    { clock },
+  )
   const channel = connectChannel(uiPort)
   return {
     channel,

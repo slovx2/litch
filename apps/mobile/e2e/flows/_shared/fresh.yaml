@@ -11,7 +11,7 @@ appId: dev.litch.app
     visible:
       id: devices
     timeout: 30000
-- openLink: litch://boot?mode=${MODE}
+- openLink: 'litch://boot?mode=${MODE}&controlled=${typeof CONTROLLED === "undefined" ? "0" : CONTROLLED}'
 # READY 多是首页的设备行；设备在经理、定时任务、「最近」下面，小屏（CI 上 320×640）要滚下去才看得见。
 # 设备一台台进来时也照样滚着等
 - scrollUntilVisible:

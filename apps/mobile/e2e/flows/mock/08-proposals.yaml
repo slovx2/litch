@@ -9,6 +9,7 @@ tags: [mock]
     file: ../_shared/fresh.yaml
     env:
       MODE: mock
+      CONTROLLED: "1"
       READY: device:local
 - tapOn:
     id: device:local
@@ -41,24 +42,21 @@ tags: [mock]
 # 卡上只有“开始”“在这里做”，“忽略”在卡片右上角的“⋯”里：点标题上方最近的那个“⋯”
 - scrollUntilVisible:
     element:
-      id: proposal:.*:more
-      above:
-        text: (Tidy the CHANGELOG|整理 CHANGELOG)
+      id: proposal:e2e-pr1:more
     direction: UP
     timeout: 10000
 - tapOn:
-    id: proposal:.*:more
-    above:
-      text: (Tidy the CHANGELOG|整理 CHANGELOG)
+    id: proposal:e2e-pr1:more
 - tapOn:
-    id: proposal:.*:dismiss
+    id: proposal:e2e-pr1:dismiss
 # 那张卡片在屏幕上面一截：往回翻到看得见它的状态
 - scrollUntilVisible:
     element:
       text: (Dismissed|已忽略)
     direction: UP
     timeout: 10000
-# 第二张八秒后过期（模拟核心里特意定得短）
+# 显式释放第二张提案的过期计时。
+- openLink: litch://test-clock?ms=8000
 - extendedWaitUntil:
     visible:
       text: (Expired|已过期)
@@ -66,17 +64,13 @@ tags: [mock]
 # “编辑后开始”也在“⋯”里：Pi 那张卡标题上方的“⋯”
 - scrollUntilVisible:
     element:
-      id: proposal:.*:more
-      above:
-        text: (Run the benchmark on Pi|在 Pi 上跑一遍基准)
+      id: proposal:e2e-pr3:more
     direction: DOWN
     timeout: 10000
 - tapOn:
-    id: proposal:.*:more
-    above:
-      text: (Run the benchmark on Pi|在 Pi 上跑一遍基准)
+    id: proposal:e2e-pr3:more
 - tapOn:
-    id: proposal:.*:edit
+    id: proposal:e2e-pr3:edit
 - extendedWaitUntil:
     visible:
       id: proposal-start
@@ -89,17 +83,13 @@ tags: [mock]
 - runFlow: ../_shared/full-access.yaml
 - scrollUntilVisible:
     element:
-      id: proposal:.*:more
-      above:
-        text: (Run the benchmark on Pi|在 Pi 上跑一遍基准)
+      id: proposal:e2e-pr3:more
     direction: UP
     timeout: 10000
 - tapOn:
-    id: proposal:.*:more
-    above:
-      text: (Run the benchmark on Pi|在 Pi 上跑一遍基准)
+    id: proposal:e2e-pr3:more
 - tapOn:
-    id: proposal:.*:edit
+    id: proposal:e2e-pr3:edit
 - extendedWaitUntil:
     visible:
       id: proposal-start
@@ -133,7 +123,7 @@ tags: [mock]
 # 起出来的子会话那一行在卡片下面，窄屏上可能在屏幕外
 - scrollUntilVisible:
     element:
-      id: proposal:.*:child
+      id: proposal:e2e-pr3:child
     direction: DOWN
     timeout: 15000
 - assertNotVisible:

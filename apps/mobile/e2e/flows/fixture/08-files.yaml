@@ -1,0 +1,22 @@
+appId: dev.litch.app
+name: fixture-文件
+tags: [fixture, smoke]
+---
+- runFlow: ../_shared/tools-session.yaml
+# 文件
+- tapOn:
+    id: detail:menu
+- tapOn:
+    id: detail:menu:files
+- extendedWaitUntil:
+    visible:
+      id: file:README.md
+    timeout: 30000
+- tapOn:
+    id: file:README.md
+- extendedWaitUntil:
+    visible:
+      id: files:text
+    timeout: 15000
+- assertVisible:
+    text: .*改过的第二行.*

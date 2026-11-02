@@ -43,6 +43,7 @@ import {
 } from '../../../scripts/ci/maestro-infrastructure.mjs'
 import { mobileShards } from '../../../scripts/ci/mobile-shards.mjs'
 import { deviceRpc } from './device-rpc.mjs'
+import { installTerminalAudit, terminalEvidence } from './terminal-audit.mjs'
 
 const mobile = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repo = resolve(mobile, '../..')
@@ -335,8 +336,8 @@ async function startFixture(serial) {
     [`tcp:${config.target.port}`, `tcp:${config.target.port}`],
     ['tcp:8765', `tcp:${serve}`],
   ]
-  keepReverse(serial, reverseRules)
   prepareRepo(config.work)
+  installTerminalAudit(config)
   const helper = await startHelper(config, serial)
   log(`夹具就绪（${since(start)}），sshd 在 127.0.0.1:${config.target.port}`)
   return { config, helper, reverseRules }
@@ -395,7 +396,8 @@ function prepareRepo(dir) {
  */
 async function startHelper(config, serial) {
   const port = await freePort()
-  const pair = pairing(config)
+  const pair = config ? pairing(config) : null
+  const clipboardReplies = new Map()
   let locked = false
   const lock = (on) => {
     // 上一轮流程设了密码、没走到清的那一步就挂了（比如模拟器掉线），重跑时还设着：再 set-pin 会失败，当成已经设好
@@ -424,6 +426,34 @@ async function startHelper(config, serial) {
     req.on('data', (chunk) => (body += chunk))
     req.on('end', async () => {
       const url = new URL(req.url ?? '/', 'http://helper')
+      // 每次请求带唯一标识，只等待这次原生读回；不用上一次的内容兜底。
+      if (url.pathname === '/clipboard/result') {
+        const id = url.searchParams.get('id')
+        if (req.method === 'POST') {
+          try {
+            const result = JSON.parse(body)
+            clipboardReplies.set(id, result)
+            appendFileSync(
+              join(debugDir, 'clipboard.jsonl'),
+              `${JSON.stringify({ at: new Date().toISOString(), id, ...result })}\n`,
+            )
+            res.writeHead(200).end()
+          } catch {
+            res.writeHead(400).end()
+          }
+        } else {
+          for (let i = 0; i < 40 && !clipboardReplies.has(id); i++) await sleep(250)
+          const result = clipboardReplies.get(id)
+          clipboardReplies.delete(id)
+          res.writeHead(result ? 200 : 408).end(JSON.stringify(result ?? {}))
+        }
+        return
+      }
+      if (!config) {
+        res.writeHead(404).end()
+        return
+      }
+
       if (
         req.method === 'POST' &&
         (url.pathname === '/lock/pin' || url.pathname === '/lock/clear')
@@ -440,6 +470,11 @@ async function startHelper(config, serial) {
           return null
         })
         res.writeHead(answer ? 200 : 404).end(answer ?? '')
+        return
+      }
+      if (req.method === 'GET' && url.pathname === '/terminal-evidence') {
+        const evidence = terminalEvidence(config, debugDir)
+        res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(evidence))
         return
       }
       if (req.method === 'GET' && url.pathname === '/file') {
@@ -687,7 +722,7 @@ function freePort() {
 
 const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
 
-async function runMaestro(serial, flows, fixture, report, attemptDir) {
+async function runMaestro(serial, flows, fixture, report, attemptDir, helper) {
   const env = fixture
     ? {
         FIXTURE_PORT: String(fixture.config.target.port),
@@ -695,7 +730,6 @@ async function runMaestro(serial, flows, fixture, report, attemptDir) {
         ADAPTER: fixture.config.adapter,
         FX_MODE: fixture.config.target.env.LITCH_FX_MODE ?? '',
         FINGERPRINT_RE: escapeRe(fixture.config.target.hostFingerprint),
-        HELPER: fixture.helper,
         WORK: realpathSync(fixture.config.work),
       }
     : {}
@@ -711,6 +745,7 @@ async function runMaestro(serial, flows, fixture, report, attemptDir) {
     'JUNIT',
     '--output',
     report,
+    ...(helper ? ['-e', `HELPER=${helper}`, '-e', `HELPER_PORT=${new URL(helper).port}`] : []),
     ...Object.entries(env).flatMap(([name, value]) => ['-e', `${name}=${value}`]),
     ...flows,
   ]
@@ -775,6 +810,7 @@ async function main() {
   const needsFixture = flows.some(
     (file) => file.includes(`${join('flows', 'fixture')}/`) || tagsOf(file).includes('fixture'),
   )
+  const needsClipboard = flows.some((file) => tagsOf(file).includes('clipboard'))
   const total = Date.now()
   await checkDriverPort()
   if (flag('--build')) await phase('构建 APK', buildApk)
@@ -793,6 +829,21 @@ async function main() {
   setScreen(serial)
   await phase('安装 APK', () => install(serial))
   const fixture = needsFixture ? await phase('夹具就绪', () => startFixture(serial)) : null
+  const helper = fixture?.helper ?? (needsClipboard ? await startHelper(null, serial) : null)
+  const reverseRules = fixture?.reverseRules ?? []
+  // 普通 mock 不依赖助手；fixture 的宿主查询也不需要手机映射。
+  // 只有原生剪贴板探针会从手机回传，才建立并恢复这条 reverse。
+  if (needsClipboard) {
+    const port = new URL(helper).port
+    const rule = [`tcp:${port}`, `tcp:${port}`]
+    adb(serial, 'reverse', ...rule)
+    reverseRules.push(rule)
+    cleanups.push(() =>
+      spawnSync(adbBin, ['-s', serial, 'reverse', '--remove', rule[0]], { stdio: 'ignore' }),
+    )
+  }
+  // 最后登记映射看护，收尾先停看护，再撤助手和夹具的映射。
+  if (reverseRules.length) keepReverse(serial, reverseRules)
   summary('\n| Flow | 尝试 | 结果 | 耗时 |\n|---|---|---|---|')
   let code = 0
   let firstFailure = null
@@ -809,12 +860,28 @@ async function main() {
       const reverseMark = reverseLosses.length
       const start = Date.now()
       diagnostics?.mark('flow-start', { flow: name, attempt })
+      if (fixture && name === 'fixture/03-tools.yaml') {
+        for (const file of ['e2e-mark.txt', 'e2e-terminal-ready.txt', 'e2e-shell-commands.txt'])
+          rmSync(join(fixture.config.work, file), { force: true })
+      }
       try {
-        status = await runMaestro(serial, [flow], fixture, report, attemptDir)
+        status = await runMaestro(serial, [flow], fixture, report, attemptDir, helper)
       } catch (error) {
         status = 1
         writeFileSync(join(attemptDir, 'runner-error.txt'), error.message)
         log(`${name} 尝试 ${attempt} 失败：${error.message}`)
+      }
+      if (fixture && name === 'fixture/03-tools.yaml') {
+        terminalEvidence(fixture.config, attemptDir)
+        try {
+          const lines = adb(serial, 'logcat', '-d', '-s', 'ReactNativeJS:I').split('\n')
+          writeFileSync(
+            join(attemptDir, 'terminal-input.txt'),
+            lines.filter((line) => line.includes('LITCH_INPUT')).join('\n'),
+          )
+        } catch (error) {
+          log(`输入取证失败：${error.message}`)
+        }
       }
       const reverseLost = reverseLosses.length > reverseMark
       const row = { flow: name, attempt, status, seconds: (Date.now() - start) / 1000, retryReason }
@@ -836,7 +903,7 @@ async function main() {
       const recoveryStart = Date.now()
       diagnostics?.mark('recovery-start', { flow: name, attempt, reason: retryReason })
       try {
-        await recoverInfrastructure(serial, fixture?.reverseRules ?? [])
+        await recoverInfrastructure(serial, reverseRules)
         recovery.recovered = true
         retries++
       } catch (error) {

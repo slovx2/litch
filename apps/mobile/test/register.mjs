@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 const here = new URL('./', import.meta.url)
 const core = new URL('../../../packages/core/src/index.mts', import.meta.url)
 const stubs = {
+  'expo-clipboard': new URL('stubs/expo-clipboard.mjs', here),
   'expo-file-system': new URL('stubs/expo-file-system.mjs', here),
   'expo-modules-core': new URL('stubs/expo-modules-core.mjs', here),
   '@react-navigation/native': new URL('stubs/react-navigation-native.mjs', here),

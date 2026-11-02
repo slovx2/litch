@@ -145,7 +145,12 @@ tags: [mock]
     timeout: 10000
 - assertVisible:
     id: hc:model:team-long
-# 再存一次（核心已经重读到最新的版本）
+# 失败提示出现不代表重读已经结束；save 的 enabled 状态由 rereading 决定。
+- extendedWaitUntil:
+    visible:
+      id: hc:models:save
+      enabled: true
+    timeout: 10000
 - tapOn:
     id: hc:models:save
 - extendedWaitUntil:

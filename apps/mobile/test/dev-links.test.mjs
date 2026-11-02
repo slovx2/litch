@@ -6,6 +6,7 @@ import { createReplica, keys } from '@litch/core'
 import { navigated } from '@react-navigation/native'
 import { experiment } from '../src/experiment.ts'
 import { handleDevLink, navigationRef } from '../src/shell/dev-links.ts'
+import { testScenario } from '../src/shell/test-clock.ts'
 import { mockChannel, until } from './helpers.mjs'
 
 const mock = mockChannel()
@@ -28,6 +29,30 @@ test('换装法：只认三种，换装法不需要核心已经装好', () => {
   assert.equal(handleDevLink('litch://boot?mode=stored', null), 'stored')
   assert.equal(handleDevLink('litch://boot?mode=mock', null), 'mock')
   assert.equal(handleDevLink('litch://boot?mode=bogus', null), null)
+})
+
+test('场景时钟只在显式受控 mock 中启用，输入取证只在 fixture 中启用', () => {
+  handleDevLink('litch://boot?mode=mock&controlled=1', null)
+  assert.equal(testScenario.controlled, true)
+  let advanced = 0
+  const booted = {
+    mode: 'mock',
+    advanceScenario: (ms) => {
+      advanced += ms
+    },
+  }
+  handleDevLink('litch://test-clock?ms=1500', { ...services, booted })
+  assert.equal(advanced, 1500)
+  handleDevLink('litch://test-clock?ms=1500', {
+    ...services,
+    booted: { ...booted, mode: 'stored' },
+  })
+  assert.equal(advanced, 1500)
+  handleDevLink('litch://test-terminal', { ...services, booted: { mode: 'fixture' } })
+  assert.equal(testScenario.terminalAudit, true)
+  handleDevLink('litch://boot?mode=stored&controlled=1', null)
+  assert.equal(testScenario.controlled, false)
+  assert.equal(testScenario.terminalAudit, false)
 })
 
 test('核心没装好、页面栈没就绪：过一会儿再交', () => {

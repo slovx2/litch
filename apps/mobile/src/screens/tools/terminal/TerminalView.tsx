@@ -12,6 +12,7 @@ import { Linking, StyleSheet } from 'react-native'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 import { showKeyboard } from '../../../../modules/litch-keyboard/src'
 import { useChannel } from '../../../shell/services'
+import { testScenario } from '../../../shell/test-clock'
 import { TERMINAL_HTML } from '../../../web/terminal-html.generated'
 import { TERM_FONT_SIZE, type TermTheme } from './look'
 
@@ -181,11 +182,24 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(
           break
         case 'in': {
           const id = now.terminalId
+          // 测试专用：WebView 收到的输入与核心写入回执分层记录，不改变输入或错误处理。
+          if (testScenario.terminalAudit)
+            console.log(
+              `LITCH_INPUT ${JSON.stringify({ at: Date.now(), terminalId: id, data: message.b })}`,
+            )
           // 写不进去（刚好断线、刚好退出）不用单独说：状态条会跟着变
           if (id)
             channel
               .command('terminal.write', { deviceId, terminalId: id, data: message.b })
-              .catch(() => {})
+              .then(() => {
+                if (testScenario.terminalAudit)
+                  console.log(
+                    `LITCH_INPUT_ACK ${JSON.stringify({ at: Date.now(), data: message.b })}`,
+                  )
+              })
+              .catch((error: unknown) => {
+                if (testScenario.terminalAudit) console.log(`LITCH_INPUT_ERROR ${String(error)}`)
+              })
           break
         }
         case 'ack': {

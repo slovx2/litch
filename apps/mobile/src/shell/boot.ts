@@ -20,6 +20,8 @@ import { mobilePlatform } from '../platform'
 import { watchConnections } from '../platform/background'
 import { type RemoteConfig, sshOpener } from '../platform/ssh-transport'
 
+import { createTestClock, testScenario } from './test-clock'
+
 export type BootMode = 'stored' | 'mock' | 'fixture'
 
 export interface Booted {
@@ -27,6 +29,8 @@ export interface Booted {
   channel: CoreChannel
   /** fixture 时夹具给的新会话工作目录；别的装法是 null */
   work: string | null
+  scenarioNow?(): number
+  advanceScenario?(ms: number): void
   stop(): void
 }
 
@@ -72,8 +76,23 @@ const log = (line: string) => console.log(`[核心] ${line}`)
 
 export async function boot(mode: BootMode, lang: 'zh-CN' | 'en'): Promise<Booted> {
   if (mode === 'mock') {
-    const served = serve(createMockCore({ clock, version: VERSION, lang }))
-    return { mode, work: null, ...served }
+    const controlled = testScenario.controlled ? createTestClock(Date.now()) : null
+    const served = serve(
+      createMockCore({
+        clock,
+        version: VERSION,
+        lang,
+        ...(controlled ? { scenarioClock: controlled.clock } : {}),
+      }),
+    )
+    return {
+      mode,
+      work: null,
+      ...served,
+      ...(controlled
+        ? { advanceScenario: controlled.advance, scenarioNow: controlled.clock.now }
+        : {}),
+    }
   }
   if (mode === 'fixture') {
     const config = await fetchFixtureConfig()

@@ -85,20 +85,25 @@ test('先等上线，再恢复全部 reverse 并核对；恢复不完整就失�
   )
 })
 
-for (const [mode, attempts, exitCode] of [
+for (const [mode, attempts, exitCode, clipboard = false, restoreReverse = true] of [
   ['offline-once', 2, 0],
   ['offline-always', 2, 1],
   ['launch-without-feature', 1, 1],
   ['assert-offline', 1, 1],
   ['recovery-offline', 1, 1],
+  ['offline-once', 2, 0, true],
+  ['offline-always', 2, 1, true],
+  ['offline-once', 1, 1, true, false],
 ]) {
-  test(`执行器基础设施恢复：${mode}`, (t) => {
+  const scope = clipboard ? `，剪贴板${restoreReverse ? '' : '映射恢复不完整'}` : ''
+  test(`执行器基础设施恢复：${mode}${scope}`, (t) => {
     const directory = temporary(t)
     const android = join(directory, 'android')
     const maestro = join(directory, 'maestro')
     const events = join(directory, 'events.jsonl')
     const summary = join(directory, 'summary.md')
     const artifacts = join(directory, 'artifacts')
+    const reverseState = join(directory, 'reverse.json')
     const apk = join(directory, 'input.apk')
     writeFileSync(apk, 'fake')
     executable(
@@ -109,6 +114,17 @@ for (const [mode, attempts, exitCode] of [
       fs.appendFileSync(process.env.EVENTS, JSON.stringify({kind:'adb',args}) + '\\n');
       if (args[0] === 'devices') console.log('List of devices attached\\nemulator-5554\\tdevice\\n');
       else if (args.includes('get-state')) console.log(process.env.MODE === 'recovery-offline' ? 'offline' : 'device');
+      else if (process.env.CLIPBOARD === '1' && args[2] === 'reverse') {
+        const file = process.env.REVERSE_STATE;
+        let rules = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file,'utf8')) : [];
+        if (args[3] === '--list') {
+          if (process.env.RESTORE_REVERSE === '1') console.log(rules.map(pair => 'emulator ' + pair.join(' ')).join('\\n'));
+        } else {
+          rules = rules.filter(pair => pair[0] !== (args[3] === '--remove' ? args[4] : args[3]));
+          if (args[3] !== '--remove') rules.push(args.slice(3,5));
+          fs.writeFileSync(file, JSON.stringify(rules));
+        }
+      }
       else if (!args.includes('--list')) console.log('diagnostic');`,
     )
     executable(
@@ -122,6 +138,7 @@ for (const [mode, attempts, exitCode] of [
       const mode = process.env.MODE;
       const failed = !(mode === 'offline-once' && attempt === 2);
       fs.appendFileSync(process.env.EVENTS, JSON.stringify({kind:'maestro',attempt}) + '\\n');
+      if (process.env.CLIPBOARD === '1' && attempt === 1) fs.writeFileSync(process.env.REVERSE_STATE,'[]');
       const command = mode === 'assert-offline' ? {assertConditionCommand:{}} : {launchAppCommand:{appId:'dev.litch.app'}};
       fs.writeFileSync(path.join(debug,'commands-test.json'),JSON.stringify([{command,metadata:{status:failed?'FAILED':'COMPLETED',error:{message:'test'}}}]));
       fs.writeFileSync(path.join(debug,'maestro.log'),mode === 'launch-without-feature' ? 'other failure' : 'java.io.IOException: device offline');
@@ -137,7 +154,7 @@ for (const [mode, attempts, exitCode] of [
         '--apk',
         apk,
         '--only',
-        join(repo, 'apps/mobile/e2e/flows/mock/01-home.yaml'),
+        join(repo, `apps/mobile/e2e/flows/mock/${clipboard ? '18-message-copy' : '01-home'}.yaml`),
       ],
       {
         cwd: repo,
@@ -147,6 +164,9 @@ for (const [mode, attempts, exitCode] of [
           ANDROID_HOME: android,
           MAESTRO: maestro,
           MODE: mode,
+          CLIPBOARD: clipboard ? '1' : '0',
+          RESTORE_REVERSE: restoreReverse ? '1' : '0',
+          REVERSE_STATE: reverseState,
           EVENTS: events,
           LITCH_E2E_ARTIFACTS: artifacts,
           GITHUB_STEP_SUMMARY: summary,
@@ -155,23 +175,43 @@ for (const [mode, attempts, exitCode] of [
         timeout: 20000,
       },
     )
-    assert.equal(result.status, exitCode, result.stderr)
+    assert.equal(result.status, exitCode, `${result.stdout}\n${result.stderr}`)
     const rows = readFileSync(join(artifacts, 'flows.jsonl'), 'utf8')
       .trim()
       .split('\n')
       .map(JSON.parse)
     assert.equal(rows.length, attempts)
     assert.equal(rows[0].status, 1)
+    const flowName = clipboard ? '18-message-copy' : '01-home'
     assert.match(
-      readFileSync(join(artifacts, 'mock/01-home/attempt-1/junit.xml'), 'utf8'),
+      readFileSync(join(artifacts, `mock/${flowName}/attempt-1/junit.xml`), 'utf8'),
       /first failure/,
     )
-    assert.ok(existsSync(join(artifacts, 'mock/01-home/attempt-1/screen.png')))
+    assert.ok(existsSync(join(artifacts, `mock/${flowName}/attempt-1/screen.png`)))
+    const observed = readFileSync(events, 'utf8').trim().split('\n').map(JSON.parse)
+    const mappings = observed.filter(
+      (event) => event.args?.[2] === 'reverse' && event.args[3]?.startsWith('tcp:'),
+    )
+    if (clipboard) {
+      assert.equal(mappings.length, 2, '初始化一次，掉线后恢复同一条映射一次')
+      assert.deepEqual(mappings[0].args, mappings[1].args)
+      if (!restoreReverse) {
+        const recovery = JSON.parse(
+          readFileSync(
+            join(artifacts, `mock/${flowName}/attempt-1/infrastructure-recovery.json`),
+            'utf8',
+          ),
+        )
+        assert.equal(recovery.recovered, false)
+        assert.match(recovery.error, /reverse 未恢复完整/)
+      }
+    } else {
+      assert.equal(mappings.length, 0, '普通 mock 不建立无关的 reverse 映射')
+    }
     if (attempts === 2) {
       assert.equal(rows[1].attempt, 2)
       assert.match(rows[1].retryReason, /device offline/)
       assert.match(readFileSync(summary, 'utf8'), /基础设施重试：1 次/)
-      const observed = readFileSync(events, 'utf8').trim().split('\n').map(JSON.parse)
       const wait = observed.findIndex((event) => event.args?.includes('wait-for-device'))
       const verify = observed.findIndex((event) => event.args?.includes('--list'))
       const rerun = observed.findIndex((event) => event.kind === 'maestro' && event.attempt === 2)

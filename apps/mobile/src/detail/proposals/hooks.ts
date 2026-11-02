@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import type { SessionStore } from '../../core/session-store'
 import { acquireStore, releaseStore } from '../../core/store-cache'
-import { useChannel } from '../../shell/services'
+import { useChannel, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { nextExpiry, type overridesFor } from './logic'
 
@@ -40,19 +40,20 @@ export function useProposalClock(
   list: readonly (SessionProposalView | null)[] | undefined,
 ): number {
   const [, redraw] = useState(0)
-  const now = Date.now()
+  const { booted } = useServices()
+  const now = booted.scenarioNow?.() ?? Date.now()
   const next = nextExpiry(
     (list ?? []).filter((proposal): proposal is SessionProposalView => proposal !== null),
     now,
   )
   useEffect(() => {
-    if (next === null) return
+    if (next === null || booted.scenarioNow) return
     const timer = setTimeout(
       () => redraw((n) => n + 1),
       Math.min(2_000_000_000, Math.max(0, next - now) + 50),
     )
     return () => clearTimeout(timer)
-  }, [next, now])
+  }, [next, now, booted.scenarioNow])
   return now
 }
 

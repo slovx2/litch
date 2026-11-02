@@ -93,6 +93,7 @@ export interface MockTreeHost {
   lang: SampleLang
   now(): number
   setTimer(run: () => void, ms: number): () => void
+  setProposalTimer(run: () => void, ms: number): () => void
   /** 侧栏里的一个会话。没有是 undefined */
   summary(deviceId: string, sessionId: string): SessionSummary | undefined
   /** 这台设备侧栏里所有的会话 */
@@ -630,7 +631,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
     ])
     // 和设备进程一样：过期的那一刻记成过期、发一次通知
     for (const proposal of made) {
-      host.setTimer(() => {
+      host.setProposalTimer(() => {
         if (view.proposals.find((entry) => entry.id === proposal.id)?.status !== 'pending') return
         settle(view, proposal.id, 'expired', null, proposal.expiresAt)
       }, proposal.expiresAt - now)

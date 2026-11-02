@@ -1,4 +1,4 @@
-// 根据历史首轮耗时贪心均衡；每片八条。新 flow 自动加入，绝不因名单过时漏测。
+// 根据历史首轮耗时贪心均衡；片大小差不超过一条。新 flow 自动加入，绝不因名单过时漏测。
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 

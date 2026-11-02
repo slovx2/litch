@@ -32,7 +32,7 @@ function executable(path, code) {
   writeFileSync(path, `#!${process.execPath}\n${code}`, { mode: 0o755 })
 }
 
-test('手机全 24 flow 恰好分配一次，每片八条，预估耗时均衡', () => {
+test('手机全部 flow 恰好分配一次，每片九条，预估耗时均衡', () => {
   const flows = join(repo, 'apps/mobile/e2e/flows')
   const expected = ['mock', 'fixture']
     .flatMap((group) =>
@@ -42,11 +42,11 @@ test('手机全 24 flow 恰好分配一次，每片八条，预估耗时均衡',
     )
     .sort()
   const shards = mobileShards(flows)
-  assert.equal(expected.length, 24)
+  assert.equal(expected.length, 27)
   assert.deepEqual(shards.flatMap((shard) => shard.files).sort(), expected)
   assert.deepEqual(
     shards.map((shard) => shard.files.length),
-    [8, 8, 8],
+    [9, 9, 9],
   )
   const seconds = shards.map((shard) => shard.seconds)
   assert.ok(Math.max(...seconds) - Math.min(...seconds) < 40)

@@ -1,0 +1,33 @@
+appId: dev.litch.app
+name: fixture-差异
+tags: [fixture, smoke]
+---
+- runFlow: ../_shared/tools-session.yaml
+# 差异
+- tapOn:
+    id: detail:menu
+- tapOn:
+    id: detail:menu:diff
+- extendedWaitUntil:
+    visible:
+      id: diff:file:README.md
+    timeout: 30000
+- assertVisible:
+    id: diff:file:notes.txt
+- tapOn:
+    id: diff:file:README.md
+- extendedWaitUntil:
+    visible:
+      id: diff:lines
+    timeout: 15000
+- assertVisible:
+    text: .*改过的第二行.*
+# 单文件的差异是差异页里的一层：退两次回到会话
+- tapOn:
+    id: header:back
+- extendedWaitUntil:
+    visible:
+      id: diff:files
+    timeout: 10000
+- tapOn:
+    id: header:back

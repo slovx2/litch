@@ -24,6 +24,8 @@ import { termStats } from '../screens/tools/tool-flags'
 import { setFeedOverride } from '../update/override'
 import type { BootMode } from './boot'
 import type { Services } from './services'
+import { reportTestClipboard } from './test-clipboard'
+import { testScenario } from './test-clock'
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>()
 
@@ -67,6 +69,8 @@ export function handleDevLink(url: string, services: Services | null): BootMode 
   }
   if (parsed.hostname === 'boot') {
     const mode = params.get('mode')
+    testScenario.terminalAudit = false
+    testScenario.controlled = mode === 'mock' && params.get('controlled') === '1'
     return mode === 'mock' || mode === 'fixture' || mode === 'stored' ? mode : null
   }
   if (!services || !navigationRef.isReady()) return 'later'
@@ -78,6 +82,15 @@ export function handleDevLink(url: string, services: Services | null): BootMode 
     return ids[0] ?? null
   }
   switch (parsed.hostname) {
+    case 'test-clipboard':
+      if (booted.mode === 'mock') void reportTestClipboard(params).catch(console.warn)
+      return null
+    case 'test-terminal':
+      testScenario.terminalAudit = booted.mode === 'fixture'
+      return null
+    case 'test-clock':
+      if (booted.mode === 'mock') booted.advanceScenario?.(Number(params.get('ms')))
+      return null
     case 'new': {
       const deviceId = deviceOf()
       if (!deviceId) return 'later'

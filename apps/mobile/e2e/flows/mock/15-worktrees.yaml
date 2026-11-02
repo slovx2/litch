@@ -9,6 +9,7 @@ tags: [mock]
     file: ../_shared/fresh.yaml
     env:
       MODE: mock
+      CONTROLLED: "1"
       READY: device:local
 - tapOn:
     id: device:local
@@ -67,17 +68,17 @@ tags: [mock]
     visible:
       id: proposal:.*:start
     timeout: 20000
-# 三张卡：Pi 那张自己写了目录，开关默认关；没写目录的（整理 CHANGELOG）默认开。顺手那张一会儿就过期、不再有开关
+# 三张卡：Pi 那张自己写了目录，开关默认关；没写目录的（整理 CHANGELOG）默认开。提案时钟未推进，三张卡保持 pending，不靠过期来排除其他卡
 - scrollUntilVisible:
     element:
-      id: proposal:.*:worktree
+      id: proposal:e2e-pr3:worktree
       checked: false
     direction: DOWN
     centerElement: true
     timeout: 10000
 - scrollUntilVisible:
     element:
-      id: proposal:.*:worktree
+      id: proposal:e2e-pr1:worktree
       checked: true
     direction: UP
     centerElement: true
