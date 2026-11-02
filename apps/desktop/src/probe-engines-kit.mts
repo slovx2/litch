@@ -35,7 +35,7 @@ export interface EnginesKit {
   lastTurn(): string
   /** 最后一个回合里露在外面的回答（活动块里的不算） */
   lastAnswer(): string
-  /** 等这一轮完全结束：不在跑、没有卡片、没有排着的消息、输入框在 */
+  /** 等这一轮完全结束：不在跑、正文已画完、没有卡片、没有排着的消息、输入框在 */
   idle(ms?: number): Promise<void>
   /** 经界面的“加载更早消息”逐页补齐，等分批绘制完成；读失败要报错，不能把首屏当全历史。 */
   history(): Promise<void>
@@ -92,6 +92,7 @@ export function installEnginesKit(): boolean {
       crumb: text(one('.crumb')),
       turns: turns().length,
       running: running(),
+      streaming: Boolean(one('.agent-message > .md.live')),
       card: text(one('.req')).slice(0, 200),
       tray: all('.tray-row').length,
       hint: text(one('.dock .cmp-hint')),
@@ -118,7 +119,14 @@ export function installEnginesKit(): boolean {
     await wait(
       '这一轮结束',
       () => {
-        const quiet = !running() && !one('.req') && !one('.tray-row') && area()
+        // 回合完成后 useSmoothText 仍可能在放字；Markdown 的 live 消失才表示正文已定稿。
+        // 只等回合静默 300ms 会读到半句，慢帧上尤其明显；不能靠加长静默时间判断。
+        const quiet =
+          !running() &&
+          !one('.agent-message > .md.live') &&
+          !one('.req') &&
+          !one('.tray-row') &&
+          area()
         calm = quiet ? calm || performance.now() : 0
         return calm > 0 && performance.now() - calm > 300
       },

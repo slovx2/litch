@@ -48,7 +48,7 @@
     "check:settings": "npm run build && node scripts/check-settings.mjs",
     "check:text-scale": "node scripts/check-text-scale.mjs",
     "check:engines": "node --test ../../scripts/client-fixture-anthropic.test.mjs && npm run build && node scripts/check-engines.mjs",
-    "check:first-turn": "npm run build && node scripts/check-first-turn.mjs",
+    "check:first-turn": "node --test scripts/probe-engines-kit.test.mjs && npm run build && node scripts/check-first-turn.mjs",
     "test:computer-use": "node scripts/test-computer-use.mjs",
     "check:computer-use": "node scripts/check-computer-use.mjs",
     "test:browser": "node scripts/test-browser.mjs",
