@@ -21,7 +21,9 @@ Prepare 固定到本次工作流 SHA，门禁与五类打包并行。macOS 必�
 
 ## 2. 只读核对或草稿演练
 
-Promote 使用含相同验证策略的已推送 ref；明确指定源候选，不找“最新同名 artifact”。例如：
+Promote 使用含相同验证策略的已推送 ref；明确指定源候选，不找“最新同名 artifact”。
+
+首次引入 `promote.yml` 时，先合入默认分支，让 GitHub 登记这个 workflow，再对目标 ref dispatch。只把新 workflow 推到候选分支，不能据此认定 dispatch 入口已经可用。正式首次运行先选 `verify`，核对入口和权限后再走草稿。例如：
 
 ```sh
 gh workflow run promote.yml --ref <已推送验证分支> \
@@ -53,6 +55,8 @@ gh workflow run promote.yml --ref <已推送验证分支> \
 - 基线过期时可在原 run 补跑 Gate 影响范围 job 及其依赖，再封存；必须核对 GitHub 实际定点重跑范围，不能不加分辨地重跑所有成功打包。工作流策略变更后不能用新代码给旧候选盖章，需重新准备包含该变更的候选。
 - 最新夜间仅手机模拟器领域失败且完整证明显示其余领域通过时，不阻断；`Nightly mobile follow-up` 创建修复 issue，不加 release-blocker。没有证明或其他领域红灯仍要求同 SHA 完整非手机验证或明确的既有分诊。任何 open release-blocker 仍拦截。
 - 原手机 ADB 整片重跑预算不再用于发版，因为候选不跑模拟器。准备阶段/其他基础设施恢复规则不扩大；通用自动恢复和夜间缺跑监测分阶段交付。
+- Apple 票据步骤只在原始输出明确包含 `NSURLErrorDomain -1005` 或 `Error 68` 时恢复：staple 和 validate 各最多三次，退避30/60秒，逐次失败原文写入 step summary。其他错误、超时或耗尽均失败；validate 恢复不重复 staple，更不重新提交公证。Accepted 不能替代票据成功。
+- 当前公证前后的出包尚未拆检查点，整片重跑 Mac 仍会重新构建、签名和公证，须按既定授权判断，不能称为“仅恢复钉票”。重跑 API 要等原 run 全部 job 结束后才接受；先核对各失败 job 的根因，不能把产品失败混入基础设施重跑。
 
 ## 5. 实施验收
 
