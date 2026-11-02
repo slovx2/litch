@@ -101,16 +101,29 @@ test('Git 工具：经理/临时身份、工作线工作树、分页所有权、
     assert.equal((await call('status', { directory: unrelated })).success, false)
     symlinkSync(unrelated, join(env.stateDir, 'escape'))
     assert.equal((await call('status', { directory: join(env.stateDir, 'escape') })).success, false)
-    assert.equal((await call('commit', { directory: repo })).success, false)
-    const initial = value(await call('show', { directory: repo, path: 'pages.txt' }))
+    assert.equal(
+      value(await call('run', { directory: repo, argv: ['branch', 'from-helper'] })).exit_code,
+      0,
+    )
+    assert.match(sh(repo, 'branch', '--list', 'from-helper'), /from-helper/)
+    assert.equal(
+      value(
+        await call('run', {
+          directory: join(repo, 'src'),
+          argv: ['rev-parse', '--show-prefix'],
+        }),
+      ).content,
+      'src/\n',
+    )
+    const initial = value(await call('run', { directory: repo, argv: ['show', 'HEAD:pages.txt'] }))
     assert.ok(initial.next_cursor)
     assert.ok(initial.content.length <= 12000)
-    assert.equal((await call('show', { cursor: initial.next_cursor }, threadId)).success, false)
+    assert.equal((await call('run', { cursor: initial.next_cursor }, threadId)).success, false)
     assert.equal((await call('log', { cursor: initial.next_cursor })).success, false)
     let content = initial.content
     let cursor = initial.next_cursor
     while (cursor) {
-      const page = value(await call('show', { cursor }))
+      const page = value(await call('run', { cursor }))
       assert.equal(page.captured_at, initial.captured_at)
       content += page.content
       cursor = page.next_cursor

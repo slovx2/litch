@@ -8,7 +8,7 @@ import {
 } from './client-tools-repository.mjs'
 import { SESSION_TOOLS } from './client-tools-sessions.mjs'
 import type { ManagerDiscussion } from './manager.mjs'
-export const MANAGER_QUESTION_RULE = 'Litch decision background question (read-only).'
+export const MANAGER_QUESTION_RULE = 'Litch decision background question'
 
 // 注入、各引擎的工具识别与设备执行闸共用这一份精确方法集合。
 const METHODS: Readonly<Record<string, readonly string[]>> = {
@@ -89,12 +89,12 @@ export function isManagerQuestionTools(tools: unknown): boolean {
 }
 
 export function managerQuestionRules(id: string, managerThreadId?: string): string {
-  return `${MANAGER_QUESTION_RULE}
+  return `${MANAGER_QUESTION_RULE}.
 Markdown supported; use it for lists and emphasis.
-When litch_repository is available, it provides structured log/show/diff/blame/status queries. It runs on the device without shell commands, network or repository writes. Use only cursor for subsequent output pages. Older Codex parents may lack these inherited tools; their existing sandboxed shell remains available.
+When litch_repository.run is available, pass an authorized repository directory and a Git argv array (including the subcommand, without the git executable). It runs Git from the device PATH without a shell, with timeout and bounded output. All Git subcommands/options are available: Git can write, use the network and run configured hooks/helpers; it is not read-only or sandboxed. directory selects the authorized starting repository, not an isolation boundary for Git arguments. Use only cursor for subsequent output pages without executing the command again. The existing log/show/diff/blame/status shortcuts remain available. Older Codex parents may lack newly added inherited tools; their existing sandboxed shell remains available.
 ${managerThreadId ? `The manager threadId is ${JSON.stringify(managerThreadId)}. Use litch_sessions.read to retrieve its recent history when needed.` : ''}
-Use litch_sessions.list/read only for this manager and its worklines with valid ownership, including descendants across harnesses. A known id, same folder or a quoted reference does not grant access. Never read raw harness/Litch session storage, databases, backups or links to them; use these scoped tools. Do not use network tools or run tests. Do not call wrap_up or any session control method; return your answer normally.
-Only answer the user's questions about post ${id}, briefly. Earlier conversation is reference material, not a task to continue. You may read files and call litch_manager.summary/get/post_get. For any post use post_reply with id ${id}, current revision, patch and why to update its original content only; do not supply text or questionId. You may use update ONLY for this decision’s title, background, options and recommend, or close ONLY this decision as expired/withdrawn when warranted by the discussion. Read get before changing it. The device records changes and informs the manager next turn. Do not change files, other board objects or other fields, start sessions or agents, send messages, or request permissions. If the available context cannot answer the question, say so and suggest forwarding it to the manager.`
+Use litch_sessions.list/read only for this manager and its worklines with valid ownership, including descendants across harnesses. A known id, same folder or a quoted reference does not grant access. Never read raw harness/Litch session storage, databases, backups or links to them; use these scoped tools. Apart from Git commands, do not use network tools. Do not run tests. Do not call wrap_up or any session control method; return your answer normally.
+Only answer the user's questions about post ${id}, briefly. Earlier conversation is reference material, not a task to continue. You may read files, use Git commands relevant to the question, and call litch_manager.summary/get/post_get. For any post use post_reply with id ${id}, current revision, patch and why to update its original content only; do not supply text or questionId. You may use update ONLY for this decision’s title, background, options and recommend, or close ONLY this decision as expired/withdrawn when warranted by the discussion. Read get before changing it. The device records changes and informs the manager next turn. Apart from Git commands, do not change files. Do not change other board objects or other fields, start sessions or agents, send messages, or request permissions. If the available context cannot answer the question, say so and suggest forwarding it to the manager.`
 }
 
 export function forwardedManagerQuestion(

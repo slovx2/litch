@@ -7,11 +7,11 @@ import {
   REPOSITORY_NAMESPACE,
   type RepositoryMethod,
 } from '../../protocol/src/client-tools-repository.mjs'
-import { ReadCommandError } from '../../shared/src/read-only-command.mjs'
 import type { DeviceToolCall, DeviceToolHandler } from './device-tools.mjs'
 import type { DeviceManagers } from './manager.mjs'
+import { RepositoryCommandError } from './repository-command.mjs'
+import { insideRepository, repositoryRoot } from './repository-path.mjs'
 import { queryRepository, type RepositoryQueryResult } from './repository-query.mjs'
-import { insideRepository, requireLocalRepositoryPath } from './repository-view.mjs'
 import { isObject } from './wire.mjs'
 
 const PAGE_CHARS = 12000
@@ -30,7 +30,8 @@ const ok = (value: unknown): ClientToolCallResponse => ({
 
 function withinDeadline<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
-    const abort = () => reject(new ReadCommandError('cancelled', 'Query cancelled or timed out.'))
+    const abort = () =>
+      reject(new RepositoryCommandError('cancelled', 'Query cancelled or timed out.'))
     signal.addEventListener('abort', abort, { once: true })
     work.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort))
     if (signal.aborted) abort()
@@ -47,8 +48,7 @@ export class RepositoryTools {
 
   private async authorize(call: DeviceToolCall, directory: unknown): Promise<string> {
     if (typeof directory !== 'string' || !isAbsolute(directory))
-      throw new ReadCommandError('invalid', 'directory must be absolute.')
-    requireLocalRepositoryPath(directory)
+      throw new RepositoryCommandError('invalid', 'directory must be absolute.')
     const questions = this.managers.questions
     const temporary = questions.managerFor(call.threadId)
     const manager = temporary
@@ -60,7 +60,7 @@ export class RepositoryTools {
       manager.status !== 'active' ||
       !questions.allowed(call.threadId, REPOSITORY_NAMESPACE, call.tool)
     )
-      throw new ReadCommandError(
+      throw new RepositoryCommandError(
         'forbidden',
         'Only an active manager or its active temporary question may query repositories.',
       )
@@ -68,7 +68,7 @@ export class RepositoryTools {
       ? questions.readableSessions(call.threadId)
       : questions.ownedSessions(manager.id)
     if (!ids?.has(manager.threadId))
-      throw new ReadCommandError('forbidden', 'The temporary question has retired.')
+      throw new RepositoryCommandError('forbidden', 'The temporary question has retired.')
     const target = realpathSync(directory)
     const roots = new Map([[manager.threadId, manager.cwd]])
     for (const id of ids) {
@@ -86,12 +86,12 @@ export class RepositoryTools {
         }
       })
     )
-      throw new ReadCommandError(
+      throw new RepositoryCommandError(
         'path_denied',
         'Select a repository inside this manager or a currently owned workline directory.',
       )
     if (!questions.allowed(call.threadId, REPOSITORY_NAMESPACE, call.tool))
-      throw new ReadCommandError('forbidden', 'The temporary question has retired.')
+      throw new RepositoryCommandError('forbidden', 'The temporary question has retired.')
     return target
   }
   private page(id: string, snapshot: Snapshot) {
@@ -116,19 +116,19 @@ export class RepositoryTools {
   readonly handle: DeviceToolHandler = async (call, { signal }) => {
     try {
       if (!(REPOSITORY_METHODS as readonly string[]).includes(call.tool))
-        throw new ReadCommandError('invalid', 'Unknown repository method.')
+        throw new RepositoryCommandError('invalid', 'Unknown repository method.')
       if (!isObject(call.arguments))
-        throw new ReadCommandError('invalid', 'Expected structured query arguments.')
+        throw new RepositoryCommandError('invalid', 'Expected structured query arguments.')
       const args = call.arguments
       const bounded = AbortSignal.any([signal, AbortSignal.timeout(15000)])
       for (const [id, snapshot] of this.pages)
         if (snapshot.expires < Date.now()) this.pages.delete(id)
       if (args.cursor !== undefined) {
         if (Object.keys(args).length !== 1 || typeof args.cursor !== 'string')
-          throw new ReadCommandError('invalid', 'Supply only cursor to continue.')
+          throw new RepositoryCommandError('invalid', 'Supply only cursor to continue.')
         const snapshot = this.pages.get(args.cursor)
         if (!snapshot || snapshot.owner !== call.threadId || snapshot.method !== call.tool)
-          throw new ReadCommandError(
+          throw new RepositoryCommandError(
             'invalid_cursor',
             'This output cursor is unavailable or belongs to another session/query.',
           )
@@ -136,13 +136,18 @@ export class RepositoryTools {
         return ok(this.page(args.cursor, snapshot))
       }
       if (this.running >= 2)
-        throw new ReadCommandError(
+        throw new RepositoryCommandError(
           'busy',
           'Two repository queries are already running; retry after they finish.',
         )
       this.running++
       try {
-        const directory = await withinDeadline(this.authorize(call, args.directory), bounded)
+        const requested = await withinDeadline(this.authorize(call, args.directory), bounded)
+        const root = await withinDeadline(
+          this.authorize(call, await repositoryRoot(requested, bounded)),
+          bounded,
+        )
+        const directory = call.tool === 'run' ? requested : root
         const result = await queryRepository(
           call.tool as RepositoryMethod,
           { ...args, directory },
@@ -165,7 +170,7 @@ export class RepositoryTools {
         this.running--
       }
     } catch (error) {
-      if (error instanceof ReadCommandError)
+      if (error instanceof RepositoryCommandError)
         return { ...ok({ error: { code: error.code, message: error.message } }), success: false }
       return clientToolFailure('failed', error instanceof Error ? error.message : String(error))
     }

@@ -60,7 +60,7 @@ const text = (value: unknown): string => (typeof value === 'string' ? value : ''
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
 export class DeviceTools implements DeviceToolRegistry {
-  /** 设备拥有的只读旁问对所有动态工具统一把关，包含客户端工具。 */
+  /** 设备拥有的临时旁问对所有动态工具统一把关，包含客户端工具。 */
   allowed: (threadId: string, namespace: unknown, tool: unknown) => boolean = () => true
   private readonly handlers = new Map<string, DeviceToolHandler>()
   /** 原生动态工具由设备直接接管，不向适配器宣称能执行这类命名空间。 */

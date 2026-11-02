@@ -50,7 +50,7 @@ const operations = [
     { directory: work, ...(method === 'blame' ? { path: 'README.md' } : {}) },
     'litch_repository',
   ]),
-  ['commit', { directory: work }, 'litch_repository'],
+  ['run', { directory: work, argv: ['branch', 'temporary-git'] }, 'litch_repository'],
 ]
 let index = 0
 let active = false
@@ -184,14 +184,13 @@ try {
   assert.match(strings[1], new RegExp(managerId))
   assert.match(strings[2], new RegExp(lineId))
   for (const result of strings.slice(3, 6)) assert.match(result, /litch:blocked/)
-  assert.match(strings.at(-1), /unsupported call/)
-  for (const result of strings.slice(6, 11)) {
+  for (const result of strings.slice(6)) {
     assert.match(result, /captured_at/)
     assert.doesNotMatch(result, /litch:|query_failed/)
   }
   assert.equal(cross.seen.filter((call) => call.method === 'turn/start').length, 0)
   console.log(
-    'PASS 真 Codex：继承工具、list/read、五个真实 Git 查询；越权会话读/写和不存在的 Git 写方法拒绝',
+    'PASS 真 Codex：继承工具、list/read、五个 Git 快捷方法和通用 Git 写命令；越权会话读/写仍拒绝',
   )
   // 仅隔离探针评估上游开关，不改变经理旁问的生产配置。
   const link = await tree.link('codex')

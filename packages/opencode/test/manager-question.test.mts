@@ -41,9 +41,9 @@ test('旁问轻会话可连续回答，工具全拒绝后仅开放读文件和�
           {
             type: 'tool',
             get name() {
-              return `${toolPrefix}_repository_status`
+              return `${toolPrefix}_repository_run`
             },
-            input: { directory: '/work' },
+            input: { directory: '/work', argv: ['status'] },
           },
         ],
         [{ type: 'text', chunks: ['Git 背景'] }],
@@ -101,11 +101,7 @@ test('旁问轻会话可连续回答，工具全拒绝后仅开放读文件和�
     const names = env.model.requests.flatMap(
       (body) => body.tools?.map((tool: any) => tool.function?.name ?? tool.name) ?? [],
     )
-    assert.deepEqual(calls, [
-      'litch_sessions.list',
-      'litch_sessions.read',
-      'litch_repository.status',
-    ])
+    assert.deepEqual(calls, ['litch_sessions.list', 'litch_sessions.read', 'litch_repository.run'])
     assert.ok(
       env.model.requests.some((body) =>
         JSON.stringify(body.messages).includes('authorized snapshot'),

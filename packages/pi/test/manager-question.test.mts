@@ -7,7 +7,7 @@ import { managerQuestionTools } from '../../protocol/src/manager-question.mjs'
 import { clientTools } from '../src/dynamic-tools.mjs'
 import { approvalHarness, toolResults } from './approval-harness.mjs'
 
-test('旁问即使关闭审批也拦写文件与命令，分叉替换经理工具', { timeout: 60000 }, async () => {
+test('旁问拦原生写文件与命令，分叉替换经理工具并接通 Git run', { timeout: 60000 }, async () => {
   const env = await approvalHarness({ approvals: false })
   try {
     const client = await env.connect('question')
@@ -52,8 +52,8 @@ test('旁问即使关闭审批也拦写文件与命令，分叉替换经理工�
         litchClientTools: { namespaces: ['litch_sessions', 'litch_repository'] },
       },
     })
-    for (const method of ['list', 'read', 'status']) {
-      const namespace = method === 'status' ? 'litch_repository' : 'litch_sessions'
+    for (const method of ['list', 'read', 'run']) {
+      const namespace = method === 'run' ? 'litch_repository' : 'litch_sessions'
       const tool = clientTools(dynamicTools).find(
         (one) => one.namespace === namespace && one.name === method,
       )
@@ -66,8 +66,8 @@ test('旁问即使关闭审批也拦写文件与命令，分叉替换经理工�
               args:
                 method === 'read'
                   ? { thread_id: thread.id }
-                  : method === 'status'
-                    ? { directory: env.cwd }
+                  : method === 'run'
+                    ? { directory: env.cwd, argv: ['status'] }
                     : {},
             },
           ],

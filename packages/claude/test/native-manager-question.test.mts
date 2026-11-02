@@ -10,7 +10,7 @@ import { DYNAMIC_TOOL_SERVER, dynamicToolName } from '../src/dynamic-tools.mjs'
 import { MockLLM } from './fixtures/mock-llm.mjs'
 import { ProtocolClient } from './fixtures/protocol-client.mjs'
 
-test('真实 Claude 临时分叉：list/read 到执行器，Bash 在 PreToolUse 拒绝', {
+test('真实 Claude 临时分叉：list/read 和 Git run 到执行器，Bash 在 PreToolUse 拒绝', {
   timeout: 100_000,
 }, async () => {
   const home = await mkdtemp(join(tmpdir(), 'question-cli-'))
@@ -73,8 +73,8 @@ test('真实 Claude 临时分叉：list/read 到执行器，Bash 在 PreToolUse 
         {
           type: 'tool_use',
           id: 'toolu_git',
-          name: `mcp__${DYNAMIC_TOOL_SERVER}__${dynamicToolName('litch_repository', 'status')}`,
-          input: { directory: home },
+          name: `mcp__${DYNAMIC_TOOL_SERVER}__${dynamicToolName('litch_repository', 'run')}`,
+          input: { directory: home, argv: ['status'] },
         },
       ]
     })
@@ -111,11 +111,7 @@ test('真实 Claude 临时分叉：list/read 到执行器，Bash 在 PreToolUse 
       input: [{ type: 'text', text: '查经理和工作线背景' }],
     })
     assert.equal((await client.completed(turn.id)).status, 'completed')
-    assert.deepEqual(calls, [
-      'litch_sessions.list',
-      'litch_sessions.read',
-      'litch_repository.status',
-    ])
+    assert.deepEqual(calls, ['litch_sessions.list', 'litch_sessions.read', 'litch_repository.run'])
     model.assertConsumed()
   } finally {
     await client.close()

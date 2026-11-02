@@ -235,10 +235,10 @@ export class ManagerQuestions {
     const manager = this.owner.manager(state.managerId)
     const link = await this.link(manager)
     const features = isObject(link.runtime?.features) ? link.runtime.features : {}
-    // 没有可强制的工具边界时拒绝，不能用提示词假装只读。
+    // 没有可强制的工具边界时拒绝，不能用提示词假装已限制会话访问。
     if (!link.native && features.managerQuestions !== true)
       throw new Error(
-        'This harness cannot enforce read-only background questions. Ask the manager in chat.',
+        'This harness cannot enforce scoped background questions. Ask the manager in chat.',
       )
     const read = await link.request('thread/read', {
       threadId: manager.threadId,

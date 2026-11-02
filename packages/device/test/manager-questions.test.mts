@@ -372,7 +372,8 @@ test('Codex 旁问覆盖自治规则、禁用 MCP 和提权，不发上游未知
     assert.equal(fork.approvalPolicy, 'never')
     assert.deepEqual(fork.config.mcp_servers, { unsafe: { enabled: false } })
     assert.equal(fork.config['features.request_permissions_tool'], false)
-    assert.match(fork.developerInstructions, /background question \(read-only\)/)
+    assert.match(fork.developerInstructions, /Litch decision background question\./)
+    assert.match(fork.developerInstructions, /litch_repository\.run/)
     assert.doesNotMatch(
       fork.developerInstructions,
       /You are a Litch manager|Manager sessions \(Litch\)/,
