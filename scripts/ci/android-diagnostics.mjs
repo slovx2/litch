@@ -38,6 +38,47 @@ export function cappedWriter(path, limit, onLimit = () => {}) {
   }
 }
 
+/** 按体积续段；断线重接也开新段。保留首段，直到总预算耗尽才停止写入。 */
+export function logcatWriter(directory, mark, bytesPerFile = 16 * 1024 * 1024, maxFiles = 12) {
+  let write = null
+  let bytes = 0
+  let segment = 0
+  let exhausted = false
+  return {
+    nextStream() {
+      write = null
+    },
+    write(chunk) {
+      const data = Buffer.from(chunk)
+      let offset = 0
+      while (offset < data.length && !exhausted) {
+        if (!write) {
+          if (segment === maxFiles) {
+            exhausted = true
+            mark('logcat-capped', { files: segment, maxBytes: maxFiles * bytesPerFile })
+            return
+          }
+          const file = `android-logcat-${++segment}.txt`
+          try {
+            write = cappedWriter(join(directory, file), bytesPerFile)
+          } catch (error) {
+            exhausted = true
+            mark('logcat-error', { error: error.message })
+            return
+          }
+          bytes = 0
+          mark('logcat-segment', { segment, file })
+        }
+        const length = Math.min(data.length - offset, bytesPerFile - bytes)
+        write(data.subarray(offset, offset + length))
+        bytes += length
+        offset += length
+        if (bytes === bytesPerFile) write = null
+      }
+    },
+  }
+}
+
 /** ADB smart socket：OKAY 后是四位十六进制长度 + 完整设备快照；不能把 TCP chunk 当消息。 */
 export function trackerDecoder(onSnapshot) {
   let pending = Buffer.alloc(0)
@@ -73,7 +114,8 @@ export function startAndroidDiagnostics({ adbBin, serial, directory, port = 5037
   let disconnected = Promise.resolve()
   let state = 'unknown'
   let logcat = null
-  let segments = 0
+  let streams = 0
+  const logOutput = logcatWriter(directory, mark)
   let reconnects = 0
   let stopping = null
   let settleReady
@@ -113,22 +155,15 @@ export function startAndroidDiagnostics({ adbBin, serial, directory, port = 5037
     return child
   }
   const startLogcat = () => {
-    if (stopped || logcat || state !== 'device' || segments >= 12) return
-    const segment = ++segments
-    let output
-    try {
-      output = cappedWriter(
-        join(directory, `android-logcat-${segment}.txt`),
-        16 * 1024 * 1024,
-        () => mark('logcat-capped', { segment }),
-      )
-    } catch (error) {
-      mark('logcat-error', { error: error.message })
+    if (stopped || logcat || state !== 'device' || streams > 12) return
+    if (streams++ === 12) {
+      mark('logcat-connections-capped')
       return
     }
-    mark('logcat-start', { segment })
+    logOutput.nextStream()
+    mark('logcat-start', { stream: streams })
     // 仅重接观察流；不重新运行 flow。首次掉线前的段永不覆盖。
-    logcat = launch(['logcat', '-b', 'all', '-v', 'epoch', '-T', '1'], output)
+    logcat = launch(['logcat', '-b', 'all', '-v', 'epoch', '-T', '1'], logOutput.write)
     logcat.once('close', () => {
       logcat = null
       later(startLogcat)

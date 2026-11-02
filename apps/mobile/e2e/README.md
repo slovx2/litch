@@ -56,7 +56,8 @@ Full 的 `mobile-build` 只构建一次 x86_64 APK，上传清单与 APK；三�
 
 CI 掉线诊断：`LITCH_E2E_DIAGNOSTICS=1` 在 APK 安装前订阅 ADB 的设备状态，并分段保留连续 logcat。
 `android-events.jsonl` 对齐安装、夹具、每次 flow、reverse 丢失/补回和恢复的时间；`android-logcat-*.txt`
-保留掉线前的日志（每段最多 16 MiB、最多 12 段，截断有事件），不会覆盖第一次失败。宿主的 CPU、内存、
+保留掉线前的日志（每段最多 16 MiB，写满或断线重接后续新段；最多 12 段，耗尽总预算才截断并记录事件），
+不会覆盖第一次失败。宿主的 CPU、内存、
 AVD、SDK 和 KVM 信息在 `android-host.json`，传输层 trace 在 `adb-server.log`（最多 32 MiB）。
 观察流断开后可重新订阅，只恢复日志读取，不重启设备/ADB、不重跑测试。诊断缺失会报告，不改测试结果。
 

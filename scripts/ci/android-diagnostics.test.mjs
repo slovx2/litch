@@ -4,7 +4,12 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { cappedWriter, startAndroidDiagnostics, trackerDecoder } from './android-diagnostics.mjs'
+import {
+  cappedWriter,
+  logcatWriter,
+  startAndroidDiagnostics,
+  trackerDecoder,
+} from './android-diagnostics.mjs'
 
 const frame = (text) => `${Buffer.byteLength(text).toString(16).padStart(4, '0')}${text}`
 const pause = (ms) => new Promise((done) => setTimeout(done, ms))
@@ -41,6 +46,22 @@ test('日志限额保留最早证据并只报告一次截断', (t) => {
   write('later')
   assert.equal(readFileSync(file, 'utf8'), 'abcde')
   assert.equal(limits, 1)
+})
+
+test('单连接日志超限会续段，重接不覆盖首段；只在总预算耗尽后截断', (t) => {
+  const directory = temporary(t)
+  const events = []
+  const output = logcatWriter(directory, (kind) => events.push(kind), 5, 3)
+  output.write('abcdefgh')
+  assert.equal(readFileSync(join(directory, 'android-logcat-1.txt'), 'utf8'), 'abcde')
+  assert.equal(readFileSync(join(directory, 'android-logcat-2.txt'), 'utf8'), 'fgh')
+  assert.ok(!events.includes('logcat-capped'))
+  output.nextStream()
+  output.write('ijklmnop')
+  output.write('later')
+  assert.equal(readFileSync(join(directory, 'android-logcat-3.txt'), 'utf8'), 'ijklm')
+  assert.equal(readFileSync(join(directory, 'android-logcat-1.txt'), 'utf8'), 'abcde')
+  assert.equal(events.filter((kind) => kind === 'logcat-capped').length, 1)
 })
 
 test('掉线后只重接日志观察流；保留首段、记录阶段、收掉自己启动的进程', async (t) => {
@@ -97,7 +118,7 @@ setInterval(() => { if (existsSync(${JSON.stringify(release)})) process.exit(0) 
   )
   rmSync(release)
   peer.write(frame('emulator-5554\tdevice\n'))
-  await until(() => events().some((event) => event.kind === 'logcat-start' && event.segment === 2))
+  await until(() => events().some((event) => event.kind === 'logcat-start' && event.stream === 2))
   await until(
     () =>
       readFileSync(commands, 'utf8')
