@@ -149,9 +149,8 @@ export function SettingsScreen(_props: Props) {
 
         <SectionLabel>{t('switches.col.taskCards')}</SectionLabel>
         <TaskCardsSection />
-        <Note>
-          {t('switches.note')} {t('switches.note.taskCards')}
-        </Note>
+        {/* 统一设置整台设备的说明在每台设备的选择单里 */}
+        <Note>{t('switches.note.taskCards')}</Note>
 
         <SectionLabel>{t('approval.settings')}</SectionLabel>
         <ApprovalKeySection />

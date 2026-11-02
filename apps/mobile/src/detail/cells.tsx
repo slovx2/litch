@@ -408,7 +408,8 @@ export function useTicking(since: number | null): number | null {
 
 /**
  * 回合末尾的状态行：从回合开始一直在，高度固定，只换字。回合在跑时写“{name} 正在工作”和已经用了多久，
- * 正文在出字、等人答复时留空；命令、工具、思考在跑时照写。右边一个“⋯”打开这一回合的操作
+ * 正文在出字、等人答复时留空；命令、工具、思考在跑时照写。紧挨在上面的是这一回合的活动时不画（merged）。
+ * 右边一个“⋯”打开这一回合的操作
  */
 export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
   const { c, font } = useTheme()
@@ -417,7 +418,8 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
   // 模型请求在重试时一直写着：手机上窄，第几次和原因写在最前面，不再写“正在工作”
   const retry = row.status === 'running' ? row.retry : null
   const working = useLasting(row.working) || retry !== null
-  const spent = useTicking(working ? row.startedAt : null)
+  // 不画的时候不走钟
+  const spent = useTicking(working && !row.merged ? row.startedAt : null)
   const time = row.durationMs == null ? '' : ` · ${duration(row.durationMs, t)}`
   // 回合结束的时刻（开始加用时），写在用时后面
   const ended = turnEnded(row)
@@ -435,6 +437,8 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
         : row.status === 'interrupted'
           ? `${t('turn.interrupted')}${time}${at}`
           : `${t('turn.failed')}${at}`
+  // 紧挨在上面的是这一回合的活动：那一行已经写着在做什么、用了多久，这里不另占一行
+  if (row.merged) return null
   return (
     <View>
       {row.recovery ? <Recovery turnId={row.turnId} recovery={row.recovery} /> : null}

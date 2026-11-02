@@ -45,6 +45,10 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
   (sending during a turn), connection, task cards, the sign-in approval key's fingerprint, updates.
   Every pick-one setting is a single row with its current value (for example "Theme  Light ›"); tap it
   to choose in a sheet. 手机设置里每个单选项都是一行“名称　当前值 ›”，点开在底部单里选。
+  Task cards are one row per device with how many harnesses have them on ("This Mac  3/4 on ›"); tap
+  it to tick harnesses one by one in a sheet that stays open, with Turn all on / Turn all off at the end.
+  An offline device or an outdated device service shows the reason on each item and cannot be changed.
+  任务卡每台设备一行“名称　N/M 已开 ›”，点开逐个勾，单不收起，末尾是全部开启或全部关闭。
 
 ## Android background connections
 
@@ -88,6 +92,10 @@ or global Suggestions entry; it keeps its per-session suggestion list (`managers
   **Dismiss** and turning task cards off are under ⋯ at the card's top right. The "New worktree" switch
   sits beside the buttons (it moves below them on narrow screens); its explanation is on the Edit and
   start page. 卡上只有“开始”“在这里做”，其余在右上角“⋯”里。
+  When the target harness cannot run as strictly as the parent session, Start is dimmed and its
+  screen-reader name gives the reason; it becomes available once the parent session's access is raised.
+  Do it here and Edit and start (to pick another harness) still work.
+  目标 harness 收不到父会话那么严时，“开始”置灰，读屏名称写明原因；放宽父会话权限后可点。
 - **New session**: harnesses are a row of pills (swipe sideways when they do not fit). A dimmed pill
   cannot be used on this device; tap it to see why. Long-press a pill to see its version.
   新建对话的 harness 是一排胶囊，置灰的点了写原因，长按看版本。
@@ -101,6 +109,10 @@ or global Suggestions entry; it keeps its per-session suggestion list (`managers
   description, time, and a status: queued, running, done, failed or stopped); tap it to open the
   subagent's page with its task, the failure reason and its own transcript (read only). Tapping an
   activity group opens its steps below it, with **Collapse** at the end; the tapped line stays in place.
+  While the activity line is the last thing in a running turn it is the turn's status; there is no
+  separate "… is working" line under it. After the turn, the folded summary reads "Processed · N steps"
+  and the time is written once, on the turn's last line ("Done · 41 s · 15:34").
+  回合在跑、活动行在最下面时不再另起“正在工作”一行；回合结束后摘要写“已处理 · N 步”，用时只写在回合尾。
 - **Quote part of a reply**: long-press a reply → Select text; the word under the finger is already
   selected with both handles (drag them, or long-press elsewhere). Reply in the system menu opens a box
   to write a note on the passage (it can stay empty); Add puts it above the input box as a quote (the same

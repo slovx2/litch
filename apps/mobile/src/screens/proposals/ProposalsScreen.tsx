@@ -155,6 +155,7 @@ function ProposalRow({
             sessionId={sessionId}
             proposalId={proposal.id}
             worktree={proposal.worktree ?? proposal.worktreeDefault}
+            wider={proposal.widerSandbox}
           />
         </View>
       ) : null}

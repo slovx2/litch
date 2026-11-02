@@ -192,7 +192,10 @@ try {
   const checkPending = async (look, where) => {
     // 设置在页面里，换页就没了：从设置页一路点进会话
     await call('Page.navigate', { url: url('settings', look) })
+    // 设置页上是一行加选择单
+    await tap('settings:sendMode')
     await tap('settings:sendMode:queue')
+    await sleep(300)
     await tap('header:back')
     await tap('device:local')
     await tap('session:s2')
@@ -240,6 +243,12 @@ try {
         ['立即插入', '编辑', '移除'],
         `${where} 排队的行尾是插入、编辑、移除`,
       )
+      // 立即插入是拐角回车，和待发的“发送”（↑）分开（桌面同样）
+      assert.deepEqual(
+        acts.map((act) => act.text),
+        ['⏎', '✎', '✕'],
+        `${where} 排队行尾的记号`,
+      )
       for (const act of acts)
         assert.ok(
           act.width >= 36 && act.height >= 36,
@@ -260,10 +269,25 @@ try {
     )
     const held = await rect('queue')
     assert.ok(held.height <= 120, `${where} 停止后的待发：一行头加两行（${held.height}）`)
+    // “全部发送”可点 44 高、至少 44 宽，头一行看着仍是 32（网页预览不认 hitSlop，量的是它自己）
+    const sendAll = await rect('queue:send')
+    const head = await read(
+      `Math.round(document.querySelector('${sel('queue:send')}').parentElement.getBoundingClientRect().height)`,
+    )
+    assert.ok(
+      sendAll.height >= 44 && sendAll.width >= 44,
+      `${where} “全部发送”可点区（${sendAll.width}×${sendAll.height}）`,
+    )
+    assert.equal(head, 32, `${where} 待发的头一行仍是 32 高`)
     assert.deepEqual(
       (await buttons('queue:0')).map((act) => act.label),
       ['发送', '编辑', '移除'],
       `${where} 待发的行尾是发送、编辑、移除`,
+    )
+    assert.deepEqual(
+      (await buttons('queue:0')).map((act) => act.text),
+      ['↑', '✎', '✕'],
+      `${where} 待发行尾的记号`,
     )
     assert.equal(await label('composer-send'), '发送', `${where} 停止后是发送键`)
     // 没字时没有“连同待发”，有字时在发送键旁，默认连同
@@ -286,7 +310,7 @@ try {
     await tap('queue:send')
     await until(async () => !(await rect('queue')), `${where} 全部发送后托盘收起`)
   }
-  /** 回合里的过程摘要：“已处理 41 秒 · 1 步”一行 */
+  /** 回合里的过程摘要：“已处理 · 1 步”一行；用时只写在回合尾“完成 · 41 秒”，不写两遍 */
   const checkProcess = async (look, where) => {
     await call('Page.navigate', { url: url('sessions', look) })
     await tap('session:s1')
@@ -295,8 +319,157 @@ try {
     const head = await read(
       `(()=>{const e=document.querySelector('${sel('process-head')}');return {text:e.innerText,height:e.getBoundingClientRect().height}})()`,
     )
-    assert.match(head.text, /已处理 .+ · \d+ 步/, `${where} 时长和步数在同一行`)
+    assert.match(head.text, /^▸\s*已处理 · \d+ 步$/, `${where} 摘要不再写用时（${head.text}）`)
+    assert.match(
+      await read(
+        `[...document.querySelectorAll('${sel('turn-menu')}')].at(-1).parentElement.textContent`,
+      ),
+      /^完成 · .+ 秒 · /,
+      `${where} 用时写在回合尾`,
+    )
     assert.ok(head.height <= 48, `${where} 过程摘要一行（${head.height}）`)
+  }
+
+  /**
+   * 回合在跑、紧挨在下面没有正文时，活动那一行就是“正在做什么”：不再另起一行“{name} 正在工作”。
+   * 新会话里说“跑一会儿”，模拟核心先跑一条两秒多的命令
+   */
+  const checkWorking = async (look, where) => {
+    await call('Page.navigate', { url: url('new-session', look) })
+    await wait('new-input')
+    await sleep(500)
+    await read(
+      `(()=>{const i=document.querySelector('${sel('new-input')}');const set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;set.call(i,'跑一会儿：看状态行');i.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+    )
+    await sleep(250)
+    await tap('new-send')
+    let live = 0
+    for (let i = 0; i < 40; i++) {
+      const state = await read(
+        `(()=>{const leaf=(re)=>[...document.querySelectorAll('div,span')].filter(e=>e.childElementCount===0&&re.test(e.textContent)).at(-1);return {group:leaf(/^▸ 活动.*正在运行/)?.textContent??null,working:leaf(/正在工作/)?.textContent??null}})()`,
+      )
+      if (state.group) {
+        live++
+        assert.equal(
+          state.working,
+          null,
+          `${where} 活动行在跑时不另起“正在工作”（${state.working}）`,
+        )
+      }
+      await sleep(100)
+    }
+    assert.ok(live > 0, `${where} 量到了活动行在跑的时候`)
+  }
+  /** 建议卡：写明开不成的那张，“开始”是不能点的边框样式，读屏名称带原因；点了不报错 */
+  const checkProposal = async (look, where) => {
+    await call('Page.navigate', { url: url('proposals', look) })
+    await until(
+      () => read(`document.querySelectorAll('[data-testid$=":start"]').length >= 3`),
+      `${where} 三张提案卡`,
+    )
+    await sleep(400)
+    const starts = await read(
+      `[...document.querySelectorAll('[data-testid^="proposal:"][data-testid$=":start"]')].map(e=>({id:e.dataset.testid,text:e.textContent,label:e.getAttribute('aria-label'),disabled:e.getAttribute('aria-disabled'),bg:getComputedStyle(e).backgroundColor}))`,
+    )
+    const blocked = starts.filter((entry) => entry.disabled === 'true')
+    assert.equal(blocked.length, 1, `${where} 只有 Pi 那张开不成`)
+    assert.equal(blocked[0].text, '开始')
+    assert.match(
+      blocked[0].label ?? '',
+      /^开始，不可用：此 harness 要求「完全访问」/,
+      `${where} 读屏名称写明原因`,
+    )
+    assert.equal(blocked[0].bg, 'rgba(0, 0, 0, 0)', `${where} 不再是实心主色`)
+    for (const entry of starts.filter((entry) => entry.disabled !== 'true'))
+      assert.equal(entry.label, null, `${where} 能开的“开始”照常读字`)
+    await read(`document.querySelector('${sel(blocked[0].id)}').click()`)
+    await sleep(600)
+    assert.equal(
+      await read(
+        `[...document.querySelectorAll('div')].some(e=>e.childElementCount===0&&/操作失败|不支持父会话权限/.test(e.textContent))`,
+      ),
+      false,
+      `${where} 点了不再报一遍同样的错`,
+    )
+    await shot(`proposal-blocked-${look.skin}-${look.theme}`)
+  }
+  /** 设置“任务卡”：每台设备一行“名字　N/M 已开 ›”，点开是选择单，逐个勾、单不收起 */
+  const checkTaskCards = async (look, where) => {
+    await call('Page.navigate', { url: url('settings', look) })
+    await wait('settings:task-cards')
+    await read(`document.querySelector('${sel('settings:task-cards')}').scrollIntoView()`)
+    await sleep(500)
+    const rows = await read(
+      `[...document.querySelectorAll('[data-testid^="task-cards:"][data-testid$=":open"]')].map(e=>({id:e.dataset.testid,label:e.getAttribute('aria-label'),height:Math.round(e.getBoundingClientRect().height)}))`,
+    )
+    assert.deepEqual(
+      rows.map((row) => row.id),
+      [
+        'task-cards:local:open',
+        'task-cards:build:open',
+        'task-cards:nas:open',
+        'task-cards:gpu:open',
+      ],
+      `${where} 每台设备一行`,
+    )
+    for (const row of rows)
+      assert.ok(row.height <= 48, `${where} 设备那一行一行高（${row.height}）`)
+    const section = await rect('settings:task-cards')
+    assert.ok(
+      section.height <= rows.length * 48 + 4,
+      `${where} 一节不再列出每个 harness（${section.height}）`,
+    )
+    const local = rows[0].label ?? ''
+    const [, on, all] = local.match(/^本机：(\d+)\/(\d+) 已开$/) ?? []
+    assert.ok(on && all, `${where} 读屏名称带开了几个（${local}）`)
+    assert.equal(rows[3].label, 'gpu-box：离线', `${where} 离线设备写着离线`)
+    await tap('task-cards:local:open')
+    await until(
+      () =>
+        read(
+          `document.querySelectorAll('[data-testid^="task-cards:local:"][role="checkbox"]').length > 1`,
+        ),
+      `${where} 本机的选择单`,
+    )
+    const items = await read(
+      `[...document.querySelectorAll('[data-testid^="task-cards:local:"][role="checkbox"]')].map(e=>({id:e.dataset.testid,checked:e.getAttribute('aria-checked')}))`,
+    )
+    assert.equal(items.length, Number(all), `${where} 单里每个 harness 一项`)
+    assert.equal(
+      items.filter((item) => item.checked === 'true').length,
+      Number(on),
+      `${where} 勾着的和行上写的一样`,
+    )
+    assert.ok(await rect('task-cards:local:device'), `${where} 单里有整台设备一起设`)
+    await shot(`task-cards-${look.skin}-${look.theme}`)
+    // 勾一项：单不收起，那一项换勾，行上的数跟着变
+    const first = items[0]
+    await read(`document.querySelector('${sel(first.id)}').click()`)
+    const flipped = first.checked === 'true' ? 'false' : 'true'
+    await until(
+      () =>
+        read(
+          `document.querySelector('${sel(first.id)}')?.getAttribute('aria-checked') === '${flipped}'`,
+        ),
+      `${where} 勾了换勾、单还开着`,
+    )
+    await tap('sheet:scrim')
+    const after = Number(on) + (flipped === 'true' ? 1 : -1)
+    await until(
+      async () => (await label('task-cards:local:open')) === `本机：${after}/${all} 已开`,
+      `${where} 行上的数跟着变`,
+    )
+    // 离线设备：单里每项不能改，写着原因
+    await tap('task-cards:gpu:open')
+    await wait('task-cards:gpu:device')
+    assert.equal(
+      await read(
+        `(()=>{const items=[...document.querySelectorAll('[data-testid^="task-cards:gpu:"]:not([data-testid$=":open"])')];return items.length>1&&items.every(e=>e.getAttribute('aria-disabled')==='true')})()`,
+      ),
+      true,
+      `${where} 离线设备的项不能改`,
+    )
+    await tap('sheet:scrim')
   }
 
   if (measureOnly) {
@@ -357,6 +530,9 @@ try {
         }
         await checkPending(look, `${skin}/${theme}`)
         await checkProcess(look, `${skin}/${theme}`)
+        await checkWorking(look, `${skin}/${theme}`)
+        await checkProposal(look, `${skin}/${theme}`)
+        await checkTaskCards(look, `${skin}/${theme}`)
       }
     // 复制收进菜单：长按用户消息有“复制消息”，点了闪“已复制”；回合状态行的 ⋯ 里有“复制回答”
     await openTaskSession()

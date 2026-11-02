@@ -7,6 +7,7 @@
 //   或者还有子代理没做完时不自动收；点那一行开合。
 // - 启动子代理的那次调用不进步骤组，单独一行，每个子代理一条（照桌面端）；等待、发输入这些协作调用还是组里的一步。
 // - 每个回合末尾一行状态，从回合开始到结束一直在，只换字不换高度。回合在跑时写“{name} 正在工作”和已用的时间，只在正文出字、等人答复时留空（workingShown）。
+//   紧挨在上面的是这一回合的活动时不另占一行（merged），活动那一行就是“正在做什么”。
 // - 建议任务的卡片（收尾带的、start 提的）和收尾留的问题排在回合最下方（回答下面、状态行上面），过程里调用的位置只留一步；
 //   offer 卡挂在回合中间等人选，不挪。没字的思考不画。
 // - 行里放条目对象本身（单元格从它取要画的东西），再加上条目里会被原地改掉的那几项（核心对文字、状态是原地改的，
@@ -299,6 +300,11 @@ export type Row =
       /** 回合在跑、模型请求在重试：状态行照写“正在工作”，后面接第几次和原因 */
       retry: TurnRetryView | null
       recovery?: TurnView['recovery']
+      /**
+       * 回合在跑、紧挨在上面的是这一回合的活动（步骤组的摘要、展开的步骤）：活动那一行已经写着在做什么和用时，
+       * 状态行不再另占一行（重试、恢复照写）。正文接着出来时它又回到下面
+       */
+      merged: boolean
     }
 
 interface ItemCache {
@@ -518,6 +524,14 @@ export class RowBuilder {
     if (remind) return out
     if (turn.status === 'failed' && turn.error)
       out.push(this.keep({ type: 'error', key: `${turn.id}:error`, text: turn.error }))
+    const above = out.at(-1)
+    const merged =
+      running &&
+      !turn.retry &&
+      !turn.recovery &&
+      above !== undefined &&
+      (above.type === 'group' || above.type === 'groupEnd' || above.type === 'step') &&
+      above.turnId === turn.id
     out.push(
       this.keep({
         type: 'status',
@@ -529,6 +543,7 @@ export class RowBuilder {
         working: running && workingShown(running, items, view.requests.length),
         retry: running ? (turn.retry ?? null) : null,
         recovery: running ? (turn.recovery ?? null) : null,
+        merged,
       }),
     )
     return out
@@ -677,11 +692,14 @@ export class RowBuilder {
       declined: tally.declined,
       agentsFailed: tally.agentsFailed,
       status: turn.status,
-      durationMs: processDuration(
-        turn,
-        ids.flatMap((id) => view.items[id] ?? []),
-        divided,
-      ),
+      // 没被用户补充分段时，过程的用时就是回合的用时，回合尾“完成 · 41 秒”已经写了：摘要只写“已处理 · N 步”
+      durationMs: divided
+        ? processDuration(
+            turn,
+            ids.flatMap((id) => view.items[id] ?? []),
+            divided,
+          )
+        : null,
       ids: ids.join(' '),
     })
   }

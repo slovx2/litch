@@ -236,7 +236,8 @@ test('一个回合：用户消息、收起的过程组、回答、状态行', ()
   assert.equal(rows[1].key, 't:process')
   assert.equal(rows[1].steps, 2)
   assert.equal(rows[1].expanded, false)
-  assert.equal(rows[1].durationMs, 900)
+  // 没被补充分段：过程的用时就是回合的用时，只写在状态行上
+  assert.equal(rows[1].durationMs, null)
   assert.equal(rows[1].ids, 'c1 c2')
   assert.equal(rows[3].durationMs, 900)
   const open = openedBuilder().build(view, 'all')
@@ -287,6 +288,34 @@ test('状态行在回合跑时写“正在工作”：只在正文出字、等�
   assert.equal(working([user('u', '跑')], [{ id: 'r', kind: 'approval' }]), false)
   const done = viewOf([{ id: 't', status: 'completed', itemIds: ['u'] }], [user('u', '跑')])
   assert.equal(new RowBuilder().build(done, 'all').at(-1).working, false)
+})
+
+test('回合在跑、紧挨在上面的是这一回合的活动：状态行不另占一行；正文接着出来、重试、回合结束时照常', () => {
+  const last = (items, turn = {}) =>
+    new RowBuilder()
+      .build(
+        viewOf(
+          [{ id: 't', status: 'running', itemIds: items.map((item) => item.id), ...turn }],
+          items,
+        ),
+        'all',
+      )
+      .at(-1)
+  const running = { ...command('c'), status: 'inProgress' }
+  assert.equal(last([user('u', '跑')]).merged, false)
+  assert.equal(last([user('u', '跑'), running]).merged, true)
+  assert.equal(last([user('u', '跑'), running, answer('a', '正在写', 'inProgress')]).merged, false)
+  assert.equal(
+    last([user('u', '跑'), running], {
+      retry: { attempt: 2, maxRetries: 5, reason: 'rateLimit', httpStatus: 429 },
+    }).merged,
+    false,
+  )
+  const done = viewOf(
+    [{ id: 't', status: 'completed', itemIds: ['u', 'c'] }],
+    [user('u', '跑'), { ...command('c'), status: 'completed', exitCode: 0 }],
+  )
+  assert.equal(new RowBuilder().build(done, 'all').at(-1).merged, false)
 })
 
 test('展开一组：摘要在前，每一步各一行排在它后面，最后一行“收起”（倒置后往下展开）', () => {
@@ -636,7 +665,7 @@ test('过程收起：回合结束整段收成一行；说明段在过程里；�
       status: rows[1].status,
       durationMs: rows[1].durationMs,
     },
-    { notes: 2, steps: 2, declined: 1, status: 'failed', durationMs: 4000 },
+    { notes: 2, steps: 2, declined: 1, status: 'failed', durationMs: null },
   )
   // 点开、再点收起
   builder.toggle('t:process', 't')
@@ -812,7 +841,8 @@ test('零次、一次、多次补充：每段独立开合，计数、总脚注�
         heads.map((r) => [r.notes, r.steps]),
         Array.from({ length: count + 1 }, () => [1, 1]),
       )
-      assert.ok(heads.every((r) => r.durationMs === (count > 0 ? null : 196000)))
+      // 分了段的各段没记全起止时刻，不写；没分段的用时就是回合的，写在状态行上
+      assert.ok(heads.every((r) => r.durationMs === null))
       assert.equal(rows.filter((r) => r.type === 'status').length, 1)
       assert.equal(rows.at(-1).type, 'status')
       assert.equal(rows.filter((r) => r.type === 'origin').length, origin ? 1 : 0)

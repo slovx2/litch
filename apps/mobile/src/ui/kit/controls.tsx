@@ -21,6 +21,7 @@ export function Button({
   kind = 'solid',
   disabled,
   busy,
+  spoken,
   testID,
 }: {
   label: string
@@ -29,6 +30,8 @@ export function Button({
   kind?: 'solid' | 'plain' | 'danger'
   disabled?: boolean
   busy?: boolean
+  /** 读屏名称和字不一样时给（比如不能点时写明原因）；不给就读字 */
+  spoken?: string
   testID?: string
 }) {
   const { c, hit, radius, font } = useTheme()
@@ -43,6 +46,7 @@ export function Button({
       key={busy ? 'busy' : 'idle'}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!inactive, busy: !!busy }}
+      {...(spoken ? { accessibilityLabel: spoken } : {})}
       testID={testID}
       disabled={inactive}
       onPress={onPress}

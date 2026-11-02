@@ -19,6 +19,7 @@ import {
   overridesFor,
   pendingCount,
   STATUS_TEXT,
+  startBlocked,
 } from '../src/detail/proposals/logic.ts'
 import * as messages from '../src/ui/messages/proposals.ts'
 import { mockChannel, until } from './helpers.mjs'
@@ -524,4 +525,18 @@ test('文案：中英文的键一样多；没有和桌面界面撞名的键；�
     Object.keys(messages.zhCN).filter((key) => key in desktop),
     [],
   )
+})
+
+test('开不成的提案：父会话现在比目标 harness 最严的那一档还严才拦；放宽了、认不出父会话的档时不拦', () => {
+  // 目标 harness（Pi）最严只到完全访问
+  assert.equal(startBlocked('danger-full-access', ':workspace'), true)
+  assert.equal(startBlocked('danger-full-access', ':read-only'), true)
+  // 父会话放宽到完全访问以后开得成
+  assert.equal(startBlocked('danger-full-access', ':danger-full-access'), false)
+  assert.equal(startBlocked('workspace-write', ':read-only'), true)
+  assert.equal(startBlocked('workspace-write', ':workspace'), false)
+  // 收得紧、父会话的档认不出或还没取到：交给设备判断
+  assert.equal(startBlocked(null, ':workspace'), false)
+  assert.equal(startBlocked('danger-full-access', 'custom:strict'), false)
+  assert.equal(startBlocked('danger-full-access', null), false)
 })

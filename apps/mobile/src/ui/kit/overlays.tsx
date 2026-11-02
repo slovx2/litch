@@ -21,6 +21,8 @@ export interface SheetAction {
   disabled?: string
   /** 这一项现在的值（模型名、档位）：靠右写着，读屏名称里也带上 */
   value?: string
+  /** 点了不收起（一张单里逐个勾几项时） */
+  stay?: boolean
 }
 
 /** 底部动作单。visible 为 false 时什么都不画 */
@@ -94,7 +96,7 @@ export function Sheet({
             disabled={action.disabled !== undefined}
             testID={action.testID}
             onPress={() => {
-              onClose()
+              if (!action.stay) onClose()
               action.onPress()
             }}
             style={({ pressed }) => [

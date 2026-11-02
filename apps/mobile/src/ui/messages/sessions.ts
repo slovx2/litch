@@ -24,6 +24,11 @@ export const zhCN = {
   'sessions.settings.boot.mock': '模拟核心',
   'sessions.settings.boot.fixture': '测试夹具',
   'sessions.settings.mode': '当前：{mode}',
+  'sessions.settings.cards.count': '{on}/{n} 已开',
+  'sessions.settings.cards.allOn': '全部开启',
+  'sessions.settings.cards.allOff': '全部关闭',
+  'sessions.settings.cards.note':
+    '“全部开启”“全部关闭”统一设置这台设备的所有 harness，之后新安装的 harness 也沿用。',
 } satisfies Record<`sessions.${string}`, Entry>
 
 export const en: Record<keyof typeof zhCN, Entry> = {
@@ -49,4 +54,9 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'sessions.settings.boot.mock': 'Mock core',
   'sessions.settings.boot.fixture': 'Test fixture',
   'sessions.settings.mode': 'Current: {mode}',
+  'sessions.settings.cards.count': '{on}/{n} on',
+  'sessions.settings.cards.allOn': 'Turn all on',
+  'sessions.settings.cards.allOff': 'Turn all off',
+  'sessions.settings.cards.note':
+    'Turn all on and Turn all off set every harness on this device, including ones installed later.',
 }

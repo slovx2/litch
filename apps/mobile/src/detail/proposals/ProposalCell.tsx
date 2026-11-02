@@ -29,7 +29,7 @@ import { useCardsOff } from './CardsOff'
 import { ChildLine } from './ChildLine'
 import { useFlashed, useProposalClock } from './hooks'
 import { isLongBrief, isOfferStatus, needsUser, STATUS_TEXT } from './logic'
-import { MoreButton, OfferActs, ProposalActsRow, useProposalActs } from './ProposalActs'
+import { MoreButton, OfferActs, ProposalActsRow, useBlocked, useProposalActs } from './ProposalActs'
 
 /** offer 卡上那句说明，按状态（已开始的不写，下面是子会话那一行） */
 const OFFER_NOTE = {
@@ -60,6 +60,7 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
     proposal?.worktree ?? proposal?.worktreeDefault ?? false,
   )
   const [menuOpen, setMenuOpen] = useState(false)
+  const blocked = useBlocked(deviceId, sessionId, proposal?.widerSandbox)
   // 列表里还没有这一张：开始了的看侧栏里谁记着从它开始；offer 的调用还没有结果（还在等你选），当作等你选；
   // 否则说不清
   const status = proposal
@@ -192,12 +193,11 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
               level: proposal.widerSandbox ? t(SANDBOX_LEVEL[proposal.widerSandbox]) : '',
             })}
           </Text>
-        ) : waiting && proposal.widerSandbox ? (
-          <Text style={[styles.wider, { color: c.wait, fontSize: font.size.meta }]}>
-            {t('proposal.wider', { level: t(SANDBOX_LEVEL[proposal.widerSandbox]) })}
-          </Text>
+        ) : waiting && blocked ? (
+          // 父会话后来放宽了权限就开得成，这句跟着不写
+          <Text style={[styles.wider, { color: c.wait, fontSize: font.size.meta }]}>{blocked}</Text>
         ) : null}
-        {waiting ? <ProposalActsRow acts={acts} /> : null}
+        {waiting ? <ProposalActsRow acts={acts} blocked={blocked} /> : null}
         {choosing ? (
           <OfferActs
             deviceId={deviceId}

@@ -589,6 +589,7 @@ function Issue({
               sessionId={suggestion.source.threadId}
               proposalId={suggestion.proposal.id}
               worktree={suggestion.proposal.worktree ?? false}
+              wider={suggestion.proposal.widerSandbox}
             />
           ) : null}
           {decision || request ? null : endedNote}

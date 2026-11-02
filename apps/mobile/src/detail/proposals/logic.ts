@@ -7,6 +7,7 @@ import {
   type ProposalStatus,
   proposalStatus,
   proposedBy,
+  type SandboxLevel,
   type SessionEventView,
   type SessionProposalView,
   type ToolCallItem,
@@ -14,12 +15,28 @@ import {
 } from '@litch/core'
 import { CLIENT_TOOL_NAMESPACE } from '../../../../../packages/protocol/src/client-tools.mts'
 import { SESSION_TOOL } from '../../../../../packages/protocol/src/client-tools-sessions.mts'
+import { levelOf, SANDBOX_CHOICES } from '../../../../../packages/ui/src/tree/sandbox.ts'
 import {
   overridesOf,
   type SpawnFields,
   type SpawnParent,
 } from '../../../../../packages/ui/src/tree/spawn-form.ts'
 import type { Key } from '../../ui/i18n'
+
+/**
+ * 提案开不成：目标 harness 最严只给得到 wider 这一档，父会话现在比它还严（设备进程开始时照同样的规矩拒绝）。
+ * wider 是提的时候记下的，父会话后来放宽了权限就开得成。父会话的档认不出（不是三家内置预设、还没取到）时
+ * 不拦，交给设备判断
+ */
+export function startBlocked(
+  wider: SandboxLevel | null | undefined,
+  parentPermission: string | null | undefined,
+): boolean {
+  const parent = levelOf(parentPermission)
+  if (!wider || !parent) return false
+  // SANDBOX_CHOICES 从严到宽
+  return SANDBOX_CHOICES.indexOf(parent) < SANDBOX_CHOICES.indexOf(wider)
+}
 
 /** 简报长到要折起来：超过这么多字，或者超过这么多行（和桌面卡片同一个门槛） */
 export const LONG_BRIEF = 160

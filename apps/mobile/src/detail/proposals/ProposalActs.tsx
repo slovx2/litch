@@ -4,18 +4,22 @@
 // offer 卡的“新会话”“在这里做”在下面的 OfferActs。“编辑后开始”是单独一页（src/screens/proposals/ProposalStartScreen.tsx）。
 // 设备能建工作树时按钮行右边多一个“新工作树”开关（WorktreeSwitch，只写名字，说明在读屏提示和“编辑后开始”那一页），
 // “开始”“新会话”照它带上。
-import { type DeviceView, keys, type SessionSummary } from '@litch/core'
+// 目标 harness 收不到父会话那么严（widerSandbox）、父会话现在仍比它严时开不成：“开始”换成不能点的边框样式，
+// 读屏名称写明原因；“在这里做”和“编辑后开始”照常（改了 harness 或放宽父会话权限就能开）。
+import { type DeviceView, keys, type SandboxLevel, type SessionSummary } from '@litch/core'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useState, useSyncExternalStore } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { SANDBOX_LEVEL } from '../../../../../packages/ui/src/tree/sandbox.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
 import { Sheet, type SheetAction } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
-import { useProposalAct } from './hooks'
+import { useProposalAct, useSessionStore } from './hooks'
+import { startBlocked } from './logic'
 import { useWorktreesOn, WorktreeSwitch } from './WorktreeSwitch'
 
 /** 一张等着的提案：发出去的状态、工作树开关、收进“⋯”的几项 */
@@ -66,8 +70,41 @@ export function useProposalActs(
 
 export type ProposalActsState = ReturnType<typeof useProposalActs>
 
-/** 按钮行：“开始”“在这里做”，右边是工作树开关和 tail（列表里的“⋯”） */
-export function ProposalActsRow({ acts, tail }: { acts: ProposalActsState; tail?: ReactNode }) {
+/**
+ * 开不成时的原因（卡上那一句）；能开是 null。父会话现在的权限档从会话存储取（手机上数据副本不开会话），
+ * 父会话放宽了权限这里跟着变成能开
+ */
+export function useBlocked(
+  deviceId: string,
+  sessionId: string,
+  wider: SandboxLevel | null | undefined,
+): string | null {
+  const t = useT()
+  const store = useSessionStore(deviceId, sessionId)
+  const permission = useSyncExternalStore(
+    store.subscribeMeta,
+    () => store.getMeta()?.settings.permission ?? null,
+  )
+  return wider && startBlocked(wider, permission)
+    ? t('proposal.wider', { level: t(SANDBOX_LEVEL[wider]) })
+    : null
+}
+
+/**
+ * 按钮行：“开始”“在这里做”，右边是工作树开关和 tail（列表里的“⋯”）。
+ * blocked 是开不成的原因；explain 时把它写在按钮下面（对话里的卡片上面已经写了，不再写）
+ */
+export function ProposalActsRow({
+  acts,
+  tail,
+  blocked = null,
+  explain = false,
+}: {
+  acts: ProposalActsState
+  tail?: ReactNode
+  blocked?: string | null
+  explain?: boolean
+}) {
   const { c, font } = useTheme()
   const t = useT()
   const { deviceId, proposalId, act, off, worktree, worktrees } = acts
@@ -76,8 +113,10 @@ export function ProposalActsRow({ acts, tail }: { acts: ProposalActsState; tail?
       <View style={styles.acts}>
         <Button
           label={t('proposal.start')}
-          disabled={off}
+          kind={blocked ? 'plain' : 'solid'}
+          disabled={off || blocked !== null}
           busy={act.busy}
+          {...(blocked ? { spoken: t('proposals.start.blocked', { reason: blocked }) } : {})}
           onPress={() => act.accept(worktrees ? { worktree } : undefined)}
           testID={`proposal:${proposalId}:start`}
         />
@@ -100,6 +139,9 @@ export function ProposalActsRow({ acts, tail }: { acts: ProposalActsState; tail?
           {tail}
         </View>
       </View>
+      {blocked && explain ? (
+        <Text style={[styles.failure, { color: c.wait, fontSize: font.size.meta }]}>{blocked}</Text>
+      ) : null}
       {act.failure ? (
         <Text style={[styles.failure, { color: c.err, fontSize: font.size.meta }]}>
           {act.failure}
@@ -127,17 +169,45 @@ export function MoreButton({ onPress, testID }: { onPress(): void; testID: strin
   )
 }
 
-/** 没有标题行的地方（建议任务列表、经理页）：按钮行末尾自带“⋯” */
-export function ProposalActs({
+/** 没有标题行的地方（建议任务列表、经理页）：按钮行末尾自带“⋯”。带着 wider 时才去看父会话现在的权限档 */
+export function ProposalActs(props: {
+  deviceId: string
+  sessionId: string
+  proposalId: string
+  worktree: boolean
+  /** 提案上的 widerSandbox：父会话现在比它严就开不成，原因写在按钮下面 */
+  wider: SandboxLevel | null
+}) {
+  return props.wider ? (
+    <WiderActs {...props} wider={props.wider} />
+  ) : (
+    <ListActs {...props} blocked={null} />
+  )
+}
+
+function WiderActs(props: {
+  deviceId: string
+  sessionId: string
+  proposalId: string
+  worktree: boolean
+  wider: SandboxLevel
+}) {
+  const blocked = useBlocked(props.deviceId, props.sessionId, props.wider)
+  return <ListActs {...props} blocked={blocked} />
+}
+
+function ListActs({
   deviceId,
   sessionId,
   proposalId,
   worktree,
+  blocked,
 }: {
   deviceId: string
   sessionId: string
   proposalId: string
   worktree: boolean
+  blocked: string | null
 }) {
   const acts = useProposalActs(deviceId, sessionId, proposalId, worktree)
   const [open, setOpen] = useState(false)
@@ -145,6 +215,8 @@ export function ProposalActs({
     <>
       <ProposalActsRow
         acts={acts}
+        blocked={blocked}
+        explain
         tail={
           acts.menu.length > 0 ? (
             <MoreButton onPress={() => setOpen(true)} testID={`proposal:${proposalId}:more`} />

@@ -80,7 +80,7 @@ export function QueueTray({
           <Pressable
             accessibilityRole="button"
             testID="queue:send"
-            hitSlop={8}
+            hitSlop={{ left: 8, right: 8 }}
             onPress={() => onResume()}
             style={styles.link}
           >
@@ -129,7 +129,8 @@ export function QueueTray({
             {running && canSteer && !message.delivery ? (
               <Act
                 testID={`queue:${index}:steer`}
-                glyph="↑"
+                // 插进当前回合：拐角回车，和待发那一行的“发送”（↑）分开（桌面同样）
+                glyph="⏎"
                 label={t('composer.steer')}
                 muted={stuck}
                 onPress={() => (stuck ? onRefused() : onSteer(message))}
@@ -161,7 +162,14 @@ const styles = StyleSheet.create({
   tray: { paddingHorizontal: 12, paddingBottom: 4, marginBottom: 6, borderBottomWidth: 1 },
   head: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32 },
   headText: { fontSize: 12 },
-  link: { minHeight: 32, justifyContent: 'center' },
+  // 可点 44 高、至少 44 宽，上下各让出 6：头一行看着仍是 32 高（网页预览不认 hitSlop，所以不靠它补高）
+  link: {
+    minHeight: 44,
+    minWidth: 44,
+    marginVertical: -6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 36 },
   lead: { width: 34, fontSize: 12 },
   text: { flex: 1, fontSize: 13, marginRight: 4 },
