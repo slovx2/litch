@@ -12,14 +12,19 @@ export function DiscussionHistory({
   viewKey,
   text,
   children,
+  defaultOpen = false,
 }: {
   viewKey: string
   text: string
   children: ReactNode
+  /** 讨论抽屉专门用来读讨论：默认展开，手动收起照样记住 */
+  defaultOpen?: boolean
 }) {
   const t = useT()
   const { c, font, hit } = useTheme()
-  const [collapsed, setCollapsed] = useState(() => postCollapsed(viewKey, text.length > 1200))
+  const [collapsed, setCollapsed] = useState(() =>
+    postCollapsed(viewKey, !defaultOpen && text.length > 1200),
+  )
   return (
     <View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>

@@ -6,7 +6,7 @@ import {
   type SuggestionView,
   suggestionCount,
 } from '@litch/core'
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ManagerDecisionId,
   ManagerItemId,
@@ -25,7 +25,9 @@ import { BoardPanels } from './BoardPanels.tsx'
 import { BoardReferencesContext } from './BoardReferences.tsx'
 import { BOARD_GRIP, CHAT_MIN, setBoardLayout, useBoardLayout } from './board-layout.ts'
 import { Decisions } from './Decisions.tsx'
+import { DiscussionPane } from './DiscussionPane.tsx'
 import { ManagerFeaturesContext, useManagerBoard } from './data.ts'
+import { DiscussionPaneContext } from './discussion-pane.ts'
 import { IssueOrderSelect } from './issue-order.tsx'
 import { ManagerForm } from './ManagerForm.tsx'
 import { RelationsContext } from './Relations.tsx'
@@ -144,6 +146,60 @@ export function ManagerPage({
     'decisions',
   )
   const activeTab = tab === 'inbox' ? inboxTab : tab
+  // 控制台帖子的讨论在看板底部分屏里看：一次只开一个，换帖子就换内容
+  const [talk, setTalk] = useState<string | null>(null)
+  const [talkHost, setTalkHost] = useState<HTMLElement | null>(null)
+  const openTalk = useCallback((id: string) => setTalk(id), [])
+  const closeTalk = useCallback(
+    (id?: string) => setTalk((now) => (id === undefined || now === id ? null : now)),
+    [],
+  )
+  const talkContext = useMemo(
+    () => ({ host: talk ? talkHost : null, openId: talk, open: openTalk, close: closeTalk }),
+    [talk, talkHost, openTalk, closeTalk],
+  )
+  // 换页签、换经理时关掉分屏
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 只在页签或经理变化时关
+  useEffect(() => setTalk(null), [activeTab, manager.id])
+  // 打开或换帖子后把焦点交给分屏里的输入框（不能输入时给标题）
+  useEffect(() => {
+    if (!talk || !talkHost) return
+    const pane = talkHost.closest<HTMLElement>('.mg-talk-pane')
+    const input = talkHost.querySelector<HTMLTextAreaElement>('textarea:not(:disabled)')
+    ;(input ?? pane?.querySelector<HTMLElement>('[data-act="discussion-back"]'))?.focus({
+      preventScroll: true,
+    })
+  }, [talk, talkHost])
+  const cardOf = (id: string) =>
+    page.current?.querySelector<HTMLElement>(`[data-post-card="${CSS.escape(id)}"]`)
+  const dismissTalk = useCallback(() => {
+    const id = talk
+    setTalk(null)
+    if (!id) return
+    // 关掉后焦点回到那张卡片的讨论入口
+    requestAnimationFrame(() =>
+      page.current
+        ?.querySelector<HTMLElement>(
+          `[data-post-card="${CSS.escape(id)}"] [data-act="post-discussion"]`,
+        )
+        ?.focus({ preventScroll: true }),
+    )
+  }, [talk])
+  // Esc 关分屏：经理页内生效；有模态窗口、输入法组字时不管
+  useEffect(() => {
+    if (!talk) return
+    const listener = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented) return
+      if (document.querySelector('dialog[open]')) return
+      const target = event.target as Element | null
+      const inPage = target?.closest('.mg-page')
+      if (!inPage && target !== document.body) return
+      event.preventDefault()
+      dismissTalk()
+    }
+    window.addEventListener('keydown', listener)
+    return () => window.removeEventListener('keydown', listener)
+  }, [talk, dismissTalk])
   const [responding, setResponding] = useState(false)
   const [ending, setEnding] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -385,127 +441,147 @@ export function ManagerPage({
           ) : !board || !pages ? (
             <p>{t('manager.loading')}</p>
           ) : (
-            <ManagerFeaturesContext.Provider value={features}>
-              <RelationsContext.Provider value={{ board, manager }}>
-                <BoardReferencesContext.Provider
-                  value={{
-                    ids: new Set<BoardReference>([
-                      ...(board.posts ?? []).map((post) => post.id),
-                      ...(board.requests ?? []).map((request) => request.id),
-                      ...board.items.map((item) => item.id),
-                      ...board.decisions.map((decision) => decision.id),
-                    ]),
-                    previews: new Map([
-                      ...board.items.map(
-                        (i) =>
-                          [
-                            i.id,
-                            { title: i.title, status: t(`manager.status.${i.status}`) },
-                          ] as const,
-                      ),
-                      ...board.decisions.map(
-                        (d) =>
-                          [
-                            d.id,
-                            {
-                              title: d.title,
-                              status: t(
-                                d.status === 'open'
-                                  ? 'manager.open'
-                                  : d.status === 'answered'
-                                    ? 'manager.answered'
-                                    : 'manager.closed',
-                              ),
-                            },
-                          ] as const,
-                      ),
-                      ...(board.requests ?? []).map(
-                        (r) =>
-                          [
-                            r.id,
-                            { title: r.title, status: t(`manager.request.${r.status}`) },
-                          ] as const,
-                      ),
-                      ...(board.posts ?? [])
-                        .filter((p) => p.kind === 'report' || p.kind === 'suggestion')
-                        .map(
-                          (p) =>
+            <DiscussionPaneContext.Provider value={talkContext}>
+              <ManagerFeaturesContext.Provider value={features}>
+                <RelationsContext.Provider value={{ board, manager }}>
+                  <BoardReferencesContext.Provider
+                    value={{
+                      ids: new Set<BoardReference>([
+                        ...(board.posts ?? []).map((post) => post.id),
+                        ...(board.requests ?? []).map((request) => request.id),
+                        ...board.items.map((item) => item.id),
+                        ...board.decisions.map((decision) => decision.id),
+                      ]),
+                      previews: new Map([
+                        ...board.items.map(
+                          (i) =>
                             [
-                              p.id,
+                              i.id,
+                              { title: i.title, status: t(`manager.status.${i.status}`) },
+                            ] as const,
+                        ),
+                        ...board.decisions.map(
+                          (d) =>
+                            [
+                              d.id,
                               {
-                                title: p.title,
-                                status:
-                                  p.kind === 'report'
-                                    ? t(p.unread ? 'manager.reportUnread' : 'manager.reportRead')
-                                    : '',
+                                title: d.title,
+                                status: t(
+                                  d.status === 'open'
+                                    ? 'manager.open'
+                                    : d.status === 'answered'
+                                      ? 'manager.answered'
+                                      : 'manager.closed',
+                                ),
                               },
                             ] as const,
                         ),
-                    ]),
-                    open: openReference,
-                  }}
-                >
-                  {/* 排序在列表头右端：决策放在状态切换那一行（Decisions），其他三类一行细的列表头 */}
-                  {activeTab === 'suggestions' ||
-                  activeTab === 'requests' ||
-                  activeTab === 'reports' ? (
-                    <div className="mg-list-head">
-                      <IssueOrderSelect />
-                    </div>
-                  ) : null}
-                  {/* 答复区保持挂载，切页签不丢提交状态；本地草稿独立持久化。 */}
-                  {activeTab === 'suggestions' ? (
-                    <ManagerSuggestions
+                        ...(board.requests ?? []).map(
+                          (r) =>
+                            [
+                              r.id,
+                              { title: r.title, status: t(`manager.request.${r.status}`) },
+                            ] as const,
+                        ),
+                        ...(board.posts ?? [])
+                          .filter((p) => p.kind === 'report' || p.kind === 'suggestion')
+                          .map(
+                            (p) =>
+                              [
+                                p.id,
+                                {
+                                  title: p.title,
+                                  status:
+                                    p.kind === 'report'
+                                      ? t(p.unread ? 'manager.reportUnread' : 'manager.reportRead')
+                                      : '',
+                                },
+                              ] as const,
+                          ),
+                      ]),
+                      open: openReference,
+                    }}
+                  >
+                    {/* 排序在列表头右端：决策放在状态切换那一行（Decisions），其他三类一行细的列表头 */}
+                    {activeTab === 'suggestions' ||
+                    activeTab === 'requests' ||
+                    activeTab === 'reports' ? (
+                      <div className="mg-list-head">
+                        <IssueOrderSelect />
+                      </div>
+                    ) : null}
+                    {/* 答复区保持挂载，切页签不丢提交状态；本地草稿独立持久化。 */}
+                    {activeTab === 'suggestions' ? (
+                      <ManagerSuggestions
+                        posts={board.posts ?? []}
+                        manager={manager}
+                        onOpen={onSuggestionSource}
+                      />
+                    ) : null}
+                    {activeTab === 'requests' ? (
+                      <Requests
+                        posts={board.posts ?? []}
+                        manager={manager}
+                        requests={board.requests ?? []}
+                        disabled={disabled || responding}
+                        target={requestTarget}
+                        onLocated={requestLocated}
+                      />
+                    ) : null}
+                    {tab === 'overview' || tab === 'items' || tab === 'lines' ? (
+                      <BoardPanels
+                        pages={pages}
+                        deviceId={manager.deviceId}
+                        tab={tab}
+                        onTab={setTab}
+                        target={itemTarget}
+                        onLocated={itemLocated}
+                      />
+                    ) : null}
+                    {activeTab === 'reports' ? (
+                      <Reports
+                        manager={manager}
+                        posts={(board.posts ?? []).filter((p) => p.kind === 'report')}
+                        disabled={disabled}
+                      />
+                    ) : null}
+                    <Decisions
                       posts={board.posts ?? []}
                       manager={manager}
-                      onOpen={onSuggestionSource}
-                    />
-                  ) : null}
-                  {activeTab === 'requests' ? (
-                    <Requests
-                      posts={board.posts ?? []}
-                      manager={manager}
+                      onBusy={setResponding}
+                      decisions={board.decisions}
+                      changes={board.changes}
                       requests={board.requests ?? []}
-                      disabled={disabled || responding}
-                      target={requestTarget}
-                      onLocated={requestLocated}
-                    />
-                  ) : null}
-                  {tab === 'overview' || tab === 'items' || tab === 'lines' ? (
-                    <BoardPanels
-                      pages={pages}
-                      deviceId={manager.deviceId}
-                      tab={tab}
-                      onTab={setTab}
-                      target={itemTarget}
-                      onLocated={itemLocated}
-                    />
-                  ) : null}
-                  {activeTab === 'reports' ? (
-                    <Reports
-                      manager={manager}
-                      posts={(board.posts ?? []).filter((p) => p.kind === 'report')}
+                      groups={pages.decisions}
                       disabled={disabled}
+                      visible={activeTab === 'decisions'}
+                      target={decisionTarget}
+                      onLocated={decisionLocated}
                     />
-                  ) : null}
-                  <Decisions
-                    posts={board.posts ?? []}
-                    manager={manager}
-                    onBusy={setResponding}
-                    decisions={board.decisions}
-                    changes={board.changes}
-                    requests={board.requests ?? []}
-                    groups={pages.decisions}
-                    disabled={disabled}
-                    visible={activeTab === 'decisions'}
-                    target={decisionTarget}
-                    onLocated={decisionLocated}
-                  />
-                </BoardReferencesContext.Provider>
-              </RelationsContext.Provider>
-            </ManagerFeaturesContext.Provider>
+                  </BoardReferencesContext.Provider>
+                </RelationsContext.Provider>
+              </ManagerFeaturesContext.Provider>
+            </DiscussionPaneContext.Provider>
           )}
         </div>
+        {talk ? (
+          <DiscussionPane
+            id={talk}
+            title={
+              board?.posts?.find((post) => post.id === talk)?.title ??
+              board?.decisions.find((decision) => decision.id === talk)?.title ??
+              board?.requests?.find((request) => request.id === talk)?.title ??
+              ''
+            }
+            onHost={setTalkHost}
+            onBack={() => {
+              const card = cardOf(talk)
+              card?.scrollIntoView({ block: 'nearest' })
+              card?.focus({ preventScroll: true })
+            }}
+            onClose={dismissTalk}
+          />
+        ) : null}
       </section>
     </section>
   )

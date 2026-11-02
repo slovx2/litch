@@ -4,6 +4,8 @@ import test from 'node:test'
 import { refreshAnswerDrafts } from '../src/manager/drafts.ts'
 import {
   hasTemporaryQuestions,
+  markRepliesSeen,
+  newReplies,
   postCollapsed,
   postSummary,
   postViewKey,
@@ -43,6 +45,16 @@ test('已有临时轮次直接续问；纯经理讨论不触发，手动切回�
   assert.equal(questionMode(null, messages), 'temporary')
   assert.equal(questionMode('manager', messages), 'manager')
   assert.equal(questionMode(null, [{}]), 'temporary')
+})
+test('讨论新回复以首次历史为基线，阅读后清除，并按帖子隔离', () => {
+  const key = postViewKey('unread-device', 'm1', 'D-1/seen')
+  const other = postViewKey('unread-device', 'm1', 'D-2/seen')
+  assert.equal(newReplies(key, 5), false)
+  assert.equal(newReplies(key, 6), true)
+  assert.equal(newReplies(other, 6), false)
+  markRepliesSeen(key, 6)
+  assert.equal(newReplies(key, 6), false)
+  assert.equal(newReplies(key, 7), true)
 })
 test('选项过期删除草稿并提示；空稿静默删除；文字、追问及结束的草稿保持', () => {
   const base = { decisionId: 'D-1', revision: 1, optionId: 'a', text: '' }

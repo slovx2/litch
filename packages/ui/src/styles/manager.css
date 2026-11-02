@@ -1196,3 +1196,143 @@
   align-items: center;
   gap: 8px;
 }
+
+/* ---------- 控制台讨论：卡片上的入口与看板底部分屏 ---------- */
+/* 入口放在卡片标题行末尾，不占整行：小图标加回复数；有新回复、在等回复或有没发出的追问时右上角一个小点 */
+.mg-talk-slot {
+  display: inline-flex;
+  flex: none;
+  margin-left: auto;
+}
+.mg-talk-entry {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: round(calc(22px * var(--fs)), 1px);
+  padding: 0 5px;
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: calc(11px * var(--fs));
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.mg-talk-entry:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.mg-talk-entry:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--ink);
+}
+.mg-talk-entry[aria-expanded="true"] {
+  background: var(--sel);
+  color: var(--ink);
+}
+.mg-talk-dot {
+  position: absolute;
+  top: 2px;
+  right: 1px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.mg-talk-entry:is([data-waiting], [data-unsent]):not([data-new]) .mg-talk-dot {
+  background: var(--wait);
+}
+/* 讨论开着的那张卡片：左边一道强调色 */
+.mg-board [data-discussion-open] {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* 分屏：卡片列表在上面自己滚，分屏在下面；高度可拖，记在本机。
+   看板不够高时分屏先让，卡片列表至少留 140px */
+.mg-board:has(> .mg-talk-pane) > .mg-body {
+  min-height: 140px;
+}
+.mg-talk-pane {
+  position: relative;
+  flex: 0 1 var(--mg-talk-h, 320px);
+  display: flex;
+  flex-direction: column;
+  min-height: 96px;
+  border-top: 1px solid var(--line-2);
+  background: var(--panel);
+}
+.mg-talk-grip {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: row-resize;
+  touch-action: none;
+  z-index: 2;
+}
+.mg-talk-grip:hover,
+.mg-talk-grip:focus-visible {
+  background: var(--press);
+  outline: none;
+}
+.mg-talk-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 4px 8px 4px 16px;
+  border-bottom: 1px solid var(--line-2);
+}
+.mg-talk-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: calc(13px * var(--fs));
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.mg-talk-title:hover {
+  text-decoration: underline;
+}
+.mg-talk-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 16px 12px;
+}
+.mg-talk-body > .mg-post-discussion {
+  margin-top: 0;
+}
+/* 窄窗口（看板独占一列）：分屏至少占看板一半，卡片列表仍留在上面 */
+@container manager-main (max-width: 859px) {
+  .mg-talk-pane {
+    flex-basis: max(50%, var(--mg-talk-h, 320px));
+  }
+}
+/* 分屏里问答在上面滚，追问输入固定在底部，不用先滚到最后才能写 */
+.mg-talk-body .mg-post-compose {
+  position: sticky;
+  bottom: -12px;
+  z-index: 1;
+  margin-bottom: -12px;
+  padding-block: 8px 12px;
+  background: var(--panel);
+}
+.mg-talk-body .mg-post-compose > .ic {
+  justify-self: end;
+}
+/* 分屏矮时让问答多露几行：输入框起始高度收小，仍可往下拉 */
+.mg-talk-body textarea.mg-post-input {
+  min-height: calc(48px * var(--fs));
+}
+.mg-talk-body .mg-post-compose .mg-question-modes {
+  margin-bottom: 4px;
+}

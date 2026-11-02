@@ -21,7 +21,8 @@ import type { ManagerPost } from '../../../../../packages/protocol/src/manager-p
 import { stamp } from '../../../../../packages/ui/src/app/format.ts'
 import { readWhileOpen } from '../../../../../packages/ui/src/app/read.ts'
 import {
-  hasTemporaryQuestions,
+  markRepliesSeen,
+  newReplies,
   postCollapsed,
   postSummary,
   postViewKey,
@@ -39,6 +40,7 @@ import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { readChoice, writeChoice } from './choice-drafts'
 import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutcome'
+import { DiscussionDrawer } from './DiscussionDrawer'
 import { DiscussionHistory } from './DiscussionHistory'
 import { DraftEndedNote } from './DraftEndedNote'
 import { Markdown } from './IssueMarkdown'
@@ -109,11 +111,19 @@ function Issue({
   post,
   board,
   suggestions,
+  talking,
+  onTalk,
+  onBack,
+  onPosition,
 }: {
   manager: ManagerView
   post: ManagerPost
   board: ManagerBoardTopicView['board']
   suggestions: readonly SuggestionView[]
+  talking: boolean
+  onTalk(open: boolean): void
+  onBack(): void
+  onPosition(y: number): void
 }) {
   const t = useT()
   const { c, font, radius, hit } = useTheme()
@@ -140,8 +150,7 @@ function Issue({
   }
   const [selectedMode, setMode] = useState<'manager' | 'temporary' | null>(null)
   const mode = questionMode(selectedMode, post.discussion.messages)
-  const direct = hasTemporaryQuestions(post.discussion.messages)
-  const [asking, setAsking] = useState(false)
+  // 讨论不内嵌在卡片里：卡片标题行只留入口，点开在底部抽屉里看问答、写追问
   const [history, setHistory] = useState(false)
   const options = board?.decisions.find((d) => d.id === post.id)?.options ?? []
   /** 作答时选中的选项：先选，再点“提交给经理”（与桌面的单选一致）；和补充文字一样存成草稿 */
@@ -361,139 +370,184 @@ function Issue({
         : ''
   const pending =
     drafted || decision?.status === 'open' || request?.status === 'open' || post.unread
+  const events = post.discussion.messages
+    .flatMap((q) => [
+      ...(q.question
+        ? [{ id: `${q.id}-q`, at: q.at, who: t('manager.questionYou'), text: q.question }]
+        : []),
+      {
+        id: `${q.id}-a`,
+        at: q.answeredAt ?? q.at,
+        who: t(
+          q.mode === 'manager'
+            ? 'manager.questionManagerSpeaker'
+            : 'manager.questionTemporarySpeaker',
+        ),
+        text:
+          q.answer ??
+          t(
+            q.updatedPost
+              ? 'manager.postUpdatedReply'
+              : q.status === 'failed'
+                ? 'manager.questionFailed'
+                : 'manager.questionPending',
+          ),
+      },
+    ])
+    .sort((a, b) => a.at - b.at)
+  // 入口：回复数，有新回复、在等回复或有没发出的追问时加一个小点；读屏名称写全
+  const replies = post.discussion.messages.filter((q) => q.status !== 'running').length
+  const seenKey = `${viewKey}/seen`
+  useEffect(() => {
+    if (talking) markRepliesSeen(seenKey, replies)
+  }, [talking, seenKey, replies])
+  const news = !talking && newReplies(seenKey, replies)
+  const waiting = post.discussion.messages.some((q) => q.status === 'running')
+  const unsent = Boolean(question.trim()) && !questionEnded
+  const noTalk = !features.posts && !post.discussion.messages.length
+  const entryLabel = [
+    t('manager.discussionOpen'),
+    replies ? t('manager.discussionCount', { n: replies }) : '',
+    news ? t('manager.discussionNew') : '',
+    waiting ? t('manager.discussionWaiting') : '',
+    unsent ? t('manager.discussionDraft') : '',
+    features.posts ? '' : t('manager.oldDeviceShort'),
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  const entry = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={entryLabel}
+      accessibilityState={{ expanded: talking, disabled: noTalk }}
+      disabled={noTalk}
+      testID={`post-discussion:${post.id}`}
+      onPress={() => onTalk(true)}
+      style={({ pressed }) => [
+        styles.entry,
+        { minHeight: hit, backgroundColor: pressed ? c.press : 'transparent' },
+      ]}
+    >
+      <Text style={{ color: c.ink2, fontSize: font.size.meta }}>
+        ❝{replies ? ` ${replies}` : ''}
+      </Text>
+      {/* 设备服务较旧、没有讨论可读：入口禁用，原因写在入口上（看板顶上另有一行说去设备详情升级） */}
+      {noTalk ? (
+        <Text
+          testID={`old-device-reason:posts:${post.id}`}
+          style={{ color: c.ink3, fontSize: font.size.meta }}
+        >
+          {t('manager.oldDeviceShort')}
+        </Text>
+      ) : null}
+      {news || waiting || unsent ? (
+        <View
+          style={[styles.dot, { backgroundColor: news ? c.accent : c.wait }]}
+          testID={`post-discussion-dot:${post.id}`}
+        />
+      ) : null}
+    </Pressable>
+  )
+  const compose = features.posts ? (
+    <View style={styles.talkCompose}>
+      <View style={styles.modes}>
+        <Button
+          kind={mode === 'manager' ? 'solid' : 'plain'}
+          label={t('manager.questionManager')}
+          onPress={() => setMode('manager')}
+        />
+        {canTemporary ? (
+          <Button
+            kind={mode === 'temporary' ? 'solid' : 'plain'}
+            label={t('manager.questionTemporary')}
+            onPress={() => setMode('temporary')}
+          />
+        ) : null}
+      </View>
+      <View style={styles.askRow}>
+        <TextInput
+          multiline
+          accessibilityLabel={questionPrompt}
+          placeholder={questionPrompt}
+          placeholderTextColor={c.ink3}
+          style={[
+            styles.input,
+            styles.askInput,
+            { color: c.ink, borderColor: c.line1, fontSize: font.size.body },
+          ]}
+          value={question}
+          onChangeText={writeQuestion}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('manager.postSubmit')}
+          style={{ minHeight: hit, minWidth: hit, justifyContent: 'center', alignItems: 'center' }}
+          disabled={locked || !question.trim() || (mode === 'manager' && answerConflict)}
+          onPress={() =>
+            void run(async () => {
+              await channel.command('managers.post.question', {
+                deviceId: manager.deviceId,
+                managerId: manager.id,
+                id: post.id,
+                revision: post.revision,
+                question,
+                mode,
+              })
+              writeQuestion('')
+            })
+          }
+        >
+          <Text style={{ color: c.accent, fontSize: font.size.title }}>↑</Text>
+        </Pressable>
+      </View>
+    </View>
+  ) : (
+    <Text style={{ color: c.ink2 }}>{t('manager.oldDeviceShort')}</Text>
+  )
   const discussion = (
-    <>
-      {!collapsed && post.discussion.messages.length ? (
+    <DiscussionDrawer
+      visible={talking}
+      id={post.id}
+      title={post.title}
+      onClose={() => onTalk(false)}
+      onBack={onBack}
+      footer={
+        <>
+          {compose}
+          {error ? <Text style={{ color: c.err }}>{error}</Text> : null}
+        </>
+      }
+    >
+      {events.length ? (
         <DiscussionHistory
           viewKey={`${viewKey}/discussion`}
           text={post.discussion.messages.map((q) => `${q.question}\n${q.answer ?? ''}`).join('\n')}
+          defaultOpen
         >
-          {post.discussion.messages
-            .flatMap((q) => [
-              ...(q.question
-                ? [{ id: `${q.id}-q`, at: q.at, who: t('manager.questionYou'), text: q.question }]
-                : []),
-              {
-                id: `${q.id}-a`,
-                at: q.answeredAt ?? q.at,
-                who: t(
-                  q.mode === 'manager'
-                    ? 'manager.questionManagerSpeaker'
-                    : 'manager.questionTemporarySpeaker',
-                ),
-                text:
-                  q.answer ??
-                  t(
-                    q.updatedPost
-                      ? 'manager.postUpdatedReply'
-                      : q.status === 'failed'
-                        ? 'manager.questionFailed'
-                        : 'manager.questionPending',
-                  ),
-              },
-            ])
-            .sort((a, b) => a.at - b.at)
-            .map((entry) => (
-              <View key={entry.id} style={[styles.discussion, { borderColor: c.line1 }]}>
-                <Text style={{ color: c.ink3 }}>
-                  {entry.who} · {stamp(entry.at, Date.now(), t.lang)}
-                </Text>
-                <Markdown text={entry.text} />
-              </View>
-            ))}
+          {events.map((entry) => (
+            <View key={entry.id} style={[styles.discussion, { borderColor: c.line1 }]}>
+              <Text style={{ color: c.ink3 }}>
+                {entry.who} · {stamp(entry.at, Date.now(), t.lang)}
+              </Text>
+              <Markdown text={entry.text} />
+            </View>
+          ))}
         </DiscussionHistory>
       ) : null}
-      {!direct && !collapsed ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{
-            expanded: asking && features.posts,
-            disabled: locked || !features.posts,
-          }}
-          disabled={locked || !features.posts}
-          testID={`post-ask:${post.id}`}
-          onPress={() => setAsking(!asking)}
-          style={styles.textLink}
-        >
-          <Text style={{ color: c.ink2 }}>
-            {asking ? '▾' : '▸'} {t(asking ? 'manager.postAskClose' : 'manager.postAsk')}
-          </Text>
-        </Pressable>
-      ) : null}
-      {oldReason('posts')}
-      {((asking && !collapsed) || direct) && features.posts ? (
-        <View style={[styles.askComposer, { borderColor: c.line3, backgroundColor: c.sunken }]}>
-          <View style={styles.actions}>
-            <Button
-              kind={mode === 'manager' ? 'solid' : 'plain'}
-              label={t('manager.questionManager')}
-              onPress={() => setMode('manager')}
-            />
-            {canTemporary ? (
-              <Button
-                kind={mode === 'temporary' ? 'solid' : 'plain'}
-                label={t('manager.questionTemporary')}
-                onPress={() => setMode('temporary')}
-              />
-            ) : null}
-          </View>
-          <Text style={{ color: c.ink3 }}>{t('manager.postAsk')}</Text>
-          <TextInput
-            multiline
-            accessibilityLabel={questionPrompt}
-            placeholder={questionPrompt}
-            placeholderTextColor={c.ink3}
-            style={[styles.input, { color: c.ink, borderColor: c.line1, fontSize: font.size.body }]}
-            value={question}
-            onChangeText={writeQuestion}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('manager.postSubmit')}
-            style={{
-              minHeight: hit,
-              minWidth: hit,
-              alignSelf: 'flex-end',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-            disabled={locked || !question.trim() || (mode === 'manager' && answerConflict)}
-            onPress={() =>
-              void run(async () => {
-                await channel.command('managers.post.question', {
-                  deviceId: manager.deviceId,
-                  managerId: manager.id,
-                  id: post.id,
-                  revision: post.revision,
-                  question,
-                  mode,
-                })
-                writeQuestion('')
-                setAsking(false)
-              })
-            }
-          >
-            <Text style={{ color: c.accent, fontSize: font.size.title }}>↑</Text>
-          </Pressable>
-        </View>
-      ) : null}
-    </>
+    </DiscussionDrawer>
   )
   return (
     <View
-      style={[styles.card, { borderColor: c.line1, backgroundColor: c.panel }]}
+      style={[styles.card, { borderColor: talking ? c.accent : c.line1, backgroundColor: c.panel }]}
       testID={`manager-issue:${post.id}`}
+      onLayout={(event) => onPosition(event.nativeEvent.layout.y)}
     >
       <View style={styles.cardHeader}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t(collapsed ? 'manager.postExpand' : 'manager.postCollapse')}
           accessibilityState={{ expanded: !collapsed }}
-          testID={
-            decision?.status === 'ignored'
-              ? `decision-ignored-toggle:${decision.id}`
-              : `post-collapse:${post.id}`
-          }
+          testID={`post-collapse:${post.id}`}
           style={{ minHeight: hit, minWidth: hit, justifyContent: 'center', alignItems: 'center' }}
           onPress={() => {
             rememberPostCollapsed(viewKey, !collapsed)
@@ -529,6 +583,7 @@ function Issue({
             {t('manager.selectionReset')}
           </Text>
         ) : null}
+        {!pendingReview || unreviewed ? entry : null}
       </View>
       {pendingReview ? (
         <Button
@@ -541,6 +596,22 @@ function Issue({
         <Text numberOfLines={1} style={{ color: c.ink2, fontSize: font.size.body }}>
           {postSummary(post.body)}
         </Text>
+      ) : null}
+      {decision?.status === 'ignored' ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: !collapsed }}
+          testID={`decision-ignored-toggle:${decision.id}`}
+          style={[styles.detailsRow, { minHeight: hit }]}
+          onPress={() => {
+            rememberPostCollapsed(viewKey, !collapsed)
+            setCollapsed(!collapsed)
+          }}
+        >
+          <Text style={{ color: c.ink2 }}>
+            {collapsed ? '▸' : '▾'} {t(collapsed ? 'mgr.ignored.show' : 'mgr.ignored.hide')}
+          </Text>
+        </Pressable>
       ) : null}
       {(!pendingReview || unreviewed) && !collapsed ? (
         <>
@@ -866,6 +937,8 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
   const [tab, setTab] = useState<'overview' | 'console' | 'items'>(route.params.tab ?? 'overview')
   const [kind, setKind] = useState<Category>('decision')
   const [ordering, setOrdering] = useState(false)
+  const [talkId, setTalkId] = useState<string | null>(null)
+  const positions = useRef(new Map<string, number>())
   const order = useIssueOrder()
   useEffect(() => replica.openManagerBoard(deviceId, managerId), [replica, deviceId, managerId])
   const manager = useKey<ManagerView>(keys.manager(deviceId, managerId))
@@ -894,6 +967,7 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
     }
   }
   const go = (next: typeof tab, category?: Category) => {
+    setTalkId(null)
     setSelected(null)
     setTab(next)
     if (category) setKind(category)
@@ -1083,6 +1157,16 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
                     post={post}
                     board={view.board}
                     suggestions={suggestions}
+                    talking={talkId === post.id}
+                    onTalk={(open) => setTalkId(open ? post.id : null)}
+                    onPosition={(y) => positions.current.set(post.id, y)}
+                    onBack={() => {
+                      setTalkId(null)
+                      scroll.current?.scrollTo({
+                        y: positions.current.get(post.id) ?? 0,
+                        animated: false,
+                      })
+                    }}
                   />
                 ))
               : null}
@@ -1117,6 +1201,12 @@ const styles = StyleSheet.create({
   textLink: { alignSelf: 'flex-start', paddingVertical: 8 },
   detailsRow: { alignSelf: 'stretch', justifyContent: 'center' },
   askComposer: { gap: 10, borderLeftWidth: 2, padding: 12 },
+  talkCompose: { gap: 6 },
+  modes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  askRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
+  askInput: { flex: 1, minHeight: 44, maxHeight: 160 },
+  entry: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6 },
+  dot: { width: 6, height: 6, borderRadius: 3 },
   tabs: { flexDirection: 'row', borderBottomWidth: 1, paddingHorizontal: 8 },
   tab: {
     flexDirection: 'row',

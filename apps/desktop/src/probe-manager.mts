@@ -3,6 +3,12 @@ export interface ManagerSeen {
   boardFont: boolean
   boardFontDetail: string
   questionEnter: boolean
+  /**
+   * 帖子讨论不内嵌：卡片标题行只有讨论入口，卡片里没有问答和输入框、问答后高度不变；点开在看板底部分屏，
+   * 换帖子换内容且只有一个分屏，Esc 关闭、焦点回到入口，换页签关闭；没发出的追问计入草稿、关开分屏不丢
+   */
+  discussionPane: boolean
+  discussionPaneDetail: string
   postCollapse: boolean
   directFollowup: boolean
   revisionDrafts: boolean
@@ -128,6 +134,9 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
         title: one('.mg-title')?.textContent,
         crumb: one('.crumb')?.textContent,
         error: one('.mg-form [role="alert"]')?.textContent,
+        discussionError: one('.mg-post-discussion .err')?.textContent,
+        discussionEntries: document.querySelectorAll('.mg-post-timeline li').length,
+        discussionInput: one<HTMLTextAreaElement>('.mg-post-discussion textarea')?.value,
         permission: one('.mg-form [data-kind="permission"]')?.textContent,
       })}`,
     )
@@ -251,24 +260,58 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       one('[data-board-tab="decisions"]')?.getAttribute('aria-pressed') === 'true',
   )
   ;(await until('决策页签', () => one<HTMLButtonElement>('[data-board-tab="decisions"]'))).click()
-  await click('[data-decision="D-15"] [data-act="post-ask"]')
-  await click('[data-decision="D-15"] [data-question-mode="temporary"]')
+  // 帖子讨论不在卡片里：卡片标题行只有讨论入口，点开后在看板底部分屏，一次只开一个
+  const talk = (id: string) => `.mg-talk-pane[data-post="${id}"]`
+  const openTalk = async (card: string, id: string) => {
+    if (!one(`${talk(id)} .mg-post-discussion`))
+      await click(`${card} > header [data-act="post-discussion"]`)
+    return until(`${id} 的讨论分屏`, () => one(`${talk(id)} .mg-post-discussion`))
+  }
+  const d15 = await until('决策 D-15', () => one('[data-decision="D-15"]'))
+  const cardClean = (card: Element | null) =>
+    Boolean(
+      card &&
+        !card.querySelector(
+          '.mg-post-timeline, .mg-discussion-history, [data-act="manager-question-input"], [data-act="post-question-send"], [data-act="post-ask"], .mg-talk-pane',
+        ),
+    )
+  const paneSeen: Record<string, unknown> = { cleanBefore: cardClean(d15) }
+  const entry15 = one<HTMLButtonElement>(
+    '[data-decision="D-15"] > header [data-act="post-discussion"]',
+  )
+  paneSeen.entry = Boolean(
+    entry15?.getAttribute('aria-label')?.includes('打开讨论') &&
+      entry15.getAttribute('aria-expanded') === 'false' &&
+      entry15.getBoundingClientRect().height < 40,
+  )
+  await openTalk('[data-decision="D-15"]', 'D-15')
+  const board = one<HTMLElement>('.mg-board')
+  const paneBox = one<HTMLElement>(talk('D-15'))
+  paneSeen.opened = Boolean(
+    board &&
+      paneBox &&
+      paneBox.parentElement === board &&
+      paneBox.previousElementSibling === one('.mg-board > .mg-body') &&
+      Math.abs(paneBox.getBoundingClientRect().bottom - board.getBoundingClientRect().bottom) < 2 &&
+      d15.hasAttribute('data-discussion-open') &&
+      entry15?.getAttribute('aria-expanded') === 'true' &&
+      paneBox.querySelector('[data-act="discussion-back"]')?.textContent?.includes('D-15') &&
+      paneBox.querySelector('[data-act="discussion-close"]')?.getAttribute('aria-label'),
+  )
+  const cardHeight = d15.getBoundingClientRect().height
+  await click(`${talk('D-15')} [data-question-mode="temporary"]`)
   let questionEnter = true
   const askBackground = async (value: string, count: number) => {
-    if (!one('[data-decision="D-15"] .mg-post-discussion textarea'))
-      await click('[data-decision="D-15"] [data-act="post-ask"]')
+    await openTalk('[data-decision="D-15"]', 'D-15')
     const input = await until('背景问题输入框', () =>
-      one<HTMLTextAreaElement>('[data-decision="D-15"] .mg-post-discussion textarea'),
+      one<HTMLTextAreaElement>(`${talk('D-15')} .mg-post-discussion textarea`),
     )
     fill(input, value)
     await until(
       '背景提问按钮可用',
-      () =>
-        !one<HTMLButtonElement>('[data-decision="D-15"] [data-act="post-question-send"]')?.disabled,
+      () => !one<HTMLButtonElement>(`${talk('D-15')} [data-act="post-question-send"]`)?.disabled,
     )
-    const previousCount = document.querySelectorAll(
-      '[data-decision="D-15"] .mg-post-timeline li',
-    ).length
+    const previousCount = document.querySelectorAll(`${talk('D-15')} .mg-post-timeline li`).length
     for (const patch of [{ shiftKey: true }, { isComposing: true }, { keyCode: 229 }]) {
       const event = new KeyboardEvent('keydown', {
         key: 'Enter',
@@ -280,27 +323,28 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       questionEnter &&=
         !event.defaultPrevented &&
         input.value === value &&
-        document.querySelectorAll('[data-decision="D-15"] .mg-post-timeline li').length ===
-          previousCount
+        document.querySelectorAll(`${talk('D-15')} .mg-post-timeline li`).length === previousCount
     }
     const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
     input.dispatchEvent(enter)
     questionEnter &&= enter.defaultPrevented
     await until(
-      '背景问答完成',
+      `第 ${count} 轮背景问答完成`,
       () =>
-        document.querySelectorAll('[data-decision="D-15"] .mg-post-timeline li').length ===
-        count * 2,
+        document.querySelectorAll(`${talk('D-15')} .mg-post-timeline li`).length === count * 2 &&
+        input.value === '' &&
+        !input.disabled,
     )
   }
   const turnsBeforeQuestions = document.querySelectorAll('.mg-chat .turn').length
   await askBackground('为什么推荐这个选项？', 1)
   const directInput = () =>
-    one<HTMLTextAreaElement>('[data-decision="D-15"] [data-act="manager-question-input"]')
+    one<HTMLTextAreaElement>(`${talk('D-15')} [data-act="manager-question-input"]`)
   let directFollowup = Boolean(
     directInput()?.getClientRects().length &&
-      one('[data-decision="D-15"] [data-question-mode="temporary"][aria-pressed="true"]'),
+      one(`${talk('D-15')} [data-question-mode="temporary"][aria-pressed="true"]`),
   )
+  // 卡片收起不影响已开的分屏：续问输入仍在分屏里
   await click('[data-decision="D-15"] [data-act="post-collapse"]')
   await until('帖子收起', () => one('[data-decision="D-15"][data-post-collapsed="true"]'))
   let postCollapse = Boolean(
@@ -309,26 +353,48 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       directInput()?.getClientRects().length,
   )
   await click('[data-board-tab="overview"]')
+  paneSeen.tabCloses = !one('.mg-talk-pane')
   await click('[data-board-tab="decisions"]')
   postCollapse &&= Boolean(one('[data-decision="D-15"][data-post-collapsed="true"]'))
   await click('[data-decision="D-15"] [data-act="post-collapse"]')
   await askBackground('还有哪些影响需要确认？', 2)
+  await askBackground('第三轮：对手机有什么影响？', 3)
+  await askBackground('第四轮：如何验证草稿保留？', 4)
+  await askBackground('第五轮：还有哪些限制？', 5)
   directFollowup &&= Boolean(directInput()?.getClientRects().length && !directInput()?.value)
-  await click('[data-decision="D-15"] .mg-discussion-history summary')
+  // 五轮问答之后卡片里仍没有讨论，高度不变；保留测量值供前后对照
+  const cardHeightAfter = one('[data-decision="D-15"]')?.getBoundingClientRect().height ?? 0
+  paneSeen.heights = { beforeQuestions: cardHeight, afterFiveQuestions: cardHeightAfter }
+  paneSeen.cardSteady =
+    cardClean(one('[data-decision="D-15"]')) && Math.abs(cardHeightAfter - cardHeight) < 2
+  const grip = one<HTMLElement>(`${talk('D-15')} [role="separator"]`)
+  const paneHeight = () => one(talk('D-15'))?.getBoundingClientRect().height ?? 0
+  const heightBefore = paneHeight()
+  grip?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }))
+  await until('分屏高度可调', () => paneHeight() > heightBefore)
+  const resized = paneHeight()
+  paneSeen.resized = Boolean(
+    resized > heightBefore &&
+      one('.mg-board > .mg-body')!.getBoundingClientRect().height >= 140 &&
+      JSON.parse(localStorage.getItem('litch.managerDiscussionPane') ?? '{}').height >= resized,
+  )
+  await click(`${talk('D-15')} .mg-discussion-history summary`)
   await until(
     '讨论收起',
-    () => !one<HTMLDetailsElement>('[data-decision="D-15"] .mg-discussion-history')?.open,
+    () => !one<HTMLDetailsElement>(`${talk('D-15')} .mg-discussion-history`)?.open,
   )
-  await click('[data-decision="D-15"] [data-act="post-collapse"]')
-  await until('卡片收起时不展开历史', () => !one('[data-decision="D-15"] .mg-discussion-history'))
-  await click('[data-decision="D-15"] [data-act="post-collapse"]')
+  await click(`${talk('D-15')} [data-act="discussion-close"]`)
+  await until('分屏关闭', () => !one('.mg-talk-pane'))
+  await openTalk('[data-decision="D-15"]', 'D-15')
+  paneSeen.heightRemembered =
+    Math.abs(one(talk('D-15'))!.getBoundingClientRect().height - resized) < 2
   postCollapse &&= Boolean(
     await until('保留讨论收起状态', () => {
-      const history = one<HTMLDetailsElement>('[data-decision="D-15"] .mg-discussion-history')
+      const history = one<HTMLDetailsElement>(`${talk('D-15')} .mg-discussion-history`)
       return history && !history.open
     }),
   )
-  await click('[data-decision="D-15"] .mg-discussion-history summary')
+  await click(`${talk('D-15')} .mg-discussion-history summary`)
   const fontLook = (
     window as unknown as {
       __litchLook: {
@@ -350,6 +416,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
         '[data-decision="D-15"] h3',
         '[data-decision="D-15"] .mg-markdown p',
         '[data-decision="D-15"] textarea',
+        `${talk('D-15')} textarea`,
+        `${talk('D-15')} .mg-post-timeline p`,
       ].map((selector) => one<HTMLElement>(selector))
       measured.push(
         elements.map((element) =>
@@ -382,7 +450,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   }
   fontLook.set(oldLook)
   if (captureQuestions) {
-    one('[data-decision="D-15"] .mg-post-discussion')?.scrollIntoView({ block: 'center' })
+    one('[data-decision="D-15"]')?.scrollIntoView({ block: 'start' })
     await new Promise<void>((resolve) => {
       window.addEventListener('litch-manager-questions-captured', () => resolve(), { once: true })
       document.documentElement.dataset.managerQuestionsReady = 'true'
@@ -390,12 +458,42 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   }
   const backgroundQuestions =
     document.querySelectorAll('.mg-chat .turn').length === turnsBeforeQuestions
-  await click('[data-decision="D-15"] [data-act="manager-question-forward"]')
+  await click(`${talk('D-15')} [data-act="manager-question-forward"]`)
   const questionForwarded = Boolean(
     await until('问答已转给经理', () =>
       one('[data-act="manager-question-forward"]')
         ?.getAttribute('aria-label')
         ?.includes('已转给经理'),
+    ),
+  )
+  // 打开别的帖子的讨论换掉分屏内容，始终只有一个分屏；Esc 关闭并把焦点还给入口
+  const other = await until('另一项决策的讨论入口', () =>
+    one<HTMLButtonElement>(
+      '[data-decision]:not([data-decision="D-15"]) > header [data-act="post-discussion"]:not(:disabled)',
+    ),
+  )
+  const otherId = other.closest('[data-decision]')?.getAttribute('data-decision') ?? ''
+  other.click()
+  paneSeen.switched = Boolean(
+    await until(
+      '分屏换成另一项决策',
+      () =>
+        document.querySelectorAll('.mg-talk-pane').length === 1 &&
+        one(talk(otherId)) &&
+        !one(talk('D-15')) &&
+        !one('[data-decision="D-15"][data-discussion-open]') &&
+        one(`[data-decision="${otherId}"][data-discussion-open]`) &&
+        one(talk(otherId))
+          ?.querySelector('[data-act="discussion-back"]')
+          ?.textContent?.includes(otherId),
+    ),
+  )
+  const escapeKey = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+  ;(document.activeElement ?? document.body).dispatchEvent(escapeKey)
+  paneSeen.esc = Boolean(
+    await until(
+      'Esc 关闭分屏',
+      () => !one('.mg-talk-pane') && document.activeElement === other && escapeKey.defaultPrevented,
     ),
   )
 
@@ -415,7 +513,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     return input
   }
   await click('[data-decision="D-15"] .mg-option:has(.mg-recommend) input')
-  await askBackground(updateQuestion, 3)
+  await askBackground(updateQuestion, 6)
   const selectionReset = await until(
     '新版清掉仅选项草稿',
     () =>
@@ -433,7 +531,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   answerInput().dispatchEvent(answerEnter)
   questionEnter &&= !answerEnter.defaultPrevented
   await until('文字草稿', () => one('.mg-send'))
-  await askBackground(updateQuestion, 4)
+  await askBackground(updateQuestion, 7)
   const textKept = await until(
     '新版保留文字要求确认',
     () =>
@@ -448,7 +546,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   )
   fill(answerInput(), '')
   await until('清空文字草稿', () => !one('.mg-send'))
-  await askBackground(updateQuestion, 5)
+  await askBackground(updateQuestion, 8)
   const emptyFollows = !one('.mg-conflict') && !one('.mg-send') && !answerInput().value
   const revisionDrafts = selectionReset && textKept && confirmed && emptyFollows
   ;(
@@ -515,15 +613,42 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
         one('[data-decision="D-15"]')?.textContent?.includes('修改后的答案'),
     ),
   )
-  if (!one('[data-decision="D-15"] [data-act="manager-question-input"]'))
-    await click('[data-decision="D-15"] [data-act="post-ask"]')
-  await click('[data-decision="D-15"] [data-question-mode="manager"]')
+  const draftCount = () =>
+    Number(one('.mg-send .grow')?.textContent?.match(/(\d+) 项草稿/)?.[1] ?? 0)
+  const draftsBefore = draftCount()
+  await openTalk('[data-decision="D-15"]', 'D-15')
+  await click(`${talk('D-15')} [data-question-mode="manager"]`)
   fill(
     await until('经理追问草稿', () =>
-      one<HTMLTextAreaElement>('[data-decision="D-15"] [data-act="manager-question-input"]'),
+      one<HTMLTextAreaElement>(`${talk('D-15')} [data-act="manager-question-input"]`),
     ),
     '请补充影响范围',
   )
+  // 分屏里没发出的追问照旧是草稿：计入“N 项草稿”，关掉分屏不丢，入口带未发出的记号
+  await until('追问计入草稿', () => draftCount() === draftsBefore + 1)
+  const draftOther = await until('草稿切换到另一帖子', () =>
+    one<HTMLButtonElement>(
+      '[data-decision]:not([data-decision="D-15"]) > header [data-act="post-discussion"]:not(:disabled)',
+    ),
+  )
+  draftOther.click()
+  await until('草稿暂存后分屏切换', () => !one(talk('D-15')))
+  await openTalk('[data-decision="D-15"]', 'D-15')
+  paneSeen.draftSwitched =
+    one<HTMLTextAreaElement>(`${talk('D-15')} textarea`)?.value === '请补充影响范围'
+  await click(`${talk('D-15')} [data-act="discussion-close"]`)
+  await until('分屏关闭', () => !one('.mg-talk-pane'))
+  const keptEntry = one('[data-decision="D-15"] > header [data-act="post-discussion"]')
+  paneSeen.draftClosed = Boolean(
+    draftCount() === draftsBefore + 1 &&
+      keptEntry?.hasAttribute('data-unsent') &&
+      keptEntry.getAttribute('aria-label')?.includes('有未发出的追问'),
+  )
+  await openTalk('[data-decision="D-15"]', 'D-15')
+  paneSeen.draftReopened =
+    one<HTMLTextAreaElement>(`${talk('D-15')} [data-act="manager-question-input"]`)?.value ===
+      '请补充影响范围' &&
+    one(`${talk('D-15')} [data-question-mode="manager"][aria-pressed="true"]`) !== null
   await click('[data-board-tab="requests"]')
   fill(
     await until('请你做备注', () =>
@@ -531,33 +656,34 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     ),
     '真机已复验',
   )
-  await click('[data-manager-request="R-1"] [data-act="post-ask"]')
+  await openTalk('[data-manager-request="R-1"]', 'R-1')
   fill(
     await until('交付与追问同批草稿', () =>
-      one<HTMLTextAreaElement>('[data-manager-request="R-1"] [data-act="manager-question-input"]'),
+      one<HTMLTextAreaElement>(`${talk('R-1')} [data-act="manager-question-input"]`),
     ),
     '交付后还需哪些验证？',
   )
   await click('[data-manager-request="R-1"] [data-act="manager-request-deliver"]')
   await click('[data-act="manager-submit"]')
+  await until(
+    '交付写回请你做',
+    () =>
+      !one('.mg-send') && one('[data-manager-request="R-1"]')?.textContent?.includes('真机已复验'),
+  )
+  await openTalk('[data-manager-request="R-1"]', 'R-1')
   const userRequests = Boolean(
-    await until(
-      '交付写回请你做',
-      () =>
-        !one('.mg-send') &&
-        one('[data-manager-request="R-1"]')?.textContent?.includes('真机已复验') &&
-        one('[data-manager-request="R-1"] .mg-post-timeline')?.textContent?.includes(
-          '交付后还需哪些验证',
-        ),
+    await until('追问写回请你做的讨论', () =>
+      one(`${talk('R-1')} .mg-post-timeline`)?.textContent?.includes('交付后还需哪些验证'),
     ),
   )
   await click('[data-board-tab="decisions"]')
+  await openTalk('[data-decision="D-15"]', 'D-15')
   const managerQuestionDrafts = Boolean(
     await until(
       '经理回复写回记录',
       () =>
-        one('[data-decision="D-15"] .mg-post-timeline')?.textContent?.includes('请补充影响范围') &&
-        one('[data-decision="D-15"] .mg-post-timeline')?.textContent?.includes('经理回复'),
+        one(`${talk('D-15')} .mg-post-timeline`)?.textContent?.includes('请补充影响范围') &&
+        one(`${talk('D-15')} .mg-post-timeline`)?.textContent?.includes('经理回复'),
     ),
   )
 
@@ -795,18 +921,18 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const unreadBadgeBeforeRead = one('[data-board-tab="reports"] .pill')?.textContent === '1'
   await click('[data-act="report-read"]')
   await until('报告已阅', () => !one('[data-act="report-read"]'))
-  await click('[data-report="P-1"] [data-act="post-ask"]')
+  await openTalk('[data-report="P-1"]', 'P-1')
   fill(
-    await until('报告追问框', () => one<HTMLTextAreaElement>('[data-report="P-1"] textarea')),
+    await until('报告追问框', () => one<HTMLTextAreaElement>(`${talk('P-1')} textarea`)),
     '报告还有什么限制？',
   )
-  await click('[data-report="P-1"] [data-act="post-question-send"]')
+  await click(`${talk('P-1')} [data-act="post-question-send"]`)
   const consoleReports = Boolean(
     unreadBadgeBeforeRead &&
       !one('[data-board-tab="reports"] .pill') &&
       attentionBeforeRead === one('[data-board-tab="inbox"] .pill')?.textContent &&
       (await until('报告帖子记录', () =>
-        one('[data-report="P-1"] .mg-post-timeline')?.textContent?.includes('报告还有什么限制'),
+        one(`${talk('P-1')} .mg-post-timeline`)?.textContent?.includes('报告还有什么限制'),
       )),
   )
   await click('[data-board-tab="items"]')
@@ -1491,7 +1617,9 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const banner = await until('设备服务较旧的说明', () => one('[data-old-device]'))
   const oldCard = await until('旧设备上的待定决策', () => one('[data-decision="D-1"]'))
   const oldIgnore = oldCard.querySelector<HTMLButtonElement>('[data-act="manager-ignore"]')
-  const oldAsk = oldCard.querySelector<HTMLButtonElement>('[data-act="post-ask"]')
+  const oldAsk = await until('旧设备上的讨论入口', () =>
+    oldCard.querySelector<HTMLButtonElement>(':scope > header [data-act="post-discussion"]'),
+  )
   const oldChecks = {
     banner: Boolean(
       banner.textContent?.includes('设备详情里升级设备服务') &&
@@ -1501,7 +1629,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     ignore: Boolean(oldIgnore?.disabled && oldIgnore.title.includes('升级后可用')),
     ask: Boolean(
       oldAsk?.disabled &&
-        oldCard.querySelector('[data-old-device-reason]')?.textContent?.includes('升级后可用'),
+        oldAsk.title.includes('升级后可用') &&
+        oldAsk.getAttribute('aria-label')?.includes('升级后可用'),
     ),
     answered: false,
   }
@@ -1540,10 +1669,14 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const oldError = one('.mg-body .err')?.textContent ?? ''
   const oldDevice = Object.values(oldChecks).every(Boolean)
   const oldDeviceDetail = JSON.stringify({ ...oldChecks, error: oldError })
+  const discussionPane = Object.values(paneSeen).every(Boolean)
+  const discussionPaneDetail = JSON.stringify(paneSeen)
   treeShapeDetail = JSON.stringify({ ...treeShapeSeen, managerLeft, chatLeft })
   return {
     boardFont,
     boardFontDetail: JSON.stringify(fontMeasurements),
+    discussionPane,
+    discussionPaneDetail,
     questionEnter,
     postCollapse,
     directFollowup,
@@ -1635,11 +1768,13 @@ export function judgeManager(seen: ManagerSeen): string[] {
       | 'treeShapeDetail'
       | 'boardFontDetail'
       | 'groupHeadsDetail'
+      | 'discussionPaneDetail'
     >,
     string
   > = {
     boardFont: `看板字号未跟随对话倍率，或极端字号溢出：${seen.boardFontDetail}`,
     questionEnter: '追问 Enter / Shift+Enter / 输入法组词处理错误',
+    discussionPane: `帖子讨论仍内嵌在卡片里，或底部分屏的打开、换帖子、Esc 关闭、草稿保留不对：${seen.discussionPaneDetail}`,
     postCollapse: '帖子收起没有保留摘要、会话状态或直接续问',
     directFollowup: '已有临时问答没有直接续问或默认目标错误',
     revisionDrafts: '新版本的选项清空、文字确认或空草稿跟随错误',
@@ -1660,7 +1795,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
     issueRelations: '议题关联与编号预览未完成',
     managerQuestionDrafts: '经理追问草稿与回复记录未完成',
     userRequests: '请你做交付未写回',
-    backgroundQuestions: '两轮背景问答没有保持在独立线程',
+    backgroundQuestions: '五轮背景问答没有保持在独立线程',
     questionForwarded: '背景问答没有转给经理',
     revisedAnswer: '已答复决策没有保存修改后的答案',
     list: '切换后没有全部经理页',

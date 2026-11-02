@@ -5,14 +5,19 @@ import { postCollapsed, postSummary, rememberPostCollapsed } from './post-presen
 export function DiscussionHistory({
   viewKey,
   text,
+  defaultOpen = false,
   children,
 }: {
   viewKey: string
   text: string
+  /** 看板分屏里默认展开（专门用来读讨论）；卡片内嵌时超过 1200 字默认收起 */
+  defaultOpen?: boolean
   children: ReactNode
 }) {
   const t = useT()
-  const [collapsed, setCollapsed] = useState(() => postCollapsed(viewKey, text.length > 1200))
+  const [collapsed, setCollapsed] = useState(() =>
+    postCollapsed(viewKey, !defaultOpen && text.length > 1200),
+  )
   return (
     <details className="mg-discussion-history" open={!collapsed}>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: 原生 summary 支持键盘触发 click；同步记忆替代异步 toggle。 */}

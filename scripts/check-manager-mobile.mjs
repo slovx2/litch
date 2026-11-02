@@ -149,6 +149,16 @@ try {
   assert.equal(await decisionOrder(), 'D-17,D-16,D-15,D-13,D-12,D-11', '待处理优先')
   await order('newest')
   // 已答决策：答复单独一块，其他选项默认收起；已关闭另有关闭记录。
+  // 已处理的帖子默认收起：先通过正式入口展开，再核对原来的答复与关闭记录。
+  for (const id of ['D-11', 'D-12', 'D-13']) {
+    assert.ok(
+      await read(
+        `!document.querySelector('[data-testid="manager-issue:${id}"] [data-testid="decision-answer:${id}"]')`,
+      ),
+      `${id} 默认收起`,
+    )
+    await tapId(`post-collapse:${id}`)
+  }
   assert.ok(
     await read(
       "(()=>{const a=document.querySelector('[data-testid=\"decision-answer:D-13\"]');return !!a&&a.innerText.includes('你的答复')&&a.innerText.includes('子会话不算，子代理照算')&&a.innerText.includes('子会话已有回报')&&!a.innerText.includes('后台任务页要列出')})()",
@@ -465,7 +475,64 @@ try {
       ),
     '标记已阅',
   )
-  await press('追问')
+  // 讨论不在卡片里：卡片标题行只有讨论入口，点开是底部抽屉，先占半屏，可到全屏
+  const reportCard = '[data-testid="manager-issue:P-1"]'
+  const drawer = '[data-testid="discussion-drawer:P-1"]'
+  assert.ok(
+    await read(`!document.querySelector('${reportCard}').querySelector('textarea')`),
+    '卡片里没有追问输入',
+  )
+  assert.ok(
+    await read(
+      `(document.querySelector('[data-testid="post-discussion:P-1"]')?.getAttribute('aria-label')??'').includes('打开讨论')`,
+    ),
+    '讨论入口带读屏名称',
+  )
+  await tapId('post-discussion:P-1')
+  await wait(drawer)
+  const viewport = await read('innerHeight')
+  const drawerHeight = () =>
+    read(`Math.round(document.querySelector('${drawer}').getBoundingClientRect().height)`)
+  const halfHeight = await drawerHeight()
+  assert.ok(
+    halfHeight > viewport * 0.4 && halfHeight < viewport * 0.7,
+    `抽屉先占半屏：${halfHeight}/${viewport}`,
+  )
+  await tapId('discussion-drawer:size')
+  await until(async () => (await drawerHeight()) > viewport * 0.85, '抽屉展开到全屏')
+  await shot('mobile-discussion-full')
+  await tapId('discussion-drawer:size')
+  await until(async () => (await drawerHeight()) < viewport * 0.7, '抽屉收回半屏')
+  const dragDrawer = async (dy) => {
+    const point = await read(
+      `(()=>{const r=document.querySelector('[data-testid="discussion-drawer:grip"]').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`,
+    )
+    await call('Input.dispatchMouseEvent', {
+      type: 'mousePressed',
+      ...point,
+      button: 'left',
+      clickCount: 1,
+    })
+    for (let n = 1; n <= 6; n++)
+      await call('Input.dispatchMouseEvent', {
+        type: 'mouseMoved',
+        x: point.x,
+        y: point.y + (dy * n) / 6,
+        button: 'left',
+        buttons: 1,
+      })
+    await call('Input.dispatchMouseEvent', {
+      type: 'mouseReleased',
+      x: point.x,
+      y: point.y + dy,
+      button: 'left',
+      clickCount: 1,
+    })
+  }
+  await dragDrawer(-100)
+  await until(async () => (await drawerHeight()) > viewport * 0.85, '拖动展开全屏')
+  await dragDrawer(100)
+  await until(async () => (await drawerHeight()) < viewport * 0.7, '拖动收回半屏')
   assert.equal(
     await read("document.querySelector('textarea').getAttribute('aria-label')"),
     await read("document.querySelector('textarea').placeholder"),
@@ -483,11 +550,79 @@ try {
   )
   await new Promise((r) => setTimeout(r, 150))
   await shot('mobile-question-compose')
-  await press('提交追问')
-  await until(() => read("document.body.innerText.includes('已核对这条内容')"), '经理回复')
-  assert.ok(await read("!document.querySelector('textarea')"), '提交后收起追问')
+  // 关掉抽屉不丢草稿，入口带未发出的记号；再打开草稿还在
+  await tapId('discussion-drawer:close')
+  await until(() => read(`!document.querySelector('${drawer}')`), '抽屉关闭')
+  assert.ok(
+    await read(
+      `(document.querySelector('[data-testid="post-discussion:P-1"]')?.getAttribute('aria-label')??'').includes('有未发出的追问') && !!document.querySelector('[data-testid="post-discussion-dot:P-1"]')`,
+    ),
+    '入口标出未发出的追问',
+  )
+  await tapId('post-discussion:P-1')
+  await wait(drawer)
+  assert.equal(
+    await read(`document.querySelector('${drawer} textarea').value`),
+    '手机追问范围',
+    '关开抽屉保留草稿',
+  )
+  await read(`document.querySelector('${drawer} [aria-label="提交追问"]').click()`)
+  await until(
+    () => read(`document.querySelector('${drawer}').innerText.includes('已核对这条内容')`),
+    '经理回复',
+  )
+  assert.equal(await read(`document.querySelector('${drawer} textarea').value`), '', '提交后清空')
   await shot('mobile-report-discussion')
+  await tapId('discussion-drawer:close')
+  await until(() => read(`!document.querySelector('${drawer}')`), '抽屉关闭')
+  assert.ok(
+    await read(
+      `!document.querySelector('${reportCard}').innerText.includes('已核对这条内容') && !document.querySelector('textarea')`,
+    ),
+    '回复只在抽屉里，卡片不含讨论',
+  )
+  // 窄手机仍能看见原卡片，点抽屉标题返回并定位；切到另一帖子只显示其抽屉。
+  await call('Emulation.setDeviceMetricsOverride', {
+    width: 320,
+    height: 640,
+    deviceScaleFactor: 1,
+    mobile: false,
+  })
+  await tapId('post-discussion:P-1')
+  await wait(drawer)
+  await until(
+    () =>
+      read(
+        `(()=>{const r=document.querySelector('${drawer}').getBoundingClientRect();return r.top>innerHeight*0.3&&r.bottom<=innerHeight+1&&r.right<=innerWidth})()`,
+      ),
+    '窄手机保留上方卡片空间',
+  )
+  await shot('mobile-discussion-narrow')
+  await read(`document.querySelector('${drawer} [aria-label^="回到卡片"]').click()`)
+  await until(
+    () =>
+      read(
+        `!document.querySelector('${drawer}') && document.querySelector('${reportCard}').getBoundingClientRect().top>=0`,
+      ),
+    '标题回到卡片',
+  )
+  await call('Emulation.setDeviceMetricsOverride', {
+    width: 412,
+    height: 915,
+    deviceScaleFactor: 1,
+    mobile: false,
+  })
   await tapId('manager-category:request')
+  await tapId('post-discussion:R-1')
+  await wait('[data-testid="discussion-drawer:R-1"]')
+  assert.equal(
+    await read(
+      `document.querySelectorAll('[data-testid^="discussion-drawer:"]:not([data-testid="discussion-drawer:grip"]):not([data-testid="discussion-drawer:size"]):not([data-testid="discussion-drawer:close"]):not([data-testid="discussion-drawer:scrim"])').length`,
+    ),
+    1,
+    '只打开当前帖子的抽屉',
+  )
+  await tapId('discussion-drawer:close')
   assert.ok(
     await read(
       "!document.querySelector('[data-testid=\"manager-issue:R-1\"]').innerText.includes('提交给经理')",
@@ -564,7 +699,7 @@ try {
     '设备服务较旧：忽略禁用并写原因',
   )
   assert.ok(
-    await disabledWithReason('post-ask:D-17', 'old-device-reason:posts:D-17'),
+    await disabledWithReason('post-discussion:D-17', 'old-device-reason:posts:D-17'),
     '设备服务较旧：追问禁用并写原因',
   )
   await tapId('manager-category:request')

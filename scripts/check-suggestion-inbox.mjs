@@ -524,28 +524,29 @@ try {
           )
         }
         if (tab === 'decisions') {
-          await click('[data-decision="D-15"] [data-act="post-ask"]')
-          await click('[data-decision="D-15"] [data-question-mode="manager"]')
+          // 帖子讨论在看板底部分屏里：先点卡片标题行的讨论入口
+          await click('[data-decision="D-15"] [data-act="post-discussion"]')
+          await click('.mg-talk-pane[data-post="D-15"] [data-question-mode="manager"]')
           assert.ok(
             await read("!document.querySelector('.mg-decision-filter').classList.contains('seg')"),
           )
           assert.ok(
             await read(
-              "document.querySelector('[data-decision=\"D-15\"] .mg-post-compose textarea').placeholder.includes('经理')",
+              "document.querySelector('.mg-talk-pane[data-post=\"D-15\"] .mg-post-compose textarea').placeholder.includes('经理')",
             ),
           )
           await read(
-            "document.querySelector('[data-decision=\"D-15\"] .mg-post-compose').scrollIntoView({block:'center'})",
+            "document.querySelector('[data-decision=\"D-15\"]').scrollIntoView({block:'start'})",
           )
           await shot(`questions-manager-${skin}-${theme}`)
-          await click('[data-decision="D-15"] [data-question-mode="temporary"]')
+          await click('.mg-talk-pane[data-post="D-15"] [data-question-mode="temporary"]')
           assert.ok(
             await read(
-              "document.querySelector('[data-decision=\"D-15\"] .mg-post-compose textarea').placeholder.includes('临时')",
+              "document.querySelector('.mg-talk-pane[data-post=\"D-15\"] .mg-post-compose textarea').placeholder.includes('临时')",
             ),
           )
           await shot(`questions-temporary-${skin}-${theme}`)
-          await click('[data-decision="D-15"] [data-act="post-ask"]')
+          await click('.mg-talk-pane[data-post="D-15"] [data-act="discussion-close"]')
         }
       }
       await click('[data-board-tab="items"]')
@@ -656,8 +657,8 @@ try {
     )
     await new Promise((r) => setTimeout(r, 120))
   }
-  const question = '[data-decision="D-15"] [data-act="manager-question-input"]'
-  const questionTab = '[data-decision="D-15"] [data-act="post-ask"]'
+  const question = '.mg-talk-pane[data-post="D-15"] [data-act="manager-question-input"]'
+  const questionTab = '[data-decision="D-15"] [data-act="post-discussion"]'
   await click('[data-board-tab="decisions"]')
   if (!(await read(`!!document.querySelector(${JSON.stringify(question)})`)))
     await click(questionTab)
@@ -665,7 +666,7 @@ try {
   await fill(question, '此次修改的依据？')
   assert.ok(
     await read(
-      `document.querySelector('[data-decision="D-15"] [data-act="post-ask"]').textContent.includes('草稿')`,
+      `document.querySelector('[data-decision="D-15"] [data-act="post-discussion"]').hasAttribute('data-unsent')`,
     ),
   )
   await click('[data-board-tab="requests"]')
@@ -764,9 +765,9 @@ try {
     await read(`document.querySelector(${JSON.stringify(question)}).value`),
     '保留的追问草稿',
   )
-  await click('[data-decision="D-15"] [data-question-mode="temporary"]')
+  await click('.mg-talk-pane[data-post="D-15"] [data-question-mode="temporary"]')
   await fill(question, '再确认影响范围')
-  await click('[data-decision="D-15"] [data-act="post-question-send"]')
+  await click('.mg-talk-pane[data-post="D-15"] [data-act="post-question-send"]')
   await until(
     () =>
       read(

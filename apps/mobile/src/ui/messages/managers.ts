@@ -11,6 +11,8 @@ export const zhCN = {
   'mgr.answer.note': '先写补充说明',
   'mgr.ignored.show': '展开详情',
   'mgr.ignored.hide': '收起详情',
+  'mgr.discussion.full': '展开到全屏',
+  'mgr.discussion.half': '收回半屏',
 } satisfies Record<string, Entry>
 
 const plural = (one: string, many: string) => (args: Record<string, string | number>) =>
@@ -25,4 +27,6 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'mgr.answer.note': 'Add a note first',
   'mgr.ignored.show': 'Show details',
   'mgr.ignored.hide': 'Hide details',
+  'mgr.discussion.full': 'Expand to full screen',
+  'mgr.discussion.half': 'Shrink to half screen',
 }

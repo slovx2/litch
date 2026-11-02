@@ -9,6 +9,22 @@ export function postCollapsed(key: string, fallback: boolean): boolean {
 export function rememberPostCollapsed(key: string, collapsed: boolean): void {
   folds.set(key, collapsed)
 }
+/**
+ * 讨论入口上的“新回复”（桌面与手机共用）：只在当前客户端进程里记，不写设备数据（和帖子开合记忆一样）。
+ * 头一次看到某帖时记下已答条数作基线；之后多出来的答复算新，打开讨论看过就清掉。
+ */
+const seenReplies = new Map<string, number>()
+export function newReplies(key: string, answered: number): boolean {
+  const base = seenReplies.get(key)
+  if (base === undefined) {
+    seenReplies.set(key, answered)
+    return false
+  }
+  return answered > base
+}
+export function markRepliesSeen(key: string, answered: number): void {
+  seenReplies.set(key, answered)
+}
 export function postSummary(text: string): string {
   return (text.split('\n').find((line) => line.trim()) ?? '')
     .replace(/^\s*(#{1,6}\s+|[-*+]\s+|\d+\.\s+|>\s*)/, '')
