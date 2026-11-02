@@ -55,7 +55,8 @@ import {
   useFileScope,
 } from './context'
 import { GoalReachedCell } from './goal/GoalReachedCell'
-import { IssueLinksContext, parseIssueHref } from './issue-links'
+import { parseIssueHref } from './issue-links'
+import { IssueLinksContext } from './issue-links-context'
 import { isWebUrl, parseFileHref } from './links'
 import { InView, InViewContext } from './mermaid/in-view'
 import { type MermaidShown, MermaidViewer } from './mermaid/MermaidViewer'

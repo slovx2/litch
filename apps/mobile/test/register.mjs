@@ -28,6 +28,9 @@ const typed = (url) => ({
 
 registerHooks({
   resolve(specifier, context, next) {
+    // 本地安装了手机依赖也不能掩盖纯逻辑模块误引 React；CI 不安装界面运行时。
+    if (specifier === 'react' || specifier.startsWith('react/'))
+      throw new Error(`手机纯逻辑单测不能加载 React：${specifier}，来自 ${context.parentURL}`)
     if (specifier === '@litch/core') return { url: core.href, shortCircuit: true }
     const stub = stubs[specifier]
     if (stub) return { url: stub.href, shortCircuit: true }

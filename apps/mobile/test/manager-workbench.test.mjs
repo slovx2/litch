@@ -5,6 +5,11 @@ import { linkIssues, parseIssueHref } from '../src/detail/issue-links.ts'
 import { lineIssues, managerRouteBelow } from '../src/screens/managers/origin.ts'
 import { lineRowParts } from '../src/screens/managers/presentation.ts'
 
+test('纯逻辑单测阻止引入 React，即使本地安装了手机依赖', async () => {
+  await assert.rejects(() => import('react'), /手机纯逻辑单测不能加载 React/)
+  await assert.rejects(() => import('react/jsx-runtime'), /手机纯逻辑单测不能加载 React/)
+})
+
 test('对话正文的看板编号改成链接：字形不变，只认看板上有的，代码与已有链接不动', () => {
   const ids = new Set(['D-15', 'D-16', 'I-2'])
   assert.equal(
