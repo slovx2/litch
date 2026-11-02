@@ -3,7 +3,13 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 import { SessionStore } from '../src/core/session-store.ts'
-import { sendButton, sendFlags, sendModeOf, whenRunning } from '../src/detail/composer/send-mode.ts'
+import {
+  sendButton,
+  sendFlags,
+  sendModeOf,
+  takesSend,
+  whenRunning,
+} from '../src/detail/composer/send-mode.ts'
 import { mockChannel, until } from './helpers.mjs'
 
 const cleanup = []
@@ -94,4 +100,16 @@ test('排队：回合中发的那条排着，不进对话', async () => {
   await until(() => store.getMeta().queued.length === 1, { what: '排着的那条' })
   assert.equal(store.getMeta().queued[0].text, '等会儿再说')
   assert.ok(!said(store).includes('等会儿再说'))
+})
+
+test('上一条还在发时照样接着发；新建会话时要等上一条建好，不然会另建一个会话', () => {
+  const state = { filled: true, blocked: false, sending: false, fresh: false }
+  assert.equal(takesSend(state), true)
+  assert.equal(takesSend({ ...state, sending: true }), true)
+  assert.equal(takesSend({ ...state, fresh: true }), true)
+  assert.equal(takesSend({ ...state, fresh: true, sending: true }), false)
+  for (const sending of [false, true]) {
+    assert.equal(takesSend({ ...state, sending, filled: false }), false)
+    assert.equal(takesSend({ ...state, sending, blocked: true }), false)
+  }
 })

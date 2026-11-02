@@ -322,6 +322,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
           <View style={{ paddingBottom: insets.bottom, backgroundColor: c.panel }}>
             <ComposeBox
               testID="new"
+              fresh
               draft={draft}
               placeholder={t('compose.new.placeholder')}
               running={false}

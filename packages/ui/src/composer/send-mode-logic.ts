@@ -36,3 +36,19 @@ export function runningPlaceholder(
   if (send === 'fallback') return 'composer.placeholderNoSteer'
   return 'composer.placeholderRunning'
 }
+
+/**
+ * 现在能不能发。上一条还在发（sending）时照样能发：已有的会话里，核心按会话一条一条处理，
+ * 接着发的按发送方式排进托盘或插进当前回合，不能吞掉。新建会话时（fresh）不行：上一条还在建会话，
+ * 再发一条会另建一个会话
+ */
+export function canSend(draft: {
+  filled: boolean
+  blocked: boolean
+  imagesRefused: boolean
+  sending: boolean
+  fresh: boolean
+}): boolean {
+  if (!draft.filled || draft.blocked || draft.imagesRefused) return false
+  return !(draft.fresh && draft.sending)
+}

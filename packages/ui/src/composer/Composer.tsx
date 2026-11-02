@@ -95,7 +95,7 @@ import { ProviderSwitchDialog } from './ProviderSwitchDialog.tsx'
 import { switchedProvider } from './provider-switch.ts'
 import { SettingsBar, useComposeOptions } from './SettingsBar.tsx'
 import { useRunningSend } from './send-mode.ts'
-import { runningPlaceholder } from './send-mode-logic.ts'
+import { canSend, runningPlaceholder } from './send-mode-logic.ts'
 import { keepMentioned } from './session-hits.ts'
 import { useProviderSwitch } from './useProviderSwitch.ts'
 import { useSuggest } from './useSuggest.tsx'
@@ -170,6 +170,10 @@ export function Composer(props: ComposerProps) {
   const [extras, setExtras] = useState(() => loadDraftExtras(draftKey))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // 草稿的这一版：内容一变就换一个。发出去时记下（send 里），连按时第二下拿到的还是这一版就不再发
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖就是草稿的内容，内容一变换一个新的对象
+  const version = useMemo(() => ({}), [text, images, extras, comments])
+  const taken = useRef<object | null>(null)
   /** 有文件正拖在输入区上面 */
   const [dropping, setDropping] = useState(false)
   const asked = useComposeOptions(deviceId, props.harness)
@@ -312,7 +316,13 @@ export function Composer(props: ComposerProps) {
     text.trim().length > 0 || images.length > 0 || extras.length > 0 || comments.length > 0
   /** 输入框上面出片的那几样：提到的会话写在正文里，不算 */
   const chipped = extras.filter((extra) => extra.kind !== 'session').length
-  const ready = filled && !blocked && !busy && !imagesRefused
+  const ready = canSend({
+    filled,
+    blocked: Boolean(blocked),
+    imagesRefused,
+    sending: busy,
+    fresh: props.fresh === true,
+  })
 
   const suggest = useSuggest({
     deviceId,
@@ -417,6 +427,9 @@ export function Composer(props: ComposerProps) {
     const carried = extras
     const commented = comments
     if (!content && attached.length === 0 && carried.length === 0 && commented.length === 0) return
+    // 上一条还在发时也接着发，但同一版草稿只发一次：连按时第二下拿到的还是刚发出去的那一版
+    if (taken.current === version) return
+    taken.current = version
     // 先清空：消息已经显示在对话里了。没发成功再把文字、图片和附带项还回来
     cleared.current = null
     recalling.current = null
@@ -439,7 +452,7 @@ export function Composer(props: ComposerProps) {
         setError(failure ? failure(why) : t('composer.failed', { reason: why }))
       })
       .finally(() => setBusy(false))
-  }, [onSend, failure, draftKey, text, images, extras, comments, t, disarm])
+  }, [onSend, failure, draftKey, text, images, extras, comments, t, disarm, version])
 
   const stop = () => {
     setError(null)

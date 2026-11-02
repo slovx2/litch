@@ -14,6 +14,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -43,7 +44,7 @@ import { useGrow } from './grow'
 import { MAX_IMAGE_MB, MAX_IMAGES, pickImages, REFUSAL_TEXT } from './images'
 import { rowLayout } from './layout'
 import { MentionList, mentionTrigger } from './MentionList'
-import { sendButton } from './send-mode'
+import { sendButton, takesSend } from './send-mode'
 
 export interface Draft {
   text: string
@@ -162,6 +163,7 @@ export function ComposeBox({
   running,
   steer = false,
   steerImages = true,
+  fresh = false,
   blocked,
   imagesOff,
   error,
@@ -182,6 +184,8 @@ export function ComposeBox({
   running: boolean
   /** 回合在跑时发出去会插进当前回合（设置里选了立即发送、这个会话插得了话）。不给是排队 */
   steer?: boolean
+  /** 新建会话：上一条还在建会话时不接下一条，免得另建一个 */
+  fresh?: boolean
   /** 插话收不收图片：不收时带着图片的那条照样排队，按钮写“排队” */
   steerImages?: boolean
   /** 发不了的原因（设备没连上、harness 用不了）。照样能写草稿 */
@@ -210,6 +214,10 @@ export function ComposeBox({
   const theme = useTheme()
   const { c } = theme
   const [sending, setSending] = useState(false)
+  // 草稿的这一版：内容一变就换一个。发出去时记下，连点时第二下拿到的还是这一版，不再发一次
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖就是草稿的内容，内容一变换一个新的对象
+  const version = useMemo(() => ({}), [draft.text, draft.images, draft.comments, draft.sessions])
+  const taken = useRef<object | null>(null)
   const own = useRef<TextInput>(null)
   const input = inputRef ?? own
   const grow = useGrow(input, draft.text)
@@ -234,11 +242,14 @@ export function ComposeBox({
     const images = draft.images
     const comments = draft.comments
     const sessions = keepMentioned(draft.sessions, text)
-    if ((!text && images.length === 0 && comments.length === 0) || blocked || sending) return
+    const content = text.length > 0 || images.length > 0 || comments.length > 0
+    if (!takesSend({ filled: content, blocked: Boolean(blocked), sending, fresh })) return
+    if (taken.current === version) return
     if (images.length > 0 && imagesOff) {
       onError(imagesOff)
       return
     }
+    taken.current = version
     // 先清空：消息已经显示在对话里了。没发成功再还回来
     draft.clear()
     onError(null)

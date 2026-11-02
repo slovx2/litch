@@ -1354,6 +1354,37 @@ test('立即发送：消息号每次运行都不一样（入口按消息号永�
   })
 })
 
+test('排队：上一条还在发（turn/start 没回）时接连再发两条，不吞、不另起回合，按发的先后排进托盘', async () => {
+  const { core, handlers, command, sent } = setup()
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  const start = handlers['turn/start'] as Handler
+  let release = () => {}
+  handlers['turn/start'] = (params) =>
+    new Promise((done) => {
+      release = () => done(start(params))
+    })
+  const first = command('session.send', { ...where, text: '一' })
+  await settle()
+  // 界面上不等上一条发完：两条紧接着发出去
+  const rest = [
+    command('session.send', { ...where, text: '二' }),
+    command('session.send', { ...where, text: '三' }),
+  ]
+  release()
+  await first
+  await Promise.all(rest)
+  await settle()
+  assert.equal(sent('turn/start').length, 1, '没有另起回合')
+  assert.deepEqual(
+    session.seen.view?.queued.map((message) => message.text),
+    ['二', '三'],
+  )
+  assert.deepEqual(session.texts(), [['一']])
+})
+
 test('立即发送：回合刚发出、对面还没回 turn/start 时说的话，等回合有了对面的标识再插进去，不进托盘、不另起回合', async () => {
   const { core, handlers, command, sent } = setup()
   core.start()

@@ -221,6 +221,9 @@ explain it:
   (the composer's placeholder says which). Codex, Claude Code, Pi, DSH and OpenCode take images
   mid-turn; ACP agents (Gemini, Qwen and the generic ACP entry) take no messages mid-turn. "Send now"
   on a queued message puts it into the running turn. With nothing typed the button is Stop, which interrupts the turn.
+  Pressing Enter again while the previous message is still being sent is accepted too (desktop and
+  phone): it goes in order, queued or into the running turn per the setting. On the new-conversation
+  page the next message waits until the conversation has been created.
   停止或回合失败后，本客户端尚未发送的消息暂停，不会自动开启下一回合。桌面和手机输入框上方显示
   “已停止，N 条待发”，可发送全部或单条、编辑回输入框、移除。再次输入消息时，发送处先选择
   “连同 N 条待发一起发”（默认）或“只发这条”，一次提交；前者保持各条消息的顺序与附件归属，后者保留原待发。

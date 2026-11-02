@@ -37,3 +37,17 @@ export function sendButton(state: {
   if (state.filled) return state.running && !state.steer ? 'queue' : 'send'
   return state.running && state.stoppable ? 'stop' : 'send'
 }
+
+/**
+ * 按下发送时接不接这一条（和桌面一样）。上一条还在发（sending）时照样接：已有的会话里核心按会话一条一条处理，
+ * 接着发的按发送方式排队或插进当前回合，不能吞掉。新建会话时（fresh）不接：上一条还在建会话，再发会另建一个
+ */
+export function takesSend(state: {
+  filled: boolean
+  blocked: boolean
+  sending: boolean
+  fresh: boolean
+}): boolean {
+  if (!state.filled || state.blocked) return false
+  return !(state.fresh && state.sending)
+}

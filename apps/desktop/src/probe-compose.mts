@@ -24,6 +24,8 @@ export interface ComposeProbe {
   order: string[]
   /** 排队期间托盘里最多同时有几条 */
   queuedMax: number
+  /** 上一条还在发时紧接着回车，这一句也接住了（输入框随即清空） */
+  quickTaken: boolean
   /** 每条回话有没有带上对应的那句话。只在真实入口上量 */
   echoed: boolean | null
   /** 引导：排着的那条点“现在就说”，它从托盘里出来、进了正在进行的回合，没有多出一个回合 */
@@ -364,7 +366,16 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   await until('回合开始', running)
 
   // ---- 三、回合进行中再发三条：排队，按顺序一条一条处理 ----
-  for (const text of sent.slice(1)) await say(text)
+  // 头两条连着发：同一下里写、回车，再写、回车，第三条回车时第二条一定还在发，照样该接住
+  const field = await until('输入框', area)
+  write(field, sent[1] ?? '')
+  press(field, 'Enter')
+  write(field, sent[2] ?? '')
+  press(field, 'Enter')
+  // 界面一帧之后才更新：接住了输入框是空的，被吞掉的话那句还在
+  await frame()
+  const quickTaken = area()?.value === ''
+  await say(sent[3] ?? '')
   let queuedMax = 0
   let streamSteps = 0
   let length = liveLength()
@@ -1306,6 +1317,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     streamRepeated: streamed.repeated,
     order,
     queuedMax,
+    quickTaken,
     echoed,
     steered,
     steerDetail,
@@ -1365,6 +1377,7 @@ export function judgeCompose(probe: ComposeProbe): string[] {
   if (probe.order.join('|') !== '第一条|第二条|第三条|第四条')
     failed.push(`排队的消息顺序不对：${probe.order.join('、')}`)
   if (probe.queuedMax !== 3) failed.push(`托盘里最多同时有 ${probe.queuedMax} 条，应该是 3 条`)
+  if (!probe.quickTaken) failed.push('上一条还在发时紧接着按回车，这一句没有接住')
   if (probe.echoed === false) failed.push('有回话没有对上发出去的那一句')
   if (!probe.steered) failed.push(`排着的消息没有插进正在进行的回合：${probe.steerDetail}`)
   if (!probe.interrupted) failed.push('点了停止，回合没有标成已中断')

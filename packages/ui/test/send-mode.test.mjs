@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const { DEFAULT_SEND_MODE, readSendMode, runningPlaceholder, runningSend, SEND_MODES } =
+const { canSend, DEFAULT_SEND_MODE, readSendMode, runningPlaceholder, runningSend, SEND_MODES } =
   await import('../src/composer/send-mode-logic.ts')
 
 test('默认立即发送；存着的读不懂、没有都按默认', () => {
@@ -30,4 +30,18 @@ test('排队：不管插不插得了话都排队，提示照旧', () => {
   assert.equal(runningSend('queue', true), 'queue')
   assert.equal(runningSend('queue', false), 'queue')
   assert.equal(runningPlaceholder('queue'), 'composer.placeholderRunning')
+})
+
+test('上一条还在发时照样能发；新建会话时要等上一条建好，不然会另建一个会话', () => {
+  const draft = { filled: true, blocked: false, imagesRefused: false, sending: false, fresh: false }
+  assert.equal(canSend(draft), true)
+  assert.equal(canSend({ ...draft, sending: true }), true)
+  assert.equal(canSend({ ...draft, fresh: true }), true)
+  assert.equal(canSend({ ...draft, fresh: true, sending: true }), false)
+  // 没写东西、会话发不了、带着收不了的图：在不在发都不能发
+  for (const sending of [false, true]) {
+    assert.equal(canSend({ ...draft, sending, filled: false }), false)
+    assert.equal(canSend({ ...draft, sending, blocked: true }), false)
+    assert.equal(canSend({ ...draft, sending, imagesRefused: true }), false)
+  }
 })
