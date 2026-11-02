@@ -16,6 +16,12 @@ export const zhBackground = {
   'background.noneEver':
     '此会话暂无后台任务。回合结束后仍在运行的命令、子代理和子会话会显示在这里。',
   'background.pick': '打开会话后，此处显示其后台任务。',
+  'background.native.unsupported':
+    '后台自动继续当前不可用：Codex {version} 不支持，需 ≥0.163.0。请在设备详情升级后新建会话。',
+  'background.native.unknown':
+    '后台自动继续当前不可用：无法确认 Codex 版本，需要 0.163.0 及以上。请在设备详情检查运行时。',
+  'background.native.missing':
+    '此会话未安装后台登记工具（可能创建于功能启用前）。请新建会话以启用自动继续。',
   'background.wakes': '完成后自动继续',
   'background.noWake': '完成后不会自动继续',
   'background.wake.watching': '已登记自动继续',

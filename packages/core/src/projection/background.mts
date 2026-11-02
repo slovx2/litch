@@ -22,6 +22,7 @@ import type {
   TurnOrigin,
 } from '../model-background.mjs'
 import type { AgentRunState, AgentState, AgentThreadView } from '../model-tree.mjs'
+import { type Phrase, phrase } from '../phrase.mjs'
 import { agentRunState } from './tree.mjs'
 
 const KINDS: readonly string[] = ['shell', 'agent', 'monitor', 'workflow', 'remote', 'other']
@@ -38,10 +39,10 @@ const summed = (tasks: BackgroundTaskView[], wakesOnFinish: boolean | null) => (
   wakesOnFinish,
 })
 
-/** 会话对象上入口加的集合（只发给声明了 backgroundTasks 的连接）。没有、形状不对、一个任务也没有的是 null */
+/** 会话对象上入口加的集合（只发给声明了 backgroundTasks 的连接）。没有或形状不对的是 null；空集合仅在带原生工具状态时保留 */
 export function projectBackground(raw: unknown): SessionBackgroundView | null {
   if (!raw || typeof raw !== 'object') return null
-  const { tasks, wakesOnFinish } = raw as Partial<LitchBackground>
+  const { tasks, wakesOnFinish, nativeWake } = raw as Partial<LitchBackground>
   if (!Array.isArray(tasks)) return null
   const views: BackgroundTaskView[] = []
   for (const task of tasks as unknown[]) {
@@ -66,8 +67,33 @@ export function projectBackground(raw: unknown): SessionBackgroundView | null {
         : {}),
     })
   }
-  if (views.length === 0) return null
-  return summed(views, typeof wakesOnFinish === 'boolean' ? wakesOnFinish : null)
+  const availability =
+    nativeWake &&
+    typeof nativeWake.enabled === 'boolean' &&
+    typeof nativeWake.installed === 'boolean' &&
+    typeof nativeWake.supported === 'boolean' &&
+    (nativeWake.version === null || typeof nativeWake.version === 'string')
+      ? nativeWake
+      : undefined
+  if (views.length === 0 && !availability) return null
+  return {
+    ...summed(views, typeof wakesOnFinish === 'boolean' ? wakesOnFinish : null),
+    ...(availability ? { nativeWake: availability } : {}),
+  }
+}
+
+/** 只在开启但当前不可用时提示；不把缺少状态的旧设备猜成不支持。 */
+export function nativeBackgroundHint(
+  background: Pick<SessionBackgroundView, 'nativeWake'> | null | undefined,
+): Phrase | null {
+  const wake = background?.nativeWake
+  if (!wake?.enabled) return null
+  if (!wake.supported)
+    return wake.version
+      ? phrase('background.native.unsupported', { version: wake.version })
+      : phrase('background.native.unknown')
+  if (!wake.installed) return phrase('background.native.missing')
+  return null
 }
 
 /** 回合上的 litchOrigin。没有、不认识的、user 都当用户发的，是 undefined（TurnView 上不带） */
@@ -203,8 +229,9 @@ export function backgroundEntries(
       endedAt: task.endedAt,
     })
   }
-  if (entries.length === 0) return null
+  if (entries.length === 0 && !background?.nativeWake) return null
   return {
+    ...(background?.nativeWake ? { nativeWake: background.nativeWake } : {}),
     entries: ordered(entries),
     running: entries.filter((entry) => entry.status === 'running').length,
     wakesOnFinish: background?.wakesOnFinish ?? null,

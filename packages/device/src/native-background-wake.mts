@@ -104,7 +104,7 @@ export class NativeBackgroundWake {
         : this.host.sessions.tools(String(params.threadId))
     if (Array.isArray(tools)) this.host.sessions.setTools(result.thread.id, tools)
   }
-  private installed(threadId: string): boolean {
+  installed(threadId: string): boolean {
     return this.host.sessions.tools(threadId)?.some((t) => isObject(t) && t.name === NS) === true
   }
 

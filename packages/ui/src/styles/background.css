@@ -347,3 +347,9 @@
     transparent 70%
   );
 }
+
+/* 只在后台任务页提示，字号低于正文，不占会话区的一行。 */
+.bg-native-hint {
+  font-size: calc(11px * var(--fs));
+  margin-inline: 8px;
+}

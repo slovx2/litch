@@ -339,7 +339,7 @@ explain it:
   instead of the spinner. Claude Code, dsh and Litch's background commands (Pi, OpenCode, ACP)
   continue on their own when a task finishes by itself; that turn starts with "Background task
   finished, continuing" instead of a message from the user. A task you or the model stopped does not
-  wake the session; when you stop one, the model is told on its next turn that you stopped it. 原生 Codex 在新建 Litch 会话中默认提供 `litch_background.watch/read/cancel`：模型用原生命令执行有限任务，再登记需要结果后继续的 session_id；登记成功后可以结束回合，任务完成后设备自动投递结果并继续。开发服务器和监听不登记，不因退出自动续跑。命令权限和沙箱仍由 Codex 管理。Gemini CLI and Qwen Code get no Litch
+  wake the session; when you stop one, the model is told on its next turn that you stopped it. 原生 Codex 在新建 Litch 会话中默认提供 `litch_background.watch/read/cancel`：模型用原生命令执行有限任务，再登记需要结果后继续的 session_id；登记成功后可以结束回合，任务完成后设备自动投递结果并继续。常驻开发服务器和无限监听不登记，不因退出自动续跑。等待一次消息、邮件或构建完成后退出的有限命令，若结果仍用于当前任务，必须登记 `watch`，即使名称叫 watcher 或 listener。后台任务页会提示当前 Codex 版本不支持或会话未安装工具；请升级到 0.163.0 及以上后新建会话。命令权限和沙箱仍由 Codex 管理。Gemini CLI and Qwen Code get no Litch
   background commands. Litch's background commands run on the device the session runs on, as the
   model's own commands do; their output goes to a log file the model can read. They keep running when
   every client disconnects, and stop when the harness's runtime restarts (a settings change, a service
@@ -416,6 +416,8 @@ explain it:
   a session is created: sessions started outside Litch (for example in the official Codex app) and
   sessions created before this version do not have it, and a session Litch created keeps it when
   opened in another app. There is no setting to turn it off.
+
+Native Codex **0.163.0 or later** adds `litch_background.watch/read/cancel` to new Litch sessions. Finite commands that exit after one message or email, or after a build finishes, must register with `watch` when their result is needed for the current task, even if called watchers or listeners. Persistent services and indefinite listeners remain unregistered. Registration permits ending the turn; completion triggers continuation. The Background tasks page explains an unsupported runtime or a session without the tool; upgrade and start a new session as needed.
 
 ## Claude Code sessions started elsewhere
 

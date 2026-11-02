@@ -1524,9 +1524,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     'litch/thread/queuedNotes/updated': ({ threadId, notes }) =>
       patchThread(threadId, { litchQueuedNotes: notes.length > 0 ? notes : undefined }),
     // 后台任务的集合变了（整份）。只发给声明了 backgroundTasks 的连接；没打开过的会话也发，侧栏要标
-    'litch/thread/background/changed': ({ threadId, tasks, wakesOnFinish }) =>
+    'litch/thread/background/changed': ({ threadId, tasks, wakesOnFinish, nativeWake }) =>
       patchThread(threadId, {
-        litchBackground: tasks.length > 0 ? { tasks, wakesOnFinish } : undefined,
+        litchBackground:
+          tasks.length > 0 || nativeWake
+            ? { tasks, wakesOnFinish, ...(nativeWake ? { nativeWake } : {}) }
+            : undefined,
       }),
   }
 

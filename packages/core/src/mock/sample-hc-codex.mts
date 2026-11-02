@@ -27,6 +27,19 @@ const EFFORTS = [
 export function sampleCodex({ home, remote }: SampleHome): SampleHc {
   const codexHome = `${home}/.codex`
   const settings = [
+    spec(
+      'litch.backgroundWake',
+      'behavior',
+      'boolean',
+      t('后台任务自动继续', 'Continue after background tasks'),
+      {
+        default: true,
+        description: t(
+          '当前 Codex 0.157.1 不支持，需 ≥0.163.0，可在设备详情升级。',
+          'Codex 0.157.1 does not support this. Requires ≥0.163.0; upgrade in device details.',
+        ),
+      },
+    ),
     spec('model', 'defaults', 'enum', t('模型', 'Model'), {
       default: 'gpt-5.5',
       effect: 'newSession',

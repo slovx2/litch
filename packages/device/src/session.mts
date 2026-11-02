@@ -297,18 +297,7 @@ export class ClientSession implements ClientToolPeer {
           else if (link.dialect.clientToolsByDevice)
             host.background.codexNotification(method, params)
         },
-        decorate: (thread) => {
-          host.background.decorate(thread)
-          if (this.declared.has(EXTENSION.nativeBackgroundWake) && typeof thread.id === 'string') {
-            const background = host.nativeBackground?.decorateBackground(
-              thread.id,
-              isObject(thread.litchBackground)
-                ? (thread.litchBackground as unknown as import('../../protocol/src/background-tasks.mjs').LitchBackground)
-                : null,
-            )
-            if (background) thread.litchBackground = background
-          }
-        },
+        decorate: (thread) => this.decorateBackground(thread),
         resumed: (link, thread) => {
           if (!link.dialect.clientToolsByDevice) return
           const candidates = host.background.codexResumed(thread)
@@ -624,8 +613,7 @@ export class ClientSession implements ClientToolPeer {
                     if (this.declared.has(EXTENSION.manager)) this.host.managers?.decorate(row)
                     if (this.declared.has(EXTENSION.sessionTree))
                       this.host.sessionTree.decorate(row)
-                    if (this.declared.has(EXTENSION.backgroundTasks))
-                      this.host.background.decorate(row)
+                    if (this.declared.has(EXTENSION.backgroundTasks)) this.decorateBackground(row)
                     if (this.declared.has(EXTENSION.worktrees)) this.host.worktrees?.decorate(row)
                   },
                 }
@@ -694,6 +682,7 @@ export class ClientSession implements ClientToolPeer {
         set: (value) => this.host.titles.setEnabled(link.harness, value),
       },
       backgroundWake: {
+        version: () => link.facts.runtime?.cliBuild,
         enabled: () => this.host.nativeBackground?.enabled(link.harness) ?? true,
         set: (value) => this.host.nativeBackground?.setEnabled(link.harness, value),
       },
@@ -1119,6 +1108,7 @@ export class ClientSession implements ClientToolPeer {
     workspaces.decorate(threadId, thread)
     if (this.declared.has(EXTENSION.manager)) this.host.managers?.decorate(thread)
     if (this.declared.has(EXTENSION.sessionTree)) this.host.sessionTree.decorate(thread)
+    if (this.declared.has(EXTENSION.backgroundTasks)) this.decorateBackground(thread)
     if (this.declared.has(EXTENSION.worktrees)) this.host.worktrees?.decorate(thread)
     return more ? result : { thread }
   }
@@ -1298,6 +1288,51 @@ export class ClientSession implements ClientToolPeer {
     this.send(JSON.stringify({ method: DEVICE_SETTINGS_CHANGED, params }))
   }
 
+  private readonly backgroundThreads = new Map<string, string>()
+
+  /** 状态按当前连接声明生成；空集合也带工具可用性，旧会话不能被误认为已安装。 */
+  private decorateBackground(thread: Record<string, unknown>): void {
+    this.host.background.decorate(thread)
+    if (!this.declared.has(EXTENSION.nativeBackgroundWake) || typeof thread.id !== 'string') return
+    const harness =
+      typeof thread.harness === 'string' ? thread.harness : this.host.index.lookup(thread.id)
+    if (
+      !harness ||
+      !this.host
+        .harnesses()
+        .some((source) => source.id === harness && (source.managed?.native ?? source.native))
+    )
+      return
+    const wake = this.host.nativeBackground
+    if (!wake) return
+    this.backgroundThreads.set(thread.id, harness)
+    const facts = this.links.get(harness)?.facts ?? this.host.catalog.latest(harness)
+    const version = typeof facts.runtime?.cliBuild === 'string' ? facts.runtime.cliBuild : null
+    const base = isObject(thread.litchBackground)
+      ? (thread.litchBackground as unknown as import('../../protocol/src/background-tasks.mjs').LitchBackground)
+      : null
+    thread.litchBackground = {
+      ...(wake.decorateBackground(thread.id, base) ?? { tasks: [], wakesOnFinish: false }),
+      nativeWake: {
+        enabled: wake.enabled(harness),
+        installed: wake.installed(thread.id),
+        supported: supportsNativeBackground(version),
+        version,
+      },
+    }
+  }
+
+  private refreshBackground(harness: string): void {
+    for (const [threadId, owner] of this.backgroundThreads) {
+      if (owner === harness)
+        this.announce(
+          BACKGROUND_TASKS_NOTIFICATION.changed,
+          { threadId, tasks: [], wakesOnFinish: false },
+          EXTENSION.backgroundTasks,
+        )
+    }
+  }
+
   /** 握手时声明了这项扩展没有 */
   declares(extension: string): boolean {
     return this.declared.has(extension)
@@ -1322,13 +1357,17 @@ export class ClientSession implements ClientToolPeer {
       isObject(params) &&
       typeof params.threadId === 'string'
     ) {
-      const background = this.host.nativeBackground?.decorateBackground(
-        params.threadId,
-        params as unknown as import('../../protocol/src/background-tasks.mjs').LitchBackground,
-      )
-      if (background) params = { ...params, ...background }
+      const thread: Record<string, unknown> = { id: params.threadId, litchBackground: params }
+      this.decorateBackground(thread)
+      if (isObject(thread.litchBackground)) params = { ...params, ...thread.litchBackground }
     }
     this.send(JSON.stringify({ method, params }))
+    if (
+      method === 'litch/harness/config/changed' &&
+      isObject(params) &&
+      typeof params.harness === 'string'
+    )
+      this.refreshBackground(params.harness)
   }
 
   /**
@@ -1345,6 +1384,7 @@ export class ClientSession implements ClientToolPeer {
     const copy: Record<string, unknown> = { ...thread, harness }
     this.host.workspaces.decorate(thread.id, copy)
     if (this.declared.has(EXTENSION.sessionTree)) this.host.sessionTree.decorate(copy)
+    if (this.declared.has(EXTENSION.backgroundTasks)) this.decorateBackground(copy)
     if (this.declared.has(EXTENSION.worktrees)) this.host.worktrees?.decorate(copy)
     this.send(JSON.stringify({ method: 'thread/started', params: { thread: copy } }))
   }
@@ -1372,6 +1412,7 @@ export class ClientSession implements ClientToolPeer {
     if (this.announced.get(link.harness) === text) return
     this.announced.set(link.harness, text)
     this.note(info, link.detail)
+    this.refreshBackground(link.harness)
     if (this.optOut.has(HARNESS_STATUS_CHANGED)) return
     const params = { harness: link.harness, info }
     this.send(JSON.stringify({ method: HARNESS_STATUS_CHANGED, params }))

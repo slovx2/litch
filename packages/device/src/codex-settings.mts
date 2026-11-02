@@ -10,6 +10,7 @@ import type {
   HarnessSettingSpec,
   HarnessSettingValue,
 } from '../../protocol/src/harness-config.mjs'
+import { supportsNativeBackground } from '../../protocol/src/native-background-wake.mjs'
 import {
   type Ask,
   type CodexSnapshot,
@@ -365,7 +366,14 @@ function permissionSpecs(snapshot: CodexSnapshot): Spec[] {
   ]
 }
 
-function behaviorSpecs(snapshot: CodexSnapshot): Spec[] {
+function behaviorSpecs(snapshot: CodexSnapshot, cliVersion: unknown): Spec[] {
+  const requirement: [string, string] =
+    typeof cliVersion === 'string' && !supportsNativeBackground(cliVersion)
+      ? [
+          `当前 Codex ${cliVersion} 不支持，需 ≥0.163.0，可在设备详情升级。`,
+          `Codex ${cliVersion} does not support this. Requires ≥0.163.0; upgrade in device details.`,
+        ]
+      : ['需要 Codex 0.163.0 及以上。', 'Requires Codex 0.163.0 or later.']
   return [
     autoTitleSpec(),
     {
@@ -375,8 +383,10 @@ function behaviorSpecs(snapshot: CodexSnapshot): Spec[] {
         ['后台任务自动继续', 'Continue after background tasks'],
         true,
         [
-          '新建 Litch 会话可登记原生命令，完成后自动继续。关闭会撤销已登记任务的自动继续，不停止命令。设备或 Codex 重启后不自动续跑。',
-          'New Litch sessions can register native commands for continuation on completion. Turning this off cancels pending continuations without stopping commands. Continuations do not survive device or Codex restarts.',
+          requirement[0] +
+            '新建 Litch 会话可登记原生命令，完成后自动继续。关闭会撤销已登记任务的自动继续，不停止命令。设备或 Codex 重启后不自动续跑。',
+          requirement[1] +
+            ' New Litch sessions can register native commands for continuation on completion. Turning this off cancels pending continuations without stopping commands. Continuations do not survive device or Codex restarts.',
         ],
       ),
       write: { kind: 'backgroundWake' },
@@ -615,6 +625,7 @@ export async function readCodexSettings(
   home: string | null,
   autoTitle: boolean,
   backgroundWake = true,
+  cliVersion?: unknown,
 ): Promise<CodexSettings> {
   const [snapshot, catalog] = await Promise.all([
     readSnapshot(ask, harness),
@@ -624,7 +635,7 @@ export async function readCodexSettings(
     ...defaultsSpecs(snapshot, catalog.models),
     ...contextSpecs(),
     ...permissionSpecs(snapshot),
-    ...behaviorSpecs(snapshot),
+    ...behaviorSpecs(snapshot, cliVersion),
     ...featureSpecs(catalog, snapshot),
     ...toolSpecs(catalog),
     ...memorySpecs(catalog, snapshot),

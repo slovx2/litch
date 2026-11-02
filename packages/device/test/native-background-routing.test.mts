@@ -107,7 +107,7 @@ test('NATIVE-WAKE-ROUTE-002 多连接重复工具只登记一次；新字段仅�
     assert.equal(now.thread.litchBackground.tasks.filter((t: any) => t.litchWake).length, 1)
     const old = await legacy.call('thread/read', { threadId: thread.id, includeTurns: true })
     assert.ok(!JSON.stringify(old).includes('litchWake'))
-    assert.ok(!legacy.raw.some((raw) => raw.includes('litchWake')))
+    assert.ok(!legacy.raw.some((raw) => raw.includes('litchWake') || raw.includes('nativeWake')))
     assert.ok(!plain.raw.some((raw) => raw.includes('litchBackground')))
     assert.equal(client.requests.filter((f) => f.method === 'item/tool/call').length, 0)
   } finally {
@@ -130,3 +130,86 @@ test('NATIVE-WAKE-ROUTE-003 不满足协议下限的原生 Codex 不注入', asy
     await env.close()
   }
 })
+
+for (const version of ['0.157.1', '0.163.0', '0.166.0']) {
+  test(`NATIVE-WAKE-HINT 版本 ${version}：设置可写、工具状态、空会话与扩展隔离`, async () => {
+    const fake = new FakeCodex()
+    fake.cliVersion = version
+    const old = codexThread(88, 400, { status: { type: 'idle' } })
+    fake.threads.push(old)
+    const env = codexRig({ fake })
+    installConfig(fake)
+    try {
+      const client = env.connect()
+      await client.initialize([
+        'harness',
+        'harnessConfig',
+        'backgroundTasks',
+        'nativeBackgroundWake',
+      ])
+      const plain = env.connect()
+      await plain.initialize(['harness', 'backgroundTasks'])
+      const config = await client.call('litch/harness/config/read', { harness: 'codex' })
+      const spec = config.settings.find((s: any) => s.key === 'litch.backgroundWake')
+      assert.equal(spec.default, true)
+      assert.ok(!spec.readOnly)
+      assert.match(spec.description['zh-CN'], /0.163.0/)
+      assert.match(spec.description.en, /0.163.0/)
+      if (version === '0.157.1') {
+        assert.match(spec.description['zh-CN'], /当前 Codex 0.157.1 不支持.*设备详情升级/)
+        assert.match(spec.description.en, /0.157.1 does not support/)
+      }
+      const { thread } = await client.call('thread/start', { harness: 'codex', cwd: '/work' })
+      assert.deepEqual(thread.litchBackground.nativeWake, {
+        enabled: true,
+        installed: version !== '0.157.1',
+        supported: version !== '0.157.1',
+        version,
+      })
+      const resumed = await client.call('thread/resume', { threadId: old.id })
+      assert.equal(resumed.thread.litchBackground.nativeWake.installed, false)
+      const read = await plain.call('thread/read', { threadId: old.id, includeTurns: false })
+      assert.equal(read.thread.litchBackground?.nativeWake, undefined)
+      const listed = await client.call('thread/list', {})
+      assert.equal(
+        listed.data.find((t: any) => t.id === old.id).litchBackground.nativeWake.installed,
+        false,
+      )
+      await client.call('litch/harness/config/write', {
+        harness: 'codex',
+        expectedVersion: config.version,
+        edits: [{ key: 'litch.backgroundWake', value: false }],
+      })
+      await settle()
+      assert.equal(env.device.nativeBackground.enabled('codex'), false)
+      const changed = client.notifications
+        .filter(
+          (n: any) =>
+            n.method === 'litch/thread/background/changed' && n.params.threadId === old.id,
+        )
+        .at(-1)
+      assert.equal((changed?.params as any)?.nativeWake.enabled, false)
+      const latest = await client.call('litch/harness/config/read', { harness: 'codex' })
+      await client.call('litch/harness/config/write', {
+        harness: 'codex',
+        expectedVersion: latest.version,
+        edits: [{ key: 'litch.backgroundWake', value: true }],
+      })
+      assert.equal(env.device.nativeBackground.enabled('codex'), true)
+      if (version === '0.157.1') {
+        fake.cliVersion = '0.163.0'
+        for (const connection of fake.live) connection.drop()
+        const updated = await client.waitFor(
+          (frame: any) =>
+            frame.method === 'litch/thread/background/changed' &&
+            frame.params.threadId === old.id &&
+            frame.params.nativeWake?.version === '0.163.0',
+        )
+        assert.equal((updated.params as any).nativeWake.supported, true)
+        assert.equal((updated.params as any).nativeWake.installed, false, '升级不会给旧会话补工具')
+      }
+    } finally {
+      await env.close()
+    }
+  })
+}

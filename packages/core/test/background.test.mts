@@ -22,6 +22,7 @@ import {
   backgroundHint,
   backgroundStoppable,
   deriveBackground,
+  nativeBackgroundHint,
   projectBackground,
   projectOrigin,
   runningFromTurn,
@@ -234,6 +235,23 @@ test('BG-CORE-003 设备：握手声明 backgroundTasks；集合挂在侧栏摘�
   })
   await settle()
   assert.equal(world.side.sessions.get('a')?.background, null)
+  const nativeWake = { enabled: true, installed: false, supported: true, version: '0.163.0' }
+  world.peer.last().notify('litch/thread/background/changed', {
+    threadId: 'a',
+    tasks: [],
+    wakesOnFinish: false,
+    nativeWake,
+  })
+  await settle()
+  assert.deepEqual(world.side.sessions.get('a')?.background?.nativeWake, nativeWake)
+  world.peer.last().notify('litch/thread/background/changed', {
+    threadId: 'a',
+    tasks: [],
+    wakesOnFinish: false,
+    nativeWake: { ...nativeWake, enabled: false },
+  })
+  await settle()
+  assert.equal(nativeBackgroundHint(world.side.sessions.get('a')?.background), null)
   watched.close()
 })
 
@@ -631,4 +649,31 @@ test('BG-CORE-008 诊断：后台任务数从有变没有时记一行 background
     false,
     '不另记一行命令',
   )
+})
+
+test('空后台集合保留原生工具状态，区分旧版本、未知版本、未安装与已关闭', () => {
+  const nativeWake = { enabled: true, installed: false, supported: false, version: '0.157.1' }
+  const background = projectBackground({ tasks: [], wakesOnFinish: false, nativeWake })
+  assert.equal(background?.running, 0)
+  const entries = backgroundEntries(background, [])
+  assert.equal(entries?.entries.length, 0)
+  assert.deepEqual(nativeBackgroundHint(entries), {
+    key: 'background.native.unsupported',
+    args: { version: '0.157.1' },
+  })
+  assert.equal(
+    nativeBackgroundHint({ nativeWake: { ...nativeWake, version: null } })?.key,
+    'background.native.unknown',
+  )
+  assert.equal(
+    nativeBackgroundHint({ nativeWake: { ...nativeWake, supported: true } })?.key,
+    'background.native.missing',
+  )
+  assert.equal(nativeBackgroundHint({ nativeWake: { ...nativeWake, enabled: false } }), null)
+  assert.equal(
+    nativeBackgroundHint({ nativeWake: { ...nativeWake, supported: true, installed: true } }),
+    null,
+  )
+  assert.equal(projectBackground({ tasks: [], wakesOnFinish: false }), null)
+  assert.equal(projectBackground({ tasks: [], nativeWake: { enabled: true } }), null)
 })

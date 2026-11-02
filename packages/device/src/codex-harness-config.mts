@@ -100,6 +100,7 @@ export class CodexHarnessConfig implements HarnessConfigTranslator {
             this.context.home(),
             this.context.autoTitle.enabled(),
             this.context.backgroundWake?.enabled(),
+            this.context.backgroundWake?.version?.(),
           )
         ).response
       case M.configWrite:

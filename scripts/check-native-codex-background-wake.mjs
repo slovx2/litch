@@ -36,6 +36,13 @@ const respond = (body) => {
   if (stage++ === 0) {
     assert.ok(JSON.stringify(body.tools).includes('litch_background'))
     assert.ok(input.includes('explicit delegation is the exception'))
+    assert.ok(
+      input.includes('You must register finite commands that wait for one event and then exit'),
+    )
+    assert.ok(input.includes('receiving one message or email'))
+    assert.ok(input.includes('waiting for a build to finish'))
+    assert.ok(!input.includes('Do not register dev servers, watchers'))
+    assert.ok(JSON.stringify(body.tools).includes('Register one-shot listeners'))
     return {
       call: {
         namespace: 'functions',

@@ -287,6 +287,7 @@ export {
   backgroundHint,
   backgroundStoppable,
   deriveBackground,
+  nativeBackgroundHint,
   runningFromTurn,
   sessionBackground,
   taskOfItem,

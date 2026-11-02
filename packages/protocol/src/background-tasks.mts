@@ -33,9 +33,11 @@ export interface LitchBackgroundTask {
 
 /**
  * 会话对象上的 `litchBackground`（thread/read、thread/list、thread/resume、thread/started 的会话对象），
- * 也是变化通知的主体。只在有任务（运行中的或这次运行里结束过的）时带
+ * 也是变化通知的主体。有任务或声明了原生工具可用性状态时带
  */
 export interface LitchBackground {
+  /** 原生 Codex 的设置及会话工具状态；仅向声明 nativeBackgroundWake 的连接提供，允许空任务集合。 */
+  nativeWake?: import('./native-background-wake.mjs').NativeBackgroundAvailability
   /** 运行中的在前（按开始时间），结束过的在后（按结束时间倒序，最多 BACKGROUND_ENDED_LIMIT 个） */
   tasks: LitchBackgroundTask[]
   /** 后台任务结束后这个 harness 会不会自己接着做（Claude、dsh 会，原生 codex 不会） */

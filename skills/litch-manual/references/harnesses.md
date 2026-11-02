@@ -145,7 +145,9 @@ still store it in that harness's environment on that device:
 sessions. Append `on` or `off` to change it. In the UI: Devices → Codex → Settings → Config →
 Name sessions automatically. This does not rename existing sessions or change Codex's native settings.
 
-原生 Codex 0.163.0 及以上支持显式后台任务接续。设备详情 → 设置 → 配置中有“后台任务自动继续”（`litch.backgroundWake`），默认开启。新建 Litch 会话获得显式登记有限原生命令的工具，完成后可自动接续；已有会话不会因此补装工具。关闭立即撤销已登记任务的自动继续，不停止原生命令。开启不恢复已取消登记；设备服务或 Codex 重启后不自动续跑。这个设置保存在设备服务中，不修改 Codex 的全局配置。
+原生 Codex 0.163.0 及以上支持显式后台任务接续。设备详情 → 设置 → 配置中有“后台任务自动继续”（`litch.backgroundWake`），默认开启。新建 Litch 会话获得显式登记有限原生命令的工具，完成后可自动接续；已有会话不会因此补装工具。关闭立即撤销已登记任务的自动继续，不停止原生命令。开启不恢复已取消登记；设备服务或 Codex 重启后不自动续跑。这个设置保存在设备服务中，不修改 Codex 的全局配置。桌面和手机设置页标明版本要求；低版本显示当前版本与设备详情升级入口，开关仍可更改。后台任务页以小字说明当前版本不支持、版本无法确认，或本会话未安装登记工具；升级或启用后请新建会话。
+
+Native Codex background continuation requires **0.163.0 or later**. Desktop and mobile settings show the requirement and an upgrade hint for older versions; the switch remains editable. The Background tasks page explains an unsupported or unverified runtime, or a session without the registration tool. Start a new session after upgrading or enabling the feature. Turning it off cancels continuations without stopping commands; turning it back on does not restore cancelled registrations. Device or Codex restarts do not resume this work. The setting stays in Litch and does not modify Codex configuration.
 
 - `scripts/litch harness enable <device> <id>` / `scripts/litch harness disable <device> <id>` turn a
   harness on or off on that device (the `harness.<id>.enabled` setting). Disabling stops its runtime;

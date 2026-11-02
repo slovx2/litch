@@ -57,6 +57,7 @@ export interface BackgroundEntryView {
 }
 
 export interface BackgroundEntriesView {
+  nativeWake?: import('../../protocol/src/native-background-wake.mjs').NativeBackgroundAvailability
   /** 运行中的在前（先开始的在前），已结束的在后（后结束的在前） */
   entries: BackgroundEntryView[]
   /** 还在跑的有几个（输入框上方那一行写的数） */
@@ -66,6 +67,7 @@ export interface BackgroundEntriesView {
 }
 
 export interface SessionBackgroundView {
+  nativeWake?: import('../../protocol/src/native-background-wake.mjs').NativeBackgroundAvailability
   /** 运行中的在前（先开始的在前），已结束的在后（后结束的在前） */
   tasks: BackgroundTaskView[]
   /** 还在跑的有几个 */

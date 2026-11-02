@@ -8,6 +8,7 @@ import {
   backgroundStoppable,
   type DeviceView,
   keys,
+  nativeBackgroundHint,
   type SessionSummary,
 } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
@@ -36,6 +37,7 @@ export function BackgroundScreen({ route, navigation }: Props) {
   const store = useSessionStore(deviceId, sessionId)
   const view = useBackgroundEntries(store)
   const [failure, setFailure] = useState<string | null>(null)
+  const hint = nativeBackgroundHint(view)
   const entries = view?.entries ?? []
   const running = entries.filter((entry) => entry.status === 'running')
   const ended = entries.filter((entry) => entry.status !== 'running')
@@ -83,6 +85,11 @@ export function BackgroundScreen({ route, navigation }: Props) {
       wire={device ? c.wire[device.wire] : undefined}
       testID="background"
     >
+      {hint ? (
+        <Text style={[styles.nativeHint, { color: c.ink3 }]} testID="background:native-hint">
+          {t(hint.key, hint.args)}
+        </Text>
+      ) : null}
       {failure ? (
         <Text style={[styles.failure, { color: c.err }]} testID="background:failure">
           {failure}
@@ -220,6 +227,7 @@ function EntryRow({
 
 const styles = StyleSheet.create({
   failure: { fontSize: 13, paddingHorizontal: 16, paddingVertical: 8 },
+  nativeHint: { fontSize: 12, marginHorizontal: 16, marginBottom: 8 },
   note: { fontSize: 12, maxWidth: 200 },
   none: { fontSize: 13, paddingHorizontal: 16, paddingVertical: 12 },
   row: {

@@ -14,6 +14,7 @@ import {
   type DeviceView,
   type HarnessAbilities,
   keys,
+  nativeBackgroundHint,
   type SessionSummary,
   type TurnView,
 } from '@litch/core'
@@ -50,13 +51,22 @@ export function BackgroundTab({ place }: SideTabProps) {
   const abilities = useAbilities(deviceId, sessionId)
   if (!sessionId) return <div className="side-none dim">{t('background.pick')}</div>
   const entries = view?.entries ?? []
+  const hint = nativeBackgroundHint(view)
+  const note = hint ? (
+    <small className="bg-native-hint dim" data-background-native-hint>
+      {t(hint.key, hint.args)}
+    </small>
+  ) : null
   const chosen = entries.find((entry) => entry.key === picked) ?? null
   // 列表里还没有、但点名要看的子代理（卡片点得比列表推来得早）：照样开它的子代理页
   const agentId = chosen?.source === 'agent' ? chosen.id : agentOf(picked)
   if (entries.length === 0 && agentId === null)
     return (
       <div className="side-none dim" data-background-empty>
-        {t('background.noneEver')}
+        <span>
+          {t('background.noneEver')}
+          {note}
+        </span>
       </div>
     )
   const running = entries.filter((entry) => entry.status === 'running')
@@ -79,6 +89,7 @@ export function BackgroundTab({ place }: SideTabProps) {
       data-session={sessionId}
       data-detail={chosen || agentId ? (agentId ? 'agent' : chosen?.source) : undefined}
     >
+      {note}
       <div className="bg-list" role="listbox" aria-label={t('side.tab.background')}>
         {running.length > 0 ? (
           <>

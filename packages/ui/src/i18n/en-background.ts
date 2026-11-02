@@ -21,6 +21,12 @@ export const enBackground: Record<keyof typeof zhBackground, Entry> = {
   'background.noneEver':
     'No background tasks in this session. Commands still running after a turn ends, subagents, and sub-sessions appear here.',
   'background.pick': 'Open a session to see its background tasks.',
+  'background.native.unsupported':
+    'Background continuation is unavailable: Codex {version} requires an upgrade to ≥0.163.0. Upgrade in device details, then start a new session.',
+  'background.native.unknown':
+    'Background continuation is unavailable: the Codex version could not be verified. Requires 0.163.0 or later; check the runtime in device details.',
+  'background.native.missing':
+    'This session has no background registration tool; it may predate enabling this feature. Start a new session to enable continuation.',
   'background.wakes': 'Continues automatically when done',
   'background.noWake': 'Doesn’t continue automatically',
   'background.wake.watching': 'Continuation registered',

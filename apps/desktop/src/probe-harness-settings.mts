@@ -16,6 +16,8 @@
 export interface HarnessSettingsProbe {
   /** 本机设备上带“详情设置”入口的 harness */
   entries: string[]
+  backgroundRequirement: string
+  backgroundEditable: boolean
   runtimeFlow: string[]
   /** build-01 上声明里没有详情设置的 dsh：有没有入口、点开后的说明 */
   unsupportedEntry: boolean
@@ -445,7 +447,14 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
   )
 
   // ---------- 二、账号（build-01 的 Codex）：浏览器登录经转发、设备码、API key、环境变量、自定义 provider ----------
-  await openSettings('build', 'codex', 'accounts')
+  await openSettings('build', 'codex', 'config')
+  const wakeSetting = await until('Codex 后台登记设置', () =>
+    one('[data-hc-key="litch.backgroundWake"]'),
+  )
+  const backgroundRequirement = text(wakeSetting)
+  const wakeSwitch = wakeSetting.querySelector<HTMLButtonElement>('[role="switch"]')
+  const backgroundEditable = !!wakeSwitch && !wakeSwitch.disabled
+  await click('账号标签', () => tabButton('accounts'))
   const openai = () => card('openai')
   const method = (id: string) => () =>
     one<HTMLButtonElement>(`[data-act="hc-method"][data-method="${id}"]`, openai() ?? document)
@@ -611,6 +620,8 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
 
   return {
     entries,
+    backgroundRequirement,
+    backgroundEditable,
     runtimeFlow,
     unsupportedEntry,
     unsupportedNote,
@@ -667,6 +678,12 @@ export function judgeHarnessSettings(seen: HarnessSettingsProbe): string[] {
     seen.runtimeFlow.join(',') === '1h,default,1h,default,1h',
     `运行设置保存和离开：${seen.runtimeFlow}`,
   )
+  must(
+    seen.backgroundRequirement.includes('0.157.1') &&
+      seen.backgroundRequirement.includes('≥0.163.0'),
+    '后台设置未显示当前版本和要求',
+  )
+  must(seen.backgroundEditable, '旧版本的后台开关不应禁用')
   for (const id of ['claude', 'codex', 'pi', 'dsh']) {
     must(seen.entries.includes(id), `本机的 ${id} 没有“详情设置”入口：${seen.entries.join('、')}`)
   }
