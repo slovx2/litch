@@ -890,24 +890,13 @@ jobs:
           rm -rf "${ANDROID_HOME:?}/cmdline-tools/latest"
           mv "${RUNNER_TEMP}/cmdline-tools/cmdline-tools" "${ANDROID_HOME:?}/cmdline-tools/latest"
           "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --version
-      - name: 装模拟器（仅下载基础设施重试）
+      - name: 准备 Android SDK（仅下载基础设施重试）
         id: phase-1
+        timeout-minutes: 10
         run: |
           yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          for attempt in 1 2 3 4; do
-            start="${SECONDS}"
-            if "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --install emulator 2>&1 | tee "${RUNNER_TEMP}/emulator-download.log" && [ -x "${ANDROID_HOME}/emulator/emulator" ]; then
-              echo "模拟器下载：尝试 ${attempt} 通过，本次 $((SECONDS-start)) 秒；重试 $((attempt-1)) 次。" >> "${GITHUB_STEP_SUMMARY}"
-              exit 0
-            fi
-            echo "模拟器下载：尝试 ${attempt} 失败，本次 $((SECONDS-start)) 秒。" >> "${GITHUB_STEP_SUMMARY}"
-            # 磁盘、许可证或未知错误直接失败；只重试已识别的网络下载错误。
-            if ! grep -Ei 'timed out|connection reset|connection refused|unexpected end|HTTP.*(408|429|500|502|503|504)|SSLHandshakeException|SocketException' "${RUNNER_TEMP}/emulator-download.log"; then
-              exit 1
-            fi
-            sleep 15
-          done
-          exit 1
+          # action 内部也安装这些包；先准备好，使系统镜像下载同样受有限重试与首败日志保护。
+          node scripts/ci/android-sdk-install.mjs
       - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         id: stage-14
         with:
