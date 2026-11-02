@@ -203,9 +203,15 @@ async function install() {
     }
     throw new Error(`字号验收等待超时：${check}`)
   }
+  // 一帧：浏览器画完这一帧后再往下。ResizeObserver 的回调在帧里送达，评论框据此重新定位，
+  // 只等固定时长时，CI 上帧来得慢，量到的是“已经变大、还没挪位”的评论框。
+  const frame = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)))
   const settle = async () => {
     await document.fonts.ready
     await new Promise((resolve) => setTimeout(resolve, 150))
+    // 第一帧送达尺寸变化、组件记下新位置，第二帧把新位置画上去
+    await frame()
+    await frame()
   }
   const open = async (title) => {
     await until(() =>
