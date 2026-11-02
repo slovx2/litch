@@ -1,4 +1,4 @@
-// v3 是可重建缓存与持久授权数据的边界；只在隔离状态目录里验证升级和降级行为。
+// 项目从 v2 起就是持久数据；升级、拒绝打开和失败回滚都只在隔离目录验证。
 import assert from 'node:assert/strict'
 import { readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
@@ -12,45 +12,92 @@ import { ThreadIndex } from '../src/thread-index.mjs'
 import { FakeEngine } from './fake-engine.mjs'
 import { type Rig, rig, tempDir } from './helpers.mjs'
 
-for (const version of [1, 2]) {
-  test(`设备库 v${version}：重建旧结构后设备服务可握手、创建会话`, async () => {
+const fixture = readFileSync(
+  new URL('../../../test/fixtures/device-v0.27.5.sql', import.meta.url),
+  'utf8',
+)
+const preservedTables = [
+  'threads',
+  'projects',
+  'project_threads',
+  'sections',
+  'thread_sections',
+  'imports',
+]
+const snapshot = (db: DatabaseSync) =>
+  Object.fromEntries(
+    preservedTables.map((table) => [table, db.prepare(`SELECT * FROM ${table} ORDER BY 1`).all()]),
+  )
+
+for (const wal of [false, true]) {
+  test(`真实 0.27.5 v2 库升级：项目、多根、归属、分组、置顶、排序和导入记录原样保留（WAL=${wal}）`, async () => {
     const stateDir = tempDir()
+    let old: DatabaseSync | undefined = new DatabaseSync(join(stateDir, 'device.sqlite'))
     let env: Rig | undefined
     try {
-      const old = new DatabaseSync(join(stateDir, 'device.sqlite'))
-      try {
-        initializeStoreFormat(old)
-        // 故意保留不兼容的 threads 结构，防止只是改了版本号却没有重建。
-        old.exec(`PRAGMA user_version=${version};
-          CREATE TABLE threads(old_id TEXT);
-          INSERT INTO threads VALUES('old-thread');
-          CREATE TABLE old_cache(value TEXT);`)
-      } finally {
+      if (wal) old.exec('PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0')
+      old.exec(fixture)
+      const before = snapshot(old)
+      if (!wal) {
         old.close()
+        old = undefined
       }
       env = rig({ pi: new FakeEngine('pi') }, {}, { stateDir })
       const client = env.connect()
-      await client.initialize(['harness', 'projectPermissions'])
-      const created = await client.call('thread/start', { harness: 'pi', cwd: stateDir })
-      assert.equal(typeof created.thread.id, 'string')
-      assert.equal((await client.call(PROJECT_PERMISSION.read, { cwd: stateDir })).permission, null)
+      await client.initialize(['harness', 'deviceWorkspaces', 'projectPermissions'])
+      const projects = (await client.call('project/list')).data
+      assert.deepEqual(
+        projects.map((p: any) => p.name),
+        ['第二项目', '多根项目'],
+      )
+      assert.deepEqual(projects[1].roots, [{ path: '/work/甲' }, { path: '/work/乙' }])
+      assert.equal(
+        (await client.call('threadSection/list')).data.some((s: any) => s.id === 'custom'),
+        true,
+      )
       const db = new DatabaseSync(join(stateDir, 'device.sqlite'), { readOnly: true })
       try {
+        assert.deepEqual(snapshot(db), before)
         assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 4)
-        assert.equal(
-          db.prepare("SELECT name FROM sqlite_master WHERE name='old_cache'").get(),
-          undefined,
-        )
-        assert.equal(
-          db.prepare('SELECT id FROM threads WHERE id=?').get(created.thread.id)?.id,
-          created.thread.id,
-        )
+        assert.equal(db.prepare('SELECT count(*) AS n FROM project_permissions').get()?.n, 0)
+        assert.equal(db.prepare('SELECT count(*) AS n FROM restart_turns').get()?.n, 0)
       } finally {
         db.close()
       }
+      // 再打开必须幂等，不能再次清空或重排。
+      const reopened = openDeviceStore(stateDir)
+      try {
+        assert.deepEqual(snapshot(reopened), before)
+      } finally {
+        reopened.close()
+      }
     } finally {
+      old?.close()
       if (env) await env.close()
       else rmSync(stateDir, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const version of [0, 1, 2]) {
+  test(`未知或损坏的 v${version} 结构拒绝打开，原文件不变`, () => {
+    const stateDir = tempDir()
+    const path = join(stateDir, 'device.sqlite')
+    try {
+      const old = new DatabaseSync(path)
+      initializeStoreFormat(old)
+      old.exec(
+        `PRAGMA user_version=${version}; CREATE TABLE threads(old_id TEXT); INSERT INTO threads VALUES('preserve-me')`,
+      )
+      old.close()
+      const before = readFileSync(path)
+      assert.throws(
+        () => openDeviceStore(stateDir),
+        version < 2 ? /没有可用迁移/ : /no such column/,
+      )
+      assert.deepEqual(readFileSync(path), before)
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true })
     }
   })
 }

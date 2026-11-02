@@ -299,16 +299,16 @@ test('索引：记得住、落了库、临时会话活不过进程、能忘掉�
   }
 })
 
-test('设备库：v3 以前的可重建旧库直接换掉，不是我们的库拒绝', () => {
+test('设备库：v2 升级保留数据，不是我们的库拒绝', () => {
   const dir = tempDir()
   try {
     let db = openDeviceStore(dir)
     new ThreadIndex(db).see({ id: 't1', updatedAt: 1 }, 'pi')
     // 装成上一版结构留下的库
-    db.exec('PRAGMA user_version=1')
+    db.exec('PRAGMA user_version=2')
     db.close()
     db = openDeviceStore(dir)
-    assert.equal(new ThreadIndex(db).lookup('t1'), null)
+    assert.equal(new ThreadIndex(db).lookup('t1'), 'pi')
     assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 4)
     db.close()
     // 空文件就是还没写过的新库
