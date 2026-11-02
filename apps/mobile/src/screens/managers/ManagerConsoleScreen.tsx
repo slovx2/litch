@@ -15,14 +15,22 @@ import {
 import { useIsFocused } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import {
+  Keyboard,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native'
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
 import { sessionMark } from '../../../../../packages/ui/src/sidebar/session-mark.ts'
 import { useSessionPage } from '../../detail/session-page'
 import type { ManagerTab, RootStackParamList } from '../../nav/routes'
 import { useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Empty, StatusMark } from '../../ui/kit/controls'
+import { Empty } from '../../ui/kit/controls'
 import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
@@ -150,7 +158,15 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const issues = useMemo(() => {
     const ids = new Set(idsKey ? idsKey.split(',') : [])
     return ids.size
-      ? { ids, open: (id: string) => (id.startsWith('I-') ? openIssue(id) : setSheet(id)) }
+      ? {
+          ids,
+          open: (id: string) => {
+            // 输入框还拿着焦点时，面板关上后安卓会把焦点还给它、键盘又弹出来：先放掉
+            Keyboard.dismiss()
+            if (id.startsWith('I-')) openIssue(id)
+            else setSheet(id)
+          },
+        }
       : null
   }, [idsKey, openIssue])
   const page = useSessionPage({
@@ -226,10 +242,11 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
       actions={page.actions}
       testID="manager-console"
     >
-      {/* 页签是下划线式，一排放不下（大字号）时横着滚，不换行 */}
+      {/* 页签是下划线式，一排放不下（大字号）时横着滚，不换行。键盘弹着时第一下点击也要切页签，不只是收键盘 */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         role="tablist"
         style={[styles.tabsRow, { borderColor: c.line1, backgroundColor: c.panel, height: hit }]}
         contentContainerStyle={styles.tabs}
@@ -251,7 +268,11 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                 { height: hit, borderBottomColor: on ? c.accent : 'transparent' },
               ]}
             >
-              <Text style={{ color: on ? c.ink : c.ink2, fontWeight: on ? '600' : '400' }}>
+              {/* 换粗细时重建这段字：安卓上原地改 fontWeight 会沿用旧的量宽，“Console” 被裁成 “Consol” */}
+              <Text
+                key={on ? 'on' : 'off'}
+                style={{ color: on ? c.ink : c.ink2, fontWeight: on ? '600' : '400' }}
+              >
                 {t(TAB_LABEL[key])}
               </Text>
               {mark ? (
@@ -283,49 +304,61 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
         {tab === 'chat' ? null : (
           <View style={styles.fill}>
             {tab === 'console' ? (
-              <View style={[styles.categories, narrow ? styles.categoriesNarrow : null]}>
-                {(Object.keys(KINDS) as Category[]).map((k) => {
-                  const on = kind === k
-                  const label = t(
-                    k === 'report' && counts[k] > 0 ? 'manager.reportUnread' : KINDS[k],
-                  )
-                  return (
-                    <Pressable
-                      key={k}
-                      role="radio"
-                      aria-checked={on}
-                      aria-label={counts[k] > 0 ? `${label} ${counts[k]}` : t(KINDS[k])}
-                      testID={`manager-category:${k}`}
-                      hitSlop={{ top: 9, bottom: 9 }}
-                      onPress={() => go('console', k)}
-                      style={[
-                        styles.pill,
-                        narrow ? styles.pillNarrow : null,
-                        {
-                          borderRadius: radius.l,
-                          borderColor: on ? c.accent : c.line2,
-                          backgroundColor: on ? c.sunken : 'transparent',
-                        },
-                      ]}
-                    >
-                      <Text style={{ color: on ? c.ink : c.ink2, fontSize: font.size.meta + 1 }}>
-                        {t(KINDS[k])}
-                      </Text>
-                      {counts[k] > 0 ? (
-                        <Text
-                          testID={
-                            k === 'report'
-                              ? 'manager-reports-unread'
-                              : `manager-category-count:${k}`
-                          }
-                          style={{ color: c.wait, fontSize: font.size.meta + 1, fontWeight: '600' }}
-                        >
-                          {counts[k]}
+              // 类别胶囊放不下（窄屏、英文、大字号）时横着滚，排序固定在行尾
+              <View style={styles.categories}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.fill}
+                  contentContainerStyle={[styles.pills, narrow ? styles.pillsNarrow : null]}
+                >
+                  {(Object.keys(KINDS) as Category[]).map((k) => {
+                    const on = kind === k
+                    const label = t(
+                      k === 'report' && counts[k] > 0 ? 'manager.reportUnread' : KINDS[k],
+                    )
+                    return (
+                      <Pressable
+                        key={k}
+                        role="radio"
+                        aria-checked={on}
+                        aria-label={counts[k] > 0 ? `${label} ${counts[k]}` : t(KINDS[k])}
+                        testID={`manager-category:${k}`}
+                        hitSlop={{ top: 6, bottom: 6 }}
+                        onPress={() => go('console', k)}
+                        style={[
+                          styles.pill,
+                          narrow ? styles.pillNarrow : null,
+                          {
+                            borderRadius: radius.l,
+                            borderColor: on ? c.accent : c.line2,
+                            backgroundColor: on ? c.sunken : 'transparent',
+                          },
+                        ]}
+                      >
+                        <Text style={{ color: on ? c.ink : c.ink2, fontSize: font.size.meta + 1 }}>
+                          {t(KINDS[k])}
                         </Text>
-                      ) : null}
-                    </Pressable>
-                  )
-                })}
+                        {counts[k] > 0 ? (
+                          <Text
+                            testID={
+                              k === 'report'
+                                ? 'manager-reports-unread'
+                                : `manager-category-count:${k}`
+                            }
+                            style={{
+                              color: c.wait,
+                              fontSize: font.size.meta + 1,
+                              fontWeight: '600',
+                            }}
+                          >
+                            {counts[k]}
+                          </Text>
+                        ) : null}
+                      </Pressable>
+                    )
+                  })}
+                </ScrollView>
                 <Pressable
                   accessibilityRole="button"
                   aria-label={`${t('manager.order')}: ${t(`manager.order.${order}`)}`}
@@ -469,15 +502,10 @@ const styles = StyleSheet.create({
   tabNarrow: { paddingHorizontal: 7 },
   count: { borderWidth: 1, paddingHorizontal: 4, minWidth: 18, textAlign: 'center', fontSize: 11 },
   glyph: { fontSize: 12 },
-  categories: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingTop: 6,
-  },
-  categoriesNarrow: { gap: 4, paddingHorizontal: 8, flexWrap: 'nowrap' },
+  categories: { flexDirection: 'row', alignItems: 'center', paddingRight: 8 },
+  // 滚动区会裁掉 hitSlop，上下留 6 让胶囊的点击区够高；整行高度由行尾 44 高的排序按钮定
+  pills: { alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6 },
+  pillsNarrow: { gap: 4, paddingHorizontal: 8 },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',

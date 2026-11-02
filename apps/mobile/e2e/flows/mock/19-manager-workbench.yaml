@@ -1,0 +1,72 @@
+# 模拟核心：手机经理工作台（35-manager 第十七节）。首页“经理”→ m1 落在对话 → 输入框写一句不发 →
+# 切控制台（决策卡）、工作线（线的行）、概览，再切回对话，草稿还在（对话常驻、只是不显示）→
+# 工作线页签点一条线进它的会话页 → 副标题“↰ 经理名”回到经理、落在工作线页签
+appId: dev.litch.app
+name: mock-经理工作台
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- scrollUntilVisible:
+    element:
+      id: devices:managers
+    direction: UP
+    timeout: 10000
+- tapOn:
+    id: devices:managers
+- tapOn:
+    id: manager:m1
+- extendedWaitUntil:
+    visible:
+      id: composer-input
+    timeout: 20000
+- assertVisible:
+    id: manager-tab-badge:console
+- tapOn:
+    id: composer-input
+- inputText: draft e2e
+- hideKeyboard
+- tapOn:
+    id: manager-tab:console
+- extendedWaitUntil:
+    visible:
+      id: manager-issue:D-17
+    timeout: 10000
+- assertNotVisible:
+    id: composer-input
+- tapOn:
+    id: manager-tab:lines
+- extendedWaitUntil:
+    visible:
+      id: manager-line:manager-k1
+    timeout: 10000
+- tapOn:
+    id: manager-tab:overview
+- extendedWaitUntil:
+    visible:
+      id: manager-overview
+    timeout: 10000
+- tapOn:
+    id: manager-tab:chat
+- assertVisible:
+    id: composer-input
+    text: draft e2e
+- tapOn:
+    id: manager-tab:lines
+- tapOn:
+    id: manager-line:manager-k1
+- extendedWaitUntil:
+    visible:
+      id: detail:manager
+    timeout: 15000
+- tapOn:
+    id: detail:manager
+- extendedWaitUntil:
+    visible:
+      id: manager-line:manager-k1
+    timeout: 10000
+- assertVisible:
+    id: manager-tab:lines
