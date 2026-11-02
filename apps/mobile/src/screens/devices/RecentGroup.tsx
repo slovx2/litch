@@ -316,9 +316,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  // 行只有 minHeight：安卓上 height: '100%' 不按行高解析，会把标题行撑得很高；拉满行高用 alignSelf
   headMain: {
     flex: 1,
-    height: '100%',
+    alignSelf: 'stretch',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -326,7 +327,7 @@ const styles = StyleSheet.create({
   },
   chevron: { width: 14, fontSize: 12 },
   headName: { flexShrink: 1, fontSize: 13, fontWeight: '600' },
-  headAction: { width: 44, height: '100%', alignItems: 'center', justifyContent: 'center' },
+  headAction: { width: 44, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   headActionText: { fontSize: 18, fontWeight: '600' },
   project: { paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 4, fontSize: 11 },
   row: { flexDirection: 'row' },

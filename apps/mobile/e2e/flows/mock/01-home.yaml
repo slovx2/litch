@@ -8,10 +8,19 @@ tags: [mock, smoke]
     env:
       MODE: mock
       READY: device:local
-- assertVisible:
-    id: device:build
-- assertVisible:
-    id: device:gpu
+# 首页设备在经理、定时任务、「最近」下面，小屏要滚着看
+- scrollUntilVisible:
+    element:
+      id: device:build
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      id: device:gpu
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      id: device:local
+    direction: UP
 - tapOn:
     id: device:local
 - extendedWaitUntil:

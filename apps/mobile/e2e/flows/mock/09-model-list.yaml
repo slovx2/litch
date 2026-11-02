@@ -36,9 +36,11 @@ tags: [mock]
 - tapOn:
     id: header:back
 # 设备详情里 Codex 的“详情设置”
-- extendedWaitUntil:
-    visible:
+# 刚建的会话进了「最近」，设备行更往下
+- scrollUntilVisible:
+    element:
       id: device:build:more
+    direction: DOWN
     timeout: 15000
 - waitForAnimationToEnd:
     timeout: 3000

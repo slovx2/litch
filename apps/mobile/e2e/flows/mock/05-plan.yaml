@@ -45,6 +45,11 @@ tags: [mock]
     id: header:back
 - tapOn:
     id: header:back
+# 刚建的会话进了「最近」，设备行更往下
+- scrollUntilVisible:
+    element:
+      id: device:nas
+    direction: DOWN
 - tapOn:
     id: device:nas
 - tapOn:

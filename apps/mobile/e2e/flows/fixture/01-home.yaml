@@ -31,6 +31,10 @@ tags: [fixture, smoke]
       text: Pi
 - tapOn:
     id: header:back
+- scrollUntilVisible:
+    element:
+      id: device:fixture
+    direction: DOWN
 - tapOn:
     id: device:fixture
 - extendedWaitUntil:

@@ -104,9 +104,11 @@ tags: [fixture]
     id: header:back
 
 # 收尾：移除设备、撤钥匙，清锁屏密码
-- extendedWaitUntil:
-    visible:
+# 新加的设备在首页经理、定时任务、「最近」下面，小屏要滚下去
+- scrollUntilVisible:
+    element:
       text: .*e2e-pair.*
+    direction: DOWN
     timeout: 30000
 - tapOn:
     id: device:.*:more

@@ -11,9 +11,11 @@ tags: [fixture]
     file: ../_shared/pair.yaml
 - tapOn:
     id: header:back
-- extendedWaitUntil:
-    visible:
+# 新加的设备在首页经理、定时任务、「最近」下面，小屏要滚下去
+- scrollUntilVisible:
+    element:
       text: .*e2e-pair.*
+    direction: DOWN
     timeout: 30000
 - runScript:
     file: ../_shared/pair-phones.js

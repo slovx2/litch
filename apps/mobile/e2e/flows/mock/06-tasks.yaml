@@ -10,9 +10,11 @@ tags: [mock]
       MODE: mock
       READY: device:local
 # 换成模拟核心之后首页会重画一遍（设备一台台进来），等画稳了再点入口，免得点在重画的那一下上
-- extendedWaitUntil:
-    visible:
+# 等 READY 时可能已经滚下去了，入口在顶上
+- scrollUntilVisible:
+    element:
       id: devices:tasks
+    direction: UP
     timeout: 15000
 - waitForAnimationToEnd:
     timeout: 3000
