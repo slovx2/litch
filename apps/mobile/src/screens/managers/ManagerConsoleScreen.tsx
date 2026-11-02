@@ -41,6 +41,7 @@ import { setIssueOrder, useIssueOrder } from './issue-order'
 import { ManagerLines } from './ManagerLines'
 import { ManagerOverview } from './ManagerOverview'
 import { issueCounts, managerRowState, orderedIssues } from './presentation'
+import { useManagerReset } from './use-reset'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ManagerConsole'>
 type Category = ManagerPost['kind']
@@ -93,6 +94,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const suggestions = useKey<readonly SuggestionView[]>(keys.suggestions) ?? []
   const summary = useKey<SessionSummary>(keys.summary(deviceId, manager.threadId))
   const device = useKey<{ connection?: string }>(keys.device(deviceId))
+  const reset = useManagerReset(manager, device?.connection === 'online')
   const order = useIssueOrder()
   const [kind, setKind] = useState<Category>('decision')
   const [ordering, setOrdering] = useState(false)
@@ -174,6 +176,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
     sessionId: manager.threadId,
     title: manager.name || undefined,
     manager: true,
+    menu: reset.menu,
     active: focused && tab === 'chat',
     above: hit,
     issues,
@@ -239,7 +242,21 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
       title={manager.name || t('manager.manager')}
       subtitle={t(stateKey, stateArgs)}
       wire={page.wire}
-      actions={page.actions}
+      actions={page.actions.map((action) =>
+        action.testID === 'detail:menu'
+          ? {
+              ...action,
+              attention: reset.attention,
+              ...(reset.attention
+                ? {
+                    accessibilityLabel: t(
+                      manager.reset?.outdated ? 'manager.resetOutdated' : 'manager.reset',
+                    ),
+                  }
+                : {}),
+            }
+          : action,
+      )}
       testID="manager-console"
     >
       {/* 页签是下划线式，一排放不下（大字号）时横着滚，不换行。键盘弹着时第一下点击也要切页签，不只是收键盘 */}
@@ -461,6 +478,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
         )}
       </View>
       {page.overlays}
+      {reset.overlay}
       <Sheet
         visible={ordering}
         title={t('manager.order')}

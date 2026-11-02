@@ -54,6 +54,34 @@ tags: [mock]
 - assertVisible:
     id: composer-input
     text: draft e2e
+- assertVisible:
+    id: detail:menu:attention
+- tapOn:
+    id: detail:menu
+- tapOn:
+    id: manager:reset
+- assertVisible: "(?s).*(新版本的工具和指令|latest tools and instructions).*"
+- assertVisible: "(?s).*(保留当前会话和完整历史|current conversation and full history are preserved).*"
+- tapOn: "取消|Cancel"
+# 取消没有执行重置，能力提示与原草稿都在
+- assertVisible:
+    id: detail:menu:attention
+- assertVisible:
+    id: composer-input
+    text: draft e2e
+- tapOn:
+    id: detail:menu
+- tapOn:
+    id: manager:reset
+- tapOn:
+    id: confirm:ok
+- extendedWaitUntil:
+    notVisible:
+      id: detail:menu:attention
+    timeout: 10000
+- assertVisible:
+    id: composer-input
+    text: draft e2e
 - tapOn:
     id: manager-tab:lines
 - tapOn:

@@ -16,6 +16,8 @@ export interface HeaderAction {
   disabled?: boolean
   /** 读屏名称：label 只是个记号（⋯、⏱）时给 */
   accessibilityLabel?: string
+  /** 菜单内有需要用户处理的更新，读屏说明由调用方提供。 */
+  attention?: boolean
 }
 
 /** 副标题前半段的链接（工作线的“↰ 经理名”）：整块标题都可点，点击区不小于标题栏高度，不另占一行 */
@@ -167,6 +169,16 @@ export function Screen({
             >
               {action.label}
             </Text>
+            {action.attention ? (
+              <View
+                testID={`${action.testID}:attention`}
+                pointerEvents="none"
+                style={[
+                  styles.attention,
+                  { backgroundColor: c.wait, borderRadius: theme.radius.s },
+                ]}
+              />
+            ) : null}
           </Pressable>
         ))}
       </View>
@@ -176,6 +188,7 @@ export function Screen({
 }
 
 const styles = StyleSheet.create({
+  attention: { position: 'absolute', width: 7, height: 7, top: 7, right: 5 },
   screen: { flex: 1 },
   header: {
     height: 52,

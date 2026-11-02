@@ -327,6 +327,6 @@ const styles = StyleSheet.create({
   dialogBody: { padding: 20, gap: 14 },
   dialogTitle: { fontSize: 17, fontWeight: '600' },
   dialogDetail: { fontSize: 14, lineHeight: 20 },
-  dialogButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
+  dialogButtons: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 10 },
   promptInput: { borderWidth: 1, paddingHorizontal: 12, fontSize: 15 },
 })

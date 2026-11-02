@@ -14,17 +14,21 @@ desktop actions.
 
 ### 重置经理会话 / Reset manager session
 
-桌面经理页右上角的重置图标只能由用户主动操作，每次都会确认。工具或指令比设备当前版本旧时，
+桌面经理页右上角的重置图标、手机经理页“⋯”菜单里的「重置经理会话」只能由用户主动操作，每次都会确认。
+手机能力落后时，“⋯”上显示等待色记号，菜单项也说明有新版本能力。重置过程中菜单项禁用并显示等待原因。
+工具或指令比设备当前版本旧时，
 按钮显示等待色记号。Claude 保留同一会话和完整历史，新能力在下一轮生效；其他引擎先让旧会话写
-交接摘要，再创建同引擎的新会话接手看板与工作线。旧对话只读，可从重置对话框中的历史入口打开。
+交接摘要，再创建同引擎的新会话接手看板与工作线。旧对话只读，可从桌面重置对话框中的历史入口打开。
 其余对话细节不会传入新线程；摘要失败时必须再次确认，才能仅根据看板接手。
 经理自己的回合、后台任务和临时追问停止后才执行，工作线继续运行，回报先排队。
 
-The reset icon at the top right of the desktop manager page always asks for confirmation. An amber
+Use the reset icon at the top right on desktop, or **Reset manager session** in the mobile manager page's **⋯** menu.
+Both always ask for confirmation. On mobile, an amber marker on **⋯** highlights available updates;
+the menu entry is disabled with a waiting explanation while a reset is in progress. An amber
 dot means tools or instructions are behind the connected device's current definitions. Claude keeps
 the same conversation and loads the new capabilities on its next turn. Other harnesses write a
 handover summary and start a new session with the same harness and settings; the board and worklines
-remain. The previous conversation becomes read-only history, accessible from the reset dialog.
+remain. The previous conversation becomes read-only history, accessible from the desktop reset dialog.
 Conversation details outside the summary do not carry over. If summarizing fails, the user must
 confirm again to continue with the board alone. Reset waits for the manager's turn, background tasks
 and temporary questions to finish; worklines continue and reports queue meanwhile.
