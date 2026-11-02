@@ -31,7 +31,7 @@ dispatch and waiting settings; those generated rules are not a text field to edi
 After a manager is created successfully, this desktop remembers the device and, for each device,
 the folder/project, manager harness/model/effort, workline settings, notifications and custom rules.
 The next creation form prefills them; name and first task stay blank. An explicitly chosen device
-or project takes priority. Missing devices, harnesses, models or effort levels fall back to defaults;
+or project takes priority. An entry with no project specified restores the saved project as well as its folder; choosing No project in the form still clears that choice. Missing devices, harnesses, models or effort levels fall back to defaults;
 a removed project becomes a custom folder using the saved path. Cancelled or failed creation and
 edits to an existing manager do not replace these defaults. Like ordinary new-session choices,
 this memory stays on the client and is not shared with the phone (which has no manager creation form).
@@ -320,12 +320,11 @@ the running mark a single ring.
 
 ### 议题显示与操作
 
-决策状态使用文字筛选（○ 待定、✓ 已答复、⊘ 已关闭），与控制台分类分开。追问入口只有一个“▸ 追问”按钮，点开显示追问方式和输入框，再点收起，成功提交后自动收起；决策上的追问随答复一起提交，这一点写在输入框的占位里。编号统一显示 #X-n；桌面鼠标悬停或键盘聚焦会显示标题、状态卡片，手机长按预览。
+决策状态使用文字筛选（○ 待定、✓ 已答复、⊘ 已关闭），与控制台分类分开。没有临时问答时，追问仍从“▸ 追问”展开。已有临时问答的帖子直接显示输入框，默认继续临时会话，可切回经理。桌面追问按 Enter 发送、Shift+Enter 换行，输入法组词时不发送；决策的答复文字框仍按 Enter 换行。经理追问可单独发送，未发送的追问仍随答复批量提交。编号统一显示 #X-n；桌面鼠标悬停或键盘聚焦会显示标题、状态卡片，手机长按预览。
 
 关联按卡片宽度切换：达到 520px 放在右侧，否则顶部折叠。每项显示类型和标题，工作线不显示内部编号。手机的经理事项在控制台之外；已答复和已关闭默认不显示输入区；有旧答案的可点“修改答案”，从未答复的关闭决策先“重新打开”。请你做的交付按钮为唯一主操作，只有输入文字才出现次要提交按钮；已交付或已回复后通过“修改回复”再编辑。
 
-Decision status filters are lightweight text links beneath the issue categories. Questions have a
-labelled composer, mode-specific placeholder and a collapse toggle; successful submission closes it.
+Decision status filters are lightweight text links beneath the issue categories. Questions start behind the existing disclosure. Once a temporary discussion exists, the input stays visible and defaults to that conversation, with a control to ask the manager instead. On desktop, Enter sends a question and Shift+Enter adds a newline; IME composition does not submit. Decision answer text still uses Enter for newlines. Questions to the manager can be sent separately; unsent drafts can still be submitted with answers.
 Hover or keyboard-focus an object reference for its title and status. Links show their type and title
 on separate rows; wide cards put them on the right. On phone, Manager items is separate from Console.
 Answered and closed decisions show their result. Edit answer is available
@@ -399,3 +398,15 @@ requests, follow-ups on issues, marking reports as read, reference previews and 
 Decision answers can still be submitted; follow-up and reply drafts are kept for after the upgrade.
 Any other request the device does not recognize shows the same upgrade advice. Phone behaves the
 same.
+
+### 看板阅读与新版本草稿
+
+桌面看板跟随“对话区字号”，包括概览、控制台、正文和追问。帖子标题旁的箭头可收起正文，保留标题、首行摘要和状态；已处理的决策、请你做、已阅报告和历史建议默认收起。讨论独立收起，首次打开时超过 1200 字符的讨论默认收起。开合选择在当前客户端会话中按帖子记住；收起帖子不妨碍继续已有临时问答。
+
+决策更新后，仅选了选项的旧草稿会清除选择，标题旁提示“已更新，原选项已清除”，不再计入待提交；没有填写的草稿静默清空。有自由文字（包括追问）时保留原文，先确认新版本后再提交。已结束的议题继续保留草稿查看和丢弃入口。手机采用相同规则。推荐选项保留“推荐”标记，直接点选项选择。
+
+The desktop board follows the conversation text size, including overview, console, posts and questions. A chevron beside each post title collapses its body while keeping the title, first-line summary and status. Handled decisions and requests, read reports and historical suggestions start collapsed. Discussions collapse independently and start collapsed when their initial text exceeds 1,200 characters. Each choice is remembered for the current client session. Existing temporary follow-ups remain directly accessible even when the post is collapsed.
+
+When a decision changes, an old draft containing only an option selection is cleared with a compact hint beside the title and no longer counts as pending. Empty drafts clear silently. Drafts containing free text, including questions, retain their text and require confirmation of the new version before submission. Ended issues retain their existing draft review/discard flow. The phone follows the same rules. Recommended options retain their marker; select the option directly.
+
+新建经理入口没有明确指定项目时，项目与目录一起恢复上次保存值；进入表单后仍可手动选择“无项目”。

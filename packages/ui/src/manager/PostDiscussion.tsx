@@ -8,9 +8,16 @@ import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
+import { DiscussionHistory } from './DiscussionHistory.tsx'
 import { DraftEnded } from './DraftEnded.tsx'
 import { useManagerFeatures } from './data.ts'
 import { usePostDrafts } from './post-drafts.ts'
+import {
+  hasTemporaryQuestions,
+  postViewKey,
+  questionMode,
+  submitQuestionOnEnter,
+} from './post-presentation.ts'
 
 export function usePost(manager: ManagerView, id: string) {
   return useKey<ManagerBoardTopicView>(
@@ -46,10 +53,14 @@ export function PostDiscussion({
   disabled = false,
   question,
   onQuestion,
+  questionBlocked = false,
+  compact = false,
 }: {
   manager: ManagerView
   post: ManagerPost | undefined
   disabled?: boolean
+  compact?: boolean
+  questionBlocked?: boolean
   question?: string
   onQuestion?(text: string): void
 }) {
@@ -68,7 +79,7 @@ export function PostDiscussion({
     if (count > submitted.current) setOpen(false)
     submitted.current = count
   }, [count])
-  const [mode, setMode] = useState<'manager' | 'temporary'>('manager')
+  const [selectedMode, setMode] = useState<'manager' | 'temporary' | null>(null)
   const { drafts, write } = usePostDrafts(manager.deviceId, manager.id)
   const draft = post ? drafts[post.id] : undefined
   const [temporary, setTemporary] = useState('')
@@ -79,8 +90,11 @@ export function PostDiscussion({
   const old = !features.posts || (Boolean(onQuestion) && !features.feedback)
   if (!post) return null
   const messages = post.discussion.messages
+  const mode = questionMode(selectedMode, messages)
+  const direct = hasTemporaryQuestions(messages)
+  const expanded = (!compact && open) || direct
   const running = messages.some((q) => q.status === 'running' && q.mode !== 'manager')
-  const locked = disabled || busy || running
+  const locked = disabled || busy || running || (mode === 'manager' && questionBlocked)
   const canTemporary =
     device?.harnesses.find((h) => h.id === manager.harness)?.abilities?.managerQuestions === true
   const value = mode === 'temporary' ? temporary : (question ?? draft?.question ?? '')
@@ -112,7 +126,7 @@ export function PostDiscussion({
     }
   }
   const send = async () => {
-    if (locked || !value.trim()) return
+    if (locked || old || !value.trim() || (ended && mode === 'manager')) return
     setBusy(true)
     setError('')
     try {
@@ -196,39 +210,46 @@ export function PostDiscussion({
           <BoardMarkdown text={draft.question} />
         </DraftEnded>
       ) : null}
-      {events.length ? (
-        <ol className="mg-post-timeline">
-          {events.map((e) => (
-            <li key={e.id} className="mg-post-entry">
-              <header>
-                <b>{e.who}</b> <Stamp at={e.at} />
-              </header>
-              <BoardMarkdown text={e.text} />
-            </li>
-          ))}
-        </ol>
+      {!compact && events.length ? (
+        <DiscussionHistory
+          viewKey={postViewKey(manager.deviceId, manager.id, `${post.id}/discussion`)}
+          text={events.map((event) => event.text).join('\n')}
+        >
+          <ol className="mg-post-timeline">
+            {events.map((e) => (
+              <li key={e.id} className="mg-post-entry">
+                <header>
+                  <b>{e.who}</b> <Stamp at={e.at} />
+                </header>
+                <BoardMarkdown text={e.text} />
+              </li>
+            ))}
+          </ol>
+        </DiscussionHistory>
       ) : null}
-      <button
-        type="button"
-        className="btn ghost"
-        data-act="post-ask"
-        aria-expanded={open && !old}
-        aria-controls={`${inputId}-compose`}
-        disabled={old}
-        title={old ? t('manager.oldDeviceShort') : undefined}
-        onClick={() => setOpen(!open)}
-      >
-        {/* 展开收起只看箭头和 aria-expanded，文字一直是“追问”：下面不再另写标签 */}
-        <span aria-hidden="true">{open && !old ? '▾' : '▸'}</span> {t('manager.postAsk')}
-        {value.trim() && !ended ? ` · ${t('manager.draft')}` : ''}
-      </button>
+      {!direct && !compact ? (
+        <button
+          type="button"
+          className="btn ghost"
+          data-act="post-ask"
+          aria-expanded={open && !old}
+          aria-controls={`${inputId}-compose`}
+          disabled={old}
+          title={old ? t('manager.oldDeviceShort') : undefined}
+          onClick={() => setOpen(!open)}
+        >
+          {/* 展开收起只看箭头和 aria-expanded，文字一直是“追问”：下面不再另写标签 */}
+          <span aria-hidden="true">{open && !old ? '▾' : '▸'}</span> {t('manager.postAsk')}
+          {value.trim() && !ended ? ` · ${t('manager.draft')}` : ''}
+        </button>
+      ) : null}
       {old ? (
         <span className="dim" data-old-device-reason>
           {' '}
           {t('manager.oldDeviceShort')}
         </span>
       ) : null}
-      {open && !old ? (
+      {expanded && !old ? (
         <div className="mg-post-compose" id={`${inputId}-compose`}>
           <fieldset className="mg-question-modes" aria-label={t('manager.questionMode')}>
             <button
@@ -253,7 +274,7 @@ export function PostDiscussion({
           <textarea
             id={inputId}
             className="req-input mg-post-input"
-            // 决策上的追问随“提交给经理”一起交：说明压进占位，不另起一行
+            // 未单独发送的经理追问仍随答复一起交；操作说明只放占位。
             placeholder={t(
               mode === 'temporary'
                 ? 'manager.questionTemporaryPlaceholder'
@@ -268,34 +289,48 @@ export function PostDiscussion({
             aria-label={t('manager.questionInput')}
             data-act="manager-question-input"
             onChange={(e) => change(e.target.value)}
+            onKeyDown={(event) => {
+              if (!submitQuestionOnEnter(event.nativeEvent)) return
+              event.preventDefault()
+              void send()
+            }}
           />
-          {mode === 'manager' && onQuestion ? null : (
-            <button
-              type="button"
-              className="btn"
-              disabled={locked || !value.trim() || (ended && mode === 'manager')}
-              onClick={() => void send()}
-              data-act="post-question-send"
-            >
-              {t('manager.postSubmit')}
-            </button>
-          )}
+          <button
+            type="button"
+            className="ic"
+            aria-label={t('manager.postSubmit')}
+            title={t('manager.postSubmit')}
+            disabled={locked || !value.trim() || (ended && mode === 'manager')}
+            onClick={() => void send()}
+            data-act="post-question-send"
+          >
+            <span aria-hidden="true">↑</span>
+          </button>
         </div>
       ) : null}
       {mode === 'temporary' && messages.length ? (
         <button
           type="button"
-          className="btn ghost"
-          data-act="manager-question-forward"
-          disabled={locked || old || post.discussion.forwarded === messages.length}
-          title={old ? t('manager.oldDeviceShort') : undefined}
-          onClick={() => void forward()}
-        >
-          {t(
+          className="ic"
+          aria-label={t(
             post.discussion.forwarded === messages.length
               ? 'manager.questionForwarded'
               : 'manager.questionForward',
           )}
+          data-act="manager-question-forward"
+          disabled={locked || old || post.discussion.forwarded === messages.length}
+          title={
+            old
+              ? t('manager.oldDeviceShort')
+              : t(
+                  post.discussion.forwarded === messages.length
+                    ? 'manager.questionForwarded'
+                    : 'manager.questionForward',
+                )
+          }
+          onClick={() => void forward()}
+        >
+          <span aria-hidden="true">↗</span>
         </button>
       ) : null}
       {error ? (

@@ -30,7 +30,12 @@ export function managerDevice(devices: DeviceView[], explicit?: string): string 
   )
 }
 
-export function managerWorkspace(deviceId: string): string {
+export function managerWorkspace(
+  deviceId: string,
+  initial?: { deviceId?: string; workspaceId?: string | null },
+): string {
+  // 侧栏普通新建草稿会带 null/空串：它们表示入口没有指定项目，不是清除经理偏好。
+  if (initial?.deviceId === deviceId && initial.workspaceId) return initial.workspaceId
   const id = stored(deviceId).workspaceId
   return typeof id === 'string' ? id : ''
 }

@@ -28,9 +28,11 @@ import {
   type AnswerDrafts,
   cancelAnswerEdit,
   type DecisionDraft,
+  refreshAnswerDrafts,
   useAnswerDrafts,
 } from './drafts.ts'
 import { IssueOrderSelect, useIssueOrder } from './issue-order.tsx'
+import { PostCard } from './PostCard.tsx'
 import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
 import { advancePostDrafts, usePostDrafts } from './post-drafts.ts'
 import { Relations } from './Relations.tsx'
@@ -63,7 +65,7 @@ export function Decisions({
 }) {
   const t = useT()
   const { channel } = useServices()
-  const { drafts, write } = useAnswerDrafts(manager.deviceId, manager.id)
+  const { drafts: savedDrafts, write } = useAnswerDrafts(manager.deviceId, manager.id)
   const { drafts: requestDrafts, write: writeRequests } = useRequestDrafts(
     manager.deviceId,
     manager.id,
@@ -71,6 +73,9 @@ export function Decisions({
   const { drafts: postDrafts, write: writePosts } = usePostDrafts(manager.deviceId, manager.id)
   // 议题在别处答复、关闭、忽略或取消后，草稿不计数、不提交（卡片上另有提示）；重新打开后自动回来
   const board = { decisions, changes, requests, posts }
+  const refreshed = refreshAnswerDrafts(board, savedDrafts)
+  const drafts = refreshed.drafts
+  const [clearedSelections, setClearedSelections] = useState<Set<string>>(new Set())
   const live = liveManagerDrafts(board, {
     decisions: Object.values(drafts),
     requests: Object.values(requestDrafts),
@@ -119,6 +124,16 @@ export function Decisions({
     onBusy(value)
   }
   const [error, setError] = useState('')
+  useLayoutEffect(() => {
+    const refreshed = refreshAnswerDrafts({ decisions, changes }, savedDrafts)
+    if (refreshed.drafts === savedDrafts) return
+    try {
+      write(refreshed.drafts)
+      setClearedSelections((previous) => new Set([...previous, ...refreshed.cleared]))
+    } catch {
+      setError(t('manager.savedFail'))
+    }
+  }, [savedDrafts, decisions, changes, write, t])
   const answers = live.answers.map(({ question: _question, ...answer }) => answer)
   const questions = (features.feedback ? live.questions : []).map((draft) => ({
     decisionId: draft.decisionId,
@@ -365,18 +380,42 @@ export function Decisions({
                 </DraftEnded>
               ) : null
             return (
-              <article
+              <PostCard
                 className="mg-decision"
+                manager={manager}
+                id={decision.id}
+                text={decision.background}
+                closed={decision.status !== 'open'}
+                heading={
+                  <>
+                    <span className="mono dim">{decision.id}</span>
+                    <h3>{decision.title}</h3>
+                    {clearedSelections.has(decision.id) ? (
+                      <small className="dim mg-selection-reset" data-selection-reset role="status">
+                        {t('manager.selectionReset')}
+                      </small>
+                    ) : null}
+                    {draft && !ended ? (
+                      <span className="pill wait">{t('manager.draft')}</span>
+                    ) : null}
+                  </>
+                }
+                discussion={(collapsed) => (
+                  <PostDiscussion
+                    compact={collapsed}
+                    manager={manager}
+                    post={post}
+                    disabled={disabled || busy}
+                    question={draft?.question ?? ''}
+                    questionBlocked={Boolean(stale || ended)}
+                    onQuestion={(question) => change(decision, { question })}
+                  />
+                )}
                 data-decision={decision.id}
                 key={decision.id}
                 data-draft={Boolean(draft) && !ended}
                 tabIndex={-1}
               >
-                <header>
-                  <span className="mono dim">{decision.id}</span>
-                  <h3>{decision.title}</h3>
-                  {draft && !ended ? <span className="pill wait">{t('manager.draft')}</span> : null}
-                </header>
                 <Relations id={decision.id} />
                 <BoardMarkdown text={decision.background} />
                 {decision.blocks.length ? (
@@ -403,6 +442,7 @@ export function Decisions({
                           <button
                             type="button"
                             className="btn"
+                            data-act="manager-confirm-version"
                             disabled={disabled || busy}
                             onClick={() =>
                               change(decision, {
@@ -481,6 +521,7 @@ export function Decisions({
                           <button
                             type="button"
                             className="btn ghost"
+                            data-act="manager-clear-option"
                             onClick={() => change(decision, { optionId: null })}
                           >
                             {t('manager.clearOption')}
@@ -510,17 +551,6 @@ export function Decisions({
                             }}
                           >
                             {t('manager.cancelEdit')}
-                          </button>
-                        ) : null}
-                        {decision.recommend ? (
-                          <button
-                            type="button"
-                            className="btn"
-                            data-act="manager-recommend"
-                            disabled={disabled || busy}
-                            onClick={() => change(decision, { optionId: decision.recommend })}
-                          >
-                            {t('manager.useRecommend')}
                           </button>
                         ) : null}
                         {decision.status === 'open' && ignoring?.id !== decision.id ? (
@@ -621,13 +651,7 @@ export function Decisions({
                     </>
                   )}
                 </div>
-                <PostDiscussion
-                  manager={manager}
-                  post={post}
-                  disabled={disabled || busy}
-                  question={draft?.question ?? ''}
-                  onQuestion={(question) => change(decision, { question })}
-                />
+
                 <footer className="mg-item-meta">
                   <div className="mg-item-meta-row">
                     <span className="mg-meta-label">{t('manager.basis')}</span>
@@ -643,7 +667,7 @@ export function Decisions({
                     </div>
                   ) : null}
                 </footer>
-              </article>
+              </PostCard>
             )
           })}
         </div>

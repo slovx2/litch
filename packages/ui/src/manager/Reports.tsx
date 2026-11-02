@@ -8,6 +8,7 @@ import { useServices } from '../app/services.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { useManagerFeatures } from './data.ts'
 import { useIssueOrder } from './issue-order.tsx'
+import { PostCard } from './PostCard.tsx'
 import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
 import { Relations } from './Relations.tsx'
 export function Reports({
@@ -46,14 +47,33 @@ export function Reports({
       {!posts.length ? <p className="mg-empty">{t('manager.none')}</p> : null}
       {sortManagerIssues(posts, order, (p) => ({ at: p.createdAt, pending: p.unread })).map(
         (post) => (
-          <article className="mg-card" data-report={post.id} tabIndex={-1} key={post.id}>
-            <header>
-              <span className="mono dim">{post.id}</span>
-              <h3 className="grow">{post.title}</h3>
-              <span className={post.unread ? 'pill wait' : 'pill mute'}>
-                {t(post.unread ? 'manager.reportUnread' : 'manager.reportRead')}
-              </span>
-            </header>
+          <PostCard
+            className="mg-card"
+            manager={manager}
+            id={post.id}
+            text={post.body}
+            closed={!post.unread}
+            heading={
+              <>
+                <span className="mono dim">{post.id}</span>
+                <h3 className="grow">{post.title}</h3>
+                <span className={post.unread ? 'pill wait' : 'pill mute'}>
+                  {t(post.unread ? 'manager.reportUnread' : 'manager.reportRead')}
+                </span>
+              </>
+            }
+            discussion={(collapsed) => (
+              <PostDiscussion
+                compact={collapsed}
+                manager={manager}
+                post={post}
+                disabled={disabled}
+              />
+            )}
+            data-report={post.id}
+            tabIndex={-1}
+            key={post.id}
+          >
             <Relations id={post.id} />
             <BoardMarkdown text={post.body} />
             <PostHistory post={post} />
@@ -75,8 +95,7 @@ export function Reports({
                 {t('manager.oldDeviceShort')}
               </span>
             ) : null}
-            <PostDiscussion manager={manager} post={post} disabled={disabled} />
-          </article>
+          </PostCard>
         ),
       )}
       {error ? (

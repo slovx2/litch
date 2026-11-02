@@ -14,6 +14,7 @@ import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { DraftEnded } from './DraftEnded.tsx'
 import { useManagerFeatures } from './data.ts'
 import { useIssueOrder } from './issue-order.tsx'
+import { PostCard } from './PostCard.tsx'
 import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
 import { Relations } from './Relations.tsx'
 import { useRequestDrafts } from './request-drafts.ts'
@@ -85,20 +86,29 @@ export function Requests({
         const editing = request.status === 'open' || (Boolean(draft) && state !== 'ended')
         const locked = disabled || request.status === 'cancelled'
         return (
-          <article
+          <PostCard
             className="mg-card mg-request"
+            manager={manager}
+            id={request.id}
+            text={request.description}
+            closed={request.status !== 'open'}
+            heading={
+              <>
+                <span className="mono dim">{request.id}</span>
+                <h3 className="grow">{request.title}</h3>
+                <span className={request.status === 'open' ? 'pill wait' : 'pill mute'}>
+                  {t(`manager.request.${request.status}`)}
+                </span>
+                {draft && !ended ? <span className="pill wait">{t('manager.draft')}</span> : null}
+              </>
+            }
+            discussion={(collapsed) => (
+              <PostDiscussion compact={collapsed} manager={manager} post={post} disabled={locked} />
+            )}
             data-manager-request={request.id}
             key={request.id}
             tabIndex={-1}
           >
-            <header>
-              <span className="mono dim">{request.id}</span>
-              <h3 className="grow">{request.title}</h3>
-              <span className={request.status === 'open' ? 'pill wait' : 'pill mute'}>
-                {t(`manager.request.${request.status}`)}
-              </span>
-              {draft && !ended ? <span className="pill wait">{t('manager.draft')}</span> : null}
-            </header>
             <Relations id={request.id} />
             <BoardMarkdown text={request.description} />
             <PostHistory post={post} />
@@ -218,7 +228,7 @@ export function Requests({
                 {t('manager.requestEdit')}
               </button>
             ) : null}
-            <PostDiscussion manager={manager} post={post} disabled={locked} />
+
             {request.basis.length || request.links.length ? (
               <footer className="mg-item-meta">
                 {request.basis.length ? (
@@ -235,7 +245,7 @@ export function Requests({
                 ) : null}
               </footer>
             ) : null}
-          </article>
+          </PostCard>
         )
       })}
       {error ? (

@@ -1,5 +1,9 @@
 import { useSyncExternalStore } from 'react'
 import type { ManagerSubmittedAnswer } from '../../../core/src/model-manager.mts'
+import {
+  type ManagerDraftBoard,
+  resetDecisionSelection,
+} from '../../../core/src/projection/manager-drafts.mts'
 
 export interface DecisionDraft extends ManagerSubmittedAnswer {
   question?: string
@@ -80,4 +84,18 @@ export function cancelAnswerEdit(drafts: AnswerDrafts, id: string): AnswerDrafts
   if (draft?.question?.trim()) next[id] = { ...draft, optionId: null, text: '' }
   else delete next[id]
   return next
+}
+
+/** 清空仅选项和空的过期草稿，其他对象与文字草稿保持原引用。 */
+export function refreshAnswerDrafts(board: ManagerDraftBoard, drafts: AnswerDrafts) {
+  const next = { ...drafts }
+  const cleared: string[] = []
+  let changed = false
+  for (const [id, draft] of Object.entries(drafts)) {
+    if (!resetDecisionSelection(board, draft)) continue
+    if (draft.optionId !== null) cleared.push(id)
+    delete next[id]
+    changed = true
+  }
+  return { drafts: changed ? next : drafts, cleared }
 }

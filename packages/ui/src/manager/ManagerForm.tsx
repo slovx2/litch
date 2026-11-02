@@ -63,11 +63,7 @@ export function ManagerForm({
   const [deviceId, setDeviceId] = useState(() => managerDevice(devices, initial.deviceId))
   const device = devices.find((entry) => entry.id === deviceId)
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? []
-  const [workspaceId, setWorkspaceId] = useState(() =>
-    initial.deviceId === deviceId && initial.workspaceId !== undefined
-      ? (initial.workspaceId ?? '')
-      : managerWorkspace(deviceId),
-  )
+  const [workspaceId, setWorkspaceId] = useState(() => managerWorkspace(deviceId, initial))
   const workspace = workspaces.find((entry) => entry.id === workspaceId)
   const [draft, setForm] = useState<ManagerFormDraft>(() => {
     if (manager) return { ...manager, firstTask: '' }

@@ -312,7 +312,26 @@ export function createMockManagers(host: MockManagerHost) {
         })
         if (post.kind === 'decision') {
           const d = board.decisions.find((d) => d.id === post.id)
-          if (d) d.discussion = post.discussion
+          if (d) {
+            d.discussion = post.discussion
+            // 隐藏窗口验收：临时追问更新决策，完整走看板增量和客户端草稿处理。
+            if (given.mode === 'temporary' && given.question === '请更新这项决策的背景（验收）') {
+              const before = copy(d) as unknown as Record<string, unknown>
+              d.revision += 1
+              d.background += `\n\n补充背景 v${d.revision}`
+              d.updatedAt = host.clock.now()
+              board.changes.unshift({
+                id: `mock-change-${++seq}`,
+                objectId: d.id,
+                by: 'manager',
+                at: host.clock.now(),
+                fields: ['background', 'revision'],
+                before,
+                after: copy(d) as unknown as Record<string, unknown>,
+                why: '追问后补充背景',
+              })
+            }
+          }
         }
         if (given.mode === 'manager')
           host.say(

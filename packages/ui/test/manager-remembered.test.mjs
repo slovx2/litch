@@ -177,3 +177,16 @@ test('损坏或不可用的本机存储不报错，非法并发和枚举采用�
   assert.doesNotThrow(() => rememberManager('local', '', saved()))
   assert.equal(recallManager(local, base()).harness, 'a')
 })
+
+test('新建入口没有明确项目时恢复保存项目，空串和 null 不覆盖；明确项目只作用于同一设备', () => {
+  rememberManager('remote', 'infra', { ...saved(), cwd: '/srv/work/infra' })
+  for (const workspaceId of [undefined, null, ''])
+    assert.equal(managerWorkspace('remote', { deviceId: 'remote', workspaceId }), 'infra')
+  assert.equal(managerWorkspace('remote'), 'infra')
+  assert.equal(
+    managerWorkspace('remote', { deviceId: 'remote', workspaceId: 'explicit' }),
+    'explicit',
+  )
+  assert.equal(managerWorkspace('remote', { deviceId: 'local', workspaceId: 'explicit' }), 'infra')
+  assert.equal(recallManager(remote, base()).cwd, '/srv/work/infra')
+})

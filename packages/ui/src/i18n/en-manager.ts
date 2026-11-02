@@ -3,9 +3,14 @@ import { MANAGER_NAMES } from '../../../protocol/src/manager-posts.mts'
 import type { Entry } from './types.ts'
 
 export const enManager = {
+  'manager.selectionReset': 'Updated; selection cleared',
+  'manager.discussion': 'Discussion',
+  'manager.postExpand': 'Expand post',
+  'manager.postCollapse': 'Collapse post',
   'manager.postAskClose': 'Hide question',
   'manager.questionManagerPlaceholder': 'Ask the manager a follow-up question…',
-  'manager.questionDraftPlaceholder': 'Ask the manager… (submitted with your other answers)',
+  'manager.questionDraftPlaceholder':
+    'Ask the manager… (Enter to send, or submit with your answers)',
   'manager.questionTemporaryPlaceholder': 'Ask the temporary assistant…',
   'manager.relationKind.issue': 'Issue',
   'manager.relationKind.item': 'Manager item',
@@ -162,7 +167,6 @@ export const enManager = {
   'manager.unignore': 'Undo ignore',
   'manager.reopenedBy': 'Reopened by the manager',
   'manager.recommend': 'Recommended',
-  'manager.useRecommend': 'Use recommendation',
   'manager.answer': 'Add context or write an answer',
   'manager.basis': 'Basis',
   'manager.checked': 'Last checked {time}',

@@ -130,3 +130,30 @@ test('草稿计数：决策在别处答复后计数归零、不随提交发出�
   assert.deepEqual([...other.ended.requests], ['R-1'])
   assert.deepEqual([...other.ended.posts], ['S-a'])
 })
+
+test('新版本只选项的草稿不计数、不阻塞，文字草稿仍要求确认，已结束仍可查看', () => {
+  const draft = { decisionId: 'D-1', revision: 1, optionId: 'a', text: '' }
+  const board = { decisions: [{ id: 'D-1', revision: 2, status: 'open' as const }], changes: [] }
+  const project = (patch = {}) =>
+    liveManagerDrafts(board, {
+      decisions: [{ ...draft, ...patch }],
+      requests: [],
+      posts: [],
+    })
+  assert.equal(project().count, 0)
+  assert.equal(project().conflict, false)
+  assert.equal(project({ optionId: null }).count, 0)
+  assert.equal(project({ text: '保留说明' }).count, 1)
+  assert.equal(project({ text: '保留说明' }).conflict, true)
+  assert.equal(project({ question: '待发追问' }).conflict, true)
+  const ended = liveManagerDrafts(
+    { ...board, decisions: [{ id: 'D-1', revision: 2, status: 'ignored' }] },
+    {
+      decisions: [draft],
+      requests: [],
+      posts: [],
+    },
+  )
+  assert.equal(ended.count, 0)
+  assert.equal(ended.ended.decisions.has('D-1'), true)
+})

@@ -391,6 +391,7 @@ export {
   type ManagerDraftState,
   postDraftState,
   requestDraftState,
+  resetDecisionSelection,
 } from './projection/manager-drafts.mjs'
 export {
   DEFAULT_MANAGER_ISSUE_ORDER,

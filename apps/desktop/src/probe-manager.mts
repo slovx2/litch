@@ -1,5 +1,12 @@
 // 经理冒烟只操作正式界面，模拟核心负责写答案和生成答复回合。
 export interface ManagerSeen {
+  boardFont: boolean
+  boardFontDetail: string
+  questionEnter: boolean
+  postCollapse: boolean
+  directFollowup: boolean
+  revisionDrafts: boolean
+  recommendationChoice: boolean
   linesState: boolean
   /** 经理行和普通对话的父子树同一套：默认收起、下面一行“› N 个子会话”，点开展开；行高、记号缩进与工作线行一致 */
   treeShape: boolean
@@ -40,6 +47,7 @@ export interface ManagerSeen {
   reportsResumed: boolean
   created: boolean
   creationRemembered: boolean
+  rememberedProject: boolean
   promptKept: boolean
   endedReadOnly: boolean
   endingReadOnly: boolean
@@ -239,6 +247,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   ;(await until('决策页签', () => one<HTMLButtonElement>('[data-board-tab="decisions"]'))).click()
   await click('[data-decision="D-15"] [data-act="post-ask"]')
   await click('[data-decision="D-15"] [data-question-mode="temporary"]')
+  let questionEnter = true
   const askBackground = async (value: string, count: number) => {
     if (!one('[data-decision="D-15"] .mg-post-discussion textarea'))
       await click('[data-decision="D-15"] [data-act="post-ask"]')
@@ -251,7 +260,26 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       () =>
         !one<HTMLButtonElement>('[data-decision="D-15"] [data-act="post-question-send"]')?.disabled,
     )
-    await click('[data-decision="D-15"] [data-act="post-question-send"]')
+    const previousCount = document.querySelectorAll(
+      '[data-decision="D-15"] .mg-post-timeline li',
+    ).length
+    for (const patch of [{ shiftKey: true }, { isComposing: true }, { keyCode: 229 }]) {
+      const event = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        bubbles: true,
+        cancelable: true,
+        ...patch,
+      })
+      input.dispatchEvent(event)
+      questionEnter &&=
+        !event.defaultPrevented &&
+        input.value === value &&
+        document.querySelectorAll('[data-decision="D-15"] .mg-post-timeline li').length ===
+          previousCount
+    }
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    input.dispatchEvent(enter)
+    questionEnter &&= enter.defaultPrevented
     await until(
       '背景问答完成',
       () =>
@@ -261,7 +289,92 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   }
   const turnsBeforeQuestions = document.querySelectorAll('.mg-chat .turn').length
   await askBackground('为什么推荐这个选项？', 1)
+  const directInput = () =>
+    one<HTMLTextAreaElement>('[data-decision="D-15"] [data-act="manager-question-input"]')
+  let directFollowup = Boolean(
+    directInput()?.getClientRects().length &&
+      one('[data-decision="D-15"] [data-question-mode="temporary"][aria-pressed="true"]'),
+  )
+  await click('[data-decision="D-15"] [data-act="post-collapse"]')
+  await until('帖子收起', () => one('[data-decision="D-15"][data-post-collapsed="true"]'))
+  let postCollapse = Boolean(
+    one('[data-decision="D-15"] .mg-post-summary') &&
+      one<HTMLElement>('[data-decision="D-15"] .mg-post-body')?.hidden &&
+      directInput()?.getClientRects().length,
+  )
+  await click('[data-board-tab="overview"]')
+  await click('[data-board-tab="decisions"]')
+  postCollapse &&= Boolean(one('[data-decision="D-15"][data-post-collapsed="true"]'))
+  await click('[data-decision="D-15"] [data-act="post-collapse"]')
   await askBackground('还有哪些影响需要确认？', 2)
+  directFollowup &&= Boolean(directInput()?.getClientRects().length && !directInput()?.value)
+  await click('[data-decision="D-15"] .mg-discussion-history summary')
+  await until(
+    '讨论收起',
+    () => !one<HTMLDetailsElement>('[data-decision="D-15"] .mg-discussion-history')?.open,
+  )
+  await click('[data-decision="D-15"] [data-act="post-collapse"]')
+  await until('卡片收起时不展开历史', () => !one('[data-decision="D-15"] .mg-discussion-history'))
+  await click('[data-decision="D-15"] [data-act="post-collapse"]')
+  postCollapse &&= Boolean(
+    await until('保留讨论收起状态', () => {
+      const history = one<HTMLDetailsElement>('[data-decision="D-15"] .mg-discussion-history')
+      return history && !history.open
+    }),
+  )
+  await click('[data-decision="D-15"] .mg-discussion-history summary')
+  const fontLook = (
+    window as unknown as {
+      __litchLook: {
+        get(): { chatText: number; treeText: number; skin: string }
+        set(patch: { chatText?: number; treeText?: number; skin?: string }): void
+      }
+    }
+  ).__litchLook
+  const oldLook = fontLook.get()
+  let boardFont = true
+  const fontMeasurements: unknown[] = []
+  for (const skin of ['retro', 'human', 'standard']) {
+    const measured: number[][] = []
+    for (const chatText of [0.9, 1.5]) {
+      fontLook.set({ skin, chatText, treeText: chatText === 0.9 ? 1.5 : 0.9 })
+      await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
+      const elements = [
+        '.mg-board',
+        '[data-decision="D-15"] h3',
+        '[data-decision="D-15"] .mg-markdown p',
+        '[data-decision="D-15"] textarea',
+      ].map((selector) => one<HTMLElement>(selector))
+      measured.push(
+        elements.map((element) =>
+          element ? Number.parseFloat(getComputedStyle(element).fontSize) : 0,
+        ),
+      )
+      const board = one<HTMLElement>('.mg-body')
+      fontMeasurements.push({
+        skin,
+        chatText,
+        sizes: measured.at(-1),
+        width: board?.clientWidth,
+        scroll: board?.scrollWidth,
+        elements: elements.map((element) => element?.getBoundingClientRect().width),
+      })
+      boardFont &&= Boolean(
+        board &&
+          board.scrollWidth <= board.clientWidth + 1 &&
+          elements
+            .slice(1)
+            .every(
+              (element) => element && element.getBoundingClientRect().width <= board.clientWidth,
+            ),
+      )
+    }
+    boardFont &&= (measured[0] ?? []).every(
+      (small, index) =>
+        small > 0 && Math.abs((measured[1]?.[index] ?? 0) / small - 1.5 / 0.9) < 0.02,
+    )
+  }
+  fontLook.set(oldLook)
   if (captureQuestions) {
     one('[data-decision="D-15"] .mg-post-discussion')?.scrollIntoView({ block: 'center' })
     await new Promise<void>((resolve) => {
@@ -274,13 +387,67 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('[data-decision="D-15"] [data-act="manager-question-forward"]')
   const questionForwarded = Boolean(
     await until('问答已转给经理', () =>
-      one('[data-act="manager-question-forward"]')?.textContent?.includes('已转给经理'),
+      one('[data-act="manager-question-forward"]')
+        ?.getAttribute('aria-label')
+        ?.includes('已转给经理'),
     ),
   )
 
+  const recommendationChoice = Boolean(
+    one('[data-decision="D-15"] .mg-recommend') &&
+      !one('[data-act="manager-recommend"]') &&
+      ![...document.querySelectorAll('button')].some(
+        (button) =>
+          button.getAttribute('aria-label') === '采用推荐' ||
+          button.textContent?.trim() === '采用推荐',
+      ),
+  )
+  const updateQuestion = '请更新这项决策的背景（验收）'
+  const answerInput = () => {
+    const input = one<HTMLTextAreaElement>('[data-decision="D-15"] [data-act="manager-answer"]')
+    if (!input) throw new Error('缺少决策文字输入框')
+    return input
+  }
+  await click('[data-decision="D-15"] .mg-option:has(.mg-recommend) input')
+  await askBackground(updateQuestion, 3)
+  const selectionReset = await until(
+    '新版清掉仅选项草稿',
+    () =>
+      Boolean(one('[data-decision="D-15"] [data-selection-reset]')) &&
+      !one('[data-decision="D-15"] input:checked') &&
+      !one('.mg-send') &&
+      !one('.mg-conflict'),
+  )
+  fill(answerInput(), '新版仍需核对这段补充')
+  const answerEnter = new KeyboardEvent('keydown', {
+    key: 'Enter',
+    bubbles: true,
+    cancelable: true,
+  })
+  answerInput().dispatchEvent(answerEnter)
+  questionEnter &&= !answerEnter.defaultPrevented
+  await until('文字草稿', () => one('.mg-send'))
+  await askBackground(updateQuestion, 4)
+  const textKept = await until(
+    '新版保留文字要求确认',
+    () =>
+      answerInput().value === '新版仍需核对这段补充' &&
+      Boolean(one('.mg-conflict')) &&
+      one<HTMLButtonElement>('[data-act="manager-submit"]')?.disabled === true,
+  )
+  await click('[data-act="manager-confirm-version"]')
+  const confirmed = await until(
+    '确认新版后文字可交',
+    () => !one<HTMLButtonElement>('[data-act="manager-submit"]')?.disabled,
+  )
+  fill(answerInput(), '')
+  await until('清空文字草稿', () => !one('.mg-send'))
+  await askBackground(updateQuestion, 5)
+  const emptyFollows = !one('.mg-conflict') && !one('.mg-send') && !answerInput().value
+  const revisionDrafts = selectionReset && textKept && confirmed && emptyFollows
   ;(
-    await until('按推荐', () =>
-      one<HTMLButtonElement>('[data-decision="D-15"] [data-act="manager-recommend"]'),
+    await until('选推荐选项', () =>
+      one<HTMLInputElement>('[data-decision="D-15"] .mg-option:has(.mg-recommend) input'),
     )
   ).click()
   const draft = Boolean(await until('本地草稿', () => one('.mg-decision[data-draft="true"]')))
@@ -1008,6 +1175,9 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   fill(input('首个任务'), '')
   await next()
   await until('再次进入运行环境', () => activeStep('runtime'))
+  await chooseFirst('项目')
+  const rememberedWorkspace = field('项目')?.querySelector('select')?.value
+  const rememberedCwd = input('工作目录').value
   await chooseFirst('模型')
   await chooseFirst('强度')
   await next()
@@ -1040,6 +1210,16 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       input('经理设定').value === '记住的经理规则' &&
       JSON.stringify(parameterValues()) === JSON.stringify(rememberedParameters),
   )
+  await next()
+  const rememberedProject = await until(
+    '新建入口同时恢复项目和目录',
+    () =>
+      activeStep('runtime') &&
+      Boolean(rememberedWorkspace) &&
+      field('项目')?.querySelector('select')?.value === rememberedWorkspace &&
+      input('工作目录').value === rememberedCwd,
+  )
+  await tab('basic')
   fill(input('经理设定'), '取消的新建不记住')
   await click('.mg-form-foot button[type="button"]')
   await click(`[data-manager-id="${createdId}"] .mg-pick`)
@@ -1300,6 +1480,13 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const oldDeviceDetail = JSON.stringify({ ...oldChecks, error: oldError })
   treeShapeDetail = JSON.stringify({ ...treeShapeSeen, managerLeft, chatLeft })
   return {
+    boardFont,
+    boardFontDetail: JSON.stringify(fontMeasurements),
+    questionEnter,
+    postCollapse,
+    directFollowup,
+    revisionDrafts,
+    recommendationChoice,
     linesState,
     treeShape: treeShape && rootAligned,
     treeShapeDetail,
@@ -1336,6 +1523,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     reportsResumed,
     created,
     creationRemembered,
+    rememberedProject,
     promptKept,
     endedReadOnly,
     endingReadOnly,
@@ -1377,10 +1565,20 @@ export function judgeManager(seen: ManagerSeen): string[] {
   const messages: Record<
     Exclude<
       keyof ManagerSeen,
-      'ignoreDetail' | 'endedDraftDetail' | 'oldDeviceDetail' | 'treeShapeDetail'
+      | 'ignoreDetail'
+      | 'endedDraftDetail'
+      | 'oldDeviceDetail'
+      | 'treeShapeDetail'
+      | 'boardFontDetail'
     >,
     string
   > = {
+    boardFont: `看板字号未跟随对话倍率，或极端字号溢出：${seen.boardFontDetail}`,
+    questionEnter: '追问 Enter / Shift+Enter / 输入法组词处理错误',
+    postCollapse: '帖子收起没有保留摘要、会话状态或直接续问',
+    directFollowup: '已有临时问答没有直接续问或默认目标错误',
+    revisionDrafts: '新版本的选项清空、文字确认或空草稿跟随错误',
+    recommendationChoice: '推荐标记丢失或采用推荐入口未移除',
     linesState:
       '经理自己只有后台命令、工作线在跑时，经理行仍画成运行中，或没有后台记号、没写明工作线',
     treeShape: `经理一节的树和普通对话的父子树不一致（默认收起、“› N 个子会话”、点开展开；六种外观下工作线标题与记号比经理行多缩进一级、标题列固定、行高一致，经理行与普通对话顶层行左边对齐）：${seen.treeShapeDetail}`,
@@ -1415,6 +1613,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
     reportsStopped: '经理子会话停止回报后没有显示标记',
     reportsResumed: '经理子会话恢复回报后标记没有移除',
     created: '新建经理没有进入经理页',
+    rememberedProject: '新建经理恢复了目录但没有恢复保存项目',
     creationRemembered: '再次新建经理没有预填上次成功创建的参数，或名称、首个任务没有留空',
     promptKept: '经理设定被任务分配选项覆盖',
     endedReadOnly: '已结束经理没有转只读',

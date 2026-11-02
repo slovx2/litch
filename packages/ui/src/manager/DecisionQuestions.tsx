@@ -5,6 +5,7 @@ import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
+import { submitQuestionOnEnter } from './post-presentation.ts'
 
 export function DecisionQuestions({
   manager,
@@ -119,6 +120,11 @@ export function DecisionQuestions({
           aria-label={t('manager.questionInput')}
           placeholder={t('manager.questionInput')}
           data-act="manager-question-input"
+          onKeyDown={(event) => {
+            if (mode !== 'temporary' || !submitQuestionOnEnter(event.nativeEvent)) return
+            event.preventDefault()
+            if (temporary.trim()) void send(false)
+          }}
           onChange={(event) =>
             mode === 'manager' ? onQuestion(event.target.value) : setTemporary(event.target.value)
           }

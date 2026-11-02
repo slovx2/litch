@@ -100,6 +100,17 @@ export interface ManagerDecisionDraft {
   text: string
   question?: string
 }
+/** 仅选项的旧版本草稿直接清掉；自由文字（包括追问）要保留给用户核对。结束的草稿仍走 ended。 */
+export function resetDecisionSelection(
+  board: ManagerDraftBoard,
+  draft: ManagerDecisionDraft,
+): boolean {
+  return (
+    !draft.text.trim() &&
+    !draft.question?.trim() &&
+    decisionDraftState(board, draft.decisionId, draft.revision).state === 'conflict'
+  )
+}
 export interface ManagerRequestDraft {
   requestId: string
   revision: number
@@ -146,7 +157,11 @@ export function liveManagerDrafts<
         : [{ draft: { ...draft, revision: found.revision }, conflict: found.state === 'conflict' }]
     })
   const answered = keep(
-    drafts.decisions.filter((draft) => draft.optionId !== null || draft.text.trim()),
+    drafts.decisions.filter(
+      (draft) =>
+        (draft.optionId !== null || draft.text.trim()) &&
+        !(board && resetDecisionSelection(board, draft)),
+    ),
     decisionState,
   )
   const asked = keep(

@@ -172,7 +172,7 @@
   gap: 16px;
 }
 .mg-stack h3 {
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   margin: 0 0 10px;
 }
 .mg-card,
@@ -193,7 +193,7 @@
 .mg-decision h3 {
   flex: 1;
   margin: 0;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
 }
 .mg-card p,
 .mg-decision > p {
@@ -248,7 +248,7 @@
 .mg-recommend {
   color: var(--accent);
   white-space: nowrap;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
 }
 .mg-actions {
   display: flex;
@@ -260,7 +260,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
   color: var(--ink-3);
   border-top: 1px solid var(--line-1);
   padding-top: 8px;
@@ -302,7 +302,7 @@
 }
 .mg-stats b {
   display: block;
-  font-size: 22px;
+  font-size: calc(22px * var(--fs));
   color: var(--ink);
   margin-bottom: 4px;
 }
@@ -327,12 +327,12 @@
   flex: 1;
   min-width: min(100%, 160px);
   margin: 0;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
   line-height: 1.6;
 }
 .mg-item-id {
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .mg-item-badges {
   display: flex;
@@ -341,7 +341,7 @@
 }
 .mg-item-owner {
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .mg-item-meta {
   display: grid;
@@ -350,7 +350,7 @@
   padding-top: 14px;
   border-top: 1px solid var(--line-1);
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
 }
 .mg-item-meta-row {
   display: contents;
@@ -592,7 +592,7 @@
 }
 .mg-form .mng-sec h2 {
   margin: 0 0 14px;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
 }
 .mg-form select {
   width: 100%;
@@ -889,10 +889,10 @@
   width: 176px;
   margin-left: 16px;
 }
-.mg-request:has(> .mg-relations[data-wide="true"]) {
+.mg-request .mg-post-body:has(> .mg-relations[data-wide="true"]) {
   display: block;
 }
-.mg-request:has(> .mg-relations[data-wide="true"]) > * {
+.mg-request .mg-post-body:has(> .mg-relations[data-wide="true"]) > * {
   margin-bottom: 12px;
 }
 
@@ -921,7 +921,7 @@
 .mg-decision-filter button {
   color: var(--ink-3);
   padding: 4px 0;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   background: transparent;
 }
 .mg-decision-filter button[aria-pressed="true"] {
@@ -961,7 +961,7 @@
 .mg-relation-kind {
   display: block;
   color: var(--ink-3);
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
 }
 [data-act="report-read"] {
   margin-top: 12px;
@@ -993,7 +993,7 @@
   align-items: center;
   gap: 6px;
   margin-left: auto;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
 }
 /* 小字对比度不低于 4.5：用 --ink-2、13px */
 .mg-issue-order-label {
@@ -1058,7 +1058,7 @@
 .mg-closed-note > summary {
   cursor: pointer;
   color: var(--ink-2);
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   padding-block: 4px;
 }
 .mg-closed-note > summary {
@@ -1093,7 +1093,7 @@
 }
 .mg-ignore > p {
   margin: 0 0 8px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
 }
 .mg-ignore .mg-actions {
   justify-content: flex-end;
@@ -1131,4 +1131,71 @@
 }
 .mg-draft-discard .mg-actions {
   margin: 6px 0 0;
+}
+
+/* 看板沿用对话字号；子组件在使用处计算，正文只继承一次。 */
+.mg-board {
+  --fs: var(--fs-chat);
+  font-size: calc(13px * var(--fs));
+}
+.mg-board :is(.btn, .seg button, .side-tab) {
+  font-size: inherit;
+}
+.mg-post-body {
+  min-width: 0;
+  display: flow-root;
+}
+.mg-post-body[hidden] {
+  display: none;
+}
+.mg-request .mg-post-body {
+  display: grid;
+  gap: 12px;
+}
+.mg-request .mg-post-body[hidden] {
+  display: none;
+}
+.mg-card > header,
+.mg-decision > header {
+  flex-wrap: nowrap;
+}
+.mg-card > header h3,
+.mg-decision > header h3 {
+  min-width: 0;
+}
+.mg-post-summary {
+  margin: 0;
+  color: var(--ink-2);
+}
+.mg-board :is(h3, .mg-post-body, .mg-post-discussion) {
+  overflow-wrap: anywhere;
+}
+
+.mg-selection-reset {
+  font-size: calc(11px * var(--fs));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+.mg-recommend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.mg-discussion-history > summary {
+  cursor: pointer;
+  font-size: calc(12px * var(--fs));
+  color: var(--ink-3);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.mg-board .suggestion-row > .tree-card {
+  display: block;
+}
+.mg-board .suggestion-row > .tree-card > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }

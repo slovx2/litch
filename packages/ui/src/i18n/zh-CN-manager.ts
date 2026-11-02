@@ -3,9 +3,13 @@ import { MANAGER_NAMES } from '../../../protocol/src/manager-posts.mts'
 import type { Entry } from './types.ts'
 
 export const zhManager = {
+  'manager.selectionReset': '已更新，原选项已清除',
+  'manager.discussion': '讨论',
+  'manager.postExpand': '展开帖子',
+  'manager.postCollapse': '收起帖子',
   'manager.postAskClose': '收起追问',
   'manager.questionManagerPlaceholder': '向经理追问…',
-  'manager.questionDraftPlaceholder': '向经理追问…（与其他回答一起提交）',
+  'manager.questionDraftPlaceholder': '向经理追问…（Enter 发送，或与其他回答一起提交）',
   'manager.questionTemporaryPlaceholder': '向临时助手提问…',
   'manager.relationKind.issue': '议题',
   'manager.relationKind.item': '经理事项',
@@ -146,7 +150,6 @@ export const zhManager = {
   'manager.unignore': '撤销忽略',
   'manager.reopenedBy': '经理重新打开',
   'manager.recommend': '推荐',
-  'manager.useRecommend': '采用推荐',
   'manager.answer': '补充说明或填写答复',
   'manager.basis': '依据',
   'manager.checked': '上次核对 {time}',

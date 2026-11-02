@@ -11,6 +11,7 @@ export const textFiles = [
   'comments.css',
   'goal.css',
   'text-size.css',
+  'manager.css',
   'aside.css',
   'background.css',
 ]

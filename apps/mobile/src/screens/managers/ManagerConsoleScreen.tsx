@@ -9,6 +9,7 @@ import {
   managerAttentionCount,
   postDraftState,
   requestDraftState,
+  resetDecisionSelection,
   type SuggestionView,
 } from '@litch/core'
 import { useIsFocused } from '@react-navigation/native'
@@ -19,6 +20,14 @@ import type { ManagerDecisionOption } from '../../../../../packages/protocol/src
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
 import { stamp } from '../../../../../packages/ui/src/app/format.ts'
 import { readWhileOpen } from '../../../../../packages/ui/src/app/read.ts'
+import {
+  hasTemporaryQuestions,
+  postCollapsed,
+  postSummary,
+  postViewKey,
+  questionMode,
+  rememberPostCollapsed,
+} from '../../../../../packages/ui/src/manager/post-presentation.ts'
 import { ProposalActs } from '../../detail/proposals/ProposalActs'
 import type { RootStackParamList } from '../../nav/routes'
 import { jsonFile } from '../../shell/json-file'
@@ -30,6 +39,7 @@ import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { readChoice, writeChoice } from './choice-drafts'
 import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutcome'
+import { DiscussionHistory } from './DiscussionHistory'
 import { DraftEndedNote } from './DraftEndedNote'
 import { Markdown } from './IssueMarkdown'
 import { IssueContext, IssueRelations } from './IssueRelations'
@@ -73,6 +83,7 @@ function OptionChoice({
       style={({ pressed }) => [
         styles.choice,
         {
+          flex: 1,
           minHeight: hit,
           borderColor: selected ? c.accent : c.line1,
           borderWidth: selected ? 2 : 1,
@@ -127,7 +138,9 @@ function Issue({
     }
     setChoiceState(optionId)
   }
-  const [mode, setMode] = useState<'manager' | 'temporary'>('manager')
+  const [selectedMode, setMode] = useState<'manager' | 'temporary' | null>(null)
+  const mode = questionMode(selectedMode, post.discussion.messages)
+  const direct = hasTemporaryQuestions(post.discussion.messages)
   const [asking, setAsking] = useState(false)
   const [history, setHistory] = useState(false)
   const options = board?.decisions.find((d) => d.id === post.id)?.options ?? []
@@ -146,8 +159,19 @@ function Issue({
     )
   })
   const [unreviewed, setUnreviewed] = useState(false)
-  /** 忽略的决策默认收起，点开看理由、撤销忽略 */
-  const [shown, setShown] = useState(false)
+  const viewKey = postViewKey(manager.deviceId, manager.id, post.id)
+  const [collapsed, setCollapsed] = useState(() =>
+    postCollapsed(
+      viewKey,
+      post.kind === 'decision'
+        ? board?.decisions.find((d) => d.id === post.id)?.status !== 'open'
+        : post.kind === 'request'
+          ? board?.requests?.find((r) => r.id === post.id)?.status !== 'open'
+          : post.kind === 'report'
+            ? !post.unread
+            : false,
+    ),
+  )
   /** 正在填忽略理由；null 是没在填 */
   const [ignoring, setIgnoring] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -194,6 +218,31 @@ function Issue({
     }
   }, [hasDraft, draftKey, revision])
   const base = baseFile.read()?.[draftKey] ?? revision
+  const [confirmedRevision, setConfirmedRevision] = useState<number | null>(null)
+  const [selectionReset, setSelectionReset] = useState(false)
+  const resetSelection = Boolean(
+    board &&
+      decision &&
+      resetDecisionSelection(board, {
+        decisionId: decision.id,
+        revision: base,
+        optionId: choice,
+        text: reply,
+        question,
+      }),
+  )
+  useEffect(() => {
+    if (!resetSelection || !decision) return
+    try {
+      writeChoice(draftKey, null)
+      baseFile.write({ ...baseFile.read(), [draftKey]: decision.revision })
+      if (choice) setSelectionReset(true)
+      setChoiceState(null)
+      setConfirmedRevision(decision.revision)
+    } catch (e) {
+      setError(String(e))
+    }
+  }, [resetSelection, decision, draftKey, choice])
   const answerState = !board
     ? null
     : decision
@@ -201,6 +250,8 @@ function Issue({
       : request
         ? requestDraftState(board, request.id, base).state
         : null
+  const answerConflict =
+    answerState === 'conflict' && !resetSelection && confirmedRevision !== revision
   const replyEnded = answerState === 'ended' && Boolean(choice || reply.trim())
   const questionEnded = Boolean(
     board && question.trim() && postDraftState(board, post.id, base).state === 'ended',
@@ -276,7 +327,7 @@ function Issue({
     })
   const submitDecision = (optionId: string | null) =>
     run(async () => {
-      if (!decision) return
+      if (!decision || answerConflict || resetSelection) return
       const result = await channel.command('managers.answers.submit', {
         deviceId: manager.deviceId,
         managerId: manager.id,
@@ -310,12 +361,147 @@ function Issue({
         : ''
   const pending =
     drafted || decision?.status === 'open' || request?.status === 'open' || post.unread
+  const discussion = (
+    <>
+      {!collapsed && post.discussion.messages.length ? (
+        <DiscussionHistory
+          viewKey={`${viewKey}/discussion`}
+          text={post.discussion.messages.map((q) => `${q.question}\n${q.answer ?? ''}`).join('\n')}
+        >
+          {post.discussion.messages
+            .flatMap((q) => [
+              ...(q.question
+                ? [{ id: `${q.id}-q`, at: q.at, who: t('manager.questionYou'), text: q.question }]
+                : []),
+              {
+                id: `${q.id}-a`,
+                at: q.answeredAt ?? q.at,
+                who: t(
+                  q.mode === 'manager'
+                    ? 'manager.questionManagerSpeaker'
+                    : 'manager.questionTemporarySpeaker',
+                ),
+                text:
+                  q.answer ??
+                  t(
+                    q.updatedPost
+                      ? 'manager.postUpdatedReply'
+                      : q.status === 'failed'
+                        ? 'manager.questionFailed'
+                        : 'manager.questionPending',
+                  ),
+              },
+            ])
+            .sort((a, b) => a.at - b.at)
+            .map((entry) => (
+              <View key={entry.id} style={[styles.discussion, { borderColor: c.line1 }]}>
+                <Text style={{ color: c.ink3 }}>
+                  {entry.who} · {stamp(entry.at, Date.now(), t.lang)}
+                </Text>
+                <Markdown text={entry.text} />
+              </View>
+            ))}
+        </DiscussionHistory>
+      ) : null}
+      {!direct && !collapsed ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{
+            expanded: asking && features.posts,
+            disabled: locked || !features.posts,
+          }}
+          disabled={locked || !features.posts}
+          testID={`post-ask:${post.id}`}
+          onPress={() => setAsking(!asking)}
+          style={styles.textLink}
+        >
+          <Text style={{ color: c.ink2 }}>
+            {asking ? '▾' : '▸'} {t(asking ? 'manager.postAskClose' : 'manager.postAsk')}
+          </Text>
+        </Pressable>
+      ) : null}
+      {oldReason('posts')}
+      {((asking && !collapsed) || direct) && features.posts ? (
+        <View style={[styles.askComposer, { borderColor: c.line3, backgroundColor: c.sunken }]}>
+          <View style={styles.actions}>
+            <Button
+              kind={mode === 'manager' ? 'solid' : 'plain'}
+              label={t('manager.questionManager')}
+              onPress={() => setMode('manager')}
+            />
+            {canTemporary ? (
+              <Button
+                kind={mode === 'temporary' ? 'solid' : 'plain'}
+                label={t('manager.questionTemporary')}
+                onPress={() => setMode('temporary')}
+              />
+            ) : null}
+          </View>
+          <Text style={{ color: c.ink3 }}>{t('manager.postAsk')}</Text>
+          <TextInput
+            multiline
+            accessibilityLabel={questionPrompt}
+            placeholder={questionPrompt}
+            placeholderTextColor={c.ink3}
+            style={[styles.input, { color: c.ink, borderColor: c.line1, fontSize: font.size.body }]}
+            value={question}
+            onChangeText={writeQuestion}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('manager.postSubmit')}
+            style={{
+              minHeight: hit,
+              minWidth: hit,
+              alignSelf: 'flex-end',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+            disabled={locked || !question.trim() || (mode === 'manager' && answerConflict)}
+            onPress={() =>
+              void run(async () => {
+                await channel.command('managers.post.question', {
+                  deviceId: manager.deviceId,
+                  managerId: manager.id,
+                  id: post.id,
+                  revision: post.revision,
+                  question,
+                  mode,
+                })
+                writeQuestion('')
+                setAsking(false)
+              })
+            }
+          >
+            <Text style={{ color: c.accent, fontSize: font.size.title }}>↑</Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </>
+  )
   return (
     <View
       style={[styles.card, { borderColor: c.line1, backgroundColor: c.panel }]}
       testID={`manager-issue:${post.id}`}
     >
       <View style={styles.cardHeader}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t(collapsed ? 'manager.postExpand' : 'manager.postCollapse')}
+          accessibilityState={{ expanded: !collapsed }}
+          testID={
+            decision?.status === 'ignored'
+              ? `decision-ignored-toggle:${decision.id}`
+              : `post-collapse:${post.id}`
+          }
+          style={{ minHeight: hit, minWidth: hit, justifyContent: 'center', alignItems: 'center' }}
+          onPress={() => {
+            rememberPostCollapsed(viewKey, !collapsed)
+            setCollapsed(!collapsed)
+          }}
+        >
+          <Text style={{ color: c.ink2 }}>{collapsed ? '▸' : '▾'}</Text>
+        </Pressable>
         <Text style={{ color: c.ink, fontSize: font.size.title, fontWeight: '600', flex: 1 }}>
           {post.kind === 'suggestion' ? t('manager.suggestions') : post.id} · {post.title}
         </Text>
@@ -334,6 +520,15 @@ function Issue({
             {stateLabel}
           </Text>
         ) : null}
+        {selectionReset ? (
+          <Text
+            testID={`selection-reset:${post.id}`}
+            numberOfLines={1}
+            style={{ color: c.ink3, fontSize: font.size.small, flexShrink: 1 }}
+          >
+            {t('manager.selectionReset')}
+          </Text>
+        ) : null}
       </View>
       {pendingReview ? (
         <Button
@@ -342,20 +537,12 @@ function Issue({
           onPress={() => setUnreviewed(!unreviewed)}
         />
       ) : null}
-      {decision?.status === 'ignored' ? (
-        <Pressable
-          accessibilityRole="button"
-          aria-expanded={shown}
-          testID={`decision-ignored-toggle:${decision.id}`}
-          onPress={() => setShown(!shown)}
-          style={[styles.detailsRow, { minHeight: hit }]}
-        >
-          <Text style={{ color: c.ink2 }}>
-            {shown ? '▾' : '▸'} {t(shown ? 'mgr.ignored.hide' : 'mgr.ignored.show')}
-          </Text>
-        </Pressable>
+      {collapsed ? (
+        <Text numberOfLines={1} style={{ color: c.ink2, fontSize: font.size.body }}>
+          {postSummary(post.body)}
+        </Text>
       ) : null}
-      {(!pendingReview || unreviewed) && (decision?.status !== 'ignored' || shown) ? (
+      {(!pendingReview || unreviewed) && !collapsed ? (
         <>
           <IssueRelations id={post.id} />
           <Markdown text={post.body} />
@@ -466,6 +653,36 @@ function Issue({
               {decision.status === 'open' || (editing && !replyEnded) ? (
                 <>
                   {/* 修改答案时照样显示原来的答复，选项上也预先选中原来那一项 */}
+                  {answerConflict ? (
+                    <View style={styles.actions}>
+                      <Text style={{ color: c.wait, fontSize: font.size.meta }}>
+                        {t('manager.conflict')}
+                      </Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t('manager.confirm')}
+                        testID={`decision-confirm:${decision.id}`}
+                        disabled={locked}
+                        style={{
+                          minHeight: hit,
+                          minWidth: hit,
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                        }}
+                        onPress={() => {
+                          try {
+                            baseFile.write({ ...baseFile.read(), [draftKey]: revision })
+                            if (!decision.options.some((o) => o.id === choice)) setChoice(null)
+                            setConfirmedRevision(revision)
+                          } catch (e) {
+                            setError(String(e))
+                          }
+                        }}
+                      >
+                        <Text style={{ color: c.accent }}>✓</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
                   <DecisionAnswer decision={decision} />
                   <DecisionHistory decision={decision} />
                   {/* 确认忽略时收起作答区：一张卡上只留“确认忽略”一个主按钮 */}
@@ -478,7 +695,7 @@ function Issue({
                             decisionId={decision.id}
                             option={o}
                             recommend={decision.recommend === o.id}
-                            selected={choice === o.id}
+                            selected={!resetSelection && choice === o.id}
                             disabled={locked}
                             onSelect={() => setChoice(choice === o.id ? null : o.id)}
                           />
@@ -496,18 +713,12 @@ function Issue({
                       <View style={styles.actions}>
                         <Button
                           testID={`decision-submit:${decision.id}`}
-                          disabled={locked || (!choice && !reply.trim())}
+                          disabled={
+                            locked || answerConflict || resetSelection || (!choice && !reply.trim())
+                          }
                           label={t('manager.submit')}
                           onPress={() => void submitDecision(choice)}
                         />
-                        {decision.recommend && choice !== decision.recommend ? (
-                          <Button
-                            kind="plain"
-                            disabled={locked}
-                            label={t('manager.useRecommend')}
-                            onPress={() => setChoice(decision.recommend)}
-                          />
-                        ) : null}
                         {choice ? (
                           <Button
                             kind="plain"
@@ -562,7 +773,7 @@ function Issue({
                                 ...(ignoring.trim() ? { reason: ignoring.trim() } : {}),
                               })
                               setIgnoring(null)
-                              setShown(false)
+                              setCollapsed(true)
                             })
                           }
                         />
@@ -634,103 +845,9 @@ function Issue({
               )}
             </>
           ) : null}
-          {post.discussion.messages
-            .flatMap((q) => [
-              ...(q.question
-                ? [{ id: `${q.id}-q`, at: q.at, who: t('manager.questionYou'), text: q.question }]
-                : []),
-              {
-                id: `${q.id}-a`,
-                at: q.answeredAt ?? q.at,
-                who: t(
-                  q.mode === 'manager'
-                    ? 'manager.questionManagerSpeaker'
-                    : 'manager.questionTemporarySpeaker',
-                ),
-                text:
-                  q.answer ??
-                  t(
-                    q.updatedPost
-                      ? 'manager.postUpdatedReply'
-                      : q.status === 'failed'
-                        ? 'manager.questionFailed'
-                        : 'manager.questionPending',
-                  ),
-              },
-            ])
-            .sort((a, b) => a.at - b.at)
-            .map((entry) => (
-              <View key={entry.id} style={[styles.discussion, { borderColor: c.line1 }]}>
-                <Text style={{ color: c.ink3 }}>
-                  {entry.who} · {stamp(entry.at, Date.now(), t.lang)}
-                </Text>
-                <Markdown text={entry.text} />
-              </View>
-            ))}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{
-              expanded: asking && features.posts,
-              disabled: locked || !features.posts,
-            }}
-            disabled={locked || !features.posts}
-            testID={`post-ask:${post.id}`}
-            onPress={() => setAsking(!asking)}
-            style={styles.textLink}
-          >
-            <Text style={{ color: c.ink2 }}>
-              {asking ? '▾' : '▸'} {t(asking ? 'manager.postAskClose' : 'manager.postAsk')}
-            </Text>
-          </Pressable>
-          {oldReason('posts')}
-          {asking && features.posts ? (
-            <View style={[styles.askComposer, { borderColor: c.line3, backgroundColor: c.sunken }]}>
-              <View style={styles.actions}>
-                <Button
-                  kind={mode === 'manager' ? 'solid' : 'plain'}
-                  label={t('manager.questionManager')}
-                  onPress={() => setMode('manager')}
-                />
-                {canTemporary ? (
-                  <Button
-                    kind={mode === 'temporary' ? 'solid' : 'plain'}
-                    label={t('manager.questionTemporary')}
-                    onPress={() => setMode('temporary')}
-                  />
-                ) : null}
-              </View>
-              <Text style={{ color: c.ink3 }}>{t('manager.postAsk')}</Text>
-              <TextInput
-                multiline
-                accessibilityLabel={questionPrompt}
-                placeholder={questionPrompt}
-                placeholderTextColor={c.ink3}
-                style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
-                value={question}
-                onChangeText={writeQuestion}
-              />
-              <Button
-                label={t('manager.postSubmit')}
-                disabled={locked || !question.trim()}
-                onPress={() =>
-                  void run(async () => {
-                    await channel.command('managers.post.question', {
-                      deviceId: manager.deviceId,
-                      managerId: manager.id,
-                      id: post.id,
-                      revision: post.revision,
-                      question,
-                      mode,
-                    })
-                    writeQuestion('')
-                    setAsking(false)
-                  })
-                }
-              />
-            </View>
-          ) : null}
         </>
       ) : null}
+      {!pendingReview || unreviewed ? discussion : null}
       {error ? (
         <Text accessibilityRole="alert" style={{ color: c.err }}>
           {error}

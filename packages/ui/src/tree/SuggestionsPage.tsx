@@ -20,6 +20,7 @@ import { Close, Forward, Icon } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { BoardMarkdown } from '../manager/BoardMarkdown.tsx'
 import { useIssueOrder } from '../manager/issue-order.tsx'
+import { PostCard } from '../manager/PostCard.tsx'
 import { PostDiscussion, PostHistory } from '../manager/PostDiscussion.tsx'
 import { Relations } from '../manager/Relations.tsx'
 import { Brief, ProposalActs } from './ProposalCard.tsx'
@@ -45,7 +46,91 @@ function SuggestionRow({
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? []
   const workspace = source.project ?? workspaces.find((entry) => entry.roots.includes(source.cwd))
   const online = device?.connection === 'online'
-  return (
+  const heading = (
+    <>
+      <b className="prop-title grow">{proposal.title}</b>
+      {!reviewedSuggestion(row) ? (
+        <span className="pill mute suggestion-review-label">{t('suggestions.unreviewed')}</span>
+      ) : null}
+    </>
+  )
+  const body = (
+    <>
+      <div className="prop-meta">
+        <button
+          type="button"
+          className="btn ghost suggestion-source"
+          data-act="open-source"
+          disabled={!online}
+          title={!online ? t('suggestions.offline') : t('suggestions.openSource')}
+          onClick={() => onOpen({ deviceId, sessionId: source.threadId }, source.archived)}
+        >
+          <span className="ell">{source.title}</span>
+          <Forward />
+        </button>
+        {source.archived ? <span className="pill mute">{t('suggestions.archived')}</span> : null}
+        <span>{device ? t.text(device.name) : deviceId}</span>
+        <span className="mono ell" title={source.cwd}>
+          {workspace?.name ?? source.cwd}
+        </span>
+        <time
+          dateTime={new Date(proposal.createdAt).toISOString()}
+          title={new Date(proposal.createdAt).toLocaleString()}
+        >
+          {ago(proposal.createdAt, now, t)}
+        </time>
+      </div>
+      {manager ? <Relations id={`S-${proposal.id}`} /> : null}
+      {manager ? (
+        <>
+          {proposal.background ? <BoardMarkdown text={proposal.background} /> : null}
+          <BoardMarkdown text={proposal.prompt} />
+        </>
+      ) : (
+        <Brief prompt={proposal.prompt} background={proposal.background} />
+      )}
+      <PostHistory post={post} />
+      {proposal.widerSandbox ? (
+        <p className="prop-wider">
+          {t('proposal.wider', { level: t(SANDBOX_LEVEL[proposal.widerSandbox]) })}
+        </p>
+      ) : null}
+      {!online ? <p className="dim">{t('suggestions.offline')}</p> : null}
+      {source.archived ? <p className="dim">{t('suggestions.restore')}</p> : null}
+      <ProposalActs
+        deviceId={deviceId}
+        sessionId={source.threadId}
+        proposal={proposal}
+        inbox
+        sourceParent={{
+          id: source.threadId,
+          harness: source.harness,
+          title: source.title,
+          cwd: source.cwd,
+          workspaceId: workspace?.id ?? null,
+        }}
+      />
+    </>
+  )
+  return manager ? (
+    <li className="suggestion-row">
+      <PostCard
+        manager={manager}
+        id={`S-${proposal.id}`}
+        text={post?.body ?? proposal.prompt}
+        className="tree-card prop-card"
+        data-state={proposal.status}
+        data-proposal={proposal.id}
+        tabIndex={-1}
+        heading={heading}
+        discussion={(collapsed) => (
+          <PostDiscussion compact={collapsed} manager={manager} post={post} disabled={!online} />
+        )}
+      >
+        <div className="prop-body">{body}</div>
+      </PostCard>
+    </li>
+  ) : (
     <li
       className="tree-card prop-card suggestion-row"
       data-state={proposal.status}
@@ -53,65 +138,8 @@ function SuggestionRow({
       tabIndex={-1}
     >
       <div className="prop-body">
-        <b className="prop-title">{proposal.title}</b>
-        {!reviewedSuggestion(row) ? (
-          <span className="pill mute suggestion-review-label">{t('suggestions.unreviewed')}</span>
-        ) : null}
-        <div className="prop-meta">
-          <button
-            type="button"
-            className="btn ghost suggestion-source"
-            data-act="open-source"
-            disabled={!online}
-            title={!online ? t('suggestions.offline') : t('suggestions.openSource')}
-            onClick={() => onOpen({ deviceId, sessionId: source.threadId }, source.archived)}
-          >
-            <span className="ell">{source.title}</span>
-            <Forward />
-          </button>
-          {source.archived ? <span className="pill mute">{t('suggestions.archived')}</span> : null}
-          <span>{device ? t.text(device.name) : deviceId}</span>
-          <span className="mono ell" title={source.cwd}>
-            {workspace?.name ?? source.cwd}
-          </span>
-          <time
-            dateTime={new Date(proposal.createdAt).toISOString()}
-            title={new Date(proposal.createdAt).toLocaleString()}
-          >
-            {ago(proposal.createdAt, now, t)}
-          </time>
-        </div>
-        {manager ? <Relations id={`S-${proposal.id}`} /> : null}
-        {manager ? (
-          <>
-            {proposal.background ? <BoardMarkdown text={proposal.background} /> : null}
-            <BoardMarkdown text={proposal.prompt} />
-          </>
-        ) : (
-          <Brief prompt={proposal.prompt} background={proposal.background} />
-        )}
-        <PostHistory post={post} />
-        {proposal.widerSandbox ? (
-          <p className="prop-wider">
-            {t('proposal.wider', { level: t(SANDBOX_LEVEL[proposal.widerSandbox]) })}
-          </p>
-        ) : null}
-        {!online ? <p className="dim">{t('suggestions.offline')}</p> : null}
-        {source.archived ? <p className="dim">{t('suggestions.restore')}</p> : null}
-        <ProposalActs
-          deviceId={deviceId}
-          sessionId={source.threadId}
-          proposal={proposal}
-          inbox
-          sourceParent={{
-            id: source.threadId,
-            harness: source.harness,
-            title: source.title,
-            cwd: source.cwd,
-            workspaceId: workspace?.id ?? null,
-          }}
-        />
-        {manager ? <PostDiscussion manager={manager} post={post} disabled={!online} /> : null}
+        {heading}
+        {body}
       </div>
     </li>
   )
@@ -179,18 +207,24 @@ export function ManagerSuggestions({
             {t('manager.suggestionHistory')} · {history.length}
           </summary>
           {history.map((post) => (
-            <article
+            <PostCard
+              manager={manager}
+              id={post.id}
+              text={post.body}
+              closed
               className="mg-card"
               key={post.id}
               data-proposal={post.proposalId}
               tabIndex={-1}
+              heading={<h3 className="grow">{post.title}</h3>}
+              discussion={(collapsed) => (
+                <PostDiscussion compact={collapsed} manager={manager} post={post} />
+              )}
             >
-              <h3>{post.title}</h3>
               <Relations id={post.id} />
               <BoardMarkdown text={post.body} />
               <PostHistory post={post} />
-              <PostDiscussion manager={manager} post={post} />
-            </article>
+            </PostCard>
           ))}
         </details>
       ) : null}

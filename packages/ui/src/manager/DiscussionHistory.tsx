@@ -1,0 +1,34 @@
+import { type ReactNode, useState } from 'react'
+import { useT } from '../app/appearance.ts'
+import { postCollapsed, postSummary, rememberPostCollapsed } from './post-presentation.ts'
+
+export function DiscussionHistory({
+  viewKey,
+  text,
+  children,
+}: {
+  viewKey: string
+  text: string
+  children: ReactNode
+}) {
+  const t = useT()
+  const [collapsed, setCollapsed] = useState(() => postCollapsed(viewKey, text.length > 1200))
+  return (
+    <details className="mg-discussion-history" open={!collapsed}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: 原生 summary 支持键盘触发 click；同步记忆替代异步 toggle。 */}
+      <summary
+        aria-label={t('manager.discussion')}
+        onClick={(event) => {
+          // 在卸载前同步记住选择；原生 toggle 事件是异步的，快速收起帖子会先卸载讨论。
+          event.preventDefault()
+          rememberPostCollapsed(viewKey, !collapsed)
+          setCollapsed(!collapsed)
+        }}
+      >
+        {t('manager.discussion')}
+        {collapsed ? <span className="ell dim"> · {postSummary(text)}</span> : null}
+      </summary>
+      {children}
+    </details>
+  )
+}
