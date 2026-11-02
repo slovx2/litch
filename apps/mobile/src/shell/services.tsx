@@ -3,7 +3,7 @@
 // - 只从订阅拿数据，不经路由传；按键订阅（useKey），一个键变了只重画用它的那个组件。
 // - 会话详情不走 replica，用 src/core/session-store.ts（对话区为流式专门做过的那一套）。
 // 页面拿到的通道包了一层「最近」的记录（src/shell/activity.ts）：经它发出的主动操作计入最近，核心内部的不算。
-import { type CoreChannel, createReplica, type Replica } from '@litch/core'
+import { type CoreChannel, createReplica, keys, type ManagerView, type Replica } from '@litch/core'
 import {
   createContext,
   type ReactNode,
@@ -116,8 +116,14 @@ export function ServicesProvider({
           current: () => (navigationRef.isReady() ? navigationRef.getCurrentRoute() : undefined),
           listen: (changed) => navigationRef.addListener('state', changed),
         },
+        {
+          get: (deviceId, managerId) =>
+            replica.store.get<ManagerView>(keys.manager(deviceId, managerId))?.threadId,
+          subscribe: (deviceId, managerId, changed) =>
+            replica.store.subscribe(keys.manager(deviceId, managerId), changed),
+        },
       ),
-    [activity],
+    [activity, replica],
   )
   const value = useMemo(
     () => ({ booted, channel: activity.channel, replica, prefs, setPrefs }),

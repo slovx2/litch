@@ -111,7 +111,7 @@ test('未读按后代归并主项；最近只认主动交互，排序不受 upda
   )
 })
 
-test('排除经理及后代、缺失父项、环和未知原生父项；归档不进入活动目录', () => {
+test('经理成为主项、工作线归入经理；缺失父项、环和未知原生父项不进入投影', () => {
   const manager = { ...summary('manager'), litchManager: { role: 'manager', managerId: 'm' } }
   const sessions = map(
     manager,
@@ -125,12 +125,97 @@ test('排除经理及后代、缺失父项、环和未知原生父项；归档�
   const result = projectSidebarGroups('remote', sessions, () => 10)
   assert.deepEqual(
     result.unread.map((row) => row.sessionId),
-    ['normal'],
+    ['manager', 'normal'],
   )
   assert.deepEqual(
     result.recent.map((row) => row.sessionId),
-    ['normal'],
+    ['manager', 'normal'],
   )
+})
+
+test('经理自己的未读和操作可入组，深层工作线不单列，孤立工作线不伪装成主项', () => {
+  const manager = {
+    ...child('manager', 'missing'),
+    litchManager: { role: 'manager', managerId: 'm' },
+    unread: true,
+    updatedAt: 20,
+  }
+  const line = { ...child('line', 'manager'), litchManager: { role: 'line', managerId: 'm' } }
+  const orphan = {
+    ...summary('orphan'),
+    litchManager: { role: 'line', managerId: 'gone' },
+    unread: true,
+  }
+  const sessions = map(
+    child('nested', 'line', { unread: true, updatedAt: 80 }),
+    line,
+    manager,
+    orphan,
+  )
+  const projected = projectSidebarGroups('d', sessions, (id) => (id === 'nested' ? 100 : 0))
+  assert.deepEqual(projected.unread, [
+    { deviceId: 'd', sessionId: 'manager', workspaceId: manager.workspaceId, at: 80 },
+  ])
+  assert.deepEqual(projected.recent, [{ ...projected.unread[0], at: 100 }])
+  assert.equal(projectSidebarGroups('d', map(manager), () => 30).recent[0]?.sessionId, 'manager')
+  sessions.delete('manager')
+  assert.deepEqual(
+    projectSidebarGroups('d', sessions, () => 100),
+    { recent: [], unread: [] },
+  )
+})
+
+test('经理主动操作按经理会话记最近；阅读、拒绝受理、空答复与失败不记', async () => {
+  const time = fakeClock()
+  let response: unknown = {}
+  const channel = {
+    command: async () => {
+      if (response instanceof Error) throw response
+      return response
+    },
+    subscribe: () => () => {},
+    close() {},
+  } as CoreChannel
+  const activity = createSidebarActivity(channel, time.clock)
+  activity.setManagers('d', [{ id: 'manager', threadId: 'thread' }])
+  await activity.channel.command('managers.question.ask', {
+    deviceId: 'd',
+    managerId: 'manager',
+    decisionId: 'D-1',
+    revision: 1,
+    question: '追问',
+  })
+  const at = activity.time('d', 'thread')
+  assert.ok(at > 0)
+  response = { queued: false }
+  await activity.channel.command('managers.question.forward', {
+    deviceId: 'd',
+    managerId: 'manager',
+    decisionId: 'D-1',
+  })
+  response = { accepted: [], rejected: [], delivery: 'none' }
+  await activity.channel.command('managers.answers.submit', {
+    deviceId: 'd',
+    managerId: 'manager',
+    answers: [],
+  })
+  await activity.channel.command('managers.reference.read', {
+    deviceId: 'd',
+    managerId: 'manager',
+    reference: 'note',
+  })
+  response = new Error('offline')
+  await assert.rejects(
+    activity.channel.command('managers.end', { deviceId: 'd', managerId: 'manager' }),
+  )
+  assert.equal(activity.time('d', 'thread'), at)
+  response = { queued: true }
+  await activity.channel.command('managers.question.forward', {
+    deviceId: 'd',
+    managerId: 'manager',
+    decisionId: 'D-1',
+  })
+  assert.ok(activity.time('d', 'thread') > at)
 })
 
 test('跨设备全局排序，先分页后按项目聚合，同名或同 ID 项目不跨设备混合', () => {

@@ -32,7 +32,13 @@ List updates preserve the selected location; removing that projection item selec
 切走会话、离开对话页、窗口失去前台、最小化或隐藏会清零计时，返回后重新计满 5 秒。打开立即清除未读，不用等待，也不会仅因清未读而进入最近。
 发送、插话、回答、批准或拒绝、停止、恢复、提交编辑等成功操作立即更新，不受查看时长限制；
 模型输出、定时任务、后台唤醒、子会话自动回报不更新。首次使用从新的查看和操作开始记录，不读取所有历史回填。
-最近覆盖连接的各台设备，但不跨客户端同步；离线设备保留缓存条目，归档、删除及经理和工作线子树不列入。
+最近覆盖连接的各台设备，但不跨客户端同步；离线设备保留缓存条目，归档、删除的会话不列入。
+经理也进入最近和未读。工作线及其后代归入所属经理，不单独列为主项；桌面默认收在“› N 个子会话”下，可展开。
+经理和普通对话一样：前台连续查看满 5 秒、或成功发送、答复、追问等操作进入最近；新结果沿用未读标记。读取、标记已读、失败或未受理的操作不计入最近。
+点击经理投影进入经理页，工作线进入经理模式下的对应对话；经理模式仍不显示这两组。手机首页最近中的经理同样进入经理页，工作线不单列。
+Managers also appear in Recent and Unread. Their worklines are grouped beneath the manager and collapsed by default on desktop.
+Viewing a manager for five continuous foreground seconds or completing an explicit action records a recent interaction. Reading, marking read, failed and rejected actions do not.
+Manager entries open the manager page on desktop and phone. The projection groups remain hidden in manager mode.
 
 手机首页在定时任务入口之后、各台设备之前显示「最近」，规则与桌面相同：应用在前台、会话页正显示该会话时连续停留满 5 秒才记录；
 切到后台、锁屏、下拉通知中心或离开会话页（回到列表、打开终端、文件、子代理页等）都会清零。在手机上发送、批准、停止等操作立即记录。

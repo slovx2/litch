@@ -14,6 +14,8 @@ export interface SidebarActivity {
   /** 由平台报告窗口/应用是否处于可见前台，默认不是。 */
   setForeground(foreground: boolean): void
   time(deviceId: string, sessionId: string): number
+  /** 常驻经理目录提供 ID 到会话的映射，操作记录不另行查询。 */
+  setManagers(deviceId: string, managers: readonly { id: string; threadId: string }[]): void
   subscribe(listener: (deviceId: string) => void): () => void
   flush(): void
 }
@@ -56,6 +58,39 @@ const INTERACTIONS = new Set<CommandName>([
   'session.queuedNotes.deliver',
 ])
 
+const MANAGER_INTERACTIONS = new Set<CommandName>([
+  'managers.create',
+  'managers.update',
+  'managers.end',
+  'managers.answers.submit',
+  'managers.feedback.submit',
+  'managers.question.ask',
+  'managers.question.forward',
+  'managers.post.forward',
+  'managers.post.question',
+  'managers.decision.reopen',
+  'managers.decision.ignore',
+])
+
+function managerActionAccepted(result: unknown): boolean {
+  if (!result || typeof result !== 'object') return true
+  if ('queued' in result) return result.queued === true
+  if ('accepted' in result) {
+    const response = result as {
+      accepted: unknown[]
+      acceptedRequests?: unknown[]
+      acceptedQuestions?: unknown[]
+    }
+    return (
+      response.accepted.length +
+        (response.acceptedRequests?.length ?? 0) +
+        (response.acceptedQuestions?.length ?? 0) >
+      0
+    )
+  }
+  return true
+}
+
 export interface ActivityStorage {
   load(): unknown
   save(entries: readonly SessionInteraction[]): void
@@ -71,6 +106,7 @@ export function createSidebarActivity(
   storage?: ActivityStorage,
 ): SidebarActivity {
   const times = new Map<string, Map<string, SessionInteraction>>()
+  const managers = new Map<string, Map<string, string>>()
   const listeners = new Set<(deviceId: string) => void>()
   let latest = 0
   let viewed: { deviceId: string; sessionId: string } | null = null
@@ -138,8 +174,21 @@ export function createSidebarActivity(
     channel: {
       async command(name, params, options) {
         // 以用户发起的时刻排序；较慢的应答不能盖过其后发生的查看。
-        const at = INTERACTIONS.has(name) ? stamp() : 0
+        const at = INTERACTIONS.has(name) || MANAGER_INTERACTIONS.has(name) ? stamp() : 0
         const result = await channel.command(name, params, options)
+        if (
+          MANAGER_INTERACTIONS.has(name) &&
+          'deviceId' in params &&
+          managerActionAccepted(result)
+        ) {
+          const target = params as { deviceId: string; managerId?: string }
+          const returned = result as { threadId?: string; manager?: { threadId: string } }
+          const id =
+            returned.threadId ??
+            returned.manager?.threadId ??
+            (target.managerId ? managers.get(target.deviceId)?.get(target.managerId) : undefined)
+          if (id) record(target.deviceId, id, at)
+        }
         if (INTERACTIONS.has(name) && 'deviceId' in params) {
           const target = params as { deviceId: string; sessionId?: string; parentId?: string }
           const id = target.sessionId ?? target.parentId
@@ -177,6 +226,11 @@ export function createSidebarActivity(
       restartVisit()
     },
     time: (deviceId, sessionId) => times.get(deviceId)?.get(sessionId)?.at ?? 0,
+    setManagers(deviceId, entries) {
+      if (entries.length)
+        managers.set(deviceId, new Map(entries.map((entry) => [entry.id, entry.threadId])))
+      else managers.delete(deviceId)
+    },
     subscribe(listener) {
       listeners.add(listener)
       return () => {

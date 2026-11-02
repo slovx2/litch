@@ -5,7 +5,7 @@
 // 设备列表上面是经理的入口（待处理合计）和定时任务的入口（所有设备的任务、没看过的运行合计）；
 // 再往下是「最近」组（RecentGroup），然后才是各台设备。
 // 顶上有新版本时出更新的横条（UpdateBanner）；定时查更新也挂在这一页（首页一直在栈底）。
-import { type DeviceActivity, type DeviceView, keys } from '@litch/core'
+import { type DeviceActivity, type DeviceView, keys, type SessionSummary } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useEffect, useState } from 'react'
 import { AppState, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
@@ -24,6 +24,7 @@ import { forgetUnusedKey } from './forget'
 import { RecentGroup, SectionHead } from './RecentGroup'
 import { RemoveDevice } from './RemoveDevice'
 import { RestartDevice } from './RestartDevice'
+import { recentRoute } from './recent-route'
 import { UpdateBanner } from './UpdateBanner'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Devices'>
@@ -141,6 +142,7 @@ function TasksEntry({ onPress }: { onPress(): void }) {
 export function DevicesScreen({ navigation }: Props) {
   const t = useT()
   const channel = useChannel()
+  const { store } = useReplica()
   const ids = useKey<string[]>(keys.devices) ?? []
   const now = useMinute()
   const [menu, setMenu] = useState<DeviceView | null>(null)
@@ -171,11 +173,13 @@ export function DevicesScreen({ navigation }: Props) {
               <TasksEntry onPress={() => navigation.navigate('Tasks', {})} />
               <RecentGroup
                 onOpen={(row, title) =>
-                  navigation.navigate('Detail', {
-                    deviceId: row.deviceId,
-                    sessionId: row.sessionId,
-                    title,
-                  })
+                  navigation.navigate(
+                    ...recentRoute(
+                      row,
+                      store.get<SessionSummary>(keys.summary(row.deviceId, row.sessionId)),
+                      title,
+                    ),
+                  )
                 }
               />
               <SectionHead label={t('sidebar.devices')} testID="devices:head" />

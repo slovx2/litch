@@ -11,6 +11,7 @@ import {
   type SessionGroups,
   type SessionHarnesses,
   type SessionSummary,
+  type SidebarProjections,
   type WorkspaceView,
 } from '@litch/core'
 import {
@@ -126,6 +127,7 @@ interface RowProps {
   deviceId: string
   sessionId: string
   source?: RowSource
+  projectedUnread?: boolean | undefined
   onSelect(selection: Selection): void
   /** 挂在父会话下面的子会话：行上显示状态点、名字与 harness，别的在信息卡里 */
   nested?: boolean
@@ -142,6 +144,7 @@ const SessionRow = memo(function SessionRow({
   deviceId,
   sessionId,
   source = 'tree',
+  projectedUnread,
   onSelect,
   nested = false,
   kids = 0,
@@ -239,7 +242,8 @@ const SessionRow = memo(function SessionRow({
     )
   }
   // 回合停了、后台任务还在跑：慢呼吸的空心记号，和前台在跑的转圈分开
-  const mark = sessionMark(summary)
+  const unread = projectedUnread ?? summary.unread
+  const mark = sessionMark(unread === summary.unread ? summary : { ...summary, unread })
   // 工作目录不是它所在工作区的根（在子目录里开的，或者从别处挪进来的）：标题后面一个小记号。
   // 行上只有记号；是哪个目录在记号的提示和信息卡里
   const home = workspaces.find((entry) => entry.id === summary.workspaceId)
@@ -256,12 +260,7 @@ const SessionRow = memo(function SessionRow({
     : undefined
   // 所属的 harness 现在用不了：这一行是上次留下的。行上不加字，徽标换个画法，为什么用不了在提示和设备信息卡里
   const down = downHarness(device, summary.harness)
-  const classes = [
-    'ss-row',
-    selected ? 'sel' : '',
-    summary.unread ? 'is-unread' : '',
-    down ? 'down' : '',
-  ]
+  const classes = ['ss-row', selected ? 'sel' : '', unread ? 'is-unread' : '', down ? 'down' : '']
   // 改名、归档、删除、换工作区都要够得着它所属的 harness：设备没连着、或者那个 harness 用不了，都不出。
   // 它声明了自己不会的那几样也不出（没有声明的照旧都出）
   const online = device?.connection === 'online' && !down
@@ -854,6 +853,7 @@ function ProjectedDeviceBlock({
 }) {
   const { kind, block, byProject, showDevice } = projection
   const deviceId = block.deviceId
+  const projections = useKey<SidebarProjections>(keys.sidebarProjections(deviceId))
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
   const sections = useKey<SectionView[]>(keys.sections(deviceId)) ?? NO_SECTIONS
@@ -902,6 +902,9 @@ function ProjectedDeviceBlock({
           sessionId={sessionId}
           onSelect={onSelect}
           source={kind}
+          projectedUnread={
+            depth === 0 ? projections?.unread.some((row) => row.sessionId === sessionId) : undefined
+          }
           nested={depth > 0}
           kids={kids.length}
           folded={shut}

@@ -623,6 +623,7 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
             for (const id of entry.rows.keys()) store.delete(keys.manager(deviceId, id))
             entry.rows.clear()
             for (const manager of view.managers) put(manager)
+            activity?.setManagers(deviceId, [...entry.rows.values()])
             store.set(keys.managerIds(deviceId), [...entry.rows.keys()])
             store.set(keys.managersAvailable(deviceId), view.available)
             store.delete(keys.managersError(deviceId))
@@ -636,6 +637,7 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
               else for (const listener of [...decisionListeners]) listener(op.manager, op.decision)
             }
             const ids = [...entry.rows.keys()]
+            activity?.setManagers(deviceId, [...entry.rows.values()])
             if (JSON.stringify(store.get(keys.managerIds(deviceId))) !== JSON.stringify(ids))
               store.set(keys.managerIds(deviceId), ids)
             pendingManagers()
@@ -648,6 +650,7 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
     )
   }
   const dropManagers = (deviceId: string) => {
+    activity?.setManagers(deviceId, [])
     managerLists.get(deviceId)?.stop()
     managerLists.delete(deviceId)
     for (const [key, entry] of managerBoards)

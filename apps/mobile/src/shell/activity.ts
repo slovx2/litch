@@ -1,7 +1,7 @@
 // 手机上的「最近」记录：规则全在核心的 SidebarActivity（packages/core/src/projection/sidebar-activity.mts），
 // 和桌面同一套 5 秒门槛、清零和主动操作即时记。这里只把手机的两样输入接给它：
 //   - 前台：应用处在 active。iOS 锁屏、拉下通知中心、切应用时先 inactive 再 background，安卓锁屏是 background，都不算；
-//   - 正在看哪个会话：导航当前页是会话详情页才算，换到别的页（列表、终端、子代理页……）就是离开。
+//   - 正在看哪个会话：会话详情或经理页；经理 ID 通过常驻目录解析为会话，列表、终端等不算查看。
 // 不引用 react-native，平台的东西由调用方传进来，单测（test/recent.test.mjs）直接喂假的前后台和导航。
 import {
   type Clock,
@@ -26,6 +26,11 @@ export interface NavigationSource {
   listen(changed: () => void): () => void
 }
 
+export interface ManagerSessions {
+  get(deviceId: string, managerId: string): string | undefined
+  subscribe(deviceId: string, managerId: string, changed: () => void): () => void
+}
+
 /** 记录存在本机（各客户端各记各的，不经设备同步） */
 export function createMobileActivity(
   channel: CoreChannel,
@@ -38,10 +43,17 @@ export function createMobileActivity(
   })
 }
 
-/** 当前页是会话详情才算在看那个会话 */
+/** 会话详情直接给会话标识，经理页从已订阅的目录取经理会话。 */
 export function viewedSession(
   route: RouteLike | undefined,
+  managers?: Pick<ManagerSessions, 'get'>,
 ): { deviceId: string; sessionId: string } | null {
+  if (route?.name === 'ManagerConsole') {
+    const params = route.params as { deviceId?: unknown; managerId?: unknown } | undefined
+    if (typeof params?.deviceId !== 'string' || typeof params.managerId !== 'string') return null
+    const sessionId = managers?.get(params.deviceId, params.managerId)
+    return sessionId ? { deviceId: params.deviceId, sessionId } : null
+  }
   if (route?.name !== 'Detail') return null
   const params = route.params as { deviceId?: unknown; sessionId?: unknown } | undefined
   return typeof params?.deviceId === 'string' && typeof params.sessionId === 'string'
@@ -54,18 +66,34 @@ export function watchMobileActivity(
   activity: SidebarActivity,
   app: AppStateSource,
   navigation: NavigationSource,
+  managers?: ManagerSessions,
 ): () => void {
-  const showing = () => activity.view(viewedSession(navigation.current()))
+  let stopManager: (() => void) | undefined
+  const showing = () => activity.view(viewedSession(navigation.current(), managers))
+  const changed = () => {
+    stopManager?.()
+    stopManager = undefined
+    const route = navigation.current()
+    const params = route?.params as { deviceId?: unknown; managerId?: unknown } | undefined
+    if (
+      route?.name === 'ManagerConsole' &&
+      typeof params?.deviceId === 'string' &&
+      typeof params.managerId === 'string'
+    )
+      stopManager = managers?.subscribe(params.deviceId, params.managerId, showing)
+    showing()
+  }
   activity.setForeground(app.current() === 'active')
-  showing()
+  changed()
   const stopApp = app.listen((state) => {
     activity.setForeground(state === 'active')
     if (state === 'background') activity.flush()
   })
-  const stopNavigation = navigation.listen(showing)
+  const stopNavigation = navigation.listen(changed)
   return () => {
     stopApp()
     stopNavigation()
+    stopManager?.()
     activity.setForeground(false)
     activity.view(null)
     activity.flush()

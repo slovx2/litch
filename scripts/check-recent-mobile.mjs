@@ -1,6 +1,6 @@
 // 手机首页「最近」组的正式页面预览；隔离无头浏览器，先在 apps/mobile 里运行 npm run preview。
 // 查：两台设备的主动操作按时间倒序、跨设备写设备名、按项目聚合、显示更多/收起、短暂查看不进最近、满 5 秒进最近；
-// 三种皮肤的明暗各截一张。截图在 .artifacts/mobile-recent/（LITCH_RECENT_SHOTS 可改）。
+// 三种皮肤明暗均检查；仅显式设置 LITCH_RECENT_SHOTS 时保存截图。
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { globSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
@@ -21,8 +21,8 @@ const binary =
     .at(-1)
 if (!binary) throw new Error('需要 LITCH_CHROME_BINARY 指向 Chrome for Testing')
 const work = mkdtempSync(join(tmpdir(), 'litch-recent-'))
-const output = process.env.LITCH_RECENT_SHOTS ?? join(process.cwd(), '.artifacts/mobile-recent')
-mkdirSync(output, { recursive: true })
+const output = process.env.LITCH_RECENT_SHOTS
+if (output) mkdirSync(output, { recursive: true })
 const child = spawn(
   binary,
   [
@@ -46,6 +46,7 @@ child.stderr.on('data', (chunk) => {
 })
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 let cdp
+let diagnose
 try {
   const ws = await until(
     () => endpoint.match(/DevTools listening on (ws:\/\/[^\s]+)/)?.[1],
@@ -67,6 +68,8 @@ try {
     if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails))
     return result.result.value
   }
+  diagnose = () =>
+    read('JSON.stringify({url:location.href,body:document.body.innerText.slice(0,6000)})')
   const sel = (id) => `[data-testid=${JSON.stringify(id)}]`
   const wait = (id, timeout = 60000) =>
     until(() => read(`!!document.querySelector(${JSON.stringify(sel(id))})`), id, timeout)
@@ -83,6 +86,7 @@ try {
     await read(
       'document.fonts.ready.then(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))',
     )
+    if (!output) return
     const picture = await call('Page.captureScreenshot', { format: 'png' })
     writeFileSync(join(output, `${name}.png`), Buffer.from(picture.data, 'base64'))
   }
@@ -215,7 +219,46 @@ try {
   await tap('header:back')
   await until(async () => (await recentIds())[0] === 'recent:local:s1', '满 5 秒进最近且在最前')
   await shot('recent-after-view')
-  console.log(`手机「最近」检查通过，截图在 ${output}`)
+  await call('Page.navigate', { url: `${base}?app=1&scene=home-recent-managers&lang=zh-CN` })
+  await until(async () => (await recentIds()).length === 2, '经理最近主项')
+  assert.deepEqual(
+    await recentIds(),
+    ['recent:build:m2', 'recent:local:m1'],
+    '工作线归经理，不单列',
+  )
+  await tap('recent:local:m1')
+  await wait('manager-console')
+  assert.equal(
+    await read(`!!document.querySelector('[data-testid="detail"]')`),
+    false,
+    '经理进入经理页而不是普通详情',
+  )
+  await sleep(5600)
+  await tap('header:back')
+  await until(
+    async () => (await recentIds())[0] === 'recent:local:m1',
+    '经理页停满五秒刷新最近排序',
+  )
+  await call('Page.navigate', { url: `${base}?app=1&scene=manager-overview&lang=zh-CN` })
+  await wait('manager-console')
+  await sleep(1500)
+  await tap('header:back')
+  await wait('recent')
+  assert.deepEqual(await recentIds(), [], '短暂查看经理不进最近')
+  await tap('devices:managers')
+  await tap('manager:m1')
+  await wait('manager-console')
+  await sleep(5600)
+  await tap('header:back')
+  await tap('header:back')
+  await until(
+    async () => (await recentIds())[0] === 'recent:local:m1',
+    '从目录打开经理满五秒进入最近',
+  )
+  console.log(`手机「最近」检查通过${output ? `，截图在 ${output}` : '（未保存截图）'}`)
+} catch (error) {
+  if (diagnose) console.error(await diagnose().catch(String))
+  throw error
 } finally {
   cdp?.ws.close()
   child.kill()

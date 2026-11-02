@@ -11,12 +11,14 @@ import {
   requestDraftState,
   type SuggestionView,
 } from '@litch/core'
+import { useIsFocused } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useContext, useEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import type { ManagerDecisionOption } from '../../../../../packages/protocol/src/manager.mjs'
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
 import { stamp } from '../../../../../packages/ui/src/app/format.ts'
+import { readWhileOpen } from '../../../../../packages/ui/src/app/read.ts'
 import { ProposalActs } from '../../detail/proposals/ProposalActs'
 import type { RootStackParamList } from '../../nav/routes'
 import { jsonFile } from '../../shell/json-file'
@@ -749,6 +751,12 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
   const order = useIssueOrder()
   useEffect(() => replica.openManagerBoard(deviceId, managerId), [replica, deviceId, managerId])
   const manager = useKey<ManagerView>(keys.manager(deviceId, managerId))
+  const focused = useIsFocused()
+  const channel = useChannel()
+  useEffect(() => {
+    if (focused && manager?.threadId)
+      return readWhileOpen(channel, replica.store, deviceId, manager.threadId)
+  }, [focused, channel, replica, deviceId, manager?.threadId])
   const device = useKey<DeviceView>(keys.device(deviceId))
   const view = useKey<ManagerBoardTopicView>(keys.managerBoard(deviceId, managerId))
   const suggestions = useKey<readonly SuggestionView[]>(keys.suggestions) ?? []

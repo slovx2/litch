@@ -51,11 +51,17 @@ export function projectSidebarGroups(
       }
       if (path.has(current)) break
       const session = sessions.get(current)
-      if (!session || managerMark(session)) break
+      if (!session) break
       path.add(current)
+      const manager = managerMark(session)
+      // 经理是自己的投影主项；工作线和更深后代沿真实父链归到经理。
+      if (manager?.role === 'manager') {
+        root = current
+        break
+      }
       const parent = session.lineage?.parentId ?? session.nativeLineage?.parentId
       if (!parent) {
-        root = session.nativeLineage ? null : current
+        root = session.nativeLineage || manager?.role === 'line' ? null : current
         break
       }
       current = parent

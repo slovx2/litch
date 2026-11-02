@@ -383,6 +383,16 @@ try {
   assert.deepEqual(await currentRows(), [{ sessionId: 's3', source: 'recent', selected: true }])
   await click('[data-sidebar-mode=manager]')
   await until(() => run(() => !document.querySelector('[data-projection]')), '切到经理模式')
+  await click('[data-manager-id=m1] .mg-pick')
+  await until(
+    () =>
+      run(
+        () =>
+          document.querySelector('[data-manager-id=m1] .mg-pick')?.getAttribute('aria-current') ===
+          'page',
+      ),
+    '经理模式记住自己的选择',
+  )
   await click('[data-sidebar-mode=chat]')
   await until(() => run(() => !!document.querySelector('[data-projection=recent]')), '返回对话模式')
   assert.deepEqual(
@@ -390,6 +400,22 @@ try {
     [{ sessionId: 's3', source: 'recent', selected: true }],
     '切换模式仍保留实际点击的最近行',
   )
+  await click('[data-sidebar-mode=manager]')
+  await until(
+    () =>
+      run(
+        () =>
+          document.querySelector('[data-manager-id=m1] .mg-pick')?.getAttribute('aria-current') ===
+          'page',
+      ),
+    '再次进入经理模式恢复自己的选择',
+  )
+  await click('[data-sidebar-mode=chat]')
+  await until(
+    () => run(() => !!document.querySelector('[data-projection=recent]')),
+    '再次返回对话模式',
+  )
+  assert.deepEqual(await currentRows(), [{ sessionId: 's3', source: 'recent', selected: true }])
   await click('.dev-group[data-device=local] [data-session=s3] .ss-row')
   await until(async () => (await currentRows())[0]?.source === 'tree', '树行唯一选中')
   assert.deepEqual(await currentRows(), [{ sessionId: 's3', source: 'tree', selected: true }])
@@ -662,6 +688,97 @@ try {
       await option('按项目聚合')
     }
   }
+  // 新的一份活动记录只含经理与工作线，验证主项归并及跨模式入口。
+  await run(() =>
+    localStorage.setItem(
+      'litch.sidebar.activity',
+      JSON.stringify([
+        { deviceId: 'local', sessionId: 'manager-k1', at: Date.now() - 2000 },
+        { deviceId: 'local', sessionId: 'manager-k2', at: Date.now() - 1000 },
+        { deviceId: 'build', sessionId: 'm2', at: Date.now() },
+      ]),
+    ),
+  )
+  await cdp.call('Page.reload')
+  await until(async () => (await roots()).length === 2, '经理与工作线合并成两个经理主项')
+  assert.deepEqual((await roots()).sort(), ['m1', 'm2'])
+  assert.ok(
+    await run(
+      () =>
+        !!document.querySelector('[data-projection=unread] [data-session=m1] .ss-row.is-unread'),
+    ),
+    '工作线有未读结果时经理主项进入未读',
+  )
+  assert.equal(
+    await run(() => !!document.querySelector('[data-projection=recent] [data-session=manager-k1]')),
+    false,
+    '工作线默认收起',
+  )
+  await click('[data-projection=recent] [data-session=m1] .tree-fold')
+  await until(
+    () => run(() => !!document.querySelector('[data-projection=recent] [data-session=manager-k1]')),
+    '展开经理的工作线',
+  )
+  assert.equal(
+    await run(
+      () =>
+        document.querySelector('[data-projection=recent] [data-session=manager-k1]').dataset.parent,
+    ),
+    'm1',
+  )
+  assert.deepEqual((await roots()).sort(), ['m1', 'm2'], '工作线不成为顶层主项')
+  await click('[data-projection=recent] [data-session=m1] .ss-row')
+  await until(
+    () =>
+      run(
+        () =>
+          document.querySelector('[data-sidebar-mode=manager]')?.getAttribute('aria-pressed') ===
+          'true',
+      ),
+    '点击经理投影进入经理页',
+  )
+  assert.equal(await run(() => document.querySelectorAll('[data-projection]').length), 0)
+  assert.equal(
+    await run(() =>
+      document.querySelector('[data-manager-id=m1] .mg-pick')?.getAttribute('aria-current'),
+    ),
+    'page',
+  )
+  await click('[data-sidebar-mode=chat]')
+  await until(
+    () =>
+      run(() => !!document.querySelector('[data-projection=recent] [data-session=m1] .ss-row.sel')),
+    '返回对话保留经理投影来源',
+  )
+  assert.deepEqual(await currentRows(), [{ sessionId: 'm1', source: 'recent', selected: true }])
+  await click('[data-projection=recent] [data-session=manager-k1] .ss-row')
+  await until(
+    () =>
+      run(
+        () =>
+          document.querySelector('[data-sidebar-mode=manager]')?.getAttribute('aria-pressed') ===
+          'true',
+      ),
+    '点击工作线进入经理模式',
+  )
+  assert.equal(await run(() => document.querySelectorAll('.ss-row.sel').length), 1)
+  await click('[data-sidebar-mode=chat]')
+  await until(
+    () =>
+      run(
+        () =>
+          !!document.querySelector(
+            '[data-projection=recent] [data-session=manager-k1] .ss-row.sel',
+          ),
+      ),
+    '工作线也保留实际点击的投影行',
+  )
+  assert.deepEqual(await currentRows(), [
+    { sessionId: 'manager-k1', source: 'recent', selected: true },
+  ])
+  report.checks.push(
+    '经理进入最近与未读，工作线默认收起且不单列，经理与工作线跳转保留各模式的唯一选中',
+  )
   assert.deepEqual(errors, [])
   report.success = true
 } catch (error) {

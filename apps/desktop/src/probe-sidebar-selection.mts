@@ -3,7 +3,10 @@ import type { BrowserWindow } from 'electron'
 /** 只在隔离冒烟窗口里给最近组放一项；重载后用正式行组件验证副本选中。 */
 export async function checkSidebarSelection(window: BrowserWindow) {
   await window.webContents.executeJavaScript(`(() => {
-    localStorage.setItem('litch.sidebar.activity', JSON.stringify([{deviceId:'local', sessionId:'s3', at:Date.now()}]));
+    localStorage.setItem('litch.sidebar.activity', JSON.stringify([
+      {deviceId:'local', sessionId:'s3', at:Date.now()},
+      {deviceId:'local', sessionId:'manager-k1', at:Date.now()-1000}
+    ]));
     const sidebar = JSON.parse(localStorage.getItem('litch.sidebar') || '{}');
     localStorage.setItem('litch.sidebar', JSON.stringify({...sidebar, open:true, harnesses:[], folds:{}}));
   })()`)
@@ -49,5 +52,19 @@ async function selectionSeen() {
   await until(() => only(tree()))
   recent()?.click()
   await until(() => only(recent()))
-  return { recentOnly: true, treeOnly: true, modeRestored: true }
+  const manager = () =>
+    document.querySelector<HTMLButtonElement>('[data-projection=recent] [data-session=m1] .ss-row')
+  await until(() => !!manager())
+  if (document.querySelector('[data-projection=recent] [data-session=manager-k1]'))
+    throw new Error('工作线应默认收在经理下')
+  manager()?.click()
+  await until(
+    () =>
+      document.querySelector('[data-sidebar-mode=manager]')?.getAttribute('aria-pressed') ===
+      'true',
+  )
+  if (document.querySelector('[data-projection]')) throw new Error('经理模式不应显示投影组')
+  document.querySelector<HTMLButtonElement>('[data-sidebar-mode=chat]')?.click()
+  await until(() => only(manager()))
+  return { recentOnly: true, treeOnly: true, modeRestored: true, managerEntry: true }
 }

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 import { createReplica, keys } from '@litch/core'
 import { files } from 'expo-file-system'
+import { recentRoute } from '../src/screens/devices/recent-route.ts'
 import { readRecentSettings } from '../src/screens/devices/recent-settings.ts'
 import { createMobileActivity, viewedSession, watchMobileActivity } from '../src/shell/activity.ts'
 import { jsonFile } from '../src/shell/json-file.ts'
@@ -93,7 +94,7 @@ function fakeChannel() {
   }
 }
 
-function setup({ app = 'active' } = {}) {
+function setup({ app = 'active', managers } = {}) {
   const clock = fakeClock()
   const start = clock.now()
   const file = jsonFile('test-sidebar-activity.json')
@@ -101,7 +102,7 @@ function setup({ app = 'active' } = {}) {
   const activity = createMobileActivity(channel, clock, file)
   const appState = fakeApp(app)
   const navigation = fakeNavigation()
-  const stop = watchMobileActivity(activity, appState, navigation)
+  const stop = watchMobileActivity(activity, appState, navigation, managers)
   cleanup.push(stop)
   return { clock, start, file, sent, activity, app: appState, navigation }
 }
@@ -115,6 +116,47 @@ test('只有会话详情页、参数齐全才算在看会话', () => {
   assert.equal(viewedSession({ name: 'Agent', params: { deviceId: 'd', sessionId: 's' } }), null)
   assert.equal(viewedSession({ name: 'Detail', params: { deviceId: 'd' } }), null)
   assert.equal(viewedSession(undefined), null)
+})
+
+test('最近经理进经理页，普通会话进详情；经理目录迟到后开始计时，离开和后台清零', () => {
+  const row = { deviceId: 'local', sessionId: 'manager-thread', workspaceId: null, at: 1 }
+  const summary = { litchManager: { role: 'manager', managerId: 'm' } }
+  const route = recentRoute(row, summary, '经理')
+  assert.deepEqual(route, ['ManagerConsole', { deviceId: 'local', managerId: 'm' }])
+  assert.deepEqual(recentRoute(row, {}, '普通'), [
+    'Detail',
+    { deviceId: 'local', sessionId: 'manager-thread', title: '普通' },
+  ])
+  let thread
+  const listeners = new Set()
+  const env = setup({
+    managers: {
+      get: (deviceId, id) => (deviceId === 'local' && id === 'm' ? thread : undefined),
+      subscribe: (_device, _manager, changed) => {
+        listeners.add(changed)
+        return () => listeners.delete(changed)
+      },
+    },
+  })
+  env.navigation.go(...route)
+  env.clock.advance(10_000)
+  assert.equal(env.activity.time('local', 'manager-thread'), 0)
+  thread = 'manager-thread'
+  for (const listener of listeners) listener()
+  env.clock.advance(4999)
+  assert.equal(env.activity.time('local', thread), 0)
+  env.app.set('background')
+  env.clock.advance(10_000)
+  env.app.set('active')
+  env.clock.advance(4999)
+  assert.equal(env.activity.time('local', thread), 0)
+  env.clock.advance(1)
+  assert.equal(env.activity.time('local', thread), env.clock.now())
+  env.navigation.go('Devices')
+  assert.equal(listeners.size, 0)
+  const at = env.activity.time('local', thread)
+  env.clock.advance(10_000)
+  assert.equal(env.activity.time('local', thread), at)
 })
 
 test('前台停留满 5 秒才记，时间是满 5 秒那一刻；同一段停留只记一次', () => {
@@ -252,6 +294,21 @@ test('接上 replica：主动操作（改名）立即进「最近」投影，点
     title: '改个名',
   })
   await until(() => recent().includes('s3'), { what: '改名后进最近' })
+  await until(() => replica.store.get(keys.manager('local', 'm1')), { what: '经理目录' })
+  await activity.channel.command('managers.update', {
+    deviceId: 'local',
+    managerId: 'm1',
+    patch: { name: '经理操作' },
+  })
+  await until(() => recent()[0] === 'm1', { what: '经理操作立即进最近' })
+  await activity.channel.command('session.rename', {
+    deviceId: 'local',
+    sessionId: 'manager-k2',
+    title: '工作线操作',
+  })
+  assert.equal(recent()[0], 'm1')
+  assert.equal(recent().includes('manager-k2'), false)
+  assert.ok(replica.store.get(keys.children('local')).m1.includes('manager-k2'))
 })
 
 test('快捷设置：默认不聚合、显示 5 条，只认 5/10/20', () => {

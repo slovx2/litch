@@ -125,6 +125,16 @@ export const SCENES: Scene[] = [
       ),
   },
   {
+    id: 'home-recent-managers',
+    group: '设备',
+    name: '首页 · 最近经理',
+    note: '工作线操作归入经理主项，点击经理进入经理页',
+    steps: [
+      link('litch://spawn?device=local&parent=manager-k1&title=经理工作线跟进'),
+      link('litch://spawn?device=build&parent=m2&title=远程经理跟进'),
+    ],
+  },
+  {
     id: 'add-device',
     group: '设备',
     name: '添加设备',
