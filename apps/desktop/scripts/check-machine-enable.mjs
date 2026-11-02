@@ -15,8 +15,8 @@ const self = fileURLToPath(import.meta.url)
 if (!process.versions.electron) {
   const { build } = await import('esbuild')
   const folder = mkdtempSync(join(tmpdir(), 'litch-m13-'))
-  const shots = process.env.M13_SHOTS ?? join(repo, '.local/m13/shots')
-  mkdirSync(shots, { recursive: true })
+  const shots = process.env.M13_SHOTS ?? ''
+  if (shots) mkdirSync(shots, { recursive: true })
   try {
     await build({
       entryPoints: [join(repo, 'packages/ui/test/machine-enable-preview.tsx')],
@@ -103,7 +103,8 @@ async function runWindow() {
       assert.equal(await js('window.m13.state().persisted?.tools?.remote?.machine ?? false'), false)
       await js(`document.querySelector('${card}').scrollIntoView({block:'center'})`)
       await new Promise((resolve) => setTimeout(resolve, 200))
-      writeFileSync(join(shots, `M13-${lang}.png`), (await win.webContents.capturePage()).toPNG())
+      if (shots)
+        writeFileSync(join(shots, `M13-${lang}.png`), (await win.webContents.capturePage()).toPNG())
       if (lang === 'zh-CN') {
         // 设置入口定位到开关所在分区，但不修改它；全局卡仍能找到。
         await js(
