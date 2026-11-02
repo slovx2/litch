@@ -79,7 +79,8 @@ child.stderr.on('data', (data) => {
   log += data.toString()
 })
 try {
-  await until(async () => (await fetch(`${base}/`)).ok, '回环界面服务')
+  // 等的是 Vite 起来（机器忙时要更久），不是被测的东西
+  await until(async () => (await fetch(`${base}/`)).ok, '回环界面服务', 60000)
   const port = await until(
     () => Number(readFileSync(join(work, 'profile/DevToolsActivePort'), 'utf8').split('\n')[0]),
     '浏览器端口',
@@ -190,6 +191,23 @@ try {
   )
   await run(() => document.querySelector('[data-act=onboard-close]')?.click())
   await run(() => window.__litchLook.set({ skin: 'standard', theme: 'light', lang: 'zh-CN' }))
+  // 探针要直接调界面模块（外部打开会话、定位开关、侧栏宽度）。在 CDP 里等页面动态 import 的结果，Chrome 偶尔在它落定前
+  // 回收这个 promise（Promise was collected；冷启动的 CI 上常见，没有导航、没有请求）。所以只在 until 里取，取到挂在
+  // window 上，之后同步调用；页面重载后重取
+  const modules = () =>
+    until(
+      () =>
+        run(() =>
+          Promise.all([import('/src/app/actions.ts'), import('/src/sidebar/state.ts')]).then(
+            ([actions, state]) => {
+              window.__projectionProbe = { actions, state }
+              return true
+            },
+          ),
+        ),
+      '界面模块',
+    )
+  await modules()
   const recent = '[data-projection=recent]'
   const unread = '[data-projection=unread]'
   const roots = () =>
@@ -327,6 +345,32 @@ try {
     '切走移除已读暂留项',
   )
   await click(`${recent} [data-session=s3] .ss-row`)
+  assert.equal(
+    await run(() => !!document.querySelector('[data-projection=unread] [data-session=s3]')),
+    false,
+    '重新打开已读项不重新放进未读',
+  )
+  assert.notEqual((await roots())[0], 's3', '短暂打开和清未读不应刷新最近排序')
+  assert.ok(await run(() => document.hasFocus() && document.visibilityState === 'visible'))
+  report.checks.push(
+    '未读原位暂留、已读样式、鼠标连点不串项、切走移除、已读不回填、设备名与时间口径',
+  )
+  const dwellStarted = await run(() => Date.now())
+  await until(async () => (await roots())[0] === 's3', '连续前台停留满五秒更新最近排序')
+  // 稍早的查看已切走清零；此时的时间戳来自本次达标，而不是初次点开。
+  await until(
+    () =>
+      run(
+        (since) =>
+          JSON.parse(localStorage.getItem('litch.sidebar.activity')).some(
+            (row) => row.deviceId === 'local' && row.sessionId === 's3' && row.at >= since,
+          ),
+        dwellStarted,
+      ),
+    '达标时刻持久化',
+  )
+  report.checks.push('打开立即清未读、短暂查看不刷新最近、连续前台五秒后记录达标时刻')
+  // 唯一选中：放在停留计时之后。夹在点开 s3 和“短暂打开”的断言之间，慢的机器上会让 s3 停留满五秒
   const currentRows = () =>
     run(() =>
       [...document.querySelectorAll('.ss-row[aria-current="true"]')].map((row) => ({
@@ -360,52 +404,23 @@ try {
     'recent',
   )
   await click(`${recent} [data-session=s3] .ss-row`)
-  assert.equal(
-    await run(() => !!document.querySelector('[data-projection=unread] [data-session=s3]')),
-    false,
-    '重新打开已读项不重新放进未读',
-  )
-  assert.notEqual((await roots())[0], 's3', '短暂打开和清未读不应刷新最近排序')
-  assert.ok(await run(() => document.hasFocus() && document.visibilityState === 'visible'))
-  report.checks.push(
-    '未读原位暂留、已读样式、鼠标连点不串项、切走移除、已读不回填、设备名与时间口径',
-  )
-  const dwellStarted = await run(() => Date.now())
-  await until(async () => (await roots())[0] === 's3', '连续前台停留满五秒更新最近排序')
-  // 稍早的查看已切走清零；此时的时间戳来自本次达标，而不是初次点开。
-  await until(
-    () =>
-      run(
-        (since) =>
-          JSON.parse(localStorage.getItem('litch.sidebar.activity')).some(
-            (row) => row.deviceId === 'local' && row.sessionId === 's3' && row.at >= since,
-          ),
-        dwellStarted,
-      ),
-    '达标时刻持久化',
-  )
-  report.checks.push('打开立即清未读、短暂查看不刷新最近、连续前台五秒后记录达标时刻')
   await run(() =>
-    import('/src/app/actions.ts').then((m) =>
-      m.requestOpenSession({ deviceId: 'local', sessionId: 's3' }),
-    ),
+    window.__projectionProbe.actions.requestOpenSession({ deviceId: 'local', sessionId: 's3' }),
   )
   await until(
     async () => (await currentRows())[0]?.source === 'tree',
     '外部重新打开当前对话选中树行',
   )
   assert.deepEqual(await currentRows(), [{ sessionId: 's3', source: 'tree', selected: true }])
-  await run(() => import('/src/sidebar/state.ts').then((m) => m.setSidebarAutoLocate(false)))
+  await run(() => window.__projectionProbe.state.setSidebarAutoLocate(false))
   await run(() =>
-    import('/src/app/actions.ts').then((m) =>
-      m.requestOpenSession({ deviceId: 'local', sessionId: 's4' }),
-    ),
+    window.__projectionProbe.actions.requestOpenSession({ deviceId: 'local', sessionId: 's4' }),
   )
   await until(async () => (await currentRows()).length === 0, '关闭自动定位后外部切换不新增选中')
   assert.equal(await run(() => document.querySelectorAll('.ss-row.sel').length), 0)
   await click(`${recent} [data-session=s3] .ss-row`)
   await until(async () => (await currentRows())[0]?.source === 'recent', '关闭定位仍可直接点击选中')
-  await run(() => import('/src/sidebar/state.ts').then((m) => m.setSidebarAutoLocate(true)))
+  await run(() => window.__projectionProbe.state.setSidebarAutoLocate(true))
   await until(async () => (await currentRows())[0]?.source === 'tree', '开启自动定位定位树行')
   report.checks.push('外部重新打开选树行，关闭自动定位不新增选中，直接点击不受定位开关影响')
   await click(`${recent} .projection-head .dev-row`)
@@ -514,6 +529,8 @@ try {
     () => run(() => !!document.querySelector('[data-projection=recent] [data-workspace=litch]')),
     '重启恢复项目聚合',
   )
+  // 重载后是新的模块实例
+  await modules()
   await until(async () => (await roots()).length === 10, '重启恢复默认条数')
   await click(`${recent} .projection-head .row-more button`)
   await option('默认显示 10 条')
@@ -543,7 +560,7 @@ try {
     () => run(() => document.querySelectorAll('[data-projection]').length === 2),
     '返回对话投影',
   )
-  await run(() => import('/src/sidebar/state.ts').then((m) => m.setSidebarWidth(240)))
+  await run(() => window.__projectionProbe.state.setSidebarWidth(240))
   const accessibility = await cdp.call('Accessibility.getFullAXTree')
   assert.ok(
     accessibility.nodes.some(
