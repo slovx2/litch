@@ -5,7 +5,7 @@
 // 只存最近 KEEP_TURNS 个回合，等人答的请求、排队的消息不存（过时了会误导）；
 // 一份太大就再砍一半回合；文件最多 FILE_COUNT 个、合计最多 TOTAL_CHARS 个字，超了先删存得最早的。
 // 应用换了版本，视图的形状可能变了：版本对不上的当没存过。
-import type { SessionView } from '@litch/core'
+import { type PendingInputStore, restorePendingView, type SessionView } from '@litch/core'
 import type { JsonFile } from '../shell/json-file'
 
 const KEEP_TURNS = 40
@@ -56,6 +56,7 @@ export function createViewCache(
   open: <T>(name: string) => JsonFile<T>,
   version: string,
   now: () => number = Date.now,
+  pendingInputs?: (deviceId: string) => PendingInputStore | undefined,
 ): ViewCache {
   const memory = new Map<string, SessionView>()
   const indexFile = open<{ version: string; entries: IndexEntry[] }>('views.json')
@@ -81,11 +82,16 @@ export function createViewCache(
     indexFile.write({ version, entries: next })
   }
 
+  const restore = (view: SessionView) => {
+    const pending = pendingInputs?.(view.deviceId)
+    return pending ? restorePendingView(view, pending) : view
+  }
+
   return {
     recall(deviceId, sessionId) {
       const key = keyOf(deviceId, sessionId)
       const hit = memory.get(key)
-      if (hit) return hit
+      if (hit) return restore(hit)
       const entry = entries().find((e) => e.deviceId === deviceId && e.sessionId === sessionId)
       if (!entry) return null
       const saved = open<Saved>(entry.file).read()
@@ -97,7 +103,7 @@ export function createViewCache(
       )
         return null
       keepInMemory(key, saved.view)
-      return saved.view
+      return restore(saved.view)
     },
 
     remember(full) {

@@ -716,6 +716,7 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
       const delivery = inputDelivery(item)
       return {
         ...userMessage(id, item.content, (item as { litchPeer?: unknown }).litchPeer),
+        ...(item.clientId ? { clientId: item.clientId } : {}),
         ...(delivery ? { delivery } : {}),
         ...(delivery && delivery !== 'sent' ? { unconfirmed: true as const } : {}),
       }

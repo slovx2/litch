@@ -1,5 +1,6 @@
 import { inputDelivery } from '../../../protocol/src/input-delivery.mjs'
 import { questionSource } from '../../../protocol/src/pending-asks.mjs'
+import { restorePendingView, withdrawnInputOps } from './pending-projection.mjs'
 // 一台设备上“打开着”的会话：订阅它的事件，把通知变成会话增量，受理发送、打断和答复。
 // 这里维护每个会话已读取的历史和实时状态：后来的订阅者拿到的快照已经包含之前的增量。
 //
@@ -295,6 +296,7 @@ interface Live {
   summarized: Set<string>
   requests: Map<string, Waiting>
   queued: QueuedMessage[]
+  withdrawn: Set<string>
   paused: boolean
   /** 区分“点击恢复之前已暂停”和“等待对账期间发生的新暂停”。 */
   pauseRevision: number
@@ -503,17 +505,20 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       reduceSession(view, stamped)
       return stamped
     })
-    for (const sink of live.sinks) sink.delta(ops)
-    if (
-      ops.some(
-        (op) => op.op === 'queue.set' || (op.op === 'item.add' && op.item.kind === 'userMessage'),
-      )
+    const inputChanged = ops.some(
+      (op) => op.op === 'queue.set' || (op.op === 'item.add' && op.item.kind === 'userMessage'),
     )
-      persistInputs(live)
+    if (inputChanged) persistInputs(live)
+    if (inputChanged || ops.some((op) => op.op === 'history.prepend' || op.op === 'turn.add')) {
+      const removed = withdrawnInputOps(view, live.withdrawn)
+      for (const op of removed) reduceSession(view, op)
+      ops.push(...removed)
+    }
+    for (const sink of live.sinks) sink.delta(ops)
   }
 
-  const persistInputs = (live: Live) => {
-    if (!host.pendingInputs) return
+  const persistInputs = (live: Live): boolean => {
+    if (!host.pendingInputs) return true
     const inFlight: QueuedMessage[] = [...live.steered]
       .filter(([clientId]) => !live.queued.some((entry) => entry.clientId === clientId))
       .map(([clientId, entry]) => ({
@@ -522,10 +527,22 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         clientId,
         delivery: 'unknown',
       }))
+    const withdrawn = new Set(live.withdrawn)
+    for (const entry of live.queued) {
+      if (entry.sourceClientId) withdrawn.add(entry.sourceClientId)
+    }
     try {
-      host.pendingInputs.save(live.id, [...inFlight, ...live.dispatching, ...live.queued])
+      // 原文和撤回身份同一次原子写入，失败时不能隐藏原位唯一的持久副本。
+      host.pendingInputs.save(
+        live.id,
+        [...inFlight, ...live.dispatching, ...live.queued],
+        [...withdrawn],
+      )
+      live.withdrawn = withdrawn
+      return true
     } catch (error) {
       setNote(live, phrase('session.queueFailed', { message: String(error) }))
+      return false
     }
   }
 
@@ -556,13 +573,19 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
   const reconcileInput = (live: Live, item: ThreadItem) => {
     if (item.type !== 'userMessage' || !item.clientId) return
-    const status = inputDelivery(item)
+    const status = inputDelivery(item) ?? 'sent'
     const existing = live.queued.find((entry) => entry.clientId === item.clientId)
     if (status === 'sent' && existing) {
       live.queued = live.queued.filter((entry) => entry !== existing)
     } else if (existing && (status === 'held' || status === 'unknown')) {
       live.queued = live.queued.map((entry) =>
-        entry === existing ? { ...entry, delivery: status } : entry,
+        entry === existing
+          ? {
+              ...entry,
+              delivery: status,
+              ...(status === 'held' ? { sourceClientId: item.clientId! } : {}),
+            }
+          : entry,
       )
     } else return
     emit(live, [{ op: 'queue.set', queued: live.queued }])
@@ -738,6 +761,21 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     // 插进回合里的话按发出去时带的标识认；回合的第一条消息按“这个回合里第一条用户消息”认
     let echoed: string | undefined
     if (item.type === 'userMessage') {
+      const previous = live.view?.items[viewItem(live, viewId, item.id, position)]
+      if (
+        previous?.kind === 'userMessage' &&
+        previous.delivery === 'sent' &&
+        inputDelivery(item) &&
+        inputDelivery(item) !== 'sent'
+      )
+        return
+      if (
+        item.clientId &&
+        live.withdrawn.has(item.clientId) &&
+        inputDelivery(item) !== 'sent' &&
+        inputDelivery(item) !== 'held'
+      )
+        return
       reconcileInput(live, item)
       const own = itemKey(viewId, item.id, position)
       const steered = item.clientId ? live.steered.get(item.clientId) : undefined
@@ -754,7 +792,13 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           live.paused = true
           live.queued = [
             ...live.queued.filter((entry) => entry.delivery),
-            { ...steered.message, id: item.clientId, clientId: item.clientId, delivery: status },
+            {
+              ...steered.message,
+              id: item.clientId,
+              clientId: item.clientId,
+              delivery: status,
+              ...(status === 'held' ? { sourceClientId: item.clientId } : {}),
+            },
             ...live.queued.filter((entry) => !entry.delivery),
           ]
           emit(live, [{ op: 'queue.set', queued: live.queued }])
@@ -1378,8 +1422,9 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
             : null
           clearReached(live)
         }
-        for (const sink of live.sinks) sink.snapshot(live.view)
         persistInputs(live)
+        for (const op of withdrawnInputOps(live.view, live.withdrawn)) reduceSession(live.view, op)
+        for (const sink of live.sinks) sink.snapshot(live.view)
         const held = live.held
         live.held = []
         for (const entry of held) deliver(live, entry.method, entry.params, true)
@@ -1636,11 +1681,21 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     if (!live.view?.live || !reachable(live) || isRunning(live.view)) return
     const next = live.queued.find((entry) => !entry.delivery)
     if (!next) return
-    const dispatch = { ...next, delivery: 'unknown' as const }
+    const clientId = `litch-${host.deviceId}-${runMark}-${++localSeq}`
+    const dispatch = { ...next, clientId, delivery: 'unknown' as const }
     live.dispatching.push(dispatch)
     live.queued = live.queued.filter((entry) => entry !== next)
+    // 新尝试号必须先可靠保存。否则重启只看到旧 held 副本，会把已经送出的内容再发一遍。
+    if (!persistInputs(live)) {
+      live.dispatching = live.dispatching.filter((entry) => entry !== dispatch)
+      live.queued = [{ ...next, delivery: 'held' }, ...live.queued]
+      live.paused = true
+      live.pauseRevision++
+      emit(live, [{ op: 'queue.set', queued: live.queued }])
+      return
+    }
     emit(live, [{ op: 'queue.set', queued: live.queued }])
-    startTurn(live, next).then(
+    startTurn(live, next, clientId).then(
       () => {
         live.dispatching = live.dispatching.filter((entry) => entry !== dispatch)
         persistInputs(live)
@@ -1654,7 +1709,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         live.paused = true
         const code = failure(error).code
         live.queued = [
-          { ...next, delivery: code === 'timeout' || code === 'offline' ? 'unknown' : 'held' },
+          {
+            ...next,
+            clientId,
+            delivery: code === 'timeout' || code === 'offline' ? 'unknown' : 'held',
+          },
           ...live.queued,
         ]
         emit(live, [{ op: 'queue.set', queued: live.queued }])
@@ -1711,10 +1770,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     itemAlias: new Map(),
     summarized: new Set(),
     requests: new Map(),
-    queued: (host.pendingInputs?.load(id) ?? []).map((entry) => ({
-      ...entry,
-      id: entry.clientId ?? `restored-${runMark}-${++localSeq}`,
-    })),
+    queued: host.pendingInputs?.load(id) ?? [],
+    withdrawn: new Set(host.pendingInputs?.withdrawn(id) ?? []),
     paused: false,
     pauseRevision: 0,
     needsTurnCheck: false,
@@ -1888,11 +1945,13 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       else {
         // 手里没有、或者是旧的：先摆旧的（核心留着的，或者这台电脑上存的），最新的到了整份换掉。
         // 存的那份也放进核心：这期间发的话先排着（send），载入完再发
-        const old = entry.view ?? recall(entry.id)
+        const cached = entry.view ?? recall(entry.id)
+        const old =
+          cached && host.pendingInputs ? restorePendingView(cached, host.pendingInputs) : cached
         if (old) {
-          entry.view ??= old
+          entry.view = old
           entry.stale = true
-          sink.snapshot(staleView(old))
+          sink.snapshot({ ...staleView(old), queued: entry.queued })
         }
         // 设备还没连上就先等着，连上时会统一载入；它所属的 harness 现在不可用也一样，恢复时再载入
         if (!entry.loading && reachable(entry)) load(entry)
@@ -1967,7 +2026,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
     forget(sessionId, erased = false) {
       if (erased) todos.delete(sessionId)
-      if (erased) host.pendingInputs?.save(sessionId, [])
+      if (erased) host.pendingInputs?.save(sessionId, [], [])
       unlinger(sessionId)
       host.views?.forget(sessionId)
       const live = sessions.get(sessionId)

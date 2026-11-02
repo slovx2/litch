@@ -52,3 +52,37 @@ test('待发持久化：写入失败不污染已保存数据', () => {
   assert.throws(() => store.save('thread', []), /磁盘不可写/)
   assert.equal(store.load('thread')[0]?.text, '原文')
 })
+
+test('撤回身份与原文同次写入，待发发送后仍保存；删除会话才清理', () => {
+  let raw: unknown = null
+  let fail = false
+  const file = {
+    read: () => raw,
+    write(value: unknown) {
+      if (fail) throw new Error('写失败')
+      raw = structuredClone(value)
+    },
+  }
+  const store = createPendingInputStore(file)
+  const pending = [
+    {
+      id: 'a',
+      clientId: 'attempt-a',
+      text: '同文',
+      images: [],
+      extras: [],
+      delivery: 'held' as const,
+    },
+  ]
+  fail = true
+  assert.throws(() => store.save('s', pending, ['attempt-a']))
+  assert.deepEqual(store.withdrawn('s'), [])
+  fail = false
+  store.save('s', pending, ['attempt-a'])
+  store.save('s', [])
+  const restarted = createPendingInputStore(file)
+  assert.deepEqual(restarted.load('s'), [])
+  assert.deepEqual(restarted.withdrawn('s'), ['attempt-a'])
+  restarted.save('s', [], [])
+  assert.deepEqual(createPendingInputStore(file).withdrawn('s'), [])
+})

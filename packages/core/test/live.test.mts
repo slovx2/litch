@@ -2377,3 +2377,340 @@ test('载入期间重放的审批已在别处解决：历史到达后不留下�
   assert.equal(answered, false)
   env.core.stop()
 })
+
+/** 使用真实 core 和协议替身模拟 Claude 的 queued→held，不走立即确认的 mock-core。 */
+async function pendingDeliveryCase() {
+  let raw: unknown = null
+  const file = {
+    read: () => raw,
+    write: (value: unknown) => {
+      raw = structuredClone(value)
+    },
+  }
+  const store = createPendingInputStore(file)
+  const env = setup(undefined, store)
+  runtime(env.handlers, 'claude')
+  env.core.start()
+  await settle()
+  const session = watch(env.core)
+  await settle()
+  await env.command('session.send', { ...where, text: '阻塞工具' })
+  const receipts: ThreadItem[] = []
+  const send = async (text: string, images: { url: string; name: string }[] = []) => {
+    await env.command('session.send', { ...where, text, images, now: true })
+    const request = env.sent('turn/steer').at(-1) as {
+      clientUserMessageId: string
+      input: unknown[]
+    }
+    const item = {
+      ...userText(`native-${receipts.length}`, text),
+      clientId: request.clientUserMessageId,
+      litchInputDelivery: 'queued',
+    }
+    receipts.push(item)
+    env.peer.last().notify('item/completed', { threadId: 'a', turnId: 'srv-1', item })
+    await settle()
+    return item
+  }
+  const receipt = async (index: number, delivery: string) => {
+    const item = { ...receipts[index]!, litchInputDelivery: delivery }
+    receipts[index] = item as ThreadItem
+    env.peer.last().notify('item/completed', { threadId: 'a', turnId: 'srv-1', item })
+    await settle()
+  }
+  const stop = async () => {
+    await env.command('session.interrupt', where)
+    env.peer.last().notify('turn/completed', {
+      threadId: 'a',
+      turn: finished('srv-1', { status: 'interrupted' }),
+    })
+    await settle()
+  }
+  const users = () =>
+    Object.values(session.seen.view!.items).filter((item) => item.kind === 'userMessage')
+  return { ...env, file, store, session, send, receipt, stop, users, receipts }
+}
+
+test('唯一输入：同文两条和图片按身份撤回，迟到重复通知不复活；重启与无恢复材料的另一端不同', async () => {
+  const env = await pendingDeliveryCase()
+  await env.send('同文')
+  await env.send('同文')
+  await env.send('图文', [{ url: PNG, name: '保留.png' }])
+  assert.equal(env.users().filter((item) => item.text === '同文').length, 2)
+  await env.stop()
+  for (let i = 0; i < 3; i++) await env.receipt(i, 'held')
+  assert.deepEqual(
+    env.users().map((item) => item.text),
+    ['阻塞工具'],
+  )
+  assert.deepEqual(
+    env.session.seen.view!.queued.map((item) => item.text),
+    ['同文', '同文', '图文'],
+  )
+  assert.deepEqual(env.session.seen.view!.queued[2]!.images, [{ url: PNG, name: '保留.png' }])
+  await env.receipt(0, 'queued')
+  await env.receipt(0, 'held')
+  assert.equal(env.users().length, 1)
+  assert.equal(env.session.seen.view!.queued.length, 3)
+  const history = thread({ id: 'a', turns: [turn('srv-1', env.receipts)] })
+  const restored = setup([history], createPendingInputStore(env.file))
+  restored.core.start()
+  await settle()
+  const reopened = watch(restored.core)
+  await settle()
+  assert.equal(
+    Object.values(reopened.seen.view!.items).filter((item) => item.kind === 'userMessage').length,
+    0,
+  )
+  assert.equal(reopened.seen.view!.queued.length, 3)
+  assert.equal(restored.sent('turn/start').length, 0)
+  // 没有来源和恢复材料时，不能把远端 held 或同文普通消息猜成已恢复。
+  const stranger = setup([history])
+  stranger.core.start()
+  await settle()
+  const other = watch(stranger.core)
+  await settle()
+  assert.equal(
+    Object.values(other.seen.view!.items).filter((item) => item.kind === 'userMessage').length,
+    3,
+  )
+})
+
+test('唯一输入：重发失败回到同一记录，新尝试独立；成功后历史重读不恢复旧气泡', async () => {
+  const env = await pendingDeliveryCase()
+  await env.send('待发', [{ url: PNG, name: '原图' }])
+  await env.stop()
+  await env.receipt(0, 'held')
+  const original = env.session.seen.view!.queued[0]!
+  env.world.startFailure = new RpcFailure(-32000, '明确拒绝本次提交')
+  await env.command('session.resumeQueue', { ...where, messageId: original.id })
+  await settle()
+  assert.equal(env.session.seen.view!.queued[0]!.id, original.id)
+  assert.deepEqual(env.session.seen.view!.queued[0]!.images, original.images)
+  assert.deepEqual(
+    env.users().map((item) => item.text),
+    ['阻塞工具'],
+  )
+  env.world.startFailure = null
+  await env.command('session.resumeQueue', { ...where, messageId: original.id })
+  await settle()
+  const attempt = env.sent('turn/start').at(-1) as { clientUserMessageId: string }
+  const failed = env.sent('turn/start').at(-2) as { clientUserMessageId: string }
+  assert.notEqual(attempt.clientUserMessageId, failed.clientUserMessageId)
+  assert.notEqual(attempt.clientUserMessageId, original.clientId)
+  const item = { ...userText('new-native', '待发'), clientId: attempt.clientUserMessageId }
+  env.peer.last().notify('item/completed', { threadId: 'a', turnId: 'srv-2', item })
+  await settle()
+  await env.receipt(0, 'held')
+  assert.equal(env.users().filter((entry) => entry.text === '待发').length, 1)
+  assert.equal(env.session.seen.view!.queued.length, 0)
+  const history = thread({ id: 'a', turns: [turn('srv-1', env.receipts), turn('srv-2', [item])] })
+  const restarted = setup([history], createPendingInputStore(env.file))
+  restarted.core.start()
+  await settle()
+  const session = watch(restarted.core)
+  await settle()
+  assert.deepEqual(
+    Object.values(session.seen.view!.items)
+      .filter((entry) => entry.kind === 'userMessage')
+      .map((entry) => entry.text),
+    ['待发'],
+  )
+  assert.equal(session.seen.view!.queued.length, 0)
+})
+
+test('唯一输入：未知不自动重发，已接纳消息不因迟到取消退回；主发送仍默认先待发再草稿', async () => {
+  const env = await pendingDeliveryCase()
+  await env.send('已接纳')
+  await env.receipt(0, 'sent')
+  await env.send('未知')
+  await env.send('待发')
+  await env.stop()
+  await env.receipt(0, 'held')
+  await env.receipt(2, 'held')
+  assert.deepEqual(
+    env.session.seen.view!.queued.map((entry) => [entry.text, entry.delivery]),
+    [
+      ['未知', 'unknown'],
+      ['待发', 'held'],
+    ],
+  )
+  assert.equal(env.users().filter((entry) => entry.text === '已接纳').length, 1)
+  await env.command('session.send', { ...where, text: '草稿', pending: 'include' })
+  await settle()
+  assert.equal(
+    (env.sent('turn/start').at(-1) as { input: { text: string }[] }).input[0]!.text,
+    '待发',
+  )
+  env.peer.last().notify('turn/completed', { threadId: 'a', turn: finished('srv-2') })
+  await settle()
+  assert.equal(
+    (env.sent('turn/start').at(-1) as { input: { text: string }[] }).input[0]!.text,
+    '草稿',
+  )
+  assert.deepEqual(
+    env.session.seen.view!.queued.map((entry) => entry.text),
+    ['未知'],
+  )
+})
+
+test('唯一输入：待发持久写失败保留原气泡，写成功后才移动到托盘', async () => {
+  const env = await pendingDeliveryCase()
+  await env.send('不能丢')
+  const save = env.store.save
+  env.store.save = () => {
+    throw new Error('磁盘已满')
+  }
+  await env.stop()
+  await env.receipt(0, 'held')
+  assert.equal(env.users().filter((entry) => entry.text === '不能丢').length, 1)
+  env.store.save = save
+  await env.receipt(0, 'held')
+  assert.equal(env.users().filter((entry) => entry.text === '不能丢').length, 0)
+  assert.equal(createPendingInputStore(env.file).load('a')[0]!.text, '不能丢')
+  const pendingId = env.session.seen.view!.queued[0]!.id
+  env.store.save = () => {
+    throw new Error('新尝试无法落盘')
+  }
+  await env.command('session.resumeQueue', where)
+  await settle()
+  assert.equal(env.sent('turn/start').length, 1)
+  assert.equal(env.session.seen.view!.queued[0]!.id, pendingId)
+  assert.equal(env.session.seen.view!.queued[0]!.delivery, 'held')
+})
+
+test('唯一输入：单发不释放其余待发，全发按原顺序且同文不去重；切走回来仍唯一', async () => {
+  const env = await pendingDeliveryCase()
+  await env.send('同文')
+  await env.send('同文')
+  await env.send('图文', [{ url: PNG, name: '保留.png' }])
+  await env.stop()
+  for (let index = 0; index < 3; index++) await env.receipt(index, 'held')
+  const single = env.session.seen.view!.queued[1]!
+  await env.command('session.resumeQueue', { ...where, messageId: single.id })
+  await settle()
+  assert.equal(env.session.seen.view!.queued.length, 2)
+  assert.ok(env.session.seen.view!.queued.every((entry) => entry.delivery === 'held'))
+  env.peer.last().notify('turn/completed', { threadId: 'a', turn: finished('srv-2') })
+  await settle()
+  assert.equal(env.sent('turn/start').length, 2)
+  await env.command('session.resumeQueue', where)
+  await settle()
+  env.peer.last().notify('turn/completed', { threadId: 'a', turn: finished('srv-3') })
+  await settle()
+  const requests = env.sent('turn/start').slice(1) as {
+    input: { type: string; text?: string; url?: string }[]
+  }[]
+  assert.deepEqual(
+    requests.map((request) => request.input[0]!.text),
+    ['同文', '同文', '图文'],
+  )
+  assert.equal(requests[2]!.input[1]!.url, PNG)
+  assert.equal(env.users().filter((entry) => entry.text === '同文').length, 2)
+  assert.equal(env.users().filter((entry) => entry.text === '图文').length, 1)
+  env.session.close()
+  const again = watch(env.core)
+  await settle()
+  assert.equal(
+    Object.values(again.seen.view!.items).filter(
+      (entry) => entry.kind === 'userMessage' && entry.text === '同文',
+    ).length,
+    2,
+  )
+})
+
+test('唯一输入：重发应答未到时保存新尝试，旧回执不确认它；重启用新尝试的历史对账', async () => {
+  const env = await pendingDeliveryCase()
+  await env.send('重试中的原文')
+  await env.stop()
+  await env.receipt(0, 'held')
+  env.handlers['turn/start'] = () => undefined
+  await env.command('session.resumeQueue', where)
+  await settle()
+  const attempt = env.sent('turn/start').at(-1) as { clientUserMessageId: string }
+  assert.ok(attempt.clientUserMessageId)
+  await env.receipt(0, 'held')
+  const inFlight = createPendingInputStore(env.file).load('a')
+  assert.equal(inFlight.length, 1)
+  assert.equal(inFlight[0]!.clientId, attempt.clientUserMessageId)
+  assert.equal(inFlight[0]!.delivery, 'unknown')
+  const history = thread({
+    id: 'a',
+    turns: [
+      turn('srv-1', env.receipts),
+      turn('srv-2', [
+        Object.assign(userText('accepted-attempt', '重试中的原文'), {
+          clientId: attempt.clientUserMessageId,
+        }),
+      ]),
+    ],
+  })
+  const restarted = setup([history], createPendingInputStore(env.file))
+  restarted.core.start()
+  await settle()
+  const view = watch(restarted.core)
+  await settle()
+  assert.equal(view.seen.view!.queued.length, 0)
+  assert.equal(
+    Object.values(view.seen.view!.items).filter((entry) => entry.kind === 'userMessage').length,
+    1,
+  )
+  assert.equal(restarted.sent('turn/start').length, 0)
+})
+
+test('唯一输入：取消请求失败保留原文为待确认，不隐藏、不自动恢复', async () => {
+  const env = await pendingDeliveryCase()
+  await env.send('取消结果未知')
+  env.handlers['turn/interrupt'] = () => {
+    throw new RpcFailure(-32000, '取消失败')
+  }
+  await assert.rejects(env.command('session.interrupt', where))
+  assert.equal(env.users().filter((entry) => entry.text === '取消结果未知').length, 1)
+  assert.equal(env.session.seen.view!.queued[0]!.delivery, 'unknown')
+  await env.command('session.resumeQueue', where)
+  await settle()
+  assert.equal(env.sent('turn/start').length, 1)
+})
+
+test('唯一输入：无精确回执 harness 的本地暂停不登记原生撤回，迟到标准接纳仍可对账', async () => {
+  let raw: unknown = null
+  const file = {
+    read: () => raw,
+    write: (value: unknown) => {
+      raw = structuredClone(value)
+    },
+  }
+  const inputs = createPendingInputStore(file)
+  const env = setup(undefined, inputs)
+  env.core.start()
+  await settle()
+  const session = watch(env.core)
+  await settle()
+  await env.command('session.send', { ...where, text: '首条' })
+  env.peer
+    .last()
+    .notify('item/completed', { threadId: 'a', turnId: 'srv-1', item: userText('initial', '首条') })
+  await settle()
+  await env.command('session.send', { ...where, text: '插话', now: true })
+  const attempt = env.sent('turn/steer')[0] as { clientUserMessageId: string }
+  await env.command('session.interrupt', where)
+  env.peer
+    .last()
+    .notify('turn/completed', { threadId: 'a', turn: finished('srv-1', { status: 'interrupted' }) })
+  await settle()
+  assert.equal(session.seen.view!.queued[0]!.delivery, 'held')
+  assert.deepEqual(inputs.withdrawn('a'), [])
+  env.peer.last().notify('item/completed', {
+    threadId: 'a',
+    turnId: 'srv-1',
+    item: { ...userText('accepted', '插话'), clientId: attempt.clientUserMessageId },
+  })
+  await settle()
+  assert.equal(session.seen.view!.queued.length, 0)
+  assert.equal(
+    Object.values(session.seen.view!.items).filter(
+      (entry) => entry.kind === 'userMessage' && entry.text === '插话',
+    ).length,
+    1,
+  )
+})

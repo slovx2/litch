@@ -157,3 +157,29 @@ test('顶上那一条：连着在等快照写加载中，没连上写连接中�
   assert.equal(syncState('offline', true, false), 'offline')
   assert.equal(syncState('error', false, false), 'offline')
 })
+
+test('手机冷启动：独立待发记录撤回旧缓存气泡，保留同文另一条；重发后旧气泡仍不复活', async () => {
+  const { fileDeviceStore } = await import('../src/platform/device-store.ts')
+  const inputs = (deviceId) => fileDeviceStore().pendingInputs(deviceId)
+  const cache = createViewCache(jsonFile, 'pending-review', Date.now, inputs)
+  const view = fakeView('s', 2)
+  view.items.u0 = { ...view.items.u0, text: '同文', clientId: 'cancelled', delivery: 'queued' }
+  view.items.u1 = { ...view.items.u1, text: '同文', clientId: 'accepted', delivery: 'sent' }
+  cache.remember(view)
+  inputs('d1').save(
+    's',
+    [{ id: 'q', clientId: 'cancelled', text: '同文', images: [], extras: [], delivery: 'held' }],
+    ['cancelled'],
+  )
+  for (const current of [cache, createViewCache(jsonFile, 'pending-review', Date.now, inputs)]) {
+    const restored = current.recall('d1', 's')
+    assert.equal(restored.items.u0, undefined)
+    assert.equal(restored.items.u1.text, '同文')
+    assert.equal(restored.queued[0].id, 'q')
+    assert.deepEqual(restored.turns[0].itemIds, ['a0'])
+  }
+  inputs('d1').save('s', [])
+  const after = cache.recall('d1', 's')
+  assert.equal(after.items.u0, undefined)
+  assert.deepEqual(after.queued, [])
+})

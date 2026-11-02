@@ -15,6 +15,7 @@ import { createViewCache } from './core/view-cache'
 import { MermaidHost } from './detail/mermaid/MermaidHost'
 import { Navigator } from './nav/Navigator'
 import { setBackgroundMinutes } from './platform/background'
+import { fileDeviceStore } from './platform/device-store'
 import { type Booted, boot, VERSION } from './shell/boot'
 import { handleDevLink, navigationRef } from './shell/dev-links'
 import { jsonFile } from './shell/json-file'
@@ -40,7 +41,16 @@ function useBooted(prefs: Prefs, lang: 'zh-CN' | 'en') {
         else {
           current = next
           // 会话视图按装法分开留：模拟核心的示例会话和真设备上的不混
-          setViewCache(createViewCache((name) => jsonFile(`${next.mode}-${name}`), VERSION))
+          setViewCache(
+            createViewCache(
+              (name) => jsonFile(`${next.mode}-${name}`),
+              VERSION,
+              Date.now,
+              next.mode === 'stored'
+                ? (deviceId) => fileDeviceStore().pendingInputs?.(deviceId)
+                : undefined,
+            ),
+          )
           setBooted(next)
         }
       },

@@ -3,7 +3,9 @@ import type { QueuedMessage } from '../model.mjs'
 /** 只保存在当前客户端；与会话预览缓存分开，避免缓存裁剪删除待发内容。 */
 export interface PendingInputStore {
   load(sessionId: string): QueuedMessage[]
-  save(sessionId: string, messages: QueuedMessage[]): void
+  /** 已可靠接回本机待发的原尝试；发送、编辑或移除之后仍不恢复旧气泡。 */
+  withdrawn(sessionId: string): string[]
+  save(sessionId: string, messages: QueuedMessage[], withdrawn?: string[]): void
 }
 
 export function createPendingInputStore(file: {
@@ -11,11 +13,20 @@ export function createPendingInputStore(file: {
   write(value: unknown): void
 }): PendingInputStore {
   let saved: Record<string, QueuedMessage[]> | undefined
+  let withdrawn: Record<string, string[]> = {}
   const read = () => {
     if (saved) return saved
-    const raw = file.read() as { version?: unknown; sessions?: Record<string, unknown> } | null
+    const raw = file.read() as {
+      version?: unknown
+      sessions?: Record<string, unknown>
+      withdrawn?: Record<string, unknown>
+    } | null
     saved = {}
     if (raw?.version !== 1 || !raw.sessions || typeof raw.sessions !== 'object') return saved
+    for (const [id, ids] of Object.entries(raw.withdrawn ?? {})) {
+      if (Array.isArray(ids))
+        withdrawn[id] = ids.filter((id): id is string => typeof id === 'string')
+    }
     for (const [id, entries] of Object.entries(raw.sessions)) {
       if (!Array.isArray(entries)) continue
       saved[id] = entries.filter(
@@ -35,12 +46,22 @@ export function createPendingInputStore(file: {
         // 重启后绝不自动续发；正在交付的条目由原生历史/后续回执对账。
         delivery: entry.delivery === 'unknown' ? 'unknown' : 'held',
       })),
-    save(id, messages) {
+    withdrawn(id) {
+      read()
+      return [...(withdrawn[id] ?? [])]
+    },
+    save(id, messages, sources) {
       const next = { ...read() }
       if (messages.length) next[id] = messages
       else delete next[id]
-      file.write({ version: 1, sessions: next })
+      const claimed = { ...withdrawn }
+      if (sources) {
+        if (sources.length) claimed[id] = [...new Set(sources)]
+        else delete claimed[id]
+      }
+      file.write({ version: 1, sessions: next, withdrawn: claimed })
       saved = next
+      withdrawn = claimed
     },
   }
 }

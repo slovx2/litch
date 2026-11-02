@@ -167,6 +167,7 @@ export {
   pairingPayload,
 } from './device/pairing.mjs'
 export { createPendingInputStore, type PendingInputStore } from './device/pending-inputs.mjs'
+export { restorePendingView } from './device/pending-projection.mjs'
 export type { ProjectPermissionView } from './device/project-permissions.mjs'
 export {
   changeToolSwitches,

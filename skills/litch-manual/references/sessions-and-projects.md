@@ -267,6 +267,15 @@ explain it:
   tapped. Queued, stopped pending, and unconfirmed messages remain distinct.
   Sent messages have no visible status; their accessible name still includes it. Sent means accepted by the runtime, not necessarily acted on by the model.
   待发原文和附件保存在当前客户端，重启后保持暂停并尽量按 Claude 历史对账；尚不在设备间同步。
+  明确取消的插话在本机可靠保存为待发后，从对话中移到托盘；重新发送只显示新尝试，失败仍回到原待发记录。
+  切换会话、重读历史和重启后也按输入标识对账，不按相同文字删除消息；没有本机恢复记录的历史消息保留原文。
+  托盘单条发送、全部发送都不会提交输入框里的草稿；主发送键仍默认连同待发一起发，编辑待发仍追加到现有草稿后。
+  On desktop and phone, a confirmed cancelled input moves from the transcript to the pending tray after its recovery copy
+  is saved locally. Resending shows only the new attempt; a failed resend returns to the same pending entry. Reopening
+  or restarting uses input IDs, never matching text, to keep that projection. History without a local recovery record stays visible.
+  Sending one or all pending entries leaves the composer draft untouched. The main Send button still includes pending
+  entries by default, and editing a pending entry still appends it to an existing draft.
+
   编辑时若现有草稿容纳不下附件，消息仍留在待发列表。此阶段仅 Claude 提供交付状态，其他 harness 只统一停止后暂停队列。
   若界面误以为回合仍在运行、引擎明确拒绝插话，客户端会重新核对回合状态；确认已正常结束后，原消息作为新回合发送一次。
   无法确认状态时，消息和附件保留为暂停待发，可在状态恢复后点击“发送”。用户在核对期间点停止，仍须明确恢复发送。

@@ -469,6 +469,8 @@ export interface SidebarView {
 export type ItemStatus = 'inProgress' | 'completed' | 'failed' | 'declined'
 
 export interface UserMessageItem {
+  /** 原生回显携带的尝试身份，用于本机待发投影对账，不按正文匹配。 */
+  clientId?: string
   id: string
   kind: 'userMessage'
   text: string
@@ -1051,6 +1053,8 @@ export interface SessionPeekPending {
 /** 回合进行中发的消息先排着，回合结束后按顺序发出去 */
 export interface QueuedMessage extends OutgoingMessage {
   id: string
+  /** 只有明确取消回执才能登记原尝试，普通本地暂停不能冒充原生撤回。 */
+  sourceClientId?: string
   delivery?: 'held' | 'unknown'
   /** 已发起过的插话：用稳定标识对账，不按文字匹配。 */
   clientId?: string

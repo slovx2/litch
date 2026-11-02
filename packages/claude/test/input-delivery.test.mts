@@ -81,6 +81,17 @@ test('INPUT-DELIVERY：取消回执在 interrupted 后仍能落库；按投递�
       'held',
     )
     assert.equal(view.thread.turns[0].status, 'interrupted')
+    const cancelled = view.thread.turns[0].items.find((item: any) => item.clientId === 'pending')
+    for (const status of ['unknown', 'queued'] as const) {
+      await handlers.onEvent({ type: 'input_delivery', messageId: cancelled.id, status })
+      const saved = await aware.request('thread/read', { threadId: thread.id, includeTurns: true })
+      assert.equal(
+        saved.thread.turns[0].items.find((item: any) => item.id === cancelled.id)
+          .litchInputDelivery,
+        'held',
+      )
+    }
+
     const standard = await plain.request('thread/read', { threadId: thread.id, includeTurns: true })
     assert.doesNotMatch(JSON.stringify(standard), /litchInputDelivery/)
     assert.doesNotMatch(JSON.stringify(plain.trace), /litchInputDelivery/)
@@ -89,6 +100,16 @@ test('INPUT-DELIVERY：取消回执在 interrupted 后仍能落库；按投递�
       again.thread.turns[0].items.find((item: any) => item.clientId === 'pending')
         .litchInputDelivery,
       'held',
+    )
+    // 更强的原生接纳证据优先，迟到取消/排队不能再把它退回。
+    await handlers.onEvent({ type: 'input_delivery', messageId: cancelled.id, status: 'sent' })
+    for (const status of ['held', 'unknown', 'queued'] as const)
+      await handlers.onEvent({ type: 'input_delivery', messageId: cancelled.id, status })
+    const settled = await aware.request('thread/read', { threadId: thread.id, includeTurns: true })
+    assert.equal(
+      settled.thread.turns[0].items.find((item: any) => item.id === cancelled.id)
+        .litchInputDelivery,
+      'sent',
     )
   } finally {
     release()

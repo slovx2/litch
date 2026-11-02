@@ -4967,7 +4967,17 @@ export class CodexClaudeAppServer {
           // 取消回执在回合先落 interrupted 后到达，不能被迟到工具事件的过滤挡掉。
           if (event.type === 'input_delivery') {
             const item = this.store.updateItem(turn.id, event.messageId, (entry) =>
-              entry.type === 'userMessage' ? { ...entry, litchInputDelivery: event.status } : entry,
+              entry.type === 'userMessage'
+                ? {
+                    ...entry,
+                    litchInputDelivery:
+                      entry.litchInputDelivery === 'sent'
+                        ? 'sent'
+                        : entry.litchInputDelivery === 'held' && event.status !== 'sent'
+                          ? 'held'
+                          : event.status,
+                  }
+                : entry,
             )
             if (item) this.sendInputItem(peer, thread.id, turn.id, item)
             return
