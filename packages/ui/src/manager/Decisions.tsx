@@ -22,6 +22,7 @@ import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
 import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutcome.tsx'
 import { DraftEnded } from './DraftEnded.tsx'
+import { useManagerFeatures } from './data.ts'
 import {
   type AnswerDrafts,
   cancelAnswerEdit,
@@ -74,8 +75,11 @@ export function Decisions({
     requests: Object.values(requestDrafts),
     posts: Object.values(postDrafts),
   })
-  const postQuestions = live.posts
-  const requestReplies = live.requests
+  // 比应用旧的设备服务：没宣告 Feedback 只交决策答复（核心改走 answers/submit），没宣告 Posts 不交议题追问；
+  // 那些草稿留着，升级后再交
+  const features = useManagerFeatures()
+  const postQuestions = features.posts ? live.posts : []
+  const requestReplies = features.feedback ? live.requests : []
   const [filter, setFilter] = useState<'open' | 'answered' | 'closed' | 'ignored'>('open')
   const [editing, setEditing] = useState<Set<string>>(new Set())
   /** 正在填忽略理由的那张卡 */
@@ -110,7 +114,7 @@ export function Decisions({
   }
   const [error, setError] = useState('')
   const answers = live.answers.map(({ question: _question, ...answer }) => answer)
-  const questions = live.questions.map((draft) => ({
+  const questions = (features.feedback ? live.questions : []).map((draft) => ({
     decisionId: draft.decisionId,
     revision: draft.revision,
     question: draft.question?.trim() ?? '',
@@ -123,7 +127,11 @@ export function Decisions({
         (entry) => entry.status === 'running' && entry.mode !== 'manager',
       ),
   )
-  const requestConflict = live.requestConflict
+  /** 设备服务较旧、这次交不了而留着的草稿数 */
+  const held =
+    live.posts.length - postQuestions.length + live.requests.length - requestReplies.length
+  const heldQuestions = live.questions.length - questions.length
+  const requestConflict = features.feedback && live.requestConflict
   const conflict = live.conflict || requestConflict
   const save = (next: AnswerDrafts) => {
     try {
@@ -490,7 +498,8 @@ export function Decisions({
                             type="button"
                             className="btn ghost"
                             data-act="manager-ignore"
-                            disabled={disabled || busy}
+                            disabled={disabled || busy || !features.ignore}
+                            title={features.ignore ? undefined : t('manager.oldDeviceShort')}
                             onClick={() => setIgnoring({ id: decision.id, reason: '' })}
                           >
                             {t('manager.ignore')}
@@ -614,7 +623,7 @@ export function Decisions({
           {error}
         </p>
       ) : null}
-      {pending.length || requestReplies.length || postQuestions.length ? (
+      {pending.length || requestReplies.length || postQuestions.length || held || heldQuestions ? (
         <footer className="mg-send">
           <span className="grow">
             {t('manager.unsent', {
@@ -623,6 +632,12 @@ export function Decisions({
                 requestReplies.length +
                 postQuestions.length,
             })}
+            {held || heldQuestions ? (
+              <span className="dim" data-old-device-held>
+                {' · '}
+                {t('manager.oldDeviceHeld', { n: held + heldQuestions })}
+              </span>
+            ) : null}
           </span>
           <button
             type="button"
@@ -644,21 +659,29 @@ export function Decisions({
             type="button"
             className={requestReplies.length && !pending.length ? 'btn' : 'btn primary'}
             data-act="manager-submit"
-            disabled={disabled || busy || conflict || asking}
+            disabled={
+              disabled ||
+              busy ||
+              conflict ||
+              asking ||
+              (!pending.length && !requestReplies.length && !postQuestions.length)
+            }
             title={
-              asking
-                ? t('manager.questionWait')
-                : conflict
-                  ? t(requestConflict ? 'manager.requestConflict' : 'manager.conflict')
-                  : disabled
-                    ? t(
-                        manager.status === 'active'
-                          ? 'manager.offline'
-                          : manager.status === 'ending'
-                            ? 'manager.endingNote'
-                            : 'manager.readOnly',
-                      )
-                    : undefined
+              !pending.length && !requestReplies.length && !postQuestions.length
+                ? t('manager.oldDeviceShort')
+                : asking
+                  ? t('manager.questionWait')
+                  : conflict
+                    ? t(requestConflict ? 'manager.requestConflict' : 'manager.conflict')
+                    : disabled
+                      ? t(
+                          manager.status === 'active'
+                            ? 'manager.offline'
+                            : manager.status === 'ending'
+                              ? 'manager.endingNote'
+                              : 'manager.readOnly',
+                        )
+                      : undefined
             }
             onClick={() => void submit()}
           >

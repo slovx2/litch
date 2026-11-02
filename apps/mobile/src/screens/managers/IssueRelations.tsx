@@ -4,6 +4,7 @@ import { createContext, useContext, useState } from 'react'
 import { Linking, Pressable, Text, View } from 'react-native'
 import type {
   ManagerBoardView,
+  ManagerFeaturesView,
   ManagerView,
 } from '../../../../../packages/core/src/model-manager.mts'
 import type { ManagerRelationTarget } from '../../../../../packages/protocol/src/manager-posts.mjs'
@@ -26,6 +27,8 @@ const ICONS = {
 export const IssueContext = createContext<{
   board: ManagerBoardView
   manager: ManagerView
+  /** 设备宣告的后加经理能力；没宣告的是比应用旧的设备服务，对应入口禁用并写明原因（与桌面同一套） */
+  features: ManagerFeaturesView
   open(id: string): void
 } | null>(null)
 export function IssueRelations({
@@ -44,7 +47,10 @@ export function IssueRelations({
   const channel = useChannel()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   if (!context) return null
-  const { board, manager } = context
+  const { board, manager, features } = context
+  // 提交、差异之类要向设备读原文（reference/read，属于 Posts）：比应用旧的设备服务读不了
+  const unreadable = (target: ManagerRelationTarget) =>
+    !features.posts && !['issue', 'item', 'thread', 'url', 'file'].includes(target.kind)
   const groups = relationGroups(board.relations ?? [], { kind, target: id })
   if (!Object.values(groups).some((g) => g.length)) return null
   const title = (target: ManagerRelationTarget) => {
@@ -120,6 +126,8 @@ export function IssueRelations({
                     <Pressable
                       key={`${target.kind}:${target.target}`}
                       accessibilityRole="button"
+                      accessibilityState={{ disabled: unreadable(target) }}
+                      disabled={unreadable(target)}
                       onPress={() => void open(target)}
                       style={{ paddingVertical: 8, gap: 3 }}
                     >

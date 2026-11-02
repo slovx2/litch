@@ -147,6 +147,17 @@ export const enManager = {
   'manager.ignoreNote':
     'Ignored decisions no longer count as pending and send no reminders. The manager is notified and may reopen it if things change.',
   'manager.ignoredBy': 'Ignored by you',
+  'manager.oldDevice':
+    'The device service is older than this app: {items} are unavailable. Upgrade the device service in the device details.',
+  'manager.oldDeviceShort': 'Available after upgrading the device service',
+  'manager.oldDeviceHeld': ({ n }) =>
+    n === 1
+      ? '1 more follow-up or reply can be submitted after upgrading the device service'
+      : `${n} more follow-ups or replies can be submitted after upgrading the device service`,
+  'manager.feature.feedback': 'decision follow-ups, request deliveries and replies',
+  'manager.feature.posts': 'follow-ups on issues, marking reports as read, reference previews',
+  'manager.feature.ignore': 'ignoring decisions',
+  'manager.feature.join': '; ',
   'manager.unignore': 'Undo ignore',
   'manager.reopenedBy': 'Reopened by the manager',
   'manager.recommend': 'Recommended',

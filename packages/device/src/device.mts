@@ -487,7 +487,13 @@ export class DeviceServer {
     this.sessionTree.managers = this.managers
     this.deviceTools.allowed = (threadId, namespace, tool) =>
       this.managers.questions.allowed(threadId, namespace, tool)
-    info.extensions.push(EXTENSION.manager, EXTENSION.suggestionInbox)
+    info.extensions.push(
+      EXTENSION.manager,
+      EXTENSION.managerFeedback,
+      EXTENSION.managerPosts,
+      EXTENSION.managerIgnore,
+      EXTENSION.suggestionInbox,
+    )
     this.index.onChanged = () => this.sessionTree.suggestions.changed()
     this.deviceTools.register(CLIENT_TOOL_NAMESPACE.manager, (call) => this.managers.tool(call))
     // 以前删会话时没删它带的动态工具（每个几十 KB）：设备不认识的会话的那一行清一次。

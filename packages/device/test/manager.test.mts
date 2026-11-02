@@ -367,6 +367,13 @@ test('经理扩展：声明、路由、创建工具/规则、每条投递连接�
     const other = await plain(env)
     const info = await declared.call('runtime/info')
     assert.ok(info.device.extensions.includes('litchManager'))
+    // 后加的经理能力各自宣告；客户端没看到就当旧设备，禁用对应入口
+    for (const name of ['litchManagerFeedback', 'litchManagerPosts', 'litchManagerIgnore'])
+      assert.ok(info.device.extensions.includes(name), name)
+    // 不认识的经理方法回标准的“方法不存在”，不当成参数错误
+    const unknown = await declared.fails('litch/manager/not/yet', { managerId: 'm' })
+    assert.equal(unknown.code, -32601)
+    assert.equal(unknown.data.litch, 'methodNotFound')
     for (const method of Object.values(MANAGER_METHOD)) {
       const error = await other.fails(method, {})
       assert.equal(error.data.litch, 'extensionRequired')

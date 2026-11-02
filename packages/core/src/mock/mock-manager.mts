@@ -10,6 +10,7 @@ import type {
   ManagerBoardView,
   ManagerChangeView,
   ManagerDecisionView,
+  ManagerFeaturesView,
   ManagerView,
 } from '../model-manager.mjs'
 import type { MockTasksHost } from './mock-tasks.mjs'
@@ -19,8 +20,18 @@ import {
   sampleManagerOpening,
   sampleManagers,
 } from './sample-manager.mjs'
+import { SERVICE_VERSIONS } from './sample-service.mjs'
 
 const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
+/** 属于 litchManagerPosts 的命令 */
+const POSTS_COMMANDS = new Set([
+  'managers.reference.read',
+  'managers.post.forward',
+  'managers.post.question',
+  'managers.report.read',
+  'managers.question.ask',
+  'managers.question.forward',
+])
 
 export interface MockManagerHost
   extends Pick<MockTasksHost, 'clock' | 'lang' | 'devices' | 'device' | 'spawn'> {
@@ -44,6 +55,26 @@ export function createMockManagers(host: MockManagerHost) {
     const device = host.device(id)
     return device?.mode !== 'full' ? false : device.stale ? null : true
   }
+  /**
+   * 设备服务比应用旧（远程升级那几出里的关键字把它变旧，mock-remote-upgrade.mts）就当成没宣告后加的经理能力，
+   * 与真实设备里 0.28.1 及以前的服务一样：入口禁用、写明去设备详情升级，升级换上新版后恢复。
+   */
+  const features = (id: string): ManagerFeaturesView => {
+    const version = host.device(id)?.service?.version
+    const parts = (value: string) => value.split('.').map(Number)
+    const [a = 0, b = 0, c = 0] = version ? parts(version) : []
+    const [x = 0, y = 0, z = 0] = parts(SERVICE_VERSIONS.bundled)
+    const old = version !== undefined && (a - x || b - y || c - z) < 0
+    return { feedback: !old, posts: !old, ignore: !old }
+  }
+  const oldDevice = () =>
+    new ChannelError(
+      'unsupported',
+      t(
+        '设备服务版本较旧，不支持这个操作。请在设备详情里升级设备服务后再试。',
+        'The device service is older than this app and does not support this action. Upgrade the device service in the device details, then try again.',
+      ),
+    )
   const state = (id: string) => {
     let value = states.get(id)
     if (!value) {
@@ -77,7 +108,13 @@ export function createMockManagers(host: MockManagerHost) {
         board,
         host.suggestions?.(deviceId).filter((s) => s.managerId === managerId) ?? [],
       )
-    return { deviceId, managerId, available: available(deviceId), board }
+    return {
+      deviceId,
+      managerId,
+      available: available(deviceId),
+      board,
+      features: features(deviceId),
+    }
   }
   const publish = (deviceId: string, manager: ManagerView, board: ManagerBoardView) => {
     manager.pendingDecisions = board.decisions.filter((d) => d.status === 'open').length
@@ -153,6 +190,17 @@ export function createMockManagers(host: MockManagerHost) {
         'unsupported',
         t('此设备不支持经理', 'This device does not support managers'),
       )
+    // 与核心一致：没宣告的能力不发请求；只有决策答复的 feedback 照常（核心改走 answers/submit）
+    const has = features(deviceId)
+    const given = params as { questions?: unknown[]; requests?: unknown[] }
+    if (
+      (!has.posts && POSTS_COMMANDS.has(name)) ||
+      (!has.ignore && name === 'managers.decision.ignore') ||
+      (!has.feedback &&
+        name === 'managers.feedback.submit' &&
+        (given.questions?.length || given.requests?.length))
+    )
+      throw oldDevice()
     const data = state(deviceId)
     if (name === 'managers.create') {
       const { manager: draft } = params as Commands['managers.create']['params']
@@ -651,6 +699,13 @@ export function createMockManagers(host: MockManagerHost) {
       : t('经理已结束，对话和看板只读', 'This manager has ended. Chat and board are read-only.')
   }
   return {
+    /** 设备服务换了版本（变旧或升级换上）：重发看板，能力位跟着变 */
+    refreshBoards(deviceId: string) {
+      if (!states.has(deviceId)) return
+      for (const manager of state(deviceId).managers)
+        for (const sink of boards.get(key(deviceId, manager.id)) ?? [])
+          sink.delta([{ op: 'managerBoard.set', view: copy(boardView(deviceId, manager.id)) }])
+    },
     refreshSuggestions(deviceId: string) {
       for (const manager of state(deviceId).managers) {
         const board = boardView(deviceId, manager.id).board

@@ -6,6 +6,7 @@ import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useServices } from '../app/services.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
+import { useManagerFeatures } from './data.ts'
 import { useIssueOrder } from './issue-order.tsx'
 import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
 import { Relations } from './Relations.tsx'
@@ -23,6 +24,7 @@ export function Reports({
   const [busy, setBusy] = useState('')
   const order = useIssueOrder()
   const [error, setError] = useState('')
+  const features = useManagerFeatures()
   const read = async (post: ManagerPost) => {
     setBusy(post.id)
     try {
@@ -59,12 +61,19 @@ export function Reports({
               <button
                 type="button"
                 className="btn"
-                disabled={disabled || !!busy}
+                disabled={disabled || !!busy || !features.posts}
+                title={features.posts ? undefined : t('manager.oldDeviceShort')}
                 data-act="report-read"
                 onClick={() => void read(post)}
               >
                 {t('manager.markRead')}
               </button>
+            ) : null}
+            {post.unread && !features.posts ? (
+              <span className="dim" data-old-device-reason>
+                {' '}
+                {t('manager.oldDeviceShort')}
+              </span>
             ) : null}
             <PostDiscussion manager={manager} post={post} disabled={disabled} />
           </article>

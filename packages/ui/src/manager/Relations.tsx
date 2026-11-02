@@ -9,6 +9,7 @@ import { useServices } from '../app/services.tsx'
 import { openInFiles } from '../files/state.ts'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferencesContext } from './BoardReferences.tsx'
+import { useManagerFeatures } from './data.ts'
 import type { BoardReference } from './references.ts'
 
 const RELATION_ICONS = {
@@ -36,6 +37,10 @@ export function Relations({
   const context = useContext(RelationsContext)
   const navigation = useContext(BoardReferencesContext)
   const t = useT()
+  // 提交、差异之类要向设备读原文（reference/read，属于 Posts）：比应用旧的设备服务读不了
+  const features = useManagerFeatures()
+  const unreadable = (target: ManagerRelationTarget) =>
+    !features.posts && !['issue', 'item', 'thread', 'url', 'file'].includes(target.kind)
   const { channel } = useServices()
   const [preview, setPreview] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -130,7 +135,8 @@ export function Relations({
                   type="button"
                   className="btn ghost"
                   key={`${target.kind}:${target.target}`}
-                  title={title(target)}
+                  title={unreadable(target) ? t('manager.oldDeviceShort') : title(target)}
+                  disabled={unreadable(target)}
                   data-relation-target={target.target}
                   onClick={() => void open(target)}
                 >

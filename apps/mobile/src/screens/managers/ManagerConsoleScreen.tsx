@@ -12,7 +12,7 @@ import {
   type SuggestionView,
 } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import type { ManagerDecisionOption } from '../../../../../packages/protocol/src/manager.mjs'
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
@@ -151,6 +151,18 @@ function Issue({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const locked = busy || manager.status !== 'active' || device?.connection !== 'online'
+  // 比应用旧的设备服务没宣告的能力：入口禁用，旁边写明原因（看板顶上另有一行说去设备详情升级）
+  const features = useContext(IssueContext)?.features ?? {
+    feedback: true,
+    posts: true,
+    ignore: true,
+  }
+  const oldReason = (what: keyof typeof features) =>
+    features[what] ? null : (
+      <Text testID={`old-device-reason:${what}:${post.id}`} style={{ color: c.ink2 }}>
+        {t('manager.oldDeviceShort')}
+      </Text>
+    )
   const canTemporary =
     device?.harnesses.find((h) => h.id === manager.harness)?.abilities?.managerQuestions === true
   const run = async (work: () => Promise<unknown>) => {
@@ -367,7 +379,8 @@ function Issue({
           {post.kind === 'report' && post.unread ? (
             <Button
               label={t(post.unread ? 'manager.markRead' : 'manager.reportRead')}
-              disabled={locked || !post.unread}
+              testID={`report-read:${post.id}`}
+              disabled={locked || !post.unread || !features.posts}
               onPress={() =>
                 void run(() =>
                   channel.command('managers.report.read', {
@@ -380,6 +393,7 @@ function Issue({
               }
             />
           ) : null}
+          {post.kind === 'report' && post.unread ? oldReason('posts') : null}
           {suggestion ? (
             <ProposalActs
               deviceId={manager.deviceId}
@@ -402,22 +416,25 @@ function Issue({
                     accessibilityLabel={t('manager.requestText')}
                     style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
                     multiline
+                    editable={features.feedback}
                     value={reply}
                     onChangeText={writeReply}
                   />
                   <Button
-                    disabled={locked}
+                    testID={`request-deliver:${request.id}`}
+                    disabled={locked || !features.feedback}
                     label={request.buttonLabel ?? t('manager.requestDone')}
                     onPress={() => void submitReply(true)}
                   />
                   {reply.trim() ? (
                     <Button
                       kind="plain"
-                      disabled={locked}
+                      disabled={locked || !features.feedback}
                       label={t('manager.submit')}
                       onPress={() => void submitReply(false)}
                     />
                   ) : null}
+                  {oldReason('feedback')}
                   {request.status !== 'open' ? (
                     <Button
                       kind="plain"
@@ -432,7 +449,7 @@ function Issue({
               ) : request.status !== 'cancelled' && !replyEnded ? (
                 <Button
                   kind="plain"
-                  disabled={locked}
+                  disabled={locked || !features.feedback}
                   label={t('manager.requestEdit')}
                   onPress={() => {
                     writeReply(request.response?.text ?? '')
@@ -501,12 +518,13 @@ function Issue({
                           <Button
                             kind="plain"
                             testID={`decision-ignore:${decision.id}`}
-                            disabled={locked}
+                            disabled={locked || !features.ignore}
                             label={t('manager.ignore')}
                             onPress={() => setIgnoring('')}
                           />
                         ) : null}
                       </View>
+                      {decisionButtons?.ignore ? oldReason('ignore') : null}
                     </>
                   ) : null}
                   {decisionButtons?.ignore && ignoring !== null ? (
@@ -649,8 +667,12 @@ function Issue({
             ))}
           <Pressable
             accessibilityRole="button"
-            accessibilityState={{ expanded: asking, disabled: locked }}
-            disabled={locked}
+            accessibilityState={{
+              expanded: asking && features.posts,
+              disabled: locked || !features.posts,
+            }}
+            disabled={locked || !features.posts}
+            testID={`post-ask:${post.id}`}
             onPress={() => setAsking(!asking)}
             style={styles.textLink}
           >
@@ -658,7 +680,8 @@ function Issue({
               {asking ? '▾' : '▸'} {t(asking ? 'manager.postAskClose' : 'manager.postAsk')}
             </Text>
           </Pressable>
-          {asking ? (
+          {oldReason('posts')}
+          {asking && features.posts ? (
             <View style={[styles.askComposer, { borderColor: c.line3, backgroundColor: c.sunken }]}>
               <View style={styles.actions}>
                 <Button
@@ -759,6 +782,8 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
     report: 'manager.reports',
   } as const
   const counts = issueCounts(manager)
+  const features = view?.features ?? { feedback: true, posts: true, ignore: true }
+  const missing = (['feedback', 'posts', 'ignore'] as const).filter((key) => !features[key])
   const tabs = {
     overview: 'manager.overview',
     items: 'manager.items',
@@ -880,10 +905,18 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
                 : 'manager.ended',
           )}
         </Text>
+      ) : missing.length ? (
+        <Text testID="manager-old-device" role="note" style={{ color: c.ink2, padding: 12 }}>
+          {t('manager.oldDevice', {
+            items: missing
+              .map((key) => t(`manager.feature.${key}`))
+              .join(t('manager.feature.join')),
+          })}
+        </Text>
       ) : null}
       <ScrollView ref={scroll}>
         {manager && view?.board ? (
-          <IssueContext.Provider value={{ manager, board: view.board, open: openIssue }}>
+          <IssueContext.Provider value={{ manager, board: view.board, features, open: openIssue }}>
             {tab === 'overview' ? (
               <ManagerOverview
                 board={view.board}

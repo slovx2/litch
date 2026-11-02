@@ -92,11 +92,24 @@ export interface ManagerBoardView
   changes: ManagerChangeView[]
 }
 /** 看板按经理订阅；还没读到时 board=null，不把空看板误当作真实数据。 */
+/**
+ * 设备支持哪些后加的经理能力（设备信息 extensions 里的 litchManagerFeedback / Posts / Ignore）。
+ * 没有的是比应用旧的设备服务：界面禁用对应入口并写明原因，核心也不发这些请求。
+ */
+export interface ManagerFeaturesView {
+  /** 答复、决策追问、请你做交付同批提交（feedback/submit）；没有时只能交决策答复 */
+  feedback: boolean
+  /** 议题追问、报告标已阅、编号预览、临时追问与转给经理 */
+  posts: boolean
+  /** 忽略决策、撤销忽略 */
+  ignore: boolean
+}
 export interface ManagerBoardTopicView {
   deviceId: string
   managerId: string
   available: boolean | null
   board: ManagerBoardView | null
+  features: ManagerFeaturesView
 }
 export type ManagerDraft = ManagerCreateParams
 export type ManagerEdit = ManagerPatch

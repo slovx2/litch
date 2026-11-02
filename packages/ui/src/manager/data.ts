@@ -1,6 +1,10 @@
 import { type ChannelError, keys, type ManagerBoardPages } from '@litch/core'
-import { useEffect } from 'react'
-import type { ManagerBoardTopicView, ManagerView } from '../../../core/src/model-manager.mts'
+import { createContext, useContext, useEffect } from 'react'
+import type {
+  ManagerBoardTopicView,
+  ManagerFeaturesView,
+  ManagerView,
+} from '../../../core/src/model-manager.mts'
 import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { useDevices } from '../composer/useNewPlace.ts'
 
@@ -32,3 +36,14 @@ export function useManagerBoard(manager: ManagerView) {
   const error = useKey<ChannelError>(keys.managerBoardError(deviceId, managerId))
   return { view, pages, error }
 }
+
+/**
+ * 设备宣告了哪些后加的经理能力（看板视图带的 features）。没宣告的是比应用旧的设备服务：
+ * 入口禁用、写明去设备详情升级，不等点了再报错。没包在控制台里的地方按都有算。
+ */
+export const ManagerFeaturesContext = createContext<ManagerFeaturesView>({
+  feedback: true,
+  posts: true,
+  ignore: true,
+})
+export const useManagerFeatures = () => useContext(ManagerFeaturesContext)

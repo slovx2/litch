@@ -49,6 +49,16 @@ export const SCENES: Scene[] = [
     steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1', tab: 'console' })],
   },
   {
+    id: 'manager-old-device',
+    group: '经理',
+    name: '设备服务较旧',
+    note: '本机在跑旧版设备服务：页顶写明哪些不可用、去设备详情升级，忽略、追问、交付禁用并写原因，答复照常',
+    steps: [
+      say('服务旧而忙'),
+      nav('ManagerConsole', { deviceId: 'local', managerId: 'm1', tab: 'console' }),
+    ],
+  },
+  {
     id: 'cjk-emphasis',
     group: '对话',
     name: '中文强调定界符',

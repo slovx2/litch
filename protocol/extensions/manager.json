@@ -131,12 +131,31 @@
       "description": "只投递给声明本扩展的连接。"
     },
     {
+      "kind": "Capability",
+      "name": "litchManagerFeedback",
+      "on": "runtime/info.device.extensions",
+      "description": "设备支持 litch/manager/feedback/submit（答复、决策追问、请你做交付同批提交）时宣告。没有时客户端只交决策答复（走 answers/submit），追问和交付入口禁用并写明设备服务较旧、去设备详情升级。方法与通知仍以连接声明 litchManager 为门禁。"
+    },
+    {
+      "kind": "Capability",
+      "name": "litchManagerPosts",
+      "on": "runtime/info.device.extensions",
+      "description": "设备支持议题帖子一组方法（post/question、report/read、reference/read、post/forward、question/ask、question/forward）时宣告。没有时客户端禁用议题追问、报告标已阅、临时追问等入口并写明原因。"
+    },
+    {
+      "kind": "Capability",
+      "name": "litchManagerIgnore",
+      "on": "runtime/info.device.extensions",
+      "description": "设备支持 decision/ignore（用户忽略决策）及撤销忽略时宣告。没有时客户端禁用“忽略”并写明原因。"
+    },
+    {
       "kind": "Error",
       "description": "error.data.litch 标识原因，message 为可操作的英文说明；未声明时用已有 extensionRequired。",
       "errors": [
         {"litch": "unknownManager", "code": -32602, "description": "managerId 不存在"},
         {"litch": "managerEnded", "code": -32600, "description": "经理结束中或已结束；结束中仅指定收尾回合可写，已结束后不能修改"},
         {"litch": "invalidManager", "code": -32602, "description": "参数不合法，data.field 指明字段"},
+        {"litch": "methodNotFound", "code": -32601, "description": "设备不认识这个 litch/manager/ 方法（比客户端旧）。更早的设备对此回 invalidManager、原文以 Unknown manager method 开头，客户端同样按设备服务较旧提示"},
         {"litch": "unknownDecision", "code": -32602, "description": "decisionId 不属于这个看板"},
         {"litch": "decisionNotClosed", "code": -32600, "description": "只能重新打开 expired/withdrawn/ignored"},
         {"litch": "decisionNotOpen", "code": -32600, "description": "只能忽略 open 决策"},

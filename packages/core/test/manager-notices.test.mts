@@ -24,6 +24,7 @@ function world(enabled = true) {
     deviceId: 'local',
     online: () => online,
     supported: () => true,
+    features: () => ({ feedback: true, posts: true, ignore: true }),
     request: (async (method: string) => {
       if (method === MANAGER_METHOD.list) return { managers: [structuredClone(manager)] }
       assert.equal(method, MANAGER_METHOD.boardRead)

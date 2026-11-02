@@ -2551,6 +2551,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     const next = { ...before, ...patch }
     app.devices[index] = next
     emitDevice(next)
+    if ('service' in patch) managers.refreshBoards(deviceId)
     return next
   }
 

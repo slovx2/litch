@@ -12,6 +12,7 @@ import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { DraftEnded } from './DraftEnded.tsx'
+import { useManagerFeatures } from './data.ts'
 import { useIssueOrder } from './issue-order.tsx'
 import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
 import { Relations } from './Relations.tsx'
@@ -37,6 +38,9 @@ export function Requests({
   const [error, setError] = useState('')
   const root = useRef<HTMLDivElement>(null)
   const order = useIssueOrder()
+  // 交付与回复随“提交给经理”经 feedback/submit 交：比应用旧的设备服务没有，入口禁用并写明原因
+  const old = !useManagerFeatures().feedback
+  const oldTitle = old ? t('manager.oldDeviceShort') : undefined
   useLayoutEffect(() => {
     if (!target) return
     const card = root.current?.querySelector<HTMLElement>(`[data-manager-request="${target.id}"]`)
@@ -149,7 +153,8 @@ export function Requests({
             {request.status !== 'cancelled' && editing ? (
               <>
                 <textarea
-                  disabled={locked}
+                  disabled={locked || old}
+                  title={oldTitle}
                   className="req-input"
                   rows={2}
                   data-act="manager-request-text"
@@ -162,7 +167,8 @@ export function Requests({
                   type="button"
                   className="btn primary"
                   data-act="manager-request-deliver"
-                  disabled={locked}
+                  disabled={locked || old}
+                  title={oldTitle}
                   aria-pressed={draft?.delivered ?? false}
                   onClick={() => change(request, { delivered: !draft?.delivered })}
                 >
@@ -189,13 +195,19 @@ export function Requests({
                     {t('manager.cancelEdit')}
                   </button>
                 ) : null}
+                {old ? (
+                  <p className="dim" data-old-device-reason>
+                    {t('manager.oldDeviceShort')}
+                  </p>
+                ) : null}
               </>
             ) : request.status !== 'cancelled' ? (
               <button
                 type="button"
                 className="btn ghost"
                 data-act="manager-request-edit"
-                disabled={locked}
+                disabled={locked || old}
+                title={oldTitle}
                 onClick={() =>
                   change(request, {
                     delivered: request.response?.delivered ?? false,

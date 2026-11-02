@@ -9,6 +9,7 @@ import { useKey, useServices } from '../app/services.tsx'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { DraftEnded } from './DraftEnded.tsx'
+import { useManagerFeatures } from './data.ts'
 import { usePostDrafts } from './post-drafts.ts'
 
 export function usePost(manager: ManagerView, id: string) {
@@ -73,6 +74,9 @@ export function PostDiscussion({
   const [temporary, setTemporary] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const features = useManagerFeatures()
+  // 比应用旧的设备服务：议题追问要 Posts，决策上的追问随答复一起交、还要 Feedback
+  const old = !features.posts || (Boolean(onQuestion) && !features.feedback)
   if (!post) return null
   const messages = post.discussion.messages
   const running = messages.some((q) => q.status === 'running' && q.mode !== 'manager')
@@ -208,15 +212,23 @@ export function PostDiscussion({
         type="button"
         className="btn ghost"
         data-act="post-ask"
-        aria-expanded={open}
+        aria-expanded={open && !old}
         aria-controls={`${inputId}-compose`}
+        disabled={old}
+        title={old ? t('manager.oldDeviceShort') : undefined}
         onClick={() => setOpen(!open)}
       >
-        <span aria-hidden="true">{open ? '▾' : '▸'}</span>{' '}
-        {t(open ? 'manager.postAskClose' : 'manager.postAsk')}
+        <span aria-hidden="true">{open && !old ? '▾' : '▸'}</span>{' '}
+        {t(open && !old ? 'manager.postAskClose' : 'manager.postAsk')}
         {value.trim() && !ended ? ` · ${t('manager.draft')}` : ''}
       </button>
-      {open ? (
+      {old ? (
+        <span className="dim" data-old-device-reason>
+          {' '}
+          {t('manager.oldDeviceShort')}
+        </span>
+      ) : null}
+      {open && !old ? (
         <div className="mg-post-compose" id={`${inputId}-compose`}>
           <fieldset className="mg-question-modes" aria-label={t('manager.questionMode')}>
             <button
@@ -277,7 +289,8 @@ export function PostDiscussion({
           type="button"
           className="btn ghost"
           data-act="manager-question-forward"
-          disabled={locked || post.discussion.forwarded === messages.length}
+          disabled={locked || old || post.discussion.forwarded === messages.length}
+          title={old ? t('manager.oldDeviceShort') : undefined}
           onClick={() => void forward()}
         >
           {t(

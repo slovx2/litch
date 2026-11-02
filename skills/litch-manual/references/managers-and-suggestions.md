@@ -332,6 +332,10 @@ use the same accessible name and placeholder. Related targets use link color and
 
 “忽略”是你不处理这个问题；“已关闭”是经理认为问题不在了（失效或撤回）。经理不能直接把忽略的决策记成已答复，只能在情况有变、确实需要你再看时写明理由重新打开；这时卡片上多一块默认展开的“经理重新打开”写着理由（可收起）；“上次关闭”仍默认收起。
 
+### 设备服务比应用旧
+
+经理所在设备的设备服务比应用旧时（常见于没升级的远程设备），控制台顶上写明哪些功能不可用，并提示在设备详情里升级设备服务。不可用的入口直接禁用，旁边写“设备服务版本较旧，升级后可用”：决策追问、请你做的交付与回复、议题追问、报告已阅、引用预览、忽略决策。决策答复照常可以提交；已写好的追问和回复草稿留着，升级后再提交。别的操作遇到设备不认识的请求时，同样提示去设备详情升级设备服务。手机相同。
+
 Console lists default to **Newest first** by issue creation time. Switch to **Oldest first** or
 **To handle first** (open decisions, open For you requests, reviewed suggestions and unread reports
 first, newest within each group). On desktop the sort control sits at the right of the list header:
@@ -368,3 +372,12 @@ again. Ignoring means you are not handling the question; **Closed** means the ma
 question no longer applies. The manager cannot record an answer for an ignored decision; it can only
 reopen it with a reason when things have changed, which then shows as a **Reopened by the manager**
 block, expanded by default; **Previously closed** stays collapsed.
+
+When the device service on the manager's device is older than the app (typically a remote device
+that has not been upgraded), the console says which features are unavailable and asks you to upgrade
+the device service in the device details. The affected controls are disabled with the note
+**Available after upgrading the device service**: decision follow-ups, delivering or replying to
+requests, follow-ups on issues, marking reports as read, reference previews and ignoring decisions.
+Decision answers can still be submitted; follow-up and reply drafts are kept for after the upgrade.
+Any other request the device does not recognize shows the same upgrade advice. Phone behaves the
+same.

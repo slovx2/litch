@@ -543,6 +543,48 @@ try {
   await tapId('manager-tab:overview')
   await tapId('manager-stat:wait')
   await wait('[data-testid="manager-issue-order"]')
+  // 比应用旧的设备服务（本机在跑旧版）：页顶写明哪些不可用、去设备详情升级；入口禁用并写原因，答复照常
+  await call('Page.navigate', {
+    url: url.replace('scene=manager-console', 'scene=manager-old-device'),
+  })
+  await wait('[data-testid="manager-old-device"]')
+  assert.ok(
+    await read(
+      `(()=>{const e=document.querySelector('[data-testid="manager-old-device"]').innerText;return e.includes('设备详情里升级设备服务')&&e.includes('忽略决策')&&e.includes('请你做的交付与回复')})()`,
+    ),
+    '设备服务较旧：页顶写明不可用的功能与升级去处',
+  )
+  const disabledWithReason = (button, reason) =>
+    read(
+      `document.querySelector('[data-testid="${button}"]')?.getAttribute('aria-disabled')==='true' && (document.querySelector('[data-testid="${reason}"]')?.textContent??'').includes('升级后可用')`,
+    )
+  await wait('[data-testid="decision-ignore:D-17"]')
+  assert.ok(
+    await disabledWithReason('decision-ignore:D-17', 'old-device-reason:ignore:D-17'),
+    '设备服务较旧：忽略禁用并写原因',
+  )
+  assert.ok(
+    await disabledWithReason('post-ask:D-17', 'old-device-reason:posts:D-17'),
+    '设备服务较旧：追问禁用并写原因',
+  )
+  await tapId('manager-category:request')
+  await wait('[data-testid="request-deliver:R-1"]')
+  assert.ok(
+    await disabledWithReason('request-deliver:R-1', 'old-device-reason:feedback:R-1'),
+    '设备服务较旧：请你做的交付禁用并写原因',
+  )
+  await tapId('manager-category:decision')
+  await wait('[data-testid="manager-issue:D-17"] textarea')
+  await read(
+    `(()=>{const input=document.querySelector('[data-testid="manager-issue:D-17"] textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'旧设备上照常答复');input.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+  )
+  await tapId('decision-submit:D-17')
+  await until(
+    () =>
+      read(`document.querySelector('[data-testid="issue-status:D-17"]')?.textContent==='已答复'`),
+    '设备服务较旧：决策答复照常交上',
+  )
+  await shot('mobile-old-device')
   // 经理目录：按设备分组。
   await call('Page.navigate', { url: url.replace('scene=manager-console', 'scene=managers') })
   await wait('[data-testid="managers:device:local"]')
@@ -570,7 +612,7 @@ try {
   )
   await shot('mobile-managers')
   console.log(
-    '手机经理：目录、概览、排序、已答决策分块、三皮肤报告、关联定位、已阅、追问与交付通过',
+    '手机经理：目录、概览、排序、已答决策分块、三皮肤报告、关联定位、已阅、追问与交付、设备服务较旧通过',
   )
 } catch (error) {
   console.error(error)

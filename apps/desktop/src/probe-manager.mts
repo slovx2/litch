@@ -66,6 +66,12 @@ export interface ManagerSeen {
   archivedFallback: boolean
   externalChat: boolean
   externalKeepsManager: boolean
+  /**
+   * 比应用旧的设备服务（本机在跑旧版）：控制台顶上写明哪些不可用、去设备详情升级；忽略、追问、
+   * 请你做的交付与回复、报告已阅禁用并写原因；决策答复照常能交
+   */
+  oldDevice: boolean
+  oldDeviceDetail: string
 }
 
 export async function managerProbe(captureQuestions = false): Promise<ManagerSeen> {
@@ -1018,6 +1024,67 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await until('归档普通会话不影响经理', () => one('[data-manager="session"][data-manager-id="m1"]'))
   await click('[data-sidebar-mode="chat"]')
   const archivedFallback = Boolean(await until('切回对话默认页', () => one('.new-page')))
+
+  // 比应用旧的设备服务：在本机会话里说“服务旧而忙”，本机在跑的就成了旧版（模拟核心据此不宣告后加的经理能力）
+  await click('[data-session="s4"]:not(.projection-group *) .ss-row:not(.projection-group *)')
+  const composer = await until('会话输入框', () => one<HTMLTextAreaElement>('textarea.cmp-text'))
+  fill(composer, '服务旧而忙，经理冒烟')
+  await new Promise((resolve) => requestAnimationFrame(resolve))
+  composer.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+  )
+  await until('这一句发出去', () =>
+    [...document.querySelectorAll('.turn .umsg-text')].some((entry) =>
+      entry.textContent?.includes('服务旧而忙，经理冒烟'),
+    ),
+  )
+  await click('[data-sidebar-mode="manager"]')
+  await click('[data-manager-id="m3"] .mg-pick')
+  await until('旧设备上的经理', () => one('[data-manager="session"][data-manager-id="m3"]'))
+  await click('[data-board-tab="decisions"]')
+  const banner = await until('设备服务较旧的说明', () => one('[data-old-device]'))
+  const oldCard = await until('旧设备上的待定决策', () => one('[data-decision="D-1"]'))
+  const oldIgnore = oldCard.querySelector<HTMLButtonElement>('[data-act="manager-ignore"]')
+  const oldAsk = oldCard.querySelector<HTMLButtonElement>('[data-act="post-ask"]')
+  const oldChecks = {
+    banner: Boolean(
+      banner.textContent?.includes('设备详情里升级设备服务') &&
+        banner.textContent.includes('忽略决策') &&
+        banner.textContent.includes('请你做的交付与回复'),
+    ),
+    ignore: Boolean(oldIgnore?.disabled && oldIgnore.title.includes('升级后可用')),
+    ask: Boolean(
+      oldAsk?.disabled &&
+        oldCard.querySelector('[data-old-device-reason]')?.textContent?.includes('升级后可用'),
+    ),
+    answered: false,
+  }
+  fill(
+    await until('旧设备上的答复框', () =>
+      oldCard.querySelector<HTMLTextAreaElement>('[data-act="manager-answer"]'),
+    ),
+    '旧设备上照常答复',
+  )
+  ;(
+    await until('旧设备上的提交按钮', () => {
+      const button = one<HTMLButtonElement>('[data-act="manager-submit"]')
+      return button && !button.disabled ? button : null
+    })
+  ).click()
+  // 交上后切到“已答复”，卡片上不再有答复框
+  oldChecks.answered = Boolean(
+    await until(
+      '旧设备上的答复交上',
+      () =>
+        !one('.mg-send') &&
+        one('[data-filter="answered"][aria-pressed="true"]') &&
+        one('[data-decision="D-1"]') &&
+        !one('[data-decision="D-1"] [data-act="manager-answer"]'),
+    ).catch(() => false),
+  )
+  const oldError = one('.mg-body .err')?.textContent ?? ''
+  const oldDevice = Object.values(oldChecks).every(Boolean)
+  const oldDeviceDetail = JSON.stringify({ ...oldChecks, error: oldError })
   return {
     linesState,
     pendingTitle,
@@ -1082,12 +1149,14 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     archivedFallback,
     externalChat,
     externalKeepsManager,
+    oldDevice,
+    oldDeviceDetail,
   }
 }
 
 export function judgeManager(seen: ManagerSeen): string[] {
   const messages: Record<
-    Exclude<keyof ManagerSeen, 'ignoreDetail' | 'endedDraftDetail'>,
+    Exclude<keyof ManagerSeen, 'ignoreDetail' | 'endedDraftDetail' | 'oldDeviceDetail'>,
     string
   > = {
     linesState:
@@ -1153,6 +1222,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
     archivedFallback: '已归档会话在切回对话后仍被恢复',
     externalChat: '经理视图从外部打开普通会话后未切到对话栏',
     externalKeepsManager: '外部跳转到普通会话后丢失了经理位置',
+    oldDevice: `设备服务比应用旧时，控制台没写明不可用的功能与升级去处、忽略或追问没禁用写原因，或决策答复交不上：${seen.oldDeviceDetail}`,
   }
   return (Object.keys(messages) as (keyof typeof messages)[])
     .filter((key) => !seen[key])

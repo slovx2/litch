@@ -8,6 +8,7 @@ import {
   createMockCore,
   createPortPair,
   type DeviceView,
+  type ManagerBoardTopicView,
   type SampleLang,
   serveChannel,
 } from '../src/index.mjs'
@@ -260,4 +261,68 @@ test('远程设备的一键升级四出：马上换上、等空闲（还有回�
   const behind = build().remoteUpgrade?.phase
   assert.equal(behind?.step === 'failed' ? behind.at : null, 'behind')
   assert.equal(build().remoteUpgrade?.installed, '0.6.1')
+})
+
+test('设备服务比应用旧：经理看板的后加能力全关，相应命令写明去设备详情升级；远程升级换上新版后恢复', async () => {
+  const { channel, devices, flush, say } = setup()
+  await settle()
+  const views = new Map<string, ManagerBoardTopicView>()
+  for (const [deviceId, managerId] of [
+    ['local', 'm1'],
+    ['build', 'm2'],
+  ] as const)
+    channel.subscribe(
+      { kind: 'managerBoard', deviceId, managerId },
+      {
+        snapshot: (data) => views.set(deviceId, data as ManagerBoardTopicView),
+        delta: (ops) => views.set(deviceId, (ops.at(-1) as { view: ManagerBoardTopicView }).view),
+      },
+    )
+  await flush()
+  const all = { feedback: true, posts: true, ignore: true }
+  const none = { feedback: false, posts: false, ignore: false }
+  assert.deepEqual(views.get('local')?.features, all)
+  assert.deepEqual(views.get('build')?.features, all)
+
+  // 远程：变旧后全关，一键升级换上后恢复
+  await say('b2', '远程服务旧', 'build')
+  await flush()
+  assert.deepEqual(views.get('build')?.features, none)
+  assert.deepEqual(views.get('local')?.features, all, '别的设备不受影响')
+  await channel.command('device.upgradeService', { deviceId: 'build', mode: 'start' })
+  for (let n = 0; n < 40 && devices.get('build')?.remoteUpgrade?.phase.step !== 'done'; n++)
+    await flush(200)
+  assert.equal(devices.get('build')?.service?.version, '0.7.0')
+  assert.deepEqual(views.get('build')?.features, all)
+
+  // 本机在跑旧版（忙着没换）：没宣告的命令都拒，写明去设备详情升级
+  await say('s4', '服务旧而忙')
+  await flush()
+  assert.deepEqual(views.get('local')?.features, none)
+  const decision = views.get('local')?.board?.decisions.find((one) => one.status === 'open')
+  assert.ok(decision)
+  const upgrade = { code: 'unsupported', message: /设备详情里升级设备服务/ }
+  const base = { deviceId: 'local', managerId: 'm1' }
+  const target = { ...base, decisionId: decision.id, revision: decision.revision }
+  await assert.rejects(channel.command('managers.decision.ignore', target), upgrade)
+  await assert.rejects(
+    channel.command('managers.question.ask', { ...target, question: '？' }),
+    upgrade,
+  )
+  await assert.rejects(
+    channel.command('managers.feedback.submit', {
+      ...base,
+      answers: [],
+      questions: [{ decisionId: decision.id, revision: decision.revision, question: '？' }],
+    }),
+    upgrade,
+  )
+  // 只有答复照常
+  const answered = await channel.command('managers.feedback.submit', {
+    ...base,
+    answers: [{ decisionId: decision.id, revision: decision.revision, optionId: null, text: '好' }],
+    questions: [],
+    requests: [],
+  })
+  assert.equal(answered.accepted.length, 1)
 })

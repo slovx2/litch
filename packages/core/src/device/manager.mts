@@ -26,6 +26,7 @@ import type {
   ManagerBoardView,
   ManagerDraft,
   ManagerEdit,
+  ManagerFeaturesView,
   ManagersView,
   ManagerView,
 } from '../model-manager.mjs'
@@ -43,6 +44,8 @@ export interface ManagersHost {
   deviceId: string
   online(): boolean
   supported(): boolean
+  /** 设备宣告了哪些后加的经理能力 */
+  features(): ManagerFeaturesView
   request<M extends keyof ManagerRequests>(
     method: M,
     params: ManagerRequests[M]['params'],
@@ -113,6 +116,7 @@ export function createManagers(host: ManagersHost) {
           managerId,
           available: true,
           board: projected,
+          features: host.features(),
         }
         publishBoard(entry)
       }
@@ -134,7 +138,7 @@ export function createManagers(host: ManagersHost) {
     if (!entry) {
       entry = {
         sinks: new Set(),
-        view: { deviceId, managerId, available, board: null },
+        view: { deviceId, managerId, available, board: null, features: host.features() },
         loading: false,
         dirty: false,
         observed: null,
@@ -192,6 +196,13 @@ export function createManagers(host: ManagersHost) {
         decisionNotClosed: ['rejected', '只能重新打开已关闭的决策'],
         lineLimitReached: ['rejected', '运行中的工作线已达上限'],
       }
+      // 不认识的方法：新设备回标准 -32601；0.27 及更早的设备回 invalidManager、原文以 Unknown manager method 开头。
+      // 只认这一种 invalidManager，别的照旧是“设置无效”
+      if (
+        error.code === -32601 ||
+        (data?.litch === 'invalidManager' && error.message.startsWith('Unknown manager method'))
+      )
+        return oldDevice(error.message)
       const fault = data?.litch ? faults[data.litch] : undefined
       if (fault)
         return new ChannelError(fault[0], error.message, undefined, {
@@ -200,6 +211,19 @@ export function createManagers(host: ManagersHost) {
         })
     }
     return host.fail(error)
+  }
+  /** 设备服务比应用旧、不认这个操作：说清原因和去哪里升级，不说成“设置无效” */
+  const oldDevice = (message: string) =>
+    new ChannelError('unsupported', message, undefined, {
+      said: {
+        'zh-CN': '设备服务版本较旧，不支持这个操作。请在设备详情里升级设备服务后再试。',
+        en: 'The device service is older than this app and does not support this action. Upgrade the device service in the device details, then try again.',
+      },
+    })
+  /** 设备没宣告这项能力时不发请求（界面已禁用入口，这里兜底） */
+  const requires = (feature: keyof ManagerFeaturesView, method: string) => {
+    if (host.online() && host.supported() && !host.features()[feature])
+      throw oldDevice(`${method} is not supported by this device service.`)
   }
   const guarded = async <T,>(run: () => Promise<T>): Promise<T> => {
     if (!host.online())
@@ -264,7 +288,7 @@ export function createManagers(host: ManagersHost) {
         managers.clear()
         snapshot()
         for (const entry of boards.values()) {
-          entry.view = { ...entry.view, available: false, board: null }
+          entry.view = { ...entry.view, available: false, board: null, features: host.features() }
           publishBoard(entry)
         }
         return
@@ -308,6 +332,27 @@ export function createManagers(host: ManagersHost) {
       return { manager: settle(result.manager) }
     },
     async feedback(params: ManagerFeedbackSubmitParams) {
+      // 旧设备没有 feedback/submit：只有决策答复时改走 answers/submit（经理第一版就有），有追问或交付的不发
+      if (host.online() && host.supported() && !host.features().feedback) {
+        if (params.questions.length || params.requests?.length)
+          throw oldDevice(
+            `${MANAGER_METHOD.feedbackSubmit} is not supported by this device service.`,
+          )
+        const answered = await guarded(() =>
+          host.request(MANAGER_METHOD.answersSubmit, {
+            managerId: params.managerId,
+            answers: params.answers,
+          }),
+        )
+        invalidate(params.managerId)
+        return {
+          ...projectManagerAnswers(answered),
+          acceptedRequests: [],
+          rejectedRequests: [],
+          acceptedQuestions: [],
+          rejectedQuestions: [],
+        }
+      }
       const result = await guarded(() => host.request(MANAGER_METHOD.feedbackSubmit, params))
       invalidate(params.managerId)
       return {
@@ -330,6 +375,7 @@ export function createManagers(host: ManagersHost) {
       return projectManagerAnswers(result)
     },
     async ignore(params: ManagerDecisionIgnoreParams) {
+      requires('ignore', MANAGER_METHOD.decisionIgnore)
       const result = await guarded(() => host.request(MANAGER_METHOD.decisionIgnore, params))
       invalidate(params.managerId)
       return { decision: projectManagerDecision(result.decision) }
@@ -340,32 +386,38 @@ export function createManagers(host: ManagersHost) {
       return { decision: projectManagerDecision(result.decision) }
     },
     async reference(params: { managerId: string; reference: string }) {
+      requires('posts', MANAGER_POST_METHOD.reference)
       return guarded(() => host.request(MANAGER_POST_METHOD.reference, params))
     },
     async postForward(params: {
       managerId: string
       id: import('../../../protocol/src/manager-posts.mjs').ManagerPostId
     }) {
+      requires('posts', MANAGER_POST_METHOD.forward)
       const result = await guarded(() => host.request(MANAGER_POST_METHOD.forward, params))
       invalidate(params.managerId)
       return result
     },
     async postQuestion(params: ManagerPostQuestionParams) {
+      requires('posts', MANAGER_POST_METHOD.question)
       const result = await guarded(() => host.request(MANAGER_POST_METHOD.question, params))
       invalidate(params.managerId)
       return { post: projectManagerPost(result.post) }
     },
     async reportRead(params: ManagerReportReadParams) {
+      requires('posts', MANAGER_POST_METHOD.read)
       const result = await guarded(() => host.request(MANAGER_POST_METHOD.read, params))
       invalidate(params.managerId)
       return { post: projectManagerPost(result.post) }
     },
     async ask(params: ManagerQuestionParams) {
+      requires('posts', MANAGER_METHOD.questionAsk)
       await guarded(() => host.request(MANAGER_METHOD.questionAsk, params))
       invalidate(params.managerId)
       return {}
     },
     async forward(params: ManagerDecisionReopenParams) {
+      requires('posts', MANAGER_METHOD.questionForward)
       const result = await guarded(() => host.request(MANAGER_METHOD.questionForward, params))
       invalidate(params.managerId)
       return result

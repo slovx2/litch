@@ -147,7 +147,10 @@ test('副本：普通侧栏过滤整棵经理树，经理复用原有 children �
   server()
 })
 
-function serviceWorld(handlers: Record<string, Handler>) {
+function serviceWorld(
+  handlers: Record<string, Handler>,
+  features = { feedback: true, posts: true, ignore: true },
+) {
   let online = true
   let supported = true
   const calls: string[] = []
@@ -155,6 +158,7 @@ function serviceWorld(handlers: Record<string, Handler>) {
     deviceId: 'local',
     online: () => online,
     supported: () => supported,
+    features: () => features,
     request: (async (method: string, params: unknown) => {
       calls.push(method)
       return handlers[method]?.(params)
@@ -372,6 +376,83 @@ test('设备返回经理领域错误时保留错误码、字段和双语提示',
     code: 'rejected',
     said: { 'zh-CN': '经理已结束，看板只读', en: 'The manager has ended' },
   })
+})
+
+test('比应用旧的设备：不认识的方法提示升级设备服务，只认那一种 invalidManager；没宣告 Feedback 时只交答复', async () => {
+  const { RpcError } = await import('../src/connection/rpc.mjs')
+  const decision = sample().board.decisions[0]
+  assert.ok(decision)
+  const answered = { ...decision, status: 'answered' as const, revision: decision.revision + 1 }
+  const w = serviceWorld(
+    {
+      [MANAGER_METHOD.boardRead]: () => ({ board: sample().board }),
+      [MANAGER_METHOD.answersSubmit]: () => ({
+        accepted: [answered],
+        rejected: [],
+        delivery: 'queued',
+      }),
+      [MANAGER_METHOD.update]: () => {
+        throw new RpcError(-32602, 'Scope is required', { litch: 'invalidManager', field: 'scope' })
+      },
+      [MANAGER_METHOD.end]: () => {
+        throw new RpcError(-32602, 'Unknown manager method: litch/manager/end.', {
+          litch: 'invalidManager',
+        })
+      },
+      [MANAGER_METHOD.decisionReopen]: () => {
+        throw new RpcError(-32601, 'Unknown manager method: litch/manager/decision/reopen.', {
+          litch: 'methodNotFound',
+        })
+      },
+    },
+    { feedback: false, posts: false, ignore: false },
+  )
+  const upgrade = {
+    'zh-CN': '设备服务版本较旧，不支持这个操作。请在设备详情里升级设备服务后再试。',
+    en: 'The device service is older than this app and does not support this action. Upgrade the device service in the device details, then try again.',
+  }
+  // 0.27 设备回的那一种 invalidManager、新设备的 -32601：都说设备服务较旧
+  await assert.rejects(w.service.end('m1'), { code: 'unsupported', said: upgrade })
+  await assert.rejects(w.service.reopen({ managerId: 'm1', decisionId: decision.id }), {
+    code: 'unsupported',
+    said: upgrade,
+  })
+  // 别的 invalidManager 照旧
+  await assert.rejects(w.service.update('m1', { scope: '' }), { code: 'invalid', key: 'scope' })
+  // 没宣告的能力不发请求
+  const before = w.calls.length
+  await assert.rejects(
+    w.service.ask({ managerId: 'm1', decisionId: decision.id, revision: 1, question: '？' }),
+    { code: 'unsupported' },
+  )
+  await assert.rejects(
+    w.service.ignore({ managerId: 'm1', decisionId: decision.id, revision: 1 }),
+    { code: 'unsupported' },
+  )
+  await assert.rejects(
+    w.service.feedback({
+      managerId: 'm1',
+      answers: [],
+      questions: [{ decisionId: decision.id, revision: 1, question: '？' }],
+    }),
+    { code: 'unsupported' },
+  )
+  assert.equal(w.calls.length, before)
+  // 只有决策答复：改走第一版就有的 answers/submit，结果照 feedback 的形状给
+  const result = await w.service.feedback({
+    managerId: 'm1',
+    answers: [{ decisionId: decision.id, revision: decision.revision, optionId: null, text: '好' }],
+    questions: [],
+    requests: [],
+  })
+  // 交完照常重读看板
+  assert.deepEqual(w.calls.slice(before), [MANAGER_METHOD.answersSubmit, MANAGER_METHOD.boardRead])
+  assert.equal(result.accepted[0]?.status, 'answered')
+  assert.deepEqual(
+    [result.acceptedQuestions, result.acceptedRequests, result.rejectedQuestions],
+    [[], [], []],
+  )
+  assert.ok(!w.calls.includes(MANAGER_METHOD.feedbackSubmit))
 })
 
 test('控制台通道：报告显式已阅只清未读徽标、不改变待处理，报告、请求和决策的追问独立保存，旧版本拒绝', async () => {

@@ -265,6 +265,9 @@ export class DeviceManagers {
       return { managers: this.store.managers().map((manager) => this.manager(manager.id)) }
     }
     if (method === MANAGER_METHOD.create) return this.create(params)
+    // 标准的“方法不存在”：客户端据此提示设备服务比应用旧，不当成参数错误或经理不存在
+    if (!(Object.values(MANAGER_METHOD) as string[]).includes(method))
+      throw new ManagerError('methodNotFound', `Unknown manager method: ${method}.`)
     const id = text(params.managerId, 'managerId')
     this.manager(id)
     switch (method) {
@@ -453,7 +456,7 @@ export class DeviceManagers {
         return { decision }
       }
       default:
-        throw new ManagerError('invalidManager', `Unknown manager method: ${method}.`)
+        throw new ManagerError('methodNotFound', `Unknown manager method: ${method}.`)
     }
   }
   private async create(given: unknown): Promise<unknown> {
