@@ -7,8 +7,10 @@ import { useT } from '../app/appearance.ts'
 import { Check, More } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
 import {
+  setSidebarAutoLocate,
   setSidebarNativeChildren,
   setSidebarShowActive,
+  useSidebarAutoLocate,
   useSidebarNativeChildren,
   useSidebarShowActive,
 } from './state.ts'
@@ -17,6 +19,7 @@ export function SidebarMore() {
   const t = useT()
   const nativeChildren = useSidebarNativeChildren()
   const showActive = useSidebarShowActive()
+  const autoLocate = useSidebarAutoLocate()
   const { open, setOpen, root, trigger, pop, onKeyDown } = usePopover()
   return (
     <div className="sb-more" ref={root}>
@@ -36,6 +39,19 @@ export function SidebarMore() {
         // biome-ignore lint/a11y/noStaticElementInteractions: 键盘事件是从里面的按钮冒上来的
         <div className="pick-pop down" ref={pop} onKeyDown={onKeyDown}>
           <div role="menu" aria-label={t('sidebar.more')} className="pick-list">
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={autoLocate}
+              className="pick-opt"
+              data-option="autoLocate"
+              onClick={() => setSidebarAutoLocate(!autoLocate)}
+            >
+              <b>
+                <span className="pick-mark">{autoLocate ? <Check /> : null}</span>
+                {t('sidebar.more.autoLocate')}
+              </b>
+            </button>
             <button
               type="button"
               role="menuitemcheckbox"

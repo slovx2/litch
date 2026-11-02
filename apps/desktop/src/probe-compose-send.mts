@@ -104,6 +104,8 @@ export async function sendModeProbe(real: boolean): Promise<SendModeProbe | null
     const choices = all('[data-choice="sendMode"] [data-value]').map(
       (entry) => entry.dataset.value ?? '',
     )
+    one<HTMLButtonElement>('.set-head .ibtn')?.click()
+    await until('关闭设置窗口', () => !one('.page-window'))
     await open()
     return choices
   }

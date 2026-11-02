@@ -30,6 +30,8 @@ export interface SidebarState {
    * 会话照样列出（核心的 keys.active）。默认打开
    */
   showActive: boolean
+  /** 切换会话时展开所在位置并滚到这一行。 */
+  autoLocate: boolean
   /**
    * 各台设备上用户的组和内置的“项目”排的先后（设备标识 → 组的键，拖组的标题行排的）。
    * 只记在这台电脑上：协议里的组没有先后，Codex 桌面端也是把分区的先后记在客户端
@@ -73,6 +75,7 @@ function readSaved(): SidebarState {
         : NONE,
       nativeChildren: parsed.nativeChildren === true,
       showActive: parsed.showActive !== false,
+      autoLocate: parsed.autoLocate !== false,
       bands:
         parsed.bands && typeof parsed.bands === 'object'
           ? Object.fromEntries(
@@ -94,6 +97,7 @@ function readSaved(): SidebarState {
       harnesses: NONE,
       nativeChildren: false,
       showActive: true,
+      autoLocate: true,
       bands: NO_BANDS,
       folds: NO_FOLDS,
     }
@@ -218,4 +222,11 @@ export function drawnWidth(wanted: number, windowWidth: number): number {
 export function widthCss(wanted: number): string {
   const limit = `max(${SIDEBAR_MIN}px, min(${SIDEBAR_MAX}px, 100vw - ${REST_MIN}px))`
   return `clamp(${SIDEBAR_MIN}px, ${Math.round(wanted)}px, ${limit})`
+}
+
+export const useSidebarAutoLocate = (): boolean =>
+  useSyncExternalStore(subscribe, () => sidebar.autoLocate)
+
+export function setSidebarAutoLocate(autoLocate: boolean): void {
+  if (sidebar.autoLocate !== autoLocate) publish({ ...sidebar, autoLocate })
 }

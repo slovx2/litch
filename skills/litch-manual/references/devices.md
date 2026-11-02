@@ -117,3 +117,9 @@ computer" 0.10.0, session trees and scheduled tasks 0.11.0, phone pairing 0.12.0
 - Per-device switches for the browser, Computer Use and "operate this computer": `tools set` in
   `browser-and-computer-use.md` and `operate-this-computer.md`.
 - Diagnostics and logs: `troubleshooting.md`.
+
+## 桌面设备设置窗口
+
+设备列表、设备详情以及 harness 详情都在设置模态窗口中，左侧设置导航始终保留。主窗口继续显示原对话。
+侧栏设备菜单、升级提示和 `litch open device` 直接打开窗口内对应设备/章节；服务升级、配置助手和设备操作入口照常可用。
+关闭窗口、切换设置分组或离开有未保存配置的详情时，仍会询问保存、放弃或取消。

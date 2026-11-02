@@ -30,7 +30,7 @@ export async function pageSeen(): Promise<PageSeen> {
   const { until, seen, one, all, text } = kit
   await until('侧栏', () => one('.sb-settings') && one('.ss-row:not(.projection-group *)'))
   await kit.openSettings()
-  const crumb = text(one('.crumb'))
+  const crumb = one('.page-window')?.getAttribute('aria-label') ?? ''
   const sections = all('.set-nav [data-section]').map((entry) => entry.dataset.section ?? '')
   const first = kit.settingsAt() ?? ''
   const entryCurrent = one('.sb-settings')?.getAttribute('aria-current') === 'page'
@@ -39,7 +39,8 @@ export async function pageSeen(): Promise<PageSeen> {
     await kit.openSettings(section)
     titles.push(text(one('.set-head h2')))
   }
-  const panelsHidden = !one('.side') && !one('.term-panel')
+  const panelsHidden =
+    !!one('.page-window:modal') && !one('.page-window .side') && !one('.page-window .term-panel')
 
   const press = (key: string, init: KeyboardEventInit = {}) =>
     (document.activeElement ?? document.body).dispatchEvent(
@@ -58,7 +59,7 @@ export async function pageSeen(): Promise<PageSeen> {
 
   await kit.openSettings()
   one<HTMLButtonElement>('.set-go[data-page="devices"]')?.click()
-  const toDevices = await seen(() => !one('.set-page') && one('.devp'), 3000)
+  const toDevices = await seen(() => one('.page-window:modal .devp') && !one('.main .devp'), 3000)
   press('Escape')
   await seen(() => !one('.devp'), 3000)
   await kit.openSettings()

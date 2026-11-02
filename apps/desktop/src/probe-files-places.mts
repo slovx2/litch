@@ -159,7 +159,11 @@ export async function mockPlaces(titles: {
       one<HTMLButtonElement>('.set-go[data-page="devices"]'),
     )
   ).click()
-  const hiddenOnPage = await kit.seen(() => !kit.sideOpen(), 5000)
+  await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  const hiddenOnPage = !!one('.page-window:modal') && !one('.page-window .side')
+  one<HTMLButtonElement>('.devp .arch-head .ibtn:last-child')?.click()
+  await until('关闭设备设置窗口', () => !one('.page-window'))
   await kit.openSession(titles.home)
   const backFromPage = await kit.seen(() => kit.sideOpen() && kit.rows().length > 0, 5000)
 

@@ -128,7 +128,7 @@ function ManualBlock() {
   )
 }
 
-export function AssistSection() {
+export function AssistSection({ onClose }: { onClose(): void }) {
   const t = useT()
   return (
     <>
@@ -152,7 +152,10 @@ export function AssistSection() {
               type="button"
               className="btn"
               data-act="reopen-onboarding"
-              onClick={reopenOnboarding}
+              onClick={() => {
+                onClose()
+                reopenOnboarding()
+              }}
             >
               {t('assist.section.onboardButton')}
             </button>

@@ -37,6 +37,13 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
   `${n} ${Number(n) === 1 ? one : many}`
 
 export const en: Record<MessageKey, Entry> = {
+  'navigation.label': 'Navigation',
+  'navigation.back': 'Back',
+  'navigation.forward': 'Forward',
+  'sidebar.more.autoLocate': 'Automatically locate conversation',
+  'keys.navigationBack': 'Go back',
+  'keys.navigationForward': 'Go forward',
+
   ...enSearch,
   ...enManager,
   ...enPreviewDocx,
@@ -1038,8 +1045,7 @@ export const en: Record<MessageKey, Entry> = {
   'keys.searchClear': 'File finder, changed-file filter: clear',
   'keys.noteSave': 'Comment on a change: save',
   'keys.noteDrop': 'Comment on a change: discard',
-  'keys.pageBack':
-    'Devices, Archived and Settings pages: back to conversation; in a detail view, back to list',
+  'keys.pageBack': 'Close Settings, Suggestions or Schedule; leave Archived sessions',
   'keys.menuMove': 'Menus and pickers: move between items',
   'keys.dismiss': 'Close a menu, info card, notice or dialog',
   'keys.renameDone': 'Rename field: confirm',

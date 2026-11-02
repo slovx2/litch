@@ -1,8 +1,14 @@
-/* 设置：占着对话区的一整页（settings/）。左边是分组，右边一次只放一组的内容，内容自己滚 */
+/* 设置模态窗口（settings/）。左边是分组，右边一次只放一组的内容，内容自己滚 */
 .set-page {
   flex: 1 1 0;
   min-height: 0;
   display: flex;
+}
+.set-devices {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
 }
 .set-nav {
   width: 168px;

@@ -451,6 +451,11 @@ function createWindow(): BrowserWindow {
   window.on('hide', reportForeground)
   window.on('minimize', reportForeground)
   window.on('restore', reportForeground)
+  // Windows/Linux 的鼠标侧键可能由系统直接报告为应用命令。
+  window.on('app-command', (_event, command) => {
+    if (command === 'browser-backward') window.webContents.send(MENU, 'navigation.back')
+    if (command === 'browser-forward') window.webContents.send(MENU, 'navigation.forward')
+  })
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event, url) => {
     if (!isUiUrl(url)) event.preventDefault()

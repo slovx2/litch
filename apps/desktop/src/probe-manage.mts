@@ -150,6 +150,8 @@ export async function manageProbe(): Promise<ManageProbe> {
           one<HTMLButtonElement>('.set-go[data-page="devices"]'),
         )
       ).click()
+      await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
       const item = await until('设备列表上的本机', () => one('.devp-item[data-device="local"]'))
       one<HTMLButtonElement>('.devp-row', item)?.click()
     }
@@ -205,6 +207,8 @@ export async function manageProbe(): Promise<ManageProbe> {
       one<HTMLButtonElement>('.set-go[data-page="devices"]'),
     )
   ).click()
+  await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   const item = await until('设备列表上的本机', () =>
     one<HTMLElement>('.devp-item[data-device="local"]'),
   )

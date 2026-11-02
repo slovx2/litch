@@ -12,7 +12,7 @@ export interface DevicesProbe {
   shape: string[]
   /** 没连上的那台：忙闲那一栏空着，harness 那一栏淡一档 */
   offlineRow: string
-  /** 每一行都是聚焦得到的按钮；聚焦之后按下去进了详情；Esc 回到列表，焦点落回那一行 */
+  /** 每一行都是聚焦得到的按钮；聚焦之后按下去进了详情；返回列表后焦点落回那一行 */
   rowsFocusable: boolean
   opened: string
   focusBack: boolean
@@ -73,6 +73,8 @@ export async function devicesProbe(): Promise<DevicesProbe> {
         one<HTMLButtonElement>('.set-go[data-page="devices"]'),
       )
     ).click()
+    await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
     await frame()
     one<HTMLButtonElement>('[data-detail] [data-act="back"]')?.click()
     await until('设备列表', () => !one('[data-detail]') && all('.devp-item').length >= 4)
@@ -129,7 +131,7 @@ export async function devicesProbe(): Promise<DevicesProbe> {
   rowOf('build').click()
   const opened =
     (await until('build 的详情', () => one('[data-detail]'))).getAttribute('data-detail') ?? ''
-  press(document.body, 'Escape')
+  one<HTMLButtonElement>('[data-detail] [data-act="back"]')?.click()
   await until('回到列表', () => !one('[data-detail]') && item('build'))
   await frame()
   const focusBack = document.activeElement === rowOf('build')
@@ -160,6 +162,8 @@ export async function devicesProbe(): Promise<DevicesProbe> {
   if (!idle) throw new Error('build 上没有闲着的会话')
   const title = text(one('.title', idle))
   const open = async () => {
+    one<HTMLButtonElement>('.page-window .devp .arch-head .ibtn:last-child')?.click()
+    await until('关闭设备设置后查看会话', () => !one('.page-window'))
     all('.ss-row:not(.projection-group *)', build())
       .find((entry) => text(one('.title', entry)) === title)
       ?.click()
@@ -391,7 +395,7 @@ export function judgeDevices(
   must(probe.sidebarNotes === 0, `侧栏里连着的设备下面还有说明框：${probe.sidebarNotes} 个`)
   must(probe.rowsFocusable, '设备列表的行不都是键盘聚焦得到的按钮')
   must(probe.opened === 'build', `点一行没有进它的详情：${probe.opened}`)
-  must(probe.focusBack, '按 Esc 从详情回到列表，焦点没有落回那一行')
+  must(probe.focusBack, '从详情返回列表后，焦点没有落回原来那一行')
   must(probe.backButton, '按返回从详情回到列表，焦点没有落回那一行')
 
   const steps = probe.busy.map((entry) => {

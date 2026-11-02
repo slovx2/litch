@@ -194,7 +194,7 @@ export function judgeFirst(
   same(page.sections, sections, '设置页左边的分组')
   same(page.titles, titlesOn(platform), '各组的标题')
   same(page.first, 'look', '设置页默认在哪一组')
-  must(page.crumb === '设置', `标题栏上写的不是“设置”：“${page.crumb}”`)
+  must(page.crumb === '设置', `模态窗口名称不是“设置”：“${page.crumb}”`)
   must(page.entryCurrent, '侧栏底部的齿轮没有标成正开着')
   must(page.panelsHidden, '设置页上还显示着终端面板或侧面板')
   must(page.escCloses, 'Esc 没有关掉设置页回到新建对话页')

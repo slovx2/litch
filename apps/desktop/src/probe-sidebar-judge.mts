@@ -72,6 +72,7 @@ export function judgeFrame(seen: FrameChecks): string[] {
         harnesses: [],
         nativeChildren: false,
         showActive: true,
+        autoLocate: true,
         bands: {},
         folds: {},
       }),
@@ -116,6 +117,7 @@ export function judgeFrame(seen: FrameChecks): string[] {
         harnesses: [],
         nativeChildren: false,
         showActive: true,
+        autoLocate: true,
         bands: {},
         // 前面收起过的那一项也记着（重启后照旧）
         folds: { nas: { closed: ['bk'], folded: [] } },

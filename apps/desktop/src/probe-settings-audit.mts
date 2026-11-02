@@ -58,6 +58,7 @@ export async function screensSeen(titles: { talk: string; waiting: string }): Pr
       one<HTMLButtonElement>('.set-go[data-page="archived"]'),
     )
   ).click()
+  await until('设置窗口关闭', () => !one('.page-window'))
   await until('已归档对话那一页', () => one('.arch-page') && all('.arch-item').length > 0)
   const archivedRows = all('.arch-item').length
   await sweep('已归档', ['.main'])
@@ -67,16 +68,16 @@ export async function screensSeen(titles: { talk: string; waiting: string }): Pr
   one<HTMLButtonElement>('.sb-btn.tasks')?.click()
   await until('定时任务列表', () => one('[data-tasks="list"]') && all('.tk-row').length > 0)
   const taskRows = all('.tk-row').length
-  await sweep('定时任务', ['.main'])
+  await sweep('定时任务', ['.page-window'])
   one<HTMLButtonElement>('.tk-row[data-task="task-deps"] .tk-row-btn')?.click()
   await until('定时任务的运行记录', () => all('.tk-run').length > 0)
   const taskRuns = all('.tk-run').length
-  await sweep('定时任务·详情', ['.main'])
+  await sweep('定时任务·详情', ['.page-window'])
   one<HTMLButtonElement>('[data-tasks="detail"] [data-act="back"]')?.click()
   await until('回到定时任务列表', () => one('[data-act="new-task"]'))
   one<HTMLButtonElement>('[data-act="new-task"]')?.click()
   await until('新建定时任务的表单', () => one('.tk-form'))
-  await sweep('定时任务·表单', ['.main'])
+  await sweep('定时任务·表单', ['.page-window'])
   one<HTMLButtonElement>('[data-tasks="form"] .arch-head .ibtn:last-child')?.click()
   await until('关掉定时任务那一页', () => !one('[data-tasks]'))
 
@@ -103,7 +104,7 @@ export async function screensSeen(titles: { talk: string; waiting: string }): Pr
           ),
         )
       }
-      await sweep(`设置·${section}·${lang}`, ['.main'])
+      await sweep(`设置·${section}·${lang}`, ['.page-window'])
     }
   }
   kit.look.set({ skin: before.skin, theme: before.theme, lang: before.lang })

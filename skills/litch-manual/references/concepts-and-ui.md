@@ -32,7 +32,7 @@ Each view remembers its own position until the app closes. Manager setup and boa
 [Managers and suggested tasks](managers-and-suggestions.md); external session opening and automatic
 sidebar location are in [Projects and sessions](sessions-and-projects.md).
 
-- **Title bar** (top): sidebar toggle, a breadcrumb "device / project / session" with the harness badge,
+- **Title bar** (top): fixed Back / Forward buttons, sidebar toggle, a breadcrumb "device / project / session" with the harness badge,
   and on the right: the remote-activity marker (only when remote devices are running commands on this
   computer or waiting for approval, see `operate-this-computer.md`), the terminal toggle, the info
   panel toggle (only while the session has something for the info panel) and the side panel toggle.
@@ -45,7 +45,7 @@ sidebar location are in [Projects and sessions](sessions-and-projects.md).
   (device row with status, then Pinned, your groups, the built-in Projects group, and "No project"
   sessions); at the bottom: **Suggestions** (pending suggestions across devices), **Schedule** (scheduled tasks), **Appearance** (a
   popover for skin, theme and language, with a link to Settings → Appearance) and **Settings** (Devices
-  and Archived sessions are entered from the Settings page).
+  opens inside the Settings window; Archived sessions opens in the main view).
   Hovering a device, project or "No project" row shows a **+** that starts a new session there (the
   device row and "No project" start one outside any project); the **+** on the Projects row adds a
   project. Right-click or the "more"
@@ -53,8 +53,11 @@ sidebar location are in [Projects and sessions](sessions-and-projects.md).
   rename, pin, move, delete; schedule a task, start a sub-session, archive, delete).
   Device rows, groups, projects and sessions with sub-sessions can be collapsed. What is collapsed is
   remembered per device (on the phone too) and kept after a restart; new ones start expanded.
-- **Main area**: the new-session page, a session, or one of the pages (Devices, Settings, Scheduled
-  tasks, Managers, Suggestions, Archived sessions).
+- **Main area**: the new-session page, a session, Managers, or Archived sessions.
+- **Settings, Suggestions and Scheduled tasks** open in an in-app modal window. The main view stays
+  in place but cannot be interacted with until the window closes. Esc closes it and restores focus;
+  links to conversations or main pages close it before navigating. These are not separate OS windows.
+  Opening or closing a modal does not add a navigation-history entry.
 - **Info panel** (right of the conversation): small cards that appear only when there is something to
   show, such as the session's latest to-do list and its worktree. It stays out when the window is too
   narrow; when it is hidden or out, the to-do list is shown in the conversation instead.
@@ -92,6 +95,8 @@ open, so what was done and a reply cut off midway are in view.
 
 ### Devices
 
+The device list, device details and harness details are inside the Settings modal. The settings navigation stays visible; device-menu links open the requested detail directly. Closing the window or leaving an edited section asks to save, discard or cancel.
+
 A list of devices (status, harnesses, activity) with **Add device**. A device's detail page has, from
 top to bottom: **This device** (reconnect, rename, edit connection, remove, wire color),
 **Use this computer** (built-in browser, Computer Use, and for remote devices "Operate this computer"),
@@ -106,7 +111,7 @@ together with a save bar. See `devices.md` and `device-settings.md`.
 Sections in order: **Appearance**, **Language**, **Conversation**, **Per-harness switches**,
 **Built-in browser**, **Chrome** (desktop), **Computer Use** (supported desktop platforms),
 **Notifications**, **Config assistant**, **Shortcuts**, **About**. **Devices** and **Archived sessions**
-are links above the section list, not settings sections. Appearance includes window zoom and the two
+sit above the section list: Devices stays in the Settings window, while Archived sessions opens the main view. Appearance includes window zoom and the two
 text sizes. Conversation sets mid-turn sending. Browser and Chrome use separate permission settings.
 Configuration commands and defaults are in the corresponding references.
 
@@ -154,3 +159,13 @@ cards Enter approves and Esc declines; Esc leaves the Devices, Archived and Sett
 Typing `/` in the composer lists built-in commands (`/new`, `/compact`, `/plan`, `/model`, `/effort`,
 `/permissions`, `/terminal`) and the harness's skills (this manual appears as `/litch-manual` in
 harnesses that list it). `@` searches files in the session's working folder.
+
+## 桌面导航与应用内窗口
+
+标题栏左侧固定显示后退、前进，切换普通对话、经理和其他主页面时位置不变。
+macOS 使用 `Cmd+[` / `Cmd+]`，Windows/Linux 使用 `Alt+←` / `Alt+→`，也支持鼠标侧键。
+输入框有焦点、输入法组字或模态窗口打开时不触发导航。没有可用历史时按钮禁用。
+历史包含主窗口访问的对话、新建页、经理页和归档预览，保留到本次应用关闭。
+后退后打开新位置会清除前进分支；归档或删除的活动会话在历史中跳过。
+设置、建议、定时任务以应用内模态窗口打开，阻塞主界面；关闭回到原位置。设备列表、设备详情和 harness 详情都属于设置窗口，左侧设置导航保留。
+窗口里的设置立即生效；点“打开对话”等链接会先关窗口，再进入主窗口并记录历史。手机行为不变。

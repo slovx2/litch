@@ -270,6 +270,10 @@ export async function commentsProbe(session: string): Promise<CommentsProbe> {
   }
   await idle()
   await until('回应里的记号', () => all('.cmt-cite', lastTurn()).length >= 2)
+  // 核心已结束不等于正文的逐字显示已完成；末尾的普通引用号要等到真正画出来再取样。
+  await until('回应尾部的普通引用号', () => text(finalAnswer()).includes('[3]'), 5000).catch(
+    () => null,
+  )
 
   // 九、回答里的 [N]
   const cites = all('.cmt-cite', lastTurn())

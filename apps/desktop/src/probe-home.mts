@@ -393,7 +393,11 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
       one<HTMLButtonElement>('.set-go[data-page="devices"]'),
     )
   ).click()
+  await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   await until('“设备”一页', () => one('.devp'))
+  one<HTMLButtonElement>('.devp .arch-head .ibtn:last-child')?.click()
+  await until('关闭设备设置窗口', () => !one('.page-window'))
   press(document, 'n', { ctrlKey: true })
   await until('快捷键带到新建对话页', () => home() && picker('device'), 5000).catch(() => null)
   await frame()
@@ -407,6 +411,8 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
   await until('点开的会话', () => from?.classList.contains('sel') && !home(), 10_000).catch(
     () => null,
   )
+  one<HTMLButtonElement>('.devp .arch-head .ibtn:last-child')?.click()
+  await until('关闭设备设置窗口', () => !one('.page-window'))
   press(document, 'n', { ctrlKey: true })
   await until('快捷键带到新建对话页', () => home() && picker('device'), 5000).catch(() => null)
   await frame()

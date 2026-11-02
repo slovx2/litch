@@ -40,6 +40,18 @@ const UI = 'packages/ui/src'
 const role = (name: string) => ({ file: MENU, has: `role: '${name}'` })
 
 export const SHORTCUTS = [
+  {
+    id: 'navigationBack',
+    group: 'app',
+    keys: { mac: ['Cmd+['], win: ['Alt+Left'], linux: ['Alt+Left'] },
+    source: [{ file: `${UI}/app/navigation-key.ts`, has: "event.key === '[' ? -1" }],
+  },
+  {
+    id: 'navigationForward',
+    group: 'app',
+    keys: { mac: ['Cmd+]'], win: ['Alt+Right'], linux: ['Alt+Right'] },
+    source: [{ file: `${UI}/app/navigation-key.ts`, has: "event.key === ']' ? 1" }],
+  },
   // ---------- 应用与窗口 ----------
   {
     id: 'settings',
@@ -449,7 +461,7 @@ export const SHORTCUTS = [
       { file: `${UI}/devices/DeviceDetail.tsx`, has: "document.querySelector('dialog[open]')" },
       { file: `${UI}/archived/ArchivedPage.tsx`, has: "event.key !== 'Escape'" },
       { file: `${UI}/archived/ArchivedSession.tsx`, has: "event.key !== 'Escape'" },
-      { file: `${UI}/settings/SettingsPage.tsx`, has: "event.key !== 'Escape'" },
+      { file: `${UI}/app/PageWindow.tsx`, has: "event.key === 'Escape'" },
     ],
   },
   {

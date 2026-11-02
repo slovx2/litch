@@ -102,13 +102,25 @@ export function installSettingsKit(): boolean {
     await frame()
   }
   const openSession = async (title: string) => {
+    const modal = one<HTMLDialogElement>('.page-window')
+    if (modal) {
+      modal.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      )
+      await until('关闭模态窗口', () => !one('.page-window'))
+    }
     const row = await until(`侧栏里的会话“${title}”`, () =>
       all('.ss-row:not(.projection-group *)').find((entry) => entry.textContent?.includes(title)),
     )
     row.click()
     await until(`“${title}”的内容`, () => row.classList.contains('sel') && one('.tr .turn'))
   }
-  const settingsAt = () => (one('.set-page') ? (one('.set-content')?.dataset.section ?? '') : null)
+  const settingsAt = () =>
+    one('.set-page')
+      ? one('.set-devices')
+        ? 'devices'
+        : (one('.set-content')?.dataset.section ?? '')
+      : null
   const openSettings = async (section?: string) => {
     if (!one('.set-page')) {
       const entry = await until('侧栏底部的齿轮', () => one<HTMLElement>('.sb-settings'))

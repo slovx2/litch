@@ -87,6 +87,8 @@ export async function mockServiceProbe(): Promise<MockServiceProbe> {
           one<HTMLButtonElement>('.set-go[data-page="devices"]'),
         )
       ).click()
+      await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
     }
     await until('设备列表', () => !one('[data-detail]') && all('.devp-item').length >= 4)
   }
@@ -347,6 +349,8 @@ export async function serviceProbe(): Promise<ServiceProbe> {
         one<HTMLButtonElement>('.set-go[data-page="devices"]'),
       )
     ).click()
+    await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   }
   const item = await until('设备列表上的本机', () =>
     one('[data-detail]') ? null : one('.devp-item[data-device="local"]'),

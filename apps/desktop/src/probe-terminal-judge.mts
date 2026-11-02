@@ -131,7 +131,7 @@ export function judgeMock(seen: MockSeen, lenient: boolean): string[] {
   must(flow.keptAcrossSession, '换到别的项目的会话再回来，滚到的位置变了')
   must(flow.keptAcrossPage, '开“设备”页再回来，滚到的位置变了')
   must(flow.otherGroupEmpty, '别的项目的会话里看到的不是它自己那一组终端')
-  must(flow.hiddenOnPage, '开着“设备”页的时候面板还显示着')
+  must(flow.hiddenOnPage, '设备设置窗口没有阻塞背景终端')
 
   // ---------- 刷屏 ----------
   must(

@@ -70,6 +70,7 @@ export function TerminalSlot({
   useEffect(() => {
     // 在捕获阶段接：焦点在终端里的时候，这个键不能先被终端当成输入
     const onKey = (event: KeyboardEvent) => {
+      if (document.querySelector('.page-window[open]')) return
       if (!isToggleKey(event)) return
       event.preventDefault()
       event.stopPropagation()
@@ -78,6 +79,7 @@ export function TerminalSlot({
     document.addEventListener('keydown', onKey, true)
     // 在桌面外壳里，应用菜单上也有这一项
     const offMenu = window.litchShell?.onMenu?.((action) => {
+      if (document.querySelector('.page-window[open]')) return
       if (action === 'terminal.toggle') togglePanel()
     })
     return () => {

@@ -397,6 +397,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
           one<HTMLButtonElement>('.set-go[data-page="archived"]'),
         )
       ).click()
+      await until('设置窗口关闭', () => !one('.page-window'))
       const shelved = await until('已归档对话里的这个会话', () =>
         all('.arch-item').find((element) => element.textContent?.includes(other)),
       )
@@ -455,6 +456,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
       one<HTMLButtonElement>('.set-go[data-page="archived"]'),
     )
   ).click()
+  await until('设置窗口关闭', () => !one('.page-window'))
   const opener = () =>
     all('.arch-item')
       .find((element) => element.textContent?.includes(other))

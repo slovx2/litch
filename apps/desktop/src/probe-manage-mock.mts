@@ -191,6 +191,8 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
           one<HTMLButtonElement>('.set-go[data-page="devices"]'),
         )
       ).click()
+      await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
     }
     const item = await until(`设备列表上的 ${deviceId}`, () =>
       one('[data-detail]') ? null : one(`.devp-item[data-device="${deviceId}"]`),
@@ -276,6 +278,8 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
       one<HTMLButtonElement>('.set-go[data-page="devices"]'),
     )
   ).click()
+  await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   await until('设备页', () => all('.devp-item').length >= 4)
   const entries = all('.devp-item').map(
     (item) =>

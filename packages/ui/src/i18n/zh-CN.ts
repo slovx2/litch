@@ -34,6 +34,13 @@ import { zhTasks } from './zh-CN-tasks.ts'
 import { zhWorktrees } from './zh-CN-worktrees.ts'
 
 export const zhCN = {
+  'navigation.label': '导航',
+  'navigation.back': '后退',
+  'navigation.forward': '前进',
+  'sidebar.more.autoLocate': '自动定位对话',
+  'keys.navigationBack': '后退',
+  'keys.navigationForward': '前进',
+
   ...zhSearch,
   ...zhManager,
   ...zhPreviewDocx,
@@ -991,7 +998,7 @@ export const zhCN = {
   'keys.searchClear': '查找文件、筛选改动文件：清空',
   'keys.noteSave': '改动批注：保存',
   'keys.noteDrop': '改动批注：放弃',
-  'keys.pageBack': '设备、已归档对话、设置页：返回对话；在详情中返回列表',
+  'keys.pageBack': '关闭设置、建议、定时任务窗口；离开已归档对话页',
   'keys.menuMove': '菜单和选择器：在各项之间移动',
   'keys.dismiss': '关闭菜单、信息卡、提示和对话框',
   'keys.renameDone': '重命名输入框：确认',

@@ -117,3 +117,11 @@ switch and whether the decision is newly open. A missing notice does not mean th
   `suggestions` or `new`. Use `scripts/litch open --help` for section names.
 - Shortcuts are read-only in Settings → Shortcuts. Litch updates are user-controlled in
   Settings → About → Updates and are outside the configuration command.
+
+## 设置窗口
+
+桌面设置在应用内模态窗口中打开，主对话保持原位置。外观、字号等更改立即应用到主界面。
+按 Esc 或关闭按钮返回；设备列表、设备详情和 harness 详情留在设置窗口中；归档、配置助手和重新打开引导入口会先关闭设置窗口。
+主窗口的后退/前进快捷键在设置窗口打开时不生效。
+
+设备与 harness 详情中有未保存的配置时，切换设置分组、关闭设置窗口或跳转主页面，都会询问保存、放弃或取消。

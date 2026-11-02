@@ -3,7 +3,7 @@
 // 一、配置：改开关和整数（填错了保存不了）、保存后写进去；只读项、被盖住的项有说明；
 //    别的客户端抢先改了（聊天里说“抢先改配置”）：保存撞上冲突、改动留着、再存就成；
 //    改着的时候别处改了（“别处改配置”）：提示一句，用最新的；
-//    有没保存的改动时离开前问：切标签问、取消留在原地；返回问、放弃回到设备详情；去设置页问、保存了再走；
+//    有没保存的改动时离开前问：切标签问、取消留在原地；返回问、放弃回到设备详情；设置模态保留草稿、从窗口内跳转时保存后再走；
 // 二、账号：本机 Claude 粘贴授权码（错的没成、对的成了）、改网关供应商时从它那里拉型号勾进清单；
 //    远程 build-01 上 Codex：浏览器登录先经 ssh 转发回调端口再成、设备码、API key（错的、对的）、
 //    只认环境变量的写进设备设置、按模板加一个自定义 provider 再删掉；配置里要确认的动作；
@@ -38,7 +38,7 @@ export interface HarnessSettingsProbe {
   /** 别处改：提示、用最新的之后 */
   moved: boolean
   tookLatest: boolean
-  /** 离开前问：切标签时问了没有、取消后还在配置页且改动在；返回时放弃、再进来改动没了；去设置页时保存、存进去的值 */
+  /** 离开前问：切标签时问了没有、取消后还在配置页且改动在；返回时放弃、再进来改动没了；从设置模态跳转时保存、存进去的值 */
   leaveAsked: boolean
   leaveStayed: string
   leaveDiscarded: string
@@ -136,6 +136,8 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
         one<HTMLButtonElement>('.set-go[data-page="devices"]'),
       )
     ).click()
+    await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+    await frame()
     const item = await until(`设备列表上的 ${deviceId}`, () =>
       one('[data-detail]') ? null : one(`.devp-item[data-device="${deviceId}"]`),
     )
@@ -378,13 +380,33 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
   await until('设备详情', () => !one('.hc-page') && one('[data-detail="local"]'))
   await openSettings('local', 'claude')
   const leaveDiscarded = `${fastNow()}:${bar() ? 'dirty' : 'clean'}`
-  // 去设置页时问，保存了再走
+  // 设备详情已经在设置窗口中：切设置分组和关闭窗口都要先确认。
   switchOf('fastMode')?.click()
   await until('保存条', () => bar())
-  one<HTMLButtonElement>('.sb-settings')?.click()
+  for (const viaEscape of [false, true]) {
+    if (viaEscape)
+      one('.page-window')?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      )
+    else one<HTMLButtonElement>('.hc-page > .arch-head .ibtn:last-child')?.click()
+    await until('关闭设置窗口前确认', asked)
+    await click('“取消”', () => act('leave-cancel'))
+    await until(
+      '取消关闭保留模态与草稿',
+      () => !asked() && one('.page-window:modal .hc-page') && bar(),
+    )
+  }
+  one<HTMLButtonElement>('.set-nav [data-section="look"]')?.click()
+  await until('切设置分组前问', asked)
+  await click('“取消”', () => act('leave-cancel'))
+  await until('取消后保留设备详情草稿', () => !asked() && one('.hc-page') && bar())
+  one<HTMLButtonElement>('.set-nav [data-section="look"]')?.click()
   await until('离开前问', asked)
   await click('“保存”', () => act('leave-save'))
-  await until('到了设置页', () => !one('.hc-page') && one('.set-go[data-page="devices"]'))
+  await until(
+    '保存后在设置窗口进入外观',
+    () => !one('.hc-page') && one('.page-window .set-content[data-section="look"]'),
+  )
   await openSettings('local', 'claude')
   const leaveSaved = `${fastSaved}→${fastNow()}`
 
@@ -664,7 +686,7 @@ export function judgeHarnessSettings(seen: HarnessSettingsProbe): string[] {
   must(seen.leaveAsked, '有没保存的改动时切标签没有问')
   must(seen.leaveStayed === 'config:1', `问了之后点取消没留在原地：${seen.leaveStayed}`)
   must(seen.leaveDiscarded === 'true:clean', `返回时放弃之后改动还在：${seen.leaveDiscarded}`)
-  must(seen.leaveSaved === 'true→false', `去设置页时保存没存进去：${seen.leaveSaved}`)
+  must(seen.leaveSaved === 'true→false', `从设置模态跳转时保存没存进去：${seen.leaveSaved}`)
   must(seen.pasteFailed.includes('登录失败'), `错的授权码没有说没成：“${seen.pasteFailed}”`)
   must(seen.pasteDone.includes('登录成功'), `对的授权码没有登录好：“${seen.pasteDone}”`)
   must(

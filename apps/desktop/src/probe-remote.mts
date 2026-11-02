@@ -252,6 +252,8 @@ export async function remoteProbe(aliases: {
       one<HTMLButtonElement>('.set-go[data-page="devices"]'),
     )
   ).click()
+  await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   await until('设备页', () => one('.devp'))
   noPasswordField &&= noPassword()
   const mine = await until('设备列表里的这台设备', () => item(aliases.ok))

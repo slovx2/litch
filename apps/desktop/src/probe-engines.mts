@@ -51,6 +51,8 @@ export async function enginesDevice(place: EnginesPlace, wanted: string[]): Prom
       one<HTMLButtonElement>('.set-go[data-page="devices"]'),
     )
   ).click()
+  await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   const item = await until('设备列表上的本机', () => one('.devp-item[data-device="local"]'))
   one<HTMLButtonElement>('.devp-row', item)?.click()
   await until('管理数据', () => one('[data-manage-state="ready"]'), 60_000)

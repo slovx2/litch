@@ -156,7 +156,7 @@ export async function toolsSeen(): Promise<ToolsSeen> {
     )
     const appList = one('.set-content [data-apps]') !== null
     one<HTMLButtonElement>('.set-content [data-act="open-devices"]')?.click()
-    const toDevices = await seen(() => !one('.set-page') && one('.devp'), 3000)
+    const toDevices = await seen(() => one('.page-window:modal .devp'), 3000)
     computer = {
       perms: block.dataset.perms ?? '',
       rows,
@@ -169,13 +169,15 @@ export async function toolsSeen(): Promise<ToolsSeen> {
   }
 
   // ---- 设备详情：Computer Use 开关下面那一句 ----
-  if (!one('.devp')) {
+  if (!one('.devp') || one('.page-window')) {
     one<HTMLButtonElement>('.sb-settings')?.click()
     ;(
       await until('设置页上进设备页的入口', () =>
         one<HTMLButtonElement>('.set-go[data-page="devices"]'),
       )
     ).click()
+    await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
     await until('设备页', () => one('.devp'))
   }
   const openDevice = async (id: string) => {
@@ -205,6 +207,8 @@ export async function toolsSeen(): Promise<ToolsSeen> {
         one<HTMLButtonElement>('.set-go[data-page="devices"]'),
       )
     ).click()
+    await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
     await until('设备页', () => one('.devp'))
   } else {
     // 详情里按 Esc 回到列表

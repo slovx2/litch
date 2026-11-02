@@ -129,6 +129,8 @@ export async function fullProbe(): Promise<FullProbe> {
         one<HTMLButtonElement>('.set-go[data-page="devices"]'),
       )
     ).click()
+    await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   }
   /**
    * 从设备列表点进本机的详情。列表的一行上只有徽标；名字、版本、状态和原因在详情里
@@ -439,12 +441,16 @@ export async function mockFullProbe(): Promise<MockFullProbe> {
       one<HTMLButtonElement>('.set-go[data-page="devices"]'),
     )
   ).click()
+  await until('设置窗口中的设备列表', () => one('.page-window .devp-list'))
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   const row = await until('设备列表上的本机', () => one('.devp-item'))
   const chips = all('.devp-chips .chip[data-harness]', row)
   const harnessCount = chips.length
   const offChips = chips
     .filter((chip) => chip.classList.contains('off'))
     .map((chip) => chip.dataset.harness ?? '')
+  one<HTMLButtonElement>('.page-window .devp .arch-head .ibtn:last-child')?.click()
+  await until('关闭设备设置后检查侧栏', () => !one('.page-window'))
   const flagged = Boolean(one('.dev-flag', local))
   const noteShown = Boolean(one('.dev-note', local))
   // 鼠标停到设备那一行上：是哪个、为什么，在信息卡里

@@ -6,6 +6,32 @@
   grid-template-columns: auto minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
 }
+.page-window {
+  width: min(1120px, calc(100vw - 40px));
+  height: min(820px, calc(100vh - 64px));
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r3);
+  color: var(--ink);
+  background: var(--panel);
+  overflow: hidden;
+}
+.page-window::backdrop {
+  background: color-mix(in srgb, var(--ink) 28%, transparent);
+}
+.page-window-content {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.page-window-content > * {
+  flex: 1;
+  min-width: 0;
+}
 .body {
   grid-column: 2;
   grid-row: 2;
@@ -32,6 +58,28 @@
   padding-left: 82px;
 }
 .tb button {
+  -webkit-app-region: no-drag;
+}
+/* 固定在窗口坐标中；两种标题栏及所有主页面都预留相同宽度。 */
+.main-app {
+  --navigation-left: 14px;
+}
+:root[data-shell="electron"][data-platform="mac"] .main-app {
+  --navigation-left: 82px;
+}
+.main-app > .tb,
+:root[data-shell="electron"][data-platform="mac"] .main-app > .tb {
+  padding-left: calc(var(--navigation-left) + 64px);
+}
+.window-navigation {
+  position: fixed;
+  left: var(--navigation-left);
+  top: 0;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  z-index: 5;
   -webkit-app-region: no-drag;
 }
 .crumb {

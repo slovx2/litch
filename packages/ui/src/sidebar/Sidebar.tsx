@@ -81,6 +81,7 @@ import {
   setSidebarBands,
   setSidebarHarnesses,
   toggleSidebarFold,
+  useSidebarAutoLocate,
   useSidebarBands,
   useSidebarFolds,
   useSidebarHarnesses,
@@ -1986,6 +1987,7 @@ export function Sidebar(props: SidebarProps) {
   /** 正在单独查看哪台设备上的哪一组（置顶、组、工作区）。null：照常显示全部 */
   const [focus, setFocus] = useState<{ deviceId: string; group: string } | null>(null)
   const open = useSidebarOpen()
+  const autoLocate = useSidebarAutoLocate()
   const treeSelection = useRef<Selection | null>(null)
   const [request, setRequest] = useState<Selection | null>(null)
   const fromTree = useCallback((next: Selection) => {
@@ -1994,12 +1996,12 @@ export function Sidebar(props: SidebarProps) {
   useEffect(() => {
     const direct = treeSelection.current === selection
     treeSelection.current = null
-    setRequest(direct ? null : selection)
-    if (selection && !direct) setFocus(null)
-  }, [selection])
+    setRequest(direct || !autoLocate ? null : selection)
+    if (selection && !direct && autoLocate) setFocus(null)
+  }, [selection, autoLocate])
   const reveal = useMemo(
-    () => ({ request: open && request === selection ? request : null, fromTree }),
-    [open, request, selection, fromTree],
+    () => ({ request: autoLocate && open && request === selection ? request : null, fromTree }),
+    [autoLocate, open, request, selection, fromTree],
   )
   const focusOn = useCallback(
     (deviceId: string) => (group: string | null) =>

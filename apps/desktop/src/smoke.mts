@@ -40,6 +40,7 @@
 // tasks 对着模拟核心量定时任务：侧栏入口、按设备分开的列表、新建、立即运行、去会话、会话顶上那一条（probe-tasks.mts）。
 // first-turn 对着同一种隔离设备，只走主路径：每个真的 harness（含原生 codex）从界面新建会话、发头一句、收到回话
 // （probe-first-turn.mts）。由 scripts/check-first-turn.mjs 起。
+
 import { OUTPUT_KEEP, PART_CHARS } from '@litch/core'
 import { app, type BrowserWindow } from 'electron'
 import { activityProbe, judgeActivity } from './probe-activity.mjs'
@@ -87,6 +88,7 @@ import { manageProbe } from './probe-manage.mjs'
 import { judgeManage, judgeMockManage } from './probe-manage-judge.mjs'
 import { mockManageProbe } from './probe-manage-mock.mjs'
 import { runManagerChecks } from './probe-manager-run.mjs'
+import { runNavigationChecks } from './probe-navigation.mjs'
 import { judgeOnboard, onboardProbe } from './probe-onboard.mjs'
 import { judgeOrganize, organizeProbe } from './probe-organize.mjs'
 import { judgeOrganizeMock, organizeMockProbe, PICKED_FOLDER } from './probe-organize-mock.mjs'
@@ -128,6 +130,7 @@ type ProbeMode =
   | 'manage-mock'
   | 'sidebar'
   | 'manager'
+  | 'navigation'
   | 'tasks'
   | 'tree'
   | 'background'
@@ -181,6 +184,7 @@ const PROBE_MODES: readonly string[] = [
   'manage-mock',
   'sidebar',
   'manager',
+  'navigation',
   'tasks',
   'tree',
   'background',
@@ -204,6 +208,7 @@ export const MOCK_MODES: readonly string[] = [
   'manage-mock',
   'sidebar',
   'manager',
+  'navigation',
   'tasks',
   'tree',
   'background',
@@ -300,6 +305,7 @@ async function measure(
   if (mode === 'manager') {
     return runManagerChecks(window)
   }
+  if (mode === 'navigation') return runNavigationChecks(window)
   if (mode === 'tasks') {
     const result = await runInPage(window, tasksProbe, TASK_NAME)
     return [result, judgeTasks(result, TASK_NAME)]

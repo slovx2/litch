@@ -110,12 +110,14 @@ sidebar.
 
 ### Opening from outside the sidebar
 
-Opening a session from a notification, task card, link, manager workline or pending activity reveals
+With **Automatically locate conversation** enabled (sidebar More menu, on by default), opening a session from a notification, task card, link, manager workline or pending activity reveals
 its device, project/group and parent chain and highlights the row. It scrolls only if the row is out
 of view. Clicking a row already in the tree does not reveal or scroll it again. A hidden sidebar stays
 hidden and locates the row when reopened. A single-group view returns to the full list.
 Filters and display switches are preserved; when the target cannot be shown, its nearest visible
 ancestor is revealed. Archived previews do not select a sidebar row.
+With this option off, opening a conversation still selects its existing row but does not expand
+groups or scroll the tree. Back/Forward navigation and notifications follow the same option.
 
 Chat and Managers remember separate open sessions/pages/panels until the app closes. Opening from
 an external entry switches to the session's owning view (manager and worklines → Managers, ordinary
@@ -552,3 +554,10 @@ children still report and wake normally. Resuming does not replay old results; a
 request is reported once after the usual 10-second waiting threshold. Waking also obeys the separate
 wake_parent switch. Models can read report_parent through list/read but cannot change this user
 control; set_wake only controls waking. There is no litch config command for it.
+
+## 自动定位对话（桌面）
+
+对话树顶部“更多”里的“自动定位对话”（Automatically locate conversation）默认打开，设置保存在这台电脑。
+打开时，前进、后退、通知、搜索或其他入口切换对话，都会展开设备、组、项目和父会话，滚到对应行并选中。
+关闭时只切换对话和选中已有行，不自动展开或滚动；通知打开也遵守这个开关。
+侧栏整体收起时不会自动弹开；开启自动定位后，重新显示侧栏会完成定位。

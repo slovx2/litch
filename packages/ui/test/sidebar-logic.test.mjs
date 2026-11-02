@@ -157,6 +157,7 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     harnesses: [],
     nativeChildren: false,
     showActive: true,
+    autoLocate: true,
     bands: {},
     folds: {},
   })
@@ -167,6 +168,7 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     harnesses: [],
     nativeChildren: false,
     showActive: true,
+    autoLocate: true,
     bands: {},
     folds: {},
   })
@@ -182,6 +184,7 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     harnesses: [],
     nativeChildren: false,
     showActive: true,
+    autoLocate: true,
     bands: {},
     folds: {},
   })
@@ -193,6 +196,7 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     harnesses: ['pi', 'claude'],
     nativeChildren: false,
     showActive: true,
+    autoLocate: true,
     bands: {},
     folds: {},
   })
@@ -226,6 +230,7 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
     harnesses: ['codex', 'pi'],
     nativeChildren: true,
     showActive: true,
+    autoLocate: true,
     bands: {},
     folds: {},
   })
@@ -245,6 +250,7 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
     harnesses: [],
     nativeChildren: false,
     showActive: true,
+    autoLocate: true,
     bands: {},
     folds: {},
   })

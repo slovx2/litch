@@ -105,6 +105,7 @@
     "client:check:remote": "npm run build --prefix packages/ui && npm run check:remote --prefix apps/desktop",
     "client:check:full": "npm run build --prefix packages/ui && npm run check:full --prefix apps/desktop",
     "client:check:manage": "npm run build --prefix packages/ui && npm run check:manage --prefix apps/desktop",
+    "client:check:navigation": "npm run build --prefix packages/ui && npm run check:navigation --prefix apps/desktop",
     "client:check:tasks": "npm run build --prefix packages/ui && npm run check:tasks --prefix apps/desktop",
     "client:check:onboard": "npm run build --prefix packages/ui && npm run check:onboard --prefix apps/desktop",
     "client:check:harness-settings": "npm run build --prefix packages/ui && npm run check:harness-settings --prefix apps/desktop",

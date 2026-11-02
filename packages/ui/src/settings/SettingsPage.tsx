@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import type { ReactNode } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Archive, Close, Forward, Machine } from '../app/icons.tsx'
 import { useServices } from '../app/services.tsx'
@@ -17,7 +17,7 @@ import { ShortcutsSection } from './Shortcuts.tsx'
 
 /**
  * 设置页左边的几组，按这个顺序排。
- * “设备”“已归档对话”不是这里的组，是左上角直接进那两页的入口。computer（Computer Use）只在 macOS 上的桌面外壳里有
+ * “设备”在同一窗口内显示列表和详情；“已归档对话”打开主页面。computer（Computer Use）只在 macOS 上的桌面外壳里有
  * （外壳给了 window.litchComputerUse 才显示），别的系统和普通浏览器里不出这一组；
  * chrome（代理操作这台电脑上的 Chrome）不是内置浏览器，单独一组，只在桌面外壳里有
  */
@@ -34,13 +34,14 @@ export const SETTINGS_SECTIONS = [
   'keys',
   'about',
 ] as const
-export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]
+type SettingsGroup = (typeof SETTINGS_SECTIONS)[number]
+export type SettingsSection = SettingsGroup | 'devices'
 
 export const isSettingsSection = (value: string): value is SettingsSection =>
-  (SETTINGS_SECTIONS as readonly string[]).includes(value)
+  value === 'devices' || (SETTINGS_SECTIONS as readonly string[]).includes(value)
 
 /** 这个窗口里看得到的几组 */
-const shownSections = (shell: string): SettingsSection[] =>
+const shownSections = (shell: string): SettingsGroup[] =>
   SETTINGS_SECTIONS.filter(
     (id) =>
       (id !== 'computer' || computerBridge() !== undefined) &&
@@ -48,6 +49,7 @@ const shownSections = (shell: string): SettingsSection[] =>
   )
 
 const TITLES: Record<SettingsSection, MessageKey> = {
+  devices: 'devices.title',
   look: 'settings.group.look',
   lang: 'settings.group.lang',
   chat: 'settings.group.chat',
@@ -75,47 +77,45 @@ interface SettingsPageProps {
   section: SettingsSection
   onSection(section: SettingsSection): void
   onClose(): void
-  /** 去“设备”那一页：设备和 harness 的管理都在那边，这里只留一个入口 */
+  /** 进入设置窗口内的设备列表 */
   onDevices(): void
+  /** 设备列表、设备详情及 harness 详情共用设置窗口。 */
+  devices: ReactNode
   /** 去“已归档对话”那一页 */
   onArchived(): void
 }
 
 /**
- * 设置：和“设备”“已归档对话”一样占着对话区的一整页。左边是分组，右边一次只放一组的内容。
+ * 设置模态窗口：左边是分组，右边显示当前设置或设备与 harness 详情。
  * 侧栏底部只留了定时任务和进这里的齿轮，那两页的入口放在左边分组的上面。
- * 这里的每一项都是这台电脑上的偏好，改了当场生效，没有“保存”
+ * 本机偏好改了当场生效；设备与 harness 的配置沿用原有保存/离开确认。
  */
 export function SettingsPage({
   section: asked,
   onSection,
   onClose,
   onDevices,
+  devices,
   onArchived,
 }: SettingsPageProps) {
   const t = useT()
   const { shell } = useServices()
   const sections = shownSections(shell)
   // 要的那一组这里没有（不是 macOS 却要开 Computer Use）：落到第一组
-  const section = sections.includes(asked) ? asked : 'look'
+  const section = asked === 'devices' || sections.includes(asked) ? asked : 'look'
   const intro = section === 'computer' ? computerIntro() : INTROS[section]
-
-  // Esc 回到对话
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return
-      event.preventDefault()
-      onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
 
   return (
     <div className="set-page">
       <nav className="set-nav" aria-label={t('settings.nav')}>
         <h1>{t('settings.title')}</h1>
-        <button type="button" className="set-go" data-page="devices" onClick={onDevices}>
+        <button
+          type="button"
+          className="set-go"
+          data-page="devices"
+          aria-current={section === 'devices' ? 'page' : undefined}
+          onClick={onDevices}
+        >
           <Machine />
           <span className="grow">{t('sidebar.devices')}</span>
           <Forward />
@@ -138,49 +138,53 @@ export function SettingsPage({
           </button>
         ))}
       </nav>
-      <div className="set-body">
-        <header className="set-head">
-          <div>
-            <h2>{t(TITLES[section])}</h2>
-            {intro ? <p>{t(intro)}</p> : null}
+      {section === 'devices' ? (
+        <div className="set-devices">{devices}</div>
+      ) : (
+        <div className="set-body">
+          <header className="set-head">
+            <div>
+              <h2>{t(TITLES[section])}</h2>
+              {intro ? <p>{t(intro)}</p> : null}
+            </div>
+            <button
+              type="button"
+              className="ibtn"
+              title={t('settings.close')}
+              aria-label={t('settings.close')}
+              onClick={onClose}
+            >
+              <Close />
+            </button>
+          </header>
+          <div className="set-content" data-section={section}>
+            {section === 'look' ? (
+              <LookSection />
+            ) : section === 'lang' ? (
+              <LangSection />
+            ) : section === 'chat' ? (
+              <ChatSection />
+            ) : section === 'switches' ? (
+              // 任务卡、内置浏览器、Computer Use 按“设备 → harness”的开关表
+              <HarnessSwitches />
+            ) : section === 'browser' ? (
+              <BrowserSection />
+            ) : section === 'chrome' ? (
+              <ChromeSection />
+            ) : section === 'computer' ? (
+              <ComputerSection onDevices={onDevices} />
+            ) : section === 'notify' ? (
+              <NotifySection />
+            ) : section === 'assist' ? (
+              <AssistSection onClose={onClose} />
+            ) : section === 'keys' ? (
+              <ShortcutsSection />
+            ) : (
+              <AboutSection />
+            )}
           </div>
-          <button
-            type="button"
-            className="ibtn"
-            title={t('settings.close')}
-            aria-label={t('settings.close')}
-            onClick={onClose}
-          >
-            <Close />
-          </button>
-        </header>
-        <div className="set-content" data-section={section}>
-          {section === 'look' ? (
-            <LookSection />
-          ) : section === 'lang' ? (
-            <LangSection />
-          ) : section === 'chat' ? (
-            <ChatSection />
-          ) : section === 'switches' ? (
-            // 任务卡、内置浏览器、Computer Use 按“设备 → harness”的开关表
-            <HarnessSwitches />
-          ) : section === 'browser' ? (
-            <BrowserSection />
-          ) : section === 'chrome' ? (
-            <ChromeSection />
-          ) : section === 'computer' ? (
-            <ComputerSection onDevices={onDevices} />
-          ) : section === 'notify' ? (
-            <NotifySection />
-          ) : section === 'assist' ? (
-            <AssistSection />
-          ) : section === 'keys' ? (
-            <ShortcutsSection />
-          ) : (
-            <AboutSection />
-          )}
         </div>
-      </div>
+      )}
     </div>
   )
 }

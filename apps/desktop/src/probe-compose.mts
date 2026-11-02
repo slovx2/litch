@@ -752,6 +752,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
       one<HTMLButtonElement>('.set-go[data-page="archived"]'),
     )
   ).click()
+  await until('设置窗口关闭', () => !one('.page-window'))
   const shelved = await until('已归档对话里的这个会话', () => shelvedOf(newName))
   const archived =
     !one('.sb-scroll')?.textContent?.includes(newName) &&

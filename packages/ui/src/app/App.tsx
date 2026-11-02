@@ -5,7 +5,7 @@ import '../styles/suggestions.css'
 import { ManagerTitleBar } from '../manager/ManagerTitleBar.tsx'
 import '../styles/manager.css'
 import { keys, managerMark, type SessionSummary } from '@litch/core'
-import { useCallback, useEffect, useLayoutEffect, useReducer, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { ArchivedPage } from '../archived/ArchivedPage.tsx'
 import { ArchivedSession } from '../archived/ArchivedSession.tsx'
 import { ConfigAgent } from '../assist/ConfigAgent.tsx'
@@ -43,14 +43,17 @@ import {
   type TasksRoute,
 } from './actions.ts'
 import { LeaveGuardHost, leaveThen } from './leave-guard.tsx'
+import { NavigationBar } from './NavigationBar.tsx'
+import { type AuxiliaryPage, PageWindow } from './PageWindow.tsx'
 import { readWhileOpen } from './read.ts'
 import { useKey, useServices } from './services.tsx'
 import { TitleBar } from './TitleBar.tsx'
 import { Toasts } from './toasts.tsx'
+import { useNavigation } from './useNavigation.ts'
 import { useSelectionLifetime } from './useSelectionLifetime.ts'
-import { initialNavigation, navigate, type ViewMode } from './view-navigation.ts'
+import type { ViewMode, ViewNavigation } from './view-navigation.ts'
 
-/** 占着对话区的那几页：已归档对话、设备、设置、定时任务 */
+/** 主页面与侧栏打开的模态入口。设置（含设备）、建议、定时任务不进入主导航历史。 */
 export type Page = 'archived' | 'devices' | 'settings' | 'tasks' | 'managers' | 'suggestions'
 
 export interface Selection {
@@ -68,15 +71,29 @@ export function App() {
   const { channel, replica } = useServices()
   useUpdateToast()
   const managerData = useManagers()
-  const [navigation, dispatch] = useReducer(navigate, initialNavigation)
+  const validLocation = useCallback(
+    (state: ViewNavigation) => {
+      const location = state[state.mode]
+      return (
+        !!location.page ||
+        !location.picked ||
+        !!replica.store.get(keys.summary(location.picked.deviceId, location.picked.sessionId))
+      )
+    },
+    [replica],
+  )
+  const { navigation, dispatch, go, back, forward } = useNavigation(validLocation)
+  const [auxiliary, setAuxiliary] = useState<AuxiliaryPage | null>(null)
+  const closeAuxiliary = useCallback(() => leaveThen(() => setAuxiliary(null)), [])
   const sidebarMode = navigation.mode
-  const { picked, wish, page } = navigation[sidebarMode]
+  const { picked, wish, page, peek = null } = navigation[sidebarMode]
+  const setPeek = useCallback(
+    (selection: Selection | null) => dispatch({ type: 'peek', selection }),
+    [dispatch],
+  )
   const setWish = (wish: PlaceWish | null) => dispatch({ type: 'wish', wish })
   const [managerLocations, setManagerLocations] = useState<Record<string, ManagerPageLocation>>({})
-  const [managersAt, setManagersAt] = useState<{ route: ManagersRoute; seq: number }>({
-    route: { view: 'list' },
-    seq: 0,
-  })
+  const managersAt = navigation.manager.managersRoute ?? { view: 'list' as const }
   /**
    * 新建对话页上明说的去处：从侧栏工作区行的加号带过来的，或者在页上自己换的。
    * null：按默认的来（上次用的设备和工作区）
@@ -84,8 +101,6 @@ export function App() {
   const place = useNewPlace(wish)
   /** 设置页上正看着哪一组。记在这里：应用菜单的“关于”要能直接开到那一组 */
   const [settingsAt, setSettingsAt] = useState<SettingsSection>('look')
-  /** 在“已归档对话”那一页里正只读地看着的那个对话 */
-  const [peek, setPeek] = useState<Selection | null>(null)
   // 选中的会话被归档或删掉了：回到新建对话页。
   // “没有摘要”不等于“没了”：刚建的会话，摘要可能比建好的应答晚一帧到，所以要见过之后又没了才算
   const pickedSummary = useKey<SessionSummary>(
@@ -103,12 +118,14 @@ export function App() {
       : undefined
   const forgetChat = useCallback(
     (selection: Selection) => dispatch({ type: 'missing', mode: 'chat', selection }),
-    [],
+    [dispatch],
   )
-  const forgetManager = useCallback((selection: Selection) => {
-    dispatch({ type: 'missing', mode: 'manager', selection })
-    setManagersAt((was) => ({ route: { view: 'list' }, seq: was.seq + 1 }))
-  }, [])
+  const forgetManager = useCallback(
+    (selection: Selection) => {
+      dispatch({ type: 'missing', mode: 'manager', selection })
+    },
+    [dispatch],
+  )
   useSelectionLifetime(navigation.chat.picked, managerData.managers, forgetChat)
   useSelectionLifetime(navigation.manager.picked, managerData.managers, forgetManager)
   /** 正在写的新会话要建在哪。选中了会话就没有它；一台设备都没有的时候也是 null */
@@ -117,8 +134,8 @@ export function App() {
   const selection = page ? null : picked
 
   // 只记实际呈现在主区域的会话；预取、打开侧面板和后台订阅不算查看。
-  const viewingDevice = selection?.deviceId
-  const viewingSession = selection?.sessionId
+  const viewingDevice = auxiliary ? undefined : selection?.deviceId
+  const viewingSession = auxiliary ? undefined : selection?.sessionId
   // 随画面提交即取消旧计时，不能等下一轮被动 effect 才处理切走。
   useLayoutEffect(() => {
     replica.viewSession(
@@ -131,18 +148,29 @@ export function App() {
 
   // 开着一个会话就算读过了：摘要上的未读一出现就清（摘要比选中晚到的也算）
   useEffect(() => {
-    if (!selection) return
+    if (!selection || auxiliary) return
     return readWhileOpen(channel, replica.store, selection.deviceId, selection.sessionId)
-  }, [selection, channel, replica])
+  }, [selection, auxiliary, channel, replica])
 
   // 换页的动作都先过 leaveThen：眼前那一页有没保存的改动（harness 详情设置）时先问，问完了才换（leave-guard.tsx）
   const openPage = useCallback(
-    (next: Page | null) =>
+    (next: Page | null, preview: Selection | null = null) => {
+      if (next === 'settings' && auxiliary === 'settings') return
       leaveThen(() => {
-        dispatch({ type: 'page', page: next })
-        setPeek(null)
-      }),
-    [],
+        if (next === 'devices') {
+          setSettingsAt('devices')
+          setAuxiliary('settings')
+          return
+        }
+        if (next === 'settings' || next === 'suggestions' || next === 'tasks') {
+          setAuxiliary(next)
+          return
+        }
+        setAuxiliary(null)
+        dispatch({ type: 'page', page: next, peek: preview })
+      })
+    },
+    [dispatch, auxiliary],
   )
   const select = useCallback(
     (next: Selection, mode?: ViewMode) =>
@@ -155,19 +183,21 @@ export function App() {
           managerData.managers.some(
             (manager) => manager.deviceId === next.deviceId && manager.threadId === next.sessionId,
           )
+        setAuxiliary(null)
         dispatch({ type: 'select', mode: mode ?? (managed ? 'manager' : 'chat'), selection: next })
         setPeek(null)
       }),
-    [replica, managerData.managers],
+    [replica, managerData.managers, setPeek, dispatch],
   )
   /** 到新建对话页去。next 是明说要建在哪；null 是按默认的来 */
   const compose = useCallback(
     (next: PlaceWish | null) =>
       leaveThen(() => {
+        setAuxiliary(null)
         dispatch({ type: 'compose', wish: next })
         setPeek(null)
       }),
-    [],
+    [setPeek, dispatch],
   )
   useEffect(
     () =>
@@ -186,59 +216,60 @@ export function App() {
                     route.workspaceId ?? pickedSummary?.workspaceId ?? place?.workspaceId ?? null,
                 }
               : route
-          setManagersAt((was) => ({ route: target, seq: was.seq + 1 }))
-          dispatch({ type: 'page', mode: 'manager', page: 'managers' })
+          setAuxiliary(null)
+          dispatch({ type: 'managers', route: target })
           setPeek(null)
         }),
       ),
-    [picked?.deviceId, pickedSummary?.workspaceId, place?.deviceId, place?.workspaceId],
+    [
+      picked?.deviceId,
+      pickedSummary?.workspaceId,
+      place?.deviceId,
+      place?.workspaceId,
+      dispatch,
+      setPeek,
+    ],
   )
   const switchSidebar = (mode: 'chat' | 'manager') =>
     leaveThen(() => {
       dispatch({ type: 'switch', mode })
     })
   const closePage = useCallback(() => openPage(null), [openPage])
-  /** 当前设备详情供工具栏判断本机/远程上下文。 */
-  const [deviceDetail, setDeviceDetail] = useState<string | null>(null)
-  const [taskDevice, setTaskDevice] = useState<string | null>(null)
   /** 别处要求直接进哪台设备的详情。seq 每次都变，同一台再要一次也重新进 */
   const [deviceAt, setDeviceAt] = useState<{
-    deviceId: string
+    deviceId: string | null
     section: DeviceSection | null
     seq: number
   } | null>(null)
   const openDevices = useCallback(
     () =>
       leaveThen(() => {
-        setDeviceAt(null)
+        setDeviceAt((was) => ({ deviceId: null, section: null, seq: (was?.seq ?? 0) + 1 }))
         openPage('devices')
       }),
     [openPage],
   )
-  const closePeek = useCallback(() => setPeek(null), [])
+  const closePeek = useCallback(() => setPeek(null), [setPeek])
   /** 定时任务那一页一打开去哪。seq 每次都变：在那一页里再要一次也重新进 */
   const [tasksAt, setTasksAt] = useState<{ route: TasksRoute; seq: number }>({
     route: { view: 'list' },
     seq: 0,
   })
   const onPage = useCallback(
-    (next: Page) =>
-      leaveThen(() => {
-        if (next === 'tasks') setTasksAt((was) => ({ route: { view: 'list' }, seq: was.seq + 1 }))
-        openPage(next)
-      }),
+    (next: Page) => {
+      if (next === 'tasks') setTasksAt((was) => ({ route: { view: 'list' }, seq: was.seq + 1 }))
+      openPage(next)
+    },
     [openPage],
   )
   useEffect(() => onSuggestionsRequest(() => onPage('suggestions')), [onPage])
   // 别处要去定时任务的某个地方（会话顶上那一条的“去看任务”、会话菜单的“为这个会话建定时任务”）
   useEffect(
     () =>
-      onTasksRequest((route: TasksRoute) =>
-        leaveThen(() => {
-          setTasksAt((was) => ({ route, seq: was.seq + 1 }))
-          openPage('tasks')
-        }),
-      ),
+      onTasksRequest((route: TasksRoute) => {
+        setTasksAt((was) => ({ route, seq: was.seq + 1 }))
+        openPage('tasks')
+      }),
     [openPage],
   )
 
@@ -262,20 +293,22 @@ export function App() {
     document.addEventListener('keydown', onKey)
     const offMenu = window.litchShell?.onMenu?.((action) => {
       if (action !== 'settings.open' && action !== 'settings.about') return
-      leaveThen(() => {
-        if (action === 'settings.about') setSettingsAt('about')
-        openPage('settings')
-      })
+      if (action === 'settings.about')
+        leaveThen(() => {
+          setSettingsAt('about')
+          setAuxiliary('settings')
+        })
+      else openPage('settings')
     })
     // 别处要直接开到某一组（设备详情里 Computer Use 开关旁的“去设置里看看”）。
     // “设备”原来是设置里的一组，现在是设置页上直接进设备页的入口：要它就直接进设备页
-    const offAsk = onSettingsRequest((section: string) =>
+    const offAsk = onSettingsRequest((section: string) => {
+      if (section === 'devices') return openDevices()
       leaveThen(() => {
-        if (section === 'devices') return openDevices()
         if (isSettingsSection(section)) setSettingsAt(section)
-        openPage('settings')
-      }),
-    )
+        setAuxiliary('settings')
+      })
+    })
     return () => {
       document.removeEventListener('keydown', onKey)
       offMenu?.()
@@ -288,10 +321,12 @@ export function App() {
   // 配置助手（新建页标题下、设置页、首启引导）：到新建对话页，设备切到本机，harness 和模型照上次的不动
   useEffect(
     () =>
-      onAssistantRequest(() => {
-        setAssist(nextAssistSeq())
-        compose({ deviceId: 'local' })
-      }),
+      onAssistantRequest(() =>
+        leaveThen(() => {
+          setAssist(nextAssistSeq())
+          compose({ deviceId: 'local' })
+        }),
+      ),
     [compose],
   )
 
@@ -313,6 +348,7 @@ export function App() {
   // Cmd/Ctrl+N，和输入框里的 /new，是同一件事
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (document.querySelector('dialog[open]')) return
       if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return
       if (event.key.toLowerCase() !== 'n') return
       event.preventDefault()
@@ -343,13 +379,13 @@ export function App() {
   }, [])
 
   return (
-    <div className={pickedManager && !page ? 'app mg-app' : 'app'}>
+    <div className={pickedManager && !page ? 'app main-app mg-app' : 'app main-app'}>
+      <NavigationBar back={back} forward={forward} go={go} />
       <TitleSearch
         onOpen={(next, archived) => {
           if (archived)
             leaveThen(() => {
-              dispatch({ type: 'page', page: 'archived' })
-              setPeek(next)
+              openPage('archived', next)
             })
           else select(next)
         }}
@@ -370,7 +406,7 @@ export function App() {
           draft={peek ? null : draft}
           page={page}
           peek={peek}
-          devicePageId={page === 'tasks' ? taskDevice : deviceDetail}
+          devicePageId={null}
           onCompose={compose}
         />
       )}
@@ -382,7 +418,7 @@ export function App() {
         devices={managerData.devices}
         selection={selection}
         draft={page ? null : draft}
-        page={page}
+        page={auxiliary ?? page}
         onSelect={select}
         onCompose={compose}
         onPage={onPage}
@@ -392,7 +428,7 @@ export function App() {
           <Toasts />
           <ApprovalNotices />
           <TaskNotices onOpen={select} />
-          <SessionNotices onOpen={select} selection={selection} />
+          <SessionNotices onOpen={select} selection={auxiliary ? null : selection} />
           {(page === 'archived' || page === 'suggestions' || (!page && pickedManager)) && peek ? (
             <ArchivedSession
               key={`${peek.deviceId}:${peek.sessionId}`}
@@ -402,57 +438,15 @@ export function App() {
             />
           ) : page === 'archived' ? (
             <ArchivedPage onClose={closePage} onOpen={setPeek} />
-          ) : page === 'devices' ? (
-            <DevicesPage
-              key={deviceAt?.seq ?? 0}
-              onDeviceChange={setDeviceDetail}
-              initial={deviceAt?.deviceId ?? null}
-              section={deviceAt?.section ?? null}
-              onClose={closePage}
-            />
-          ) : page === 'suggestions' ? (
-            <SuggestionsPage
-              onManager={(manager) => {
-                setBoardLayout({ open: true })
-                setManagerLocations((was) => ({
-                  ...was,
-                  [`${manager.deviceId}:${manager.id}`]: {
-                    ...was[`${manager.deviceId}:${manager.id}`],
-                    tab: 'suggestions',
-                    narrow: 'board',
-                    settings: false,
-                  },
-                }))
-                select({ deviceId: manager.deviceId, sessionId: manager.threadId }, 'manager')
-              }}
-              onClose={closePage}
-              onOpen={(next, archived) => (archived ? setPeek(next) : select(next))}
-            />
-          ) : page === 'tasks' ? (
-            <TasksPage
-              key={tasksAt.seq}
-              initial={tasksAt.route}
-              onDeviceChange={setTaskDevice}
-              onClose={closePage}
-              onOpenSession={select}
-            />
           ) : page === 'managers' ? (
             <ManagersPage
-              key={managersAt.seq}
-              initial={managersAt.route}
-              onRoute={(route) => setManagersAt((was) => ({ ...was, route }))}
+              key={JSON.stringify(managersAt)}
+              initial={managersAt}
+              onRoute={(route) => dispatch({ type: 'managers', route })}
               {...managerData}
               onClose={() => (pickedManager ? closePage() : switchSidebar('chat'))}
               // 新建应答可能先于目录摘要到达，经理入口明确保留所属视图。
               onOpen={(next) => select(next, 'manager')}
-            />
-          ) : page === 'settings' ? (
-            <SettingsPage
-              section={settingsAt}
-              onSection={setSettingsAt}
-              onClose={closePage}
-              onDevices={openDevices}
-              onArchived={() => openPage('archived')}
             />
           ) : selection && pickedManager ? (
             <ManagerPage
@@ -510,6 +504,56 @@ export function App() {
       </div>
       {/* litch config 要界面做的事、放宽安全的确认卡、执行器开的出码对话框 */}
       <ConfigAgent />
+      {auxiliary ? (
+        <PageWindow kind={auxiliary} onClose={closeAuxiliary}>
+          {auxiliary === 'suggestions' ? (
+            <SuggestionsPage
+              onManager={(manager) => {
+                setBoardLayout({ open: true })
+                setManagerLocations((was) => ({
+                  ...was,
+                  [`${manager.deviceId}:${manager.id}`]: {
+                    ...was[`${manager.deviceId}:${manager.id}`],
+                    tab: 'suggestions',
+                    narrow: 'board',
+                    settings: false,
+                  },
+                }))
+                select({ deviceId: manager.deviceId, sessionId: manager.threadId }, 'manager')
+              }}
+              onClose={closeAuxiliary}
+              onOpen={(next, archived) => {
+                if (archived) {
+                  openPage('archived', next)
+                } else select(next)
+              }}
+            />
+          ) : auxiliary === 'tasks' ? (
+            <TasksPage
+              key={tasksAt.seq}
+              initial={tasksAt.route}
+              onClose={closeAuxiliary}
+              onOpenSession={select}
+            />
+          ) : (
+            <SettingsPage
+              section={settingsAt}
+              onSection={(section) => leaveThen(() => setSettingsAt(section))}
+              onClose={closeAuxiliary}
+              onDevices={openDevices}
+              onArchived={() => openPage('archived')}
+              devices={
+                <DevicesPage
+                  key={deviceAt?.seq ?? 0}
+                  initial={deviceAt?.deviceId ?? null}
+                  section={deviceAt?.section ?? null}
+                  onClose={closeAuxiliary}
+                />
+              }
+            />
+          )}
+        </PageWindow>
+      ) : null}
       {/* 有没保存的改动时离开前问的那个对话框 */}
       <LeaveGuardHost />
     </div>
