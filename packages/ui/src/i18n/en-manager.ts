@@ -156,6 +156,21 @@ export const enManager = {
   'manager.checked': 'Last checked {time}',
   'manager.draft': 'Draft',
   'manager.draftCount': ({ n }) => (n === 1 ? '1 draft' : `${n} drafts`),
+  'manager.draftEnded.answered':
+    'This decision was answered elsewhere. Your draft is kept but will not be submitted.',
+  'manager.draftEnded.closed':
+    'This decision was closed. Your draft is kept but will not be submitted; it returns if the decision reopens.',
+  'manager.draftEnded.ignored':
+    'This decision is ignored. Your draft is kept but will not be submitted; it returns if you undo the ignore.',
+  'manager.draftEnded.cancelled':
+    'This request was cancelled. Your draft is kept but will not be submitted.',
+  'manager.draftEnded.handled':
+    'This request was delivered or replied to elsewhere. Your draft is kept but will not be submitted.',
+  'manager.draftEnded.post':
+    'This issue has ended. Your question is kept but will not be submitted.',
+  'manager.draftView': 'View draft',
+  'manager.draftHide': 'Hide draft',
+  'manager.draftDiscard': 'Discard',
   'manager.unsent': ({ n }) => (n === 1 ? '1 draft' : `${n} drafts`),
   'manager.clear': 'Clear drafts',
   'manager.submit': 'Submit to manager',

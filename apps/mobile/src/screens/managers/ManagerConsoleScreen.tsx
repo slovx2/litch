@@ -1,11 +1,14 @@
 // 手机经理页：概览、控制台、经理事项（只读）三格；复用核心经理契约，正文沿用对话 Markdown，提案沿用正式操作组件。
 import {
   type DeviceView,
+  decisionDraftState,
   keys,
   MANAGER_ISSUE_ORDERS,
   type ManagerBoardTopicView,
   type ManagerView,
   managerAttentionCount,
+  postDraftState,
+  requestDraftState,
   type SuggestionView,
 } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
@@ -25,6 +28,7 @@ import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { readChoice, writeChoice } from './choice-drafts'
 import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutcome'
+import { DraftEndedNote } from './DraftEndedNote'
 import { Markdown } from './IssueMarkdown'
 import { IssueContext, IssueRelations } from './IssueRelations'
 import { setIssueOrder, useIssueOrder } from './issue-order'
@@ -33,6 +37,8 @@ import { decisionActions, issueCounts, orderedIssues } from './presentation'
 
 const replyFile = jsonFile<Record<string, string>>('manager-replies.json')
 const draftFile = jsonFile<Record<string, string>>('manager-questions.json')
+/** 草稿开始写时议题的版本（同一个键）：议题在别处答复、关闭、忽略或取消后据此判断草稿已结束（core 的 *DraftState） */
+const baseFile = jsonFile<Record<string, number>>('manager-draft-revisions.json')
 type Props = NativeStackScreenProps<RootStackParamList, 'ManagerConsole'>
 
 /** 作答的一个选项：整块可点，选中画单选记号和强调边框；读屏角色是 radio */
@@ -129,9 +135,12 @@ function Issue({
   const [editing, setEditing] = useState(() => {
     const found = board?.decisions.find((d) => d.id === post.id)
     return Boolean(
-      found &&
+      board &&
+        found &&
         found.status !== 'open' &&
-        (readChoice(draftKey, found.options) || replyFile.read()?.[draftKey]?.trim()),
+        (readChoice(draftKey, found.options) || replyFile.read()?.[draftKey]?.trim()) &&
+        decisionDraftState(board, found.id, baseFile.read()?.[draftKey] ?? found.revision).state !==
+          'ended',
     )
   })
   const [unreviewed, setUnreviewed] = useState(false)
@@ -158,6 +167,68 @@ function Issue({
   const request = board?.requests?.find((r) => r.id === post.id)
   const decision = board?.decisions.find((d) => d.id === post.id)
   const decisionButtons = decision ? decisionActions(decision) : null
+  // 草稿开始写时记下议题版本，清空时删掉；之后议题在别处结束，草稿就不再算、不能提交（与桌面同一规则）
+  const revision = decision?.revision ?? request?.revision ?? post.revision
+  const hasDraft = Boolean(choice || reply.trim() || question.trim())
+  useEffect(() => {
+    const bases = baseFile.read() ?? {}
+    if (hasDraft && bases[draftKey] === undefined)
+      baseFile.write({ ...bases, [draftKey]: revision })
+    else if (!hasDraft && bases[draftKey] !== undefined) {
+      const { [draftKey]: _cleared, ...rest } = bases
+      baseFile.write(rest)
+    }
+  }, [hasDraft, draftKey, revision])
+  const base = baseFile.read()?.[draftKey] ?? revision
+  const answerState = !board
+    ? null
+    : decision
+      ? decisionDraftState(board, decision.id, base).state
+      : request
+        ? requestDraftState(board, request.id, base).state
+        : null
+  const replyEnded = answerState === 'ended' && Boolean(choice || reply.trim())
+  const questionEnded = Boolean(
+    board && question.trim() && postDraftState(board, post.id, base).state === 'ended',
+  )
+  const chosenLabel = decision?.options.find((o) => o.id === choice)?.label
+  const endedNote =
+    replyEnded || questionEnded ? (
+      <DraftEndedNote
+        id={post.id}
+        text={t(
+          decision
+            ? decision.status === 'answered'
+              ? 'manager.draftEnded.answered'
+              : decision.status === 'ignored'
+                ? 'manager.draftEnded.ignored'
+                : 'manager.draftEnded.closed'
+            : request && replyEnded
+              ? request.status === 'cancelled'
+                ? 'manager.draftEnded.cancelled'
+                : 'manager.draftEnded.handled'
+              : 'manager.draftEnded.post',
+        )}
+        onDiscard={() => {
+          if (replyEnded) {
+            writeReply('')
+            setChoice(null)
+          }
+          if (questionEnded) writeQuestion('')
+          setEditing(false)
+        }}
+      >
+        {replyEnded && chosenLabel ? (
+          <Text style={{ color: c.ink, fontWeight: '600' }}>{chosenLabel}</Text>
+        ) : null}
+        {replyEnded && reply.trim() ? <Markdown text={reply} /> : null}
+        {questionEnded ? (
+          <Text style={{ color: c.ink2 }}>
+            {t('manager.questionYou')} {question}
+          </Text>
+        ) : null}
+      </DraftEndedNote>
+    ) : null
   const questionPrompt = t(
     mode === 'manager'
       ? 'manager.questionManagerPlaceholder'
@@ -204,7 +275,7 @@ function Issue({
     })
   // 选了选项或写了补充说明、还没提交：卡片标“草稿”（与桌面一致），免得以为已经答复
   const drafted = Boolean(
-    decision && (decision.status === 'open' || editing) && (choice || reply.trim()),
+    decision && (decision.status === 'open' || editing) && (choice || reply.trim()) && !replyEnded,
   )
   const stateLabel = decision
     ? t(
@@ -317,10 +388,13 @@ function Issue({
               worktree={suggestion.proposal.worktree ?? false}
             />
           ) : null}
+          {endedNote}
           {request ? (
             <>
               {request.response ? <Markdown text={request.response.text} /> : null}
-              {request.status !== 'cancelled' && (request.status === 'open' || editing) ? (
+              {request.status !== 'cancelled' &&
+              !replyEnded &&
+              (request.status === 'open' || editing) ? (
                 <>
                   <TextInput
                     accessibilityLabel={t('manager.requestText')}
@@ -353,7 +427,7 @@ function Issue({
                     />
                   ) : null}
                 </>
-              ) : request.status !== 'cancelled' ? (
+              ) : request.status !== 'cancelled' && !replyEnded ? (
                 <Button
                   kind="plain"
                   disabled={locked}
@@ -368,7 +442,7 @@ function Issue({
           ) : null}
           {decision ? (
             <>
-              {decision.status === 'open' || editing ? (
+              {decision.status === 'open' || (editing && !replyEnded) ? (
                 <>
                   {/* 修改答案时照样显示原来的答复，选项上也预先选中原来那一项 */}
                   <DecisionAnswer decision={decision} />

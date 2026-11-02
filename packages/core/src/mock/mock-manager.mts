@@ -6,7 +6,12 @@ import { forwardedManagerQuestion } from '../../../protocol/src/manager-question
 import { formatSessionEvent } from '../../../protocol/src/session-tree.mjs'
 import { ChannelError, type Commands } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
-import type { ManagerBoardView, ManagerView } from '../model-manager.mjs'
+import type {
+  ManagerBoardView,
+  ManagerChangeView,
+  ManagerDecisionView,
+  ManagerView,
+} from '../model-manager.mjs'
 import type { MockTasksHost } from './mock-tasks.mjs'
 import {
   type ManagerSessionSummary,
@@ -103,6 +108,41 @@ export function createMockManagers(host: MockManagerHost) {
       threadId: null,
       changeId: null,
     })
+  /**
+   * 决策状态变化记一条变更（新的在前，同设备）：客户端靠它判断本地草稿能不能随重开恢复。
+   * 只记状态、关闭记录和版本，模拟核心不需要完整前后值。
+   */
+  const statusChange = (
+    board: ManagerBoardView,
+    decision: ManagerDecisionView,
+    apply: () => void,
+    by: ManagerChangeView['by'],
+    why: string,
+  ) => {
+    const pick = () => ({
+      status: decision.status,
+      closed: decision.closed,
+      answer: decision.answer,
+      revision: decision.revision,
+    })
+    const before = pick()
+    apply()
+    const after = pick()
+    board.changes.unshift({
+      id: `mock-change-${++seq}`,
+      objectId: decision.id,
+      by,
+      at: host.clock.now(),
+      fields: Object.keys(after).filter(
+        (key) =>
+          JSON.stringify(before[key as keyof typeof before]) !==
+          JSON.stringify(after[key as keyof typeof after]),
+      ),
+      before,
+      after,
+      why,
+    })
+  }
   const run = async (name: string, params: unknown): Promise<unknown> => {
     const { deviceId } = params as { deviceId: string }
     const device = host.device(deviceId)
@@ -369,13 +409,21 @@ export function createMockManagers(host: MockManagerHost) {
           'rejected',
           t('只能重开已关闭的决策', 'Only closed decisions can be reopened'),
         )
-      // 真设备重开时清掉 closed，客户端从变更记录里找回；模拟核心没有变更记录，直接留下。
-      // 撤销自己的忽略不留“上次关闭”（同 managerReopen 之外的投影：ignored→open 不给 previousClosed）
+      // 真设备重开时清掉 closed，客户端从变更记录里找回；模拟核心直接留下。
+      // 撤销自己的忽略不留“上次关闭”（同投影：ignored→open 不给 previousClosed）
       decision.previousClosed = decision.status === 'ignored' ? null : decision.closed
       decision.reopened = null
-      decision.status = 'open'
-      decision.closed = null
-      decision.revision++
+      statusChange(
+        board,
+        decision,
+        () => {
+          decision.status = 'open'
+          decision.closed = null
+          decision.revision++
+        },
+        'user',
+        'Decision reopened',
+      )
       decision.updatedAt = host.clock.now()
       activity(board, t(`你重开了 ${decisionId}`, `You reopened ${decisionId}`))
       result = { decision }
@@ -389,11 +437,19 @@ export function createMockManagers(host: MockManagerHost) {
           'rejected',
           t('决策已变化，请刷新后再试', 'The decision changed; refresh and try again'),
         )
-      decision.status = 'ignored'
-      decision.closed = { reason: reason?.trim() ?? '', by: 'user', at: host.clock.now() }
+      statusChange(
+        board,
+        decision,
+        () => {
+          decision.status = 'ignored'
+          decision.closed = { reason: reason?.trim() ?? '', by: 'user', at: host.clock.now() }
+          decision.revision++
+        },
+        'user',
+        'Decision ignored',
+      )
       decision.previousClosed = null
       decision.reopened = null
-      decision.revision++
       decision.updatedAt = host.clock.now()
       activity(board, t(`你忽略了 ${decisionId}`, `You ignored ${decisionId}`))
       result = { decision }
@@ -500,17 +556,25 @@ export function createMockManagers(host: MockManagerHost) {
           })
           continue
         }
-        decision.answer = {
-          optionId: answer.optionId,
-          text: answer.text,
-          by: 'user',
-          at: host.clock.now(),
-        }
-        decision.status = 'answered'
-        decision.closed = null
+        statusChange(
+          board,
+          decision,
+          () => {
+            decision.answer = {
+              optionId: answer.optionId,
+              text: answer.text,
+              by: 'user',
+              at: host.clock.now(),
+            }
+            decision.status = 'answered'
+            decision.closed = null
+            decision.revision++
+          },
+          'user',
+          'Board answer submitted',
+        )
         decision.previousClosed = null
         decision.reopened = null
-        decision.revision++
         decision.updatedAt = host.clock.now()
         submitted.accepted.push(decision)
       }

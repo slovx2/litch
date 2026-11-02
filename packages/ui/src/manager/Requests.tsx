@@ -1,4 +1,4 @@
-import { sortManagerIssues } from '@litch/core'
+import { requestDraftState, sortManagerIssues } from '@litch/core'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type {
   ManagerRequestId,
@@ -11,6 +11,7 @@ import { useT } from '../app/appearance.ts'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
+import { DraftEnded } from './DraftEnded.tsx'
 import { useIssueOrder } from './issue-order.tsx'
 import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
 import { Relations } from './Relations.tsx'
@@ -71,7 +72,13 @@ export function Requests({
       })).map((request) => {
         const post = posts.find((post) => post.id === request.id)
         const draft = drafts[request.id]
-        const editing = request.status === 'open' || Boolean(draft)
+        // 在别处交付、回复或已取消：草稿留着但不计数、不提交（规则见 core 的 requestDraftState）
+        const state = draft
+          ? requestDraftState({ decisions: [], changes: [], requests }, request.id, draft.revision)
+              .state
+          : null
+        const ended = state === 'ended' && Boolean(draft?.delivered || draft?.text.trim())
+        const editing = request.status === 'open' || (Boolean(draft) && state !== 'ended')
         const locked = disabled || request.status === 'cancelled'
         return (
           <article
@@ -86,7 +93,7 @@ export function Requests({
               <span className={request.status === 'open' ? 'pill wait' : 'pill mute'}>
                 {t(`manager.request.${request.status}`)}
               </span>
-              {draft ? <span className="pill wait">{t('manager.draft')}</span> : null}
+              {draft && !ended ? <span className="pill wait">{t('manager.draft')}</span> : null}
             </header>
             <Relations id={request.id} />
             <BoardMarkdown text={request.description} />
@@ -101,7 +108,32 @@ export function Requests({
               </section>
             ) : null}
             {request.cancelled ? <p className="dim">{request.cancelled.reason}</p> : null}
-            {draft && draft.revision !== request.revision ? (
+            {ended && draft ? (
+              <DraftEnded
+                text={t(
+                  request.status === 'cancelled'
+                    ? 'manager.draftEnded.cancelled'
+                    : 'manager.draftEnded.handled',
+                )}
+                onDiscard={() => {
+                  try {
+                    const { [request.id]: _discarded, ...rest } = drafts
+                    write(rest)
+                    setError('')
+                  } catch {
+                    setError(t('manager.savedFail'))
+                  }
+                }}
+              >
+                {draft.delivered ? (
+                  <p>
+                    <b>{request.buttonLabel ?? t('manager.requestDone')}</b>
+                  </p>
+                ) : null}
+                {draft.text.trim() ? <BoardMarkdown text={draft.text} /> : null}
+              </DraftEnded>
+            ) : null}
+            {draft && state === 'conflict' ? (
               <div className="mg-conflict" role="alert">
                 <p>{t('manager.requestConflict')}</p>
                 <button

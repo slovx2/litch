@@ -10,6 +10,9 @@ export interface ManagerSeen {
   /** 忽略：填选填理由确认，离开待定、不计待处理，单独一组显示理由；撤销忽略回到待定 */
   ignored: boolean
   ignoreDetail: string
+  /** 决策在别处不再待定（这里用忽略）后草稿不计数、卡片提示可查看与丢弃；撤销后草稿自动恢复可提交 */
+  endedDraft: boolean
+  endedDraftDetail: string
   consoleReports: boolean
   issueRelations: boolean
   managerQuestionDrafts: boolean
@@ -492,6 +495,77 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     unignored &&
     !one('[data-decision="D-17"] [data-previous-closed]')
   const ignoreDetail = JSON.stringify({ ignoreNote, ignoredCounts, ignoredText, unignored })
+
+  // 有草稿的 D-17 被忽略（等同在别处答复或关闭）：底部和侧栏都不再算它，提交栏消失；忽略的卡片上说明草稿还在，
+  // 可查看、可丢弃。撤销忽略后草稿自动回来、能直接提交（不要求先确认）；丢弃后撤销则什么都不剩。
+  const sideDrafts = () => one('[data-manager-draft-count]')?.textContent?.trim() ?? ''
+  const sendBar = () => one('.mg-send .grow')?.textContent?.trim() ?? ''
+  const draftArea = () =>
+    one<HTMLTextAreaElement>('[data-decision="D-17"] [data-act="manager-answer"]')
+  const hadBar = sendBar()
+  fill(await until('D-17 的答复框', draftArea), '先放着的草稿')
+  await until('草稿进了提交栏', () => sendBar() && sendBar() !== hadBar)
+  const withDraft = { bar: sendBar(), side: sideDrafts() }
+  const ignoreD17 = async () => {
+    await click('[data-decision="D-17"] [data-act="manager-ignore"]')
+    await click('[data-decision="D-17"] [data-act="manager-ignore-confirm"]')
+    await until('D-17 离开待定', () => !one('[data-decision="D-17"]'))
+    await click('.mg-decision-filter [data-filter="ignored"]')
+    return until('忽略卡片上的草稿说明', () => one('[data-decision="D-17"] [data-draft-ended]'))
+  }
+  const note = await ignoreD17()
+  const endedCounts = { bar: sendBar(), side: sideDrafts() }
+  const noteText = note.textContent ?? ''
+  await click('[data-decision="D-17"] [data-act="manager-draft-view"]')
+  const preview = (
+    await until('查看草稿', () => one('[data-decision="D-17"] [data-draft-preview]'))
+  ).textContent
+  const formHidden = !one('[data-decision="D-17"] [data-act="manager-answer"]')
+  await click('[data-decision="D-17"] [data-act="manager-unignore"]')
+  const revived = Boolean(
+    await until(
+      '撤销忽略后草稿回来',
+      () =>
+        draftArea()?.value === '先放着的草稿' &&
+        sendBar() === withDraft.bar &&
+        !one('[data-decision="D-17"] .mg-conflict') &&
+        !one<HTMLButtonElement>('[data-act="manager-submit"]')?.disabled,
+    ).catch(() => null),
+  )
+  const revivedSide = sideDrafts()
+  await ignoreD17()
+  await click('[data-decision="D-17"] [data-act="manager-draft-discard"]')
+  await until('丢弃后说明消失', () => !one('[data-decision="D-17"] [data-draft-ended]'))
+  await click('[data-decision="D-17"] [data-act="manager-unignore"]')
+  const discarded = Boolean(
+    await until('丢弃后撤销忽略', () => draftArea()?.value === '' && sendBar() === hadBar).catch(
+      () => null,
+    ),
+  )
+  const endedDraft =
+    !hadBar &&
+    withDraft.bar === '1 项草稿，尚未提交' &&
+    withDraft.side === '1 项草稿' &&
+    endedCounts.bar === '' &&
+    endedCounts.side === '' &&
+    noteText.includes('已忽略') &&
+    noteText.includes('草稿还在') &&
+    Boolean(preview?.includes('先放着的草稿')) &&
+    formHidden &&
+    revived &&
+    revivedSide === '1 项草稿' &&
+    discarded
+  const endedDraftDetail = JSON.stringify({
+    hadBar,
+    withDraft,
+    endedCounts,
+    noteText,
+    preview,
+    formHidden,
+    revived,
+    revivedSide,
+    discarded,
+  })
   const omittedActions = ![...document.querySelectorAll('.mg-board button')].some((button) =>
     /^(仍然有效|推迟)$/.test(button.textContent?.trim() ?? ''),
   )
@@ -953,6 +1027,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     managerReopened,
     ignored,
     ignoreDetail,
+    endedDraft,
+    endedDraftDetail,
     panels,
     childReturn,
     reportsStopped,
@@ -994,7 +1070,10 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
 }
 
 export function judgeManager(seen: ManagerSeen): string[] {
-  const messages: Record<Exclude<keyof ManagerSeen, 'ignoreDetail'>, string> = {
+  const messages: Record<
+    Exclude<keyof ManagerSeen, 'ignoreDetail' | 'endedDraftDetail'>,
+    string
+  > = {
     linesState:
       '经理自己只有后台命令、工作线在跑时，经理行仍画成运行中，或没有后台记号、没写明工作线',
     pendingTitle: '有待处理的经理行，悬停提示第一行不是“N 待处理 · 状态文字”',
@@ -1003,6 +1082,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
       '控制台没有默认最新优先，或切换排序后顺序与本机记录不对，或排序不在列表头、决策里仍有待处理优先',
     previousClosed: '重新打开的决策没有收起显示上次关闭的原因',
     managerReopened: '经理重开的决策没有收起显示经理写的理由',
+    endedDraft: `决策不再待定后草稿仍计数或可提交、卡片没有查看与丢弃，或重开后草稿没有恢复：${seen.endedDraftDetail}`,
     ignored: `忽略决策没有离开待定、单独成组显示理由，或撤销忽略没有回到待定：${seen.ignoreDetail}`,
     consoleReports: '控制台报告与帖子追问未完成',
     issueRelations: '议题关联与编号预览未完成',

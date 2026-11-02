@@ -481,6 +481,7 @@ export function ManagerPage({
                   manager={manager}
                   onBusy={setResponding}
                   decisions={board.decisions}
+                  changes={board.changes}
                   requests={board.requests ?? []}
                   groups={pages.decisions}
                   disabled={disabled}

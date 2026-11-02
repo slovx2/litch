@@ -1,5 +1,5 @@
 // 四类对象共用帖子记录；原帖在宿主卡片顶部，讨论区只负责历史和追问。
-import { type DeviceView, keys } from '@litch/core'
+import { type DeviceView, keys, postDraftState } from '@litch/core'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { ManagerBoardTopicView, ManagerView } from '../../../core/src/model-manager.mts'
 import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
@@ -8,6 +8,7 @@ import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
+import { DraftEnded } from './DraftEnded.tsx'
 import { usePostDrafts } from './post-drafts.ts'
 
 export function usePost(manager: ManagerView, id: string) {
@@ -54,6 +55,9 @@ export function PostDiscussion({
   const t = useT()
   const { channel } = useServices()
   const device = useKey<DeviceView>(keys.device(manager.deviceId))
+  const board = useKey<ManagerBoardTopicView>(
+    keys.managerBoard(manager.deviceId, manager.id),
+  )?.board
   const [open, setOpen] = useState(false)
   const inputId = useId()
   const submitted = useRef(0)
@@ -76,6 +80,13 @@ export function PostDiscussion({
   const canTemporary =
     device?.harnesses.find((h) => h.id === manager.harness)?.abilities?.managerQuestions === true
   const value = mode === 'temporary' ? temporary : (question ?? draft?.question ?? '')
+  // 议题已结束（请你做取消、建议已处理）：追问草稿留着但不计数、不提交；决策上的追问由决策卡片管
+  const ended = Boolean(
+    !onQuestion &&
+      draft?.question.trim() &&
+      board &&
+      postDraftState(board, post.id, draft.revision).state === 'ended',
+  )
   const change = (value: string) => {
     if (mode === 'temporary') {
       setTemporary(value)
@@ -165,6 +176,22 @@ export function PostDiscussion({
     .sort((a, b) => a.at - b.at)
   return (
     <section className="mg-post-discussion" data-post={post.id}>
+      {ended && draft ? (
+        <DraftEnded
+          text={t('manager.draftEnded.post')}
+          onDiscard={() => {
+            try {
+              const { [post.id]: _discarded, ...rest } = drafts
+              write(rest)
+              setError('')
+            } catch {
+              setError(t('manager.savedFail'))
+            }
+          }}
+        >
+          <BoardMarkdown text={draft.question} />
+        </DraftEnded>
+      ) : null}
       {events.length ? (
         <ol className="mg-post-timeline">
           {events.map((e) => (
@@ -187,7 +214,7 @@ export function PostDiscussion({
       >
         <span aria-hidden="true">{open ? '▾' : '▸'}</span>{' '}
         {t(open ? 'manager.postAskClose' : 'manager.postAsk')}
-        {value.trim() ? ` · ${t('manager.draft')}` : ''}
+        {value.trim() && !ended ? ` · ${t('manager.draft')}` : ''}
       </button>
       {open ? (
         <div className="mg-post-compose" id={`${inputId}-compose`}>
@@ -236,7 +263,7 @@ export function PostDiscussion({
             <button
               type="button"
               className="btn"
-              disabled={locked || !value.trim()}
+              disabled={locked || !value.trim() || (ended && mode === 'manager')}
               onClick={() => void send()}
               data-act="post-question-send"
             >

@@ -385,6 +385,14 @@ export {
   reopenedClosure,
 } from './projection/manager.mjs'
 export {
+  decisionDraftState,
+  liveManagerDrafts,
+  type ManagerDraftBoard,
+  type ManagerDraftState,
+  postDraftState,
+  requestDraftState,
+} from './projection/manager-drafts.mjs'
+export {
   DEFAULT_MANAGER_ISSUE_ORDER,
   type DecisionAnswerParts,
   decisionAnswerParts,

@@ -1,24 +1,25 @@
 import {
   type DeviceView,
   keys,
+  liveManagerDrafts,
   managerAttentionCount,
   type SessionChildren,
   type SessionSummary,
 } from '@litch/core'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import type { ManagerView } from '../../../core/src/model-manager.mts'
+import type { ManagerBoardTopicView, ManagerView } from '../../../core/src/model-manager.mts'
 import type { Selection } from '../app/App.tsx'
 import { requestManagers } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { wireStyle } from '../app/device.ts'
 import { Caret, Forward } from '../app/icons.tsx'
-import { useKey } from '../app/services.tsx'
+import { useKey, useKeys } from '../app/services.tsx'
 import { containsSession, revealRow } from '../sidebar/reveal.ts'
 import { useSidebarReveal } from '../sidebar/reveal-context.ts'
 import { managerPendingTitle, managerStateText, sessionMark } from '../sidebar/session-mark.ts'
-import { answeredDrafts, questionDrafts, useAnswerDrafts } from './drafts.ts'
+import { useAnswerDrafts } from './drafts.ts'
 import { usePostDrafts } from './post-drafts.ts'
-import { submittedRequests, useRequestDrafts } from './request-drafts.ts'
+import { useRequestDrafts } from './request-drafts.ts'
 
 function ManagerRow({
   manager,
@@ -49,11 +50,16 @@ function ManagerRow({
   const { drafts } = useAnswerDrafts(manager.deviceId, manager.id)
   const { drafts: requests } = useRequestDrafts(manager.deviceId, manager.id)
   const { drafts: posts } = usePostDrafts(manager.deviceId, manager.id)
-  const count =
-    Object.values(posts).filter((p) => p.question.trim()).length +
-    submittedRequests(requests).length +
-    new Set([...answeredDrafts(drafts), ...questionDrafts(drafts)].map((draft) => draft.decisionId))
-      .size
+  const local = {
+    decisions: Object.values(drafts),
+    requests: Object.values(requests),
+    posts: Object.values(posts),
+  }
+  // 有本地草稿时才读看板：议题在别处答复、关闭、忽略或取消后，那份草稿不算（看板没到时先全算）
+  const [view] = useKeys<ManagerBoardTopicView>(
+    liveManagerDrafts(null, local).count ? [keys.managerBoard(manager.deviceId, manager.id)] : [],
+  )
+  const count = liveManagerDrafts(view?.board, local).count
   const attention = managerAttentionCount(manager)
   // 记号只说经理会话自己（回合、后台任务），和普通会话行同一套；工作线在跑另用文字写明，
   // 不借用经理自己的“运行中”（工作线各自的记号在下面的子行上）。

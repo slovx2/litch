@@ -329,6 +329,64 @@ try {
     '撤销忽略回到待定',
   )
   assert.equal(await pendingDecisions(), pendingBefore, '撤销忽略后重新计入待处理')
+  // 有草稿的 D-17 被忽略（等同在别处答复或关闭）：不再标草稿、不显示作答区，展开后说明草稿还在，可查看、可丢弃；
+  // 撤销忽略后草稿自动回来、可直接提交；丢弃后撤销则什么都不剩
+  const d17 = '[data-testid="manager-issue:D-17"]'
+  const status17 = () =>
+    read(`document.querySelector('[data-testid="issue-status:D-17"]')?.textContent`)
+  const area17 = () => read(`document.querySelector('${d17} textarea')?.value ?? null`)
+  await read(
+    `(()=>{const input=document.querySelector('${d17} textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'先放着的草稿');input.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+  )
+  await until(async () => (await status17()) === '草稿', 'D-17 标草稿')
+  const ignore17 = async () => {
+    await tapId('decision-ignore:D-17')
+    await tapId('decision-ignore-confirm:D-17')
+    await until(async () => (await status17()) === '已忽略', 'D-17 已忽略')
+    await tapId('decision-ignored-toggle:D-17')
+    await wait('[data-testid="draft-ended:D-17"]')
+  }
+  await ignore17()
+  assert.ok(
+    await read(
+      `document.querySelector('[data-testid="draft-ended:D-17"]').innerText.includes('草稿还在') && !document.querySelector('${d17} textarea')`,
+    ),
+    '忽略后说明草稿还在、不显示作答区',
+  )
+  await tapId('draft-ended-view:D-17')
+  await until(
+    () =>
+      read(
+        `document.querySelector('[data-testid="draft-ended-preview:D-17"]')?.innerText.includes('先放着的草稿')`,
+      ),
+    '查看草稿',
+  )
+  await read(`document.querySelector('${d17}').scrollIntoView({block:'start'})`)
+  await shot('mobile-ended-draft')
+  await tapId('decision-unignore:D-17')
+  await until(
+    async () =>
+      (await status17()) === '草稿' &&
+      (await area17()) === '先放着的草稿' &&
+      (await read(`!document.querySelector('[data-testid="draft-ended:D-17"]')`)),
+    '撤销忽略后草稿回来',
+  )
+  assert.equal(
+    await read(`document.querySelector('[data-testid="decision-submit-why:D-17"]')`),
+    null,
+    '恢复的草稿可直接提交',
+  )
+  await ignore17()
+  await tapId('draft-ended-discard:D-17')
+  await until(
+    () => read(`!document.querySelector('[data-testid="draft-ended:D-17"]')`),
+    '丢弃后说明消失',
+  )
+  await tapId('decision-unignore:D-17')
+  await until(
+    async () => (await status17()) === '待定' && (await area17()) === '',
+    '丢弃后撤销忽略什么都不剩',
+  )
   for (const skin of ['standard', 'human', 'retro'])
     for (const theme of ['light', 'dark']) {
       await read(

@@ -1,6 +1,12 @@
-import { type ManagerBoardPages, sortManagerIssues } from '@litch/core'
+import {
+  decisionDraftState,
+  liveManagerDrafts,
+  type ManagerBoardPages,
+  sortManagerIssues,
+} from '@litch/core'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type {
+  ManagerChangeView,
   ManagerDecisionId,
   ManagerDecisionView,
   ManagerRequestView,
@@ -15,25 +21,25 @@ import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
 import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutcome.tsx'
+import { DraftEnded } from './DraftEnded.tsx'
 import {
   type AnswerDrafts,
-  answeredDrafts,
   cancelAnswerEdit,
   type DecisionDraft,
-  questionDrafts,
   useAnswerDrafts,
 } from './drafts.ts'
 import { IssueOrderSelect, useIssueOrder } from './issue-order.tsx'
 import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
 import { advancePostDrafts, usePostDrafts } from './post-drafts.ts'
 import { Relations } from './Relations.tsx'
-import { submittedRequests, useRequestDrafts } from './request-drafts.ts'
+import { useRequestDrafts } from './request-drafts.ts'
 
 export function Decisions({
   manager,
   posts,
   onBusy,
   decisions,
+  changes,
   requests,
   groups,
   disabled,
@@ -45,6 +51,7 @@ export function Decisions({
   posts: ManagerPost[]
   onBusy(value: boolean): void
   decisions: ManagerDecisionView[]
+  changes: ManagerChangeView[]
   requests: ManagerRequestView[]
   groups: ManagerBoardPages['decisions']
   disabled: boolean
@@ -60,8 +67,15 @@ export function Decisions({
     manager.id,
   )
   const { drafts: postDrafts, write: writePosts } = usePostDrafts(manager.deviceId, manager.id)
-  const postQuestions = Object.values(postDrafts).filter((p) => p.question.trim())
-  const requestReplies = submittedRequests(requestDrafts)
+  // 议题在别处答复、关闭、忽略或取消后，草稿不计数、不提交（卡片上另有提示）；重新打开后自动回来
+  const board = { decisions, changes, requests, posts }
+  const live = liveManagerDrafts(board, {
+    decisions: Object.values(drafts),
+    requests: Object.values(requestDrafts),
+    posts: Object.values(postDrafts),
+  })
+  const postQuestions = live.posts
+  const requestReplies = live.requests
   const [filter, setFilter] = useState<'open' | 'answered' | 'closed' | 'ignored'>('open')
   const [editing, setEditing] = useState<Set<string>>(new Set())
   /** 正在填忽略理由的那张卡 */
@@ -95,8 +109,12 @@ export function Decisions({
     onBusy(value)
   }
   const [error, setError] = useState('')
-  const answers = answeredDrafts(drafts)
-  const questions = questionDrafts(drafts)
+  const answers = live.answers.map(({ question: _question, ...answer }) => answer)
+  const questions = live.questions.map((draft) => ({
+    decisionId: draft.decisionId,
+    revision: draft.revision,
+    question: draft.question?.trim() ?? '',
+  }))
   const pending = [...answers, ...questions]
   const asking = pending.some((answer) =>
     decisions
@@ -105,24 +123,8 @@ export function Decisions({
         (entry) => entry.status === 'running' && entry.mode !== 'manager',
       ),
   )
-  const requestConflict = requestReplies.some(
-    (draft) =>
-      !requests.some(
-        (request) =>
-          request.id === draft.requestId &&
-          request.revision === draft.revision &&
-          request.status !== 'cancelled',
-      ),
-  )
-  const conflict =
-    postQuestions.some((p) => posts.find((post) => post.id === p.id)?.revision !== p.revision) ||
-    requestConflict ||
-    pending.some(
-      (draft) =>
-        !decisions.some(
-          (decision) => decision.id === draft.decisionId && decision.revision === draft.revision,
-        ),
-    )
+  const requestConflict = live.requestConflict
+  const conflict = live.conflict || requestConflict
   const save = (next: AnswerDrafts) => {
     try {
       write(next)
@@ -192,7 +194,10 @@ export function Decisions({
       writeRequests(nextRequests)
       const postNext = advancePostDrafts(postDrafts, result.acceptedRequests)
       writePosts(postNext)
-      for (const draft of Object.values(postNext).filter((draft) => draft.question.trim())) {
+      const sending = new Set(postQuestions.map((draft) => draft.id))
+      for (const draft of Object.values(postNext).filter(
+        (draft) => draft.question.trim() && sending.has(draft.id),
+      )) {
         await channel.command('managers.post.question', {
           deviceId: manager.deviceId,
           managerId: manager.id,
@@ -288,19 +293,22 @@ export function Decisions({
           {grouped[filter].map((decision) => {
             const draft = drafts[decision.id]
             const post = posts.find((post) => post.id === decision.id)
-            const stale = draft && draft.revision !== decision.revision
+            const ended = live.ended.decisions.has(decision.id)
+            const stale =
+              draft && decisionDraftState(board, decision.id, draft.revision).state === 'conflict'
+            const chosen = decision.options.find((option) => option.id === draft?.optionId)
             return (
               <article
                 className="mg-decision"
                 data-decision={decision.id}
                 key={decision.id}
-                data-draft={Boolean(draft)}
+                data-draft={Boolean(draft) && !ended}
                 tabIndex={-1}
               >
                 <header>
                   <span className="mono dim">{decision.id}</span>
                   <h3>{decision.title}</h3>
-                  {draft ? <span className="pill wait">{t('manager.draft')}</span> : null}
+                  {draft && !ended ? <span className="pill wait">{t('manager.draft')}</span> : null}
                 </header>
                 <Relations id={decision.id} />
                 <BoardMarkdown text={decision.background} />
@@ -317,11 +325,38 @@ export function Decisions({
                   </div>
                 ) : null}
                 <PostHistory post={post} />
+                {ended && draft ? (
+                  <DraftEnded
+                    text={t(
+                      decision.status === 'answered'
+                        ? 'manager.draftEnded.answered'
+                        : decision.status === 'ignored'
+                          ? 'manager.draftEnded.ignored'
+                          : 'manager.draftEnded.closed',
+                    )}
+                    disabled={busy}
+                    onDiscard={() => {
+                      const { [decision.id]: _discarded, ...rest } = drafts
+                      save(rest)
+                    }}
+                  >
+                    {chosen ? (
+                      <p>
+                        <b>{chosen.label}</b>
+                      </p>
+                    ) : null}
+                    {draft.text.trim() ? <BoardMarkdown text={draft.text} /> : null}
+                    {draft.question?.trim() ? (
+                      <p>
+                        {t('manager.questionYou')} {draft.question}
+                      </p>
+                    ) : null}
+                  </DraftEnded>
+                ) : null}
                 <div>
                   {decision.status === 'open' ||
                   editing.has(decision.id) ||
-                  draft?.optionId ||
-                  draft?.text.trim() ? (
+                  (!ended && (draft?.optionId || draft?.text.trim())) ? (
                     <>
                       {stale ? (
                         <div className="mg-conflict" role="alert">
