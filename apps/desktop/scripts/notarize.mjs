@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { appendFileSync } from 'node:fs'
 import { basename } from 'node:path'
 
 // 只提交一次，不将 Rejected/Invalid 或超时重新提交成另一单。
@@ -33,22 +34,51 @@ export function notarize(file, credentials, spawn = spawnSync) {
   throw new Error(`${basename(file)} 没有通过公证：${result?.status ?? '没有有效结果'}；不重试提交`)
 }
 
-// 票据传播可能稍晚；三次总等待 45 秒，每次命令还有自身超时。
-export function staple(file, spawn = spawnSync) {
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const result = spawn('xcrun', ['stapler', 'staple', file], {
-      stdio: 'inherit',
-      timeout: 60_000,
-    })
-    if (result.status === 0) {
-      const checked = spawn('xcrun', ['stapler', 'validate', file], {
-        stdio: 'inherit',
+export function isStaplerNetworkFailure(result) {
+  if (result.status === 0 || result.status == null || result.error || result.signal) return false
+  const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`
+  // 只在 stapler 的原始输出中识别已确认的网络故障，不能只凭进程退出码判断。
+  return /NSURLErrorDomain[^\r\n]*-1005\b/.test(output) || /\bError\s+68\b/i.test(output)
+}
+
+function recordStaplerFailure(file, operation, attempt, result, summary) {
+  if (!summary) return
+  const output = `stdout:\n${result.stdout ?? ''}\nstderr:\n${result.stderr ?? ''}`
+  const longest = Math.max(0, ...[...output.matchAll(/`+/g)].map((match) => match[0].length))
+  const fence = '`'.repeat(Math.max(3, longest + 1))
+  appendFileSync(
+    summary,
+    `\n### stapler ${operation}：${basename(file)}，第 ${attempt} 次失败\n\n` +
+      `退出码：${result.status ?? '无'}；信号：${result.signal ?? '无'}；` +
+      `执行错误：${result.error?.message ?? '无'}\n\n${fence}text\n${output}\n${fence}\n`,
+  )
+}
+
+// 只恢复明确的 Apple 票据网络故障。validate 重试不重做 staple，更不重新提交公证。
+export function staple(
+  file,
+  spawn = spawnSync,
+  { summary = process.env.GITHUB_STEP_SUMMARY } = {},
+) {
+  for (const operation of ['staple', 'validate']) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const result = spawn('xcrun', ['stapler', operation, file], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
         timeout: 60_000,
+        maxBuffer: 4 * 1024 * 1024,
       })
-      if (checked.status !== 0) throw new Error(`${basename(file)} 的 staple 校验失败`)
-      return
+      if (result.stdout) process.stdout.write(result.stdout)
+      if (result.stderr) process.stderr.write(result.stderr)
+      if (result.status === 0) break
+      recordStaplerFailure(file, operation, attempt, result, summary)
+      if (attempt === 3 || !isStaplerNetworkFailure(result)) {
+        throw new Error(
+          `${basename(file)} 的 stapler ${operation} 第 ${attempt} 次失败；不分发未通过钉票校验的包`,
+        )
+      }
+      const waited = spawn('sleep', [String(attempt * 30)], { stdio: 'inherit' })
+      if (waited.status !== 0) throw new Error('stapler 退避被中断；停止重试')
     }
-    if (attempt < 3) spawn('sleep', [String(attempt * 15)])
   }
-  throw new Error(`${basename(file)} 三次 staple 都失败；不分发未钉票的包`)
 }
