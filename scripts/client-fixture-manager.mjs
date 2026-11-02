@@ -1,5 +1,5 @@
 // 经理夹具：行首“经理：<操作> <JSON 参数>”调用 litch_manager，结果加 MANAGER_HEARD 原样回显。
-// summary、get、add、update、verify、close、answer、reply、status 的说明前缀来自 client-tools-manager.mts。
+// 各操作（summary、get、add、update、verify、close、reopen、answer、reply、status 等）的说明前缀来自 client-tools-manager.mts。
 // manager-open、manager-answers、manager-end 事件只回固定文字，不调工具；答复附本次决策编号。
 // manager-rules 尚未进入 session-tree.mts 的契约，合入后在这里补充。
 
@@ -25,6 +25,7 @@ export const MANAGER_SPACE = {
     update: 'Patch supplied fields and record why.',
     verify: 'Record that you checked the basis and it is still valid.',
     close: 'Close an open decision as expired/withdrawn, or finish/defer an item.',
+    reopen: 'Reopen a decision the user ignored, making it pending again.',
     answer:
       'Record or revise an answer the user already gave in conversation, as user-conversation.',
     status: 'Replace the current situation with a short account of material progress;',

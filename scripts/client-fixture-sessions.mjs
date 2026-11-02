@@ -4,7 +4,7 @@
 // 用户的话（一回合一次调用，工具结果回来后把结果原样说出来）：
 //   会话：<工具> <JSON 参数>   要在行首（子会话的派出说明会引用父会话的标题，别再触发一次），调 litch_sessions.<工具>，比如 会话：start {"title":"查日志","prompt":"<够宽的简报>","initiation":"user_asked"}（fresh 的简报显示宽度不到 80 会被设备进程拒绝，汉字算 2：中文至少 40 字）
 //   任务：<工具> <JSON 参数>   同样的做法调 litch_tasks.<工具>（定时任务，设备执行），比如 任务：create {"name":"日报","prompt":"总结","schedule":{"type":"interval","minutes":5}}
-//   经理：<工具> <JSON 参数>   调 litch_manager 的九种操作，回显“经理结果：”；经理事件固定应答见 client-fixture-manager.mjs。
+//   经理：<工具> <JSON 参数>   调 litch_manager 的各项操作，回显“经理结果：”；经理事件固定应答见 client-fixture-manager.mjs。
 //   浏览器：<工具> <JSON 参数> 同样的做法调 litch_browser.<工具>（只认 navigate、snapshot），比如 浏览器：navigate {"url":"about:blank"}，
 //                              用来在 dsh、OpenCode 上验桌面端执行的客户端工具（client-fixture-browse.mjs 只认 Pi 的工具名）
 //   收尾：<JSON>               要在行首，调 litch_sessions.wrap_up：JSON 是 {"suggestions":[…]}，或者直接写那个数组，比如
