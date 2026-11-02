@@ -2902,8 +2902,12 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         return {}
       }
       if (name === 'session.peek') {
-        const view = openView(params as { deviceId: string; sessionId: string })
-        return peekOf(view.turns.at(-1), (id) => view.items[id], view.requests)
+        const where = params as Commands['session.peek']['params']
+        const view = openView(where)
+        const turn = where.turnId
+          ? view.turns.find((turn) => turn.id === where.turnId)
+          : view.turns.at(-1)
+        return peekOf(turn, (id) => view.items[id], view.requests)
       }
       if (name === 'session.send') {
         const { text, images, extras, now, pending, ...where } =

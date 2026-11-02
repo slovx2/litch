@@ -283,7 +283,7 @@ test('SESSION-TREE-003：非用户回合可主动提案；接受、不要、过�
   }
 })
 
-test('SESSION-TREE-004：子会话一回合结束进父会话的队列；父会话还在跑、引擎不收插话的不唤醒，停下了才唤醒，回报取前 400 字', async () => {
+test('SESSION-TREE-004：子会话一回合结束进父会话的队列；父会话还在跑、引擎不收插话的不唤醒，停下了才唤醒，长回报取 2000 字并标明截断', async () => {
   const env = treeRig()
   refuseSteer(env.pi)
   try {
@@ -299,7 +299,7 @@ test('SESSION-TREE-004：子会话一回合结束进父会话的队列；父会�
         })
       )?.answer,
     ).thread_id
-    env.claude.end(childId, 'completed', `结果：${'好'.repeat(600)}`)
+    env.claude.end(childId, 'completed', `结果：${'好'.repeat(3000)}`)
     await until(() => env.device.sessionTree.store.notes(threadId).length === 1, '回报进队列')
     await settle(50)
     assert.equal(wakesOf(env, threadId).length, 0, '父会话还在跑，不唤醒')
@@ -309,7 +309,10 @@ test('SESSION-TREE-004：子会话一回合结束进父会话的队列；父会�
     assert.equal(wake?.notes.length, 1)
     assert.equal(wake?.notes[0]?.threadId, childId)
     assert.equal(wake?.notes[0]?.status, 'completed')
-    assert.equal(wake?.notes[0]?.excerpt.length, 400)
+    assert.equal(wake?.notes[0]?.excerpt.length, SESSION_TREE_LIMITS.noteChars)
+    assert.match(wake?.notes[0]?.excerpt ?? '', /已截断.*Truncated.*litch_sessions.read/)
+    assert.equal(wake?.notes[0]?.truncated, true)
+    assert.equal(wake?.notes[0]?.turnId, env.claude.turns.get(childId)?.[0]?.id)
     assert.equal(env.device.sessionTree.store.notes(threadId).length, 0, '交出去了就不再排队')
     // 同一个回合的结束通知从几条连接各来一份，只报一次
     env.claude.notify('turn/completed', {

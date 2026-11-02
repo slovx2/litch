@@ -309,3 +309,32 @@ test('SESSION-STORE-006：代答来源和非秘密答案落库，重开可读，
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('回报来源回合与截断标记重启后保留', () => {
+  const dir = tempDir()
+  let db = openSessionDatabase(dir)
+  try {
+    let store = new SessionStore(db)
+    store.addNote(
+      'parent',
+      {
+        threadId: 'child',
+        turnId: 'original',
+        truncated: true,
+        title: '报告',
+        status: 'completed',
+        excerpt: '摘要',
+      },
+      false,
+    )
+    db.close()
+    db = openSessionDatabase(dir)
+    store = new SessionStore(db)
+    const note = store.notes('parent')[0]
+    assert.equal(note?.turnId, 'original')
+    assert.equal(note?.truncated, true)
+  } finally {
+    db.close()
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

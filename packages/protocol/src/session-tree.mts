@@ -139,7 +139,9 @@ export interface SessionProposal {
 /** 上限（设备进程和界面按同一份） */
 export const SESSION_TREE_LIMITS = {
   /** 回报取子会话最后一条回答的前多少字 */
-  noteChars: 400,
+  noteChars: 2000,
+  /** 每批回报的摘录与错误总预算（含 JSON 转义，并计入正文和 JSON 两份） */
+  noteBatchChars: 24000,
   /** 提案多久过期（秒） */
   proposalTtlSeconds: 7 * 24 * 3600,
   /** 一条用户消息之后最多自动唤醒父会话几次 */
@@ -369,7 +371,11 @@ export interface SessionEventNote {
   title: string
   /** 子会话这一回合的结局 */
   status: 'completed' | 'failed' | 'interrupted' | 'needsUser'
-  /** 最后一条回答的前 noteChars 个字；没有回答是空字符串 */
+  /** 来源回合，用于按需读取完整回答；非回答类回报不带 */
+  turnId?: string
+  /** 摘录被截断（包括整批回报预算引起的截断） */
+  truncated?: boolean
+  /** 最后一条回答的开头，含截断提示；没有回答是空字符串 */
   excerpt: string
   /**
    * 这一回合结束时子会话里还有几个后台任务在跑（backgroundTasks 扩展）：照常算这一回合结束，
@@ -403,6 +409,54 @@ export interface SessionEvent {
   notes: SessionEventNote[]
   /** 唤醒时还有几个子会话在干活（用户点了“立即处理”，不等它们）。都停了的不带 */
   working?: number
+}
+
+/** 注入文字沿用双语说明；标记也计入单条上限，避免把 Unicode 代理对截开。 */
+export const SESSION_NOTE_TRUNCATED =
+  '\n[已截断 / Truncated — 用 litch_sessions.read 读取全文 / read full answer]'
+
+export function sessionNoteExcerpt(
+  text: string,
+  limit: number = SESSION_TREE_LIMITS.noteChars,
+): string {
+  if (text.length <= limit) return text
+  const end = Math.max(0, limit - SESSION_NOTE_TRUNCATED.length)
+  const prefix = text.slice(0, end).replace(/[\uD800-\uDBFF]$/, '')
+  return prefix + SESSION_NOTE_TRUNCATED
+}
+
+/** 正文和隐藏 JSON 都占模型上下文；按序平分剩余预算，短回报留下的额度给后面的。 */
+function budgetSessionNotes(notes: SessionEventNote[]): SessionEventNote[] {
+  let remaining = SESSION_TREE_LIMITS.noteBatchChars
+  const cost = (text: string) => text.length + JSON.stringify(text).replace(/>/g, '\\u003e').length
+  const fields = notes.reduce((n, note) => n + Number(!!note.excerpt) + Number(!!note.error), 0)
+  let left = fields
+  return notes.map((note) => {
+    const next = { ...note }
+    for (const key of ['excerpt', 'error'] as const) {
+      const value = note[key]
+      if (!value) continue
+      const allowance = Math.floor(remaining / left--)
+      let text = sessionNoteExcerpt(value)
+      if (cost(text) > allowance && allowance < cost(SESSION_NOTE_TRUNCATED)) {
+        // 大量历史回报同时到达时，完整提示本身也可能超预算；统一说明仍在事件尾部。
+        text = allowance >= cost('…[截断/Truncated]') ? '…[截断/Truncated]' : ''
+      } else if (cost(text) > allowance) {
+        let lo = SESSION_NOTE_TRUNCATED.length
+        let hi = Math.min(value.length, SESSION_TREE_LIMITS.noteChars)
+        while (lo < hi) {
+          const mid = Math.ceil((lo + hi) / 2)
+          if (cost(sessionNoteExcerpt(value, mid)) <= allowance) lo = mid
+          else hi = mid - 1
+        }
+        text = sessionNoteExcerpt(value, lo)
+      }
+      next[key] = text
+      if (key === 'excerpt' && text !== value) next.truncated = true
+      remaining -= text ? cost(text) : 0
+    }
+    return next
+  })
 }
 
 /**
@@ -462,6 +516,7 @@ export function formatSessionEvent(event: SessionEvent): string {
       `</${SESSION_EVENT_TAG}>`,
     ].join('\n')
   }
+  event = { ...event, notes: budgetSessionNotes(event.notes) }
   const head =
     event.kind === 'wake'
       ? event.working

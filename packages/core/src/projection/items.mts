@@ -273,7 +273,10 @@ function unknownSessionEvent(text: string): { event: SessionEventView; rest: str
 /** 一条回报（注入文字里的、会话对象上排着的）：对面写的，逐项核对。不合的是 null */
 export function noteView(note: unknown): SessionNoteView | null {
   if (typeof note !== 'object' || note === null) return null
-  const { threadId, title, status, excerpt, error } = note as Record<string, unknown>
+  const { threadId, title, status, excerpt, error, turnId, truncated } = note as Record<
+    string,
+    unknown
+  >
   if (typeof threadId !== 'string' || typeof status !== 'string' || !NOTE_STATUS.has(status))
     return null
   return {
@@ -281,6 +284,8 @@ export function noteView(note: unknown): SessionNoteView | null {
     title: typeof title === 'string' ? title : '',
     status: status as SessionNoteView['status'],
     excerpt: typeof excerpt === 'string' ? excerpt : '',
+    ...(typeof turnId === 'string' && turnId ? { turnId } : {}),
+    ...(truncated === true ? { truncated: true } : {}),
     ...(typeof error === 'string' && error ? { error } : {}),
   }
 }

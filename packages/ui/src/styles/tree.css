@@ -1110,3 +1110,25 @@ button.agent-row:hover {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* 摘录保留换行；展开后的正文允许完整换行，不再受事件条单行省略影响。 */
+.report-text {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.report-body {
+  white-space: pre-wrap;
+}
+.report-expand {
+  margin-inline-start: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+.report-text .sev-error {
+  display: block;
+}

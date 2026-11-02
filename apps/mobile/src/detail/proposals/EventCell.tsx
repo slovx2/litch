@@ -7,9 +7,10 @@
 import { keys, type SessionNoteView, type SessionSummary } from '@litch/core'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { memo, useState } from 'react'
+import { memo, useMemo, useState, useSyncExternalStore } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
+import { ReportText } from '../../../../../packages/ui/src/tree/report-text.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey } from '../../shell/services'
 import { type Key, useT } from '../../ui/i18n'
@@ -41,22 +42,67 @@ function Note({
 }) {
   const { c, font } = useTheme()
   const t = useT()
+  const channel = useChannel()
+  const { threadId, turnId, truncated } = note
+  const report = useMemo(
+    () =>
+      new ReportText({ turnId, truncated }, () =>
+        channel.command('session.peek', {
+          deviceId,
+          sessionId: threadId,
+          ...(turnId ? { turnId } : {}),
+        }),
+      ),
+    [channel, deviceId, threadId, turnId, truncated],
+  )
+  const state = useSyncExternalStore(report.subscribe, report.snapshot)
   const listed = useKey<SessionSummary>(keys.summary(deviceId, note.threadId))
   const head = `${note.title || (listed ? t.text(listed.title) : note.threadId)} · ${t(`tree.note.${note.status}`)}`
-  const body = [note.excerpt, note.error].filter(Boolean).join(' · ')
+  const body = [state.open ? state.text : note.excerpt, note.error].filter(Boolean).join(' · ')
   return (
-    <Pressable
-      disabled={!listed}
-      accessibilityRole={listed ? 'button' : undefined}
-      accessibilityHint={listed ? t('tree.child.open') : undefined}
-      onPress={() => openSession(note.threadId)}
-      style={({ pressed }) => [styles.note, pressed ? { backgroundColor: c.press } : null]}
-    >
-      <Text style={{ color: c.ink2, fontSize: font.size.small + 1, lineHeight: 18 }}>
-        <Text style={{ color: listed ? c.accent : c.ink2 }}>{head}</Text>
-        {body ? `：${body}` : ''}
-      </Text>
-    </Pressable>
+    <View style={styles.note}>
+      <View style={styles.noteRow}>
+        <Pressable
+          disabled={!listed}
+          accessibilityRole={listed ? 'button' : undefined}
+          accessibilityHint={listed ? t('tree.child.open') : undefined}
+          onPress={() => openSession(note.threadId)}
+          style={({ pressed }) => [styles.grow, pressed ? { backgroundColor: c.press } : null]}
+        >
+          <Text style={{ color: c.ink2, fontSize: font.size.small + 1, lineHeight: 18 }}>
+            <Text style={{ color: listed ? c.accent : c.ink2 }}>{head}</Text>
+            {body ? `：${body}` : ''}
+          </Text>
+        </Pressable>
+        {report.expandable ? (
+          <Pressable
+            testID={`report-expand:${note.threadId}`}
+            accessibilityRole="button"
+            accessibilityLabel={t(
+              state.busy
+                ? 'tree.report.loading'
+                : state.open
+                  ? 'tree.report.collapse'
+                  : 'tree.report.expand',
+            )}
+            accessibilityState={{ expanded: state.open, disabled: state.busy }}
+            disabled={state.busy}
+            hitSlop={8}
+            onPress={() => void report.toggle()}
+            style={styles.reportExpand}
+          >
+            <Text style={{ color: c.accent, fontSize: font.size.small + 1 }}>
+              {state.busy ? '…' : state.open ? '▴' : '▾'}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {state.missing || state.error ? (
+        <Text accessibilityRole="alert" style={{ color: c.err, fontSize: font.size.meta }}>
+          {state.missing ? t('tree.report.missing') : whyNot(state.error, t)}
+        </Text>
+      ) : null}
+    </View>
   )
 }
 
@@ -261,6 +307,8 @@ export function QueuedNotesPanel({
 
 const styles = StyleSheet.create({
   note: { paddingVertical: 2 },
+  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  reportExpand: { paddingHorizontal: 4 },
   grow: { flex: 1 },
   chip: {
     flexDirection: 'row',

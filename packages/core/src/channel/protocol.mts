@@ -501,7 +501,7 @@ export interface Commands {
   }
   /** 会话眼下的情况（最后一条回答、失败原因、等人处理的事），系统通知的正文用 */
   'session.peek': {
-    params: { deviceId: string; sessionId: string }
+    params: { deviceId: string; sessionId: string; turnId?: string }
     result: SessionPeek
   }
   /**

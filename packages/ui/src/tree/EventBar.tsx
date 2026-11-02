@@ -17,6 +17,7 @@ import type { MessageKey } from '../i18n/index.ts'
 import { useActions } from '../transcript/actions.tsx'
 import { CompactRow } from '../transcript/CompactRow.tsx'
 import { useToggle } from '../transcript/state.ts'
+import { ReportText } from './ReportText.tsx'
 
 const HEAD_TEXT: Partial<Record<string, MessageKey>> = {
   notes: 'tree.event.notes',
@@ -70,7 +71,7 @@ function Note({
         <span className="sev-title">{note.title || note.threadId}</span>
       )}
       <span className="sev-status">{t(`tree.note.${note.status}`)}</span>
-      {note.excerpt ? <span className="sev-text">{note.excerpt}</span> : null}
+      {note.excerpt || note.truncated ? <ReportText deviceId={deviceId} note={note} /> : null}
       {note.error ? <span className="sev-text sev-error">{note.error}</span> : null}
     </li>
   )

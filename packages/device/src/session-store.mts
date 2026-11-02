@@ -167,6 +167,9 @@ const MIGRATIONS: readonly string[] = [
    CREATE INDEX native_background_by_thread ON native_background_tasks(thread_id);
    CREATE TABLE native_background_turns(thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, batch_id TEXT NOT NULL,
      PRIMARY KEY(thread_id, turn_id)) WITHOUT ROWID;`,
+  // 回报定位到原回合；重启之后仍可展开同一份回答。
+  `ALTER TABLE notes ADD COLUMN turn_id TEXT;
+   ALTER TABLE notes ADD COLUMN truncated INTEGER NOT NULL DEFAULT 0;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -368,8 +371,8 @@ export class SessionStore {
       ),
       nextExpiry: prepare("SELECT MIN(expires_at) AS at FROM proposals WHERE status='pending'"),
       addNote: prepare(
-        `INSERT INTO notes(parent_thread_id, thread_id, title, status, excerpt, wake, created_at, background, error, user_stopped)
-         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO notes(parent_thread_id, thread_id, title, status, excerpt, wake, created_at, background, error, user_stopped, turn_id, truncated)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
       muteNotes: prepare('UPDATE notes SET wake=0, user_stopped=? WHERE thread_id=?'),
       notes: prepare('SELECT * FROM notes WHERE parent_thread_id=? ORDER BY seq'),
@@ -797,6 +800,8 @@ export class SessionStore {
       note.backgroundTasks ?? 0,
       note.error ?? null,
       note.userStopped ?? null,
+      note.turnId ?? null,
+      note.truncated ? 1 : 0,
     )
   }
 
@@ -813,6 +818,8 @@ export class SessionStore {
       title: text(row.title),
       status: text(row.status) as SessionEventNote['status'],
       excerpt: text(row.excerpt),
+      ...(typeof row.turn_id === 'string' ? { turnId: row.turn_id } : {}),
+      ...(row.truncated === 1 ? { truncated: true } : {}),
       ...(Number(row.background) > 0 ? { backgroundTasks: Number(row.background) } : {}),
       ...(typeof row.error === 'string' ? { error: row.error } : {}),
       ...(row.user_stopped === 'interrupted' || row.user_stopped === 'archived'

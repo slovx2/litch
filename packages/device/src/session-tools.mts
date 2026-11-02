@@ -41,6 +41,7 @@ import {
   SESSION_TREE_LIMITS,
   type SessionLineageKind,
   type SessionProposal,
+  sessionNoteExcerpt,
 } from '../../protocol/src/session-tree.mjs'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { DeviceToolCall, DeviceToolHandler } from './device-tools.mjs'
@@ -131,8 +132,8 @@ function summary(
   }
 }
 
-/** 一个回合给模型看的样子：用户（或注入）的话、最后的回答，都掐过 */
-function turnSummary(turn: Record<string, unknown>): SessionTurnSummary {
+/** 按需读取的回合：最近回答放宽，较早回合保留摘要上限；超出时统一标明截断。 */
+function turnSummary(turn: Record<string, unknown>, latest: boolean): SessionTurnSummary {
   const items = Array.isArray(turn.items) ? turn.items : []
   const said = items
     .filter((item) => isObject(item) && item.type === 'userMessage')
@@ -147,7 +148,10 @@ function turnSummary(turn: Record<string, unknown>): SessionTurnSummary {
   const limit = SESSION_TOOL_LIMITS.readTextChars
   return {
     input: trimText(said, limit),
-    answer: answer === null ? null : trimText(answer, limit),
+    answer:
+      answer === null
+        ? null
+        : sessionNoteExcerpt(answer, latest ? SESSION_TOOL_LIMITS.messageChars : limit),
     status,
   }
 }
@@ -239,7 +243,7 @@ async function read(tree: SessionTree, args: Record<string, unknown>, call: Devi
   const turns = (Array.isArray(thread.turns) ? thread.turns : []).filter(isObject).slice(-count)
   return {
     session: summary(tree, harness, thread, call.threadId),
-    turns: turns.map(turnSummary),
+    turns: turns.map((turn, at) => turnSummary(turn, at === turns.length - 1)),
     pending_requests: tree.pendingRequests(threadId),
     delegated_responses: tree.store.responses(threadId),
   }

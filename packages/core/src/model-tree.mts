@@ -183,6 +183,8 @@ export interface ProposalOverrides {
 
 /** 注入给父会话的一条回报：哪个子会话、这一回合怎么结束的、最后一条回答的开头 */
 export interface SessionNoteView {
+  turnId?: string
+  truncated?: boolean
   threadId: string
   title: string
   status: 'completed' | 'failed' | 'interrupted' | 'needsUser'

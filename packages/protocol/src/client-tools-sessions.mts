@@ -49,7 +49,7 @@ export const SESSION_TOOL_LIMITS = {
   /** read 缺省读最近几个回合、最多几个 */
   readTurnsDefault: 3,
   readTurnsMax: 10,
-  /** read 里每段文字（用户的话、最后的回答）最多多少字，掐头留尾 */
+  /** read 的输入与较早回答、wait 的摘要上限；read 最近回答用 messageChars */
   readTextChars: 4000,
   /** wait 最多等几个会话 */
   waitThreadsMax: 8,
@@ -307,7 +307,7 @@ export interface SessionsOptionsResult {
 export interface SessionTurnSummary {
   /** 用户（或注入）的话，掐过 */
   input: string
-  /** 最后一条回答，掐过；还在跑是 null */
+  /** 最后一条回答，最近回合最多 messageChars，较早回合最多 readTextChars；超限带标记，还在跑是 null */
   answer: string | null
   status: 'completed' | 'failed' | 'interrupted' | 'inProgress'
 }

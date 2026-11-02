@@ -29,6 +29,7 @@ import { AgentStatus, AgentTime, useAgentStates } from './agent-view.tsx'
 import { openAgent } from './agents.ts'
 import { OfferCard } from './OfferCard.tsx'
 import { ProposalCard, WrapUpCards } from './ProposalCard.tsx'
+import { ReportText } from './ReportText.tsx'
 import { useAgentList } from './useAgentList.ts'
 
 /** 侧栏行首那个状态点的画法：在跑、在等人、出错，别的不画 */
@@ -107,10 +108,10 @@ const SpawnCard = memo(function SpawnCard(ref: ItemRef) {
       ) : (
         <div className="tree-card-main">{body}</div>
       )}
-      {note?.excerpt ? (
+      {note && (note.excerpt || note.truncated) ? (
         <div className="tree-card-report">
           <span className="tree-card-label">{t('tree.child.report')}</span>
-          <span className="tree-card-text">{note.excerpt}</span>
+          <ReportText deviceId={deviceId} note={note} />
         </div>
       ) : null}
     </div>

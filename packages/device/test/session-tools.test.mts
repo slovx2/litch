@@ -67,7 +67,7 @@ test('SESSION-TOOLS-001：list、read 看这台设备上所有会话（mine 只�
     assert.equal(read.turns.length, 1)
     assert.equal(read.turns[0].status, 'completed')
     assert.ok(read.turns[0].answer.startsWith('开头') && read.turns[0].answer.endsWith('结尾'))
-    assert.equal(read.turns[0].answer.length, 4000, '掐头留尾')
+    assert.equal(read.turns[0].answer.length, 5004, '按需读取最近回答，超过旧 4000 上限仍完整')
     assert.match(read.turns[0].input, /Task: 子任务/)
     const bad = await env.pi.callTool(threadId, SESSIONS, 'read', { thread_id: 'nope' })
     assert.equal(failureOf(bad?.answer), 'invalid')
@@ -469,5 +469,29 @@ test('SESSION-TOOLS-007：父子关系、提案、回报存在 sessions.sqlite �
   } finally {
     await again.close()
     await env.close().catch(() => {})
+  }
+})
+
+test('read 最近回答上限 32000，较早回答 4000，均使用回报截断标记', async () => {
+  const env = treeRig()
+  try {
+    const { client, threadId, childId } = await family(env)
+    env.claude.end(childId, 'completed', '早'.repeat(40000))
+    await client.call('turn/start', {
+      threadId: childId,
+      input: [{ type: 'text', text: '下一回合' }],
+    })
+    env.claude.end(childId, 'completed', '新'.repeat(40000))
+    const read = resultOf(
+      (await env.pi.callTool(threadId, SESSIONS, 'read', { thread_id: childId, turns: 10 }))
+        ?.answer,
+    )
+    assert.equal(read.turns.length, 2)
+    assert.equal(read.turns[0].answer.length, 4000)
+    assert.equal(read.turns[1].answer.length, 32000)
+    for (const turn of read.turns)
+      assert.match(turn.answer, /已截断.*Truncated.*litch_sessions.read/)
+  } finally {
+    await env.close()
   }
 })

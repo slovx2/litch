@@ -5,7 +5,7 @@
 // 读会话，并订阅它建的子会话：子会话一回合结束，哪怕没有客户端开着它，设备进程也收得到。
 // 回合的开始与结束还从各条客户端连接的上游上看（relay.mts 调 turnEvent），两边按回合号去重。
 //
-// 回报：子会话一回合结束，取最后一条回答前 400 字进父会话的队列（sessions.sqlite）。父会话有回合在跑的，当场把排着的
+// 回报：子会话一回合结束，取最后一条回答前 2000 字（长回答标明截断）进父会话的队列（sessions.sqlite）。父会话有回合在跑的，当场把排着的
 // 包成 kind=notes 的一段插进那个回合（steerNotes，turn/steer），插成了就出队列；插不进（回合正在收尾、引擎不会插话）的
 // 留着，父会话下一个由客户端发起的回合把它们放在用户消息前面（beforeUserTurn），或者唤醒时交出去。
 // 队列一变就发 litch/thread/queuedNotes/updated，客户端不等交给模型就把排着的回报画在父会话对话区的末尾。
@@ -40,6 +40,7 @@ import {
   type SessionLineage,
   type SessionProposal,
   type SessionQueuedNote,
+  sessionNoteExcerpt,
 } from '../../protocol/src/session-tree.mjs'
 import { suggestionExpiry } from '../../protocol/src/suggestion-inbox.mjs'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
@@ -817,9 +818,11 @@ export class SessionTree {
       threadId,
       title: lineage.title,
       status,
-      excerpt: (answer ?? '').slice(0, SESSION_TREE_LIMITS.noteChars),
+      turnId: String(turn.id),
+      excerpt: sessionNoteExcerpt(answer ?? ''),
+      ...((answer?.length ?? 0) > SESSION_TREE_LIMITS.noteChars ? { truncated: true } : {}),
       ...(background > 0 ? { backgroundTasks: background } : {}),
-      ...(error ? { error: error.slice(0, SESSION_TREE_LIMITS.noteChars) } : {}),
+      ...(error ? { error: sessionNoteExcerpt(error) } : {}),
       ...(userStopped ? { userStopped } : {}),
     }
     // 出错、被打断的回合不唤醒（同 Claude 桌面端：被截断的回合不算），等父会话下一回合带上，
@@ -1856,6 +1859,8 @@ function publicNote(note: SessionEventNote): SessionEventNote {
     title: note.title,
     status: note.status,
     excerpt: note.excerpt,
+    ...(note.turnId ? { turnId: note.turnId } : {}),
+    ...(note.truncated ? { truncated: true } : {}),
     ...(note.backgroundTasks ? { backgroundTasks: note.backgroundTasks } : {}),
     ...(note.error ? { error: note.error } : {}),
     ...(note.userStopped ? { userStopped: note.userStopped } : {}),

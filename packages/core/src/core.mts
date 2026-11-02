@@ -443,9 +443,9 @@ export function createCore(options: CoreOptions): Core {
           return {}
         }
         case 'session.peek': {
-          const { deviceId, sessionId } = params as Commands['session.peek']['params']
+          const { deviceId, sessionId, turnId } = params as Commands['session.peek']['params']
           try {
-            return await deviceOf(deviceId).peek(sessionId)
+            return await deviceOf(deviceId).peek(sessionId, turnId)
           } catch (error) {
             throw toChannelFailure(error)
           }

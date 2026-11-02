@@ -44,6 +44,7 @@ import {
   type Thread,
   type ThreadListSkippedHarness,
   type ThreadSectionListResponse,
+  type ThreadTurnsListResponse,
   type Turn,
 } from '../../../protocol/src/index.mjs'
 import type { ManagerThreadFields } from '../../../protocol/src/manager.mjs'
@@ -382,7 +383,7 @@ export interface Device {
    * 会话眼下的情况，系统通知的正文用：开着的从核心自己的视图取，没开的向对面要最近一个回合。
    * 设备没连着、要不到时抛错（界面退回到不带内容的那句）
    */
-  peek(sessionId: string): Promise<SessionPeek>
+  peek(sessionId: string, turnId?: string): Promise<SessionPeek>
   /**
    * 订阅这台设备的管理数据（设置的结构和现在的值）。先给快照，之后给增量；返回退订函数。
    * 对面没有设置接口时抛 unsupported；设备还没连上时订阅照样成立，连上之后才有快照
@@ -2850,7 +2851,29 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (thread) hooks.sidebarOps([{ op: 'session.upsert', session: summaryOf(thread) }])
       saveSoon()
     },
-    async peek(sessionId) {
+    async peek(sessionId, turnId) {
+      // 历史回报按原回合读取，不能用最新一回合或可能只有摘要的本地投影。
+      if (turnId) {
+        let cursor: string | null = null
+        const seen = new Set<string>()
+        do {
+          const page: ThreadTurnsListResponse = await link.request(
+            'thread/turns/list',
+            { threadId: sessionId, cursor, limit: 20, sortDirection: 'desc', itemsView: 'full' },
+            { timeoutMs: PEEK_TIMEOUT_MS },
+          )
+          const found = page.data.find((turn) => turn.id === turnId)
+          if (found) {
+            const { turn, items } = projectTurn(found)
+            const byId = new Map(items.map((item) => [item.id, item]))
+            return peekOf(turn, (id) => byId.get(id), [])
+          }
+          cursor = page.nextCursor
+          if (cursor && seen.has(cursor)) break
+          if (cursor) seen.add(cursor)
+        } while (cursor)
+        return { answer: null, error: null, pending: null }
+      }
       const view = live.view(sessionId)
       if (view) {
         return peekOf(view.turns.at(-1), (id) => view.items[id], view.requests)

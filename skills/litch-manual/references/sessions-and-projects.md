@@ -539,6 +539,11 @@ woken to continue.
   see them. "Handle now" there hands them over at once: into the running turn, or in a new turn when the
   parent is idle, without waiting for the other sub-sessions. Once handed over they show on the message
   that carried them.
+  回报摘录最多 2000 字符，超过时附“已截断 / Truncated”及 `litch_sessions.read` 全文提示。
+  模型按需 `read` 时，最近回合回答最多 32000 字符，较早回合最多 4000 字符，超限使用相同截断标记；界面全文读取不受这个摘要上限影响。
+  多条回报一起交给模型时，摘录与错误（正文及 JSON 两份）共享 24000 字符预算，必要时进一步缩短并标明截断。
+  桌面回报卡、事件条和待交付回报中的 **展开全文** 按需读取原回合的完整回答；手机在回报旁用小箭头展开或收起。
+  后续新回合不会替换历史回报的全文。设备离线、回答被删除或回滚时保留摘录并提示错误，可重试或打开子会话查看。
   If a sub-session finishes several turns while the parent is busy, only its latest report is handed over.
   Users can also stop automatic reports entirely; see [Stop or resume reporting](#stop-or-resume-reporting) below.
 - **Detach as a standalone session** (session menu or the "Started from …" bar at the top of a
