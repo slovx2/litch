@@ -10,6 +10,12 @@ export interface ManagerSeen {
   linesState: boolean
   /** 经理行和普通对话的父子树同一套：默认收起、下面一行“› N 个子会话”，点开展开；行高、记号缩进与工作线行一致 */
   treeShape: boolean
+  /**
+   * 经理一节的组标题照对话一侧的“未读 / 最近”：两组都有折叠记号和 aria-expanded，“进行中”点了真能收起、
+   * 再点展开；记号、名字的横坐标与对话一侧的组标题相同。经理行的记号列都带经理框（.st.mgr）
+   */
+  groupHeads: boolean
+  groupHeadsDetail: string
   treeShapeDetail: string
   pendingTitle: boolean
   answeredSplit: boolean
@@ -955,6 +961,47 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
         )
       : []
   const managerLeft = leftOf(one('.mg-sidebar-manager .row-line > .ss-row'))
+  // 组标题的记号（左边、宽）和名字的左边：名字长短不同，只比起点
+  const headOf = (head: Element | null | undefined) => {
+    const round = (n: number | undefined) => (n === undefined ? null : Math.round(n * 10) / 10)
+    const arr = head?.querySelector(':scope > .arr')?.getBoundingClientRect()
+    const name = head?.querySelector(':scope > .name')?.getBoundingClientRect()
+    return [round(arr?.left), round(arr?.width), round(name?.left)]
+  }
+  const groupHeadRows = [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      '.mg-sidebar-group > .projection-head > .dev-row',
+    ),
+  ]
+  const firstGroupRows = () =>
+    document.querySelectorAll('.mg-sidebar-group:first-child .mg-sidebar-manager').length
+  const rowsBefore = firstGroupRows()
+  const expandedBefore = groupHeadRows.map((head) => head.getAttribute('aria-expanded'))
+  groupHeadRows[0]?.click()
+  const groupFolded = await until('收起“进行中”', () =>
+    groupHeadRows[0]?.getAttribute('aria-expanded') === 'false' && firstGroupRows() === 0
+      ? true
+      : null,
+  ).catch(() => false)
+  groupHeadRows[0]?.click()
+  const unfolded = await until('展开“进行中”', () =>
+    groupHeadRows[0]?.getAttribute('aria-expanded') === 'true' && firstGroupRows() === rowsBefore
+      ? true
+      : null,
+  ).catch(() => false)
+  // 只数经理行本身（工作线挂在 .tree-kids 里，不带经理框）
+  const managerRowMark =
+    '.mg-sidebar-manager > .tree-node[data-depth="0"] > .row-line > .ss-row > i.st'
+  const managerMarks = document.querySelectorAll(managerRowMark)
+  const groupHeadsSeen = {
+    expandedBefore,
+    rowsBefore,
+    folded: groupFolded,
+    unfolded,
+    heads: groupHeadRows.map(headOf),
+    framed: `${document.querySelectorAll(`${managerRowMark}.mgr`).length}/${managerMarks.length}`,
+    linesFramed: document.querySelectorAll('.mg-sidebar-manager .tree-kids i.st.mgr').length,
+  }
   one<HTMLButtonElement>('[data-sidebar-mode="chat"]')?.click()
   await until('返回普通对话', () => !one('.mg-sidebar-manager'))
   const chatLeft = leftOf(
@@ -964,6 +1011,21 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   )
   const rootAligned =
     managerLeft.length === 3 && managerLeft.every((left, i) => left === chatLeft[i])
+  const chatHead = headOf(one('.projection-group > .projection-head > .dev-row'))
+  const groupHeads =
+    groupHeadsSeen.heads.length === 2 &&
+    groupHeadsSeen.expandedBefore.every(
+      (expanded) => expanded === 'true' || expanded === 'false',
+    ) &&
+    groupHeadsSeen.rowsBefore > 0 &&
+    groupHeadsSeen.folded &&
+    groupHeadsSeen.unfolded &&
+    groupHeadsSeen.heads.every((head) => JSON.stringify(head) === JSON.stringify(chatHead)) &&
+    chatHead.every((value) => value !== null) &&
+    groupHeadsSeen.linesFramed === 0 &&
+    managerMarks.length > 0 &&
+    groupHeadsSeen.framed === `${managerMarks.length}/${managerMarks.length}`
+  const groupHeadsDetail = JSON.stringify({ ...groupHeadsSeen, chatHead })
   const isolated =
     childIds.length > 0 &&
     childIds.every(
@@ -1490,6 +1552,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     linesState,
     treeShape: treeShape && rootAligned,
     treeShapeDetail,
+    groupHeads,
+    groupHeadsDetail,
     pendingTitle,
     answeredSplit: answeredSplit && closedSplit,
     issueOrder: issueOrder && orderInHead,
@@ -1570,6 +1634,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
       | 'oldDeviceDetail'
       | 'treeShapeDetail'
       | 'boardFontDetail'
+      | 'groupHeadsDetail'
     >,
     string
   > = {
@@ -1581,6 +1646,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
     recommendationChoice: '推荐标记丢失或采用推荐入口未移除',
     linesState:
       '经理自己只有后台命令、工作线在跑时，经理行仍画成运行中，或没有后台记号、没写明工作线',
+    groupHeads: `经理一节的组标题和对话一侧的“未读 / 最近”不一致（记号、能否收起、记号与名字的位置），或经理行缺经理框：${seen.groupHeadsDetail}`,
     treeShape: `经理一节的树和普通对话的父子树不一致（默认收起、“› N 个子会话”、点开展开；六种外观下工作线标题与记号比经理行多缩进一级、标题列固定、行高一致，经理行与普通对话顶层行左边对齐）：${seen.treeShapeDetail}`,
     pendingTitle: '有待处理的经理行，悬停提示第一行不是“N 待处理 · 状态文字”',
     answeredSplit: '已答复或已关闭的决策没有把答复、关闭记录与问题分块，或其他选项没有默认收起',

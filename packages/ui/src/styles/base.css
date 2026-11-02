@@ -204,6 +204,20 @@ svg.ic.s14 {
   font: 600 calc(13px * var(--fs)) / round(calc(14px * var(--fs)), 1px) var(--mono);
   color: var(--err);
 }
+/* 经理会话：记号列里多一个细框（::after），状态记号照常画在框里，叠在同一格。
+   侧栏经理一节和“未读 / 最近”里的经理主项同一画法，不占宽、不加行高 */
+.st.mgr::before,
+.st.mgr::after {
+  grid-area: 1 / 1;
+}
+.st.mgr::after {
+  content: "";
+  box-sizing: border-box;
+  width: calc(14px * var(--fs));
+  height: calc(14px * var(--fs));
+  border: 1px solid var(--ink-3);
+  border-radius: var(--r1);
+}
 @keyframes beat {
   from {
     opacity: 1;

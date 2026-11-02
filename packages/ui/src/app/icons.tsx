@@ -1,4 +1,7 @@
 // 自己画的占位图标，16 像素网格、描边风格。正式图标在界面定稿后统一换。
+/** 发送箭头的路径：发送键和待发行的“发送”共用 */
+const SEND = 'M8 13V3.5M4 7.5l4-4 4 4'
+
 const PATHS = {
   plug: <path d="M5.5 2v3M10.5 2v3M4 5h8v2a4 4 0 0 1-8 0zM8 11v3" />,
   term: <path d="M3.5 5l3 3-3 3M8.5 11.5h4" />,
@@ -53,6 +56,10 @@ const PATHS = {
   /** 还原：往回拐的箭头 */
   undo: <path d="M5.5 6.5h4.7a2.8 2.8 0 0 1 0 5.6H6.5M7.5 4.5l-2 2 2 2" />,
   up: <path d="M4 10l4-4 4 4" />,
+  /** 发送：和输入框发送键同一个箭头（SEND），待发行的“发送”用它，不用“上一处”那种折线 */
+  send: <path d={SEND} />,
+  /** 立即插入：拐进去的回车箭头，插进正在跑的回合；和发送的直箭头、查找的折线都分得开 */
+  steer: <path d="M12.5 3.5V8a1.5 1.5 0 0 1-1.5 1.5H4M6.5 7L4 9.5 6.5 12" />,
   down: <path d="M4 6l4 4 4-4" />,
   /** 网页：一个地球，一圈经线一道纬线 */
   globe: (
@@ -117,7 +124,7 @@ const glyph = (path: string) =>
   }
 
 /** 发送：向上的箭头 */
-export const Send = glyph('M8 13V3.5M4 7.5l4-4 4 4')
+export const Send = glyph(SEND)
 /** 停止：一个方块 */
 export const Stop = glyph('M4.5 4.5h7v7h-7z')
 export const Close = glyph('M4 4l8 8M12 4l-8 8')

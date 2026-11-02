@@ -709,6 +709,50 @@ try {
     ),
     '工作线有未读结果时经理主项进入未读',
   )
+  // 经理主项的记号列带经理框（读屏“经理”），普通主项不带；框叠在状态记号那一格里，不加宽、不加行高
+  const marks = await run(() =>
+    [...document.querySelectorAll('[data-projection] .tree-node[data-depth="0"] > .row-line')].map(
+      (line) => {
+        const mark = line.querySelector(':scope > .ss-row > i.st')
+        const box = mark.getBoundingClientRect()
+        return {
+          session: line.dataset.session,
+          framed: mark.classList.contains('mgr'),
+          label: mark.getAttribute('aria-label'),
+          size: [Math.round(box.width), Math.round(box.height)].join('x'),
+          row: Math.round(line.querySelector(':scope > .ss-row').getBoundingClientRect().height),
+          unread: mark.classList.contains('unread'),
+        }
+      },
+    ),
+  )
+  const plain = await run(() => {
+    const line = document.querySelector(
+      '.sb-scroll .tree-node[data-depth="0"] > .row-line[data-session]:not([data-projection] *)',
+    )
+    const mark = line?.querySelector(':scope > .ss-row > i.st')
+    const box = mark?.getBoundingClientRect()
+    return box
+      ? {
+          size: [Math.round(box.width), Math.round(box.height)].join('x'),
+          row: Math.round(line.querySelector(':scope > .ss-row').getBoundingClientRect().height),
+        }
+      : null
+  })
+  assert.ok(plain, '普通会话行')
+  assert.ok(
+    marks.length >= 2 &&
+      marks.every(
+        (mark) =>
+          mark.framed === (mark.session === 'm1' || mark.session === 'm2') &&
+          (mark.framed ? mark.label === '经理' : mark.label === null) &&
+          mark.size === plain.size &&
+          mark.row === plain.row,
+      ) &&
+      marks.some((mark) => mark.framed && mark.unread),
+    `经理主项的记号列没有经理框，或框改变了记号与行的尺寸：${JSON.stringify({ marks, plain })}`,
+  )
+  report.checks.push({ managerMarks: marks, plainRow: plain })
   assert.equal(
     await run(() => !!document.querySelector('[data-projection=recent] [data-session=manager-k1]')),
     false,

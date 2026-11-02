@@ -115,7 +115,7 @@ function ManagerRow({
             }}
           >
             <i
-              className={mark && mark !== 'unread' ? `st ${mark}` : 'st'}
+              className={mark && mark !== 'unread' ? `st mgr ${mark}` : 'st mgr'}
               {...(mark === 'bg'
                 ? {
                     title: t('background.sidebar', { count: background }),
@@ -217,7 +217,8 @@ export function ManagerSidebar({
   tree(manager: ManagerView): ReactNode
 }) {
   const t = useT()
-  const [ended, setEnded] = useState(false)
+  // 两组都能收起，和对话一侧的“未读 / 最近”同一种组标题；已结束默认收起
+  const [open, setOpen] = useState({ active: true, ended: false })
   const { request } = useSidebarReveal()
   const children = useKey<SessionChildren>(keys.children(request?.deviceId ?? ''))
   const target = request
@@ -228,24 +229,31 @@ export function ManagerSidebar({
       )
     : undefined
   const targetEnded = target?.status === 'ended'
+  const found = Boolean(target)
+  // 定位到某位经理（或它的工作线）时，展开它所在的那一组
   useEffect(() => {
-    if (request && targetEnded) setEnded(true)
-  }, [request, targetEnded])
+    if (request && found)
+      setOpen((now) =>
+        now[targetEnded ? 'ended' : 'active']
+          ? now
+          : { ...now, [targetEnded ? 'ended' : 'active']: true },
+      )
+  }, [request, found, targetEnded])
   return (
     <>
       {(['active', 'ended'] as const).map((status) => (
         <section key={status} className="mg-sidebar-group">
-          <header>
+          <header className="row-line projection-head">
             <button
               type="button"
-              className="head-toggle"
-              aria-expanded={status === 'active' || ended}
-              onClick={() => {
-                if (status === 'ended') setEnded(!ended)
-              }}
+              className="dev-row head-toggle"
+              aria-expanded={open[status]}
+              onClick={() => setOpen((now) => ({ ...now, [status]: !now[status] }))}
             >
-              {status === 'ended' ? <Caret /> : null}
-              <span>{t(`manager.${status}`)}</span>
+              <span className={open[status] ? 'arr wire-sq' : 'arr wire-sq shut'}>
+                <Caret />
+              </span>
+              <span className="name ell">{t(`manager.${status}`)}</span>
             </button>
             <button
               type="button"
@@ -257,7 +265,7 @@ export function ManagerSidebar({
               <Forward />
             </button>
           </header>
-          {status === 'active' || ended
+          {open[status]
             ? managers
                 .filter((manager) =>
                   status === 'active' ? manager.status !== 'ended' : manager.status === 'ended',

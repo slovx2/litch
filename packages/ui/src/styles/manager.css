@@ -40,15 +40,12 @@
   background: transparent;
   border-color: currentColor;
 }
+/* 组标题照对话一侧的“未读 / 最近”（projections.css 的 .projection-head）：折叠记号、名字、行尾“全部经理” */
 .mg-sidebar-group {
-  padding: 6px 0;
+  margin-bottom: 8px;
 }
-.mg-sidebar-group > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 10px;
-  color: var(--ink-2);
+.mg-sidebar-group > .projection-head .dev-row {
+  padding-inline-end: 6px;
 }
 /* 一位经理一块：左边设备颜色的竖线、行和工作线子树都照普通对话的投影块（projections.css 的 .projection-block）画 */
 .mg-sidebar-manager {

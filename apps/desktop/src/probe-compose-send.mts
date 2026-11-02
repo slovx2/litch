@@ -19,6 +19,11 @@ export interface SendModeProbe {
   queued: boolean
   manualSteered: boolean
   /**
+   * 托盘行尾“立即插入”的图标（svg 路径）和查找栏“上一处”那种折线。“立即插入”自成一样：
+   * 不是折线，也不是发送箭头（发送箭头取停止后发送键上的那个，见 held.sendKey；回合在跑时那里是停止键）
+   */
+  icons: { steer: string; chevron: string }
+  /**
    * 停止后的待发：一行头“N 条待发 · 全部发送”；每条一行，行尾图标按钮带悬停提示和读屏名称；
    * 行里不重复状态；“连同待发”只在有字时出现在发送键旁，点了换档；全部发送后托盘收起
    */
@@ -34,6 +39,9 @@ export interface SendModeProbe {
     toggleBesideSend: boolean
     toggled: string[]
     resumed: boolean
+    /** 每条待发行尾“发送”的箭头，和此刻发送键上的箭头（应当同一条路径） */
+    sendIcons: string[]
+    sendKey: string
   } | null
   /** 本机记下来的那一份（最后点的是排队） */
   saved: string | null
@@ -171,6 +179,11 @@ export async function sendModeProbe(real: boolean): Promise<SendModeProbe | null
     await until('托盘里的那一条', () => one('.tray-row'), 5000).catch(() => null),
   )
   const steer = one<HTMLButtonElement>('.tray-row .ibtn.steer')
+  const pathOf = (scope: Element | null | undefined) =>
+    scope?.querySelector('svg path')?.getAttribute('d') ?? ''
+  // 查找栏“上一处”的折线：和它长得一样的就会被看成“上移”。在页面外取不到组件，按路径画一份比
+  const chevron = 'M4 10l4-4 4 4'
+  const icons = { steer: pathOf(steer), chevron }
   steer?.click()
   const manualSteered = Boolean(
     await until(
@@ -198,6 +211,8 @@ export async function sendModeProbe(real: boolean): Promise<SendModeProbe | null
     const rows = all('.tray-row')
     const rowHeights = rows.map((row) => Math.round(row.getBoundingClientRect().height))
     const buttons = rows.flatMap((row) => all('.tray-acts button', row))
+    const sendIcons = rows.map((row) => pathOf(one('.tray-acts button', row)))
+    const sendKey = pathOf(one('.dock .send:not(.stop)'))
     const toggleBeforeTyping = Boolean(one('.cmp-pending'))
     await write('再写一句')
     const toggle = await until('“连同待发”', () => one<HTMLButtonElement>('.cmp-pending'), 5000)
@@ -231,6 +246,8 @@ export async function sendModeProbe(real: boolean): Promise<SendModeProbe | null
       ),
       toggled,
       resumed,
+      sendIcons,
+      sendKey,
     }
     await idle()
   }
@@ -250,6 +267,7 @@ export async function sendModeProbe(real: boolean): Promise<SendModeProbe | null
     queueButton,
     queued,
     manualSteered,
+    icons,
     held,
     saved,
   }
@@ -275,6 +293,15 @@ export function judgeSendMode(probe: SendModeProbe | null): string[] {
   check(probe.queueButton === '排队', `排队时按钮上写的是“${probe.queueButton}”`)
   check(probe.queued, '排队：回合进行中发的消息没有进托盘')
   check(probe.manualSteered, '排队：托盘里点“现在就说”没有插进同一个回合')
+  const icons = probe.icons
+  const sendArrow = probe.held?.sendKey ?? ''
+  check(
+    icons.steer !== '' &&
+      sendArrow !== '' &&
+      icons.steer !== sendArrow &&
+      icons.steer !== icons.chevron,
+    `“立即插入”的图标和发送箭头或查找栏的折线一样：${JSON.stringify({ ...icons, sendArrow })}`,
+  )
   const held = probe.held
   check(Boolean(held), '停止后没有出现待发的头一行')
   if (held) {
@@ -294,6 +321,13 @@ export function judgeSendMode(probe: SendModeProbe | null): string[] {
     check(held.toggle === '含 2 条待发' && held.toggleBesideSend, `“连同待发”不在发送键旁：${said}`)
     check(held.toggled.join(',') === 'true,false', `“连同待发”点了没有换档：${said}`)
     check(held.resumed, `点“全部发送”后托盘没有收起：${said}`)
+    check(
+      held.sendKey !== '' &&
+        held.sendKey !== icons.chevron &&
+        held.sendIcons.length === 2 &&
+        held.sendIcons.every((icon) => icon === held.sendKey),
+      `待发行的“发送”和发送键不是同一个箭头：${said}`,
+    )
   }
   check(probe.saved === '{"mode":"queue"}', `本机记下来的不对：${probe.saved}`)
   return failed

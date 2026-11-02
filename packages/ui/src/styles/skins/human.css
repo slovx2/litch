@@ -87,6 +87,10 @@
 [data-skin="human"] .st.unread::before {
   background: var(--seal);
 }
+/* 经理框跟着人文的圆记号画成圆圈 */
+[data-skin="human"] .st.mgr::after {
+  border-radius: 50%;
+}
 
 /* 标题栏、侧栏：能用底色级差的地方不画线 */
 [data-skin="human"] .tb {

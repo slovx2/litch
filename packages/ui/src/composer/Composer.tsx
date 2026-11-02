@@ -742,7 +742,7 @@ export function Composer(props: ComposerProps) {
                       disabled={!!blocked}
                       onClick={() => resume(message.id)}
                     >
-                      <Icon name="up" small />
+                      <Icon name="send" small />
                     </button>
                   ) : null}
                   {running && onSteer && !message.delivery ? (
@@ -757,7 +757,7 @@ export function Composer(props: ComposerProps) {
                         stuck(message) ? setError(t('composer.steer.noImages')) : steer(message)
                       }
                     >
-                      <Icon name="up" small />
+                      <Icon name="steer" small />
                     </button>
                   ) : null}
                   <button

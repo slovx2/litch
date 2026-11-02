@@ -122,6 +122,11 @@
   content: "!";
   font-weight: 700;
 }
+/* 经理框里的“*”：按框的高度居中，不然沉到框底 */
+[data-skin="retro"] .st.mgr.unread::before {
+  height: calc(14px * var(--fs));
+  line-height: round(calc(12px * var(--fs)), 1px);
+}
 
 /* 标题栏、侧栏 */
 [data-skin="retro"] .tb {

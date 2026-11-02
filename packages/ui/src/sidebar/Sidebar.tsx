@@ -36,7 +36,7 @@ import { reasonOf } from '../app/errors.ts'
 import { ago, stampFull } from '../app/format.ts'
 import { useHoverCard } from '../app/HoverCard.tsx'
 import { Back, Caret, Forward, Icon, Notice, Plus } from '../app/icons.tsx'
-import { useKey, useServices } from '../app/services.tsx'
+import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import { mentionInComposer } from '../composer/drafts.ts'
 import type { PlaceWish } from '../composer/new-place.ts'
@@ -128,6 +128,8 @@ interface RowProps {
   sessionId: string
   source?: RowSource
   projectedUnread?: boolean | undefined
+  /** 这一行是经理会话（“未读 / 最近”里的经理主项）：记号列多一个经理框，和侧栏经理一节同一画法 */
+  manager?: boolean
   onSelect(selection: Selection): void
   /** 挂在父会话下面的子会话：行上显示状态点、名字与 harness，别的在信息卡里 */
   nested?: boolean
@@ -145,6 +147,7 @@ const SessionRow = memo(function SessionRow({
   sessionId,
   source = 'tree',
   projectedUnread,
+  manager = false,
   onSelect,
   nested = false,
   kids = 0,
@@ -478,11 +481,19 @@ const SessionRow = memo(function SessionRow({
           }}
         >
           <i
-            className={mark ? `st ${mark}` : 'st'}
+            className={['st', mark, manager ? 'mgr' : ''].filter(Boolean).join(' ')}
             {...(mark === 'bg'
               ? {
                   title: t('background.sidebar', { count: summary.background?.running ?? 0 }),
                   'data-background': summary.background?.running,
+                }
+              : {})}
+            // 经理框读屏念“经理”，悬停也写（有后台任务时提示仍是后台任务那一句）
+            {...(manager
+              ? {
+                  role: 'img',
+                  'aria-label': t('manager.manager'),
+                  title: mark === 'bg' ? undefined : t('manager.manager'),
                 }
               : {})}
           />
@@ -854,6 +865,13 @@ function ProjectedDeviceBlock({
   const { kind, block, byProject, showDevice } = projection
   const deviceId = block.deviceId
   const projections = useKey<SidebarProjections>(keys.sidebarProjections(deviceId))
+  // 这台设备上经理会话的标识：主项是经理的，记号列画经理框（只认身份，不改归并与选中）
+  const managerIds = useKey<string[]>(keys.managerIds(deviceId)) ?? NO_IDS
+  const managerThreads = new Set(
+    useKeys<ManagerView>(managerIds.map((id) => keys.manager(deviceId, id))).map(
+      (entry) => entry?.threadId,
+    ),
+  )
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
   const sections = useKey<SectionView[]>(keys.sections(deviceId)) ?? NO_SECTIONS
@@ -905,6 +923,7 @@ function ProjectedDeviceBlock({
           projectedUnread={
             depth === 0 ? projections?.unread.some((row) => row.sessionId === sessionId) : undefined
           }
+          manager={depth === 0 && managerThreads.has(sessionId)}
           nested={depth > 0}
           kids={kids.length}
           folded={shut}
