@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Thread } from '../../protocol/src/index.mjs'
+import { INITIAL_HISTORY } from '../src/device/history.mjs'
 import { createCore, type DeviceSnapshot } from '../src/index.mjs'
 import { fakeOpener, type Handler, RpcFailure } from './fake-server.mjs'
 import { thread, turn } from './fixtures.mjs'
@@ -147,7 +148,7 @@ test('直连原生 codex：选了快速，切走再切回来、桌面端重启�
   let session = watchSession(app.core)
   await settle()
   // 没选过：恢复只带会话号
-  assert.deepEqual(app.sent('thread/resume'), [{ threadId: 'a' }])
+  assert.deepEqual(app.sent('thread/resume'), [{ threadId: 'a', ...INITIAL_HISTORY }])
 
   await app.command('session.configure', { ...where, settings: { speed: 'priority' } })
   await say(app, '快点')
@@ -161,7 +162,11 @@ test('直连原生 codex：选了快速，切走再切回来、桌面端重启�
   codex.unload()
   session = watchSession(app.core)
   await settle()
-  assert.deepEqual(app.sent('thread/resume').at(-1), { threadId: 'a', serviceTier: 'priority' })
+  assert.deepEqual(app.sent('thread/resume').at(-1), {
+    threadId: 'a',
+    serviceTier: 'priority',
+    ...INITIAL_HISTORY,
+  })
   assert.equal(session.seen.view?.settings.speed, 'priority')
   await say(app, '再来')
   assert.equal('serviceTier' in (app.sent('turn/start').at(-1) ?? {}), false, '对上了就不用再带')
@@ -178,7 +183,11 @@ test('直连原生 codex：选了快速，切走再切回来、桌面端重启�
   await settle()
   const reopened = watchSession(again.core)
   await settle()
-  assert.deepEqual(again.sent('thread/resume').at(-1), { threadId: 'a', serviceTier: 'priority' })
+  assert.deepEqual(again.sent('thread/resume').at(-1), {
+    threadId: 'a',
+    serviceTier: 'priority',
+    ...INITIAL_HISTORY,
+  })
   assert.equal(reopened.seen.view?.settings.speed, 'priority')
 
   // 分叉接着源会话的速度，分叉出来的会话也记一份
@@ -213,7 +222,7 @@ test('连的不是原生 codex 自己（设备服务、适配器入口）：恢�
   await settle()
   session = watchSession(app.core)
   await settle()
-  assert.deepEqual(app.sent('thread/resume').at(-1), { threadId: 'a' })
+  assert.deepEqual(app.sent('thread/resume').at(-1), { threadId: 'a', ...INITIAL_HISTORY })
   app.time.advance(5000)
   assert.equal(app.saved.at(-1)?.speeds?.a, undefined)
   session.close()

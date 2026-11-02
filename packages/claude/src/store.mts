@@ -1236,6 +1236,28 @@ export class SessionStore {
     return rows.map((row: unknown) => this.rowToTurn(row))
   }
 
+  /** 分页先定位标识，只解析本页的回合，不能为十个回合读出整份历史。 */
+  listTurnIds(threadId: string): string[] {
+    this.flushAll()
+    const rows = this.db
+      .prepare('SELECT id FROM turns WHERE thread_id = ? ORDER BY started_at ASC, rowid ASC')
+      .all(threadId) as { id: string }[]
+    return rows.map((row) => row.id)
+  }
+
+  /** 两个头部游标只需要最新回合，以及最新的非空回合里的最后一个条目。 */
+  historyHeadTurns(threadId: string): TurnRecord[] {
+    const ids = this.listTurnIds(threadId)
+    const tail: TurnRecord[] = []
+    for (let i = ids.length - 1; i >= 0; i--) {
+      const turn = this.getTurn(ids[i]!)
+      if (!turn) continue
+      tail.unshift(turn)
+      if (turn.items.length) break
+    }
+    return tail
+  }
+
   // 父会话下面的子代理线程（工作流的也在内）。主模型用 SendMessage 续跑子代理时按代理 ID 从里面找回子线程
   subagentThreadIds(parentThreadId: string): string[] {
     const rows = this.db

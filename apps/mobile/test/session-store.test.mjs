@@ -33,6 +33,50 @@ const finished = (store) => {
   return !running && rows[0]?.type === 'status' && rows[0].status === 'completed'
 }
 
+test('历史分页接入手机行和状态：保留较新回合，向前补出的条目仍可展开和复制', async () => {
+  const { projectThread } = await import('../../../packages/core/src/projection/session.mts')
+  const protocolTurn = (id, text) => ({
+    id,
+    status: 'completed',
+    items: [{ id: 'u', type: 'userMessage', content: [{ type: 'text', text }] }],
+  })
+  const project = (turns) =>
+    projectThread(
+      { id: 'paged', name: '分页', cwd: '/', turns },
+      { deviceId: 'local', harness: 'claude' },
+    )
+  let sink
+  const recent = project([protocolTurn('new', '最新正文')])
+  recent.history = { hasMore: true, loading: false, error: null }
+  const store = new SessionStore(
+    {
+      subscribe(_topic, receiver) {
+        sink = receiver
+        sink.snapshot(recent)
+        return () => {}
+      },
+    },
+    'local',
+    'paged',
+  )
+  cleanup.push(() => store.stop())
+  store.start()
+  await until(() => store.getMeta()?.history?.hasMore, { what: '分页状态' })
+  const older = project([protocolTurn('old', '更早正文'), protocolTurn('new', '过期正文')])
+  sink.delta([
+    { op: 'history.prepend', turns: older.turns, items: Object.values(older.items) },
+    { op: 'session.history', history: { hasMore: false, loading: false, error: null } },
+  ])
+  await until(() => store.getMeta()?.history?.hasMore === false, { what: '旧页到达' })
+  assert.deepEqual(
+    store.currentView().turns.map((turn) => turn.id),
+    ['old', 'new'],
+  )
+  assert.equal(store.userMessage('new').text, '最新正文')
+  assert.equal(store.userMessage('old').text, '更早正文')
+  assert.ok(store.getSnapshot().rows.some((row) => row.type === 'user' && row.text === '更早正文'))
+})
+
 test('新建会话：收到回答，回合结束后是用户消息、回答、状态行', async () => {
   const { store } = await open('你好')
   store.start()

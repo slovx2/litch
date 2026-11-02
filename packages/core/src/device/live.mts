@@ -1,7 +1,7 @@
 import { inputDelivery } from '../../../protocol/src/input-delivery.mjs'
 import { questionSource } from '../../../protocol/src/pending-asks.mjs'
 // 一台设备上“打开着”的会话：订阅它的事件，把通知变成会话增量，受理发送、打断和答复。
-// 这里维护每个会话当前的完整视图：后来的订阅者拿到的快照已经包含之前的增量。
+// 这里维护每个会话已读取的历史和实时状态：后来的订阅者拿到的快照已经包含之前的增量。
 //
 // 几条规矩：
 // - 打开会话用 thread/resume（载入并订阅）。对面不让订阅时退回到只取历史，会话标成只读。
@@ -84,6 +84,13 @@ import {
   lacksMethod,
 } from './faults.mjs'
 import type { HarnessTerms } from './harness.mjs'
+import {
+  HISTORY_PAGE_SIZE,
+  historyPage,
+  INITIAL_HISTORY,
+  initialHistory,
+  lacksPaging,
+} from './history.mjs'
 import { resumeAfterRecovery } from './resume-retry.mjs'
 import { staleView, trimView, type ViewStore } from './view-store.mjs'
 
@@ -147,6 +154,7 @@ export interface LiveHost {
 }
 
 export interface LiveSessions {
+  loadOlder(sessionId: string): Promise<void>
   recover(sessionId: string, turnId: string, text?: string): Promise<void>
   open(sessionId: string, sink: HostSink): () => void
   /** 界面上有没有人开着这个会话 */
@@ -270,6 +278,9 @@ interface Live {
   /** null：还没载入成功 */
   view: SessionView | null
   loading: Cancel | null
+  historyCursor: string | null
+  paging: Cancel | null
+  pageJob: Promise<void> | null
   /** 载入期间到达的通知先攒着，载入完再放 */
   held: { method: string; params: unknown }[]
   /** 协议里的回合标识 → 界面里的回合标识。只有本机发出的回合两者不同 */
@@ -1129,34 +1140,107 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
   const failure = (error: unknown): ChannelError => channelFailure(error, host.harnessName)
 
+  const cancelPage = (live: Live) => {
+    live.paging?.abort()
+    live.paging = null
+    live.pageJob = null
+    if (live.view?.history?.loading)
+      emit(live, [{ op: 'session.history', history: { ...live.view.history, loading: false } }])
+  }
+
   const fetchView = async (live: Live, cancel: Cancel): Promise<SessionView> => {
     const scope = (thread: Thread) => ({
       deviceId: host.deviceId,
       harness: host.harnessFor(thread),
     })
     const options = { timeoutMs: LOAD_TIMEOUT, signal: cancel.signal }
-    if (host.shelved(live.id)) {
-      // 归档着的会话：只取历史来看，不恢复、不订阅。要接着聊得先把它放回来
-      const { thread } = await host.request(
-        'thread/read',
-        { threadId: live.id, includeTurns: true },
-        options,
-      )
+    live.historyCursor = null
+    const paged = (thread: Thread, cursor: string | null): SessionView => {
+      if (!cancel.signal.aborted) live.historyCursor = cursor
       return {
         ...projectThread(thread, scope(thread)),
+        history: { hasMore: cursor !== null, loading: false, error: null },
+      }
+    }
+    const readOnly = async () => {
+      try {
+        const { thread } = await host.request(
+          'thread/read',
+          { threadId: live.id, includeTurns: false },
+          options,
+        )
+        if (thread.turns?.length) return projectThread(thread, scope(thread))
+        const page = await host.request(
+          'thread/turns/list',
+          {
+            threadId: live.id,
+            ...INITIAL_HISTORY.initialTurnsPage,
+          },
+          options,
+        )
+        const first = historyPage(thread, page)
+        return paged(first.thread, first.cursor)
+      } catch (error) {
+        if (!lacksPaging(error)) throw error
+        const { thread } = await host.request(
+          'thread/read',
+          { threadId: live.id, includeTurns: true },
+          options,
+        )
+        return projectThread(thread, scope(thread))
+      }
+    }
+    if (host.shelved(live.id)) {
+      // 归档着的会话：只取历史来看，不恢复、不订阅。要接着聊得先把它放回来
+      return {
+        ...(await readOnly()),
         live: false,
         note: phrase('session.archived'),
       }
     }
     try {
-      const resumed = await resumeAfterRecovery(
-        () => withSpeed('thread/resume', { threadId: live.id }, options),
+      let paging = true
+      let resumed = await resumeAfterRecovery(
+        async () => {
+          try {
+            return await withSpeed(
+              'thread/resume',
+              { threadId: live.id, ...INITIAL_HISTORY },
+              options,
+            )
+          } catch (error) {
+            if (!lacksPaging(error)) throw error
+            paging = false
+            return withSpeed('thread/resume', { threadId: live.id }, options)
+          }
+        },
         host.clock,
         cancel.signal,
       )
-      for (const turn of resumed.thread.turns ?? [])
+      let first = paging ? initialHistory(resumed) : null
+      // 有些端支持 excludeTurns，但还没有 initialTurnsPage。不能把空 turns 当成空历史。
+      if (paging && !first && !resumed.thread.turns?.length) {
+        try {
+          first = historyPage(
+            resumed.thread,
+            await host.request(
+              'thread/turns/list',
+              {
+                threadId: live.id,
+                ...INITIAL_HISTORY.initialTurnsPage,
+              },
+              options,
+            ),
+          )
+        } catch (error) {
+          if (!lacksPaging(error)) throw error
+          resumed = await withSpeed('thread/resume', { threadId: live.id }, options)
+        }
+      }
+      const thread = first?.thread ?? resumed.thread
+      for (const turn of thread.turns ?? [])
         for (const item of turn.items) reconcileInput(live, item)
-      const view = projectThread(resumed.thread, scope(resumed.thread))
+      const view = first ? paged(thread, first.cursor) : projectThread(thread, scope(thread))
       return {
         ...view,
         settings: projectSettings(resumed, presetsOf(view.harness)),
@@ -1170,13 +1254,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (!(error instanceof RpcError) || isHarnessDown(error) || isSessionRecovering(error))
         throw error
       host.log(`订阅会话 ${live.id} 失败，改为只读载入：${error.message}`)
-      const { thread } = await host.request(
-        'thread/read',
-        { threadId: live.id, includeTurns: true },
-        options,
-      )
       return {
-        ...projectThread(thread, scope(thread)),
+        ...(await readOnly()),
         live: false,
         // 被别处的 codex 用着：说清楚是怎么回事、该怎么办，不甩一句原话
         note: isHeldElsewhere(error)
@@ -1232,6 +1311,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
   /** 重新载入会话。返回的承诺在载入完（或放弃）时落定，不会失败 */
   const load = (live: Live): Promise<void> => {
+    cancelPage(live)
     for (const [clientId, entry] of live.steered) {
       if (!entry.tracked) continue
       live.steered.delete(clientId)
@@ -1367,6 +1447,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   const drop = (live: Live) => {
     unlinger(live.id)
     if (sessions.get(live.id) !== live || live.sinks.size > 0 || live.compactSwitch) return
+    cancelPage(live)
     sessions.delete(live.id)
     // 够不着的时候不用退：订阅已经随连接（或者它的 harness 的上游连接）一起没了；旧的（stale）也一样
     if (live.view?.live && !live.stale && reachable(live)) {
@@ -1603,6 +1684,9 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   }
 
   const blank = (id: string): Live => ({
+    historyCursor: null,
+    paging: null,
+    pageJob: null,
     recoveryRevision: 0,
     id,
     sinks: new Set(),
@@ -1686,6 +1770,74 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   }
 
   const sessionsApi: LiveSessions = {
+    loadOlder(sessionId) {
+      const live = need(sessionId)
+      if (live.pageJob) return live.pageJob
+      if (live.loading || live.stale || live.reverting || !live.view.history?.hasMore)
+        return Promise.resolve()
+      mustReach(live)
+      const cursor = live.historyCursor
+      const cancel = createCancel()
+      live.paging = cancel
+      emit(live, [
+        { op: 'session.history', history: { hasMore: true, loading: true, error: null } },
+      ])
+      const current = () =>
+        !cancel.signal.aborted && sessions.get(live.id) === live && live.paging === cancel
+      const job = (async () => {
+        try {
+          const page = await host.request(
+            'thread/turns/list',
+            {
+              threadId: live.id,
+              cursor,
+              limit: HISTORY_PAGE_SIZE,
+              sortDirection: 'desc',
+              itemsView: 'full',
+            },
+            { timeoutMs: LOAD_TIMEOUT, signal: cancel.signal },
+          )
+          if (!current()) return
+          if (page.nextCursor !== null && page.nextCursor === cursor)
+            throw new Error('历史分页游标未前进')
+          const older = [...page.data].reverse().map((turn) => projectTurn(turn))
+          live.historyCursor = page.nextCursor
+          emit(live, [
+            {
+              op: 'history.prepend',
+              turns: older.map((entry) => entry.turn),
+              items: older.flatMap((entry) => entry.items),
+            },
+            {
+              op: 'session.history',
+              history: { hasMore: page.nextCursor !== null, loading: false, error: null },
+            },
+          ])
+        } catch (error) {
+          if (!current()) return
+          if (error instanceof RpcError && error.code === -32602) {
+            // 别的客户端回退了历史，旧游标已失效：重新建立页边界，不拼接两版历史。
+            await load(live)
+            return
+          }
+          const reason = failure(error)
+          emit(live, [
+            {
+              op: 'session.history',
+              history: { hasMore: true, loading: false, error: reason.message },
+            },
+          ])
+          throw reason
+        } finally {
+          if (live.paging === cancel) {
+            live.paging = null
+            live.pageJob = null
+          }
+        }
+      })()
+      live.pageJob = job
+      return job
+    },
     async recover(sessionId, turnId, text) {
       const live = need(sessionId)
       mustReach(live)
@@ -1764,6 +1916,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
     offline() {
       for (const live of sessions.values()) {
+        cancelPage(live)
         live.compactSwitch?.reject(
           new ChannelError('offline', '连接已断开，未切换供应商', phrase('session.switchOffline')),
         )
@@ -1788,6 +1941,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     harnessDown(harness) {
       for (const live of sessions.values()) {
         if (ownerOf(live) !== harness) continue
+        cancelPage(live)
         live.compactSwitch?.reject(
           new ChannelError('offline', '引擎已断开，未切换供应商', phrase('session.switchOffline')),
         )
@@ -1805,6 +1959,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       host.views?.forget(sessionId)
       const live = sessions.get(sessionId)
       if (!live) return
+      cancelPage(live)
       live.compactSwitch?.reject(
         new ChannelError(
           'cancelled',
@@ -2372,6 +2527,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
     async rollback(sessionId, turnId, itemId) {
       const live = idle(sessionId, '回合正在进行，结束后才能回退')
+      cancelPage(live)
       if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
       const before = live.view.turns.some((turn) => turn.id === turnId)
         ? serverTurn(live, turnId)
@@ -2396,7 +2552,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (!live.revertEchoed) live.revertEchoUntil = host.clock.now() + REVERT_ECHO_MS
       // 切在回合中间：这一回合只剩前半段，照对面的重新载入（等载入完再应答，紧接着发的新回合不会被盖掉），
       // 不在这边一条条拿掉
-      if (cut) {
+      if (cut || live.view.history) {
         if (sessions.get(live.id) === live) await load(live)
         host.touched(live.id)
         return

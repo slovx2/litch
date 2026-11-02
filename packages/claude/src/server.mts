@@ -2275,12 +2275,15 @@ export class CodexClaudeAppServer {
     if (!this.store.getThread(threadId)) throw new ProtocolError(-32602, '未知会话')
     const itemsView = turnItemsView(params.itemsView)
     const page = pageRecords(
-      this.store.listTurns(threadId),
+      this.store.listTurnIds(threadId),
       params,
       `turns:${threadId}`,
-      (turn) => turn.id,
+      (id) => id,
     )
-    return { ...page, data: page.data.map((turn) => this.toTurnView(turn, itemsView)) }
+    return {
+      ...page,
+      data: page.data.map((id) => this.toTurnView(this.store.getTurn(id)!, itemsView)),
+    }
   }
 
   private threadItemsList(params: Record<string, unknown>): unknown {
@@ -7623,7 +7626,10 @@ export class CodexClaudeAppServer {
       reasoningEffort: thread.reasoningEffort,
       multiAgentMode: 'explicitRequestOnly',
       initialTurnsPage: null,
-      ...historyHeadCursors(thread.id, this.store.listTurns(thread.id)),
+      ...historyHeadCursors(
+        thread.id,
+        turns.length ? turns : this.store.historyHeadTurns(thread.id),
+      ),
     }
   }
 
@@ -7971,7 +7977,10 @@ export class CodexClaudeAppServer {
     }
     const body = result && typeof result === 'object' ? (result as Record<string, unknown>) : {}
     if (turnsPage) strip(body.data)
-    else strip(asRecord(body.thread).turns)
+    else {
+      strip(asRecord(body.thread).turns)
+      strip(asRecord(body.initialTurnsPage).data)
+    }
     return result
   }
 
@@ -8122,6 +8131,8 @@ export class CodexClaudeAppServer {
     }
     if (Array.isArray(body.data)) for (const thread of body.data) mark(thread)
     mark(body.thread)
+    const initial = asRecord(body.initialTurnsPage).data
+    if (Array.isArray(initial)) this.markTurnOrigins(initial)
     return result
   }
 

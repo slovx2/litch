@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Thread, ThreadItem } from '../../protocol/src/index.mjs'
+import { INITIAL_HISTORY } from '../src/device/history.mjs'
 import { createMockCore, reduceSession, type SessionOp, type SessionView } from '../src/index.mjs'
 import { ALL_ABLE } from '../src/projection/session.mjs'
 import { RpcFailure } from './fake-server.mjs'
@@ -211,7 +212,7 @@ test('已归档：不恢复就能只读地打开看；发不了消息；恢复�
   const session = watch(core, 'b')
   await settle()
   // 只取历史，不恢复、不订阅
-  assert.deepEqual(sent('thread/read'), [{ threadId: 'b', includeTurns: true }])
+  assert.deepEqual(sent('thread/read'), [{ threadId: 'b', includeTurns: false }])
   assert.deepEqual(sent('thread/resume'), [])
   assert.deepEqual(session.texts(), [['以前说过的话', '以前的回答']])
   assert.equal(session.seen.view?.live, false)
@@ -224,7 +225,7 @@ test('已归档：不恢复就能只读地打开看；发不了消息；恢复�
   // 恢复：侧栏里有它了，开着的那一份重新载入成能发消息的
   await command('session.unarchive', { deviceId: 'local', sessionId: 'b' })
   await settle()
-  assert.deepEqual(sent('thread/resume'), [{ threadId: 'b' }])
+  assert.deepEqual(sent('thread/resume'), [{ threadId: 'b', ...INITIAL_HISTORY }])
   assert.equal(session.seen.snapshots, 2)
   assert.equal(session.seen.view?.live, true)
   assert.equal(session.seen.view?.note, null)
@@ -655,7 +656,8 @@ test('回退：按回合的标识撤掉那个回合和后面的，为它们记�
   world.threads = [{ ...(world.threads[0] as Thread), turns: [] }]
   server.notify('thread/reverted', { threadId: 'a' })
   await settle()
-  assert.equal(sent('thread/resume').length, 2)
+  // 旧端返回空 turns 且没有分页能力：另用不排除历史的 resume 确认确实为空。
+  assert.equal(sent('thread/resume').length, 3)
   assert.deepEqual(turnIds(session.seen.view), [])
 
   // 回合在进行时不让回退

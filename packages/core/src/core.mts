@@ -690,6 +690,11 @@ export function createCore(options: CoreOptions): Core {
           }
           return {}
         }
+        case 'session.loadOlder': {
+          const { deviceId, sessionId } = params as Commands['session.loadOlder']['params']
+          await deviceOf(deviceId).loadOlder(sessionId)
+          return {}
+        }
         case 'session.interrupt': {
           const { deviceId, sessionId } = params as Commands['session.interrupt']['params']
           try {

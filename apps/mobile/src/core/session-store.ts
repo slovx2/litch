@@ -64,6 +64,7 @@ export interface TailSnapshot {
  * 能不能发、会做哪些事）或者整份快照到了才换一份新的；数组是拷贝，组件拿到的永远是不可变的值
  */
 export interface SessionMeta {
+  history?: SessionView['history']
   pendingQuestions: PendingQuestion[]
   title: SessionView['title']
   harness: string
@@ -417,6 +418,13 @@ export class SessionStore {
       if (turnId && this.dirty !== 'all') this.dirty.add(turnId)
     }
     switch (op.op) {
+      case 'history.prepend':
+        for (const turn of view.turns) for (const id of turn.itemIds) this.itemTurn.set(id, turn.id)
+        this.dirty = 'all'
+        this.metaDirty = true
+        this.todoDirty = true
+        this.recountAnswers(view)
+        return
       case 'turn.add':
         for (const id of op.turn.itemIds) this.itemTurn.set(id, op.turn.id)
         mark(op.turn.id)
@@ -570,6 +578,7 @@ export class SessionStore {
     if (this.metaDirty) {
       this.metaDirty = false
       this.meta = {
+        history: view.history,
         pendingQuestions: questionsOfView(view).filter((q) => !q.ignored),
         title: view.title,
         harness: view.harness,

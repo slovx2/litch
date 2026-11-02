@@ -275,6 +275,8 @@ export type SidebarOp =
   | { op: 'archived.set'; sessions: SessionSummary[] | null }
 
 export type SessionOp =
+  | { op: 'history.prepend'; turns: TurnView[]; items: ItemView[] }
+  | { op: 'session.history'; history: import('../model.mjs').SessionHistory }
   | { op: 'turn.add'; turn: TurnView }
   /** 撤掉一个回合连同它的条目：先显示出来的消息没发成功 */
   | { op: 'turn.remove'; turnId: string }
@@ -748,6 +750,10 @@ export interface Commands {
     result: { skills: SkillOption[]; problems: SkillProblem[] }
   }
   /** 打断正在进行的回合 */
+  'session.loadOlder': {
+    params: { deviceId: string; sessionId: string }
+    result: Record<string, never>
+  }
   'session.interrupt': {
     params: { deviceId: string; sessionId: string }
     result: Record<string, never>

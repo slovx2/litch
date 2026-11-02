@@ -62,6 +62,7 @@ import { KeyedStore } from './keyed-store.mjs'
 
 /** 状态库里有哪些键、每个键放什么 */
 export const keys = {
+  history: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:history`,
   /** SidebarProjections：本设备的未读 / 最近主会话投影，不含经理子树。 */
   sidebarProjections: (deviceId: string) => `sidebar:${deviceId}:projections`,
   /** string[]：设备标识，按添加顺序 */
@@ -1129,6 +1130,27 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
     const itemKey = (itemId: string) => keys.item(deviceId, sessionId, itemId)
     const turnKey = (turnId: string) => keys.turn(deviceId, sessionId, turnId)
     switch (op.op) {
+      case 'session.history':
+        store.set(keys.history(deviceId, sessionId), op.history)
+        return
+      case 'history.prepend': {
+        const ids = store.get<string[]>(keys.turnIds(deviceId, sessionId)) ?? []
+        const known = new Set(ids)
+        const older = op.turns.filter((turn) => !known.has(turn.id))
+        const wanted = new Set(older.flatMap((turn) => turn.itemIds))
+        for (const item of op.items)
+          if (wanted.has(item.id) && !store.get(itemKey(item.id))) store.set(itemKey(item.id), item)
+        for (const turn of older) store.set(turnKey(turn.id), turn)
+        store.set(keys.turnIds(deviceId, sessionId), [...older.map((turn) => turn.id), ...ids])
+        const ordered = [...older.map((turn) => turn.id), ...ids].flatMap((id) =>
+          (store.get<TurnView>(turnKey(id))?.itemIds ?? []).flatMap(
+            (itemId) => store.get<ItemView>(itemKey(itemId)) ?? [],
+          ),
+        )
+        store.set(keys.notes(deviceId, sessionId), gatherNotes({}, ordered))
+        store.set(keys.answers(deviceId, sessionId), gatherAnswers({}, ordered))
+        return
+      }
       case 'turn.add': {
         const ids = store.get<string[]>(keys.turnIds(deviceId, sessionId)) ?? []
         store.set(turnKey(op.turn.id), op.turn)
@@ -1409,6 +1431,7 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
             snapshot(view: SessionView) {
               store.batch(() => {
                 store.deletePrefix(`session:${deviceId}:${sessionId}:`)
+                store.set(keys.history(deviceId, sessionId), view.history ?? null)
                 for (const item of Object.values(view.items)) {
                   store.set(keys.item(deviceId, sessionId, item.id), item)
                 }

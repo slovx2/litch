@@ -362,6 +362,7 @@ export interface Device {
   resumeQueue(sessionId: string, messageId?: string): Promise<void>
   steer(sessionId: string, messageId: string): Promise<void>
   interrupt(sessionId: string): Promise<void>
+  loadOlder(sessionId: string): Promise<void>
   recover(sessionId: string, turnId: string, text?: string): Promise<void>
   /** 停掉会话的一个后台命令（session.stopBackground） */
   stopBackground(sessionId: string, taskId: string, itemId: string | null): Promise<void>
@@ -2823,6 +2824,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     resumeQueue: (sessionId, messageId) => live.resumeQueue(sessionId, messageId),
     steer: (sessionId, messageId) => live.steer(sessionId, messageId),
     interrupt: (sessionId) => live.interrupt(sessionId),
+    loadOlder: (sessionId) => live.loadOlder(sessionId),
     recover: (sessionId, turnId, text) => live.recover(sessionId, turnId, text),
     stopBackground: (sessionId, taskId, itemId) => live.stopBackground(sessionId, taskId, itemId),
     unqueue: (sessionId, messageId) => live.unqueue(sessionId, messageId),

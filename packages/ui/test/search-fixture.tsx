@@ -7,9 +7,11 @@ import {
   createReplica,
   type HostSink,
   projectThread,
+  reduceSession,
   type SessionView,
   serveChannel,
 } from '@litch/core'
+import { flushSync } from 'react-dom'
 // 仅由隔离浏览器验收访问；正式页面不引用此入口，不连接 harness 或个人数据。
 import { createRoot } from 'react-dom/client'
 import { askReplyText } from '../../core/src/projection/asks.mts'
@@ -34,7 +36,8 @@ const params = new URLSearchParams(location.search)
 const sample = params.has('mock')
 const sessionId = sample ? 's1' : 'search-fixture'
 const mock = createMockCore({ clock, chunkMs: Number(params.get('chunkMs') ?? 60) })
-const count = 5000
+const paged = params.has('paging')
+const count = paged ? 100 : 5000
 const turns = Array.from({ length: count }, (_, i) => ({
   id: `t${i}`,
   status: 'completed',
@@ -124,8 +127,34 @@ const comment = bodyOf(
 view.items['t1:u1'] = { id: 't1:u1', kind: 'userMessage', text: comment, attachments: [] }
 let sink: HostSink | null = null
 let refreshFails = false
+const allHistory = paged ? structuredClone(view) : view
+let pageCalls = 0
+if (paged) {
+  view.turns = view.turns.slice(-10)
+  const wanted = new Set(view.turns.flatMap((turn) => turn.itemIds))
+  view.items = Object.fromEntries(Object.entries(view.items).filter(([id]) => wanted.has(id)))
+  view.history = { hasMore: true, loading: false, error: null }
+}
 const host: CoreHost = {
   async command(name, args, signal) {
+    if (name === 'session.loadOlder' && paged) {
+      if (!view.history?.hasMore || view.history.loading) return {} as never
+      pageCalls++
+      view.history = { hasMore: true, loading: true, error: null }
+      sink?.delta([{ op: 'session.history', history: view.history }])
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      const end = allHistory.turns.findIndex((turn) => turn.id === view.turns[0]?.id)
+      const older = allHistory.turns.slice(Math.max(0, end - 10), end)
+      const op = {
+        op: 'history.prepend' as const,
+        turns: older,
+        items: older.flatMap((turn) => turn.itemIds.map((id) => allHistory.items[id]!)),
+      }
+      reduceSession(view, op)
+      view.history = { hasMore: end > 10, loading: false, error: null }
+      sink?.delta([op, { op: 'session.history', history: view.history }])
+      return {} as never
+    }
     if (name === 'device.refresh') {
       await new Promise((resolve) => setTimeout(resolve, 400))
       if (refreshFails) throw new Error('隔离夹具：读取失败')
@@ -150,6 +179,18 @@ const channel = connectChannel(client)
 const replica = createReplica(channel)
 replica.start()
 const fixture = {
+  historyState: () => ({ pageCalls, turns: view.turns.length, history: view.history }),
+  async reopen() {
+    flushSync(() => root.render(null))
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    view.turns = allHistory.turns.slice(-10)
+    const wanted = new Set(view.turns.flatMap((turn) => turn.itemIds))
+    view.items = Object.fromEntries(
+      Object.entries(allHistory.items).filter(([id]) => wanted.has(id)),
+    )
+    view.history = { hasMore: true, loading: false, error: null }
+    show()
+  },
   openTitles: requestSearch,
   failRefresh(value: boolean) {
     refreshFails = value
@@ -225,27 +266,30 @@ const fixture = {
   },
 }
 Object.assign(window, { searchFixture: fixture })
-createRoot(document.getElementById('root')!).render(
-  <ServicesProvider value={{ channel, replica, shell: 'browser' }}>
-    <div style={{ height: '100vh', display: 'flex' }}>
-      <main className="main">
-        <FindButton deviceId="local" sessionId={sessionId} />
-        <Transcript
-          deviceId="local"
-          sessionId={sessionId}
-          footer={
-            <>
-              <PendingQuestions deviceId="local" sessionId={sessionId} />
-              <span>隔离验收</span>
-            </>
-          }
-        />
-        <TitleSearch
-          onOpen={(selection) => {
-            fixture.opened = selection
-          }}
-        />
-      </main>
-    </div>
-  </ServicesProvider>,
-)
+const root = createRoot(document.getElementById('root')!)
+const show = () =>
+  root.render(
+    <ServicesProvider value={{ channel, replica, shell: 'browser' }}>
+      <div style={{ height: '100vh', display: 'flex' }}>
+        <main className="main">
+          <FindButton deviceId="local" sessionId={sessionId} />
+          <Transcript
+            deviceId="local"
+            sessionId={sessionId}
+            footer={
+              <>
+                <PendingQuestions deviceId="local" sessionId={sessionId} />
+                <span>隔离验收</span>
+              </>
+            }
+          />
+          <TitleSearch
+            onOpen={(selection) => {
+              fixture.opened = selection
+            }}
+          />
+        </main>
+      </div>
+    </ServicesProvider>,
+  )
+show()

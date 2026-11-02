@@ -12,6 +12,19 @@ import { copyValue } from '../value.mjs'
 
 export function reduceSession(view: SessionView, op: SessionOp): void {
   switch (op.op) {
+    case 'session.history':
+      view.history = { ...op.history }
+      return
+    case 'history.prepend': {
+      // 页请求发出后可能已收到同一回合的新通知；旧页绝不覆盖现有回合或条目。
+      const known = new Set(view.turns.map((turn) => turn.id))
+      const older = op.turns.filter((turn) => !known.has(turn.id))
+      const wanted = new Set(older.flatMap((turn) => turn.itemIds))
+      for (const item of op.items)
+        if (wanted.has(item.id) && !view.items[item.id]) view.items[item.id] = copyValue(item)
+      view.turns.unshift(...copyValue(older))
+      return
+    }
     case 'turn.add': {
       const index = view.turns.findIndex((turn) => turn.id === op.turn.id)
       const turn = copyValue(op.turn)

@@ -15,6 +15,7 @@ export function changesQuestions(
         ? !!item.wrapUp
         : item?.kind === 'userMessage'
   switch (op.op) {
+    case 'history.prepend':
     case 'turn.add':
     case 'turn.remove':
     case 'turn.status':

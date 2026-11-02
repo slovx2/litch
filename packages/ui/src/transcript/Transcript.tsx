@@ -1,4 +1,5 @@
 import type { SearchHit } from '@litch/core'
+import { HistoryStatus, useOlderHistory } from './history.tsx'
 import { SearchPanel } from './search/SearchPanel.tsx'
 import { searchWindow } from './turn-window.ts'
 import '../styles/search.css'
@@ -65,7 +66,7 @@ import { AgentAnswer, PlanCard, UserMessage } from './messages.tsx'
 import { ProcessHead, ProcessParts } from './process.tsx'
 import { Recovery } from './Recovery.tsx'
 import { Stamp } from './Stamp.tsx'
-import { PinProvider, savedTurns, useTranscriptScroll } from './scroll.ts'
+import { PinProvider, savedFindRoom, savedTurns, useTranscriptScroll } from './scroll.ts'
 import { TurnTouch, touchTurn, useFold, useToggle, useTurnTouched } from './state.ts'
 import { TodoCard } from './Todo.tsx'
 import { FIRST_TURNS, growWindow, restoreWindow, WINDOWED_TURNS } from './turn-window.ts'
@@ -552,7 +553,8 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt 变了就是要重新订阅
   useEffect(() => replica.openSession(deviceId, sessionId), [replica, deviceId, sessionId, attempt])
   // 状态库的通知是同步更新。把历史渲染降为可中断任务，先让侧栏完成选中和后续点击。
-  const allTurns = useDeferredValue(useKey<string[]>(keys.turnIds(deviceId, sessionId)))
+  const loadedTurns = useKey<string[]>(keys.turnIds(deviceId, sessionId))
+  const allTurns = useDeferredValue(loadedTurns)
   const skip = aside?.skip
   const turnIds = useMemo(
     () => (allTurns && skip?.length ? allTurns.filter((id) => !skip.includes(id)) : allTurns),
@@ -564,27 +566,19 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
   const listed = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const down = downHarness(device, listed?.harness)
   const t = useT()
-  const scroll = useTranscriptScroll(`${deviceId}:${sessionId}`)
+  const scroll = useTranscriptScroll(`${deviceId}:${sessionId}`, turnIds)
   const [finding, setFinding] = useState(false)
   // 查找条浮在右上角：查找时内容最上面多留一段，最早的几行也能滚到它下面。关掉之后先留着，
   // 等最上面滚出视口再去掉（滚动区贴底，那时去掉看不出来），免得关的那一下内容往上跳；不满一屏的直接去掉
-  const [findRoom, setFindRoom] = useState(false)
+  const [findRoom, setFindRoom] = useState(() => savedFindRoom(`${deviceId}:${sessionId}`) > 0)
+  useLayoutEffect(() => {
+    const room = savedFindRoom(`${deviceId}:${sessionId}`)
+    setFindRoom(room > 0)
+    if (room) scroll.contentRef.current?.style.setProperty('--find-room', `${room}px`)
+  }, [deviceId, sessionId, scroll.contentRef])
   useEffect(() => {
     if (finding) setFindRoom(true)
   }, [finding])
-  useEffect(() => {
-    if (finding || !findRoom) return
-    const scroller = scroll.scrollerRef.current
-    if (!scroller) return
-    const check = () => {
-      const overflow = scroller.scrollHeight - scroller.clientHeight
-      // 反向列：scrollTop 在底部是 0，往上是负的，到顶是 -overflow
-      if (overflow <= 1 || overflow + scroller.scrollTop > 80) setFindRoom(false)
-    }
-    check()
-    scroller.addEventListener('scroll', check, { passive: true })
-    return () => scroller.removeEventListener('scroll', check)
-  }, [finding, findRoom, scroll.scrollerRef])
   const [target, setTarget] = useState<SearchHit | null>(null)
   const [reading, setReading] = useState<string | null>(null)
   const focusBeforeSearch = useRef<HTMLElement | null>(null)
@@ -710,6 +704,15 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
     return gaps
   }, [finding, turnIds, drawn])
   const { restore } = scroll
+  const older = useOlderHistory(
+    deviceId,
+    sessionId,
+    scroll,
+    turnIds?.length ?? 0,
+    drawn?.length ?? 0,
+    finding,
+    allTurns === loadedTurns,
+  )
   const lastTurn = useKey<TurnView>(keys.turn(deviceId, sessionId, turnIds?.at(-1) ?? ''))
   const busy = lastTurn?.status === 'running'
   const actions = useMemo(() => ({ busy, open: onOpen }), [busy, onOpen])
@@ -717,10 +720,23 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
   const fileLinks = useSessionFileLinks(deviceId, listed)
 
   // 内容第一次画出来的那一刻，回到上次离开这个会话时的位置
-  const ready = turnIds !== undefined && !restoring
+  const ready = turnIds !== undefined && allTurns === loadedTurns && !restoring && !older.restoring
   useLayoutEffect(() => {
     if (ready) restore()
   }, [ready, restore])
+  useEffect(() => {
+    if (!ready || finding || !findRoom) return
+    const scroller = scroll.scrollerRef.current
+    if (!scroller) return
+    const check = () => {
+      const overflow = scroller.scrollHeight - scroller.clientHeight
+      // 反向列：scrollTop 在底部是 0，往上是负的，到顶是 -overflow
+      if (overflow <= 1 || overflow + scroller.scrollTop > 80) setFindRoom(false)
+    }
+    check()
+    scroller.addEventListener('scroll', check, { passive: true })
+    return () => scroller.removeEventListener('scroll', check)
+  }, [ready, finding, findRoom, scroll.scrollerRef])
 
   return (
     <>
@@ -736,6 +752,12 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
           onClose={() => closeFind()}
         />
       ) : null}
+      {/* 查找会自动补页，隐藏同位置的手动入口，避免挡住浮动查找栏。 */}
+      {finding ? null : (
+        <div className="history-overlay">
+          <HistoryStatus history={older.history} load={older.load} />
+        </div>
+      )}
       <div
         className="tr-scroll"
         tabIndex={-1}

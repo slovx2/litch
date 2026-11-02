@@ -62,6 +62,7 @@ function openProxy(
     let settled = false
     let exit: number | null | undefined
     let socket: WebSocket | null = null
+    let received: (() => void) | null = null
 
     const settle = (run: () => void) => {
       if (settled) return
@@ -107,6 +108,7 @@ function openProxy(
     let marked = false
     const mark = Buffer.from(script.marker)
     child.stdout.on('data', (chunk: Buffer) => {
+      if (chunk.length) received?.()
       if (marked) {
         clean.write(chunk)
         return
@@ -167,6 +169,12 @@ function openProxy(
             peer,
             transport: wrapSocket(opened, {
               heartbeat: HEARTBEAT,
+              activity(listener) {
+                received = listener
+                return () => {
+                  received = null
+                }
+              },
               reason: dropReason,
               // ssh 进程没了，这条连接就是断了，进程退出本身就算数，不只靠 WebSocket 自己发现。
               // 实测有走不完的时候：ssh 的退出先于它标准输出的结束被处理时，它的标准输入已经随进程销毁，

@@ -105,6 +105,8 @@ type Saved =
       distance: number
       /** 那一行所在的回合到最后一共几个回合：回来时先画的那一截至少包住它（turn-window.ts） */
       turns: number
+      /** 关闭查找后尚未滚出视口的顶部留白，重开时一起恢复，避免最早消息被夹到顶。 */
+      findRoom: number
     }
 
 const saved = new Map<string, Saved>()
@@ -115,10 +117,20 @@ export function savedTurns(sessionKey: string): number | null {
   return state && !state.follow ? state.turns : null
 }
 
+/** 查找关闭后仍需保留的顶部空间。 */
+export function savedFindRoom(sessionKey: string): number {
+  const state = saved.get(sessionKey)
+  return state && !state.follow ? state.findRoom : 0
+}
+
 /** 一行所在的回合到最后一共几个回合 */
-function turnsFrom(content: Element, element: Element): number {
+function turnsFrom(content: Element, element: Element, ids: readonly string[] | undefined): number {
   const turn = element.closest('section.turn')
   if (!turn) return 0
+  // 搜索只挂载命中附近的稀疏窗口。恢复历史范围必须按逻辑顺序计数，不能数当前 DOM。
+  const id = turn.getAttribute('data-search-turn')
+  const at = id ? ids?.indexOf(id) : undefined
+  if (at !== undefined && at >= 0 && ids) return ids.length - at
   const all = content.querySelectorAll('section.turn')
   for (let index = all.length - 1; index >= 0; index--) {
     if (all[index] === turn) return all.length - index
@@ -141,7 +153,12 @@ export interface TranscriptScroll {
   pin(element: Element | null): void
 }
 
-export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
+export function useTranscriptScroll(
+  sessionKey: string,
+  turnIds?: readonly string[],
+): TranscriptScroll {
+  const logicalTurns = useRef(turnIds)
+  logicalTurns.current = turnIds
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
   const [following, setFollowing] = useState(true)
@@ -362,7 +379,10 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
       anchor: element.getAttribute('data-anchor') ?? '',
       offset: upperTop.current - view.top,
       distance,
-      turns: turnsFrom(content, element),
+      turns: turnsFrom(content, element, logicalTurns.current),
+      findRoom: scroller.hasAttribute('data-find-room')
+        ? Number.parseFloat(getComputedStyle(content).paddingTop) || 0
+        : 0,
     })
   }, [hold])
 

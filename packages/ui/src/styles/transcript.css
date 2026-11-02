@@ -35,6 +35,23 @@
   padding: 20px 24px;
   background: var(--panel);
 }
+.history-overlay {
+  position: relative;
+  flex: 0 0 0;
+  height: 0;
+  z-index: 2;
+}
+.history-more {
+  position: absolute;
+  top: 4px;
+  right: var(--tr-gut);
+  z-index: 2;
+  padding: 2px 6px;
+  border-radius: var(--r1);
+  background: var(--panel);
+  color: var(--ink-3);
+  font-size: calc(11px * var(--fs));
+}
 .tr {
   width: 100%;
   max-width: calc(var(--tr-max) + 2 * var(--tr-gut));

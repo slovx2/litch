@@ -1,8 +1,8 @@
-import { type SearchHit, searchQuery } from '@litch/core'
+import { keys, type SearchHit, type SessionHistory, searchQuery } from '@litch/core'
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { Close, Icon } from '../../app/icons.tsx'
-import { useServices } from '../../app/services.tsx'
+import { useKey, useServices } from '../../app/services.tsx'
 import { revealSearchParents, searchDOM } from './reveal.ts'
 import { useSearch } from './useSearch.ts'
 import { viewportAnchor } from './viewport.ts'
@@ -32,6 +32,13 @@ export function SearchPanel({
   const t = useT()
   const { store } = useServices().replica
   const [query, setQuery] = useState('')
+  const { channel } = useServices()
+  const history = useKey<SessionHistory>(keys.history(deviceId, sessionId))
+  const historyBusy = !!query.trim() && !!history?.hasMore && !history.error
+  useEffect(() => {
+    if (historyBusy && !history?.loading)
+      void channel.command('session.loadOlder', { deviceId, sessionId }).catch(() => {})
+  }, [channel, deviceId, sessionId, historyBusy, history])
   const [selected, setSelected] = useState('')
   const [anchor, setAnchor] = useState(() => viewportAnchor(root.current))
   const [missing, setMissing] = useState(false)
@@ -243,14 +250,14 @@ export function SearchPanel({
           role="status"
           aria-live="polite"
           aria-label={
-            result.count && !busy
+            result.count && !busy && !historyBusy && !history?.error
               ? t('search.countSpoken', { current: at + 1, total: result.hits.length })
               : undefined
           }
         >
-          {failed
+          {failed || history?.error
             ? t('search.failed')
-            : busy
+            : busy || historyBusy
               ? t('search.busy')
               : query
                 ? result.count

@@ -1220,6 +1220,9 @@ export const en: Record<MessageKey, Entry> = {
   'transcript.loadFailed': 'Couldn’t load this session: {reason}',
   'transcript.retry': 'Retry',
   'transcript.loading': 'Loading session…',
+  'transcript.historyOlder': 'Earlier messages',
+  'transcript.historyLoading': 'Loading earlier…',
+  'transcript.historyRetry': 'Retry earlier messages',
   'transcript.harnessDown':
     '{name} is unavailable. This session loads automatically once it’s back.',
   'transcript.harnessOff':

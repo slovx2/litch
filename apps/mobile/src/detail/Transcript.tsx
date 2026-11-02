@@ -27,7 +27,7 @@ import { growingRows, type SessionSnapshot, type SessionStore } from '../core/se
 import { experiment } from '../experiment'
 import type { RootStackParamList } from '../nav/routes'
 import { noteFirstContent, noteWork } from '../probe'
-import { useKey } from '../shell/services'
+import { useKey, useServices } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { useTheme } from '../ui/theme'
 import { AgentsCell } from './agents/AgentsCell'
@@ -299,10 +299,12 @@ function Footer({ guard, pad }: { guard: Guard; pad: number }) {
   return <View style={{ height: pad + raised }} />
 }
 
-/** 一次多给列表多少行更早的历史（T6）。核心给的是整个会话，分页只在界面这层：一进来只排最近的这些 */
+/** 每次多排多少行已读取的历史；排到末尾后才向核心请求下一页。 */
 const PAGE = 40
 
 export function Transcript({ store, bottomOffset, markers }: Props) {
+  const { channel } = useServices()
+  const history = useSyncExternalStore(store.subscribeMeta, () => store.getMeta()?.history)
   const listRef = useRef<FlashListRef<Row>>(null)
   const pinnedRef = useRef(true)
   /** 刚离开底部、尾巴正从表头并回列表时是当时的内容总高（见 onScroll），平时是 0 */
@@ -340,10 +342,16 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
   const visiblePosition = useMemo(() => ({ anchorFrom }), [anchorFrom])
   // 倒置列表的“末尾”在最上面：滑到最早的那一行附近时再接一页更早的
   const loadOlder = useCallback(() => {
-    if (!more) return
+    if (!more) {
+      if (history?.hasMore && !history.loading)
+        void channel
+          .command('session.loadOlder', { deviceId: store.deviceId, sessionId: store.sessionId })
+          .catch(() => {})
+      return
+    }
     noteWork('page', limit + PAGE)
     setLimit((current) => current + PAGE)
-  }, [more, limit])
+  }, [more, limit, history, channel, store])
   const actions = useActions(store)
   const background = useSessionBackground(store)
   useReveal(store, listRef, snapshot.rows, limit, setLimit, actions.say)

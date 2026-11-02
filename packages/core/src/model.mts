@@ -1195,6 +1195,12 @@ export interface SessionAbilities {
 /** 试了才知道的那几件事 */
 export type SessionAbility = 'fork' | 'rollback' | 'compact' | 'steer' | 'goals'
 
+export interface SessionHistory {
+  hasMore: boolean
+  loading: boolean
+  error: Text | null
+}
+
 export interface SessionView {
   ignoredQuestions?: string[]
   deviceId: string
@@ -1207,6 +1213,8 @@ export interface SessionView {
   /** 给人看的说明：为什么只读、排队的消息为什么没发出去 */
   note: Text | null
   turns: TurnView[]
+  /** 已载入的历史范围；没有这一项表示完整历史（旧设备或模拟核心）。 */
+  history?: SessionHistory
   items: Record<string, ItemView>
   /** 等人答复的请求，按到达顺序。界面一次只呈现第一个 */
   requests: RequestView[]

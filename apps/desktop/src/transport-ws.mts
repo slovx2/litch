@@ -12,6 +12,8 @@ export interface WrapOptions {
    * ssh 假死很常见，光等 ssh 自己发现要好几分钟。本机套接字不用。
    */
   heartbeat?: { everyMs: number; timeoutMs: number }
+  /** 入站字节的进展（不是完整 WebSocket 消息）。大帧未传完时 pong 也可能排在它后面。 */
+  activity?(received: () => void): () => void
   /** 不是自己关的时候，问一句断开的原因（ssh 退出时留下的报错比 WebSocket 的关闭码有用） */
   reason?(): Text | null
   /** 传输结束了，不管是谁关的。只调一次 */
@@ -33,12 +35,14 @@ export function wrapSocket(socket: WebSocket, options: WrapOptions = {}): Transp
   let deadline: NodeJS.Timeout | null = null
   /** 上一拍心跳时这条 WebSocket 已经在“正在关闭”上了 */
   let stalled = false
+  let stopActivity: (() => void) | undefined
 
   const finish = (reason: Text | null) => {
     if (closed) return
     closed = true
     if (beat) clearInterval(beat)
     if (deadline) clearTimeout(deadline)
+    stopActivity?.()
     options.ended?.()
     if (handlers) handlers.close(reason)
     else closedWith = { reason }
@@ -51,6 +55,7 @@ export function wrapSocket(socket: WebSocket, options: WrapOptions = {}): Transp
   }
 
   if (options.heartbeat) {
+    stopActivity = options.activity?.(alive)
     const { everyMs, timeoutMs } = options.heartbeat
     beat = setInterval(() => {
       // 上一拍就在关了，到这一拍还没关完：不会再有动静了，按断开收场
