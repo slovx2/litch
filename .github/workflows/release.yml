@@ -1,72 +1,20 @@
-name: Release
-
-# 出这一版要发的全部东西，挂到这个标签的发布页：
-#   适配器的独立发布包（linux-x64、linux-arm64、darwin-arm64）、它的校验和清单、安装脚本
-#   给集成方的 Claude 入口包 cha-v<版本>.tar.gz 和它的校验和清单 cha-SHA256SUMS.txt（scripts/package-cha.sh）
-#   桌面应用 Litch 的安装包：macOS（Apple Silicon）签名并公证过的 dmg，Windows（x64）的安装程序（不签名，还没有经过完整的测试）
-#   安卓应用（arm64）：发版钥匙签名的 apk
-#   应用自己的更新：macOS 的 zip（Squirrel 下这个）和更新清单 litch-update.json，
-#   三个端都从“最新一版”下面取这份清单，草稿不算，人公开之后才收得到
-# 打 v 开头的标签时自动跑。也可以手动跑：
-#   填一个已有的标签：给它出包、验证，勾了“挂到发布页”才挂上去
-#   标签不填：照选的分支试跑一遍，只出包、验证、留作流程产物，不挂发布页，也不查版本号和标签对不对得上
-# 冻结候选 SHA 后，并行跑 gate.yml 与各平台出包；统一核对门禁、产物来源与 hash 后才建草稿。
-# gate.yml = 必跑集合 + 受影响完整领域；夜间红灯和 release-blocker 在晋级时再次核对。
-# 全部出好才一起挂上去；发布页还没有时建成草稿，人看过再公开，安装脚本取“最新一版”时不会碰到一个缺包的发布页。
-#
-# macOS 的签名和公证要在仓库的 Actions 机密里配好这五项（怎么取见 CONTRIBUTING.md 的“发版”一节）：
-#   MACOS_CERTIFICATE_P12        “Developer ID Application”证书连同私钥导出的 .p12，base64 编码
-#   MACOS_CERTIFICATE_PASSWORD   导出 .p12 时设的密码
-#   APPLE_API_KEY                App Store Connect 的 API 密钥（.p8 文件的内容，原文或者 base64 都行），公证用
-#   APPLE_API_KEY_ID             这把密钥的编号
-#   APPLE_API_ISSUER             签发者编号（Issuer ID）
-# 试跑时没配就出一份只有临时签名的 dmg 并说明；要挂到发布页时没配直接失败。
-#
-# 安卓的签名要这三项（钥匙库的原件和密码在维护者电脑的 ~/Documents/litch-android-release/，见那里的 README）：
-#   ANDROID_KEYSTORE_P12         钥匙库（PKCS12），base64 编码
-#   ANDROID_KEYSTORE_PASSWORD    钥匙库和钥匙的密码（PKCS12 里两者是同一个）
-#   ANDROID_KEY_ALIAS            钥匙的别名
-# 试跑时没配就用调试钥匙签并说明（那样的包装不到装了正式版的手机上）；要挂到发布页时没配直接失败。
+# 正式候选准备：只运行一次 Gate 和五类出包，不创建标签/Release。
+# 签名机密见 CONTRIBUTING.md；缺失时失败，不允许临时签名候选晋级。
+name: Prepare release candidate
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
     inputs:
-      tag:
-        description: 给哪个标签出包，例如 v0.7.1（标签要已经推上来）；不填就照选的分支试跑，不挂发布页
-        required: false
-        default: ''
-        type: string
-      publish:
-        description: 上传到草稿发布页（不公开；只对填了标签的有用）
-        required: false
-        default: false
-        type: boolean
-
       nightly-triage:
-        description: 夜间失败与本候选无关的已关闭 nightly-triage issue 编号
-        required: false
+        description: 夜间失败与候选无关的已关闭分诊 issue 编号
         default: ''
         type: string
-
 permissions:
-  contents: write
-  # 同 SHA 门禁、夜间 Full 与维护者的分诊记录
+  contents: read
   actions: read
   issues: read
-
 concurrency:
-  group: release-${{ inputs.tag || github.ref_name }}
+  group: prepare-${{ github.sha }}
   cancel-in-progress: false
-
-env:
-  # 出包用的提交：标签，或者试跑时选的分支
-  REF: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
-  # 要发的标签，试跑时是空的
-  TAG: ${{ inputs.tag || (github.event_name == 'push' && github.ref_name || '') }}
-  # 这一趟要不要挂到发布页
-  PUBLISH: ${{ github.event_name == 'push' || (inputs.tag != '' && inputs.publish) }}
-
 jobs:
   candidate:
     runs-on: ubuntu-24.04
@@ -77,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ env.REF }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
       - name: 冻结候选源码与工作流提交
         id: freeze
@@ -93,6 +41,12 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 24.21.0
+      - name: 版本一致性及同 SHA 去重
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/check-versions.mjs
+          node scripts/ci/release-preflight.mjs
       # 在候选阶段按同一规则计算，不等完整 Gate 结束，保持测试和出包并行。
       # 桌面、入口或未知影响加跑完整 packed；无可信夜间基线时规则会扩大到全量。
       - name: 判断完整签名包检查的影响范围
@@ -133,19 +87,11 @@ jobs:
           ref: ${{ needs.candidate.outputs.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: 24
+          node-version: 24.21.0
           cache: npm
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: 1.26.10
-      - name: 标签和版本号要对得上
-        if: env.TAG != ''
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          if [ "v${version}" != "${TAG}" ]; then
-            echo "标签是 ${TAG}，package.json 里的版本号是 ${version}" >&2
-            exit 1
-          fi
       - run: npm ci --no-audit --no-fund
       - run: npm ci --prefix packages/claude --no-audit --no-fund
       - run: npm ci --prefix packages/pi --no-audit --no-fund
@@ -176,7 +122,8 @@ jobs:
         run: node scripts/release-provenance.mjs write "${RUNNER_TEMP}/release" adapter
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: adapter
+          name: adapter-${{ github.run_attempt }}
+          retention-days: 14
           path: ${{ runner.temp }}/release
           if-no-files-found: error
 
@@ -193,14 +140,6 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 24.21.0
-      - name: 标签和版本号要对得上
-        if: env.TAG != ''
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          if [ "v${version}" != "${TAG}" ]; then
-            echo "标签是 ${TAG}，package.json 里的版本号是 ${version}" >&2
-            exit 1
-          fi
       - name: 出包
         run: bash scripts/package-cha.sh --out "${RUNNER_TEMP}/cha"
       - name: 产物来源与 SHA-256
@@ -209,7 +148,8 @@ jobs:
         run: node scripts/release-provenance.mjs write "${RUNNER_TEMP}/cha" cha
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: cha
+          name: cha-${{ github.run_attempt }}
+          retention-days: 14
           path: ${{ runner.temp }}/cha
           if-no-files-found: error
 
@@ -223,19 +163,11 @@ jobs:
           ref: ${{ needs.candidate.outputs.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: 24
+          node-version: 24.21.0
           cache: npm
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: 1.26.10
-      - name: 标签和版本号要对得上
-        if: env.TAG != ''
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          if [ "v${version}" != "${TAG}" ]; then
-            echo "标签是 ${TAG}，package.json 里的版本号是 ${version}" >&2
-            exit 1
-          fi
       # 证书放进一个临时的钥匙串，公证凭据用 notarytool 存进同一个钥匙串，用完一起删掉。
       # 签名身份从导入的证书里找“Developer ID Application”那一个
       - name: 导入签名证书和公证凭据
@@ -246,14 +178,6 @@ jobs:
           API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
-          if [ -z "$P12" ] && [ -z "$API_KEY" ]; then
-            if [ "$PUBLISH" = true ]; then
-              echo "要挂到发布页的 dmg 必须签名并公证，可仓库里没有配签名证书和公证凭据（见本文件开头）" >&2
-              exit 1
-            fi
-            echo "::warning::没有配签名证书和公证凭据，这一趟出的 dmg 只有临时签名"
-            exit 0
-          fi
           for name in P12 P12_PASSWORD API_KEY API_KEY_ID API_ISSUER; do
             eval "value=\${$name}"
             if [ -z "$value" ]; then
@@ -309,12 +233,7 @@ jobs:
           swift test --package-path apps/computer-use
       - run: npm run client:pack
       - name: 签名、公证，做成 dmg
-        run: |
-          if [ "$PUBLISH" = true ]; then
-            node apps/desktop/scripts/make-installer.mjs --require-signing
-          else
-            node apps/desktop/scripts/make-installer.mjs
-          fi
+        run: node apps/desktop/scripts/make-installer.mjs --require-signing
       # 应用自己的更新在 macOS 上下的是 zip（Squirrel.Mac 只认 zip），从签过、公证过、钉过票的那份应用打
       - name: 给自动更新打 zip
         run: |
@@ -343,7 +262,8 @@ jobs:
         run: node scripts/release-provenance.mjs write "apps/desktop/out/installer" desktop-macos
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: desktop-macos
+          name: desktop-macos-${{ github.run_attempt }}
+          retention-days: 14
           path: |
             apps/desktop/out/installer/*.dmg
             apps/desktop/out/installer/*.zip
@@ -365,19 +285,11 @@ jobs:
           ref: ${{ needs.candidate.outputs.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: 24
+          node-version: 24.21.0
           cache: npm
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: 1.26.10
-      - name: 标签和版本号要对得上
-        if: env.TAG != ''
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          if [ "v${version}" != "${TAG}" ]; then
-            echo "标签是 ${TAG}，package.json 里的版本号是 ${version}" >&2
-            exit 1
-          fi
       # 机器上已经有这一版时 choco 什么都不做；版本不对就装成这一版
       - name: Inno Setup 6.7.1
         run: choco install innosetup --version=6.7.1 --no-progress -y
@@ -409,7 +321,8 @@ jobs:
         run: node scripts/release-provenance.mjs write "apps/desktop/out/installer" desktop-windows
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: desktop-windows
+          name: desktop-windows-${{ github.run_attempt }}
+          retention-days: 14
           path: |
             apps/desktop/out/installer/*.exe
             apps/desktop/out/installer/release-provenance-*.json
@@ -430,20 +343,11 @@ jobs:
           ref: ${{ needs.candidate.outputs.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: 24
+          node-version: 24.21.0
           cache: npm
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: 1.26.10
-      - name: 标签和版本号要对得上
-        if: env.TAG != ''
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          mobile="$(node -p "require('./apps/mobile/app.json').expo.version")"
-          if [ "v${version}" != "${TAG}" ] || [ "v${mobile}" != "${TAG}" ]; then
-            echo "标签是 ${TAG}，package.json 里是 ${version}，apps/mobile/app.json 里是 ${mobile}" >&2
-            exit 1
-          fi
       - name: JDK 17
         run: echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "${GITHUB_ENV}"
       - name: 取出签名钥匙
@@ -453,12 +357,8 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           if [ -z "$KEYSTORE" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
-            if [ "$PUBLISH" = true ]; then
-              echo "要挂到发布页的安卓包必须用发版钥匙签，可仓库里的安卓签名机密不全（见本文件开头）" >&2
-              exit 1
-            fi
-            echo "::warning::没有配安卓签名机密，这一趟的 apk 用调试钥匙签"
-            exit 0
+            echo '正式候选必须配置全部 Android 签名机密' >&2
+            exit 1
           fi
           umask 077
           printf '%s' "$KEYSTORE" | base64 --decode > "${RUNNER_TEMP}/litch-release.p12"
@@ -483,6 +383,7 @@ jobs:
           apk="apps/mobile/android/app/build/outputs/apk/release/app-release.apk"
           apksigner="$(ls -d "${ANDROID_HOME}"/build-tools/* | sort -V | tail -1)/apksigner"
           "$apksigner" verify --print-certs "$apk" | tee "${RUNNER_TEMP}/certs.txt"
+          node scripts/ci/release-apk.mjs "$apk"
           if [ -n "${LITCH_ANDROID_KEYSTORE:-}" ]; then
             if ! grep -qi "certificate SHA-256 digest: ${RELEASE_CERT_SHA256}" "${RUNNER_TEMP}/certs.txt"; then
               echo "签出来的包不是发版钥匙签的（证书指纹对不上）" >&2
@@ -500,19 +401,19 @@ jobs:
         run: node scripts/release-provenance.mjs write "${RUNNER_TEMP}/android" android
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: android
+          name: android-${{ github.run_attempt }}
+          retention-days: 14
           path: ${{ runner.temp }}/android
           if-no-files-found: error
 
-  promote:
+  seal:
     needs: [candidate, gate, adapter, cha, desktop-macos, desktop-windows, android]
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       CANDIDATE_SHA: ${{ needs.candidate.outputs.sha }}
-      NIGHTLY_TRIAGE: ${{ inputs.nightly-triage || '' }}
+      NIGHTLY_TRIAGE: ${{ inputs.nightly-triage }}
       GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -520,71 +421,25 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 24.21.0
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: adapter
-          path: ${{ runner.temp }}/release
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: cha
-          path: ${{ runner.temp }}/release
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: desktop-macos
-          path: ${{ runner.temp }}/release
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: desktop-windows
-          path: ${{ runner.temp }}/release
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: android
-          path: ${{ runner.temp }}/release
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: gate-proof
-          path: ${{ runner.temp }}/release
-      - name: 门禁与五个平台产物必须同 SHA，逐文件核对 hash
-        env:
-          GATE_SHA: ${{ needs.gate.outputs.sha }}
-        run: |
-          test "$GATE_SHA" = "$CANDIDATE_SHA"
-          node scripts/release-provenance.mjs verify "${RUNNER_TEMP}/release"
-      - name: 晋级前重新检查夜间、已知问题、标签和最新版
-        run: node scripts/release-policy.mjs
-      - name: 校验已有清单并生成应用清单
-        working-directory: ${{ runner.temp }}/release
-        run: |
-          sha256sum -c codex-harness-adapter-SHA256SUMS.txt
-          sha256sum -c cha-SHA256SUMS.txt
-          sha256sum Litch-*.dmg Litch-*-setup.exe Litch-*.apk Litch-*-macos-arm64.zip > Litch-SHA256SUMS.txt
-          cat Litch-SHA256SUMS.txt
-      - name: 更新清单（dry-run 也生成，但不上传发布页）
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          node scripts/update-manifest.mjs --dir "${RUNNER_TEMP}/release" --tag "${TAG:-v${version}}" --repo "${GITHUB_REPOSITORY}"
+      - name: 校验同源五类产物、Gate 与 Full 并封存摘要
+        run: node scripts/ci/release-seal.mjs "${RUNNER_TEMP}/release"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        id: verified
         with:
-          name: verified-candidate
+          name: verified-candidate-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release
           if-no-files-found: error
-      - name: 只上传完整草稿，绝不修改已公开版本
-        if: env.PUBLISH == 'true'
-        working-directory: ${{ runner.temp }}/release
+          retention-days: 14
+      - name: 晋级参数（只用明确 ID，禁止找同名最新产物）
+        env:
+          ARTIFACT_ID: ${{ steps.verified.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.verified.outputs.artifact-digest }}
         run: |
-          releases="$(gh api --paginate "repos/${GH_REPO}/releases?per_page=100" --slurp)"
-          existing="$(printf '%s' "$releases" | jq --arg tag "$TAG" '[.[][] | select(.tag_name == $tag)][0] // null')"
-          if [ "$existing" = null ]; then
-            gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes --latest=false
-          elif [ "$(printf '%s' "$existing" | jq -r .draft)" != true ]; then
-            echo '版本已经公开，禁止覆盖资产' >&2
-            exit 1
-          fi
-          gh release upload "$TAG" --clobber \
-            codex-harness-adapter-*.tar.gz \
-            codex-harness-adapter-SHA256SUMS.txt install.sh \
-            cha-v*.tar.gz cha-SHA256SUMS.txt \
-            Litch-*.dmg Litch-*-setup.exe Litch-*-macos-arm64.zip \
-            Litch-*-android-arm64.apk Litch-SHA256SUMS.txt litch-update.json \
-            gate-proof.json release-provenance-*.json
-          echo '草稿准备完成；经理核对证据并询问用户后才可公开。' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "source-run: $GITHUB_RUN_ID"
+            echo "source-attempt: $GITHUB_RUN_ATTEMPT"
+            echo "candidate-sha: $CANDIDATE_SHA"
+            echo "artifact-id: $ARTIFACT_ID"
+            echo "artifact-digest: sha256:$ARTIFACT_DIGEST"
+            echo '先用 promote.yml mode=verify 验证；公开须人工授权，不能再运行 Prepare。'
+          } >> "$GITHUB_STEP_SUMMARY"

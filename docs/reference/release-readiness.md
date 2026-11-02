@@ -18,7 +18,7 @@ Windows 的命令执行需要显式完全访问。受限命令缺少操作系统
 
 ## 自动检查
 
-流水线分两档：`.github/workflows/ci.yml` 是门禁，每次推送都跑，只放关键的冒烟；`.github/workflows/full.yml` 是全量，发版前手动触发。全量执行以下检查：
+常规 `.github/workflows/ci.yml` 每次推送/PR 跑必需检查；`full.yml` 在夜间和手动运行完整覆盖。发版候选用 `gate.yml` 选完整受影响领域并与正式出包并行，标签后晋级已有产物；操作见[候选准备与产物晋级](release-candidates.md)。手机模拟器 E2E 不参与发版，手机单测/类型/APK 验证仍必需。Full 执行以下检查：
 
 - macOS / Linux：格式、类型、构建、Claude/Pi 测试、Go 测试、文档构建。
 - Windows Server 2025 x64：类型、构建、路径转换、沙箱权限边界、旧数据库拒绝、Go 测试。

@@ -41,7 +41,7 @@ jobs:
         with:
           node-version: 24.21.0
       - name: 影响范围规则与发版策略的变更案例
-        run: node --test scripts/ci-impact.test.mjs scripts/ci-nightly-base.test.mjs scripts/release-policy.test.mjs scripts/full-proof.test.mjs scripts/release-provenance.test.mjs apps/desktop/scripts/notarize.test.mjs
+        run: node --test scripts/ci-impact.test.mjs scripts/ci-nightly-base.test.mjs scripts/release-policy.test.mjs scripts/full-proof.test.mjs scripts/release-provenance.test.mjs scripts/ci/release-*.test.mjs apps/desktop/scripts/notarize.test.mjs
       - name: 从 48 小时内成功的祖先夜间 Full 计算增量影响范围
         id: impact
         env:
@@ -74,8 +74,25 @@ jobs:
       domains: ${{ needs.impact.outputs.domains }}
       run-ci: true
 
+  # 用户决定：候选不跑模拟器，但手机单测与类型仍必跑；普通 CI 已含 mobile:test。
+  mobile-static:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/ui --no-audit --no-fund
+      - run: npm ci --prefix apps/mobile --no-audit --no-fund
+      - run: npm run typecheck --prefix apps/mobile
+      - run: npm run mobile:test:markdown
+
   result:
-    needs: [impact, tests]
+    needs: [impact, tests, mobile-static]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
@@ -87,28 +104,19 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 24.21.0
-      - name: 最近夜间 Full 与已知问题
+      - name: 校验夜间和已知问题，绑定实际成功的 Full 证明
+        id: proof
         env:
           GH_TOKEN: ${{ github.token }}
           CANDIDATE_SHA: ${{ needs.impact.outputs.sha }}
-          NIGHTLY_TRIAGE: ${{ inputs.nightly-triage }}
-          TAG: ''
-        run: node scripts/release-policy.mjs
-      - name: 门禁通过证明
-        id: proof
-        env:
-          CANDIDATE_SHA: ${{ needs.impact.outputs.sha }}
           DOMAINS: ${{ needs.impact.outputs.domains }}
           BASELINE: ${{ needs.impact.outputs.baseline }}
-        run: |
-          node --input-type=module <<'JS'
-          import { writeFileSync, appendFileSync } from 'node:fs'
-          const sha = process.env.CANDIDATE_SHA
-          writeFileSync('gate-proof.json', JSON.stringify({ sha, run: process.env.GITHUB_RUN_ID, attempt: process.env.GITHUB_RUN_ATTEMPT, domains: JSON.parse(process.env.DOMAINS), baseline: JSON.parse(process.env.BASELINE), conclusion: 'success' }, null, 2))
-          appendFileSync(process.env.GITHUB_OUTPUT, `sha=${sha}\n`)
-          JS
+          NIGHTLY_TRIAGE: ${{ inputs.nightly-triage }}
+          TAG: ''
+        run: node scripts/ci/release-gate-proof.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: gate-proof
+          name: gate-proof-${{ github.run_attempt }}
+          retention-days: 14
           path: gate-proof.json
           if-no-files-found: error

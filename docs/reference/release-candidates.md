@@ -1,0 +1,61 @@
+# 候选准备与产物晋级
+
+发版标准路径是 Prepare 一次，再 Promote 已验字节。独立 Gate 保留诊断用途；不需要先跑 Gate、再试出包、最后打标签重跑一遍。普通 push/PR CI 保留。
+
+## 1. 冻结并准备候选
+
+同步根版本、所有包/锁和 mobile app.json，更新日志，完成本地相关检查并由维护者推送候选分支。
+版本号须在此时确定，不能在准备完成后再改。运行：
+
+```sh
+gh workflow run release.yml --ref <候选分支>
+```
+
+Prepare 固定到本次工作流 SHA，门禁与五类打包并行。macOS 必须正式签名、Accepted、公证票据有效；Android 必须使用正式钥匙，验证证书、packageName、versionName、versionCode、非 debug 和 arm64 ABI。缺机密直接失败。
+
+门禁必跑 CI 单测/契约/类型、桌面 smoke/critical/六入口首回合，另跑手机类型与原生 Markdown 单测。按 48 小时内全绿的祖先夜间选择完整领域；没有基线时跑全部非手机领域。
+
+用户决定：手机模拟器 24 条 E2E 不参与任何发版候选，包含手机/共享代码变更和无基线情形。它们仍在夜间/手动 Full。手机单测、类型、正式 APK 与包验证不豁免。普通 push/PR 不跑模拟器，保持原状。
+
+成功的 `seal` 汇总生成 `verified-candidate-<attempt>`，保存 14 天；Summary 给出 source run、验证 attempt、SHA、artifact ID 和带 `sha256:` 的 archive digest。每个平台和门禁/Full 分别登记真实来源 attempt，成功包不重签、不重公证。已有成功候选时，同 SHA 再次 Prepare 会停止并提示晋级来源。
+
+## 2. 只读核对或草稿演练
+
+Promote 使用含相同验证策略的已推送 ref；明确指定源候选，不找“最新同名 artifact”。例如：
+
+```sh
+gh workflow run promote.yml --ref <已推送验证分支> \
+  -f source-run=<Prepare运行ID> -f source-attempt=<验证attempt> \
+  -f candidate-sha=<完整SHA> -f artifact-id=<制品ID> \
+  -f artifact-digest=sha256:<archive摘要> -f tag=vX.Y.Z -f mode=verify
+```
+
+`verify` 只有读权限，不创建 tag、draft 或公开版本。`draft` 验证后才创建缺失的同 SHA 标签和草稿，上传封存的文件并逐个下载回验，不修改 Latest。已有草稿必须带同一候选的来源标记；缺资产可补传，冲突资产拒绝覆盖。重复运行不重新上传相同资产，不构建任何包。
+
+演练只针对明确授权的测试版本或 fork，结束清理自己创建的草稿/测试标签。不能借演练操作已经公开的版本。旧格式 dry-run 没有新的证明契约，不能直接冒充正式候选。
+
+## 3. 人工批准后公开
+
+维护者审阅 Summary、同 SHA 的源码/覆盖、每次首败、签名和包启动结果，核对**同一份 ZIP** 的隔离 ShipIt 验收。自动流程已验证 ZIP 内 App 的签名、票据和可写权限，但不能把这项静态验证描述成真实自动更新已验。断网首次启动条件不足时仍明确记为未验。
+
+取得用户的本版公开授权后，把上述命令的 `mode` 改为 `publish`，并增加 `-f confirm-publication=vX.Y.Z`。这个输入是维护者对授权和审阅的明确确认，不是默认选项；已有授权不重复向用户询问。标签 push 本身不会触发准备或公开。
+
+`publish` 同样先创建/核对完整草稿和回验；临公开再次检查来源 run 当前 attempt 成功、证明有效性、最新夜间、open release-blocker、标签实际 SHA、全部资产 ID/hash 和版本顺序。只能显式公开一次，已公开版本禁止覆写，旧版本不能抢 Latest。Promote 全局串行；不要同时排多个晋级请求，GitHub concurrency 只保留一个等待者。
+
+草稿/公开后生成 `promotion-<attempt>`，含 `promotion.json` 和 `tap-inputs.json`。后者包含版本、真实标签源码 tar URL/hash、formula 路径及源 run/artifact 参数，可直接用于 Homebrew PR；不会自动修改或发布 tap。源码 hash 是标签 URL 的真实 bytes，不拿安装包 hash 或 commit tar hash 替代。
+
+## 4. 失败、补验和证明边界
+
+- 任何测试、出包或验证失败，都不封存可晋级候选。部分 Full、缺 run-ci、实际检出错误、未知证明不能冒充完整。
+- 源 run ID 与 Promote 自己的 run ID 不同是正常情况；源 run 最新 attempt 必须成功。源运行开始新 attempt 后旧封存件不再可晋级。
+- 测试重跑沿用源 run，已成功包引用原 artifact ID/创建 attempt。只重跑 Gate 汇总时可绑定较早成功的 Full artifact，不能伪造“本次重新实跑”。重跑后的新封存件有新 ID/digest，重新取 Summary 参数。
+- 48 小时约束作用于增量夜间基线；已经完成全部非手机领域的同 SHA 证明不依赖旧基线。源制品缺失/过期、基线过期或验证策略变化时明确失败，不静默重建、跨 run 拼包或降低覆盖。
+- 基线过期时可在原 run 补跑 Gate 影响范围 job 及其依赖，再封存；必须核对 GitHub 实际定点重跑范围，不能不加分辨地重跑所有成功打包。工作流策略变更后不能用新代码给旧候选盖章，需重新准备包含该变更的候选。
+- 最新夜间仅手机模拟器领域失败且完整证明显示其余领域通过时，不阻断；`Nightly mobile follow-up` 创建修复 issue，不加 release-blocker。没有证明或其他领域红灯仍要求同 SHA 完整非手机验证或明确的既有分诊。任何 open release-blocker 仍拦截。
+- 原手机 ADB 整片重跑预算不再用于发版，因为候选不跑模拟器。准备阶段/其他基础设施恢复规则不扩大；通用自动恢复和夜间缺跑监测分阶段交付。
+
+## 5. 实施验收
+
+本地 Node 24 跑 `node --test scripts/ci/*.test.mjs` 及根目录影响范围、Full/Release 策略/来源、公证专项。用 actionlint 检查工作流，人工确认 Release→Gate→Full→CI 的 `contents:read`/`actions:read` 权限继承。
+
+GitHub 先在实施分支 ref 跑 Prepare 和 Promote `verify`，再在 fork/授权测试草稿范围演练 `draft`。核对：错误 SHA/run/attempt、损坏或过期 artifact、临时签名、产品与基础设施混合失败、重复请求、旧版本、标签移动都失败；晋级过程中没有测试、打包、签名、公证 job。确认原始首败仍可见且成功包 hash 不变。未经授权不演练公开。

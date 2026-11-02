@@ -1,14 +1,23 @@
 import { execFileSync } from 'node:child_process'
 import { appendFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
-import { findSuccessfulFull } from './full-proof.mjs'
+import { isCompleteReleaseFull } from './full-proof.mjs'
 import { readFullProofArtifact } from './full-proof-artifact.mjs'
 
-export function checkNightly({ nightly, fullPassed, blockers, triage, sha }) {
+export function checkNightly({
+  nightly,
+  fullPassed,
+  blockers,
+  triage,
+  sha,
+  releaseCoveragePassed,
+}) {
   if (blockers.length)
     throw new Error(`仍有 release-blocker：${blockers.map((issue) => issue.html_url).join(', ')}`)
   if (!nightly) return '尚无夜间 Full 历史；首次接入警告'
   if (nightly.conclusion === 'success') return `夜间 Full 通过：${nightly.html_url}`
+  if (releaseCoveragePassed)
+    return `夜间仅手机模拟器领域未绿，按用户决定不拦发版；需跟进修复：${nightly.html_url}`
   if (fullPassed)
     return `夜间 ${nightly.conclusion}；同候选 SHA 完整 Full 已通过：${fullPassed.html_url}`
   if (
@@ -61,7 +70,7 @@ function api(path, paginate = false) {
   return paginate ? result.flat() : result
 }
 
-export async function releasePolicy() {
+export async function releasePolicy({ candidateFull, allowMissingTag = false } = {}) {
   const repo = process.env.GITHUB_REPOSITORY
   const sha = process.env.CANDIDATE_SHA
   if (!/^[a-f0-9]{40}$/.test(sha ?? '')) throw new Error('缺少完整候选 SHA')
@@ -69,16 +78,39 @@ export async function releasePolicy() {
     `repos/${repo}/actions/workflows/full.yml/runs?event=schedule&status=completed&per_page=1`,
   ).workflow_runs[0]
   // head_sha 是工作流提交，dispatch 的 sha 可覆盖实际检出；只认同次运行的完整证明。
-  const fullPassed =
-    nightly && nightly.conclusion !== 'success'
-      ? await findSuccessfulFull(
-          api(`repos/${repo}/actions/workflows/full.yml/runs?status=success&per_page=100`)
-            .workflow_runs,
-          sha,
-          repo,
-          (run) => readFullProofArtifact(repo, run, api),
-        )
-      : undefined
+  let fullPassed
+  let releaseCoveragePassed = false
+  if (nightly && nightly.conclusion !== 'success') {
+    const proof = await readFullProofArtifact(repo, nightly, api)
+    releaseCoveragePassed = isCompleteReleaseFull(nightly, proof, nightly.head_sha, repo)
+    if (!releaseCoveragePassed) {
+      if (!candidateFull && process.env.GITHUB_RUN_ID) {
+        const run = api(`repos/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`)
+        if (['.github/workflows/release.yml', '.github/workflows/gate.yml'].includes(run.path))
+          candidateFull = { run, proof: await readFullProofArtifact(repo, run, api) }
+      }
+      if (
+        candidateFull &&
+        isCompleteReleaseFull(candidateFull.run, candidateFull.proof, sha, repo, {
+          runningCandidate: true,
+          verifiedPreviousAttempt: candidateFull.verifiedPreviousAttempt === true,
+        })
+      )
+        fullPassed = candidateFull.run
+      if (!fullPassed) {
+        const runs = api(
+          `repos/${repo}/actions/workflows/full.yml/runs?status=completed&per_page=100`,
+        ).workflow_runs
+        for (const run of runs) {
+          const fullProof = await readFullProofArtifact(repo, run, api)
+          if (isCompleteReleaseFull(run, fullProof, sha, repo)) {
+            fullPassed = run
+            break
+          }
+        }
+      }
+    }
+  }
   const blockers = api(`repos/${repo}/issues?labels=release-blocker&state=open&per_page=100`)
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(
@@ -102,7 +134,7 @@ export async function releasePolicy() {
   }
   let message
   try {
-    message = checkNightly({ nightly, fullPassed, blockers, triage, sha })
+    message = checkNightly({ nightly, fullPassed, blockers, triage, sha, releaseCoveragePassed })
   } catch (error) {
     if (process.env.GITHUB_STEP_SUMMARY)
       appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n阻断：${error.message}\n`)
@@ -113,8 +145,15 @@ export async function releasePolicy() {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n${message}\n`)
   }
   if (process.env.TAG) {
-    const tagSha = api(`repos/${repo}/commits/${encodeURIComponent(process.env.TAG)}`).sha
-    if (tagSha !== sha) throw new Error('标签已移动，与冻结的候选 SHA 不同')
+    const refs = api(`repos/${repo}/git/matching-refs/tags/${encodeURIComponent(process.env.TAG)}`)
+    const exists = refs.some((ref) => ref.ref === `refs/tags/${process.env.TAG}`)
+    if (!exists && !allowMissingTag) throw new Error('标签不存在')
+    if (exists) {
+      const tagSha = api(
+        `repos/${repo}/commits/${encodeURIComponent(`refs/tags/${process.env.TAG}`)}`,
+      ).sha
+      if (tagSha !== sha) throw new Error('标签已移动，与冻结的候选 SHA 不同')
+    }
     // releases 列表不会把草稿当最新版。按 GitHub latest API 的实际选择核对。
     const releases = api(`repos/${repo}/releases?per_page=100`, true)
     const published = releases.filter((release) => !release.draft && !release.prerelease)
@@ -127,6 +166,7 @@ export async function releasePolicy() {
       for (const release of published) checkVersion(process.env.TAG, release.tag_name)
     } else checkVersion(process.env.TAG)
   }
+  return message
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)

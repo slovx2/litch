@@ -2,7 +2,7 @@
 import { execFileSync } from 'node:child_process'
 import { appendFileSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
-import { domains } from './ci-impact.mjs'
+import { domains, releaseDomains } from './ci-impact.mjs'
 
 export const fullJobs = [
   'source',
@@ -57,6 +57,66 @@ export function isCompleteFull(run, proof, sha, repository) {
   )
 }
 
+// 完整 Full 仍含手机；发版完整覆盖按用户决定排除手机模拟器，不伪造全绿结论。
+export function hasReleaseCoverage(proof) {
+  if (typeof proof?.domains !== 'string') return false
+  let selected
+  try {
+    selected = proof?.domains?.trim() ? JSON.parse(proof.domains) : domains
+  } catch {
+    return false
+  }
+  return Boolean(
+    proof?.schema === 1 &&
+      proof.runCi === true &&
+      Array.isArray(selected) &&
+      new Set(selected).size === selected.length &&
+      selected.every((domain) => domains.includes(domain)) &&
+      releaseDomains.every((domain) => selected.includes(domain)) &&
+      fullJobs
+        .filter((job) => !['mobile', 'mobile-build'].includes(job))
+        .every((job) => proof.jobs?.[job] === 'success'),
+  )
+}
+
+export function isCompleteReleaseFull(
+  run,
+  proof,
+  sha,
+  repository,
+  { runningCandidate = false, verifiedPreviousAttempt = false } = {},
+) {
+  const standalone = run?.path === '.github/workflows/full.yml'
+  const candidate = ['.github/workflows/release.yml', '.github/workflows/gate.yml'].includes(
+    run?.path,
+  )
+  const mobileFailed = ['mobile', 'mobile-build'].some((job) =>
+    ['failure', 'cancelled', 'timed_out'].includes(proof?.jobs?.[job]),
+  )
+  return Boolean(
+    (standalone || candidate) &&
+      Number.isSafeInteger(run.id) &&
+      Number.isSafeInteger(run.run_attempt) &&
+      ((run.status === 'completed' &&
+        (run.conclusion === 'success' || (run.conclusion === 'failure' && mobileFailed))) ||
+        (runningCandidate && candidate && run.status === 'in_progress')) &&
+      ['workflow_dispatch', 'schedule'].includes(run.event) &&
+      proof?.repository === repository &&
+      proof.runId === run.id &&
+      (proof.attempt === run.run_attempt ||
+        (verifiedPreviousAttempt &&
+          candidate &&
+          Number.isSafeInteger(proof.attempt) &&
+          proof.attempt >= 1 &&
+          proof.attempt < run.run_attempt)) &&
+      proof.event === run.event &&
+      proof.workflowSha === run.head_sha &&
+      proof.sha === sha &&
+      /^[a-f0-9]{40}$/.test(sha) &&
+      hasReleaseCoverage(proof),
+  )
+}
+
 export async function findSuccessfulFull(runs, sha, repository, loadProof) {
   for (const run of runs) {
     if (
@@ -96,6 +156,11 @@ export function writeFullProof(env = process.env) {
     runCi: env.FULL_RUN_CI === 'true',
     mobileDisableVulkan: env.FULL_MOBILE_DISABLE_VULKAN === 'true',
     jobs: Object.fromEntries(Object.entries(needs).map(([job, data]) => [job, data.result])),
+  }
+  proof.releaseCoverage = {
+    mobileE2eRequired: false,
+    reason: '用户决定：模拟器 E2E 不参与发版',
+    passed: hasReleaseCoverage(proof),
   }
   writeFileSync('full-proof.json', `${JSON.stringify(proof, null, 2)}\n`)
   if (env.GITHUB_STEP_SUMMARY) {

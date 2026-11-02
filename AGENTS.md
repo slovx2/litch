@@ -57,7 +57,7 @@
 - 一律用隔离的 `HOME`、`CODEX_HOME` 等配置目录，不碰真实的 `~/.codex`、`~/.claude`；测试和验收绝不在本机真实环境装或升级 harness。
 - 真实 Claude Code 测试要用 `CHA_CLAUDE_CLI` 指一份隔离的官方 CLI。
 - 真实窗口验收尽量用隐藏的 Litch 窗口（不显示、不激活、不抢焦点），只驱动自己起的进程；只有必须看可见窗口时才占用前台。
-- 流水线分两档：门禁 `ci.yml` 只放快且拦“一上来就撞上”的冒烟，墙钟控制在 20 分钟内；其余新检查默认进全量 `full.yml`（发版前手动触发）。
+- 流水线分两档：门禁 `ci.yml` 只放快且拦“一上来就撞上”的冒烟，墙钟控制在 20 分钟内；其余新检查默认进全量 `full.yml`（夜间/手动）。发版用 `release.yml` 准备候选、`promote.yml` 晋级，步骤见 `docs/reference/release-candidates.md`。
 
 ```sh
 npm ci && npm ci --prefix packages/claude   # 其余引擎包同样各装一次

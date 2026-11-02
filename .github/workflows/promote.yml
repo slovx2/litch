@@ -1,0 +1,109 @@
+name: Promote verified candidate
+# tag push 不触发构建或公开；只有维护者显式 dispatch 才进入晋级。
+on:
+  workflow_dispatch:
+    inputs:
+      source-run:
+        description: Prepare 的 run ID
+        required: true
+        type: string
+      source-attempt:
+        description: 封存 verified-candidate 的验证 attempt
+        required: true
+        type: string
+      candidate-sha:
+        description: 完整候选 SHA
+        required: true
+        type: string
+      artifact-id:
+        description: verified-candidate 的不可变 artifact ID
+        required: true
+        type: string
+      artifact-digest:
+        description: 完整 sha256 前缀及 archive 摘要（Prepare summary）
+        required: true
+        type: string
+      tag:
+        description: v主.次.补丁；draft/publish 时可创建同 SHA 的标签
+        required: true
+        type: string
+      mode:
+        description: verify 只读，draft 不公开，publish 必须先取得人工授权
+        type: choice
+        options: [verify, draft, publish]
+        default: verify
+      confirm-publication:
+        description: 仅公开时填写完整标签，确认已取得用户授权并核对同 ZIP 的隔离 ShipIt 验收
+        type: string
+        default: ''
+      nightly-triage:
+        description: 夜间失败与候选无关的已关闭分诊 issue 编号
+        type: string
+        default: ''
+permissions:
+  contents: read
+  actions: read
+  issues: read
+concurrency:
+  group: release-promotion
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: inputs.mode == 'verify'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - run: node scripts/ci/release-promote.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source-run }}
+          SOURCE_ATTEMPT: ${{ inputs.source-attempt }}
+          CANDIDATE_SHA: ${{ inputs.candidate-sha }}
+          ARTIFACT_ID: ${{ inputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ inputs.artifact-digest }}
+          TAG: ${{ inputs.tag }}
+          PROMOTE_MODE: ${{ inputs.mode }}
+          CONFIRM_PUBLICATION: ${{ inputs.confirm-publication }}
+          NIGHTLY_TRIAGE: ${{ inputs.nightly-triage }}
+          PROMOTE_OUTPUT: ${{ runner.temp }}/promotion
+  promote:
+    if: inputs.mode != 'verify'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+      issues: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - name: 晋级已验 bytes，生成 tap PR 输入
+        run: node scripts/ci/release-promote.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source-run }}
+          SOURCE_ATTEMPT: ${{ inputs.source-attempt }}
+          CANDIDATE_SHA: ${{ inputs.candidate-sha }}
+          ARTIFACT_ID: ${{ inputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ inputs.artifact-digest }}
+          TAG: ${{ inputs.tag }}
+          PROMOTE_MODE: ${{ inputs.mode }}
+          CONFIRM_PUBLICATION: ${{ inputs.confirm-publication }}
+          NIGHTLY_TRIAGE: ${{ inputs.nightly-triage }}
+          PROMOTE_OUTPUT: ${{ runner.temp }}/promotion
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: promotion-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/promotion
+          if-no-files-found: error
+          retention-days: 14

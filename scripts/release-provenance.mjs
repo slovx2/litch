@@ -8,15 +8,18 @@ import { pathToFileURL } from 'node:url'
 export const artifactKinds = ['adapter', 'cha', 'desktop-macos', 'desktop-windows', 'android']
 const hash = (path) => createHash('sha256').update(readFileSync(path)).digest('hex')
 
-export function writeProvenance(dir, kind, sha, run) {
+export function writeProvenance(dir, kind, sha, run, attempt = process.env.GITHUB_RUN_ATTEMPT) {
   if (!artifactKinds.includes(kind) || !/^[a-f0-9]{40}$/.test(sha))
     throw new Error('产物来源参数错误')
   const files = readdirSync(dir).filter((name) => !name.startsWith('release-provenance-'))
   if (!files.length) throw new Error('产物目录为空')
   const proof = {
+    schema: 2,
     kind,
     sha,
     run,
+    attempt,
+    signing: ['desktop-macos', 'android'].includes(kind) ? 'release' : 'not-required',
     files: Object.fromEntries(files.map((file) => [file, hash(join(dir, file))])),
   }
   writeFileSync(join(dir, `release-provenance-${kind}.json`), JSON.stringify(proof, null, 2))
@@ -30,7 +33,7 @@ export function verifyProvenance(dir, sha, run) {
   const covered = new Set()
   for (const kind of artifactKinds) {
     const proof = JSON.parse(readFileSync(join(dir, `release-provenance-${kind}.json`), 'utf8'))
-    if (proof.kind !== kind || proof.sha !== sha || proof.run !== run)
+    if (proof.schema !== 2 || proof.kind !== kind || proof.sha !== sha || proof.run !== run)
       throw new Error(`${kind} 来源与候选不符`)
     if (!Object.keys(proof.files).length) throw new Error(`${kind} 无产物`)
     for (const [name, expected] of Object.entries(proof.files)) {
@@ -59,6 +62,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (sha !== head) throw new Error('检出的代码不是冻结的候选 SHA')
     writeProvenance(dir, kind, sha, process.env.GITHUB_RUN_ID)
   } else if (mode === 'verify') {
-    console.log(`已核对 ${verifyProvenance(dir, sha, process.env.GITHUB_RUN_ID)} 份同 SHA 产物`)
+    console.log(
+      `已核对 ${verifyProvenance(dir, sha, process.env.SOURCE_RUN || process.env.GITHUB_RUN_ID)} 份同 SHA 产物`,
+    )
   } else throw new Error('用法：release-provenance.mjs write|verify DIR [KIND]')
 }

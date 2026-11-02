@@ -50,7 +50,12 @@ coding conventions.
 
 ## 发版
 
-发版由维护者做。整个仓库只有一个版本号（根目录 `package.json`），适配器各包、客户端各包和它们的锁文件一起改，`npm run check` 会指出落下的；更新日志里“未发布”那一节改成版本号。打标签之前在本机跑 `npm run check:adapter-package`（要 Docker），并在要打标签的提交上跑一轮全量（`gh workflow run full.yml`）；release.yml 查不到这个提交上有通过的全量，就不挂发布页。推 `v<版本>` 标签后，`.github/workflows/release.yml` 出全部的包：适配器的独立发布包和安装脚本、macOS 的 dmg 和 zip、Windows 的安装程序、安卓的 apk，应用自动更新读的清单 `litch-update.json`（`scripts/update-manifest.mjs` 生成），以及给集成方的 Claude 入口包 `cha-v<版本>.tar.gz` 和它的校验和清单 `cha-SHA256SUMS.txt`（`scripts/package-cha.sh` 在钉了摘要的 Go、Node 容器里出，同一个提交出来的 sha256 不变；要给已发的版本补一份，在本机跑 `bash scripts/package-cha.sh --ref v<版本> --out <目录>` 再 `gh release upload`），都出好了一起挂到草稿发布页。安卓包的 `versionCode` 由版本号算出（`apps/mobile/plugins/release-signing.js`），`apps/mobile/app.json` 的版本号也要一起改。核对过再公开，**不要标成预发布**：安装脚本和三个端的自动更新取的都是“最新一版”，公开之前谁也收不到。
+发版由维护者做。整个仓库只有一个版本号，根包、各包/锁、mobile app.json 和更新日志在冻结候选前一起同步，`npm run check` 会检查版本一致性。
+
+标准流程见[候选准备与产物晋级](docs/reference/release-candidates.md)：先在候选分支运行 `release.yml`（Prepare），并行完成门禁与正式签名出包；随后用 `promote.yml` 指定 source run/attempt、候选 SHA、artifact ID 和 digest，只晋级已验文件。标签不再触发测试或打包。独立 Gate 仅用于诊断，不是标准发版的重复前置步骤。
+
+Promote 默认只读 `verify`；`draft` 创建/回验草稿、不公开；取得本版人工授权并核对验收后，才显式选择 `publish` 并输入确认标签。公开前重查夜间、blocker、标签 SHA、资产和版本顺序，禁止覆盖已公开版本或让 Latest 倒退。Tap PR 输入自动生成，不自动发布 Homebrew。手机模拟器 E2E 按用户决定只在夜间/手动 Full；手机单测、类型及正式 APK 签名/manifest/版本验证仍是候选必需。
+
 
 macOS 的 dmg 要用 Developer ID 签名并经苹果公证，公证用 App Store Connect 的 API 密钥（.p8）。要在仓库的 Settings → Secrets and variables → Actions 里配这五项机密（也可以用 `gh secret set <名字> --repo slovx2/litch`，值从标准输入给）：
 
@@ -62,7 +67,7 @@ macOS 的 dmg 要用 Developer ID 签名并经苹果公证，公证用 App Store
 | `APPLE_API_KEY_ID` | 这把密钥的编号 | 同一页的“密钥 ID” |
 | `APPLE_API_ISSUER` | 签发者编号 | 同一页上方的 Issuer ID |
 
-配好之后可以先在 Actions 里手动跑一次 Release、标签不填：照选的分支出包，不挂发布页，看 macOS 那一步签名、公证、起应用都过了再打标签。没配这几项时试跑出的是只有临时签名的 dmg，要挂到发布页时直接失败。Windows 的安装程序不签名，打开时系统会提示来源不明。
+Prepare 不创建标签或发布页，但始终要求正式签名和公证凭据；缺少任何一项直接失败，不生成可晋级的临时签名候选。Windows 安装程序仍按现行政策不签名，打开时系统会提示来源不明。
 
 安卓的 apk 要用发版钥匙签名：安卓只接受同一把钥匙签的更新，钥匙丢了就发不出能覆盖安装的新版本，务必另外备份。另配这三项机密：
 

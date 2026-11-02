@@ -19,6 +19,16 @@ export const domains = [
 ]
 // CI 负责其余包的单测、类型与契约；这三个领域补齐两个引擎单测和原生首回合。
 export const mandatory = ['dsh', 'opencode', 'real-engines']
+// 用户决定：候选始终排除手机模拟器 E2E，单测/类型/APK 验证另外必跑。
+export const releaseDomains = domains.filter((domain) => domain !== 'mobile')
+
+export function releaseImpact(result) {
+  return {
+    ...result,
+    domains: result.domains.filter((domain) => domain !== 'mobile'),
+    reasons: [...result.reasons, '用户决定：手机模拟器 E2E 仅夜间/手动 Full，候选排除'],
+  }
+}
 
 export function affectedDomains(paths, { trustedBase = true, versionOnly = [] } = {}) {
   const selected = new Set(mandatory)
@@ -186,7 +196,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       },
     },
   )
-  const result = { ...gitImpact(baseline.sha, sha), baseline }
+  const result = { ...releaseImpact(gitImpact(baseline.sha, sha)), baseline }
   console.log(JSON.stringify(result, null, 2))
   if (process.env.GITHUB_OUTPUT) {
     appendFileSync(
