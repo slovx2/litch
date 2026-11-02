@@ -25,6 +25,19 @@ Start every investigation with `scripts/litch status`, then narrow down.
 
 **从 0.27.x 升到 0.28.0 或 0.28.1 后项目消失。** 这两版设备服务会错误删除 v2 设备库。尚未升级设备服务时，先在线备份状态目录中的数据库，再使用包含修复的版本；不要为排查而重启或降级服务。若已丢失，修复版本只能防止再次删除，不能自动找回原项目；应先备份现场，再从升级前的备份恢复。会话内容仍由各引擎保存，仅按工作目录重建不能还原原项目名、多目录关系、分组和排序。
 
+没有升级前备份时，维护者可使用仓库的 `scripts/recover-device-projects.mjs` 按工作目录重建。用 Node 24 运行，默认只读输出候选项目、会话归属和计划摘要：
+
+```sh
+node scripts/recover-device-projects.mjs --home ~/.codex-harness-adapter
+node scripts/recover-device-projects.mjs --home ~/.codex-harness-adapter --only /work/app --only /work/notes
+```
+
+`--only` 可重复，只匹配完整目录，不包含子目录。脚本读取设备索引及 Claude、Pi、Codex 的现存库；DSH 会话头需要系统安装了 `zstd`。自定义路径可传 `--codex-db`、`--dsh-home`。已取证的元数据可用 `--inventory <JSON>` 离线预览，该模式禁止写入。
+
+审阅并确认范围后，先断开会自动重连的客户端、停止设备服务，再用同样参数加 `--apply --expect <计划中的 digest>` 执行；源数据或筛选条件改变后需重新预览。脚本不负责停止或重启服务，写入前在线备份状态目录顶层和设备、引擎目录下的库及配置，存到 `<状态目录>-backups/project-recovery-<时间戳>-<随机后缀>/`，校验成功才写。只轮换本工具生成的完整备份并保留四份，不删除其他备份。恢复后再启动包含迁移修复的设备服务。
+
+重建仅补未归属且能找到唯一工作目录的已索引会话，保留已有项目和归属，遇到多个项目都包含该目录则跳过。目录名用作新项目名，原分组、置顶、排序和权限确认不作推断；原有这些数据也不会被改动。
+
 **`scripts/litch` says the Litch desktop app is not running.** Ask the user to open Litch; retry. The
 command never starts Litch.
 
