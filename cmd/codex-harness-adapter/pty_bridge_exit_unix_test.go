@@ -54,6 +54,17 @@ func TestPtyBridgeSignalledCommandExitsOne(t *testing.T) {
 	}
 }
 
+// shell 等待被杀掉的子进程后会正常 exit(137)，与 shell 自己被信号结束不同。
+// 不能仅凭 128+信号值就把正常退出码改成 1。
+func TestPtyBridgePreservesShellExitCodeFromKilledChild(t *testing.T) {
+	bridge := startPtyScript(t, `sleep 300 & child=$!; kill -KILL "$child"; wait "$child"`)
+	pid := bridge.pid()
+	if code, _ := bridge.exit(10 * time.Second); code != 137 {
+		t.Fatalf("shell 的正常退出码是 %d，应保留 137", code)
+	}
+	expectPtyGroupGone(t, pid)
+}
+
 // 命令起不来：第一行就是 spawnError，没有别的行，退出码 127。
 func TestPtyBridgeSpawnFailures(t *testing.T) {
 	directory := t.TempDir()
@@ -194,7 +205,9 @@ func TestPtyBridgeTerminationWhileInputIsBlocked(t *testing.T) {
 	}
 	for name, end := range ways {
 		t.Run(name, func(t *testing.T) {
-			bridge := startPtyScript(t, `stty -echo; echo up; sleep 1; echo still-out; sleep 300`)
+			// 最后直接成为 sleep，避免整组终止时 shell 先收割子进程并正常 exit(137)。
+			// 本用例检查阻塞输入不拖住终止；信号退出码由被直接杀掉的命令提供。
+			bridge := startPtyScript(t, `stty -echo; echo up; sleep 1; echo still-out; exec sleep 300`)
 			pid := bridge.pid()
 			bridge.expect("up\n")
 			bridge.input(flood)
