@@ -12,7 +12,7 @@
 //                                     那个端口上已经有设备（不管什么状态）就报错，不用别人的、也不再起一台
 //   --avd <名字>                      默认 tyrs_hand_e2e_api35；以只读方式起（-read-only），不改 AVD、可以和别人同时用
 //   --screen 320x640@160              把模拟器的屏幕改成这个尺寸和密度（wm size/density）再跑；CI 的模拟器就是这个，本地复现 CI 用
-//   --no-retry                        没过的不重跑（默认重跑一次，重跑才过的会点名“不稳”）
+//   --shard N/3                       CI 分片，每片独立 runner；每个 flow 只执行一次，失败不重跑
 //   --keep                            跑完不关模拟器、留下 Maestro 的调试输出（截图、日志），排查失败用，用完自己删
 // 要的环境：ANDROID_HOME（默认 ~/Library/Android/sdk）、JDK 17 以上（JAVA_HOME，Maestro 和 gradle 都要）、
 // Maestro 2.3.0（MAESTRO 指过去，或者在 PATH 里）；跑夹具的流程要先在仓库根目录 npm run build（适配器、Pi、设备进程）。
@@ -32,10 +32,11 @@ import {
 } from 'node:fs'
 import { createServer } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
-import { basename, dirname, join, relative, resolve } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { approvalSignedText } from '../../../packages/protocol/src/client-approvals.mts'
 import { encodePairPayload } from '../../../packages/protocol/src/device-pairing.mts'
+import { mobileShards } from '../../../scripts/ci/mobile-shards.mjs'
 import { deviceRpc } from './device-rpc.mjs'
 
 const mobile = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -65,6 +66,17 @@ const work = mkdtempSync(join(tmpdir(), 'litch-e2e-'))
 const artifacts = process.env.LITCH_E2E_ARTIFACTS ? resolve(process.env.LITCH_E2E_ARTIFACTS) : null
 const debugDir = artifacts ?? join(work, 'debug')
 const log = (line) => console.log(`[e2e] ${line}`)
+const summary = (text) => {
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${text}\n`)
+}
+const phase = async (name, run) => {
+  const start = Date.now()
+  try {
+    return await run()
+  } finally {
+    summary(`- ${name}：${((Date.now() - start) / 1000).toFixed(1)}s`)
+  }
+}
 const since = (start) => `${((Date.now() - start) / 1000).toFixed(1)}s`
 
 /** 收尾要做的事，后登记的先做；出错、被打断都会走到 */
@@ -105,7 +117,12 @@ function pickFlows() {
   }
   for (const one of only.filter((value) => !groups.includes(value))) files.push(resolve(one))
   const tag = arg('--tags')
-  return tag ? files.filter((file) => tagsOf(file).includes(tag)) : files
+  const selected = tag ? files.filter((file) => tagsOf(file).includes(tag)) : files
+  const shard = arg('--shard')
+  if (!shard) return selected
+  if (!/^[1-3]\/3$/.test(shard)) throw new Error('--shard 要写 1/3、2/3 或 3/3')
+  const assigned = new Set(mobileShards(flowsDir)[Number(shard[0]) - 1].files)
+  return selected.filter((file) => assigned.has(file))
 }
 
 /** 流程开头那段里的 tags: [a, b] */
@@ -649,34 +666,7 @@ function freePort() {
 
 const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
 
-/** 流程开头那段里的 name:；没写就是文件名（Maestro 报告里也这么叫） */
-function nameOf(file) {
-  const found = readFileSync(file, 'utf8').match(/^name:\s*(.+?)\s*$/m)
-  return found ? found[1] : basename(file, '.yaml')
-}
-
-/** JUnit 报告里没过的流程，按名字对回文件；报告没写出来（Maestro 自己挂了）或者对不上就是 null */
-function failedFlows(report, flows) {
-  if (!existsSync(report)) return null
-  const fromXml = (text) =>
-    text.replace(
-      /&(lt|gt|quot|apos|amp);/g,
-      (_, name) => ({ lt: '<', gt: '>', quot: '"', apos: "'", amp: '&' })[name],
-    )
-  const failed = []
-  for (const [, attrs, body = ''] of readFileSync(report, 'utf8').matchAll(
-    /<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g,
-  )) {
-    if (!body.includes('<failure') && !body.includes('<error')) continue
-    const name = fromXml(attrs.match(/\bname="([^"]*)"/)?.[1] ?? '')
-    const file = flows.find((one) => nameOf(one) === name)
-    if (!file) return null
-    failed.push(file)
-  }
-  return failed
-}
-
-async function runMaestro(serial, flows, fixture, report) {
+async function runMaestro(serial, flows, fixture, report, attemptDir) {
   const env = fixture
     ? {
         FIXTURE_PORT: String(fixture.config.target.port),
@@ -694,7 +684,7 @@ async function runMaestro(serial, flows, fixture, report) {
     'test',
     '--no-ansi',
     '--debug-output',
-    debugDir,
+    attemptDir,
     '--flatten-debug-output',
     '--format',
     'JUNIT',
@@ -738,26 +728,51 @@ async function main() {
   )
   const total = Date.now()
   await checkDriverPort()
-  if (flag('--build')) buildApk()
+  if (flag('--build')) await phase('构建 APK', buildApk)
   if (!flag('--no-install') && !existsSync(apk))
     throw new Error(`没有安装包 ${apk}：加 --build，或者用 --apk 指过去`)
-  const serial = await startEmulator()
+  const serial = await phase('模拟器连接/启动', startEmulator)
   setScreen(serial)
-  install(serial)
-  const fixture = needsFixture ? await startFixture(serial) : null
-  const first = join(work, 'report-1.xml')
-  let code = await runMaestro(serial, flows, fixture, first)
-  // 没过的重跑一次（CI 的模拟器偶尔掉线，正跑着的那个流程会跟着挂）；重跑才过的照样点名，别当没事
-  const failed = code === 0 || flag('--no-retry') ? null : failedFlows(first, flows)
-  if (failed?.length && !interrupted) {
-    log(`没过的重跑一次：${failed.map((file) => relative(flowsDir, file)).join(' ')}`)
-    execFileSync(adbBin, ['-s', serial, 'wait-for-device'], { stdio: 'ignore', timeout: 120_000 })
-    code = await runMaestro(serial, failed, fixture, join(work, 'report-2.xml'))
-    const still = code === 0 ? [] : (failedFlows(join(work, 'report-2.xml'), failed) ?? failed)
-    const flaky = failed.filter((file) => !still.includes(file))
-    if (flaky.length)
-      log(`重跑才过（不稳，要查）：${flaky.map((file) => relative(flowsDir, file)).join(' ')}`)
+  await phase('安装 APK', () => install(serial))
+  const fixture = needsFixture ? await phase('夹具就绪', () => startFixture(serial)) : null
+  summary('\n| Flow | 尝试 | 结果 | 耗时 |\n|---|---|---|---|')
+  let code = 0
+  let firstFailure = null
+  for (const flow of flows) {
+    if (interrupted) break
+    const name = relative(flowsDir, flow)
+    const attemptDir = join(debugDir, name.replace(/\.yaml$/, ''), 'attempt-1')
+    mkdirSync(attemptDir, { recursive: true })
+    const report = join(attemptDir, 'junit.xml')
+    const start = Date.now()
+    let status = 1
+    try {
+      status = await runMaestro(serial, [flow], fixture, report, attemptDir)
+    } catch (error) {
+      writeFileSync(join(attemptDir, 'runner-error.txt'), error.message)
+      log(`${name} 尝试 1 失败：${error.message}`)
+    }
+    const row = { flow: name, attempt: 1, status, seconds: (Date.now() - start) / 1000 }
+    appendFileSync(join(debugDir, 'flows.jsonl'), `${JSON.stringify(row)}\n`)
+    summary(`| ${name} | 1 | ${status === 0 ? '通过' : '失败'} | ${row.seconds.toFixed(1)}s |`)
+    if (status !== 0) {
+      code = status
+      firstFailure ??= name
+      // 首次失败立即采集，下一条 flow 清数据之前保存；诊断失败不覆盖产品断言结果。
+      for (const [file, args] of [
+        ['logcat.txt', ['logcat', '-d', '-t', '1500']],
+        ['driver.txt', ['shell', 'dumpsys', 'activity', 'services', 'dev.mobile.maestro']],
+        ['screen.png', ['exec-out', 'screencap', '-p']],
+      ]) {
+        const result = spawnSync(adbBin, ['-s', serial, ...args], {
+          timeout: 15000,
+          maxBuffer: 16 * 1024 * 1024,
+        })
+        if (result.stdout) writeFileSync(join(attemptDir, file), result.stdout)
+      }
+    }
   }
+  summary(`\n首次失败：${firstFailure ?? '无'}；尝试次数：1；flow 重试：0。\n`)
   log(`${code === 0 ? '全部通过' : '有流程没过'}（总共 ${since(total)}）`)
   return code
 }
@@ -773,6 +788,7 @@ try {
   code = await main()
 } catch (error) {
   log(`出错：${error.message}`)
+  summary(`\n执行器失败（尝试 1，无重试）：${error.message}`)
 } finally {
   await cleanup()
 }

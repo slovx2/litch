@@ -44,11 +44,15 @@ cd apps/mobile && npm run e2e -- [--build] [--only mock|fixture|<流程文件>] 
 那个端口上已经有设备（不管什么状态）就报错，让你换 `--port` 或者用 `--serial` 指定，不拿别人的来用。
 然后装包，要夹具的流程先起夹具（`scripts/fixture.mjs`，真的适配器经 SSH、隔离的 Pi、回环上的假模型），跑完收尾：
 停夹具、只撤夹具加的那两条 `adb reverse`、关掉自己起的模拟器（`--serial` 给的不关）、删临时目录。
-没过的流程重跑一次（`--no-retry` 不重跑），重跑才过的在最后点名“不稳”；重跑还没过才返回非零。
+每条 flow 只执行一次；失败就返回非零，不自动重跑产品断言。首次失败的 JUnit、截图和日志保存在该 flow 的 `attempt-1/`。
 Ctrl-C 打断时照样收完尾，退出码 130。
 
 Maestro 的调试输出（失败时的截图、日志）默认放在临时目录里、跑完删掉（`--keep` 才留下）；设了 `LITCH_E2E_ARTIFACTS=<目录>`
-就放到那个目录并留着，CI 上失败时上传它。
+就放到那个目录并留着，CI 每片都上传 JUnit、逐 flow 耗时及首次失败诊断。
+
+Full 的 `mobile-build` 只构建一次 x86_64 APK，上传清单与 APK；三个 `mobile` shard 各自下载并核对源码 SHA 和 APK SHA-256。
+`--shard 1/3`、`2/3`、`3/3` 按历史首轮耗时均衡分配；24 条 flow 每片 8 条，新增 flow 自动纳入。
+每片独立 runner、模拟器与夹具，不共享 Maestro 的 7001 端口。
 
 流程在 `flows/`，靠测试链接和 testID 驱动，不点坐标；每个流程开头清掉应用数据（`_shared/fresh.yaml`），互不依赖、可以单跑。
 
@@ -131,9 +135,9 @@ echo no | avdmanager create avd -n <名字> --package 'system-images;android-35;
 - `launchApp` 之后立刻发的测试链接会丢（JS 还没挂上监听），所以 `fresh.yaml` 先等首页出来再发。
 - `litch://new` 不等设备连上，夹具刚列出设备时发会落空：夹具的流程走界面新建会话，或者先等设备那一行写着“已连接”。
 - CI 的模拟器偶尔掉线一下（Maestro 打出 `device offline`），正跑着的流程会挂，`adb reverse` 的映射也全没了、
-  后面的夹具流程都连不上 127.0.0.1:8765。入口脚本跑的时候每两秒看一眼映射、少了就补，再加上没过的重跑一次。
+  后面的夹具流程都连不上 127.0.0.1:8765。入口脚本跑的时候每两秒看一眼映射、少了就补，失败仍直接报告。
   本地用 `adb -s <序列号> reconnect` 能复现。最常掉在 `launchApp` 清完数据、停应用那一下（Maestro 驱动刚起来时多），
-  流程报 Unable to launch app，本地仿 CI 的模拟器上也有；`fresh.yaml` 给它包了 `retry`，碰上时多等两分钟。
+  流程报 Unable to launch app，本地仿 CI 的模拟器上也有；不再在 `fresh.yaml` 内重试，保留首次失败。
 - 重跑时上一轮可能把锁屏密码设着没清（流程半路挂了），入口脚本的 `/lock/pin` 已经设过就不再设；
   扫码绑好的手机也可能没移除，`/pair` 出码前先撤掉设备上已绑定的手机，05、06 收尾“一部都不剩”才验得准。
 - xterm 的内容读屏读不到：终端里的命令跑没跑，由入口脚本开在回环上的小口去看工作目录里的文件（`_shared/wait-file.js`）。

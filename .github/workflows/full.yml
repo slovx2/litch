@@ -1,106 +1,215 @@
 # 全量：门禁（ci.yml，整个带上）加上各平台、各引擎、全部桌面验收、Windows 上的 Computer Use 助手与打包、各家真命令行上的首回合、移动端模拟器上的端到端。
-# 墙钟十五到二十多分钟，但要占十几台跑机（其中一半是要排队的 macOS），不自动跑：
-# 发版前（release.yml 要求打标签的提交上有一轮通过的全量）和动了大块之后手动触发：gh workflow run full.yml
+# 每晚北京时间 03:17 跑全量，也可手动或按领域复用；发布是否公开仍由用户决定。
 name: Full
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '17 19 * * *'
+  workflow_call:
+    inputs:
+      domains:
+        type: string
+        default: '["adapters","computer-use","computer-use-windows","client","dsh","opencode","client-engines","real-engines","mobile"]'
+      sha:
+        type: string
+        default: ''
+      run-ci:
+        type: boolean
+        default: true
+
+env:
+  npm_config_cache: ${{ github.workspace }}/.artifacts/npm-cache
+  ELECTRON_CACHE: ${{ github.workspace }}/.artifacts/electron-cache
 
 jobs:
   gate:
+    if: ${{ toJSON(inputs.run-ci) != 'false' }}
     uses: ./.github/workflows/ci.yml
+    with:
+      sha: ${{ inputs.sha || github.sha }}
 
   adapters:
+    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'adapters') }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, macos-15]
+        suite: [claude, platform]
+      max-parallel: 4
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-1
         with:
-          node-version: 24
-          cache: npm
+          ref: ${{ inputs.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-2
+        with:
+          node-version: 24.21.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-npm
+        with:
+          path: ${{ github.workspace }}/.artifacts/npm-cache
+          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        id: stage-4
         with:
           go-version: 1.26.10
       - name: Linux 沙箱依赖
+        id: phase-17
         if: runner.os == 'Linux'
         run: |
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           sudo apt-get update
           sudo apt-get install --no-install-recommends bubblewrap=0.9.0-1ubuntu0.3
       - run: npm ci --no-audit --no-fund
+        id: phase-16
       - run: npm ci --prefix packages/claude --no-audit --no-fund
+        id: phase-15
       - run: npm ci --prefix packages/pi --no-audit --no-fund
+        id: phase-14
       - run: npm ci --prefix packages/dsh --no-audit --no-fund
+        id: phase-13
       - run: npm ci --prefix packages/opencode --no-audit --no-fund
+        id: phase-12
       - run: npm ci --prefix packages/acp --no-audit --no-fund
+        id: phase-11
       - name: 安装隔离的测试 CLI
+        id: phase-10
         run: |
           npm install --prefix .artifacts/host-cli --save-exact @anthropic-ai/claude-code@2.1.282 --no-audit --no-fund
           echo "CHA_CLAUDE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-cli/node_modules/.bin/claude" >> "${GITHUB_ENV}"
-      - run: npm run check
-      - run: npm run typecheck
+      - if: matrix.suite == 'platform'
+        id: stage-13
+        run: npm run check
+      - if: matrix.suite == 'platform'
+        id: stage-14
+        run: npm run typecheck
       - run: npm run build
+        id: phase-9
       # 含协议兼容性的两项测试（回放、结构校验，各包的 upstream-compat.test.mts）：
       # Claude Code、Pi 两个入口和设备聚合面在这里，dsh 入口的在下面的 dsh job 里
-      - run: npm test
+      - name: 准备分片 HOME
+        id: stage-16
+        run: mkdir -p "${RUNNER_TEMP}/adapter-test-home"
+      - name: Claude 文件集合
+        id: phase-8
+        if: matrix.suite == 'claude'
+        run: node scripts/ci/test-shard.mjs claude
+      - name: Pi、设备和 Go 包
+        id: phase-7
+        if: matrix.suite == 'platform'
+        run: |
+          node scripts/ci/test-shard.mjs pi
+          node scripts/ci/test-shard.mjs device
+          GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)" HOME="${RUNNER_TEMP}/adapter-test-home" go test ./...
       # 按模型窗口需要较新的 CLI；单独隔离，不改变其余测试的 2.1.282 基线。
       - name: Claude 按供应商与模型自动压缩窗口
+        id: phase-6
+        if: matrix.suite == 'platform'
         run: |
           npm install --prefix .artifacts/context-cli --save-exact "@anthropic-ai/claude-code@$(node -p 'require("./protocol/versions.json").claudeContextCli')" --no-audit --no-fund
           CHA_CLAUDE_CLI="${GITHUB_WORKSPACE}/.artifacts/context-cli/node_modules/.bin/claude" node --import ./packages/claude/dist/claude/test/fixtures/isolate-process.mjs --test --test-force-exit packages/claude/dist/claude/test/context-window-cli/*.mjs
       - name: Claude TUI 后端（隔离新版 CLI 和回环假模型）
+        id: phase-5
+        if: matrix.suite == 'platform'
         run: |
           npm install --prefix .artifacts/tui-cli --save-exact @anthropic-ai/claude-code@2.1.316 --no-audit --no-fund
           CHA_CLAUDE_CLI="${GITHUB_WORKSPACE}/.artifacts/tui-cli/node_modules/.bin/claude" npm run test:claude-tui
       # 这里只跑手机纯逻辑单测；需要手机和 UI 依赖的 Markdown 测试在下面的 mobile 作业执行
-      - run: npm run mobile:test
-      - run: npm run test:local-ssh
-      - run: npm run docs:build
+      - if: matrix.suite == 'platform'
+        id: stage-21
+        run: npm run mobile:test
+      - if: matrix.suite == 'platform'
+        id: stage-22
+        run: npm run test:local-ssh
+      - if: matrix.suite == 'platform'
+        id: stage-23
+        run: npm run docs:build
       # 独立发布包：安装脚本和包里的入口做静态检查；出一个本机平台的包，装进临时的主目录，确认装上的命令报得出版本。
       # Linux 上再把完整的容器验证跑一遍（发版的流程里验的是要发的那一份，这里先拦住平时的改动把它弄坏）
       - name: 安装脚本的静态检查
+        id: phase-4
+        if: matrix.suite == 'platform'
         run: |
           sh -n scripts/install.sh
           sh -n scripts/adapter-launcher.sh
       - name: shellcheck
-        if: runner.os == 'Linux'
+        id: phase-3
+        if: runner.os == 'Linux' && matrix.suite == 'platform'
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends shellcheck=0.9.0-1
           shellcheck --shell=sh scripts/install.sh scripts/adapter-launcher.sh
       - name: 出本机平台的发布包并试装
+        id: phase-2
+        timeout-minutes: 10
+        if: matrix.suite == 'platform'
         run: |
           node scripts/package-adapter.mjs --target host --out "${RUNNER_TEMP}/release"
           HOME="${RUNNER_TEMP}/home" sh "${RUNNER_TEMP}/release/install.sh" --from "${RUNNER_TEMP}"/release/codex-harness-adapter-*.tar.gz
           "${RUNNER_TEMP}/home/.local/bin/codex-harness-adapter" version
       - name: 发布包的容器验证
-        if: runner.os == 'Linux'
+        id: phase-1
+        if: runner.os == 'Linux' && matrix.suite == 'platform'
         run: node scripts/check-adapter-package.mjs
+
+      - name: 缓存与首次失败
+        id: stage-28
+        if: always()
+        run: node scripts/ci/job-summary.mjs
+        env:
+          CI_STEPS: ${{ toJSON(steps) }}
 
   # Computer Use 的原生助手（Swift）和主进程里接它的那一层：助手的单元测试、执行器与看护的单元测试（桩助手），
   # 再真的经 LaunchServices 起一次临时签名的助手、握手、调不要系统授权的几样（不点、不截图）
   computer-use:
+    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'computer-use') }}
     runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-1
         with:
-          node-version: 24
-          cache: npm
+          ref: ${{ inputs.sha || github.sha }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-electron
+        with:
+          path: ${{ github.workspace }}/.artifacts/electron-cache
+          key: electron-v1-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-3
+        with:
+          node-version: 24.21.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-npm
+        with:
+          path: ${{ github.workspace }}/.artifacts/npm-cache
+          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
       - run: npm ci --prefix apps/desktop --no-audit --no-fund
+        id: phase-5
       - run: swift --version
+        id: phase-4
       - run: swift test --package-path apps/computer-use
+        id: phase-3
       - run: npm run test:computer-use --prefix apps/desktop
+        id: phase-2
       - run: npm run check:computer-use --prefix apps/desktop
+        id: phase-1
+
+      - name: 缓存与首次失败
+        id: stage-10
+        if: always()
+        run: node scripts/ci/job-summary.mjs
+        env:
+          CI_STEPS: ${{ toJSON(steps) }}
 
   # Windows 的 Computer Use 助手（Rust）：纯逻辑的单元测试、构建，照主进程的做法拉起它、握手、调不动界面的几样；
   # 再把 Windows 的应用和安装包打一遍（和 release.yml 的 desktop-windows 同样的步骤），核对助手装进了 resources/computer-use。
   # 打包的整条链平时只有发版才走，放在这里是为了发版前就拦住它被弄坏
   computer-use-windows:
+    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'computer-use-windows') }}
     runs-on: windows-2025
     timeout-minutes: 60
     defaults:
@@ -108,173 +217,334 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-1
         with:
-          node-version: 24
-          cache: npm
+          ref: ${{ inputs.sha || github.sha }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-electron
+        with:
+          path: ${{ github.workspace }}/.artifacts/electron-cache
+          key: electron-v1-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-3
+        with:
+          node-version: 24.21.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-npm
+        with:
+          path: ${{ github.workspace }}/.artifacts/npm-cache
+          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        id: stage-5
         with:
           go-version: 1.26.10
       # 工具链的版本只在 rust-toolchain.toml 里写，rustup 在 crate 目录里按它装、按它用
       - name: Rust 工具链（apps/computer-use-win/rust-toolchain.toml）
+        id: phase-16
         working-directory: apps/computer-use-win
         run: |
           rustup set auto-self-update disable
           rustup toolchain install
           rustup show active-toolchain
           cargo --version
+      - name: Cargo 工具链指纹
+        id: rust
+        working-directory: apps/computer-use-win
+        run: echo "fingerprint=$(rustc -vV | sha256sum | cut -d ' ' -f 1)" >> "${GITHUB_OUTPUT}"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-cargo
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/src
+            ~/.cargo/git/db
+            apps/computer-use-win/target
+          key: cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.fingerprint }}-${{ hashFiles('apps/computer-use-win/Cargo.lock', 'apps/computer-use-win/rust-toolchain.toml') }}-${{ inputs.sha || github.sha }}
+          restore-keys: |
+            cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.fingerprint }}-${{ hashFiles('apps/computer-use-win/Cargo.lock', 'apps/computer-use-win/rust-toolchain.toml') }}-
       - name: 助手的单元测试
+        id: phase-15
         working-directory: apps/computer-use-win
         run: cargo test --locked --target x86_64-pc-windows-msvc
       - name: 构建助手
+        id: phase-14
         working-directory: apps/computer-use-win
         run: cargo build --release --locked --target x86_64-pc-windows-msvc
       - name: Inno Setup 6.7.1
+        id: phase-13
         run: choco install innosetup --version=6.7.1 --no-progress -y
       - run: npm ci --no-audit --no-fund
+        id: phase-12
       - run: npm ci --prefix packages/claude --no-audit --no-fund
+        id: phase-11
       - run: npm ci --prefix packages/pi --no-audit --no-fund
+        id: phase-10
       - run: npm ci --prefix packages/dsh --no-audit --no-fund
+        id: phase-9
       - run: npm ci --prefix packages/opencode --no-audit --no-fund
+        id: phase-8
       - run: npm ci --prefix packages/acp --no-audit --no-fund
+        id: phase-7
       - run: npm run build
+        id: phase-6
       - run: npm run client:setup
+        id: phase-5
       - run: node apps/desktop/scripts/check-computer-use.mjs --require
+        id: phase-4
       - run: npm run client:pack
+        id: phase-3
       - run: node apps/desktop/scripts/make-installer.mjs
+        id: phase-2
       - name: 助手装进了应用
+        id: phase-1
         run: test -f apps/desktop/out/Litch-win32-x64/resources/computer-use/litch-computer-use.exe
+
+      - name: 缓存与首次失败
+        id: stage-24
+        if: always()
+        run: node scripts/ci/job-summary.mjs
+        env:
+          CI_STEPS: ${{ toJSON(steps) }}
 
   # 客户端：核心的单元测试、三个包的类型检查、界面构建，再起真的 Electron 做自检、对话区的滚动验收、输入区的验收、终端面板的验收和远程设备的验收（窗口不显示）。
   # 代码规范检查由上面 adapters 里的 npm run check 一并覆盖。
   client:
+    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'client') }}
     runs-on: macos-15
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-1
         with:
-          node-version: 24
-          cache: npm
+          ref: ${{ inputs.sha || github.sha }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-electron
+        with:
+          path: ${{ github.workspace }}/.artifacts/electron-cache
+          key: electron-v1-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-3
+        with:
+          node-version: 24.21.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-npm
+        with:
+          path: ${{ github.workspace }}/.artifacts/npm-cache
+          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
       # 带终端的进程由适配器命令行（Go）的 pty-bridge 子命令来起，下面对着真实入口的那几步要用到它
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        id: stage-5
         with:
           go-version: 1.26.10
       - run: npm ci --no-audit --no-fund
+        id: phase-34
       - run: npm run client:setup
+        id: phase-33
       - run: npm run client:typecheck
+        id: phase-32
       - run: npm run client:test
+        id: phase-31
       # 界面里不靠浏览器就能测的那部分逻辑（终端面板的开合、只认最新的那一次）
       - run: npm run client:test:ui
+        id: phase-30
       # 桌面端自己的日志：轮转、清理、console 落盘
       - run: npm run test:log-file --prefix apps/desktop
+        id: phase-29
       # 存在这台电脑上的会话视图：读写、裁剪、个数上限、换版本
       - run: npm run test:view-files --prefix apps/desktop
+        id: phase-28
       # 手机批准的验签与批准钥匙：伪造、篡改、重放、过期、换钥匙都不认
       - run: npm run test:approvals --prefix apps/desktop
+        id: phase-27
       - run: npm run client:build
+        id: phase-26
       - run: npm run client:smoke
+        id: phase-25
       # 对话区“不飘”的验收：在不显示的窗口里真的去滚、去点，逐帧量位置
       - run: npm run client:check:scroll
+        id: phase-24
       # 输入区的验收：输入法回车不误发、发送与排队的顺序、打断、草稿、审批和提问卡片的快捷键
       - run: npm run client:check:compose
+        id: phase-23
       # 侧栏投影验收（check-sidebar-projections.mjs）要一份隔离的 headless Chrome for Testing，经 LITCH_CHROME_BINARY
       # 交给本作业后面的步骤；版本与 chrome-e2e 的引导脚本一致。搜索验收不进 CI，见 scripts/AGENTS.md
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-chrome
+        with:
+          path: ${{ runner.temp }}/chrome-for-testing
+          key: chrome-v1-${{ runner.os }}-${{ runner.arch }}-151.0.7922.34-${{ hashFiles('apps/desktop/package-lock.json') }}
       - name: 准备界面验收的 Chrome for Testing
+        id: chrome
         run: |
           architecture="$(node -p "process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64'")"
           directory="${RUNNER_TEMP}/chrome-for-testing"
-          mkdir -p "${directory}"
-          curl --fail --location --retry 3 -o "${directory}/chrome.zip" "https://storage.googleapis.com/chrome-for-testing-public/151.0.7922.34/${architecture}/chrome-${architecture}.zip"
-          ditto -xk "${directory}/chrome.zip" "${directory}"
-          echo "LITCH_CHROME_BINARY=${directory}/chrome-${architecture}/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" >> "${GITHUB_ENV}"
+          binary="${directory}/chrome-${architecture}/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+          if [ ! -x "${binary}" ]; then
+            mkdir -p "${directory}"
+            node scripts/ci/download.mjs chrome "https://storage.googleapis.com/chrome-for-testing-public/151.0.7922.34/${architecture}/chrome-${architecture}.zip" "${directory}/chrome.zip"
+            ditto -xk "${directory}/chrome.zip" "${directory}"
+          fi
+          "${binary}" --version | grep -F '151.0.7922.34'
+          echo "LITCH_CHROME_BINARY=${binary}" >> "${GITHUB_ENV}"
       - run: npm run client:check:projections
+        id: phase-21
       # 对着真实入口的自检：在临时目录里起一个 Pi 引擎，模型请求全部走回环上的假模型
       - run: npm ci --no-audit --no-fund --prefix packages/pi
+        id: phase-20
       - run: npm run build --prefix packages/pi
+        id: phase-19
       # 这里的引擎和设备进程是直接用 node 起的，没有命令行那一层：把命令行编到 bin/ 下，它们才找得到伪终端桥
       - run: node scripts/build-cli.mjs
+        id: phase-18
       - run: npm run client:smoke:entry
+        id: phase-17
       - run: npm run client:check:scroll:entry
+        id: phase-16
       - run: npm run client:check:compose:entry
+        id: phase-15
       # 终端面板的验收：模拟核心、多 harness 的隔离设备（可重连的终端）、单个 harness 的入口（随连接结束的终端）。
       # 流水线上时间的线按宽的算（回显和帧间隔只报数），功能对不对照旧严
       - run: npm run build --prefix packages/device
+        id: phase-14
       - run: npm run client:check:terminal
+        id: phase-13
       # 侧面板和文件标签的验收：模拟核心、多 harness 的隔离设备、单个 harness 的入口（后两种是真的文件系统）。
       # 流水线上时间的线按宽的算（展开大目录、帧间隔、开大文件只报数），功能对不对照旧严
       - run: npm run client:check:files
+        id: phase-12
       # 设置页与外观的验收（只对着模拟核心）：设置页的五组与入口、皮肤明暗密度缩放语言当场生效并记得住、
       # 快捷键一览和真的应用菜单对账、关于与许可、回合正在跑的时候换外观、六套皮肤组合下各屏的溢出与对比度、
       # 缩放到最小最大时的终端行列数；再用同一份用户数据目录冷启动一遍，看窗口一建出来的底色和缩放
       - run: npm run client:check:settings
+        id: phase-11
       - run: npm run client:check:navigation
+        id: phase-10
       # 对话字号：三套皮肤的评论 portal、窄窗口定位、输入浮层和侧面板边界。
       - run: npm run client:check:text-scale
+        id: phase-9
       # 完整模式（多 harness 的会话目录、工作区、置顶与分区、新建时选 harness、提问向导）和设备管理页的验收：
       # 各跑两遍，模拟核心一遍、多 harness 的隔离设备一遍
       - run: npm run client:check:full
+        id: phase-8
       - run: npm run client:check:manage
+        id: phase-7
       - run: npm run client:check:harness-settings
+        id: phase-6
       # 本机内置适配器的打开方式（拿假的适配器，不起界面）：拉起、已经在跑就复用、换版本的各种情形、每一种没连上
       - run: npm run client:check:adapter
+        id: phase-5
       # 侧面板里“差异”标签的验收：模拟核心（示例仓库）、多 harness 的隔离设备、单个 harness 的入口
       # （后两种是脚本在夹具的临时目录里现建的 git 仓库，暂存、还原只对它做）。时间的线同样按宽的算
       - run: npm run client:check:diff
+        id: phase-4
       # 远程设备：在回环上起一个用户态的 sshd 当假的远程机器（临时密钥、临时主目录，跑完就删），
       # 先不起界面把每一种连接情形过一遍，再在真的外壳里走添加、连接、断线重连、移除
       - run: npm run client:check:ssh
+        id: phase-3
       - run: npm run client:check:remote
+        id: phase-2
       # 远程操作本机的开启确认：隔离状态、隐藏窗口、中英文卡片及继续执行。
       - run: npm run check:machine-enable --prefix apps/desktop
+        id: phase-1
+
+      - name: 缓存与首次失败
+        id: stage-41
+        if: always()
+        run: node scripts/ci/job-summary.mjs
+        env:
+          CI_STEPS: ${{ toJSON(steps) }}
 
   # dsh 本体不随适配器分发，测试需要一份真实的 dsh：按 protocol/versions.json 登记的下限版本装到临时前缀。
   # 模型端是回环 mock，SSH 实例发往回环之外的 HTTP(S) 请求都落到陷阱代理上，验收要求一次也没有。
   dsh:
+    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'dsh') }}
     runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-1
         with:
-          node-version: 24
-          cache: npm
+          ref: ${{ inputs.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-2
+        with:
+          node-version: 24.21.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-npm
+        with:
+          path: ${{ github.workspace }}/.artifacts/npm-cache
+          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        id: stage-4
         with:
           go-version: 1.26.10
       - run: npm ci --no-audit --no-fund
+        id: phase-5
       - run: npm ci --prefix packages/dsh --no-audit --no-fund
+        id: phase-4
       - name: 安装隔离的 dsh
+        id: phase-3
         run: |
           version="$(node -p "require('./protocol/versions.json').dshMinimum")"
           npm install --prefix .artifacts/host-dsh --save-exact "@deepseek-ai/dsh@${version}" --no-audit --no-fund
           echo "CHA_DSH_CLI=${GITHUB_WORKSPACE}/.artifacts/host-dsh/node_modules/.bin/dsh" >> "${GITHUB_ENV}"
       # 含 dsh 入口的协议兼容性测试（packages/dsh/test/upstream-compat.test.mts）
       - run: npm run test:dsh
+        id: phase-2
       - run: npm run test:dsh-ssh
+        id: phase-1
+
+      - name: 缓存与首次失败
+        id: stage-10
+        if: always()
+        run: node scripts/ci/job-summary.mjs
+        env:
+          CI_STEPS: ${{ toJSON(steps) }}
 
   # OpenCode 本体不随适配器分发，测试要一份真实的 opencode：按 protocol/versions.json 登记的验证过的版本
   # （opencodeVerified 的第一个）装到临时前缀。模型端是回环上的假模型，数据目录按 HOME/XDG 隔离在临时目录里。
   opencode:
+    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'opencode') }}
     runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-1
         with:
-          node-version: 24
-          cache: npm
+          ref: ${{ inputs.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-2
+        with:
+          node-version: 24.21.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-npm
+        with:
+          path: ${{ github.workspace }}/.artifacts/npm-cache
+          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        id: stage-4
         with:
           go-version: 1.26.10
       - run: npm ci --no-audit --no-fund
+        id: phase-4
       - run: npm ci --prefix packages/opencode --no-audit --no-fund
+        id: phase-3
       - name: 安装隔离的 opencode
+        id: phase-2
         run: |
           version="$(node -p "require('./protocol/versions.json').opencodeVerified[0]")"
           npm install --prefix .artifacts/host-opencode --save-exact "opencode-ai@${version}" --no-audit --no-fund
           echo "CHA_OPENCODE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-opencode/node_modules/.bin/opencode" >> "${GITHUB_ENV}"
       - run: npm run test:opencode
+        id: phase-1
+
+      - name: 缓存与首次失败
+        id: stage-9
+        if: always()
+        run: node scripts/ci/job-summary.mjs
+        env:
+          CI_STEPS: ${{ toJSON(steps) }}
 
   # 客户端对着三个引擎各走一遍的验收：真的适配器主进程管着 Claude Code、Pi、dsh，模型请求全部走回环上的假模型，
   # 界面在不显示的窗口里把新建、审批、提问、技能、打断、读历史、计划模式、改文件与差异、图片、分叉回退压缩各走一遍。
@@ -282,25 +552,48 @@ jobs:
   # 缺哪一个这一步都会直接失败，不会跳过。单独一个 job：它要的依赖比 client 多（引擎包都要装、都要构建；
   # OpenCode 和 ACP 的两个包也在里面，只因为 npm run build 要构建它们，验收还不走这两个引擎）
   client-engines:
+    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'client-engines') }}
     runs-on: macos-15
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-1
         with:
-          node-version: 24
-          cache: npm
+          ref: ${{ inputs.sha || github.sha }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-electron
+        with:
+          path: ${{ github.workspace }}/.artifacts/electron-cache
+          key: electron-v1-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-3
+        with:
+          node-version: 24.21.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-npm
+        with:
+          path: ${{ github.workspace }}/.artifacts/npm-cache
+          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        id: stage-5
         with:
           go-version: 1.26.10
       - run: npm ci --no-audit --no-fund
+        id: phase-10
       - run: npm ci --prefix packages/claude --no-audit --no-fund
+        id: phase-9
       - run: npm ci --prefix packages/pi --no-audit --no-fund
+        id: phase-8
       - run: npm ci --prefix packages/dsh --no-audit --no-fund
+        id: phase-7
       - run: npm ci --prefix packages/opencode --no-audit --no-fund
+        id: phase-6
       - run: npm ci --prefix packages/acp --no-audit --no-fund
+        id: phase-5
       - run: npm run client:setup
+        id: phase-4
       - name: 安装隔离的 Claude Code 和 dsh
+        id: phase-3
         run: |
           npm install --prefix .artifacts/host-cli --save-exact @anthropic-ai/claude-code@2.1.282 --no-audit --no-fund
           echo "CHA_CLAUDE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-cli/node_modules/.bin/claude" >> "${GITHUB_ENV}"
@@ -309,31 +602,63 @@ jobs:
           echo "CHA_DSH_CLI=${GITHUB_WORKSPACE}/.artifacts/host-dsh/node_modules/.bin/dsh" >> "${GITHUB_ENV}"
       # 各个引擎包、设备进程和命令行
       - run: npm run build
+        id: phase-2
       - run: npm run client:check:engines
+        id: phase-1
+
+      - name: 缓存与首次失败
+        id: stage-16
+        if: always()
+        run: node scripts/ci/job-summary.mjs
+        env:
+          CI_STEPS: ${{ toJSON(steps) }}
 
   # 真的原生 codex（protocol/versions.json 的 codexVerified 里第一个版本，装到临时前缀）：Litch 建会话带的工具定义
   # codex 收不收、客户端工具调用由设备进程挑执行方，再在各家真的命令行上从界面建会话跑头一个回合。
   # 模型都是回环上的假模型，各家的数据目录隔离在临时目录里。门禁只跑其中 codex 和 Pi 的首回合
   real-engines:
+    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'real-engines') }}
     runs-on: macos-15
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-1
         with:
-          node-version: 24
-          cache: npm
+          ref: ${{ inputs.sha || github.sha }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-electron
+        with:
+          path: ${{ github.workspace }}/.artifacts/electron-cache
+          key: electron-v1-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-3
+        with:
+          node-version: 24.21.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-npm
+        with:
+          path: ${{ github.workspace }}/.artifacts/npm-cache
+          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        id: stage-5
         with:
           go-version: 1.26.10
       - run: npm ci --no-audit --no-fund
+        id: phase-16
       - run: npm ci --prefix packages/claude --no-audit --no-fund
+        id: phase-15
       - run: npm ci --prefix packages/pi --no-audit --no-fund
+        id: phase-14
       - run: npm ci --prefix packages/dsh --no-audit --no-fund
+        id: phase-13
       - run: npm ci --prefix packages/opencode --no-audit --no-fund
+        id: phase-12
       - run: npm ci --prefix packages/acp --no-audit --no-fund
+        id: phase-11
       - run: npm run client:setup
+        id: phase-10
       - name: 安装隔离的各家命令行
+        id: phase-9
         run: |
           codex="$(node -p "require('./protocol/versions.json').codexVerified[0]")"
           npm install --prefix .artifacts/host-codex --save-exact "@openai/codex@${codex}" --no-audit --no-fund
@@ -348,103 +673,266 @@ jobs:
           echo "CHA_OPENCODE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-opencode/node_modules/.bin/opencode" >> "${GITHUB_ENV}"
           echo "CHA_ACP_CLI=${GITHUB_WORKSPACE}/.artifacts/host-opencode/node_modules/.bin/opencode" >> "${GITHUB_ENV}"
       - run: npm run build
+        id: phase-8
       # 首回合在前：它会构建外壳，后面两条 codex 检查里“客户端核心那一遍”要用到构建产物
       - run: npm run client:check:first-turn -- --engines pi,codex,claude,dsh,opencode,acp
+        id: phase-7
       - run: npm run check:native-codex
+        id: phase-6
       - run: npm run check:client-tools-codex
+        id: phase-5
       - run: npm run check:background-client-tools
+        id: phase-4
       # 复用上面的隔离 Codex；验证 UI 离线后原生后台任务仍能唤醒会话。
       - run: npm run check:native-codex-background-wake
+        id: phase-3
       # npm run build 已准备 Claude、设备进程和 Go CLI；脚本自行起停隔离常驻服务。
       - run: node scripts/check-restart-resume.mjs
+        id: phase-2
       - run: npm run check:manager-fixture
+        id: phase-1
 
-  # 移动端：单元测试，再在安卓模拟器上对着 release 包跑端到端（Maestro，模拟核心和夹具两组，apps/mobile/e2e/README.md）。
-  # GitHub 的 macOS 跑机不能嵌套虚拟化，起不了安卓模拟器，所以用 ubuntu 加 KVM；包在这里现打
-  mobile:
+      - name: 缓存与首次失败
+        id: stage-22
+        if: always()
+        run: node scripts/ci/job-summary.mjs
+        env:
+          CI_STEPS: ${{ toJSON(steps) }}
+
+  # 同一份 x86_64 APK 只构建一次；三个独立 runner 下载后核对源码和 SHA-256。
+  mobile-build:
+    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'mobile') }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 35
+    outputs:
+      sha: ${{ steps.apk.outputs.sha }}
+      hash: ${{ steps.apk.outputs.hash }}
+      artifact-id: ${{ steps.apk-upload.outputs.artifact-id }}
     steps:
-      # 打包安卓之后再解模拟器，跑机的盘会不够（解到一半停下、sdkmanager 不报原因）：先删掉用不上的大件
-      - name: 腾磁盘空间
+      - name: 为原生构建与缓存腾出空间
+        id: stage-1
         run: |
           df -h /
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/powershell /usr/local/lib/node_modules
           df -h /
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-2
         with:
-          node-version: 24
-          cache: npm
+          ref: ${{ inputs.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-3
+        with:
+          node-version: 24.21.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-npm
+        with:
+          path: ${{ github.workspace }}/.artifacts/npm-cache
+          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        id: stage-5
         with:
           go-version: 1.26.10
-      - name: 模拟器用的 KVM、打包用的 JDK 17
+          cache-dependency-path: |
+            go.sum
+            mobile/go.sum
+      - name: 构建目录与 JDK 17
+        id: phase-8
+        run: |
+          mkdir -p "${RUNNER_TEMP}/metro-tmp" "${RUNNER_TEMP}/gradle"
+          echo "TMPDIR=${RUNNER_TEMP}/metro-tmp" >> "${GITHUB_ENV}"
+          echo "GRADLE_USER_HOME=${RUNNER_TEMP}/gradle" >> "${GITHUB_ENV}"
+          echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "${GITHUB_ENV}"
+      - run: npm ci --no-audit --no-fund
+        id: phase-7
+      - run: npm ci --prefix apps/mobile --no-audit --no-fund
+        id: phase-6
+      - run: npm ci --prefix packages/ui --no-audit --no-fund
+        id: phase-5
+      - run: npm run mobile:test
+        id: phase-4
+      - name: 手机原生 Markdown 与 WASM 中文强调对照
+        id: phase-3
+        run: npm run mobile:test:markdown
+      - name: 生成 Android 工程
+        id: phase-2
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform android --clean --no-install
+      - name: Android 工具链指纹
+        id: android-tools
+        run: |
+          fingerprint="$("${JAVA_HOME}/bin/java" -version 2>&1 | sha256sum | cut -d ' ' -f 1)"
+          echo "jdk=${fingerprint}" >> "${GITHUB_OUTPUT}"
+      # prebuild 会清 android，只缓存用户级依赖和 Gradle build-cache，不把签名/APK 当缓存。
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-gradle
+        with:
+          path: |
+            ${{ runner.temp }}/gradle/caches
+            ${{ runner.temp }}/gradle/wrapper
+          key: gradle-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-go1.26.10-jdk${{ steps.android-tools.outputs.jdk }}-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'apps/mobile/android/*.gradle', 'apps/mobile/android/gradle.properties', 'apps/mobile/node_modules/react-native/gradle/libs.versions.toml', 'apps/mobile/plugins/**', 'apps/mobile/modules/**', 'mobile/**', 'scripts/ci/**') }}-${{ inputs.sha || github.sha }}
+          restore-keys: |
+            gradle-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-go1.26.10-jdk${{ steps.android-tools.outputs.jdk }}-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'apps/mobile/android/*.gradle', 'apps/mobile/android/gradle.properties', 'apps/mobile/node_modules/react-native/gradle/libs.versions.toml', 'apps/mobile/plugins/**', 'apps/mobile/modules/**', 'mobile/**', 'scripts/ci/**') }}-
+      # Expo 在 CI 下不执行 RN 传来的 --reset-cache；Metro 自身按源码内容失效转换结果。
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-metro
+        with:
+          path: |
+            ${{ runner.temp }}/metro-tmp/metro-cache
+            ${{ runner.temp }}/metro-tmp/metro-file-map-*
+          key: metro-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/metro.*', 'apps/mobile/babel.config.js', 'apps/mobile/patches/**') }}-${{ inputs.sha || github.sha }}
+          restore-keys: |
+            metro-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/metro.*', 'apps/mobile/babel.config.js', 'apps/mobile/patches/**') }}-
+      - name: 打 release 包
+        id: phase-1
+        working-directory: apps/mobile
+        run: npm run android:release -- --build-cache --max-workers=4 -PreactNativeArchitectures=x86_64
+      - name: 封存唯一 APK
+        id: apk
+        run: node scripts/ci/apk.mjs seal "${RUNNER_TEMP}/mobile-apk" apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        id: apk-upload
+        with:
+          name: mobile-apk-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/mobile-apk
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+      - name: 缓存与首次失败
+        id: stage-19
+        if: always()
+        run: node scripts/ci/job-summary.mjs
+        env:
+          CI_STEPS: ${{ toJSON(steps) }}
+
+  mobile:
+    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'mobile') }}
+    needs: mobile-build
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        id: stage-1
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-2
+        with:
+          node-version: 24.21.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache-npm
+        with:
+          path: ${{ github.workspace }}/.artifacts/npm-cache
+          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        id: stage-4
+        with:
+          go-version: 1.26.10
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        id: stage-5
+        with:
+          artifact-ids: ${{ needs.mobile-build.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/mobile-apk
+      - name: 核对源码与 APK hash
+        id: phase-8
+        run: node scripts/ci/apk.mjs verify "${RUNNER_TEMP}/mobile-apk"
+        env:
+          EXPECTED_SOURCE_SHA: ${{ needs.mobile-build.outputs.sha }}
+          EXPECTED_APK_HASH: ${{ needs.mobile-build.outputs.hash }}
+      - name: 模拟器 KVM 与 JDK 17
+        id: phase-7
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "${GITHUB_ENV}"
       - name: 装 Maestro 2.3.0
+        id: phase-6
         run: |
-          curl -fsSL -o "${RUNNER_TEMP}/maestro.zip" https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.3.0/maestro.zip
+          node scripts/ci/download.mjs maestro https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.3.0/maestro.zip "${RUNNER_TEMP}/maestro.zip"
           echo "aaf524c6bcd456013855b1337464f964d9a65e2fb88861affea9b4c014644e50  ${RUNNER_TEMP}/maestro.zip" | sha256sum -c -
           unzip -q "${RUNNER_TEMP}/maestro.zip" -d "${RUNNER_TEMP}"
           echo "MAESTRO=${RUNNER_TEMP}/maestro/bin/maestro" >> "${GITHUB_ENV}"
       - run: npm ci --no-audit --no-fund
+        id: phase-5
       - run: npm ci --prefix packages/pi --no-audit --no-fund
-      - run: npm ci --prefix apps/mobile --no-audit --no-fund
-      # 终端页的网页（npm run web:build）用的是界面包里的那份 xterm
-      - run: npm ci --prefix packages/ui --no-audit --no-fund
-      - run: npm run mobile:test
-      # 手机 postinstall 应用原生和 WASM 补丁，UI 依赖用于核对 CJK 扩展版本；缺依赖或补丁必须失败
-      - name: 手机原生 Markdown 与 WASM 中文强调对照
-        run: npm run mobile:test:markdown
-      # 夹具那一组要真的适配器命令行、Pi 和设备进程（不要别的引擎包，所以不跑根目录的 npm run build）
+        id: phase-4
       - run: npm run build --prefix packages/pi && npm run build --prefix packages/device && node scripts/build-cli.mjs
-      - name: 打 release 包
-        working-directory: apps/mobile
-        run: |
-          npx expo prebuild --platform android --clean --no-install
-          # 手机上发的包只有 arm64-v8a；跑机上的模拟器是 x86_64，这里只给它打 x86_64 的
-          npm run android:release -- --max-workers=4 -PreactNativeArchitectures=x86_64
-      # 跑机自带的 cmdline-tools 太旧，读不了新的 SDK 清单（XML 第 4 版），装模拟器时下载失败；
-      # 换成这个 action 自己在没有 cmdline-tools 时会下的那一版
+        id: phase-3
       - name: 换新的 Android cmdline-tools
+        id: phase-2
         run: |
-          curl -fsSL -o "${RUNNER_TEMP}/cmdline-tools.zip" https://dl.google.com/android/repository/commandlinetools-linux-14742923_latest.zip
+          node scripts/ci/download.mjs android-tools https://dl.google.com/android/repository/commandlinetools-linux-14742923_latest.zip "${RUNNER_TEMP}/cmdline-tools.zip"
           unzip -q "${RUNNER_TEMP}/cmdline-tools.zip" -d "${RUNNER_TEMP}/cmdline-tools"
           rm -rf "${ANDROID_HOME:?}/cmdline-tools/latest"
           mv "${RUNNER_TEMP}/cmdline-tools/cmdline-tools" "${ANDROID_HOME:?}/cmdline-tools/latest"
           "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --version
-      # 下面那个 action 装模拟器时不重试、输出也丢掉了，跑机上十次里有三四次下载失败：先在这里带重试装好，它再装就是现成的
-      - name: 装模拟器（带重试）
+      - name: 装模拟器（仅下载基础设施重试）
+        id: phase-1
         run: |
           yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           for attempt in 1 2 3 4; do
-            if "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --install emulator && [ -x "${ANDROID_HOME}/emulator/emulator" ]; then
+            start="${SECONDS}"
+            if "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --install emulator 2>&1 | tee "${RUNNER_TEMP}/emulator-download.log" && [ -x "${ANDROID_HOME}/emulator/emulator" ]; then
+              echo "模拟器下载：尝试 ${attempt} 通过，本次 $((SECONDS-start)) 秒；重试 $((attempt-1)) 次。" >> "${GITHUB_STEP_SUMMARY}"
               exit 0
             fi
-            echo "第 ${attempt} 次没装上，过一会儿再试" >&2
-            df -h / >&2
+            echo "模拟器下载：尝试 ${attempt} 失败，本次 $((SECONDS-start)) 秒。" >> "${GITHUB_STEP_SUMMARY}"
+            # 磁盘、许可证或未知错误直接失败；只重试已识别的网络下载错误。
+            if ! grep -Ei 'timed out|connection reset|connection refused|unexpected end|HTTP.*(408|429|500|502|503|504)|SSLHandshakeException|SocketException' "${RUNNER_TEMP}/emulator-download.log"; then
+              exit 1
+            fi
             sleep 15
           done
           exit 1
-      - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+      - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        id: stage-14
         with:
           api-level: 35
           arch: x86_64
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: node apps/mobile/scripts/e2e.mjs --serial emulator-5554
+          script: node apps/mobile/scripts/e2e.mjs --serial emulator-5554 --shard ${{ matrix.shard }}/3 --apk "${RUNNER_TEMP}/mobile-apk/app-release.apk"
         env:
           LITCH_E2E_ARTIFACTS: ${{ runner.temp }}/maestro-out
-      # 没过时把 Maestro 的截图和日志传上来看
-      - if: failure()
+      - if: always()
+        id: stage-15
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: mobile-e2e-maestro
+          name: mobile-e2e-maestro-${{ matrix.shard }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/maestro-out
           if-no-files-found: ignore
           retention-days: 7
+      - name: 缓存与首次失败
+        id: stage-16
+        if: always()
+        run: node scripts/ci/job-summary.mjs
+        env:
+          CI_STEPS: ${{ toJSON(steps) }}
+
+  report:
+    if: always()
+    needs: [gate, adapters, computer-use, computer-use-windows, client, dsh, opencode, client-engines, real-engines, mobile-build, mobile]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        id: stage-1
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        id: stage-2
+        with:
+          node-version: 24.21.0
+      - run: node scripts/ci/run-summary.mjs
+        id: stage-3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
