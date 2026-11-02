@@ -1,7 +1,7 @@
 // 原样 magpie helper 的六平台产物；只在外部模块加入口，不改第三方镜像。
 import { execFileSync, spawn } from 'node:child_process'
-import { cpSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repo = fileURLToPath(new URL('..', import.meta.url))
@@ -53,7 +53,12 @@ for (const [path, { dir }] of modules) {
   for (const name of files) cpSync(join(dir, name), join(target, name), { recursive: true })
 }
 const goroot = execFileSync('go', ['env', 'GOROOT'], { encoding: 'utf8' }).trim()
-cpSync(join(goroot, 'LICENSE'), join(licenses, 'GO-LICENSE'))
+// 官方发行包的许可在 GOROOT 下；Homebrew 的 go 以 <keg>/libexec 为 GOROOT，许可在 keg 根目录
+const goLicenses = [join(goroot, 'LICENSE')]
+if (basename(goroot) === 'libexec') goLicenses.push(join(dirname(goroot), 'LICENSE'))
+const goLicense = goLicenses.find((path) => existsSync(path))
+if (!goLicense) throw new Error(`找不到 Go 的许可文件，查过：${goLicenses.join('、')}`)
+cpSync(goLicense, join(licenses, 'GO-LICENSE'))
 cpSync(join(repo, 'third_party/magpie/UPSTREAM.json'), join(licenses, 'UPSTREAM.json'))
 writeFileSync(
   join(licenses, 'MODULES.json'),
