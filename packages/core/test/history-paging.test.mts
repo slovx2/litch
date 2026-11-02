@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Turn } from '../../protocol/src/index.mjs'
 import { INITIAL_HISTORY } from '../src/device/history.mjs'
+import type { ItemView } from '../src/model.mjs'
 import { RpcFailure } from './fake-server.mjs'
 import { agentText, thread, turn, userText } from './fixtures.mjs'
 import { settle } from './helpers.mjs'
@@ -84,6 +85,46 @@ test('首屏仅十回合；按游标向前、去重合并；重复加载请求�
   assert.match(JSON.stringify(session.seen.view?.items), /第0页历史/)
   session.close()
   app.core.stop()
+})
+
+test('窗口探针的二十四回合：分页加载和重新打开均保留每条消息、顺序与标识', async () => {
+  const app = paging()
+  app.replace(app.turns().slice(0, 24))
+  const expected = app.turns().map((entry) => entry.id)
+  app.core.start()
+  try {
+    await settle()
+    for (let visit = 0; visit < 2; visit++) {
+      const session = watch(app.core)
+      try {
+        await settle()
+        // 重开可以复用已读页；首开只取尾页，完整性不依赖 DOM 同时挂载多少回合。
+        for (let page = 0; page < 3 && session.seen.view?.history?.hasMore; page++) {
+          await app.command('session.loadOlder', where)
+          await settle()
+        }
+        const view = session.seen.view
+        assert.ok(view)
+        assert.equal(view.history?.hasMore, false)
+        assert.deepEqual(
+          view.turns.map((entry) => entry.id),
+          expected,
+        )
+        assert.equal(new Set(view.turns.map((entry) => entry.id)).size, 24)
+        for (let index = 0; index < 24; index++) {
+          const user: ItemView | undefined = view.items[`t${index}:u${index}`]
+          const answer: ItemView | undefined = view.items[`t${index}:a${index}`]
+          assert.equal(user?.kind === 'userMessage' && user.text, `第${index}页历史`)
+          assert.equal(answer?.kind === 'agentMessage' && answer.text, `回答${index}`)
+        }
+      } finally {
+        session.close()
+      }
+      await settle()
+    }
+  } finally {
+    app.core.stop()
+  }
 })
 
 test('加载旧页时正在运行的回合继续流；新回合与重叠旧页不能覆盖最新状态', async () => {

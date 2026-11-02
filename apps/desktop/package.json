@@ -20,6 +20,8 @@
     "check:scroll:entry": "npm run build && node scripts/smoke.mjs --scroll --entry",
     "check:compose": "npm run build && node scripts/smoke.mjs --compose",
     "check:compose:entry": "npm run build && node scripts/smoke.mjs --compose --entry",
+    "check:critical": "npm run build && node scripts/smoke.mjs --critical && node scripts/smoke.mjs --critical --entry",
+    "check:nightly": "node scripts/check-nightly.mjs",
     "check:ssh": "npm run build && node scripts/check-ssh.mjs",
     "check:upgrade": "npm run build && node scripts/check-upgrade.mjs",
     "check:pair": "npm run build && node scripts/check-pair.mjs",

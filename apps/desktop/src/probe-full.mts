@@ -92,8 +92,12 @@ export async function fullProbe(): Promise<FullProbe> {
     const input = await until('输入框', area)
     write(input, words)
     await frame()
+    await until('当前会话发送按钮可用', () => {
+      const button = one<HTMLButtonElement>('.dock .send:not(.stop)')
+      return button && !button.disabled
+    })
     press(input, 'Enter')
-    await frame()
+    await until('输入已接收', () => area()?.value === '')
   }
   const lastTurn = () => all('.turn').at(-1)?.textContent ?? ''
   const running = () => Boolean(one('.running-line'))
@@ -120,6 +124,7 @@ export async function fullProbe(): Promise<FullProbe> {
   const open = async (title: string) => {
     ;(await until(`侧栏里的“${title}”`, () => rowOf(title))).click()
     await until(`“${title}”的内容`, () => text(one('.crumb b')) === title && one('.turn'))
+    await until('当前会话完成恢复', () => one('.tr-scroll')?.getAttribute('aria-busy') === 'false')
   }
   /** 设备页的入口收进了设置页：先点侧栏底部的齿轮，再点设置页左上角的“设备” */
   const toDevices = async () => {
@@ -247,8 +252,7 @@ export async function fullProbe(): Promise<FullProbe> {
   const downCard = text(one(`.harness-entry[data-harness="${second.id}"]`, seen.card))
   seen.close()
   const othersUntouched = !isDown(onFirst) && !one('.chip.off', rowOf(onFirst))
-  // 夹具要先看到那个运行时退出了，才肯把它重新起来
-  await sleep(500)
+  // smoke.mjs 按夹具的进程退出事件排队发送 start。
   console.log(`LITCH_SIGNAL start ${second.id}`)
   await until('这一行恢复原样', () => !isDown(opening) && !hint() && !flag())
   const recovered = true
@@ -270,7 +274,6 @@ export async function fullProbe(): Promise<FullProbe> {
   await until('设备详情里它是不可用', () => entry()?.dataset.state === 'unavailable', 10_000)
   const downReason = text(one('.harness-why', entry() as HTMLElement))
   const pageShowsDown = Boolean(one('.pill', entry() as HTMLElement)) && downReason.length > 0
-  await sleep(500)
   console.log(`LITCH_SIGNAL start ${second.id}`)
   await until('设备详情里它恢复可用', () => entry()?.dataset.state === 'ready')
   const pageShowsUp = !one('.harness-why', entry() as HTMLElement)

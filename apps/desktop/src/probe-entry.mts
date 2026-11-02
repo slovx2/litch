@@ -14,8 +14,8 @@ export interface EntryProbe {
   toggles: number
   /** 文件改动点开后有没有画出差异的行 */
   diffLines: number
-  /** 长对话：回合数，以及切走再切回来之后位置差了多少 */
-  longTurns: number
+  /** 长对话：旧历史入口能到达首尾问题，以及切走再切回的位置 */
+  historyEnds: boolean
   restoreShift: number
   /** 不属于任何项目的会话有没有出现在“无项目”下面 */
   looseListed: boolean
@@ -52,6 +52,7 @@ export async function entryProbe(): Promise<EntryProbe> {
       `“${title}”的内容`,
       () => one('.crumb')?.textContent?.includes(title) && one('.turn'),
     )
+    await until('滚动恢复完成', () => scroller().getAttribute('aria-busy') === 'false')
     await frame()
   }
 
@@ -103,11 +104,19 @@ export async function entryProbe(): Promise<EntryProbe> {
 
   // ---- 三、长对话：切走再切回来 ----
   await open('连接层的重连与对账')
-  // 对话区先画最后几个回合、更早的分批往前补（ui 的 turn-window.ts）：等画全再数，等不到就照实数
-  const drawnBy = performance.now() + 5000
-  while (performance.now() < drawnBy && document.querySelectorAll('.turn').length < 24)
-    await frame()
-  const longTurns = document.querySelectorAll('.turn').length
+  // 回合完整性、顺序与重开后的去重在 core/history-paging.test.mts 逐条验证。
+  // 窗口只沿真实的“更早历史”入口到达首条和末条，不拿首批 DOM 数量当历史总数。
+  const question = (index: number) =>
+    [...document.querySelectorAll('.umsg-text')].find(
+      (entry) => entry.textContent === `第 ${index} 个问题：重连之后的对账该怎么做？请分点说。`,
+    )
+  await until('加载旧历史并画出首尾问题', () => {
+    const older = document.querySelector<HTMLButtonElement>('.history-more')
+    if (older?.title) throw new Error(`旧历史加载失败：${older.title}`)
+    if (older && !older.disabled) older.click()
+    return !older && question(1) && question(24)
+  })
+  const historyEnds = Boolean(question(1) && question(24))
   scroller().scrollTop = -2400
   await frame()
   await frame()
@@ -122,6 +131,7 @@ export async function entryProbe(): Promise<EntryProbe> {
   const back = await until('切回来之后的那一行', () =>
     content().querySelector<HTMLElement>(`[data-anchor="${anchor}"]`),
   )
+  await until('切回后的滚动恢复完成', () => scroller().getAttribute('aria-busy') === 'false')
   await frame()
   const restoreShift = Math.abs(
     back.getBoundingClientRect().top - scroller().getBoundingClientRect().top - offset,
@@ -138,7 +148,7 @@ export async function entryProbe(): Promise<EntryProbe> {
     toggleMaxShift,
     toggles,
     diffLines,
-    longTurns,
+    historyEnds,
     restoreShift,
     looseListed: Boolean(
       looseLabel?.closest('[data-group]')?.querySelector('.ss-row:not(.projection-group *)'),
@@ -161,7 +171,7 @@ export function judgeEntry(probe: EntryProbe, slow: boolean): string[] {
   }
   if (probe.toggles < 4) failed.push(`只成功点了 ${probe.toggles} 次条目`)
   if (probe.diffLines < 2) failed.push('文件改动点开后没有画出差异')
-  if (probe.longTurns !== 24) failed.push(`长对话应该有 24 个回合，画出了 ${probe.longTurns} 个`)
+  if (!probe.historyEnds) failed.push('长历史未能通过加载入口到达首尾问题')
   if (!(probe.restoreShift <= 1))
     failed.push(`切回会话后位置差了 ${probe.restoreShift.toFixed(2)} 像素`)
   if (!probe.looseListed) failed.push('不属于任何项目的会话没有出现在“无项目”下面')

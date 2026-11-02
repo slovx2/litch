@@ -17,6 +17,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { fixtureEnvironment } from '../../../scripts/fixture-environment.mjs'
 import { packedBinary } from './packed.mjs'
 
 const require = createRequire(import.meta.url)
@@ -59,6 +60,7 @@ const probe = useRemote
       : [
           'scroll',
           'compose',
+          'critical',
           'sidebar',
           'manager',
           'navigation',
@@ -146,13 +148,45 @@ function startDevice(managed) {
     })
     const exited = new Promise((done) => child.on('exit', done))
     let output = ''
+    const changed = new Set()
+    let commands = Promise.resolve()
+    const command = (text) => {
+      commands = commands.then(async () => {
+        const id = text.match(/^stop ([\w-]+)$/)?.[1]
+        if (!id) {
+          child.stdin.write(`${text}\n`)
+          return
+        }
+        // 夹具在 exit 回调删掉旧进程后报告退出；start 必须等这个事件，不能靠页面睡半秒。
+        const from = output.length
+        await new Promise((done, fail) => {
+          const finish = (error) => {
+            clearTimeout(timer)
+            changed.delete(check)
+            child.off('exit', lost)
+            if (error) fail(error)
+            else done()
+          }
+          const check = () => {
+            if (output.slice(from).includes(`${id} 退出了（`)) finish()
+          }
+          const lost = () => finish(new Error(`等待 ${id} 退出时设备夹具结束`))
+          const timer = setTimeout(() => finish(new Error(`夹具未确认 ${id} 已退出`)), 15_000)
+          changed.add(check)
+          child.once('exit', lost)
+          child.stdin.write(`${text}\n`)
+        })
+      })
+      return commands
+    }
     const onData = (chunk) => {
       output += chunk
+      for (const notify of changed) notify()
       const line = output.split('\n').find((entry) => entry.startsWith('LITCH_DEVICE_FIXTURE '))
       if (!line) return
       resolve({
         socket: JSON.parse(line.slice('LITCH_DEVICE_FIXTURE '.length)).socket,
-        command: (text) => child.stdin.write(`${text}\n`),
+        command,
         log: () => output,
         stop: () => {
           child.kill('SIGTERM')
@@ -255,7 +289,10 @@ function writeElsewhere(socket, key, value) {
 const profile = mkdtempSync(join(tmpdir(), 'litch-smoke-'))
 const child = spawn(usePacked ? packedBinary() : electron, usePacked ? [] : [appDir], {
   env: {
-    ...process.env,
+    ...fixtureEnvironment(),
+    HOME: profile,
+    CODEX_HOME: join(profile, 'codex'),
+    CLAUDE_CONFIG_DIR: join(profile, 'claude'),
     LITCH_SMOKE: mode,
     LITCH_PROFILE: profile,
     // 上手功能：本机一个 harness 都没装的开局，首启引导照第一次启动那样出
@@ -378,7 +415,7 @@ child.stdout.on('data', (chunk) => {
       // write <设置项的键> <值>：别的客户端改一项设置。别的原样转给夹具
       const write = signal.match(/^write (\S+) (.+)$/)
       if (write) writeElsewhere(device.socket, write[1], JSON.parse(write[2]))
-      else device.command(signal)
+      else void device.command(signal).catch((error) => outside.push(error.message))
     }
     relayed = signals.length
   }

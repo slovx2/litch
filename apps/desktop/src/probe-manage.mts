@@ -271,13 +271,38 @@ export async function manageProbe(): Promise<ManageProbe> {
 
   // ---- 三、停用 Pi ----
   const enabled = () => one<HTMLButtonElement>('[data-lead] .switch', block('pi'))
+  const setEnabled = async (value: boolean) => {
+    const button = await until('Pi 启用开关可用', () => {
+      const found = enabled()
+      return found && !found.disabled ? found : null
+    })
+    if (button.getAttribute('aria-checked') === String(value))
+      throw new Error(`Pi 开关已经是 ${value}，夹具未处于预期起点`)
+    button.click()
+    await until(
+      'Pi 启用草稿已更新',
+      () => enabled()?.getAttribute('aria-checked') === String(value),
+    )
+  }
   const before = rows().length
-  enabled()?.click()
+  const beforeIds = rows()
+    .map((row) => row.dataset.session)
+    .sort()
+  await setEnabled(false)
   await save()
   await until('Pi 变成停用', () => block('pi').dataset.state === 'disabled')
   const disabledState = block('pi').dataset.state ?? ''
-  // 停用之后核心会重新对一次账：等它对完，会话应该还在
-  await sleep(2500)
+  // 状态通知和侧栏投影分开到达：等原有会话全部标为不可用，不以固定停留代表对账完成。
+  await until(
+    '原有会话均保留且已标为不可用',
+    () =>
+      rows().every(isDown) &&
+      JSON.stringify(
+        rows()
+          .map((row) => row.dataset.session)
+          .sort(),
+      ) === JSON.stringify(beforeIds),
+  )
   const disabledRows = `${rows().filter(isDown).length}/${rows().length}/${before}`
   ;(
     await until('设备行上的新建按钮', () =>
@@ -307,9 +332,13 @@ export async function manageProbe(): Promise<ManageProbe> {
 
   // ---- 四、再启用 ----
   await openDetail()
-  enabled()?.click()
+  await setEnabled(true)
   await save()
   await piReady()
+  await until(
+    '启用后的会话恢复可用',
+    () => rows().length === before && rows().every((row) => !isDown(row)),
+  )
   const enabledState = block('pi').dataset.state ?? ''
   const enabledRowsDown = rows().filter(isDown).length
   const spokeAfterEnable = await converse(SESSION, '启用之后说一句')

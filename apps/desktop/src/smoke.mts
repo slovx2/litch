@@ -66,6 +66,7 @@ import {
 } from './probe-compose-more.mjs'
 import { judgePlan, planProbe } from './probe-compose-plan.mjs'
 import { judgeSendMode, sendModeProbe } from './probe-compose-send.mjs'
+import { criticalProbe, judgeCritical } from './probe-critical.mjs'
 import { devicesProbe, judgeDevices, narrowDevicesProbe } from './probe-devices.mjs'
 import { type DiffMode, runDiffChecks } from './probe-diff-run.mjs'
 import { runEnginesChecks } from './probe-engines-run.mjs'
@@ -122,6 +123,8 @@ type ProbeMode =
   | 'scroll-entry'
   | 'compose'
   | 'compose-entry'
+  | 'critical'
+  | 'critical-entry'
   | 'remote'
   | 'remote-service'
   | 'full'
@@ -176,6 +179,8 @@ const PROBE_MODES: readonly string[] = [
   'scroll-entry',
   'compose',
   'compose-entry',
+  'critical',
+  'critical-entry',
   'remote',
   'remote-service',
   'full',
@@ -204,6 +209,7 @@ export const MOCK_MODES: readonly string[] = [
   'mock',
   'scroll',
   'compose',
+  'critical',
   'full-mock',
   'manage-mock',
   'sidebar',
@@ -300,6 +306,10 @@ async function measure(
   }
   if (mode === 'files' || mode === 'files-device' || mode === 'files-entry') {
     return runFilesChecks(window, mode, hooks)
+  }
+  if (mode === 'critical' || mode === 'critical-entry') {
+    const result = await runInPage(window, criticalProbe, mode === 'critical-entry')
+    return [result, judgeCritical(result)]
   }
   if (mode === 'sidebar') return runSidebarChecks(window, hooks)
   if (mode === 'manager') {

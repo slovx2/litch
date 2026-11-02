@@ -37,9 +37,6 @@ export interface SessionProbe {
   undo: {
     /** 从右键菜单里归档：这一行没了，出一条提示，上面有标题和“撤销” */
     offered: boolean
-    /** 鼠标在提示上面时过了时间也不消失；移开之后自己消失。只在模拟核心上量（要等十几秒） */
-    heldWhileHovered: boolean | null
-    goneAfterLeave: boolean | null
     /** 提示还在的时候，那个会话在“已归档对话”里被恢复了：提示跟着收起，不留一个撤销不了的按钮 */
     prunedElsewhere: boolean | null
     /** 连着归档两个：还是一条提示，说的是两个；“全部撤销”把两个都恢复。只在模拟核心上量 */
@@ -372,8 +369,6 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   const offer = await until('可以撤销的提示', toast)
   const undo: SessionProbe['undo'] = {
     offered: Boolean(offer.textContent?.includes(other)) && undoButton()?.textContent === '撤销',
-    heldWhileHovered: null,
-    goneAfterLeave: null,
     prunedElsewhere: null,
     merged: null,
     mergedRestored: null,
@@ -381,15 +376,10 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     reselected: false,
   }
   if (!real) {
-    // 鼠标停在上面：过了该消失的时间还在；移开之后才开始计时
-    offer.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
-    await sleep(7000)
-    undo.heldWhileHovered = toast() === offer
-    offer.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }))
-    const leftAt = performance.now()
-    await until('提示自己消失', () => !toast(), 9000)
-    undo.goneAfterLeave = performance.now() - leftAt > 4000
-    // 上面那个已经过了能撤销的时候，从“已归档对话”里放回来
+    // 悬停/焦点暂停和离开后重新计时下沉到 toast-lifetime.test.mjs。
+    // 窗口继续验证主动关闭与归档列表恢复，不等待六秒的业务计时。
+    offer.querySelector<HTMLButtonElement>('.toast-x')?.click()
+    await until('关闭归档提示', () => !toast())
     const restoreFromPage = async () => {
       one<HTMLButtonElement>('.sb-settings')?.click()
       ;(
@@ -587,19 +577,27 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   const bubble = (text: string) => bubbles().find((element) => element.textContent?.includes(text))
   const turns = () => all('.turn').length
   /**
-   * 切回一个会话之后先等回合画全再数：对话区先画最后几个回合、更早的分批往前补（ui 的 turn-window.ts），
-   * 刚切回来那一下数到的是先画的那一截。等不到 count 个就照实数（少了回合照样算没过）
+   * 首批 DOM 和首批协议页都不是完整历史。需要的旧页先加载，再等所需回合挂载；缺回合仍失败。
    */
   const drawnTo = async (count: number) => {
-    const end = performance.now() + 5000
-    while (performance.now() < end && turns() < count) await sleep(16)
+    // 初始历史只有尾页。需要更早的回合时走用户可用的加载入口，不能等待不存在的自动全量恢复。
+    await until('所需历史回合加载并挂载', () => {
+      if (turns() >= count) return true
+      const older = one<HTMLButtonElement>('.history-more')
+      if (older?.title) throw new Error(`旧历史加载失败：${older.title}`)
+      if (older && !older.disabled) older.click()
+      return false
+    })
     await frame()
   }
   /** 发一句话，等这一轮结束 */
   const sayAndWait = async (text: string) => {
-    const before = turns()
+    const before = all('.turn').at(-1)?.getAttribute('data-search-turn')
     await say(text)
-    await until(`“${text}”这一轮`, () => turns() > before && bubble(text))
+    await until(`“${text}”这一轮`, () => {
+      const current = bubble(text)?.closest('.turn')
+      return current && current.getAttribute('data-search-turn') !== before
+    })
     await until('这一轮结束', () => !running() && area(), 60_000)
     await frame()
   }
@@ -614,7 +612,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   await sayAndWait(earlier)
   await sayAndWait(later)
   const acts = bubble(earlier)?.querySelector<HTMLElement>('.umsg-acts')
-  const rowsBefore = mainRows().length
+  const sourceId = one('.ss-row:not(.projection-group *).sel')?.getAttribute('data-session')
   const turnsBefore = turns()
   const fork: SessionProbe['fork'] = {
     hidden:
@@ -635,12 +633,17 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     await until('操作出现', () => acts && getComputedStyle(acts).opacity === '1', 3000),
   )
   act(earlier, 'fork')?.click()
-  await until('落到分叉出来的会话里', () => mainRows().length === rowsBefore + 1)
+  await until('落到分叉出来的会话里', () => {
+    const selected = one('.ss-row:not(.projection-group *).sel')?.getAttribute('data-session')
+    return selected && selected !== sourceId && one('.forked-from[data-source]')
+  })
+  await drawnTo(turnsBefore - 1)
   await until('新会话的内容', () => turns() === turnsBefore - 1 && bubble(earlier))
   await frame()
   fork.opened =
     Boolean(one('.ss-row:not(.projection-group *).sel')?.textContent?.includes(main)) &&
-    Boolean(one('.crumb')?.textContent?.includes(main))
+    Boolean(one('.crumb')?.textContent?.includes(main)) &&
+    mainRows().some((row) => row.getAttribute('data-session') === sourceId)
   fork.cut = Boolean(bubble(earlier)) && !bubble(later)
   fork.told = Boolean(actionToast()?.textContent?.includes('分叉'))
   // 只认分叉来源那一条（data-source）：定时任务的说明条、会话树的父会话条也借用 forked-from 的样子
