@@ -203,11 +203,13 @@ async function managerRealStep(step: string, harness: string, cwd: string): Prom
         (entry) => text(entry).includes(report) && text(one('.pill', entry)) === '空闲',
       ),
     )
-    const line = await wait('侧栏经理的工作线', () =>
-      all('[data-session]:not(.projection-group *)', row()).find((entry) =>
+    const line = await wait('侧栏经理的工作线', () => {
+      // 经理行默认收起，下面一行“› N 个子会话”：先展开
+      one<HTMLButtonElement>('.tree-kids > .tree-sum', row())?.click()
+      return all('.mg-tree [data-session]:not(.projection-group *)', row()).find((entry) =>
         text(entry).includes(title),
-      ),
-    )
+      )
+    })
     state.lineId = line.dataset.session ?? ''
     assert(state.lineId, '侧栏工作线没有会话标识')
     const shown = text(card)

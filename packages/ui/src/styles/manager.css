@@ -50,45 +50,15 @@
   padding: 4px 10px;
   color: var(--ink-2);
 }
-.mg-sidebar-row {
-  display: flex;
-  align-items: center;
-  min-height: 34px;
-  padding: 0 6px;
-  border-radius: var(--r1);
-}
-.mg-sidebar-row[data-selected="true"] {
-  background: var(--sel);
-}
-.mg-sidebar-row:hover {
-  background: var(--hover);
-}
-.mg-pick {
-  display: flex;
-  flex: 1;
+/* 一位经理一块：左边设备颜色的竖线、行和工作线子树都照普通对话的投影块（projections.css 的 .projection-block）画 */
+.mg-sidebar-manager {
   min-width: 0;
-  align-items: center;
-  gap: 6px;
-  text-align: left;
-  padding: 6px 0;
-}
-.mg-pick small {
-  white-space: nowrap;
-}
-.mg-fold {
-  flex: none;
-}
-.mg-fold[aria-expanded="false"] svg {
-  transform: rotate(-90deg);
+  margin: 4px 8px;
+  padding-inline-start: 4px;
+  border-inline-start: 2px solid var(--wire);
 }
 .mg-attention {
   color: var(--wait);
-}
-.mg-sidebar-children {
-  padding-left: 10px;
-}
-.mg-tree {
-  min-width: 0;
 }
 .mg-page {
   display: grid;
@@ -813,13 +783,28 @@
   align-self: flex-start;
 }
 
-/* 待处理与本地草稿分行并列，窄侧栏也保留两种数量。 */
+/* 行尾一栏（普通会话行放时间的位置）：待处理、状态与本地草稿数排在一行，标题先截断。 */
 .mg-sidebar-counts {
   display: flex;
+  flex: 0 1000 auto;
+  align-items: center;
+  gap: 6px;
+  font-size: calc(11px * var(--fs));
+  white-space: nowrap;
+}
+/* 标题按字宽起算、先让行尾的状态文字收（收不掉的待处理与草稿数照常显示） */
+.mg-sidebar-manager .ss-row > .title {
+  flex: 1 1 auto;
+}
+.mg-sidebar-counts > * {
   flex: none;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
+}
+.mg-sidebar-counts:has(> [data-manager-state]) {
+  min-width: 0;
+}
+.mg-sidebar-counts > [data-manager-state] {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .mg-inbox-tabs {

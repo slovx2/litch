@@ -63,6 +63,8 @@ async function backgroundStep(step: string, cwd: string): Promise<object> {
     await frame()
   }
   const row = () => one(`.mg-sidebar-manager[data-manager-id="${CSS.escape(state.managerId)}"]`)
+  // 经理行和普通对话的父子树一样默认收起，下面一行“› N 个子会话”：要点工作线先展开
+  const expand = () => one<HTMLButtonElement>('.tree-kids > .tree-sum', row())?.click()
   /** 侧栏经理行：状态记号的类名与右侧文字 */
   const managerRow = () => ({
     mark: one('.mg-pick > i.st', row())?.className ?? null,
@@ -152,9 +154,10 @@ async function backgroundStep(step: string, cwd: string): Promise<object> {
       })}`,
     )
     await reply('会话结果：')
-    const line = await wait('侧栏里的工作线', () =>
-      all('[data-session]', row()).find((entry) => text(entry).includes(title)),
-    )
+    const line = await wait('侧栏里的工作线', () => {
+      expand()
+      return all('.mg-tree [data-session]', row()).find((entry) => text(entry).includes(title))
+    })
     state.lineId = line.dataset.session ?? ''
     const lineRow = () => one(`[data-session="${CSS.escape(state.lineId)}"]`, row())
     // 工作线的命令审批在它自己的页面里答；回合结束、后台命令在跑时它那一行换成后台记号
@@ -172,6 +175,7 @@ async function backgroundStep(step: string, cwd: string): Promise<object> {
   }
   if (step === '05-line-page') {
     // 普通对话页（工作线自己的页面）：同样有那一行，右侧页能看到命令、用时并停止
+    expand()
     await click(`.mg-sidebar-manager [data-session="${CSS.escape(state.lineId)}"] button`)
     const shown = await wait('工作线页的后台任务行', () => bar(), 30_000)
     const tasks = await panel()

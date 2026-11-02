@@ -164,6 +164,10 @@ try {
   await click('[data-board-tab="suggestions"]')
   assert.equal(await read("document.querySelectorAll('.suggestion-row').length"), 0)
   // 从经理的工作线产生建议，全局只留一张经理汇总卡；打开后在看板内操作。
+  // 经理行默认收起，下面一行“› N 个子会话”：先展开
+  await read(
+    "document.querySelectorAll('.mg-sidebar-manager .tree-kids > .tree-sum').forEach((sum) => sum.click())",
+  )
   await click(
     '[data-session="manager-k2"]:not(.projection-group *) .ss-row:not(.projection-group *)',
   )

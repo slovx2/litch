@@ -1,6 +1,9 @@
 // 经理冒烟只操作正式界面，模拟核心负责写答案和生成答复回合。
 export interface ManagerSeen {
   linesState: boolean
+  /** 经理行和普通对话的父子树同一套：默认收起、下面一行“› N 个子会话”，点开展开；行高、记号缩进与工作线行一致 */
+  treeShape: boolean
+  treeShapeDetail: string
   pendingTitle: boolean
   answeredSplit: boolean
   issueOrder: boolean
@@ -649,6 +652,94 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     !one('[data-board-tab="lines"]') &&
     !one('[data-overview="yours"]') &&
     Boolean(one('[data-board-tab="suggestions"]'))
+  // 经理一节的树：经理行默认收起，下面只有“› N 个子会话”，点开后工作线挂在下面（和普通对话的父子树同一套）。
+  // m1 前面选中过它的工作线，已经展开：先收起再量；“默认收起”看没碰过的 m3
+  const m1 = '.mg-sidebar-manager[data-manager-id="m1"]'
+  const caret = () => one(`${m1} .row-line > .tree-fold`)?.getAttribute('aria-expanded') ?? ''
+  const untouched = Boolean(one('.mg-sidebar-manager[data-manager-id="m3"] .tree-kids > .tree-sum'))
+  if (caret() === 'true') await click(`${m1} .row-line > .tree-fold`)
+  await until('收起经理工作线', () => one(`${m1} .tree-kids > .tree-sum`))
+  const folded = {
+    untouched,
+    sum: one(`${m1} .tree-kids > .tree-sum`)?.textContent?.trim() ?? '',
+    caret: caret(),
+    hidden: !one(`${m1} .mg-tree`),
+    oldFold: Boolean(one('.mg-fold, .mg-sidebar-children')),
+  }
+  await click(`${m1} .tree-sum`)
+  await until('展开经理工作线', () => one(`${m1} .tree-kids .mg-tree [data-session]`))
+  const lineRows = () => [
+    ...document.querySelectorAll<HTMLElement>(
+      `${m1} .mg-tree [data-depth="1"] > .row-line > .ss-row`,
+    ),
+  ]
+  const box = (e: Element | null | undefined) => e?.getBoundingClientRect()
+  const managerRow = () => one(`${m1} .row-line > .ss-row`)
+  // 六种外观各量一次：标题、记号都在固定的列里，工作线的标题比经理的靠右，差值等于普通对话父子之间的缩进
+  // （.tree-kids 的左内边距，普通对话的子会话也挂在它里面）
+  const appearance = (
+    window as unknown as {
+      __litchLook: {
+        get(): { skin: string; theme: string }
+        set(patch: { skin?: string; theme?: string }): void
+      }
+    }
+  ).__litchLook
+  const was = appearance.get()
+  const columns: Record<string, unknown> = {}
+  let columnsOk = true
+  for (const skin of ['standard', 'human', 'retro'])
+    for (const theme of ['light', 'dark']) {
+      appearance.set({ skin, theme })
+      await document.fonts.ready
+      await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
+      const row = box(managerRow())
+      const title = box(managerRow()?.querySelector(':scope > .title'))
+      const mark = box(managerRow()?.querySelector(':scope > i.st'))
+      const lines = lineRows().map((line) => ({
+        row: box(line),
+        title: box(line.querySelector(':scope > .title')),
+        mark: box(line.querySelector(':scope > i.st')),
+      }))
+      const kids = one(`${m1} .row-line + .tree-kids`)
+      const indent = kids ? Number.parseFloat(getComputedStyle(kids).paddingLeft) : Number.NaN
+      const round = (n: number | undefined) => (n === undefined ? null : Math.round(n * 10) / 10)
+      const seen = {
+        indent,
+        titleShift: lines.map((line) => round((line.title?.left ?? 0) - (title?.left ?? 0))),
+        // 标题在行里的起点：经理行和每条工作线一样（记号占同一列，有没有记号都不推标题）
+        titleColumn: [round((title?.left ?? 0) - (row?.left ?? 0))].concat(
+          lines.map((line) => round((line.title?.left ?? 0) - (line.row?.left ?? 0))),
+        ),
+        markShift: lines.map((line) => round((line.mark?.left ?? 0) - (mark?.left ?? 0))),
+        height: [round(row?.height)].concat(lines.map((line) => round(line.row?.height))),
+      }
+      columns[`${skin}-${theme}`] = seen
+      columnsOk &&=
+        lines.length > 0 &&
+        indent > 0 &&
+        seen.titleShift.every((shift) => shift === indent) &&
+        seen.markShift.every((shift) => shift === indent) &&
+        seen.titleColumn.every((left) => left === seen.titleColumn[0]) &&
+        seen.height.every((height) => height === seen.height[0])
+    }
+  appearance.set(was)
+  const treeShapeSeen = {
+    ...folded,
+    lines: lineRows().length,
+    caretOpen: caret(),
+    columns,
+  }
+  const treeShape =
+    treeShapeSeen.untouched &&
+    treeShapeSeen.sum === `${treeShapeSeen.lines} 个子会话` &&
+    treeShapeSeen.lines > 0 &&
+    treeShapeSeen.caret === 'false' &&
+    treeShapeSeen.caretOpen === 'true' &&
+    treeShapeSeen.hidden &&
+    !treeShapeSeen.oldFold &&
+    columnsOk
+  let treeShapeDetail = JSON.stringify(treeShapeSeen)
   const branchFacts = Boolean(one('.mg-tree [data-session="manager-k1"]:not(.projection-group *)'))
   await click(
     '.mg-tree [data-session="manager-k1"]:not(.projection-group *) .ss-row:not(.projection-group *)',
@@ -689,8 +780,23 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const reportsStopped = Boolean(
     await until('经理子会话停报标记', () => one(`${childRow} [data-report="off"]`)),
   )
+  // 经理行和普通对话的顶层行（未读、最近里的主项）左边对齐：行、记号、标题三处同一个横坐标
+  const leftOf = (row: Element | null | undefined) =>
+    row
+      ? [row, row.querySelector(':scope > i.st'), row.querySelector(':scope > .title')].map(
+          (e) => Math.round((e?.getBoundingClientRect().left ?? Number.NaN) * 10) / 10,
+        )
+      : []
+  const managerLeft = leftOf(one('.mg-sidebar-manager .row-line > .ss-row'))
   one<HTMLButtonElement>('[data-sidebar-mode="chat"]')?.click()
   await until('返回普通对话', () => !one('.mg-sidebar-manager'))
+  const chatLeft = leftOf(
+    await until('普通对话的顶层行', () =>
+      one('[data-projection] .tree-node[data-depth="0"] > .row-line > .ss-row'),
+    ),
+  )
+  const rootAligned =
+    managerLeft.length === 3 && managerLeft.every((left, i) => left === chatLeft[i])
   const isolated =
     childIds.length > 0 &&
     childIds.every(
@@ -1192,8 +1298,11 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const oldError = one('.mg-body .err')?.textContent ?? ''
   const oldDevice = Object.values(oldChecks).every(Boolean)
   const oldDeviceDetail = JSON.stringify({ ...oldChecks, error: oldError })
+  treeShapeDetail = JSON.stringify({ ...treeShapeSeen, managerLeft, chatLeft })
   return {
     linesState,
+    treeShape: treeShape && rootAligned,
+    treeShapeDetail,
     pendingTitle,
     answeredSplit: answeredSplit && closedSplit,
     issueOrder: issueOrder && orderInHead,
@@ -1266,11 +1375,15 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
 
 export function judgeManager(seen: ManagerSeen): string[] {
   const messages: Record<
-    Exclude<keyof ManagerSeen, 'ignoreDetail' | 'endedDraftDetail' | 'oldDeviceDetail'>,
+    Exclude<
+      keyof ManagerSeen,
+      'ignoreDetail' | 'endedDraftDetail' | 'oldDeviceDetail' | 'treeShapeDetail'
+    >,
     string
   > = {
     linesState:
       '经理自己只有后台命令、工作线在跑时，经理行仍画成运行中，或没有后台记号、没写明工作线',
+    treeShape: `经理一节的树和普通对话的父子树不一致（默认收起、“› N 个子会话”、点开展开；六种外观下工作线标题与记号比经理行多缩进一级、标题列固定、行高一致，经理行与普通对话顶层行左边对齐）：${seen.treeShapeDetail}`,
     pendingTitle: '有待处理的经理行，悬停提示第一行不是“N 待处理 · 状态文字”',
     answeredSplit: '已答复或已关闭的决策没有把答复、关闭记录与问题分块，或其他选项没有默认收起',
     issueOrder:

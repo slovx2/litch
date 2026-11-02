@@ -6,17 +6,18 @@ import {
   type SessionChildren,
   type SessionSummary,
 } from '@litch/core'
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import type { ManagerBoardTopicView, ManagerView } from '../../../core/src/model-manager.mts'
 import type { Selection } from '../app/App.tsx'
 import { requestManagers } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
-import { wireStyle } from '../app/device.ts'
+import { badgeOf, nameOf, wireStyle } from '../app/device.ts'
 import { Caret, Forward } from '../app/icons.tsx'
 import { useKey, useKeys } from '../app/services.tsx'
 import { containsSession, revealRow } from '../sidebar/reveal.ts'
 import { useSidebarReveal } from '../sidebar/reveal-context.ts'
 import { managerPendingTitle, managerStateText, sessionMark } from '../sidebar/session-mark.ts'
+import { toggleSidebarFold, useSidebarFolds } from '../sidebar/state.ts'
 import { useAnswerDrafts } from './drafts.ts'
 import { usePostDrafts } from './post-drafts.ts'
 import { useRequestDrafts } from './request-drafts.ts'
@@ -37,16 +38,34 @@ function ManagerRow({
   reveal: Selection | null
 }) {
   const t = useT()
-  const [open, setOpen] = useState(true)
+  const kids = useKey<SessionChildren>(keys.children(manager.deviceId))
+  const lines = kids?.[manager.threadId]?.length ?? 0
+  // 和普通对话的父子树一样默认收起，下面一行“› N 个子会话”。展开了哪些照“最近 / 未读”的投影记在侧栏状态里
+  // （folded 里的是展开的），切栏、重开都不丢；选中的是它的工作线时先展开，免得选中行藏着
+  const scope = `:manager:${manager.deviceId}`
+  const open = useSidebarFolds(scope).folded.includes(manager.threadId)
+  // 只在选中工作线、定位到这里的那一刻展开；之后用户自己收起不再被撑开（展开与否从 ref 读最新的）
+  const opened = useRef(open)
+  opened.current = open
+  const unfold = useCallback(() => {
+    if (!opened.current) toggleSidebarFold(scope, 'folded', manager.threadId)
+  }, [scope, manager.threadId])
+  const holdsSelection =
+    selection?.deviceId === manager.deviceId &&
+    selection.sessionId !== manager.threadId &&
+    containsSession(kids ?? {}, manager.threadId, selection.sessionId)
+  useEffect(() => {
+    if (holdsSelection) unfold()
+  }, [holdsSelection, unfold])
   const row = useRef<HTMLDivElement>(null)
   const { fromTree, selected } = useSidebarReveal()
   useEffect(() => {
     if (!reveal) return
-    setOpen(true)
+    unfold()
     if (reveal.sessionId !== manager.threadId) return
     const scroll = row.current?.closest<HTMLElement>('.sb-scroll')
     if (row.current && scroll) revealRow(row.current, scroll)
-  }, [reveal, manager.threadId])
+  }, [reveal, manager.threadId, unfold])
   const { drafts } = useAnswerDrafts(manager.deviceId, manager.id)
   const { drafts: requests } = useRequestDrafts(manager.deviceId, manager.id)
   const { drafts: posts } = usePostDrafts(manager.deviceId, manager.id)
@@ -74,76 +93,112 @@ function ManagerRow({
     selected.sessionId === selection?.sessionId &&
     selection?.deviceId === manager.deviceId &&
     selection.sessionId === manager.threadId
+  const fold = () => toggleSidebarFold(scope, 'folded', manager.threadId)
+  // 行的结构、类名和普通会话行（Sidebar.tsx 的 SessionRow 与 tree）一致：记号、标题、harness 标签、行尾一栏，
+  // 行首左边距里的小箭头，收起时下面一行“› N 个子会话”。经理行尾那栏放待处理、状态与草稿数，占普通行时间的位置
   return (
     <div
       className="mg-sidebar-manager"
       style={wireStyle(device?.wire)}
       data-manager-id={manager.id}
     >
-      <div ref={row} className="mg-sidebar-row" data-selected={picked}>
-        <button
-          type="button"
-          className="ibtn mg-fold"
-          aria-expanded={open}
-          aria-label={manager.name}
-          onClick={() => setOpen(!open)}
-        >
-          <Caret />
-        </button>
-        <button
-          type="button"
-          className="mg-pick"
-          aria-current={picked ? 'page' : undefined}
-          onClick={() => {
-            const next = { deviceId: manager.deviceId, sessionId: manager.threadId }
-            fromTree(next, 'tree')
-            onSelect(next)
-          }}
-        >
-          <i
-            className={mark && mark !== 'unread' ? `st ${mark}` : 'st'}
-            {...(mark === 'bg'
-              ? {
-                  title: t('background.sidebar', { count: background }),
-                  'data-background': background,
-                }
-              : {})}
-          />
-          <span className="ell grow">{manager.name || t('manager.manager')}</span>
-          <i className="wire-sq" title={device ? t.text(device.name) : manager.deviceId} />
-          <small className="mg-sidebar-counts">
-            {manager.status === 'ending' ? (
-              <span className="dim">{t('manager.ending')}</span>
-            ) : null}
-            {attention || count ? (
-              <span
-                className={attention ? 'mg-attention' : 'dim'}
-                title={managerPendingTitle(
-                  t('manager.pending', { n: attention }),
-                  state,
-                  t('manager.pendingDetail', {
-                    decisions: manager.pendingDecisions,
-                    requests: manager.pendingRequests ?? 0,
-                    suggestions: manager.pendingSuggestions ?? 0,
-                  }),
-                )}
+      <div className="tree-node" data-depth={0}>
+        <div ref={row} className="row-line" data-session={manager.threadId}>
+          <button
+            type="button"
+            className={picked ? 'ss-row mg-pick sel' : 'ss-row mg-pick'}
+            aria-current={picked ? 'page' : undefined}
+            onClick={() => {
+              const next = { deviceId: manager.deviceId, sessionId: manager.threadId }
+              fromTree(next, 'tree')
+              onSelect(next)
+            }}
+          >
+            <i
+              className={mark && mark !== 'unread' ? `st ${mark}` : 'st'}
+              {...(mark === 'bg'
+                ? {
+                    title: t('background.sidebar', { count: background }),
+                    'data-background': background,
+                  }
+                : {})}
+            />
+            <span className="title ell grow">{manager.name || t('manager.manager')}</span>
+            {/* 在哪台设备看左边竖线的颜色，名字在标签的提示里：行尾留给待处理与状态 */}
+            <span
+              className="chip"
+              title={[
+                nameOf(device, manager.harness),
+                device ? t.text(device.name) : manager.deviceId,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            >
+              {badgeOf(device, manager.harness)}
+            </span>
+            <small className="mg-sidebar-counts">
+              {manager.status === 'ending' ? (
+                <span className="dim">{t('manager.ending')}</span>
+              ) : null}
+              {attention || count ? (
+                <span
+                  className={attention ? 'mg-attention' : 'dim'}
+                  title={managerPendingTitle(
+                    t('manager.pending', { n: attention }),
+                    state,
+                    t('manager.pendingDetail', {
+                      decisions: manager.pendingDecisions,
+                      requests: manager.pendingRequests ?? 0,
+                      suggestions: manager.pendingSuggestions ?? 0,
+                    }),
+                  )}
+                >
+                  {t('manager.pending', { n: attention })}
+                </span>
+              ) : manager.status !== 'ending' ? (
+                <span className="dim ell" data-manager-state>
+                  {state}
+                </span>
+              ) : null}
+              {count ? (
+                <span className="mg-attention" data-manager-draft-count>
+                  {t('manager.draftCount', { n: count })}
+                </span>
+              ) : null}
+            </small>
+          </button>
+          {lines > 0 ? (
+            <button
+              type="button"
+              className="tree-fold"
+              aria-expanded={open}
+              title={open ? t('tree.fold') : t('tree.unfold', { n: lines })}
+              aria-label={open ? t('tree.fold') : t('tree.unfold', { n: lines })}
+              onClick={fold}
+            >
+              <Caret />
+            </button>
+          ) : null}
+        </div>
+        {lines > 0 ? (
+          <div className="tree-kids">
+            {open ? (
+              children
+            ) : (
+              <button
+                type="button"
+                className="tree-sum"
+                aria-expanded="false"
+                title={t('tree.unfold', { n: lines })}
+                onClick={fold}
               >
-                {t('manager.pending', { n: attention })}
-              </span>
-            ) : manager.status !== 'ending' ? (
-              <span className="dim" data-manager-state>
-                {state}
-              </span>
-            ) : null}
-            {count ? (
-              <span className="mg-attention" data-manager-draft-count>
-                {t('manager.draftCount', { n: count })}
-              </span>
-            ) : null}
-          </small>
-        </button>
+                <Caret />
+                <span className="ell">{t('tree.tucked', { n: lines })}</span>
+              </button>
+            )}
+          </div>
+        ) : null}
       </div>
-      {open ? <div className="mg-sidebar-children">{children}</div> : null}
     </div>
   )
 }
