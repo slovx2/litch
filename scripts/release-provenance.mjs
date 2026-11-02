@@ -8,7 +8,14 @@ import { pathToFileURL } from 'node:url'
 export const artifactKinds = ['adapter', 'cha', 'desktop-macos', 'desktop-windows', 'android']
 const hash = (path) => createHash('sha256').update(readFileSync(path)).digest('hex')
 
-export function writeProvenance(dir, kind, sha, run, attempt = process.env.GITHUB_RUN_ATTEMPT) {
+export function writeProvenance(
+  dir,
+  kind,
+  sha,
+  run,
+  attempt = process.env.GITHUB_RUN_ATTEMPT,
+  checkpoint,
+) {
   if (!artifactKinds.includes(kind) || !/^[a-f0-9]{40}$/.test(sha))
     throw new Error('产物来源参数错误')
   const files = readdirSync(dir).filter((name) => !name.startsWith('release-provenance-'))
@@ -21,6 +28,7 @@ export function writeProvenance(dir, kind, sha, run, attempt = process.env.GITHU
     attempt,
     signing: ['desktop-macos', 'android'].includes(kind) ? 'release' : 'not-required',
     files: Object.fromEntries(files.map((file) => [file, hash(join(dir, file))])),
+    ...(checkpoint ? { notarization: checkpoint } : {}),
   }
   writeFileSync(join(dir, `release-provenance-${kind}.json`), JSON.stringify(proof, null, 2))
   return proof
@@ -60,7 +68,18 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   if (mode === 'write') {
     const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
     if (sha !== head) throw new Error('检出的代码不是冻结的候选 SHA')
-    writeProvenance(dir, kind, sha, process.env.GITHUB_RUN_ID)
+    const checkpoint =
+      kind === 'desktop-macos'
+        ? JSON.parse(readFileSync(process.env.MACOS_VALIDATED_CHECKPOINT, 'utf8'))
+        : undefined
+    writeProvenance(
+      dir,
+      kind,
+      sha,
+      process.env.GITHUB_RUN_ID,
+      process.env.GITHUB_RUN_ATTEMPT,
+      checkpoint,
+    )
   } else if (mode === 'verify') {
     console.log(
       `已核对 ${verifyProvenance(dir, sha, process.env.SOURCE_RUN || process.env.GITHUB_RUN_ID)} 份同 SHA 产物`,

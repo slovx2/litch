@@ -1,11 +1,13 @@
 import { execFileSync } from 'node:child_process'
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { checkCheckpointJob } from '../../apps/desktop/scripts/macos-checkpoint.mjs'
 import { releasePolicy } from '../release-policy.mjs'
 import { artifactKinds } from '../release-provenance.mjs'
 import { api, downloadArtifact, pages, validateArtifact } from './release-artifacts.mjs'
 import {
   checkJob,
+  checkNotarization,
   chooseArtifact,
   inventory,
   policyHash,
@@ -46,6 +48,23 @@ for (const kind of [...artifactKinds, 'gate-proof', 'full-proof']) {
   await downloadArtifact(context.repository, artifact, dir)
 }
 const manifest = await sealCandidate(dir, context, artifacts, policyHash())
+const notarization = checkNotarization(
+  readJson(join(dir, 'release-provenance-desktop-macos.json')),
+  context,
+)
+validateArtifact(
+  listed.find((item) => item.id === notarization.artifact.id),
+  {
+    run: context.runId,
+    sha: context.sha,
+    name: notarization.artifact.name,
+    digest: notarization.artifact.digest,
+  },
+)
+checkCheckpointJob(
+  pages(`${base}/attempts/${notarization.attempt}/jobs?per_page=100`, 'jobs'),
+  notarization.attempt,
+)
 manifest.history = []
 for (let attempt = 1; attempt <= context.attempt; attempt++) {
   const jobs = pages(`${base}/attempts/${attempt}/jobs?per_page=100`, 'jobs')

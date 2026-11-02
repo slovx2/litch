@@ -157,6 +157,11 @@ jobs:
     needs: candidate
     runs-on: macos-15
     timeout-minutes: 75
+    env:
+      CANDIDATE_SHA: ${{ needs.candidate.outputs.sha }}
+      MACOS_CHECKPOINT_DIR: ${{ github.workspace }}/macos-checkpoint
+      # https://github.com/actions/runner-images/issues/14924；只在单条票据命令期间阻断 UDP443。
+      LITCH_STAPLER_TCP: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -168,6 +173,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: 1.26.10
+      - name: 查找同源 Accepted 检查点
+        id: checkpoint
+        run: node apps/desktop/scripts/macos-checkpoint.mjs find "$MACOS_CHECKPOINT_DIR"
+        env:
+          GH_TOKEN: ${{ github.token }}
       # 证书放进一个临时的钥匙串，公证凭据用 notarytool 存进同一个钥匙串，用完一起删掉。
       # 签名身份从导入的证书里找“Developer ID Application”那一个
       - name: 导入签名证书和公证凭据
@@ -228,12 +238,33 @@ jobs:
       # Computer Use 的原生助手（apps/computer-use）：打包时由 client:pack 构建并放进应用的 SharedSupport，
       # 签名在下一步 make-installer.mjs 里（同一个开发者身份，加固的运行时）。这里先把它的单元测试跑一遍
       - name: Computer Use 助手的单元测试
+        if: steps.checkpoint.outputs.restored != 'true'
         run: |
           swift --version
           swift test --package-path apps/computer-use
       - run: npm run client:pack
-      - name: 签名、公证，做成 dmg
-        run: node apps/desktop/scripts/make-installer.mjs --require-signing
+        if: steps.checkpoint.outputs.restored != 'true'
+      - name: 签名并公证到 Accepted 检查点
+        if: steps.checkpoint.outputs.restored != 'true'
+        run: node apps/desktop/scripts/make-installer.mjs --require-signing --checkpoint-only
+      - name: 上传 Accepted 检查点（不可分发）
+        id: notarized
+        if: steps.checkpoint.outputs.restored != 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: macos-notarized-${{ github.run_attempt }}
+          path: ${{ env.MACOS_CHECKPOINT_DIR }}/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: 绑定检查点不可变 ID 与摘要
+        if: steps.checkpoint.outputs.restored != 'true'
+        run: node apps/desktop/scripts/macos-checkpoint.mjs bind "$MACOS_CHECKPOINT_DIR"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECKPOINT_ID: ${{ steps.notarized.outputs.artifact-id }}
+          CHECKPOINT_DIGEST: ${{ steps.notarized.outputs.artifact-digest }}
+      - name: 恢复 Accepted 包并钉票校验（不重新公证）
+        run: node apps/desktop/scripts/macos-checkpoint.mjs finish "$MACOS_CHECKPOINT_DIR" apps/desktop/out
       # 应用自己的更新在 macOS 上下的是 zip（Squirrel.Mac 只认 zip），从签过、公证过、钉过票的那份应用打
       - name: 给自动更新打 zip
         run: |
@@ -259,6 +290,7 @@ jobs:
       - name: 产物来源与 SHA-256
         env:
           CANDIDATE_SHA: ${{ needs.candidate.outputs.sha }}
+          MACOS_VALIDATED_CHECKPOINT: ${{ env.MACOS_CHECKPOINT_DIR }}/validated.json
         run: node scripts/release-provenance.mjs write "apps/desktop/out/installer" desktop-macos
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:

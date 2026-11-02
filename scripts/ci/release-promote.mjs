@@ -4,6 +4,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { checkCheckpointJob } from '../../apps/desktop/scripts/macos-checkpoint.mjs'
 import { releasePolicy as defaultPolicy } from '../release-policy.mjs'
 import {
   api as defaultApi,
@@ -16,8 +17,10 @@ import {
 } from './release-artifacts.mjs'
 import {
   checkJob,
+  checkNotarization,
   policyHash as defaultPolicyHash,
   inventory,
+  readJson,
   sourceRun,
   summary,
   verifyCandidate,
@@ -126,6 +129,20 @@ export async function promote(env = process.env, services = {}) {
         '最新 job 未通过',
       )
     }
+    const notarization = checkNotarization(
+      readJson(join(dir, 'release-provenance-desktop-macos.json')),
+      context,
+    )
+    validateArtifact(api(`${base}/actions/artifacts/${notarization.artifact.id}`), {
+      run: context.runId,
+      sha: context.sha,
+      name: notarization.artifact.name,
+      digest: notarization.artifact.digest,
+    })
+    checkCheckpointJob(
+      pages(`${runPath}/attempts/${notarization.attempt}/jobs?per_page=100`, 'jobs'),
+      notarization.attempt,
+    )
     const candidateFull = { run, proof: manifest.full, verifiedPreviousAttempt: true }
     await releasePolicy({ candidateFull, allowMissingTag: true })
     const marker = `<!-- litch-candidate:${context.runId}:${context.attempt}:${artifact.id}:${artifact.digest} -->`

@@ -29,6 +29,7 @@ import { fileURLToPath } from 'node:url'
 import { sign } from '@electron/osx-sign'
 import { auditWritable } from '../../../scripts/adapter-stage.mjs'
 import { HELPER_APP_NAME, helperTeam, signHelper } from '../../computer-use/build-app.mjs'
+import { saveCheckpoint } from './macos-checkpoint.mjs'
 import { notarize, staple } from './notarize.mjs'
 import { OUT_DIR } from './packed.mjs'
 import { machOFiles } from './sign.mjs'
@@ -40,6 +41,9 @@ const version = manifest.version
 const installerDir = join(OUT_DIR, 'installer')
 const requireSigning = process.argv.includes('--require-signing')
 const signOnly = process.argv.includes('--sign-only')
+const checkpointOnly = process.argv.includes('--checkpoint-only')
+if (checkpointOnly && (!requireSigning || signOnly || !process.env.MACOS_CHECKPOINT_DIR))
+  throw new Error('--checkpoint-only 必须 require-signing 并指定 MACOS_CHECKPOINT_DIR')
 
 const run = (command, args, options = {}) =>
   execFileSync(command, args, { stdio: ['ignore', 'inherit', 'inherit'], ...options })
@@ -162,7 +166,12 @@ async function macos() {
 
   if (creds) {
     run('codesign', ['--force', '--sign', creds.identity, ...keychain, '--timestamp', dmg])
-    notarize(dmg, creds.notary)
+    const submission = notarize(dmg, creds.notary)
+    if (checkpointOnly) {
+      await saveCheckpoint(process.env.MACOS_CHECKPOINT_DIR, app, dmg, submission)
+      console.log('公证 Accepted 检查点已封存，尚未完成票据和包验收，不可分发')
+      return dmg
+    }
     staple(dmg)
     staple(app)
     run('spctl', ['--assess', '--type', 'execute', '--verbose=2', app])

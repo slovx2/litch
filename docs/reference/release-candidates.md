@@ -11,6 +11,8 @@
 gh workflow run release.yml --ref <候选分支>
 ```
 
+安排候选或 Mac 专项实验时，先查看正在执行/排队的 Mac jobs，尽量避开完整 Full 重叠。[GitHub 默认上限](https://docs.github.com/en/actions/reference/limits#job-concurrency-limits-for-github-hosted-runners)中 Free/Pro/Team 的 macOS 并发均为5，且标准与 larger runners共享该子上限。workflow 总状态 queued 不代表里面没有执行中的 job；应查 jobs 的状态和 runner 分配，不能仅按 workflow 总状态判断容量。未获 runner 和票据网络错误分别记录，不互相借用恢复预算。
+
 Prepare 固定到本次工作流 SHA，门禁与五类打包并行。macOS 必须正式签名、Accepted、公证票据有效；Android 必须使用正式钥匙，验证证书、packageName、versionName、versionCode、非 debug 和 arm64 ABI。缺机密直接失败。
 
 门禁必跑 CI 单测/契约/类型、桌面 smoke/critical/六入口首回合，另跑手机类型与原生 Markdown 单测。按 48 小时内全绿的祖先夜间选择完整领域；没有基线时跑全部非手机领域。
@@ -56,7 +58,9 @@ gh workflow run promote.yml --ref <已推送验证分支> \
 - 最新夜间仅手机模拟器领域失败且完整证明显示其余领域通过时，不阻断；`Nightly mobile follow-up` 创建修复 issue，不加 release-blocker。没有证明或其他领域红灯仍要求同 SHA 完整非手机验证或明确的既有分诊。任何 open release-blocker 仍拦截。
 - 原手机 ADB 整片重跑预算不再用于发版，因为候选不跑模拟器。准备阶段/其他基础设施恢复规则不扩大；通用自动恢复和夜间缺跑监测分阶段交付。
 - Apple 票据步骤只在原始输出明确包含 `NSURLErrorDomain -1005` 或 `Error 68` 时恢复：staple 和 validate 各最多三次，退避30/60秒，逐次失败原文写入 step summary。其他错误、超时或耗尽均失败；validate 恢复不重复 staple，更不重新提交公证。Accepted 不能替代票据成功。
-- 当前公证前后的出包尚未拆检查点，整片重跑 Mac 仍会重新构建、签名和公证，须按既定授权判断，不能称为“仅恢复钉票”。重跑 API 要等原 run 全部 job 结束后才接受；先核对各失败 job 的根因，不能把产品失败混入基础设施重跑。
+- ARM 托管出包在票据命令期间临时阻断 UDP443，使其使用 TCP；只装载自己的 PF anchor，命令退出即撤销规则、释放 PF 引用。清理失败硬停止，不能被网络恢复掩盖。该规避来自[托管镜像已知问题](https://github.com/actions/runner-images/issues/14924)及本仓 ARM 对照；不是零故障保证，因此仍保留上述次数上限与检查点。本地普通出包不启用这项托管 runner 网络操作。
+- macOS 在 Accepted 后先上传独立 `macos-notarized-<attempt>` 检查点，包含保真 App 归档、DMG、公证 UUID、团队和原始 hash。它不可分发，也不属于 verified-candidate。后续 attempt 只接受同 run/SHA、来源 Accepted/上传步骤成功、摘要匹配的检查点；恢复前再次查询 Accepted，再做票据、ZIP 和包验收，不重新签名或提交公证。检查点丢失、过期、损坏或身份不符直接停止，不能悄悄重做公证。
+- 最终来源分别记录公证 attempt 与票据验证 attempt，Prepare/Promote 都核对原检查点的不可变 ID、digest 和来源步骤。GitHub 重跑 API 要等原 run 全部 job 结束后才接受；重跑仍须符合授权和预算，检查点不构成无限重跑许可，也不能把产品失败混入基础设施恢复。
 
 ## 5. 实施验收
 

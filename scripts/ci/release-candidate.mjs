@@ -4,12 +4,13 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { checkCheckpoint } from '../../apps/desktop/scripts/macos-checkpoint.mjs'
 import { mandatory, releaseDomains } from '../ci-impact.mjs'
 import { hasReleaseCoverage } from '../full-proof.mjs'
 import { artifactKinds } from '../release-provenance.mjs'
 import { fileHash, validateArtifact } from './release-artifacts.mjs'
 
-export const policyVersion = 'candidate-v2-mobile-e2e-nightly'
+export const policyVersion = 'candidate-v3-accepted-checkpoint'
 export const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'))
 export const writeJson = (path, value) => writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`)
 
@@ -37,6 +38,10 @@ export function policyHash() {
       'scripts/full-proof*.mjs',
       'scripts/update-manifest.mjs',
       'protocol/versions.json',
+      'apps/desktop/scripts/macos-checkpoint.mjs',
+      'apps/desktop/scripts/notarize.mjs',
+      'apps/desktop/scripts/make-installer.mjs',
+      'apps/desktop/scripts/verify-macos-distribution.mjs',
     ],
     { encoding: 'utf8' },
   )
@@ -98,6 +103,23 @@ export async function inventory(dir, excluded = []) {
     files[name] = { sha256: await fileHash(join(dir, name)), size: statSync(join(dir, name)).size }
   }
   return files
+}
+
+export function checkNotarization(proof, context) {
+  const note = checkCheckpoint(proof.notarization, {
+    repository: context.repository,
+    sha: context.sha,
+    run: String(context.runId),
+    version: context.version,
+    arch: 'arm64',
+    attempt: Number(proof.attempt),
+  })
+  assert.equal(note.validatedAttempt, Number(proof.attempt), '票据验证 attempt')
+  assert.equal(note.artifact.attempt, note.attempt, '公证来源 attempt')
+  assert.equal(note.artifact.name, `macos-notarized-${note.attempt}`)
+  assert.ok(Number.isSafeInteger(note.artifact.id) && note.artifact.id > 0)
+  assert.match(note.artifact.digest, /^sha256:[a-f0-9]{64}$/)
+  return note
 }
 
 export function checkGate(gate, full, context, now = Date.now()) {
@@ -166,6 +188,7 @@ export async function sealCandidate(dir, context, artifacts, policy, now = Date.
     ...artifactKinds.map((kind) => `release-provenance-${kind}.json`),
   ])
   for (const proof of proofs) {
+    if (proof.kind === 'desktop-macos') checkNotarization(proof, context)
     assert.equal(proof.schema, 2)
     assert.equal(proof.sha, context.sha)
     assert.equal(proof.run, String(context.runId))
@@ -238,6 +261,7 @@ export async function verifyCandidate(dir, context, policy, now = Date.now()) {
   }
   for (const kind of artifactKinds) {
     const proof = readJson(join(dir, `release-provenance-${kind}.json`))
+    if (kind === 'desktop-macos') checkNotarization(proof, context)
     assert.equal(proof.schema, 2)
     assert.equal(proof.kind, kind)
     assert.equal(proof.sha, context.sha)

@@ -4,6 +4,7 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { test } from 'node:test'
+import { acceptedStep, uploadStep } from '../../apps/desktop/scripts/macos-checkpoint.mjs'
 import { affectedDomains, releaseDomains, releaseImpact } from '../ci-impact.mjs'
 import { fullJobs, hasReleaseCoverage, isCompleteReleaseFull } from '../full-proof.mjs'
 import { checkNightly, checkVersion } from '../release-policy.mjs'
@@ -30,6 +31,21 @@ const sha = 'a'.repeat(40)
 const digest = `sha256:${'b'.repeat(64)}`
 const policy = 'c'.repeat(64)
 const context = { repository: 'fixture/repo', sha, runId: '42', attempt: 3, version: '1.2.3' }
+const checkpoint = {
+  schema: 1,
+  state: 'Accepted',
+  repository: context.repository,
+  sha,
+  run: '42',
+  attempt: 1,
+  version: context.version,
+  arch: 'arm64',
+  submission: '12345678-1234-1234-1234-123456789abc',
+  team: 'ABCDEFGHIJ',
+  validatedAttempt: 1,
+  files: { 'signed-app.zip': 'a'.repeat(64), 'Litch-1.2.3-macos-arm64.dmg': 'b'.repeat(64) },
+  artifact: { id: 88, name: 'macos-notarized-1', digest, attempt: 1 },
+}
 const run = {
   repository: { full_name: context.repository },
   id: 42,
@@ -70,7 +86,7 @@ async function fixture(t) {
     const source = temp(t)
     for (const name of requiredPackages(context.version)[kind])
       writeFileSync(join(source, name), name)
-    writeProvenance(source, kind, sha, '42', '1')
+    writeProvenance(source, kind, sha, '42', '1', kind === 'desktop-macos' ? checkpoint : undefined)
     cpSync(source, dir, { recursive: true })
     artifacts[kind] = { id: id++, name: `${kind}-1`, digest, attempt: 1, jobId: id + 100 }
   }
@@ -344,6 +360,10 @@ async function serviceFixture(t) {
     status: 'completed',
     conclusion: 'success',
     run_attempt: a.attempt,
+    steps:
+      kind === 'desktop-macos'
+        ? [acceptedStep, uploadStep].map((name) => ({ name, conclusion: 'success' }))
+        : [],
   }))
   jobs.push({ id: 200, name: 'seal', status: 'completed', conclusion: 'success', run_attempt: 3 })
   const services = {
@@ -351,6 +371,7 @@ async function serviceFixture(t) {
     api(path, fields) {
       if (path.endsWith('/actions/runs/42')) return run
       if (path.endsWith('/actions/artifacts/99')) return artifact
+      if (path.endsWith('/actions/artifacts/88')) return { ...artifact, ...checkpoint.artifact }
       const source = Object.values(f.artifacts).find((a) =>
         path.endsWith(`/actions/artifacts/${a.id}`),
       )

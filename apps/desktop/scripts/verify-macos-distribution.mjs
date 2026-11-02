@@ -4,6 +4,7 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { auditWritable } from '../../../scripts/adapter-stage.mjs'
+import { validateTicket } from './notarize.mjs'
 import { OUT_DIR } from './packed.mjs'
 
 const run = (command, args) => execFileSync(command, args, { stdio: 'inherit', timeout: 120_000 })
@@ -21,14 +22,14 @@ const checkApp = (app, requireTicket) => {
   run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', app])
   auditWritable(app)
   if (signed) {
-    if (requireTicket) run('xcrun', ['stapler', 'validate', app])
+    if (requireTicket) validateTicket(app)
     run('spctl', ['--assess', '--type', 'execute', '--verbose=2', app])
   }
 }
 try {
   const dmg = unique('.dmg')
   if (signed) {
-    run('xcrun', ['stapler', 'validate', dmg])
+    validateTicket(dmg)
     run('spctl', [
       '--assess',
       '--type',
