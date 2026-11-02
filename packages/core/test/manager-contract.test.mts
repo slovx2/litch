@@ -208,6 +208,10 @@ test('工具 schema 校验字段形状，拒绝写系统字段、工作线和跨
         { kind: 'decision', id: 'D-1', status: 'expired' },
       ],
     },
+    reopen: {
+      valid: { id: 'D-1', reason: '情况变了，需要你重新看' },
+      invalid: [{ id: 'D-1' }, { id: 'D-1', reason: '理由', status: 'open' }],
+    },
     answer: {
       valid: { id: 'D-1', optionId: null, text: '先做协议' },
       invalid: [{ id: 'D-1', optionId: null, text: '先做协议', by: 'manager' }],
@@ -238,6 +242,8 @@ test('角色规则保持预算，允许说明选项推荐；经理自行归档�
   assert.match(role, /endorse useful work/)
   assert.match(role, /may include options and recommendations/)
   assert.match(role, /submits answers on the board or explicitly in chat/)
+  assert.match(role, /do not reopen them by habit/)
+  assert.match(role, /attention is truly needed, and state the reason/)
   assert.doesNotMatch(role, /mention decision titles only/)
   const sessions = managerSessionRules(4)
   for (const shared of [FRESH_BRIEF, WORKTREE_RULE, TITLE_LINE, outsideLitch(false)])

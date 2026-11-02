@@ -5,6 +5,11 @@ export interface ManagerSeen {
   answeredSplit: boolean
   issueOrder: boolean
   previousClosed: boolean
+  /** 经理重开用户忽略过的决策：收起显示经理写的理由 */
+  managerReopened: boolean
+  /** 忽略：填选填理由确认，离开待定、不计待处理，单独一组显示理由；撤销忽略回到待定 */
+  ignored: boolean
+  ignoreDetail: string
   consoleReports: boolean
   issueRelations: boolean
   managerQuestionDrafts: boolean
@@ -404,7 +409,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await until('恢复最新优先', () => answeredOrder() === 'D-15,D-13,D-11')
   const issueOrder = newestFirst && oldestFirst && orderSaved
 
-  await click('.mg-decision-filter button:last-of-type')
+  await click('.mg-decision-filter [data-filter="closed"]')
   await until('已关闭的决策', () => one('[data-decision="D-12"]'))
   const closedSplit = Boolean(
     one('[data-decision="D-12"] .mg-closed-note')?.textContent?.includes('已关闭 · 经理') &&
@@ -425,6 +430,68 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       getComputedStyle(history.querySelector('summary') as Element, '::before').content === '"▸"' &&
       history.textContent?.includes('feat/mobile-mermaid'),
   )
+  const reopenedNote = one<HTMLDetailsElement>('[data-decision="D-16"] [data-reopened]')
+  const managerReopened = Boolean(
+    reopenedNote &&
+      !reopenedNote.open &&
+      reopenedNote.querySelector('summary')?.textContent?.includes('经理重新打开') &&
+      reopenedNote.textContent?.includes('song-pc'),
+  )
+
+  // 忽略 D-17：选填理由，确认后离开待定、不计待处理；在“已忽略”里看得到理由，撤销忽略回到待定
+  const count = (key: string) =>
+    Number.parseInt(
+      one(`.mg-decision-filter [data-filter="${key}"]`)?.textContent?.replace(/\D+/g, ' ').trim() ??
+        '',
+      10,
+    )
+  // 收件箱“决策”页签上的待处理数（设备给的 pendingDecisions）
+  const decisionPill = () =>
+    Number.parseInt(one('[data-board-tab="decisions"] .pill')?.textContent ?? '0', 10)
+  const openBefore = count('open')
+  const ignoredBefore = count('ignored')
+  const pillBefore = decisionPill()
+  await click('[data-decision="D-17"] [data-act="manager-ignore"]')
+  fill(
+    await until('忽略理由', () =>
+      one<HTMLTextAreaElement>('[data-decision="D-17"] [data-act="manager-ignore-reason"]'),
+    ),
+    '网关不归这个项目管',
+  )
+  const ignoreNote = one('[data-decision="D-17"] [data-ignore-form]')?.textContent ?? ''
+  await click('[data-decision="D-17"] [data-act="manager-ignore-confirm"]')
+  await until(
+    '忽略后离开待定',
+    () => !one('[data-decision="D-17"]') && count('ignored') === ignoredBefore + 1,
+  )
+  // 待处理数随经理对象的通知更新，等它跟上；跟不上的照实记进下面的明细
+  await until('决策待处理数减一', () => decisionPill() === pillBefore - 1).catch(() => null)
+  const ignoredCounts = `${openBefore}->${count('open')} ${ignoredBefore}->${count('ignored')} 决策待处理 ${pillBefore}->${decisionPill()}`
+  await click('.mg-decision-filter [data-filter="ignored"]')
+  const ignoredCard = await until('已忽略的 D-17', () =>
+    one('[data-decision="D-17"] [data-ignored]'),
+  )
+  const ignoredText = ignoredCard.textContent ?? ''
+  await click('[data-decision="D-17"] [data-act="manager-unignore"]')
+  const unignored = Boolean(
+    await until(
+      '撤销忽略回到待定',
+      () =>
+        one('.mg-decision-filter [data-filter="open"][aria-pressed="true"]') &&
+        one('[data-decision="D-17"] [data-act="manager-ignore"]') &&
+        count('open') === openBefore,
+    ),
+  )
+  const ignored =
+    ignoreNote.includes('经理会收到通知') &&
+    count('open') === openBefore &&
+    ignoredCounts ===
+      `${openBefore}->${openBefore - 1} ${ignoredBefore}->${ignoredBefore + 1} 决策待处理 ${pillBefore}->${pillBefore - 1}` &&
+    ignoredText.includes('你已忽略') &&
+    ignoredText.includes('网关不归这个项目管') &&
+    unignored &&
+    !one('[data-decision="D-17"] [data-previous-closed]')
+  const ignoreDetail = JSON.stringify({ ignoreNote, ignoredCounts, ignoredText, unignored })
   const omittedActions = ![...document.querySelectorAll('.mg-board button')].some((button) =>
     /^(仍然有效|推迟)$/.test(button.textContent?.trim() ?? ''),
   )
@@ -883,6 +950,9 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     isolated,
     draftKept,
     reopened,
+    managerReopened,
+    ignored,
+    ignoreDetail,
     panels,
     childReturn,
     reportsStopped,
@@ -924,7 +994,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
 }
 
 export function judgeManager(seen: ManagerSeen): string[] {
-  const messages: Record<keyof ManagerSeen, string> = {
+  const messages: Record<Exclude<keyof ManagerSeen, 'ignoreDetail'>, string> = {
     linesState:
       '经理自己只有后台命令、工作线在跑时，经理行仍画成运行中，或没有后台记号、没写明工作线',
     pendingTitle: '有待处理的经理行，悬停提示第一行不是“N 待处理 · 状态文字”',
@@ -932,6 +1002,8 @@ export function judgeManager(seen: ManagerSeen): string[] {
     issueOrder:
       '控制台没有默认最新优先，或切换排序后顺序与本机记录不对，或排序不在列表头、决策里仍有待处理优先',
     previousClosed: '重新打开的决策没有收起显示上次关闭的原因',
+    managerReopened: '经理重开的决策没有收起显示经理写的理由',
+    ignored: `忽略决策没有离开待定、单独成组显示理由，或撤销忽略没有回到待定：${seen.ignoreDetail}`,
     consoleReports: '控制台报告与帖子追问未完成',
     issueRelations: '议题关联与编号预览未完成',
     managerQuestionDrafts: '经理追问草稿与回复记录未完成',
@@ -986,7 +1058,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
     externalChat: '经理视图从外部打开普通会话后未切到对话栏',
     externalKeepsManager: '外部跳转到普通会话后丢失了经理位置',
   }
-  return (Object.keys(messages) as (keyof ManagerSeen)[])
+  return (Object.keys(messages) as (keyof typeof messages)[])
     .filter((key) => !seen[key])
     .map((key) => messages[key])
 }

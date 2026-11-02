@@ -60,19 +60,35 @@ export function DecisionAnswer({ decision }: { decision: ManagerDecisionView }) 
   )
 }
 
-/** 重新打开的决策：作答表单上方，重开前那次关闭的记录，默认收起，作历史看。 */
+/**
+ * 重新打开的决策：作答表单上方，重开前那次关闭的记录；经理把你忽略的重新打开时是经理写的理由。都默认收起。
+ */
 export function DecisionHistory({ decision }: { decision: ManagerDecisionView }) {
   const t = useT()
-  const closed = decisionAnswerParts(decision).previousClosed
-  if (!closed) return null
+  const { previousClosed: closed, reopened } = decisionAnswerParts(decision)
   return (
-    <details className="mg-closed-note" data-previous-closed>
-      <summary>
-        <b>{t('manager.closedPrevious', { who: t(`manager.closer.${closerKey(closed.by)}`) })}</b>
-        <Stamp className="dim" at={closed.at} />
-      </summary>
-      <BoardMarkdown text={closed.reason} />
-    </details>
+    <>
+      {reopened ? (
+        <details className="mg-closed-note" data-reopened>
+          <summary>
+            <b>{t('manager.reopenedBy')}</b>
+            <Stamp className="dim" at={reopened.at} />
+          </summary>
+          <BoardMarkdown text={reopened.reason} />
+        </details>
+      ) : null}
+      {closed ? (
+        <details className="mg-closed-note" data-previous-closed>
+          <summary>
+            <b>
+              {t('manager.closedPrevious', { who: t(`manager.closer.${closerKey(closed.by)}`) })}
+            </b>
+            <Stamp className="dim" at={closed.at} />
+          </summary>
+          <BoardMarkdown text={closed.reason} />
+        </details>
+      ) : null}
+    </>
   )
 }
 
@@ -84,14 +100,21 @@ export function DecisionOutcome({ decision }: { decision: ManagerDecisionView })
     <>
       <DecisionAnswer decision={decision} />
       {parts.closed ? (
-        <section className="mg-closed-note">
+        <section
+          className="mg-closed-note"
+          data-ignored={decision.status === 'ignored' ? '' : undefined}
+        >
           <header>
             <b>
-              {t('manager.closedBy', { who: t(`manager.closer.${closerKey(parts.closed.by)}`) })}
+              {decision.status === 'ignored'
+                ? t('manager.ignoredBy')
+                : t('manager.closedBy', {
+                    who: t(`manager.closer.${closerKey(parts.closed.by)}`),
+                  })}
             </b>
             <Stamp className="dim" at={parts.closed.at} />
           </header>
-          <BoardMarkdown text={parts.closed.reason} />
+          {parts.closed.reason ? <BoardMarkdown text={parts.closed.reason} /> : null}
         </section>
       ) : null}
       {parts.others.length ? (

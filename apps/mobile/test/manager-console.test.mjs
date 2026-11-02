@@ -104,21 +104,36 @@ test('手机三皮肤报告正文标题不大于卡片标题', () => {
     }
 })
 
-test('关闭决策无答案时仅可重开，有答案时保留修改与重开，已答复不能重开', () => {
+test('关闭决策无答案时仅可重开，有答案时保留修改与重开，已答复不能重开；待定可忽略，忽略的可撤销', () => {
+  const none = { ignore: false, unignore: false }
   for (const status of ['expired', 'withdrawn']) {
-    assert.deepEqual(decisionActions({ status, answer: null }), { edit: false, reopen: true })
+    assert.deepEqual(decisionActions({ status, answer: null }), {
+      edit: false,
+      reopen: true,
+      ...none,
+    })
     assert.deepEqual(decisionActions({ status, answer: { text: '旧答案' } }), {
       edit: true,
       reopen: true,
+      ...none,
     })
   }
   assert.deepEqual(decisionActions({ status: 'answered', answer: { text: '答案' } }), {
     edit: true,
     reopen: false,
+    ...none,
   })
   assert.deepEqual(decisionActions({ status: 'open', answer: null }), {
     edit: false,
     reopen: false,
+    ignore: true,
+    unignore: false,
+  })
+  assert.deepEqual(decisionActions({ status: 'ignored', answer: null }), {
+    edit: false,
+    reopen: false,
+    ignore: false,
+    unignore: true,
   })
 })
 

@@ -75,26 +75,35 @@ export function DecisionAnswer({ decision }: { decision: ManagerDecision }) {
   )
 }
 
-/** 已关闭的记录。重新打开的决策只作历史：默认收起，展开看原因 */
+/**
+ * 关闭记录。closed：已关闭；ignored：你忽略的（理由可空）。重新打开的决策只作历史，默认收起展开看原因：
+ * previous 是重开前那次关闭，reopened 是经理把你忽略的重新打开时写的理由。
+ */
 function ClosedNote({
   decisionId,
   closed,
-  previous,
+  kind,
 }: {
   decisionId: string
   closed: ManagerClosed
-  previous: boolean
+  kind: 'closed' | 'ignored' | 'previous' | 'reopened'
 }) {
   const t = useT()
   const { c, radius, hit } = useTheme()
+  const previous = kind === 'previous' || kind === 'reopened'
   const [open, setOpen] = useState(!previous)
+  const who = { who: t(`manager.closer.${closerKey(closed.by)}`) }
   const head = (
     <Text style={{ color: c.ink2 }}>
       {previous ? `${open ? '▾' : '▸'} ` : ''}
       <Text style={{ color: c.ink, fontWeight: '600' }}>
-        {t(previous ? 'manager.closedPrevious' : 'manager.closedBy', {
-          who: t(`manager.closer.${closerKey(closed.by)}`),
-        })}
+        {kind === 'previous'
+          ? t('manager.closedPrevious', who)
+          : kind === 'reopened'
+            ? t('manager.reopenedBy')
+            : kind === 'ignored'
+              ? t('manager.ignoredBy')
+              : t('manager.closedBy', who)}
       </Text>
       {' · '}
       {stamp(closed.at, Date.now(), t.lang)}
@@ -102,7 +111,7 @@ function ClosedNote({
   )
   return (
     <View
-      testID={`decision-${previous ? 'previous-closed' : 'closed'}:${decisionId}`}
+      testID={`decision-${kind === 'previous' ? 'previous-closed' : kind}:${decisionId}`}
       style={[
         styles.block,
         { backgroundColor: c.sunken, borderLeftColor: c.line3, borderRadius: radius.s },
@@ -120,17 +129,24 @@ function ClosedNote({
       ) : (
         head
       )}
-      {open ? <Markdown text={closed.reason} /> : null}
+      {open && closed.reason ? <Markdown text={closed.reason} /> : null}
     </View>
   )
 }
 
-/** 重新打开的决策：作答表单上方，重开前的关闭记录（收起） */
+/** 重新打开的决策：作答表单上方，经理重开的理由和重开前的关闭记录（收起） */
 export function DecisionHistory({ decision }: { decision: ManagerDecision }) {
   const parts = decisionAnswerParts(decision)
-  return parts.previousClosed ? (
-    <ClosedNote decisionId={decision.id} closed={parts.previousClosed} previous />
-  ) : null
+  return (
+    <>
+      {parts.reopened ? (
+        <ClosedNote decisionId={decision.id} closed={parts.reopened} kind="reopened" />
+      ) : null}
+      {parts.previousClosed ? (
+        <ClosedNote decisionId={decision.id} closed={parts.previousClosed} kind="previous" />
+      ) : null}
+    </>
+  )
 }
 
 export function DecisionOutcome({ decision }: { decision: ManagerDecision }) {
@@ -142,7 +158,11 @@ export function DecisionOutcome({ decision }: { decision: ManagerDecision }) {
     <>
       <DecisionAnswer decision={decision} />
       {parts.closed ? (
-        <ClosedNote decisionId={decision.id} closed={parts.closed} previous={false} />
+        <ClosedNote
+          decisionId={decision.id}
+          closed={parts.closed}
+          kind={decision.status === 'ignored' ? 'ignored' : 'closed'}
+        />
       ) : null}
       {parts.others.length ? (
         <>

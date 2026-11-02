@@ -11,6 +11,7 @@ import {
   MANAGER_NOTIFICATION,
   type Manager,
   type ManagerChangedNotification,
+  type ManagerDecisionIgnoreParams,
   type ManagerDecisionReopenParams,
   type ManagerFeedbackSubmitParams,
   type ManagerQuestionParams,
@@ -327,6 +328,11 @@ export function createManagers(host: ManagersHost) {
       )
       invalidate(managerId)
       return projectManagerAnswers(result)
+    },
+    async ignore(params: ManagerDecisionIgnoreParams) {
+      const result = await guarded(() => host.request(MANAGER_METHOD.decisionIgnore, params))
+      invalidate(params.managerId)
+      return { decision: projectManagerDecision(result.decision) }
     },
     async reopen(params: ManagerDecisionReopenParams) {
       const result = await guarded(() => host.request(MANAGER_METHOD.decisionReopen, params))

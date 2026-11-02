@@ -473,6 +473,17 @@ export interface Commands {
     params: { deviceId: string; managerId: string; decisionId: ManagerDecisionView['id'] }
     result: { decision: ManagerDecisionView }
   }
+  /** 用户忽略一条待定决策；撤销忽略用 managers.decision.reopen */
+  'managers.decision.ignore': {
+    params: {
+      deviceId: string
+      managerId: string
+      decisionId: ManagerDecisionView['id']
+      revision: number
+      reason?: string
+    }
+    result: { decision: ManagerDecisionView }
+  }
   'automationPreview.control': { params: AutomationPreviewCommand; result: Record<string, never> }
   'chrome.settings': { params: ChromeSettingsRequest; result: ChromeSettingsState }
   /** 核心的基本信息。界面启动时用它确认通道是通的 */

@@ -210,6 +210,9 @@ function sessionEvent(event: SessionEvent): SessionEventView {
         ...questions,
         ...requests,
         ...(manager.postQuestions ?? []).map((q) => [q.id, q.title, q.question].join(' · ')),
+        ...(manager.ignored ?? []).map((entry) =>
+          [entry.decisionId, entry.title, entry.reason].filter(Boolean).join(' · '),
+        ),
       ]
         .filter(Boolean)
         .join('\n\n'),
@@ -225,7 +228,9 @@ function sessionEvent(event: SessionEvent): SessionEventView {
               ]),
             ].join(' · '),
           }
-        : {}),
+        : manager.ignored
+          ? { summary: manager.ignored.map((entry) => entry.decisionId).join(' · ') }
+          : {}),
     }
   }
   return { kind: event.kind, notes }
@@ -245,6 +250,7 @@ function unknownSessionEvent(text: string): { event: SessionEventView; rest: str
       'remind',
       'manager-open',
       'manager-answers',
+      'manager-ignored',
       'manager-end',
       'manager-rules',
     ].includes(match[1] ?? '')

@@ -135,6 +135,10 @@ function Issue({
     )
   })
   const [unreviewed, setUnreviewed] = useState(false)
+  /** 忽略的决策默认收起，点开看理由、撤销忽略 */
+  const [shown, setShown] = useState(false)
+  /** 正在填忽略理由；null 是没在填 */
+  const [ignoring, setIgnoring] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const locked = busy || manager.status !== 'active' || device?.connection !== 'online'
@@ -210,7 +214,9 @@ function Issue({
             ? 'manager.open'
             : decision.status === 'answered'
               ? 'manager.answered'
-              : 'manager.closed',
+              : decision.status === 'ignored'
+                ? 'manager.ignored'
+                : 'manager.closed',
       )
     : request
       ? t(`manager.request.${request.status}`)
@@ -251,7 +257,20 @@ function Issue({
           onPress={() => setUnreviewed(!unreviewed)}
         />
       ) : null}
-      {!pendingReview || unreviewed ? (
+      {decision?.status === 'ignored' ? (
+        <Pressable
+          accessibilityRole="button"
+          aria-expanded={shown}
+          testID={`decision-ignored-toggle:${decision.id}`}
+          onPress={() => setShown(!shown)}
+          style={styles.textLink}
+        >
+          <Text style={{ color: c.ink2 }}>
+            {shown ? '▾' : '▸'} {t(shown ? 'mgr.ignored.hide' : 'mgr.ignored.show')}
+          </Text>
+        </Pressable>
+      ) : null}
+      {(!pendingReview || unreviewed) && (decision?.status !== 'ignored' || shown) ? (
         <>
           <IssueRelations id={post.id} />
           <Markdown text={post.body} />
@@ -399,7 +418,62 @@ function Issue({
                         onPress={() => setChoice(null)}
                       />
                     ) : null}
+                    {decisionButtons?.ignore && ignoring === null ? (
+                      <Button
+                        kind="plain"
+                        testID={`decision-ignore:${decision.id}`}
+                        disabled={locked}
+                        label={t('manager.ignore')}
+                        onPress={() => setIgnoring('')}
+                      />
+                    ) : null}
                   </View>
+                  {decisionButtons?.ignore && ignoring !== null ? (
+                    <View
+                      testID={`decision-ignore-form:${decision.id}`}
+                      style={[
+                        styles.askComposer,
+                        { borderColor: c.line3, backgroundColor: c.sunken },
+                      ]}
+                    >
+                      <Text style={{ color: c.ink2 }}>{t('manager.ignoreNote')}</Text>
+                      <TextInput
+                        testID={`decision-ignore-reason:${decision.id}`}
+                        accessibilityLabel={t('manager.ignoreReason')}
+                        placeholder={t('manager.ignoreReason')}
+                        placeholderTextColor={c.ink3}
+                        style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
+                        value={ignoring}
+                        onChangeText={setIgnoring}
+                      />
+                      <View style={styles.actions}>
+                        <Button
+                          testID={`decision-ignore-confirm:${decision.id}`}
+                          disabled={locked}
+                          label={t('manager.ignoreConfirm')}
+                          onPress={() =>
+                            void run(async () => {
+                              await channel.command('managers.decision.ignore', {
+                                deviceId: manager.deviceId,
+                                managerId: manager.id,
+                                decisionId: decision.id,
+                                revision: decision.revision,
+                                ...(ignoring.trim() ? { reason: ignoring.trim() } : {}),
+                              })
+                              setIgnoring(null)
+                              setShown(false)
+                            })
+                          }
+                        />
+                        <Button
+                          kind="plain"
+                          disabled={busy}
+                          label={t('manager.cancel')}
+                          onPress={() => setIgnoring(null)}
+                        />
+                      </View>
+                    </View>
+                  ) : null}
                   {/* 按钮一直显示；不能点时写明为什么（离线、已结束由页顶那一行说） */}
                   {!locked && !choice && !reply.trim() ? (
                     <Text testID={`decision-submit-why:${decision.id}`} style={{ color: c.ink2 }}>
@@ -433,11 +507,12 @@ function Issue({
                       }}
                     />
                   ) : null}
-                  {decisionButtons?.reopen ? (
+                  {decisionButtons?.reopen || decisionButtons?.unignore ? (
                     <Button
                       kind="plain"
+                      testID={`decision-${decisionButtons.unignore ? 'unignore' : 'reopen'}:${decision.id}`}
                       disabled={locked}
-                      label={t('manager.reopen')}
+                      label={t(decisionButtons.unignore ? 'manager.unignore' : 'manager.reopen')}
                       onPress={() =>
                         void run(async () => {
                           await channel.command('managers.decision.reopen', {

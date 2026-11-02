@@ -2,7 +2,10 @@ import { addRelations } from './manager-relations.mjs'
 import { isRequest, requestTool } from './manager-requests.mjs'
 // 看板对象的原子修改和状态流转；不接受模型写入运行事实。
 
-import { MANAGER_ANSWERS_TEXT } from '../../protocol/src/client-tools-manager.mjs'
+import {
+  MANAGER_ANSWERS_TEXT,
+  MANAGER_IGNORED_TEXT,
+} from '../../protocol/src/client-tools-manager.mjs'
 import type {
   ManagerActor,
   ManagerAnswersSubmitResponse,
@@ -262,8 +265,19 @@ export class ManagerBoardWriter {
           why = 'Manager replied to user follow-up questions'
           break
         }
+        case 'reopen':
+          // 经理只能重开用户忽略的决策，理由必填并原样给用户看（变更的 why）
+          if (!isDecision(before) || before.status !== 'ignored')
+            invalid('Only decisions the user ignored can be reopened.')
+          why = text(args.reason, 'reason')
+          patch = { status: 'open', closed: null }
+          break
         case 'answer': {
           if (!isDecision(before)) invalid('Only decisions can be answered.')
+          if (before.status === 'ignored')
+            invalid(
+              'The user ignored this decision. Reopen it with litch_manager.reopen and a reason before recording an answer.',
+            )
           const error = this.answerFailure(before, {
             decisionId: before.id,
             revision: before.revision,
@@ -399,13 +413,56 @@ export class ManagerBoardWriter {
     // 混合提交已持有事务；单独交答复仍由这里开启事务。
     return enqueue ? this.store.transaction(apply) : apply()
   }
+  /** 用户忽略一条待定决策：记下理由，排一条不开回合的 manager-ignored 事件（见 Managers.drain） */
+  ignore(
+    managerId: string,
+    id: ManagerObjectId,
+    revision: unknown,
+    reason: unknown,
+  ): ManagerDecision {
+    this.active(managerId)
+    if (reason !== undefined && typeof reason !== 'string') invalid('reason must be a string.')
+    const before = this.object(managerId, id)
+    if (!isDecision(before)) throw new ManagerError('unknownDecision', 'Unknown decision.')
+    if (before.status !== 'open')
+      throw new ManagerError('decisionNotOpen', 'Only open decisions can be ignored.', {
+        decision: before,
+      })
+    if (revision !== before.revision)
+      throw new ManagerError('decisionConflict', 'The decision changed; read it and try again.', {
+        decision: before,
+      })
+    const why = (reason ?? '').trim()
+    return this.store.transaction(() => {
+      const after = this.change(
+        managerId,
+        before,
+        { status: 'ignored', closed: { reason: why, by: 'user', at: managerNow() } },
+        'user',
+        'Decision ignored',
+      ) as ManagerDecision
+      this.store.enqueue(
+        managerId,
+        formatSessionEvent({
+          kind: 'manager-ignored',
+          notes: [],
+          manager: {
+            managerId,
+            text: MANAGER_IGNORED_TEXT,
+            ignored: [{ decisionId: after.id, title: after.title, reason: why }],
+          },
+        }),
+      )
+      return after
+    })
+  }
   reopen(managerId: string, id: ManagerObjectId): ManagerDecision {
     this.active(managerId)
     const before = this.object(managerId, id)
-    if (!isDecision(before) || !['expired', 'withdrawn'].includes(before.status))
+    if (!isDecision(before) || !['expired', 'withdrawn', 'ignored'].includes(before.status))
       throw new ManagerError(
         'decisionNotClosed',
-        'Only expired or withdrawn decisions can be reopened.',
+        'Only expired, withdrawn or ignored decisions can be reopened.',
       )
     return this.store.transaction(
       () =>

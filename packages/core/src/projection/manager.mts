@@ -107,6 +107,26 @@ export function reopenedClosure(
   }
   return null
 }
+/**
+ * 待定决策若是经理把用户忽略的重新打开的，取那次变更的理由（why）给用户看。规则同上：只看这个决策最近一次状态变化。
+ */
+export function managerReopen(
+  decision: Pick<ManagerDecision, 'id' | 'status'>,
+  changes: readonly ManagerChange[],
+): ManagerClosed | null {
+  if (decision.status !== 'open') return null
+  for (const change of changes) {
+    if (change.objectId !== decision.id || !change.before || !change.after) continue
+    if (change.before.status === change.after.status) continue
+    return change.after.status === 'open' &&
+      change.before.status === 'ignored' &&
+      change.by === 'manager' &&
+      typeof change.why === 'string'
+      ? { reason: change.why, by: change.by, at: change.at }
+      : null
+  }
+  return null
+}
 export function projectManagerBoard(deviceId: string, board: ManagerBoard): ManagerBoardView {
   return {
     ...board,
@@ -118,7 +138,12 @@ export function projectManagerBoard(deviceId: string, board: ManagerBoard): Mana
     decisions: board.decisions.map((decision) => {
       const view = projectManagerDecision(decision)
       const previous = reopenedClosure(decision, board.changes)
-      return previous ? { ...view, previousClosed: timed(previous) } : view
+      const reopened = managerReopen(decision, board.changes)
+      return {
+        ...view,
+        ...(previous ? { previousClosed: timed(previous) } : {}),
+        ...(reopened ? { reopened: timed(reopened) } : {}),
+      }
     }),
     items: board.items.map((item) => ({
       ...item,
@@ -152,6 +177,7 @@ export function managerBoardPages(board: ManagerBoardView) {
     pending: board.decisions.filter((d) => d.status === 'open'),
     answered: board.decisions.filter((d) => d.status === 'answered'),
     closed: board.decisions.filter((d) => d.status === 'expired' || d.status === 'withdrawn'),
+    ignored: board.decisions.filter((d) => d.status === 'ignored'),
   }
   const items: Record<ManagerItemStatus, ManagerItemView[]> = {
     backlog: [],

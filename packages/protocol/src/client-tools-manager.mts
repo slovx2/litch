@@ -33,6 +33,7 @@ export const MANAGER_TOOL = {
   update: 'update',
   verify: 'verify',
   close: 'close',
+  reopen: 'reopen',
   answer: 'answer',
   status: 'status',
   reply: 'reply',
@@ -44,13 +45,17 @@ export const MANAGER_TOOL = {
 export const MANAGER_ANSWERS_TEXT =
   'Apply these board answers to the plan, notify affected lines with litch_sessions.send, land lasting decisions under project rules, record their locations, and update items and the situation. Do not ask these questions again.'
 
+/** 用户忽略决策的事件指令：不开回合，随经理下一回合交出。 */
+export const MANAGER_IGNORED_TEXT =
+  'Ignored decisions are no longer pending and get no reminders. Do not ask them again or work around them. Reopen one with litch_manager.reopen only when the situation has changed and the user’s attention is truly needed, giving the reason.'
+
 /** 第 1 层：固定部分约 800 token；scope 原样插入，用户经理设定另放最后。 */
 export function managerRoleRules(scope: string): string {
   return [
     `You are a Litch manager. Delegate implementation to sub-sessions. ${scope.trim() ? `Your scope: ${scope}. ` : ''}Keep lasting information in the board or repository. Do not implement code yourself; start a line. Read code and documents to brief and review.`,
     `The progress-only item ledger is ${MANAGER_NAMES.work.en} (${MANAGER_NAMES.work['zh-CN']}); never assign new items to users. ${MANAGER_NAMES.inbox.en} contains issues: decisions, suggestions for agent work, For you for human actions, and reports. Publish long updates, limitations and release notes with report, not long chat messages. Link derived work using source/related on creation, or relate later; keep provenance on issues and manager items.`,
     'Each turn: identify user messages, board answers, line reports or Litch events. Apply answers, notify affected lines with litch_sessions.send, land lasting decisions under repository rules and record locations with update. Check reports before updating progress. Start in-scope work; raise out-of-scope work as decisions. Use status when the situation changes. On user turns explain changes, blockers and user actions; on event-only turns keep chat brief.',
-    'You may include options and recommendations in chat; the user submits answers on the board or explicitly in chat. Ask through board decisions. One decision asks one question as its title, with self-contained background, useful options, recommendation, consequences and basis. Record explicit answers already given in chat with answer; never ask again. Close obsolete open decisions with a reason; never close an answered decision. Consolidate excessive pending questions.',
+    'You may include options and recommendations in chat; the user submits answers on the board or explicitly in chat. Ask through board decisions. One decision asks one question as its title, with self-contained background, useful options, recommendation, consequences and basis. Record explicit answers already given in chat with answer; never ask again. Close obsolete open decisions with a reason; never close an answered decision. The user may ignore decisions; do not reopen them by habit. Reopen only when the situation has changed and the user’s attention is truly needed, and state the reason. Consolidate excessive pending questions.',
     'Lines cannot see this conversation: make briefs self-contained. Turn scope or product questions in reports into decisions. Serialize lines touching the same files. Reassign stalled work or send guidance; do not leave stalled lines unattended. Check branches, commits and check results, and record unverified work in manager items.',
     'Create For you objects (kind=request, R-n) for actions only the user can perform: device checks, settings or login. Give a clear description and optional buttonLabel. Read get before updates/cancellation; provide current revision and why/reason. Never deliver for the user; a written reply can describe a blocker.',
     'For follow-up questions use post_get and post_reply with current revision and why. Reply text, original-content patch, or both are allowed. Save answers to the issue, not only chat. questionId selects one pending question; omission resolves all pending manager questions. Legacy litch_manager.reply remains available for decision questions. Questions are not authorization; never answer or deliver for users.',
@@ -186,6 +191,10 @@ export type ManagerCloseArguments =
   | { kind: 'request'; id: ManagerRequestId; status: 'cancelled'; revision: number; reason: string }
   | { kind: 'decision'; id: ManagerDecisionId; status: 'expired' | 'withdrawn'; reason: string }
   | { kind: 'item'; id: ManagerItemId; status: 'done' | 'deferred'; reason: string }
+export interface ManagerReopenArguments {
+  id: ManagerDecisionId
+  reason: string
+}
 export interface ManagerAnswerArguments {
   id: ManagerDecisionId
   optionId: string | null
@@ -216,6 +225,7 @@ export interface ManagerToolArguments {
   update: ManagerUpdateArguments
   verify: ManagerVerifyArguments
   close: ManagerCloseArguments
+  reopen: ManagerReopenArguments
   endorse: { proposalId: string; reason?: string }
   dismiss: { proposalId: string; reason: string }
   reply: { id: ManagerDecisionId; revision: number; text: string }
@@ -227,12 +237,16 @@ export interface ManagerToolResults {
   report: { post: import('./manager-posts.mjs').ManagerPost }
   post_get: { post: import('./manager-posts.mjs').ManagerPost }
   post_reply: { post: import('./manager-posts.mjs').ManagerPost }
-  summary: Pick<ManagerBoard, 'situation' | 'decisions' | 'items' | 'lines' | 'requests'>
+  summary: Pick<ManagerBoard, 'situation' | 'decisions' | 'items' | 'lines' | 'requests'> & {
+    /** 用户忽略的决策，只列 id 和标题：别再问同样的问题 */
+    ignoredDecisions?: { id: ManagerDecisionId; title: string }[]
+  }
   get: { object: ManagerDecision | ManagerItem | ManagerRequest; changes: ManagerChange[] }
   add: { id: ManagerObjectId; object: ManagerDecision | ManagerItem | ManagerRequest }
   update: { object: ManagerDecision | ManagerItem | ManagerRequest }
   verify: { object: ManagerDecision | ManagerItem | ManagerRequest }
   close: { object: ManagerDecision | ManagerItem | ManagerRequest }
+  reopen: { object: ManagerDecision }
   endorse: { proposalId: string; review: import('./suggestion-inbox.mjs').SuggestionReview }
   dismiss: { proposalId: string; review: import('./suggestion-inbox.mjs').SuggestionReview }
   reply: { object: ManagerDecision }
@@ -411,9 +425,16 @@ export const MANAGER_TOOLS: ClientToolNamespaceSpec = {
     },
     {
       type: 'function',
+      name: MANAGER_TOOL.reopen,
+      description:
+        'Reopen a decision the user ignored, making it pending again. Only when the situation has changed and the user’s attention is truly needed. The reason is required and shown to the user.',
+      inputSchema: object({ id: ID, reason: MARKDOWN }, ['id', 'reason']),
+    },
+    {
+      type: 'function',
       name: MANAGER_TOOL.answer,
       description:
-        'Record or revise an answer the user already gave in conversation, as user-conversation. Supply an option id or nonempty text (or both). Answered and closed decisions may be revised; the previous answer and closure remain in history. Never invent the user’s answer.',
+        'Record or revise an answer the user already gave in conversation, as user-conversation. Supply an option id or nonempty text (or both). Answered and closed decisions may be revised; the previous answer and closure remain in history. Decisions the user ignored must be reopened first. Never invent the user’s answer.',
       inputSchema: object({ id: ID, optionId: NULLABLE_STRING, text: STRING }, [
         'id',
         'optionId',

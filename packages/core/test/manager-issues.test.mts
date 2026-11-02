@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   decisionAnswerParts,
+  managerBoardPages,
+  managerReopen,
   parseManagerIssueOrder,
   reopenedClosure,
   sortManagerIssues,
@@ -125,4 +127,92 @@ test('从变更记录找回重开前的关闭：只看最近一次状态变化',
   assert.equal(reopenedClosure({ ...decision, status: 'answered' }, [reopen]), null, '已答不给')
   assert.equal(reopenedClosure({ ...decision, id: 'D-2' }, [reopen]), null, '别的决策')
   assert.equal(reopenedClosure(decision, []), null, '从没关过')
+})
+
+test('经理重开用户忽略的决策：给出经理写的理由；用户自己撤销忽略不给，也不算上次关闭', () => {
+  const ignoredBy = { reason: '先不管', by: 'user' as const, at: 2 }
+  const change = (
+    by: 'user' | 'manager',
+    before: Record<string, unknown>,
+    after: Record<string, unknown>,
+    why: string,
+  ) => ({
+    id: `c-${by}-${why}`,
+    objectId: 'D-1' as const,
+    by,
+    at: 5,
+    fields: [],
+    before,
+    after,
+    why,
+  })
+  const ignore = change(
+    'user',
+    { status: 'open', closed: null },
+    { status: 'ignored', closed: ignoredBy },
+    'Decision ignored',
+  )
+  const managerReopened = change(
+    'manager',
+    { status: 'ignored', closed: ignoredBy },
+    { status: 'open', closed: null },
+    '情况变了',
+  )
+  const userReopened = change(
+    'user',
+    { status: 'ignored', closed: ignoredBy },
+    { status: 'open', closed: null },
+    'Decision reopened',
+  )
+  const decision = { id: 'D-1' as const, status: 'open' as const }
+  assert.deepEqual(managerReopen(decision, [managerReopened, ignore]), {
+    reason: '情况变了',
+    by: 'manager',
+    at: 5,
+  })
+  assert.equal(managerReopen(decision, [userReopened, ignore]), null, '用户撤销忽略')
+  assert.equal(reopenedClosure(decision, [managerReopened, ignore]), null, '不算上次关闭')
+  assert.equal(managerReopen({ ...decision, status: 'ignored' }, [ignore]), null, '还在忽略')
+  const parts = decisionAnswerParts({
+    status: 'open',
+    options,
+    answer: null,
+    closed: null,
+    reopened: { reason: '情况变了', by: 'manager', at: 5 },
+  })
+  assert.equal(parts.reopened?.reason, '情况变了')
+  assert.equal(
+    decisionAnswerParts({
+      status: 'ignored',
+      options,
+      answer: null,
+      closed: ignoredBy,
+      reopened: { reason: '情况变了', by: 'manager', at: 5 },
+    }).reopened,
+    null,
+  )
+})
+
+test('忽略的决策单独成组，不计待定', () => {
+  const base = { options: [], answer: null, closed: null, revision: 1 }
+  const pages = managerBoardPages({
+    decisions: [
+      { ...base, id: 'D-1', status: 'open' },
+      { ...base, id: 'D-2', status: 'ignored', closed: { reason: '', by: 'user', at: 1 } },
+      { ...base, id: 'D-3', status: 'withdrawn' },
+    ],
+    items: [],
+    lines: [],
+    activities: [],
+    situation: null,
+  } as never)
+  assert.deepEqual(
+    pages.decisions.ignored.map((d) => d.id),
+    ['D-2'],
+  )
+  assert.deepEqual(
+    pages.decisions.closed.map((d) => d.id),
+    ['D-3'],
+  )
+  assert.equal(pages.overview.stats.pendingDecisions, 1)
 })

@@ -268,6 +268,67 @@ try {
     `document.querySelector('[data-testid="manager-issue:D-12"]').scrollIntoView({block:'start'})`,
   )
   await shot('mobile-reopened-history')
+  // 经理把你忽略过的 D-16 重新打开：经理写的理由同样默认收起，展开可看
+  const reopenedNote = '[data-testid="decision-reopened:D-16"]'
+  await wait(reopenedNote)
+  assert.ok(
+    await read(
+      `(()=>{const e=document.querySelector('${reopenedNote}');return e.innerText.includes('经理重新打开')&&!e.innerText.includes('song-pc')})()`,
+    ),
+    '经理重开的理由默认收起',
+  )
+  await read(`document.querySelector('${reopenedNote} [role=button]').click()`)
+  await until(
+    () => read(`document.querySelector('${reopenedNote}').innerText.includes('song-pc')`),
+    '展开看经理重开的理由',
+  )
+  // 忽略 D-17：选填理由确认后标“已忽略”、不计待处理、默认收起；展开看理由，撤销忽略回到待定
+  const pendingDecisions = () =>
+    read(
+      `Number(document.querySelector('[data-testid="manager-category-count:decision"]')?.textContent ?? 0)`,
+    )
+  const pendingBefore = await pendingDecisions()
+  await tapId('decision-ignore:D-17')
+  await wait('[data-testid="decision-ignore-form:D-17"]')
+  assert.ok(
+    await read(
+      `document.querySelector('[data-testid="decision-ignore-form:D-17"]').innerText.includes('经理会收到通知')`,
+    ),
+    '忽略前说明后果',
+  )
+  await read(
+    `(()=>{const input=document.querySelector('[data-testid="decision-ignore-reason:D-17"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'网关不归这个项目管');input.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+  )
+  await tapId('decision-ignore-confirm:D-17')
+  await until(
+    () =>
+      read(
+        `document.querySelector('[data-testid="issue-status:D-17"]')?.textContent==='已忽略' && !document.querySelector('[data-testid="manager-issue:D-17"] textarea')`,
+      ),
+    '忽略后标已忽略、收起',
+  )
+  await until(async () => (await pendingDecisions()) === pendingBefore - 1, '忽略后不计待处理')
+  await tapId('decision-ignored-toggle:D-17')
+  await until(
+    () =>
+      read(
+        `(()=>{const e=document.querySelector('[data-testid="decision-ignored:D-17"]');return !!e&&e.innerText.includes('你已忽略')&&e.innerText.includes('网关不归这个项目管')})()`,
+      ),
+    '展开看忽略理由',
+  )
+  await read(
+    `document.querySelector('[data-testid="manager-issue:D-17"]').scrollIntoView({block:'start'})`,
+  )
+  await shot('mobile-ignored-decision')
+  await tapId('decision-unignore:D-17')
+  await until(
+    () =>
+      read(
+        `document.querySelector('[data-testid="issue-status:D-17"]')?.textContent==='待定' && !!document.querySelector('[data-testid="decision-ignore:D-17"]')`,
+      ),
+    '撤销忽略回到待定',
+  )
+  assert.equal(await pendingDecisions(), pendingBefore, '撤销忽略后重新计入待处理')
   for (const skin of ['standard', 'human', 'retro'])
     for (const theme of ['light', 'dark']) {
       await read(

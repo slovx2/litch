@@ -468,6 +468,15 @@ export function sampleManagers(
       ]
     }
     if (d16) {
+      // 用户忽略过，经理因为情况变了重新打开：卡片上收起显示经理写的理由
+      d16.reopened = {
+        reason: t(
+          'song-pc 今天空出来了，0.23.0 发版前只剩这一次补验窗口，需要你重新看一下。',
+          'song-pc is free today, and this is the last verification window before 0.23.0. Please review this again.',
+        ),
+        by: 'manager',
+        at: ago(90),
+      }
       d16.blocks = ['I-4']
       d16.basis = [{ kind: 'file', target: '13-windows-desktop-acceptance.md', label: null }]
       d16.checked = { commit: null, at: ago(180) }

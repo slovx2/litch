@@ -376,6 +376,7 @@ export {
   managerAttentionCount,
   managerBoardPages,
   managerMark,
+  managerReopen,
   managerSessionIds,
   projectManager,
   projectManagerAnswers,

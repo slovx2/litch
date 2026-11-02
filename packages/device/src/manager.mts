@@ -431,6 +431,18 @@ export class DeviceManagers {
         }
         return result
       }
+      case MANAGER_METHOD.decisionIgnore: {
+        keys(params, ['managerId', 'decisionId', 'revision', 'reason'])
+        const decision = this.writer.ignore(
+          id,
+          text(params.decisionId, 'decisionId') as ManagerObjectId,
+          params.revision,
+          params.reason,
+        )
+        // 不唤醒：事件留在队列里，等经理有回合在跑或下一条开回合的事件（drain）
+        this.changed(id)
+        return { decision }
+      }
       case MANAGER_METHOD.decisionReopen: {
         keys(params, ['managerId', 'decisionId'])
         const decision = this.writer.reopen(
@@ -608,6 +620,9 @@ export class DeviceManagers {
               const { discussion: _discussion, ...fields } = decision
               return fields
             }),
+          ignoredDecisions: board.decisions
+            .filter((decision) => decision.status === 'ignored')
+            .map(({ id, title }) => ({ id, title })),
           requests: board.requests?.filter((request) => request.status === 'open'),
           items: board.items.filter((item) => !['done', 'deferred'].includes(item.status)),
           lines: board.lines.filter((line) => line.running),
@@ -655,14 +670,36 @@ export class DeviceManagers {
     const manager = this.store.manager(id)
     if (!manager) return
     if (manager.status === 'ending') await this.endings.recover(id)
-    for (const event of this.store.deliveries(id)) {
+    const deliveries = this.store.deliveries(id)
+    for (const [index, event] of deliveries.entries()) {
       if (this.closed) return
       const parsed = parseSessionEvent(event.text)
       // 结束回合单独开，避免结束请求把当前回合冒充成收尾回合。
       if (parsed.event?.kind === 'manager-end' && this.tree.isActive(manager.threadId)) return
+      let text = event.text
+      if (parsed.event?.kind === 'manager-ignored' && parsed.event.manager) {
+        // 忽略事件不开回合：经理闲着、后面也没有要开回合的事件就先留着
+        const later = deliveries
+          .slice(index + 1)
+          .some((next) => parseSessionEvent(next.text).event?.kind !== 'manager-ignored')
+        if (!later && !this.tree.isActive(manager.threadId)) return
+        // 交出前已撤销忽略或被重开的条目不再告诉经理
+        const board = this.store.objects(id)
+        const ignored = (parsed.event.manager.ignored ?? []).filter((entry) =>
+          board.some((object) => object.id === entry.decisionId && object.status === 'ignored'),
+        )
+        if (!ignored.length) {
+          this.store.delivered(event.id)
+          continue
+        }
+        text = formatSessionEvent({
+          ...parsed.event,
+          manager: { ...parsed.event.manager, ignored },
+        })
+      }
       const sent = await this.tree.deliverManagerEvent(
         manager.threadId,
-        event.text,
+        text,
         event.id,
         manager.effort,
         parsed.event?.kind === 'manager-end'

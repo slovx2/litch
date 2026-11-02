@@ -360,18 +360,42 @@ export function createMockManagers(host: MockManagerHost) {
       const { decisionId } = params as Commands['managers.decision.reopen']['params']
       const decision = board.decisions.find((d) => d.id === decisionId)
       if (!decision) throw new ChannelError('notFound', t('决策不存在', 'Decision not found'))
-      if (decision.status !== 'expired' && decision.status !== 'withdrawn')
+      if (
+        decision.status !== 'expired' &&
+        decision.status !== 'withdrawn' &&
+        decision.status !== 'ignored'
+      )
         throw new ChannelError(
           'rejected',
           t('只能重开已关闭的决策', 'Only closed decisions can be reopened'),
         )
+      // 真设备重开时清掉 closed，客户端从变更记录里找回；模拟核心没有变更记录，直接留下。
+      // 撤销自己的忽略不留“上次关闭”（同 managerReopen 之外的投影：ignored→open 不给 previousClosed）
+      decision.previousClosed = decision.status === 'ignored' ? null : decision.closed
+      decision.reopened = null
       decision.status = 'open'
-      // 真设备重开时清掉 closed，客户端从变更记录里找回；模拟核心没有变更记录，直接留下
-      decision.previousClosed = decision.closed
       decision.closed = null
       decision.revision++
       decision.updatedAt = host.clock.now()
       activity(board, t(`你重开了 ${decisionId}`, `You reopened ${decisionId}`))
+      result = { decision }
+    } else if (name === 'managers.decision.ignore') {
+      const { decisionId, revision, reason } =
+        params as Commands['managers.decision.ignore']['params']
+      const decision = board.decisions.find((d) => d.id === decisionId)
+      if (!decision) throw new ChannelError('notFound', t('决策不存在', 'Decision not found'))
+      if (decision.status !== 'open' || decision.revision !== revision)
+        throw new ChannelError(
+          'rejected',
+          t('决策已变化，请刷新后再试', 'The decision changed; refresh and try again'),
+        )
+      decision.status = 'ignored'
+      decision.closed = { reason: reason?.trim() ?? '', by: 'user', at: host.clock.now() }
+      decision.previousClosed = null
+      decision.reopened = null
+      decision.revision++
+      decision.updatedAt = host.clock.now()
+      activity(board, t(`你忽略了 ${decisionId}`, `You ignored ${decisionId}`))
       result = { decision }
     } else {
       const {
@@ -485,6 +509,7 @@ export function createMockManagers(host: MockManagerHost) {
         decision.status = 'answered'
         decision.closed = null
         decision.previousClosed = null
+        decision.reopened = null
         decision.revision++
         decision.updatedAt = host.clock.now()
         submitted.accepted.push(decision)
@@ -627,6 +652,7 @@ export function createMockManagers(host: MockManagerHost) {
         'managers.answers.submit',
         'managers.feedback.submit',
         'managers.decision.reopen',
+        'managers.decision.ignore',
         'managers.question.ask',
         'managers.question.forward',
       ].includes(name)

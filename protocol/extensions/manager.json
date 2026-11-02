@@ -32,13 +32,13 @@
     "工作线现推：只从会话树、状态、工作树和最近 wrap_up 回报计算，不持久化为经理可写记录。unknown 的 git 事实为 null，不猜成未合并或零提交。unverified 从最近回报逐行取以没验：开头的行，保留前缀，不从截短的回报摘要推断。动态从会话、git 事件和变更记录派生，以稳定 id 去重、按时间倒序。",
     "对象：决策 id 从 D-1、事项从 I-1 起，在同一看板内递增且不复用；跨板引用无效。options.id 非空且唯一；recommend 和 default.optionId 必须引用现有选项。blocks/blockedBy 引用同板事项/决策。line owner 必须是本经理的线。blocked 事项 why 不得空白。",
     "对象更新：每次变更 revision 加一（初值 1），updatedAt 同步；记录谁、何时、字段、前后值、原因。工具 add 缺省数组为空，决策 recommend=null、default={kind:ask}、status=open，事项 status=backlog、owner={kind:manager}、why 为空；checked/answer/closed 初始 null。update 只改给的字段，数组整体替换，不允许空 patch；设备拒绝写 id、时间、revision、工作线事实。",
-    "状态：所有状态的决策都可由用户答复或修改答案，保存后为 answered，清 closed，旧答案和关闭原因保留在历史。answer 只记录真实用户答复，工具记 user-conversation，界面提交记 user。close 只能关 open 决策且原因必填；answered 不能关闭或重开。reopen 只允许 expired/withdrawn→open，清 closed，旧关闭原因留在历史；已 open 重开回 decisionNotClosed。事项 close 只设 done/deferred；update 可恢复事项，必须写原因。",
+    "状态：所有状态的决策都可由用户答复或修改答案，保存后为 answered，清 closed，旧答案和关闭原因保留在历史。answer 只记录真实用户答复，工具记 user-conversation，界面提交记 user。close 只能关 open 决策且原因必填；answered 不能关闭或重开。reopen 只允许 expired/withdrawn/ignored→open，清 closed，旧关闭原因留在历史；已 open 重开回 decisionNotClosed。ignore 只允许用户把 open 决策（带当前 revision）设为 ignored，closed 记 by=user、时间和可选理由（可为空字符串）；ignored 不计入待处理、不能直接答复，经理须用 litch_manager.reopen 带必填理由（记在变更的 why）重开，用户撤销忽略即 reopen。事项 close 只设 done/deferred；update 可恢复事项，必须写原因。",
     "核对：basis 是链接数组，checked={commit,at} 单独存；verify 由设备刷新核对时间，提交号可 null，保留原因记录。第一版不自动检测过时、不生成 stale 或提醒，也没有 due、defaulted 或到期执行；default.option 只记意向，不代表执行授权。",
     "答复：草稿只在桌面本地，只有显式提交才生效。answers 非空，同一决策重复出现的条目均为 invalidAnswer。每项独立检查 revision 和 optionId；optionId 与非空 text 至少一个。问答仍在运行的项拒绝提交，避免交出不完整原文。成功项返回完整对象，失败项返回 code/message 和可得的最新 decision，不回滚别项。",
-    "答复事件：有成功项就在同一持久化事务中记一条 manager-answers 待投递事件，delivery=queued；全失败为 none。事件含成功项的 id、标题、选项 id/显示名、自由文字和可选 discussion（设备持有的问答，长记录有摘要且保留原文），不重复决策背景。闲时开回合，忙时按会话插话机制送入当前回合，暂时送不进就保留重试；同一事件不重复入队。RPC 重试因旧 revision 不会重复写答案或重复派事件。",
+    "忽略事件：忽略成功在同一事务中记一条 manager-ignored 待投递事件（manager.ignored 列出 id、标题、理由），不开回合：只在经理已有回合在跑时插入，或随下一条要开回合的事件一起交出；交出前决策已不再是 ignored 的条目丢掉。答复事件：有成功项就在同一持久化事务中记一条 manager-answers 待投递事件，delivery=queued；全失败为 none。事件含成功项的 id、标题、选项 id/显示名、自由文字和可选 discussion（设备持有的问答，长记录有摘要且保留原文），不重复决策背景。闲时开回合，忙时按会话插话机制送入当前回合，暂时送不进就保留重试；同一事件不重复入队。RPC 重试因旧 revision 不会重复写答案或重复派事件。",
     "结束：end 幂等，active 先转 ending（endedAt 仍为 null），同事务只排一次 manager-end。ending 拒绝客户端 update、answers/submit、decision/reopen 和新增工作线；只在设备绑定的 manager-end 收尾回合中允许 status、close、verify 和 update（事项字段、决策 landed），其他回合不得写看板。此回合完成、失败或被打断后转 ended，记录 endedAt 并发送通知；此后看板只读。收尾事件及回合绑定持久化，设备重启后继续等待或从历史核实完成，不把普通回合结束算作收尾。未完成决策和事项原样保留；结束不代表检查通过。子会话不得自动归档，需用户明确授权，仍遵守 sessionTree 的忙碌/置顶限制。",
     "通知：经理任一字段（含待定数、运行线数、最近动态、名称）改变发送 changed 的完整经理对象；看板任一部分改变发送 board/changed 的 managerId，客户端重读。所有声明过扩展的连接都收到，包括发起者；通知可合并，重连由 list/board/read 对账。",
-    "工具结果为 JSON 文本：summary={situation,decisions,items,lines}，只含 open 决策、未完事项、在跑线；get={object,changes}；add={id,object}；update/verify/close/answer={object}；status={situation}。设备验证对象种类与 id 前缀。失败 success=false，以 [litch:invalid] 或 [litch:failed] 开头解释原因。",
+    "工具结果为 JSON 文本：summary={situation,decisions,items,lines,ignoredDecisions}，只含 open 决策、未完事项、在跑线，ignoredDecisions 只列被忽略决策的 id 和标题；get={object,changes}；add={id,object}；update/verify/close/reopen/answer={object}；status={situation}。设备验证对象种类与 id 前缀。失败 success=false，以 [litch:invalid] 或 [litch:failed] 开头解释原因。",
     "规则注入：第 1/2/3 层在创建、恢复、fork、压缩后恢复，并在每回合保持可用。第 4 层摘要只在上下文建立/恢复/压缩后补，约 2000 token，截断后提示用 summary 查完整内容；第 1 层固定文案约 800 token。第 6/9 层统一用 litch-session-event，manager-* 载荷必须带 manager，notes=[]。",
     "不提供删除、接手、手机推送、到期自动推荐、巡检、提醒或草稿存储方法。模板仅决定初始规矩，建立后对象行为无区别。",
     "旁问：question/ask 按经理及决策保存独立 discussion，不改变决策 revision，通知沿用 board/changed。所有状态的决策可问，结束中的或已结束的经理不可问。设备复用最新已结束回合的临时分叉，有新的已结束回合或决策版本就重建、带旧问答引文；轻会话没有经理历史，决策变化时补新版本。只向声明 managerQuestions 的引擎或可由设备执行只读沙箱约束的原生 Codex 发起。设备只允许 summary/get 及受限的本决策 update/close，客户端不能直接操纵旁问会话。question/forward 将问答送入持久消息队列，不写答案，同一问答条数只转一次。答复/关闭释放分叉，文本留存，之后仍可追问；设备重启保留文字并重建分叉。",
@@ -97,6 +97,12 @@
     },
     {
       "kind": "ClientRequest",
+      "method": "litch/manager/decision/ignore",
+      "params": {"$ref": "#/definitions/IgnoreParams"},
+      "response": {"$ref": "#/definitions/DecisionResponse"}
+    },
+    {
+      "kind": "ClientRequest",
       "method": "litch/manager/question/ask",
       "params": {"$ref": "#/definitions/QuestionParams"},
       "response": {"$ref": "#/definitions/QuestionResponse"}
@@ -132,7 +138,9 @@
         {"litch": "managerEnded", "code": -32600, "description": "经理结束中或已结束；结束中仅指定收尾回合可写，已结束后不能修改"},
         {"litch": "invalidManager", "code": -32602, "description": "参数不合法，data.field 指明字段"},
         {"litch": "unknownDecision", "code": -32602, "description": "decisionId 不属于这个看板"},
-        {"litch": "decisionNotClosed", "code": -32600, "description": "只能重新打开 expired/withdrawn"},
+        {"litch": "decisionNotClosed", "code": -32600, "description": "只能重新打开 expired/withdrawn/ignored"},
+        {"litch": "decisionNotOpen", "code": -32600, "description": "只能忽略 open 决策"},
+        {"litch": "decisionConflict", "code": -32600, "description": "revision 不是当前版本，重新读取后再操作"},
         {
           "litch": "lineLimitReached",
           "code": -32600,
@@ -490,7 +498,7 @@
         "checked": { "anyOf": [{ "$ref": "#/definitions/Checked" }, { "type": "null" }] },
         "answer": { "anyOf": [{ "$ref": "#/definitions/Answer" }, { "type": "null" }] },
         "closed": { "anyOf": [{ "$ref": "#/definitions/Closed" }, { "type": "null" }] },
-        "status": { "enum": ["open", "answered", "expired", "withdrawn"] },
+        "status": { "enum": ["open", "answered", "expired", "withdrawn", "ignored"] },
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" }
       },
@@ -816,6 +824,17 @@
       "properties": {
         "managerId": { "type": "string" },
         "decisionId": { "$ref": "#/definitions/DecisionId" }
+      },
+      "additionalProperties": false
+    },
+    "IgnoreParams": {
+      "type": "object",
+      "required": ["managerId", "decisionId", "revision"],
+      "properties": {
+        "managerId": { "type": "string" },
+        "decisionId": { "$ref": "#/definitions/DecisionId" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "reason": { "type": "string" }
       },
       "additionalProperties": false
     },

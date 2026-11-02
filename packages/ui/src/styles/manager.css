@@ -1102,3 +1102,18 @@
 .mg-other-options .mg-option-static + .mg-option-static {
   margin-top: 6px;
 }
+/* 忽略：选填理由和后果说明，与作答区同宽 */
+.mg-ignore {
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  background: var(--sunken);
+  border-radius: var(--r1);
+}
+.mg-ignore > p {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.mg-ignore .mg-actions {
+  justify-content: flex-end;
+  margin-bottom: 0;
+}

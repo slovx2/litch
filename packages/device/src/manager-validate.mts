@@ -11,7 +11,13 @@ export class ManagerError extends Error {
   readonly data: Record<string, unknown>
   constructor(reason: string, message: string, detail: Record<string, unknown> = {}) {
     super(message)
-    this.code = ['managerEnded', 'decisionNotClosed', 'lineLimitReached'].includes(reason)
+    this.code = [
+      'managerEnded',
+      'decisionNotClosed',
+      'decisionNotOpen',
+      'decisionConflict',
+      'lineLimitReached',
+    ].includes(reason)
       ? -32600
       : -32602
     this.data = { litch: reason, ...detail }

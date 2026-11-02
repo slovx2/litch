@@ -347,6 +347,8 @@ export const SESSION_EVENT_TAG = 'litch-session-event'
 export type SessionEventKind =
   /** 经理的看板答复、规矩更新、第一回合和结束回合；载荷在 manager，notes 为空。 */
   | 'manager-answers'
+  /** 用户在看板上忽略了决策：不开回合，只插进经理在跑的回合或随下一条开回合的事件交出 */
+  | 'manager-ignored'
   | 'manager-open'
   | 'manager-end'
   | 'manager-rules'
@@ -416,11 +418,13 @@ export function formatSessionEvent(event: SessionEvent): string {
         ? manager.questions?.length || manager.requests?.length || manager.postQuestions?.length
           ? 'The user submitted these board entries.'
           : 'The user submitted these board answers.'
-        : event.kind === 'manager-open'
-          ? 'The user created this manager.'
-          : event.kind === 'manager-rules'
-            ? 'The user updated this manager’s scope or rules.'
-            : 'The user requested ending this manager.'
+        : event.kind === 'manager-ignored'
+          ? 'The user ignored these board decisions; they no longer count as pending.'
+          : event.kind === 'manager-open'
+            ? 'The user created this manager.'
+            : event.kind === 'manager-rules'
+              ? 'The user updated this manager’s scope or rules.'
+              : 'The user requested ending this manager.'
     return [
       `<${SESSION_EVENT_TAG} kind="${event.kind}">`,
       `${head} This message is from Litch, not typed by the user. Manager: ${manager.managerId}.`,
@@ -436,6 +440,10 @@ export function formatSessionEvent(event: SessionEvent): string {
               `Original questions and answers: ${JSON.stringify(answer.discussion.messages)}`,
             ].filter(Boolean)
           : [],
+      ),
+      ...(manager.ignored ?? []).map(
+        (entry) =>
+          `- ${entry.decisionId} ${JSON.stringify(entry.title)}${entry.reason ? `: ${JSON.stringify(entry.reason)}` : ''}`,
       ),
       ...(manager.questions ?? []).map(
         (question) =>
@@ -511,7 +519,7 @@ export function formatSessionEvent(event: SessionEvent): string {
  */
 export function parseSessionEvent(text: string): { event: SessionEvent | null; rest: string } {
   const pattern = new RegExp(
-    `^<${SESSION_EVENT_TAG} kind="(notes|wake|remind|manager-answers|manager-open|manager-end|manager-rules)">\\n[\\s\\S]*?<!-- (\\{[\\s\\S]*?\\}) -->\\n</${SESSION_EVENT_TAG}>\\n?`,
+    `^<${SESSION_EVENT_TAG} kind="(notes|wake|remind|manager-answers|manager-ignored|manager-open|manager-end|manager-rules)">\\n[\\s\\S]*?<!-- (\\{[\\s\\S]*?\\}) -->\\n</${SESSION_EVENT_TAG}>\\n?`,
   )
   const match = pattern.exec(text)
   if (!match) return { event: null, rest: text }
@@ -537,7 +545,21 @@ function validManagerEvent(event: SessionEvent): boolean {
     typeof data.text !== 'string'
   )
     return false
-  if (event.kind !== 'manager-answers') return data.answers === undefined
+  if (event.kind === 'manager-ignored')
+    return (
+      data.answers === undefined &&
+      Array.isArray(data.ignored) &&
+      data.ignored.length > 0 &&
+      data.ignored.every(
+        (entry) =>
+          entry &&
+          /^D-[1-9]\d*$/.test(entry.decisionId) &&
+          typeof entry.title === 'string' &&
+          typeof entry.reason === 'string',
+      )
+    )
+  if (event.kind !== 'manager-answers')
+    return data.answers === undefined && data.ignored === undefined
   return (
     Array.isArray(data.answers) &&
     (data.answers.length > 0 ||

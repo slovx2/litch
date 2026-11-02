@@ -59,6 +59,8 @@ export interface ManagerDecisionView
    * 客户端推出来的，不在设备契约里；答复结果等没有变更记录的来源不带它。
    */
   previousClosed?: ManagerClosedView | null
+  /** 经理把用户忽略的决策重新打开的记录（by=manager，reason 是经理写的理由）：同样从变更记录推出，只在待定时有值 */
+  reopened?: ManagerClosedView | null
 }
 export interface ManagerRequestView extends ManagerRequest {}
 export interface ManagerItemView extends Omit<ManagerItem, 'checked'> {

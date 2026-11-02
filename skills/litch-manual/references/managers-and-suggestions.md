@@ -325,6 +325,12 @@ use the same accessible name and placeholder. Related targets use link color and
 
 已答复的决策中，问题和答案分开：答案单独一块，写“你的答复”（经理从对话里记下的写“你在对话中的答复”）和时间，内容是选中的选项和答复文字。没选中的选项收在“其他选项 N”里，点开可看。已关闭的决策另有一块“已关闭 · 关闭者”写原因；重新打开的决策照常展开所有选项供作答，上方保留“上次的答复”，再下面是收起的“上次关闭 · 关闭者”，点开可看当初关闭的原因。桌面和手机相同。
 
+### 忽略决策
+
+不想答的待定决策可以点“忽略”，理由选填。忽略后它不计入待处理，不再提醒，也不唤醒经理；经理在下一个回合会得知你忽略了哪一项（经理正在运行时直接插入）。桌面把忽略的决策放在“已忽略”一栏，手机在列表里标“已忽略”并默认收起，展开可看理由。点“撤销忽略”回到待定。
+
+“忽略”是你不处理这个问题；“已关闭”是经理认为问题不在了（失效或撤回）。经理不能直接把忽略的决策记成已答复，只能在情况有变、确实需要你再看时写明理由重新打开；这时卡片上多一块收起的“经理重新打开”，点开可看理由。
+
 Console lists default to **Newest first** by issue creation time. Switch to **Oldest first** or
 **To handle first** (open decisions, open For you requests, reviewed suggestions and unread reports
 first, newest within each group). On desktop the sort control sits at the right of the list header:
@@ -343,3 +349,12 @@ choosing one option and then tapping **Submit to manager** (until you choose or 
 note below the button says so); the chosen option and the text are kept as local drafts if you
 leave, and the card is marked **Draft**. When editing an answer, the previous answer stays visible and its
 option is preselected.
+
+**Ignore** an open decision you do not want to answer; a reason is optional. Ignored decisions no
+longer count as pending, send no reminders and do not wake the manager; the manager learns about it
+in its next turn (or immediately if it is running). Desktop lists them under **Ignored**; on phone
+they are labeled **Ignored** and collapsed until opened. **Undo ignore** makes the decision open
+again. Ignoring means you are not handling the question; **Closed** means the manager decided the
+question no longer applies. The manager cannot record an answer for an ignored decision; it can only
+reopen it with a reason when things have changed, which then shows as a collapsed **Reopened by the
+manager** block.

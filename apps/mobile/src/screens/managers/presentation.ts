@@ -61,11 +61,15 @@ const MOBILE_MARK: Record<SessionMark, StatusKind> = {
   '': 'idle',
 }
 
-/** 未回答的关闭决策只能重开；有旧答案时保留修改入口，与桌面相同。 */
+/**
+ * 未回答的关闭决策只能重开；有旧答案时保留修改入口，与桌面相同。待定的可以忽略，忽略的可以撤销（也是重开）。
+ */
 export function decisionActions(decision: Pick<ManagerDecision, 'status' | 'answer'>) {
   return {
     edit: decision.status === 'answered' || Boolean(decision.answer),
     reopen: decision.status === 'expired' || decision.status === 'withdrawn',
+    ignore: decision.status === 'open',
+    unignore: decision.status === 'ignored',
   }
 }
 

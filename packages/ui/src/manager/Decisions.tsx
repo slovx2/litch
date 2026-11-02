@@ -62,8 +62,10 @@ export function Decisions({
   const { drafts: postDrafts, write: writePosts } = usePostDrafts(manager.deviceId, manager.id)
   const postQuestions = Object.values(postDrafts).filter((p) => p.question.trim())
   const requestReplies = submittedRequests(requestDrafts)
-  const [filter, setFilter] = useState<'open' | 'answered' | 'closed'>('open')
+  const [filter, setFilter] = useState<'open' | 'answered' | 'closed' | 'ignored'>('open')
   const [editing, setEditing] = useState<Set<string>>(new Set())
+  /** 正在填忽略理由的那张卡 */
+  const [ignoring, setIgnoring] = useState<{ id: ManagerDecisionId; reason: string } | null>(null)
   const cards = useRef<HTMLDivElement>(null)
   const targetDecision = target
     ? decisions.find((decision) => decision.id === target.id)
@@ -73,7 +75,9 @@ export function Decisions({
       ? 'open'
       : targetDecision?.status === 'answered'
         ? 'answered'
-        : 'closed'
+        : targetDecision?.status === 'ignored'
+          ? 'ignored'
+          : 'closed'
   useLayoutEffect(() => {
     if (target) setFilter(targetGroup)
   }, [target, targetGroup])
@@ -216,6 +220,24 @@ export function Decisions({
       setBusy(false)
     }
   }
+  const ignore = async (decision: ManagerDecisionView, reason: string) => {
+    setBusy(true)
+    setError('')
+    try {
+      await channel.command('managers.decision.ignore', {
+        deviceId: manager.deviceId,
+        managerId: manager.id,
+        decisionId: decision.id,
+        revision: decision.revision,
+        ...(reason.trim() ? { reason: reason.trim() } : {}),
+      })
+      setIgnoring(null)
+    } catch (cause) {
+      setError(reasonOf(cause, t))
+    } finally {
+      setBusy(false)
+    }
+  }
   const reopen = async (decision: ManagerDecisionView) => {
     setBusy(true)
     setError('')
@@ -239,20 +261,22 @@ export function Decisions({
     open: sorted(groups.pending),
     answered: sorted(groups.answered),
     closed: sorted(groups.closed),
+    ignored: sorted(groups.ignored),
   }
   return (
     <>
       <div hidden={!visible}>
         <div className="mg-decision-filter">
-          {(['open', 'answered', 'closed'] as const).map((key) => (
+          {(['open', 'answered', 'closed', 'ignored'] as const).map((key) => (
             <button
               type="button"
               key={key}
+              data-filter={key}
               aria-pressed={filter === key}
               onClick={() => setFilter(key)}
             >
               <span aria-hidden="true">
-                {key === 'open' ? '○' : key === 'answered' ? '✓' : '⊘'}
+                {key === 'open' ? '○' : key === 'answered' ? '✓' : key === 'closed' ? '⊘' : '◌'}
               </span>{' '}
               {grouped[key].length} {t(`manager.${key}`)}
             </button>
@@ -425,7 +449,54 @@ export function Decisions({
                             {t('manager.useRecommend')}
                           </button>
                         ) : null}
+                        {decision.status === 'open' && ignoring?.id !== decision.id ? (
+                          <button
+                            type="button"
+                            className="btn ghost"
+                            data-act="manager-ignore"
+                            disabled={disabled || busy}
+                            onClick={() => setIgnoring({ id: decision.id, reason: '' })}
+                          >
+                            {t('manager.ignore')}
+                          </button>
+                        ) : null}
                       </div>
+                      {decision.status === 'open' && ignoring?.id === decision.id ? (
+                        <div className="mg-ignore" data-ignore-form>
+                          <p className="dim">{t('manager.ignoreNote')}</p>
+                          <textarea
+                            data-act="manager-ignore-reason"
+                            className="req-input"
+                            rows={1}
+                            aria-label={t('manager.ignoreReason')}
+                            placeholder={t('manager.ignoreReason')}
+                            disabled={disabled || busy}
+                            value={ignoring.reason}
+                            onChange={(event) =>
+                              setIgnoring({ id: decision.id, reason: event.target.value })
+                            }
+                          />
+                          <div className="mg-actions">
+                            <button
+                              type="button"
+                              className="btn ghost"
+                              disabled={busy}
+                              onClick={() => setIgnoring(null)}
+                            >
+                              {t('manager.cancel')}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn"
+                              data-act="manager-ignore-confirm"
+                              disabled={disabled || busy}
+                              onClick={() => void ignore(decision, ignoring.reason)}
+                            >
+                              {t('manager.ignoreConfirm')}
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
                     </>
                   ) : (
                     <>
@@ -461,9 +532,11 @@ export function Decisions({
                           className="btn ghost"
                           disabled={disabled || busy}
                           onClick={() => void reopen(decision)}
-                          data-act="manager-reopen"
+                          data-act={
+                            decision.status === 'ignored' ? 'manager-unignore' : 'manager-reopen'
+                          }
                         >
-                          {t('manager.reopen')}
+                          {t(decision.status === 'ignored' ? 'manager.unignore' : 'manager.reopen')}
                         </button>
                       ) : null}
                     </>

@@ -1283,6 +1283,10 @@ export function createCore(options: CoreOptions): Core {
             params as Commands['managers.decision.reopen']['params']
           return await deviceOf(deviceId).managers.reopen({ managerId, decisionId })
         }
+        case 'managers.decision.ignore': {
+          const { deviceId, ...given } = params as Commands['managers.decision.ignore']['params']
+          return await deviceOf(deviceId).managers.ignore(given)
+        }
         case 'managers.reference.read': {
           const { deviceId, ...given } = params as Commands['managers.reference.read']['params']
           return await deviceOf(deviceId).managers.reference(given)

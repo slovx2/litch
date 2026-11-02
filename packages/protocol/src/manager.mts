@@ -11,6 +11,7 @@ export const MANAGER_METHOD = {
   answersSubmit: 'litch/manager/answers/submit',
   feedbackSubmit: 'litch/manager/feedback/submit',
   decisionReopen: 'litch/manager/decision/reopen',
+  decisionIgnore: 'litch/manager/decision/ignore',
   questionAsk: 'litch/manager/question/ask',
   questionForward: 'litch/manager/question/forward',
   ...MANAGER_POST_METHOD,
@@ -112,8 +113,11 @@ export interface ManagerClosed {
   by: ManagerActor
   at: number
 }
-/** 第一版不产生 defaulted：没有截止时间调度。 */
-export type ManagerDecisionStatus = 'open' | 'answered' | 'expired' | 'withdrawn'
+/**
+ * 第一版不产生 defaulted：没有截止时间调度。ignored 是用户在看板上忽略的结局，closed 记下谁、何时、可选理由；
+ * 不计入待处理、不唤醒经理，用户可撤销（decision/reopen），经理要带理由用 litch_manager.reopen 才能重开。
+ */
+export type ManagerDecisionStatus = 'open' | 'answered' | 'expired' | 'withdrawn' | 'ignored'
 export type ManagerItemStatus = 'backlog' | 'running' | 'review' | 'done' | 'deferred' | 'blocked'
 export type ManagerItemOwner =
   | { kind: 'manager' }
@@ -385,6 +389,15 @@ export interface ManagerDecisionReopenParams extends ManagerIdParams {
 export interface ManagerDecisionReopenResponse {
   decision: ManagerDecision
 }
+/** 用户忽略一条待定决策；revision 是所读版本，理由可空。 */
+export interface ManagerDecisionIgnoreParams extends ManagerIdParams {
+  decisionId: ManagerDecisionId
+  revision: number
+  reason?: string
+}
+export interface ManagerDecisionIgnoreResponse {
+  decision: ManagerDecision
+}
 export interface ManagerChangedNotification {
   manager: Manager
 }
@@ -412,6 +425,8 @@ export interface ManagerEventData {
     text: string
     discussion?: ManagerDiscussion
   }[]
+  /** manager-ignored 事件：用户忽略了哪些决策（理由可为空字符串）。 */
+  ignored?: { decisionId: ManagerDecisionId; title: string; reason: string }[]
 }
 
 export const MANAGER_ERROR = {
@@ -420,5 +435,7 @@ export const MANAGER_ERROR = {
   invalidManager: 'invalidManager',
   unknownDecision: 'unknownDecision',
   decisionNotClosed: 'decisionNotClosed',
+  decisionNotOpen: 'decisionNotOpen',
+  decisionConflict: 'decisionConflict',
   lineLimitReached: 'lineLimitReached',
 } as const

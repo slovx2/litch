@@ -6,6 +6,8 @@ import type {
   ManagerBoardReadResponse,
   ManagerCreateParams,
   ManagerCreateResponse,
+  ManagerDecisionIgnoreParams,
+  ManagerDecisionIgnoreResponse,
   ManagerDecisionReopenParams,
   ManagerDecisionReopenResponse,
   ManagerDiscussion,
@@ -64,5 +66,9 @@ export interface ManagerRequests {
   'litch/manager/decision/reopen': {
     params: ManagerDecisionReopenParams
     result: ManagerDecisionReopenResponse
+  }
+  'litch/manager/decision/ignore': {
+    params: ManagerDecisionIgnoreParams
+    result: ManagerDecisionIgnoreResponse
   }
 }
