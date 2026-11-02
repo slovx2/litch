@@ -14,6 +14,12 @@ import type {
   ManagerDecision,
 } from '../../../../../packages/protocol/src/manager.mjs'
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
+import {
+  type ManagerStateText,
+  managerStateText,
+  type SessionMark,
+  sessionMark,
+} from '../../../../../packages/ui/src/sidebar/session-mark.ts'
 import { markdownStyleOf } from '../../detail/markdownStyle'
 import type { StatusKind, Theme } from '../../ui/theme'
 
@@ -27,39 +33,32 @@ export function managerRowState(
     ManagerView,
     'status' | 'runningLines' | 'pendingDecisions' | 'pendingRequests' | 'pendingSuggestions'
   >,
-  summary: Pick<SessionSummary, 'status' | 'background'> | undefined,
+  summary: Pick<SessionSummary, 'status' | 'background' | 'unread'> | undefined,
 ): {
   mark: StatusKind
   /** 进行中经理的待处理合计（同 D-29 口径），0 不画胶囊 */
   pending: number
-  text:
-    | { key: 'manager.ending' | 'manager.ended' | 'manager.running' | 'manager.idle' }
-    | { key: 'manager.linesCount'; n: number }
-    | { key: 'background.sidebar'; count: number }
+  text: { key: 'manager.ending' | 'manager.ended' } | ManagerStateText
 } {
-  const background = summary?.background?.running ?? 0
+  // 记号和文字与桌面侧栏同一套规则（session-mark.ts）；手机不画未读，已结束画离线
   const mark: StatusKind =
-    manager.status === 'ended'
-      ? 'offline'
-      : summary?.status === 'running'
-        ? 'running'
-        : summary?.status === 'waiting'
-          ? 'waiting'
-          : summary?.status === 'error'
-            ? 'error'
-            : background > 0
-              ? 'background'
-              : 'idle'
+    manager.status === 'ended' ? 'offline' : MOBILE_MARK[sessionMark(summary)]
   if (manager.status !== 'active')
     return { mark, pending: 0, text: { key: `manager.${manager.status}` } }
-  const pending = managerAttentionCount(manager)
-  if (mark === 'running' || mark === 'waiting')
-    return { mark, pending, text: { key: 'manager.running' } }
-  if (manager.runningLines > 0)
-    return { mark, pending, text: { key: 'manager.linesCount', n: manager.runningLines } }
-  if (background > 0)
-    return { mark, pending, text: { key: 'background.sidebar', count: background } }
-  return { mark, pending, text: { key: 'manager.idle' } }
+  return {
+    mark,
+    pending: managerAttentionCount(manager),
+    text: managerStateText(summary, manager.runningLines),
+  }
+}
+
+const MOBILE_MARK: Record<SessionMark, StatusKind> = {
+  run: 'running',
+  wait: 'waiting',
+  err: 'error',
+  bg: 'background',
+  unread: 'idle',
+  '': 'idle',
 }
 
 /** 未回答的关闭决策只能重开；有旧答案时保留修改入口，与桌面相同。 */

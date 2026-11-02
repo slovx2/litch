@@ -413,6 +413,13 @@ try {
     ),
     '经理行的读屏名称带待处理数',
   )
+  // m2 自己回合已停、挂着后台命令，另有工作线在跑：记号是后台的呼吸记号，文字写工作线（与桌面 session-mark 同规则）
+  assert.ok(
+    await read(
+      '(()=>{const row=document.querySelector(\'[data-testid="manager:m2"]\');return !!row&&!!row.querySelector(\'[data-testid="mark:background"]\')&&/\\d+ 条工作线运行中/.test(row.textContent)})()',
+    ),
+    '经理行记号只看经理自己，工作线在跑另写文字',
+  )
   await shot('mobile-managers')
   console.log(
     '手机经理：目录、概览、排序、已答决策分块、三皮肤报告、关联定位、已阅、追问与交付通过',

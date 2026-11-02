@@ -7,10 +7,9 @@ on a board stored on its device, and reports progress. Repository changes remain
 what has landed. Managers and their worklines appear in the desktop sidebar's **Managers** view;
 ordinary sessions appear in **Chat**. The phone home screen has a **Managers** entry: managers are
 grouped by device, and each manager page has **Overview**, read-only **Manager items** and **Console**
-(the same order as desktop), plus **Chat** to open the manager conversation. A manager row's status
-mark shows only the manager conversation itself (running, waiting, error, or background tasks still
-running); its text reads Running, then N work lines running, then N background tasks running, then
-Idle. Managers with items to handle show the count in an amber pill at the end of the row. Creating managers and editing dispatch settings remain
+(the same order as desktop), plus **Chat** to open the manager conversation. Manager rows use the
+same mark and status text as the desktop sidebar (see below); managers with items to handle show the
+count in an amber pill at the end of the row. Creating managers and editing dispatch settings remain
 desktop actions.
 
 ### Where and how to create one
@@ -251,12 +250,13 @@ and whether the cards were handled or expired. Increasing retention does not res
 
 ### 看板答复与待办提示
 
-侧栏经理行前面的记号只表示经理会话自己：回合在跑是“运行中”的记号，回合结束但它的后台命令还在跑是后台任务的呼吸记号（写“N 个后台任务正在运行”），与普通会话行相同；只有工作线在跑时不画记号，文字写“N 条工作线运行中”，各条工作线的记号在其子行上。经理页和工作线页的输入框上方都有“N 个后台任务正在运行”，点开可看命令、用时并停止。
+桌面侧栏和手机经理目录里，经理行前面的记号只表示经理会话自己：回合在跑是“运行中”的记号，回合结束但它的后台命令还在跑是后台任务的呼吸记号（写“N 个后台任务正在运行”），与普通会话行相同；只有工作线在跑时不画记号，文字写“N 条工作线运行中”，各条工作线的记号在其子行上（手机不嵌套工作线）。文字依次为运行中、N 条工作线运行中、N 个后台任务正在运行、空闲。经理页和工作线页的输入框上方都有“N 个后台任务正在运行”，点开可看命令、用时并停止。
 
-The dot on a manager's sidebar row describes the manager session itself, as on ordinary rows: a running
-turn, or the breathing background mark with "N background tasks running" when its turn has ended but a
+The dot on a manager's row, in the desktop sidebar and in the phone's manager list, describes the
+manager session itself, as on ordinary rows: a running turn, or the breathing background mark with "N background tasks running" when its turn has ended but a
 background command continues. When only worklines are running, the row shows no dot and says "N work
-lines running"; each workline shows its own mark underneath.
+lines running"; on desktop each workline shows its own mark underneath. The text reads Running, then
+N work lines running, then N background tasks running, then Idle.
 
 侧栏、窄窗口的“看板”和收起后的“展开看板”数字，合计待定决策、待做的“请你做”和经理已审核待开始建议；报告未读不计入。
 已回复、已交付或已取消的请求不重复计入；已回复但尚未交付的请求仍保留在概览中。
@@ -288,7 +288,7 @@ lines running"; each workline shows its own mark underneath.
 经理可只编辑原帖、只回复或两者同时做；“已编辑”可展开旧版本、编辑时间与原因。
 控制台合计待定决策、待做请你做和经理已审核待开始建议；悬停也只显示这三类数量。手机采用相同口径。
 
-手机首页有“经理”入口（第二行是待处理合计），经理按设备分组、先进行中后已结束。经理行前面的记号只表示经理会话自己（回合在跑、等人、出错、回合停了但后台任务还在跑）；文字依次为运行中、N 条工作线运行中、N 个后台任务正在运行、空闲；有待处理时行尾是等待色的计数胶囊，读屏念整行时带上“N 待处理”。进入经理后有“概览 | 经理事项 | 控制台”三格（与桌面同序），默认概览，内容与桌面一致：现状、待用户决策与已完成两个数（分别点进控制台的决策和经理事项）、受阻事项（第二行写“等待决策 #D-n”，编号可点）、请你做和最近动态；长动态点“展开全文”看完整内容；右上角“对话”打开经理会话。手机作答决策时先点选一项（单选），再点“提交给经理”（没选也没写时按钮下方写明“先选一项或写补充说明”，决策没有选项时写“先写补充说明”）；选中项和补充文字都存为本机草稿，离开再回来还在，卡片状态标“草稿”。修改答案时上方照样显示原来的答复，原来选的那一项已选中。控制台可阅读和操作四类议题，并提交经理或临时追问。
+手机首页有“经理”入口（第二行是待处理合计），经理按设备分组、先进行中后已结束。经理行的记号和文字与桌面侧栏相同（见“看板答复与待办提示”）；有待处理时行尾是等待色的计数胶囊，读屏念整行时带上“N 待处理”。进入经理后有“概览 | 经理事项 | 控制台”三格（与桌面同序），默认概览，内容与桌面一致：现状、待用户决策与已完成两个数（分别点进控制台的决策和经理事项）、受阻事项（第二行写“等待决策 #D-n”，编号可点）、请你做和最近动态；长动态点“展开全文”看完整内容；右上角“对话”打开经理会话。手机作答决策时先点选一项（单选），再点“提交给经理”（没选也没写时按钮下方写明“先选一项或写补充说明”，决策没有选项时写“先写补充说明”）；选中项和补充文字都存为本机草稿，离开再回来还在，卡片状态标“草稿”。修改答案时上方照样显示原来的答复，原来选的那一项已选中。控制台可阅读和操作四类议题，并提交经理或临时追问。
 手机沿用建议的开始/编辑/忽略，支持请求交付/文字回复、决策答复、报告已阅和讨论历史；创建经理、派活设置及完整经理事项看板仍在桌面。
 用户主动新建议题尚未开放。手机也提供只读经理事项供关联定位；目前按卡提交，桌面支持跨卡混合提交。
 

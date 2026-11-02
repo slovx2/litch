@@ -15,7 +15,7 @@ import { Caret, Forward } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { containsSession, revealRow } from '../sidebar/reveal.ts'
 import { useSidebarReveal } from '../sidebar/reveal-context.ts'
-import { sessionMark } from '../sidebar/session-mark.ts'
+import { managerStateText, sessionMark } from '../sidebar/session-mark.ts'
 import { answeredDrafts, questionDrafts, useAnswerDrafts } from './drafts.ts'
 import { usePostDrafts } from './post-drafts.ts'
 import { submittedRequests, useRequestDrafts } from './request-drafts.ts'
@@ -60,14 +60,8 @@ function ManagerRow({
   const summary = useKey<SessionSummary>(keys.summary(manager.deviceId, manager.threadId))
   const mark = sessionMark(summary)
   const background = summary?.background?.running ?? 0
-  const state =
-    mark === 'run' || mark === 'wait'
-      ? t('manager.running')
-      : manager.runningLines
-        ? t('manager.linesCount', { n: manager.runningLines })
-        : background
-          ? t('background.sidebar', { count: background })
-          : t('manager.idle')
+  const { key: stateKey, ...stateArgs } = managerStateText(summary, manager.runningLines)
+  const state = t(stateKey, stateArgs)
   const picked =
     selection?.deviceId === manager.deviceId && selection.sessionId === manager.threadId
   return (

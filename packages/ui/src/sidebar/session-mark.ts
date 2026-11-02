@@ -14,3 +14,24 @@ export function sessionMark(
   if ((summary.background?.running ?? 0) > 0) return 'bg'
   return summary.unread ? 'unread' : ''
 }
+
+export type ManagerStateText =
+  | { key: 'manager.running' | 'manager.idle' }
+  | { key: 'manager.linesCount'; n: number }
+  | { key: 'background.sidebar'; count: number }
+
+/**
+ * 经理行的状态文字（桌面侧栏和手机经理目录共用）：记号只说经理会话自己，工作线在跑另用文字写明。
+ * 依次为经理自己回合在跑或等人 → N 条工作线运行中 → 自己的 N 个后台任务 → 空闲。
+ */
+export function managerStateText(
+  summary: Pick<SessionSummary, 'status' | 'background' | 'unread'> | undefined,
+  runningLines: number,
+): ManagerStateText {
+  const mark = sessionMark(summary)
+  if (mark === 'run' || mark === 'wait') return { key: 'manager.running' }
+  if (runningLines > 0) return { key: 'manager.linesCount', n: runningLines }
+  const background = summary?.background?.running ?? 0
+  if (background > 0) return { key: 'background.sidebar', count: background }
+  return { key: 'manager.idle' }
+}
