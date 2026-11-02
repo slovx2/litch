@@ -7,6 +7,61 @@ export interface RowSelection extends Selection {
   source: RowSource
 }
 
+type Mode = 'chat' | 'manager'
+export interface RowMemory {
+  mode: Mode
+  rows: Record<Mode, RowSelection | null>
+  viewed: Record<Mode, Selection | null>
+  clicked: { mode: Mode; selection: Selection } | null
+  request: Selection | null
+}
+
+export function rowMemory(mode: Mode): RowMemory {
+  return {
+    mode,
+    rows: { chat: null, manager: null },
+    viewed: { chat: null, manager: null },
+    clicked: null,
+    request: null,
+  }
+}
+
+export function clickedRow(
+  was: RowMemory,
+  mode: Mode,
+  selection: Selection,
+  source: RowSource,
+): RowMemory {
+  return {
+    ...was,
+    rows: { ...was.rows, [mode]: { ...selection, source } },
+    clicked: { mode, selection },
+    request: null,
+  }
+}
+
+/** 模式切换复用该模式原有的导航对象；外部重开同一会话仍会给新对象，应继续定位。 */
+export function navigateRows(
+  was: RowMemory,
+  mode: Mode,
+  selection: Selection | null,
+  autoLocate: boolean,
+): RowMemory {
+  const restored = was.mode !== mode && was.viewed[mode] === selection
+  const direct =
+    selection !== null && was.clicked?.mode === mode && was.clicked.selection === selection
+  return {
+    mode,
+    rows:
+      restored || direct
+        ? was.rows
+        : { ...was.rows, [mode]: navigatedRow(was.rows[mode], selection, autoLocate) },
+    viewed: { ...was.viewed, [mode]: selection },
+    clicked: null,
+    request: !restored && !direct && autoLocate ? selection : null,
+  }
+}
+
 export function sameSession(a: Selection | null, b: Selection | null): boolean {
   return !!a && !!b && a.deviceId === b.deviceId && a.sessionId === b.sessionId
 }

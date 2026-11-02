@@ -18,6 +18,8 @@
 
 桌面「对话」视图在各设备前显示「未读」「最近」，两组可独立收起。
 点击会话时只高亮实际点击的那一行；同一会话在其他投影和对话树中的副本不高亮。上下方向键与读屏当前项跟随这一行。
+对话与经理模式各自记住选中位置；切换模式、切换窗口或列表重绘不会把投影选择移回设备树。
+Chat and manager modes remember their selected rows separately. Switching modes or windows does not move a projection selection to the device tree.
 刷新列表、排序或新增副本不会转移选择；选中的投影项移除后，选择回到同一会话的对话树行。
 Only the clicked row is selected, including for keyboard navigation and screen readers. Other copies stay unselected.
 List updates preserve the selected location; removing that projection item selects the same conversation in the tree.

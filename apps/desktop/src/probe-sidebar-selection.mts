@@ -40,9 +40,14 @@ async function selectionSeen() {
   }
   recent()?.click()
   await until(() => only(recent()))
+  document.querySelector<HTMLButtonElement>('[data-sidebar-mode=manager]')?.click()
+  await until(() => !document.querySelector('[data-projection]'))
+  document.querySelector<HTMLButtonElement>('[data-sidebar-mode=chat]')?.click()
+  await until(() => !!recent())
+  await until(() => only(recent()))
   tree()?.click()
   await until(() => only(tree()))
   recent()?.click()
   await until(() => only(recent()))
-  return { recentOnly: true, treeOnly: true }
+  return { recentOnly: true, treeOnly: true, modeRestored: true }
 }

@@ -39,7 +39,7 @@ function ManagerRow({
   const t = useT()
   const [open, setOpen] = useState(true)
   const row = useRef<HTMLDivElement>(null)
-  const { fromTree } = useSidebarReveal()
+  const { fromTree, selected } = useSidebarReveal()
   useEffect(() => {
     if (!reveal) return
     setOpen(true)
@@ -69,7 +69,11 @@ function ManagerRow({
   const { key: stateKey, ...stateArgs } = managerStateText(summary, manager.runningLines)
   const state = t(stateKey, stateArgs)
   const picked =
-    selection?.deviceId === manager.deviceId && selection.sessionId === manager.threadId
+    selected?.source === 'tree' &&
+    selected.deviceId === selection?.deviceId &&
+    selected.sessionId === selection?.sessionId &&
+    selection?.deviceId === manager.deviceId &&
+    selection.sessionId === manager.threadId
   return (
     <div
       className="mg-sidebar-manager"

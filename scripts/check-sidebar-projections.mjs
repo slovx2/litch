@@ -381,6 +381,15 @@ try {
     )
   await until(async () => (await currentRows())[0]?.source === 'recent', '最近行唯一选中')
   assert.deepEqual(await currentRows(), [{ sessionId: 's3', source: 'recent', selected: true }])
+  await click('[data-sidebar-mode=manager]')
+  await until(() => run(() => !document.querySelector('[data-projection]')), '切到经理模式')
+  await click('[data-sidebar-mode=chat]')
+  await until(() => run(() => !!document.querySelector('[data-projection=recent]')), '返回对话模式')
+  assert.deepEqual(
+    await currentRows(),
+    [{ sessionId: 's3', source: 'recent', selected: true }],
+    '切换模式仍保留实际点击的最近行',
+  )
   await click('.dev-group[data-device=local] [data-session=s3] .ss-row')
   await until(async () => (await currentRows())[0]?.source === 'tree', '树行唯一选中')
   assert.deepEqual(await currentRows(), [{ sessionId: 's3', source: 'tree', selected: true }])

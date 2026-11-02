@@ -76,10 +76,11 @@ import { SidebarFoot } from './SidebarFoot.tsx'
 import { SidebarFrame } from './SidebarFrame.tsx'
 import { SidebarMore } from './SidebarMore.tsx'
 import {
-  navigatedRow,
-  type RowSelection,
+  clickedRow,
+  navigateRows,
   type RowSource,
   reconcileProjection,
+  rowMemory,
   sameSession,
 } from './selection.ts'
 import { sessionMark } from './session-mark.ts'
@@ -2021,28 +2022,36 @@ export function Sidebar(props: SidebarProps) {
   const [focus, setFocus] = useState<{ deviceId: string; group: string } | null>(null)
   const open = useSidebarOpen()
   const autoLocate = useSidebarAutoLocate()
-  const treeSelection = useRef<Selection | null>(null)
-  const [selectedRow, setSelectedRow] = useState<RowSelection | null>(null)
-  const [request, setRequest] = useState<Selection | null>(null)
-  const fromTree = useCallback((next: Selection, source: RowSource) => {
-    treeSelection.current = next
-    setSelectedRow({ ...next, source })
-  }, [])
+  const [memory, setMemory] = useState(() => rowMemory(props.mode))
+  const selectedRow = memory.rows[props.mode]
+  const request = memory.request
+  const fromTree = useCallback(
+    (next: Selection, source: RowSource) => {
+      setMemory((was) => clickedRow(was, props.mode, next, source))
+    },
+    [props.mode],
+  )
   useEffect(() => {
-    const direct = selection !== null && treeSelection.current === selection
-    treeSelection.current = null
-    setRequest(direct || !autoLocate ? null : selection)
-    if (!direct) setSelectedRow((was) => navigatedRow(was, selection, autoLocate))
-    if (selection && !direct && autoLocate) setFocus(null)
-  }, [selection, autoLocate])
+    setMemory((was) => navigateRows(was, props.mode, selection, autoLocate))
+  }, [props.mode, selection, autoLocate])
+  useEffect(() => {
+    if (request) setFocus(null)
+  }, [request])
   const checkProjection = useCallback<React.ContextType<typeof SidebarReveal>['checkProjection']>(
     (kind, rows, children) => {
-      const next = reconcileProjection(selectedRow, kind, rows, children)
-      if (next === selectedRow) return
-      setSelectedRow(next)
-      if (autoLocate && sameSession(next, selection)) setRequest(selection)
+      setMemory((was) => {
+        const previous = was.rows[props.mode]
+        const next = reconcileProjection(previous, kind, rows, children)
+        return next === previous
+          ? was
+          : {
+              ...was,
+              rows: { ...was.rows, [props.mode]: next },
+              request: autoLocate && sameSession(next, selection) ? selection : null,
+            }
+      })
     },
-    [selectedRow, selection, autoLocate],
+    [props.mode, selection, autoLocate],
   )
   const reveal = useMemo(
     () => ({
