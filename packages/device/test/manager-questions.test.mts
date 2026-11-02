@@ -240,7 +240,7 @@ test('轻会话带看板；不支持只读时不启动回合', async () => {
   try {
     const id = await light.ask('轻会话问题')
     assert.equal(light.state().discussion.light, true)
-    assert.match(JSON.stringify(light.env.pi.current(id)), /no manager conversation history/)
+    assert.match(JSON.stringify(light.env.pi.current(id)), /no inherited manager history/)
     await light.finish('轻会话回答')
   } finally {
     await light.env.close()

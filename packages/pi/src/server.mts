@@ -7,7 +7,10 @@ import {
 } from '../../protocol/src/background-tasks.mjs'
 import type { ClientToolNamespaceSpec } from '../../protocol/src/client-tools.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
-import { isManagerQuestionTools } from '../../protocol/src/manager-question.mjs'
+import {
+  isManagerQuestionTools,
+  managerQuestionToolAllowed,
+} from '../../protocol/src/manager-question.mjs'
 import {
   type BackgroundReport,
   notificationWithOrigin,
@@ -33,6 +36,7 @@ import {
 import { FilesystemRpc } from '../../shared/src/filesystem-rpc.mjs'
 import { FuzzyFileSearch, FuzzySearchSessions } from '../../shared/src/fuzzy-session.mjs'
 import { declaredExtensions } from '../../shared/src/harness-declaration.mjs'
+import { deniedQuestionFile } from '../../shared/src/manager-question-files.mjs'
 import { applyNotificationOptOut } from '../../shared/src/notification-opt-out.mjs'
 import { PowerObserver, powerThreads } from '../../shared/src/power-observer.mjs'
 import { ProcessRpc } from '../../shared/src/process-rpc.mjs'
@@ -155,6 +159,7 @@ export class PiServer {
   private readonly toolNamespaces = new Map<string, DeclaredClientTools>()
   /** 工具执行之前问不问用户。运行时起来时定下，之后不变（设置 harness.pi.approvals，改了要重启运行时） */
   readonly approvals: boolean
+  private readonly storageHome: string
   /**
    * 注入的后台 shell（shared/src/background-shell.mts）。设置 harness.pi.backgroundShell 关着时是 null，
    * 模型看不到这几个工具、也不报后台任务的集合。进程归这个运行时，运行时退出时一起结束
@@ -166,6 +171,7 @@ export class PiServer {
   /** 后台任务的集合、回合的来历怎么加到给声明过 backgroundTasks 的连接的应答和通知上 */
   readonly report: BackgroundReport
   constructor(home: string, options: { approvals?: boolean; backgroundShell?: boolean } = {}) {
+    this.storageHome = home
     this.approvals = options.approvals === true
     this.store = new PiStore(home)
     this.projects = new ProjectStore(this.store.db, threadsTable(this.store.db))
@@ -415,11 +421,19 @@ export class PiServer {
     ask: ToolCallAsk,
   ): Promise<ToolCallBlock | undefined> {
     const client = clientTools(thread.dynamicTools).some((tool) => tool.piName === ask.toolName)
-    if (isManagerQuestionTools(thread.dynamicTools))
-      return client ||
-        ['builtin:read', 'builtin:grep', 'builtin:find', 'builtin:ls'].includes(ask.source ?? '')
-        ? undefined
-        : { block: true, reason: '决策旁问只允许读文件和读取看板' }
+    if (isManagerQuestionTools(thread.dynamicTools)) {
+      const tool = clientTools(thread.dynamicTools).find((tool) => tool.piName === ask.toolName)
+      if (tool && managerQuestionToolAllowed(tool.namespace, tool.name)) return undefined
+      if (
+        !['builtin:read', 'builtin:grep', 'builtin:find', 'builtin:ls'].includes(ask.source ?? '')
+      )
+        return { block: true, reason: '决策旁问只允许受控读工具和本议题编辑' }
+      const reason = deniedQuestionFile(thread.cwd, ask.toolName, ask.input, [
+        this.storageHome,
+        ...sessionIndexDirectories([thread.cwd]),
+      ])
+      return reason ? { block: true, reason } : undefined
+    }
     // 后台 shell 起命令照跑命令问，别的几个（读、停、列）不问
     const shell = this.shellSpec?.tools.find((tool) => shellToolName(tool.name) === ask.toolName)
     const kind = shell

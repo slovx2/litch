@@ -1,11 +1,12 @@
 // 旁问由设备持有连接与记录，窗口关闭不丢问答；分叉不登记为工作线。
 import { randomUUID } from 'node:crypto'
-import { MANAGER_TOOLS } from '../../protocol/src/client-tools-manager.mjs'
 import type { Manager } from '../../protocol/src/manager.mjs'
 import type { ManagerPost, ManagerPostId } from '../../protocol/src/manager-posts.mjs'
 import {
   forwardedManagerQuestion,
   managerQuestionRules,
+  managerQuestionToolAllowed,
+  managerQuestionTools,
 } from '../../protocol/src/manager-question.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { DeviceManagers } from './manager.mjs'
@@ -60,9 +61,37 @@ export class ManagerQuestions {
   allowed(threadId: string, namespace: unknown, tool: unknown): boolean {
     return (
       !this.restricted.has(threadId) ||
-      (namespace === 'litch_manager' &&
-        ['summary', 'get', 'update', 'close', 'post_get', 'post_reply'].includes(String(tool)))
+      (this.active(threadId) && managerQuestionToolAllowed(namespace, tool))
     )
+  }
+  private active(threadId: string): boolean {
+    const managerId = this.restricted.get(threadId)
+    return (
+      !!managerId &&
+      !this.retired.has(threadId) &&
+      this.owner.store.manager(managerId)?.status === 'active' &&
+      this.owner.store.questions(managerId).some((state) => state.threadId === threadId)
+    )
+  }
+  /** null 表示普通会话；空集合表示已失效的临时会话，绝不能回落成全设备读取。 */
+  readableSessions(threadId: string): Set<string> | null {
+    const managerId = this.restricted.get(threadId)
+    if (!managerId) return null
+    const result = new Set<string>()
+    if (!this.active(threadId)) return result
+    const manager = this.owner.manager(managerId)
+    result.add(manager.threadId)
+    const visit = (parent: string) => {
+      for (const child of this.owner.tree.store.childrenOf(parent)) {
+        // 嵌套的另一位经理及其子树有独立归属，不能因为仍有祖先关系而越界。
+        if (result.has(child.threadId) || this.owner.store.forThread(child.threadId)) continue
+        if (this.restricted.has(child.threadId)) continue
+        result.add(child.threadId)
+        visit(child.threadId)
+      }
+    }
+    visit(manager.threadId)
+    return result
   }
   validateWrite(threadId: string, tool: string, given: unknown): void {
     if (!['update', 'close', 'post_reply'].includes(tool)) return
@@ -226,17 +255,7 @@ export class ManagerQuestions {
         previous.length > 0 &&
         (state.revision !== decision.revision || (fork && state.source !== snapshot.source))
       await this.release(state, link)
-      const tools = [
-        {
-          ...MANAGER_TOOLS,
-          description:
-            'Explain this post. Read post_get; use post_reply patch only to update the current post. Do not change other objects.',
-          instructions: managerQuestionRules(decision.id),
-          tools: MANAGER_TOOLS.tools.filter((tool) =>
-            ['summary', 'get', 'update', 'close', 'post_get', 'post_reply'].includes(tool.name),
-          ),
-        },
-      ]
+      const tools = managerQuestionTools(decision.id, manager.threadId)
       const nativeConfig = link.native ? await this.nativeConfig(link, manager.cwd) : undefined
       const created = await link.request(fork ? 'thread/fork' : 'thread/start', {
         ...(fork ? { threadId: manager.threadId, ...snapshot.position } : { cwd: manager.cwd }),
@@ -247,7 +266,10 @@ export class ManagerQuestions {
         sandbox: 'read-only',
         approvalPolicy: 'never',
         ...(nativeConfig
-          ? { config: nativeConfig, developerInstructions: managerQuestionRules(decision.id) }
+          ? {
+              config: nativeConfig,
+              developerInstructions: managerQuestionRules(decision.id, manager.threadId),
+            }
           : {}),
       })
       if (typeof created?.thread?.id !== 'string')
@@ -260,10 +282,10 @@ export class ManagerQuestions {
       state.discussion.light = !fork
       this.owner.store.saveQuestion(state)
       prompt = [
-        managerQuestionRules(decision.id),
+        managerQuestionRules(decision.id, manager.threadId),
         fork
           ? ''
-          : 'You have no manager conversation history. Say when the supplied context is insufficient.',
+          : 'You have no inherited manager history. Use litch_sessions.read with the manager threadId above to retrieve it; say when the available snapshot is insufficient.',
         `Decision and board context (reference only):\n${JSON.stringify({
           decision: backgroundDecision,
           situation: this.owner.store.situation(manager.id),

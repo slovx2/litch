@@ -163,7 +163,19 @@ async function list(tree: SessionTree, args: Record<string, unknown>, call: Devi
     throw new Refused('invalid', 'status must be running or idle.')
   const limit = integer(args, 'limit', 20, SESSION_TOOL_LIMITS.listMax)
   const rows: { harness: string; thread: Record<string, unknown> }[] = []
-  if (scope === 'mine') {
+  const authorized = tree.managers?.questions.readableSessions(call.threadId)
+  if (authorized) {
+    const manager = tree.managers?.store.manager(
+      tree.managers.questions.managerFor(call.threadId) ?? '',
+    )
+    for (const id of authorized) {
+      if (scope === 'mine' && id === manager?.threadId) continue
+      if (!tree.managers?.questions.readableSessions(call.threadId)?.has(id)) continue
+      const found = await tree.read(id, false).catch(() => null)
+      if (found && tree.managers?.questions.readableSessions(call.threadId)?.has(id))
+        rows.push(found)
+    }
+  } else if (scope === 'mine') {
     for (const child of tree.store.descendants(call.threadId)) {
       const found = await tree.read(child.threadId, false).catch(() => null)
       if (found) rows.push(found)
@@ -189,6 +201,11 @@ async function list(tree: SessionTree, args: Record<string, unknown>, call: Devi
     )
   }
   const sessions = rows
+    .filter(
+      (row) =>
+        !authorized ||
+        tree.managers?.questions.readableSessions(call.threadId)?.has(String(row.thread.id)),
+    )
     .filter((row) => !harness || row.harness === harness)
     .filter((row) => !cwd || row.thread.cwd === cwd)
     .map((row) => summary(tree, row.harness, row.thread, call.threadId))
@@ -201,6 +218,15 @@ async function list(tree: SessionTree, args: Record<string, unknown>, call: Devi
 
 async function read(tree: SessionTree, args: Record<string, unknown>, call: DeviceToolCall) {
   const threadId = string(args, 'thread_id', true)
+  const check = () => {
+    const authorized = tree.managers?.questions.readableSessions(call.threadId)
+    if (authorized && !authorized.has(threadId))
+      throw new Refused(
+        'blocked',
+        'Temporary questions may read only their active manager and its worklines.',
+      )
+  }
+  check()
   const count = integer(
     args,
     'turns',
@@ -208,6 +234,8 @@ async function read(tree: SessionTree, args: Record<string, unknown>, call: Devi
     SESSION_TOOL_LIMITS.readTurnsMax,
   )
   const { harness, thread } = await found(tree, threadId)
+  // 读引擎期间可能被释放或脱离归属；返回内容前再查，pending/response 也在闸之后。
+  check()
   const turns = (Array.isArray(thread.turns) ? thread.turns : []).filter(isObject).slice(-count)
   return {
     session: summary(tree, harness, thread, call.threadId),
@@ -1160,6 +1188,11 @@ export function sessionToolsHandler(
   archives: SessionArchives,
 ): DeviceToolHandler {
   return async (call, { signal }) => {
+    if (
+      tree.managers &&
+      !tree.managers.questions.allowed(call.threadId, 'litch_sessions', call.tool)
+    )
+      return clientToolFailure('blocked', 'This temporary question cannot call that session tool.')
     if (!tree.enabledFor(call.threadId))
       return clientToolFailure(
         'disabled',

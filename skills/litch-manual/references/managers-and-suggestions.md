@@ -182,7 +182,20 @@ issue's original content. For a decision it may also withdraw or expire it. It c
 other objects, start lines or send messages. Changes are recorded as coming from the temporary
 conversation and reach the manager on its next turn. Questions use the manager's latest finished
 turn; newer progress or an edited post rebuilds the context with earlier Q&A quoted. OpenCode uses
-a light conversation with board context. ACP and DSH offer only Ask manager.
+a light conversation with board context and the manager's thread ID for retrieving recent history.
+`litch_sessions.list/read` can query that manager and its currently owned worklines, including valid
+descendants across harnesses. Other managers, detached lines and unrelated sessions are denied even
+when they share a folder or their IDs appear in references. List filters only narrow this scope;
+`scope: mine` excludes the manager itself. Reads are bounded recent snapshots, not full tool logs.
+Retired helpers cannot regain tool access after refresh or restart. Tools must not use the network
+or run tests. ACP and DSH offer only Ask manager.
+
+This is a scoped session-tool boundary, not complete filesystem isolation. Claude Code and Pi also
+block known raw session-storage paths and direct symbolic links to them; Pi temporary helpers do
+not load user extensions. Unknown copies, hard links, recursive search links and path replacement
+are not fully isolated. Codex retains its existing read-only, no-network shell, which can still read
+raw session files or run commands that do not write; OpenCode's native file tools have no equivalent
+per-path guard. Never use raw storage to bypass the session scope.
 
 The **Links** area groups Sources, Derived and Related targets. It sits on the right of wide cards,
 and collapses above the post in narrow layouts. Issue links open the corresponding post; manager
@@ -308,6 +321,10 @@ the running mark a single ring.
 
 每类议题都可追问。原帖和操作区始终在上方，问答记录在下方按时间排列；不再切换“回答/追问”两套视图。
 默认交给经理主对话，也可选受限的临时对话（支持该能力的 harness）；临时助手可更新当前原帖，但不能改其他议题、文件或开工作线。
+
+临时助手可通过 `litch_sessions.list/read` 读取当前经理主会话及归属仍有效的工作线，含跨引擎后代。其他经理、脱离归属的工作线和无关会话均拒绝，同目录、已知编号或引用不会授权；筛选参数只能缩小范围，`scope: mine` 不含经理自身。结果是有限的最近回合快照，不含完整工具过程。OpenCode 轻会话收到经理会话编号后可补读背景。已退役的助手不能在刷新或重启后重新取得权限。工具不得联网或运行测试；ACP、DSH 本轮不支持。
+
+上述范围由会话工具强制执行，不代表文件系统完全隔离。Claude Code、Pi 另拦截已知原始会话存储路径及直接指向它们的符号链接；Pi 临时助手不加载用户扩展。未知副本、硬链接、递归搜索中的链接和检查后的路径替换仍未完整隔离。Codex 保留现有只读禁网 shell，仍可能读取原始记录或运行不写文件的命令；OpenCode 原生文件工具没有同等的逐路径闸。不得用直接翻原始存储绕过会话范围。
 经理可只编辑原帖、只回复或两者同时做；“已编辑”可展开旧版本、编辑时间与原因。
 控制台合计待定决策、待做请你做和经理已审核待开始建议；悬停也只显示这三类数量。手机采用相同口径。
 

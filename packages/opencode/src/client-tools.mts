@@ -2,7 +2,10 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { isAbsolute, relative } from 'node:path'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
-import { isManagerQuestionTools } from '../../protocol/src/manager-question.mjs'
+import {
+  isManagerQuestionTools,
+  managerQuestionToolAllowed,
+} from '../../protocol/src/manager-question.mjs'
 import {
   BACKGROUND_SHELL_NAMESPACE,
   backgroundShellSpec,
@@ -272,11 +275,7 @@ export class ClientTools {
         list: true,
         ...Object.fromEntries(
           this.specs(threadId)
-            .filter(
-              (spec) =>
-                spec.namespace === 'litch_manager' &&
-                ['summary', 'get', 'update', 'close', 'post_get', 'post_reply'].includes(spec.tool),
-            )
+            .filter((spec) => managerQuestionToolAllowed(spec.namespace, spec.tool))
             .map((spec) => [`${serverName(threadId)}_${spec.mcpName}`, true]),
         ),
       }

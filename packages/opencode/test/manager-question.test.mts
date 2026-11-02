@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { MANAGER_TOOLS } from '../../protocol/src/client-tools-manager.mjs'
-import { managerQuestionRules } from '../../protocol/src/manager-question.mjs'
+import { managerQuestionTools } from '../../protocol/src/manager-question.mjs'
 import { serverName } from '../src/client-tools.mjs'
 import { client, isolate, skip, text, violations } from './client.mjs'
 import { scripted } from './mock-model.mjs'
@@ -10,10 +9,33 @@ test('旁问轻会话可连续回答，工具全拒绝后仅开放读文件和�
   skip,
   timeout: 120000,
 }, async () => {
+  let toolPrefix = ''
   const env = await isolate(
     scripted({
-      FIRST: [[{ type: 'text', chunks: ['第一轮背景'] }]],
-      SECOND: [[{ type: 'text', chunks: ['第二轮背景'] }]],
+      FIRST: [
+        [
+          {
+            type: 'tool',
+            get name() {
+              return `${toolPrefix}_sessions_list`
+            },
+            input: {},
+          },
+        ],
+        [{ type: 'text', chunks: ['第一轮背景'] }],
+      ],
+      SECOND: [
+        [
+          {
+            type: 'tool',
+            get name() {
+              return `${toolPrefix}_sessions_read`
+            },
+            input: { thread_id: 'manager' },
+          },
+        ],
+        [{ type: 'text', chunks: ['第二轮背景'] }],
+      ],
     }),
     { server: { backgroundShell: true } },
   )
@@ -22,23 +44,34 @@ test('旁问轻会话可连续回答，工具全拒绝后仅开放读文件和�
     const observer = client(env.server)
     await connection.initialize()
     await observer.initialize()
+    const calls: string[] = []
+    connection.onRequest((request) => {
+      if (request.method !== 'item/tool/call') return undefined
+      calls.push(`${request.params.namespace}.${request.params.tool}`)
+      return { success: true, contentItems: [{ type: 'inputText', text: 'authorized snapshot' }] }
+    })
+    // 执行器声明；真实设备层的范围拒绝由 manager-question-reads 用例覆盖。
+    await connection.call('initialize', {
+      clientInfo: { name: 'question', version: '0' },
+      capabilities: {
+        litchExtensions: ['clientTools'],
+        litchClientTools: { namespaces: ['litch_sessions'] },
+      },
+    })
     const { thread } = await connection.call('thread/start', {
       cwd: env.cwd,
       ephemeral: true,
       sandbox: 'read-only',
-      dynamicTools: [
-        {
-          ...MANAGER_TOOLS,
-          instructions: managerQuestionRules('D-1'),
-          tools: MANAGER_TOOLS.tools.filter((tool) => ['summary', 'get'].includes(tool.name)),
-        },
-      ],
+      dynamicTools: managerQuestionTools('D-1', 'manager'),
     })
+    toolPrefix = serverName(thread.id)
     assert.equal(thread.ephemeral, true)
     const rules = env.server.clientTools.rules(thread.id)
     assert.equal(rules['*'], false)
     assert.equal(rules[`${serverName(thread.id)}_manager_summary`], true)
     assert.equal(rules[`${serverName(thread.id)}_manager_get`], true)
+    assert.equal(rules[`${serverName(thread.id)}_sessions_list`], true)
+    assert.equal(rules[`${serverName(thread.id)}_sessions_read`], true)
     assert.equal(
       Object.keys(rules).some((key) => /shell|bash|write/.test(key)),
       false,
@@ -55,6 +88,12 @@ test('旁问轻会话可连续回答，工具全拒绝后仅开放读文件和�
     }
     const names = env.model.requests.flatMap(
       (body) => body.tools?.map((tool: any) => tool.function?.name ?? tool.name) ?? [],
+    )
+    assert.deepEqual(calls, ['litch_sessions.list', 'litch_sessions.read'])
+    assert.ok(
+      env.model.requests.some((body) =>
+        JSON.stringify(body.messages).includes('authorized snapshot'),
+      ),
     )
     assert.equal(
       names.some((name) => ['bash', 'edit', 'write', 'task', 'webfetch'].includes(name)),

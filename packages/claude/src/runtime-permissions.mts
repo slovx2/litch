@@ -1,5 +1,9 @@
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { isManagerQuestionTools } from '../../protocol/src/manager-question.mjs'
+import {
+  isManagerQuestionTools,
+  managerQuestionToolSubset,
+} from '../../protocol/src/manager-question.mjs'
+import { deniedQuestionFile } from '../../shared/src/manager-question-files.mjs'
 import { claudeConfigDir } from './claude-native-files.mjs'
 import { sandboxCommand } from './command-sandbox.mjs'
 import { dynamicToolCliNames } from './dynamic-tools.mjs'
@@ -237,12 +241,17 @@ export function deniedTool(
   name: string,
   input: Record<string, unknown>,
 ): string | null {
-  if (
-    isManagerQuestionTools(context.dynamicTools) &&
-    !['Read', 'Glob', 'Grep', 'ToolSearch'].includes(name) &&
-    !dynamicToolCliNames(context.dynamicTools).has(name)
-  )
-    return '决策旁问只允许读文件和读取看板'
+  if (isManagerQuestionTools(context.dynamicTools)) {
+    if (
+      !['Read', 'Glob', 'Grep', 'ToolSearch'].includes(name) &&
+      !dynamicToolCliNames(managerQuestionToolSubset(context.dynamicTools)).has(name)
+    )
+      return '决策旁问只允许受控读工具和本议题编辑'
+    if (isFileReadTool(name)) {
+      const denied = deniedQuestionFile(context.cwd, name, input)
+      if (denied) return denied
+    }
+  }
   // 原生计划文件保存在会话专属目录，只豁免此文件，不豁免项目源码或符号链接外逃。
   if (isPlanFile(context, name, input)) return null
   if (isStructuredOutput(context, name)) return null

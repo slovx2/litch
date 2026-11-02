@@ -8,6 +8,7 @@ import type {
   InlineExtension,
 } from '@earendil-works/pi-coding-agent'
 import type { ClientToolNamespaceSpec } from '../../protocol/src/client-tools.mjs'
+import { isManagerQuestionTools } from '../../protocol/src/manager-question.mjs'
 import {
   BACKGROUND_SHELL_NAMESPACE,
   type ShellToolResult,
@@ -109,7 +110,8 @@ export async function openSession(
   const subagentPath = fileURLToPath(
     new URL('../index.ts', import.meta.resolve('@gotgenes/pi-subagents')),
   )
-  const managed = [planPath, subagentPath]
+  const question = isManagerQuestionTools(thread.dynamicTools)
+  const managed = question ? [] : [planPath, subagentPath]
   // 随适配器分发的插件注册的工具名，每次装载扩展时重填；审批的钩子靠它认这些工具。
   const managedTools = new Set<string>()
   const approve = host.approve
@@ -157,11 +159,12 @@ export async function openSession(
     agentDir,
     settingsManager,
     eventBus,
+    ...(question ? { noExtensions: true, noSkills: true, noPromptTemplates: true } : {}),
     ...(toolInstructions
       ? { appendSystemPromptOverride: (base: string[]) => [...base, toolInstructions] }
       : {}),
     additionalExtensionPaths: managed,
-    extensionFactories: [...builtInExtensions, compaction, ...approvals],
+    extensionFactories: [...(question ? [] : builtInExtensions), compaction, ...approvals],
     extensionsOverride(base) {
       const preferred = base.extensions.filter((e) =>
         managed.some((p) => e.path === p || e.resolvedPath === p),
