@@ -18,6 +18,23 @@ export interface SendModeProbe {
   queueButton: string
   queued: boolean
   manualSteered: boolean
+  /**
+   * 停止后的待发：一行头“N 条待发 · 全部发送”；每条一行，行尾图标按钮带悬停提示和读屏名称；
+   * 行里不重复状态；“连同待发”只在有字时出现在发送键旁，点了换档；全部发送后托盘收起
+   */
+  held: {
+    head: string
+    rows: number
+    rowHeights: number[]
+    buttons: string[]
+    titled: boolean
+    statusRepeated: boolean
+    toggleBeforeTyping: boolean
+    toggle: string
+    toggleBesideSend: boolean
+    toggled: string[]
+    resumed: boolean
+  } | null
   /** 本机记下来的那一份（最后点的是排队） */
   saved: string | null
 }
@@ -153,7 +170,7 @@ export async function sendModeProbe(real: boolean): Promise<SendModeProbe | null
   const queued = Boolean(
     await until('托盘里的那一条', () => one('.tray-row'), 5000).catch(() => null),
   )
-  const steer = one<HTMLButtonElement>('.tray-row .mini.steer')
+  const steer = one<HTMLButtonElement>('.tray-row .ibtn.steer')
   steer?.click()
   const manualSteered = Boolean(
     await until(
@@ -163,6 +180,60 @@ export async function sendModeProbe(real: boolean): Promise<SendModeProbe | null
     ).catch(() => null),
   )
   await idle()
+
+  // ---- 三、停止后的待发 ----
+  enter(await write('跑一会儿：停下来'))
+  await runningTurn()
+  enter(await write('待发的头一句'))
+  await until('托盘里的头一句', () => all('.tray-row').length === 1, 5000)
+  enter(await write('待发的后一句'))
+  await until('托盘里的两句', () => all('.tray-row').length === 2, 5000)
+  await write('')
+  one<HTMLButtonElement>('.dock .send.stop')?.click()
+  let held: SendModeProbe['held'] = null
+  const head = await until('待发的头一行', () => one('[data-pending-inputs]'), 10_000).catch(
+    () => null,
+  )
+  if (head) {
+    const rows = all('.tray-row')
+    const rowHeights = rows.map((row) => Math.round(row.getBoundingClientRect().height))
+    const buttons = rows.flatMap((row) => all('.tray-acts button', row))
+    const toggleBeforeTyping = Boolean(one('.cmp-pending'))
+    await write('再写一句')
+    const toggle = await until('“连同待发”', () => one<HTMLButtonElement>('.cmp-pending'), 5000)
+    const send = one('.dock .send')?.getBoundingClientRect()
+    const box = toggle.getBoundingClientRect()
+    const toggled = [toggle.getAttribute('aria-pressed') ?? '']
+    toggle.click()
+    await frame()
+    toggled.push(one('.cmp-pending')?.getAttribute('aria-pressed') ?? '')
+    await write('')
+    one<HTMLButtonElement>('[data-pending-inputs] button')?.click()
+    const resumed = Boolean(
+      await until('全部发送后托盘收起', () => !one('.tray-row'), 10_000).catch(() => null),
+    )
+    held = {
+      head: text(head).replace(/\s+/g, ' '),
+      rows: rows.length,
+      rowHeights,
+      buttons: buttons.map((button) => button.getAttribute('aria-label') ?? ''),
+      titled: buttons.every(
+        (button) =>
+          button.title !== '' &&
+          button.title === button.getAttribute('aria-label') &&
+          text(button) === '',
+      ),
+      statusRepeated: rows.some((row) => /已停止|待发送|inputDelivery/.test(text(row))),
+      toggleBeforeTyping,
+      toggle: text(toggle),
+      toggleBesideSend: Boolean(
+        send && box.right <= send.left && send.left - box.right <= 12 && box.bottom > send.top,
+      ),
+      toggled,
+      resumed,
+    }
+    await idle()
+  }
   let saved: string | null = null
   try {
     saved = localStorage.getItem('litch.compose')
@@ -179,6 +250,7 @@ export async function sendModeProbe(real: boolean): Promise<SendModeProbe | null
     queueButton,
     queued,
     manualSteered,
+    held,
     saved,
   }
 }
@@ -203,6 +275,26 @@ export function judgeSendMode(probe: SendModeProbe | null): string[] {
   check(probe.queueButton === '排队', `排队时按钮上写的是“${probe.queueButton}”`)
   check(probe.queued, '排队：回合进行中发的消息没有进托盘')
   check(probe.manualSteered, '排队：托盘里点“现在就说”没有插进同一个回合')
+  const held = probe.held
+  check(Boolean(held), '停止后没有出现待发的头一行')
+  if (held) {
+    const said = JSON.stringify(held)
+    check(/^2 条待发\s*·\s*全部发送$/.test(held.head), `待发的头一行不对：${said}`)
+    check(
+      held.rows === 2 && held.rowHeights.every((h) => h > 0 && h <= 30),
+      `待发每条不是一行：${said}`,
+    )
+    check(
+      held.buttons.join(',') === '发送,编辑,移除,发送,编辑,移除',
+      `待发行尾的图标按钮不对：${said}`,
+    )
+    check(held.titled, `待发的图标按钮缺悬停提示或读屏名称，或者写了字：${said}`)
+    check(!held.statusRepeated, `待发的每行又写了一遍状态：${said}`)
+    check(!held.toggleBeforeTyping, `输入框没字时就出现了“连同待发”：${said}`)
+    check(held.toggle === '含 2 条待发' && held.toggleBesideSend, `“连同待发”不在发送键旁：${said}`)
+    check(held.toggled.join(',') === 'true,false', `“连同待发”点了没有换档：${said}`)
+    check(held.resumed, `点“全部发送”后托盘没有收起：${said}`)
+  }
   check(probe.saved === '{"mode":"queue"}', `本机记下来的不对：${probe.saved}`)
   return failed
 }

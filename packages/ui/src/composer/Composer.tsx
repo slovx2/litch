@@ -29,7 +29,7 @@ import { requestNewSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { nameOf } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
-import { Clip, Close, Send, Stop } from '../app/icons.tsx'
+import { Clip, Close, Icon, Send, Stop } from '../app/icons.tsx'
 import { currentPlatform } from '../app/platform.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import {
@@ -690,92 +690,102 @@ export function Composer(props: ComposerProps) {
     props.onResumeQueue?.(id).catch((error: unknown) => setError(String(error)))
   return (
     <>
-      {heldCount > 0 ? (
-        <div className="tray-row" data-pending-inputs="">
-          <span className="grow">{t('composer.pendingStopped', { n: heldCount })}</span>
-          <button type="button" className="mini" disabled={!!blocked} onClick={() => resume()}>
-            {t('composer.pendingSend')}
-          </button>
-        </div>
-      ) : null}
-      {heldCount > 0 && props.pendingSend ? (
-        <label className="tray-row">
-          <select
-            aria-label={t('composer.pendingChoice')}
-            value={props.pendingSend.value}
-            onChange={(event) =>
-              props.pendingSend?.change(event.target.value === 'only' ? 'only' : 'include')
-            }
-          >
-            <option value="include">{t('composer.pendingInclude', { n: heldCount })}</option>
-            <option value="only">{t('composer.pendingOnly')}</option>
-          </select>
-        </label>
-      ) : null}
+      {/* 停止后的待发：一行头“⏸ N 条待发 · 全部发送”，下面每条一行，行尾是图标按钮（悬停或聚焦时出现）。
+          状态不在每行重复；“连同待发一起发”是发送按钮旁的小开关，只在输入框有内容时出现 */}
       {queued.length > 0 ? (
-        <ul className="tray" aria-label={t('composer.queued')}>
-          {queued.map((message) => (
-            <li key={message.id} className="tray-row">
-              {message.extras.map((extra, index) =>
-                // 提到的会话写在正文里，不另出一片
-                extra.kind === 'session' ? null : (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: 贴进来的文字没有自己的标识，同一段可以带两遍
-                  <span key={index} className="mention">
-                    {labelOf(extra)}
-                  </span>
-                ),
-              )}
-              {message.images.length > 0 ? (
-                <span className="mention">
-                  {t('composer.imageCount', { n: message.images.length })}
-                </span>
-              ) : null}
-              <span className="ell grow">{message.text}</span>
-              {message.delivery ? (
-                <span className="muted">{t(`inputDelivery.${message.delivery}`)}</span>
-              ) : null}
-              {message.delivery === 'held' ? (
-                <button
-                  type="button"
-                  className="mini"
-                  disabled={!!blocked}
-                  onClick={() => resume(message.id)}
-                >
-                  {t('composer.send')}
-                </button>
-              ) : null}
-              {running && onSteer && !message.delivery ? (
-                // 带着图而图插不进去的那一条：留着能点，点了说为什么（等回合结束它会照常发出去）
-                <button
-                  type="button"
-                  className="mini steer"
-                  title={t(stuck(message) ? 'composer.steer.noImages' : 'composer.steer.note')}
-                  aria-disabled={stuck(message) || undefined}
-                  onClick={() =>
-                    stuck(message) ? setError(t('composer.steer.noImages')) : steer(message)
-                  }
-                >
-                  {t('composer.steer')}
-                </button>
-              ) : null}
-              <button type="button" className="mini" onClick={() => unqueue(message, true)}>
-                {t('composer.editQueued')}
+        <div className="tray">
+          {heldCount > 0 ? (
+            <div className="tray-head" data-pending-inputs="">
+              <Icon name="pause" small />
+              <span>{t('composer.pendingCount', { n: heldCount })}</span>
+              <span aria-hidden="true">·</span>
+              <button type="button" className="link" disabled={!!blocked} onClick={() => resume()}>
+                {t('composer.pendingSendAll')}
               </button>
-              <button
-                type="button"
-                className="ibtn"
-                title={t('composer.unqueue')}
-                aria-label={t('composer.unqueue')}
-                onClick={() => unqueue(message, false)}
-              >
-                <Close />
-              </button>
-            </li>
-          ))}
-          {queued.some((entry) => entry.delivery === 'unknown') ? (
-            <li className="muted">{t('composer.pendingUnknown')}</li>
+            </div>
           ) : null}
-        </ul>
+          <ul className="tray-list" aria-label={t('composer.queued')}>
+            {queued.map((message) => (
+              <li key={message.id} className="tray-row">
+                {message.extras.map((extra, index) =>
+                  // 提到的会话写在正文里，不另出一片
+                  extra.kind === 'session' ? null : (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: 贴进来的文字没有自己的标识，同一段可以带两遍
+                    <span key={index} className="mention">
+                      {labelOf(extra)}
+                    </span>
+                  ),
+                )}
+                {message.images.length > 0 ? (
+                  <span className="mention">
+                    {t('composer.imageCount', { n: message.images.length })}
+                  </span>
+                ) : null}
+                <span className="ell grow">{message.text}</span>
+                {message.delivery === 'unknown' ? (
+                  <span
+                    className="tray-unknown"
+                    role="img"
+                    title={t('inputDelivery.unknown.note')}
+                    aria-label={t('inputDelivery.unknown.note')}
+                  >
+                    <Icon name="info" small />
+                  </span>
+                ) : null}
+                <span className="tray-acts">
+                  {message.delivery === 'held' ? (
+                    <button
+                      type="button"
+                      className="ibtn"
+                      title={t('composer.send')}
+                      aria-label={t('composer.send')}
+                      disabled={!!blocked}
+                      onClick={() => resume(message.id)}
+                    >
+                      <Icon name="up" small />
+                    </button>
+                  ) : null}
+                  {running && onSteer && !message.delivery ? (
+                    // 带着图而图插不进去的那一条：留着能点，点了说为什么（等回合结束它会照常发出去）
+                    <button
+                      type="button"
+                      className="ibtn steer"
+                      title={t(stuck(message) ? 'composer.steer.noImages' : 'composer.steer.note')}
+                      aria-label={t('composer.steer')}
+                      aria-disabled={stuck(message) || undefined}
+                      onClick={() =>
+                        stuck(message) ? setError(t('composer.steer.noImages')) : steer(message)
+                      }
+                    >
+                      <Icon name="up" small />
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="ibtn edit"
+                    title={t('composer.editQueued')}
+                    aria-label={t('composer.editQueued')}
+                    onClick={() => unqueue(message, true)}
+                  >
+                    <Icon name="edit" small />
+                  </button>
+                  <button
+                    type="button"
+                    className="ibtn"
+                    title={t('composer.unqueue')}
+                    aria-label={t('composer.unqueue')}
+                    onClick={() => unqueue(message, false)}
+                  >
+                    <Close />
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {queued.some((entry) => entry.delivery === 'unknown') ? (
+            <div className="muted">{t('composer.pendingUnknown')}</div>
+          ) : null}
+        </div>
       ) : null}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: 拖放没有键盘的对应操作，加附件另有按钮 */}
       <div
@@ -927,6 +937,22 @@ export function Composer(props: ComposerProps) {
               compact={props.compact}
               limits={props.harness ? { deviceId, harness: props.harness } : undefined}
             />
+            {heldCount > 0 && props.pendingSend && filled ? (
+              // 紧挨发送键（上下文圆环不挪）。开着：这条连同待发的一起发（默认）；关着：只发这条，待发的留着
+              <button
+                type="button"
+                className="cmp-pending"
+                aria-pressed={props.pendingSend.value === 'include'}
+                title={t('composer.pendingWith.note', { n: heldCount })}
+                onClick={() =>
+                  props.pendingSend?.change(
+                    props.pendingSend.value === 'include' ? 'only' : 'include',
+                  )
+                }
+              >
+                {t('composer.pendingWith', { n: heldCount })}
+              </button>
+            ) : null}
             {mode === 'stop' ? (
               <button
                 type="button"

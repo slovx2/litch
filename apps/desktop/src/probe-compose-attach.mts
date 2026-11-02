@@ -217,9 +217,7 @@ export async function attachProbe(real: boolean): Promise<AttachProbe> {
     if (row) {
       const said = text(one('.mention', row))
       // 拿回来改：片回到输入区。然后清掉，不真的发第二条
-      all('.mini', row)
-        .find((button) => !button.classList.contains('steer'))
-        ?.click()
+      one<HTMLButtonElement>('.ibtn.edit', row)?.click()
       await until('片回到输入区', () => chips().length === 1, 5000).catch(() => null)
       queued = { row: said, back: chips().length }
       for (const cross of all('.dock .cmp-chip-x')) cross.click()

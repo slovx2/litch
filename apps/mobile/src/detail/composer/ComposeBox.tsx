@@ -166,6 +166,7 @@ export function ComposeBox({
   draft,
   placeholder,
   running,
+  pending = null,
   steer = false,
   steerImages = true,
   fresh = false,
@@ -187,6 +188,11 @@ export function ComposeBox({
   placeholder: string
   /** 回合在跑：有字时按钮是“发送”（插进当前回合）或“排队”，没字时是“停止”（给了 onStop 的话） */
   running: boolean
+  /**
+   * 停止后有待发：输入框有内容时发送键旁出一个小开关“含 N 条”，开着这条连同待发一起发（默认）、
+   * 关着只发这条。没有待发是 null
+   */
+  pending?: { count: number; include: boolean; toggle(): void } | null
   /** 回合在跑时发出去会插进当前回合（设置里选了立即发送、这个会话插得了话）。不给是排队 */
   steer?: boolean
   /** 新建会话：上一条还在建会话时不接下一条，免得另建一个 */
@@ -422,26 +428,59 @@ export function ComposeBox({
             {...(settings?.onUsage ? { onPress: settings.onUsage } : {})}
           />
         ) : null}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={sendLabel}
-          accessibilityState={{ disabled: mode !== 'stop' && (!filled || !!blocked) }}
-          testID={`${testID}-send`}
-          onPress={send}
-          style={({ pressed }) => [
-            styles.send,
-            {
-              borderRadius: theme.radius.m,
-              backgroundColor: mode === 'stop' ? 'transparent' : c.accentSolid,
-              borderColor: mode === 'stop' ? c.err : c.accentSolid,
-              opacity: mode !== 'stop' && (!filled || blocked) ? 0.45 : pressed ? 0.75 : 1,
-            },
-          ]}
-        >
-          <Text style={[styles.sendText, { color: mode === 'stop' ? c.err : c.onAccent }]}>
-            {sendLabel}
-          </Text>
-        </Pressable>
+        {pending && filled ? (
+          <View style={styles.pendingSlot}>
+            <Pressable
+              accessibilityRole="switch"
+              aria-checked={pending.include}
+              accessibilityLabel={t('composer.pendingWith', { n: pending.count })}
+              accessibilityHint={t('composer.pendingWith.note', { n: pending.count })}
+              testID={`${testID}-pending`}
+              hitSlop={8}
+              onPress={pending.toggle}
+              style={[
+                styles.pending,
+                {
+                  borderColor: pending.include ? c.accent : c.line2,
+                  backgroundColor: pending.include ? c.sel : 'transparent',
+                },
+              ]}
+            >
+              <Text style={[styles.pendingText, { color: pending.include ? c.accent : c.ink3 }]}>
+                {t('compose.pendingShort', { n: pending.count })}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {/* 发送、排队、停止：36 的圆形图标键（↑、■），读屏名称写是哪一个；这一格随输入框拉高、键贴底 */}
+        <View style={styles.send}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={sendLabel}
+            accessibilityState={{ disabled: mode !== 'stop' && (!filled || !!blocked) }}
+            testID={`${testID}-send`}
+            // 36 见方，四边放 4：可点 44
+            hitSlop={4}
+            onPress={send}
+            style={({ pressed }) => [
+              styles.sendDot,
+              {
+                backgroundColor: mode === 'stop' ? 'transparent' : c.accentSolid,
+                borderColor: mode === 'stop' ? c.err : c.accentSolid,
+                opacity: mode !== 'stop' && (!filled || blocked) ? 0.45 : pressed ? 0.75 : 1,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                mode === 'stop' ? styles.stopGlyph : styles.sendGlyph,
+                { color: mode === 'stop' ? c.err : c.onAccent },
+              ]}
+            >
+              {mode === 'stop' ? '■' : '↑'}
+            </Text>
+          </Pressable>
+        </View>
       </View>
       <Sheet
         visible={moreOpen}
@@ -489,5 +528,15 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     borderWidth: 2,
   },
-  sendText: { fontSize: 15, fontWeight: '600' },
+  sendGlyph: { fontSize: 20, lineHeight: 24, fontWeight: '700' },
+  stopGlyph: { fontSize: 13, lineHeight: 16 },
+  pendingSlot: { justifyContent: 'flex-end', paddingBottom: 6 },
+  pending: {
+    height: 28,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderRadius: 14,
+    justifyContent: 'center',
+  },
+  pendingText: { fontSize: 12 },
 })

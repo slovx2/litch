@@ -41,8 +41,8 @@ function useInBackground(ended: boolean, ids: string): number {
 }
 
 /**
- * 告一段落后整段过程的开合入口：第一行是用时，第二行是统计，底线标清整个过程的边界。
- * 异常和后台任务单独显示，不被窄屏上的统计截断。点击范围沿用皮肤的触控高度。
+ * 告一段落后整段过程的开合入口：用时和统计一行，底线标清整个过程的边界。
+ * 异常和后台任务另起一行，不被窄屏上的统计截断。点击范围沿用皮肤的触控高度。
  */
 export const ProcessCell = memo(function ProcessCell({ row }: Props<'process'>) {
   const { c, font, hit } = useTheme()
@@ -73,14 +73,13 @@ export const ProcessCell = memo(function ProcessCell({ row }: Props<'process'>) 
       >
         <Text style={{ fontSize: font.size.body, color: c.ink2 }}>{row.expanded ? '▾' : '▸'}</Text>
         <View style={styles.processBody}>
-          <Text style={{ fontSize: font.size.body, fontFamily: font.ui, color: c.ink2 }}>
-            {plain[0]}
+          {/* 用时和统计写成一行（“已处理 41 秒 · 1 步”），太长就截断统计 */}
+          <Text numberOfLines={1} style={{ color: c.ink2 }}>
+            <Text style={{ fontSize: font.size.body, fontFamily: font.ui }}>{plain[0]}</Text>
+            {plain.length > 1 ? (
+              <Text style={{ fontSize: font.size.meta }}>{` · ${plain.slice(1).join(' · ')}`}</Text>
+            ) : null}
           </Text>
-          {plain.length > 1 ? (
-            <Text style={{ fontSize: font.size.meta, color: c.ink2 }} numberOfLines={1}>
-              {plain.slice(1).join(' · ')}
-            </Text>
-          ) : null}
           {bad.length > 0 ? (
             <Text style={{ fontSize: font.size.meta, color: c.err }}>{bad.join(' · ')}</Text>
           ) : null}
@@ -530,7 +529,7 @@ const styles = StyleSheet.create({
   group: { paddingHorizontal: 16, paddingVertical: 2 },
   processHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 6,
     paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,

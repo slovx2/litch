@@ -678,11 +678,10 @@
   color: var(--err);
 }
 
-/* 排着队的消息 */
+/* 排着队的消息、停止后的待发：头一行“⏸ N 条待发 · 全部发送”，下面每条一行（单行截断），
+   行尾的图标按钮悬停或聚焦这一行时出现；状态不在每行重复 */
 .tray {
-  margin: 0;
   padding: 4px 4px 4px 10px;
-  list-style: none;
   border: 1px solid var(--line-2);
   border-radius: var(--r2);
   background: var(--panel);
@@ -691,6 +690,32 @@
   gap: 2px;
   font-size: calc(12px * var(--fs));
 }
+.tray-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  min-height: 24px;
+}
+.tray-head .link {
+  color: var(--accent);
+  font: inherit;
+}
+.tray-head .link:hover {
+  text-decoration: underline;
+}
+.tray-head .link:disabled {
+  color: var(--ink-3);
+  text-decoration: none;
+}
+.tray-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .tray-row {
   display: flex;
   align-items: center;
@@ -698,18 +723,44 @@
   color: var(--ink-2);
   min-height: 24px;
 }
-.tray-row .mini {
-  align-self: center;
+.tray-unknown {
+  display: flex;
+  color: var(--wait);
 }
-.tray-row select {
-  max-width: 100%;
-  min-height: 30px;
-  padding: 4px 8px;
-  color: var(--ink);
-  background: var(--raised);
+.tray-acts {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.tray-row:hover .tray-acts,
+.tray-acts:focus-within {
+  opacity: 1;
+}
+/* 摸不到悬停的屏幕上常显 */
+@media (hover: none) {
+  .tray-acts {
+    opacity: 1;
+  }
+}
+.tray-acts .ibtn:disabled,
+.tray-acts .ibtn[aria-disabled="true"] {
+  opacity: 0.45;
+}
+/* 发送按钮旁“含 N 条待发”的小开关：开着是强调色的淡底 */
+.cmp-pending {
+  height: calc(24px * var(--fs));
+  padding: 0 8px;
   border: 1px solid var(--line-2);
-  border-radius: var(--r1);
-  font: inherit;
+  border-radius: 999px;
+  color: var(--ink-3);
+  font-size: calc(12px * var(--fs));
+  white-space: nowrap;
+}
+.cmp-pending[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--sel);
 }
 
 /* ---------- 审批与提问：排在输入框上面，输入框照常在 ---------- */

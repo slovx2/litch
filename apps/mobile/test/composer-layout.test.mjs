@@ -21,3 +21,14 @@ test('输入框一行正好和按钮的最小高度一样，没内容时三者�
   assert.equal(ONE_LINE, ROW_MIN)
   assert.ok(rowLayout.input.maxHeight > ROW_MIN)
 })
+
+test('发送、停止是 36 的圆键，放在随一排拉高的那一格里贴底', async () => {
+  const { SEND } = await import('../src/detail/composer/layout.ts')
+  assert.equal(SEND, 36)
+  assert.equal(rowLayout.sendDot.width, 36)
+  assert.equal(rowLayout.sendDot.height, 36)
+  assert.equal(rowLayout.sendDot.borderRadius, 18)
+  assert.equal(rowLayout.send.justifyContent, 'flex-end')
+  // 一行时圆键在这一格里上下居中
+  assert.equal(rowLayout.send.paddingBottom * 2 + SEND, ROW_MIN)
+})

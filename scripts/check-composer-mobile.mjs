@@ -1,7 +1,8 @@
 // 手机输入区收纳的正式页面预览；隔离无头浏览器，先在 apps/mobile 里运行 npm run preview。
 // 查：对话参数收在“+”单里（每行带当前值、读屏名称带值）、计划模式开着时“+”上有点、上下文小圆环、
 // 定时任务跑出的会话在顶栏放时钟而不是占一行；消息区没有“复制消息”文字按钮，复制在长按菜单和回合 ⋯ 里，
-// 用户消息的时刻在气泡左边、不另起一行；三种皮肤的明暗各截一张。
+// 用户消息的时刻在气泡左边、不另起一行；回合在跑时排队的消息一条一行、停止后的待发一行头加图标按钮，
+// “连同待发”是发送键旁的小开关，发送、停止是 36 的圆键，提示语不截断；过程摘要一行。三种皮肤的明暗各截一张。
 // 第二个参数是 measure 时只量不查：会话页对话区、输入区的高度（新旧代码都能跑，用来对比省了多少）。
 // 截图在 .artifacts/mobile-composer/（LITCH_COMPOSER_SHOTS 可改）。
 import assert from 'node:assert/strict'
@@ -170,6 +171,134 @@ try {
     assert.ok(layout.wrapBottom - layout.bubble.bottom <= 8, `${where} 气泡下面不另起一行`)
   }
 
+  /** 往输入框里写字（react-native-web 的输入框认原生 input 事件） */
+  const type = async (text) => {
+    await read(
+      `(()=>{const i=document.querySelector('[data-testid="composer-input"]');const set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;set.call(i,${JSON.stringify(text)});i.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+    )
+    await sleep(250)
+  }
+  const pressed = (id) =>
+    read(`document.querySelector(${JSON.stringify(sel(id))})?.getAttribute('aria-checked')`)
+  /** 某处里所有可点的东西：读屏名称和尺寸 */
+  const buttons = (id) =>
+    read(
+      `[...document.querySelectorAll(${JSON.stringify(`${sel(id)} [role="button"]`)})].map(e=>{const r=e.getBoundingClientRect();return {label:e.getAttribute('aria-label'),text:e.textContent,width:r.width,height:r.height}})`,
+    )
+  /**
+   * 待发与发送键（会话 s2 回合在跑）：排队时没有标题行、每条一行图标按钮；停止后一行头加“全部发送”，
+   * 状态不每行重复；“连同待发”只在有字时出现在发送键旁；发送、停止是 36 的圆键；提示语不截断
+   */
+  const checkPending = async (look, where) => {
+    // 设置在页面里，换页就没了：从设置页一路点进会话
+    await call('Page.navigate', { url: url('settings', look) })
+    await tap('settings:sendMode:queue')
+    await tap('header:back')
+    await tap('device:local')
+    await tap('session:s2')
+    await wait('composer-input')
+    await sleep(600)
+    const send = await rect('composer-send')
+    assert.ok(
+      Math.round(send.width) === 36 && Math.round(send.height) === 36,
+      `${where} 发送键 36 见方`,
+    )
+    assert.equal(
+      await read(
+        `getComputedStyle(document.querySelector('${sel('composer-send')}')).borderRadius`,
+      ),
+      '18px',
+      `${where} 发送键是圆的`,
+    )
+    assert.equal(await label('composer-send'), '停止', `${where} 回合在跑时是停止键，读屏名称写着`)
+    const hint = await read(
+      `(()=>{const i=document.querySelector('${sel('composer-input')}');const s=getComputedStyle(i);const c=document.createElement('canvas').getContext('2d');c.font=s.font;return {text:i.placeholder,need:c.measureText(i.placeholder).width,room:i.clientWidth-parseFloat(s.paddingLeft)-parseFloat(s.paddingRight)}})()`,
+    )
+    assert.equal(hint.text, '排队发送…', `${where} 排队时的提示语`)
+    assert.ok(hint.need <= hint.room, `${where} 提示语不截断（${hint.need} > ${hint.room}）`)
+    await type('第一句排队的话，长一点看会不会折行')
+    await tap('composer-send')
+    await type('第二句')
+    await tap('composer-send')
+    await wait('queue:1')
+    await sleep(300)
+    assert.equal(await rect('queue:send'), null, `${where} 只是排队时没有“全部发送”`)
+    const queued = await rect('queue')
+    // 两条各一行（36）加内边距：没有标题行
+    assert.ok(queued.height <= 84, `${where} 排队的两条不另占标题行（${queued.height}）`)
+    assert.match(
+      await read(`document.querySelector('${sel('queue:0')}').textContent`),
+      /^◷ 2/,
+      `${where} 数目写在第一行前面`,
+    )
+    for (const index of [0, 1]) {
+      const row = await rect(`queue:${index}`)
+      assert.ok(row.height <= 40, `${where} 第 ${index + 1} 条单行（${row.height}）`)
+      const acts = await buttons(`queue:${index}`)
+      assert.deepEqual(
+        acts.map((act) => act.label),
+        ['立即插入', '编辑', '移除'],
+        `${where} 排队的行尾是插入、编辑、移除`,
+      )
+      for (const act of acts)
+        assert.ok(
+          act.width >= 36 && act.height >= 36,
+          `${where} 图标按钮 36 见方（另有 hitSlop 4）`,
+        )
+    }
+    await shot(`pending-queued-${look.skin}-${look.theme}`)
+    // 停止：留下两条待发
+    await tap('composer-send')
+    await wait('queue:send')
+    await sleep(400)
+    const tray = await read(`document.querySelector('${sel('queue')}').textContent`)
+    assert.match(tray, /^‖ 2 条待发 ·\s*全部发送/, `${where} 待发的头一行`)
+    assert.equal(
+      /已停止|待发送/.test(tray.replace(/^‖ 2 条待发/, '')),
+      false,
+      `${where} 状态不每行重复`,
+    )
+    const held = await rect('queue')
+    assert.ok(held.height <= 120, `${where} 停止后的待发：一行头加两行（${held.height}）`)
+    assert.deepEqual(
+      (await buttons('queue:0')).map((act) => act.label),
+      ['发送', '编辑', '移除'],
+      `${where} 待发的行尾是发送、编辑、移除`,
+    )
+    assert.equal(await label('composer-send'), '发送', `${where} 停止后是发送键`)
+    // 没字时没有“连同待发”，有字时在发送键旁，默认连同
+    assert.equal(await rect('composer-pending'), null, `${where} 没字时没有“连同待发”`)
+    await type('再写一句')
+    await wait('composer-pending')
+    const toggle = await rect('composer-pending')
+    const sendNow = await rect('composer-send')
+    assert.ok(
+      toggle.right <= sendNow.left && sendNow.left - toggle.right <= 12,
+      `${where} “连同待发”在发送键旁`,
+    )
+    assert.ok(Math.abs(toggle.top + toggle.height / 2 - (sendNow.top + sendNow.height / 2)) <= 4)
+    assert.equal(await pressed('composer-pending'), 'true', `${where} 默认连同待发一起发`)
+    assert.equal(await label('composer-pending'), '含 2 条待发')
+    await shot(`pending-held-${look.skin}-${look.theme}`)
+    await tap('composer-pending')
+    assert.equal(await pressed('composer-pending'), 'false', `${where} 点一下改成只发这条`)
+    await type('')
+    await tap('queue:send')
+    await until(async () => !(await rect('queue')), `${where} 全部发送后托盘收起`)
+  }
+  /** 回合里的过程摘要：“已处理 41 秒 · 1 步”一行 */
+  const checkProcess = async (look, where) => {
+    await call('Page.navigate', { url: url('sessions', look) })
+    await tap('session:s1')
+    await wait('process-head')
+    await sleep(400)
+    const head = await read(
+      `(()=>{const e=document.querySelector('${sel('process-head')}');return {text:e.innerText,height:e.getBoundingClientRect().height}})()`,
+    )
+    assert.match(head.text, /已处理 .+ · \d+ 步/, `${where} 时长和步数在同一行`)
+    assert.ok(head.height <= 48, `${where} 过程摘要一行（${head.height}）`)
+  }
+
   if (measureOnly) {
     await openTaskSession()
     const detail = await measure()
@@ -226,6 +355,8 @@ try {
         } else {
           await tap('sheet:scrim')
         }
+        await checkPending(look, `${skin}/${theme}`)
+        await checkProcess(look, `${skin}/${theme}`)
       }
     // 复制收进菜单：长按用户消息有“复制消息”，点了闪“已复制”；回合状态行的 ⋯ 里有“复制回答”
     await openTaskSession()

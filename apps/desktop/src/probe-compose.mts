@@ -427,7 +427,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   const turnsBefore = all('.turn').length
   await say('插进来的话')
   const steerButton = await until('托盘里的“立即插入”', () =>
-    one<HTMLButtonElement>('.tray-row .mini.steer'),
+    one<HTMLButtonElement>('.tray-row .ibtn.steer'),
   )
   steerButton.click()
   await until('插进来的话出现在对话里', () => users().includes('插进来的话'))

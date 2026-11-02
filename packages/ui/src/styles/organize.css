@@ -186,9 +186,8 @@
   vertical-align: middle;
 }
 
-/* ---------- 排着的消息带着图、这时插不进去：“现在就说”淡下去，留着能点 ---------- */
-.tray-row .mini[aria-disabled="true"] {
-  color: var(--ink-3);
+/* ---------- 排着的消息带着图、这时插不进去：“立即插入”淡下去，留着能点 ---------- */
+.tray-row .ibtn[aria-disabled="true"] {
   cursor: default;
 }
 

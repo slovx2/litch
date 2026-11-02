@@ -5,6 +5,9 @@ import type { Entry } from '../../../../../packages/ui/src/i18n/types.ts'
 export const zhCN = {
   // 桌面端那两句提到了回车和 Shift，手机上回车是换行、发送靠按钮
   'compose.placeholder': '输入消息',
+  'compose.placeholder.steer': '插入当前回合…',
+  'compose.placeholder.queue': '排队发送…',
+  'compose.pendingShort': '含 {n} 条',
   'compose.addImage': '添加图片',
   'compose.context': '上下文',
   'compose.ring': '上下文已用 {n}%',
@@ -27,6 +30,9 @@ export const zhCN = {
 
 export const en: Record<keyof typeof zhCN, Entry> = {
   'compose.placeholder': 'Message',
+  'compose.placeholder.steer': 'Add to this turn…',
+  'compose.placeholder.queue': 'Queue a message…',
+  'compose.pendingShort': '+{n} pending',
   'compose.addImage': 'Add images',
   'compose.context': 'Context',
   'compose.ring': 'Context {n}% used',

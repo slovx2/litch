@@ -85,9 +85,17 @@ tags: [mock]
     visible:
       id: queue:send
     timeout: 10000
+# “连同待发一起发”只在输入框有内容时出现，是发送键旁的小开关，默认开着
+- assertNotVisible:
+    id: composer-pending
+- tapOn:
+    id: composer-input
+- inputText: draft e2e
 - assertVisible:
-    id: queue:choice:include
+    id: composer-pending
     checked: true
+- eraseText: 20
+- hideKeyboard
 - assertVisible:
     id: queue:0
 - assertNotVisible:

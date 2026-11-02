@@ -18,9 +18,7 @@ import {
 } from '@litch/core'
 import { type RefObject, useEffect, useState, useSyncExternalStore } from 'react'
 import { StyleSheet, type TextInput, View } from 'react-native'
-import { nameOf } from '../../../../packages/ui/src/app/device.ts'
 import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
-import { runningPlaceholder } from '../../../../packages/ui/src/composer/send-mode-logic.ts'
 import { useProviderSwitch } from '../../../../packages/ui/src/composer/useProviderSwitch'
 import type { SessionStore } from '../core/session-store'
 import { useKey, useServices } from '../shell/services'
@@ -96,6 +94,7 @@ export function Composer({
     meta?.settings ?? NO_SETTINGS,
   )
   const running = meta?.running ?? false
+  const heldCount = meta?.queued.filter((entry) => entry.delivery === 'held').length ?? 0
   const down = downHarness(device, meta?.harness)
   const blocked =
     device && device.connection !== 'online'
@@ -187,10 +186,20 @@ export function Composer({
         draft={draft}
         placeholder={
           running
-            ? t(runningPlaceholder(onRunning), { harness: nameOf(device, meta?.harness ?? '') })
+            ? // 手机屏窄，占位只写一句短的（桌面那句长的会被截成两行）
+              t(onRunning === 'steer' ? 'compose.placeholder.steer' : 'compose.placeholder.queue')
             : t('compose.placeholder')
         }
         running={running}
+        pending={
+          heldCount > 0
+            ? {
+                count: heldCount,
+                include: pendingSend === 'include',
+                toggle: () => setPendingSend(pendingSend === 'include' ? 'only' : 'include'),
+              }
+            : null
+        }
         steer={onRunning === 'steer'}
         steerImages={meta?.can.steerImages !== false}
         blocked={blocked}
@@ -242,8 +251,6 @@ export function Composer({
               />
               <QueueTray
                 queued={meta.queued}
-                pendingSend={pendingSend}
-                onPendingSend={setPendingSend}
                 onResume={(messageId) => {
                   channel
                     .command('session.resumeQueue', {

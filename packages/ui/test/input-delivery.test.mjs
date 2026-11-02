@@ -161,3 +161,79 @@ test('手机交付记号：已发送不画；其余只画记号，读屏名称�
     assert.equal(render({ delivery }).props.disabled, true)
   }
 })
+
+test('手机待发：停止后一行头加每条一行图标按钮，不每行重复状态；只是排队时没有标题行', async () => {
+  const render = await component(
+    new URL('../../../apps/mobile/src/detail/composer/QueueTray.tsx', import.meta.url).pathname,
+    'QueueTray',
+  )
+  const message = (id, delivery) => ({ id, text: id, images: [], extras: [], delivery })
+  const props = (queued) => ({
+    queued,
+    running: queued.every((entry) => !entry.delivery),
+    canSteer: true,
+    steerImages: true,
+    onSteer() {},
+    onEdit() {},
+    onRemove() {},
+    onRefused() {},
+    onResume() {},
+  })
+  const texts = (tree) =>
+    nodes(tree)
+      .filter((node) => node.type === 'Text')
+      .flatMap((node) => [node.props.children].flat())
+      .filter((child) => typeof child === 'string')
+  const acts = (tree) => nodes(tree).filter((node) => node.props && 'glyph' in node.props)
+
+  const held = render(props([message('a', 'held'), message('b', 'held')]))
+  assert.ok(nodes(held).some((node) => node.props?.testID === 'queue:send'))
+  assert.ok(texts(held).includes('composer.pendingSendAll'))
+  // 状态词不在行里：没有“已停止待发”，也没有每行的状态记号
+  assert.equal(
+    texts(held).some((text) => text.includes('inputDelivery')),
+    false,
+  )
+  assert.equal(
+    nodes(held).some((node) => node.props && 'delivery' in node.props),
+    false,
+  )
+  for (const index of [0, 1]) {
+    const row = nodes(held).find((node) => node.props?.testID === `queue:${index}`)
+    const icons = acts(row)
+    assert.deepEqual(
+      icons.map((node) => node.props.glyph),
+      ['↑', '✎', '✕'],
+    )
+    // 每个图标按钮都有读屏名称（动作），不是只有记号
+    assert.deepEqual(
+      icons.map((node) => node.props.label),
+      ['composer.send', 'composer.editQueued', 'composer.unqueue'],
+    )
+    // 单行：正文截断成一行
+    assert.ok(nodes(row).some((node) => node.props?.numberOfLines === 1))
+  }
+
+  const queued = render(props([message('a'), message('b')]))
+  assert.equal(
+    nodes(queued).some((node) => node.props?.testID === 'queue:send'),
+    false,
+  )
+  // 没有标题行：数目写在第一行前面
+  assert.ok(texts(queued).includes('◷ 2'))
+  assert.deepEqual(
+    acts(nodes(queued).find((node) => node.props?.testID === 'queue:0')).map(
+      (node) => node.props.label,
+    ),
+    ['composer.steer', 'composer.editQueued', 'composer.unqueue'],
+  )
+
+  // 说不准的那条：只在那一行标一个记号
+  const unknown = render(props([message('a', 'held'), message('b', 'unknown')]))
+  assert.deepEqual(
+    nodes(unknown)
+      .filter((node) => node.props && 'delivery' in node.props)
+      .map((node) => node.props.delivery),
+    ['unknown'],
+  )
+})
