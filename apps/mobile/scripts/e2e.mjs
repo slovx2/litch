@@ -12,7 +12,7 @@
 //                                     那个端口上已经有设备（不管什么状态）就报错，不用别人的、也不再起一台
 //   --avd <名字>                      默认 tyrs_hand_e2e_api35；以只读方式起（-read-only），不改 AVD、可以和别人同时用
 //   --screen 320x640@160              把模拟器的屏幕改成这个尺寸和密度（wm size/density）再跑；CI 的模拟器就是这个，本地复现 CI 用
-//   --shard N/3                       CI 分片，每片独立 runner；每个 flow 只执行一次，失败不重跑
+//   --shard N/3                       CI 分片，每片独立 runner；只对有掉线证据的 launchApp 失败重跑一次
 //   --keep                            跑完不关模拟器、留下 Maestro 的调试输出（截图、日志），排查失败用，用完自己删
 // 要的环境：ANDROID_HOME（默认 ~/Library/Android/sdk）、JDK 17 以上（JAVA_HOME，Maestro 和 gradle 都要）、
 // Maestro 2.3.0（MAESTRO 指过去，或者在 PATH 里）；跑夹具的流程要先在仓库根目录 npm run build（适配器、Pi、设备进程）。
@@ -36,6 +36,10 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { approvalSignedText } from '../../../packages/protocol/src/client-approvals.mts'
 import { encodePairPayload } from '../../../packages/protocol/src/device-pairing.mts'
+import {
+  infrastructureRetryReason,
+  recoverAdb,
+} from '../../../scripts/ci/maestro-infrastructure.mjs'
 import { mobileShards } from '../../../scripts/ci/mobile-shards.mjs'
 import { deviceRpc } from './device-rpc.mjs'
 
@@ -65,6 +69,8 @@ const work = mkdtempSync(join(tmpdir(), 'litch-e2e-'))
 /** Maestro 的调试输出（失败时的截图、日志）：给了 LITCH_E2E_ARTIFACTS 就放那里、不删（CI 上传用），不给就放临时目录里 */
 const artifacts = process.env.LITCH_E2E_ARTIFACTS ? resolve(process.env.LITCH_E2E_ARTIFACTS) : null
 const debugDir = artifacts ?? join(work, 'debug')
+// 每条尝试记起点，只使用这次尝试中观察到的 reverse 丢失，避免沿用旧故障。
+const reverseLosses = []
 const log = (line) => console.log(`[e2e] ${line}`)
 const summary = (text) => {
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${text}\n`)
@@ -316,14 +322,15 @@ async function startFixture(serial) {
   })
   const config = JSON.parse(readFileSync(out, 'utf8'))
   // 和夹具加的那两条一样（scripts/fixture.mjs 的 --adb）；后登记先收：先停盯梢，再撤映射
-  keepReverse(serial, [
+  const reverseRules = [
     [`tcp:${config.target.port}`, `tcp:${config.target.port}`],
     ['tcp:8765', `tcp:${serve}`],
-  ])
+  ]
+  keepReverse(serial, reverseRules)
   prepareRepo(config.work)
   const helper = await startHelper(config, serial)
   log(`夹具就绪（${since(start)}），sshd 在 127.0.0.1:${config.target.port}`)
-  return { config, helper }
+  return { config, helper, reverseRules }
 }
 
 /**
@@ -337,6 +344,7 @@ function keepReverse(serial, rules) {
     busy = true
     execFile(adbBin, ['-s', serial, 'reverse', '--list'], (error, out) => {
       const missing = error ? [] : rules.filter((pair) => !out.includes(pair.join(' ')))
+      if (missing.length) reverseLosses.push({ at: Date.now(), rules: missing })
       for (const pair of missing)
         execFile(adbBin, ['-s', serial, 'reverse', ...pair], (failed) => {
           if (!failed) log(`模拟器掉过线，补回端口映射 ${pair.join(' → ')}`)
@@ -718,6 +726,34 @@ async function runMaestro(serial, flows, fixture, report, attemptDir) {
   return status
 }
 
+/** 首次失败立即取证，下一条 flow 清数据前保存；诊断错误不覆盖失败结果。 */
+function captureFailure(serial, directory) {
+  for (const [file, args] of [
+    ['logcat.txt', ['logcat', '-d', '-t', '1500']],
+    ['driver.txt', ['shell', 'dumpsys', 'activity', 'services', 'dev.mobile.maestro']],
+    ['screen.png', ['exec-out', 'screencap', '-p']],
+  ]) {
+    const result = spawnSync(adbBin, ['-s', serial, ...args], {
+      timeout: 15000,
+      maxBuffer: 16 * 1024 * 1024,
+    })
+    if (result.stdout) writeFileSync(join(directory, file), result.stdout)
+  }
+}
+
+async function recoverInfrastructure(serial, rules) {
+  const run = (...args) =>
+    new Promise((done, fail) => {
+      execFile(
+        adbBin,
+        ['-s', serial, ...args],
+        { timeout: args[0] === 'wait-for-device' ? 120000 : 15000 },
+        (error, stdout) => (error ? fail(error) : done(stdout)),
+      )
+    })
+  await recoverAdb(run, rules)
+}
+
 // ---------- 主流程 ----------
 
 async function main() {
@@ -738,41 +774,59 @@ async function main() {
   summary('\n| Flow | 尝试 | 结果 | 耗时 |\n|---|---|---|---|')
   let code = 0
   let firstFailure = null
+  let retries = 0
   for (const flow of flows) {
     if (interrupted) break
     const name = relative(flowsDir, flow)
-    const attemptDir = join(debugDir, name.replace(/\.yaml$/, ''), 'attempt-1')
-    mkdirSync(attemptDir, { recursive: true })
-    const report = join(attemptDir, 'junit.xml')
-    const start = Date.now()
     let status = 1
-    try {
-      status = await runMaestro(serial, [flow], fixture, report, attemptDir)
-    } catch (error) {
-      writeFileSync(join(attemptDir, 'runner-error.txt'), error.message)
-      log(`${name} 尝试 1 失败：${error.message}`)
-    }
-    const row = { flow: name, attempt: 1, status, seconds: (Date.now() - start) / 1000 }
-    appendFileSync(join(debugDir, 'flows.jsonl'), `${JSON.stringify(row)}\n`)
-    summary(`| ${name} | 1 | ${status === 0 ? '通过' : '失败'} | ${row.seconds.toFixed(1)}s |`)
-    if (status !== 0) {
-      code = status
-      firstFailure ??= name
-      // 首次失败立即采集，下一条 flow 清数据之前保存；诊断失败不覆盖产品断言结果。
-      for (const [file, args] of [
-        ['logcat.txt', ['logcat', '-d', '-t', '1500']],
-        ['driver.txt', ['shell', 'dumpsys', 'activity', 'services', 'dev.mobile.maestro']],
-        ['screen.png', ['exec-out', 'screencap', '-p']],
-      ]) {
-        const result = spawnSync(adbBin, ['-s', serial, ...args], {
-          timeout: 15000,
-          maxBuffer: 16 * 1024 * 1024,
-        })
-        if (result.stdout) writeFileSync(join(attemptDir, file), result.stdout)
+    let retryReason = null
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const attemptDir = join(debugDir, name.replace(/\.yaml$/, ''), `attempt-${attempt}`)
+      mkdirSync(attemptDir, { recursive: true })
+      const report = join(attemptDir, 'junit.xml')
+      const reverseMark = reverseLosses.length
+      const start = Date.now()
+      try {
+        status = await runMaestro(serial, [flow], fixture, report, attemptDir)
+      } catch (error) {
+        status = 1
+        writeFileSync(join(attemptDir, 'runner-error.txt'), error.message)
+        log(`${name} 尝试 ${attempt} 失败：${error.message}`)
       }
+      const reverseLost = reverseLosses.length > reverseMark
+      const row = { flow: name, attempt, status, seconds: (Date.now() - start) / 1000, retryReason }
+      appendFileSync(join(debugDir, 'flows.jsonl'), `${JSON.stringify(row)}\n`)
+      summary(
+        `| ${name} | ${attempt} | ${status === 0 ? '通过' : '失败'} | ${row.seconds.toFixed(1)}s |`,
+      )
+      if (status === 0) break
+      firstFailure ??= `${name}（尝试 ${attempt}）`
+      captureFailure(serial, attemptDir)
+      if (attempt === 2 || interrupted) break
+      retryReason = infrastructureRetryReason(attemptDir, PKG, reverseLost)
+      if (!retryReason) break
+      // 首次诊断文件完全保留，恢复后从这条 flow 开头再跑，最多一次。
+      const recovery = { reason: retryReason, recovered: false, error: null }
+      summary(`| ${name} | 基础设施重试准备 | ${retryReason} | — |`)
+      log(`基础设施重试：${name}；${retryReason}`)
+      const recoveryStart = Date.now()
+      try {
+        await recoverInfrastructure(serial, fixture?.reverseRules ?? [])
+        recovery.recovered = true
+        retries++
+      } catch (error) {
+        recovery.error = error.message
+        summary(`| ${name} | 基础设施恢复失败，不重跑 | ${error.message} | — |`)
+      }
+      writeFileSync(
+        join(attemptDir, 'infrastructure-recovery.json'),
+        `${JSON.stringify({ ...recovery, seconds: (Date.now() - recoveryStart) / 1000 }, null, 2)}\n`,
+      )
+      if (!recovery.recovered) break
     }
+    if (status !== 0) code = status
   }
-  summary(`\n首次失败：${firstFailure ?? '无'}；尝试次数：1；flow 重试：0。\n`)
+  summary(`\n首次失败：${firstFailure ?? '无'}；基础设施重试：${retries} 次；产品断言重试：0。\n`)
   log(`${code === 0 ? '全部通过' : '有流程没过'}（总共 ${since(total)}）`)
   return code
 }

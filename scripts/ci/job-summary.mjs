@@ -9,5 +9,7 @@ for (const [name, step] of Object.entries(steps)) {
 }
 const failed = Object.entries(steps).filter(([, step]) => step.outcome === 'failure')
 lines.push(`\n首次失败步骤：${failed[0]?.[0] ?? '无（具体阶段与耗时见运行总览）'}。`)
-lines.push(`GitHub attempt：${process.env.GITHUB_RUN_ATTEMPT ?? '1'}；测试自动重试：0。`)
+lines.push(
+  `GitHub attempt：${process.env.GITHUB_RUN_ATTEMPT ?? '1'}；产品断言自动重试：0；手机基础设施重试见 flow 摘要。`,
+)
 appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`)

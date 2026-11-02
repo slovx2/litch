@@ -74,7 +74,7 @@ jobs:
         run: |
           npm install --prefix .artifacts/host-cli --save-exact @anthropic-ai/claude-code@2.1.282 --no-audit --no-fund
           echo "CHA_CLAUDE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-cli/node_modules/.bin/claude" >> "${GITHUB_ENV}"
-      - run: node --test scripts/ci/orchestration.test.mjs
+      - run: node --test --test-concurrency=1 scripts/ci/*.test.mjs
         id: stage-13
       - run: npm run check
         id: phase-12

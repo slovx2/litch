@@ -191,7 +191,7 @@ test('模拟执行器保留首次失败，下一 flow 通过也不变绿，不�
   }
   assert.match(
     readFileSync(summary, 'utf8'),
-    /首次失败：mock\/01-home.yaml；尝试次数：1；flow 重试：0/,
+    /首次失败：mock\/01-home.yaml（尝试 1）；基础设施重试：0 次；产品断言重试：0/,
   )
 })
 
