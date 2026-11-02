@@ -495,7 +495,6 @@ export class DeviceManagers {
     if (typeof thread?.id !== 'string')
       throw new Error('The harness did not return a manager thread.')
     manager.threadId = thread.id
-    this.tree.store.setTools(thread.id, tools)
     this.tree.host.index.see(
       { id: thread.id, updatedAt: thread.updatedAt, ephemeral: thread.ephemeral },
       params.harness,
@@ -527,13 +526,17 @@ export class DeviceManagers {
   }
   private rememberRules(manager: Manager): void {
     const tools = managerTools(manager)
-    this.tree.store.setTools(manager.threadId, tools)
     const record = this.tree.store.instructions(manager.threadId)
-    if (record)
+    if (record) {
+      // 设置更新没有重新安装工具；只替换已登记的经理规则，保留后台接续等其他命名空间。
+      const updated = ruledNamespaces(tools)
       this.tree.store.setInstructions(manager.threadId, {
         ...record,
-        namespaces: ruledNamespaces(tools),
+        namespaces: record.namespaces.map(
+          (namespace) => updated.find((one) => one.name === namespace.name) ?? namespace,
+        ),
       })
+    }
   }
   async tool(call: DeviceToolCall): Promise<ClientToolCallResponse> {
     try {

@@ -5,6 +5,7 @@
 import { closeSync, existsSync, openSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync, type StatementSync } from 'node:sqlite'
+import { bornThread } from '../../protocol/src/codex-developer-instructions.mjs'
 import type { SessionDelegatedResponse } from '../../protocol/src/session-pending.mjs'
 import type {
   SessionEventNote,
@@ -821,6 +822,26 @@ export class SessionStore {
 
   setTools(threadId: string, tools: unknown[]): void {
     this.run('setTools', threadId, JSON.stringify(tools))
+  }
+
+  /** 创建成功后按最终请求登记；业务入口不能再用注入前的清单回写。规则元数据随清单保留。 */
+  rememberCreatedTools(
+    method: string,
+    params: Record<string, unknown>,
+    result: unknown,
+    native: boolean,
+  ): void {
+    if (method !== 'thread/start' && method !== 'thread/fork') return
+    const thread = bornThread(result)
+    if (!thread) return
+    // 原生 Codex 分叉继承源线程的工具，协议不接受替换；适配器的显式替换按请求登记。
+    const tools =
+      method === 'thread/fork' && (native || !Array.isArray(params.dynamicTools))
+        ? this.tools(String(params.threadId))
+        : Array.isArray(params.dynamicTools)
+          ? params.dynamicTools
+          : null
+    if (tools) this.setTools(thread.id, tools)
   }
 
   /** 会话删掉了：它带的动态工具跟着删 */

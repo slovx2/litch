@@ -814,7 +814,8 @@ export class ClientSession implements ClientToolPeer {
     if (params && link.dialect.clientToolsByDevice) {
       const given = params
       afterwards.push((result) => {
-        this.host.nativeBackground?.born(method, given, result)
+        if (method === 'thread/delete' && typeof given.threadId === 'string')
+          this.host.nativeBackground?.forget(given.threadId)
         if (
           typeof given.threadId === 'string' &&
           (method === 'turn/start' || method === 'turn/steer')
@@ -830,13 +831,16 @@ export class ClientSession implements ClientToolPeer {
         afterwards.push(sped.remember)
       }
     }
-    // 建会话时带的动态工具记下来：设备进程替这个会话派子会话时照样带上
-    if (method === 'thread/start' && Array.isArray(params?.dynamicTools)) {
-      const tools = params.dynamicTools as unknown[]
+    // 和设备自己的连接共用登记入口，保存注入后的清单；分叉照 harness 的继承或替换语义。
+    if (params && (method === 'thread/start' || method === 'thread/fork')) {
+      const given = params
       afterwards.push((result) => {
-        const thread = isObject(result) ? result.thread : null
-        if (isObject(thread) && typeof thread.id === 'string')
-          this.host.sessionTree.store.setTools(thread.id, tools)
+        this.host.sessionTree.store.rememberCreatedTools(
+          method,
+          given,
+          result,
+          link.dialect.clientToolsByDevice === true,
+        )
       })
     }
     // 经聚合面新建的原生 codex 会话（聚合面只认声明了 harness 扩展的客户端，也就是 Litch）：首条消息成功提交后起名

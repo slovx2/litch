@@ -27,7 +27,7 @@ interface Command {
 }
 export interface NativeBackgroundHost {
   store: NativeBackgroundStore
-  sessions: Pick<SessionStore, 'option' | 'setOption' | 'tools' | 'setTools'>
+  sessions: Pick<SessionStore, 'option' | 'setOption' | 'tools'>
   link(harness: string): Promise<EngineLink>
   watch(harness: string, threadId: string): Promise<unknown>
   canContinue(threadId: string): boolean
@@ -85,24 +85,6 @@ export class NativeBackgroundWake {
         NATIVE_BACKGROUND_TOOLS,
       ],
     }
-  }
-  born(method: string, params: Record<string, unknown>, result: unknown): void {
-    if (method === 'thread/delete' && typeof params.threadId === 'string') {
-      this.forget(params.threadId)
-      return
-    }
-    if (
-      !['thread/start', 'thread/fork'].includes(method) ||
-      !isObject(result) ||
-      !isObject(result.thread) ||
-      typeof result.thread.id !== 'string'
-    )
-      return
-    const tools =
-      method === 'thread/start'
-        ? params.dynamicTools
-        : this.host.sessions.tools(String(params.threadId))
-    if (Array.isArray(tools)) this.host.sessions.setTools(result.thread.id, tools)
   }
   installed(threadId: string): boolean {
     return this.host.sessions.tools(threadId)?.some((t) => isObject(t) && t.name === NS) === true
@@ -444,7 +426,7 @@ export class NativeBackgroundWake {
         this.save(task)
       }
   }
-  private forget(threadId: string): void {
+  forget(threadId: string): void {
     this.lost(threadId)
     this.host.store.forget(threadId)
     for (const [id, task] of this.live) if (task.threadId === threadId) this.live.delete(id)

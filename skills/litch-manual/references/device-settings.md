@@ -33,6 +33,8 @@ and redo the change. Devices that only have Codex (no device service) have no se
 
 原生 Codex 使用独立的设备内设置 `litch.backgroundWake`（Codex 详情的配置页，不是上表的运行时环境变量）。需要 Codex 0.163.0 及以上，默认开，新建会话获得 `litch_background` 登记工具；关闭会取消已登记任务的自动继续，不停止命令、不重启 Codex。任务仍由原生执行器管理权限、输出和生命周期；设备或 Codex 重启不自动继续，自动续跑不设次数上限。低版本会显示当前不支持及升级提示，但开关仍可更改。升级后新建会话才获得登记工具。
 
+这也适用于新建的 Codex 子会话、接受提案后新建的会话、经理和经理工作线。修改经理规则保留已经安装的后台登记工具。旧版本曾将部分子会话的工具登记覆盖，升级不会自动修复这些旧记录；若仍提示本会话未安装登记工具，请新建会话。
+
 Native Codex has a separate `litch.backgroundWake` setting in its Config tab. It defaults to on and requires Codex **0.163.0 or later**. Older versions show an upgrade hint without disabling the switch; start a new session after upgrading. Turning it off cancels registered continuations without stopping commands or restarting Codex. Device/runtime restarts do not resume this work; automatic continuations have no count limit.
 
 The ACP entries take their arguments from an environment variable in their own `env` setting:

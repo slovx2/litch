@@ -608,7 +608,6 @@ async function createChild(
     ...(spec.proposalId ? { proposalId: spec.proposalId } : {}),
   })
   bind(threadId)
-  if (tools) store.setTools(threadId, tools)
   tree.host.threadStarted(harness, { ...thread })
   tree.lineageChanged(threadId)
   const text = briefing(

@@ -1022,8 +1022,11 @@ export class DeviceServer {
               request(method, value, options),
             )
           : await request(method, ready, options)
+        if (isObject(ready))
+          this.sessionTree.store.rememberCreatedTools(method, ready, result, link.native)
         if (link.native && isObject(ready)) {
-          this.nativeBackground.born(method, ready, result)
+          if (method === 'thread/delete' && typeof ready.threadId === 'string')
+            this.nativeBackground.forget(ready.threadId)
           if (isObject(result))
             this.nativeBackground.decorate(
               typeof ready.threadId === 'string' ? ready.threadId : '',

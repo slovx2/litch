@@ -13,6 +13,41 @@ import {
 } from '../src/session-store.mjs'
 import { tempDir } from './helpers.mjs'
 
+test('SESSION-STORE-TOOLS：最终创建请求登记，分叉按原生继承或适配器替换，恢复不补装', () => {
+  const dir = tempDir()
+  const db = openSessionDatabase(dir)
+  try {
+    const store = new SessionStore(db)
+    const tools = [{ name: 'client' }, { name: 'device-injected' }]
+    const born = (id: string) => ({ thread: { id } })
+    store.rememberCreatedTools('thread/start', { dynamicTools: tools }, born('parent'), true)
+    assert.deepEqual(store.tools('parent'), tools)
+    for (const native of [true, false]) {
+      const id = `inherited-${native}`
+      store.rememberCreatedTools('thread/fork', { threadId: 'parent' }, born(id), native)
+      assert.deepEqual(store.tools(id), tools)
+    }
+    const fork = { threadId: 'parent', dynamicTools: [{ name: 'replacement' }] }
+    store.rememberCreatedTools('thread/fork', fork, born('native'), true)
+    assert.deepEqual(store.tools('native'), tools)
+    store.rememberCreatedTools('thread/fork', fork, born('adapter'), false)
+    assert.deepEqual(store.tools('adapter'), fork.dynamicTools)
+    store.rememberCreatedTools('thread/start', {}, born('empty'), true)
+    assert.equal(store.tools('empty'), null)
+    store.rememberCreatedTools('thread/start', { dynamicTools: [] }, born('explicit-empty'), true)
+    assert.deepEqual(store.tools('explicit-empty'), [])
+    store.rememberCreatedTools('thread/resume', { dynamicTools: tools }, born('old'), true)
+    store.rememberCreatedTools('thread/fork', { threadId: 'unknown' }, born('unknown'), true)
+    assert.equal(store.tools('old'), null)
+    assert.equal(store.tools('unknown'), null)
+    store.rememberCreatedTools('thread/start', { dynamicTools: tools }, {}, true)
+    assert.equal(store.tools('undefined'), null)
+  } finally {
+    db.close()
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('SESSION-STORE-DIRECT：直接启动额度持久化、原子预占，失败退还；其他父会话和回合不互占', () => {
   const dir = tempDir()
   let db = openSessionDatabase(dir)
