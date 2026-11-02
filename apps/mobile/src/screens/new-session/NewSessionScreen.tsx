@@ -22,7 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { fitFrom } from '../../../../../packages/ui/src/composer/worktree-from.ts'
 import { acquireStore, releaseStore } from '../../core/store-cache'
 import { ComposeBox, useDraft } from '../../detail/composer/ComposeBox'
-import { draftKey } from '../../detail/composer/drafts'
+import { draftKey, moveDraft } from '../../detail/composer/drafts'
 import { useComposeOptions, useNewSessionDefaults } from '../../detail/composer/options'
 import { PickerSheet } from '../../detail/composer/PickerSheet'
 import { useProjectPermission } from '../../detail/composer/project-permission'
@@ -196,6 +196,8 @@ export function NewSessionScreen({ navigation, route }: Props) {
       }
     })
     const title = text.split('\n')[0]?.slice(0, 80) || undefined
+    // 建会话的时候又写了、没收的那些带进新会话的输入框，不自动发；新建页清空
+    moveDraft(draftKey(deviceId, 'new'), draftKey(deviceId, sessionId))
     navigation.replace('Detail', { deviceId, sessionId, ...(title ? { title } : {}) })
     // 详情页接上了再放掉这一次
     setTimeout(() => releaseStore(store), 0)

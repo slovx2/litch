@@ -26,6 +26,7 @@ import { useInstall } from '../install/useInstall.ts'
 import { WorkspaceDialog } from '../sidebar/WorkspaceDialog.tsx'
 import { UserAttachments } from '../transcript/messages.tsx'
 import { Composer } from './Composer.tsx'
+import { moveDraft } from './drafts.ts'
 import { fitPicks, type PlaceWish } from './new-place.ts'
 import { Picker, type PickerOption } from './Picker.tsx'
 import { useProjectPermission } from './project-permission.ts'
@@ -423,6 +424,8 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
           done()
         }
       })
+      // 建会话的时候又写了、没收的那些（文字、图片、附带项、评论片）带进新会话的输入框，不自动发；新建页清空
+      moveDraft('new', `${deviceId}:${sessionId}`)
       onCreated({ deviceId, sessionId })
       // 对话区自己会再订阅一次；等它接上了再放掉这一次，中间不退订
       window.setTimeout(close, 0)

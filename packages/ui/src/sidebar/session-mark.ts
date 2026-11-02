@@ -35,3 +35,11 @@ export function managerStateText(
   if (background > 0) return { key: 'background.sidebar', count: background }
   return { key: 'manager.idle' }
 }
+
+/**
+ * 有待处理时侧栏经理行上那段的悬停提示：行上只写“N 待处理”，状态文字被它占掉，悬停时补上
+ * （“4 待处理 · 1 条工作线运行中”），下一行是各类各有几个
+ */
+export function managerPendingTitle(pending: string, state: string, detail: string): string {
+  return [`${pending} · ${state}`, detail].filter(Boolean).join('\n')
+}

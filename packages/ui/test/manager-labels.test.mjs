@@ -76,3 +76,25 @@ test('最近空状态说明查看时长或交互，不使用前台技术术语',
     'Conversations you view for 5 seconds or interact with appear here',
   )
 })
+
+test('有待处理时经理行的悬停提示补上状态文字，下一行是各类明细', async () => {
+  const { managerPendingTitle, managerStateText } = await import('../src/sidebar/session-mark.ts')
+  const { key, ...args } = managerStateText({ status: 'idle', background: null, unread: false }, 1)
+  const detail = translate('zh-CN', 'manager.pendingDetail', { decisions: 3, requests: 1 })
+  assert.equal(
+    managerPendingTitle(
+      translate('zh-CN', 'manager.pending', { n: 4 }),
+      translate('zh-CN', key, args),
+      detail,
+    ),
+    `4 待处理 · 1 条工作线运行中\n${detail}`,
+  )
+  assert.equal(
+    managerPendingTitle(
+      translate('en', 'manager.pending', { n: 4 }),
+      translate('en', key, args),
+      '',
+    ),
+    '4 to handle · 1 work line running',
+  )
+})

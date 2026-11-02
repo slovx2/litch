@@ -60,6 +60,31 @@ test('草稿：文件坏了当作没有', async () => {
   assert.equal(drafts.loadDraft(drafts.draftKey('dev', 's1')), '')
 })
 
+test('草稿：新建页剩下的文字、图片、提到的会话、评论整份挪进新会话，新建页清空', async () => {
+  const drafts = await fresh('../src/detail/composer/drafts.ts')
+  const from = drafts.draftKey('dev', 'new')
+  const to = drafts.draftKey('dev', 's9')
+  const image = { url: 'data:image/png;base64,AA', name: null }
+  const session = { kind: 'session', threadId: 't2', title: '另一个' }
+  const comment = { kind: 'comment', itemId: 'i1', quote: '原文', note: '评论' }
+  drafts.saveDraft(from, '第二句')
+  drafts.saveDraftImages(from, [image])
+  drafts.saveDraftSessions(from, [session])
+  drafts.saveDraftComments(from, [comment])
+  drafts.moveDraft(from, to)
+  assert.equal(drafts.loadDraft(to), '第二句')
+  assert.deepEqual(drafts.loadDraftImages(to), [image])
+  assert.deepEqual(drafts.loadDraftSessions(to), [session])
+  assert.deepEqual(drafts.loadDraftComments(to), [comment])
+  assert.equal(drafts.loadDraft(from), '')
+  assert.deepEqual(drafts.loadDraftImages(from), [])
+  assert.deepEqual(drafts.loadDraftSessions(from), [])
+  assert.deepEqual(drafts.loadDraftComments(from), [])
+  // 什么都没剩：目标原有的不动
+  drafts.moveDraft(from, to)
+  assert.equal(drafts.loadDraft(to), '第二句')
+})
+
 test('新建会话页：记住工作区和 harness，过期的选择不回来', async () => {
   const memory = await fresh('../src/screens/new-session/remembered.ts')
   const ready = [{ id: 'pi' }, { id: 'claude' }]

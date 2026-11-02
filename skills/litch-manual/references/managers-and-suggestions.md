@@ -256,7 +256,10 @@ The dot on a manager's row, in the desktop sidebar and in the phone's manager li
 manager session itself, as on ordinary rows: a running turn, or the breathing background mark with "N background tasks running" when its turn has ended but a
 background command continues. When only worklines are running, the row shows no dot and says "N work
 lines running"; on desktop each workline shows its own mark underneath. The text reads Running, then
-N work lines running, then N background tasks running, then Idle.
+N work lines running, then N background tasks running, then Idle. When there is something to handle,
+the desktop row shows "N to handle" instead; hovering it adds the status text ("4 to handle · 1 work
+line running") and the breakdown by kind. In the Human skin the background mark is a double ring,
+the running mark a single ring.
 
 侧栏、窄窗口的“看板”和收起后的“展开看板”数字，合计待定决策、待做的“请你做”和经理已审核待开始建议；报告未读不计入。
 已回复、已交付或已取消的请求不重复计入；已回复但尚未交付的请求仍保留在概览中。

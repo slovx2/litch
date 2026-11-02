@@ -1,6 +1,7 @@
 // 经理冒烟只操作正式界面，模拟核心负责写答案和生成答复回合。
 export interface ManagerSeen {
   linesState: boolean
+  pendingTitle: boolean
   answeredSplit: boolean
   issueOrder: boolean
   previousClosed: boolean
@@ -535,6 +536,22 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     Boolean(
       linesRow.querySelector('[data-manager-state]')?.textContent?.includes('1 条工作线运行中'),
     )
+  // 有待处理的经理行：行上只写“N 待处理”，悬停提示第一行补上状态文字
+  const pendingBadges = [
+    ...document.querySelectorAll<HTMLElement>(
+      '.mg-sidebar-manager .mg-sidebar-counts .mg-attention',
+    ),
+  ].filter((badge) => !badge.hasAttribute('data-manager-draft-count'))
+  const pendingTitle =
+    pendingBadges.length > 0 &&
+    pendingBadges.every((badge) => {
+      const [first = ''] = (badge.title ?? '').split('\n')
+      const prefix = `${badge.textContent?.trim()} · `
+      return (
+        first.startsWith(prefix) &&
+        /^(运行中|空闲|\d+ 条工作线运行中|\d+ 个后台任务正在运行)$/.test(first.slice(prefix.length))
+      )
+    })
   await until('切栏后保留停报标记', () => one(`${childRow} [data-report="off"]`))
   await click(`${childRow} [aria-haspopup="menu"]`)
   await click('[data-action="report"]')
@@ -846,6 +863,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   const archivedFallback = Boolean(await until('切回对话默认页', () => one('.new-page')))
   return {
     linesState,
+    pendingTitle,
     answeredSplit: answeredSplit && closedSplit,
     issueOrder: issueOrder && orderInHead,
     previousClosed,
@@ -909,6 +927,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
   const messages: Record<keyof ManagerSeen, string> = {
     linesState:
       '经理自己只有后台命令、工作线在跑时，经理行仍画成运行中，或没有后台记号、没写明工作线',
+    pendingTitle: '有待处理的经理行，悬停提示第一行不是“N 待处理 · 状态文字”',
     answeredSplit: '已答复或已关闭的决策没有把答复、关闭记录与问题分块，或其他选项没有默认收起',
     issueOrder:
       '控制台没有默认最新优先，或切换排序后顺序与本机记录不对，或排序不在列表头、决策里仍有待处理优先',

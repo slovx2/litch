@@ -21,6 +21,7 @@ export interface BackgroundSeen {
   sidebarMark: boolean
   /** 三种皮肤各画各的：标准空心方块、复古 &、人文空心圆 */
   skinMarks: boolean
+  runBgDistinct: boolean
   /** 点那一行在右侧打开“后台任务”页：运行中两行，组头写跑完会接着做 */
   panelOpen: boolean
   panelRows: boolean
@@ -124,13 +125,30 @@ export async function backgroundProbe(sessionId: string): Promise<BackgroundSeen
   }
   const marks: string[] = []
   const looks: string[] = []
+  // 运行中和后台的记号各是什么形状：内容、边框、圆角、底图、阴影、宽高。每种皮肤里两个都得不一样
+  const shape = (element: Element | null) => {
+    if (!element) return '没有'
+    const style = getComputedStyle(element, '::before')
+    return [
+      style.content,
+      style.borderTopWidth,
+      style.borderRadius,
+      style.backgroundImage,
+      style.boxShadow,
+      style.width,
+    ].join(' ')
+  }
+  const runShapes: string[] = []
   for (const skin of ['standard', 'retro', 'human']) {
     for (const theme of ['light', 'dark']) {
       await look(skin, theme)
       const mark = rowMark()
       const before = mark ? getComputedStyle(mark, '::before') : null
-      if (theme === 'dark')
+      if (theme === 'dark') {
         marks.push(`${skin}:${before?.content}:${before?.borderTopStyle}:${before?.borderRadius}`)
+        const run = shape($('.row-line:not(.projection-group *) .st.run'))
+        runShapes.push(`${skin}｜运行中 ${run}｜后台 ${shape(mark)}`)
+      }
       for (const selector of ['.main .bgbar', '.main .proc-head']) {
         const element = $(selector)
         if (!element) continue
@@ -144,6 +162,15 @@ export async function backgroundProbe(sessionId: string): Promise<BackgroundSeen
   }
   appearance.set({ skin: was.skin, theme: was.theme })
   seen.marks = marks.join(' | ')
+  seen.runShapes = runShapes.join(' ‖ ')
+  // 人文皮肤的后台是同心双圈：底图里画着里面那一圈
+  const runBgDistinct =
+    runShapes.length === 3 &&
+    runShapes.every((line) => {
+      const [, run = '', bg = ''] = line.split('｜')
+      return !run.includes('没有') && run.replace('运行中 ', '') !== bg.replace('后台 ', '')
+    }) &&
+    (runShapes[2] ?? '').split('｜后台 ')[1]?.includes('radial-gradient') === true
   const skinMarks =
     marks.length === 3 &&
     /^standard:[^:]*:solid:0px$/.test(marks[0] ?? '') &&
@@ -276,6 +303,7 @@ export async function backgroundProbe(sessionId: string): Promise<BackgroundSeen
     foldMark,
     sidebarMark,
     skinMarks,
+    runBgDistinct,
     panelOpen,
     panelRows,
     wakesNote,
@@ -298,7 +326,8 @@ const LABELS: Record<Exclude<keyof BackgroundSeen, 'seen' | 'looks'>, string> = 
   breathing: '那一行整条在呼吸',
   foldMark: '收起的过程那一行末尾写着 2 个在后台运行',
   sidebarMark: '侧栏那一行是后台任务的记号',
-  skinMarks: '三种皮肤的侧栏记号：标准空心方块、复古 &、人文空心圆',
+  skinMarks: '三种皮肤的侧栏记号：标准空心方块、复古 &、人文同心双圈',
+  runBgDistinct: '三种皮肤里运行中和后台的记号形状得不一样（人文皮肤的后台是同心双圈）',
   panelOpen: '点那一行在右侧打开“后台任务”页',
   panelRows: '右侧页运行中两行',
   wakesNote: '运行中那一组的组头写跑完会不会接着做',

@@ -69,6 +69,8 @@ export interface HomeProbe {
     /** 第一条回话有没有对上。只在真实入口上量 */
     echoed: boolean | null
   }
+  /** 建会话时紧接着按回车的第二句：带进新会话的输入框、没发出去；再回新建页那里是空的 */
+  carried: { kept: boolean; notSent: boolean; homeCleared: boolean }
   /** 该建在哪：“设备/项目” */
   wanted: string
   /** 再点“新对话”：默认的去处换成了刚才用的（“设备/项目/harness”，没有选 harness 的选择器时最后一段是空的） */
@@ -321,6 +323,10 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
   )
   const sentAt = performance.now()
   press(fresh, 'Enter')
+  // 第一句还在建会话时紧接着写第二句、按回车：这时不收（不然另建一个会话），建好跳过去时带进新会话的输入框
+  const second = '建会话时紧接着写的第二句'
+  write(fresh, second)
+  press(fresh, 'Enter')
   await until('第一条消息出现', () => users().includes(opening))
   const bubbleMs = performance.now() - sentAt
   await until(
@@ -330,6 +336,14 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
   await until('标题栏换成新会话', () => text(one('.crumb b')).includes(opening), 5000).catch(
     () => null,
   )
+  const kept = Boolean(
+    await until('第二句在新会话的输入框里', () => area()?.value === second, 5000).catch(() => null),
+  )
+  const carried: HomeProbe['carried'] = {
+    kept,
+    notSent: !users().includes(second),
+    homeCleared: false,
+  }
   const crumb = `${text(one('.crumb .dev'))}/${text(one('.crumb span.ell'))}/${text(one('.crumb b'))}`
   const created: HomeProbe['created'] = {
     bubbleMs,
@@ -346,6 +360,7 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
   entry.click()
   await until('回到新建对话页', () => home() && picker('device'))
   await frame()
+  carried.homeCleared = area()?.value === ''
   const remembered = `${place()}/${shown('harness')}`
   let rememberedPerDevice: string | null = null
   if (!real) {
@@ -436,6 +451,7 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
     offline,
     failed,
     created,
+    carried,
     wanted,
     remembered,
     rememberedPerDevice,
@@ -555,6 +571,9 @@ export function judgeHome(probe: HomeProbe, real: boolean): string[] {
     failed.push(`新会话的徽标不对：“${created.chip}”`)
   }
   if (created.echoed === false) failed.push('新建对话页上建的会话，第一条回话没有对上')
+  if (!probe.carried.kept) failed.push('建会话时紧接着按回车的第二句，没有带进新会话的输入框')
+  if (!probe.carried.notSent) failed.push('建会话时紧接着按回车的第二句被发出去了')
+  if (!probe.carried.homeCleared) failed.push('再回新建对话页，输入框里还留着带走的那句')
   if (!real && probe.wanted !== 'build-01/infra') {
     failed.push(`没能在页上选到要建的地方：“${probe.wanted}”`)
   }

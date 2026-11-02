@@ -321,7 +321,7 @@
   }
 }
 
-/* 三种皮肤各画一个：复古是终端里后台作业的 &，人文是空心圆 */
+/* 三种皮肤各画一个：复古是终端里后台作业的 &，人文是同心双圈（◎，和手机一样；运行中是单圈） */
 [data-skin="retro"] .pulse {
   border-radius: 0;
 }
@@ -337,7 +337,13 @@
   border-radius: 50%;
 }
 [data-skin="human"] .st.bg::before {
-  width: calc(8px * var(--fs));
-  height: calc(8px * var(--fs));
+  width: calc(9px * var(--fs));
+  height: calc(9px * var(--fs));
   border-radius: 50%;
+  background: radial-gradient(
+    circle closest-side,
+    transparent 0 30%,
+    var(--accent) 34% 66%,
+    transparent 70%
+  );
 }

@@ -96,6 +96,26 @@ export function dropDraft(key: string): void {
   saveDraftComments(key, NONE)
 }
 
+/**
+ * 把一个输入框里剩下的草稿（文字、图片、提到的会话、评论）整份挪到另一个输入框，原处清空（和桌面一样）。
+ * 新建会话页用：第一句建会话的时候又写了一句、按发送没收（那时还在建），建好跳过去时带进新会话的输入框，
+ * 不自动发；新建页的草稿随之清空，下次开“新对话”不会再冒出来
+ */
+export function moveDraft(from: string, to: string): void {
+  const text = loadDraft(from)
+  const list = loadDraftImages(from)
+  const mentioned = loadDraftSessions(from)
+  const notes = loadDraftComments(from)
+  if (text) {
+    const before = loadDraft(to)
+    saveDraft(to, before.trim() ? `${before}\n\n${text}` : text)
+  }
+  if (list.length) saveDraftImages(to, [...loadDraftImages(to), ...list])
+  if (mentioned.length) saveDraftSessions(to, [...loadDraftSessions(to), ...mentioned])
+  if (notes.length) saveDraftComments(to, [...loadDraftComments(to), ...notes])
+  dropDraft(from)
+}
+
 const isComment = (value: unknown): value is CommentExtra => {
   const each = value as CommentExtra | null
   return (

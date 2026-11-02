@@ -15,7 +15,7 @@ import { Caret, Forward } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { containsSession, revealRow } from '../sidebar/reveal.ts'
 import { useSidebarReveal } from '../sidebar/reveal-context.ts'
-import { managerStateText, sessionMark } from '../sidebar/session-mark.ts'
+import { managerPendingTitle, managerStateText, sessionMark } from '../sidebar/session-mark.ts'
 import { answeredDrafts, questionDrafts, useAnswerDrafts } from './drafts.ts'
 import { usePostDrafts } from './post-drafts.ts'
 import { submittedRequests, useRequestDrafts } from './request-drafts.ts'
@@ -108,11 +108,15 @@ function ManagerRow({
             {attention || count ? (
               <span
                 className={attention ? 'mg-attention' : 'dim'}
-                title={t('manager.pendingDetail', {
-                  decisions: manager.pendingDecisions,
-                  requests: manager.pendingRequests ?? 0,
-                  suggestions: manager.pendingSuggestions ?? 0,
-                })}
+                title={managerPendingTitle(
+                  t('manager.pending', { n: attention }),
+                  state,
+                  t('manager.pendingDetail', {
+                    decisions: manager.pendingDecisions,
+                    requests: manager.pendingRequests ?? 0,
+                    suggestions: manager.pendingSuggestions ?? 0,
+                  }),
+                )}
               >
                 {t('manager.pending', { n: attention })}
               </span>
