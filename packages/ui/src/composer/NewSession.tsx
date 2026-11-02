@@ -39,6 +39,7 @@ import {
   useNewHarness,
 } from './remembered.ts'
 import { useComposeOptions, useNewSessionDefaults } from './SettingsBar.tsx'
+import { rememberSubmitted } from './submitted-history.ts'
 import { useBranches } from './useBranches.ts'
 import { useDevices } from './useNewPlace.ts'
 import { branchFrom, FROM_DEFAULT, FROM_WORKING, fitFrom, fromOf } from './worktree-from.ts'
@@ -379,7 +380,12 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
   // 指着的工作区不在这台设备的表里（被删了）：不能悄悄建成不属于工作区的会话
   const missing = workspaceId !== null && !workspace
 
-  const create = async (text: string, images: ImageAttachment[], extras: MessageExtra[]) => {
+  const create = async (
+    text: string,
+    images: ImageAttachment[],
+    extras: MessageExtra[],
+    submittedText: string,
+  ) => {
     if (permissionBlocked || project.loading || project.error)
       throw new Error(project.error ?? t('permission.project.unsupported'))
     // 第一句是 /goal 加上目标（harness 会持续目标时）：建好会话就设目标，不发消息，它空闲时自己开始做
@@ -405,6 +411,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
         ...(inWorktree ? { worktree: { ...withFrom(where.from) } } : {}),
       })
       const { mode: _thisOnce, ...kept } = picks
+      rememberSubmitted(`${deviceId}:${sessionId}`, submittedText)
       rememberPicks(deviceId, harnessId, kept)
       if (harness) rememberHarness(deviceId, workspaceId, harness.id)
       rememberPlace(deviceId, workspaceId)

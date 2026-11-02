@@ -95,6 +95,13 @@ export interface ComposeProbe {
   deletedHome: boolean
   /** 输入历史：光标在最前面按上箭头翻出上一次发的话，再按是更早的一条，下箭头翻回到空 */
   historyRecalled: boolean
+  /** 输入框提交记录与对话回显分离：外来历史排除、新建首句、停止待发和原始空白。 */
+  historySubmitted: {
+    foreignExcluded: boolean
+    fresh: boolean
+    stopped: boolean
+    verbatim: boolean
+  }
   /** macOS 的 Ctrl+C 清空整份草稿，组字时不处理，Cmd+Z 恢复文字和片。 */
   draftClearUndo: boolean | null
   /** 底栏上有上下文占用的百分比 */
@@ -346,6 +353,11 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   // ---- 一、输入法选词时的回车不发送 ----
   await open(main)
   const input = await until('输入框', area)
+  input.focus()
+  input.setSelectionRange(0, 0)
+  press(input, 'ArrowUp')
+  await frame()
+  const foreignExcluded = input.value === ''
   const base = users().length
   const half = '输入法里还没选完的字'
   write(input, half)
@@ -702,7 +714,8 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   await until('新建会话的页面', () => one('.new-hero'))
   const opening = '新会话的第一句'
   const fresh = await until('输入框', area)
-  write(fresh, opening)
+  const openingDraft = `  ${opening}  `
+  write(fresh, openingDraft)
   await frame()
   const createdAt = performance.now()
   press(fresh, 'Enter')
@@ -718,6 +731,14 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     Boolean(one('.ss-row:not(.projection-group *).sel')?.textContent?.includes(opening)) &&
     Boolean(one('.crumb b')?.textContent?.includes(opening))
   const newEchoed = real ? Boolean(one('.turn')?.textContent?.includes(`收到：${opening}`)) : null
+  const newInput = await until('新会话输入框', area)
+  newInput.focus()
+  newInput.setSelectionRange(0, 0)
+  press(newInput, 'ArrowUp')
+  await frame()
+  const freshHistory = newInput.value === openingDraft
+  press(newInput, 'ArrowDown')
+  await frame()
 
   // ---- 八、侧栏上的会话操作：改名、删除（用的是刚建的那个会话）----
   const rowOf = (title: string) =>
@@ -821,6 +842,43 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   const historyRecalled =
     said.length >= 2 && newest === said.at(-1) && older === said.at(-2) && typing.value === ''
   const contextShown = /^\d+%$/.test(one('.cmp-bar .ctx')?.textContent ?? '')
+
+  // 停止时未消费的输入移到待发；上键仍须取到提交时的正文与空白。
+  const historyFirst = '  历史首条原文  '
+  const historyPending = '  历史待发原文  '
+  await say(historyFirst)
+  await until('历史探针回合开始', running)
+  await say(historyPending)
+  await until('历史探针待发已保留', () =>
+    all('.tray-row').some((row) => row.textContent?.includes(historyPending.trim())),
+  )
+  const stopHistory = await until('历史探针停止按钮', () => one<HTMLButtonElement>('.send.stop'))
+  stopHistory.click()
+  await until('历史探针停止完成', () => !running())
+  const recallInput = await until('历史探针输入框', area)
+  recallInput.focus()
+  recallInput.setSelectionRange(0, 0)
+  press(recallInput, 'ArrowUp')
+  await frame()
+  const stoppedHistory = recallInput.value === historyPending
+  press(recallInput, 'ArrowUp')
+  await frame()
+  const verbatimHistory = recallInput.value === historyFirst
+  press(recallInput, 'ArrowDown')
+  await frame()
+  press(recallInput, 'ArrowDown')
+  await frame()
+  const historySubmitted = {
+    foreignExcluded,
+    fresh: freshHistory,
+    stopped: stoppedHistory,
+    verbatim: verbatimHistory,
+  }
+  const pendingHistoryRow = all('.tray-row').find((row) =>
+    row.textContent?.includes(historyPending.trim()),
+  )
+  pendingHistoryRow?.querySelector<HTMLButtonElement>('.tray-acts .ibtn:last-child')?.click()
+  await frame()
 
   // ---- 九、请求卡片：焦点、快捷键、分页 ----
   let cards: ComposeProbe['cards'] = null
@@ -1352,6 +1410,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     deleteAsked,
     deletedHome,
     historyRecalled,
+    historySubmitted,
     draftClearUndo,
     contextShown,
     cards,
@@ -1421,6 +1480,9 @@ export function judgeCompose(probe: ComposeProbe): string[] {
   if (!probe.deleteAsked) failed.push('删除会话没有先问一句')
   if (!probe.deletedHome) failed.push('会话删掉之后没有回到新建对话页')
   if (!probe.historyRecalled) failed.push('上下箭头没有翻出这个会话里发过的话')
+  for (const [name, ok] of Object.entries(probe.historySubmitted)) {
+    if (!ok) failed.push(`输入框提交历史：${name} 不对`)
+  }
   if (probe.draftClearUndo === false) failed.push('Ctrl+C 清空草稿或 Cmd+Z 恢复文字与附件失败')
   if (!probe.contextShown) failed.push('底栏上没有上下文占用')
   for (const [name, ok] of Object.entries(probe.cards ?? {})) {

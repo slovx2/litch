@@ -2,8 +2,6 @@ import {
   type ContextUsage,
   type DeviceView,
   type ImageAttachment,
-  type ItemView,
-  inputHistory,
   keys,
   type MessageExtra,
   pathTwin,
@@ -97,6 +95,7 @@ import { SettingsBar, useComposeOptions } from './SettingsBar.tsx'
 import { useRunningSend } from './send-mode.ts'
 import { canSend, runningPlaceholder } from './send-mode-logic.ts'
 import { keepMentioned } from './session-hits.ts'
+import { rememberSubmitted, submittedHistory } from './submitted-history.ts'
 import { useProviderSwitch } from './useProviderSwitch.ts'
 import { useSuggest } from './useSuggest.tsx'
 
@@ -136,12 +135,15 @@ interface ComposerProps {
   usage?: ContextUsage | null
   /** 手动压缩上下文。已有的会话才给 */
   compact?: Compaction
-  /** 这个会话里发过的话，从早到晚。按上箭头翻的时候才来要，不给就没有输入历史 */
-  history?(): string[]
   /** 开一个新对话（输入框里的 /new）。已有的会话才给 */
   onNew?(): void
   /** 发出去。受理了就算成；不成时输入框把文字、图片和附带项还给用户，并显示原因 */
-  onSend(text: string, images: ImageAttachment[], extras: MessageExtra[]): Promise<unknown>
+  onSend(
+    text: string,
+    images: ImageAttachment[],
+    extras: MessageExtra[],
+    submittedText: string,
+  ): Promise<unknown>
   onStop?(): Promise<unknown>
   onUnqueue?(messageId: string): void
   /** 把一条排着队的消息现在就插进正在进行的回合里。不给就没有这个按钮 */
@@ -430,6 +432,7 @@ export function Composer(props: ComposerProps) {
     // 上一条还在发时也接着发，但同一版草稿只发一次：连按时第二下拿到的还是刚发出去的那一版
     if (taken.current === version) return
     taken.current = version
+    if (sessionId) rememberSubmitted(draftKey, text)
     // 先清空：消息已经显示在对话里了。没发成功再把文字、图片和附带项还回来
     cleared.current = null
     recalling.current = null
@@ -442,7 +445,7 @@ export function Composer(props: ComposerProps) {
     setError(null)
     setBusy(true)
     // 评论排在最前面（核心并进正文时也是写在最前面）
-    onSend(content, attached, [...commented.map(commentExtra), ...carried])
+    onSend(content, attached, [...commented.map(commentExtra), ...carried], text)
       .catch((reason: unknown) => {
         setText((current) => (current && content ? `${content}\n${current}` : content || current))
         setImages((current) => [...attached, ...current].slice(0, MAX_IMAGES))
@@ -452,7 +455,7 @@ export function Composer(props: ComposerProps) {
         setError(failure ? failure(why) : t('composer.failed', { reason: why }))
       })
       .finally(() => setBusy(false))
-  }, [onSend, failure, draftKey, text, images, extras, comments, t, disarm, version])
+  }, [onSend, failure, draftKey, sessionId, text, images, extras, comments, t, disarm, version])
 
   const stop = () => {
     setError(null)
@@ -522,7 +525,7 @@ export function Composer(props: ComposerProps) {
     const state = recalling.current
     const area = event.currentTarget
     if (!state && !(up && area.selectionStart === 0 && area.selectionEnd === 0)) return false
-    const sent = props.history?.() ?? []
+    const sent = submittedHistory(draftKey)
     const back = (state?.back ?? 0) + (up ? 1 : -1)
     if (back > sent.length) return Boolean(state)
     event.preventDefault()
@@ -1008,7 +1011,7 @@ interface SessionComposerProps {
 
 /** 一个已有会话的输入区：消息发进这个会话，设置改的是这个会话的 */
 export function SessionComposer({ deviceId, sessionId, blocked }: SessionComposerProps) {
-  const { channel, replica } = useServices()
+  const { channel } = useServices()
   const t = useT()
   const turnIds = useKey<string[]>(keys.turnIds(deviceId, sessionId))
   const last = turnIds?.[turnIds.length - 1] ?? ''
@@ -1086,15 +1089,6 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
     ranWith?.sessionId === sessionId
       ? switchedProvider(ranWith.model, settings.model, options?.models ?? [])
       : null
-  // 输入历史就是这个会话里发过的话：不另外存，翻的时候从对话里现找
-  const history = useCallback(() => {
-    const { store } = replica
-    const turns = (store.get<string[]>(keys.turnIds(deviceId, sessionId)) ?? []).flatMap((id) => {
-      const turn = store.get<TurnView>(keys.turn(deviceId, sessionId, id))
-      return turn ? [turn] : []
-    })
-    return inputHistory(turns, (id) => store.get<ItemView>(keys.item(deviceId, sessionId, id)))
-  }, [replica, deviceId, sessionId])
   return (
     <>
       {switching.pending ? (
@@ -1142,7 +1136,6 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
         settings={settings}
         usage={usage ?? null}
         {...(compact ? { compact } : {})}
-        history={history}
         onSettings={(patch) => {
           switching.change(patch).catch(() => {})
         }}
