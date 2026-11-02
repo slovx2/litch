@@ -612,7 +612,10 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   await sayAndWait(earlier)
   await sayAndWait(later)
   const acts = bubble(earlier)?.querySelector<HTMLElement>('.umsg-acts')
-  const sourceId = one('.ss-row:not(.projection-group *).sel')?.getAttribute('data-session')
+  const sessionId = (row: Element | null | undefined) =>
+    row?.closest('[data-session]')?.getAttribute('data-session')
+  const sourceId = sessionId(one('.ss-row:not(.projection-group *).sel'))
+  if (!sourceId) throw new Error('分叉之前没有选中会话标识')
   const turnsBefore = turns()
   const fork: SessionProbe['fork'] = {
     hidden:
@@ -634,7 +637,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   )
   act(earlier, 'fork')?.click()
   await until('落到分叉出来的会话里', () => {
-    const selected = one('.ss-row:not(.projection-group *).sel')?.getAttribute('data-session')
+    const selected = sessionId(one('.ss-row:not(.projection-group *).sel'))
     return selected && selected !== sourceId && one('.forked-from[data-source]')
   })
   await drawnTo(turnsBefore - 1)
@@ -643,7 +646,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   fork.opened =
     Boolean(one('.ss-row:not(.projection-group *).sel')?.textContent?.includes(main)) &&
     Boolean(one('.crumb')?.textContent?.includes(main)) &&
-    mainRows().some((row) => row.getAttribute('data-session') === sourceId)
+    mainRows().some((row) => sessionId(row) === sourceId)
   fork.cut = Boolean(bubble(earlier)) && !bubble(later)
   fork.told = Boolean(actionToast()?.textContent?.includes('分叉'))
   // 只认分叉来源那一条（data-source）：定时任务的说明条、会话树的父会话条也借用 forked-from 的样子

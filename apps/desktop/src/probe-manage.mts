@@ -285,9 +285,8 @@ export async function manageProbe(): Promise<ManageProbe> {
     )
   }
   const before = rows().length
-  const beforeIds = rows()
-    .map((row) => row.dataset.session)
-    .sort()
+  const rowId = (row: HTMLElement) => row.closest<HTMLElement>('[data-session]')?.dataset.session
+  const beforeIds = rows().map(rowId).sort()
   await setEnabled(false)
   await save()
   await until('Pi 变成停用', () => block('pi').dataset.state === 'disabled')
@@ -297,11 +296,7 @@ export async function manageProbe(): Promise<ManageProbe> {
     '原有会话均保留且已标为不可用',
     () =>
       rows().every(isDown) &&
-      JSON.stringify(
-        rows()
-          .map((row) => row.dataset.session)
-          .sort(),
-      ) === JSON.stringify(beforeIds),
+      JSON.stringify(rows().map(rowId).sort()) === JSON.stringify(beforeIds),
   )
   const disabledRows = `${rows().filter(isDown).length}/${rows().length}/${before}`
   ;(
