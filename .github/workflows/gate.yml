@@ -1,0 +1,113 @@
+name: Release gate
+on:
+  workflow_dispatch:
+    inputs:
+      nightly-triage:
+        description: 夜间失败与本候选无关的已关闭 nightly-triage issue 编号（可不填）
+        type: string
+        default: ''
+  workflow_call:
+    inputs:
+      sha:
+        type: string
+        required: true
+      nightly-triage:
+        type: string
+        default: ''
+    outputs:
+      sha:
+        description: 本次通过门禁的精确提交
+        value: ${{ jobs.result.outputs.sha }}
+
+permissions:
+  contents: read
+  actions: read
+  issues: read
+
+jobs:
+  impact:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.impact.outputs.sha }}
+      domains: ${{ steps.impact.outputs.domains }}
+      baseline: ${{ steps.impact.outputs.baseline }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - name: 影响范围规则与发版策略的变更案例
+        run: node --test scripts/ci-impact.test.mjs scripts/ci-nightly-base.test.mjs scripts/release-policy.test.mjs scripts/release-provenance.test.mjs apps/desktop/scripts/notarize.test.mjs
+      - name: 从 48 小时内成功的祖先夜间 Full 计算增量影响范围
+        id: impact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 只查询真实 schedule Full，保留 run ID；API 故障直接失败，不能伪装成没有基线。
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/full.yml/runs?event=schedule&status=success&per_page=100" \
+            --jq '.workflow_runs | map({id, head_sha, status, conclusion, event, updated_at, html_url, path, run_attempt})' > nightly-runs.json
+          export CANDIDATE_SHA="$(git rev-parse HEAD)"
+          export NIGHTLY_RUNS_PATH=nightly-runs.json
+          node scripts/ci-impact.mjs | tee gate-impact.json
+          {
+            echo '### 本次门禁影响范围'
+            echo '```json'
+            cat gate-impact.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # 必跑 CI（所有包单测、契约、类型、原生首回合及关键审批/发送）与受影响完整领域。
+  # 窗口清单的入口由 ci.yml client 维护，避免在两个工作流里复制命令。
+  tests:
+    needs: impact
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/full.yml
+    with:
+      sha: ${{ needs.impact.outputs.sha }}
+      domains: ${{ needs.impact.outputs.domains }}
+      run-ci: true
+
+  result:
+    needs: [impact, tests]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.proof.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.impact.outputs.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - name: 最近夜间 Full 与已知问题
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ needs.impact.outputs.sha }}
+          NIGHTLY_TRIAGE: ${{ inputs.nightly-triage }}
+          TAG: ''
+        run: node scripts/release-policy.mjs
+      - name: 门禁通过证明
+        id: proof
+        env:
+          CANDIDATE_SHA: ${{ needs.impact.outputs.sha }}
+          DOMAINS: ${{ needs.impact.outputs.domains }}
+          BASELINE: ${{ needs.impact.outputs.baseline }}
+        run: |
+          node --input-type=module <<'JS'
+          import { writeFileSync, appendFileSync } from 'node:fs'
+          const sha = process.env.CANDIDATE_SHA
+          writeFileSync('gate-proof.json', JSON.stringify({ sha, run: process.env.GITHUB_RUN_ID, attempt: process.env.GITHUB_RUN_ATTEMPT, domains: JSON.parse(process.env.DOMAINS), baseline: JSON.parse(process.env.BASELINE), conclusion: 'success' }, null, 2))
+          appendFileSync(process.env.GITHUB_OUTPUT, `sha=${sha}\n`)
+          JS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: gate-proof
+          path: gate-proof.json
+          if-no-files-found: error

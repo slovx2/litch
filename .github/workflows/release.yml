@@ -10,8 +10,8 @@ name: Release
 # 打 v 开头的标签时自动跑。也可以手动跑：
 #   填一个已有的标签：给它出包、验证，勾了“挂到发布页”才挂上去
 #   标签不填：照选的分支试跑一遍，只出包、验证、留作流程产物，不挂发布页，也不查版本号和标签对不对得上
-# 挂之前要求标签指的提交上有一轮通过的全量（full.yml，手动触发）：门禁只跑冒烟，0.8.0 那种在 Codex 上建不成会话的问题
-# 要全量才拦得全。没有就不挂，先 gh workflow run full.yml --ref <那个提交所在的分支>，过了再重跑这一趟。
+# 冻结候选 SHA 后，并行跑 gate.yml 与各平台出包；统一核对门禁、产物来源与 hash 后才建草稿。
+# gate.yml = 必跑集合 + 受影响完整领域；夜间红灯和 release-blocker 在晋级时再次核对。
 # 全部出好才一起挂上去；发布页还没有时建成草稿，人看过再公开，安装脚本取“最新一版”时不会碰到一个缺包的发布页。
 #
 # macOS 的签名和公证要在仓库的 Actions 机密里配好这五项（怎么取见 CONTRIBUTING.md 的“发版”一节）：
@@ -38,15 +38,22 @@ on:
         default: ''
         type: string
       publish:
-        description: 挂到发布页（只对填了标签的有用）
+        description: 上传到草稿发布页（不公开；只对填了标签的有用）
         required: false
         default: false
         type: boolean
 
+      nightly-triage:
+        description: 夜间失败与本候选无关的已关闭 nightly-triage issue 编号
+        required: false
+        default: ''
+        type: string
+
 permissions:
   contents: write
-  # 查这个提交上的全量过没过
+  # 同 SHA 门禁、夜间 Full 与维护者的分诊记录
   actions: read
+  issues: read
 
 concurrency:
   group: release-${{ inputs.tag || github.ref_name }}
@@ -61,13 +68,46 @@ env:
   PUBLISH: ${{ github.event_name == 'push' || (inputs.tag != '' && inputs.publish) }}
 
 jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.freeze.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.REF }}
+      - name: 冻结候选源码与工作流提交
+        id: freeze
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          sha="$(git rev-parse HEAD)"
+          if [ "$sha" != "$WORKFLOW_SHA" ]; then
+            echo '候选必须与工作流同 SHA；手动发标签请同时选择该标签作为运行 ref' >&2
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  gate:
+    needs: candidate
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+    uses: ./.github/workflows/gate.yml
+    with:
+      sha: ${{ needs.candidate.outputs.sha }}
+      nightly-triage: ${{ inputs.nightly-triage || '' }}
+
   adapter:
+    needs: candidate
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ env.REF }}
+          ref: ${{ needs.candidate.outputs.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 24
@@ -107,6 +147,10 @@ jobs:
       # musl 的系统给出明确的说法。验的就是要发的那一份
       - name: 容器验证
         run: node scripts/check-adapter-package.mjs --release "${RUNNER_TEMP}/release"
+      - name: 产物来源与 SHA-256
+        env:
+          CANDIDATE_SHA: ${{ needs.candidate.outputs.sha }}
+        run: node scripts/release-provenance.mjs write "${RUNNER_TEMP}/release" adapter
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: adapter
@@ -116,12 +160,16 @@ jobs:
   # 给集成方（WakeQora）的 Claude 入口包 cha-v<版本>.tar.gz 和它的校验和清单。在钉了摘要的容器里出，
   # 同一个提交在哪出都是同一个 sha256，集成方把清单里的值记进自己的锁文件
   cha:
+    needs: candidate
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ env.REF }}
+          ref: ${{ needs.candidate.outputs.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
       - name: 标签和版本号要对得上
         if: env.TAG != ''
         run: |
@@ -132,6 +180,10 @@ jobs:
           fi
       - name: 出包
         run: bash scripts/package-cha.sh --out "${RUNNER_TEMP}/cha"
+      - name: 产物来源与 SHA-256
+        env:
+          CANDIDATE_SHA: ${{ needs.candidate.outputs.sha }}
+        run: node scripts/release-provenance.mjs write "${RUNNER_TEMP}/cha" cha
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: cha
@@ -139,12 +191,13 @@ jobs:
           if-no-files-found: error
 
   desktop-macos:
+    needs: candidate
     runs-on: macos-15
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ env.REF }}
+          ref: ${{ needs.candidate.outputs.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 24
@@ -245,8 +298,10 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           ditto -c -k --sequesterRsrc --keepParent "apps/desktop/out/Litch-darwin-arm64/Litch.app" "apps/desktop/out/installer/Litch-${version}-macos-arm64.zip"
       # 签过、钉过票的应用照样起得来：对着模拟核心起一次，界面和核心打通
-      - name: 签好的应用能起来
-        run: node apps/desktop/scripts/smoke.mjs --packed
+      - name: 签好的应用、发送和远程连接验收
+        run: npm run client:check:packed
+      - name: 核对最终 dmg 和自动更新 zip
+        run: node apps/desktop/scripts/verify-macos-distribution.mjs
       # 助手单独签过、和应用同一个团队（make-installer.mjs 已经比过）；这里再打出来留个底
       - name: Computer Use 助手的签名
         run: codesign -dv --verbose=2 "apps/desktop/out/Litch-darwin-arm64/Litch.app/Contents/SharedSupport/Litch Computer Use.app"
@@ -256,17 +311,23 @@ jobs:
           if [ -n "${LITCH_SIGN_KEYCHAIN:-}" ]; then
             security delete-keychain "$LITCH_SIGN_KEYCHAIN"
           fi
+      - name: 产物来源与 SHA-256
+        env:
+          CANDIDATE_SHA: ${{ needs.candidate.outputs.sha }}
+        run: node scripts/release-provenance.mjs write "apps/desktop/out/installer" desktop-macos
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: desktop-macos
           path: |
             apps/desktop/out/installer/*.dmg
             apps/desktop/out/installer/*.zip
+            apps/desktop/out/installer/release-provenance-*.json
           if-no-files-found: error
 
   # Windows 的安装程序：不签名（打开时系统会提示来源不明），这里只出包、不验收（真机验收另做）。
   # 带 Computer Use 的助手（apps/computer-use-win，Rust）：打包前先构建，打包和做安装包都核对它在
   desktop-windows:
+    needs: candidate
     runs-on: windows-2025
     timeout-minutes: 60
     defaults:
@@ -275,7 +336,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ env.REF }}
+          ref: ${{ needs.candidate.outputs.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 24
@@ -316,15 +377,22 @@ jobs:
       - run: node apps/desktop/scripts/check-computer-use.mjs --require
       - run: npm run client:pack
       - run: node apps/desktop/scripts/make-installer.mjs
+      - name: 产物来源与 SHA-256
+        env:
+          CANDIDATE_SHA: ${{ needs.candidate.outputs.sha }}
+        run: node scripts/release-provenance.mjs write "apps/desktop/out/installer" desktop-windows
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: desktop-windows
-          path: apps/desktop/out/installer/*.exe
+          path: |
+            apps/desktop/out/installer/*.exe
+            apps/desktop/out/installer/release-provenance-*.json
           if-no-files-found: error
 
   # 安卓应用：arm64 的 release 包，发版钥匙签名（apps/mobile/plugins/release-signing.js 在 prebuild 时把签名接进生成的 gradle）。
   # 装上去之后的整套验收在全量（full.yml 的 mobile）里，这里只出包、核对签名
   android:
+    needs: candidate
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -333,7 +401,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ env.REF }}
+          ref: ${{ needs.candidate.outputs.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 24
@@ -400,64 +468,97 @@ jobs:
       - name: 收掉签名钥匙
         if: always()
         run: rm -f "${RUNNER_TEMP}/litch-release.p12"
+      - name: 产物来源与 SHA-256
+        env:
+          CANDIDATE_SHA: ${{ needs.candidate.outputs.sha }}
+        run: node scripts/release-provenance.mjs write "${RUNNER_TEMP}/android" android
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: android
-          path: ${{ runner.temp }}/android/*.apk
+          path: ${{ runner.temp }}/android
           if-no-files-found: error
 
-  publish:
-    needs: [adapter, cha, desktop-macos, desktop-windows, android]
-    if: github.event_name == 'push' || (inputs.tag != '' && inputs.publish)
+  promote:
+    needs: [candidate, gate, adapter, cha, desktop-macos, desktop-windows, android]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      CANDIDATE_SHA: ${{ needs.candidate.outputs.sha }}
+      NIGHTLY_TRIAGE: ${{ inputs.nightly-triage || '' }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
-      - name: 这个提交上要有一轮通过的全量
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          sha="$(gh api "repos/${GH_REPO}/commits/${TAG}" --jq .sha)"
-          passed="$(gh run list --workflow full.yml --commit "${sha}" --status success --limit 1 --json databaseId --jq length)"
-          if [ "${passed}" != "1" ]; then
-            echo "${TAG}（${sha}）上没有通过的全量：先 gh workflow run full.yml，过了再重跑这一趟" >&2
-            exit 1
-          fi
-      # 只为了下面生成更新清单的那个脚本
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ env.REF }}
-          sparse-checkout: scripts/update-manifest.mjs
-          sparse-checkout-cone-mode: false
+          ref: ${{ needs.candidate.outputs.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
+          name: adapter
           path: ${{ runner.temp }}/release
-          merge-multiple: true
-      - name: 应用安装包的校验和清单
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: cha
+          path: ${{ runner.temp }}/release
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: desktop-macos
+          path: ${{ runner.temp }}/release
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: desktop-windows
+          path: ${{ runner.temp }}/release
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: android
+          path: ${{ runner.temp }}/release
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: gate-proof
+          path: ${{ runner.temp }}/release
+      - name: 门禁与五个平台产物必须同 SHA，逐文件核对 hash
+        env:
+          GATE_SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          test "$GATE_SHA" = "$CANDIDATE_SHA"
+          node scripts/release-provenance.mjs verify "${RUNNER_TEMP}/release"
+      - name: 晋级前重新检查夜间、已知问题、标签和最新版
+        run: node scripts/release-policy.mjs
+      - name: 校验已有清单并生成应用清单
         working-directory: ${{ runner.temp }}/release
         run: |
+          sha256sum -c codex-harness-adapter-SHA256SUMS.txt
+          sha256sum -c cha-SHA256SUMS.txt
           sha256sum Litch-*.dmg Litch-*-setup.exe Litch-*.apk Litch-*-macos-arm64.zip > Litch-SHA256SUMS.txt
           cat Litch-SHA256SUMS.txt
-      - name: 更新清单
-        run: node scripts/update-manifest.mjs --dir "${RUNNER_TEMP}/release" --tag "${TAG}" --repo "${GITHUB_REPOSITORY}"
-      - name: 挂到发布页
-        working-directory: ${{ runner.temp }}/release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+      - name: 更新清单（dry-run 也生成，但不上传发布页）
         run: |
-          if ! gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release create "${TAG}" --draft --verify-tag --title "${TAG}" --generate-notes
+          version="$(node -p "require('./package.json').version")"
+          node scripts/update-manifest.mjs --dir "${RUNNER_TEMP}/release" --tag "${TAG:-v${version}}" --repo "${GITHUB_REPOSITORY}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: verified-candidate
+          path: ${{ runner.temp }}/release
+          if-no-files-found: error
+      - name: 只上传完整草稿，绝不修改已公开版本
+        if: env.PUBLISH == 'true'
+        working-directory: ${{ runner.temp }}/release
+        run: |
+          releases="$(gh api --paginate "repos/${GH_REPO}/releases?per_page=100" --slurp)"
+          existing="$(printf '%s' "$releases" | jq --arg tag "$TAG" '[.[][] | select(.tag_name == $tag)][0] // null')"
+          if [ "$existing" = null ]; then
+            gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes --latest=false
+          elif [ "$(printf '%s' "$existing" | jq -r .draft)" != true ]; then
+            echo '版本已经公开，禁止覆盖资产' >&2
+            exit 1
           fi
-          gh release upload "${TAG}" --clobber \
+          gh release upload "$TAG" --clobber \
             codex-harness-adapter-*.tar.gz \
-            codex-harness-adapter-SHA256SUMS.txt \
-            install.sh \
-            cha-v*.tar.gz \
-            cha-SHA256SUMS.txt \
-            Litch-*.dmg \
-            Litch-*-setup.exe \
-            Litch-*-macos-arm64.zip \
-            Litch-*-android-arm64.apk \
-            Litch-SHA256SUMS.txt \
-            litch-update.json
+            codex-harness-adapter-SHA256SUMS.txt install.sh \
+            cha-v*.tar.gz cha-SHA256SUMS.txt \
+            Litch-*.dmg Litch-*-setup.exe Litch-*-macos-arm64.zip \
+            Litch-*-android-arm64.apk Litch-SHA256SUMS.txt litch-update.json \
+            gate-proof.json release-provenance-*.json
+          echo '草稿准备完成；经理核对证据并询问用户后才可公开。' >> "$GITHUB_STEP_SUMMARY"

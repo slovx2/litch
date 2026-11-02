@@ -12,8 +12,8 @@
 // 本机用登录钥匙串里的证书和已经存好的配置；发布流程把机密导进一个临时钥匙串，再存一份配置（见 release.yml）。
 // 顺序：内置适配器里的两个可执行文件先各自签（加固的运行时，Node 带上它要的权限，见 packaging/node.entitlements.plist）；
 // 再用 @electron/osx-sign 签 Electron 的部分和整个应用（它会把 Resources 下面所有像二进制的文件都签一遍，
-// 适配器那一大棵依赖不该这样，所以让它跳过适配器目录）；然后公证应用、把公证票钉进去；
-// 做成 dmg，给 dmg 签名、公证、钉票。
+// 适配器那一大棵依赖不该这样，所以让它跳过适配器目录）；做成 dmg 后只公证最外层一次，
+// 分别给 dmg 和原始应用钉票。更新 zip 从钉票后的原始应用制作，不重新构建 dmg。
 // 没给身份时只有 npm run pack 做的本机临时签名，dmg 不签不公证，换一台机器打开会被系统拦下；
 // 带 --require-signing 时（发布流程）这样就报错。
 // 带 --sign-only 时只用 LITCH_SIGN_IDENTITY 把装好的应用原地签好，不公证、不做 dmg：本机测 Computer Use 的授权用。
@@ -29,6 +29,7 @@ import { fileURLToPath } from 'node:url'
 import { sign } from '@electron/osx-sign'
 import { auditWritable } from '../../../scripts/adapter-stage.mjs'
 import { HELPER_APP_NAME, helperTeam, signHelper } from '../../computer-use/build-app.mjs'
+import { notarize, staple } from './notarize.mjs'
 import { OUT_DIR } from './packed.mjs'
 import { machOFiles } from './sign.mjs'
 import { WIN_HELPER_DIR, WIN_HELPER_EXE, withoutWinHelper } from './win-helper.mjs'
@@ -69,27 +70,6 @@ function credentials() {
       ...(notaryKeychain ? ['--keychain', notaryKeychain] : []),
     ],
   }
-}
-
-/** 交给苹果公证，等结果。没过就把苹果给的日志打出来再报错 */
-function notarize(file, creds) {
-  console.log(`公证 ${basename(file)}（要等几分钟）`)
-  const submit = spawnSync(
-    'xcrun',
-    ['notarytool', 'submit', file, ...creds.notary, '--wait', '--output-format', 'json'],
-    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] },
-  )
-  let result = null
-  try {
-    result = JSON.parse(submit.stdout)
-  } catch {}
-  if (result?.status === 'Accepted') return
-  if (result?.id) {
-    spawnSync('xcrun', ['notarytool', 'log', result.id, ...creds.notary], { stdio: 'inherit' })
-  }
-  throw new Error(
-    `${basename(file)} 没有通过公证：${result ? `${result.status}，${result.message}` : submit.stdout}`,
-  )
 }
 
 /** hdiutil 在 CI 的机器上偶尔报“资源忙”，再试两次 */
@@ -161,12 +141,6 @@ async function macos() {
       console.log(`已用开发者身份签好（没公证）：${app}`)
       return null
     }
-    const zip = join(OUT_DIR, 'Litch-notarize.zip')
-    run('ditto', ['-c', '-k', '--keepParent', app, zip])
-    notarize(zip, creds)
-    rmSync(zip, { force: true })
-    run('xcrun', ['stapler', 'staple', app])
-    run('spctl', ['--assess', '--type', 'execute', '--verbose=2', app])
   } else {
     console.warn(
       '没有给开发者身份：应用只有本机的临时签名，dmg 不签名也不公证，换一台机器打开会被系统拦下',
@@ -188,8 +162,10 @@ async function macos() {
 
   if (creds) {
     run('codesign', ['--force', '--sign', creds.identity, ...keychain, '--timestamp', dmg])
-    notarize(dmg, creds)
-    run('xcrun', ['stapler', 'staple', dmg])
+    notarize(dmg, creds.notary)
+    staple(dmg)
+    staple(app)
+    run('spctl', ['--assess', '--type', 'execute', '--verbose=2', app])
     run('spctl', [
       '--assess',
       '--type',
