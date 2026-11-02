@@ -3,6 +3,23 @@
 name: Full
 on:
   workflow_dispatch:
+    inputs:
+      domains:
+        description: '完整领域的 JSON 数组；留空执行全量'
+        type: string
+        default: ''
+      sha:
+        description: '待验源码 SHA；留空使用本次工作流 SHA'
+        type: string
+        default: ''
+      run-ci:
+        description: '同时执行 CI 必跑集合'
+        type: boolean
+        default: true
+      mobile-disable-vulkan:
+        description: '手机稳定性实验：仅禁用模拟器 Vulkan，保持一次基础设施重试上限'
+        type: boolean
+        default: false
   schedule:
     - cron: '17 19 * * *'
   workflow_call:
@@ -16,6 +33,9 @@ on:
       run-ci:
         type: boolean
         default: true
+      mobile-disable-vulkan:
+        type: boolean
+        default: false
 
 env:
   npm_config_cache: ${{ github.workspace }}/.artifacts/npm-cache
@@ -868,9 +888,20 @@ jobs:
           api-level: 35
           arch: x86_64
           target: google_apis
+          # 两组实验固定为历史样本的同一模拟器 build；避免 sdkmanager 最新版漂移。
+          emulator-build: '16740729'
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot${{ inputs.mobile-disable-vulkan && ' -feature -Vulkan' || '' }}
+          pre-emulator-launch-script: node scripts/ci/android-diagnostics.mjs host
           script: node apps/mobile/scripts/e2e.mjs --serial emulator-5554 --shard ${{ matrix.shard }}/3 --apk "${RUNNER_TEMP}/mobile-apk/app-release.apk"
+        env:
+          LITCH_E2E_ARTIFACTS: ${{ runner.temp }}/maestro-out
+          LITCH_E2E_DIAGNOSTICS: '1'
+          # 记录传输与服务生命周期以对齐并发命令；不启用 packets/rwx、不主动 kill/restart ADB。
+          ADB_TRACE: transport,services
+      - name: 保留 ADB 宿主传输日志
+        if: always()
+        run: node scripts/ci/android-diagnostics.mjs collect
         env:
           LITCH_E2E_ARTIFACTS: ${{ runner.temp }}/maestro-out
       - if: always()

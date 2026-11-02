@@ -36,6 +36,7 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { approvalSignedText } from '../../../packages/protocol/src/client-approvals.mts'
 import { encodePairPayload } from '../../../packages/protocol/src/device-pairing.mts'
+import { startAndroidDiagnostics } from '../../../scripts/ci/android-diagnostics.mjs'
 import {
   infrastructureRetryReason,
   recoverAdb,
@@ -71,15 +72,18 @@ const artifacts = process.env.LITCH_E2E_ARTIFACTS ? resolve(process.env.LITCH_E2
 const debugDir = artifacts ?? join(work, 'debug')
 // 每条尝试记起点，只使用这次尝试中观察到的 reverse 丢失，避免沿用旧故障。
 const reverseLosses = []
+let diagnostics = null
 const log = (line) => console.log(`[e2e] ${line}`)
 const summary = (text) => {
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${text}\n`)
 }
 const phase = async (name, run) => {
   const start = Date.now()
+  diagnostics?.mark('phase-start', { name })
   try {
     return await run()
   } finally {
+    diagnostics?.mark('phase-end', { name })
     summary(`- ${name}：${((Date.now() - start) / 1000).toFixed(1)}s`)
   }
 }
@@ -257,14 +261,19 @@ function buildApk() {
   log(`包打好了（${since(start)}）`)
 }
 
-function install(serial) {
+async function install(serial) {
   if (flag('--no-install')) {
     if (!adb(serial, 'shell', 'pm', 'list', 'packages', PKG).includes(PKG))
       throw new Error('模拟器上没装 Litch，去掉 --no-install')
     return log('用已经装着的包')
   }
   const start = Date.now()
-  adb(serial, 'install', '-r', '-g', apk)
+  // 安装期间也要接收 ADB 状态/logcat，不能把十余秒的安装变成观察盲区。
+  await new Promise((done, fail) => {
+    execFile(adbBin, ['-s', serial, 'install', '-r', '-g', apk], (error) =>
+      error ? fail(error) : done(),
+    )
+  })
   log(`装好了（${since(start)}）`)
 }
 
@@ -344,11 +353,15 @@ function keepReverse(serial, rules) {
     busy = true
     execFile(adbBin, ['-s', serial, 'reverse', '--list'], (error, out) => {
       const missing = error ? [] : rules.filter((pair) => !out.includes(pair.join(' ')))
+      if (error) diagnostics?.mark('reverse-query-error', { error: error.message })
       if (missing.length) reverseLosses.push({ at: Date.now(), rules: missing })
-      for (const pair of missing)
+      for (const pair of missing) {
+        diagnostics?.mark('reverse-restore-start', { pair })
         execFile(adbBin, ['-s', serial, 'reverse', ...pair], (failed) => {
+          diagnostics?.mark('reverse-restore-end', { pair, error: failed?.message ?? null })
           if (!failed) log(`模拟器掉过线，补回端口映射 ${pair.join(' → ')}`)
         })
+      }
       busy = false
     })
   }, 2000)
@@ -768,6 +781,15 @@ async function main() {
   if (!flag('--no-install') && !existsSync(apk))
     throw new Error(`没有安装包 ${apk}：加 --build，或者用 --apk 指过去`)
   const serial = await phase('模拟器连接/启动', startEmulator)
+  if (process.env.LITCH_E2E_DIAGNOSTICS === '1') {
+    try {
+      diagnostics = startAndroidDiagnostics({ adbBin, serial, directory: debugDir })
+      cleanups.push(() => diagnostics.stop())
+      await diagnostics.ready
+    } catch (error) {
+      log(`诊断启动失败：${error.message}`)
+    }
+  }
   setScreen(serial)
   await phase('安装 APK', () => install(serial))
   const fixture = needsFixture ? await phase('夹具就绪', () => startFixture(serial)) : null
@@ -786,6 +808,7 @@ async function main() {
       const report = join(attemptDir, 'junit.xml')
       const reverseMark = reverseLosses.length
       const start = Date.now()
+      diagnostics?.mark('flow-start', { flow: name, attempt })
       try {
         status = await runMaestro(serial, [flow], fixture, report, attemptDir)
       } catch (error) {
@@ -795,6 +818,7 @@ async function main() {
       }
       const reverseLost = reverseLosses.length > reverseMark
       const row = { flow: name, attempt, status, seconds: (Date.now() - start) / 1000, retryReason }
+      diagnostics?.mark('flow-end', row)
       appendFileSync(join(debugDir, 'flows.jsonl'), `${JSON.stringify(row)}\n`)
       summary(
         `| ${name} | ${attempt} | ${status === 0 ? '通过' : '失败'} | ${row.seconds.toFixed(1)}s |`,
@@ -810,6 +834,7 @@ async function main() {
       summary(`| ${name} | 基础设施重试准备 | ${retryReason} | — |`)
       log(`基础设施重试：${name}；${retryReason}`)
       const recoveryStart = Date.now()
+      diagnostics?.mark('recovery-start', { flow: name, attempt, reason: retryReason })
       try {
         await recoverInfrastructure(serial, fixture?.reverseRules ?? [])
         recovery.recovered = true
@@ -818,6 +843,7 @@ async function main() {
         recovery.error = error.message
         summary(`| ${name} | 基础设施恢复失败，不重跑 | ${error.message} | — |`)
       }
+      diagnostics?.mark('recovery-end', { flow: name, attempt, ...recovery })
       writeFileSync(
         join(attemptDir, 'infrastructure-recovery.json'),
         `${JSON.stringify({ ...recovery, seconds: (Date.now() - recoveryStart) / 1000 }, null, 2)}\n`,

@@ -54,6 +54,17 @@ Full 的 `mobile-build` 只构建一次 x86_64 APK，上传清单与 APK；三�
 `--shard 1/3`、`2/3`、`3/3` 按历史首轮耗时均衡分配；24 条 flow 每片 8 条，新增 flow 自动纳入。
 每片独立 runner、模拟器与夹具，不共享 Maestro 的 7001 端口。
 
+CI 掉线诊断：`LITCH_E2E_DIAGNOSTICS=1` 在 APK 安装前订阅 ADB 的设备状态，并分段保留连续 logcat。
+`android-events.jsonl` 对齐安装、夹具、每次 flow、reverse 丢失/补回和恢复的时间；`android-logcat-*.txt`
+保留掉线前的日志（每段最多 16 MiB、最多 12 段，截断有事件），不会覆盖第一次失败。宿主的 CPU、内存、
+AVD、SDK 和 KVM 信息在 `android-host.json`，传输层 trace 在 `adb-server.log`（最多 32 MiB）。
+观察流断开后可重新订阅，只恢复日志读取，不重启设备/ADB、不重跑测试。诊断缺失会报告，不改测试结果。
+
+手动 `full.yml` 可给 `domains='["mobile"]'`、`run-ci=false`，只验证手机领域。稳定性实验参数
+`mobile-disable-vulkan` 默认 false，true 只增加模拟器参数 `-feature -Vulkan`；两组使用同一工作流 SHA、
+同一 emulator build 和全 24 条 flow。它是诊断实验，尚不能视为掉线修复；其他 GPU、核数、内存和断言保持。
+不要把不同 runner 上的一次通过认作因果证据，需比较多轮掉线/传输事件、首次失败及重试，而不只看最终绿灯。
+
 流程在 `flows/`，靠测试链接和 testID 驱动，不点坐标；每个流程开头清掉应用数据（`_shared/fresh.yaml`），互不依赖、可以单跑。
 
 | 流程 | 走的路径 | 本机耗时 |
