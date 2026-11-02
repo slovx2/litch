@@ -1,5 +1,5 @@
-# 模拟核心：建议任务。新建会话说“提个子会话”→ 对话里三张提案卡、顶上“几个建议任务等你开始”→ 第一张点“不要”→
-# 第二张过一会儿过期 → 第三张（Pi，沙箱收不紧）“改了再开始”：改标题、关掉完成后唤醒、开始 → 回到对话，卡片下面是起出来的子会话 →
+# 模拟核心：建议任务。新建会话说“提个子会话”→ 对话里三张提案卡、顶上“几个建议任务等你开始”→ 第一张“⋯”里点“忽略”→
+# 第二张过一会儿过期 → 第三张（Pi，沙箱收不紧）“⋯”里“编辑后开始”：改标题、关掉完成后唤醒、开始 → 回到对话，卡片下面是起出来的子会话 →
 # 菜单里的“建议任务”列表：三条都了结了，点一条回到对话里那张卡
 appId: dev.litch.app
 name: mock-建议任务
@@ -38,16 +38,20 @@ tags: [mock]
       text: (Tidy the CHANGELOG|整理 CHANGELOG)
     direction: UP
     timeout: 10000
-# 四个按钮在窄屏上折成两行，“不要”在第二行，可能被输入框挡着：往下翻到它露出来
+# 卡上只有“开始”“在这里做”，“忽略”在卡片右上角的“⋯”里：点标题上方最近的那个“⋯”
 - scrollUntilVisible:
     element:
-      id: proposal:.*:dismiss
-    direction: DOWN
-    centerElement: true
+      id: proposal:.*:more
+      above:
+        text: (Tidy the CHANGELOG|整理 CHANGELOG)
+    direction: UP
     timeout: 10000
 - tapOn:
+    id: proposal:.*:more
+    above:
+      text: (Tidy the CHANGELOG|整理 CHANGELOG)
+- tapOn:
     id: proposal:.*:dismiss
-    index: 0
 # 那张卡片在屏幕上面一截：往回翻到看得见它的状态
 - scrollUntilVisible:
     element:
@@ -59,11 +63,18 @@ tags: [mock]
     visible:
       text: (Expired|已过期)
     timeout: 20000
+# “编辑后开始”也在“⋯”里：Pi 那张卡标题上方的“⋯”
 - scrollUntilVisible:
     element:
-      id: proposal:.*:edit
+      id: proposal:.*:more
+      above:
+        text: (Run the benchmark on Pi|在 Pi 上跑一遍基准)
     direction: DOWN
     timeout: 10000
+- tapOn:
+    id: proposal:.*:more
+    above:
+      text: (Run the benchmark on Pi|在 Pi 上跑一遍基准)
 - tapOn:
     id: proposal:.*:edit
 - extendedWaitUntil:
@@ -78,9 +89,15 @@ tags: [mock]
 - runFlow: ../_shared/full-access.yaml
 - scrollUntilVisible:
     element:
-      id: proposal:.*:edit
+      id: proposal:.*:more
+      above:
+        text: (Run the benchmark on Pi|在 Pi 上跑一遍基准)
     direction: UP
     timeout: 10000
+- tapOn:
+    id: proposal:.*:more
+    above:
+      text: (Run the benchmark on Pi|在 Pi 上跑一遍基准)
 - tapOn:
     id: proposal:.*:edit
 - extendedWaitUntil:

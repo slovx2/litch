@@ -1,6 +1,7 @@
 // 对话里的提案卡（建议任务）：收尾调用带的每条建议、litch_sessions.start 降成的提案各一张。
 // 标题、harness / 模型 / 目录、简报（长的折起来，点了展开）、状态（等你开始、已开始、不要了、撤回了、过期了），
-// 沙箱收不紧时的提醒；等着的有“开始”“在这里做”“改了再开始”“不要”，右上角“⋯”里能对这个 harness 关闭任务卡（CardsOff.tsx）。
+// 沙箱收不紧时的提醒；等着的卡上有“开始”“在这里做”，右上角“⋯”里是“编辑后开始”“忽略”（ProposalActs.tsx）
+// 和对这个 harness 关闭任务卡（CardsOff.tsx）。
 // 这些卡片排在回合最下方（rows.ts）。已开始的下面一行是实际起出来的子会话
 // （它的 harness 和目录照子会话本身写，不照提案），点了进去。列表页点一条回来时这张描一圈。
 // offer 卡（start 带 initiation offer，用户这条消息是和会话无关的新任务）：只有标题和一句说明，
@@ -20,6 +21,7 @@ import { SANDBOX_LEVEL } from '../../../../../packages/ui/src/tree/sandbox.ts'
 import { badgeOf } from '../../screens/sessions/rows'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { Sheet } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import type { Props } from '../cells'
 import { useTranscript } from '../context'
@@ -27,7 +29,7 @@ import { useCardsOff } from './CardsOff'
 import { ChildLine } from './ChildLine'
 import { useFlashed, useProposalClock } from './hooks'
 import { isLongBrief, isOfferStatus, needsUser, STATUS_TEXT } from './logic'
-import { OfferActs, ProposalActs } from './ProposalActs'
+import { MoreButton, OfferActs, ProposalActsRow, useProposalActs } from './ProposalActs'
 
 /** offer 卡上那句说明，按状态（已开始的不写，下面是子会话那一行） */
 const OFFER_NOTE = {
@@ -51,6 +53,13 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
   const lit = useFlashed(proposalId || undefined)
   const [unfolded, setUnfolded] = useState(false)
   const cardsOff = useCardsOff(deviceId, sessionId, proposalId)
+  const acts = useProposalActs(
+    deviceId,
+    sessionId,
+    proposalId,
+    proposal?.worktree ?? proposal?.worktreeDefault ?? false,
+  )
+  const [menuOpen, setMenuOpen] = useState(false)
   // 列表里还没有这一张：开始了的看侧栏里谁记着从它开始；offer 的调用还没有结果（还在等你选），当作等你选；
   // 否则说不清
   const status = proposal
@@ -78,6 +87,9 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
     offer && status !== null && status in OFFER_NOTE
       ? OFFER_NOTE[status as keyof typeof OFFER_NOTE]
       : null
+  const menu = offer
+    ? []
+    : [...(waiting ? acts.menu : []), ...(cardsOff.action ? [cardsOff.action] : [])]
   const nameOf = (id: string) => device?.harnesses.find((entry) => entry.id === id)?.name ?? id
   const meta = [
     harness ? nameOf(harness) : null,
@@ -114,7 +126,9 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
               {t(STATUS_TEXT[status])}
             </Text>
           ) : null}
-          {offer ? null : cardsOff.button}
+          {menu.length > 0 ? (
+            <MoreButton onPress={() => setMenuOpen(true)} testID={`proposal:${proposalId}:more`} />
+          ) : null}
         </View>
         <Text style={[styles.title, { color: c.ink, fontSize: font.size.body }]}>{title}</Text>
         {note ? (
@@ -183,14 +197,7 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
             {t('proposal.wider', { level: t(SANDBOX_LEVEL[proposal.widerSandbox]) })}
           </Text>
         ) : null}
-        {waiting ? (
-          <ProposalActs
-            deviceId={deviceId}
-            sessionId={sessionId}
-            proposalId={proposalId}
-            worktree={proposal.worktree ?? proposal.worktreeDefault}
-          />
-        ) : null}
+        {waiting ? <ProposalActsRow acts={acts} /> : null}
         {choosing ? (
           <OfferActs
             deviceId={deviceId}
@@ -201,7 +208,7 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
         ) : null}
         {offer ? null : cardsOff.notice}
       </View>
-      {offer ? null : cardsOff.sheet}
+      <Sheet visible={menuOpen} actions={menu} onClose={() => setMenuOpen(false)} />
       {status === 'started' && childId ? (
         <ChildLine childId={childId} fallback={title} testID={`proposal:${proposalId}:child`} />
       ) : null}

@@ -3,7 +3,7 @@ import { AppState, Platform, StyleSheet, Text, View } from 'react-native'
 import { BACKGROUND_MINUTES, batteryState, openBatterySettings } from '../../platform/background'
 import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button, Row, SectionLabel } from '../../ui/kit/controls'
+import { Button, SectionLabel, ValueRow } from '../../ui/kit/controls'
 import { Sheet } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 
@@ -29,12 +29,14 @@ export function ConnectionSection() {
   return (
     <View testID="settings:connection">
       <SectionLabel>{t('connection.settings')}</SectionLabel>
-      <Row
-        title={t('connection.timeout')}
-        detail={label(minutes)}
-        onPress={() => setChoosing(true)}
-        testID="settings:backgroundTimeout"
-      />
+      <View style={[styles.group, { borderColor: c.line2 }]}>
+        <ValueRow
+          title={t('connection.timeout')}
+          value={label(minutes)}
+          onPress={() => setChoosing(true)}
+          testID="settings:backgroundTimeout"
+        />
+      </View>
       <Text style={note}>
         {t(minutes === null ? 'connection.never.note' : 'connection.timeout.note')}
       </Text>
@@ -94,6 +96,7 @@ export function ConnectionSection() {
 }
 
 const styles = StyleSheet.create({
+  group: { borderTopWidth: 1, borderBottomWidth: 1 },
   note: { paddingHorizontal: 16, paddingTop: 6, fontSize: 12, lineHeight: 17 },
   // 和批准钥匙那一节同样的框：说明、状态和操作放在一起，和上面的行区分开
   system: { marginTop: 12, borderTopWidth: 1, borderBottomWidth: 1, padding: 16, gap: 8 },

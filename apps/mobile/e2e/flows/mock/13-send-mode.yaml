@@ -36,15 +36,26 @@ tags: [mock]
 - openLink: litch://home
 - tapOn:
     id: devices:settings
+# 一行“回合进行中发消息　立即发送 ›”，点开是单选的选择单，选完收起、那一行写新值
 - scrollUntilVisible:
     element:
-      id: settings:sendMode:queue
+      id: settings:sendMode
     direction: DOWN
 - tapOn:
+    id: settings:sendMode
+- extendedWaitUntil:
+    visible:
+      id: settings:sendMode:queue
+    timeout: 5000
+- tapOn:
     id: settings:sendMode:queue
+- extendedWaitUntil:
+    notVisible:
+      id: settings:sendMode:queue
+    timeout: 5000
 - assertVisible:
-    id: settings:sendMode:queue
-    selected: true
+    id: settings:sendMode
+    text: .*(Queue|排队).*
 - openLink: litch://open?session=s2&device=local
 - extendedWaitUntil:
     visible:

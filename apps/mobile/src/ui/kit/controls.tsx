@@ -11,6 +11,7 @@ import {
   type TextInputProps,
   View,
 } from 'react-native'
+import { useT } from '../i18n'
 import { type StatusKind, type Theme, useTheme } from '../theme'
 import { useBreath } from './breath'
 
@@ -145,6 +146,56 @@ export function Row({
   )
 }
 
+/**
+ * 一行设置：左边名字，右边现在的值和 ›，点了出选择单。设置页上几项里选一项的都用它，
+ * 读屏名称是“名字：值”
+ */
+export function ValueRow({
+  title,
+  value,
+  onPress,
+  testID,
+}: {
+  title: string
+  value: string
+  onPress(): void
+  testID?: string
+}) {
+  const t = useT()
+  const theme = useTheme()
+  const { c } = theme
+  return (
+    <Pressable
+      accessibilityRole="button"
+      aria-label={t('app.valued', { name: title, value })}
+      testID={testID}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.valueRow,
+        {
+          minHeight: theme.hit,
+          borderBottomColor: c.line1,
+          backgroundColor: pressed ? c.press : c.panel,
+        },
+      ]}
+    >
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.valueTitle,
+          { color: c.ink, fontSize: theme.font.size.body, fontFamily: theme.font.ui },
+        ]}
+      >
+        {title}
+      </Text>
+      <Text numberOfLines={1} style={[styles.value, { color: c.ink2, fontFamily: theme.font.ui }]}>
+        {value}
+      </Text>
+      <Text style={{ color: c.ink3 }}>›</Text>
+    </Pressable>
+  )
+}
+
 /** 分组的小标题（复古皮肤里用等宽字） */
 export function SectionLabel({ children, right }: { children: string; right?: ReactNode }) {
   const theme = useTheme()
@@ -212,27 +263,41 @@ export function Empty({
   )
 }
 
-/** 可选的小块：一排里选一个或几个（日程种类、星期）。选中反白 */
+/** 可选的小块：一排里选一个或几个（日程种类、星期、新会话的 harness）。选中反白 */
 export function Chip({
   label,
   on,
   onPress,
+  onLongPress,
   disabled,
+  dim,
+  radio,
+  accessibilityLabel,
   testID,
 }: {
   label: string
   on?: boolean
   onPress?(): void
+  onLongPress?(): void
   disabled?: boolean
+  /** 画成不能用的样子，但还能点（点了说为什么不能用） */
+  dim?: boolean
+  /** 几个里只能选一个：读屏角色是 radio */
+  radio?: boolean
+  accessibilityLabel?: string
   testID?: string
 }) {
   const { c, radius } = useTheme()
   return (
     <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: !!on, disabled: !!disabled }}
+      accessibilityRole={radio ? 'radio' : 'button'}
+      accessibilityState={
+        radio ? { checked: !!on, disabled: !!disabled } : { selected: !!on, disabled: !!disabled }
+      }
+      {...(accessibilityLabel ? { accessibilityLabel } : {})}
       disabled={disabled || !onPress}
       onPress={onPress}
+      onLongPress={onLongPress}
       testID={testID}
       hitSlop={4}
       style={({ pressed }) => [
@@ -241,7 +306,7 @@ export function Chip({
           borderColor: on ? c.line3 : c.line2,
           borderRadius: radius.s,
           backgroundColor: on ? c.selBg : pressed ? c.press : 'transparent',
-          opacity: disabled ? 0.5 : 1,
+          opacity: disabled || dim ? 0.5 : 1,
         },
       ]}
     >
@@ -309,6 +374,15 @@ const styles = StyleSheet.create({
   rowTitle: { flex: 1, fontWeight: '500' },
   rowMeta: { fontSize: 11 },
   rowDetail: { fontSize: 13, marginTop: 2 },
+  valueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  valueTitle: { flexShrink: 0, maxWidth: '60%' },
+  value: { flex: 1, fontSize: 15, textAlign: 'right' },
   section: {
     flexDirection: 'row',
     alignItems: 'center',

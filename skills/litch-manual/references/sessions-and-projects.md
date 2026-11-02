@@ -310,8 +310,8 @@ explain it:
   Monitor, a dsh background job, a long-running Codex command, or a background command Litch gives Pi,
   OpenCode and ACP sessions through its `litch_shell` tools (on by default; each harness's "Background
   commands" setting turns it off). The session counts as idle, not stuck:
-  a breathing line above the composer says how many are running, counting running subagents too;
-  clicking it opens the Background tasks tab. That tab lists background commands and the harness's own
+  a breathing line above the composer says how many are running, counting running subagents too (on
+  the phone a small pill with the mark and the count); clicking it opens the Background tasks tab. That tab lists background commands and the harness's own
   subagents together (running first, then finished ones; type icon, name, elapsed time and status).
   Sub-sessions are not background tasks: they sit under their parent in the sidebar, and you stop one
   from its own page. Click a subagent to open its page below the list, a command to see its output.

@@ -1,4 +1,4 @@
-// 新会话：选 harness（设备上可用的不止一个时）、建在哪（工作区、不属于任何工作区、或者自己填一个目录）、
+// 新会话：选 harness（设备上可用的不止一个时，一排胶囊）、建在哪（工作区、不属于任何工作区、或者自己填一个目录）、
 // 模型和权限这些（没选的显示对面不带设置新建时会用的，建会话时照显示的发），写第一句话发出去。
 // 建会话和发第一条消息是一条命令（session.create），成了就把这一页换成详情页；没成就把文字还回输入框。
 // harness 会持续目标时第一句可以是 `/goal 要做到的事`：建好会话就设目标、不发消息（和桌面一样）。
@@ -31,7 +31,7 @@ import { SlashGoal } from '../../detail/goal/SlashGoal'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Row, SectionLabel } from '../../ui/kit/controls'
+import { Chip, Row, SectionLabel } from '../../ui/kit/controls'
 import { Prompt } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
@@ -61,7 +61,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets()
   const keyboard = useKeyboardState((state) => (state.isVisible ? state.height : 0))
   const lifted = keyboard > 0 ? keyboard - insets.bottom : 0
-  const { c } = useTheme()
+  const { c, font } = useTheme()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId))
   const [where, setWhere] = useState<Where>(() => {
@@ -71,6 +71,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
   })
   const [asking, setAsking] = useState(false)
   const [chosenHarness, setChosenHarness] = useState<string | undefined>(undefined)
+  const [harnessNote, setHarnessNote] = useState<{ id: string; text: string } | null>(null)
   const [own, setOwn] = useState<{ slot: string; picks: Partial<SessionSettings> }>({
     slot: '',
     picks: {},
@@ -206,25 +207,39 @@ export function NewSessionScreen({ navigation, route }: Props) {
     setError(null)
     setWhere(next)
   }
-  const harnessRow = (entry: HarnessView) => {
+  /** 一个 harness 的小注：能用的是版本号，不能用的是原因 */
+  const aboutHarness = (entry: HarnessView) =>
+    entry.state === 'ready'
+      ? (entry.version ?? '')
+      : entry.reason
+        ? t.text(entry.reason)
+        : t(`harness.state.${entry.state}`)
+  const harnessChip = (entry: HarnessView) => {
     const usable = entry.state === 'ready'
+    const about = aboutHarness(entry)
     return (
-      <Row
+      <Chip
         key={entry.id}
         testID={`new:harness:${entry.id}`}
-        title={`${entry.badge}  ${entry.name}`}
-        detail={
-          usable
-            ? (entry.version ?? undefined)
-            : entry.reason
-              ? t.text(entry.reason)
-              : t(`harness.state.${entry.state}`)
+        label={entry.name}
+        radio
+        on={entry.id === harness?.id}
+        dim={!usable}
+        accessibilityLabel={
+          about ? t('app.valued', { name: entry.name, value: about }) : entry.name
         }
-        selected={entry.id === harness?.id}
-        {...(usable ? { onPress: () => setChosenHarness(entry.id) } : {})}
+        // 能用的点了就选上；不能用的点了在下面写原因。长按看版本号
+        onPress={() => {
+          if (usable) {
+            setChosenHarness(entry.id)
+            setHarnessNote(null)
+          } else setHarnessNote({ id: entry.id, text: about })
+        }}
+        onLongPress={() => setHarnessNote({ id: entry.id, text: `${entry.name} ${about}` })}
       />
     )
   }
+  const shownNote = harnessNote && offered.some((entry) => entry.id === harnessNote.id)
 
   return (
     <Screen
@@ -245,7 +260,24 @@ export function NewSessionScreen({ navigation, route }: Props) {
             {ready.length > 1 ? (
               <>
                 <SectionLabel>{t('newSession.harness')}</SectionLabel>
-                {offered.map(harnessRow)}
+                {/* 一排胶囊，放不下就横着滑；版本号和不能用的原因点了（长按）才写在下面 */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  accessibilityRole="radiogroup"
+                  contentContainerStyle={styles.harnesses}
+                >
+                  {offered.map(harnessChip)}
+                </ScrollView>
+                {shownNote ? (
+                  <Text
+                    testID="new:harness:note"
+                    style={[styles.harnessNote, { color: c.ink3, fontSize: font.size.meta }]}
+                  >
+                    {harnessNote.text}
+                  </Text>
+                ) : null}
               </>
             ) : null}
             <SectionLabel>{t('compose.new.where')}</SectionLabel>
@@ -380,5 +412,7 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   clip: { flex: 1, overflow: 'hidden' },
   swatch: { width: 4, alignSelf: 'stretch' },
+  harnesses: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 4 },
+  harnessNote: { paddingHorizontal: 16, paddingTop: 2, lineHeight: 17 },
   blocked: { paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, lineHeight: 20 },
 })

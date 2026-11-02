@@ -205,8 +205,8 @@ sessions remain. This does not authorize archiving unrelated sessions. There is 
 ## Suggested tasks
 
 A suggestion is a proposed task, not work already started and not a manager board item. Its card
-offers **Start**, **Edit and start**, **Do it here**, and **Dismiss**. The brief shows the background and
-task; expand it before starting. Missing choices inherit from the parent at the time you start it
+offers **Start**, **Edit and start**, **Do it here**, and **Dismiss** (on the phone the card shows Start and
+Do it here, the other two are under ⋯). The brief shows the background and task; expand it before starting. Missing choices inherit from the parent at the time you start it
 (a different harness uses its own model/effort defaults). Worktree behavior and session authorization
 are in `sessions-and-projects.md`.
 
@@ -250,7 +250,7 @@ and whether the cards were handled or expired. Increasing retention does not res
 
 ### 看板答复与待办提示
 
-桌面侧栏和手机经理目录里，经理行前面的记号只表示经理会话自己：回合在跑是“运行中”的记号，回合结束但它的后台命令还在跑是后台任务的呼吸记号（写“N 个后台任务正在运行”），与普通会话行相同；只有工作线在跑时不画记号，文字写“N 条工作线运行中”，各条工作线的记号在其子行上（手机不嵌套工作线）。文字依次为运行中、N 条工作线运行中、N 个后台任务正在运行、空闲。经理页和工作线页的输入框上方都有“N 个后台任务正在运行”，点开可看命令、用时并停止。
+桌面侧栏和手机经理目录里，经理行前面的记号只表示经理会话自己：回合在跑是“运行中”的记号，回合结束但它的后台命令还在跑是后台任务的呼吸记号（写“N 个后台任务正在运行”），与普通会话行相同；只有工作线在跑时不画记号，文字写“N 条工作线运行中”，各条工作线的记号在其子行上（手机不嵌套工作线）。文字依次为运行中、N 条工作线运行中、N 个后台任务正在运行、空闲。经理页和工作线页的输入框上方都有“N 个后台任务正在运行”（手机上是只写记号和个数的小胶囊），点开可看命令、用时并停止。
 
 The dot on a manager's row, in the desktop sidebar and in the phone's manager list, describes the
 manager session itself, as on ordinary rows: a running turn, or the breathing background mark with "N background tasks running" when its turn has ended but a

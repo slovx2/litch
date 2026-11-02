@@ -1,6 +1,7 @@
 // 提案卡、offer 卡、“改了再开始”上的“新工作树”开关：开着子会话有自己的工作树和分支，关着共用当前目录。
 // 设备不能建工作树（没有 git、旧设备服务）时不出。初值照设备算的缺省（父会话在工作树里就开着）或模型定的，
-// 和桌面的 packages/ui/src/worktrees/WorktreeCheck.tsx 一样。
+// 和桌面的 packages/ui/src/worktrees/WorktreeCheck.tsx 一样。卡片上用紧凑的（compact）：只写名字、跟在按钮后面，
+// 说明只在读屏提示里；“编辑后开始”那一页照常写出说明。
 import { type DeviceView, keys } from '@litch/core'
 import { StyleSheet, Switch, Text, View } from 'react-native'
 import { useKey } from '../../shell/services'
@@ -18,6 +19,7 @@ export function WorktreeSwitch({
   onChange,
   testID,
   inset,
+  compact,
 }: {
   deviceId: string
   value: boolean
@@ -26,10 +28,26 @@ export function WorktreeSwitch({
   testID: string
   /** 表单页里和别的开关对齐：左右各留 16 */
   inset?: boolean
+  /** 卡片按钮行里：只写名字，说明进读屏提示 */
+  compact?: boolean
 }) {
   const t = useT()
   const { c, font } = useTheme()
   if (!useWorktreesOn(deviceId)) return null
+  if (compact)
+    return (
+      <View style={styles.compact}>
+        <Text style={{ color: c.ink2, fontSize: font.size.meta }}>{t('worktree.check')}</Text>
+        <Switch
+          testID={testID}
+          value={value}
+          disabled={disabled}
+          onValueChange={onChange}
+          accessibilityLabel={t('worktree.check')}
+          accessibilityHint={t('worktree.check.hint')}
+        />
+      </View>
+    )
   return (
     <View style={[styles.row, inset ? styles.inset : null]}>
       <View style={styles.text}>
@@ -54,6 +72,7 @@ export function WorktreeSwitch({
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
   inset: { paddingHorizontal: 16 },
+  compact: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   text: { flex: 1, gap: 2 },
   label: {},
   hint: { lineHeight: 18 },

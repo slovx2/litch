@@ -27,11 +27,14 @@ export interface SheetAction {
 export function Sheet({
   visible,
   title,
+  note,
   actions,
   onClose,
 }: {
   visible: boolean
   title?: string
+  /** 标题下的一句说明：选项各是什么意思、选了有什么不明显的后果 */
+  note?: string
   actions: SheetAction[]
   onClose(): void
 }) {
@@ -60,6 +63,17 @@ export function Sheet({
             style={[styles.sheetTitle, sectionFont(theme), { color: c.ink2 }]}
           >
             {title}
+          </Text>
+        ) : null}
+        {note ? (
+          <Text
+            style={[
+              styles.sheetNote,
+              title ? styles.sheetNoteTitled : null,
+              { color: c.ink3, fontSize: theme.font.size.meta },
+            ]}
+          >
+            {note}
           </Text>
         ) : null}
         {actions.map((action) => (
@@ -294,6 +308,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
+  sheetNote: { paddingHorizontal: 16, paddingVertical: 12, lineHeight: 18 },
+  sheetNoteTitled: { paddingTop: 0 },
   sheetText: { fontSize: 16 },
   sheetValued: {
     flexDirection: 'row',

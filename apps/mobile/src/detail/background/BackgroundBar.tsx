@@ -1,4 +1,6 @@
-// 输入框上方的一行（和待办的小按钮排在一起，Composer.tsx）：后台还有任务在跑时出现，只说有几个在跑，整条一起慢呼吸（减少动态效果时不动）。
+// 输入框上方的一个小胶囊（和待办、回报的小按钮排在一起，Composer.tsx）：后台还有任务在跑时出现，只写记号和个数，
+// 整个一起慢呼吸（减少动态效果时不动），读屏名称是整句“N 个后台任务正在运行”。不放标题栏：那里已有定时任务的时钟和菜单，
+// 窄屏上再加一个图标会把标题挤得更短，而且这里离输入框近、和其他小按钮同一排，有就多一个胶囊，没有就不占地方。
 // 数的是合起来的整张（state.ts）：后台命令、引擎自己派出的子代理、会话树里的子会话，都叫后台任务。
 // 点一下进“后台任务”页（src/screens/background/BackgroundScreen.tsx）。人接着说话、新回合在跑时照样在
 // （后台的任务没有停），全部跑完就没了。
@@ -42,6 +44,7 @@ export function BackgroundBar({ store }: { store: SessionStore }) {
       }
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
+      hitSlop={6}
       style={[styles.bar, { borderColor: c.accent, borderRadius: theme.radius.m }]}
     >
       <Animated.View
@@ -49,7 +52,7 @@ export function BackgroundBar({ store }: { store: SessionStore }) {
         style={[StyleSheet.absoluteFill, { backgroundColor: c.accent, opacity: glow }]}
       />
       <Animated.View style={[styles.dot, { backgroundColor: c.accent, opacity: breath }]} />
-      <Text style={[styles.lead, { color: c.ink }]}>{t('background.bar', { count })}</Text>
+      <Text style={[styles.lead, { color: c.ink, fontFamily: theme.font.mono }]}>{count}</Text>
       <Text style={{ color: c.ink3 }}>›</Text>
     </Pressable>
   )
@@ -60,7 +63,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     minHeight: 32,
     paddingHorizontal: 10,
     marginBottom: 6,

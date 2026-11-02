@@ -40,9 +40,11 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
 - On a machine without the desktop app, `codex-harness-adapter pair` shows the same QR code in a
   terminal.
 - Settings of the Litch app on the phone itself are out of reach (exception E9).
-  They live in the phone app under Settings: language, theme (follow the system, light, dark), skin
-  (Retro, Literary, Standard, the same three as on the desktop; default Retro), connection, task cards, the
-  sign-in approval key's fingerprint, updates.
+  They live in the phone app under Settings: Appearance (language, theme: follow the system, light,
+  dark; skin: Retro, Literary, Standard, the same three as on the desktop, default Retro), Conversation
+  (sending during a turn), connection, task cards, the sign-in approval key's fingerprint, updates.
+  Every pick-one setting is a single row with its current value (for example "Theme  Light ›"); tap it
+  to choose in a sheet. 手机设置里每个单选项都是一行“名称　当前值 ›”，点开在底部单里选。
 
 ## Android background connections
 
@@ -79,6 +81,16 @@ or global Suggestions entry; it keeps its per-session suggestion list (`managers
   手机输入框旁的“+”里是添加图片和对话参数（模型、强度、速度、权限、计划模式），每项写着当前值；计划模式开着时“+”上有强调色圆点。
 - **Scheduled task**: a session run by a scheduled task (or targeted by one) shows a ⏱ clock in the
   title bar; tap it to open the task. 定时任务跑出的会话在标题栏显示时钟，点开是任务详情。
+- **Background tasks**: while background tasks run, a small pill above the input box shows a breathing
+  mark and their count (screen readers say "N background tasks running"); tap it to open the
+  Background tasks page. 输入框上方的小胶囊只写记号和个数，点开看后台任务。
+- **Suggested task cards**: a waiting card shows **Start** and **Do it here**; **Edit and start**,
+  **Dismiss** and turning task cards off are under ⋯ at the card's top right. The "New worktree" switch
+  sits beside the buttons (it moves below them on narrow screens); its explanation is on the Edit and
+  start page. 卡上只有“开始”“在这里做”，其余在右上角“⋯”里。
+- **New session**: harnesses are a row of pills (swipe sideways when they do not fit). A dimmed pill
+  cannot be used on this device; tap it to see why. Long-press a pill to see its version.
+  新建对话的 harness 是一排胶囊，置灰的点了写原因，长按看版本。
 - **Usage and limits**: tap the small context ring beside the input box (it fills with the share of
   context in use), or ⋯ → Usage and limits. 输入框旁的小圆环按上下文用量填充，点开看具体数字。It shows the
   context in use and, for subscription logins (Claude Code with an Anthropic subscription, Codex with a
