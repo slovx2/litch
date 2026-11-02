@@ -2,16 +2,16 @@
 // - threads：见过的会话属于哪个 harness（路由要用），外加它的近况（更新时间、归没归档、是不是临时的）
 // - 工作区、会话到工作区的归属、分区与置顶（表由 workspaces.mts、sections.mts 建）
 // - 从各引擎导入过没有（workspace-import.mts）
-// 项目权限确认也在本库；不能把整库当成可重建缓存删除。
-import { closeSync, existsSync, openSync, rmSync, statSync } from 'node:fs'
+// 项目、归属、分区和权限确认都是持久数据；任何版本都不能删库重建。
+import { closeSync, existsSync, openSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { assertStoreFormat, initializeStoreFormat } from '../../shared/src/store-format.mjs'
 import { ensureParent } from '../../shared/src/util.mjs'
 
 /**
- * v3 起包含不能重建的项目权限确认；以后升结构版本必须为 v3 及以上的库写迁移，不能删库。
- * v3 以前只有可重建的数据（索引重新积累，工作区重新导入），保留旧行为直接重建。
+ * v2 已保存设备独有的项目和归属，不能靠引擎重新导入恢复。
+ * v3 增加项目权限，v4 增加重启续跑；升级只在事务中加表，未知版本拒绝打开。
  */
 const SCHEMA_VERSION = 4
 
@@ -35,18 +35,40 @@ export function openDeviceStore(stateDir: string): DatabaseSync {
       throw new Error(
         `设备库是更新的版本（${version}）建的，这一版设备服务只支持到 ${SCHEMA_VERSION}，拒绝降级打开`,
       )
-    if (version < 3)
-      for (const suffix of ['', '-wal', '-shm']) rmSync(`${path}${suffix}`, { force: true })
+    if (version < 2)
+      throw new Error(`设备库版本 ${version} 没有可用迁移，已保留原库；请先备份并联系维护者`)
   }
   // 库文件只有属主可读写，和这个目录里别的文件一致。先把文件建出来再打开：
   // 预写日志等附带的文件会沿用主文件的权限
   if (!existsSync(path)) closeSync(openSync(path, 'a', 0o600))
   const db = new DatabaseSync(path)
-  initializeStoreFormat(db)
-  // v3 起的库含权限确认，结构升级只做事务迁移，不能删除或重建。
+  // 初始化和升级一起提交，失败时连版本号也不变。
   db.exec('BEGIN IMMEDIATE')
   try {
-    db.exec(`CREATE TABLE IF NOT EXISTS restart_turns(
+    const version = Number(db.prepare('PRAGMA user_version').get()?.user_version ?? 0)
+    if (version !== 0) {
+      // 不能用 CREATE IF NOT EXISTS 掩盖损坏或未知的旧结构。
+      db.prepare(
+        'SELECT id,harness,updated_at,archived,ephemeral,seen_at FROM threads LIMIT 0',
+      ).all()
+    }
+    initializeStoreFormat(db)
+    db.exec(`CREATE TABLE IF NOT EXISTS threads(
+      id TEXT PRIMARY KEY,
+      harness TEXT NOT NULL,
+      updated_at INTEGER NOT NULL DEFAULT 0,
+      archived INTEGER NOT NULL DEFAULT 0,
+      ephemeral INTEGER NOT NULL DEFAULT 0,
+      seen_at INTEGER NOT NULL
+    ) WITHOUT ROWID;`)
+    // v2 → v3：权限必须重新明确确认，不能从会话或项目归属推断。
+    if (version < 3)
+      db.exec(`CREATE TABLE IF NOT EXISTS project_permissions(
+        cwd TEXT PRIMARY KEY, permission TEXT NOT NULL, confirmed TEXT NOT NULL
+      ) WITHOUT ROWID;`)
+    // v3 → v4：只新增续跑记录，不动项目、归属、分区、导入标记或权限。
+    if (version < 4)
+      db.exec(`CREATE TABLE IF NOT EXISTS restart_turns(
       thread_id TEXT PRIMARY KEY,
       harness TEXT NOT NULL,
       token TEXT NOT NULL,
@@ -55,24 +77,14 @@ export function openDeviceStore(stateDir: string): DatabaseSync {
       service TEXT NOT NULL DEFAULT '',
       prepared_at INTEGER,
       resume_turn_id TEXT
-    ) WITHOUT ROWID;
-    PRAGMA user_version=${SCHEMA_VERSION};`)
+    ) WITHOUT ROWID;`)
+    db.exec(`PRAGMA user_version=${SCHEMA_VERSION};`)
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
     db.close()
     throw error
   }
-  // 表名和列名要和 packages/shared 项目存储的 threadsTable 对得上：算工作区的最近活动时间、
-  // 判断会话存不存在、是不是临时的，查的就是这张表
-  db.exec(`PRAGMA journal_mode=WAL;
-    CREATE TABLE IF NOT EXISTS threads(
-      id TEXT PRIMARY KEY,
-      harness TEXT NOT NULL,
-      updated_at INTEGER NOT NULL DEFAULT 0,
-      archived INTEGER NOT NULL DEFAULT 0,
-      ephemeral INTEGER NOT NULL DEFAULT 0,
-      seen_at INTEGER NOT NULL
-    ) WITHOUT ROWID;`)
+  db.exec('PRAGMA journal_mode=WAL;')
   return db
 }
