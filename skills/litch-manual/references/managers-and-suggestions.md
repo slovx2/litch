@@ -140,6 +140,8 @@ Choose an option or write an answer. Answers are local drafts until **Submit to 
 not sync before submission. Submitting saves them to the device and asks the manager to handle them.
 Successful drafts clear; failed ones remain. If a decision changed, review its new version before
 confirming. **Clear drafts** clears local unsent answers, questions and For you responses. Closed decisions can be reopened.
+Submitting answers keeps the current decision filter. In **Open**, answered cards leave the list;
+focus continues to the next open decision in the displayed order, or the list header if none follows.
 Answered decisions offer **Edit answer**. Closed decisions offer **Reopen** and, when a previous
 answer exists, **Edit answer**. Submit the revised answer to notify the manager; the previous answer and closure remain in the change history. A revised closed decision
 moves to Answered. Decisions under an ending or ended manager remain read-only.
@@ -278,6 +280,7 @@ the running mark a single ring.
 
 侧栏、收起入口及窄窗口中的合计统一标为“N 待处理 / N to handle”，悬停可查看三类待处理议题的数量明细，数量为零的部分省略。收起入口的按钮与数量标签提供相同明细。侧栏同时保留待处理数与草稿数；看板内“待定”仍只表示决策。
 已答复决策先展示答案，再提供“修改答案”；答复与核对时间沿用消息时间格式。
+提交一条或多条答复后保留当前决策分栏。在“待定”栏，答复成功的卡片移出，焦点接续当前显示顺序中的下一条待定决策；没有下一条时回到列表头，不自动切到“已答复”。
 临时追问的回复标为“助手（临时对话）”；请求卡的回复行仅显示“你的回复”和时间，状态保留在卡片头部。
 
 ### 控制台与议题（0.28）

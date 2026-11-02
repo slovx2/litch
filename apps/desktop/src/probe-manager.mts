@@ -25,6 +25,8 @@ export interface ManagerSeen {
   pendingTooltip: boolean
   draft: boolean
   submitted: boolean
+  submitKeepsPending: boolean
+  batchKeepsPending: boolean
   turnAdded: boolean
   isolated: boolean
   draftKept: boolean
@@ -301,6 +303,11 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     '答复写入看板',
     () => !one('.mg-send') && Boolean(one('.mg-decision')),
   )
+  const submitKeepsPending = Boolean(
+    one('[data-filter="open"][aria-pressed="true"]') &&
+      !one('[data-decision="D-15"]') &&
+      document.activeElement === one('.mg-decision-filter'),
+  )
   const turnAdded = await until('对话新增一回合', () => {
     const turns = chatTurns()
     return turns
@@ -309,6 +316,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   })
   const answerEvent = Boolean((await eventBody('manager-answers')).textContent?.includes('D-15'))
   eventsClean = cleanChat() && eventsClean
+  await click('.mg-decision-filter [data-filter="answered"]')
   await click('[data-decision="D-15"] [data-act="manager-edit-answer"]')
   fill(
     await until('修改答案输入框', () =>
@@ -325,7 +333,9 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     await until(
       '修改答案写回',
       () =>
-        !one('.mg-send') && one('[data-decision="D-15"]')?.textContent?.includes('修改后的答案'),
+        !one('.mg-send') &&
+        one('[data-filter="answered"][aria-pressed="true"]') &&
+        one('[data-decision="D-15"]')?.textContent?.includes('修改后的答案'),
     ),
   )
   if (!one('[data-decision="D-15"] [data-act="manager-question-input"]'))
@@ -984,6 +994,35 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('[data-manager-id="m1"] .mg-pick')
   await until('回到主经理', () => one('[data-manager="session"][data-manager-id="m1"]'))
   await click('[data-board-tab="decisions"]')
+  await click('.mg-decision-filter [data-filter="open"]')
+  // 同批答复首尾两项，保留中间的待定项；焦点应落到它，栏位和可视区域都留在决策列表。
+  for (const id of ['D-17', 'D-12']) {
+    fill(
+      await until(`${id} 批量答复框`, () =>
+        one<HTMLTextAreaElement>(`[data-decision="${id}"] [data-act="manager-answer"]`),
+      ),
+      '批量答复后继续处理待定决策',
+    )
+  }
+  await until(
+    '批量答复可提交',
+    () => !one<HTMLButtonElement>('[data-act="manager-submit"]')?.disabled,
+  )
+  await click('[data-act="manager-submit"]')
+  await until('批量答复完成', () => !one('.mg-send'))
+  const nextDecision = one('[data-decision="D-16"]')
+  const nextBox = nextDecision?.querySelector('header')?.getBoundingClientRect()
+  const bodyBox = one('.mg-body')?.getBoundingClientRect()
+  const batchKeepsPending = Boolean(
+    one('[data-filter="open"][aria-pressed="true"]') &&
+      !one('[data-decision="D-17"]') &&
+      !one('[data-decision="D-12"]') &&
+      document.activeElement === nextDecision &&
+      nextBox &&
+      bodyBox &&
+      nextBox.top >= bodyBox.top &&
+      nextBox.bottom <= bodyBox.bottom,
+  )
   await click('[data-act="manager-end"]')
   await click('.mg-end button:last-child')
   await until('先进入结束中', () => one('[data-manager-status="ending"]'))
@@ -1071,7 +1110,16 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       return button && !button.disabled ? button : null
     })
   ).click()
-  // 交上后切到“已答复”，卡片上不再有答复框
+  // 最后一条答复后仍在待定，焦点落在列表头；用户手动切栏才能看到已答复。
+  await until(
+    '旧设备答复后停在空待定栏',
+    () =>
+      !one('.mg-send') &&
+      Boolean(one('[data-filter="open"][aria-pressed="true"]')) &&
+      !one('[data-decision="D-1"]') &&
+      document.activeElement === one('.mg-decision-filter'),
+  )
+  await click('.mg-decision-filter [data-filter="answered"]')
   oldChecks.answered = Boolean(
     await until(
       '旧设备上的答复交上',
@@ -1103,6 +1151,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     pendingTooltip,
     draft,
     submitted,
+    submitKeepsPending,
+    batchKeepsPending,
     turnAdded,
     isolated,
     draftKept,
@@ -1181,6 +1231,8 @@ export function judgeManager(seen: ManagerSeen): string[] {
     pendingTooltip: '收起看板按钮与待处理数量未提供相同悬停明细',
     draft: '答复没有标为本地草稿',
     submitted: '答复没有提交到看板',
+    submitKeepsPending: '答复后没有留在待定栏，或末条答复后焦点没有回到列表头',
+    batchKeepsPending: '批量答复后没有留在待定栏，或下一条待定决策没有获得焦点和保持可见',
     turnAdded: '提交后对话没有新增回合',
     isolated: '经理子会话漏进普通对话目录',
     draftKept: '切换经理后草稿丢失',

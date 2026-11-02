@@ -23,6 +23,7 @@ import { BoardReferences } from './BoardReferences.tsx'
 import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutcome.tsx'
 import { DraftEnded } from './DraftEnded.tsx'
 import { useManagerFeatures } from './data.ts'
+import { focusDecisionAfterSubmit, nextPendingDecision } from './decision-submit-focus.ts'
 import {
   type AnswerDrafts,
   cancelAnswerEdit,
@@ -85,6 +86,11 @@ export function Decisions({
   /** 正在填忽略理由的那张卡 */
   const [ignoring, setIgnoring] = useState<{ id: ManagerDecisionId; reason: string } | null>(null)
   const cards = useRef<HTMLDivElement>(null)
+  const listHead = useRef<HTMLDivElement>(null)
+  const [submittedFocus, setSubmittedFocus] = useState<{
+    before: string[]
+    accepted: string[]
+  } | null>(null)
   const targetDecision = target
     ? decisions.find((decision) => decision.id === target.id)
     : undefined
@@ -185,6 +191,12 @@ export function Decisions({
               delivery: 'none',
             }
       const next = { ...drafts }
+      // 只接续正在看的待定列表，不改变分栏；失败项保留在原处，追问与其他类别提交不抢焦点。
+      if (visible && filter === 'open' && result.accepted.length)
+        setSubmittedFocus({
+          before: grouped.open.map((decision) => decision.id),
+          accepted: result.accepted.map((decision) => decision.id),
+        })
       for (const decision of result.accepted) {
         const draft = next[decision.id]
         if (draft) next[decision.id] = { ...draft, optionId: null, text: '' }
@@ -225,7 +237,6 @@ export function Decisions({
             ].join(' · '),
           }),
         )
-      else if (answers.length && !questions.length) setFilter('answered')
       setEditing(new Set())
     } catch (cause) {
       setError(reasonOf(cause, t))
@@ -276,10 +287,29 @@ export function Decisions({
     closed: sorted(groups.closed),
     ignored: sorted(groups.ignored),
   }
+  useLayoutEffect(() => {
+    if (!submittedFocus || busy) return
+    if (!visible || filter !== 'open' || target) {
+      setSubmittedFocus(null)
+      return
+    }
+    // 命令回包和看板订阅可能先后到：等成功项真的离开待定，再接续焦点。
+    if (groups.pending.some((decision) => submittedFocus.accepted.includes(decision.id))) return
+    const next = nextPendingDecision(
+      submittedFocus.before,
+      submittedFocus.accepted,
+      groups.pending.map((decision) => decision.id),
+    )
+    const element = next
+      ? cards.current?.querySelector<HTMLElement>(`[data-decision="${next}"]`)
+      : listHead.current
+    if (element) focusDecisionAfterSubmit(element)
+    setSubmittedFocus(null)
+  }, [submittedFocus, busy, visible, filter, target, groups.pending])
   return (
     <>
       <div hidden={!visible}>
-        <div className="mg-decision-filter">
+        <div className="mg-decision-filter" ref={listHead} tabIndex={-1}>
           {(['open', 'answered', 'closed', 'ignored'] as const).map((key) => (
             <button
               type="button"
