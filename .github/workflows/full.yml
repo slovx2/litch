@@ -850,6 +850,9 @@ jobs:
         id: stage-1
         with:
           ref: ${{ needs.source.outputs.sha }}
+      - name: 为模拟器 userdata 与 SDK 腾出空间
+        id: prepare-disk
+        run: bash scripts/ci/mobile-disk.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         id: stage-2
         with:
