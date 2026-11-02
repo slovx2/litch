@@ -11,6 +11,7 @@
 | opencode | Full/opencode完整单测 | OpenCode依赖与隔离CLI |
 | client-engines | Anthropic夹具单测、原三引擎完整窗口检查 | 全部引擎/设备/Go产物、Claude/DSH CLI |
 | real-engines | 六入口首回合、原生Codex/客户端工具、后台工具与唤醒、重启恢复、经理夹具单测与真实入口 | 全部引擎/设备/Go产物、全部隔离CLI |
+| real-engine-tools | real-engines中除首回合、原生Codex、客户端工具外的五项；前三项保留关键Mac | 同上 |
 
 多个集合同时执行时，重叠ID只执行一次，报告仍保留完整请求集合。CLI版本保持原Full/CI基线，Claude用2.1.282；`protocol/versions.json`里的Claude TUI专项版本不代替这个基线。ACP复用同一隔离OpenCode。
 
@@ -21,3 +22,5 @@
 对照成功仅证明这次执行的命令与可观察用例一致，不能证明所有操作系统行为相同。迁移前仍要审阅平台条件、原生调用和skip分支。完整窗口集合包含macOS快捷键、标题栏/侧栏留白、Computer Use设置等差异，仍由原Full/client在Mac覆盖；Swift、LaunchServices、签名/公证和Darwin原生行为不因Linux绿灯被删除。当前引入共享入口和对照工具，正式工作流尚未迁移。
 
 浏览器组中的mac-keychain有三个仅macOS执行的原生用例，另有一个显式环境开关启用的可选NSS用例。整组不能按纯JS迁移。对照工作流选择明确命名的`desktop-portable-unit`，不改`desktop-unit`原清单，不修改浏览器测试断言或既有skip条件；这部分继续由原Mac命令执行。严格对照器不会把带skip的完整集合误报为可迁移。
+
+六入口首回合在Linux对照中曾命中Claude回话内容不完整断言，不能宣称可迁移或以重跑掩盖。`desktop-required`完整保留在Mac；后续平台对照只选择DSH、OpenCode、client-engines、real-engine-tools和desktop-portable-unit。`desktop-required`与`real-engine-tools`合起来仍覆盖原real-engines全部检查，须实际绑定两份成功来源后才能用于门禁，不能只凭子集成功宣布整域通过。

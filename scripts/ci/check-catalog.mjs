@@ -46,6 +46,13 @@ export const checks = [
   node('manager-fixture', 'scripts/check-manager-fixture.mjs'),
 ]
 const units = checks.slice(0, 9).map((check) => check.id)
+const engineTools = [
+  'background-client-tools',
+  'native-codex-background-wake',
+  'restart-resume',
+  'client-fixture-manager',
+  'manager-fixture',
+]
 export const suites = {
   'desktop-unit': { checks: units, desktopBuild: false, clis: [] },
   // 浏览器组包含真实 macOS Keychain/Node-API 测试，必须留在 Mac；原完整集合不缩减。
@@ -84,6 +91,12 @@ export const suites = {
       'client-fixture-manager',
       'manager-fixture',
     ],
+    desktopBuild: true,
+    clis: ['CODEX', 'CLAUDE', 'DSH', 'OPENCODE', 'ACP'],
+  },
+  // 三项原生首回合/客户端工具检查仍由关键Mac覆盖；这里只对照剩余工具与生命周期。
+  'real-engine-tools': {
+    checks: engineTools,
     desktopBuild: true,
     clis: ['CODEX', 'CLAUDE', 'DSH', 'OPENCODE', 'ACP'],
   },

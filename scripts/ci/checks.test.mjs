@@ -36,6 +36,19 @@ test('可移植子集明确排除浏览器，原完整桌面集合仍包含所�
   )
 })
 
+test('引擎工具子集不冒充完整领域，与关键Mac集合组合恰好覆盖原检查', () => {
+  const ids = (names) =>
+    checkPlan(names)
+      .checks.map((check) => check.id)
+      .sort()
+  assert.deepEqual(
+    ids(['desktop-required', 'real-engine-tools']),
+    ids(['desktop-required', 'real-engines']),
+  )
+  assert.ok(!ids(['real-engine-tools']).includes('first-turn'))
+  assert.ok(ids(['real-engines']).includes('first-turn'))
+})
+
 test('读取真实 reporter 形态，保留重名用例、跳过和失败数量，去除耗时与ANSI', () => {
   assert.deepEqual(
     coverage(

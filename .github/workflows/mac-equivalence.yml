@@ -42,14 +42,14 @@ jobs:
           done
           npm run client:setup
       - name: 同版本隔离CLI
-        run: node scripts/ci/install-test-clis.mjs desktop-required client-engines real-engines dsh opencode
+        run: node scripts/ci/install-test-clis.mjs client-engines real-engine-tools dsh opencode
       - run: npm run build
       - name: 同一检查集合，不允许跳过
         run: |
           if [ "$RUNNER_OS" = Linux ]; then
-            xvfb-run -a --server-args='-screen 0 1920x1080x24' node scripts/ci/run-checks.mjs desktop-portable-unit desktop-required dsh opencode client-engines real-engines
+            xvfb-run -a --server-args='-screen 0 1920x1080x24' node scripts/ci/run-checks.mjs desktop-portable-unit dsh opencode client-engines real-engine-tools
           else
-            node scripts/ci/run-checks.mjs desktop-portable-unit desktop-required dsh opencode client-engines real-engines
+            node scripts/ci/run-checks.mjs desktop-portable-unit dsh opencode client-engines real-engine-tools
           fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
@@ -77,4 +77,4 @@ jobs:
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" -n "check-comparison-ubuntu-24.04-${GITHUB_RUN_ATTEMPT}" -D "$RUNNER_TEMP/comparison"
       - name: 核对来源、检查ID、实际用例和跳过数量
         run: |
-          node scripts/ci/compare-checks.mjs "$RUNNER_TEMP/comparison/macos-15.json" "$RUNNER_TEMP/comparison/ubuntu-24.04.json" desktop-portable-unit desktop-required dsh opencode client-engines real-engines
+          node scripts/ci/compare-checks.mjs "$RUNNER_TEMP/comparison/macos-15.json" "$RUNNER_TEMP/comparison/ubuntu-24.04.json" desktop-portable-unit dsh opencode client-engines real-engine-tools
