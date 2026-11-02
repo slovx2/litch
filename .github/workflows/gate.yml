@@ -41,7 +41,7 @@ jobs:
         with:
           node-version: 24.21.0
       - name: 影响范围规则与发版策略的变更案例
-        run: node --test scripts/ci-impact.test.mjs scripts/ci-nightly-base.test.mjs scripts/release-policy.test.mjs scripts/release-provenance.test.mjs apps/desktop/scripts/notarize.test.mjs
+        run: node --test scripts/ci-impact.test.mjs scripts/ci-nightly-base.test.mjs scripts/release-policy.test.mjs scripts/full-proof.test.mjs scripts/release-provenance.test.mjs apps/desktop/scripts/notarize.test.mjs
       - name: 从 48 小时内成功的祖先夜间 Full 计算增量影响范围
         id: impact
         env:

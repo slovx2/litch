@@ -42,7 +42,24 @@ env:
   electron_config_cache: ${{ github.workspace }}/.artifacts/electron-cache
 
 jobs:
+  # dispatch 的 sha 可以和调度提交不同：先解析一次，所有测试统一检出这个不可变 SHA。
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.freeze.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+      - name: 冻结实际待验源码
+        id: freeze
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   gate:
+    needs: source
     if: ${{ toJSON(inputs.run-ci) != 'false' }}
     # 被调用的 CI 汇总需要读 Actions；可复用工作流不能提升调用方的权限。
     permissions:
@@ -50,9 +67,10 @@ jobs:
       actions: read
     uses: ./.github/workflows/ci.yml
     with:
-      sha: ${{ inputs.sha || github.sha }}
+      sha: ${{ needs.source.outputs.sha }}
 
   adapters:
+    needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'adapters') }}
     strategy:
       fail-fast: false
@@ -66,7 +84,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         id: stage-1
         with:
-          ref: ${{ inputs.sha || github.sha }}
+          ref: ${{ needs.source.outputs.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         id: stage-2
         with:
@@ -189,6 +207,7 @@ jobs:
   # Computer Use 的原生助手（Swift）和主进程里接它的那一层：助手的单元测试、执行器与看护的单元测试（桩助手），
   # 再真的经 LaunchServices 起一次临时签名的助手、握手、调不要系统授权的几样（不点、不截图）
   computer-use:
+    needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'computer-use') }}
     runs-on: macos-15
     timeout-minutes: 20
@@ -196,7 +215,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         id: stage-1
         with:
-          ref: ${{ inputs.sha || github.sha }}
+          ref: ${{ needs.source.outputs.sha }}
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: cache-electron
         with:
@@ -238,6 +257,7 @@ jobs:
   # 再把 Windows 的应用和安装包打一遍（和 release.yml 的 desktop-windows 同样的步骤），核对助手装进了 resources/computer-use。
   # 打包的整条链平时只有发版才走，放在这里是为了发版前就拦住它被弄坏
   computer-use-windows:
+    needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'computer-use-windows') }}
     runs-on: windows-2025
     timeout-minutes: 60
@@ -248,7 +268,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         id: stage-1
         with:
-          ref: ${{ inputs.sha || github.sha }}
+          ref: ${{ needs.source.outputs.sha }}
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: cache-electron
         with:
@@ -294,7 +314,7 @@ jobs:
             ~/.cargo/registry/src
             ~/.cargo/git/db
             apps/computer-use-win/target
-          key: cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.fingerprint }}-${{ hashFiles('apps/computer-use-win/Cargo.lock', 'apps/computer-use-win/rust-toolchain.toml') }}-${{ inputs.sha || github.sha }}
+          key: cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.fingerprint }}-${{ hashFiles('apps/computer-use-win/Cargo.lock', 'apps/computer-use-win/rust-toolchain.toml') }}-${{ needs.source.outputs.sha }}
           restore-keys: |
             cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.fingerprint }}-${{ hashFiles('apps/computer-use-win/Cargo.lock', 'apps/computer-use-win/rust-toolchain.toml') }}-
       - name: 助手的单元测试
@@ -344,6 +364,7 @@ jobs:
   # 客户端：核心的单元测试、三个包的类型检查、界面构建，再起真的 Electron 做自检、对话区的滚动验收、输入区的验收、终端面板的验收和远程设备的验收（窗口不显示）。
   # 代码规范检查由上面 adapters 里的 npm run check 一并覆盖。
   client:
+    needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'client') }}
     runs-on: macos-15
     # 原测试阶段可接近 25 分钟；为新增缓存上传与 runner 收尾预留时间，不改变探针等待/断言。
@@ -352,7 +373,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         id: stage-1
         with:
-          ref: ${{ inputs.sha || github.sha }}
+          ref: ${{ needs.source.outputs.sha }}
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: cache-electron
         with:
@@ -441,6 +462,7 @@ jobs:
   # dsh 本体不随适配器分发，测试需要一份真实的 dsh：按 protocol/versions.json 登记的下限版本装到临时前缀。
   # 模型端是回环 mock，SSH 实例发往回环之外的 HTTP(S) 请求都落到陷阱代理上，验收要求一次也没有。
   dsh:
+    needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'dsh') }}
     runs-on: macos-15
     timeout-minutes: 20
@@ -448,7 +470,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         id: stage-1
         with:
-          ref: ${{ inputs.sha || github.sha }}
+          ref: ${{ needs.source.outputs.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         id: stage-2
         with:
@@ -488,6 +510,7 @@ jobs:
   # OpenCode 本体不随适配器分发，测试要一份真实的 opencode：按 protocol/versions.json 登记的验证过的版本
   # （opencodeVerified 的第一个）装到临时前缀。模型端是回环上的假模型，数据目录按 HOME/XDG 隔离在临时目录里。
   opencode:
+    needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'opencode') }}
     runs-on: macos-15
     timeout-minutes: 20
@@ -495,7 +518,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         id: stage-1
         with:
-          ref: ${{ inputs.sha || github.sha }}
+          ref: ${{ needs.source.outputs.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         id: stage-2
         with:
@@ -535,6 +558,7 @@ jobs:
   # 缺哪一个这一步都会直接失败，不会跳过。单独一个 job：它要的依赖比 client 多（引擎包都要装、都要构建；
   # OpenCode 和 ACP 的两个包也在里面，只因为 npm run build 要构建它们，验收还不走这两个引擎）
   client-engines:
+    needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'client-engines') }}
     runs-on: macos-15
     timeout-minutes: 30
@@ -542,7 +566,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         id: stage-1
         with:
-          ref: ${{ inputs.sha || github.sha }}
+          ref: ${{ needs.source.outputs.sha }}
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: cache-electron
         with:
@@ -605,6 +629,7 @@ jobs:
   # codex 收不收、客户端工具调用由设备进程挑执行方，再在各家真的命令行上从界面建会话跑头一个回合。
   # 模型都是回环上的假模型，各家的数据目录隔离在临时目录里。门禁只跑其中 codex 和 Pi 的首回合
   real-engines:
+    needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'real-engines') }}
     runs-on: macos-15
     timeout-minutes: 30
@@ -612,7 +637,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         id: stage-1
         with:
-          ref: ${{ inputs.sha || github.sha }}
+          ref: ${{ needs.source.outputs.sha }}
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: cache-electron
         with:
@@ -694,6 +719,7 @@ jobs:
 
   # 同一份 x86_64 APK 只构建一次；三个独立 runner 下载后核对源码和 SHA-256。
   mobile-build:
+    needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'mobile') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 35
@@ -711,7 +737,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         id: stage-2
         with:
-          ref: ${{ inputs.sha || github.sha }}
+          ref: ${{ needs.source.outputs.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         id: stage-3
         with:
@@ -762,7 +788,7 @@ jobs:
           path: |
             ${{ runner.temp }}/gradle/caches
             ${{ runner.temp }}/gradle/wrapper
-          key: gradle-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-go1.26.10-jdk${{ steps.android-tools.outputs.jdk }}-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'apps/mobile/android/*.gradle', 'apps/mobile/android/gradle.properties', 'apps/mobile/node_modules/react-native/gradle/libs.versions.toml', 'apps/mobile/plugins/**', 'apps/mobile/modules/**', 'mobile/**') }}-${{ inputs.sha || github.sha }}
+          key: gradle-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-go1.26.10-jdk${{ steps.android-tools.outputs.jdk }}-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'apps/mobile/android/*.gradle', 'apps/mobile/android/gradle.properties', 'apps/mobile/node_modules/react-native/gradle/libs.versions.toml', 'apps/mobile/plugins/**', 'apps/mobile/modules/**', 'mobile/**') }}-${{ needs.source.outputs.sha }}
           restore-keys: |
             gradle-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-go1.26.10-jdk${{ steps.android-tools.outputs.jdk }}-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'apps/mobile/android/*.gradle', 'apps/mobile/android/gradle.properties', 'apps/mobile/node_modules/react-native/gradle/libs.versions.toml', 'apps/mobile/plugins/**', 'apps/mobile/modules/**', 'mobile/**') }}-
       # Expo 在 CI 下不执行 RN 传来的 --reset-cache；Metro 自身按源码内容失效转换结果。
@@ -772,7 +798,7 @@ jobs:
           path: |
             ${{ runner.temp }}/metro-tmp/metro-cache
             ${{ runner.temp }}/metro-tmp/metro-file-map-*
-          key: metro-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/metro.*', 'apps/mobile/babel.config.js', 'apps/mobile/patches/**') }}-${{ inputs.sha || github.sha }}
+          key: metro-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/metro.*', 'apps/mobile/babel.config.js', 'apps/mobile/patches/**') }}-${{ needs.source.outputs.sha }}
           restore-keys: |
             metro-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/metro.*', 'apps/mobile/babel.config.js', 'apps/mobile/patches/**') }}-
       - name: 打 release 包
@@ -799,7 +825,7 @@ jobs:
 
   mobile:
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'mobile') }}
-    needs: mobile-build
+    needs: [source, mobile-build]
     strategy:
       fail-fast: false
       matrix:
@@ -810,7 +836,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         id: stage-1
         with:
-          ref: ${{ inputs.sha || github.sha }}
+          ref: ${{ needs.source.outputs.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         id: stage-2
         with:
@@ -921,7 +947,7 @@ jobs:
 
   report:
     if: always()
-    needs: [gate, adapters, computer-use, computer-use-windows, client, dsh, opencode, client-engines, real-engines, mobile-build, mobile]
+    needs: [source, gate, adapters, computer-use, computer-use-windows, client, dsh, opencode, client-engines, real-engines, mobile-build, mobile]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -931,7 +957,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         id: stage-1
         with:
-          ref: ${{ inputs.sha || github.sha }}
+          ref: ${{ needs.source.outputs.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         id: stage-2
         with:
@@ -940,3 +966,17 @@ jobs:
         id: stage-3
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      - name: 记录输入、实际检出和完整领域结果
+        run: node scripts/full-proof.mjs
+        env:
+          FULL_SOURCE_SHA: ${{ needs.source.outputs.sha }}
+          FULL_REQUESTED_SHA: ${{ inputs.sha || '' }}
+          FULL_DOMAINS: ${{ inputs.domains || '' }}
+          FULL_RUN_CI: ${{ github.event_name == 'schedule' || inputs.run-ci }}
+          FULL_MOBILE_DISABLE_VULKAN: ${{ inputs.mobile-disable-vulkan || false }}
+          FULL_NEEDS: ${{ toJSON(needs) }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: full-proof-${{ github.run_attempt }}
+          path: full-proof.json
+          if-no-files-found: error

@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process'
 import { appendFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { findSuccessfulFull } from './full-proof.mjs'
+import { readFullProofArtifact } from './full-proof-artifact.mjs'
 
 export function checkNightly({ nightly, fullPassed, blockers, triage, sha }) {
   if (blockers.length)
@@ -59,18 +61,24 @@ function api(path, paginate = false) {
   return paginate ? result.flat() : result
 }
 
-export function releasePolicy() {
+export async function releasePolicy() {
   const repo = process.env.GITHUB_REPOSITORY
   const sha = process.env.CANDIDATE_SHA
   if (!/^[a-f0-9]{40}$/.test(sha ?? '')) throw new Error('缺少完整候选 SHA')
   const nightly = api(
     `repos/${repo}/actions/workflows/full.yml/runs?event=schedule&status=completed&per_page=1`,
   ).workflow_runs[0]
-  const fullPassed = api(
-    `repos/${repo}/actions/workflows/full.yml/runs?head_sha=${sha}&status=success&per_page=100`,
-  ).workflow_runs.find(
-    (run) => ['workflow_dispatch', 'schedule'].includes(run.event) && run.head_sha === sha,
-  )
+  // head_sha 是工作流提交，dispatch 的 sha 可覆盖实际检出；只认同次运行的完整证明。
+  const fullPassed =
+    nightly && nightly.conclusion !== 'success'
+      ? await findSuccessfulFull(
+          api(`repos/${repo}/actions/workflows/full.yml/runs?status=success&per_page=100`)
+            .workflow_runs,
+          sha,
+          repo,
+          (run) => readFullProofArtifact(repo, run, api),
+        )
+      : undefined
   const blockers = api(`repos/${repo}/issues?labels=release-blocker&state=open&per_page=100`)
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(
@@ -121,4 +129,5 @@ export function releasePolicy() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) releasePolicy()
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+  await releasePolicy()
