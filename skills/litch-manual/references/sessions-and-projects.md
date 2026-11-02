@@ -57,8 +57,8 @@ List updates preserve the selected location; removing that projection item selec
 
 ## 复制消息
 
-桌面端悬停或聚焦消息可见“复制消息”按钮；手机端按钮常显在消息下方。
-手机端等待确认时，确认卡片会为最近消息的正文和复制按钮保留显示空间。
+桌面端悬停或聚焦消息可见“复制消息”按钮。手机端不再在消息下方放复制按钮：长按用户消息选“复制消息”，
+长按回答或点回合状态行的 ⋯ 选“复制回答”；别的会话发来的消息和系统消息展开后有一个小的复制图标。
 复制成功显示“已复制”，失败会给出重试提示。离线和输出中也可复制当前已收到的全文。
 一条回答以消息条目为界：多段过程说明与最终回答分别复制，不合并整个回合；
 手机端把长回答分块显示时仍复制该条完整 Markdown，代码围栏和链接原样保留。
@@ -240,10 +240,13 @@ explain it:
   停止或回合失败后，本客户端尚未发送的消息暂停，不会自动开启下一回合。桌面和手机输入框上方显示
   “已停止，N 条待发”，可发送全部或单条、编辑回输入框、移除。再次输入消息时，发送处先选择
   “连同 N 条待发一起发”（默认）或“只发这条”，一次提交；前者保持各条消息的顺序与附件归属，后者保留原待发。
-  桌面和手机的插话状态放在气泡外下方，不混入正文；排队、停止待发、状态待确认仍分别显示，桌面配有状态图标。
-  正常已发送消息不显示状态文字或图标，读屏名称仍包含状态。“已发送”只表示运行时已接纳，
+  插话状态在气泡左边用一个小记号表示，不占一行：桌面是图标（钟、暂停、圈 i），悬停提示和读屏名称是整句说明；
+  手机是小记号，点一下在对话区底部显示整句说明。排队、停止待发、状态待确认分别表示。手机用户消息的发送时刻也在气泡左边。
+  正常已发送消息不显示状态记号，读屏名称仍包含状态。“已发送”只表示运行时已接纳，
   不保证模型已经执行。只有明确取消的未消费输入进入待发；状态待确认的消息不会自动重发，核实后可编辑再发。
-  Delivery status appears below the bubble on desktop and phone. Queued, stopped pending, and unconfirmed messages remain distinct.
+  Delivery status is a small mark at the left of the bubble on desktop and phone, taking no extra line: an icon on desktop
+  with the full explanation as tooltip and accessible name, and a small mark on the phone that shows the explanation when
+  tapped. Queued, stopped pending, and unconfirmed messages remain distinct.
   Sent messages have no visible status; their accessible name still includes it. Sent means accepted by the runtime, not necessarily acted on by the model.
   待发原文和附件保存在当前客户端，重启后保持暂停并尽量按 Claude 历史对账；尚不在设备间同步。
   编辑时若现有草稿容纳不下附件，消息仍留在待发列表。此阶段仅 Claude 提供交付状态，其他 harness 只统一停止后暂停队列。

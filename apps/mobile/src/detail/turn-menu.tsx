@@ -63,9 +63,10 @@ export function TurnMenu({
   const target = turnId ? turnTarget(store, meta?.can, turnId, pressed) : null
   if (turnId && target) {
     const { user, fork, rollback: back } = target
+    // 按在哪条回答上就复制那一条的全文（和以前回答下的复制按钮同一份），别处按的复制这一回合最后的回答
     const answer =
       pressed && store.kindOf(pressed) === 'agentMessage'
-        ? store.itemText(pressed)
+        ? store.copyText(pressed, (attachment) => t(`attachment.${attachment.kind}`))
         : store.answerText(turnId)
     const userText = user
       ? store.copyText(user.id, (attachment) => t(`attachment.${attachment.kind}`))
@@ -76,9 +77,18 @@ export function TurnMenu({
         () => say(t('message.copy.failed')),
       )
     }
-    if (answer) actions.push({ label: t('detail.menu.copyAnswer'), onPress: () => copy(answer) })
+    if (answer)
+      actions.push({
+        label: t('detail.menu.copyAnswer'),
+        testID: 'menu:copy-answer',
+        onPress: () => copy(answer),
+      })
     if (userText)
-      actions.push({ label: t('detail.menu.copyMessage'), onPress: () => copy(userText) })
+      actions.push({
+        label: t('detail.menu.copyMessage'),
+        testID: 'menu:copy-message',
+        onPress: () => copy(userText),
+      })
     if (fork) {
       actions.push({
         label: t('turn.fork'),

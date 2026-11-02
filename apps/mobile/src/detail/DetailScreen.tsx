@@ -38,8 +38,11 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Detail'>
 
 /** 标题栏的高度（src/ui/kit/Screen.tsx） */
 const HEADER = 52
-/** 至少容纳一行用户正文、气泡内外间距、常显复制按钮和底部留白，不能只露出复制按钮。 */
-const KEEP_TRANSCRIPT = 120
+/**
+ * 至少容纳一行用户正文、气泡内外间距和底部留白。复制收进了长按菜单，气泡下面不再有那一排（36），
+ * 时刻和交付状态在气泡左边
+ */
+const KEEP_TRANSCRIPT = 84
 
 export function DetailScreen({ route, navigation }: Props) {
   const { deviceId, sessionId, title } = route.params

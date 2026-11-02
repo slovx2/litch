@@ -85,6 +85,7 @@ export function CollapsedTurnPreview({ params }: { params: URLSearchParams }) {
               openLink: noop,
               turnMenu: noop,
               copyMessage: noop,
+              notify: noop,
               openDiff: noop,
               openSession: noop,
               viewImage: noop,

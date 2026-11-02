@@ -4,6 +4,7 @@ import type { QueuedMessage } from '@litch/core'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
+import { DeliveryMark } from '../DeliveryMark'
 
 function Mini({
   label,
@@ -114,9 +115,8 @@ export function QueueTray({
                 ? `${text}  [${t('composer.imageCount', { n: message.images.length })}]`
                 : text}
             </Text>
-            {message.delivery ? (
-              <Text style={{ color: c.ink3 }}>{t(`inputDelivery.${message.delivery}`)}</Text>
-            ) : null}
+            {/* 和气泡旁一样只画小记号：这一排的标题已经写了是排队还是停止待发，读屏名称是整句说明 */}
+            <DeliveryMark delivery={message.delivery} />
             {message.delivery === 'held' ? (
               <Mini
                 testID={`queue:${index}:send`}

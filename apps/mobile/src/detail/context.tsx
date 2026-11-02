@@ -31,6 +31,8 @@ export interface TranscriptActions {
   turnMenu(turnId: string): void
   /** 复制指定消息的全文，按下时从会话存储读取，包含刚收到的流式文本。 */
   copyMessage(itemId: string): void
+  /** 在对话区底部闪一句话（记号的说明等） */
+  notify(text: string): void
   /** 到“差异”页看这个会话工作目录里的改动 */
   openDiff(): void
   /** 到另一个会话（分叉来源） */

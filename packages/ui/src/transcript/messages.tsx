@@ -236,6 +236,24 @@ export const UserMessage = memo(function UserMessage({
             {t(open ? 'message.collapse' : 'message.expand')}
           </button>
         ) : null}
+        {/* 交付状态（排队、停止待发、状态待确认）：气泡左边一个小图标，不占一行；说明在悬停提示和读屏名称里。
+            已发送不显示 */}
+        {item.delivery && item.delivery !== 'sent' ? (
+          <span
+            className="umsg-delivery"
+            data-delivery-status={item.delivery}
+            role="img"
+            aria-label={t(`inputDelivery.${item.delivery}.note`)}
+            title={t(`inputDelivery.${item.delivery}.note`)}
+          >
+            <Icon
+              name={
+                item.delivery === 'queued' ? 'clock' : item.delivery === 'held' ? 'pause' : 'info'
+              }
+              small
+            />
+          </span>
+        ) : null}
         <div className="umsg-acts">
           <MessageCopy item={item} />
           {turnId ? (
@@ -248,17 +266,6 @@ export const UserMessage = memo(function UserMessage({
           ) : null}
         </div>
       </div>
-      {item.delivery && item.delivery !== 'sent' ? (
-        <div className="umsg-delivery" data-delivery-status={item.delivery} aria-hidden="true">
-          <Icon
-            name={
-              item.delivery === 'queued' ? 'clock' : item.delivery === 'held' ? 'pause' : 'info'
-            }
-            small
-          />
-          <span>{t(`inputDelivery.${item.delivery}`)}</span>
-        </div>
-      ) : null}
     </>
   )
   if (!event) return message

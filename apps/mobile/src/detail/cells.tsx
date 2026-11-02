@@ -34,6 +34,7 @@ import { useComments, useFlashedRow, useHubValue } from './comments/context'
 import { notePressed } from './comments/hub'
 import { linkCommentRefs, parseCommentHref } from './comments/refs'
 import { useToggleInPlace, useTranscript } from './context'
+import { DeliveryMark } from './DeliveryMark'
 import { linkify } from './links'
 import { MessageCopy } from './MessageCopy'
 import { markdownStyleOf } from './markdownStyle'
@@ -56,7 +57,7 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
   const theme = useTheme()
   const { c, font, radius } = theme
   const t = useT()
-  const { turnMenu } = useTranscript()
+  const { turnMenu, notify } = useTranscript()
   const toggle = useToggleInPlace()
   const peer = row.peer
   if (peer)
@@ -91,8 +92,18 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
     notePressed(row.turnId, row.key)
     turnMenu(row.turnId)
   }
+  // 气泡左边一窄列：交付状态的小记号、发送的时刻，底边和气泡对齐，不在气泡下面另起一行。
+  // 复制在长按菜单（和回合状态行的 ⋯）里
   return (
     <View style={styles.userWrap}>
+      <View style={styles.userSide}>
+        <DeliveryMark delivery={row.delivery} onPress={notify} />
+        {row.sentAt === undefined ? null : (
+          <Text style={{ color: c.ink3, fontSize: font.size.small }}>
+            {stamp(row.sentAt, Date.now(), t.lang)}
+          </Text>
+        )}
+      </View>
       <Pressable
         onLongPress={menu}
         accessibilityLabel={
@@ -128,26 +139,6 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
           </Text>
         ) : null}
       </Pressable>
-      <View style={styles.userActions}>
-        {row.delivery && row.delivery !== 'sent' ? (
-          <Text
-            testID={`input-delivery-${row.delivery}`}
-            style={{
-              color: row.delivery === 'unknown' ? c.wait : c.ink3,
-              fontSize: font.size.small,
-            }}
-          >
-            {t(`inputDelivery.${row.delivery}`)}
-          </Text>
-        ) : null}
-        <MessageCopy itemId={row.key} />
-        {/* 发送的时刻与复制按钮常显在气泡下面。 */}
-        {row.sentAt === undefined ? null : (
-          <Text style={[styles.userTime, { color: c.ink3, fontSize: font.size.small }]}>
-            {stamp(row.sentAt, Date.now(), t.lang)}
-          </Text>
-        )}
-      </View>
     </View>
   )
 })
@@ -328,11 +319,6 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
         ) : null}
         {body}
       </Pressable>
-      {row.last && !row.plan ? (
-        <View style={styles.answerActions}>
-          <MessageCopy itemId={row.itemId} />
-        </View>
-      ) : null}
     </View>
   )
 })
@@ -644,15 +630,21 @@ export const TodoCell = memo(function TodoCell({ row }: Props<'todo'>) {
 export const styles = StyleSheet.create({
   grow: { flex: 1 },
   meta: { fontSize: 13 },
-  userWrap: { paddingHorizontal: 16, paddingVertical: 6, alignItems: 'flex-end' },
-  userTime: { marginTop: 3, marginRight: 2 },
-  userActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  answerActions: { paddingHorizontal: 8 },
+  userWrap: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  userSide: { flexShrink: 0, alignItems: 'flex-end', gap: 2, paddingBottom: 2 },
   userBubble: {
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 8,
     maxWidth: '85%',
+    flexShrink: 1,
     gap: 6,
   },
   userText: { lineHeight: 22 },

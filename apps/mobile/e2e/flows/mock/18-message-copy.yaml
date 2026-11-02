@@ -1,4 +1,4 @@
-# 常显按钮复制用户消息和回答，核对原生剪贴板写入成功后的反馈；全文规则由单测守住。
+# 复制在长按菜单里（用户消息长按、回合状态行的 ⋯），核对原生剪贴板写入成功后的反馈；全文规则由单测守住。
 appId: dev.litch.app
 name: mock-复制整条消息
 tags: [mock]
@@ -11,16 +11,22 @@ tags: [mock]
 - openLink: litch://open?session=s3&device=local
 - extendedWaitUntil:
     visible:
-      id: message-copy:s3-t1-u
+      id: user-message
     timeout: 30000
+# 用户消息：长按出菜单，点“复制消息”
+- longPressOn:
+    id: user-message
 - tapOn:
-    id: message-copy:s3-t1-u
+    id: menu:copy-message
     waitToSettleTimeoutMs: 250
 - assertVisible: (已复制|Copied)
 - extendedWaitUntil:
     notVisible: (已复制|Copied)
     timeout: 10000
+# 回答：回合状态行的 ⋯（读屏也走这里），点“复制回答”
 - tapOn:
-    id: message-copy:s3-t1-a
+    id: turn-menu
+- tapOn:
+    id: menu:copy-answer
     waitToSettleTimeoutMs: 250
 - assertVisible: (已复制|Copied)

@@ -204,6 +204,7 @@ function useActions(store: SessionStore) {
           Linking.openURL(url).catch(() => setFlash(t('detail.link.failed', { url })))
       },
       turnMenu: setMenu,
+      notify: setFlash,
       copyMessage: (itemId) => {
         const text = store.copyText(itemId, (attachment) => t(`attachment.${attachment.kind}`))
         if (!text) return setFlash(t('message.copy.empty'))

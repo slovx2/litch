@@ -80,7 +80,7 @@ const nodes = (node) =>
       ? node.flatMap(nodes)
       : [node, ...nodes(node.props?.children)]
 
-test('桌面消息的四种状态在读屏名称中，只有未落定状态显示在气泡外', async () => {
+test('桌面消息的四种状态在读屏名称中，只有未落定状态在气泡左边画一个小图标', async () => {
   const render = await component(
     new URL('../src/transcript/messages.tsx', import.meta.url).pathname,
     'UserMessage',
@@ -97,16 +97,18 @@ test('桌面消息的四种状态在读屏名称中，只有未落定状态显�
         bubble.props['aria-label'],
         delivery ? `message: inputDelivery.${delivery}` : undefined,
       )
-      assert.equal(
-        nodes(bubble).some((node) => node.props?.['data-delivery-status']),
-        false,
-      )
       if (delivery && delivery !== 'sent') {
         assert.equal(status.props['data-delivery-status'], delivery)
+        // 挂在气泡上、绝对定位到左边（transcript.css），不另起一行
+        assert.ok(nodes(bubble).includes(status))
+        // 只有图标，没有字；说明在悬停提示和读屏名称里
         assert.equal(
-          nodes(status).find((node) => node.type === 'span').props.children[0],
-          `inputDelivery.${delivery}`,
+          nodes(status).some((node) => node !== status && node.type === 'span'),
+          false,
         )
+        assert.equal(status.props.role, 'img')
+        assert.equal(status.props['aria-label'], `inputDelivery.${delivery}.note`)
+        assert.equal(status.props.title, `inputDelivery.${delivery}.note`)
       } else assert.equal(status, undefined)
     }
   } finally {
@@ -114,7 +116,7 @@ test('桌面消息的四种状态在读屏名称中，只有未落定状态显�
   }
 })
 
-test('手机状态在气泡下方，已发送无可见状态，读屏仍读正文和状态', async () => {
+test('手机状态在气泡左边一窄列里，不在气泡里也不另起一行；读屏仍读正文和状态', async () => {
   const render = await component(
     new URL('../../../apps/mobile/src/detail/cells.tsx', import.meta.url).pathname,
     'UserCell',
@@ -123,15 +125,39 @@ test('手机状态在气泡下方，已发送无可见状态，读屏仍读正�
     const row = { text: '正文', attachments: [], delivery }
     const result = render({ row })
     const bubble = nodes(result).find((node) => node.props?.testID === 'user-message')
-    const status = nodes(result).find((node) => node.props?.testID?.startsWith('input-delivery-'))
+    const mark = nodes(result).find((node) => node.props && 'delivery' in node.props)
     assert.equal(
       bubble.props.accessibilityLabel,
       delivery ? `message: inputDelivery.${delivery}. 正文` : undefined,
     )
-    assert.equal(nodes(bubble).includes(status), false)
+    // 记号和气泡是同一排的兄弟：在气泡外面，也不在气泡下面另起一排
+    assert.equal(nodes(bubble).includes(mark), false)
+    assert.ok(result.props.children.flat().some((child) => nodes(child).includes(mark)))
+    assert.equal(mark.props.delivery, delivery)
+    // 复制收进长按菜单：气泡旁没有复制按钮
     assert.equal(
-      status?.props.testID,
-      delivery && delivery !== 'sent' ? `input-delivery-${delivery}` : undefined,
+      nodes(result).some((node) => node.props && 'itemId' in node.props),
+      false,
     )
+  }
+})
+
+test('手机交付记号：已发送不画；其余只画记号，读屏名称和点一下的说明是整句', async () => {
+  const render = await component(
+    new URL('../../../apps/mobile/src/detail/DeliveryMark.tsx', import.meta.url).pathname,
+    'DeliveryMark',
+  )
+  for (const delivery of ['sent', undefined, null]) assert.equal(render({ delivery }), null)
+  for (const delivery of ['queued', 'held', 'unknown']) {
+    let said = null
+    const mark = render({ delivery, onPress: (note) => (said = note) })
+    assert.equal(mark.props.testID, `input-delivery-${delivery}`)
+    assert.equal(mark.props['aria-label'], `inputDelivery.${delivery}.note`)
+    const glyph = nodes(mark).find((node) => node.type === 'Text').props.children
+    assert.equal([glyph].flat().join('').length, 1)
+    mark.props.onPress()
+    assert.equal(said, `inputDelivery.${delivery}.note`)
+    // 没给 onPress（输入框上方的待发列表）：不能点，读屏名称照样是整句
+    assert.equal(render({ delivery }).props.disabled, true)
   }
 })

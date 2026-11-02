@@ -1401,6 +1401,11 @@ export const en: Record<MessageKey, Entry> = {
   'inputDelivery.sent': 'Sent',
   'inputDelivery.held': 'Stopped · pending',
   'inputDelivery.unknown': 'Delivery unconfirmed',
+  'inputDelivery.queued.note': 'Queued: sent in order after the current turn ends',
+  'inputDelivery.held.note':
+    'Stopped · pending: the turn stopped before this was sent. Send, edit or remove it above the composer.',
+  'inputDelivery.unknown.note':
+    'Delivery unconfirmed: it may not have been sent and won’t be resent automatically. Check, then edit and send again.',
   'composer.pendingUnknown': 'Delivery could not be confirmed. Check before editing and resending.',
   'composer.pendingDraftFull':
     'These attachments cannot all fit in the current draft. Clear the draft first; the pending message is kept.',

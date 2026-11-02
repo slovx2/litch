@@ -1,6 +1,7 @@
 // 手机输入区收纳的正式页面预览；隔离无头浏览器，先在 apps/mobile 里运行 npm run preview。
 // 查：对话参数收在“+”单里（每行带当前值、读屏名称带值）、计划模式开着时“+”上有点、上下文小圆环、
-// 定时任务跑出的会话在顶栏放时钟而不是占一行；三种皮肤的明暗各截一张。
+// 定时任务跑出的会话在顶栏放时钟而不是占一行；消息区没有“复制消息”文字按钮，复制在长按菜单和回合 ⋯ 里，
+// 用户消息的时刻在气泡左边、不另起一行；三种皮肤的明暗各截一张。
 // 第二个参数是 measure 时只量不查：会话页对话区、输入区的高度（新旧代码都能跑，用来对比省了多少）。
 // 截图在 .artifacts/mobile-composer/（LITCH_COMPOSER_SHOTS 可改）。
 import assert from 'node:assert/strict'
@@ -85,6 +86,11 @@ try {
     const picture = await call('Page.captureScreenshot', { format: 'png' })
     writeFileSync(join(output, `${name}.png`), Buffer.from(picture.data, 'base64'))
   }
+  // 复制要真的写进剪贴板（无头浏览器默认不给）
+  await cdp.call('Browser.grantPermissions', {
+    origin: new URL(base).origin,
+    permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'],
+  })
   // CI 模拟器的小屏（320×640）：省出来的高度在小屏上最要紧
   await call('Emulation.setDeviceMetricsOverride', {
     width: 320,
@@ -117,6 +123,51 @@ try {
       strip && strip.top > menu.bottom ? strip.bottom : 0,
     )
     return { transcript: Math.round(box.top - headerBottom), composer: Math.round(box.height) }
+  }
+
+  /** 长按：按住 700ms 再松开（react-native-web 的长按是 500ms） */
+  const longPress = async (selector) => {
+    const box = await read(
+      `(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()`,
+    )
+    await call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: box.x, y: box.y })
+    await call('Input.dispatchMouseEvent', {
+      type: 'mousePressed',
+      x: box.x,
+      y: box.y,
+      button: 'left',
+      clickCount: 1,
+    })
+    await sleep(700)
+    await call('Input.dispatchMouseEvent', {
+      type: 'mouseReleased',
+      x: box.x,
+      y: box.y,
+      button: 'left',
+      clickCount: 1,
+    })
+    await sleep(300)
+  }
+  /** 消息区：没有复制文字按钮，用户消息的时刻在气泡左边、和气泡底边对齐 */
+  const checkMessages = async (where) => {
+    assert.equal(
+      await read(
+        `[...document.querySelectorAll('[data-testid="detail"] *')].some(e=>e.childElementCount===0&&/^(复制消息|Copy message)$/.test(e.textContent))`,
+      ),
+      false,
+      `${where} 消息区没有“复制消息”文字按钮`,
+    )
+    const layout = await read(
+      `(()=>{const b=[...document.querySelectorAll('[data-testid="user-message"]')].at(-1);if(!b)return null;const r=b.getBoundingClientRect();const side=b.previousElementSibling?.getBoundingClientRect();const next=b.parentElement.nextElementSibling;return {bubble:{left:r.left,bottom:r.bottom},side:side&&{right:side.right,bottom:side.bottom,height:side.height},wrapBottom:b.parentElement.getBoundingClientRect().bottom}})()`,
+    )
+    assert.ok(layout?.side, `${where} 用户消息左边有时刻那一列`)
+    assert.ok(layout.side.right <= layout.bubble.left, `${where} 时刻在气泡左边`)
+    assert.ok(
+      Math.abs(layout.side.bottom - layout.bubble.bottom) <= 4,
+      `${where} 时刻和气泡底边对齐`,
+    )
+    // 这一排的下沿就是气泡的下沿（加上下内边距），气泡下面没有另一排
+    assert.ok(layout.wrapBottom - layout.bubble.bottom <= 8, `${where} 气泡下面不另起一行`)
   }
 
   if (measureOnly) {
@@ -153,6 +204,7 @@ try {
           /^上下文已用 \d+%$/,
           '圆环的读屏名称带百分比',
         )
+        await checkMessages(`${skin}/${theme}`)
         await shot(`composer-${skin}-${theme}`)
         // 点开“+”：每行带当前值，读屏名称也带
         await tap('composer-more')
@@ -175,6 +227,21 @@ try {
           await tap('sheet:scrim')
         }
       }
+    // 复制收进菜单：长按用户消息有“复制消息”，点了闪“已复制”；回合状态行的 ⋯ 里有“复制回答”
+    await openTaskSession()
+    await longPress('[data-testid="user-message"]')
+    await wait('menu:copy-message')
+    await tap('menu:copy-message')
+    await until(
+      () =>
+        read(
+          `[...document.querySelectorAll('*')].some(e=>e.childElementCount===0&&/^(已复制|Copied)$/.test(e.textContent))`,
+        ),
+      '复制后的提示',
+    )
+    await tap('turn-menu')
+    await wait('menu:copy-answer')
+    await tap('sheet:scrim')
     // 改模型：选完单收起，再点开“+”那一行是新的值
     await openTaskSession()
     await tap('composer-more')

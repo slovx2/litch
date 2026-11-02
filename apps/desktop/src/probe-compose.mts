@@ -487,8 +487,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
       (message) =>
         message.querySelector('.umsg-text')?.textContent === '插进来的话' &&
         !message.matches('[data-input-delivery]:not([data-input-delivery="sent"])') &&
-        !message.querySelector('[data-input-delivery], [data-delivery-status]') &&
-        !message.nextElementSibling?.matches('.umsg-delivery'),
+        !message.querySelector('[data-input-delivery], [data-delivery-status]'),
     )
   const held = pendingSteer().length === 1
   let steerSettled = held

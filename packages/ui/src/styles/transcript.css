@@ -142,19 +142,25 @@
   color: var(--ink-3);
   white-space: nowrap;
 }
-/* 交付状态属于气泡外的辅助信息；正常送达后不留标记。 */
+/* 交付状态：气泡左边、底边对齐的一个小图标，常显、不占排版的位置；正常送达后不留标记。
+   悬停出来的操作（.umsg-acts）也贴在左边，有状态时往左让出这一格 */
 .umsg-delivery {
-  align-self: flex-end;
+  position: absolute;
+  right: 100%;
+  bottom: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-top: -8px;
+  justify-content: center;
+  width: 22px;
+  height: 24px;
+  margin-right: 4px;
   color: var(--ink-3);
-  font-size: calc(11px * var(--fs));
-  line-height: round(calc(16px * var(--fs)), 1px);
 }
 .umsg-delivery[data-delivery-status="unknown"] {
   color: var(--wait);
+}
+.umsg[data-input-delivery]:not([data-input-delivery="sent"]) .umsg-acts {
+  right: calc(100% + 26px);
 }
 .umsg-acts .ibtn[aria-disabled="true"] {
   color: var(--ink-3);
