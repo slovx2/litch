@@ -50,6 +50,7 @@ import type { DeviceApprovals } from './approvals.mjs'
 import type { DeviceBackground } from './background.mjs'
 import type { ClientToolInvoker } from './client-tool-invoke.mjs'
 import type { ClientToolPeer, ClientToolRouter } from './client-tools.mjs'
+import { readCodexHistory, readsCodexHistory } from './codex-history.mjs'
 import type { CodexTitles } from './codex-titles.mjs'
 import type { ManagedHarness } from './control.mjs'
 import type { DeviceTrace } from './device.mjs'
@@ -873,7 +874,9 @@ export class ClientSession implements ClientToolPeer {
           worktrees.adopt(thread.id, thread.cwd, subject)
       })
     }
-    const send = (ready: Record<string, unknown> | null): typeof HANDLED => {
+    const send = (
+      ready: Record<string, unknown> | null,
+    ): typeof HANDLED | Promise<typeof HANDLED> => {
       const threadId = typeof ready?.threadId === 'string' ? ready.threadId : null
       if (threadId && method === 'turn/start') {
         const token = this.host.restart?.input(link.harness, threadId)
@@ -914,6 +917,19 @@ export class ClientSession implements ClientToolPeer {
               }
             : undefined,
         )
+      if (link.dialect === NATIVE_CODEX_DIALECT && readsCodexHistory(method, outgoing)) {
+        if (expectation) this.relay.expect(link, id, expectation)
+        // 仍走同一条 relay：恢复的订阅记账、后台来源和扩展声明过滤都不能绕开。
+        const respond = (response: Frame): typeof HANDLED => {
+          this.relay.upstream(link, response, JSON.stringify(response), { id, method })
+          return HANDLED
+        }
+        // 大会话恢复可能远长于 probeTimeoutMs；沿用客户端转发原有的等待语义。
+        return this.query(link, method, outgoing, Number.POSITIVE_INFINITY).then(
+          (result) => respond({ id, result }),
+          (error) => respond({ id, error: toRpcError(error) }),
+        )
+      }
       if (!link.forward(id, method, text)) {
         done()
         throw this.unavailable(link, method)
@@ -1040,7 +1056,11 @@ export class ClientSession implements ClientToolPeer {
   ): Promise<unknown> {
     if (!link.available) throw this.unavailable(link, method)
     try {
-      return await link.request(method, params, timeoutMs)
+      return await (link.dialect === NATIVE_CODEX_DIALECT
+        ? readCodexHistory(method, params, timeoutMs, (remaining) =>
+            link.request(method, params, remaining),
+          )
+        : link.request(method, params, timeoutMs))
     } catch (error) {
       // 上游明确回的错误原样带给客户端（和转发的请求一样，它那种“话”里意思不一样的才换）；
       // 等的时候它断开了的，照“不可用”报

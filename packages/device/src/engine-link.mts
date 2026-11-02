@@ -20,6 +20,7 @@ import { prepareSpeed, type SpeedStore } from '../../protocol/src/codex-speeds.m
 import { EXTENSION, EXTENSIONS_CAPABILITY } from '../../protocol/src/device.mjs'
 import { NO_RECIPIENT_MESSAGE } from '../../shared/src/server-requests.mjs'
 import type { ClientToolRouter, ClientToolSource } from './client-tools.mjs'
+import { readCodexHistory } from './codex-history.mjs'
 import type { InstructionStore } from './codex-instructions.mjs'
 import { type DeviceTools, declareDeviceTools } from './device-tools.mjs'
 import type { UpstreamDialect } from './dialect.mjs'
@@ -344,13 +345,15 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
             : null
         const release = threadId ? await options.reserveTurn?.(threadId) : undefined
         try {
-          // 所有异步准备结束后、写入协议前同步检查；恢复票可在排队期间被用户停止撤销。
-          requestOptions?.beforeSend?.()
-          const result = await call(
-            method,
-            (isObject(ready) ? dialect.outgoing(method, ready) : null) ?? ready,
-            timeoutMs,
-          )
+          const outgoing = (isObject(ready) ? dialect.outgoing(method, ready) : null) ?? ready
+          const ask = (remaining: number) => {
+            // 每次写入协议前同步检查；恢复票可在排队或历史重试期间被用户停止撤销。
+            requestOptions?.beforeSend?.()
+            return call(method, outgoing, remaining)
+          }
+          const result = await (dialect === NATIVE_CODEX_DIALECT
+            ? readCodexHistory(method, outgoing, timeoutMs, ask)
+            : ask(timeoutMs))
           sped?.remember(result)
           if (
             (method === 'thread/archive' || method === 'thread/delete') &&

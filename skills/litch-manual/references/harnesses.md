@@ -16,6 +16,9 @@
 Litch never bundles a harness. Each device uses what is installed on it. Feature support differs: plan
 mode exists only where the harness supports it.
 
+Codex 历史刚写入时若暂报 `list_turns is not supported yet`，设备会短暂重试历史读取和恢复，
+保留原生分页与游标。持续失败仍显示原错误；无需因此降级或重装 Codex。
+
 ## Seeing what is there
 
 The harness Settings → Runtime tab on desktop and phone shows a running harness's CLI entry, launch-time version, selection

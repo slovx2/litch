@@ -60,7 +60,7 @@ export interface LinkOptions {
 interface Waiting {
   resolve(value: unknown): void
   reject(error: Error): void
-  timer: NodeJS.Timeout
+  timer: NodeJS.Timeout | undefined
 }
 
 const text = (error: unknown): string => (error instanceof Error ? error.message : String(error))
@@ -175,11 +175,14 @@ export class UpstreamLink {
     if (!wire) return Promise.reject(new Error('这个运行时现在没有连上'))
     const id = `${INTERNAL_ID_PREFIX}${++this.sequence}`
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.internal.delete(id)
-        reject(new Error(`${method} 等了 ${timeoutMs} 毫秒没有应答`))
-      }, timeoutMs)
-      timer.unref()
+      // 转发给上游的客户端请求原本没有设备探测时限；内部代理这些请求时保持该语义。
+      const timer = Number.isFinite(timeoutMs)
+        ? setTimeout(() => {
+            this.internal.delete(id)
+            reject(new Error(`${method} 等了 ${timeoutMs} 毫秒没有应答`))
+          }, timeoutMs)
+        : undefined
+      timer?.unref()
       this.internal.set(id, { resolve, reject, timer })
       wire.send(JSON.stringify({ id, method, params }))
     })
