@@ -41,7 +41,6 @@ const NO_SETTINGS: SessionSettings = {
 }
 
 import { QueueTray } from './composer/QueueTray'
-import { SettingsBar } from './composer/SettingsBar'
 import { sendFlags, whenRunning } from './composer/send-mode'
 import { GoalBar } from './goal/GoalBar'
 import { SlashGoal } from './goal/SlashGoal'
@@ -265,20 +264,20 @@ export function Composer({
             </>
           ) : null
         }
-        bar={
-          meta?.live ? (
-            <SettingsBar
-              deviceId={deviceId}
-              cwd={meta.cwd}
-              options={options}
-              settings={meta.settings}
-              usage={meta.usage}
-              {...(onUsage ? { onUsage } : {})}
-              onChange={(patch) => {
-                switching.change(patch).catch((reason: unknown) => setError(whyNot(reason, t)))
-              }}
-            />
-          ) : null
+        settings={
+          meta?.live
+            ? {
+                deviceId,
+                cwd: meta.cwd,
+                options,
+                settings: meta.settings,
+                usage: meta.usage,
+                ...(onUsage ? { onUsage } : {}),
+                onChange: (patch) => {
+                  switching.change(patch).catch((reason: unknown) => setError(whyNot(reason, t)))
+                },
+              }
+            : null
         }
       />
     </>

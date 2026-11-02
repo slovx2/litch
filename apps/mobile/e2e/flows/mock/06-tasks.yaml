@@ -92,7 +92,7 @@ tags: [mock]
 - assertVisible:
     id: task:detail:target
     text: .*(new worktree|新工作树).*
-# 任务跑出来的会话：顶上一条写着是哪个任务跑的
+# 任务跑出来的会话：顶栏上一个时钟，读屏名称写着是哪个任务跑的
 - openLink: litch://open?session=s3&device=local
 - extendedWaitUntil:
     visible:

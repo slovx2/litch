@@ -73,7 +73,14 @@ segments. The rules are shared with the desktop and described in `sessions-and-p
 Manager events can be read as expandable system rows, but the phone has no manager board/settings
 or global Suggestions entry; it keeps its per-session suggestion list (`managers-and-suggestions.md`).
 
-- **Usage and limits**: tap "Context N% ›" under the input box, or ⋯ → Usage and limits. It shows the
+- **Conversation settings**: the **+** button next to the input box opens Add images plus the model,
+  effort, speed, permission and Plan mode, each showing its current value; tap one to change it. When
+  Plan mode is on, the + button carries an accent dot. The same applies on the New session page.
+  手机输入框旁的“+”里是添加图片和对话参数（模型、强度、速度、权限、计划模式），每项写着当前值；计划模式开着时“+”上有强调色圆点。
+- **Scheduled task**: a session run by a scheduled task (or targeted by one) shows a ⏱ clock in the
+  title bar; tap it to open the task. 定时任务跑出的会话在标题栏显示时钟，点开是任务详情。
+- **Usage and limits**: tap the small context ring beside the input box (it fills with the share of
+  context in use), or ⋯ → Usage and limits. 输入框旁的小圆环按上下文用量填充，点开看具体数字。It shows the
   context in use and, for subscription logins (Claude Code with an Anthropic subscription, Codex with a
   ChatGPT login), each limit window's usage and when it resets; API keys have no limits to show.
 - **Compact context**: ⋯ → Compact context, or the button in the usage sheet. Not offered for harnesses

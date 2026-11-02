@@ -26,7 +26,6 @@ import { draftKey, moveDraft } from '../../detail/composer/drafts'
 import { useComposeOptions, useNewSessionDefaults } from '../../detail/composer/options'
 import { PickerSheet } from '../../detail/composer/PickerSheet'
 import { useProjectPermission } from '../../detail/composer/project-permission'
-import { SettingsBar } from '../../detail/composer/SettingsBar'
 import { goalIntent } from '../../detail/goal/logic'
 import { SlashGoal } from '../../detail/goal/SlashGoal'
 import type { RootStackParamList } from '../../nav/routes'
@@ -335,20 +334,18 @@ export function NewSessionScreen({ navigation, route }: Props) {
               onSend={create}
               onError={setError}
               top={<SlashGoal text={draft.text} able={goalsAble} onPick={draft.setText} />}
-              bar={
-                <SettingsBar
-                  deviceId={deviceId}
-                  cwd={cwd}
-                  fresh
-                  options={options}
-                  settings={shown}
-                  onChange={(patch) => {
-                    const picks = { ...mine, ...patch }
-                    if (cwd) delete picks.permission
-                    setOwn({ slot, picks })
-                  }}
-                />
-              }
+              settings={{
+                deviceId,
+                cwd,
+                fresh: true,
+                options,
+                settings: shown,
+                onChange: (patch) => {
+                  const picks = { ...mine, ...patch }
+                  if (cwd) delete picks.permission
+                  setOwn({ slot, picks })
+                },
+              }}
             />
           </View>
         </KeyboardStickyView>

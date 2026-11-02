@@ -13,10 +13,13 @@ tags: [mock]
     id: device:local
 - tapOn:
     id: sessions:new
+# 对话参数收在输入框的“+”里
 - extendedWaitUntil:
     visible:
-      id: settings:plan
+      id: new-more
     timeout: 15000
+- tapOn:
+    id: new-more
 - tapOn:
     id: settings:plan
 - tapOn:
@@ -54,10 +57,13 @@ tags: [mock]
     id: device:nas
 - tapOn:
     id: sessions:new
+# 对话参数收在输入框的“+”里
 - extendedWaitUntil:
     visible:
-      id: settings:plan
+      id: new-more
     timeout: 15000
+- tapOn:
+    id: new-more
 - tapOn:
     id: settings:plan
 - tapOn:

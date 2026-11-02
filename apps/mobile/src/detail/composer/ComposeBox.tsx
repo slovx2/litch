@@ -1,4 +1,6 @@
-// 输入框那一块：要带的图片、多行输入框、加图片和发送（排队、停止）两个按钮，底下一排设置条（由外面给）。
+// 输入框那一块：要带的图片、多行输入框、“+”和发送（排队、停止）两个按钮，有用量时中间一个上下文小圆环。
+// “+”点开是一张单：添加图片，加上对话参数（模型、强度、速度、权限、计划模式，各写着现在的值）。参数不常改，
+// 收在这里不占屏幕高度；计划模式开着时“+”上有个强调色的点，读屏名称也说明。
 // 会话详情和新建会话页共用；发去哪、发成功没有由外面定，这里只管写、清空、没发成时还回来。
 // 草稿按会话记（drafts.ts）：文字落盘，图片只在内存里。回车在手机上是换行，发送只靠按钮。
 // 选中回答加的评论也是草稿的一部分（落盘），一条一片排在最上面；只有评论、没打字也能发。
@@ -23,6 +25,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { keepMentioned } from '../../../../../packages/ui/src/composer/session-hits.ts'
 import { useT } from '../../ui/i18n'
+import { Sheet, type SheetAction } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { CommentChips } from '../comments/CommentChips'
 import { colors } from '../theme'
@@ -44,7 +47,9 @@ import { useGrow } from './grow'
 import { MAX_IMAGE_MB, MAX_IMAGES, pickImages, REFUSAL_TEXT } from './images'
 import { rowLayout } from './layout'
 import { MentionList, mentionTrigger } from './MentionList'
+import { type SettingsProps, useComposeSettings } from './SettingsBar'
 import { sendButton, takesSend } from './send-mode'
+import { UsageRing } from './UsageRing'
 
 export interface Draft {
   text: string
@@ -168,7 +173,7 @@ export function ComposeBox({
   imagesOff,
   error,
   top,
-  bar,
+  settings = null,
   markers,
   inputRef,
   mentions,
@@ -196,8 +201,8 @@ export function ComposeBox({
   error: string | null
   /** 输入框上面的东西：排着队的消息 */
   top?: ReactNode
-  /** 输入框下面一排：设置条 */
-  bar?: ReactNode
+  /** 对话参数（收在“+”里）。不给是没有，“+”里只有添加图片 */
+  settings?: SettingsProps | null
   markers?: boolean
   /** 打 `@` 列哪台设备上的会话、当前是哪个会话（新建页上没有）。不给就不列 */
   mentions?: { deviceId: string; sessionId: string | null }
@@ -280,6 +285,34 @@ export function ComposeBox({
     )
   }
 
+  const config = useComposeSettings(settings)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const planOn = config.plan?.on ?? false
+  const moreActions: SheetAction[] = [
+    {
+      label: t('compose.addImage'),
+      testID: `${testID}-image`,
+      onPress: () => void addImages(),
+      ...(imagesOff ? { disabled: imagesOff } : {}),
+    },
+    ...config.entries.map((entry) => ({
+      label: entry.title,
+      value: entry.value,
+      testID: entry.testID,
+      onPress: entry.open,
+    })),
+    ...(config.plan
+      ? [
+          {
+            label: t('composer.plan'),
+            checked: config.plan.on,
+            testID: 'settings:plan',
+            onPress: config.plan.toggle,
+          },
+        ]
+      : []),
+  ]
+
   const note = error ?? blocked
   const sendLabel =
     mode === 'stop'
@@ -344,13 +377,22 @@ export function ComposeBox({
       <View style={styles.row}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={t('compose.addImage')}
-          testID={`${testID}-image`}
+          accessibilityLabel={t(planOn ? 'compose.more.plan' : 'compose.more')}
+          testID={`${testID}-more`}
           hitSlop={6}
-          onPress={() => void addImages()}
-          style={[styles.side, { borderColor: c.line2, borderRadius: theme.radius.m }]}
+          onPress={() => setMoreOpen(true)}
+          style={[
+            styles.side,
+            { borderColor: planOn ? c.accent : c.line2, borderRadius: theme.radius.m },
+          ]}
         >
-          <Text style={[styles.sideText, { color: imagesOff ? c.ink3 : c.ink }]}>＋</Text>
+          <Text style={[styles.sideText, { color: c.ink }]}>＋</Text>
+          {planOn ? (
+            <View
+              testID={`${testID}-more-plan`}
+              style={[styles.planDot, { backgroundColor: c.accentSolid, borderColor: c.panel }]}
+            />
+          ) : null}
         </Pressable>
         <TextInput
           ref={input}
@@ -374,6 +416,12 @@ export function ComposeBox({
             },
           ]}
         />
+        {config.percent !== null ? (
+          <UsageRing
+            percent={config.percent}
+            {...(settings?.onUsage ? { onPress: settings.onUsage } : {})}
+          />
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={sendLabel}
@@ -395,7 +443,13 @@ export function ComposeBox({
           </Text>
         </Pressable>
       </View>
-      {bar}
+      <Sheet
+        visible={moreOpen}
+        title={t('compose.more.title')}
+        actions={moreActions}
+        onClose={() => setMoreOpen(false)}
+      />
+      {config.pickers}
     </View>
   )
 }
@@ -426,5 +480,14 @@ const styles = StyleSheet.create({
   },
   ...rowLayout,
   sideText: { fontSize: 22, lineHeight: 26 },
+  planDot: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+  },
   sendText: { fontSize: 15, fontWeight: '600' },
 })

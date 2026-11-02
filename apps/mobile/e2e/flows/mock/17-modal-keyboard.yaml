@@ -36,10 +36,13 @@ tags: [mock]
     timeout: 5000
 - assertVisible: Keyboard visible rename
 - openLink: litch://open?session=b6&device=build
+# 对话参数收在输入框的“+”里
 - extendedWaitUntil:
     visible:
-      id: settings:model
+      id: composer-more
     timeout: 15000
+- tapOn:
+    id: composer-more
 - tapOn:
     id: settings:model
 - tapOn:
@@ -51,4 +54,8 @@ tags: [mock]
     notVisible:
       id: picker:search
     timeout: 5000
+# 换好的模型写在“+”单里那一行上
+- tapOn:
+    id: composer-more
 - assertVisible: .*GPT-5.5 mini.*
+- pressKey: back

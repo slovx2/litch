@@ -1,5 +1,6 @@
-// 输入区底下一排：模型、强度、速度、权限预设、计划模式的开关，和上下文用了多少。可选值全部来自设备，这里只管显示和交回改动
+// 对话参数：模型、强度、速度、权限预设、计划模式。可选值全部来自设备，这里只管显示和交回改动
 // （会话里走 session.configure，从下一个回合起生效；新建会话页记着，建会话时一起发）。
+// 逻辑在 useComposeSettings：输入框的“+”面板（ComposeBox）列成带当前值的几行；定时任务的表单仍是一排片（SettingsBar）。
 // 规矩照桌面端（packages/ui/src/composer/SettingsBar.tsx）：换模型时没有现在那一档强度就换成它的默认档；
 // 会话建好之后换不了的那几档权限只在新建时能选；声明了要确认的那一档切过去之前先问一句。
 import {
@@ -11,7 +12,7 @@ import {
   shownEffort,
   shownSpeed,
 } from '@litch/core'
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -105,16 +106,7 @@ function PlanSwitch({ on, onPress }: { on: boolean; onPress(): void }) {
   )
 }
 
-export function SettingsBar({
-  deviceId = '',
-  cwd,
-  options,
-  settings,
-  usage,
-  fresh,
-  onUsage,
-  onChange,
-}: {
+export interface SettingsProps {
   deviceId?: string | undefined
   cwd?: string | null | undefined
   options: ComposeOptions | null
@@ -122,10 +114,46 @@ export function SettingsBar({
   usage?: ContextUsage | null
   /** 这是在新建会话：会话建好之后换不了的那几档权限这时可以选 */
   fresh?: boolean
-  /** 给了的话“上下文 N%”能点，打开用量页（上下文、账号额度） */
+  /** 给了的话上下文用量能点，打开用量页（上下文、账号额度） */
   onUsage?(): void
   onChange(patch: Partial<SessionSettings>): void
-}) {
+}
+
+/** 一项可选的参数：名字、现在的值，点了打开它的选择单 */
+export interface SettingEntry {
+  id: 'model' | 'effort' | 'speed' | 'permission'
+  title: string
+  value: string
+  testID: string
+  open(): void
+}
+
+export interface ComposeSettings {
+  entries: SettingEntry[]
+  /** 计划模式：设备不支持时是 null */
+  plan: { on: boolean; toggle(): void } | null
+  /** 上下文用了百分之几；不知道是 null */
+  percent: number | null
+  /** 各项的选择单、权限确认框和出错的那句，挂在页面里 */
+  pickers: ReactNode
+}
+
+const NO_SETTINGS: SettingsProps = {
+  options: null,
+  settings: { model: null, effort: null, speed: null, permission: null, mode: null },
+  onChange: () => {},
+}
+
+/** 上下文用了百分之几；窗口大小不知道时是 null */
+export function usagePercent(usage: ContextUsage | null | undefined): number | null {
+  return usage?.windowTokens && usage.windowTokens > 0
+    ? Math.min(100, Math.round((usage.usedTokens / usage.windowTokens) * 100))
+    : null
+}
+
+/** props 是 null：这个输入框没有对话参数（只列“添加图片”） */
+export function useComposeSettings(props: SettingsProps | null): ComposeSettings {
+  const { deviceId = '', cwd, options, settings, usage, fresh, onChange } = props ?? NO_SETTINGS
   const t = useT()
   const theme = useTheme()
   const project = useProjectPermission(useServices(), deviceId, cwd)
@@ -136,20 +164,8 @@ export function SettingsBar({
   }
   const [open, setOpen] = useState<Open>(null)
   const [asking, setAsking] = useState<{ preset: PermissionPreset; title: string } | null>(null)
-  const percent =
-    usage?.windowTokens && usage.windowTokens > 0
-      ? Math.min(100, Math.round((usage.usedTokens / usage.windowTokens) * 100))
-      : null
-  if (!options) {
-    return percent === null ? null : (
-      <View style={styles.bar}>
-        <Chip
-          label={`${t('compose.context')} ${percent}%`}
-          {...(onUsage ? { onPress: onUsage, testID: 'settings:usage' } : {})}
-        />
-      </View>
-    )
-  }
+  const percent = usagePercent(usage)
+  if (!options) return { entries: [], plan: null, percent, pickers: null }
   const model = options.models.find((entry) => entry.id === settings.model)
   const effort = model ? shownEffort(settings.effort, model) : null
   // 没选过的时候用的是模型自己的默认档（有的模型默认就是快速）
@@ -210,54 +226,61 @@ export function SettingsBar({
     }
   })
   const plan = settings.mode === 'plan'
-  return (
+  const modelTitle =
+    model?.title ??
+    (settings.model && options.hiddenTitles?.[settings.model]) ??
+    settings.model ??
+    t('composer.model')
+  const entries: SettingEntry[] = [
+    ...(options.models.length > 0
+      ? [
+          {
+            id: 'model' as const,
+            title: t('composer.model'),
+            value: modelTitle,
+            testID: 'settings:model',
+            open: () => setOpen('model'),
+          },
+        ]
+      : []),
+    ...(model && model.efforts.length > 0
+      ? [
+          {
+            id: 'effort' as const,
+            title: t('composer.effort'),
+            value: effort ? effortTitle(t, effort) : t('composer.effort'),
+            testID: 'settings:effort',
+            open: () => setOpen('effort'),
+          },
+        ]
+      : []),
+    ...(speed !== null
+      ? [
+          {
+            id: 'speed' as const,
+            title: t('composer.speed'),
+            value: speedTitle ?? '',
+            testID: 'settings:speed',
+            open: () => setOpen('speed'),
+          },
+        ]
+      : []),
+    ...(options.permissions.length > 0
+      ? [
+          {
+            id: 'permission' as const,
+            title: t('composer.permission'),
+            value: currentPreset
+              ? permissionText(t, currentPreset).title
+              : t('composer.permission'),
+            testID: 'settings:permission',
+            open: () => setOpen('permission'),
+          },
+        ]
+      : []),
+  ]
+  const pickers = (
     <>
-      <View style={styles.bar}>
-        {options.models.length > 0 ? (
-          <Chip
-            testID="settings:model"
-            label={`${model?.title ?? (settings.model && options.hiddenTitles?.[settings.model]) ?? settings.model ?? t('composer.model')} ▾`}
-            onPress={() => setOpen('model')}
-          />
-        ) : null}
-        {model && model.efforts.length > 0 ? (
-          <Chip
-            testID="settings:effort"
-            label={`${effort ? effortTitle(t, effort) : t('composer.effort')} ▾`}
-            onPress={() => setOpen('effort')}
-          />
-        ) : null}
-        {speed !== null ? (
-          <Chip
-            testID="settings:speed"
-            label={`${speedTitle} ▾`}
-            onPress={() => setOpen('speed')}
-          />
-        ) : null}
-        {options.permissions.length > 0 ? (
-          <Chip
-            testID="settings:permission"
-            label={`${currentPreset ? permissionText(t, currentPreset).title : t('composer.permission')} ▾`}
-            onPress={() => setOpen('permission')}
-          />
-        ) : null}
-        {options.plan ? (
-          <PlanSwitch on={plan} onPress={() => onChange({ mode: plan ? 'default' : 'plan' })} />
-        ) : null}
-        {percent !== null ? (
-          <Pressable
-            disabled={!onUsage}
-            accessibilityRole={onUsage ? 'button' : 'text'}
-            testID="settings:usage"
-            hitSlop={8}
-            {...(onUsage ? { onPress: onUsage } : {})}
-          >
-            <Text style={[styles.usage, { color: theme.c.ink3, fontFamily: theme.font.mono }]}>
-              {t('compose.context')} {percent}%{onUsage ? ' ›' : ''}
-            </Text>
-          </Pressable>
-        ) : null}
-      </View>
       <PickerSheet
         visible={open === 'model'}
         title={t('composer.model')}
@@ -313,6 +336,52 @@ export function SettingsBar({
         onConfirm={() => asking && applyPermission(asking.preset.id)}
         onClose={() => setAsking(null)}
       />
+    </>
+  )
+  return {
+    entries,
+    plan: options.plan
+      ? { on: plan, toggle: () => onChange({ mode: plan ? 'default' : 'plan' }) }
+      : null,
+    percent,
+    pickers,
+  }
+}
+
+/** 一排片：定时任务表单用（那里没有输入框，也没有“+”）。每片写着现在的值，点了打开选择单 */
+export function SettingsBar(props: SettingsProps) {
+  const t = useT()
+  const theme = useTheme()
+  const { entries, plan, percent, pickers } = useComposeSettings(props)
+  const { onUsage } = props
+  if (entries.length === 0 && !plan && percent === null) return null
+  return (
+    <>
+      <View style={styles.bar}>
+        {entries.map((entry) => (
+          <Chip
+            key={entry.id}
+            testID={entry.testID}
+            label={`${entry.value} ▾`}
+            onPress={entry.open}
+          />
+        ))}
+        {plan ? <PlanSwitch on={plan.on} onPress={plan.toggle} /> : null}
+        {percent !== null ? (
+          <Pressable
+            disabled={!onUsage}
+            accessibilityRole={onUsage ? 'button' : 'text'}
+            testID="settings:usage"
+            hitSlop={8}
+            {...(onUsage ? { onPress: onUsage } : {})}
+          >
+            <Text style={[styles.usage, { color: theme.c.ink3, fontFamily: theme.font.mono }]}>
+              {t('compose.context')} {percent}%{onUsage ? ' ›' : ''}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {pickers}
     </>
   )
 }

@@ -14,7 +14,7 @@ import { acquireStore, releaseStore } from '../core/store-cache'
 import { experiment } from '../experiment'
 import type { RootStackParamList } from '../nav/routes'
 import { ProposalsStrip } from '../screens/proposals/ProposalsStrip'
-import { SessionTaskStrip } from '../screens/tasks/SessionTaskStrip'
+import { useSessionTask } from '../screens/tasks/session-task'
 import { useChannel, useKey, useServices } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { Confirm, Prompt, Sheet } from '../ui/kit/overlays'
@@ -218,6 +218,7 @@ export function DetailScreen({ route, navigation }: Props) {
         ]),
   ]
 
+  const task = useSessionTask(deviceId, summary?.task)
   const markers = experiment.markers
   const error = snapshot.error ?? failure
   return (
@@ -225,13 +226,25 @@ export function DetailScreen({ route, navigation }: Props) {
       title={shownTitle}
       subtitle={subtitle}
       wire={device ? c.wire[device.wire] : undefined}
-      actions={[{ label: '⋯', testID: 'detail:menu', onPress: () => setMenu(true) }]}
+      actions={[
+        // 定时任务跑出来的会话：顶栏上一个时钟，不另占一行
+        ...(task
+          ? [
+              {
+                label: '⏱',
+                accessibilityLabel: task.label,
+                testID: 'detail:task',
+                onPress: task.open,
+              },
+            ]
+          : []),
+        { label: '⋯', testID: 'detail:menu', onPress: () => setMenu(true) },
+      ]}
       testID="detail"
     >
       {/* 键盘升起时整块往上平移，移出去的那一截裁在标题栏下沿，不压到状态栏上 */}
       <View style={styles.clip}>
         <DelegatedHistory deviceId={deviceId} sessionId={sessionId} />
-        <SessionTaskStrip deviceId={deviceId} mark={summary?.task} />
         {device?.sessionTree ? (
           <ProposalsStrip deviceId={deviceId} sessionId={sessionId} title={shownTitle} />
         ) : null}

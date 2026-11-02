@@ -14,6 +14,8 @@ export interface HeaderAction {
   /** 测试标识（Maestro、uiautomator 用） */
   testID?: string
   disabled?: boolean
+  /** 读屏名称：label 只是个记号（⋯、⏱）时给 */
+  accessibilityLabel?: string
 }
 
 export function Screen({
@@ -118,6 +120,9 @@ export function Screen({
           <Pressable
             key={action.label}
             accessibilityRole="button"
+            {...(action.accessibilityLabel
+              ? { accessibilityLabel: action.accessibilityLabel }
+              : {})}
             testID={action.testID}
             disabled={action.disabled}
             hitSlop={8}

@@ -19,6 +19,8 @@ export interface SheetAction {
   selected?: boolean
   /** 禁用的原因，随菜单项显示。 */
   disabled?: string
+  /** 这一项现在的值（模型名、档位）：靠右写着，读屏名称里也带上 */
+  value?: string
 }
 
 /** 底部动作单。visible 为 false 时什么都不画 */
@@ -72,6 +74,9 @@ export function Sheet({
             }
             aria-checked={action.selected ?? action.checked}
             aria-disabled={action.disabled !== undefined}
+            {...(action.value !== undefined
+              ? { 'aria-label': t('app.valued', { name: action.label, value: action.value }) }
+              : {})}
             disabled={action.disabled !== undefined}
             testID={action.testID}
             onPress={() => {
@@ -80,6 +85,7 @@ export function Sheet({
             }}
             style={({ pressed }) => [
               styles.sheetRow,
+              action.value !== undefined ? styles.sheetValued : null,
               {
                 minHeight: theme.hit + 4,
                 borderTopColor: c.line1,
@@ -90,6 +96,7 @@ export function Sheet({
             <Text
               style={[
                 styles.sheetText,
+                action.value !== undefined ? styles.sheetGrow : null,
                 { color: action.disabled ? c.ink3 : action.danger ? c.err : c.ink },
               ]}
             >
@@ -99,6 +106,11 @@ export function Sheet({
                   ? `${action.checked ? theme.check.on : theme.check.off} ${action.label}`
                   : action.label}
             </Text>
+            {action.value !== undefined ? (
+              <Text numberOfLines={1} style={[styles.sheetValue, { color: c.ink2 }]}>
+                {action.value}
+              </Text>
+            ) : null}
             {action.disabled ? (
               <Text style={{ color: c.ink3, fontSize: theme.font.size.meta }}>
                 {action.disabled}
@@ -283,6 +295,14 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   sheetText: { fontSize: 16 },
+  sheetValued: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 12,
+  },
+  sheetGrow: { flexShrink: 0 },
+  sheetValue: { flex: 1, fontSize: 15, textAlign: 'right' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   dialog: { alignSelf: 'stretch', borderWidth: 1, maxHeight: '100%' },
   dialogScroll: { flexGrow: 0 },

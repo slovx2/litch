@@ -11,6 +11,7 @@ export const zhCN = {
   'app.mockBadge': '模拟核心',
   'app.fixtureBadge': '测试夹具',
   'app.todo': '此页面尚未完成',
+  'app.valued': '{name}：{value}',
 } satisfies Record<`app.${string}`, Entry>
 
 export const en: Record<keyof typeof zhCN, Entry> = {
@@ -22,4 +23,5 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'app.mockBadge': 'Mock core',
   'app.fixtureBadge': 'Test fixture',
   'app.todo': 'This page isn’t ready yet',
+  'app.valued': '{name}: {value}',
 }
