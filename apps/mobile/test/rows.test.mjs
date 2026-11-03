@@ -1,7 +1,7 @@
 // 会话视图 → 对话区的行（src/core/rows.ts）：过程连成一组、展开收起、末尾的状态行、内容没变的行复用同一个对象。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { projectItem } from '@litch/core'
+import { askQuestionId, askReplyText, projectItem } from '@litch/core'
 import { formatSessionEvent } from '../../../packages/protocol/src/session-tree.mts'
 import { recoverMessage, restartMessage } from '../../../packages/protocol/src/system-messages.mts'
 import { RowBuilder } from '../src/core/rows.ts'
@@ -120,6 +120,130 @@ test('插话前一段的工具和回答都结束才折叠；条目状态更新�
     rows.some((row) => row.itemId === 'n'),
     '最后一段仍然展开',
   )
+})
+
+test('问答只在同回合紧邻时合并；插入会话消息的两种顺序和重读历史都保留答案位置', () => {
+  const q = {
+    ...answer('q', ''),
+    questions: [{ id: askQuestionId('q', 0), title: '接下来做什么？', options: [] }],
+  }
+  const reply = user(
+    'reply',
+    askReplyText([
+      { questionItemId: askQuestionId('q', 0), question: '接下来做什么？', answer: '先做其他事情' },
+    ]),
+  )
+  const peer = {
+    ...user('peer', '补齐证据'),
+    peer: { name: '基建', session: 'other', bypass: false },
+  }
+  for (const items of [
+    [q, reply],
+    [q, peer, reply],
+    [q, command('work', 'completed'), reply, peer],
+  ]) {
+    for (const status of ['running', 'completed']) {
+      const view = viewOf([{ id: 't', status, itemIds: items.map((item) => item.id) }], items)
+      for (const snapshot of [view, structuredClone(view)]) {
+        const rows = new RowBuilder().build(snapshot, 'all')
+        const users = rows.filter((row) => row.type === 'user')
+        assert.equal(
+          users.some((row) => row.key === 'reply'),
+          items.length !== 2,
+        )
+        if (items.length > 2) {
+          assert.equal(users.find((row) => row.key === 'reply').text, reply.text)
+          assert.deepEqual(
+            users.map((row) => row.key),
+            items.filter((item) => item.kind === 'userMessage').map((item) => item.id),
+          )
+        }
+      }
+    }
+  }
+  const separate = viewOf(
+    [
+      { id: 'old', status: 'completed', itemIds: ['q'] },
+      { id: 'new', status: 'running', itemIds: ['reply', 'peer'] },
+    ],
+    [q, reply, peer],
+  )
+  assert.ok(
+    new RowBuilder()
+      .build(separate, 'all')
+      .some((row) => row.type === 'user' && row.key === 'reply'),
+  )
+})
+
+test('问答与过程分段一起工作：较早两段分别折叠，答复保留原位，运行中的最后一段持续展开', () => {
+  const q = {
+    ...answer('q', ''),
+    questions: [{ id: askQuestionId('q', 0), title: '下一步做什么？', options: [] }],
+  }
+  const reply = user(
+    'reply',
+    askReplyText([
+      { questionItemId: askQuestionId('q', 0), question: '下一步做什么？', answer: '先做其他事情' },
+    ]),
+  )
+  const peer = {
+    ...user('peer', '补齐证据'),
+    peer: { name: '基建', session: 'other', bypass: false },
+  }
+  for (const messages of [
+    [reply, peer],
+    [peer, reply],
+  ]) {
+    const items = [
+      q,
+      user('start', '继续处理'),
+      command('c0', 'completed', 0),
+      answer('a0', '第一段结论'),
+      messages[0],
+      command('c1', 'completed', 0),
+      answer('a1', '第二段结论'),
+      messages[1],
+      { ...answer('n2', '最后一段继续处理'), phase: 'commentary' },
+      command('c2', 'inProgress'),
+    ]
+    const source = viewOf(
+      [
+        { id: 'old', status: 'completed', itemIds: ['q'] },
+        { id: 'live', status: 'running', itemIds: items.slice(1).map((item) => item.id) },
+      ],
+      items,
+    )
+    for (const view of [source, structuredClone(source)]) {
+      const builder = new RowBuilder()
+      const rows = builder.build(view, 'all')
+      const users = rows.filter((row) => row.type === 'user')
+      assert.deepEqual(
+        users.map((row) => row.key),
+        ['start', ...messages.map((item) => item.id)],
+      )
+      assert.equal(users.find((row) => row.key === 'reply').text, reply.text)
+      const folded = rows.filter((row) => row.type === 'process')
+      assert.equal(folded.length, 2, '较早两段分别保留摘要')
+      assert.ok(folded.every((row) => !row.expanded))
+      assert.ok(
+        rows.some((row) => row.itemId === 'n2'),
+        '最后一段的说明可见',
+      )
+      assert.ok(
+        rows.some((row) => row.type === 'group'),
+        '最后一段的工具组可见',
+      )
+      // 最后工具和 final 都写完，仍须等回合真正结束才折叠。
+      view.items.c2 = { ...view.items.c2, status: 'completed' }
+      view.items.final = answer('final', '最终结果')
+      view.turns[1].itemIds.push('final')
+      assert.ok(builder.build(view, 'all').some((row) => row.itemId === 'n2'))
+      view.turns[1].status = 'completed'
+      const done = builder.build(view, 'all')
+      assert.ok(!done.some((row) => row.itemId === 'n2'))
+      assert.ok(done.some((row) => row.type === 'user' && row.key === 'reply'))
+    }
+  }
 })
 
 test('同回合两段最终回答都显示，父会话插话后的短答不折叠调研结论', () => {

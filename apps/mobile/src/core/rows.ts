@@ -40,6 +40,7 @@ import type {
   WebSearchItem,
 } from '@litch/core'
 import {
+  adjacentAskReply,
   agentRowShown,
   agentRunState,
   agentStatesOf,
@@ -47,7 +48,6 @@ import {
   blockInput,
   bucketItems,
   goalReachedIn,
-  parseAskReply,
   processDuration,
   processFolded,
   processSegments,
@@ -59,7 +59,6 @@ import {
   turnAddition,
   workingShown,
 } from '@litch/core'
-import { questionItemOf } from '../../../../packages/ui/src/transcript/ask-ids.ts'
 import { cardsOf, eventKind, handOffOf, isOfferCall } from '../detail/proposals/logic'
 import { type ChunkState, chunkText, emptyChunks } from './blocks'
 
@@ -605,10 +604,10 @@ export class RowBuilder {
         }),
       )
     // 唤醒、提醒的回合没有用户自己说的话：只有上面那条提示。
-    // 整段是一份答复、问题那一条都还在会话里的：答案并进问题卡（AskSheet），不另画气泡
+    // 只有同回合紧邻问题卡时才并回卡片；隔开的答复留在发送位置。
     else if (
       (item.text || item.attachments.length > 0 || !item.event) &&
-      !(item.attachments.length === 0 && foldedReply(view, item.text, item.peer !== undefined))
+      !adjacentAskReply(item, turn, (id) => view.items[id])
     )
       out.push(
         this.keep({
@@ -992,16 +991,4 @@ export function labelOf(item: StepItem): Text {
 const lastLine = (text: string): string => {
   const lines = text.trim().split('\n')
   return lines[lines.length - 1] ?? ''
-}
-
-/** 整段是一份答复，答的题都还在会话里（问题卡上画得出答案） */
-function foldedReply(view: SessionView, text: string, peer: boolean): boolean {
-  if (peer) return false
-  const replies = parseAskReply(text)
-  return (
-    replies?.every((reply) => {
-      const itemId = questionItemOf(reply.questionItemId)
-      return itemId !== null && view.items[itemId] !== undefined
-    }) === true
-  )
 }

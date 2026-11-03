@@ -119,6 +119,9 @@
   font-size: calc(12px * var(--fs));
 }
 .ask-reply-q {
+  display: block;
+  text-align: left;
+  font-size: calc(12px * var(--fs));
   padding-left: 8px;
   border-left: 2px solid var(--line-2);
   color: var(--ink-2);

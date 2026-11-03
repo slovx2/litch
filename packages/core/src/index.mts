@@ -285,6 +285,7 @@ export {
   sameText,
   type Text,
 } from './phrase.mjs'
+export { adjacentAskReply, askReplySource } from './projection/ask-reply.mjs'
 export {
   ASK_TOOL,
   type AskAnswers,

@@ -1,5 +1,6 @@
 import {
   type AskAnswers,
+  adjacentAskReply,
   type ItemView,
   keys,
   type PendingQuestion,
@@ -13,7 +14,6 @@ import {
   searchQuery,
   searchTransferItem,
   type TurnView,
-  wrapQuestionId,
 } from '@litch/core'
 import { useEffect, useRef, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
@@ -97,8 +97,7 @@ export function useSearch(
         previousAnswers !== answers ||
         previousPending !== pending ||
         previousProposals !== proposals
-      const waiting = new Set(pending.flatMap((q) => q.replyIds)),
-        known = new Set<string>()
+      const waiting = new Set(pending.flatMap((q) => q.replyIds))
       for (const turnId of turnIds) {
         if (omitted.has(turnId)) continue
         const turnKey = keys.turn(deviceId, sessionId, turnId)
@@ -111,9 +110,6 @@ export function useSearch(
           const item = store.get<ItemView>(key)
           if (!item) continue
           rawItems.push(item)
-          if (item.kind === 'agentMessage') for (const q of item.questions ?? []) known.add(q.id)
-          if (item.kind === 'toolCall' && item.wrapUp?.ask)
-            known.add(wrapQuestionId(item.id, item.questionSource))
         }
         if (turn) {
           let cached = turnCache.get(turnId)
@@ -180,7 +176,16 @@ export function useSearch(
           (item.kind === 'toolCall' && !item.asked && !item.wrapUp && !item.spawned)
         const card = excluded
           ? null
-          : searchCardItem(searchProposalItem(item, proposals, Date.now()), answers, waiting, known)
+          : searchCardItem(
+              searchProposalItem(item, proposals, Date.now()),
+              answers,
+              waiting,
+              adjacentAskReply(
+                item,
+                store.get<TurnView>(keys.turn(deviceId, sessionId, turnId)),
+                (id) => store.get<ItemView>(keys.item(deviceId, sessionId, id)),
+              ),
+            )
         if (!card) {
           if (indexed.has(item.id)) removed.push(item.id)
           indexed.delete(item.id)

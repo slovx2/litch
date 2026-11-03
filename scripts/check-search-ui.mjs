@@ -7,6 +7,7 @@ import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync }
 import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { checkAnswerReply } from './check-answer-reply.mjs'
 import { checkSearchR3 } from './check-search-r3.mjs'
 import { checkSearchReview } from './check-search-review.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
@@ -320,6 +321,7 @@ try {
     .then((r) => writeFileSync(join(output, 'titles.png'), Buffer.from(r.data, 'base64')))
   await checkSearchReview({ cdp, evaluate, query, report, output, base })
   await checkSearchR3({ cdp, evaluate, query, report, output, base })
+  await checkAnswerReply({ cdp, evaluate, query, report, base })
   assert.deepEqual(errors, [])
   report.success = true
 } catch (error) {

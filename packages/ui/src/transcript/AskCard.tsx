@@ -11,8 +11,9 @@ import {
 } from '@litch/core'
 import { memo } from 'react'
 import { useT } from '../app/appearance.ts'
-import { useKey } from '../app/services.tsx'
+import { useKey, useServices } from '../app/services.tsx'
 import { historyQuestions } from './ask-history.ts'
+import { replySource, revealReplySource } from './ask-reveal.ts'
 import { CompactRow } from './CompactRow.tsx'
 import { type ItemRef, useItem } from './messages.tsx'
 import { useToggle } from './state.ts'
@@ -29,7 +30,7 @@ export interface SheetQuestion {
 
 /**
  * 问题卡：模型边干活边问的题（AskCard）和收尾留的问题（tree/TurnTail.tsx）都画成它，答案并在同一张卡里，
- * 不再另出一个“已回答问题”的气泡（messages.tsx 认出答复就不画）。卡片跟着状态变：
+ * 只有紧邻卡片的答复不另画气泡；隔开的答复留在发送位置。卡片跟着状态变：
  * 待回答——只在输入区显示；已答——默认收起，标题行写答了几题和题目，下面一行是答案，点开看每题；
  * 未回答（问题已经过去了）——收起，点开看题目和当时的选项。
  */
@@ -139,14 +140,36 @@ export const AskCard = memo(function AskCard(ref: ItemRef) {
 })
 
 /** 用户消息整段是一份答复时，气泡里画成“题目 → 回答”，不露那一段标签和 JSON */
-export function AskReplyBody({ replies }: { replies: AskReply[] }) {
+export function AskReplyBody({
+  replies,
+  deviceId,
+  sessionId,
+}: {
+  replies: AskReply[]
+  deviceId: string
+  sessionId: string
+}) {
   const t = useT()
+  const { store } = useServices().replica
   return (
     <div className="umsg-text ask-reply">
       <span className="ask-reply-kind">{t('ask.replied')}</span>
       {distinctReplies(replies).map((reply) => (
         <div className="ask-reply-one" key={reply.questionItemId}>
-          <div className="ask-reply-q">{reply.question}</div>
+          {replySource(store, deviceId, sessionId, reply.questionItemId) ? (
+            <button
+              type="button"
+              className="ask-reply-q"
+              data-search-option
+              onClick={() => {
+                void revealReplySource(store, deviceId, sessionId, reply.questionItemId)
+              }}
+            >
+              {reply.question}
+            </button>
+          ) : (
+            <div className="ask-reply-q">{reply.question}</div>
+          )}
           <div className="ask-reply-a">{reply.answer}</div>
         </div>
       ))}

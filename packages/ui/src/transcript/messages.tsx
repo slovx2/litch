@@ -2,10 +2,12 @@
 // 每个组件只订阅自己那一个条目：流式文本到达时只有正在变的那一条重画。
 import {
   type AgentMessageItem,
+  adjacentAskReply,
   type ItemView,
   keys,
   type PlanItem,
   parseAskReply,
+  type TurnView,
   type UserAttachment,
   type UserMessageItem,
 } from '@litch/core'
@@ -16,7 +18,6 @@ import { Icon } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { SessionEventBar } from '../tree/EventBar.tsx'
 import { AskReplyBody } from './AskCard.tsx'
-import { questionItemOf } from './ask-ids.ts'
 import { CompactRow } from './CompactRow.tsx'
 import { SentComments } from './comments/Cards.tsx'
 import { commentsOf } from './comments/Cite.tsx'
@@ -85,6 +86,8 @@ export function UserAttachments({ attachments }: { attachments: UserAttachment[]
 }
 
 interface UserMessageProps extends ItemRef {
+  /** 显示判断用的回合；只读会话也有，不受编辑/回退操作是否可用影响。 */
+  turn?: TurnView
   /** 给了就在这条消息上出“分叉”“编辑”：现在做得了（回合结束了、设备连着这些） */
   turnId?: string | undefined
   /** 它不是回合开头的那条，是回合进行中插进来的话 */
@@ -99,6 +102,7 @@ interface UserMessageProps extends ItemRef {
  */
 export const UserMessage = memo(function UserMessage({
   turnId,
+  turn,
   steered = false,
   ...ref
 }: UserMessageProps) {
@@ -113,18 +117,14 @@ export const UserMessage = memo(function UserMessage({
   const t = useT()
   const said = item?.kind === 'userMessage' ? item.text : ''
   const peer = item?.kind === 'userMessage' ? item.peer : undefined
-  // 答模型边干活边问的题时发的那一段：答案并进问题卡（AskCard.tsx 的 AskSheet），这里不再画；
-  // 问题那一条不在会话里（历史被截掉了）的才画成题目和回答
+  // 答复保留在发送位置；同一回合紧邻原卡时才合并显示。
   const replies = peer ? null : parseAskReply(said)
   const { replica } = useServices()
   const folded =
-    replies?.every((reply) => {
-      const itemId = questionItemOf(reply.questionItemId)
-      return (
-        itemId !== null &&
-        replica.store.get(keys.item(ref.deviceId, ref.sessionId, itemId)) !== undefined
-      )
-    }) === true
+    !!item &&
+    adjacentAskReply(item, turn, (id) =>
+      replica.store.get<ItemView>(keys.item(ref.deviceId, ref.sessionId, id)),
+    )
   // 开头带着评论的：评论画成卡片，下面只出打的字
   const comments = replies || peer ? null : commentsOf(said)
   const text = comments ? comments.rest : said
@@ -218,7 +218,7 @@ export const UserMessage = memo(function UserMessage({
         <UserAttachments attachments={item.attachments} />
         {comments ? <SentComments {...ref} comments={comments.comments} /> : null}
         {replies ? (
-          <AskReplyBody replies={replies} />
+          <AskReplyBody replies={replies} deviceId={ref.deviceId} sessionId={ref.sessionId} />
         ) : text ? (
           <div className={open ? 'umsg-text' : 'umsg-text clamp'} ref={body}>
             <MentionedText deviceId={ref.deviceId} text={text} sessions={item.sessions} />

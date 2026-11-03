@@ -179,6 +179,88 @@ const channel = connectChannel(client)
 const replica = createReplica(channel)
 replica.start()
 const fixture = {
+  // wind 的问答顺序，用完整对话组件验证显示、跳回原题与重读。
+  answerReplyScene(mode: 'adjacent' | 'peer-first' | 'reply-first' | 'previous-turn') {
+    const questionId =
+      mode === 'previous-turn' ? '["wrap_up","q"]' : '["request_user_input_async","q",0]'
+    const q =
+      mode === 'previous-turn'
+        ? {
+            id: 'q',
+            kind: 'toolCall' as const,
+            tool: 'wrap_up',
+            source: null,
+            input: [],
+            output: [],
+            error: null,
+            durationMs: null,
+            status: 'completed' as const,
+            wrapUp: { suggestions: [], ask: '下一步做什么？' },
+          }
+        : {
+            id: 'q',
+            kind: 'agentMessage' as const,
+            text: '',
+            status: 'completed' as const,
+            phase: 'commentary' as const,
+            questions: [{ id: questionId, title: '下一步做什么？', options: [] }],
+          }
+    const reply = {
+      id: 'reply',
+      kind: 'userMessage' as const,
+      attachments: [],
+      text: askReplyText([
+        { questionItemId: questionId, question: '下一步做什么？', answer: 'AnswerPositionNeedle' },
+      ]),
+    }
+    const peer = {
+      id: 'peer',
+      kind: 'userMessage' as const,
+      attachments: [],
+      text: '补齐证据',
+      peer: { name: '基建', session: 'other', bypass: false },
+    }
+    const process = {
+      id: 'work',
+      kind: 'reasoning' as const,
+      text: '继续处理',
+      status: 'completed' as const,
+    }
+    const continued = {
+      id: 'continued',
+      kind: 'agentMessage' as const,
+      text: '已记下决定',
+      status: 'inProgress' as const,
+      phase: 'commentary' as const,
+    }
+    const ids =
+      mode === 'adjacent'
+        ? ['q', 'reply', 'continued']
+        : mode === 'peer-first'
+          ? ['q', 'peer', 'reply', 'continued']
+          : mode === 'reply-first'
+            ? ['q', 'work', 'reply', 'peer', 'continued']
+            : ['peer', 'reply', 'continued']
+    const turn = (id: string, itemIds: string[], status: 'running' | 'completed') => ({
+      id,
+      itemIds,
+      status,
+      startedAt: null,
+      durationMs: null,
+      error: null,
+    })
+    view.turns = [
+      ...(mode === 'previous-turn' ? [turn('old', ['q'], 'completed')] : []),
+      turn('live', ids, 'running'),
+    ]
+    view.items = Object.fromEntries(
+      [q, reply, peer, process, continued].map((item) => [item.id, item]),
+    )
+    sink?.snapshot(structuredClone(view))
+  },
+  rereadAnswerReply() {
+    sink?.snapshot(structuredClone(view))
+  },
   historyState: () => ({ pageCalls, turns: view.turns.length, history: view.history }),
   async reopen() {
     flushSync(() => root.render(null))

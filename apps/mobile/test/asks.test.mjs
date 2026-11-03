@@ -131,7 +131,7 @@ test('边做边问：卡片要的题目、回合、答复表都对，答复插�
   const after = store.getMeta()
   assert.equal(after.queued.length, 0)
   assert.equal(after.lastTurn.id, meta.lastTurn.id)
-  // 答案并进问题卡：问题那一条还在会话里，答复不另画用户气泡。行晚一帧交出来，等答复所在的回合重算完再看
+  // 模型继续工作后才作答，隔开的答案留在发送位置。行晚一帧交出来，等回合重算完再看。
   await until(() => store.getSnapshot().rows.some((each) => each.key === row.key), {
     what: '问题卡还在',
   })
@@ -140,6 +140,6 @@ test('边做边问：卡片要的题目、回合、答复表都对，答复插�
     store
       .getSnapshot()
       .rows.some((each) => each.type === 'user' && each.text === askReplyText(reply)),
-    false,
+    true,
   )
 })

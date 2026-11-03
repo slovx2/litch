@@ -187,15 +187,15 @@ test('10,000 条目索引只重做变更项，热查询保持有界结果', () =
   assert.equal(searchText('中文A'), '中文a')
 })
 
-test('已答卡片把答案并回题目、隐藏答复气泡；待答题交给待答区，选项不重复', () => {
+test('已答卡片同步答案，仅相邻合并的答复不另搜；待答题交给待答区', () => {
   const question: ItemView = {
     ...agent('q', ''),
     questions: [{ id: 'qid', title: '问题', options: ['选项'] }],
   }
-  const answered = searchCardItem(question, { qid: '答案' }, new Set(), new Set(['qid']))
+  const answered = searchCardItem(question, { qid: '答案' }, new Set())
   assert.ok(answered)
   assert.equal(plain(answered), '\n问题\n答案')
-  const pending = searchCardItem(question, {}, new Set(['qid']), new Set(['qid']))
+  const pending = searchCardItem(question, {}, new Set(['qid']))
   assert.ok(pending)
   assert.equal(plain(pending), '')
   const reply: ItemView = {
@@ -204,8 +204,8 @@ test('已答卡片把答案并回题目、隐藏答复气泡；待答题交给�
     attachments: [],
     text: askReplyText([{ questionItemId: 'qid', question: '问题', answer: '答案' }]),
   }
-  assert.equal(searchCardItem(reply, {}, new Set(), new Set(['qid'])), null)
-  assert.ok(searchCardItem(reply, {}, new Set(), new Set()), '来源缺失时答复仍显示为用户卡片')
+  assert.equal(searchCardItem(reply, {}, new Set(), true), null)
+  assert.ok(searchCardItem(reply, {}, new Set(), false), '隔开的答复可在发送位置搜索')
 })
 
 test('上下文相关的希腊 sigma 大小写使用一致的规范化坐标', () => {

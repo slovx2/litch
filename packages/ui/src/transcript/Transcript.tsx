@@ -372,6 +372,7 @@ const Turn = memo(function Turn({
                 key={block.itemId}
                 {...ref}
                 itemId={block.itemId}
+                turn={turn}
                 turnId={actable ? turnId : undefined}
                 steered={turn.itemIds.indexOf(block.itemId) > 0}
               />

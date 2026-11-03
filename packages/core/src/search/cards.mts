@@ -1,25 +1,17 @@
 import { proposalStatus, proposedBy, type SessionProposalView } from '../model-tree.mjs'
-// 问答卡的搜索内容与历史卡一致：答案并回题目，待答题在待答区搜索，不重复搜已隐藏的答复气泡。
+// 问答卡的搜索内容与历史卡一致；仅相邻合并的答复不单独搜。
 
 import { wrapQuestionId } from '../../../protocol/src/pending-asks.mjs'
 import type { ItemView } from '../model.mjs'
-import { type AskAnswers, parseAskReply } from '../projection/asks.mjs'
+import type { AskAnswers } from '../projection/asks.mjs'
 
 export function searchCardItem(
   item: ItemView,
   answers: AskAnswers,
   pending: ReadonlySet<string>,
-  known: ReadonlySet<string>,
+  foldedReply = false,
 ): ItemView | null {
-  if (item.kind === 'userMessage' && !item.peer && !item.system) {
-    const replies = parseAskReply(item.text)
-    if (
-      replies &&
-      item.attachments.length === 0 &&
-      replies.every((reply) => known.has(reply.questionItemId))
-    )
-      return null
-  }
+  if (foldedReply) return null
   if (item.kind === 'agentMessage' && item.questions?.length)
     return {
       ...item,
