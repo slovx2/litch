@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { appendFileSync } from 'node:fs'
 import { setTimeout as delay } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
-import { api, pages } from './release-artifacts.mjs'
+import { gh } from './release-artifacts.mjs'
 
 export function signingState(run, jobs, { repository, sha, runId, attempt }) {
   assert.equal(run.repository?.full_name, repository, '签名来源仓库')
@@ -49,9 +49,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
   const base = `repos/${context.repository}/actions/runs/${context.runId}`
   const result = await waitForSigning(context, {
-    readRun: () => api(base),
+    // 单次读取也有界，不能让卡住的网络请求绕过70分钟的状态等待上限。
+    readRun: () => JSON.parse(gh(['api', base], { timeout: 30_000 })),
     // filter=latest保留前次attempt已经成功且本次未重跑的签名job；仍只接受同run同SHA。
-    readJobs: () => pages(`${base}/jobs?filter=latest&per_page=100`, 'jobs'),
+    readJobs: () =>
+      JSON.parse(
+        gh(['api', '--paginate', '--slurp', `${base}/jobs?filter=latest&per_page=100`], {
+          timeout: 30_000,
+        }),
+      ).flatMap((page) => page.jobs),
   })
   appendFileSync(
     env.GITHUB_STEP_SUMMARY,

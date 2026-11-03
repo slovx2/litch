@@ -214,3 +214,27 @@ test('复用Linux首回合必须绑定artifact及稳定ID：缺失或对不上�
     assert.equal(hasReleaseCoverage(changed), false)
   }
 })
+
+test('签名一直queued或执行不结束，聚合状态queued也须在固定预算内报错', async () => {
+  for (const status of ['queued', 'in_progress']) {
+    let time = 0
+    let reads = 0
+    await assert.rejects(
+      waitForSigning(context, {
+        now: () => time,
+        limitMs: 30_000,
+        sleep: async (ms) => {
+          time += ms
+        },
+        readRun: () => ({ ...run, status: 'queued' }),
+        readJobs: () => {
+          reads++
+          return [{ ...job, status, conclusion: null }]
+        },
+      }),
+      /等待候选签名超过70分钟/,
+    )
+    assert.equal(time, 30_000)
+    assert.equal(reads, 2)
+  }
+})
