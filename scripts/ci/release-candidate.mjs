@@ -10,6 +10,7 @@ import { hasMacCoverage, hasReleaseCoverage } from '../full-proof.mjs'
 import { artifactKinds } from '../release-provenance.mjs'
 import { hasLinuxCoverage } from './linux-proof.mjs'
 import { fileHash, validateArtifact } from './release-artifacts.mjs'
+import { checkPatchRecord } from './release-patch-base.mjs'
 import { hasWindowsCoverage } from './windows-proof.mjs'
 
 export const policyVersion = 'candidate-v4-mac-consolidated'
@@ -126,6 +127,8 @@ export function checkNotarization(proof, context) {
 }
 
 export function checkGate(gate, full, context, now = Date.now()) {
+  const mode = gate.mode ?? 'standard'
+  assert.ok(['standard', 'patch'].includes(mode), '未知发版模式')
   assert.equal(gate.schema, 2, 'gate schema')
   assert.equal(gate.repository, context.repository, 'gate repository')
   assert.equal(gate.sha, context.sha, 'gate SHA')
@@ -141,7 +144,7 @@ export function checkGate(gate, full, context, now = Date.now()) {
     Array.isArray(gate.domains) &&
       new Set(gate.domains).size === gate.domains.length &&
       gate.domains.every((domain) => releaseDomains.includes(domain)) &&
-      mandatory.every((domain) => gate.domains.includes(domain)),
+      (mode === 'patch' || mandatory.every((domain) => gate.domains.includes(domain))),
     'gate domains',
   )
   assert.equal(full.repository, context.repository, 'full repository')
@@ -166,7 +169,9 @@ export function checkGate(gate, full, context, now = Date.now()) {
     assert.equal(full.jobs[job], 'success', `full job ${job}`)
   const created = Date.parse(gate.createdAt)
   assert.ok(Number.isFinite(created) && created <= now, 'gate 证明时间无效')
-  if (!hasReleaseCoverage(full)) {
+  if (mode === 'patch') {
+    checkPatchRecord(gate.baseline, context)
+  } else if (!hasReleaseCoverage(full)) {
     const baseline = gate.baseline
     assert.ok(
       Number.isSafeInteger(baseline?.run) && /^[a-f0-9]{40}$/.test(baseline.sha),
@@ -292,7 +297,7 @@ export function summary(manifest) {
   return (
     `## 候选 ${manifest.version}\n\nSHA：\`${manifest.sha}\`\n\n来源：[run ${manifest.runId}](https://github.com/${manifest.repository}/actions/runs/${manifest.runId}) / 验证 attempt ${manifest.attempt}\n\n` +
     `领域：${manifest.gate.domains.join(', ')}；手机模拟器 E2E 按用户决定不参与发版。\n\n` +
-    `夜间基线：${manifest.gate.baseline?.url || '无，执行完整非手机领域'}\n\n` +
+    `${manifest.gate.mode === 'patch' ? '正式版修复基线' : '夜间基线'}：${manifest.gate.baseline?.url || '无，执行完整非手机领域'}\n\n` +
     `| 产物 | 来源 attempt | Artifact ID |\n|---|---|---|\n` +
     Object.entries(manifest.artifacts)
       .map(([kind, a]) => `| ${kind} | ${a.attempt} | ${a.id} |`)

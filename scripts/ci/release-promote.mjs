@@ -144,7 +144,13 @@ export async function promote(env = process.env, services = {}) {
       notarization.attempt,
     )
     const candidateFull = { run, proof: manifest.full, verifiedPreviousAttempt: true }
-    await releasePolicy({ candidateFull, allowMissingTag: true })
+    const policyContext = {
+      candidateFull,
+      gate: manifest.gate,
+      branch: run.head_branch,
+      version: context.version,
+    }
+    await releasePolicy({ ...policyContext, allowMissingTag: true })
     const marker = `<!-- litch-candidate:${context.runId}:${context.attempt}:${artifact.id}:${artifact.digest} -->`
     const report = `${summary(manifest)}\n封存 artifact：${artifact.id}，${artifact.digest}\n`
     if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, report)
@@ -155,7 +161,7 @@ export async function promote(env = process.env, services = {}) {
     const refs = api(`${base}/git/matching-refs/tags/${env.TAG}`)
     if (!refs.some((ref) => ref.ref === `refs/tags/${env.TAG}`))
       api(`${base}/git/refs`, { ref: `refs/tags/${env.TAG}`, sha: context.sha })
-    await releasePolicy({ candidateFull })
+    await releasePolicy(policyContext)
     const existing = pages(`${base}/releases?per_page=100`).filter(
       (item) => item.tag_name === env.TAG,
     )
@@ -230,7 +236,7 @@ export async function promote(env = process.env, services = {}) {
     // 临公开再次检查，所有晋级工作流共用全局串行组，Latest 不能倒退。
     sourceRun(api(runPath), context)
     await verifyCandidate(dir, context, policyHash())
-    await releasePolicy({ candidateFull })
+    await releasePolicy(policyContext)
     checkDraft(api(`${base}/releases/${release.id}`), env.TAG, marker)
     const finalAssets = pages(assetPath)
     checkAssets(finalAssets, expected)
