@@ -4,6 +4,15 @@ name: Prepare release candidate
 on:
   workflow_dispatch:
     inputs:
+      release-mode:
+        description: standard 沿用夜间规则；patch 仅允许最新正式版之后的少量线性补丁
+        type: choice
+        options: [standard, patch]
+        default: standard
+      base-tag:
+        description: patch 必填上一正式版本标签；standard 不填
+        type: string
+        default: ''
       nightly-triage:
         description: 夜间失败与候选无关的已关闭分诊 issue 编号
         default: ''
@@ -48,6 +57,7 @@ jobs:
           node scripts/check-versions.mjs
           node scripts/ci/release-preflight.mjs
       - name: 只读展示夜间监测心跳
+        if: inputs.release-mode != 'patch'
         run: node scripts/ci/nightly-status.mjs
         env:
           GH_TOKEN: ${{ github.token }}
@@ -59,9 +69,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CANDIDATE_SHA: ${{ steps.freeze.outputs.sha }}
           NIGHTLY_RUNS_PATH: nightly-runs.json
+          RELEASE_MODE: ${{ inputs.release-mode || 'standard' }}
+          BASE_TAG: ${{ inputs.base-tag }}
         run: |
-          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/full.yml/runs?event=schedule&status=success&per_page=100" \
-            --jq '.workflow_runs | map({id, head_sha, status, conclusion, event, updated_at, html_url, path, run_attempt})' > nightly-runs.json
+          set -euo pipefail
+          if [ "$RELEASE_MODE" = standard ]; then
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/full.yml/runs?event=schedule&status=success&per_page=100" \
+              --jq '.workflow_runs | map({id, head_sha, status, conclusion, event, updated_at, html_url, path, run_attempt})' > nightly-runs.json
+          fi
           node scripts/ci-impact.mjs | tee packed-impact.json
           {
             echo '### 签名包完整检查的影响范围'
@@ -80,6 +95,8 @@ jobs:
     with:
       sha: ${{ needs.candidate.outputs.sha }}
       nightly-triage: ${{ inputs.nightly-triage || '' }}
+      release-mode: ${{ inputs.release-mode || 'standard' }}
+      base-tag: ${{ inputs.base-tag || '' }}
       mac-after-signing: true
 
   adapter:

@@ -2,12 +2,25 @@ name: Release gate
 on:
   workflow_dispatch:
     inputs:
+      release-mode:
+        type: choice
+        options: [standard, patch]
+        default: standard
+      base-tag:
+        type: string
+        default: ''
       nightly-triage:
         description: 夜间失败与本候选无关的已关闭 nightly-triage issue 编号（可不填）
         type: string
         default: ''
   workflow_call:
     inputs:
+      release-mode:
+        type: string
+        default: standard
+      base-tag:
+        type: string
+        default: ''
       mac-after-signing:
         type: boolean
         default: false
@@ -45,14 +58,19 @@ jobs:
           node-version: 24.21.0
       - name: 影响范围规则与发版策略的变更案例
         run: node --test scripts/ci-impact.test.mjs scripts/ci-nightly-base.test.mjs scripts/release-policy.test.mjs scripts/full-proof.test.mjs scripts/release-provenance.test.mjs scripts/ci/release-*.test.mjs apps/desktop/scripts/notarize.test.mjs
-      - name: 从 48 小时内成功的祖先夜间 Full 计算增量影响范围
+      - name: 按发版模式核验基线并计算增量影响范围
         id: impact
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_MODE: ${{ inputs.release-mode || 'standard' }}
+          BASE_TAG: ${{ inputs.base-tag }}
         run: |
+          set -euo pipefail
           # 只查询真实 schedule Full，保留 run ID；API 故障直接失败，不能伪装成没有基线。
-          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/full.yml/runs?event=schedule&status=success&per_page=100" \
-            --jq '.workflow_runs | map({id, head_sha, status, conclusion, event, updated_at, html_url, path, run_attempt})' > nightly-runs.json
+          if [ "$RELEASE_MODE" = standard ]; then
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/full.yml/runs?event=schedule&status=success&per_page=100" \
+              --jq '.workflow_runs | map({id, head_sha, status, conclusion, event, updated_at, html_url, path, run_attempt})' > nightly-runs.json
+          fi
           export CANDIDATE_SHA="$(git rev-parse HEAD)"
           export NIGHTLY_RUNS_PATH=nightly-runs.json
           node scripts/ci-impact.mjs | tee gate-impact.json
@@ -116,6 +134,7 @@ jobs:
           DOMAINS: ${{ needs.impact.outputs.domains }}
           BASELINE: ${{ needs.impact.outputs.baseline }}
           NIGHTLY_TRIAGE: ${{ inputs.nightly-triage }}
+          RELEASE_MODE: ${{ inputs.release-mode || 'standard' }}
           TAG: ''
         run: node scripts/ci/release-gate-proof.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

@@ -25,6 +25,21 @@ Prepare 固定到本次工作流 SHA，门禁与五类打包并行。macOS 必�
 
 成功的 `seal` 汇总生成 `verified-candidate-<attempt>`，保存 14 天；Summary 给出 source run、验证 attempt、SHA、artifact ID 和带 `sha256:` 的 archive digest。每个平台和门禁/Full 分别登记真实来源 attempt，成功包不重签、不重公证。已有成功候选时，同 SHA 再次 Prepare 会停止并提示晋级来源。
 
+### 修复版快速模式
+
+普通版本默认 `release-mode=standard`，上述夜间基线与领域规则不变。修复版可从最新公开正式标签创建 `release/X.Y.Z`，只增加同主、次版本的下一个补丁号，再运行：
+
+```sh
+gh workflow run release.yml --ref release/0.30.1 \
+  -f release-mode=patch -f base-tag=v0.30.0
+```
+
+快速模式核验公开 Release 的 `candidate.json` 资产摘要、标签 SHA 和成功的 Prepare，要求候选从该 SHA 派生且只有 1–5 个连续单父提交；修复、工作流、版本提交全部计数，不允许 merge。Gate、封存和临公开均重新核对基线身份、最新版本、提交链及 open `release-blocker`。基线不是最新正式版、被移动、没有成功证明或有 blocker 都停止。
+
+保留 CI 必跑集合、手机静态检查、五类正式出包、签名、公证、封存和公开前 hash 回验。完整领域按正式基线至候选的实际 diff 选择，不因红夜间扩大全量，也不需要 `nightly-triage`。普通模式的必补完整领域不自动加入；未知路径、共享协议、设备和普通构建脚本仍保守选择全领域。发版策略文件仅限明确清单，由策略测试覆盖，不能豁免整个 `scripts/` 或 `.github/`。所选领域内仍完整执行检查，不删窗口或原生断言。
+
+模式和正式基线封入候选证明；Promote 从封存读取，不能通过晋级输入临时降低门禁。日常修复版不另跑补充 Mac 全量、不单跑 Promote `verify`，公开后不做额外隔离安装；修改发版证明链时，维护者应先运行一次 `verify` 再 `publish`。`publish` 自身始终核对封存 digest、清单和资产。
+
 ## 2. 只读核对或草稿演练
 
 Promote 使用含相同验证策略的已推送 ref；明确指定源候选，不找“最新同名 artifact”。
@@ -48,7 +63,7 @@ gh workflow run promote.yml --ref <已推送验证分支> \
 
 取得用户的本版公开授权后，把上述命令的 `mode` 改为 `publish`，并增加 `-f confirm-publication=vX.Y.Z`。这个输入是维护者对授权和审阅的明确确认，不是默认选项；已有授权不重复向用户询问。标签 push 本身不会触发准备或公开。
 
-`publish` 同样先创建/核对完整草稿和回验；临公开再次检查来源 run 当前 attempt 成功、证明有效性、最新夜间、open release-blocker、标签实际 SHA、全部资产 ID/hash 和版本顺序。只能显式公开一次，已公开版本禁止覆写，旧版本不能抢 Latest。Promote 全局串行；不要同时排多个晋级请求，GitHub concurrency 只保留一个等待者。
+`publish` 同样先创建/核对完整草稿和回验；临公开再次检查来源 run 当前 attempt 成功、证明有效性、普通模式的最新夜间或修复模式的正式基线、open release-blocker、标签实际 SHA、全部资产 ID/hash 和版本顺序。只能显式公开一次，已公开版本禁止覆写，旧版本不能抢 Latest。Promote 全局串行；不要同时排多个晋级请求，GitHub concurrency 只保留一个等待者。
 
 草稿/公开后生成 `promotion-<attempt>`，含 `promotion.json` 和 `tap-inputs.json`。后者包含版本、真实标签源码 tar URL/hash、formula 路径及源 run/artifact 参数，可直接用于 Homebrew PR；不会自动修改或发布 tap。源码 hash 是标签 URL 的真实 bytes，不拿安装包 hash 或 commit tar hash 替代。
 

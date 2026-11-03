@@ -83,6 +83,9 @@ for (let attempt = 1; attempt <= context.attempt; attempt++) {
 const source = api(base)
 await releasePolicy({
   candidateFull: { run: source, proof: manifest.full, verifiedPreviousAttempt: true },
+  gate: manifest.gate,
+  branch: source.head_branch,
+  version: context.version,
 })
 // 最终清单也纳入封存 hash；晋级阶段绝不重新生成它们。
 execFileSync('sha256sum', ['-c', 'codex-harness-adapter-SHA256SUMS.txt'], {

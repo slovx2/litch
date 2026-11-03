@@ -1,4 +1,4 @@
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, readFileSync } from 'node:fs'
 import { readFullProofArtifact } from '../full-proof-artifact.mjs'
 import { releasePolicy } from '../release-policy.mjs'
 import { api, pages } from './release-artifacts.mjs'
@@ -35,6 +35,7 @@ const full = await readFullProofArtifact(
 )
 const gate = {
   schema: 2,
+  mode: process.env.RELEASE_MODE || 'standard',
   repository: context.repository,
   policy: policyVersion,
   mobileStatic: 'success',
@@ -48,6 +49,11 @@ const gate = {
   conclusion: 'success',
 }
 checkGate(gate, full, context)
-await releasePolicy({ candidateFull: { run, proof: full, verifiedPreviousAttempt: true } })
+await releasePolicy({
+  candidateFull: { run, proof: full, verifiedPreviousAttempt: true },
+  gate,
+  branch: run.head_branch,
+  version: JSON.parse(readFileSync('package.json', 'utf8')).version,
+})
 writeJson('gate-proof.json', gate)
 appendFileSync(process.env.GITHUB_OUTPUT, `sha=${context.sha}\n`)

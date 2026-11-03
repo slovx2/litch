@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { appendFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { verifyPatchBase } from './ci/release-patch-base.mjs'
 import { isCompleteReleaseFull } from './full-proof.mjs'
 import { readFullProofArtifact } from './full-proof-artifact.mjs'
 
@@ -60,7 +61,7 @@ export function checkVersion(tag, latest) {
   throw new Error(`${tag} 已是公开最新版，不准覆盖公开产物`)
 }
 
-function api(path, paginate = false) {
+function githubApi(path, paginate = false) {
   const result = JSON.parse(
     execFileSync('gh', ['api', path, ...(paginate ? ['--paginate', '--slurp'] : [])], {
       encoding: 'utf8',
@@ -70,10 +71,7 @@ function api(path, paginate = false) {
   return paginate ? result.flat() : result
 }
 
-export async function releasePolicy({ candidateFull, allowMissingTag = false } = {}) {
-  const repo = process.env.GITHUB_REPOSITORY
-  const sha = process.env.CANDIDATE_SHA
-  if (!/^[a-f0-9]{40}$/.test(sha ?? '')) throw new Error('缺少完整候选 SHA')
+async function nightlyPolicy(candidateFull, repo, sha, api) {
   const nightly = api(
     `repos/${repo}/actions/workflows/full.yml/runs?event=schedule&status=completed&per_page=1`,
   ).workflow_runs[0]
@@ -144,6 +142,39 @@ export async function releasePolicy({ candidateFull, allowMissingTag = false } =
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n${message}\n`)
   }
+  return message
+}
+
+export async function releasePolicy(
+  { candidateFull, allowMissingTag = false, gate, branch, version } = {},
+  services = {},
+) {
+  const api = services.api ?? githubApi
+  const repo = process.env.GITHUB_REPOSITORY
+  const sha = process.env.CANDIDATE_SHA
+  if (!/^[a-f0-9]{40}$/.test(sha ?? '')) throw new Error('缺少完整候选 SHA')
+  const mode = gate?.mode ?? 'standard'
+  if (!['standard', 'patch'].includes(mode)) throw new Error('未知发版模式')
+  let message
+  if (mode === 'patch') {
+    const blockers = api(
+      `repos/${repo}/issues?labels=release-blocker&state=open&per_page=100`,
+      true,
+    )
+    if (blockers.length) throw new Error('仍有 release-blocker，禁止修复版发布')
+    const base = (services.verifyPatchBase ?? verifyPatchBase)({
+      repository: repo,
+      sha,
+      version: version ?? gate.baseline?.candidateVersion,
+      branch,
+      tag: gate.baseline?.tag,
+      expected: gate.baseline,
+    })
+    message = `修复版基线：${base.url}；${base.commits.length} 个线性提交；不依赖夜间分诊`
+    console.log(message)
+    if (process.env.GITHUB_STEP_SUMMARY)
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n${message}\n`)
+  } else message = await nightlyPolicy(candidateFull, repo, sha, api)
   if (process.env.TAG) {
     const refs = api(`repos/${repo}/git/matching-refs/tags/${encodeURIComponent(process.env.TAG)}`)
     const exists = refs.some((ref) => ref.ref === `refs/tags/${process.env.TAG}`)

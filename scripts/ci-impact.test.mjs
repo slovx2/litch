@@ -179,3 +179,80 @@ test('手机仅 expo.version/android.versionCode/ios.buildNumber 同步不扩大
     assert.equal(compare(changed), false)
   }
 })
+
+test('patch按改动选领域，不补无关完整领域；普通模式和未知路径仍保守', async () => {
+  const { patchAffectedDomains } = await import('./ci-impact.mjs')
+  const options = { trustedBase: true }
+  assert.deepEqual(patchAffectedDomains(['docs/guide.md'], options).domains, [])
+  assert.deepEqual(
+    patchAffectedDomains(['packages/ui/src/composer/Permission.tsx'], options).domains,
+    ['client', 'client-engines', 'mobile'],
+  )
+  assert.deepEqual(
+    patchAffectedDomains(['packages/device/src/server.mts'], options).domains,
+    domains,
+  )
+  assert.deepEqual(patchAffectedDomains(['scripts/build-cli.mjs'], options).domains, domains)
+  assert.deepEqual(
+    patchAffectedDomains(['.github/workflows/windows.yml'], options).domains,
+    domains,
+  )
+  assert.deepEqual(
+    patchAffectedDomains(
+      ['.github/workflows/release.yml', 'scripts/ci/release-patch-base.mjs'],
+      options,
+    ).domains,
+    [],
+  )
+  assert.deepEqual(affectedDomains(['.github/workflows/release.yml']).domains, domains)
+  for (const engine of ['dsh', 'opencode']) {
+    const result = patchAffectedDomains([`packages/${engine}/src/adapter.mts`], options)
+    for (const domain of ['adapters', 'client-engines', 'mobile', 'real-engines', engine])
+      assert.ok(result.domains.includes(domain))
+  }
+  assert.throws(() => patchAffectedDomains([], { trustedBase: false }), /正式祖先基线/)
+})
+
+test('patch仅细化客户端权限记忆模块；设备、协议和其他core仍全域，普通模式不变', async () => {
+  const { patchAffectedDomains, releaseImpact } = await import('./ci-impact.mjs')
+  const paths = [
+    'packages/core/src/device/project-permissions.mts',
+    'packages/core/test/project-permissions.test.mts',
+    'packages/core/test/project-permission-failures.test.mts',
+    'scripts/check-permission-ui.mjs',
+    'packages/core/test/diff-cap.test.mts',
+  ]
+  for (const path of paths) {
+    assert.deepEqual(patchAffectedDomains([path], { trustedBase: true }).domains, [
+      'client',
+      'client-engines',
+      'mobile',
+    ])
+    assert.deepEqual(affectedDomains([path]).domains, domains)
+  }
+  for (const path of [
+    'packages/core/src/device/thread-start.mts',
+    'packages/device/src/project-permissions.mts',
+    'packages/protocol/src/project-permissions.mts',
+    'scripts/check-permission-other.mjs',
+  ]) {
+    assert.deepEqual(patchAffectedDomains([path], { trustedBase: true }).domains, domains)
+  }
+  assert.deepEqual(releaseImpact(patchAffectedDomains(paths, { trustedBase: true })).domains, [
+    'client',
+    'client-engines',
+  ])
+})
+
+test('patch引擎包纯版本同步不误触发引擎完整领域', async () => {
+  const { patchAffectedDomains } = await import('./ci-impact.mjs')
+  const paths = [
+    'packages/dsh/package.json',
+    'packages/opencode/package-lock.json',
+    'packages/claude/package.json',
+  ]
+  assert.deepEqual(
+    patchAffectedDomains(paths, { trustedBase: true, versionOnly: paths }).domains,
+    [],
+  )
+})

@@ -52,3 +52,41 @@ test('发布版本严格递增，不能覆盖已公开的同版本', () => {
     assert.throws(() => checkVersion(tag, 'v0.28.2'))
   }
 })
+
+test('修复版政策不查询夜间，仍重查blocker与正式基线；没有patch证明不能借环境变量绕过', async (t) => {
+  const { releasePolicy } = await import('./release-policy.mjs')
+  for (const [key, value] of Object.entries({
+    GITHUB_REPOSITORY: 'fixture/repo',
+    CANDIDATE_SHA: sha,
+    TAG: '',
+    GITHUB_STEP_SUMMARY: '',
+    RELEASE_MODE: 'patch',
+  })) {
+    const old = process.env[key]
+    process.env[key] = value
+    t.after(() => {
+      if (old === undefined) delete process.env[key]
+      else process.env[key] = old
+    })
+  }
+  const gate = { mode: 'patch', baseline: { tag: 'v0.30.0', candidateVersion: '0.30.1' } }
+  const calls = []
+  let blockers = []
+  const services = {
+    api(path) {
+      calls.push(path)
+      assert.match(path, /issues\?labels=release-blocker/)
+      return blockers
+    },
+    verifyPatchBase(input) {
+      assert.equal(input.expected, gate.baseline)
+      assert.equal(input.branch, 'release/0.30.1')
+      return { url: 'release', commits: [sha] }
+    },
+  }
+  assert.match(await releasePolicy({ gate, branch: 'release/0.30.1' }, services), /不依赖夜间分诊/)
+  assert.equal(calls.length, 1)
+  blockers = [{ number: 1 }]
+  await assert.rejects(releasePolicy({ gate }, services), /release-blocker/)
+  await assert.rejects(releasePolicy({}, services), /issues/)
+})

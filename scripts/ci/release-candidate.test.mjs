@@ -55,6 +55,7 @@ const run = {
   event: 'workflow_dispatch',
   status: 'completed',
   conclusion: 'success',
+  head_branch: 'release/1.2.3',
 }
 const artifact = {
   id: 99,
@@ -78,7 +79,7 @@ function temp(t) {
   t.after(() => rmSync(dir, { recursive: true, force: true }))
   return dir
 }
-async function fixture(t) {
+async function fixture(t, mode = 'standard') {
   const dir = temp(t)
   const artifacts = {}
   let id = 10
@@ -94,14 +95,32 @@ async function fixture(t) {
     artifacts[kind] = { id: id++, name: `${kind}-3`, digest, attempt: 3, jobId: id + 100 }
   const gate = {
     schema: 2,
+    mode,
     repository: context.repository,
     policy: policyVersion,
     mobileStatic: 'success',
     sha,
     run: '42',
     attempt: '3',
-    domains: releaseDomains,
-    baseline: { sha: null, run: null },
+    domains: mode === 'patch' ? ['client'] : releaseDomains,
+    baseline:
+      mode === 'patch'
+        ? {
+            kind: 'release',
+            repository: context.repository,
+            tag: 'v1.2.2',
+            version: '1.2.2',
+            sha: 'b'.repeat(40),
+            releaseId: 1,
+            asset: { id: 2, digest },
+            run: 3,
+            attempt: 1,
+            candidateSha: sha,
+            candidateVersion: context.version,
+            branch: 'release/1.2.3',
+            commits: [sha],
+          }
+        : { sha: null, run: null },
     conclusion: 'success',
     fullArtifact: artifacts['full-proof'],
     createdAt: new Date().toISOString(),
@@ -115,7 +134,7 @@ async function fixture(t) {
     workflowSha: sha,
     event: 'workflow_dispatch',
     runCi: true,
-    domains: JSON.stringify(releaseDomains),
+    domains: JSON.stringify(gate.domains),
     jobs: Object.fromEntries(
       fullJobs.map((job) => [job, job.startsWith('mobile') ? 'skipped' : 'success']),
     ),
@@ -343,8 +362,8 @@ test('公开必须显式确认；旧版本/已公开/外来草稿/资产缺失�
   assert.throws(() => checkAssets([], { 'app.zip': { size: 1 } }), /资产缺失/)
 })
 
-async function serviceFixture(t) {
-  const f = await fixture(t)
+async function serviceFixture(t, mode = 'standard') {
+  const f = await fixture(t, mode)
   const commands = []
   let release
   let tagExists = false
@@ -553,4 +572,39 @@ test('晋级工作流没有构建/测试调用，标签不会启动第二轮 Pre
   assert.doesNotMatch(promotion, /run:.*(?:npm|make-installer|notarytool|stapler|codesign)/)
   assert.match(prepare, /make-installer\.mjs --require-signing/)
   assert.doesNotMatch(prepare, /临时签名的 dmg|用调试钥匙签/)
+})
+
+test('patch证明可只包含client且不受夜间48h限制，不能伪装普通模式或篡改基线', async (t) => {
+  const f = await fixture(t, 'patch')
+  await verifyCandidate(f.dir, context, policy, Date.now() + 72 * 3600_000)
+  assert.throws(() => checkGate({ ...f.gate, mode: 'standard' }, f.full, context), /gate domains/)
+  for (const change of [
+    { candidateSha: 'd'.repeat(40) },
+    { candidateVersion: '1.3.0' },
+    { branch: 'main' },
+  ]) {
+    assert.throws(() =>
+      checkGate({ ...f.gate, baseline: { ...f.gate.baseline, ...change } }, f.full, context),
+    )
+  }
+  assert.throws(() => checkGate({ ...f.gate, mode: 'unknown' }, f.full, context), /未知发版模式/)
+})
+
+test('patch晋级verify及临公开的策略检查始终使用封存模式和基线，不能由输入覆盖', async (t) => {
+  const f = await serviceFixture(t, 'patch')
+  const seen = []
+  f.services.releasePolicy = async (input) => {
+    assert.deepEqual(input.gate, f.gate)
+    assert.equal(input.branch, 'release/1.2.3')
+    assert.equal(input.version, context.version)
+    seen.push(input)
+  }
+  await promote({ ...env, RELEASE_MODE: 'standard', PROMOTE_OUTPUT: f.output }, f.services)
+  assert.deepEqual(f.commands, [])
+  await promote(
+    { ...env, PROMOTE_MODE: 'publish', CONFIRM_PUBLICATION: env.TAG, PROMOTE_OUTPUT: f.output },
+    f.services,
+  )
+  assert.equal(seen.length, 4)
+  assert.equal(f.state().release.draft, false)
 })
