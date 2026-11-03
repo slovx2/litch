@@ -58,14 +58,28 @@ export async function serviceSession(svc: string, opening: string): Promise<Serv
     return Boolean(element && !element.classList.contains('off'))
   }
   const area = () => one<HTMLTextAreaElement>('textarea.cmp-text')
-  const say = async (words: string) => {
+  const blocked = () =>
+    `${text(one('.new-why'))}${text(one('.dock .cmp-hint.err'))}${text(one('.dock [role="alert"]'))}`
+  const say = async (words: string, first = false) => {
     const input = await until('输入框', area)
     write(input, words)
     await frame()
+    if (first) {
+      // 项目权限从远程异步读取；徽标和下一帧都不能证明首句已经可以发送。
+      // 只等待状态，不重写首句或重发 Enter；一直 loading/报错仍由原 until 预算判失败。
+      await until('远程项目权限就绪且首句可发送', () => {
+        const send = one<HTMLButtonElement>('.dock .send')
+        return Boolean(send && !send.disabled && !blocked())
+      }).catch((error) => {
+        throw new Error(`${String(error)}；发送阻塞：${blocked() || '发送按钮不可用'}`)
+      })
+    }
+    const sampled = blocked()
     input.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
     )
     await frame()
+    return sampled
   }
   const lastTurn = () => all('.turn').at(-1)?.textContent ?? ''
   const running = () => Boolean(one('.running-line'))
@@ -93,11 +107,8 @@ export async function serviceSession(svc: string, opening: string): Promise<Serv
   const chip = await until('标题栏上的徽标', () => one<HTMLElement>('.crumb .chip'), 30_000)
   const target = chip.title
   const pickerShown = Boolean(picker('harness'))
-  await frame()
-  const stillBlocked = `${text(one('.new-why'))}${text(one('.dock .cmp-hint.err'))}`
-
   // ---- 二、发头一句：会话建在那台机器上，回话是那边的假模型说的 ----
-  await say(opening)
+  const stillBlocked = await say(opening, true)
   await until(
     '落到新会话里',
     () => !one('.new-hero') && text(one('.ss-row:not(.projection-group *).sel')).includes(opening),
