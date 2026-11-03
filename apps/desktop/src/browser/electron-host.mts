@@ -29,7 +29,7 @@ export interface ElectronBrowserHost extends BrowserHost {
   list(): TabInfo[]
   /** 标签有变化时（合并到下一拍）通知；回一个取消的函数 */
   onChange(listener: (tabs: TabInfo[]) => void): () => void
-  /** 代理要给用户看某个标签（show 工具） */
+  /** 需要显示某个标签（代理 show 工具，或用户在当前网页打开前台标签） */
   onShow(listener: (tab: TabInfo) => void): () => void
   /** 清除浏览数据：cookie、站点存储、缓存、登录的凭据 */
   clearData(): Promise<void>
@@ -104,7 +104,7 @@ export function createElectronHost(): ElectronBrowserHost {
       changed,
       gate: (page, url) => gate(page, url),
       rewrite: (page, url) => rewrite(page, url),
-      popup(from, url) {
+      popup(from, url, foreground) {
         // 网页要开的新窗口改成同一个会话里的新标签。代理的标签开出来的还是代理的（回合结束时关）
         if (from.kind === 'agent' && from.info().agentActive && !gate(from, url)) {
           from.notice(
@@ -129,6 +129,14 @@ export function createElectronHost(): ElectronBrowserHost {
               ),
           )
         } else void next.load(url, 30_000)
+        // 只接续用户眼前页面的操作。代理自己的弹窗留在后台；交给人登录时按用户操作处理。
+        if (
+          foreground &&
+          (!from.info().agentActive || handover !== null) &&
+          [...shown.values()].includes(from.id)
+        ) {
+          for (const listener of showListeners) listener(next.info())
+        }
         if (handover === null) from.notice(`The page opened ${url} in a new tab ${next.id}.`)
       },
     })

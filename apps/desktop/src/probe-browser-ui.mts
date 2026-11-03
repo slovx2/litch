@@ -137,6 +137,53 @@ void app.whenReady().then(async () => {
     )
     await shot('page')
 
+    // 页面自己开新标签：经过预加载、宿主、IPC 和真实面板，核对选中项及实际挂上的视图。
+    if (process.env.LITCH_BROWSER_POPUPS_ONLY) {
+      if (!tab) throw new Error('新标签验收没有可用的用户标签')
+      const opener = browser.host.page(tab.id) as HostTab
+      opener.view.webContents.setBackgroundThrottling(false)
+      await opener.load(`${pages.local}/popup`, 5000)
+      await opener.cdp('Runtime.evaluate', { expression: 'document.readyState' })
+      await pause(150)
+      const point = await opener.cdp<{ result: { value: number[] } }>('Runtime.evaluate', {
+        expression:
+          '(()=>{const r=document.querySelector("#pop").getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()',
+        returnByValue: true,
+      })
+      for (const type of ['mousePressed', 'mouseReleased']) {
+        await opener.cdp('Input.dispatchMouseEvent', {
+          type,
+          x: point.result.value[0],
+          y: point.result.value[1],
+          button: 'left',
+          clickCount: 1,
+        })
+      }
+      check(
+        '页面开窗后面板选中新标签',
+        await until(
+          'document.querySelectorAll(".bw-tab").length === 2 && document.querySelector(".bw-tab[data-active=true] .bw-tab-name")?.textContent === "Form"',
+        ),
+      )
+      const popup = browser.host.list().find((one) => one.id !== tab.id)
+      await pause(200)
+      check(
+        '新标签的网页实际显示、原网页已摘下',
+        !!popup && window.contentView.children.includes(viewOf(popup.id) as never) && !attached(),
+      )
+      if (popup) browser.host.close(popup.id)
+      await until('document.querySelectorAll(".bw-tab").length === 1')
+      check('新标签面板验收全程窗口隐藏', !window.isVisible())
+      for (const one of browser.host.list()) browser.host.close(one.id)
+      window.destroy()
+      pages.close()
+      clearTimeout(limit)
+      const ok = checks.every((one) => one.ok)
+      console.log(`LITCH_BROWSER ${JSON.stringify({ ok, pid: process.pid, checks })}`)
+      app.exit(ok ? 0 : 1)
+      return
+    }
+
     // 浮层压上来就撤下
     await page(
       `(() => { const m = document.createElement('div'); m.id = 'probe-menu'; m.setAttribute('role', 'menu'); const r = document.querySelector('.bw-view').getBoundingClientRect(); Object.assign(m.style, { position: 'fixed', left: r.left + 10 + 'px', top: r.top + 10 + 'px', width: '80px', height: '40px' }); document.body.append(m) })()`,

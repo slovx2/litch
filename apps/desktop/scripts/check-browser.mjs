@@ -1,6 +1,8 @@
 // 内置浏览器的自检：不显示窗口，起一次 Electron，跑 src/probe-browser.mts（工具逐个调用、CDP 白名单、
 // 按来源审批、回合收尾）。测试网页由自检自己在回环上起，用户数据目录是临时的，跑完删掉。
 //   node scripts/check-browser.mjs          自检
+//   node scripts/check-browser.mjs --popups 新标签的前后台选择、真实输入与代理归属（隐藏窗口）
+//   node scripts/check-browser.mjs --popups-ui 新标签到真实面板的接线（隐藏窗口；先构建 packages/ui）
 //   node scripts/check-browser.mjs --v0     实测：WebContentsView 在面板关着的各种挂法下截图、输入能不能用
 //   node scripts/check-browser.mjs --ui     浏览器面板：真的界面（先构建 packages/ui）对着页面里的模拟核心，
 //                                          量矩形、叠上去、收起摘下、浮层撤下、show 打开面板
@@ -26,20 +28,24 @@ const electron = require('electron')
 const appDir = fileURLToPath(new URL('..', import.meta.url))
 const v0 = process.argv.includes('--v0')
 const imports = process.argv.includes('--import')
-const ui = process.argv.includes('--ui') || imports
+const popupsUi = process.argv.includes('--popups-ui')
+const ui = process.argv.includes('--ui') || imports || popupsUi
 const autofill = process.argv.includes('--autofill')
 const fill = process.argv.includes('--fill')
-const entry = v0
-  ? 'src/probe-browser-v0.mts'
-  : imports
-    ? 'src/probe-browser-import.mts'
-    : ui
-      ? 'src/probe-browser-ui.mts'
-      : autofill
-        ? 'src/probe-browser-autofill.mts'
-        : fill
-          ? 'src/probe-browser-fill.mts'
-          : 'src/probe-browser.mts'
+const popups = process.argv.includes('--popups')
+const entry = popups
+  ? 'src/probe-browser-popups.mts'
+  : v0
+    ? 'src/probe-browser-v0.mts'
+    : imports
+      ? 'src/probe-browser-import.mts'
+      : ui
+        ? 'src/probe-browser-ui.mts'
+        : autofill
+          ? 'src/probe-browser-autofill.mts'
+          : fill
+            ? 'src/probe-browser-fill.mts'
+            : 'src/probe-browser.mts'
 const uiRoot = fileURLToPath(new URL('../../../packages/ui/dist', import.meta.url))
 if (ui && !existsSync(join(uiRoot, 'index.html'))) {
   console.error('没有界面的构建产物，先 npm run build --prefix packages/ui')
@@ -95,11 +101,13 @@ await build({
 
 const env = {
   ...process.env,
+  HOME: join(work, 'home'),
   LITCH_PROFILE: join(work, 'profile'),
   LITCH_UI_ROOT: uiRoot,
   LITCH_PROBE_PRELOAD: preload,
 }
 if (process.argv.includes('--shown')) env.LITCH_V0_SHOWN = '1'
+if (popupsUi) env.LITCH_BROWSER_POPUPS_ONLY = '1'
 if (process.argv.includes('--manual')) env.LITCH_AUTOFILL_MANUAL = '1'
 // 导入的样本：空目录交给主进程，它自己摆一套（browser-import/test/sample.mts），跑完随临时目录删掉
 if (imports) {
@@ -122,6 +130,8 @@ if (imports) {
   })
 }
 delete env.ELECTRON_RUN_AS_NODE
+mkdirSync(env.HOME, { recursive: true })
+if (!existsSync(outfile)) throw new Error(`找不到验收入口：${outfile}`)
 
 const child = spawn(electron, [outfile], { env, stdio: ['ignore', 'pipe', 'pipe'] })
 let output = ''
@@ -141,7 +151,7 @@ const code = await new Promise((resolve) => child.on('exit', (exitCode) => resol
 clearTimeout(limit)
 rmSync(work, { recursive: true, force: true })
 // 自动填充、面板（保存提示）两项用的 safeStorage 在 macOS 钥匙串里留下的那把钥匙（按自检的应用名起的名，不是 Litch 的）
-if ((autofill || ui) && process.platform === 'darwin') {
+if ((autofill || (ui && !popupsUi)) && process.platform === 'darwin') {
   spawnSync('security', [
     'delete-generic-password',
     '-s',
@@ -158,5 +168,8 @@ if (!line) {
   process.exit(1)
 }
 const result = JSON.parse(line.slice(marker.length))
+if ((popups || popupsUi) && result.pid !== child.pid) {
+  throw new Error('新标签验收结果的 PID 与启动的 Electron 不符')
+}
 console.log(JSON.stringify(result, null, 1))
 if (!v0 && !result.ok) process.exit(1)

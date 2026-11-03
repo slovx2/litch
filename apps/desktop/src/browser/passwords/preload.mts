@@ -1,5 +1,6 @@
 // 标签里的自动填充预加载（打成 dist/autofill-preload.cjs，用户的、代理的标签都挂，各个框架都跑一份）。
 // 跑在隔离环境里，不往网页暴露任何东西：不用 contextBridge、不加全局变量、不往网页 DOM 里加东西，只听事件。
+// 同一份预加载也报告开窗所需的真实输入事件（popup-gesture-preload.mts）。
 //
 // 自动填充：登录框获得焦点时问主进程这个框架有没有候选（主进程按 senderFrame 的真实源回答，只回用户名，
 // 这里的消息不带源；代理自己在用的标签没有候选）；有人真的点了这个框（或在框里按 ↓）才请主进程给候选，
@@ -14,6 +15,7 @@
 //
 // Litch 代填（人在卡片上选了已存的账号）：主进程一步一步请（sign-in-page.mts），这期间的提交不出保存提示。
 import { ipcRenderer } from 'electron'
+import '../popup-gesture-preload.mjs'
 import type { SecretProbe } from './fill-rules.mjs'
 import {
   fillInput,

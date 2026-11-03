@@ -46,6 +46,10 @@ Claude 的新分叉和 hand_off 按当前开关重新整理工具；其余引擎
 
 ## Built-in browser
 
+- 用户在当前网页普通点击链接或按钮打开新标签时，自动切到新标签；Cmd/Ctrl+点击、中键点击
+  在后台打开，Shift 配合点击按前台打开处理。没有真实输入的脚本弹窗不切换当前标签。
+  代理正在操作的标签开出的新标签仍归同一代理，并保持后台；交给用户登录期间开的弹窗
+  归用户，普通点击时切过去。后台网页不会自动打开浏览器面板或切走用户正在看的页面。
 - In the side panel, tab **Browser**: tabs, address bar (non-URLs search the web), back, forward,
   reload, "Open in system browser". One browser profile is shared by all sessions and devices: sign in
   once in the panel and agents can use that session.

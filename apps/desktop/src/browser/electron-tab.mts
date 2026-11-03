@@ -1,5 +1,5 @@
 // 一个标签：一块 WebContentsView，加上它的调试器（CDP，经白名单）、控制台记录、对话框、提示。
-// 视图只由主进程持有：开沙箱和上下文隔离、不开 Node，用共用的持久分区。预加载只有自动填充的那一个
+// 视图只由主进程持有：开沙箱和上下文隔离、不开 Node，用共用的持久分区。预加载处理自动填充和开窗输入
 // （passwords/preload.mts，隔离环境里只听事件，不往网页暴露东西）。
 // 它碰不到界面，也拿不到通往核心的端口（那个端口只给界面自己的主框架，见 main.mts 的 REQUEST_CORE_PORT）。
 import { type Event, WebContentsView } from 'electron'
@@ -8,6 +8,7 @@ import { SIGNING_IN } from './executor.mjs'
 import { failurePage } from './forwarding.mjs'
 import type { BrowserPage, DialogInfo, LoadOutcome, TabInfo, TabKind, TabOwner } from './model.mjs'
 import { autofillPreferences, isHandedOver, registerAutofillTab } from './passwords/tabs.mjs'
+import { POPUP_GESTURE } from './popup-gesture.mjs'
 import { createTabLog } from './tab-log.mjs'
 import { BLANK, isOpenable } from './url.mjs'
 
@@ -25,7 +26,7 @@ export interface TabHooks {
   /** 代理在用时网页自己发起的跳转放不放行 */
   gate(page: BrowserPage, url: string): boolean
   /** 网页要开新窗口：在内置浏览器里开新标签 */
-  popup(from: HostTab, url: string): void
+  popup(from: HostTab, url: string, foreground: boolean): void
   /**
    * 网页自己要去的地址要不要先改写（远程会话里的远端 localhost 要经 ssh 转发）。
    * 不用改回 null；要改回改写后的地址（可能要等转发就绪），改写失败时拒绝
@@ -264,8 +265,28 @@ export function createTab(
     return true
   }
 
-  contents.setWindowOpenHandler(({ url }) => {
-    if (isOpenable(url) && url !== BLANK) hooks.popup(tab, url)
+  let gesture: { frame: number; token: number; background: boolean; at: number } | null = null
+  contents.on('ipc-message', (event, channel, message) => {
+    if (channel !== POPUP_GESTURE || !event.senderFrame || !message) return
+    const frame = event.senderFrame.frameTreeNodeId
+    if (message.active === true) {
+      gesture = { frame, token: message.token, background: message.background, at: Date.now() }
+    } else if (gesture?.frame === frame && gesture.token === message.token) {
+      gesture = null
+    }
+  })
+  contents.on('did-start-navigation', () => {
+    gesture = null
+  })
+  contents.setWindowOpenHandler(({ url, disposition }) => {
+    // 预加载报告的输入任务结束就撤销；时间上限防止框架销毁等情况漏掉结束消息。
+    const foreground =
+      gesture !== null &&
+      Date.now() - gesture.at < 1000 &&
+      !gesture.background &&
+      disposition !== 'background-tab' &&
+      disposition !== 'other'
+    if (isOpenable(url) && url !== BLANK) hooks.popup(tab, url, foreground)
     return { action: 'deny' }
   })
   contents.on('will-frame-navigate', (event) => {
