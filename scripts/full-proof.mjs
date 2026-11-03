@@ -2,6 +2,7 @@
 import { execFileSync } from 'node:child_process'
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { hasLinuxCoverage } from './ci/linux-proof.mjs'
 import { checkNativeProof, selectedNative } from './ci/mac-native-plan.mjs'
 import { domains, releaseDomains } from './ci-impact.mjs'
 
@@ -87,6 +88,7 @@ export function isCompleteFull(run, proof, sha, repository) {
       proof.runCi === true &&
       hasAllDomains(proof.domains) &&
       hasMacCoverage(proof) &&
+      hasLinuxCoverage(proof) &&
       fullJobs.every((job) => proof.jobs?.[job] === 'success'),
   )
 }
@@ -103,6 +105,7 @@ export function hasReleaseCoverage(proof) {
   return Boolean(
     proof?.schema === 1 &&
       hasMacCoverage(proof) &&
+      hasLinuxCoverage(proof) &&
       proof.runCi === true &&
       Array.isArray(selected) &&
       new Set(selected).size === selected.length &&
@@ -178,6 +181,7 @@ export function writeFullProof(env = process.env) {
     throw new Error('汇总 job 的实际检出与 Full 冻结 SHA 不同')
   }
   const needs = JSON.parse(env.FULL_NEEDS)
+  const bound = JSON.parse(readFileSync('check-proofs-bound.json', 'utf8'))
   const proof = {
     schema: 1,
     repository: env.GITHUB_REPOSITORY,
@@ -191,9 +195,11 @@ export function writeFullProof(env = process.env) {
     runCi: env.FULL_RUN_CI === 'true',
     mobileDisableVulkan: env.FULL_MOBILE_DISABLE_VULKAN === 'true',
     jobs: Object.fromEntries(Object.entries(needs).map(([job, data]) => [job, data.result])),
-    macProof: JSON.parse(readFileSync('mac-proof-bound.json', 'utf8')),
+    macProof: bound.macProof,
+    linuxProofs: bound.linuxProofs,
   }
   if (!hasMacCoverage(proof)) throw new Error('合并Mac的检查证明缺失、失败或来源不符')
+  if (!hasLinuxCoverage(proof)) throw new Error('复用Linux的检查证明缺失、失败或来源不符')
   const selected = selectedNative(proof.domains, proof.runCi)
   for (const domain of ['computer-use', 'client', 'client-engines']) {
     proof.jobs[domain] = selected.includes(domain) ? 'success' : 'skipped'

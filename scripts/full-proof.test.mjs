@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { fixtureMacProof } from './ci/mac-proof-fixture.mjs'
+import { fixtureLinuxProofs, fixtureMacProof } from './ci/mac-proof-fixture.mjs'
 import { domains } from './ci-impact.mjs'
 import {
   findSuccessfulFull,
@@ -41,6 +41,7 @@ const proof = {
   jobs: Object.fromEntries(fullJobs.map((job) => [job, 'success'])),
 }
 proof.macProof = fixtureMacProof(proof)
+proof.linuxProofs = fixtureLinuxProofs(proof)
 
 test('默认全量、显式全集和 schedule 都可证明同 SHA 完整 Full', () => {
   assert.ok(isCompleteFull(run, proof, sha, repository))
@@ -215,8 +216,11 @@ test('用真实 git HEAD 生成证明，拒绝与冻结 SHA 不一致的 checkou
       ),
     }
     writeFileSync(
-      'mac-proof-bound.json',
-      JSON.stringify(fixtureMacProof({ ...proof, sha: actualSha })),
+      'check-proofs-bound.json',
+      JSON.stringify({
+        macProof: fixtureMacProof({ ...proof, sha: actualSha }),
+        linuxProofs: fixtureLinuxProofs({ ...proof, sha: actualSha }),
+      }),
     )
     const generated = writeFullProof(env)
     assert.equal(generated.sha, actualSha)

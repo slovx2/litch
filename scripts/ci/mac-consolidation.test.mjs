@@ -127,3 +127,75 @@ test('汇总不能用一个成功job冒充Mac覆盖；逐检查和artifact来源
     assert.equal(hasMacCoverage(changed), false)
   }
 })
+
+test('复用Linux首回合必须绑定artifact及稳定ID：缺失或对不上不能算Full完整', async () => {
+  const { fixtureLinuxProofs } = await import('./mac-proof-fixture.mjs')
+  const { hasLinuxCoverage } = await import('./linux-proof.mjs')
+  const { fullJobs, hasReleaseCoverage } = await import('../full-proof.mjs')
+  const full = {
+    ...context,
+    schema: 1,
+    workflowSha: context.sha,
+    domains: '',
+    runCi: true,
+    jobs: Object.fromEntries(fullJobs.map((job) => [job, 'success'])),
+  }
+  full.macProof = fixtureMacProof(full)
+  full.linuxProofs = fixtureLinuxProofs(full)
+  assert.equal(hasReleaseCoverage(full), true)
+  const key = 'linux-checks-ci-client'
+  for (const alter of [
+    (p) => {
+      delete p.linuxProofs
+    },
+    (p) => {
+      delete p.linuxProofs[key]
+    },
+    (p) => {
+      p.linuxProofs[key].artifact.id = 0
+    },
+    (p) => {
+      p.linuxProofs[key].artifact.digest = 'wrong'
+    },
+    (p) => {
+      p.linuxProofs[key].artifact.name = 'linux-checks-real-engines-2'
+    },
+    (p) => {
+      p.linuxProofs[key].artifact.attempt = 3
+    },
+    (p) => {
+      p.linuxProofs[key].proof.sha = 'b'.repeat(40)
+    },
+    (p) => {
+      p.linuxProofs[key].proof.runId = '43'
+    },
+    (p) => {
+      p.linuxProofs[key].proof.attempt = 1
+    },
+    (p) => {
+      p.linuxProofs[key].proof.results = p.linuxProofs[key].proof.results.filter(
+        (x) => x.id !== 'first-turn',
+      )
+    },
+    (p) => {
+      p.linuxProofs[key].proof.results[0].code = 1
+    },
+    (p) => {
+      p.linuxProofs[key].proof.results[0].tests.skipped = 1
+    },
+    (p) => {
+      p.linuxProofs[key].proof.plan.checks[0].command = ['true']
+    },
+    (p) => {
+      p.linuxProofs[key].proof.clis = []
+    },
+    (p) => {
+      p.linuxProofs[key].proof.complete = false
+    },
+  ]) {
+    const changed = structuredClone(full)
+    alter(changed)
+    assert.equal(hasLinuxCoverage(changed), false)
+    assert.equal(hasReleaseCoverage(changed), false)
+  }
+})

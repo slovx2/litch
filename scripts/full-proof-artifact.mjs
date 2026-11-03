@@ -14,7 +14,7 @@ export async function readFullProofArtifact(repo, run, api, download = downloadA
   if (
     artifact.workflow_run?.id !== run.id ||
     artifact.workflow_run?.head_sha !== run.head_sha ||
-    artifact.size_in_bytes > 128 * 1024
+    artifact.size_in_bytes > 2 * 1024 * 1024
   )
     return undefined
   return download(repo, artifact.id)
@@ -34,7 +34,7 @@ async function downloadArchive(repo, id) {
 }
 
 export function decodeFullProofArchive(buffer) {
-  if (buffer.length > 128 * 1024) throw new Error('Full 证明超出大小上限')
+  if (buffer.length > 2 * 1024 * 1024) throw new Error('Full 证明超出大小上限')
   const temp = mkdtempSync(join(tmpdir(), 'litch-full-proof-'))
   try {
     const archive = join(temp, 'proof.zip')
@@ -42,13 +42,13 @@ export function decodeFullProofArchive(buffer) {
     // 不解包任何路径，只读取唯一的 JSON，拒绝其他文件和路径穿越。
     const files = execFileSync('unzip', ['-Z1', archive], {
       encoding: 'utf8',
-      maxBuffer: 128 * 1024,
+      maxBuffer: 2 * 1024 * 1024,
     }).trim()
     if (files !== 'full-proof.json') throw new Error('Full 证明 archive 内容不符')
     return JSON.parse(
       execFileSync('unzip', ['-p', archive, 'full-proof.json'], {
         encoding: 'utf8',
-        maxBuffer: 128 * 1024,
+        maxBuffer: 2 * 1024 * 1024,
       }),
     )
   } finally {

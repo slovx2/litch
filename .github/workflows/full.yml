@@ -871,12 +871,14 @@ jobs:
         id: stage-3
         env:
           GITHUB_TOKEN: ${{ github.token }}
-      - name: 读取同run成功Mac作业的不可变检查证明
+      - name: 读取同run成功Mac和Linux作业的不可变检查证明
         env:
           GH_TOKEN: ${{ github.token }}
           FULL_SOURCE_SHA: ${{ needs.source.outputs.sha }}
           NATIVE_DOMAINS: ${{ needs.source.outputs.native-domains }}
-        run: node scripts/ci/read-mac-proof.mjs
+          FULL_DOMAINS: ${{ inputs.domains || '' }}
+          FULL_RUN_CI: ${{ toJSON(inputs.run-ci) != 'false' }}
+        run: node scripts/ci/read-check-proofs.mjs
       - name: 记录输入、实际检出和完整领域结果
         run: node scripts/full-proof.mjs
         env:
