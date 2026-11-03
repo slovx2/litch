@@ -167,13 +167,13 @@ export class ManagerResets {
     const bundle = managerBundle(manager, link.native, tree.host.taskCards(manager.harness))
     const names = new Set(bundle.map((spec) => spec.name))
     const known = new Set<string>(Object.values(CLIENT_TOOL_NAMESPACE))
-    // 重置经理规则时保留已安装的客户端工具；不对存量会话补装工具。
-    const tools = [
+    // 重置与恢复按同一份设备设置补齐或移除常驻工具；回滚仍原样恢复旧定义。
+    const tools = tree.host.refreshClientTools(manager.harness, [
       ...(tree.store.tools(manager.threadId) ?? []).filter(
         (spec) => isObject(spec) && known.has(String(spec.name)) && !names.has(String(spec.name)),
       ),
       ...bundle,
-    ]
+    ])
     const fingerprint = managerFingerprint(bundle)
     if (manager.harness === 'claude-code') {
       const oldTools = record.oldTools ?? tree.store.tools(manager.threadId)

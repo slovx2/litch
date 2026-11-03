@@ -8,10 +8,11 @@ import {
 import { ManagerResets } from '../src/manager-reset.mjs'
 import { managerBundle, managerFingerprint } from '../src/manager-rules.mjs'
 import { startChild } from '../src/session-start.mjs'
+import { rig } from './helpers.mjs'
 import { treeRig, until } from './tree-kit.mjs'
 
-async function setup(harness = 'pi') {
-  const env = treeRig()
+async function setup(harness = 'pi', values: Record<string, unknown> = {}) {
+  const env = treeRig({}, { values })
   const client = env.connect()
   await client.initialize(['harness', 'litchManager', 'sessionTree'])
   const result = await client.call(MANAGER_METHOD.create, {
@@ -33,6 +34,187 @@ async function setup(harness = 'pi') {
   engine.end(result.threadId, 'completed', '原始历史')
   await until(() => !env.device.sessionTree.isActive(result.threadId), '空闲')
   return { ...env, client, engine, manager: result.manager, oldId: result.threadId as string }
+}
+
+const residentNames = ['litch_browser', 'litch_computer', 'litch_machine', 'litch_tasks']
+const enabled = { 'tools.browser': true, 'tools.computer': true, 'tools.machine': true }
+
+function legacyTools(env: Awaited<ReturnType<typeof setup>>): unknown[] {
+  const tools = env.device.sessionTree.store
+    .tools(env.oldId)!
+    .filter((tool: any) => !residentNames.includes(tool.name))
+  env.device.sessionTree.store.setTools(env.oldId, tools)
+  env.engine.threads.find((thread) => thread.id === env.oldId)!.dynamicTools = tools
+  return tools
+}
+
+test('旧 Claude 经理重置补齐四类工具并落库，下一回合可调用；角色包不变', async () => {
+  const env = await setup('claude-code', enabled)
+  try {
+    const oldTools = legacyTools(env)
+    await env.client.call(MANAGER_METHOD.reset, { managerId: env.manager.id })
+    await until(
+      () => env.device.managers.manager(env.manager.id).reset?.phase === 'ready',
+      '旧经理补齐工具',
+      5000,
+    )
+    const tools = env.device.sessionTree.store.tools(env.oldId)! as {
+      name: string
+      tools: { name: string }[]
+    }[]
+    assert.deepEqual(
+      tools.filter((tool) => !residentNames.includes(tool.name)),
+      oldTools,
+    )
+    for (const name of residentNames)
+      assert.ok(
+        tools.some((tool) => tool.name === name),
+        name,
+      )
+    assert.deepEqual(
+      env.engine.threads.find((thread) => thread.id === env.oldId)!.dynamicTools,
+      tools,
+    )
+    const desktop = env.connect()
+    await desktop.initialize(['harness', 'clientTools'], {
+      litchClientTools: { namespaces: residentNames.slice(0, 3) },
+    })
+    await desktop.call('turn/start', { threadId: env.oldId, input: [] })
+    for (const [namespace, tool] of [
+      ['litch_browser', 'tabs'],
+      ['litch_computer', 'list_apps'],
+      ['litch_machine', 'machines'],
+    ]) {
+      assert.ok(
+        tools.find((spec) => spec.name === namespace)?.tools.some((spec) => spec.name === tool),
+      )
+      const called = env.engine.callTool(env.oldId, namespace!, tool!, {})
+      const request = await desktop.waitFor((frame) => frame.method === 'item/tool/call')
+      desktop.answer(request.id, { success: true, contentItems: [] })
+      assert.equal((await called)?.answer.result.success, true)
+      desktop.requests.length = 0
+    }
+    assert.equal(
+      (await env.engine.callTool(env.oldId, 'litch_tasks', 'list', {}))?.answer.result.success,
+      true,
+    )
+  } finally {
+    await env.close()
+  }
+})
+
+test('Claude 重置按最新设备和 harness 开关移除已有工具，保留定时任务与角色包', async () => {
+  const env = await setup('claude-code', enabled)
+  try {
+    const before = env.device.sessionTree.store.tools(env.oldId)!
+    env.control!.patch({
+      values: {
+        ...enabled,
+        'tools.machine': false,
+        'harness.claude-code.browser': false,
+        'harness.claude-code.computer': false,
+      } as never,
+    })
+    await env.client.call(MANAGER_METHOD.reset, { managerId: env.manager.id })
+    await until(
+      () => env.device.managers.manager(env.manager.id).reset?.phase === 'ready',
+      '关闭工具后重置',
+      5000,
+    )
+    assert.deepEqual(
+      env.device.sessionTree.store.tools(env.oldId),
+      before.filter((tool: any) => !residentNames.slice(0, 3).includes(tool.name)),
+    )
+  } finally {
+    await env.close()
+  }
+})
+
+test('进行中回合重置先等待，结束后按此时的开关补齐工具', async () => {
+  const env = await setup('claude-code')
+  try {
+    const oldTools = legacyTools(env)
+    await env.client.call('turn/start', { threadId: env.oldId, input: [] })
+    await env.client.call(MANAGER_METHOD.reset, { managerId: env.manager.id })
+    assert.equal(env.device.managers.manager(env.manager.id).reset?.phase, 'waiting')
+    assert.deepEqual(env.device.sessionTree.store.tools(env.oldId), oldTools)
+    env.control!.patch({ values: enabled as never })
+    env.engine.end(env.oldId, 'completed', '当前回合结束')
+    await until(
+      () => env.device.managers.manager(env.manager.id).reset?.phase === 'ready',
+      '回合结束后刷新',
+      5000,
+    )
+    const tools = env.device.sessionTree.store.tools(env.oldId)! as { name: string }[]
+    for (const name of residentNames)
+      assert.ok(
+        tools.some((tool) => tool.name === name),
+        name,
+      )
+  } finally {
+    await env.close()
+  }
+})
+
+for (const harness of ['claude-code', 'pi']) {
+  for (const path of ['reconnect', 'restart'] as const) {
+    test(`${harness} 旧经理${path}恢复：补齐四类工具，关闭时移除常驻工具，角色不变`, async () => {
+      const env = await setup(harness, enabled)
+      let restarted: ReturnType<typeof rig> | undefined
+      try {
+        const oldTools = legacyTools(env)
+        env.client.close()
+        if (path === 'restart') {
+          await env.device.close()
+          restarted = rig(
+            { [harness]: env.engine },
+            {},
+            {
+              stateDir: env.stateDir,
+              clientToolSettings: enabled,
+            },
+          )
+        }
+        const current = restarted ?? env
+        const client = current.connect()
+        await client.initialize(['harness', 'litchManager'])
+        if (path === 'restart') {
+          // 设备重启续做与内部唤醒通过同一个 EngineLink 恢复入口。
+          const link = await current.device.sessionTree.link(harness)
+          await link.request('thread/resume', { threadId: env.oldId })
+        } else await client.call('thread/resume', { threadId: env.oldId, dynamicTools: [] })
+        let tools = current.device.sessionTree.store.tools(env.oldId)! as { name: string }[]
+        for (const name of residentNames)
+          assert.ok(
+            tools.some((tool) => tool.name === name),
+            name,
+          )
+        assert.deepEqual(
+          tools.filter((tool) => !residentNames.includes(tool.name)),
+          oldTools,
+        )
+        if (path === 'reconnect') {
+          env.control!.patch({
+            values: {
+              'tools.browser': false,
+              'tools.computer': false,
+              'tools.machine': false,
+            } as never,
+          })
+          await client.call('thread/resume', { threadId: env.oldId })
+          tools = env.device.sessionTree.store.tools(env.oldId)! as { name: string }[]
+          assert.deepEqual(
+            tools.filter((tool) => tool.name !== 'litch_tasks'),
+            oldTools,
+          )
+          assert.ok(tools.some((tool) => tool.name === 'litch_tasks'))
+        }
+      } finally {
+        await restarted?.device.close()
+        await env.close()
+      }
+    })
+  }
 }
 
 test('能力指纹稳定，创建已安装；设置和工具变化均显示落后', async () => {
@@ -89,6 +271,8 @@ test('换绑保留看板、子树、停报偏好和待投递回报，旧经理�
   try {
     const managers = env.device.managers
     const tree = env.device.sessionTree
+    legacyTools(env)
+    env.control!.patch({ values: enabled as never })
     const child = await startChild(
       tree,
       env.oldId,
@@ -111,6 +295,12 @@ test('换绑保留看板、子树、停报偏好和待投递回报，旧经理�
       5000,
     )
     const current = managers.manager(env.manager.id)
+    const installed = tree.store.tools(current.threadId)! as { name: string }[]
+    for (const name of residentNames)
+      assert.ok(
+        installed.some((tool) => tool.name === name),
+        name,
+      )
     assert.equal(managers.store.forThread(env.oldId), null)
     assert.equal(managers.store.forThread(current.threadId)?.id, current.id)
     assert.deepEqual(current.historyThreadIds, [env.oldId])
@@ -143,6 +333,36 @@ test('换绑保留看板、子树、停报偏好和待投递回报，旧经理�
       assert.equal(reply?.answer.result.success, false)
       assert.match(JSON.stringify(reply?.answer.result), new RegExp(current.threadId))
     }
+  } finally {
+    await env.close()
+  }
+})
+
+test('Claude 刷新中断后先恢复旧定义，开关开启也不改写回滚快照', async () => {
+  const env = await setup('claude-code', enabled)
+  try {
+    const oldTools = legacyTools(env)
+    const managers = env.device.managers
+    const applied = managers.manager(env.manager.id).reset!.applied
+    managers.store.saveReset({
+      managerId: env.manager.id,
+      oldThreadId: env.oldId,
+      phase: 'applying',
+      applied,
+      oldTools,
+    })
+    managers.resets.tick(env.manager.id)
+    await until(
+      () => managers.manager(env.manager.id).reset?.phase === 'failed',
+      '恢复旧定义',
+      5000,
+    )
+    assert.deepEqual(env.device.sessionTree.store.tools(env.oldId), oldTools)
+    assert.deepEqual(
+      env.engine.threads.find((thread) => thread.id === env.oldId)!.dynamicTools,
+      oldTools,
+    )
+    assert.equal(managers.manager(env.manager.id).reset?.applied, applied)
   } finally {
     await env.close()
   }

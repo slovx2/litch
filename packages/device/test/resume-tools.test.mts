@@ -1,12 +1,27 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { SESSION_TOOLS } from '../../protocol/src/client-tools-sessions.mjs'
+import { TASKS_TOOLS } from '../../protocol/src/client-tools-tasks.mjs'
 import { RESUME_TOOLS_CHANGED, RESUME_TOOLS_READ } from '../../protocol/src/resume-tools.mjs'
 import { ResumeTools } from '../src/resume-tools.mjs'
 import { codexRig, sentTo } from './codex-kit.mjs'
 import { ECHO_SPEC, litch, treeRig } from './tree-kit.mjs'
 
 const names = (tools: any[]) => tools.map((tool) => tool.name)
+
+test('经理定时任务随设备能力补齐或移除，其他角色定义不变', () => {
+  let tasks = true
+  const coordinator = new ResumeTools(
+    () => ({ 'tools.browser': false }),
+    { setTools() {} },
+    () => false,
+    () => tasks,
+  )
+  const role = { ...ECHO_SPEC, name: 'litch_manager' }
+  assert.deepEqual(coordinator.tools('claude-code', [role]), [role, TASKS_TOOLS])
+  tasks = false
+  assert.deepEqual(coordinator.tools('claude-code', [role, TASKS_TOOLS]), [role])
+})
 
 for (const harness of ['claude-code', 'pi']) {
   test(`${harness}：重新打开与重新连接按当前开关刷新，角色和自定义工具保留`, async () => {

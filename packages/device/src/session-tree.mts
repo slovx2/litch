@@ -69,6 +69,8 @@ export interface SessionTreeHost {
   enabled(): boolean
   /** 设备已提供定时任务；子会话按本设备能力挂载，不依赖父会话是否带过。 */
   tasksEnabled?(): boolean
+  /** 按设备当前设置整理常驻工具；与普通恢复共用协调器。 */
+  refreshClientTools(harness: string, tools: unknown[]): unknown[]
   /** 发给全部声明了 extension 的客户端连接 */
   announce(method: string, params: unknown, extension: string): void
   /** 设备进程建出来的会话：给每条客户端连接发一条标准的 thread/started（各自挂上 harness、工作区、litchLineage） */

@@ -4,6 +4,7 @@ import {
   deviceMachineEnabled,
   deviceToolSwitches,
 } from '../../protocol/src/client-tools-settings.mjs'
+import { TASKS_TOOLS } from '../../protocol/src/client-tools-tasks.mjs'
 import { RESUME_TOOLS_CHANGED, RESUME_TOOLS_READ } from '../../protocol/src/resume-tools.mjs'
 import { isObject } from './wire.mjs'
 
@@ -22,17 +23,41 @@ export class ResumeTools {
     privateValues: () => Record<string, unknown> | undefined,
     privateStore: { setTools(threadId: string, tools: unknown[]): void },
     privateRestricted: (threadId: string) => boolean,
+    tasksEnabled: () => boolean = () => false,
   ) {
     this.values = privateValues
     this.store = privateStore
     this.restricted = privateRestricted
+    this.tasksEnabled = tasksEnabled
   }
   private readonly values: () => Record<string, unknown> | undefined
   private readonly store: { setTools(threadId: string, tools: unknown[]): void }
   private readonly restricted: (threadId: string) => boolean
+  private readonly tasksEnabled: () => boolean
 
   supports(harness: string, native: boolean): boolean {
     return !native && (harness === 'claude-code' || harness === 'pi')
+  }
+
+  /** 恢复和经理重置共用；只更新常驻工具，角色与自定义定义保持原样。 */
+  tools(harness: string, current: unknown[]): unknown[] {
+    const values = this.values()
+    const managedNames = new Set(refreshed)
+    const manager = current.some(
+      (tool) => isObject(tool) && tool.name === CLIENT_TOOL_NAMESPACE.manager,
+    )
+    if (manager) managedNames.add(CLIENT_TOOL_NAMESPACE.tasks)
+    const managed = sessionClientTools(
+      manager && this.tasksEnabled() ? [TASKS_TOOLS] : [],
+      harness,
+      deviceToolSwitches(values, harness),
+      null,
+      deviceMachineEnabled(values),
+    ).filter((tool) => isObject(tool) && managedNames.has(String(tool.name)))
+    return [
+      ...current.filter((tool) => !isObject(tool) || !managedNames.has(String(tool.name))),
+      ...managed,
+    ]
   }
 
   observe(method: string, params: unknown): void {
@@ -86,20 +111,7 @@ export class ResumeTools {
         this.restricted(id)
       )
         return request('thread/resume', rest)
-      const values = this.values()
-      const managed = sessionClientTools(
-        [],
-        harness,
-        deviceToolSwitches(values, harness),
-        null,
-        deviceMachineEnabled(values),
-      ).filter((tool) => isObject(tool) && refreshed.has(String(tool.name)))
-      const dynamicTools = [
-        ...snapshot.dynamicTools.filter(
-          (tool) => !isObject(tool) || !refreshed.has(String(tool.name)),
-        ),
-        ...managed,
-      ]
+      const dynamicTools = this.tools(harness, snapshot.dynamicTools)
       const result = await request('thread/resume', { ...rest, dynamicTools })
       // 活动回合只记待生效；这里读取实际值，不能把尚未生效的请求写进 thread_tools。
       const applied = await request(RESUME_TOOLS_READ, { threadId: id })

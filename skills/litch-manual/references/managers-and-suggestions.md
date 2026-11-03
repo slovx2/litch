@@ -42,6 +42,8 @@ desktop actions.
 交接摘要，再创建同引擎的新会话接手看板与工作线。旧对话只读，可从桌面重置对话框中的历史入口打开。
 其余对话细节不会传入新线程；摘要失败时必须再次确认，才能仅根据看板接手。
 经理自己的回合、后台任务和临时追问停止后才执行，工作线继续运行，回报先排队。
+重置时按设备当前开关补齐或移除浏览器、Computer Use、操作本机工具，并在设备提供定时任务时补齐定时任务工具。
+已有 Claude 和 Pi 经理重新打开、重连或设备重启后恢复时也会更新这些工具；Codex 普通恢复不更新，重置创建的新会话使用当前开关。
 
 Use the reset icon at the top right on desktop, or **Reset manager session** in the mobile manager page's **⋯** menu.
 Both always ask for confirmation. On mobile, an amber marker on **⋯** highlights available updates;
@@ -53,6 +55,10 @@ remain. The previous conversation becomes read-only history, accessible from the
 Conversation details outside the summary do not carry over. If summarizing fails, the user must
 confirm again to continue with the board alone. Reset waits for the manager's turn, background tasks
 and temporary questions to finish; worklines continue and reports queue meanwhile.
+Reset adds or removes browser, Computer Use and local-machine tools according to current device settings,
+and adds scheduling tools when the device provides scheduled tasks. Existing Claude and Pi managers also
+refresh these tools when reopened, reconnected or resumed after a device restart. Normal Codex resumes
+keep their tools; a replacement session created by reset uses the current settings.
 
 ### Where and how to create one
 

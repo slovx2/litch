@@ -234,6 +234,7 @@ export class DeviceServer {
     (id) =>
       this.managers.store.forThread(id)?.status === 'ended' ||
       this.managers.resets.refusal(id) !== null,
+    () => this.tasks !== null,
   )
   private prepareSession(
     params: Record<string, unknown>,
@@ -483,6 +484,7 @@ export class DeviceServer {
       worktrees: this.worktrees,
       enabled: () => this.sessionTreeOn(),
       tasksEnabled: () => this.tasks !== null,
+      refreshClientTools: (harness, tools) => this.resumeTools.tools(harness, tools),
       announce: (method, params, extension) => this.announce(method, params, extension),
       threadStarted: (harness, thread) => {
         for (const session of this.sessions) session.threadStarted(harness, thread)
