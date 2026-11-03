@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { TURN_NOTICE, type TurnNotice } from '../../protocol/src/turn-notices.mjs'
 import { TurnNotices } from '../src/turn-notices.mjs'
 import { FakeUpstream } from './fake-upstream.mjs'
-import { rig, settle } from './helpers.mjs'
+import { rig } from './helpers.mjs'
 
 for (const harness of ['codex', 'claude-code', 'pi', 'dsh', 'opencode', 'acp']) {
   test(`${harness}：摘要按最后回答截断，完成事件去重，各种结局不串正文`, () => {
@@ -95,11 +95,37 @@ test('设备自己的引擎连接收到正文：只向声明扩展的桌面和�
         },
       },
     }
+    const notices = (client: typeof desktop, turnId: string) =>
+      client.notifications.filter(
+        (n) => n.method === TURN_NOTICE && (n.params as TurnNotice | undefined)?.turnId === turnId,
+      )
+    // 通知经 setImmediate 广播，固定等 20ms 不保证广播已执行。
+    // 同一上游连接再发一个独立回合，等客户端实际收到它，才检查前面的去重和不投递。
+    const through = async (turnId: string, clients = [desktop, phone]) => {
+      source.send({
+        ...event,
+        params: { ...event.params, turn: { ...event.params.turn, id: turnId } },
+      })
+      await Promise.all(
+        clients.map((client) =>
+          client.waitFor(
+            (n) =>
+              n.method === TURN_NOTICE && (n.params as TurnNotice | undefined)?.turnId === turnId,
+          ),
+        ),
+      )
+    }
     source.send(event)
     source.send(event)
-    await settle()
+    await through('after-duplicates')
     for (const client of [desktop, phone]) {
-      assert.equal(client.notifications.filter((n) => n.method === TURN_NOTICE).length, 1)
+      assert.equal(notices(client, 't').length, 1)
+      assert.deepEqual(notices(client, 't')[0]?.params, {
+        threadId: 'background-line',
+        turnId: 't',
+        outcome: 'completed',
+        body: '**后台完成**',
+      })
       assert.equal(client.notifications.filter((n) => n.method === 'turn/completed').length, 0)
     }
     assert.equal(old.notifications.filter((n) => n.method === TURN_NOTICE).length, 0)
@@ -111,8 +137,10 @@ test('设备自己的引擎连接收到正文：只向声明扩展的桌面和�
     const reconnect = env.connect()
     await reconnect.initialize(['harness', 'turnNotices'])
     source.send(event)
-    await settle()
-    assert.equal(reconnect.notifications.filter((n) => n.method === TURN_NOTICE).length, 0)
+    await through('after-reconnect', [desktop, phone, reconnect])
+    assert.equal(notices(reconnect, 't').length, 0)
+    for (const client of [desktop, phone]) assert.equal(notices(client, 't').length, 1)
+    assert.equal(old.notifications.filter((n) => n.method === TURN_NOTICE).length, 0)
     link.close()
   } finally {
     await env.close()
