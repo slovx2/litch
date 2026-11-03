@@ -1,6 +1,6 @@
 // 一台设备上的工作区和会话（相当于桌面端侧栏里这台设备的那一段）：置顶、自定义分区、各个工作区、不属于工作区的，
 // 最后是已归档（展开时才去设备上取）。子会话挂在父会话下面（会话树，list.ts）。
-// 整张列表只订阅分组和树这几个键（keys.groups、sections、workspaces、archived、children、nativeChildren、pressing），
+// 整张列表只订阅分组和树这几个键（keys.groups、sections、workspaces、archived、children、nativeChildren、pressing、unread），
 // 每一行自己订阅自己的摘要：一个会话有了动静只重画那一行。
 // 长按会话出菜单（置顶、移出分区、移到别的工作区、改名、归档、删除），工作区标题的“⋯”出工作区的菜单；
 // 下拉刷新是重新取一遍会话目录（device.refresh）。
@@ -67,6 +67,7 @@ export function SessionsScreen({ navigation, route }: Props) {
   const showNative = useServices().prefs.nativeChildren
   /** 停下来等人的会话：藏不掉，收起的父会话下面也露着 */
   const pressing = useKey<string[]>(keys.pressing(deviceId)) ?? NO_IDS
+  const unread = useKey<string[]>(keys.unread(deviceId)) ?? NO_IDS
   const online = device?.connection === 'online'
   // 工作区那一行的“＋”要设备连着；“⋯”里的事要连着或者能整理，一件都做不了就不出
   const organizable = device?.organizable === true
@@ -97,7 +98,7 @@ export function SessionsScreen({ navigation, route }: Props) {
         children,
         hidden: showNative ? NO_IDS : nativeChildren,
         folded,
-        always: (id) => pressing.includes(id),
+        always: (id) => pressing.includes(id) || unread.includes(id),
       }),
     [
       groups,
@@ -113,6 +114,7 @@ export function SessionsScreen({ navigation, route }: Props) {
       nativeChildren,
       folded,
       pressing,
+      unread,
     ],
   )
   const noSessions = Object.values(groups).every((ids) => ids.length === 0)

@@ -2,7 +2,7 @@
 // 顺序照桌面端侧栏：置顶、各个自定义分区、内置的“项目”组、不属于任何工作区的，最后是已归档。
 // 工作区排在它所在的那一组里（置顶的在置顶里、进了分区的在分区里，其余的都在“项目”里），收起一组连里面的工作区一起收起。
 // 会话树照桌面侧栏：父会话也在列表里的子会话挂到它下面、一层往里缩一级（depth），不在自己那一组里另占一行；
-// 父会话可以收起子会话（默认都展开），收起了只露出停下来等人的。别的应用派出来的会话不显示时整个藏掉（等人的照露）。
+// 父会话可以收起子会话（默认都展开），收起了仍露出等人和未读的直接子项。别的应用派出来的会话不显示时整个藏掉（等人和未读的照露）。
 // 这里只排行，不碰数据：会话行只带标识，各行自己订阅自己的摘要（keys.summary）。
 import {
   groupOfSection,
@@ -18,7 +18,8 @@ import {
   dropNativeChildren,
   workspaceShown,
 } from '../../../../../packages/ui/src/sidebar/filter.ts'
-import { kidsShown, MAX_DEPTH, nestedUnder } from '../../../../../packages/ui/src/sidebar/tree.ts'
+import { nestedUnder } from '../../../../../packages/ui/src/sidebar/tree.ts'
+import { sessionTree } from './tree'
 
 /**
  * 内置的“项目”组的键：设备上没有这一组，只是界面上把不在置顶、分区里的工作区收在一起。
@@ -81,7 +82,7 @@ export interface ListInput {
   hidden: readonly string[]
   /** 收起了子会话的父会话 */
   folded: ReadonlySet<string>
-  /** 非露出来不可的（停下来等人的，keys.pressing）：藏不掉，收起的父会话下面也露着 */
+  /** 非露出来不可的（keys.pressing 和 keys.unread）：藏不掉，收起的父会话下面也露着 */
   always(sessionId: string): boolean
 }
 
@@ -95,15 +96,12 @@ export function buildList(input: ListInput): ListItem[] {
     children,
   )
   /** 一个会话和挂在它下面的子会话，一层套一层 */
-  const tree = (id: string, depth: number) => {
-    if (depth > MAX_DEPTH) return
-    const kids = dropNativeChildren(children[id], hidden, always)
-    const shut = folded.has(id)
-    items.push({ type: 'session', key: `s:${id}`, id, depth, kids: kids.length, folded: shut })
-    for (const kid of kidsShown(kids, shut, always)) tree(kid, depth + 1)
+  const tree = (id: string) => {
+    for (const row of sessionTree(id, children, folded, hidden, always))
+      items.push({ type: 'session', key: `s:${row.id}`, ...row })
   }
   const sessions = (groupKey: string) => {
-    for (const id of shown(groupKey)) if (!nested.has(id)) tree(id, 0)
+    for (const id of shown(groupKey)) if (!nested.has(id)) tree(id)
   }
   /** 一个工作区：标题（没有会话也画，好在下面新建）和它的会话 */
   const workspace = (entry: WorkspaceView, inner: boolean) => {

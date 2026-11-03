@@ -1,11 +1,12 @@
 // 设备列表页上的「最近」组：所有设备合在一起，以主对话为单位、按最后一次主动交互倒序（核心的 keys.sidebarProjections，
 // 口径见 src/shell/activity.ts）。每行左边是设备的线色，跨设备时远程设备的行第二行写设备名（本机不写）；可按项目聚合，默认显示几条、
 // “显示更多”每次多十条，都照桌面侧栏。快捷设置在组标题的“⋯”里，不放设置页。
-// 子会话不单列：在子会话里的交互算到它的主对话上，点主对话进去。
+// 子会话的交互算到主项上；子树照桌面投影默认收起，开合单独记在手机上。
 import {
   type DeviceView,
   keys,
   pageSidebarProjection,
+  type SessionChildren,
   type SessionSummary,
   type SidebarProjectionBlock,
   type SidebarProjectionRow,
@@ -18,11 +19,14 @@ import { useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Sheet } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
-import { SummaryLine, titleOf } from '../sessions/rows'
+import { foldsOf, subscribeFolds, toggleFolded } from '../sessions/folds'
+import { ChildLine, SessionFold, SummaryLine, titleOf } from '../sessions/rows'
+import { recentTree, type TreeRow } from '../sessions/tree'
 import { FIRST_CHOICES, MORE_STEP } from './recent-settings'
 import { setRecentSettings, useRecentSettings } from './recent-state'
 
 const NONE: string[] = []
+const NO_CHILDREN: SessionChildren = {}
 
 /** 所有设备的「最近」主项合在一起；任何一台的投影没换就还是同一个数组，不让列表白白重画 */
 function useRecentRows(): SidebarProjectionRow[] {
@@ -249,6 +253,9 @@ function RecentBlock({
   const { c } = theme
   const device = useKey<DeviceView>(keys.device(block.deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(block.deviceId))
+  const children = useKey<SessionChildren>(keys.children(block.deviceId)) ?? NO_CHILDREN
+  // 和桌面投影一样反向使用 folded：只记主动展开的父项，目录晚到不改变开合。
+  const folds = useSyncExternalStore(subscribeFolds, () => foldsOf(`recent:${block.deviceId}`))
   const deviceName = showDevice && device ? t.text(device.name) : undefined
   const project = block.workspaceId
     ? (workspaces?.find((entry) => entry.id === block.workspaceId)?.name ?? '')
@@ -264,26 +271,31 @@ function RecentBlock({
           {[project, deviceName].filter(Boolean).join(' · ')}
         </Text>
       ) : null}
-      {block.rows.map((row) => (
-        <RecentRow
-          key={row.sessionId}
-          row={row}
-          device={device}
-          where={byProject || device?.kind === 'local' ? undefined : deviceName}
-          onOpen={onOpen}
-        />
-      ))}
+      {block.rows.flatMap((row) =>
+        recentTree(row.sessionId, children, folds.folded).map((node) => (
+          <RecentRow
+            key={node.id}
+            row={{ ...row, sessionId: node.id }}
+            node={node}
+            device={device}
+            where={byProject || device?.kind === 'local' ? undefined : deviceName}
+            onOpen={onOpen}
+          />
+        )),
+      )}
     </>
   )
 }
 
 function RecentRow({
   row,
+  node,
   device,
   where,
   onOpen,
 }: {
   row: SidebarProjectionRow
+  node: TreeRow
   device: DeviceView | undefined
   where: string | undefined
   onOpen(row: SidebarProjectionRow, title: string): void
@@ -293,18 +305,42 @@ function RecentRow({
   const summary = useKey<SessionSummary>(keys.summary(row.deviceId, row.sessionId))
   if (!summary) return null
   const open = () => onOpen(row, titleOf(summary, t))
+  const testID = `recent:${row.deviceId}:${row.sessionId}`
+  const fold =
+    node.kids > 0 ? (
+      <SessionFold
+        deviceId={row.deviceId}
+        sessionId={row.sessionId}
+        kids={node.kids}
+        folded={node.folded}
+        onPress={() => toggleFolded(`recent:${row.deviceId}`, 'folded', row.sessionId)}
+        testID={`${testID}:fold`}
+      />
+    ) : undefined
   return (
     <View style={styles.row}>
       <View style={[styles.wire, { backgroundColor: device ? c.wire[device.wire] : c.line2 }]} />
       <View style={styles.grow}>
-        <SummaryLine
-          summary={summary}
-          device={device}
-          testID={`recent:${row.deviceId}:${row.sessionId}`}
-          at={row.at}
-          {...(where ? { where } : {})}
-          onPress={open}
-        />
+        {node.depth > 0 ? (
+          <ChildLine
+            summary={summary}
+            device={device}
+            depth={node.depth}
+            testID={testID}
+            onPress={open}
+            fold={fold}
+          />
+        ) : (
+          <SummaryLine
+            summary={summary}
+            device={device}
+            testID={testID}
+            at={row.at}
+            {...(where ? { where } : {})}
+            onPress={open}
+            fold={fold}
+          />
+        )}
       </View>
     </View>
   )

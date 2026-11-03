@@ -7,18 +7,20 @@ import {
   type GroupTallies,
   keys,
   managerMark,
+  type SessionChildren,
   type SessionSummary,
   type WireColor,
 } from '@litch/core'
-import { memo, type ReactNode } from 'react'
+import { memo, type ReactNode, useCallback, useMemo, useSyncExternalStore } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { ago } from '../../../../../packages/ui/src/app/format.ts'
-import { useKey } from '../../shell/services'
+import { useKey, useReplica } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
 import { StatusMark } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
 import { useNow } from './clock'
 import { type GroupHead, groupKeyOf } from './list'
+import { descendantIds, sessionHasActivity } from './tree'
 
 export const SESSION_ROW_H = 60
 export const GROUP_ROW_H = 44
@@ -204,7 +206,7 @@ export function SummaryLine({
 }
 
 /** 子会话的一行：缩进、每一层一根竖线，状态记号、标题、定时任务记号、harness 徽标 */
-function ChildLine({
+export function ChildLine({
   summary,
   device,
   depth,
@@ -217,7 +219,7 @@ function ChildLine({
   depth: number
   device: DeviceView | undefined
   onPress(): void
-  onLongPress(): void
+  onLongPress?(): void
   testID: string
   fold?: ReactNode
 }) {
@@ -311,12 +313,16 @@ function ChildLine({
 }
 
 /** 有子会话的行尾：收起、展开下面的子会话，写着有几个 */
-function FoldButton({
+export function SessionFold({
+  deviceId,
+  sessionId,
   kids,
   folded,
   onPress,
   testID,
 }: {
+  deviceId: string
+  sessionId: string
   kids: number
   folded: boolean
   onPress(): void
@@ -324,19 +330,50 @@ function FoldButton({
 }) {
   const theme = useTheme()
   const t = useT()
+  const children = useKey<SessionChildren>(keys.children(deviceId))
+  const { store } = useReplica()
+  const ids = useMemo(
+    () => (folded ? descendantIds(sessionId, children ?? {}) : []),
+    [sessionId, children, folded],
+  )
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      const stops = ids.map((id) => store.subscribe(keys.summary(deviceId, id), listener))
+      return () => {
+        for (const stop of stops) stop()
+      }
+    },
+    [deviceId, ids, store],
+  )
+  const get = useCallback(
+    () =>
+      ids.filter((id) => sessionHasActivity(store.get<SessionSummary>(keys.summary(deviceId, id))))
+        .length,
+    [deviceId, ids, store],
+  )
+  const count = useSyncExternalStore(subscribe, get)
   const label = folded ? t('tree.unfold', { n: kids }) : t('tree.fold')
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={count ? `${label} · ${t('sessions.childrenActive', { count })}` : label}
       accessibilityState={{ expanded: !folded }}
+      aria-expanded={!folded}
       testID={testID}
-      onPress={onPress}
+      onPress={(event) => {
+        event.stopPropagation()
+        onPress()
+      }}
       style={({ pressed }) => [
         styles.fold,
         { backgroundColor: pressed ? theme.c.press : 'transparent' },
       ]}
     >
+      {count > 0 ? (
+        <Text testID={`${testID}:activity`} style={{ color: theme.c.accent, fontSize: 12 }}>
+          •
+        </Text>
+      ) : null}
       <Text style={[styles.foldText, { color: theme.c.ink3, fontFamily: theme.font.mono }]}>
         {folded ? '▸' : '▾'} {kids}
       </Text>
@@ -371,7 +408,9 @@ export const SessionRow = memo(function SessionRow({
   const testID = `session:${sessionId}`
   const fold =
     kids > 0 ? (
-      <FoldButton
+      <SessionFold
+        deviceId={deviceId}
+        sessionId={sessionId}
         kids={kids}
         folded={folded}
         onPress={() => onFold(sessionId)}
@@ -622,6 +661,8 @@ const styles = StyleSheet.create({
   guide: { position: 'absolute', top: 0, bottom: 0, width: StyleSheet.hairlineWidth * 2 },
   fold: {
     minWidth: 52,
+    flexDirection: 'row',
+    gap: 4,
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',

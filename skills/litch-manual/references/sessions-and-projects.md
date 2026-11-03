@@ -56,15 +56,18 @@ Opening a child keeps its whole tree in the Unread group, at the same position a
 经理也进入最近和未读。工作线及其后代归入所属经理，不单独列为主项；桌面默认收在“› N 个子会话”下，可展开。
 桌面上经理主项的记号列多一个细框（人文外观是圆圈），状态记号照常画在框里，读屏念“经理”；和侧栏经理一节的经理行同一画法。
 经理和普通对话一样：前台连续查看满 5 秒、或成功发送、答复、追问等操作进入最近；新结果沿用未读标记。读取、标记已读、失败或未受理的操作不计入最近。
-点击经理投影进入经理页，工作线进入经理模式下的对应对话；经理模式仍不显示这两组。手机首页最近中的经理同样进入经理页，工作线不单列。
+点击经理或工作线投影在当前视图打开对应对话；经理模式仍不显示这两组。手机首页最近中的经理与工作线都打开对话详情。
 Managers also appear in Recent and Unread. Their worklines are grouped beneath the manager and collapsed by default on desktop.
 Viewing a manager for five continuous foreground seconds or completing an explicit action records a recent interaction. Reading, marking read, failed and rejected actions do not.
-Manager entries open the manager page on desktop and phone. The projection groups remain hidden in manager mode.
+Manager and workline entries open their conversation in the current view on desktop, and conversation details on phone. The projection groups remain hidden in manager mode.
 
 手机首页在定时任务入口之后、各台设备之前显示「最近」，规则与桌面相同：应用在前台、会话页正显示该会话时连续停留满 5 秒才记录；
 切到后台、锁屏、下拉通知中心或离开会话页（回到列表、打开终端、文件、子代理页等）都会清零。在手机上发送、批准、停止等操作立即记录。
 手机只记录本机的查看和操作，与电脑上的「最近」各自独立。每行以设备色线区分设备，包含多台设备时远程设备的行第二行写设备名（本机的行不写）；
-子会话不单独列出，点开主会话后再进入子会话。点组头收起或展开；组头「⋯」可切换按项目聚合，并选择默认显示 5 / 10 / 20 条，
+普通子会话和经理工作线缩进显示在主项下面，不占主项分页名额，点击直接打开对应对话。行尾小箭头展开或收起，照桌面投影默认收起，开合独立记在手机上。
+收起时行尾动态点表示后代有未读、等待处理、运行或后台任务，读屏给出数量，包含更深层的后代。设备会话列表使用同样的提示，并让未读和待处理的直接子项在折叠时仍显示。
+On phone, Recent shows ordinary children and manager worklines below their parent. The compact arrow toggles children, collapsed by default, and remembers the state locally. Children do not count toward pagination. A dot on a folded parent indicates activity anywhere in its descendant tree, with its count available to screen readers. The device conversation list uses the same indicator and keeps unread and waiting direct children visible when folded.
+点组头收起或展开；组头「⋯」可切换按项目聚合，并选择默认显示 5 / 10 / 20 条，
 「显示更多」每次增加 10 条，设置记在手机上。手机暂不显示「未读」组，会话列表里的未读标记照旧。
 
 子会话符合条件时列出其主会话，展开主会话可查看整个子树，子会话不单独列出；父会话不在活动目录时不列出孤立子项。
