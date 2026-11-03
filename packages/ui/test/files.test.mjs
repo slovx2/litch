@@ -122,3 +122,99 @@ test('编辑发送失败的文件引用放回草稿，输入区尚未挂载也�
   assert.deepEqual(got, ['再试', [], [attachment]])
   stop()
 })
+
+test('本机拿不到磁盘路径时，文本和二进制都上传为设备文件', async () => {
+  const inputs = [file('notes.md', '# 备忘\r\n一行'), file('blob.bin', new Uint8Array([0, 255, 1]))]
+  const seen = []
+  const result = await readFiles(
+    inputs,
+    facts({
+      local: true,
+      machine: null,
+      pathOf: () => '',
+      upload: async (selected) => {
+        seen.push({ name: selected.name, bytes: [...new Uint8Array(await selected.arrayBuffer())] })
+        return { kind: 'file', name: selected.name, path: `/device/attachments/${selected.name}` }
+      },
+    }),
+  )
+  assert.equal(result.refused, null)
+  assert.deepEqual(
+    seen,
+    await Promise.all(
+      inputs.map(async (selected) => ({
+        name: selected.name,
+        bytes: [...new Uint8Array(await selected.arrayBuffer())],
+      })),
+    ),
+  )
+  assert.deepEqual(
+    result.extras.map(({ kind, path, client }) => ({ kind, path, client })),
+    [
+      { kind: 'file', path: '/device/attachments/notes.md', client: undefined },
+      { kind: 'file', path: '/device/attachments/blob.bin', client: undefined },
+    ],
+  )
+})
+
+test('远程可操作本机时，目录、文本和二进制均保留控制端路径且不读内容', async () => {
+  const folder = file('资料', '')
+  const text = file('notes.md', '# 备忘')
+  const binary = file('blob.bin', new Uint8Array([0, 255, 1]))
+  for (const selected of [folder, text, binary]) {
+    selected.arrayBuffer = () => {
+      throw new Error('路径可达时不应读取内容')
+    }
+  }
+  const result = await readFiles(
+    [folder, text, binary],
+    facts({ machine: 'on', isFolder: (f) => f === folder }),
+  )
+  assert.equal(result.refused, null)
+  assert.deepEqual(result.extras, [
+    { kind: 'file', name: '资料', path: '/Users/dev/资料/', folder: true, client: true },
+    {
+      kind: 'file',
+      name: 'notes.md',
+      path: '/Users/dev/notes.md',
+      client: true,
+      size: text.size,
+      mimeType: text.type,
+    },
+    {
+      kind: 'file',
+      name: 'blob.bin',
+      path: '/Users/dev/blob.bin',
+      client: true,
+      size: binary.size,
+      mimeType: binary.type,
+    },
+  ])
+})
+
+test('远程无法访问本机时，拒绝目录仍继续上传同批普通文件', async () => {
+  const folder = file('资料', '')
+  const text = file('notes.md', '# 备忘')
+  const uploaded = []
+  const result = await readFiles(
+    [folder, text],
+    facts({
+      isFolder: (f) => f === folder,
+      upload: async (selected) => {
+        uploaded.push(selected.name)
+        return { kind: 'file', name: selected.name, path: `/remote/${selected.name}` }
+      },
+    }),
+  )
+  assert.deepEqual(result.refused, { why: 'folder', name: '资料' })
+  assert.deepEqual(uploaded, ['notes.md'])
+  assert.deepEqual(result.extras, [
+    {
+      kind: 'file',
+      name: 'notes.md',
+      path: '/remote/notes.md',
+      size: text.size,
+      mimeType: text.type,
+    },
+  ])
+})
