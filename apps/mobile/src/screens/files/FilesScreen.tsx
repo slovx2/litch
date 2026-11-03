@@ -20,7 +20,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ScrollView } from 'react-native'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import type { RootStackParamList } from '../../nav/routes'
-import { useChannel, useKey } from '../../shell/services'
+import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Empty } from '../../ui/kit/controls'
 import { Screen } from '../../ui/kit/Screen'
@@ -39,14 +39,21 @@ type Loaded =
 
 export function FilesScreen({ navigation, route }: Props) {
   const { deviceId, line } = route.params
-  const [target, setTarget] = useState<FileLinkTarget | null>(null)
+  const requestKey = JSON.stringify(route.params)
+  const [selection, setSelection] = useState<{ key: string; target: FileLinkTarget } | null>(null)
+  const target = selection?.key === requestKey ? selection.target : null
+  const setTarget = useCallback(
+    (target: FileLinkTarget) => setSelection({ key: requestKey, target }),
+    [requestKey],
+  )
   const root = target?.root ?? normalizePath(route.params.root)
   const path = target?.path ?? normalizePath(route.params.path ?? root)
   const device = useKey<DeviceView>(keys.device(deviceId))
   const t = useT()
   const channel = useChannel()
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' })
-  const [showHidden, setShowHidden] = useState(false)
+  const { files } = useReplica()
+  const showHidden = useKey<boolean>(keys.filesShowHidden) ?? false
   const [attempt, setAttempt] = useState(0)
   const [resolution, setResolution] = useState<FileLinkResolution | null>(null)
 
@@ -156,7 +163,13 @@ export function FilesScreen({ navigation, route }: Props) {
 
   return (
     <Screen
-      title={path === root ? baseName(root) || root : baseName(path)}
+      title={
+        route.params.unrecognized
+          ? t('files.link.failed')
+          : path === root
+            ? baseName(root) || root
+            : baseName(path)
+      }
       subtitle={rel === '' ? root : rel}
       actions={
         loaded.kind === 'dir'
@@ -164,7 +177,7 @@ export function FilesScreen({ navigation, route }: Props) {
               {
                 label: showHidden ? '.*✓' : '.*',
                 testID: 'files:hidden',
-                onPress: () => setShowHidden((show) => !show),
+                onPress: () => files.setShowHidden(!showHidden),
               },
             ]
           : []

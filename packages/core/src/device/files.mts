@@ -126,6 +126,8 @@ export function createFiles(host: FilesHost): Files {
   const cache = new Map<string, { at: number; view: DirectoryView }>()
   const listing = new Map<string, Promise<DirectoryView>>()
   const reading = new Map<string, Promise<FileContent>>()
+  // 只在读取结果存活时保留原始字节，用于相对路径歧义比较；不能比较已正规化换行的显示文字。
+  const original = new WeakMap<FileContent, string>()
   /** 各个根上正在找的那一次：新的一次来了，旧的作废 */
   const searching = new Map<string, { abort(): void }>()
   /** 真的向对面要过几次。这次运行里一直累计，重连也不清 */
@@ -276,7 +278,10 @@ export function createFiles(host: FilesHost): Files {
         { path },
         { timeoutMs: READ_TIMEOUT_MS },
       )
-      return projectFile(path, typeof dataBase64 === 'string' ? dataBase64 : '')
+      const bytes = typeof dataBase64 === 'string' ? dataBase64 : ''
+      const content = projectFile(path, bytes)
+      if (content.kind === 'text') original.set(content, bytes)
+      return content
     } catch (error) {
       // 问元数据和读之间文件没了
       if (isMissing(error)) return { kind: 'missing', path }
@@ -311,7 +316,24 @@ export function createFiles(host: FilesHost): Files {
 
   const files: Files = {
     resolve(root, ref, href, signal) {
-      return resolveFileLink(files, host.home(), root, ref, href, signal)
+      if (!host.online())
+        return Promise.resolve({
+          status: 'failed',
+          href,
+          path: ref.path,
+          attempted: [],
+          candidates: [],
+          failures: [{ path: ref.path, reason: 'offline' }],
+        })
+      return resolveFileLink(
+        files,
+        host.home(),
+        root,
+        ref,
+        href,
+        (a, b) => original.has(a) && original.get(a) === original.get(b),
+        signal,
+      )
     },
     async preview(root, path, format, signal) {
       const at = locate(root, path)

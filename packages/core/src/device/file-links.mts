@@ -12,6 +12,7 @@ export async function resolveFileLink(
   root: string,
   ref: FileRef,
   href: string,
+  sameContent: (a: FileContent, b: FileContent) => boolean,
   signal?: AbortSignalLike,
 ): Promise<FileLinkResolution> {
   const attempted: string[] = []
@@ -70,9 +71,7 @@ export async function resolveFileLink(
     contents.every((content) => content.kind === 'text' && !content.lossy)
   ) {
     const first = contents[0]
-    identical =
-      first?.kind === 'text' &&
-      contents.every((content) => content.kind === 'text' && content.text === first.text)
+    identical = first?.kind === 'text' && contents.every((content) => sameContent(first, content))
   } else if (contents.length > 1 && contents.every((content) => content.kind === 'binary')) {
     // 二进制只走已有受限预览；旧服务或超过预算时不猜是否同内容，保留候选让人选。
     const bytes: string[] = []

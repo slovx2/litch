@@ -1,9 +1,43 @@
 // 对话里的文件路径和网址改写成链接（src/detail/links.ts）：代码块不动、已有链接的行不动、litch-file: 来回不失真。
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import { fileHref, fileRefFromHref, isWebUrl, linkify, parseFileHref } from '../src/detail/links.ts'
 
 const scope = { root: '/w/proj', cwd: '/w/proj' }
+
+test('33 条匿名真实写法经手机标准点击或自动改写保留同一组候选', async () => {
+  const samples = JSON.parse(
+    await readFile(
+      new URL('../../../packages/core/test/file-link-samples.json', import.meta.url),
+      'utf8',
+    ),
+  )
+  const counts = [0, 0, 0]
+  for (const sample of samples) {
+    for (let mode = 0; mode < 3; mode++) {
+      const here = {
+        root: sample.cwd,
+        cwd: mode === 0 ? sample.cwd : sample.entryCwd,
+        roots: mode === 2 ? [sample.cwd, '/work/example/litch'] : [sample.cwd],
+      }
+      const text = sample.kind === 'code' ? `\`${sample.value}\`` : sample.value
+      const href =
+        sample.kind === 'explicit'
+          ? sample.value
+          : linkify(text, here).match(/\((litch-file:[^)]+)\)/)?.[1]
+      const ref = href ? fileRefFromHref(href, here) : null
+      if (!ref) {
+        assert.equal(sample.id, 27)
+        continue
+      }
+      const paths = ref.candidates ?? [ref.path, ref.alt].filter(Boolean)
+      if (paths.some((path) => sample.files.includes(path.replace(/^~/, '/home/fixture'))))
+        counts[mode]++
+    }
+  }
+  assert.deepEqual(counts, [13, 20, 26])
+})
 
 test('裸网址改成自动链接，结尾的句读留在外面', () => {
   assert.equal(linkify('看 https://example.com/a?b=1。', null), '看 <https://example.com/a?b=1>。')

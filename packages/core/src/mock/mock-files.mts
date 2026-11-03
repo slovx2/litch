@@ -259,7 +259,21 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
     async 'files.resolve'({ deviceId, root, ref, href }, signal) {
       const files = filesOf(deviceId, root)
       for (const known of host.rootsOf(deviceId)) filesOf(deviceId, known)
-      return files.resolve(expand(root), ref, href, signal)
+      const result = await files.resolve(expand(root), ref, href, signal)
+      return {
+        ...result,
+        path: outward(root, result.path),
+        attempted: result.attempted.map((path) => outward(root, path)),
+        candidates: result.candidates.map((candidate) => ({
+          ...candidate,
+          root: outward(root, candidate.root),
+          path: outward(root, candidate.path),
+        })),
+        failures: result.failures.map((failure) => ({
+          ...failure,
+          path: outward(root, failure.path),
+        })),
+      }
     },
     async 'files.list'({ deviceId, root, path, fresh }, signal) {
       const files = filesOf(deviceId, root)

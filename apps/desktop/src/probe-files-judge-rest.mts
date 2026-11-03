@@ -112,13 +112,16 @@ function judgeLinks(links: LinksSeen, lines: FileLines): string[] {
     'packages/core/src/device/files.mts:40→packages/core/src/device/files.mts:40',
     'packages/ui/src/app/App.tsx→packages/ui/src/app/App.tsx',
     'fixtures/long.ts:4200→fixtures/long.ts:4200',
+    '../outside/secret.txt→~/work/outside/secret.txt',
+    '文档目录→docs',
+    '缺失文件→fixtures/not-here.md',
   ]
   must(
     links.links.length === wanted.length && wanted.every((entry) => links.links.includes(entry)),
     `回答里认出来的文件不对：${links.links.join(' ／ ')}`,
   )
   must(
-    ['console.log', '../outside/secret.txt'].every((entry) => links.plain.includes(entry)),
+    ['console.log'].every((entry) => links.plain.includes(entry)),
     `不是项目里的文件的也被认成了文件，没认的只有：${links.plain.join(' ／ ')}`,
   )
   must(links.panelOpened, '面板收着的时候点对话里的路径，面板没有自己打开到“文件”标签')
@@ -142,6 +145,9 @@ function judgeLinks(links: LinksSeen, lines: FileLines): string[] {
     )
   })
   must(links.again, '滚走之后同一个链接再点一次，没有回到那一行')
+  must(links.directoryExpanded, '目录链接未展开目标或未收起其他目录')
+  must(links.failureDetails, '缺失链接没有显示原因和尝试路径')
+  must(links.unsupportedExplained, 'file URI 没有给出不支持的说明')
   must(
     links.toolLinks.length >= 2 && links.toolOpened === 'cmd/codex-harness-adapter/serve_test.go',
     `文件改动详情里的路径点不开：${links.toolLinks.join(' ／ ')}，开的是 ${links.toolOpened}`,

@@ -71,6 +71,27 @@ test('标准 fs 形状不变；声明按连接隔离并在关闭后清除', asyn
   })
 })
 
+test('根外文件以父目录为临时预览根，仍拒绝该目录中跳到外面的符号链接', async (t) => {
+  const home = await mkdtemp(join(tmpdir(), 'litch-links-preview-'))
+  t.after(() => rm(home, { recursive: true, force: true }))
+  const root = join(home, 'reports')
+  await mkdir(root)
+  const bytes = Buffer.from('%PDF-1.7\nfixture')
+  const pdf = join(root, 'report.pdf')
+  await writeFile(pdf, bytes)
+  assert.deepEqual(await readPreview(pdf, { root, maxBytes: 100 }), {
+    dataBase64: bytes.toString('base64'),
+  })
+  const outside = join(home, 'other.pdf')
+  await writeFile(outside, bytes)
+  const link = join(root, 'escape.pdf')
+  await symlink(outside, link)
+  await assert.rejects(
+    readPreview(link, { root, maxBytes: 100 }),
+    (error: any) => error.data?.litchPreview.kind === 'outside',
+  )
+})
+
 test('真实设备套接字：声明、限量、结构化错误与二进制响应', async (t) => {
   const home = await mkdtemp(join(tmpdir(), 'lpf-'))
   const root = join(home, 'work')

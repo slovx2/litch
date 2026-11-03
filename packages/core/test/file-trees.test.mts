@@ -87,6 +87,13 @@ test('目录链接展开目标与父级、收起其他分支；根目录也能�
     true,
   )
   assert.equal(rows().filter((row) => row.expanded).length, 0)
+  const hidden = files.reveal('local', ROOT, `${ROOT}/.github`, {
+    directory: true,
+    collapseOthers: true,
+  })
+  await flush()
+  assert.equal(await hidden, true)
+  assert.equal(rows().find((row) => row.path === `${ROOT}/.github`)?.expanded, true)
 })
 
 test('打开一棵树：先是“正在取”，取到之后是根那一层，目录在前、隐藏的不显示', async () => {

@@ -447,6 +447,13 @@ export const SCENES: Scene[] = [
     note: '目录和文件内容',
     steps: [sessions('local'), nav('Files', { deviceId: 'local', root: '~/work/litch' })],
   },
+  {
+    id: 'file-links',
+    group: '工具',
+    name: '对话文件链接',
+    note: '标准链接、行号、目录展开和失败详情，使用模拟核心',
+    steps: [say('看文件')],
+  },
 
   {
     id: 'tasks',

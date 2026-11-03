@@ -162,6 +162,9 @@ export interface JumpSeen {
 }
 
 export interface LinksSeen {
+  directoryExpanded: boolean
+  failureDetails: boolean
+  unsupportedExplained: boolean
   /** 回答里认成了文件的：每项写成“显示的字→相对路径[:行]” */
   links: string[]
   /** 回答里没认成文件的行内代码和外链 */
@@ -179,7 +182,8 @@ export interface LinksSeen {
 export async function mockLinks(session: string, toolSession: string): Promise<LinksSeen> {
   const kit = (window as unknown as { __filesKit: FilesKit }).__filesKit
   const { until, one, all, text, frame, sleep } = kit
-  const relative = (path: string) => path.slice(kit.root().length + 1)
+  const relative = (path: string) =>
+    path.startsWith(`${kit.root()}/`) ? path.slice(kit.root().length + 1) : path
   await kit.openSession(session)
   const turnsBefore = all('.turn').length
   await kit.say('看文件')
@@ -261,6 +265,27 @@ export async function mockLinks(session: string, toolSession: string): Promise<L
   kit.click(anchors.find((entry) => text(entry) === 'fixtures/long.ts:4200') as HTMLElement)
   const again = await kit.seen(() => kit.lineInView(4200), 10_000)
 
+  kit.click(anchors.find((anchor) => text(anchor) === '文档目录') as HTMLElement)
+  const directoryExpanded = await kit.seen(
+    () =>
+      kit.rows().some((row) => row.path === 'docs/guide.md') &&
+      !kit.rows().some((row) => row.path.startsWith('fixtures/')),
+    10_000,
+  )
+  kit.click(anchors.find((anchor) => text(anchor) === '缺失文件') as HTMLElement)
+  await until('文件链接失败详情', () => one('.file-link-dialog[open]'))
+  const failureDetails =
+    text(one('.file-link-dialog')).includes('文件或目录不存在') &&
+    text(one('.file-link-dialog')).includes('fixtures/not-here.md') &&
+    text(one('.file-link-dialog')).includes('已尝试的路径')
+  ;(one('.file-link-dialog') as HTMLDialogElement).close()
+  await frame()
+  kit.click(all('.md a', turn).find((anchor) => text(anchor) === '文件 URI') as HTMLElement)
+  await until('不支持的 URI 说明', () => one('.file-link-dialog[open]'))
+  const unsupportedExplained = text(one('.file-link-dialog')).includes('不支持 file://')
+  ;(one('.file-link-dialog') as HTMLDialogElement).close()
+  await frame()
+
   // ---------- 工具改过的文件 ----------
   await kit.openSession(toolSession)
   const toolAnchors = async () => {
@@ -285,5 +310,16 @@ export async function mockLinks(session: string, toolSession: string): Promise<L
     toolOpened = file
   }
 
-  return { links, plain, panelOpened, jumps, again, toolLinks, toolOpened }
+  return {
+    links,
+    plain,
+    panelOpened,
+    jumps,
+    again,
+    toolLinks,
+    toolOpened,
+    directoryExpanded,
+    failureDetails,
+    unsupportedExplained,
+  }
 }

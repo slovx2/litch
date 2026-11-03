@@ -155,8 +155,8 @@ test('根之外的路径、不认识的根被拒；每个工作区的根、不�
   assert.deepEqual([outside.code, outside.text?.key], ['rejected', 'files.outside'])
   const escaped = await failureOf(list(`${ROOT}/../../.ssh`))
   assert.deepEqual([escaped.code, escaped.text?.key], ['rejected', 'files.outside'])
-  const unknown = await failureOf(run('files.list', { root: '~/.ssh', path: '~/.ssh' }))
-  assert.deepEqual([unknown.code, unknown.text?.key], ['rejected', 'files.unknownRoot'])
+  const arbitrary = await run<DirectoryView>('files.list', { root: '~/outside', path: '~/outside' })
+  assert.equal(arbitrary.path, '~/outside')
 
   const docs = await run<DirectoryView>('files.list', {
     root: '~/work/docs-site',
@@ -218,15 +218,23 @@ test('“看文件”的回答：该认的路径都认出来、都在示例树�
     const pieces = [...text.matchAll(/`([^`]+)`|\]\(([^)]+)\)/g)].map((m) => m[1] ?? m[2] ?? '')
     const refs = pieces.map((piece) => [piece, fileRefOf(piece, scope)] as const)
     assert.deepEqual(
-      refs.map(([piece, ref]) => [piece, ref ? [ref.path.slice(ROOT.length + 1), ref.line] : null]),
+      refs.map(([piece, ref]) => [
+        piece,
+        ref
+          ? [ref.path.startsWith(`${ROOT}/`) ? ref.path.slice(ROOT.length + 1) : ref.path, ref.line]
+          : null,
+      ]),
       [
         ['cmd/codex-harness-adapter/serve.go:131', ['cmd/codex-harness-adapter/serve.go', 131]],
         ['docs/guide.md#L12', ['docs/guide.md', 12]],
         ['README.md', ['README.md', null]],
         ['packages/ui/src/app/App.tsx', ['packages/ui/src/app/App.tsx', null]],
         ['fixtures/long.ts:4200', ['fixtures/long.ts', 4200]],
+        ['docs/', ['docs', null]],
+        ['fixtures/not-here.md', ['fixtures/not-here.md', null]],
+        ['file:///tmp/report.md', null],
+        ['../outside/secret.txt', ['~/work/outside/secret.txt', null]],
         ['console.log', null],
-        ['../outside/secret.txt', null],
       ],
     )
     // 正文里扫出来的：去掉行内代码和链接之后只剩一个
@@ -237,7 +245,16 @@ test('“看文件”的回答：该认的路径都认出来、都在示例树�
     )
     for (const [piece, ref] of refs) {
       if (!ref) continue
+      if (!ref.path.startsWith(`${ROOT}/`)) continue
       const content = await read(ref.path.slice(ROOT.length + 1))
+      if (piece === 'docs/') {
+        assert.equal(content.kind, 'directory')
+        continue
+      }
+      if (piece === 'fixtures/not-here.md') {
+        assert.equal(content.kind, 'missing')
+        continue
+      }
       assert.equal(content.kind, 'text', piece)
       const count = content.kind === 'text' ? content.text.split('\n').length : 0
       assert.ok(ref.line === null || ref.line <= count, `${piece} 的行号在文件里`)

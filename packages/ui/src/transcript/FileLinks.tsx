@@ -181,8 +181,13 @@ export function Link({ href, children }: { href: string; children: ReactNode }) 
     return (
       <>
         <a
-          href={href}
+          href={`#${encodeURIComponent(href)}`}
+          title={href}
           onClick={(event) => {
+            event.preventDefault()
+            setFailure(unrecognizedFileLink(href))
+          }}
+          onAuxClick={(event) => {
             event.preventDefault()
             setFailure(unrecognizedFileLink(href))
           }}

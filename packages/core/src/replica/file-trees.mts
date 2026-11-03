@@ -7,7 +7,7 @@ import type { CoreChannel } from '../channel/client.mjs'
 import { type ChannelErrorShape, toChannelError } from '../channel/protocol.mjs'
 import type { DirectoryView, FileTreeState } from '../model-files.mjs'
 import { flattenTree, type TreeListing } from '../projection/files.mjs'
-import { insideRoot, normalizePath, parentPath } from '../text/paths.mjs'
+import { insideRoot, normalizePath, parentPath, relativeTo } from '../text/paths.mjs'
 import type { KeyedStore } from './keyed-store.mjs'
 
 export const fileKeys = {
@@ -243,6 +243,19 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
       const tree = treeOf(deviceId, root)
       const target = normalizePath(path)
       if (!insideRoot(tree.root, target)) return false
+      // 明确打开隐藏目录也必须看得见；同步开关，界面上的隐藏项按钮与树保持一致。
+      if (
+        !showHidden &&
+        relativeTo(tree.root, target)
+          .split('/')
+          .some((part) => part.startsWith('.'))
+      ) {
+        showHidden = true
+        store.batch(() => {
+          store.set(fileKeys.showHidden, true)
+          for (const entry of trees.values()) if (entry.listings.size > 0) publish(entry)
+        })
+      }
       const version = ++tree.revealVersion
       if (options.collapseOthers) tree.expanded.clear()
       const chain: string[] = []

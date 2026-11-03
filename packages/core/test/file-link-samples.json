@@ -1,0 +1,561 @@
+[
+  {
+    "id": 1,
+    "kind": "explicit",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example",
+    "value": "/work/example/litch/packages/claude/src/runtime-config.mts:124",
+    "before": {
+      "path": "/work/example/litch/packages/claude/src/runtime-config.mts",
+      "alt": null,
+      "line": 124
+    },
+    "beforeEntry": {
+      "path": "/work/example/litch/packages/claude/src/runtime-config.mts",
+      "alt": null,
+      "line": 124
+    },
+    "files": ["/work/example/litch/packages/claude/src/runtime-config.mts"],
+    "mobileBefore": false
+  },
+  {
+    "id": 2,
+    "kind": "explicit",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example",
+    "value": "/work/example/litch/packages/device/src/codex-titles.mts:111",
+    "before": {
+      "path": "/work/example/litch/packages/device/src/codex-titles.mts",
+      "alt": null,
+      "line": 111
+    },
+    "beforeEntry": {
+      "path": "/work/example/litch/packages/device/src/codex-titles.mts",
+      "alt": null,
+      "line": 111
+    },
+    "files": ["/work/example/litch/packages/device/src/codex-titles.mts"],
+    "mobileBefore": false
+  },
+  {
+    "id": 3,
+    "kind": "explicit",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example",
+    "value": "/work/example/litch/packages/core/src/projection/blocks.mts:80",
+    "before": {
+      "path": "/work/example/litch/packages/core/src/projection/blocks.mts",
+      "alt": null,
+      "line": 80
+    },
+    "beforeEntry": {
+      "path": "/work/example/litch/packages/core/src/projection/blocks.mts",
+      "alt": null,
+      "line": 80
+    },
+    "files": ["/work/example/litch/packages/core/src/projection/blocks.mts"],
+    "mobileBefore": false
+  },
+  {
+    "id": 4,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example",
+    "value": "packages/ui/src/transcript/wheel.ts:23",
+    "before": {
+      "path": "/work/example/packages/ui/src/transcript/wheel.ts",
+      "alt": null,
+      "line": 23
+    },
+    "beforeEntry": {
+      "path": "/work/example/packages/ui/src/transcript/wheel.ts",
+      "alt": null,
+      "line": 23
+    },
+    "files": ["/work/example/litch/packages/ui/src/transcript/wheel.ts"],
+    "mobileBefore": true
+  },
+  {
+    "id": 5,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example",
+    "value": ".artifacts/review-wheel-IcI9jL/native.cjs",
+    "before": {
+      "path": "/work/example/.artifacts/review-wheel-IcI9jL/native.cjs",
+      "alt": null,
+      "line": null
+    },
+    "beforeEntry": {
+      "path": "/work/example/.artifacts/review-wheel-IcI9jL/native.cjs",
+      "alt": null,
+      "line": null
+    },
+    "files": ["/work/example/litch/.artifacts/review-wheel-IcI9jL/native.cjs"],
+    "mobileBefore": true
+  },
+  {
+    "id": 6,
+    "kind": "explicit",
+    "cwd": "/work/example/litch-wt/session-perm",
+    "entryCwd": "/work/example/litch-wt/session-perm",
+    "value": "/work/example/design/harness-client/47-session-permission.md",
+    "before": null,
+    "beforeEntry": null,
+    "files": ["/work/example/design/harness-client/47-session-permission.md"],
+    "mobileBefore": false
+  },
+  {
+    "id": 7,
+    "kind": "explicit",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example",
+    "value": "/work/example/design/harness-client/55-ci-release-gate.md:138",
+    "before": {
+      "path": "/work/example/design/harness-client/55-ci-release-gate.md",
+      "alt": null,
+      "line": 138
+    },
+    "beforeEntry": {
+      "path": "/work/example/design/harness-client/55-ci-release-gate.md",
+      "alt": null,
+      "line": 138
+    },
+    "files": ["/work/example/design/harness-client/55-ci-release-gate.md"],
+    "mobileBefore": false
+  },
+  {
+    "id": 8,
+    "kind": "explicit",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example",
+    "value": "/work/example/design/harness-client/55-ci-release-gate.md",
+    "before": {
+      "path": "/work/example/design/harness-client/55-ci-release-gate.md",
+      "alt": null,
+      "line": null
+    },
+    "beforeEntry": {
+      "path": "/work/example/design/harness-client/55-ci-release-gate.md",
+      "alt": null,
+      "line": null
+    },
+    "files": ["/work/example/design/harness-client/55-ci-release-gate.md"],
+    "mobileBefore": false
+  },
+  {
+    "id": 9,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch",
+    "value": "packages/protocol/src/client-tools-manager.mts",
+    "before": {
+      "path": "/work/example/packages/protocol/src/client-tools-manager.mts",
+      "alt": null,
+      "line": null
+    },
+    "beforeEntry": {
+      "path": "/work/example/litch/packages/protocol/src/client-tools-manager.mts",
+      "alt": "/work/example/packages/protocol/src/client-tools-manager.mts",
+      "line": null
+    },
+    "files": ["/work/example/litch/packages/protocol/src/client-tools-manager.mts"],
+    "mobileBefore": true
+  },
+  {
+    "id": 10,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example",
+    "value": "~/.claude/settings.json",
+    "before": null,
+    "beforeEntry": null,
+    "files": ["/home/fixture/.claude/settings.json"],
+    "mobileBefore": false
+  },
+  {
+    "id": 11,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch-wt/_integ",
+    "value": "research/claude-p-vs-tui-2026-11-01/README.md",
+    "before": {
+      "path": "/work/example/research/claude-p-vs-tui-2026-11-01/README.md",
+      "alt": null,
+      "line": null
+    },
+    "beforeEntry": {
+      "path": "/work/example/litch-wt/_integ/research/claude-p-vs-tui-2026-11-01/README.md",
+      "alt": "/work/example/research/claude-p-vs-tui-2026-11-01/README.md",
+      "line": null
+    },
+    "files": ["/work/example/research/claude-p-vs-tui-2026-11-01/README.md"],
+    "mobileBefore": true
+  },
+  {
+    "id": 12,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch",
+    "value": "research/claude-entrypoint-2026-11-01/README.md",
+    "before": {
+      "path": "/work/example/research/claude-entrypoint-2026-11-01/README.md",
+      "alt": null,
+      "line": null
+    },
+    "beforeEntry": {
+      "path": "/work/example/litch/research/claude-entrypoint-2026-11-01/README.md",
+      "alt": "/work/example/research/claude-entrypoint-2026-11-01/README.md",
+      "line": null
+    },
+    "files": ["/work/example/research/claude-entrypoint-2026-11-01/README.md"],
+    "mobileBefore": true
+  },
+  {
+    "id": 13,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch",
+    "value": "apps/desktop/src/local-adapter.mts",
+    "before": {
+      "path": "/work/example/apps/desktop/src/local-adapter.mts",
+      "alt": null,
+      "line": null
+    },
+    "beforeEntry": {
+      "path": "/work/example/litch/apps/desktop/src/local-adapter.mts",
+      "alt": "/work/example/apps/desktop/src/local-adapter.mts",
+      "line": null
+    },
+    "files": ["/work/example/litch/apps/desktop/src/local-adapter.mts"],
+    "mobileBefore": true
+  },
+  {
+    "id": 14,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch-wt/_integ",
+    "value": "research/ephemeral-permissions-2026-11-02/README.md",
+    "before": {
+      "path": "/work/example/research/ephemeral-permissions-2026-11-02/README.md",
+      "alt": null,
+      "line": null
+    },
+    "beforeEntry": {
+      "path": "/work/example/litch-wt/_integ/research/ephemeral-permissions-2026-11-02/README.md",
+      "alt": "/work/example/research/ephemeral-permissions-2026-11-02/README.md",
+      "line": null
+    },
+    "files": ["/work/example/research/ephemeral-permissions-2026-11-02/README.md"],
+    "mobileBefore": true
+  },
+  {
+    "id": 15,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example",
+    "value": "scripts/build-tui-helper.mjs",
+    "before": { "path": "/work/example/scripts/build-tui-helper.mjs", "alt": null, "line": null },
+    "beforeEntry": {
+      "path": "/work/example/scripts/build-tui-helper.mjs",
+      "alt": null,
+      "line": null
+    },
+    "files": [],
+    "mobileBefore": true
+  },
+  {
+    "id": 16,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch",
+    "value": "~/Library/Caches/io.github.slovx2.litch.ShipIt/ShipIt_stderr.log",
+    "before": null,
+    "beforeEntry": null,
+    "files": ["/home/fixture/Library/Caches/io.github.slovx2.litch.ShipIt/ShipIt_stderr.log"],
+    "mobileBefore": false
+  },
+  {
+    "id": 17,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example",
+    "value": "packages/ui/src/styles/dock.css:729",
+    "before": { "path": "/work/example/packages/ui/src/styles/dock.css", "alt": null, "line": 729 },
+    "beforeEntry": {
+      "path": "/work/example/packages/ui/src/styles/dock.css",
+      "alt": null,
+      "line": 729
+    },
+    "files": ["/work/example/litch/packages/ui/src/styles/dock.css"],
+    "mobileBefore": true
+  },
+  {
+    "id": 18,
+    "kind": "explicit",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch",
+    "value": "packages/ui/src/composer/asking.ts",
+    "before": {
+      "path": "/work/example/packages/ui/src/composer/asking.ts",
+      "alt": null,
+      "line": null
+    },
+    "beforeEntry": {
+      "path": "/work/example/litch/packages/ui/src/composer/asking.ts",
+      "alt": "/work/example/packages/ui/src/composer/asking.ts",
+      "line": null
+    },
+    "files": ["/work/example/litch/packages/ui/src/composer/asking.ts"],
+    "mobileBefore": false
+  },
+  {
+    "id": 19,
+    "kind": "explicit",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch",
+    "value": "packages/ui/src/composer/RequestCard.tsx",
+    "before": {
+      "path": "/work/example/packages/ui/src/composer/RequestCard.tsx",
+      "alt": null,
+      "line": null
+    },
+    "beforeEntry": {
+      "path": "/work/example/litch/packages/ui/src/composer/RequestCard.tsx",
+      "alt": "/work/example/packages/ui/src/composer/RequestCard.tsx",
+      "line": null
+    },
+    "files": ["/work/example/litch/packages/ui/src/composer/RequestCard.tsx"],
+    "mobileBefore": false
+  },
+  {
+    "id": 20,
+    "kind": "explicit",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch",
+    "value": "packages/ui/src/terminal/TerminalPanel.tsx",
+    "before": {
+      "path": "/work/example/packages/ui/src/terminal/TerminalPanel.tsx",
+      "alt": null,
+      "line": null
+    },
+    "beforeEntry": {
+      "path": "/work/example/litch/packages/ui/src/terminal/TerminalPanel.tsx",
+      "alt": "/work/example/packages/ui/src/terminal/TerminalPanel.tsx",
+      "line": null
+    },
+    "files": ["/work/example/litch/packages/ui/src/terminal/TerminalPanel.tsx"],
+    "mobileBefore": false
+  },
+  {
+    "id": 21,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch/apps/desktop/src",
+    "value": "/work/example/research/device-browser-2026-11-01/README.md",
+    "before": {
+      "path": "/work/example/research/device-browser-2026-11-01/README.md",
+      "alt": null,
+      "line": null
+    },
+    "beforeEntry": {
+      "path": "/work/example/research/device-browser-2026-11-01/README.md",
+      "alt": null,
+      "line": null
+    },
+    "files": ["/work/example/research/device-browser-2026-11-01/README.md"],
+    "mobileBefore": true
+  },
+  {
+    "id": 22,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch/apps/desktop/src",
+    "value": "apps/mobile/src/shell/boot.ts:96",
+    "before": { "path": "/work/example/apps/mobile/src/shell/boot.ts", "alt": null, "line": 96 },
+    "beforeEntry": {
+      "path": "/work/example/litch/apps/desktop/src/apps/mobile/src/shell/boot.ts",
+      "alt": "/work/example/apps/mobile/src/shell/boot.ts",
+      "line": 96
+    },
+    "files": ["/work/example/litch/apps/mobile/src/shell/boot.ts"],
+    "mobileBefore": true
+  },
+  {
+    "id": 23,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch/apps/desktop/src",
+    "value": "browser/model.mts",
+    "before": { "path": "/work/example/browser/model.mts", "alt": null, "line": null },
+    "beforeEntry": {
+      "path": "/work/example/litch/apps/desktop/src/browser/model.mts",
+      "alt": "/work/example/browser/model.mts",
+      "line": null
+    },
+    "files": ["/work/example/litch/apps/desktop/src/browser/model.mts"],
+    "mobileBefore": true
+  },
+  {
+    "id": 24,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/reference/claude-code-cli-2.1.299/bunfs",
+    "value": "packages/shared/src/client-tool-executor.mts:69-89",
+    "before": {
+      "path": "/work/example/packages/shared/src/client-tool-executor.mts",
+      "alt": null,
+      "line": 69
+    },
+    "beforeEntry": {
+      "path": "/work/example/reference/claude-code-cli-2.1.299/bunfs/packages/shared/src/client-tool-executor.mts",
+      "alt": "/work/example/packages/shared/src/client-tool-executor.mts",
+      "line": 69
+    },
+    "files": ["/work/example/litch/packages/shared/src/client-tool-executor.mts"],
+    "mobileBefore": true
+  },
+  {
+    "id": 25,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch",
+    "value": "packages/ui/src/manager/rules.ts",
+    "before": {
+      "path": "/work/example/packages/ui/src/manager/rules.ts",
+      "alt": null,
+      "line": null
+    },
+    "beforeEntry": {
+      "path": "/work/example/litch/packages/ui/src/manager/rules.ts",
+      "alt": "/work/example/packages/ui/src/manager/rules.ts",
+      "line": null
+    },
+    "files": [],
+    "mobileBefore": true
+  },
+  {
+    "id": 26,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch",
+    "value": "litch-wt/cu-polish/.artifacts/cu-polish/M8-report.md",
+    "before": {
+      "path": "/work/example/litch-wt/cu-polish/.artifacts/cu-polish/M8-report.md",
+      "alt": null,
+      "line": null
+    },
+    "beforeEntry": {
+      "path": "/work/example/litch/litch-wt/cu-polish/.artifacts/cu-polish/M8-report.md",
+      "alt": "/work/example/litch-wt/cu-polish/.artifacts/cu-polish/M8-report.md",
+      "line": null
+    },
+    "files": [],
+    "mobileBefore": true
+  },
+  {
+    "id": 27,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch",
+    "value": "iCloud Drive/:tmp:litch-cu-trial:cu-note.rtf",
+    "before": null,
+    "beforeEntry": null,
+    "files": [],
+    "mobileBefore": false
+  },
+  {
+    "id": 28,
+    "kind": "explicit",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch",
+    "value": "/work/example/litch-wt/_mgr/shots/M17-standard-light-folded.png",
+    "before": {
+      "path": "/work/example/litch-wt/_mgr/shots/M17-standard-light-folded.png",
+      "alt": null,
+      "line": null
+    },
+    "beforeEntry": {
+      "path": "/work/example/litch-wt/_mgr/shots/M17-standard-light-folded.png",
+      "alt": null,
+      "line": null
+    },
+    "files": ["/work/example/litch-wt/_mgr/shots/M17-standard-light-folded.png"],
+    "mobileBefore": false
+  },
+  {
+    "id": 29,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch-wt/small-batch",
+    "value": ".local/mobile-power.png",
+    "before": { "path": "/work/example/.local/mobile-power.png", "alt": null, "line": null },
+    "beforeEntry": {
+      "path": "/work/example/litch-wt/small-batch/.local/mobile-power.png",
+      "alt": "/work/example/.local/mobile-power.png",
+      "line": null
+    },
+    "files": [],
+    "mobileBefore": true
+  },
+  {
+    "id": 30,
+    "kind": "code",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example",
+    "value": "/root/remote-app/backups/amazon-metric-20261029/validate-before.jsonl",
+    "before": null,
+    "beforeEntry": null,
+    "files": [],
+    "mobileBefore": false
+  },
+  {
+    "id": 31,
+    "kind": "prose",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/litch-wt/sp-client",
+    "value": "projection/tree.mts",
+    "before": { "path": "/work/example/projection/tree.mts", "alt": null, "line": null },
+    "beforeEntry": {
+      "path": "/work/example/litch-wt/sp-client/projection/tree.mts",
+      "alt": "/work/example/projection/tree.mts",
+      "line": null
+    },
+    "files": [],
+    "mobileBefore": true
+  },
+  {
+    "id": 32,
+    "kind": "prose",
+    "cwd": "/work/example",
+    "entryCwd": "/work/example/claude-codex",
+    "value": "docs/index.md",
+    "before": { "path": "/work/example/docs/index.md", "alt": null, "line": null },
+    "beforeEntry": {
+      "path": "/work/example/claude-codex/docs/index.md",
+      "alt": "/work/example/docs/index.md",
+      "line": null
+    },
+    "files": ["/work/example/claude-codex/docs/index.md", "/work/example/litch/docs/index.md"],
+    "mobileBefore": true
+  },
+  {
+    "id": 33,
+    "kind": "prose",
+    "cwd": "/work/example/litch-wt/chrome-ext",
+    "entryCwd": "/work/example/litch-wt/chrome-ext",
+    "value": "scripts/AGENTS.md",
+    "before": {
+      "path": "/work/example/litch-wt/chrome-ext/scripts/AGENTS.md",
+      "alt": null,
+      "line": null
+    },
+    "beforeEntry": {
+      "path": "/work/example/litch-wt/chrome-ext/scripts/AGENTS.md",
+      "alt": null,
+      "line": null
+    },
+    "files": ["/work/example/litch/scripts/AGENTS.md"],
+    "mobileBefore": true
+  }
+]

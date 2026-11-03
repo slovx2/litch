@@ -279,8 +279,9 @@ const zh: SampleText = {
     '- 用法见 [使用说明](docs/guide.md#L12) 和 `README.md`。',
     '- 文件模块在 packages/core/src/device/files.mts:40，界面的入口是 `packages/ui/src/app/App.tsx`。',
     '- 长的那个是 `fixtures/long.ts:4200`。',
+    '- 打开[文档目录](docs/)。[缺失文件](fixtures/not-here.md)和[文件 URI](file:///tmp/report.md)用于检查失败说明。',
     '',
-    '下面这几样不是工作区里的文件：`console.log`、`../outside/secret.txt`、读/写，还有 https://example.com/a/b.ts 这个网址。',
+    '根外示例 `../outside/secret.txt` 可能不存在；`console.log`、读/写和 https://example.com/a/b.ts 不是文件路径。',
   ].join('\n'),
   diagramsReply: [
     '把设备服务的几处结构都画出来了，一张一段。',
@@ -676,8 +677,9 @@ const en: SampleText = {
     '- Usage is in [the guide](docs/guide.md#L12) and `README.md`.',
     '- The files module is at packages/core/src/device/files.mts:40, and the interface starts in `packages/ui/src/app/App.tsx`.',
     '- The long one is `fixtures/long.ts:4200`.',
+    '- Open [documents](docs/). [Missing file](fixtures/not-here.md) and [file URI](file:///tmp/report.md) exercise failure details.',
     '',
-    'These are not files in the workspace: `console.log`, https://example.com/a/b.ts, `../outside/secret.txt`, read/write.',
+    'The outside example `../outside/secret.txt` may not exist; `console.log`, https://example.com/a/b.ts and read/write are not file paths.',
   ].join('\n'),
   diagramsReply: [
     'Here are the main parts of the device service, one diagram per section.',
