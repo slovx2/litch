@@ -240,6 +240,10 @@ export const en: Record<MessageKey, Entry> = {
   'workspace.unpin': 'Unpin',
   'workspace.ungroup': 'Remove from “{name}”',
   'permission.newOnly': 'Only available when starting a session',
+  'permission.project.unavailable':
+    'This device cannot save access permissions. Update its device service and try again.',
+  'permission.project.confirmFirst':
+    'Select Full access in the permissions menu and confirm, then send again.',
   'permission.project.saving': 'Saving project permission…',
   'permission.project.loading': 'Loading project permission…',
   'permission.project.unsupported':

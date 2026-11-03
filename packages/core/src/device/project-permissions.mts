@@ -94,6 +94,10 @@ export function createProjectPermissions(host: Host) {
       if (!host.online()) throw new ChannelError('offline', '设备未连接')
       if (!host.supported()) throw new ChannelError('unsupported', '设备不支持项目权限')
       const record = await host.request(PROJECT_PERMISSION.set, params)
+      // 保存响应已经是设备确认的值，不依赖随后的重读才能更新当前选择。
+      const entry = entries.get(params.cwd)
+      if (entry) entry.epoch++
+      publish(params.cwd, record)
       await Promise.all([...entries.keys()].map(read))
       return record
     },

@@ -11,7 +11,7 @@
   },
   "undeclared": "方法返回 extensionRequired；changed 仅发给声明了此扩展的实际连接。",
   "rules": [
-    "cwd 是设备上存在的目录，支持绝对路径与 ~、~/ 写法；由目标设备展开自身 home，再 realpath 后作为键；不沿父目录扩散，不以 projectId 或 harness 划分。",
+    "cwd 是设备上存在的目录，支持绝对路径与 ~、~/ 写法；由目标设备展开自身 home，再 realpath 后作为键；不沿父目录扩散，不以 projectId 或 harness 划分。cwd 为空字符串时表示该设备的“无项目”新建范围，独立保存，不向其他目录传播。",
     "read 返回 {cwd,permission,confirmedPermissions}，未记忆 permission 为 null；set 参数为 {cwd,permission,confirmed}，permission 只能是 :read-only、:workspace、:danger-full-access。",
     "set 只供客户端用户操作，不向模型提供对应工具。confirmed=true 表示用户明确确认；完全访问需要既有或本次明确确认。降低默认不抹掉此前确认。",
     "目录校验失败返回 -32602，新增可选 data={litch:invalidDirectory,field:cwd,reason,value,resolvedPath}；reason 为 absolutePath、missingDirectory、notDirectory、unreadableDirectory。客户端保留字段位置、原始输入及设备解析路径。",

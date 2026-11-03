@@ -35,16 +35,28 @@ export function useProjectPermission(
   const [saving, setSaving] = useState(false)
   const [failure, setFailure] = useState<{ key: string; text: string } | null>(null)
   useEffect(() => {
-    if (deviceId && path) return replica.openProjectPermission(deviceId, path)
+    if (deviceId) return replica.openProjectPermission(deviceId, path)
   }, [replica, deviceId, path])
+  const persist = async (id: string | null | undefined, confirmed = false): Promise<void> => {
+    const permission = permissionLevel(id)
+    if (!permission) return
+    if (view?.available === false) throw new Error(t('permission.project.unavailable'))
+    if (
+      permission === ':danger-full-access' &&
+      !confirmed &&
+      !view?.record?.confirmedPermissions.includes(permission)
+    )
+      throw new Error(t('permission.project.confirmFirst'))
+    await channel.command('projectPermission.set', { deviceId, cwd: path, permission, confirmed })
+  }
   const save = async (id: string, confirmed: boolean): Promise<boolean> => {
     const permission = permissionLevel(id)
-    if (!path || !permission || view?.available === false) return true
-    if (!view?.record || saving) return false
+    if (!permission) return true
+    if (saving) return false
     setSaving(true)
     setFailure(null)
     try {
-      await channel.command('projectPermission.set', { deviceId, cwd: path, permission, confirmed })
+      await persist(id, confirmed)
       return true
     } catch (error) {
       setFailure({ key, text: error instanceof Error ? error.message : String(error) })
@@ -58,10 +70,11 @@ export function useProjectPermission(
     permission: view?.record?.permission ?? null,
     confirmed: (id: string) =>
       view?.record?.confirmedPermissions.some((entry) => entry === id) === true,
-    loading: Boolean(deviceId && path && !view && !readError),
+    loading: Boolean(deviceId && !view && !readError),
     saving,
     error: readError ? reasonOf(readError, t) : failure?.key === key ? failure.text : null,
     errorField: readError?.key,
     save,
+    persist,
   }
 }

@@ -164,7 +164,7 @@ export function SettingsBar({
             ),
           }
         : {}),
-      ...((preset.confirm || (cwd && preset.id === ':danger-full-access')) &&
+      ...((preset.confirm || preset.id === ':danger-full-access') &&
       !project.confirmed(preset.id) &&
       !locked
         ? {

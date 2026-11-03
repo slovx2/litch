@@ -86,3 +86,41 @@ test('不支持项目权限的连接不发送扩展请求；读取失败明确�
   assert.match(String(failure), /目录不存在/)
   stop()
 })
+
+test('保存结果立即更新选择，重读失败有提示而不是悄悄还原', async () => {
+  const record: ProjectPermission = {
+    cwd: '',
+    permission: ':danger-full-access',
+    confirmedPermissions: [':danger-full-access'],
+  }
+  let saved = false
+  let shown: ProjectPermissionView | undefined
+  let failure: unknown
+  const permissions = createProjectPermissions({
+    deviceId: 'remote',
+    online: () => true,
+    supported: () => true,
+    request: async (method) => {
+      if (method === PROJECT_PERMISSION.set) {
+        saved = true
+        return record
+      }
+      if (saved) throw new Error('重读失败')
+      return { cwd: '', permission: null, confirmedPermissions: [] }
+    },
+  })
+  const stop = permissions.open('', {
+    snapshot: (value) => {
+      shown = value as ProjectPermissionView
+    },
+    delta() {},
+    error: (error) => {
+      failure = error
+    },
+  })
+  await Promise.resolve()
+  await permissions.set({ cwd: '', permission: ':danger-full-access', confirmed: true })
+  assert.equal(shown?.record?.permission, ':danger-full-access')
+  assert.match(String(failure), /重读失败/)
+  stop()
+})

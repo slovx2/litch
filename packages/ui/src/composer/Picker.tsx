@@ -72,12 +72,12 @@ export function Picker({ kind, label, value, fallback, options, onPick, search }
 
   const pick = (option: PickerOption, confirmed = false) => {
     if (option.disabled) return
-    if (option.confirm && !confirmed && option.id !== value) {
+    if (option.confirm && !confirmed) {
       setAsking(option)
       return
     }
     close(true)
-    if (option.id !== value) onPick(option.id)
+    if (option.id !== value || confirmed) onPick(option.id)
   }
 
   const display = current?.title ?? fallback ?? value ?? label

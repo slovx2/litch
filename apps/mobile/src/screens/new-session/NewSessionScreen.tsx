@@ -110,10 +110,8 @@ export function NewSessionScreen({ navigation, route }: Props) {
   const slot = `${deviceId}/${harnessId}`
   const mine = own.slot === slot ? own.picks : {}
   const picks = { ...(options ? recallPicks(deviceId, harnessId, options) : {}), ...mine }
-  if (cwd) {
-    delete picks.permission
-    if (project.permission) picks.permission = project.permission
-  }
+  delete picks.permission
+  if (project.permission) picks.permission = project.permission
   const permissionBlocked =
     project.permission &&
     options &&
@@ -160,11 +158,13 @@ export function NewSessionScreen({ navigation, route }: Props) {
 
   const goalsAble = harness?.abilities?.goals === true
   const create = async (typed: string, images: ImageAttachment[], extras: MessageExtra[]) => {
+    if (blocked) throw new Error(blocked)
     // 第一句是 /goal 加上目标（harness 会持续目标时）：建好会话就设目标，不发消息，它空闲时自己开始做
     const intent = goalIntent(typed, images.length + extras.length, goalsAble, null)
     if (intent.kind === 'refuse') throw new Error(t(intent.key))
     const goal = intent.kind === 'goal'
     const text = goal ? intent.objective : typed
+    await project.persist(sent.permission)
     const { sessionId } = await channel.command('session.create', {
       deviceId,
       ...(harness ? { harness: harness.id } : {}),
@@ -180,7 +180,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
       // 在新工作树里建：设备先建工作树（可能要几秒），再在里面起会话
       ...(inWorktree ? { worktree: worktreeParam(place.from) } : {}),
     })
-    const { mode: _thisOnce, ...kept } = picks
+    const { mode: _thisOnce, ...kept } = sent
     remember(deviceId, workspaceId, harness?.id, kept)
     if (branches) rememberWhere(deviceId, workspaceId, place)
     // 先把会话订阅上，内容到了（或者等过了时限）再换页：详情页拿的是同一份会话存储
@@ -374,7 +374,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
                 settings: shown,
                 onChange: (patch) => {
                   const picks = { ...mine, ...patch }
-                  if (cwd) delete picks.permission
+                  delete picks.permission
                   setOwn({ slot, picks })
                 },
               }}

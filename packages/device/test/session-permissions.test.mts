@@ -230,3 +230,42 @@ test('项目确认按设备真实目录共享，降低默认保留确认；经�
     await env.close()
   }
 })
+
+test('无项目的权限按设备持久化；与真实目录和别名互不覆盖', async () => {
+  const env = treeRig()
+  try {
+    const client = env.connect()
+    await client.initialize(['harness', 'projectPermissions'])
+    await client.call(PROJECT_PERMISSION.set, {
+      cwd: '',
+      permission: ':danger-full-access',
+      confirmed: true,
+    })
+    const second = env.connect()
+    await second.initialize(['harness', 'projectPermissions'])
+    const loose = await second.call(PROJECT_PERMISSION.read, { cwd: '' })
+    assert.equal(loose.permission, ':danger-full-access')
+    assert.deepEqual(loose.confirmedPermissions, [':danger-full-access'])
+    await client.call(PROJECT_PERMISSION.set, {
+      cwd: env.stateDir,
+      permission: ':read-only',
+      confirmed: false,
+    })
+    assert.equal(
+      (await second.call(PROJECT_PERMISSION.read, { cwd: '' })).permission,
+      ':danger-full-access',
+    )
+    await assert.rejects(client.call(PROJECT_PERMISSION.read, { cwd: 'relative' }), {
+      message: /absolutePath/,
+    })
+    await assert.rejects(client.call(PROJECT_PERMISSION.read, {}), { message: /cwd/ })
+    const reopened = new DatabaseSync(join(env.stateDir, 'device.sqlite'))
+    try {
+      assert.deepEqual(new ProjectPermissions(reopened, () => {}).read(''), loose)
+    } finally {
+      reopened.close()
+    }
+  } finally {
+    await env.close()
+  }
+})

@@ -200,7 +200,7 @@ export function useComposeSettings(props: SettingsProps | null): ComposeSettings
   const pickPermission = (id: string) => {
     const preset = options.permissions.find((entry) => entry.id === id)
     if (!preset) return
-    if ((preset.confirm || (cwd && id === ':danger-full-access')) && !project.confirmed(id))
+    if ((preset.confirm || id === ':danger-full-access') && !project.confirmed(id))
       setAsking({ preset, title: permissionText(t, preset).title })
     else applyPermission(id)
   }
@@ -312,6 +312,7 @@ export function useComposeSettings(props: SettingsProps | null): ComposeSettings
       />
       <PickerSheet
         visible={open === 'permission'}
+        reselect
         title={t('composer.permission')}
         value={permission}
         options={permissionOptions}

@@ -14,11 +14,13 @@ export const PROJECT_PERMISSION = {
   changed: 'litch/projectPermission/changed',
 } as const
 export interface ProjectPermission {
+  /** 空字符串表示执行设备上的“无项目”新建范围。 */
   cwd: string
   permission: PermissionLevel | null
   confirmedPermissions: PermissionLevel[]
 }
 export interface ProjectPermissionSet {
+  /** 实际目录或空字符串（无项目）；不按 harness 区分。 */
   cwd: string
   permission: PermissionLevel
   /** 用户本次明确确认；模型的工具调用不得写入项目确认。 */

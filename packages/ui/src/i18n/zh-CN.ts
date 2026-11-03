@@ -241,6 +241,8 @@ export const zhCN = {
   'workspace.unpin': '取消置顶',
   'workspace.ungroup': '移出“{name}”',
   'permission.newOnly': '此权限只能在新建会话时选择',
+  'permission.project.unavailable': '此设备不支持保存访问权限，请升级设备服务后重试。',
+  'permission.project.confirmFirst': '请在访问权限菜单中选择“完全访问”并确认，然后重新发送。',
   'permission.project.saving': '正在保存项目权限…',
   'permission.project.loading': '正在读取项目权限…',
   'permission.project.unsupported': '当前 harness 不支持项目权限，请选择其他权限或 harness。',

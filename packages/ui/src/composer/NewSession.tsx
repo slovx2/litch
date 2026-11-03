@@ -350,10 +350,8 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
   const mine = chosen.harness === harnessId ? chosen.picks : {}
   const own = options ? fitPicks(mine, options) : mine
   const picks = { ...(options ? recallPicks(deviceId, harnessId, options) : {}), ...own }
-  if (cwd) {
-    delete picks.permission
-    if (project.permission) picks.permission = project.permission
-  }
+  delete picks.permission
+  if (project.permission) picks.permission = project.permission
   const permissionBlocked =
     project.permission &&
     options &&
@@ -397,6 +395,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
       localUserMessage('pending', { text, images, extras }, harness?.abilities?.mentions === true),
     )
     try {
+      await project.persist(sent.permission)
       const { sessionId } = await channel.command('session.create', {
         deviceId,
         ...(harness ? { harness: harness.id } : {}),
@@ -410,7 +409,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
         ...(goal ? { goal: true } : {}),
         ...(inWorktree ? { worktree: { ...withFrom(where.from) } } : {}),
       })
-      const { mode: _thisOnce, ...kept } = picks
+      const { mode: _thisOnce, ...kept } = sent
       rememberSubmitted(`${deviceId}:${sessionId}`, submittedText)
       rememberPicks(deviceId, harnessId, kept)
       if (harness) rememberHarness(deviceId, workspaceId, harness.id)
@@ -595,7 +594,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
               holdSettings={holding}
               onSettings={(patch) => {
                 const picks = { ...mine, ...patch }
-                if (cwd) delete picks.permission
+                delete picks.permission
                 setChosen({ harness: harnessId, picks })
               }}
               onSend={create}

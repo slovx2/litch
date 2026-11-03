@@ -7,7 +7,7 @@ import {
   type ProjectPermission,
   permissionLevel,
 } from '../../protocol/src/project-permissions.mjs'
-import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
+import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import { DirectoryError, requireDeviceDirectory } from './directory-validation.mjs'
 import { isObject } from './wire.mjs'
 import type { Announce } from './workspaces.mjs'
@@ -23,13 +23,16 @@ export class ProjectPermissions {
     ) WITHOUT ROWID`)
   }
   read(cwd: string): ProjectPermission {
-    const resolved = requireDeviceDirectory(cwd)
-    let path: string
-    try {
-      path = realpathSync(resolved)
-      if (!statSync(path).isDirectory()) throw new Error('不是目录')
-    } catch {
-      throw new DirectoryError('unreadableDirectory', cwd, resolved)
+    // 空目录是这台设备的“无项目”范围，不能拿某个 harness 的默认目录代替。
+    let path = ''
+    if (cwd !== '') {
+      const resolved = requireDeviceDirectory(cwd)
+      try {
+        path = realpathSync(resolved)
+        if (!statSync(path).isDirectory()) throw new Error('不是目录')
+      } catch {
+        throw new DirectoryError('unreadableDirectory', cwd, resolved)
+      }
     }
     const row = this.db.prepare('SELECT * FROM project_permissions WHERE cwd=?').get(path)
     return {
@@ -40,7 +43,8 @@ export class ProjectPermissions {
   }
   call(method: string, value: unknown): ProjectPermission {
     const fields = isObject(value) ? value : {}
-    const current = this.read(requiredString(fields.cwd, 'cwd'))
+    if (typeof fields.cwd !== 'string') throw new ProtocolError(-32602, '需要 cwd 字符串')
+    const current = this.read(fields.cwd)
     if (method === PROJECT_PERMISSION.read) return current
     if (method !== PROJECT_PERMISSION.set) throw new ProtocolError(-32601, '未知项目权限方法')
     const permission = permissionLevel(fields.permission)

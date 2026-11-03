@@ -34,6 +34,7 @@ export function PickerSheet({
   onPick,
   onClose,
   testID,
+  reselect = false,
 }: {
   visible: boolean
   title: string
@@ -44,6 +45,8 @@ export function PickerSheet({
   onPick(id: string): void
   onClose(): void
   testID?: string
+  /** 权限默认值也需要明确确认，允许再次选择当前项。 */
+  reselect?: boolean
 }) {
   const insets = useSafeAreaInsets()
   const keyboardShown = useKeyboardState((state) => state.isVisible)
@@ -111,7 +114,7 @@ export function PickerSheet({
                   testID={`picker:option:${option.id}`}
                   onPress={() => {
                     onClose()
-                    if (!selected) onPick(option.id)
+                    if (!selected || reselect) onPick(option.id)
                   }}
                   style={({ pressed }) => [
                     styles.row,
