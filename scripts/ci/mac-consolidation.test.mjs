@@ -26,6 +26,21 @@ const job = {
 
 test('签名完成前只等待；错SHA/run/attempt、失败/取消或其他workflow均不放行Mac', () => {
   assert.equal(signingState(run, [], context), null)
+  assert.equal(
+    signingState(
+      { ...run, status: 'queued' },
+      [{ ...job, status: 'in_progress', conclusion: null }],
+      context,
+    ),
+    null,
+  )
+  assert.throws(() =>
+    signingState(
+      { ...run, status: 'completed' },
+      [{ ...job, status: 'in_progress', conclusion: null }],
+      context,
+    ),
+  )
   assert.equal(signingState(run, [{ ...job, status: 'queued', conclusion: null }], context), null)
   assert.equal(signingState(run, [job], context).job, 123)
   for (const changed of [

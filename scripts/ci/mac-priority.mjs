@@ -16,7 +16,8 @@ export function signingState(run, jobs, { repository, sha, runId, attempt }) {
   assert.ok(found.length <= 1, '签名job身份不唯一')
   const job = found[0]
   if (job?.status !== 'completed') {
-    assert.equal(run.status, 'in_progress', '候选结束而签名未成功')
+    // 新的下游job入队时，workflow总状态可能回到queued，已有签名job仍在执行。
+    assert.ok(['queued', 'in_progress'].includes(run.status), '候选结束而签名未成功')
     return null
   }
   assert.equal(job.conclusion, 'success', '签名job失败，不放行补充Mac')
