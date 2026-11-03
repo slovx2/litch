@@ -34,6 +34,7 @@ import {
   type ManagerCreateParams,
   type ManagerDecision,
 } from '../../protocol/src/manager.mjs'
+import { MANAGER_PAGING_METHOD } from '../../protocol/src/manager-paging.mjs'
 import { dynamicToolProblems } from '../../shared/test/codex-params.mjs'
 
 const ajv = new Ajv2019({ strict: false, allErrors: true })
@@ -67,7 +68,7 @@ test('扩展、方法和通知登记与声明完全一致', () => {
   assert.equal(extension.extension, EXTENSION.manager)
   assert.deepEqual(
     extension.parts.filter((part) => part.kind === 'ClientRequest').map((part) => part.method),
-    Object.values(MANAGER_METHOD),
+    [...Object.values(MANAGER_PAGING_METHOD), ...Object.values(MANAGER_METHOD)],
   )
   assert.deepEqual(
     extension.parts.filter((part) => part.kind === 'ServerNotification').map((part) => part.method),
