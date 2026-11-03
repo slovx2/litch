@@ -292,9 +292,9 @@ let uploaded = 0
  * 模型请求之外，Claude Code 还会来数词元、打招呼，dsh 带图片时先把图传上来（表单，不是 JSON），各回一句固定的。
  * 这里出了错不往外抛（那会把整个夹具带倒，它起的进程就没人收了）：回一个 500，把错打出来。
  */
-export async function serveAnthropic(harness, path, raw, res, pace) {
+export async function serveAnthropic(harness, path, raw, res, pace, beforeTextDelta) {
   try {
-    await serve(harness, path, raw, res, pace)
+    await serve(harness, path, raw, res, pace, beforeTextDelta)
   } catch (error) {
     console.error(`假模型应答 ${harness} ${path} 时出错：${error?.stack ?? error}`)
     if (res.headersSent) return res.destroy()
@@ -304,7 +304,7 @@ export async function serveAnthropic(harness, path, raw, res, pace) {
   }
 }
 
-async function serve(harness, path, raw, res, pace) {
+async function serve(harness, path, raw, res, pace, beforeTextDelta) {
   const json = (value, status = 200) =>
     res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(value))
   if (path.endsWith('/api/hello')) return json({})
@@ -371,6 +371,8 @@ async function serve(harness, path, raw, res, pace) {
       // 文字分几段发，让引擎那边产生真实的增量
       const size = Math.max(1, Math.ceil(block.text.length / (block.pieces ?? 6)))
       for (let at = 0; at < block.text.length; at += size) {
+        // 端到端测试可在指定增量前等事件放行，避免拿流式应答的时长赌插话时机。
+        await beforeTextDelta?.(block, at)
         emit('content_block_delta', {
           index,
           delta: { type: 'text_delta', text: block.text.slice(at, at + size) },

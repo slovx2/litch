@@ -72,7 +72,7 @@ import {
   writeDeviceSettings,
   writeEngineSettings,
 } from './client-fixture-engines.mjs'
-import { FIXTURE_SKILL, piReply, sendCompletion } from './client-fixture-marks.mjs'
+import { FIXTURE_SKILL, piReply, SLOW_PIECES, sendCompletion } from './client-fixture-marks.mjs'
 import { codexSocketCleanup, serveResponses } from './client-fixture-responses.mjs'
 import { sessionsReply } from './client-fixture-sessions.mjs'
 
@@ -197,6 +197,21 @@ const deviceSocket = join(home, 'device', 'device.sock')
 // 两个运行时的模型地址带着各自的标识（/<标识>/v1），假模型据此知道请求是哪个 harness 发来的。
 let requests = 0
 let paced = false
+// 会话树测试固定回报与父会话首段输出的先后。只拦“慢慢说”，其余请求（包括子会话）照常。
+// --hold-slow-response=before|after-first-delta；标准输入 release-slow-response 放行。
+const holdSlowResponse = process.argv
+  .find((arg) => arg.startsWith('--hold-slow-response='))
+  ?.split('=')[1]
+const slowResponse = Promise.withResolvers()
+let slowResponsePaused = false
+const beforeTextDelta = async (block, at) => {
+  if (block.pieces !== SLOW_PIECES || !holdSlowResponse) return
+  if (holdSlowResponse === 'before' || at > 0) {
+    if (!slowResponsePaused) console.log('LITCH_SLOW_RESPONSE_PAUSED')
+    slowResponsePaused = true
+    await slowResponse.promise
+  }
+}
 const pause = (ms) => new Promise((done) => setTimeout(done, ms))
 const model = createServer(async (req, res) => {
   const chunks = []
@@ -205,7 +220,7 @@ const model = createServer(async (req, res) => {
   const [, id, ...rest] = (req.url ?? '').split('/')
   // Claude Code 和 dsh 说的是另一种形态，怎么答在 client-fixture-anthropic.mjs
   if (id === 'claude-code' || id === 'dsh') {
-    await serveAnthropic(id, `/${rest.join('/')}`, raw, res, 150)
+    await serveAnthropic(id, `/${rest.join('/')}`, raw, res, 150, beforeTextDelta)
     return
   }
   // 原生 codex 说的是 Responses 形态。工具表上的命名空间打一行出来：建会话时带的工具定义到没到模型手里，看它
@@ -608,6 +623,10 @@ try {
 
 // 标准输入里的命令。标准输入没有接东西（或者已经关了）时这里什么都不会发生
 createInterface({ input: process.stdin }).on('line', (line) => {
+  if (line.trim() === 'release-slow-response') {
+    slowResponse.resolve()
+    return
+  }
   const [command, id] = line.trim().split(/\s+/)
   if (managed) {
     if (line.trim())

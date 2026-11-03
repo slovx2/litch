@@ -31,6 +31,7 @@ const DEVICE_MAIN = 'packages/device/dist/device/src/main.mjs'
 
 interface Fixture {
   child: ChildProcessWithoutNullStreams
+  slowResponsePaused: () => Promise<void>
   socket: string
   root: string
   dirs: { app: string; web: string; notes: string }
@@ -59,6 +60,10 @@ function startFixture(flags: string[] = []): Promise<Fixture> {
     stdio: ['pipe', 'pipe', 'pipe'],
   })
   return new Promise((resolve, reject) => {
+    let markSlowResponsePaused = () => {}
+    const slowResponsePaused = new Promise<void>((done) => {
+      markSlowResponsePaused = done
+    })
     let output = ''
     let errors = ''
     const timer = setTimeout(() => {
@@ -74,10 +79,22 @@ function startFixture(flags: string[] = []): Promise<Fixture> {
     })
     child.stdout.on('data', (data) => {
       output += data
+      if (output.includes('LITCH_SLOW_RESPONSE_PAUSED\n')) markSlowResponsePaused()
       const line = output.split('\n').find((item) => item.startsWith('LITCH_DEVICE_FIXTURE '))
       if (!line || !output.includes('\n', output.indexOf(line))) return
       clearTimeout(timer)
-      resolve({ child, ...JSON.parse(line.slice('LITCH_DEVICE_FIXTURE '.length)) })
+      resolve({
+        child,
+        slowResponsePaused: () =>
+          new Promise<void>((done, fail) => {
+            const waiting = setTimeout(() => fail(new Error('假模型 60 秒没有暂停应答')), 60_000)
+            void slowResponsePaused.then(() => {
+              clearTimeout(waiting)
+              done()
+            })
+          }),
+        ...JSON.parse(line.slice('LITCH_DEVICE_FIXTURE '.length)),
+      })
     })
   })
 }
@@ -591,11 +608,27 @@ async function startDevice(fixture: Fixture, directory: string): Promise<ChildPr
   return child
 }
 
-test('端到端：Claude Code 的父会话回合在跑时子会话做完，回报当场插进这个回合，模型在同一回合里看到，不另开唤醒回合', async () => {
-  const fixture = await startFixture(['--managed', '--engines', 'claude'])
+for (const phase of ['before', 'after-first-delta'] as const) {
+  test(`端到端：Claude Code 的父会话回合在跑时子会话做完，回报当场插进这个回合，模型在同一回合里看到，不另开唤醒回合（${phase}）`, () =>
+    midTurnReport(phase))
+}
+
+async function midTurnReport(phase: 'before' | 'after-first-delta'): Promise<void> {
+  const fixture = await startFixture([
+    '--managed',
+    '--engines',
+    'claude',
+    `--hold-slow-response=${phase}`,
+  ])
   try {
     const client = await TestClient.overSocket(fixture.socket)
-    await client.initialize(['harness', 'deviceWorkspaces', 'sessionTree', 'clientTools'])
+    await client.initialize([
+      'harness',
+      'deviceWorkspaces',
+      'sessionTree',
+      'clientTools',
+      'inputDelivery',
+    ])
     for (let attempt = 0; ; attempt++) {
       const info = await client.call('runtime/info')
       if (info.harnesses.some((item: any) => item.id === 'claude-code' && item.available)) break
@@ -639,26 +672,61 @@ test('端到端：Claude Code 的父会话回合在跑时子会话做完，回�
         frame.method === 'item/tool/requestUserInput' && (frame.params as any).threadId === childId,
       60_000,
     )
-    // 第二回合：父会话慢慢回话（九秒上下），这时才答子会话的题，子会话在这期间做完
+    // 等假模型收到父会话的请求才答子会话，避免 CLI 把两句输入合并成同一次请求。
+    // 假模型在首段前或首段后暂停，等回报入队才放行；不依赖“慢慢说”的九秒窗口。
     const second = await client.call('turn/start', {
       threadId: parentId,
       input: [{ type: 'text', text: '慢慢说' }],
     })
+    await fixture.slowResponsePaused()
+    if (phase === 'after-first-delta')
+      await client.waitFor(
+        (frame) =>
+          frame.method === 'item/agentMessage/delta' &&
+          (frame.params as any).turnId === second.turn.id,
+        60_000,
+      )
     client.answer(question.id, {
       answers: { [(question.params as any).questions[0].id]: { answers: ['先看设备服务'] } },
     })
-    await ended(second.turn.id)
+    const queued = await client.waitFor(
+      (frame) =>
+        frame.method === 'item/started' &&
+        (frame.params as any).threadId === parentId &&
+        (frame.params as any).item.type === 'userMessage' &&
+        JSON.stringify((frame.params as any).item.content).includes('<litch-session-event kind='),
+      60_000,
+    )
+    assert.equal((queued.params as any).item.litchInputDelivery, 'queued')
+    await client.waitFor(
+      (frame) =>
+        frame.method === 'litch/thread/queuedNotes/updated' &&
+        (frame.params as any).threadId === parentId &&
+        (frame.params as any).notes.length === 0 &&
+        client.notifications.indexOf(frame) > client.notifications.indexOf(question),
+      60_000,
+    )
+    assert.ok(
+      !client.notifications.some(
+        (frame) =>
+          frame.method === 'turn/completed' && (frame.params as any).turn.id === second.turn.id,
+      ),
+      '回报入队时父回合仍在进行',
+    )
+    fixture.child.stdin.write('release-slow-response\n')
+    const completed = await ended(second.turn.id)
+    assert.equal((completed.params as any).turn.status, 'completed')
     const steered = client.notifications.filter(
       (frame) =>
         frame.method === 'item/started' &&
         (frame.params as any).item.type === 'userMessage' &&
         JSON.stringify((frame.params as any).item.content).includes('<litch-session-event kind='),
     )
-    assert.equal(steered.length, 1, '插了一次')
+    // 声明交付状态后，queued/sent 会再次通知同一条消息，按条目标识计数。
+    assert.equal(new Set(steered.map((frame) => (frame.params as any).item.id)).size, 1, '插了一次')
     const inserted = steered[0]?.params as any
     assert.equal(inserted.turnId, second.turn.id, '插在第二回合里')
     assert.match(inserted.item.clientId, /^litch-sessions-[a-z0-9]+-\d+$/)
-    await pause(2000)
     const read = await client.call('thread/read', { threadId: parentId, includeTurns: true })
     assert.equal(read.thread.turns.length, 2, '没有另开唤醒回合')
     const items: any[] = read.thread.turns[1].items
@@ -667,8 +735,17 @@ test('端到端：Claude Code 的父会话回合在跑时子会话做完，回�
         item.type === 'userMessage' && JSON.stringify(item.content).includes('kind=\\"notes\\"'),
     )
     assert.ok(at > 0, '记录里留着插进去的回报，在回合中间')
-    // 假模型认出只有回报的那条消息，照着回一句（client-fixture-sessions.mjs）：模型在这一回合里看到了它，是这个子会话的
-    const answer = items.slice(at + 1).find((item) => item.type === 'agentMessage')?.text ?? ''
+    assert.equal(items[at].litchInputDelivery, 'sent', 'CLI 已接纳回报')
+    const replies = items.filter((item) => item.type === 'agentMessage')
+    assert.equal(replies.length, 2, '原回答和收到回报后的回答各一次')
+    assert.match(replies[0].text, /^claude-code 收到：慢慢说/)
+    assert.equal(
+      items.indexOf(replies[0]) < at,
+      phase === 'after-first-delta',
+      '确实覆盖首段前后两种顺序',
+    )
+    // 条目按开始输出的时刻排：首段前插话时，后面第一条仍是原回答，最后一条才是对回报的回答。
+    const answer = replies[1].text
     assert.match(answer, /^收到子会话的回报：1 条/)
     assert.ok(answer.includes(childId), answer.slice(0, 400))
     client.close()
@@ -677,7 +754,7 @@ test('端到端：Claude Code 的父会话回合在跑时子会话做完，回�
     fixture.child.kill('SIGTERM')
     await exited
   }
-})
+}
 
 test('端到端：Claude Code 的父会话回合结束时后台命令还在跑，子会话做完不唤醒；后台跑完 CLI 自己续跑时回报跟着交出去', async () => {
   const fixture = await startFixture(['--managed', '--engines', 'claude'])
