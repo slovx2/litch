@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
+  explicitFileRef,
   type FileScope,
   fileRefOf,
   findFileRefs,
@@ -68,7 +69,6 @@ test('不认的：根之外的、目录、网址和域名、属性访问、带�
     'e.g.',
     'v1.2.3',
     '1.5',
-    'src/my file.ts',
     'src/*.ts',
     'src//index.ts',
     '--flag=a/b.ts',
@@ -80,6 +80,44 @@ test('不认的：根之外的、目录、网址和域名、属性访问、带�
     assert.equal(fileRefOf(raw, scope), null, raw)
   }
   assert.equal(fileRefOf('src/index.ts', { root: '', cwd: '' }), null)
+})
+
+test('明确链接、反引号路径共用位置、空格、二进制和 Windows 解析', () => {
+  const nested = { root: '/repo', cwd: '/repo/sub' }
+  for (const raw of [
+    'a.ts:12',
+    'src/a.ts:12',
+    'docs/My%20Report.md:12',
+    'docs/My Report.md#L12C3',
+  ]) {
+    const explicit = explicitFileRef(raw, nested)
+    assert.deepEqual(explicit, fileRefOf(raw, nested), raw)
+    assert.equal(explicit?.line, 12, raw)
+    assert.ok(explicit?.alt, raw)
+  }
+  for (const raw of ['report.pdf', 'docs/My%20Report.md']) {
+    assert.equal(explicitFileRef(raw, nested)?.alt, `/repo/${decodeURIComponent(raw)}`)
+  }
+  for (const raw of ['C:/repo/a.ts', 'C:\\repo\\a.ts', 'src\\a.ts']) {
+    for (const suffix of ['', ':12', ':12:3-20:4', '#L12', '#L12C3-L20C4']) {
+      const windows = { root: 'C:/repo', cwd: 'C:/repo' }
+      const ref = explicitFileRef(raw + suffix, windows)
+      assert.deepEqual(ref, fileRefOf(raw + suffix, windows), raw + suffix)
+      assert.equal(ref?.path, raw.startsWith('src') ? 'C:/repo/src/a.ts' : 'C:/repo/a.ts')
+      assert.equal(ref?.line, suffix ? 12 : null)
+    }
+  }
+  assert.equal(explicitFileRef('docs/a%23b.md#section', nested)?.path, '/repo/sub/docs/a#b.md')
+  assert.equal(explicitFileRef('docs/a%23b.md#section', nested)?.fragment, 'section')
+  for (const raw of [
+    'file:///repo/a.ts',
+    'https://host/a.ts',
+    'mailto:a.ts',
+    '\\\\server\\a.ts',
+    'bad%ZZ.ts',
+  ]) {
+    assert.equal(explicitFileRef(raw, nested), null, raw)
+  }
 })
 
 test('工作目录不是根：相对路径先按工作目录接，另一种读法（按根接）也带上', () => {

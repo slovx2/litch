@@ -7,6 +7,7 @@
 // - 正文里（不在行内代码里）的更严：必须有目录分隔，扩展名得是常见的源码或文本类型，或者后面跟着行号。
 import {
   extensionOf,
+  isAbsolutePath,
   joinPath,
   normalizePath,
   noTwin,
@@ -41,9 +42,9 @@ export interface FileRef {
 export type FileRefMode = 'code' | 'prose'
 
 /** 路径里许出现的字符：不许空白、引号、冒号和通配符这些 */
-const PATH_CHARS = /^[^\s<>"'`|*?:;,{}$\\!]+$/
+const PATH_CHARS = /^[^<>"'`|*?:;,{}$!\0\r\n]+$/
 /** 结尾的位置：#L12、#L12-L20、:12、:12:5、:12-20 */
-const LOCATION = /(?:#L(\d+)(?:C\d+)?(?:-L?\d+(?:C\d+)?)?|:(\d+)(?::\d+)?(?:-\d+)?)$/
+const LOCATION = /(?:#L(\d+)(?:C\d+)?(?:-L?\d+(?:C\d+)?)?|:(\d+)(?::\d+)?(?:-\d+(?::\d+)?)?)$/
 /** 扩展名：字母开头，最多十个字母数字 */
 const EXTENSION = /\.[A-Za-z][A-Za-z0-9]{0,9}$/
 /** 像域名的一段：最后一节是两个以上的字母 */
@@ -64,7 +65,8 @@ const BARE_NAMES = new Set([
 const KNOWN = new Set(
   (
     'ts mts cts tsx js mjs cjs jsx json jsonc md mdx yml yaml toml ini sh bash zsh py go rs java kt swift ' +
-    'cc cpp hpp cs css scss less html htm xml svg vue sql rb php lua txt lock csv gradle proto graphql'
+    'cc cpp hpp cs css scss less html htm xml svg vue sql rb php lua txt lock csv gradle proto graphql ' +
+    'pdf png jpg jpeg gif webp docx xlsx'
   ).split(' '),
 )
 const MAX_LINE = 10_000_000
@@ -84,12 +86,45 @@ export function fileRefOf(
   scope: FileScope,
   mode: FileRefMode = 'code',
 ): FileRef | null {
-  if (raw.length < 3 || raw.length > 400 || !scope.root) return null
+  return parseFileRef(raw, scope, mode)
+}
+
+/** 先剥离位置，再判断协议和盘符；明确链接与自动识别共用同一条解析路线。 */
+function parseFileRef(
+  raw: string,
+  scope: FileScope,
+  mode: FileRefMode | 'explicit',
+): FileRef | null {
+  if (raw.length < 1 || raw.length > 4096 || !scope.root) return null
   const location = LOCATION.exec(raw)
-  const text = location ? raw.slice(0, location.index) : raw
+  let address = location ? raw.slice(0, location.index) : raw
+  const hash = address.indexOf('#')
+  let fragment = ''
+  let text: string
+  try {
+    if (hash >= 0) {
+      fragment = decodeURIComponent(address.slice(hash + 1))
+      address = address.slice(0, hash)
+    }
+    text = decodeURIComponent(address)
+  } catch {
+    return null
+  }
   const number = location ? Number(location[1] ?? location[2]) : Number.NaN
   const line = Number.isInteger(number) && number >= 1 && number <= MAX_LINE ? number : null
-  if (!PATH_CHARS.test(text) || text.includes('//') || text.startsWith('-')) return null
+  // 反斜杠只在 Windows 路径中作分隔符，UNC 不在本轮支持范围。
+  if (/^[\\/]{2}/.test(text)) return null
+  const windows = /^[a-z]:[\\/]/i.test(text) || /^[a-z]:[\\/]/i.test(scope.cwd)
+  if (windows) text = text.replaceAll('\\', '/')
+  const chars = /^[a-z]:\//i.test(text) ? text.slice(2) : text
+  if (
+    !PATH_CHARS.test(chars) ||
+    chars.includes('\\') ||
+    text.includes('//') ||
+    text.startsWith('-')
+  )
+    return null
+  if (mode === 'prose' && /\s/.test(text)) return null
   const parts = text.split('/')
   const name = parts[parts.length - 1] ?? ''
   if (!name || !looksLikeFile(name)) return null
@@ -98,17 +133,17 @@ export function fileRefOf(
   if (mode === 'prose') {
     // 正文里：要有目录分隔；扩展名常见，或者明明白白带着行号
     if (!nested || !(known || line !== null)) return null
-  } else if (!nested && !(known && extensionOf(name).length !== 1)) {
+  } else if (mode !== 'explicit' && !nested && !(known && extensionOf(name).length !== 1)) {
     // 光一个文件名：`console.log`、`a.b` 这类不是文件，只认扩展名常见的
     return null
   }
   // 开头那一段像域名的是网址的一截，不是路径
   const first = parts.find((part) => part !== '' && part !== '.' && part !== '..') ?? ''
-  if (first !== name && DOMAIN.test(first)) return null
+  if (mode !== 'explicit' && first !== name && DOMAIN.test(first)) return null
 
   const root = normalizePath(scope.root)
   const cwd = scope.cwd ? normalizePath(scope.cwd) : root
-  const absolute = text.startsWith('/') || text.startsWith('~/')
+  const absolute = isAbsolutePath(text) || text.startsWith('~/')
   const twin = scope.twin ?? noTwin
   /** 在根里面（不是根自己）的照根的写法给出来，不在是 null */
   const within = (path: string): string | null => {
@@ -117,12 +152,17 @@ export function fileRefOf(
   }
   if (absolute) {
     const path = within(normalizePath(text))
-    return path === null ? null : { path, alt: null, line }
+    return path === null ? null : { path, alt: null, line, ...(fragment ? { fragment } : {}) }
   }
   const fromCwd = within(joinPath(cwd, text))
   const fromRoot = within(joinPath(root, text))
   if (fromCwd !== null) {
-    return { path: fromCwd, alt: fromRoot !== fromCwd ? fromRoot : null, line }
+    return {
+      path: fromCwd,
+      alt: fromRoot !== fromCwd ? fromRoot : null,
+      line,
+      ...(fragment ? { fragment } : {}),
+    }
   }
   return fromRoot === null ? null : { path: fromRoot, alt: null, line }
 }
@@ -135,18 +175,18 @@ export interface FileRefSpan {
 }
 
 /** 正文里一个可能是路径的片段：不含空白、括号、引号和中文标点 */
-const TOKEN = /[^\s<>"'`|*?;,{}$\\!()[\]，。；：、（）【】「」“”‘’！？]+/g
+const TOKEN = /[^\s<>"'`|*?;,{}$!()[\]，。；：、（）【】「」“”‘’！？]+/g
 /** 片段末尾跟着的句读不算路径的一部分 */
 const TRAILING = /[.:]+$/
 
 /** 正文里的文件路径，按出现的先后。一个都没有是空数组 */
 export function findFileRefs(text: string, scope: FileScope): FileRefSpan[] {
   // 没有斜杠的正文里不会有要认的路径：绝大多数文字在这里就结束了
-  if (!scope.root || !text.includes('/')) return []
+  if (!scope.root || !/[\\/]/.test(text)) return []
   const spans: FileRefSpan[] = []
   for (const match of text.matchAll(TOKEN)) {
     const token = match[0]
-    if (!token.includes('/') || token.includes('://')) continue
+    if (!/[\\/]/.test(token) || token.includes('://')) continue
     const trimmed = token.replace(TRAILING, '')
     const ref = fileRefOf(trimmed, scope, 'prose')
     if (ref) spans.push({ start: match.index, end: match.index + trimmed.length, ref })
@@ -168,26 +208,5 @@ export function knownFileRef(path: string, scope: FileScope): FileRef | null {
 
 /** 明确的链接地址允许空格和二进制文件名，不扩宽正文的启发式识别。 */
 export function explicitFileRef(href: string, scope: FileScope): FileRef | null {
-  const hash = href.indexOf('#')
-  let value: string, fragment: string
-  try {
-    value = decodeURIComponent(hash >= 0 ? href.slice(0, hash) : href)
-    fragment = hash >= 0 ? decodeURIComponent(href.slice(hash + 1)) : ''
-  } catch {
-    return null
-  }
-  if (
-    (/^[a-z][a-z0-9+.-]*:/i.test(value) && !/^[a-z]:\//i.test(value)) ||
-    /^[\\/]{2}/.test(value) ||
-    /[\0\r\n]/.test(value + fragment)
-  )
-    return null
-  const normal = fileRefOf(value, scope)
-  if (normal && !fragment) return normal
-  const path = value
-  if ((!normal && !EXTENSION.test(path)) || path.endsWith('/')) return null
-  const ref = normal ?? knownFileRef(path, scope)
-  if (!ref) return null
-  const line = /^L(\d+)(?:-L?\d+)?$/.exec(fragment)
-  return { ...ref, ...(line ? { line: Number(line[1]) } : fragment ? { fragment } : {}) }
+  return parseFileRef(href, scope, 'explicit')
 }
