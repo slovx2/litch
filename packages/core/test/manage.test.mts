@@ -227,7 +227,7 @@ test('对面没有设置接口：设备不算能管理，订阅和命令都以 u
 
 test('订阅：读一次，拿到设备服务声明的结构和现在的值；第二个订阅者不再读', async () => {
   const { me, seen, settings } = await opened()
-  assert.equal(settings.reads, 1)
+  assert.equal(settings.reads, 2)
   const view = seen.view as ManageView
   assert.deepEqual(
     view.groups.map((group) => [group.id, group.scope.kind]),
@@ -264,7 +264,7 @@ test('订阅：读一次，拿到设备服务声明的结构和现在的值；�
   const second = me.watch()
   await settle()
   assert.equal(second.seen.snapshots, 1, '第二个订阅者当场拿到手上那一份')
-  assert.equal(settings.reads, 1)
+  assert.equal(settings.reads, 2)
 })
 
 test('已保存的密钥到不了界面：对面就算把值给过来了，快照、增量、日志、存盘的东西里都没有', async () => {
@@ -672,11 +672,11 @@ test('任务卡按 harness 的开关：有人看着设置时设备的显示数�
   const me = w.client()
   me.core.start()
   await settle()
-  assert.equal(w.settings.reads, 0)
+  assert.equal(w.settings.reads, 1)
   assert.equal(me.device()?.tools.harnesses?.pi?.taskCards, null)
   const { close } = me.watch()
   await settle()
-  assert.equal(w.settings.reads, 1)
+  assert.equal(w.settings.reads, 2)
   assert.equal(me.device()?.tools.harnesses?.pi?.taskCards, false)
   // 设备服务没声明这一项的 harness（旧版）
   assert.equal(me.device()?.tools.harnesses?.cc?.taskCards, null)
@@ -699,7 +699,7 @@ test('订阅的时候设备还没连上：连上才有快照；断了再连上�
   me.core.start()
   await settle()
   assert.equal(seen.snapshots, 1)
-  assert.equal(w.settings.reads, 1)
+  assert.equal(w.settings.reads, 2)
 
   // 断开的那一阵里别处改了设置：这边没有通知可收，连回来之后读到的就是新的
   w.peer.last().drop()
@@ -711,7 +711,7 @@ test('订阅的时候设备还没连上：连上才有快照；断了再连上�
   }
   w.time.advance(1000)
   await settle()
-  assert.equal(w.settings.reads, 2)
+  assert.equal(w.settings.reads, 4)
   assert.equal(seen.snapshots, 2)
   assert.equal(seen.view?.snapshot.values['ssh.pi.port'], 2500)
   assert.equal(seen.errors.length, 0)
@@ -728,7 +728,7 @@ test('没人看着管理数据的时候不留着：关掉再打开，重新读�
   await settle()
   const again = me.watch()
   await settle()
-  assert.equal(settings.reads, 2)
+  assert.equal(settings.reads, 3)
   assert.equal(again.seen.view?.snapshot.values['ssh.pi.port'], 2600)
 })
 

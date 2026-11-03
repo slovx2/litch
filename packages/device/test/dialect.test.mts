@@ -216,7 +216,7 @@ test('DIALECT-007：父会话带着呈现风格，设备进程派到原生 codex
     assert.equal(toCodex.approvalPolicy, 'never')
     assert.deepEqual(
       toCodex.dynamicTools.map((spec: any) => spec.name),
-      ['litch_echo', 'litch_sessions'],
+      ['litch_echo', 'litch_tasks', 'litch_sessions'],
     )
     assert.deepEqual(codexVerdict('thread/start', toCodex), { rejects: [], ignored: [] })
   } finally {

@@ -646,7 +646,7 @@ test('设备：建会话时声明了 clientTools 的 harness 带 litch_sessions�
   const tools = world.sent('thread/start').at(-1)?.dynamicTools as { name: string }[] | undefined
   assert.deepEqual(
     tools?.map((entry) => entry.name),
-    ['litch_sessions'],
+    ['litch_sessions', 'litch_browser'],
   )
 
   const bare = treeWorld({ tree: false })

@@ -392,8 +392,25 @@ test('SESSION-TOOLS-005：设备进程替每条通往适配器的连接声明 li
     )
     // 定时任务的 litch_tasks 先注册，排在前面
     assert.deepEqual(namespaces, [
-      ['litch_echo', 'litch_tasks', 'litch_manager', 'litch_repository', SESSIONS],
-      ['litch_tasks', 'litch_manager', 'litch_repository', SESSIONS],
+      [
+        'litch_echo',
+        'litch_tasks',
+        'litch_manager',
+        'litch_repository',
+        SESSIONS,
+        'litch_browser',
+        'litch_computer',
+        'litch_machine',
+      ],
+      [
+        'litch_tasks',
+        'litch_manager',
+        'litch_repository',
+        SESSIONS,
+        'litch_browser',
+        'litch_computer',
+        'litch_machine',
+      ],
     ])
     // 设备进程自己的连接（第一次用到时才开）也声明
     const { threadId } = await parent(client)

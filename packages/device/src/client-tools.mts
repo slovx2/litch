@@ -67,6 +67,8 @@ interface Call {
 }
 
 export interface ClientToolRouterOptions {
+  enabled?(harness: string, namespace: string): boolean
+
   /**
    * 按已知的发起者和订阅者挑不出执行方时，等其余几份到齐的工夫（毫秒）。几份是 codex 一口气发给
    * 各条连接的，各走各的套接字，前后差几毫秒；收到某一份的连接本身就说明它订阅着（比如子代理的会话
@@ -170,6 +172,17 @@ export class ClientToolRouter {
     }
     if (!call.copies.some((copy) => copy.link === link)) call.copies.push({ link, peer })
     if (call.executor) return
+    if (this.options.enabled?.(link.harness, call.namespace) === false) {
+      this.finish(
+        call,
+        clientToolFailure(
+          'disabled',
+          '会话所在设备或 harness 已关闭这项工具。请在 Litch 设置中开启后再试。',
+        ),
+        '设备设置已关闭',
+      )
+      return
+    }
     const executor = this.pick(call)
     if (executor) this.deliver(call, executor)
     else if (!call.grace)
@@ -190,12 +203,16 @@ export class ClientToolRouter {
     for (const peer of this.inherited.get(call.threadId) ?? [])
       if (!ordered.includes(peer)) ordered.push(peer)
     for (const { peer } of call.copies) if (peer && !ordered.includes(peer)) ordered.push(peer)
+    // 常驻浏览器/CU/操作电脑工具可由之后上线的桌面执行；仍逐项检查能力，不扩到其他命名空间。
+    if (['litch_browser', 'litch_computer', 'litch_machine'].includes(call.namespace))
+      for (const peer of this.executors(call.namespace))
+        if (!ordered.includes(peer)) ordered.push(peer)
     return pickClientToolExecutor(
       call.namespace,
       starter?.ready ? starter : null,
       ordered.filter((peer) => peer.ready),
       (peer) => peer.clientToolNamespaces,
-      // 到这里的都是客户端执行的命名空间（设备进程自己执行的在 relay 里先截下了），只交给看着这个会话的
+      // 设备工具在 relay 里先截下；最终候选已在上面按常驻工具和会话关系选好。
       [],
       (call.frame.params as { tool?: string }).tool,
     )
@@ -226,7 +243,11 @@ export class ClientToolRouter {
   private replyLink(call: Call): ClientToolSource | null {
     const candidates: (ClientToolSource | null | undefined)[] = [
       // 内部连接收到的调用先从原通道答，适配器不必接受另一条连接上的请求号。
-      ...call.copies.filter((copy) => copy.peer === null).map((copy) => copy.link),
+      ...call.copies
+        .filter(
+          (copy) => copy.peer === null || !(copy.link as UpstreamLink).dialect?.clientToolsByDevice,
+        )
+        .map((copy) => copy.link),
       call.executor?.upstream(call.harness),
       ...call.copies.map((copy) => copy.link),
       ...[...this.peers].map((peer) => peer.upstream(call.harness)),

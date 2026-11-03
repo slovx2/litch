@@ -62,7 +62,7 @@ test('文件提示经设备进入原生 Codex；恢复、分叉后的压缩配�
     })
     const seen = last(env, 'thread/start')
     assert.equal(seen.developerInstructions, `${PROJECT}\n\n${FILE_LINK_RULES}`)
-    assert.deepEqual(seen.dynamicTools, [])
+    assert.equal(seen.dynamicTools, undefined)
     for (const method of ['thread/resume', 'thread/fork']) {
       await client.call(method, { harness: 'codex', threadId: started.thread.id })
       const params = last(env, method)

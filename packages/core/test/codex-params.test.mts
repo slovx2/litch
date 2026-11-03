@@ -17,6 +17,7 @@ import { type ClientToolPort, createCore } from '../src/index.mjs'
 import { deviceWorld } from './device-world.mjs'
 import { harness, model } from './fake-device.mjs'
 import { fakeOpener, RpcFailure } from './fake-server.mjs'
+import { fakeToolSettings } from './fake-tool-settings.mjs'
 import { project, thread, turn } from './fixtures.mjs'
 import { fakeClock, settle } from './helpers.mjs'
 import { watchSession } from './wire.mjs'
@@ -59,6 +60,8 @@ function forwarded(method: string, params: Record<string, unknown>): Record<stri
 }
 
 async function codexWorld() {
+  const settings = fakeToolSettings(['codex'])
+  settings.settings.snapshot.values['tools.machine'] = true
   const world = deviceWorld(
     [
       harness('codex', {
@@ -78,8 +81,9 @@ async function codexWorld() {
     ],
     {
       clientTools: tools,
+      extra: settings.handlers,
       prepare(device) {
-        device.extensions.push('deviceWorkspaces')
+        device.extensions.push('deviceWorkspaces', 'deviceSettings')
         device.projects.push(project('w1', '应用', '/work/app'))
       },
     },
@@ -110,8 +114,8 @@ test('建会话：全部工具定义、工作区、模型强度权限、计划�
   assert.ok(start && turn, '核心应该发了 thread/start 和 turn/start')
   // 工具定义整份都带上了：codex 是对整份做校验的
   assert.deepEqual(
-    (start.dynamicTools as { name: string }[] | undefined)?.map((entry) => entry.name),
-    NAMESPACES,
+    (start.dynamicTools as { name: string }[] | undefined)?.map((entry) => entry.name).sort(),
+    [...NAMESPACES].sort(),
   )
   assert.deepEqual(codexRejects('thread/start', forwarded('thread/start', start)), [])
   assert.deepEqual(codexRejects('turn/start', forwarded('turn/start', turn)), [])
@@ -182,7 +186,10 @@ test('只有 codex 的远程机器（直接连它的常驻服务，中间没有�
   core.start()
   await settle()
   const never = { aborted: false, addEventListener() {} }
-  await core.command('device.tools.set', { deviceId: 'box', computer: true }, never)
+  await assert.rejects(
+    core.command('device.tools.set', { deviceId: 'box', computer: true }, never),
+    { code: 'offline' },
+  )
   await core.command(
     'session.create',
     {
@@ -203,8 +210,8 @@ test('只有 codex 的远程机器（直接连它的常驻服务，中间没有�
   const [first] = seen('turn/start')
   assert.ok(start && first)
   assert.deepEqual(
-    (start.dynamicTools as { name: string }[] | undefined)?.map((entry) => entry.name),
-    NAMESPACES,
+    (start.dynamicTools as { name: string }[] | undefined)?.map((entry) => entry.name).sort(),
+    NAMESPACES.filter((name) => name !== 'litch_computer' && name !== 'litch_machine').sort(),
   )
   assert.deepEqual(codexRejects('thread/start', start), [])
   assert.deepEqual(codexRejects('turn/start', first), [])

@@ -136,6 +136,13 @@ export interface HarnessSource extends UpstreamConfig {
 
 /** 设备进程里各条连接共用的东西 */
 export interface SessionHost {
+  prepareSession(
+    params: Record<string, unknown>,
+    harness: string,
+    runtime: Record<string, unknown> | null,
+    native: boolean,
+  ): Record<string, unknown>
+
   turnNotices?: import('./turn-notices.mjs').TurnNotices
   restart?: RestartResume
   recovery?: TurnRecoveryObserver
@@ -832,6 +839,30 @@ export class ClientSession implements ClientToolPeer {
       )
         params = this.host.nativeBackground?.prepare(link.harness, method, params) ?? params
     }
+    // 普通 Claude 分叉没有显式传工具时，先保留源会话的工具，再按新会话开关整理。
+    if (
+      params &&
+      method === 'thread/fork' &&
+      !Array.isArray(params.dynamicTools) &&
+      !link.dialect.clientToolsByDevice &&
+      link.facts.runtime?.engine === 'claude-code' &&
+      params.ephemeral !== true &&
+      typeof params.threadId === 'string'
+    )
+      params = { ...params, dynamicTools: this.host.sessionTree.store.tools(params.threadId) ?? [] }
+    if (
+      params &&
+      (method === 'thread/start' ||
+        (method === 'thread/fork' &&
+          link.facts.runtime?.engine === 'claude-code' &&
+          !link.dialect.clientToolsByDevice))
+    )
+      params = this.host.prepareSession(
+        params,
+        link.harness,
+        link.facts.runtime,
+        link.dialect.clientToolsByDevice === true,
+      )
     // 应答回来之后要记的（一个请求只有一个 after）；没成时要收拾的
     const afterwards: ((result: unknown) => void)[] = []
     const failures: (() => void)[] = []
@@ -1306,6 +1337,7 @@ export class ClientSession implements ClientToolPeer {
       initializeParams: declareDeviceTools(
         this.initializeParams,
         this.host.deviceTools.namespaces(),
+        ['litch_browser', 'litch_computer', 'litch_machine'],
       ),
       retryMs: timing.retryMs,
       handshakeTimeoutMs: timing.handshakeTimeoutMs,

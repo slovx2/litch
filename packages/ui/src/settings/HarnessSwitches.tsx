@@ -1,7 +1,7 @@
 // 设置页“按 harness 开关”：一张树表，每台设备一行（能展开），下面是它的各 harness；三列多选框：任务卡、内置浏览器、Computer Use。
 // 只存 harness 这一层，设备那一格是算出来的三态（harness-switches-logic.ts），点它把这台设备的整列一起设。
 // 设置里停用的 harness 不列，设备那一格也不算它们（harness-switches-logic.ts 的 harnessRows）。
-// 浏览器、Computer Use 存在桌面端（核心的 device.tools.set，带 harness 只改那一个），离线也改得了；
+// 浏览器、Computer Use 经核心的 device.tools.set 读写设备设置，带 harness 只改那一个；
 // 任务卡存在设备上（设备设置 harness.<id>.taskCards），走现有的设备设置写入，要连着才改得了。
 // 写入要带设备设置的版本号：开着这张表时订阅能管理的设备的设置（replica.openManage），核心也靠这份订阅给出任务卡的现值。
 import { type DeviceView, keys, type SettingsSnapshotView, taskCardsSettingKey } from '@litch/core'

@@ -67,8 +67,8 @@ export interface SavedDevices {
   localWire: WireColor | null
   remotes: SavedRemote[]
   /**
-   * 各台设备（键是设备标识，本机是 local）改过的两个开关：内置浏览器、Computer Use，设备一级和按 harness 的。
-   * 没改过的不记，按默认来（浏览器开、Computer Use 关）；一个都没改过时没有这一项
+   * 0.30 之前桌面保存的工具开关，仅供 tool-settings.mts 一次性迁移到设备。
+   * 迁移成功删除对应设备的这一项，日常读写不再使用它。
    */
   tools?: Record<string, SavedToolSwitches>
   /**
@@ -99,7 +99,9 @@ export interface SavedHarnessSwitches {
 }
 
 /** 设备设置页上两个开关的默认值 */
-export const DEFAULT_TOOL_SWITCHES = { browser: true, computer: false } as const
+export { DEFAULT_TOOL_SWITCHES } from '../../../protocol/src/client-tools-settings.mjs'
+
+import { DEFAULT_TOOL_SWITCHES } from '../../../protocol/src/client-tools-settings.mjs'
 
 type ToolColumn = 'browser' | 'computer'
 const TOOL_COLUMNS: readonly ToolColumn[] = ['browser', 'computer']

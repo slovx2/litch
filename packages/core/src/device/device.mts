@@ -1,7 +1,19 @@
+import { clientToolFailure } from '../../../protocol/src/client-tools.mjs'
+import { sessionClientTools } from '../../../protocol/src/client-tools-session.mjs'
+import {
+  deviceMachineEnabled,
+  deviceToolSwitches,
+} from '../../../protocol/src/client-tools-settings.mjs'
+import type {
+  DeviceSettingsReadResponse,
+  DeviceSettingsSnapshot,
+} from '../../../protocol/src/device-settings.mjs'
 import { PATH_PICKER_EXTENSION } from '../../../protocol/src/path-picker.mjs'
 import type { TitleSearchResult } from '../search/model.mjs'
 import { matchTitles } from '../search/titles.mjs'
 import { createProjectPermissions, type ProjectPermissions } from './project-permissions.mjs'
+import type { SavedToolSwitches, ToolSwitchChange } from './remote.mjs'
+import { migrateToolSettings, toolSettingEdits } from './tool-settings.mjs'
 // 一台设备：一条连接，加上连上之后要做的事。
 // 对面有两种：
 // - 一个普通的 Codex 服务（原生 codex，或适配器的一个入口）：单 harness 模式，这是基础层；
@@ -18,7 +30,6 @@ import type {
 } from '../../../protocol/src/client-tools.mjs'
 import { CONFIG_NAMESPACE } from '../../../protocol/src/client-tools-config.mjs'
 import type { MachineSpecContext } from '../../../protocol/src/client-tools-machine.mjs'
-import { presentationSpec } from '../../../protocol/src/client-tools-presentation.mjs'
 import { clientToolSpecs } from '../../../protocol/src/client-tools-specs.mjs'
 import {
   DEVICE_POWER_CHANGED,
@@ -56,7 +67,11 @@ import type { HostSink } from '../channel/server.mjs'
 import { createLink, type LinkState } from '../connection/link.mjs'
 import { RpcError } from '../connection/rpc.mjs'
 import type { TransportOpener } from '../connection/transport.mjs'
-import type { MachineDeviceLink, MachineSessionAsk } from '../machine-wiring.mjs'
+import {
+  MACHINE_DISABLED,
+  type MachineDeviceLink,
+  type MachineSessionAsk,
+} from '../machine-wiring.mjs'
 import type {
   ComposeOptions,
   ConnectFailureView,
@@ -161,7 +176,7 @@ import { createOrganizer, looseDirectories, type Organizer } from './organize.mj
 import { createPairing, type Pairing, type PairingPlatform } from './pairing.mjs'
 import { createPathPicker } from './path-picker.mjs'
 import { createPeekCache } from './peek-cache.mjs'
-import { DEFAULT_TOOL_SWITCHES, type RemoteUpgradePlatform } from './remote.mjs'
+import type { RemoteUpgradePlatform } from './remote.mjs'
 import {
   createServiceRestarter,
   type RestartMode,
@@ -232,10 +247,11 @@ export interface DeviceOptions {
   /** 通往主进程的客户端工具那一头（tool-hub.mts）。不给就是这台桌面什么都执行不了 */
   tools?: ToolHub
   /**
-   * 这台设备的两个开关现在是什么：harness 给了是这个 harness 的（没单独设过的跟设备一级），null 是设备一级的。
-   * 不给按默认：浏览器开、Computer Use 关
+   * 升级前保存在桌面的工具开关。
+   * 旧桌面本地值只用于一次性迁移，迁移后删除；日常读写全部走设备设置。
    */
-  toolSwitches?(harness: HarnessId | null): { browser: boolean; computer: boolean }
+  legacyToolSwitches?(): SavedToolSwitches | undefined
+  clearLegacyToolSwitches?(): void
   /** litch_machine：远程设备上的会话操作这台电脑。只有远程设备、核心有执行器时给 */
   machine?: DeviceMachine
   /** 扫码绑定手机要碰 ssh、文件、端口的那几样（外壳给）。不给就出不了码，已绑定的手机照样能看、能撤 */
@@ -270,6 +286,7 @@ export interface DeviceMachine {
   turnEnded(threadId: string, turnId: string): void
   /** 连上了、断开了（断开太久执行器会结束这台设备发起的进程） */
   presence(online: boolean): void
+  disabled?(): void
 }
 
 export { DEFAULT_TOOL_SWITCHES } from './remote.mjs'
@@ -306,6 +323,8 @@ export interface Device {
   restartSessions(): ServiceRestartSession[]
   /** 改显示名、线色。怎么连不在这里改：那要换一条连接，由核心重建这台设备 */
   update(patch: { name?: Text; wire?: WireColor }): void
+  setToolSwitches(change: ToolSwitchChange): Promise<void>
+  machineEnabled(): boolean
   /** 手动刷新：重新做一次全量对账 */
   refresh(): Promise<void>
   /** 打开一个会话：载入并订阅它。先给快照，之后给增量；返回关闭函数 */
@@ -813,15 +832,28 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
 
   /** 两个开关现在是什么：harness 是 null 时是设备一级的 */
+  let toolSettings: DeviceSettingsReadResponse | null = null
+  let latestToolSnapshot: DeviceSettingsSnapshot | null = null
+  const acceptToolSettings = (snapshot: DeviceSettingsSnapshot) => {
+    if (!latestToolSnapshot || snapshot.version >= latestToolSnapshot.version)
+      latestToolSnapshot = snapshot
+    if (!toolSettings || snapshot.version < toolSettings.snapshot.version) return
+    const wasEnabled = deviceMachineEnabled(toolSettings.snapshot.values)
+    toolSettings = { ...toolSettings, snapshot }
+    if (wasEnabled && !deviceMachineEnabled(snapshot.values)) {
+      toolCalls.stopMachine(clientToolFailure('disabled', MACHINE_DISABLED))
+      options.machine?.disabled?.()
+    }
+    hooks.device(view())
+  }
   const switchesOf = (harness: HarnessId | null) =>
-    options.toolSwitches?.(harness) ?? DEFAULT_TOOL_SWITCHES
+    deviceToolSwitches(toolSettings?.snapshot.values, harness)
 
   /**
-   * 设置页上的开关：设备一级的两个（这台桌面执行不了的那一项是 null，不出开关），
-   * 和设备声明的每个 harness 的三样（任务卡读设备设置，浏览器、Computer Use 存在桌面端）
+   * 设置页上的开关：设备一级的两个（设备没有设置接口时是 null），
+   * 和设备声明的每个 harness 的三样（均读设备设置）
    */
   const toolSwitchesView = (): ToolSwitches => {
-    const can = options.tools?.namespaces() ?? []
     const now = switchesOf(null)
     const each: Record<string, HarnessSwitches> = {}
     for (const entry of harnesses) {
@@ -833,8 +865,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       }
     }
     return {
-      browser: can.includes(CLIENT_TOOL_NAMESPACE.browser) ? now.browser : null,
-      computer: can.includes(CLIENT_TOOL_NAMESPACE.computer) ? now.computer : null,
+      browser: manageable ? now.browser : null,
+      computer: manageable ? now.computer : null,
       harnesses: each,
     }
   }
@@ -1680,6 +1712,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   /** 握手之后：认出对面是谁，再做全量对账 */
   const identify = async () => {
     const mine = session
+    latestToolSnapshot = null
     // 上一次连接时认的声明不算数了：对面可能升级过
     terms.clear()
     serviceDue = false
@@ -1799,6 +1832,25 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     if (mode !== 'full' && linked.phase === 'connected') platform = linked.info.platformOs ?? null
     // 本机：这一次打开传输时换没换版本。外壳在传输打开之前就记好了，这里取到的就是这条连接的
     upgrade = projectUpgrade(config.upgrade?.())
+    if (mode === 'full' && manageable) {
+      try {
+        const current = await link.request('litch/device/settings/read', {})
+        if (mine !== session) return
+        toolSettings = current
+        toolSettings = await migrateToolSettings(
+          current,
+          options.legacyToolSwitches?.(),
+          (params) => link.request('litch/device/settings/write', params),
+          () => {
+            if (mine === session && !stale) options.clearLegacyToolSwitches?.()
+          },
+        )
+      } catch (error) {
+        log(`读取或迁移客户端工具设置失败：${String(error)}`)
+      }
+      if (mine !== session) return
+      if (latestToolSnapshot) acceptToolSettings(latestToolSnapshot)
+    }
     online = true
     everConnected = true
     if (options.machine) {
@@ -1938,6 +1990,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       }
       // 设置变了：和会话目录是两回事，不跟着对账攒着（攒着再放会把读到的新值盖回去）
       if (method === DEVICE_SETTINGS_CHANGED) {
+        acceptToolSettings((params as DeviceSettingsChangedNotification).snapshot)
         manage.changed(params as DeviceSettingsChangedNotification)
         return
       }
@@ -2082,26 +2135,24 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       // litch_manager 只由设备在建经理时注入，普通会话和子线不能继承。
       // 最后是呈现风格（不带工具，只有 instructions；原生 codex 不带，client-tools-presentation.mts）
       // 内置浏览器、Computer Use 在这个 harness 上关着的不带（模型看不到，也省提示词）；调用时还会再查一次
-      const presentation = presentationSpec(harness)
-      const now = switchesOf(harness)
-      return [
-        ...clientToolSpecs(
+      return sessionClientTools(
+        clientToolSpecs(
           [
-            ...toolNamespaces().filter((namespace) => {
-              const which = SWITCHED[namespace]
-              return which === undefined || now[which]
-            }),
+            ...toolNamespaces(),
             ...(schedulable ? [CLIENT_TOOL_NAMESPACE.tasks] : []),
             ...(sessionTree ? [CLIENT_TOOL_NAMESPACE.sessions] : []),
           ],
-          {
-            machine: machineSpec(),
-            desktopPlatform: options.tools?.platform?.() ?? null,
-            computerActions: true,
-          },
+          { machine: machineSpec() },
         ),
-        ...(presentation ? [presentation] : []),
-      ]
+        harness,
+        switchesOf(harness),
+        {
+          machine: machineSpec(),
+          desktopPlatform: options.tools?.platform?.() ?? null,
+          computerActions: true,
+        },
+        deviceMachineEnabled(toolSettings?.snapshot.values),
+      ) as import('../../../protocol/src/client-tools.mjs').ClientToolNamespaceSpec[]
     },
     sessionTree: () => sessionTree,
     turnDiff: (sessionId, turnId, diff) => diffs.turnDiff(sessionId, turnId, diff),
@@ -2700,6 +2751,18 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       restarter.run(mode)
     },
     restartSessions,
+    machineEnabled: () => deviceMachineEnabled(toolSettings?.snapshot.values),
+    async setToolSwitches(change) {
+      if (!online || !manageable) throw new ChannelError('offline', '设备设置不可用')
+      const current = await link.request('litch/device/settings/read', {})
+      const edits = toolSettingEdits(current, change)
+      const result = await link.request('litch/device/settings/write', {
+        expectedVersion: current.snapshot.version,
+        edits,
+      })
+      toolSettings ??= current
+      acceptToolSettings(result.snapshot)
+    },
     update(patch) {
       if (patch.name !== undefined) name = patch.name
       if (patch.wire !== undefined) wire = patch.wire

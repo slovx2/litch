@@ -28,7 +28,9 @@ import {
   type ToolToMain,
 } from '../src/index.mjs'
 import { IMAGE_CHARS, IMAGE_KEEP, projectItem } from '../src/projection/items.mjs'
+import { fakeDevice, harness } from './fake-device.mjs'
 import { fakeOpener, type Handler } from './fake-server.mjs'
+import { fakeToolSettings } from './fake-tool-settings.mjs'
 import { thread, turn } from './fixtures.mjs'
 import { fakeClock, settle } from './helpers.mjs'
 import { watchSession } from './wire.mjs'
@@ -60,6 +62,7 @@ function fakeMain(namespaces: string[]) {
 
 function setup(
   options: {
+    managed?: boolean
     namespaces?: string[] | null
     engine?: string
     /** runtime/info 里声明的扩展；不给就是没有声明的旧适配器 */
@@ -98,6 +101,17 @@ function setup(
     'turn/start': () => ({ turn: turn('srv-1', [], { status: 'inProgress' }) }),
     'turn/interrupt': () => ({}),
     'thread/unsubscribe': () => ({ status: 'unsubscribed' }),
+  }
+  if (options.managed) {
+    const fake = fakeDevice([
+      harness('pi', {
+        threads,
+        declaration: { extensions: ['clientTools'], features: {} as never },
+      }),
+    ])
+    fake.device.extensions.push('deviceSettings')
+    handlers['runtime/info'] = fake.handlers['runtime/info']!
+    Object.assign(handlers, fakeToolSettings(['pi']).handlers)
   }
   const time = fakeClock()
   const peer = fakeOpener(handlers)
@@ -219,6 +233,7 @@ test('建会话：带上这台桌面能执行的那几份工具定义（不看�
     tools?.map((entry) => [entry.type, entry.name]),
     [
       ['namespace', 'litch_echo'],
+      ['namespace', 'litch_browser'],
       ['namespace', 'litch_presentation'],
     ],
   )
@@ -257,18 +272,18 @@ test('建会话：带上这台桌面能执行的那几份工具定义（不看�
   // 这台桌面什么都执行不了：只剩呈现风格
   assert.deepEqual(
     (bare.params as { dynamicTools?: { name: string }[] }).dynamicTools?.map((entry) => entry.name),
-    ['litch_presentation'],
+    ['litch_browser', 'litch_presentation'],
   )
 })
 
 test('建会话：呈现风格（litch_presentation，不带工具、只带 instructions）排在最后；原生 codex 不带', async () => {
   for (const [engine, expected] of [
-    ['claude-code', ['litch_echo', 'litch_presentation']],
-    ['opencode', ['litch_echo', 'litch_presentation']],
-    ['pi', ['litch_echo', 'litch_presentation']],
-    ['dsh', ['litch_echo', 'litch_presentation']],
-    ['acp', ['litch_echo', 'litch_presentation']],
-    ['codex', ['litch_echo']],
+    ['claude-code', ['litch_echo', 'litch_browser', 'litch_presentation']],
+    ['opencode', ['litch_echo', 'litch_browser', 'litch_presentation']],
+    ['pi', ['litch_echo', 'litch_browser', 'litch_presentation']],
+    ['dsh', ['litch_echo', 'litch_browser', 'litch_presentation']],
+    ['acp', ['litch_echo', 'litch_browser', 'litch_presentation']],
+    ['codex', ['litch_echo', 'litch_browser']],
   ] as const) {
     const world = setup({ namespaces: ['litch_echo'], engine, extensions: ['clientTools'] })
     world.core.start()
@@ -359,6 +374,7 @@ test('调用：远程设备交给执行器的是 ssh 目标，种类是 ssh', as
 test('开关：浏览器默认开、Computer Use 默认关；关着当场回 disabled 不找主进程，打开之后下一次就交过去；执行不了的回 noExecutor', async () => {
   const { core, main, call, command, app } = setup({
     namespaces: ['litch_browser', 'litch_computer'],
+    managed: true,
   })
   core.start()
   await settle()
@@ -698,7 +714,7 @@ test('截图：动态工具结果里头几张能直接显示的内联图片留�
   assert.deepEqual(failed.error, [{ kind: 'text', text: '[litch:disabled] off' }])
 })
 
-test('开关存在设备配置里：改过的才记，移除设备时一起去掉；读回来不合规矩的丢掉', async () => {
+test('离线不能修改设备工具开关；本地旧值仍可读取以便迁移', async () => {
   let saved: SavedDevices = {
     localWire: null,
     remotes: [{ id: 'ssh-1', name: 'box', target: { kind: 'alias', alias: 'box' }, wire: 'blue' }],
@@ -718,8 +734,11 @@ test('开关存在设备配置里：改过的才记，移除设备时一起去�
     clientTools: fakeMain(['litch_browser', 'litch_computer']).port,
     devices: [],
   })
-  await core.command('device.tools.set', { deviceId: 'ssh-1', computer: true }, never)
-  assert.deepEqual(saved.tools, { 'ssh-1': { computer: true } })
+  await assert.rejects(
+    core.command('device.tools.set', { deviceId: 'ssh-1', computer: true }, never),
+    { code: 'offline' },
+  )
+  assert.equal(saved.tools, undefined)
   await core.command('device.remove', { deviceId: 'ssh-1' }, never)
   assert.equal(saved.tools, undefined)
 

@@ -31,7 +31,9 @@ import type {
   MachineLogEntry,
   MachineOp,
 } from '../src/model-machine.mjs'
+import { fakeDevice, harness } from './fake-device.mjs'
 import { fakeOpener, type Handler } from './fake-server.mjs'
+import { fakeToolSettings } from './fake-tool-settings.mjs'
 import { thread, turn } from './fixtures.mjs'
 import { fakeClock, settle } from './helpers.mjs'
 import { watchSession } from './wire.mjs'
@@ -163,7 +165,11 @@ function fakeExecutor() {
 
 function setup(options: { threads?: Thread[]; machine?: boolean; desktop?: MachineFacts } = {}) {
   const threads = options.threads ?? [
-    thread({ id: 'a', cwd: '/work/app', turns: [turn('t1', [], { status: 'inProgress' })] }),
+    thread({
+      id: 'a',
+      cwd: '/work/app',
+      turns: [turn('t1', [], { status: 'inProgress' })],
+    }),
   ]
   const remoteHandlers: Record<string, Handler> = {
     'runtime/info': () => ({
@@ -176,13 +182,18 @@ function setup(options: { threads?: Thread[]; machine?: boolean; desktop?: Machi
     }),
     'project/list': () => ({ data: [], nextCursor: null }),
     'thread/list': () => ({
-      data: threads.map((entry) => ({ ...entry, turns: [] })),
+      data: threads.map((entry) => ({ ...entry, harness: 'pi', turns: [] })),
       nextCursor: null,
       backwardsCursor: null,
     }),
     'thread/resume': (params) => {
       const found = threads.find((entry) => entry.id === (params as { threadId: string }).threadId)
-      return { thread: found, model: 'm', reasoningEffort: null, sandbox: { type: 'readOnly' } }
+      return {
+        thread: { ...found, harness: 'pi' },
+        model: 'm',
+        reasoningEffort: null,
+        sandbox: { type: 'readOnly' },
+      }
     },
     'thread/start': () => {
       const created = thread({ id: 'new', preview: '', turns: [] })
@@ -221,6 +232,12 @@ function setup(options: { threads?: Thread[]; machine?: boolean; desktop?: Machi
     }),
     'turn/start': () => ({ turn: turn('srv-1', [], { status: 'inProgress' }) }),
   }
+  const aggregate = fakeDevice([
+    harness('pi', { threads, declaration: { extensions: ['clientTools'], features: {} as never } }),
+  ])
+  aggregate.device.extensions.push('deviceSettings')
+  remoteHandlers['runtime/info'] = aggregate.handlers['runtime/info']!
+  Object.assign(remoteHandlers, fakeToolSettings(['pi']).handlers)
   const remote = fakeOpener(remoteHandlers)
   const local = fakeOpener(localHandlers)
   const time = fakeClock()
@@ -490,6 +507,7 @@ test('握手：远程设备声明 litch_machine 并报桌面端的主机名和�
 
 test('建会话：远程会话带上 litch_machine，说明开头写这个会话在哪台、桌面端是哪台；本机会话不带', async () => {
   const { command, remote, local } = await started()
+  await command('device.tools.set', { deviceId: 'box', machine: true })
   await command('session.create', { deviceId: 'box', cwd: '/work', text: '你好' })
   const start = remote.last().seen.find((entry) => entry.method === 'thread/start')
   assert.ok(start)
@@ -507,7 +525,9 @@ test('建会话：远程会话带上 litch_machine，说明开头写这个会话
   // 呈现风格只给不是原生 codex 的 harness（这里是 pi），原生 codex 不收没有工具的命名空间，核对时去掉
   assert.deepEqual(
     codexRejects('thread/start', {
-      ...(start.params as object),
+      ...Object.fromEntries(
+        Object.entries(start.params as object).filter(([key]) => key !== 'harness'),
+      ),
       dynamicTools: tools?.filter((entry) => entry.name !== 'litch_presentation'),
     }),
     [],
@@ -519,7 +539,7 @@ test('建会话：远程会话带上 litch_machine，说明开头写这个会话
   // 本机会话只有呈现风格（client-tools-presentation.mts）
   assert.deepEqual(
     (mine.params as { dynamicTools?: { name: string }[] }).dynamicTools?.map((entry) => entry.name),
-    ['litch_presentation'],
+    ['litch_browser', 'litch_presentation'],
   )
 })
 

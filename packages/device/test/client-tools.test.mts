@@ -60,7 +60,9 @@ const start = (client: TestClient) =>
   client.call('turn/start', { threadId: THREAD, input: [{ type: 'text', text: '调' }] })
 
 test('M13：litch_machine 只投递给声明该命名空间的桌面，普通连接和手机不收到调用', async () => {
-  const env = codexRig()
+  const env = codexRig({
+    toolSettings: { 'tools.browser': true, 'tools.computer': true, 'tools.machine': true },
+  })
   try {
     const ordinary = await join_(env, null)
     const phone = await join_(env, ['litch_browser'])
@@ -93,7 +95,9 @@ test('M13：litch_machine 只投递给声明该命名空间的桌面，普通连
 })
 
 test('批量 CU 只投递给声明 computerActions 的连接；旧连接发起也不能抢到', async () => {
-  const env = codexRig()
+  const env = codexRig({
+    toolSettings: { 'tools.browser': true, 'tools.computer': true, 'tools.machine': true },
+  })
   try {
     const old = await join_(env, ['litch_computer'])
     const fresh = await join_(env, ['litch_computer'], true)
@@ -124,7 +128,9 @@ test('批量 CU 只投递给声明 computerActions 的连接；旧连接发起�
 })
 
 test('CLIENT-TOOLS-DEV-001：发起回合的连接声明了，调用只转给它；它没订阅、没收到那一份也一样，答复从它自己的连接回', async () => {
-  const env = codexRig()
+  const env = codexRig({
+    toolSettings: { 'tools.browser': true, 'tools.computer': true, 'tools.machine': true },
+  })
   try {
     const desktop = await join_(env, null)
     const litch = await join_(env, [ECHO])
@@ -147,7 +153,9 @@ test('CLIENT-TOOLS-DEV-001：发起回合的连接声明了，调用只转给它
 })
 
 test('CLIENT-TOOLS-DEV-002：发起回合的连接没声明，转给最早订阅、声明了的连接；别的那几份不转也不答', async () => {
-  const env = codexRig()
+  const env = codexRig({
+    toolSettings: { 'tools.browser': true, 'tools.computer': true, 'tools.machine': true },
+  })
   try {
     const desktop = await join_(env, null)
     const other = await join_(env, ['litch_browser'])
@@ -168,7 +176,9 @@ test('CLIENT-TOOLS-DEV-002：发起回合的连接没声明，转给最早订阅
 })
 
 test('CLIENT-TOOLS-DEV-003：没有声明过的连接，设备进程当场替它回 noExecutor，只回一份', async () => {
-  const env = codexRig()
+  const env = codexRig({
+    toolSettings: { 'tools.browser': true, 'tools.computer': true, 'tools.machine': true },
+  })
   try {
     const desktop = await join_(env, null)
     const phone = await join_(env, null)
@@ -189,7 +199,9 @@ test('CLIENT-TOOLS-DEV-003：没有声明过的连接，设备进程当场替它
 })
 
 test('CLIENT-TOOLS-DEV-004：设备进程没看到订阅的连接收到了一份（比如子代理的会话），等一下其余几份，交给声明了的那条', async () => {
-  const env = codexRig()
+  const env = codexRig({
+    toolSettings: { 'tools.browser': true, 'tools.computer': true, 'tools.machine': true },
+  })
   try {
     const desktop = await join_(env, null)
     const litch = await join_(env, [ECHO])
@@ -219,7 +231,9 @@ test('CLIENT-TOOLS-DEV-004：设备进程没看到订阅的连接收到了一份
 })
 
 test('CLIENT-TOOLS-DEV-005：执行方断开，设备进程从别的连接替它回 failed，不改交给别的声明了的连接', async () => {
-  const env = codexRig()
+  const env = codexRig({
+    toolSettings: { 'tools.browser': true, 'tools.computer': true, 'tools.machine': true },
+  })
   try {
     const desktop = await join_(env, null)
     const litch = await join_(env, [ECHO])
@@ -243,7 +257,9 @@ test('CLIENT-TOOLS-DEV-005：执行方断开，设备进程从别的连接替它
 })
 
 test('CLIENT-TOOLS-DEV-006：回合结束了结还在等的调用：执行方收到“有结果了”，迟到的答复不再交给 codex', async () => {
-  const env = codexRig()
+  const env = codexRig({
+    toolSettings: { 'tools.browser': true, 'tools.computer': true, 'tools.machine': true },
+  })
   try {
     const litch = await join_(env, [ECHO])
     await resume(litch.client)
@@ -267,7 +283,9 @@ test('CLIENT-TOOLS-DEV-006：回合结束了结还在等的调用：执行方收
 })
 
 test('CLIENT-TOOLS-DEV-007：codex 说请求有结果了：只有执行方收到，带它看到的请求号；没收到调用的连接不收这条', async () => {
-  const env = codexRig()
+  const env = codexRig({
+    toolSettings: { 'tools.browser': true, 'tools.computer': true, 'tools.machine': true },
+  })
   try {
     const desktop = await join_(env, null)
     const litch = await join_(env, [ECHO])
@@ -289,7 +307,9 @@ test('CLIENT-TOOLS-DEV-007：codex 说请求有结果了：只有执行方收到
 })
 
 test('CLIENT-TOOLS-DEV-008：了结之后再到的那一份（恢复会话时补发的）直接丢掉，不再转、不再答', async () => {
-  const env = codexRig()
+  const env = codexRig({
+    toolSettings: { 'tools.browser': true, 'tools.computer': true, 'tools.machine': true },
+  })
   try {
     const litch = await join_(env, [ECHO])
     const late = await join_(env, [ECHO])
@@ -312,7 +332,9 @@ test('CLIENT-TOOLS-DEV-008：了结之后再到的那一份（恢复会话时补
 })
 
 test('CLIENT-TOOLS-DEV-009：别的命名空间照旧发给每条订阅连接；握手时我们的键不带给原生 codex', async () => {
-  const env = codexRig()
+  const env = codexRig({
+    toolSettings: { 'tools.browser': true, 'tools.computer': true, 'tools.machine': true },
+  })
   try {
     const desktop = await join_(env, null)
     const litch = await join_(env, [ECHO])
@@ -336,7 +358,9 @@ test('CLIENT-TOOLS-DEV-009：别的命名空间照旧发给每条订阅连接；
 })
 
 test('CLIENT-TOOLS-DEV-010：退订了的连接不再按订阅者挑', async () => {
-  const env = codexRig()
+  const env = codexRig({
+    toolSettings: { 'tools.browser': true, 'tools.computer': true, 'tools.machine': true },
+  })
   try {
     const desktop = await join_(env, null)
     const gone = await join_(env, [ECHO])
@@ -355,7 +379,9 @@ test('CLIENT-TOOLS-DEV-010：退订了的连接不再按订阅者挑', async () 
 })
 
 test('CLIENT-TOOLS-DEV-011：带着 Litch 的全部工具定义经聚合面建会话，到 codex 手里的参数它收；过不了它校验的，原话带回客户端', async () => {
-  const env = codexRig()
+  const env = codexRig({
+    toolSettings: { 'tools.browser': true, 'tools.computer': true, 'tools.machine': true },
+  })
   try {
     const litch = await join_(env, NAMESPACES)
     const params = {
@@ -377,7 +403,10 @@ test('CLIENT-TOOLS-DEV-011：带着 Litch 的全部工具定义经聚合面建�
     assert.ok(first)
     const failure = await litch.client.fails('thread/start', {
       ...params,
-      dynamicTools: [{ ...first, description: '字'.repeat(1025) }, ...rest],
+      dynamicTools: [
+        { ...first, name: 'litch_invalid_definition', description: '字'.repeat(1025) },
+        ...rest,
+      ],
     })
     assert.equal(failure.code, -32600)
     assert.match(failure.message, /说明有 1025 个字/)

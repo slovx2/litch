@@ -11,6 +11,12 @@ app; no port is opened and macOS Remote Login is not used.
   else running on the remote machine) use the `litch-machine` command there (same as
   `codex-harness-adapter machine`: `machines`, `exec`, `ps`, `read`, `write`, `ls`, `cp`, `--json`).
 
+开关 `tools.machine` 保存在会话所在设备，默认关闭，不分 harness。升级首次连接时从旧桌面设置迁入一次，设备已有值优先。
+开启后，普通会话、经理、工作线、手机创建及其子会话、定时新会话均获得 `litch_machine`，即使桌面离线也一样。
+执行时需要具备“操作这台电脑”能力的桌面连接；没有则立即返回 `noExecutor`，桌面连接后下一次调用即可执行。
+已有会话不会补装工具，开启后请新建经理或新开线。设备关闭开关后，动态工具调用直接返回 `disabled`；命令行入口仍可由执行桌面展示原有开启确认卡。
+审批方式、访问范围、操作记录仍属于具体执行桌面。
+
 ## Settings
 
 In the UI: Devices → the remote device → "Use this computer" → "Operate this computer (commands and

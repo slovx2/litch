@@ -1237,7 +1237,7 @@ test('新建会话：建好就发第一条，侧栏立刻有它；带不进建�
     (sent('thread/start')[0] as { dynamicTools?: { name: string }[] }).dynamicTools?.map(
       (spec) => spec.name,
     ),
-    ['litch_presentation'],
+    ['litch_browser', 'litch_presentation'],
   )
   const first = sent('turn/start')[0] as Record<string, unknown>
   assert.equal(first.threadId, 'new-0')

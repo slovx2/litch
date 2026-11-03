@@ -17,20 +17,32 @@ test('SESSION-TOOLS-NS-001：建会话带的 litch_ 命名空间挂在会话对�
     })
     const id = withTools.thread.id as string
     // 建会话的应答里就有（记工具在挂字段之前）
-    assert.deepEqual(withTools.thread.litchToolNamespaces, ['litch_echo', SESSIONS])
+    assert.deepEqual(withTools.thread.litchToolNamespaces, [
+      'litch_echo',
+      SESSIONS,
+      'litch_browser',
+      'litch_presentation',
+    ])
     const bare = await client.call('thread/start', { harness: 'pi', cwd: '/work/app' })
-    assert.equal(bare.thread.litchToolNamespaces, undefined)
+    assert.deepEqual(bare.thread.litchToolNamespaces, ['litch_browser', 'litch_presentation'])
     const listed = await client.call('thread/list', {})
     assert.deepEqual(listed.data.find((row: any) => row.id === id).litchToolNamespaces, [
       'litch_echo',
       SESSIONS,
+      'litch_browser',
+      'litch_presentation',
     ])
-    assert.equal(
+    assert.deepEqual(
       listed.data.find((row: any) => row.id === bare.thread.id).litchToolNamespaces,
-      undefined,
+      ['litch_browser', 'litch_presentation'],
     )
     const read = await client.call('thread/read', { threadId: id })
-    assert.deepEqual(read.thread.litchToolNamespaces, ['litch_echo', SESSIONS])
+    assert.deepEqual(read.thread.litchToolNamespaces, [
+      'litch_echo',
+      SESSIONS,
+      'litch_browser',
+      'litch_presentation',
+    ])
     // 没声明 sessionTree 的连接看不到
     const plainList = await other.call('thread/list', {})
     assert.ok(plainList.data.every((row: any) => row.litchToolNamespaces === undefined))

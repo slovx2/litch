@@ -186,7 +186,8 @@ if (engines.ids.includes('codex')) {
       .filter((entry) => entry.startsWith('LITCH_FIXTURE_TOOLS '))
       .flatMap((entry) => JSON.parse(entry.slice('LITCH_FIXTURE_TOOLS '.length)).namespaces),
   )
-  // 外壳认得的全部命名空间（开了 LITCH_CLIENT_TOOLS_ECHO，回声也在）；
+  // 普通新会话必须有浏览器，与桌面是否能执行分开；夹具另开启了回声。
+  // 条件命名空间按设备设置和会话身份排除：
   // Computer Use 的开关默认关着，建会话时不挂那组工具；
   // 操作这台电脑（litch_machine）只给远程设备上的会话，这里的夹具是本机设备，不该有；
   // 经理工具只给所属的经理会话，普通首回合不该有。

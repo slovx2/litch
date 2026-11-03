@@ -26,6 +26,7 @@ async function background(
     managed('pi'),
     { ...managed('codex'), native: true },
   ])
+  control.patch({ values: { 'tools.computer': true } as never })
   const env = rig(
     {},
     {},
@@ -117,11 +118,11 @@ test('M16：Pi 父派出 Claude 子，适配器内部连接声明转交能力，
   }
 })
 
-test('M16：执行方离开后立即 noExecutor，不借用无关或未声明能力的连接', async () => {
+test('M16：执行方离开后无可执行桌面立即 noExecutor，不交给未声明能力的连接', async () => {
   const env = await background()
   try {
     const stranger = env.connect()
-    await stranger.initialize(TREE, { litchClientTools: { namespaces: ['litch_browser'] } })
+    await stranger.initialize(TREE, { litchClientTools: { namespaces: ['litch_echo'] } })
     const plain = env.connect()
     await plain.initialize(['harness'])
     await plain.call('thread/resume', { threadId: env.childId })

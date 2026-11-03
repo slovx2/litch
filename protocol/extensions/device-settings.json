@@ -17,6 +17,7 @@
   },
   "undeclared": "没声明的连接收不到 litch/device/settings/changed，runtime/info 和 litch/harness/status/changed 里的 unavailable 上没有 text；方法照样可以调用，设置变没变要自己再读一遍。runtime/info 里 unavailable.kind 的新值（disabled、notInstalled 等）不看这个声明：harness 扩展本来就约定了 kind 以后会加、不认识的按一般的不可用处理。设备服务没有适配器主进程在管时（device.extensions 里没有 deviceSettings），这些方法一律回 settingsUnavailable。",
   "rules": [
+    "浏览器与 Computer Use 的唯一权威是设备设置：tools.browser 默认 true，tools.computer 与 tools.machine 默认 false（machine 不分 harness）；harness.<id>.browser 和 harness.<id>.computer 未显式设置时继承对应设备值。schema 通过现有布尔设置声明这些键，snapshot.values 给有效值，snapshot.explicit 标识覆盖；沿用版本冲突与通知声明门禁。桌面只在设备尚未显式设置某列时一次性迁移本地旧列，确认成功后删除本地旧值。",
     "密钥只能写、不能读回：secret 类型读到的是 {set}，环境变量表里的密钥读到的没有 value；通知和日志里也没有。名字看着像密钥的环境变量（含 key、token、secret、passw、credential、auth，不分大小写）不标也按密钥处理。",
     "改了要重启才生效的设置（restart 为 harness）：那个 harness 没有回合在跑时，写入之后设备服务自己把它重新起一遍（停用就是停掉）；有回合在跑、或者判断不了时，写入照样成功，它出现在 snapshot.pendingRestart 里，等用户调 litch/device/harness/restart。",
     "谁能连上聚合面谁就能配置，不另设权限。远程设备走的是同一条连接。",

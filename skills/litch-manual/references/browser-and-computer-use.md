@@ -1,17 +1,12 @@
 # Built-in browser and Computer Use
 
-Both are capabilities of the Litch **desktop app** that agents can use: models in sessions started from
-Litch (Codex, Claude Code, Pi, DSH, OpenCode, Gemini CLI, Qwen Code, ACP) get `litch_browser` and
-`litch_computer` tools. Sessions on remote devices use the desktop's browser and Computer Use too,
-while the desktop is connected (remote adapter 0.8.0 or later).
+内置浏览器、Computer Use 和“操作这台电脑”是 Litch 的常驻工具。只要会话所在设备、所在 harness 的开关开启，
+新会话就获得对应工具：桌面和手机新建、经理、工作线、普通子会话、任务卡与定时任务均遵守同一规则。
+创建时不要求桌面在线；调用时由连接这台设备、声明能执行该工具的 Litch 桌面端执行。远程会话经原连接回到桌面执行。
 
-后台子会话（包括跨 harness 派出的会话）继承派出时父会话可用的桌面执行连接，无须先打开子会话即可调用
-浏览器和 Computer Use。设备、harness 开关及网站、登录等审批仍由执行桌面检查。没有获授权且在线的
-执行方时，调用立即返回 `noExecutor`，表示当前没有可执行的桌面端，不表示浏览器不可用。
-执行中桌面断线会返回失败，不会自动换另一台桌面重做；操作可能已部分完成。先核查结果，再连接桌面并
-打开会话后重试。设备保留近期已了结调用的去重记录，防止回合结束后恢复会话时重复执行。
-会话卸载、归档或删除时释放执行连接和去重记录；去重记录也有总量上限，超出后淘汰最早的记录。
-执行连接的继承仅保存在设备服务内存中，会话卸载或服务重启后需重新打开会话以建立执行关系。
+没有可用桌面时，调用立即返回 `noExecutor`，提示打开 Litch 桌面端并连接这台设备；桌面上线后下一次调用即可执行。
+后台子会话优先使用父会话的执行连接，无须先打开子会话。执行中断线会返回失败，不会换一台桌面重做；操作可能已部分完成，重试前先核查结果。
+网站、登录审批与系统权限继续由执行桌面检查。近期已了结调用保留去重记录；会话卸载、归档或删除时释放，记录达到上限时淘汰最早的条目。
 
 ## Switches per device and harness
 
@@ -25,9 +20,8 @@ out when a device's box is clicked, and its switches are kept and apply again on
 
 - without `--harness`, every harness on the device changes together;
 - with `--harness <id>`, only that harness;
-- `--task-cards on|off` writes the device's own setting `harness.<id>.taskCards`, so the device must
-  be online; the browser and Computer Use are stored on the desktop and can be changed while the
-  device is offline.
+- Task cards, browser and Computer Use all write device settings and require the device to be online.
+  Desktop and mobile share these values. "Operate this computer" also uses the device setting `tools.machine`.
 
 | Switch | Default | Notes |
 |---|---|---|
@@ -39,13 +33,16 @@ out when a device's box is clicked, and its switches are kept and apply again on
 In the UI: Settings → Per-harness switches, a table with a row per device (expand it to see its
 harnesses) and a column per switch. A device cell is checked when all its harnesses are on, empty
 when all are off and half-checked otherwise; clicking it sets the whole column for that device. The
-task-card column of an offline device is read-only. The device page (Devices → the device) shows a
+three columns of an offline device are read-only. The device page (Devices → the device) shows a
 one-line summary with a link to that table.
 
-When a session is created, the browser and Computer Use tools are only attached if they are on for
-that session's harness; a session created while they were off does not get them later (start a new
-session after turning them on). A switch turned off after a session was created makes the next call
-fail at once, with a message telling the model where to turn it on.
+开关保存在设备设置的 `tools.browser`、`tools.computer`、`tools.machine`，每个 harness 可用 `harness.<id>.browser`、
+`harness.<id>.computer` 覆盖；未覆盖的跟随设备。“操作这台电脑”不分 harness。浏览器默认开，另两项默认关。升级后首次连接时，仅将设备尚未设置的旧桌面值迁入；确认成功后删除本地旧值，之后设备值始终优先。
+
+已有会话不补装工具：开启后需要新建经理或新开工作线/会话。关闭开关会立即阻止后续调用。
+Claude 的新分叉和 hand_off 按当前开关重新整理工具；其余引擎的分叉继承源会话工具，需 fresh 新建才能获得新开启的工具。
+只读旁问与自动起标题等临时内部会话保留原有工具限制。
+
 
 ## Built-in browser
 

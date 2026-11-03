@@ -64,16 +64,16 @@ export const taskCardTargets = (device: DeviceView): string[] =>
 /** 点设备那一格之后整列设成什么：全开的关掉，别的（全关、有开有关）都打开 */
 export const nextForDevice = (state: CellState): boolean => state !== 'on'
 
-/** 这一列出不出：浏览器、Computer Use 这台桌面执行不了时（DeviceView.tools 里是 null）不出 */
+/** 这一列出不出：浏览器、Computer Use 在设备不支持设置时（DeviceView.tools 里是 null）不出 */
 export const columnShown = (devices: readonly DeviceView[], column: SwitchColumn): boolean =>
   column === 'taskCards' || devices.some((device) => device.tools[column] !== null)
 
 /**
  * 任务卡那一格改得了没有：存在设备上，要连着、读到了这一项。
- * 浏览器、Computer Use 存在桌面端，离线也改得了
+ * 浏览器、Computer Use 同样存在设备上，离线不能修改
  */
-export const editable = (device: DeviceView, column: SwitchColumn, state: CellState): boolean =>
-  column !== 'taskCards' || (device.connection === 'online' && state !== 'unknown')
+export const editable = (device: DeviceView, _column: SwitchColumn, state: CellState): boolean =>
+  device.connection === 'online' && state !== 'unknown'
 
 /** 设备详情里一行摘要：全开、全关、只对哪几个开着；不知道是 null */
 export type Summary = { kind: 'all' } | { kind: 'none' } | { kind: 'some'; names: string[] } | null

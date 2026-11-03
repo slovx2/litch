@@ -193,6 +193,7 @@ test('建会话：设备既列了 deviceTasks 又声明了会话树，litch_task
     [
       ['namespace', 'litch_tasks'],
       ['namespace', 'litch_sessions'],
+      ['namespace', 'litch_browser'],
       ['namespace', 'litch_presentation'],
     ],
   )
@@ -208,6 +209,7 @@ test('建会话：设备列了 deviceTasks 就带上 litch_tasks（这台桌面�
     start.dynamicTools?.map((entry) => [entry.type, entry.name]),
     [
       ['namespace', 'litch_tasks'],
+      ['namespace', 'litch_browser'],
       ['namespace', 'litch_presentation'],
     ],
   )

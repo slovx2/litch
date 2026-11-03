@@ -47,7 +47,7 @@ export const MACHINE_DISABLED =
 /** 已展示卡片但未获允许；不把拒绝或超时说成仍在等待 */
 export const MACHINE_ENABLE_DECLINED = `${MACHINE_DISABLED}\nAn enable card was shown in the calling conversation (or Litch’s global pending requests). It was declined, cancelled or expired. Tell the user to enable access in Litch if they still want to proceed; do not request approval again in this turn.\nLitch 已在调用会话（或全局待处理）展示开启卡，但卡片已被拒绝、取消或超时。若用户仍需继续，请提示用户在 Litch 中开启；本回合不要再次请求。`
 
-/** 一台设备上“操作这台电脑”的设置（存在桌面端，按设备） */
+/** 一台设备上“操作这台电脑”的设置（开关来自设备，审批和范围属于执行桌面） */
 export interface MachineSettings {
   enabled: boolean
   approval: MachineApproval
@@ -89,7 +89,7 @@ export interface MachineWiringHost {
   device(deviceId: string): MachineSessionDevice | null
   settings(deviceId: string): MachineSettings
   /** 只能在本地确认卡获得允许后调用；存最保守的范围与逐条审批 */
-  enable(deviceId: string): void
+  enable(deviceId: string): void | Promise<void>
   notify(notice: MachineNotice): void
   /** 一台设备的操作记录存在哪。不给就只记在内存里 */
   logStore?(deviceId: string): MachineLogStore | null
@@ -479,7 +479,7 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
             host.device(deviceId)
           ) {
             // 用户已在另一张卡或设置页开启时保留其设置，不覆盖后续选择。
-            if (!host.settings(deviceId).enabled) host.enable(deviceId)
+            if (!host.settings(deviceId).enabled) await host.enable(deviceId)
           } else {
             if (key !== null) declined.set(key, null)
             addLog(deviceId, owner, {

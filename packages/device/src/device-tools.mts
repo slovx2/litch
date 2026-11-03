@@ -181,11 +181,15 @@ export class DeviceTools implements DeviceToolRegistry {
  * 设备进程替自己通往引擎的连接声明能执行这些命名空间：litchExtensions 里加上 clientTools，
  * litchClientTools.namespaces 里加上它们，anyThread 就是它们（不看会话：发起回合的、订阅着的连接都没有时，
  * 引擎交给任一条设备进程的连接，不要求客户端在线）。客户端自己声明的命名空间照原样保留（它声明了别的命名空间的
- * 照旧），它声明的 anyThread 不算：客户端执行的工具要在看着这个会话的那一台上执行。
+ * 照旧），它声明的 anyThread 不算。forward 只声明转交能力，最终桌面的能力由设备路由另查。
  * 原生 codex 不认识这两个键，它的“话”在握手前会摘掉（native-codex.mts），由设备进程自己拦它的调用。
  */
-export function declareDeviceTools(given: unknown, namespaces: readonly string[]): unknown {
-  if (namespaces.length === 0) return given
+export function declareDeviceTools(
+  given: unknown,
+  namespaces: readonly string[],
+  forward: readonly string[] = [],
+): unknown {
+  if (namespaces.length === 0 && forward.length === 0) return given
   const fields = isObject(given) ? given : {}
   const capabilities = isObject(fields.capabilities) ? fields.capabilities : {}
   const listed = capabilities[EXTENSIONS_CAPABILITY]
@@ -200,7 +204,9 @@ export function declareDeviceTools(given: unknown, namespaces: readonly string[]
     Array.isArray(tools.namespaces)
       ? tools.namespaces
       : []
-  const added = namespaces.filter((namespace) => !own.includes(namespace))
+  const added = [...new Set([...namespaces, ...forward])].filter(
+    (namespace) => !own.includes(namespace),
+  )
   return {
     ...fields,
     capabilities: {
@@ -209,6 +215,7 @@ export function declareDeviceTools(given: unknown, namespaces: readonly string[]
       [CLIENT_TOOLS_CAPABILITY]: {
         ...tools,
         namespaces: [...own, ...added],
+        ...(forward.includes('litch_computer') ? { computerActions: true } : {}),
         anyThread: [...namespaces],
       },
     },

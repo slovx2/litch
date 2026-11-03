@@ -92,6 +92,6 @@ export function pickClientToolExecutor<T>(
 export function noClientToolExecutor(namespace: string): ClientToolCallResponse {
   return clientToolFailure(
     'noExecutor',
-    `当前没有获授权且已连接、能执行 ${namespace} 的 Litch 执行方，这次调用没有执行。对于内置浏览器、Computer Use 等桌面工具，这表示当前没有可执行的桌面端，不表示浏览器或工具不可用。请告诉用户连接支持该工具的 Litch 桌面端并打开会话后再试；后台子会话可使用派出时继承的桌面连接，无须先打开子会话。litch_sessions、litch_tasks 由设备服务执行。不要反复重试。`,
+    `当前没有获授权且已连接、能执行 ${namespace} 的 Litch 执行方，这次调用没有执行。对于内置浏览器、Computer Use 等桌面工具，这表示当前没有可执行的桌面端，不表示浏览器或工具不可用。请告诉用户打开支持该工具的 Litch 桌面端并连接这台设备后再试；浏览器、Computer Use 和操作电脑工具无须先打开会话。litch_sessions、litch_tasks 由设备服务执行。不要反复重试。`,
   )
 }

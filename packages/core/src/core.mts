@@ -16,7 +16,6 @@ import { sensitivePresets } from './device/machine/presets.mjs'
 import type { MachineExecutor, MachineFacts } from './device/machine/types.mjs'
 import type { PairingPlatform } from './device/pairing.mjs'
 import {
-  changeToolSwitches,
   checkPairingAddress,
   checkTarget,
   cleanDeniedPaths,
@@ -28,7 +27,6 @@ import {
   type SavedDevices,
   type SavedRemote,
   sameTarget,
-  toolSwitchesOf,
   WIRES,
 } from './device/remote.mjs'
 import {
@@ -167,9 +165,6 @@ export function createCore(options: CoreOptions): Core {
     })
     return configExecutor
   }
-  /** 一台设备（给了 harness 是它上面这个 harness）的两个开关现在是什么：改过的按改的，没改过的按默认 */
-  const switchesOf = (deviceId: string, harness: string | null) =>
-    toolSwitchesOf(saved.tools?.[deviceId], harness)
 
   // —— litch_machine：远程设备上的会话操作这台电脑 ——
 
@@ -177,7 +172,7 @@ export function createCore(options: CoreOptions): Core {
   const machineSettingsOf = (deviceId: string): MachineSettings => {
     const kept = saved.machine?.[deviceId] ?? {}
     return {
-      enabled: saved.tools?.[deviceId]?.machine === true,
+      enabled: devices.get(deviceId)?.machineEnabled() === true,
       approval: kept.approval ?? 'session',
       access: { mode: kept.access ?? 'sensitive', custom: kept.custom ?? [] },
     }
@@ -213,18 +208,18 @@ export function createCore(options: CoreOptions): Core {
           }
         },
         settings: machineSettingsOf,
-        enable(deviceId) {
+        async enable(deviceId) {
           const device = devices.get(deviceId)
           if (device?.view.kind !== 'ssh') return
           saved = {
             ...saved,
-            tools: { ...saved.tools, [deviceId]: { ...saved.tools?.[deviceId], machine: true } },
             machine: {
               ...saved.machine,
               [deviceId]: { ...saved.machine?.[deviceId], approval: 'each', access: 'sensitive' },
             },
           }
           persist()
+          await device.setToolSwitches({ machine: true })
           device.update({})
         },
         notify: (notice) => hub.notify(notice),
@@ -257,7 +252,13 @@ export function createCore(options: CoreOptions): Core {
       ...(store?.views ? { views: store.views(config.id) } : {}),
       ...(store?.pendingInputs ? { pendingInputs: store.pendingInputs(config.id) } : {}),
       tools: hub,
-      toolSwitches: (harness) => switchesOf(config.id, harness),
+      legacyToolSwitches: () => saved.tools?.[config.id],
+      clearLegacyToolSwitches() {
+        const tools = { ...saved.tools }
+        delete tools[config.id]
+        saved = { ...saved, tools }
+        persist()
+      },
       ...(options.pairing ? { pairing: options.pairing } : {}),
       ...(options.forward ? { forward: options.forward } : {}),
       // 远程设备服务的一键升级：要装的是应用的这一版；外壳没给能力（手机端）就只显示“比应用旧”
@@ -278,6 +279,7 @@ export function createCore(options: CoreOptions): Core {
         ? {
             machine: {
               view: () => machineView(config.id),
+              disabled: () => wiring.disabled(config.id),
               desktop: desktopInfo,
               call: (input, session) => wiring.call(config.id, input, session),
               turnEnded: (threadId, turnId) => wiring.turnEnded(config.id, threadId, turnId),
@@ -979,22 +981,12 @@ export function createCore(options: CoreOptions): Core {
             }
           }
           if (typeof machine === 'boolean') machineDevice(deviceId)
-          const before = saved.tools?.[deviceId] ?? {}
-          const next = changeToolSwitches(before, {
+          await device.setToolSwitches({
             ...(harness === undefined ? {} : { harness }),
             ...(typeof browser === 'boolean' ? { browser } : {}),
             ...(typeof computer === 'boolean' ? { computer } : {}),
             ...(typeof machine === 'boolean' ? { machine } : {}),
           })
-          saved = { ...saved, tools: { ...(saved.tools ?? {}), [deviceId]: next } }
-          persist()
-          // 关掉“操作这台电脑”的那一刻（08 号 3.1）：进行中的调用回失败、卡片撤掉、它起的进程都结束
-          if (machine === false && before.machine === true) {
-            device.stopMachine(clientToolFailure('disabled', MACHINE_DISABLED))
-            wiring?.disabled(deviceId)
-          }
-          // 之后建的会话按新的挑工具；已经建好的会话里的调用，下一次就按新的来
-          device.update({})
           return {}
         }
         case 'device.machine.set': {

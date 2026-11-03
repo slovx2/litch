@@ -1,4 +1,9 @@
+import {
+  deviceMachineEnabled,
+  deviceToolSwitches,
+} from '../../protocol/src/client-tools-settings.mjs'
 import { PATH_PICKER_EXTENSION } from '../../protocol/src/path-picker.mjs'
+import { prepareSessionTools } from './session-client-tools.mjs'
 // 设备进程的主体：一台机器上的多个 harness 运行时收在一个入口（聚合面）后面。
 // 这里只管各条客户端连接共用的东西；一条连接上的事在 session.mts。
 
@@ -82,6 +87,9 @@ export type DeviceTrace = (
 ) => void
 
 export interface DeviceOptions {
+  /** 无控制进程的隔离夹具使用；生产开关来自设备设置。 */
+  clientToolSettings?: Record<string, boolean>
+
   /** 设备进程自己的状态目录，设备库 device.sqlite 放在里面 */
   stateDir: string
   /**
@@ -213,6 +221,21 @@ export const WRAP_UP_SETTING = 'sessions.wrapUp'
 export const WRAP_UP_REMINDER_SETTING = 'sessions.wrapUpReminder'
 
 export class DeviceServer {
+  private prepareSession(
+    params: Record<string, unknown>,
+    harness: string,
+    runtime: Record<string, unknown> | null,
+    native: boolean,
+  ): Record<string, unknown> {
+    const values = this.control?.state?.snapshot.values ?? this.options.clientToolSettings
+    return prepareSessionTools(params, harness, runtime, native, values, {
+      tasks: this.tasks !== null,
+      desktopNamespaces: this.host.clientTools
+        .executors(null)
+        .flatMap((peer) => [...peer.clientToolNamespaces]),
+    })
+  }
+
   private readonly turnNotices = new TurnNotices((notice) =>
     this.announce(TURN_NOTICE, notice, EXTENSION.turnNotices),
   )
@@ -443,6 +466,7 @@ export class DeviceServer {
       store: new SessionStore(this.sessionsDb),
       worktrees: this.worktrees,
       enabled: () => this.sessionTreeOn(),
+      tasksEnabled: () => this.tasks !== null,
       announce: (method, params, extension) => this.announce(method, params, extension),
       threadStarted: (harness, thread) => {
         for (const session of this.sessions) session.threadStarted(harness, thread)
@@ -575,6 +599,21 @@ export class DeviceServer {
       log,
     })
     const router = new ClientToolRouter({
+      enabled: (harness, namespace) => {
+        const switches = deviceToolSwitches(
+          this.control?.state?.snapshot.values ?? this.options.clientToolSettings,
+          harness,
+        )
+        return namespace === 'litch_browser'
+          ? switches.browser
+          : namespace === 'litch_computer'
+            ? switches.computer
+            : namespace === 'litch_machine'
+              ? deviceMachineEnabled(
+                  this.control?.state?.snapshot.values ?? this.options.clientToolSettings,
+                )
+              : true
+      },
       graceMs: options.timing?.clientToolGraceMs ?? DEFAULT_TIMING.clientToolGraceMs,
       log,
     })
@@ -626,6 +665,8 @@ export class DeviceServer {
             .map((source) => source.id),
         )
       },
+      prepareSession: (params, harness, runtime, native) =>
+        this.prepareSession(params, harness, runtime, native),
       clientTools: router,
       clientInvoke: new ClientToolInvoker({ router, index: this.index, log }),
       tasks: this.tasks,
@@ -1016,6 +1057,12 @@ export class DeviceServer {
       if (isObject(params)) this.recovery.observe(link.harness, method, params)
     })
     link.request = async (method, params, options) => {
+      if (
+        isObject(params) &&
+        (method === 'thread/start' ||
+          (method === 'thread/fork' && !link.native && link.runtime?.engine === 'claude-code'))
+      )
+        params = this.prepareSession(params, link.harness, link.runtime, link.native)
       if (
         !restarting &&
         (method === 'turn/start' || method === 'thread/resume') &&

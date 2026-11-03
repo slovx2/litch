@@ -99,7 +99,16 @@ test('握手：没声明 harness 扩展的被拒绝并说明原因，声明了�
         litchExtensions: ['harness', 'futureThing', 'clientTools'],
         subAgentActivityKinds: ['completed'],
         litchClientTools: {
-          namespaces: ['litch_tasks', 'litch_manager', 'litch_repository', 'litch_sessions'],
+          namespaces: [
+            'litch_tasks',
+            'litch_manager',
+            'litch_repository',
+            'litch_sessions',
+            'litch_browser',
+            'litch_computer',
+            'litch_machine',
+          ],
+          computerActions: true,
           anyThread: ['litch_tasks', 'litch_manager', 'litch_repository', 'litch_sessions'],
         },
       },

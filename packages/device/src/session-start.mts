@@ -17,6 +17,7 @@ import {
   SESSION_TOOLS,
   sessionTools,
 } from '../../protocol/src/client-tools-sessions.mjs'
+import { TASKS_TOOLS } from '../../protocol/src/client-tools-tasks.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import { NATIVE_BACKGROUND_NAMESPACE } from '../../protocol/src/native-background-wake.mjs'
 import {
@@ -182,7 +183,7 @@ export function briefing(
 }
 
 /**
- * 子会话建的时候带哪些动态工具：父会话建时客户端给的那些（目标引擎认客户端工具才带），开关开着再加上 litch_sessions
+ * 子会话继承自定义工具并按设备能力补任务、会话工具；常驻客户端工具在统一新建入口按目标 harness 重算
  *（按“每回合收尾”开关和子会话所在 harness 的“任务卡”开关给的那份）
  */
 function childTools(
@@ -208,6 +209,10 @@ function childTools(
   if (manager) sessions.instructions = `${sessions.instructions}\n\n${lineInstructions(manager)}`
   return [
     ...inherited,
+    ...(tree.host.tasksEnabled?.() &&
+    !inherited.some((spec) => isObject(spec) && spec.name === TASKS_TOOLS.name)
+      ? [TASKS_TOOLS]
+      : []),
     ...(tree.host.enabled() || manager ? [sessions] : []),
     ...(link.native ? [] : [PRESENTATION_SPEC]),
   ]
@@ -496,7 +501,9 @@ async function createChild(
       'This harness cannot replace manager tools when forking a line. Use kind fresh with a self-contained brief.',
     )
   const tools =
-    spec.kind === 'fresh' || managerFork ? childTools(tree, parentId, harness, link) : null
+    spec.kind === 'fresh' || (!link.native && link.runtime?.engine === 'claude-code')
+      ? childTools(tree, parentId, harness, link)
+      : null
   // 模型、强度没给的取父会话现在的；harness 不同时不带，用那边的默认。父会话自己那一对不用再问
   const same = harness === parentHarness
   const parentModel = same ? textOf(parentConfig?.model) : null
@@ -546,7 +553,7 @@ async function createChild(
         ? await link.request('thread/fork', {
             threadId: parentId,
             ...(spec.handOffBefore ? { beforeTurnId: spec.handOffBefore } : {}),
-            ...(managerFork && tools ? { dynamicTools: tools } : {}),
+            ...(tools ? { dynamicTools: tools } : {}),
             ...(made ? { cwd: where } : {}),
             ...(model ? { model } : {}),
             ...permissions,

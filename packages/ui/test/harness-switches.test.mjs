@@ -34,7 +34,7 @@ test('设备那一格：全开打勾、全关空、有开有关半选；不知�
   assert.deepEqual(['on', 'off', 'mixed'].map(nextForDevice), [false, true, true])
 })
 
-test('按设备声明的顺序列 harness；这台桌面执行不了的那一列不出；离线时任务卡只读，浏览器、Computer Use 照改', () => {
+test('按设备声明的顺序列 harness；设备未声明的列不出；离线时三列都只读', () => {
   const d = device({ pi: sw(true, true, false), cc: sw(true, true, false) })
   d.harnesses = [
     { id: 'cc', name: 'Claude Code' },
@@ -51,7 +51,7 @@ test('按设备声明的顺序列 harness；这台桌面执行不了的那一列
   assert.equal(columnShown([bare, d], 'computer'), true)
   const offline = { ...d, connection: 'offline' }
   assert.equal(editable(offline, 'taskCards', 'on'), false)
-  assert.equal(editable(offline, 'browser', 'on'), true)
+  assert.equal(editable(offline, 'browser', 'on'), false)
   assert.equal(editable(d, 'taskCards', 'unknown'), false)
   assert.equal(editable(d, 'taskCards', 'mixed'), true)
 })

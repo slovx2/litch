@@ -63,7 +63,7 @@ func (s *settingsStore) registerLocalPower() (bool, error) {
 func (m *harnessManager) settingsSchema() settingsSchema {
 	m.schemaMu.RLock()
 	defer m.schemaMu.RUnlock()
-	return m.schema
+	return m.base.clientToolDefaults(m.schema)
 }
 
 func (m *harnessManager) registerLocalPower() error {

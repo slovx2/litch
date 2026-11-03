@@ -10,7 +10,7 @@ import { until } from './tree-kit.mjs'
 const threadId = codexThread(1, 400).id
 
 test('SESSION-PENDING-CLIENT-001：慢客户端工具及成功结果不进入待用户集合，多连接只执行一次', async () => {
-  const env = codexRig()
+  const env = codexRig({ toolSettings: { 'tools.browser': true } })
   try {
     const client = env.connect()
     await client.initialize(['harness', 'sessionTree', 'clientTools'], {
@@ -45,7 +45,7 @@ test('SESSION-PENDING-CLIENT-001：慢客户端工具及成功结果不进入待
 })
 
 test('SESSION-PENDING-CLIENT-002：客户端显式登录审批进父会话快照，关闭/断连清除，未声明不收到', async () => {
-  const env = codexRig()
+  const env = codexRig({ toolSettings: { 'tools.browser': true } })
   try {
     env.device.sessionTree.host.needsUserMs = 0
     const client = env.connect()
@@ -83,7 +83,7 @@ test('SESSION-PENDING-CLIENT-002：客户端显式登录审批进父会话快照
 })
 
 test('SESSION-PENDING-CLIENT-003：空白提问的标题和摘要都有兜底', async () => {
-  const env = codexRig()
+  const env = codexRig({ toolSettings: { 'tools.browser': true } })
   try {
     await env.device.sessionTree.link('codex')
     for (const c of env.codex.live)

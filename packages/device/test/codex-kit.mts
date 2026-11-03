@@ -11,6 +11,8 @@ import { rig } from './helpers.mjs'
 export const STATUS = 'litch/harness/status/changed'
 
 export interface CodexRigOptions {
+  toolSettings?: Record<string, boolean>
+
   /** 原生 codex 起始的状态。默认在跑 */
   codex?: ManagedHarnessState
   /** 假的原生 codex。不给就用一个带两个会话的 */
@@ -30,6 +32,8 @@ export function codexRig(options: CodexRigOptions = {}) {
     managed('pi'),
     { ...managed('codex', options.codex ?? 'running'), native: true },
   ])
+  // 原生协议用例默认关闭常驻工具，工具专项测试显式开启。
+  control.patch({ values: { 'tools.browser': false, ...options.toolSettings } as never })
   const logs: string[] = []
   const env = rig(
     {},

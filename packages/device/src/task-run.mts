@@ -272,7 +272,7 @@ export async function executeRun(
           cwd: made ? worktreeCwd(made) : target.cwd,
           ...(target.settings.model ? { model: target.settings.model } : {}),
           ...permissionParams(target.settings.permission, link),
-          // 任务自己的回合里模型也能管任务（litch_tasks 由设备进程执行）。别的客户端工具要桌面端，不带。
+          // 任务自己的回合里模型也能管任务；常驻客户端工具随后由设备的新建入口按设置统一补齐。
           // 任务的会话也在 Litch 里看，带上呈现风格（原生 codex 不带，client-tools-presentation.mts）
           ...(supportsClientTools(link) ? { dynamicTools: taskTools(link) } : {}),
           // 原生 codex 认这个来源（上游的 ThreadSource::Feature("automation")），适配器的引擎不认，不带

@@ -28,8 +28,12 @@ async function task(client: TestClient, id: string): Promise<any> {
 
 test('到点在新会话里跑一个回合：会话起了名、进了索引，运行记录 succeeded、带摘要、未读；提示词前有说明', async () => {
   const engine = new TaskEngine()
+  engine.declaration = { extensions: ['clientTools'] }
   engine.script = () => ({ status: 'completed', answer: `日报写好了。${'很长'.repeat(400)}` })
-  const target = taskRig({ pi: engine })
+  const target = taskRig(
+    { pi: engine },
+    { clientToolSettings: { 'tools.computer': true, 'tools.machine': true } },
+  )
   try {
     const client = await tasksClient(target)
     const { task: created } = await client.call('litch/task/create', {
@@ -51,6 +55,9 @@ test('到点在新会话里跑一个回合：会话起了名、进了索引，�
     const start = engine.seen.find((item) => item.method === 'thread/start')
     assert.equal(start?.params.cwd, target.stateDir)
     assert.equal(start?.params.model, 'gate')
+    const namespaces = start?.params.dynamicTools.map((spec: any) => spec.name)
+    for (const name of ['litch_tasks', 'litch_browser', 'litch_computer', 'litch_machine'])
+      assert.ok(namespaces.includes(name), `离线定时新会话应注入 ${name}`)
     // 假引擎没报权限预设：权限当作审批策略给
     assert.equal(start?.params.approvalPolicy, 'never')
     assert.equal(start?.params.threadSource, undefined)

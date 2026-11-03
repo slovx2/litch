@@ -399,10 +399,9 @@ export class Relay {
       })
       return
     }
-    // 原生 codex 发给每条订阅连接的客户端工具调用：由设备进程挑一条转（client-tools.mts）
+    // 设备统一挑选最终桌面执行方；适配器也可能选中只负责转交的手机上游连接。
     if (
       frame.method === 'item/tool/call' &&
-      link.dialect.clientToolsByDevice &&
       isClientToolNamespace(fields?.namespace as string | undefined)
     ) {
       this.host.clientTools.offer(link, frame, upstreamId)

@@ -137,8 +137,9 @@ do not add JSON quotation marks inside the value.
 
 ## Things that are not device settings
 
-- Per-device switches for the built-in browser, Computer Use and "operate this computer" live in Litch,
-  not on the device: `scripts/litch tools set` (`browser-and-computer-use.md`).
+- 执行“操作这台电脑”的审批方式、访问范围仍保存在桌面端；开关 `tools.machine` 与
+  `tools.browser`、`tools.computer` 均保存在设备。浏览器/CU 另有 `harness.<id>.browser|computer` 覆盖。
+  使用 `scripts/litch tools set`，见 `browser-and-computer-use.md`。
 - Projects: `scripts/litch projects list` and friends (`sessions-and-projects.md`).
 - The adapter's `env` file (`~/.codex-harness-adapter/env`) is for standalone installs; prefer the
   per-harness `env` setting, which takes precedence anyway.

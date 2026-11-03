@@ -340,6 +340,7 @@ func buildSettingsSchema(c configuration) settingsSchema {
 			},
 		)
 		schema.Settings = append(schema.Settings, taskCardsSetting(id, group))
+		schema.Settings = append(schema.Settings, c.clientToolSettings(id, group)...)
 		if id == "pi" {
 			schema.Settings = append(schema.Settings, piApprovalsSetting(c, group))
 		}
@@ -382,6 +383,8 @@ func buildSettingsSchema(c configuration) settingsSchema {
 		)
 	}
 	group, specs := processSettings()
+	schema.Groups = append(schema.Groups, settingGroup{ID: "tools", Title: both("客户端工具", "Client tools"), Scope: deviceScope})
+	schema.Settings = append(schema.Settings, c.clientToolSettings("", "tools")...)
 	schema.Groups = append(schema.Groups, group)
 	schema.Settings = append(schema.Settings, specs...)
 	group, specs = taskSettings()

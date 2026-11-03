@@ -1,3 +1,4 @@
+import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import type { Manager, ManagerResetState } from '../../protocol/src/manager.mjs'
 import type { DeviceManagers } from './manager.mjs'
 import {
@@ -157,8 +158,17 @@ export class ManagerResets {
     await tree.settleManagerQueue(manager.threadId)
     if (this.closed || !(await this.safe(manager))) return
     const link = await tree.link(manager.harness)
-    const tools = managerBundle(manager, link.native)
-    const fingerprint = managerFingerprint(tools)
+    const bundle = managerBundle(manager, link.native)
+    const names = new Set(bundle.map((spec) => spec.name))
+    const known = new Set<string>(Object.values(CLIENT_TOOL_NAMESPACE))
+    // 重置经理规则时保留已安装的客户端工具；不对存量会话补装工具。
+    const tools = [
+      ...(tree.store.tools(manager.threadId) ?? []).filter(
+        (spec) => isObject(spec) && known.has(String(spec.name)) && !names.has(String(spec.name)),
+      ),
+      ...bundle,
+    ]
+    const fingerprint = managerFingerprint(bundle)
     if (manager.harness === 'claude-code') {
       const oldTools = record.oldTools ?? tree.store.tools(manager.threadId)
       if (!oldTools) throw new Error('The installed manager tool snapshot is unavailable.')
@@ -280,7 +290,6 @@ export class ManagerResets {
     }
     tree.host.index.see(created.thread, manager.harness)
     tree.noteSubscribed(manager.harness, newId)
-    tree.store.setTools(newId, tools)
     record.applied = fingerprint
     record.committed = {
       manager: after,

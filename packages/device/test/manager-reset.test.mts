@@ -68,7 +68,15 @@ test('Claude 原地替换完整工具和指令，保持线程、历史和看板'
     await until(() => managers.manager(env.manager.id).reset?.phase === 'ready', '原地刷新', 5000)
     assert.equal(managers.manager(env.manager.id).threadId, env.oldId)
     assert.deepEqual(env.engine.turns.get(env.oldId), oldTurns)
-    assert.deepEqual(installed, managerBundle(managers.manager(env.manager.id), false))
+    const bundle = managerBundle(managers.manager(env.manager.id), false)
+    const bundleNames = new Set(bundle.map((spec) => spec.name))
+    const installedTools = installed as { name: string }[]
+    assert.deepEqual(
+      installedTools.filter((spec) => bundleNames.has(spec.name)),
+      bundle,
+    )
+    for (const name of ['litch_browser', 'litch_tasks'])
+      assert.ok(installedTools.some((spec) => spec.name === name))
     assert.deepEqual(env.device.sessionTree.store.tools(env.oldId), installed)
     assert.equal(managers.manager(env.manager.id).reset?.outdated, false)
   } finally {

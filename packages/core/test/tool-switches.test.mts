@@ -13,6 +13,7 @@ import {
 } from '../src/index.mjs'
 import { deviceWorld, features } from './device-world.mjs'
 import { harness } from './fake-device.mjs'
+import { fakeSettings, spec } from './fake-settings.mjs'
 import { thread } from './fixtures.mjs'
 import { settle } from './helpers.mjs'
 
@@ -80,7 +81,32 @@ const declared = (id: string) =>
 
 async function twoHarnesses() {
   const main = fakeMain()
-  const world = deviceWorld([declared('claude'), declared('pi')], { clientTools: main.port })
+  const settings = fakeSettings()
+  for (const harness of [null, 'claude', 'pi'])
+    for (const column of ['browser', 'computer']) {
+      const key = harness === null ? `tools.${column}` : `harness.${harness}.${column}`
+      settings.settings.schema.settings.push(
+        spec(key, 'boolean', { default: column === 'browser' }),
+      )
+      settings.settings.snapshot.values[key] = column === 'browser'
+    }
+  const world = deviceWorld([declared('claude'), declared('pi')], {
+    clientTools: main.port,
+    prepare: (device) => device.extensions.push('deviceSettings'),
+    extra: settings.handlers,
+  })
+  settings.settings.beforeWriteReply = () => {
+    for (const column of ['browser', 'computer'])
+      for (const harness of ['claude', 'pi']) {
+        const key = `harness.${harness}.${column}`
+        if (!settings.settings.snapshot.explicit.includes(key))
+          settings.settings.snapshot.values[key] =
+            settings.settings.snapshot.values[`tools.${column}`]!
+      }
+    world.peer
+      .last()
+      .notify('litch/device/settings/changed', { snapshot: settings.settings.snapshot, keys: [] })
+  }
   world.core.start()
   await settle()
   /** 在这个 harness 上建一个会话，返回会话号和建会话时带的命名空间 */

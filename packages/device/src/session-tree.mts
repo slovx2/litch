@@ -67,6 +67,8 @@ export interface SessionTreeHost {
   worktrees: Worktrees | null
   /** 设置里“会话编排”开着 */
   enabled(): boolean
+  /** 设备已提供定时任务；子会话按本设备能力挂载，不依赖父会话是否带过。 */
+  tasksEnabled?(): boolean
   /** 发给全部声明了 extension 的客户端连接 */
   announce(method: string, params: unknown, extension: string): void
   /** 设备进程建出来的会话：给每条客户端连接发一条标准的 thread/started（各自挂上 harness、工作区、litchLineage） */

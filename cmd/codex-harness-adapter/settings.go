@@ -216,6 +216,7 @@ func (s *settingsStore) present(schema settingsSchema) (version int, values map[
 		}
 		values[spec.Key] = presentSetting(spec, raw, written)
 	}
+	inheritClientToolSettings(values, explicit)
 	sort.Strings(explicit)
 	return s.version, values, explicit
 }
