@@ -428,17 +428,12 @@ export class RowBuilder {
     }
     // 整段过程告一段落（有最终回答、没被打断，规矩在核心的 processSettled）就收成一行，照桌面端：用户在这一回合里点开过某一组、某一步，
     // 或者还有子代理没做完时不自动收。点那一行翻转（expanded 里有它的键就和自动的相反）
-    const answerId = blocks.find((block) => block.type === 'answer')?.itemId
-    const answer = answerId ? view.items[answerId] : undefined
-    const settled = processSettled(turn.status, answer ? [answer] : [], view.can.finalOnStart)
+    const answerIds = blocks.filter((block) => block.type === 'answer').map((block) => block.itemId)
     const segments = processSegments(blocks)
     const firstSegment = segments.values().next().value
     const divided = items.some((item) => item.kind === 'userMessage' && turnAddition(turn, item.id))
-    const autoOpen = !processFolded(
-      settled,
-      this.touchedIn(turn, items),
-      agentsUnfinished(items, view.agents),
-    )
+    const touched = this.touchedIn(turn, items)
+    const unfinished = agentsUnfinished(items, view.agents)
     /** 最后一条回答的末尾在 out 里的位置：目标达成那一句插在这里 */
     let answerEnd = -1
     blocks.forEach((block) => {
@@ -500,6 +495,17 @@ export class RowBuilder {
           return
         case 'process': {
           const segment = segments.get(block.key)!
+          const read = (ids: string[]) =>
+            ids.map((id) => view.items[id]).filter((item): item is ItemView => item !== undefined)
+          const settled = processSettled(
+            turn.status,
+            read(running ? segment.answerIds : answerIds),
+            {
+              closed: segment.closed,
+              items: read(segment.itemIds),
+            },
+          )
+          const autoOpen = !processFolded(settled, touched, unfinished)
           const processKey =
             segment === firstSegment ? `${turn.id}:process` : `${turn.id}:process:${segment.key}`
           const open = this.processOpen.get(processKey) ?? autoOpen

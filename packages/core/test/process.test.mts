@@ -362,7 +362,7 @@ test('分块：新顺序“干活 → 空收尾 → 完整回答”照旧；收�
   )
 })
 
-test('过程什么时候告一段落：有最终回答的回合结束，或者最终回答写完（声明了一开始就知道的，一开始就算）；被打断的、没回答的不算', () => {
+test('过程告一段落：运行中的最后一段始终展开，较早段需自身结束；被打断的、没回答的不算', () => {
   const answer = (phase: string, status: string) => [
     { kind: 'agentMessage' as const, phase, status },
   ]
@@ -374,16 +374,35 @@ test('过程什么时候告一段落：有最终回答的回合结束，或者�
   assert.equal(processSettled('completed', []), false, '没有最终回答的')
   assert.equal(processSettled('failed', []), false)
   assert.equal(processSettled('running', []), false)
-  assert.equal(processSettled('running', answer('final', 'completed')), true)
+  assert.equal(processSettled('running', answer('final', 'completed')), false)
   assert.equal(
     processSettled('running', answer('final', 'inProgress')),
     false,
     '刚开始就自称最终回答的不算',
   )
   assert.equal(processSettled('running', answer('unknown', 'completed')), false)
-  assert.equal(processSettled('running', answer('final', 'inProgress'), true), true)
-  assert.equal(processSettled('running', answer('unknown', 'inProgress'), true), false)
-  assert.equal(processSettled('running', [], true), false)
+  const closed = { closed: true, items: [command('c')] }
+  assert.equal(processSettled('running', answer('final', 'completed'), closed), true)
+  assert.equal(processSettled('running', answer('final', 'inProgress'), closed), false)
+  assert.equal(
+    processSettled(
+      'running',
+      [...answer('final', 'completed'), ...answer('final', 'inProgress')],
+      closed,
+    ),
+    false,
+    '较早的 final 不能盖过本段仍在写的另一条回答',
+  )
+  assert.equal(processSettled('running', answer('unknown', 'completed'), closed), false)
+  assert.equal(processSettled('running', [], closed), false)
+  assert.equal(
+    processSettled('running', answer('final', 'completed'), {
+      closed: true,
+      items: [command('c', { status: 'inProgress' })],
+    }),
+    false,
+    '插话抵达时前面的工具还没结束，不提前折叠',
+  )
 })
 
 test('整段过程收不收：告一段落了才收；手动展开过、子代理没做完都不收', () => {

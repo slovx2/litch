@@ -81,8 +81,8 @@ interface TurnBlocks {
   blocks: Block[]
   /** 设备进程提醒收尾的回合（开头是 event.kind 为 remind 的用户消息） */
   remind: boolean
-  /** 最终回答那一条 */
-  answerId: string | undefined
+  /** 回合结束后按全部回答判断是否收起过程。 */
+  answerIds: string[]
   /** 每块过程所属的段，同段共用摘要与开关。 */
   segments: Map<string, ProcessSegment>
 }
@@ -108,32 +108,46 @@ function useBlocks(
     return {
       blocks,
       remind: inputs[0] !== undefined && 'remind' in inputs[0] && inputs[0].remind,
-      answerId: blocks.find((block) => block.type === 'answer')?.itemId,
+      answerIds: blocks.filter((block) => block.type === 'answer').map((block) => block.itemId),
       segments: processSegments(blocks),
     }
   }, [store, deviceId, sessionId, itemIds, status])
 }
 
 /**
- * 过程是不是告一段落、可以收成一行了（规矩在核心的 processSettled：有最终回答、没被打断）。
- * 要看最终回答那一条，所以订阅它；结果是个布尔值，回答的文字在变而结论没变时不会引起重画
+ * 每段分别判断，订阅本段条目的结束状态；文字增量不改变布尔值，不引起整段重画。
  */
 function useSettled(
   ref: SessionRef,
   status: TurnStatus | undefined,
-  answerId: string | undefined,
-  finalOnStart: boolean,
+  answerIds: string[],
+  segment: ProcessSegment,
 ): boolean {
   const { store } = useServices().replica
   const { deviceId, sessionId } = ref
-  const key = answerId ? keys.item(deviceId, sessionId, answerId) : null
+  const ids = status === 'running' ? segment.answerIds : answerIds
+  const itemKeys = useMemo(() => {
+    // 活跃的最后一段必定展开，无需随每个文本增量扫描整段历史。
+    if (status === 'running' && !segment.closed) return []
+    return (status === 'running' ? [...segment.itemIds, ...ids] : ids).map((id) =>
+      keys.item(deviceId, sessionId, id),
+    )
+  }, [deviceId, sessionId, status, segment, ids])
   const subscribe = useCallback(
-    (listener: () => void) => (key ? store.subscribe(key, listener) : () => {}),
-    [store, key],
+    (listener: () => void) => {
+      const offs = itemKeys.map((key) => store.subscribe(key, listener))
+      return () => {
+        for (const off of offs) off()
+      }
+    },
+    [store, itemKeys],
   )
   return useSyncExternalStore(subscribe, () => {
-    const answer = key ? store.get<ItemView>(key) : undefined
-    return processSettled(status ?? 'running', answer ? [answer] : [], finalOnStart)
+    if (status === 'running' && !segment.closed) return false
+    const read = (id: string) => store.get<ItemView>(keys.item(deviceId, sessionId, id))
+    const answers = ids.map(read).filter((item): item is ItemView => item !== undefined)
+    const items = segment.itemIds.map(read).filter((item): item is ItemView => item !== undefined)
+    return processSettled(status ?? 'running', answers, { closed: segment.closed, items })
   })
 }
 
@@ -219,8 +233,9 @@ function SegmentBlock({
   segment,
   first,
   divided,
-  settled,
-  autoOpen,
+  answerIds,
+  touched,
+  agentsRunning,
   userId,
   ...ref
 }: SessionRef & {
@@ -229,10 +244,13 @@ function SegmentBlock({
   segment: ProcessSegment
   first: boolean
   divided: boolean
-  settled: boolean
-  autoOpen: boolean
+  answerIds: string[]
+  touched: boolean
+  agentsRunning: boolean
   userId: string | undefined
 }) {
+  const settled = useSettled(ref, turn.status, answerIds, segment)
+  const autoOpen = !processFolded(settled, touched, agentsRunning)
   const foldKey = first ? `p:${turn.id}` : `p:${turn.id}:${segment.key}`
   const [open, setOpen] = useFold(`${ref.deviceId}:${ref.sessionId}`, foldKey, autoOpen)
   const head = block.key === segment.key
@@ -291,8 +309,7 @@ const Turn = memo(function Turn({
   const running = turn?.status === 'running'
   // 回合结束的时刻（开始加用时），结尾那一行写在用时后面
   const ended = turn ? turnEnded(turn) : null
-  const { blocks, remind, answerId, segments } = useBlocks(ref, turn?.itemIds ?? [], turn?.status)
-  const settled = useSettled(ref, turn?.status, answerId, meta?.can.finalOnStart === true)
+  const { blocks, remind, answerIds, segments } = useBlocks(ref, turn?.itemIds ?? [], turn?.status)
   const working = useLasting(useWorking(ref, running, turn?.itemIds ?? NO_ITEMS), WORKING_DELAY_MS)
   // 模型请求在重试：状态行一直显出，后面写第几次和原因，重试结束（新一次出字）就去掉
   const retry = running ? (turn?.retry ?? null) : null
@@ -302,8 +319,6 @@ const Turn = memo(function Turn({
   const todoInRail = useRailHasTodo(sessionKey) && !searchTodo
   // 回合里还有没做完的子代理时不自动收（状态以子线程为准，见 tree/agent-view.tsx）
   const agentsRunning = useAgentsUnfinished(deviceId, sessionId, turnId)
-  // 详细视图里整段过程一直开着，回合结束也不收（useFold）
-  const autoOpen = !processFolded(settled, touched, agentsRunning)
   // 详细视图里点开什么都不算“手动展开过”：切回精简时照常自动收
   const verbose = useTranscriptView(sessionKey) === 'verbose'
   const touch = useCallback(() => {
@@ -395,8 +410,9 @@ const Turn = memo(function Turn({
               segment={segment}
               first={segment === firstSegment}
               divided={divided}
-              settled={settled}
-              autoOpen={autoOpen}
+              answerIds={answerIds}
+              touched={touched}
+              agentsRunning={agentsRunning}
               userId={userBefore[index]}
             />
           )

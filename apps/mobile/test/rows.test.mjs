@@ -50,6 +50,78 @@ function viewOf(turns, items) {
 
 const types = (rows) => rows.map((row) => row.type)
 
+for (const scenario of ['插话', '压缩', '插话和压缩']) {
+  test(`进行中的最后一段保持展开：${scenario}后继续说明和调用工具`, () => {
+    const builder = new RowBuilder()
+    const items = [user('u', '开始'), command('c0', 'completed', 0), answer('a0', '阶段结论')]
+    if (scenario.includes('插话')) items.push(user('peer', '来自经理的补充'))
+    items.push({ ...answer('n1', '继续检查'), phase: 'commentary' })
+    if (scenario.includes('压缩'))
+      items.push({ id: 'compact', kind: 'compaction', status: 'completed', source: 'automatic' })
+    items.push(
+      { ...answer('n2', '压缩后继续输出'), phase: 'commentary' },
+      command('c2', 'inProgress'),
+    )
+    const build = (status = 'running') => {
+      const view = viewOf([{ id: 't', status, itemIds: items.map((item) => item.id) }], items)
+      view.can.finalOnStart = true
+      return builder.build(view, 'all')
+    }
+    for (let i = 0; i < 3; i++) {
+      items.push({ ...answer(`live-${i}`, `新增说明 ${i}`), phase: 'commentary' })
+      const rows = build()
+      assert.ok(
+        rows.some((row) => row.type === 'md' && row.itemId === `live-${i}`),
+        '新说明必须可见',
+      )
+      assert.ok(
+        rows.some((row) => row.type === 'group'),
+        '当前工具组必须可见',
+      )
+      if (scenario.includes('压缩'))
+        assert.ok(
+          rows.findIndex((row) => row.type === 'compaction') <
+            rows.findIndex((row) => row.itemId === 'n2'),
+        )
+    }
+    items[items.findIndex((item) => item.id === 'c2')].status = 'completed'
+    items.push(answer('final', '最终结果'))
+    assert.ok(
+      build().some((row) => row.itemId === 'n2'),
+      'final 写完也等回合结束',
+    )
+    const done = build('completed')
+    assert.ok(done.some((row) => row.type === 'process' && !row.expanded))
+    assert.ok(!done.some((row) => row.itemId === 'n2'), '回合结束后恢复折叠')
+  })
+}
+
+test('插话前一段的工具和回答都结束才折叠；条目状态更新无需新增条目', () => {
+  const builder = new RowBuilder()
+  const items = [
+    user('u', '开始'),
+    { ...command('c', 'inProgress'), status: 'inProgress' },
+    answer('a', '阶段结论', 'inProgress'),
+    user('peer', '补充'),
+    { ...answer('n', '仍在处理'), phase: 'commentary' },
+  ]
+  const build = () =>
+    builder.build(
+      viewOf([{ id: 't', status: 'running', itemIds: items.map((item) => item.id) }], items),
+      'all',
+    )
+  assert.ok(!build().some((row) => row.type === 'process'))
+  items[2].status = 'completed'
+  assert.ok(!build().some((row) => row.type === 'process'), '回答结束但工具未结束')
+  items[1].status = 'completed'
+  const rows = build()
+  assert.equal(rows.filter((row) => row.type === 'process').length, 1)
+  assert.ok(
+    rows.some((row) => row.itemId === 'n'),
+    '最后一段仍然展开',
+  )
+})
+
 test('同回合两段最终回答都显示，父会话插话后的短答不折叠调研结论', () => {
   const items = [
     user('question', '请调研'),
@@ -737,9 +809,9 @@ test('过程收起：回合结束整段收成一行；说明段在过程里；�
     'md',
     'status',
   ])
-  // 回答写完了（回合还没结束）也算告一段落：收起
+  // 回答写完了也可能继续处理插话，最后一段等回合结束再收起。
   const answered = viewOf([{ id: 't', status: 'running', itemIds: ids }], items)
-  assert.deepEqual(types(builder.build(answered, 'all')), ['user', 'process', 'md', 'status'])
+  assert.deepEqual(types(builder.build(answered, 'all')), types(builder.build(running, 'all')))
   const done = viewOf([{ id: 't', status: 'failed', itemIds: ids, durationMs: 4000 }], items)
   const rows = builder.build(done, 'all')
   assert.deepEqual(types(rows), ['user', 'process', 'md', 'status'])

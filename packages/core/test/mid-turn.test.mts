@@ -93,6 +93,55 @@ test('待办等外露块不拆摘要；只有用户条目划分各段', () => {
   assert.deepEqual(segments.get('c')?.itemIds, ['c'])
 })
 
+test('长回合多次插话和压缩：已结束段独立收起，最后一段和压缩后新增条目仍在原位', () => {
+  const view = projectTurn(
+    turn('t', [
+      userText('u', '开始'),
+      agentText('n0', '说明', 'commentary'),
+      agentText('a0', '阶段回答', 'final_answer'),
+      userText('u1', '经理插话'),
+      agentText('n1', '下一阶段', 'commentary'),
+      agentText('a1', '阶段回答', 'final_answer'),
+      userText('u2', '父会话插话'),
+      agentText('n2', '继续工作', 'commentary'),
+      { id: 'compact', type: 'contextCompaction' },
+      agentText('n3', '压缩后继续工作', 'commentary'),
+    ]),
+  )
+  const blocks = bucketItems(
+    view.items.map((item) => blockInput(item.id, item)),
+    { turnRunning: true },
+  )
+  const segments = processSegments(blocks)
+  const all = [...new Set(segments.values())]
+  assert.deepEqual(
+    all.map((segment) => segment.closed),
+    [true, true, false],
+  )
+  assert.deepEqual(
+    all.map((segment) => segment.answerIds),
+    [['t:a0'], ['t:a1'], []],
+  )
+  assert.equal(segments.get('t:n2'), segments.get('t:n3'), '压缩本身不结束过程段')
+  assert.deepEqual(
+    blocks.slice(-3).map((block) => block.type),
+    ['process', 'compaction', 'process'],
+  )
+  assert.deepEqual(
+    all.map((segment) =>
+      processSettled(
+        'running',
+        view.items.filter((item) => segment.answerIds.includes(item.id)),
+        {
+          closed: segment.closed,
+          items: view.items.filter((item) => segment.itemIds.includes(item.id)),
+        },
+      ),
+    ),
+    [true, true, false],
+  )
+})
+
 test('分段耗时要求该段所有条目的完整时间，历史缺时间不编造；无补充仍用总时长', () => {
   const view = projectTurn(turn('t', [agentText('n', '说明', 'commentary')]))
   view.turn.durationMs = 196000

@@ -3,8 +3,8 @@
 //     （对面不增量给输出时，这是唯一看得出它还活着的东西）；等批准的命令写的是“待审批”，不计时。
 //     跑完之后那一行是动作和个数（“运行 1 条命令”）和用时。
 //     回合在跑时，最下面“{harness} 正在工作”那一行后面跟着这一回合已经跑了多久。
-// 二、整段过程什么时候自己收成一行：一般的 harness 等最终回答写完；声明了“最终回答一开始就知道”的
-//     （模拟核心里的 Codex）在最终回答一开始就收。用户在回合里手动展开过步骤组的，回合结束也不收；
+// 二、整段过程什么时候自己收成一行：各 harness 都等回合结束，Codex 的 final 一开始也不提前收。
+//     用户在回合里手动展开过步骤组的，回合结束也不收；
 //     点了停止的回合不收（照 Codex 桌面端），过程摊着。
 // 三、思考：只有一行浅字（不写“想了一下”），点开看全文。
 // 整个函数会被转成文字放进页面里执行，所以用到的工具都写在函数里面。
@@ -33,8 +33,8 @@ export interface ActivityProbe {
   touched: { openAfter: boolean }
   /** 声明了“最终回答一开始就知道”的 harness（Codex）上的会话 */
   early: {
-    /** 最终回答已经在出字、回合还没结束的那一刻，整段过程已经收起来了 */
-    closedWhileAnswering: boolean
+    /** 最终回答已经在出字、回合还没结束的那一刻，整段过程仍然展开 */
+    openWhileAnswering: boolean
   }
 }
 
@@ -245,7 +245,7 @@ export async function activityProbe(): Promise<ActivityProbe> {
     thought,
     waiting,
     touched: { openAfter: touched.openAfter },
-    early: { closedWhileAnswering: early.openWhileAnswering === false },
+    early: { openWhileAnswering: early.openWhileAnswering },
   }
 }
 
@@ -280,8 +280,8 @@ export function judgeActivity(probe: ActivityProbe): string[] {
   if (waiting.timed) failed.push('等批准的命令在计时：等人的时间不该算成它跑了多久')
   if (!waiting.openAfterStop) failed.push('点了停止的回合，过程收起来了（应该摊着）')
   if (!touched.openAfter) failed.push('回合里手动展开过步骤组，回合结束时过程还是自己收起来了')
-  if (!early.closedWhileAnswering) {
-    failed.push('声明了“最终回答一开始就知道”的 harness：最终回答已经在出字，过程还摊着')
+  if (!early.openWhileAnswering) {
+    failed.push('Codex 回合尚未结束，过程已提前收起')
   }
   return failed
 }

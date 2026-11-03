@@ -200,6 +200,10 @@ export interface ProcessSegment {
   /** 第一块过程的键：同段的其他过程块共用开关和摘要。 */
   key: string
   itemIds: string[]
+  /** 只属于这一段的回答；前一段的 final 不能结束后一段。 */
+  answerIds: string[]
+  /** 后面已经出现新的用户消息。压缩、计划等分隔不结束这一段。 */
+  closed: boolean
 }
 
 /** 只在用户消息处断开。待办、卡片等仍露在原处，不增加摘要行。 */
@@ -207,12 +211,14 @@ export function processSegments(blocks: Block[]): Map<string, ProcessSegment> {
   const segments = new Map<string, ProcessSegment>()
   let current: ProcessSegment | undefined
   for (const block of blocks) {
-    if (block.type === 'user') current = undefined
-    else if (block.type === 'process') {
-      current ??= { key: block.key, itemIds: [] }
+    if (block.type === 'user') {
+      if (current) current.closed = true
+      current = undefined
+    } else if (block.type === 'process') {
+      current ??= { key: block.key, itemIds: [], answerIds: [], closed: false }
       current.itemIds.push(...processItemIds(block.parts))
       segments.set(block.key, current)
-    }
+    } else if (block.type === 'answer') current?.answerIds.push(block.itemId)
   }
   return segments
 }
@@ -231,23 +237,24 @@ export function processDuration(
  * 过程是不是告一段落、可以收成一行了。照 Codex 桌面端（有最终回答、没被打断才让收）：
  * 被打断的回合不收，没有最终回答的回合结束了也不收——收起来只剩一行“已处理”“已中断”，
  * 中途做了什么、写了一半的回答都藏进去了，而停下来以后用户要看的就是这些。
- * 回合还在进行时，最终回答已经写完就算。“刚开始就说自己是最终回答”的消息只在 finalOnStart 为真时采信：
- * harness 声明了消息一开始阶段值就是准的（原生 codex），最终回答一开始就算。没声明的不信——
- * 前置验证 P6 的结论是 Claude Code 和 Pi 都要等消息写完才分得清。
- * answer 是最终回答那一条（没有就不给）
+ * 回合还在进行时，最后一段始终展开。较早的段须已有后续用户消息、本段 final 写完、条目全部结束才可收。
+ * answer 在运行中只给本段的回答；回合结束后给全回合的回答，保留原来的整体折叠规则。
  */
 export function processSettled(
   status: TurnStatus,
   answer: { kind: ItemView['kind']; phase?: string; status?: string }[],
-  finalOnStart = false,
+  segment?: { closed: boolean; items: ItemView[] },
 ): boolean {
   if (status === 'interrupted') return false
   if (status !== 'running') return answer.length > 0
+  if (
+    !segment?.closed ||
+    answer.some((item) => item.status === 'inProgress') ||
+    segment.items.some((item) => 'status' in item && item.status === 'inProgress')
+  )
+    return false
   return answer.some(
-    (item) =>
-      item.kind === 'agentMessage' &&
-      item.phase === 'final' &&
-      (finalOnStart || item.status === 'completed'),
+    (item) => item.kind === 'agentMessage' && item.phase === 'final' && item.status === 'completed',
   )
 }
 
