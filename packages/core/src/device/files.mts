@@ -12,6 +12,7 @@
 import type { ClientRequestMethod, ClientRequests } from '../../../protocol/src/index.mjs'
 import { createCancel } from '../channel/cancel.mjs'
 import { type AbortSignalLike, ChannelError, type Clock } from '../channel/protocol.mjs'
+import type { HostSink } from '../channel/server.mjs'
 import { RpcAbortError, RpcError, type RpcRequestOptions } from '../connection/rpc.mjs'
 import type {
   DirectoryView,
@@ -44,6 +45,7 @@ import {
 } from '../text/paths.mjs'
 import { lacksMethod } from './faults.mjs'
 import { resolveFileLink } from './file-links.mjs'
+import { createFileWatches } from './file-watches.mjs'
 
 export interface FilesHost {
   previewSupported?(): boolean
@@ -66,6 +68,8 @@ export interface FilesHost {
 }
 
 export interface Files {
+  watch(root: string, path: string, directory: boolean, sink: HostSink): () => void
+  notification(method: string, params: unknown): boolean
   resolve(
     root: string,
     ref: FileRef,
@@ -133,8 +137,18 @@ export function createFiles(host: FilesHost): Files {
   /** 真的向对面要过几次。这次运行里一直累计，重连也不清 */
   const asked = { lists: new Map<string, number>(), reads: new Map<string, number>() }
 
+  const versions = new Map<string, object>()
+  const watches = createFileWatches(host, (path) => {
+    cache.delete(path)
+    listing.delete(path)
+    reading.delete(path)
+    // 旧请求回来不能把失效的目录重新写回缓存。
+    versions.delete(path)
+  })
+
   const forget = () => {
     epoch++
+    versions.clear()
     cache.clear()
     listing.clear()
     reading.clear()
@@ -235,14 +249,18 @@ export function createFiles(host: FilesHost): Files {
 
   const fetchDirectory = async (path: string): Promise<DirectoryView> => {
     const mine = epoch
+    const version = {}
+    versions.set(path, version)
     tally(asked.lists, path)
     try {
       const { entries } = await host.request('fs/readDirectory', { path })
       const view = await resolveLinks(projectDirectory(path, Array.isArray(entries) ? entries : []))
-      if (mine === epoch) remember(path, view)
+      if (mine === epoch && versions.get(path) === version) remember(path, view)
       return view
     } catch (error) {
       throw failed(error, 'fs')
+    } finally {
+      if (versions.get(path) === version) versions.delete(path)
     }
   }
 
@@ -315,6 +333,10 @@ export function createFiles(host: FilesHost): Files {
   }
 
   const files: Files = {
+    watch(root, path, directory, sink) {
+      return watches.open(locate(root, path).path, directory, sink)
+    },
+    notification: watches.notification,
     resolve(root, ref, href, signal) {
       if (!host.online())
         return Promise.resolve({
@@ -466,9 +488,11 @@ export function createFiles(host: FilesHost): Files {
       forget()
       lacks.fs = false
       lacks.search = false
+      watches.resync()
     },
 
     offline() {
+      watches.offline()
       forget()
     },
   }

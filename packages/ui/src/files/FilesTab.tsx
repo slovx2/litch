@@ -27,6 +27,7 @@ import { useKey, useServices } from '../app/services.tsx'
 import type { SideTabProps } from '../side/tabs.ts'
 import { FILE_ACTIONS, type FileAction, type FileSubject, runFileAction } from './actions.ts'
 import { ContextMenu } from './ContextMenu.tsx'
+import { FileWatching } from './content.ts'
 import { resultId, SearchResults, useFileSearch } from './FileSearch.tsx'
 import { FileTree, type RowContext } from './FileTree.tsx'
 import { FileViewer } from './FileViewer.tsx'
@@ -48,7 +49,7 @@ interface Menu {
   y: number
 }
 
-function Files({ deviceId, root }: { deviceId: string; root: string }) {
+function Files({ deviceId, root, shown }: { deviceId: string; root: string; shown: boolean }) {
   const { replica, channel } = useServices()
   const t = useT()
   const uiKey = treeKey(deviceId, root)
@@ -74,7 +75,10 @@ function Files({ deviceId, root }: { deviceId: string; root: string }) {
   const menuFrom = useRef<HTMLElement | null>(null)
 
   // 开始看这棵树：没取过根就去取，取过的重新对一遍
-  useEffect(() => replica.files.open(deviceId, root), [replica, deviceId, root])
+  useEffect(
+    () => (shown ? replica.files.open(deviceId, root) : undefined),
+    [replica, deviceId, root, shown],
+  )
 
   // 给验收留的口子，界面自己不用：在这个元素上发一个 litch:files-check 事件，就把核心记的
   // “每个目录、每个文件各向设备问过几次”写到 data-check 上（量“每层只请求一次”）。
@@ -283,7 +287,7 @@ function Files({ deviceId, root }: { deviceId: string; root: string }) {
   )
 }
 
-export function FilesTab({ place }: SideTabProps) {
+export function FilesTab({ place, shown }: SideTabProps) {
   const t = useT()
   const roots = useMemo(() => place.roots.map(normalizePath), [place.roots])
   const root = usePickedRoot(place.deviceId, place.workspaceId, roots)
@@ -307,7 +311,14 @@ export function FilesTab({ place }: SideTabProps) {
         </div>
       ) : null}
       {/* 换一棵树就整个换掉：搜索框里的字、菜单这些不跟过去；各棵树自己的状态记在别处（state.ts），回来还在 */}
-      <Files key={treeKey(place.deviceId, root)} deviceId={place.deviceId} root={root} />
+      <FileWatching.Provider value={shown}>
+        <Files
+          key={treeKey(place.deviceId, root)}
+          deviceId={place.deviceId}
+          root={root}
+          shown={shown}
+        />
+      </FileWatching.Provider>
     </>
   )
 }

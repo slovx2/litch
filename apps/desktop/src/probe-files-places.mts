@@ -58,6 +58,13 @@ export async function mockPlaces(titles: {
       `面板跟到了 ${device}`,
       () => kit.side()?.dataset.device === device && kit.files()?.dataset.device === device,
     )
+    // 连续切会话不能撞上侧栏开关的 150ms 双入口去重。
+    await kit.sleep(180)
+    // 隐藏的文件面板不再请求或监视目录；验收前显式打开。
+    if (!kit.sideOpen()) {
+      kit.toggle()
+      await until('面板打开', () => kit.sideOpen())
+    }
     await until('树有了结果', () => kit.rows().length > 0 || one('.ft-hold'), 30_000)
     await frame()
   }

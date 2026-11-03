@@ -1963,6 +1963,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       // 账号额度变了
       if (accountLimits.notification(method, params)) return
       // 差异面板在设备上跑的命令结束了、它盯着的路径变了：先认它自己起的那些，剩下的进程通知才是终端的
+      if (files.notification(method, params)) return
       if (diffs.notification(method, params)) return
       // litch_machine 起的进程（执行器的、现查设备情况的）也不是终端的
       if (machineExec.notification(method, params)) return

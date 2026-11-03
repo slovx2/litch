@@ -3683,6 +3683,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         sink.snapshot(mockAccountLimits(topic.deviceId, topic.harness, clock.now()))
         return () => {}
       }
+      if (topic.kind === 'fileChanges') {
+        sink.snapshot({ revision: 0 })
+        return () => {}
+      }
       const key = topicKey(topic)
       if (topic.kind === 'app') {
         sink.snapshot(app)

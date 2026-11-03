@@ -156,6 +156,7 @@ import type { SkippingOutput } from '../text/output-cap.mjs'
 // ---------- 主题 ----------
 
 export type Topic =
+  | { kind: 'fileChanges'; deviceId: string; root: string; path: string; directory?: boolean }
   | { kind: 'automationPreview'; deviceId: string; sessionId: string; observeOnly?: boolean }
   | { kind: 'app' }
   | { kind: 'sidebar'; deviceId: string }
@@ -243,6 +244,7 @@ export type Topic =
 export type TopicKind = Topic['kind']
 
 export interface TopicData {
+  fileChanges: { revision: number }
   automationPreview: AutomationPreviewView | null
   app: AppView
   sidebar: SidebarView
@@ -382,6 +384,7 @@ export type AccountLimitsOp = { op: 'limits.set'; view: AccountLimitsView }
 export type WorktreesOp = { op: 'worktrees.set'; view: WorktreesTopicView }
 
 export interface TopicOp {
+  fileChanges: never
   automationPreview: never
   app: AppOp
   sidebar: SidebarOp

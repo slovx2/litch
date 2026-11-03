@@ -1,4 +1,9 @@
-import { baseName, PREVIEW_LIMIT, type FilePreview as PreviewResult } from '@litch/core'
+import {
+  baseName,
+  observeFileChanges,
+  PREVIEW_LIMIT,
+  type FilePreview as PreviewResult,
+} from '@litch/core'
 import { useIsFocused } from '@react-navigation/native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
@@ -46,8 +51,8 @@ export function FilePreview({
     let live = true
     const abort = new AbortController()
     setLoaded({ kind: 'loading' })
-    if (focused)
-      void channel
+    const read = () =>
+      channel
         .command('files.preview', { deviceId, root, path, format }, { signal: abort.signal })
         .then(
           (result) => {
@@ -59,7 +64,11 @@ export function FilePreview({
             if (live) setLoaded({ kind: 'failed', reason: 'failed' })
           },
         )
+    const close = focused
+      ? observeFileChanges(channel, { deviceId, root, path }, read, true)
+      : () => {}
     return () => {
+      close()
       live = false
       abort.abort()
     }

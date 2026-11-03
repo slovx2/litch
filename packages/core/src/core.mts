@@ -1686,6 +1686,8 @@ export function createCore(options: CoreOptions): Core {
       // litch config 要界面做的事、确认卡
       if (topic.kind === 'config') return configBridge.subscribe(sink)
       const device = deviceOf(topic.deviceId)
+      if (topic.kind === 'fileChanges')
+        return device.files.watch(topic.root, topic.path, topic.directory === true, sink)
       if (topic.kind === 'sidebar') {
         sink.snapshot(device.sidebar)
         const set = sidebarSinks.get(topic.deviceId) ?? new Set<HostSink>()

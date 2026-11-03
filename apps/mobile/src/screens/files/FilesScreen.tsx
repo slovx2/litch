@@ -11,10 +11,12 @@ import {
   type FileLinkTarget,
   keys,
   normalizePath,
+  observeFileChanges,
   pathTwin,
   relativeTo,
   unrecognizedFileLink,
 } from '@litch/core'
+import { useIsFocused } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useEffect, useState } from 'react'
 import { ScrollView } from 'react-native'
@@ -51,6 +53,7 @@ export function FilesScreen({ navigation, route }: Props) {
   const device = useKey<DeviceView>(keys.device(deviceId))
   const t = useT()
   const channel = useChannel()
+  const focused = useIsFocused()
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' })
   const { files } = useReplica()
   const showHidden = useKey<boolean>(keys.filesShowHidden) ?? false
@@ -65,7 +68,10 @@ export function FilesScreen({ navigation, route }: Props) {
   // attempt 变了就是点了“重试”
   // biome-ignore lint/correctness/useExhaustiveDependencies: 见上
   useEffect(() => {
+    if (!focused) return
     let live = true
+    let generation = 0
+    let close = () => {}
     setLoaded({ kind: 'loading' })
     const failed = (error: unknown) => {
       if (live) setLoaded({ kind: 'failed', reason: reasonOf(error, t) })
@@ -90,17 +96,27 @@ export function FilesScreen({ navigation, route }: Props) {
           else setLoaded({ kind: 'link', result })
         }, failed)
     } else if (path === root) void asDir()
-    else
-      channel.command('files.read', { deviceId, root, path }).then((content) => {
-        if (!live) return
-        if (content.kind === 'directory') void asDir()
-        else setLoaded({ kind: 'file', content })
-      }, failed)
+    else {
+      const read = async () => {
+        const mine = ++generation
+        try {
+          const content = await channel.command('files.read', { deviceId, root, path })
+          if (!live || mine !== generation) return
+          if (content.kind === 'directory') void asDir()
+          else setLoaded({ kind: 'file', content })
+        } catch (error) {
+          if (mine === generation) failed(error)
+        }
+      }
+      close = observeFileChanges(channel, { deviceId, root, path }, read, true)
+    }
     return () => {
       live = false
+      close()
     }
   }, [
     channel,
+    focused,
     deviceId,
     root,
     path,

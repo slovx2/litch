@@ -331,6 +331,7 @@ explain it:
   staged / unstaged, stage, unstage, discard, comment on lines; comments go with the next message),
   Browser, Suggested tasks, Background tasks, Goal, Side chat.
   从回答里的文件改动点“在差异里看”可定位该文件；连续打开不同文件时，会分别确认各自的最新改动。
+- **文件自动刷新**：桌面和手机打开文件页时，展开目录中的新增、删除和重命名自动更新，保留展开和选中状态。当前预览随文件改写重新读取；删除或重命名后原路径显示不存在。收起目录、关闭面板或离开手机文件页时停止相关监听；重新打开或重连后重新读取。批量变化会合并；设备不支持 `fs/watch` 时仍可手动刷新。
 - **File previews (desktop)**: the Files tab opens tree/search results and file links read-only.
   Markdown renders by default (Source is available; line-number links open source). Static images
   and SVG can zoom. PDF supports pages, scroll, zoom and text selection. CSV/TSV shows strings, never

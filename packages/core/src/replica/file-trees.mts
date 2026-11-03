@@ -5,6 +5,7 @@
 // 状态只在这次运行里：换会话、收起面板再回来，展开的样子还在。
 import type { CoreChannel } from '../channel/client.mjs'
 import { type ChannelErrorShape, toChannelError } from '../channel/protocol.mjs'
+import { observeFileChanges } from '../file-changes.mjs'
 import type { DirectoryView, FileTreeState } from '../model-files.mjs'
 import { flattenTree, type TreeListing } from '../projection/files.mjs'
 import { insideRoot, normalizePath, parentPath, relativeTo } from '../text/paths.mjs'
@@ -51,6 +52,7 @@ interface Tree {
   expanded: Set<string>
   /** 各层最近一次请求的代号：迟到的应答按它作废 */
   latest: Map<string, number>
+  watches: Map<string, () => void>
   watchers: number
   refreshing: number
   revealVersion: number
@@ -83,6 +85,7 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
         listings: new Map(),
         expanded: new Set(),
         latest: new Map(),
+        watches: new Map(),
         watchers: 0,
         refreshing: 0,
         revealVersion: 0,
@@ -118,6 +121,7 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
 
   /** 行变了：重新摊平一遍发出去，状态顺带对一下 */
   const publish = (tree: Tree) => {
+    syncWatches(tree)
     store.batch(() => {
       store.set(
         fileKeys.rows(tree.deviceId, tree.root),
@@ -152,6 +156,7 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
             view: same ? (before?.view ?? view) : view,
             error: null,
           })
+          syncWatches(tree)
           if (!same) publish(tree)
           return true
         },
@@ -188,6 +193,31 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
     return out
   }
 
+  const syncWatches = (tree: Tree) => {
+    const visible = new Set(tree.watchers > 0 ? visibleDirs(tree) : [])
+    for (const [path, close] of tree.watches) {
+      if (visible.has(path)) continue
+      close()
+      tree.watches.delete(path)
+    }
+    for (const path of visible) {
+      if (tree.watches.has(path)) continue
+      tree.watches.set(
+        path,
+        observeFileChanges(
+          channel,
+          {
+            deviceId: tree.deviceId,
+            root: tree.root,
+            path,
+            directory: true,
+          },
+          () => load(tree, path, true),
+        ),
+      )
+    }
+  }
+
   const reloadVisible = async (tree: Tree, fresh: boolean, from = tree.root): Promise<void> => {
     tree.refreshing++
     // 只是“正在刷新”变了，行没变：各层取到了不一样的内容，load 自己会发
@@ -211,6 +241,7 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
     open(deviceId, root) {
       const tree = treeOf(deviceId, root)
       tree.watchers++
+      syncWatches(tree)
       // 第一次看：只取根。再回来看：把展开着的各层对一遍（刚取过的核心会直接给缓存）
       if (tree.listings.has(tree.root)) void reloadVisible(tree, false)
       else void load(tree, tree.root, false)
@@ -219,6 +250,7 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
         if (closed) return
         closed = true
         tree.watchers--
+        syncWatches(tree)
       }
     },
 
@@ -303,7 +335,11 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
 
     drop(deviceId) {
       for (const [key, tree] of trees) {
-        if (tree.deviceId === deviceId) trees.delete(key)
+        if (tree.deviceId === deviceId) {
+          tree.watchers = 0
+          syncWatches(tree)
+          trees.delete(key)
+        }
       }
       store.deletePrefix(`files:${deviceId}:`)
     },

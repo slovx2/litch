@@ -1,8 +1,12 @@
 // 读一个文件的内容。读过的留一小会儿：在几个开着的文件之间来回切，先照上次读到的显示，同时重新去读一遍
 // ——文件是对面的引擎随时在改的，留着的那一份只用来垫一下，不当真。
-import type { ChannelErrorShape, FileContent } from '@litch/core'
-import { useEffect, useState } from 'react'
+import { type ChannelErrorShape, type FileContent, observeFileChanges } from '@litch/core'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { useServices } from '../app/services.tsx'
+
+/** 面板隐藏时保留界面状态，暂停读取和监视。 */
+export const FileWatching = createContext(true)
+export const useFileWatching = () => useContext(FileWatching)
 
 export type Loaded =
   /** content：上次读到的那一份（有就先照着显示） */
@@ -41,6 +45,7 @@ export function useFileContent(
   nonce: number,
 ): Loaded {
   const { channel } = useServices()
+  const watching = useFileWatching()
   const id = `${deviceId}\n${path}`
   const [loaded, setLoaded] = useState<Loaded>(() => ({
     state: 'loading',
@@ -49,24 +54,34 @@ export function useFileContent(
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: nonce 变了就是要重新读
   useEffect(() => {
+    if (!watching) return
     const before = kept.get(id) ?? null
     setLoaded({ state: 'loading', content: before })
     const abort = new AbortController()
-    channel.command('files.read', { deviceId, root, path }, { signal: abort.signal }).then(
-      (content) => {
-        if (abort.signal.aborted) return
-        const next = before && sameContent(before, content) ? before : content
-        keep(id, next)
-        setLoaded({ state: 'ready', content: next })
-      },
-      (error: ChannelErrorShape) => {
-        if (abort.signal.aborted || error.code === 'cancelled') return
-        kept.delete(id)
-        setLoaded({ state: 'failed', error, content: null })
-      },
-    )
-    return () => abort.abort()
-  }, [channel, deviceId, root, path, id, nonce])
+    let generation = 0
+    const read = () => {
+      const mine = ++generation
+      return channel.command('files.read', { deviceId, root, path }, { signal: abort.signal }).then(
+        (content) => {
+          if (abort.signal.aborted || mine !== generation) return
+          const previous = kept.get(id)
+          const next = previous && sameContent(previous, content) ? previous : content
+          keep(id, next)
+          setLoaded({ state: 'ready', content: next })
+        },
+        (error: ChannelErrorShape) => {
+          if (abort.signal.aborted || mine !== generation || error.code === 'cancelled') return
+          kept.delete(id)
+          setLoaded({ state: 'failed', error, content: null })
+        },
+      )
+    }
+    const close = observeFileChanges(channel, { deviceId, root, path }, read, true)
+    return () => {
+      close()
+      abort.abort()
+    }
+  }, [channel, deviceId, root, path, id, nonce, watching])
 
   return loaded
 }

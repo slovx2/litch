@@ -1,5 +1,6 @@
 // 手机文件树复用核心副本。目录链接只展开通向目标的分支，其他分支收起。
 import { type FileRow, keys } from '@litch/core'
+import { useIsFocused } from '@react-navigation/native'
 import * as Clipboard from 'expo-clipboard'
 import { useEffect, useRef, useState } from 'react'
 import { FlatList, Pressable, Text } from 'react-native'
@@ -24,13 +25,17 @@ export function FileTreeView({
   onOpen(path: string): void
 }) {
   const { files } = useReplica()
+  const focused = useIsFocused()
   const rows = useKey<FileRow[]>(keys.fileRows(deviceId, root)) ?? EMPTY
   const theme = useTheme()
   const t = useT()
   const list = useRef<FlatList<FileRow>>(null)
   const seek = useRef(path)
   const [refreshing, setRefreshing] = useState(false)
-  useEffect(() => files.open(deviceId, root), [files, deviceId, root])
+  useEffect(
+    () => (focused ? files.open(deviceId, root) : undefined),
+    [files, focused, deviceId, root],
+  )
   useEffect(() => {
     files.setShowHidden(showHidden)
   }, [files, showHidden])

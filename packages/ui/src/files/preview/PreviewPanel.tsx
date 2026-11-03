@@ -2,6 +2,7 @@ import {
   decodeBase64,
   type FilePreview,
   languageOf,
+  observeFileChanges,
   type PreviewKind,
   relativeTo,
 } from '@litch/core'
@@ -12,6 +13,7 @@ import { Icon } from '../../app/icons.tsx'
 import { useServices } from '../../app/services.tsx'
 import { type FileAction, runFileAction } from '../actions.ts'
 import { CodeView } from '../CodeView.tsx'
+import { useFileWatching } from '../content.ts'
 import { byteSize, splitLines } from '../lines.ts'
 import { type OpenFile, openFile, retargetFile, setFileMode } from '../state.ts'
 import type { PreviewScope } from './contract.ts'
@@ -49,6 +51,7 @@ export function PreviewPanel({
 }) {
   const t = useT()
   const { channel } = useServices()
+  const watching = useFileWatching()
   const [refresh, setRefresh] = useState(0)
   const [error, setError] = useState('')
   const text = ['markdown', 'svg', 'html', 'csv'].includes(format)
@@ -63,15 +66,6 @@ export function PreviewPanel({
     [deviceId, root, tab.path],
   )
   const [resources, setResources] = useState<PreviewResources | null>(null)
-  // effect 中创建：StrictMode 的卸载/重挂不能复用已取消的资源。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refresh 与 scope 明确开始新一代
-  useEffect(() => {
-    const value = new PreviewResources((where, kind, signal) =>
-      channel.command('files.preview', { ...where, format: kind }, { signal }),
-    )
-    setResources(value)
-    return () => value.dispose()
-  }, [channel, scope, refresh])
   const Renderer = useMemo(() => {
     const loader = rendererFor(format)
     if (!loader) throw new Error('没有注册此文件渲染器')
@@ -84,13 +78,23 @@ export function PreviewPanel({
         : '',
     [content, source],
   )
+  // 每次变化创建独立资源预算；读取串行合并，慢连接不会被连续变更反复取消。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refresh 是手动重读
   useEffect(() => {
-    if (!resources) return
+    if (!watching) return
     let alive = true
+    let current: PreviewResources | null = null
+    let pending: PreviewResources | null = null
+    let previous: FilePreview | null = null
     setLoaded(null)
     setError('')
-    resources.load(scope, reading).then(
-      (result) => {
+    const read = async () => {
+      const next = new PreviewResources((where, kind, signal) =>
+        channel.command('files.preview', { ...where, format: kind }, { signal }),
+      )
+      pending = next
+      try {
+        const result = await next.load(scope, reading)
         if (!alive) return
         if (result.kind === 'unsupported') {
           onUnsupported()
@@ -100,16 +104,33 @@ export function PreviewPanel({
           retargetFile(uiKey, tab.path, tab.alt)
           return
         }
+        setError('')
+        if (
+          result.kind === 'ready' &&
+          previous?.kind === 'ready' &&
+          result.dataBase64 === previous.dataBase64
+        )
+          return
+        previous = result
+        current?.dispose()
+        current = next
+        setResources(next)
         setLoaded({ reading, value: result })
-      },
-      (reason) => {
-        if (alive && !resources.abort.signal.aborted) setError(whyNot(reason, t))
-      },
-    )
+      } catch (reason) {
+        if (alive && !next.abort.signal.aborted) setError(whyNot(reason, t))
+      } finally {
+        if (current !== next) next.dispose()
+        pending = null
+      }
+    }
+    const close = observeFileChanges(channel, scope, read, true)
     return () => {
       alive = false
+      close()
+      pending?.dispose()
+      current?.dispose()
     }
-  }, [scope, resources, reading, tab.alt, tab.path, uiKey, t, onUnsupported])
+  }, [channel, scope, reading, refresh, tab.alt, tab.path, uiKey, t, onUnsupported, watching])
   const reload = () => setRefresh((n) => n + 1)
   const act = (action: FileAction) =>
     runFileAction(action, { path: tab.path, relative: relativeTo(root, tab.path), line: tab.line })

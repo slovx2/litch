@@ -220,6 +220,7 @@ export {
   type ViewStore,
 } from './device/view-store.mjs'
 export { projectWorkspaces, resolveWorkspace } from './device/workspaces.mjs'
+export { observeFileChanges } from './file-changes.mjs'
 export { createMockCore, type MockCore, type MockCoreOptions } from './mock/mock-core.mjs'
 export type { SampleLang } from './mock/sample-text.mjs'
 export type * from './model.mjs'
