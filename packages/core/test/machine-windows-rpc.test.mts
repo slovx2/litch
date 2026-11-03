@@ -145,12 +145,12 @@ test('Windows 正式执行链：读写复制、范围、中文、停止及全部
     assert.match(await call('read_file', { path }), /第一行\r\n第二行😀\n追加/)
     assert.ok(asks.some((ask) => ask.ask.path?.includes("a'文件.txt")))
     assert.match(await call('list_dir', { path: root }), /中文 空格/)
-    assert.match(
-      await call('exec', {
-        command: "Write-Output '中文输出😀'; [Console]::Error.WriteLine('错误输出')",
-      }),
-      /中文输出😀/,
-    )
+    const commandOutput = await call('exec', {
+      command: "Write-Output '中文输出😀'; [Console]::Error.WriteLine('错误输出')",
+    })
+    assert.match(commandOutput, /中文输出😀/)
+    assert.match(commandOutput, /错误输出/)
+    assert.doesNotMatch(commandOutput, /CLIXML|<Objs|litch-pid|�/)
     const secret = join(root, '.ssh', 'key')
     mkdirSync(join(root, '.ssh'))
     writeFileSync(secret, 'secret')
@@ -159,6 +159,26 @@ test('Windows 正式执行链：读写复制、范围、中文、停止及全部
     assert.match(await call('read_file', { path }, false), /\[litch:blocked\]/)
     context.policy = { mode: 'open', denied: [] }
     assert.match(await call('read_file', { path: secret }), /secret/)
+    // 目录根可写，但复制不能覆盖其中的自定义禁止子目录。
+    const tree = join(root, 'source-tree')
+    const targetDir = join(root, 'target-tree')
+    mkdirSync(join(tree, 'private'), { recursive: true })
+    mkdirSync(targetDir)
+    writeFileSync(join(tree, 'private/key'), 'blocked')
+    writeFileSync(join(tree, 'ok'), 'allowed')
+    context.policy = { mode: 'custom', denied: [join(targetDir, 'source-tree/private')] }
+    assert.match(
+      await call('copy', {
+        from: { machine: 'session', path: tree },
+        to: { machine: 'desktop', path: targetDir },
+      }),
+      /blocked locations/,
+    )
+    assert.equal(readFileSync(join(targetDir, 'source-tree/ok'), 'utf8'), 'allowed')
+    assert.throws(() => readFileSync(join(targetDir, 'source-tree/private/key')), {
+      code: 'ENOENT',
+    })
+    context.policy = { mode: 'open', denied: [] }
     const big = Buffer.alloc(4 * 1024 * 1024 + 19)
     for (let at = 0; at < big.length; at++) big[at] = at % 251
     const source = join(root, 'binary.bin')

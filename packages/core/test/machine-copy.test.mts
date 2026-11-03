@@ -21,6 +21,25 @@ function world(denied: string[] = []) {
 
 const from = (machine: string, path: string) => ({ machine, path })
 
+test('copy：允许写目标根时仍拦住其中的禁止子目录', async () => {
+  const { desktop, session, executor, context } = world(['~/target/pkg/private'])
+  session.fs.file('/home/song/pkg/private/key', 'should not copy')
+  session.fs.file('/home/song/pkg/ok', 'allowed')
+  desktop.fs.mkdirp('/Users/song/target')
+  const response = await executor.call(
+    'copy',
+    {
+      from: from('session', '~/pkg'),
+      to: from('desktop', '~/target'),
+    },
+    context,
+  )
+  assert.equal(response.success, true, textOf(response))
+  assert.match(textOf(response), /blocked locations/)
+  assert.equal(desktop.fs.resolve('/Users/song/target/pkg/private').node, undefined)
+  assert.equal(desktop.fs.text('/Users/song/target/pkg/ok'), 'allowed')
+})
+
 test('copy：会话那台到桌面端的一个文件，审批按 mutate，卡片写两头的机器名', async () => {
   const { desktop, session, executor, context, asks, logs } = world()
   session.fs.file('/home/song/out/app.tar', 'build output')

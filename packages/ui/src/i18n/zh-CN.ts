@@ -1624,7 +1624,7 @@ export const zhCN = {
   'machine.access.removeOne': '移除 {path}',
   'machine.access.add': '添加',
   'machine.access.addLabel': '添加禁止的位置',
-  'machine.access.placeholder': '~/路径 或 /完整路径',
+  'machine.access.placeholder': '~/路径、C:/路径 或 /完整路径',
   'machine.access.dup': '已在列表中',
   'machine.access.empty': '请先输入路径',
   'machine.log': '最近操作',

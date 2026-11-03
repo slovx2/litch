@@ -23,7 +23,9 @@ export function powershellCommand(script: string): string[] {
 
 const literal = (value: string): string => `'${value.replace(/'/g, "''")}'`
 const array = (values: readonly string[]): string => `@(${values.map(literal).join(',')})`
-const UTF8 = `$utf8 = New-Object System.Text.UTF8Encoding $false
+// 首次加载模块会把进度序列化成 CLIXML 写到 stderr，必须在 New-Object 之前关闭进度。
+const UTF8 = `$ProgressPreference = 'SilentlyContinue'
+$utf8 = New-Object System.Text.UTF8Encoding $false
 [Console]::InputEncoding = $utf8
 [Console]::OutputEncoding = $utf8
 $OutputEncoding = $utf8`

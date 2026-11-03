@@ -15,11 +15,7 @@ function pathParam(params: Record<string, unknown>, key = 'path'): string {
 }
 
 export function decodeBase64(value: unknown): Buffer {
-  if (
-    typeof value !== 'string' ||
-    value.length % 4 !== 0 ||
-    !/^[A-Za-z0-9+/]*={0,2}$/.test(value)
-  )
+  if (typeof value !== 'string' || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value))
     throw new ProtocolError(-32602, 'dataBase64 必须是有效的 base64')
   return Buffer.from(value, 'base64')
 }

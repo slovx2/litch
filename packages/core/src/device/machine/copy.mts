@@ -305,6 +305,23 @@ async function treePlan(kit: ToolKit, source: End, dest: End): Promise<Plan> {
       plan.blocked.push(entry.rel)
       continue
     }
+    // 目录的根允许写，不代表每个子路径都允许写；也要解开目标的短文件名等别名。
+    // 链接仍由下面的 throughLink 统一跳过；已拦住的子树不再逐项起探测进程。
+    if (
+      dest.target.role === 'desktop' &&
+      dest.looked.rules.length &&
+      entry.type !== 'l' &&
+      !throughLink(entry.rel)
+    ) {
+      const belowBlocked = plan.blocked.some((rel) => entry.rel.startsWith(`${rel}/`))
+      const targetPath = belowBlocked
+        ? null
+        : await lookPath(kit, dest.target, dest.facts, `${dest.looked.path}/${entry.rel}`)
+      if (belowBlocked || targetPath?.blocked) {
+        plan.blocked.push(entry.rel)
+        continue
+      }
+    }
     if (entry.type === 'l') plan.links.push(entry.rel)
     else if (entry.type === 'o') plan.others.push(entry.rel)
     else if (entry.type === 'd') {

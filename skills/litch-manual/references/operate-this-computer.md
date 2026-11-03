@@ -52,6 +52,9 @@ is no "always allow". A card unanswered for 10 minutes counts as declined.
 File tools refuse blocked places outright. Commands cannot be fully checked: a command that mentions a
 blocked place shows a red card even if the session was already allowed.
 
+Copying a folder also checks its destination children: blocked subfolders and files are skipped and
+reported, even when the destination root itself is allowed.
+
 ### Windows
 
 - Commands run in Windows PowerShell without a profile, with UTF-8 input/output. Use PowerShell

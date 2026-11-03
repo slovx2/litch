@@ -1693,7 +1693,7 @@ export const en: Record<MessageKey, Entry> = {
   'machine.access.removeOne': 'Remove {path}',
   'machine.access.add': 'Add',
   'machine.access.addLabel': 'Add a blocked place',
-  'machine.access.placeholder': '~/path or /full/path',
+  'machine.access.placeholder': '~/path, C:/path or /full/path',
   'machine.access.dup': 'Already in the list',
   'machine.access.empty': 'Type a path first',
   'machine.log': 'Recent activity',
