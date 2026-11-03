@@ -90,6 +90,7 @@ import {
   readImages,
 } from './images.ts'
 import { ProviderSwitchDialog } from './ProviderSwitchDialog.tsx'
+import type { ProjectPermissionController } from './project-permission.ts'
 import { switchedProvider } from './provider-switch.ts'
 import { SettingsBar, useComposeOptions } from './SettingsBar.tsx'
 import { useRunningSend } from './send-mode.ts'
@@ -100,6 +101,7 @@ import { useProviderSwitch } from './useProviderSwitch.ts'
 import { useSuggest } from './useSuggest.tsx'
 
 interface ComposerProps {
+  projectPermission?: ProjectPermissionController | undefined
   deviceId: string
   /** 已有的会话才给：评论的片能直接发出去、能定位原文 */
   sessionId?: string
@@ -922,6 +924,7 @@ export function Composer(props: ComposerProps) {
           />
           {props.lead}
           <SettingsBar
+            projectPermission={props.projectPermission}
             deviceId={deviceId}
             harness={props.harness}
             cwd={cwd}

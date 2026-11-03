@@ -241,7 +241,10 @@ export const zhCN = {
   'workspace.unpin': '取消置顶',
   'workspace.ungroup': '移出“{name}”',
   'permission.newOnly': '此权限只能在新建会话时选择',
-  'permission.project.unavailable': '此设备不支持保存访问权限，请升级设备服务后重试。',
+  'permission.project.unavailable':
+    '此设备无法记住访问权限，本次仍按所选权限新建。升级设备服务后可记住。',
+  'permission.project.saveFailed': '未能保存访问权限：{reason}。本次仍按所选权限新建。',
+  'permission.project.failedReason': '设备暂时无法处理访问权限设置',
   'permission.project.confirmFirst': '请在访问权限菜单中选择“完全访问”并确认，然后重新发送。',
   'permission.project.saving': '正在保存项目权限…',
   'permission.project.loading': '正在读取项目权限…',

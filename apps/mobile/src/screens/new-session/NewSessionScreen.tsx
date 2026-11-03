@@ -131,23 +131,20 @@ export function NewSessionScreen({ navigation, route }: Props) {
           ...Object.fromEntries(Object.entries(settled).filter(([, value]) => value !== null)),
         }
       : picks
+  if (shown.permission) sent.permission = shown.permission
 
   const missing = where.kind === 'workspace' && workspaces !== undefined && !workspace
-  const blocked =
-    project.loading || project.error
-      ? (project.error ??
-        t(project.loading ? 'permission.project.loading' : 'permission.project.unsupported'))
-      : !device
-        ? t('newSession.noDevice')
-        : device.connection === 'connecting' || device.connection === 'reconnecting'
-          ? t('newSession.deviceConnecting', { name: t.text(device.name) })
-          : device.connection !== 'online'
-            ? t('newSession.deviceOffline', { name: t.text(device.name) })
-            : !harness
-              ? t('newSession.noHarness')
-              : missing
-                ? t('newSession.workspaceGone')
-                : null
+  const blocked = !device
+    ? t('newSession.noDevice')
+    : device.connection === 'connecting' || device.connection === 'reconnecting'
+      ? t('newSession.deviceConnecting', { name: t.text(device.name) })
+      : device.connection !== 'online'
+        ? t('newSession.deviceOffline', { name: t.text(device.name) })
+        : !harness
+          ? t('newSession.noHarness')
+          : missing
+            ? t('newSession.workspaceGone')
+            : null
   const imagesOff =
     harness?.abilities?.images === false
       ? t('composer.image.harness')
@@ -163,7 +160,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
     if (intent.kind === 'refuse') throw new Error(t(intent.key))
     const goal = intent.kind === 'goal'
     const text = goal ? intent.objective : typed
-    await project.persist(sent.permission)
+    const permissionNotice = await project.persist(sent.permission)
     const { sessionId } = await channel.command('session.create', {
       deviceId,
       ...(harness ? { harness: harness.id } : {}),
@@ -197,7 +194,12 @@ export function NewSessionScreen({ navigation, route }: Props) {
     const title = text.split('\n')[0]?.slice(0, 80) || undefined
     // 建会话的时候又写了、没收的那些带进新会话的输入框，不自动发；新建页清空
     moveDraft(draftKey(deviceId, 'new'), draftKey(deviceId, sessionId))
-    navigation.replace('Detail', { deviceId, sessionId, ...(title ? { title } : {}) })
+    navigation.replace('Detail', {
+      deviceId,
+      sessionId,
+      ...(title ? { title } : {}),
+      ...(permissionNotice ? { permissionNotice } : {}),
+    })
     // 详情页接上了再放掉这一次
     setTimeout(() => releaseStore(store), 0)
   }
@@ -371,6 +373,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
                 </>
               }
               settings={{
+                projectPermission: project,
                 deviceId,
                 harness: harnessId,
                 cwd,

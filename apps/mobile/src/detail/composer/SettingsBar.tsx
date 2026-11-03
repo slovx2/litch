@@ -20,7 +20,7 @@ import { Confirm } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { effortTitle, permissionText } from './labels'
 import { type PickerOption, PickerSheet } from './PickerSheet'
-import { useProjectPermission } from './project-permission'
+import { type ProjectPermissionController, useProjectPermission } from './project-permission'
 
 type Open = 'model' | 'effort' | 'speed' | 'permission' | null
 
@@ -107,6 +107,7 @@ function PlanSwitch({ on, onPress }: { on: boolean; onPress(): void }) {
 }
 
 export interface SettingsProps {
+  projectPermission?: ProjectPermissionController | undefined
   deviceId?: string | undefined
   harness?: string | undefined
   cwd?: string | null | undefined
@@ -163,12 +164,20 @@ export function useComposeSettings(props: SettingsProps | null): ComposeSettings
     usage,
     fresh,
     onChange,
+    projectPermission,
   } = props ?? NO_SETTINGS
   const t = useT()
   const theme = useTheme()
-  const project = useProjectPermission(useServices(), deviceId, cwd, harness, options)
+  const ownProject = useProjectPermission(
+    useServices(),
+    projectPermission ? '' : deviceId,
+    cwd,
+    harness,
+    options,
+  )
+  const project = projectPermission ?? ownProject
   const applyPermission = (id: string) => {
-    void project.save(id, true).then((saved) => {
+    void project.save(id, true, !fresh).then((saved) => {
       if (saved) onChange({ permission: id })
     })
   }
@@ -216,10 +225,7 @@ export function useComposeSettings(props: SettingsProps | null): ComposeSettings
   }
   const permissionOptions: PickerOption[] = options.permissions.map((preset) => {
     const text = permissionText(t, preset)
-    const locked =
-      (!fresh && !preset.switchable && preset.id !== permission) ||
-      project.loading ||
-      project.saving
+    const locked = (!fresh && !preset.switchable && preset.id !== permission) || project.saving
     return {
       id: preset.id,
       title: text.title,
@@ -329,11 +335,7 @@ export function useComposeSettings(props: SettingsProps | null): ComposeSettings
         onPick={pickPermission}
         onClose={() => setOpen(null)}
       />
-      {project.error ? (
-        <Text accessibilityRole="alert" style={{ color: theme.c.ink }}>
-          {project.error}
-        </Text>
-      ) : null}
+      {project.notice ? <Text style={{ color: theme.c.ink }}>{project.notice}</Text> : null}
       <Confirm
         visible={asking !== null}
         title={t('permission.confirm.title', { name: asking?.title ?? '' })}

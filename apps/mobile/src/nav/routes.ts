@@ -32,7 +32,7 @@ export type RootStackParamList = {
    */
   NewSession: { deviceId: string; workspaceId?: string | null }
   /** 会话详情。title 是列表里那一行的标题，首帧就画出来（F1） */
-  Detail: { deviceId: string; sessionId: string; title?: string }
+  Detail: { deviceId: string; sessionId: string; title?: string; permissionNotice?: string }
   /**
    * 引擎自己派出的一个子代理（对话里子代理那一行点进来）：状态、类型、用时、任务、失败原因，下面是它的对话。
    * parentId 是派出它的会话，title 是那一行上的描述，首帧就画

@@ -241,7 +241,11 @@ export const en: Record<MessageKey, Entry> = {
   'workspace.ungroup': 'Remove from “{name}”',
   'permission.newOnly': 'Only available when starting a session',
   'permission.project.unavailable':
-    'This device cannot save access permissions. Update its device service and try again.',
+    'This device cannot remember access permissions. Your selected access still applies to this session. Update the device service to remember it.',
+  'permission.project.saveFailed':
+    'Could not save access permissions: {reason}. Your selected access still applies to this session.',
+  'permission.project.failedReason':
+    'The device cannot handle access permission settings right now',
   'permission.project.confirmFirst':
     'Select Full access in the permissions menu and confirm, then send again.',
   'permission.project.saving': 'Saving project permission…',

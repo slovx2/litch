@@ -12,6 +12,7 @@ import { useT } from '../app/appearance.ts'
 import { nameOf } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
+import { showToast } from '../app/toasts.tsx'
 import { EFFORT_TEXT } from '../composer/efforts.ts'
 import { useProjectPermission } from '../composer/project-permission.ts'
 import { SettingsBar, useComposeOptions, useNewSessionDefaults } from '../composer/SettingsBar.tsx'
@@ -158,14 +159,6 @@ export function ManagerForm({
       )
       return
     }
-    if (!manager && step !== 'basic' && (project.loading || project.error)) {
-      showError(
-        project.error ??
-          t(project.loading ? 'permission.project.loading' : 'permission.project.unsupported'),
-        project.error ? (project.errorField ?? 'cwd') : 'permission',
-      )
-      return
-    }
     if (step !== 'basic') {
       const harness = step === 'runtime' ? form.harness : (form.dispatch.harness ?? form.harness)
       if (!device?.harnesses.some((entry) => entry.id === harness && entry.state === 'ready')) {
@@ -222,7 +215,8 @@ export function ManagerForm({
         return
       }
       // 保留已发布的 template 字段以维持协议形状；界面固定发送 blank。
-      await project.persist(permission)
+      const notice = await project.persist(permission)
+      if (notice) showToast({ id: 'permission-memory', text: () => notice, lifeMs: 8000 })
       const result = await channel.command('managers.create', {
         deviceId,
         manager: { ...form, permission, template: 'blank', scope: '', cwd: cwd.trim() },
@@ -424,9 +418,9 @@ export function ManagerForm({
                     }}
                   />
                 </span>
-                {project.error ? (
-                  <span className="err" role="alert">
-                    {project.error}
+                {project.notice ? (
+                  <span className="form-note" role="status">
+                    {project.notice}
                   </span>
                 ) : project.loading ? (
                   <span className="form-note">{t('permission.project.loading')}</span>
@@ -472,6 +466,7 @@ export function ManagerForm({
               <div className="form-field" {...fieldProps('permission')}>
                 <span>{t('composer.permission')}</span>
                 <SettingsBar
+                  projectPermission={project}
                   deviceId={deviceId}
                   harness={form.harness}
                   cwd={cwd}
@@ -690,11 +685,7 @@ export function ManagerForm({
         <button
           type="submit"
           className="btn primary"
-          disabled={
-            busy ||
-            disabled ||
-            (!manager && step === 'dispatch' && (project.loading || optionsLoading))
-          }
+          disabled={busy || disabled || (!manager && step === 'dispatch' && optionsLoading)}
           title={
             disabled
               ? t('manager.offline')

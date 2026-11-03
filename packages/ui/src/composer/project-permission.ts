@@ -4,13 +4,13 @@ import {
   type ComposeOptions,
   type CoreChannel,
   keys,
+  type PermissionLevel,
   type ProjectPermissionView,
   permissionLevel,
   type Replica,
 } from '@litch/core'
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useT } from '../app/appearance.ts'
-import { reasonOf } from '../app/errors.ts'
 
 export function useProjectPermission(
   { channel, replica }: { channel: CoreChannel; replica: Replica },
@@ -37,42 +37,74 @@ export function useProjectPermission(
   )
   const [saving, setSaving] = useState(false)
   const [failure, setFailure] = useState<{ key: string; text: string } | null>(null)
+  // 表单内的选择优先于设备记忆；无法保存的确认只允许本次发送，不共享给下一张表单。
+  const [selection, setSelection] = useState<{ key: string; permission: PermissionLevel } | null>(
+    null,
+  )
+  const confirmedOnce = useRef<{ key: string; permission: PermissionLevel } | null>(null)
   useEffect(() => {
     if (deviceId && harness) return replica.openProjectPermission(deviceId, path, harness)
   }, [replica, deviceId, path, harness])
-  const persist = async (id: string | null | undefined, confirmed = false): Promise<void> => {
+  const persist = async (
+    id: string | null | undefined,
+    confirmed = false,
+    consume = true,
+  ): Promise<string | null> => {
     const permission = permissionLevel(id)
-    if (!permission || !deviceId || !harness) return
-    if (view?.available === false) throw new Error(t('permission.project.unavailable'))
+    if (!permission) return null
     const requiresConfirmation =
       options?.permissions.find((preset) => preset.id === permission)?.confirm ?? true
     confirmed = confirmed && requiresConfirmation
+    const once =
+      confirmedOnce.current?.key === key && confirmedOnce.current.permission === permission
     if (
       permission === ':danger-full-access' &&
       requiresConfirmation &&
       !confirmed &&
+      !once &&
       !view?.record?.confirmedPermissions.includes(permission)
     )
       throw new Error(t('permission.project.confirmFirst'))
-    await channel.command('projectPermission.set', {
-      deviceId,
-      cwd: path,
-      harness,
-      permission,
-      confirmed,
-    })
+    // 记忆是辅助功能；确认要求已满足后，持久化失败不能阻断按当前档位新建。
+    let notice: string | null = null
+    try {
+      if (!deviceId || !harness) return null
+      if (view?.available === false) notice = t('permission.project.unavailable')
+      else
+        await channel.command('projectPermission.set', {
+          deviceId,
+          cwd: path,
+          harness,
+          permission,
+          confirmed: requiresConfirmation && (confirmed || once),
+        })
+    } catch {
+      notice = t('permission.project.saveFailed', { reason: t('permission.project.failedReason') })
+    } finally {
+      if (consume && once) confirmedOnce.current = null
+    }
+    setFailure(notice ? { key, text: notice } : null)
+    return notice
   }
-  const save = async (id: string, confirmed: boolean): Promise<boolean> => {
+  const save = async (id: string, confirmed: boolean, consume = false): Promise<boolean> => {
     const permission = permissionLevel(id)
     if (!permission) return true
     if (saving) return false
     setSaving(true)
     setFailure(null)
     try {
-      await persist(id, confirmed)
+      await persist(id, confirmed, false)
+      setSelection({ key, permission })
+      if (
+        confirmed &&
+        (options?.permissions.find((preset) => preset.id === permission)?.confirm ?? true) &&
+        !consume
+      )
+        confirmedOnce.current = { key, permission }
+      else confirmedOnce.current = null
       return true
-    } catch (error) {
-      setFailure({ key, text: error instanceof Error ? error.message : String(error) })
+    } catch {
+      setFailure({ key, text: t('permission.project.confirmFirst') })
       return false
     } finally {
       setSaving(false)
@@ -80,14 +112,24 @@ export function useProjectPermission(
   }
   return {
     view,
-    permission: view?.record?.permission ?? null,
+    permission: selection?.key === key ? selection.permission : (view?.record?.permission ?? null),
     confirmed: (id: string) =>
-      view?.record?.confirmedPermissions.some((entry) => entry === id) === true,
+      view?.record?.confirmedPermissions.some((entry) => entry === id) === true ||
+      (confirmedOnce.current?.key === key && confirmedOnce.current.permission === id),
     loading: Boolean(deviceId && harness && !view && !readError),
     saving,
-    error: readError ? reasonOf(readError, t) : failure?.key === key ? failure.text : null,
+    notice:
+      failure?.key === key
+        ? failure.text
+        : view?.available === false
+          ? t('permission.project.unavailable')
+          : readError
+            ? t('permission.project.saveFailed', { reason: t('permission.project.failedReason') })
+            : null,
     errorField: readError?.key,
     save,
     persist,
   }
 }
+
+export type ProjectPermissionController = ReturnType<typeof useProjectPermission>

@@ -16,7 +16,7 @@ import { useKey, useServices } from '../app/services.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 import { EFFORT_TEXT } from './efforts.ts'
 import { Picker, type PickerOption } from './Picker.tsx'
-import { useProjectPermission } from './project-permission.ts'
+import { type ProjectPermissionController, useProjectPermission } from './project-permission.ts'
 
 /** 问过的记着，切会话时底栏不用等一下才出来。一台设备上每个 harness 各记各的 */
 const known = new Map<string, ComposeOptions>()
@@ -97,6 +97,7 @@ const PERMISSION_TEXT: Record<string, { title: MessageKey; note: MessageKey }> =
 }
 
 interface SettingsBarProps {
+  projectPermission?: ProjectPermissionController | undefined
   deviceId?: string | undefined
   harness?: string | undefined
   cwd?: string | null | undefined
@@ -119,8 +120,16 @@ export function SettingsBar({
   deviceId = '',
   harness = '',
   cwd,
+  projectPermission,
 }: SettingsBarProps) {
-  const project = useProjectPermission(useServices(), deviceId, cwd, harness, options)
+  const ownProject = useProjectPermission(
+    useServices(),
+    projectPermission ? '' : deviceId,
+    cwd,
+    harness,
+    options,
+  )
+  const project = projectPermission ?? ownProject
   const t = useT()
   if (!options) return null
   const model = options.models.find((entry) => entry.id === settings.model)
@@ -145,8 +154,7 @@ export function SettingsBar({
     const title = preset.title ? t.said(preset.title) : text ? t(text.title) : preset.id
     const note = preset.note ? t.said(preset.note) : text ? t(text.note) : null
     // 会话建好之后换不了的那一档：只在新建时选得了。会话正用着的那一档照常显示
-    const locked =
-      (!fresh && !preset.switchable && preset.id !== current) || project.loading || project.saving
+    const locked = (!fresh && !preset.switchable && preset.id !== current) || project.saving
     // 要不要先问一遍听声明的。内置的那一档问的话是界面自己的；声明的预设拿它自己的说明来问
     const asked = preset.title ? (note ?? t('permission.confirm.declared')) : null
     return {
@@ -244,13 +252,13 @@ export function SettingsBar({
           }
           options={options.permissions.map(permission)}
           onPick={(id) => {
-            void project.save(id, true).then((saved) => {
+            void project.save(id, true, !fresh).then((saved) => {
               if (saved) onChange({ permission: id })
             })
           }}
         />
       ) : null}
-      {project.error ? <span role="alert">{project.error}</span> : null}
+      {project.notice ? <span role="status">{project.notice}</span> : null}
       {options.plan ? (
         // 计划模式：一个开关。开着的时候下一条消息先出计划，确认了再动手。
         // 画成带拨块的开关，关着的时候也一直在：光看底栏上有“计划”两个字分不出开没开（别的产品里出现计划标识就是开着）

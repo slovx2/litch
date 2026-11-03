@@ -19,6 +19,7 @@ import { requestAssistant, requestDevice } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { nameOf, nextStep, wireStyle } from '../app/device.ts'
 import { useKey, useServices } from '../app/services.tsx'
+import { showToast } from '../app/toasts.tsx'
 import { useAssistant, warmManualDir } from '../assist/useAssistant.ts'
 import { FailureNote, shownState, useReconnect } from '../devices/status.tsx'
 import { parseGoalCommand } from '../goal/logic.ts'
@@ -346,7 +347,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
   const defaults = useNewSessionDefaults(deviceId, harness?.id, cwd)
   // 还在问的时候底栏先不出选择器：先按清单猜一个、问回来再换掉的话，底栏会跳一下，
   // 正点开的选项（比如那个模型才有的强度）会在手底下没了
-  const holding = defaults === undefined || project.loading
+  const holding = defaults === undefined
 
   const mine = chosen.harness === harnessId ? chosen.picks : {}
   const own = options ? fitPicks(mine, options) : mine
@@ -374,6 +375,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
           ...Object.fromEntries(Object.entries(settled).filter(([, value]) => value !== null)),
         }
       : picks
+  if (shown.permission) sent.permission = shown.permission
   // 指着的工作区不在这台设备的表里（被删了）：不能悄悄建成不属于工作区的会话
   const missing = workspaceId !== null && !workspace
 
@@ -383,8 +385,6 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
     extras: MessageExtra[],
     submittedText: string,
   ) => {
-    if (project.loading || project.error)
-      throw new Error(project.error ?? t('permission.project.unsupported'))
     // 第一句是 /goal 加上目标（harness 会持续目标时）：建好会话就设目标，不发消息，它空闲时自己开始做
     const goal = harness?.abilities?.goals === true ? parseGoalCommand(text) : null
     if (goal && !goal.objective) throw new Error(t('goal.needText'))
@@ -394,7 +394,8 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
       localUserMessage('pending', { text, images, extras }, harness?.abilities?.mentions === true),
     )
     try {
-      await project.persist(sent.permission)
+      const notice = await project.persist(sent.permission)
+      if (notice) showToast({ id: 'permission-memory', text: () => notice, lifeMs: 8000 })
       const { sessionId } = await channel.command('session.create', {
         deviceId,
         ...(harness ? { harness: harness.id } : {}),
@@ -550,22 +551,16 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
       <div className="dock-wrap">
         <div className="dock" style={wireStyle(device?.wire)}>
           <div className="dock-in">
-            {project.error ? (
-              <p role="alert">{project.error ?? t('permission.project.unsupported')}</p>
-            ) : null}
             {permissionFallback ? <p role="status">{t('permission.project.fallback')}</p> : null}
             <Composer
+              projectPermission={project}
               deviceId={deviceId}
               harness={harness?.id}
               // 整个新建对话页只有一份草稿：在页上换设备、换工作区，写了一半的字不动
               draftKey="new"
               cwd={cwd}
               placeholder={t('newSession.placeholder')}
-              blocked={
-                blocked ??
-                project.error ??
-                (project.loading ? t('permission.project.loading') : null)
-              }
+              blocked={blocked}
               fresh
               lead={choice}
               // 发出去之后不再让换去处，这一排收起来：输入区的高度和会话里的一样，建好切过去时不跳

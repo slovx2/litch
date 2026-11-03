@@ -5,7 +5,7 @@
 //   - desktop：什么都没声明（当作官方桌面端），恢复同一个会话、发起回合。
 // 模型调 litch_echo 时 codex 把调用发给两条连接，设备进程只转给 litch；litch 答的文字和图片交到模型手里。
 // 然后 litch 断开，desktop 再发起一个要调工具的回合：设备进程当场替它回 noExecutor，回合照常结束。
-// CI 上没有 codex，自动化测试用的是假的 codex（packages/device/test/client-tools.test.mts）；这一条在本机跑。
+// CI 与本机都用隔离的真实 codex CLI；设备路由单测另用假的 codex（packages/device/test/client-tools.test.mts）。
 //
 // 用法：node scripts/check-client-tools-codex.mjs（先 npm run build --prefix packages/device；需要本机有 go）
 //   CHA_CODEX_CLI 指定用哪一份 codex；没给时用 PATH 里的，PATH 里也没有就说明原因后跳过（退出码 0）。
@@ -283,6 +283,10 @@ async function main() {
     edits: [
       { key: 'harness.codex.enabled', value: true },
       { key: 'harness.codex.cliPath', value: codex },
+      // 工具按会话所在设备的开关注入；这里验证全部定义，三项都明确开启，不依赖默认值。
+      { key: 'tools.browser', value: true },
+      { key: 'tools.computer', value: true },
+      { key: 'tools.machine', value: true },
       { key: 'sessions.wrapUpReminder', value: false },
     ],
   })

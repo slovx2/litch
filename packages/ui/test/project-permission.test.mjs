@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { build } from '../../../node_modules/esbuild/lib/main.js'
 
 for (const platform of ['desktop', 'mobile']) {
-  test(`${platform}：同 harness 记住、不同 harness 隔离，免确认与需确认声明分别生效；失败明确返回错误`, async () => {
+  test(`${platform}：同 harness 记住、不同 harness 隔离，免确认与需确认声明分别生效；保存失败不阻断且确认只对本次有效`, async () => {
     let states = []
     let cursor = 0
     const opened = []
@@ -37,7 +37,7 @@ for (const platform of ['desktop', 'mobile']) {
           setup(api) {
             const sources = {
               react: `export const useState=x=>globalThis.__permissionHooks.useState(x);
-            export const useCallback=x=>x; export const useEffect=f=>f();
+            export const useRef=x=>globalThis.__permissionHooks.useState({current:x})[0]; export const useCallback=x=>x; export const useEffect=f=>f();
             export const useSyncExternalStore=(_,read)=>read();`,
               '@litch/core': `export const permissionLevel=x=>[':read-only',':workspace',':danger-full-access'].includes(x)?x:null;
             export const keys={projectPermission:(d,p,h)=>'permission:'+JSON.stringify([d,p,h]),projectPermissionError:(d,p,h)=>'error:'+JSON.stringify([d,p,h])};`,
@@ -112,8 +112,8 @@ for (const platform of ['desktop', 'mobile']) {
         })
       }
       available = false
-      assert.equal(await render('/project').save(':danger-full-access', true), false)
-      assert.match(render('/project').error, /unavailable/)
+      assert.equal(await render('/project').save(':danger-full-access', true), true)
+      assert.match(render('/project').notice, /unavailable/)
       available = true
       states = []
       await assert.rejects(render().persist(':danger-full-access'), /confirmFirst/)
@@ -135,15 +135,24 @@ for (const platform of ['desktop', 'mobile']) {
       assert.equal(render(null, 'other-device').permission, null)
       assert.equal(render('/other-project').permission, null)
       available = false
-      assert.equal(await render('/project').save(':danger-full-access', true), false)
-      assert.match(render('/project').error, /不支持|unavailable/)
+      assert.equal(await render('/project').save(':danger-full-access', true), true)
+      assert.match(render('/project').notice, /不支持|unavailable/)
+      assert.equal(render('/project').permission, ':danger-full-access')
+      await render('/project').persist(':danger-full-access')
+      await assert.rejects(render('/project').persist(':danger-full-access'), /confirmFirst/)
       available = true
       failure = '写入失败'
-      assert.equal(await render('/project').save(':workspace', false), false)
-      assert.match(render('/project').error, /写入失败/)
+      assert.equal(await render('/project').save(':workspace', false), true)
+      assert.match(render('/project').notice, /saveFailed/)
+      assert.equal(render('/project').permission, ':workspace')
+      assert.match(await render('/project').persist(':workspace'), /saveFailed/)
+      assert.equal(await render('/project').save(':danger-full-access', true), true)
+      await render('/project').persist(':danger-full-access')
+      await assert.rejects(render('/project').persist(':danger-full-access'), /confirmFirst/)
+      await render('/project', 'remote', 'pi', false).persist(':danger-full-access')
       failure = null
       assert.equal(await render('/project').save(':read-only', false), true)
-      assert.equal(render('/project').error, null, '可以重试保存')
+      assert.equal(render('/project').notice, null, '可以重试保存')
     } finally {
       delete globalThis.__permissionHooks
     }
