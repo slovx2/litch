@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 0.30.1（2026-11-03）
+
+- 设备服务未升级时，输入框不再显示“读取失败”，底栏保持单行。
+
 ## 0.30.0（2026-11-03）
 
 ### 文件与远程操作
