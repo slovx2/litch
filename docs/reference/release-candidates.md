@@ -62,7 +62,7 @@ gh workflow run promote.yml --ref <已推送验证分支> \
 - 48 小时约束作用于增量夜间基线；已经完成全部非手机领域的同 SHA 证明不依赖旧基线。源制品缺失/过期、基线过期或验证策略变化时明确失败，不静默重建、跨 run 拼包或降低覆盖。
 - 基线过期时可在原 run 补跑 Gate 影响范围 job 及其依赖，再封存；必须核对 GitHub 实际定点重跑范围，不能不加分辨地重跑所有成功打包。工作流策略变更后不能用新代码给旧候选盖章，需重新准备包含该变更的候选。
 - 最新夜间仅手机模拟器领域失败且完整证明显示其余领域通过时，不阻断；`Nightly mobile follow-up` 创建修复 issue，不加 release-blocker。没有证明或其他领域红灯仍要求同 SHA 完整非手机验证或明确的既有分诊。任何 open release-blocker 仍拦截。
-- 原手机 ADB 整片重跑预算不再用于发版，因为候选不跑模拟器。准备阶段/其他基础设施恢复规则不扩大；通用自动恢复和夜间缺跑监测分阶段交付。当前仅提供[只读故障分类和审计](./ci-recovery.md)，自动恢复未启用。
+- 原手机 ADB 整片重跑预算不再用于发版，因为候选不跑模拟器。准备阶段/其他基础设施恢复规则不扩大；[基础设施恢复控制器与审计](./ci-recovery.md)默认关闭，须先完成Linux合成故障验收再启用。夜间缺跑监测单独交付。
 - Apple 票据步骤只在原始输出明确包含 `NSURLErrorDomain -1005` 或 `Error 68` 时恢复：staple 和 validate 各最多三次，退避30/60秒，逐次失败原文写入 step summary。其他错误、超时或耗尽均失败；validate 恢复不重复 staple，更不重新提交公证。Accepted 不能替代票据成功。
 - ARM 托管出包在票据命令期间临时阻断 UDP443，使其使用 TCP；只装载自己的 PF anchor，命令退出即撤销规则、释放 PF 引用。清理失败硬停止，不能被网络恢复掩盖。该规避来自[托管镜像已知问题](https://github.com/actions/runner-images/issues/14924)及本仓 ARM 对照；不是零故障保证，因此仍保留上述次数上限与检查点。本地普通出包不启用这项托管 runner 网络操作。
 - macOS 在 Accepted 后先上传独立 `macos-notarized-<attempt>` 检查点，包含保真 App 归档、DMG、公证 UUID、团队和原始 hash。它不可分发，也不属于 verified-candidate。后续 attempt 只接受同 run/SHA、来源 Accepted/上传步骤成功、摘要匹配的检查点；恢复前再次查询 Accepted，再做票据、ZIP 和包验收，不重新签名或提交公证。检查点丢失、过期、损坏或身份不符直接停止，不能悄悄重做公证。

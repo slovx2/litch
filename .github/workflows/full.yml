@@ -94,11 +94,15 @@ jobs:
     if: ${{ always() && (!inputs.domains || contains(fromJSON(inputs.domains), 'adapters')) }}
     runs-on: ubuntu-24.04
     steps:
-      - name: 两个平台的完整适配器覆盖缺一不可
+      - name: 阻断失败的上游
         env:
           LINUX: ${{ needs.adapters-linux.result }}
           MACOS: ${{ needs.adapters-macos.result }}
-        run: test "$LINUX" = success && test "$MACOS" = success
+        run: |
+          if [ "$LINUX" != success ] || [ "$MACOS" != success ]; then
+            echo '::error::LITCH_RECOVERY_UPSTREAM_FAILURE'
+            exit 1
+          fi
 
   mac-ready:
     needs: source
@@ -887,6 +891,12 @@ jobs:
         id: stage-3
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      # 显式标明上游失败，不能把缺产物误判成一个独立的产品失败。
+      - name: 阻断失败的上游
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: |
+          echo '::error::LITCH_RECOVERY_UPSTREAM_FAILURE'
+          exit 1
       - name: 读取同run成功Mac和Linux作业的不可变检查证明
         env:
           GH_TOKEN: ${{ github.token }}

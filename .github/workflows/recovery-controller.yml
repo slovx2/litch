@@ -1,0 +1,72 @@
+name: CI infrastructure recovery
+run-name: CI recovery ${{ inputs.source-run || github.event.workflow_run.id || 'reconcile' }} ${{ inputs.mode || 'automatic' }}
+on:
+  workflow_run:
+    workflows: [CI, Full, Release gate, Prepare release candidate, Windows native]
+    types: [completed]
+  # 只补恢复事件漏投/曾因Mac竞争deferred；夜间健康监测属于独立第三笔。
+  schedule:
+    - cron: '8,23,38,53 * * * *'
+  workflow_dispatch:
+    inputs:
+      source-run:
+        description: 要观察或演练的源run ID
+        required: true
+        type: string
+      mode:
+        description: 正式恢复只能经开关启用；手动写操作限同SHA的Linux fixture
+        type: choice
+        options: [observe, fixture-recover]
+        default: observe
+permissions:
+  contents: read
+concurrency:
+  # 所有来源共用写锁；pending可能被替换，因此另有只读reconcile找漏事件。
+  group: ci-infrastructure-recovery-controller
+  cancel-in-progress: false
+jobs:
+  observe:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'observe' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node scripts/ci/recovery-run.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECOVERY_SOURCE_RUN: ${{ inputs.source-run }}
+          RECOVERY_MODE: observe
+  recovery:
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'fixture-recover') || (github.event_name != 'workflow_dispatch' && vars.LITCH_CI_RECOVERY_ENABLED == 'true') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: 分类、预占、一次恢复与结果对账
+        run: node scripts/ci/recovery-run.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECOVERY_SOURCE_RUN: ${{ inputs.source-run || github.event.workflow_run.id }}
+          RECOVERY_MODE: ${{ inputs.mode || 'automatic' }}
+          LITCH_CI_RECOVERY_ENABLED: ${{ vars.LITCH_CI_RECOVERY_ENABLED }}

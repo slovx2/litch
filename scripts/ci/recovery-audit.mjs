@@ -22,7 +22,9 @@ function assertReservation(plan, now) {
 
 export function auditRecord(plan, type, details, previous = null, now = Date.now()) {
   assert.equal(plan.rule, recoveryVersion)
-  assert.ok(['observation', 'reservation', 'dispatched', 'uncertain', 'resolved'].includes(type))
+  assert.ok(
+    ['observation', 'reservation', 'dispatched', 'uncertain', 'resolved', 'aborted'].includes(type),
+  )
   assert.ok(Number.isFinite(now))
   if (type === 'reservation') assertReservation(plan, now)
   const value = {
@@ -74,6 +76,10 @@ export function readAudit(records, plan) {
       assert.ok(
         ['success', 'failure', 'cancelled', 'not-observed'].includes(record.details.conclusion),
       )
+      assert.equal(record.details.reservation, reservation)
+      state = 'resolved'
+    } else if (record.type === 'aborted') {
+      assert.equal(state, 'reserved')
       assert.equal(record.details.reservation, reservation)
       state = 'resolved'
     } else {

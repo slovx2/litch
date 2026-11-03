@@ -140,7 +140,8 @@
     "@types/ws": "8.18.2",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
-    "vitepress": "1.6.4"
+    "vitepress": "1.6.4",
+    "yaml": "2.8.2"
   },
   "engines": {
     "node": ">=24"

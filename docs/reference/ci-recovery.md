@@ -1,36 +1,51 @@
 # CI 基础设施恢复与审计
 
-当前交付第一阶段：**只读分类，自动恢复未启用**。没有新工作流、写 issue、预占预算或重跑 API 调用。维护者在已审核的仓库源码上用 Node 24 运行：
+代码包含只读观察器、持久审计和有界恢复控制器。**正式自动恢复默认关闭**：仓库变量 `LITCH_CI_RECOVERY_ENABLED` 不存在或不为 `true` 时，不执行事件驱动或定时恢复。必须先完成下述 Linux 合成故障验收，再启用该变量。
+
+## 只读观察
+
+维护者在已审核的源码上使用 Node 24：
 
 ```sh
 node scripts/ci/recovery-observe.mjs <run-id>
 ```
 
-只调用本仓库 GitHub GET API，需要读取 Actions 的权限；输出分类计划与 `observation` 审计记录。设置了 `GITHUB_STEP_SUMMARY` 时追加可读摘要。不要把完整日志作为本地证据归档；审计只保留固定原因、原运行链接和证据 SHA-256，不复制秘密、环境或原始输出。
+只调用本仓库 GET API，输出分类和 `observation`，可追加 `GITHUB_STEP_SUMMARY`。`recovery-controller.yml` 的手动 `mode=observe` 作业同样只有读取权限。日志只在内存里定位，审计不复制环境、秘密或原始输出，只保存固定原因、来源链接与证据 hash。
 
-## 分类条件
+## 可恢复范围
 
-观察器绑定仓库、默认分支祖先 SHA、实际 job 的 run/attempt/SHA，并比对源提交与当前默认分支的工作流文件内容。当前本地受审工作流也必须相同。旧编排、外部分支、fork、PR 或 API 读取不完整时只报原因，不建议自动恢复。
+- 准备故障：精确锁定的 checkout、setup-node、setup-go 步骤；只允许准备动作先行。必须从唯一对应步骤文件读到最后一条明确网络错误，不能挑先前已恢复的网络词。权限、证书、校验和、配额、内部恢复耗尽均排除。npm 安装可能执行生命周期脚本，不泛化成安全下载。
+- 未获 runner：runner ID 零、名称为空、无 steps，且有 GitHub Actions 明确的未获 hosted runner 失败注解。容量 notice、queued 时间长、人工或并发取消不够。
+- 产品、未知、混合失败不恢复；手机、SDK和票据既有恢复预算不叠加。公证 Rejected、签名或证明损坏不重跑。
+- 汇总或签名协调作业仅在受审位置发出明确上游失败标记、依赖图里确有可恢复首败时，才能归为派生失败；普通缺证明或未知错误仍阻断。
 
-- 准备故障：仅精确锁定的 checkout、setup-node、setup-go 步骤。必须只有一个失败步骤、之前只有准备动作、之后没有继续测试/构建，并从真实 run 日志归档中定位唯一的对应步骤文件。最后一条明确错误必须是网络故障，不能挑先前已经恢复的网络词；权限、证书、校验和、配额、内部重试耗尽等均排除。
-- 未获 runner：runner ID 为零、名称为空、没有 steps，并有 GitHub Actions 的明确失败注解 `The job was not acquired by Runner of type hosted even after multiple attempts`。普通容量 notice 或 queued 时间长不够；整轮人工/并发取消不恢复。
-- 产品、未知、混合失败：不恢复。npm 安装可能执行生命周期脚本，不能仅凭网络词认定为安全准备阶段，首版也不自动恢复。
-- 手机现有重试、公证 Rejected、票据重试耗尽及证明缺失不叠加整片预算。跳过的汇总作业不能冒充成功证明。
+默认仅信任本仓库默认分支的祖先提交。源 SHA/run/attempt、当前默认分支及本地受审工作流和恢复代码/依赖契约都须匹配。旧编排、fork、PR和未注册分支不建议自动恢复。Linux 演练另有明确限定：只允许 `ci/recovery-nightly` 的同一冻结 SHA、同一套控制器及 fixture 文件；合成错误识别不用于正式工作流。
 
-只有所有失败根都能分类才输出 `eligible`；它仍是观察结论，`automatic=false`，而且没有核实完整依赖闭包，不能据此直接调用 API。成功片和产品失败的原始记录不能被重跑覆盖。
+## 预算、依赖和审计
 
-首版预算为每个源 run 一轮、每个逻辑片最多一次，只考虑 attempt 1。源运行必须全部结束。存在其他运行或排队中的 Mac 作业时，涉及 Mac 的计划为 `deferred`；从源运行结束起两小时到期后停止建议。读取包含分页和多个活跃状态，不把 workflow 总状态 queued 当成无作业在执行。单次读取至多30秒，整个观察的 GitHub 请求预算8分钟，日志归档64MiB、单步骤解压4MiB；超过边界按未知处理。
+每个源 run 一轮，每个逻辑片最多一次，只处理 attempt 1；必须等整轮结束。解析受审 YAML 的本地调用、静态矩阵和 needs，不执行表达式；不支持的动态矩阵/外部工作流、身份不唯一或循环都拒绝。签名协调的 API 等待边单独登记，不能冒充 GitHub 的声明依赖。
 
-## 审计状态机
+只有全部失败根可分类，且重跑集合不会重复已成功的测试或包，才进入写入。单根用 job rerun，多根或明确派生失败用一次 failed-jobs rerun；纯汇总可重算，同 SHA 已成功制品保持原 ID/hash。签名协调没有声明的等待边由失败集合恢复覆盖。
 
-`recovery-audit.mjs` 提供无副作用的记录和验证函数，尚未接入持久 issue。记录绑定规则版本、run/SHA、原计划摘要、前条记录摘要和时间。`observation` 不占预算；后续控制器必须先完成下游核对，再写持久 `reservation`，读回验证后才能调用重跑 API。
+涉及 Mac 且其他工作流有运行/排队 Mac 时记 `deferred`，不占用恢复预算；从源 run 结束起最多等两小时，到期记录 blocked。GitHub 内部 reconcile 也可能迟到，因此它不是准时调度保证；过期不会补跑。每轮最多检查五个来源，超出的 ID 在 summary 明示，不能把截断列表报告成全部已处理。
 
-`reservation → dispatched → resolved` 消耗一次预算；API 返回不明确时转 `uncertain`，只能读取服务器状态确认，不能再预占或盲目POST。重复、乱序、缺链、改计划、换SHA或过期记录都拒绝。观察记录不会释放已消耗预算。
+审计 issue 标题为 `[CI recovery] run <id>`，不加 release-blocker。机器记录绑定源 run/SHA、原计划、规则版本、前条 hash、控制器身份和真实 Actions run。只信 GitHub Actions bot 并交叉核对控制器来源；重复 issue、缺链、来源变化和写入结果不可读回均停止。关闭 issue 不释放预算；发现可能处理过却没有账本，不默认为新预算。
 
-这些哈希不是数字签名，不能证明作者身份。第二阶段的 issue 传输层还必须验证控制器身份、串行化同源操作、保留原始计划、交叉核对 Actions attempt，并以写前 reservation 抗重复。不能直接把任意 issue 评论喂给状态机当成可信账本。
+先持久写 `reservation` 并读回验证，再复查源运行、Mac占用和整个计划；不一致则记 aborted，保留已占预算。API 响应不明确转 uncertain，只读确认下一 attempt，不再次 POST。控制器崩溃留下 reservation 同样不重发。恢复结果核对实际 job 执行区间、范围及原 artifact ID/digest；GitHub可能为沿用的成功 job分配新ID，所以用真实执行区间与steps核对是否重做，而非只比较job ID。
 
-## 下一阶段验收边界
+issue哈希链不是数字签名，不替代仓库维护者对凭据和写权限的管理。控制器只运行固定可信源码，不执行来源制品代码。读取作业只有 contents/actions read；恢复作业另外有 actions/issues write，没有 contents write、签名、发布或 tap 权限。固定串行组避免并发写；事件可能被替换，由有界 reconcile 补查。
 
-第二阶段先在获批 Linux 演练分支制造准备故障与产品失败，核对实际重跑下游范围、一次预算、请求结果不明确、重复事件、失败审计写入与成功制品不重做，再启用恢复。需要真实 Mac 的验收另行协调；未获 runner 不能靠主动占满机器来制造。
+## 上线与 Linux 验收
 
-夜间监测尚未接线。已确定保留 cron：90分钟只在摘要提示，8小时未创建 run 告警、24小时升级疑似漏跑，同 issue 去重并显示监测心跳；绿色基线36小时提醒、48小时继续原规则。积累14次真实夜间样本后复核8小时阈值。GitHub 内部定时监测也可能延迟，不能保证平台整体缺跑时准时告警；这次不引入外部调度。
+1. 先合入或登记**关闭状态**的控制器/fixture入口；保持 `LITCH_CI_RECOVERY_ENABLED` 未设为 `true`。由维护者推送已审代码到演练分支，冻结 SHA。不得拿本地未推代码的测试结果代替云端。
+2. `recovery-fixture.yml` 在 `ci/recovery-nightly` 上分别执行 `case=infra`、`product`、`mixed`、`multi`，仅使用 Linux，不用真实模型、签名或机密。
+3. 每个源 run 全部结束后，在同一 ref dispatch `recovery-controller.yml`，传 `source-run=<id>`、`mode=fixture-recover`。检查 infra/multi 只产生 attempt 2，包含必要的可复用下游；product/mixed 仍为 attempt 1，没有重跑请求。
+4. 正向恢复结束后再 dispatch 同一控制器对账；核对 reservation先于API、原成功片的runner/时间未变、原制品 ID/digest 不变，下载其文本确认仍为原 SHA/run/attempt 1。重复执行控制器不得产生第三 attempt，也不得重传成功制品。
+5. 本地替身还覆盖审计写失败、读回丢失、API响应丢失、竞态与错误来源；这些只报告为本地验收，不谎称云端故障实测。云端不伪造平台未获Mac，不为验收占满runner。
+6. 确认真实演练通过后才设置仓库变量 `LITCH_CI_RECOVERY_ENABLED=true`；回滚将其关闭。签名相关恢复仍需按运行窗口协调。演练审计保留可追溯，可人工关闭但不删记录；不公开任何版本。
+
+正式第一次启用应核对一次来源、权限与依赖范围，再扩展支持面。每次代码改变恢复契约都重新验收，不能用旧演练自动盖章。
+
+## 夜间监测
+
+夜间健康监测属于第三笔，尚未接线。已确定保留 Full cron：90分钟只在摘要提示，8小时未创建 run 告警、24小时升级疑似漏跑，同 issue 去重并显示心跳；绿色基线36小时提醒、48小时继续原规则。积累14次真实夜间样本后复核8小时阈值。GitHub内部监测也可能延迟，本轮不引入外部调度。

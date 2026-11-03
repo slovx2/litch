@@ -74,6 +74,7 @@ export function classifyJob(job, evidence = {}) {
         item.number > step.number &&
         item.conclusion !== 'skipped' &&
         !item.name.startsWith('Post ') &&
+        item.name !== '缓存与首次失败' &&
         item.name !== 'Complete job',
     )
   )
@@ -104,7 +105,10 @@ export function classifyJob(job, evidence = {}) {
   })
 }
 
-export function planRecovery(snapshot, { now = Date.now(), reserved = false } = {}) {
+export function planRecovery(
+  snapshot,
+  { now = Date.now(), reserved = false, classify = classifyJob, paths = workflowPaths } = {},
+) {
   const { run, jobs, evidence = {}, sourceBinding, activeMac = [] } = snapshot
   const context = {
     rule: recoveryVersion,
@@ -113,6 +117,7 @@ export function planRecovery(snapshot, { now = Date.now(), reserved = false } = 
     sha: run.head_sha,
     attempt: run.run_attempt,
     workflow: run.path,
+    createdAt: run.created_at,
   }
   const report = {
     ...context,
@@ -122,14 +127,14 @@ export function planRecovery(snapshot, { now = Date.now(), reserved = false } = 
     jobs: jobs.map((job) => ({
       id: job.id,
       name: job.name,
-      ...classifyJob(job, evidence[job.id]),
+      ...classify(job, evidence[job.id]),
     })),
   }
   const stop = (reason, decision = 'blocked') => ({ ...report, decision, reason, roots: [] })
   if (
     context.repository !== 'slovx2/litch' ||
     run.head_repository?.full_name !== context.repository ||
-    !workflowPaths.includes(run.path) ||
+    !paths.includes(run.path) ||
     !['push', 'schedule', 'workflow_dispatch'].includes(run.event) ||
     !Number.isSafeInteger(run.id) ||
     !/^[a-f0-9]{40}$/.test(run.head_sha ?? '')
@@ -163,7 +168,7 @@ export function planRecovery(snapshot, { now = Date.now(), reserved = false } = 
     )
   )
     return stop('job-source-or-identity-mismatch')
-  const bad = report.jobs.filter((job) => !['passed', 'skipped'].includes(job.kind))
+  const bad = report.jobs.filter((job) => !['passed', 'skipped', 'dependent'].includes(job.kind))
   if (bad.length === 0) return stop('failure-without-classifiable-root')
   if (bad.some((job) => job.kind !== 'infra')) return stop('product-unknown-or-mixed-failure')
   const ended = Date.parse(run.updated_at)

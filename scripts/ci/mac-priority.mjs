@@ -5,6 +5,13 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 import { gh } from './release-artifacts.mjs'
 
+export class SigningFailure extends Error {
+  constructor(jobId) {
+    super('签名job失败，不放行补充Mac')
+    this.jobId = jobId
+  }
+}
+
 export function signingState(run, jobs, { repository, sha, runId, attempt }) {
   assert.equal(run.repository?.full_name, repository, '签名来源仓库')
   assert.equal(run.id, Number(runId), '签名来源run')
@@ -20,7 +27,7 @@ export function signingState(run, jobs, { repository, sha, runId, attempt }) {
     assert.ok(['queued', 'in_progress'].includes(run.status), '候选结束而签名未成功')
     return null
   }
-  assert.equal(job.conclusion, 'success', '签名job失败，不放行补充Mac')
+  if (job.conclusion !== 'success') throw new SigningFailure(job.id)
   assert.ok(job.run_attempt >= 1 && job.run_attempt <= Number(attempt))
   assert.ok(job.id > 0 && Number.isFinite(Date.parse(job.completed_at)))
   return { job: job.id, attempt: job.run_attempt, completedAt: job.completed_at }
@@ -58,6 +65,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
           timeout: 30_000,
         }),
       ).flatMap((page) => page.jobs),
+  }).catch((error) => {
+    if (error instanceof SigningFailure)
+      console.error(`::error::LITCH_RECOVERY_UPSTREAM_FAILURE_JOB:${error.jobId}`)
+    throw error
   })
   appendFileSync(
     env.GITHUB_STEP_SUMMARY,

@@ -13,10 +13,15 @@ const repository = 'slovx2/litch'
 
 export function githubReader(execute = execFileSync) {
   const deadline = Date.now() + 8 * 60_000
+  const immutable = new Map()
   return (path, bytes = false) => {
     assert.ok(Date.now() < deadline, '只读观察总时间超过8分钟')
     assert.ok(path.startsWith(`repos/${repository}/`), '只读本仓库相对API路径')
-    assert.ok(!path.includes('..') && !path.includes('\n'), 'API路径')
+    // compare端点的三个点是GitHub语法，不是目录穿越；只允许两个完整SHA。
+    const compare = /^repos\/slovx2\/litch\/compare\/[a-f0-9]{40}\.\.\.[a-f0-9]{40}$/.test(path)
+    assert.ok((!path.includes('..') || compare) && !/[\r\n]/.test(path), 'API路径')
+    const cacheable = !bytes && (compare || /\/contents\/[^?]+\?ref=[a-f0-9]{40}$/.test(path))
+    if (cacheable && immutable.has(path)) return structuredClone(immutable.get(path))
     let output
     try {
       output = execute('gh', ['api', '--method', 'GET', '--allow-escape-sequences', path], {
@@ -28,7 +33,9 @@ export function githubReader(execute = execFileSync) {
     } catch {
       throw new Error('GitHub只读请求失败或超过边界；原输出不写入审计')
     }
-    return bytes ? output : JSON.parse(output)
+    const value = bytes ? output : JSON.parse(output)
+    if (cacheable) immutable.set(path, structuredClone(value))
+    return value
   }
 }
 
@@ -56,15 +63,42 @@ export function localWorkflowContract() {
   )
 }
 
-export function bindSource(read, run, expectedFiles) {
+export function bindSource(read, run, expectedFiles, rehearsalSource) {
   assert.ok(Object.keys(expectedFiles).length > 0, '工作流契约不能为空')
   for (const [path, hash] of Object.entries(expectedFiles)) {
-    assert.match(path, /^\.github\/workflows\/[a-z0-9-]+\.yml$/)
+    assert.match(
+      path,
+      /^(?:\.github\/workflows\/[a-z0-9-]+\.yml|scripts\/ci\/[a-z0-9-]+\.mjs|package(?:-lock)?\.json)$/,
+    )
     assert.match(hash, /^[a-f0-9]{64}$/)
   }
   const base = `repos/${repository}`
   const metadata = read(base)
   const branch = metadata.default_branch
+  if (rehearsalSource) {
+    assert.equal(rehearsalSource.ref, 'ci/recovery-nightly')
+    assert.match(rehearsalSource.sha, /^[a-f0-9]{40}$/)
+    assert.equal(run.path, '.github/workflows/recovery-fixture.yml')
+    assert.equal(run.event, 'workflow_dispatch')
+    assert.equal(run.head_branch, rehearsalSource.ref)
+    assert.equal(run.head_sha, rehearsalSource.sha)
+    assert.equal(run.head_repository?.full_name, repository)
+    const hashes = {}
+    for (const [path, expected] of Object.entries(expectedFiles)) {
+      const file = read(`${base}/contents/${path}?ref=${run.head_sha}`)
+      assert.equal(file.type, 'file')
+      assert.equal(file.encoding, 'base64')
+      hashes[path] = evidenceHash(Buffer.from(file.content, 'base64').toString('utf8'))
+      assert.equal(hashes[path], expected, '演练源码与控制器不同')
+    }
+    return {
+      matched: true,
+      sha: run.head_sha,
+      trustedSha: rehearsalSource.sha,
+      digest: evidenceHash(hashes),
+      rehearsal: true,
+    }
+  }
   const trustedSha = read(`${base}/commits/${encodeURIComponent(branch)}`).sha
   assert.match(trustedSha, /^[a-f0-9]{40}$/)
   const failed = (reason) => ({ matched: false, reason, sha: run.head_sha, trustedSha })
@@ -90,7 +124,13 @@ export function bindSource(read, run, expectedFiles) {
 
 export function observeRun(
   runId,
-  { read = githubReader(), contract = localWorkflowContract(), now = Date.now() } = {},
+  {
+    read = githubReader(),
+    contract = localWorkflowContract(),
+    now = Date.now(),
+    includeSnapshot = false,
+    rehearsalSource,
+  } = {},
 ) {
   assert.match(String(runId), /^[1-9][0-9]*$/)
   const base = `repos/${repository}`
@@ -101,7 +141,7 @@ export function observeRun(
   const jobs = readPages(read, `${path}/attempts/${run.run_attempt}/jobs`, 'jobs')
   let sourceBinding
   try {
-    sourceBinding = bindSource(read, run, contract)
+    sourceBinding = bindSource(read, run, contract, rehearsalSource)
   } catch {
     sourceBinding = { matched: false, reason: 'source-read-unavailable', sha: run.head_sha }
   }
@@ -117,7 +157,10 @@ export function observeRun(
       const annotations = readPages(read, `${base}/check-runs/${job.id}/annotations`)
       evidence[job.id] = { annotations }
       const preliminary = classifyJob(job, evidence[job.id])
-      if (preliminary.reason === 'exact-step-log-missing') {
+      if (
+        preliminary.reason === 'exact-step-log-missing' ||
+        (includeSnapshot && job.steps?.filter((item) => item.conclusion === 'failure').length === 1)
+      ) {
         archive ??= read(`${path}/attempts/${run.run_attempt}/logs`, true)
         const step = job.steps.find((item) => item.conclusion === 'failure')
         evidence[job.id].stepLog = readStepLog(archive, job, step)
@@ -158,13 +201,18 @@ export function observeRun(
     latest.run_attempt === run.run_attempt &&
     latest.status === run.status &&
     latest.conclusion === run.conclusion
-  const plan = planRecovery({ run, jobs, evidence, sourceBinding, activeMac }, { now })
+  const snapshot = { run, jobs, evidence, sourceBinding, activeMac }
+  const plan = planRecovery(snapshot, { now })
   if (!unchanged || !activityComplete) {
     plan.decision = 'blocked'
     plan.reason = unchanged ? 'mac-activity-read-incomplete' : 'source-changed-during-observation'
     plan.roots = []
   }
-  return { plan, audit: observation(plan, now) }
+  return {
+    plan,
+    audit: observation(plan, now),
+    ...(includeSnapshot ? { snapshot, stable: unchanged && activityComplete } : {}),
+  }
 }
 
 export function recoverySummary({ plan }) {
