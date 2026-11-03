@@ -22,7 +22,8 @@ import type {
   ManagerUpdateResponse,
 } from '../../../protocol/src/manager.mjs'
 
-export interface ManagerRequests {
+import type { ManagerPagingRequests } from '../../../protocol/src/manager-paging.mjs'
+export interface ManagerRequests extends ManagerPagingRequests {
   'litch/manager/reference/read': {
     params: { managerId: string; reference: string }
     result: { text: string }

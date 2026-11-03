@@ -1295,6 +1295,25 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId, ...feedback } = params as Commands['managers.feedback.submit']['params']
           return await deviceOf(deviceId).managers.feedback(feedback)
         }
+        case 'managers.board.page': {
+          const { deviceId, managerId, more, ...query } =
+            params as Commands['managers.board.page']['params']
+          return await deviceOf(deviceId).managers.page(managerId, query, more)
+        }
+        case 'managers.board.detail': {
+          const { deviceId, managerId, id } = params as Commands['managers.board.detail']['params']
+          return await deviceOf(deviceId).managers.detail(managerId, id)
+        }
+        case 'managers.board.history': {
+          const { deviceId, managerId, id, more } =
+            params as Commands['managers.board.history']['params']
+          return await deviceOf(deviceId).managers.history(managerId, id, more)
+        }
+        case 'managers.board.refresh': {
+          const { deviceId, managerId, lines } =
+            params as Commands['managers.board.refresh']['params']
+          return await deviceOf(deviceId).managers.refresh(managerId, lines)
+        }
         case 'managers.answers.submit': {
           const { deviceId, managerId, answers } =
             params as Commands['managers.answers.submit']['params']

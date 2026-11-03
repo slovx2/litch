@@ -18,6 +18,10 @@ import {
   type ManagerQuestionParams,
   type ManagerSubmittedAnswer,
 } from '../../../protocol/src/manager.mjs'
+import {
+  MANAGER_PAGING_METHOD,
+  type ManagerPageQuery,
+} from '../../../protocol/src/manager-paging.mjs'
 import { managerInputIssue } from '../../../protocol/src/manager-validation.mjs'
 import { ChannelError } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
@@ -41,6 +45,7 @@ import {
   projectManagerRequest,
 } from '../projection/manager.mjs'
 import { openedManagerDecisions } from './manager-decisions.mjs'
+import { PagedManagerBoard } from './manager-paging.mjs'
 import { managerValidationError } from './manager-validation.mjs'
 
 export interface ManagersHost {
@@ -58,6 +63,8 @@ export interface ManagersHost {
   log(line: string): void
 }
 interface BoardEntry {
+  paged?: PagedManagerBoard
+  observedHeads?: Map<string, number>
   sinks: Set<HostSink>
   view: ManagerBoardTopicView
   loading: boolean
@@ -102,6 +109,16 @@ export function createManagers(host: ManagersHost) {
     entry.dirty = false
     const mine = epoch
     try {
+      if (host.features().paging) {
+        const first = !entry.paged
+        const paged = paging(managerId, entry)
+        await paged.refresh()
+        if (mine !== epoch || boards.get(managerId) !== entry) return
+        entry.confirmed.clear()
+        if (first) void paged.lines().catch((error) => host.log(String(error)))
+        if (watching(managerId)) await observePages(managerId, entry, mine)
+        return
+      }
       const { board } = await host.request(MANAGER_METHOD.boardRead, { managerId })
       if (mine !== epoch || boards.get(managerId) !== entry) return
       // 通知触发的在途读取可承接提交后的对账；版本不足才补读，不能闪回旧的待定状态。
@@ -132,6 +149,8 @@ export function createManagers(host: ManagersHost) {
     } catch (error) {
       if (mine !== epoch || boards.get(managerId) !== entry) return
       entry.observed = null
+      entry.view = { ...entry.view, loadError: String(error) }
+      publishBoard(entry)
       host.log(`读取经理看板失败：${String(error)}`)
     } finally {
       if (mine === epoch && boards.get(managerId) === entry) {
@@ -142,6 +161,92 @@ export function createManagers(host: ManagersHost) {
   }
   const watching = (managerId: string): boolean =>
     sinks.size > 0 && managers.get(managerId)?.contact.desktopNotification === true
+  const paging = (managerId: string, entry: BoardEntry) => {
+    entry.paged ??= new PagedManagerBoard(host, managerId, (value) => {
+      if (boards.get(managerId) !== entry) return
+      entry.view = { ...entry.view, ...value, available: true, features: host.features() }
+      delete entry.view.loadError
+      const manager = managers.get(managerId)
+      const summary = value.paging?.summary
+      if (manager && summary) {
+        const updated = {
+          ...manager,
+          pendingDecisions: summary.counts.decision.open ?? 0,
+          pendingRequests: summary.counts.request.open ?? 0,
+          pendingReports: summary.counts.report.unread ?? 0,
+          pendingSuggestions: summary.counts.suggestion.pending ?? 0,
+          runningLines: summary.lines.lines.filter((line) => line.running).length,
+        }
+        managers.set(managerId, updated)
+        for (const sink of sinks) sink.delta([{ op: 'manager.upsert', manager: updated }])
+      }
+      publishBoard(entry)
+    })
+    return entry.paged
+  }
+  const observePages = async (managerId: string, entry: BoardEntry, mine: number) => {
+    // 通知独立遍历开放议题的头字段，不能把首屏三十条误当成全部开放议题。
+    const current = new Map<string, number>()
+    let cursor: string | undefined
+    do {
+      const page = await host.request(MANAGER_PAGING_METHOD.page, {
+        managerId,
+        kind: 'decision',
+        status: 'open',
+        order: 'newest',
+        limit: 100,
+        ...(cursor ? { cursor } : {}),
+      })
+      for (const head of page.entries) current.set(head.id, head.revision)
+      cursor = page.nextCursor ?? undefined
+    } while (cursor)
+    if (mine !== epoch || boards.get(managerId) !== entry) return
+    const before = entry.observedHeads
+    entry.observedHeads = current
+    if (!before || early !== null) return
+    for (const [id, revision] of current) {
+      if (before.get(id) === revision) continue
+      let opened = !before.has(id)
+      if (!opened) {
+        let next: string | undefined
+        do {
+          const history = await host.request(MANAGER_PAGING_METHOD.history, {
+            managerId,
+            id: id as ManagerDecision['id'],
+            ...(next ? { cursor: next } : {}),
+          })
+          opened = history.changes.some(
+            (change) =>
+              change.before?.status !== 'open' &&
+              change.after?.status === 'open' &&
+              Number(change.after.revision) > (before.get(id) ?? 0),
+          )
+          next =
+            !opened &&
+            history.changes.every(
+              (change) => Number(change.after?.revision ?? 0) > (before.get(id) ?? 0),
+            )
+              ? (history.nextCursor ?? undefined)
+              : undefined
+        } while (next)
+      }
+      if (!opened) continue
+      const detail = await host.request(MANAGER_PAGING_METHOD.detail, {
+        managerId,
+        id: id as ManagerDecision['id'],
+      })
+      const manager = managers.get(managerId)
+      if (mine !== epoch || !manager || !detail.object || detail.object.status !== 'open') continue
+      for (const sink of sinks)
+        sink.delta([
+          {
+            op: 'manager.decisionOpened',
+            manager,
+            decision: projectManagerDecision(detail.object as ManagerDecision),
+          },
+        ])
+    }
+  }
   const boardEntry = (managerId: string): BoardEntry => {
     let entry = boards.get(managerId)
     if (!entry) {
@@ -161,11 +266,12 @@ export function createManagers(host: ManagersHost) {
     for (const id of managers.keys()) {
       if (!watching(id)) continue
       const entry = boardEntry(id)
-      if (!entry.observed && !entry.loading) void loadBoard(id, entry)
+      if (!entry.observed && !entry.observedHeads && !entry.loading) void loadBoard(id, entry)
     }
     for (const [id, entry] of boards) {
       if (watching(id)) continue
       entry.observed = null
+      delete entry.observedHeads
       if (!entry.sinks.size) boards.delete(id)
     }
   }
@@ -175,6 +281,19 @@ export function createManagers(host: ManagersHost) {
   }
   const applyDecisions = (managerId: string, decisions: ManagerDecision[]) => {
     const entry = boards.get(managerId)
+    if (entry?.paged) {
+      entry.paged.accepted(decisions)
+      const manager = managers.get(managerId)
+      if (manager && entry.view.paging) {
+        const updated = {
+          ...manager,
+          pendingDecisions: entry.view.paging.summary.counts.decision.open ?? 0,
+        }
+        managers.set(managerId, updated)
+        for (const sink of sinks) sink.delta([{ op: 'manager.upsert', manager: updated }])
+      }
+      return
+    }
     const board = entry?.view.board
     if (!entry || !board || !decisions.length) return
     const updates = new Map(decisions.map((decision) => [decision.id, decision]))
@@ -224,7 +343,10 @@ export function createManagers(host: ManagersHost) {
     const mine = epoch
     early = []
     try {
-      const result = await host.request(MANAGER_METHOD.list, {})
+      const result = await host.request(
+        host.features().paging ? MANAGER_PAGING_METHOD.catalog : MANAGER_METHOD.list,
+        {},
+      )
       if (mine !== epoch) return
       managers.clear()
       for (const manager of result.managers) keep(manager, false)
@@ -318,6 +440,33 @@ export function createManagers(host: ManagersHost) {
     return next
   }
   return {
+    async page(managerId: string, query: ManagerPageQuery, more?: boolean) {
+      requires('paging', MANAGER_PAGING_METHOD.page)
+      await guarded(() => paging(managerId, boardEntry(managerId)).page(query, more))
+      return {}
+    },
+    async detail(managerId: string, id: import('../model-manager.mjs').ManagerObjectId) {
+      requires('paging', MANAGER_PAGING_METHOD.detail)
+      await guarded(() => paging(managerId, boardEntry(managerId)).detail(id))
+      return {}
+    },
+    async history(
+      managerId: string,
+      id: import('../model-manager.mjs').ManagerObjectId,
+      more?: boolean,
+    ) {
+      requires('paging', MANAGER_PAGING_METHOD.history)
+      await guarded(() => paging(managerId, boardEntry(managerId)).history(id, more))
+      return {}
+    },
+    async refresh(managerId: string, lines?: boolean) {
+      await guarded(() =>
+        lines && host.features().paging
+          ? paging(managerId, boardEntry(managerId)).lines()
+          : loadBoard(managerId, boardEntry(managerId)),
+      )
+      return {}
+    },
     open(sink: HostSink) {
       sinks.add(sink)
       sink.snapshot(view())
@@ -344,6 +493,9 @@ export function createManagers(host: ManagersHost) {
       epoch++
       early = null
       for (const entry of boards.values()) {
+        entry.paged?.stop()
+        delete entry.paged
+        delete entry.observedHeads
         entry.loading = false
         entry.dirty = false
         entry.observed = null
@@ -367,6 +519,9 @@ export function createManagers(host: ManagersHost) {
       epoch++
       early = null
       for (const entry of boards.values()) {
+        entry.paged?.stop()
+        delete entry.paged
+        delete entry.observedHeads
         entry.loading = false
         entry.dirty = false
         entry.observed = null

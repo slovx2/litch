@@ -97,6 +97,7 @@ export interface ManagerBoardView
  * 没有的是比应用旧的设备服务：界面禁用对应入口并写明原因，核心也不发这些请求。
  */
 export interface ManagerFeaturesView {
+  paging?: boolean
   /** 答复、决策追问、请你做交付同批提交（feedback/submit）；没有时只能交决策答复 */
   feedback: boolean
   /** 议题追问、报告标已阅、编号预览、临时追问与转给经理 */
@@ -105,11 +106,21 @@ export interface ManagerFeaturesView {
   ignore: boolean
 }
 export interface ManagerBoardTopicView {
+  loadError?: string
+  /** 分页模式下 board 仅含已加载详情，不能用数组长度推总数。 */
+  paging?: ManagerPagingView
   deviceId: string
   managerId: string
   available: boolean | null
   board: ManagerBoardView | null
   features: ManagerFeaturesView
+}
+export interface ManagerPagingView {
+  summary: import('../../protocol/src/manager-paging.mjs').ManagerBoardSummary
+  pages: Record<string, import('../../protocol/src/manager-paging.mjs').ManagerObjectPage>
+  histories: Record<string, import('../../protocol/src/manager-paging.mjs').ManagerHistoryPage>
+  loading: string[]
+  error: string | null
 }
 export type ManagerDraft = ManagerCreateParams
 export type ManagerEdit = ManagerPatch

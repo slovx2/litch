@@ -229,6 +229,7 @@ export function createLink(options: LinkOptions): Link {
                 // deviceTasks：声明了才收得到定时任务和运行的变化通知（litch/task/changed、litch/task/run/changed）
                 EXTENSION.deviceTasks,
                 EXTENSION.manager,
+                EXTENSION.managerPaging,
                 EXTENSION.projectPermissions,
                 PATH_PICKER_EXTENSION,
                 // sessionTree：声明了，会话对象上才有 Litch 子会话的 litchLineage，才收得到父子关系、提案变了的通知

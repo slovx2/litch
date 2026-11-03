@@ -8,7 +8,7 @@ import { createManagers, type ManagersHost } from '../src/device/manager.mjs'
 
 export function managerBoardFixture(
   mock: CoreHost,
-  data: { board: ManagerBoard; manager: Manager; rpcUrl?: string },
+  data: { board: ManagerBoard; manager: Manager; rpcUrl?: string; paging?: boolean },
   factory = createManagers,
 ) {
   let submitted = false
@@ -33,7 +33,7 @@ export function managerBoardFixture(
     deviceId: 'local',
     online: () => true,
     supported: () => true,
-    features: () => ({ feedback: true, posts: true, ignore: true }),
+    features: () => ({ feedback: true, posts: true, ignore: true, paging: data.paging === true }),
     changed() {},
     log() {},
     fail: (error) => new ChannelError('internal', String(error)),
@@ -108,6 +108,16 @@ export function managerBoardFixture(
       return mock.subscribe(topic, sink)
     },
     command(name, params: any, signal) {
+      if (name === 'managers.board.page')
+        return service.page(
+          params.managerId,
+          { kind: params.kind, status: params.status, order: params.order },
+          params.more,
+        )
+      if (name === 'managers.board.detail') return service.detail(params.managerId, params.id)
+      if (name === 'managers.board.history')
+        return service.history(params.managerId, params.id, params.more)
+      if (name === 'managers.board.refresh') return service.refresh(params.managerId, params.lines)
       if (name === 'managers.feedback.submit') {
         const { deviceId: _deviceId, ...feedback } = params
         return service.feedback(feedback)

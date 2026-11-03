@@ -415,6 +415,35 @@ export interface Commands {
     params: { deviceId: string; root: string; path: string; offset: number; revision?: string }
     result: import('../../../protocol/src/file-download.mjs').FileReadChunk
   }
+  'managers.board.page': {
+    params: import('../../../protocol/src/manager-paging.mjs').ManagerPageQuery & {
+      deviceId: string
+      managerId: string
+      more?: boolean
+    }
+    result: Record<string, never>
+  }
+  'managers.board.detail': {
+    params: {
+      deviceId: string
+      managerId: string
+      id: import('../model-manager.mjs').ManagerObjectId
+    }
+    result: Record<string, never>
+  }
+  'managers.board.history': {
+    params: {
+      deviceId: string
+      managerId: string
+      id: import('../model-manager.mjs').ManagerObjectId
+      more?: boolean
+    }
+    result: Record<string, never>
+  }
+  'managers.board.refresh': {
+    params: { deviceId: string; managerId: string; lines?: boolean }
+    result: Record<string, never>
+  }
   'managers.reference.read': {
     params: { deviceId: string; managerId: string; reference: string }
     result: { text: string }

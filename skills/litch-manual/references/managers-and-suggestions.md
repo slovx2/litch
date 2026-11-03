@@ -8,6 +8,9 @@
 未声明分页能力的设备继续使用原完整看板读取；已有设备数据库无需迁移。
 摘要包含全板计数、局势、第一批待定决策、最近十条动态和工作线快照。
 工作线核对独立进行；“尚未核对”或上次核对时间说明快照的新鲜度，失败时保留旧快照。
+分页客户端只缓存已经打开的列表、详情和历史。答复成功后先根据设备回包更新该条决策及计数，
+再在后台对账摘要和已加载的页；未打开的已答复、已关闭和已完成列表不会随答复一起读取。
+桌面新决策通知仍覆盖全部待定决策，不受当前页或第一批条数限制。
 
 A manager is a conversation that coordinates worklines (sub-sessions), maintains decisions and items
 on a board stored on its device, and reports progress. Repository changes remain the evidence for
