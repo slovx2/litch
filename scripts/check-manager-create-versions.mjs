@@ -3,7 +3,7 @@
 // 历史源码只解包到临时夹具目录，不创建或切换 Git 工作树。结果包含原始设备错误与客户端文案。
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, symlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -65,6 +65,11 @@ if (process.argv[2] !== '--child') {
 } else {
   const directory = process.argv[3]
   const ref = process.argv[4]
+  // 按解包的实现确定断言，HEAD 在修复合入后也应能重复验收，不把引用名称当版本能力。
+  const validatesModels = existsSync(
+    join(directory, 'packages/device/src/manager-create-validation.mts'),
+  )
+  const expandsHome = existsSync(join(directory, 'packages/device/src/directory-validation.mts'))
   const device = (path) => import(pathToFileURL(join(directory, 'packages/device/dist', path)).href)
   const { rig } = await device('device/test/helpers.mjs')
   const { FakeEngine } = await device('device/test/fake-engine.mjs')
@@ -130,7 +135,7 @@ if (process.argv[2] !== '--child') {
     const cases = [
       ['截图配置', {}, true],
       ['经理也用Codex', { harness: 'codex', model: 'gpt-6-astra', effort: 'high' }, true],
-      ['目标设备home', { cwd: '~' }, null],
+      ['目标设备home', { cwd: '~' }, expandsHome],
       ['相对目录', { cwd: 'project' }, false],
       ['波浪目录', { cwd: '~/project' }, false],
       ['目录不存在', { cwd: join(env.stateDir, 'deleted-project') }, false],
@@ -140,12 +145,12 @@ if (process.argv[2] !== '--child') {
       [
         '失效模型和强度',
         { dispatch: { ...base.dispatch, model: 'removed-model', effort: 'removed-effort' } },
-        ref !== 'working',
+        !validatesModels,
       ],
       [
         '显示名当模型ID',
         { dispatch: { ...base.dispatch, model: 'GPT-6-Astra' } },
-        ref !== 'working',
+        !validatesModels,
       ],
       ['并行数0', { dispatch: { ...base.dispatch, maxRunningLines: 0 } }, false],
       ['并行数小数', { dispatch: { ...base.dispatch, maxRunningLines: 1.5 } }, false],
@@ -173,9 +178,7 @@ if (process.argv[2] !== '--child') {
         if (error instanceof assert.AssertionError || error instanceof TypeError) throw error
         raw = error
       }
-      if (valid !== null)
-        assert.equal(raw.success === true, valid, `${ref}: ${name}: ${JSON.stringify(raw)}`)
-      else if (ref === 'working') assert.equal(raw.success, true)
+      assert.equal(raw.success === true, valid, `${ref}: ${name}: ${JSON.stringify(raw)}`)
       let mapped
       try {
         await core.create(input)

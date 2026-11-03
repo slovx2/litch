@@ -656,7 +656,9 @@ export function ManagerForm({
               />
               {t('manager.notify')}
             </label>
-            <p className="dim">{t('manager.unanswered')}</p>
+            <p className="dim" tabIndex={-1} {...fieldProps('contact.unanswered')}>
+              {t('manager.unanswered')}
+            </p>
           </section>
         </section>
       </fieldset>
