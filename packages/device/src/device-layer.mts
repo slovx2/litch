@@ -130,6 +130,7 @@ export class DeviceCalls {
         method,
         fields,
         this.connection.declares(EXTENSION.filePreview),
+        this.connection.declares(EXTENSION.fileDownload),
       )
     if (method.startsWith(DEVICE_PROCESS_PREFIX)) return this.deviceProcess(method, fields)
     const devices = this.layer.deviceProcesses

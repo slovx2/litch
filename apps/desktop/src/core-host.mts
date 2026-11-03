@@ -24,6 +24,7 @@ import { APPROVAL_KEYS, type ApprovalKeysMessage } from './approvals/ipc.mjs'
 import { automationPreviewPort } from './automation-preview/core-port.mjs'
 import { CLIENT_TOOL, type ClientToolToCore, type ClientToolToMain } from './client-tools/types.mjs'
 import { fileDeviceStore } from './device-store.mjs'
+import { createFileSaveCore } from './file-save-core.mjs'
 import { ATTACH, LANGUAGE, SERVICE, TERMINALS } from './ipc.mjs'
 import { type AdapterLang, localDevice, upgradeReport } from './local-adapter.mjs'
 import { createDesktopLog, DESKTOP_LOG_DIR, type DesktopLog, teeConsole } from './log-file.mjs'
@@ -251,7 +252,13 @@ const begin = () => {
 }
 const waitTools = setTimeout(begin, 3000)
 
+const fileSaves = createFileSaveCore(core, (progress) =>
+  process.parentPort.postMessage({ type: 'file-save', progress }),
+)
+process.once('exit', () => fileSaves.dispose())
+
 process.parentPort.on('message', (event) => {
+  if (fileSaves.receive(event.data)) return
   if (previewPort.receive(event.data)) return
   if (event.data?.type === CLIENT_TOOL) {
     const message = toCore(event.data as ClientToolToCore)

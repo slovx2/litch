@@ -58,6 +58,10 @@ export interface ShellBridge {
    */
   pickFolder?(options: { defaultPath?: string; title?: string }): Promise<string | null>
   /** 本机文件选择，取消返回 null；不能用于远程设备的路径。 */
+  saveFile?(request: import('@litch/core').FileSaveRequest): Promise<void>
+  fileSaveAction?(id: string, action: 'cancel' | 'open' | 'reveal'): Promise<void>
+  onFileSave?(handler: (progress: import('@litch/core').FileSaveProgress) => void): () => void
+  onFileContextMenu?(handler: (point: { x: number; y: number }) => void): () => void
   pickFile?(options: { defaultPath?: string; title?: string }): Promise<string | null>
   /** 告诉外壳现在有没有没保存的改动：有的话关窗口、退出之前它先拦下来，请界面问（onLeaveAsk） */
   setUnsaved?(unsaved: boolean): void

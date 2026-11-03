@@ -108,6 +108,9 @@ export type PhraseKey =
   | 'files.outside'
   | 'files.unknownRoot'
   | 'files.unsupported'
+  | 'files.save.unsupported'
+  | 'files.save.changed'
+  | 'files.save.notFile'
   | 'files.searchUnsupported'
   | 'files.network'
   // 差异面板：目录不在了、这里不能暂存和还原、有冲突的文件不在这里处理、确认之后文件又变了

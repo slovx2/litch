@@ -332,6 +332,7 @@ explain it:
   Browser, Suggested tasks, Background tasks, Goal, Side chat.
   从回答里的文件改动点“在差异里看”可定位该文件；连续打开不同文件时，会分别确认各自的最新改动。
 - **文件自动刷新**：桌面和手机打开文件页时，展开目录中的新增、删除和重命名自动更新，保留展开和选中状态。当前预览随文件改写重新读取；删除或重命名后原路径显示不存在。收起目录、关闭面板或离开手机文件页时停止相关监听；重新打开或重连后重新读取。批量变化会合并；设备不支持 `fs/watch` 时仍可手动刷新。
+- **另存到本地电脑**：桌面文件树的文件右键菜单、当前预览的右键菜单及标题栏均可选择“另存到本地…”。系统保存对话框的目标属于运行客户端的这台电脑，默认使用原文件名，重名确认由系统处理。传输显示进度并可取消；完成后可打开文件或显示所在文件夹。本机设备也可用。只支持单个普通文件，需要设备服务提供 `fileDownload`；不支持时提示升级，不回退整文件读取。大文件按 256 KiB 分块读取和落盘；来源变化会停止，完成前不覆盖目标。手机尚无系统导出入口。
 - **File previews (desktop)**: the Files tab opens tree/search results and file links read-only.
   Markdown renders by default (Source is available; line-number links open source). Static images
   and SVG can zoom. PDF supports pages, scroll, zoom and text selection. CSV/TSV shows strings, never

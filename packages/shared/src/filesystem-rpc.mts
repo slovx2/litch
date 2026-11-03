@@ -1,5 +1,6 @@
 import { cp, lstat, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
+import { readFileChunk } from './file-download.mjs'
 import { readPreview } from './file-preview.mjs'
 import { declaredExtensions } from './harness-declaration.mjs'
 import { PathWatch } from './path-watch.mjs'
@@ -30,10 +31,14 @@ function optionalBoolean(params: Record<string, unknown>, key: string, fallback:
 
 export class FilesystemRpc {
   private watchers = new Map<string, Map<string, PathWatch>>()
+  private downloadPeers = new Set<string>()
+  private downloads = 0
   private previewPeers = new Set<string>()
   private previews = 0
 
   declare(peer: RpcPeer, params: unknown): void {
+    if (declaredExtensions(params).has('fileDownload')) this.downloadPeers.add(peer.id)
+    else this.downloadPeers.delete(peer.id)
     if (declaredExtensions(params).has('filePreview')) this.previewPeers.add(peer.id)
     else this.previewPeers.delete(peer.id)
   }
@@ -43,9 +48,22 @@ export class FilesystemRpc {
     method: string,
     params: Record<string, unknown>,
     previewAllowed = this.previewPeers.has(peer.id),
+    downloadAllowed = this.downloadPeers.has(peer.id),
   ): Promise<unknown> {
     switch (method) {
       case 'fs/readFile': {
+        if (params.litchReadRange !== undefined) {
+          if (!downloadAllowed) throw new ProtocolError(-32602, 'fileDownload 扩展未声明')
+          if (params.litchPreview !== undefined)
+            throw new ProtocolError(-32602, '不能混用预览与另存参数')
+          if (this.downloads >= 4) throw new ProtocolError(-32004, '分块读取繁忙')
+          this.downloads++
+          try {
+            return await readFileChunk(pathParam(params), params.litchReadRange)
+          } finally {
+            this.downloads--
+          }
+        }
         if (params.litchPreview !== undefined) {
           if (!previewAllowed) throw new ProtocolError(-32602, 'filePreview 扩展未声明')
           if (this.previews >= 4)
@@ -125,12 +143,14 @@ export class FilesystemRpc {
   }
 
   closePeer(peerId: string): void {
+    this.downloadPeers.delete(peerId)
     this.previewPeers.delete(peerId)
     for (const watcher of this.watchers.get(peerId)?.values() ?? []) watcher.close()
     this.watchers.delete(peerId)
   }
 
   close(): void {
+    this.downloadPeers.clear()
     this.previewPeers.clear()
     for (const peerId of this.watchers.keys()) this.closePeer(peerId)
   }

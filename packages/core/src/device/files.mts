@@ -9,6 +9,8 @@
 // 不改变写入、差异操作的根核对。预览仍在设备核对根与目标的 realpath，避免文档相对资源逃出所选目录。
 //
 // 没有哪个 harness 声明过会不会这几个方法，所以是“试了才知道”：对面说不认识，就记到下次重连，期间不再去问。
+
+import { FILE_DOWNLOAD_CHUNK, type FileReadChunk } from '../../../protocol/src/file-download.mjs'
 import type { ClientRequestMethod, ClientRequests } from '../../../protocol/src/index.mjs'
 import { createCancel } from '../channel/cancel.mjs'
 import { type AbortSignalLike, ChannelError, type Clock } from '../channel/protocol.mjs'
@@ -49,6 +51,7 @@ import { createFileWatches } from './file-watches.mjs'
 
 export interface FilesHost {
   previewSupported?(): boolean
+  downloadSupported?(): boolean
   clock: Clock
   online(): boolean
   /** 对面的系统（macos、linux、windows），还不知道是 null：路径的另一种写法按它认（text/paths.mts 的 pathTwin） */
@@ -68,6 +71,13 @@ export interface FilesHost {
 }
 
 export interface Files {
+  chunk(
+    root: string,
+    path: string,
+    offset: number,
+    revision?: string,
+    signal?: AbortSignalLike,
+  ): Promise<FileReadChunk>
   watch(root: string, path: string, directory: boolean, sink: HostSink): () => void
   notification(method: string, params: unknown): boolean
   resolve(
@@ -333,6 +343,66 @@ export function createFiles(host: FilesHost): Files {
   }
 
   const files: Files = {
+    async chunk(root, path, offset, revision, signal) {
+      const at = locate(root, path)
+      mustBeOnline()
+      if (!host.downloadSupported?.())
+        throw new ChannelError(
+          'unsupported',
+          '设备不支持分块另存，请升级设备服务',
+          phrase('files.save.unsupported'),
+        )
+      if (!Number.isSafeInteger(offset) || offset < 0)
+        throw new ChannelError('invalid', '读取位置无效')
+      let result: ClientRequests['fs/readFile']['result']
+      try {
+        result = await host.request(
+          'fs/readFile',
+          {
+            path: at.path,
+            litchReadRange: {
+              root: at.root,
+              offset,
+              maxBytes: FILE_DOWNLOAD_CHUNK,
+              ...(revision ? { revision } : {}),
+            },
+          },
+          { timeoutMs: READ_TIMEOUT_MS, ...(signal ? { signal } : {}) },
+        )
+      } catch (error) {
+        const kind =
+          error instanceof RpcError
+            ? (error.data as { litchReadRange?: { kind?: string } } | null)?.litchReadRange?.kind
+            : undefined
+        if (kind === 'changed')
+          throw new ChannelError(
+            'rejected',
+            '源文件在保存期间发生变化',
+            phrase('files.save.changed'),
+          )
+        if (kind === 'notFile')
+          throw new ChannelError('rejected', '只能另存普通文件', phrase('files.save.notFile'))
+        throw failed(error, 'fs')
+      }
+      const info = result.litchReadRange
+      if (
+        !info ||
+        !Number.isSafeInteger(info.size) ||
+        info.size < offset ||
+        typeof info.revision !== 'string' ||
+        !/^[a-f0-9]{64}$/.test(info.revision) ||
+        (revision !== undefined && info.revision !== revision) ||
+        typeof result.dataBase64 !== 'string' ||
+        result.dataBase64.length > Math.ceil(FILE_DOWNLOAD_CHUNK / 3) * 4 ||
+        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+          result.dataBase64,
+        ) ||
+        base64Bytes(result.dataBase64) !== Math.min(FILE_DOWNLOAD_CHUNK, info.size - offset)
+      ) {
+        throw new ChannelError('remote', '分块读取响应无效')
+      }
+      return { dataBase64: result.dataBase64, litchReadRange: info }
+    },
     watch(root, path, directory, sink) {
       return watches.open(locate(root, path).path, directory, sink)
     },

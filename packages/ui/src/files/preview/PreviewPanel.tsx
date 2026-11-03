@@ -133,7 +133,13 @@ export function PreviewPanel({
   }, [channel, scope, reading, refresh, tab.alt, tab.path, uiKey, t, onUnsupported, watching])
   const reload = () => setRefresh((n) => n + 1)
   const act = (action: FileAction) =>
-    runFileAction(action, { path: tab.path, relative: relativeTo(root, tab.path), line: tab.line })
+    runFileAction(action, {
+      deviceId,
+      root,
+      path: tab.path,
+      relative: relativeTo(root, tab.path),
+      line: tab.line,
+    })
   const retry = (
     <button type="button" className="btn" onClick={reload}>
       {t('files.retry')}
@@ -233,6 +239,16 @@ export function PreviewPanel({
       data-kind={content?.kind ?? ''}
     >
       <div className="fv-head">
+        {window.litchShell?.saveFile ? (
+          <button
+            type="button"
+            className="mini"
+            data-tool="save-local"
+            onClick={() => act('saveLocal')}
+          >
+            {t('files.action.saveLocal')}
+          </button>
+        ) : null}
         <span className="ell grow" title={tab.path}>
           {relativeTo(root, tab.path)}
         </span>

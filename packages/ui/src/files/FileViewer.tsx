@@ -6,8 +6,9 @@ import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
 import { Close, Icon } from '../app/icons.tsx'
 import type { MessageKey } from '../i18n/index.ts'
-import { type FileAction, runFileAction } from './actions.ts'
+import { type FileAction, type FileSubject, fileActions, runFileAction } from './actions.ts'
 import { CodeView } from './CodeView.tsx'
+import { ContextMenu } from './ContextMenu.tsx'
 import { useFileContent } from './content.ts'
 import { FileLinkDetails } from './FileLinkDetails.tsx'
 import { byteSize, splitLines } from './lines.ts'
@@ -94,7 +95,7 @@ function SourceFileBody({
   }, [settled, uiKey, tab.path, tab.alt])
 
   const act = (action: FileAction) =>
-    runFileAction(action, { path: tab.path, relative, line: tab.line })
+    runFileAction(action, { deviceId, root, path: tab.path, relative, line: tab.line })
   const reload = () => setNonce((n) => n + 1)
   const lineCount = useMemo(
     () => (content?.kind === 'text' ? splitLines(content.text).length : 0),
@@ -110,6 +111,16 @@ function SourceFileBody({
       data-kind={content?.kind ?? ''}
     >
       <div className="fv-head">
+        {window.litchShell?.saveFile ? (
+          <button
+            type="button"
+            className="mini"
+            data-tool="save-local"
+            onClick={() => act('saveLocal')}
+          >
+            {t('files.action.saveLocal')}
+          </button>
+        ) : null}
         <span className="ell grow" title={tab.path}>
           {relative}
         </span>
@@ -236,6 +247,24 @@ export function FileViewer({
   const t = useT()
   const ui = useTreeUi(uiKey)
   const active = ui.tabs.find((tab) => tab.path === ui.active) ?? null
+  const [menu, setMenu] = useState<{ x: number; y: number; subject: FileSubject } | null>(null)
+  const openMenu = useCallback(
+    (x: number, y: number, path: string) => {
+      setMenu({ x, y, subject: { deviceId, root, path, relative: relativeTo(root, path) } })
+    },
+    [deviceId, root],
+  )
+  useEffect(() => {
+    if (!active) return
+    return window.litchShell?.onFileContextMenu?.(({ x, y }) => {
+      // opaque iframe 内的右键由外壳转发；仅接收当前文件预览中的坐标。
+      const element = document.elementFromPoint(x, y)
+      if (element?.tagName === 'IFRAME' && element.closest('.fv-file')) openMenu(x, y, active.path)
+    })
+  }, [active, openMenu])
+  useEffect(() => {
+    setMenu((current) => (current?.subject.path === ui.active ? current : null))
+  }, [ui.active])
 
   if (ui.tabs.length === 0) {
     return (
@@ -245,7 +274,26 @@ export function FileViewer({
     )
   }
   return (
-    <section className="fv" aria-label={t('files.view')}>
+    <section
+      className="fv"
+      aria-label={t('files.view')}
+      onContextMenu={(event) => {
+        if (!active || !(event.target instanceof Element) || !event.target.closest('.fv-file'))
+          return
+        event.preventDefault()
+        openMenu(event.clientX, event.clientY, active.path)
+      }}
+    >
+      {menu ? (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          label={baseName(menu.subject.path)}
+          items={fileActions(menu.subject).map((id) => ({ id, title: t(`files.action.${id}`) }))}
+          onPick={(id) => runFileAction(id as FileAction, menu.subject)}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
       <div className="fv-tabs" role="tablist" aria-label={t('files.view.tabs')}>
         {ui.tabs.map((tab) => {
           const name = baseName(tab.path)

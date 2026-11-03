@@ -1,0 +1,60 @@
+{
+  "extension": "fileDownload",
+  "description": "客户端另存文件的有界分块读取；文件字节仍经 fs/readFile。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "fileDownload" }
+    }
+  },
+  "undeclared": "携带 litchReadRange 返回 -32602；标准 fs/readFile 参数和响应保持不变。",
+  "rules": [
+    "目前由设备聚合面声明；客户端收到 runtime/info 的 device.extensions 中的 fileDownload 才能请求。原生 Codex 和未声明的单引擎入口不回退整文件读取。",
+    "root/path 为设备绝对路径，实际路径必须仍在 root 内。只读普通文件，拒绝目录、UNC、越根符号链接与检查期间替换。",
+    "offset 为非负安全整数，maxBytes 为 1 到 262144。首次 offset=0 可不带 revision；后续必须使用上次 revision。",
+    "每次最多读取 maxBytes，响应附 litchReadRange.size 与 revision。revision 包含真实路径、文件身份、大小及纳秒级修改/变更时间的摘要。读取期间或两块之间变化返回 changed，不拼接不同版本。",
+    "单个设备最多并行四次分块读取，每次结束关闭句柄；没有后台传输或主动通知。响应附加字段只回给声明并实际携带该参数的请求。",
+    "本地目标由客户端系统保存对话框选择，在客户端工具进程中按块落盘；完成前使用临时文件，取消或失败清理临时文件。"
+  ],
+  "parts": [
+    {
+      "kind": "Param",
+      "on": "fs/readFile",
+      "name": "litchReadRange",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["root", "offset", "maxBytes"],
+        "properties": {
+          "root": { "type": "string", "minLength": 1 },
+          "offset": { "type": "integer", "minimum": 0 },
+          "maxBytes": { "type": "integer", "minimum": 1, "maximum": 262144 },
+          "revision": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    },
+    {
+      "kind": "Response",
+      "on": "fs/readFile（携带 litchReadRange）",
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dataBase64", "litchReadRange"],
+        "properties": {
+          "dataBase64": { "type": "string" },
+          "litchReadRange": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["size", "revision"],
+            "properties": {
+              "size": { "type": "integer", "minimum": 0 },
+              "revision": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

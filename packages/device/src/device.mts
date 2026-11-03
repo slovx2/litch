@@ -288,6 +288,7 @@ export class DeviceServer {
     })
     const info = deviceInfo(this.version)
     info.extensions.push(EXTENSION.filePreview)
+    info.extensions.push(EXTENSION.fileDownload)
     info.extensions.push(EXTENSION.turnRecovery)
     info.extensions.push(EXTENSION.turnNotices)
     this.recovery = new TurnRecoveryObserver({

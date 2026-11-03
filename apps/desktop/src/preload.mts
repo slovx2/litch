@@ -1,3 +1,4 @@
+import type { FileSaveProgress, FileSaveRequest } from '@litch/core'
 // 预加载脚本。它是界面和外壳之间唯一的接触面：帮界面拿到通往核心的消息端口、请系统的浏览器打开网址、
 // 告诉外壳界面用的是哪种语言和外观、取“关于”里要的版本和许可文本、告诉界面用户选的文件在磁盘上的位置，
 // 以及设置页里内置浏览器、Computer Use 那两节要的几件事（各自一个全局对象，和 litchShell 分开）。
@@ -75,6 +76,19 @@ contextBridge.exposeInMainWorld('litchShell', {
   // 添加项目时用系统的对话框选一个本机目录
   pickFolder: (options: { defaultPath?: string; title?: string }) =>
     ipcRenderer.invoke(PICK_FOLDER, options),
+  saveFile: (request: FileSaveRequest) => ipcRenderer.invoke('litch:file-save', request),
+  fileSaveAction: (id: string, action: 'cancel' | 'open' | 'reveal') =>
+    ipcRenderer.invoke('litch:file-save:action', id, action),
+  onFileSave: (handler: (progress: FileSaveProgress) => void) => {
+    const listen = (_event: unknown, progress: FileSaveProgress) => handler(progress)
+    ipcRenderer.on('litch:file-save', listen)
+    return () => ipcRenderer.removeListener('litch:file-save', listen)
+  },
+  onFileContextMenu: (handler: (point: { x: number; y: number }) => void) => {
+    const listen = (_event: unknown, point: { x: number; y: number }) => handler(point)
+    ipcRenderer.on('litch:file-save:context', listen)
+    return () => ipcRenderer.removeListener('litch:file-save:context', listen)
+  },
   pickFile: (options: { defaultPath?: string; title?: string }) =>
     ipcRenderer.invoke(PICK_FILE, options),
   // 应用菜单里要界面来办的那几项。只把是哪一项交给页面，事件对象不给

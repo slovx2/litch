@@ -2,12 +2,15 @@
 
 import { showToast } from '../app/toasts.tsx'
 import { mentionInComposer } from '../composer/drafts.ts'
+import { saveToLocal } from './save.ts'
 
-export type FileAction = 'mention' | 'copyRelative' | 'copyFull'
+export type FileAction = 'mention' | 'copyRelative' | 'copyFull' | 'saveLocal'
 
 export const FILE_ACTIONS: readonly FileAction[] = ['mention', 'copyRelative', 'copyFull']
 
 export interface FileSubject {
+  deviceId?: string
+  root?: string
   /** 完整路径 */
   path: string
   /** 相对于工作区根的路径 */
@@ -15,6 +18,12 @@ export interface FileSubject {
   /** 是目录：加入对话时路径后面带一个斜杠，看得出是目录 */
   dir?: boolean
   line?: number | null
+}
+
+export function fileActions(subject: FileSubject): readonly FileAction[] {
+  return !subject.dir && subject.deviceId && subject.root && window.litchShell?.saveFile
+    ? [...FILE_ACTIONS, 'saveLocal']
+    : FILE_ACTIONS
 }
 
 function copy(text: string): void {
@@ -31,6 +40,11 @@ function copy(text: string): void {
 }
 
 export function runFileAction(action: FileAction, subject: FileSubject): void {
+  if (action === 'saveLocal') {
+    if (!subject.dir && subject.deviceId && subject.root)
+      saveToLocal({ deviceId: subject.deviceId, root: subject.root, path: subject.path })
+    return
+  }
   if (action === 'copyRelative') {
     copy(subject.relative || subject.path)
     return

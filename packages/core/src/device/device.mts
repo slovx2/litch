@@ -594,6 +594,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let harnesses: HarnessView[] = []
   /** 对面有没有设备配置接口（deviceSettings 扩展）。认出来之前、对面不是设备服务时都是没有 */
   let manageable = false
+  let fileDownloadSupported = false
   let filePreviewSupported = false
   let powerSupported = false
   let recoverySupported = false
@@ -1683,6 +1684,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     terms.clear()
     serviceDue = false
     nativeDirect = false
+    fileDownloadSupported = false
     filePreviewSupported = false
     turnNotices = false
     pathsSupported = false
@@ -1697,6 +1699,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         if (declares || mode !== 'full') hasProjects = null
         mode = 'full'
         turnNotices = info.device.extensions?.includes(EXTENSION.turnNotices) === true
+        fileDownloadSupported = info.device.extensions?.includes(EXTENSION.fileDownload) === true
         filePreviewSupported = info.device.extensions?.includes(EXTENSION.filePreview) === true
         configurable = info.device.extensions?.includes(EXTENSION.harnessConfig) === true
         harnesses = info.harnesses.map((entry) => withConfig(harnessFromInfo(entry)))
@@ -1739,6 +1742,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         if (mode === 'full') hasProjects = null
         remember(harnessFromRuntimeInfo(info).id, termsOf(info))
         mode = 'single'
+        fileDownloadSupported = info.extensions?.includes(EXTENSION.fileDownload) === true
         filePreviewSupported = info.extensions?.includes(EXTENSION.filePreview) === true
         harnesses = [harnessFromRuntimeInfo(info)]
         manageable = false
@@ -2509,6 +2513,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   })
   const files = createFiles({
     previewSupported: () => filePreviewSupported,
+    downloadSupported: () => fileDownloadSupported,
     clock: options.clock,
     online: () => online,
     platform: () => platform,

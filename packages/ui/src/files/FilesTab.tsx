@@ -25,7 +25,7 @@ import { useT } from '../app/appearance.ts'
 import { Icon } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import type { SideTabProps } from '../side/tabs.ts'
-import { FILE_ACTIONS, type FileAction, type FileSubject, runFileAction } from './actions.ts'
+import { type FileAction, type FileSubject, fileActions, runFileAction } from './actions.ts'
 import { ContextMenu } from './ContextMenu.tsx'
 import { FileWatching } from './content.ts'
 import { resultId, SearchResults, useFileSearch } from './FileSearch.tsx'
@@ -104,8 +104,14 @@ function Files({ deviceId, root, shown }: { deviceId: string; root: string; show
   }, [channel, deviceId, root])
 
   const subjectOf = useCallback(
-    (path: string, dir: boolean): FileSubject => ({ path, relative: relativeTo(root, path), dir }),
-    [root],
+    (path: string, dir: boolean): FileSubject => ({
+      deviceId,
+      root,
+      path,
+      relative: relativeTo(root, path),
+      dir,
+    }),
+    [deviceId, root],
   )
   const onContext = useCallback(
     ({ row, x, y }: RowContext) => {
@@ -184,8 +190,9 @@ function Files({ deviceId, root, shown }: { deviceId: string; root: string; show
   }
 
   const menuItems = useMemo(
-    () => FILE_ACTIONS.map((id) => ({ id, title: t(`files.action.${id}`) })),
-    [t],
+    () =>
+      (menu ? fileActions(menu.subject) : []).map((id) => ({ id, title: t(`files.action.${id}`) })),
+    [t, menu],
   )
   const offline = device !== undefined && device.connection !== 'online'
 
