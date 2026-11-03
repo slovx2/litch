@@ -11,7 +11,7 @@ const machineHelpZH = `%[4]s：经 Litch 在用户的桌面电脑上执行命令
 
 用法: %[4]s <动作> [选项] [参数]（等同于 codex-harness-adapter machine <动作> …）
   machines                      列出能操作的机器
-  exec [选项] [--] 命令…         用那台机器上用户的登录 shell（-lc）执行一行命令（选项写在命令前面）；输出打到标准输出，退出码就是命令的退出码
+  exec [选项] [--] 命令…         在 Windows 用 PowerShell、macOS/Linux 用登录 shell（-lc）执行一行命令（选项写在命令前面）；输出打到标准输出，退出码就是命令的退出码
       --cwd 目录                工作目录，缺省是主目录
       --timeout-ms N            到点还没结束就结束它（缺省 30000，上限 600000）
       --yield-ms N              到点还没结束就先返回进程号和已有输出（上限 100000），进程留着，用 ps 接着读
@@ -43,7 +43,7 @@ Each step waits for the user to approve in Litch, which can take several minutes
 
 Usage: %[4]s <action> [options] [arguments] (same as codex-harness-adapter machine <action> ...)
   machines                      list the machines you can operate
-  exec [options] [--] command...   run one command line with the user's login shell (-lc) there (options go before the command); output goes to stdout, the exit code is the command's
+  exec [options] [--] command...   run a PowerShell command on Windows, or a login-shell command (-lc) on macOS/Linux (options go before the command); output goes to stdout, the exit code is the command's
       --cwd DIR                 working directory, default home
       --timeout-ms N            kill it after this long (default 30000, at most 600000)
       --yield-ms N              if still running after this long, return the process id and output so far (at most 100000); keep reading with ps

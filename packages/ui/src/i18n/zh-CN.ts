@@ -1598,7 +1598,7 @@ export const zhCN = {
     'Computer Use 需要在本机为“Litch Computer Use”授予两项系统权限（辅助功能、屏幕录制）。',
   'devices.tools.computer.check': '在设置中查看',
   'machine.title': '操作本机（命令与文件）',
-  'machine.note': '该设备上的会话可在本机运行命令、读写文件',
+  'machine.note': '该设备上的会话可在本机运行命令、读写文件（支持 macOS 和 Windows）',
   'machine.enable.title': '允许 {device} 操作本机？',
   'machine.enable.note':
     '开启后，{device} 上的任何会话经你同意，即可以你的身份在本机运行命令、读写文件。如果该设备被他人控制，对方也能这样做。',

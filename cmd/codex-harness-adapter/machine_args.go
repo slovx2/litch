@@ -28,7 +28,7 @@ func fillMachineArgs(command *machineCommand, values map[string]string, position
 		if len(positional) == 0 {
 			return usageErr("exec 缺参数：要执行的命令", "exec is missing the command to run")
 		}
-		// 几段拼成一行交给登录 shell 的 -lc（和 ssh 一样）；带空格、引号的命令整个用引号括起来最稳
+		// 几段拼成一行交给目标机器的 shell（Windows 是 PowerShell）；带空格、引号的命令整个用引号括起来最稳
 		args["command"] = strings.Join(positional, " ")
 		if cwd := values["cwd"]; cwd != "" {
 			args["cwd"] = cwd

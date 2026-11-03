@@ -66,6 +66,17 @@ func TestMachineArgsMapToTools(t *testing.T) {
 			"from": map[string]any{"machine": "session", "path": "/tmp/a"},
 			"to":   map[string]any{"machine": "desktop", "path": "~/b"},
 		}},
+		// 只切机器名后的第一个冒号，Windows 盘符、反斜杠和 UNC 原样交给桌面端。
+		{[]string{"cp", `desktop:C:\用户\中文 a.txt`, "session:/tmp/a"}, "", "copy", map[string]any{
+			"from": map[string]any{"machine": "desktop", "path": `C:\用户\中文 a.txt`},
+			"to":   map[string]any{"machine": "session", "path": "/tmp/a"},
+		}},
+		{[]string{"cp", "session:/tmp/a", `desktop:\\server\share\目录\a`}, "", "copy", map[string]any{
+			"from": map[string]any{"machine": "session", "path": "/tmp/a"},
+			"to":   map[string]any{"machine": "desktop", "path": `\\server\share\目录\a`},
+		}},
+		{[]string{"exec", "--cwd", `C:\用户\项目`, `Write-Output '中文'`}, "", "exec",
+			map[string]any{"command": `Write-Output '中文'`, "cwd": `C:\用户\项目`}},
 	}
 	for _, c := range cases {
 		command := parseOK(t, nil, c.stdin, c.argv...)

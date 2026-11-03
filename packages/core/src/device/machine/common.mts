@@ -25,7 +25,7 @@ import {
   parseProbe,
   runScript,
   ScriptError,
-  scriptCommand,
+  scriptsFor,
   splitBytes,
 } from './scripts.mjs'
 import type {
@@ -206,7 +206,7 @@ export async function lookPath(
   const result = await runScript(
     kit.runner,
     target,
-    scriptCommand.probe(
+    scriptsFor(path).probe(
       path,
       expanded.map((rule) => rule.expanded),
     ),

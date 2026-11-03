@@ -243,6 +243,8 @@ export class ProcessRpc {
       cwd: plan.cwd,
       env: plan.env,
       detached: !plan.tty && process.platform !== 'win32',
+      // Windows 的脚本助手和非交互命令不能为每次文件操作闪出控制台窗口。
+      windowsHide: true,
       stdio: plan.tty || plan.stdin ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'],
     })
     let resolveResult: (value: unknown) => void = () => {}
@@ -714,6 +716,7 @@ export class ProcessRpc {
         if (!record.tty) {
           const killer = spawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
             stdio: 'ignore',
+            windowsHide: true,
           })
           killer.on('error', (error) => debugLog('process.kill.error', { error: error.message }))
         }

@@ -27,7 +27,7 @@ import {
 import { clipMiddle, OutputLog, utf8Stream } from './output.mjs'
 import { flaggedIn } from './paths.mjs'
 import type { RunExit, Runner, Running } from './runner.mjs'
-import { execCommand, PID_MARK, runScript, scriptCommand } from './scripts.mjs'
+import { execCommand, PID_MARK, runScript, scriptsFor } from './scripts.mjs'
 import type { MachineOwner, MachineProcessRecord, MachineTarget } from './types.mjs'
 
 /** 每个进程留多少输出 */
@@ -141,12 +141,16 @@ export class ProcessTable {
       log.push(text)
       for (const wake of holder.proc?.wake ?? []) wake()
     }
-    const running = await this.runner.run(target, execCommand(shell, command), {
-      cwd,
-      stdin: keepStdin,
-      timeoutMs,
-      onOutput,
-    })
+    const running = await this.runner.run(
+      target,
+      execCommand(shell, command, (await target.facts()).system),
+      {
+        cwd,
+        stdin: keepStdin,
+        timeoutMs,
+        onOutput,
+      },
+    )
     const proc: Proc = {
       record: {
         id,
@@ -275,9 +279,14 @@ export class ProcessTable {
       throw new ArgumentError(
         'Litch does not know the process group of this process; use action kill instead.',
       )
-    await runScript(this.runner, proc.target, scriptCommand.signal(signal, proc.pid), {
-      collect: 1024,
-    })
+    await runScript(
+      this.runner,
+      proc.target,
+      scriptsFor(proc.record.cwd).signal(signal, proc.pid),
+      {
+        collect: 1024,
+      },
+    )
   }
 }
 
@@ -329,7 +338,7 @@ export async function execTool(kit: ToolKit, table: ProcessTable, raw: unknown):
     const looked = await lookPath(kit, target, facts, cwdRaw, 'cwd')
     if (looked.probe.type !== 'd')
       return failed('invalid', `cwd ${looked.path} is not an existing folder`, summary)
-    flagged = flaggedIn(command, looked.path, facts.home, looked.rules, looked.icase)
+    flagged = flaggedIn(command, looked.path, facts.home, looked.rules, looked.icase, facts)
     if (looked.blocked && !flagged.includes(looked.blocked.rule)) flagged.push(looked.blocked.rule)
     const refused = await approved(
       kit,

@@ -1,10 +1,12 @@
 // 执行器在目标机器上跑的几段小脚本（POSIX sh，macOS 和 Linux 都能跑）。
 // 协议的 fs/* 不够用：读文件只能整个读、元数据里没有大小、没有“解开符号链接之后的真实路径”、写文件不能接在后面，
 // 所以这几样借 process/spawn 跑脚本来做。参数一律经位置参数交给脚本（sh -c 脚本 litch 参数…），
-// 脚本里不拼任何外面来的字。Windows 的机器（第二期以后）不在这里。
+// Windows 使用 scripts-windows.mts 的字节流和 PowerShell 命令。
 import { decodeUtf8 } from '../../text/bytes.mjs'
 import type { Runner } from './runner.mjs'
+import { windowsExec, windowsScripts } from './scripts-windows.mjs'
 import type { MachineTarget } from './types.mjs'
+import { windowsPath, windowsSystem } from './windows-paths.mjs'
 
 /** 解真实路径：不存在的部分去掉，解开最近存在的祖先（连同中间和末尾的符号链接），再把去掉的接回去 */
 const REAL = `real() {
@@ -80,26 +82,38 @@ const SIGNAL = `kill -s "$1" -- "-$2"`
  * 发 SIGINT 这类信号要用组号（协议的 process/kill 只会 SIGKILL）
  */
 export const PID_MARK = '\u001elitch-pid '
-export const execCommand = (shell: string, command: string): string[] => [
-  '/bin/sh',
-  '-c',
-  `printf '\\036litch-pid %s\\n' "$$" >&2; exec "$0" -lc "$1"`,
-  shell || '/bin/sh',
-  command,
-]
+export const execCommand = (shell: string, command: string, system = ''): string[] =>
+  windowsSystem(system)
+    ? windowsExec(command)
+    : [
+        '/bin/sh',
+        '-c',
+        `printf '\\036litch-pid %s\\n' "$$" >&2; exec "$0" -lc "$1"`,
+        shell || '/bin/sh',
+        command,
+      ]
 
 const sh = (script: string, args: readonly string[]) => ['/bin/sh', '-c', script, 'litch', ...args]
 
 export const scriptCommand = {
   probe: (path: string, denied: readonly string[]) => sh(PROBE, [path, ...denied]),
   list: (root: string, depth: number | null, icase: boolean, prune: readonly string[]) =>
-    sh(LIST, [root, depth == null ? '' : String(depth), icase ? '1' : '0', ...prune]),
+    sh(LIST, [
+      root,
+      depth == null ? '' : String(depth),
+      icase ? '1' : '0',
+      ...prune.map(findPattern),
+    ]),
   readRange: (path: string, offset: number, length: number) =>
     sh(READ_RANGE, [path, String(offset + 1), String(length)]),
   write: (path: string) => sh(WRITE, [path]),
   append: (path: string) => sh(APPEND, [path]),
   signal: (signal: string, pid: number) => sh(SIGNAL, [signal.replace(/^SIG/, ''), String(pid)]),
 }
+
+/** 文件工具按目标的绝对路径选平台；跨设备复制的两端可以是不同系统。 */
+export const scriptsFor = (path: string): typeof scriptCommand =>
+  windowsPath(path) ? windowsScripts : scriptCommand
 
 /** 脚本跑出来的结果有问题：说明给模型看 */
 export class ScriptError extends Error {
@@ -119,7 +133,7 @@ export async function runScript(
   options: { collect: number; timeoutMs?: number; stdin?: Uint8Array; allowFail?: boolean },
 ): Promise<{ stdout: Uint8Array; overflow: boolean; exitCode: number; stderr: string }> {
   const running = await runner.run(target, command, {
-    cwd: '/',
+    cwd: (await target.facts()).home,
     stdin: options.stdin !== undefined,
     timeoutMs: options.timeoutMs ?? SCRIPT_TIMEOUT_MS,
     collect: options.collect,

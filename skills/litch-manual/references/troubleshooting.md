@@ -97,8 +97,8 @@ or while no Litch desktop is connected, fail by design.
 **Sub-sessions or scheduled tasks are missing.** The device may have them switched off
 (`sessions.enabled`, `tasks.enabled`) or the remote adapter is older than 0.11.0.
 
-**Windows.** On Windows devices "operate this computer" (on the Windows desktop) is not available yet;
-Claude Code's "Read only" and "In project" modes cannot run commands there (use Full access or WSL2);
+**Windows.** "Operate this computer" supports Windows desktops (PowerShell commands and Windows paths;
+see `operate-this-computer.md`). Claude Code's "Read only" and "In project" modes cannot run commands there (use Full access or WSL2);
 network-share folders are not supported in the files panel.
 
 ## Where things live (read-only facts for explaining, do not edit by hand)

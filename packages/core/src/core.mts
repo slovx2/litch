@@ -11,7 +11,8 @@ import { createDevice, type Device, type DeviceConfig } from './device/device.mj
 import { channelFailure } from './device/faults.mjs'
 import type { AuthForwardPlatform } from './device/harness-config.mjs'
 import { createMachineExecutor, type MachineExecutorOptions } from './device/machine/executor.mjs'
-import { SENSITIVE_PRESETS } from './device/machine/presets.mjs'
+import { expandPath } from './device/machine/paths.mjs'
+import { sensitivePresets } from './device/machine/presets.mjs'
 import type { MachineExecutor, MachineFacts } from './device/machine/types.mjs'
 import type { PairingPlatform } from './device/pairing.mjs'
 import {
@@ -187,7 +188,7 @@ export function createCore(options: CoreOptions): Core {
       enabled: settings.enabled,
       approval: settings.approval,
       access: { mode: settings.access.mode, custom: [...settings.access.custom] },
-      presets: [...SENSITIVE_PRESETS],
+      presets: [...sensitivePresets(options.machine?.desktop)],
     }
   }
   const machineOptions = options.machine
@@ -1011,10 +1012,15 @@ export function createCore(options: CoreOptions): Core {
               throw new ChannelError('invalid', '无效的访问范围')
             }
             next.access = access.mode
-            if (Array.isArray(access.custom)) next.custom = cleanDeniedPaths(access.custom)
-            else if (access.mode === 'custom' && before.custom === undefined) {
+            if (Array.isArray(access.custom)) {
+              next.custom = cleanDeniedPaths(access.custom)
+              for (const path of next.custom) {
+                if (!expandPath(path, options.machine?.desktop.home ?? '/'))
+                  throw new ChannelError('invalid', '禁止位置必须是绝对路径或以 ~ 开头')
+              }
+            } else if (access.mode === 'custom' && before.custom === undefined) {
               // 第一次切到自定义：从内置名单起步
-              next.custom = [...SENSITIVE_PRESETS]
+              next.custom = [...sensitivePresets(options.machine?.desktop)]
             }
           }
           saved = { ...saved, machine: { ...(saved.machine ?? {}), [deviceId]: next } }

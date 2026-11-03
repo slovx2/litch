@@ -2,29 +2,36 @@
 // 只做字面上的运算；符号链接由 scripts.mts 的 probe 在目标机器上解开，这里拿解开之后的真实路径来比。
 // macOS 的文件系统默认不分大小写：~/.SSH 就是 ~/.ssh，所以那边一律按不分大小写比。
 import { normalizePath } from '../../text/paths.mjs'
+import { normalizeWindowsPath, windowsPath, windowsSystem } from './windows-paths.mjs'
 
 /** 把以 ~ 开头的展开成主目录下的，理成最简（`..` 按字面折掉，之后读写用的也是这个样子）。不是绝对路径的是 null */
 export function expandPath(path: string, home: string): string | null {
-  const trimmed = path.trim()
+  const win = windowsPath(home)
+  const trimmed = win ? path.trim().replace(/\\/g, '/') : path.trim()
   let full: string
   if (trimmed === '~') full = home
   else if (trimmed.startsWith('~/')) full = `${home}/${trimmed.slice(2)}`
   else full = trimmed
+  if (win) return normalizeWindowsPath(full)
   if (!full.startsWith('/') || full.includes('\0')) return null
   return normalizePath(full)
 }
 
 /** 脚本给回来的真实路径可能带重复的斜杠，理一遍 */
-export const cleanReal = (path: string): string => normalizePath(path) || '/'
+export const cleanReal = (path: string): string =>
+  windowsPath(path) ? (normalizeWindowsPath(path) ?? path) : normalizePath(path) || '/'
 
-export const foldCase = (system: string): boolean => /^mac ?os|^darwin/i.test(system)
+export const foldCase = (system: string): boolean =>
+  windowsSystem(system) || /^mac ?os|^darwin/i.test(system)
 
 /** path 是不是 base 本身或者在它里面 */
 export function inside(base: string, path: string, icase: boolean): boolean {
-  const a = icase ? base.toLowerCase() : base
-  const b = icase ? path.toLowerCase() : path
+  const normalizedBase = cleanReal(base)
+  const normalizedPath = cleanReal(path)
+  const a = icase ? normalizedBase.toLowerCase() : normalizedBase
+  const b = icase ? normalizedPath.toLowerCase() : normalizedPath
   if (a === '/') return true
-  return b === a || b.startsWith(`${a}/`)
+  return b === a || b.startsWith(a.endsWith('/') ? a : `${a}/`)
 }
 
 /** 一条生效的禁止位置：设置里的写法、展开之后的、解开符号链接之后的 */
@@ -46,7 +53,7 @@ export function blockedBy(
   return null
 }
 
-/** 禁止位置展开成绝对路径（展不开的，比如相对路径，直接丢掉：设置那边该拦住它） */
+/** 禁止位置必须能展开；无效规则不能悄悄失效。 */
 export function expandRules(
   denied: readonly string[],
   home: string,
@@ -54,7 +61,9 @@ export function expandRules(
   const out: { rule: string; expanded: string }[] = []
   for (const rule of denied) {
     const expanded = expandPath(rule, home)
-    if (expanded && expanded !== '/') out.push({ rule, expanded })
+    if (!expanded)
+      throw new Error(`Blocked location must be an absolute path or start with ~: ${rule}`)
+    out.push({ rule, expanded })
   }
   return out
 }
@@ -72,16 +81,36 @@ export function flaggedIn(
   home: string,
   rules: readonly DeniedRule[],
   icase: boolean,
+  folders: { appData?: string; localAppData?: string } = {},
 ): string[] {
-  const text = icase ? command.toLowerCase() : command
+  const win = windowsPath(home)
+  const normalized = win ? command.replace(/\\/g, '/') : command
+  const text = icase ? normalized.toLowerCase() : normalized
+  home = cleanReal(home)
   const out: string[] = []
   for (const rule of rules) {
     const forms = new Set<string>([rule.expanded, rule.real])
-    if (inside(home, rule.expanded, false) && rule.expanded !== home) {
+    if (inside(home, rule.expanded, icase) && rule.expanded !== home) {
       const rest = rule.expanded.slice(home.length + 1)
       forms.add(`~/${rest}`)
       forms.add(`$HOME/${rest}`)
       forms.add(`\${HOME}/${rest}`)
+      if (win) {
+        forms.add(`$env:USERPROFILE/${rest}`)
+        forms.add(`\${env:USERPROFILE}/${rest}`)
+        forms.add(`%USERPROFILE%/${rest}`)
+      }
+    }
+    if (win) {
+      for (const [name, base] of [
+        ['APPDATA', folders.appData ?? `${home}/AppData/Roaming`],
+        ['LOCALAPPDATA', folders.localAppData ?? `${home}/AppData/Local`],
+      ] as const) {
+        const dir = cleanReal(base)
+        if (!inside(dir, rule.expanded, true)) continue
+        const rest = rule.expanded.slice(dir.length)
+        for (const form of [`$env:${name}`, `\${env:${name}}`, `%${name}%`]) forms.add(form + rest)
+      }
     }
     if (rule.rule.startsWith('~')) forms.add(rule.rule)
     // 相对写法只在前面是空白、引号、等号或者开头时才算，免得 foo.ssh 这种也算进去
@@ -117,6 +146,12 @@ export const lastPart = (path: string): string => path.slice(path.lastIndexOf('/
 
 /** 父目录（根的父目录是根） */
 export const parentOf = (path: string): string => {
+  path = cleanReal(path)
+  if (windowsPath(path)) {
+    if (path.endsWith('/')) return path
+    const parent = path.slice(0, path.lastIndexOf('/'))
+    return normalizeWindowsPath(`${parent}/`) ?? parent
+  }
   const at = path.lastIndexOf('/')
   return at <= 0 ? '/' : path.slice(0, at)
 }

@@ -11,7 +11,7 @@
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import type { Clock } from './channel/protocol.mjs'
 import type { HostSink } from './channel/server.mjs'
-import { SENSITIVE_PRESETS } from './device/machine/presets.mjs'
+import { sensitivePresets } from './device/machine/presets.mjs'
 import type {
   MachineCallContext,
   MachineExecutor,
@@ -326,7 +326,7 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
     mode: settings.access.mode,
     denied:
       settings.access.mode === 'sensitive'
-        ? SENSITIVE_PRESETS
+        ? sensitivePresets(host.desktop)
         : settings.access.mode === 'custom'
           ? [...settings.access.custom]
           : [],

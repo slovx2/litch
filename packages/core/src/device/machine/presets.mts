@@ -1,5 +1,8 @@
 // 访问范围“禁止常用敏感位置”的内置名单。以 ~ 开头的是主目录下的。
 // 设置页显示它，切到“自定义”时从它抄一份起步。改名单就改这里，随版本更新。
+import type { MachineFacts } from './types.mjs'
+import { windowsSystem } from './windows-paths.mjs'
+
 export const SENSITIVE_PRESETS: readonly string[] = [
   '~/.ssh',
   '~/.gnupg',
@@ -31,3 +34,52 @@ export const SENSITIVE_PRESETS: readonly string[] = [
   '~/.netrc',
   '~/.npmrc',
 ]
+
+/** Windows 的凭据、浏览器资料和 harness 配置；AppData 按外壳给的真实目录展开。 */
+export function sensitivePresets(
+  facts?: Pick<MachineFacts, 'system' | 'appData' | 'localAppData'>,
+): readonly string[] {
+  if (!facts || !windowsSystem(facts.system)) return SENSITIVE_PRESETS
+  const roaming = (facts.appData ?? '~/AppData/Roaming').replace(/\\/g, '/')
+  const local = (facts.localAppData ?? '~/AppData/Local').replace(/\\/g, '/')
+  return [
+    '~/.ssh',
+    '~/.gnupg',
+    `${roaming}/Microsoft/Credentials`,
+    `${local}/Microsoft/Credentials`,
+    `${roaming}/Microsoft/Protect`,
+    `${roaming}/Microsoft/Vault`,
+    `${local}/Microsoft/Vault`,
+    `${roaming}/Microsoft/Crypto`,
+    `${local}/Google/Chrome/User Data`,
+    `${local}/Microsoft/Edge/User Data`,
+    `${roaming}/Mozilla/Firefox`,
+    `${local}/Mozilla/Firefox`,
+    `${local}/BraveSoftware`,
+    `${roaming}/Opera Software`,
+    `${local}/Microsoft/Outlook`,
+    `${local}/Packages/microsoft.windowscommunicationsapps_8wekyb3d8bbwe`,
+    `${roaming}/Litch`,
+    '~/.codex-harness-adapter',
+    '~/.codex',
+    '~/.claude',
+    '~/.claude.json',
+    '~/.pi',
+    '~/.dsh',
+    '~/.config/opencode',
+    '~/.local/share/opencode',
+    `${roaming}/codex`,
+    `${roaming}/claude`,
+    `${roaming}/pi`,
+    `${roaming}/dsh`,
+    `${roaming}/opencode`,
+    '~/.config/gh',
+    `${roaming}/GitHub CLI`,
+    '~/.aws',
+    '~/.docker/config.json',
+    '~/.kube/config',
+    '~/.netrc',
+    '~/_netrc',
+    '~/.npmrc',
+  ]
+}

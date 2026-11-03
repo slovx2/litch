@@ -87,9 +87,11 @@ export function addPath(
   return { list: [...list, path] }
 }
 
-/** 去掉首尾空白和结尾多余的斜杠（根目录“/”留着） */
+/** 去掉首尾空白和结尾多余的斜杠；盘符根必须保留分隔符，C: 并不是 C:/。 */
 export function tidyPath(input: string): string {
   const trimmed = input.trim()
+  if (/^[a-z]:[/\\]+$/i.test(trimmed)) return `${trimmed.slice(0, 2)}/`
+  if (/^[a-z]:[/\\]|^\\\\/i.test(trimmed)) return trimmed.replace(/[/\\]+$/, '')
   return trimmed.length > 1 ? trimmed.replace(/\/+$/, '') || '/' : trimmed
 }
 

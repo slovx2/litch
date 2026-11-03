@@ -20,15 +20,9 @@ import {
   type ToolKit,
 } from './common.mjs'
 import { inside, lastPart, parentOf } from './paths.mjs'
-import {
-  findPattern,
-  type ListedEntry,
-  parseListed,
-  runScript,
-  scriptCommand,
-  splitBytes,
-} from './scripts.mjs'
+import { type ListedEntry, parseListed, runScript, scriptsFor, splitBytes } from './scripts.mjs'
 import type { MachineFacts, MachineTarget } from './types.mjs'
+import { windowsCopyPath, windowsPath } from './windows-paths.mjs'
 
 /** 每块多大 */
 export const COPY_CHUNK = 4 * 1024 * 1024
@@ -89,8 +83,11 @@ export async function copyTool(kit: ToolKit, raw: unknown): Promise<Outcome> {
     if (kind === 'f' && source.looked.probe.size == null)
       return failed('failed', `${source.looked.path} cannot be read (permission denied).`, summary)
     // 目标是个已有的目录（或者以斜杠结尾），就放进它里面，名字照源的
-    if (dest.looked.probe.type === 'd' || to.path.endsWith('/')) {
-      const inner = `${dest.looked.path === '/' ? '' : dest.looked.path}/${lastPart(source.looked.path)}`
+    if (dest.looked.probe.type === 'd' || /[/\\]$/.test(to.path)) {
+      const name = lastPart(source.looked.path)
+      if (windowsPath(dest.looked.path) && !windowsCopyPath(dest.looked.path, name))
+        throw new ArgumentError(`Cannot copy this name to Windows: ${name}`)
+      const inner = `${dest.looked.path === '/' ? '' : dest.looked.path}/${name}`
       dest = { ...dest, looked: await lookPath(kit, dest.target, dest.facts, inner) }
       summary = `${source.label}:${source.looked.path} -> ${dest.label}:${dest.looked.path}`
       if (dest.looked.blocked) return failed('blocked', blockedMessage(dest.looked), summary)
@@ -114,7 +111,11 @@ export async function copyTool(kit: ToolKit, raw: unknown): Promise<Outcome> {
       inside(source.looked.probe.real, dest.looked.probe.real, source.looked.icase)
     )
       return failed('invalid', 'Cannot copy a folder into itself.', summary)
-    if (sameMachine && source.looked.probe.real === dest.looked.probe.real)
+    if (
+      sameMachine &&
+      inside(source.looked.probe.real, dest.looked.probe.real, source.looked.icase) &&
+      inside(dest.looked.probe.real, source.looked.probe.real, source.looked.icase)
+    )
       return failed('invalid', 'Source and destination are the same file.', summary)
 
     // 复制到桌面端算“写”，从桌面端复制出去算“读”（“本会话都允许”按这两类各记）
@@ -157,6 +158,14 @@ export async function copyTool(kit: ToolKit, raw: unknown): Promise<Outcome> {
 
     const srcRoot = source.looked.probe.real
     const dstRoot = dest.looked.path
+    // POSIX 文件名可以含反斜杠、冒号或末尾空格；Windows 会把它们当路径或别名，不能直接拼进去。
+    if (windowsPath(dstRoot)) {
+      for (const rel of [...plan.dirs, ...plan.files.map((file) => file.rel)]) {
+        if (!rel) continue
+        if (!windowsCopyPath(dstRoot, rel))
+          throw new ArgumentError(`Cannot copy this name to Windows: ${rel}`)
+      }
+    }
     if (kind === 'd')
       await dest.target.request('fs/createDirectory', { path: dstRoot, recursive: true })
     else
@@ -238,18 +247,20 @@ const filePlan = (size: number): Plan => ({
 })
 
 async function listTree(kit: ToolKit, target: MachineTarget, root: string, looked: LookedPath) {
-  const prune = looked.rules.flatMap((rule) => [rule.real, rule.expanded]).map(findPattern)
+  const prune = looked.rules.flatMap((rule) => [rule.real, rule.expanded])
   const result = await runScript(
     kit.runner,
     target,
-    scriptCommand.list(root, null, looked.icase, prune),
+    scriptsFor(root).list(root, null, looked.icase, prune),
     {
       collect: COPY_LIST_COLLECT,
       allowFail: true,
       timeoutMs: 300_000,
     },
   )
-  const prefix = root === '/' ? '/' : `${root}/`
+  const prefix = root.endsWith('/') ? root : `${root}/`
+  if (result.exitCode !== 0 && !result.overflow)
+    throw new ArgumentError(`Could not inspect ${root}: ${result.stderr.trim()}`)
   const entries: (ListedEntry & { rel: string })[] = []
   for (const record of splitBytes(result.stdout, [0, 0x1e])) {
     const entry = parseListed(decodeUtf8(record))
@@ -284,7 +295,11 @@ async function treePlan(kit: ToolKit, source: End, dest: End): Promise<Plan> {
     destLinks = there.entries.filter((entry) => entry.type === 'l').map((entry) => entry.rel)
   }
   const throughLink = (rel: string) =>
-    destLinks.some((link) => rel === link || rel.startsWith(`${link}/`))
+    destLinks.some((link) => {
+      const a = dest.looked.icase ? link.toLowerCase() : link
+      const b = dest.looked.icase ? rel.toLowerCase() : rel
+      return b === a || b.startsWith(`${a}/`)
+    })
   for (const entry of tree.entries.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0))) {
     if (pruned(entry.path)) {
       plan.blocked.push(entry.rel)
@@ -322,8 +337,8 @@ async function copyFile(
     )
     return decodeBase64(read.dataBase64).length
   }
-  const writer = await kit.runner.run(to, scriptCommand.write(dst), {
-    cwd: '/',
+  const writer = await kit.runner.run(to, scriptsFor(dst).write(dst), {
+    cwd: (await to.facts()).home,
     stdin: true,
     timeoutMs: null,
   })
@@ -335,7 +350,7 @@ async function copyFile(
       const chunk = await runScript(
         kit.runner,
         from,
-        scriptCommand.readRange(src, offset, length),
+        scriptsFor(src).readRange(src, offset, length),
         {
           collect: length,
           timeoutMs: 120_000,

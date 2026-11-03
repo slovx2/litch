@@ -172,7 +172,7 @@ export function machineToolsSpec(context: MachineSpecContext | null): ClientTool
       {
         type: 'function',
         name: MACHINE_TOOL.exec,
-        description: `Run one command line with the user's login shell (-lc) on a machine. Returns the exit code and combined output (at most ${MACHINE_LIMITS.outputBytes / 1024}KB, middle cut). If it is still running after yield_ms, returns process_id and the output so far; the process keeps running.`,
+        description: `Run a command with PowerShell (no profile, UTF-8) on Windows, or the user's login shell (-lc) on macOS/Linux. Returns the exit code and combined output (at most ${MACHINE_LIMITS.outputBytes / 1024}KB, middle cut). If still running after yield_ms, returns process_id; the process keeps running.`,
         inputSchema: {
           type: 'object',
           properties: {

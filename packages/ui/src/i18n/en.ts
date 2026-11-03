@@ -1667,7 +1667,7 @@ export const en: Record<MessageKey, Entry> = {
   'devices.tools.computer.check': 'View in Settings',
   'machine.title': 'Operate this computer (commands and files)',
   'machine.note':
-    'Sessions on this device can run commands and read or write files on this computer',
+    'Sessions on this device can run commands and read or write files on this Mac or Windows PC',
   'machine.enable.title': 'Let {device} operate this computer?',
   'machine.enable.note':
     'Any session on {device} can then run commands and read or write files on this computer as you, after your approval. If someone takes over that device, they can do the same.',

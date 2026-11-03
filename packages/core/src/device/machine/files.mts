@@ -22,7 +22,8 @@ import {
   targetOf,
 } from './common.mjs'
 import { utf8CompleteLength, utf8LeadingContinuation } from './output.mjs'
-import { findPattern, parseListed, runScript, scriptCommand, splitBytes } from './scripts.mjs'
+import { parentOf } from './paths.mjs'
+import { parseListed, runScript, scriptsFor, splitBytes } from './scripts.mjs'
 
 /** 不超过这么大的整个读回来再切（省一次起进程） */
 const WHOLE_READ_MAX = 1024 * 1024
@@ -155,7 +156,7 @@ export async function readFileTool(kit: ToolKit, raw: unknown): Promise<Outcome>
       const result = await runScript(
         kit.runner,
         target,
-        scriptCommand.readRange(looked.path, offset, length),
+        scriptsFor(looked.path).readRange(looked.path, offset, length),
         {
           collect: length,
         },
@@ -219,10 +220,10 @@ export async function writeFileTool(kit: ToolKit, raw: unknown): Promise<Outcome
         `${looked.path} already exists; use mode overwrite or append.`,
         summary,
       )
-    const parent = looked.path.slice(0, looked.path.lastIndexOf('/')) || '/'
+    const parent = parentOf(looked.path)
     if (!exists) await target.request('fs/createDirectory', { path: parent, recursive: true })
     if (mode === 'append' && exists) {
-      await runScript(kit.runner, target, scriptCommand.append(looked.path), {
+      await runScript(kit.runner, target, scriptsFor(looked.path).append(looked.path), {
         collect: 1024,
         stdin: bytes,
       })
@@ -267,26 +268,27 @@ export async function listDirTool(kit: ToolKit, raw: unknown): Promise<Outcome> 
       return failed('invalid', `${looked.path} is not a folder; use read_file.`, summary)
     const root = looked.probe.real
     // 禁止位置不往下走：列出来但标明挡住了
-    const prune = looked.rules.flatMap((rule) => [rule.real, rule.expanded]).map(findPattern)
+    const prune = looked.rules.flatMap((rule) => [rule.real, rule.expanded])
     const result = await runScript(
       kit.runner,
       target,
-      scriptCommand.list(root, depth, looked.icase, prune),
+      scriptsFor(root).list(root, depth, looked.icase, prune),
       {
         collect: LIST_COLLECT,
         allowFail: true,
       },
     )
     const records = splitBytes(result.stdout, [0, 0x1e])
+    const prefix = root.endsWith('/') ? root : `${root}/`
     const entries = []
     for (const record of records) {
       const entry = parseListed(decodeUtf8(record))
-      if (entry?.path.startsWith(`${root === '/' ? '' : root}/`)) entries.push(entry)
+      if (entry?.path.startsWith(prefix)) entries.push(entry)
     }
     const truncated = result.overflow || entries.length > MACHINE_LIMITS.listEntries
     entries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
     const shown = entries.slice(0, MACHINE_LIMITS.listEntries)
-    const cut = root === '/' ? 1 : root.length + 1
+    const cut = prefix.length
     const lines = shown.map((entry) => {
       const name = entry.path.slice(cut) + (entry.type === 'd' ? '/' : '')
       const blocked = looked.rules.some(

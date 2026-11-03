@@ -144,7 +144,14 @@ function desktopFacts() {
     system,
     user: user.username,
     home: homedir(),
-    shell: user.shell ?? process.env.SHELL ?? '',
+    shell:
+      process.platform === 'win32' ? 'powershell.exe' : (user.shell ?? process.env.SHELL ?? ''),
+    ...(process.platform === 'win32'
+      ? {
+          appData: process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'),
+          localAppData: process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'),
+        }
+      : {}),
   }
 }
 
@@ -204,8 +211,7 @@ function createHost(): Core | MockCore {
     },
     clientTools: toolPort,
     forward: authForward(),
-    // 操作这台电脑（litch_machine）的脚本只有 POSIX 的写法：Windows 的桌面端不提供，远程设备上就没有这个工具和开关
-    ...(process.platform === 'win32' ? {} : { machine: { desktop } }),
+    machine: { desktop },
     // 扫码绑定手机：一次性私钥的临时文件放在用户数据目录下；本机给手机看的名字用电脑名称。
     // 扫码时核对过的批准公钥、撤销的手机交给主进程（批准钥匙只由它读写，approvals/main.mts）
     pairing: {

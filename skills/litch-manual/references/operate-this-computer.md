@@ -5,8 +5,8 @@ between that machine and this computer (the one running the Litch desktop app), 
 approves. Requests travel back over the existing SSH connection and are approved and run by the desktop
 app; no port is opened and macOS Remote Login is not used.
 
-- Remote devices only, per device; **off by default**. Not available when the desktop app runs on
-  Windows. The remote adapter needs 0.10.0 or later.
+- Remote devices only, per device; **off by default**. Supports macOS and Windows desktops.
+  The remote adapter needs 0.10.0 or later.
 - Codex, Claude Code and Pi sessions started from Litch get it as tools; other harnesses (and anything
   else running on the remote machine) use the `litch-machine` command there (same as
   `codex-harness-adapter machine`: `machines`, `exec`, `ps`, `read`, `write`, `ls`, `cp`, `--json`).
@@ -51,6 +51,24 @@ is no "always allow". A card unanswered for 10 minutes counts as declined.
 
 File tools refuse blocked places outright. Commands cannot be fully checked: a command that mentions a
 blocked place shows a red card even if the session was already allowed.
+
+### Windows
+
+- Commands run in Windows PowerShell without a profile, with UTF-8 input/output. Use PowerShell
+  syntax; `machines` reports the shell. Text writes use UTF-8 without a BOM and preserve the supplied
+  line endings. Copy preserves bytes, including files using legacy encodings; text reads expect UTF-8.
+- Paths accept `C:\Users\name\file.txt`, `C:/Users/name/file.txt`, `~/file.txt` and UNC paths such as
+  `\\server\share\file.txt`. Access checks ignore case and resolve junctions and symbolic links.
+  Drive-relative paths (`C:file.txt`), device paths and alternate data streams are rejected.
+- The Windows sensitive list covers SSH/GPG keys, Windows credentials and protection keys,
+  browser profiles, Outlook data, Litch and harness configuration, and common CLI credentials.
+  AppData locations follow this computer's configuration. Custom paths are absolute paths or use `~`.
+- End and Stop all terminate the entire process tree. POSIX signals are unavailable; use `ps … kill`.
+- From a remote shell, quote the whole Windows argument, for example:
+  `litch-machine cp 'desktop:C:\Users\name\report.txt' 'session:/tmp/report.txt'`.
+- If PowerShell or a file operation reports access denied or a security-policy error, review the
+  original error and Windows Security's Protection history or your organization's policy. Litch does
+  not bypass those controls; only approve the program or folder if you recognize and trust it.
 
 ## Watching and stopping
 

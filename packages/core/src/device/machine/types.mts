@@ -21,6 +21,9 @@ export interface MachineFacts {
   home: string
   /** 登录 shell 的路径 */
   shell: string
+  /** Windows 的实际用户配置目录（可重定向到别的盘）。仅用于本机访问范围 */
+  appData?: string
+  localAppData?: string
 }
 
 /** 一台能操作的机器：背后是核心到那台设备的一条连接（第一期只有桌面端这台，背后是本机设备的连接） */

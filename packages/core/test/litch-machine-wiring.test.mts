@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import type { JsonRpcMessage, Thread } from '../../protocol/src/index.mjs'
 import { codexRejects } from '../../shared/test/codex-params.mjs'
-import { SENSITIVE_PRESETS } from '../src/device/machine/presets.mjs'
+import { SENSITIVE_PRESETS, sensitivePresets } from '../src/device/machine/presets.mjs'
 import type {
   MachineApprovalResult,
   MachineCallContext,
@@ -161,7 +161,7 @@ function fakeExecutor() {
   }
 }
 
-function setup(options: { threads?: Thread[]; machine?: boolean } = {}) {
+function setup(options: { threads?: Thread[]; machine?: boolean; desktop?: MachineFacts } = {}) {
   const threads = options.threads ?? [
     thread({ id: 'a', cwd: '/work/app', turns: [turn('t1', [], { status: 'inProgress' })] }),
   ]
@@ -234,7 +234,7 @@ function setup(options: { threads?: Thread[]; machine?: boolean } = {}) {
     clientTools: main.port,
     ...(options.machine === false
       ? {}
-      : { machine: { desktop: DESKTOP, executor: () => fake.executor } }),
+      : { machine: { desktop: options.desktop ?? DESKTOP, executor: () => fake.executor } }),
     store: {
       load: () => ({ localWire: null, remotes: [] }),
       save() {},
@@ -354,13 +354,57 @@ const cardsOf = (session: ReturnType<typeof watchSession>) =>
       request.kind === 'clientAsk' && request.ask.kind === 'machine',
   )
 
-async function started() {
-  const world = setup()
+async function started(options: Parameters<typeof setup>[0] = {}) {
+  const world = setup(options)
   world.core.start()
   await settle()
   await settle()
   return world
 }
+
+test('Windows 桌面端：宣告工具、敏感名单、自定义范围、命令行审批原样展示路径', async () => {
+  const desktop = {
+    ...DESKTOP,
+    system: 'Windows 11 x64',
+    home: 'C:\\Users\\song',
+    shell: 'powershell.exe',
+    appData: 'D:/配置',
+  }
+  const { core, command, box, enable, detached, activity, fake } = await started({ desktop })
+  try {
+    assert.deepEqual(box()?.machine?.presets, sensitivePresets(desktop))
+    await enable()
+    await command('device.machine.set', { deviceId: 'box', access: { mode: 'custom' } })
+    assert.deepEqual(box()?.machine?.access.custom, sensitivePresets(desktop))
+    await assert.rejects(
+      command('device.machine.set', {
+        deviceId: 'box',
+        access: { mode: 'custom', custom: ['C:relative'] },
+      }),
+      { code: 'invalid' },
+    )
+    await command('device.machine.set', {
+      deviceId: 'box',
+      access: { mode: 'custom', custom: ['C:\\机密'] },
+    })
+    const pending = detached(
+      { path: 'C:\\Users\\song\\中文.txt' },
+      { tool: 'read_file', harness: 'dsh' },
+    )
+    await settle()
+    const card = activity.view?.pending[0]
+    assert.equal(card?.ask.path, 'C:\\Users\\song\\中文.txt')
+    assert.deepEqual(fake.seen.at(-1)?.context.policy, { mode: 'custom', denied: ['C:\\机密'] })
+    await command('machine.answer', { pendingId: card?.id, optionId: 'once', note: null })
+    assert.equal(textOf(await pending), 'ok')
+    await command('device.machine.set', { deviceId: 'box', access: { mode: 'open' } })
+    const machines = detached({}, { tool: 'machines' })
+    await machines
+    assert.deepEqual(fake.seen.at(-1)?.context.policy.denied, [])
+  } finally {
+    core.stop()
+  }
+})
 
 test('开关：默认关闭时展示开启卡；拒绝仍回 disabled 和双语提示，不执行并记录', async () => {
   const world = await started()
