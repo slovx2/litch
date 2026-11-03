@@ -81,7 +81,7 @@ test('项目订阅在变更时重新读取别名；晚到的读取不会覆盖�
   assert.equal(snapshots.at(-1)?.record, null)
   await assert.rejects(
     permissions.set({ harness: 'pi', cwd: '/alias', permission: ':read-only', confirmed: false }),
-    /设备未连接/,
+    /Device disconnected/,
   )
   stop()
   permissions.notification(PROJECT_PERMISSION.changed)
@@ -105,6 +105,7 @@ test('不支持项目权限的连接不发送扩展请求；读取失败明确�
   const stop = permissions.open('/missing', 'pi', {
     snapshot: (value) => {
       view = value as ProjectPermissionView
+      failure = view.failure
     },
     delta() {},
     error: (error) => {
@@ -117,13 +118,18 @@ test('不支持项目权限的连接不发送扩展请求；读取失败明确�
     harness: 'pi',
     available: false,
     record: null,
+    failure: {
+      code: 'unsupported',
+      message: 'Permission storage unavailable',
+      text: { key: 'permission.project.unavailable' },
+    },
   })
   assert.equal(requests, 0)
   supported = true
   permissions.resync()
   await Promise.resolve()
   await Promise.resolve()
-  assert.match(String(failure), /目录不存在/)
+  assert.equal((failure as { text: { key: string } }).text.key, 'permission.project.failedReason')
   stop()
 })
 
@@ -153,6 +159,7 @@ test('保存结果立即更新选择，重读失败有提示而不是悄悄还�
   const stop = permissions.open('', 'pi', {
     snapshot: (value) => {
       shown = value as ProjectPermissionView
+      failure = shown.failure
     },
     delta() {},
     error: (error) => {
@@ -166,7 +173,7 @@ test('保存结果立即更新选择，重读失败有提示而不是悄悄还�
     permission: ':danger-full-access',
     confirmed: true,
   })
-  assert.equal(shown?.record?.permission, ':danger-full-access')
-  assert.match(String(failure), /重读失败/)
+  assert.equal(shown?.record, null)
+  assert.equal((failure as { text: { key: string } }).text.key, 'permission.project.failedReason')
   stop()
 })

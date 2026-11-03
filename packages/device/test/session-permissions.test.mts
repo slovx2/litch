@@ -357,3 +357,27 @@ test('同目录两个 harness 各记各的；确认按引擎声明且不跨 harn
     await env.close()
   }
 })
+
+test('权限读取不等待忙碌引擎；未知新旧方法立即报错且不先访问目录', { timeout: 5_000 }, async () => {
+  const env = treeRig()
+  try {
+    const client = env.connect()
+    await client.initialize(['harness', 'harnessProjectPermissions'])
+    await parent(client)
+    // 引擎请求悬而未决时，设备权限读取依然直接完成。
+    env.pi.handlers['model/list'] = () => new Promise(() => {})
+    client.sendRaw(JSON.stringify({ id: 'busy', method: 'model/list', params: { harness: 'pi' } }))
+    const result = await client.call(PROJECT_PERMISSION.read, { cwd: env.stateDir, harness: 'pi' })
+    assert.equal(result.permission, null)
+    assert.equal(env.pi.sent(PROJECT_PERMISSION.read).length, 0)
+    for (const params of [{}, { cwd: '/does-not-exist', harness: 'pi' }]) {
+      await assert.rejects(client.call('litch/harnessProjectPermission/unknown', params), {
+        code: -32601,
+      })
+    }
+    const old = await client.fails('litch/projectPermission/read', { cwd: env.stateDir })
+    assert.equal(old.data?.litch, 'unsupported')
+  } finally {
+    await env.close()
+  }
+})

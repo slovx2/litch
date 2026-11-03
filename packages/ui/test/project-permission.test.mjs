@@ -12,6 +12,8 @@ for (const platform of ['desktop', 'mobile']) {
     let available = true
     let failure = null
     let calls = 0
+    let readFailure
+    let retries = 0
     globalThis.__permissionHooks = {
       useState(initial) {
         const index = cursor++
@@ -41,8 +43,10 @@ for (const platform of ['desktop', 'mobile']) {
             export const useSyncExternalStore=(_,read)=>read();`,
               '@litch/core': `export const permissionLevel=x=>[':read-only',':workspace',':danger-full-access'].includes(x)?x:null;
             export const keys={projectPermission:(d,p,h)=>'permission:'+JSON.stringify([d,p,h]),projectPermissionError:(d,p,h)=>'error:'+JSON.stringify([d,p,h])};`,
-              '../../ui/i18n': 'export const useT=()=>key=>key;',
-              '../app/appearance.ts': 'export const useT=()=>key=>key;',
+              '../../ui/i18n':
+                'export const useT=()=>Object.assign(key=>key,{text:x=>x.key,said:x=>x.en});',
+              '../app/appearance.ts':
+                'export const useT=()=>Object.assign(key=>key,{text:x=>x.key,said:x=>x.en});',
               '../app/errors.ts': 'export const reasonOf=x=>x.message;',
             }
             api.onResolve({ filter: /.*/ }, ({ path }) =>
@@ -62,6 +66,11 @@ for (const platform of ['desktop', 'mobile']) {
       const services = {
         channel: {
           command: async (method, input) => {
+            if (method === 'projectPermission.retry') {
+              retries++
+              readFailure = undefined
+              return
+            }
             calls++
             assert.equal(method, 'projectPermission.set')
             if (!available) throw new Error('设备不支持项目权限，请升级设备服务')
@@ -86,7 +95,7 @@ for (const platform of ['desktop', 'mobile']) {
             subscribe: () => () => {},
             get: (key) =>
               key.startsWith('error:')
-                ? undefined
+                ? readFailure
                 : {
                     available,
                     record: available
@@ -153,6 +162,26 @@ for (const platform of ['desktop', 'mobile']) {
       failure = null
       assert.equal(await render('/project').save(':read-only', false), true)
       assert.equal(render('/project').notice, null, '可以重试保存')
+      states = []
+      for (const reason of ['timeout', 'unavailable', 'offline']) {
+        readFailure = {
+          message: 'RpcAbortError: litch/projectPermission/read 在 30000 毫秒内未响应',
+          text: { key: `permission.project.${reason}` },
+        }
+        const failed = render()
+        assert.equal(failed.loading, false)
+        assert.equal(failed.readFailed, true)
+        assert.equal(failed.permission, null, '失败不能使用之前缓存的权限')
+        assert.equal(failed.confirmed(':danger-full-access'), false)
+        assert.equal(failed.notice, `permission.project.${reason}`)
+        await assert.rejects(failed.persist(':danger-full-access'), /confirmFirst/)
+        const before = calls
+        await failed.persist(':workspace')
+        assert.equal(calls, before, '读取失败不自动覆盖原记录')
+        await failed.retry()
+        assert.equal(render().readFailed, false)
+      }
+      assert.equal(retries, 3)
     } finally {
       delete globalThis.__permissionHooks
     }

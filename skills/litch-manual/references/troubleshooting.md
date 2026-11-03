@@ -118,3 +118,9 @@ network-share folders are not supported in the files panel.
 - This manual: `~/.agents/skills/litch-manual`, linked into other harnesses' skill folders. Litch
   rewrites it every time it starts; the switch "Install the manual into local harnesses" is in Litch's
   settings.
+
+### 记住的访问权限读取失败
+
+新建对话显示“未能读取记住的权限”时，没有手动选择时使用当前 harness 的默认权限，已有手动选择时保留所选档位，仍可创建对话，不会把默认值写回项目权限记录。设置条的“读取失败”旁可重试；桌面悬停显示原因，手机直接显示原因。设备无响应可稍后重试，断线后重新连接，不支持保存权限的设备需要升级设备服务。恢复读取后，没有手动选择的表单重新采用该设备、目录和 harness 记住的权限；手动选择不被覆盖。已有对话的当前权限不受读取失败影响。
+
+When saved permissions cannot be loaded, new conversations use the harness default without overwriting the saved choice. Retry beside “Couldn’t load”; hover on desktop or read the reason on mobile. Reconnect a disconnected device, retry an unresponsive device, or update a device service that does not support saved permissions. Existing conversations keep their current permissions.

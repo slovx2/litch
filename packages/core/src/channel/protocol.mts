@@ -484,6 +484,10 @@ export interface Commands {
       rejectedQuestions: ManagerAnswersResult['rejected']
     }
   }
+  'projectPermission.retry': {
+    params: { deviceId: string; cwd: string; harness: string }
+    result: void
+  }
   'projectPermission.set': {
     params: ProjectPermissionSet & { deviceId: string }
     result: ProjectPermission

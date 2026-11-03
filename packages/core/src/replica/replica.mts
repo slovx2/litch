@@ -1543,7 +1543,9 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
           {
             snapshot: (view) => {
               store.set(key, view)
-              store.delete(keys.projectPermissionError(deviceId, cwd, harness))
+              const errorKey = keys.projectPermissionError(deviceId, cwd, harness)
+              if (view.failure) store.set(errorKey, view.failure)
+              else store.delete(errorKey)
             },
             delta: (ops) => {
               for (const op of ops) store.set(key, op.view)

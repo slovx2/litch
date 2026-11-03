@@ -2867,6 +2867,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       }
       const tuned = harnessConfig.command(name, params)
       if (tuned !== undefined) return tuned
+      if (name === 'projectPermission.retry') return undefined
       if (name === 'projectPermission.set') {
         const { deviceId, cwd, harness, permission, confirmed } =
           params as Commands['projectPermission.set']['params']

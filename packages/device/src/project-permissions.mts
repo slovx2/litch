@@ -47,12 +47,14 @@ export class ProjectPermissions {
     }
   }
   call(method: string, value: unknown, confirmationRequired = true): ProjectPermission {
+    // 未知方法先拒绝，不能先访问目录或数据库再发现方法不存在。
+    if (method !== PROJECT_PERMISSION.read && method !== PROJECT_PERMISSION.set)
+      throw new ProtocolError(-32601, '未知项目权限方法')
     const fields = isObject(value) ? value : {}
     if (typeof fields.cwd !== 'string') throw new ProtocolError(-32602, '需要 cwd 字符串')
     if (typeof fields.harness !== 'string') throw new ProtocolError(-32602, '需要 harness 字符串')
     const current = this.read(fields.cwd, fields.harness)
     if (method === PROJECT_PERMISSION.read) return current
-    if (method !== PROJECT_PERMISSION.set) throw new ProtocolError(-32601, '未知项目权限方法')
     const permission = permissionLevel(fields.permission)
     if (!permission || typeof fields.confirmed !== 'boolean')
       throw new ProtocolError(-32602, '需要有效的 permission 和 confirmed')

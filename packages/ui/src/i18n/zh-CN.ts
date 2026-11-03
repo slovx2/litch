@@ -241,6 +241,11 @@ export const zhCN = {
   'workspace.unpin': '取消置顶',
   'workspace.ungroup': '移出“{name}”',
   'permission.newOnly': '此权限只能在新建会话时选择',
+  'permission.project.readFailed': '读取失败',
+  'permission.project.retry': '重新读取记住的权限',
+  'permission.project.readFallback': '未能读取记住的权限，本次仍按所选权限新建。',
+  'permission.project.timeout': '设备无响应，请稍后重试。',
+  'permission.project.offline': '设备连接已断开，请连接设备后重试。',
   'permission.project.unavailable':
     '此设备无法记住访问权限，本次仍按所选权限新建。升级设备服务后可记住。',
   'permission.project.saveFailed': '未能保存访问权限：{reason}。本次仍按所选权限新建。',

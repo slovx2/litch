@@ -35,6 +35,15 @@ export function useProjectPermission(
   const readError = useSyncExternalStore(watchError, () =>
     replica.store.get<ChannelErrorShape>(errorKey),
   )
+  const [retrying, setRetrying] = useState(false)
+  const reason = (error: unknown) => {
+    const safe = error as ChannelErrorShape | null
+    return safe?.text
+      ? t.text(safe.text)
+      : safe?.said
+        ? t.said(safe.said)
+        : t('permission.project.failedReason')
+  }
   const [saving, setSaving] = useState(false)
   const [failure, setFailure] = useState<{ key: string; text: string } | null>(null)
   // 表单内的选择优先于设备记忆；无法保存的确认只允许本次发送，不共享给下一张表单。
@@ -49,6 +58,7 @@ export function useProjectPermission(
     id: string | null | undefined,
     confirmed = false,
     consume = true,
+    selected = false,
   ): Promise<string | null> => {
     const permission = permissionLevel(id)
     if (!permission) return null
@@ -62,7 +72,7 @@ export function useProjectPermission(
       requiresConfirmation &&
       !confirmed &&
       !once &&
-      !view?.record?.confirmedPermissions.includes(permission)
+      !(!readError && view?.record?.confirmedPermissions.includes(permission))
     )
       throw new Error(t('permission.project.confirmFirst'))
     // 记忆是辅助功能；确认要求已满足后，持久化失败不能阻断按当前档位新建。
@@ -70,6 +80,7 @@ export function useProjectPermission(
     try {
       if (!deviceId || !harness) return null
       if (view?.available === false) notice = t('permission.project.unavailable')
+      else if (readError && !selected) notice = t('permission.project.readFallback')
       else
         await channel.command('projectPermission.set', {
           deviceId,
@@ -78,8 +89,8 @@ export function useProjectPermission(
           permission,
           confirmed: requiresConfirmation && (confirmed || once),
         })
-    } catch {
-      notice = t('permission.project.saveFailed', { reason: t('permission.project.failedReason') })
+    } catch (error) {
+      notice = t('permission.project.saveFailed', { reason: reason(error) })
     } finally {
       if (consume && once) confirmedOnce.current = null
     }
@@ -93,7 +104,7 @@ export function useProjectPermission(
     setSaving(true)
     setFailure(null)
     try {
-      await persist(id, confirmed, false)
+      await persist(id, confirmed, false, true)
       setSelection({ key, permission })
       if (
         confirmed &&
@@ -110,11 +121,31 @@ export function useProjectPermission(
       setSaving(false)
     }
   }
+  const retry = async () => {
+    if (retrying) return
+    setRetrying(true)
+    setFailure(null)
+    try {
+      await channel.command('projectPermission.retry', { deviceId, cwd: path, harness })
+    } catch (error) {
+      setFailure({ key, text: reason(error) })
+    } finally {
+      setRetrying(false)
+    }
+  }
   return {
     view,
-    permission: selection?.key === key ? selection.permission : (view?.record?.permission ?? null),
+    readFailed: Boolean(readError),
+    retrying,
+    retry,
+    permission:
+      selection?.key === key
+        ? selection.permission
+        : readError
+          ? null
+          : (view?.record?.permission ?? null),
     confirmed: (id: string) =>
-      view?.record?.confirmedPermissions.some((entry) => entry === id) === true ||
+      (!readError && view?.record?.confirmedPermissions.some((entry) => entry === id) === true) ||
       (confirmedOnce.current?.key === key && confirmedOnce.current.permission === id),
     loading: Boolean(deviceId && harness && !view && !readError),
     saving,
@@ -124,7 +155,7 @@ export function useProjectPermission(
         : view?.available === false
           ? t('permission.project.unavailable')
           : readError
-            ? t('permission.project.saveFailed', { reason: t('permission.project.failedReason') })
+            ? reason(readError)
             : null,
     errorField: readError?.key,
     save,

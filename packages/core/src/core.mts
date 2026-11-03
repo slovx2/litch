@@ -1269,6 +1269,10 @@ export function createCore(options: CoreOptions): Core {
           return deviceOf(deviceId).diffs.requests()
         }
         // 经理与定时任务：各模块把设备结果转换为界面形状。
+        case 'projectPermission.retry': {
+          const { deviceId, cwd, harness } = params as Commands['projectPermission.retry']['params']
+          return deviceOf(deviceId).projectPermissions.retry(cwd, harness)
+        }
         case 'projectPermission.set': {
           const { deviceId, ...input } = params as Commands['projectPermission.set']['params']
           return deviceOf(deviceId).projectPermissions.set(input)
