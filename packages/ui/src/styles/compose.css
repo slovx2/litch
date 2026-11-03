@@ -261,6 +261,7 @@
    圆角跟着皮肤走（和设置页的 .switch 同一个算法）：有圆角的皮肤里是胶囊，方角的皮肤里是方块 */
 .mode-btn {
   flex: none;
+  white-space: nowrap;
   height: calc(16px * var(--fs) + 8px);
   padding: 0 6px 0 4px;
   border-radius: var(--r1);

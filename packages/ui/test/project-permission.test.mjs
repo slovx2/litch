@@ -13,7 +13,6 @@ for (const platform of ['desktop', 'mobile']) {
     let failure = null
     let calls = 0
     let readFailure
-    let retries = 0
     globalThis.__permissionHooks = {
       useState(initial) {
         const index = cursor++
@@ -66,15 +65,10 @@ for (const platform of ['desktop', 'mobile']) {
       const services = {
         channel: {
           command: async (method, input) => {
-            if (method === 'projectPermission.retry') {
-              retries++
-              readFailure = undefined
-              return
-            }
             calls++
             assert.equal(method, 'projectPermission.set')
             if (!available) throw new Error('设备不支持项目权限，请升级设备服务')
-            if (failure) throw new Error(failure)
+            if (failure) throw typeof failure === 'string' ? new Error(failure) : failure
             records.set(
               `permission:${JSON.stringify([input.deviceId, input.cwd, input.harness])}`,
               {
@@ -121,8 +115,12 @@ for (const platform of ['desktop', 'mobile']) {
         })
       }
       available = false
+      await assert.rejects(render('/project').persist(':danger-full-access'), /confirmFirst/)
       assert.equal(await render('/project').save(':danger-full-access', true), true)
-      assert.match(render('/project').notice, /unavailable/)
+      assert.equal(render('/project').notice, null)
+      assert.equal(await render('/project').persist(':danger-full-access'), null)
+      await assert.rejects(render('/project').persist(':danger-full-access'), /confirmFirst/)
+      assert.equal(calls, 0, '旧设备完全静默，已确认的权限只用于本次创建')
       available = true
       states = []
       await assert.rejects(render().persist(':danger-full-access'), /confirmFirst/)
@@ -145,7 +143,7 @@ for (const platform of ['desktop', 'mobile']) {
       assert.equal(render('/other-project').permission, null)
       available = false
       assert.equal(await render('/project').save(':danger-full-access', true), true)
-      assert.match(render('/project').notice, /不支持|unavailable/)
+      assert.equal(render('/project').notice, null)
       assert.equal(render('/project').permission, ':danger-full-access')
       await render('/project').persist(':danger-full-access')
       await assert.rejects(render('/project').persist(':danger-full-access'), /confirmFirst/)
@@ -164,6 +162,7 @@ for (const platform of ['desktop', 'mobile']) {
       assert.equal(render('/project').notice, null, '可以重试保存')
       states = []
       for (const reason of ['timeout', 'unavailable', 'offline']) {
+        states = []
         readFailure = {
           message: 'RpcAbortError: litch/projectPermission/read 在 30000 毫秒内未响应',
           text: { key: `permission.project.${reason}` },
@@ -173,15 +172,18 @@ for (const platform of ['desktop', 'mobile']) {
         assert.equal(failed.readFailed, true)
         assert.equal(failed.permission, null, '失败不能使用之前缓存的权限')
         assert.equal(failed.confirmed(':danger-full-access'), false)
-        assert.equal(failed.notice, `permission.project.${reason}`)
+        assert.equal(failed.notice, null, '临时读取失败不产生常驻提示')
         await assert.rejects(failed.persist(':danger-full-access'), /confirmFirst/)
         const before = calls
         await failed.persist(':workspace')
         assert.equal(calls, before, '读取失败不自动覆盖原记录')
-        await failed.retry()
+        readFailure = undefined // 模拟核心重连或重新打开后发布成功状态。
         assert.equal(render().readFailed, false)
       }
-      assert.equal(retries, 3)
+      states = []
+      failure = { code: 'unsupported', text: { key: 'permission.project.unavailable' } }
+      assert.equal(await render('/race').persist(':workspace'), null)
+      assert.equal(render('/race').notice, null, '保存时才发现旧设备也完全静默')
     } finally {
       delete globalThis.__permissionHooks
     }

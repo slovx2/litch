@@ -89,7 +89,7 @@ export function Picker({ kind, label, value, fallback, options, onPick, search }
         className="pick-btn"
         // 当前值自己就以方括号开头（带供应商前缀的模型，“[Account] Opus”）：皮肤别再套一层
         data-bracketed={display.startsWith('[') ? '' : undefined}
-        title={label}
+        title={`${label}：${display}`}
         aria-label={`${label}：${current?.title ?? fallback ?? value ?? ''}`}
         aria-haspopup="listbox"
         aria-expanded={open}

@@ -81,12 +81,18 @@ for (const fault of ['timeout', 'unsupported', 'offline'] as const) {
     await settle()
     const errorKey = keys.projectPermissionError('local', '', 'pi')
     const error = replica.store.get<ChannelErrorShape>(errorKey)
-    assert.equal(error?.code, fault)
-    assert.equal(
-      error?.text?.key,
-      `permission.project.${fault === 'unsupported' ? 'unavailable' : fault}`,
-    )
-    assert.doesNotMatch(JSON.stringify(error), /RpcAbortError|litch\/|30000/)
+    if (fault === 'unsupported') {
+      assert.equal(error, undefined)
+      assert.equal(
+        replica.store.get<ProjectPermissionView>(keys.projectPermission('local', '', 'pi'))
+          ?.available,
+        false,
+      )
+    } else {
+      assert.equal(error?.code, fault)
+      assert.equal(error?.text?.key, `permission.project.${fault}`)
+      assert.doesNotMatch(JSON.stringify(error), /RpcAbortError|litch\/|30000/)
+    }
     assert.equal(
       replica.store.get<ProjectPermissionView>(keys.projectPermission('local', '', 'pi'))?.record,
       null,
@@ -99,11 +105,7 @@ for (const fault of ['timeout', 'unsupported', 'offline'] as const) {
       permissions.resync()
     } else {
       handlers[PROJECT_PERMISSION.read] = () => record
-      await channel.command('projectPermission.retry', {
-        deviceId: 'local',
-        cwd: '',
-        harness: 'pi',
-      })
+      permissions.resync()
     }
     await settle()
     assert.equal(replica.store.get(errorKey), undefined)
