@@ -15,6 +15,7 @@ import { useKey, useKeys } from '../app/services.tsx'
 import { Picker, type PickerOption } from '../composer/Picker.tsx'
 import { SettingsBar, useComposeOptions } from '../composer/SettingsBar.tsx'
 import { useBranches } from '../composer/useBranches.ts'
+import { PathPicker } from '../path-picker/PathPicker.tsx'
 import type { FormProblems, TaskForm } from './form.ts'
 
 interface TargetFieldsProps {
@@ -189,16 +190,24 @@ export function TargetFields({
             <label className="form-label" htmlFor="tk-cwd">
               {t('tasks.form.cwd')}
             </label>
-            <input
-              id="tk-cwd"
-              className={problems.cwd ? 'req-input mono wrong' : 'req-input mono'}
-              value={form.cwd}
-              placeholder={t('tasks.form.cwdPlaceholder')}
-              aria-invalid={problems.cwd !== undefined}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(event) => onChange({ cwd: event.target.value })}
-            />
+            <span className="ws-pathrow">
+              <input
+                id="tk-cwd"
+                className={problems.cwd ? 'req-input mono wrong' : 'req-input mono'}
+                value={form.cwd}
+                placeholder={t('tasks.form.cwdPlaceholder')}
+                aria-invalid={problems.cwd !== undefined}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(event) => onChange({ cwd: event.target.value })}
+              />
+              <PathPicker
+                deviceId={form.deviceId}
+                value={form.cwd}
+                kind="directory"
+                onPick={(cwd) => onChange({ cwd })}
+              />
+            </span>
             {problems.cwd ? <span className="form-note err">{t(problems.cwd)}</span> : null}
           </div>
           {/* 每次在新工作树里跑：设备能建工作树、目录在仓库里才出；已经开着的照样显示，好关掉 */}

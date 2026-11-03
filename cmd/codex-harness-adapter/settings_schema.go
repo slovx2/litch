@@ -49,6 +49,7 @@ type settingSpec struct {
 	Key         string          `json:"key"`
 	Group       string          `json:"group"`
 	Type        string          `json:"type"`
+	PathKind    string          `json:"pathKind,omitempty"`
 	Title       bilingual       `json:"title"`
 	Description bilingual       `json:"description"`
 	Scope       settingScope    `json:"scope"`
@@ -330,7 +331,7 @@ func buildSettingsSchema(c configuration) settingsSchema {
 				Role: roleEnable, Default: c.defaultEnabled(id), Title: both("启用", "Enabled"), Description: texts.enabled,
 			},
 			settingSpec{
-				Key: cliPathKey(id), Group: group, Type: settingPath, Scope: harnessScope(id), Restart: restartHarness,
+				Key: cliPathKey(id), Group: group, Type: settingPath, PathKind: "file", Scope: harnessScope(id), Restart: restartHarness,
 				Default: "", Title: both("命令行路径", "CLI path"), Description: texts.cliPath,
 			},
 			settingSpec{

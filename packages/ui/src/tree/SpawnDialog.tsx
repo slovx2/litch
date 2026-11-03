@@ -19,6 +19,7 @@ import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { EFFORT_TEXT } from '../composer/efforts.ts'
 import { useComposeOptions } from '../composer/SettingsBar.tsx'
+import { PathPicker } from '../path-picker/PathPicker.tsx'
 import { WorktreeCheck } from '../worktrees/WorktreeCheck.tsx'
 import { SANDBOX_CHOICES, SANDBOX_LEVEL, widerLevel } from './sandbox.ts'
 import { fieldsFor, kindOf, overridesOf, type SpawnFields, spawnParams } from './spawn-form.ts'
@@ -236,15 +237,23 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
             <label className="form-label" htmlFor="spawn-cwd">
               {t('tree.dialog.cwd')}
             </label>
-            <input
-              id="spawn-cwd"
-              className="req-input mono"
-              value={fields.cwd}
-              autoComplete="off"
-              spellCheck={false}
-              placeholder={parent.cwd}
-              onChange={(event) => set({ cwd: event.target.value })}
-            />
+            <span className="ws-pathrow">
+              <input
+                id="spawn-cwd"
+                className="req-input mono"
+                value={fields.cwd}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={parent.cwd}
+                onChange={(event) => set({ cwd: event.target.value })}
+              />
+              <PathPicker
+                deviceId={deviceId}
+                value={fields.cwd || parent.cwd}
+                kind="directory"
+                onPick={(cwd) => set({ cwd })}
+              />
+            </span>
           </div>
           <div className="form-field spawn-row">
             <label className="form-label" htmlFor="spawn-sandbox">

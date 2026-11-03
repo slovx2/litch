@@ -36,6 +36,7 @@ import { useBusy, useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Chip, Empty, Field, Row } from '../../ui/kit/controls'
 import { Screen } from '../../ui/kit/Screen'
+import { PathPicker } from '../../ui/PathPicker'
 import { useTheme } from '../../ui/theme'
 import { titleOf } from '../sessions/rows'
 
@@ -276,6 +277,12 @@ function StartForm({
             placeholder={parent.cwd}
             onChangeText={(cwd) => set({ cwd })}
             testID="proposal-start:cwd"
+          />
+          <PathPicker
+            deviceId={deviceId}
+            value={fields.cwd || parent.cwd}
+            kind="directory"
+            onPick={(cwd) => set({ cwd })}
           />
           <View style={styles.kind}>
             <Text style={[styles.label, { color: c.ink2 }]}>{t('tree.dialog.kind')}</Text>

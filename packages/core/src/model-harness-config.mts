@@ -38,6 +38,8 @@ export interface HcOption {
 export type HcEffect = 'none' | 'newSession' | 'harness'
 
 export interface HcSettingSpec {
+  pathKind?: 'file' | 'directory'
+
   key: string
   group: string
   /** 对面声明的类型，原样（不认识的也照给，界面按只读画） */

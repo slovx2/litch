@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import type { Translator } from '../i18n/index.ts'
+import { PathPicker } from '../path-picker/PathPicker.tsx'
 
 const reasonOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
@@ -233,23 +234,37 @@ export function AddDevice({ edit, onClose }: AddDeviceProps) {
       <label className="form-label" htmlFor={`add-${id}`}>
         {label}
       </label>
-      <input
-        id={`add-${id}`}
-        className={['req-input', extra.wrong ? 'wrong' : '', extra.mono ? 'mono' : '']
-          .filter(Boolean)
-          .join(' ')}
-        value={form[id]}
-        placeholder={extra.placeholder}
-        autoComplete="off"
-        autoCapitalize="off"
-        spellCheck={false}
-        aria-invalid={extra.wrong}
-        onChange={(event) => {
-          setForm({ ...form, [id]: event.target.value })
-          // 改了连接配置，之前那次检查就不算数了
-          if (id !== 'name') setChecks(({ '': _gone, ...rest }) => rest)
-        }}
-      />
+      <span className="ws-pathrow">
+        <input
+          id={`add-${id}`}
+          className={['req-input', extra.wrong ? 'wrong' : '', extra.mono ? 'mono' : '']
+            .filter(Boolean)
+            .join(' ')}
+          value={form[id]}
+          placeholder={extra.placeholder}
+          autoComplete="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          aria-invalid={extra.wrong}
+          onChange={(event) => {
+            setForm({ ...form, [id]: event.target.value })
+            // 改了连接配置，之前那次检查就不算数了
+            if (id !== 'name') setChecks(({ '': _gone, ...rest }) => rest)
+          }}
+        />
+        {id === 'keyFile' ? (
+          <PathPicker
+            local
+            deviceId=""
+            value={form.keyFile}
+            kind="file"
+            onPick={(keyFile) => {
+              setForm((current) => ({ ...current, keyFile }))
+              setChecks(({ '': _gone, ...rest }) => rest)
+            }}
+          />
+        ) : null}
+      </span>
       {hint ? <span className="form-note">{hint}</span> : null}
     </div>
   )

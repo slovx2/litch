@@ -21,6 +21,7 @@ import { useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Chip, Row } from '../../ui/kit/controls'
 import { Prompt } from '../../ui/kit/overlays'
+import { PathPicker } from '../../ui/PathPicker'
 import { useTheme } from '../../ui/theme'
 import { useBranches } from '../new-session/useBranches'
 
@@ -251,6 +252,14 @@ export function TargetFields({
         </>
       )}
       {problem ? <Text style={[styles.note, { color: c.err }]}>{problem}</Text> : null}
+      {form.target === 'newThread' ? (
+        <PathPicker
+          deviceId={deviceId}
+          value={model.cwd ?? ''}
+          kind="directory"
+          onPick={(cwd) => onChange({ workspaceId: null, cwd })}
+        />
+      ) : null}
       <Prompt
         visible={asking}
         title={t('tasks.form.cwd')}

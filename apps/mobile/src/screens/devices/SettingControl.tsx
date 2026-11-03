@@ -5,6 +5,7 @@ import type { SettingEditView, SettingSpecView, SettingValueView } from '@litch/
 import type { ComponentProps, ReactNode } from 'react'
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import { useT } from '../../ui/i18n'
+import { PathPicker } from '../../ui/PathPicker'
 import { useTheme } from '../../ui/theme'
 
 export type Draft = SettingEditView['value'] | undefined
@@ -38,11 +39,13 @@ export function editOf(spec: SettingSpecView, draft: Draft): SettingEditView | n
 }
 
 export function SettingControl({
+  deviceId,
   spec,
   value,
   draft,
   onDraft,
 }: {
+  deviceId: string
   spec: SettingSpecView
   value: SettingValueView
   draft: Draft
@@ -91,8 +94,24 @@ export function SettingControl({
         onChangeText: (text) => onDraft(text === String(value ?? '') ? undefined : text),
       })
       break
-    case 'string':
     case 'path':
+      control = (
+        <View>
+          {input({
+            value: typeof draft === 'string' ? draft : typeof value === 'string' ? value : '',
+            placeholder: t('manage.text.empty'),
+            onChangeText: (text) => onDraft(text === value ? undefined : text),
+          })}
+          <PathPicker
+            deviceId={deviceId}
+            value={typeof draft === 'string' ? draft : typeof value === 'string' ? value : ''}
+            kind={spec.pathKind}
+            onPick={(path) => onDraft(path === value ? undefined : path)}
+          />
+        </View>
+      )
+      break
+    case 'string':
       control = input({
         value: typeof draft === 'string' ? draft : typeof value === 'string' ? value : '',
         placeholder: t('manage.text.empty'),

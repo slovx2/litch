@@ -1,0 +1,57 @@
+{
+  "extension": "devicePaths",
+  "description": "客户端用户主动选择设备上的目录或文件；只列目录项及必要元数据，不读取文件内容，不作为模型工具。类型见 packages/protocol/src/path-picker.mts。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "devicePaths" }
+    }
+  },
+  "undeclared": "拒绝 litch/paths/list；不发送额外通知。旧服务未声明此能力时，客户端提示只能手填或升级设备服务。",
+  "rules": [
+    "仅在用户打开路径选择器或跳转目录后调用。不改 files.list 的项目根校验，不授予读取文件内容、写文件或执行命令的能力。",
+    "path=null 从目标设备主目录开始；~、~/ 在目标设备上展开。只接受已有的绝对目录，不接受普通相对路径。",
+    "复用 fs/readDirectory 读取目录项；对每项补充 lstat/stat 和可执行判断。kind 保留 link，targetKind 指明链接目标类型；失效链接 targetKind=null。POSIX executable 按当前设备服务用户的 X_OK 检查，Windows 按设备的 PATHEXT 判断；不执行文件。",
+    "一页最多返回 2000 项，超出时 truncated=true、total 保留总数，客户端提示仍可手填。并发元数据检查最多 8 项。"
+  ],
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "method": "litch/paths/list",
+      "params": {
+        "type": "object",
+        "required": ["path"],
+        "additionalProperties": false,
+        "properties": { "path": { "type": ["string", "null"] } }
+      },
+      "response": {
+        "type": "object",
+        "required": ["path", "parent", "entries", "total", "truncated"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string" },
+          "parent": { "type": ["string", "null"] },
+          "total": { "type": "integer", "minimum": 0 },
+          "truncated": { "type": "boolean" },
+          "entries": {
+            "type": "array",
+            "maxItems": 2000,
+            "items": {
+              "type": "object",
+              "required": ["name", "kind", "targetKind", "executable"],
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string" },
+                "kind": { "enum": ["dir", "file", "link", "other"] },
+                "targetKind": { "enum": ["dir", "file", null] },
+                "executable": { "type": ["boolean", "null"] }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

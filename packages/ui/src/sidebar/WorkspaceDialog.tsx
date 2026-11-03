@@ -1,12 +1,12 @@
 // 添加一个工作区，或者改一个工作区的名字和颜色。
 // 工作区是设备上的一条记录（名字 + 目录），不是磁盘上的东西：这里不建目录、不删目录。
-import { type DeviceView, keys, WIRES, type WireColor, type WorkspaceView } from '@litch/core'
+import { WIRES, type WireColor, type WorkspaceView } from '@litch/core'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { wireStyle } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
-import { useKey, useServices } from '../app/services.tsx'
-import { FolderPicker } from './FolderPicker.tsx'
+import { useServices } from '../app/services.tsx'
+import { PathPicker } from '../path-picker/PathPicker.tsx'
 
 interface WorkspaceDialogProps {
   deviceId: string
@@ -36,27 +36,6 @@ export function WorkspaceDialog({ deviceId, workspace, onAdded, onClose }: Works
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const adding = workspace === null
-  const device = useKey<DeviceView>(keys.device(deviceId))
-  /**
-   * 系统的选文件夹对话框：只有本机的设备、外壳又给得出才有。选出来的是这台电脑上的路径。
-   * 别的（远程设备、普通浏览器里）在对话框里浏览设备上的目录（FolderPicker）
-   */
-  const pickFolder = device?.kind === 'local' ? window.litchShell?.pickFolder : undefined
-  const [browsing, setBrowsing] = useState(false)
-  const browse = () => {
-    if (!pickFolder) {
-      setBrowsing((open) => !open)
-      return
-    }
-    const from = root.trim()
-    pickFolder({ title: t('workspace.root.browse.title'), ...(from ? { defaultPath: from } : {}) })
-      .then((picked) => {
-        if (picked) setRoot(picked)
-      })
-      // 弹不出来：自己填路径不受影响
-      .catch(() => {})
-  }
-
   // 用模态方式打开：焦点留在里面，Esc 由浏览器处理
   useEffect(() => {
     const element = dialog.current
@@ -134,24 +113,10 @@ export function WorkspaceDialog({ deviceId, workspace, onAdded, onClose }: Works
                   autoFocus
                   onChange={(event) => setRoot(event.target.value)}
                 />
-                <button
-                  type="button"
-                  className="btn ws-browse"
-                  aria-expanded={pickFolder ? undefined : browsing}
-                  onClick={browse}
-                >
-                  {t('workspace.root.browse')}
-                </button>
+                <PathPicker deviceId={deviceId} value={root} kind="directory" onPick={setRoot} />
               </span>
               <span className="form-note">{t('workspace.root.hint')}</span>
-              {browsing ? (
-                <FolderPicker
-                  deviceId={deviceId}
-                  start={/^(\/|[A-Za-z]:[\\/])/.test(path) ? path : null}
-                  onPick={setRoot}
-                  onClose={() => setBrowsing(false)}
-                />
-              ) : candidates.length > 0 ? (
+              {candidates.length > 0 ? (
                 <ul className="ws-roots" aria-label={t('workspace.root.candidates')}>
                   <li className="form-note">{t('workspace.root.candidates')}</li>
                   {candidates.map((candidate) => (

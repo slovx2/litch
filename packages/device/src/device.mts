@@ -1,3 +1,4 @@
+import { PATH_PICKER_EXTENSION } from '../../protocol/src/path-picker.mjs'
 // 设备进程的主体：一台机器上的多个 harness 运行时收在一个入口（聚合面）后面。
 // 这里只管各条客户端连接共用的东西；一条连接上的事在 session.mts。
 
@@ -414,7 +415,7 @@ export class DeviceServer {
           log,
         })
       : null
-    info.extensions.push(EXTENSION.projectPermissions)
+    info.extensions.push(EXTENSION.projectPermissions, PATH_PICKER_EXTENSION)
     if (this.worktrees) info.extensions.push(EXTENSION.worktrees)
     this.orchestrating = this.sessionTreeOn()
     this.sessionTree = new SessionTree({

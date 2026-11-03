@@ -1,3 +1,4 @@
+import { zhCNPathPicker } from '../path-picker/messages.ts'
 import { zhSearch } from './zh-CN-search.ts'
 // 中文文案。这一份是“有哪些句子”的依据：键的集合以这里为准，别的语言必须一句不少。
 // 前半是界面自己的话，后半是核心要说的话（键和 packages/core/src/phrase.mts 一一对应）。
@@ -60,6 +61,7 @@ export const zhCN = {
 
   ...zhSearch,
   ...zhManager,
+  ...zhCNPathPicker,
   ...zhPreviewDocx,
   ...zhPreviewXlsx,
   ...zhPreview,

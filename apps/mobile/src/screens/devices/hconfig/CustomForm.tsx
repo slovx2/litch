@@ -137,6 +137,7 @@ export function CustomForm({
             <View style={styles.field} key={field.key}>
               <Text style={[styles.label, { color: c.ink2 }]}>{t.said(field.title)}</Text>
               <HcControl
+                deviceId={deviceId}
                 spec={field}
                 stored={field.key in stored ? stored[field.key] : undefined}
                 draft={draft}

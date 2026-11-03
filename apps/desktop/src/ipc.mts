@@ -47,6 +47,7 @@ export const NOTIFY_CLOSE = 'litch:notify-close'
 export const SET_BADGE = 'litch:set-badge'
 /** 界面 → 主进程，等应答：弹系统的选文件夹对话框，回选中的那个目录（没选是 null）。只给本机的设备用 */
 export const PICK_FOLDER = 'litch:pick-folder'
+export const PICK_FILE = 'litch:pick-file'
 // —— 有没保存的改动时关窗口、退出之前先问（leave-guard.mts） ——
 /** 界面 → 主进程：现在有没有没保存的改动（true、false） */
 export const UNSAVED = 'litch:unsaved'

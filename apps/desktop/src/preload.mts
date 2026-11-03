@@ -20,6 +20,7 @@ import {
   NOTIFY_CLOSE,
   OPEN_EXTERNAL,
   OPEN_LOGS,
+  PICK_FILE,
   PICK_FOLDER,
   REQUEST_CORE_PORT,
   REQUEST_WINDOW_FOREGROUND,
@@ -74,6 +75,8 @@ contextBridge.exposeInMainWorld('litchShell', {
   // 添加项目时用系统的对话框选一个本机目录
   pickFolder: (options: { defaultPath?: string; title?: string }) =>
     ipcRenderer.invoke(PICK_FOLDER, options),
+  pickFile: (options: { defaultPath?: string; title?: string }) =>
+    ipcRenderer.invoke(PICK_FILE, options),
   // 应用菜单里要界面来办的那几项。只把是哪一项交给页面，事件对象不给
   onMenu(handler: (action: string) => void) {
     const listener = (_event: unknown, action: unknown) => {

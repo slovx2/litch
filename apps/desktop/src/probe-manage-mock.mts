@@ -405,6 +405,18 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   const english = title()
   look.set({ lang: 'zh-CN' })
   await until('标题换回中文', () => title() === chinese)
+  const beforeCli = input('harness.pi.cliPath')?.value
+  const pickCli = one<HTMLButtonElement>(
+    '[data-setting="harness.pi.cliPath"] [data-path-picker="file"]',
+  )
+  if (!pickCli) throw new Error('CLI 路径缺少文件选择器')
+  pickCli.click()
+  await until(
+    '本机文件选择回填 CLI 路径',
+    () => input('harness.pi.cliPath')?.value === '/tmp/litch-fixture-cli',
+  )
+  act(row('harness.pi.cliPath') as HTMLElement, 'revert')?.click()
+  await until('撤销选择不保存设置', () => input('harness.pi.cliPath')?.value === beforeCli)
 
   // ---- 三、停用 Pi（在收着的标题行上拨），再启用（在里面那一行上拨） ----
   const enabled = () =>

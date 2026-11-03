@@ -204,6 +204,7 @@ export function ConfigTab({
             {group.description ? <Note text={t.said(group.description)} tone="dim" /> : null}
             {specs.map((spec) => (
               <ConfigRow
+                deviceId={deviceId}
                 key={spec.key}
                 spec={spec}
                 data={data}
@@ -290,6 +291,7 @@ export function ConfigTab({
 }
 
 interface RowProps {
+  deviceId: string
   spec: HcSettingSpec
   data: HcConfigView
   draft: HcDraft | undefined
@@ -299,7 +301,7 @@ interface RowProps {
   onDraft(draft: HcDraft | null): void
 }
 
-function ConfigRow({ spec, data, draft, parsed, refused, saving, onDraft }: RowProps) {
+function ConfigRow({ deviceId, spec, data, draft, parsed, refused, saving, onDraft }: RowProps) {
   const theme = useTheme()
   const t = useT()
   const { c } = theme
@@ -333,6 +335,7 @@ function ConfigRow({ spec, data, draft, parsed, refused, saving, onDraft }: RowP
       : null
   const control = (
     <HcControl
+      deviceId={deviceId}
       spec={spec}
       stored={stored}
       draft={draft}

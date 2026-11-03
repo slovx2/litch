@@ -60,6 +60,7 @@ export function PowerSettings({
             </div>
             <div className="mng-row-ctl">
               <Control
+                deviceId={deviceId}
                 id={`power-${deviceId}-${spec.key}`}
                 spec={spec}
                 stored={snapshot.values[spec.key]}

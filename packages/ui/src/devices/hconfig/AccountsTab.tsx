@@ -595,6 +595,7 @@ function CustomDialog({
               {t.said(field.title)}
             </label>
             <HcControl
+              deviceId={device.id}
               id={`hc-def-${field.key}`}
               spec={field}
               stored={field.key in stored ? stored[field.key] : undefined}

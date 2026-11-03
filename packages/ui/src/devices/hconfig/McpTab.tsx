@@ -15,6 +15,7 @@ import { Confirm } from '../../app/Confirm.tsx'
 import { whyNot } from '../../app/errors.ts'
 import { useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
+import { PathPicker } from '../../path-picker/PathPicker.tsx'
 import { HcControl } from './HcControl.tsx'
 import { formOf, type HcDraft, type McpForm, parseDraft, serverOf } from './logic.ts'
 import { AttemptView, HcDialog, SlotState, useRun } from './parts.tsx'
@@ -329,15 +330,26 @@ function McpDialog({
     </div>
   )
   const input = (key: 'name' | 'command' | 'cwd' | 'url' | 'bearerTokenEnvVar', mono = true) => (
-    <input
-      id={`hc-mcp-${key}`}
-      className={mono ? 'req-input mono' : 'req-input'}
-      value={form[key]}
-      disabled={busy}
-      autoComplete="off"
-      spellCheck={false}
-      onChange={(event) => set({ [key]: event.target.value })}
-    />
+    <span className="ws-pathrow">
+      <input
+        id={`hc-mcp-${key}`}
+        className={mono ? 'req-input mono' : 'req-input'}
+        value={form[key]}
+        disabled={busy}
+        autoComplete="off"
+        spellCheck={false}
+        onChange={(event) => set({ [key]: event.target.value })}
+      />
+      {key === 'cwd' || key === 'command' ? (
+        <PathPicker
+          deviceId={device.id}
+          value={form[key]}
+          kind={key === 'cwd' ? 'directory' : 'file'}
+          disabled={busy}
+          onPick={(path) => set({ [key]: path })}
+        />
+      ) : null}
+    </span>
   )
   const area = (key: 'args' | 'headers') => (
     <textarea
@@ -474,6 +486,7 @@ function McpDialog({
               {t.said(spec.title)}
             </label>
             <HcControl
+              deviceId={device.id}
               id={`hc-mcp-x-${spec.key}`}
               spec={spec}
               stored={stored}

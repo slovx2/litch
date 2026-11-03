@@ -438,7 +438,13 @@ async function measure(
   }
   // 设备管理的两段后面各接一段“设备服务”（probe-service.mts）：在跑的是哪一版，这次连接换没换版本
   if (mode === 'manage-mock') {
-    const result = await runInPage(window, mockManageProbe)
+    process.env.LITCH_PICK_FILE = '/tmp/litch-fixture-cli'
+    let result: Awaited<ReturnType<typeof mockManageProbe>>
+    try {
+      result = await runInPage(window, mockManageProbe)
+    } finally {
+      delete process.env.LITCH_PICK_FILE
+    }
     const service = await runInPage(window, mockServiceProbe)
     return [{ ...result, service }, [...judgeMockManage(result), ...judgeMockService(service)]]
   }

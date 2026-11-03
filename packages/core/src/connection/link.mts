@@ -12,6 +12,8 @@ import {
   type InitializeResponse,
   type JsonRpcId,
 } from '../../../protocol/src/index.mjs'
+import type { PathPickerRequests } from '../../../protocol/src/path-picker.mjs'
+import { PATH_PICKER_EXTENSION } from '../../../protocol/src/path-picker.mjs'
 import type { ProjectPermissionRequests } from '../../../protocol/src/project-permissions.mjs'
 import { type Cancel, createCancel } from '../channel/cancel.mjs'
 import type { Clock } from '../channel/protocol.mjs'
@@ -84,11 +86,22 @@ export interface Link {
   stop(): void
   /** 暂时关闭连接并禁止重试；恢复不重开健康连接，也不销毁设备的缓存与订阅。 */
   setPaused(paused: boolean): void
-  request<M extends ClientRequestMethod | keyof ManagerRequests | keyof ProjectPermissionRequests>(
+  request<
+    M extends
+      | ClientRequestMethod
+      | keyof ManagerRequests
+      | keyof ProjectPermissionRequests
+      | keyof PathPickerRequests,
+  >(
     method: M,
-    params: (ClientRequests & ManagerRequests & ProjectPermissionRequests)[M]['params'],
+    params: (ClientRequests &
+      ManagerRequests &
+      ProjectPermissionRequests &
+      PathPickerRequests)[M]['params'],
     options?: RpcRequestOptions,
-  ): Promise<(ClientRequests & ManagerRequests & ProjectPermissionRequests)[M]['result']>
+  ): Promise<
+    (ClientRequests & ManagerRequests & ProjectPermissionRequests & PathPickerRequests)[M]['result']
+  >
 }
 
 const DEFAULT_BACKOFF = [500, 1000, 2000, 5000, 10_000, 30_000]
@@ -216,6 +229,7 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.deviceTasks,
                 EXTENSION.manager,
                 EXTENSION.projectPermissions,
+                PATH_PICKER_EXTENSION,
                 // sessionTree：声明了，会话对象上才有 Litch 子会话的 litchLineage，才收得到父子关系、提案变了的通知
                 EXTENSION.sessionTree,
                 EXTENSION.suggestionInbox,

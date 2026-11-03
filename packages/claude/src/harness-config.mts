@@ -422,6 +422,7 @@ const OTEL_SPECS: HarnessSettingSpec[] = [
     key: 'otelHeadersHelper',
     group: 'otel',
     type: 'path',
+    pathKind: 'file',
     title: text('请求头脚本', 'Headers helper script'),
     description: text(
       '设备上的一个脚本，输出 JSON 格式的请求头，适合会过期的令牌。',

@@ -269,7 +269,7 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   seen.candidates = candidates.map(text).join('|')
   // 和外面的 PICKED_FOLDER 是同一个：这个函数被原样送进页面里执行，引用不到外面的
   const PICKED = '/Users/dev/notes/picked'
-  const browse = one<HTMLButtonElement>('.ws-dialog .ws-browse')
+  const browse = one<HTMLButtonElement>('.ws-dialog [data-path-picker=directory]')
   browse?.click()
   const browsed = browse
     ? Boolean(

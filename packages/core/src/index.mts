@@ -263,6 +263,14 @@ export {
 } from './model-tree.mjs'
 export type * from './model-worktrees.mjs'
 export {
+  type PathPickerKind,
+  type PathPickerListing,
+  pathPickerChild,
+  pathPickerDirectory,
+  pathPickerStart,
+  readPathPicker,
+} from './path-picker.mjs'
+export {
   describeText,
   type Phrase,
   type PhraseArgs,

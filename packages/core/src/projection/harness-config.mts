@@ -77,6 +77,7 @@ const options = (value: unknown): HcOption[] =>
 export function projectSpec(raw: HarnessSettingSpec): HcSettingSpec | null {
   if (!isRecord(raw) || typeof raw.key !== 'string' || !raw.key) return null
   return {
+    ...(raw.pathKind === 'file' || raw.pathKind === 'directory' ? { pathKind: raw.pathKind } : {}),
     key: raw.key,
     group: str(raw.group) ?? '',
     type: str(raw.type) ?? 'string',

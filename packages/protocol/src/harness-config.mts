@@ -157,6 +157,8 @@ export interface HarnessSettingSpec {
   /** 属于哪个分组（HarnessSettingGroup.id） */
   group: string
   type: HarnessSettingType
+  /** path：选择文件还是目录；未声明时界面提供两种选择。 */
+  pathKind?: 'file' | 'directory'
   title: HarnessText
   description: HarnessText | null
   /** 原生配置里没写时 harness 实际用的值；不知道是 null */

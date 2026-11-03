@@ -1,0 +1,37 @@
+.path-picker-trigger {
+  flex: none;
+  white-space: nowrap;
+}
+.path-picker-dialog {
+  width: min(600px, calc(100vw - 32px));
+}
+.path-picker-dialog[open] {
+  flex-direction: column;
+}
+.path-picker-dialog .path-picker-location {
+  display: flex;
+  flex: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.path-picker-dialog .modal-foot {
+  justify-content: flex-end;
+}
+.path-picker-location > input {
+  flex: 1;
+  min-width: 0;
+}
+.path-picker-entries {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  max-height: 45vh;
+  overflow: auto;
+}
+.path-picker-entries .ws-root {
+  width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+}

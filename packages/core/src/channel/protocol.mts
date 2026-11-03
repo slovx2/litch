@@ -1021,6 +1021,11 @@ export interface Commands {
     params: { deviceId: string; path: string | null }
     result: FolderListing
   }
+  /** 用户主动选择设备路径；可浏览项目之外的目录，只返回条目，不读取文件内容。 */
+  'paths.list': {
+    params: { deviceId: string; path: string | null }
+    result: import('../path-picker.mjs').PathPickerListing
+  }
   /** 读一个文件。太大的、不是文字的只说是哪一种，不给内容；路径是目录、文件不在了也各有一种结果，不算出错 */
   'files.read': {
     params: { deviceId: string; root: string; path: string }

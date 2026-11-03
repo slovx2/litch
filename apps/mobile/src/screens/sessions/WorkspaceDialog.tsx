@@ -9,8 +9,8 @@ import { useBusy, useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Field } from '../../ui/kit/controls'
 import { ModalKeyboardArea } from '../../ui/kit/ModalKeyboardArea'
+import { PathPicker } from '../../ui/PathPicker'
 import { useTheme } from '../../ui/theme'
-import { FolderPicker } from './FolderPicker'
 
 const COLORS: WireColor[] = ['blue', 'orange', 'green', 'brown', 'slate', 'red', 'yellow', 'violet']
 
@@ -41,7 +41,6 @@ export function WorkspaceDialog({
   const [color, setColor] = useState<WireColor | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [candidates, setCandidates] = useState<string[]>([])
-  const [browsing, setBrowsing] = useState(false)
   const adding = edit?.kind === 'add'
 
   useEffect(() => {
@@ -57,7 +56,6 @@ export function WorkspaceDialog({
     setRoot('')
     setColor(null)
     setCandidates([])
-    setBrowsing(false)
     let live = true
     channel.command('workspace.candidates', { deviceId }).then(
       ({ roots }) => live && setCandidates(roots),
@@ -140,24 +138,8 @@ export function WorkspaceDialog({
                   testID="workspace:root"
                   style={{ fontFamily: theme.font.mono }}
                 />
-                {browsing ? (
-                  <FolderPicker
-                    deviceId={deviceId}
-                    start={/^(\/|[A-Za-z]:[\\/])/.test(root.trim()) ? root.trim() : null}
-                    onPick={setRoot}
-                    onClose={() => setBrowsing(false)}
-                  />
-                ) : (
-                  <View style={styles.browse}>
-                    <Button
-                      kind="plain"
-                      label={t('workspace.root.browse')}
-                      testID="workspace:browse"
-                      onPress={() => setBrowsing(true)}
-                    />
-                  </View>
-                )}
-                {!browsing && candidates.length > 0 ? (
+                <PathPicker deviceId={deviceId} value={root} kind="directory" onPick={setRoot} />
+                {candidates.length > 0 ? (
                   <View style={styles.candidates}>
                     <Text style={[styles.label, { color: c.ink2 }]}>
                       {t('workspace.root.candidates')}

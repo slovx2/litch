@@ -1295,6 +1295,73 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   )?.value
   if (!firstDevice || !otherDevice) throw new Error('缺少切换设备的夹具')
   await select('设备', otherDevice)
+  await select('设备', 'build')
+  // 共用目录选择器：远程浏览只改选择器草稿，确认才回填；跳转不能提交外层经理表单。
+  const beforeBrowse = input('工作目录').value
+  const browseDirectory = one<HTMLButtonElement>('.mg-form [data-path-picker="directory"]')
+  if (!browseDirectory || browseDirectory.disabled)
+    throw new Error(
+      `目录选择器按钮不可用：${browseDirectory?.outerHTML}；设备=${field('设备')?.querySelector('select')?.value}`,
+    )
+  await click('.mg-form [data-path-picker="directory"]')
+  await until('目录选择器打开', () => one('.path-picker-dialog'))
+  await until('远端目录选择器载入', () => {
+    const error = one('.path-picker-dialog [role="alert"]')
+    if (error) throw new Error(`远端目录选择器：${error.textContent}`)
+    return one('.path-picker-dialog .primary:not(:disabled)')
+  })
+  const pickerInput = one<HTMLInputElement>('.path-picker-dialog input')
+  if (!pickerInput) throw new Error('目录选择器缺少路径跳转输入')
+  fill(pickerInput, 'relative-directory')
+  one<HTMLButtonElement>('.path-picker-dialog button[type="submit"]')?.click()
+  await until(
+    '无效跳转保留经理表单',
+    () => one('.path-picker-dialog [role="alert"]') && activeStep('runtime'),
+  )
+  const cancelPicker = one<HTMLButtonElement>('.path-picker-dialog .modal-foot button')
+  cancelPicker?.click()
+  await until(
+    '取消目录选择不修改输入',
+    () => !one('.path-picker-dialog') && input('工作目录').value === beforeBrowse,
+  )
+  await click('.mg-form [data-path-picker="directory"]')
+  await until('重新浏览远端目录', () => one('.path-picker-dialog .primary:not(:disabled)'))
+  const jump = one<HTMLInputElement>('.path-picker-dialog input')
+  if (!jump) throw new Error('目录选择器缺少输入框')
+  fill(jump, '/srv/work')
+  await click('.path-picker-dialog button[type="submit"]')
+  await until('手动跳转远端目录', () => one('.path-picker-dialog [data-path-kind="dir"]'))
+  await click('.path-picker-dialog [data-path-kind="dir"]')
+  await until(
+    '逐层进入目录',
+    () =>
+      one<HTMLInputElement>('.path-picker-dialog input')?.value.startsWith('/srv/work/') &&
+      one('.path-picker-dialog .primary:not(:disabled)'),
+  )
+  const pickerHead = one('.path-picker-dialog .modal-head')?.getBoundingClientRect()
+  const pickerBody = one('.path-picker-dialog .modal-body')?.getBoundingClientRect()
+  const pickerFoot = one('.path-picker-dialog .modal-foot')?.getBoundingClientRect()
+  if (
+    !pickerHead ||
+    !pickerBody ||
+    !pickerFoot ||
+    pickerHead.bottom > pickerBody.top + 1 ||
+    pickerBody.bottom > pickerFoot.top + 1
+  )
+    throw new Error('目录选择器的标题、列表与按钮没有按上下顺序布局')
+  if (document.documentElement.dataset.pathPickerShot === 'true') {
+    const captured = new Promise<void>((resolve) =>
+      window.addEventListener('litch-path-picker-captured', () => resolve(), { once: true }),
+    )
+    document.documentElement.dataset.pathPickerReady = 'true'
+    await captured
+  }
+  const selectedDirectory = one<HTMLInputElement>('.path-picker-dialog input')?.value
+  await click('.path-picker-dialog .modal-foot .primary')
+  await until(
+    '选择远端目录回填经理输入',
+    () => !one('.path-picker-dialog') && input('工作目录').value === selectedDirectory,
+  )
   await select('设备', firstDevice)
   // 视图恢复后可能带入当前会话的项目，先明确改为无项目，再验空目录的校验。
   const workspace = field('项目')?.querySelector('select')

@@ -407,6 +407,7 @@ function ConfigRow({ device, spec, data, draft, parsed, refused, saving, onDraft
       </div>
       <div className="mng-row-ctl">
         <HcControl
+          deviceId={device.id}
           id={id}
           spec={spec}
           stored={stored}

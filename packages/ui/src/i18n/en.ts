@@ -1,3 +1,4 @@
+import { enPathPicker } from '../path-picker/messages.ts'
 import { enChrome } from './en-chrome.ts'
 import { enManager } from './en-manager.ts'
 import { enSearch } from './en-search.ts'
@@ -65,6 +66,7 @@ export const en: Record<MessageKey, Entry> = {
 
   ...enSearch,
   ...enManager,
+  ...enPathPicker,
   ...enPreviewDocx,
   ...enPreviewXlsx,
   ...enPreview,

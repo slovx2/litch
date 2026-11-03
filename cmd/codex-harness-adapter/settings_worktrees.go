@@ -31,7 +31,7 @@ func worktreeSettings() (settingGroup, []settingSpec) {
 			Title: both("工作树", "Worktrees"),
 		}, []settingSpec{
 			{
-				Key: worktreeRootKey, Group: worktreeGroup, Type: settingPath, Scope: deviceScope, Restart: restartNone,
+				Key: worktreeRootKey, Group: worktreeGroup, Type: settingPath, PathKind: "directory", Scope: deviceScope, Restart: restartNone,
 				Default: "", Title: both("存放位置", "Location"),
 				Description: both(
 					"工作树都建在这个目录下，按仓库分子目录。空着时放在设备服务的状态目录里的 worktrees 下。",

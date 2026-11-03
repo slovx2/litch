@@ -13,6 +13,7 @@ import {
   DEVICE_PROCESS_LIST,
   DEVICE_PROCESS_REMOVE,
 } from '../../protocol/src/device-processes.mjs'
+import { PATH_PICKER_EXTENSION, PATH_PICKER_METHOD } from '../../protocol/src/path-picker.mjs'
 import { FilesystemRpc } from '../../shared/src/filesystem-rpc.mjs'
 import { FuzzyFileSearch, FuzzySearchSessions } from '../../shared/src/fuzzy-session.mjs'
 import { nativeWirePaths } from '../../shared/src/native-path.mjs'
@@ -27,6 +28,7 @@ import {
   type ProcessLimits,
 } from './device-processes.mjs'
 import { ConnectionFlow, DEFAULT_FLOW, type FlowLimits } from './flow.mjs'
+import { listDevicePaths } from './path-picker.mjs'
 import { DeviceError, isObject } from './wire.mjs'
 
 export interface DeviceLayerOptions {
@@ -113,6 +115,15 @@ export class DeviceCalls {
   call(method: string, params: unknown): unknown {
     const raw = isObject(params) ? params : {}
     const fields = nativeWirePaths(raw)
+    if (method === PATH_PICKER_METHOD) {
+      if (!this.connection.declares(PATH_PICKER_EXTENSION))
+        throw new DeviceError('extensionRequired', 'Declare devicePaths to browse paths.', {
+          required: [PATH_PICKER_EXTENSION],
+        })
+      return listDevicePaths(raw, (path) =>
+        this.layer.files.call(this.peer, 'fs/readDirectory', { path }),
+      )
+    }
     if (method.startsWith('fs/'))
       return this.layer.files.call(
         this.connection,

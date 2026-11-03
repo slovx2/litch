@@ -189,3 +189,5 @@ logging in with its own key it enrolls itself; the confirmation code and Allow w
   tailnet IP) and the device runs Tailscale SSH, the dialog fills in the device's tailnet IP: the phone's
   DNS may not resolve MagicDNS names (for example while another VPN app is on). The menu next to the host
   switches between the IP, the full MagicDNS name and the short name.
+
+手机的项目根目录、定时任务工作目录、子会话/建议任务工作目录、设备路径设置和 harness 路径设置均可浏览连接设备的目录或文件，并支持手动输入路径跳转。选择器不使用手机文件系统代替服务器路径；取消不会修改表单。手机尚无创建经理入口，MCP 设置保持只读。

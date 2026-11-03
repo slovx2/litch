@@ -1,3 +1,4 @@
+import { PATH_PICKER_EXTENSION } from '../../../protocol/src/path-picker.mjs'
 import type { TitleSearchResult } from '../search/model.mjs'
 import { matchTitles } from '../search/titles.mjs'
 import { createProjectPermissions, type ProjectPermissions } from './project-permissions.mjs'
@@ -158,6 +159,7 @@ import {
 } from './mentions.mjs'
 import { createOrganizer, looseDirectories, type Organizer } from './organize.mjs'
 import { createPairing, type Pairing, type PairingPlatform } from './pairing.mjs'
+import { createPathPicker } from './path-picker.mjs'
 import { createPeekCache } from './peek-cache.mjs'
 import { DEFAULT_TOOL_SWITCHES, type RemoteUpgradePlatform } from './remote.mjs'
 import {
@@ -404,6 +406,7 @@ export interface Device {
   readonly terminals: Terminals
   /** 这台设备上的文件：列目录、读文件、找文件（files.mts） */
   readonly files: Files
+  readonly pathPicker: ReturnType<typeof createPathPicker>
   /** 这台设备上的差异：没提交的改动、暂存和还原（diffs.mts） */
   readonly diffs: Diffs
   /** 这台设备上的定时任务：订阅、建、改、删、立即运行、运行记录（tasks.mts） */
@@ -599,8 +602,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   /** 对面支不支持定时任务（deviceTasks 扩展）。认出来之前、对面不是设备服务时都是不支持 */
   let schedulable = false
   let suggestionsOn = false
-  /** 对面声明 litchManager 后才读取看板、接受经理通知与会话标记。 */
+  let pathsSupported = false
   let projectPermissionsOn = false
+  /** 对面声明 litchManager 后才读取看板、接受经理通知与会话标记。 */
   let managersOn = false
   /** 设备宣告的后加经理能力；没宣告的是比应用旧的设备服务 */
   let managerFeatures = { feedback: false, posts: false, ignore: false }
@@ -1681,6 +1685,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     nativeDirect = false
     filePreviewSupported = false
     turnNotices = false
+    pathsSupported = false
     try {
       const info = await link.request('runtime/info', {})
       if (mine !== session) return
@@ -1703,6 +1708,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         reattachable = info.device.extensions?.includes(EXTENSION.deviceProcesses) === true
         schedulable = info.device.extensions?.includes(EXTENSION.deviceTasks) === true
         suggestionsOn = info.device.extensions?.includes(EXTENSION.suggestionInbox) === true
+        pathsSupported = info.device.extensions?.includes(PATH_PICKER_EXTENSION) === true
         projectPermissionsOn =
           info.device.extensions?.includes(EXTENSION.projectPermissions) === true
         managersOn = info.device.extensions?.includes(EXTENSION.manager) === true
@@ -1739,6 +1745,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         reattachable = false
         schedulable = false
         suggestionsOn = false
+        pathsSupported = false
         projectPermissionsOn = false
         managersOn = false
         managerFeatures = { feedback: false, posts: false, ignore: false }
@@ -1769,6 +1776,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       reattachable = false
       schedulable = false
       suggestionsOn = false
+      pathsSupported = false
       projectPermissionsOn = false
       managersOn = false
       sessionTree = false
@@ -2492,6 +2500,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     ...(options.terminalNotes ? { notes: options.terminalNotes } : {}),
   })
 
+  const pathPicker = createPathPicker({
+    supported: () => pathsSupported,
+    online: () => online,
+    request: (params, requestOptions) => link.request('litch/paths/list', params, requestOptions),
+    fail: (error) => fail(error),
+  })
   const files = createFiles({
     previewSupported: () => filePreviewSupported,
     clock: options.clock,
@@ -2929,6 +2943,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     readSshConfig: () => manage.sshConfig(),
     terminals,
     files,
+    pathPicker,
     diffs,
     tasks,
     suggestions,

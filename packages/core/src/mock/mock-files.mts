@@ -303,6 +303,31 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
       return { ...view, path: outward(root, view.path) }
     },
 
+    async 'paths.list'({ deviceId, path }, signal) {
+      const files = filesOf(deviceId, null)
+      for (const root of host.rootsOf(deviceId)) filesOf(deviceId, root)
+      const directory = await files.folders(path === null ? null : expand(path), signal)
+      const raw = (await answer(
+        deviceId,
+        remoteOf(deviceId),
+        'fs/readDirectory',
+        { path: directory.path },
+        { signal },
+      )) as { entries: { fileName: string; isDirectory: boolean; isFile: boolean }[] }
+      return {
+        path: directory.path,
+        parent: directory.parent,
+        total: raw.entries.length,
+        truncated: false,
+        entries: raw.entries.map((entry) => ({
+          name: entry.fileName,
+          kind: entry.isDirectory ? 'dir' : entry.isFile ? 'file' : 'other',
+          targetKind: entry.isDirectory ? 'dir' : entry.isFile ? 'file' : null,
+          executable: entry.isFile ? /\.(sh|exe)$/.test(entry.fileName) : null,
+        })),
+      }
+    },
+
     async 'folders.list'({ deviceId, path }, signal) {
       // 挑目录不带根：示例树里的那些根先都记上，走进去时认得出
       const files = filesOf(deviceId, null)

@@ -23,12 +23,14 @@ import {
 } from '../../../../../../packages/ui/src/devices/hconfig/logic.ts'
 import { useT } from '../../../ui/i18n'
 import { Chip } from '../../../ui/kit/controls'
+import { PathPicker } from '../../../ui/PathPicker'
 import { useTheme } from '../../../ui/theme'
 
 /** 选项不超过这么多时排成一排小块，多了点开清单选 */
 const INLINE_OPTIONS = 6
 
 export interface HcControlProps {
+  deviceId: string
   spec: HcSettingSpec
   /** 存着的值（没写过是 undefined，显示默认值） */
   stored: HcValue | undefined
@@ -214,6 +216,19 @@ export function HcControl(props: HcControlProps) {
         </View>
       )
     }
+    case 'path':
+      return (
+        <View>
+          {text({ mono: true })}
+          <PathPicker
+            deviceId={props.deviceId}
+            value={String(raw)}
+            kind={spec.pathKind}
+            disabled={off}
+            onPick={set}
+          />
+        </View>
+      )
     case 'text':
       return text({ mono: false, multi: true })
     case 'stringList':

@@ -65,6 +65,8 @@ export interface SettingSpec {
   /** 属于哪个分组（SettingGroup.id） */
   group: string
   type: SettingType
+  /** path：选择文件还是目录；未声明时界面提供两种选择。 */
+  pathKind?: 'file' | 'directory'
   title: LocalizedText
   description: LocalizedText
   scope: SettingScope

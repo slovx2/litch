@@ -43,6 +43,7 @@ export function LeadSwitch(props: Omit<SettingRowProps, 'failure' | 'restarts'>)
   return (
     <span className="mng-lead" data-lead={spec.key}>
       <Control
+        deviceId={deviceId}
         id={`lead-${deviceId}-${spec.key}`}
         spec={spec}
         stored={stored}
@@ -79,7 +80,16 @@ export function SettingRow(props: SettingRowProps) {
   const origin = { revision, stored }
   const onEdit = (next: DraftEdit) => editDraft(deviceId, spec, next, origin)
   const id = `set-${deviceId}-${key}`
-  const control = { id, spec, stored, edit, disabled: saving, wrong: problem !== null, onEdit }
+  const control = {
+    deviceId,
+    id,
+    spec,
+    stored,
+    edit,
+    disabled: saving,
+    wrong: problem !== null,
+    onEdit,
+  }
   const wide = spec.type === 'env' || !known
   const range =
     spec.type === 'integer' && spec.minimum !== null && spec.maximum !== null

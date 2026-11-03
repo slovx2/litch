@@ -102,6 +102,7 @@ function valueByType(type: string, raw: unknown): SettingValueView {
 function specOf(raw: DeviceSettingsReadResponse['schema']['settings'][number]): SettingSpecView {
   const type = text(raw.type)
   return {
+    ...(raw.pathKind === 'file' || raw.pathKind === 'directory' ? { pathKind: raw.pathKind } : {}),
     key: raw.key,
     group: text(raw.group),
     type,

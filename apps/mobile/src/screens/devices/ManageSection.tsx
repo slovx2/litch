@@ -163,6 +163,7 @@ function Block({
       {shown
         ? specs.map((spec) => (
             <SettingControl
+              deviceId={deviceId}
               key={spec.key}
               spec={spec}
               value={snapshot.values[spec.key] ?? null}

@@ -756,6 +756,10 @@
         "type": {
           "$ref": "#/definitions/HarnessSettingType"
         },
+        "pathKind": {
+          "description": "path 类型的选择目标。未声明时客户端提供文件和目录两种选择，不按设置键名猜测。",
+          "enum": ["file", "directory"]
+        },
         "title": {
           "$ref": "#/definitions/HarnessText"
         },

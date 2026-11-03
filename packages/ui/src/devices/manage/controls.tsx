@@ -3,9 +3,11 @@
 // 这一版不认识的类型只读地摆出来并说明，不出错。
 import type { SettingSpecView, SettingValueView } from '@litch/core'
 import { useT } from '../../app/appearance.ts'
+import { PathPicker } from '../../path-picker/PathPicker.tsx'
 import type { DraftEdit } from './drafts.ts'
 
 export interface ControlProps {
+  deviceId: string
   /** 控件的 id，行里的标题用它指过来 */
   id: string
   spec: SettingSpecView
@@ -58,7 +60,7 @@ function TextField(props: ControlProps) {
   if (wrong) classes.push('wrong')
   // 默认值是空的那种（比如“留空就到 PATH 里找”），空着的时候提示一句
   const placeholder = !numeric && spec.default === '' ? t('manage.text.empty') : undefined
-  return (
+  const input = (
     <input
       id={id}
       className={classes.filter(Boolean).join(' ')}
@@ -72,6 +74,20 @@ function TextField(props: ControlProps) {
       aria-invalid={wrong}
       onChange={(event) => onEdit({ kind: 'text', value: event.target.value })}
     />
+  )
+  return spec.type === 'path' ? (
+    <span className="ws-pathrow">
+      {input}
+      <PathPicker
+        deviceId={props.deviceId}
+        value={text}
+        kind={spec.pathKind}
+        disabled={disabled}
+        onPick={(value) => onEdit({ kind: 'text', value })}
+      />
+    </span>
+  ) : (
+    input
   )
 }
 

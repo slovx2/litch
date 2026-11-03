@@ -37,6 +37,8 @@ export interface SettingOptionView {
 }
 
 export interface SettingSpecView {
+  pathKind?: 'file' | 'directory'
+
   /** 键。写入时用它 */
   key: string
   /** 属于哪个分组（SettingGroupView.id） */

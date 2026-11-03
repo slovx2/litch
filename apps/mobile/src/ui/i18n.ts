@@ -5,6 +5,7 @@ import { getLocales } from 'expo-localization'
 import { createContext, useContext } from 'react'
 import { type Lang, type MessageKey, translate } from '../../../../packages/ui/src/i18n/index.ts'
 import type { Args, Entry } from '../../../../packages/ui/src/i18n/types.ts'
+import { enPathPicker, zhCNPathPicker } from '../../../../packages/ui/src/path-picker/messages.ts'
 import * as app from './messages/app'
 import * as approvals from './messages/approvals'
 import * as comments from './messages/comments'
@@ -26,6 +27,7 @@ import * as usage from './messages/usage'
 export type { Lang } from '../../../../packages/ui/src/i18n/index.ts'
 
 const zhCN = {
+  ...zhCNPathPicker,
   ...filePreview.zhCN,
   ...app.zhCN,
   ...devices.zhCN,
@@ -46,6 +48,7 @@ const zhCN = {
 }
 type MobileKey = keyof typeof zhCN
 const en: Record<MobileKey, Entry> = {
+  ...enPathPicker,
   ...filePreview.en,
   ...app.en,
   ...devices.en,

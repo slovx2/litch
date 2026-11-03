@@ -4,9 +4,11 @@
 import type { HcSettingSpec, HcValue } from '@litch/core'
 import { useId } from 'react'
 import { useT } from '../../app/appearance.ts'
+import { PathPicker } from '../../path-picker/PathPicker.tsx'
 import { HC_TYPES, type HcDraft, rawOf, secretSet } from './logic.ts'
 
 export interface HcControlProps {
+  deviceId: string
   id: string
   spec: HcSettingSpec
   /** 存着的值（没写过是 undefined，显示默认值） */
@@ -131,6 +133,26 @@ export function HcControl(props: HcControlProps) {
         </span>
       )
     }
+    case 'path':
+      return (
+        <span className="ws-pathrow">
+          <input
+            id={id}
+            className={cls('req-input mono')}
+            value={String(raw)}
+            disabled={off}
+            placeholder={spec.placeholder ?? undefined}
+            onChange={(event) => set(event.target.value)}
+          />
+          <PathPicker
+            deviceId={props.deviceId}
+            value={String(raw)}
+            kind={spec.pathKind}
+            disabled={off}
+            onPick={set}
+          />
+        </span>
+      )
     case 'text':
     case 'stringList':
     case 'json':

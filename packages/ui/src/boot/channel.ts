@@ -57,6 +57,8 @@ export interface ShellBridge {
    * 选出来的是这台电脑上的路径。defaultPath 是从哪里开始找
    */
   pickFolder?(options: { defaultPath?: string; title?: string }): Promise<string | null>
+  /** 本机文件选择，取消返回 null；不能用于远程设备的路径。 */
+  pickFile?(options: { defaultPath?: string; title?: string }): Promise<string | null>
   /** 告诉外壳现在有没有没保存的改动：有的话关窗口、退出之前它先拦下来，请界面问（onLeaveAsk） */
   setUnsaved?(unsaved: boolean): void
   /** 外壳拦下了关窗口、退出，请界面问“保存 / 放弃 / 取消”。返回的函数用来不再听 */

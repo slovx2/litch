@@ -9,6 +9,11 @@ export async function runManagerChecks(
   window: BrowserWindow,
 ): Promise<readonly [object, string[]]> {
   const shots = process.env.LITCH_MANAGER_QUESTION_SHOTS
+  const pathShot = process.env.LITCH_FIXTURE_PATH_PICKER_SHOT
+  if (pathShot)
+    await window.webContents.executeJavaScript(
+      'document.documentElement.dataset.pathPickerShot = "true"',
+    )
   const running = runInPage(window, managerProbe, true)
   {
     const capture = async () => {
@@ -88,6 +93,34 @@ export async function runManagerChecks(
       throw new Error('等待经理问答截图超时')
     }
     await Promise.race([capture(), running])
+  }
+  if (pathShot) {
+    const capturePath = async () => {
+      const deadline = Date.now() + 30000
+      while (Date.now() < deadline) {
+        if (
+          await window.webContents.executeJavaScript(
+            'document.documentElement.dataset.pathPickerReady === "true"',
+          )
+        ) {
+          await window.webContents.executeJavaScript(
+            'window.__litchLook.set({skin:"human",theme:"light"})',
+          )
+          await new Promise((resolve) => setTimeout(resolve, 150))
+          await writeFile(
+            pathShot,
+            (await window.webContents.capturePage(undefined, { stayHidden: true })).toPNG(),
+          )
+          await window.webContents.executeJavaScript(
+            'window.dispatchEvent(new Event("litch-path-picker-captured"))',
+          )
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      throw new Error('等待路径选择器截图超时')
+    }
+    await Promise.race([capturePath(), running])
   }
   const result = await running
   return [result, judgeManager(result)]

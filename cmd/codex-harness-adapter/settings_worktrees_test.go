@@ -19,8 +19,13 @@ func TestWorktreeSettingsAreDeclared(t *testing.T) {
 		t.Fatalf("工作树那一组没有声明全: %+v", group)
 	}
 	root, declared := schema.spec(worktreeRootKey)
-	if !declared || root.Type != settingPath || root.Default != "" || root.Restart != restartNone || root.Scope != deviceScope {
+	if !declared || root.Type != settingPath || root.PathKind != "directory" || root.Default != "" || root.Restart != restartNone || root.Scope != deviceScope {
 		t.Fatalf("存放位置声明得不对: %+v", root)
+	}
+	for _, spec := range schema.Settings {
+		if spec.Type == settingPath && spec.Key != worktreeRootKey && spec.PathKind != "file" {
+			t.Fatalf("CLI 路径没有声明文件选择类型: %+v", spec)
+		}
 	}
 	prefix, declared := schema.spec(worktreePrefixKey)
 	if !declared || prefix.Type != settingString || prefix.Default != worktreePrefixDefault || prefix.Restart != restartNone {

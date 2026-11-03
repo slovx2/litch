@@ -15,6 +15,7 @@ import { useKey, useServices } from '../app/services.tsx'
 import { EFFORT_TEXT } from '../composer/efforts.ts'
 import { useProjectPermission } from '../composer/project-permission.ts'
 import { SettingsBar, useComposeOptions, useNewSessionDefaults } from '../composer/SettingsBar.tsx'
+import { PathPicker } from '../path-picker/PathPicker.tsx'
 import {
   MANAGER_FORM_STEPS,
   type ManagerFormStep,
@@ -404,14 +405,25 @@ export function ManagerForm({
               </label>
               <label className="form-field">
                 {t('manager.cwd')}
-                <input
-                  className="req-input"
-                  required
-                  {...fieldProps('cwd')}
-                  value={cwd}
-                  readOnly={Boolean(workspace)}
-                  onChange={(event) => change({ cwd: event.target.value })}
-                />
+                <span className="ws-pathrow">
+                  <input
+                    className="req-input"
+                    required
+                    {...fieldProps('cwd')}
+                    value={cwd}
+                    readOnly={Boolean(workspace)}
+                    onChange={(event) => change({ cwd: event.target.value })}
+                  />
+                  <PathPicker
+                    deviceId={deviceId}
+                    value={cwd}
+                    kind="directory"
+                    onPick={(path) => {
+                      setWorkspaceId('')
+                      change({ cwd: path })
+                    }}
+                  />
+                </span>
                 {project.error ? (
                   <span className="err" role="alert">
                     {project.error}

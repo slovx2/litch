@@ -51,6 +51,7 @@ import {
   NOTIFY_CLOSE,
   OPEN_EXTERNAL,
   OPEN_LOGS,
+  PICK_FILE,
   PICK_FOLDER,
   REQUEST_CORE_PORT,
   REQUEST_WINDOW_FOREGROUND,
@@ -622,30 +623,36 @@ ipcMain.handle(LICENSE_TEXT, (event, id: unknown) => {
   return typeof id === 'string' ? licensesNow().text(id) : null
 })
 
-// ---------- 添加项目时选目录 ----------
+// ---------- 选择客户端本机的目录或文件 ----------
 
 /**
- * 系统的选文件夹对话框，挂在发请求的那个窗口上。defaultPath 是框里已经填了的（从那里开始找）；
- * 选了回绝对路径，取消回 null。LITCH_PICK_FOLDER 是给自检用的：不弹框，直接当作选了这个目录
+ * 系统对话框挂在发请求的窗口上，defaultPath 是输入框里的路径。
+ * 选中回绝对路径，取消回 null；自检由 LITCH_PICK_FOLDER / LITCH_PICK_FILE 代答，不占前台。
  */
-ipcMain.handle(PICK_FOLDER, async (event, options: unknown) => {
-  const frame = event.senderFrame
-  if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return null
-  if (process.env.LITCH_PICK_FOLDER !== undefined) return process.env.LITCH_PICK_FOLDER || null
-  const asked = (options ?? {}) as { defaultPath?: unknown; title?: unknown }
-  const window = BrowserWindow.fromWebContents(event.sender)
-  const settings: Electron.OpenDialogOptions = {
-    properties: ['openDirectory', 'createDirectory'],
-    ...(typeof asked.title === 'string' ? { title: asked.title, message: asked.title } : {}),
-    ...(typeof asked.defaultPath === 'string' && isAbsolute(asked.defaultPath)
-      ? { defaultPath: asked.defaultPath }
-      : {}),
-  }
-  const result = window
-    ? await dialog.showOpenDialog(window, settings)
-    : await dialog.showOpenDialog(settings)
-  return result.canceled ? null : (result.filePaths[0] ?? null)
-})
+for (const kind of ['directory', 'file'] as const)
+  ipcMain.handle(
+    kind === 'directory' ? PICK_FOLDER : PICK_FILE,
+    async (event, options: unknown) => {
+      const frame = event.senderFrame
+      if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return null
+      const fixture =
+        kind === 'directory' ? process.env.LITCH_PICK_FOLDER : process.env.LITCH_PICK_FILE
+      if (fixture !== undefined) return fixture || null
+      const asked = (options ?? {}) as { defaultPath?: unknown; title?: unknown }
+      const window = BrowserWindow.fromWebContents(event.sender)
+      const settings: Electron.OpenDialogOptions = {
+        properties: kind === 'directory' ? ['openDirectory', 'createDirectory'] : ['openFile'],
+        ...(typeof asked.title === 'string' ? { title: asked.title, message: asked.title } : {}),
+        ...(typeof asked.defaultPath === 'string' && isAbsolute(asked.defaultPath)
+          ? { defaultPath: asked.defaultPath }
+          : {}),
+      }
+      const result = window
+        ? await dialog.showOpenDialog(window, settings)
+        : await dialog.showOpenDialog(settings)
+      return result.canceled ? null : (result.filePaths[0] ?? null)
+    },
+  )
 
 // ---------- 设置页里 Computer Use 那一节（macOS 和 Windows 上有，computer-use/settings.mts） ----------
 

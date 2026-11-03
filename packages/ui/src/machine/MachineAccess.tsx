@@ -11,6 +11,7 @@ import { reasonOf } from '../app/errors.ts'
 import { Fold } from '../app/Fold.tsx'
 import { useServices } from '../app/services.tsx'
 import type { MessageKey } from '../i18n/index.ts'
+import { PathPicker } from '../path-picker/PathPicker.tsx'
 import { addPath, removePath } from './logic.ts'
 import { MachineLog } from './MachineLog.tsx'
 
@@ -212,6 +213,7 @@ function MachineOptions({
         <PresetList deviceId={deviceId} presets={machine.presets} />
       ) : mode === 'custom' ? (
         <CustomList
+          deviceId={deviceId}
           paths={custom}
           disabled={disabled}
           onChange={(next) => onAccess({ mode: 'custom', custom: next })}
@@ -247,10 +249,12 @@ function PresetList({ deviceId, presets }: { deviceId: string; presets: string[]
 
 /** 自定义的禁止位置：一行一个，能删；最下面一行能加 */
 function CustomList({
+  deviceId,
   paths,
   disabled,
   onChange,
 }: {
+  deviceId: string
   paths: string[]
   disabled: boolean
   onChange(next: string[]): void
@@ -313,6 +317,16 @@ function CustomList({
               event.preventDefault()
               add()
             }
+          }}
+        />
+        <PathPicker
+          local
+          deviceId={deviceId}
+          value={draft}
+          disabled={disabled}
+          onPick={(path) => {
+            setDraft(path)
+            setProblem(null)
           }}
         />
         <button type="button" className="btn" disabled={disabled} onClick={add}>
