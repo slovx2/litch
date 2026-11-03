@@ -225,3 +225,73 @@ test('同SHA双平台正例；缺检查、错来源、跳过、用例差异和�
     assert.throws(() => compareChecks(left, changed, names))
   }
 })
+
+test('末项失败只允许比较已完成子集，原始失败/来源保留，不能冒充整轮等价', () => {
+  const names = ['opencode', 'client-engines']
+  const versions = {
+    codexVerified: ['0.163.0'],
+    dshMinimum: '0.2.0-rc.2',
+    opencodeVerified: ['1.18.33'],
+  }
+  const plan = checkPlan(names)
+  const specs = cliPackages(versions)
+  const left = {
+    schema: 1,
+    complete: false,
+    repository: 'example/repo',
+    sha: 'a'.repeat(40),
+    runId: '123',
+    attempt: 1,
+    platform: 'darwin',
+    node: 'v24.21.0',
+    versions,
+    plan,
+    clis: plan.clis.map((id) => ({ id, package: specs[id].name, version: specs[id].version })),
+    results: plan.checks.map((check, index) => ({
+      id: check.id,
+      code: index === 2 ? 1 : 0,
+      signal: null,
+      tests: coverage('✔ 用例 (1ms)\nℹ tests 1'),
+    })),
+  }
+  const right = { ...structuredClone(left), platform: 'linux' }
+  const before = JSON.stringify([left, right])
+  const result = compareChecks(left, right, names, { only: ['opencode'] })
+  assert.equal(result.scope, 'selected-subsets')
+  assert.deepEqual(result.sourceComplete, [false, false])
+  assert.equal(JSON.stringify([left, right]), before)
+  assert.throws(() => compareChecks(left, right, names))
+  assert.throws(() => compareChecks(left, right, names, { only: names }))
+  assert.throws(() => compareChecks(left, right, names, { only: ['client-engines'] }))
+  assert.throws(() => compareChecks(left, right, names, { only: ['dsh'] }))
+  for (const alter of [
+    (p) => {
+      p.results[0].tests.skipped = 1
+    },
+    (p) => {
+      p.results[0].code = 1
+    },
+    (p) => {
+      p.results = []
+    },
+    (p) => {
+      p.results.push(p.results[0])
+    },
+    (p) => {
+      p.plan.checks[0].command = ['true']
+    },
+    (p) => {
+      p.attempt = 2
+    },
+    (p) => {
+      p.sha = 'b'.repeat(40)
+    },
+    (p) => {
+      p.results[0].tests.names = ['不同用例']
+    },
+  ]) {
+    const changed = structuredClone(right)
+    alter(changed)
+    assert.throws(() => compareChecks(left, changed, names, { only: ['opencode'] }))
+  }
+})
