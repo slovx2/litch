@@ -61,7 +61,16 @@ function reconcile(ledger, run, services) {
   const { read, write, controller, now } = services
   const plan = ledger.plan
   const append = (type, details) =>
-    persistRecord({ read, write, controller, plan, type, details, now: now() })
+    persistRecord({
+      read,
+      write,
+      controller,
+      plan,
+      type,
+      details,
+      now: now(),
+      issueNumber: ledger.issue,
+    })
   if (ledger.state === 'resolved') return { state: 'already-resolved', runId: run.id }
   assert.equal(run.head_sha, plan.sha)
   assert.ok(run.run_attempt === 1 || run.run_attempt === 2, '其他人工attempt介入，停止自动对账')
@@ -187,6 +196,7 @@ export function recoverRun(runId, services) {
       controller,
       plan,
       type: 'aborted',
+      issueNumber: ledger.issue,
       details: { reservation: ledger.reservation, reason },
       now: now(),
     })
@@ -216,6 +226,7 @@ export function recoverRun(runId, services) {
       controller,
       plan,
       type: 'uncertain',
+      issueNumber: ledger.issue,
       details: { reservation: ledger.reservation, reason: 'api-response-not-confirmed' },
       now: now(),
     })
@@ -231,6 +242,7 @@ export function recoverRun(runId, services) {
     controller,
     plan,
     type: 'uncertain',
+    issueNumber: ledger.issue,
     details: { reservation: ledger.reservation, reason: 'api-accepted-awaiting-attempt' },
     now: now(),
   })

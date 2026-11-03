@@ -4,8 +4,9 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { checkControllerRun, recoverRun } from './recovery-controller.mjs'
 import { buildRecoveryGraph } from './recovery-graph.mjs'
-import { loadLedger } from './recovery-ledger.mjs'
+import { loadLedger, persistRecord } from './recovery-ledger.mjs'
 import { controllerPlan, fixtureStep, fixtureWorkflow } from './recovery-plan.mjs'
+import { recoveryFailureLocation } from './recovery-run.mjs'
 import { githubWriter } from './recovery-write.mjs'
 
 const sha = 'a'.repeat(40)
@@ -20,6 +21,18 @@ const artifact = {
   digest: `sha256:${'b'.repeat(64)}`,
   expired: false,
 }
+
+test('控制器失败定位只输出已知模块行列，不暴露异常或绝对路径', () => {
+  const error = {
+    stack: 'Error: secret-example\n    at fn (/private/secret/recovery-ledger.mjs:80:9)',
+  }
+  assert.equal(recoveryFailureLocation(error), 'recovery-ledger.mjs:80:9')
+  assert.equal(recoveryFailureLocation({ stack: 'Error: secret-example' }), 'unknown')
+  assert.equal(
+    recoveryFailureLocation({ stack: 'Error\n    at fn (/x/recovery-secret.mjs:1:2)' }),
+    'unknown',
+  )
+})
 function fixture(scenario = 'infra', second = false) {
   let id = 1000
   const step = (name, conclusion, number = 1) => ({
@@ -138,6 +151,7 @@ function memory(scenario = 'infra') {
     if (path === 'repos/slovx2/litch/actions/runs/100') return structuredClone(machine.snapshot.run)
     if (path === 'repos/slovx2/litch/actions/runs/500') return controlRun
     if (path.includes('/issues?')) return machine.issues
+    if (path === 'repos/slovx2/litch/issues/9') return machine.issues[0]
     if (path.includes('/issues/9/comments')) return machine.comments
     if (path.includes('/artifacts?')) return { artifacts: machine.artifacts }
     if (path.includes('/attempts/2/jobs?')) return { jobs: machine.snapshot.jobs }
@@ -154,8 +168,10 @@ function memory(scenario = 'infra') {
       created_at: new Date(now()).toISOString(),
       ...body,
     }
-    if (path.endsWith('/issues')) machine.issues.push({ ...record, number: 9 })
-    else if (path.endsWith('/comments')) machine.comments.push(record)
+    if (path.endsWith('/issues')) {
+      record.number = 9
+      machine.issues.push(record)
+    } else if (path.endsWith('/comments')) machine.comments.push(record)
     else if (path.endsWith('/rerun-failed-jobs') || path.endsWith('/rerun')) {
       machine.snapshot = fixture(scenario, true)
       machine.snapshot.run.status = 'in_progress'
@@ -283,13 +299,64 @@ test('写前复查发现新失败/attempt改变，reservation保留但不调用�
 test('写入reservation后读不到原记录，禁止调用API', () => {
   const machine = memory()
   const read = machine.services.read
-  let lists = 0
   machine.services.read = (path) => {
-    if (path.includes('/issues?') && ++lists >= 3) return []
+    if (path === 'repos/slovx2/litch/issues/9') throw new Error('精确读回不可用')
     return read(path)
   }
-  assert.throws(() => recoverRun(100, machine.services), /可靠写入/)
+  assert.throws(() => recoverRun(100, machine.services), /读回不可用/)
   assert.equal(machine.apiCalls().length, 0)
+})
+
+test('新issue在列表尚不可见时按POST编号读回；错误编号不能授权重跑', () => {
+  const machine = memory()
+  const read = machine.services.read
+  machine.services.read = (path) => (path.includes('/issues?') ? [] : read(path))
+  // 本次控制器后续追加沿用已验证编号，不再依赖新issue进入列表的时间。
+  assert.equal(recoverRun(100, machine.services).state, 'recovery-running')
+  assert.equal(machine.apiCalls().length, 1)
+  const wrong = memory()
+  const write = wrong.services.write
+  wrong.services.write = (path, body) => ({ ...write(path, body), number: 900 })
+  assert.throws(() => recoverRun(100, wrong.services))
+  assert.equal(wrong.apiCalls().length, 0)
+})
+
+test('评论读回仅有限GET等待；持续不可见时失败，不重写评论', () => {
+  for (const visible of [true, false]) {
+    const machine = memory()
+    recoverRun(100, machine.services)
+    const prior = loadLedger(machine.services.read, { runId: 100, sha })
+    const read = machine.services.read
+    const waits = []
+    let commentReads = 0
+    const delayedRead = (path) => {
+      const value = read(path)
+      if (path.includes('/comments')) {
+        commentReads++
+        if (commentReads > 1 && (!visible || commentReads < 4)) return value.slice(0, -1)
+      }
+      return value
+    }
+    const append = () =>
+      persistRecord({
+        ...machine.services,
+        read: delayedRead,
+        plan: prior.plan,
+        type: 'resolved',
+        details: { reservation: prior.reservation, conclusion: 'success' },
+        now: now(),
+        issueNumber: prior.issue,
+        wait: (ms) => waits.push(ms),
+      })
+    if (visible) assert.equal(append().state, 'resolved')
+    else assert.throws(append, /可靠写入/)
+    assert.deepEqual(waits, [1000, 2000])
+    assert.equal(
+      machine.comments.filter((item) => item.body.includes('"type":"resolved"')).length,
+      1,
+    )
+    assert.equal(machine.apiCalls().length, 1)
+  }
 })
 
 test('未知/伪造审计作者、重复issue、删除后的控制器痕迹都不能重置预算', () => {

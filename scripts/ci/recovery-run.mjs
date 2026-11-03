@@ -10,6 +10,17 @@ import { githubWriter } from './recovery-write.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const base = 'repos/slovx2/litch'
+export function recoveryFailureLocation(error) {
+  // 只输出受审模块和行列，不输出异常消息、API响应、绝对路径或环境。
+  const modules = new Set(readdirSync(join(root, 'scripts/ci')))
+  for (const line of String(error?.stack ?? '')
+    .split('\n')
+    .slice(1)) {
+    const match = line.match(/\/(recovery-[a-z-]+\.mjs):(\d{1,6}):(\d{1,6})(?:\)|$)/)
+    if (match && modules.has(match[1])) return `${match[1]}:${match[2]}:${match[3]}`
+  }
+  return 'unknown'
+}
 export function recoveryContract() {
   const paths = [
     'package.json',
@@ -124,8 +135,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         process.env.GITHUB_STEP_SUMMARY,
         `## 基础设施恢复控制器\n\n产品断言重试：0。写前reservation，每源run最多一轮。\n\n\`\`\`json\n${JSON.stringify(results, null, 2)}\n\`\`\`\n`,
       )
-  } catch {
+  } catch (error) {
     console.error('恢复控制器停止：来源、审计、API或范围检查未通过。预算不重置，不盲目重跑。')
+    console.error(`CI_RECOVERY_FAILURE_AT ${recoveryFailureLocation(error)}`)
     process.exitCode = 1
   }
 }

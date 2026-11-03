@@ -33,15 +33,22 @@ export function decodeAudit(item, read) {
   return value
 }
 
-export function loadLedger(read, source) {
+export function loadLedger(read, source, issueNumber) {
   const since = source.createdAt ? `&since=${encodeURIComponent(source.createdAt)}` : ''
-  const issues = readPages(
-    read,
-    `${base}/issues?state=all&creator=github-actions%5Bbot%5D&sort=created&direction=desc${since}`,
-  ).filter((issue) => !issue.pull_request && issue.title === auditTitle(source.runId))
+  if (issueNumber !== undefined) assert.ok(Number.isSafeInteger(issueNumber) && issueNumber > 0)
+  const issues =
+    issueNumber === undefined
+      ? readPages(
+          read,
+          `${base}/issues?state=all&creator=github-actions%5Bbot%5D&sort=created&direction=desc${since}`,
+        ).filter((issue) => !issue.pull_request && issue.title === auditTitle(source.runId))
+      : [read(`${base}/issues/${issueNumber}`)]
   assert.ok(issues.length <= 1, '同run审计issue不唯一')
   if (!issues.length) return null
   const issue = issues[0]
+  assert.equal(issue.title, auditTitle(source.runId), '读回的issue不属于源run')
+  assert.ok(!issue.pull_request, '审计不是PR')
+  if (issueNumber !== undefined) assert.equal(issue.number, issueNumber)
   const initial = decodeAudit(issue, read)
   assert.ok(initial, '审计issue缺少机器记录')
   assert.equal(initial.plan.sha, source.sha, '审计run绑定了其他SHA')
@@ -68,19 +75,30 @@ export function persistRecord({
   type,
   details = {},
   now = Date.now(),
+  wait = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
+  issueNumber,
 }) {
-  const ledger = loadLedger(read, plan)
+  const ledger = loadLedger(read, plan, issueNumber)
   if (type === 'reservation') assert.ok(!ledger?.reserved, '预算已预占')
   const record = auditRecord(plan, type, details, ledger?.last, now)
   const body = encodeAudit(plan, record, controller)
+  issueNumber = ledger?.issue
   if (ledger) {
-    write(`${base}/issues/${ledger.issue}/comments`, { body })
+    write(`${base}/issues/${issueNumber}/comments`, { body })
   } else {
     assert.ok(['reservation', 'observation'].includes(type), '不能无前序追加调用结果')
-    write(`${base}/issues`, { title: auditTitle(plan.runId), body })
+    const response = write(`${base}/issues`, { title: auditTitle(plan.runId), body })
+    issueNumber = response.number
   }
-  // 只有原记录可读回、链和来源都通过，调用方才可进行下一步。
-  const stored = loadLedger(read, plan)
+  assert.ok(Number.isSafeInteger(issueNumber) && issueNumber > 0, '审计写入未返回issue编号')
+  // 新建后按精确编号读回，不依赖issue列表的即时可见性。只重复GET，不重复POST；
+  // 评论尚不可见最多等1秒、2秒，坏链/错误作者/来源异常立即停止。
+  let stored
+  for (const delay of [0, 1000, 2000]) {
+    if (delay) wait(delay)
+    stored = loadLedger(read, plan, issueNumber)
+    if (stored?.last.hash === record.hash) return stored
+  }
   assert.equal(stored?.last.hash, record.hash, '审计没有可靠写入或发生并发修改')
   return stored
 }
