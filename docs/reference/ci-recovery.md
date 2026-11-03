@@ -41,6 +41,8 @@ issue哈希链不是数字签名，不替代仓库维护者对凭据和写权限
 
 ## 上线与 Linux 验收
 
+Claude TUI 后端专项用例暂停进入 CI 和默认本地检查，待上游完善并重新验收接入后恢复；功能代码和用例保留。默认脚本检查用 `node --test scripts/ci/*.test.mjs scripts/*.test.mjs`，手动专项位于 `scripts/manual/claude-tui.test.mjs`，准备隔离的 CLI 后运行 `CHA_CLAUDE_CLI=/绝对路径/隔离的claude npm run test:claude-tui`。暂停通过移出默认集合实现，不使用 skip，也不删除其他领域的必跑检查。
+
 1. 先合入或登记**关闭状态**的控制器/fixture入口；保持 `LITCH_CI_RECOVERY_ENABLED` 未设为 `true`。由维护者推送已审代码到演练分支，冻结 SHA。不得拿本地未推代码的测试结果代替云端。
 2. `recovery-fixture.yml` 在 `ci/recovery-nightly` 上分别执行 `case=infra`、`product`、`mixed`、`multi`，仅使用 Linux，不用真实模型、签名或机密。
 3. 每个源 run 全部结束后，在同一 ref dispatch `recovery-controller.yml`，传 `source-run=<id>`、`mode=fixture-recover`。检查 infra/multi 只产生 attempt 2，包含必要的可复用下游；product/mixed 仍为 attempt 1，没有重跑请求。

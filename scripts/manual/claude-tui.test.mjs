@@ -4,8 +4,8 @@ import { mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { MockLLM } from '../packages/claude/dist/claude/test/fixtures/mock-llm.mjs'
-import { ProtocolClient } from '../packages/claude/dist/claude/test/fixtures/protocol-client.mjs'
+import { MockLLM } from '../../packages/claude/dist/claude/test/fixtures/mock-llm.mjs'
+import { ProtocolClient } from '../../packages/claude/dist/claude/test/fixtures/protocol-client.mjs'
 
 test('TUI：SDK → TUI → SDK 保持上下文、标题和历史；TUI 工具审批与拒绝', {
   timeout: 180_000,
@@ -201,7 +201,9 @@ test('TUI：SDK → TUI → SDK 保持上下文、标题和历史；TUI 工具�
     assert.equal((await client.completed(questionTurn.id)).status, 'completed')
     assert.equal(questions, 1)
     model.assertConsumed()
-    const { dynamicToolName } = await import('../packages/claude/dist/claude/src/dynamic-tools.mjs')
+    const { dynamicToolName } = await import(
+      '../../packages/claude/dist/claude/src/dynamic-tools.mjs'
+    )
     const { thread: toolThread } = await client.request('thread/start', {
       cwd: home,
       dynamicTools: [
@@ -309,7 +311,7 @@ test('TUI：SDK → TUI → SDK 保持上下文、标题和历史；TUI 工具�
 
 test('切到 TUI 时拒绝接管仍在运行的 SDK 后台命令，并保留原进程', { timeout: 60_000 }, async () => {
   const { startScene, disposeScene, backgroundBash, say, runTurn, uniqueSleep, commandAlive } =
-    await import('../packages/claude/dist/claude/test/fixtures/background-scene.mjs')
+    await import('../../packages/claude/dist/claude/test/fixtures/background-scene.mjs')
   const path = join(await mkdtemp(join(tmpdir(), 'ltt-switch-')), 'settings.json')
   await writeFile(path, JSON.stringify({ values: { 'harness.claude-code.backend': 'sdk' } }))
   const scene = await startScene('tui-switch-background', {
