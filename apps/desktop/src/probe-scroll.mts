@@ -139,6 +139,8 @@ export async function scrollProbe(): Promise<ScrollProbe> {
 
   // ---- 一、贴在底部，回答在增长 ----
   await until('回答开始输出', live)
+  // 收尾不再预留两行，开头可能尚未铺满视口；短内容自然向下增长不属于贴底滚动。
+  await until('正文铺满滚动视口', () => content().offsetHeight >= scroller().clientHeight)
   const startHeight = content().offsetHeight
   const follow = track(gap)
   await frames(1500, follow.sample)

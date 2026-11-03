@@ -283,7 +283,10 @@ export const UserMessage = memo(function UserMessage({
 })
 
 /** 助手回答。还在往外出字时文字匀速放出，结尾带一个光标 */
-export const AgentAnswer = memo(function AgentAnswer(ref: ItemRef) {
+export const AgentAnswer = memo(function AgentAnswer({
+  footerCopy = false,
+  ...ref
+}: ItemRef & { footerCopy?: boolean }) {
   const item = useItem<AgentMessageItem>(ref)
   const [searchCode] = useToggle(sessionKeyOf(ref), `search-code:${ref.itemId}`, false)
   const { text, revealing } = useSmoothText(item?.kind === 'agentMessage' ? item.text : '')
@@ -295,12 +298,20 @@ export const AgentAnswer = memo(function AgentAnswer(ref: ItemRef) {
       <SearchCodeContext.Provider value={searchCode}>
         <Markdown text={text} streaming={streaming} anchor={`a:${ref.itemId}`} item={ref.itemId} />
       </SearchCodeContext.Provider>
-      <div className="message-acts">
-        <MessageCopy item={item} />
-      </div>
+      {footerCopy ? null : (
+        <div className="message-acts">
+          <MessageCopy item={item} />
+        </div>
+      )}
     </div>
   )
 })
+
+/** 最后一条回答的操作并入回合收尾，仍只订阅该消息，复制完整原文。 */
+export function AnswerCopy(ref: ItemRef) {
+  const item = useItem<AgentMessageItem>(ref)
+  return item?.kind === 'agentMessage' ? <MessageCopy item={item} /> : null
+}
 
 /** 计划：一张卡片，内容按 Markdown 画 */
 export const PlanCard = memo(function PlanCard(ref: ItemRef) {

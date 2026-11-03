@@ -183,11 +183,29 @@
   color: var(--ink-3);
   opacity: 0.55;
 }
-/* 回答的操作区留出固定高度，悬停和键盘聚焦只改显隐，不推动正文。 */
+/* 收尾操作与状态同行；没有收尾的回答在右下角悬浮，不预留空行。 */
+.agent-message {
+  position: relative;
+  /* 操作槽在定稿前后保持同宽，移入收尾时正文不会重新换行。 */
+  padding-inline-end: calc(var(--message-action-size) * var(--fs));
+}
+.agent-message > .message-acts {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-end: 0;
+}
 .message-acts {
   display: flex;
   opacity: 0;
 }
+.message-acts .ibtn {
+  width: calc(var(--message-action-size) * var(--fs));
+  height: calc(var(--message-action-size) * var(--fs));
+}
+.turn-foot > .message-acts {
+  margin-inline-start: auto;
+}
+.turn:hover > .turn-foot .message-acts,
 .agent-message:hover .message-acts,
 .message-acts:focus-within {
   opacity: 1;

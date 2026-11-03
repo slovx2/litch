@@ -62,7 +62,7 @@ import { Compaction, Notes, RestartNote } from './activity.tsx'
 import { CiteScope } from './comments/Cite.tsx'
 import { CommentLayer } from './comments/Layer.tsx'
 import { FileLinksProvider, useSessionFileLinks } from './FileLinks.tsx'
-import { AgentAnswer, PlanCard, UserMessage } from './messages.tsx'
+import { AgentAnswer, AnswerCopy, PlanCard, UserMessage } from './messages.tsx'
 import { ProcessHead, ProcessParts } from './process.tsx'
 import { Recovery } from './Recovery.tsx'
 import { Stamp } from './Stamp.tsx'
@@ -321,6 +321,7 @@ const Turn = memo(function Turn({
   const divided = blocks.some((block) => block.type === 'user' && turnAddition(turn, block.itemId))
   const tail = blocks.find((block) => block.type === 'tail')
   const lastAnswer = blocks.findLastIndex((block) => block.type === 'answer')
+  const footerAnswer = !running && !remind ? blocks[lastAnswer] : undefined
   // 每一块前面最近的那条用户消息：它带着评论的话，回答里的 [N] 指向它的评论（comments/Cite.tsx）
   const userBefore = blocks.map(
     (_, index) =>
@@ -364,7 +365,7 @@ const Turn = memo(function Turn({
             return (
               <Fragment key={block.itemId}>
                 <CiteScope {...ref} userId={userBefore[index]}>
-                  <AgentAnswer {...ref} itemId={block.itemId} />
+                  <AgentAnswer {...ref} itemId={block.itemId} footerCopy={block === footerAnswer} />
                 </CiteScope>
                 {/* 达成目标的那一轮：最后一条回答下面写用了多久（目标随即清掉） */}
                 {index === lastAnswer && !running ? <GoalReached {...ref} turn={turn} /> : null}
@@ -413,7 +414,7 @@ const Turn = memo(function Turn({
         {tail ? (
           <TurnTail {...ref} turnId={turnId} itemIds={tail.itemIds} fresh={freshTail} />
         ) : null}
-        {/* 回合在跑时这一格一直占着位置，正文出字时隐去（只改透明度，不跟着跳）；用时从回合开始算，隐去时照样走 */}
+        {/* 正文出字且没有工作提示时不占行；实际高度变化由对话区的滚动锚点补偿。 */}
         {remind ? null : running ? (
           <div
             className="running-line slot"
@@ -431,6 +432,11 @@ const Turn = memo(function Turn({
             <span>{turn.status === 'running' ? '' : t(TURN_END[turn.status])}</span>
             {turn.durationMs === null ? null : <span>{duration(turn.durationMs, t)}</span>}
             {ended === null ? null : <Stamp at={ended} />}
+            {footerAnswer?.type === 'answer' ? (
+              <div className="message-acts">
+                <AnswerCopy {...ref} itemId={footerAnswer.itemId} />
+              </div>
+            ) : null}
           </div>
         )}
       </section>

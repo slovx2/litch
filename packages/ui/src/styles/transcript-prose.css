@@ -429,9 +429,19 @@
 .turn-foot {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font: calc(11px * var(--fs)) / 1 var(--mono);
+  gap: var(--message-foot-gap);
+  font: calc(var(--message-meta-size) * var(--fs)) / 1 var(--mono);
   color: var(--ink-3);
+  white-space: nowrap;
+}
+.turn-foot > span {
+  flex: none;
+}
+/* 窄窗口或大字号下，日期可以截短；完整时间仍在 time 的悬停提示里。 */
+.turn-foot > time {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* 分叉出来的会话：对话最上面一行写明从哪个会话分出来，点名字回到那个会话 */
 .forked-from {
@@ -470,8 +480,7 @@
   font-size: calc(12px * var(--fs));
   color: var(--ink-2);
 }
-/* 对话里回合进行中末尾那一格（.slot；新建会话页那一行不带）：高度固定，正文出字时隐去（Transcript.tsx 的 useWorking），不改布局。
-   只淡入不淡出：正文一出字立刻让开，不和光标同时在 */
+/* 正文出字时不显示空的工作提示；重试或等待工具时仍显示。 */
 /* “{harness} 正在工作”后面这一回合已经用了多久 */
 .running-time {
   color: var(--ink-3);
@@ -490,8 +499,7 @@
   transition: opacity 0.2s ease;
 }
 .running-line.slot[data-hidden] {
-  opacity: 0;
-  transition: none;
+  display: none;
 }
 
 /* 系统设了“减少动态效果”时，记号和光标不闪。这一段要放在所有动画规则之后 */

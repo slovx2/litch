@@ -5,6 +5,10 @@
   --fs: 1;
   --fs-tree: 1;
   --fs-chat: 1;
+  /* 消息收尾共用的尺度；皮肤可覆盖，字号随对话设置缩放。 */
+  --message-action-size: 22px;
+  --message-meta-size: 11px;
+  --message-foot-gap: 8px;
   --L: initial;
   --D: ;
   color-scheme: light;
