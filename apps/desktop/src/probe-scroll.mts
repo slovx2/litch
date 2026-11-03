@@ -32,6 +32,8 @@ export interface ScrollProbe {
   toBottomWorks: boolean
   /** 贴在底部、待办卡片在一步步更新（中途变长变短）：底边的距离变了多少 */
   todoFollowGapSpread: number
+  /** 贴底待办取样的几何变化：底边差、内容高、视口高、scrollTop、完成计数。只记录变化，最多 40 项。 */
+  todoFollowTrace: [number, number, number, number, string][]
   /** 更新期间卡片出现过几种高度（证明它确实变长变短了） */
   todoHeights: number
   /** 不在底部、待办卡片在眼前更新：视口里最靠上的一行挪了多少 */
@@ -308,10 +310,27 @@ export async function scrollProbe(): Promise<ScrollProbe> {
   rail?.set(false)
   // 这个会话够长，能滚起来。它的回答还在流，先停掉再发
   await halt()
-  scroller().scrollTop = 0
-  await frame()
+  // 走真实按钮同步更新贴底状态；直接写 scrollTop 时异步 scroll 尚未到，尺寸变化会继续守旧阅读锚点。
+  await backToBottom()
   await listTodos('列一份待办')
-  const todoFollow = track(gap)
+  const todoFollowTrace: ScrollProbe['todoFollowTrace'] = []
+  const todoFollow = track(() => {
+    const value = gap()
+    const sample: ScrollProbe['todoFollowTrace'][number] = [
+      value,
+      content().offsetHeight,
+      scroller().clientHeight,
+      scroller().scrollTop,
+      count(),
+    ]
+    if (
+      todoFollowTrace.length < 40 &&
+      JSON.stringify(todoFollowTrace.at(-1)) !== JSON.stringify(sample)
+    ) {
+      todoFollowTrace.push(sample)
+    }
+    return value
+  })
   const todoHeights = await watchTodos(todoFollow.sample)
   todoFollow.stop()
   const todoFollowGapSpread = spread(todoFollow.values)
@@ -348,6 +367,7 @@ export async function scrollProbe(): Promise<ScrollProbe> {
 
   return {
     todoFollowGapSpread,
+    todoFollowTrace,
     todoHeights,
     todoInView,
     todoFreeSpread,

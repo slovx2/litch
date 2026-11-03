@@ -63,11 +63,11 @@ if (!process.versions.electron) {
       await win.webContents.debugger.sendCommand('Emulation.setCPUThrottlingRate', {
         rate: Number(process.env.LITCH_WHEEL_CPU),
       })
-      const wheel = async (deltaY, deltaX = 0) => {
-        const point = await run(() => {
+      const wheel = async (deltaY, deltaX = 0, edge = false) => {
+        const point = await run((edge) => {
           const box = document.querySelector('.tr-scroll').getBoundingClientRect()
-          return { x: box.left + box.width / 2, y: box.top + box.height / 2 }
-        })
+          return { x: box.left + (edge ? 4 : box.width / 2), y: box.top + box.height / 2 }
+        }, edge)
         await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', {
           type: 'mouseWheel',
           ...point,
@@ -237,6 +237,20 @@ if (!process.versions.electron) {
       console.log(
         JSON.stringify({ nested, diagonal, gestures, smallWheelDelta: afterSmall - beforeSmall }),
       )
+      // 与待办贴底探针同样延迟 scroll 通知，用 CDP 真实滚轮确认用户不点按钮也能恢复跟随。
+      await run(prepareDelayedFollow)
+      await wheel(-240, 0, true)
+      await painted()
+      await run(() => window.wheelCheck.delayScroll())
+      await wheel(100000, 0, true)
+      const follow = await run(() => window.wheelCheck.measureFollow())
+      assert.ok(follow.trusted, '必须由真实滚轮输入恢复跟随')
+      assert.ok(follow.delayed > 0, '必须实际延迟 scroll 事件')
+      assert.ok(follow.done && follow.heights >= 3, '必须覆盖待办变长、变短直到完成')
+      assert.ok(follow.maxDistance <= 1, `滚轮到底后没有恢复跟随：${JSON.stringify(follow)}`)
+      assert.ok(follow.spread <= 0.5, `事件延迟期间贴底波动：${JSON.stringify(follow)}`)
+      results.push({ delayedScrollFollow: follow })
+      console.log(JSON.stringify({ delayedScrollFollow: follow }))
       if (process.env.LITCH_WHEEL_RESULT)
         writeFileSync(process.env.LITCH_WHEEL_RESULT, `${JSON.stringify(results, null, 2)}\n`)
       app.exit(0)
@@ -245,6 +259,60 @@ if (!process.versions.electron) {
       app.exit(1)
     }
   })
+}
+
+async function prepareDelayedFollow() {
+  const p = window.wheelCheck
+  window.__litchRail?.set(false)
+  await p.say('列一份待办，验证滚轮回到底部')
+  const card = () => document.querySelector('.turn:last-child .todo')
+  const count = () => card()?.querySelector('.todo-count')?.textContent ?? ''
+  await p.until(() => count().includes('0/4'))
+  const scroller = document.querySelector('.tr-scroll')
+  let delayed = 0
+  let trusted = false
+  const hold = (event) => {
+    delayed++
+    event.stopImmediatePropagation()
+  }
+  const wheel = (event) => {
+    trusted ||= event.isTrusted && event.deltaY > 0
+  }
+  p.delayScroll = () => {
+    if (scroller.scrollTop >= -1 || !document.querySelector('.to-bottom'))
+      throw new Error('滚轮恢复前必须真的处于自由阅读状态')
+    scroller.addEventListener('scroll', hold, true)
+    scroller.addEventListener('wheel', wheel, true)
+  }
+  p.measureFollow = async () => {
+    const samples = []
+    const heights = new Set()
+    const deadline = performance.now() + 15000
+    try {
+      do {
+        // 跨过绘制，尺寸变化的取样在应用自己的 ResizeObserver 补偿之后。
+        await new Promise((done) => requestAnimationFrame(() => setTimeout(done, 0)))
+        const content = document.querySelector('.tr')
+        samples.push({
+          gap: content.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom,
+          top: scroller.scrollTop,
+        })
+        heights.add(Math.round(card()?.getBoundingClientRect().height ?? 0))
+      } while (!count().includes('5/5') && performance.now() < deadline)
+      const gaps = samples.map((sample) => sample.gap)
+      return {
+        trusted,
+        delayed,
+        done: count().includes('5/5'),
+        heights: heights.size,
+        maxDistance: Math.max(...samples.map((sample) => Math.abs(sample.top))),
+        spread: Math.max(...gaps) - Math.min(...gaps),
+      }
+    } finally {
+      scroller.removeEventListener('scroll', hold, true)
+      scroller.removeEventListener('wheel', wheel, true)
+    }
+  }
 }
 
 function prepareNested() {
