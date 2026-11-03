@@ -318,3 +318,21 @@ test('日志测试只消除已核实入口的随机临时前缀，原始记录/�
   ])
     assert.notDeepEqual(comparableCoverage(mac), comparableCoverage(changed))
 })
+
+test('原生Codex诊断只映射同仓库隔离CLI的宿主前缀，版本与安装路径仍严格比较', () => {
+  const make = (root, version = '0.163.0', repo = 'litch') => ({
+    id: 'native-codex',
+    tests: coverage(
+      `✔ 启用后可用：Codex ${version}（${root}/runner/work/${repo}/${repo}/.artifacts/host-codex/node_modules/.bin/codex），权限预设 :read-only`,
+    ),
+  })
+  const mac = comparableCoverage(make('/Users'), 'slovx2/litch')
+  assert.deepEqual(mac, comparableCoverage(make('/home'), 'slovx2/litch'))
+  for (const changed of [
+    make('/home', '0.164.0'),
+    make('/home', '0.163.0', 'other'),
+    make('/unrecognized'),
+  ]) {
+    assert.notDeepEqual(mac, comparableCoverage(changed, 'slovx2/litch'))
+  }
+})

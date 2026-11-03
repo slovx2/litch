@@ -5,7 +5,23 @@ import { pathToFileURL } from 'node:url'
 import { checkPlan, expectsNodeTests } from './check-catalog.mjs'
 import { cliPackages } from './install-test-clis.mjs'
 
-export function comparableCoverage(result) {
+export function comparableCoverage(result, repository = '') {
+  if (result.id === 'native-codex') {
+    // 探针成功诊断带实际隔离 CLI 的绝对位置；版本、相对安装路径和断言文字仍须完全一致。
+    const repo = repository.split('/').at(-1)
+    if (!repo || !/^[A-Za-z0-9_.-]+$/.test(repo)) return result.tests
+    const suffix = `/runner/work/${repo}/${repo}/.artifacts/host-codex/node_modules/.bin/codex`
+    return {
+      ...result.tests,
+      names: result.tests.names.map((name) =>
+        name.startsWith('启用后可用：Codex ')
+          ? name
+              .replace(`（/Users${suffix}）`, '（<isolated-codex>）')
+              .replace(`（/home${suffix}）`, '（<isolated-codex>）')
+          : name,
+      ),
+    }
+  }
   if (result.id !== 'desktop:test:log-file') return result.tests
   // test-log-file.mjs 仅把同 SHA 的 src/test/log-file.test.mts 构建到 mkdtemp 目录。
   // 此测试使用顶层 assert，Node 以随机绝对路径命名；只映射这一个已核实的入口。
@@ -76,8 +92,8 @@ export function compareChecks(left, right, names, { only } = {}) {
   const r = selectedResults(right)
   for (let index = 0; index < l.length; index++)
     assert.deepEqual(
-      comparableCoverage(l[index]),
-      comparableCoverage(r[index]),
+      comparableCoverage(l[index], left.repository),
+      comparableCoverage(r[index], right.repository),
       `实际用例不同：${l[index].id}`,
     )
   return {
