@@ -94,7 +94,9 @@ function patch(n: number, hunks = 1): string {
         news++
       }
     }
-    parts.push(`@@ -${old},${olds} +${fresh},${news} @@`, ...body)
+    parts.push(`@@ -${old},${olds} +${fresh},${news} @@`)
+    // 大补丁不能展开成函数参数；不同平台的参数栈上限会先于产品代码报错。
+    for (const line of body) parts.push(line)
     old += olds + 10
     fresh += news + 10
   }
