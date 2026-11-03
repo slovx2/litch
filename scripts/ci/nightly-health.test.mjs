@@ -121,6 +121,20 @@ test('工作流停用和心跳迟到明确呈现，不自动启用或伪称监�
   assert.ok(result.alerts.some((a) => a.key === 'workflow-state'))
   assert.equal(result.heartbeatGapMinutes, 240)
   assert.match(result.notices.join(), /监测本身/)
+  assert.ok(!result.notices.some((n) => n.includes('首次观测')))
+})
+
+test('首次观测明确历史监测空窗未知，不新增告警或推算漏跑槽数', () => {
+  const first = report(3, [source()])
+  assert.match(first.notices.join(), /首次观测，之前的监测空窗无法核实/)
+  assert.equal(first.heartbeatGapMinutes, null)
+  assert.equal(first.alerts.length, 0)
+  const next = report(3, [source()], {
+    previousHeartbeat: new Date(slot + 2.9 * hour).toISOString(),
+  })
+  assert.ok(!next.notices.some((n) => n.includes('首次观测')))
+  assert.deepEqual(next.alerts, first.alerts)
+  assert.deepEqual(next.slots, first.slots)
 })
 
 function service() {

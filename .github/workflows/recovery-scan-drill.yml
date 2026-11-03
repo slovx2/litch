@@ -1,0 +1,43 @@
+name: CI recovery scan drill
+run-name: CI scan drill ${{ inputs.phase }} ${{ inputs.source-run }}
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: 首轮、承接首轮、或读取故意损坏的夹具（预期失败）
+        type: choice
+        options: [seed, resume, reject-corrupt]
+        required: true
+      source-run:
+        description: seed留空；其他阶段填同SHA同ref的成功seed run ID
+        type: string
+        required: false
+permissions:
+  contents: read
+  actions: read
+jobs:
+  drill:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: 只读扫描与检查点校验
+        run: node scripts/ci/recovery-scan-drill.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRILL_PHASE: ${{ inputs.phase }}
+          DRILL_SOURCE_RUN: ${{ inputs.source-run }}
+      - name: 保存独立演练检查点
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ci-recovery-scan-drill-${{ github.run_attempt }}
+          path: .artifacts/scan-drill/*.json
+          if-no-files-found: error
+          retention-days: 7

@@ -128,6 +128,8 @@ export function evaluateNightly({ runs, now, monitoringSince, workflowState, pre
   const heartbeatGapMinutes = previousHeartbeat
     ? (now - Date.parse(previousHeartbeat)) / minute
     : null
+  if (heartbeatGapMinutes === null)
+    notices.push('首次观测，之前的监测空窗无法核实；不据此推算漏跑槽数')
   if (heartbeatGapMinutes !== null && heartbeatGapMinutes > 90)
     notices.push(`监测心跳间隔 ${Math.floor(heartbeatGapMinutes)} 分钟，监测本身也曾迟到`)
   const samples = nightlies

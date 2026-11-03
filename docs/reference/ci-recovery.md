@@ -62,3 +62,26 @@ issue哈希链不是数字签名，不替代仓库维护者对凭据和写权限
 - 只累计真实 `event=schedule` 的独立 Full run；同 run 的重试与手动 dispatch 不增加样本。达到14次后提示经理复核8小时阈值。创建时间只能推定最近的 cron 槽，超过一天的调度延迟不能唯一归槽。
 
 合入后的验收顺序：保持恢复变量关闭；先在默认分支手动 dispatch `mode=nightly-observe`（无需 source-run），确认只读权限和当前摘要；再等待真实维护 schedule，核对心跳上传及 CI/Prepare 展示。随后观察真实夜间 Full 的创建、结果、告警去重与心跳闭环。**手动演练不能验收 I-94**，也不能替代14个真实样本。新增审计标签/自动关闭还需用同冻结SHA的 Linux fixture 验证；正式开关仍须用户另行同意。
+
+首次没有可信心跳时，摘要明确显示“首次观测，之前的监测空窗无法核实”，不据此猜测漏跑槽数。后续使用实际前一份心跳计算间隔；已有90分钟等阈值不变。
+
+## 隔离的只读扫描演练
+
+`recovery-scan-drill.yml` 只有手动入口、Linux runner 和 `contents: read`、`actions: read` 权限。它用8个固定的合成来源调用正式纯选择器与收据函数，不查询或恢复真实失败来源，不写审计issue。合成来源1模拟已成功的attempt2，其他来源模拟仍需跟进；模拟收据不代表真实恢复成功。
+
+演练使用独立工作流、artifact名`ci-recovery-scan-drill-1`和JSON kind。正式维护只接受schedule、正式工作流和`ci-recovery-scan`，不会把演练检查点纳入预算历史。来源按明确run ID下载，不自动选择“最新”；须同ref、同SHA、attempt1、成功首轮，核对上传job/step、ZIP digest与检查点身份，再重放固定夹具核对游标及收据。API错误、缺制品或损坏立即拒绝，不回退为空游标。
+
+合并后保持恢复开关关闭，由维护者在同一冻结提交的ref上执行三次（将下方`<冻结ref>`和`<首轮run-id>`替换为实际值）：
+
+```sh
+gh workflow run recovery-scan-drill.yml --repo slovx2/litch --ref <冻结ref> -f phase=seed
+gh workflow run recovery-scan-drill.yml --repo slovx2/litch --ref <冻结ref> -f phase=resume -f source-run=<首轮run-id>
+gh workflow run recovery-scan-drill.yml --repo slovx2/litch --ref <冻结ref> -f phase=reject-corrupt -f source-run=<首轮run-id>
+```
+
+1. `seed` 成功：选中`1,2,3,4,5`，剩余`6,7,8`，游标5；模拟成功来源1持有terminal收据。独立artifact含正常检查点和明确标记的`bad-checkpoint.json`（游标故意为-1）。
+2. `resume` 必须等待首轮完成。成功后选中`6,7,8,2,3`、剩余`4,5`、游标3；来源1成功收据原样保留、不再占名额，两个轮次合计覆盖8个来源。下载第二轮检查点核对`parentRun`与首轮run ID一致，并与实际两次run的SHA/attempt/上传digest逐项比对。
+3. `reject-corrupt` 仍指向同一成功首轮，读取真实上传ZIP中的损坏夹具。**预期工作流失败**，扫描步骤摘要必须明确“演练检查点内容损坏”，上传步骤skipped且没有新artifact。若只是准备失败、API失败或通用身份拒绝，不算损坏反例通过。
+4. 三次均不得出现恢复API、审计issue写入、Mac job或正式`ci-recovery-scan-*`制品。错误SHA/ref/attempt、篡改成功收据等另有本地测试；未云端实测时如实列为未验。
+
+三次dispatch必须保持同一SHA；若main前进，可由维护者按授权冻结专用分支。不得通过放宽SHA校验续验旧检查点。演练不接正式恢复开关，也不能替代真实schedule心跳继承或I-94验收。
