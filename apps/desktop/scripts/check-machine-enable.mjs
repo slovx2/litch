@@ -100,7 +100,7 @@ async function runWindow() {
       await js(
         'document.body.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter", bubbles:true}))',
       )
-      assert.equal(await js('window.m13.state().persisted?.tools?.remote?.machine ?? false'), false)
+      assert.equal(await js('window.m13.state().toolSettings.values["tools.machine"]'), false)
       await js(`document.querySelector('${card}').scrollIntoView({block:'center'})`)
       await new Promise((resolve) => setTimeout(resolve, 200))
       if (shots)
@@ -111,14 +111,12 @@ async function runWindow() {
           `Array.from(document.querySelectorAll('${card} button')).find(b => b.textContent.includes('打开设置页')).click()`,
         )
         await until('document.querySelector("[data-sec=tools]")')
-        assert.equal(
-          await js('window.m13.state().persisted?.tools?.remote?.machine ?? false'),
-          false,
-        )
+        assert.equal(await js('window.m13.state().toolSettings.values["tools.machine"]'), false)
         await click('.ss-row:not(.projection-group *)')
         await until('document.querySelector(".mach-card")')
         await click(`${card} [data-option="once"]`)
-        await until('window.m13.state().persisted?.tools?.remote?.machine === true')
+        await until('window.m13.state().toolSettings.values["tools.machine"] === true')
+        assert.equal(await js('window.m13.state().toolWrites.length'), 1)
         assert.equal(await js('window.m13.state().persisted.machine.remote.access'), 'sensitive')
         assert.equal(await js('window.m13.state().persisted.machine.remote.approval'), 'each')
         assert.equal(await js('window.m13.state().executions'), 0)

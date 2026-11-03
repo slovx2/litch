@@ -1385,7 +1385,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       one('#manager-form-error')?.textContent?.includes('相对路径'),
   )
   fill(input('工作目录'), '~/work/litch')
-  // 只对模拟核心：取消不记确认；确认后跨 harness 复用；换目录不带走项目权限。
+  // 只对模拟核心：取消不记确认；权限与确认按 harness 分开；换目录不带走项目权限。
   const managerHarness = field('经理使用')?.querySelector('select')
   if (!managerHarness) throw new Error('运行环境缺少 harness 选择')
   managerHarness.value = 'claude'
@@ -1418,18 +1418,21 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   )
   managerHarness.value = 'pi'
   managerHarness.dispatchEvent(new Event('change', { bubbles: true }))
-  await until('换 harness 沿用项目权限', () => permissionIs('完全访问'))
+  await until('Pi 使用自己的默认完全访问', () => permissionIs('完全访问'))
   managerHarness.value = 'dsh'
   managerHarness.dispatchEvent(new Event('change', { bubbles: true }))
+  await until('未记忆的 DSH 使用默认工作区权限', () => permissionIs('工作区'))
   await pickPermission(':read-only')
-  await until('另一 harness 可降低项目默认', () => permissionIs('只读'))
+  await until('另一 harness 可降低自己的默认', () => permissionIs('只读'))
   await pickPermission(':danger-full-access')
-  await until(
-    '跨 harness 的确认记录复用',
-    () => permissionIs('完全访问') && !one('.mg-form .pick-ask'),
-  )
+  await until('DSH 不继承 Claude 的确认记录', () => one('.mg-form .pick-ask'))
+  await click('.mg-form .pick-ask .danger')
+  await until('DSH 单独确认完全访问', () => permissionIs('完全访问'))
+  await pickPermission(':read-only')
+  await until('DSH 记住只读', () => permissionIs('只读'))
   managerHarness.value = 'claude'
   managerHarness.dispatchEvent(new Event('change', { bubbles: true }))
+  await until('Claude 保留自己的完全访问', () => permissionIs('完全访问'))
   fill(input('工作目录'), '~/work/other-project')
   await until('不同项目不继承确认和默认', () => permissionIs('工作区'))
   fill(input('工作目录'), '~/work/litch')

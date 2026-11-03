@@ -8,7 +8,9 @@ import {
   serveChannel,
 } from '@litch/core'
 import { createRoot } from 'react-dom/client'
+import { fakeDevice, harness } from '../../core/test/fake-device.mts'
 import { fakeOpener } from '../../core/test/fake-server.mts'
+import { fakeToolSettings } from '../../core/test/fake-tool-settings.mts'
 import { thread, turn } from '../../core/test/fixtures.mts'
 import { App } from '../src/app/App.tsx'
 import { ServicesProvider } from '../src/app/services.tsx'
@@ -19,15 +21,13 @@ const session = thread({
   cwd: '/srv/project',
   turns: [turn('t1', [], { status: 'inProgress' })],
 })
+// 开关已由设备服务保存；夹具也使用聚合面和正式设备设置协议。
+const device = fakeDevice([harness('pi', { declaration: { extensions: ['clientTools'] } })])
+device.device.extensions.push('deviceSettings')
+const tools = fakeToolSettings(['pi'])
 const peer = fakeOpener({
-  'runtime/info': () => ({
-    engine: 'pi',
-    protocolVersion: '0.163.0',
-    cliBuild: '0.99.1',
-    capabilities: [],
-    releaseReady: true,
-    extensions: ['clientTools'],
-  }),
+  ...device.handlers,
+  ...tools.handlers,
   'project/list': () => ({ data: [], nextCursor: null }),
   'thread/list': () => ({
     data: [{ ...session, turns: [] }],
@@ -54,7 +54,7 @@ const core = createCore({
       return () => clearTimeout(id)
     },
   },
-  version: '0.26.0',
+  version: '0.30.0',
   store: {
     load: () => ({ localWire: null, remotes: [] }),
     save(value) {
@@ -151,6 +151,12 @@ Object.assign(window, {
           result = reply
         })
     },
-    state: () => ({ executions, persisted, result }),
+    state: () => ({
+      executions,
+      persisted,
+      result,
+      toolSettings: tools.settings.snapshot,
+      toolWrites: tools.settings.writes,
+    }),
   },
 })

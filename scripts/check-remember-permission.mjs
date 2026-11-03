@@ -61,22 +61,35 @@ async function probe() {
   await choose('harness', 'pi')
   type('must not escalate')
   await sleep(100)
-  const unsupported = {
+  const independent = {
     permission: picker('permission').textContent,
     alert: document.querySelector('[role="alert"]')?.textContent,
     disabled: document.querySelector('.cmp .send')?.disabled,
   }
-  // 同范围确认仍在：降低后再切全访问不应重复弹窗。
+  // Pi 的唯一档位免确认；换回 Claude 仍记着只读，且同范围确认未丢失。
+  await choose('permission', ':danger-full-access')
+  const piNoConfirmation = !document.querySelector('.pick-ask')
+  await choose('harness', 'claude')
+  const claudeRemembered = picker('permission').textContent
   await choose('permission', ':danger-full-access')
   const rememberedConfirmation = !document.querySelector('.pick-ask')
-  await choose('harness', 'claude')
   // 远程设备独立记录；同一个前端无需自己的 home 路径。
   await choose('device', 'build')
   const remoteDefault = picker('permission').textContent
   await choose('permission', ':danger-full-access', true)
   await choose('harness', 'pi')
   const remoteCross = picker('permission').textContent
-  return { full, cross, reopened, unsupported, rememberedConfirmation, remoteDefault, remoteCross }
+  return {
+    full,
+    cross,
+    reopened,
+    independent,
+    piNoConfirmation,
+    claudeRemembered,
+    rememberedConfirmation,
+    remoteDefault,
+    remoteCross,
+  }
 }
 
 if (process.versions.electron) {
@@ -95,9 +108,11 @@ if (process.versions.electron) {
       const result = await window.webContents.executeJavaScript(`(${probe.toString()})()`)
       for (const key of ['full', 'cross', 'reopened', 'remoteCross'])
         assert.equal(result[key], 'Full access')
-      assert.equal(result.unsupported.permission, 'Read only')
-      assert.match(result.unsupported.alert, /does not support/)
-      assert.equal(result.unsupported.disabled, true)
+      assert.equal(result.independent.permission, 'Full access')
+      assert.equal(result.independent.alert, undefined)
+      assert.equal(result.independent.disabled, false)
+      assert.equal(result.piNoConfirmation, true)
+      assert.equal(result.claudeRemembered, 'Read only')
       assert.equal(result.rememberedConfirmation, true)
       assert.equal(result.remoteDefault, 'Workspace')
       console.log(JSON.stringify(result))

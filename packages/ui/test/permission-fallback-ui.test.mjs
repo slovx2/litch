@@ -67,11 +67,15 @@ function nodes(value) {
 for (const platform of ['desktop', 'mobile']) {
   test(`${platform}：超时、旧设备、断线提示可翻译；不泄露 RPC；默认或自选权限仍可提交`, async () => {
     const calls = []
+    const notices = []
     const harness = { id: 'pi', state: 'ready', name: 'Pi', abilities: {} }
     const device = { connection: 'online', name: 'Test device', harnesses: [harness] }
     const options = {
       models: [],
-      permissions: [{ id: ':workspace', confirm: false, switchable: true }],
+      permissions: [
+        { id: ':workspace', confirm: false, switchable: true },
+        { id: ':read-only', confirm: false, switchable: true },
+      ],
       plan: false,
     }
     let project
@@ -88,6 +92,7 @@ for (const platform of ['desktop', 'mobile']) {
     }
     const noop = () => {}
     globalThis.__permissionUI = {
+      showToast: (toast) => notices.push(toast.text()),
       useState: (initial) => [typeof initial === 'function' ? initial() : initial, noop],
       useEffect: noop,
       useCallback: (fn) => fn,
@@ -156,10 +161,19 @@ for (const platform of ['desktop', 'mobile']) {
           (key, args) => (key.startsWith('compose.') ? key : catalog(key, args)),
           catalog,
         )
-        for (const reason of ['timeout', 'unavailable', 'offline', 'saveFailed']) {
+        for (const [reason, selected] of [
+          'timeout',
+          'unavailable',
+          'offline',
+          'saveFailed',
+        ].flatMap((reason) => [
+          [reason, null],
+          [reason, ':read-only'],
+        ])) {
+          const expected = selected ?? ':workspace'
           let retries = 0
           project = {
-            permission: null,
+            permission: selected,
             readFailed: reason !== 'saveFailed',
             loading: false,
             saving: false,
@@ -172,7 +186,7 @@ for (const platform of ['desktop', 'mobile']) {
               retries++
             },
             persist: async (permission) => {
-              assert.equal(permission, ':workspace')
+              assert.equal(permission, expected)
               return project.notice
             },
           }
@@ -187,14 +201,17 @@ for (const platform of ['desktop', 'mobile']) {
                 })
               : page.NewSessionScreen({
                   route: { params: { deviceId: 'local', workspaceId: null } },
-                  navigation: { replace: noop },
+                  navigation: {
+                    replace: (_route, params) => notices.push(params.permissionNotice),
+                  },
                 })
           const composer = nodes(root).find((node) => typeof node.props?.onSend === 'function')
           assert.ok(composer)
           assert.equal(composer.props.blocked, null)
           await composer.props.onSend('hello', [], [], 'hello')
           assert.equal(calls.at(-1)[0], 'session.create')
-          assert.equal(calls.at(-1)[1].settings.permission, ':workspace')
+          assert.equal(calls.at(-1)[1].settings.permission, expected)
+          assert.equal(notices.at(-1), project.notice, '离开新建页后仍显示非阻断提示')
           const props = {
             options,
             settings: { permission: ':workspace', model: null, effort: null, speed: null },
