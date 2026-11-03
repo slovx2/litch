@@ -3,6 +3,7 @@ import {
   deviceToolSwitches,
 } from '../../protocol/src/client-tools-settings.mjs'
 import { PATH_PICKER_EXTENSION } from '../../protocol/src/path-picker.mjs'
+import { ResumeTools } from './resume-tools.mjs'
 import { prepareSessionTools } from './session-client-tools.mjs'
 // 设备进程的主体：一台机器上的多个 harness 运行时收在一个入口（聚合面）后面。
 // 这里只管各条客户端连接共用的东西；一条连接上的事在 session.mts。
@@ -221,6 +222,13 @@ export const WRAP_UP_SETTING = 'sessions.wrapUp'
 export const WRAP_UP_REMINDER_SETTING = 'sessions.wrapUpReminder'
 
 export class DeviceServer {
+  private readonly resumeTools = new ResumeTools(
+    () => this.control?.state?.snapshot.values ?? this.options.clientToolSettings,
+    { setTools: (id, tools) => this.sessionTree.store.setTools(id, tools) },
+    (id) =>
+      this.managers.store.forThread(id)?.status === 'ended' ||
+      this.managers.resets.refusal(id) !== null,
+  )
   private prepareSession(
     params: Record<string, unknown>,
     harness: string,
@@ -667,6 +675,7 @@ export class DeviceServer {
       },
       prepareSession: (params, harness, runtime, native) =>
         this.prepareSession(params, harness, runtime, native),
+      resumeTools: this.resumeTools,
       clientTools: router,
       clientInvoke: new ClientToolInvoker({ router, index: this.index, log }),
       tasks: this.tasks,
@@ -1038,6 +1047,7 @@ export class DeviceServer {
     // 设备进程自己的连接上看到的也算：没有客户端连着时跑的定时任务、子会话，回报里也要数得出后台任务
     link.onNotification((method, params) => {
       if (!params || typeof params !== 'object') return
+      this.resumeTools.observe(method, params)
       this.turnNotices.observe(method, params)
       this.restart?.observe(method, params)
       if (link.native) {
@@ -1096,7 +1106,17 @@ export class DeviceServer {
           ? await this.nativeBackground.request(method, ready, (value) =>
               request(method, value, options),
             )
-          : await request(method, ready, options)
+          : method === 'thread/resume' &&
+              isObject(ready) &&
+              this.resumeTools.supports(link.harness, link.native)
+            ? await this.resumeTools.resume(
+                link.harness,
+                ready,
+                (asked, value) => request(asked, value, options),
+                Array.isArray(ready.dynamicTools) &&
+                  this.managers.resets.held(String(ready.threadId)),
+              )
+            : await request(method, ready, options)
         if (isObject(ready))
           this.sessionTree.store.rememberCreatedTools(method, ready, result, link.native)
         if (link.native && isObject(ready)) {

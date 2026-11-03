@@ -53,6 +53,7 @@ export interface SessionHost {
 /** 后台 shell 的工具在 Pi 里叫这个名字（Pi 没有命名空间，拼起来）：litch_shell_start 这样 */
 export const shellToolName = (tool: string): string => `${BACKGROUND_SHELL_NAMESPACE}_${tool}`
 export interface LiveSession {
+  toolsFingerprint: string
   session: AgentSession
   loader: DefaultResourceLoader
   waitForExtensionInputs(): Promise<void>
@@ -81,6 +82,8 @@ export async function openSession(
   host: SessionHost,
   prepared?: SessionManager,
 ): Promise<LiveSession> {
+  // 装载期间可能收到另一条恢复请求；注册、提示与指纹必须使用同一份快照。
+  const dynamicTools = structuredClone(thread.dynamicTools)
   const agentDir = getAgentDir()
   const settingsManager = SettingsManager.create(thread.cwd, agentDir)
   const eventBus = createEventBus()
@@ -153,7 +156,7 @@ export async function openSession(
   }
   // 动态工具的命名空间带的规则接在追加提示的最后：用户自己的 APPEND_SYSTEM.md（项目的、全局的）照旧在前面。
   // 会话每次装载都按记下的工具重算，恢复、分叉出来的会话（带着原会话的工具）一样有
-  const toolInstructions = clientToolInstructions(thread.dynamicTools)
+  const toolInstructions = clientToolInstructions(dynamicTools)
   const loader = new DefaultResourceLoader({
     cwd: thread.cwd,
     agentDir,
@@ -217,7 +220,7 @@ export async function openSession(
     sessionManager: manager,
     resourceLoader: loader,
     customTools: [
-      ...clientTools(thread.dynamicTools).map((tool) => ({
+      ...clientTools(dynamicTools).map((tool) => ({
         name: tool.piName,
         label: tool.name,
         description: toolDescription(tool),
@@ -281,6 +284,7 @@ export async function openSession(
     throw error
   }
   live = {
+    toolsFingerprint: JSON.stringify(dynamicTools),
     session,
     loader,
     hasPendingInputs: () => pendingInputs.size > 0,

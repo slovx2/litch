@@ -11,6 +11,7 @@ import {
   isManagerQuestionTools,
   managerQuestionToolAllowed,
 } from '../../protocol/src/manager-question.mjs'
+import { RESUME_TOOLS_CHANGED } from '../../protocol/src/resume-tools.mjs'
 import {
   type BackgroundReport,
   notificationWithOrigin,
@@ -120,6 +121,42 @@ export interface ActiveTurn {
 }
 export class PiServer {
   private readonly powerObserver = new PowerObserver()
+  private readonly pendingResumeTools = new Map<string, unknown[]>()
+  readonly resumeToolsPeers = new WeakSet<RpcPeer>()
+  readonly toolsInstance = randomUUID()
+  readonly toolsRevisions = new Map<string, number>()
+
+  resumeTools(thread: PiThread, tools: unknown): void {
+    if (!Array.isArray(tools)) throw new ProtocolError(-32602, 'dynamicTools 必须是数组')
+    clientTools(tools)
+    if (thread.ephemeral) return
+    if (this.active.has(thread.id)) {
+      this.pendingResumeTools.set(thread.id, tools)
+      return
+    }
+    this.pendingResumeTools.delete(thread.id)
+    if (JSON.stringify(thread.dynamicTools) === JSON.stringify(tools)) return
+    thread.dynamicTools = tools
+    this.store.saveThread(thread)
+    const revision = (this.toolsRevisions.get(thread.id) ?? 0) + 1
+    this.toolsRevisions.set(thread.id, revision)
+    for (const peer of this.peers.values())
+      if (this.resumeToolsPeers.has(peer) && this.declared.get(peer.id)?.has('clientTools'))
+        peer.send({
+          method: RESUME_TOOLS_CHANGED,
+          params: {
+            threadId: thread.id,
+            dynamicTools: tools,
+            instance: this.toolsInstance,
+            revision,
+          },
+        })
+  }
+
+  flushResumeTools(thread: PiThread): void {
+    const tools = this.pendingResumeTools.get(thread.id)
+    if (tools) this.resumeTools(thread, tools)
+  }
   readonly store: PiStore
   readonly projects: ProjectStore
   readonly queue: QueueStore
@@ -662,7 +699,12 @@ export class PiServer {
     prepared?: SessionManager,
   ): Promise<LiveSession> {
     const pending = this.loading.get(thread.id)
-    if (pending) return this.synchronize(thread, await pending)
+    if (pending) {
+      const live = await pending
+      if (live.toolsFingerprint === JSON.stringify(thread.dynamicTools))
+        return this.synchronize(thread, live)
+      return this.load(thread, peer, refresh, prepared)
+    }
     const loading = (async () => {
       await this.releasing.get(thread.id)
       return this.open(thread, peer, refresh, prepared)
@@ -691,9 +733,10 @@ export class PiServer {
       this.store.turns(thread.id).some((t) => t.items.length)
     )
       throw new ProtocolError(-32009, 'Pi 原生会话文件已移除，无法继续恢复')
-    if (cached && (!refresh || !thread.path || !existsSync(thread.path)))
+    const sameTools = cached?.toolsFingerprint === JSON.stringify(thread.dynamicTools)
+    if (cached && sameTools && (!refresh || !thread.path || !existsSync(thread.path)))
       return this.synchronize(thread, cached)
-    if (cached && thread.path) {
+    if (cached && sameTools && thread.path) {
       const disk = this.nativeFiles.read(thread.path).slice(1)
       if (JSON.stringify(disk) === JSON.stringify(cached.session.sessionManager.getEntries()))
         return this.synchronize(thread, cached)
@@ -752,6 +795,9 @@ export class PiServer {
     return this.synchronize(thread, live)
   }
   private synchronize(thread: PiThread, live: LiveSession): LiveSession {
+    // 恢复装载跨过 await，旧的线程对象不能覆盖另一条连接刚保存的工具。
+    if (this.toolsRevisions.has(thread.id))
+      thread.dynamicTools = this.store.thread(thread.id).dynamicTools
     thread.path = live.session.sessionFile ?? null
     thread.name = live.session.sessionName ?? null
     thread.model = live.session.model

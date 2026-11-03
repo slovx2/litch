@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -16,6 +17,7 @@ import {
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import { NATIVE_OWNER_NOTIFICATION, type NativeOwner } from '../../protocol/src/native-owner.mjs'
 import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
+import { RESUME_TOOLS_CHANGED, RESUME_TOOLS_READ } from '../../protocol/src/resume-tools.mjs'
 import { catalogPagination } from '../../shared/src/catalog-pagination.mjs'
 import {
   clientToolNamespaces,
@@ -405,6 +407,10 @@ export class CodexClaudeAppServer {
   private readonly powerObservers = new WeakSet<RpcPeer>()
   private readonly powerBackgroundThreads = new Set<string>()
   private activeTurnByThread = new Map<string, string>()
+  private readonly pendingResumeTools = new Map<string, unknown[]>()
+  private readonly resumeToolsPeers = new WeakSet<RpcPeer>()
+  private readonly toolsInstance = randomUUID()
+  private readonly toolsRevisions = new Map<string, number>()
   private scheduledGoals = new Map<string, string>()
   private scheduledQueues = new Map<string, string>()
   private goalUsageLimited = new Set<string>()
@@ -798,6 +804,20 @@ export class CodexClaudeAppServer {
   private async dispatch(peer: RpcPeer, method: string, params: unknown): Promise<unknown> {
     if (params === null || typeof params !== 'object' || Array.isArray(params))
       throw new ProtocolError(-32602, 'params 必须是对象')
+    if (method === RESUME_TOOLS_READ) {
+      this.resumeToolsPeers.add(peer)
+      const id = requiredString(asRecord(params).threadId, 'threadId')
+      await this.nativeHistory(id)
+      const thread = this.store.getThread(id)
+      if (!thread) throw new ProtocolError(-32602, '未知会话')
+      return {
+        dynamicTools: this.store.threadSettings(id).dynamicTools ?? [],
+        instance: this.toolsInstance,
+        revision: this.toolsRevisions.get(id) ?? 0,
+        restricted:
+          thread.ephemeral || thread.sandboxMode === 'read-only' || !!this.native?.owner(id),
+      }
+    }
     if (method === 'litch/internal/power/activity') {
       if (!this.powerObservers.has(peer))
         throw new ProtocolError(-32601, `method not implemented: ${method}`)
@@ -1492,16 +1512,34 @@ export class CodexClaudeAppServer {
     if (!thread) throw new Error('unknown thread: ' + threadId)
     // 恢复之前的设置：这次恢复要是改动了它，别的订阅连接也得知道。
     const settingsBefore = JSON.stringify(this.threadSettingsNotification(thread))
-    this.saveRuntimeSettings(threadId, params)
-    if (typeof params.cwd === 'string' && params.cwd.length > 0) thread.cwd = params.cwd
-    const rawModel = modelFromParams(params, null)
-    const model = rawModel ? normalizeSelectableModelId(rawModel, thread.model) : null
-    const reasoningEffort = reasoningEffortFromParams(params, null)
     const permissionProfileId = permissionProfileIdFromParams(params)
     const permissionProfile = permissionProfilePolicy(
       permissionProfileId,
       this.configOverrides.permissions,
     )
+    let deferredTools: unknown[] | null = null
+    if (params.dynamicTools !== undefined) {
+      if (!Array.isArray(params.dynamicTools))
+        throw new ProtocolError(-32602, 'dynamicTools 必须是数组')
+      const { dynamicTools, ...rest } = params
+      if (
+        thread.ephemeral ||
+        thread.sandboxMode === 'read-only' ||
+        this.native?.owner(threadId) ||
+        (permissionProfile?.sandboxMode ?? sandboxFromTurnParams(params)) === 'read-only'
+      ) {
+        params = rest
+      } else if (this.activeTurnByThread.has(threadId)) {
+        deferredTools = dynamicTools
+        params = rest
+      }
+    }
+    this.saveRuntimeSettings(threadId, params)
+    if (deferredTools) this.pendingResumeTools.set(threadId, deferredTools)
+    if (typeof params.cwd === 'string' && params.cwd.length > 0) thread.cwd = params.cwd
+    const rawModel = modelFromParams(params, null)
+    const model = rawModel ? normalizeSelectableModelId(rawModel, thread.model) : null
+    const reasoningEffort = reasoningEffortFromParams(params, null)
     if (model) {
       // runtimeBackend is pinned at thread/start. Refuse cross-backend
       // model changes on resume — the conversation history wouldn't carry
@@ -2319,6 +2357,8 @@ export class CodexClaudeAppServer {
 
   private saveRuntimeSettings(threadId: string, params: Record<string, unknown>): void {
     const settings = this.store.threadSettings(threadId)
+    const previousTools =
+      params.dynamicTools === undefined ? null : JSON.stringify(settings.dynamicTools ?? [])
     const thread = this.store.getThread(threadId)
     if (!thread) throw new ProtocolError(-32602, '未知会话')
     const cwd = typeof params.cwd === 'string' ? params.cwd : thread.cwd
@@ -2360,6 +2400,27 @@ export class CodexClaudeAppServer {
       skillRules(asRecord(skills).config)
     }
     this.store.saveThreadSettings(threadId, settings)
+    if (previousTools !== null && JSON.stringify(settings.dynamicTools ?? []) !== previousTools)
+      this.announceResumeTools(threadId)
+  }
+
+  private announceResumeTools(threadId: string): void {
+    const revision = (this.toolsRevisions.get(threadId) ?? 0) + 1
+    this.toolsRevisions.set(threadId, revision)
+    for (const peer of this.accountPeers)
+      if (
+        this.resumeToolsPeers.has(peer) &&
+        this.peerFeatures.get(peer)?.extensions.has(EXTENSION.clientTools)
+      )
+        peer.send({
+          method: RESUME_TOOLS_CHANGED,
+          params: {
+            threadId,
+            dynamicTools: this.store.threadSettings(threadId).dynamicTools ?? [],
+            instance: this.toolsInstance,
+            revision,
+          },
+        })
   }
 
   private threadTurnItemsList(params: Record<string, unknown>): unknown {
@@ -8364,6 +8425,18 @@ export class CodexClaudeAppServer {
       this.handedToRuntime.delete(turnId)
     }
     const existed = this.activeTurnByThread.delete(threadId)
+    const tools = this.pendingResumeTools.get(threadId)
+    if (tools) {
+      this.pendingResumeTools.delete(threadId)
+      const thread = this.store.getThread(threadId)
+      if (
+        thread &&
+        !thread.ephemeral &&
+        thread.sandboxMode !== 'read-only' &&
+        !this.native?.owner(threadId)
+      )
+        this.saveRuntimeSettings(threadId, { dynamicTools: tools })
+    }
     const waiters = this.turnClearWaiters.get(threadId)
     if (waiters) {
       this.turnClearWaiters.delete(threadId)

@@ -596,6 +596,7 @@ export async function finishTurn(
   server.store.saveThread(thread)
   server.store.saveTurn(thread.id, turn)
   server.active.delete(thread.id)
+  server.flushResumeTools(thread)
   server.notify(thread.id, 'turn/completed', { turn })
   server.notify(thread.id, 'thread/status/changed', { status: { type: 'idle' } })
   server.notify(thread.id, 'thread/settings/updated', { threadSettings: server.settings(thread) })

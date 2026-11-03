@@ -33,6 +33,7 @@ export class FakeEngine extends FakeUpstream {
   }
   private serial = 0
   private requestSerial = 0
+  private readonly pendingTools = new Map<string, unknown[]>()
 
   constructor(engine: string, threads: FakeThread[] = []) {
     super(engine, threads)
@@ -61,6 +62,7 @@ export class FakeEngine extends FakeUpstream {
         ephemeral: false,
       }
       this.threads.push(thread)
+      thread.dynamicTools = params.dynamicTools ?? []
       this.subscribe(thread.id, connection)
       return {
         thread: { ...withState(thread), turns: [] },
@@ -78,6 +80,13 @@ export class FakeEngine extends FakeUpstream {
     }
     this.handlers['thread/resume'] = (params, connection) => {
       const thread = this.thread(params.threadId)
+      if (Array.isArray(params.dynamicTools)) {
+        if (this.running(thread.id)) this.pendingTools.set(thread.id, params.dynamicTools)
+        else {
+          thread.dynamicTools = params.dynamicTools
+          thread.toolsRevision = Number(thread.toolsRevision ?? 0) + 1
+        }
+      }
       this.subscribe(thread.id, connection)
       return {
         thread: { ...withState(thread), turns: [] },
@@ -195,6 +204,19 @@ export class FakeEngine extends FakeUpstream {
       this.notify('item/completed', { threadId, turnId: turn.id, item })
     }
     turn.status = status
+    const tools = this.pendingTools.get(threadId)
+    if (tools) {
+      this.pendingTools.delete(threadId)
+      this.thread(threadId).dynamicTools = tools
+      const revision = Number(this.thread(threadId).toolsRevision ?? 0) + 1
+      this.thread(threadId).toolsRevision = revision
+      this.notify('litch/internal/thread/tools/changed', {
+        threadId,
+        dynamicTools: tools,
+        instance: 'fake',
+        revision,
+      })
+    }
     this.notify('turn/completed', { threadId, turn: { ...turn, items: [] } })
     return turn
   }

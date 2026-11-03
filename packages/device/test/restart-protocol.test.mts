@@ -5,8 +5,8 @@ import { FakeControl, managed } from './fake-control.mjs'
 import { FakeEngine } from './fake-engine.mjs'
 import { rig, settle } from './helpers.mjs'
 
-function control(pid: number): FakeControl {
-  const value = new FakeControl([managed('pi')])
+function control(pid: number, harness = 'pi'): FakeControl {
+  const value = new FakeControl([managed(harness)])
   value.service = {
     pid,
     startedAt: `start-${pid}`,
@@ -40,42 +40,54 @@ test('恢复占用时订阅和插话返回明确的暂态标记，释放后原�
   }
 })
 
-test('设备协议：明确准备后重建设备，在原线程发送一次标准文本；无需新扩展', async () => {
-  const engine = new FakeEngine('pi')
-  const oldControl = control(1)
-  let env = rig({ pi: engine }, {}, { control: oldControl, wrapUpReminder: false })
-  try {
-    const client = env.connect()
-    await client.initialize()
-    const { thread } = await client.call('thread/start', { harness: 'pi', cwd: env.stateDir })
-    const { turn } = await client.call('turn/start', {
-      threadId: thread.id,
-      input: [{ type: 'text', text: '原任务' }],
-    })
-    assert.deepEqual(await oldControl.onAsk?.('restart.prepare'), { prepared: 1 })
-    assert.equal(engine.turns.get(thread.id)?.[0]?.status, 'interrupted')
-    await env.device.close()
-    env = rig(
-      { pi: engine },
-      {},
-      { stateDir: env.stateDir, control: control(2), wrapUpReminder: false },
-    )
-    for (let attempt = 0; attempt < 100 && engine.turns.get(thread.id)?.length !== 2; attempt++)
-      await settle()
-    const turns = engine.turns.get(thread.id) ?? []
-    assert.equal(turns.length, 2)
-    assert.equal(turns[0]?.id, turn.id)
-    const sent = engine.seen.filter((frame) => frame.method === 'turn/start')
-    assert.equal(sent.length, 2)
-    const input = sent[1]?.params
-    assert.deepEqual(Object.keys(input).sort(), ['input', 'threadId'])
-    assert.equal(parseSystemMessage(input.input[0].text)?.kind, 'restart')
-    await env.device.restart.recover()
-    assert.equal(engine.seen.filter((frame) => frame.method === 'turn/start').length, 2)
-  } finally {
-    await env.close()
-  }
-})
+for (const harness of ['pi', 'claude-code']) {
+  test(`${harness} 设备协议：重启后先按新开关恢复工具，再在原线程发送一次标准文本`, async () => {
+    const engine = new FakeEngine(harness)
+    const oldControl = control(1, harness)
+    oldControl.patch({ values: { 'tools.machine': false } as never })
+    let env = rig({ [harness]: engine }, {}, { control: oldControl, wrapUpReminder: false })
+    try {
+      const client = env.connect()
+      await client.initialize()
+      const { thread } = await client.call('thread/start', { harness, cwd: env.stateDir })
+      const { turn } = await client.call('turn/start', {
+        threadId: thread.id,
+        input: [{ type: 'text', text: '原任务' }],
+      })
+      assert.deepEqual(await oldControl.onAsk?.('restart.prepare'), { prepared: 1 })
+      assert.equal(engine.turns.get(thread.id)?.[0]?.status, 'interrupted')
+      await env.device.close()
+      const newControl = control(2, harness)
+      newControl.patch({ values: { 'tools.machine': true } as never })
+      env = rig(
+        { [harness]: engine },
+        {},
+        { stateDir: env.stateDir, control: newControl, wrapUpReminder: false },
+      )
+      for (let attempt = 0; attempt < 100 && engine.turns.get(thread.id)?.length !== 2; attempt++)
+        await settle()
+      const turns = engine.turns.get(thread.id) ?? []
+      assert.equal(turns.length, 2)
+      assert.equal(turns[0]?.id, turn.id)
+      assert.ok(
+        env.device.sessionTree.store
+          .tools(thread.id)
+          ?.some((tool: any) => tool.name === 'litch_machine'),
+      )
+      const resumed = engine.seen.findLast((frame) => frame.method === 'thread/resume')
+      assert.ok(resumed?.params.dynamicTools.some((tool: any) => tool.name === 'litch_machine'))
+      const sent = engine.seen.filter((frame) => frame.method === 'turn/start')
+      assert.equal(sent.length, 2)
+      const input = sent[1]?.params
+      assert.deepEqual(Object.keys(input).sort(), ['input', 'threadId'])
+      assert.equal(parseSystemMessage(input.input[0].text)?.kind, 'restart')
+      await env.device.restart.recover()
+      assert.equal(engine.seen.filter((frame) => frame.method === 'turn/start').length, 2)
+    } finally {
+      await env.close()
+    }
+  })
+}
 
 test('设备协议：客户端停止撤销资格，普通停止也不会留下恢复票', async () => {
   const engine = new FakeEngine('pi')

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { unlink } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
+import { RESUME_TOOLS_READ } from '../../protocol/src/resume-tools.mjs'
 import { backgroundTerminalsPage, withBackground } from '../../shared/src/background-report.mjs'
 import { gitDiffToRemote } from '../../shared/src/git-diff-remote.mjs'
 import { projectRequest } from '../../shared/src/project-rpc.mjs'
@@ -68,6 +69,17 @@ export async function dispatch(s: PiServer, peer: RpcPeer, method: string, p: an
   )
     return metadataRequest(s, peer, method, p)
   switch (method) {
+    case RESUME_TOOLS_READ: {
+      s.resumeToolsPeers.add(peer)
+      await s.index()
+      const thread = s.store.thread(p.threadId)
+      return {
+        dynamicTools: thread.dynamicTools,
+        restricted: thread.ephemeral,
+        instance: s.toolsInstance,
+        revision: s.toolsRevisions.get(thread.id) ?? 0,
+      }
+    }
     case 'initialize':
       return {
         userAgent: codexUserAgent(
@@ -362,6 +374,7 @@ export async function dispatch(s: PiServer, peer: RpcPeer, method: string, p: an
           thread: s.envelope(thread, p.includeTurns !== false),
         })
       s.subscribe(peer, thread.id)
+      if (p.dynamicTools !== undefined) s.resumeTools(thread, p.dynamicTools)
       if (!s.active.has(thread.id)) await s.load(thread, peer, true)
       restoreUsage(s, peer, thread.id)
       return withBackground(s.report, peer.id, {

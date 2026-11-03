@@ -142,6 +142,7 @@ export interface HarnessSource extends UpstreamConfig {
 
 /** 设备进程里各条连接共用的东西 */
 export interface SessionHost {
+  resumeTools: import('./resume-tools.mjs').ResumeTools
   prepareSession(
     params: Record<string, unknown>,
     harness: string,
@@ -281,6 +282,7 @@ export class ClientSession implements ClientToolPeer {
           ? (host.nativeBackground?.decorate(threadId ?? '', value) ?? false)
           : false,
       observe: (link, method, params) => {
+        this.host.resumeTools.observe(method, params)
         this.host.turnNotices?.observe(method, params)
         this.host.restart?.observe(method, params)
         this.host.managers?.observe(method, params)
@@ -1054,7 +1056,14 @@ export class ClientSession implements ClientToolPeer {
           throw new ProtocolError(-32600, refusal ?? 'Manager reset is in progress.')
         }
       }
-      if (link.dialect === NATIVE_CODEX_DIALECT && readsCodexHistory(method, outgoing)) {
+      const refreshTools =
+        method === 'thread/resume' &&
+        outgoing &&
+        this.host.resumeTools.supports(link.harness, link.dialect.clientToolsByDevice === true)
+      if (
+        refreshTools ||
+        (link.dialect === NATIVE_CODEX_DIALECT && readsCodexHistory(method, outgoing))
+      ) {
         if (expectation) this.relay.expect(link, id, expectation)
         // 仍走同一条 relay：恢复的订阅记账、后台来源和扩展声明过滤都不能绕开。
         const respond = (response: Frame): typeof HANDLED => {
@@ -1062,7 +1071,13 @@ export class ClientSession implements ClientToolPeer {
           return HANDLED
         }
         // 大会话恢复可能远长于 probeTimeoutMs；沿用客户端转发原有的等待语义。
-        return this.query(link, method, outgoing, Number.POSITIVE_INFINITY).then(
+        const request = (asked: string, value: unknown) =>
+          this.query(link, asked, value, Number.POSITIVE_INFINITY)
+        return (
+          refreshTools
+            ? this.host.resumeTools.resume(link.harness, outgoing!, request)
+            : request(method, outgoing)
+        ).then(
           (result) => respond({ id, result }),
           (error) => respond({ id, error: toRpcError(error) }),
         )

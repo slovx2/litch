@@ -5,6 +5,7 @@
 // 归属存在设备层，引擎自己那一份和聚合面互不相通。
 import { isClientToolNamespace } from '../../protocol/src/client-tools.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import { RESUME_TOOLS_CHANGED } from '../../protocol/src/resume-tools.mjs'
 import type { DeviceTools } from './device-tools.mjs'
 import { isHarnessConfigNotification } from './harness-config.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
@@ -363,6 +364,7 @@ export class Relay {
     if (fields && (method === 'item/started' || method === 'item/completed'))
       this.host.sessions.itemEvent(fields)
     if (fields) this.host.observe(link, method, fields)
+    if (method === RESUME_TOOLS_CHANGED) return
     if (fields && this.host.decorateNative?.(link, method, fields, threadId ?? undefined))
       changed = true
     // harness 详情设置的通知（引擎发的配置变了、登录有进展）只给声明过这项扩展的连接

@@ -132,6 +132,16 @@ export class FakeUpstream {
     this.engine = engine
     this.threads = threads
     this.handlers = {
+      'litch/internal/thread/tools/read': (params) => {
+        const thread = this.threads.find((thread) => thread.id === params.threadId)
+        if (!thread) throw new RpcFailure(-32602, '未知会话')
+        return {
+          dynamicTools: thread.dynamicTools ?? [],
+          restricted: thread.ephemeral === true,
+          instance: 'fake',
+          revision: thread.toolsRevision ?? 0,
+        }
+      },
       initialize: () => ({
         // 适配器的运行时在这里报的是协议版本；原生 codex 报的是它自己的版本
         userAgent: engine
@@ -172,6 +182,10 @@ export class FakeUpstream {
       'thread/resume': (params) => {
         const thread = this.threads.find((item) => item.id === params.threadId)
         if (!thread) throw new RpcFailure(-32602, '未知会话')
+        if (Array.isArray(params.dynamicTools)) {
+          thread.dynamicTools = params.dynamicTools
+          thread.toolsRevision = Number(thread.toolsRevision ?? 0) + 1
+        }
         return { thread: { ...thread, turns: [] }, model: 'fake' }
       },
       'thread/start': (params) => {
@@ -180,6 +194,7 @@ export class FakeUpstream {
           updatedAt: 9000 + this.created,
           cwd: params.cwd ?? '/',
           ephemeral: params.ephemeral === true,
+          dynamicTools: params.dynamicTools ?? [],
         }
         this.threads.push(thread)
         return { thread: { ...thread, turns: [] }, model: 'fake' }
