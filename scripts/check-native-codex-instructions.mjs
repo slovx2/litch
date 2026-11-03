@@ -51,6 +51,9 @@ if (!existsSync(join(repo, 'packages/device/dist/device/src/main.mjs'))) {
 const { SESSION_TOOLS, outsideLitch } = await import(
   join(repo, 'packages/device/dist/protocol/src/client-tools-sessions.mjs')
 )
+const { FILE_LINK_RULES, FILE_LINK_SPEC } = await import(
+  join(repo, 'packages/device/dist/protocol/src/file-link-instructions.mjs')
+)
 
 // 套接字路径有长度上限，临时目录的名字要短
 const root = mkdtempSync('/tmp/lci-')
@@ -83,6 +86,7 @@ const model = await startResponsesModel((body) => {
   seen.push({
     said: compaction ? '（压缩）' : said,
     rules: count(input, RULES_MARK),
+    fileLinks: count(input, JSON.stringify(FILE_LINK_RULES).slice(1, -1)),
     outside: count(input, JSON.stringify(OUTSIDE_MARK).slice(1, -1)),
     config: count(input, CONFIG_MARK),
     given: count(input, GIVEN_MARK),
@@ -215,7 +219,7 @@ function bothOnce(from, what) {
   expect(asked.length > 0, `${what}：没有模型请求`)
   for (const entry of asked)
     expect(
-      entry.rules === 1 && entry.outside === 1 && entry.config === 1,
+      entry.rules === 1 && entry.fileLinks === 1 && entry.outside === 1 && entry.config === 1,
       `${what}：请求「${entry.said}」里规则 ${entry.rules} 次、兜底 ${entry.outside} 次、config.toml 那段 ${entry.config} 次，应各 1 次`,
     )
 }
@@ -295,7 +299,7 @@ async function main() {
     harness: 'codex',
     cwd: dirs.work,
     permissions: ':workspace',
-    dynamicTools: [SESSION_TOOLS],
+    dynamicTools: [SESSION_TOOLS, FILE_LINK_SPEC],
   })
   const threadId = started.thread.id
   let from = seen.length

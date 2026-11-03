@@ -23,6 +23,7 @@ import {
   ruledNamespaces,
   withDeveloperInstructions,
 } from '../../protocol/src/codex-developer-instructions.mjs'
+import { FILE_LINK_NAMESPACE, FILE_LINK_RULES } from '../../protocol/src/file-link-instructions.mjs'
 import { isManagerQuestionTools } from '../../protocol/src/manager-question.mjs'
 import {
   NATIVE_BACKGROUND_NAMESPACE,
@@ -72,6 +73,7 @@ const PLAIN_HEAD = `${sessionProposalRules(false, false).split('. ')[0]}.`
 const CURRENT: Record<string, ((recorded: string, tools: unknown[] | null) => string) | undefined> =
   {
     [NATIVE_BACKGROUND_NAMESPACE]: () => NATIVE_BACKGROUND_RULES,
+    [FILE_LINK_NAMESPACE]: () => FILE_LINK_RULES,
     litch_manager: (recorded) => refreshManagerRules('litch_manager', recorded) ?? recorded,
     [SESSION_TOOLS.name]: (recorded, tools) => {
       const manager = refreshManagerRules(SESSION_TOOLS.name, recorded)

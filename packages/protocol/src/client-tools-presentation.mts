@@ -11,6 +11,7 @@
 //
 // 这个文件只引用 client-tools.mts：设备进程（派子会话、跑定时任务）和客户端核心（建会话）都直接引用它。
 import type { ClientToolNamespaceSpec } from './client-tools.mjs'
+import { FILE_LINK_NAMESPACE, FILE_LINK_RULES, FILE_LINK_SPEC } from './file-link-instructions.mjs'
 
 /**
  * 呈现风格的命名空间。不带工具、没有调用，握手时不声明，所以不放进 CLIENT_TOOL_NAMESPACE（那里是能执行的命名空间）
@@ -29,6 +30,7 @@ export const PRESENTATION_RULES = [
   'During tool work, give brief progress updates at meaningful transitions. Litch already shows the tool calls, so explain what their results mean instead of repeating them. Finish with the result and how it was verified; do not recap commands or tool steps already visible in the conversation unless the user asks.',
   'Match the language and the level of detail the user asks for. Skip diagrams for trivial replies, and follow any requested text-only preference or output format. These defaults only shape how you present replies: they do not change how you use tools, and explicit project, developer and personality instructions take precedence.',
   'Images in Markdown show as links, not inline pictures; raw HTML, SVG and React code show as source and do not run. Do not promise an inline image or an interactive artifact by emitting its source.',
+  FILE_LINK_RULES,
 ].join('\n')
 
 /** 不带工具的命名空间：只为了把 PRESENTATION_RULES 经命名空间的 instructions 送进系统提示 */
@@ -46,7 +48,7 @@ export const PRESENTATION_SPEC: ClientToolNamespaceSpec = {
  * （上游也不收没有工具的命名空间）。不知道建在哪个 harness 上的也不带，免得交给原生 codex 被拒。
  */
 export function presentationSpec(harness: string | null): ClientToolNamespaceSpec | null {
-  return harness === null || harness === 'codex' ? null : PRESENTATION_SPEC
+  return harness === null ? null : harness === 'codex' ? FILE_LINK_SPEC : PRESENTATION_SPEC
 }
 
 /** 是不是呈现风格这个命名空间（子会话继承父会话的工具时，先摘掉再按子会话的 harness 重新决定带不带） */
@@ -54,6 +56,8 @@ export function isPresentationSpec(spec: unknown): boolean {
   return (
     typeof spec === 'object' &&
     spec !== null &&
-    (spec as { name?: unknown }).name === PRESENTATION_NAMESPACE
+    [PRESENTATION_NAMESPACE, FILE_LINK_NAMESPACE].includes(
+      String((spec as { name?: unknown }).name),
+    )
   )
 }

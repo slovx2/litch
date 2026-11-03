@@ -23,6 +23,10 @@ import {
   DEVICE_POWER_CHANGED,
   type DevicePowerStatus,
 } from '../../../protocol/src/device-power.mjs'
+import {
+  FILE_LINK_NAMESPACE,
+  FILE_LINK_SPEC,
+} from '../../../protocol/src/file-link-instructions.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../../protocol/src/harness-config.mjs'
 import {
   CLIENT_TOOL_NAMESPACE,
@@ -1983,12 +1987,14 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     clock: options.clock,
     ...(options.codexThreads ? { store: options.codexThreads } : {}),
     ask: (method, params) => link.request(method as never, params as never),
-    specs: (namespaces) =>
-      clientToolSpecs(namespaces, {
+    specs: (namespaces) => [
+      ...clientToolSpecs(namespaces, {
         machine: machineSpec(),
         desktopPlatform: options.tools?.platform?.() ?? null,
         computerActions: true,
       }),
+      ...(namespaces.includes(FILE_LINK_NAMESPACE) ? [FILE_LINK_SPEC] : []),
+    ],
     cwdOf: (threadId) => threads.get(threadId)?.cwd ?? null,
     log,
   })

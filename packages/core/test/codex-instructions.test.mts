@@ -5,6 +5,11 @@ import { test } from 'node:test'
 import { SESSION_PROPOSAL_RULES, SESSION_TOOLS } from '../../protocol/src/client-tools-sessions.mjs'
 import { ECHO_TOOLS } from '../../protocol/src/client-tools-specs.mjs'
 import {
+  FILE_LINK_NAMESPACE,
+  FILE_LINK_RULES,
+  FILE_LINK_SPEC,
+} from '../../protocol/src/file-link-instructions.mjs'
+import {
   CODEX_THREAD_NOTES_MAX,
   type CodexThreadNotes,
   checkCodexThreadNotes,
@@ -39,13 +44,39 @@ function rig(options: { notes?: CodexThreadNotes | null; failRead?: boolean } = 
     // 这一版的规则：litch_ruled 换了说法
     specs: (names) =>
       names.flatMap((name) =>
-        name === RULED.name ? [{ ...RULED, instructions: 'New rules.' }] : [],
+        name === FILE_LINK_NAMESPACE
+          ? [FILE_LINK_SPEC]
+          : name === RULED.name
+            ? [{ ...RULED, instructions: 'New rules.' }]
+            : [],
       ),
     cwdOf: (threadId) => (threadId === 'a' ? '/work/a' : null),
     log: (line) => logs.push(line),
   })
   return { direct, asked, logs, saved, time }
 }
+
+test('原生直连文件提示：抽出空命名空间，恢复与分叉重建压缩所用开发者指令且不重复', async () => {
+  const { direct, saved } = rig()
+  const start = await direct.prepare('thread/start', {
+    cwd: '/work/a',
+    dynamicTools: [FILE_LINK_SPEC],
+  })
+  assert.ok(start)
+  assert.deepEqual(start.params.dynamicTools, [])
+  assert.ok(String(start.params.developerInstructions).includes(FILE_LINK_RULES))
+  start.remember({ thread: { id: 'a', cwd: '/work/a' } })
+  assert.deepEqual(saved.at(-1)?.threads.a?.namespaces, [FILE_LINK_NAMESPACE])
+  const restored = rig({ notes: saved.at(-1) ?? null })
+  for (const method of ['thread/resume', 'thread/fork']) {
+    const prepared = await restored.direct.prepare(method, {
+      threadId: 'a',
+      developerInstructions: start.params.developerInstructions,
+    })
+    assert.ok(prepared)
+    assert.equal(String(prepared.params.developerInstructions).split(FILE_LINK_RULES).length - 1, 1)
+  }
+})
 
 test('直连建会话：规则拼在 config.toml 那段后面（config/read 带 cwd），工具上的规则摘掉；应答回来按会话记下命名空间', async () => {
   const { direct, asked, saved } = rig()

@@ -1,3 +1,4 @@
+import { FILE_LINK_SPEC } from '../../protocol/src/file-link-instructions.mjs'
 // 工具形状和可重拼的规则：参数放在规则末尾的 JSON 注释中，避免从自然语言反解范围和派活设置。
 
 import { createHash } from 'node:crypto'
@@ -31,7 +32,7 @@ function tagged(text: string, settings: RuleSettings): string {
 }
 /** 创建、检测和重置共用一份生成器，不把线程号和运行计数混进能力版本。 */
 export function managerBundle(manager: RuleSettings, native: boolean) {
-  return [...managerTools(manager), ...(native ? [] : [PRESENTATION_SPEC])]
+  return [...managerTools(manager), ...(native ? [FILE_LINK_SPEC] : [PRESENTATION_SPEC])]
 }
 export function managerFingerprint(tools: unknown): string {
   const canonical = (value: unknown): unknown =>

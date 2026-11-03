@@ -14,6 +14,11 @@ import {
 } from '../../protocol/src/client-tools-sessions.mjs'
 import { ECHO_TOOLS } from '../../protocol/src/client-tools-specs.mjs'
 import { composeInstructions } from '../../protocol/src/codex-developer-instructions.mjs'
+import {
+  FILE_LINK_NAMESPACE,
+  FILE_LINK_RULES,
+  FILE_LINK_SPEC,
+} from '../../protocol/src/file-link-instructions.mjs'
 import { openSessionDatabase, SessionStore } from '../src/session-store.mjs'
 import { codexRig, sentTo } from './codex-kit.mjs'
 import { codexThread } from './fake-codex.mjs'
@@ -48,6 +53,33 @@ async function litch(env: ReturnType<typeof codexRig>) {
 }
 
 const last = (env: ReturnType<typeof codexRig>, method: string) => sentTo(env.codex, method).at(-1)
+
+test('文件提示经设备进入原生 Codex；恢复、分叉后的压缩配置保留且不叠加', async () => {
+  const env = codexRig()
+  try {
+    withConfig(env)
+    const client = await litch(env)
+    const started = await client.call('thread/start', {
+      harness: 'codex',
+      cwd: '/work/proj',
+      dynamicTools: [FILE_LINK_SPEC],
+    })
+    const seen = last(env, 'thread/start')
+    assert.ok(seen.developerInstructions.includes(FILE_LINK_RULES))
+    assert.equal(
+      seen.dynamicTools?.some((spec: any) => spec.name === FILE_LINK_NAMESPACE) ?? false,
+      false,
+    )
+    for (const method of ['thread/resume', 'thread/fork']) {
+      await client.call(method, { harness: 'codex', threadId: started.thread.id })
+      const params = last(env, method)
+      assert.equal(params.developerInstructions.split(FILE_LINK_RULES).length - 1, 1)
+      assert.ok(params.developerInstructions.startsWith(PROJECT))
+    }
+  } finally {
+    await env.close()
+  }
+})
 
 test('CODEX-DEV-001：建会话时客户端没给开发者指令：底子是 config.toml 里实际生效的那段（带 cwd，项目层算进去），规则拼在后面，按会话记下', async () => {
   const env = codexRig()

@@ -10,6 +10,7 @@
 //
 // 补的做法：建会话、恢复、分叉都带上整段（底子在前，规则拼在后面）。每次都带是安全的（实测）：恢复不马上重放，
 // 会话还装载着时 codex 忽略这个参数，压缩后只放一次，不叠加。
+import { FILE_LINK_NAMESPACE } from './file-link-instructions.mjs'
 
 /** 动态工具里带规则的一个命名空间 */
 export interface RuledNamespace {
@@ -40,7 +41,8 @@ export function ruledNamespaces(tools: unknown): RuledNamespace[] {
   const out: RuledNamespace[] = []
   for (const spec of tools) {
     if (!isRecord(spec) || spec.type !== 'namespace' || typeof spec.name !== 'string') continue
-    if (isEmptyNamespace(spec)) continue
+    // 文件格式规则没有工具，但需要走同一份持久化与压缩恢复；其他空命名空间（呈现风格）仍不注入 Codex。
+    if (isEmptyNamespace(spec) && spec.name !== FILE_LINK_NAMESPACE) continue
     const text = typeof spec.instructions === 'string' ? spec.instructions.trim() : ''
     if (text && !out.some((one) => one.name === spec.name))
       out.push({ name: spec.name, instructions: text })
@@ -64,11 +66,13 @@ export function withDeveloperInstructions(
   const next: Record<string, unknown> = { ...params }
   if (developerInstructions) next.developerInstructions = developerInstructions
   if (Array.isArray(params.dynamicTools))
-    next.dynamicTools = params.dynamicTools.map((spec) => {
-      if (!isRecord(spec) || !('instructions' in spec)) return spec
-      const { instructions: _rules, ...rest } = spec
-      return rest
-    })
+    next.dynamicTools = params.dynamicTools
+      .filter((spec) => !isEmptyNamespace(spec))
+      .map((spec) => {
+        if (!isRecord(spec) || !('instructions' in spec)) return spec
+        const { instructions: _rules, ...rest } = spec
+        return rest
+      })
   return next
 }
 
