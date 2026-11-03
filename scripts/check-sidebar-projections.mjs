@@ -801,81 +801,85 @@ try {
     'm1',
   )
   assert.deepEqual((await roots()).sort(), ['m1', 'm2'], '工作线不成为顶层主项')
+  const chatShown = async (sessionId, source) => {
+    await until(
+      () =>
+        run(
+          (id) =>
+            document.querySelector('[data-sidebar-mode=chat]')?.getAttribute('aria-pressed') ===
+              'true' &&
+            !document.querySelector('[data-manager="session"]') &&
+            document.querySelector('.cmp-text')?.dataset.composerSession ===
+              JSON.stringify(['local', id]),
+          sessionId,
+        ),
+      `在对话视图打开 ${sessionId}`,
+    )
+    assert.deepEqual(await currentRows(), [{ sessionId, source, selected: true }])
+  }
+  const folding = () =>
+    run(() => ({
+      folds: window.__projectionProbe.state.sidebarNow().folds,
+      projections: localStorage.getItem('litch.sidebar.projections'),
+      expanded: document
+        .querySelector('[data-projection=recent] [data-session=m1] .tree-fold')
+        ?.getAttribute('aria-expanded'),
+    }))
+  await modules()
+  const beforeManager = await folding()
   await click('[data-projection=recent] [data-session=m1] .ss-row')
-  await until(
-    () =>
-      run(
-        () =>
-          document.querySelector('[data-sidebar-mode=manager]')?.getAttribute('aria-pressed') ===
-          'true',
-      ),
-    '点击经理投影进入经理页',
-  )
-  assert.equal(await run(() => document.querySelectorAll('[data-projection]').length), 0)
-  assert.equal(
-    await run(() =>
-      document.querySelector('[data-manager-id=m1] .mg-pick')?.getAttribute('aria-current'),
-    ),
-    'page',
-  )
-  await click('[data-sidebar-mode=chat]')
-  await until(
-    () =>
-      run(() => !!document.querySelector('[data-projection=recent] [data-session=m1] .ss-row.sel')),
-    '返回对话保留经理投影来源',
-  )
-  assert.deepEqual(await currentRows(), [{ sessionId: 'm1', source: 'recent', selected: true }])
+  await chatShown('m1', 'recent')
+  assert.deepEqual(await folding(), beforeManager, '经理会话点击不改变折叠状态')
+  await screenshot('manager-chat-from-recent.png')
   await click('[data-projection=recent] [data-session=manager-k1] .ss-row')
-  await until(
-    () =>
-      run(
-        () =>
-          document.querySelector('[data-sidebar-mode=manager]')?.getAttribute('aria-pressed') ===
-          'true',
-      ),
-    '点击工作线进入经理模式',
-  )
-  assert.equal(await run(() => document.querySelectorAll('.ss-row.sel').length), 1)
-  await click('[data-sidebar-mode=chat]')
-  await until(
-    () =>
-      run(
-        () =>
-          !!document.querySelector(
-            '[data-projection=recent] [data-session=manager-k1] .ss-row.sel',
-          ),
-      ),
-    '工作线也保留实际点击的投影行',
-  )
-  assert.deepEqual(await currentRows(), [
-    { sessionId: 'manager-k1', source: 'recent', selected: true },
-  ])
-  checkpoint('经理进入最近与未读，工作线默认收起且不单列，经理与工作线跳转保留各模式的唯一选中')
+  await chatShown('manager-k1', 'recent')
+  assert.deepEqual(await folding(), beforeManager, '工作线点击不改变折叠状态')
+  checkpoint('最近中的经理与工作线打开当前对话，保持唯一选中和展开状态')
   await click(`${unread} [data-session=m1] .ss-row`)
-  await until(() => run(() => !document.querySelector('[data-projection]')), '未读经理进入经理模式')
-  await click('[data-sidebar-mode=chat]')
-  await until(
-    () => run(() => !!document.querySelector('[data-projection=unread] [data-session=m1]')),
-    '经理工作线仍未读，返回后根项还在',
-  )
+  await chatShown('m1', 'unread')
   await click(`${unread} [data-session=m1] .tree-fold`)
+  const beforeUnread = await folding()
   await click(`${unread} [data-session=manager-k2] .ss-row`)
+  await chatShown('manager-k2', 'unread')
+  assert.deepEqual(await folding(), beforeUnread)
+  assert.ok(
+    await run(() => !!document.querySelector('[data-projection=unread] [data-session=m1]')),
+    '读完最后一条工作线后，仍在查看的树原位暂留',
+  )
+  await screenshot('manager-line-chat-from-unread.png')
+  // 经理入口仍在经理模式，切换不会覆盖对话模式保存的选中来源。
+  await click('[data-sidebar-mode=manager]')
+  await click('[data-manager-id=m1] .mg-pick')
   await until(
-    () => run(() => !document.querySelector('[data-projection]')),
-    '未读工作线进入经理模式',
+    () => run(() => !!document.querySelector('[data-manager="session"][data-manager-id=m1]')),
+    '经理入口照常打开经理页',
   )
   await click('[data-sidebar-mode=chat]')
   await until(
-    () => run(() => !!document.querySelector('[data-projection=unread]')),
-    '工作线读完返回对话模式',
+    () =>
+      run(
+        () =>
+          document.querySelector('.cmp-text')?.dataset.composerSession ===
+          JSON.stringify(['local', 'manager-k2']),
+      ),
+    '切回恢复经理工作线对话',
   )
   assert.equal(
     await run(() => !!document.querySelector('[data-projection=unread] [data-session=m1]')),
     false,
-    '最后一个工作线读完并切到经理模式后，返回对话不恢复已读暂留树',
+    '离开后不恢复已读的未读暂留树',
   )
-  assert.ok(await run(() => !!document.querySelector('[data-projection=recent] [data-session=m1]')))
-  checkpoint('经理和工作线从未读进入经理模式，读完后不回填未读，最近仍保留')
+  // 普通设备树按现有设计排除了经理及工作线；经理专属树仍属于经理视图。
+  assert.equal(
+    await run(
+      () =>
+        document.querySelectorAll(
+          '.dev-group [data-session=m1], .dev-group [data-session=manager-k1]',
+        ).length,
+    ),
+    0,
+  )
+  checkpoint('未读经理与工作线保留对话视图，普通设备树不重复列经理，经理页入口保留')
   // 当前父会话打开时，子会话完成才让整棵树进入未读；点最后一个未读子会话不能让树消失。
   for (const leave of ['tree', 'page', 'manager', 'settings']) {
     stage(`检查子会话晚到未读：${leave}`)

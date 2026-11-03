@@ -159,6 +159,10 @@ sessions → Chat) without overwriting the other view's location. Removed manage
 deleted sessions are not restored. These navigation behaviors have no setting to turn off.
 Managers and the global suggestion list: see [Managers and suggested tasks](managers-and-suggestions.md).
 
+直接点击侧栏“未读”“最近”中的经理、工作线时，在当前对话视图打开正文，
+保留所点击行的选中来源和各组的展开状态，不切换到经理页。普通设备树不重复列出经理及其工作线，
+看板、控制台与经理专属会话树仍从“经理”视图进入。手机“最近”中的经理同样打开对话详情。
+
 ### Pending questions and answers
 
 Answer pending wrap-up and asynchronous questions **above the composer**, on desktop and phone.

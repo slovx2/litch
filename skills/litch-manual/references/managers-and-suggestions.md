@@ -267,6 +267,7 @@ sessions remain. This does not authorize archiving unrelated sessions. There is 
 - **Why did the sidebar switch?** Chat and Managers remember separate positions for this app run.
   Opening a session from a notification, link or activity switches to its owning view. See
   `sessions-and-projects.md` for revealing its row.
+  直接点击侧栏中的会话行（包括“未读”“最近”中的经理与工作线）保留当前视图；经理看板入口仍在“经理”视图。
 - **Cannot edit or create?** Connect the device and use a version supporting managers. The runtime
   must be ready, the working directory must exist, and concurrency must be a positive integer.
 

@@ -118,15 +118,19 @@ test('只有会话详情页、参数齐全才算在看会话', () => {
   assert.equal(viewedSession(undefined), null)
 })
 
-test('最近经理进经理页，普通会话进详情；经理目录迟到后开始计时，离开和后台清零', () => {
+test('最近经理与普通会话都进对话详情，不依赖经理目录', () => {
   const row = { deviceId: 'local', sessionId: 'manager-thread', workspaceId: null, at: 1 }
-  const summary = { litchManager: { role: 'manager', managerId: 'm' } }
-  const route = recentRoute(row, summary, '经理')
-  assert.deepEqual(route, ['ManagerConsole', { deviceId: 'local', managerId: 'm' }])
-  assert.deepEqual(recentRoute(row, {}, '普通'), [
+  assert.deepEqual(recentRoute(row, '经理'), [
     'Detail',
-    { deviceId: 'local', sessionId: 'manager-thread', title: '普通' },
+    { deviceId: 'local', sessionId: 'manager-thread', title: '经理' },
   ])
+  assert.deepEqual(recentRoute({ ...row, sessionId: 'normal' }, '普通'), [
+    'Detail',
+    { deviceId: 'local', sessionId: 'normal', title: '普通' },
+  ])
+})
+
+test('经理控制台的目录迟到后开始计时，离开和后台清零', () => {
   let thread
   const listeners = new Set()
   const env = setup({
@@ -138,7 +142,7 @@ test('最近经理进经理页，普通会话进详情；经理目录迟到后�
       },
     },
   })
-  env.navigation.go(...route)
+  env.navigation.go('ManagerConsole', { deviceId: 'local', managerId: 'm' })
   env.clock.advance(10_000)
   assert.equal(env.activity.time('local', 'manager-thread'), 0)
   thread = 'manager-thread'

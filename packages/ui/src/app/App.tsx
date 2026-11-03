@@ -115,9 +115,14 @@ export function App() {
     (manager) =>
       manager.deviceId === picked?.deviceId && manager.historyThreadIds?.includes(picked.sessionId),
   )
-  const pickedManager = managerData.managers.find(
-    (manager) => manager.deviceId === picked?.deviceId && manager.threadId === picked.sessionId,
-  )
+  // 对话侧栏的经理行也只是会话入口；只有经理视图才展示看板和控制台。
+  const pickedManager =
+    sidebarMode === 'manager'
+      ? managerData.managers.find(
+          (manager) =>
+            manager.deviceId === picked?.deviceId && manager.threadId === picked.sessionId,
+        )
+      : undefined
   const owner =
     mark?.role === 'line'
       ? managerData.managers.find(
@@ -210,6 +215,10 @@ export function App() {
         setPeek(null)
       }),
     [replica, managerData.managers, setPeek, dispatch],
+  )
+  const selectFromSidebar = useCallback(
+    (next: Selection) => select(next, sidebarMode),
+    [select, sidebarMode],
   )
   /** 到新建对话页去。next 是明说要建在哪；null 是按默认的来 */
   const compose = useCallback(
@@ -412,7 +421,7 @@ export function App() {
           else select(next)
         }}
       />
-      {page === 'managers' || (!page && (pickedManager || owner)) ? (
+      {page === 'managers' || (sidebarMode === 'manager' && !page && (pickedManager || owner)) ? (
         <ManagerTitleBar
           {...(page
             ? {}
@@ -441,7 +450,7 @@ export function App() {
         selection={selection}
         draft={page ? null : draft}
         page={auxiliary ?? page}
-        onSelect={select}
+        onSelect={selectFromSidebar}
         onCompose={compose}
         onPage={onPage}
       />
