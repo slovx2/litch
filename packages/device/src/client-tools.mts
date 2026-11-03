@@ -128,6 +128,11 @@ export class ClientToolRouter {
     this.subscribers.set(key, list)
   }
 
+  /** 附件清理只关心会话是否仍有客户端打开，不要求该客户端声明工具。 */
+  hasSubscribers(harness: string, threadId: string): boolean {
+    return (this.subscribers.get(harness + sep + threadId)?.length ?? 0) > 0
+  }
+
   unsubscribed(peer: ClientToolPeer, harness: string, threadId: string): void {
     const key = harness + sep + threadId
     const list = this.subscribers.get(key)?.filter((one) => one !== peer) ?? []

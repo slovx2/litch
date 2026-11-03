@@ -15,6 +15,7 @@ export {
   type PairPayload,
   tailscaleVerifyUrl,
 } from '../../protocol/src/device-pairing.mjs'
+export type { AttachmentState } from '../../protocol/src/file-attachments.mjs'
 export { attachmentDetail, MAX_ATTACHMENT_BYTES } from '../../protocol/src/file-attachments.mjs'
 export type {
   PermissionLevel,
@@ -49,6 +50,7 @@ export {
   type TaskScheduleProblem,
   validateTaskSchedule,
 } from '../../protocol/src/task-schedule.mjs'
+export { attachmentState } from './attachment-state.mjs'
 export { withAutomationPreview } from './automation-preview/host.mjs'
 export type {
   AutomationPreviewCommand,

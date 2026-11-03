@@ -632,9 +632,18 @@ export interface ClientRequests {
   }
   /** 跟着符号链接走到底之后是什么；`isSymlink` 说的是这个路径本身 */
   'fs/getMetadata': { params: FsGetMetadataParams; result: FsGetMetadataResponse }
-  // 以下四个是 litch_machine 的执行器写文件、建目录用的（core 的 device/machine/）。
-  // 形状照上游 codex 0.157.1 的 v2/Fs*Params（都只回空对象）；适配器的实现在 packages/shared/src/filesystem-rpc.mts
-  /** 整个写进去（已有的覆盖），父目录要已经在了。协议里没有“接在后面写” */
+  /** fileAttachments 扩展：按连接登记打开的会话视图，保护其上传附件。 */
+  'litch/attachments/watch': {
+    params: { threadId: string; open: boolean }
+    result: Record<string, never>
+  }
+  /** fileAttachments 扩展：区分可用、已自动清理与未知。 */
+  'litch/attachments/status': {
+    params: { path: string }
+    result: { state: import('./file-attachments.mjs').AttachmentState }
+  }
+  // 以下四个复用上游 v2/Fs*Params，执行器位于 shared/src/filesystem-rpc.mts。
+  /** 整个写进去（已有的覆盖），父目录要已经在了。协议里没有追加写入。 */
   'fs/writeFile': { params: { path: string; dataBase64: string }; result: Record<string, never> }
   /** recursive 缺省为真（连父目录一起建，已有的不算错） */
   'fs/createDirectory': {

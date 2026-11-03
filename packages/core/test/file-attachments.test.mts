@@ -151,3 +151,73 @@ test('文件名中的标签、引号、换行不会破坏格式；坏块与裸�
     /litch_machine.read_file/,
   )
 })
+
+test('清理状态只询问设备管理的附件，客户端路径和无法确认的响应不误标为已清理', async () => {
+  const { attachmentState } = await import('../src/attachment-state.mjs')
+  const { createFiles } = await import('../src/device/files.mjs')
+  const path = '/remote/home/.litch/attachments/mabcdefg-abcdefgh-12345678/a.pdf'
+  const calls: unknown[] = []
+  const channel = {
+    command: async (method: string, params: unknown) => {
+      calls.push({ method, params })
+      return { state: 'cleaned' }
+    },
+  } as never
+  assert.equal(await attachmentState(channel, 'remote', { path }), 'cleaned')
+  assert.equal(calls.length, 1)
+  assert.equal(await attachmentState(channel, 'remote', { path, client: true }), 'unknown')
+  assert.equal(await attachmentState(channel, 'remote', { path: '/remote/user.pdf' }), 'unknown')
+  assert.equal(
+    await attachmentState(channel, 'remote', { path: path.replace('/a.pdf', '/../outside') }),
+    'unknown',
+  )
+  assert.equal(calls.length, 1)
+  const endpoint = host()
+  endpoint.request = async (method) => {
+    assert.equal(method, 'litch/attachments/status')
+    return { state: 'cleaned' } as never
+  }
+  assert.deepEqual(await createFiles(endpoint).attachmentStatus(path), { state: 'unknown' })
+  endpoint.attachmentsSupported = () => true
+  assert.deepEqual(await createFiles(endpoint).attachmentStatus(path), { state: 'cleaned' })
+})
+
+test('会话视图引用计数控制附件保活，未声明扩展的设备不发送请求', async () => {
+  const { deviceWorld } = await import('./device-world.mjs')
+  const { harness } = await import('./fake-device.mjs')
+  const { thread } = await import('./fixtures.mjs')
+  const { settle } = await import('./helpers.mjs')
+  for (const supported of [true, false]) {
+    const world = deviceWorld([harness('pi', { threads: [thread({ id: 'a' })] })], {
+      prepare(device) {
+        if (supported) device.extensions.push('fileAttachments')
+      },
+      extra: { 'litch/attachments/watch': () => ({}) },
+    })
+    world.core.start()
+    await settle()
+    const sink = { snapshot() {}, delta() {}, error() {} }
+    const first = world.core.subscribe({ kind: 'session', deviceId: 'local', sessionId: 'a' }, sink)
+    const second = world.core.subscribe(
+      { kind: 'session', deviceId: 'local', sessionId: 'a' },
+      sink,
+    )
+    await settle()
+    assert.equal(world.sent('litch/attachments/watch').length, supported ? 1 : 0)
+    first()
+    await settle()
+    assert.equal(world.sent('litch/attachments/watch').length, supported ? 1 : 0)
+    second()
+    await settle()
+    assert.deepEqual(
+      world.sent('litch/attachments/watch'),
+      supported
+        ? [
+            { threadId: 'a', open: true },
+            { threadId: 'a', open: false },
+          ]
+        : [],
+    )
+    world.core.stop()
+  }
+})

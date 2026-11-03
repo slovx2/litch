@@ -120,6 +120,7 @@ async function main(): Promise<void> {
         log('适配器主进程还没有把各 harness 的状态送过来，先就绪，到了再补')
     }
     listener = await listenUnix(args.listen, (wire) => device.attach(wire))
+    void device.attachments.start()
   } catch (error) {
     control?.close()
     await device.close()

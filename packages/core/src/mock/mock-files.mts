@@ -368,6 +368,9 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
       return { ...content, path: outward(root, content.path) }
     },
 
+    async 'files.attachmentStatus'() {
+      return { state: 'available' as const }
+    },
     async 'files.uploadAttachment'({ deviceId, ...file }, signal) {
       return filesOf(deviceId, null).upload(file, signal)
     },

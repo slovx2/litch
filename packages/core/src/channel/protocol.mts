@@ -1067,6 +1067,11 @@ export interface Commands {
     result: import('../path-picker.mjs').PathPickerListing
   }
   /** 读一个文件。太大的、不是文字的只说是哪一种，不给内容；路径是目录、文件不在了也各有一种结果，不算出错 */
+  /** 读取设备记录的附件清理状态，不把断线或路径未知当成已清理。 */
+  'files.attachmentStatus': {
+    params: { deviceId: string; path: string }
+    result: { state: import('../../../protocol/src/file-attachments.mjs').AttachmentState }
+  }
   /** 上传普通附件，保存到设备主目录的 .litch/attachments 下；不发起模型回合。 */
   'files.uploadAttachment': {
     params: { deviceId: string; name: string; dataBase64: string; mimeType?: string }

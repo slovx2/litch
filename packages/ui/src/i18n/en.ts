@@ -1481,6 +1481,7 @@ export const en: Record<MessageKey, Entry> = {
   'composer.file.uploadSize': '"{name}" exceeds the {max} MB upload limit.',
   'composer.file.upload': 'Could not upload "{name}". Check the device connection and try again.',
   'composer.file.uploading': 'Adding files…',
+  'attachment.cleaned': 'Cleaned up',
   'attachment.desktopRequired': 'Open this file on the desktop computer it came from.',
   'attachment.noRoot': 'The file’s directory is unavailable.',
   'compose.addFile': 'Add file',

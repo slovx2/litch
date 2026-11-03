@@ -61,6 +61,8 @@ export function classify(method: string, params: unknown): Route {
   if (method.startsWith('litch/approval/')) return { kind: 'device' }
   // 工作树（worktrees 扩展）：设备进程自己跑 git，记录存在它自己的库里
   if (method.startsWith('litch/worktree/')) return { kind: 'device' }
+  if (method === 'litch/attachments/status' || method === 'litch/attachments/watch')
+    return { kind: 'device' }
   if (method.startsWith('fs/')) return { kind: 'device' }
   if (PROCESS_METHODS.has(method) || SEARCH_METHODS.has(method)) return { kind: 'device' }
   // 属于设备的进程（可重连的终端，deviceProcesses 扩展）：列出、挂接、解除、结束、清除

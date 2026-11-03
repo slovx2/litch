@@ -1218,6 +1218,10 @@ export function createCore(options: CoreOptions): Core {
             params as Commands['files.readChunk']['params']
           return await deviceOf(deviceId).files.chunk(root, path, offset, revision, signal)
         }
+        case 'files.attachmentStatus': {
+          const { deviceId, path } = params as Commands['files.attachmentStatus']['params']
+          return await deviceOf(deviceId).files.attachmentStatus(path, signal)
+        }
         case 'files.uploadAttachment': {
           const { deviceId, ...file } = params as Commands['files.uploadAttachment']['params']
           return await deviceOf(deviceId).files.upload(file, signal)

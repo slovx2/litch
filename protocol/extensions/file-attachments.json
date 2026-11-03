@@ -1,0 +1,76 @@
+{
+  "extension": "fileAttachments",
+  "description": "设备管理上传附件的保留期限与清理状态；文件字节仍使用标准 fs/*。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "fileAttachments"
+      }
+    }
+  },
+  "undeclared": "拒绝 litch/attachments/status 和 litch/attachments/watch，不增加任何标准应答字段或主动通知。",
+  "rules": [
+    "设备服务启动时清理一次，之后每 24 小时清理一次。只处理主目录 .litch/attachments 下符合编号格式且修改时间超过 30 天的直接子目录。",
+    "按发送输入及历史快照记录附件所属会话；任一引用会话仍被客户端订阅、正在执行回合或后台任务时保留。清理前只读查询引擎已加载会话；不确定时跳过。",
+    "引用附件、查询可用附件和保护活跃附件会刷新目录修改时间。软链、越界、不支持的文件类型及核对期间替换的目录不删除。",
+    "归属与清理记录存于设备状态目录 attachments.sqlite。成功清理的记录保留供历史卡显示；不会扫描模型私有目录。",
+    "客户端只有在 device.extensions 包含 fileAttachments 时调用。unknown 不代表已清理；仅已登记清理且目录缺失的附件返回 cleaned。",
+    "watch 按客户端连接记录打开的视图，包含只读归档会话；关闭视图或连接断开后解除。客户端重连后重新登记。"
+  ],
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "method": "litch/attachments/status",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["state"],
+        "properties": {
+          "state": {
+            "enum": ["available", "cleaned", "unknown"]
+          }
+        }
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/attachments/watch",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["threadId", "open"],
+        "properties": {
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "open": {
+            "type": "boolean"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
+    }
+  ]
+}

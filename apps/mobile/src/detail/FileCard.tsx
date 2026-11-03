@@ -1,19 +1,52 @@
-import { attachmentDetail, type UserAttachment } from '@litch/core'
+import {
+  type AttachmentState,
+  attachmentDetail,
+  attachmentState,
+  type DeviceView,
+  keys,
+  type UserAttachment,
+} from '@litch/core'
+import { useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { useKey, useServices } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { useTheme } from '../ui/theme'
 
 export function FileCard({
   file,
+  deviceId,
   onPress,
   onRemove,
 }: {
   file: UserAttachment
+  deviceId?: string | undefined
   onPress(): void
   onRemove?(): void
 }) {
   const { c, radius, font } = useTheme()
   const t = useT()
+  const { channel } = useServices()
+  const device = useKey<DeviceView>(keys.device(deviceId ?? ''))
+  const [state, setState] = useState<AttachmentState>('unknown')
+  useEffect(() => {
+    let active = true
+    setState('unknown')
+    if (device?.connection !== 'online') return
+    void attachmentState(channel, deviceId, { path: file.path, client: file.client }).then(
+      (next) => {
+        if (active) setState(next)
+      },
+    )
+    return () => {
+      active = false
+    }
+  }, [channel, deviceId, file.path, file.client, device?.connection])
+  const open = async () => {
+    if (state === 'cleaned') return
+    const next = await attachmentState(channel, deviceId, file)
+    setState(next)
+    if (next !== 'cleaned') onPress()
+  }
   const name = file.label ?? t('attachment.file')
   const detail =
     file.kind === 'folder'
@@ -25,7 +58,9 @@ export function FileCard({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={name}
-        onPress={onPress}
+        onPress={() => void open()}
+        disabled={state === 'cleaned'}
+        accessibilityState={{ disabled: state === 'cleaned' }}
         style={styles.open}
       >
         <Text style={{ color: c.ink2, fontSize: font.size.body }}>
@@ -40,7 +75,7 @@ export function FileCard({
             {name}
           </Text>
           <Text numberOfLines={1} style={{ color: c.ink3, fontFamily: font.ui }}>
-            {detail}
+            {state === 'cleaned' ? t('attachment.cleaned') : detail}
           </Text>
         </View>
       </Pressable>

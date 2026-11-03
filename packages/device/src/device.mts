@@ -1,8 +1,11 @@
+import { homedir } from 'node:os'
 import {
   deviceMachineEnabled,
   deviceToolSwitches,
 } from '../../protocol/src/client-tools-settings.mjs'
 import { PATH_PICKER_EXTENSION } from '../../protocol/src/path-picker.mjs'
+import { protectedAttachmentOwners } from './attachment-active.mjs'
+import { AttachmentRetention } from './attachment-retention.mjs'
 import { ResumeTools } from './resume-tools.mjs'
 import { prepareSessionTools } from './session-client-tools.mjs'
 // 设备进程的主体：一台机器上的多个 harness 运行时收在一个入口（聚合面）后面。
@@ -88,6 +91,9 @@ export type DeviceTrace = (
 ) => void
 
 export interface DeviceOptions {
+  /** 隔离验收的附件主目录；生产取系统 home。 */
+  attachmentHome?: string
+
   /** 无控制进程的隔离夹具使用；生产开关来自设备设置。 */
   clientToolSettings?: Record<string, boolean>
 
@@ -255,6 +261,7 @@ export class DeviceServer {
   private readonly index: ThreadIndex
   private readonly workspaces: Workspaces
   private readonly importer: WorkspaceImporter | null
+  readonly attachments: AttachmentRetention
   private readonly layer: DeviceLayer
   private readonly options: DeviceOptions
   private readonly control: ControlChannel | null
@@ -320,6 +327,7 @@ export class DeviceServer {
     const info = deviceInfo(this.version)
     info.extensions.push(EXTENSION.filePreview)
     info.extensions.push(EXTENSION.fileDownload)
+    info.extensions.push(EXTENSION.fileAttachments)
     info.extensions.push(EXTENSION.turnRecovery)
     info.extensions.push(EXTENSION.turnNotices)
     this.recovery = new TurnRecoveryObserver({
@@ -625,6 +633,26 @@ export class DeviceServer {
       graceMs: options.timing?.clientToolGraceMs ?? DEFAULT_TIMING.clientToolGraceMs,
       log,
     })
+    this.attachments = new AttachmentRetention({
+      home: options.attachmentHome ?? homedir(),
+      stateDir: options.stateDir,
+      log,
+      inUse: (owner) =>
+        router.hasSubscribers(owner.harness, owner.threadId) ||
+        this.sessionTree.isActive(owner.threadId) ||
+        this.background.running(owner.threadId) > 0,
+      protectedOwners: (owners) =>
+        protectedAttachmentOwners(
+          owners,
+          this.harnesses().map((source) => ({
+            id: source.id,
+            connect: source.connect,
+            running: source.managed ? ['running', 'starting'].includes(source.managed.state) : true,
+            native: source.managed ? source.managed.native === true : source.native === true,
+          })),
+          this.version,
+        ),
+    })
     this.restart = new RestartResume({
       store: new RestartStore(this.db),
       service: () => {
@@ -642,6 +670,7 @@ export class DeviceServer {
       log,
     })
     this.host = {
+      attachments: this.attachments,
       turnNotices: this.turnNotices,
       restart: this.restart,
       power: () => this.power,
@@ -1048,6 +1077,7 @@ export class DeviceServer {
     link.onNotification((method, params) => {
       if (!params || typeof params !== 'object') return
       this.resumeTools.observe(method, params)
+      this.attachments.observe(link.harness, params)
       this.turnNotices.observe(method, params)
       this.restart?.observe(method, params)
       if (link.native) {
@@ -1067,6 +1097,8 @@ export class DeviceServer {
       if (isObject(params)) this.recovery.observe(link.harness, method, params)
     })
     link.request = async (method, params, options) => {
+      if (['turn/start', 'turn/steer', 'thread/queue/add'].includes(method))
+        this.attachments.observe(link.harness, params)
       // 定时任务和设备工具也使用内部连接，结束后的经理不能从这里重新开工。
       if (
         isObject(params) &&
@@ -1128,6 +1160,8 @@ export class DeviceServer {
               result,
             )
         }
+        if (isObject(result) && isObject(result.thread))
+          this.attachments.observe(link.harness, result)
         if (observeSnapshots && isObject(result) && isObject(result.thread))
           this.recovery.snapshot(link.harness, result.thread)
         return result
@@ -1150,6 +1184,7 @@ export class DeviceServer {
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
+    await this.attachments.close()
     this.restart.close()
     this.nativeBackground.close()
     this.recovery.close()

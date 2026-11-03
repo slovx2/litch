@@ -1,6 +1,8 @@
 import type { FileLinkResolution } from '@litch/core'
 import {
+  type AttachmentState,
   attachmentDetail,
+  attachmentState,
   type DeviceView,
   isAbsolutePath,
   keys,
@@ -8,11 +10,11 @@ import {
   type SessionSummary,
   type UserAttachment,
 } from '@litch/core'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { Icon } from '../app/icons.tsx'
-import { useServices } from '../app/services.tsx'
+import { useKey, useServices } from '../app/services.tsx'
 import { FileLinkDialog } from '../files/FileLinkDialog.tsx'
 import { openInFiles } from '../files/state.ts'
 
@@ -35,6 +37,21 @@ export function FileCard({
 }) {
   const t = useT()
   const { channel, replica } = useServices()
+  const device = useKey<DeviceView>(keys.device(deviceId ?? ''))
+  const [state, setState] = useState<AttachmentState>('unknown')
+  useEffect(() => {
+    let active = true
+    setState('unknown')
+    if (device?.connection !== 'online') return
+    void attachmentState(channel, deviceId, { path: file.path, client: file.client }).then(
+      (next) => {
+        if (active) setState(next)
+      },
+    )
+    return () => {
+      active = false
+    }
+  }, [channel, deviceId, file.path, file.client, device?.connection])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [resolvedDevice, setResolvedDevice] = useState<string | null>(null)
@@ -46,7 +63,10 @@ export function FileCard({
       : attachmentDetail({ name, ...(file.size !== undefined ? { size: file.size } : {}) }) ||
         t('attachment.file')
   const open = async () => {
-    if (!file.path || busy) return
+    if (!file.path || busy || state === 'cleaned') return
+    const next = await attachmentState(channel, deviceId, file)
+    setState(next)
+    if (next === 'cleaned') return
     let targetId = deviceId
     if (file.client) {
       const ids = replica.store.get<string[]>(keys.devices) ?? []
@@ -97,14 +117,14 @@ export function FileCard({
           type="button"
           className="attachment-card-open"
           onClick={() => void open()}
-          disabled={!file.path}
+          disabled={!file.path || state === 'cleaned'}
           aria-busy={busy}
           title={[file.path, file.client ? t('chip.client') : ''].filter(Boolean).join('\n')}
         >
           <Icon name={file.kind === 'folder' ? 'folder' : 'file'} />
           <span className="attachment-card-info">
             <span className="ell">{name}</span>
-            <small className="ell">{detail}</small>
+            <small className="ell">{state === 'cleaned' ? t('attachment.cleaned') : detail}</small>
           </span>
         </button>
         {children}

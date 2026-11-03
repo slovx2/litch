@@ -113,8 +113,26 @@ try {
   await evaluate(`document.querySelector('.umsg .attachment-card-open').click()`)
   await until(() => evaluate('!!window.__attachments.opened()?.active'), '点击卡片打开文件面板')
   assert.equal(await evaluate('window.__attachments.opened().active'), sent.attachments[0].path)
+  const resolvedBefore = await evaluate('window.__attachments.resolves()')
+  await evaluate('window.__attachments.expire()')
+  await evaluate(`document.querySelector('.umsg .attachment-card-open').click()`)
+  await until(
+    () =>
+      evaluate(
+        `document.querySelector('.umsg .attachment-card-info small').textContent === '已清理'`,
+      ),
+    '已清理状态',
+  )
+  assert.equal(
+    await evaluate(`document.querySelector('.umsg .attachment-card-open').disabled`),
+    true,
+  )
+  assert.equal(await evaluate('window.__attachments.resolves()'), resolvedBefore)
+  assert.equal(await evaluate(`document.querySelectorAll('.attachment-card-error').length`), 0)
   assert.deepEqual(errors, [])
-  console.log('通过：选择文件、协议上传模拟、输入区/消息文件卡、三皮肤两宽度截断、点击预览')
+  console.log(
+    '通过：选择文件、协议上传模拟、输入区/消息文件卡、三皮肤两宽度截断、点击预览与已清理状态',
+  )
 } finally {
   cdp?.close()
   for (const child of [browser, vite]) {

@@ -80,3 +80,25 @@ export function attachmentDetail(file: { name: string; size?: number }): string 
           : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   return [ext, size].filter(Boolean).join(' · ')
 }
+
+export const ATTACHMENT_WATCH_METHOD = 'litch/attachments/watch'
+export const ATTACHMENT_STATUS_METHOD = 'litch/attachments/status'
+export const ATTACHMENT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+export type AttachmentState = 'available' | 'cleaned' | 'unknown'
+/** 上传器生成的编号；只允许附件根目录的直接子目录。 */
+export const ATTACHMENT_ID = /^[a-z0-9]{8,12}-[a-z0-9]{8,16}-[a-z0-9]{8,16}$/
+
+/** 只作客户端请求筛选；设备仍须验证主目录、真实路径和清理记录。 */
+export function managedAttachmentPath(path: string | undefined): boolean {
+  if (!path || /[\0\r\n]/.test(path)) return false
+  const parts = path.replace(/\\/g, '/').split('/')
+  const at = parts.lastIndexOf('.litch')
+  return (
+    at >= 0 &&
+    parts[at + 1] === 'attachments' &&
+    parts.length === at + 4 &&
+    ATTACHMENT_ID.test(parts[at + 2] ?? '') &&
+    !!parts[at + 3] &&
+    parts.every((part) => part !== '..' && part !== '.')
+  )
+}

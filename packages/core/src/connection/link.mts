@@ -214,6 +214,7 @@ export function createLink(options: LinkOptions): Link {
               litchExtensions: [
                 EXTENSION.filePreview,
                 EXTENSION.fileDownload,
+                EXTENSION.fileAttachments,
                 EXTENSION.harness,
                 // deviceWorkspaces：声明了才收得到置顶、分区变化的通知
                 EXTENSION.deviceWorkspaces,

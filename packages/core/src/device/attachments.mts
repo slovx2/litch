@@ -40,7 +40,7 @@ export async function uploadAttachment(
   const chars = Array.from(cleaned || 'attachment').slice(-80)
   while (utf8Length(chars.join('')) > 200) chars.shift()
   const diskName = `file-${chars.join('')}`
-  const id = `${host.clock.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
+  const id = `${host.clock.now().toString(36).padStart(8, '0')}-${Math.random().toString(36).slice(2).padEnd(10, '0')}-${Math.random().toString(36).slice(2).padEnd(10, '0')}`
   const dir = joinPath(home, `.litch/attachments/${id}`)
   const path = joinPath(dir, diskName)
   const options = { timeoutMs: 120_000, ...(signal ? { signal } : {}) }

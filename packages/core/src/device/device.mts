@@ -613,6 +613,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let harnesses: HarnessView[] = []
   /** 对面有没有设备配置接口（deviceSettings 扩展）。认出来之前、对面不是设备服务时都是没有 */
   let manageable = false
+  const attachmentViews = new Map<string, number>()
+  const watchAttachments = (threadId: string, open: boolean) => {
+    if (online && fileAttachmentsSupported)
+      void link.request('litch/attachments/watch', { threadId, open }).catch(() => {})
+  }
+  let fileAttachmentsSupported = false
   let fileDownloadSupported = false
   let filePreviewSupported = false
   let powerSupported = false
@@ -1717,6 +1723,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     terms.clear()
     serviceDue = false
     nativeDirect = false
+    fileAttachmentsSupported = false
     fileDownloadSupported = false
     filePreviewSupported = false
     turnNotices = false
@@ -1732,6 +1739,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         if (declares || mode !== 'full') hasProjects = null
         mode = 'full'
         turnNotices = info.device.extensions?.includes(EXTENSION.turnNotices) === true
+        fileAttachmentsSupported =
+          info.device.extensions?.includes(EXTENSION.fileAttachments) === true
         fileDownloadSupported = info.device.extensions?.includes(EXTENSION.fileDownload) === true
         filePreviewSupported = info.device.extensions?.includes(EXTENSION.filePreview) === true
         configurable = info.device.extensions?.includes(EXTENSION.harnessConfig) === true
@@ -1864,6 +1873,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     tellUpgrader()
     setConnection('online', null)
     if (serviceDue) askServiceLater(mine, 1)
+    for (const threadId of attachmentViews.keys()) watchAttachments(threadId, true)
     live.resync()
     // 断开那阵结束了的子代理、引擎进程换了停在半路的（入口重启时记成被打断）：回合结束的通知都收不到
     for (const threadId of agentThreads.running()) void askAgentTurn(threadId)
@@ -2567,6 +2577,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   const files = createFiles({
     previewSupported: () => filePreviewSupported,
     downloadSupported: () => fileDownloadSupported,
+    attachmentsSupported: () => fileAttachmentsSupported,
     clock: options.clock,
     online: () => online,
     platform: () => platform,
@@ -2771,10 +2782,24 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     refresh: () => (online ? reconcile() : Promise.resolve()),
     openSession(sessionId, sink) {
+      const count = attachmentViews.get(sessionId) ?? 0
+      attachmentViews.set(sessionId, count + 1)
+      if (!count) watchAttachments(sessionId, true)
       const close = live.open(sessionId, sink)
       // 打开了任务跑出来的会话：里面跑完的运行算看过了
       tasks.seen(sessionId)
-      return close
+      let closed = false
+      return () => {
+        if (closed) return
+        closed = true
+        close()
+        const remaining = (attachmentViews.get(sessionId) ?? 1) - 1
+        if (remaining) attachmentViews.set(sessionId, remaining)
+        else {
+          attachmentViews.delete(sessionId)
+          watchAttachments(sessionId, false)
+        }
+      }
     },
     async create(cwd, message, settings, harness, workspaceId, asGoal, worktree) {
       if (worktree && !worktreesOn)

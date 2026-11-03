@@ -1417,6 +1417,7 @@ export const zhCN = {
   'composer.file.uploadSize': '「{name}」超过上传上限 {max} MB。',
   'composer.file.upload': '「{name}」上传失败，请检查设备连接后重试。',
   'composer.file.uploading': '正在添加文件…',
+  'attachment.cleaned': '已清理',
   'attachment.desktopRequired': '请在上传此文件的电脑上打开。',
   'attachment.noRoot': '无法确定文件所属目录。',
   'compose.addFile': '添加文件',

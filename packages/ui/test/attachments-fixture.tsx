@@ -26,7 +26,21 @@ const clock = {
 }
 const mock = createMockCore({ clock })
 const [client, server] = createPortPair()
-serveChannel(server, mock, { clock })
+let cleaned = false
+let resolves = 0
+serveChannel(
+  server,
+  {
+    command(name, args, signal) {
+      if (name === 'files.attachmentStatus' && cleaned)
+        return Promise.resolve({ state: 'cleaned' }) as never
+      if (name === 'files.resolve') resolves++
+      return mock.command(name, args, signal)
+    },
+    subscribe: (topic, sink) => mock.subscribe(topic, sink),
+  },
+  { clock },
+)
 const channel = connectChannel(client)
 const replica = createReplica(channel)
 replica.start()
@@ -35,6 +49,10 @@ let sent: UserMessageItem | null = null
 Object.assign(window, {
   __attachments: {
     sent: () => sent,
+    expire: () => {
+      cleaned = true
+    },
+    resolves: () => resolves,
     opened: () => {
       const file = sent?.attachments[0]
       return file?.path ? treeUiNow(treeKey('local', parentPath(file.path)!)) : null

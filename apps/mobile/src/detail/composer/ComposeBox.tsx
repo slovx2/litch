@@ -424,6 +424,7 @@ export function ComposeBox({
       {draft.files.map((file, index) => (
         <FileCard
           key={file.path}
+          deviceId={mentions?.deviceId}
           file={{ ...file, kind: file.folder ? 'folder' : 'file', label: file.name }}
           onPress={() => {
             if (mentions)

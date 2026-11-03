@@ -151,7 +151,7 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
 function UserAttachments({ row }: Props<'user'>) {
   const { c, font, radius } = useTheme()
   const t = useT()
-  const { viewImage, openLink, notify } = useTranscript()
+  const { viewImage, openLink, notify, deviceId } = useTranscript()
   const images = row.attachments.filter((each) => each.kind === 'image' && each.url)
   const others = row.attachments.filter((each) => !(each.kind === 'image' && each.url))
   return (
@@ -182,6 +182,7 @@ function UserAttachments({ row }: Props<'user'>) {
                 // biome-ignore lint/suspicious/noArrayIndexKey: 同一条消息的附件顺序固定
                 key={index}
                 file={each}
+                deviceId={deviceId}
                 onPress={() => {
                   if (each.client) notify(t('attachment.desktopRequired'))
                   else if (each.path) openLink(fileHref({ path: each.path, line: null, alt: null }))

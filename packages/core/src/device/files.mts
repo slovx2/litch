@@ -1,3 +1,7 @@
+import {
+  ATTACHMENT_STATUS_METHOD,
+  type AttachmentState,
+} from '../../../protocol/src/file-attachments.mjs'
 import { type AttachmentUpload, uploadAttachment } from './attachments.mjs'
 // 一台设备上的文件：列一层目录、读一个文件、模糊找文件。文件面板只发这三条命令。
 // 另有挑目录（添加项目时浏览设备上的目录）：只列目录名、不读文件，所以不受下面“只在根之内”的限制。
@@ -51,6 +55,7 @@ import { resolveFileLink } from './file-links.mjs'
 import { createFileWatches } from './file-watches.mjs'
 
 export interface FilesHost {
+  attachmentsSupported?(): boolean
   previewSupported?(): boolean
   downloadSupported?(): boolean
   clock: Clock
@@ -72,6 +77,8 @@ export interface FilesHost {
 }
 
 export interface Files {
+  attachmentStatus(path: string, signal?: AbortSignalLike): Promise<{ state: AttachmentState }>
+
   upload(
     file: AttachmentUpload,
     signal?: AbortSignalLike,
@@ -348,6 +355,17 @@ export function createFiles(host: FilesHost): Files {
   }
 
   const files: Files = {
+    async attachmentStatus(path, signal) {
+      if (!host.online() || !host.attachmentsSupported?.()) return { state: 'unknown' }
+      const response = await host.request(
+        ATTACHMENT_STATUS_METHOD,
+        { path },
+        { ...(signal ? { signal } : {}) },
+      )
+      return {
+        state: ['available', 'cleaned'].includes(response.state) ? response.state : 'unknown',
+      }
+    },
     upload: (file, signal) => uploadAttachment(host, file, signal),
     async chunk(root, path, offset, revision, signal) {
       const at = locate(root, path)

@@ -24,6 +24,10 @@ import {
   DEVICE_SETTINGS_CHANGED,
   type DeviceSettingsChangedNotification,
 } from '../../protocol/src/device-settings.mjs'
+import {
+  ATTACHMENT_STATUS_METHOD,
+  ATTACHMENT_WATCH_METHOD,
+} from '../../protocol/src/file-attachments.mjs'
 import type { HarnessConfigChangedNotification } from '../../protocol/src/harness-config.mjs'
 import { PROJECT_PERMISSION } from '../../protocol/src/harness-project-permissions.mjs'
 import { supportsNativeBackground } from '../../protocol/src/native-background-wake.mjs'
@@ -49,6 +53,7 @@ import {
   platformOs,
 } from '../../shared/src/runtime-version.mjs'
 import type { DeviceApprovals } from './approvals.mjs'
+import type { AttachmentRetention } from './attachment-retention.mjs'
 import type { DeviceBackground } from './background.mjs'
 import type { ClientToolInvoker } from './client-tool-invoke.mjs'
 import type { ClientToolPeer, ClientToolRouter } from './client-tools.mjs'
@@ -143,6 +148,8 @@ export interface HarnessSource extends UpstreamConfig {
 /** 设备进程里各条连接共用的东西 */
 export interface SessionHost {
   resumeTools: import('./resume-tools.mjs').ResumeTools
+  attachments?: AttachmentRetention
+
   prepareSession(
     params: Record<string, unknown>,
     harness: string,
@@ -283,6 +290,7 @@ export class ClientSession implements ClientToolPeer {
           : false,
       observe: (link, method, params) => {
         this.host.resumeTools.observe(method, params)
+        this.host.attachments?.observe(link.harness, params)
         this.host.turnNotices?.observe(method, params)
         this.host.restart?.observe(method, params)
         this.host.managers?.observe(method, params)
@@ -393,6 +401,7 @@ export class ClientSession implements ClientToolPeer {
     this.translators.clear()
     this.relay.close()
     this.calls.close()
+    this.host.attachments?.left(this.id)
     this.host.clientTools.left(this)
     this.host.clientInvoke.callerLeft(this)
     this.host.clientInvoke.peerLeft(this)
@@ -580,6 +589,28 @@ export class ClientSession implements ClientToolPeer {
     switch (route.kind) {
       case 'device':
         if (method === 'runtime/info') return this.runtimeInfo()
+        if (method === ATTACHMENT_WATCH_METHOD) {
+          if (!this.declared.has(EXTENSION.fileAttachments))
+            throw new ProtocolError(-32602, 'fileAttachments 扩展未声明')
+          const p = frame.params
+          if (
+            !isObject(p) ||
+            typeof p.threadId !== 'string' ||
+            !p.threadId ||
+            p.threadId.length > 4096 ||
+            typeof p.open !== 'boolean'
+          )
+            throw new ProtocolError(-32602, '附件会话视图无效')
+          this.host.attachments?.watch(this.id, p.threadId, p.open)
+          return {}
+        }
+        if (method === ATTACHMENT_STATUS_METHOD) {
+          if (!this.declared.has(EXTENSION.fileAttachments))
+            throw new ProtocolError(-32602, 'fileAttachments 扩展未声明')
+          if (!isObject(frame.params) || typeof frame.params.path !== 'string')
+            throw new ProtocolError(-32602, '附件路径无效')
+          return this.host.attachments?.status(frame.params.path) ?? { state: 'unknown' }
+        }
         if (method.startsWith('litch/harnessProjectPermission/')) {
           if (!this.declared.has(EXTENSION.harnessProjectPermissions))
             throw new DeviceError('extensionRequired', 'harnessProjectPermissions must be declared')
@@ -1016,6 +1047,8 @@ export class ClientSession implements ClientToolPeer {
           ...(threadId ? { threadId } : {}),
         })
       }
+      if (['turn/start', 'turn/steer', 'thread/queue/add'].includes(method))
+        this.host.attachments?.observe(link.harness, ready)
       // 先准备参数，再拿短期工作来源；准备失败不能遗留保活。
       let outgoing = ready
       if (outgoing) outgoing = link.dialect.outgoing(method, outgoing) ?? outgoing
