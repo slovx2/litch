@@ -477,7 +477,7 @@ jobs:
   dsh:
     needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'dsh') }}
-    runs-on: macos-15
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -497,6 +497,11 @@ jobs:
         id: stage-4
         with:
           go-version: 1.26.10
+      - name: Linux沙箱前置（与双平台对照一致）
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends bubblewrap=0.9.0-1ubuntu0.3
       - run: npm ci --no-audit --no-fund
         id: phase-5
       - run: npm ci --prefix packages/dsh --no-audit --no-fund
@@ -525,7 +530,7 @@ jobs:
   opencode:
     needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'opencode') }}
-    runs-on: macos-15
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -545,6 +550,11 @@ jobs:
         id: stage-4
         with:
           go-version: 1.26.10
+      - name: Linux沙箱前置（与双平台对照一致）
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends bubblewrap=0.9.0-1ubuntu0.3
       - run: npm ci --no-audit --no-fund
         id: phase-4
       - run: npm ci --prefix packages/opencode --no-audit --no-fund
@@ -644,93 +654,15 @@ jobs:
   real-engines:
     needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'real-engines') }}
-    runs-on: macos-15
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        id: stage-1
-        with:
-          ref: ${{ needs.source.outputs.sha }}
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cache-electron
-        with:
-          # 安装器用 electron_config_cache；packager 用 @electron/get 的平台默认目录。
-          path: |
-            ${{ github.workspace }}/.artifacts/electron-cache
-            ~/Library/Caches/electron
-            ~/.cache/electron
-            ~/AppData/Local/electron/Cache
-          key: electron-v2-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        id: stage-3
-        with:
-          node-version: 24.21.0
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cache-npm
-        with:
-          path: ${{ github.workspace }}/.artifacts/npm-cache
-          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
-        id: stage-5
-        with:
-          go-version: 1.26.10
-      - run: npm ci --no-audit --no-fund
-        id: phase-16
-      - run: npm ci --prefix packages/claude --no-audit --no-fund
-        id: phase-15
-      - run: npm ci --prefix packages/pi --no-audit --no-fund
-        id: phase-14
-      - run: npm ci --prefix packages/dsh --no-audit --no-fund
-        id: phase-13
-      - run: npm ci --prefix packages/opencode --no-audit --no-fund
-        id: phase-12
-      - run: npm ci --prefix packages/acp --no-audit --no-fund
-        id: phase-11
-      - run: npm run client:setup
-        id: phase-10
-      - name: 安装隔离的各家命令行
-        id: phase-9
-        run: |
-          codex="$(node -p "require('./protocol/versions.json').codexVerified[0]")"
-          npm install --prefix .artifacts/host-codex --save-exact "@openai/codex@${codex}" --no-audit --no-fund
-          echo "CHA_CODEX_CLI=${GITHUB_WORKSPACE}/.artifacts/host-codex/node_modules/.bin/codex" >> "${GITHUB_ENV}"
-          npm install --prefix .artifacts/host-cli --save-exact @anthropic-ai/claude-code@2.1.282 --no-audit --no-fund
-          echo "CHA_CLAUDE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-cli/node_modules/.bin/claude" >> "${GITHUB_ENV}"
-          dsh="$(node -p "require('./protocol/versions.json').dshMinimum")"
-          npm install --prefix .artifacts/host-dsh --save-exact "@deepseek-ai/dsh@${dsh}" --no-audit --no-fund
-          echo "CHA_DSH_CLI=${GITHUB_WORKSPACE}/.artifacts/host-dsh/node_modules/.bin/dsh" >> "${GITHUB_ENV}"
-          opencode="$(node -p "require('./protocol/versions.json').opencodeVerified[0]")"
-          npm install --prefix .artifacts/host-opencode --save-exact "opencode-ai@${opencode}" --no-audit --no-fund
-          echo "CHA_OPENCODE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-opencode/node_modules/.bin/opencode" >> "${GITHUB_ENV}"
-          echo "CHA_ACP_CLI=${GITHUB_WORKSPACE}/.artifacts/host-opencode/node_modules/.bin/opencode" >> "${GITHUB_ENV}"
-      - run: npm run build
-        id: phase-8
-      # 首回合在前：它会构建外壳，后面两条 codex 检查里“客户端核心那一遍”要用到构建产物
-      - run: npm run client:check:first-turn -- --engines pi,codex,claude,dsh,opencode,acp
-        id: phase-7
-      - run: npm run check:native-codex
-        id: phase-6
-      - run: npm run check:client-tools-codex
-        id: phase-5
-      - run: npm run check:background-client-tools
-        id: phase-4
-      # 复用上面的隔离 Codex；验证 UI 离线后原生后台任务仍能唤醒会话。
-      - run: npm run check:native-codex-background-wake
-        id: phase-3
-      # npm run build 已准备 Claude、设备进程和 Go CLI；脚本自行起停隔离常驻服务。
-      - run: node scripts/check-restart-resume.mjs
-        id: phase-2
-      - run: npm run check:manager-fixture
-        id: phase-1
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/linux-desktop.yml
+    with:
+      sha: ${{ needs.source.outputs.sha }}
+      suites: '["real-engines"]'
+      identity: real-engines
 
-      - name: 缓存与首次失败
-        id: stage-22
-        if: always()
-        run: node scripts/ci/job-summary.mjs
-        env:
-          CI_STEPS: ${{ toJSON(steps) }}
-
-  # 同一份 x86_64 APK 只构建一次；三个独立 runner 下载后核对源码和 SHA-256。
   mobile-build:
     needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'mobile') }}

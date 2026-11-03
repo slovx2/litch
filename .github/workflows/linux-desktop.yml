@@ -1,0 +1,63 @@
+name: Linux desktop checks
+on:
+  workflow_call:
+    inputs:
+      sha:
+        type: string
+        required: true
+      suites:
+        type: string
+        required: true
+      identity:
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      npm_config_cache: ${{ github.workspace }}/.artifacts/npm-cache
+      CI_CHECK_REPORT: ${{ github.workspace }}/check-results/checks.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.10
+      - name: Linux桌面与沙箱前置
+        run: |
+          command -v xvfb-run
+          df -h /dev/shm
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends bubblewrap=0.9.0-1ubuntu0.3
+      - name: 安装相同源码的依赖
+        run: |
+          npm ci --no-audit --no-fund
+          for package in claude pi dsh opencode acp; do
+            npm ci --prefix "packages/${package}" --no-audit --no-fund
+          done
+          npm run client:setup
+      - name: 安装检查清单要求的精确隔离CLI
+        env:
+          CHECK_SUITES: ${{ inputs.suites }}
+        run: node scripts/ci/linux-desktop.mjs install
+      - run: npm run build
+      - name: 同一检查清单，构建一次、不跳过或重试
+        env:
+          CHECK_SUITES: ${{ inputs.suites }}
+        run: xvfb-run -a --server-args='-screen 0 1920x1080x24' node scripts/ci/linux-desktop.mjs run
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: linux-checks-${{ inputs.identity }}-${{ github.run_attempt }}
+          path: check-results/checks.json
+          if-no-files-found: error
+          retention-days: 14

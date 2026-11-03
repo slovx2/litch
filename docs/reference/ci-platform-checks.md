@@ -19,7 +19,7 @@
 
 `mac-equivalence.yml`在同一SHA的Mac ARM和Linux x64上执行相同集合，再校验命令、实际Node用例名称/数量、来源与版本。它不签名、不发布，也不会自动改变Full/Gate的覆盖。未登记到默认分支的新工作流，需要维护者安排一个已登记的分支专用入口才能首次实跑。
 
-对照成功仅证明这次执行的命令与可观察用例一致，不能证明所有操作系统行为相同。迁移前仍要审阅平台条件、原生调用和skip分支。完整窗口集合包含macOS快捷键、标题栏/侧栏留白、Computer Use设置等差异，仍由原Full/client在Mac覆盖；Swift、LaunchServices、签名/公证和Darwin原生行为不因Linux绿灯被删除。当前引入共享入口和对照工具，正式工作流尚未迁移。
+对照成功仅证明这次执行的命令与可观察用例一致，不能证明所有操作系统行为相同。迁移前仍要审阅平台条件、原生调用和skip分支。完整窗口集合包含macOS快捷键、标题栏/侧栏留白、Computer Use设置等差异，仍由原Full/client在Mac覆盖；Swift、LaunchServices、签名/公证和Darwin原生行为不因Linux绿灯被删除。CI/client已通过Linux共享入口执行portable-unit与required；浏览器另由Mac执行。Full的DSH、OpenCode、real-engines已接Linux，Mac归并与候选签名优先随后接线。
 
 末项失败时，默认整轮对照仍拒绝。分诊可调用`compareChecks(left, right, originalSuites, { only: selectedSuites })`只核对原计划中的完整子集：原始报告保持不变，结果标明`selected-subsets`及两份原始`complete`状态。所选检查缺失、失败、skip、来源或实际用例不同仍拒绝；这份结果不能作为完整领域或门禁的成功证明。
 

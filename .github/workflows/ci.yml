@@ -174,108 +174,28 @@ jobs:
   # 跑头一个回合（0.8.0 在 Codex 上一个会话都建不成，就是这一条该拦住的），codex 收不收 Litch 的工具定义，
   # 本机内置适配器的拉起与换版本。其余的桌面验收在 full.yml
   client:
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/linux-desktop.yml
+    with:
+      sha: ${{ inputs.sha || github.sha }}
+      suites: '["desktop-portable-unit","desktop-required"]'
+      identity: ci-client
+
+  # 浏览器含真实Mac Keychain/Node-API用例，Linux证据不替代这些覆盖。
+  browser:
     runs-on: macos-15
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        id: stage-1
         with:
           ref: ${{ inputs.sha || github.sha }}
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cache-electron
-        with:
-          # 安装器用 electron_config_cache；packager 用 @electron/get 的平台默认目录。
-          path: |
-            ${{ github.workspace }}/.artifacts/electron-cache
-            ~/Library/Caches/electron
-            ~/.cache/electron
-            ~/AppData/Local/electron/Cache
-          key: electron-v2-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        id: stage-3
         with:
           node-version: 24.21.0
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cache-npm
-        with:
-          path: ${{ github.workspace }}/.artifacts/npm-cache
-          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
-      # 带终端的进程由适配器命令行（Go）的 pty-bridge 子命令来起
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
-        id: stage-5
-        with:
-          go-version: 1.26.10
-      - run: npm ci --no-audit --no-fund
-        id: phase-25
-      - run: npm ci --prefix packages/claude --no-audit --no-fund
-        id: phase-24
-      - run: npm ci --prefix packages/pi --no-audit --no-fund
-        id: phase-23
-      - run: npm ci --prefix packages/dsh --no-audit --no-fund
-        id: phase-22
-      - run: npm ci --prefix packages/opencode --no-audit --no-fund
-        id: phase-21
-      - run: npm ci --prefix packages/acp --no-audit --no-fund
-        id: phase-20
-      - run: npm run client:setup
-        id: phase-19
-      - name: 安装六入口首回合所需的隔离 CLI（Pi 来自仓库依赖）
-        id: phase-18
-        run: |
-          codex="$(node -p "require('./protocol/versions.json').codexVerified[0]")"
-          npm install --prefix .artifacts/host-codex --save-exact "@openai/codex@${codex}" --no-audit --no-fund
-          echo "CHA_CODEX_CLI=${GITHUB_WORKSPACE}/.artifacts/host-codex/node_modules/.bin/codex" >> "${GITHUB_ENV}"
-          npm install --prefix .artifacts/host-cli --save-exact @anthropic-ai/claude-code@2.1.282 --no-audit --no-fund
-          echo "CHA_CLAUDE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-cli/node_modules/.bin/claude" >> "${GITHUB_ENV}"
-          dsh="$(node -p "require('./protocol/versions.json').dshMinimum")"
-          npm install --prefix .artifacts/host-dsh --save-exact "@deepseek-ai/dsh@${dsh}" --no-audit --no-fund
-          echo "CHA_DSH_CLI=${GITHUB_WORKSPACE}/.artifacts/host-dsh/node_modules/.bin/dsh" >> "${GITHUB_ENV}"
-          opencode="$(node -p "require('./protocol/versions.json').opencodeVerified[0]")"
-          npm install --prefix .artifacts/host-opencode --save-exact "opencode-ai@${opencode}" --no-audit --no-fund
-          echo "CHA_OPENCODE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-opencode/node_modules/.bin/opencode" >> "${GITHUB_ENV}"
-          echo "CHA_ACP_CLI=${GITHUB_WORKSPACE}/.artifacts/host-opencode/node_modules/.bin/opencode" >> "${GITHUB_ENV}"
-      - run: npm run client:typecheck
-        id: phase-17
-      - run: npm run client:test
-        id: phase-16
-      - run: npm run client:test:ui
-        id: phase-15
+      - run: npm ci --prefix apps/desktop --no-audit --no-fund
       - run: npm run test:browser --prefix apps/desktop
-        id: phase-14
-      - run: npm run test:manual-skill --prefix apps/desktop
-        id: phase-13
-      - run: npm run test:log-file --prefix apps/desktop
-        id: phase-12
-      - run: npm run test:view-files --prefix apps/desktop
-        id: phase-11
-      - run: npm run test:approvals --prefix apps/desktop
-        id: phase-10
-      - run: npm run test:computer-use --prefix apps/desktop
-        id: phase-9
-      - run: npm run build
-        id: phase-8
-      - run: npm run client:smoke
-        id: phase-7
-      - run: npm run client:smoke:entry
-        id: phase-6
-      # build 已准备 Pi/device/Go，smoke 已准备 UI；长 compose 留在 Full/client。
-      - run: npm run check:critical --prefix apps/desktop
-        id: phase-5
-      # 首回合在前：它会构建外壳，后面两条 codex 检查里“客户端核心那一遍”要用到构建产物
-      - run: npm run client:check:first-turn -- --engines codex,claude,dsh,opencode,acp
-        id: phase-4
-      - run: npm run check:native-codex
-        id: phase-3
-      - run: npm run check:client-tools-codex
-        id: phase-2
-      - run: npm run client:check:adapter
-        id: phase-1
-      - name: 缓存与首次失败
-        id: stage-31
-        if: always()
-        run: node scripts/ci/job-summary.mjs
-        env:
-          CI_STEPS: ${{ toJSON(steps) }}
 
   protocol-fixtures:
     runs-on: ubuntu-24.04
@@ -314,7 +234,7 @@ jobs:
 
   report:
     if: always()
-    needs: [windows, unit, unit-claude, client, protocol-fixtures]
+    needs: [windows, unit, unit-claude, client, browser, protocol-fixtures]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
