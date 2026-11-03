@@ -108,6 +108,8 @@ export interface StartSeen {
   /** 回答是一段一段出来的：从头到尾显示成过几种样子，有没有哪一种不是最终文字开头的一截 */
   shapes: number
   stray: string[]
+  /** 只记录取样时间和长度，不改变 MutationObserver 的取样或断言；达到上限明确记丢弃数。 */
+  sampling: { startedAt: string; samples: { ms: number; length: number }[]; dropped: number }
   /** 回合怎么结束的、回答是什么 */
   foot: string
   answer: string
@@ -158,8 +160,17 @@ export async function enginesStart(spec: EngineSpec, place: EnginesPlace): Promi
 
   // ---- 二、发头一句：盯着回答从头到尾显示成过什么样子 ----
   const shapes: string[] = []
+  const startedAt = new Date().toISOString()
+  const sampleStart = performance.now()
+  const samples: { ms: number; length: number }[] = []
+  let dropped = 0
   const sample = () => {
     const shown = kit.lastAnswer()
+    if (samples.length < 1000) {
+      samples.push({ ms: Math.round(performance.now() - sampleStart), length: shown.length })
+    } else {
+      dropped++
+    }
     if (shown && shapes.at(-1) !== shown) shapes.push(shown)
   }
   const observer = new MutationObserver(sample)
@@ -198,6 +209,7 @@ export async function enginesStart(spec: EngineSpec, place: EnginesPlace): Promi
     landed,
     shapes: shapes.length,
     stray: stray.slice(0, 3),
+    sampling: { startedAt, samples, dropped },
     foot: kit.foot(),
     answer: kit.lastAnswer(),
     rowTitle: text(kit.sub(row, '.title')),

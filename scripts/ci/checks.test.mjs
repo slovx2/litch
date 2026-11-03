@@ -20,6 +20,11 @@ test('CLI安装复用原精确基线，ACP共用隔离OpenCode，拒绝版本范
 test('多领域复用首回合/原生工具检查，不允许未知、空或重复领域', () => {
   const plan = checkPlan(['desktop-required', 'real-engines'])
   assert.equal(plan.checks.filter((check) => check.id === 'first-turn').length, 1)
+  assert.equal(plan.checks.filter((check) => check.id === 'probe-engines-kit:test').length, 1)
+  for (const suite of ['desktop-required', 'real-engines']) {
+    const ids = checkPlan([suite]).checks.map((check) => check.id)
+    assert.ok(ids.indexOf('probe-engines-kit:test') < ids.indexOf('first-turn'))
+  }
   assert.ok(plan.checks.some((check) => check.id === 'manager-fixture'))
   assert.deepEqual(plan.clis, ['CODEX', 'CLAUDE', 'DSH', 'OPENCODE', 'ACP'])
   for (const names of [[], ['typo'], ['dsh', 'dsh']]) assert.throws(() => checkPlan(names))

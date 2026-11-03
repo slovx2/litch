@@ -31,6 +31,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           command -v xvfb-run
+          df -h /dev/shm
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           sudo apt-get update
           sudo apt-get install --no-install-recommends bubblewrap=0.9.0-1ubuntu0.3
@@ -42,14 +43,14 @@ jobs:
           done
           npm run client:setup
       - name: 同版本隔离CLI
-        run: node scripts/ci/install-test-clis.mjs client-engines real-engine-tools dsh opencode
+        run: node scripts/ci/install-test-clis.mjs desktop-required real-engine-tools dsh opencode client-engines
       - run: npm run build
       - name: 同一检查集合，不允许跳过
         run: |
           if [ "$RUNNER_OS" = Linux ]; then
-            xvfb-run -a --server-args='-screen 0 1920x1080x24' node scripts/ci/run-checks.mjs desktop-portable-unit dsh opencode client-engines real-engine-tools
+            xvfb-run -a --server-args='-screen 0 1920x1080x24' node scripts/ci/run-checks.mjs desktop-portable-unit desktop-required dsh opencode real-engine-tools client-engines
           else
-            node scripts/ci/run-checks.mjs desktop-portable-unit dsh opencode client-engines real-engine-tools
+            node scripts/ci/run-checks.mjs desktop-portable-unit desktop-required dsh opencode real-engine-tools client-engines
           fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
@@ -77,4 +78,4 @@ jobs:
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" -n "check-comparison-ubuntu-24.04-${GITHUB_RUN_ATTEMPT}" -D "$RUNNER_TEMP/comparison"
       - name: 核对来源、检查ID、实际用例和跳过数量
         run: |
-          node scripts/ci/compare-checks.mjs "$RUNNER_TEMP/comparison/macos-15.json" "$RUNNER_TEMP/comparison/ubuntu-24.04.json" desktop-portable-unit dsh opencode client-engines real-engine-tools
+          node scripts/ci/compare-checks.mjs "$RUNNER_TEMP/comparison/macos-15.json" "$RUNNER_TEMP/comparison/ubuntu-24.04.json" desktop-portable-unit desktop-required dsh opencode real-engine-tools client-engines

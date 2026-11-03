@@ -25,6 +25,7 @@ export const checks = [
   node('smoke:entry', `${desktop}smoke.mjs`, '--entry'),
   node('critical', `${desktop}smoke.mjs`, '--critical'),
   node('critical:entry', `${desktop}smoke.mjs`, '--critical', '--entry'),
+  node('probe-engines-kit:test', '--test', `${desktop}probe-engines-kit.test.mjs`),
   node(
     'first-turn',
     `${desktop}check-first-turn.mjs`,
@@ -67,6 +68,7 @@ export const suites = {
       'smoke:entry',
       'critical',
       'critical:entry',
+      'probe-engines-kit:test',
       'first-turn',
       'native-codex',
       'client-tools-codex',
@@ -82,6 +84,7 @@ export const suites = {
   },
   'real-engines': {
     checks: [
+      'probe-engines-kit:test',
       'first-turn',
       'native-codex',
       'client-tools-codex',
