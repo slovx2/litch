@@ -212,6 +212,13 @@ function useActions(store: SessionStore) {
         }
         if (isWebUrl(url))
           Linking.openURL(url).catch(() => setFlash(t('detail.link.failed', { url })))
+        else
+          navigation.navigate('Files', {
+            deviceId,
+            root: root ?? '',
+            href: url,
+            unrecognized: true,
+          })
       },
       turnMenu: setMenu,
       notify: setFlash,

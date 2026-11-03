@@ -2,6 +2,7 @@ import type { FileLinkResolution, FileLinkTarget } from '@litch/core'
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useT } from '../app/appearance.ts'
+import { FileLinkDetails } from './FileLinkDetails.tsx'
 
 /** 门户避免对话正文的段落、链接等标签约束影响模态框布局。 */
 export function FileLinkDialog({
@@ -21,7 +22,7 @@ export function FileLinkDialog({
   return createPortal(
     <dialog
       ref={dialog}
-      className="modal ws-dialog"
+      className="modal ws-dialog file-link-dialog"
       onClose={onClose}
       aria-label={t(result.status === 'choose' ? 'files.link.choose' : 'files.link.failed')}
     >
@@ -29,6 +30,7 @@ export function FileLinkDialog({
         {t(result.status === 'choose' ? 'files.link.choose' : 'files.link.failed')}
       </div>
       <div className="modal-body">
+        <FileLinkDetails result={result} expanded />
         {result.candidates.map((candidate) => (
           <button
             key={candidate.path}

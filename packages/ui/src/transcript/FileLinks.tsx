@@ -15,6 +15,7 @@ import {
   pathTwin,
   type SessionSummary,
   sessionFileScope,
+  unrecognizedFileLink,
   type WorkspaceView,
 } from '@litch/core'
 import {
@@ -34,7 +35,7 @@ import { ExternalLink } from './ExternalLink.tsx'
 export interface FileLinks {
   scope: FileScope
   resolve?(ref: FileRef, href: string): Promise<FileLinkResolution>
-  open(ref: FileRef, target?: FileLinkTarget): void
+  open(ref: FileRef, target?: FileLinkTarget, result?: FileLinkResolution): void
 }
 
 const Context = createContext<FileLinks | null>(null)
@@ -66,9 +67,10 @@ export function useSessionFileLinks(
     return {
       scope,
       resolve: (ref, href) => channel.command('files.resolve', { deviceId, root, ref, href }),
-      open: (ref, target) =>
+      open: (ref, target, result) =>
         openInFiles({
           deviceId,
+          ...(result ? { link: result } : {}),
           workspaceId,
           root: target?.root ?? root,
           ...(target ? { kind: target.kind } : {}),
@@ -107,7 +109,7 @@ function FileLink({
       .then(
         (resolution) => {
           const found = resolution.candidates[0]
-          if (resolution.status === 'ready' && found) links.open(target, found)
+          if (resolution.status === 'ready' && found) links.open(target, found, resolution)
           else setResult(resolution)
         },
         () =>
@@ -143,7 +145,7 @@ function FileLink({
           onClose={() => setResult(null)}
           onPick={(found) => {
             setResult(null)
-            links.open(target, found)
+            links.open(target, found, result)
           }}
         />
       ) : null}
@@ -171,9 +173,28 @@ export function CodeSpan({ text }: { text: string }) {
 /** 回答里的链接。地址是工作区里的文件路径的，在文件面板里打开；别的照外链办 */
 export function Link({ href, children }: { href: string; children: ReactNode }) {
   const links = useContext(Context)
+  const [failure, setFailure] = useState<FileLinkResolution | null>(null)
   let target: FileRef | null = null
   if (links) target = explicitFileRef(href, links.scope)
-  if (!links || !target) return <ExternalLink href={href}>{children}</ExternalLink>
+  if (!links || !target) {
+    if (/^https?:\/\//i.test(href)) return <ExternalLink href={href}>{children}</ExternalLink>
+    return (
+      <>
+        <a
+          href={href}
+          onClick={(event) => {
+            event.preventDefault()
+            setFailure(unrecognizedFileLink(href))
+          }}
+        >
+          {children}
+        </a>
+        {failure ? (
+          <FileLinkDialog result={failure} onClose={() => setFailure(null)} onPick={() => {}} />
+        ) : null}
+      </>
+    )
+  }
   return (
     <FileLink links={links} target={target} href={href}>
       {children}

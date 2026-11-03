@@ -13,6 +13,7 @@ import {
   normalizePath,
   pathTwin,
   relativeTo,
+  unrecognizedFileLink,
 } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useEffect, useState } from 'react'
@@ -23,6 +24,7 @@ import { useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Empty } from '../../ui/kit/controls'
 import { Screen } from '../../ui/kit/Screen'
+import { FileLinkReport } from './FileLinkReport'
 import { FileTreeView } from './FileTreeView'
 import { FileView } from './FileView'
 
@@ -46,6 +48,7 @@ export function FilesScreen({ navigation, route }: Props) {
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' })
   const [showHidden, setShowHidden] = useState(false)
   const [attempt, setAttempt] = useState(0)
+  const [resolution, setResolution] = useState<FileLinkResolution | null>(null)
 
   const list = useCallback(
     (fresh: boolean) => channel.command('files.list', { deviceId, root, path, fresh }),
@@ -62,7 +65,9 @@ export function FilesScreen({ navigation, route }: Props) {
     }
     const asDir = () =>
       list(attempt > 0).then((view) => live && setLoaded({ kind: 'dir', view }), failed)
-    if (route.params.ref && !target) {
+    if (route.params.unrecognized) {
+      setLoaded({ kind: 'link', result: unrecognizedFileLink(route.params.href ?? '') })
+    } else if (route.params.ref && !target) {
       channel
         .command('files.resolve', {
           deviceId,
@@ -72,6 +77,7 @@ export function FilesScreen({ navigation, route }: Props) {
         })
         .then((result) => {
           if (!live) return
+          setResolution(result)
           const found = result.candidates[0]
           if (result.status === 'ready' && found) setTarget(found)
           else setLoaded({ kind: 'link', result })
@@ -86,7 +92,18 @@ export function FilesScreen({ navigation, route }: Props) {
     return () => {
       live = false
     }
-  }, [channel, deviceId, root, path, list, attempt, route.params.ref, route.params.href, target])
+  }, [
+    channel,
+    deviceId,
+    root,
+    path,
+    list,
+    attempt,
+    route.params.ref,
+    route.params.href,
+    route.params.unrecognized,
+    target,
+  ])
 
   const open = useCallback(
     (to: string) => navigation.push('Files', { deviceId, root, path: to }),
@@ -99,24 +116,10 @@ export function FilesScreen({ navigation, route }: Props) {
   else if (loaded.kind === 'link')
     body = (
       <ScrollView>
-        <Empty
-          title={t(loaded.result.status === 'choose' ? 'files.link.choose' : 'files.link.failed')}
-        />
-        {loaded.result.candidates.map((candidate) => (
-          <Button
-            key={candidate.path}
-            kind="plain"
-            label={candidate.path}
-            onPress={() => setTarget(candidate)}
-          />
-        ))}
-        {loaded.result.failures.map((failure) => (
-          <Empty
-            key={failure.path}
-            title={t(`files.link.error.${failure.reason}`)}
-            detail={failure.path}
-          />
-        ))}
+        <FileLinkReport result={loaded.result} expanded onPick={setTarget} />
+        {!route.params.unrecognized ? (
+          <Button kind="plain" label={t('files.retry')} onPress={() => setAttempt((n) => n + 1)} />
+        ) : null}
       </ScrollView>
     )
   else if (loaded.kind === 'failed')
@@ -169,6 +172,21 @@ export function FilesScreen({ navigation, route }: Props) {
       testID="files"
     >
       {body}
+      {loaded.kind !== 'link' && loaded.kind !== 'loading' && loaded.kind !== 'dir' ? (
+        <FileLinkReport
+          expanded={loaded.kind === 'failed'}
+          result={
+            resolution ?? {
+              status: 'failed',
+              href: route.params.href ?? path,
+              path,
+              attempted: [path],
+              candidates: [],
+              failures: [],
+            }
+          }
+        />
+      ) : null}
     </Screen>
   )
 }

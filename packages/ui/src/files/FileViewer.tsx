@@ -9,6 +9,7 @@ import type { MessageKey } from '../i18n/index.ts'
 import { type FileAction, runFileAction } from './actions.ts'
 import { CodeView } from './CodeView.tsx'
 import { useFileContent } from './content.ts'
+import { FileLinkDetails } from './FileLinkDetails.tsx'
 import { byteSize, splitLines } from './lines.ts'
 import { PreviewPanel } from './preview/PreviewPanel.tsx'
 import { rendererFor } from './preview/registry.ts'
@@ -293,7 +294,10 @@ export function FileViewer({
         })}
       </div>
       {active ? (
-        <FileBody key={active.path} deviceId={deviceId} root={root} uiKey={uiKey} tab={active} />
+        <>
+          {active.link ? <FileLinkDetails result={active.link} /> : null}
+          <FileBody key={active.path} deviceId={deviceId} root={root} uiKey={uiKey} tab={active} />
+        </>
       ) : null}
     </section>
   )

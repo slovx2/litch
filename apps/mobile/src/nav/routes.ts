@@ -60,6 +60,7 @@ export type RootStackParamList = {
     fragment?: string
     ref?: FileRef
     href?: string
+    unrecognized?: boolean
   }
   /** 定时任务：按设备分组列出（名字、日程、下一次、最近一次、没看过的运行）。deviceId 给了只列这一台 */
   Tasks: { deviceId?: string }

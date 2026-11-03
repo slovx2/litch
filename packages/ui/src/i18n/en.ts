@@ -37,6 +37,12 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
   `${n} ${Number(n) === 1 ? one : many}`
 
 export const en: Record<MessageKey, Entry> = {
+  'files.link.details': 'Link details',
+  'files.link.href': 'Original link',
+  'files.link.path': 'Normalized path',
+  'files.link.attempted': 'Attempted paths',
+  'files.link.notResolved': 'Not resolved',
+  'files.link.notAttempted': 'No reads attempted',
   'files.link.choose': 'Choose a path to open',
   'files.link.failed': 'Cannot open file link',
   'files.link.error.unrecognized': 'Unrecognized file path',

@@ -343,6 +343,7 @@ export {
   findFileRefs,
   knownFileRef,
   sessionFileScope,
+  unrecognizedFileLink,
 } from './projection/file-refs.mjs'
 export {
   flattenTree,

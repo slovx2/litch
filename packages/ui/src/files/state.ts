@@ -2,11 +2,13 @@
 // 选中的是哪一行、树滚到哪了、开着哪些文件（哪个是预览、正看着哪个、要定位到哪一行）。
 // 展开着哪些目录不在这里：那在数据副本里（核心的 replica/file-trees.mts）。
 // 这个文件不碰页面上的元素，只管数：预览和固定的规矩在这里，好单独测。
+import type { FileLinkResolution } from '@litch/core'
 import { useSyncExternalStore } from 'react'
 import { showSideTab } from '../side/side.ts'
 import { FILES_TAB } from '../side/tabs.ts'
 
 export interface OpenFile {
+  link?: FileLinkResolution
   fragment?: string
   previewMode?: 'source' | 'preview'
   path: string
@@ -76,6 +78,7 @@ export function selectPath(key: string, path: string | null): void {
 }
 
 export interface OpenOptions {
+  link?: FileLinkResolution
   fragment?: string
   /** 固定打开（双击、回车）。不给就是预览 */
   pin?: boolean
@@ -101,6 +104,7 @@ export function openFile(key: string, path: string, options: OpenOptions = {}): 
       index === at
         ? {
             ...tab,
+            ...(options.link ? { link: options.link } : {}),
             ...(options.fragment
               ? { fragment: options.fragment, previewMode: 'preview' as const }
               : {}),
@@ -113,6 +117,7 @@ export function openFile(key: string, path: string, options: OpenOptions = {}): 
     )
   } else {
     const fresh: OpenFile = {
+      ...(options.link ? { link: options.link } : {}),
       ...(options.fragment ? { fragment: options.fragment } : {}),
       path,
       pinned: pin,
@@ -258,6 +263,7 @@ export function usePickedRoot(
 // ---------- 别处要“在文件面板里打开这个文件” ----------
 
 export interface FileTarget {
+  link?: FileLinkResolution
   kind?: 'file' | 'directory'
   fragment?: string
   deviceId: string
@@ -278,6 +284,7 @@ export function openInFiles(target: FileTarget): void {
     return
   }
   openFile(treeKey(target.deviceId, target.root), target.path, {
+    ...(target.link ? { link: target.link } : {}),
     ...(target.fragment ? { fragment: target.fragment } : {}),
     line: target.line ?? null,
     alt: target.alt ?? null,

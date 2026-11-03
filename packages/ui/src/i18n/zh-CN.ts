@@ -34,6 +34,12 @@ import { zhTasks } from './zh-CN-tasks.ts'
 import { zhWorktrees } from './zh-CN-worktrees.ts'
 
 export const zhCN = {
+  'files.link.details': '链接详情',
+  'files.link.href': '原始链接',
+  'files.link.path': '规范化路径',
+  'files.link.attempted': '已尝试的路径',
+  'files.link.notResolved': '未能解析',
+  'files.link.notAttempted': '尚未读取',
   'files.link.choose': '请选择要打开的路径',
   'files.link.failed': '无法打开文件链接',
   'files.link.error.unrecognized': '未识别的文件路径',

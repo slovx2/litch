@@ -453,3 +453,22 @@
 .side[data-mode="tight"] .ft-grip {
   display: none;
 }
+/* 文件链接诊断里的长路径换行；不把失败对话框撑出窗口。 */
+.file-link-details {
+  overflow-wrap: anywhere;
+  padding: 8px;
+  color: var(--ink);
+  max-height: 40vh;
+  overflow: auto;
+  flex-shrink: 0;
+}
+.file-link-details dd {
+  margin: 0 0 8px;
+}
+.file-link-dialog .modal-body {
+  overflow-wrap: anywhere;
+}
+.file-link-dialog .btn {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

@@ -1,4 +1,6 @@
 // 会话设备上的路径与位置。这里只做字面解析；点击时由 files.resolve 核实候选和设备 home。
+
+import type { FileLinkResolution } from '../model-files.mjs'
 import {
   extensionOf,
   isAbsolutePath,
@@ -9,6 +11,29 @@ import {
   samePath,
   withinRoot,
 } from '../text/paths.mjs'
+
+/** 明确链接没有进入读取也要说明原因；这里绝不把 URI 转成设备路径。 */
+export function unrecognizedFileLink(href: string): FileLinkResolution {
+  let value = href
+  try {
+    value = decodeURIComponent(href)
+  } catch {
+    /* 非法编码按未识别处理 */
+  }
+  const reason = /^[\\/]{2}/.test(value)
+    ? 'network'
+    : /^[a-z][a-z0-9+.-]*:/i.test(value) && !/^[a-z]:[\\/]/i.test(value)
+      ? 'uri'
+      : 'unrecognized'
+  return {
+    status: 'failed',
+    href,
+    path: '',
+    attempted: [],
+    candidates: [],
+    failures: [{ path: href, reason }],
+  }
+}
 
 export interface FileScope {
   /** 当前文件树的根；用于路径写法与候选排序，不是读取边界 */
