@@ -36,6 +36,7 @@ whether any link-checking gap remains.
 - `scripts/codex-shim` is the remote `codex` PATH shim.
 - `docs/` is the VitePress documentation site.
 - 各适配器的 `test/` 包含针对其编译输出的 `node:test` 测试。
+- 真实磁盘文件监视单独手动运行 `npm run client:diagnose:files-refresh`，说明见 [诊断入口](packages/core/diagnostics/README.md)。
 
 ## Pull request expectations
 

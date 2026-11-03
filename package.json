@@ -78,6 +78,7 @@
     "client:setup": "npm ci --prefix packages/ui && npm ci --prefix apps/desktop",
     "client:typecheck": "npm run typecheck --prefix packages/core && npm run typecheck --prefix packages/ui && npm run typecheck --prefix apps/desktop",
     "client:test": "npm run test --prefix packages/core",
+    "client:diagnose:files-refresh": "node --import tsx --test packages/core/diagnostics/files-refresh-disk.mts",
     "client:test:ui": "npm run test --prefix packages/ui",
     "client:build": "npm run build --prefix packages/ui && npm run build --prefix apps/desktop",
     "client:dev": "npm run dev --prefix packages/ui",

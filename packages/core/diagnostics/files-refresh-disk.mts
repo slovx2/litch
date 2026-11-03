@@ -1,4 +1,5 @@
 // 真实磁盘 + 现有 PathWatch，验证原子替换后仍能持续收到同一路径的新内容。
+// 手动诊断：npm run client:diagnose:files-refresh。原生事件交付尚有偶发遗漏，不作为发版门禁。
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
