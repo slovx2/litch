@@ -300,6 +300,8 @@ export function remoteSteps(view: RemoteUpgradeView, pid: number | null): GuideS
   if (phase.step !== 'failed') return []
   const method = view.method ?? 'script'
   switch (phase.at) {
+    case 'diskSpace':
+      return []
     case 'download':
       return [install(method), step('service.remote.step.from'), swap, after]
     case 'connect':

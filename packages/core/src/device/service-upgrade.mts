@@ -16,6 +16,7 @@ import type { ConnectGuide, RemoteTarget } from '../model.mjs'
 import type {
   DeviceServiceView,
   RemoteAdapterFacts,
+  RemoteDiskSpace,
   RemoteUpgradePhase,
   RemoteUpgradeView,
 } from '../model-service.mjs'
@@ -161,7 +162,8 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
   const failed = (
     at: Extract<RemoteUpgradePhase, { step: 'failed' }>['at'],
     detail: string | null,
-  ) => set({ step: 'failed', at, text: null, detail })
+    diskSpace?: RemoteDiskSpace,
+  ) => set({ step: 'failed', at, text: null, detail, ...(diskSpace ? { diskSpace } : {}) })
 
   /** ssh 没连上那台机器 */
   const unreachable = (error: unknown) => {
@@ -233,7 +235,7 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
     }
     if (cancel.signal.aborted) return
     if (!result.ok) {
-      failed(result.at, result.said)
+      failed(result.diskSpace ? 'diskSpace' : result.at, result.said, result.diskSpace)
       return
     }
     facts = { version: result.installed, path: facts?.path ?? null }

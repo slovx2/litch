@@ -40,6 +40,9 @@ export const enRupgrade: Record<keyof typeof zhRupgrade, Entry> = {
   'service.remote.failed.download':
     'Downloading the install script failed. This device may not be able to reach GitHub.',
   'service.remote.failed.install': 'The install script didn’t finish.',
+  'service.remote.failed.diskSpace':
+    'The remote device is low on disk space. Free up space, then click Retry.',
+  'service.remote.diskSpace': 'Path: {path}. Required: {required} KiB; available: {available} KiB.',
   'service.remote.failed.brew': 'brew upgrade didn’t finish.',
   'service.remote.failed.behind':
     'Homebrew still installed {installed}; the formula hasn’t reached {to} yet. Try again later, or use the install script instead.',

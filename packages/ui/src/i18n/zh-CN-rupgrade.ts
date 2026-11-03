@@ -31,6 +31,8 @@ export const zhRupgrade = {
   'service.remote.failed.fetch': '该设备上没有 curl 或 wget，无法下载安装脚本。',
   'service.remote.failed.download': '下载安装脚本失败，该设备可能无法访问 GitHub。',
   'service.remote.failed.install': '安装脚本未能完成安装。',
+  'service.remote.failed.diskSpace': '远程设备磁盘空间不足。释放空间后再点重试。',
+  'service.remote.diskSpace': '路径：{path}。需要 {required} KiB，剩余 {available} KiB。',
   'service.remote.failed.brew': 'brew upgrade 未能完成。',
   'service.remote.failed.behind':
     'Homebrew 安装的仍是 {installed}，配方尚未更新到 {to}。可稍后重试，或改用安装脚本。',

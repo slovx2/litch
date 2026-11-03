@@ -59,7 +59,24 @@ export function readInstall(
       : method === 'brew'
         ? 'brew'
         : 'install'
-  return { ok: false, at, code: Number.isFinite(code) ? code : null, said: said(out.said) }
+  // 先从完整输出提取稳定标记，再裁剪给“详情”的尾部；不能把 curl 的退出码 28（超时）认成磁盘满。
+  const match =
+    method === 'script'
+      ? out.said?.match(/^LITCH_INSTALL_DISK_SPACE\t([^\r\n\t]+)\t(\d+)\t(\d+)$/m)
+      : null
+  const requiredKiB = Number(match?.[2])
+  const availableKiB = Number(match?.[3])
+  const diskSpace =
+    match?.[1] && Number.isSafeInteger(requiredKiB) && Number.isSafeInteger(availableKiB)
+      ? { path: match[1], requiredKiB, availableKiB }
+      : undefined
+  return {
+    ok: false,
+    at,
+    code: Number.isFinite(code) ? code : null,
+    said: said(out.said),
+    ...(diskSpace ? { diskSpace } : {}),
+  }
 }
 
 /** 停服务的脚本报回来的字 → 结果。退出码的含义见 cmd/codex-harness-adapter/device_stop.go */

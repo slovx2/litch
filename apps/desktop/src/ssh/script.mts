@@ -305,6 +305,15 @@ export function installScript(plan: InstallPlan): RemoteScript {
           `if [ "$code" -ne 0 ]; then ${stopAt('brew').join('; ')}; fi`,
         ]
       : [
+          // 安装脚本还没下载时，临时分区就可能已满；在 mktemp 之前报同一稳定标记。
+          'temporary=${TMPDIR:-/tmp}',
+          'root_blocks=0',
+          'if [ "$(uname -s)" = Linux ] && [ "$(id -u)" = 0 ]; then root_blocks=1; fi',
+          `available=$(LC_ALL=C df -Pk "$temporary" 2>/dev/null | awk -v root="$root_blocks" 'NR == 2 && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ && $4 ~ /^-?[0-9]+$/ { free = root ? $2 - $3 : $4; printf "%.0f", (free < 0 ? 0 : free) }')`,
+          'if [ -n "$available" ] && [ "$available" -lt 65536 ]; then',
+          `  printf 'said=LITCH_INSTALL_DISK_SPACE\\t%s\\t65536\\t%s\\n' "$temporary" "$available"`,
+          `  code=28; ${stopAt('download').join('; ')}`,
+          'fi',
           'work=$(mktemp -d 2>/dev/null || mktemp -d -t litch-upgrade 2>/dev/null)',
           `if [ -z "$work" ]; then code=1; ${stopAt('download').join('; ')}; fi`,
           `trap 'rm -rf "$work"' EXIT`,

@@ -279,6 +279,15 @@ export function RemoteUpgradeNote({
         <div className="cfail-text" data-failed={phase.at}>
           {t(`service.remote.failed.${phase.at}`, { to, installed: view.installed ?? '' })}
           {phase.text ? ` ${t.text(phase.text)}` : ''}
+          {phase.diskSpace ? (
+            <div>
+              {t('service.remote.diskSpace', {
+                path: phase.diskSpace.path,
+                required: phase.diskSpace.requiredKiB,
+                available: phase.diskSpace.availableKiB,
+              })}
+            </div>
+          ) : null}
         </div>
       ) : null}
       {steps.length > 0 ? (

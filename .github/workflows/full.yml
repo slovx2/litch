@@ -247,6 +247,7 @@ jobs:
         run: |
           sh -n scripts/install.sh
           sh -n scripts/adapter-launcher.sh
+          node --test scripts/install-disk-space.test.mjs scripts/remote-upgrade-disk.test.mjs
       - name: shellcheck
         id: phase-3
         if: runner.os == 'Linux' && matrix.suite == 'platform'
@@ -384,6 +385,7 @@ jobs:
         run: |
           sh -n scripts/install.sh
           sh -n scripts/adapter-launcher.sh
+          node --test scripts/install-disk-space.test.mjs scripts/remote-upgrade-disk.test.mjs
       - name: shellcheck
         id: phase-3
         if: runner.os == 'Linux' && (matrix.suite == 'platform' || matrix.suite == 'all')

@@ -116,10 +116,18 @@ export interface ServiceUpgradeReport {
 /** 远程设备上那份适配器是怎么装的：script 安装脚本、brew Homebrew（text/versions.mts 的 installMethodOf） */
 export type RemoteInstallMethod = 'script' | 'brew'
 
+/** 安装脚本空间预检或解压失败时的快照，单位为 1024 字节 */
+export interface RemoteDiskSpace {
+  path: string
+  requiredKiB: number
+  availableKiB: number
+}
+
 /**
  * 没做成的是哪一步：
  * connect 经 ssh 连不上那台机器（原因在 text 里）；fetch 那台机器上没有 curl 也没有 wget；
  * download 下载安装脚本失败（多半连不上 GitHub）；install 安装脚本失败；brew brew upgrade 失败；
+ * diskSpace 安装或临时分区空间不足，diskSpace 字段带路径和空间快照；
  * behind 装完还是旧的（Homebrew 的配方还没跟上这一版）；verify 装完问不出版本，或者版本对不上；
  * unsupported 在跑的服务不认识停止的请求，或者它的控制通道连不上；legacy 在跑的是不带聚合面的旧服务；
  * stop 去停了，没停成；stale 停了、重连上来在跑的还是旧的
@@ -129,6 +137,7 @@ export type RemoteUpgradeFailure =
   | 'fetch'
   | 'download'
   | 'install'
+  | 'diskSpace'
   | 'brew'
   | 'behind'
   | 'verify'
@@ -159,6 +168,7 @@ export type RemoteUpgradePhase =
       text: Text | null
       /** 远端的原话（安装脚本、brew、device-stop 说的），给“详情”用。没有就是 null */
       detail: string | null
+      diskSpace?: RemoteDiskSpace
     }
   | { step: 'done'; from: string | null; to: string }
 
@@ -195,6 +205,7 @@ export type RemoteInstallResult =
       at: 'fetch' | 'download' | 'install' | 'brew' | 'verify'
       code: number | null
       said: string | null
+      diskSpace?: RemoteDiskSpace
     }
 
 /**

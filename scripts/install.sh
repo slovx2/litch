@@ -327,7 +327,12 @@ download() {
     fail '下载不了：这台机器上没有 curl，也没有 wget。可以在别处下好压缩包和 %s，拷过来用 --from 安装' \
       'Cannot download: neither curl nor wget is available. Fetch the archive and %s elsewhere, copy them over and install with --from' \
       "$CHECKSUMS"
-  fi || fail '下载失败：%s' 'Download failed: %s' "$1"
+  fi || {
+    # 下载期间也可能耗尽空间；curl / wget 原始错误已留在输出里。
+    check_space "$base_dir" "$reserve_kib"
+    check_space "${TMPDIR:-/tmp}" "$reserve_kib"
+    fail '下载失败：%s' 'Download failed: %s' "$1"
+  }
 }
 
 # 把 $2 这个链接换成指向 $1。一步到位：没有“链接不存在”的那一刻。
@@ -449,10 +454,45 @@ Commands run directly over ssh (ssh host command) do not read those files; use t
   service_notice "$1"
 }
 
+# df 的 Available 不含保留块；Linux root 可用总块数减已用块数，普通用户不可借用。
+# macOS 的 APFS 共享容器不能这样相减，只用 Available。
+# 路径还没建立时查最近的祖先；-Pk 在 macOS / Linux 都按 1024 字节输出。
+available_kib() {
+  probe=$1
+  while [ ! -d "$probe" ]; do probe=$(dirname "$probe"); done
+  root_blocks=0
+  if [ "$system" = linux ] && [ "$(id -u)" = 0 ]; then root_blocks=1; fi
+  LC_ALL=C df -Pk "$probe" | awk -v root="$root_blocks" '
+    NR == 2 && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ && $4 ~ /^-?[0-9]+$/ {
+      free = root ? $2 - $3 : $4
+      printf "%.0f\n", (free < 0 ? 0 : free)
+    }'
+}
+
+# 稳定标记留在最后，避免被 tar 的衍生错误挤掉；28 只用于本脚本的空间不足。
+disk_full() {
+  say '磁盘空间不足：%s，需要 %s KiB，剩余 %s KiB。请清理缓存或释放该文件系统的空间后重试。' \
+    'Insufficient disk space: %s; need %s KiB, available %s KiB. Clear caches or free space on this filesystem, then retry.' \
+    "$1" "$2" "$3" >&2
+  printf 'LITCH_INSTALL_DISK_SPACE\t%s\t%s\t%s\n' "$1" "$2" "$3" >&2
+  exit 28
+}
+
+check_space() {
+  available=$(available_kib "$1")
+  [ -n "$available" ] || fail '无法检查可用空间：%s' 'Cannot check available disk space: %s' "$1"
+  [ "$available" -ge "$2" ] || disk_full "$1" "$2" "$available"
+}
+
+# 安装包和解压目录都在 base_dir；TMPDIR 供外层升级脚本等使用。
+# 下载前先保留 64 MiB，拿到包后再按实际展开大小检查（压缩包此时已计入 df 的已用空间）。
+reserve_kib=65536
+check_space "$base_dir" "$reserve_kib"
+check_space "${TMPDIR:-/tmp}" "$reserve_kib"
 mkdir -p "$base_dir"
 work=$(mktemp -d "$base_dir/.tmp.XXXXXX")
 # 临时目录一定删掉；第一次安装就没装成的话，连空的安装目录也不留
-trap 'rm -rf "$work"; rmdir "$base_dir" 2>/dev/null || true' EXIT
+trap 'rm -rf "${work:?}"; rmdir "$base_dir" 2>/dev/null || true' EXIT
 trap 'exit 1' HUP INT TERM
 
 if [ -n "$from" ]; then
@@ -500,9 +540,28 @@ if [ -n "$checksums" ]; then
   fi
 fi
 
+# 流式计数完整 tar 字节数，不落盘、不用 gzip -l 的 32 位回绕大小。
+# 额外 50% 覆盖文件块取整及目录元数据，另留 64 MiB 给日志、链接与并发写入。
+expanded_bytes=$({
+  if gzip -dc "$archive"; then echo 0 >"$work/gzip-status"; else echo 1 >"$work/gzip-status"; fi
+} | wc -c | tr -d ' ')
+[ "$(cat "$work/gzip-status")" = 0 ] || fail '压缩包损坏：%s' 'Damaged archive: %s' "$archive"
+required_kib=$(((expanded_bytes * 3 + 2047) / 2048 + reserve_kib))
+check_space "$base_dir" "$required_kib"
+check_space "${TMPDIR:-/tmp}" "$reserve_kib"
 mkdir "$work/unpacked"
-tar -xzf "$archive" -C "$work/unpacked" ||
+if tar_error=$(LC_ALL=C tar -xzf "$archive" -C "$work/unpacked" 2>&1); then
+  :
+else
+  # 保留原始错误；即使预检后有其他进程占满空间，也按同一原因报告并由 EXIT 清理。
+  printf '%s\n' "$tar_error" >&2
+  available=$(available_kib "$base_dir")
+  if printf '%s\n' "$tar_error" | grep -q 'No space left on device' ||
+    { [ -n "$available" ] && [ "$available" -lt "$reserve_kib" ]; }; then
+    disk_full "$base_dir" "$required_kib" "${available:-0}"
+  fi
   fail '压缩包解不开：%s' 'Cannot unpack the archive: %s' "$archive"
+fi
 # 压缩包里最外面只有一层目录，名字是 codex-harness-adapter-<版本>-<系统>-<架构>
 unpacked=
 for entry in "$work/unpacked"/*; do

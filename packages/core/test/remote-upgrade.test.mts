@@ -262,6 +262,39 @@ test('装着的已经不旧（用户自己装过）：按钮是“换上新版�
   assert.deepEqual(w.calls.stop, [true])
 })
 
+test('磁盘不足传到主界面且不停止旧服务，释放空间后可以重新安装', async () => {
+  const diskSpace = {
+    path: '/home/dev/.local/share/codex-harness-adapter',
+    requiredKiB: 987654,
+    availableKiB: 123,
+  }
+  let low = true
+  const w = world({
+    install: () =>
+      low
+        ? { ok: false, at: 'install', code: 28, said: 'tar: No space left on device', diskSpace }
+        : { ok: true, installed: APP, said: null },
+  })
+  w.core.start()
+  await flush()
+  await w.run('start')
+  await flush()
+  assert.deepEqual(w.upgradeView()?.phase, {
+    step: 'failed',
+    at: 'diskSpace',
+    text: null,
+    detail: 'tar: No space left on device',
+    diskSpace,
+  })
+  assert.deepEqual(w.calls.stop, [])
+  low = false
+  await w.run('start')
+  await flush()
+  assert.equal(w.calls.install.length, 2)
+  assert.deepEqual(w.calls.stop, [true])
+  w.core.stop()
+})
+
 test('没做成的几种：下载失败、Homebrew 配方没跟上、服务太旧停不了、ssh 连不上', async () => {
   const download = world({
     install: () => ({ ok: false, at: 'download', code: 22, said: 'curl: (22) 404' }),
