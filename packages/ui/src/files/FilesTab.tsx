@@ -298,7 +298,7 @@ export function FilesTab({ place }: SideTabProps) {
             value={root}
             onChange={(event) => pickRoot(place.deviceId, place.workspaceId, event.target.value)}
           >
-            {roots.map((entry) => (
+            {(roots.includes(root) ? roots : [root, ...roots]).map((entry) => (
               <option key={entry} value={entry}>
                 {entry}
               </option>

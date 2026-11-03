@@ -250,7 +250,8 @@ export function usePickedRoot(
     () => rootVersion,
   )
   const picked = pickedRoots.get(placeKey(deviceId, workspaceId))
-  return picked !== undefined && roots.includes(picked) ? picked : (roots[0] ?? null)
+  // 对话链接可以打开项目根外的同设备目录；不把临时选择写回项目配置。
+  return picked ?? roots[0] ?? null
 }
 
 // ---------- 别处要“在文件面板里打开这个文件” ----------

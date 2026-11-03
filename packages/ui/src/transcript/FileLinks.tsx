@@ -4,28 +4,37 @@
 import {
   type DeviceView,
   explicitFileRef,
+  type FileLinkResolution,
+  type FileLinkTarget,
   type FileRef,
   type FileScope,
   fileRefOf,
   findFileRefs,
-  insideRoot,
   keys,
   knownFileRef,
-  normalizePath,
   pathTwin,
   type SessionSummary,
+  sessionFileScope,
   type WorkspaceView,
 } from '@litch/core'
-import { createContext, type MouseEvent, type ReactNode, useContext, useMemo } from 'react'
+import {
+  createContext,
+  type MouseEvent,
+  type ReactNode,
+  useContext,
+  useMemo,
+  useState,
+} from 'react'
 import { useT } from '../app/appearance.ts'
-import { useKey } from '../app/services.tsx'
+import { useKey, useServices } from '../app/services.tsx'
+import { FileLinkDialog } from '../files/FileLinkDialog.tsx'
 import { openInFiles } from '../files/state.ts'
-import { sessionRoots } from '../side/roots.ts'
 import { ExternalLink } from './ExternalLink.tsx'
 
 export interface FileLinks {
   scope: FileScope
-  open(ref: FileRef): void
+  resolve?(ref: FileRef, href: string): Promise<FileLinkResolution>
+  open(ref: FileRef, target?: FileLinkTarget): void
 }
 
 const Context = createContext<FileLinks | null>(null)
@@ -41,35 +50,34 @@ export function useSessionFileLinks(
   summary: SessionSummary | undefined,
 ): FileLinks | null {
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId))
+  const { channel } = useServices()
   const os = useKey<DeviceView>(keys.device(deviceId))?.os
   const workspaceId = summary?.workspaceId ?? null
   const cwd = summary?.cwd ?? ''
-  const roots = sessionRoots(summary, workspaces?.find((entry) => entry.id === workspaceId)?.roots)
+  const roots = workspaces?.find((entry) => entry.id === workspaceId)?.roots ?? []
   // 按内容比：侧栏每来一次增量，工作区的对象都是新的
   const rootsKey = roots.join('\n')
   // biome-ignore lint/correctness/useExhaustiveDependencies: roots 按内容（rootsKey）比
   return useMemo(() => {
     if (!summary) return null
-    const here = cwd ? normalizePath(cwd) : ''
-    const candidates = roots.map(normalizePath)
-    const twin = pathTwin(os)
-    // 工作区有几个根的：工作目录在哪个根里就认哪个
-    const root = candidates.find((entry) => here && insideRoot(entry, here, twin)) ?? candidates[0]
-    if (!root) return null
+    const scope = sessionFileScope(summary, roots, pathTwin(os))
+    if (!scope) return null
+    const root = scope.root
     return {
-      scope: { root, cwd: here || root, twin },
-      open: (ref) =>
+      scope,
+      resolve: (ref, href) => channel.command('files.resolve', { deviceId, root, ref, href }),
+      open: (ref, target) =>
         openInFiles({
           deviceId,
           workspaceId,
-          root,
-          path: ref.path,
-          alt: ref.alt,
+          root: target?.root ?? root,
+          path: target?.path ?? ref.path,
+          alt: target ? null : ref.alt,
           line: ref.line,
           ...(ref.fragment ? { fragment: ref.fragment } : {}),
         }),
     }
-  }, [deviceId, summary !== undefined, workspaceId, cwd, rootsKey, os])
+  }, [deviceId, summary !== undefined, summary?.worktree, workspaceId, cwd, rootsKey, os, channel])
 }
 
 function FileLink({
@@ -77,30 +85,68 @@ function FileLink({
   target,
   className,
   children,
+  href,
 }: {
   links: FileLinks
   target: FileRef
   className?: string
   children: ReactNode
+  href?: string
 }) {
   const t = useT()
+  const [result, setResult] = useState<FileLinkResolution | null>(null)
+  const [busy, setBusy] = useState(false)
   const open = (event: MouseEvent) => {
     event.preventDefault()
-    links.open(target)
+    if (busy) return
+    if (!links.resolve) return links.open(target)
+    setBusy(true)
+    void links
+      .resolve(target, href ?? target.path)
+      .then(
+        (resolution) => {
+          const found = resolution.candidates[0]
+          if (resolution.status === 'ready' && found) links.open(target, found)
+          else setResult(resolution)
+        },
+        () =>
+          setResult({
+            status: 'failed',
+            href: href ?? target.path,
+            path: target.path,
+            attempted: [],
+            candidates: [],
+            failures: [{ path: target.path, reason: 'read' }],
+          }),
+      )
+      .finally(() => setBusy(false))
   }
   return (
-    <a
-      className={className ? `file-link ${className}` : 'file-link'}
-      // 地址只是让它成为一个真的链接（键盘走得到、回车能开）；点了不跳转
-      href={`#${encodeURI(target.path)}`}
-      title={t('files.link.open', { path: target.path })}
-      data-file={target.path}
-      data-line={target.line ?? undefined}
-      onClick={open}
-      onAuxClick={open}
-    >
-      {children}
-    </a>
+    <>
+      <a
+        className={className ? `file-link ${className}` : 'file-link'}
+        // 地址只是让它成为一个真的链接（键盘走得到、回车能开）；点了不跳转
+        href={`#${encodeURI(target.path)}`}
+        title={t('files.link.open', { path: target.path })}
+        data-file={target.path}
+        data-line={target.line ?? undefined}
+        onClick={open}
+        onAuxClick={open}
+        aria-busy={busy}
+      >
+        {children}
+      </a>
+      {result ? (
+        <FileLinkDialog
+          result={result}
+          onClose={() => setResult(null)}
+          onPick={(found) => {
+            setResult(null)
+            links.open(target, found)
+          }}
+        />
+      ) : null}
+    </>
   )
 }
 
@@ -111,7 +157,7 @@ export function CodeSpan({ text }: { text: string }) {
   return (
     <code>
       {links && target ? (
-        <FileLink links={links} target={target}>
+        <FileLink links={links} target={target} href={text}>
           {text}
         </FileLink>
       ) : (
@@ -128,7 +174,7 @@ export function Link({ href, children }: { href: string; children: ReactNode }) 
   if (links) target = explicitFileRef(href, links.scope)
   if (!links || !target) return <ExternalLink href={href}>{children}</ExternalLink>
   return (
-    <FileLink links={links} target={target}>
+    <FileLink links={links} target={target} href={href}>
       {children}
     </FileLink>
   )
@@ -144,7 +190,12 @@ export function Prose({ text }: { text: string }) {
   for (const span of spans) {
     if (span.start > at) out.push(text.slice(at, span.start))
     out.push(
-      <FileLink key={span.start} links={links} target={span.ref}>
+      <FileLink
+        key={span.start}
+        links={links}
+        target={span.ref}
+        href={text.slice(span.start, span.end)}
+      >
         {text.slice(span.start, span.end)}
       </FileLink>,
     )

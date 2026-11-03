@@ -52,8 +52,6 @@ test('整段是路径：绝对的要在根之内；光一个文件名只认常�
 test('不认的：根之外的、目录、网址和域名、属性访问、带空白和通配的', () => {
   for (const raw of [
     '/etc/passwd',
-    '../outside/secret.txt',
-    '/work/app-secrets/key.txt',
     '/work/app',
     'src/',
     'src/components',
@@ -130,14 +128,14 @@ test('工作目录不是根：相对路径先按工作目录接，另一种读�
   // 往上走出了工作目录、还在根里的照认
   assert.deepEqual(fileRefOf('../core/src/index.mts', nested), {
     path: '/work/app/packages/core/src/index.mts',
-    alt: null,
+    alt: '/work/core/src/index.mts',
     line: null,
   })
   // 按工作目录接出了根，按根接还在里面：用后一种
   const outside: FileScope = { root: '/work/app', cwd: '/elsewhere' }
   assert.deepEqual(fileRefOf('src/a.ts', outside), {
-    path: '/work/app/src/a.ts',
-    alt: null,
+    path: '/elsewhere/src/a.ts',
+    alt: '/work/app/src/a.ts',
     line: null,
   })
 })
@@ -146,7 +144,7 @@ test('以 ~ 开头的根（示例数据里的写法）：路径照样认', () =>
   const home: FileScope = { root: '~/work/litch', cwd: '~/work/litch' }
   assert.equal(fileRefOf('docs/guide.md#L12', home)?.path, '~/work/litch/docs/guide.md')
   assert.equal(fileRefOf('~/work/litch/README.md', home)?.path, '~/work/litch/README.md')
-  assert.equal(fileRefOf('~/other/README.md', home), null)
+  assert.equal(fileRefOf('~/other/README.md', home)?.path, '~/other/README.md')
   assert.equal(fileRefOf('../../../etc/passwd', home), null)
 })
 
@@ -173,7 +171,6 @@ test('正文里不认的：光一个文件名、网址、扩展名不常见又�
     '读/写都要权限，and/or 也一样',
     '图在 assets/logo.xcf 里',
     '版本 1.2/1.3 都行',
-    '路径 ../outside/a.ts 在外面',
     '没有斜杠的一句话',
   ]) {
     assert.deepEqual(findFileRefs(text, scope), [], text)
@@ -184,15 +181,15 @@ test('明知是文件的路径（工具改动的文件）：不看像不像，�
   const nested: FileScope = { root: '/work/app', cwd: '/work/app/packages/ui' }
   assert.deepEqual(knownFileRef('src/weird-name', nested), {
     path: '/work/app/packages/ui/src/weird-name',
-    alt: null,
+    alt: '/work/app/src/weird-name',
     line: null,
   })
   assert.equal(knownFileRef('/work/app/LICENSE', scope)?.path, '/work/app/LICENSE')
-  assert.equal(knownFileRef('/etc/hosts', scope), null)
-  assert.equal(knownFileRef('../../outside.txt', scope), null)
-  assert.equal(knownFileRef('C:\\work\\a.ts', scope), null)
+  assert.equal(knownFileRef('/etc/hosts', scope)?.path, '/etc/hosts')
+  assert.equal(knownFileRef('../../outside.txt', scope)?.path, '/outside.txt')
+  assert.equal(knownFileRef('C:\\work\\a.ts', scope)?.path, 'C:/work/a.ts')
   assert.equal(knownFileRef('', scope), null)
-  assert.equal(knownFileRef('.', scope), null)
+  assert.equal(knownFileRef('.', scope)?.path, '/work/app')
 })
 
 test('macOS 上根的另一种写法（Claude Code 给的是 /private/var/…，根是 /var/…）：照样认，路径换成根的写法', () => {
@@ -205,7 +202,7 @@ test('macOS 上根的另一种写法（Claude Code 给的是 /private/var/…，
     alt: null,
     line: null,
   })
-  assert.equal(knownFileRef(real, mac), null)
+  assert.equal(knownFileRef(real, mac)?.path, root)
   // 回答里写的完整路径、正文里扫到的
   assert.deepEqual(fileRefOf(`${real}/src/app.ts:12`, mac), {
     path: `${root}/src/app.ts`,
@@ -226,7 +223,7 @@ test('macOS 上根的另一种写法（Claude Code 给的是 /private/var/…，
   // 设备是 Linux、或者没给：只比字面，不认
   for (const twin of [pathTwin('linux'), undefined]) {
     const plain: FileScope = { root, cwd: root, ...(twin ? { twin } : {}) }
-    assert.equal(knownFileRef(`${real}/a.txt`, plain), null)
-    assert.equal(fileRefOf(`${real}/src/app.ts`, plain), null)
+    assert.equal(knownFileRef(`${real}/a.txt`, plain)?.path, `${real}/a.txt`)
+    assert.equal(fileRefOf(`${real}/src/app.ts`, plain)?.path, `${real}/src/app.ts`)
   }
 })

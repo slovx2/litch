@@ -40,8 +40,8 @@ test('预览只在声明能力后读取；native direct 无能力时零请求', 
     { path: '/work/a.md', litchPreview: { root: '/work', maxBytes: PREVIEW_LIMIT.markdown } },
   ])
   await assert.rejects(yes.files.preview('/work', '/outside/a.md', 'markdown'))
-  await assert.rejects(yes.files.preview('/unknown', '/unknown/a.md', 'markdown'))
-  assert.equal(yes.asked.length, 1)
+  assert.equal((await yes.files.preview('/unknown', '/unknown/a.md', 'markdown')).kind, 'ready')
+  assert.equal(yes.asked.length, 2)
 })
 
 test('预览对后端错误和不可信响应再次核验', async () => {
@@ -68,6 +68,6 @@ test('明确文件链接支持空格、图片、标题与编码井号，正文�
   assert.equal(explicitFileRef('a.md#L12', scope)?.line, 12)
   assert.equal(explicitFileRef('a.md#中文', scope)?.fragment, '中文')
   assert.equal(explicitFileRef('%6aavascript:alert(1)', scope), null)
-  assert.equal(explicitFileRef('../../outside.md', scope), null)
-  assert.equal(fileRefOf('my file.png', scope), null)
+  assert.equal(explicitFileRef('../../outside.md', scope)?.path, '/outside.md')
+  assert.equal(fileRefOf('my file.png', scope)?.path, '/work/docs/my file.png')
 })

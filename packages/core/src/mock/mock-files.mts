@@ -256,6 +256,11 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
   const handlers: {
     [K in keyof Commands]?: (params: Commands[K]['params'], signal: AbortSignalLike) => unknown
   } = {
+    async 'files.resolve'({ deviceId, root, ref, href }, signal) {
+      const files = filesOf(deviceId, root)
+      for (const known of host.rootsOf(deviceId)) filesOf(deviceId, known)
+      return files.resolve(expand(root), ref, href, signal)
+    },
     async 'files.list'({ deviceId, root, path, fresh }, signal) {
       const files = filesOf(deviceId, root)
       const view = await files.list(expand(root), expand(path), fresh === true, signal)

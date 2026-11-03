@@ -34,6 +34,17 @@ import { zhTasks } from './zh-CN-tasks.ts'
 import { zhWorktrees } from './zh-CN-worktrees.ts'
 
 export const zhCN = {
+  'files.link.choose': '请选择要打开的路径',
+  'files.link.failed': '无法打开文件链接',
+  'files.link.error.unrecognized': '未识别的文件路径',
+  'files.link.error.missing': '文件或目录不存在',
+  'files.link.error.offline': '设备未连接，请连接后重试',
+  'files.link.error.unsupported': '此设备不提供文件访问，请升级设备服务',
+  'files.link.error.permission': '没有读取权限',
+  'files.link.error.home': '设备未报告主目录，请使用绝对路径或升级设备服务',
+  'files.link.error.read': '无法读取，请重试',
+  'files.link.error.uri': '不支持 file:// 或编辑器链接，请使用设备上的绝对路径',
+  'files.link.error.network': '不支持 UNC 网络共享路径',
   'navigation.label': '导航',
   'navigation.back': '后退',
   'navigation.forward': '前进',

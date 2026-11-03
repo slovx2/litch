@@ -5,9 +5,8 @@
 // - 设备服务的聚合面：设备进程自己读，不经任何引擎，所以不带 harness，哪个 harness 掉线都不影响；
 // - 某个 harness 自己的入口：那个引擎的进程读；
 // - 原生 codex：它自己读。
-// 协议不管能读哪里，“只在工作区的根之内”是这里守的：根必须是这台设备上认得的（某个工作区的根，或者某个会话的
-// 工作目录），路径理成最简之后必须落在根里。只是字面上的核对：根里面的符号链接指到外面去，这里拦不住
-// （协议里没有“解析成真实路径”这一样）。
+// 只读访问允许同设备的任意绝对根。路径必须落在调用方选定的文件树根内；对话根外链接由 resolve 选择父目录作根。
+// 不改变写入、差异操作的根核对。预览仍在设备核对根与目标的 realpath，避免文档相对资源逃出所选目录。
 //
 // 没有哪个 harness 声明过会不会这几个方法，所以是“试了才知道”：对面说不认识，就记到下次重连，期间不再去问。
 import type { ClientRequestMethod, ClientRequests } from '../../../protocol/src/index.mjs'
@@ -18,12 +17,14 @@ import type {
   DirectoryView,
   FileContent,
   FileEntry,
+  FileLinkResolution,
   FileMatch,
   FileSearchView,
   FolderListing,
 } from '../model-files.mjs'
 import { type FilePreview, PREVIEW_LIMIT, type PreviewKind } from '../model-preview.mjs'
 import { phrase } from '../phrase.mjs'
+import type { FileRef } from '../projection/file-refs.mjs'
 import {
   projectDirectory,
   projectFile,
@@ -42,6 +43,7 @@ import {
   withinRoot,
 } from '../text/paths.mjs'
 import { lacksMethod } from './faults.mjs'
+import { resolveFileLink } from './file-links.mjs'
 
 export interface FilesHost {
   previewSupported?(): boolean
@@ -51,7 +53,7 @@ export interface FilesHost {
   platform(): string | null
   /** 对面的用户主目录（设备服务报的），不知道是 null。挑目录从这里开始 */
   home(): string | null
-  /** 这个目录是不是这台设备上认得的根：某个工作区的根，或者某个会话的工作目录。给的是理过的路径 */
+  /** 设备的项目根信息；只读文件访问不再用它限制范围 */
   knownRoot(root: string): boolean
   request<M extends ClientRequestMethod>(
     method: M,
@@ -64,6 +66,12 @@ export interface FilesHost {
 }
 
 export interface Files {
+  resolve(
+    root: string,
+    ref: FileRef,
+    href: string,
+    signal?: AbortSignalLike,
+  ): Promise<FileLinkResolution>
   preview(
     root: string,
     path: string,
@@ -148,11 +156,11 @@ export function createFiles(host: FilesHost): Files {
     if (typeof root !== 'string' || typeof path !== 'string' || !root || !path) {
       throw new ChannelError('rejected', '没有给路径', phrase('files.outside'))
     }
-    if (isNetworkPath(root)) {
+    if (isNetworkPath(root) || /^[\\/]{2}/.test(root) || /^[\\/]{2}/.test(path)) {
       throw new ChannelError('unsupported', '网络共享上的目录还不支持', phrase('files.network'))
     }
     const base = normalizePath(root)
-    if (!isAbsolutePath(base) || !host.knownRoot(base)) {
+    if (!isAbsolutePath(base) || /[\0\r\n]/.test(root + path)) {
       throw new ChannelError('rejected', `不认识这个根目录：${root}`, phrase('files.unknownRoot'))
     }
     const full = normalizePath(path)
@@ -301,7 +309,10 @@ export function createFiles(host: FilesHost): Files {
     return abandonable(work, signal)
   }
 
-  return {
+  const files: Files = {
+    resolve(root, ref, href, signal) {
+      return resolveFileLink(files, host.home(), root, ref, href, signal)
+    },
     async preview(root, path, format, signal) {
       const at = locate(root, path)
       mustBeOnline()
@@ -439,4 +450,5 @@ export function createFiles(host: FilesHost): Files {
       forget()
     },
   }
+  return files
 }

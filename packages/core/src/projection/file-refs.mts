@@ -1,10 +1,4 @@
-// 对话里哪些字是工作区里的一个文件路径（可以带行号），点了能在文件面板里打开。
-// 这里只做字面上的判断，不去问文件在不在；所以规矩是“认不准的宁可不认”：
-// - 只认落在工作区根之内的路径（相对路径按会话的工作目录接）；
-// - 必须看得出是个文件：带扩展名，或者是 Makefile 这类名字；目录不认；
-// - 光一个文件名（不带目录）的只认扩展名常见的：`console.log`、`.then` 这类不是文件；
-// - 网址、域名开头的、带空白和引号的不认；
-// - 正文里（不在行内代码里）的更严：必须有目录分隔，扩展名得是常见的源码或文本类型，或者后面跟着行号。
+// 会话设备上的路径与位置。这里只做字面解析；点击时由 files.resolve 核实候选和设备 home。
 import {
   extensionOf,
   isAbsolutePath,
@@ -12,12 +6,15 @@ import {
   normalizePath,
   noTwin,
   type PathTwin,
+  samePath,
   withinRoot,
 } from '../text/paths.mjs'
 
 export interface FileScope {
-  /** 工作区的根（不属于工作区的会话是它的工作目录）：只认它里面的路径 */
+  /** 当前文件树的根；用于路径写法与候选排序，不是读取边界 */
   root: string
+  /** 项目的全部根，按项目中的顺序 */
+  roots?: readonly string[]
   /** 相对路径相对于谁：会话的工作目录 */
   cwd: string
   /**
@@ -30,8 +27,10 @@ export interface FileScope {
 export interface FileRef {
   /** 明确的 Markdown 文件链接可携带文档标题锚点。 */
   fragment?: string
-  /** 完整路径，理过，在根之内，照根的写法 */
+  /** 完整路径；~ 留给会话设备展开 */
   path: string
+  /** 相对路径的全部候选（cwd 在先），超过两个时提供；alt 保留给单候选入口 */
+  candidates?: string[]
   /** 工作目录不是根的时候，相对路径的另一种读法：相对于根。按 path 找不到文件时界面再试这个 */
   alt: string | null
   /** 从 1 起的行号。没写就是 null */
@@ -141,30 +140,49 @@ function parseFileRef(
   const first = parts.find((part) => part !== '' && part !== '.' && part !== '..') ?? ''
   if (mode !== 'explicit' && first !== name && DOMAIN.test(first)) return null
 
-  const root = normalizePath(scope.root)
-  const cwd = scope.cwd ? normalizePath(scope.cwd) : root
-  const absolute = isAbsolutePath(text) || text.startsWith('~/')
-  const twin = scope.twin ?? noTwin
-  /** 在根里面（不是根自己）的照根的写法给出来，不在是 null */
-  const within = (path: string): string | null => {
-    const inside = withinRoot(root, path, twin)
-    return inside === root ? null : inside
-  }
-  if (absolute) {
-    const path = within(normalizePath(text))
-    return path === null ? null : { path, alt: null, line, ...(fragment ? { fragment } : {}) }
-  }
-  const fromCwd = within(joinPath(cwd, text))
-  const fromRoot = within(joinPath(root, text))
-  if (fromCwd !== null) {
-    return {
-      path: fromCwd,
-      alt: fromRoot !== fromCwd ? fromRoot : null,
-      line,
-      ...(fragment ? { fragment } : {}),
+  return { ...addressRef(text, scope), line, ...(fragment ? { fragment } : {}) }
+}
+
+function addressRef(text: string, scope: FileScope): FileRef {
+  const roots = (scope.roots ?? [scope.root]).map(normalizePath)
+  const canonical = (path: string) => {
+    const full = normalizePath(path)
+    for (const root of roots) {
+      const inside = withinRoot(root, full, scope.twin ?? noTwin)
+      if (inside !== null) return inside
     }
+    return full
   }
-  return fromRoot === null ? null : { path: fromRoot, alt: null, line }
+  const candidates =
+    isAbsolutePath(text) || text === '~' || text.startsWith('~/')
+      ? [canonical(text)]
+      : [scope.cwd || scope.root, ...roots].map((base) => canonical(joinPath(base, text)))
+  const unique = candidates.filter(
+    (path, index) => !candidates.slice(0, index).some((other) => samePath(path, other)),
+  )
+  return {
+    path: unique[0] ?? '',
+    alt: unique[1] ?? null,
+    line: null,
+    ...(unique.length > 2 ? { candidates: unique } : {}),
+  }
+}
+
+/** 两端共享根的选择：工作树作为文件树默认根，项目各根仍参与相对路径寻址。 */
+export function sessionFileScope(
+  summary: { cwd: string; worktree?: { state: string; path: string } | null },
+  roots: readonly string[] = [],
+  twin: PathTwin = noTwin,
+): FileScope | null {
+  const cwd = normalizePath(summary.cwd)
+  const tree = summary.worktree
+  const root =
+    tree && tree.state !== 'removed'
+      ? tree.path
+      : (roots.find((entry) => withinRoot(normalizePath(entry), cwd, twin) !== null) ??
+        roots[0] ??
+        cwd)
+  return root ? { root: normalizePath(root), cwd: cwd || root, roots, twin } : null
 }
 
 export interface FileRefSpan {
@@ -199,11 +217,8 @@ export function findFileRefs(text: string, scope: FileScope): FileRefSpan[] {
  * 只核对在不在根之内。在就给出完整路径，不在是 null
  */
 export function knownFileRef(path: string, scope: FileScope): FileRef | null {
-  if (!path || !scope.root || path.includes('\\')) return null
-  const root = normalizePath(scope.root)
-  const full = joinPath(scope.cwd ? normalizePath(scope.cwd) : root, path)
-  const inside = withinRoot(root, full, scope.twin ?? noTwin)
-  return inside !== null && inside !== root ? { path: inside, alt: null, line: null } : null
+  if (!path || !scope.root || /^[\\/]{2}/.test(path) || /[\0\r\n]/.test(path)) return null
+  return addressRef(path, scope)
 }
 
 /** 明确的链接地址允许空格和二进制文件名，不扩宽正文的启发式识别。 */

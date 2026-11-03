@@ -2,6 +2,32 @@
 // 路径都是对面那台机器上的绝对路径，已经理成最简的样子（text/paths.mts）。
 import type { ChannelErrorShape } from './channel/protocol.mjs'
 
+export type FileLinkFailure =
+  | 'unrecognized'
+  | 'missing'
+  | 'offline'
+  | 'unsupported'
+  | 'permission'
+  | 'home'
+  | 'read'
+  | 'uri'
+  | 'network'
+
+export interface FileLinkTarget {
+  root: string
+  path: string
+  kind: 'file' | 'directory'
+}
+
+export interface FileLinkResolution {
+  status: 'ready' | 'choose' | 'failed'
+  href: string
+  path: string
+  attempted: string[]
+  candidates: FileLinkTarget[]
+  failures: { path: string; reason: FileLinkFailure }[]
+}
+
 /** other：既不是目录也不是普通文件，或者是没去问过指向哪儿的符号链接 */
 export type FileEntryKind = 'dir' | 'file' | 'other'
 

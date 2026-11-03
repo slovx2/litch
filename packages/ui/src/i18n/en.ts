@@ -37,6 +37,19 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
   `${n} ${Number(n) === 1 ? one : many}`
 
 export const en: Record<MessageKey, Entry> = {
+  'files.link.choose': 'Choose a path to open',
+  'files.link.failed': 'Cannot open file link',
+  'files.link.error.unrecognized': 'Unrecognized file path',
+  'files.link.error.missing': 'File or folder does not exist',
+  'files.link.error.offline': 'Device is offline. Connect and try again.',
+  'files.link.error.unsupported': 'File access is unavailable. Update the device service.',
+  'files.link.error.permission': 'Permission denied',
+  'files.link.error.home':
+    'The device did not report its home directory. Use an absolute path or update the device service.',
+  'files.link.error.read': 'Cannot read this path. Try again.',
+  'files.link.error.uri':
+    'File and editor URLs are not supported. Use an absolute path on this device.',
+  'files.link.error.network': 'UNC network paths are not supported',
   'navigation.label': 'Navigation',
   'navigation.back': 'Back',
   'navigation.forward': 'Forward',

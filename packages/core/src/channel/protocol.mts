@@ -55,7 +55,13 @@ import type {
   DiffView,
   FileDiff,
 } from '../model-diff.mjs'
-import type { DirectoryView, FileContent, FileSearchView, FolderListing } from '../model-files.mjs'
+import type {
+  DirectoryView,
+  FileContent,
+  FileLinkResolution,
+  FileSearchView,
+  FolderListing,
+} from '../model-files.mjs'
 import type { GoalChange, GoalReachedView, SessionGoalView } from '../model-goal.mjs'
 import type {
   HarnessConfigTopicView,
@@ -144,6 +150,7 @@ import type {
   WorktreeView,
 } from '../model-worktrees.mjs'
 import type { Phrase, Text } from '../phrase.mjs'
+import type { FileRef } from '../projection/file-refs.mjs'
 import type { SkippingOutput } from '../text/output-cap.mjs'
 
 // ---------- 主题 ----------
@@ -1018,6 +1025,11 @@ export interface Commands {
   'files.read': {
     params: { deviceId: string; root: string; path: string }
     result: FileContent
+  }
+  /** 点击对话链接：在所属设备上核对全部候选，展开设备 home，遇到歧义交由界面选择。 */
+  'files.resolve': {
+    params: { deviceId: string; root: string; ref: FileRef; href: string }
+    result: FileLinkResolution
   }
   /** 只对已声明 filePreview 的服务发受限读取；不退回整文件或 shell 读取。 */
   'files.preview': {
