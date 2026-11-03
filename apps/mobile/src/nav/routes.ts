@@ -1,5 +1,5 @@
 // 全部页面和各自的参数，是页面之间互相跳转的约定，改这里要连带看所有用到它的页面。参数只放标识和少量首帧要用的字（标题），数据一律从核心订阅，不经路由传。
-import type { DiffScope } from '@litch/core'
+import type { DiffScope, FileRef } from '@litch/core'
 
 export type RootStackParamList = {
   /** 经理目录：按设备分组，先进行中、后已结束 */
@@ -52,7 +52,15 @@ export type RootStackParamList = {
   /** 未提交的改动：文件列表和逐个文件的差异 */
   Diff: { deviceId: string; root: string; scope: DiffScope; sessionId: string | null }
   /** 文件：浏览一个根下面的目录、看文件内容。path 是完整路径，是目录就列它，是文件就打开看；line 是打开后定位到第几行（从 1 起，对话区里的文件引用会带） */
-  Files: { deviceId: string; root: string; path?: string; line?: number }
+  Files: {
+    deviceId: string
+    root: string
+    path?: string
+    line?: number
+    fragment?: string
+    ref?: FileRef
+    href?: string
+  }
   /** 定时任务：按设备分组列出（名字、日程、下一次、最近一次、没看过的运行）。deviceId 给了只列这一台 */
   Tasks: { deviceId?: string }
   /** 新建或编辑一个定时任务。taskId 给了是编辑；sessionId 给了是新建“在这个会话里接着发”的任务 */

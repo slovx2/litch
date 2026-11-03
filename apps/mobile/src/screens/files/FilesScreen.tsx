@@ -7,6 +7,8 @@ import {
   type DeviceView,
   type DirectoryView,
   type FileContent,
+  type FileLinkResolution,
+  type FileLinkTarget,
   keys,
   normalizePath,
   pathTwin,
@@ -14,6 +16,7 @@ import {
 } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useEffect, useState } from 'react'
+import { ScrollView } from 'react-native'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey } from '../../shell/services'
@@ -30,11 +33,13 @@ type Loaded =
   | { kind: 'dir'; view: DirectoryView }
   | { kind: 'file'; content: FileContent }
   | { kind: 'failed'; reason: string }
+  | { kind: 'link'; result: FileLinkResolution }
 
 export function FilesScreen({ navigation, route }: Props) {
   const { deviceId, line } = route.params
-  const root = normalizePath(route.params.root)
-  const path = normalizePath(route.params.path ?? root)
+  const [target, setTarget] = useState<FileLinkTarget | null>(null)
+  const root = target?.root ?? normalizePath(route.params.root)
+  const path = target?.path ?? normalizePath(route.params.path ?? root)
   const device = useKey<DeviceView>(keys.device(deviceId))
   const t = useT()
   const channel = useChannel()
@@ -58,7 +63,21 @@ export function FilesScreen({ navigation, route }: Props) {
     }
     const asDir = () =>
       list(attempt > 0).then((view) => live && setLoaded({ kind: 'dir', view }), failed)
-    if (path === root) void asDir()
+    if (route.params.ref && !target) {
+      channel
+        .command('files.resolve', {
+          deviceId,
+          root,
+          ref: route.params.ref,
+          href: route.params.href ?? path,
+        })
+        .then((result) => {
+          if (!live) return
+          const found = result.candidates[0]
+          if (result.status === 'ready' && found) setTarget(found)
+          else setLoaded({ kind: 'link', result })
+        }, failed)
+    } else if (path === root) void asDir()
     else
       channel.command('files.read', { deviceId, root, path }).then((content) => {
         if (!live) return
@@ -68,7 +87,7 @@ export function FilesScreen({ navigation, route }: Props) {
     return () => {
       live = false
     }
-  }, [channel, deviceId, root, path, list, attempt])
+  }, [channel, deviceId, root, path, list, attempt, route.params.ref, route.params.href, target])
 
   const refresh = useCallback(() => {
     setRefreshing(true)
@@ -88,6 +107,29 @@ export function FilesScreen({ navigation, route }: Props) {
   const rel = relativeTo(root, path, pathTwin(device?.os ?? null))
   let body: React.ReactNode
   if (loaded.kind === 'loading') body = <Empty title={t('files.tree.loading')} />
+  else if (loaded.kind === 'link')
+    body = (
+      <ScrollView>
+        <Empty
+          title={t(loaded.result.status === 'choose' ? 'files.link.choose' : 'files.link.failed')}
+        />
+        {loaded.result.candidates.map((candidate) => (
+          <Button
+            key={candidate.path}
+            kind="plain"
+            label={candidate.path}
+            onPress={() => setTarget(candidate)}
+          />
+        ))}
+        {loaded.result.failures.map((failure) => (
+          <Empty
+            key={failure.path}
+            title={t(`files.link.error.${failure.reason}`)}
+            detail={failure.path}
+          />
+        ))}
+      </ScrollView>
+    )
   else if (loaded.kind === 'failed')
     body = (
       <Empty
@@ -115,7 +157,11 @@ export function FilesScreen({ navigation, route }: Props) {
         onOpen={open}
       />
     )
-  else body = <FileView content={loaded.content} line={line} deviceId={deviceId} root={root} />
+  else {
+    // 预览与源码共用最终选中的设备、文件树根和定位信息。
+    const view = { content: loaded.content, line, deviceId, root, fragment: route.params.fragment }
+    body = <FileView {...view} />
+  }
 
   return (
     <Screen

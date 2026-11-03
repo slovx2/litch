@@ -57,7 +57,7 @@ import {
 import { GoalReachedCell } from './goal/GoalReachedCell'
 import { parseIssueHref } from './issue-links'
 import { IssueLinksContext } from './issue-links-context'
-import { isWebUrl, parseFileHref } from './links'
+import { fileRefFromHref, isWebUrl } from './links'
 import { InView, InViewContext } from './mermaid/in-view'
 import { type MermaidShown, MermaidViewer } from './mermaid/MermaidViewer'
 import { EventCell } from './proposals/EventCell'
@@ -196,13 +196,16 @@ function useActions(store: SessionStore) {
       openLink: (url) => {
         const issue = parseIssueHref(url)
         if (issue !== null) return issues?.open(issue)
-        const file = parseFileHref(url)
+        const file = fileRefFromHref(url, scope)
         if (file) {
           if (!root) return setFlash(t('detail.link.noFiles'))
           navigation.navigate('Files', {
             deviceId,
             root,
             path: file.path,
+            ref: file,
+            href: 'href' in file && typeof file.href === 'string' ? file.href : url,
+            ...(file.fragment ? { fragment: file.fragment } : {}),
             ...(file.line === null ? {} : { line: file.line }),
           })
           return

@@ -7,6 +7,7 @@ import {
   pathTwin,
   type SessionBackgroundView,
   type SessionSummary,
+  sessionFileScope,
   type WorkspaceView,
 } from '@litch/core'
 import { useFlashListContext } from '@shopify/flash-list'
@@ -90,8 +91,11 @@ export function useFileScope(
   const os = device?.os ?? null
   return useMemo(() => {
     const workspace = workspaceId ? workspaces?.find((each) => each.id === workspaceId) : null
-    const root = workspace?.roots[0] ?? workDir
-    if (!root) return { scope: null, root: null }
-    return { scope: { root, cwd: workDir ?? root, twin: pathTwin(os) }, root }
-  }, [workspaces, workspaceId, workDir, os])
+    const scope = sessionFileScope(
+      { cwd: workDir ?? '', worktree: summary?.worktree },
+      workspace?.roots,
+      pathTwin(os),
+    )
+    return { scope, root: scope?.root ?? null }
+  }, [workspaces, workspaceId, workDir, os, summary?.worktree])
 }

@@ -5,32 +5,43 @@
 // - 裸写的 http(s) 地址改成 <地址>，Markdown 的自动链接。
 // 代码块里的一律不动；一行里已经有链接（`](`、`<http`）的整行不动，免得拆坏原有的链接。
 // 改写只换链接、不换字形：封口的块排好版钉了高度（cells.tsx），改写前后排出来要一样高。
-import { type FileRef, type FileScope, fileRefOf, findFileRefs } from '@litch/core'
+import { explicitFileRef, type FileRef, type FileScope, fileRefOf, findFileRefs } from '@litch/core'
 
 const FILE = 'litch-file:'
 /** 一段正文里的裸网址。结尾的句读不算 */
 const URL = /https?:\/\/[^\s<>()[\]`"'，。；：！？、（）]+/g
 const TRAILING = /[.,;:!?]+$/
 /** 单个反引号围起来的行内代码 */
-const CODE = /`([^`\n]+)`/g
+const INLINE =
+  /!?\[(?:[^\]\\]|\\.)*\]\((?:<[^>\n]*>|[^()\\]|\\.|\([^()\n]*\))*\)|<https?:\/\/[^>]*>|`([^`\n]+)`/g
 
 /** 路径里的括号也要转义：Markdown 的链接地址遇到右括号就结束了 */
 const encodePath = (path: string): string =>
   encodeURIComponent(path).replace(/\(/g, '%28').replace(/\)/g, '%29')
 
-export function fileHref(ref: FileRef): string {
-  return `${FILE}${encodePath(ref.path)}${ref.line === null ? '' : `#L${ref.line}`}`
+export function fileHref(ref: FileRef, href?: string): string {
+  return `${FILE}${encodePath(JSON.stringify({ ...ref, ...(href ? { href } : {}) }))}`
 }
 
 /** litch-file: 链接里的路径和行号。不是这种链接是 null */
-export function parseFileHref(url: string): { path: string; line: number | null } | null {
+export function parseFileHref(url: string): (FileRef & { href?: string }) | null {
   if (!url.startsWith(FILE)) return null
   const rest = url.slice(FILE.length)
-  const hash = rest.indexOf('#L')
   try {
-    const path = decodeURIComponent(hash < 0 ? rest : rest.slice(0, hash))
-    const line = hash < 0 ? null : Number(rest.slice(hash + 2))
-    return { path, line: line !== null && Number.isInteger(line) && line > 0 ? line : null }
+    const ref = JSON.parse(decodeURIComponent(rest)) as FileRef & { href?: string }
+    if (
+      !ref ||
+      typeof ref.path !== 'string' ||
+      !(ref.alt === null || typeof ref.alt === 'string') ||
+      !(ref.line === null || (Number.isInteger(ref.line) && ref.line > 0)) ||
+      (ref.fragment !== undefined && typeof ref.fragment !== 'string') ||
+      (ref.href !== undefined && typeof ref.href !== 'string') ||
+      (ref.candidates !== undefined &&
+        (!Array.isArray(ref.candidates) ||
+          !ref.candidates.every((path) => typeof path === 'string')))
+    )
+      return null
+    return ref
   } catch {
     return null
   }
@@ -38,9 +49,17 @@ export function parseFileHref(url: string): { path: string; line: number | null 
 
 export const isWebUrl = (url: string): boolean => /^https?:\/\//i.test(url)
 
+/** Markdown 原地址与自动改写的内部地址在点击处汇合。 */
+export function fileRefFromHref(
+  url: string,
+  scope: FileScope | null,
+): (FileRef & { href?: string }) | null {
+  return parseFileHref(url) ?? (scope ? explicitFileRef(url, scope) : null)
+}
+
 /** 改写一块 Markdown。scope 是 null（还不知道工作区）时只认网址 */
 export function linkify(text: string, scope: FileScope | null): string {
-  const paths = scope !== null && (text.includes('/') || text.includes('`'))
+  const paths = scope !== null && (/[\\/]/.test(text) || text.includes('`'))
   if (!paths && !text.includes('://')) return text
   const lines = text.split('\n')
   let fence: string | null = null
@@ -57,7 +76,7 @@ export function linkify(text: string, scope: FileScope | null): string {
       continue
     }
     // 缩进四格的是代码块（在列表里的也可能是续行，不碰它最稳）
-    if (/^( {4}|\t)/.test(line) || line.includes('](') || line.includes('<http')) continue
+    if (/^( {4}|\t)/.test(line)) continue
     const next = linkLine(line, paths ? scope : null)
     if (next !== line) {
       lines[index] = next
@@ -70,11 +89,11 @@ export function linkify(text: string, scope: FileScope | null): string {
 function linkLine(line: string, scope: FileScope | null): string {
   let out = ''
   let at = 0
-  for (const match of line.matchAll(CODE)) {
+  for (const match of line.matchAll(INLINE)) {
     out += linkProse(line.slice(at, match.index), scope)
     const code = match[1] ?? ''
     const ref = scope ? fileRefOf(code, scope, 'code') : null
-    out += ref ? `[${match[0]}](${fileHref(ref)})` : match[0]
+    out += ref ? `[${match[0]}](${fileHref(ref, code)})` : match[0]
     at = match.index + match[0].length
   }
   // 反引号没配对（流式到一半）：后面的照正文处理也不会出错，链接不会跨过反引号
@@ -90,10 +109,10 @@ function linkProse(text: string, scope: FileScope | null): string {
       spans.push({ start: match.index, end: match.index + url.length, with: `<${url}>` })
     }
   }
-  if (scope && text.includes('/')) {
+  if (scope && /[\\/]/.test(text)) {
     for (const span of findFileRefs(text, scope)) {
       const raw = text.slice(span.start, span.end)
-      spans.push({ start: span.start, end: span.end, with: `[${raw}](${fileHref(span.ref)})` })
+      spans.push({ start: span.start, end: span.end, with: `[${raw}](${fileHref(span.ref, raw)})` })
     }
   }
   if (spans.length === 0) return text
