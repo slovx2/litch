@@ -1,6 +1,9 @@
 // 文件面板验收在主进程这一头的编排：页面里的脚本分几段送进去，中间夹着要主进程做的事
 // （改窗口大小、点应用菜单、把核心重启）。三种对面：模拟核心、隔离的设备夹具、单个 harness 的入口，
 // 由 scripts/check-files.mjs 各起一次外壳。
+
+import { rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { BrowserWindow } from 'electron'
 import { SIDE_ITEM } from './menu.mjs'
 import { mockTree } from './probe-files.mjs'
@@ -171,6 +174,19 @@ async function runReal(window: BrowserWindow, mode: FilesMode): Promise<RealSeen
   const session = mode === 'files-device' ? '给列表加上分页' : '逐个检查一百多个文件'
   await inPage(window, installFilesKit)
   const tree = await inPage(window, realTree, session, dirs.outside)
+  // 重新展开会重建监视并补读，不再保证整个过程只读一次。用真实磁盘变更验新语义，
+  // 缓存的请求次数由核心假时钟测试负责，避免把合法的监视补读当成缓存失效。
+  const marker = join(dirs.app, 'many', '000-refresh.txt')
+  let refreshed: RealSeen['refreshed']
+  try {
+    writeFileSync(marker, '只由文件探针创建\n', { flag: 'wx' })
+    const addedRows = await inPage(window, reopenedDirectory)
+    rmSync(marker)
+    await inPage(window, removedFromDirectory, addedRows - 1)
+    refreshed = { added: true, removed: true }
+  } finally {
+    rmSync(marker, { force: true })
+  }
   const view = await inPage(window, realView, {
     session,
     // 没起名字的那个会话，工作目录在另一个目录里
@@ -178,7 +194,29 @@ async function runReal(window: BrowserWindow, mode: FilesMode): Promise<RealSeen
     // 入口夹具里有一个工作目录在子目录里、回答里提到了文件名的会话
     cwdSession: mode === 'files-entry' ? '给首页加一个状态条' : null,
   })
-  return { tree, view }
+  return { tree, view, refreshed }
+}
+
+async function reopenedDirectory(): Promise<number> {
+  const kit = (window as unknown as { __filesKit: FilesKit }).__filesKit
+  await kit.scrollTree(0)
+  const row = await kit.rowShown('many')
+  const index = Number(row.id.replace('ft-row-', ''))
+  await kit.expand('many')
+  await kit.until('重新展开目录有三万项', () => kit.rowCount() > 30_000)
+  await kit.scrollTree(index + 25)
+  await kit.rowShown('many/000-refresh.txt')
+  return kit.rowCount()
+}
+
+async function removedFromDirectory(expectedRows: number): Promise<void> {
+  const kit = (window as unknown as { __filesKit: FilesKit }).__filesKit
+  await kit.until(
+    '监视自动移除已删除文件',
+    () => kit.rowCount() === expectedRows && !kit.row('many/000-refresh.txt'),
+  )
+  await kit.scrollTree(0)
+  await kit.collapse('many')
 }
 
 async function run(

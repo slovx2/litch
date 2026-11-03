@@ -60,7 +60,7 @@ function judgeMenu(menu: MenuSeen): string[] {
     if (!ok) failed.push(what)
   }
   must(
-    menu.items.join(',') === 'mention,copyRelative,copyFull',
+    menu.items.join(',') === 'mention,copyRelative,copyFull,saveLocal',
     `右键菜单里的项不对：${menu.items.join(',')}（${menu.labels.join('、')}）`,
   )
   must(menu.selectedOnContext, '点了右键的那一行没有成为选中的')

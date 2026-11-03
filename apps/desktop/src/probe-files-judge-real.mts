@@ -23,6 +23,7 @@ export interface RealDirs {
 export interface RealSeen {
   tree: RealTree
   view: RealView
+  refreshed: { added: boolean; removed: boolean }
 }
 
 export function realNumbers(seen: RealSeen): string {
@@ -68,10 +69,8 @@ function judgeRealTree(tree: RealTree, dirs: RealDirs, lines: FileLines): string
     tree.hiddenShown.includes('.config') && tree.hiddenShown.includes('.hidden.txt'),
     `打开“显示隐藏文件”没有多出隐藏的：${tree.hiddenShown.join(' ')}`,
   )
-  must(tree.rootAsked === 1, `根这一层向设备问了 ${tree.rootAsked} 次，应该是 1 次`)
   must(tree.manyRows > 30_000, `三万个条目的目录展开之后行数不对：${tree.manyRows}`)
   must(tree.manyDom <= DOM_ROWS_MAX, `展开之后页面上画了 ${tree.manyDom} 行，应该只画看得见的那些`)
-  must(tree.manyAsked === 1, `三万个条目的那一层向设备问了 ${tree.manyAsked} 次，应该是 1 次`)
   must(tree.manyHead[0] === 'group-00', `展开之后头一行不是目录：${tree.manyHead.join(' ')}`)
   must(tree.tail === 'item-29999.txt', `滚到底，最后一行不对：${tree.tail}`)
   must(tree.blank === 0, `滚动的时候有 ${tree.blank} 帧看得见的地方是空的`)
@@ -81,10 +80,6 @@ function judgeRealTree(tree: RealTree, dirs: RealDirs, lines: FileLines): string
   )
   failed.push(...judgeGaps('展开三万个条目的目录', tree.manyGaps, lines, false))
   failed.push(...judgeGaps('在三万行里滚动', tree.rollGaps, lines, true))
-  must(
-    tree.reexpandAsked === 1,
-    `收起再马上展开，这一层问了 ${tree.reexpandAsked} 次，应该还是 1 次`,
-  )
   must(
     tree.linkDir.includes('file:long.ts'),
     `指向目录的符号链接展开之后不对：${tree.linkDir.join(' ')}`,
@@ -151,14 +146,21 @@ function judgeRealView(
     'src/long.ts:4200→src/long.ts:4200',
     'notes.txt:12→notes.txt:12',
     'src/app.ts→src/app.ts',
+    `../../outside/secret.txt→${dirs.outside}/secret.txt`,
   ]
   must(
     view.links.length === wanted.length && wanted.every((entry) => view.links.includes(entry)),
     `回答里认出来的文件不对：${view.links.join(' ／ ')}`,
   )
   must(
-    view.plain.includes('../../outside/secret.txt') && view.plain.includes('console.log'),
-    `项目外面的路径、不是文件的字被认成了文件，没认的只有：${view.plain.join(' ／ ')}`,
+    view.plain.includes('console.log'),
+    `不是文件的字被认成了文件，没认的只有：${view.plain.join(' ／ ')}`,
+  )
+  must(
+    view.outside.path === `${dirs.outside}/secret.txt` &&
+      view.outside.root === dirs.outside &&
+      view.outside.text === 'outside-secret',
+    `根外链接的设备路径、文件树根或内容不对：${JSON.stringify(view.outside)}`,
   )
   const wantText = ['value4200', 'notes line 12', 'export const app']
   view.jumps.forEach((jump, index) => {
@@ -197,5 +199,8 @@ export function judgeReal(
   return [
     ...judgeRealTree(seen.tree, dirs, lines),
     ...judgeRealView(seen.view, dirs, withCwd, lines),
+    ...(!seen.refreshed.added || !seen.refreshed.removed
+      ? ['目录重新展开未补上关闭期间的新增文件，或展开后没有自动移除已删除文件']
+      : []),
   ]
 }

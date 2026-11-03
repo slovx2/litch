@@ -230,6 +230,8 @@ export async function newPageSeen(args: {
 
   await choose('device', args.device)
   await choose('workspace', args.deviceWorkspace)
+  // 新建页的开合按设备保存；换设备不会沿用上一台设备的展开状态。
+  await openSide()
   await until('面板跟到了那台设备', () => kit.files() !== null && kit.rows().length > 0)
   const device = placeNow()
   // 页上选的去处会被记成“上次用的”：换回起头的地方，后面的不受影响

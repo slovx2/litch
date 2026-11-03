@@ -249,7 +249,7 @@ export function judgeSearch(search: SearchSeen): string[] {
     '找之前 scripts 这一层已经被列过了：量不出结果是不是从整棵树里找的',
   )
   must(search.walked.join(',') === '0,1,0', `上下键在结果里走得不对：${search.walked.join(',')}`)
-  must(search.hitMenu === 3, `结果上点右键，菜单里有 ${search.hitMenu} 项`)
+  must(search.hitMenu === 4, `结果上点右键，菜单里有 ${search.hitMenu} 项`)
   must(search.opened === 'scripts/tool.py', `回车没有固定打开第一条：${search.opened}`)
   must(search.cleared && search.revealed, '按 Esc 回到树上，找到的那个文件没有露出来、选中')
   must(search.none === '未找到。', `找不到的时候写的不对：${search.none}`)

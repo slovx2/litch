@@ -3,7 +3,7 @@
 // LITCH_WHEEL_CPU=4 可在渲染进程中降速，复查绘制与取样的先后顺序。
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -38,6 +38,7 @@ if (!process.versions.electron) {
   } finally {
     clearTimeout(timeout)
     await server.close()
+    rmSync(scratch, { recursive: true, force: true })
   }
 } else {
   const { app, BrowserWindow } = require('electron')
@@ -142,9 +143,21 @@ if (!process.versions.electron) {
           })
         }
       }
+      // 停止按钮消失只表示输入区已更新，过程收尾的布局与滚动补偿还可能没画完。
+      // 先等最后一轮画出结束状态并跨过绘制，再设置内层测试的 -200 基线，否则前一阶段的补偿
+      // 会在真实滚轮到达前把它改成 -191（停止时状态行变矮了约 9px）。
+      await run(() =>
+        window.wheelCheck.until(() => document.querySelector('.turn:last-child > .turn-foot')),
+      )
+      await painted()
       const nestedPoint = await run(prepareNested)
       // 新建的内层滚动区先上屏，合成线程才会把真实滚轮命中它。
       await painted()
+      const nestedBefore = await run(() => ({
+        outer: document.querySelector('.tr-scroll').scrollTop,
+        inner: document.querySelector('[data-wheel-inner]').scrollTop,
+      }))
+      assert.deepEqual(nestedBefore, { outer: -200, inner: 80 }, '内层测试的初始位置尚未就绪')
       await win.webContents.debugger.sendCommand('Input.dispatchMouseEvent', {
         type: 'mouseWheel',
         ...nestedPoint,

@@ -37,6 +37,8 @@ export interface RealView {
   links: string[]
   plain: string[]
   jumps: RealJump[]
+  /** 根外链接在所属设备打开，文件树切到父目录；随后返回项目内文件 */
+  outside: { path: string; root: string; text: string }
   /** 工作目录在项目的子目录里的会话：回答里相对于工作目录写的文件名点开的是谁（没有这样的会话就是空的） */
   cwdOpened: string
   cwdText: string
@@ -54,7 +56,8 @@ export async function realView(args: {
 }): Promise<RealView> {
   const kit = (window as unknown as { __filesKit: FilesKit }).__filesKit
   const { until, one, all, text, frame } = kit
-  const relative = (path: string) => path.slice(kit.root().length + 1)
+  const relative = (path: string) =>
+    path.startsWith(`${kit.root()}/`) ? path.slice(kit.root().length + 1) : path
   const lineText = (line: number) => one(`.cl[data-line="${line}"] .lc`)?.textContent ?? ''
 
   await kit.open('notes.txt')
@@ -103,7 +106,7 @@ export async function realView(args: {
   const turnsBefore = all('.turn').length
   // 假模型会把这句话原样带回来：回答里就有了这几个路径
   await kit.say(
-    '看看 `src/long.ts:4200` 和 `notes.txt:12`，还有 `src/app.ts`；`../../outside/secret.txt` 不在项目里，`console.log` 不是文件。',
+    '看看 `src/long.ts:4200` 和 `notes.txt:12`，还有 `src/app.ts`；`../../outside/secret.txt` 在同设备的项目根外，`console.log` 不是文件。',
   )
   const turn = await until(
     '带路径的回答',
@@ -148,6 +151,22 @@ export async function realView(args: {
       ms,
     })
   }
+  const outsideLink = anchors.find((entry) => text(entry) === '../../outside/secret.txt')
+  if (!outsideLink) throw new Error('没有识别同设备的根外文件链接')
+  kit.click(outsideLink)
+  await until(
+    '根外文件打开',
+    () => one('.fv-file[data-state="ready"]')?.dataset.path === outsideLink.dataset.file,
+  )
+  await kit.painted()
+  const outside = {
+    path: one('.fv-file')?.dataset.path ?? '',
+    root: kit.root(),
+    text: lineText(1),
+  }
+  // 回到原项目后再验切换会话，避免根外文件自己的面板状态污染后续基线。
+  kit.click(anchors.find((entry) => text(entry) === 'src/app.ts') as HTMLElement)
+  await kit.viewed('src/app.ts')
   const tabsBefore = kit.tabs().length
 
   // ---------- 工作目录在子目录里的会话 ----------
@@ -194,6 +213,7 @@ export async function realView(args: {
     links,
     plain,
     jumps,
+    outside,
     cwdOpened,
     cwdText,
     otherRoot,

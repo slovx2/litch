@@ -22,8 +22,6 @@ export interface RealTree {
   rollGaps: number[]
   tail: string
   blank: number
-  /** 收起再马上展开，还是只问过一次 */
-  reexpandAsked: number
   /** 指向目录的符号链接里面有什么；指向根外面的那个里面有什么（设备会跟着链接走，这一头拦不住） */
   linkDir: string[]
   linkOut: string[]
@@ -139,10 +137,6 @@ export async function realTree(session: string, outside: string): Promise<RealTr
     (await until('最后那一项', () => kit.rows().find((row) => row.index === tailIndex))).name ?? ''
   await kit.scrollTree(manyIndex)
   await kit.collapse('many')
-  kit.click(await kit.rowShown('many'))
-  await until('又是三万行', () => kit.rowCount() - before >= 30_000, 90_000)
-  const reexpandAsked = askedOf((await kit.check()).lists, 'many')
-  await kit.collapse('many')
   await kit.scrollTree(0)
 
   // ---------- 找文件 ----------
@@ -194,7 +188,6 @@ export async function realTree(session: string, outside: string): Promise<RealTr
     rollGaps: rolled.gaps,
     tail,
     blank,
-    reexpandAsked,
     linkDir,
     linkOut,
     emptyNote,

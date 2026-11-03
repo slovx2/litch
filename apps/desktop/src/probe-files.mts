@@ -129,6 +129,23 @@ export async function mockTree(session: string): Promise<TreeSeen> {
       .map((row) => row.name),
   }
 
+  // 先验刚读完的缓存。低优先级下后面 90 帧滚动可能超过缓存有效期，
+  // 滚完才验“马上再展开”会把正常的到期重读误判成重复请求。
+  await kit.scrollTree(manyIndex)
+  await kit.collapse('fixtures/many')
+  const afterCollapse = kit.rowCount()
+  const again = await kit.frames(async () => {
+    const started = performance.now()
+    kit.click((await kit.rowShown('fixtures/many')) as HTMLElement)
+    await until('又是三万行', () => kit.rowCount() - before >= 30_000, 60_000)
+    return performance.now() - started
+  })
+  const reexpand = {
+    asked: askedOf((await kit.check()).lists, 'fixtures/many'),
+    rows: kit.rowCount(),
+    ms: again.value,
+  }
+
   // ---------- 在三万行里滚 ----------
   const treeElement = kit.tree() as HTMLElement
   const total = kit.rowCount()
@@ -170,21 +187,7 @@ export async function mockTree(session: string): Promise<TreeSeen> {
     blank,
   }
 
-  // ---------- 收起再展开：短时间里不再问 ----------
   await kit.scrollTree(manyIndex)
-  await kit.collapse('fixtures/many')
-  const afterCollapse = kit.rowCount()
-  const again = await kit.frames(async () => {
-    const started = performance.now()
-    kit.click((await kit.rowShown('fixtures/many')) as HTMLElement)
-    await until('又是三万行', () => kit.rowCount() - before >= 30_000, 60_000)
-    return performance.now() - started
-  })
-  const reexpand = {
-    asked: askedOf((await kit.check()).lists, 'fixtures/many'),
-    rows: kit.rowCount(),
-    ms: again.value,
-  }
   await kit.collapse('fixtures/many')
 
   // ---------- 说明行、符号链接 ----------
