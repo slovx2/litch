@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { checkPlan } from './check-catalog.mjs'
-import { compareChecks } from './compare-checks.mjs'
+import { comparableCoverage, compareChecks } from './compare-checks.mjs'
 import { cliPackages } from './install-test-clis.mjs'
 import { coverage, executeChecks, isolatedEnvironment } from './run-checks.mjs'
 
@@ -294,4 +294,27 @@ test('末项失败只允许比较已完成子集，原始失败/来源保留，�
     alter(changed)
     assert.throws(() => compareChecks(left, changed, names, { only: ['opencode'] }))
   }
+})
+
+test('日志测试只消除已核实入口的随机临时前缀，原始记录/数量/失败语义不变', () => {
+  const make = (name, id = 'desktop:test:log-file') => ({
+    id,
+    tests: { tests: 1, fail: 0, skipped: 0, cancelled: 0, names: [name] },
+  })
+  const mac = make(
+    '/var/folders/y3/p6x0rn5562l5qyxy7x6jqrsc0000gn/T/litch-log-tests-ziDy8M/log-file.test.mjs',
+  )
+  const linux = make('/tmp/litch-log-tests-xqthzr/log-file.test.mjs')
+  const original = JSON.stringify(mac)
+  assert.deepEqual(comparableCoverage(mac), comparableCoverage(linux))
+  assert.equal(JSON.stringify(mac), original)
+  for (const changed of [
+    make('/tmp/litch-log-tests-xqthzr/another.test.mjs'),
+    make('/tmp/other-tests-xqthzr/log-file.test.mjs'),
+    make('/tmp/litch-log-tests-xqthzr/log-file.test.mjs', 'desktop:test:browser'),
+    { ...linux, tests: { ...linux.tests, skipped: 1 } },
+    { ...linux, tests: { ...linux.tests, fail: 1 } },
+    { ...linux, tests: { ...linux.tests, tests: 2 } },
+  ])
+    assert.notDeepEqual(comparableCoverage(mac), comparableCoverage(changed))
 })

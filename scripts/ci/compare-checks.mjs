@@ -5,6 +5,20 @@ import { pathToFileURL } from 'node:url'
 import { checkPlan, expectsNodeTests } from './check-catalog.mjs'
 import { cliPackages } from './install-test-clis.mjs'
 
+export function comparableCoverage(result) {
+  if (result.id !== 'desktop:test:log-file') return result.tests
+  // test-log-file.mjs 仅把同 SHA 的 src/test/log-file.test.mts 构建到 mkdtemp 目录。
+  // 此测试使用顶层 assert，Node 以随机绝对路径命名；只映射这一个已核实的入口。
+  const temporaryEntry =
+    /^(?:\/tmp\/|\/var\/folders\/[^/]+\/[^/]+\/T\/)litch-log-tests-[A-Za-z0-9]{6}\/log-file\.test\.mjs$/
+  return {
+    ...result.tests,
+    names: result.tests.names.map((name) =>
+      temporaryEntry.test(name) ? 'apps/desktop/src/test/log-file.test.mts' : name,
+    ),
+  }
+}
+
 export function compareChecks(left, right, names, { only } = {}) {
   const expected = checkPlan(names)
   // 子集只从原始计划中选，不能改写失败报告的 complete 或伪造一份较短的来源计划。
@@ -61,7 +75,11 @@ export function compareChecks(left, right, names, { only } = {}) {
   const l = selectedResults(left)
   const r = selectedResults(right)
   for (let index = 0; index < l.length; index++)
-    assert.deepEqual(l[index].tests, r[index].tests, `实际用例不同：${l[index].id}`)
+    assert.deepEqual(
+      comparableCoverage(l[index]),
+      comparableCoverage(r[index]),
+      `实际用例不同：${l[index].id}`,
+    )
   return {
     sha: left.sha,
     scope: only ? 'selected-subsets' : 'complete',

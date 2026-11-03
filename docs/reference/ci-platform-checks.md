@@ -23,6 +23,8 @@
 
 末项失败时，默认整轮对照仍拒绝。分诊可调用`compareChecks(left, right, originalSuites, { only: selectedSuites })`只核对原计划中的完整子集：原始报告保持不变，结果标明`selected-subsets`及两份原始`complete`状态。所选检查缺失、失败、skip、来源或实际用例不同仍拒绝；这份结果不能作为完整领域或门禁的成功证明。
 
+用例身份只有一个显式映射：`desktop:test:log-file`使用顶层assert，Node以构建后的随机临时路径命名。已核对构建脚本只含固定入口`apps/desktop/src/test/log-file.test.mts`；对照时仅映射该入口的Mac/Linux临时前缀，原始路径仍保留。不同文件、不同检查ID、数量、失败与skip不归一化。
+
 浏览器组中的mac-keychain有三个仅macOS执行的原生用例，另有一个显式环境开关启用的可选NSS用例。整组不能按纯JS迁移。对照工作流选择明确命名的`desktop-portable-unit`，不改`desktop-unit`原清单，不修改浏览器测试断言或既有skip条件；这部分继续由原Mac命令执行。严格对照器不会把带skip的完整集合误报为可迁移。
 
 六入口首回合在Linux对照中曾命中Claude回话内容不完整断言。探针已修复等待平滑动画定稿，并增加三项回归；共享清单也在首回合前执行这三项。修复后的同SHA对照重新包含`desktop-required`，通过前保留原Mac覆盖。`client-engines`排在其他子集后执行；若仍命中流式分段断言，整组留Mac，按日志中的有界时间/长度序列另行分诊，不修改阈值或采样频率。`desktop-required`与`real-engine-tools`合起来仍覆盖原real-engines全部检查，须实际绑定两份成功来源后才能用于门禁，不能只凭子集成功宣布整域通过。
