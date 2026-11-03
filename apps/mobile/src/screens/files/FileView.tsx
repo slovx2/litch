@@ -1,6 +1,6 @@
 // 只读看一个文件：等宽、带行号、不折行（横着滑）。按行虚拟化，行高固定，几千行的文件也只画看得见的几十行；
 // 一行太长只显示前面一截并说还有多少。按行切、切长行、字节数的写法用桌面的 packages/ui/src/files/lines.ts。
-// 带了 line 的打开时滚到那一行并标出来。不按文字显示的文件（太大、不是文字、不在了）只说是哪一种。
+// 带了 line 的打开时滚到那一行并标出来；图片和 PDF 另走核心的受限预览命令。
 import type { FileContent } from '@litch/core'
 import { useCallback, useMemo, useState } from 'react'
 import {
@@ -17,6 +17,9 @@ import { byteSize, cutLine, splitLines } from '../../../../../packages/ui/src/fi
 import { useT } from '../../ui/i18n'
 import { Empty } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
+import { FilePreview } from './preview/FilePreview'
+import { mobilePreviewFormat } from './preview/model'
+import { CopyPath } from './preview/PreviewNotice'
 
 const LINE_H = 18
 const FONT = 12
@@ -25,8 +28,31 @@ const PROBE = 64
 /** 定位到某一行时，它上面留几行 */
 const ABOVE = 4
 
-export function FileView({ content, line }: { content: FileContent; line?: number }) {
+export function FileView({
+  content,
+  line,
+  deviceId,
+  root,
+}: {
+  content: FileContent
+  line?: number
+  deviceId: string
+  root: string
+  /** 由文件解析保留；手机暂不定位文档标题。 */
+  fragment?: string
+}) {
   const t = useT()
+  const format = mobilePreviewFormat(content)
+  if (format)
+    return (
+      <FilePreview
+        key={`${deviceId}:${root}:${content.path}`}
+        deviceId={deviceId}
+        root={root}
+        path={content.path}
+        format={format}
+      />
+    )
   if (content.kind === 'text') return <TextView content={content} line={line} />
   if (content.kind === 'tooLarge')
     return (
@@ -43,11 +69,12 @@ export function FileView({ content, line }: { content: FileContent; line?: numbe
       <Empty
         title={t(`files.view.group.${content.group}`)}
         detail={[
-          t('files.view.binary.note'),
+          t('mobilePreview.unsupportedFormat'),
           content.bytes === null
             ? ''
             : t('files.view.binary.sized', { size: byteSize(content.bytes) }),
         ].join('')}
+        action={<CopyPath path={content.path} />}
       />
     )
   if (content.kind === 'missing')

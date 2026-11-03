@@ -8,3 +8,4 @@ measure/.venv/
 src/bench/terminal-html.generated.ts
 src/web/terminal-html.generated.ts
 src/web/mermaid-html.generated.ts
+src/web/file-preview-html.generated.ts

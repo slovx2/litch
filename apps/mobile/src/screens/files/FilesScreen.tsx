@@ -115,7 +115,7 @@ export function FilesScreen({ navigation, route }: Props) {
         onOpen={open}
       />
     )
-  else body = <FileView content={loaded.content} line={line} />
+  else body = <FileView content={loaded.content} line={line} deviceId={deviceId} root={root} />
 
   return (
     <Screen

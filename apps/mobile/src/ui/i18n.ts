@@ -12,6 +12,7 @@ import * as compose from './messages/compose'
 import * as connection from './messages/connection'
 import * as detail from './messages/detail'
 import * as devices from './messages/devices'
+import * as filePreview from './messages/file-preview'
 import * as hconfig from './messages/hconfig'
 import * as managers from './messages/managers'
 import * as pairing from './messages/pairing'
@@ -25,6 +26,7 @@ import * as usage from './messages/usage'
 export type { Lang } from '../../../../packages/ui/src/i18n/index.ts'
 
 const zhCN = {
+  ...filePreview.zhCN,
   ...app.zhCN,
   ...devices.zhCN,
   ...hconfig.zhCN,
@@ -44,6 +46,7 @@ const zhCN = {
 }
 type MobileKey = keyof typeof zhCN
 const en: Record<MobileKey, Entry> = {
+  ...filePreview.en,
   ...app.en,
   ...devices.en,
   ...hconfig.en,

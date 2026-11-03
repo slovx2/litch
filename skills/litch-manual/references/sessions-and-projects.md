@@ -324,7 +324,13 @@ explain it:
   20 MiB/200 pages; Office: 10 MiB compressed/40 MiB expanded; media: 16 MiB). Large table previews
   are cropped with a notice. Use the original application for editing or full fidelity. Preview
   fonts do not follow Conversation text size. A device without preview support offers its ordinary
-  source/type view; phone file viewing is unchanged.
+  source/type view.
+- **手机文件预览**：PNG、JPG/JPEG、静态 GIF/WebP 支持双指缩放、拖动平移和双击复原。
+  图片上限 8 MiB、2000 万像素、单边 16384 像素；动画图片暂不预览。SVG 显示源码。
+  PDF 使用离线渲染器逐页查看，也可缩放和平移；上限 20 MiB、200 页，每次仅保留一页画布。
+  加密、损坏、超限或处理超时的文件会显示原因，并提示在桌面查看；设备服务没有预览能力时提示升级。
+  Office、音视频、压缩包等格式暂不在手机预览。预览页与不支持格式的提示均可复制设备上的文件路径。
+  PDF 不执行文档脚本、动作或外链，渲染器不从网络加载资源。
 - **Side chat**: a temporary fork of the current session for asking something on the side. It starts
   with the session's context up to the last finished turn (if a turn is running it stops before it, and
   the main turn keeps going), lives in the side panel's Side chat tab, never shows in the sidebar, and

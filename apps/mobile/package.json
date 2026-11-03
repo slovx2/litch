@@ -7,7 +7,7 @@
   "main": "index.js",
   "scripts": {
     "markdown:wasm": "node scripts/build-markdown-wasm.mjs",
-    "web:build": "node scripts/build-webview-terminal.mjs && node scripts/build-webview-mermaid.mjs && node scripts/build-webview-bench.mjs",
+    "web:build": "node scripts/build-webview-terminal.mjs && node scripts/build-webview-mermaid.mjs && node scripts/build-webview-bench.mjs && node scripts/build-webview-file-preview.mjs",
     "preview": "expo start --web --port 5189",
     "preview:check": "node scripts/check-preview.mjs",
     "typecheck": "npm run web:build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.web.json --noEmit",
