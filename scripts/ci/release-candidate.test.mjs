@@ -24,7 +24,6 @@ import {
   verifyCandidate,
   writeJson,
 } from './release-candidate.mjs'
-import { mobileFailure } from './release-nightly-mobile.mjs'
 import { existingCandidate } from './release-preflight.mjs'
 import { checkAssets, checkDraft, promote, promotionInputs } from './release-promote.mjs'
 
@@ -534,30 +533,6 @@ test('重复 Prepare 复用现有候选提示；原 run 的失败重跑和过期
   assert.equal(
     existingCandidate([old], () => [{ ...artifact, expired: true }], options),
     undefined,
-  )
-})
-
-test('夜间手机修复项只接受真实 schedule 的完整证明，不把部分 Full 当手机故障', async (t) => {
-  const { full } = await fixture(t)
-  const nightly = {
-    ...run,
-    path: '.github/workflows/full.yml',
-    event: 'schedule',
-    conclusion: 'failure',
-  }
-  const proof = {
-    ...full,
-    domains: '',
-    event: 'schedule',
-    jobs: { ...full.jobs, mobile: 'failure' },
-  }
-  assert.deepEqual(mobileFailure(nightly, proof, context.repository), ['mobile'])
-  assert.throws(() => mobileFailure(nightly, { ...proof, attempt: 1 }, context.repository))
-  assert.throws(() =>
-    mobileFailure(nightly, { ...proof, domains: '["mobile"]' }, context.repository),
-  )
-  assert.throws(() =>
-    mobileFailure({ ...nightly, event: 'workflow_dispatch' }, proof, context.repository),
   )
 })
 

@@ -224,8 +224,12 @@ test('用真实 git HEAD 生成证明，拒绝与冻结 SHA 不一致的 checkou
     )
     const generated = writeFullProof(env)
     assert.equal(generated.sha, actualSha)
+    assert.deepEqual(generated.mobileE2e, { requested: false, required: false })
     assert.ok(isCompleteFull(run, generated, actualSha, repository))
     assert.deepEqual(JSON.parse(readFileSync('full-proof.json', 'utf8')), generated)
+    const manual = writeFullProof({ ...env, FULL_MOBILE_E2E: 'true' })
+    assert.deepEqual(manual.mobileE2e, { requested: true, required: false })
+    assert.equal(Object.hasOwn(manual.jobs, 'mobile'), false, 'report 不等待三片，不能伪造其结果')
     assert.throws(() => writeFullProof({ ...env, FULL_SOURCE_SHA: 'b'.repeat(40) }), /实际检出/)
   } finally {
     process.chdir(previous)

@@ -54,7 +54,9 @@ coding conventions.
 
 标准流程见[候选准备与产物晋级](docs/reference/release-candidates.md)：先在候选分支运行 `release.yml`（Prepare），并行完成门禁与正式签名出包；随后用 `promote.yml` 指定 source run/attempt、候选 SHA、artifact ID 和 digest，只晋级已验文件。标签不再触发测试或打包。独立 Gate 仅用于诊断，不是标准发版的重复前置步骤。
 
-Promote 默认只读 `verify`；`draft` 创建/回验草稿、不公开；取得本版人工授权并核对验收后，才显式选择 `publish` 并输入确认标签。公开前重查夜间、blocker、标签 SHA、资产和版本顺序，禁止覆盖已公开版本或让 Latest 倒退。Tap PR 输入自动生成，不自动发布 Homebrew。手机模拟器 E2E 按用户决定只在夜间/手动 Full；手机单测、类型及正式 APK 签名/manifest/版本验证仍是候选必需。
+Promote 默认只读 `verify`；`draft` 创建/回验草稿、不公开；取得本版人工授权并核对验收后，才显式选择 `publish` 并输入确认标签。公开前重查夜间、blocker、标签 SHA、资产和版本顺序，禁止覆盖已公开版本或让 Latest 倒退。Tap PR 输入自动生成，不自动发布 Homebrew。手机模拟器 E2E 只按需手动开启，默认 Full 和夜间都不跑；手机单测、类型及正式 APK 签名/manifest/版本验证仍是候选必需。
+
+修改手机交互、流程或 E2E 夹具后，合并前手动验一次手机全量：`gh workflow run full.yml --ref <工作流分支> -f sha=<待验完整SHA> -f domains='["mobile"]' -F run-ci=false -F mobile-e2e=true`。这只构建手机 APK 并执行三片，不申请 Mac。分片中的预检、ANR 监测、磁盘清理和首次失败证据保持启用；只允许既有的一次 launchApp 基础设施恢复。默认 Full 的汇总不等待可选 E2E，手动运行时应另外核对三片和逐 flow 制品。
 
 
 macOS 的 dmg 要用 Developer ID 签名并经苹果公证，公证用 App Store Connect 的 API 密钥（.p8）。要在仓库的 Settings → Secrets and variables → Actions 里配这五项机密（也可以用 `gh secret set <名字> --repo slovx2/litch`，值从标准输入给）：

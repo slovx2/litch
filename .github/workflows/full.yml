@@ -1,4 +1,4 @@
-# 全量：门禁（ci.yml，整个带上）加上各平台、各引擎、全部桌面验收、Windows 上的 Computer Use 助手与打包、各家真命令行上的首回合、移动端模拟器上的端到端。
+# 全量：门禁、各平台/引擎、桌面验收及手机静态检查与 APK 构建；手机模拟器 E2E 只按需手动开启。
 # 每晚北京时间 03:17 跑全量，也可手动或按领域复用；发布是否公开仍由用户决定。
 name: Full
 on:
@@ -16,6 +16,10 @@ on:
         description: '同时执行 CI 必跑集合'
         type: boolean
         default: true
+      mobile-e2e:
+        description: '手动运行手机模拟器三片；需同时选择 mobile 领域'
+        type: boolean
+        default: false
       mobile-disable-vulkan:
         description: '手机稳定性实验：仅禁用模拟器 Vulkan，保持一次基础设施重试上限'
         type: boolean
@@ -36,6 +40,9 @@ on:
       run-ci:
         type: boolean
         default: true
+      mobile-e2e:
+        type: boolean
+        default: false
       mobile-disable-vulkan:
         type: boolean
         default: false
@@ -678,6 +685,8 @@ jobs:
         id: phase-5
       - run: npm run mobile:test
         id: phase-4
+      - name: 手机类型检查
+        run: npm run typecheck --prefix apps/mobile
       - name: 手机原生 Markdown 与 WASM 中文强调对照
         id: phase-3
         run: npm run mobile:test:markdown
@@ -717,6 +726,13 @@ jobs:
       - name: 封存唯一 APK
         id: apk
         run: node scripts/ci/apk.mjs seal "${RUNNER_TEMP}/mobile-apk" apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+      - name: 校验 APK 签名、Android manifest 与封存清单
+        run: |
+          node scripts/ci/check-mobile-apk.mjs "${RUNNER_TEMP}/mobile-apk/app-release.apk"
+          node scripts/ci/apk.mjs verify "${RUNNER_TEMP}/mobile-apk"
+        env:
+          EXPECTED_SOURCE_SHA: ${{ steps.apk.outputs.sha }}
+          EXPECTED_APK_HASH: ${{ steps.apk.outputs.hash }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         id: apk-upload
         with:
@@ -733,7 +749,7 @@ jobs:
           CI_STEPS: ${{ toJSON(steps) }}
 
   mobile:
-    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'mobile') }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mobile-e2e && (!inputs.domains || contains(fromJSON(inputs.domains), 'mobile')) }}
     needs: [source, mobile-build]
     strategy:
       fail-fast: false
@@ -852,7 +868,7 @@ jobs:
 
   report:
     if: always()
-    needs: [source, gate, adapters, native, client-unit, computer-use-windows, dsh, opencode, real-engines, mobile-build, mobile]
+    needs: [source, gate, adapters, native, client-unit, computer-use-windows, dsh, opencode, real-engines, mobile-build]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -887,6 +903,7 @@ jobs:
           FULL_DOMAINS: ${{ inputs.domains || '' }}
           FULL_RUN_CI: ${{ github.event_name == 'schedule' || inputs.run-ci }}
           FULL_MOBILE_DISABLE_VULKAN: ${{ inputs.mobile-disable-vulkan || false }}
+          FULL_MOBILE_E2E: ${{ github.event_name == 'workflow_dispatch' && inputs.mobile-e2e && (!inputs.domains || contains(fromJSON(inputs.domains), 'mobile')) || false }}
           FULL_NEEDS: ${{ toJSON(needs) }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:

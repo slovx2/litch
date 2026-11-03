@@ -50,7 +50,6 @@ export const fullJobs = [
   'client-engines',
   'real-engines',
   'mobile-build',
-  'mobile',
 ]
 
 export function hasAllDomains(value) {
@@ -93,7 +92,7 @@ export function isCompleteFull(run, proof, sha, repository) {
   )
 }
 
-// 完整 Full 仍含手机；发版完整覆盖按用户决定排除手机模拟器，不伪造全绿结论。
+// 完整 Full 含手机静态检查与 APK；模拟器仅手动按需执行，不在这份证明的必跑集合内。
 export function hasReleaseCoverage(proof) {
   if (typeof proof?.domains !== 'string') return false
   let selected
@@ -194,6 +193,8 @@ export function writeFullProof(env = process.env) {
     domains: env.FULL_DOMAINS,
     runCi: env.FULL_RUN_CI === 'true',
     mobileDisableVulkan: env.FULL_MOBILE_DISABLE_VULKAN === 'true',
+    // report 不等待可选三片，不在此伪造其最终结果；需要查 mobile job/逐 flow 制品。
+    mobileE2e: { requested: env.FULL_MOBILE_E2E === 'true', required: false },
     jobs: Object.fromEntries(Object.entries(needs).map(([job, data]) => [job, data.result])),
     macProof: bound.macProof,
     linuxProofs: bound.linuxProofs,

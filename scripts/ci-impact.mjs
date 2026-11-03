@@ -26,7 +26,7 @@ export function releaseImpact(result) {
   return {
     ...result,
     domains: result.domains.filter((domain) => domain !== 'mobile'),
-    reasons: [...result.reasons, '用户决定：手机模拟器 E2E 仅夜间/手动 Full，候选排除'],
+    reasons: [...result.reasons, '用户决定：手机模拟器 E2E 仅按需手动开启，候选排除'],
   }
 }
 
