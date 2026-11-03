@@ -16,7 +16,11 @@ export function githubReader(execute = execFileSync) {
   const immutable = new Map()
   return (path, bytes = false) => {
     assert.ok(Date.now() < deadline, '只读观察总时间超过8分钟')
-    assert.ok(path.startsWith(`repos/${repository}/`), '只读本仓库相对API路径')
+    // 仓库元信息用精确根路径；子资源仍须有斜线边界，不能放行同名前缀仓库。
+    assert.ok(
+      path === `repos/${repository}` || path.startsWith(`repos/${repository}/`),
+      '只读本仓库相对API路径',
+    )
     // compare端点的三个点是GitHub语法，不是目录穿越；只允许两个完整SHA。
     const compare = /^repos\/slovx2\/litch\/compare\/[a-f0-9]{40}\.\.\.[a-f0-9]{40}$/.test(path)
     assert.ok((!path.includes('..') || compare) && !/[\r\n]/.test(path), 'API路径')

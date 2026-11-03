@@ -264,6 +264,31 @@ test('GET客户端不能写API，分页超限不以截断数据放行', () => {
   assert.throws(() => readPages(() => Array(100).fill({}), 'repos/slovx2/litch/issues'), /上限/)
 })
 
+test('真实GET客户端允许仓库元信息根路径，拒绝同名前缀和其他仓库', () => {
+  const requests = []
+  const read = githubReader((_command, args) => {
+    requests.push(args)
+    return JSON.stringify({ default_branch: 'main' })
+  })
+  assert.equal(read('repos/slovx2/litch').default_branch, 'main')
+  assert.deepEqual(requests[0], [
+    'api',
+    '--method',
+    'GET',
+    '--allow-escape-sequences',
+    'repos/slovx2/litch',
+  ])
+  for (const path of [
+    'repos/slovx2/litch-other',
+    'repos/slovx2/litch-other/actions/runs',
+    'repos/other/litch',
+    'repos/slovx2/litch/../other',
+    'repos/slovx2/litch\n',
+  ])
+    assert.throws(() => read(path))
+  assert.equal(requests.length, 1, '被拒绝的路径不能发出GET')
+})
+
 function sourceReader(value, files) {
   return (path) => {
     if (path === 'repos/slovx2/litch') return { default_branch: 'main' }
