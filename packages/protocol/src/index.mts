@@ -174,6 +174,12 @@ export {
   HARNESS_CONFIG_METHOD,
   HARNESS_CONFIG_NOTIFICATION,
 } from './harness-config.mjs'
+export {
+  PROJECT_PERMISSION as HARNESS_PROJECT_PERMISSION,
+  type ProjectPermission as HarnessProjectPermission,
+  type ProjectPermissionRequests as HarnessProjectPermissionRequests,
+  type ProjectPermissionSet as HarnessProjectPermissionSet,
+} from './harness-project-permissions.mjs'
 export type {
   JsonRpcError,
   JsonRpcId,

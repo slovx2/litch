@@ -198,8 +198,10 @@ export const keys = {
   /** number：各台设备上没看过的运行一共有几条。侧栏的“定时任务”入口用它 */
   tasksUnread: 'tasks:unread',
   /** 经理列表与可用性常驻；子树继续使用 summary、children、harnessOf。 */
-  projectPermission: (deviceId: string, cwd: string) => `permission:${deviceId}:${cwd}`,
-  projectPermissionError: (deviceId: string, cwd: string) => `permission-error:${deviceId}:${cwd}`,
+  projectPermission: (deviceId: string, cwd: string, harness: string) =>
+    `permission:${JSON.stringify([deviceId, cwd, harness])}`,
+  projectPermissionError: (deviceId: string, cwd: string, harness: string) =>
+    `permission-error:${JSON.stringify([deviceId, cwd, harness])}`,
   managersAvailable: (deviceId: string) => `managers:${deviceId}:available`,
   managerIds: (deviceId: string) => `managers:${deviceId}:ids`,
   manager: (deviceId: string, managerId: string) => `managers:${deviceId}:manager:${managerId}`,
@@ -400,7 +402,7 @@ export interface Replica {
    */
   openDiff(deviceId: string, root: string, scope: DiffScope, sessionId: string | null): () => void
   /** 看板按经理订阅，可重复打开；最后一个引用关闭后清掉快照和四页投影。 */
-  openProjectPermission(deviceId: string, cwd: string): () => void
+  openProjectPermission(deviceId: string, cwd: string, harness: string): () => void
   openManagerBoard(deviceId: string, managerId: string): () => void
   /**
    * 打开一个任务的运行记录：取头一页放进 keys.taskRuns，之后运行的变化跟着改；重连之后重新取头一页。
@@ -1532,21 +1534,21 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
 
     files,
 
-    openProjectPermission(deviceId, cwd) {
-      const key = keys.projectPermission(deviceId, cwd)
+    openProjectPermission(deviceId, cwd, harness) {
+      const key = keys.projectPermission(deviceId, cwd, harness)
       let entry = permissionEntries.get(key)
       if (!entry) {
         const stop = channel.subscribe(
-          { kind: 'projectPermission', deviceId, cwd },
+          { kind: 'projectPermission', deviceId, cwd, harness },
           {
             snapshot: (view) => {
               store.set(key, view)
-              store.delete(keys.projectPermissionError(deviceId, cwd))
+              store.delete(keys.projectPermissionError(deviceId, cwd, harness))
             },
             delta: (ops) => {
               for (const op of ops) store.set(key, op.view)
             },
-            error: (error) => store.set(keys.projectPermissionError(deviceId, cwd), error),
+            error: (error) => store.set(keys.projectPermissionError(deviceId, cwd, harness), error),
           },
         )
         entry = { count: 0, stop }
@@ -1561,7 +1563,7 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
           entry.stop()
           permissionEntries.delete(key)
           store.delete(key)
-          store.delete(keys.projectPermissionError(deviceId, cwd))
+          store.delete(keys.projectPermissionError(deviceId, cwd, harness))
         }
       }
     },

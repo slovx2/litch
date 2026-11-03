@@ -1,5 +1,7 @@
 // 连接层的中间一层：一台设备的一条连接。
 // 负责开传输、握手、断了之后按退避重连，并把状态变化报出去。连上之后的事（问设备信息、取目录）不归它管。
+
+import type { ProjectPermissionRequests } from '../../../protocol/src/harness-project-permissions.mjs'
 import {
   CLIENT_TOOLS_CAPABILITY,
   type ClientInfo,
@@ -14,7 +16,6 @@ import {
 } from '../../../protocol/src/index.mjs'
 import type { PathPickerRequests } from '../../../protocol/src/path-picker.mjs'
 import { PATH_PICKER_EXTENSION } from '../../../protocol/src/path-picker.mjs'
-import type { ProjectPermissionRequests } from '../../../protocol/src/project-permissions.mjs'
 import { type Cancel, createCancel } from '../channel/cancel.mjs'
 import type { Clock } from '../channel/protocol.mjs'
 import type { ConnectGuide, ConnectStage } from '../model.mjs'
@@ -230,7 +231,7 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.deviceTasks,
                 EXTENSION.manager,
                 EXTENSION.managerPaging,
-                EXTENSION.projectPermissions,
+                EXTENSION.harnessProjectPermissions,
                 PATH_PICKER_EXTENSION,
                 // sessionTree：声明了，会话对象上才有 Litch 子会话的 litchLineage，才收得到父子关系、提案变了的通知
                 EXTENSION.sessionTree,

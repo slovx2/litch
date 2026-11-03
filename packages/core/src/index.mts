@@ -15,12 +15,15 @@ export {
   type PairPayload,
   tailscaleVerifyUrl,
 } from '../../protocol/src/device-pairing.mjs'
-export type { PermissionLevel, ProjectPermission } from '../../protocol/src/project-permissions.mjs'
+export type {
+  PermissionLevel,
+  ProjectPermission,
+} from '../../protocol/src/harness-project-permissions.mjs'
 export {
   PERMISSION_LEVELS,
   permissionLevel,
   permissionRank,
-} from '../../protocol/src/project-permissions.mjs'
+} from '../../protocol/src/harness-project-permissions.mjs'
 // 输入框里 @ 的会话：正文里的写法、对上、切段（协议包里的同一份，设备进程也用）
 export {
   type MentionSegment,
@@ -169,6 +172,7 @@ export {
 export { createPendingInputStore, type PendingInputStore } from './device/pending-inputs.mjs'
 export { restorePendingView } from './device/pending-projection.mjs'
 export type { ProjectPermissionView } from './device/project-permissions.mjs'
+export { projectPermissionChoice } from './device/project-permissions.mjs'
 export {
   changeToolSwitches,
   checkPairingAddress,

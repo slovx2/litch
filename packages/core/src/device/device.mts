@@ -1746,7 +1746,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         suggestionsOn = info.device.extensions?.includes(EXTENSION.suggestionInbox) === true
         pathsSupported = info.device.extensions?.includes(PATH_PICKER_EXTENSION) === true
         projectPermissionsOn =
-          info.device.extensions?.includes(EXTENSION.projectPermissions) === true
+          info.device.extensions?.includes(EXTENSION.harnessProjectPermissions) === true
         managersOn = info.device.extensions?.includes(EXTENSION.manager) === true
         managerFeatures = {
           paging: info.device.extensions?.includes(EXTENSION.managerPaging) === true,

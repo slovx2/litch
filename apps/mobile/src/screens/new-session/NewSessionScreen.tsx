@@ -11,6 +11,7 @@ import {
   keys,
   type MessageExtra,
   newSessionSettings,
+  projectPermissionChoice,
   type SessionSettings,
   type WorkspaceView,
 } from '@litch/core'
@@ -88,7 +89,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
   const harnessId = harness?.id ?? ''
   const options = useComposeOptions(deviceId, harness?.id)
   const defaults = useNewSessionDefaults(deviceId, harness?.id, cwd)
-  const project = useProjectPermission(useServices(), deviceId, cwd)
+  const project = useProjectPermission(useServices(), deviceId, cwd, harnessId, options)
   /** 工作区根的分支：不是 git 仓库、设备建不了工作树时是 null，不出“位置” */
   const branches = useBranches(device, workspace ? cwd : null)
   /** 这次在页上选的位置和起点，连同是在哪个工作区选的；换了工作区就回到那里记下的 */
@@ -111,17 +112,15 @@ export function NewSessionScreen({ navigation, route }: Props) {
   const mine = own.slot === slot ? own.picks : {}
   const picks = { ...(options ? recallPicks(deviceId, harnessId, options) : {}), ...mine }
   delete picks.permission
-  if (project.permission) picks.permission = project.permission
-  const permissionBlocked =
-    project.permission &&
-    options &&
-    !options.permissions.some((entry) => entry.id === project.permission)
+  const { permission: rememberedPermission, fallback: permissionFallback } =
+    projectPermissionChoice(project.permission, options)
+  if (rememberedPermission) picks.permission = rememberedPermission
   const settled = options ? newSessionSettings(picks, defaults, options) : null
   const shown: SessionSettings = {
     model: settled?.model ?? null,
     effort: settled?.effort ?? null,
     speed: settled?.speed ?? null,
-    permission: project.permission ?? settled?.permission ?? null,
+    permission: rememberedPermission ?? settled?.permission ?? null,
     mode: options?.plan ? (mine.mode ?? 'default') : null,
   }
   // 问到了对面的默认就把显示的几项都明着发；没问到只发选了的，免得把猜的当成选的发出去
@@ -135,7 +134,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
 
   const missing = where.kind === 'workspace' && workspaces !== undefined && !workspace
   const blocked =
-    permissionBlocked || project.loading || project.error
+    project.loading || project.error
       ? (project.error ??
         t(project.loading ? 'permission.project.loading' : 'permission.project.unsupported'))
       : !device
@@ -365,9 +364,15 @@ export function NewSessionScreen({ navigation, route }: Props) {
               mentions={{ deviceId, sessionId: null }}
               onSend={create}
               onError={setError}
-              top={<SlashGoal text={draft.text} able={goalsAble} onPick={draft.setText} />}
+              top={
+                <>
+                  {permissionFallback ? <Text>{t('permission.project.fallback')}</Text> : null}
+                  <SlashGoal text={draft.text} able={goalsAble} onPick={draft.setText} />
+                </>
+              }
               settings={{
                 deviceId,
+                harness: harnessId,
                 cwd,
                 fresh: true,
                 options,

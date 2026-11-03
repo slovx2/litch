@@ -11,9 +11,10 @@ import { ensureParent } from '../../shared/src/util.mjs'
 
 /**
  * v2 已保存设备独有的项目和归属，不能靠引擎重新导入恢复。
- * v3 增加项目权限，v4 增加重启续跑；升级只在事务中加表，未知版本拒绝打开。
+ * v3 增加项目权限，v4 增加重启续跑；v5 仅重建权限表为目录与 harness 复合键，旧权限作废。
+ * 升级在原库事务内完成，禁止删库重建；未知版本拒绝打开并保留文件。
  */
-const SCHEMA_VERSION = 4
+const SCHEMA_VERSION = 5
 
 function schemaVersion(path: string): number {
   const db = new DatabaseSync(path, { readOnly: true })
@@ -78,6 +79,13 @@ export function openDeviceStore(stateDir: string): DatabaseSync {
       prepared_at INTEGER,
       resume_turn_id TEXT
     ) WITHOUT ROWID;`)
+    // v4 → v5：旧权限跨 harness 共享，不迁移值或确认。只重建这一张表，其他持久数据不动。
+    if (version < 5)
+      db.exec(`DROP TABLE IF EXISTS project_permissions;
+      CREATE TABLE project_permissions(
+        cwd TEXT NOT NULL, harness TEXT NOT NULL, permission TEXT NOT NULL, confirmed TEXT NOT NULL,
+        PRIMARY KEY(cwd,harness)
+      ) WITHOUT ROWID;`)
     db.exec(`PRAGMA user_version=${SCHEMA_VERSION};`)
     db.exec('COMMIT')
   } catch (error) {

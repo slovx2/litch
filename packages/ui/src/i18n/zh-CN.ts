@@ -246,6 +246,7 @@ export const zhCN = {
   'permission.project.saving': '正在保存项目权限…',
   'permission.project.loading': '正在读取项目权限…',
   'permission.project.unsupported': '当前 harness 不支持项目权限，请选择其他权限或 harness。',
+  'permission.project.fallback': '此前保存的访问权限已不受此引擎支持，已使用引擎默认权限。',
   'permission.confirm.declared': '切换到此权限前请确认。',
   'composer.steer.noImages': '带图片的消息不能在回合中途插入，请在本回合结束后发送',
   'composer.image.harness': '此 harness 不支持图片，请移除图片后发送。',

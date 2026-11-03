@@ -275,6 +275,7 @@ export function Composer({
           meta?.live
             ? {
                 deviceId,
+                harness: meta.harness ?? undefined,
                 cwd: meta.cwd,
                 options,
                 settings: meta.settings,

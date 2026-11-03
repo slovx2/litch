@@ -1,0 +1,43 @@
+{
+  "extension": "harnessProjectPermissions",
+  "description": "设备按真实目录与 harness 分别保存访问档位和确认记录；旧跨 harness 记录不复用。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "harnessProjectPermissions"
+      }
+    }
+  },
+  "undeclared": "方法返回 extensionRequired；changed 仅发给声明了此扩展的实际连接。",
+  "rules": [
+    "cwd 在目标设备展开并 realpath，与非空 harness 组成复合键；设备独立保存，桌面和手机共享同一范围。空 cwd 表示该设备、该 harness 的无项目范围。",
+    "read 参数为 {cwd,harness}，返回 {cwd,harness,permission,confirmedPermissions}；set 参数另含 permission、confirmed。未记忆 permission 为 null，三档取值沿用原权限档位。",
+    "set 只供客户端用户操作，不向模型提供对应工具。confirmed=true 表示用户明确确认；完全访问是否需要确认以引擎 requiresConfirmation 声明为准。显式 false 时直接使用且不写确认记录；其余情况需要同范围既有或本次明确确认。降低默认不抹掉此前确认，不跨 harness 继承确认。",
+    "目录校验失败返回 -32602，新增可选 data={litch:invalidDirectory,field:cwd,reason,value,resolvedPath}；reason 为 absolutePath、missingDirectory、notDirectory、unreadableDirectory。客户端保留字段位置、原始输入及设备解析路径。",
+    "写入持久化后通知所有声明连接；独立设备各自保存。引擎默认、自动继承不能写入确认记录。"
+  ],
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harnessProjectPermission/read",
+      "description": "参数 {cwd,harness}，返回 HarnessProjectPermission。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harnessProjectPermission/set",
+      "description": "参数 ProjectPermissionSet，返回 ProjectPermission。"
+    },
+    {
+      "kind": "ServerNotification",
+      "methods": [
+        "litch/harnessProjectPermission/changed"
+      ],
+      "description": "参数 ProjectPermission；只发给声明过此扩展的连接。"
+    }
+  ]
+}

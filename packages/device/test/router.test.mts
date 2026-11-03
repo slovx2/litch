@@ -43,7 +43,7 @@ test('握手：没声明 harness 扩展的被拒绝并说明原因，声明了�
         'harnessConfig',
         'clientApprovals',
         'deviceTasks',
-        'projectPermissions',
+        'harnessProjectPermissions',
         'devicePaths',
         // 测试机上有 git
         'worktrees',
@@ -181,7 +181,7 @@ test('runtime/info：设备信息和每个 harness 的状态，形状和扩展�
       'harnessConfig',
       'clientApprovals',
       'deviceTasks',
-      'projectPermissions',
+      'harnessProjectPermissions',
       'devicePaths',
       'worktrees',
       'nativeBackgroundWake',

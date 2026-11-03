@@ -5,7 +5,7 @@ import type {
 import type {
   ProjectPermission,
   ProjectPermissionSet,
-} from '../../../protocol/src/project-permissions.mjs'
+} from '../../../protocol/src/harness-project-permissions.mjs'
 import type { TurnRecovery } from '../../../protocol/src/turn-recovery.mjs'
 import type { ProjectPermissionView } from '../device/project-permissions.mjs'
 // 界面与核心之间那条通道的约定：有哪些主题、增量长什么样、有哪些命令、线上发什么消息。
@@ -195,7 +195,7 @@ export type Topic =
    */
   | { kind: 'tasks'; deviceId: string }
   /** 经理列表常驻订阅，断线保留快照；可用性同 tasks。 */
-  | { kind: 'projectPermission'; deviceId: string; cwd: string }
+  | { kind: 'projectPermission'; deviceId: string; cwd: string; harness: string }
   | { kind: 'managers'; deviceId: string }
   | { kind: 'suggestions'; deviceId: string }
   /** 只在看板打开时订阅；设备变更通知后重读整块看板。 */

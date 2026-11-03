@@ -1,10 +1,10 @@
 // 项目从 v2 起就是持久数据；升级、拒绝打开和失败回滚都只在隔离目录验证。
 import assert from 'node:assert/strict'
-import { readFileSync, rmSync } from 'node:fs'
+import { readFileSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import test from 'node:test'
-import { PROJECT_PERMISSION } from '../../protocol/src/project-permissions.mjs'
+import { PROJECT_PERMISSION } from '../../protocol/src/harness-project-permissions.mjs'
 import { initializeStoreFormat } from '../../shared/src/store-format.mjs'
 import { ProjectPermissions } from '../src/project-permissions.mjs'
 import { openDeviceStore } from '../src/store.mjs'
@@ -29,6 +29,73 @@ const snapshot = (db: DatabaseSync) =>
     preservedTables.map((table) => [table, db.prepare(`SELECT * FROM ${table} ORDER BY 1`).all()]),
   )
 
+test('旧 v4 实库升级只清空跨 harness 权限：防止整库重建丢失项目、归属、分组与置顶', async () => {
+  const stateDir = tempDir()
+  const path = join(stateDir, 'device.sqlite')
+  const other = join(stateDir, 'other.sqlite')
+  let env: Rig | undefined
+  try {
+    const old = new DatabaseSync(path)
+    // 真实 0.27.5 数据导出，加上 0.29.0 的两张表，形成独立于当前建库代码的旧 v4 实库。
+    old.exec(fixture)
+    old.exec(`CREATE TABLE project_permissions(cwd TEXT PRIMARY KEY, permission TEXT NOT NULL, confirmed TEXT NOT NULL) WITHOUT ROWID;
+      CREATE TABLE restart_turns(thread_id TEXT PRIMARY KEY,harness TEXT NOT NULL,token TEXT NOT NULL,turn_id TEXT,state TEXT NOT NULL,service TEXT NOT NULL DEFAULT '',prepared_at INTEGER,resume_turn_id TEXT) WITHOUT ROWID;
+      CREATE TABLE unrelated_payload(id TEXT PRIMARY KEY, content BLOB NOT NULL);
+      INSERT INTO unrelated_payload VALUES('keep', X'0001FF'); PRAGMA user_version=4`)
+    old
+      .prepare('INSERT INTO project_permissions VALUES(?,?,?)')
+      .run(stateDir, ':danger-full-access', '[":danger-full-access"]')
+    const tables = old
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name!='project_permissions' ORDER BY name",
+      )
+      .all()
+      .map((row) => String(row.name))
+    const allRows = (db: DatabaseSync) =>
+      Object.fromEntries(
+        tables.map((name) => [name, db.prepare(`SELECT * FROM "${name}" ORDER BY 1`).all()]),
+      )
+    const before = allRows(old)
+    old.close()
+    const inode = statSync(path).ino
+    const unrelated = new DatabaseSync(other)
+    unrelated.exec("CREATE TABLE records(value TEXT NOT NULL); INSERT INTO records VALUES('keep')")
+    unrelated.close()
+    const otherBefore = readFileSync(other)
+    // 直接验证升级事务，再让新服务打开同一个文件，不能换库或改其他表。
+    const upgraded = openDeviceStore(stateDir)
+    assert.equal(statSync(path).ino, inode)
+    assert.deepEqual(allRows(upgraded), before)
+    assert.equal(upgraded.prepare('SELECT count(*) AS n FROM project_permissions').get()?.n, 0)
+    upgraded.close()
+    env = rig({ pi: new FakeEngine('pi') }, {}, { stateDir })
+    const client = env.connect()
+    await client.initialize(['harness', 'deviceWorkspaces', 'harnessProjectPermissions'])
+    assert.equal(
+      (await client.call(PROJECT_PERMISSION.read, { cwd: stateDir, harness: 'pi' })).permission,
+      null,
+    )
+    await client.call(PROJECT_PERMISSION.set, {
+      cwd: stateDir,
+      harness: 'pi',
+      permission: ':read-only',
+      confirmed: false,
+    })
+    const check = new DatabaseSync(path, { readOnly: true })
+    try {
+      assert.equal(check.prepare('PRAGMA user_version').get()?.user_version, 5)
+      assert.deepEqual(allRows(check), before)
+      assert.equal(check.prepare('SELECT harness FROM project_permissions').get()?.harness, 'pi')
+      assert.deepEqual(readFileSync(other), otherBefore)
+    } finally {
+      check.close()
+    }
+  } finally {
+    if (env) await env.close()
+    else rmSync(stateDir, { recursive: true, force: true })
+  }
+})
+
 for (const wal of [false, true]) {
   test(`真实 0.27.5 v2 库升级：项目、多根、归属、分组、置顶、排序和导入记录原样保留（WAL=${wal}）`, async () => {
     const stateDir = tempDir()
@@ -44,7 +111,7 @@ for (const wal of [false, true]) {
       }
       env = rig({ pi: new FakeEngine('pi') }, {}, { stateDir })
       const client = env.connect()
-      await client.initialize(['harness', 'deviceWorkspaces', 'projectPermissions'])
+      await client.initialize(['harness', 'deviceWorkspaces', 'harnessProjectPermissions'])
       const projects = (await client.call('project/list')).data
       assert.deepEqual(
         projects.map((p: any) => p.name),
@@ -58,7 +125,7 @@ for (const wal of [false, true]) {
       const db = new DatabaseSync(join(stateDir, 'device.sqlite'), { readOnly: true })
       try {
         assert.deepEqual(snapshot(db), before)
-        assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 4)
+        assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 5)
         assert.equal(db.prepare('SELECT count(*) AS n FROM project_permissions').get()?.n, 0)
         assert.equal(db.prepare('SELECT count(*) AS n FROM restart_turns').get()?.n, 0)
       } finally {
@@ -102,37 +169,44 @@ for (const version of [0, 1, 2]) {
   })
 }
 
-test('设备库 v3：服务启动保留项目默认、确认记录和已有索引', async () => {
+test('设备库 v3：只作废跨 harness 权限，保留已有索引', async () => {
   const stateDir = tempDir()
   let env: Rig | undefined
   try {
     const db = openDeviceStore(stateDir)
-    let remembered: ReturnType<ProjectPermissions['read']>
     try {
-      assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 4)
+      assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 5)
       const permissions = new ProjectPermissions(db, () => {})
       permissions.call(PROJECT_PERMISSION.set, {
+        harness: 'pi',
         cwd: stateDir,
         permission: ':danger-full-access',
         confirmed: true,
       })
-      remembered = permissions.call(PROJECT_PERMISSION.set, {
+      permissions.call(PROJECT_PERMISSION.set, {
+        harness: 'pi',
         cwd: stateDir,
         permission: ':read-only',
         confirmed: false,
       })
       new ThreadIndex(db).see({ id: 'preserved', updatedAt: 1 }, 'pi')
-      db.exec('DROP TABLE restart_turns; PRAGMA user_version=3')
+      db.exec(`DROP TABLE restart_turns; DROP TABLE project_permissions;
+        CREATE TABLE project_permissions(cwd TEXT PRIMARY KEY, permission TEXT NOT NULL, confirmed TEXT NOT NULL) WITHOUT ROWID;
+        INSERT INTO project_permissions VALUES('/old', ':danger-full-access', '[":danger-full-access"]');
+        PRAGMA user_version=3`)
     } finally {
       db.close()
     }
     env = rig({ pi: new FakeEngine('pi') }, {}, { stateDir })
     const client = env.connect()
-    await client.initialize(['harness', 'projectPermissions'])
-    assert.deepEqual(await client.call(PROJECT_PERMISSION.read, { cwd: stateDir }), remembered)
+    await client.initialize(['harness', 'harnessProjectPermissions'])
+    assert.equal(
+      (await client.call(PROJECT_PERMISSION.read, { harness: 'pi', cwd: stateDir })).permission,
+      null,
+    )
     const check = new DatabaseSync(join(stateDir, 'device.sqlite'), { readOnly: true })
     try {
-      assert.equal(check.prepare('PRAGMA user_version').get()?.user_version, 4)
+      assert.equal(check.prepare('PRAGMA user_version').get()?.user_version, 5)
       assert.equal(
         check.prepare("SELECT harness FROM threads WHERE id='preserved'").get()?.harness,
         'pi',
@@ -146,27 +220,28 @@ test('设备库 v3：服务启动保留项目默认、确认记录和已有索�
   }
 })
 
-test('设备库高于 v4：拒绝降级打开，文件与权限数据不变', () => {
+test('设备库高于 v5：拒绝降级打开，文件与权限数据不变', () => {
   const stateDir = tempDir()
   const path = join(stateDir, 'device.sqlite')
   try {
     const db = openDeviceStore(stateDir)
     try {
       new ProjectPermissions(db, () => {}).call(PROJECT_PERMISSION.set, {
+        harness: 'pi',
         cwd: stateDir,
         permission: ':danger-full-access',
         confirmed: true,
       })
-      db.exec('PRAGMA user_version=5')
+      db.exec('PRAGMA user_version=6')
     } finally {
       db.close()
     }
     const before = readFileSync(path)
-    assert.throws(() => openDeviceStore(stateDir), /更新的版本（5）建的.*支持到 4.*拒绝降级/)
+    assert.throws(() => openDeviceStore(stateDir), /更新的版本（6）建的.*支持到 5.*拒绝降级/)
     assert.deepEqual(readFileSync(path), before)
     const check = new DatabaseSync(path, { readOnly: true })
     try {
-      assert.equal(check.prepare('PRAGMA user_version').get()?.user_version, 5)
+      assert.equal(check.prepare('PRAGMA user_version').get()?.user_version, 6)
       assert.equal(
         check.prepare('SELECT permission FROM project_permissions').get()?.permission,
         ':danger-full-access',

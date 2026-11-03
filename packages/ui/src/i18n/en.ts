@@ -245,6 +245,8 @@ export const en: Record<MessageKey, Entry> = {
   'permission.project.confirmFirst':
     'Select Full access in the permissions menu and confirm, then send again.',
   'permission.project.saving': 'Saving project permission…',
+  'permission.project.fallback':
+    'This engine no longer supports the saved access level. Its default is selected.',
   'permission.project.loading': 'Loading project permission…',
   'permission.project.unsupported':
     'This harness does not support the project permission. Choose another permission or harness.',

@@ -25,6 +25,7 @@ import {
   type DeviceSettingsChangedNotification,
 } from '../../protocol/src/device-settings.mjs'
 import type { HarnessConfigChangedNotification } from '../../protocol/src/harness-config.mjs'
+import { PROJECT_PERMISSION } from '../../protocol/src/harness-project-permissions.mjs'
 import { supportsNativeBackground } from '../../protocol/src/native-background-wake.mjs'
 import { SESSION_TREE_METHOD } from '../../protocol/src/session-tree.mjs'
 import { SUGGESTIONS_LIST } from '../../protocol/src/suggestion-inbox.mjs'
@@ -80,6 +81,10 @@ import { classify } from './routes.mjs'
 import { describeDevice } from './service-info.mjs'
 import type { SessionArchives } from './session-archive.mjs'
 import { sessionTreeCall } from './session-methods.mjs'
+import {
+  requireSupportedPermission,
+  requiresPermissionConfirmation,
+} from './session-permissions.mjs'
 import type { SessionTree } from './session-tree.mjs'
 import { DEVICE_TASK_PREFIX, type DeviceTasks } from './tasks.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
@@ -573,10 +578,25 @@ export class ClientSession implements ClientToolPeer {
     switch (route.kind) {
       case 'device':
         if (method === 'runtime/info') return this.runtimeInfo()
-        if (method.startsWith('litch/projectPermission/')) {
-          if (!this.declared.has(EXTENSION.projectPermissions))
-            throw new DeviceError('extensionRequired', 'projectPermissions must be declared')
-          return this.host.workspaces.permissions.call(method, frame.params)
+        if (method.startsWith('litch/harnessProjectPermission/')) {
+          if (!this.declared.has(EXTENSION.harnessProjectPermissions))
+            throw new DeviceError('extensionRequired', 'harnessProjectPermissions must be declared')
+          if (method !== PROJECT_PERMISSION.set)
+            return this.host.workspaces.permissions.call(method, frame.params)
+          const params = isObject(frame.params) ? frame.params : {}
+          if (typeof params.harness !== 'string' || typeof params.permission !== 'string')
+            throw new ProtocolError(-32602, '需要 harness 和 permission 字符串')
+          const link = this.link(params.harness)
+          const declaration = {
+            native: link.dialect.clientToolsByDevice === true,
+            runtime: link.facts.runtime,
+          }
+          requireSupportedPermission(declaration, params.permission)
+          return this.host.workspaces.permissions.call(
+            method,
+            params,
+            requiresPermissionConfirmation(declaration, params.permission),
+          )
         }
         if ([RECOVERY_READ, RECOVERY_CONTINUE, RECOVERY_DISMISS].includes(method)) {
           if (!this.declared.has(EXTENSION.turnRecovery))

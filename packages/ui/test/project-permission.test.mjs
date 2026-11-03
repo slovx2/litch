@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { build } from '../../../node_modules/esbuild/lib/main.js'
 
 for (const platform of ['desktop', 'mobile']) {
-  test(`${platform}：无目录也保存、重开和换 harness 共用；失败明确返回错误`, async () => {
+  test(`${platform}：同 harness 记住、不同 harness 隔离，免确认与需确认声明分别生效；失败明确返回错误`, async () => {
     let states = []
     let cursor = 0
     const opened = []
@@ -40,7 +40,7 @@ for (const platform of ['desktop', 'mobile']) {
             export const useCallback=x=>x; export const useEffect=f=>f();
             export const useSyncExternalStore=(_,read)=>read();`,
               '@litch/core': `export const permissionLevel=x=>[':read-only',':workspace',':danger-full-access'].includes(x)?x:null;
-            export const keys={projectPermission:(d,p)=>'permission:'+d+':'+p,projectPermissionError:(d,p)=>'error:'+d+':'+p};`,
+            export const keys={projectPermission:(d,p,h)=>'permission:'+JSON.stringify([d,p,h]),projectPermissionError:(d,p,h)=>'error:'+JSON.stringify([d,p,h])};`,
               '../../ui/i18n': 'export const useT=()=>key=>key;',
               '../app/appearance.ts': 'export const useT=()=>key=>key;',
               '../app/errors.ts': 'export const reasonOf=x=>x.message;',
@@ -66,16 +66,20 @@ for (const platform of ['desktop', 'mobile']) {
             assert.equal(method, 'projectPermission.set')
             if (!available) throw new Error('设备不支持项目权限，请升级设备服务')
             if (failure) throw new Error(failure)
-            records.set(`permission:${input.deviceId}:${input.cwd}`, {
-              cwd: input.cwd,
-              permission: input.permission,
-              confirmedPermissions: input.confirmed ? [input.permission] : [],
-            })
+            records.set(
+              `permission:${JSON.stringify([input.deviceId, input.cwd, input.harness])}`,
+              {
+                cwd: input.cwd,
+                harness: input.harness,
+                permission: input.permission,
+                confirmedPermissions: input.confirmed ? [input.permission] : [],
+              },
+            )
           },
         },
         replica: {
-          openProjectPermission: (d, p) => {
-            opened.push([d, p])
+          openProjectPermission: (d, p, h) => {
+            opened.push([d, p, h])
             return () => {}
           },
           store: {
@@ -96,10 +100,16 @@ for (const platform of ['desktop', 'mobile']) {
           },
         },
       }
-      const render = (cwd = null, device = 'remote') => {
+      const render = (cwd = null, device = 'remote', harness = 'claude-code', confirm = true) => {
         cursor = 0
         // biome-ignore lint/correctness/useHookAtTopLevel: 测试调度器逐次执行完整钩子。
-        return useProjectPermission(services, device, cwd)
+        return useProjectPermission(services, device, cwd, harness, {
+          permissions: [
+            { id: ':danger-full-access', confirm },
+            { id: ':workspace', confirm: false },
+            { id: ':read-only', confirm: false },
+          ],
+        })
       }
       available = false
       assert.equal(await render('/project').save(':danger-full-access', true), false)
@@ -112,12 +122,16 @@ for (const platform of ['desktop', 'mobile']) {
       assert.equal(calls, 1, '没有项目时必须发送保存请求，不能假报成功')
       assert.ok(opened.some(([d, p]) => d === 'remote' && p === ''))
       states = []
-      assert.equal(
-        render().permission,
-        ':danger-full-access',
-        '重开页面读取设备记忆，不依赖 harness',
-      )
+      assert.equal(render().permission, ':danger-full-access', '重开页面读取该 harness 的设备记忆')
       assert.equal(render().confirmed(':danger-full-access'), true)
+      assert.equal(render(null, 'remote', 'pi', false).permission, null)
+      assert.equal(render(null, 'remote', 'pi', false).confirmed(':danger-full-access'), false)
+      await render(null, 'remote', 'pi', false).persist(':danger-full-access')
+      assert.equal(render(null, 'remote', 'pi', false).permission, ':danger-full-access')
+      assert.equal(render(null, 'remote', 'pi', false).confirmed(':danger-full-access'), false)
+      await render().persist(':read-only')
+      assert.equal(render().permission, ':read-only')
+      assert.equal(render(null, 'remote', 'pi', false).permission, ':danger-full-access')
       assert.equal(render(null, 'other-device').permission, null)
       assert.equal(render('/other-project').permission, null)
       available = false

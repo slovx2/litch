@@ -309,7 +309,7 @@ test('设备库：v2 升级保留数据，不是我们的库拒绝', () => {
     db.close()
     db = openDeviceStore(dir)
     assert.equal(new ThreadIndex(db).lookup('t1'), 'pi')
-    assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 4)
+    assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 5)
     db.close()
     // 空文件就是还没写过的新库
     rmSync(join(dir, 'device.sqlite'))

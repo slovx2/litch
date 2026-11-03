@@ -7,6 +7,7 @@ import {
   localUserMessage,
   type MessageExtra,
   newSessionSettings,
+  projectPermissionChoice,
   type SessionSettings,
   type UserMessageItem,
   type WorkspaceView,
@@ -328,7 +329,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
   const [pending, setPending] = useState<UserMessageItem | null>(null)
 
   const cwd = workspace?.roots[0] ?? null
-  const project = useProjectPermission(useServices(), deviceId, cwd)
+  const project = useProjectPermission(useServices(), deviceId, cwd, harnessId, options)
   /** 工作区根的分支：不是 git 仓库、设备建不了工作树时是 null，不出“在哪做” */
   const branches = useBranches(device, workspace ? cwd : null)
   /** 这次在页上选的“在哪做”，连同是在哪台设备的哪个工作区选的；换了去处就回到那里记下的 */
@@ -351,18 +352,16 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
   const own = options ? fitPicks(mine, options) : mine
   const picks = { ...(options ? recallPicks(deviceId, harnessId, options) : {}), ...own }
   delete picks.permission
-  if (project.permission) picks.permission = project.permission
-  const permissionBlocked =
-    project.permission &&
-    options &&
-    !options.permissions.some((entry) => entry.id === project.permission)
+  const { permission: rememberedPermission, fallback: permissionFallback } =
+    projectPermissionChoice(project.permission, options)
+  if (rememberedPermission) picks.permission = rememberedPermission
   // 底栏上显示的：选过的；没选的是对面不带设置新建时会用的，建会话时也照显示的发，显示的就是会用的
   const settled = options && !holding ? newSessionSettings(picks, defaults, options) : null
   const shown: SessionSettings = {
     model: settled?.model ?? null,
     effort: settled?.effort ?? null,
     speed: settled?.speed ?? null,
-    permission: project.permission ?? settled?.permission ?? null,
+    permission: rememberedPermission ?? settled?.permission ?? null,
     // 计划模式只管眼前这一个新对话，不记到下一次；这个 harness 不会的话没有这个开关
     mode: options?.plan ? (own.mode ?? 'default') : null,
   }
@@ -384,7 +383,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
     extras: MessageExtra[],
     submittedText: string,
   ) => {
-    if (permissionBlocked || project.loading || project.error)
+    if (project.loading || project.error)
       throw new Error(project.error ?? t('permission.project.unsupported'))
     // 第一句是 /goal 加上目标（harness 会持续目标时）：建好会话就设目标，不发消息，它空闲时自己开始做
     const goal = harness?.abilities?.goals === true ? parseGoalCommand(text) : null
@@ -551,9 +550,10 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
       <div className="dock-wrap">
         <div className="dock" style={wireStyle(device?.wire)}>
           <div className="dock-in">
-            {permissionBlocked || project.error ? (
+            {project.error ? (
               <p role="alert">{project.error ?? t('permission.project.unsupported')}</p>
             ) : null}
+            {permissionFallback ? <p role="status">{t('permission.project.fallback')}</p> : null}
             <Composer
               deviceId={deviceId}
               harness={harness?.id}
@@ -564,11 +564,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
               blocked={
                 blocked ??
                 project.error ??
-                (project.loading
-                  ? t('permission.project.loading')
-                  : permissionBlocked
-                    ? t('permission.project.unsupported')
-                    : null)
+                (project.loading ? t('permission.project.loading') : null)
               }
               fresh
               lead={choice}

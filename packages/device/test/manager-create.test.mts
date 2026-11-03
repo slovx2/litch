@@ -156,8 +156,11 @@ test('~/ 使用目标设备 home；项目权限预检、会话与落库路径一
     assert.equal(homedir(), deviceHome)
     mkdirSync(join(deviceHome, 'project'))
     const client = env.connect()
-    await client.initialize(['harness', 'litchManager', 'projectPermissions'])
-    const permission = await client.call('litch/projectPermission/read', { cwd: '~/project' })
+    await client.initialize(['harness', 'litchManager', 'harnessProjectPermissions'])
+    const permission = await client.call('litch/harnessProjectPermission/read', {
+      cwd: '~/project',
+      harness: 'pi',
+    })
     assert.equal(permission.cwd, realpathSync(join(deviceHome, 'project')))
     for (const cwd of ['~', '~/project']) {
       const { manager, threadId } = await client.call('litch/manager/create', settings(cwd))
@@ -166,10 +169,10 @@ test('~/ 使用目标设备 home；项目权限预检、会话与落库路径一
       assert.equal(env.device.managers.store.manager(manager.id)?.cwd, expected)
       assert.equal((await client.call('thread/read', { threadId })).thread.cwd, expected)
     }
-    for (const method of ['litch/manager/create', 'litch/projectPermission/read']) {
+    for (const method of ['litch/manager/create', 'litch/harnessProjectPermission/read']) {
       const error = await client.fails(
         method,
-        method.endsWith('/create') ? settings('~/missing') : { cwd: '~/missing' },
+        method.endsWith('/create') ? settings('~/missing') : { cwd: '~/missing', harness: 'codex' },
       )
       assert.equal(error.data.reason, 'missingDirectory')
       assert.equal(error.data.value, '~/missing')

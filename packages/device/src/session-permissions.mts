@@ -38,6 +38,19 @@ export function requireSupportedPermission(
       `Target harness does not support permission ${permission}. Choose a supported permission or another harness.`,
     )
 }
+/** 只接受引擎显式声明免确认；原生 Codex 与未声明时仍保留完全访问确认。 */
+export function requiresPermissionConfirmation(
+  link: Pick<EngineLink, 'native' | 'runtime'>,
+  permission: string,
+): boolean {
+  if (permission !== ':danger-full-access') return false
+  if (link.native) return true
+  const presets = link.runtime?.permissionPresets
+  const preset = Array.isArray(presets)
+    ? presets.find((entry) => isObject(entry) && entry.id === permission)
+    : null
+  return !isObject(preset) || preset.requiresConfirmation !== false
+}
 export function childPermissions(
   parent: Record<string, unknown> | null,
   requested: {

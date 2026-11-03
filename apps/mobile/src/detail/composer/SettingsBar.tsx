@@ -108,6 +108,7 @@ function PlanSwitch({ on, onPress }: { on: boolean; onPress(): void }) {
 
 export interface SettingsProps {
   deviceId?: string | undefined
+  harness?: string | undefined
   cwd?: string | null | undefined
   options: ComposeOptions | null
   settings: SessionSettings
@@ -153,10 +154,19 @@ export function usagePercent(usage: ContextUsage | null | undefined): number | n
 
 /** props 是 null：这个输入框没有对话参数（只列“添加图片”） */
 export function useComposeSettings(props: SettingsProps | null): ComposeSettings {
-  const { deviceId = '', cwd, options, settings, usage, fresh, onChange } = props ?? NO_SETTINGS
+  const {
+    deviceId = '',
+    harness = '',
+    cwd,
+    options,
+    settings,
+    usage,
+    fresh,
+    onChange,
+  } = props ?? NO_SETTINGS
   const t = useT()
   const theme = useTheme()
-  const project = useProjectPermission(useServices(), deviceId, cwd)
+  const project = useProjectPermission(useServices(), deviceId, cwd, harness, options)
   const applyPermission = (id: string) => {
     void project.save(id, true).then((saved) => {
       if (saved) onChange({ permission: id })
@@ -200,7 +210,7 @@ export function useComposeSettings(props: SettingsProps | null): ComposeSettings
   const pickPermission = (id: string) => {
     const preset = options.permissions.find((entry) => entry.id === id)
     if (!preset) return
-    if ((preset.confirm || id === ':danger-full-access') && !project.confirmed(id))
+    if (preset.confirm && !project.confirmed(id))
       setAsking({ preset, title: permissionText(t, preset).title })
     else applyPermission(id)
   }

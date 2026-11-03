@@ -45,7 +45,7 @@ import {
   validatePatch,
   validateTool,
 } from './manager-validate.mjs'
-import { requireSupportedPermission } from './session-permissions.mjs'
+import { requireSupportedPermission, supportedPermissions } from './session-permissions.mjs'
 import type { SessionTree } from './session-tree.mjs'
 import { DeviceError, isObject } from './wire.mjs'
 
@@ -529,8 +529,13 @@ export class DeviceManagers {
       latestActivity: null,
     }
     const link = await this.tree.link(params.harness)
+    const remembered = this.tree.host.workspaces.permissions.read(
+      params.cwd,
+      params.harness,
+    ).permission
     const permission =
-      params.permission ?? this.tree.host.workspaces.permissions.read(params.cwd).permission
+      params.permission ??
+      (supportedPermissions(link).includes(remembered ?? '') ? remembered : null)
     if (permission) {
       try {
         requireSupportedPermission(link, permission)

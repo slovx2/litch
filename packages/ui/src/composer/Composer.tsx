@@ -923,6 +923,7 @@ export function Composer(props: ComposerProps) {
           {props.lead}
           <SettingsBar
             deviceId={deviceId}
+            harness={props.harness}
             cwd={cwd}
             options={options}
             settings={props.settings}

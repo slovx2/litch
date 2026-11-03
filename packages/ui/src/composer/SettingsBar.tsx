@@ -98,6 +98,7 @@ const PERMISSION_TEXT: Record<string, { title: MessageKey; note: MessageKey }> =
 
 interface SettingsBarProps {
   deviceId?: string | undefined
+  harness?: string | undefined
   cwd?: string | null | undefined
   options: ComposeOptions | null
   settings: SessionSettings
@@ -116,9 +117,10 @@ export function SettingsBar({
   fresh,
   onChange,
   deviceId = '',
+  harness = '',
   cwd,
 }: SettingsBarProps) {
-  const project = useProjectPermission(useServices(), deviceId, cwd)
+  const project = useProjectPermission(useServices(), deviceId, cwd, harness, options)
   const t = useT()
   if (!options) return null
   const model = options.models.find((entry) => entry.id === settings.model)
@@ -164,9 +166,7 @@ export function SettingsBar({
             ),
           }
         : {}),
-      ...((preset.confirm || preset.id === ':danger-full-access') &&
-      !project.confirmed(preset.id) &&
-      !locked
+      ...(preset.confirm && !project.confirmed(preset.id) && !locked
         ? {
             confirm: {
               title: t('permission.confirm.title', { name: title }),

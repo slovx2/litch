@@ -2102,15 +2102,17 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   const tasks = createMockTasks(tasksHost)
   const permissionRecords = new Map<
     string,
-    import('../../../protocol/src/project-permissions.mjs').ProjectPermission
+    import('../../../protocol/src/harness-project-permissions.mjs').ProjectPermission
   >()
   const permissionSinks = new Map<string, Set<HostSink>>()
-  const permissionView = (deviceId: string, cwd: string) => ({
+  const permissionView = (deviceId: string, cwd: string, harness: string) => ({
     deviceId,
     cwd,
+    harness,
     available: true,
-    record: permissionRecords.get(`${deviceId}:${cwd}`) ?? {
+    record: permissionRecords.get(JSON.stringify([deviceId, cwd, harness])) ?? {
       cwd,
+      harness,
       permission: null,
       confirmedPermissions: [],
     },
@@ -2866,18 +2868,24 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       const tuned = harnessConfig.command(name, params)
       if (tuned !== undefined) return tuned
       if (name === 'projectPermission.set') {
-        const { deviceId, cwd, permission, confirmed } =
+        const { deviceId, cwd, harness, permission, confirmed } =
           params as Commands['projectPermission.set']['params']
-        const key = `${deviceId}:${cwd}`
+        const key = JSON.stringify([deviceId, cwd, harness])
         const previous = permissionRecords.get(key)
+        const preset = sampleOptions(
+          app.devices
+            .find((entry) => entry.id === deviceId)
+            ?.harnesses.find((entry) => entry.id === harness),
+        ).permissions.find((entry) => entry.id === permission)
+        const needsConfirmation = preset?.confirm !== false
         const approvals = new Set(previous?.confirmedPermissions ?? [])
-        if (confirmed) approvals.add(permission)
-        if (permission === ':danger-full-access' && !approvals.has(permission))
+        if (confirmed && needsConfirmation) approvals.add(permission)
+        if (permission === ':danger-full-access' && needsConfirmation && !approvals.has(permission))
           throw new ChannelError('rejected', 'Permission confirmation required')
-        const record = { cwd, permission, confirmedPermissions: [...approvals] }
+        const record = { cwd, harness, permission, confirmedPermissions: [...approvals] }
         permissionRecords.set(key, record)
         for (const sink of permissionSinks.get(key) ?? [])
-          sink.snapshot(permissionView(deviceId, cwd))
+          sink.snapshot(permissionView(deviceId, cwd, harness))
         return record
       }
       const managerResult = managers.command(name, params)
@@ -3652,11 +3660,11 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (topic.kind === 'machine') return machine.subscribe(sink)
       // 定时任务（mock-tasks.mts）
       if (topic.kind === 'projectPermission') {
-        const key = `${topic.deviceId}:${topic.cwd}`
+        const key = JSON.stringify([topic.deviceId, topic.cwd, topic.harness])
         const sinks = permissionSinks.get(key) ?? new Set<HostSink>()
         permissionSinks.set(key, sinks)
         sinks.add(sink)
-        sink.snapshot(permissionView(topic.deviceId, topic.cwd))
+        sink.snapshot(permissionView(topic.deviceId, topic.cwd, topic.harness))
         return () => {
           sinks.delete(sink)
           if (!sinks.size) permissionSinks.delete(key)

@@ -1,4 +1,4 @@
-import { type DeviceView, keys, type WorkspaceView } from '@litch/core'
+import { type DeviceView, keys, projectPermissionChoice, type WorkspaceView } from '@litch/core'
 import { useEffect, useRef, useState } from 'react'
 import type { ManagerDraft, ManagerView } from '../../../core/src/model-manager.mts'
 import {
@@ -129,12 +129,11 @@ export function ManagerForm({
     form.model ? entry.id === form.model : entry.isDefault,
   )
   const cwd = workspace?.roots[0] ?? form.cwd
-  const project = useProjectPermission(useServices(), deviceId, cwd.trim())
+  const project = useProjectPermission(useServices(), deviceId, cwd.trim(), form.harness, options)
   const defaults = useNewSessionDefaults(deviceId, form.harness, cwd || null)
-  const permission = project.permission ?? defaults?.permission ?? null
-  const permissionBlocked = Boolean(
-    permission && options && !options.permissions.some((entry) => entry.id === permission),
-  )
+  const { permission: rememberedPermission, fallback: permissionFallback } =
+    projectPermissionChoice(project.permission, options)
+  const permission = rememberedPermission ?? defaults?.permission ?? null
   const change = (patch: Partial<Omit<ManagerDraft, 'template' | 'scope'>>) => {
     setForm((was) => ({ ...was, ...patch }))
     setError('')
@@ -159,7 +158,7 @@ export function ManagerForm({
       )
       return
     }
-    if (!manager && step !== 'basic' && (permissionBlocked || project.loading || project.error)) {
+    if (!manager && step !== 'basic' && (project.loading || project.error)) {
       showError(
         project.error ??
           t(project.loading ? 'permission.project.loading' : 'permission.project.unsupported'),
@@ -223,6 +222,7 @@ export function ManagerForm({
         return
       }
       // 保留已发布的 template 字段以维持协议形状；界面固定发送 blank。
+      await project.persist(permission)
       const result = await channel.command('managers.create', {
         deviceId,
         manager: { ...form, permission, template: 'blank', scope: '', cwd: cwd.trim() },
@@ -473,14 +473,15 @@ export function ManagerForm({
                 <span>{t('composer.permission')}</span>
                 <SettingsBar
                   deviceId={deviceId}
+                  harness={form.harness}
                   cwd={cwd}
                   fresh
                   options={options ? { ...options, models: [], plan: false } : null}
                   settings={{ model: null, effort: null, speed: null, mode: null, permission }}
                   onChange={() => {}}
                 />
-                {permissionBlocked ? (
-                  <span role="alert">{t('permission.project.unsupported')}</span>
+                {permissionFallback ? (
+                  <span role="status">{t('permission.project.fallback')}</span>
                 ) : null}
               </div>
               <label className="form-field">
