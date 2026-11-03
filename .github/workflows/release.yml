@@ -47,6 +47,10 @@ jobs:
         run: |
           node scripts/check-versions.mjs
           node scripts/ci/release-preflight.mjs
+      - name: 只读展示夜间监测心跳
+        run: node scripts/ci/nightly-status.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
       # 在候选阶段按同一规则计算，不等完整 Gate 结束，保持测试和出包并行。
       # 桌面、入口或未知影响加跑完整 packed；无可信夜间基线时规则会扩大到全量。
       - name: 判断完整签名包检查的影响范围

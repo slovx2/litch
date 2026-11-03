@@ -1,6 +1,7 @@
 // 恢复控制器：一次reservation、一次API；未知结果只读对账，不重发POST。
 import assert from 'node:assert/strict'
-import { loadLedger, persistRecord } from './recovery-ledger.mjs'
+import { readStateForRun } from './maintenance-state.mjs'
+import { ensureAuditClosed, loadLedger, persistRecord } from './recovery-ledger.mjs'
 import { readPages } from './recovery-observe.mjs'
 import { controllerPlan, executionHash } from './recovery-plan.mjs'
 import { evidenceHash } from './recovery-policy.mjs'
@@ -29,6 +30,44 @@ function artifacts(read, runId) {
   return readPages(read, `${base}/actions/runs/${runId}/artifacts`, 'artifacts')
     .map(({ id, name, digest, expired }) => ({ id, name, digest, expired }))
     .sort((a, b) => a.id - b.id)
+}
+
+export function excludedFromPriorScan(
+  read,
+  prior,
+  sourceId,
+  defaultBranch,
+  readScan = readStateForRun,
+) {
+  if (
+    prior.path !== controllerPath ||
+    prior.head_branch !== defaultBranch ||
+    prior.repository?.full_name !== 'slovx2/litch' ||
+    prior.head_repository?.full_name !== 'slovx2/litch'
+  )
+    return false
+  const scan =
+    prior.event === 'schedule' ? readScan(read, 'ci-recovery-scan', prior, { defaultBranch }) : null
+  const ids = scan?.value.selectedRunIds
+  if (
+    Array.isArray(ids) &&
+    ids.length <= 5 &&
+    ids.every((id) => Number.isSafeInteger(id) && id > 0) &&
+    new Set(ids).size === ids.length
+  )
+    return !ids.includes(sourceId)
+  // 开关关闭的旧定时run只有监测；以真实job skipped证明没执行恢复，不看当前开关猜过去。
+  const jobs = readPages(
+    read,
+    `${base}/actions/runs/${prior.id}/attempts/${prior.run_attempt}/jobs`,
+    'jobs',
+  ).filter((job) => job.name === 'recovery')
+  return (
+    jobs.length === 1 &&
+    jobs[0].conclusion === 'skipped' &&
+    !jobs[0].runner_name &&
+    jobs[0].steps?.length === 0
+  )
 }
 
 export function verifyRecoveryOutcome(plan, jobs, currentArtifacts) {
@@ -121,7 +160,10 @@ export function recoverRun(runId, services) {
   if (!enabled) return { state: 'observe-only', report: observe(runId).plan }
   const source = { runId: run.id, sha: run.head_sha, createdAt: run.created_at }
   let ledger = loadLedger(read, source)
-  if (ledger?.reserved) return reconcile(ledger, run, { ...services, now })
+  if (ledger?.reserved) {
+    ensureAuditClosed(ledger, { read, write })
+    return reconcile(ledger, run, { ...services, now })
+  }
   const observed = observe(runId)
   if (!observed.stable) return { state: 'blocked', reason: 'unstable-observation' }
   const plan = controllerPlan(observed.snapshot, readWorkflow, {
@@ -149,18 +191,23 @@ export function recoverRun(runId, services) {
       `${base}/actions/workflows/recovery-controller.yml/runs?created=${encodeURIComponent(`>=${since}`)}`,
       'workflow_runs',
     )
-    if (
-      history.some(
-        (item) =>
-          item.id !== controller.runId &&
-          Date.parse(item.updated_at) >= Date.parse(run.updated_at) &&
-          !/^CI recovery \d+ observe$/.test(item.display_title ?? '') &&
-          (item.display_title === `CI recovery ${run.id} fixture-recover` ||
-            item.display_title === `CI recovery ${run.id} automatic` ||
-            !/^CI recovery \d+ (?:fixture-recover|automatic)$/.test(item.display_title ?? '')),
+    for (const item of history) {
+      if (
+        item.id === controller.runId ||
+        Date.parse(item.updated_at) < Date.parse(run.updated_at) ||
+        /^CI recovery (?:\d+|reconcile) (?:observe|nightly-observe)$/.test(
+          item.display_title ?? '',
+        ) ||
+        (/^CI recovery \d+ (?:fixture-recover|automatic)$/.test(item.display_title ?? '') &&
+          ![`CI recovery ${run.id} fixture-recover`, `CI recovery ${run.id} automatic`].includes(
+            item.display_title,
+          ))
       )
-    )
+        continue
+      // 没有可信扫描范围时仍保守阻断，不能靠游标或标题重置预算。
+      if (excludedFromPriorScan(read, item, run.id, controller.defaultBranch)) continue
       return { state: 'blocked', reason: 'ledger-missing-after-prior-controller' }
+    }
   }
   if (plan.decision === 'deferred') {
     if (!ledger || ledger.last.details.reason !== plan.reason)

@@ -4,26 +4,22 @@ on:
   workflow_run:
     workflows: [CI, Full, Release gate, Prepare release candidate, Windows native]
     types: [completed]
-  # 只补恢复事件漏投/曾因Mac竞争deferred；夜间健康监测属于独立第三笔。
+  # 夜间健康与恢复补偿共用一份cron；恢复开关关闭时仍执行轻量心跳。
   schedule:
     - cron: '8,23,38,53 * * * *'
   workflow_dispatch:
     inputs:
       source-run:
         description: 要观察或演练的源run ID
-        required: true
+        required: false
         type: string
       mode:
         description: 正式恢复只能经开关启用；手动写操作限同SHA的Linux fixture
         type: choice
-        options: [observe, fixture-recover]
+        options: [observe, fixture-recover, nightly-observe]
         default: observe
 permissions:
   contents: read
-concurrency:
-  # 所有来源共用写锁；pending可能被替换，因此另有只读reconcile找漏事件。
-  group: ci-infrastructure-recovery-controller
-  cancel-in-progress: false
 jobs:
   observe:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'observe' }}
@@ -51,6 +47,10 @@ jobs:
     if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'fixture-recover') || (github.event_name != 'workflow_dispatch' && vars.LITCH_CI_RECOVERY_ENABLED == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    concurrency:
+      # 恢复写操作仍全局串行；空事件不会挤掉夜间监测的pending槽。
+      group: ci-infrastructure-recovery-controller
+      cancel-in-progress: false
     permissions:
       contents: read
       actions: write
@@ -72,3 +72,65 @@ jobs:
           RECOVERY_SOURCE_RUN: ${{ inputs.source-run || github.event.workflow_run.id }}
           RECOVERY_MODE: ${{ inputs.mode || 'automatic' }}
           LITCH_CI_RECOVERY_ENABLED: ${{ vars.LITCH_CI_RECOVERY_ENABLED }}
+      - name: 保存公平扫描检查点
+        if: ${{ always() && github.event_name == 'schedule' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ci-recovery-scan-${{ github.run_attempt }}
+          path: .artifacts/ci-recovery-scan.json
+          if-no-files-found: error
+          retention-days: 7
+
+  nightly:
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Full' && github.event.workflow_run.event == 'schedule') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    concurrency:
+      group: ci-nightly-health-monitor
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: 检查夜间运行、绿色基线与监测心跳
+        run: node scripts/ci/nightly-run.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: 保存夜间监测心跳
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ci-nightly-health-${{ github.run_attempt }}
+          path: .artifacts/ci-nightly-health.json
+          if-no-files-found: error
+          retention-days: 7
+
+  nightly-observe:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'nightly-observe' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node scripts/ci/nightly-run.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECOVERY_MODE: nightly-observe

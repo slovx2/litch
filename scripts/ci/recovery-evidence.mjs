@@ -37,6 +37,10 @@ export function stepLogPath(job, step) {
 
 export function readStepLog(archive, job, step, unpack = execFileSync) {
   const path = stepLogPath(job, step)
+  return { number: step.number, complete: true, text: readZipText(archive, path, unpack) }
+}
+
+export function readZipText(archive, path, unpack = execFileSync) {
   if (path.startsWith('-') || path.split('/').includes('..') || /[\r\n\0]/.test(path))
     throw new Error('不接受的日志路径')
   if (!Buffer.isBuffer(archive) || archive.length > 64 * 1024 * 1024)
@@ -55,5 +59,5 @@ export function readStepLog(archive, job, step, unpack = execFileSync) {
     throw new Error('失败步骤ZIP读取失败：缺失、不唯一、损坏或超过边界')
   }
   if (!text.trim()) throw new Error('步骤日志为空')
-  return { number: step.number, complete: true, text }
+  return text
 }

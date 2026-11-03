@@ -3,9 +3,11 @@ import assert from 'node:assert/strict'
 import { appendFileSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { latestState, saveState } from './maintenance-state.mjs'
 import { checkControllerRun, recoverRun } from './recovery-controller.mjs'
 import { githubReader, localWorkflowContract, observeRun, readPages } from './recovery-observe.mjs'
-import { evidenceHash, workflowPaths } from './recovery-policy.mjs'
+import { evidenceHash } from './recovery-policy.mjs'
+import { recordScanned, selectRecoveryBatch } from './recovery-scan.mjs'
 import { githubWriter } from './recovery-write.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -26,6 +28,7 @@ export function recoveryContract() {
     'package.json',
     'package-lock.json',
     'scripts/ci/mac-priority.mjs',
+    'scripts/ci/maintenance-state.mjs',
     ...readdirSync(join(root, 'scripts/ci'))
       .filter(
         (name) =>
@@ -85,44 +88,63 @@ export function runController(
       }),
   }
   let sources
-  let remaining = []
   if (run.event === 'schedule') {
     if (!enabled) return [{ state: 'disabled' }]
+    const previous = latestState(read, 'ci-recovery-scan', {
+      defaultBranch: metadata.default_branch,
+      currentRun: run.id,
+    })
     // 以实际结束时间选窗口；长Full不能因创建时间超过2小时就漏掉。
     const since = new Date(Date.now() - 24 * 60 * 60_000).toISOString()
-    sources = readPages(
+    const candidates = readPages(
       read,
-      `${base}/actions/runs?created=${encodeURIComponent(`>=${since}`)}`,
+      `${base}/actions/runs?branch=${encodeURIComponent(metadata.default_branch)}&created=${encodeURIComponent(`>=${since}`)}`,
       'workflow_runs',
     )
-      .filter(
-        (source) =>
-          workflowPaths.includes(source.path) &&
-          source.head_branch === metadata.default_branch &&
-          source.status === 'completed' &&
-          (source.conclusion !== 'success' || source.run_attempt === 2) &&
-          Date.parse(source.updated_at) >= Date.now() - 2 * 60 * 60_000,
-      )
-      .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))
-      .map((source) => source.id)
-    remaining = sources.slice(5)
-    sources = sources.slice(0, 5)
+    return reconcileRecoverySources(candidates, previous?.value, services, {
+      defaultBranch: metadata.default_branch,
+      save: (state) => saveState('ci-recovery-scan', state, run),
+    })
   } else {
     assert.match(env.RECOVERY_SOURCE_RUN ?? '', /^[1-9][0-9]*$/)
     sources = [Number(env.RECOVERY_SOURCE_RUN)]
   }
-  return [
-    ...sources.map((source) => recoverRun(source, services)),
-    ...(remaining.length
-      ? [
-          {
-            state: 'reconcile-limit-reached',
-            remaining,
-            reason: '本轮上限5个来源，剩余项未判断，需跟进',
-          },
-        ]
-      : []),
-  ]
+  return sources.map((source) => recoverRun(source, services))
+}
+
+export function reconcileRecoverySources(
+  runs,
+  previous,
+  services,
+  { defaultBranch = 'main', save, recover = recoverRun, now = Date.now() },
+) {
+  const batch = selectRecoveryBatch(runs, previous, { defaultBranch, now })
+  // 在任何恢复写入前固化本轮最多五个来源。后续才能证明其他来源未被这轮处理。
+  let state = { ...batch.state, selectedRunIds: batch.selected.map((source) => source.id) }
+  const results = [{ state: previous ? 'checkpoint-loaded' : 'checkpoint-bootstrap' }]
+  save(state)
+  for (const source of batch.selected) {
+    let result
+    try {
+      result = recover(source.id, services)
+    } catch {
+      result = {
+        state: 'controller-error',
+        runId: source.id,
+        reason: '只读或审计检查失败；不重试写请求',
+      }
+    }
+    state = recordScanned(state, source, result, now)
+    save(state)
+    results.push(result)
+  }
+  if (batch.remaining.length)
+    results.push({
+      state: 'reconcile-limit-reached',
+      remaining: batch.remaining,
+      reason: '每轮最多五来源，下轮从游标之后继续，不把剩余项当作已处理',
+    })
+  return results
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -130,6 +152,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const results = runController()
     // 输出仅分类/来源/状态；observe不返回原始日志。
     console.log(JSON.stringify(results, null, 2))
+    if (results.some((result) => result.state === 'controller-error')) process.exitCode = 1
     if (process.env.GITHUB_STEP_SUMMARY)
       appendFileSync(
         process.env.GITHUB_STEP_SUMMARY,

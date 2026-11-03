@@ -257,3 +257,8 @@ jobs:
         id: stage-3
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      - name: 只读展示夜间监测心跳
+        if: always()
+        run: node scripts/ci/nightly-status.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}

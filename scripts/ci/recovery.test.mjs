@@ -313,6 +313,15 @@ test('GET客户端不能写API，分页超限不以截断数据放行', () => {
   assert.throws(() => read('https://evil.test/token'))
   assert.throws(() => read('repos/slovx2/litch/../elsewhere'))
   assert.throws(() => readPages(() => Array(100).fill({}), 'repos/slovx2/litch/issues'), /上限/)
+  assert.throws(
+    () =>
+      readPages(
+        () => ({ total_count: 1000, workflow_runs: [] }),
+        'repos/slovx2/litch/actions/runs',
+        'workflow_runs',
+      ),
+    /上限/,
+  )
 })
 
 test('真实GET客户端允许仓库元信息根路径，拒绝同名前缀和其他仓库', () => {

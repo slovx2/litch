@@ -5,6 +5,11 @@ import { readPages } from './recovery-observe.mjs'
 
 const base = 'repos/slovx2/litch'
 const marker = '<!-- litch-ci-recovery:v1 -->'
+const auditLabel = {
+  name: 'ci-recovery',
+  color: 'ededed',
+  description: 'CI基础设施恢复审计；关闭不释放预算',
+}
 export const auditTitle = (id) => `[CI recovery] run ${id}`
 export const encodeAudit = (plan, record, controller) =>
   `${marker}\n基础设施恢复审计；关闭此issue不会清除预算。\n\n\`\`\`json\n${JSON.stringify({ plan, record, controller })}\n\`\`\`\n`
@@ -64,7 +69,27 @@ export function loadLedger(read, source, issueNumber) {
     entries.map((entry) => entry.record),
     plan,
   )
-  return { issue: issue.number, plan, entries, ...state }
+  return { issue: issue.number, issueState: issue.state, plan, entries, ...state }
+}
+
+export function ensureAuditClosed(ledger, { read, write }) {
+  if (ledger.issueState === 'closed') return
+  assert.equal(ledger.issueState, 'open')
+  write(`${base}/issues/${ledger.issue}`, { state: 'closed' }, 'PATCH')
+  const issue = read(`${base}/issues/${ledger.issue}`)
+  assert.equal(issue.number, ledger.issue)
+  assert.equal(issue.title, auditTitle(ledger.plan.runId))
+  assert.equal(issue.user?.id, 41898282)
+  assert.equal(issue.state, 'closed', '审计issue关闭未确认；预算保留，不调用恢复')
+  ledger.issueState = 'closed'
+}
+
+function ensureAuditLabel(read, write) {
+  const labels = readPages(read, `${base}/labels`)
+  if (labels.some((label) => label.name === auditLabel.name)) return
+  // 不重试POST。若其他维护者同时建标签导致冲突，下次只读发现即可，不能盲目再创建。
+  write(`${base}/labels`, auditLabel)
+  assert.equal(read(`${base}/labels/ci-recovery`).name, auditLabel.name)
 }
 
 export function persistRecord({
@@ -84,10 +109,16 @@ export function persistRecord({
   const body = encodeAudit(plan, record, controller)
   issueNumber = ledger?.issue
   if (ledger) {
+    ensureAuditClosed(ledger, { read, write })
     write(`${base}/issues/${issueNumber}/comments`, { body })
   } else {
     assert.ok(['reservation', 'observation'].includes(type), '不能无前序追加调用结果')
-    const response = write(`${base}/issues`, { title: auditTitle(plan.runId), body })
+    ensureAuditLabel(read, write)
+    const response = write(`${base}/issues`, {
+      title: auditTitle(plan.runId),
+      body,
+      labels: ['ci-recovery'],
+    })
     issueNumber = response.number
   }
   assert.ok(Number.isSafeInteger(issueNumber) && issueNumber > 0, '审计写入未返回issue编号')
@@ -97,7 +128,10 @@ export function persistRecord({
   for (const delay of [0, 1000, 2000]) {
     if (delay) wait(delay)
     stored = loadLedger(read, plan, issueNumber)
-    if (stored?.last.hash === record.hash) return stored
+    if (stored?.last.hash === record.hash) {
+      ensureAuditClosed(stored, { read, write })
+      return stored
+    }
   }
   assert.equal(stored?.last.hash, record.hash, '审计没有可靠写入或发生并发修改')
   return stored

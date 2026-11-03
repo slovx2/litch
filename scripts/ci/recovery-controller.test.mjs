@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { checkControllerRun, recoverRun } from './recovery-controller.mjs'
+import { checkControllerRun, excludedFromPriorScan, recoverRun } from './recovery-controller.mjs'
 import { buildRecoveryGraph } from './recovery-graph.mjs'
 import { loadLedger, persistRecord } from './recovery-ledger.mjs'
 import { controllerPlan, fixtureStep, fixtureWorkflow } from './recovery-plan.mjs'
@@ -129,6 +129,7 @@ function memory(scenario = 'infra') {
   const machine = {
     snapshot,
     issues: [],
+    labels: [],
     comments: [],
     calls: [],
     history: [],
@@ -151,6 +152,8 @@ function memory(scenario = 'infra') {
     if (path === 'repos/slovx2/litch/actions/runs/100') return structuredClone(machine.snapshot.run)
     if (path === 'repos/slovx2/litch/actions/runs/500') return controlRun
     if (path.includes('/issues?')) return machine.issues
+    if (path.includes('/labels?')) return machine.labels
+    if (path.endsWith('/labels/ci-recovery')) return machine.labels[0]
     if (path === 'repos/slovx2/litch/issues/9') return machine.issues[0]
     if (path.includes('/issues/9/comments')) return machine.comments
     if (path.includes('/artifacts?')) return { artifacts: machine.artifacts }
@@ -159,8 +162,8 @@ function memory(scenario = 'infra') {
       return { workflow_runs: machine.history }
     throw new Error(`未预期读取：${path}`)
   }
-  const write = (path, body) => {
-    machine.calls.push({ path, body })
+  const write = (path, body, method = 'POST') => {
+    machine.calls.push({ path, body, method })
     if (machine.failWrite) throw new Error('写入失败')
     const record = {
       id: 10 + machine.calls.length,
@@ -168,8 +171,18 @@ function memory(scenario = 'infra') {
       created_at: new Date(now()).toISOString(),
       ...body,
     }
+    if (method === 'PATCH') {
+      assert.equal(path, 'repos/slovx2/litch/issues/9')
+      Object.assign(machine.issues[0], body)
+      return machine.issues[0]
+    }
+    if (path.endsWith('/labels')) {
+      machine.labels.push(body)
+      return body
+    }
     if (path.endsWith('/issues')) {
       record.number = 9
+      record.state = 'open'
       machine.issues.push(record)
     } else if (path.endsWith('/comments')) machine.comments.push(record)
     else if (path.endsWith('/rerun-failed-jobs') || path.endsWith('/rerun')) {
@@ -258,7 +271,10 @@ test('DAG拒绝未知job、动态矩阵、调用环及新外部workflow，不执
 test('先写入并读回reservation再调用一次API，重复控制器只对账', () => {
   const machine = memory()
   assert.equal(recoverRun(100, machine.services).state, 'recovery-running')
-  assert.equal(machine.calls[0].path, 'repos/slovx2/litch/issues')
+  const created = machine.calls.findIndex((call) => call.path === 'repos/slovx2/litch/issues')
+  const closed = machine.calls.findIndex((call) => call.method === 'PATCH')
+  const rerun = machine.calls.findIndex((call) => call.path.endsWith('/rerun-failed-jobs'))
+  assert.ok(created >= 0 && closed > created && rerun > closed)
   assert.equal(machine.apiCalls().length, 1)
   assert.ok(machine.issues[0].body.includes('reservation'))
   assert.equal(recoverRun(100, machine.services).state, 'recovery-running')
@@ -390,6 +406,96 @@ test('人工关闭审计issue不释放预算；无机器标记的普通评论不
   })
   assert.equal(recoverRun(100, machine.services).state, 'recovery-running')
   assert.equal(machine.apiCalls().length, 1)
+})
+
+test('审计创建即带固定灰色标签并关闭；追加和对账沿用已关闭issue', () => {
+  const machine = memory()
+  recoverRun(100, machine.services)
+  assert.deepEqual(machine.labels, [
+    { name: 'ci-recovery', color: 'ededed', description: 'CI基础设施恢复审计；关闭不释放预算' },
+  ])
+  assert.deepEqual(machine.issues[0].labels, ['ci-recovery'])
+  assert.equal(machine.issues[0].state, 'closed')
+  assert.equal(loadLedger(machine.services.read, { runId: 100, sha }).reserved, true)
+  machine.snapshot.run.status = 'completed'
+  machine.snapshot.run.conclusion = 'success'
+  assert.equal(recoverRun(100, machine.services).state, 'recovery-completed')
+  assert.equal(machine.issues[0].state, 'closed')
+  assert.equal(machine.calls.filter((call) => call.path.endsWith('/issues')).length, 1)
+  assert.equal(machine.apiCalls().length, 1)
+})
+
+test('关闭失败不重建issue、不恢复预算；下次只补关闭并对账，不重发恢复', () => {
+  const machine = memory()
+  const write = machine.services.write
+  machine.services.write = (path, body, method) => {
+    if (method === 'PATCH') throw Error('close failed')
+    return write(path, body, method)
+  }
+  assert.throws(() => recoverRun(100, machine.services), /close failed/)
+  assert.equal(machine.apiCalls().length, 0)
+  assert.equal(machine.issues[0].state, 'open')
+  assert.equal(loadLedger(machine.services.read, { runId: 100, sha }).reserved, true)
+  machine.services.write = write
+  assert.equal(recoverRun(100, machine.services).state, 'reserved-awaiting-api-result')
+  assert.equal(machine.issues[0].state, 'closed')
+  assert.equal(machine.calls.filter((call) => call.path.endsWith('/issues')).length, 1)
+  assert.equal(machine.apiCalls().length, 0)
+})
+
+test('写接口只许固定灰色标签与关闭，不提供任意label、重开或修改body权限', () => {
+  const methods = []
+  const write = githubWriter((_cmd, args) => {
+    methods.push(args[2])
+    return 'HTTP/2.0 200 OK\r\n\r\n{}'
+  })
+  write('repos/slovx2/litch/issues/9', { state: 'closed' }, 'PATCH')
+  write('repos/slovx2/litch/labels', {
+    name: 'ci-recovery',
+    color: 'ededed',
+    description: 'CI基础设施恢复审计；关闭不释放预算',
+  })
+  for (const body of [{ state: 'open' }, { body: 'changed' }])
+    assert.throws(() => write('repos/slovx2/litch/issues/9', body, 'PATCH'))
+  assert.throws(() =>
+    write('repos/slovx2/litch/labels', { name: 'release-blocker', color: 'ededed' }),
+  )
+  assert.deepEqual(methods, ['PATCH', 'POST'])
+})
+
+test('历史扫描只在可信范围明确排除来源或写job真实skipped时不占预算', () => {
+  const prior = {
+    id: 90,
+    event: 'schedule',
+    path: '.github/workflows/recovery-controller.yml',
+    head_branch: 'main',
+    run_attempt: 1,
+    repository: { full_name: 'slovx2/litch' },
+    head_repository: { full_name: 'slovx2/litch' },
+  }
+  const jobs = [{ name: 'recovery', conclusion: 'success', steps: [], runner_name: 'runner' }]
+  const read = () => ({ jobs })
+  assert.equal(
+    excludedFromPriorScan(read, prior, 100, 'main', () => ({ value: { selectedRunIds: [1, 2] } })),
+    true,
+  )
+  assert.equal(
+    excludedFromPriorScan(read, prior, 100, 'main', () => ({ value: { selectedRunIds: [100] } })),
+    false,
+  )
+  assert.equal(
+    excludedFromPriorScan(read, prior, 100, 'main', () => null),
+    false,
+  )
+  jobs[0] = { name: 'recovery', conclusion: 'skipped', steps: [], runner_name: null }
+  assert.equal(
+    excludedFromPriorScan(read, prior, 100, 'main', () => null),
+    true,
+  )
+  assert.equal(
+    excludedFromPriorScan(read, { ...prior, head_branch: 'other' }, 100, 'main', () => null),
+    false,
+  )
 })
 
 test('原成功片被重做、制品被删换及API范围超出计划都判验收失败', () => {

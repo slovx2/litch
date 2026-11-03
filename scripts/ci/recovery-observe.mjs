@@ -11,11 +11,14 @@ import { classifyJob, evidenceHash, planRecovery } from './recovery-policy.mjs'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const repository = 'slovx2/litch'
 
-export function githubReader(execute = execFileSync) {
-  const deadline = Date.now() + 8 * 60_000
+export function githubReader(
+  execute = execFileSync,
+  { budgetMs = 8 * 60_000, requestMs = 30_000 } = {},
+) {
+  const deadline = Date.now() + budgetMs
   const immutable = new Map()
   return (path, bytes = false) => {
-    assert.ok(Date.now() < deadline, '只读观察总时间超过8分钟')
+    assert.ok(Date.now() < deadline, '只读观察超过本次总时间预算')
     // 仓库元信息用精确根路径；子资源仍须有斜线边界，不能放行同名前缀仓库。
     assert.ok(
       path === `repos/${repository}` || path.startsWith(`repos/${repository}/`),
@@ -30,7 +33,7 @@ export function githubReader(execute = execFileSync) {
     try {
       output = execute('gh', ['api', '--method', 'GET', '--allow-escape-sequences', path], {
         encoding: bytes ? null : 'utf8',
-        timeout: Math.min(30_000, deadline - Date.now()),
+        timeout: Math.min(requestMs, deadline - Date.now()),
         maxBuffer: bytes ? 64 * 1024 * 1024 : 8 * 1024 * 1024,
         stdio: ['ignore', 'pipe', 'pipe'],
       })
@@ -47,6 +50,11 @@ export function readPages(read, path, key) {
   const values = []
   for (let page = 1; page <= 20; page++) {
     const response = read(`${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`)
+    // Actions按event/branch/created过滤时最多返回1000条；不能把服务端截断当完整扫描。
+    assert.ok(
+      key !== 'workflow_runs' || !(response.total_count >= 1000),
+      '运行查询达到GitHub上限，需缩小时间范围',
+    )
     const items = key ? response[key] : response
     assert.ok(Array.isArray(items), '分页响应')
     values.push(...items)
