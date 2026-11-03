@@ -89,6 +89,7 @@ test('先等上线，再恢复全部 reverse 并核对；恢复不完整就失�
 for (const [mode, attempts, exitCode, clipboard = false, restoreReverse = true] of [
   ['offline-once', 2, 0],
   ['offline-always', 2, 1],
+  ['offline-then-driver-timeout', 2, 1],
   ['launch-without-feature', 1, 1],
   ['assert-offline', 1, 1],
   ['recovery-offline', 1, 1],
@@ -142,8 +143,10 @@ for (const [mode, attempts, exitCode, clipboard = false, restoreReverse = true] 
       const failed = !(mode === 'offline-once' && attempt === 2);
       fs.appendFileSync(process.env.EVENTS, JSON.stringify({kind:'maestro',attempt}) + '\\n');
       if (process.env.CLIPBOARD === '1' && attempt === 1) fs.writeFileSync(process.env.REVERSE_STATE,'[]');
-      const command = mode === 'assert-offline' ? {assertConditionCommand:{}} : {launchAppCommand:{appId:'dev.litch.app'}};
-      fs.writeFileSync(path.join(debug,'commands-test.json'),JSON.stringify([{command,metadata:{status:failed?'FAILED':'COMPLETED',error:{message:'test'}}}]));
+      const driverTimeout = mode === 'offline-then-driver-timeout' && attempt === 2;
+      const command = driverTimeout ? {tapOnElement:{selector:{idRegex:'composer-send'}}} : mode === 'assert-offline' ? {assertConditionCommand:{}} : {launchAppCommand:{appId:'dev.litch.app'}};
+      const error = {message:driverTimeout ? 'DEADLINE_EXCEEDED: waiting_for_connection' : 'test'};
+      fs.writeFileSync(path.join(debug,'commands-test.json'),JSON.stringify([{command,metadata:{status:failed?'FAILED':'COMPLETED',error}}]));
       fs.writeFileSync(path.join(debug,'maestro.log'),mode === 'launch-without-feature' ? 'other failure' : 'java.io.IOException: device offline');
       fs.writeFileSync(args[args.indexOf('--output') + 1], failed ? '<testsuite><testcase><failure>first failure</failure></testcase></testsuite>' : '<testsuite/>');
       process.exit(failed ? 1 : 0);`,
@@ -219,6 +222,17 @@ for (const [mode, attempts, exitCode, clipboard = false, restoreReverse = true] 
       const verify = observed.findIndex((event) => event.args?.includes('--list'))
       const rerun = observed.findIndex((event) => event.kind === 'maestro' && event.attempt === 2)
       assert.ok(wait >= 0 && verify > wait && rerun > verify)
+    }
+    if (mode === 'offline-then-driver-timeout') {
+      // 夜间先在 launchApp 掉线，第二次在点击时丢失 gRPC；不得追加第三次尝试或把整片记绿。
+      assert.equal(rows[1].status, 1)
+      assert.equal(observed.filter((event) => event.args?.includes('wait-for-device')).length, 1)
+      const second = join(artifacts, `mock/${flowName}/attempt-2`)
+      assert.match(
+        readFileSync(join(second, 'commands-test.json'), 'utf8'),
+        /waiting_for_connection/,
+      )
+      assert.equal(infrastructureRetryReason(second, 'dev.litch.app', true), null)
     }
   })
 }

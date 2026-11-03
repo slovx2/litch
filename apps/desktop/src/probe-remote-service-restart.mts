@@ -3,7 +3,7 @@
 //   一、“设置”进这台设备的详情，记下在跑的服务的进程号；
 //   二、没有会话在跑：直接重启（空闲时停），行上写“重启中”，做完出提示，连回来的是另一个进程；
 //   三、回合进行中：先列出这个会话确认，确认之后不等空闲直接停；做完的提示说打断了一个会话，
-//       那个会话末尾说一句“发消息继续”，再发一句回合照常跑完，那一句去掉。
+//       原会话自动继续一次并完成；之后再发一句，回合照常跑完。
 // 接在 serviceSession 后面（那台设备连着、有一个会话），编排在 smoke.mts。
 // 和别的验收一样，下面的函数会被原样送进页面里执行，不能引用函数外面的东西。
 import type { TerminalKit } from './probe-terminal-kit.mjs'
@@ -18,10 +18,11 @@ export interface ServiceRestart {
   /** 空闲时重启：行上写过“重启中”、做完的提示 */
   idlePill: boolean
   idleToast: string
-  /** 回合进行中：确认框列出的会话、做完的提示、会话末尾那一句 */
+  /** 回合进行中：确认框列出的会话、做完的提示 */
   confirm: string
   forcedToast: string
-  note: string
+  /** 原会话自动继续一次，回答完整且回合结束 */
+  autoContinued: boolean
   /** 再发一句：回话到了，那一句去掉了 */
   continued: boolean
   noteGone: boolean
@@ -141,7 +142,18 @@ export async function serviceRestart(svc: string, opening: string): Promise<Serv
   const forcedToast = text(one('.toast-text', forced))
   one<HTMLButtonElement>('.toast-x', forced)?.click()
   await until('连回来', online, 60_000)
-  const note = text(await until('末尾那一句', () => one('[data-restart-note]'), 60_000))
+  // 自动恢复可能先于重启 toast 被采样；开始新回合就会撤下手动继续提示，不能再等它常驻。
+  // 看持久的回合来历和完整回答，不把 toast、回合开始或提示消失当作恢复成功。
+  await until(
+    '原会话自动继续且回答完成',
+    () => {
+      const resumed = all('.turn').filter((turn) => one('[data-sys="restart"]', turn))
+      if (resumed.length > 1) throw new Error('重启后自动继续了不止一次')
+      return resumed.length === 1 && text(resumed[0]).includes('一点一点出来的。') && !running()
+    },
+    60_000,
+  )
+  const autoContinued = true
 
   // ---- 四、再发一句：回合照常跑完，那一句去掉 ----
   const after = '重启之后接着说的一句'
@@ -160,7 +172,7 @@ export async function serviceRestart(svc: string, opening: string): Promise<Serv
     idleToast,
     confirm,
     forcedToast,
-    note,
+    autoContinued,
     continued,
     noteGone,
   }
@@ -187,10 +199,7 @@ export function judgeServiceRestart(seen: ServiceRestart, svc: string, opening: 
     seen.forcedToast === `已重启 ${svc} 的设备服务，1 个会话被打断`,
     `打断回合之后的提示不对：${seen.forcedToast}`,
   )
-  must(
-    seen.note === '设备服务已重启。符合条件的回合将自动继续；未恢复的回合可手动继续。',
-    `被打断的会话末尾那一句不对：${seen.note}`,
-  )
+  must(seen.autoContinued, '重启后没有在原会话自动继续一次并完成回答')
   must(seen.continued && seen.noteGone, '再发一句之后重启提示还在')
   return failed
 }

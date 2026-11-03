@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm'
 import { serviceSession } from '../../apps/desktop/src/probe-remote-service-more.mts'
 import { installTerminalKit } from '../../apps/desktop/src/probe-terminal-kit.mts'
 
-function fixture(mode) {
+function fixture(mode, permissionDelay = 96) {
   let now = 0
   let readyAt = Infinity
   let created = false
@@ -43,7 +43,7 @@ function fixture(mode) {
     set value(words) {
       this.words = words
       writes.push(words)
-      if (writes.length === 1) readyAt = now + 96
+      if (writes.length === 1) readyAt = now + permissionDelay
     }
     dispatchEvent(event) {
       if (event.type !== 'keydown') return
@@ -179,6 +179,16 @@ test('项目权限延迟到首句写入之后才返回：原探针等待就绪�
   assert.equal(page.sends.filter((words) => words === '首句').length, 1)
   assert.equal(page.sends.length, 3, '首句、断线时、恢复后三条各发一次')
   assert.ok(page.waits.includes('远程项目权限就绪且首句可发送'))
+})
+
+test('权限在写入首句的下一帧返回：成功创建不能留下此前的 loading 采样', async () => {
+  // 夜间旧探针先采样、再写首句并等一帧，会同时报 loading 和 created=true。
+  const page = fixture('delayed', 16)
+  const seen = await page.run()
+  assert.equal(seen.created, true)
+  assert.equal(seen.stillBlocked, '')
+  assert.equal(page.writes.filter((words) => words === '首句').length, 1)
+  assert.equal(page.sends.filter((words) => words === '首句').length, 1)
 })
 
 for (const mode of ['loading', 'error', 'enabled-loading', 'enabled-error', 'disabled']) {

@@ -165,6 +165,12 @@ export async function prepareService({ repo, root, engines = {}, pace = 200 }) {
         if (res.destroyed) return
       }
     }
+    // 强制重启验收要真的打断在跑的回合，不能赌点击确认与六段普通回复谁先结束。
+    // 自动继续的输入不是这句话，会按普通回复结束；服务停掉时关闭这个旧请求。
+    if (said === '重启设备服务时在说的这一句') {
+      if (!res.destroyed) await new Promise((done) => res.once('close', done))
+      return
+    }
     chunk({}, calls ? 'tool_calls' : 'stop', {
       usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
     })
