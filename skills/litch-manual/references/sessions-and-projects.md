@@ -310,6 +310,7 @@ explain it:
 - **Side panel**: Files (tree, search, read-only viewer, add a file to the conversation), Diff (all /
   staged / unstaged, stage, unstage, discard, comment on lines; comments go with the next message),
   Browser, Suggested tasks, Background tasks, Goal, Side chat.
+  从回答里的文件改动点“在差异里看”可定位该文件；连续打开不同文件时，会分别确认各自的最新改动。
 - **File previews (desktop)**: the Files tab opens tree/search results and file links read-only.
   Markdown renders by default (Source is available; line-number links open source). Static images
   and SVG can zoom. PDF supports pages, scroll, zoom and text selection. CSV/TSV shows strings, never

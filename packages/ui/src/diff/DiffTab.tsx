@@ -175,7 +175,7 @@ function Diffs({
   const os = device?.os
   const wanted = useWanted()
   const taken = useRef(0)
-  const retried = useRef(0)
+  const retried = useRef<{ nonce: number; version: number } | null>(null)
   const [retryDone, setRetryDone] = useState(0)
   const stillLoading = view?.refreshing === true
   useEffect(() => {
@@ -189,15 +189,18 @@ function Diffs({
         return
       }
       // 手上的概况可能是旧的（回合还没结束，面板还没跟上代理刚改的）：重新取一遍再找
-      if (retried.current !== wanted.nonce) {
-        retried.current = wanted.nonce
+      if (retried.current?.nonce !== wanted.nonce) {
+        retried.current = { nonce: wanted.nonce, version: view?.version ?? 0 }
         channel
           .command('diff.refresh', { deviceId, root })
           .catch(() => {})
-          .finally(() => setRetryDone((count) => count + 1))
+          .finally(() => setRetryDone(wanted.nonce))
         return
       }
-      if (stillLoading || retryDone === 0) return
+      // 每次跳转都等自己的刷新完成，不能借上一次跳转的完成状态判定文件不存在。
+      if (stillLoading || retryDone !== wanted.nonce) return
+      // 命令回包早于按帧合并的订阅增量：还要等新的 git 概况。回合差异不随 git 刷新换版本。
+      if (git && (view?.version ?? 0) <= retried.current.version) return
       // 还是没有：它现在没有没提交的改动了（提交了，或者改回去了），说一声
       taken.current = wanted.nonce
       showToast({ id: 'diff-wanted', lifeMs: 5000, text: (say) => say('diffs.wanted.none') })
@@ -206,7 +209,21 @@ function Diffs({
     taken.current = wanted.nonce
     setPlaceState(key, { picked: path, query: '' })
     setJump({ path, nonce: wanted.nonce })
-  }, [wanted, ready, byPath, root, os, scope, key, stillLoading, retryDone, channel, deviceId])
+  }, [
+    wanted,
+    ready,
+    byPath,
+    root,
+    os,
+    scope,
+    key,
+    stillLoading,
+    retryDone,
+    channel,
+    deviceId,
+    git,
+    view?.version,
+  ])
 
   const pick = useCallback(
     (path: string) => {
