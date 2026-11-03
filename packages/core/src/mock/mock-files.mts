@@ -17,6 +17,7 @@ import type { DeviceView } from '../model.mjs'
 import type { FileContent } from '../model-files.mjs'
 import { encodeBase64, textToBase64 } from '../text/bytes.mjs'
 import { insideRoot, normalizePath, relativeTo } from '../text/paths.mjs'
+import { OUTSIDE_FILE_DATA, OUTSIDE_FILE_ROOT } from './sample-file-links.mjs'
 import { type SampleFiles, sampleFiles } from './sample-files.mjs'
 import type { SampleLang } from './sample-text.mjs'
 
@@ -152,6 +153,27 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
       }
     }
     const { path } = params as { path: string }
+    // 固定的根外文件与项目示例树分开，临时根改变时文件身份仍保持不变。
+    const outside = OUTSIDE_FILE_DATA[path]
+    if (outside || path === OUTSIDE_FILE_ROOT) {
+      if (method === 'fs/getMetadata')
+        return {
+          isDirectory: path === OUTSIDE_FILE_ROOT,
+          isFile: !!outside,
+          isSymlink: false,
+          createdAtMs: 0,
+          modifiedAtMs: 0,
+        }
+      if (method === 'fs/readFile' && outside) return { dataBase64: outside }
+      if (method === 'fs/readDirectory' && path === OUTSIDE_FILE_ROOT)
+        return {
+          entries: Object.keys(OUTSIDE_FILE_DATA).map((file) => ({
+            fileName: file.slice(OUTSIDE_FILE_ROOT.length + 1),
+            isDirectory: false,
+            isFile: true,
+          })),
+        }
+    }
     const relative = relativeOf(remote, path)
     // 示例树之外的目录（挑目录时一层层往上、往下走）：照这台设备认得的根编出它们那一路上的目录
     if (method === 'fs/readDirectory' && relative === null) {

@@ -102,7 +102,7 @@ const looksLikeFile = (name: string): boolean =>
   BARE_NAMES.has(name.toLowerCase())
 
 /**
- * 一整段字是不是工作区里的一个文件路径。不是、或者认不准，就是 null。
+ * 一整段字是不是会话设备上的文件路径。不是、或者认不准，就是 null。
  * mode 是 prose 时按正文的规矩，更严
  */
 export function fileRefOf(
@@ -247,7 +247,7 @@ export function findFileRefs(text: string, scope: FileScope): FileRefSpan[] {
 
 /**
  * 明知道是个文件路径的（工具调用里改动的文件，是引擎给的，不是从文字里猜的）：不用看它像不像，
- * 只核对在不在根之内。在就给出完整路径，不在是 null
+ * 不做文件名启发式判断；返回同设备的完整路径与候选，不改变设备身份
  */
 export function knownFileRef(path: string, scope: FileScope): FileRef | null {
   if (!path || !scope.root || /^[\\/]{2}/.test(path) || /[\0\r\n]/.test(path)) return null

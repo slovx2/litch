@@ -3,7 +3,7 @@
 // - 行内代码整段是个路径的，改成 [`路径`](litch-file:…)，样子还是行内代码；
 // - 正文里扫出来的路径（核心的 findFileRefs，认不准的宁可不认）改成 [路径](litch-file:…)；
 // - 裸写的 http(s) 地址改成 <地址>，Markdown 的自动链接。
-// 代码块里的一律不动；一行里已经有链接（`](`、`<http`）的整行不动，免得拆坏原有的链接。
+// 代码块里的一律不动；已有链接与自动链接作为完整片段保留，同一行的其他路径仍可改写。
 // 改写只换链接、不换字形：封口的块排好版钉了高度（cells.tsx），改写前后排出来要一样高。
 import { explicitFileRef, type FileRef, type FileScope, fileRefOf, findFileRefs } from '@litch/core'
 

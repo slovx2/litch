@@ -35,8 +35,13 @@ export class WebView extends Component<WebViewProps> {
   private frame: Frame | null = null
 
   injectJavaScript(code: string): void {
-    const target = this.frame?.contentWindow as (Window & { eval(code: string): unknown }) | null
-    target?.eval(code)
+    // 文件预览的 CSP 禁止 eval。用文档允许的内联脚本模拟原生注入，不放宽正式预览的 CSP。
+    const document = this.frame?.contentDocument
+    if (!document?.body) return
+    const script = document.createElement('script')
+    script.textContent = code
+    document.body.append(script)
+    script.remove()
   }
 
   requestFocus(): void {

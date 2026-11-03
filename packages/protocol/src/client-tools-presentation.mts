@@ -44,8 +44,8 @@ export const PRESENTATION_SPEC: ClientToolNamespaceSpec = {
 
 /**
  * 客户端核心建会话时要不要带呈现风格（按 harness 名字认），要带就给定义，不带是 null。设备进程按 link.native 认。
- * 原生 codex 不带：它自己的提示词和官方桌面端用的是同一份，Litch 照官方桌面端的样子用它，不另加呈现指令
- * （上游也不收没有工具的命名空间）。不知道建在哪个 harness 上的也不带，免得交给原生 codex 被拒。
+ * 原生 codex 只带文件链接规则，随后抽成 developerInstructions；不另加整份呈现风格，空命名空间也不交给上游。
+ * 不知道建在哪个 harness 上的暂不带。
  */
 export function presentationSpec(harness: string | null): ClientToolNamespaceSpec | null {
   return harness === null ? null : harness === 'codex' ? FILE_LINK_SPEC : PRESENTATION_SPEC

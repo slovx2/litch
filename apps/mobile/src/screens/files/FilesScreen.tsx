@@ -1,5 +1,5 @@
-// 文件：一个根（工作区的根、会话的工作目录）下面逐层往里看，文件只读打开。
-// 一层目录、一个文件各是页面栈里的一页（系统返回键就是上一层）；路由参数带着 path，对话区的文件引用直接跳到这里，
+// 文件：同设备选定的根下面展开目录树，文件只读打开。
+// 路由参数带着 path，对话区的文件引用直接跳到这里；根外链接由核心核实并返回临时根，
 // 带着 line 的打开后定位到那一行。path 不知道是目录还是文件时先读一次（对面说是目录就改成列这一层），根就是目录。
 // 路径都由核心核对：必须在根之内，对面不提供文件访问时说明白（files.unsupported 这类话由核心给）。
 import {
@@ -157,8 +157,15 @@ export function FilesScreen({ navigation, route }: Props) {
     )
   else {
     // 预览与源码共用最终选中的设备、文件树根和定位信息。
-    const view = { content: loaded.content, line, deviceId, root, fragment: route.params.fragment }
-    body = <FileView {...view} />
+    body = (
+      <FileView
+        content={loaded.content}
+        line={line}
+        deviceId={deviceId}
+        root={root}
+        fragment={route.params.fragment}
+      />
+    )
   }
 
   return (

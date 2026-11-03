@@ -7,6 +7,8 @@ import {
   createMockCore,
   type DirectoryView,
   type FileContent,
+  type FileLinkResolution,
+  type FilePreview,
   type FileSearchView,
   fileRefOf,
   findFileRefs,
@@ -44,6 +46,31 @@ function setup(deviceId = 'local', root = ROOT) {
     run,
   }
 }
+
+test('根外图片/PDF 从解析的临时根进入同设备受限预览，本机和远程模拟设备一致', async () => {
+  for (const deviceId of ['local', 'build']) {
+    const { run } = setup(deviceId)
+    for (const [name, format] of [
+      ['image.png', 'image'],
+      ['report.pdf', 'pdf'],
+    ]) {
+      const path = `/tmp/litch-file-links/${name}`
+      const resolved = await run<FileLinkResolution>('files.resolve', {
+        ref: { path, alt: null, line: null },
+        href: path,
+      })
+      assert.equal(resolved.status, 'ready')
+      assert.deepEqual(resolved.candidates, [{ path, root: '/tmp/litch-file-links', kind: 'file' }])
+      const preview = await run<FilePreview>('files.preview', {
+        path,
+        root: resolved.candidates[0]?.root,
+        format,
+      })
+      assert.equal(preview.kind, 'ready')
+      assert.ok(preview.kind === 'ready' && preview.bytes > 100)
+    }
+  }
+})
 
 async function failureOf(run: Promise<unknown>): Promise<ChannelError> {
   try {

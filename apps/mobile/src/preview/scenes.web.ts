@@ -454,6 +454,13 @@ export const SCENES: Scene[] = [
     note: '标准链接、行号、目录展开和失败详情，使用模拟核心',
     steps: [say('看文件')],
   },
+  {
+    id: 'outside-previews',
+    group: '工具',
+    name: '根外图片与 PDF',
+    note: '对话绝对链接 → 核心临时根 → 手机受限预览，全程模拟设备',
+    steps: [say('根外预览')],
+  },
 
   {
     id: 'tasks',

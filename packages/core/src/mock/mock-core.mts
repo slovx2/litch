@@ -1,4 +1,5 @@
 import { matchTitles } from '../search/titles.mjs'
+import { OUTSIDE_FILE_REPLY } from './sample-file-links.mjs'
 // 模拟核心：不连任何设备，拿示例数据实现核心对通道的两个入口。
 // 界面开发、组件测试、桌面外壳的自检都对着它跑。
 // 它会把回答按小块流出来，发送、排队、打断、审批、提问也都有个样子，让界面的每条路径真的被走到。
@@ -1073,6 +1074,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         { op: 'item.add', turnId, item: projectItem(readCall(`${turnId}-r${++seq}`, sample.read)) },
       ])
       reply(view, turnId, sample.answer)
+      return turnId
+    }
+    if (/根外预览|outside previews/i.test(message.text)) {
+      reply(view, turnId, OUTSIDE_FILE_REPLY)
       return turnId
     }
     if (SHOWS_FILES.test(message.text)) {

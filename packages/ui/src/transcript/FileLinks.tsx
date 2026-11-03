@@ -43,7 +43,7 @@ const Context = createContext<FileLinks | null>(null)
 export const FileLinksProvider = Context.Provider
 
 /**
- * 这个会话里的路径怎么认、点了去哪。路径要落在会话的根里（side/roots.ts，和侧面板的根一样：工作树、工作区、工作目录）；
+ * 这个会话里的路径怎么认、点了去哪。默认文件树根优先工作树，相对路径保留项目全部根；
  * 只读地看已归档的对话时没有摘要，也就不认路径。同一个目录的另一种写法按设备的系统认（pathTwin）
  */
 export function useSessionFileLinks(
@@ -153,7 +153,7 @@ function FileLink({
   )
 }
 
-/** 行内代码。整段是工作区里的一个文件路径就能点 */
+/** 行内代码。整段是文件路径就能点，存在性在点击时核实 */
 export function CodeSpan({ text }: { text: string }) {
   const links = useContext(Context)
   const target = links ? fileRefOf(text, links.scope) : null
@@ -170,7 +170,7 @@ export function CodeSpan({ text }: { text: string }) {
   )
 }
 
-/** 回答里的链接。地址是工作区里的文件路径的，在文件面板里打开；别的照外链办 */
+/** 回答里的文件链接在所属设备打开，网址走浏览器；未识别的明确链接说明原因 */
 export function Link({ href, children }: { href: string; children: ReactNode }) {
   const links = useContext(Context)
   const [failure, setFailure] = useState<FileLinkResolution | null>(null)
@@ -232,7 +232,7 @@ export function Prose({ text }: { text: string }) {
   return out
 }
 
-/** 工具调用里的文件路径（引擎给的，明知是文件）：在工作区里的就能点 */
+/** 工具调用里的文件路径（引擎给的，明知是文件）：点击时核实 */
 export function ToolPath({ path, className }: { path: string; className?: string }) {
   const links = useContext(Context)
   const target = links ? knownFileRef(path, links.scope) : null
