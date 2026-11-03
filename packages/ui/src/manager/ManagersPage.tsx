@@ -35,7 +35,9 @@ export function ManagersPage({
       <button
         type="button"
         className="mg-list-open"
-        onClick={() => onOpen({ deviceId: manager.deviceId, sessionId: manager.threadId })}
+        onClick={() =>
+          onOpen({ deviceId: manager.deviceId, sessionId: manager.threadId, managerId: manager.id })
+        }
       >
         <span className="grow">
           <b>{manager.name || t('manager.manager')}</b>

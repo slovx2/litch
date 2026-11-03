@@ -58,14 +58,13 @@ async function selectionSeen() {
   if (document.querySelector('[data-projection=recent] [data-session=manager-k1]'))
     throw new Error('工作线应默认收在经理下')
   manager()?.click()
-  await until(() => only(manager()))
-  // 从侧栏选择经理仍留在当前模式；只有显式切换才进入经理侧栏。
-  if (document.querySelector('[data-sidebar-mode=chat]')?.getAttribute('aria-pressed') !== 'true')
-    throw new Error('点最近里的经理不应切换侧栏模式')
-  if (!document.querySelector('[data-projection=recent]')) throw new Error('最近组不应消失')
-  document.querySelector<HTMLButtonElement>('[data-sidebar-mode=manager]')?.click()
-  await until(() => !document.querySelector('[data-projection]'))
+  await until(() => !!document.querySelector('[data-manager="session"][data-manager-id=m1]'))
+  if (
+    document.querySelector('[data-sidebar-mode=manager]')?.getAttribute('aria-pressed') !== 'true'
+  )
+    throw new Error('点最近里的经理应进入同一经理工作台')
+  if (document.querySelector('[data-projection]')) throw new Error('经理模式不显示普通投影')
   document.querySelector<HTMLButtonElement>('[data-sidebar-mode=chat]')?.click()
-  await until(() => only(manager()))
+  await until(() => only(recent()))
   return { recentOnly: true, treeOnly: true, modeRestored: true, managerEntry: true }
 }

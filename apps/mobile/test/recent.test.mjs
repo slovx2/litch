@@ -118,7 +118,7 @@ test('只有会话详情页、参数齐全才算在看会话', () => {
   assert.equal(viewedSession(undefined), null)
 })
 
-test('最近经理与普通会话都进对话详情，不依赖经理目录', () => {
+test('最近经理与普通会话都交给公共会话入口，由入口确认身份', () => {
   const row = { deviceId: 'local', sessionId: 'manager-thread', workspaceId: null, at: 1 }
   assert.deepEqual(recentRoute(row, '经理'), [
     'Detail',
@@ -135,6 +135,8 @@ test('经理控制台的目录迟到后开始计时，离开和后台清零', ()
   const listeners = new Set()
   const env = setup({
     managers: {
+      destination: () => null,
+      subscribeDestination: () => () => {},
       get: (deviceId, id) => (deviceId === 'local' && id === 'm' ? thread : undefined),
       subscribe: (_device, _manager, changed) => {
         listeners.add(changed)

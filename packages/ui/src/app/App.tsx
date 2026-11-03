@@ -5,7 +5,7 @@ import { useT } from './appearance.ts'
 import '../styles/suggestions.css'
 import { ManagerTitleBar } from '../manager/ManagerTitleBar.tsx'
 import '../styles/manager.css'
-import { keys, managerMark, type SessionSummary } from '@litch/core'
+import { keys, managerMark, openSessionWhenKnown, type SessionSummary } from '@litch/core'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArchivedPage } from '../archived/ArchivedPage.tsx'
 import { ArchivedSession } from '../archived/ArchivedSession.tsx'
@@ -53,7 +53,12 @@ import { TitleBar } from './TitleBar.tsx'
 import { Toasts } from './toasts.tsx'
 import { useNavigation } from './useNavigation.ts'
 import { useSelectionLifetime } from './useSelectionLifetime.ts'
-import type { ViewMode, ViewNavigation } from './view-navigation.ts'
+import {
+  type NavigationAction,
+  sessionSelection,
+  type ViewMode,
+  type ViewNavigation,
+} from './view-navigation.ts'
 
 /** 主页面与侧栏打开的模态入口。设置（含设备）、建议、定时任务不进入主导航历史。 */
 export type Page = 'archived' | 'devices' | 'settings' | 'tasks' | 'managers' | 'suggestions'
@@ -61,6 +66,8 @@ export type Page = 'archived' | 'devices' | 'settings' | 'tasks' | 'managers' | 
 export interface Selection {
   deviceId: string
   sessionId: string
+  /** 来自经理对象或创建应答的已确认身份，目录可稍后到达。 */
+  managerId?: string
 }
 
 /** 正在写第一条消息、还没建出来的会话。workspaceId 为 null 表示不属于任何工作区 */
@@ -86,8 +93,31 @@ export function App() {
     },
     [replica],
   )
-  const { navigation, dispatch, go, back, forward } = useNavigation(validLocation)
+  const { navigation, dispatch: visit, go: travel, back, forward } = useNavigation(validLocation)
+  const opening = useRef<(() => void) | null>(null)
+  const cancelOpening = useCallback(() => {
+    opening.current?.()
+    opening.current = null
+  }, [])
+  useEffect(() => cancelOpening, [cancelOpening])
+  const dispatch = useCallback(
+    (action: NavigationAction) => {
+      // 隐藏视图清理失效会话不是用户改选，不能取消正在等待目录的打开请求。
+      if (action.type !== 'missing') cancelOpening()
+      visit(action)
+    },
+    [cancelOpening, visit],
+  )
+  const go = useCallback(
+    (direction: -1 | 1) => {
+      cancelOpening()
+      travel(direction)
+    },
+    [cancelOpening, travel],
+  )
   const [auxiliary, setAuxiliary] = useState<AuxiliaryPage | null>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 浮窗开关本身就是离开动作，须取消尚未确认身份的导航。
+  useLayoutEffect(() => cancelOpening(), [auxiliary, cancelOpening])
   const closeAuxiliary = useCallback(() => leaveThen(() => setAuxiliary(null)), [])
   const sidebarMode = navigation.mode
   const { picked, wish, page, peek = null } = navigation[sidebarMode]
@@ -115,14 +145,11 @@ export function App() {
     (manager) =>
       manager.deviceId === picked?.deviceId && manager.historyThreadIds?.includes(picked.sessionId),
   )
-  // 对话侧栏的经理行也只是会话入口；只有经理视图才展示看板和控制台。
-  const pickedManager =
-    sidebarMode === 'manager'
-      ? managerData.managers.find(
-          (manager) =>
-            manager.deviceId === picked?.deviceId && manager.threadId === picked.sessionId,
-        )
-      : undefined
+  const pickedManager = managerData.managers.find(
+    (manager) => manager.deviceId === picked?.deviceId && manager.threadId === picked.sessionId,
+  )
+  const waitingManager =
+    (mark?.role === 'manager' || !!picked?.managerId) && !historicalManager && !pickedManager
   const owner =
     mark?.role === 'line'
       ? managerData.managers.find(
@@ -161,8 +188,8 @@ export function App() {
   const selection = page ? null : picked
 
   // 只记实际呈现在主区域的会话；预取、打开侧面板和后台订阅不算查看。
-  const viewingDevice = auxiliary ? undefined : selection?.deviceId
-  const viewingSession = auxiliary ? undefined : selection?.sessionId
+  const viewingDevice = auxiliary || waitingManager ? undefined : selection?.deviceId
+  const viewingSession = auxiliary || waitingManager ? undefined : selection?.sessionId
   // 随画面提交即取消旧计时，不能等下一轮被动 effect 才处理切走。
   useLayoutEffect(() => {
     replica.viewSession(
@@ -175,15 +202,16 @@ export function App() {
 
   // 开着一个会话就算读过了：摘要上的未读一出现就清（摘要比选中晚到的也算）
   useEffect(() => {
-    if (!selection || auxiliary) return
+    if (!selection || auxiliary || waitingManager) return
     return readWhileOpen(channel, replica.store, selection.deviceId, selection.sessionId)
-  }, [selection, auxiliary, channel, replica])
+  }, [selection, auxiliary, waitingManager, channel, replica])
 
   // 换页的动作都先过 leaveThen：眼前那一页有没保存的改动（harness 详情设置）时先问，问完了才换（leave-guard.tsx）
   const openPage = useCallback(
     (next: Page | null, preview: Selection | null = null) => {
       if (next === 'settings' && auxiliary === 'settings') return
       leaveThen(() => {
+        cancelOpening()
         if (next === 'devices') {
           setSettingsAt('devices')
           setAuxiliary('settings')
@@ -197,24 +225,29 @@ export function App() {
         dispatch({ type: 'page', page: next, peek: preview })
       })
     },
-    [dispatch, auxiliary],
+    [dispatch, auxiliary, cancelOpening],
   )
   const select = useCallback(
     (next: Selection, mode?: ViewMode) =>
       leaveThen(() => {
-        const summary = replica.store.get<SessionSummary>(
-          keys.summary(next.deviceId, next.sessionId),
+        cancelOpening()
+        opening.current = openSessionWhenKnown(
+          replica.store,
+          next.deviceId,
+          next.sessionId,
+          (managerId) => {
+            const summary = replica.store.get<SessionSummary>(
+              keys.summary(next.deviceId, next.sessionId),
+            )
+            const managed = summary && managerMark(summary)
+            setAuxiliary(null)
+            // 入口可以保留工作线所在的侧栏，但不能把经理工作台降为普通对话。
+            dispatch(sessionSelection(next, managerId, mode, !!managed))
+          },
+          next.managerId,
         )
-        const managed =
-          (summary && managerMark(summary)) ||
-          managerData.managers.some(
-            (manager) => manager.deviceId === next.deviceId && manager.threadId === next.sessionId,
-          )
-        setAuxiliary(null)
-        dispatch({ type: 'select', mode: mode ?? (managed ? 'manager' : 'chat'), selection: next })
-        setPeek(null)
       }),
-    [replica, managerData.managers, setPeek, dispatch],
+    [replica, cancelOpening, dispatch],
   )
   const selectFromSidebar = useCallback(
     (next: Selection) => select(next, sidebarMode),
@@ -410,7 +443,11 @@ export function App() {
   }, [])
 
   return (
-    <div className={pickedManager && !page ? 'app main-app mg-app' : 'app main-app'}>
+    <div
+      className={
+        (pickedManager || waitingManager) && !page ? 'app main-app mg-app' : 'app main-app'
+      }
+    >
       <NavigationBar back={back} forward={forward} go={go} />
       <TitleSearch
         onOpen={(next, archived) => {
@@ -421,7 +458,8 @@ export function App() {
           else select(next)
         }}
       />
-      {page === 'managers' || (sidebarMode === 'manager' && !page && (pickedManager || owner)) ? (
+      {page === 'managers' ||
+      (sidebarMode === 'manager' && !page && (pickedManager || waitingManager || owner)) ? (
         <ManagerTitleBar
           {...(page
             ? {}
@@ -496,6 +534,8 @@ export function App() {
               }
               onOpen={select}
             />
+          ) : selection && waitingManager ? (
+            <div className="empty">{t('manager.loading')}</div>
           ) : selection ? (
             <>
               {owner ? (
@@ -526,7 +566,7 @@ export function App() {
           <TerminalSlot selection={selection} draft={draft} page={page} />
         </main>
         {/* 右边常驻的信息栏（待办等）：有内容才出来，排在对话和侧面板之间 */}
-        {selection && !page && !pickedManager ? (
+        {selection && !page && !pickedManager && !waitingManager ? (
           <InfoRail
             key={`${selection.deviceId}:${selection.sessionId}`}
             deviceId={selection.deviceId}

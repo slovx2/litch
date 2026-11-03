@@ -68,10 +68,10 @@ Opening a child keeps its whole tree in the Unread group, at the same position a
 经理也进入最近和未读。工作线及其后代归入所属经理，不单独列为主项；桌面默认收在“› N 个子会话”下，可展开。
 桌面上经理主项的记号列多一个细框（人文外观是圆圈），状态记号照常画在框里，读屏念“经理”；和侧栏经理一节的经理行同一画法。
 经理和普通对话一样：前台连续查看满 5 秒、或成功发送、答复、追问等操作进入最近；新结果沿用未读标记。读取、标记已读、失败或未受理的操作不计入最近。
-点击经理或工作线投影在当前视图打开对应对话；经理模式仍不显示这两组。手机首页最近中的经理与工作线都打开对话详情。
+从最近、未读、搜索、通知或会话链接打开经理，均进入与经理目录相同的工作台（含看板）；手机也相同。工作线和普通子会话仍打开普通对话。身份尚未确认时等待目录或摘要，不先展示普通对话。经理模式仍不显示这两组。
 Managers also appear in Recent and Unread. Their worklines are grouped beneath the manager and collapsed by default on desktop.
 Viewing a manager for five continuous foreground seconds or completing an explicit action records a recent interaction. Reading, marking read, failed and rejected actions do not.
-Manager and workline entries open their conversation in the current view on desktop, and conversation details on phone. The projection groups remain hidden in manager mode.
+Opening a manager from Recent, Unread, search, a notification or a session link opens the same workbench and board as the Managers directory, on desktop and phone. Worklines and ordinary children keep their conversation view. Opening waits for session identity when needed. The projection groups remain hidden in manager mode.
 
 手机首页在定时任务入口之后、各台设备之前显示「最近」，规则与桌面相同：应用在前台、会话页正显示该会话时连续停留满 5 秒才记录；
 切到后台、锁屏、下拉通知中心或离开会话页（回到列表、打开终端、文件、子代理页等）都会清零。在手机上发送、批准、停止等操作立即记录。
@@ -182,9 +182,9 @@ sessions → Chat) without overwriting the other view's location. Removed manage
 deleted sessions are not restored. These navigation behaviors have no setting to turn off.
 Managers and the global suggestion list: see [Managers and suggested tasks](managers-and-suggestions.md).
 
-直接点击侧栏“未读”“最近”中的经理、工作线时，在当前对话视图打开正文，
-保留所点击行的选中来源和各组的展开状态，不切换到经理页。普通设备树不重复列出经理及其工作线，
-看板、控制台与经理专属会话树仍从“经理”视图进入。手机“最近”中的经理同样打开对话详情。
+直接点击侧栏“未读”“最近”中的经理时，进入经理工作台；工作线仍在原视图打开普通对话。
+普通设备树不重复列出经理及其工作线。手机最近中的经理使用与经理目录相同的工作台和默认页签，
+返回一次回到原入口；查看对话时按工作台的规则清除会话未读。
 
 ### Pending questions and answers
 

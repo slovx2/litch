@@ -12,7 +12,7 @@ export interface RowMemory {
   mode: Mode
   rows: Record<Mode, RowSelection | null>
   viewed: Record<Mode, Selection | null>
-  clicked: { mode: Mode; selection: Selection } | null
+  clicked: { mode: Mode; selection: Selection; previous: RowSelection | null } | null
   request: Selection | null
 }
 
@@ -35,7 +35,7 @@ export function clickedRow(
   return {
     ...was,
     rows: { ...was.rows, [mode]: { ...selection, source } },
-    clicked: { mode, selection },
+    clicked: { mode, selection, previous: was.rows[mode] },
     request: null,
   }
 }
@@ -50,12 +50,17 @@ export function navigateRows(
   const restored = was.mode !== mode && was.viewed[mode] === selection
   const direct =
     selection !== null && was.clicked?.mode === mode && was.clicked.selection === selection
+  // 最近里的经理会跨模式打开。来源模式仍显示原会话，返回时不能高亮刚点过的经理。
+  const rows =
+    was.clicked && was.clicked.mode !== mode
+      ? { ...was.rows, [was.clicked.mode]: was.clicked.previous }
+      : was.rows
   return {
     mode,
     rows:
       restored || direct
-        ? was.rows
-        : { ...was.rows, [mode]: navigatedRow(was.rows[mode], selection, autoLocate) },
+        ? rows
+        : { ...rows, [mode]: navigatedRow(rows[mode], selection, autoLocate) },
     viewed: { ...was.viewed, [mode]: selection },
     clicked: null,
     request: !restored && !direct && autoLocate ? selection : null,

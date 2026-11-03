@@ -264,6 +264,31 @@ function serviceWorld(
   }
 }
 
+test('连接已完成但经理目录仍在途时，新订阅保持未知，不能将空目录判为普通会话', async () => {
+  const { manager } = sample()
+  let finish: (value: { managers: Manager[] }) => void = () => {}
+  const w = serviceWorld({
+    [MANAGER_METHOD.list]: () =>
+      new Promise<{ managers: Manager[] }>((resolve) => {
+        finish = resolve
+      }),
+  })
+  w.connect()
+  const lists: ManagersView[] = []
+  const stop = w.service.open({
+    snapshot: (data) => lists.push(data as ManagersView),
+    delta() {},
+    error() {},
+  })
+  assert.equal(lists.at(-1)?.available, null)
+  finish({ managers: [manager] })
+  await settle()
+  assert.equal(lists.at(-1)?.available, true)
+  assert.equal(lists.at(-1)?.managers[0]?.id, manager.id)
+  stop()
+  w.offline()
+})
+
 test('答复成功立即发布权威结果，不依赖通知或整板重读；失败保留待定', async () => {
   for (const mode of ['submit', 'feedback', 'old-feedback']) {
     const feedback = mode !== 'old-feedback'

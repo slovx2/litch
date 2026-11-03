@@ -12,6 +12,7 @@ import {
   createCore,
   createPortPair,
   type DeviceSnapshot,
+  managerMark,
   type SessionSummary,
   type SidebarOp,
   type SidebarView,
@@ -25,6 +26,33 @@ import { fakeClock, settle } from './helpers.mjs'
 import { setup as single, watch } from './world.mjs'
 
 const never = { aborted: false, addEventListener() {} }
+
+test('冷启动的离线缓存保留经理与工作线标记，普通会话仍无经理身份', () => {
+  const remembered: DeviceSnapshot = {
+    mode: 'full',
+    harnesses: [],
+    workspaces: [],
+    sections: [],
+    unread: [],
+    threads: [
+      { ...thread({ id: 'manager' }), litchManager: { role: 'manager', managerId: 'm1' } },
+      { ...thread({ id: 'line' }), litchManager: { role: 'line', managerId: 'm1' } },
+      thread({ id: 'ordinary' }),
+    ] as DeviceSnapshot['threads'],
+  }
+  const w = setup([], remembered)
+  assert.equal(w.device()?.stale, true)
+  for (const [id, role] of [
+    ['manager', 'manager'],
+    ['line', 'line'],
+    ['ordinary', undefined],
+  ]) {
+    const summary = w.side.sessions.get(id ?? '')
+    assert.ok(summary)
+    assert.equal(managerMark(summary)?.role, role)
+  }
+  w.core.stop()
+})
 
 /** 两个 harness，各有两个会话，更新时间交错着 */
 const pair = (): FakeHarness[] => [

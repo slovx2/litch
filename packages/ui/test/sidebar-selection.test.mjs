@@ -36,17 +36,32 @@ test('对话和经理分别记住来源：切模式与窗口重渲染不重算�
   assert.equal(memory.rows.manager, managerRow)
 })
 
-test('模式切换保留未选中状态；跨模式点击保存来源模式的行，目标模式独立定位', () => {
+test('模式切换保留未选中状态；跨模式点击恢复来源模式的原行，目标模式独立定位', () => {
   let memory = navigateRows(rowMemory('chat'), 'chat', session, false)
   memory = navigateRows(memory, 'manager', null, false)
   memory = navigateRows(memory, 'chat', session, false)
   assert.equal(memory.rows.chat, null)
   const manager = { ...session, sessionId: 'manager' }
   memory = navigateRows(clickedRow(memory, 'chat', manager, 'recent'), 'manager', manager, true)
-  assert.equal(memory.rows.chat.source, 'recent')
+  assert.equal(memory.rows.chat, null)
   assert.equal(memory.rows.manager.source, 'tree')
   memory = navigateRows(memory, 'chat', session, true)
-  assert.deepEqual(memory.rows.chat, { ...manager, source: 'recent' })
+  assert.equal(memory.rows.chat, null)
+})
+
+test('最近打开经理后切回普通对话，正文与高亮均恢复原会话的最近行', () => {
+  const manager = { ...session, sessionId: 'manager' }
+  let memory = navigateRows(
+    clickedRow(rowMemory('chat'), 'chat', session, 'recent'),
+    'chat',
+    session,
+    true,
+  )
+  memory = navigateRows(clickedRow(memory, 'chat', manager, 'recent'), 'manager', manager, true)
+  assert.deepEqual(memory.rows.chat, recent)
+  memory = navigateRows(memory, 'chat', session, true)
+  assert.deepEqual(memory.rows.chat, recent)
+  assert.equal(memory.request, null)
 })
 
 test('同一会话的三个位置只选中明确点过的位置，设备标识也参与匹配', () => {

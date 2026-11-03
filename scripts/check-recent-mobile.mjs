@@ -228,6 +228,15 @@ try {
   )
   await tap('recent:local:m1')
   await wait('manager-console')
+  const managerTabs = () =>
+    read(
+      `[...document.querySelectorAll('[data-testid^="manager-tab:"]')].map(e=>[e.dataset.testid,e.getAttribute('aria-selected')])`,
+    )
+  const recentTabs = await managerTabs()
+  assert.ok(
+    recentTabs.some(([id]) => id === 'manager-tab:console'),
+    '工作台有看板页签',
+  )
   assert.equal(
     await read(`!!document.querySelector('[data-testid="detail"]')`),
     false,
@@ -248,12 +257,24 @@ try {
   await tap('devices:managers')
   await tap('manager:m1')
   await wait('manager-console')
+  assert.deepEqual(await managerTabs(), recentTabs, '最近与经理目录的工作台及默认页签一致')
   await sleep(5600)
   await tap('header:back')
   await tap('header:back')
   await until(
     async () => (await recentIds())[0] === 'recent:local:m1',
     '从目录打开经理满五秒进入最近',
+  )
+  await call('Page.navigate', { url: `${base}?app=1&scene=manager-session-link&lang=zh-CN` })
+  await wait('manager-console')
+  assert.deepEqual(await managerTabs(), recentTabs, '深链进入同一工作台')
+  assert.equal(await read(`!!document.querySelector('[data-testid="detail"]')`), false)
+  await tap('header:back')
+  await wait('devices')
+  assert.equal(
+    await read(`!!document.querySelector('[data-testid="detail"]')`),
+    false,
+    '返回不经过详情中间页',
   )
   console.log(`手机「最近」检查通过${output ? `，截图在 ${output}` : '（未保存截图）'}`)
 } catch (error) {

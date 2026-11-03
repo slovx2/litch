@@ -3,7 +3,6 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { WebViewBench } from '../bench/WebViewBench'
 import { AgentScreen } from '../detail/agents/AgentScreen'
-import { DetailScreen } from '../detail/DetailScreen'
 import { BackgroundScreen } from '../screens/background/BackgroundScreen'
 import { AddDeviceScreen } from '../screens/devices/AddDeviceScreen'
 import { DeviceDetailScreen } from '../screens/devices/DeviceDetailScreen'
@@ -24,6 +23,7 @@ import { TasksScreen } from '../screens/tasks/TasksScreen'
 import { DiffScreen } from '../screens/tools/DiffScreen'
 import { TerminalScreen } from '../screens/tools/TerminalScreen'
 import type { RootStackParamList } from './routes'
+import { SessionScreen } from './SessionScreen'
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
 
@@ -47,7 +47,7 @@ export function Navigator() {
       <Stack.Screen name="HarnessSettings" component={HarnessSettingsScreen} />
       <Stack.Screen name="Sessions" component={SessionsScreen} />
       <Stack.Screen name="NewSession" component={NewSessionScreen} />
-      <Stack.Screen name="Detail" component={DetailScreen} />
+      <Stack.Screen name="Detail" component={SessionScreen} />
       <Stack.Screen name="Agent" component={AgentScreen} />
       <Stack.Screen name="Proposals" component={ProposalsScreen} />
       <Stack.Screen name="Background" component={BackgroundScreen} />

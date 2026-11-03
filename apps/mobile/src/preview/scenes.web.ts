@@ -149,11 +149,18 @@ export const SCENES: Scene[] = [
     id: 'home-recent-managers',
     group: '设备',
     name: '首页 · 最近经理',
-    note: '工作线操作归入经理主项，点击经理打开对话详情',
+    note: '工作线操作归入经理主项，点击经理打开与经理目录相同的工作台',
     steps: [
       link('litch://spawn?device=local&parent=manager-k1&title=经理工作线跟进'),
       link('litch://spawn?device=build&parent=m2&title=远程经理跟进'),
     ],
+  },
+  {
+    id: 'manager-session-link',
+    group: '经理',
+    name: '会话链接打开经理',
+    note: '开发深链只给会话 ID，经公共入口进入经理工作台；返回回到首页',
+    steps: [open('local', 'm1')],
   },
   {
     id: 'add-device',

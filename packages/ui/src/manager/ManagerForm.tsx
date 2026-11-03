@@ -211,7 +211,7 @@ export function ManagerForm({
             contact: form.contact,
           },
         })
-        onCreated({ deviceId, sessionId: manager.threadId })
+        onCreated({ deviceId, sessionId: manager.threadId, managerId: manager.id })
         return
       }
       // 保留已发布的 template 字段以维持协议形状；界面固定发送 blank。
@@ -222,7 +222,7 @@ export function ManagerForm({
         manager: { ...form, permission, template: 'blank', scope: '', cwd: cwd.trim() },
       })
       rememberManager(deviceId, workspace?.id ?? '', { ...form, cwd: cwd.trim() })
-      onCreated({ deviceId, sessionId: result.threadId })
+      onCreated({ deviceId, sessionId: result.threadId, managerId: result.manager.id })
     } catch (cause) {
       showError(
         reasonOf(cause, t),

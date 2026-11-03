@@ -7,6 +7,7 @@ import {
   type Clock,
   type CoreChannel,
   createSidebarActivity,
+  type SessionDestination,
   type SidebarActivity,
 } from '@litch/core'
 import type { JsonFile } from './json-file'
@@ -29,6 +30,8 @@ export interface NavigationSource {
 export interface ManagerSessions {
   get(deviceId: string, managerId: string): string | undefined
   subscribe(deviceId: string, managerId: string, changed: () => void): () => void
+  destination(deviceId: string, sessionId: string): SessionDestination
+  subscribeDestination(deviceId: string, sessionId: string, changed: () => void): () => void
 }
 
 /** 记录存在本机（各客户端各记各的，不经设备同步） */
@@ -46,7 +49,7 @@ export function createMobileActivity(
 /** 会话详情直接给会话标识，经理页从已订阅的目录取经理会话。 */
 export function viewedSession(
   route: RouteLike | undefined,
-  managers?: Pick<ManagerSessions, 'get'>,
+  managers?: Pick<ManagerSessions, 'get' | 'destination'>,
 ): { deviceId: string; sessionId: string } | null {
   if (route?.name === 'ManagerConsole') {
     const params = route.params as { deviceId?: unknown; managerId?: unknown } | undefined
@@ -56,9 +59,10 @@ export function viewedSession(
   }
   if (route?.name !== 'Detail') return null
   const params = route.params as { deviceId?: unknown; sessionId?: unknown } | undefined
-  return typeof params?.deviceId === 'string' && typeof params.sessionId === 'string'
-    ? { deviceId: params.deviceId, sessionId: params.sessionId }
-    : null
+  if (typeof params?.deviceId !== 'string' || typeof params.sessionId !== 'string') return null
+  // 身份闸门仍在等待或即将换成经理工作台时，还没有呈现会话。
+  if (managers && managers.destination(params.deviceId, params.sessionId) !== null) return null
+  return { deviceId: params.deviceId, sessionId: params.sessionId }
 }
 
 /** 把前后台和当前页接给核心；退到后台时顺手把攒着的记录写下去（进程随时可能被系统杀掉） */
@@ -74,13 +78,21 @@ export function watchMobileActivity(
     stopManager?.()
     stopManager = undefined
     const route = navigation.current()
-    const params = route?.params as { deviceId?: unknown; managerId?: unknown } | undefined
+    const params = route?.params as
+      | { deviceId?: unknown; managerId?: unknown; sessionId?: unknown }
+      | undefined
     if (
       route?.name === 'ManagerConsole' &&
       typeof params?.deviceId === 'string' &&
       typeof params.managerId === 'string'
     )
       stopManager = managers?.subscribe(params.deviceId, params.managerId, showing)
+    else if (
+      route?.name === 'Detail' &&
+      typeof params?.deviceId === 'string' &&
+      typeof params.sessionId === 'string'
+    )
+      stopManager = managers?.subscribeDestination(params.deviceId, params.sessionId, showing)
     showing()
   }
   activity.setForeground(app.current() === 'active')

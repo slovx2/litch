@@ -906,7 +906,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       }),
       unread: unread.has(thread.id),
       task: tasks.mark(thread.id),
-      ...(managersOn && (thread as Thread & ManagerThreadFields).litchManager
+      // 离线缓存保留已确认的经理身份，避免等到重新握手才恢复工作台入口。
+      ...((managersOn || stale) && (thread as Thread & ManagerThreadFields).litchManager
         ? { litchManager: (thread as Thread & ManagerThreadFields).litchManager }
         : {}),
     }

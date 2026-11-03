@@ -505,7 +505,8 @@ export function createManagers(host: ManagersHost) {
         }
         return
       }
-      available = true
+      // 新订阅不能把正在读取的空目录当成完整目录，否则经理会被暂时路由到普通对话。
+      available = null
       void reconcile()
       for (const [id, entry] of boards) void loadBoard(id, entry)
     },

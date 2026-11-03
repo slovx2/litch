@@ -30,6 +30,20 @@ export type NavigationAction =
   | { type: 'peek'; selection: Selection | null }
   | { type: 'managers'; route: ManagersRoute }
 
+/** 经理不受点击入口所在模式影响；工作线仍可保留当前侧栏，正文始终是普通会话页。 */
+export function sessionSelection(
+  selection: Selection,
+  managerId: string | null,
+  mode?: ViewMode,
+  managed = false,
+): NavigationAction {
+  return {
+    type: 'select',
+    mode: managerId ? 'manager' : (mode ?? (managed ? 'manager' : 'chat')),
+    selection,
+  }
+}
+
 /** 两种视图各自记住位置；切栏只换当前视图，不等同于新建或回到列表。 */
 export function navigate(state: ViewNavigation, action: NavigationAction): ViewNavigation {
   const mode = 'mode' in action ? (action.mode ?? state.mode) : state.mode

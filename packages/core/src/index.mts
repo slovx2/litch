@@ -520,6 +520,12 @@ export {
   type TaskRunsPage,
   type TerminalGroups,
 } from './replica/replica.mjs'
+export {
+  openSessionWhenKnown,
+  type SessionDestination,
+  sessionDestination,
+  subscribeSessionDestination,
+} from './replica/session-destination.mjs'
 export { searchCardItem, searchProposalItem } from './search/cards.mjs'
 export { ConversationSearch } from './search/index.mjs'
 export { itemSearchParts, type SearchPart } from './search/items.mjs'

@@ -5,7 +5,7 @@ export type RootStackParamList = {
   /** 经理目录：按设备分组，先进行中、后已结束 */
   Managers: undefined
   /**
-   * 一位经理的工作台：对话、控制台、工作线、概览四格；tab 不给时进对话。
+   * 一位经理的工作台：对话、控制台、工作线、概览四格；tab 不给时进控制台。
    * issue 给了就落到控制台（经理事项落到概览）并定位到那一项（#D-n 等编号、受阻事项、经理事件）
    */
   ManagerConsole: {
@@ -31,7 +31,7 @@ export type RootStackParamList = {
    * workspaceId 是 null 时建不属于项目的会话；不给就从上次在这台设备上的位置开始
    */
   NewSession: { deviceId: string; workspaceId?: string | null }
-  /** 会话详情。title 是列表里那一行的标题，首帧就画出来（F1） */
+  /** 按会话标识打开；经理统一转到工作台。title 是列表里的标题，首帧就画出来（F1） */
   Detail: { deviceId: string; sessionId: string; title?: string; permissionNotice?: string }
   /**
    * 引擎自己派出的一个子代理（对话里子代理那一行点进来）：状态、类型、用时、任务、失败原因，下面是它的对话。

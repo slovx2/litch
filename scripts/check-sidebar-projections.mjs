@@ -819,7 +819,12 @@ try {
   }
   const folding = () =>
     run(() => ({
-      folds: window.__projectionProbe.state.sidebarNow().folds,
+      // 进入经理工作台会单独记下经理树的展开状态；这里只核对普通投影不变。
+      folds: Object.fromEntries(
+        Object.entries(window.__projectionProbe.state.sidebarNow().folds).filter(
+          ([scope]) => !scope.startsWith(':manager:'),
+        ),
+      ),
       projections: localStorage.getItem('litch.sidebar.projections'),
       expanded: document
         .querySelector('[data-projection=recent] [data-session=m1] .tree-fold')
@@ -827,16 +832,32 @@ try {
     }))
   await modules()
   const beforeManager = await folding()
+  const managerShown = () =>
+    until(
+      () =>
+        run(
+          () =>
+            document.querySelector('[data-sidebar-mode=manager]')?.getAttribute('aria-pressed') ===
+              'true' &&
+            !!document.querySelector('[data-manager="session"][data-manager-id=m1] .mg-board') &&
+            !!document.querySelector('[data-manager="session"][data-manager-id=m1] .mg-chat'),
+        ),
+      '投影打开同一经理工作台',
+    )
   await click('[data-projection=recent] [data-session=m1] .ss-row')
-  await chatShown('m1', 'recent')
+  await managerShown()
+  await screenshot('manager-workbench-from-recent.png')
+  await click('[data-sidebar-mode=chat]')
+  await until(() => run(() => !!document.querySelector('[data-projection=recent]')), '返回投影')
   assert.deepEqual(await folding(), beforeManager, '经理会话点击不改变折叠状态')
-  await screenshot('manager-chat-from-recent.png')
   await click('[data-projection=recent] [data-session=manager-k1] .ss-row')
   await chatShown('manager-k1', 'recent')
   assert.deepEqual(await folding(), beforeManager, '工作线点击不改变折叠状态')
-  checkpoint('最近中的经理与工作线打开当前对话，保持唯一选中和展开状态')
+  checkpoint('最近中的经理进入工作台，工作线保留普通对话与展开状态')
   await click(`${unread} [data-session=m1] .ss-row`)
-  await chatShown('m1', 'unread')
+  await managerShown()
+  await click('[data-sidebar-mode=chat]')
+  await until(() => run(() => !!document.querySelector('[data-projection=unread]')), '返回未读投影')
   await click(`${unread} [data-session=m1] .tree-fold`)
   const beforeUnread = await folding()
   await click(`${unread} [data-session=manager-k2] .ss-row`)
@@ -879,7 +900,7 @@ try {
     ),
     0,
   )
-  checkpoint('未读经理与工作线保留对话视图，普通设备树不重复列经理，经理页入口保留')
+  checkpoint('未读经理进入工作台，工作线保留普通对话；普通设备树不重复列经理')
   // 当前父会话打开时，子会话完成才让整棵树进入未读；点最后一个未读子会话不能让树消失。
   for (const leave of ['tree', 'page', 'manager', 'settings']) {
     stage(`检查子会话晚到未读：${leave}`)

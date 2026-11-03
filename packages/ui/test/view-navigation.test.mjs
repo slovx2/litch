@@ -1,11 +1,52 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { initialNavigation, navigate } from '../src/app/view-navigation.ts'
+import { historyOf, travel } from '../src/app/history.ts'
+import { navigationHistory } from '../src/app/navigation-history.ts'
+import { initialNavigation, navigate, sessionSelection } from '../src/app/view-navigation.ts'
 
 const chat = { deviceId: 'local', sessionId: 'chat' }
 const manager = { deviceId: 'local', sessionId: 'manager' }
 const select = (state, mode, selection) => navigate(state, { type: 'select', mode, selection })
 const switchTo = (state, mode) => navigate(state, { type: 'switch', mode })
+
+for (const [entry, mode] of [
+  ['最近', 'chat'],
+  ['未读', 'chat'],
+  ['经理侧栏', 'manager'],
+  ['经理目录', 'manager'],
+  ['标题搜索', undefined],
+  ['@ 会话', undefined],
+  ['会话通知', undefined],
+  ['经理通知', undefined],
+  ['定时任务运行记录及通知', undefined],
+  ['子会话回报和父子链接', undefined],
+  ['建议来源', undefined],
+  ['浏览器去看及看板引用', undefined],
+]) {
+  test(`${entry}打开经理与经理目录一致，后退不会经过普通经理对话`, () => {
+    const before = navigate(initialNavigation, sessionSelection(chat, null))
+    const action = sessionSelection(manager, 'm1', mode)
+    const expected = navigate(before, sessionSelection(manager, 'm1', 'manager'))
+    const history = navigationHistory(historyOf(before), action)
+    assert.deepEqual(history.entries[history.index], expected)
+    assert.equal(expected.mode, 'manager')
+    assert.equal(expected.manager.page, null)
+    assert.equal(expected.manager.picked, manager)
+    assert.equal(expected.chat.picked, chat, '进入经理保留普通会话位置')
+    assert.deepEqual(travel(history, -1, () => true).entries[0], before)
+    assert.equal(navigationHistory(history, action).entries.length, 2, '重复打开不新增返回层')
+  })
+}
+
+test('普通会话与子会话仍选普通详情，工作线保留原侧栏模式', () => {
+  for (const sessionId of ['chat', 'child']) {
+    const next = navigate(initialNavigation, sessionSelection({ ...chat, sessionId }, null))
+    assert.equal(next.mode, 'chat')
+    assert.equal(next.chat.picked.sessionId, sessionId)
+  }
+  assert.equal(sessionSelection(chat, null, 'chat', true).mode, 'chat')
+  assert.equal(sessionSelection(chat, null, undefined, true).mode, 'manager')
+})
 
 test('对话 → 经理 → 对话恢复原会话，经理 → 对话 → 经理恢复原经理', () => {
   let state = select(initialNavigation, 'chat', chat)
