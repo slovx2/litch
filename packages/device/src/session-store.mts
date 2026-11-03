@@ -715,9 +715,7 @@ export class SessionStore {
   }
 
   /** 看板分页只读头字段，已了结建议也能按状态访问；rowid 用于稳定的创建上界。 */
-  suggestionHeads(
-    threadIds: readonly string[],
-  ): {
+  suggestionHeads(threadIds: readonly string[]): {
     serial: number
     id: string
     threadId: string

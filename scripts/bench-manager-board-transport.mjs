@@ -12,7 +12,9 @@ import { WebSocket, WebSocketServer } from 'ws'
 const forwardOnly = process.argv[2] === '--forward'
 const payload = forwardOnly
   ? ''
-  : JSON.stringify({ board: JSON.parse(readFileSync(process.argv[2], 'utf8')).board })
+  : process.argv.includes('--summary')
+    ? JSON.stringify({ summary: JSON.parse(readFileSync(process.argv[2], 'utf8')).summary })
+    : JSON.stringify({ board: JSON.parse(readFileSync(process.argv[2], 'utf8')).board })
 const root = mkdtempSync(join(tmpdir(), 'manager-board-ssh-'))
 const children = []
 const freePort = async () => {

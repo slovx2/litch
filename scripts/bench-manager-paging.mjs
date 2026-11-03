@@ -1,6 +1,8 @@
 // 先构建 device；node scripts/bench-manager-paging.mjs 夹具JSON [规模倍数] [输出JSON]
 import { readFileSync, writeFileSync } from 'node:fs'
 import { performance } from 'node:perf_hooks'
+import { PagedManagerBoard } from '../packages/core/dist/packages/core/src/device/manager-paging.mjs'
+import { projectManagerBoard } from '../packages/core/dist/packages/core/src/projection/manager.mjs'
 import { managerPagingRig } from './manager-paging-rig.mjs'
 
 const data = JSON.parse(readFileSync(process.argv[2], 'utf8'))
@@ -19,13 +21,23 @@ try {
   for (let i = 0; i < 7; i++) {
     summary = await measure('summary', () => owner.paging.summary(manager.id))
     await measure('catalog', () => owner.paging.call('litch/manager/catalog/read', {}))
-    await measure('serializeSummary', () => JSON.stringify({ summary }))
+    const summaryWire = await measure('serializeSummary', () => JSON.stringify({ summary }))
+    const summaryCopy = await measure('parseSummary', () => JSON.parse(summaryWire))
+    await measure('projectSummary', () =>
+      new PagedManagerBoard(
+        { deviceId: 'local', request: async () => summaryCopy },
+        manager.id,
+        () => {},
+      ).refresh(),
+    )
     await measure('historyPage', () => owner.paging.queries.history(manager.id, 'D-1'))
     full = await measure('board', () =>
       owner.call('litch/manager/board/read', { managerId: manager.id }, true),
     )
     await measure('list', () => owner.call('litch/manager/list', {}, true))
-    await measure('serializeBoard', () => JSON.stringify(full))
+    const boardWire = await measure('serializeBoard', () => JSON.stringify(full))
+    const boardCopy = await measure('parseBoard', () => JSON.parse(boardWire))
+    await measure('projectBoard', () => projectManagerBoard('local', boardCopy.board))
   }
   const plans = {
     heads: owner.store.db
