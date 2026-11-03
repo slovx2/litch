@@ -23,6 +23,7 @@ import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardPanels, Item } from './BoardPanels.tsx'
 import { Decisions } from './Decisions.tsx'
 import { IssueOrderSelect, useIssueOrder } from './issue-order.tsx'
+import { InlinePostContext } from './PostCard.tsx'
 import { Reports } from './Reports.tsx'
 import { Requests } from './Requests.tsx'
 
@@ -68,6 +69,15 @@ export function PagedBoard({
   const [linked, setLinked] = useState(false)
   const [error, setError] = useState('')
   const root = useRef<HTMLDivElement>(null)
+  const anchor = useRef<{ id: string; top: number } | null>(null)
+  useLayoutEffect(() => {
+    const saved = anchor.current
+    if (!saved) return
+    const card = root.current?.querySelector<HTMLElement>(`[data-paging-object="${saved.id}"]`)
+    const host = root.current?.closest('.mg-body')
+    if (card && host) host.scrollTop += card.getBoundingClientRect().top - saved.top
+    anchor.current = null
+  })
   const positions = useRef(new Map<string, number>())
   const address = useMemo(
     () => ({ deviceId: manager.deviceId, managerId: manager.id }),
@@ -125,8 +135,97 @@ export function PagedBoard({
     }
     if ((!post && !item) || focused.current === active) return
     focused.current = active
-    root.current?.querySelector('[data-paging-detail]')?.scrollIntoView({ block: 'start' })
-  }, [active, post, item])
+    if (linked)
+      root.current?.querySelector('[data-paging-detail]')?.scrollIntoView({ block: 'nearest' })
+  }, [active, post, item, linked])
+  const detail = active ? (
+    <InlinePostContext.Provider value={true}>
+      <section data-paging-detail={active}>
+        {!post && !item && !paging.loading.includes(active) ? (
+          <p role="alert">
+            {error || paging.error}
+            <button type="button" onClick={() => open(active)}>
+              {t('manager.paging.retry')}
+            </button>
+          </p>
+        ) : null}
+        {paging.loading.includes(active) ? <p>{t('manager.loading')}</p> : null}
+        {post?.kind === 'report' ? (
+          <Reports manager={manager} posts={[post]} disabled={disabled} />
+        ) : null}
+        {post?.kind === 'request' ? (
+          <Requests
+            manager={manager}
+            posts={[post]}
+            requests={(board.requests ?? []).filter((r) => r.id === active)}
+            disabled={disabled}
+            target={null}
+            onLocated={() => {}}
+          />
+        ) : null}
+        {post?.kind === 'suggestion' ? (
+          <ManagerSuggestions
+            onlyId={post.id}
+            posts={[post]}
+            manager={manager}
+            onOpen={onSuggestionSource}
+          />
+        ) : null}
+        {item ? <Item item={item} /> : null}
+
+        <Decisions
+          manager={manager}
+          posts={board.posts ?? []}
+          decisions={board.decisions}
+          changes={board.changes}
+          requests={board.requests ?? []}
+          groups={pages.decisions}
+          onlyId={active}
+          visible={Boolean(active?.startsWith('D-'))}
+          disabled={disabled}
+          target={null}
+          onLocated={() => {}}
+          onBusy={() => {}}
+        />
+        {active && kinds[tab] ? (
+          <section>
+            {!history || history.nextCursor ? (
+              <button
+                type="button"
+                data-paging-history
+                disabled={paging.loading.includes(`history:${active}`)}
+                onClick={() =>
+                  invoke(
+                    channel.command('managers.board.history', {
+                      ...address,
+                      id: active,
+                      ...(history ? { more: true } : {}),
+                    }),
+                  )
+                }
+              >
+                {t(history ? 'manager.paging.more' : 'manager.postHistory')}
+              </button>
+            ) : null}
+            {history?.changes.map((change) => {
+              const snapshot = managerHistorySnapshot(change)
+              return (
+                <article key={change.id}>
+                  <b>
+                    {snapshot?.revision ? `v${snapshot.revision} · ` : ''}
+                    {snapshot?.title}
+                  </b>{' '}
+                  · <Stamp at={change.at} />
+                  <BoardMarkdown text={change.why} />
+                  {snapshot ? <BoardMarkdown text={snapshot.body} /> : null}
+                </article>
+              )
+            })}
+          </section>
+        ) : null}
+      </section>
+    </InlinePostContext.Provider>
+  ) : null
   const lines = paging.summary.lines
   return (
     <div ref={root} className="mg-stack" data-manager-paging>
@@ -220,6 +319,7 @@ export function PagedBoard({
               </button>
             ))}
           </div>
+          {linked && active && !page?.entries.some((head) => head.id === active) ? detail : null}
           {!page ? (
             <p>
               {t('manager.loading')}{' '}
@@ -240,16 +340,24 @@ export function PagedBoard({
                     className="mg-paging-head"
                     type="button"
                     aria-expanded={active === head.id}
-                    onClick={() => {
+                    onClick={(event) => {
+                      const card = event.currentTarget.closest('[data-paging-object]')
+                      if (card)
+                        anchor.current = { id: head.id, top: card.getBoundingClientRect().top }
                       setLinked(false)
                       if (active === head.id) setSelected(null)
                       else open(head.id)
                     }}
                   >
+                    <span aria-hidden="true">{active === head.id ? '▾' : '▸'}</span>{' '}
                     <span className="mono">{head.id}</span> · {head.title} ·{' '}
                     {t(managerPageLabel(kind, head.status) as Parameters<typeof t>[0])}
                   </button>
-                  <p className="mg-paging-preview">{head.preview}</p>
+                  {active === head.id ? (
+                    detail
+                  ) : (
+                    <p className="mg-paging-preview">{head.preview}</p>
+                  )}
                 </article>
               ))}
               <p>{t('manager.paging.loaded', { n: page.entries.length, total: page.total })}</p>
@@ -269,92 +377,7 @@ export function PagedBoard({
               ) : null}
             </>
           )}
-          {active ? (
-            <section data-paging-detail={active}>
-              {!post && !item && !paging.loading.includes(active) ? (
-                <p role="alert">
-                  {error || paging.error}
-                  <button type="button" onClick={() => open(active)}>
-                    {t('manager.paging.retry')}
-                  </button>
-                </p>
-              ) : null}
-              {paging.loading.includes(active) ? <p>{t('manager.loading')}</p> : null}
-              {post?.kind === 'report' ? (
-                <Reports manager={manager} posts={[post]} disabled={disabled} />
-              ) : null}
-              {post?.kind === 'request' ? (
-                <Requests
-                  manager={manager}
-                  posts={[post]}
-                  requests={(board.requests ?? []).filter((r) => r.id === active)}
-                  disabled={disabled}
-                  target={null}
-                  onLocated={() => {}}
-                />
-              ) : null}
-              {post?.kind === 'suggestion' ? (
-                <ManagerSuggestions
-                  onlyId={post.id}
-                  posts={[post]}
-                  manager={manager}
-                  onOpen={onSuggestionSource}
-                />
-              ) : null}
-              {item ? <Item item={item} /> : null}
-            </section>
-          ) : null}
         </>
-      ) : null}
-      <Decisions
-        manager={manager}
-        posts={board.posts ?? []}
-        decisions={board.decisions}
-        changes={board.changes}
-        requests={board.requests ?? []}
-        groups={pages.decisions}
-        onlyId={active}
-        visible={Boolean(kinds[tab] && active?.startsWith('D-'))}
-        disabled={disabled}
-        target={null}
-        onLocated={() => {}}
-        onBusy={() => {}}
-      />
-      {active && kinds[tab] ? (
-        <section>
-          {!history || history.nextCursor ? (
-            <button
-              type="button"
-              data-paging-history
-              disabled={paging.loading.includes(`history:${active}`)}
-              onClick={() =>
-                invoke(
-                  channel.command('managers.board.history', {
-                    ...address,
-                    id: active,
-                    ...(history ? { more: true } : {}),
-                  }),
-                )
-              }
-            >
-              {t(history ? 'manager.paging.more' : 'manager.postHistory')}
-            </button>
-          ) : null}
-          {history?.changes.map((change) => {
-            const snapshot = managerHistorySnapshot(change)
-            return (
-              <article key={change.id}>
-                <b>
-                  {snapshot?.revision ? `v${snapshot.revision} · ` : ''}
-                  {snapshot?.title}
-                </b>{' '}
-                · <Stamp at={change.at} />
-                <BoardMarkdown text={change.why} />
-                {snapshot ? <BoardMarkdown text={snapshot.body} /> : null}
-              </article>
-            )
-          })}
-        </section>
       ) : null}
     </div>
   )

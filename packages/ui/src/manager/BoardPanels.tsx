@@ -6,7 +6,6 @@ import { useT } from '../app/appearance.ts'
 import { badgeOf, nameOf } from '../app/device.ts'
 import { useKey } from '../app/services.tsx'
 import { Activity } from './Activity.tsx'
-import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
 import { Relations } from './Relations.tsx'
@@ -31,7 +30,7 @@ export function Item({ item }: { item: ManagerItemView }) {
           <BoardMarkdown text={item.why} />
         </div>
       ) : null}
-      {item.blockedBy.length || item.unverified.length || item.basis.length || item.links.length ? (
+      {item.blockedBy.length || item.unverified.length ? (
         <div className="mg-item-meta">
           {item.blockedBy.length ? (
             <div className="mg-item-meta-row">
@@ -55,18 +54,6 @@ export function Item({ item }: { item: ManagerItemView }) {
                   </li>
                 ))}
               </ul>
-            </div>
-          ) : null}
-          {item.basis.length ? (
-            <div className="mg-item-meta-row">
-              <span className="mg-meta-label">{t('manager.basis')}</span>
-              <BoardLinks links={item.basis} />
-            </div>
-          ) : null}
-          {item.links.length ? (
-            <div className="mg-item-meta-row">
-              <span className="mg-meta-label">{t('manager.links')}</span>
-              <BoardLinks links={item.links} />
             </div>
           ) : null}
         </div>

@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 
-export async function installManagerBoardMobileFixture() {
+export async function installManagerBoardMobileFixture({ consoleCards = false } = {}) {
   const boot = new URL('../apps/mobile/src/shell/boot.ts', import.meta.url)
   const override = new URL('../apps/mobile/src/shell/boot.web.ts', import.meta.url)
   const fixture = new URL('../apps/mobile/src/preview/ManagerBoardFixture.web.ts', import.meta.url)
@@ -22,15 +22,21 @@ export async function installManagerBoardMobileFixture() {
     end,
     `...(controlled ? { scenarioClock: controlled.clock } : {}),
       }),
-      await fetch('/__manager_board_data').then(r => r.json()),
+      ${consoleCards ? '' : "await fetch('/__manager_board_data').then(r => r.json()),"}
     )
     Object.assign(globalThis, { __managerBoardFixture: fixture.state })
     const served = serve(fixture.core)`,
   )
   const helper = readFileSync(
-    new URL('../packages/core/test/manager-board-fixture.mts', import.meta.url),
+    new URL(
+      consoleCards
+        ? '../packages/core/test/console-cards-fixture.mts'
+        : '../packages/core/test/manager-board-fixture.mts',
+      import.meta.url,
+    ),
     'utf8',
   )
+    .replace('export function consoleCardsFixture', 'export function managerBoardFixture')
     .replaceAll('../src/', '../../../../packages/core/src/')
     .replaceAll('../../protocol/', '../../../../packages/protocol/')
   writeFileSync(fixture, helper, { flag: 'wx' })

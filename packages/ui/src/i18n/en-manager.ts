@@ -115,6 +115,8 @@ export const enManager = {
     'Saved as a local draft. Submit together with answers or questions on other decisions.',
   'manager.questionPending': 'Awaiting the manager’s reply',
   'manager.suggestions': 'Suggestions',
+  'manager.linkUnavailable':
+    'Cannot open this link. Check that the target exists and the device is connected.',
   'manager.links': 'Related links',
   'manager.hideBoard': 'Hide board',
   'manager.showBoard': 'Show board',

@@ -45,7 +45,7 @@ export function PagedBoard({
   suggestions: readonly SuggestionView[]
   onLine(id: string, title?: string): void
   onQuery(key: string): void
-  onDetail(y: number): void
+  onDetail(y: number, relative?: boolean): void
 }) {
   const channel = useChannel()
   const t = useT()
@@ -64,6 +64,7 @@ export function PagedBoard({
   const [linked, setLinked] = useState(false)
   const [talking, setTalking] = useState(false)
   const [error, setError] = useState('')
+  const positions = useRef(new Map<string, number>())
   const focused = useRef<string | null>(null)
   const address = useMemo(
     () => ({ deviceId: manager.deviceId, managerId: manager.id }),
@@ -85,6 +86,8 @@ export function PagedBoard({
   const list = tab === 'console' || (tab === 'overview' && items)
   useLayoutEffect(() => {
     if (tab === 'chat') return
+    focused.current = null
+    positions.current.clear()
     setLinked(false)
     onQuery(`${tab}/${key}`)
     if (list) invoke(channel.command('managers.board.page', { ...address, ...query }))
@@ -103,6 +106,70 @@ export function PagedBoard({
   const history = active ? paging.histories[active] : undefined
   const lines = paging.summary.lines
   const style = { color: c.ink, fontSize: font.size.body }
+  const detail = active ? (
+    <View
+      testID={`paging-detail:${active}`}
+      onLayout={(event) => {
+        // 编号跳转可能不在当前分页里；只有这种导航才主动定位详情。
+        if (linked && !page?.entries.some((head) => head.id === active))
+          onDetail(event.nativeEvent.layout.y + 12)
+      }}
+    >
+      {!post && !item && !paging.loading.includes(active) ? (
+        <>
+          <Text accessibilityRole="alert" style={{ color: c.err }}>
+            {error || paging.error}
+          </Text>
+          <Button kind="plain" label={t('manager.paging.retry')} onPress={() => open(active)} />
+        </>
+      ) : null}
+      {post ? (
+        <Issue
+          inline
+          key={post.id}
+          manager={manager}
+          post={post}
+          board={board}
+          suggestions={suggestions}
+          talking={talking}
+          onTalk={setTalking}
+          onBack={() => setTalking(false)}
+          onPosition={() => {}}
+        />
+      ) : null}
+      {item ? <ItemRow item={item} focused /> : null}
+      {!history || history.nextCursor ? (
+        <Button
+          testID="paging-history"
+          kind="plain"
+          label={t(history ? 'manager.paging.more' : 'manager.postHistory')}
+          busy={paging.loading.includes(`history:${active}`)}
+          onPress={() =>
+            invoke(
+              channel.command('managers.board.history', {
+                ...address,
+                id: active,
+                more: Boolean(history),
+              }),
+            )
+          }
+        />
+      ) : null}
+      {history?.changes.map((change) => {
+        const snapshot = managerHistorySnapshot(change)
+        return (
+          <View key={change.id}>
+            <Text style={style}>
+              {snapshot?.revision ? `v${snapshot.revision} · ` : ''}
+              {snapshot?.title} · {new Date(change.at).toLocaleString()}
+            </Text>
+            <Markdown text={change.why} />
+            {snapshot ? <Markdown text={snapshot.body} /> : null}
+          </View>
+        )
+      })}
+    </View>
+  ) : null
   return (
     <View testID="manager-paging" style={{ gap: 12, padding: 12 }}>
       {error || paging.error ? (
@@ -213,6 +280,7 @@ export function PagedBoard({
               </Pressable>
             ))}
           </View>
+          {linked && active && !page?.entries.some((head) => head.id === active) ? detail : null}
           {!page ? (
             <Button
               label={t('manager.paging.retry')}
@@ -223,26 +291,45 @@ export function PagedBoard({
           ) : (
             <>
               {page.entries.map((head) => (
-                <Pressable
+                <View
                   key={head.id}
-                  testID={`paging-object:${head.id}`}
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: active === head.id }}
-                  onPress={() => {
-                    setLinked(false)
-                    if (active === head.id) setSelected(null)
-                    else open(head.id)
+                  onLayout={(event) => {
+                    const y = event.nativeEvent.layout.y
+                    const previous = positions.current.get(head.id)
+                    positions.current.set(head.id, y)
+                    if (focused.current === head.id && previous !== undefined)
+                      onDetail(y - previous, true)
+                    if (linked && active === head.id) onDetail(y + 12)
                   }}
-                  style={{ minHeight: hit, padding: 12, backgroundColor: c.panel, gap: 8 }}
                 >
-                  <Text style={style}>
-                    {head.id} · {head.title} ·{' '}
-                    {t(managerPageLabel(kind, head.status) as Parameters<typeof t>[0])}
-                  </Text>
-                  <Text numberOfLines={2} style={{ color: c.ink2 }}>
-                    {head.preview}
-                  </Text>
-                </Pressable>
+                  <Pressable
+                    testID={`paging-object:${head.id}`}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: active === head.id }}
+                    aria-expanded={active === head.id}
+                    onPress={() => {
+                      focused.current = head.id
+                      setLinked(false)
+                      if (active === head.id) setSelected(null)
+                      else open(head.id)
+                    }}
+                    style={({ pressed }) => ({
+                      minHeight: hit,
+                      padding: 12,
+                      backgroundColor: pressed ? c.press : c.panel,
+                      gap: 8,
+                    })}
+                  >
+                    <Text style={style}>
+                      {active === head.id ? '▾' : '▸'} {head.id} · {head.title} ·{' '}
+                      {t(managerPageLabel(kind, head.status) as Parameters<typeof t>[0])}
+                    </Text>
+                    <Text numberOfLines={2} style={{ color: c.ink2 }}>
+                      {head.preview}
+                    </Text>
+                  </Pressable>
+                  {active === head.id ? detail : null}
+                </View>
               ))}
               <Text style={style}>
                 {t('manager.paging.loaded', { n: page.entries.length, total: page.total })}
@@ -261,74 +348,6 @@ export function PagedBoard({
               ) : null}
             </>
           )}
-          {active ? (
-            <View
-              testID={`paging-detail:${active}`}
-              onLayout={(event) => {
-                if ((post || item) && focused.current !== active) {
-                  focused.current = active
-                  onDetail(event.nativeEvent.layout.y + 12)
-                }
-              }}
-            >
-              {!post && !item && !paging.loading.includes(active) ? (
-                <>
-                  <Text accessibilityRole="alert" style={{ color: c.err }}>
-                    {error || paging.error}
-                  </Text>
-                  <Button
-                    kind="plain"
-                    label={t('manager.paging.retry')}
-                    onPress={() => open(active)}
-                  />
-                </>
-              ) : null}
-              {post ? (
-                <Issue
-                  key={post.id}
-                  manager={manager}
-                  post={post}
-                  board={board}
-                  suggestions={suggestions}
-                  talking={talking}
-                  onTalk={setTalking}
-                  onBack={() => setTalking(false)}
-                  onPosition={() => {}}
-                />
-              ) : null}
-              {item ? <ItemRow item={item} focused /> : null}
-              {!history || history.nextCursor ? (
-                <Button
-                  testID="paging-history"
-                  kind="plain"
-                  label={t(history ? 'manager.paging.more' : 'manager.postHistory')}
-                  busy={paging.loading.includes(`history:${active}`)}
-                  onPress={() =>
-                    invoke(
-                      channel.command('managers.board.history', {
-                        ...address,
-                        id: active,
-                        more: Boolean(history),
-                      }),
-                    )
-                  }
-                />
-              ) : null}
-              {history?.changes.map((change) => {
-                const snapshot = managerHistorySnapshot(change)
-                return (
-                  <View key={change.id}>
-                    <Text style={style}>
-                      {snapshot?.revision ? `v${snapshot.revision} · ` : ''}
-                      {snapshot?.title} · {new Date(change.at).toLocaleString()}
-                    </Text>
-                    <Markdown text={change.why} />
-                    {snapshot ? <Markdown text={snapshot.body} /> : null}
-                  </View>
-                )
-              })}
-            </View>
-          ) : null}
         </>
       ) : null}
     </View>

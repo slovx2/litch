@@ -1,4 +1,11 @@
-import { type HTMLAttributes, type ReactNode, useId, useState } from 'react'
+import {
+  createContext,
+  type HTMLAttributes,
+  type ReactNode,
+  useContext,
+  useId,
+  useState,
+} from 'react'
 import type { ManagerView } from '../../../core/src/model-manager.mts'
 import { useT } from '../app/appearance.ts'
 import { DiscussionSlotContext, useDiscussionPane } from './discussion-pane.ts'
@@ -8,6 +15,9 @@ import {
   postViewKey,
   rememberPostCollapsed,
 } from './post-presentation.ts'
+
+/** 分页卡头负责开合，内部帖子保留讨论入口但不再显示第二个卡头。 */
+export const InlinePostContext = createContext(false)
 
 export function PostCard({
   manager,
@@ -28,7 +38,9 @@ export function PostCard({
 }) {
   const t = useT()
   const key = postViewKey(manager.deviceId, manager.id, id)
-  const [collapsed, setCollapsed] = useState(() => postCollapsed(key, closed))
+  const inline = useContext(InlinePostContext)
+  const [savedCollapsed, setCollapsed] = useState(() => postCollapsed(key, closed))
+  const collapsed = inline ? false : savedCollapsed
   const bodyId = useId()
   // 有看板分屏时，讨论入口放在标题行末尾的插槽里，讨论内容进分屏（PostDiscussion）
   const pane = useDiscussionPane()
@@ -51,17 +63,17 @@ export function PostCard({
       <header>
         <button
           type="button"
-          className="ic"
+          className="mg-post-toggle"
+          hidden={inline}
           data-act="post-collapse"
           aria-expanded={!collapsed}
           aria-controls={bodyId}
-          aria-label={t(collapsed ? 'manager.postExpand' : 'manager.postCollapse')}
           title={t(collapsed ? 'manager.postExpand' : 'manager.postCollapse')}
           onClick={() => change(!collapsed)}
         >
           <span aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
+          {heading}
         </button>
-        {heading}
         {pane ? <span className="mg-talk-slot" ref={setSlot} /> : null}
       </header>
       {collapsed ? <p className="mg-post-summary ell">{postSummary(text)}</p> : null}

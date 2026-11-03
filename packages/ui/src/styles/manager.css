@@ -3,6 +3,33 @@
   width: 100%;
   text-align: start;
   font-weight: 600;
+  cursor: pointer;
+  padding: 10px;
+}
+.mg-paging-head:hover,
+.mg-post-toggle:hover {
+  background: var(--hover);
+}
+.mg-post-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  text-align: start;
+  cursor: pointer;
+}
+.mg-post-toggle[hidden] {
+  display: none;
+}
+[data-paging-detail] .mg-card {
+  border: 0;
+}
+.mg-item-links a,
+.mg-relations a,
+.mg-relations button[data-relation-target] {
+  color: var(--accent);
+  text-decoration: underline;
 }
 .mg-paging-preview {
   display: -webkit-box;

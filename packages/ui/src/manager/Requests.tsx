@@ -9,7 +9,6 @@ import type {
 import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
 import { useT } from '../app/appearance.ts'
 import { Stamp } from '../transcript/Stamp.tsx'
-import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { DraftEnded } from './DraftEnded.tsx'
 import { useManagerFeatures } from './data.ts'
@@ -227,23 +226,6 @@ export function Requests({
               >
                 {t('manager.requestEdit')}
               </button>
-            ) : null}
-
-            {request.basis.length || request.links.length ? (
-              <footer className="mg-item-meta">
-                {request.basis.length ? (
-                  <div className="mg-item-meta-row">
-                    <span className="mg-meta-label">{t('manager.basis')}</span>
-                    <BoardLinks links={request.basis} />
-                  </div>
-                ) : null}
-                {request.links.length ? (
-                  <div className="mg-item-meta-row">
-                    <span className="mg-meta-label">{t('manager.links')}</span>
-                    <BoardLinks links={request.links} />
-                  </div>
-                ) : null}
-              </footer>
             ) : null}
           </PostCard>
         )

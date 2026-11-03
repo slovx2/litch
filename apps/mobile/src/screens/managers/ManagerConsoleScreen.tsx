@@ -481,7 +481,11 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                     suggestions={suggestions}
                     onLine={openSession}
                     onQuery={pagingQuery}
-                    onDetail={(y) => scroll.current?.scrollTo({ y, animated: false })}
+                    onDetail={(y, relative) => {
+                      const next = relative ? pagingScroll.current.y + y : y
+                      pagingScroll.current.y = next
+                      scroll.current?.scrollTo({ y: next, animated: false })
+                    }}
                   />
                 ) : (
                   <>

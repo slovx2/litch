@@ -111,6 +111,7 @@ export const zhManager = {
   'manager.questionDraftNote': '追问保存为本地草稿，可与其他决策的回答或追问一起提交。',
   'manager.questionPending': '等待经理回复',
   'manager.suggestions': '建议',
+  'manager.linkUnavailable': '无法打开此关联，请确认目标存在且设备已连接',
   'manager.links': '相关链接',
   'manager.hideBoard': '收起看板',
   'manager.showBoard': '展开看板',

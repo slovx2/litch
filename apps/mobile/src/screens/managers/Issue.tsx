@@ -124,6 +124,7 @@ export function Issue({
   onBack,
   onPosition,
   bare = false,
+  inline = false,
 }: {
   manager: ManagerView
   post: ManagerPost
@@ -135,6 +136,8 @@ export function Issue({
   onPosition(y: number): void
   /** 在半屏议题卡里：不画卡片的边框和外边距（面板本身就是框） */
   bare?: boolean
+  /** 分页列表已提供可折叠的卡头，详情只显示正文和讨论入口。 */
+  inline?: boolean
 }) {
   const t = useT()
   const { c, font, radius, hit } = useTheme()
@@ -181,7 +184,7 @@ export function Issue({
   })
   const [unreviewed, setUnreviewed] = useState(false)
   const viewKey = postViewKey(manager.deviceId, manager.id, post.id)
-  const [collapsed, setCollapsed] = useState(() =>
+  const [savedCollapsed, setCollapsed] = useState(() =>
     postCollapsed(
       viewKey,
       post.kind === 'decision'
@@ -193,6 +196,7 @@ export function Issue({
             : false,
     ),
   )
+  const collapsed = inline ? false : savedCollapsed
   /** 正在填忽略理由；null 是没在填 */
   const [ignoring, setIgnoring] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -560,45 +564,54 @@ export function Issue({
       onLayout={(event) => onPosition(event.nativeEvent.layout.y)}
     >
       <View style={styles.cardHeader}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t(collapsed ? 'manager.postExpand' : 'manager.postCollapse')}
-          accessibilityState={{ expanded: !collapsed }}
-          testID={`post-collapse:${post.id}`}
-          style={{ minHeight: hit, minWidth: hit, justifyContent: 'center', alignItems: 'center' }}
-          onPress={() => {
-            rememberPostCollapsed(viewKey, !collapsed)
-            setCollapsed(!collapsed)
-          }}
-        >
-          <Text style={{ color: c.ink2 }}>{collapsed ? '▸' : '▾'}</Text>
-        </Pressable>
-        <Text style={{ color: c.ink, fontSize: font.size.title, fontWeight: '600', flex: 1 }}>
-          {post.kind === 'suggestion' ? t('manager.suggestions') : post.id} · {post.title}
-        </Text>
-        {stateLabel ? (
-          <Text
-            testID={`issue-status:${post.id}`}
-            style={[
-              styles.status,
-              {
-                color: pending ? c.wait : c.ink3,
-                borderColor: pending ? c.wait : c.line1,
-                borderRadius: radius.s,
-              },
-            ]}
+        {!inline ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t(collapsed ? 'manager.postExpand' : 'manager.postCollapse')}
+            accessibilityState={{ expanded: !collapsed }}
+            testID={`post-collapse:${post.id}`}
+            style={({ pressed }) => ({
+              minHeight: hit,
+              flex: 1,
+              flexDirection: 'row',
+              gap: 8,
+              alignItems: 'center',
+              backgroundColor: pressed ? c.press : 'transparent',
+            })}
+            onPress={() => {
+              rememberPostCollapsed(viewKey, !collapsed)
+              setCollapsed(!collapsed)
+            }}
           >
-            {stateLabel}
-          </Text>
-        ) : null}
-        {selectionReset ? (
-          <Text
-            testID={`selection-reset:${post.id}`}
-            numberOfLines={1}
-            style={{ color: c.ink3, fontSize: font.size.small, flexShrink: 1 }}
-          >
-            {t('manager.selectionReset')}
-          </Text>
+            <Text style={{ color: c.ink2 }}>{collapsed ? '▸' : '▾'}</Text>
+            <Text style={{ color: c.ink, fontSize: font.size.title, fontWeight: '600', flex: 1 }}>
+              {post.kind === 'suggestion' ? t('manager.suggestions') : post.id} · {post.title}
+            </Text>
+            {stateLabel ? (
+              <Text
+                testID={`issue-status:${post.id}`}
+                style={[
+                  styles.status,
+                  {
+                    color: pending ? c.wait : c.ink3,
+                    borderColor: pending ? c.wait : c.line1,
+                    borderRadius: radius.s,
+                  },
+                ]}
+              >
+                {stateLabel}
+              </Text>
+            ) : null}
+            {selectionReset ? (
+              <Text
+                testID={`selection-reset:${post.id}`}
+                numberOfLines={1}
+                style={{ color: c.ink3, fontSize: font.size.small, flexShrink: 1 }}
+              >
+                {t('manager.selectionReset')}
+              </Text>
+            ) : null}
+          </Pressable>
         ) : null}
         {!pendingReview || unreviewed ? entry : null}
       </View>

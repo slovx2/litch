@@ -1,14 +1,15 @@
+import { knownFileRef } from '@litch/core'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { createContext, useContext, useState } from 'react'
-import { Linking, Pressable, Text, View } from 'react-native'
+import { Alert, Linking, Pressable, Text, View } from 'react-native'
 import type {
   ManagerBoardView,
   ManagerFeaturesView,
   ManagerView,
 } from '../../../../../packages/core/src/model-manager.mts'
+import { managerRelationGroups } from '../../../../../packages/core/src/projection/manager-relations.mts'
 import type { ManagerRelationTarget } from '../../../../../packages/protocol/src/manager-posts.mjs'
-import { relationGroups } from '../../../../../packages/protocol/src/manager-relations.mts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -51,7 +52,7 @@ export function IssueRelations({
   // 提交、差异之类要向设备读原文（reference/read，属于 Posts）：比应用旧的设备服务读不了
   const unreadable = (target: ManagerRelationTarget) =>
     !features.posts && !['issue', 'item', 'thread', 'url', 'file'].includes(target.kind)
-  const groups = relationGroups(board.relations ?? [], { kind, target: id })
+  const groups = managerRelationGroups(board, { kind, target: id })
   if (!Object.values(groups).some((g) => g.length)) return null
   const title = (target: ManagerRelationTarget) => {
     if (target.kind === 'thread')
@@ -68,26 +69,39 @@ export function IssueRelations({
     )
   }
   const open = async (target: ManagerRelationTarget) => {
-    if (target.kind === 'issue' || target.kind === 'item') return context.open(target.target)
-    if (target.kind === 'thread')
-      return navigation.navigate('Detail', {
-        deviceId: manager.deviceId,
-        sessionId: target.target,
-        title: title(target),
-      })
-    if (target.kind === 'file')
-      return navigation.navigate('Files', {
-        deviceId: manager.deviceId,
-        root: manager.cwd,
-        path: /^(\/|[A-Za-z]:[\\/])/.test(target.target)
-          ? target.target
-          : `${manager.cwd}/${target.target}`,
-      })
-    if (target.kind === 'url') {
-      if (/^https?:\/\//.test(target.target)) await Linking.openURL(target.target)
-      return
-    }
+    setError('')
     try {
+      if (target.kind === 'issue' || target.kind === 'item') {
+        if (
+          !features.paging &&
+          !board.posts?.some((p) => p.id === target.target) &&
+          !board.items.some((i) => i.id === target.target)
+        )
+          throw new Error(t('manager.linkUnavailable'))
+        return context.open(target.target)
+      }
+      if (target.kind === 'thread')
+        return navigation.navigate('Detail', {
+          deviceId: manager.deviceId,
+          sessionId: target.target,
+          title: title(target),
+        })
+      if (target.kind === 'file') {
+        const ref = knownFileRef(target.target, { root: manager.cwd, cwd: manager.cwd })
+        if (!ref) throw new Error(t('manager.linkUnavailable'))
+        return navigation.navigate('Files', {
+          deviceId: manager.deviceId,
+          root: manager.cwd,
+          path: ref.path,
+          ref,
+          href: target.target,
+        })
+      }
+      if (target.kind === 'url') {
+        if (!/^https?:\/\//i.test(target.target)) throw new Error(t('manager.linkUnavailable'))
+        await Linking.openURL(target.target)
+        return
+      }
       setPreview(
         (
           await channel.command('managers.reference.read', {
@@ -106,6 +120,7 @@ export function IssueRelations({
     <View>
       <Pressable
         accessibilityRole="button"
+        testID={`relations:${id}`}
         accessibilityState={{ expanded }}
         onPress={() => setExpanded(!expanded)}
         style={{ alignSelf: 'flex-start', paddingVertical: 8 }}
@@ -125,9 +140,12 @@ export function IssueRelations({
                   {targets.map((target) => (
                     <Pressable
                       key={`${target.kind}:${target.target}`}
+                      testID={`relation:${target.target}`}
                       accessibilityRole="button"
                       accessibilityState={{ disabled: unreadable(target) }}
                       disabled={unreadable(target)}
+                      accessibilityHint={target.target}
+                      onLongPress={() => Alert.alert(title(target), target.target)}
                       onPress={() => void open(target)}
                       style={{ paddingVertical: 8, gap: 3 }}
                     >
@@ -160,7 +178,11 @@ export function IssueRelations({
           </Text>
         </>
       ) : null}
-      {error ? <Text style={{ color: c.err }}>{error}</Text> : null}
+      {error ? (
+        <Text accessibilityRole="alert" style={{ color: c.err }}>
+          {error}
+        </Text>
+      ) : null}
     </View>
   )
 }
