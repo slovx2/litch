@@ -157,7 +157,10 @@ let output = ''
 // 对着夹具起的设备：把聚合面的地址交给外壳。对着自带的适配器：带上夹具给的那几个变量（状态目录、
 // 假的登录 shell、适配器在哪），外壳自己去起服务；别的指路的变量一个不带，免得盖过登录 shell 给的
 const { CHA_CLAUDE_CLI: _claude, CHA_DSH_CLI: _dsh, ...inherited } = process.env
-const child = spawn(electron, [appDir], {
+// Linux/Xvfb 的隐藏窗口即使 backgroundThrottling=false，合成器仍会把动画帧压到约 1 秒一次。
+// MutationObserver 因而只能看到合并后的正文；只给这次验收关掉帧率限制，保留原来的流式断言。
+const frameArgs = process.platform === 'linux' ? ['--disable-frame-rate-limit'] : []
+const child = spawn(electron, [...frameArgs, appDir], {
   env: {
     ...(local ? inherited : process.env),
     LITCH_SMOKE: 'engines',
