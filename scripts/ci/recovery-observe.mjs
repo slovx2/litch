@@ -153,11 +153,13 @@ export function observeRun(
   let archive
   for (const job of jobs) {
     if (['success', 'skipped'].includes(job.conclusion) || job.status !== 'completed') continue
+    let stage = 'check-run'
     try {
       const check = read(`${base}/check-runs/${job.id}`)
       assert.equal(check.id, job.id)
       assert.equal(check.head_sha, run.head_sha)
       assert.equal(check.app?.slug, 'github-actions')
+      stage = 'check-annotations'
       const annotations = readPages(read, `${base}/check-runs/${job.id}/annotations`)
       evidence[job.id] = { annotations }
       const preliminary = classifyJob(job, evidence[job.id])
@@ -165,13 +167,15 @@ export function observeRun(
         preliminary.reason === 'exact-step-log-missing' ||
         (includeSnapshot && job.steps?.filter((item) => item.conclusion === 'failure').length === 1)
       ) {
+        stage = 'log-archive'
         archive ??= read(`${path}/attempts/${run.run_attempt}/logs`, true)
         const step = job.steps.find((item) => item.conclusion === 'failure')
+        stage = 'step-log'
         evidence[job.id].stepLog = readStepLog(archive, job, step)
       }
     } catch {
       // 读取/归档失败只留下固定原因；不把异常携带的原日志打印出来。
-      evidence[job.id] = { unavailable: true }
+      evidence[job.id] = { unavailable: true, stage }
     }
   }
   const activeMac = []

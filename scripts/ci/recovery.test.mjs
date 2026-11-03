@@ -1,5 +1,6 @@
 // 合成故障只验证恢复分类与账本，不启动runner、不触发workflow。
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { test } from 'node:test'
 import { auditRecord, observation, readAudit } from './recovery-audit.mjs'
 import { readStepLog, stepLogPath } from './recovery-evidence.mjs'
@@ -243,11 +244,61 @@ test('精确失败步骤日志：不存在/重名/空文件拒绝，不读相邻
   const failed = step(3, setup, 'failure')
   const path = stepLogPath(job, failed)
   assert.equal(path, `gate _ unit/3_${setup.replace('/', '_')}.txt`)
-  const unpack = (_cmd, args) => (args[0] === '-tf' ? `${path}\nother/3_bad.txt\n` : 'ETIMEDOUT')
-  assert.equal(readStepLog(Buffer.from('zip'), job, failed, unpack).text, 'ETIMEDOUT')
-  for (const list of ['other.txt', `${path}\n${path}`]) {
-    assert.throws(() => readStepLog(Buffer.from('zip'), job, failed, () => list), /缺失|不唯一/)
+  const unpack = (cmd, args) => {
+    assert.equal(cmd, 'python3')
+    assert.equal(args[0], '-I')
+    assert.equal(args.at(-1), path)
+    return 'ETIMEDOUT'
   }
+  assert.equal(readStepLog(Buffer.from('zip'), job, failed, unpack).text, 'ETIMEDOUT')
+  assert.throws(() => readStepLog(Buffer.from('zip'), job, failed, () => ''), /为空/)
+  assert.throws(() => readStepLog(Buffer.from('zip'), { name: '..' }, failed, unpack), /路径/)
+})
+
+test('真实ZIP精确读取步骤；重复、缺失、CRC损坏、空文本及解压超限均拒绝', () => {
+  const job = { name: 'infra-a' }
+  const failed = { number: 3, name: '恢复演练：模拟准备下载' }
+  const path = stepLogPath(job, failed)
+  const zip = (entries) =>
+    execFileSync(
+      'python3',
+      [
+        '-I',
+        '-c',
+        `
+import io, json, sys, warnings, zipfile
+warnings.simplefilter("ignore", UserWarning)
+target: io.BytesIO = io.BytesIO()
+with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    for name, text in json.load(sys.stdin):
+        archive.writestr(name, text)
+sys.stdout.buffer.write(target.getvalue())
+`,
+      ],
+      { input: JSON.stringify(entries), maxBuffer: 8 * 1024 * 1024 },
+    )
+  const content = '##[error]HTTP 503 LITCH_FIXTURE_INFRA\n'
+  const valid = zip([
+    [path, content],
+    ['other/3_other.txt', 'do not read'],
+  ])
+  assert.equal(readStepLog(valid, job, failed).text, content)
+  for (const entries of [
+    [['other.txt', content]],
+    [
+      [path, content],
+      [path, content],
+    ],
+    [[path, '']],
+    [[path, 'x'.repeat(4 * 1024 * 1024 + 1)]],
+  ])
+    assert.throws(() => readStepLog(zip(entries), job, failed), /ZIP|为空/)
+  const corrupt = Buffer.from(valid)
+  const central = corrupt.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]))
+  assert.ok(central > 0)
+  corrupt[central + 16] ^= 0xff
+  assert.throws(() => readStepLog(corrupt, job, failed), /ZIP/)
+  assert.throws(() => readStepLog(Buffer.from('not zip'), job, failed), /ZIP/)
 })
 
 test('GET客户端不能写API，分页超限不以截断数据放行', () => {
@@ -366,6 +417,30 @@ test('只读观察完整回放容量首败；采样时attempt改变、Mac列表�
     observeRun(100, { read: unavailable, contract, now: completed + 1000 }).plan.reason,
     'mac-activity-read-incomplete',
   )
+})
+
+test('证据读取失败只报告固定阶段，不暴露API异常内容', () => {
+  const value = sample()
+  const files = { '.github/workflows/full.yml': 'name: Full' }
+  const contract = Object.fromEntries(Object.entries(files).map(([k, v]) => [k, evidenceHash(v)]))
+  const baseRead = sourceReader(value, files)
+  for (const stage of ['check-run', 'check-annotations', 'log-archive', 'step-log']) {
+    const read = (path) => {
+      if (path.endsWith('/check-runs/200') && stage === 'check-run')
+        throw new Error('secret-example')
+      if (path.includes('/annotations') && stage === 'check-annotations')
+        throw new Error('secret-example')
+      if (path.endsWith('/logs')) {
+        if (stage === 'log-archive') throw new Error('secret-example')
+        return Buffer.from('invalid zip secret-example')
+      }
+      return baseRead(path)
+    }
+    const result = observeRun(100, { read, contract, now: completed + 1000, includeSnapshot: true })
+    assert.equal(result.plan.decision, 'blocked')
+    assert.equal(result.plan.jobs[0].evidenceReadFailure, stage)
+    assert.ok(!JSON.stringify(result).includes('secret-example'))
+  }
 })
 
 test('观察不消耗预算，审计不记录日志原文或秘密', () => {

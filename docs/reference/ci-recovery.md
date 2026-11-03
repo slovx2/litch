@@ -10,7 +10,7 @@
 node scripts/ci/recovery-observe.mjs <run-id>
 ```
 
-只调用本仓库 GET API，输出分类和 `observation`，可追加 `GITHUB_STEP_SUMMARY`。`recovery-controller.yml` 的手动 `mode=observe` 作业同样只有读取权限。日志只在内存里定位，审计不复制环境、秘密或原始输出，只保存固定原因、来源链接与证据 hash。
+只调用本仓库 GET API，输出分类和 `observation`，可追加 `GITHUB_STEP_SUMMARY`。`recovery-controller.yml` 的手动 `mode=observe` 作业同样只有读取权限；两个入口都声明 `checks: read` 读取 GitHub Actions 检查注解。日志 ZIP 由 runner 自带的 Python 3 标准库在内存里精确读取，不依赖不同平台的 tar 格式支持。审计不复制环境、秘密或原始输出，只保存固定原因、来源链接与证据 hash；读取失败仅报告固定阶段，不输出 API 异常内容。
 
 ## 可恢复范围
 

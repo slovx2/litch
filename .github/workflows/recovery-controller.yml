@@ -32,6 +32,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      checks: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -53,6 +54,7 @@ jobs:
     permissions:
       contents: read
       actions: write
+      checks: read
       issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

@@ -128,6 +128,7 @@ export function planRecovery(
       id: job.id,
       name: job.name,
       ...classify(job, evidence[job.id]),
+      ...(evidence[job.id]?.unavailable ? { evidenceReadFailure: evidence[job.id].stage } : {}),
     })),
   }
   const stop = (reason, decision = 'blocked') => ({ ...report, decision, reason, roots: [] })
