@@ -9,6 +9,7 @@ import { isObject } from './wire.mjs'
 
 export class ManagerLines {
   readonly snapshots = new Map<string, Record<string, unknown>>()
+  readonly checkedAt = new Map<string, number>()
   private readonly reserved = new Map<string, { managerId: string; threadId: string | null }>()
   private readonly began = new Map<string, number>()
   readonly store: ManagerStore
@@ -100,17 +101,21 @@ export class ManagerLines {
         }
       })
   }
-  async refresh(managerId: string): Promise<void> {
+  async refresh(managerId: string): Promise<number> {
+    let failed = 0
     await Promise.all(
       this.lines(managerId).map(async (line) => {
         try {
           const { thread } = await this.tree.read(line.threadId, false)
           this.snapshots.set(line.threadId, thread)
+          this.checkedAt.set(line.threadId, managerNow())
         } catch {
+          failed++
           /* 断线时保留最近事实，不凭失败推断空闲。 */
         }
       }),
     )
+    return failed
   }
   async reserve(
     parentId: string,

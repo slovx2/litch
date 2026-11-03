@@ -609,6 +609,7 @@ export class ClientSession implements ClientToolPeer {
             method,
             frame.params,
             this.declared.has(EXTENSION.manager),
+            this.declared.has(EXTENSION.managerPaging),
           )
         if (method.startsWith(DEVICE_TASK_PREFIX)) return this.tasks(method, frame.params)
         return this.calls.call(method, frame.params)

@@ -267,6 +267,16 @@ export class ManagerStore {
       .all(managerId)
       .map((row) => JSON.parse(String(row.body)))
   }
+  publishedReport(
+    managerId: string,
+    id: string,
+  ): import('../../protocol/src/manager-posts.mjs').ManagerReport | null {
+    return body(
+      this.db
+        .prepare('SELECT body FROM manager_reports WHERE manager_id=? AND id=?')
+        .get(managerId, id),
+    )
+  }
   savePublishedReport(
     managerId: string,
     report: import('../../protocol/src/manager-posts.mjs').ManagerReport,

@@ -2,6 +2,13 @@
 
 ## Managers
 
+### 看板分页
+
+支持分页的设备提供看板摘要、分类列表、单条详情、版本历史和工作线核对接口。
+未声明分页能力的设备继续使用原完整看板读取；已有设备数据库无需迁移。
+摘要包含全板计数、局势、第一批待定决策、最近十条动态和工作线快照。
+工作线核对独立进行；“尚未核对”或上次核对时间说明快照的新鲜度，失败时保留旧快照。
+
 A manager is a conversation that coordinates worklines (sub-sessions), maintains decisions and items
 on a board stored on its device, and reports progress. Repository changes remain the evidence for
 what has landed. Managers and their worklines appear in the desktop sidebar's **Managers** view;

@@ -57,10 +57,14 @@ export class ManagerPosts {
   get(managerId: string, id: string): ManagerPost {
     return this.project(managerId, id, this.store.changes(managerId))
   }
+  /** 分页详情只读当前原帖，历史由独立的 seq 游标接口提供。 */
+  current(managerId: string, id: string): ManagerPost {
+    return this.project(managerId, id, [])
+  }
   private project(managerId: string, id: string, changes: ManagerChange[]): ManagerPost {
     let original: Omit<ManagerPost, 'discussion' | 'versions'>
     if (id.startsWith('P-')) {
-      const report = this.store.publishedReports(managerId).find((r) => r.id === id)
+      const report = this.store.publishedReport(managerId, id)
       if (!report) invalid('Unknown report.')
       original = {
         ...report,

@@ -505,6 +505,7 @@ export class DeviceServer {
       EXTENSION.managerFeedback,
       EXTENSION.managerPosts,
       EXTENSION.managerIgnore,
+      EXTENSION.managerPaging,
       EXTENSION.suggestionInbox,
     )
     this.index.onChanged = () => this.sessionTree.suggestions.changed()

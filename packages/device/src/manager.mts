@@ -18,6 +18,7 @@ import {
   type ManagerBoard,
   type ManagerObjectId,
 } from '../../protocol/src/manager.mjs'
+import { MANAGER_PAGING_METHOD } from '../../protocol/src/manager-paging.mjs'
 import { MANAGER_POST_METHOD, type ManagerPostId } from '../../protocol/src/manager-posts.mjs'
 import { formatSessionEvent, parseSessionEvent } from '../../protocol/src/session-tree.mjs'
 import type { DeviceToolCall } from './device-tools.mjs'
@@ -26,6 +27,7 @@ import { validateManagerRuntime } from './manager-create-validation.mjs'
 import { ManagerEndings } from './manager-ending.mjs'
 import { submitManagerFeedback } from './manager-feedback.mjs'
 import { ManagerLines } from './manager-lines.mjs'
+import { ManagerPaging } from './manager-paging.mjs'
 import { ManagerPosts } from './manager-posts.mjs'
 import { ManagerQuestions } from './manager-questions.mjs'
 import { projectedRelations } from './manager-relations.mjs'
@@ -55,6 +57,7 @@ export class DeviceManagers {
   readonly posts: ManagerPosts
   readonly questions: ManagerQuestions
   readonly resets: ManagerResets
+  readonly paging: ManagerPaging
   private readonly draining = new Map<string, Promise<void>>()
   private readonly timer: NodeJS.Timeout
   private closed = false
@@ -84,6 +87,7 @@ export class DeviceManagers {
     this.posts = new ManagerPosts(this)
     this.questions = new ManagerQuestions(this)
     this.resets = new ManagerResets(this)
+    this.paging = new ManagerPaging(this)
     this.unlisten = tree.onTurnEnded((threadId) => {
       const manager = this.lines.managerFor(threadId)
       if (manager) {
@@ -257,7 +261,12 @@ export class DeviceManagers {
     this.store.saveReport(threadId, { text: report, turnId, status, at: managerNow() })
     this.changed(mark.managerId)
   }
-  async call(method: string, given: unknown, declared: boolean): Promise<unknown> {
+  async call(
+    method: string,
+    given: unknown,
+    declared: boolean,
+    pagingDeclared = false,
+  ): Promise<unknown> {
     if (!declared)
       throw new DeviceError(
         'extensionRequired',
@@ -265,6 +274,14 @@ export class DeviceManagers {
         { method, required: [EXTENSION.manager] },
       )
     if (method === MANAGER_METHOD.create) return this.create(given)
+    if ((Object.values(MANAGER_PAGING_METHOD) as string[]).includes(method)) {
+      if (!pagingDeclared)
+        throw new DeviceError('extensionRequired', `${method} requires litchManagerPaging.`, {
+          method,
+          required: [EXTENSION.managerPaging],
+        })
+      return this.paging.call(method, given)
+    }
     const params = fields(given ?? {})
     if (method === MANAGER_METHOD.list) {
       keys(params, [])
