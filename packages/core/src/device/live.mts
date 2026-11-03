@@ -731,6 +731,17 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       },
     ]
     if (turn.status !== 'inProgress') {
+      // Codex 的完成事件会带最后一条回答；条目流未送到这条连接时仍须补齐。
+      // 这里只合并事件实际携带的条目，不能用 summary/notLoaded 清空此前的过程。
+      for (const item of turn.items ?? []) {
+        if (item.type !== 'agentMessage') continue
+        const key = viewItem(live, viewId, item.id)
+        ops.push({
+          op: 'item.add',
+          turnId: viewId,
+          item: { ...projectItem(item, false), id: key },
+        })
+      }
       // 助手消息和推理自己不带状态。回合结束了它们还显示“进行中”就不对了
       for (const itemId of existing.itemIds) {
         const item = live.view?.items[itemId]

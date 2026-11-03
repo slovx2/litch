@@ -31,7 +31,7 @@ test('回合结束：最后一条有字的回答；失败的回合带原因', ()
     error: { message: '额度用完了' },
     items: [],
   })
-  assert.deepEqual(failed, { answer: null, error: '额度用完了', pending: null })
+  assert.deepEqual(failed, { outcome: 'failed', answer: null, error: '额度用完了', pending: null })
   assert.deepEqual(
     peekOf(undefined, () => undefined, []),
     {

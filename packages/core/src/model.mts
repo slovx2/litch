@@ -1039,6 +1039,8 @@ export type RequestView = ApprovalRequest | QuestionRequest | FormRequest | Clie
  * 停下来等人处理的那件事。都是原文，掐字、加前缀由界面做；拿不到的是 null
  */
 export interface SessionPeek {
+  /** 已知的非正常结局；没有正文的失败也不能当成功，中断不发完成通知。 */
+  outcome?: 'failed' | 'interrupted'
   answer: string | null
   error: string | null
   pending: SessionPeekPending | null

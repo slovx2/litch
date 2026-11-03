@@ -17,6 +17,9 @@ export function peekOf(
   )
   const request = requests[0]
   return {
+    ...(turn?.status === 'failed' || turn?.status === 'interrupted'
+      ? { outcome: turn.status }
+      : {}),
     answer: answer ? answer.text.trim() : null,
     error: turn?.error?.trim() || null,
     pending: request ? pendingOfRequest(request, itemOf) : pendingOfItems(items),

@@ -136,6 +136,7 @@ export interface HarnessSource extends UpstreamConfig {
 
 /** 设备进程里各条连接共用的东西 */
 export interface SessionHost {
+  turnNotices?: import('./turn-notices.mjs').TurnNotices
   restart?: RestartResume
   recovery?: TurnRecoveryObserver
   recoveryActions?: RecoveryActions
@@ -267,6 +268,7 @@ export class ClientSession implements ClientToolPeer {
           ? (host.nativeBackground?.decorate(threadId ?? '', value) ?? false)
           : false,
       observe: (link, method, params) => {
+        this.host.turnNotices?.observe(method, params)
         this.host.restart?.observe(method, params)
         this.host.managers?.observe(method, params)
         if (method === 'thread/name/updated') this.host.sessionTree.suggestions.changed()

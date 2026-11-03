@@ -18,6 +18,7 @@ import {
 } from '../../protocol/src/native-background-wake.mjs'
 import { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
 import { SUGGESTION_RETENTION_SETTING } from '../../protocol/src/suggestion-inbox.mjs'
+import { TURN_NOTICE } from '../../protocol/src/turn-notices.mjs'
 import { RECOVERY_CHANGED } from '../../protocol/src/turn-recovery.mjs'
 import { WORKTREE_DEFAULTS, WORKTREE_SETTING } from '../../protocol/src/worktrees.mjs'
 import { PINNED_SECTION_ID } from '../../shared/src/thread-sections.mjs'
@@ -64,6 +65,7 @@ import { DEFAULT_TASK_SETTINGS, type TaskClock, type TaskSettings } from './task
 import { DeviceTasks } from './tasks.mjs'
 import { registerTasksTool } from './tasks-tool.mjs'
 import { ThreadIndex } from './thread-index.mjs'
+import { TurnNotices } from './turn-notices.mjs'
 import { TurnRecoveryObserver } from './turn-recovery.mjs'
 import { type Connector, isObject, type Wire, type WireHandlers } from './wire.mjs'
 import { Workspaces } from './workspaces.mjs'
@@ -210,6 +212,9 @@ export const WRAP_UP_SETTING = 'sessions.wrapUp'
 export const WRAP_UP_REMINDER_SETTING = 'sessions.wrapUpReminder'
 
 export class DeviceServer {
+  private readonly turnNotices = new TurnNotices((notice) =>
+    this.announce(TURN_NOTICE, notice, EXTENSION.turnNotices),
+  )
   private readonly host: SessionHost
   private readonly sessions = new Set<ClientSession>()
   private readonly db: DatabaseSync
@@ -283,6 +288,7 @@ export class DeviceServer {
     const info = deviceInfo(this.version)
     info.extensions.push(EXTENSION.filePreview)
     info.extensions.push(EXTENSION.turnRecovery)
+    info.extensions.push(EXTENSION.turnNotices)
     this.recovery = new TurnRecoveryObserver({
       check: async (harness, threadId, includeTurns) => {
         const deadline = Date.now() + 5000
@@ -586,6 +592,7 @@ export class DeviceServer {
       log,
     })
     this.host = {
+      turnNotices: this.turnNotices,
       restart: this.restart,
       power: () => this.power,
       recovery: this.recovery,
@@ -987,6 +994,7 @@ export class DeviceServer {
     // 设备进程自己的连接上看到的也算：没有客户端连着时跑的定时任务、子会话，回报里也要数得出后台任务
     link.onNotification((method, params) => {
       if (!params || typeof params !== 'object') return
+      this.turnNotices.observe(method, params)
       this.restart?.observe(method, params)
       if (link.native) {
         this.nativeBackground.observe(link.harness, method, params)

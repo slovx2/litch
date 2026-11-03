@@ -158,6 +158,7 @@ import {
 } from './mentions.mjs'
 import { createOrganizer, looseDirectories, type Organizer } from './organize.mjs'
 import { createPairing, type Pairing, type PairingPlatform } from './pairing.mjs'
+import { createPeekCache } from './peek-cache.mjs'
 import { DEFAULT_TOOL_SWITCHES, type RemoteUpgradePlatform } from './remote.mjs'
 import {
   createServiceRestarter,
@@ -576,6 +577,8 @@ const backgroundDigest = (thread: Thread | undefined) => {
 
 export function createDevice(config: DeviceConfig, options: DeviceOptions): Device {
   const { hooks } = options
+  const peeks = createPeekCache()
+  let turnNotices = false
   const log = (line: string) => options.log?.(`[${config.id}] ${line}`)
   const trace = options.trace ? traceWith(options.trace, { device: config.id }) : null
   let name = config.name
@@ -1143,6 +1146,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
 
   const removeThread = (threadId: string) => {
+    peeks.forget(threadId)
     agentThreads.forget(threadId)
     unread.delete(threadId)
     unspoken.delete(threadId)
@@ -1429,6 +1433,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
 
   const routes: Routes = {
+    'litch/thread/turn/notice': (notice) => peeks.receive(notice),
     // 已在列表里的会话再收到一次（比如 Claude 入口重扫原生会话后重发）：通知里的会话对象只在集合不空时带
     // litchBackground，没带不等于空了（空了另有 litch/thread/background/changed），沿用已知的那份，
     // 免得输入框上方那一行在后台任务还在跑时没了
@@ -1465,6 +1470,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       }
       const was = known.status?.type === 'active'
       const running = status.type === 'active'
+      if (!was && running) peeks.forget(threadId)
       // 重启时被打断的会话又开始了一个回合：末尾那句“发消息继续”不用再说了
       if (running) restarted.delete(threadId)
       // 从“在跑”变成“停了”，而界面上没人开着它：标成未读
@@ -1535,6 +1541,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
 
   const route = (method: string, params: unknown) => {
+    peeks.observe(method, params)
     const handler = (routes as Record<string, ((params: never) => void) | undefined>)[method]
     if (handler) {
       causedBy(method, () => handler(params as never))
@@ -1673,6 +1680,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     serviceDue = false
     nativeDirect = false
     filePreviewSupported = false
+    turnNotices = false
     try {
       const info = await link.request('runtime/info', {})
       if (mine !== session) return
@@ -1683,6 +1691,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         const declares = info.device.extensions?.includes(EXTENSION.deviceWorkspaces) === true
         if (declares || mode !== 'full') hasProjects = null
         mode = 'full'
+        turnNotices = info.device.extensions?.includes(EXTENSION.turnNotices) === true
         filePreviewSupported = info.device.extensions?.includes(EXTENSION.filePreview) === true
         configurable = info.device.extensions?.includes(EXTENSION.harnessConfig) === true
         harnesses = info.harnesses.map((entry) => withConfig(harnessFromInfo(entry)))
@@ -1839,6 +1848,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       askingService?.()
       askingService = null
       if (dropped) toolCalls.offline()
+      if (dropped) peeks.clear()
       if (dropped) machineExec.offline()
       if (dropped) machineFactsCache = null
       if (dropped) options.machine?.presence(false)
@@ -2874,20 +2884,37 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         } while (cursor)
         return { answer: null, error: null, pending: null }
       }
-      const view = live.view(sessionId)
-      if (view) {
-        return peekOf(view.turns.at(-1), (id) => view.items[id], view.requests)
-      }
-      const page = await link.request(
-        'thread/turns/list',
-        { threadId: sessionId, limit: 1, sortDirection: 'desc', itemsView: 'full' },
-        { timeoutMs: PEEK_TIMEOUT_MS },
+      return peeks.read(
+        sessionId,
+        async () => {
+          const view = live.view(sessionId)
+          const summary = threads.get(sessionId)
+          // 状态先结束、完成事件还没到时，不把半截流式正文当最终回答。
+          if (
+            view &&
+            (summary?.status?.type === 'active' || view.turns.at(-1)?.status !== 'running')
+          )
+            return peekOf(view.turns.at(-1), (id) => view.items[id], view.requests)
+          try {
+            const page = await link.request(
+              'thread/turns/list',
+              { threadId: sessionId, limit: 1, sortDirection: 'desc', itemsView: 'full' },
+              { timeoutMs: PEEK_TIMEOUT_MS },
+            )
+            const last = page.data[0]
+            if (!last) return { answer: null, error: null, pending: null }
+            const { turn, items } = projectTurn(last)
+            const byId = new Map(items.map((item) => [item.id, item]))
+            return peekOf(turn, (id) => byId.get(id), [])
+          } catch (error) {
+            log(`读取会话 ${sessionId} 的通知正文失败：${String(error)}`)
+            throw error
+          }
+        },
+        turnNotices && threads.get(sessionId)?.status?.type !== 'active'
+          ? { clock: options.clock, ms: 200 }
+          : undefined,
       )
-      const last = page.data[0]
-      if (!last) return { answer: null, error: null, pending: null }
-      const { turn, items } = projectTurn(last)
-      const byId = new Map(items.map((item) => [item.id, item]))
-      return peekOf(turn, (id) => byId.get(id), [])
     },
     openManage: (sink) => manage.open(sink),
     writeSettings: (expectedVersion, edits) => manage.write(expectedVersion, edits),

@@ -12,7 +12,9 @@ import type {
   SessionSummary,
   Text,
 } from '@litch/core'
+import type { Token, Tokens } from 'marked'
 import { useSyncExternalStore } from 'react'
+import { lex } from '../transcript/markdown-lex.ts'
 
 export type SessionNoticeKind = 'done' | 'failed' | 'approval' | 'answer'
 export type SessionNoticeScope = ConfigPrefs['notifyScope']
@@ -25,15 +27,48 @@ export function inNoticeScope(session: SessionSummary, scope: SessionNoticeScope
 /** 正文最多多少个字：通知中心里大约两三行 */
 export const NOTICE_BODY_MAX = 100
 
-/** 回答是 Markdown：去掉代码块的围栏、标题和列表的记号、强调和链接的写法，空白并成一个空格 */
+const tokenText = (tokens: Token[]): string =>
+  tokens
+    .map((token): string => {
+      if (token.type === 'list')
+        return ` ${(token as Tokens.List).items.map((item) => tokenText(item.tokens)).join(' ')} `
+      if (token.type === 'table') {
+        const table = token as Tokens.Table
+        return [table.header, ...table.rows]
+          .map((row) => row.map((cell) => tokenText(cell.tokens)).join(' '))
+          .join(' ')
+      }
+      if (token.type === 'html') return token.text.replace(/<!--[\s\S]*?-->|<[^>]*>/g, '')
+      if (token.type === 'space' || token.type === 'br' || token.type === 'hr') return ' '
+      if (token.type === 'def' || token.type === 'checkbox') return ''
+      const text =
+        'tokens' in token && token.tokens
+          ? tokenText(token.tokens)
+          : 'text' in token && typeof token.text === 'string'
+            ? token.text
+            : ''
+      return ['heading', 'paragraph', 'blockquote', 'code'].includes(token.type)
+        ? ` ${text} `
+        : text
+    })
+    .join('')
+
+/** 与对话共用 Markdown 解析规则；保留代码里的字面符号，去掉排版标记。 */
 export function plainText(markdown: string): string {
-  return markdown
-    .replace(/^\s*(```|~~~).*$/gm, '')
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/^\s{0,3}(#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)/gm, '')
-    .replace(/(\*\*|__|~~|`)/g, '')
+  return tokenText(lex(markdown))
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+/** 有些入口失败后仍报 idle；完成事件中的错误比目录状态更具体。 */
+export const noticeKindOf = (
+  kind: SessionNoticeKind,
+  peek: SessionPeek | null,
+): SessionNoticeKind | null => {
+  if (kind !== 'done' && kind !== 'failed') return kind
+  if (peek?.outcome === 'interrupted') return null
+  return peek?.outcome === 'failed' || peek?.error ? 'failed' : kind
 }
 
 /** 按字（不是 UTF-16 单元）掐到 max 个，掐了的末尾加省略号 */

@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const { clipText, noticeBodyOf, plainText, sessionNoticeOf, slotOf } = await import(
+const { clipText, noticeBodyOf, noticeKindOf, plainText, sessionNoticeOf, slotOf } = await import(
   '../src/notify/session-notice.ts'
 )
 
@@ -146,6 +146,11 @@ test('回合结束写回答的开头：去掉 Markdown，空白并成一个，�
 })
 
 test('出错写原因，审批写要做的事，提问写问题本身；对不上的不写', () => {
+  assert.equal(noticeKindOf('done', peek({ error: '模型请求失败' })), 'failed')
+  assert.equal(noticeKindOf('done', peek({ outcome: 'failed' })), 'failed')
+  assert.equal(noticeKindOf('done', peek({ outcome: 'interrupted' })), null)
+  assert.equal(noticeKindOf('done', peek()), 'done')
+  assert.equal(noticeKindOf('answer', peek({ error: '旧错误' })), 'answer')
   assert.deepEqual(noticeBodyOf('failed', peek({ error: '额度\n用完了' }), say), {
     key: 'notify.session.failedWith',
     text: '额度 用完了',
@@ -165,4 +170,22 @@ test('出错写原因，审批写要做的事，提问写问题本身；对不�
   assert.deepEqual(noticeBodyOf('answer', question, say), { key: 'plain', text: '用 哪个 库？' })
   assert.equal(noticeBodyOf('answer', command, say), null)
   assert.equal(noticeBodyOf('approval', question, say), null)
+})
+
+test('通知去掉嵌套 Markdown、引用链接和任务记号，保留代码中的下划线和星号', () => {
+  assert.equal(
+    plainText(
+      '> ### **完成**\n\n- [x] *验证*了 _结果_，见[文档][ref]\n\n[ref]: https://example.test',
+    ),
+    '完成 验证了 结果，见文档',
+  )
+  assert.equal(
+    plainText('`a_b * 2`\n\n```js\nconst a_b = 2 ** 3\n```'),
+    'a_b * 2 const a_b = 2 ** 3',
+  )
+  assert.equal(
+    plainText('| 项目 | 结果 |\n| --- | --- |\n| 测试 | **通过** |'),
+    '项目 结果 测试 通过',
+  )
+  assert.equal(plainText('<b>完成</b>\u0000\u0007'), '完成')
 })

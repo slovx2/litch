@@ -76,6 +76,10 @@ sidebar hides them. New notifications replace the previous turn/waiting notice; 
 withdraws its notice, and opening the session clears its turn notice. On macOS a waiting request can
 bounce the Dock icon while Litch is in the background. Clicking a notification opens its session.
 
+回合完成通知显示最后一条助手回答的开头，移除 Markdown 排版标记后最多显示 100 个字符；
+没有回答正文时显示回合结束说明。各 harness 使用同一规则，未打开的会话也保留完成事件携带的正文。
+失败通知显示错误原因，审批通知显示待批准的操作，提问通知显示问题；无法读取具体内容时使用对应状态说明。
+
 **Main sessions only** means no parent in the session tree. Litch sub-sessions, manager worklines and
 known children from another app are filtered even if their parent is not loaded or is archived.
 A session without known parent information is treated as a main session. Scope filters completion,

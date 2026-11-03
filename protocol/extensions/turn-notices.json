@@ -1,0 +1,20 @@
+{
+  "extension": "turnNotices",
+  "description": "设备从已有引擎连接收集回合完成摘要，供未订阅会话的客户端显示通知。不会为此额外恢复或订阅会话。",
+  "declaration": "设备在 runtime/info 的 device.extensions 声明 turnNotices；客户端在 initialize.params.capabilities.litchExtensions 声明 turnNotices 后才接收通知。",
+  "notification": "litch/thread/turn/notice",
+  "fields": {
+    "threadId": "会话 ID",
+    "turnId": "回合 ID",
+    "outcome": "completed | failed | interrupted",
+    "body": "string | null。正常结束取最后一条非空助手回答，失败取错误原因；保留 Markdown，由客户端清理。最多 500 个 Unicode 码点，超出含省略号。无正文为 null。"
+  },
+  "rules": [
+    "只发给声明 turnNotices 的连接，不改变标准通知、标准会话订阅或官方客户端的协议行为。",
+    "同一回合只发一次。设备对多个引擎连接的重复事件去重；客户端按 threadId 和 turnId 去重。",
+    "只发新收到的回合结束事件，不持久化或在客户端重连后补发旧回合。",
+    "审批、提问不是回合结局，沿用标准等待状态与客户端 session.peek；本扩展不替代这些请求。",
+    "未声明扩展的设备沿用核心生命周期缓存与历史读取，读取失败记录日志并显示对应状态的兜底说明。",
+    "手机与桌面使用同一核心接收摘要；手机目前没有系统推送，此扩展不新增系统推送。"
+  ]
+}

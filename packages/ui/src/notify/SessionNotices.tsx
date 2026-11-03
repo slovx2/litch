@@ -24,6 +24,7 @@ import {
   inNoticeScope,
   type NoticeSlot,
   noticeBodyOf,
+  noticeKindOf,
   notifyScope,
   notifySessions,
   sessionNoticeOf,
@@ -67,8 +68,8 @@ export function SessionNotices({
       if (before?.status === 'waiting' && after.status !== 'waiting')
         shell.closeNotice?.(noticeId(deviceId, after.id, 'ask'))
       if (!notifySessions()) return
-      const kind = sessionNoticeOf(before, after, !nativeShown.current, notifyScope())
-      if (!kind) return
+      const change = sessionNoticeOf(before, after, !nativeShown.current, notifyScope())
+      if (!change) return
       const seen = viewing.current
       if (document.hasFocus() && seen?.deviceId === deviceId && seen.sessionId === after.id) return
       // 要不到也照发：只是正文退回到不带内容的那句
@@ -80,6 +81,13 @@ export function SessionNotices({
           const summary =
             replica.store.get<SessionSummary>(keys.summary(deviceId, after.id)) ?? after
           if (!notifySessions() || !inNoticeScope(summary, notifyScope())) return
+          // 读取期间已继续运行、处理了请求或打开会话，不再补发过时的提醒。
+          if (summary.status !== after.status || summary.waitingFor !== after.waitingFor) return
+          const seen = viewing.current
+          if (document.hasFocus() && seen?.deviceId === deviceId && seen.sessionId === after.id)
+            return
+          const kind = noticeKindOf(change, peek)
+          if (!kind) return
           const t = said.current
           const device = replica.store.get<DeviceView>(keys.device(deviceId))
           const deviceName = device ? t.text(device.name) : deviceId
