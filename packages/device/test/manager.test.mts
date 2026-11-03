@@ -123,10 +123,7 @@ test('经理归档别的会话：看板答复回合放行，wake 与其他事件
           ? { manager: { managerId: manager.id, text: '事件' } }
           : {}),
       })
-      assert.equal(
-        await env.device.sessionTree.deliverManagerEvent(threadId, text, kind, null),
-        true,
-      )
+      assert.equal(await env.device.sessionTree.deliverManagerEvent(threadId, text, kind), true)
       await refused()
     }
   } finally {

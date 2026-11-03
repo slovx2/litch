@@ -29,6 +29,69 @@ import { fakeDevice, harness } from './fake-device.mjs'
 import { fakeOpener, type Handler } from './fake-server.mjs'
 import { thread } from './fixtures.mjs'
 import { fakeClock, settle } from './helpers.mjs'
+import { watchSession } from './wire.mjs'
+
+for (const initial of ['active', 'ended'] as const)
+  test(`D09：普通详情从 manager.status 派生只读，初始 ${initial}，无需打开经理页`, async () => {
+    const { manager } = sample()
+    manager.threadId = 'm1'
+    manager.status = initial
+    const fake = fakeDevice([harness('claude', { threads: [thread({ id: 'm1' })] })])
+    fake.device.extensions = ['harness', 'litchManager']
+    const peer = fakeOpener({
+      ...fake.handlers,
+      [MANAGER_METHOD.list]: () => ({ managers: [manager] }),
+    })
+    const time = fakeClock()
+    const core = createCore({
+      clock: time.clock,
+      version: '1.0.0',
+      log() {},
+      devices: [
+        {
+          id: 'local',
+          name: '本机',
+          host: 'dev@mac',
+          kind: 'local',
+          target: null,
+          wire: 'green',
+          open: peer.open,
+        },
+      ],
+    })
+    core.start()
+    const watched = watchSession(core, 'm1')
+    try {
+      await settle()
+      await settle()
+      assert.equal(watched.seen.view?.live, initial === 'active')
+      for (const status of ['ending', 'ended'] as const) {
+        peer.last().notify(MANAGER_NOTIFICATION.changed, {
+          manager: { ...manager, status, updatedAt: manager.updatedAt + 1 },
+        })
+        await settle()
+        assert.equal(watched.seen.view?.live, false)
+        assert.deepEqual(watched.seen.view?.note, {
+          key: status === 'ending' ? 'manager.endingNote' : 'manager.readOnly',
+        })
+        await assert.rejects(
+          core.command(
+            'session.send',
+            {
+              deviceId: 'local',
+              sessionId: 'm1',
+              text: '不应发送',
+            },
+            { aborted: false, addEventListener() {} },
+          ),
+          { code: 'rejected' },
+        )
+      }
+    } finally {
+      watched.close()
+      core.stop()
+    }
+  })
 
 function sample() {
   const data = sampleManagers('local', 1_800_000_000, 'zh-CN')

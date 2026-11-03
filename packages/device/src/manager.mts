@@ -543,11 +543,12 @@ export class DeviceManagers {
       }
       manager.permission = permission
     }
-    const tools = managerBundle(manager, link.native)
+    const tools = managerBundle(manager, link.native, this.tree.host.taskCards(manager.harness))
     const created = await link.request('thread/start', {
       cwd: params.cwd,
       ...(permission ? { permissions: permission } : {}),
       ...(params.model ? { model: params.model } : {}),
+      ...(params.effort ? { config: { model_reasoning_effort: params.effort } } : {}),
       dynamicTools: tools,
     })
     const thread = isObject(created) && isObject(created.thread) ? created.thread : null
@@ -590,7 +591,7 @@ export class DeviceManagers {
     return { manager: this.manager(manager.id), threadId: thread.id }
   }
   private rememberRules(manager: Manager): void {
-    const tools = managerTools(manager)
+    const tools = managerTools(manager, this.tree.host.taskCards(manager.harness))
     const record = this.tree.store.instructions(manager.threadId)
     if (record) {
       // 设置更新没有重新安装工具；只替换已登记的经理规则，保留后台接续等其他命名空间。
@@ -779,7 +780,6 @@ export class DeviceManagers {
         manager.threadId,
         text,
         event.id,
-        manager.effort,
         parsed.event?.kind === 'manager-end'
           ? { startOnly: true, onStarted: (turnId) => this.endings.started(id, turnId) }
           : {},

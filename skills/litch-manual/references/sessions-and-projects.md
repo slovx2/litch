@@ -617,7 +617,8 @@ woken to continue.
 
 The whole feature can be switched per device with the `sessions.enabled` setting
 (`scripts/litch settings set <device> sessions.enabled=false`); remote devices need adapter 0.11.0 or
-later.
+later. Managers and their worklines are exempt: delegation, reports and automatic wakes continue
+when this switch is off. Individual report and wake settings, user stops and failures still apply.
 
 A running client tool does not mean the session needs user input. Browser sign-in approvals explicitly shared by the desktop appear in the parent’s pending section; complete them through the original approval flow. Other approvals held only by a client may require opening that sub-session on that client.
 

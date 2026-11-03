@@ -29,7 +29,13 @@ export class ManagerResets {
   }
   state(manager: Manager): ManagerResetState {
     const record = this.owner.store.reset(manager.id)
-    const current = managerFingerprint(managerBundle(manager, manager.harness === 'codex'))
+    const current = managerFingerprint(
+      managerBundle(
+        manager,
+        manager.harness === 'codex',
+        this.owner.tree.host.taskCards(manager.harness),
+      ),
+    )
     const applied = record?.applied ?? null
     return {
       mode: manager.harness === 'claude-code' ? 'refresh' : 'replace',
@@ -158,7 +164,7 @@ export class ManagerResets {
     await tree.settleManagerQueue(manager.threadId)
     if (this.closed || !(await this.safe(manager))) return
     const link = await tree.link(manager.harness)
-    const bundle = managerBundle(manager, link.native)
+    const bundle = managerBundle(manager, link.native, tree.host.taskCards(manager.harness))
     const names = new Set(bundle.map((spec) => spec.name))
     const known = new Set<string>(Object.values(CLIENT_TOOL_NAMESPACE))
     // 重置经理规则时保留已安装的客户端工具；不对存量会话补装工具。

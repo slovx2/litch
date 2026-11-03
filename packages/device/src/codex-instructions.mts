@@ -74,10 +74,10 @@ const CURRENT: Record<string, ((recorded: string, tools: unknown[] | null) => st
     [NATIVE_BACKGROUND_NAMESPACE]: () => NATIVE_BACKGROUND_RULES,
     litch_manager: (recorded) => refreshManagerRules('litch_manager', recorded) ?? recorded,
     [SESSION_TOOLS.name]: (recorded, tools) => {
-      const manager = refreshManagerRules(SESSION_TOOLS.name, recorded)
-      if (manager) return manager
       const spec = tools?.find((one) => isObject(one) && one.name === SESSION_TOOLS.name)
       if (!isObject(spec)) {
+        const manager = refreshManagerRules(SESSION_TOOLS.name, recorded)
+        if (manager) return manager
         if (recorded.startsWith(PLAIN_HEAD)) return sessionProposalRules(false, false)
         const off = sessionProposalRules(false)
         const unwrapped =
@@ -93,6 +93,8 @@ const CURRENT: Record<string, ((recorded: string, tools: unknown[] | null) => st
       const properties = isObject(schema?.properties) ? schema.properties : null
       const initiation = isObject(properties?.initiation) ? properties.initiation : null
       const cards = !Array.isArray(initiation?.enum) || initiation.enum.includes('propose')
+      const manager = refreshManagerRules(SESSION_TOOLS.name, recorded, cards)
+      if (manager) return manager
       return sessionProposalRules(wrapUp, cards)
     },
   }

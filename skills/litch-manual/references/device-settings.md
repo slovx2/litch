@@ -73,7 +73,7 @@ snippet for entries that are on and running (see `troubleshooting.md`).
 
 | Key | Default | Meaning |
 |---|---|---|
-| `sessions.enabled` | on | Models may use `litch_sessions` to list and read sessions on the device, start sub-sessions and message their own sub-sessions; sub-sessions report back and can wake the parent. Off: new sessions do not get these tools; existing parent links still show |
+| `sessions.enabled` | on | Models may use `litch_sessions` to list and read sessions on the device, start sub-sessions and message their own sub-sessions; sub-sessions report back and can wake the parent. Off: ordinary new sessions do not get these tools; existing parent links still show. Does not affect managers or their worklines: delegation, reports and automatic wakes continue |
 | `sessions.wrapUp` | on | The model ends every turn with a `litch_sessions.wrap_up` call (its suggested tasks) and then its final answer. Off: sessions created afterwards do not get `wrap_up` and are not asked to wrap up, and no reminders are sent; the rest of `litch_sessions` works as before. Existing sessions keep the tools they started with |
 | `sessions.wrapUpReminder` | on | If a turn you started ends without a wrap-up, Litch opens one short turn to remind the model. No effect while `sessions.wrapUp` is off |
 

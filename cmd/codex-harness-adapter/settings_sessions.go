@@ -4,7 +4,7 @@ package main
 // 一个会话派出子会话、模型用 litch_sessions 列出读取别的会话、子会话的回报和唤醒父会话，都由设备进程做
 // （packages/device/src/session-tree.mts）。设备进程从经控制通道推过去的设置现状里按 sessionTreeKey 读它
 // （device.mts 的 SESSION_TREE_SETTING），改了当场生效，不重启任何东西：关掉时设备信息不列 sessionTree，
-// 新会话不带 litch_sessions，不回报、不唤醒；已有的父子关系还在设备进程的库里，照常显示。
+// 普通新会话不带 litch_sessions，不回报、不唤醒；已有父子关系照常显示。经理及其工作线不受影响。
 
 const sessionTreeKey = "sessions.enabled"
 
@@ -30,8 +30,8 @@ func taskCardsSetting(id, group string) settingSpec {
 		Key: taskCardsKey(id), Group: group, Type: settingBoolean, Scope: harnessScope(id), Restart: restartNone,
 		Default: true, Title: both("任务卡", "Task cards"),
 		Description: both(
-			"开着时模型会把值得另开会话的后续工作做成建议任务卡片，和这个会话无关的新任务先出“新会话 / 在这里做”的卡，每回合收尾。关掉之后这个 harness 的会话不再出这些卡、不收尾也不提醒；你明说要时它照样派子会话、交接任务。立刻生效，已有会话也一样。会话编排关着时这一项不起作用。",
-			"While on, the model turns follow-up work worth its own session into suggested-task cards, asks with a \"New session / Do it here\" card before a new task unrelated to the session, and wraps up every turn. When off, sessions of this harness get none of these cards, no wrap-up and no reminder; the model still starts sub-sessions and hands off tasks when you ask. Takes effect at once, also in existing sessions. Has no effect while Session orchestration is off.",
+			"开着时模型会把值得另开会话的后续工作做成建议任务卡片，和这个会话无关的新任务先出“新会话 / 在这里做”的卡，每回合收尾。关掉之后这个 harness 的会话不再出这些卡、不收尾也不提醒；你明说要时它照样派子会话、交接任务。立刻生效，已有会话也一样。普通会话关闭会话编排时这一项不起作用；经理仍按此项设置。",
+			"While on, the model turns follow-up work worth its own session into suggested-task cards, asks with a \"New session / Do it here\" card before a new task unrelated to the session, and wraps up every turn. When off, sessions of this harness get none of these cards, no wrap-up and no reminder; the model still starts sub-sessions and hands off tasks when you ask. Takes effect at once, also in existing sessions. For ordinary sessions, this has no effect while Session orchestration is off. Managers still follow this setting.",
 		),
 	}
 }
@@ -49,8 +49,8 @@ func sessionSettings() (settingGroup, []settingSpec) {
 		Key: sessionTreeKey, Group: sessionGroup, Type: settingBoolean, Scope: deviceScope, Restart: restartNone,
 		Default: true, Title: both("会话编排", "Session orchestration"),
 		Description: both(
-			"开着时模型可以用 litch_sessions 列出、读取这台设备上的会话，派子会话（用户没要求的先出提案卡片），给自己的子会话发消息；子会话做完一回合把结果交回主会话，必要时唤醒它。关掉之后新建的会话不带这组工具，不再回报、唤醒；已有的父子关系照常显示。立刻生效。",
-			"While on, the model can use litch_sessions to list and read sessions on this device, start sub-sessions (as a proposal card unless the user asked for one), and message its own sub-sessions; a sub-session hands each turn's result back and can wake its parent. When off, new sessions do not get these tools and nothing is reported or woken; existing parent links still show. Takes effect at once.",
+			"开着时模型可以用 litch_sessions 列出、读取这台设备上的会话，派子会话（用户没要求的先出提案卡片），给自己的子会话发消息；子会话做完一回合把结果交回主会话，必要时唤醒它。关掉之后普通新会话不带这组工具，不再回报、唤醒；已有的父子关系照常显示。不影响经理及其工作线：派线、回报和自动唤醒照常。立刻生效。",
+			"While on, the model can use litch_sessions to list and read sessions on this device, start sub-sessions (as a proposal card unless the user asked for one), and message its own sub-sessions; a sub-session hands each turn's result back and can wake its parent. When off, ordinary new sessions do not get these tools and no longer report or wake parents; existing parent links still show. Does not affect managers or their worklines: delegation, reports and automatic wakes continue. Takes effect at once.",
 		),
 	}
 	wrapUp := settingSpec{

@@ -1,4 +1,5 @@
 import { inputDelivery } from '../../../protocol/src/input-delivery.mjs'
+import type { Manager } from '../../../protocol/src/manager.mjs'
 import { questionSource } from '../../../protocol/src/pending-asks.mjs'
 import { restorePendingView, withdrawnInputOps } from './pending-projection.mjs'
 // 一台设备上“打开着”的会话：订阅它的事件，把通知变成会话增量，受理发送、打断和答复。
@@ -155,6 +156,7 @@ export interface LiveHost {
 }
 
 export interface LiveSessions {
+  managerStatus(sessionId: string, status: Manager['status']): void
   loadOlder(sessionId: string): Promise<void>
   recover(sessionId: string, turnId: string, text?: string): Promise<void>
   open(sessionId: string, sink: HostSink): () => void
@@ -363,6 +365,16 @@ const isRunning = (view: SessionView): TurnView | undefined =>
 const UNSUPPORTED = '对方不支持此操作'
 
 export function createLiveSessions(host: LiveHost): LiveSessions {
+  // 来自设备经理状态，不依赖当前打开的是经理页还是普通详情页。
+  const managerStates = new Map<string, Manager['status']>()
+  const managerNote = (id: string) => {
+    const status = managerStates.get(id)
+    return status === 'ending'
+      ? phrase('manager.endingNote')
+      : status === 'ended'
+        ? phrase('manager.readOnly')
+        : null
+  }
   const sessions = new Map<string, Live>()
   /** 没人看了、还留着的会话（插入的先后就是离开的先后）→ 到点放掉的取消函数 */
   const lingering = new Map<string, () => void>()
@@ -500,8 +512,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     if (!view || given.length === 0) return
     // 添加条目的那几条记上看到它开始、结束的时刻（步骤组的时长用），再落到视图上
     const now = host.clock.now()
+    const readonlyNote = managerNote(live.id)
     const ops = given.map((op) => {
-      const stamped = spanOp(view, op, now)
+      const guarded =
+        readonlyNote && op.op === 'session.state' ? { ...op, live: false, note: readonlyNote } : op
+      const stamped = spanOp(view, guarded, now)
       reduceSession(view, stamped)
       return stamped
     })
@@ -1393,6 +1408,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         live.stale = false
         live.view = {
           ...view,
+          ...(managerNote(live.id) ? { live: false, note: managerNote(live.id) } : {}),
           queued: live.queued,
           settings: { ...view.settings, ...live.pending },
           // 重新载入时对面不一定再报一遍，先留着上一次的
@@ -1851,6 +1867,12 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   }
 
   const sessionsApi: LiveSessions = {
+    managerStatus(sessionId, status) {
+      managerStates.set(sessionId, status)
+      const live = sessions.get(sessionId)
+      const note = managerNote(sessionId)
+      if (live && note) emit(live, [{ op: 'session.state', live: false, note }])
+    },
     loadOlder(sessionId) {
       const live = need(sessionId)
       if (live.pageJob) return live.pageJob

@@ -7,6 +7,7 @@ import {
   CLIENT_TOOLS_CAPABILITY,
   type ClientToolsDesktopInfo,
 } from '../../protocol/src/client-tools.mjs'
+import { sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
 import { prepareSpeed } from '../../protocol/src/codex-speeds.mjs'
 import {
   type DeviceInfo,
@@ -534,6 +535,22 @@ export class ClientSession implements ClientToolPeer {
     if (this.state !== 'ready') throw new ProtocolError(-32600, 'Not initialized')
     if (isObject(frame.params) && typeof frame.params.threadId === 'string') {
       const threadId = frame.params.threadId
+      const manager = this.host.managers?.store.forThread(threadId)
+      if (
+        manager &&
+        manager.status !== 'active' &&
+        [
+          'turn/start',
+          'turn/steer',
+          'thread/queue/add',
+          'thread/queue/start',
+          'thread/goal/set',
+        ].includes(method)
+      )
+        throw new ProtocolError(
+          -32600,
+          'This manager is ending or has ended; its conversation is read-only.',
+        )
       const readOnly = ['thread/read', 'thread/turns/list', 'thread/unsubscribe'].includes(method)
       const refusal = this.host.managers?.resets.refusal(threadId)
       if (refusal && !readOnly) throw new ProtocolError(-32600, refusal)
@@ -776,6 +793,38 @@ export class ClientSession implements ClientToolPeer {
     let params = fields
     if (fields && dropped.some((key) => key in fields))
       params = Object.fromEntries(Object.entries(fields).filter(([key]) => !dropped.includes(key)))
+    // 普通分叉、侧聊均为普通会话，不能继承没有身份绑定的经理工具和规则。
+    if (
+      params &&
+      method === 'thread/fork' &&
+      typeof params.threadId === 'string' &&
+      this.host.managers?.store.forThread(params.threadId)
+    ) {
+      if (link.dialect.clientToolsByDevice || link.facts.runtime?.engine !== 'claude-code')
+        throw new ProtocolError(
+          -32600,
+          'This harness cannot replace manager tools when forking. Start a fresh conversation instead.',
+        )
+      const inherited = (this.host.sessionTree.store.tools(params.threadId) ?? []).filter(
+        (tool) =>
+          !isObject(tool) ||
+          !['litch_manager', 'litch_sessions', 'litch_repository'].includes(String(tool.name)),
+      )
+      params = {
+        ...params,
+        dynamicTools: [
+          ...inherited,
+          ...(this.host.sessionTree.host.enabled()
+            ? [
+                sessionTools(
+                  this.host.sessionTree.host.wrapUp(),
+                  this.host.sessionTree.host.taskCards(link.harness),
+                ),
+              ]
+            : []),
+        ],
+      }
+    }
     // 客户端发起回合就是用户说了一句话：子会话的回报排着队的话，包好放在这句话前面（session-tree.mts）
     if (params && method === 'turn/start' && typeof params.threadId === 'string') {
       const input = this.host.sessionTree.beforeUserTurn(params.threadId, params.input)

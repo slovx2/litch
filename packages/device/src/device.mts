@@ -1057,6 +1057,20 @@ export class DeviceServer {
       if (isObject(params)) this.recovery.observe(link.harness, method, params)
     })
     link.request = async (method, params, options) => {
+      // 定时任务和设备工具也使用内部连接，结束后的经理不能从这里重新开工。
+      if (
+        isObject(params) &&
+        typeof params.threadId === 'string' &&
+        [
+          'turn/start',
+          'turn/steer',
+          'thread/queue/add',
+          'thread/queue/start',
+          'thread/goal/set',
+        ].includes(method) &&
+        this.managers.store.forThread(params.threadId)?.status === 'ended'
+      )
+        throw new Error('This manager has ended; its conversation is read-only.')
       if (
         isObject(params) &&
         (method === 'thread/start' ||

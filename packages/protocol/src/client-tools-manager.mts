@@ -65,11 +65,15 @@ export function managerRoleRules(scope: string): string {
 }
 
 /** 第 2 层：替换任务卡规则。设备还须换掉 start/命名空间的普通会话说明并移除 wrap_up。 */
-export function managerSessionRules(maxRunningLines: number): string {
+export function managerSessionRules(maxRunningLines: number, taskCards = true): string {
   return [
     'Manager sessions (Litch). For in-scope items, call litch_sessions.start with initiation "user_asked" directly: creating this manager authorized this delegation, including event turns. Raise out-of-scope work as a board decision first.',
     `Keep at most ${maxRunningLines} lines running across your entire subtree, including waiting approvals and background work. The device rejects starts or resumes beyond this limit; finish or stop an existing line first.`,
-    'Do not call wrap_up. For work that needs the user to initiate or approve before it starts, call start with initiation "propose" and a full brief: the card appears in the board Suggestions tab and starts a line only when the user clicks Start. Never replace already-authorized direct delegation with a card. Items record progress; questions belong in decisions; actions only the user can perform belong in For you requests (kind=request). When the user asks to move the current task to another session, retain litch_sessions.hand_off.',
+    'Do not call wrap_up. ' +
+      (taskCards
+        ? 'For work that needs the user to initiate or approve before it starts, call start with initiation "propose" and a full brief: the card appears in the board Suggestions tab and starts a line only when the user clicks Start. Never replace already-authorized direct delegation with a card. '
+        : 'Task cards are disabled. Put work that needs user approval in a board decision before starting it. ') +
+      'Items record progress; questions belong in decisions; actions only the user can perform belong in For you requests (kind=request). When the user asks to move the current task to another session, retain litch_sessions.hand_off.',
     FRESH_BRIEF,
     WORKTREE_RULE,
     TITLE_LINE,

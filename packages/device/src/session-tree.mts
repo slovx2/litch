@@ -976,7 +976,6 @@ export class SessionTree {
     threadId: string,
     text: string,
     eventId: string,
-    effort: string | null,
     options: { startOnly?: boolean; onStarted?: (turnId: string) => void } = {},
   ): Promise<boolean> {
     let sent = false
@@ -1020,10 +1019,16 @@ export class SessionTree {
             this.host.log(`经理事件未插入当前回合，保留重试：${String(error)}`)
           }
         } else if (idle) {
+          // 线程设置是当前型号/强度的唯一权威，不用经理创建记录覆盖用户的选择。
+          const settings = await link.request('thread/resume', { threadId, excludeTurns: true })
+          const current = isObject(settings) ? settings : {}
           const result = await link.request('turn/start', {
             threadId,
             input,
-            ...(effort ? { effort } : {}),
+            ...(typeof current.model === 'string' ? { model: current.model } : {}),
+            ...(typeof current.reasoningEffort === 'string'
+              ? { effort: current.reasoningEffort }
+              : {}),
           })
           if (isObject(result?.turn) && typeof result.turn.id === 'string') {
             options.onStarted?.(result.turn.id)
@@ -1111,7 +1116,7 @@ export class SessionTree {
   private async wake(parentId: string): Promise<void> {
     const manager = this.managers?.store.forThread(parentId)
     if (manager && manager.status !== 'active') return
-    if (this.closed || !this.host.enabled()) return
+    if (this.closed || !this.enabledFor(parentId)) return
     if (!this.hasWakeNote(parentId)) return
     if (this.store.wakes(parentId) >= SESSION_TREE_LIMITS.wakesPerUserMessage) return
     if (this.cutShort.has(parentId)) return
@@ -1176,7 +1181,7 @@ export class SessionTree {
       return false
     }
     // 读历史期间模型可能关掉开关；用户点“立即处理”仍然绕过自动唤醒限制。
-    if (automatic && !this.hasWakeNote(parentId)) return false
+    if (automatic && (!this.enabledFor(parentId) || !this.hasWakeNote(parentId))) return false
     const text = formatSessionEvent({
       kind: 'wake',
       ...(pendingQuestions.length ? { pendingQuestions } : {}),

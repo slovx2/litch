@@ -2414,6 +2414,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     request: (method, params) => link.request(method, params),
     fail,
     changed(manager) {
+      live.managerStatus(manager.threadId, manager.status)
       for (const oldId of manager.historyThreadIds ?? []) {
         const previous = threads.get(oldId) as (Thread & ManagerThreadFields) | undefined
         if (!previous?.litchManager) continue
