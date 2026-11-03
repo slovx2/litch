@@ -1,6 +1,6 @@
 // Windows 上用正式的 process/*、fs/* 跑执行器；不启动 harness，不使用模型或个人配置。
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -15,6 +15,7 @@ import type {
   MachineFacts,
   MachineTarget,
 } from '../src/device/machine/types.mjs'
+import { windowsShortPath } from './machine-windows-fixture.mjs'
 
 assert.equal(process.platform, 'win32', 'Windows 原生用例必须在 Windows 上执行')
 
@@ -156,10 +157,81 @@ test('Windows 正式执行链：读写复制、范围、中文、停止及全部
     mkdirSync(join(root, '.ssh'))
     writeFileSync(secret, 'secret')
     assert.match(await call('read_file', { path: secret }, false), /\[litch:blocked\]/)
+    assert.match(
+      await call('read_file', { path: `${windowsShortPath(root)}/.SSH/key` }, false),
+      /\[litch:blocked\]/,
+    )
     context.policy = { mode: 'custom', denied: [join(root, '中文 空格')] }
     assert.match(await call('read_file', { path }, false), /\[litch:blocked\]/)
     context.policy = { mode: 'open', denied: [] }
     assert.match(await call('read_file', { path: secret }), /secret/)
+    // 用真正的短名或 junction 定义禁止规则，验证正式入口的读写、目录和复制都守住同一范围。
+    const aliasSource = join(root, 'Alias Source Directory')
+    const denied = join(aliasSource, 'Confidential Directory')
+    const junction = join(root, 'Forbidden Junction')
+    mkdirSync(denied, { recursive: true })
+    writeFileSync(join(denied, 'credential.txt'), 'fixture-secret')
+    writeFileSync(join(aliasSource, 'public.txt'), 'fixture-public')
+    symlinkSync(denied, junction, 'junction')
+    for (const [index, rule] of [windowsShortPath(denied).toLowerCase(), junction].entries()) {
+      context.policy = { mode: 'custom', denied: [rule] }
+      const count = asks.length
+      for (const deniedPath of [
+        join(denied, 'credential.txt'),
+        `${windowsShortPath(denied)}/credential.txt`,
+      ]) {
+        assert.match(await call('read_file', { path: deniedPath }, false), /\[litch:blocked\]/)
+        assert.match(
+          await call('write_file', { path: deniedPath, mode: 'append', content: 'bad' }, false),
+          /\[litch:blocked\]/,
+        )
+      }
+      assert.match(
+        await call('write_file', { path: join(junction, 'new.txt'), content: 'bad' }, false),
+        /\[litch:blocked\]/,
+      )
+      assert.match(
+        await call(
+          'copy',
+          {
+            from: { machine: 'desktop', path: join(denied, 'credential.txt') },
+            to: { machine: 'session', path: join(root, `leak-${index}`) },
+          },
+          false,
+        ),
+        /\[litch:blocked\]/,
+      )
+      assert.match(
+        await call(
+          'copy',
+          {
+            from: { machine: 'session', path: join(aliasSource, 'public.txt') },
+            to: { machine: 'desktop', path: join(junction, 'new.txt') },
+          },
+          false,
+        ),
+        /\[litch:blocked\]/,
+      )
+      assert.equal(asks.length, count, '被禁止的操作不能进入审批')
+      const listed = await call('list_dir', { path: windowsShortPath(aliasSource), depth: 3 })
+      assert.doesNotMatch(listed, /credential\.txt/)
+      assert.match(listed, /public\.txt/)
+      const destAlias = join(root, `export-${index}`)
+      assert.match(
+        await call('copy', {
+          from: { machine: 'desktop', path: aliasSource },
+          to: { machine: 'session', path: destAlias },
+        }),
+        /blocked locations/,
+      )
+      assert.equal(readFileSync(join(destAlias, 'public.txt'), 'utf8'), 'fixture-public')
+      assert.throws(() => readFileSync(join(destAlias, 'Confidential Directory/credential.txt')), {
+        code: 'ENOENT',
+      })
+      assert.equal(readFileSync(join(denied, 'credential.txt'), 'utf8'), 'fixture-secret')
+      assert.throws(() => readFileSync(join(denied, 'new.txt')), { code: 'ENOENT' })
+    }
+    context.policy = { mode: 'open', denied: [] }
     // 目录根可写，但复制不能覆盖其中的自定义禁止子目录。
     const tree = join(root, 'source-tree')
     const targetDir = join(root, 'target-tree')

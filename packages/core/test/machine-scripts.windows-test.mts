@@ -8,6 +8,7 @@ import { test } from 'node:test'
 import { cleanReal, inside } from '../src/device/machine/paths.mjs'
 import { parseListed, parseProbe } from '../src/device/machine/scripts.mjs'
 import { windowsExec, windowsScripts } from '../src/device/machine/scripts-windows.mjs'
+import { windowsShortPath } from './machine-windows-fixture.mjs'
 
 assert.equal(process.platform, 'win32', 'Windows 原生用例必须在 Windows 上执行')
 
@@ -59,3 +60,54 @@ test('Windows 真脚本：中文、字节范围、追加、junction、目录裁�
 })
 
 const commandTuple = (argv: string[]): [string, string[]] => [argv[0] as string, argv.slice(1)]
+
+test('Windows 真实别名：短名、大小写与 junction 规则都裁剪同一目录，边界相邻目录仍可读', () => {
+  const root = mkdtempSync(join(tmpdir(), 'litch-machine-alias-long '))
+  const secret = join(root, 'Confidential Directory')
+  const sibling = join(root, 'Confidential Directory-other')
+  const alias = join(root, 'Secret Junction')
+  try {
+    mkdirSync(secret)
+    mkdirSync(sibling)
+    writeFileSync(join(secret, 'credential.txt'), 'fixture-secret')
+    writeFileSync(join(sibling, 'public.txt'), 'fixture-public')
+    symlinkSync(secret, alias, 'junction')
+    const shortRoot = windowsShortPath(root)
+    const shortSecret = windowsShortPath(secret)
+    for (const [directory, rule] of [
+      [root, secret],
+      [root, shortSecret],
+      [shortRoot, shortSecret.toLowerCase()],
+      [shortRoot.toUpperCase(), alias],
+    ] as const) {
+      const argv = windowsScripts.list(directory, null, true, [rule])
+      const result = spawnSync(argv[0] as string, argv.slice(1), {
+        windowsHide: true,
+        timeout: 30_000,
+      })
+      assert.equal(result.status, 0, result.stderr?.toString() || String(result.error))
+      const rows = result.stdout.toString('utf8').split('\0').filter(Boolean).map(parseListed)
+      assert.ok(
+        rows.some((entry) => entry?.path.endsWith('/public.txt')),
+        `${directory}: 边界相邻目录`,
+      )
+      assert.ok(
+        !rows.some((entry) => entry?.path.endsWith('/credential.txt')),
+        `${directory} / ${rule}: 禁止目录被遍历`,
+      )
+      assert.ok(
+        rows.some((entry) => entry?.type === 'l' && entry.path.endsWith('/Secret Junction')),
+      )
+    }
+    // 从禁止目录的另一个别名直接起列举，也不能绕过底层裁剪。
+    const argv = windowsScripts.list(alias, null, true, [shortSecret])
+    const result = spawnSync(argv[0] as string, argv.slice(1), {
+      windowsHide: true,
+      timeout: 30_000,
+    })
+    assert.equal(result.status, 0, result.stderr?.toString() || String(result.error))
+    assert.equal(result.stdout.length, 0)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})

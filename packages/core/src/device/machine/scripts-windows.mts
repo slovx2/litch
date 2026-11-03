@@ -88,18 +88,30 @@ if (Test-Path -LiteralPath $path) {
 [Console]::Write($real + [char]0 + $kind + [char]0 + $size + [char]0)
 foreach ($rule in ${array(denied)}) { [Console]::Write([LitchMachinePath]::Real($rule) + [char]0) }`),
   list: (root: string, depth: number | null, _icase: boolean, prune: readonly string[]): string[] =>
-    helper(`
-$prune = ${array(prune)}
+    helper(`${REAL}
+# 短名、junction 与普通长名必须在比较前走同一份句柄解析；解析失败直接停止。
+$prune = @(${array(prune)} | ForEach-Object { [LitchMachinePath]::Real($_) })
+function IsBlocked([string]$path) {
+  foreach ($rule in $prune) {
+    if ($path.Equals($rule, [StringComparison]::OrdinalIgnoreCase) -or
+        $path.StartsWith($rule.TrimEnd('/') + '/', [StringComparison]::OrdinalIgnoreCase)) { return $true }
+  }
+  return $false
+}
 function Walk([string]$folder, [int]$level) {
+  $folder = [LitchMachinePath]::Real($folder)
+  if (IsBlocked $folder) { return }
   foreach ($entry in Get-ChildItem -LiteralPath $folder -Force) {
-    $path = $entry.FullName.Replace('\\', '/')
+    $real = [LitchMachinePath]::Real($entry.FullName)
+    # 链接显示自身的长名，不能把它改成根外的目标路径；裁剪仍比较解析后的真实目标。
+    $path = $folder.TrimEnd('/') + '/' + $entry.Name
     $link = ''; $size = 0
     if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) { $kind = 'l'; $link = [string]$entry.Target }
     elseif ($entry.PSIsContainer) { $kind = 'd' }
     else { $kind = 'f'; $size = $entry.Length }
     $time = ([DateTimeOffset]$entry.LastWriteTimeUtc).ToUnixTimeSeconds()
     [Console]::Write($kind + [char]9 + $size + [char]9 + $time + [char]9 + $link + [char]9 + $path + [char]0)
-    if ($kind -eq 'd' -and $level -lt ${depth ?? 2147483647} -and $prune -notcontains $path) { Walk $entry.FullName ($level + 1) }
+    if ($kind -eq 'd' -and $level -lt ${depth ?? 2147483647} -and -not (IsBlocked $real)) { Walk $real ($level + 1) }
   }
 }
 Walk ${literal(root)} 1`),

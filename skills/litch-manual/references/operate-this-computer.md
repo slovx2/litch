@@ -69,6 +69,7 @@ reported, even when the destination root itself is allowed.
 - Paths accept `C:\Users\name\file.txt`, `C:/Users/name/file.txt`, `~/file.txt` and UNC paths such as
   `\\server\share\file.txt`. Access checks ignore case and resolve junctions and symbolic links.
   Drive-relative paths (`C:file.txt`), device paths and alternate data streams are rejected.
+- Windows 列目录和递归复制在遍历前统一解析禁止规则与实际目录的真实路径；8.3 短名、大小写或 junction 别名不能改变禁止范围。禁止目录本身可显示，内部条目不展开；路径解析失败时停止，不回退到字面比较。
 - The Windows sensitive list covers SSH/GPG keys, Windows credentials and protection keys,
   browser profiles, Outlook data, Litch and harness configuration, and common CLI credentials.
   AppData locations follow this computer's configuration. Custom paths are absolute paths or use `~`.

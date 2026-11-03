@@ -55,7 +55,8 @@ try {
     [
       '--test',
       'packages/core/dist/packages/core/test/machine-windows.test.mjs',
-      'packages/core/dist/packages/core/test/machine-windows-rpc.test.mjs',
+      'packages/core/dist/packages/core/test/machine-rpc.windows-test.mjs',
+      'packages/core/dist/packages/core/test/machine-scripts.windows-test.mjs',
     ],
     240_000,
   )
