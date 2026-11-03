@@ -64,6 +64,31 @@ const TOP = [
   'README.md',
 ]
 
+test('目录链接展开目标与父级、收起其他分支；根目录也能定位', async () => {
+  const { files, flush, rows } = await setup()
+  files.open('local', ROOT)
+  await flush()
+  files.expand('local', ROOT, `${ROOT}/packages`)
+  await flush()
+  const reveal = files.reveal('local', ROOT, `${ROOT}/docs/images`, {
+    directory: true,
+    collapseOthers: true,
+  })
+  await flush()
+  assert.equal(await reveal, true)
+  assert.deepEqual(
+    rows()
+      .filter((row) => row.expanded)
+      .map((row) => row.path),
+    [`${ROOT}/docs`, `${ROOT}/docs/images`],
+  )
+  assert.equal(
+    await files.reveal('local', ROOT, ROOT, { directory: true, collapseOthers: true }),
+    true,
+  )
+  assert.equal(rows().filter((row) => row.expanded).length, 0)
+})
+
 test('打开一棵树：先是“正在取”，取到之后是根那一层，目录在前、隐藏的不显示', async () => {
   const { files, flush, shape, state, asked } = await setup()
   files.open('local', ROOT)

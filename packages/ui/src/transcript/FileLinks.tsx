@@ -71,6 +71,7 @@ export function useSessionFileLinks(
           deviceId,
           workspaceId,
           root: target?.root ?? root,
+          ...(target ? { kind: target.kind } : {}),
           path: target?.path ?? ref.path,
           alt: target ? null : ref.alt,
           line: ref.line,

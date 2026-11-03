@@ -164,11 +164,16 @@ export function FileTree({
     if (!path) return
     seeking.current = path
     clearReveal(uiKey, path)
-    void replica.files.reveal(deviceId, root, path).then((found) => {
-      // 没找到（上面的目录不在了）：不滚
-      if (!found && seeking.current === path) seeking.current = null
-    })
-  }, [replica, deviceId, root, uiKey, ui.reveal])
+    void replica.files
+      .reveal(deviceId, root, path, {
+        directory: ui.revealDirectory === true,
+        collapseOthers: ui.revealDirectory === true,
+      })
+      .then((found) => {
+        // 没找到（上面的目录不在了）：不滚
+        if (!found && seeking.current === path) seeking.current = null
+      })
+  }, [replica, deviceId, root, uiKey, ui.reveal, ui.revealDirectory])
   useLayoutEffect(() => {
     const path = seeking.current
     if (!path) return

@@ -28,7 +28,12 @@ export interface FileTrees {
   expand(deviceId: string, root: string, path: string): void
   collapse(deviceId: string, root: string, path: string): void
   /** 把一个路径上面的各级目录都展开，让它在树里看得见。各级都取到了是 true */
-  reveal(deviceId: string, root: string, path: string): Promise<boolean>
+  reveal(
+    deviceId: string,
+    root: string,
+    path: string,
+    options?: { directory?: boolean; collapseOthers?: boolean },
+  ): Promise<boolean>
   /** 不用缓存，把根和展开着的各层重新取一遍 */
   refresh(deviceId: string, root: string): Promise<void>
   /** 显不显示隐藏的文件。所有的树一起变，不用重新取 */
@@ -48,6 +53,7 @@ interface Tree {
   latest: Map<string, number>
   watchers: number
   refreshing: number
+  revealVersion: number
 }
 
 const sameView = (a: DirectoryView | null, b: DirectoryView): boolean => {
@@ -79,6 +85,7 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
         latest: new Map(),
         watchers: 0,
         refreshing: 0,
+        revealVersion: 0,
       }
       trees.set(key, tree)
     }
@@ -232,22 +239,30 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
       if (tree.expanded.delete(normalizePath(path))) publish(tree)
     },
 
-    async reveal(deviceId, root, path) {
+    async reveal(deviceId, root, path, options = {}) {
       const tree = treeOf(deviceId, root)
       const target = normalizePath(path)
       if (!insideRoot(tree.root, target)) return false
+      const version = ++tree.revealVersion
+      if (options.collapseOthers) tree.expanded.clear()
       const chain: string[] = []
-      for (let dir = parentPath(target); dir && dir !== tree.root; dir = parentPath(dir)) {
+      for (
+        let dir = target === tree.root ? null : options.directory ? target : parentPath(target);
+        dir && dir !== tree.root;
+        dir = parentPath(dir)
+      ) {
         if (!insideRoot(tree.root, dir)) return false
         chain.unshift(dir)
       }
       for (const dir of [tree.root, ...chain]) {
+        if (version !== tree.revealVersion) return false
         if (dir !== tree.root) tree.expanded.add(dir)
         if (!tree.listings.get(dir)?.view && !(await load(tree, dir, false))) {
           publish(tree)
           return false
         }
       }
+      if (version !== tree.revealVersion) return false
       publish(tree)
       return true
     },

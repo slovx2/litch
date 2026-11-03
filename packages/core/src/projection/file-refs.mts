@@ -126,13 +126,21 @@ function parseFileRef(
   if (mode === 'prose' && /\s/.test(text)) return null
   const parts = text.split('/')
   const name = parts[parts.length - 1] ?? ''
-  if (!name || !looksLikeFile(name)) return null
+  const directory =
+    text.endsWith('/') ||
+    mode === 'explicit' ||
+    (mode === 'code' &&
+      (isAbsolutePath(text) ||
+        text.startsWith('./') ||
+        text.startsWith('../') ||
+        text.startsWith('~/')))
+  if (!text || (!directory && (!name || !looksLikeFile(name)))) return null
   const nested = parts.length > 1
   const known = KNOWN.has(extensionOf(name)) || BARE_NAMES.has(name.toLowerCase())
   if (mode === 'prose') {
     // 正文里：要有目录分隔；扩展名常见，或者明明白白带着行号
-    if (!nested || !(known || line !== null)) return null
-  } else if (mode !== 'explicit' && !nested && !(known && extensionOf(name).length !== 1)) {
+    if (!nested || !(known || line !== null || text.endsWith('/'))) return null
+  } else if (!directory && !nested && !(known && extensionOf(name).length !== 1)) {
     // 光一个文件名：`console.log`、`a.b` 这类不是文件，只认扩展名常见的
     return null
   }

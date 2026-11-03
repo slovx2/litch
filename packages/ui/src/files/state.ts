@@ -29,6 +29,7 @@ export interface TreeUi {
   active: string | null
   /** 要在树里露出来的路径（从对话里、从找文件的结果里点开的）。树定位到了就清掉 */
   reveal: string | null
+  revealDirectory?: boolean
 }
 
 const EMPTY: TreeUi = { selected: null, tabs: [], active: null, reveal: null }
@@ -182,8 +183,8 @@ export function retargetFile(key: string, from: string, to: string): void {
 }
 
 /** 要在树里把这个路径露出来（不开文件）。打开的是个目录的时候用 */
-export function revealPath(key: string, path: string): void {
-  publish(key, { ...treeUiNow(key), selected: path, reveal: path })
+export function revealPath(key: string, path: string, directory = true): void {
+  publish(key, { ...treeUiNow(key), selected: path, reveal: path, revealDirectory: directory })
 }
 
 export function clearReveal(key: string, path: string): void {
@@ -257,6 +258,7 @@ export function usePickedRoot(
 // ---------- 别处要“在文件面板里打开这个文件” ----------
 
 export interface FileTarget {
+  kind?: 'file' | 'directory'
   fragment?: string
   deviceId: string
   workspaceId: string | null
@@ -271,6 +273,10 @@ export interface FileTarget {
 export function openInFiles(target: FileTarget): void {
   showSideTab(FILES_TAB)
   pickRoot(target.deviceId, target.workspaceId, target.root)
+  if (target.kind === 'directory') {
+    revealPath(treeKey(target.deviceId, target.root), target.path)
+    return
+  }
   openFile(treeKey(target.deviceId, target.root), target.path, {
     ...(target.fragment ? { fragment: target.fragment } : {}),
     line: target.line ?? null,

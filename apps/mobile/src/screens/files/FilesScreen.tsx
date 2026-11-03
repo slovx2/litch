@@ -23,7 +23,7 @@ import { useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Empty } from '../../ui/kit/controls'
 import { Screen } from '../../ui/kit/Screen'
-import { DirList } from './DirList'
+import { FileTreeView } from './FileTreeView'
 import { FileView } from './FileView'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Files'>
@@ -46,7 +46,6 @@ export function FilesScreen({ navigation, route }: Props) {
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' })
   const [showHidden, setShowHidden] = useState(false)
   const [attempt, setAttempt] = useState(0)
-  const [refreshing, setRefreshing] = useState(false)
 
   const list = useCallback(
     (fresh: boolean) => channel.command('files.list', { deviceId, root, path, fresh }),
@@ -88,16 +87,6 @@ export function FilesScreen({ navigation, route }: Props) {
       live = false
     }
   }, [channel, deviceId, root, path, list, attempt, route.params.ref, route.params.href, target])
-
-  const refresh = useCallback(() => {
-    setRefreshing(true)
-    list(true)
-      .then(
-        (view) => setLoaded({ kind: 'dir', view }),
-        (error: unknown) => setLoaded({ kind: 'failed', reason: reasonOf(error, t) }),
-      )
-      .finally(() => setRefreshing(false))
-  }, [list, t])
 
   const open = useCallback(
     (to: string) => navigation.push('Files', { deviceId, root, path: to }),
@@ -148,12 +137,11 @@ export function FilesScreen({ navigation, route }: Props) {
     )
   else if (loaded.kind === 'dir')
     body = (
-      <DirList
-        view={loaded.view}
+      <FileTreeView
+        deviceId={deviceId}
         root={root}
+        path={path}
         showHidden={showHidden}
-        refreshing={refreshing}
-        onRefresh={refresh}
         onOpen={open}
       />
     )
