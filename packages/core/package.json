@@ -8,6 +8,7 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
     "build": "tsc -p test/tsconfig.json",
-    "test": "npm run build && node --test dist/packages/core/test/*.test.mjs"
+    "test": "npm run build && node ../../scripts/ci/core-tests.mjs portable",
+    "test:windows-native": "npm run build && node ../../scripts/ci/core-tests.mjs windows-native"
   }
 }

@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { hasMacCoverage } from '../full-proof.mjs'
 import { checkNativeProof, nativePlan, selectedNative } from './mac-native-plan.mjs'
 import { signingState, waitForSigning } from './mac-priority.mjs'
-import { fixtureMacProof } from './mac-proof-fixture.mjs'
+import { fixtureMacProof, fixtureWindowsProof } from './mac-proof-fixture.mjs'
 
 const context = { repository: 'test/litch', sha: 'a'.repeat(40), runId: 42, attempt: 2 }
 const run = {
@@ -157,6 +157,7 @@ test('复用Linux首回合必须绑定artifact及稳定ID：缺失或对不上�
   }
   full.macProof = fixtureMacProof(full)
   full.linuxProofs = fixtureLinuxProofs(full)
+  full.windowsProof = fixtureWindowsProof(full)
   assert.equal(hasReleaseCoverage(full), true)
   const key = 'linux-checks-ci-client'
   for (const alter of [

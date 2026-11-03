@@ -8,11 +8,12 @@ import { checkLinuxProof, linuxSources } from './linux-proof.mjs'
 import { checkNativeProof } from './mac-native-plan.mjs'
 import { api, archiveNames, download, fileHash, pages } from './release-artifacts.mjs'
 import { checkJob, chooseArtifact } from './release-candidate.mjs'
+import { checkWindowsProof, windowsSource } from './windows-proof.mjs'
 
 const env = process.env
 const selected = JSON.parse(env.NATIVE_DOMAINS)
 const sources = linuxSources(env.FULL_DOMAINS ?? '', env.FULL_RUN_CI === 'true')
-const bound = { macProof: null, linuxProofs: {} }
+const bound = { macProof: null, linuxProofs: {}, windowsProof: null }
 const context = {
   repository: env.GITHUB_REPOSITORY,
   sha: env.GITHUB_SHA,
@@ -76,5 +77,12 @@ for (const source of sources)
     'checks.json',
     source.job,
     (proof, context) => checkLinuxProof(proof, source.suites, context),
+  )
+if (env.FULL_RUN_CI === 'true')
+  bound.windowsProof = await readProof(
+    windowsSource.kind,
+    'checks.json',
+    windowsSource.job,
+    checkWindowsProof,
   )
 writeFileSync('check-proofs-bound.json', `${JSON.stringify(bound)}\n`)

@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { runInNewContext } from 'node:vm'
 import { fullJobs, isCompleteFull } from '../full-proof.mjs'
 import { checkManifest } from './check-mobile-apk.mjs'
-import { fixtureLinuxProofs, fixtureMacProof } from './mac-proof-fixture.mjs'
+import { fixtureLinuxProofs, fixtureMacProof, fixtureWindowsProof } from './mac-proof-fixture.mjs'
 
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')
 const full = read('.github/workflows/full.yml')
@@ -109,6 +109,7 @@ test('默认 Full 保留手机单测/类型/APK 校验，report 和证明不依�
   }
   proof.macProof = fixtureMacProof(proof)
   proof.linuxProofs = fixtureLinuxProofs(proof)
+  proof.windowsProof = fixtureWindowsProof(proof)
   assert.equal(isCompleteFull(run, proof, sha, 'test/litch'), true)
   assert.equal(isCompleteFull(run, { ...proof, macProof: null }, sha, 'test/litch'), false)
   assert.equal(isCompleteFull(run, { ...proof, linuxProofs: {} }, sha, 'test/litch'), false)

@@ -16,8 +16,9 @@ import type {
   MachineTarget,
 } from '../src/device/machine/types.mjs'
 
+assert.equal(process.platform, 'win32', 'Windows 原生用例必须在 Windows 上执行')
+
 test('Windows 正式执行链：读写复制、范围、中文、停止及全部停止整棵树', {
-  skip: process.platform !== 'win32',
   timeout: 180_000,
 }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'litch-machine-rpc-'))

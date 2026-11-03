@@ -10,6 +10,7 @@ import { hasMacCoverage, hasReleaseCoverage } from '../full-proof.mjs'
 import { artifactKinds } from '../release-provenance.mjs'
 import { hasLinuxCoverage } from './linux-proof.mjs'
 import { fileHash, validateArtifact } from './release-artifacts.mjs'
+import { hasWindowsCoverage } from './windows-proof.mjs'
 
 export const policyVersion = 'candidate-v4-mac-consolidated'
 export const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'))
@@ -159,6 +160,7 @@ export function checkGate(gate, full, context, now = Date.now()) {
   assert.equal(full.runCi, true, 'full run-ci')
   assert.ok(hasMacCoverage(full), '合并Mac检查证明无效')
   assert.ok(hasLinuxCoverage(full), '复用Linux检查证明无效')
+  assert.ok(hasWindowsCoverage(full), 'Windows原生检查证明无效')
   assert.deepEqual(JSON.parse(full.domains).sort(), [...gate.domains].sort(), 'full domains')
   for (const job of ['source', 'gate', ...gate.domains])
     assert.equal(full.jobs[job], 'success', `full job ${job}`)

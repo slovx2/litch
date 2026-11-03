@@ -4,7 +4,11 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { fixtureLinuxProofs, fixtureMacProof } from './ci/mac-proof-fixture.mjs'
+import {
+  fixtureLinuxProofs,
+  fixtureMacProof,
+  fixtureWindowsProof,
+} from './ci/mac-proof-fixture.mjs'
 import { domains } from './ci-impact.mjs'
 import {
   findSuccessfulFull,
@@ -42,6 +46,7 @@ const proof = {
 }
 proof.macProof = fixtureMacProof(proof)
 proof.linuxProofs = fixtureLinuxProofs(proof)
+proof.windowsProof = fixtureWindowsProof(proof)
 
 test('默认全量、显式全集和 schedule 都可证明同 SHA 完整 Full', () => {
   assert.ok(isCompleteFull(run, proof, sha, repository))
@@ -75,6 +80,7 @@ test('mobile-only、缺领域、额外或重复领域和无法读取的输入不
 })
 
 test('run-ci 必须为 true；跳过、失败或缺失任何领域均不放行', () => {
+  assert.equal(isCompleteFull(run, { ...proof, windowsProof: null }, sha, repository), false)
   for (const runCi of [false, 'true', undefined]) {
     assert.equal(isCompleteFull(run, { ...proof, runCi }, sha, repository), false)
   }
@@ -220,6 +226,7 @@ test('用真实 git HEAD 生成证明，拒绝与冻结 SHA 不一致的 checkou
       JSON.stringify({
         macProof: fixtureMacProof({ ...proof, sha: actualSha }),
         linuxProofs: fixtureLinuxProofs({ ...proof, sha: actualSha }),
+        windowsProof: fixtureWindowsProof({ ...proof, sha: actualSha }),
       }),
     )
     const generated = writeFullProof(env)

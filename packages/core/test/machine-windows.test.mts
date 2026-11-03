@@ -1,8 +1,4 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { test } from 'node:test'
 import {
   blockedBy,
@@ -15,12 +11,8 @@ import {
   parentOf,
 } from '../src/device/machine/paths.mjs'
 import { sensitivePresets } from '../src/device/machine/presets.mjs'
-import { execCommand, parseListed, parseProbe, scriptsFor } from '../src/device/machine/scripts.mjs'
-import {
-  powershellCommand,
-  windowsExec,
-  windowsScripts,
-} from '../src/device/machine/scripts-windows.mjs'
+import { execCommand, scriptsFor } from '../src/device/machine/scripts.mjs'
+import { powershellCommand, windowsScripts } from '../src/device/machine/scripts-windows.mjs'
 import { windowsCopyPath } from '../src/device/machine/windows-paths.mjs'
 
 const home = 'C:\\Users\\小明'
@@ -143,55 +135,3 @@ test('Windows 命令：UTF-16LE 参数完整保留中文、引号、美元、换
   assert.equal(scriptsFor('//server/share/x'), windowsScripts)
   assert.throws(() => windowsScripts.signal('SIGINT', 123), /action kill/)
 })
-
-// 同一个测试文件带到 Windows 后运行，验证真实 PowerShell 与 Win32 文件语义；Mac 上只跳过这一项。
-test('Windows 真脚本：中文、字节范围、追加、junction、目录裁剪和命令退出码', {
-  skip: process.platform !== 'win32',
-}, () => {
-  const root = mkdtempSync(join(tmpdir(), 'litch-machine-中文 '))
-  const run = (argv: string[], input?: Buffer): Buffer => {
-    const result = spawnSync(argv[0] as string, argv.slice(1), {
-      input,
-      windowsHide: true,
-      timeout: 30_000,
-    })
-    assert.equal(result.status, 0, result.stderr?.toString() || String(result.error))
-    return result.stdout
-  }
-  const probe = (path: string, denied: string[] = []) =>
-    parseProbe(
-      run(windowsScripts.probe(path, denied)).toString('utf8').split('\0').slice(0, -1),
-      denied.length,
-    )
-  try {
-    mkdirSync(join(root, '机密'))
-    writeFileSync(join(root, '机密', '凭据.txt'), '不要泄露')
-    symlinkSync(join(root, '机密'), join(root, '联接'), 'junction')
-    const resolved = probe(join(root, '联接', '凭据.txt'), [join(root, '机密')])
-    assert.equal(resolved.type, 'f')
-    assert.equal(resolved.size, Buffer.byteLength('不要泄露'))
-    assert.equal(inside(resolved.denied[0] as string, resolved.real, true), true)
-    assert.equal(probe(join(root, '联接', '不存在', '新文件')).type, 'm')
-    const file = join(root, "a'中文.txt")
-    run(windowsScripts.write(file), Buffer.from('中文\r\n'))
-    run(windowsScripts.append(file), Buffer.from('追加\n'))
-    assert.deepEqual(readFileSync(file), Buffer.from('中文\r\n追加\n'))
-    assert.deepEqual(run(windowsScripts.readRange(file, 3, 5)), Buffer.from('文\r\n'))
-    const rows = run(windowsScripts.list(root, null, true, [cleanReal(join(root, '机密'))]))
-      .toString('utf8')
-      .split('\0')
-      .filter(Boolean)
-      .map(parseListed)
-    assert.ok(rows.some((one) => one?.type === 'l'))
-    assert.equal(
-      rows.some((one) => one?.path.endsWith('/凭据.txt')),
-      false,
-    )
-    assert.match(run(windowsExec("Write-Output '中文输出😀'")).toString('utf8'), /中文输出😀/)
-    assert.equal(spawnSync(...commandTuple(windowsExec('exit 7')), { windowsHide: true }).status, 7)
-  } finally {
-    rmSync(root, { recursive: true, force: true })
-  }
-})
-
-const commandTuple = (argv: string[]): [string, string[]] => [argv[0] as string, argv.slice(1)]

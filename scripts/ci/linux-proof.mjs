@@ -1,9 +1,7 @@
 // Full复用CI首回合必须带真实检查制品，不能只用调用job的success代替检查身份。
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { domains as fullDomains } from '../ci-impact.mjs'
-import { checkPlan, expectsNodeTests } from './check-catalog.mjs'
-import { cliPackages } from './install-test-clis.mjs'
+import { checkExecutionProof } from './check-proof.mjs'
 
 export function linuxSources(domains, runCi) {
   const selected = domains.trim() ? JSON.parse(domains) : fullDomains
@@ -32,39 +30,8 @@ export function linuxSources(domains, runCi) {
   return sources
 }
 
-export function checkLinuxProof(proof, names, context) {
-  const plan = checkPlan(names)
-  assert.equal(proof?.schema, 1)
-  assert.equal(proof.repository, context.repository)
-  assert.equal(proof.sha, context.sha)
-  assert.equal(proof.runId, String(context.runId))
-  assert.equal(proof.attempt, context.attempt)
-  assert.equal(proof.platform, 'linux')
-  assert.equal(proof.arch, 'x64')
-  assert.equal(proof.node, 'v24.21.0')
-  assert.equal(proof.complete, true)
-  assert.deepEqual(proof.plan, plan)
-  const versions = JSON.parse(
-    readFileSync(new URL('../../protocol/versions.json', import.meta.url)),
-  )
-  assert.deepEqual(proof.versions, versions)
-  const specs = cliPackages(versions)
-  assert.deepEqual(
-    proof.clis,
-    plan.clis.map((id) => ({ id, package: specs[id].name, version: specs[id].version })),
-  )
-  assert.deepEqual(
-    proof.results.map((item) => item.id),
-    plan.checks.map((item) => item.id),
-  )
-  for (const item of proof.results) {
-    assert.equal(item.code, 0)
-    assert.equal(item.signal, null)
-    assert.equal(item.tests.fail + item.tests.cancelled + item.tests.skipped, 0)
-    if (expectsNodeTests(item.id)) assert.ok(item.tests.tests > 0 && item.tests.names.length > 0)
-  }
-  return proof
-}
+export const checkLinuxProof = (proof, names, context) =>
+  checkExecutionProof(proof, names, context, 'linux')
 
 export function hasLinuxCoverage(full) {
   try {

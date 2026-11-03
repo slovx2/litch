@@ -57,6 +57,7 @@ gh workflow run promote.yml --ref <已推送验证分支> \
 - 任何测试、出包或验证失败，都不封存可晋级候选。部分 Full、缺 run-ci、实际检出错误、未知证明不能冒充完整。
 - 合并 Mac 逐检查生成 `mac-native-proof-<attempt>`，Full 汇总核对实际成功 job、源码/工作流 SHA、run、attempt、artifact ID/digest、命令与检查 ID 后才生成逻辑领域结果。缺浏览器或任一窗口/原生检查都不能以“合并 job 绿”替代。验证策略已变更，旧策略候选不能用新代码晋级。夜间增量基线的选择规则保持不变：真实 schedule、全绿、48 小时内且是候选祖先；候选证明升级不额外要求既有夜间带有新版候选证明。
 - Linux 的 CI/client、real-engines、必要时补跑的client单测也逐一绑定真实成功job和`linux-checks-*-<attempt>`制品。Full保留完整检查计划、稳定ID、实际用例清单和版本，核对SHA/run/attempt及archive摘要后才允许复用首回合；只有CI的success而没有这条制品绑定仍拒绝。含用例名称的Full证明大小上限为2MiB，未知文件/额外归档条目仍拒绝。
+- Windows 本机文件和进程用例由 `windows.yml` 单独实跑，上传 `windows-native-proof-<attempt>`。Full 与候选验证绑定同 run/SHA 的成功 Windows job、真实平台、检查清单、逐项结果及制品摘要；缺少证明、失败或跳过均不能放行。跨平台 `client:test` 按源码清单选择用例，不包含 Windows 原生集合，也不执行重命名后残留的编译文件。
 - 源 run ID 与 Promote 自己的 run ID 不同是正常情况；源 run 最新 attempt 必须成功。源运行开始新 attempt 后旧封存件不再可晋级。
 - 测试重跑沿用源 run，已成功包引用原 artifact ID/创建 attempt。只重跑 Gate 汇总时可绑定较早成功的 Full artifact，不能伪造“本次重新实跑”。重跑后的新封存件有新 ID/digest，重新取 Summary 参数。
 - 48 小时约束作用于增量夜间基线；已经完成全部非手机领域的同 SHA 证明不依赖旧基线。源制品缺失/过期、基线过期或验证策略变化时明确失败，不静默重建、跨 run 拼包或降低覆盖。

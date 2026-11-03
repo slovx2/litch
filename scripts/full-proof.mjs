@@ -4,6 +4,7 @@ import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { hasLinuxCoverage } from './ci/linux-proof.mjs'
 import { checkNativeProof, selectedNative } from './ci/mac-native-plan.mjs'
+import { hasWindowsCoverage } from './ci/windows-proof.mjs'
 import { domains, releaseDomains } from './ci-impact.mjs'
 
 export function hasMacCoverage(full) {
@@ -88,6 +89,7 @@ export function isCompleteFull(run, proof, sha, repository) {
       hasAllDomains(proof.domains) &&
       hasMacCoverage(proof) &&
       hasLinuxCoverage(proof) &&
+      hasWindowsCoverage(proof) &&
       fullJobs.every((job) => proof.jobs?.[job] === 'success'),
   )
 }
@@ -105,6 +107,7 @@ export function hasReleaseCoverage(proof) {
     proof?.schema === 1 &&
       hasMacCoverage(proof) &&
       hasLinuxCoverage(proof) &&
+      hasWindowsCoverage(proof) &&
       proof.runCi === true &&
       Array.isArray(selected) &&
       new Set(selected).size === selected.length &&
@@ -198,9 +201,11 @@ export function writeFullProof(env = process.env) {
     jobs: Object.fromEntries(Object.entries(needs).map(([job, data]) => [job, data.result])),
     macProof: bound.macProof,
     linuxProofs: bound.linuxProofs,
+    windowsProof: bound.windowsProof,
   }
   if (!hasMacCoverage(proof)) throw new Error('合并Mac的检查证明缺失、失败或来源不符')
   if (!hasLinuxCoverage(proof)) throw new Error('复用Linux的检查证明缺失、失败或来源不符')
+  if (!hasWindowsCoverage(proof)) throw new Error('Windows原生检查证明缺失、失败或来源不符')
   const selected = selectedNative(proof.domains, proof.runCi)
   for (const domain of ['computer-use', 'client', 'client-engines']) {
     proof.jobs[domain] = selected.includes(domain) ? 'success' : 'skipped'

@@ -24,6 +24,8 @@ import {
 import { fakeClock } from './helpers.mjs'
 
 export interface GitWorldOptions {
+  /** 用例需要指定路径语义时，在这份临时目录下建隔离仓库 */
+  tempRoot?: string
   /** 不建仓库：只是一个普通目录 */
   plain?: boolean
   /** 对面起不了进程：没有这个方法 */
@@ -56,7 +58,7 @@ const GIT_ENV = {
 
 export function gitWorld(options: GitWorldOptions = {}) {
   // macOS 上临时目录是个符号链接：git 报的是解开之后的路径
-  const base = realpathSync(mkdtempSync(join(tmpdir(), 'litch-diff-test-')))
+  const base = realpathSync(mkdtempSync(join(options.tempRoot ?? tmpdir(), 'litch-diff-test-')))
   const root = join(base, 'repo')
   mkdirSync(root)
   /** 在仓库里直接跑 git（摆场景用，不经差异模块） */

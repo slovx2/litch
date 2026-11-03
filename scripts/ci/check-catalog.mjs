@@ -45,6 +45,7 @@ export const checks = [
   node('restart-resume', 'scripts/check-restart-resume.mjs'),
   node('client-fixture-manager', '--test', 'scripts/client-fixture-manager.test.mjs'),
   node('manager-fixture', 'scripts/check-manager-fixture.mjs'),
+  node('client:test:windows-native', 'scripts/ci/core-tests.mjs', 'windows-native'),
 ]
 const units = checks.slice(0, 9).map((check) => check.id)
 const engineTools = [
@@ -55,6 +56,7 @@ const engineTools = [
   'manager-fixture',
 ]
 export const suites = {
+  'windows-native': { checks: ['client:test:windows-native'], desktopBuild: false, clis: [] },
   'desktop-unit': { checks: units, desktopBuild: false, clis: [] },
   // 浏览器组包含真实 macOS Keychain/Node-API 测试，必须留在 Mac；原完整集合不缩减。
   'desktop-portable-unit': {

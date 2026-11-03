@@ -6,6 +6,40 @@ import { cliPackages } from './install-test-clis.mjs'
 import { linuxSources } from './linux-proof.mjs'
 import { nativeCliVersions, nativePlan, selectedNative } from './mac-native-plan.mjs'
 
+export function fixtureWindowsProof(full) {
+  if (!full.runCi) return null
+  const plan = checkPlan(['windows-native'])
+  return {
+    artifact: {
+      id: 3000,
+      jobId: 4000,
+      attempt: full.attempt,
+      name: `windows-native-proof-${full.attempt}`,
+      digest: `sha256:${'c'.repeat(64)}`,
+    },
+    proof: {
+      schema: 1,
+      repository: full.repository,
+      sha: full.sha,
+      runId: String(full.runId),
+      attempt: full.attempt,
+      platform: 'win32',
+      arch: 'x64',
+      node: 'v24.21.0',
+      complete: true,
+      versions: JSON.parse(readFileSync(new URL('../../protocol/versions.json', import.meta.url))),
+      plan,
+      clis: [],
+      results: plan.checks.map(({ id }) => ({
+        id,
+        code: 0,
+        signal: null,
+        tests: { tests: 2, fail: 0, cancelled: 0, skipped: 0, names: ['脚本', '执行链'] },
+      })),
+    },
+  }
+}
+
 export function fixtureLinuxProofs(full) {
   const versions = JSON.parse(
     readFileSync(new URL('../../protocol/versions.json', import.meta.url)),

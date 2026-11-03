@@ -461,11 +461,11 @@ test('不是 git 仓库：照实说；harness 发本回合差异的，用它当�
 
 test('本回合差异里的完整路径是根的另一种写法（macOS 上 /private/var 和 /var）：设备是 macOS 时也换成相对于根的', async (t) => {
   for (const platform of ['macos', 'linux']) {
-    const world = gitWorld({ plain: true, turnDiff: true, platform })
+    const world = gitWorld({ plain: true, turnDiff: true, platform, tempRoot: '/tmp' })
     t.after(world.cleanup)
     // 根是解开链接之后的路径（/private/var/…、/private/tmp/…，Linux 上是 /tmp/…）；harness 报的是另一种写法
     const other = privateTwin(world.root)
-    if (other === null) return t.skip(`临时目录不在 /tmp、/var 下面：${world.root}`)
+    assert.ok(other, `隔离夹具必须提供 /private 路径别名：${world.root}`)
     const seen = world.watch('all', 's1')
     await seen.settled()
     world.diffs.turnDiff(
