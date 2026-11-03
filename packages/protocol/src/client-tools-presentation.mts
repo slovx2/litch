@@ -11,7 +11,7 @@
 //
 // 这个文件只引用 client-tools.mts：设备进程（派子会话、跑定时任务）和客户端核心（建会话）都直接引用它。
 import type { ClientToolNamespaceSpec } from './client-tools.mjs'
-import { FILE_LINK_NAMESPACE, FILE_LINK_RULES, FILE_LINK_SPEC } from './file-link-instructions.mjs'
+import { FILE_LINK_RULES } from './file-link-instructions.mjs'
 
 /**
  * 呈现风格的命名空间。不带工具、没有调用，握手时不声明，所以不放进 CLIENT_TOOL_NAMESPACE（那里是能执行的命名空间）
@@ -44,11 +44,11 @@ export const PRESENTATION_SPEC: ClientToolNamespaceSpec = {
 
 /**
  * 客户端核心建会话时要不要带呈现风格（按 harness 名字认），要带就给定义，不带是 null。设备进程按 link.native 认。
- * 原生 codex 只带文件链接规则，随后抽成 developerInstructions；不另加整份呈现风格，空命名空间也不交给上游。
+ * 原生 codex 在既有 developerInstructions 拼接点补文件规则；不带这份呈现风格，也不增加工具命名空间。
  * 不知道建在哪个 harness 上的暂不带。
  */
 export function presentationSpec(harness: string | null): ClientToolNamespaceSpec | null {
-  return harness === null ? null : harness === 'codex' ? FILE_LINK_SPEC : PRESENTATION_SPEC
+  return harness === null || harness === 'codex' ? null : PRESENTATION_SPEC
 }
 
 /** 是不是呈现风格这个命名空间（子会话继承父会话的工具时，先摘掉再按子会话的 harness 重新决定带不带） */
@@ -56,8 +56,6 @@ export function isPresentationSpec(spec: unknown): boolean {
   return (
     typeof spec === 'object' &&
     spec !== null &&
-    [PRESENTATION_NAMESPACE, FILE_LINK_NAMESPACE].includes(
-      String((spec as { name?: unknown }).name),
-    )
+    (spec as { name?: unknown }).name === PRESENTATION_NAMESPACE
   )
 }

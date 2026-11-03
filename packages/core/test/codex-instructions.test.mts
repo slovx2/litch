@@ -4,11 +4,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { SESSION_PROPOSAL_RULES, SESSION_TOOLS } from '../../protocol/src/client-tools-sessions.mjs'
 import { ECHO_TOOLS } from '../../protocol/src/client-tools-specs.mjs'
-import {
-  FILE_LINK_NAMESPACE,
-  FILE_LINK_RULES,
-  FILE_LINK_SPEC,
-} from '../../protocol/src/file-link-instructions.mjs'
+import { FILE_LINK_RULES } from '../../protocol/src/file-link-instructions.mjs'
 import {
   CODEX_THREAD_NOTES_MAX,
   type CodexThreadNotes,
@@ -44,11 +40,7 @@ function rig(options: { notes?: CodexThreadNotes | null; failRead?: boolean } = 
     // 这一版的规则：litch_ruled 换了说法
     specs: (names) =>
       names.flatMap((name) =>
-        name === FILE_LINK_NAMESPACE
-          ? [FILE_LINK_SPEC]
-          : name === RULED.name
-            ? [{ ...RULED, instructions: 'New rules.' }]
-            : [],
+        name === RULED.name ? [{ ...RULED, instructions: 'New rules.' }] : [],
       ),
     cwdOf: (threadId) => (threadId === 'a' ? '/work/a' : null),
     log: (line) => logs.push(line),
@@ -56,19 +48,21 @@ function rig(options: { notes?: CodexThreadNotes | null; failRead?: boolean } = 
   return { direct, asked, logs, saved, time }
 }
 
-test('原生直连文件提示：抽出空命名空间，恢复与分叉重建压缩所用开发者指令且不重复', async () => {
+test('原生直连无工具也有文件提示，恢复与分叉保持工具清单为空、指令不重复', async () => {
   const { direct, saved } = rig()
   const start = await direct.prepare('thread/start', {
     cwd: '/work/a',
-    dynamicTools: [FILE_LINK_SPEC],
+    dynamicTools: [],
   })
   assert.ok(start)
   assert.deepEqual(start.params.dynamicTools, [])
   assert.ok(String(start.params.developerInstructions).includes(FILE_LINK_RULES))
   start.remember({ thread: { id: 'a', cwd: '/work/a' } })
-  assert.deepEqual(saved.at(-1)?.threads.a?.namespaces, [FILE_LINK_NAMESPACE])
+  assert.deepEqual(saved.at(-1)?.threads.a?.namespaces, [])
   const restored = rig({ notes: saved.at(-1) ?? null })
   for (const method of ['thread/resume', 'thread/fork']) {
+    const bare = await restored.direct.prepare(method, { threadId: 'a' })
+    assert.equal(bare?.params.developerInstructions, `${CONFIG}\n\n${FILE_LINK_RULES}`)
     const prepared = await restored.direct.prepare(method, {
       threadId: 'a',
       developerInstructions: start.params.developerInstructions,
@@ -88,7 +82,7 @@ test('直连建会话：规则拼在 config.toml 那段后面（config/read 带 
   assert.deepEqual(asked, [{ method: 'config/read', params: { cwd: '/work/a' } }])
   assert.equal(
     prepared.params.developerInstructions,
-    `${CONFIG}\n\n# Tool instructions: litch_ruled\nOld rules.`,
+    `${CONFIG}\n\n# Tool instructions: litch_ruled\nOld rules.\n\n${FILE_LINK_RULES}`,
   )
   const tools = prepared.params.dynamicTools as Record<string, unknown>[]
   assert.equal(
@@ -98,8 +92,10 @@ test('直连建会话：规则拼在 config.toml 那段后面（config/read 带 
   prepared.remember({ thread: { id: 'new', cwd: '/work/a' } })
   assert.deepEqual(Object.keys(saved.at(-1)?.threads ?? {}), ['new'])
   assert.deepEqual(saved.at(-1)?.threads.new?.namespaces, ['litch_ruled'])
-  // 没有规则的会话：照转，不问、不记
-  assert.equal(direct.prepare('thread/start', { cwd: '/w', dynamicTools: [ECHO_TOOLS] }), null)
+  // 没有工具规则仍有文件格式，但不往工具清单里加东西。
+  const plain = await direct.prepare('thread/start', { cwd: '/w', dynamicTools: [ECHO_TOOLS] })
+  assert.equal(plain?.params.developerInstructions, `${CONFIG}\n\n${FILE_LINK_RULES}`)
+  assert.deepEqual(plain?.params.dynamicTools, [ECHO_TOOLS])
   assert.equal(direct.prepare('turn/start', { threadId: 'new' }), null)
 })
 
@@ -111,7 +107,7 @@ test('直连恢复、分叉：记过的会话按这一版的规则重拼，底�
   assert.deepEqual(asked.at(-1), { method: 'config/read', params: { cwd: '/work/a' } })
   assert.equal(
     resumed.params.developerInstructions,
-    `${CONFIG}\n\n# Tool instructions: litch_ruled\nNew rules.`,
+    `${CONFIG}\n\n# Tool instructions: litch_ruled\nNew rules.\n\n${FILE_LINK_RULES}`,
   )
   resumed.remember({ thread: { id: 'a' } })
   assert.equal(saved.at(-1)?.threads.a?.at, time.clock.now())
@@ -128,7 +124,7 @@ test('直连恢复、分叉：记过的会话按这一版的规则重拼，底�
   })
   assert.equal(
     own?.params.developerInstructions,
-    'Mine.\n\n# Tool instructions: litch_ruled\nNew rules.',
+    `Mine.\n\n# Tool instructions: litch_ruled\nNew rules.\n\n${FILE_LINK_RULES}`,
   )
   assert.equal(asked.length, before)
   assert.equal(direct.prepare('thread/resume', { threadId: 'elsewhere' }), null)
@@ -139,7 +135,7 @@ test('直连 config/read 失败：只放规则，记一行日志；记录超过�
   const prepared = await direct.prepare('thread/start', { dynamicTools: [RULED] })
   assert.equal(
     prepared?.params.developerInstructions,
-    '# Tool instructions: litch_ruled\nOld rules.',
+    `# Tool instructions: litch_ruled\nOld rules.\n\n${FILE_LINK_RULES}`,
   )
   assert.ok(logs.some((line) => line.includes('boom')))
   for (let index = 0; index <= CODEX_THREAD_NOTES_MAX; index++) {
@@ -157,7 +153,7 @@ test('直连 config/read 失败：只放规则，记一行日志；记录超过�
     checkCodexThreadNotes({
       threads: { a: { namespaces: ['x', 3, ''], at: 5 }, b: { namespaces: [], at: 1 }, c: 'no' },
     }),
-    { threads: { a: { namespaces: ['x'], at: 5 } } },
+    { threads: { a: { namespaces: ['x'], at: 5 }, b: { namespaces: [], at: 1 } } },
   )
 })
 
@@ -231,7 +227,7 @@ test('直连原生 codex 打开记过的会话：恢复带上 config.toml 那段
     assert.ok(resume, `runtime=${runtime}`)
     const params = resume.params as Record<string, unknown>
     if (runtime) assert.equal('developerInstructions' in params, false)
-    else assert.equal(params.developerInstructions, `${CONFIG}\n\n${RULES}`)
+    else assert.equal(params.developerInstructions, `${CONFIG}\n\n${RULES}\n\n${FILE_LINK_RULES}`)
     session.close()
     core.stop()
   }

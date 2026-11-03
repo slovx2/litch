@@ -1,4 +1,3 @@
-import { FILE_LINK_SPEC } from '../../protocol/src/file-link-instructions.mjs'
 // 派一个子会话（模型的 litch_sessions.start、用户的 litch/session/start、开始提案（acceptProposal）都走这里）。
 // fresh：在目标 harness 上 thread/start（目录缺省是父会话的），再 turn/start 发简报；fork：同 harness 的 thread/fork
 // 再 turn/start。访问权限继承父会话，显式提升或目标不支持时拒绝；模型、强度不限，没给的取开始那一刻父会话的
@@ -210,7 +209,7 @@ function childTools(
   return [
     ...inherited,
     ...(tree.host.enabled() || manager ? [sessions] : []),
-    ...(link.native ? [FILE_LINK_SPEC] : [PRESENTATION_SPEC]),
+    ...(link.native ? [] : [PRESENTATION_SPEC]),
   ]
 }
 

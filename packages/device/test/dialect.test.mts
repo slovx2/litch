@@ -8,6 +8,7 @@ import {
 } from '../../protocol/src/client-tools-presentation.mjs'
 import { SESSION_PROPOSAL_RULES, SESSION_TOOLS } from '../../protocol/src/client-tools-sessions.mjs'
 import { ECHO_TOOLS } from '../../protocol/src/client-tools-specs.mjs'
+import { FILE_LINK_RULES } from '../../protocol/src/file-link-instructions.mjs'
 import { codexVerdict } from '../../shared/test/codex-params.mjs'
 import { ADAPTER_DIALECT, foldToolInstructions, withoutEmptyNamespaces } from '../src/dialect.mjs'
 import { codexRig, sentTo } from './codex-kit.mjs'
@@ -80,7 +81,7 @@ test('DIALECT-004：经聚合面建原生 codex 的会话，到它手里的是�
       dynamicTools: [ECHO_TOOLS, SESSION_TOOLS],
     })
     const [seen] = sentTo(env.codex, 'thread/start')
-    assert.equal(seen.developerInstructions, `${USER}\n\n${RULES}`)
+    assert.equal(seen.developerInstructions, `${USER}\n\n${RULES}\n\n${FILE_LINK_RULES}`)
     assert.equal(
       seen.dynamicTools.some((spec: any) => 'instructions' in spec),
       false,
@@ -89,16 +90,19 @@ test('DIALECT-004：经聚合面建原生 codex 的会话，到它手里的是�
     assert.equal(seen.approvalPolicy, 'on-request')
     assert.deepEqual(codexVerdict('thread/start', seen), { rejects: [], ignored: [] })
 
-    // 恢复：参数里没有工具，开发者指令原样（规则在会话历史里，上游不重放）
+    // 外部会话显式传入底子时补文件提示，已有工具规则不重复。
     await client.call('thread/resume', { threadId: THREAD, developerInstructions: USER })
-    assert.equal(sentTo(env.codex, 'thread/resume').at(-1).developerInstructions, USER)
+    assert.equal(
+      sentTo(env.codex, 'thread/resume').at(-1).developerInstructions,
+      `${USER}\n\n${FILE_LINK_RULES}`,
+    )
     await client.call('thread/resume', {
       threadId: THREAD,
       developerInstructions: `${USER}\n\n${RULES}`,
     })
     assert.equal(
       sentTo(env.codex, 'thread/resume').at(-1).developerInstructions,
-      `${USER}\n\n${RULES}`,
+      `${USER}\n\n${RULES}\n\n${FILE_LINK_RULES}`,
     )
 
     // 适配器的运行时（pi）原样拿到 instructions，由入口自己拼进系统提示
@@ -146,7 +150,7 @@ test('DIALECT-006：经聚合面建原生 codex 的会话误带了呈现风格�
       seen.dynamicTools.map((spec: any) => spec.name),
       ['litch_echo', 'litch_sessions'],
     )
-    assert.equal(seen.developerInstructions, `${USER}\n\n${RULES}`)
+    assert.equal(seen.developerInstructions, `${USER}\n\n${RULES}\n\n${FILE_LINK_RULES}`)
     assert.equal(seen.developerInstructions.includes(PRESENTATION_RULES), false)
     assert.deepEqual(codexVerdict('thread/start', seen), { rejects: [], ignored: [] })
 

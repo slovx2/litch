@@ -268,7 +268,7 @@ test('建会话：呈现风格（litch_presentation，不带工具、只带 inst
     ['pi', ['litch_echo', 'litch_presentation']],
     ['dsh', ['litch_echo', 'litch_presentation']],
     ['acp', ['litch_echo', 'litch_presentation']],
-    ['codex', ['litch_echo', 'litch_file_links']],
+    ['codex', ['litch_echo']],
   ] as const) {
     const world = setup({ namespaces: ['litch_echo'], engine, extensions: ['clientTools'] })
     world.core.start()

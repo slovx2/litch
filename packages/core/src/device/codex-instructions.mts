@@ -5,12 +5,12 @@
 //   - thread/start：带规则的命名空间摘下来，拼在 config.toml 实际生效的 developer_instructions（config/read，带 cwd）后面；
 //     按会话在这台电脑上记下是哪几个命名空间（只记名字）。
 //   - thread/resume、thread/fork：记过的会话，按这一版重新生成那几个命名空间的规则，底子重新问 config.toml，整段带上；
-//     分叉出来的用新会话号再记一份。没记过的会话（别处建的，或者没带规则的）不动：它们没有这些工具，不该有这些规则。
-// 核心自己不给 developerInstructions；调用方给了的当底子，不问 config.toml。
+//     分叉出来的用新会话号再记一份。没记过的会话（别处建的）不动，避免覆盖未知的项目配置。
+// 无工具的新会话也记空名单并补文件链接提示；调用方给了 developerInstructions 的当底子，不问 config.toml。
 import {
   bornThread,
   type CodexAsk,
-  composeInstructions,
+  composeCodexInstructions,
   configuredInstructions,
   instructionSection,
   ruledNamespaces,
@@ -43,7 +43,7 @@ export function checkCodexThreadNotes(value: unknown): CodexThreadNotes | null {
     const { namespaces, at } = entry as Record<string, unknown>
     if (!Array.isArray(namespaces) || typeof at !== 'number') continue
     const names = namespaces.filter((name): name is string => typeof name === 'string' && !!name)
-    if (names.length) threads[id] = { namespaces: names, at }
+    threads[id] = { namespaces: names, at }
   }
   return { threads }
 }
@@ -112,13 +112,12 @@ export function createDirectInstructions(options: DirectInstructionsOptions): Di
       const params = given as Record<string, unknown>
       if (method === 'thread/start') {
         const ruled = ruledNamespaces(params.dynamicTools)
-        if (ruled.length === 0) return null
         const sections = ruled.map((one) => instructionSection(one.name, one.instructions))
         const names = ruled.map((one) => one.name)
         return (async () => ({
           params: withDeveloperInstructions(
             params,
-            composeInstructions(await base(params, textOr(params.cwd)), sections),
+            composeCodexInstructions(await base(params, textOr(params.cwd)), sections),
           ),
           remember(result) {
             const born = bornThread(result)
@@ -137,7 +136,7 @@ export function createDirectInstructions(options: DirectInstructionsOptions): Di
       return (async () => ({
         params: withDeveloperInstructions(
           params,
-          composeInstructions(await base(params, cwd), sections),
+          composeCodexInstructions(await base(params, cwd), sections),
         ),
         remember(result) {
           const born = method === 'thread/fork' ? bornThread(result) : null

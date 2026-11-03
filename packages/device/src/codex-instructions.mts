@@ -4,7 +4,7 @@
 //   - thread/start：底子是客户端给的 developerInstructions；客户端没给时对 codex 调一次 config/read（带 cwd，项目层才算进去），
 //     用实际生效的 developer_instructions 当底子，规则拼在后面，免得把用户 config.toml 里那段盖掉。
 //   - 按会话记下（sessions.sqlite 的 thread_instructions）：客户端给的那段（没给是 null）、带规则的命名空间、目录。
-//     两样都没有的不记：那样的会话 codex 每次装载都重读 config.toml，压缩后放回来的就是它，不会丢。
+//     无工具的新会话也记空名单和目录，恢复时重读正确的项目配置，并补统一文件链接提示。
 //     分叉出来的会话用新的会话号再记一份，分叉的分叉也接得上。
 //   - thread/resume、thread/fork：客户端没带 developerInstructions 时，底子是记下的客户端那段，没有就重新 config/read；
 //     规则按这一版设备进程的重拼（规则改了，下一次压缩起生效）。客户端带了、里面没有规则的，规则拼在后面；
@@ -16,14 +16,13 @@ import {
 } from '../../protocol/src/client-tools-sessions.mjs'
 import {
   bornThread,
-  composeInstructions,
+  composeCodexInstructions,
   configuredInstructions,
   instructionSection,
   type RuledNamespace,
   ruledNamespaces,
   withDeveloperInstructions,
 } from '../../protocol/src/codex-developer-instructions.mjs'
-import { FILE_LINK_NAMESPACE, FILE_LINK_RULES } from '../../protocol/src/file-link-instructions.mjs'
 import { isManagerQuestionTools } from '../../protocol/src/manager-question.mjs'
 import {
   NATIVE_BACKGROUND_NAMESPACE,
@@ -73,7 +72,6 @@ const PLAIN_HEAD = `${sessionProposalRules(false, false).split('. ')[0]}.`
 const CURRENT: Record<string, ((recorded: string, tools: unknown[] | null) => string) | undefined> =
   {
     [NATIVE_BACKGROUND_NAMESPACE]: () => NATIVE_BACKGROUND_RULES,
-    [FILE_LINK_NAMESPACE]: () => FILE_LINK_RULES,
     litch_manager: (recorded) => refreshManagerRules('litch_manager', recorded) ?? recorded,
     [SESSION_TOOLS.name]: (recorded, tools) => {
       const manager = refreshManagerRules(SESSION_TOOLS.name, recorded)
@@ -122,13 +120,12 @@ export function prepareInstructions(
   const given = givenOf(params)
   if (method === 'thread/start') {
     const namespaces = ruledNamespaces(params.dynamicTools)
-    if (namespaces.length === 0 && given === null) return null
     const sections = namespaces.map((one) => instructionSection(one.name, one.instructions))
     const cwd = cwdOf(params.cwd)
     return (async () => {
       const base = given ?? (await configured(context, cwd))
       return {
-        params: withDeveloperInstructions(params, composeInstructions(base, sections)),
+        params: withDeveloperInstructions(params, composeCodexInstructions(base, sections)),
         remember(result) {
           const born = bornThread(result)
           if (born)
@@ -141,13 +138,13 @@ export function prepareInstructions(
   if (!threadId) return null
   const record = recorded(context.store, threadId)
   if (!record) {
-    // 没记过、客户端这次带了自己的那段：照转，记下来，以后恢复、分叉没带时照它
+    // 别处创建且没有记录的会话不猜项目配置；调用方明确给了底子时才补文件格式并记下。
     if (given === null) return null
     return Promise.resolve({
-      params,
+      params: withDeveloperInstructions(params, composeCodexInstructions(given, [])),
       remember(result) {
         const born = method === 'thread/fork' ? bornThread(result) : null
-        if (method === 'thread/resume' || born)
+        if (given !== null && (method === 'thread/resume' || born))
           context.store.setInstructions(born?.id ?? threadId, {
             given,
             namespaces: [],
@@ -171,7 +168,7 @@ export function prepareInstructions(
   return (async () => {
     const base = given ?? record.given ?? (await configured(context, cwd))
     return {
-      params: withDeveloperInstructions(params, composeInstructions(base, sections)),
+      params: withDeveloperInstructions(params, composeCodexInstructions(base, sections)),
       remember(result) {
         if (method === 'thread/resume') {
           // 客户端这次带了自己的那段：以后恢复照它
@@ -194,7 +191,7 @@ export function prepareInstructions(
 /** 记下的；更早的设备进程只记了动态工具的，从那里认出带规则的命名空间（客户端那段当作没给） */
 function recorded(store: InstructionStore, threadId: string): ThreadInstructions | null {
   const known = store.instructions(threadId)
-  if (known) return known.namespaces.length || known.given !== null ? known : null
+  if (known) return known
   const namespaces = ruledNamespaces(store.tools(threadId))
   return namespaces.length ? { given: null, namespaces, cwd: null } : null
 }

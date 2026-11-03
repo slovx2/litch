@@ -51,7 +51,7 @@ if (!existsSync(join(repo, 'packages/device/dist/device/src/main.mjs'))) {
 const { SESSION_TOOLS, outsideLitch } = await import(
   join(repo, 'packages/device/dist/protocol/src/client-tools-sessions.mjs')
 )
-const { FILE_LINK_RULES, FILE_LINK_SPEC } = await import(
+const { FILE_LINK_RULES } = await import(
   join(repo, 'packages/device/dist/protocol/src/file-link-instructions.mjs')
 )
 
@@ -299,7 +299,7 @@ async function main() {
     harness: 'codex',
     cwd: dirs.work,
     permissions: ':workspace',
-    dynamicTools: [SESSION_TOOLS, FILE_LINK_SPEC],
+    dynamicTools: [SESSION_TOOLS],
   })
   const threadId = started.thread.id
   let from = seen.length
@@ -349,8 +349,8 @@ async function main() {
     expect(asked.length > 0, `${what}：没有模型请求`)
     for (const entry of asked)
       expect(
-        entry.given === 1 && entry.config === 0 && entry.rules === 0,
-        `${what}：请求「${entry.said}」里客户端那段 ${entry.given} 次、config.toml 那段 ${entry.config} 次、规则 ${entry.rules} 次，应是 1、0、0`,
+        entry.given === 1 && entry.fileLinks === 1 && entry.config === 0 && entry.rules === 0,
+        `${what}：请求「${entry.said}」里客户端那段 ${entry.given} 次、文件提示 ${entry.fileLinks} 次、config.toml 那段 ${entry.config} 次、工具规则 ${entry.rules} 次，应是 1、1、0、0`,
       )
   }
   from = seen.length

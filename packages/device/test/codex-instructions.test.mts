@@ -14,11 +14,7 @@ import {
 } from '../../protocol/src/client-tools-sessions.mjs'
 import { ECHO_TOOLS } from '../../protocol/src/client-tools-specs.mjs'
 import { composeInstructions } from '../../protocol/src/codex-developer-instructions.mjs'
-import {
-  FILE_LINK_NAMESPACE,
-  FILE_LINK_RULES,
-  FILE_LINK_SPEC,
-} from '../../protocol/src/file-link-instructions.mjs'
+import { FILE_LINK_RULES } from '../../protocol/src/file-link-instructions.mjs'
 import { openSessionDatabase, SessionStore } from '../src/session-store.mjs'
 import { codexRig, sentTo } from './codex-kit.mjs'
 import { codexThread } from './fake-codex.mjs'
@@ -28,7 +24,7 @@ const CONFIG = 'From config.toml.'
 const PROJECT = 'From the project config.'
 const OLD_ONE = codexThread(1, 400).id
 const OLD_TWO = codexThread(2, 200).id
-const RULES = `# Tool instructions: litch_sessions\n${SESSION_PROPOSAL_RULES}`
+const RULES = `# Tool instructions: litch_sessions\n${SESSION_PROPOSAL_RULES}\n\n${FILE_LINK_RULES}`
 
 /** 假 codex 的 config/read：/work/proj 下有项目层的 developer_instructions，别处是用户层的 */
 function withConfig(env: ReturnType<typeof codexRig>, user: string | null = CONFIG) {
@@ -62,14 +58,11 @@ test('文件提示经设备进入原生 Codex；恢复、分叉后的压缩配�
     const started = await client.call('thread/start', {
       harness: 'codex',
       cwd: '/work/proj',
-      dynamicTools: [FILE_LINK_SPEC],
+      dynamicTools: [],
     })
     const seen = last(env, 'thread/start')
     assert.ok(seen.developerInstructions.includes(FILE_LINK_RULES))
-    assert.equal(
-      seen.dynamicTools?.some((spec: any) => spec.name === FILE_LINK_NAMESPACE) ?? false,
-      false,
-    )
+    assert.deepEqual(seen.dynamicTools, [])
     for (const method of ['thread/resume', 'thread/fork']) {
       await client.call(method, { harness: 'codex', threadId: started.thread.id })
       const params = last(env, method)
@@ -124,15 +117,19 @@ test('CODEX-DEV-001：建会话时客户端没给开发者指令：底子是 con
     assert.equal(sentTo(env.codex, 'config/read').length, asked)
     assert.equal(last(env, 'thread/start').developerInstructions, `${USER}\n\n${RULES}`)
     assert.equal(env.device.sessionTree.store.instructions(given.thread.id)?.given, USER)
-    // 没有规则的会话：什么都不补、不问、不记
+    // 没有工具规则的会话也补文件格式；沿用原记录保存 cwd，供恢复时读项目配置。
     const plain = await client.call('thread/start', {
       harness: 'codex',
       cwd: '/work/other',
       dynamicTools: [ECHO_TOOLS],
     })
-    assert.equal('developerInstructions' in last(env, 'thread/start'), false)
-    assert.equal(sentTo(env.codex, 'config/read').length, asked)
-    assert.equal(env.device.sessionTree.store.instructions(plain.thread.id), null)
+    assert.equal(last(env, 'thread/start').developerInstructions, `${CONFIG}\n\n${FILE_LINK_RULES}`)
+    assert.equal(sentTo(env.codex, 'config/read').length, asked + 1)
+    assert.deepEqual(env.device.sessionTree.store.instructions(plain.thread.id), {
+      given: null,
+      namespaces: [],
+      cwd: '/work/other',
+    })
     // config.toml 里没配：只有规则
     withConfig(env, null)
     await client.call('thread/start', {
@@ -229,7 +226,10 @@ test('CODEX-DEV-006：“每回合收尾”关着时建的会话不带 wrap_up�
     })
     store.setTools(OLD_ONE, [sessionTools(false)])
     await client.call('thread/resume', { threadId: OLD_ONE })
-    assert.equal(last(env, 'thread/resume').developerInstructions, `${USER}\n\n${off}`)
+    assert.equal(
+      last(env, 'thread/resume').developerInstructions,
+      `${USER}\n\n${off}\n\n${FILE_LINK_RULES}`,
+    )
     // 没记下工具的（分叉出来的）：看原文是不是关着的那份
     store.setInstructions(OLD_TWO, {
       given: USER,
@@ -237,7 +237,10 @@ test('CODEX-DEV-006：“每回合收尾”关着时建的会话不带 wrap_up�
       cwd: '/work',
     })
     await client.call('thread/resume', { threadId: OLD_TWO })
-    assert.equal(last(env, 'thread/resume').developerInstructions, `${USER}\n\n${off}`)
+    assert.equal(
+      last(env, 'thread/resume').developerInstructions,
+      `${USER}\n\n${off}\n\n${FILE_LINK_RULES}`,
+    )
   } finally {
     await env.close()
   }
@@ -314,7 +317,10 @@ test('CODEX-DEV-007：任务卡关着时建的会话（没有建议的那份）�
     })
     store.setTools(OLD_ONE, [sessionTools(true, false)])
     await client.call('thread/resume', { threadId: OLD_ONE })
-    assert.equal(last(env, 'thread/resume').developerInstructions, `${USER}\n\n${plain}`)
+    assert.equal(
+      last(env, 'thread/resume').developerInstructions,
+      `${USER}\n\n${plain}\n\n${FILE_LINK_RULES}`,
+    )
     // 没记下工具：原文是任务卡关着的那份
     store.setInstructions(OLD_TWO, {
       given: USER,
@@ -322,7 +328,10 @@ test('CODEX-DEV-007：任务卡关着时建的会话（没有建议的那份）�
       cwd: '/work',
     })
     await client.call('thread/resume', { threadId: OLD_TWO })
-    assert.equal(last(env, 'thread/resume').developerInstructions, `${USER}\n\n${plain}`)
+    assert.equal(
+      last(env, 'thread/resume').developerInstructions,
+      `${USER}\n\n${plain}\n\n${FILE_LINK_RULES}`,
+    )
     // 上一版收尾关着时的原文（头一句一样、没提 wrap_up）：挑这一版收尾关着的那份
     const older = `${sessionProposalRules(false).split('. ')[0]}. Older wording without the wrap-up tool.`
     store.setInstructions(OLD_TWO, {
@@ -333,7 +342,7 @@ test('CODEX-DEV-007：任务卡关着时建的会话（没有建议的那份）�
     await client.call('thread/resume', { threadId: OLD_TWO })
     assert.equal(
       last(env, 'thread/resume').developerInstructions,
-      `${USER}\n\n# Tool instructions: litch_sessions\n${sessionProposalRules(false)}`,
+      `${USER}\n\n# Tool instructions: litch_sessions\n${sessionProposalRules(false)}\n\n${FILE_LINK_RULES}`,
     )
   } finally {
     await env.close()
@@ -355,12 +364,12 @@ test('CODEX-DEV-008：没有规则、客户端给了自己的开发者指令的�
       })
     ).thread.id
     assert.equal(sentTo(env.codex, 'config/read').length, 0)
-    assert.equal(last(env, 'thread/start').developerInstructions, USER)
+    assert.equal(last(env, 'thread/start').developerInstructions, `${USER}\n\n${FILE_LINK_RULES}`)
     assert.deepEqual(store.instructions(own), { given: USER, namespaces: [], cwd: '/work/a' })
     await client.call('thread/resume', { threadId: own })
-    assert.equal(last(env, 'thread/resume').developerInstructions, USER)
+    assert.equal(last(env, 'thread/resume').developerInstructions, `${USER}\n\n${FILE_LINK_RULES}`)
     const fork = (await client.call('thread/fork', { threadId: own })).thread.id
-    assert.equal(last(env, 'thread/fork').developerInstructions, USER)
+    assert.equal(last(env, 'thread/fork').developerInstructions, `${USER}\n\n${FILE_LINK_RULES}`)
     assert.equal(store.instructions(fork)?.given, USER)
     // 别处建的、没记过的会话：恢复时不带的照转不记，带了的照转并记下，下一次没带时补回
     await client.call('thread/resume', { threadId: OLD_ONE })
@@ -369,7 +378,7 @@ test('CODEX-DEV-008：没有规则、客户端给了自己的开发者指令的�
     await client.call('thread/resume', { threadId: OLD_TWO, developerInstructions: USER })
     assert.equal(store.instructions(OLD_TWO)?.given, USER)
     await client.call('thread/resume', { threadId: OLD_TWO })
-    assert.equal(last(env, 'thread/resume').developerInstructions, USER)
+    assert.equal(last(env, 'thread/resume').developerInstructions, `${USER}\n\n${FILE_LINK_RULES}`)
     assert.equal(sentTo(env.codex, 'config/read').length, 0)
   } finally {
     await env.close()

@@ -10,7 +10,7 @@
 //
 // 补的做法：建会话、恢复、分叉都带上整段（底子在前，规则拼在后面）。每次都带是安全的（实测）：恢复不马上重放，
 // 会话还装载着时 codex 忽略这个参数，压缩后只放一次，不叠加。
-import { FILE_LINK_NAMESPACE } from './file-link-instructions.mjs'
+import { FILE_LINK_RULES } from './file-link-instructions.mjs'
 
 /** 动态工具里带规则的一个命名空间 */
 export interface RuledNamespace {
@@ -41,8 +41,7 @@ export function ruledNamespaces(tools: unknown): RuledNamespace[] {
   const out: RuledNamespace[] = []
   for (const spec of tools) {
     if (!isRecord(spec) || spec.type !== 'namespace' || typeof spec.name !== 'string') continue
-    // 文件格式规则没有工具，但需要走同一份持久化与压缩恢复；其他空命名空间（呈现风格）仍不注入 Codex。
-    if (isEmptyNamespace(spec) && spec.name !== FILE_LINK_NAMESPACE) continue
+    if (isEmptyNamespace(spec)) continue
     const text = typeof spec.instructions === 'string' ? spec.instructions.trim() : ''
     if (text && !out.some((one) => one.name === spec.name))
       out.push({ name: spec.name, instructions: text })
@@ -58,6 +57,11 @@ export function composeInstructions(base: string | null, sections: string[]): st
   return [head, ...missing].filter(Boolean).join('\n\n')
 }
 
+/** 原生 Codex 在 Litch 中装载会话时补文件格式提示，不把呈现要求伪装成工具，也不覆盖 config.toml 的底子。 */
+export function composeCodexInstructions(base: string | null, sections: string[]): string | null {
+  return composeInstructions(base, [...sections, FILE_LINK_RULES])
+}
+
 /** 参数换上开发者指令（null 是不带），动态工具上的规则摘掉 */
 export function withDeveloperInstructions(
   params: Record<string, unknown>,
@@ -65,7 +69,7 @@ export function withDeveloperInstructions(
 ): Record<string, unknown> {
   const next: Record<string, unknown> = { ...params }
   if (developerInstructions) next.developerInstructions = developerInstructions
-  if (Array.isArray(params.dynamicTools))
+  if (Array.isArray(params.dynamicTools)) {
     next.dynamicTools = params.dynamicTools
       .filter((spec) => !isEmptyNamespace(spec))
       .map((spec) => {
@@ -73,6 +77,9 @@ export function withDeveloperInstructions(
         const { instructions: _rules, ...rest } = spec
         return rest
       })
+    if (params.dynamicTools.length && (next.dynamicTools as unknown[]).length === 0)
+      delete next.dynamicTools
+  }
   return next
 }
 

@@ -12,7 +12,6 @@ import {
   type TaskError,
   type TaskRunErrorCode,
 } from '../../protocol/src/device-tasks.mjs'
-import { FILE_LINK_SPEC } from '../../protocol/src/file-link-instructions.mjs'
 import type { Worktree } from '../../protocol/src/worktrees.mjs'
 import {
   type EngineLink,
@@ -162,7 +161,7 @@ const message = (error: unknown): string => (error instanceof Error ? error.mess
 
 /** 任务新建会话时带的动态工具。原生 codex 不带呈现风格（按设备侧的 link.native 认，client-tools-presentation.mts） */
 function taskTools(link: EngineLink): unknown[] {
-  return link.native ? [TASKS_TOOLS, FILE_LINK_SPEC] : [TASKS_TOOLS, PRESENTATION_SPEC]
+  return link.native ? [TASKS_TOOLS] : [TASKS_TOOLS, PRESENTATION_SPEC]
 }
 
 /** 开内部连接；开不了的算 harnessUnavailable */
