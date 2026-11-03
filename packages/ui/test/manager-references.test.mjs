@@ -2,6 +2,15 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { boardReferences } from '../src/manager/references.ts'
 
+test('分页编号不要求对象已在首屏，打开后由设备验证归属', () => {
+  assert.deepEqual(
+    boardReferences('参见 #D-60', new Set(), true)
+      .filter((part) => part.id)
+      .map((part) => part.id),
+    ['D-60'],
+  )
+})
+
 test('事项和决策的说明链接所有现存编号，不限制在阻塞关系内，缺失编号保持原文', () => {
   const text = '参见I-3、D-15；I-3 已完成，D-99 不存在。'
   const parts = boardReferences(text, new Set(['I-3', 'D-15']))

@@ -3,6 +3,22 @@ import { MANAGER_NAMES } from '../../../protocol/src/manager-posts.mts'
 import type { Entry } from './types.ts'
 
 export const enManager = {
+  'manager.paging.all': 'All',
+  'manager.paging.pending': 'Pending',
+  'manager.paging.review': 'Awaiting review',
+  'manager.paging.started': 'Started',
+  'manager.paging.here': 'Handle here',
+  'manager.paging.dismissed': 'Dismissed',
+  'manager.paging.withdrawn': 'Withdrawn',
+  'manager.paging.expired': 'Expired',
+  'manager.paging.more': 'Load more',
+  'manager.paging.detail': 'View details',
+  'manager.paging.refresh': 'Refresh',
+  'manager.paging.retry': 'Retry',
+  'manager.paging.loaded': '{n} of {total} loaded',
+  'manager.paging.unchecked': 'Workline status not checked yet',
+  'manager.paging.checked': 'Last checked',
+  'manager.paging.failed': 'Could not check {n} worklines. Previous snapshots retained.',
   'manager.resetHistory': 'View previous session {n}',
   'manager.resetHistoryReadOnly':
     'This manager session was reset. This conversation is read-only history.',

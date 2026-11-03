@@ -68,6 +68,8 @@ export interface ManagerLinesPage {
   failed: number
 }
 export interface ManagerBoardSummary {
+  /** 工作线返回经理时使用的编号关系，不携带关联对象正文。 */
+  lineReferences?: Record<string, ManagerObjectId[]>
   manager: Manager
   situation: ManagerSituation | null
   counts: ManagerBoardCounts

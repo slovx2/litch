@@ -61,6 +61,9 @@ test('分页必须按连接声明；摘要不读全对象、全历史或引擎',
     owner.store.objects = () => {
       throw new Error('禁止全对象')
     }
+    owner.tree.store.allSuggestions = () => {
+      throw new Error('禁止读取完整建议正文')
+    }
     owner.lines.refresh = async () => {
       throw new Error('禁止阻塞引擎读取')
     }
@@ -86,6 +89,7 @@ test('键集分页保持同秒排序；新建不挤入旧游标，筛选计数�
   try {
     const first = owner.paging.queries.page(query)
     assert.ok(first.nextCursor)
+    const cursor = first.nextCursor
     owner.writer.tool('paging', 'add', {
       kind: 'decision',
       decision: { title: '新建', background: '' },
@@ -99,11 +103,11 @@ test('键集分页保持同秒排序；新建不挤入旧游标，筛选计数�
     assert.ok(!ids.includes('D-66'))
     assert.equal(owner.paging.queries.page(query).total, 66)
     assert.throws(
-      () => owner.paging.queries.page({ ...query, status: 'answered', cursor: first.nextCursor! }),
+      () => owner.paging.queries.page({ ...query, status: 'answered', cursor }),
       /cursor/i,
     )
     assert.throws(
-      () => owner.paging.queries.page({ ...query, managerId: 'other', cursor: first.nextCursor! }),
+      () => owner.paging.queries.page({ ...query, managerId: 'other', cursor }),
       /cursor/i,
     )
     for (const limit of [0, 101, 1.5])
@@ -135,12 +139,13 @@ test('详情与对象历史分离，历史按 seq 取页并隔离新增变更', 
     const first = owner.paging.queries.history('paging', 'D-1')
     assert.equal(first.changes.length, 30)
     assert.ok(first.nextCursor)
+    const cursor = first.nextCursor
     owner.store.record('paging', 'D-1', 'manager', null, detail.object, '游标之后')
     const second = owner.paging.queries.history('paging', 'D-1', first.nextCursor)
     assert.equal(second.changes.length, 6)
     assert.equal(second.nextCursor, null)
     assert.equal(new Set([...first.changes, ...second.changes].map((c) => c.id)).size, 36)
-    assert.throws(() => owner.paging.queries.history('paging', 'D-2', first.nextCursor!), /cursor/i)
+    assert.throws(() => owner.paging.queries.history('paging', 'D-2', cursor), /cursor/i)
     assert.throws(() => owner.paging.detail('paging', 'D-999'), /belong/i)
   } finally {
     await env.close()
@@ -164,6 +169,12 @@ test('新增方法响应符合声明的 JSON schema，工作线失败保留核�
     })
     env.device.sessionTree.read = async (id) =>
       ({ thread: { id, status: { type: 'idle' }, cwd: env.stateDir } }) as never
+    const decision = owner.writer.object('paging', 'D-1')
+    owner.store.saveObject('paging', {
+      ...decision,
+      basis: [{ kind: 'thread', target: 'paging-line', label: null }],
+    })
+    assert.deepEqual(owner.paging.summary('paging').lineReferences?.['paging-line'], ['D-1'])
     const definitions = JSON.parse(readFileSync('protocol/extensions/manager.json', 'utf8'))
     const ajv = new Ajv({ strict: false })
     for (const [method, params] of [
@@ -187,6 +198,75 @@ test('新增方法响应符合声明的 JSON schema，工作线失败保留核�
     const failed = await owner.paging.lines('paging')
     assert.equal(failed.failed, 1)
     assert.equal(failed.checkedAt, checked.checkedAt)
+  } finally {
+    await env.close()
+  }
+})
+
+test('会话连接独立声明分页，未声明的新方法被拒绝且旧 board/read 仍可用', async () => {
+  const { env } = setup()
+  try {
+    const old = env.connect()
+    const paged = env.connect()
+    await old.initialize(['harness', 'litchManager'])
+    await paged.initialize(['harness', 'litchManager', 'litchManagerPaging'])
+    const error = await old.fails(METHOD.summary, { managerId: 'paging' })
+    assert.match(error.message, /litchManagerPaging/)
+    const result = await paged.call(METHOD.summary, { managerId: 'paging' })
+    assert.equal(result.summary.initial.entries.length, 30)
+    const full = await old.call('litch/manager/board/read', { managerId: 'paging' })
+    assert.equal(full.board.decisions.length, 65)
+  } finally {
+    await env.close()
+  }
+})
+
+test('建议包括已了结状态，摘要不含完整简报，同秒新增不进入旧游标', async () => {
+  const { env, owner } = setup()
+  try {
+    const add = (id: string) =>
+      owner.tree.store.addProposal({
+        id,
+        threadId: 'paging-thread',
+        title: id,
+        prompt: '简报'.repeat(1000),
+        background: '背景'.repeat(1000),
+        harness: null,
+        model: null,
+        cwd: null,
+        kind: 'fresh',
+        wakeParent: true,
+        createdAt: 100,
+        expiresAt: 9999999999,
+      })
+    add('one')
+    add('two')
+    const query = {
+      managerId: 'paging',
+      kind: 'suggestion',
+      status: 'all',
+      order: 'newest',
+      limit: 1,
+    } as const
+    const first = owner.paging.queries.page(query, owner.paging.suggestions('paging'))
+    assert.ok(first.nextCursor)
+    add('three')
+    const next = owner.paging.queries.page(
+      { ...query, cursor: first.nextCursor },
+      owner.paging.suggestions('paging'),
+    )
+    assert.equal(next.entries[0]?.id, 'S-one')
+    assert.equal(next.total, 2)
+    assert.equal(next.nextCursor, null)
+    assert.ok(first.entries.every((head) => !('serial' in head) && head.preview.length <= 160))
+    owner.tree.settleProposal('one', 'dismissed', null)
+    const dismissed = owner.paging.queries.page(
+      { ...query, status: 'dismissed' },
+      owner.paging.suggestions('paging'),
+    )
+    assert.equal(dismissed.entries[0]?.id, 'S-one')
+    assert.equal(owner.paging.summary('paging').counts.suggestion.dismissed, 1)
+    assert.equal(owner.paging.detail('paging', 'S-one').post?.body.length, 2000)
   } finally {
     await env.close()
   }

@@ -11,13 +11,12 @@ import {
   type ManagerBoardSummary,
   type ManagerLinesPage,
   type ManagerObjectDetail,
-  type ManagerObjectHead,
   type ManagerPageParams,
 } from '../../protocol/src/manager-paging.mjs'
 import type { DeviceManagers } from './manager.mjs'
 import { isDecision } from './manager-board.mjs'
-import { ManagerPageQueryStore } from './manager-page-query.mjs'
-import { projectedRelations } from './manager-relations.mjs'
+import { ManagerPageQueryStore, type ManagerPagingSuggestion } from './manager-page-query.mjs'
+import { projectedLineRelations, projectedRelations } from './manager-relations.mjs'
 import { fields, keys, ManagerError, text } from './manager-validate.mjs'
 
 export class ManagerPaging {
@@ -33,16 +32,13 @@ export class ManagerPaging {
     if (!manager) throw new ManagerError('unknownManager', 'This manager does not exist.')
     return manager
   }
-  suggestions(id: string): ManagerObjectHead[] {
+  suggestions(id: string): ManagerPagingSuggestion[] {
     const manager = this.managerRecord(id)
     const history = this.owner.store.history(id)
-    return this.owner.tree.store.allSuggestions().flatMap((proposal) => {
-      if (
-        proposal.offer ||
-        (this.owner.store.historical(proposal.threadId)?.id ??
-          this.owner.lines.mark(proposal.threadId)?.managerId) !== id
-      )
-        return []
+    const threads = new Set([manager.threadId, ...history])
+    for (const line of this.owner.tree.store.children())
+      if (this.owner.lines.mark(line.threadId)?.managerId === id) threads.add(line.threadId)
+    return this.owner.tree.store.suggestionHeads([...threads]).flatMap((proposal) => {
       const version = this.owner.store.suggestionVersion(id, `S-${proposal.id}`)
       const review = this.owner.store.suggestionReview(id, proposal.id)
       const own = proposal.threadId === manager.threadId || history.includes(proposal.threadId)
@@ -55,9 +51,10 @@ export class ManagerPaging {
       return [
         {
           id: `S-${proposal.id}` as const,
+          serial: proposal.serial,
           kind: 'suggestion' as const,
           title: proposal.title,
-          preview: proposal.prompt.slice(0, 160),
+          preview: proposal.preview,
           status,
           pending: status === 'pending',
           revision: version?.revision ?? 1,
@@ -167,7 +164,7 @@ export class ManagerPaging {
       pendingReports: totals.report.unread ?? 0,
       pendingSuggestions: totals.suggestion.pending ?? 0,
       runningLines: snapshot.lines.filter((line) => line.running).length,
-      latestActivity: latest,
+      latestActivity: latest ? { ...latest, text: latest.text.slice(0, 400) } : null,
       updatedAt: Math.max(manager.updatedAt, latest?.at ?? 0),
     }
   }
@@ -176,7 +173,19 @@ export class ManagerPaging {
     const counts = this.queries.counts(id, suggestions)
     const lines = this.snapshot(id)
     const activities = this.activities(id, 10)
+    const references = new Map<string, Set<ManagerObjectId>>()
+    for (const relation of projectedLineRelations(this.owner.store, id)) {
+      const thread = relation.from.kind === 'thread' ? relation.from : relation.to
+      const object = relation.from.kind === 'thread' ? relation.to : relation.from
+      if (object.kind !== 'issue' && object.kind !== 'item') continue
+      const ids = references.get(thread.target) ?? new Set<ManagerObjectId>()
+      ids.add(object.target as ManagerObjectId)
+      references.set(thread.target, ids)
+    }
     return {
+      lineReferences: Object.fromEntries(
+        [...references].map(([thread, ids]) => [thread, [...ids]]),
+      ),
       manager: this.manager(id, counts, lines, activities),
       counts,
       situation: this.owner.store.situation(id),

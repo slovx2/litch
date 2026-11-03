@@ -5,6 +5,14 @@ import { linkIssues, parseIssueHref } from '../src/detail/issue-links.ts'
 import { lineIssues, managerRouteBelow } from '../src/screens/managers/origin.ts'
 import { lineRowParts } from '../src/screens/managers/presentation.ts'
 
+test('分页会话正文允许打开未加载的编号，代码和路径仍不改写', () => {
+  const ids = Object.assign(new Set(), { deferred: true })
+  assert.equal(
+    linkIssues('D-60 `D-60` feat/D-60', ids),
+    '[D-60](litch-issue:D-60) `D-60` feat/D-60',
+  )
+})
+
 test('纯逻辑单测阻止引入 React，即使本地安装了手机依赖', async () => {
   await assert.rejects(() => import('react'), /手机纯逻辑单测不能加载 React/)
   await assert.rejects(() => import('react/jsx-runtime'), /手机纯逻辑单测不能加载 React/)

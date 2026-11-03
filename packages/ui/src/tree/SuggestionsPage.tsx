@@ -149,16 +149,20 @@ export function ManagerSuggestions({
   manager,
   posts,
   onOpen,
+  onlyId,
 }: {
   manager: ManagerView
   posts: ManagerPost[]
   onOpen(selection: Selection, archived: boolean): void
+  onlyId?: string
 }) {
   const all = useKey<readonly SuggestionView[]>(keys.suggestions) ?? NONE
   const order = useIssueOrder()
   // 已审核与未审核各成一组，组内都待开始；排序只决定组内先后。
   const rows = sortManagerIssues(
-    filterSuggestions(all, { deviceId: manager.deviceId, managerId: manager.id }),
+    filterSuggestions(all, { deviceId: manager.deviceId, managerId: manager.id }).filter(
+      (row) => onlyId === undefined || `S-${row.proposal.id}` === onlyId,
+    ),
     order,
     (row) => ({ at: row.proposal.createdAt, pending: true }),
   )
@@ -190,11 +194,15 @@ export function ManagerSuggestions({
     <div className="mg-stack">
       {reviewed.length ? (
         cards(reviewed)
-      ) : (
+      ) : onlyId === undefined ? (
         <p className="mg-empty">{t('suggestions.noReviewed')}</p>
-      )}
+      ) : null}
       {pending.length ? (
-        <details className="mg-suggestion-review" data-suggestions-unreviewed>
+        <details
+          className="mg-suggestion-review"
+          data-suggestions-unreviewed
+          open={onlyId !== undefined}
+        >
           <summary>
             {t('suggestions.unreviewed')} {pending.length}
           </summary>
@@ -202,7 +210,7 @@ export function ManagerSuggestions({
         </details>
       ) : null}
       {history.length ? (
-        <details className="mg-suggestion-history">
+        <details className="mg-suggestion-history" open={onlyId !== undefined}>
           <summary>
             {t('manager.suggestionHistory')} · {history.length}
           </summary>

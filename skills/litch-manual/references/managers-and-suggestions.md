@@ -11,13 +11,16 @@
 分页客户端只缓存已经打开的列表、详情和历史。答复成功后先根据设备回包更新该条决策及计数，
 再在后台对账摘要和已加载的页；未打开的已答复、已关闭和已完成列表不会随答复一起读取。
 桌面新决策通知仍覆盖全部待定决策，不受当前页或第一批条数限制。
+桌面控制台、经理事项和手机工作台的分类列表每页 30 条，以“加载更多”继续，切换状态和排序时保留各自的滚动位置。
+已答复、已关闭、已完成等状态在切换时读取。点击条目查看完整背景、选项、依据和讨论；版本历史独立展开，每次 30 条。
+已加载范围在后台对账后保留，读取失败可重试；答复失败保留条目和草稿。正文中的编号可直接打开尚未加载的详情。
 
 A manager is a conversation that coordinates worklines (sub-sessions), maintains decisions and items
 on a board stored on its device, and reports progress. Repository changes remain the evidence for
 what has landed. Managers and their worklines appear in the desktop sidebar's **Managers** view;
 ordinary sessions appear in **Chat**. The phone home screen has a **Managers** entry: managers are
-grouped by device, and each manager page has **Overview**, read-only **Manager items** and **Console**
-(the same order as desktop), plus **Chat** to open the manager conversation. Manager rows use the
+grouped by device. Desktop manager pages open **Console** first, followed by **Overview** and read-only **Manager items**.
+The phone workbench opens **Console** first, followed by **Chat**, **Worklines** and **Overview** (which includes manager items). Manager rows use the
 same mark and status text as the desktop sidebar (see below); managers with items to handle show the
 count in an amber pill at the end of the row. Creating managers and editing dispatch settings remain
 desktop actions.

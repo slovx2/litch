@@ -13,15 +13,19 @@ export const parseIssueHref = (url: string): string | null =>
   url.startsWith(ISSUE) ? url.slice(ISSUE.length) : null
 
 /** 改写一块 Markdown：代码块、行内代码、已有的链接都不动 */
-export function linkIssues(text: string, ids: ReadonlySet<string>): string {
-  if (ids.size === 0 || !/[DIRP]-\d/.test(text)) return text
+export function linkIssues(
+  text: string,
+  ids: ReadonlySet<string> & { deferred?: boolean },
+): string {
+  // 分页只知道已经加载的编号，其他编号在打开详情时校验。
+  if ((!ids.deferred && ids.size === 0) || !/[DIRP]-\d/.test(text)) return text
   return text
     .split(/(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`|\[[^\]]*\]\([^)]*\)|<https?:[^>]*>)/g)
     .map((part, index) =>
       index % 2 === 1
         ? part
         : part.replace(/(?<![\w/#-])#?([DIRP]-\d+)(?![\w-])/g, (word, id: string) =>
-            ids.has(id) ? `[${word}](${ISSUE}${id})` : word,
+            ids.deferred || ids.has(id) ? `[${word}](${ISSUE}${id})` : word,
           ),
     )
     .join('')

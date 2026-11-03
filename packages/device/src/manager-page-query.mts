@@ -12,6 +12,9 @@ import {
 } from '../../protocol/src/manager-paging.mjs'
 import type { ManagerStore } from './manager-store.mjs'
 import { fields, invalid } from './manager-validate.mjs'
+export interface ManagerPagingSuggestion extends ManagerObjectHead {
+  serial: number
+}
 
 const states: Record<ManagerPageKind, readonly string[]> = {
   decision: ['all', 'pending', 'open', 'answered', 'closed', 'expired', 'withdrawn', 'ignored'],
@@ -41,7 +44,6 @@ interface Cursor {
   rank: number
   at: number
   id: number
-  tie?: string
 }
 export const encodeCursor = (cursor: Cursor): string =>
   Buffer.from(JSON.stringify(cursor)).toString('base64url')
@@ -52,7 +54,6 @@ export function decodeCursor(value: string | undefined, scope: string): Cursor |
     if (
       value.length > 2048 ||
       cursor.scope !== scope ||
-      (cursor.tie !== undefined && typeof cursor.tie !== 'string') ||
       !['upper', 'rank', 'at', 'id'].every(
         (key) => Number.isSafeInteger(cursor[key]) && Number(cursor[key]) >= 0,
       )
@@ -118,7 +119,7 @@ export class ManagerPageQueryStore {
     }
     return result
   }
-  page(params: ManagerPageParams, suggestions: ManagerObjectHead[] = []): ManagerObjectPage {
+  page(params: ManagerPageParams, suggestions: ManagerPagingSuggestion[] = []): ManagerObjectPage {
     const query = pageQuery(params)
     const limit = pageLimit(params.limit)
     const scope = JSON.stringify([params.managerId, query])
@@ -192,28 +193,28 @@ export class ManagerPageQueryStore {
   }
   private suggestionPage(
     query: ManagerPageQuery,
-    heads: ManagerObjectHead[],
+    heads: ManagerPagingSuggestion[],
     limit: number,
     scope: string,
     cursor: Cursor | null,
   ): ManagerObjectPage {
-    // 提案已在会话树内存中；编号先稳定排序，再用同样的创建上界与键集语义分页。
+    // 提案来自会话库的摘要列；用 rowid 固定创建上界，同秒新增也不会挤进旧游标。
     const all = heads.map((head) => ({
       head,
       rank: query.order === 'pending' && head.pending ? 1 : 0,
     }))
-    const upper = cursor?.upper ?? Math.max(0, ...all.map((row) => row.head.createdAt))
+    const upper = cursor?.upper ?? heads.reduce((max, head) => Math.max(max, head.serial), 0)
     const sign = query.order === 'oldest' ? 1 : -1
     const filtered = all
       .filter(
         ({ head }) =>
-          head.createdAt <= upper && (query.status === 'all' || head.status === query.status),
+          head.serial <= upper && (query.status === 'all' || head.status === query.status),
       )
       .sort(
         (a, b) =>
           b.rank - a.rank ||
           sign * (a.head.createdAt - b.head.createdAt) ||
-          sign * a.head.id.localeCompare(b.head.id),
+          sign * (a.head.serial - b.head.serial),
       )
     const eligible = cursor
       ? filtered.filter(
@@ -221,15 +222,14 @@ export class ManagerPageQueryStore {
             row.rank < cursor.rank ||
             (row.rank === cursor.rank &&
               (sign * (row.head.createdAt - cursor.at) > 0 ||
-                (row.head.createdAt === cursor.at &&
-                  sign * row.head.id.localeCompare(cursor.tie ?? '') > 0))),
+                (row.head.createdAt === cursor.at && sign * (row.head.serial - cursor.id) > 0))),
         )
       : filtered
     const last = eligible[limit - 1]
     return {
       query,
       total: filtered.length,
-      entries: eligible.slice(0, limit).map((r) => r.head),
+      entries: eligible.slice(0, limit).map(({ head: { serial: _serial, ...head } }) => head),
       nextCursor:
         eligible.length > limit && last
           ? encodeCursor({
@@ -237,8 +237,7 @@ export class ManagerPageQueryStore {
               upper,
               rank: last.rank,
               at: last.head.createdAt,
-              id: 0,
-              tie: last.head.id,
+              id: last.head.serial,
             })
           : null,
     }

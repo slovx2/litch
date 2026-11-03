@@ -49,6 +49,7 @@ export class PagedManagerBoard {
   private stopped = false
   private serial: Promise<void> = Promise.resolve()
   private mutation = 0
+  private acceptedDuringRead: { serial: number; before: string; decision: ManagerDecision }[] = []
   constructor(host: ManagersHost, managerId: string, publish: PagedManagerBoard['publish']) {
     this.host = host
     this.managerId = managerId
@@ -67,7 +68,16 @@ export class PagedManagerBoard {
       items: [],
       requests: [],
       posts: [],
-      relations: [],
+      relations: Object.entries(summary.lineReferences ?? {}).flatMap(([thread, ids]) =>
+        ids.map((id) => ({
+          id: `summary:${thread}:${id}`,
+          from: { kind: 'thread' as const, target: thread },
+          to: { kind: id.startsWith('I-') ? ('item' as const) : ('issue' as const), target: id },
+          kind: 'related' as const,
+          at: 0,
+          by: 'projection' as const,
+        })),
+      ),
       changes: [],
       activities: summary.activities,
       lines: summary.lines.lines.map(
@@ -79,6 +89,10 @@ export class PagedManagerBoard {
       ),
     }
     for (const detail of this.details.values()) {
+      const id = detail.object?.id ?? detail.post?.id
+      board.relations = board.relations.filter(
+        (relation) => !(relation.id.startsWith('summary:') && relation.to.target === id),
+      )
       if (detail.object?.id.startsWith('D-')) board.decisions.push(detail.object as ManagerDecision)
       if (detail.object?.id.startsWith('I-'))
         board.items.push(detail.object as ManagerBoard['items'][number])
@@ -99,6 +113,9 @@ export class PagedManagerBoard {
       paging: {
         summary: {
           ...summary,
+          counts: Object.fromEntries(
+            Object.entries(summary.counts).map(([kind, counts]) => [kind, { ...counts }]),
+          ) as typeof summary.counts,
           manager: projectManager(this.host.deviceId, summary.manager),
           situation: summary.situation ? timed(summary.situation) : null,
           activities: summary.activities.map(timed),
@@ -176,9 +193,23 @@ export class PagedManagerBoard {
             this.fetchHistory(id as ManagerObjectId, false, true),
           ),
         )
-        if (revision === this.mutation) {
+        // 完整的待定首页已排除刚答复的对象，或摘要已带同版对象：回包没有使这份摘要过时。
+        // 首页未覆盖全部待定时不能靠“没看见”推断，仍补读一次。
+        const covered = this.acceptedDuringRead
+          .filter((change) => change.serial > revision)
+          .every(({ before, decision }) => {
+            const head = summary.initial.entries.find((head) => head.id === decision.id)
+            return head
+              ? head.revision >= decision.revision
+              : before === 'open' &&
+                  decision.status !== 'open' &&
+                  summary.initial.entries.length === summary.initial.total
+          })
+        if (revision === this.mutation || covered) {
           this.summary = summary
           this.pages = nextPages
+          revision = this.mutation
+          this.acceptedDuringRead = []
         }
       } while (revision !== this.mutation && !this.stopped)
     })
@@ -256,10 +287,21 @@ export class PagedManagerBoard {
     if (!this.summary) return
     this.mutation++
     for (const decision of decisions) {
-      const detail = this.details.get(decision.id)
-      const before = detail?.object
+      const cached = this.details.get(decision.id)
+      let before: ManagerObjectDetail['object'] | ManagerObjectPage['entries'][number] =
+        cached?.object ?? null
+      for (const page of this.pages.values())
+        for (const head of page.entries)
+          if (head.id === decision.id && (!before || head.revision > before.revision)) before = head
       if (!before || before.revision >= decision.revision) continue
-      if (!detail) continue
+      const detail = cached ?? {
+        object: null,
+        post: null,
+        relations: [],
+        previousClosed: null,
+        reopened: null,
+      }
+      this.acceptedDuringRead.push({ serial: this.mutation, before: before.status, decision })
       this.details.set(decision.id, {
         ...detail,
         object: decision,

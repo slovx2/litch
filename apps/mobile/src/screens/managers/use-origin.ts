@@ -57,11 +57,16 @@ export function useManagerOrigin(
     if (managerId) return replica.openManagerBoard(deviceId, managerId)
   }, [replica, deviceId, managerId])
   const manager = useKey<ManagerView>(keys.manager(deviceId, managerId ?? ''))
-  const board = useKey<ManagerBoardTopicView>(keys.managerBoard(deviceId, managerId ?? ''))?.board
+  const view = useKey<ManagerBoardTopicView>(keys.managerBoard(deviceId, managerId ?? ''))
+  const board = view?.board
+  const pagingOn = Boolean(view?.paging)
   const idsKey = board
     ? [...(board.posts ?? []).map((p) => p.id), ...board.items.map((i) => i.id)].join(',')
     : ''
-  const ids = useMemo(() => new Set(idsKey ? idsKey.split(',') : []), [idsKey])
+  const ids = useMemo(
+    () => Object.assign(new Set(idsKey ? idsKey.split(',') : []), { deferred: pagingOn }),
+    [idsKey, pagingOn],
+  )
   const related = useMemo(
     () => (board ? lineIssues(board.relations ?? [], sessionId) : []),
     [board, sessionId],

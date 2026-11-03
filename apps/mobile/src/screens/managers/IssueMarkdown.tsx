@@ -18,7 +18,7 @@ export function Markdown({ text }: { text: string }) {
   ])
   return (
     <EnrichedMarkdownText
-      markdown={issueLinks(text, ids)}
+      markdown={issueLinks(text, ids, context?.features.paging)}
       flavor="github"
       markdownStyle={issueMarkdownStyle(theme)}
       onLinkLongPress={({ url }) => {

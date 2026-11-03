@@ -118,7 +118,7 @@ function BlockedItem({ item, onIssue }: { item: ManagerItemView; onIssue(id: str
 }
 
 /** 经理事项一行：编号、标题、状态；点开看理由和关联。定位到的那一项展开并画强调边 */
-function ItemRow({ item, focused }: { item: ManagerItemView; focused: boolean }) {
+export function ItemRow({ item, focused }: { item: ManagerItemView; focused: boolean }) {
   const t = useT()
   const { c, font, hit } = useTheme()
   const [open, setOpen] = useState(focused)

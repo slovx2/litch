@@ -108,6 +108,12 @@ export function managerBoardFixture(
       return mock.subscribe(topic, sink)
     },
     command(name, params: any, signal) {
+      if (name === 'managers.report.read')
+        return service.reportRead({
+          managerId: params.managerId,
+          id: params.id,
+          revision: params.revision,
+        })
       if (name === 'managers.board.page')
         return service.page(
           params.managerId,

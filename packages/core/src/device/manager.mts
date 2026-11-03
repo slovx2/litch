@@ -224,7 +224,9 @@ export function createManagers(host: ManagersHost) {
           next =
             !opened &&
             history.changes.every(
-              (change) => Number(change.after?.revision ?? 0) > (before.get(id) ?? 0),
+              (change) =>
+                typeof change.after?.revision !== 'number' ||
+                change.after.revision > (before.get(id) ?? 0),
             )
               ? (history.nextCursor ?? undefined)
               : undefined
@@ -283,15 +285,6 @@ export function createManagers(host: ManagersHost) {
     const entry = boards.get(managerId)
     if (entry?.paged) {
       entry.paged.accepted(decisions)
-      const manager = managers.get(managerId)
-      if (manager && entry.view.paging) {
-        const updated = {
-          ...manager,
-          pendingDecisions: entry.view.paging.summary.counts.decision.open ?? 0,
-        }
-        managers.set(managerId, updated)
-        for (const sink of sinks) sink.delta([{ op: 'manager.upsert', manager: updated }])
-      }
       return
     }
     const board = entry?.view.board
@@ -482,7 +475,8 @@ export function createManagers(host: ManagersHost) {
       entry.sinks.add(sink)
       sink.snapshot(entry.view)
       // 通知观察器正在读取或已有持续订阅的快照时可以复用；新增读者不代表快照失效。
-      if (first && !entry.loading && !entry.observed) void loadBoard(managerId, entry)
+      if (first && !entry.loading && !entry.observed && !entry.observedHeads)
+        void loadBoard(managerId, entry)
       const watched = entry
       return () => {
         watched.sinks.delete(sink)

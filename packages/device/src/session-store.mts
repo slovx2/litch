@@ -714,6 +714,34 @@ export class SessionStore {
     return (this.statements.allSuggestions?.all() ?? []).map(proposalOf)
   }
 
+  /** 看板分页只读头字段，已了结建议也能按状态访问；rowid 用于稳定的创建上界。 */
+  suggestionHeads(
+    threadIds: readonly string[],
+  ): {
+    serial: number
+    id: string
+    threadId: string
+    title: string
+    preview: string
+    status: SessionProposalStatus
+    createdAt: number
+  }[] {
+    if (!threadIds.length) return []
+    return this.db
+      .prepare(`SELECT rowid AS serial,id,thread_id,title,substr(prompt,1,160) AS preview,status,created_at
+      FROM proposals WHERE offer=0 AND thread_id IN (${threadIds.map(() => '?').join(',')})`)
+      .all(...threadIds)
+      .map((row) => ({
+        serial: Number(row.serial),
+        id: String(row.id),
+        threadId: String(row.thread_id),
+        title: String(row.title),
+        preview: String(row.preview),
+        status: String(row.status) as SessionProposalStatus,
+        createdAt: Number(row.created_at),
+      }))
+  }
+
   suggestionExpiry(id: string, at: number): void {
     this.run('suggestionExpiry', at, id)
   }

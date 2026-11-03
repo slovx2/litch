@@ -47,20 +47,32 @@ function useLineSummaries(deviceId: string, ids: readonly string[]) {
   }, [store, deviceId, version])
 }
 
-function LineRow({ row, onOpen }: { row: ManagerLineRow; onOpen(): void }) {
+function LineRow({
+  row,
+  onOpen,
+  head,
+}: {
+  row: ManagerLineRow
+  onOpen(): void
+  head?:
+    | import('../../../../../packages/protocol/src/manager-paging.mts').ManagerLineHead
+    | undefined
+}) {
   const t = useT()
   const { c, font, radius } = useTheme()
   const parts = lineRowParts(row)
   const detail = [
-    t(parts.state),
+    head?.checkedAt === null ? t('manager.paging.unchecked') : t(parts.state),
     parts.branch,
     parts.merged ? t('manager.merged') : null,
-    parts.report,
+    head?.reportPreview ?? parts.report,
+    head?.checkedAt ? `${t('manager.paging.checked')} ${ago(head.checkedAt, Date.now(), t)}` : null,
   ]
     .filter(Boolean)
     .join(' · ')
   const meta = row.at ? ago(row.at, Date.now(), t) : undefined
-  const unverified = parts.unverified ? t('mgr.lines.unverified', { count: parts.unverified }) : ''
+  const unverifiedCount = head?.unverifiedCount ?? parts.unverified
+  const unverified = unverifiedCount ? t('mgr.lines.unverified', { count: unverifiedCount }) : ''
   return (
     <Row
       testID={`manager-line:${row.line.threadId}`}
@@ -96,10 +108,12 @@ export function ManagerLines({
   deviceId,
   board,
   onOpen,
+  lineHeads,
 }: {
   deviceId: string
   board: ManagerBoardView
   onOpen(threadId: string, title: string): void
+  lineHeads?: import('../../../../../packages/protocol/src/manager-paging.mts').ManagerLineHead[]
 }) {
   const t = useT()
   const { c, hit } = useTheme()
@@ -117,6 +131,7 @@ export function ManagerLines({
     <LineRow
       key={each.line.threadId}
       row={each}
+      head={lineHeads?.find((head) => head.threadId === each.line.threadId)}
       onOpen={() => onOpen(each.line.threadId, each.line.title)}
     />
   )

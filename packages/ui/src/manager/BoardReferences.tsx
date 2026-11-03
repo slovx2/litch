@@ -4,6 +4,8 @@ import { type BoardReference, boardReferences } from './references.ts'
 
 export const BoardReferencesContext = createContext<{
   ids: ReadonlySet<BoardReference>
+  /** 分页未加载的编号点击后由设备校验归属。 */
+  deferred?: boolean
   previews?: ReadonlyMap<string, { title: string; status: string }>
   open(id: BoardReference): void
 } | null>(null)
@@ -47,7 +49,7 @@ function ReferenceLink({
 export function BoardReferences({ text }: { text: string }) {
   const context = useContext(BoardReferencesContext)
   if (!context) return text
-  const parts = boardReferences(text, context.ids)
+  const parts = boardReferences(text, context.ids, context.deferred)
   return parts.map((part, index) => {
     let punctuation = ''
     const next = parts[index + 1]

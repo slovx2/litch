@@ -30,6 +30,7 @@ import { ManagerFeaturesContext, useManagerBoard } from './data.ts'
 import { DiscussionPaneContext } from './discussion-pane.ts'
 import { IssueOrderSelect } from './issue-order.tsx'
 import { ManagerForm } from './ManagerForm.tsx'
+import { PagedBoard } from './PagedBoard.tsx'
 import { RelationsContext } from './Relations.tsx'
 import { Reports } from './Reports.tsx'
 import { Requests } from './Requests.tsx'
@@ -94,7 +95,7 @@ export function ManagerPage({
   )
   const boardBody = useRef<HTMLDivElement>(null)
   const setTab = (tab: ManagerPageLocation['tab']) => {
-    if (boardBody.current) boardBody.current.scrollTop = 0
+    if (boardBody.current && !view?.paging) boardBody.current.scrollTop = 0
     onLocation({ ...location, tab })
   }
   const setNarrow = (narrow: ManagerPageLocation['narrow']) => onLocation({ ...location, narrow })
@@ -104,8 +105,10 @@ export function ManagerPage({
   const [itemTarget, setItemTarget] = useState<{ id: ManagerItemId } | null>(null)
   const itemLocated = useCallback(() => setItemTarget(null), [])
   const [requestTarget, setRequestTarget] = useState<{ id: ManagerRequestId } | null>(null)
+  const [pagingTarget, setPagingTarget] = useState<BoardReference | null>(null)
   const requestLocated = useCallback(() => setRequestTarget(null), [])
   const openReference = (id: BoardReference) => {
+    if (view?.paging) setPagingTarget(id)
     if (boardBody.current) boardBody.current.scrollTop = 0
     setBoardLayout({ open: true })
     if (id.startsWith('P-') || id.startsWith('S-')) {
@@ -218,7 +221,9 @@ export function ManagerPage({
     reports: manager.pendingReports ?? 0,
     requests: manager.pendingRequests ?? 0,
     decisions: manager.pendingDecisions,
-    items: (pages?.overview.stats.totalItems ?? 0) - (pages?.overview.stats.doneItems ?? 0),
+    items:
+      view?.paging?.summary.counts.item.pending ??
+      (pages?.overview.stats.totalItems ?? 0) - (pages?.overview.stats.doneItems ?? 0),
     lines: manager.runningLines,
     suggestions: suggestionCount(suggestions),
   }
@@ -440,6 +445,23 @@ export function ManagerPage({
             </p>
           ) : view?.available === false ? (
             <p>{t('manager.unavailable')}</p>
+          ) : view?.loadError ? (
+            <p role="alert">
+              {view.loadError}{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  void channel
+                    .command('managers.board.refresh', {
+                      deviceId: manager.deviceId,
+                      managerId: manager.id,
+                    })
+                    .catch(() => {})
+                }}
+              >
+                {t('manager.paging.retry')}
+              </button>
+            </p>
           ) : !board || !pages ? (
             <p>{t('manager.loading')}</p>
           ) : (
@@ -448,6 +470,7 @@ export function ManagerPage({
                 <RelationsContext.Provider value={{ board, manager }}>
                   <BoardReferencesContext.Provider
                     value={{
+                      deferred: Boolean(view.paging),
                       ids: new Set<BoardReference>([
                         ...(board.posts ?? []).map((post) => post.id),
                         ...(board.requests ?? []).map((request) => request.id),
@@ -504,62 +527,76 @@ export function ManagerPage({
                       open: openReference,
                     }}
                   >
-                    {/* 排序在列表头右端：决策放在状态切换那一行（Decisions），其他三类一行细的列表头 */}
-                    {activeTab === 'suggestions' ||
-                    activeTab === 'requests' ||
-                    activeTab === 'reports' ? (
-                      <div className="mg-list-head">
-                        <IssueOrderSelect />
-                      </div>
-                    ) : null}
-                    {/* 答复区保持挂载，切页签不丢提交状态；本地草稿独立持久化。 */}
-                    {activeTab === 'suggestions' ? (
-                      <ManagerSuggestions
-                        posts={board.posts ?? []}
+                    {view.paging ? (
+                      <PagedBoard
                         manager={manager}
-                        onOpen={onSuggestionSource}
-                      />
-                    ) : null}
-                    {activeTab === 'requests' ? (
-                      <Requests
-                        posts={board.posts ?? []}
-                        manager={manager}
-                        requests={board.requests ?? []}
-                        disabled={disabled || responding}
-                        target={requestTarget}
-                        onLocated={requestLocated}
-                      />
-                    ) : null}
-                    {tab === 'overview' || tab === 'items' || tab === 'lines' ? (
-                      <BoardPanels
-                        pages={pages}
-                        deviceId={manager.deviceId}
-                        tab={tab}
-                        onTab={setTab}
-                        target={itemTarget}
-                        onLocated={itemLocated}
-                      />
-                    ) : null}
-                    {activeTab === 'reports' ? (
-                      <Reports
-                        manager={manager}
-                        posts={(board.posts ?? []).filter((p) => p.kind === 'report')}
+                        view={{ ...view, board, paging: view.paging }}
+                        tab={activeTab}
                         disabled={disabled}
+                        target={pagingTarget}
+                        onLocated={() => setPagingTarget(null)}
+                        onSuggestionSource={onSuggestionSource}
                       />
-                    ) : null}
-                    <Decisions
-                      posts={board.posts ?? []}
-                      manager={manager}
-                      onBusy={setResponding}
-                      decisions={board.decisions}
-                      changes={board.changes}
-                      requests={board.requests ?? []}
-                      groups={pages.decisions}
-                      disabled={disabled}
-                      visible={activeTab === 'decisions'}
-                      target={decisionTarget}
-                      onLocated={decisionLocated}
-                    />
+                    ) : (
+                      <>
+                        {/* 排序在列表头右端：决策放在状态切换那一行（Decisions），其他三类一行细的列表头 */}
+                        {activeTab === 'suggestions' ||
+                        activeTab === 'requests' ||
+                        activeTab === 'reports' ? (
+                          <div className="mg-list-head">
+                            <IssueOrderSelect />
+                          </div>
+                        ) : null}
+                        {/* 答复区保持挂载，切页签不丢提交状态；本地草稿独立持久化。 */}
+                        {activeTab === 'suggestions' ? (
+                          <ManagerSuggestions
+                            posts={board.posts ?? []}
+                            manager={manager}
+                            onOpen={onSuggestionSource}
+                          />
+                        ) : null}
+                        {activeTab === 'requests' ? (
+                          <Requests
+                            posts={board.posts ?? []}
+                            manager={manager}
+                            requests={board.requests ?? []}
+                            disabled={disabled || responding}
+                            target={requestTarget}
+                            onLocated={requestLocated}
+                          />
+                        ) : null}
+                        {tab === 'overview' || tab === 'items' || tab === 'lines' ? (
+                          <BoardPanels
+                            pages={pages}
+                            deviceId={manager.deviceId}
+                            tab={tab}
+                            onTab={setTab}
+                            target={itemTarget}
+                            onLocated={itemLocated}
+                          />
+                        ) : null}
+                        {activeTab === 'reports' ? (
+                          <Reports
+                            manager={manager}
+                            posts={(board.posts ?? []).filter((p) => p.kind === 'report')}
+                            disabled={disabled}
+                          />
+                        ) : null}
+                        <Decisions
+                          posts={board.posts ?? []}
+                          manager={manager}
+                          onBusy={setResponding}
+                          decisions={board.decisions}
+                          changes={board.changes}
+                          requests={board.requests ?? []}
+                          groups={pages.decisions}
+                          disabled={disabled}
+                          visible={activeTab === 'decisions'}
+                          target={decisionTarget}
+                          onLocated={decisionLocated}
+                        />
+                      </>
+                    )}
                   </BoardReferencesContext.Provider>
                 </RelationsContext.Provider>
               </ManagerFeaturesContext.Provider>

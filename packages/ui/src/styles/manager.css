@@ -1,4 +1,16 @@
 /* 经理：侧栏入口、对话与看板、设备列表和新建表单。颜色与表面均跟随皮肤。 */
+.mg-paging-head {
+  width: 100%;
+  text-align: start;
+  font-weight: 600;
+}
+.mg-paging-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--ink-2);
+}
 .mg-questions {
   border-top: 1px solid var(--line);
   padding-top: 8px;

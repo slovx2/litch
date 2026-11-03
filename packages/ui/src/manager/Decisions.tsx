@@ -50,6 +50,7 @@ export function Decisions({
   visible,
   target,
   onLocated,
+  onlyId,
 }: {
   manager: ManagerView
   posts: ManagerPost[]
@@ -62,6 +63,7 @@ export function Decisions({
   visible: boolean
   target: { id: ManagerDecisionId } | null
   onLocated(): void
+  onlyId?: string | null
 }) {
   const t = useT()
   const { channel } = useServices()
@@ -302,6 +304,8 @@ export function Decisions({
     closed: sorted(groups.closed),
     ignored: sorted(groups.ignored),
   }
+  const displayed =
+    onlyId === undefined ? grouped[filter] : decisions.filter((decision) => decision.id === onlyId)
   useLayoutEffect(() => {
     if (!submittedFocus || busy) return
     if (!visible || filter !== 'open' || target) {
@@ -324,26 +328,28 @@ export function Decisions({
   return (
     <>
       <div hidden={!visible}>
-        <div className="mg-decision-filter" ref={listHead} tabIndex={-1}>
-          {(['open', 'answered', 'closed', 'ignored'] as const).map((key) => (
-            <button
-              type="button"
-              key={key}
-              data-filter={key}
-              aria-pressed={filter === key}
-              onClick={() => setFilter(key)}
-            >
-              <span aria-hidden="true">
-                {key === 'open' ? '○' : key === 'answered' ? '✓' : key === 'closed' ? '⊘' : '◌'}
-              </span>{' '}
-              {grouped[key].length} {t(`manager.${key}`)}
-            </button>
-          ))}
-          <IssueOrderSelect withPending={false} />
-        </div>
+        {onlyId === undefined ? (
+          <div className="mg-decision-filter" ref={listHead} tabIndex={-1}>
+            {(['open', 'answered', 'closed', 'ignored'] as const).map((key) => (
+              <button
+                type="button"
+                key={key}
+                data-filter={key}
+                aria-pressed={filter === key}
+                onClick={() => setFilter(key)}
+              >
+                <span aria-hidden="true">
+                  {key === 'open' ? '○' : key === 'answered' ? '✓' : key === 'closed' ? '⊘' : '◌'}
+                </span>{' '}
+                {grouped[key].length} {t(`manager.${key}`)}
+              </button>
+            ))}
+            <IssueOrderSelect withPending={false} />
+          </div>
+        ) : null}
         <div className="mg-stack" ref={cards}>
-          {grouped[filter].length === 0 ? <p className="mg-empty">{t('manager.none')}</p> : null}
-          {grouped[filter].map((decision) => {
+          {displayed.length === 0 ? <p className="mg-empty">{t('manager.none')}</p> : null}
+          {displayed.map((decision) => {
             const draft = drafts[decision.id]
             const post = posts.find((post) => post.id === decision.id)
             const ended = live.ended.decisions.has(decision.id)

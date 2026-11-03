@@ -3,6 +3,22 @@ import { MANAGER_NAMES } from '../../../protocol/src/manager-posts.mts'
 import type { Entry } from './types.ts'
 
 export const zhManager = {
+  'manager.paging.all': '全部',
+  'manager.paging.pending': '待处理',
+  'manager.paging.review': '待审核',
+  'manager.paging.started': '已开始',
+  'manager.paging.here': '在此处理',
+  'manager.paging.dismissed': '已取消',
+  'manager.paging.withdrawn': '已撤回',
+  'manager.paging.expired': '已过期',
+  'manager.paging.more': '加载更多',
+  'manager.paging.detail': '查看详情',
+  'manager.paging.refresh': '刷新',
+  'manager.paging.retry': '重试',
+  'manager.paging.loaded': '已加载 {n} / {total}',
+  'manager.paging.unchecked': '尚未核对工作线状态',
+  'manager.paging.checked': '上次核对',
+  'manager.paging.failed': '{n} 条工作线核对失败，保留上次快照',
   'manager.resetHistory': '查看旧会话 {n}',
   'manager.resetHistoryReadOnly': '此经理会话已重置，旧对话仅供查阅。',
 

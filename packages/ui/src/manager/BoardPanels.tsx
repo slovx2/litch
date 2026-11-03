@@ -11,7 +11,7 @@ import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
 import { Relations } from './Relations.tsx'
 
-function Item({ item }: { item: ManagerItemView }) {
+export function Item({ item }: { item: ManagerItemView }) {
   const t = useT()
   return (
     <article className="mg-item" data-manager-item={item.id} tabIndex={-1}>
@@ -82,6 +82,7 @@ export function BoardPanels({
   onTab,
   target,
   onLocated,
+  lineHeads,
 }: {
   pages: ManagerBoardPages
   deviceId: string
@@ -89,10 +90,12 @@ export function BoardPanels({
   onTab(tab: 'decisions' | 'items' | 'lines'): void
   target: { id: ManagerItemId } | null
   onLocated(): void
+  lineHeads?: import('../../../protocol/src/manager-paging.mts').ManagerLineHead[]
 }) {
   const t = useT()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const list = useRef<HTMLDivElement>(null)
+  const headOf = (id: string) => lineHeads?.find((head) => head.threadId === id)
   useLayoutEffect(() => {
     if (tab !== 'items' || !target) return
     const item = list.current?.querySelector<HTMLElement>(`[data-manager-item="${target.id}"]`)
@@ -131,7 +134,11 @@ export function BoardPanels({
         {pages.lines.map((line) => (
           <article className="mg-card" key={line.threadId}>
             <header>
-              <span className="pill mute">{t(`manager.${line.status}`)}</span>
+              <span className="pill mute">
+                {headOf(line.threadId)?.checkedAt === null
+                  ? t('manager.paging.unchecked')
+                  : t(`manager.${line.status}`)}
+              </span>
               <b className="grow">{line.title}</b>
               <span className="chip" title={nameOf(device, line.harness)}>
                 {badgeOf(device, line.harness)}
@@ -154,6 +161,20 @@ export function BoardPanels({
               </p>
             ) : null}
             {line.report ? <p>{line.report.text}</p> : null}
+            {headOf(line.threadId)?.reportPreview ? (
+              <p>{headOf(line.threadId)?.reportPreview}</p>
+            ) : null}
+            {headOf(line.threadId)?.unverifiedCount ? (
+              <p>
+                {t('manager.unverified')} · {headOf(line.threadId)?.unverifiedCount}
+              </p>
+            ) : null}
+            {headOf(line.threadId)?.checkedAt ? (
+              <small className="dim">
+                {t('manager.paging.checked')} ·{' '}
+                {new Date(headOf(line.threadId)?.checkedAt ?? 0).toLocaleString()}
+              </small>
+            ) : null}
             {line.unverified.map((text) => (
               <p className="mg-unverified" key={text}>
                 {text}

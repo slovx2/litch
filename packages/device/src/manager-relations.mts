@@ -84,3 +84,44 @@ export function projectedRelations(store: ManagerStore, managerId: string): Mana
   }
   return result
 }
+
+/** 首屏和工作线入口只需要会话关联；SQLite 提取这些小字段，不读取对象正文。 */
+export function projectedLineRelations(store: ManagerStore, managerId: string): ManagerRelation[] {
+  const result = store
+    .relations(managerId)
+    .filter((edge) => edge.from.kind === 'thread' || edge.to.kind === 'thread')
+  const rows = store.db
+    .prepare(`SELECT id,json_extract(body,'$.basis') AS basis,
+    json_extract(body,'$.links') AS links,json_extract(body,'$.owner') AS owner
+    FROM objects WHERE manager_id=?`)
+    .all(managerId)
+  for (const row of rows) {
+    const id = String(row.id)
+    const from: ManagerRelationTarget = { kind: id.startsWith('I-') ? 'item' : 'issue', target: id }
+    const add = (to: ManagerRelationTarget) =>
+      result.push({
+        id: JSON.stringify(['projection', from, to]),
+        from,
+        to,
+        kind: 'related',
+        at: 0,
+        by: 'projection',
+      })
+    for (const field of ['basis', 'links']) {
+      const links = JSON.parse(String(row[field] ?? '[]')) as {
+        kind: string
+        target: string
+        label?: string
+      }[]
+      for (const link of links)
+        if (link.kind === 'thread')
+          add({ kind: 'thread', target: link.target, ...(link.label ? { label: link.label } : {}) })
+    }
+    const owner = JSON.parse(String(row.owner ?? 'null')) as {
+      kind: string
+      threadId?: string
+    } | null
+    if (owner?.kind === 'line' && owner.threadId) add({ kind: 'thread', target: owner.threadId })
+  }
+  return result
+}

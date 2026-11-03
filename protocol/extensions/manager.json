@@ -209,6 +209,12 @@
     },
     {
       "kind": "Capability",
+      "name": "litchManagerPaging",
+      "on": "runtime/info.device.extensions",
+      "description": "提供摘要、游标列表、对象详情、对象历史与独立工作线核对。六个新方法要求当前连接同时声明 litchManager 和 litchManagerPaging；不新增主动通知。未宣告此能力的设备继续使用 list 和 board/read。"
+    },
+    {
+      "kind": "Capability",
       "name": "litchManagerFeedback",
       "on": "runtime/info.device.extensions",
       "description": "设备支持 litch/manager/feedback/submit（答复、决策追问、请你做交付同批提交）时宣告。没有时客户端只交决策答复（走 answers/submit），追问和交付入口禁用并写明设备服务较旧、去设备详情升级。方法与通知仍以连接声明 litchManager 为门禁。"
@@ -415,6 +421,10 @@
       "additionalProperties": false,
       "required": ["manager", "situation", "counts", "initial", "activities", "lines"],
       "properties": {
+        "lineReferences": {
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "$ref": "#/definitions/ObjectId" } }
+        },
         "manager": { "$ref": "#/definitions/Manager" },
         "situation": { "anyOf": [{ "$ref": "#/definitions/Situation" }, { "type": "null" }] },
         "counts": { "$ref": "#/definitions/PagingCounts" },

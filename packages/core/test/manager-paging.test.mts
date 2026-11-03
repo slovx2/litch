@@ -15,8 +15,10 @@ import type { ManagerBoardTopicView } from '../src/model-manager.mjs'
 
 function fixture() {
   const sample = sampleManagers('local', 1_800_000_000, 'zh-CN')
-  const manager = sample.managers[0]!
-  const template = sample.boards[0]!.decisions[0]!
+  const manager = sample.managers[0]
+  const template = sample.boards[0]?.decisions[0]
+  assert.ok(manager)
+  assert.ok(template)
   const decisions = Array.from({ length: 65 }, (_, i) => ({
     ...template,
     id: `D-${i + 1}` as const,
@@ -132,7 +134,9 @@ test('分页首屏不用旧整板；详情、历史按需；对账只重读已�
   assert.equal(f.calls.filter((c) => c.method === METHOD.page).length, 1)
   await service.detail('D-1')
   assert.equal(view.board?.decisions.length, 1)
-  assert.equal(view.board?.decisions[0]?.createdAt, f.decisions[0]!.createdAt * 1000)
+  const first = f.decisions[0]
+  assert.ok(first)
+  assert.equal(view.board?.decisions[0]?.createdAt, first.createdAt * 1000)
   assert.equal(
     f.calls.some((c) => c.method === METHOD.history),
     false,
@@ -165,10 +169,12 @@ test('成功回包立即移出待定并改总数；在途旧摘要不覆盖回�
   )
   const reading = service.refresh()
   await new Promise((resolve) => setTimeout(resolve, 0))
+  const first = f.decisions[0]
+  assert.ok(first)
   const accepted = {
-    ...f.decisions[0]!,
+    ...first,
     status: 'answered' as const,
-    revision: f.decisions[0]!.revision + 1,
+    revision: first.revision + 1,
   }
   f.decisions[0] = accepted
   service.accepted([accepted])
@@ -220,6 +226,14 @@ test('桌面通知观察所有开放头字段，能发现第一页之外重新�
   service.resync()
   await new Promise((resolve) => setTimeout(resolve, 30))
   assert.deepEqual(opened, [])
+  const reads = f.calls.filter((call) => call.method === METHOD.summary).length
+  const closeBoard = service.openBoard(f.manager.id, { snapshot() {}, delta() {} } as never)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(
+    f.calls.filter((call) => call.method === METHOD.summary).length,
+    reads,
+    '打开页面复用通知观察器的分页快照',
+  )
   const last = f.decisions[64]
   assert.ok(last)
   last.status = 'answered'
@@ -231,6 +245,50 @@ test('桌面通知观察所有开放头字段，能发现第一页之外重新�
   service.notification('litch/manager/board/changed', { managerId: f.manager.id })
   await new Promise((resolve) => setTimeout(resolve, 30))
   assert.deepEqual(opened, ['D-65'])
+  closeBoard()
   close()
   service.offline()
+})
+
+test('完整待定首页已包含答复结果时复用在途对账，不重复读取', async () => {
+  const f = fixture()
+  f.decisions.length = 20
+  const service = new PagedManagerBoard(f.host, f.manager.id, () => {})
+  await service.refresh()
+  await service.detail('D-1')
+  const before = f.decisions[0]
+  assert.ok(before)
+  const accepted = { ...before, status: 'answered' as const, revision: before.revision + 1 }
+  f.decisions[0] = accepted
+  let release = () => {}
+  f.gate(
+    new Promise<void>((resolve) => {
+      release = resolve
+    }),
+  )
+  f.calls.length = 0
+  const reading = service.refresh()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  service.accepted([accepted])
+  release()
+  f.gate(null)
+  await reading
+  assert.equal(f.calls.filter((call) => call.method === METHOD.summary).length, 1)
+})
+
+test('另一已加载页已经见到更高版本时，迟到答复不能倒退列表或计数', async () => {
+  const f = fixture()
+  let view: Pick<ManagerBoardTopicView, 'board' | 'paging'> = { board: null }
+  const service = new PagedManagerBoard(f.host, f.manager.id, (next) => {
+    view = next
+  })
+  await service.refresh()
+  await service.detail('D-1')
+  const first = f.decisions[0]
+  assert.ok(first)
+  f.decisions[0] = { ...first, revision: first.revision + 2 }
+  await service.page({ kind: 'decision', status: 'all', order: 'newest' })
+  service.accepted([{ ...first, revision: first.revision + 1, status: 'answered' }])
+  assert.equal(view.paging?.summary.counts.decision.open, 65)
+  assert.equal(view.paging?.pages['decision/all/newest']?.entries[0]?.revision, first.revision + 2)
 })

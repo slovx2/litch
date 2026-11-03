@@ -1,6 +1,6 @@
-// 手机经理工作台（35-manager 第十七节）：标题栏是经理名和状态，下面一排页签“对话 · 控制台 · 工作线 · 概览”。
+// 手机经理工作台（35-manager 第十七节）：标题栏是经理名和状态，下面一排页签“控制台 · 对话 · 工作线 · 概览”。
 // 对话就是经理会话本身（与会话页同一套组件，detail/session-page.tsx），切到别的页签时不卸载、只是不显示，
-// 回来时滚动位置和草稿都在；只有对话页签显示着才标已读。默认落在对话；带 issue 的入口（经理事件、#D-n、受阻事项、
+// 回来时滚动位置和草稿都在；只有对话页签显示着才标已读。默认落在控制台；带 issue 的入口（经理事件、#D-n、受阻事项、
 // 工作线回经理）落到控制台（经理事项落到概览）并定位。当前页签存在路由参数里，回经理时可以直接改。
 // 议题卡在 Issue.tsx，对话里点编号拉起的半屏议题卡在 IssueSheet.tsx，工作线列表在 ManagerLines.tsx。
 import {
@@ -28,7 +28,7 @@ import type { ManagerPost } from '../../../../../packages/protocol/src/manager-p
 import { sessionMark } from '../../../../../packages/ui/src/sidebar/session-mark.ts'
 import { useSessionPage } from '../../detail/session-page'
 import type { ManagerTab, RootStackParamList } from '../../nav/routes'
-import { useKey, useReplica } from '../../shell/services'
+import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { BreathingText } from '../../ui/kit/BreathingText'
 import { Empty } from '../../ui/kit/controls'
@@ -41,6 +41,7 @@ import { IssueSheet } from './IssueSheet'
 import { setIssueOrder, useIssueOrder } from './issue-order'
 import { ManagerLines } from './ManagerLines'
 import { ManagerOverview } from './ManagerOverview'
+import { PagedBoard } from './PagedBoard'
 import { issueCounts, managerRowState, orderedIssues } from './presentation'
 import { useManagerReset } from './use-reset'
 
@@ -82,6 +83,7 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
 }
 
 function Workbench({ manager, route, navigation }: Props & { manager: ManagerView }) {
+  const channel = useChannel()
   const { deviceId, id: managerId } = manager
   const tab: ManagerTab = route.params.tab ?? 'console'
   const t = useT()
@@ -91,6 +93,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const focused = useIsFocused()
   const view = useKey<ManagerBoardTopicView>(keys.managerBoard(deviceId, managerId))
   const board = view?.board ?? null
+  const pagingOn = Boolean(view?.paging)
   const features = view?.features ?? { feedback: true, posts: true, ignore: true }
   const suggestions = useKey<readonly SuggestionView[]>(keys.suggestions) ?? []
   const summary = useKey<SessionSummary>(keys.summary(deviceId, manager.threadId))
@@ -106,6 +109,25 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const positions = useRef(new Map<string, number>())
   const itemsAt = useRef(0)
   const scroll = useRef<ScrollView>(null)
+  const pagingPositions = useRef(new Map<string, number>())
+  const pagingScroll = useRef({ key: '', y: 0 })
+  const pagingQuery = useCallback((key: string) => {
+    if (pagingScroll.current.key === key) return
+    pagingPositions.current.set(pagingScroll.current.key, pagingScroll.current.y)
+    const y = pagingPositions.current.get(key) ?? 0
+    pagingScroll.current = { key, y }
+    requestAnimationFrame(() => scroll.current?.scrollTo({ y, animated: false }))
+  }, [])
+  useEffect(() => {
+    if (!pagingOn || !sheet) return
+    void channel
+      .command('managers.board.detail', {
+        deviceId,
+        managerId,
+        id: sheet as import('@litch/core').ManagerObjectId,
+      })
+      .catch(() => {})
+  }, [sheet, pagingOn, channel, deviceId, managerId])
 
   const setTab = useCallback(
     (next: ManagerTab) => navigation.setParams({ tab: next, issue: undefined }),
@@ -117,10 +139,9 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
     setFocusItem(null)
     if (category) setKind(category)
     setTab(next)
-    scroll.current?.scrollTo({ y: 0, animated: false })
+    if (!view?.paging) scroll.current?.scrollTo({ y: 0, animated: false })
   }
   // 定位到一条议题：经理事项到概览展开那一项，其他到控制台只列这一条（点类别或页签恢复整列）
-  const posts = board?.posts
   const openIssue = useCallback(
     (id: string, talk = false) => {
       setSheet(null)
@@ -131,13 +152,19 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
       }
       setSelected(id)
       setKind(
-        id.startsWith('R-') ? 'request' : (posts?.find((p) => p.id === id)?.kind ?? 'decision'),
+        id.startsWith('R-')
+          ? 'request'
+          : id.startsWith('P-')
+            ? 'report'
+            : id.startsWith('S-')
+              ? 'suggestion'
+              : 'decision',
       )
       setTalkId(talk ? id : null)
       setTab('console')
       scroll.current?.scrollTo({ y: 0, animated: false })
     },
-    [posts, setTab],
+    [setTab],
   )
   // 路由带来的议题（经理事件、工作线回经理、链接）：定位后清掉，免得返回时又跳一次
   const routeIssue = route.params.issue
@@ -159,8 +186,10 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
     ? [...(board.posts ?? []).map((p) => p.id), ...board.items.map((i) => i.id)].join(',')
     : ''
   const issues = useMemo(() => {
-    const ids = new Set(idsKey ? idsKey.split(',') : [])
-    return ids.size
+    const ids = Object.assign(new Set(idsKey ? idsKey.split(',') : []), {
+      deferred: pagingOn,
+    })
+    return ids.size || ids.deferred
       ? {
           ids,
           open: (id: string) => {
@@ -171,7 +200,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
           },
         }
       : null
-  }, [idsKey, openIssue])
+  }, [idsKey, openIssue, pagingOn])
   const page = useSessionPage({
     deviceId,
     sessionId: manager.threadId,
@@ -323,166 +352,225 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
         <View testID="manager-chat" style={[styles.fill, tab === 'chat' ? null : styles.hidden]}>
           {page.body}
         </View>
-        {tab === 'chat' ? null : (
-          <View style={styles.fill}>
-            {tab === 'console' ? (
-              // 类别胶囊放不下（窄屏、英文、大字号）时横着滚，排序固定在行尾
-              <View style={styles.categories}>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.fill}
-                  contentContainerStyle={[styles.pills, narrow ? styles.pillsNarrow : null]}
-                >
-                  {(Object.keys(KINDS) as Category[]).map((k) => {
-                    const on = kind === k
-                    const label = t(
-                      k === 'report' && counts[k] > 0 ? 'manager.reportUnread' : KINDS[k],
-                    )
-                    return (
-                      <Pressable
-                        key={k}
-                        role="radio"
-                        aria-checked={on}
-                        aria-label={counts[k] > 0 ? `${label} ${counts[k]}` : t(KINDS[k])}
-                        testID={`manager-category:${k}`}
-                        hitSlop={{ top: 6, bottom: 6 }}
-                        onPress={() => go('console', k)}
-                        style={[
-                          styles.pill,
-                          narrow ? styles.pillNarrow : null,
-                          {
-                            borderRadius: radius.l,
-                            borderColor: on ? c.accent : c.line2,
-                            backgroundColor: on ? c.sunken : 'transparent',
-                          },
-                        ]}
-                      >
-                        <Text style={{ color: on ? c.ink : c.ink2, fontSize: font.size.meta + 1 }}>
-                          {t(KINDS[k])}
-                        </Text>
-                        {counts[k] > 0 ? (
-                          <Text
-                            testID={
-                              k === 'report'
-                                ? 'manager-reports-unread'
-                                : `manager-category-count:${k}`
-                            }
-                            style={{
-                              color: c.wait,
-                              fontSize: font.size.meta + 1,
-                              fontWeight: '600',
-                            }}
-                          >
-                            {counts[k]}
-                          </Text>
-                        ) : null}
-                      </Pressable>
-                    )
-                  })}
-                </ScrollView>
-                <Pressable
-                  accessibilityRole="button"
-                  aria-label={`${t('manager.order')}: ${t(`manager.order.${order}`)}`}
-                  testID="manager-issue-order"
-                  onPress={() => setOrdering(true)}
-                  style={[styles.order, { minHeight: hit, minWidth: narrow ? hit : undefined }]}
-                >
-                  <Text style={{ color: c.ink2, fontSize: font.size.meta + 1 }}>
-                    {narrow
-                      ? theme.skin === 'retro'
-                        ? '↕'
-                        : '⇅'
-                      : `${t(`manager.order.${order}`)} ▾`}
-                  </Text>
-                </Pressable>
-              </View>
-            ) : null}
-            {device?.connection !== 'online' || manager.status !== 'active' ? (
-              <Text testID="manager-state-note" style={[styles.note, { color: c.ink3 }]}>
-                {t(
-                  device?.connection !== 'online'
-                    ? 'manager.offline'
-                    : manager.status === 'ending'
-                      ? 'manager.ending'
-                      : 'manager.ended',
-                )}
-              </Text>
-            ) : missing.length && tab === 'console' ? (
-              <Text
-                testID="manager-old-device"
-                role="note"
-                style={[styles.note, { color: c.ink2 }]}
+        <View style={[styles.fill, tab === 'chat' ? styles.hidden : null]}>
+          {tab === 'console' ? (
+            // 类别胶囊放不下（窄屏、英文、大字号）时横着滚，排序固定在行尾
+            <View style={styles.categories}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.fill}
+                contentContainerStyle={[styles.pills, narrow ? styles.pillsNarrow : null]}
               >
-                {t('manager.oldDevice', {
-                  items: missing
-                    .map((key) => t(`manager.feature.${key}`))
-                    .join(t('manager.feature.join')),
-                })}
-              </Text>
-            ) : null}
-            <ScrollView ref={scroll} style={styles.fill}>
-              {board ? (
-                <IssueContext.Provider value={{ manager, board, features, open: openIssue }}>
-                  {tab === 'overview' ? (
-                    <ManagerOverview
-                      board={board}
-                      onDecisions={() => go('console', 'decision')}
-                      onItems={() => {
-                        setFocusItem('*')
-                        scroll.current?.scrollTo({ y: itemsAt.current, animated: true })
-                      }}
-                      onIssue={openIssue}
-                      onLine={openSession}
-                      focusItem={focusItem}
-                      onItemsAt={(y) => {
-                        itemsAt.current = y
-                      }}
-                    />
-                  ) : null}
-                  {tab === 'lines' ? (
-                    <ManagerLines deviceId={deviceId} board={board} onOpen={openSession} />
-                  ) : null}
-                  {tab === 'console'
-                    ? orderedIssues(
-                        (board.posts ?? []).filter(
-                          (p) => p.kind === kind && (!selected || p.id === selected),
-                        ),
-                        board,
-                        order,
-                        suggestions,
-                      ).map((post) => (
-                        <Issue
-                          key={post.id}
-                          manager={manager}
-                          post={post}
-                          board={board}
-                          suggestions={suggestions}
-                          talking={talkId === post.id}
-                          onTalk={(open) => setTalkId(open ? post.id : null)}
-                          onPosition={(y) => positions.current.set(post.id, y)}
-                          onBack={() => {
-                            setTalkId(null)
-                            scroll.current?.scrollTo({
-                              y: positions.current.get(post.id) ?? 0,
-                              animated: false,
-                            })
+                {(Object.keys(KINDS) as Category[]).map((k) => {
+                  const on = kind === k
+                  const label = t(
+                    k === 'report' && counts[k] > 0 ? 'manager.reportUnread' : KINDS[k],
+                  )
+                  return (
+                    <Pressable
+                      key={k}
+                      role="radio"
+                      aria-checked={on}
+                      aria-label={counts[k] > 0 ? `${label} ${counts[k]}` : t(KINDS[k])}
+                      testID={`manager-category:${k}`}
+                      hitSlop={{ top: 6, bottom: 6 }}
+                      onPress={() => go('console', k)}
+                      style={[
+                        styles.pill,
+                        narrow ? styles.pillNarrow : null,
+                        {
+                          borderRadius: radius.l,
+                          borderColor: on ? c.accent : c.line2,
+                          backgroundColor: on ? c.sunken : 'transparent',
+                        },
+                      ]}
+                    >
+                      <Text style={{ color: on ? c.ink : c.ink2, fontSize: font.size.meta + 1 }}>
+                        {t(KINDS[k])}
+                      </Text>
+                      {counts[k] > 0 ? (
+                        <Text
+                          testID={
+                            k === 'report'
+                              ? 'manager-reports-unread'
+                              : `manager-category-count:${k}`
+                          }
+                          style={{
+                            color: c.wait,
+                            fontSize: font.size.meta + 1,
+                            fontWeight: '600',
                           }}
-                        />
-                      ))
-                    : null}
-                  {tab === 'console' && !(board.posts ?? []).some((p) => p.kind === kind) ? (
-                    <Text style={[styles.note, { color: c.ink3 }]}>{t('manager.none')}</Text>
-                  ) : null}
-                </IssueContext.Provider>
-              ) : (
-                <Empty title={t('manager.loading')} />
+                        >
+                          {counts[k]}
+                        </Text>
+                      ) : null}
+                    </Pressable>
+                  )
+                })}
+              </ScrollView>
+              <Pressable
+                accessibilityRole="button"
+                aria-label={`${t('manager.order')}: ${t(`manager.order.${order}`)}`}
+                testID="manager-issue-order"
+                onPress={() => setOrdering(true)}
+                style={[styles.order, { minHeight: hit, minWidth: narrow ? hit : undefined }]}
+              >
+                <Text style={{ color: c.ink2, fontSize: font.size.meta + 1 }}>
+                  {narrow
+                    ? theme.skin === 'retro'
+                      ? '↕'
+                      : '⇅'
+                    : `${t(`manager.order.${order}`)} ▾`}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {device?.connection !== 'online' || manager.status !== 'active' ? (
+            <Text testID="manager-state-note" style={[styles.note, { color: c.ink3 }]}>
+              {t(
+                device?.connection !== 'online'
+                  ? 'manager.offline'
+                  : manager.status === 'ending'
+                    ? 'manager.ending'
+                    : 'manager.ended',
               )}
-            </ScrollView>
-          </View>
-        )}
+            </Text>
+          ) : missing.length && tab === 'console' ? (
+            <Text testID="manager-old-device" role="note" style={[styles.note, { color: c.ink2 }]}>
+              {t('manager.oldDevice', {
+                items: missing
+                  .map((key) => t(`manager.feature.${key}`))
+                  .join(t('manager.feature.join')),
+              })}
+            </Text>
+          ) : null}
+          <ScrollView
+            testID="manager-board-scroll"
+            ref={scroll}
+            style={styles.fill}
+            onScroll={(event) => {
+              pagingScroll.current.y = event.nativeEvent.contentOffset.y
+            }}
+            scrollEventThrottle={32}
+          >
+            {view?.loadError ? (
+              <>
+                <Text accessibilityRole="alert" style={{ color: c.err }}>
+                  {view.loadError}
+                </Text>
+                <Pressable
+                  onPress={() => {
+                    void channel
+                      .command('managers.board.refresh', { deviceId, managerId })
+                      .catch(() => {})
+                  }}
+                >
+                  <Text>{t('manager.paging.retry')}</Text>
+                </Pressable>
+              </>
+            ) : board ? (
+              <IssueContext.Provider value={{ manager, board, features, open: openIssue }}>
+                {view?.paging ? (
+                  <PagedBoard
+                    manager={manager}
+                    view={{ ...view, board, paging: view.paging }}
+                    tab={tab}
+                    kind={kind}
+                    target={selected ?? (focusItem === '*' ? null : focusItem)}
+                    suggestions={suggestions}
+                    onLine={openSession}
+                    onQuery={pagingQuery}
+                    onDetail={(y) => scroll.current?.scrollTo({ y, animated: false })}
+                  />
+                ) : (
+                  <>
+                    {tab === 'overview' ? (
+                      <ManagerOverview
+                        board={board}
+                        onDecisions={() => go('console', 'decision')}
+                        onItems={() => {
+                          setFocusItem('*')
+                          scroll.current?.scrollTo({ y: itemsAt.current, animated: true })
+                        }}
+                        onIssue={openIssue}
+                        onLine={openSession}
+                        focusItem={focusItem}
+                        onItemsAt={(y) => {
+                          itemsAt.current = y
+                        }}
+                      />
+                    ) : null}
+                    {tab === 'lines' ? (
+                      <ManagerLines deviceId={deviceId} board={board} onOpen={openSession} />
+                    ) : null}
+                    {tab === 'console'
+                      ? orderedIssues(
+                          (board.posts ?? []).filter(
+                            (p) => p.kind === kind && (!selected || p.id === selected),
+                          ),
+                          board,
+                          order,
+                          suggestions,
+                        ).map((post) => (
+                          <Issue
+                            key={post.id}
+                            manager={manager}
+                            post={post}
+                            board={board}
+                            suggestions={suggestions}
+                            talking={talkId === post.id}
+                            onTalk={(open) => setTalkId(open ? post.id : null)}
+                            onPosition={(y) => positions.current.set(post.id, y)}
+                            onBack={() => {
+                              setTalkId(null)
+                              scroll.current?.scrollTo({
+                                y: positions.current.get(post.id) ?? 0,
+                                animated: false,
+                              })
+                            }}
+                          />
+                        ))
+                      : null}
+                    {tab === 'console' && !(board.posts ?? []).some((p) => p.kind === kind) ? (
+                      <Text style={[styles.note, { color: c.ink3 }]}>{t('manager.none')}</Text>
+                    ) : null}
+                  </>
+                )}
+              </IssueContext.Provider>
+            ) : (
+              <Empty title={t('manager.loading')} />
+            )}
+          </ScrollView>
+        </View>
       </View>
       {page.overlays}
+      {sheet && view?.paging && !board?.posts?.some((post) => post.id === sheet) ? (
+        <Sheet
+          visible
+          title={sheet}
+          note={view.paging.error ?? t('manager.loading')}
+          onClose={() => setSheet(null)}
+          actions={
+            view.paging.error
+              ? [
+                  {
+                    label: t('manager.paging.retry'),
+                    onPress: () => {
+                      void channel
+                        .command('managers.board.detail', {
+                          deviceId,
+                          managerId,
+                          id: sheet as import('@litch/core').ManagerObjectId,
+                        })
+                        .catch(() => {})
+                    },
+                  },
+                ]
+              : []
+          }
+        />
+      ) : null}
       {reset.overlay}
       <Sheet
         visible={ordering}
