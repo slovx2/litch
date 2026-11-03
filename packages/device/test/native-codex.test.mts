@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ManagedHarnessState } from '../../protocol/src/device-settings.mjs'
+import { FILE_LINK_RULES } from '../../protocol/src/file-link-instructions.mjs'
 import { codexRig, sentTo, statusOf } from './codex-kit.mjs'
 import { codexThread, FakeCodex } from './fake-codex.mjs'
 import {
@@ -255,7 +256,9 @@ test('路由：带 harness 参数的到原生 codex 并摘掉这个参数；不�
     await client.initialize()
     const started = await client.call('thread/start', { harness: 'codex', cwd: '/work/new' })
     assert.equal(started.thread.harness, 'codex')
-    assert.deepEqual(sentTo(env.codex, 'thread/start'), [{ cwd: '/work/new' }])
+    assert.deepEqual(sentTo(env.codex, 'thread/start'), [
+      { cwd: '/work/new', developerInstructions: FILE_LINK_RULES },
+    ])
     assert.equal(sentTo(env.pi, 'thread/start').length, 0)
     assert.equal((await client.call('model/list', { harness: 'codex' })).data.length, 1)
     assert.deepEqual(sentTo(env.codex, 'model/list'), [{}])

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
 import { Ajv } from 'ajv'
+import { FILE_LINK_RULES } from '../../protocol/src/file-link-instructions.mjs'
 import { codexRig, sentTo } from './codex-kit.mjs'
 import { codexThread, FakeCodex } from './fake-codex.mjs'
 import { FakeUpstream, fakeProject, RpcFailure } from './fake-upstream.mjs'
@@ -192,6 +193,7 @@ test('权限预设：选了内置档又没带审批策略的，转给原生 code
     assert.deepEqual(sentTo(env.codex, 'thread/start').at(-1), {
       permissions: ':danger-full-access',
       approvalPolicy: 'never',
+      developerInstructions: FILE_LINK_RULES,
     })
     await client.call('turn/start', { threadId: THREAD, input: [], permissions: ':workspace' })
     assert.deepEqual(sentTo(env.codex, 'turn/start').at(-1), {

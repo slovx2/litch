@@ -61,14 +61,35 @@ test('文件提示经设备进入原生 Codex；恢复、分叉后的压缩配�
       dynamicTools: [],
     })
     const seen = last(env, 'thread/start')
-    assert.ok(seen.developerInstructions.includes(FILE_LINK_RULES))
+    assert.equal(seen.developerInstructions, `${PROJECT}\n\n${FILE_LINK_RULES}`)
     assert.deepEqual(seen.dynamicTools, [])
     for (const method of ['thread/resume', 'thread/fork']) {
       await client.call(method, { harness: 'codex', threadId: started.thread.id })
       const params = last(env, method)
-      assert.equal(params.developerInstructions.split(FILE_LINK_RULES).length - 1, 1)
-      assert.ok(params.developerInstructions.startsWith(PROJECT))
+      assert.equal(params.developerInstructions, `${PROJECT}\n\n${FILE_LINK_RULES}`)
     }
+  } finally {
+    await env.close()
+  }
+})
+
+test('无工具会话保留用户配置的开发者指令，已有文件提示不重复，显式底子优先于配置', async () => {
+  const env = codexRig()
+  try {
+    const client = await litch(env)
+    for (const configured of [CONFIG, `${CONFIG}\n\n${FILE_LINK_RULES}`]) {
+      withConfig(env, configured)
+      await client.call('thread/start', { harness: 'codex', cwd: '/work/other' })
+      assert.deepEqual(last(env, 'config/read'), { cwd: '/work/other' })
+      assert.deepEqual(last(env, 'thread/start'), {
+        cwd: '/work/other',
+        developerInstructions: `${CONFIG}\n\n${FILE_LINK_RULES}`,
+      })
+    }
+    const reads = sentTo(env.codex, 'config/read').length
+    await client.call('thread/start', { harness: 'codex', developerInstructions: USER })
+    assert.equal(last(env, 'thread/start').developerInstructions, `${USER}\n\n${FILE_LINK_RULES}`)
+    assert.equal(sentTo(env.codex, 'config/read').length, reads)
   } finally {
     await env.close()
   }

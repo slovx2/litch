@@ -109,7 +109,8 @@ const configured = (context: InstructionContext, cwd: string | null) =>
 
 /**
  * 原生 codex 的 thread/start、thread/resume、thread/fork 转发前补齐 developerInstructions，命名空间上的规则一并摘掉。
- * 别的方法、不需要补的（没有规则、客户端没给、也没记过的）返回 null，照常同步转发。不会失败：问不到 config.toml 时底子当作没有
+ * 每个新会话都补文件提示；别的方法，以及没有记录也没给底子的恢复、分叉返回 null。
+ * 沿用统一机制：问不到 config.toml 时底子当作没有，并记录诊断日志。
  */
 export function prepareInstructions(
   method: string,
