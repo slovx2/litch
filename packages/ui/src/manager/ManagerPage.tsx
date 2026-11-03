@@ -50,7 +50,7 @@ export interface ManagerPageLocation {
   narrow: 'chat' | 'board'
   settings: boolean
 }
-const defaultLocation: ManagerPageLocation = { tab: 'overview', narrow: 'chat', settings: false }
+const defaultLocation: ManagerPageLocation = { tab: 'inbox', narrow: 'board', settings: false }
 
 export function ManagerPage({
   manager,
@@ -378,7 +378,7 @@ export function ManagerPage({
         ) : null}
         <div className="side-tabs">
           <div className="side-tablist" role="tablist">
-            {(['overview', 'items', 'inbox'] as const).map((key) => (
+            {(['inbox', 'overview', 'items'] as const).map((key) => (
               <button
                 type="button"
                 role="tab"

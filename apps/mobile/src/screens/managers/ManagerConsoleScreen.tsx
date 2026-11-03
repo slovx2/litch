@@ -47,7 +47,7 @@ import { useManagerReset } from './use-reset'
 type Props = NativeStackScreenProps<RootStackParamList, 'ManagerConsole'>
 type Category = ManagerPost['kind']
 
-const TABS: readonly ManagerTab[] = ['chat', 'console', 'lines', 'overview']
+const TABS: readonly ManagerTab[] = ['console', 'chat', 'lines', 'overview']
 const TAB_LABEL = {
   chat: 'mgr.tab.chat',
   console: 'manager.inbox',
@@ -83,7 +83,7 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
 
 function Workbench({ manager, route, navigation }: Props & { manager: ManagerView }) {
   const { deviceId, id: managerId } = manager
-  const tab: ManagerTab = route.params.tab ?? 'chat'
+  const tab: ManagerTab = route.params.tab ?? 'console'
   const t = useT()
   const theme = useTheme()
   const { c, radius, font, hit, marks } = theme

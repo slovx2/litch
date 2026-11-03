@@ -1,4 +1,4 @@
-# 模拟核心：手机经理工作台（35-manager 第十七节）。首页“经理”→ m1 落在对话 → 输入框写一句不发 →
+# 模拟核心：手机经理工作台（35-manager 第十七节）。首页“经理”→ m1 落在控制台 → 切对话写草稿 →
 # 切控制台（决策卡）、工作线（线的行）、概览，再切回对话，草稿还在（对话常驻、只是不显示）→
 # 工作线页签点一条线进它的会话页 → 副标题“↰ 经理名”回到经理、落在工作线页签
 appId: dev.litch.app
@@ -19,6 +19,12 @@ tags: [mock]
     id: devices:managers
 - tapOn:
     id: manager:m1
+- extendedWaitUntil:
+    visible:
+      id: manager-issue:D-17
+    timeout: 20000
+- tapOn:
+    id: manager-tab:chat
 - extendedWaitUntil:
     visible:
       id: composer-input

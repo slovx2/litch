@@ -90,6 +90,13 @@ try {
   })
   await call('Page.navigate', { url })
   await wait('[data-testid="manager-console"]')
+  assert.equal(
+    await read(
+      'document.querySelector(\'[data-testid="manager-tab:console"]\').getAttribute("aria-selected")',
+    ),
+    'true',
+    '未指定页签时默认控制台',
+  )
   const press = async (text) => {
     await until(
       () =>
@@ -113,7 +120,7 @@ try {
     await read(
       "[...document.querySelectorAll('[role=tab][data-testid^=\"manager-tab:\"]')].map(e=>e.dataset.testid.slice(12)).join(',')",
     ),
-    'chat,console,lines,overview',
+    'console,chat,lines,overview',
     '页签顺序',
   )
   await tapId('manager-tab:console')
@@ -728,7 +735,7 @@ try {
     '设备服务较旧：决策答复照常交上',
   )
   await shot('mobile-old-device')
-  // 工作台：默认落在对话；正文编号点了拉起半屏议题卡，↗ 到控制台定位；切页签对话不卸载，草稿还在
+  // 显式对话链接仍落在对话；正文编号拉起半屏卡，↗ 到控制台定位；切页签草稿保留
   await call('Page.navigate', { url: url.replace('scene=manager-console', 'scene=manager-chat') })
   await wait('[data-testid="manager-chat"] textarea')
   assert.equal(
@@ -736,7 +743,7 @@ try {
       "document.querySelector('[data-testid=\"manager-tab:chat\"]').getAttribute('aria-selected')",
     ),
     'true',
-    '默认落在对话',
+    '显式对话链接不受默认页签改变影响',
   )
   assert.ok(
     await read(

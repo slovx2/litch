@@ -175,6 +175,13 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   )
   await click('[data-manager-id="m1"] .mg-pick')
   const selected = Boolean(await until('经理页', () => one('[data-manager="session"]')))
+  await until('首次打开控制台', () => one('[data-board-tab="inbox"][aria-selected="true"]'))
+  if (
+    [...document.querySelectorAll('.mg-board .side-tablist [data-board-tab]')]
+      .map((element) => element.getAttribute('data-board-tab'))
+      .join(',') !== 'inbox,overview,items'
+  )
+    throw new Error('经理看板页签应为控制台、概览、事项')
   await click('[data-act="manager-board-toggle"]')
   const boardToggle = await until('看板收起入口', () =>
     one<HTMLButtonElement>('[data-act="manager-board-toggle"][aria-expanded="false"]'),

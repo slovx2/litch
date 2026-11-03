@@ -38,8 +38,8 @@ export const SCENES: Scene[] = [
     id: 'manager-chat',
     group: '经理',
     name: '经理工作台 · 对话',
-    note: '默认落在对话：页签“对话 · 控制台 · 工作线 · 概览”，控制台挂待处理数；正文里的 #D-n 点了拉起半屏议题卡',
-    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' })],
+    note: '显式打开对话；页签“控制台 · 对话 · 工作线 · 概览”，正文里的 #D-n 点了拉起半屏议题卡',
+    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1', tab: 'chat' })],
   },
   {
     id: 'manager-lines',
@@ -67,7 +67,7 @@ export const SCENES: Scene[] = [
     group: '经理',
     name: '控制台与议题',
     note: '四类议题、排序、已答决策分块、原帖操作、讨论与双向关联，复用正式页面',
-    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1', tab: 'console' })],
+    steps: [nav('ManagerConsole', { deviceId: 'local', managerId: 'm1' })],
   },
   {
     id: 'manager-old-device',
