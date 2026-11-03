@@ -258,23 +258,6 @@ export function SettingsBar({
           }}
         />
       ) : null}
-      {project.readFailed ? (
-        <span role="status" title={project.notice ?? undefined}>
-          {t('permission.project.readFailed')}
-          <button
-            type="button"
-            className="mode-btn"
-            aria-label={t('permission.project.retry')}
-            title={project.notice ?? undefined}
-            disabled={project.retrying}
-            onClick={() => void project.retry()}
-          >
-            <span aria-hidden="true">↻</span>
-          </button>
-        </span>
-      ) : project.notice ? (
-        <span role="status">{project.notice}</span>
-      ) : null}
       {options.plan ? (
         // 计划模式：一个开关。开着的时候下一条消息先出计划，确认了再动手。
         // 画成带拨块的开关，关着的时候也一直在：光看底栏上有“计划”两个字分不出开没开（别的产品里出现计划标识就是开着）

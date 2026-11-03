@@ -88,7 +88,7 @@ test('项目订阅在变更时重新读取别名；晚到的读取不会覆盖�
   assert.equal(reads.length, 2)
 })
 
-test('不支持项目权限的连接不发送扩展请求；读取失败明确通知订阅者', async () => {
+test('旧设备不发送扩展请求或读取错误；临时失败保留状态以便恢复', async () => {
   let supported = false
   let requests = 0
   let failure: unknown
@@ -118,11 +118,6 @@ test('不支持项目权限的连接不发送扩展请求；读取失败明确�
     harness: 'pi',
     available: false,
     record: null,
-    failure: {
-      code: 'unsupported',
-      message: 'Permission storage unavailable',
-      text: { key: 'permission.project.unavailable' },
-    },
   })
   assert.equal(requests, 0)
   supported = true
@@ -133,7 +128,7 @@ test('不支持项目权限的连接不发送扩展请求；读取失败明确�
   stop()
 })
 
-test('保存结果立即更新选择，重读失败有提示而不是悄悄还原', async () => {
+test('保存结果立即更新选择，重读失败清除过期记录并保留失败状态', async () => {
   const record: ProjectPermission = {
     cwd: '',
     harness: 'pi',
@@ -176,4 +171,43 @@ test('保存结果立即更新选择，重读失败有提示而不是悄悄还�
   assert.equal(shown?.record, null)
   assert.equal((failure as { text: { key: string } }).text.key, 'permission.project.failedReason')
   stop()
+})
+
+test('临时失败后重新打开订阅自动重读，不依赖手动重试', async () => {
+  let reads = 0
+  let view: ProjectPermissionView | undefined
+  const record: ProjectPermission = {
+    cwd: '/project',
+    harness: 'pi',
+    permission: ':workspace',
+    confirmedPermissions: [],
+  }
+  const permissions = createProjectPermissions({
+    deviceId: 'remote',
+    online: () => true,
+    supported: () => true,
+    async request() {
+      if (++reads === 1) throw new Error('临时读取失败')
+      return record
+    },
+  })
+  const sink: HostSink = {
+    snapshot(value) {
+      view = value as ProjectPermissionView
+    },
+    delta() {},
+    error(error) {
+      throw error
+    },
+  }
+  const first = permissions.open('/project', 'pi', sink)
+  await Promise.resolve()
+  assert.equal(view?.failure?.code, 'rejected')
+  first()
+  const second = permissions.open('/project', 'pi', sink)
+  await Promise.resolve()
+  assert.equal(reads, 2)
+  assert.equal(view?.failure, undefined)
+  assert.deepEqual(view?.record, record)
+  second()
 })

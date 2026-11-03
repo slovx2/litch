@@ -303,16 +303,16 @@
 }
 .cmp-bar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 2px;
   padding: 4px 6px 6px 8px;
 }
-/* 上下文和发送保持一组，换行后仍靠右。 */
+/* 上下文和发送保持一组，底栏始终单行靠右。 */
 .cmp-send-actions {
   display: flex;
   align-items: center;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
   margin-left: auto;
 }
@@ -493,9 +493,9 @@
   position: relative;
   min-width: 0;
 }
-/* 底栏不足一行时整项换行，保留模型和权限的辨识文字。 */
+/* 空间不足时缩短选择器文字，完整当前值仍可通过悬停或读屏查看。 */
 .cmp-bar > .pick {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   max-width: 100%;
 }
 .pick-btn {

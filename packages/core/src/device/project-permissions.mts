@@ -88,12 +88,13 @@ export function createProjectPermissions(host: Host) {
     harness: string,
     record: ProjectPermission | null,
     failure?: ChannelErrorShape,
+    available = host.supported(),
   ) => {
     const view: ProjectPermissionView = {
       deviceId: host.deviceId,
       cwd,
       harness,
-      available: host.supported(),
+      available,
       record,
       ...(failure ? { failure } : {}),
     }
@@ -104,16 +105,22 @@ export function createProjectPermissions(host: Host) {
     if (!entry) return
     const { cwd, harness } = entry
     const epoch = ++entry.epoch
+    // 旧设备没有权限记忆是正常状态，不发送扩展请求，也不发布读取错误。
+    if (!host.supported()) {
+      publish(cwd, harness, null)
+      return
+    }
     try {
       if (!host.online()) throw new RpcAbortError('closed', 'Device disconnected')
-      if (!host.supported()) throw new RpcError(-32601, 'Permission storage unavailable')
       const result = await host.request(PROJECT_PERMISSION.read, { cwd, harness })
       if (entry.epoch === epoch) publish(cwd, harness, result)
     } catch (error) {
       if (entry.epoch !== epoch) return
       // 重读失败也不能继续使用旧的权限和确认记录。
       // sink.error 会结束整个订阅；可重试失败作为状态发送，保留断线重连后的自动恢复。
-      publish(cwd, harness, null, permissionFailure(error).toShape())
+      const failure = permissionFailure(error).toShape()
+      if (failure.code === 'unsupported') publish(cwd, harness, null, undefined, false)
+      else publish(cwd, harness, null, failure)
     }
   }
 

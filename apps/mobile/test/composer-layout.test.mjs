@@ -6,6 +6,7 @@ import { ONE_LINE, ROW_MIN, rowLayout } from '../src/detail/composer/layout.ts'
 
 test('一排按 stretch 排，两边按钮跟着输入框的实际高度走', () => {
   assert.equal(rowLayout.row.flexDirection, 'row')
+  assert.equal(rowLayout.row.flexWrap, 'nowrap', '权限记忆状态不能使输入框按钮折行')
   assert.equal(rowLayout.row.alignItems, 'stretch')
   for (const name of ['side', 'send']) {
     const style = rowLayout[name]

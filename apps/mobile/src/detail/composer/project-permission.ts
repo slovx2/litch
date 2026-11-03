@@ -35,7 +35,6 @@ export function useProjectPermission(
   const readError = useSyncExternalStore(watchError, () =>
     replica.store.get<ChannelErrorShape>(errorKey),
   )
-  const [retrying, setRetrying] = useState(false)
   const reason = (error: unknown) => {
     const safe = error as ChannelErrorShape | null
     return safe?.text
@@ -79,8 +78,10 @@ export function useProjectPermission(
     let notice: string | null = null
     try {
       if (!deviceId || !harness) return null
-      if (view?.available === false) notice = t('permission.project.unavailable')
-      else if (readError && !selected) notice = t('permission.project.readFallback')
+      if (view?.available === false) {
+        setFailure(null)
+        return null
+      } else if (readError && !selected) notice = t('permission.project.readFallback')
       else
         await channel.command('projectPermission.set', {
           deviceId,
@@ -90,7 +91,8 @@ export function useProjectPermission(
           confirmed: requiresConfirmation && (confirmed || once),
         })
     } catch (error) {
-      notice = t('permission.project.saveFailed', { reason: reason(error) })
+      if ((error as ChannelErrorShape | null)?.code !== 'unsupported')
+        notice = t('permission.project.saveFailed', { reason: reason(error) })
     } finally {
       if (consume && once) confirmedOnce.current = null
     }
@@ -121,23 +123,9 @@ export function useProjectPermission(
       setSaving(false)
     }
   }
-  const retry = async () => {
-    if (retrying) return
-    setRetrying(true)
-    setFailure(null)
-    try {
-      await channel.command('projectPermission.retry', { deviceId, cwd: path, harness })
-    } catch (error) {
-      setFailure({ key, text: reason(error) })
-    } finally {
-      setRetrying(false)
-    }
-  }
   return {
     view,
     readFailed: Boolean(readError),
-    retrying,
-    retry,
     permission:
       selection?.key === key
         ? selection.permission
@@ -149,14 +137,7 @@ export function useProjectPermission(
       (confirmedOnce.current?.key === key && confirmedOnce.current.permission === id),
     loading: Boolean(deviceId && harness && !view && !readError),
     saving,
-    notice:
-      failure?.key === key
-        ? failure.text
-        : view?.available === false
-          ? t('permission.project.unavailable')
-          : readError
-            ? reason(readError)
-            : null,
+    notice: failure?.key === key ? failure.text : null,
     save,
     persist,
   }

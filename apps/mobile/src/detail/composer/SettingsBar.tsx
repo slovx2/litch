@@ -335,24 +335,6 @@ export function useComposeSettings(props: SettingsProps | null): ComposeSettings
         onPick={pickPermission}
         onClose={() => setOpen(null)}
       />
-      {project.readFailed ? (
-        <View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('permission.project.retry')}
-            accessibilityHint={project.notice ?? undefined}
-            disabled={project.retrying}
-            onPress={() => void project.retry()}
-          >
-            <Text style={{ color: theme.c.ink }}>{t('permission.project.readFailed')} ↻</Text>
-          </Pressable>
-          <Text style={{ color: theme.c.ink }}>{project.notice}</Text>
-        </View>
-      ) : project.notice ? (
-        <Text accessibilityLiveRegion="polite" style={{ color: theme.c.ink }}>
-          {project.notice}
-        </Text>
-      ) : null}
       <Confirm
         visible={asking !== null}
         title={t('permission.confirm.title', { name: asking?.title ?? '' })}

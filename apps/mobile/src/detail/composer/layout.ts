@@ -22,6 +22,7 @@ export const rowLayout: {
 } = {
   row: {
     flexDirection: 'row',
+    flexWrap: 'nowrap',
     alignItems: 'stretch',
     gap: 8,
     paddingHorizontal: 12,

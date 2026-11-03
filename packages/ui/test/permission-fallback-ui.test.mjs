@@ -65,7 +65,7 @@ function nodes(value) {
 }
 
 for (const platform of ['desktop', 'mobile']) {
-  test(`${platform}：超时、旧设备、断线提示可翻译；不泄露 RPC；默认或自选权限仍可提交`, async () => {
+  test(`${platform}：超时、旧设备、断线不占用设置栏；默认或自选权限仍可提交`, async () => {
     const calls = []
     const notices = []
     const harness = { id: 'pi', state: 'ready', name: 'Pi', abilities: {} }
@@ -171,7 +171,7 @@ for (const platform of ['desktop', 'mobile']) {
           [reason, ':read-only'],
         ])) {
           const expected = selected ?? ':workspace'
-          let retries = 0
+          const noticesBefore = notices.filter(Boolean).length
           project = {
             permission: selected,
             readFailed: reason !== 'saveFailed',
@@ -182,12 +182,9 @@ for (const platform of ['desktop', 'mobile']) {
               reason: t('permission.project.failedReason'),
             }),
             confirmed: () => false,
-            retry: async () => {
-              retries++
-            },
             persist: async (permission) => {
               assert.equal(permission, expected)
-              return project.notice
+              return reason === 'unavailable' ? null : project.notice
             },
           }
           const root =
@@ -211,7 +208,9 @@ for (const platform of ['desktop', 'mobile']) {
           await composer.props.onSend('hello', [], [], 'hello')
           assert.equal(calls.at(-1)[0], 'session.create')
           assert.equal(calls.at(-1)[1].settings.permission, expected)
-          assert.equal(notices.at(-1), project.notice, '离开新建页后仍显示非阻断提示')
+          if (reason !== 'unavailable')
+            assert.equal(notices.at(-1), project.notice, '离开新建页后仍显示非阻断提示')
+          else assert.equal(notices.filter(Boolean).length, noticesBefore, '旧设备新建不提示失败')
           const props = {
             options,
             settings: { permission: ':workspace', model: null, effort: null, speed: null },
@@ -225,20 +224,15 @@ for (const platform of ['desktop', 'mobile']) {
             platform === 'desktop'
               ? settings.SettingsBar(props)
               : renderMobileSettings(props).pickers
-          if (project.readFailed)
-            assert.ok(JSON.stringify(bar).includes(t('permission.project.readFailed')))
-          assert.ok(JSON.stringify(bar).includes(project.notice))
+          assert.ok(!JSON.stringify(bar).includes(t('permission.project.readFailed')))
+          assert.ok(!JSON.stringify(bar).includes(project.notice))
           assert.doesNotMatch(JSON.stringify([root, bar]), /RpcAbortError|litch\/|30000/)
           const retry = nodes(bar).find(
             (node) =>
               (node.props?.['aria-label'] ?? node.props?.accessibilityLabel) ===
               t('permission.project.retry'),
           )
-          if (project.readFailed) {
-            assert.ok(retry)
-            await (retry.props.onClick ?? retry.props.onPress)()
-            assert.equal(retries, 1)
-          }
+          assert.equal(retry, undefined, '设置栏不显示重试入口')
         }
       }
     } finally {
