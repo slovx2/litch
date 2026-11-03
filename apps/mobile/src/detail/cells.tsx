@@ -26,6 +26,7 @@ import { experiment } from '../experiment'
 import { noteWork } from '../probe'
 import { useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
+import { StatusMark } from '../ui/kit/controls'
 import { type Palette, useTheme } from '../ui/theme'
 import { AskCell, AskReplyText, useAsks } from './asks/AskCell'
 import { CompactRow } from './CompactRow'
@@ -461,6 +462,7 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
     <View>
       {row.recovery ? <Recovery turnId={row.turnId} recovery={row.recovery} /> : null}
       <View style={styles.status}>
+        {row.status === 'running' && working ? <StatusMark status="running" /> : null}
         <Text
           style={[
             styles.meta,

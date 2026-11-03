@@ -1,48 +1,45 @@
-// 后台任务那几处的慢呼吸（输入框上方那一行、会话列表的记号）：不透明度在 1 和 0.35 之间来回，2.4 秒一个周期（和桌面一样）。
-// 系统开着“减少动态效果”时不动。用原生驱动，不占 JS 线程
-import { useEffect, useRef, useState } from 'react'
-import { AccessibilityInfo, Animated, Easing } from 'react-native'
+// 运行记号统一慢呼吸：2.4 秒一轮，只改变透明度，不挪动文字或触发布局。
+import { useIsFocused } from '@react-navigation/native'
+import { useEffect } from 'react'
+import { AccessibilityInfo, Animated, AppState, Easing } from 'react-native'
+import { createBreathClock } from './breath-state'
 
-const PERIOD_MS = 2400
-
-/** 系统是不是开着“减少动态效果” */
-export function useReduceMotion(): boolean {
-  const [reduce, setReduce] = useState(false)
-  useEffect(() => {
-    let alive = true
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((value) => {
-        if (alive) setReduce(value)
-      })
-      .catch(() => {})
-    const listener = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduce)
-    return () => {
-      alive = false
-      listener.remove()
-    }
-  }, [])
-  return reduce
-}
-
-/** 呼吸的不透明度。paused 为真（比如按着）时停在当前的样子 */
-export function useBreath(paused = false): Animated.Value {
-  const value = useRef(new Animated.Value(1)).current
-  const reduce = useReduceMotion()
-  useEffect(() => {
-    if (reduce || paused) {
-      if (reduce) value.setValue(1)
-      return
-    }
-    const half = (to: number) =>
+const value = new Animated.Value(1)
+const still = new Animated.Value(1)
+const clock = createBreathClock({
+  active: () => AppState.currentState === 'active',
+  reduced: () => AccessibilityInfo.isReduceMotionEnabled(),
+  onActive: (change) => {
+    const listener = AppState.addEventListener('change', (state) => change(state === 'active'))
+    return () => listener.remove()
+  },
+  onReduced: (change) => {
+    const listener = AccessibilityInfo.addEventListener('reduceMotionChanged', change)
+    return () => listener.remove()
+  },
+  start: () => {
+    const half = (toValue: number) =>
       Animated.timing(value, {
-        toValue: to,
-        duration: PERIOD_MS / 2,
+        toValue,
+        duration: 1200,
         easing: Easing.inOut(Easing.ease),
         useNativeDriver: true,
+        // 无限循环不能占住交互队列，否则长列表会推迟挂载后续的行。
+        isInteraction: false,
       })
     const loop = Animated.loop(Animated.sequence([half(0.35), half(1)]))
     loop.start()
     return () => loop.stop()
-  }, [value, reduce, paused])
-  return value
+  },
+  reset: () => value.setValue(1),
+})
+
+/** 暂停、页面失焦、退到后台、减弱动态时用完整不透明度的皮肤记号。 */
+export function useBreath(paused = false): Animated.Value {
+  const focused = useIsFocused()
+  const enabled = focused && !paused
+  useEffect(() => {
+    if (enabled) return clock.retain()
+  }, [enabled])
+  return enabled ? value : still
 }

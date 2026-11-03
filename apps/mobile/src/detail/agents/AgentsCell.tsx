@@ -15,6 +15,7 @@ import { duration, elapsed } from '../../../../../packages/ui/src/app/format.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
+import { BreathingText } from '../../ui/kit/BreathingText'
 import { type Palette, type Theme, useTheme } from '../../ui/theme'
 import { type Props, useTicking } from '../cells'
 import { useTranscript } from '../context'
@@ -111,7 +112,15 @@ function AgentLine({
       ]}
       testID={threadId ? `agent:${threadId}` : 'agent:pending'}
     >
-      <Text style={[styles.icon, { color: c.ink3, fontFamily: font.mono }]}>⑂</Text>
+      <BreathingText
+        active={state === 'running'}
+        style={[
+          styles.icon,
+          { color: state === 'running' ? c.accent : c.ink3, fontFamily: font.mono },
+        ]}
+      >
+        ⑂
+      </BreathingText>
       {thread?.role ? (
         <Text style={[styles.kind, { color: c.ink3, fontFamily: font.mono }]} numberOfLines={1}>
           {thread.role}

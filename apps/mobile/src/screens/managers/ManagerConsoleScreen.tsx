@@ -30,6 +30,7 @@ import { useSessionPage } from '../../detail/session-page'
 import type { ManagerTab, RootStackParamList } from '../../nav/routes'
 import { useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { BreathingText } from '../../ui/kit/BreathingText'
 import { Empty } from '../../ui/kit/controls'
 import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
@@ -293,7 +294,11 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                 {t(TAB_LABEL[key])}
               </Text>
               {mark ? (
-                <Text
+                <BreathingText
+                  active={
+                    (key === 'chat' && chatMark === 'run') ||
+                    (key === 'lines' && manager.runningLines > 0 && !linesWaiting)
+                  }
                   testID={`manager-tab-badge:${key}`}
                   style={[
                     mark.boxed ? styles.count : styles.glyph,
@@ -307,7 +312,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                   ]}
                 >
                   {mark.text}
-                </Text>
+                </BreathingText>
               ) : null}
             </Pressable>
           )

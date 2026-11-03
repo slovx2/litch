@@ -15,6 +15,7 @@ import { duration, elapsed } from '../../../../packages/ui/src/app/format.ts'
 import { processSummary, suggestTitles } from '../../../../packages/ui/src/transcript/steps-text.ts'
 import type { Row, StepState } from '../core/rows'
 import { type Translator, useT } from '../ui/i18n'
+import { StatusMark } from '../ui/kit/controls'
 import { type Palette, useTheme } from '../ui/theme'
 import { styles as cellStyles, type Props, useLasting, useTicking } from './cells'
 import { useBackgroundView, useToggleInPlace, useTranscript } from './context'
@@ -134,8 +135,10 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
         style={({ pressed }) => [styles.groupHeader, pressed ? { backgroundColor: c.press } : null]}
         testID="process-toggle"
       >
+        {!row.ended && (row.running || working) ? <StatusMark status="running" /> : null}
         <Text
           style={{
+            flex: 1,
             fontSize: font.size.meta,
             color: c.ink3,
           }}
@@ -541,7 +544,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   processBody: { flex: 1, gap: 4 },
-  groupHeader: { height: 32, justifyContent: 'center' },
+  groupHeader: { height: 32, flexDirection: 'row', alignItems: 'center' },
   step: {
     marginLeft: 16,
     marginRight: 16,

@@ -103,7 +103,15 @@ function DeviceRow({
       left={
         <View style={styles.left}>
           <View style={[styles.wire, { backgroundColor: theme.c.wire[device.wire] }]} />
-          <StatusMark status={activity?.waiting ? 'waiting' : MARK[state]} />
+          <StatusMark
+            status={
+              activity?.waiting
+                ? 'waiting'
+                : state === 'online' && activity?.running
+                  ? 'running'
+                  : MARK[state]
+            }
+          />
         </View>
       }
       right={

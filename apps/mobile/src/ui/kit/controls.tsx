@@ -3,7 +3,6 @@
 import type { ReactNode } from 'react'
 import {
   ActivityIndicator,
-  Animated,
   Pressable,
   StyleSheet,
   Text,
@@ -13,7 +12,7 @@ import {
 } from 'react-native'
 import { useT } from '../i18n'
 import { type StatusKind, type Theme, useTheme } from '../theme'
-import { useBreath } from './breath'
+import { BreathingText } from './BreathingText'
 
 export function Button({
   label,
@@ -334,17 +333,14 @@ export function StatusMark({ status }: { status: StatusKind }) {
     offline: c.ink3,
     background: c.accent,
   }[status]
-  // 只剩后台任务在跑：慢呼吸，和前台在跑的分开
-  if (status === 'background') return <BreathingMark glyph={glyph} color={color} />
-  return <Text style={[styles.mark, { color }]}>{glyph}</Text>
-}
-
-function BreathingMark({ glyph, color }: { glyph: string; color: string }) {
-  const breath = useBreath()
   return (
-    <Animated.Text testID="mark:background" style={[styles.mark, { color, opacity: breath }]}>
+    <BreathingText
+      active={status === 'running' || status === 'background'}
+      testID={`mark:${status}`}
+      style={[styles.mark, { color }]}
+    >
       {glyph}
-    </Animated.Text>
+    </BreathingText>
   )
 }
 
