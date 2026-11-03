@@ -41,7 +41,9 @@ Exact flags: `scripts/litch tasks --help`.
     worktree cannot be made, that run fails instead of running in the folder. The worktrees follow the
     usual rules (`sessions-and-projects.md`): archiving the run's session removes the folder
     if nothing in it changed, and the branch stays;
-  - **continue an existing session**: the prompt is sent into that session each time.
+  - **continue an existing session**: the prompt is sent into that session each time. Desktop and phone
+    offer unarchived conversations, sub-sessions, managers and work lines, with searchable type labels.
+    桌面和手机都可选择普通对话、子会话、经理或工作线；候选显示类型并支持按类型搜索，已归档会话不列出。
 - **Start paused**.
 
 ## Rules worth telling the user
@@ -51,6 +53,9 @@ Exact flags: `scripts/litch tasks --help`.
   a one-time task still runs once.
 - A run is limited to 2 hours. A failed run does not pause the task; a task whose target session is
   gone is paused.
+- Existing targets use the same session-resume path regardless of type. Archiving a target does not
+  retarget its task: if the harness rejects resume, that run fails and the task pauses as a missing target.
+  已有目标归档后不会改为新会话；恢复被引擎拒绝时，本次失败并按目标不存在暂停任务。
 - Approvals and questions in a task's turn wait for a person: the session shows "waiting for you" in the
   session list on the desktop and phone, opening it shows the approval, and the desktop shows a system
   notification. Unanswered after `tasks.approvalTimeoutMinutes` (default 30), the device declines them

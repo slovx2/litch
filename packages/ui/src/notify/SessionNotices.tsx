@@ -4,8 +4,8 @@
 // 标题：回合结束、要回答的是会话标题，小字是项目和设备；要审批的是项目，小字是会话标题和设备。
 // 每个会话一条回合结束的、一条要人处理的（slotOf），新的盖掉旧的；事情处理掉了、人打开了那个会话就收回。
 // 点通知把窗口叫到前面（外壳做），这里打开那个会话。
-// 角标：各台设备上未读的会话（keys.unread）加起来，变了就报给外壳。等审批、等回答的不算，它们只发通知；
-// 侧栏用同一份让未读的会话收不起、折不住，角标上的每一个都能在侧栏里找到。
+// 角标：各台设备全目录的未读线程数（keys.catalogUnread）相加，含经理与工作线，不按根聚合。
+// 等审批、等回答和经理待处理事项、报告已阅另计，不加进图标数字。
 import {
   type DeviceView,
   keys,
@@ -152,7 +152,7 @@ export function SessionNotices({
   )
 
   const devices = useKey<string[]>(keys.devices) ?? NO_DEVICES
-  const unreadKeys = useMemo(() => devices.map((id) => keys.unread(id)), [devices])
+  const unreadKeys = useMemo(() => devices.map((id) => keys.catalogUnread(id)), [devices])
   const unread = useKeys<string[]>(unreadKeys)
   const total = unread.reduce<number>((sum, ids) => sum + (ids?.length ?? 0), 0)
   useEffect(() => {

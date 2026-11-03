@@ -6,6 +6,7 @@ import { rank } from './suggest.ts'
 export interface SessionCandidate {
   id: string
   title: string
+  typeLabel: string
   harness: string
   /** 所在工作区的名字；不属于工作区的是空字符串 */
   workspace: string
@@ -53,9 +54,14 @@ export function sessionHits(
     .sort((a, b) => a.near - b.near || b.one.updatedAt - a.one.updatedAt)
     .map(({ one }) => ({
       one,
-      words: [one.title, one.workspace, tail(one.cwd), one.harness, one.id.slice(0, 8)].filter(
-        Boolean,
-      ),
+      words: [
+        one.title,
+        one.typeLabel,
+        one.workspace,
+        tail(one.cwd),
+        one.harness,
+        one.id.slice(0, 8),
+      ].filter(Boolean),
     }))
   return rank(ordered, query)
     .slice(0, MATCHED_SESSIONS)

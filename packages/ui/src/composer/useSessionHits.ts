@@ -7,17 +7,17 @@ import {
   type MessageExtra,
   mentionTitle,
   SESSION_MENTION_LIMITS,
-  type SessionGroups,
+  type SessionCatalog,
   type SessionSummary,
   type WorkspaceView,
 } from '@litch/core'
-import { useMemo } from 'react'
 import { useT } from '../app/appearance.ts'
 import { nameOf } from '../app/device.ts'
-import { useKey, useKeys } from '../app/services.tsx'
+import { useKey } from '../app/services.tsx'
 import { useSidebarNativeChildren } from '../sidebar/state.ts'
 import type { SuggestEntry, SuggestGroup } from './Suggest.tsx'
-import { type SessionCandidate, sessionHits } from './session-hits.ts'
+import { catalogCandidates } from './session-catalog.ts'
+import { sessionHits } from './session-hits.ts'
 
 const NONE = 'none'
 const NO_IDS: string[] = []
@@ -41,37 +41,22 @@ export function useSessionHits(
   const t = useT()
   const { deviceId } = host
   const open = query !== null
-  const groups = useKey<SessionGroups>(open ? keys.groups(deviceId) : NONE)
+  const catalog = useKey<SessionCatalog>(open ? keys.sessionCatalog(deviceId) : NONE)
   const native = useKey<string[]>(open ? keys.nativeChildren(deviceId) : NONE) ?? NO_IDS
   const showNative = useSidebarNativeChildren()
-  const ids = useMemo(() => {
-    const hidden = showNative ? new Set<string>() : new Set(native)
-    return [...new Set(Object.values(groups ?? {}).flat())].filter((id) => !hidden.has(id))
-  }, [groups, native, showNative])
-  const summaries = useKeys<SessionSummary>(
-    open ? ids.map((id) => keys.summary(deviceId, id)) : NO_IDS,
-  )
   const workspaces = useKey<WorkspaceView[]>(open ? keys.workspaces(deviceId) : NONE)
   const device = useKey<DeviceView>(keys.device(deviceId))
   const here = useKey<SessionSummary>(
     open && host.current ? keys.summary(deviceId, host.current) : NONE,
   )
 
-  const candidates: SessionCandidate[] = summaries.flatMap((summary) => {
-    if (!summary) return []
-    const title = mentionTitle(t.text(summary.title)) || summary.id.slice(0, 8)
-    return [
-      {
-        id: summary.id,
-        title,
-        harness: summary.harness,
-        workspace: workspaces?.find((one) => one.id === summary.workspaceId)?.name ?? '',
-        workspaceId: summary.workspaceId,
-        cwd: summary.cwd,
-        updatedAt: summary.updatedAt,
-      },
-    ]
-  })
+  const candidates = catalogCandidates(
+    catalog ?? [],
+    workspaces ?? [],
+    (title) => mentionTitle(t.text(title)),
+    (kind) => t(`session.kind.${kind}`),
+    new Set(showNative ? [] : native),
+  )
   const full = host.bound.length >= SESSION_MENTION_LIMITS.perMessage
   const shown = full
     ? []
@@ -85,7 +70,7 @@ export function useSessionHits(
     id: idOf(one.id),
     kind: 'session',
     title: one.title,
-    note: [one.workspace, nameOf(device, one.harness)].filter(Boolean).join(' · '),
+    note: [one.typeLabel, one.workspace, nameOf(device, one.harness)].filter(Boolean).join(' · '),
     // 行上写了工作区和 harness，底下那一栏只补目录
     ...(one.cwd ? { facts: [{ label: t('at.path'), value: one.cwd }] } : {}),
     words: [],

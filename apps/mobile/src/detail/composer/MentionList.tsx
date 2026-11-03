@@ -6,19 +6,16 @@ import {
   keys,
   mentionTitle,
   SESSION_MENTION_LIMITS,
-  type SessionGroups,
+  type SessionCatalog,
   type SessionSummary,
   type WorkspaceView,
 } from '@litch/core'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { nameOf } from '../../../../../packages/ui/src/app/device.ts'
-import {
-  insertMention,
-  type SessionCandidate,
-  sessionHits,
-} from '../../../../../packages/ui/src/composer/session-hits.ts'
+import { catalogCandidates } from '../../../../../packages/ui/src/composer/session-catalog.ts'
+import { insertMention, sessionHits } from '../../../../../packages/ui/src/composer/session-hits.ts'
 import { findTrigger, type Trigger } from '../../../../../packages/ui/src/composer/suggest.ts'
-import { useKey, useReplica } from '../../shell/services'
+import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import type { SessionExtra } from './drafts'
@@ -56,31 +53,19 @@ export function MentionList({
   const t = useT()
   const theme = useTheme()
   const { c } = theme
-  const { store } = useReplica()
-  const groups = useKey<SessionGroups>(keys.groups(deviceId))
+  const catalog = useKey<SessionCatalog>(keys.sessionCatalog(deviceId))
   const native = useKey<string[]>(keys.nativeChildren(deviceId)) ?? NO_IDS
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId))
   const device = useKey<DeviceView>(keys.device(deviceId))
   const here = useKey<SessionSummary>(sessionId ? keys.summary(deviceId, sessionId) : NONE)
 
-  const hidden = new Set(native)
-  const ids = [...new Set(Object.values(groups ?? {}).flat())].filter((id) => !hidden.has(id))
-  // 单子开着的这一会儿各会话的摘要不用跟着变：直接取一次，不一个个订阅
-  const candidates: SessionCandidate[] = ids.flatMap((id) => {
-    const summary = store.get<SessionSummary>(keys.summary(deviceId, id))
-    if (!summary) return []
-    return [
-      {
-        id,
-        title: mentionTitle(t.text(summary.title)) || id.slice(0, 8),
-        harness: summary.harness,
-        workspace: workspaces?.find((one) => one.id === summary.workspaceId)?.name ?? '',
-        workspaceId: summary.workspaceId,
-        cwd: summary.cwd,
-        updatedAt: summary.updatedAt,
-      },
-    ]
-  })
+  const candidates = catalogCandidates(
+    catalog ?? [],
+    workspaces ?? [],
+    (title) => mentionTitle(t.text(title)),
+    (kind) => t(`session.kind.${kind}`),
+    new Set(native),
+  )
   const full = bound.length >= SESSION_MENTION_LIMITS.perMessage
   const shown = full
     ? []
@@ -122,7 +107,9 @@ export function MentionList({
             {one.title}
           </Text>
           <Text numberOfLines={1} style={[styles.meta, { color: c.ink3 }]}>
-            {[one.workspace, nameOf(device, one.harness)].filter(Boolean).join(' · ')}
+            {[one.typeLabel, one.workspace, nameOf(device, one.harness)]
+              .filter(Boolean)
+              .join(' · ')}
           </Text>
         </Pressable>
       ))}

@@ -1512,6 +1512,10 @@ export const en: Record<MessageKey, Entry> = {
 
   'at.label': 'Mention a session or file',
   'at.group': 'Files and folders',
+  'session.kind.conversation': 'Conversation',
+  'session.kind.child': 'Sub-session',
+  'session.kind.manager': 'Manager',
+  'session.kind.line': 'Work line',
   'at.group.sessions': 'Sessions',
   'mention.open': 'Open session: {about}',
   'mention.gone': 'This session is no longer in the list',

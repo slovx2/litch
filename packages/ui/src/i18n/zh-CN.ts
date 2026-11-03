@@ -1446,6 +1446,10 @@ export const zhCN = {
   // 输入框里打 / 弹出来的单子
   'at.label': '提到会话或文件',
   'at.group': '文件和目录',
+  'session.kind.conversation': '普通对话',
+  'session.kind.child': '子会话',
+  'session.kind.manager': '经理',
+  'session.kind.line': '工作线',
   'at.group.sessions': '会话',
   'mention.open': '打开会话：{about}',
   'mention.gone': '这个会话已不在列表中',

@@ -54,6 +54,11 @@ import {
   managerSessionIds,
 } from '../projection/manager.mjs'
 import { changesQuestions, pendingQuestions } from '../projection/pending-asks.mjs'
+import {
+  catalogUnread,
+  projectSessionCatalog,
+  type SessionCatalog,
+} from '../projection/session-catalog.mjs'
 import type { SidebarActivity } from '../projection/sidebar-activity.mjs'
 import { projectSidebarGroups, type SidebarProjections } from '../projection/sidebar-groups.mjs'
 import { appendOutput, appendSkipping } from '../text/output-cap.mjs'
@@ -63,7 +68,7 @@ import { KeyedStore } from './keyed-store.mjs'
 /** 状态库里有哪些键、每个键放什么 */
 export const keys = {
   history: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:history`,
-  /** SidebarProjections：本设备的未读 / 最近主会话投影，不含经理子树。 */
+  /** SidebarProjections：本设备的未读 / 最近根会话投影，包含经理子树的聚合。 */
   sidebarProjections: (deviceId: string) => `sidebar:${deviceId}:projections`,
   /** string[]：设备标识，按添加顺序 */
   devices: 'devices',
@@ -73,6 +78,10 @@ export const keys = {
   workspaces: (deviceId: string) => `sidebar:${deviceId}:workspaces`,
   /** SessionGroups：每个工作区下面的会话标识，已排好序。置顶的、在自定义分区里的各自单列一组 */
   groups: (deviceId: string) => `sidebar:${deviceId}:groups`,
+  /** SessionCatalog：未归档的全会话目录，含普通对话、子会话、经理和工作线的类型。 */
+  sessionCatalog: (deviceId: string) => `sidebar:${deviceId}:catalog`,
+  /** string[]：全目录的未读线程标识；桌面图标按长度计数，不按根会话聚合。 */
+  catalogUnread: (deviceId: string) => `sidebar:${deviceId}:catalogUnread`,
   /** SectionView[]：这台设备上的组（自定义分区），按建的先后，空的也在。一个都没有就是空数组 */
   sections: (deviceId: string) => `sidebar:${deviceId}:sections`,
   /** 这台设备上停下来等人审批或回答的会话。侧栏把会话折起来一部分时，这些不能折掉 */
@@ -87,8 +96,8 @@ export const keys = {
   /** GroupTallies：每一组里几个在等人、几个在跑、几个只剩后台任务在跑、几个未读。侧栏里收起来的工作区、设备那一行用它 */
   tallies: (deviceId: string) => `sidebar:${deviceId}:tallies`,
   /**
-   * string[]：这台设备上未读的会话（有了新结果、还没点开看过的），按标识排。桌面端的 Dock 角标数它，
-   * 侧栏让它们收不起、折不住，角标上的每一个都能在侧栏里看到记号。停下来等人的不算（那是另一个记号）
+   * string[]：普通侧栏里未读的会话，按标识排，让它们收不起、折不住。
+   * 不含经理树；停下来等人的不算（那是另一个记号）。
    */
   unread: (deviceId: string) => `sidebar:${deviceId}:unread`,
   /** SessionHarnesses：这台设备上每个会话属于哪个 harness。侧栏只看某个 harness 时按它挑会话 */
@@ -857,6 +866,23 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
   ) => {
     const allSessions = sessions
     refreshProjections(deviceId, allSessions)
+    // 保留原选择器的分组次序，但目录独立于普通侧栏的经理树过滤。
+    const catalogGroups = groupSessions(allSessions.values())
+    settlePlaced(catalogGroups, allSessions)
+    const catalog = projectSessionCatalog(
+      Object.values(catalogGroups)
+        .flat()
+        .flatMap((id) => allSessions.get(id) ?? []),
+    )
+    const previousCatalog = store.get<SessionCatalog>(keys.sessionCatalog(deviceId))
+    if (JSON.stringify(previousCatalog) !== JSON.stringify(catalog)) {
+      store.set(keys.sessionCatalog(deviceId), catalog)
+    }
+    const unreadThreads = catalogUnread(catalog)
+    const previousUnread = store.get<string[]>(keys.catalogUnread(deviceId))
+    if (!previousUnread || previousUnread.join('\n') !== unreadThreads.join('\n')) {
+      store.set(keys.catalogUnread(deviceId), unreadThreads)
+    }
     const hidden = managerSessionIds(allSessions.values())
     sessions = new Map([...allSessions].filter(([id]) => !hidden.has(id)))
     const next = groupSessions(sessions.values())

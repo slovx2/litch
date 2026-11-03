@@ -32,6 +32,12 @@
 空查询先显示最近会话；方向键选择结果，Enter 打开并聚焦目标会话输入框；Esc 取消才返回原控件。结果以标题/时间/归档和设备/项目/harness两行显示；没有项目归属的会话显示“无项目”。点击活动会话打开对话，点击归档会话进入只读历史。每台设备最多显示 100 项，超过时请输入更完整的标题。
 全局标题搜索不检索消息正文；手机搜索界面尚未提供。
 
+## @ 引用会话
+
+桌面和手机输入 `@` 可搜索同一设备上未归档的普通对话、子会话、经理和工作线。候选显示类型，也支持按“经理”“工作线”等类型文字搜索；空查询仍按最近更新排序。当前会话、已经引用的会话和隐藏的原生子会话不列出。普通侧栏的经理树过滤不影响这些候选。
+
+On desktop and phone, `@` searches unarchived conversations, sub-sessions, managers and work lines on the same device. Each result shows its type, which is also searchable. Empty searches keep the recent-update order. The current session, already mentioned sessions and hidden native sub-sessions are excluded.
+
 ## 侧栏「未读 / 最近」
 
 桌面「对话」视图在各设备前显示「未读」「最近」，两组可独立收起。

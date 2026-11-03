@@ -447,6 +447,13 @@ export {
   threadTitle,
 } from './projection/session.mjs'
 export {
+  catalogUnread,
+  projectSessionCatalog,
+  type SessionCatalog,
+  type SessionCatalogEntry,
+  type SessionKind,
+} from './projection/session-catalog.mjs'
+export {
   newSessionSettings,
   projectDefaults,
   STANDARD_SPEED,

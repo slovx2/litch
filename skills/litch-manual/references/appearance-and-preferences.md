@@ -88,9 +88,13 @@ notification switch still applies. Manager decisions, scheduled tasks and remote
 a session are outside this scope. Failed scheduled-task runs always notify; success uses the switch.
 
 Unread state is local to each app: a turn ending or failing while unseen creates a dot and contributes
-to the Dock count; opening clears it. Approvals/questions do not add to that count. Unread rows stay
+to the Dock count; opening clears it. The count is unread threads across all devices, including managers
+and work lines, with each thread counted once. It is not the sidebar's count of root conversations.
+Approvals/questions, manager pending items and report-read status do not add to it. Unread rows stay
 findable even behind collapsed parents or “Show more”. The phone has no system push notifications
 and does not share this desktop notification preference.
+
+桌面图标数字是所有设备的未读线程总数，包含经理和每条工作线，各线程单独计数；侧栏“未读”仍按根会话聚合。经理待处理事项和报告已阅状态不计入图标数字。
 
 ### Manager decisions
 

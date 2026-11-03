@@ -6,7 +6,7 @@ import {
   type DeviceView,
   keys,
   newSessionSettings,
-  type SessionGroups,
+  type SessionCatalog,
   type SessionSettings,
   type SessionSummary,
   type WorkspaceView,
@@ -14,10 +14,11 @@ import {
 import { useState } from 'react'
 import { StyleSheet, Switch, Text, View } from 'react-native'
 import type { TaskForm } from '../../../../../packages/ui/src/tasks/form.ts'
+import { sessionTargetOptions } from '../../../../../packages/ui/src/tasks/session-options.ts'
 import { useComposeOptions, useNewSessionDefaults } from '../../detail/composer/options'
 import { PickerSheet } from '../../detail/composer/PickerSheet'
 import { SettingsBar } from '../../detail/composer/SettingsBar'
-import { useKey, useReplica } from '../../shell/services'
+import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Chip, Row } from '../../ui/kit/controls'
 import { Prompt } from '../../ui/kit/overlays'
@@ -79,22 +80,6 @@ export function resolvedForm(form: TaskForm, model: TargetModel): TaskForm {
   return { ...form, harness: model.harness ?? '', workspaceId: model.workspaceId, cwd: model.cwd }
 }
 
-/** 设备上能接着发的会话（没归档的），最近动过的在前 */
-function threadsOf(deviceId: string, store: ReturnType<typeof useReplica>['store']) {
-  const groups = store.get<SessionGroups>(keys.groups(deviceId)) ?? {}
-  const seen = new Set<string>()
-  const list: SessionSummary[] = []
-  for (const ids of Object.values(groups)) {
-    for (const id of ids) {
-      if (seen.has(id)) continue
-      seen.add(id)
-      const summary = store.get<SessionSummary>(keys.summary(deviceId, id))
-      if (summary) list.push(summary)
-    }
-  }
-  return list.sort((a, b) => b.updatedAt - a.updatedAt)
-}
-
 export function TargetFields({
   deviceId,
   form,
@@ -114,14 +99,15 @@ export function TargetFields({
 }) {
   const t = useT()
   const { c, font } = useTheme()
-  const { store } = useReplica()
   const device = useKey<DeviceView>(keys.device(deviceId))
   // 目录在不在 git 仓库里（每次在新工作树里跑要它）
   const branches = useBranches(device, form.target === 'newThread' && model.cwd ? model.cwd : null)
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? []
   const summary = useKey<SessionSummary>(keys.summary(deviceId, form.threadId ?? ''))
   const [asking, setAsking] = useState(false)
-  const [picking, setPicking] = useState<SessionSummary[] | null>(null)
+  const [picking, setPicking] = useState(false)
+  const catalog = useKey<SessionCatalog>(keys.sessionCatalog(deviceId))
+  const sessions = [...(catalog ?? [])].sort((a, b) => b.updatedAt - a.updatedAt)
   const harnesses = device?.harnesses.filter((entry) => entry.state !== 'disabled') ?? []
   const harness = device?.harnesses.find((entry) => entry.id === model.harness)
   const harnessName = (id: string) => device?.harnesses.find((entry) => entry.id === id)?.name ?? id
@@ -154,7 +140,7 @@ export function TargetFields({
                 : t('tasks.form.pickSession')
           }
           detail={[harness?.name, summary?.cwd].filter(Boolean).join(' · ') || undefined}
-          onPress={locked ? undefined : () => setPicking(threadsOf(deviceId, store))}
+          onPress={locked ? undefined : () => setPicking(true)}
         />
       ) : (
         <>
@@ -270,21 +256,23 @@ export function TargetFields({
         onClose={() => setAsking(false)}
       />
       <PickerSheet
-        visible={picking !== null}
+        visible={picking}
         title={t('tasks.form.pickSession')}
         value={form.threadId}
         search={t('composer.modelSearch')}
-        options={(picking ?? []).map((entry) => ({
-          id: entry.id,
-          title: t.text(entry.title),
-          note: [harnessName(entry.harness), entry.cwd].filter(Boolean).join(' · '),
-        }))}
+        options={sessionTargetOptions(
+          sessions,
+          (title) => t.text(title),
+          (kind) => t(`session.kind.${kind}`),
+          harnessName,
+          true,
+        )}
         onPick={(id) => {
-          setPicking(null)
-          const picked = picking?.find((entry) => entry.id === id)
+          setPicking(false)
+          const picked = sessions.find((entry) => entry.id === id)
           onChange({ threadId: id, harness: picked?.harness ?? '' })
         }}
-        onClose={() => setPicking(null)}
+        onClose={() => setPicking(false)}
         testID="task:threads"
       />
     </View>

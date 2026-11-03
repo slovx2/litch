@@ -1,22 +1,16 @@
 // 表单里“到点之后”那一块：每次新建会话（设备、项目或目录、harness、模型强度权限），
 // 或者在已有的会话里接着发（设备、会话）。选择器和新建对话页、输入区底栏是同一套。
 // 建好之后换不了的（哪一种、设备、harness、哪个会话）编辑时只显示不让改。
-import {
-  type DeviceView,
-  keys,
-  LOOSE,
-  type SessionGroups,
-  type SessionSummary,
-  type WorkspaceView,
-} from '@litch/core'
+import { type DeviceView, keys, LOOSE, type SessionCatalog, type WorkspaceView } from '@litch/core'
 import { useT } from '../app/appearance.ts'
 import { nameOf, wireStyle } from '../app/device.ts'
-import { useKey, useKeys } from '../app/services.tsx'
+import { useKey } from '../app/services.tsx'
 import { Picker, type PickerOption } from '../composer/Picker.tsx'
 import { SettingsBar, useComposeOptions } from '../composer/SettingsBar.tsx'
 import { useBranches } from '../composer/useBranches.ts'
 import { PathPicker } from '../path-picker/PathPicker.tsx'
 import type { FormProblems, TaskForm } from './form.ts'
+import { sessionTargetOptions } from './session-options.ts'
 
 interface TargetFieldsProps {
   form: TaskForm
@@ -43,16 +37,6 @@ export function placeOn(device: DeviceView | undefined): Partial<TaskForm> {
   }
 }
 
-const EMPTY_GROUPS: SessionGroups = {}
-
-/** 这台设备上能接着发的会话（侧栏里有的），按侧栏的顺序，同一个只列一次 */
-function useSessions(deviceId: string): SessionSummary[] {
-  const groups = useKey<SessionGroups>(keys.groups(deviceId)) ?? EMPTY_GROUPS
-  const ids = [...new Set(Object.values(groups).flat())]
-  const summaries = useKeys<SessionSummary>(ids.map((id) => keys.summary(deviceId, id)))
-  return summaries.filter((entry) => entry !== undefined)
-}
-
 export function TargetFields({
   form,
   problems,
@@ -69,7 +53,7 @@ export function TargetFields({
     form.target === 'newThread' && form.cwd.trim() ? form.cwd.trim() : null,
   )
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(form.deviceId)) ?? []
-  const sessions = useSessions(form.deviceId)
+  const sessions = useKey<SessionCatalog>(keys.sessionCatalog(form.deviceId)) ?? []
   const options = useComposeOptions(form.deviceId, form.harness || undefined)
   const fixed = editing ? <span className="form-note">{t('tasks.form.fixed')}</span> : null
 
@@ -95,11 +79,12 @@ export function TargetFields({
     })),
     { id: LOOSE, title: t('workspace.none') },
   ]
-  const sessionOptions: PickerOption[] = sessions.map((entry) => ({
-    id: entry.id,
-    title: t.text(entry.title),
-    note: nameOf(device, entry.harness),
-  }))
+  const sessionOptions = sessionTargetOptions(
+    sessions,
+    (title) => t.text(title),
+    (kind) => t(`session.kind.${kind}`),
+    (harness) => nameOf(device, harness),
+  )
 
   return (
     <>
