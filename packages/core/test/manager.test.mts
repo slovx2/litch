@@ -201,6 +201,200 @@ function serviceWorld(
   }
 }
 
+test('答复成功立即发布权威结果，不依赖通知或整板重读；失败保留待定', async () => {
+  for (const mode of ['submit', 'feedback', 'old-feedback']) {
+    const feedback = mode !== 'old-feedback'
+    const { board } = sample()
+    const decision = board.decisions[0]
+    assert.ok(decision)
+    const answered = {
+      ...decision,
+      status: 'answered' as const,
+      revision: decision.revision + 1,
+      updatedAt: decision.updatedAt + 1,
+    }
+    board.posts = [
+      {
+        id: decision.id,
+        kind: 'decision',
+        title: decision.title,
+        body: decision.background,
+        revision: decision.revision,
+        createdAt: decision.createdAt,
+        updatedAt: decision.updatedAt,
+        fields: {},
+        versions: [],
+        discussion: { messages: [], light: false, summary: null, forwarded: 0 },
+      },
+    ]
+    let delayed = false
+    let failing = false
+    const submit = () => {
+      if (failing) throw new Error('提交失败')
+      return {
+        accepted: [answered],
+        rejected: [],
+        delivery: 'queued',
+        acceptedRequests: [],
+        rejectedRequests: [],
+        acceptedQuestions: [],
+        rejectedQuestions: [],
+      }
+    }
+    const w = serviceWorld(
+      {
+        [MANAGER_METHOD.boardRead]: () => (delayed ? new Promise(() => {}) : { board }),
+        [MANAGER_METHOD.answersSubmit]: submit,
+        [MANAGER_METHOD.feedbackSubmit]: submit,
+      },
+      { feedback, posts: true, ignore: true },
+    )
+    await settle()
+    delayed = true
+    failing = true
+    const answers = [
+      { decisionId: decision.id, revision: decision.revision, optionId: null, text: '同意' },
+    ]
+    await assert.rejects(w.service.submit('m1', answers), /提交失败/)
+    assert.equal(w.boards.at(-1)?.board?.decisions[0]?.status, 'open')
+    failing = false
+    if (mode === 'submit') await w.service.submit('m1', answers)
+    else await w.service.feedback({ managerId: 'm1', answers, questions: [] })
+    assert.equal(w.boards.at(-1)?.board?.decisions[0]?.status, 'answered')
+    assert.equal(w.boards.at(-1)?.board?.decisions[0]?.revision, answered.revision)
+    assert.equal(w.boards.at(-1)?.board?.posts?.[0]?.revision, answered.revision)
+    assert.equal(w.boards.at(-1)?.board?.posts?.[0]?.updatedAt, answered.updatedAt * 1000)
+  }
+})
+
+test('部分提交仅移除成功项；提交前旧读取及迟到答复不覆盖更新版本', async () => {
+  const { board } = sample()
+  const decision = board.decisions[0]
+  const other = board.decisions[1]
+  assert.ok(decision && other)
+  const answered = { ...decision, status: 'answered' as const, revision: decision.revision + 1 }
+  let read: () => unknown = () => ({ board })
+  let finish: (value: unknown) => void = () => {}
+  const w = serviceWorld({
+    [MANAGER_METHOD.boardRead]: () => read(),
+    [MANAGER_METHOD.answersSubmit]: () => ({
+      accepted: [answered],
+      rejected: [{ decisionId: other.id, code: 'decisionConflict', message: '', decision: other }],
+      delivery: 'queued',
+    }),
+  })
+  await settle()
+  read = () =>
+    new Promise((resolve) => {
+      finish = resolve
+    })
+  w.service.notification(MANAGER_NOTIFICATION.boardChanged, { managerId: 'm1' })
+  const answers = [decision, other].map((d) => ({
+    decisionId: d.id,
+    revision: d.revision,
+    optionId: null,
+    text: '同意',
+  }))
+  const result = await w.service.submit('m1', answers)
+  assert.equal(result.rejected.length, 1)
+  assert.equal(w.boards.at(-1)?.board?.decisions[0]?.status, 'answered')
+  assert.equal(w.boards.at(-1)?.board?.decisions[1]?.status, 'open')
+  finish({ board })
+  await settle()
+  assert.equal(w.boards.at(-1)?.board?.decisions[0]?.status, 'answered', '废弃提交前的整板回包')
+  const newer = { ...decision, revision: answered.revision + 1 }
+  finish({ board: { ...board, decisions: [newer, other] } })
+  await settle()
+  await w.service.submit('m1', answers)
+  assert.equal(
+    w.boards.at(-1)?.board?.decisions[0]?.status,
+    'open',
+    '保留已由经理重新打开的更新版本',
+  )
+  assert.equal(w.boards.at(-1)?.board?.decisions[0]?.revision, newer.revision)
+})
+
+test('通知观察器已在读取时，界面订阅复用首次读取，不废弃并再读', async () => {
+  const { manager, board } = sample()
+  let reads = 0
+  let finish: (value: { board: ManagerBoard }) => void = () => {}
+  const service = createManagers({
+    deviceId: 'local',
+    online: () => true,
+    supported: () => true,
+    features: () => ({ feedback: true, posts: true, ignore: true }),
+    request: (async (method) => {
+      if (method === MANAGER_METHOD.list)
+        return {
+          managers: [{ ...manager, contact: { ...manager.contact, desktopNotification: true } }],
+        }
+      reads++
+      return new Promise<{ board: ManagerBoard }>((resolve) => {
+        finish = resolve
+      })
+    }) as ManagersHost['request'],
+    changed() {},
+    log() {},
+    fail: () => new ChannelError('internal', '失败'),
+  })
+  const noop = { snapshot() {}, delta() {}, error() {} }
+  service.open(noop)
+  service.resync()
+  await settle()
+  assert.equal(reads, 1)
+  const close = service.openBoard('m1', noop)
+  finish({ board })
+  await settle()
+  assert.equal(reads, 1)
+  close()
+  service.openBoard('m1', noop)
+  await settle()
+  assert.equal(reads, 1, '持续观察的快照也不必再读')
+})
+
+test('成功答复复用通知触发的对账，旧在途读取才补读，已回填的整板不再读取', async () => {
+  for (const stale of [true, false]) {
+    const { board } = sample()
+    const decision = board.decisions[0]
+    assert.ok(decision)
+    const answered = { ...decision, status: 'answered' as const, revision: decision.revision + 1 }
+    let finish: (value: unknown) => void = () => {}
+    let delayed = false
+    const result = { accepted: [answered], rejected: [], delivery: 'queued' }
+    const w = serviceWorld({
+      [MANAGER_METHOD.boardRead]: () =>
+        delayed
+          ? new Promise((resolve) => {
+              finish = resolve
+            })
+          : { board },
+      [MANAGER_METHOD.answersSubmit]: () => result,
+    })
+    await settle()
+    delayed = true
+    w.service.notification(MANAGER_NOTIFICATION.boardChanged, { managerId: 'm1' })
+    const answers = [
+      { decisionId: decision.id, revision: decision.revision, optionId: null, text: '同意' },
+    ]
+    await w.service.submit('m1', answers)
+    const updated = { board: { ...board, decisions: [answered, ...board.decisions.slice(1)] } }
+    finish(stale ? { board } : updated)
+    await settle()
+    assert.equal(w.boards.at(-1)?.board?.decisions[0]?.status, 'answered')
+    assert.equal(
+      w.calls.filter((method) => method === MANAGER_METHOD.boardRead).length,
+      stale ? 3 : 2,
+    )
+    if (stale) {
+      finish(updated)
+      await settle()
+    }
+    const reads = w.calls.filter((method) => method === MANAGER_METHOD.boardRead).length
+    await w.service.submit('m1', answers)
+    assert.equal(w.calls.filter((method) => method === MANAGER_METHOD.boardRead).length, reads)
+  }
+})
+
 test('列表对账不覆盖在途通知，看板失效合并补读，断线废弃结果并保留快照', async () => {
   const { manager, board } = sample()
   let resolveList: (value: unknown) => void = () => {}
@@ -383,14 +577,25 @@ test('比应用旧的设备：不认识的方法提示升级设备服务，只�
   const decision = sample().board.decisions[0]
   assert.ok(decision)
   const answered = { ...decision, status: 'answered' as const, revision: decision.revision + 1 }
+  let submitted = false
   const w = serviceWorld(
     {
-      [MANAGER_METHOD.boardRead]: () => ({ board: sample().board }),
-      [MANAGER_METHOD.answersSubmit]: () => ({
-        accepted: [answered],
-        rejected: [],
-        delivery: 'queued',
+      [MANAGER_METHOD.boardRead]: () => ({
+        board: {
+          ...sample().board,
+          decisions: sample().board.decisions.map((entry) =>
+            submitted && entry.id === answered.id ? answered : entry,
+          ),
+        },
       }),
+      [MANAGER_METHOD.answersSubmit]: () => {
+        submitted = true
+        return {
+          accepted: [answered],
+          rejected: [],
+          delivery: 'queued',
+        }
+      },
       [MANAGER_METHOD.update]: () => {
         throw new RpcError(-32602, 'Scope is required', { litch: 'invalidManager', field: 'scope' })
       },

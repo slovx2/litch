@@ -1,6 +1,6 @@
 // 原帖从权威对象投影；报告独立持久化。讨论、编辑和已阅均校验当前版本。
 import { randomUUID } from 'node:crypto'
-import type { ManagerActor, ManagerDiscussion } from '../../protocol/src/manager.mjs'
+import type { ManagerActor, ManagerChange, ManagerDiscussion } from '../../protocol/src/manager.mjs'
 import type {
   ManagerPost,
   ManagerPostId,
@@ -23,7 +23,14 @@ export class ManagerPosts {
   private get store() {
     return this.owner.store
   }
-  list(managerId: string): ManagerPost[] {
+  list(managerId: string, changes = this.store.changes(managerId)): ManagerPost[] {
+    // 一次看板读取只解析一次历史，再按对象分组；不能让每张帖子重读整份历史。
+    const histories = new Map<string, ManagerChange[]>()
+    for (const change of changes) {
+      const history = histories.get(change.objectId) ?? []
+      history.push(change)
+      histories.set(change.objectId, history)
+    }
     const ids: ManagerPostId[] = this.store
       .objects(managerId)
       .filter((o) => isDecision(o) || isRequest(o))
@@ -41,13 +48,16 @@ export class ManagerPosts {
       if (!ids.includes(state.decisionId)) ids.push(state.decisionId)
     return ids.flatMap((id) => {
       try {
-        return [this.get(managerId, id)]
+        return [this.project(managerId, id, histories.get(id) ?? [])]
       } catch {
         return []
       }
     })
   }
   get(managerId: string, id: string): ManagerPost {
+    return this.project(managerId, id, this.store.changes(managerId))
+  }
+  private project(managerId: string, id: string, changes: ManagerChange[]): ManagerPost {
     let original: Omit<ManagerPost, 'discussion' | 'versions'>
     if (id.startsWith('P-')) {
       const report = this.store.publishedReports(managerId).find((r) => r.id === id)
@@ -102,8 +112,7 @@ export class ManagerPosts {
           : { title: obj.title, body: obj.description, buttonLabel: obj.buttonLabel },
       }
     }
-    const versions = this.store
-      .changes(managerId)
+    const versions = changes
       .filter(
         (c) =>
           c.objectId === id &&

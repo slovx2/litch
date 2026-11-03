@@ -114,16 +114,14 @@ export class DeviceManagers {
       pendingRequests: (board.requests ?? []).filter((request) => request.status === 'open').length,
       pendingReports:
         board.posts?.filter((post) => post.kind === 'report' && post.unread).length ?? 0,
-      pendingSuggestions: this.posts
-        .list(id)
-        .filter(
-          (post) =>
-            post.kind === 'suggestion' &&
-            post.fields.status === 'pending' &&
-            (post.sourceThreadId === manager.threadId ||
-              this.store.history(id).includes(post.sourceThreadId ?? '') ||
-              this.store.suggestionReview(id, post.proposalId ?? '')?.state === 'endorsed'),
-        ).length,
+      pendingSuggestions: (board.posts ?? []).filter(
+        (post) =>
+          post.kind === 'suggestion' &&
+          post.fields.status === 'pending' &&
+          (post.sourceThreadId === manager.threadId ||
+            this.store.history(id).includes(post.sourceThreadId ?? '') ||
+            this.store.suggestionReview(id, post.proposalId ?? '')?.state === 'endorsed'),
+      ).length,
       runningLines: board.lines.filter((line) => line.running).length,
       latestActivity: board.activities[0] ?? null,
       updatedAt: Math.max(manager.updatedAt, board.activities[0]?.at ?? 0),
@@ -177,7 +175,7 @@ export class DeviceManagers {
     activities.sort((a, b) => b.at - a.at)
     return {
       managerId: id,
-      posts: this.posts.list(id),
+      posts: this.posts.list(id, changes),
       relations: projectedRelations(this.store, id),
       situation: this.store.situation(id),
       decisions: objects.filter(isDecision).map((decision) => {
@@ -275,7 +273,9 @@ export class DeviceManagers {
     if (!(Object.values(MANAGER_METHOD) as string[]).includes(method))
       throw new ManagerError('methodNotFound', `Unknown manager method: ${method}.`)
     const id = text(params.managerId, 'managerId')
-    this.manager(id)
+    // 路由这里只校验身份。构造完整经理摘要会额外读取一次整板及历史。
+    if (!this.store.manager(id))
+      throw new ManagerError('unknownManager', 'This manager does not exist.')
     switch (method) {
       case MANAGER_METHOD.reset:
         keys(params, ['managerId', 'boardOnly'])

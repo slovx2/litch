@@ -33,24 +33,28 @@ export function usePost(manager: ManagerView, id: string) {
 }
 export function PostHistory({ post }: { post: ManagerPost | undefined }) {
   const t = useT()
+  const [open, setOpen] = useState(false)
   if (!post?.versions.length) return null
   return (
-    <details className="mg-post-history">
+    <details className="mg-post-history" onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>
         {t('manager.postEdited')} · <Stamp at={post.updatedAt} /> · {t('manager.postHistory')}
       </summary>
-      {post.versions.map((v) => (
-        <article key={`${v.revision}-${v.at}`}>
-          <header>
-            <b>
-              v{v.revision} · {v.title}
-            </b>{' '}
-            <Stamp at={v.at} />
-          </header>
-          <BoardMarkdown text={v.why} />
-          <BoardMarkdown text={v.body} />
-        </article>
-      ))}
+      {/* 收起时不解析历史正文；大看板的旧版本数量远多于首屏卡片。 */}
+      {open
+        ? post.versions.map((v) => (
+            <article key={`${v.revision}-${v.at}`}>
+              <header>
+                <b>
+                  v{v.revision} · {v.title}
+                </b>{' '}
+                <Stamp at={v.at} />
+              </header>
+              <BoardMarkdown text={v.why} />
+              <BoardMarkdown text={v.body} />
+            </article>
+          ))
+        : null}
     </details>
   )
 }

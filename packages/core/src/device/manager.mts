@@ -11,6 +11,7 @@ import {
   MANAGER_NOTIFICATION,
   type Manager,
   type ManagerChangedNotification,
+  type ManagerDecision,
   type ManagerDecisionIgnoreParams,
   type ManagerDecisionReopenParams,
   type ManagerFeedbackSubmitParams,
@@ -60,6 +61,7 @@ interface BoardEntry {
   loading: boolean
   dirty: boolean
   observed: ManagerBoardView | null
+  confirmed: Map<string, number>
 }
 export type Managers = ReturnType<typeof createManagers>
 
@@ -100,8 +102,13 @@ export function createManagers(host: ManagersHost) {
     try {
       const { board } = await host.request(MANAGER_METHOD.boardRead, { managerId })
       if (mine !== epoch || boards.get(managerId) !== entry) return
+      // 通知触发的在途读取可承接提交后的对账；版本不足才补读，不能闪回旧的待定状态。
+      const revisions = new Map(board.decisions.map((decision) => [decision.id, decision.revision]))
+      for (const [id, revision] of entry.confirmed)
+        if ((revisions.get(id as ManagerDecision['id']) ?? 0) < revision) entry.dirty = true
       // 在途期间有失效通知：不先闪出一份已知过时的快照。
       if (!entry.dirty) {
+        entry.confirmed.clear()
         const projected = projectManagerBoard(deviceId, board)
         const manager = managers.get(managerId)
         if (watching(managerId) && manager) {
@@ -142,6 +149,7 @@ export function createManagers(host: ManagersHost) {
         loading: false,
         dirty: false,
         observed: null,
+        confirmed: new Map(),
       }
       boards.set(managerId, entry)
     }
@@ -162,6 +170,53 @@ export function createManagers(host: ManagersHost) {
   const invalidate = (managerId: string) => {
     const entry = boards.get(managerId)
     if (entry) void loadBoard(managerId, entry)
+  }
+  const applyDecisions = (managerId: string, decisions: ManagerDecision[]) => {
+    const entry = boards.get(managerId)
+    const board = entry?.view.board
+    if (!entry || !board || !decisions.length) return
+    const updates = new Map(decisions.map((decision) => [decision.id, decision]))
+    // 提交回包就是设备已保存的状态，先同步给两端，再重读整板补齐历史和动态。
+    // 版本更高的通知可能先到，迟到的提交结果不能把它覆盖回去。
+    const next = board.decisions.map((previous) => {
+      const decision = updates.get(previous.id)
+      return decision && decision.revision > previous.revision
+        ? projectManagerDecision(decision)
+        : previous
+    })
+    if (next.every((decision, index) => decision === board.decisions[index])) return
+    const posts = board.posts?.map((post) => {
+      const decision = next.find((decision) => decision.id === post.id)
+      return post.kind === 'decision' && decision && decision.revision > post.revision
+        ? { ...post, revision: decision.revision, updatedAt: decision.updatedAt }
+        : post
+    })
+    entry.view = {
+      ...entry.view,
+      board: { ...board, decisions: next, ...(posts ? { posts } : {}) },
+    }
+    publishBoard(entry)
+    const manager = managers.get(managerId)
+    const pendingDecisions = next.filter((decision) => decision.status === 'open').length
+    if (manager && manager.pendingDecisions !== pendingDecisions) {
+      const updated = { ...manager, pendingDecisions }
+      managers.set(managerId, updated)
+      for (const sink of sinks) sink.delta([{ op: 'manager.upsert', manager: updated }])
+    }
+  }
+  const refreshAnswers = (managerId: string, decisions: ManagerDecision[], complete: boolean) => {
+    const entry = boards.get(managerId)
+    const known = new Map(
+      entry?.view.board?.decisions.map((decision) => [decision.id, decision.revision]),
+    )
+    // 回包前已收到相同或更高版本的整板时，无需再次对账。
+    const pending = decisions.filter(
+      (decision) => decision.revision > (known.get(decision.id) ?? 0),
+    )
+    applyDecisions(managerId, decisions)
+    if (!entry || !complete || !decisions.length) return invalidate(managerId)
+    for (const decision of pending) entry.confirmed.set(decision.id, decision.revision)
+    if (entry.confirmed.size && !entry.loading) void loadBoard(managerId, entry)
   }
   const reconcile = async () => {
     const mine = epoch
@@ -268,7 +323,8 @@ export function createManagers(host: ManagersHost) {
       const first = entry.sinks.size === 0
       entry.sinks.add(sink)
       sink.snapshot(entry.view)
-      if (first) void loadBoard(managerId, entry)
+      // 通知观察器正在读取或已有持续订阅的快照时可以复用；新增读者不代表快照失效。
+      if (first && !entry.loading && !entry.observed) void loadBoard(managerId, entry)
       const watched = entry
       return () => {
         watched.sinks.delete(sink)
@@ -282,6 +338,7 @@ export function createManagers(host: ManagersHost) {
         entry.loading = false
         entry.dirty = false
         entry.observed = null
+        entry.confirmed.clear()
       }
       if (!host.supported()) {
         available = false
@@ -304,6 +361,7 @@ export function createManagers(host: ManagersHost) {
         entry.loading = false
         entry.dirty = false
         entry.observed = null
+        entry.confirmed.clear()
       }
     },
     notification(method: string, params: unknown): boolean {
@@ -353,7 +411,7 @@ export function createManagers(host: ManagersHost) {
             answers: params.answers,
           }),
         )
-        invalidate(params.managerId)
+        refreshAnswers(params.managerId, answered.accepted, !answered.rejected.length)
         return {
           ...projectManagerAnswers(answered),
           acceptedRequests: [],
@@ -363,7 +421,11 @@ export function createManagers(host: ManagersHost) {
         }
       }
       const result = await guarded(() => host.request(MANAGER_METHOD.feedbackSubmit, params))
-      invalidate(params.managerId)
+      refreshAnswers(
+        params.managerId,
+        result.accepted,
+        !result.rejected.length && !params.questions.length && !params.requests?.length,
+      )
       return {
         ...projectManagerAnswers(result),
         acceptedRequests: result.acceptedRequests.map(projectManagerRequest),
@@ -380,7 +442,7 @@ export function createManagers(host: ManagersHost) {
       const result = await guarded(() =>
         host.request(MANAGER_METHOD.answersSubmit, { managerId, answers }),
       )
-      invalidate(managerId)
+      refreshAnswers(managerId, result.accepted, !result.rejected.length)
       return projectManagerAnswers(result)
     },
     async ignore(params: ManagerDecisionIgnoreParams) {
