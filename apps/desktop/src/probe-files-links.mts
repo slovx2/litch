@@ -89,7 +89,7 @@ export async function mockMenu(): Promise<MenuSeen> {
   await until('又复制了一次', () => clipboard.length === 2)
 
   // 加入对话：变成输入框上面的一片（和打 @ 选中的是同一种），输入框里已经写的字不动
-  const chips = () => all('.dock .cmp-chip[data-kind="file"]')
+  const chips = () => all('.dock .cmp-file-card')
   const chipNames = () =>
     chips()
       .map((chip) => text(one('.ell', chip)))
@@ -99,7 +99,7 @@ export async function mockMenu(): Promise<MenuSeen> {
   await pick('Makefile', 'mention')
   await until('多了一片', () => chips().length === 1)
   const mentioned = chipNames()
-  const mentionPath = chips()[0]?.title ?? ''
+  const mentionPath = one<HTMLElement>('.attachment-card-open', chips()[0])?.title ?? ''
   const mentionTyped = area.value
   const mentionFocus = await kit.seen(() => document.activeElement === area, 2000)
   await pick('docs', 'mention')

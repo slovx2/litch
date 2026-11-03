@@ -1,5 +1,5 @@
-// 不是图片的文件的验收：选文件、拖文件，本机设备上按路径提到、远程设备上只带文本文件的内容、带不了的当场说明。
-// 远程那一步用的构建机在模拟核心里开着“操作本机”：带不了内容的文件按这台电脑上的路径提到（关着时的拒绝在 ui 的单元测试里）。
+// 普通文件验收：可访问的本机路径直接引用，无路径的文本与二进制都上传；超限文件明确拒绝。
+// 远程那一步开着“操作本机”，两个文件都引用控制端路径；真实入口经隔离设备服务验证上传字节。
 // 接在带着的文字那一组后面，模拟核心和真实入口都跑。
 // 原生 codex 上“提到的文件把路径写进正文”这一条不在这里量：模拟核心里本机的 Codex 是没装上的样子，发不了消息；
 // 它在核心的单元测试里（declared.test.mts），界面上的在“@ 提到文件”那一组里量（远程的 Codex 会话）。
@@ -24,25 +24,23 @@ export type FilesStage =
 
 export interface FilesProbe {
   /**
-   * 本机设备，选了一个文本文件和一个二进制文件：两个都按路径提到（片上是名字，鼠标移上去是完整的路径）；
-   * 再拖进来两个拿不到路径的：文本的内容带上了（一片带名字的文字），二进制的没带上、说了是哪个；
-   * 发出去之后对话里那条消息带着提到的文件、正文里有那段内容；真实入口上回话里有那个文件的路径
+   * 两个本机文件显示为文件卡；无路径的文本和二进制上传，超限文件拒绝。
+   * 发送后保留文件卡、正文不展开内容；真实模型读回上传字节。
    */
   local: {
     chips: string[]
     titles: string[]
     button: string
-    dropped: { text: string[]; said: string }
+    dropped: { files: string[]; said: string }
     sent: { mentions: string[]; body: string; cleared: boolean; heard: boolean | null }
     /** 一种一行：“皮肤/明暗｜横向溢出的像素｜文件片上的字的对比度” */
     layouts: string[]
   } | null
   /**
-   * 远程设备（开着“操作本机”）：文本文件变成一片带名字的文字，二进制的按这台电脑上的路径提到（片的说明写着），
-   * 没有拒绝的说明；按钮上写着其他文件以这台电脑上的路径提及
+   * 远程设备开着“操作本机”：文本与二进制都按控制端路径引用，卡片说明路径归属。
    */
   remote: { text: string[]; files: number; titles: string[]; said: string; button: string } | null
-  /** 新建对话页：选一个文本文件，出了一片（本机设备是提到的文件，远程设备是带名字的文字） */
+  /** 新建对话页：选一个文本文件，显示一张文件卡 */
   fresh: { chips: number } | null
 }
 
@@ -97,7 +95,7 @@ export async function filesStep(
   }
   const press = (target: EventTarget, key: string) =>
     target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
-  const fileChips = () => all('.dock .cmp-chip[data-kind="file"]')
+  const fileChips = () => all('.dock .cmp-file-card .attachment-card-open')
   const textChips = () => all('.dock .cmp-chip[data-kind="text"]')
   const labels = (chips: HTMLElement[]) => chips.map((chip) => text(one('.ell', chip)))
   const hint = () => text(one('.dock .cmp-hint.err'))
@@ -130,7 +128,7 @@ export async function filesStep(
     press(field, 'Enter')
     const sent = turnOf(await until('发出去的那一条', () => landed(words, lastBefore)))
     await frame()
-    const cleared = all('.dock .cmp-chip').length === 0 && area()?.value === ''
+    const cleared = all('.dock .cmp-atts > *').length === 0 && area()?.value === ''
     await idle()
     await sleep(200)
     return { turn: all('.turn').find((entry) => turnOf(entry) === sent), cleared }
@@ -159,7 +157,7 @@ export async function filesStep(
     const chips = labels(fileChips())
     const titles = fileChips().map((chip) => chip.getAttribute('title') ?? '')
     const shown = button()
-    // 样子：文件的片和技能的片是同一种，这里只量它自己的字和这一排有没有溢出
+    // 检查文件卡名字的对比度及附件行溢出。
     type Rgba = [number, number, number, number]
     const parse = (color: string): Rgba => {
       const parts = (color.match(/-?[\d.]+(?:e-?\d+)?/g) ?? []).map(Number)
@@ -235,12 +233,16 @@ export async function filesStep(
     const data = new DataTransfer()
     data.items.add(new File(['拖进来的一段\n记号 LITCH-DROP-6640'], 'dragged.txt'))
     data.items.add(new File([new Uint8Array([0x89, 0x50, 0, 1, 2, 0xff])], 'dragged.bin'))
+    data.items.add(new File([new Uint8Array(16 * 1024 * 1024 + 1)], 'too-large.bin'))
     one('.dock .cmp')?.dispatchEvent(
       new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }),
     )
-    await until('拖进来的文本文件的片', () => textChips().length === 1, 5000).catch(() => null)
+    await until('上传后两张文件卡', () => fileChips().length === 3, 30_000).catch(() => null)
     await until('带不上的说明', hint, 5000).catch(() => null)
-    const dropped = { text: labels(textChips()), said: hint() }
+    const dropped = {
+      files: labels(fileChips()).filter((name) => name.startsWith('dragged.')),
+      said: hint(),
+    }
     const words = '看看这两个文件'
     const { turn, cleared } = await send(words)
     const bubble = one('.umsg', turn)
@@ -252,13 +254,14 @@ export async function filesStep(
         button: shown,
         dropped,
         sent: {
-          mentions: all('.atts .mention', bubble ?? document).map(text),
+          mentions: all('.atts .attachment-card-info > span', bubble ?? document).map(text),
           body: text(one('.umsg-text', bubble ?? document)),
           cleared,
-          // 假模型把收到的话原样带回来：里面有那个文件在磁盘上的位置和拖进来那段的记号，就是都到了
+          // 假模型从隔离设备的上传目录读回文本与二进制，证明真实字节已落盘且引用送到了模型。
           heard: real
             ? whole.split(`${dir}/${NOTES}`).length - 1 >= 1 &&
-              whole.split('LITCH-DROP-6640').length - 1 >= 2
+              whole.includes('LITCH-DROP-6640') &&
+              whole.includes('8950000102ff')
             : null,
         },
         layouts,
@@ -267,8 +270,7 @@ export async function filesStep(
   }
 
   if (stage === 'remote') {
-    await until('文本文件的片', () => textChips().length === 1, 10_000).catch(() => null)
-    await until('这台电脑上的文件的片', () => fileChips().length === 1, 5000).catch(() => null)
+    await until('这台电脑上的两张文件卡', () => fileChips().length === 2, 10_000).catch(() => null)
     const seen = {
       text: labels(textChips()),
       files: fileChips().length,
@@ -281,8 +283,8 @@ export async function filesStep(
     return { remote: seen }
   }
 
-  await until('选中的文件的片', () => all('.dock .cmp-chip').length > 0, 10_000).catch(() => null)
-  const chips = all('.dock .cmp-chip').length
+  await until('选中的文件卡', () => fileChips().length > 0, 10_000).catch(() => null)
+  const chips = fileChips().length
   clear()
   await frame()
   // 那两个名字只是给上面几步用的
@@ -299,24 +301,27 @@ export function judgeFiles(probe: FilesProbe, real: boolean, dir: string): strin
   if (!local) return ['带文件：本机设备上的那一步没有量到']
   check(
     local.chips.join() === 'litch-notes.md,litch-blob.bin',
-    `本机设备上选两个文件，该是两片提到的文件，实际是 ${local.chips.join() || '没有'}`,
+    `本机设备上选两个文件，该是两张文件卡，实际是 ${local.chips.join() || '没有'}`,
   )
   check(
-    local.titles.every((title) => title.includes(dir)),
+    local.titles.length === 2 && local.titles.every((title) => title.includes(dir)),
     `提到的文件那一片上没有完整的路径：${local.titles.join('；')}`,
   )
   check(local.button.length > 0, '加附件的按钮上没有写能带什么')
   check(
-    local.dropped.text.join() === 'dragged.txt',
-    `拖进来一个拿不到路径的文本文件，该是一片带名字的文字，实际是 ${local.dropped.text.join() || '没有'}`,
+    local.dropped.files.join() === 'dragged.txt,dragged.bin',
+    `无路径文本和二进制上传后应显示两张文件卡，实际是 ${local.dropped.files.join() || '没有'}`,
   )
   check(
-    local.dropped.said.includes('dragged.bin'),
+    local.dropped.said.includes('too-large.bin'),
     `拖进来一个带不了的文件，没有说是哪个：“${local.dropped.said}”`,
   )
   check(local.sent.cleared, '发出去之后输入区里的片或者字还在')
-  check(local.sent.body.includes('dragged.txt:'), '文件的内容并进正文时前面没有它的名字')
-  check(local.sent.body.includes('LITCH-DROP-6640'), '发出去的那条消息里没有拖进来那个文件的内容')
+  check(local.sent.body === '看看这两个文件', '文件内容或元数据不应展开到用户消息正文')
+  check(
+    local.sent.mentions.join() === 'litch-notes.md,dragged.txt,dragged.bin',
+    `发出的文件卡不完整：${local.sent.mentions.join()}`,
+  )
   if (real) {
     check(local.sent.heard === true, '真实入口：回话里没有那个文件的路径或者内容，它没到模型手里')
   } else {
@@ -337,13 +342,12 @@ export function judgeFiles(probe: FilesProbe, real: boolean, dir: string): strin
   }
   if (remote) {
     check(
-      remote.text.join() === 'litch-notes.md' && remote.files === 1,
-      `远程设备上选一个文本文件、一个二进制文件，该是一片带名字的文字加一片文件，实际是文字 ${remote.text.join() || '没有'}、文件 ${remote.files} 片`,
+      remote.text.length === 0 && remote.files === 2,
+      `可访问控制端路径时，文本和二进制应都显示文件卡，实际是文字 ${remote.text.join() || '没有'}、文件 ${remote.files} 张`,
     )
     check(
-      remote.titles.length === 1 &&
-        (remote.titles[0] ?? '').includes('litch-blob.bin') &&
-        (remote.titles[0] ?? '').includes('在这台电脑上'),
+      remote.titles.length === 2 &&
+        remote.titles.every((title) => title.includes(dir) && title.includes('在这台电脑上')),
       `远程设备上二进制文件的片没有写明路径在这台电脑上：${remote.titles.join('；') || '没有'}`,
     )
     check(remote.said === '', `远程设备开着“操作本机”，不该有拒绝的说明：“${remote.said}”`)

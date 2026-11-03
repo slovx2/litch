@@ -4,6 +4,7 @@
 //
 // 用法：node scripts/client-fixture.mjs [--ws 端口]
 //   默认监听临时目录里的 unix 套接字；--ws 改成监听回环上的端口（只给浏览器里调界面用）。
+//   --device 在 Unix 入口外加隔离设备服务，供输入区上传附件验收。
 //   就绪后输出一行 LITCH_FIXTURE {"entry": "...", "root": "..."}，然后一直运行到被结束，退出时清掉临时目录。
 //   会话造完之后再发消息：话里带“改个文件”时，假模型会调 bash 工具在会话的工作目录里接着写一个文件、
 //   新写一个文件（见 client-fixture-edit.mjs），差异面板的验收拿它看“代理改完，回合结束后面板自己跟上”。
@@ -16,6 +17,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocket } from 'ws'
+import { parseFileAttachments } from '../packages/protocol/src/file-attachments.mts'
 import { ASK_TOOL, askOffered, askReply, installAskExtension } from './client-fixture-ask.mjs'
 import { echoReply } from './client-fixture-echo.mjs'
 import { editReply } from './client-fixture-edit.mjs'
@@ -75,6 +77,15 @@ const model = createServer(async (req, res) => {
   const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
   requests++
   askReady ||= askOffered(body)
+  // 附件探针验证设备落盘的真实字节；只读取本夹具的上传目录。
+  const attached = parseFileAttachments(lastUserText(body))?.files ?? []
+  const uploaded = attached
+    .filter((file) => file.path.startsWith(`${dirs.home}/.litch/attachments/`))
+    .map((file) => {
+      const data = readFileSync(file.path)
+      return `${file.name}: ${file.name.endsWith('.bin') ? data.toString('hex') : data.toString()}`
+    })
+    .join('\n')
   const reply =
     replies.shift() ??
     (paced
@@ -82,7 +93,7 @@ const model = createServer(async (req, res) => {
         editReply(body, lastUserText(body)) ??
         echoReply(body, lastUserText(body)) ??
         askReply(body, lastUserText(body)) ?? {
-          text: `收到：${lastUserText(body)}${lastUserImages(body) ? `（图 ${lastUserImages(body)} 张）` : ''}\n\n这是隔离入口里的假模型在回话，分成几段慢慢发，好让界面上看得到字是一点一点出来的。`,
+          text: `收到：${lastUserText(body)}${lastUserImages(body) ? `（图 ${lastUserImages(body)} 张）` : ''}${uploaded ? `\n附件读回：${uploaded}` : ''}\n\n这是隔离入口里的假模型在回话，分成几段慢慢发，好让界面上看得到字是一点一点出来的。`,
           pace: 200,
         })
       : { text: '好的。' })
@@ -199,10 +210,12 @@ child.stderr.on('data', (data) => {
   engineLog = (engineLog + data).slice(-4000)
 })
 
+let device
 let cleaned = false
 const cleanup = (code) => {
   if (cleaned) return
   cleaned = true
+  device?.kill('SIGTERM')
   child.kill('SIGTERM')
   model.close()
   rmSync(root, { recursive: true, force: true })
@@ -281,5 +294,51 @@ try {
   cleanup(1)
 }
 
-console.log(`LITCH_FIXTURE ${JSON.stringify({ entry: listen, root })}`)
+let entry = listen
+if (process.argv.includes('--device')) {
+  // 上传依赖设备服务声明的主目录；输入区实测通过真实聚合面，不伪造 fs 回包。
+  entry = `unix://${join(root, 'device.sock')}`
+  device = spawn(
+    process.execPath,
+    [
+      join(repo, 'packages/device/dist/device/src/main.mjs'),
+      '--listen',
+      entry,
+      '--state',
+      join(root, 'device'),
+      '--upstream',
+      `pi=${listen}`,
+      '--wrap-up-reminder',
+      'off',
+    ],
+    {
+      env: { PATH: process.env.PATH, HOME: dirs.home, TMPDIR: root },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  )
+  try {
+    await new Promise((done, fail) => {
+      let output = ''
+      let errors = ''
+      const timer = setTimeout(() => fail(new Error(`设备服务未就绪：${errors}`)), 30_000)
+      device.stderr.on('data', (data) => {
+        errors = (errors + data).slice(-4000)
+      })
+      device.stdout.on('data', (data) => {
+        output += data
+        if (!output.split('\n').includes('LITCH_DEVICE_READY')) return
+        clearTimeout(timer)
+        done()
+      })
+      device.once('exit', (code) => {
+        clearTimeout(timer)
+        fail(new Error(`设备服务退出 ${code}：${errors}`))
+      })
+    })
+  } catch (error) {
+    console.error(error)
+    cleanup(1)
+  }
+}
+console.log(`LITCH_FIXTURE ${JSON.stringify({ entry, root })}`)
 console.log('隔离入口已就绪，按 Ctrl+C 结束并清理。')

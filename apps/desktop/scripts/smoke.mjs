@@ -88,10 +88,14 @@ const mode = useRemote
 /** 起隔离入口，等它把会话造好。返回入口的地址和结束它的函数 */
 function startFixture() {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['scripts/client-fixture.mjs'], {
-      cwd: repo,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
+    const child = spawn(
+      process.execPath,
+      ['scripts/client-fixture.mjs', ...(probe === 'compose' ? ['--device'] : [])],
+      {
+        cwd: repo,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    )
     let output = ''
     const onData = (chunk) => {
       output += chunk

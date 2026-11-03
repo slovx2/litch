@@ -558,8 +558,8 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   if (!png) throw new Error('画不出测试用的图片')
   const clipboard = new DataTransfer()
   clipboard.items.add(new File([png], 'image.png', { type: 'image/png' }))
-  // 另一个是带不了的：不是图片，也不是文本，剪贴板里的文件对象又没有磁盘上的位置
-  clipboard.items.add(new File([new Uint8Array([0x89, 0x50, 0, 1, 2, 0xff])], '说明.bin'))
+  // 普通二进制现在可以上传；使用超过 16 MB 上限的文件验证图片仍可添加、拒绝原因明确。
+  clipboard.items.add(new File([new Uint8Array(16 * 1024 * 1024 + 1)], '说明.bin'))
   const thumbs = () => all('.cmp-att').length
   const target = await until('输入框', area)
   target.dispatchEvent(

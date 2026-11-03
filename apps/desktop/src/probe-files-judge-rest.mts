@@ -82,7 +82,7 @@ function judgeMenu(menu: MenuSeen): string[] {
     `“加入对话”动了输入框里已经写的字：${JSON.stringify(menu.mentionTyped)}`,
   )
   must(
-    menu.mentionPath.endsWith(' Makefile'),
+    menu.mentionPath === 'Makefile',
     `那一片指的路径不是相对工作目录的：${JSON.stringify(menu.mentionPath)}`,
   )
   must(

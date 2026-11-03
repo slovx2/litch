@@ -100,7 +100,7 @@ export async function mentionProbe(real: boolean): Promise<MentionProbe> {
   const names = () => rows().map((row) => text(one('b', row)))
   const picked = () => one('.dock .sug-opt[aria-selected="true"]')
   const note = () => text(one('.dock .sug-note'))
-  const chips = () => all('.dock .cmp-chip[data-kind="file"]')
+  const chips = () => all('.dock .cmp-file-card .attachment-card-open')
   const labels = () => chips().map((chip) => text(one('.ell', chip)))
   const idle = () => until('这一轮结束', () => !running() && !one('.req') && area(), 90_000)
   const clear = () => {
@@ -150,14 +150,14 @@ export async function mentionProbe(real: boolean): Promise<MentionProbe> {
     press(field, 'Enter')
     const sent = turnOf(await until('发出去的那一条', () => landed(words, lastBefore)))
     await frame()
-    const cleared = all('.dock .cmp-chip').length === 0 && area()?.value === ''
+    const cleared = all('.dock .cmp-atts > *').length === 0 && area()?.value === ''
     await idle()
     await sleep(200)
     const turn = all('.turn').find((entry) => turnOf(entry) === sent)
     const bubble = one('.umsg', turn)
     return {
       whole: text(turn),
-      mentions: all('.atts .mention', bubble ?? document).map(text),
+      mentions: all('.atts .attachment-card-info > span', bubble ?? document).map(text),
       text: text(one('.umsg-text', bubble ?? document)),
       cleared,
     }

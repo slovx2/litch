@@ -636,11 +636,12 @@ export async function slashLook(sheet: 'slash' | 'at' = 'slash'): Promise<SlashL
   const input = await until('输入框', area)
   for (const cross of all('.dock .cmp-chip-x')) cross.click()
   input.focus()
+  const chipSelector = sheet === 'at' ? '.dock .cmp-file-card' : '.dock .cmp-chip'
   // 先带上一片，再把单子打开，走到头一项技能（或者文件）上：底下那一栏这时有来源和位置
   write(input, first)
   await until('单子', () => one(`.dock .sug-opt[data-kind="${kind}"]`))
   press(input, 'Enter')
-  await until('带上的那一片', () => one('.dock .cmp-chip'))
+  await until('带上的附件', () => one(chipSelector))
   /** 把单子打开，走到头一项技能（或者文件）上（换语言之后输入区可能是新的一份，重新来一遍） */
   const show = async () => {
     const field = await until('输入框', area)
@@ -711,7 +712,7 @@ export async function slashLook(sheet: 'slash' | 'at' = 'slash'): Promise<SlashL
         one('.dock .cmp-bar'),
         ...all('.dock .sug-opt'),
         ...all('.dock .sug-fact'),
-        ...all('.dock .cmp-chip'),
+        ...all(chipSelector),
       ].map((box) => (box ? box.scrollWidth - box.clientWidth : 0)),
     )
   const faults = () => {
@@ -731,7 +732,7 @@ export async function slashLook(sheet: 'slash' | 'at' = 'slash'): Promise<SlashL
       const at = fact.getBoundingClientRect()
       if (at.right > box.right + 0.5) found.push('底下那一栏里的字伸到单子外面')
     }
-    const chip = one('.dock .cmp-chip')?.getBoundingClientRect()
+    const chip = one(chipSelector)?.getBoundingClientRect()
     if (!chip || chip.left < cmp.left - 0.5 || chip.right > cmp.right + 0.5) {
       found.push('片不在输入区里')
     }
@@ -778,7 +779,7 @@ export async function slashLook(sheet: 'slash' | 'at' = 'slash'): Promise<SlashL
           readable('.dock .sug-opt[aria-selected="true"] b'),
           readable('.dock .sug-head'),
           readable('.dock .sug-foot-note'),
-          readable('.dock .cmp-chip .ell'),
+          readable(`${chipSelector} .ell`),
         ]
         layouts.push(
           `${language}/${skin}/${theme}｜${Math.ceil(overflow())}｜${faults()}｜${numbers
