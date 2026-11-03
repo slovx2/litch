@@ -80,6 +80,7 @@ interface Remote {
   roots: Set<string>
   /** 其中界面是用 ~ 开头的写法给的那些 */
   short: Set<string>
+  uploads: Map<string, string>
 }
 
 export function createMockFiles(host: MockFilesHost): MockFiles {
@@ -153,6 +154,27 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
       }
     }
     const { path } = params as { path: string }
+    if (method === 'fs/createDirectory') return {}
+    if (method === 'fs/writeFile') {
+      remote.uploads.set(path, (params as { dataBase64: string }).dataBase64)
+      return {}
+    }
+    if (method === 'fs/remove') {
+      for (const key of remote.uploads.keys())
+        if (key.startsWith(path + '/')) remote.uploads.delete(key)
+      return {}
+    }
+    if (remote.uploads.has(path)) {
+      if (method === 'fs/readFile') return { dataBase64: remote.uploads.get(path) }
+      if (method === 'fs/getMetadata')
+        return {
+          isDirectory: false,
+          isFile: true,
+          isSymlink: false,
+          createdAtMs: 0,
+          modifiedAtMs: 0,
+        }
+    }
     // 固定的根外文件与项目示例树分开，临时根改变时文件身份仍保持不变。
     const outside = OUTSIDE_FILE_DATA[path]
     if (outside || path === OUTSIDE_FILE_ROOT) {
@@ -236,6 +258,7 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
     const remote: Remote = {
       roots: new Set(),
       short: new Set(),
+      uploads: new Map(),
       files: createFiles({
         previewSupported: () => deviceId !== NO_FILES,
         clock,
@@ -345,6 +368,9 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
       return { ...content, path: outward(root, content.path) }
     },
 
+    async 'files.uploadAttachment'({ deviceId, ...file }, signal) {
+      return filesOf(deviceId, null).upload(file, signal)
+    },
     async 'files.read'({ deviceId, root, path }, signal) {
       const files = filesOf(deviceId, root)
       const content: FileContent = await files.read(expand(root), expand(path), signal)

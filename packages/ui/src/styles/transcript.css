@@ -279,6 +279,10 @@
   line-clamp: 20;
   overflow: hidden;
 }
+.atts {
+  min-width: 0;
+  max-width: 100%;
+}
 .umsg .atts {
   display: flex;
   flex-wrap: wrap;
@@ -770,4 +774,60 @@ button.smen:focus-visible {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* 文件卡的收缩边界独立于文件名长度，输入区和用户气泡共用。 */
+.attachment-card-wrap,
+.cmp-file-card {
+  min-width: 0;
+  max-width: 100%;
+  list-style: none;
+}
+.attachment-card {
+  display: flex;
+  align-items: center;
+  width: 240px;
+  max-width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--hover);
+}
+.attachment-card-open {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.attachment-card-open > svg {
+  flex: none;
+}
+.attachment-card-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font: calc(13px * var(--fs)) / 1.4 var(--ui);
+}
+.attachment-card-info small {
+  color: var(--ink-3);
+  font: calc(12px * var(--fs)) / 1.4 var(--ui);
+}
+.attachment-card-error {
+  display: block;
+  max-width: 240px;
+  overflow-wrap: anywhere;
+  color: var(--ink-3);
+  font: calc(12px * var(--fs)) / 1.4 var(--ui);
+}
+.mention {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

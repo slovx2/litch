@@ -92,6 +92,7 @@ export function EditMessage({
           refillDraft(deviceId, sessionId, {
             text,
             images: message.images,
+            files: message.extras.filter((extra) => extra.kind === 'file'),
             comments: (parseComments(target.user.text)?.comments ?? []).map(({ quote, note }) => ({
               kind: 'comment',
               itemId: UNKNOWN_ITEM,

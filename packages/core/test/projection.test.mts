@@ -35,7 +35,7 @@ test('条目：用户消息把文字拼起来，别的输入变成附件', () =>
     text: '看这张图\n第二段',
     attachments: [
       { kind: 'image', label: 'a.png' },
-      { kind: 'file', label: 'serve.go' },
+      { kind: 'file', label: 'serve.go', path: '/work/serve.go' },
     ],
   })
 })

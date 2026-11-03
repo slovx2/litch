@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { clientPathsBlock, parseClientPaths } from '../../protocol/src/client-paths.mjs'
+import { parseFileAttachments } from '../../protocol/src/file-attachments.mjs'
 import type { MessageExtra, OutgoingMessage } from '../src/model.mjs'
 import { projectItem } from '../src/projection/items.mjs'
 import { bodyOf, localUserMessage, outgoing, toInput } from '../src/projection/outgoing.mjs'
@@ -37,20 +38,19 @@ test('那一段：说明 + 每个路径一行，文件夹补斜杠，尖括号�
   assert.equal(parseClientPaths('<litch-client-paths>\n说明\n</litch-client-paths>'), null)
 })
 
-test('本机设备的文件夹：路径补斜杠、按 mention 带；不收 mention 的写进正文', () => {
+test('本机设备的文件夹：路径补斜杠、统一文本带元数据', () => {
   const message = outgoing(
     '看看',
     [],
     [{ kind: 'file', name: 'docs', path: '/w/docs', folder: true }],
   )
   assert.deepEqual(message.extras, [{ kind: 'file', name: 'docs', path: '/w/docs/', folder: true }])
-  assert.deepEqual(toInput(message, true), [
-    { type: 'text', text: '看看', text_elements: [] },
-    { type: 'mention', name: 'docs', path: '/w/docs/' },
+  assert.deepEqual(toInput(message, true), toInput(message, false))
+  assert.deepEqual(parseFileAttachments(bodyOf(message, false))?.files, [
+    { name: 'docs', path: '/w/docs/', folder: true, location: 'device' },
   ])
-  assert.equal(bodyOf(message, false), '看看\n\n/w/docs/')
   assert.deepEqual(localUserMessage('u1', message, true).attachments, [
-    { kind: 'folder', label: 'docs' },
+    { kind: 'folder', label: 'docs', path: '/w/docs/' },
   ])
 })
 
@@ -63,15 +63,17 @@ test('这台电脑上的路径：不走 mention，写成那一段，排在提到
   const input = toInput(message, true)
   assert.equal(input.length, 1)
   const body = bodyOf(message, true)
-  assert.ok(body.indexOf('<litch-client-paths>') < body.indexOf('<litch-session-mentions>'))
-  assert.match(body, /<path kind="folder">\/Users\/me\/sa攻略\/<\/path>/)
+  assert.ok(body.indexOf('<litch-file-attachments>') < body.indexOf('<litch-session-mentions>'))
+  assert.match(body, /litch_machine/)
 })
 
 test('对话里的条目：先显示的那条和对面回显的一样，那一段化成附件，text 里没有它', () => {
   const message = outgoing('看看这个文件夹', [], [folder])
   const local = localUserMessage('u1', message, true)
   assert.equal(local.text, '看看这个文件夹')
-  assert.deepEqual(local.attachments, [{ kind: 'folder', label: '/Users/me/sa攻略/' }])
+  assert.deepEqual(local.attachments, [
+    { kind: 'folder', label: 'sa攻略', path: '/Users/me/sa攻略/', client: true },
+  ])
   const echoed = projectItem(
     {
       type: 'userMessage',
@@ -82,7 +84,7 @@ test('对话里的条目：先显示的那条和对面回显的一样，那一�
   )
   assert.equal(echoed.kind === 'userMessage' && echoed.text, '看看这个文件夹')
   assert.deepEqual(echoed.kind === 'userMessage' && echoed.attachments, [
-    { kind: 'folder', label: '/Users/me/sa攻略/' },
+    { kind: 'folder', label: 'sa攻略', path: '/Users/me/sa攻略/', client: true },
   ])
 })
 
@@ -100,7 +102,7 @@ test('回显里 mention 的路径以斜杠结尾的画成文件夹', () => {
     false,
   )
   assert.deepEqual(echoed.kind === 'userMessage' && echoed.attachments, [
-    { kind: 'folder', label: 'docs' },
-    { kind: 'file', label: 'a.md' },
+    { kind: 'folder', label: 'docs', path: '/w/docs/' },
+    { kind: 'file', label: 'a.md', path: '/w/a.md' },
   ])
 })

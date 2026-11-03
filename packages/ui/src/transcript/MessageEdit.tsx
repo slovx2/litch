@@ -102,7 +102,12 @@ export function MessageEdit({
             const key = `${deviceId}:${sessionId}`
             if (drafted.length > 0)
               editDraftComments(key, (list) => [...drafted, ...list].slice(0, MAX_COMMENTS))
-            refillDraft(key, text, message.images)
+            refillDraft(
+              key,
+              text,
+              message.images,
+              message.extras.filter((extra) => extra.kind === 'file'),
+            )
             showToast({
               id: 'turn-action',
               tone: 'err',
@@ -143,7 +148,9 @@ export function MessageEdit({
           comments={comments.comments}
         />
       ) : null}
-      {start.kept.length > 0 ? <UserAttachments attachments={start.kept} /> : null}
+      {start.kept.length > 0 ? (
+        <UserAttachments attachments={start.kept} deviceId={deviceId} sessionId={sessionId} />
+      ) : null}
       <textarea
         ref={area}
         className="umsg-edit"

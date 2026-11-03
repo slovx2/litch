@@ -1,5 +1,6 @@
 // 要发出去的消息：界面给的文字、图片和别的附带项 → 协议里的输入，以及不等对面、先显示出来的那条用户消息。
-import { clientPathsBlock, folderPath } from '../../../protocol/src/client-paths.mjs'
+import { folderPath } from '../../../protocol/src/client-paths.mjs'
+import { fileAttachmentsBlock, isFileAttachment } from '../../../protocol/src/file-attachments.mjs'
 import type { UserInput } from '../../../protocol/src/index.mjs'
 import {
   matchMentions,
@@ -50,7 +51,10 @@ function checkExtra(extra: MessageExtra): MessageExtra {
   ) {
     return { kind: 'text', name: extra.name, text: extra.text }
   }
-  if (extra?.kind === 'file' && short(extra.name) && short(extra.path)) {
+  if (
+    extra?.kind === 'file' &&
+    isFileAttachment({ ...extra, location: extra.client ? 'client' : 'device' })
+  ) {
     const folder = extra.folder === true
     return {
       kind: 'file',
@@ -58,6 +62,8 @@ function checkExtra(extra: MessageExtra): MessageExtra {
       path: folder ? folderPath(extra.path) : extra.path,
       ...(folder ? { folder } : {}),
       ...(extra.client === true ? { client: true } : {}),
+      ...(extra.size !== undefined ? { size: extra.size } : {}),
+      ...(extra.mimeType ? { mimeType: extra.mimeType } : {}),
     }
   }
   if (
@@ -79,10 +85,6 @@ function checkExtra(extra: MessageExtra): MessageExtra {
   throw new ChannelError('rejected', '消息附件无效')
 }
 
-/** 提到的文件、文件夹在会话所在的设备上（不是这台桌面端上的）：按 mention 或正文里的一行路径带 */
-const isDeviceFile = (extra: MessageExtra): extra is Extract<MessageExtra, { kind: 'file' }> =>
-  extra.kind === 'file' && !extra.client
-
 /** 带着的一段文字并进正文时的样子：有名字的（一个文件的内容）前面加一行名字，对面才知道这是哪个文件 */
 export const textOf = (extra: Extract<MessageExtra, { kind: 'text' }>): string =>
   extra.name === null ? extra.text : `${extra.name}:\n${extra.text}`
@@ -90,13 +92,12 @@ export const textOf = (extra: Extract<MessageExtra, { kind: 'text' }>): string =
 /**
  * 真正发出去的正文：评论那一段在最前面，然后是打的字，带着的几段文字依次跟在后面，中间空一行。
  * 协议里没有“文本附件”，对面收到的就是这样一整段，和把那几段直接贴进输入框是一回事。
- * mentions 是这个 harness 收不收指向文件的 mention：不收的话，提到的文件的路径也写进正文，一行一个，排在后面。
- * 提到的这台桌面端上的路径（client）不管 mentions，写成 <litch-client-paths> 那一段（client-paths.mts）。
+ * 文件统一写成 file-attachments.mts 的文字块，保留位置和元数据；不再依赖 harness 的 mention 能力。
  * 提到了会话的，打的字里的 @[标题] 换成 ＠[标题]，最后是列出这些会话的那一段（session-mentions.mts）
  */
 export function bodyOf(
   { text, extras }: Pick<OutgoingMessage, 'text' | 'extras'>,
-  mentions: boolean,
+  _mentions: boolean,
 ): string {
   const comments = extras.filter((extra): extra is CommentExtra => extra.kind === 'comment')
   const sessions = extras.filter((extra): extra is SessionExtra => extra.kind === 'session')
@@ -108,15 +109,20 @@ export function bodyOf(
     : text
   const parts = [commentsBlock(comments), said.trim() ? said : '']
   for (const extra of extras) if (extra.kind === 'text') parts.push(textOf(extra))
-  if (!mentions) {
-    const paths = extras.flatMap((extra) => (isDeviceFile(extra) ? [extra.path] : []))
-    parts.push(paths.join('\n'))
-  }
   parts.push(
-    clientPathsBlock(
+    fileAttachmentsBlock(
       extras.flatMap((extra) =>
-        extra.kind === 'file' && extra.client
-          ? [{ path: extra.path, folder: extra.folder === true }]
+        extra.kind === 'file'
+          ? [
+              {
+                name: extra.name,
+                path: extra.path,
+                location: extra.client ? ('client' as const) : ('device' as const),
+                ...(extra.folder ? { folder: true } : {}),
+                ...(extra.size !== undefined ? { size: extra.size } : {}),
+                ...(extra.mimeType ? { mimeType: extra.mimeType } : {}),
+              },
+            ]
           : [],
       ),
     ),
@@ -169,28 +175,17 @@ export function toInput(message: OutgoingMessage, mentions: boolean): UserInput[
   // 只有图片的消息不带空的文字段：有的引擎不收空文字
   const text = bodyOf(message, mentions)
   if (text) input.push({ type: 'text', text, text_elements: [] })
-  // 提到的文件跟在话后面：适配器的引擎把它化成一行路径（Claude Code 是 @路径）接在话的后面
-  if (mentions) {
-    for (const extra of extras) {
-      if (isDeviceFile(extra)) input.push({ type: 'mention', name: extra.name, path: extra.path })
-    }
-  }
   for (const image of images) input.push({ type: 'image', url: image.url })
   return input
 }
 
 /**
  * 附带项在对话里显示成什么。顺序和发出去的输入一致，对面回显时落在同样的位置上。
- * 带着的文字、评论已经并进正文了，不另外显示；提到的文件也一样，除非它是用 mention 带过去的
+ * 文件由统一的文字块解析恢复；这里仅处理不在文字块中的技能。
  */
-const shown = (extras: MessageExtra[], mentions: boolean): UserAttachment[] => [
+const shown = (extras: MessageExtra[]): UserAttachment[] => [
   ...extras.flatMap((extra): UserAttachment[] =>
     extra.kind === 'skill' ? [{ kind: 'skill', label: extra.name }] : [],
-  ),
-  ...extras.flatMap((extra): UserAttachment[] =>
-    isDeviceFile(extra) && mentions
-      ? [{ kind: extra.folder ? 'folder' : 'file', label: extra.name }]
-      : [],
   ),
 ]
 
@@ -206,7 +201,7 @@ export const localUserMessage = (
       kind: 'userMessage',
       text: bodyOf(message, mentions),
       attachments: [
-        ...shown(message.extras, mentions),
+        ...shown(message.extras),
         ...message.images.map(
           (image): UserAttachment => ({ kind: 'image', label: image.name, url: image.url }),
         ),

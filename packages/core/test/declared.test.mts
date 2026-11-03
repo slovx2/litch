@@ -1,8 +1,10 @@
 // 按声明来：harness 事先声明了会什么、有哪几档权限预设、认识哪些扩展，核心照着给界面；
 // 没有声明的才退回“试了才知道”。另有原生 codex 接进来之后要跟着做的几件事。
 // 对着假的聚合面和假对端跑，会话经真的通道订阅（wire.mts 的 watchSession）。
+
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { fileAttachmentsBlock } from '../../protocol/src/file-attachments.mjs'
 import type { ThreadItem } from '../../protocol/src/index.mjs'
 import { abilitiesOf } from '../src/device/harness.mjs'
 import type { ChannelError, UserMessageItem } from '../src/index.mjs'
@@ -613,7 +615,7 @@ test('不可用的种类原样带到界面：认识的说得出是哪一句，�
   )
 })
 
-test('提到的文件：声明了收 mention 的用 mention 带；原生 codex 的 mention 不是给文件用的，和没有声明的一样把路径写进正文', async () => {
+test('提到的文件：所有 harness 使用相同文字格式并恢复文件卡', async () => {
   const withMention = features({ inputTypes: ['text', 'image', 'skill', 'mention'] })
   const { core, command, sent, device } = deviceWorld([
     harness('pi', {
@@ -658,25 +660,23 @@ test('提到的文件：声明了收 mention 的用 mention 带；原生 codex �
   }
   // 有名字的那段文字（一个文件的内容）并进正文时前面有一行名字
   const body = '看看这两处\n\nnotes.md:\n# 备忘\n一行'
-  assert.deepEqual(inputOf('p1'), [
-    { type: 'text', text: body, text_elements: [] },
-    { type: 'mention', name: 'app.ts', path: 'src/app.ts' },
-    { type: 'mention', name: 'docs', path: '/work/docs' },
+  const block = fileAttachmentsBlock([
+    { name: 'app.ts', path: 'src/app.ts', location: 'device' },
+    { name: 'docs', path: '/work/docs', location: 'device' },
   ])
-  assert.equal(first(onPi.seen).text, body)
-  assert.deepEqual(first(onPi.seen).attachments, [
-    { kind: 'file', label: 'app.ts' },
-    { kind: 'file', label: 'docs' },
-  ])
-  // 路径写进正文：一行一个，排在最后；对话里那条消息就是这一整段，不另画附件
-  const spelled = `${body}\n\nsrc/app.ts\n/work/docs`
   for (const [threadId, seen] of [
+    ['p1', onPi.seen],
     ['x1', onCodex.seen],
     ['o1', onOld.seen],
   ] as const) {
-    assert.deepEqual(inputOf(threadId), [{ type: 'text', text: spelled, text_elements: [] }])
-    assert.equal(first(seen).text, spelled)
-    assert.deepEqual(first(seen).attachments, [])
+    assert.deepEqual(inputOf(threadId), [
+      { type: 'text', text: body + '\n\n' + block, text_elements: [] },
+    ])
+    assert.equal(first(seen).text, body)
+    assert.deepEqual(first(seen).attachments, [
+      { kind: 'file', label: 'app.ts', path: 'src/app.ts' },
+      { kind: 'file', label: 'docs', path: '/work/docs' },
+    ])
   }
   // 形状不对的不收
   const refused = await failureOf(

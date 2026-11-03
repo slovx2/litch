@@ -537,7 +537,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
           <div className="tr">
             <section className="turn">
               <div className="umsg">
-                <UserAttachments attachments={pending.attachments} />
+                <UserAttachments attachments={pending.attachments} deviceId={deviceId} />
                 {pending.text ? <div className="umsg-text">{pending.text}</div> : null}
               </div>
               <div className="running-line">

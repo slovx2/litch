@@ -184,3 +184,11 @@ function flushComments(): void {
     // 同上
   }
 }
+
+// 普通文件已上传，只保存设备路径；与图片一样在当前应用进程内保留。
+const files = new Map<string, Extract<MessageExtra, { kind: 'file' }>[]>()
+export const loadDraftFiles = (key: string) => files.get(key) ?? []
+export function saveDraftFiles(key: string, list: Extract<MessageExtra, { kind: 'file' }>[]): void {
+  if (list.length) files.set(key, list)
+  else files.delete(key)
+}

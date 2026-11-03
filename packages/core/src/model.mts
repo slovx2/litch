@@ -532,6 +532,11 @@ export interface PeerView {
 export interface UserAttachment {
   kind: 'image' | 'audio' | 'file' | 'folder' | 'skill'
   label: string | null
+  /** 文件卡指向的路径；client 为真时属于控制端电脑。 */
+  path?: string
+  client?: boolean
+  size?: number
+  mimeType?: string
   /** 图片能直接显示时的内容（data URL）。在设备磁盘上的、要联网取的都不给 */
   url?: string
 }
@@ -557,9 +562,17 @@ export type MessageExtra =
   /**
    * 提到的一个文件或文件夹。path 是 harness 那台机器上的路径：绝对的，或者相对会话的工作目录；文件夹以 / 结尾。
    * client 为真：path 在这台桌面端上、不在会话所在的设备上（远程设备开了“操作这台电脑”时才有），
-   * 发出去写进正文末尾的 <litch-client-paths>（protocol/src/client-paths.mts），不走 mention
+   * 发出去统一写入 <litch-file-attachments> 文字块，原生历史可以认回卡片，不走 mention
    */
-  | { kind: 'file'; name: string; path: string; folder?: boolean; client?: boolean }
+  | {
+      kind: 'file'
+      name: string
+      path: string
+      folder?: boolean
+      client?: boolean
+      size?: number
+      mimeType?: string
+    }
   /**
    * 选中回答里的一段文字加的评论。quote 是选中的原文，note 是用户写的评论（可以是空的），
    * itemId 是那段原文所在的助手条目。发出去时写成正文开头的一段（见 projection/comments.mts）

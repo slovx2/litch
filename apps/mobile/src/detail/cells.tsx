@@ -2,6 +2,7 @@
 // 文字平时不可选：安卓上文本选择的监听在滚动时占主线程；复制可点消息下方按钮，也可走长按菜单。
 // 长按菜单里点了“选择文字”的那条回答例外：它的几块能自由选字，系统的选字菜单里多一个“回复”（comments/hub.ts）。
 // 颜色、字号只从主题取。会长高的东西（流式的那一块）之外，行的高度在内容不变时不变。
+
 import { type FileScope, keys, parseAskReply, type SessionSummary } from '@litch/core'
 import { memo, useEffect, useMemo, useState } from 'react'
 import {
@@ -36,8 +37,9 @@ import { notePressed } from './comments/hub'
 import { linkCommentRefs, parseCommentHref } from './comments/refs'
 import { useToggleInPlace, useTranscript } from './context'
 import { DeliveryMark } from './DeliveryMark'
+import { FileCard } from './FileCard'
 import { linkIssues } from './issue-links'
-import { linkify } from './links'
+import { fileHref, linkify } from './links'
 import { MessageCopy } from './MessageCopy'
 import { markdownStyleOf } from './markdownStyle'
 import { MermaidCard } from './mermaid/MermaidCard'
@@ -149,7 +151,7 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
 function UserAttachments({ row }: Props<'user'>) {
   const { c, font, radius } = useTheme()
   const t = useT()
-  const { viewImage } = useTranscript()
+  const { viewImage, openLink, notify } = useTranscript()
   const images = row.attachments.filter((each) => each.kind === 'image' && each.url)
   const others = row.attachments.filter((each) => !(each.kind === 'image' && each.url))
   return (
@@ -174,25 +176,37 @@ function UserAttachments({ row }: Props<'user'>) {
       ) : null}
       {others.length > 0 ? (
         <View style={styles.chips}>
-          {others.map((each, index) => (
-            <Text
-              // biome-ignore lint/suspicious/noArrayIndexKey: 同上
-              key={index}
-              numberOfLines={1}
-              style={[
-                styles.chip,
-                {
-                  color: c.ink2,
-                  borderColor: c.line2,
-                  borderRadius: radius.s,
-                  fontFamily: font.mono,
-                },
-              ]}
-            >
-              {t(`attachment.${each.kind}`)}
-              {each.label ? ` · ${each.label}` : ''}
-            </Text>
-          ))}
+          {others.map((each, index) =>
+            each.kind === 'file' || each.kind === 'folder' ? (
+              <FileCard
+                // biome-ignore lint/suspicious/noArrayIndexKey: 同一条消息的附件顺序固定
+                key={index}
+                file={each}
+                onPress={() => {
+                  if (each.client) notify(t('attachment.desktopRequired'))
+                  else if (each.path) openLink(fileHref({ path: each.path, line: null, alt: null }))
+                }}
+              />
+            ) : (
+              <Text
+                // biome-ignore lint/suspicious/noArrayIndexKey: 同上
+                key={index}
+                numberOfLines={1}
+                style={[
+                  styles.chip,
+                  {
+                    color: c.ink2,
+                    borderColor: c.line2,
+                    borderRadius: radius.s,
+                    fontFamily: font.mono,
+                  },
+                ]}
+              >
+                {t(`attachment.${each.kind}`)}
+                {each.label ? ` · ${each.label}` : ''}
+              </Text>
+            ),
+          )}
         </View>
       ) : null}
     </>

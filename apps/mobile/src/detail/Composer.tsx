@@ -81,7 +81,7 @@ export function Composer({
   useEffect(
     () =>
       onRefill(deviceId, sessionId, (message) =>
-        refill(message.text, message.images, message.comments),
+        refill(message.text, message.images, message.comments, [], message.files),
       ),
     [deviceId, sessionId, refill],
   )
@@ -156,7 +156,11 @@ export function Composer({
       edit &&
       (draft.images.length + message.images.length > MAX_IMAGES ||
         draft.comments.length + commentsIn(message.extras).length > MAX_COMMENTS ||
-        message.extras.some((extra) => extra.kind !== 'comment' && extra.kind !== 'session'))
+        draft.files.length + draft.comments.length + draft.sessions.length + message.extras.length >
+          16 ||
+        message.extras.some(
+          (extra) => extra.kind !== 'comment' && extra.kind !== 'session' && extra.kind !== 'file',
+        ))
     ) {
       setError(t('composer.pendingDraftFull'))
       return
@@ -170,6 +174,7 @@ export function Composer({
         message.images,
         commentsIn(message.extras),
         sessionsIn(message.extras),
+        message.extras.filter((extra) => extra.kind === 'file'),
       )
   }
 

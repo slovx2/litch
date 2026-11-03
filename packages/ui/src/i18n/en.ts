@@ -1478,8 +1478,14 @@ export const en: Record<MessageKey, Entry> = {
   'composer.speed.fast.note': 'Faster, higher usage',
   'composer.permission': 'Permissions',
   'composer.attach': 'Add images or files',
-  'composer.attach.inline': 'Add images or text files',
-  'composer.attach.remote': 'Add images or text files (remote devices can’t receive other files)',
+  'composer.file.uploadSize': '"{name}" exceeds the {max} MB upload limit.',
+  'composer.file.upload': 'Could not upload "{name}". Check the device connection and try again.',
+  'composer.file.uploading': 'Adding files…',
+  'attachment.desktopRequired': 'Open this file on the desktop computer it came from.',
+  'attachment.noRoot': 'The file’s directory is unavailable.',
+  'compose.addFile': 'Add file',
+  'composer.attach.inline': 'Add images or files',
+  'composer.attach.remote': 'Add images or files (files are uploaded to the session device)',
   'composer.attach.client':
     'Add images or files (other files are mentioned by their path on this computer)',
   'composer.file.binary':

@@ -1067,6 +1067,11 @@ export interface Commands {
     result: import('../path-picker.mjs').PathPickerListing
   }
   /** 读一个文件。太大的、不是文字的只说是哪一种，不给内容；路径是目录、文件不在了也各有一种结果，不算出错 */
+  /** 上传普通附件，保存到设备主目录的 .litch/attachments 下；不发起模型回合。 */
+  'files.uploadAttachment': {
+    params: { deviceId: string; name: string; dataBase64: string; mimeType?: string }
+    result: Extract<MessageExtra, { kind: 'file' }>
+  }
   'files.read': {
     params: { deviceId: string; root: string; path: string }
     result: FileContent

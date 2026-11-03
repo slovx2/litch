@@ -15,6 +15,7 @@ export {
   type PairPayload,
   tailscaleVerifyUrl,
 } from '../../protocol/src/device-pairing.mjs'
+export { attachmentDetail, MAX_ATTACHMENT_BYTES } from '../../protocol/src/file-attachments.mjs'
 export type {
   PermissionLevel,
   ProjectPermission,

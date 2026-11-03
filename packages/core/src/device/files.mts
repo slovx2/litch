@@ -1,3 +1,4 @@
+import { type AttachmentUpload, uploadAttachment } from './attachments.mjs'
 // 一台设备上的文件：列一层目录、读一个文件、模糊找文件。文件面板只发这三条命令。
 // 另有挑目录（添加项目时浏览设备上的目录）：只列目录名、不读文件，所以不受下面“只在根之内”的限制。
 //
@@ -71,6 +72,10 @@ export interface FilesHost {
 }
 
 export interface Files {
+  upload(
+    file: AttachmentUpload,
+    signal?: AbortSignalLike,
+  ): Promise<Extract<import('../model.mjs').MessageExtra, { kind: 'file' }>>
   chunk(
     root: string,
     path: string,
@@ -343,6 +348,7 @@ export function createFiles(host: FilesHost): Files {
   }
 
   const files: Files = {
+    upload: (file, signal) => uploadAttachment(host, file, signal),
     async chunk(root, path, offset, revision, signal) {
       const at = locate(root, path)
       mustBeOnline()

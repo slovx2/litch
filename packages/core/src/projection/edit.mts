@@ -3,7 +3,7 @@
 // - 评论：不在编辑框里改，原样带上（正文开头那一段，parseComments 认得出的）；
 // - 提到的会话：正文里显示的 ＠[标题] 在编辑框里换回输入框里的 @[标题]，发的时候照常带上；
 // - 图片：对话里能直接显示的（data URL）原样带上；
-// - 带不上的：设备磁盘上的图、音频、提到的文件、技能。对话里只有名字，没有路径、内容，重发时不带（编辑框里写明）。
+// - 文件：有路径的文件卡保留设备位置和元数据；只有名字的文件、设备磁盘上的图、音频和技能不能重发。
 //   贴进来的长文字发出去时已经并进正文，在编辑框的文字里，不算附件。
 import { SENT_SIGIL } from '../../../protocol/src/session-mentions.mjs'
 import type { ImageAttachment, MessageExtra, UserAttachment, UserMessageItem } from '../model.mjs'
@@ -15,14 +15,17 @@ export interface EditableMessage {
   text: string
   /** 原样带上的评论条数（不在编辑框里改） */
   comments: number
-  /** 重发时带上的附件（能直接显示的图片） */
+  /** 重发时带上的附件（内联图片、有路径的文件卡） */
   kept: UserAttachment[]
   /** 重发时带不上的附件 */
   dropped: UserAttachment[]
 }
 
 const resendable = (attachment: UserAttachment): boolean =>
-  attachment.kind === 'image' && typeof attachment.url === 'string' && isInlineImage(attachment.url)
+  (attachment.kind === 'image' &&
+    typeof attachment.url === 'string' &&
+    isInlineImage(attachment.url)) ||
+  ((attachment.kind === 'file' || attachment.kind === 'folder') && !!attachment.path)
 
 /** 正文去掉评论那一段，提到的会话写回输入框里的样子 */
 function editableText(item: UserMessageItem): string {
@@ -55,10 +58,30 @@ export function resendOf(
   )
   return {
     text,
-    images: item.attachments.filter(resendable).map((image) => ({
-      url: image.url as string,
-      name: image.label,
-    })),
-    extras: [...comments, ...sessions],
+    images: item.attachments
+      .filter((a) => a.kind === 'image' && resendable(a))
+      .map((image) => ({
+        url: image.url as string,
+        name: image.label,
+      })),
+    extras: [
+      ...comments,
+      ...sessions,
+      ...item.attachments.flatMap((a): MessageExtra[] =>
+        (a.kind === 'file' || a.kind === 'folder') && a.path
+          ? [
+              {
+                kind: 'file',
+                name: a.label ?? a.path.split(/[\\/]/).pop() ?? a.path,
+                path: a.path,
+                ...(a.kind === 'folder' ? { folder: true } : {}),
+                ...(a.client ? { client: true } : {}),
+                ...(a.size !== undefined ? { size: a.size } : {}),
+                ...(a.mimeType ? { mimeType: a.mimeType } : {}),
+              },
+            ]
+          : [],
+      ),
+    ],
   }
 }

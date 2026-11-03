@@ -3,6 +3,7 @@ import {
   type DeviceView,
   type ImageAttachment,
   keys,
+  MAX_ATTACHMENT_BYTES,
   type MessageExtra,
   pathTwin,
   type QueuedMessage,
@@ -79,6 +80,7 @@ import {
   TEXT_LIMIT,
   tidyText,
 } from './extras.ts'
+import { fileBase64 } from './file-base64.ts'
 import { type FilesResult, filesOf, type MachineReach, readFiles } from './files.ts'
 import { useGrabFocus } from './focus.ts'
 import {
@@ -174,6 +176,10 @@ export function Composer(props: ComposerProps) {
   const [extras, setExtras] = useState(() => loadDraftExtras(draftKey))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [attaching, setAttaching] = useState(false)
+  const attachingRef = useRef(false)
+  const attachmentDraft = useRef(draftKey)
+  attachmentDraft.current = draftKey
   // 草稿的这一版：内容一变就换一个。发出去时记下（send 里），连按时第二下拿到的还是这一版就不再发
   // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖就是草稿的内容，内容一变换一个新的对象
   const version = useMemo(() => ({}), [text, images, extras, comments])
@@ -212,9 +218,10 @@ export function Composer(props: ComposerProps) {
   // 别处把一段话放回来（回退之后把原来那条消息还给用户改）：放进输入框，光标落到末尾
   useEffect(
     () =>
-      onRefill(draftKey, (back, attached) => {
+      onRefill(draftKey, (back, attached, restored) => {
         recalling.current = null
         setText((current) => joinDraft(back, current))
+        setExtras((current) => mergeExtras(current, restored))
         setImages((current) => [...attached, ...current].slice(0, MAX_IMAGES))
         requestAnimationFrame(() => {
           const area = input.current
@@ -308,8 +315,7 @@ export function Composer(props: ComposerProps) {
   // 选的模型不收图片：带着图就不让发，免得发出去才报错
   const model = options?.models.find((entry) => entry.id === props.settings.model)
   // 这个 harness 声明了自己收不了图片：图片加不上，草稿里留着图的也不让发（device 在上面取过）
-  // 消息发给本机设备：harness 和这个界面在同一台机器上，文件可以按路径提到。远程设备上只带得了文本文件的内容，
-  // 除非那台设备打开了“操作这台电脑”：那时文件夹、二进制文件按这台电脑上的路径提到（files.ts）
+  // 本机或启用了操作本机工具时发送路径；其余普通文件上传，文件夹不展开。
   const local = device?.kind === 'local'
   const machine: MachineReach = device?.machine ? (device.machine.enabled ? 'on' : 'off') : null
   const declared = device?.harnesses.find((entry) => entry.id === props.harness)?.abilities
@@ -322,7 +328,7 @@ export function Composer(props: ComposerProps) {
   const chipped = extras.filter((extra) => extra.kind !== 'session').length
   const ready = canSend({
     filled,
-    blocked: Boolean(blocked),
+    blocked: Boolean(blocked) || attaching,
     imagesRefused,
     sending: busy,
     fresh: props.fresh === true,
@@ -369,12 +375,7 @@ export function Composer(props: ComposerProps) {
   const fileRefusalText = ({ why, name }: NonNullable<FilesResult['refused']>): string => {
     if (why === 'count') return t('composer.extra.count', { max: EXTRAS_LIMIT })
     if (why === 'size') {
-      return t('composer.file.size', { name, max: TEXT_LIMIT.toLocaleString(t.lang) })
-    }
-    // 不是文本、内容带不了：说清楚为什么不能按路径提到它。远程设备能打开“操作这台电脑”的，告诉人去哪里开
-    if (why === 'binary') {
-      if (local) return t('composer.file.binary', { name })
-      return t(machine === 'off' ? 'composer.file.remoteMachine' : 'composer.file.remote', { name })
+      return t('composer.file.uploadSize', { name, max: MAX_ATTACHMENT_BYTES / 1024 / 1024 })
     }
     if (why === 'folder') {
       return t(machine === 'off' ? 'composer.file.folderMachine' : 'composer.file.folder', { name })
@@ -383,11 +384,14 @@ export function Composer(props: ComposerProps) {
   }
 
   /**
-   * 选中的、拖进来的、贴进来的文件：图片内联进消息，别的按路径提到或者把内容当文字带（见 files.ts）。
+   * 选择、拖放、粘贴共用路径可达性判断；图片内联，普通文件发送可访问路径（见 files.ts）。
    * folders 是拖进来、贴进来时认出的文件夹（选文件的对话框选不了文件夹）
    */
   const addFiles = (files: File[], named: boolean, folders: ReadonlySet<File> = new Set()) => {
-    if (files.length === 0) return
+    if (files.length === 0 || attachingRef.current) return
+    attachingRef.current = true
+    setAttaching(true)
+    const pickedDraft = draftKey
     const pictures = files.filter((file) => !folders.has(file) && IMAGE_TYPES.includes(file.type))
     const others = files.filter((file) => folders.has(file) || !IMAGE_TYPES.includes(file.type))
     void Promise.all([
@@ -398,22 +402,42 @@ export function Composer(props: ComposerProps) {
         pathOf: (file) => window.litchShell?.pathOf(file) ?? '',
         isFolder: (file) => folders.has(file),
         room: EXTRAS_LIMIT - extras.length - comments.length,
+        upload: async (file) =>
+          channel.command('files.uploadAttachment', {
+            deviceId,
+            name: file.name,
+            mimeType: file.type,
+            dataBase64: await fileBase64(file),
+          }),
       }),
-    ]).then(([shots, rest]) => {
-      if (shots && shots.images.length > 0) {
-        setImages((current) => [...current, ...shots.images].slice(0, MAX_IMAGES))
-      }
-      if (rest.extras.length > 0) setExtras((current) => mergeExtras(current, rest.extras))
-      setError(
-        shots === null && pictures.length > 0
-          ? t('composer.image.refused')
-          : shots?.refused
-            ? refusalText(shots.refused)
-            : rest.refused
-              ? fileRefusalText(rest.refused)
-              : null,
-      )
-    })
+    ])
+      .then(([shots, rest]) => {
+        // 即使输入区已经卸载，完成的附件也留在原草稿里。
+        saveDraftExtras(pickedDraft, mergeExtras(loadDraftExtras(pickedDraft), rest.extras))
+        if (shots)
+          saveDraftImages(
+            pickedDraft,
+            [...loadDraftImages(pickedDraft), ...shots.images].slice(0, MAX_IMAGES),
+          )
+        if (attachmentDraft.current !== pickedDraft) return
+        if (shots && shots.images.length > 0) {
+          setImages((current) => [...current, ...shots.images].slice(0, MAX_IMAGES))
+        }
+        if (rest.extras.length > 0) setExtras((current) => mergeExtras(current, rest.extras))
+        setError(
+          shots === null && pictures.length > 0
+            ? t('composer.image.refused')
+            : shots?.refused
+              ? refusalText(shots.refused)
+              : rest.refused
+                ? fileRefusalText(rest.refused)
+                : null,
+        )
+      })
+      .finally(() => {
+        attachingRef.current = false
+        setAttaching(false)
+      })
   }
 
   /** 按了第一下 Esc：在哪个回合里、什么时候，到点作废的计时（下面的两下 Esc 停） */
@@ -426,6 +450,7 @@ export function Composer(props: ComposerProps) {
   }, [])
 
   const send = useCallback(() => {
+    if (attachingRef.current) return
     const content = text.trim()
     const attached = images
     const carried = extras
@@ -695,6 +720,7 @@ export function Composer(props: ComposerProps) {
     props.onResumeQueue?.(id).catch((error: unknown) => setError(String(error)))
   return (
     <>
+      {attaching ? <div role="status">{t('composer.file.uploading')}</div> : null}
       {/* 停止后的待发：一行头“⏸ N 条待发 · 全部发送”，下面每条一行，行尾是图标按钮（悬停或聚焦时出现）。
           状态不在每行重复；“连同待发一起发”是发送按钮旁的小开关，只在输入框有内容时出现 */}
       {queued.length > 0 ? (
@@ -835,6 +861,9 @@ export function Composer(props: ComposerProps) {
               // 提到的会话写在正文里（@[标题]），不另出一片：删掉那几个字就不带了
               extra.kind === 'session' ? null : (
                 <ExtraChip
+                  deviceId={deviceId}
+                  sessionId={sessionId}
+                  cwd={cwd}
                   // biome-ignore lint/suspicious/noArrayIndexKey: 贴进来的文字没有自己的标识，同一段可以带两遍
                   key={index}
                   extra={extra}
@@ -895,8 +924,7 @@ export function Composer(props: ComposerProps) {
             type="button"
             className="ibtn"
             data-act="attach"
-            // 能带什么写在按钮上：本机设备、外壳给得出路径时什么文件都能提到（远程设备开了“操作这台电脑”也是，
-            // 提到的是这台电脑上的路径）；否则只带得了图片和文本文件的内容
+            // 本机文件能直接访问时发送路径；否则上传到会话设备。
             title={t(
               !window.litchShell
                 ? 'composer.attach.inline'

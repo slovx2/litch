@@ -21,6 +21,7 @@ import { AskReplyBody } from './AskCard.tsx'
 import { CompactRow } from './CompactRow.tsx'
 import { SentComments } from './comments/Cards.tsx'
 import { commentsOf } from './comments/Cite.tsx'
+import { type AttachmentContext, FileCard } from './FileCard.tsx'
 import { Markdown } from './Markdown.tsx'
 import { MessageCopy } from './MessageCopy.tsx'
 import { MessageEdit } from './MessageEdit.tsx'
@@ -48,7 +49,10 @@ export const sessionKeyOf = (ref: { deviceId: string; sessionId: string }) =>
  * 用户消息带的东西。能直接显示的图片是固定大小的缩略图（图片解出来之前之后占的地方一样，
  * 对话不会因为它跳一下），点开看大图；别的只显示名字。
  */
-export function UserAttachments({ attachments }: { attachments: UserAttachment[] }) {
+export function UserAttachments({
+  attachments,
+  ...context
+}: { attachments: UserAttachment[] } & AttachmentContext) {
   const t = useT()
   const [viewing, setViewing] = useState<UserAttachment | null>(null)
   if (attachments.length === 0) return null
@@ -67,6 +71,9 @@ export function UserAttachments({ attachments }: { attachments: UserAttachment[]
           >
             <img src={attachment.url} alt={attachment.label ?? t('attachment.image')} />
           </button>
+        ) : attachment.kind === 'file' || attachment.kind === 'folder' ? (
+          // biome-ignore lint/suspicious/noArrayIndexKey: 附件发出去之后不会增删换位
+          <FileCard key={index} file={attachment} {...context} />
         ) : (
           // biome-ignore lint/suspicious/noArrayIndexKey: 附件发出去之后不会增删换位
           <span key={index} className="mention" title={t(`attachment.${attachment.kind}`)}>
@@ -190,7 +197,11 @@ export const UserMessage = memo(function UserMessage({
         {open ? (
           <>
             <PeerHead deviceId={ref.deviceId} peer={peer} detail />
-            <UserAttachments attachments={item.attachments} />
+            <UserAttachments
+              attachments={item.attachments}
+              deviceId={ref.deviceId}
+              sessionId={ref.sessionId}
+            />
             <div className="sysm-full">{text}</div>
             <MessageCopy item={item} />
           </>

@@ -1,141 +1,124 @@
-// 往消息里加不是图片的文件、文件夹：什么时候按路径提到它，什么时候把内容当文字带，什么时候带不了。
-// 跑法：npm run test --prefix packages/ui（Node 直接读 .ts，不用先构建）。
+// 三种去向使用同一套入口；上传之前不把二进制或文本内容并入模型正文。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { MAX_ATTACHMENT_BYTES } from '../../protocol/src/file-attachments.mts'
+import { baseName, filesOf, planFile, readFiles } from '../src/composer/files.ts'
 
-const { baseName, decodeText, planFile, readFiles } = await import('../src/composer/files.ts')
-const { TEXT_LIMIT } = await import('../src/composer/extras.ts')
-
-const text = (name, body) => new File([body], name, { type: 'text/plain' })
-const binary = (name) => new File([new Uint8Array([0x89, 0x50, 0, 1, 2, 0xff])], name)
-/** 假装这些文件在磁盘上：名字就是路径的最后一段 */
-const onDisk = (file) => `/Users/dev/work/${file.name}`
-const nowhere = () => ''
-const folder = (name) => new File([], name)
-/** 认得出的文件夹：名字里不带点的当文件夹（测试用的约定） */
-const byName = (file) => !file.name.includes('.')
-const noFolders = () => false
-const local = { local: true, machine: null, isFolder: noFolders }
-const remote = { local: false, machine: 'off', isFolder: noFolders }
-
-test('怎么带：消息发给本机、又拿得到路径，才按路径提到它；远程设备的文件夹看开没开“操作这台电脑”', () => {
-  const on = { local: false, machine: 'on' }
-  const off = { local: false, machine: 'off' }
-  assert.equal(planFile({ local: true, machine: null }, '/Users/dev/a.txt', false), 'ref')
-  assert.equal(planFile({ local: true, machine: null }, '/Users/dev/docs', true), 'ref')
-  assert.equal(planFile({ local: true, machine: null }, '', false), 'inline')
-  assert.equal(planFile({ local: true, machine: null }, '', true), 'refuse')
-  assert.equal(planFile(off, '/Users/dev/a.txt', false), 'inline')
-  assert.equal(planFile(on, '/Users/dev/a.txt', false), 'inline')
-  assert.equal(planFile(off, '', false), 'inline')
-  assert.equal(planFile(on, '/Users/dev/docs', true), 'client')
-  assert.equal(planFile(off, '/Users/dev/docs', true), 'refuse')
-  assert.equal(planFile({ local: false, machine: null }, '/Users/dev/docs', true), 'refuse')
-  assert.equal(planFile(on, '', true), 'refuse')
+const file = (name, body = '内容') => new File([body], name, { type: 'text/plain' })
+const localPath = (f) => `/Users/dev/${f.name}`
+const facts = (more = {}) => ({
+  local: false,
+  machine: 'off',
+  pathOf: localPath,
+  isFolder: () => false,
+  room: 16,
+  upload: async () => {
+    throw new Error('不该上传')
+  },
+  ...more,
 })
 
-test('是不是文本：按 UTF-8 解得出来、没有 NUL 的才算', () => {
-  assert.equal(decodeText(new TextEncoder().encode('第一行\n第二行')), '第一行\n第二行')
-  assert.equal(decodeText(new Uint8Array([0x61, 0, 0x62])), null)
-  assert.equal(decodeText(new Uint8Array([0xff, 0xfe, 0x00])), null)
-  assert.equal(baseName('/Users/dev/work/docs/'), 'docs')
+test('本机、远程可操作本机、远程不可访问：文本和二进制采用相同规则', () => {
+  assert.equal(planFile(facts({ local: true }), '/local/a.txt', false), 'ref')
+  assert.equal(planFile(facts({ machine: 'on' }), '/local/a.txt', false), 'client')
+  assert.equal(planFile(facts(), '/local/a.txt', false), 'upload')
+  assert.equal(planFile(facts({ local: true }), '', false), 'upload')
+  assert.equal(planFile(facts({ machine: 'on' }), '', false), 'upload')
+  assert.equal(planFile(facts(), '/local/folder', true), 'refuse')
+})
+for (const [local, machine, client] of [
+  [true, null, false],
+  [false, 'on', true],
+]) {
+  test(`有可访问路径时不读文件、不上传：local=${local}`, async () => {
+    const a = file('很长的中文文件名.pdf', new Uint8Array([255, 0, 1]))
+    a.arrayBuffer = () => {
+      throw new Error('不该读内容')
+    }
+    const result = await readFiles([a], facts({ local, machine }))
+    assert.equal(result.refused, null)
+    assert.deepEqual(result.extras, [
+      {
+        kind: 'file',
+        name: a.name,
+        path: localPath(a),
+        size: 3,
+        mimeType: 'text/plain',
+        ...(client ? { client: true } : {}),
+      },
+    ])
+  })
+}
+test('远程无访问能力：保留内容字节上传，空文件也接受', async () => {
+  const seen = []
+  const result = await readFiles(
+    [file('binary.bin', new Uint8Array([0, 255, 1])), file('empty.txt', '')],
+    facts({
+      upload: async (f) => {
+        seen.push([...new Uint8Array(await f.arrayBuffer())])
+        return { kind: 'file', name: f.name, path: `/remote/${f.name}` }
+      },
+    }),
+  )
+  assert.deepEqual(seen, [[0, 255, 1], []])
+  assert.equal(result.refused, null)
+  assert.equal(result.extras[0].path, '/remote/binary.bin')
+  assert.equal(result.extras[1].size, 0)
+})
+test('上传上限、失败和附件数量不会产生假卡片', async () => {
+  let calls = 0
+  const big = file('big')
+  Object.defineProperty(big, 'size', { value: MAX_ATTACHMENT_BYTES + 1 })
+  const result = await readFiles(
+    [big, file('bad')],
+    facts({
+      upload: async () => {
+        calls++
+        throw new Error('offline')
+      },
+    }),
+  )
+  assert.deepEqual(result.extras, [])
+  assert.deepEqual(result.refused, { why: 'size', name: 'big' })
+  assert.equal(calls, 1)
+  assert.deepEqual((await readFiles([file('bad')], facts())).refused, {
+    why: 'upload',
+    name: 'bad',
+  })
+  assert.equal((await readFiles([file('a')], facts({ room: 0 }))).refused.why, 'count')
+})
+test('文件夹只有可访问路径才接受，拖放和粘贴识别目录', async () => {
+  const folder = file('docs', '')
+  const result = await readFiles([folder], facts({ local: true, isFolder: () => true }))
+  assert.deepEqual(result.extras, [
+    { kind: 'file', name: 'docs', path: '/Users/dev/docs/', folder: true },
+  ])
+  assert.equal((await readFiles([folder], facts({ isFolder: () => true }))).refused.why, 'folder')
+  assert.equal(
+    (await readFiles([folder], facts({ local: true, pathOf: () => '', isFolder: () => true })))
+      .refused.why,
+    'read',
+  )
+  const data = {
+    items: [
+      { kind: 'file', getAsFile: () => folder, webkitGetAsEntry: () => ({ isDirectory: true }) },
+    ],
+    files: [folder],
+  }
+  assert.ok(filesOf(data).folders.has(folder))
   assert.equal(baseName('C:\\work\\a.txt'), 'a.txt')
 })
 
-test('本机设备、拿得到路径：什么文件都按路径提到，不读内容', async () => {
-  const { extras, refused } = await readFiles([text('notes.md', '# 备忘'), binary('blob.bin')], {
-    ...local,
-    pathOf: onDisk,
-    room: 16,
+test('编辑发送失败的文件引用放回草稿，输入区尚未挂载也不会丢失', async () => {
+  const { refillDraft, loadDraftExtras, onRefill } = await import('../src/composer/drafts.ts')
+  const attachment = { kind: 'file', name: 'a.pdf', path: '/remote/a.pdf', size: 10 }
+  refillDraft('failed-file', '再试', [], [attachment])
+  assert.deepEqual(loadDraftExtras('failed-file'), [attachment])
+  let got
+  const stop = onRefill('open-file', (...args) => {
+    got = args
   })
-  assert.deepEqual(extras, [
-    { kind: 'file', name: 'notes.md', path: '/Users/dev/work/notes.md' },
-    { kind: 'file', name: 'blob.bin', path: '/Users/dev/work/blob.bin' },
-  ])
-  assert.equal(refused, null)
-})
-
-test('远程设备：文本文件把内容带上（名字留着、换行统一），不是文本的带不了，说得出是哪个', async () => {
-  const { extras, refused } = await readFiles(
-    [text('notes.md', '# 备忘\r\n一行'), binary('blob.bin'), text('b.txt', '乙')],
-    { ...remote, pathOf: onDisk, room: 16 },
-  )
-  assert.deepEqual(extras, [
-    { kind: 'text', name: 'notes.md', text: '# 备忘\n一行' },
-    { kind: 'text', name: 'b.txt', text: '乙' },
-  ])
-  assert.deepEqual(refused, { why: 'binary', name: 'blob.bin' })
-})
-
-test('本机设备但拿不到路径（不在桌面外壳里）：和远程一样，只带得了文本文件的内容', async () => {
-  const { extras, refused } = await readFiles([binary('blob.bin'), text('a.txt', '甲')], {
-    ...local,
-    pathOf: nowhere,
-    room: 16,
-  })
-  assert.deepEqual(extras, [{ kind: 'text', name: 'a.txt', text: '甲' }])
-  assert.deepEqual(refused, { why: 'binary', name: 'blob.bin' })
-})
-
-test('带不了的几种：空的、太长的、满了的', async () => {
-  const facts = { ...remote, pathOf: nowhere, room: 16 }
-  assert.deepEqual((await readFiles([text('empty.txt', ' \n')], facts)).refused, {
-    why: 'empty',
-    name: 'empty.txt',
-  })
-  assert.deepEqual(
-    (await readFiles([text('big.log', 'x'.repeat(TEXT_LIMIT + 1))], facts)).refused,
-    {
-      why: 'size',
-      name: 'big.log',
-    },
-  )
-  const full = await readFiles([text('a.txt', '甲'), text('b.txt', '乙')], { ...facts, room: 1 })
-  assert.equal(full.extras.length, 1)
-  assert.deepEqual(full.refused, { why: 'count', name: 'b.txt' })
-})
-
-test('本机设备的文件夹：按路径提到，路径末尾补 /，标成文件夹；拿不到路径的读不出来', async () => {
-  const found = await readFiles([folder('docs'), text('a.md', '甲')], {
-    ...local,
-    isFolder: byName,
-    pathOf: onDisk,
-    room: 16,
-  })
-  assert.deepEqual(found.extras, [
-    { kind: 'file', name: 'docs', path: '/Users/dev/work/docs/', folder: true },
-    { kind: 'file', name: 'a.md', path: '/Users/dev/work/a.md' },
-  ])
-  assert.equal(found.refused, null)
-  const lost = await readFiles([folder('docs')], {
-    ...local,
-    isFolder: byName,
-    pathOf: nowhere,
-    room: 16,
-  })
-  assert.deepEqual(lost, { extras: [], refused: { why: 'read', name: 'docs' } })
-})
-
-test('远程设备开了“操作这台电脑”：文件夹、二进制文件按这台电脑上的路径提到，文本文件照旧带内容', async () => {
-  const { extras, refused } = await readFiles(
-    [folder('sa攻略'), binary('blob.bin'), text('b.txt', '乙')],
-    { local: false, machine: 'on', isFolder: byName, pathOf: onDisk, room: 16 },
-  )
-  assert.deepEqual(extras, [
-    { kind: 'file', name: 'sa攻略', path: '/Users/dev/work/sa攻略/', folder: true, client: true },
-    { kind: 'file', name: 'blob.bin', path: '/Users/dev/work/blob.bin', client: true },
-    { kind: 'text', name: 'b.txt', text: '乙' },
-  ])
-  assert.equal(refused, null)
-})
-
-test('远程设备没开“操作这台电脑”：文件夹带不了，说得出是哪个', async () => {
-  const { extras, refused } = await readFiles([folder('sa攻略'), text('b.txt', '乙')], {
-    ...remote,
-    isFolder: byName,
-    pathOf: onDisk,
-    room: 16,
-  })
-  assert.deepEqual(extras, [{ kind: 'text', name: 'b.txt', text: '乙' }])
-  assert.deepEqual(refused, { why: 'folder', name: 'sa攻略' })
+  refillDraft('open-file', '再试', [], [attachment])
+  assert.deepEqual(got, ['再试', [], [attachment]])
+  stop()
 })

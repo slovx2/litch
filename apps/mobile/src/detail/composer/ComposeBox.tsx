@@ -8,8 +8,10 @@
 import {
   type CommentExtra,
   type ImageAttachment,
+  MAX_ATTACHMENT_BYTES,
   MAX_COMMENTS,
   type MessageExtra,
+  parentPath,
 } from '@litch/core'
 import {
   type ReactNode,
@@ -24,25 +26,31 @@ import {
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { keepMentioned } from '../../../../../packages/ui/src/composer/session-hits.ts'
+import { navigationRef } from '../../shell/dev-links'
+import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Sheet, type SheetAction } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { CommentChips } from '../comments/CommentChips'
+import { FileCard } from '../FileCard'
 import { colors } from '../theme'
 import {
   dropDraft,
   flushDrafts,
   loadDraft,
   loadDraftComments,
+  loadDraftFiles,
   loadDraftImages,
   loadDraftSessions,
   type SessionExtra,
   saveDraft,
   saveDraftComments,
+  saveDraftFiles,
   saveDraftImages,
   saveDraftSessions,
   subscribeDraftComments,
 } from './drafts'
+import { type FileExtra, pickFile } from './files'
 import { useGrow } from './grow'
 import { MAX_IMAGE_MB, MAX_IMAGES, pickImages, REFUSAL_TEXT } from './images'
 import { rowLayout } from './layout'
@@ -58,6 +66,8 @@ export interface Draft {
   comments: CommentExtra[]
   /** 打 @ 提到的会话。正文里那几个字删掉了就跟着去掉 */
   sessions: SessionExtra[]
+  files: FileExtra[]
+  setFiles(update: (current: FileExtra[]) => FileExtra[]): void
   setText(text: string): void
   /** 选中一个会话：换上新的字，记下这个会话 */
   mention(text: string, extra: SessionExtra): void
@@ -69,6 +79,7 @@ export interface Draft {
     images: ImageAttachment[],
     comments?: CommentExtra[],
     sessions?: SessionExtra[],
+    files?: FileExtra[],
   ): void
   clear(): void
 }
@@ -80,6 +91,7 @@ export function useDraft(key: string): Draft {
     text: loadDraft(key),
     images: loadDraftImages(key),
     sessions: loadDraftSessions(key),
+    files: loadDraftFiles(key),
   }))
   const current =
     state.key === key
@@ -89,6 +101,7 @@ export function useDraft(key: string): Draft {
           text: loadDraft(key),
           images: loadDraftImages(key),
           sessions: loadDraftSessions(key),
+          files: loadDraftFiles(key),
         }
   if (current !== state) setState(current)
   useEffect(() => {
@@ -100,6 +113,9 @@ export function useDraft(key: string): Draft {
   useEffect(() => {
     saveDraftSessions(key, current.sessions)
   }, [key, current.sessions])
+  useEffect(() => {
+    saveDraftFiles(key, current.files)
+  }, [key, current.files])
   // 评论另有一份，对话区的全文页也会往里加：订阅着
   const comments = useSyncExternalStore(subscribeDraftComments, () => loadDraftComments(key))
   // 离开页面时把攒着的草稿写进文件
@@ -122,6 +138,15 @@ export function useDraft(key: string): Draft {
       setState((s) => ({ ...s, images: update(s.images) })),
     [],
   )
+  const setFiles = useCallback(
+    (update: (list: FileExtra[]) => FileExtra[]) =>
+      setState((s) => {
+        if (s.key === key) return { ...s, files: update(s.files) }
+        saveDraftFiles(key, update(loadDraftFiles(key)))
+        return s
+      }),
+    [key],
+  )
   const setComments = useCallback((list: CommentExtra[]) => saveDraftComments(key, list), [key])
   const refill = useCallback(
     (
@@ -129,6 +154,7 @@ export function useDraft(key: string): Draft {
       images: ImageAttachment[],
       back: CommentExtra[] = [],
       mentioned: SessionExtra[] = [],
+      files: FileExtra[] = [],
     ) => {
       if (back.length)
         saveDraftComments(key, [...back, ...loadDraftComments(key)].slice(0, MAX_COMMENTS))
@@ -136,6 +162,7 @@ export function useDraft(key: string): Draft {
         ...s,
         text: s.text && text ? `${text}\n${s.text}` : text || s.text,
         images: [...images, ...s.images].slice(0, MAX_IMAGES),
+        files: [...files, ...s.files],
         sessions: [
           ...mentioned,
           ...s.sessions.filter((one) => !mentioned.some((back) => back.threadId === one.threadId)),
@@ -146,13 +173,15 @@ export function useDraft(key: string): Draft {
   )
   const clear = useCallback(() => {
     dropDraft(key)
-    setState((s) => ({ ...s, text: '', images: [], sessions: [] }))
+    setState((s) => ({ ...s, text: '', images: [], sessions: [], files: [] }))
   }, [key])
   return {
     text: current.text,
     images: current.images,
     comments,
     sessions: current.sessions,
+    files: current.files,
+    setFiles,
     setText,
     mention,
     setImages,
@@ -225,9 +254,15 @@ export function ComposeBox({
   const theme = useTheme()
   const { c } = theme
   const [sending, setSending] = useState(false)
+  const { channel } = useServices()
+  const [uploading, setUploading] = useState(false)
+  const uploadingRef = useRef(false)
   // 草稿的这一版：内容一变就换一个。发出去时记下，连点时第二下拿到的还是这一版，不再发一次
   // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖就是草稿的内容，内容一变换一个新的对象
-  const version = useMemo(() => ({}), [draft.text, draft.images, draft.comments, draft.sessions])
+  const version = useMemo(
+    () => ({}),
+    [draft.text, draft.images, draft.comments, draft.sessions, draft.files],
+  )
   const taken = useRef<object | null>(null)
   const own = useRef<TextInput>(null)
   const input = inputRef ?? own
@@ -236,7 +271,10 @@ export function ComposeBox({
   const [caret, setCaret] = useState<number | null>(null)
   const trigger = mentions ? mentionTrigger(draft.text, caret) : null
   const filled =
-    draft.text.trim().length > 0 || draft.images.length > 0 || draft.comments.length > 0
+    draft.text.trim().length > 0 ||
+    draft.images.length > 0 ||
+    draft.comments.length > 0 ||
+    draft.files.length > 0
   const mode = sendButton({
     filled,
     running,
@@ -249,11 +287,13 @@ export function ComposeBox({
       onStop?.()
       return
     }
+    if (uploadingRef.current) return
     const text = draft.text.trim()
     const images = draft.images
     const comments = draft.comments
+    const files = draft.files
     const sessions = keepMentioned(draft.sessions, text)
-    const content = text.length > 0 || images.length > 0 || comments.length > 0
+    const content = text.length > 0 || images.length > 0 || comments.length > 0 || files.length > 0
     if (!takesSend({ filled: content, blocked: Boolean(blocked), sending, fresh })) return
     if (taken.current === version) return
     if (images.length > 0 && imagesOff) {
@@ -265,9 +305,9 @@ export function ComposeBox({
     draft.clear()
     onError(null)
     setSending(true)
-    onSend(text, images, [...comments, ...sessions])
+    onSend(text, images, [...comments, ...sessions, ...files])
       .catch((reason: unknown) => {
-        draft.refill(text, images, comments, sessions)
+        draft.refill(text, images, comments, sessions, files)
         onError(t('composer.failed', { reason: whyNot(reason, t) }))
       })
       .finally(() => setSending(false))
@@ -291,10 +331,53 @@ export function ComposeBox({
     )
   }
 
+  const addFile = async () => {
+    if (!mentions || uploadingRef.current) return
+    if (draft.files.length + draft.comments.length + draft.sessions.length >= 16) {
+      onError(t('composer.extra.count', { max: 16 }))
+      return
+    }
+    uploadingRef.current = true
+    setUploading(true)
+    onError(null)
+    try {
+      const file = await pickFile(channel, mentions.deviceId)
+      if (file?.kind === 'image') {
+        if (imagesOff) onError(imagesOff)
+        else if (draft.images.length >= MAX_IMAGES)
+          onError(t('composer.image.count', { max: MAX_IMAGES }))
+        else draft.setImages((list) => [...list, { name: file.name, url: file.url }])
+      } else if (file) draft.setFiles((list) => [...list, file])
+    } catch (reason) {
+      onError(
+        reason instanceof Error && reason.message === 'imageTooLarge'
+          ? t('composer.image.size', { max: MAX_IMAGE_MB })
+          : reason instanceof Error && reason.message === 'fileTooLarge'
+            ? t('composer.file.uploadSize', {
+                name: t('attachment.file'),
+                max: MAX_ATTACHMENT_BYTES / 1024 / 1024,
+              })
+            : t('composer.failed', { reason: whyNot(reason, t) }),
+      )
+    } finally {
+      uploadingRef.current = false
+      setUploading(false)
+    }
+  }
   const config = useComposeSettings(settings)
   const [moreOpen, setMoreOpen] = useState(false)
   const planOn = config.plan?.on ?? false
   const moreActions: SheetAction[] = [
+    ...(mentions
+      ? [
+          {
+            label: t('compose.addFile'),
+            testID: `${testID}-file`,
+            onPress: () => void addFile(),
+            ...(uploading ? { disabled: t('composer.file.uploading') } : {}),
+          },
+        ]
+      : []),
     {
       label: t('compose.addImage'),
       testID: `${testID}-image`,
@@ -333,6 +416,26 @@ export function ComposeBox({
     >
       {markers ? <View style={styles.mark} /> : null}
       {top}
+      {uploading ? (
+        <Text accessibilityRole="text" style={{ color: c.ink3 }}>
+          {t('composer.file.uploading')}
+        </Text>
+      ) : null}
+      {draft.files.map((file, index) => (
+        <FileCard
+          key={file.path}
+          file={{ ...file, kind: file.folder ? 'folder' : 'file', label: file.name }}
+          onPress={() => {
+            if (mentions)
+              navigationRef.navigate('Files', {
+                deviceId: mentions.deviceId,
+                root: parentPath(file.path) ?? '/',
+                path: file.path,
+              })
+          }}
+          onRemove={() => draft.setFiles((list) => list.filter((_, at) => at !== index))}
+        />
+      ))}
       <CommentChips comments={draft.comments} onChange={draft.setComments} testID={testID} />
       {mentions && trigger ? (
         <MentionList
@@ -457,7 +560,9 @@ export function ComposeBox({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={sendLabel}
-            accessibilityState={{ disabled: mode !== 'stop' && (!filled || !!blocked) }}
+            accessibilityState={{
+              disabled: mode !== 'stop' && (!filled || !!blocked || uploading),
+            }}
             testID={`${testID}-send`}
             // 36 见方，四边放 4：可点 44
             hitSlop={4}
@@ -467,7 +572,8 @@ export function ComposeBox({
               {
                 backgroundColor: mode === 'stop' ? 'transparent' : c.accentSolid,
                 borderColor: mode === 'stop' ? c.err : c.accentSolid,
-                opacity: mode !== 'stop' && (!filled || blocked) ? 0.45 : pressed ? 0.75 : 1,
+                opacity:
+                  mode !== 'stop' && (!filled || blocked || uploading) ? 0.45 : pressed ? 0.75 : 1,
               },
             ]}
           >

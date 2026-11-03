@@ -1,3 +1,4 @@
+import { parseFileAttachments } from '../../../protocol/src/file-attachments.mjs'
 import { inputDelivery } from '../../../protocol/src/input-delivery.mjs'
 import { wrapQuestionFields } from '../../../protocol/src/pending-history.mjs'
 // 投影的第一步：协议条目 → 显示条目。纯函数，不碰连接，不碰状态。
@@ -91,7 +92,11 @@ function userMessage(id: string, content: UserInput[], rawPeer?: unknown): UserM
         break
       case 'mention':
         // 文件夹的路径以斜杠结尾（输入框里加的就是这样，Claude Code 也按这个认目录）
-        attachments.push({ kind: isFolderPath(part.path) ? 'folder' : 'file', label: part.name })
+        attachments.push({
+          kind: isFolderPath(part.path) ? 'folder' : 'file',
+          label: part.name,
+          path: part.path,
+        })
         break
     }
   }
@@ -140,7 +145,7 @@ const isFolderPath = (path: unknown): boolean => typeof path === 'string' && /[\
  */
 export function withSessionMentions(item: UserMessageItem): UserMessageItem {
   const found = parseSessionMentions(item.text)
-  const rest = withClientPaths(found ? { ...item, text: found.rest } : item)
+  const rest = withFileAttachments(withClientPaths(found ? { ...item, text: found.rest } : item))
   if (!found) return rest
   return {
     ...rest,
@@ -164,7 +169,29 @@ function withClientPaths(item: UserMessageItem): UserMessageItem {
       ...item.attachments,
       ...found.paths.map(({ path, folder }) => ({
         kind: folder ? ('folder' as const) : ('file' as const),
-        label: path,
+        label: baseName(path.replace(/[\\/]+$/, '')),
+        path,
+        client: true,
+      })),
+    ],
+  }
+}
+
+function withFileAttachments(item: UserMessageItem): UserMessageItem {
+  const found = parseFileAttachments(item.text)
+  if (!found) return item
+  return {
+    ...item,
+    text: found.rest,
+    attachments: [
+      ...item.attachments,
+      ...found.files.map((file) => ({
+        kind: file.folder ? ('folder' as const) : ('file' as const),
+        label: file.name,
+        path: file.path,
+        ...(file.location === 'client' ? { client: true } : {}),
+        ...(file.size !== undefined ? { size: file.size } : {}),
+        ...(file.mimeType ? { mimeType: file.mimeType } : {}),
       })),
     ],
   }

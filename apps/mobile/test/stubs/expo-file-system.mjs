@@ -6,7 +6,13 @@ export const Paths = { document: 'doc:' }
 
 export class File {
   constructor(dir, name) {
-    this.path = `${dir}/${name}`
+    this.path = name === undefined ? dir : `${dir}/${name}`
+  }
+  get size() {
+    return Buffer.byteLength(files.get(this.path) ?? '')
+  }
+  async base64() {
+    return Buffer.from(this.textSync()).toString('base64')
   }
   get exists() {
     return files.has(this.path)

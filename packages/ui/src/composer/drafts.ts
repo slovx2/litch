@@ -56,12 +56,15 @@ export function saveDraft(key: string, text: string): void {
 export const dropDraft = (key: string): void => saveDraft(key, '')
 
 /** 开着的输入区：草稿的键 → 往它的输入框里放东西 */
-const refillers = new Map<string, (text: string, images: ImageAttachment[]) => void>()
+const refillers = new Map<
+  string,
+  (text: string, images: ImageAttachment[], extras: MessageExtra[]) => void
+>()
 
 /** 输入区开着的时候登记自己，别处要把一段话放回输入框时找它。返回取消登记的函数 */
 export function onRefill(
   key: string,
-  refill: (text: string, images: ImageAttachment[]) => void,
+  refill: (text: string, images: ImageAttachment[], extras: MessageExtra[]) => void,
 ): () => void {
   refillers.set(key, refill)
   return () => {
@@ -77,14 +80,20 @@ export const joinDraft = (back: string, draft: string): string =>
  * 把一段话（回退掉的那条消息）放回一个会话的输入框，给用户改了重发。
  * 输入区开着就直接放进去；没开着就写进草稿，下次打开时在。
  */
-export function refillDraft(key: string, text: string, list: ImageAttachment[]): void {
+export function refillDraft(
+  key: string,
+  text: string,
+  list: ImageAttachment[],
+  extras: MessageExtra[] = [],
+): void {
   const refill = refillers.get(key)
   if (refill) {
-    refill(text, list)
+    refill(text, list, extras)
     return
   }
   saveDraft(key, joinDraft(text, loadDraft(key)))
   saveDraftImages(key, [...list, ...loadDraftImages(key)])
+  saveDraftExtras(key, mergeExtras(loadDraftExtras(key), extras))
 }
 
 // ---------- 带预填地开新建页（配置助手按钮） ----------

@@ -1,19 +1,20 @@
 // 输入区里随消息带的东西（图片之外的）：一个个小片，每片能拿掉。
 // 片上只放一眼要看的（记号、名字）；带着的文字那一片能点开，浮层里看开头一段，能放回正文、能拿掉；
-// 提到的文件只是一个路径，鼠标移上去看得到完整的。
+// 文件卡可点开预览，鼠标移上去显示完整路径。
 // 选中回答加的评论每条一片，排在最前面（CommentChip）。
 import type { MessageExtra } from '@litch/core'
 import { type ReactNode, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
-import { Close, Icon, Snippet, Spark } from '../app/icons.tsx'
+import { Close, Snippet, Spark } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
 import { CommentEditor } from '../transcript/comments/Editor.tsx'
+import { type AttachmentContext, FileCard } from '../transcript/FileCard.tsx'
 import type { DraftComment } from './drafts.ts'
 import { extraLabel, lineCount } from './extras.ts'
 
 type TextExtra = Extract<MessageExtra, { kind: 'text' }>
 
-interface ChipProps {
+interface ChipProps extends AttachmentContext {
   extra: MessageExtra
   onRemove(): void
   /** 把这段文字放回正文。带着的文字才用得着 */
@@ -33,7 +34,7 @@ export function useExtraLabel(): (extra: MessageExtra) => string {
     })
 }
 
-export function ExtraChip({ extra, onRemove, onInline }: ChipProps) {
+export function ExtraChip({ extra, onRemove, onInline, ...context }: ChipProps) {
   const t = useT()
   const label = useExtraLabel()(extra)
   const remove = (
@@ -54,25 +55,26 @@ export function ExtraChip({ extra, onRemove, onInline }: ChipProps) {
       </TextChip>
     )
   }
+  if (extra.kind === 'file')
+    return (
+      <li className="cmp-file-card">
+        <FileCard
+          {...context}
+          file={{
+            ...extra,
+            kind: extra.folder ? 'folder' : 'file',
+            label: extra.name,
+          }}
+        >
+          {remove}
+        </FileCard>
+      </li>
+    )
   // 片上只写名字；提到的文件在哪（完整的路径）鼠标移上去看。路径在这台电脑上（远程设备的会话）的也写明
-  const about =
-    extra.kind === 'file'
-      ? [
-          t(extra.folder ? 'chip.folder' : 'chip.file'),
-          extra.path,
-          extra.client ? t('chip.client') : '',
-        ]
-          .filter(Boolean)
-          .join(' · ')
-      : `${t('chip.skill')} ${label}`
+  const about = `${t('chip.skill')} ${label}`
   return (
-    <li
-      className="cmp-chip"
-      data-kind={extra.kind}
-      data-folder={extra.kind === 'file' && extra.folder ? '' : undefined}
-      title={about}
-    >
-      {extra.kind === 'file' ? <Icon name={extra.folder ? 'folder' : 'file'} /> : <Spark />}
+    <li className="cmp-chip" data-kind={extra.kind} title={about}>
+      <Spark />
       <span className="ell">{label}</span>
       {remove}
     </li>
