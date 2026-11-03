@@ -1,10 +1,11 @@
 import { type DeviceView, keys, type WorkspaceView } from '@litch/core'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ManagerDraft, ManagerView } from '../../../core/src/model-manager.mts'
 import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
 } from '../../../protocol/src/manager.mts'
+import { managerSelectionIssue } from '../../../protocol/src/manager-validation.mts'
 import type { Selection } from '../app/App.tsx'
 import type { ManagersRoute } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
@@ -17,6 +18,7 @@ import { SettingsBar, useComposeOptions, useNewSessionDefaults } from '../compos
 import {
   MANAGER_FORM_STEPS,
   type ManagerFormStep,
+  managerFieldStep,
   managerStepError,
   managerTabTarget,
 } from './form-steps.ts'
@@ -73,6 +75,37 @@ export function ManagerForm({
   const stepIndex = MANAGER_FORM_STEPS.findIndex((entry) => entry.id === step)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [errorField, setErrorField] = useState('')
+  const formRef = useRef<HTMLFormElement>(null)
+  const showError = (message: string, field = '') => {
+    setError(message)
+    setErrorField(field)
+    const targetStep = managerFieldStep(field)
+    if (targetStep) setStep(targetStep)
+  }
+  useEffect(() => {
+    if (!error || busy || !errorField) return
+    const exact = [
+      ...(formRef.current?.querySelectorAll<HTMLElement>('[data-manager-field]') ?? []),
+    ].find((entry) => entry.dataset.managerField === errorField)
+    const target =
+      exact ?? formRef.current?.querySelector<HTMLElement>(`[data-manager-panel="${step}"]`)
+    const control = target?.matches('input, select, textarea')
+      ? target
+      : target?.querySelector<HTMLElement>('input, select, textarea, button')
+    // 项目目录只读时，定位到项目选择，让用户可以更换目录来源。
+    const focus =
+      control instanceof HTMLInputElement && control.readOnly
+        ? formRef.current?.querySelector<HTMLElement>('[data-manager-workspace]')
+        : (control ?? target)
+    focus?.focus()
+    target?.scrollIntoView({ block: 'nearest' })
+  }, [error, errorField, busy, step])
+  const fieldProps = (field: string) => ({
+    'data-manager-field': field,
+    'aria-invalid': error && errorField === field ? true : undefined,
+    'aria-describedby': error && errorField === field ? 'manager-form-error' : undefined,
+  })
   const environment = manager ? draft : fitManagerHarness(draft, device)
   const options = useComposeOptions(deviceId, environment.harness || undefined)
   const lineOptions = useComposeOptions(
@@ -80,10 +113,7 @@ export function ManagerForm({
     environment.dispatch.harness ?? environment.harness,
   )
   const form = manager ? draft : fitManagerModels(environment, options, lineOptions)
-  const optionsLoading =
-    !manager &&
-    ((!options && Boolean(form.model || form.effort)) ||
-      (!lineOptions && Boolean(form.dispatch.model || form.dispatch.effort)))
+  const optionsLoading = !manager && (!options || !lineOptions)
   const sameHarness = !form.dispatch.harness || form.dispatch.harness === form.harness
   const lineModel = lineOptions?.models.find((entry) =>
     form.dispatch.model
@@ -98,7 +128,7 @@ export function ManagerForm({
     form.model ? entry.id === form.model : entry.isDefault,
   )
   const cwd = workspace?.roots[0] ?? form.cwd
-  const project = useProjectPermission(useServices(), deviceId, cwd)
+  const project = useProjectPermission(useServices(), deviceId, cwd.trim())
   const defaults = useNewSessionDefaults(deviceId, form.harness, cwd || null)
   const permission = project.permission ?? defaults?.permission ?? null
   const permissionBlocked = Boolean(
@@ -118,20 +148,60 @@ export function ManagerForm({
       maxRunningLines: form.dispatch.maxRunningLines,
     })
     if (issue) {
-      if (manager) setStep('dispatch')
-      setError(t(issue))
+      showError(
+        t(issue),
+        issue === 'manager.updateRequired'
+          ? 'dispatch.maxRunningLines'
+          : issue === 'manager.harnessRequired'
+            ? 'harness'
+            : 'cwd',
+      )
       return
+    }
+    if (!manager && step !== 'basic' && (permissionBlocked || project.loading || project.error)) {
+      showError(
+        project.error ??
+          t(project.loading ? 'permission.project.loading' : 'permission.project.unsupported'),
+        project.error ? (project.errorField ?? 'cwd') : 'permission',
+      )
+      return
+    }
+    if (step !== 'basic') {
+      const harness = step === 'runtime' ? form.harness : (form.dispatch.harness ?? form.harness)
+      if (!device?.harnesses.some((entry) => entry.id === harness && entry.state === 'ready')) {
+        showError(t('manager.harnessRequired'), step === 'runtime' ? 'harness' : 'dispatch.harness')
+        return
+      }
+      const catalog = step === 'runtime' ? options : lineOptions
+      const model =
+        step === 'runtime' ? form.model : (form.dispatch.model ?? (sameHarness ? form.model : null))
+      const effort = step === 'runtime' ? form.effort : form.dispatch.effort
+      const prefix = step === 'runtime' ? '' : 'dispatch.'
+      if (!catalog) {
+        showError(t('manager.optionsLoading'), `${prefix}model`)
+        return
+      }
+      const selected = managerSelectionIssue(
+        catalog.models.map((entry) => ({ ...entry, efforts: entry.efforts.map((one) => one.id) })),
+        model,
+        effort,
+        prefix,
+      )
+      if (selected) {
+        showError(
+          t(
+            selected.reason === 'unavailableModel'
+              ? 'manager.invalidModel'
+              : 'manager.invalidEffort',
+          ),
+          selected.field,
+        )
+        return
+      }
     }
     if (!manager && step !== 'dispatch') {
       setStep(step === 'basic' ? 'runtime' : 'dispatch')
       setError('')
-      return
-    }
-    if (!manager && (permissionBlocked || project.loading || project.error)) {
-      setError(
-        project.error ??
-          t(project.loading ? 'permission.project.loading' : 'permission.project.unsupported'),
-      )
       return
     }
     setBusy(true)
@@ -159,13 +229,17 @@ export function ManagerForm({
       rememberManager(deviceId, workspace?.id ?? '', { ...form, cwd: cwd.trim() })
       onCreated({ deviceId, sessionId: result.threadId })
     } catch (cause) {
-      setError(reasonOf(cause, t))
+      showError(
+        reasonOf(cause, t),
+        typeof (cause as { key?: unknown })?.key === 'string' ? (cause as { key: string }).key : '',
+      )
     } finally {
       setBusy(false)
     }
   }
   return (
     <form
+      ref={formRef}
       className="mng-wrap mg-form"
       data-manager="form"
       data-manager-mode={manager ? 'edit' : 'create'}
@@ -220,6 +294,7 @@ export function ManagerForm({
           className="mng-sec mg-panel"
           id="manager-panel-basic"
           data-manager-panel="basic"
+          tabIndex={-1}
           hidden={step !== 'basic'}
           role={manager ? 'tabpanel' : undefined}
           aria-labelledby="manager-tab-basic"
@@ -228,6 +303,7 @@ export function ManagerForm({
             {t('manager.name')}
             <input
               className="req-input"
+              {...fieldProps('name')}
               value={form.name}
               placeholder={t('manager.optionalName')}
               onChange={(event) => change({ name: event.target.value })}
@@ -238,6 +314,7 @@ export function ManagerForm({
             <textarea
               className="req-input"
               rows={3}
+              {...fieldProps('rules')}
               value={form.rules}
               placeholder={t('manager.promptPlaceholder')}
               onChange={(event) => change({ rules: event.target.value })}
@@ -249,6 +326,7 @@ export function ManagerForm({
               <textarea
                 className="req-input"
                 rows={3}
+                {...fieldProps('firstTask')}
                 value={form.firstTask}
                 placeholder={t('manager.firstPlaceholder')}
                 onChange={(event) => change({ firstTask: event.target.value })}
@@ -260,6 +338,7 @@ export function ManagerForm({
           className="mng-sec mg-form-grid mg-panel"
           id="manager-panel-runtime"
           data-manager-panel="runtime"
+          tabIndex={-1}
           hidden={step !== 'runtime'}
           role={manager ? 'tabpanel' : undefined}
           aria-labelledby="manager-tab-runtime"
@@ -311,6 +390,7 @@ export function ManagerForm({
               <label className="form-field">
                 {t('manager.workspace')}
                 <select
+                  data-manager-workspace
                   value={workspace?.id ?? ''}
                   onChange={(event) => setWorkspaceId(event.target.value)}
                 >
@@ -327,14 +407,27 @@ export function ManagerForm({
                 <input
                   className="req-input"
                   required
+                  {...fieldProps('cwd')}
                   value={cwd}
                   readOnly={Boolean(workspace)}
                   onChange={(event) => change({ cwd: event.target.value })}
                 />
+                {project.error ? (
+                  <span className="err" role="alert">
+                    {project.error}
+                  </span>
+                ) : project.loading ? (
+                  <span className="form-note">{t('permission.project.loading')}</span>
+                ) : project.view?.record ? (
+                  <span className="form-note">
+                    {t('manager.resolvedDirectory', { path: project.view.record.cwd })}
+                  </span>
+                ) : null}
               </label>
               <label className="form-field">
                 {t('manager.harness')}
                 <select
+                  {...fieldProps('harness')}
                   value={form.harness}
                   onChange={(event) =>
                     change({ harness: event.target.value, model: null, effort: null })
@@ -352,6 +445,7 @@ export function ManagerForm({
               <label className="form-field">
                 {t('manager.model')}
                 <select
+                  {...fieldProps('model')}
                   value={form.model ?? ''}
                   onChange={(event) => change({ model: event.target.value || null, effort: null })}
                 >
@@ -363,7 +457,7 @@ export function ManagerForm({
                   ))}
                 </select>
               </label>
-              <div className="form-field">
+              <div className="form-field" {...fieldProps('permission')}>
                 <span>{t('composer.permission')}</span>
                 <SettingsBar
                   deviceId={deviceId}
@@ -380,6 +474,7 @@ export function ManagerForm({
               <label className="form-field">
                 {t('manager.effort')}
                 <select
+                  {...fieldProps('effort')}
                   value={form.effort ?? ''}
                   onChange={(event) => change({ effort: event.target.value || null })}
                 >
@@ -401,6 +496,7 @@ export function ManagerForm({
           className="mg-panel"
           id="manager-panel-dispatch"
           data-manager-panel="dispatch"
+          tabIndex={-1}
           hidden={step !== 'dispatch'}
           role={manager ? 'tabpanel' : undefined}
           aria-labelledby="manager-tab-dispatch"
@@ -410,6 +506,7 @@ export function ManagerForm({
             <label className="form-field">
               {t('manager.lineHarness')}
               <select
+                {...fieldProps('dispatch.harness')}
                 value={form.dispatch.harness ?? ''}
                 onChange={(event) =>
                   change({
@@ -435,6 +532,7 @@ export function ManagerForm({
             <label className="form-field">
               {t('manager.lineModel')}
               <select
+                {...fieldProps('dispatch.model')}
                 value={form.dispatch.model ?? ''}
                 onChange={(event) =>
                   change({
@@ -457,6 +555,7 @@ export function ManagerForm({
             <label className="form-field">
               {t('manager.lineEffort')}
               <select
+                {...fieldProps('dispatch.effort')}
                 value={form.dispatch.effort ?? ''}
                 onChange={(event) =>
                   change({
@@ -482,6 +581,7 @@ export function ManagerForm({
             <label className="form-check">
               <input
                 type="checkbox"
+                {...fieldProps('dispatch.worktree')}
                 checked={form.dispatch.worktree}
                 aria-describedby="manager-worktree-note"
                 onChange={(event) =>
@@ -499,6 +599,7 @@ export function ManagerForm({
             <label className="form-field">
               {t('manager.merge')}
               <select
+                {...fieldProps('dispatch.merge')}
                 value={form.dispatch.merge}
                 onChange={(event) =>
                   change({
@@ -518,6 +619,7 @@ export function ManagerForm({
                 min={1}
                 step={1}
                 required
+                {...fieldProps('dispatch.maxRunningLines')}
                 value={form.dispatch.maxRunningLines}
                 onChange={(event) =>
                   change({
@@ -532,6 +634,7 @@ export function ManagerForm({
             <label className="form-check">
               <input
                 type="checkbox"
+                {...fieldProps('contact.desktopNotification')}
                 checked={form.contact.desktopNotification}
                 onChange={(event) =>
                   change({
@@ -547,7 +650,7 @@ export function ManagerForm({
       </fieldset>
       <footer className="tk-form-foot mg-form-foot">
         {error ? (
-          <p className="err" role="alert">
+          <p className="err" role="alert" id="manager-form-error">
             {error}
           </p>
         ) : null}

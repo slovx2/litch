@@ -22,6 +22,7 @@ import { MANAGER_POST_METHOD, type ManagerPostId } from '../../protocol/src/mana
 import { formatSessionEvent, parseSessionEvent } from '../../protocol/src/session-tree.mjs'
 import type { DeviceToolCall } from './device-tools.mjs'
 import { isDecision, ManagerBoardWriter } from './manager-board.mjs'
+import { validateManagerRuntime } from './manager-create-validation.mjs'
 import { ManagerEndings } from './manager-ending.mjs'
 import { submitManagerFeedback } from './manager-feedback.mjs'
 import { ManagerLines } from './manager-lines.mjs'
@@ -34,6 +35,7 @@ import { managerBundle, managerFingerprint, managerTools } from './manager-rules
 import { ManagerStore, managerNow, openManagerDatabase } from './manager-store.mjs'
 import {
   fields,
+  invalidSetting,
   keys,
   ManagerError,
   text,
@@ -262,13 +264,13 @@ export class DeviceManagers {
         `${method} requires litchManager. Declare it in capabilities.litchExtensions.`,
         { method, required: [EXTENSION.manager] },
       )
+    if (method === MANAGER_METHOD.create) return this.create(given)
     const params = fields(given ?? {})
     if (method === MANAGER_METHOD.list) {
       keys(params, [])
       await Promise.all(this.store.managers().map((manager) => this.lines.refresh(manager.id)))
       return { managers: this.store.managers().map((manager) => this.manager(manager.id)) }
     }
-    if (method === MANAGER_METHOD.create) return this.create(params)
     // 标准的“方法不存在”：客户端据此提示设备服务比应用旧，不当成参数错误或经理不存在
     if (!(Object.values(MANAGER_METHOD) as string[]).includes(method))
       throw new ManagerError('methodNotFound', `Unknown manager method: ${method}.`)
@@ -363,7 +365,11 @@ export class DeviceManagers {
           patch.dispatch?.harness &&
           !this.tree.host.harnesses().some((source) => source.id === patch.dispatch?.harness)
         )
-          throw new ManagerError('invalidManager', 'The default line harness is not configured.')
+          invalidSetting({
+            field: 'dispatch.harness',
+            reason: 'unavailableHarness',
+            message: 'The default line harness is not configured.',
+          })
         const before = this.store.manager(id) as Manager
         const after = { ...before, ...patch, updatedAt: managerNow() }
         this.store.transaction(() => {
@@ -481,10 +487,18 @@ export class DeviceManagers {
   }
   private async create(given: unknown): Promise<unknown> {
     const params = validateCreate(given)
-    for (const harness of [params.harness, params.dispatch.harness].filter(Boolean))
-      if (!this.tree.host.harnesses().some((source) => source.id === harness))
-        throw new ManagerError('invalidManager', `Harness ${harness} is not configured.`)
+    for (const [field, harness] of [
+      ['harness', params.harness],
+      ['dispatch.harness', params.dispatch.harness],
+    ] as const)
+      if (harness && !this.tree.host.harnesses().some((source) => source.id === harness))
+        invalidSetting({
+          field,
+          reason: 'unavailableHarness',
+          message: `Harness ${harness} is not configured.`,
+        })
     const { firstTask, ...settings } = params
+    await validateManagerRuntime(this.tree, params)
     const manager: Manager = {
       ...settings,
       id: randomUUID(),
@@ -501,7 +515,15 @@ export class DeviceManagers {
     const permission =
       params.permission ?? this.tree.host.workspaces.permissions.read(params.cwd).permission
     if (permission) {
-      requireSupportedPermission(link, permission)
+      try {
+        requireSupportedPermission(link, permission)
+      } catch (error) {
+        invalidSetting({
+          field: 'permission',
+          reason: 'unsupportedPermission',
+          message: String(error),
+        })
+      }
       manager.permission = permission
     }
     const tools = managerBundle(manager, link.native)

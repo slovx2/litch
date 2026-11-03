@@ -1300,6 +1300,16 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     '空工作目录留在运行环境并显示原因',
     () => activeStep('runtime') && one('.mg-form [role="alert"]'),
   )
+  fill(input('工作目录'), 'relative-project')
+  await next()
+  await until(
+    '相对目录在下一步前定位字段并显示具体原因',
+    () =>
+      activeStep('runtime') &&
+      document.activeElement === input('工作目录') &&
+      input('工作目录').getAttribute('aria-invalid') === 'true' &&
+      one('#manager-form-error')?.textContent?.includes('相对路径'),
+  )
   fill(input('工作目录'), '~/work/litch')
   // 只对模拟核心：取消不记确认；确认后跨 harness 复用；换目录不带走项目权限。
   const managerHarness = field('经理使用')?.querySelector('select')
@@ -1358,7 +1368,10 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await next()
   await until(
     '并发数无效时留在任务分配',
-    () => activeStep('dispatch') && one('.mg-form [role="alert"]'),
+    () =>
+      activeStep('dispatch') &&
+      one('.mg-form [role="alert"]') &&
+      document.activeElement === input('最大并行工作线数'),
   )
   fill(input('最大并行工作线数'), '2')
   await click('[data-act="manager-previous"]')

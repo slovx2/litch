@@ -1,6 +1,5 @@
 // 项目权限归设备和真实目录所有，客户端与 harness 不分别保存确认记录。
 import { realpathSync, statSync } from 'node:fs'
-import { isAbsolute } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import {
@@ -9,6 +8,7 @@ import {
   permissionLevel,
 } from '../../protocol/src/project-permissions.mjs'
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
+import { DirectoryError, requireDeviceDirectory } from './directory-validation.mjs'
 import { isObject } from './wire.mjs'
 import type { Announce } from './workspaces.mjs'
 
@@ -23,13 +23,13 @@ export class ProjectPermissions {
     ) WITHOUT ROWID`)
   }
   read(cwd: string): ProjectPermission {
-    if (!isAbsolute(cwd)) throw new ProtocolError(-32602, 'cwd 必须是绝对目录')
+    const resolved = requireDeviceDirectory(cwd)
     let path: string
     try {
-      path = realpathSync(cwd)
+      path = realpathSync(resolved)
       if (!statSync(path).isDirectory()) throw new Error('不是目录')
     } catch {
-      throw new ProtocolError(-32602, 'cwd 必须是设备上存在的目录')
+      throw new DirectoryError('unreadableDirectory', cwd, resolved)
     }
     const row = this.db.prepare('SELECT * FROM project_permissions WHERE cwd=?').get(path)
     return {

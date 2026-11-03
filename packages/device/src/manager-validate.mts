@@ -1,9 +1,12 @@
 // 入口参数与跨字段引用校验。模型的 schema 不是权限边界，设备仍逐项检查。
-import { statSync } from 'node:fs'
-import { isAbsolute } from 'node:path'
 import { Ajv } from 'ajv'
 import { MANAGER_TOOLS } from '../../protocol/src/client-tools-manager.mjs'
 import type { ManagerCreateParams, ManagerPatch } from '../../protocol/src/manager.mjs'
+import {
+  type ManagerValidationIssue,
+  managerInputIssue,
+} from '../../protocol/src/manager-validation.mjs'
+import { DirectoryError, requireDeviceDirectory } from './directory-validation.mjs'
 import { isObject } from './wire.mjs'
 
 export class ManagerError extends Error {
@@ -42,59 +45,25 @@ export function text(value: unknown, field: string, nonempty = true): string {
     invalid(`${field} must be ${nonempty ? 'nonempty ' : ''}text.`, field)
   return value
 }
-function nullable(value: unknown, field: string): void {
-  if (value !== null) text(value, field)
+export function invalidSetting(issue: ManagerValidationIssue): never {
+  const { message, ...detail } = issue
+  throw new ManagerError('invalidManager', message, { ...detail, litch: 'invalidManager' })
 }
-
-const PATCH = ['name', 'scope', 'rules', 'dispatch', 'contact']
 export function validatePatch(value: Record<string, unknown>): ManagerPatch {
-  keys(value, PATCH)
-  for (const key of ['name', 'scope', 'rules']) if (key in value) text(value[key], key, false)
-  if ('dispatch' in value) {
-    const dispatch = fields(value.dispatch)
-    keys(dispatch, ['harness', 'model', 'effort', 'worktree', 'merge', 'maxRunningLines'])
-    for (const key of ['harness', 'model', 'effort']) nullable(dispatch[key], `dispatch.${key}`)
-    if (typeof dispatch.worktree !== 'boolean') invalid('dispatch.worktree must be boolean.')
-    if (!['manager', 'user'].includes(String(dispatch.merge)))
-      invalid('dispatch.merge must be manager or user.')
-    if (!Number.isSafeInteger(dispatch.maxRunningLines) || Number(dispatch.maxRunningLines) < 1)
-      invalid('dispatch.maxRunningLines must be a positive integer.')
-  }
-  if ('contact' in value) {
-    const contact = fields(value.contact)
-    keys(contact, ['desktopNotification', 'unanswered'])
-    if (typeof contact.desktopNotification !== 'boolean' || contact.unanswered !== 'wait')
-      invalid('contact requires desktopNotification and unanswered=wait.')
-  }
+  const issue = managerInputIssue(value, 'patch')
+  if (issue) invalidSetting(issue)
   return value as ManagerPatch
 }
 export function validateCreate(value: unknown): ManagerCreateParams {
-  const input = fields(value)
-  keys(input, [
-    ...PATCH,
-    'cwd',
-    'harness',
-    'model',
-    'effort',
-    'permission',
-    'template',
-    'firstTask',
-  ])
-  for (const key of ['cwd', 'harness', 'scope', 'name', 'rules', 'firstTask'])
-    text(input[key], key, ['cwd', 'harness'].includes(key))
-  for (const key of ['model', 'effort']) nullable(input[key], key)
-  if (!['release', 'investigation', 'research', 'blank'].includes(String(input.template)))
-    invalid('Unknown manager template.', 'template')
-  validatePatch(Object.fromEntries(PATCH.map((key) => [key, input[key]])))
-  if (input.permission != null) text(input.permission, 'permission')
-  const cwd = input.cwd as string
-  if (!isAbsolute(cwd)) invalid('cwd must be an absolute directory.', 'cwd')
+  const issue = managerInputIssue(value, 'create')
+  if (issue) invalidSetting(issue)
+  const given = value as ManagerCreateParams
   try {
-    if (!statSync(cwd).isDirectory()) invalid('cwd must be a directory.', 'cwd')
-  } catch {
-    invalid('cwd must be an existing directory on this device.', 'cwd')
+    return { ...given, cwd: requireDeviceDirectory(given.cwd) }
+  } catch (error) {
+    if (error instanceof DirectoryError) invalidSetting({ ...error.data, message: error.message })
+    throw error
   }
-  return input as unknown as ManagerCreateParams
 }
 const ajv = new Ajv({ strict: false, allErrors: true })
 const validators = new Map(

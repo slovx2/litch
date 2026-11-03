@@ -6,6 +6,8 @@ import {
 } from '../../../protocol/src/project-permissions.mjs'
 import { ChannelError } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
+import { RpcError } from '../connection/rpc.mjs'
+import { managerValidationError } from './manager-validation.mjs'
 
 export interface ProjectPermissionView {
   deviceId: string
@@ -46,8 +48,20 @@ export function createProjectPermissions(host: Host) {
       const result = await host.request(PROJECT_PERMISSION.read, { cwd })
       if (entry.epoch === epoch) publish(cwd, result)
     } catch (error) {
-      if (entry.epoch === epoch)
-        for (const sink of entry.sinks) sink.error(new ChannelError('rejected', String(error)))
+      const data =
+        error instanceof RpcError
+          ? (error.data as {
+              litch?: string
+              reason?: string
+              value?: string
+              resolvedPath?: string
+            } | null)
+          : null
+      const failure =
+        data?.litch === 'invalidDirectory'
+          ? managerValidationError(String(error), 'cwd', data.reason, data)
+          : new ChannelError('rejected', String(error), undefined, { key: 'cwd' })
+      if (entry.epoch === epoch) for (const sink of entry.sinks) sink.error(failure)
     }
   }
   return {

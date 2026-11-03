@@ -18,6 +18,7 @@ import {
   type ManagerQuestionParams,
   type ManagerSubmittedAnswer,
 } from '../../../protocol/src/manager.mjs'
+import { managerInputIssue } from '../../../protocol/src/manager-validation.mjs'
 import { ChannelError } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import type { ManagerRequests } from '../connection/manager-protocol.mjs'
@@ -40,6 +41,7 @@ import {
   projectManagerRequest,
 } from '../projection/manager.mjs'
 import { openedManagerDecisions } from './manager-decisions.mjs'
+import { managerValidationError } from './manager-validation.mjs'
 
 export interface ManagersHost {
   deviceId: string
@@ -242,22 +244,29 @@ export function createManagers(host: ManagersHost) {
   }
   const failure = (error: unknown): ChannelError => {
     if (error instanceof RpcError) {
-      const data = error.data as { litch?: string; field?: string } | null
+      const data = error.data as {
+        litch?: string
+        field?: string
+        reason?: string
+        value?: string
+        resolvedPath?: string
+      } | null
       const faults: Record<string, [ChannelError['code'], string]> = {
         unknownManager: ['notFound', '经理不存在'],
         managerEnded: ['rejected', '经理已结束，看板只读'],
-        invalidManager: ['invalid', '经理设置无效，请检查填写的内容'],
         unknownDecision: ['notFound', '决策不存在'],
         decisionNotClosed: ['rejected', '只能重新打开已关闭的决策'],
         lineLimitReached: ['rejected', '运行中的工作线已达上限'],
       }
       // 不认识的方法：新设备回标准 -32601；0.27 及更早的设备回 invalidManager、原文以 Unknown manager method 开头。
-      // 只认这一种 invalidManager，别的照旧是“设置无效”
+      // 只把明确的不认识方法解释为版本问题，字段错误保留具体原因。
       if (
         error.code === -32601 ||
         (data?.litch === 'invalidManager' && error.message.startsWith('Unknown manager method'))
       )
         return oldDevice(error.message)
+      if (data?.litch === 'invalidManager')
+        return managerValidationError(error.message, data.field, data.reason, data)
       const fault = data?.litch ? faults[data.litch] : undefined
       if (fault)
         return new ChannelError(fault[0], error.message, undefined, {
@@ -376,10 +385,14 @@ export function createManagers(host: ManagersHost) {
       return true
     },
     async create(draft: ManagerDraft) {
+      const issue = managerInputIssue(draft, 'create')
+      if (issue) throw managerValidationError(issue.message, issue.field, issue.reason, issue)
       const result = await guarded(() => host.request(MANAGER_METHOD.create, draft))
       return { manager: settle(result.manager), threadId: result.threadId }
     },
     async update(managerId: string, patch: ManagerEdit) {
+      const issue = managerInputIssue(patch, 'patch')
+      if (issue) throw managerValidationError(issue.message, issue.field, issue.reason, issue)
       const result = await guarded(() =>
         host.request(MANAGER_METHOD.update, { managerId, ...patch }),
       )

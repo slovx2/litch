@@ -485,3 +485,7 @@ On phone, discussions open in a half-screen bottom drawer. Drag the handle up or
 When a decision changes, an old draft containing only an option selection is cleared with a compact hint beside the title and no longer counts as pending. Empty drafts clear silently. Drafts containing free text, including questions, retain their text and require confirmation of the new version before submission. Ended issues retain their existing draft review/discard flow. The phone follows the same rules. Recommended options retain their marker; select the option directly.
 
 新建经理入口没有明确指定项目时，项目与目录一起恢复上次保存值；进入表单后仍可手动选择“无项目”。
+
+新建经理每一步在进入下一步前校验。工作目录在目标设备上检查，显示解析后的设备路径；支持绝对路径、`~` 和 `~/项目目录`，远程设备使用远程设备自己的主目录。目录不存在、路径指向文件或无法访问时，提示原始输入、设备路径和修正方法。模型列表尚未加载时不能继续；型号和强度按目标 harness 的列表核对，创建时设备再次核验。名称、经理设定和首个任务可留空，最大并行工作线数必须为正安全整数。
+
+创建或保存失败时，表单会定位到有问题的字段；前一步的错误会自动返回对应步骤并保留草稿。设备服务不认识操作时明确提示版本较旧；旧设备没有返回具体校验原因时，保留已知字段并提示升级设备服务，不能据此判断设置本身无效。

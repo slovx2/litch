@@ -267,6 +267,15 @@ export const enManager = {
   'manager.unanswered': 'Wait until decisions are answered',
   'manager.firstTask': 'First task',
   'manager.firstPlaceholder': 'Leave blank to plan only and wait for user confirmation to start',
+  'manager.cwdRequired': 'Working directory: enter an existing directory on the target device.',
+  'manager.resolvedDirectory': 'Device path: {path}',
+  'manager.invalidModel':
+    'This model is no longer available. Select another model or use the default.',
+  'manager.invalidEffort':
+    'The selected model does not support this effort. Select a supported effort or use the default.',
+  'manager.cwdAbsolute':
+    'Working directory: enter an absolute path or a path starting with ~/. Relative paths are not supported.',
+  'manager.harnessRequired': 'Manager harness: select an available harness on the target device.',
   'manager.create': 'Create manager',
   'manager.creating': 'Creating…',
   'manager.noDevice': 'No online device supports managers',

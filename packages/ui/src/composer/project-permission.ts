@@ -1,5 +1,6 @@
 // 订阅设备上的项目权限；两端共用核心协议，React 钩子留在各自平台，避免重复加载 React。
 import {
+  type ChannelErrorShape,
   type CoreChannel,
   keys,
   type ProjectPermissionView,
@@ -7,12 +8,15 @@ import {
   type Replica,
 } from '@litch/core'
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useT } from '../app/appearance.ts'
+import { reasonOf } from '../app/errors.ts'
 
 export function useProjectPermission(
   { channel, replica }: { channel: CoreChannel; replica: Replica },
   deviceId: string,
   cwd: string | null | undefined,
 ) {
+  const t = useT()
   const path = cwd ?? ''
   const key = keys.projectPermission(deviceId, path)
   const errorKey = keys.projectPermissionError(deviceId, path)
@@ -26,7 +30,7 @@ export function useProjectPermission(
   )
   const view = useSyncExternalStore(watch, () => replica.store.get<ProjectPermissionView>(key))
   const readError = useSyncExternalStore(watchError, () =>
-    replica.store.get<{ message: string }>(errorKey),
+    replica.store.get<ChannelErrorShape>(errorKey),
   )
   const [saving, setSaving] = useState(false)
   const [failure, setFailure] = useState<{ key: string; text: string } | null>(null)
@@ -56,7 +60,8 @@ export function useProjectPermission(
       view?.record?.confirmedPermissions.some((entry) => entry === id) === true,
     loading: Boolean(deviceId && path && !view && !readError),
     saving,
-    error: readError?.message ?? (failure?.key === key ? failure.text : null),
+    error: readError ? reasonOf(readError, t) : failure?.key === key ? failure.text : null,
+    errorField: readError?.key,
     save,
   }
 }
