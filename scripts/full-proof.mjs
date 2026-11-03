@@ -1,12 +1,45 @@
 // Full 的输入和实际检出共同构成证明；工作流显示 success 不能替代完整覆盖。
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { checkNativeProof, selectedNative } from './ci/mac-native-plan.mjs'
 import { domains, releaseDomains } from './ci-impact.mjs'
+
+export function hasMacCoverage(full) {
+  try {
+    const selected = selectedNative(full.domains, full.runCi)
+    if (!selected.length) return full.macProof === null
+    const { artifact, proof } = full.macProof
+    if (
+      full.jobs?.native !== 'success' ||
+      !Number.isSafeInteger(artifact.id) ||
+      artifact.id <= 0 ||
+      !Number.isSafeInteger(artifact.jobId) ||
+      artifact.jobId <= 0 ||
+      !Number.isSafeInteger(artifact.attempt) ||
+      artifact.attempt < 1 ||
+      artifact.attempt > full.attempt ||
+      artifact.name !== `mac-native-proof-${artifact.attempt}` ||
+      !/^sha256:[a-f0-9]{64}$/.test(artifact.digest)
+    )
+      return false
+    checkNativeProof(proof, selected, {
+      repository: full.repository,
+      sha: full.sha,
+      workflowSha: full.workflowSha,
+      runId: full.runId,
+      attempt: artifact.attempt,
+    })
+    return true
+  } catch {
+    return false
+  }
+}
 
 export const fullJobs = [
   'source',
   'gate',
+  'native',
   'adapters',
   'computer-use',
   'computer-use-windows',
@@ -53,6 +86,7 @@ export function isCompleteFull(run, proof, sha, repository) {
       proof.sha === sha &&
       proof.runCi === true &&
       hasAllDomains(proof.domains) &&
+      hasMacCoverage(proof) &&
       fullJobs.every((job) => proof.jobs?.[job] === 'success'),
   )
 }
@@ -68,6 +102,7 @@ export function hasReleaseCoverage(proof) {
   }
   return Boolean(
     proof?.schema === 1 &&
+      hasMacCoverage(proof) &&
       proof.runCi === true &&
       Array.isArray(selected) &&
       new Set(selected).size === selected.length &&
@@ -156,6 +191,16 @@ export function writeFullProof(env = process.env) {
     runCi: env.FULL_RUN_CI === 'true',
     mobileDisableVulkan: env.FULL_MOBILE_DISABLE_VULKAN === 'true',
     jobs: Object.fromEntries(Object.entries(needs).map(([job, data]) => [job, data.result])),
+    macProof: JSON.parse(readFileSync('mac-proof-bound.json', 'utf8')),
+  }
+  if (!hasMacCoverage(proof)) throw new Error('合并Mac的检查证明缺失、失败或来源不符')
+  const selected = selectedNative(proof.domains, proof.runCi)
+  for (const domain of ['computer-use', 'client', 'client-engines']) {
+    proof.jobs[domain] = selected.includes(domain) ? 'success' : 'skipped'
+  }
+  if (selected.includes('client')) {
+    const units = proof.runCi ? needs.gate?.result : needs['client-unit']?.result
+    if (units !== 'success') proof.jobs.client = 'failure'
   }
   proof.releaseCoverage = {
     mobileE2eRequired: false,

@@ -15,6 +15,10 @@ gh workflow run release.yml --ref <候选分支>
 
 Prepare 固定到本次工作流 SHA，门禁与五类打包并行。macOS 必须正式签名、Accepted、公证票据有效；Android 必须使用正式钥匙，验证证书、packageName、versionName、versionCode、非 debug 和 arm64 ABI。缺机密直接失败。
 
+候选内首先申请签名打包的 Mac；补充 Mac 检查由 Linux 协调作业等待同 run、同 SHA 的 `desktop-macos` 成功后放行。其余平台出包和 Linux 门禁仍并行。等待有70分钟上限，不触发任何重跑；签名失败/取消会拦住补充 Mac。若按既有规则恢复未获 runner 的签名片，须同时恢复失败的协调作业及其下游，不能只重跑签名后假定门禁会自动续接。
+
+完整非手机候选最多使用三个 Mac 作业：签名；浏览器/原生 Computer Use/完整客户端窗口/三引擎窗口的合并检查；两套适配器测试共用准备的 Mac 检查。普通 Full 只用后两台，独立 CI 保留浏览器 Mac。五个已完成双平台对照的子集在 Linux 执行；CI 已通过首回合时，Full 的 real-engines 只执行剩余工具检查，`run-ci=false` 时仍补齐完整入口。
+
 门禁必跑 CI 单测/契约/类型、桌面 smoke/critical/六入口首回合，另跑手机类型与原生 Markdown 单测。按 48 小时内全绿的祖先夜间选择完整领域；没有基线时跑全部非手机领域。
 
 用户决定：手机模拟器 24 条 E2E 不参与任何发版候选，包含手机/共享代码变更和无基线情形。它们仍在夜间/手动 Full。手机单测、类型、正式 APK 与包验证不豁免。普通 push/PR 不跑模拟器，保持原状。
@@ -51,6 +55,7 @@ gh workflow run promote.yml --ref <已推送验证分支> \
 ## 4. 失败、补验和证明边界
 
 - 任何测试、出包或验证失败，都不封存可晋级候选。部分 Full、缺 run-ci、实际检出错误、未知证明不能冒充完整。
+- 合并 Mac 逐检查生成 `mac-native-proof-<attempt>`，Full 汇总核对实际成功 job、源码/工作流 SHA、run、attempt、artifact ID/digest、命令与检查 ID 后才生成逻辑领域结果。缺浏览器或任一窗口/原生检查都不能以“合并 job 绿”替代。验证策略已变更，旧策略候选不能用新代码晋级；没有符合当前证明契约的夜间基线时照旧扩大测试。
 - 源 run ID 与 Promote 自己的 run ID 不同是正常情况；源 run 最新 attempt 必须成功。源运行开始新 attempt 后旧封存件不再可晋级。
 - 测试重跑沿用源 run，已成功包引用原 artifact ID/创建 attempt。只重跑 Gate 汇总时可绑定较早成功的 Full artifact，不能伪造“本次重新实跑”。重跑后的新封存件有新 ID/digest，重新取 Summary 参数。
 - 48 小时约束作用于增量夜间基线；已经完成全部非手机领域的同 SHA 证明不依赖旧基线。源制品缺失/过期、基线过期或验证策略变化时明确失败，不静默重建、跨 run 拼包或降低覆盖。

@@ -23,3 +23,18 @@ test('独立CI保留浏览器原生检查；Linux共享入口不接受skip或重
   assert.match(workflow, /ref: \$\{\{ inputs.sha \}\}/)
   assert.doesNotMatch(workflow, /skip-missing|continue-on-error/)
 })
+
+test('候选补充Mac必须经过签名协调，Linux测试/出包不等待签名', () => {
+  const read = (name) => readFileSync(`.github/workflows/${name}.yml`, 'utf8')
+  const release = read('release')
+  assert.match(release, /mac-after-signing: true/)
+  assert.match(release, /desktop-macos:\n {4}needs: candidate/)
+  assert.match(release, /gate:\n {4}needs: candidate/)
+  assert.match(read('full'), /adapters-macos:\n {4}needs: \[source, mac-ready\]/)
+  assert.match(read('mac-native'), /checks:\n {4}needs: priority\n {4}runs-on: macos-15/)
+  assert.match(read('mac-priority'), /runs-on: ubuntu-24.04/)
+  assert.match(read('full'), /include-browser: false/)
+  assert.match(read('full'), /suite: \[all\]/)
+  assert.match(read('full'), /matrix.suite == 'claude' \|\| matrix.suite == 'all'/)
+  assert.match(read('full'), /matrix.suite == 'platform' \|\| matrix.suite == 'all'/)
+})

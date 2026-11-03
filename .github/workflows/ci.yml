@@ -13,6 +13,9 @@ on:
       sha:
         type: string
         default: ''
+      include-browser:
+        type: boolean
+        default: true
 
 # 每次调用独立并发组，Full 和发布门禁不能互相取消同 SHA 的验收。
 concurrency:
@@ -185,6 +188,7 @@ jobs:
 
   # 浏览器含真实Mac Keychain/Node-API用例，Linux证据不替代这些覆盖。
   browser:
+    if: ${{ toJSON(inputs.include-browser) != 'false' }}
     runs-on: macos-15
     timeout-minutes: 15
     steps:

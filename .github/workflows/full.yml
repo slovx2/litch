@@ -24,6 +24,9 @@ on:
     - cron: '17 19 * * *'
   workflow_call:
     inputs:
+      mac-after-signing:
+        type: boolean
+        default: false
       domains:
         type: string
         default: '["adapters","computer-use","computer-use-windows","client","dsh","opencode","client-engines","real-engines","mobile"]'
@@ -50,6 +53,7 @@ jobs:
       contents: read
     outputs:
       sha: ${{ steps.freeze.outputs.sha }}
+      native-domains: ${{ steps.native.outputs.domains }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -57,6 +61,14 @@ jobs:
       - name: 冻结实际待验源码
         id: freeze
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - id: native
+        env:
+          FULL_DOMAINS: ${{ inputs.domains || '' }}
+          FULL_RUN_CI: ${{ toJSON(inputs.run-ci) != 'false' }}
+        run: node scripts/ci/mac-native-plan.mjs
 
   gate:
     needs: source
@@ -68,16 +80,63 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       sha: ${{ needs.source.outputs.sha }}
+      include-browser: false
 
   adapters:
+    needs: [source, adapters-linux, adapters-macos]
+    if: ${{ always() && (!inputs.domains || contains(fromJSON(inputs.domains), 'adapters')) }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: 两个平台的完整适配器覆盖缺一不可
+        env:
+          LINUX: ${{ needs.adapters-linux.result }}
+          MACOS: ${{ needs.adapters-macos.result }}
+        run: test "$LINUX" = success && test "$MACOS" = success
+
+  mac-ready:
+    needs: source
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/mac-priority.yml
+    with:
+      sha: ${{ needs.source.outputs.sha }}
+      after-signing: ${{ inputs.mac-after-signing || false }}
+
+  native:
+    needs: source
+    if: ${{ needs.source.outputs.native-domains != '[]' }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/mac-native.yml
+    with:
+      sha: ${{ needs.source.outputs.sha }}
+      domains: ${{ needs.source.outputs.native-domains }}
+      after-signing: ${{ inputs.mac-after-signing || false }}
+
+  # run-ci=false时，完整client域仍须覆盖原来包含的纯单测/类型。
+  client-unit:
+    needs: source
+    if: ${{ toJSON(inputs.run-ci) == 'false' && (!inputs.domains || contains(fromJSON(inputs.domains), 'client')) }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/linux-desktop.yml
+    with:
+      sha: ${{ needs.source.outputs.sha }}
+      suites: '["desktop-portable-unit"]'
+      identity: full-client-unit
+
+  adapters-linux:
     needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'adapters') }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15]
+        os: [ubuntu-24.04]
         suite: [claude, platform]
-      max-parallel: 4
+      max-parallel: 2
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
@@ -206,28 +265,24 @@ jobs:
 
   # Computer Use 的原生助手（Swift）和主进程里接它的那一层：助手的单元测试、执行器与看护的单元测试（桩助手），
   # 再真的经 LaunchServices 起一次临时签名的助手、握手、调不要系统授权的几样（不点、不截图）
-  computer-use:
-    needs: source
-    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'computer-use') }}
-    runs-on: macos-15
-    timeout-minutes: 20
+  adapters-macos:
+    needs: [source, mac-ready]
+    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'adapters') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15]
+        suite: [all]
+      max-parallel: 1
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         id: stage-1
         with:
           ref: ${{ needs.source.outputs.sha }}
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cache-electron
-        with:
-          # 安装器用 electron_config_cache；packager 用 @electron/get 的平台默认目录。
-          path: |
-            ${{ github.workspace }}/.artifacts/electron-cache
-            ~/Library/Caches/electron
-            ~/.cache/electron
-            ~/AppData/Local/electron/Cache
-          key: electron-v2-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        id: stage-3
+        id: stage-2
         with:
           node-version: 24.21.0
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -235,27 +290,118 @@ jobs:
         with:
           path: ${{ github.workspace }}/.artifacts/npm-cache
           key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
-      - run: npm ci --prefix apps/desktop --no-audit --no-fund
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        id: stage-4
+        with:
+          go-version: 1.26.10
+      - name: Linux 沙箱依赖
+        id: phase-17
+        if: runner.os == 'Linux'
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends bubblewrap=0.9.0-1ubuntu0.3
+      - run: npm ci --no-audit --no-fund
+        id: phase-16
+      - run: npm ci --prefix packages/claude --no-audit --no-fund
+        id: phase-15
+      - run: npm ci --prefix packages/pi --no-audit --no-fund
+        id: phase-14
+      - run: npm ci --prefix packages/dsh --no-audit --no-fund
+        id: phase-13
+      - run: npm ci --prefix packages/opencode --no-audit --no-fund
+        id: phase-12
+      - run: npm ci --prefix packages/acp --no-audit --no-fund
+        id: phase-11
+      - name: 安装隔离的测试 CLI
+        id: phase-10
+        run: |
+          npm install --prefix .artifacts/host-cli --save-exact @anthropic-ai/claude-code@2.1.282 --no-audit --no-fund
+          echo "CHA_CLAUDE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-cli/node_modules/.bin/claude" >> "${GITHUB_ENV}"
+      - if: (matrix.suite == 'platform' || matrix.suite == 'all')
+        id: stage-13
+        run: npm run check
+      - if: (matrix.suite == 'platform' || matrix.suite == 'all')
+        id: stage-14
+        run: npm run typecheck
+      - run: npm run build
+        id: phase-9
+      # 含协议兼容性的两项测试（回放、结构校验，各包的 upstream-compat.test.mts）：
+      # Claude Code、Pi 两个入口和设备聚合面在这里，dsh 入口的在下面的 dsh job 里
+      - name: 准备分片 HOME
+        id: stage-16
+        run: mkdir -p "${RUNNER_TEMP}/adapter-test-home"
+      - name: Claude 文件集合
+        id: phase-8
+        if: (matrix.suite == 'claude' || matrix.suite == 'all')
+        run: node scripts/ci/test-shard.mjs claude
+      - name: Pi、设备和 Go 包
+        id: phase-7
+        if: (matrix.suite == 'platform' || matrix.suite == 'all')
+        run: |
+          node scripts/ci/test-shard.mjs pi
+          node scripts/ci/test-shard.mjs device
+          GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)" HOME="${RUNNER_TEMP}/adapter-test-home" go test ./...
+      # 按模型窗口需要较新的 CLI；单独隔离，不改变其余测试的 2.1.282 基线。
+      - name: Claude 按供应商与模型自动压缩窗口
+        id: phase-6
+        if: (matrix.suite == 'platform' || matrix.suite == 'all')
+        run: |
+          npm install --prefix .artifacts/context-cli --save-exact "@anthropic-ai/claude-code@$(node -p 'require("./protocol/versions.json").claudeContextCli')" --no-audit --no-fund
+          CHA_CLAUDE_CLI="${GITHUB_WORKSPACE}/.artifacts/context-cli/node_modules/.bin/claude" node --import ./packages/claude/dist/claude/test/fixtures/isolate-process.mjs --test --test-force-exit packages/claude/dist/claude/test/context-window-cli/*.mjs
+      - name: Claude TUI 后端（隔离新版 CLI 和回环假模型）
         id: phase-5
-      - run: swift --version
+        if: (matrix.suite == 'platform' || matrix.suite == 'all')
+        run: |
+          npm install --prefix .artifacts/tui-cli --save-exact @anthropic-ai/claude-code@2.1.316 --no-audit --no-fund
+          CHA_CLAUDE_CLI="${GITHUB_WORKSPACE}/.artifacts/tui-cli/node_modules/.bin/claude" npm run test:claude-tui
+      # 这里只跑手机纯逻辑单测；需要手机和 UI 依赖的 Markdown 测试在下面的 mobile 作业执行
+      - if: (matrix.suite == 'platform' || matrix.suite == 'all')
+        id: stage-21
+        run: npm run mobile:test
+      - if: (matrix.suite == 'platform' || matrix.suite == 'all')
+        id: stage-22
+        run: npm run test:local-ssh
+      - if: (matrix.suite == 'platform' || matrix.suite == 'all')
+        id: stage-23
+        run: npm run docs:build
+      # 独立发布包：安装脚本和包里的入口做静态检查；出一个本机平台的包，装进临时的主目录，确认装上的命令报得出版本。
+      # Linux 上再把完整的容器验证跑一遍（发版的流程里验的是要发的那一份，这里先拦住平时的改动把它弄坏）
+      - name: 安装脚本的静态检查
         id: phase-4
-      - run: swift test --package-path apps/computer-use
+        if: (matrix.suite == 'platform' || matrix.suite == 'all')
+        run: |
+          sh -n scripts/install.sh
+          sh -n scripts/adapter-launcher.sh
+      - name: shellcheck
         id: phase-3
-      - run: npm run test:computer-use --prefix apps/desktop
+        if: runner.os == 'Linux' && (matrix.suite == 'platform' || matrix.suite == 'all')
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends shellcheck=0.9.0-1
+          shellcheck --shell=sh scripts/install.sh scripts/adapter-launcher.sh
+      - name: 出本机平台的发布包并试装
         id: phase-2
-      - run: npm run check:computer-use --prefix apps/desktop
+        timeout-minutes: 10
+        if: (matrix.suite == 'platform' || matrix.suite == 'all')
+        run: |
+          node scripts/package-adapter.mjs --target host --out "${RUNNER_TEMP}/release"
+          HOME="${RUNNER_TEMP}/home" sh "${RUNNER_TEMP}/release/install.sh" --from "${RUNNER_TEMP}"/release/codex-harness-adapter-*.tar.gz
+          "${RUNNER_TEMP}/home/.local/bin/codex-harness-adapter" version
+      - name: 发布包的容器验证
         id: phase-1
+        if: runner.os == 'Linux' && (matrix.suite == 'platform' || matrix.suite == 'all')
+        run: node scripts/check-adapter-package.mjs
 
       - name: 缓存与首次失败
-        id: stage-10
+        id: stage-28
         if: always()
         run: node scripts/ci/job-summary.mjs
         env:
           CI_STEPS: ${{ toJSON(steps) }}
 
-  # Windows 的 Computer Use 助手（Rust）：纯逻辑的单元测试、构建，照主进程的做法拉起它、握手、调不动界面的几样；
-  # 再把 Windows 的应用和安装包打一遍（和 release.yml 的 desktop-windows 同样的步骤），核对助手装进了 resources/computer-use。
-  # 打包的整条链平时只有发版才走，放在这里是为了发版前就拦住它被弄坏
+  # Computer Use 的原生助手（Swift）和主进程里接它的那一层：助手的单元测试、执行器与看护的单元测试（桩助手），
+  # 再真的经 LaunchServices 起一次临时签名的助手、握手、调不要系统授权的几样（不点、不截图）
   computer-use-windows:
     needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'computer-use-windows') }}
@@ -363,117 +509,6 @@ jobs:
 
   # 客户端：核心的单元测试、三个包的类型检查、界面构建，再起真的 Electron 做自检、对话区的滚动验收、输入区的验收、终端面板的验收和远程设备的验收（窗口不显示）。
   # 代码规范检查由上面 adapters 里的 npm run check 一并覆盖。
-  client:
-    needs: source
-    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'client') }}
-    runs-on: macos-15
-    # 原测试阶段可接近 25 分钟；为新增缓存上传与 runner 收尾预留时间，不改变探针等待/断言。
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        id: stage-1
-        with:
-          ref: ${{ needs.source.outputs.sha }}
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cache-electron
-        with:
-          # 安装器用 electron_config_cache；packager 用 @electron/get 的平台默认目录。
-          path: |
-            ${{ github.workspace }}/.artifacts/electron-cache
-            ~/Library/Caches/electron
-            ~/.cache/electron
-            ~/AppData/Local/electron/Cache
-          key: electron-v2-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        id: stage-3
-        with:
-          node-version: 24.21.0
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cache-npm
-        with:
-          path: ${{ github.workspace }}/.artifacts/npm-cache
-          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
-      # 带终端的进程由适配器命令行（Go）的 pty-bridge 子命令来起，下面对着真实入口的那几步要用到它
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
-        id: stage-5
-        with:
-          go-version: 1.26.10
-      - run: npm ci --no-audit --no-fund
-        id: phase-34
-      - run: npm run client:setup
-        id: phase-33
-      - run: npm run client:typecheck
-        id: phase-32
-      - run: npm run client:test
-        id: phase-31
-      # 界面里不靠浏览器就能测的那部分逻辑（终端面板的开合、只认最新的那一次）
-      - run: npm run client:test:ui
-        id: phase-30
-      # 桌面端自己的日志：轮转、清理、console 落盘
-      - run: npm run test:log-file --prefix apps/desktop
-        id: phase-29
-      # 存在这台电脑上的会话视图：读写、裁剪、个数上限、换版本
-      - run: npm run test:view-files --prefix apps/desktop
-        id: phase-28
-      # 手机批准的验签与批准钥匙：伪造、篡改、重放、过期、换钥匙都不认
-      - run: npm run test:approvals --prefix apps/desktop
-        id: phase-27
-      # 侧栏投影验收（check-sidebar-projections.mjs）要一份隔离的 headless Chrome for Testing，经 LITCH_CHROME_BINARY
-      # 交给本作业后面的步骤；版本与 chrome-e2e 的引导脚本一致。搜索验收不进 CI，见 scripts/AGENTS.md
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cache-chrome
-        with:
-          path: ${{ runner.temp }}/chrome-for-testing
-          key: chrome-v1-${{ runner.os }}-${{ runner.arch }}-151.0.7922.34-${{ hashFiles('apps/desktop/package-lock.json') }}
-      - name: 准备界面验收的 Chrome for Testing
-        id: chrome
-        run: |
-          architecture="$(node -p "process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64'")"
-          directory="${RUNNER_TEMP}/chrome-for-testing"
-          binary="${directory}/chrome-${architecture}/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
-          if [ ! -x "${binary}" ]; then
-            mkdir -p "${directory}"
-            node scripts/ci/download.mjs chrome "https://storage.googleapis.com/chrome-for-testing-public/151.0.7922.34/${architecture}/chrome-${architecture}.zip" "${directory}/chrome.zip"
-            ditto -xk "${directory}/chrome.zip" "${directory}"
-          fi
-          "${binary}" --version | grep -F '151.0.7922.34'
-          echo "LITCH_CHROME_BINARY=${binary}" >> "${GITHUB_ENV}"
-      # nightly 自己只构建一次 UI/桌面；先准备真实入口、设备和伪终端桥。
-      - run: npm ci --no-audit --no-fund --prefix packages/pi
-        id: phase-20
-      - run: npm run build --prefix packages/pi
-        id: phase-19
-      - run: node scripts/build-cli.mjs
-        id: phase-18
-      - run: npm run build --prefix packages/device
-        id: phase-14
-      # 同一套 25 个窗口/连接子检查；逐项计时，不重试，任一失败则本步骤失败。
-      - name: 完整桌面窗口与连接检查（一次构建）
-        id: nightly
-        run: |
-          node --test scripts/chrome-m0/diagnostics.test.mjs
-          npm run check:nightly --prefix apps/desktop
-        env:
-          LITCH_PROJECTIONS_OUTPUT: ${{ runner.temp }}/sidebar-projections
-
-      - name: 保存侧栏投影失败现场
-        if: ${{ failure() && steps.nightly.outcome == 'failure' }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: sidebar-projections-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/sidebar-projections
-          if-no-files-found: warn
-          retention-days: 7
-
-      - name: 缓存与首次失败
-        id: stage-41
-        if: always()
-        run: node scripts/ci/job-summary.mjs
-        env:
-          CI_STEPS: ${{ toJSON(steps) }}
-
-  # dsh 本体不随适配器分发，测试需要一份真实的 dsh：按 protocol/versions.json 登记的下限版本装到临时前缀。
-  # 模型端是回环 mock，SSH 实例发往回环之外的 HTTP(S) 请求都落到陷阱代理上，验收要求一次也没有。
   dsh:
     needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'dsh') }}
@@ -580,87 +615,16 @@ jobs:
   # Claude Code 和 dsh 的命令行不随适配器分发：各装一份隔离的到临时前缀（版本和上面两个 job 的一样），
   # 缺哪一个这一步都会直接失败，不会跳过。单独一个 job：它要的依赖比 client 多（引擎包都要装、都要构建；
   # OpenCode 和 ACP 的两个包也在里面，只因为 npm run build 要构建它们，验收还不走这两个引擎）
-  client-engines:
-    needs: source
-    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'client-engines') }}
-    runs-on: macos-15
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        id: stage-1
-        with:
-          ref: ${{ needs.source.outputs.sha }}
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cache-electron
-        with:
-          # 安装器用 electron_config_cache；packager 用 @electron/get 的平台默认目录。
-          path: |
-            ${{ github.workspace }}/.artifacts/electron-cache
-            ~/Library/Caches/electron
-            ~/.cache/electron
-            ~/AppData/Local/electron/Cache
-          key: electron-v2-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        id: stage-3
-        with:
-          node-version: 24.21.0
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cache-npm
-        with:
-          path: ${{ github.workspace }}/.artifacts/npm-cache
-          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
-        id: stage-5
-        with:
-          go-version: 1.26.10
-      - run: npm ci --no-audit --no-fund
-        id: phase-10
-      - run: npm ci --prefix packages/claude --no-audit --no-fund
-        id: phase-9
-      - run: npm ci --prefix packages/pi --no-audit --no-fund
-        id: phase-8
-      - run: npm ci --prefix packages/dsh --no-audit --no-fund
-        id: phase-7
-      - run: npm ci --prefix packages/opencode --no-audit --no-fund
-        id: phase-6
-      - run: npm ci --prefix packages/acp --no-audit --no-fund
-        id: phase-5
-      - run: npm run client:setup
-        id: phase-4
-      - name: 安装隔离的 Claude Code 和 dsh
-        id: phase-3
-        run: |
-          npm install --prefix .artifacts/host-cli --save-exact @anthropic-ai/claude-code@2.1.282 --no-audit --no-fund
-          echo "CHA_CLAUDE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-cli/node_modules/.bin/claude" >> "${GITHUB_ENV}"
-          version="$(node -p "require('./protocol/versions.json').dshMinimum")"
-          npm install --prefix .artifacts/host-dsh --save-exact "@deepseek-ai/dsh@${version}" --no-audit --no-fund
-          echo "CHA_DSH_CLI=${GITHUB_WORKSPACE}/.artifacts/host-dsh/node_modules/.bin/dsh" >> "${GITHUB_ENV}"
-      # 各个引擎包、设备进程和命令行
-      - run: npm run build
-        id: phase-2
-      - run: npm run client:check:engines
-        id: phase-1
-
-      - name: 缓存与首次失败
-        id: stage-16
-        if: always()
-        run: node scripts/ci/job-summary.mjs
-        env:
-          CI_STEPS: ${{ toJSON(steps) }}
-
-  # 真的原生 codex（protocol/versions.json 的 codexVerified 里第一个版本，装到临时前缀）：Litch 建会话带的工具定义
-  # codex 收不收、客户端工具调用由设备进程挑执行方，再在各家真的命令行上从界面建会话跑头一个回合。
-  # 模型都是回环上的假模型，各家的数据目录隔离在临时目录里。门禁只跑其中 codex 和 Pi 的首回合
   real-engines:
-    needs: source
-    if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'real-engines') }}
+    needs: [source, gate]
+    if: ${{ !cancelled() && (needs.gate.result == 'success' || needs.gate.result == 'skipped') && (!inputs.domains || contains(fromJSON(inputs.domains), 'real-engines')) }}
     permissions:
       contents: read
       actions: read
     uses: ./.github/workflows/linux-desktop.yml
     with:
       sha: ${{ needs.source.outputs.sha }}
-      suites: '["real-engines"]'
+      suites: ${{ toJSON(inputs.run-ci) == 'false' && '["real-engines"]' || '["real-engine-tools"]' }}
       identity: real-engines
 
   mobile-build:
@@ -888,7 +852,7 @@ jobs:
 
   report:
     if: always()
-    needs: [source, gate, adapters, computer-use, computer-use-windows, client, dsh, opencode, client-engines, real-engines, mobile-build, mobile]
+    needs: [source, gate, adapters, native, client-unit, computer-use-windows, dsh, opencode, real-engines, mobile-build, mobile]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -907,6 +871,12 @@ jobs:
         id: stage-3
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      - name: 读取同run成功Mac作业的不可变检查证明
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FULL_SOURCE_SHA: ${{ needs.source.outputs.sha }}
+          NATIVE_DOMAINS: ${{ needs.source.outputs.native-domains }}
+        run: node scripts/ci/read-mac-proof.mjs
       - name: 记录输入、实际检出和完整领域结果
         run: node scripts/full-proof.mjs
         env:

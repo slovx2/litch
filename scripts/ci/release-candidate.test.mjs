@@ -9,6 +9,7 @@ import { affectedDomains, releaseDomains, releaseImpact } from '../ci-impact.mjs
 import { fullJobs, hasReleaseCoverage, isCompleteReleaseFull } from '../full-proof.mjs'
 import { checkNightly, checkVersion } from '../release-policy.mjs'
 import { artifactKinds, writeProvenance } from '../release-provenance.mjs'
+import { fixtureMacProof } from './mac-proof-fixture.mjs'
 import { checkApkManifest } from './release-apk.mjs'
 import { archiveNames, extractFlat, validateArtifact } from './release-artifacts.mjs'
 import {
@@ -120,6 +121,7 @@ async function fixture(t) {
       fullJobs.map((job) => [job, job.startsWith('mobile') ? 'skipped' : 'success']),
     ),
   }
+  full.macProof = fixtureMacProof(full)
   writeJson(join(dir, 'gate-proof.json'), gate)
   writeJson(join(dir, 'full-proof.json'), full)
   const manifest = await sealCandidate(dir, context, artifacts, policy)
@@ -194,6 +196,7 @@ test('source 必须同仓同工作流同 SHA，当前 attempt 全绿，旧成功
 test('只重跑 Gate 汇总可以绑定较早成功的 Full attempt，必须保留确切 artifact', async (t) => {
   const { gate, full } = await fixture(t)
   const old = { ...full, attempt: 1 }
+  old.macProof = fixtureMacProof(old)
   checkGate({ ...gate, fullArtifact: { ...gate.fullArtifact, attempt: 1 } }, old, context)
   assert.throws(() => checkGate(gate, old, context), /full attempt/)
 })
@@ -304,15 +307,9 @@ test('增量基线过期不能用仍存在的 artifact 放行', async (t) => {
   const { gate, full } = await fixture(t)
   const domains = ['dsh', 'opencode', 'real-engines']
   const baseline = { sha, run: 1, completedAt: new Date(Date.now() - 49 * 3600_000).toISOString() }
-  assert.throws(
-    () =>
-      checkGate(
-        { ...gate, domains, baseline },
-        { ...full, domains: JSON.stringify(domains) },
-        context,
-      ),
-    /基线过期/,
-  )
+  const incremental = { ...full, domains: JSON.stringify(domains) }
+  incremental.macProof = fixtureMacProof(incremental)
+  assert.throws(() => checkGate({ ...gate, domains, baseline }, incremental, context), /基线过期/)
 })
 
 test('APK 要核对 package、versionCode、versionName、ABI 和非 debug manifest', () => {

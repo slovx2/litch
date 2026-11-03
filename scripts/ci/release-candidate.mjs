@@ -6,11 +6,11 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { checkCheckpoint } from '../../apps/desktop/scripts/macos-checkpoint.mjs'
 import { mandatory, releaseDomains } from '../ci-impact.mjs'
-import { hasReleaseCoverage } from '../full-proof.mjs'
+import { hasMacCoverage, hasReleaseCoverage } from '../full-proof.mjs'
 import { artifactKinds } from '../release-provenance.mjs'
 import { fileHash, validateArtifact } from './release-artifacts.mjs'
 
-export const policyVersion = 'candidate-v3-accepted-checkpoint'
+export const policyVersion = 'candidate-v4-mac-consolidated'
 export const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'))
 export const writeJson = (path, value) => writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`)
 
@@ -42,6 +42,7 @@ export function policyHash() {
       'apps/desktop/scripts/notarize.mjs',
       'apps/desktop/scripts/make-installer.mjs',
       'apps/desktop/scripts/verify-macos-distribution.mjs',
+      'apps/desktop/scripts/nightly-checks.mjs',
     ],
     { encoding: 'utf8' },
   )
@@ -155,6 +156,7 @@ export function checkGate(gate, full, context, now = Date.now()) {
   assert.equal(full.workflowSha, context.sha, 'full workflow SHA')
   assert.equal(full.sha, context.sha, 'full checked SHA')
   assert.equal(full.runCi, true, 'full run-ci')
+  assert.ok(hasMacCoverage(full), '合并Mac检查证明无效')
   assert.deepEqual(JSON.parse(full.domains).sort(), [...gate.domains].sort(), 'full domains')
   for (const job of ['source', 'gate', ...gate.domains])
     assert.equal(full.jobs[job], 'success', `full job ${job}`)

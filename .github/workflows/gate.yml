@@ -8,6 +8,9 @@ on:
         default: ''
   workflow_call:
     inputs:
+      mac-after-signing:
+        type: boolean
+        default: false
       sha:
         type: string
         required: true
@@ -73,6 +76,7 @@ jobs:
       sha: ${{ needs.impact.outputs.sha }}
       domains: ${{ needs.impact.outputs.domains }}
       run-ci: true
+      mac-after-signing: ${{ inputs.mac-after-signing || false }}
 
   # 用户决定：候选不跑模拟器，但手机单测与类型仍必跑；普通 CI 已含 mobile:test。
   mobile-static:

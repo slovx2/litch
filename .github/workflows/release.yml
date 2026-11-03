@@ -76,6 +76,7 @@ jobs:
     with:
       sha: ${{ needs.candidate.outputs.sha }}
       nightly-triage: ${{ inputs.nightly-triage || '' }}
+      mac-after-signing: true
 
   adapter:
     needs: candidate
