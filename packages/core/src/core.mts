@@ -648,9 +648,10 @@ export function createCore(options: CoreOptions): Core {
           return {}
         }
         case 'device.composeOptions': {
-          const { deviceId, harness } = params as Commands['device.composeOptions']['params']
+          const { deviceId, harness, sessionId } =
+            params as Commands['device.composeOptions']['params']
           try {
-            return await deviceOf(deviceId).composeOptions(harness)
+            return await deviceOf(deviceId).composeOptions(harness, sessionId)
           } catch (error) {
             throw toChannelFailure(error)
           }

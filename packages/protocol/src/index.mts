@@ -6,10 +6,12 @@ export {
   RECOVERY_DISMISS,
   RECOVERY_READ,
 } from './turn-recovery.mjs'
+
 // 协议包的入口。设备进程（packages/device）和客户端核心（packages/core）都从这里取类型。
 // codex.mts 是 Codex 原有的，extensions.mts 是我们加的，两边分开放，
 // 改上游的类型时不会碰到我们的扩展。
 
+export * from './acp-controls.mjs'
 // 模型请求在重试（apiRetry 扩展）：回合状态行上的“重试中”。不依赖别的文件
 export type * from './api-retry.mjs'
 export { API_RETRY_NOTIFICATION } from './api-retry.mjs'
@@ -255,6 +257,7 @@ export {
   nextTaskRun,
   validateTaskSchedule,
 } from './task-schedule.mjs'
+export * from './thread-capabilities.mjs'
 export { TURN_NOTICE, TURN_NOTICE_BODY_MAX, type TurnNotice } from './turn-notices.mjs'
 // 工作树（worktrees 扩展）：thread/start 上要一个新工作树、会话对象上的 litchWorktree、列出删除恢复
 export type * from './worktrees.mjs'

@@ -23,7 +23,7 @@ const select = (catalog: Catalog, category: string): any =>
   ) ?? null
 
 /** 下拉项里的全部选项，分组的摊平 */
-function choices(option: any): Choice[] {
+export function choices(option: any): Choice[] {
   const flat = (Array.isArray(option?.options) ? option.options : []).flatMap((entry: any) =>
     Array.isArray(entry?.options) ? entry.options : [entry],
   )

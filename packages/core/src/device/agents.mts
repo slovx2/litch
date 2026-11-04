@@ -13,6 +13,7 @@ import { projectAgentThread, projectAgentTurn } from '../projection/tree.mjs'
 
 export interface AgentThreads {
   has(threadId: string): boolean
+  parent(threadId: string): string | null
   /** 记下（或换掉）一个子代理线程的会话对象。对象里不带回合的，之前记着的那个回合留着 */
   put(thread: Thread): void
   /** 会话对象上的几项变了（状态、名字……）。不认识的线程不管 */
@@ -66,6 +67,10 @@ export function createAgentThreads(
 
   return {
     has: (threadId) => threads.has(threadId),
+    parent: (threadId) => {
+      const thread = threads.get(threadId)
+      return thread ? parentOf(thread) : null
+    },
 
     put(thread) {
       const last = thread.turns?.at(-1)

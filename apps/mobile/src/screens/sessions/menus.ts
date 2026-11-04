@@ -30,7 +30,7 @@ export function sessionMenu(
 ): MenuEntry<SessionAct>[] {
   const harness = device?.harnesses.find((entry) => entry.id === summary.harness)
   const online = device?.connection === 'online' && harness?.state === 'ready'
-  const can = harness?.abilities
+  const can = summary.abilities ?? harness?.abilities
   const entries: MenuEntry<SessionAct>[] = []
   if (summary.lineage && device?.reportControl)
     entries.push({
@@ -95,7 +95,8 @@ export function archivedMenu(
   t: Translator,
 ): MenuEntry<ArchivedAct>[] {
   if (device?.connection !== 'online') return []
-  const can = device.harnesses.find((entry) => entry.id === summary.harness)?.abilities
+  const can =
+    summary.abilities ?? device.harnesses.find((entry) => entry.id === summary.harness)?.abilities
   const entries: MenuEntry<ArchivedAct>[] = [
     { act: 'restore', label: t('archived.restore') },
     { act: 'open', label: t('archived.open') },

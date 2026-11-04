@@ -31,7 +31,14 @@ import type { Draft, Page, Selection } from '../app/App.tsx'
 import { requestDevice, requestManagers, requestTasks } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { useNow } from '../app/clock.ts'
-import { badgeOf, downHarness, downText, nameOf, wireStyle } from '../app/device.ts'
+import {
+  abilitiesForSession,
+  badgeOf,
+  downHarness,
+  downText,
+  nameOf,
+  wireStyle,
+} from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
 import { ago, stampFull } from '../app/format.ts'
 import { useHoverCard } from '../app/HoverCard.tsx'
@@ -267,7 +274,7 @@ const SessionRow = memo(function SessionRow({
   // 改名、归档、删除、换工作区都要够得着它所属的 harness：设备没连着、或者那个 harness 用不了，都不出。
   // 它声明了自己不会的那几样也不出（没有声明的照旧都出）
   const online = device?.connection === 'online' && !down
-  const can = device?.harnesses.find((entry) => entry.id === summary.harness)?.abilities
+  const can = abilitiesForSession(device, summary)
   // 置顶是设备上的记录，不用经过 harness：它用不了的时候也能做
   const organizable = device?.organizable === true
   const elsewhere = workspaces.filter((entry) => entry.id !== summary.workspaceId)

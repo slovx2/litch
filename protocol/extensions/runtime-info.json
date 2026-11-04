@@ -10,7 +10,7 @@
     "required": ["engine", "protocolVersion", "cliBuild", "capabilities", "releaseReady"],
     "properties": {
       "engine": {
-        "enum": ["claude-code", "pi", "dsh", "opencode", "gemini", "qwen", "acp"]
+        "enum": ["claude-code", "pi", "dsh", "opencode", "gemini", "qwen", "acp", "agy"]
       },
       "protocolVersion": {
         "const": "0.163.0"
@@ -142,7 +142,7 @@
       {
         "properties": {
           "engine": {
-            "enum": ["gemini", "qwen", "acp"]
+            "enum": ["gemini", "qwen", "acp", "agy"]
           }
         },
         "required": ["nodeVersion"]

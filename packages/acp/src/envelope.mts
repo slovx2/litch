@@ -1,15 +1,35 @@
 import { PINNED_SECTION, PINNED_SECTION_ID } from '../../shared/src/thread-sections.mjs'
 import { type Catalog, currentEffort, currentMode, currentModel, planMode } from './catalog.mjs'
+import { declarationFor } from './declaration.mjs'
 import type { AcpThread, AcpTurn } from './projection.mjs'
+import { models } from './protocol.mjs'
 import type { AcpServer, LiveThread } from './server.mjs'
 
 /** 唯一的权限档（declaration.mts）：适配器不加沙箱，什么时候问由 agent 自己定 */
 export const PROFILE = ':danger-full-access'
 
+export const profileOf = (live: LiveThread | undefined): string => {
+  const mode = live && (live.pending.agentMode ?? currentMode(live.projection))
+  return mode ? `acp:mode:${mode}` : PROFILE
+}
+
 /** 会话对象。形状照 dsh 的入口（客户端读的那几个自己加的字段也一样） */
 export function envelope(s: AcpServer, thread: AcpThread, turns: AcpTurn[] = []): any {
   const metadata = s.store.getMeta('thread', thread.id) ?? {}
   const live = s.live.get(thread.id) ?? s.ephemeral.get(thread.id)
+  const declaration = declarationFor(s.agentId, s.runtime.known, live?.projection)
+  if (metadata.parentThreadId && declaration.features) {
+    declaration.features = {
+      ...declaration.features,
+      interrupt: s.children.get(thread.id)?.cancel === true,
+      fork: false,
+      delete: false,
+      rename: false,
+      archive: false,
+      inputTypes: [],
+    }
+    declaration.permissionPresets = []
+  }
   return {
     id: thread.id,
     sessionId: thread.id,
@@ -31,7 +51,7 @@ export function envelope(s: AcpServer, thread: AcpThread, turns: AcpTurn[] = [])
     sectionEnteredAt: metadata.sectionEnteredAt ?? null,
     isPinned: metadata.sectionId === PINNED_SECTION_ID,
     canAcceptDirectInput: true,
-    activePermissionProfile: PROFILE,
+    activePermissionProfile: profileOf(live),
     status: live?.projection.status() ?? { type: 'idle' },
     // agent 的会话文件不是 Codex rollout，不交给桌面读取。
     path: null,
@@ -45,6 +65,12 @@ export function envelope(s: AcpServer, thread: AcpThread, turns: AcpTurn[] = [])
     agentRole: null,
     turns,
     projectId: s.projects.projectId(thread.id),
+    litchCapabilities: {
+      ...declaration,
+      ...(live
+        ? { models: models(s, live.projection), planMode: planMode(live.projection) !== null }
+        : {}),
+    },
     ...metadata,
   }
 }
@@ -80,8 +106,8 @@ export function settings(s: AcpServer, live: LiveThread): any {
     approvalsReviewer: 'user',
     sandbox: { type: 'dangerFullAccess' },
     sandboxPolicy: { type: 'dangerFullAccess' },
-    activePermissionProfile: { id: PROFILE, extends: null },
-    permissions: PROFILE,
+    activePermissionProfile: { id: profileOf(live), extends: null },
+    permissions: profileOf(live),
     reasoningEffort: effort,
     collaborationMode: {
       mode: plan ? 'plan' : 'default',

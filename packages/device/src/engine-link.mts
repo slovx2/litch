@@ -301,6 +301,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
             requestAttestation: false,
             [EXTENSIONS_CAPABILITY]: [
               EXTENSION.backgroundTasks,
+              EXTENSION.threadCapabilities,
               EXTENSION.peerMessages,
               ...(options.clientTools ? [EXTENSION.clientTools] : []),
             ],

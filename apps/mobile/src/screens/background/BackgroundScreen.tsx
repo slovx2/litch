@@ -42,7 +42,9 @@ export function BackgroundScreen({ route, navigation }: Props) {
   const running = entries.filter((entry) => entry.status === 'running')
   const ended = entries.filter((entry) => entry.status !== 'running')
   // 停不停得掉看 harness 报的能力（stopBackground、stopAgent），桌面同一个判断
-  const abilities = device?.harnesses.find((entry) => entry.id === summary?.harness)?.abilities
+  const abilities =
+    summary?.abilities ??
+    device?.harnesses.find((entry) => entry.id === summary?.harness)?.abilities
   // 在跑的用时一秒一秒地走：有在跑的才走
   const [now, setNow] = useState(Date.now())
   const ticking = running.length > 0

@@ -368,6 +368,14 @@ export class ClientTools {
     this.keys.set(threadId, key)
   }
 
+  /** 关闭或删除会话后撤销旧桥；动态工具定义仍由持久化记录决定是否恢复。 */
+  release(threadId: string): void {
+    const key = this.keys.get(threadId)
+    if (key) this.bridges.delete(key)
+    this.keys.delete(threadId)
+    this.cache.delete(threadId)
+  }
+
   // 第一次要挂桥时才开监听。套接字放在临时目录下新建的、只有自己能进的目录里（macOS 的套接字路径
   // 不能超过 104 个字节，状态目录可能很长）；Windows 用命名管道，靠口令挡住别人
   private listen(): Promise<string> {

@@ -705,20 +705,13 @@ export class ClientSession implements ClientToolPeer {
             timeoutMs: this.host.timing.listTimeoutMs,
             adopt: (row: Record<string, unknown>) =>
               this.host.worktrees?.adopt(String(row.id), row.cwd),
-            ...(this.declared.has(EXTENSION.sessionTree) ||
-            this.declared.has(EXTENSION.backgroundTasks) ||
-            this.declared.has(EXTENSION.worktrees) ||
-            this.declared.has(EXTENSION.manager)
-              ? {
-                  decorate: (row: Record<string, unknown>) => {
-                    if (this.declared.has(EXTENSION.manager)) this.host.managers?.decorate(row)
-                    if (this.declared.has(EXTENSION.sessionTree))
-                      this.host.sessionTree.decorate(row)
-                    if (this.declared.has(EXTENSION.backgroundTasks)) this.decorateBackground(row)
-                    if (this.declared.has(EXTENSION.worktrees)) this.host.worktrees?.decorate(row)
-                  },
-                }
-              : {}),
+            decorate: (row: Record<string, unknown>) => {
+              if (!this.declared.has(EXTENSION.threadCapabilities)) delete row.litchCapabilities
+              if (this.declared.has(EXTENSION.manager)) this.host.managers?.decorate(row)
+              if (this.declared.has(EXTENSION.sessionTree)) this.host.sessionTree.decorate(row)
+              if (this.declared.has(EXTENSION.backgroundTasks)) this.decorateBackground(row)
+              if (this.declared.has(EXTENSION.worktrees)) this.host.worktrees?.decorate(row)
+            },
           },
           frame.params,
         )
@@ -1321,6 +1314,7 @@ export class ClientSession implements ClientToolPeer {
     if (projectId !== undefined) workspaces.assign(threadId, projectId)
     if (typeof fields.isPinned === 'boolean') workspaces.pin(threadId, fields.isPinned)
     thread.harness = link.harness
+    if (!this.declared.has(EXTENSION.threadCapabilities)) delete thread.litchCapabilities
     workspaces.decorate(threadId, thread)
     if (this.declared.has(EXTENSION.manager)) this.host.managers?.decorate(thread)
     if (this.declared.has(EXTENSION.sessionTree)) this.host.sessionTree.decorate(thread)
@@ -1599,6 +1593,7 @@ export class ClientSession implements ClientToolPeer {
     )
       return
     const copy: Record<string, unknown> = { ...thread, harness }
+    if (!this.declared.has(EXTENSION.threadCapabilities)) delete copy.litchCapabilities
     this.host.workspaces.decorate(thread.id, copy)
     if (this.declared.has(EXTENSION.sessionTree)) this.host.sessionTree.decorate(copy)
     if (this.declared.has(EXTENSION.backgroundTasks)) this.decorateBackground(copy)

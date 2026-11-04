@@ -46,10 +46,13 @@ import {
 import { readTextFile, Terminals, writeTextFile } from './client-side.mjs'
 import { ClientTools } from './client-tools.mjs'
 import { AcpError, HandlerError } from './connection.mjs'
+import { present } from './declaration.mjs'
+import { elicit } from './elicitation.mjs'
 import { settings } from './envelope.mjs'
 import { type AcpThread, type AcpTurn, Projection } from './projection.mjs'
 import { dispatch } from './protocol.mjs'
 import { AcpRuntime, type AgentHandle } from './runtime.mjs'
+import { sessionOptions } from './session-options.mjs'
 import { AcpStore } from './store.mjs'
 import { echoContent, promptContent, withStopNoticeBlocks } from './turn.mjs'
 
@@ -71,7 +74,12 @@ export interface LiveThread {
   /** 会话在第几个 agent 进程里接上了（runtime.mts 的 generation）；0 是还没接上 */
   generation: number
   /** 换了、还没交给 agent 的设置：下一回合开始前交 */
-  pending: { model: string | null; effort: string | null; mode: 'plan' | 'default' | null }
+  pending: {
+    model: string | null
+    effort: string | null
+    mode: 'plan' | 'default' | null
+    agentMode?: string
+  }
   /** 本进程里受理过的提交标识：同一条消息再发一遍回的是同一个回合 */
   submitted: Map<string, AcpTurn>
   /** 进行中的回合：提示词交没交给 agent、有没有被打断，done 在回合收尾（不管成败）时兑现 */
@@ -136,6 +144,8 @@ export class AcpServer {
   private readonly locks = new Map<string, Promise<unknown>>()
   // 正在 session/load 回放的会话：这期间的更新归到这里
   private readonly replays = new Map<string, Projection>()
+  /** ACP 草案的父子关联只在当前连接有效；子会话不能自行恢复或接收用户提示词。 */
+  readonly children = new Map<string, { parent: string; generation: number; cancel: boolean }>()
   // agent 的会话清单，最近一次问来的（见 sessions）
   known = new Map<string, AcpThread>()
   // 问过技能清单的连接：命令清单变了给它们发 skills/changed
@@ -189,7 +199,8 @@ export class AcpServer {
     this.runtime = new AcpRuntime(
       home,
       {
-        request: (method, params, agent) => this.agentRequest(method, params, agent),
+        request: (method, params, agent, signal) =>
+          this.agentRequest(method, params, agent, signal),
         notification: (method, params, agent) => this.agentNotification(method, params, agent),
         closed: (error, agent) => this.agentClosed(error, agent),
       },
@@ -272,7 +283,7 @@ export class AcpServer {
       const work = () => dispatch(this, peer, message.method, params)
       const threadId = typeof params.threadId === 'string' ? params.threadId : null
       const result = threadId ? await this.serial(threadId, work) : await work()
-      peer.send({ id: message.id, result } as any)
+      peer.send({ id: message.id, result: this.shape(peer.id, result) } as any)
     } catch (error) {
       const code = error instanceof ProtocolError ? error.code : -32603
       const text = error instanceof Error ? error.message : String(error)
@@ -311,6 +322,21 @@ export class AcpServer {
     this.subscriptions.set(id, ids)
   }
 
+  /** 只裁剪协议承载的 thread，不碰消息正文和工具结果里的同名字段。 */
+  private shape(peerId: string, value: any): any {
+    if (
+      this.declared.get(peerId)?.has(EXTENSION.threadCapabilities) ||
+      !value ||
+      typeof value !== 'object'
+    )
+      return value
+    if (Array.isArray(value)) return value.map((entry) => this.shape(peerId, entry))
+    const { litchCapabilities: _capabilities, ...result } = value
+    for (const key of ['thread', 'threadSettings', 'data'])
+      if (key in result) result[key] = this.shape(peerId, result[key])
+    return result
+  }
+
   notify(threadId: string | null, method: string, params: any): void {
     if (method === 'item/started') params = { startedAtMs: Date.now(), ...params }
     if (method === 'item/completed')
@@ -320,10 +346,17 @@ export class AcpServer {
       threadId === null ||
       (BROADCAST_THREAD_NOTIFICATIONS.has(method) && !threadId.startsWith(EPHEMERAL_PREFIX))
     for (const peer of this.peers.values())
-      if (everyone || (threadId !== null && this.subscriptions.get(threadId)?.has(peer.id))) {
+      if (
+        everyone ||
+        (threadId !== null &&
+          this.subscribers(threadId).some((subscriber) => subscriber.id === peer.id))
+      ) {
         // 回合的来历只给声明了 backgroundTasks 的连接（另拷一份）
         const shaped = notificationWithOrigin(this.report, peer.id, threadId, method, params)
-        peer.send({ method, params: threadId ? { threadId, ...shaped } : shaped })
+        peer.send({
+          method,
+          params: this.shape(peer.id, threadId ? { threadId, ...shaped } : shaped),
+        })
       }
   }
 
@@ -337,7 +370,10 @@ export class AcpServer {
 
   /** 订阅着这个线程、还连着的连接，按订阅的先后 */
   subscribers(threadId: string): RpcPeer[] {
-    return [...(this.subscriptions.get(threadId) ?? [])].flatMap((id) => this.peers.get(id) ?? [])
+    const ids = new Set(this.subscriptions.get(threadId) ?? [])
+    const parent = this.children.get(threadId)?.parent
+    if (parent) for (const peer of this.subscribers(parent)) ids.add(peer.id)
+    return [...ids].flatMap((id) => this.peers.get(id) ?? [])
   }
 
   /** 只发给 targets 的反向请求（动态工具的调用）：有副作用，不补送给后来订阅的连接 */
@@ -389,7 +425,7 @@ export class AcpServer {
         .join('、')
       return new ProtocolError(
         -32600,
-        `${name} 需要先登录：请在终端里运行它完成登录${methods ? `（它支持：${methods}）` : ''}。原话：${error.message}`,
+        `${name} 需要先登录：请在终端里运行${this.agentId === 'agy' ? ' agy acp --login ' : '它'}完成登录${methods ? `（它支持：${methods}）` : ''}。原话：${error.message}`,
       )
     }
     const code = error.code === -32602 || error.code === -32601 ? error.code : -32603
@@ -422,6 +458,11 @@ export class AcpServer {
 
   private apply(live: LiveThread, update: unknown): void {
     const id = live.projection.thread.id
+    const patch = update as any
+    if (patch?.sessionUpdate === 'subagent_update') {
+      this.childUpdate(live, patch)
+      return
+    }
     const change = live.projection.update(update, (method, params) =>
       this.notify(id, method, params),
     )
@@ -438,15 +479,91 @@ export class AcpServer {
     }
   }
 
-  private async agentRequest(method: string, params: any, agent: AgentHandle): Promise<unknown> {
+  private childUpdate(parent: LiveThread, update: any): void {
+    const id = update.sessionId
+    if (typeof id !== 'string' || !id || id === parent.projection.thread.id) return
+    const previous = this.children.get(id)
+    // 首次声明不得夺走已打开的普通会话，也不得改写其他父会话的归属。
+    if (previous ? previous.parent !== parent.projection.thread.id : this.live.has(id)) return
+    let ancestor: string | undefined = parent.projection.thread.id
+    while (ancestor) {
+      if (ancestor === id) return
+      ancestor = this.children.get(ancestor)?.parent
+    }
+    const relation = previous ?? {
+      parent: parent.projection.thread.id,
+      generation: parent.generation,
+      cancel: false,
+    }
+    relation.generation = parent.generation
+    if ('capabilities' in update) relation.cancel = present(update.capabilities?.cancel)
+    this.children.set(id, relation)
+    let child = this.live.get(id)
+    if (!child) {
+      child = this.fresh({
+        ...parent.projection.thread,
+        id,
+        name: null,
+        preview: '',
+        forkedFromId: null,
+      })
+      child.generation = parent.generation
+      this.live.set(id, child)
+      this.store.setMeta('thread', id, {
+        parentThreadId: relation.parent,
+        canAcceptDirectInput: false,
+      })
+    }
+    child.generation = parent.generation
+    if ('title' in update)
+      child.projection.thread.name = typeof update.title === 'string' ? update.title : null
+    if ('cwd' in update)
+      child.projection.thread.cwd =
+        typeof update.cwd === 'string' ? update.cwd : parent.projection.thread.cwd
+    const notify = (method: string, params: any) => this.notify(id, method, params)
+    if (['running', 'requires_action'].includes(update.state?.state) && !child.projection.active)
+      child.projection.beginLive(notify)
+    if (update.state?.state === 'idle' && child.projection.active) {
+      child.projection.finish({ stopReason: update.state.stopReason ?? 'end_turn' }, notify)
+      this.requests.reject((threadId) => threadId === id, TURN_STOPPED)
+    }
+    this.save(child, true)
+    this.saveTurns(child)
+    this.notify(id, 'thread/started', { thread: settings(this, child).thread })
+  }
+
+  private async agentRequest(
+    method: string,
+    params: any,
+    agent: AgentHandle,
+    signal: AbortSignal,
+  ): Promise<unknown> {
     const sessionId = typeof params?.sessionId === 'string' ? params.sessionId : ''
     const live = this.live.get(sessionId)
     const attached = live && live.generation === agent.generation ? live : null
     const notify = (name: string, value: any) => this.notify(sessionId, name, value)
+    if (
+      attached &&
+      this.children.has(sessionId) &&
+      !attached.projection.active &&
+      ['session/request_permission', 'elicitation/create'].includes(method)
+    )
+      attached.projection.beginLive(notify)
     switch (method) {
+      case 'elicitation/create':
+        if (!attached) return { action: 'cancel' }
+        return elicit(this, attached, params, agent.resolved.spec.displayName, signal)
       case 'session/request_permission': {
         // 回放、或者会话不在这里打开着：没有人能答，当取消
         if (!attached) return { outcome: { outcome: 'cancelled' } }
+        if (this.children.has(sessionId) && params.toolCall)
+          params = {
+            ...params,
+            toolCall: {
+              ...params.toolCall,
+              title: `[${attached.projection.thread.name ?? sessionId}] ${params.toolCall.title ?? ''}`,
+            },
+          }
         // 调的是会话的动态工具：不经 agent 的审批（同 client-tools.json 的规矩，要不要问用户由执行方定），
         // 允许这一次（“总是允许”有的 agent 会写进用户自己的配置）
         const once = (Array.isArray(params?.options) ? params.options : []).find(
@@ -456,7 +573,7 @@ export class AcpServer {
           if (attached.projection.active) attached.projection.ensureTool(params.toolCall, notify)
           return { outcome: { outcome: 'selected', optionId: once.optionId } }
         }
-        return requestPermission(this, attached, params, new AbortController().signal)
+        return requestPermission(this, attached, params, signal)
       }
       case 'fs/read_text_file':
         return readTextFile(params)
@@ -574,7 +691,13 @@ export class AcpServer {
     projection.startReplay()
     this.replays.set(id, projection)
     try {
-      return await this.ask(agent, 'session/load', { sessionId: id, cwd, mcpServers })
+      const environment = sessionOptions(this.store.getMeta('environment', id), agent.caps)
+      return await this.ask(agent, 'session/load', {
+        sessionId: id,
+        cwd,
+        ...environment,
+        mcpServers,
+      })
     } finally {
       this.replays.delete(id)
       projection.endReplay()
@@ -593,18 +716,25 @@ export class AcpServer {
       throw new ProtocolError(-32603, error instanceof Error ? error.message : String(error))
     }
     if (live.generation === agent.generation) return agent
+    if (this.store.getMeta('thread', live.projection.thread.id)?.parentThreadId)
+      throw new ProtocolError(-32004, '子会话由父 agent 管理，不能单独恢复')
     const { thread } = live.projection
     // 会话的动态工具每次接上都要重新挂（新的 agent 进程里没有上一次的 MCP 服务）
     const { servers } = await this.clientTools.mount(thread.id, this.clientTools.raw(thread.id))
+    const environment = sessionOptions(this.store.getMeta('environment', thread.id), agent.caps)
     let response: any
     if (agent.caps.resume)
       response = await this.ask(agent, 'session/resume', {
         sessionId: thread.id,
         cwd: thread.cwd,
-        mcpServers: servers,
+        ...environment,
+        mcpServers: [...environment.mcpServers, ...servers],
       })
     else if (agent.caps.loadSession)
-      response = await this.replay(agent, this.fresh({ ...thread }).projection, servers)
+      response = await this.replay(agent, this.fresh({ ...thread }).projection, [
+        ...environment.mcpServers,
+        ...servers,
+      ])
     else
       throw new ProtocolError(
         -32600,
@@ -625,6 +755,7 @@ export class AcpServer {
       projection.models = response.models
     if (response?.modes && Array.isArray(response.modes.availableModes))
       projection.modes = response.modes
+    if (Array.isArray(response?.availableCommands)) projection.commands = response.availableCommands
     this.saveCatalog(live)
   }
 
@@ -642,10 +773,16 @@ export class AcpServer {
     this.store.setMeta('catalog', '', catalog)
   }
 
+  persistCatalog(live: LiveThread): void {
+    this.saveCatalog(live)
+  }
+
   /** 报模型清单用的那一份：打开着的会话里最近的，没有就是库里最近一次见到的 */
   latestCatalog(): Catalog | null {
     const opened = [...this.live.values()]
-      .filter((live) => live.projection.configOptions || live.projection.models)
+      .filter(
+        (live) => live.projection.configOptions || live.projection.models || live.projection.modes,
+      )
       .sort((a, b) => b.projection.thread.updatedAt - a.projection.thread.updatedAt)[0]
     return opened?.projection ?? this.store.getMeta('catalog', '') ?? null
   }
@@ -680,7 +817,7 @@ export class AcpServer {
    * 线程列表：agent 的会话清单（有 session/list 才问，翻完所有页）并上适配器库里记的。
    * 经这里建了、一句话都没说过的会话不列（和上游一样，没有内容的会话不进列表）。
    */
-  async sessions(): Promise<AcpThread[]> {
+  async sessions(archived = false): Promise<AcpThread[]> {
     // 握过手、知道它不能列会话的，不为列清单去起它
     const known = this.runtime.known
     const agent = known && !known.list ? null : await this.runtime.agent().catch(() => null)
@@ -688,9 +825,17 @@ export class AcpServer {
       const known = new Map<string, AcpThread>()
       let cursor: string | null = null
       for (let page = 0; page < 100; page++) {
-        const response: any = await this.ask(agent, 'session/list', cursor ? { cursor } : {})
+        const response: any = await this.ask(agent, 'session/list', {
+          ...(cursor !== null ? { cursor } : {}),
+          ...(agent.caps.archive ? { archived } : {}),
+        })
         for (const entry of Array.isArray(response?.sessions) ? response.sessions : []) {
           if (typeof entry?.sessionId !== 'string') continue
+          if (agent.caps.archive)
+            this.store.setMeta('thread', entry.sessionId, {
+              ...(this.store.getMeta('thread', entry.sessionId) ?? {}),
+              archived: entry.archived ?? archived,
+            })
           const updated = Date.parse(String(entry.updatedAt ?? ''))
           const time = Number.isFinite(updated) ? Math.floor(updated / 1000) : 0
           const title = typeof entry.title === 'string' && entry.title ? entry.title : null
@@ -705,11 +850,8 @@ export class AcpServer {
             ephemeral: false,
           })
         }
-        cursor =
-          typeof response?.nextCursor === 'string' && response.nextCursor
-            ? response.nextCursor
-            : null
-        if (!cursor) break
+        cursor = typeof response?.nextCursor === 'string' ? response.nextCursor : null
+        if (cursor === null) break
       }
       this.known = known
     }
@@ -725,15 +867,18 @@ export class AcpServer {
   }
 
   /** thread/start：agent 那边建一个会话（session/new），在这个进程里接上；带了动态工具的挂上 MCP 桥 */
-  async create(cwd: string, dynamicTools: unknown): Promise<LiveThread> {
+  async create(cwd: string, dynamicTools: unknown, options?: unknown): Promise<LiveThread> {
     const agent = await this.attachable()
+    const environment = sessionOptions(options, agent.caps)
     const { servers, key } = await this.clientTools.mount(null, dynamicTools)
-    const response = await this.ask(agent, 'session/new', { cwd, mcpServers: servers }).catch(
-      (error) => {
-        this.clientTools.bind(key, null)
-        throw error
-      },
-    )
+    const response = await this.ask(agent, 'session/new', {
+      cwd,
+      ...environment,
+      mcpServers: [...environment.mcpServers, ...servers],
+    }).catch((error) => {
+      this.clientTools.bind(key, null)
+      throw error
+    })
     if (typeof response?.sessionId !== 'string') {
       this.clientTools.bind(key, null)
       throw new ProtocolError(
@@ -742,6 +887,7 @@ export class AcpServer {
       )
     }
     this.clientTools.bind(key, response.sessionId)
+    this.store.setMeta('environment', response.sessionId, environment)
     this.clientTools.remember(response.sessionId, dynamicTools)
     const now = Math.floor(Date.now() / 1000)
     const live = this.fresh({
@@ -756,7 +902,8 @@ export class AcpServer {
     })
     live.generation = agent.generation
     this.catalogFrom(live, response)
-    live.projection.commands = this.store.getMeta('commands', cwd) ?? []
+    if (!Array.isArray(response.availableCommands))
+      live.projection.commands = this.store.getMeta('commands', cwd) ?? []
     this.live.set(live.projection.thread.id, live)
     this.save(live)
     for (const update of this.early.get(response.sessionId) ?? []) this.apply(live, update)
@@ -775,11 +922,13 @@ export class AcpServer {
     const { thread } = source.projection
     // 分叉出来的会话带着原会话的动态工具
     const tools = this.clientTools.raw(thread.id)
+    const environment = sessionOptions(this.store.getMeta('environment', thread.id), agent.caps)
     const { servers, key } = await this.clientTools.mount(null, tools)
     const response = await this.ask(agent, 'session/fork', {
       sessionId: thread.id,
       cwd: thread.cwd,
-      mcpServers: servers,
+      ...environment,
+      mcpServers: [...environment.mcpServers, ...servers],
     }).catch((error) => {
       this.clientTools.bind(key, null)
       throw error
@@ -792,6 +941,7 @@ export class AcpServer {
       )
     }
     this.clientTools.bind(key, response.sessionId)
+    this.store.setMeta('environment', response.sessionId, environment)
     if (tools) this.clientTools.remember(response.sessionId, tools)
     const now = Math.floor(Date.now() / 1000)
     const live = this.fresh({
@@ -864,6 +1014,8 @@ export class AcpServer {
 
   /** turn/start：回合先回给客户端，接上会话、交设置、交提示词随后在后台做；出错按失败收尾 */
   start(peer: RpcPeer, live: LiveThread, params: any): AcpTurn {
+    if (this.store.getMeta('thread', live.projection.thread.id)?.parentThreadId)
+      throw new ProtocolError(-32004, '子会话由父 agent 管理，不能直接输入')
     const { projection } = live
     const clientId: string | null = params.clientUserMessageId ?? params.clientMessageId ?? null
     const submitted = clientId
@@ -948,6 +1100,7 @@ export class AcpServer {
         if (live.running === running) live.running = null
         this.save(live, true)
         this.saveTurns(live)
+        if (!this.closed) void this.serial(threadId, () => this.release(threadId)).catch(() => {})
       }
     })()
   }
@@ -1020,6 +1173,15 @@ export class AcpServer {
    */
   applySettings(live: LiveThread, params: any, lenient: boolean): void {
     const catalog: Catalog = live.projection
+    if (typeof params.permissions === 'string' && params.permissions.startsWith('acp:mode:')) {
+      const value = params.permissions.slice('acp:mode:'.length)
+      if (!modes(catalog).some((entry) => entry.value === value))
+        throw new ProtocolError(-32602, `ACP agent 没有模式 ${value}`)
+      live.pending.agentMode = value
+      live.pending.mode = null
+    } else if (params.permissions && params.permissions !== ':danger-full-access') {
+      throw new ProtocolError(-32602, 'ACP 入口不提供此沙箱权限档')
+    }
     const mode = params.collaborationMode?.mode
     const model = nonEmpty(params.model) ?? nonEmpty(params.collaborationMode?.settings?.model)
     const effort =
@@ -1037,7 +1199,7 @@ export class AcpServer {
       if (levels.some((choice) => choice.value === effort)) live.pending.effort = effort
       else reject(`${this.agentName()} 没有强度 ${effort}`)
     }
-    if (mode === 'plan' || mode === 'default') {
+    if (!live.pending.agentMode && (mode === 'plan' || mode === 'default')) {
       if (mode === 'plan' && !planMode(catalog)) reject(`${this.agentName()} 没有计划模式`)
       else live.pending.mode = mode
     }
@@ -1054,6 +1216,10 @@ export class AcpServer {
     const send = (method: string, params: unknown) => this.ask(agent, method, params)
     const { model, effort, mode } = pending
     pending.model = pending.effort = pending.mode = null
+    if (pending.agentMode) {
+      await setMode(send, id, projection, pending.agentMode)
+      delete pending.agentMode
+    }
     if (model && model !== currentModel(projection)) await setModel(send, id, projection, model)
     if (effort && effort !== currentEffort(projection))
       await setEffort(send, id, projection, effort)
@@ -1085,6 +1251,15 @@ export class AcpServer {
   }
 
   async interrupt(id: string): Promise<void> {
+    const child = this.children.get(id)
+    if (child) {
+      const agent = this.runtime.current()
+      if (!child.cancel || agent?.generation !== child.generation)
+        throw new ProtocolError(-32004, 'agent 没有授权取消这个子会话')
+      this.requests.reject((threadId) => threadId === id, TURN_STOPPED)
+      agent.connection.notify('session/cancel', { sessionId: id })
+      return
+    }
     const live = this.live.get(id)
     const running = live?.running
     if (!live || !running || live.projection.active !== running.turn) return
@@ -1104,6 +1279,61 @@ export class AcpServer {
     }
   }
 
+  /** 关闭会话只释放 agent 内存；历史留在 agent。最后一个订阅退出后才能关闭。 */
+  async release(id: string): Promise<void> {
+    const live = this.live.get(id)
+    const agent = this.runtime.current()
+    if (
+      !live ||
+      live.running ||
+      live.projection.active ||
+      this.subscriptions.get(id)?.size ||
+      !agent?.caps.close ||
+      this.store.getMeta('thread', id)?.parentThreadId
+    )
+      return
+    if (live.generation === agent.generation)
+      await this.ask(agent, 'session/close', { sessionId: id })
+    this.save(live)
+    this.saveTurns(live)
+    live.generation = 0
+    await this.terminals.closeAll(id)
+    this.clientTools.release(id)
+    this.live.delete(id)
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    const agent = await this.runtime.agent()
+    if (!agent.caps.delete) throw new ProtocolError(-32601, 'ACP agent 没有声明 session/delete')
+    await this.interrupt(id)
+    if (this.live.get(id)?.running)
+      throw new ProtocolError(-32009, 'agent 尚未确认回合结束，暂不能删除会话')
+    try {
+      await agent.connection.request('session/delete', { sessionId: id })
+    } catch (error) {
+      if (!(error instanceof AcpError) || error.code !== -32002) throw this.failure(agent, error)
+    }
+    this.requests.reject((threadId) => threadId === id, '会话已删除')
+    await this.terminals.closeAll(id)
+    this.clientTools.release(id)
+    if (this.thread(id)) this.projects.assignThread(id, null)
+    for (const scope of [
+      'session',
+      'thread',
+      'catalog',
+      'turns',
+      'turnOrigins',
+      'environment',
+      'dynamicTools',
+    ])
+      this.store.deleteMeta(scope, id)
+    this.store.deleteInputs(id)
+    this.live.delete(id)
+    this.known.delete(id)
+    this.notify(id, 'thread/deleted', {})
+    this.subscriptions.delete(id)
+  }
+
   closePeer(peer: RpcPeer): void {
     if (this.powerObserver.close(peer)) return
     this.peers.delete(peer.id)
@@ -1112,7 +1342,10 @@ export class AcpServer {
     this.clientTools.drop(peer.id)
     this.files.closePeer(peer.id)
     this.processes.closePeer(peer.id)
-    for (const ids of this.subscriptions.values()) ids.delete(peer.id)
+    for (const [id, ids] of this.subscriptions) {
+      ids.delete(peer.id)
+      if (!this.closed) void this.serial(id, () => this.release(id)).catch(() => {})
+    }
     for (const id of [...this.ephemeral.keys()]) this.releaseEphemeral(id)
     this.requests.dropPeer(peer.id, '客户端已断开')
   }

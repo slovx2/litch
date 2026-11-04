@@ -179,3 +179,31 @@ OpenCode 启动或重启时重新连接当前 serve 进程，不沿用旧进程�
 4. Starts but fails: read `scripts/litch diagnose logs <device>` for that harness
    (`troubleshooting.md`), most often a sign-in or model problem in the harness itself.
 5. Gemini CLI, Qwen Code and ACP are off by default: enable them first.
+
+## ACP 会话能力与 Antigravity 订阅
+
+Antigravity 的订阅入口运行用户安装的官方 `agy acp`。请先在会话所在设备的终端运行
+`agy acp --login`，或交互运行 `agy` 完成登录，再重试。登录和凭据由 agy 自己管理；Litch
+不读取、复制或代存 OAuth 令牌。账号、套餐与第三方客户端的适用范围以 Google 当前政策为准，
+使用订阅前应确认相关账号风险；官方 ACP 接口存在不等于任意消费订阅包装都已获授权。
+
+同一 Antigravity 下不同会话可能属于不同后端。已打开会话的能力、模型、权限模式以该会话后端
+声明为准；改变新建默认后端不会把旧会话迁移过去。没有会话级声明时才使用 harness 默认能力。
+
+ACP agent 声明的模式会出现在权限选项中，显示 agent 提供的名称。它们不代表 Litch 增加了
+操作系统沙箱；模式与模型的调整在回合之间应用。只有 agent 声明图片输入时才能附图；官方
+agy CLI 的具体能力以当前握手为准，不能套用独立 ACP 包的能力。文件引用在 agent 接受内嵌
+资源且文件较小、可读为 UTF-8 时附正文，否则作为文件链接。
+
+表单提问显示征询卡，数值、布尔和选项保留原始类型；取消或连接断开时不会默认接受。正式
+宣告的子代理可以向父会话的订阅者请求审批，未宣告的会话仍拒绝。子代理不能直接发送用户
+消息，只有 agent 明确授予取消能力时才能单独中断。
+
+会话删除仅在 agent 声明支持时显示；最后一个订阅关闭且没有回合运行时可释放 ACP 会话，
+历史仍保留。中途插话、回退和主动压缩没有通用 ACP v1 方法，相关入口保持关闭。
+`acpControls` 集成接口支持按声明列登录方式、显式 authenticate/logout、通用 select/boolean
+配置、MCP 服务和附加目录；不会自动登录、自动执行终端鉴权命令或扩大权限。URL 征询和音频
+附件目前未开放。
+
+ACP 的 `allow_always` / `reject_always` 表示让 agent 记住选择，规范没有保证只作用于当前会话。
+选到此类选项时，Litch 会再明确说明实际范围并请求确认；未确认不会发送持久决定。

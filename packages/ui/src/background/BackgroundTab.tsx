@@ -21,6 +21,7 @@ import {
 import { type MouseEvent, memo, useMemo, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { useElapsed } from '../app/clock.ts'
+import { abilitiesForSession } from '../app/device.ts'
 import { whyNot } from '../app/errors.ts'
 import { duration } from '../app/format.ts'
 import { Icon, type IconName } from '../app/icons.tsx'
@@ -136,7 +137,7 @@ const agentOf = (key: string | null): string | null =>
 function useAbilities(deviceId: string, sessionId: string | null): HarnessAbilities | null {
   const device = useKey<DeviceView>(keys.device(deviceId))
   const summary = useKey<SessionSummary>(sessionId ? keys.summary(deviceId, sessionId) : '')
-  return device?.harnesses.find((entry) => entry.id === summary?.harness)?.abilities ?? null
+  return abilitiesForSession(device, summary)
 }
 
 const EntryRow = memo(function EntryRow({

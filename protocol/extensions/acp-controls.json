@@ -1,0 +1,20 @@
+{
+  "extension": "acpControls",
+  "description": "ACP 专用的显式鉴权与通用配置控制；不读取或传递 agent 的登录令牌。",
+  "declaration": "客户端 initialize.capabilities.litchExtensions 声明 acpControls；运行时 extensions 声明支持；未声明调用报 -32602。",
+  "methods": {
+    "litch/acp/auth/read": "{} → {methods: [{id,name,description,type,args?}], logout: boolean, instruction: string|null}",
+    "litch/acp/auth/authenticate": "{methodId:string} → {}；只允许 agent 类型且 ID 必须来自握手。用户显式选择后调用，agent 负责登录。terminal 类型须由用户在终端完成。",
+    "litch/acp/auth/logout": "{} → {}；仅 agent 声明 auth.logout 时可用。",
+    "litch/acp/config/read": "{threadId:string} → {configOptions: ACP SessionConfigOption[]}",
+    "litch/acp/config/set": "{threadId:string,configId:string,value:string|boolean} → {configOptions: ACP SessionConfigOption[]}；只接受已声明选项和值，活动回合不允许。"
+  },
+  "rules": [
+    "没有自动登录、退出或 terminal 命令执行；服务端不接收密钥或令牌字段。",
+    "这些方法供集成外壳使用；普通模型与模式选择继续走现有 app-server 接口。",
+    "双后端路由把带 threadId 的请求交回原后端；无 threadId 的请求只交 ACP 后端。"
+  ],
+  "fields": {
+    "thread/start.litchAcp": "可选 { additionalDirectories?: string[], mcpServers?: ACP McpServer[] }。仅 acpControls 连接可发送；目录必须绝对路径，HTTP/SSE 按握手声明；保存会话环境供 resume/load/fork 使用。"
+  }
+}

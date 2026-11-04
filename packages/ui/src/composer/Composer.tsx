@@ -186,7 +186,7 @@ export function Composer(props: ComposerProps) {
   const taken = useRef<object | null>(null)
   /** 有文件正拖在输入区上面 */
   const [dropping, setDropping] = useState(false)
-  const asked = useComposeOptions(deviceId, props.harness)
+  const asked = useComposeOptions(deviceId, props.harness, sessionId)
   const options = props.holdSettings ? null : asked
   /** 这个会话能不能设持续目标（输入框里的 /goal）。新建对话页上没有会话，按 harness 的声明 */
   const sessionMeta = useKey<SessionMeta>(sessionId ? keys.session(deviceId, sessionId) : '')
@@ -319,7 +319,8 @@ export function Composer(props: ComposerProps) {
   const local = device?.kind === 'local'
   const machine: MachineReach = device?.machine ? (device.machine.enabled ? 'on' : 'off') : null
   const declared = device?.harnesses.find((entry) => entry.id === props.harness)?.abilities
-  const noImages = declared?.images === false
+  const noImages =
+    (sessionId ? (sessionMeta?.can.images ?? declared?.images) : declared?.images) === false
   const imagesRefused =
     images.length > 0 && (noImages || (model !== undefined && !model.acceptsImages))
   const filled =
@@ -1107,7 +1108,7 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
   // 打的是 /goal 加上目标：设成持续目标，不当消息发（goal/send.ts）
   const sendOrGoal = useGoalSend(deviceId, sessionId, onSend)
   // 上一轮用的型号：会话打开时是它当时的设置，之后每开始一轮记一次。下一轮要换到别的供应商时提示一行
-  const options = useComposeOptions(deviceId, meta?.harness)
+  const options = useComposeOptions(deviceId, meta?.harness, sessionId)
   const [ranWith, setRanWith] = useState<{ sessionId: string; model: string | null } | null>(null)
   useEffect(() => {
     if (settings.model && ranWith?.sessionId !== sessionId)

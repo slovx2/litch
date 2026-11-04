@@ -1,4 +1,5 @@
 import { isAbsolute } from 'node:path'
+import { EXTENSION } from '../../protocol/src/device.mjs'
 import { backgroundTerminalsPage, withBackground } from '../../shared/src/background-report.mjs'
 import { gitDiffToRemote } from '../../shared/src/git-diff-remote.mjs'
 import { declaredExtensions } from '../../shared/src/harness-declaration.mjs'
@@ -23,6 +24,7 @@ import {
   planMode,
 } from './catalog.mjs'
 import { dynamicToolSpecs } from './client-tools.mjs'
+import { control } from './controls.mjs'
 import { envelope, PROFILE, settings } from './envelope.mjs'
 import type { AcpServer } from './server.mjs'
 import { runtimeInfo, versions } from './versions.mjs'
@@ -40,8 +42,7 @@ const NOT_APPLICABLE: Record<string, string> = {
 }
 
 /** agent 报的模型换成 Codex 的模型清单；还没见过 agent 报的（一个会话都没建过）是空的 */
-function models(s: AcpServer): any[] {
-  const catalog = s.latestCatalog()
+export function models(s: AcpServer, catalog: Catalog | null = s.latestCatalog()): any[] {
   if (!catalog) return []
   const current = currentModel(catalog)
   const levels = efforts(catalog)
@@ -87,6 +88,25 @@ function skills(s: AcpServer, cwd: string): any[] {
 }
 
 export async function dispatch(s: AcpServer, peer: RpcPeer, method: string, p: any): Promise<any> {
+  if (
+    p.threadId &&
+    s.store.getMeta('thread', p.threadId)?.parentThreadId &&
+    ![
+      'thread/read',
+      'thread/resume',
+      'thread/turns/list',
+      'thread/turns/items/list',
+      'thread/items/list',
+      'thread/unsubscribe',
+      'turn/interrupt',
+    ].includes(method)
+  )
+    throw new ProtocolError(-32004, 'ACP 子会话不允许此操作')
+  if (method.startsWith('litch/acp/')) {
+    if (!s.declared.get(peer.id)?.has(EXTENSION.acpControls))
+      throw new ProtocolError(-32602, '需要声明 acpControls 扩展')
+    return control(s, method, p)
+  }
   if (method.startsWith('fs/')) return s.files.call(peer, method, p)
   if (method === 'command/exec' || method === 'process/spawn')
     return s.processes.start(peer, method === 'command/exec' ? 'command' : 'process', p)
@@ -133,7 +153,12 @@ export async function dispatch(s: AcpServer, peer: RpcPeer, method: string, p: a
     case 'runtime/info': {
       // 声明照 agent 的能力定：没握过手的先起来握一次；起不来的照保守的报（各项能力按没有算）
       const agent = await s.runtime.agent().catch(() => null)
-      return runtimeInfo(s.agentId, agent?.caps ?? s.runtime.known, s.shells !== null)
+      return runtimeInfo(
+        s.agentId,
+        agent?.caps ?? s.runtime.known,
+        s.shells !== null,
+        s.latestCatalog(),
+      )
     }
     case 'server/diagnostics':
       return {
@@ -256,6 +281,7 @@ async function threads(s: AcpServer, peer: RpcPeer, method: string, p: any): Pro
         throw new ProtocolError(-32602, 'cwd 必须是绝对路径')
       const saved = s.store.getMeta('config', 'defaults') ?? {}
       const selection = {
+        permissions: p.permissions,
         model: p.model ?? p.config?.model ?? saved.model,
         effort: p.config?.model_reasoning_effort ?? saved.model_reasoning_effort,
       }
@@ -272,7 +298,9 @@ async function threads(s: AcpServer, peer: RpcPeer, method: string, p: any): Pro
       if (p.projectId) s.projects.read(p.projectId)
       // 动态工具先校验，不合规矩的不建会话
       dynamicToolSpecs(p.dynamicTools)
-      const live = await s.create(cwd, p.dynamicTools)
+      if (p.litchAcp != null && !s.declared.get(peer.id)?.has(EXTENSION.acpControls))
+        throw new ProtocolError(-32602, 'litchAcp 需要声明 acpControls')
+      const live = await s.create(cwd, p.dynamicTools, p.litchAcp)
       const { thread } = live.projection
       s.subscribe(peer, thread.id)
       // 桌面可能带着别的引擎的模型名新建；允许回退时不认识的值不管，用 agent 的默认
@@ -287,13 +315,13 @@ async function threads(s: AcpServer, peer: RpcPeer, method: string, p: any): Pro
       return resolved
     }
     case 'thread/list': {
-      const rows = (await s.sessions())
+      const rows = (await s.sessions(p.archived === true))
         .sort((a, b) => a.updatedAt - b.updatedAt || a.id.localeCompare(b.id))
         .filter((thread) => {
           const metadata = s.store.getMeta('thread', thread.id) ?? {}
           return (
             (metadata.archived === true) === (p.archived === true) &&
-            !p.parentThreadId &&
+            (!p.parentThreadId || metadata.parentThreadId === p.parentThreadId) &&
             (!p.sourceKinds?.length || p.sourceKinds.includes('appServer')) &&
             (p.cwd == null ||
               (Array.isArray(p.cwd) ? p.cwd.includes(thread.cwd) : thread.cwd === p.cwd)) &&
@@ -354,6 +382,7 @@ async function threads(s: AcpServer, peer: RpcPeer, method: string, p: any): Pro
     case 'thread/unsubscribe': {
       const subscribed = s.subscriptions.get(p.threadId)?.delete(peer.id)
       const ephemeral = s.releaseEphemeral(p.threadId)
+      await s.release(p.threadId)
       return {
         status: subscribed
           ? 'unsubscribed'
@@ -372,6 +401,9 @@ async function threads(s: AcpServer, peer: RpcPeer, method: string, p: any): Pro
       const name = requiredString(p.name, 'name')
       const { projection } = live
       if (projection.thread.name === name) return {}
+      const agent = await s.runtime.agent()
+      if (agent.caps.title)
+        await s.ask(agent, 'session/set_title', { sessionId: p.threadId, title: name })
       // ACP 没有改名的方法：名字记在适配器这边，之后 agent 报的标题不再盖掉它
       projection.thread.name = name
       projection.userNamed = true
@@ -379,6 +411,9 @@ async function threads(s: AcpServer, peer: RpcPeer, method: string, p: any): Pro
       s.notify(p.threadId, 'thread/name/updated', { threadName: name })
       return {}
     }
+    case 'thread/delete':
+      await s.deleteSession(requiredString(p.threadId, 'threadId'))
+      return {}
     case 'thread/goal/get':
       await s.load(requiredString(p.threadId, 'threadId'))
       return { goal: null }
@@ -410,6 +445,11 @@ async function threads(s: AcpServer, peer: RpcPeer, method: string, p: any): Pro
       const live = await s.load(requiredString(p.threadId, 'threadId'))
       const archived = method === 'thread/archive'
       if (archived) await s.interrupt(p.threadId)
+      const agent = await s.runtime.agent()
+      if (agent.caps.archive)
+        await s.ask(agent, archived ? 'session/archive' : 'session/unarchive', {
+          sessionId: p.threadId,
+        })
       s.store.setMeta('thread', p.threadId, {
         ...(s.store.getMeta('thread', p.threadId) ?? {}),
         archived,

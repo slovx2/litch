@@ -115,11 +115,12 @@ export class Projection {
   private current: { item: any; messageId: string | null } | null = null
   /** 回放时刚认出的后台结果那段话：紧跟着来的同一条消息的分块接着吞掉，中间隔了别的更新就不算了 */
   private eventChunk: { messageId: string | null } | null = null
+  private readonly sessionMessages = new Map<string, any>()
   private counter = 0
   private readonly tools = new Map<string, ToolState>()
   private readonly startedMs = new Map<string, number>()
   // 正在等用户的审批，一件一个记号（见 waiting）
-  private readonly approving = new Set<symbol>()
+  private readonly approving = new Map<symbol, 'waitingOnApproval' | 'waitingOnUserInput'>()
   contextWindow: number | null = null
   private readonly total = zero()
   private last: Breakdown | null = null
@@ -136,14 +137,18 @@ export class Projection {
 
   /** 线程现在的状态，照上游 thread_status.rs：有回合在跑或者有审批在等是 active */
   status(): any {
-    const activeFlags = this.approving.size ? ['waitingOnApproval'] : []
+    const activeFlags = [...new Set(this.approving.values())]
     return this.active || activeFlags.length ? { type: 'active', activeFlags } : { type: 'idle' }
   }
 
   /** 等用户审批的这段时间（work）线程标着在等，等完改回来 */
-  async waiting<T>(notify: Notify, work: () => Promise<T>): Promise<T> {
+  async waiting<T>(
+    notify: Notify,
+    work: () => Promise<T>,
+    kind: 'waitingOnApproval' | 'waitingOnUserInput' = 'waitingOnApproval',
+  ): Promise<T> {
     const mark = Symbol('approval')
-    this.approving.add(mark)
+    this.approving.set(mark, kind)
     notify('thread/status/changed', { status: this.status() })
     try {
       return await work()
@@ -344,6 +349,31 @@ export class Projection {
     const send = this.replaying ? quiet : notify
     if (kind !== 'user_message_chunk') this.eventChunk = null
     switch (kind) {
+      case 'session_message':
+      case 'session_message_chunk': {
+        if (typeof update.messageId !== 'string') return null
+        const before = this.sessionMessages.get(update.messageId) ?? { content: [] }
+        const message =
+          kind === 'session_message'
+            ? { ...before, ...update }
+            : { ...before, content: [...(before.content ?? []), update.content] }
+        this.sessionMessages.set(update.messageId, message)
+        const turn = this.active ?? this.turns.at(-1)
+        if (turn)
+          this.put(
+            turn,
+            {
+              type: 'agentMessage',
+              id: `acp-session-message:${update.messageId}`,
+              text: `[${message.senderSessionId ?? '?'} → ${message.recipientSessionId ?? '?'}]\n${(message.content ?? []).map(blockText).join('')}`,
+              phase: 'commentary',
+              memoryCitation: null,
+            },
+            true,
+            send,
+          )
+        return null
+      }
       case 'user_message_chunk':
         // 实时回合里用户的话是适配器自己放的（客户端发来的样子），agent 回显的不再要
         if (this.replaying) this.replayUser(update)

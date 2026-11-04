@@ -1,3 +1,4 @@
+import type { AcpControlsRequests } from './acp-controls.mjs'
 import type { SessionPendingChanged } from './session-pending.mjs'
 // 客户端实际会调用的方法、会处理的通知，各自的参数和应答类型。
 // 没列在这里的方法客户端不调用；没列在这里的通知客户端不处理（记日志后丢弃）。
@@ -295,7 +296,7 @@ type CutBeforeItem<T> = T & { beforeItemId?: string }
 /** 客户端发给对面的请求 */
 import type { DevicePowerStatus } from './device-power.mjs'
 
-export interface ClientRequests {
+export interface ClientRequests extends AcpControlsRequests {
   'litch/device/recovery/read': {
     params: Record<string, never>
     result: { notices: RecoveryNotice[] }

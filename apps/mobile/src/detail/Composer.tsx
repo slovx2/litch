@@ -66,7 +66,7 @@ export function Composer({
   const meta = useSyncExternalStore(store.subscribeMeta, store.getMeta)
   const device = useKey<DeviceView>(keys.device(deviceId))
   const draft = useDraft(draftKey(deviceId, sessionId))
-  const options = useComposeOptions(deviceId, meta?.harness)
+  const options = useComposeOptions(deviceId, meta?.harness, sessionId)
   const [error, setError] = useState<string | null>(null)
   const [pendingSend, setPendingSend] = useState<'include' | 'only'>('include')
   // biome-ignore lint/correctness/useExhaustiveDependencies: 切换会话时恢复默认选择，不沿用另一个会话的选择
@@ -113,7 +113,7 @@ export function Composer({
   const harness = device?.harnesses.find((entry) => entry.id === meta?.harness)
   const model = options?.models.find((entry) => entry.id === meta?.settings.model)
   const imagesOff =
-    harness?.abilities?.images === false
+    (meta?.can.images ?? harness?.abilities?.images) === false
       ? t('composer.image.harness')
       : model && !model.acceptsImages
         ? t('composer.image.unsupported')

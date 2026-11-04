@@ -28,6 +28,42 @@ import { watchSession } from './wire.mjs'
 const never = { aborted: false, addEventListener() {} }
 const where = { deviceId: 'local', sessionId: 'a' }
 
+test('未打开的原生子代理提问显示在已打开父会话，父回合完成不误撤回', async () => {
+  const parent = thread({ id: 'a', turns: [turn('t1', [], { status: 'inProgress' })] })
+  const child = thread({ id: 'child', parentThreadId: 'a', turns: [] })
+  const { core, peer, command } = setup([parent, child])
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  const asked = peer.last().ask('item/tool/requestUserInput', {
+    threadId: 'child',
+    turnId: 't1',
+    itemId: 'child-question',
+    questions: [
+      {
+        id: 'q',
+        header: '子任务',
+        question: '继续？',
+        isOther: true,
+        isSecret: false,
+        options: null,
+      },
+    ],
+    isBlocking: true,
+    autoResolutionMs: null,
+  })
+  await settle()
+  const pending = session.seen.view?.requests[0]
+  assert.equal(pending?.kind, 'question')
+  assert.ok(pending)
+  peer.last().notify('turn/completed', { threadId: 'a', turn: turn('t1', []) })
+  await settle()
+  assert.equal(session.seen.view?.requests[0]?.id, pending.id)
+  await command('session.respond', { ...where, requestId: pending.id, answers: { q: ['继续'] } })
+  assert.deepEqual(((await asked) as any).result, { answers: { q: { answers: ['继续'] } } })
+})
+
 /** 某个条目的状态；没有这个条目就是 undefined */
 const statusOf = (view: SessionView | null, itemId: string): unknown =>
   (view?.items[itemId] as { status?: string } | undefined)?.status

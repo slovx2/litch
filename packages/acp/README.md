@@ -1,23 +1,24 @@
 # ACP 引擎（实验性）
 
-把说 ACP（Agent Client Protocol，第 1 版）的编码 agent 接到 Codex app-server 协议上。一个包管三个 harness 标识，入口都是 `dist/acp/src/adapter.mjs`，由命令行用 `CHA_ACP_AGENT` 告诉它这一次扮演哪一个：
+把说 ACP（Agent Client Protocol，第 1 版）的编码 agent 接到 Codex app-server 协议上。一个包管四个 harness 标识，入口都是 `dist/acp/src/adapter.mjs`，由命令行用 `CHA_ACP_AGENT` 告诉它这一次扮演哪一个：
 
 | 标识 | 默认命令 | 说明 |
 |---|---|---|
 | `gemini` | `gemini --acp` | Gemini CLI |
 | `qwen` | `qwen --acp` | Qwen Code |
+| `agy` | `agy acp` | Antigravity 订阅后端，由外壳路由到本入口 |
 | `acp` | 无，必须配置 | 用户指定的任意 ACP agent（比如 `opencode acp`） |
 
 预设在 `packages/protocol/src/acp-agents.json`。agent 本体不随适配器分发，一律用用户自己装的。
 
 ## 环境变量
 
-`<ID>` 是标识的大写（`GEMINI`、`QWEN`、`ACP`）：
+`<ID>` 是标识的大写（`GEMINI`、`QWEN`、`AGY`、`ACP`）：
 
-- `CHA_ACP_AGENT`：扮演哪一个，`gemini`、`qwen`、`acp` 之一，没设按 `acp`。
+- `CHA_ACP_AGENT`：扮演哪一个，`gemini`、`qwen`、`agy`、`acp` 之一，没设按 `acp`。
 - `CHA_<ID>_CLI`：命令（路径或 PATH 里的名字），没设用预设。`acp` 没有预设，不设就报“CLI 不可执行或未找到”。
 - `CHA_<ID>_ARGS`：参数，整行按空白切开，双引号里的空白不切，`\"` 是字面的引号；设了就整个替换预设（设成空串就是不带参数）。
-- `CHA_<ID>_HOME`：适配器给这个标识的状态目录（库、`agent.log`），默认 `~/.codex-harness-adapter/<id>`。不是 agent 自己的数据目录。
+- `CHA_<ID>_HOME`：适配器给这个标识的状态目录（库、`agent.log`），默认 `~/.codex-harness-adapter/<id>`。不是 agent 自己的数据目录。agy 单独使用 `CHA_ACP_HOME`，缺省为 `~/.codex-harness-adapter/agy/acp`，不与 SDK 共库。
 
 ## 命令行
 
@@ -53,8 +54,8 @@
 - 动态工具（`thread/start.dynamicTools`，含 Litch 的客户端工具 `litch_*`）：`runtime/info` 的扩展里报 `clientTools`。带了动态工具的会话，`session/new`、`session/load`、`session/resume`、`session/fork` 的 `mcpServers` 里挂一个 stdio 的 MCP 服务 `litch`（规范要求每个 agent 都收 stdio 的）：命令是当前的 node 跑 `dist/acp/src/mcp-bridge.mjs`，它经本地套接字（放在临时目录下新建的、只有自己能进的目录里；Windows 上是命名管道）接回入口进程，口令在环境变量 `LITCH_ACP_MCP_TOKEN` 里。MCP 由入口答：工具名是命名空间去掉 `litch_` 再接工具名（`browser_navigate`），各命名空间的 `instructions` 放在 `initialize` 应答的 `instructions` 里。模型调用时按 `protocol/extensions/client-tools.json` 挑执行方，发标准的 `item/tool/call`，答复转成 MCP 的结果交回 agent。动态工具记在适配器库里，适配器重启、agent 进程换过之后接回会话时重新挂，分叉出来的会话带着原会话的。
 - 动态工具的条目画成 `dynamicToolCall`，条目号就是 `item/tool/call` 的 `callId`。agent 为这次调用报的 `tool_call` 按标题认（`litch_<工具>`、`mcp_litch_<工具>`、`mcp__litch__<工具>`、`<工具> (litch MCP Server)`），认不出的在调用进来时按参数认领（Gemini CLI 在参数里有字符串 `command` 时拿命令当标题，按它认），都认不到就另起一个条目。agent 为这些工具来问权限的（Gemini CLI 默认会问）认得出就直接“允许这一次”，不转给用户（和别的入口一样，要不要问用户由执行方定）；认不出的照普通审批转给用户。
 - 实测（2026-10-20）：Gemini CLI 0.38.0、OpenCode 1.18.33 的 `acp` 都把 MCP 的 `instructions` 放进了给模型的系统提示，见 `test/smoke.test.mts`。
-- 权限只有一档（`:danger-full-access`）：适配器不加沙箱，agent 自己决定什么时候问。
-- 不支持（声明里关掉，调了答 -32601）：插话、压缩、回退、删除会话、向用户提问、MCP 征询；`mcpServerStatus/list` 等答 -32004。
+- 权限模式来自 agent 会话目录（`acp:mode:<id>`）；没有目录时只有 agent 自主管理的一档。适配器不增加 OS 沙箱。
+- 插话、主动压缩、回退仍无通用 v1 方法；删除按 sessionCapabilities.delete 开放，表单提问通过 MCP 征询卡呈现。未宣告 URL 征询、音频输入、v2。`mcpServerStatus/list` 等答 -32004。
 
 ## 运行与测试
 
@@ -73,3 +74,10 @@ LITCH_SMOKE_OPENCODE=$(which opencode) node --test packages/acp/dist/acp/test/sm
 # gemini：一条只握手；一条经 MCP 桥调客户端工具，模型是回环上的假 Gemini API（假的密钥，不发真实请求）
 LITCH_SMOKE_GEMINI=$(which gemini) node --test packages/acp/dist/acp/test/smoke.test.mjs
 ```
+
+## 嵌入和扩展
+
+`AcpServer(home, env)` 的 `handle(peer, message)`、`closePeer(peer)`、`close()` 是双后端外壳使用的公开接口。
+构建在 `dist/acp/src/server.mjs`；独立适配器安装包内为 `libexec/packages/acp/dist/acp/src/server.mjs`。
+每会话能力见 `protocol/extensions/thread-capabilities.json`；通用鉴权和配置控制见 `protocol/extensions/acp-controls.json`。
+只有声明扩展的连接才可读写对应字段。未登录的 agy 指引用户运行 `agy acp --login`；不读取或代管 OAuth。

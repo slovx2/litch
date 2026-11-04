@@ -5,6 +5,43 @@ import { assertStatusChanged, assertThreadList, errorCode, rig, settle } from '.
 
 const STATUS = 'litch/harness/status/changed'
 
+test('每会话能力按最终连接过滤：列表、读取、开始与设置更新', async () => {
+  const caps = { features: { fork: false }, permissionPresets: [], models: [] }
+  const pi = new FakeUpstream('pi', [{ id: 'cap-thread', updatedAt: 1, litchCapabilities: caps }])
+  const env = rig({ pi })
+  try {
+    const declared = env.connect()
+    const plain = env.connect()
+    await declared.initialize(['harness', 'threadCapabilities'])
+    await plain.initialize(['harness'])
+    for (const [client, wants] of [
+      [declared, true],
+      [plain, false],
+    ] as const) {
+      const list = await client.call('thread/list', {})
+      assert.equal(Boolean(list.data[0].litchCapabilities), wants)
+      const read = await client.call('thread/read', { threadId: 'cap-thread' })
+      assert.equal(Boolean(read.thread.litchCapabilities), wants)
+    }
+    pi.notify('thread/started', { thread: { id: 'cap-thread', litchCapabilities: caps } })
+    pi.notify('thread/settings/updated', {
+      threadId: 'cap-thread',
+      threadSettings: { thread: { id: 'cap-thread', litchCapabilities: caps } },
+    })
+    for (const [client, wants] of [
+      [declared, true],
+      [plain, false],
+    ] as const) {
+      const started = await client.waitFor((frame) => frame.method === 'thread/started')
+      assert.equal(Boolean((started.params as any).thread.litchCapabilities), wants)
+      const updated = await client.waitFor((frame) => frame.method === 'thread/settings/updated')
+      assert.equal(Boolean((updated.params as any).threadSettings.thread.litchCapabilities), wants)
+    }
+  } finally {
+    await env.close()
+  }
+})
+
 test('通知：带会话标识的原样转发，不带的加上 harness，会话开始的通知打标并进索引', async () => {
   const pi = new FakeUpstream('pi')
   const claude = new FakeUpstream('claude-code')

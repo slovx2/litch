@@ -1,5 +1,6 @@
 {
   "gemini": { "command": "gemini", "args": ["--acp"] },
   "qwen": { "command": "qwen", "args": ["--acp"] },
+  "agy": { "command": "agy", "args": ["acp"] },
   "acp": { "command": "", "args": [] }
 }

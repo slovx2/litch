@@ -1,0 +1,15 @@
+{
+  "extension": "threadCapabilities",
+  "description": "同一个 harness 下，各会话来自不同后端时使用的能力声明。",
+  "declaration": "客户端在 initialize.capabilities.litchExtensions 声明 threadCapabilities；引擎在 runtime/info.extensions 声明支持。",
+  "fields": {
+    "Thread.litchCapabilities": "HarnessDeclaration，加可选 models（标准 Model[]）、planMode（boolean）。出现在 thread/start、resume、read、fork、list 应答和 thread/started、thread/settings/updated 通知的 thread 对象。"
+  },
+  "rules": [
+    "只发给声明过扩展的连接，聚合或双后端路由按最终接收连接过滤。",
+    "字段不存在时沿用 harness 级 runtime/info；存在时完整替换该会话的能力、扩展和权限预设，禁止取并集。",
+    "models、planMode 缺省时沿用 harness 查询；空模型数组表示该会话没有声明可选模型。",
+    "runtime/info 始终描述新建会话默认后端；切换默认后端不改变已有会话能力。",
+    "设置、模型或模式目录变化时通过已有 thread/settings/updated 通知更新。"
+  ]
+}

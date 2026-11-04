@@ -39,7 +39,7 @@ async function check(s: Scene): Promise<void> {
     permissions: presets[0]?.id,
   })
   const id = started.thread.id
-  assert.equal(started.activePermissionProfile.id, presets[0]?.id)
+  assert.equal(started.activePermissionProfile.id, 'acp:mode:default')
 
   // 计划更新
   await turn(s, id, text('hello'))

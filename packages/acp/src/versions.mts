@@ -2,6 +2,7 @@ import { declareBackgroundTasks } from '../../shared/src/background-report.mjs'
 import { CODEX_PROTOCOL_VERSION } from '../../shared/src/runtime-version.mjs'
 import pkg from '../package.json' with { type: 'json' }
 import type { AcpAgentId } from './agent.mjs'
+import type { Catalog } from './catalog.mjs'
 import { type AgentCapabilities, declarationFor } from './declaration.mjs'
 
 // acpProtocol：ACP 的协议版本（initialize 里的 protocolVersion，是个整数），只认这一个，
@@ -23,6 +24,7 @@ export function runtimeInfo(
   id: AcpAgentId,
   caps: AgentCapabilities | null,
   backgroundShell = false,
+  catalog?: Catalog | null,
 ) {
   return {
     engine: id,
@@ -34,7 +36,7 @@ export function runtimeInfo(
     capabilities: ['submission.idempotency'],
     releaseReady: false,
     ...(backgroundShell
-      ? declareBackgroundTasks(declarationFor(id, caps))
-      : declarationFor(id, caps)),
+      ? declareBackgroundTasks(declarationFor(id, caps, catalog))
+      : declarationFor(id, caps, catalog)),
   }
 }

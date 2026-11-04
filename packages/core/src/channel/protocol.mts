@@ -783,7 +783,7 @@ export interface Commands {
    * 设备上不止一个 harness 时各是各的一份：harness 给的是会话所属的那个（新建时是选中的那个）
    */
   'device.composeOptions': {
-    params: { deviceId: string; harness?: string }
+    params: { deviceId: string; harness?: string; sessionId?: string }
     result: ComposeOptions
   }
   /**

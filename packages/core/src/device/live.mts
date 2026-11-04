@@ -112,9 +112,9 @@ export interface LiveHost {
   /** harness 给人看的名字，说明为什么做不了的时候用 */
   harnessName(harness: HarnessId): string
   /** 这个 harness 事先声明的会什么、不会什么。没有声明是 null：那就试了才知道 */
-  declared(harness: HarnessId): HarnessAbilities | null
+  declared(harness: HarnessId, sessionId?: string): HarnessAbilities | null
   /** 它的声明里核心自己要用的部分（认识哪些扩展、有哪几档权限预设）。没有声明是 null */
-  terms(harness: HarnessId): HarnessTerms | null
+  terms(harness: HarnessId, sessionId?: string): HarnessTerms | null
   /** 这个会话是不是归档着的。归档着的只取历史来看，不订阅 */
   shelved(sessionId: string): boolean
   request<M extends keyof ClientRequests>(
@@ -129,6 +129,9 @@ export interface LiveHost {
   touched(sessionId: string, said?: string): void
   /** 刚建了一个会话。设备据此把它放进侧栏，不等对面的通知 */
   started(thread: Thread): void
+  rememberCapabilities?(thread: Thread): void
+  threadScoped?(sessionId: string): boolean
+  agentParent?(sessionId: string): string | null
   /** 一个回合结束了（turnId 是协议里的回合标识）。差异面板据此重新取；客户端工具据此收尾 */
   turnEnded?(sessionId: string, turnId: string): void
   /** 用户在这边打断了这个会话的回合（请求发出去之前）。客户端工具据此当场取消正在执行的调用 */
@@ -435,12 +438,17 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
    * 这个 harness 上那几件事做不做得了：有声明照声明，没有声明先当它都会；
    * 两种情况下，对面说过“不认识”的都算不会（声明说会、实际不会的，照实际的来）
    */
-  const abilities = (harness: HarnessId): SessionAbilities => {
-    const lacks = lacking.get(harness)
-    const declared = host.declared(harness)
+  const abilities = (harness: HarnessId, sessionId?: string): SessionAbilities => {
+    const lacks = lacking.get(
+      sessionId && host.threadScoped?.(sessionId) ? `${harness}:${sessionId}` : harness,
+    )
+    const declared = host.declared(harness, sessionId)
     const can = (ability: SessionAbility): boolean =>
       (declared ? declared[ability] : true) && !lacks?.has(ability)
     return {
+      ...(declared
+        ? { images: declared.images, skills: declared.skills, mentions: declared.mentions }
+        : {}),
       fork: can('fork'),
       rollback: can('rollback'),
       compact: can('compact'),
@@ -459,28 +467,32 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
   /** 这个会话所在的 harness 收不收指向文件的 mention。没有声明的按不收算：路径写进正文，谁都读得到 */
   const mentionsIn = (live: Live): boolean =>
-    live.view ? host.declared(live.view.harness)?.mentions === true : false
+    live.view ? host.declared(live.view.harness, live.id)?.mentions === true : false
 
   /** 对面说它不会这件事：记下来，告诉这个 harness 上所有开着的会话 */
-  const markLacking = (harness: HarnessId, ability: SessionAbility) => {
-    const lacks = lacking.get(harness) ?? new Set<SessionAbility>()
+  const markLacking = (harness: HarnessId, ability: SessionAbility, sessionId?: string) => {
+    const scoped = sessionId && host.threadScoped?.(sessionId)
+    const key = scoped ? `${harness}:${sessionId}` : harness
+    const lacks = lacking.get(key) ?? new Set<SessionAbility>()
     lacks.add(ability)
-    lacking.set(harness, lacks)
-    const can = abilities(harness)
+    lacking.set(key, lacks)
     for (const other of sessions.values()) {
-      if (other.view?.harness === harness) emit(other, [{ op: 'session.can', can }])
+      if (other.view?.harness === harness && (!scoped || other.id === sessionId))
+        emit(other, [{ op: 'session.can', can: abilities(harness, other.id) }])
     }
   }
 
   /** 这个 harness 声明的权限预设。没有声明是 null，按内置的三档 */
-  const presetsOf = (harness: HarnessId) => host.terms(harness)?.presets ?? null
+  const presetsOf = (harness: HarnessId, sessionId?: string) =>
+    host.terms(harness, sessionId)?.presets ?? null
 
   /**
    * 审批请求按什么条件画。“拒绝并附说明”要三样都有才给入口：这条连接声明了（握手时我们一律声明，
    * 见 link.mts）、会话所属的 harness 声明了、这次请求的决定列表里真有这一项（最后一样在 requests.mts 里看）
    */
-  const requestTerms = (harness: HarnessId): RequestTerms => ({
-    declineWithNote: host.terms(harness)?.extensions.includes(EXTENSION.declineWithNote) === true,
+  const requestTerms = (harness: HarnessId, sessionId?: string): RequestTerms => ({
+    declineWithNote:
+      host.terms(harness, sessionId)?.extensions.includes(EXTENSION.declineWithNote) === true,
   })
 
   /** 这个会话属于哪个 harness：载入过就看载入的结果，没载入过看会话目录。都不知道就是 null */
@@ -1019,6 +1031,17 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     // 设置变了：别的客户端改的，或者引擎自己改的（模型退出了计划模式）。这一版只跟模式：
     // 模型、强度、权限这几项各有各的认法，回合之间换了的话下次载入会话时会对上
     'thread/settings/updated': (live, { threadSettings }) => {
+      const thread = (threadSettings as typeof threadSettings & { thread?: Thread })?.thread
+      if (thread) host.started(thread)
+      if (live.view && thread) {
+        emit(live, [
+          { op: 'session.can', can: abilities(live.view.harness, live.id) },
+          {
+            op: 'session.settings',
+            settings: projectSettings(threadSettings, presetsOf(live.view.harness, live.id)),
+          },
+        ])
+      }
       const mode = projectMode(threadSettings?.collaborationMode?.mode)
       if (!mode || !live.view) return
       // 对面说了算：这边想改还没发出去的那一下不留着
@@ -1224,10 +1247,10 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   }
 
   const fetchView = async (live: Live, cancel: Cancel): Promise<SessionView> => {
-    const scope = (thread: Thread) => ({
-      deviceId: host.deviceId,
-      harness: host.harnessFor(thread),
-    })
+    const scope = (thread: Thread) => {
+      host.rememberCapabilities?.(thread)
+      return { deviceId: host.deviceId, harness: host.harnessFor(thread) }
+    }
     const options = { timeoutMs: LOAD_TIMEOUT, signal: cancel.signal }
     live.historyCursor = null
     const paged = (thread: Thread, cursor: string | null): SessionView => {
@@ -1318,7 +1341,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       const view = first ? paged(thread, first.cursor) : projectThread(thread, scope(thread))
       return {
         ...view,
-        settings: projectSettings(resumed, presetsOf(view.harness)),
+        settings: projectSettings(resumed, presetsOf(view.harness, live.id)),
         proposals: await proposalsOf(live.id, options),
         goal: await goalOf(live.id, view.harness, options),
       }
@@ -1371,14 +1394,14 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     harness: HarnessId,
     options: RpcRequestOptions,
   ): Promise<SessionGoalView | null> => {
-    if (!abilities(harness).goals) return null
+    if (!abilities(harness, threadId).goals) return null
     try {
       const { goal } = await host.request('thread/goal/get', { threadId }, options)
       return projectGoal(goal)
     } catch (error) {
       if (!(error instanceof RpcError) || isHarnessDown(error)) throw error
       if (lacksMethod(error) || goalsOff(error))
-        markLacking(deviceFault(error)?.harness ?? harness, 'goals')
+        markLacking(deviceFault(error)?.harness ?? harness, 'goals', threadId)
       else host.log(`取会话 ${threadId} 的目标失败：${error.message}`)
       return null
     }
@@ -1415,7 +1438,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           settings: { ...view.settings, ...live.pending },
           // 重新载入时对面不一定再报一遍，先留着上一次的
           usage: view.usage ?? live.view?.usage ?? null,
-          can: abilities(view.harness),
+          can: abilities(view.harness, live.id),
           agents: host.agentsOf?.(live.id) ?? [],
         }
         if (!isRunning(live.view)) live.needsTurnCheck = false
@@ -1588,7 +1611,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     // 改过的设置跟着这个回合一起告诉对面，之后的回合对面会沿用
     const sent = { ...live.pending }
     // 它声明了自己的权限预设的话，只发预设的标识
-    const declared = live.view ? presetsOf(live.view.harness) !== null : false
+    const declared = live.view ? presetsOf(live.view.harness, live.id) !== null : false
     const overrides = turnOverrides(sent, declared, live.view?.settings)
     try {
       const { turn } = await withSpeed(
@@ -1827,13 +1850,13 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   ): Promise<T> => {
     const { harness } = live.view
     // 声明了不会的、试过不行的：不去发
-    if (!abilities(harness)[ability]) throw new ChannelError('unsupported', UNSUPPORTED)
+    if (!abilities(harness, live.id)[ability]) throw new ChannelError('unsupported', UNSUPPORTED)
     try {
       return await run()
     } catch (error) {
       if (!lacksMethod(error)) throw failure(error)
       // 聚合面替它说“不支持”的时候写着是哪个 harness：照它说的记
-      markLacking(deviceFault(error)?.harness ?? harness, ability)
+      markLacking(deviceFault(error)?.harness ?? harness, ability, live.id)
       throw new ChannelError('unsupported', UNSUPPORTED)
     }
   }
@@ -1844,12 +1867,12 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     run: () => Promise<T>,
   ): Promise<T> => {
     const { harness } = live.view
-    if (!abilities(harness).goals) throw new ChannelError('unsupported', UNSUPPORTED)
+    if (!abilities(harness, live.id).goals) throw new ChannelError('unsupported', UNSUPPORTED)
     try {
       return await run()
     } catch (error) {
       if (!lacksMethod(error) && !goalsOff(error)) throw failure(error)
-      markLacking(deviceFault(error)?.harness ?? harness, 'goals')
+      markLacking(deviceFault(error)?.harness ?? harness, 'goals', live.id)
       throw new ChannelError('unsupported', UNSUPPORTED)
     }
   }
@@ -2036,6 +2059,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
     harnessUp(harness) {
       lacking.delete(harness)
+      for (const key of lacking.keys()) if (key.startsWith(`${harness}:`)) lacking.delete(key)
       for (const live of [...sessions.values()]) {
         if (ownerOf(live) !== harness) continue
         if (live.sinks.size === 0 && live.queued.length === 0) {
@@ -2121,6 +2145,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
     notification(method, params) {
       if (!(method in notes)) return false
+      // 子代理的请求可能显示在父会话里。请求号在连接内唯一，按号撤回，不取决于当前打开了哪页。
+      if (method === 'serverRequest/resolved') {
+        for (const live of sessions.values()) deliver(live, method, params)
+        return true
+      }
       const threadId = (params as { threadId?: unknown } | null)?.threadId
       const live = typeof threadId === 'string' ? sessions.get(threadId) : undefined
       if (live) deliver(live, method, params)
@@ -2129,11 +2158,26 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
     serverRequest(method, params, id) {
       const threadId = (params as { threadId?: unknown } | null)?.threadId
-      const live = typeof threadId === 'string' ? sessions.get(threadId) : undefined
+      let live = typeof threadId === 'string' ? sessions.get(threadId) : undefined
+      let ancestor = typeof threadId === 'string' ? threadId : null
+      const visited = new Set<string>()
+      while (!live?.view && !live?.loading && ancestor && !visited.has(ancestor)) {
+        visited.add(ancestor)
+        ancestor = host.agentParent?.(ancestor) ?? null
+        live = ancestor ? sessions.get(ancestor) : undefined
+      }
       // 普通打开、重连、父界面订阅都可能先收到 resume 重放的请求，再收到历史。
       // 载入中的会话先登记，快照就绪后一起呈现，不能回“方法不存在”让真实请求失败。
       if (!live || (!live.view && !live.loading)) return undefined
-      const pending = projectRequest(method, params, String(id), requestTerms(ownerOf(live) ?? ''))
+      const projected = projectRequest(
+        method,
+        params,
+        String(id),
+        requestTerms(ownerOf(live) ?? '', typeof threadId === 'string' ? threadId : live.id),
+      )
+      // 跨页卡片不挂父回合条目，也不随父回合完成误收掉。
+      const pending =
+        projected && live.id !== threadId ? { ...projected, turnId: null, itemId: null } : projected
       if (!pending) return undefined
       const viewId = pending.turnId ? viewTurn(live, pending.turnId) : null
       const key = viewId && pending.itemId ? viewItem(live, viewId, pending.itemId) : null
@@ -2253,12 +2297,13 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       const { thread } = started
       const live = blank(thread.id)
       const owner = host.harnessFor(thread)
-      const actual = projectSettings(started, presetsOf(owner))
+      host.rememberCapabilities?.(thread)
+      const actual = projectSettings(started, presetsOf(owner, thread.id))
       live.pending = settingsDiff(settings, actual)
       live.view = {
         ...projectThread(thread, { deviceId: host.deviceId, harness: owner }),
         settings: { ...actual, ...live.pending },
-        can: abilities(owner),
+        can: abilities(owner, thread.id),
       }
       sessions.set(live.id, live)
       host.started(thread)
@@ -2413,7 +2458,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       const turnId = running ? serverTurn(live, running.id) : null
       if (!running || !turnId) throw new ChannelError('rejected', '当前没有可插入消息的回合')
       const { harness } = live.view
-      const can = abilities(harness)
+      const can = abilities(harness, live.id)
       // 声明了不会的、试过不行的：不去发，消息照常排着等这个回合结束
       if (!can.steer) throw new ChannelError('unsupported', UNSUPPORTED)
       if (!can.steerImages && message.images.length > 0) {
@@ -2429,7 +2474,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       live.queued = live.queued.filter((entry) => entry !== message)
       const { id: _queueId, ...said } = message
       const mentions = mentionsIn(live)
-      const tracked = host.terms(harness)?.extensions.includes(EXTENSION.inputDelivery) === true
+      const tracked =
+        host.terms(harness, live.id)?.extensions.includes(EXTENSION.inputDelivery) === true
       live.steered.set(clientId, { key, turnId: running.id, message: said, tracked })
       emit(live, [
         { op: 'queue.set', queued: live.queued },
@@ -2479,7 +2525,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         pump(live)
         if (!lacksMethod(error)) throw failure(error)
         // 对面不会引导：记下来，这个 harness 上的入口都停掉
-        markLacking(deviceFault(error)?.harness ?? harness, 'steer')
+        markLacking(deviceFault(error)?.harness ?? harness, 'steer', live.id)
         throw new ChannelError('unsupported', UNSUPPORTED)
       }
     },
@@ -2528,7 +2574,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (!turnId) return
       // 目标在做的时候按停止：先把目标暂停（照官方桌面端和终端界面），不然这一轮停下、空闲了它又接着续跑。
       // 暂停只等一小会儿，没成也照样打断：停下回合要紧
-      if (live.view.goal?.status === 'active' && abilities(live.view.harness).goals) {
+      if (live.view.goal?.status === 'active' && abilities(live.view.harness, live.id).goals) {
         await host
           .request(
             'thread/goal/set',

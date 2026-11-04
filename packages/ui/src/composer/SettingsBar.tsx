@@ -4,6 +4,7 @@ import {
   keys,
   type PermissionPreset,
   type SessionDefaults,
+  type SessionMeta,
   type SessionSettings,
   STANDARD_SPEED,
   shownEffort,
@@ -26,12 +27,19 @@ const known = new Map<string, ComposeOptions>()
  * 模型清单是 harness 自己的。设备每连上一次、这个 harness 每恢复可用一次，重新问一遍。
  * 不说是哪个 harness（还不知道）就由核心定。
  */
-export function useComposeOptions(deviceId: string, harness?: string): ComposeOptions | null {
+export function useComposeOptions(
+  deviceId: string,
+  harness?: string,
+  sessionId?: string,
+): ComposeOptions | null {
   const { channel } = useServices()
   const device = useKey<DeviceView>(keys.device(deviceId))
   // 能问的时候才问：设备连着，要问的那个 harness 也没有掉线
   const reachable = device?.connection === 'online' && !downHarness(device, harness)
-  const key = `${deviceId}\n${harness ?? ''}`
+  const meta = useKey<SessionMeta>(sessionId ? keys.session(deviceId, sessionId) : '')
+  const settings = useKey<SessionSettings>(sessionId ? keys.settings(deviceId, sessionId) : '')
+  const revision = JSON.stringify([settings, meta?.can])
+  const key = `${deviceId}\n${harness ?? ''}\n${sessionId ?? ''}\n${revision}`
   const [asked, setAsked] = useState<{ key: string; value: ComposeOptions } | null>(null)
   useEffect(() => {
     if (!reachable) return
@@ -39,7 +47,7 @@ export function useComposeOptions(deviceId: string, harness?: string): ComposeOp
     channel
       .command(
         'device.composeOptions',
-        { deviceId, ...(harness ? { harness } : {}) },
+        { deviceId, ...(harness ? { harness } : {}), ...(sessionId ? { sessionId } : {}) },
         { signal: controller.signal },
       )
       .then((value) => {
@@ -49,7 +57,7 @@ export function useComposeOptions(deviceId: string, harness?: string): ComposeOp
       // 问不到就不显示选择器，发消息不受影响
       .catch(() => {})
     return () => controller.abort()
-  }, [channel, deviceId, harness, key, reachable])
+  }, [channel, deviceId, harness, sessionId, key, reachable])
   // 刚换了 harness、新的那份还没问回来：不拿上一个 harness 的清单顶着
   return asked?.key === key ? asked.value : (known.get(key) ?? null)
 }

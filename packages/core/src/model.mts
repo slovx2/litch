@@ -392,6 +392,8 @@ export interface SectionView {
 export type SessionStatus = 'idle' | 'running' | 'waiting' | 'error'
 
 export interface SessionSummary {
+  /** 会话专属后端能力；缺省沿用所属 harness 的声明。 */
+  abilities?: HarnessAbilities
   /** 原生子代理与临时会话不参与全局搜索。 */
   searchable?: boolean
   id: string
@@ -1178,6 +1180,9 @@ export interface ContextUsage {
  * 有声明的也一样会被“试了不行”改写：声明说会、对面却说不认识的，照实际的来。
  */
 export interface SessionAbilities {
+  images?: boolean
+  skills?: boolean
+  mentions?: boolean
   /** 从某个回合分叉出一个新会话 */
   fork: boolean
   /** 把会话回退到某个回合之前 */

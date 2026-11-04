@@ -12,6 +12,7 @@ import type {
 import { HARNESS_IDENTITY } from '../../protocol/src/harness-identity.mjs'
 import { builtinPreset, PRESET } from '../../shared/src/harness-declaration.mjs'
 import type { AcpAgentId } from './agent.mjs'
+import { type Catalog, modes } from './catalog.mjs'
 
 /** agent 在 initialize 里报的、我们用得上的那几项 */
 export interface AgentCapabilities {
@@ -26,17 +27,31 @@ export interface AgentCapabilities {
   resume: boolean
   /** session/close */
   close: boolean
+  delete: boolean
+  title: boolean
+  archive: boolean
+  additionalDirectories: boolean
+  logout: boolean
+  audio: boolean
+  mcpHttp: boolean
+  mcpSse: boolean
   /** prompt 里能带图片 */
   image: boolean
   /** prompt 里能带内嵌的资源（文件内容） */
   embeddedContext: boolean
   /** agent 要求的登录方式；有的 agent 没登录时 session/new 会报要先登录 */
-  authMethods: { id: string; name: string; description: string | null }[]
+  authMethods: {
+    id: string
+    name: string
+    description: string | null
+    type: string
+    args?: string[]
+  }[]
   agentInfo: { name: string; title: string | null; version: string | null } | null
 }
 
-const present = (value: unknown): boolean =>
-  value !== undefined && value !== null && value !== false
+export const present = (value: unknown): boolean =>
+  value !== null && typeof value === 'object' && !Array.isArray(value)
 
 /** 从 initialize 的应答里取能力。缺的、形状不对的一律当没有 */
 export function capabilitiesOf(response: any): AgentCapabilities {
@@ -51,6 +66,14 @@ export function capabilitiesOf(response: any): AgentCapabilities {
     fork: present(session.fork),
     resume: present(session.resume),
     close: present(session.close),
+    delete: present(session.delete),
+    title: present(session.title),
+    archive: present(session.archive) && present(session.list),
+    additionalDirectories: present(session.additionalDirectories),
+    logout: present(caps.auth?.logout),
+    audio: prompt.audio === true,
+    mcpHttp: caps.mcpCapabilities?.http === true,
+    mcpSse: caps.mcpCapabilities?.sse === true,
     image: prompt.image === true,
     embeddedContext: prompt.embeddedContext === true,
     authMethods: (Array.isArray(response?.authMethods) ? response.authMethods : [])
@@ -59,6 +82,10 @@ export function capabilitiesOf(response: any): AgentCapabilities {
         id: method.id,
         name: String(method.name ?? method.id),
         description: typeof method.description === 'string' ? method.description : null,
+        type: typeof method.type === 'string' ? method.type : 'agent',
+        ...(Array.isArray(method.args)
+          ? { args: method.args.filter((arg: unknown) => typeof arg === 'string') }
+          : {}),
       })),
     agentInfo:
       info && typeof info.name === 'string'
@@ -98,19 +125,19 @@ export function featuresOf(caps: AgentCapabilities | null): HarnessFeatures {
     approvals: {
       // session/request_permission：改文件的工具（edit、delete、move）走文件改动审批，别的走命令审批。
       kinds: ['command', 'fileChange'],
-      // 不在这个入口上打开着的会话（agent 自己起的子代理会话）来问时没人能答，一律回“取消”。
-      uncovered: ['subagents'],
+      // 仅接受已由父会话正式宣告的子会话；未知会话仍取消。
+      uncovered: [],
     },
-    // ACP 稳定版里没有向用户提问的请求（elicitation 还是草案）。
+    // elicitation 由客户端握手声明，走原生征询卡片；不是 requestUserInput 的窄字符串表单。
     userInput: false,
-    mcpElicitation: false,
+    mcpElicitation: caps !== null,
     // agent 发 plan 更新就转成 turn/plan/updated；不发的 agent 就没有。
     planUpdates: true,
     inputTypes: inputTypes(caps),
     steerInputTypes: [],
-    // 归档、改名只是适配器这边记的；ACP 没有删除会话（session/delete 还没进稳定版）。
+    // 归档、改名在没有远端能力时由本地记录；删除始终要求 agent 声明。
     archive: true,
-    delete: false,
+    delete: caps?.delete ?? false,
     rename: true,
     // 一段话是过程说明还是最终回答，要看它后面还有没有工具调用：完成时才准。
     agentMessagePhase: 'onCompleted',
@@ -129,17 +156,40 @@ const PRESET_TEXT = {
   en: 'The adapter adds no sandbox: the agent decides on its own which actions to ask about (per its own modes and settings), and asks you here. Asking only gives you a look first and is not a security boundary',
 }
 
-export function declarationFor(id: AcpAgentId, caps: AgentCapabilities | null): HarnessDeclaration {
+export function declarationFor(
+  id: AcpAgentId,
+  caps: AgentCapabilities | null,
+  catalog?: Catalog | null,
+): HarnessDeclaration {
   return {
     // 名字和徽标不在这里写：和设置里这一组的标题是同一个出处
     ...HARNESS_IDENTITY[id],
     // 审批的选项是 agent 给的那几个，带不了用户写的说明：不支持 declineWithNote。
     // 动态工具经按会话挂的 MCP 桥交给 agent（ACP 要求每个 agent 都收 stdio 的 MCP 服务），
     // litch_ 命名空间的调用照 clientTools 的规矩挑执行方（client-tools.mts）。
-    extensions: [EXTENSION.filePreview, EXTENSION.clientTools],
+    extensions: [
+      EXTENSION.filePreview,
+      EXTENSION.clientTools,
+      EXTENSION.threadCapabilities,
+      EXTENSION.acpControls,
+    ],
     features: featuresOf(caps),
     permissionPresets: [
       { ...builtinPreset(PRESET.fullAccess, PRESET_TEXT, switching), requiresConfirmation: false },
+      ...(catalog
+        ? modes(catalog).map((mode) => ({
+            id: `acp:mode:${mode.value}`,
+            title: { 'zh-CN': mode.name, en: mode.name },
+            description: {
+              'zh-CN': mode.description ?? mode.name,
+              en: mode.description ?? mode.name,
+            },
+            risk: 'high' as const,
+            requiresConfirmation: true,
+            switchInSession: true,
+            switchDuringTurn: false,
+          }))
+        : []),
     ],
   }
 }

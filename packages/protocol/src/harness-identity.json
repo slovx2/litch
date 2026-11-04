@@ -6,5 +6,6 @@
   "opencode": { "displayName": "OpenCode", "badge": "OC" },
   "gemini": { "displayName": "Gemini CLI", "badge": "GE" },
   "qwen": { "displayName": "Qwen Code", "badge": "QW" },
+  "agy": { "displayName": "Antigravity", "badge": "AG" },
   "acp": { "displayName": "ACP", "badge": "AC" }
 }

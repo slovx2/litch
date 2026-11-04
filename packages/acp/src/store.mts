@@ -36,6 +36,12 @@ export class AcpStore {
   deleteMeta(scope: string, id: string): void {
     this.db.prepare('DELETE FROM metadata WHERE scope=? AND id=?').run(scope, id)
   }
+  deleteInputs(threadId: string): void {
+    const prefix = `${threadId}:`
+    this.db
+      .prepare("DELETE FROM metadata WHERE scope='input' AND substr(id,1,length(?))=?")
+      .run(prefix, prefix)
+  }
   close(): void {
     this.db.close()
   }

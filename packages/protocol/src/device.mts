@@ -17,6 +17,8 @@ export const EXTENSIONS_CAPABILITY = 'litchExtensions'
 
 /** 扩展名。以后每加一个扩展在这里加一个名字，并在 protocol/extensions/ 下写一份定义 */
 export const EXTENSION = {
+  threadCapabilities: 'threadCapabilities',
+  acpControls: 'acpControls',
   projectPermissions: 'projectPermissions',
   harnessProjectPermissions: 'harnessProjectPermissions',
   inputDelivery: 'inputDelivery',

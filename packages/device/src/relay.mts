@@ -283,6 +283,7 @@ export class Relay {
     this.see(link, thread.id, thread)
     this.host.worktrees.adopt(thread)
     thread.harness = link.harness
+    if (!this.host.declares(EXTENSION.threadCapabilities)) delete thread.litchCapabilities
     this.host.workspaces.decorate(thread.id, thread)
     if (this.host.declares(EXTENSION.sessionTree)) this.host.sessions.decorate(thread)
     if (this.host.declares(EXTENSION.backgroundTasks)) this.host.background.decorate(thread)
@@ -325,6 +326,8 @@ export class Relay {
         return
       }
       changed = this.stamp(link, thread)
+    } else if (method === 'thread/settings/updated' && isObject(fields?.threadSettings)) {
+      changed = this.stamp(link, fields.threadSettings.thread)
     } else if (method === 'thread/deleted' && threadId) {
       this.host.workspaces.forget(threadId)
       this.host.index.forget(threadId)

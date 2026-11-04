@@ -24,6 +24,7 @@ interface Session {
   model: string
   effort: string
   mode: string
+  enabled?: boolean
   history: Array<{ role: 'user' | 'agent'; text: string }>
 }
 
@@ -44,6 +45,7 @@ const defaultCaps = {
 }
 
 const configOptions = (session: Session) => [
+  { id: 'enabled', name: '开关', type: 'boolean', currentValue: session.enabled ?? false },
   {
     id: 'model',
     name: '模型',
@@ -253,6 +255,74 @@ async function prompt(params: any): Promise<object> {
   const argument = rest.join(' ')
   let usage: object | undefined
   switch (word) {
+    case 'ask-cancel': {
+      const requestId = nextId
+      const result = request('elicitation/create', {
+        sessionId,
+        mode: 'form',
+        message: '稍后撤回',
+        requestedSchema: { type: 'object', properties: {} },
+      })
+      setTimeout(() => send({ method: '$/cancel_request', params: { requestId } }), 50)
+      say(JSON.stringify(await result))
+      break
+    }
+    case 'ask': {
+      const reply = await request('elicitation/create', {
+        sessionId,
+        mode: 'form',
+        message: '选择方案',
+        requestedSchema: {
+          type: 'object',
+          properties: { count: { type: 'integer' }, enabled: { type: 'boolean' } },
+          required: ['count'],
+        },
+      })
+      say(JSON.stringify(reply))
+      break
+    }
+    case 'child': {
+      const childId = `${sessionId}-child`
+      notify(sessionId, {
+        sessionUpdate: 'subagent_update',
+        sessionId: childId,
+        title: '子任务',
+        capabilities: { cancel: {} },
+        state: { state: 'running' },
+      })
+      notify(childId, {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: '子任务过程' },
+      })
+      const result = await permit(childId, {
+        toolCallId: 'child-command',
+        title: '子任务命令',
+        kind: 'execute',
+      })
+      notify(sessionId, {
+        sessionUpdate: 'session_message',
+        messageId: 'child-instruction',
+        senderSessionId: sessionId,
+        recipientSessionId: childId,
+        content: [{ type: 'text', text: '执行子任务' }],
+      })
+      notify(sessionId, {
+        sessionUpdate: 'subagent_update',
+        sessionId: childId,
+        state: { state: 'idle', stopReason: 'end_turn' },
+      })
+      say(result)
+      break
+    }
+    case 'unknown-permission':
+      say(
+        await permit('unknown-session', {
+          toolCallId: 'unknown',
+          title: '未知会话',
+          kind: 'execute',
+        }),
+      )
+      break
     case 'hello':
       notify(sessionId, {
         sessionUpdate: 'agent_thought_chunk',
@@ -499,7 +569,10 @@ async function handle(method: string, params: any): Promise<unknown> {
         agentCapabilities: process.env.FAKE_ACP_CAPS
           ? JSON.parse(process.env.FAKE_ACP_CAPS)
           : defaultCaps,
-        authMethods: [],
+        authMethods: [
+          { id: 'agent-login', name: 'Agent login' },
+          { id: 'terminal-login', name: 'Terminal', type: 'terminal', args: ['--login'] },
+        ],
         agentInfo: { name: 'fake-acp', title: 'Fake ACP', version: '9.9.9' },
       }
     case 'session/new': {
@@ -507,6 +580,20 @@ async function handle(method: string, params: any): Promise<unknown> {
       await mountMcp(created.sessionId, params?.mcpServers)
       return { sessionId: created.sessionId, ...settings(created) }
     }
+    case 'authenticate':
+    case 'logout':
+    case 'session/close':
+    case 'session/archive':
+    case 'session/unarchive':
+      return {}
+    case 'session/delete':
+      if (!sessions.delete(params.sessionId)) throw { code: -32002, message: 'not found' }
+      persist()
+      return {}
+    case 'session/set_title':
+      session(params).title = params.title
+      persist()
+      return {}
     case 'session/load': {
       const found = session(params)
       await mountMcp(found.sessionId, params?.mcpServers)
@@ -545,6 +632,7 @@ async function handle(method: string, params: any): Promise<unknown> {
       const found = session(params)
       if (params.configId === 'model') found.model = params.value
       else if (params.configId === 'effort') found.effort = params.value
+      else if (params.configId === 'enabled') found.enabled = params.value
       else throw { code: -32602, message: `unknown config ${params.configId}` }
       return { configOptions: configOptions(found) }
     }

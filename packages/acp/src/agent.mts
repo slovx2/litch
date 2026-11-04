@@ -82,7 +82,10 @@ export function agentSpec(env: NodeJS.ProcessEnv = process.env): AgentSpec {
     // 设了 CHA_<标识>_ARGS 就整个用它（设成空串就是不带参数），没设才用预设
     args: args === undefined ? [...preset.args] : splitArgs(args),
     source: { command: cli ? 'env' : 'preset', args: args === undefined ? 'preset' : 'env' },
-    home: resolve(env[`${prefix}_HOME`] ?? join(homedir(), '.codex-harness-adapter', id)),
+    home: resolve(
+      (id === 'agy' ? env.CHA_ACP_HOME : env[`${prefix}_HOME`]) ??
+        join(homedir(), '.codex-harness-adapter', id, ...(id === 'agy' ? ['acp'] : [])),
+    ),
   }
 }
 

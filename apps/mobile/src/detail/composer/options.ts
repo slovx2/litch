@@ -6,6 +6,8 @@ import {
   type HarnessView,
   keys,
   type SessionDefaults,
+  type SessionMeta,
+  type SessionSettings,
 } from '@litch/core'
 import { useEffect, useState } from 'react'
 import { useChannel, useKey } from '../../shell/services'
@@ -23,17 +25,28 @@ export function downHarness(
 /** 问过的记着，进同一台设备的另一个会话时设置条不用等一下才出来。每个 harness 各记各的 */
 const known = new Map<string, ComposeOptions>()
 
-export function useComposeOptions(deviceId: string, harness?: string): ComposeOptions | null {
+export function useComposeOptions(
+  deviceId: string,
+  harness?: string,
+  sessionId?: string,
+): ComposeOptions | null {
   const channel = useChannel()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const reachable = device?.connection === 'online' && !downHarness(device, harness)
-  const key = `${deviceId}\n${harness ?? ''}`
+  const meta = useKey<SessionMeta>(sessionId ? keys.session(deviceId, sessionId) : '')
+  const settings = useKey<SessionSettings>(sessionId ? keys.settings(deviceId, sessionId) : '')
+  const revision = JSON.stringify([settings, meta?.can])
+  const key = `${deviceId}\n${harness ?? ''}\n${sessionId ?? ''}\n${revision}`
   const [asked, setAsked] = useState<{ key: string; value: ComposeOptions } | null>(null)
   useEffect(() => {
     if (!reachable) return
     let live = true
     channel
-      .command('device.composeOptions', { deviceId, ...(harness ? { harness } : {}) })
+      .command('device.composeOptions', {
+        deviceId,
+        ...(harness ? { harness } : {}),
+        ...(sessionId ? { sessionId } : {}),
+      })
       .then((value) => {
         known.set(key, value)
         if (live) setAsked({ key, value })
@@ -43,7 +56,7 @@ export function useComposeOptions(deviceId: string, harness?: string): ComposeOp
     return () => {
       live = false
     }
-  }, [channel, deviceId, harness, key, reachable])
+  }, [channel, deviceId, harness, sessionId, key, reachable])
   // 刚换了 harness、新的那份还没问回来：不拿上一个 harness 的清单顶着
   return asked?.key === key ? asked.value : (known.get(key) ?? null)
 }

@@ -30,6 +30,7 @@ test('三个标识的预设与环境变量', () => {
   assert.deepEqual(presets, {
     gemini: { command: 'gemini', args: ['--acp'] },
     qwen: { command: 'qwen', args: ['--acp'] },
+    agy: { command: 'agy', args: ['acp'] },
     acp: { command: '', args: [] },
   })
   assert.equal(agentId({}), 'acp')

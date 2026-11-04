@@ -106,6 +106,9 @@ test('会话操作按声明来：声明了不会的一上来就是不会，去�
   const onOld = watchSession(core, 'o1')
   await settle()
   assert.deepEqual(onDsh.seen.view?.can, {
+    images: true,
+    skills: false,
+    mentions: false,
     fork: false,
     rollback: false,
     rollbackRestoresFiles: false,
@@ -139,6 +142,52 @@ test('会话操作按声明来：声明了不会的一上来就是不会，去�
   })
   assert.deepEqual(onOld.seen.view?.can, { ...ALL_ABLE, fork: false })
   assert.equal(sent('thread/fork').length, 1)
+})
+
+test('同一 harness 的会话能力独立：后端声明完整覆盖，模型和权限按会话选取', async () => {
+  const sdk = thread({ id: 'sdk', turns: [said('t1')] })
+  const acp = thread({ id: 'acp', turns: [said('t1')] })
+  const fallback = thread({ id: 'fallback', turns: [said('t1')] })
+  Object.assign(sdk, {
+    litchCapabilities: {
+      features: features({ steer: false, inputTypes: ['text'] }),
+      models: [],
+      planMode: false,
+      permissionPresets: [declaredPreset('sdk-only')],
+    },
+  })
+  Object.assign(acp, {
+    litchCapabilities: {
+      features: features({ fork: false, inputTypes: ['text', 'image'] }),
+      models: [],
+      planMode: true,
+      permissionPresets: [declaredPreset('acp:mode:plan')],
+    },
+  })
+  const { core, command } = deviceWorld([
+    harness('agy', {
+      declaration: { features: features({ compact: false }) },
+      threads: [sdk, acp, fallback],
+    }),
+  ])
+  core.start()
+  await settle()
+  const first = watchSession(core, 'sdk')
+  const second = watchSession(core, 'acp')
+  const third = watchSession(core, 'fallback')
+  await settle()
+  assert.equal(first.seen.view?.can.steer, false)
+  assert.equal(first.seen.view?.can.images, false)
+  assert.equal(second.seen.view?.can.steer, true)
+  assert.equal(second.seen.view?.can.fork, false)
+  assert.equal(second.seen.view?.can.images, true)
+  assert.equal(third.seen.view?.can.compact, false)
+  const a = (await command('device.composeOptions', { harness: 'agy', sessionId: 'sdk' })) as any
+  const b = (await command('device.composeOptions', { harness: 'agy', sessionId: 'acp' })) as any
+  assert.deepEqual(a.models, [])
+  assert.notDeepEqual(a, b)
+  assert.equal(JSON.stringify(a).includes('sdk-only'), true)
+  assert.equal(JSON.stringify(b).includes('acp:mode:plan'), true)
 })
 
 test('声明说会、对面却说不支持：照实际的来。聚合面替原生 codex 说的“不支持”带着是哪个 harness', async () => {

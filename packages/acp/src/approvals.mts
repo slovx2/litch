@@ -3,7 +3,7 @@
 // agent 给的选项按种类对：allow_once ↔ accept（允许这一次），allow_always ↔ acceptForSession（这个会话里都允许，
 // 记在 agent 那边），reject_once / reject_always ↔ decline，取消 ↔ cancel（回 agent“取消”，并打断回合）。
 // agent 没给的那一种不列在 availableDecisions 里；改文件的审批协议里没有这一项，客户端照固定的四个按钮，
-// 选了 agent 没给的，就近换一个同方向的（允许换允许，拒绝换拒绝）。
+// 只允许缩小放行范围（总是允许可以降为一次），不得把一次接受扩大成永久放行。
 import type { LiveThread } from './server.mjs'
 
 const CANCELLED = { outcome: { outcome: 'cancelled' } }
@@ -70,18 +70,49 @@ export async function requestPermission(
     projection.decline(params.toolCall.toolCallId)
     return CANCELLED
   }
-  // 带执行策略修改的那种允许，这里只当“允许这一次”
-  const allowed =
-    decision === 'accept' ||
-    (decision !== null && typeof decision === 'object' && !Array.isArray(decision))
-  const chosen =
+  // 没有声明过的对象决定也不接受，避免把带说明的拒绝误当成放行。
+  const allowed = decision === 'accept'
+  let chosen =
     decision === 'acceptForSession'
       ? option('allow_always', 'allow_once')
       : allowed
-        ? option('allow_once', 'allow_always')
+        ? option('allow_once')
         : decision === 'decline'
           ? option('reject_once', 'reject_always')
           : undefined
+  // ACP 的 always 是“记住选择”，没有限定为当前会话。标准按钮只有 acceptForSession，
+  // 不能把这个较窄的同意直接扩大为 agent 的持久策略；明确确认实际选项后才发送。
+  if (chosen && ['allow_always', 'reject_always'].includes(chosen.kind)) {
+    try {
+      const reply = await projection.waiting(
+        notify,
+        () =>
+          host.call(
+            threadId,
+            'mcpServer/elicitation/request',
+            {
+              serverName: projection.server,
+              turnId: projection.active?.id ?? null,
+              mode: 'form',
+              _meta: null,
+              message: `ACP agent 将记住“${chosen.name ?? chosen.optionId}”。其作用范围由 agent 决定，可能超出当前会话。`,
+              requestedSchema: {
+                type: 'object',
+                properties: {
+                  confirm: { type: 'boolean', title: '允许 agent 记住此选择', default: false },
+                },
+                required: ['confirm'],
+              },
+            },
+            signal,
+          ),
+        'waitingOnUserInput',
+      )
+      if (reply?.action !== 'accept' || reply.content?.confirm !== true) chosen = undefined
+    } catch {
+      chosen = undefined
+    }
+  }
   if (!chosen || !String(chosen.kind).startsWith('allow'))
     projection.decline(params.toolCall.toolCallId)
   if (!chosen) {

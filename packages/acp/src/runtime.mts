@@ -19,7 +19,7 @@ export interface AgentHandle {
 
 export interface RuntimeEvents {
   /** agent 反过来问我们（权限、文件、终端） */
-  request(method: string, params: any, agent: AgentHandle): Promise<unknown>
+  request(method: string, params: any, agent: AgentHandle, signal: AbortSignal): Promise<unknown>
   /** agent 发来的通知（session/update） */
   notification(method: string, params: any, agent: AgentHandle): void
   /** agent 进程退出了（握手成功之后的才报） */
@@ -102,9 +102,9 @@ export class AcpRuntime {
     const generation = ++this.generations
     let handle: AgentHandle | null = null
     const connection = new AcpConnection(child.stdout as any, child.stdin as any, {
-      request: (method, params) =>
+      request: (method, params, signal) =>
         handle
-          ? this.events.request(method, params, handle)
+          ? this.events.request(method, params, handle, signal)
           : Promise.reject(new AcpError(-32603, '还没握手')),
       notification: (method, params) => {
         if (handle) this.events.notification(method, params, handle)
@@ -121,7 +121,7 @@ export class AcpRuntime {
       )
     })
     void ended.then((error) => {
-      connection.close(new AcpError(-32000, error.message))
+      connection.close(new AcpError(-32603, error.message))
       if (handle && this.running === handle) {
         this.running = null
         this.events.closed(error, handle)
@@ -134,7 +134,13 @@ export class AcpRuntime {
           'initialize',
           {
             protocolVersion: versions.acpProtocol,
-            clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: true },
+            clientCapabilities: {
+              fs: { readTextFile: true, writeTextFile: true },
+              terminal: true,
+              elicitation: { form: {} },
+              subagents: {},
+              session: { configOptions: { boolean: {} } },
+            },
             clientInfo: { name: 'litch', title: 'Litch', version: versions.adapter },
           },
           INITIALIZE_TIMEOUT_MS,

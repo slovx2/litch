@@ -9,8 +9,13 @@ import type {
   DeviceSettingsSnapshot,
 } from '../../../protocol/src/device-settings.mjs'
 import { PATH_PICKER_EXTENSION } from '../../../protocol/src/path-picker.mjs'
+import {
+  type ThreadCapabilities,
+  threadCapabilities,
+} from '../../../protocol/src/thread-capabilities.mjs'
 import type { TitleSearchResult } from '../search/model.mjs'
 import { matchTitles } from '../search/titles.mjs'
+import { abilitiesOf } from './harness.mjs'
 import { createProjectPermissions, type ProjectPermissions } from './project-permissions.mjs'
 import type { SavedToolSwitches, ToolSwitchChange } from './remote.mjs'
 import { migrateToolSettings, toolSettingEdits } from './tool-settings.mjs'
@@ -367,7 +372,7 @@ export interface Device {
    * 发消息时能选的模型和权限预设。一次连接只问一遍；
    * 完整模式下每个 harness 各问一遍、各记各的，harness 说要哪一份，不给就是第一个可用的
    */
-  composeOptions(harness?: HarnessId): Promise<ComposeOptions>
+  composeOptions(harness?: HarnessId, sessionId?: string): Promise<ComposeOptions>
   /**
    * 在这个 harness 上不带设置新建会话（在 cwd 下）时对面会用的模型、强度、权限档。不记着，每次现问：
    * 别处改了配置、dsh 在别的会话里选了模型，都会让它变
@@ -745,6 +750,17 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
    * 只在连着的时候有：断线重连、它掉线又回来之后重新记
    */
   const terms = new Map<HarnessId, HarnessTerms>()
+  const sessionCapabilities = new Map<string, ThreadCapabilities | null>()
+  const rememberCapabilities = (thread: Thread) => {
+    const caps = threadCapabilities(thread)
+    sessionCapabilities.set(thread.id, caps)
+  }
+  const capabilitiesFor = (id?: string) =>
+    id
+      ? sessionCapabilities.has(id)
+        ? sessionCapabilities.get(id)
+        : threadCapabilities(threads.get(id) ?? archived?.get(id))
+      : null
   /** 能不能整理侧栏。连着、对过账、对面有“项目”这组方法才是 true */
   let organizable = false
   /** 会话目录：只留元数据，不带回合 */
@@ -900,11 +916,14 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
    */
   const asking = new Map<string, number>()
   const summaryOf = (thread: Thread): SessionSummary => {
+    const declared = capabilitiesFor(thread.id)
+    const abilities = declared ? abilitiesOf(declared.features, harnessOf(thread)) : null
     const summary: SessionSummary & ManagerThreadFields = {
       ...projectSummary(thread, {
         harness: harnessOf(thread),
         workspaceId: resolveWorkspace(thread, workspaces, pathTwin(platform)),
       }),
+      ...(abilities ? { abilities } : {}),
       unread: unread.has(thread.id),
       task: tasks.mark(thread.id),
       // 离线缓存保留已确认的经理身份，避免等到重新握手才恢复工作台入口。
@@ -1155,6 +1174,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
 
   const upsertThread = (thread: Thread) => {
+    rememberCapabilities(thread)
     if (thread.ephemeral) {
       transient.add(thread.id)
       return
@@ -1191,6 +1211,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
 
   const removeThread = (threadId: string) => {
+    sessionCapabilities.delete(threadId)
     peeks.forget(threadId)
     agentThreads.forget(threadId)
     unread.delete(threadId)
@@ -1380,6 +1401,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     const before = trace ? new Map(threads) : null
     threads.clear()
     for (const [id, thread] of next) {
+      rememberCapabilities(thread)
       // 列表里混进来的子代理线程（不按上游的默认排除它们的入口）也不进侧栏
       if (isAgentThread(thread)) agentThreads.put(thread)
       else threads.set(id, thread)
@@ -1723,6 +1745,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     latestToolSnapshot = null
     // 上一次连接时认的声明不算数了：对面可能升级过
     terms.clear()
+    sessionCapabilities.clear()
     serviceDue = false
     nativeDirect = false
     fileAttachmentsSupported = false
@@ -2096,11 +2119,19 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     ready: harnessReady,
     sole: () => (mode === 'full' ? null : (harnesses[0]?.id ?? null)),
     harnessName,
-    declared: (id): HarnessAbilities | null =>
-      harnesses.find((entry) => entry.id === id)?.abilities ?? null,
-    terms: (id) => terms.get(id) ?? null,
+    declared: (id, sessionId): HarnessAbilities | null => {
+      const caps = capabilitiesFor(sessionId)
+      return caps
+        ? abilitiesOf(caps.features, id)
+        : (harnesses.find((entry) => entry.id === id)?.abilities ?? null)
+    },
+    terms: (id, sessionId) => {
+      const caps = capabilitiesFor(sessionId)
+      return caps ? termsOf(caps) : (terms.get(id) ?? null)
+    },
     shelved: (sessionId) => archived?.has(sessionId) ?? false,
     agentsOf: (sessionId) => agentThreads.list(sessionId),
+    agentParent: (sessionId) => agentThreads.parent(sessionId),
     async request(method, params, requestOptions) {
       const prepared = nativeDirect ? directInstructions.prepare(method, params) : null
       if (!prepared) return link.request(method, params, requestOptions)
@@ -2120,6 +2151,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       })
     },
     started: (thread) => upsertThread(thread),
+    rememberCapabilities,
+    threadScoped: (id) => capabilitiesFor(id) != null,
     ...(options.views ? { views: options.views } : {}),
     ...(options.pendingInputs ? { pendingInputs: options.pendingInputs } : {}),
     speeds: {
@@ -2631,7 +2664,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       const thread = threads.get(sessionId)
       if (!thread) return null
       const owner = harnessOf(thread)
-      return harnesses.find((entry) => entry.id === owner)?.abilities?.turnDiff ?? null
+      const caps = capabilitiesFor(sessionId)
+      return caps
+        ? caps.features?.turnDiff === true
+        : (harnesses.find((entry) => entry.id === owner)?.abilities?.turnDiff ?? null)
     },
     request: (method, params, requestOptions) => link.request(method, params, requestOptions),
     fail: (error) => fail(error),
@@ -2905,7 +2941,16 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (!online) throw new ChannelError('offline', '设备未连接')
       await guarded(loadArchived)
     },
-    async composeOptions(harness) {
+    async composeOptions(harness, sessionId) {
+      const caps = capabilitiesFor(sessionId)
+      if (caps) {
+        const target = mode === 'full' ? pickHarness(harness) : null
+        return composeOptions(
+          caps.models ?? (await listModels(target)),
+          termsOf(caps)?.presets ?? null,
+          caps.planMode ?? (await aids.plan(target ?? undefined)),
+        )
+      }
       if (!online) throw new ChannelError('offline', '设备未连接')
       const target = mode === 'full' ? pickHarness(harness) : null
       const key = target ?? ''

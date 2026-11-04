@@ -51,16 +51,6 @@ export function assertResponse(method: string, value: unknown): void {
       const schema = JSON.parse(
         readFileSync(resolve(root, '../../../extensions/runtime-info.json'), 'utf8'),
       )
-      // 扩展的 engine 枚举还没收 ACP 的三个标识（protocol/extensions 不归这条线改，已报给注册线）：
-      // 先在这里补上再校验，别的字段照原样校验。收进去之后这一段删掉。
-      const engine = schema.response.properties.engine
-      const ids = ['gemini', 'qwen', 'acp']
-      for (const id of ids) if (!engine.enum.includes(id)) engine.enum = [...engine.enum, id]
-      if (!schema.response.oneOf.some((branch: any) => branch.properties.engine.enum))
-        schema.response.oneOf.push({
-          properties: { engine: { enum: ids } },
-          required: ['nodeVersion'],
-        })
       validate = ajv.compile(schema.response)
       validators.set(method, validate)
     }

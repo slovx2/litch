@@ -1,7 +1,19 @@
 // 和设备、harness 有关的几个显示用小函数
-import type { DeviceView, HarnessView } from '@litch/core'
+import type { DeviceView, HarnessAbilities, HarnessView, SessionSummary } from '@litch/core'
 import type { CSSProperties } from 'react'
 import type { MessageKey, Translator } from '../i18n/index.ts'
+
+/** 会话能力整体覆盖新建默认后端，切会话时不把两个后端的权限合并。 */
+export function abilitiesForSession(
+  device: DeviceView | undefined,
+  session: Pick<SessionSummary, 'harness' | 'abilities'> | undefined,
+): HarnessAbilities | null {
+  return (
+    session?.abilities ??
+    device?.harnesses.find((entry) => entry.id === session?.harness)?.abilities ??
+    null
+  )
+}
 
 /** 把设备的线色交给样式：这个元素和它里面的内容都用这根线色 */
 export const wireStyle = (wire: string | undefined): CSSProperties =>

@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { open, readFile } from 'node:fs/promises'
 import { basename, extname } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { withStopNotice } from '../../shared/src/background-shell.mjs'
@@ -36,11 +36,40 @@ export async function promptContent(
     else if (item?.type === 'skill') skills.push(`/${String(item.name ?? '')}`)
     else if (item?.type === 'mention') {
       const path = String(item.path ?? '')
-      links.push({
-        type: 'resource_link',
-        uri: pathToFileURL(path).href,
-        name: String(item.name || basename(path)),
-      })
+      let resource: string | null = null
+      if (caps?.embeddedContext) {
+        try {
+          const file = await open(path, 'r')
+          try {
+            if ((await file.stat()).isFile()) {
+              const limit = 1024 * 1024
+              const { buffer, bytesRead } = await file.read(
+                Buffer.alloc(limit + 1),
+                0,
+                limit + 1,
+                0,
+              )
+              const data = buffer.subarray(0, bytesRead)
+              if (bytesRead <= limit && !data.includes(0))
+                resource = new TextDecoder('utf-8', { fatal: true }).decode(data)
+            }
+          } finally {
+            await file.close()
+          }
+        } catch {}
+      }
+      links.push(
+        resource !== null
+          ? {
+              type: 'resource',
+              resource: { uri: pathToFileURL(path).href, mimeType: 'text/plain', text: resource },
+            }
+          : {
+              type: 'resource_link',
+              uri: pathToFileURL(path).href,
+              name: String(item.name || basename(path)),
+            },
+      )
     } else if (item?.type === 'localImage') {
       const mimeType = MEDIA[extname(String(item.path ?? '')).toLowerCase()]
       if (!mimeType) throw new ProtocolError(-32602, `不支持的图片类型: ${item.path}`)
