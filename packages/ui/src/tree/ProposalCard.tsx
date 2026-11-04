@@ -26,6 +26,7 @@ import { Icon, More } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { useActions } from '../transcript/actions.tsx'
+import { CardMarkdown } from '../transcript/CardMarkdown.tsx'
 import type { ItemRef } from '../transcript/messages.tsx'
 import { useToggle } from '../transcript/state.ts'
 import { useWorktreesOn, WorktreeCheck } from '../worktrees/WorktreeCheck.tsx'
@@ -178,19 +179,26 @@ export function Brief({
   const context = background.trim()
   if (!prompt && !context) return null
   const long = context !== '' || prompt.length > LONG_BRIEF || prompt.split('\n').length > 3
+  // 写全的按 Markdown 画（同经理看板上的建议）；折成三行的是预览，照原文截
+  const whole = open || !long
   return (
     <>
       {open && context ? (
-        <div className="prop-brief" data-open="true" data-part="background">
+        <div className="prop-brief" data-open="true" data-part="background" data-md="">
           <span className="prop-brief-label">{t('proposal.brief.background')}</span>
-          {context}
+          <CardMarkdown text={context} />
         </div>
       ) : null}
-      <div className="prop-brief" data-open={open || !long} data-part="task">
+      <div
+        className="prop-brief"
+        data-open={whole}
+        data-part="task"
+        data-md={whole ? '' : undefined}
+      >
         {open && context ? (
           <span className="prop-brief-label">{t('proposal.brief.task')}</span>
         ) : null}
-        {prompt}
+        {whole ? <CardMarkdown text={prompt} /> : prompt}
       </div>
       {long ? (
         <button

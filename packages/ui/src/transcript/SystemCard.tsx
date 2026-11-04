@@ -42,15 +42,8 @@ function Parent({ deviceId, parent }: { deviceId: string; parent: { id: string; 
   )
 }
 
-/** 展开后来源那一行之外还要交代的：手动运行的标记，启动指令来自哪个会话（能点回去）。没有就不画 */
+/** 展开后来源那一行之外还要交代的：启动指令来自哪个会话（能点回去）。没有就不画。手动运行的标记在来源那一行上 */
 function Detail({ deviceId, system }: { deviceId: string; system: SystemMessageView }) {
-  const t = useT()
-  if (system.kind === 'scheduledTask')
-    return system.manual ? (
-      <div className="sev-head sysm-head">
-        <span className="sysm-tag">{t('sysmsg.manual')}</span>
-      </div>
-    ) : null
   if (system.kind !== 'briefing') return null
   return (
     <div className="sev-head sysm-head">
@@ -93,6 +86,11 @@ export function SystemCard({
         icon={<Icon name={ICON[system.kind]} small />}
         source={label}
         title={title}
+        tag={
+          system.kind === 'scheduledTask' && system.manual ? (
+            <span className="sysm-tag">{t('sysmsg.manual')}</span>
+          ) : undefined
+        }
         summary={system.prompt}
         open={open}
         onToggle={() => {

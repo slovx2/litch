@@ -110,8 +110,11 @@ const SpawnCard = memo(function SpawnCard(ref: ItemRef) {
       )}
       {note && (note.excerpt || note.truncated) ? (
         <div className="tree-card-report">
-          <span className="tree-card-label">{t('tree.child.report')}</span>
-          <ReportText deviceId={deviceId} note={note} />
+          <ReportText
+            deviceId={deviceId}
+            note={note}
+            head={<span className="tree-card-label">{t('tree.child.report')}</span>}
+          />
         </div>
       ) : null}
     </div>

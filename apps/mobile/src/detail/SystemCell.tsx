@@ -14,19 +14,13 @@ import { MessageCopy } from './MessageCopy'
 
 const MARK = { scheduledTask: '◷', briefing: '⑂', here: '↳', recover: '↻', restart: '↻' } as const
 
-/** 展开后补一行：手动运行，启动指令来自哪个会话（还在列表里的点了过去）。没有就不画 */
+/** 展开后补一行：启动指令来自哪个会话（还在列表里的点了过去）。没有就不画。手动运行是第一行的小标签 */
 function Detail({ system }: { system: SystemMessageView }) {
   const { c, font } = useTheme()
   const t = useT()
   const { deviceId, openSession } = useTranscript()
   const parent = system.kind === 'briefing' ? system.parent : null
   const listed = useKey<SessionSummary>(keys.summary(deviceId, parent?.id ?? ''))
-  if (system.kind === 'scheduledTask' && system.manual)
-    return (
-      <Text style={[styles.detail, { color: c.ink3, fontSize: font.size.meta }]}>
-        {t('sysmsg.manual')}
-      </Text>
-    )
   if (!parent) return null
   const name = parent.title || (listed ? t.text(listed.title) : parent.id)
   return (
@@ -65,6 +59,11 @@ export const SystemCell = memo(function SystemCell({ row }: Props<'system'>) {
       mark={MARK[system.kind]}
       source={source}
       title={title}
+      tag={
+        system.kind === 'scheduledTask' && system.manual
+          ? { text: t('sysmsg.manual'), color: c.ink3 }
+          : undefined
+      }
       summary={system.prompt}
       open={row.expanded === true}
       onPress={() => toggle(row.key, row.turnId)}

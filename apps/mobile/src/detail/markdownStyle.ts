@@ -144,3 +144,37 @@ export function markdownStyleOf({
   styleCache.set(c, style)
   return style
 }
+
+const cardCache = new WeakMap<Palette, MarkdownStyle>()
+
+/**
+ * 卡片里的正文（子会话的回报、经理事件、别的会话发来的话，CardMarkdown.tsx）：同回答的配色，
+ * 字号跟卡片的小字走、二级字色，标题不放大只加粗（同桌面端 .card-md）
+ */
+export function cardMarkdownStyleOf(
+  theme: Pick<Theme, 'c' | 'font' | 'radius' | 'skin' | 'dark'>,
+): MarkdownStyle {
+  const { c, font } = theme
+  let style = cardCache.get(c)
+  if (style) return style
+  const base = markdownStyleOf(theme)
+  const size = font.size.meta
+  const text = { fontSize: size, lineHeight: 18, color: c.ink2, fontFamily: font.ui }
+  const heading = { ...text, color: c.ink, fontWeight: '700' as const }
+  style = {
+    ...base,
+    paragraph: text,
+    h1: heading,
+    h2: heading,
+    h3: heading,
+    h4: heading,
+    h5: heading,
+    h6: heading,
+    list: { ...base.list, ...text },
+    codeBlock: { ...base.codeBlock, fontSize: size - 1, lineHeight: 17, padding: 8 },
+    code: { ...base.code, fontSize: size - 1 },
+    table: { ...base.table, fontSize: size },
+  }
+  cardCache.set(c, style)
+  return style
+}

@@ -115,6 +115,13 @@ export const SCENES: Scene[] = [
     steps: [say('恢复观察')],
   },
   {
+    id: 'system-cards',
+    group: '会话',
+    name: '系统卡片',
+    note: '定时任务、简报、交接、带长 Markdown 回报的“在这里做”、别的会话发来的话、重启后继续；点开看展开样子',
+    steps: [say('看看系统消息')],
+  },
+  {
     id: 'home',
     group: '设备',
     name: '首页',

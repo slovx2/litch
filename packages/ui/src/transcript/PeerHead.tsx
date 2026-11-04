@@ -55,6 +55,16 @@ export function PeerLinks({
   )
 }
 
+/** 对方是跳过确认的会话 */
+export function PeerTag() {
+  const t = useT()
+  return (
+    <span className="peer-tag" title={t('peer.bypassHint')}>
+      {t('peer.bypass')}
+    </span>
+  )
+}
+
 export function PeerHead({
   deviceId,
   peer,
@@ -62,7 +72,7 @@ export function PeerHead({
 }: {
   deviceId: string
   peer: PeerView
-  /** 来源已经写在折叠的那一行上（CompactRow）：只留标记和链接 */
+  /** 来源和标记已经写在折叠的那一行上（CompactRow、PeerTag）：只留链接 */
   detail?: boolean
 }) {
   const t = useT()
@@ -76,11 +86,7 @@ export function PeerHead({
           </span>
         </>
       )}
-      {peer.bypass ? (
-        <span className="peer-tag" title={t('peer.bypassHint')}>
-          {t('peer.bypass')}
-        </span>
-      ) : null}
+      {peer.bypass && !detail ? <PeerTag /> : null}
       <PeerLinks
         deviceId={deviceId}
         peer={peer}

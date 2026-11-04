@@ -24,15 +24,17 @@ const TEXT = {
     title: '查构建为什么变慢',
     background: '这一轮在给 CI 提速，用户最在意门禁的墙钟时间。上周的基线是 14 分钟。',
     prompt:
-      '找出 ci.yml 里最慢的三步，各说一句为什么慢、能不能并行或缓存。\n只读不改；结论写在最后的回答里。',
+      '找出 `ci.yml` 里最慢的三步：\n\n1. 各说一句为什么慢；\n2. 能不能并行或缓存。\n\n**只读不改**；结论写在最后的回答里。',
     plan: '1. 补完侧栏标题的样式\n2. 跑 npm run check\n3. 在预览里看一遍复古皮肤',
     here: '在这里做：',
     hereTitle: '去掉复古皮肤的标题前缀',
     herePrompt: '侧栏分区、分组标题前面的 “## ” 去掉，其他皮肤不变。',
     child: '查构建为什么变慢',
-    excerpt: '最慢的是端到端用例，占 9 分钟。',
+    excerpt:
+      '最慢的三步找到了，结论写在 [ci-timing.md](</Volumes/workspace/litch/docs/ci-timing.md>)，原始计时在 `artifacts/timing.json`。\n\n## 最慢的三步\n\n- **端到端用例**：9 分钟，串行跑 4 个浏览器；可以按浏览器拆成并行任务。\n- **安装依赖**：3 分钟，`npm ci` 没走缓存，缓存键带了时间戳。\n- **类型检查**：2 分钟，`tsc` 每个包各起一次。\n\n## 没做的\n\n只读没改；并行拆分要改 `ci.yml`，留给下一步。',
     from: '修 CI',
-    message: '我这边改完了 ci.yml 的缓存键，你那边的基线能再跑一次吗？跑完把墙钟时间告诉我。',
+    message:
+      '我这边改完了 `ci.yml` 的缓存键：\n\n- 去掉了时间戳\n- 改成按 `package-lock.json` 的哈希\n\n你那边的基线能再跑一次吗？跑完把**墙钟时间**告诉我。',
     reply: '收到。',
   },
   en: {
@@ -46,17 +48,18 @@ const TEXT = {
     background:
       'This round speeds up CI; the user cares most about the gate wall-clock time. Last week the baseline was 14 minutes.',
     prompt:
-      'Find the three slowest steps in ci.yml and say for each why it is slow and whether it can run in parallel or be cached.\nRead only; put the findings in your final answer.',
+      'Find the three slowest steps in `ci.yml`:\n\n1. why each is slow;\n2. whether it can run in parallel or be cached.\n\n**Read only**; put the findings in your final answer.',
     plan: '1. Finish the sidebar heading styles\n2. Run npm run check\n3. Check the retro skin in the preview',
     here: 'Do it here: ',
     hereTitle: 'Drop the retro heading prefix',
     herePrompt:
       'Remove the “## ” before sidebar section and group headings; other skins stay as they are.',
     child: 'Find why the build got slower',
-    excerpt: 'The end-to-end tests are the slowest, 9 minutes.',
+    excerpt:
+      'Found the three slowest steps. Findings are in [ci-timing.md](</Volumes/workspace/litch/docs/ci-timing.md>), raw timings in `artifacts/timing.json`.\n\n## Slowest steps\n\n- **End-to-end tests**: 9 minutes, 4 browsers run serially; they can be split into parallel jobs.\n- **Install dependencies**: 3 minutes, `npm ci` misses the cache because the key has a timestamp.\n- **Type check**: 2 minutes, `tsc` starts once per package.\n\n## Not done\n\nRead only; splitting the jobs needs a change to `ci.yml`, left for the next step.',
     from: 'Fix CI',
     message:
-      'I changed the cache key in ci.yml. Can you run the baseline again and tell me the wall-clock time?',
+      'I changed the cache key in `ci.yml`:\n\n- dropped the timestamp\n- keyed on the `package-lock.json` hash\n\nCan you run the baseline again and tell me the **wall-clock time**?',
     reply: 'Got it.',
   },
 } as const
@@ -112,7 +115,15 @@ export function createMockSystem(host: MockSystemHost): MockSystem {
   const here = `${formatSessionEvent({
     kind: 'notes',
     notes: [
-      { threadId: 'thread-child-3', title: text.child, status: 'completed', excerpt: text.excerpt },
+      // 截断了的摘录：看读全文的小图标（模拟核心里没有这个子会话，点了是读不到的样子）
+      {
+        threadId: 'thread-child-3',
+        title: text.child,
+        status: 'completed',
+        excerpt: text.excerpt,
+        turnId: 'turn-child-3',
+        truncated: true,
+      },
     ],
   })}${text.here}${text.hereTitle}\n\n${text.herePrompt}`
   const send = `[Litch] Message from session "${text.from}" (${parentId}), not typed by the user:\n\n${text.message}`

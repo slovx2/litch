@@ -1,5 +1,6 @@
 // 默认收起的卡片共用的样子（系统消息、子会话回报、别的会话发来的话、问题卡）：左边一道细线，
-// 第一行是标记、来源、标题、末尾的 ▸/▾；收着的时候下面一行是正文摘要（只占一行），点一下展开，
+// 第一行是标记、来源、标题、小标签（手动运行、对方跳过确认，不另占一行）、末尾的 ▸/▾；
+// 收着的时候下面一行是正文摘要（只占一行），点一下展开，
 // 展开后摘要不再显示，内容（children）排在下面。同桌面的 CompactRow
 import type { ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
@@ -10,6 +11,7 @@ export function CompactRow({
   markColor,
   source,
   title,
+  tag,
   summary,
   open,
   onPress,
@@ -23,6 +25,8 @@ export function CompactRow({
   source: string
   /** 标题：任务名、问题的题目这类，和来源排在同一行 */
   title?: string
+  /** 标题后面的小标签和它的颜色，收着展开都显示 */
+  tag?: { text: string; color: string }
   /** 正文摘要，收着的时候在第二行，只占一行 */
   summary?: string
   open: boolean
@@ -49,16 +53,26 @@ export function CompactRow({
           </Text>
           <Text
             numberOfLines={1}
-            style={[styles.source, size, { color: c.ink2 }, title ? styles.capped : styles.grow]}
+            style={[styles.source, size, { color: c.ink2 }, title ? styles.capped : styles.shrink]}
           >
             {source}
           </Text>
           {title ? (
-            <Text numberOfLines={1} style={[styles.title, styles.grow, size, { color: c.ink }]}>
+            <Text numberOfLines={1} style={[styles.title, styles.shrink, size, { color: c.ink }]}>
               {title}
             </Text>
           ) : null}
-          {fixed ? null : <Text style={[size, { color: c.ink3 }]}>{open ? '▾' : '▸'}</Text>}
+          {tag ? (
+            <Text
+              numberOfLines={1}
+              style={[styles.tag, { color: tag.color, fontSize: font.size.small }]}
+            >
+              {tag.text}
+            </Text>
+          ) : null}
+          {fixed ? null : (
+            <Text style={[size, styles.caret, { color: c.ink3 }]}>{open ? '▾' : '▸'}</Text>
+          )}
         </View>
         {!open && summary ? (
           <Text numberOfLines={1} style={[styles.sum, size, { color: c.ink3 }]}>
@@ -79,6 +93,9 @@ const styles = StyleSheet.create({
   source: { fontWeight: '500' },
   title: { fontWeight: '600' },
   capped: { flexShrink: 1, maxWidth: '45%' },
-  grow: { flex: 1 },
+  shrink: { flexShrink: 1 },
+  tag: { flexShrink: 0 },
+  // 来源、标题只占自己的宽，箭头靠右
+  caret: { marginLeft: 'auto' },
   sum: { paddingLeft: 20 },
 })

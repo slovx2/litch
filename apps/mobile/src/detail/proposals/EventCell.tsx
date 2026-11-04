@@ -1,5 +1,6 @@
 // 设备进程注入在用户消息开头的那一段（<litch-session-event>）画成一条轻的提示，不画成用户说的话：
-// 子会话的回报（每条一行，还在列表里的子会话点了进去）、子会话都停下了的唤醒、模型没调收尾时的提醒。
+// 子会话的回报（每条头一行写标题和状态，还在列表里的子会话点了进去；正文在下面占满整宽、按 Markdown 画）、
+// 子会话都停下了的唤醒、模型没调收尾时的提醒。
 // 还排着、没交给模型的回报（SessionSummary.queuedNotes）不进对话区：输入框上方、后台任务那一行旁边一个小按钮，
 // 几条都合成一个（一条写来自谁，多条写几条），点开在输入框上方展开整份（QueuedNotesChip、QueuedNotesPanel，
 // 照 Claude 桌面端收成一行、点开再看）；交出去之后小按钮没了，回报画在带着它的那条消息上。
@@ -15,6 +16,7 @@ import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey } from '../../shell/services'
 import { type Key, useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
+import { CardMarkdown } from '../CardMarkdown'
 import { CompactRow } from '../CompactRow'
 import type { Props } from '../cells'
 import { useTranscript } from '../context'
@@ -57,10 +59,11 @@ function Note({
   )
   const state = useSyncExternalStore(report.subscribe, report.snapshot)
   const listed = useKey<SessionSummary>(keys.summary(deviceId, note.threadId))
-  const head = `${note.title || (listed ? t.text(listed.title) : note.threadId)} · ${t(`tree.note.${note.status}`)}`
-  const body = [state.open ? state.text : note.excerpt, note.error].filter(Boolean).join(' · ')
+  const title = note.title || (listed ? t.text(listed.title) : note.threadId)
+  const body = state.open ? state.text : note.excerpt
   return (
     <View style={styles.note}>
+      {/* 头一行：标题（能点进子会话）、状态、读全文的小图标；正文在下面，不和标题挤在一段字里 */}
       <View style={styles.noteRow}>
         <Pressable
           disabled={!listed}
@@ -69,9 +72,12 @@ function Note({
           onPress={() => openSession(note.threadId)}
           style={({ pressed }) => [styles.grow, pressed ? { backgroundColor: c.press } : null]}
         >
-          <Text style={{ color: c.ink2, fontSize: font.size.small + 1, lineHeight: 18 }}>
-            <Text style={{ color: listed ? c.accent : c.ink2 }}>{head}</Text>
-            {body ? `：${body}` : ''}
+          <Text
+            numberOfLines={1}
+            style={{ color: c.ink3, fontSize: font.size.meta, lineHeight: 18 }}
+          >
+            <Text style={{ color: listed ? c.accent : c.ink, fontWeight: '600' }}>{title}</Text>
+            {` · ${t(`tree.note.${note.status}`)}`}
           </Text>
         </Pressable>
         {report.expandable ? (
@@ -97,6 +103,10 @@ function Note({
           </Pressable>
         ) : null}
       </View>
+      {body ? <CardMarkdown text={body} /> : null}
+      {note.error ? (
+        <Text style={{ color: c.err, fontSize: font.size.meta }}>{note.error}</Text>
+      ) : null}
       {state.missing || state.error ? (
         <Text accessibilityRole="alert" style={{ color: c.err, fontSize: font.size.meta }}>
           {state.missing ? t('tree.report.missing') : whyNot(state.error, t)}
@@ -124,7 +134,6 @@ function EventBar({
   const [open, toggle] = useCardOpen(id)
   const t = useT()
   const { deviceId, openSession } = useTranscript()
-  const { c, font } = useTheme()
   return (
     <CompactRow
       testID={testID}
@@ -140,13 +149,8 @@ function EventBar({
       onPress={toggle}
       fixed={notes.length === 0 && !body}
     >
-      {/* 空行隔开的几段各占一行，段间距和回报列表一样，不画出整行空白（同桌面） */}
-      {body?.split(/\n{2,}/).map((part, at) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: 正文是一整段字拆开的，段落没有别的标识
-        <Text key={at} style={{ color: c.ink2, fontSize: font.size.meta }}>
-          {part}
-        </Text>
-      ))}
+      {/* 经理事件、认不出的事件自带的正文：同回报按 Markdown 画（同桌面） */}
+      {body ? <CardMarkdown text={body} /> : null}
       {notes.map((note) => (
         <Note key={note.threadId} deviceId={deviceId} note={note} openSession={openSession} />
       ))}
@@ -306,8 +310,8 @@ export function QueuedNotesPanel({
 }
 
 const styles = StyleSheet.create({
-  note: { paddingVertical: 2 },
-  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  note: { paddingVertical: 2, gap: 2 },
+  noteRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   reportExpand: { paddingHorizontal: 4 },
   grow: { flex: 1 },
   chip: {

@@ -50,11 +50,10 @@ button.tree-card-main:hover {
   color: var(--ink-2);
 }
 .tree-card-report {
-  display: flex;
-  gap: 8px;
   padding: 6px 12px 8px;
   border-top: 1px solid var(--line-1);
   font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
 }
 .tree-card-label {
   flex: none;
@@ -126,6 +125,11 @@ button.tree-card-main:hover {
   font-weight: 600;
   color: var(--ink);
 }
+/* 标题后面的小标记（手动运行、对方跳过确认）：放在这一行里，不撑高 */
+.compact-line > :is(.sysm-tag, .peer-tag) {
+  flex: none;
+  line-height: round(calc(16px * var(--fs)), 1px);
+}
 .compact-line > .caret-ic {
   margin-left: auto;
   color: var(--ink-3);
@@ -159,30 +163,29 @@ button.tree-card-main:hover {
   flex-direction: column;
   gap: 2px;
 }
-/* 事件自带的正文（经理事件、认不出的事件）：一段一块，段内的换行照原样 */
+/* 事件自带的正文（经理事件、认不出的事件）：按 Markdown 画（.card-md） */
 .sev-body {
   margin: 4px 0 0;
+}
+/* 一条回报：头一行（状态点、标题、状态、读全文的小图标），正文在下面占满整宽 */
+.sev-note {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
-.sev-body > p {
-  margin: 0;
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-}
-.sev-note {
+.report-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   min-width: 0;
 }
-.sev-note .st {
-  align-self: center;
+.report-head > .st {
+  flex: none;
 }
 .sev-title {
-  flex: none;
-  max-width: 40%;
+  flex: 0 1 auto;
+  min-width: 0;
   padding: 0;
   border: 0;
   background: none;
@@ -201,12 +204,6 @@ button.sev-title {
 .sev-status {
   flex: none;
   color: var(--ink-3);
-}
-.sev-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .sev-error {
   color: var(--err);
@@ -345,6 +342,10 @@ button.sev-title {
   line-height: round(calc(18px * var(--fs)), 1px);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+/* 写全的简报是 Markdown（.card-md），不再照原文保留空白 */
+.prop-brief[data-md] {
+  white-space: normal;
 }
 .prop-brief-label {
   display: block;
@@ -485,10 +486,14 @@ button.sysm-from {
   border: 1px solid var(--line-2);
   border-radius: var(--r1);
 }
+/* 发给模型的原文（定时任务、简报、在这里做）照原样排；别的会话发来的话是 Markdown，不保留原文的空白 */
 .sysm-full {
   margin-top: 4px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+.sysm-full.peer-full {
+  white-space: normal;
 }
 
 /* 侧面板点了一条：对话里那张卡片（找不到时是那一行）闪一圈 */
@@ -1111,24 +1116,60 @@ button.agent-row:hover {
   overflow-wrap: anywhere;
 }
 
-/* 摘录保留换行；展开后的正文允许完整换行，不再受事件条单行省略影响。 */
+/* 回报的头和正文上下排（ReportText.tsx）；读全文、收起是头一行末尾的小图标 */
 .report-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
-  flex: 1;
-  overflow-wrap: anywhere;
-}
-.report-body {
-  white-space: pre-wrap;
 }
 .report-expand {
-  margin-inline-start: 6px;
-  padding: 0;
+  flex: none;
+  display: inline-flex;
+  padding: 0 2px;
   border: 0;
+  border-radius: var(--r1);
   background: none;
-  color: var(--accent);
-  font: inherit;
+  color: var(--ink-3);
   cursor: pointer;
 }
-.report-text .sev-error {
-  display: block;
+.report-expand:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--ink);
+}
+.report-expand:disabled {
+  cursor: progress;
+}
+
+/* 卡片里的 Markdown 正文（CardMarkdown.tsx）：同对话的渲染，字号行距跟着卡片，块间距收紧，段内换行照原样 */
+.card-md {
+  min-width: 0;
+  color: var(--ink-2);
+}
+.card-md .md {
+  font-size: inherit;
+  line-height: inherit;
+}
+.card-md .md > * + * {
+  margin-top: 6px;
+}
+.card-md .md p {
+  white-space: pre-line;
+}
+.card-md .md :is(h1, h2, h3, h4, h5, h6) {
+  font-size: 1em;
+  line-height: inherit;
+  color: var(--ink);
+}
+.card-md .md > :is(h1, h2, h3, h4, h5, h6):not(:first-child) {
+  margin-top: 10px;
+}
+.card-md .md :is(ul, ol) {
+  padding-left: 18px;
+}
+.card-md .md li + li {
+  margin-top: 2px;
+}
+.card-md .md code {
+  font-size: calc(11.5px * var(--fs));
 }

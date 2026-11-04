@@ -30,6 +30,7 @@ import { useT } from '../ui/i18n'
 import { StatusMark } from '../ui/kit/controls'
 import { type Palette, useTheme } from '../ui/theme'
 import { AskCell, AskReplyText, useAsks } from './asks/AskCell'
+import { CardMarkdown } from './CardMarkdown'
 import { CompactRow } from './CompactRow'
 import { CommentCards, commentsOfRow } from './comments/CommentCards'
 import { useComments, useFlashedRow, useHubValue } from './comments/context'
@@ -70,20 +71,16 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
         testID="peer-message"
         mark="✉"
         source={peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')}
+        tag={peer.bypass ? { text: t('peer.bypass'), color: c.wait } : undefined}
         summary={row.text}
         open={row.expanded === true}
         onPress={() => toggle(row.key, row.turnId)}
       >
-        {peer.bypass ? (
-          <Text style={[styles.peerTag, { color: c.wait, fontSize: font.size.meta }]}>
-            {t('peer.bypass')}
-          </Text>
-        ) : null}
         <UserAttachments row={row} />
-        {/* 对方的原话照登，不认答题、评论这些格式 */}
-        <Text selectable style={[styles.peerText, { color: c.ink2, fontSize: font.size.meta }]}>
-          {row.text}
-        </Text>
+        {/* 对方（别的会话里的模型）写的话按 Markdown 画，同子会话的回报；不认答题、评论这些格式 */}
+        <View style={styles.peerText}>
+          <CardMarkdown text={row.text} />
+        </View>
         <MessageCopy itemId={row.key} />
       </CompactRow>
     )
@@ -687,8 +684,7 @@ export const styles = StyleSheet.create({
     gap: 6,
   },
   userText: { lineHeight: 22 },
-  peerTag: { paddingBottom: 2 },
-  peerText: { lineHeight: 18, paddingBottom: 4 },
+  peerText: { paddingBottom: 4 },
   thumbs: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   thumb: { width: 72, height: 72, borderWidth: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },

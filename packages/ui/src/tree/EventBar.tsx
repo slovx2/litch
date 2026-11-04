@@ -15,7 +15,9 @@ import { usePopover } from '../app/popover.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 import { useActions } from '../transcript/actions.tsx'
+import { CardMarkdown } from '../transcript/CardMarkdown.tsx'
 import { CompactRow } from '../transcript/CompactRow.tsx'
+import { FileLinksProvider, useSessionFileLinks } from '../transcript/FileLinks.tsx'
 import { useToggle } from '../transcript/state.ts'
 import { ReportText } from './ReportText.tsx'
 
@@ -38,7 +40,7 @@ const NOTE_MARK: Record<SessionNoteView['status'], string> = {
 }
 
 /**
- * 一条回报：子会话的标题（还在侧栏里的可以点开）、怎么停下的、最后一条回答的开头。
+ * 一条回报：子会话的标题（还在侧栏里的可以点开）、怎么停下的，下面是最后一条回答的开头。
  * 对话区外面（输入框上方的按钮）没有对话区的动作，由那边给 open
  */
 function Note({
@@ -55,9 +57,11 @@ function Note({
   const open = given ?? actions.open
   const listed = useKey<SessionSummary>(keys.summary(deviceId, note.threadId))
   const mark = NOTE_MARK[note.status]
-  return (
-    <li className="sev-note" data-child={note.threadId} data-status={note.status}>
-      <i className={mark ? `st ${mark}` : 'st'} />
+  // 头一行：状态点、标题、怎么停下的；正文在下面占满整宽（ReportText），不和标题左右分栏
+  const head = (
+    <>
+      {/* 出错、等人才有点；做完了的不留空位，标题和正文左边对齐 */}
+      {mark ? <i className={`st ${mark}`} /> : null}
       {listed && open ? (
         <button
           type="button"
@@ -71,8 +75,16 @@ function Note({
         <span className="sev-title">{note.title || note.threadId}</span>
       )}
       <span className="sev-status">{t(`tree.note.${note.status}`)}</span>
-      {note.excerpt || note.truncated ? <ReportText deviceId={deviceId} note={note} /> : null}
-      {note.error ? <span className="sev-text sev-error">{note.error}</span> : null}
+    </>
+  )
+  return (
+    <li className="sev-note" data-child={note.threadId} data-status={note.status}>
+      {note.excerpt || note.truncated ? (
+        <ReportText deviceId={deviceId} note={note} head={head} />
+      ) : (
+        <div className="report-head">{head}</div>
+      )}
+      {note.error ? <span className="sev-error">{note.error}</span> : null}
     </li>
   )
 }
@@ -111,12 +123,9 @@ export function SessionEventBar({
         fixed={event.notes.length === 0 && !event.body}
       />
       {open && event.body ? (
-        // 空行隔开的几段各占一块，段间和回报列表一样只隔一点，不画出整行空白
+        // 经理事件、认不出的事件自带的正文：和回报一样按 Markdown 画，段内的换行照原样
         <div className="sev-body">
-          {event.body.split(/\n{2,}/).map((part, at) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: 正文是一整段字拆开的，段落没有别的标识
-            <p key={at}>{part}</p>
-          ))}
+          <CardMarkdown text={event.body} />
         </div>
       ) : null}
       {open && event.notes.length > 0 ? (
@@ -141,6 +150,7 @@ export function QueuedNotesChip({ deviceId, sessionId }: { deviceId: string; ses
   const { open, setOpen, root, trigger, pop, onKeyDown } = usePopover()
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  const fileLinks = useSessionFileLinks(deviceId, summary)
   const notes = summary?.queuedNotes
   if (!notes?.length) return null
   const deliver = () => {
@@ -195,19 +205,22 @@ export function QueuedNotesChip({ deviceId, sessionId }: { deviceId: string; ses
             </button>
           </div>
           {failure ? <p className="qn-failure">{failure}</p> : null}
-          <ul className="sev-notes">
-            {notes.map((note) => (
-              <Note
-                key={note.threadId}
-                deviceId={deviceId}
-                note={note}
-                open={(selection) => {
-                  setOpen(false)
-                  requestOpenSession(selection)
-                }}
-              />
-            ))}
-          </ul>
+          {/* 浮窗在对话区外面：正文里的文件链接要自己给出这个会话的路径怎么认 */}
+          <FileLinksProvider value={fileLinks}>
+            <ul className="sev-notes">
+              {notes.map((note) => (
+                <Note
+                  key={note.threadId}
+                  deviceId={deviceId}
+                  note={note}
+                  open={(selection) => {
+                    setOpen(false)
+                    requestOpenSession(selection)
+                  }}
+                />
+              ))}
+            </ul>
+          </FileLinksProvider>
         </div>
       ) : null}
     </div>

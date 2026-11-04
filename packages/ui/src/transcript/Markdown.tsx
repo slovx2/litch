@@ -239,7 +239,15 @@ function block(token: Token, key: number, anchor?: string, open = false): ReactN
 
 /** 一个顶层块。原文没变就不重画：流式输出时只有最后一块在变。open：它是还没写完的围栏代码块 */
 const Block = memo(
-  function Block({ token, anchor, open }: { token: Token; anchor: string; open: boolean }) {
+  function Block({
+    token,
+    anchor,
+    open,
+  }: {
+    token: Token
+    anchor: string | undefined
+    open: boolean
+  }) {
     return block(token, 0, anchor, open)
   },
   (before, after) =>
@@ -252,8 +260,9 @@ interface MarkdownProps {
   text: string
   /** 文本还在往外出。这时结尾可能停在没闭合的标记中间，要先补齐再解析 */
   streaming: boolean
-  /** 这段回答在滚动定位里的标识，每个顶层块在它后面再加序号 */
-  anchor: string
+  /** 这段回答在滚动定位里的标识，每个顶层块在它后面再加序号。
+   *  不给的（卡片里的正文）块上不打标记：卡片自己带着标记，带标记的行不能互相套着 */
+  anchor?: string
   /** 助手回答所在的条目：给了就能在里面选字加评论（comments/） */
   item?: string
 }
@@ -279,7 +288,7 @@ export const Markdown = memo(function Markdown({ text, streaming, anchor, item }
           <Block
             key={index}
             token={token}
-            anchor={`${anchor}:${index}`}
+            anchor={anchor ? `${anchor}:${index}` : undefined}
             open={index === unfinished}
           />
         ),

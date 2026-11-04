@@ -244,7 +244,11 @@ that turn and divides its activity into independently expandable segments on des
 Segment time appears only when every entry has timestamps. The turn's source appears once at its
 start, and completion/total time once at its end. With no mid-turn input there is one activity row.
 System events (reports, schedules, messages and manager updates) fold to their source and summary;
-expand to read the body. Their open state is remembered per session.
+expand to read the body. Their open state is remembered per session. Expanded, a sub-session report
+shows the sub-session's title and status on one line with the report underneath at the card's full
+width. Reports, manager updates, messages from other sessions and unfolded suggested-task briefs are
+rendered as Markdown; file links in them open in the file viewer as in answers. Tags such as "Run
+manually" or "Sender skips approvals" sit on the card's title line. Desktop and phone alike.
 
 Ordinary sessions are managed in the UI or with session tools; manager configuration has its own commands. What the user can do in the UI, so you can
 explain it:
@@ -425,7 +429,7 @@ explain it:
   opens its own page and running commands can be stopped; the folded steps and the
   line at the start of a continuing turn look the same as on the desktop.
 - **Messages Litch sends for you** show as cards, not as your own message: a scheduled task's run
-  ("Scheduled task · <name>", with "Run manually" for Run now), a sub-session's first message ("Sub-session
+  ("Scheduled task · <name>", tagged "Run manually" for Run now), a sub-session's first message ("Sub-session
   brief", "Fork brief" or "Handed-off task", with the session it came from, which opens it), and "Do it
   here" on a suggested-task card ("Task card · Do it here"). The card shows the title and the start of
   the task; Show full text shows exactly what the model received, Show less folds it again. A message
@@ -607,7 +611,7 @@ woken to continue.
   回报摘录最多 2000 字符，超过时附“已截断 / Truncated”及 `litch_sessions.read` 全文提示。
   模型按需 `read` 时，最近回合回答最多 32000 字符，较早回合最多 4000 字符，超限使用相同截断标记；界面全文读取不受这个摘要上限影响。
   多条回报一起交给模型时，摘录与错误（正文及 JSON 两份）共享 24000 字符预算，必要时进一步缩短并标明截断。
-  桌面回报卡、事件条和待交付回报中的 **展开全文** 按需读取原回合的完整回答；手机在回报旁用小箭头展开或收起。
+  桌面回报卡、事件条和待交付回报中，回报标题行末尾的小图标（展开全文 / 收起全文）按需读取原回合的完整回答；手机在标题行末尾用小箭头展开或收起。
   后续新回合不会替换历史回报的全文。设备离线、回答被删除或回滚时保留摘录并提示错误，可重试或打开子会话查看。
   If a sub-session finishes several turns while the parent is busy, only its latest report is handed over.
   Users can also stop automatic reports entirely; see [Stop or resume reporting](#stop-or-resume-reporting) below.

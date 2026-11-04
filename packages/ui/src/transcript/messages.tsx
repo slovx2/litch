@@ -18,6 +18,7 @@ import { Icon } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { SessionEventBar } from '../tree/EventBar.tsx'
 import { AskReplyBody } from './AskCard.tsx'
+import { CardMarkdown } from './CardMarkdown.tsx'
 import { CompactRow } from './CompactRow.tsx'
 import { SentComments } from './comments/Cards.tsx'
 import { commentsOf } from './comments/Cite.tsx'
@@ -25,7 +26,7 @@ import { type AttachmentContext, FileCard } from './FileCard.tsx'
 import { Markdown } from './Markdown.tsx'
 import { MessageCopy } from './MessageCopy.tsx'
 import { MessageEdit } from './MessageEdit.tsx'
-import { PeerHead } from './PeerHead.tsx'
+import { PeerHead, PeerTag } from './PeerHead.tsx'
 import { MentionedText } from './SessionMentions.tsx'
 import { SystemCard } from './SystemCard.tsx'
 import { usePin } from './scroll.ts'
@@ -187,6 +188,7 @@ export const UserMessage = memo(function UserMessage({
         <CompactRow
           icon={<Icon name="note" small />}
           source={peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')}
+          tag={peer.bypass ? <PeerTag /> : undefined}
           summary={text}
           open={open}
           onToggle={() => {
@@ -202,7 +204,10 @@ export const UserMessage = memo(function UserMessage({
               deviceId={ref.deviceId}
               sessionId={ref.sessionId}
             />
-            <div className="sysm-full">{text}</div>
+            {/* 对方（别的会话里的模型）写的话按 Markdown 画，同子会话的回报 */}
+            <div className="sysm-full peer-full">
+              <CardMarkdown text={text} />
+            </div>
             <MessageCopy item={item} />
           </>
         ) : null}

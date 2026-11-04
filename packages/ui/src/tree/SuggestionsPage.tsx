@@ -4,6 +4,7 @@ import {
   groupSuggestions,
   keys,
   reviewedSuggestion,
+  type SessionSummary,
   type SuggestionEntry,
   type SuggestionView,
   sortManagerIssues,
@@ -25,6 +26,7 @@ import { useIssueOrder } from '../manager/issue-order.tsx'
 import { PostCard } from '../manager/PostCard.tsx'
 import { PostDiscussion, PostHistory } from '../manager/PostDiscussion.tsx'
 import { Relations } from '../manager/Relations.tsx'
+import { FileLinksProvider, useSessionFileLinks } from '../transcript/FileLinks.tsx'
 import { Brief, ProposalActs } from './ProposalCard.tsx'
 import { SANDBOX_LEVEL } from './sandbox.ts'
 
@@ -48,6 +50,11 @@ function SuggestionRow({
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? []
   const workspace = source.project ?? workspaces.find((entry) => entry.roots.includes(source.cwd))
   const online = device?.connection === 'online'
+  // 简报里的文件链接按来源会话的路径认，同对话里
+  const fileLinks = useSessionFileLinks(
+    deviceId,
+    useKey<SessionSummary>(keys.summary(deviceId, source.threadId)),
+  )
   const heading = (
     <>
       <b className="prop-title grow">{proposal.title}</b>
@@ -89,7 +96,9 @@ function SuggestionRow({
           <BoardMarkdown text={proposal.prompt} />
         </>
       ) : (
-        <Brief prompt={proposal.prompt} background={proposal.background} />
+        <FileLinksProvider value={fileLinks}>
+          <Brief prompt={proposal.prompt} background={proposal.background} />
+        </FileLinksProvider>
       )}
       <PostHistory post={post} />
       {proposal.widerSandbox ? (
