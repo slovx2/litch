@@ -51,7 +51,7 @@ on a board stored on its device, and reports progress. Repository changes remain
 what has landed. Managers and their worklines appear in the desktop sidebar's **Managers** view;
 ordinary sessions appear in **Chat**. The phone home screen has a **Managers** entry: managers are
 grouped by device. Desktop manager pages open **Console** first, followed by **Overview** and read-only **Manager items**.
-The phone workbench opens **Console** first, followed by **Chat**, **Worklines** and **Overview** (which includes manager items). Manager rows use the
+The phone workbench opens **Console** first, followed by **Chat**, **Worklines** and **Overview** (with a collapsed manager items section at the bottom). Manager rows use the
 same mark and status text as the desktop sidebar (see below); managers with items to handle show the
 count in an amber pill at the end of the row. Creating managers and editing dispatch settings remain
 desktop actions.
@@ -191,12 +191,15 @@ while reserving at least 460 pixels for chat; smaller spaces compress the board 
 the saved preference. Both chat width settings continue to apply inside the available space.
 Narrow windows keep the Chat/Board switch, independently of desktop board visibility.
 Opening Files covers the board; the info rail is hidden.
-Overview shows progress and blocked items. Work lines are managed from the left conversation tree;
+Overview starts with one row for the four console kinds (Decisions, For you, Reports, Suggestions),
+each showing its open count; open counts are highlighted, and an all-zero row stays muted. Clicking
+one switches to that console tab, exactly like choosing the kind inside Console. Below is the
+manager's **Current status** card: Markdown written and maintained by the manager, with section
+headings, lists and clickable board references, the update time and a small refresh icon. Overview
+does not show manager items (they have their own tab) or the activity timeline; on paged boards the
+work line list follows the status card. Work lines are managed from the left conversation tree;
 the duplicate board tab is hidden. Opening a work line shows its conversation; **Back to manager** returns. Clicking an item's decision id opens that decision,
-including the appropriate answered or closed group. Recent activity uses Markdown and clickable
-board references, with long reports collapsed to about five lines. Expand or collapse each report
-independently. Source labels distinguish manager, user, system and work lines; selecting a line’s
-source opens that conversation.
+including the appropriate answered or closed group.
 
 Items are the manager’s own progress records, owned by the manager or a work line. New add/update
 operations reject an explicit user owner; existing user-owned items remain unchanged. For work that
@@ -388,7 +391,7 @@ line running") and the breakdown by kind. In the Human skin the background mark 
 the running mark a single ring.
 
 侧栏、窄窗口的“看板”和收起后的“展开看板”数字，合计待定决策、待做的“请你做”和经理已审核待开始建议；报告未读不计入。
-已回复、已交付或已取消的请求不重复计入；已回复但尚未交付的请求仍保留在概览中。
+已回复、已交付或已取消的请求不重复计入；已回复但尚未交付的请求仍计入“请你做”的未完成数。
 “请你做”的默认交付按钮是“标记完成 / Mark as done”，经理可以指定其他文案。
 提交后的回复按 Markdown 展示，并标明回复时间。
 
@@ -435,7 +438,7 @@ the running mark a single ring.
 
 “工作线”页签列出经理开的每条线：记号和标题、最近动静的时间，第二行是状态和分支（领先几个提交、是否已合并），没有分支时写最近回报的第一句，行尾等待色的“没验 N”是回报里没验证的项数。等人、出错的排最前，然后是运行中、只剩后台任务、空闲；已合并的收在最下面“已结束 N”，默认收起。点一行进这条线的会话页；工作线会话页的副标题前半段是“↰ 经理名”，点了回到经理的工作线页签（从经理页进来时直接退回去，从链接或通知直达时新开经理页），“⋯”里也有“回到经理”和这条线的相关议题。
 
-“概览”与桌面一致：现状、待用户决策与已完成两个数（分别点进控制台的决策和展开经理事项）、受阻事项（第二行写“等待决策 #D-n”，编号可点）、请你做和最近动态；长动态点“展开全文”看完整内容；最下面“经理事项 N”一节默认收起，展开后每项一行，点开看理由和关联。控制台在窄屏上把排序收成一个图标，与类别同一行。手机作答决策时先点选一项（单选），再点“提交给经理”（没选也没写时按钮下方写明“先选一项或写补充说明”，决策没有选项时写“先写补充说明”）；选中项和补充文字都存为本机草稿，离开再回来还在，卡片状态标“草稿”。修改答案时上方照样显示原来的答复，原来选的那一项已选中。控制台可阅读和操作四类议题，并提交经理或临时追问。
+“概览”与桌面一致：上面一行是控制台四类（决策、请你做、报告、建议）的未完成数，点哪一类就到控制台的那一类；下面是经理维护的现状卡（Markdown，小标题、列表和看板编号可点，卡头有更新时间和刷新图标）；不显示受阻事项和最近动态。手机没有单独的经理事项页签，最下面“经理事项”一节默认收起，展开后每项一行，点开看理由和关联。控制台在窄屏上把排序收成一个图标，与类别同一行。手机作答决策时先点选一项（单选），再点“提交给经理”（没选也没写时按钮下方写明“先选一项或写补充说明”，决策没有选项时写“先写补充说明”）；选中项和补充文字都存为本机草稿，离开再回来还在，卡片状态标“草稿”。修改答案时上方照样显示原来的答复，原来选的那一项已选中。控制台可阅读和操作四类议题，并提交经理或临时追问。
 手机沿用建议的开始/编辑/忽略，支持请求交付/文字回复、决策答复、报告已阅和讨论历史；创建经理、派活设置及完整经理事项看板仍在桌面。
 用户主动新建议题尚未开放。手机也提供只读经理事项供关联定位；每张卡可单独提交，也可用控制台底部的提交条跨卡一起提交（同桌面）。
 

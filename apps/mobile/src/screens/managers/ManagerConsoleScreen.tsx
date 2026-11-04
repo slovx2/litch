@@ -46,7 +46,7 @@ import { IssueContext } from './IssueRelations'
 import { IssueSheet } from './IssueSheet'
 import { setIssueOrder, useIssueOrder } from './issue-order'
 import { ManagerLines } from './ManagerLines'
-import { ManagerOverview } from './ManagerOverview'
+import { ManagerOverview, type OverviewCounts, OverviewItems } from './ManagerOverview'
 import { PagedBoard } from './PagedBoard'
 import { issueCounts, managerRowState, orderedIssues } from './presentation'
 import { useManagerReset } from './use-reset'
@@ -264,6 +264,25 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const { key: stateKey, ...stateArgs } = text
   const pending = manager.status === 'active' ? managerAttentionCount(manager) : 0
   const counts = issueCounts(manager)
+  // 概览上的控制台四类：未完成数与类别胶囊同源，总数取分页摘要或整份看板
+  const totals = view?.paging?.summary.counts
+  const postsOf = (category: Category) =>
+    (board?.posts ?? []).filter((post) => post.kind === category).length
+  const overviewCounts: OverviewCounts = {
+    decision: {
+      pending: counts.decision,
+      total: totals?.decision.all ?? board?.decisions.length ?? 0,
+    },
+    request: {
+      pending: counts.request,
+      total: totals?.request.all ?? board?.requests?.length ?? 0,
+    },
+    report: { pending: counts.report, total: totals?.report.all ?? postsOf('report') },
+    suggestion: {
+      pending: counts.suggestion,
+      total: totals?.suggestion.all ?? postsOf('suggestion'),
+    },
+  }
   const missing = (['feedback', 'posts', 'ignore'] as const).filter((key) => !features[key])
   const chatMark = sessionMark(summary)
   const linesWaiting = (board?.lines ?? []).some(
@@ -530,6 +549,8 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                     target={selected ?? (focusItem === '*' ? null : focusItem)}
                     suggestions={suggestions}
                     onLine={openSession}
+                    overviewCounts={overviewCounts}
+                    onCategory={(category) => go('console', category)}
                     onQuery={pagingQuery}
                     locator={locator}
                     onDetail={(y, relative) => {
@@ -542,19 +563,18 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                   <>
                     {tab === 'overview' ? (
                       <ManagerOverview
-                        board={board}
-                        onDecisions={() => go('console', 'decision')}
-                        onItems={() => {
-                          setFocusItem('*')
-                          scroll.current?.scrollTo({ y: itemsAt.current, animated: true })
-                        }}
-                        onIssue={openIssue}
-                        onLine={openSession}
-                        focusItem={focusItem}
-                        onItemsAt={(y) => {
-                          itemsAt.current = y
-                        }}
-                      />
+                        situation={board.situation}
+                        counts={overviewCounts}
+                        onCategory={(category) => go('console', category)}
+                      >
+                        <OverviewItems
+                          items={board.items}
+                          focusItem={focusItem}
+                          onItemsAt={(y) => {
+                            itemsAt.current = y
+                          }}
+                        />
+                      </ManagerOverview>
                     ) : null}
                     {tab === 'lines' ? (
                       <ManagerLines deviceId={deviceId} board={board} onOpen={openSession} />

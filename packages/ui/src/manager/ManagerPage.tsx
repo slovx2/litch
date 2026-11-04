@@ -31,6 +31,7 @@ import { ManagerFeaturesContext, useManagerBoard } from './data.ts'
 import { DiscussionPaneContext } from './discussion-pane.ts'
 import { IssueOrderSelect } from './issue-order.tsx'
 import { ManagerForm } from './ManagerForm.tsx'
+import { Overview, type OverviewCategory, type OverviewCounts } from './Overview.tsx'
 import { PagedBoard } from './PagedBoard.tsx'
 import { RelationsContext } from './Relations.tsx'
 import { Reports } from './Reports.tsx'
@@ -247,6 +248,30 @@ export function ManagerPage({
     lines: manager.runningLines,
     suggestions: suggestionCount(suggestions),
   }
+  // 概览上的控制台四类：未完成数与控制台页签的计数同源，总数取分页摘要或整份看板
+  const totals = view?.paging?.summary.counts
+  const postsOf = (kind: 'report' | 'suggestion') =>
+    (board?.posts ?? []).filter((post) => post.kind === kind).length
+  const overviewCounts: OverviewCounts = {
+    decisions: {
+      pending: counts.decisions,
+      total: totals?.decision.all ?? board?.decisions.length ?? 0,
+    },
+    requests: {
+      pending: counts.requests,
+      total: totals?.request.all ?? board?.requests?.length ?? 0,
+    },
+    reports: { pending: counts.reports, total: totals?.report.all ?? postsOf('report') },
+    suggestions: {
+      pending: counts.suggestions,
+      total: totals?.suggestion.all ?? postsOf('suggestion'),
+    },
+  }
+  /** 概览跳到控制台某一类：和点控制台里的类别按钮是同一件事 */
+  const openInbox = (kind: OverviewCategory) => {
+    setInboxTab(kind)
+    setTab(kind)
+  }
   const readOnly = manager.status !== 'active'
   const readOnlyText = t(manager.status === 'ending' ? 'manager.endingNote' : 'manager.readOnly')
   const disabled = readOnly || device?.connection !== 'online'
@@ -435,10 +460,7 @@ export function ManagerPage({
                   data-board-tab={kind}
                   key={kind}
                   aria-pressed={activeTab === kind}
-                  onClick={() => {
-                    setInboxTab(kind)
-                    setTab(kind)
-                  }}
+                  onClick={() => openInbox(kind)}
                 >
                   {t(`manager.${kind}`)}
                   {counts[kind] ? <span className="pill wait">{counts[kind]}</span> : null}
@@ -556,6 +578,8 @@ export function ManagerPage({
                         target={pagingTarget}
                         onLocated={() => setPagingTarget(null)}
                         onSuggestionSource={onSuggestionSource}
+                        overviewCounts={overviewCounts}
+                        onInbox={openInbox}
                       />
                     ) : (
                       <>
@@ -585,12 +609,18 @@ export function ManagerPage({
                             onLocated={requestLocated}
                           />
                         ) : null}
-                        {tab === 'overview' || tab === 'items' || tab === 'lines' ? (
+                        {tab === 'overview' ? (
+                          <Overview
+                            situation={pages.overview.situation}
+                            counts={overviewCounts}
+                            onOpen={openInbox}
+                          />
+                        ) : null}
+                        {tab === 'items' || tab === 'lines' ? (
                           <BoardPanels
                             pages={pages}
                             deviceId={manager.deviceId}
                             tab={tab}
-                            onTab={setTab}
                             target={itemTarget}
                             onLocated={itemLocated}
                           />

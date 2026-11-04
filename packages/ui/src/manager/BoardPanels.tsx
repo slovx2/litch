@@ -5,7 +5,6 @@ import { requestOpenSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { badgeOf, nameOf } from '../app/device.ts'
 import { useKey } from '../app/services.tsx'
-import { Activity } from './Activity.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
 import { Relations } from './Relations.tsx'
@@ -66,15 +65,13 @@ export function BoardPanels({
   pages,
   deviceId,
   tab,
-  onTab,
   target,
   onLocated,
   lineHeads,
 }: {
   pages: ManagerBoardPages
   deviceId: string
-  tab: 'overview' | 'items' | 'lines'
-  onTab(tab: 'decisions' | 'items' | 'lines'): void
+  tab: 'items' | 'lines'
   target: { id: ManagerItemId } | null
   onLocated(): void
   lineHeads?: import('../../../protocol/src/manager-paging.mts').ManagerLineHead[]
@@ -115,111 +112,60 @@ export function BoardPanels({
         {!pages.overview.stats.totalItems ? <p>{t('manager.none')}</p> : null}
       </div>
     )
-  if (tab === 'lines')
-    return (
-      <div className="mg-stack">
-        {pages.lines.map((line) => (
-          <article className="mg-card" key={line.threadId}>
-            <header>
-              <span className="pill mute">
-                {headOf(line.threadId)?.checkedAt === null
-                  ? t('manager.paging.unchecked')
-                  : t(`manager.${line.status}`)}
-              </span>
-              <b className="grow">{line.title}</b>
-              <span className="chip" title={nameOf(device, line.harness)}>
-                {badgeOf(device, line.harness)}
-              </span>
-              <button
-                type="button"
-                className="btn ghost"
-                onClick={() => requestOpenSession({ deviceId, sessionId: line.threadId })}
-              >
-                {t('manager.openSession')}
-              </button>
-            </header>
-            {line.branch ? (
-              <p className="dim mono">
-                {line.branch}
-                {line.merged !== null
-                  ? ` · ${t(line.merged ? 'manager.merged' : 'manager.unmerged')}`
-                  : ''}
-                {line.ahead !== null ? ` · +${line.ahead}` : ''}
-              </p>
-            ) : null}
-            {line.report ? <p>{line.report.text}</p> : null}
-            {headOf(line.threadId)?.reportPreview ? (
-              <p>{headOf(line.threadId)?.reportPreview}</p>
-            ) : null}
-            {headOf(line.threadId)?.unverifiedCount ? (
-              <p>
-                {t('manager.unverified')} · {headOf(line.threadId)?.unverifiedCount}
-              </p>
-            ) : null}
-            {headOf(line.threadId)?.checkedAt ? (
-              <small className="dim">
-                {t('manager.paging.checked')} ·{' '}
-                {new Date(headOf(line.threadId)?.checkedAt ?? 0).toLocaleString()}
-              </small>
-            ) : null}
-            {line.unverified.map((text) => (
-              <p className="mg-unverified" key={text}>
-                {text}
-              </p>
-            ))}
-          </article>
-        ))}
-        {!pages.lines.length ? <p>{t('manager.none')}</p> : null}
-      </div>
-    )
-  const { blocked, situation, stats, activities, requests } = pages.overview
   return (
     <div className="mg-stack">
-      <article className="mg-card">
-        <header>
-          <b className="grow">{t('manager.situation')}</b>
-          <small className="dim">{situation ? new Date(situation.at).toLocaleString() : ''}</small>
-        </header>
-        <BoardMarkdown text={situation?.text ?? t('manager.none')} />
-      </article>
-      <div className="mg-stats">
-        <button type="button" onClick={() => onTab('decisions')}>
-          <b>{stats.pendingDecisions}</b>
-          {t('manager.wait', { n: stats.pendingDecisions })}
-        </button>
-        <button type="button" onClick={() => onTab('items')}>
-          <b>{stats.doneItems}</b>
-          {t('manager.done')}
-        </button>
-      </div>
-      <section data-overview="blocked">
-        <h3>{t('manager.blocked')}</h3>
-        {blocked.length ? (
-          blocked.map((item) => <Item key={item.id} item={item} />)
-        ) : (
-          <p className="dim">{t('manager.none')}</p>
-        )}
-      </section>
-      {requests.length ? (
-        <section data-overview="requests">
-          <h3>{t('manager.requests')}</h3>
-          {requests.map((request) => (
-            <article className="mg-card" key={request.id}>
-              <header>
-                <BoardReferences text={request.id} />
-                <b>{request.title}</b>
-              </header>
-              <BoardMarkdown text={request.description} />
-            </article>
+      {pages.lines.map((line) => (
+        <article className="mg-card" key={line.threadId}>
+          <header>
+            <span className="pill mute">
+              {headOf(line.threadId)?.checkedAt === null
+                ? t('manager.paging.unchecked')
+                : t(`manager.${line.status}`)}
+            </span>
+            <b className="grow">{line.title}</b>
+            <span className="chip" title={nameOf(device, line.harness)}>
+              {badgeOf(device, line.harness)}
+            </span>
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => requestOpenSession({ deviceId, sessionId: line.threadId })}
+            >
+              {t('manager.openSession')}
+            </button>
+          </header>
+          {line.branch ? (
+            <p className="dim mono">
+              {line.branch}
+              {line.merged !== null
+                ? ` · ${t(line.merged ? 'manager.merged' : 'manager.unmerged')}`
+                : ''}
+              {line.ahead !== null ? ` · +${line.ahead}` : ''}
+            </p>
+          ) : null}
+          {line.report ? <p>{line.report.text}</p> : null}
+          {headOf(line.threadId)?.reportPreview ? (
+            <p>{headOf(line.threadId)?.reportPreview}</p>
+          ) : null}
+          {headOf(line.threadId)?.unverifiedCount ? (
+            <p>
+              {t('manager.unverified')} · {headOf(line.threadId)?.unverifiedCount}
+            </p>
+          ) : null}
+          {headOf(line.threadId)?.checkedAt ? (
+            <small className="dim">
+              {t('manager.paging.checked')} ·{' '}
+              {new Date(headOf(line.threadId)?.checkedAt ?? 0).toLocaleString()}
+            </small>
+          ) : null}
+          {line.unverified.map((text) => (
+            <p className="mg-unverified" key={text}>
+              {text}
+            </p>
           ))}
-        </section>
-      ) : null}
-      <section>
-        <h3>{t('manager.activity')}</h3>
-        {activities.map((activity) => (
-          <Activity key={activity.id} activity={activity} deviceId={deviceId} />
-        ))}
-      </section>
+        </article>
+      ))}
+      {!pages.lines.length ? <p>{t('manager.none')}</p> : null}
     </div>
   )
 }

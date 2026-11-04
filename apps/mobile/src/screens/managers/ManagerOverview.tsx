@@ -1,121 +1,27 @@
-// 手机经理概览，照桌面概览：现状、两个数（待用户决策、已完成）、受阻事项、请你做、最近动态；
-// 末尾“经理事项 N”一节默认收起（原来单独的页签并进来，35-manager 17.3），“已完成”和 #I-n 展开它并定位到那一项。
-import { type ManagerBoardTopicView, managerBoardPages } from '@litch/core'
-import { useEffect, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
-import type {
-  ManagerActivityView,
-  ManagerItemView,
-} from '../../../../../packages/core/src/model-manager.mts'
+// 手机经理概览，照桌面概览：上面一行控制台四类的未完成数（点了到控制台那一类），下面是经理维护的现状正文。
+// 时间线不再画（数据照旧随看板返回）。手机没有单独的经理事项页签，事项留在末尾一节，默认收起，#I-n 展开并定位。
+
+import { type ReactNode, useEffect, useState } from 'react'
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import type { ManagerItemView } from '../../../../../packages/core/src/model-manager.mts'
+import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
 import { stamp } from '../../../../../packages/ui/src/app/format.ts'
 import { useT } from '../../ui/i18n'
-import { Button, Row, SectionLabel } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
 import { Markdown } from './IssueMarkdown'
 import { IssueRelations } from './IssueRelations'
-import { collapsedMarkdown } from './presentation'
 
-const PAGE = 10
-/** 超过这么多行的动态先收起，只显示前几行。 */
-const LONG_LINES = 5
+export type OverviewCategory = ManagerPost['kind']
+export type OverviewCounts = Record<OverviewCategory, { pending: number; total: number }>
 
-function Activity({
-  activity,
-  onLine,
-}: {
-  activity: ManagerActivityView
-  onLine(threadId: string, title: string): void
-}) {
-  const t = useT()
-  const { c, radius, hit } = useTheme()
-  const [expanded, setExpanded] = useState(false)
-  const source = activity.source ?? { kind: 'system' as const }
-  const short = collapsedMarkdown(activity.text, LONG_LINES)
-  return (
-    <View
-      testID={`manager-activity:${activity.id}`}
-      style={[styles.activity, { borderColor: c.line1 }]}
-    >
-      <View style={styles.activityHead}>
-        {source.kind === 'line' ? (
-          <Pressable
-            accessibilityRole="link"
-            onPress={() => onLine(source.threadId, source.title)}
-            style={[styles.pill, { borderColor: c.line3, borderRadius: radius.s }]}
-          >
-            <Text style={{ color: c.ink2 }}>
-              {t('manager.source.line')} · {source.title} ↗
-            </Text>
-          </Pressable>
-        ) : (
-          <Text
-            style={[styles.pill, { color: c.ink2, borderColor: c.line1, borderRadius: radius.s }]}
-          >
-            {t(`manager.source.${source.kind}`)}
-          </Text>
-        )}
-        <Text style={{ color: c.ink3 }}>{stamp(activity.at, Date.now(), t.lang)}</Text>
-      </View>
-      <Markdown text={short && !expanded ? `${short}\n\n…` : activity.text} />
-      {short ? (
-        <Pressable
-          accessibilityRole="button"
-          aria-expanded={expanded}
-          onPress={() => setExpanded(!expanded)}
-          style={[styles.toggle, { minHeight: hit }]}
-        >
-          <Text style={{ color: c.ink2 }}>
-            {expanded ? '▾' : '▸'}{' '}
-            {t(expanded ? 'manager.activityCollapse' : 'manager.activityExpand')}
-          </Text>
-        </Pressable>
-      ) : null}
-    </View>
-  )
-}
-
-/** 受阻事项：标题一行，第二行“等待决策 #D-n”，编号是链接色、点了跳到那条决策 */
-function BlockedItem({ item, onIssue }: { item: ManagerItemView; onIssue(id: string): void }) {
-  const t = useT()
-  const { c, font, hit } = useTheme()
-  return (
-    <Pressable
-      accessibilityRole="button"
-      testID={`overview-blocked:${item.id}`}
-      onPress={() => onIssue(item.id)}
-      style={({ pressed }) => [
-        styles.blocked,
-        {
-          minHeight: hit,
-          borderBottomColor: c.line1,
-          backgroundColor: pressed ? c.press : c.panel,
-        },
-      ]}
-    >
-      <Text style={{ color: c.ink, fontSize: font.size.body }}>
-        #{item.id} · {item.title}
-      </Text>
-      {item.blockedBy.length ? (
-        <View style={styles.waits}>
-          <Text style={{ color: c.ink2 }}>
-            {t('manager.waitDecisions', { n: item.blockedBy.length })}
-          </Text>
-          {item.blockedBy.map((id) => (
-            <Text
-              key={id}
-              role="link"
-              testID={`overview-blocked:${item.id}:${id}`}
-              onPress={() => onIssue(id)}
-              style={[styles.link, { color: c.accent, minHeight: hit }]}
-            >
-              #{id}
-            </Text>
-          ))}
-        </View>
-      ) : null}
-    </Pressable>
-  )
-}
+const CATEGORIES = {
+  decision: 'manager.decisions',
+  request: 'manager.requests',
+  report: 'manager.reports',
+  suggestion: 'manager.suggestions',
+} as const
+/** 比这窄（320 一类的小屏）四格排成两行 */
+const NARROW = 360
 
 /** 经理事项一行：编号、标题、状态；点开看理由和关联。定位到的那一项展开并画强调边 */
 export function ItemRow({ item, focused }: { item: ManagerItemView; focused: boolean }) {
@@ -162,164 +68,175 @@ export function ItemRow({ item, focused }: { item: ManagerItemView; focused: boo
 }
 
 export function ManagerOverview({
-  board,
-  onDecisions,
-  onItems,
-  onIssue,
-  onLine,
-  focusItem,
-  onItemsAt,
+  situation,
+  counts,
+  onCategory,
+  refresh,
+  children,
 }: {
-  board: NonNullable<ManagerBoardTopicView['board']>
-  onDecisions(): void
-  /** “已完成”：展开经理事项一节，页面滚到那里 */
-  onItems(): void
-  onIssue(id: string): void
-  onLine(threadId: string, title: string): void
-  /** 要定位的经理事项（#I-n）：展开这一节和那一项；'*' 只展开这一节 */
-  focusItem: string | null
-  /** 经理事项一节在概览里的纵向位置，页面据此滚过去 */
-  onItemsAt(y: number): void
+  situation: { text: string; at: number } | null
+  counts: OverviewCounts
+  onCategory(category: OverviewCategory): void
+  /** 分页看板才有：重读摘要 */
+  refresh?: { busy: boolean; run(): void }
+  /** 末尾的经理事项一节 */
+  children?: ReactNode
 }) {
   const t = useT()
   const { c, font, radius, hit } = useTheme()
-  const [shown, setShown] = useState(PAGE)
-  const [itemsOpen, setItemsOpen] = useState(Boolean(focusItem))
-  useEffect(() => {
-    if (focusItem) setItemsOpen(true)
-  }, [focusItem])
-  const { situation, stats, requests, blocked, activities } = managerBoardPages(board).overview
-  // 两个数照桌面概览：待用户决策（点进控制台的决策）、已完成（点进经理事项）
-  const tiles = [
-    {
-      key: 'wait',
-      value: stats.pendingDecisions,
-      wait: stats.pendingDecisions > 0,
-      onPress: onDecisions,
-    },
-    { key: 'done', value: stats.doneItems, wait: false, onPress: onItems },
-  ] as const
+  const { width } = useWindowDimensions()
   return (
     <View testID="manager-overview">
-      <View style={[styles.card, { borderColor: c.line1, backgroundColor: c.panel }]}>
-        <View style={styles.activityHead}>
-          <Text style={{ color: c.ink, fontWeight: '600', fontSize: font.size.title, flex: 1 }}>
+      <View style={styles.counts}>
+        {(Object.keys(CATEGORIES) as OverviewCategory[]).map((key) => {
+          const { pending, total } = counts[key]
+          const label = t(CATEGORIES[key])
+          return (
+            <Pressable
+              key={key}
+              testID={`overview-count:${key}`}
+              accessibilityRole="button"
+              aria-label={`${label} · ${t('manager.overviewCount', { pending, total })}`}
+              onPress={() => onCategory(key)}
+              style={({ pressed }) => [
+                styles.count,
+                {
+                  flexBasis: width < NARROW ? '45%' : '22%',
+                  minHeight: hit,
+                  borderRadius: radius.s,
+                  borderColor: pending ? c.wait : c.line1,
+                  backgroundColor: pressed ? c.press : pending ? c.raised : 'transparent',
+                },
+              ]}
+            >
+              <Text numberOfLines={1} style={{ color: pending ? c.ink : c.ink2, flexShrink: 1 }}>
+                {label}
+              </Text>
+              <Text
+                testID={`overview-count-value:${key}`}
+                style={{
+                  color: pending ? c.wait : c.ink3,
+                  fontFamily: font.mono,
+                  fontWeight: pending ? '700' : '400',
+                }}
+              >
+                {pending}
+              </Text>
+            </Pressable>
+          )
+        })}
+      </View>
+      <View
+        testID="overview-situation"
+        style={[
+          styles.card,
+          { borderColor: c.line1, backgroundColor: c.raised, borderRadius: radius.m },
+        ]}
+      >
+        <View style={[styles.cardHead, { borderBottomColor: c.line1 }]}>
+          <Text style={{ color: c.ink2, fontWeight: '600', fontSize: font.size.meta, flex: 1 }}>
             {t('manager.situation')}
           </Text>
           {situation ? (
-            <Text style={{ color: c.ink3 }}>{stamp(situation.at, Date.now(), t.lang)}</Text>
+            <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
+              {t('manager.situationAt')} {stamp(situation.at, Date.now(), t.lang)}
+            </Text>
+          ) : null}
+          {refresh ? (
+            <Pressable
+              testID="overview-refresh"
+              accessibilityRole="button"
+              aria-label={t('manager.paging.refresh')}
+              aria-busy={refresh.busy}
+              disabled={refresh.busy}
+              onPress={refresh.run}
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.refresh,
+                { borderRadius: radius.s, backgroundColor: pressed ? c.press : 'transparent' },
+              ]}
+            >
+              <Text style={{ color: refresh.busy ? c.ink3 : c.ink2, fontSize: font.size.body }}>
+                ↻
+              </Text>
+            </Pressable>
           ) : null}
         </View>
-        <Markdown text={situation?.text ?? t('manager.none')} />
+        {situation?.text ? (
+          <Markdown situation text={situation.text} />
+        ) : (
+          <Text style={{ color: c.ink3 }}>{t('manager.situationEmpty')}</Text>
+        )}
       </View>
-      <View style={styles.tiles}>
-        {tiles.map((tile) => (
-          <Pressable
-            key={tile.key}
-            testID={`manager-stat:${tile.key}`}
-            accessibilityRole="button"
-            aria-label={`${tile.value} ${t(`manager.${tile.key}`, { n: tile.value })}`}
-            onPress={tile.onPress}
-            style={({ pressed }) => [
-              styles.tile,
-              {
-                borderColor: c.line1,
-                backgroundColor: pressed ? c.press : c.panel,
-                borderRadius: radius.s,
-              },
-            ]}
-          >
-            <Text
-              style={{
-                color: tile.wait ? c.wait : c.ink,
-                fontSize: font.size.title + 4,
-                fontWeight: '600',
-                fontFamily: font.mono,
-              }}
-            >
-              {tile.value}
-            </Text>
-            <Text style={{ color: c.ink2 }}>{t(`manager.${tile.key}`, { n: tile.value })}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <SectionLabel>{t('manager.blocked')}</SectionLabel>
-      {blocked.length ? (
-        blocked.map((item) => <BlockedItem key={item.id} item={item} onIssue={onIssue} />)
-      ) : (
-        <Text style={[styles.none, { color: c.ink3 }]}>{t('manager.none')}</Text>
-      )}
-      {requests.length ? (
-        <>
-          <SectionLabel>{t('manager.requests')}</SectionLabel>
-          {requests.map((request) => (
-            <Row
-              key={request.id}
-              testID={`overview-request:${request.id}`}
-              title={`#${request.id} · ${request.title}`}
-              detail={t(`manager.request.${request.status}`)}
-              onPress={() => onIssue(request.id)}
-            />
-          ))}
-        </>
-      ) : null}
-      <SectionLabel>{t('manager.activity')}</SectionLabel>
-      {activities.slice(0, shown).map((activity) => (
-        <Activity key={activity.id} activity={activity} onLine={onLine} />
-      ))}
-      {!activities.length ? (
-        <Text style={[styles.none, { color: c.ink3 }]}>{t('manager.none')}</Text>
-      ) : null}
-      {activities.length > shown ? (
-        <View style={styles.more}>
-          <Button
-            kind="plain"
-            label={t('mgr.activity.more')}
-            onPress={() => setShown(shown + PAGE * 2)}
-          />
-        </View>
-      ) : null}
-      <View onLayout={(event) => onItemsAt(event.nativeEvent.layout.y)}>
-        <Pressable
-          accessibilityRole="button"
-          aria-expanded={itemsOpen}
-          testID="overview-items"
-          onPress={() => setItemsOpen(!itemsOpen)}
-          style={[styles.itemsHead, { minHeight: hit, backgroundColor: c.win }]}
-        >
-          <Text style={{ color: c.ink2, fontSize: font.size.meta + 1, fontWeight: '600' }}>
-            {itemsOpen ? '▾' : '▸'} {t('mgr.items.count', { count: board.items.length })}
-          </Text>
-        </Pressable>
-        {itemsOpen
-          ? board.items.map((item) => (
-              <ItemRow key={item.id} item={item} focused={focusItem === item.id} />
-            ))
-          : null}
-      </View>
+      {children}
+    </View>
+  )
+}
+
+/** 经理事项一节（整份看板用）：默认收起，#I-n 定位时展开 */
+export function OverviewItems({
+  items,
+  focusItem,
+  onItemsAt,
+}: {
+  items: readonly ManagerItemView[]
+  /** 要定位的经理事项（#I-n）：展开这一节和那一项；'*' 只展开这一节 */
+  focusItem: string | null
+  /** 这一节在概览里的纵向位置，页面据此滚过去 */
+  onItemsAt(y: number): void
+}) {
+  const t = useT()
+  const { c, font, hit } = useTheme()
+  const [open, setOpen] = useState(Boolean(focusItem))
+  useEffect(() => {
+    if (focusItem) setOpen(true)
+  }, [focusItem])
+  return (
+    <View onLayout={(event) => onItemsAt(event.nativeEvent.layout.y)}>
+      <Pressable
+        accessibilityRole="button"
+        aria-expanded={open}
+        testID="overview-items"
+        onPress={() => setOpen(!open)}
+        style={[styles.itemsHead, { minHeight: hit, backgroundColor: c.win }]}
+      >
+        <Text style={{ color: c.ink2, fontSize: font.size.meta + 1, fontWeight: '600' }}>
+          {open ? '▾' : '▸'} {t('mgr.items.count', { count: items.length })}
+        </Text>
+      </Pressable>
+      {open
+        ? items.map((item) => <ItemRow key={item.id} item={item} focused={focusItem === item.id} />)
+        : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  card: { padding: 16, margin: 12, borderWidth: 1, gap: 8 },
-  tiles: {
+  counts: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
     paddingHorizontal: 12,
-    paddingBottom: 12,
+    paddingTop: 12,
   },
-  tile: { flexGrow: 1, flexBasis: '40%', borderWidth: 1, padding: 12, gap: 2 },
-  activity: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, gap: 8 },
-  activityHead: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
-  pill: { borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2 },
-  toggle: { alignSelf: 'stretch', justifyContent: 'center' },
-  blocked: { paddingHorizontal: 16, paddingVertical: 8, gap: 2, borderBottomWidth: 1 },
-  waits: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8 },
-  link: { textAlignVertical: 'center', paddingVertical: 12 },
-  none: { paddingHorizontal: 16, paddingVertical: 12 },
-  more: { padding: 12 },
+  count: {
+    flexGrow: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+  },
+  card: { margin: 12, paddingHorizontal: 16, paddingBottom: 16, borderWidth: 1, gap: 10 },
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+  },
+  refresh: { paddingHorizontal: 6, paddingVertical: 2 },
   itemsHead: { justifyContent: 'center', paddingHorizontal: 16 },
   item: { borderBottomWidth: 1, borderLeftWidth: 3 },
   itemHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 13 },

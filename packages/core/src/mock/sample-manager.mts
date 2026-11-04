@@ -363,8 +363,30 @@ export function sampleManagers(
   if (main) {
     main.situation = {
       text: t(
-        '回退编辑和后台任务筛选仍在进行；子会话归档等验收，CLI 重试已合入。发版前还有插话编辑和 Windows 补验需要决定。',
-        'Rewind editing and background task filters are in progress. Child archiving awaits verification; CLI retries are merged. Steering-message editing and Windows verification still need decisions before release.',
+        [
+          '### 正在做',
+          '- **回退编辑**：桌面、手机两条线各做到一半，见 #I-2',
+          '- **后台任务筛选**：进行中',
+          '',
+          '### 等你',
+          '- #D-15 插话消息在不支持的 harness 上是否显示“编辑”',
+          '- #D-16 Windows 补验是否放进本版',
+          '',
+          '### 接下来',
+          '- 子会话归档验收通过后合入；CLI 重试已合入',
+        ].join('\n'),
+        [
+          '### In progress',
+          '- **Rewind editing**: desktop and mobile lines are halfway, see #I-2',
+          '- **Background task filters**: in progress',
+          '',
+          '### Waiting for you',
+          '- #D-15 Show Edit on steering messages for unsupported harnesses?',
+          '- #D-16 Include Windows verification in this release?',
+          '',
+          '### Next',
+          '- Merge child archiving after verification; CLI retries are merged',
+        ].join('\n'),
       ),
       at: ago(18),
     }

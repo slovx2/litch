@@ -24,7 +24,6 @@ import { reasonOf } from '../app/errors.ts'
 import { useServices } from '../app/services.tsx'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { ManagerSuggestions } from '../tree/SuggestionsPage.tsx'
-import { Activity } from './Activity.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardPanels, Item } from './BoardPanels.tsx'
 import { useBoardScroll } from './board-memory.ts'
@@ -32,6 +31,7 @@ import { useCardMotion, useCardPress } from './card-motion.ts'
 import { Decisions } from './Decisions.tsx'
 import { useAnswerDrafts } from './drafts.ts'
 import { IssueOrderSelect, useIssueOrder } from './issue-order.tsx'
+import { Overview, type OverviewCategory, type OverviewCounts } from './Overview.tsx'
 import { InlinePostContext } from './PostCard.tsx'
 import { usePostDrafts } from './post-drafts.ts'
 import { Reports } from './Reports.tsx'
@@ -53,6 +53,8 @@ export function PagedBoard({
   target,
   onLocated,
   onSuggestionSource,
+  overviewCounts,
+  onInbox,
 }: {
   manager: ManagerView
   view: ManagerBoardTopicView & {
@@ -64,6 +66,8 @@ export function PagedBoard({
   target: ManagerObjectId | null
   onLocated(): void
   onSuggestionSource(selection: Selection, archived: boolean): void
+  overviewCounts: OverviewCounts
+  onInbox(category: OverviewCategory): void
 }) {
   const t = useT()
   const { channel } = useServices()
@@ -334,39 +338,33 @@ export function PagedBoard({
           {error || paging.error}
         </p>
       ) : null}
-      <div className="mg-list-head">
-        <button
-          type="button"
-          disabled={paging.loading.includes('summary')}
-          onClick={() => invoke(channel.command('managers.board.refresh', address))}
-        >
-          {t('manager.paging.refresh')}
-        </button>
-        {kinds[tab] ? <IssueOrderSelect /> : null}
-      </div>
       {tab === 'overview' ? (
-        <>
-          {paging.summary.situation ? <BoardMarkdown text={paging.summary.situation.text} /> : null}
-          <div className="mg-stats">
-            {Object.entries(paging.summary.counts).map(([category, counts]) => (
-              <p key={category}>
-                {t(
-                  `manager.${category === 'decision' ? 'decisions' : category === 'item' ? 'items' : `${category}s`}` as Parameters<
-                    typeof t
-                  >[0],
-                )}{' '}
-                · {counts.pending ?? 0} / {counts.all ?? 0}
-              </p>
-            ))}
-          </div>
-          {board.activities.map((activity) => (
-            <Activity key={activity.id} activity={activity} deviceId={manager.deviceId} />
-          ))}
-        </>
-      ) : null}
+        // 概览的刷新是现状卡头上的小图标
+        <Overview
+          situation={paging.summary.situation}
+          counts={overviewCounts}
+          onOpen={onInbox}
+          refresh={{
+            busy: paging.loading.includes('summary'),
+            run: () => invoke(channel.command('managers.board.refresh', address)),
+          }}
+        />
+      ) : (
+        <div className="mg-list-head">
+          <button
+            type="button"
+            disabled={paging.loading.includes('summary')}
+            onClick={() => invoke(channel.command('managers.board.refresh', address))}
+          >
+            {t('manager.paging.refresh')}
+          </button>
+          {kinds[tab] ? <IssueOrderSelect /> : null}
+        </div>
+      )}
       {tab === 'lines' || tab === 'overview' ? (
         <>
-          <div className="mg-list-head">
+          <div className="mg-list-head mg-lines-head">
+            {tab === 'overview' ? <h3 className="grow">{t('manager.lines')}</h3> : null}
             <span>
               {lines.checkedAt === null ? (
                 t('manager.paging.unchecked')
@@ -394,7 +392,6 @@ export function PagedBoard({
             deviceId={manager.deviceId}
             tab="lines"
             lineHeads={lines.lines}
-            onTab={() => {}}
             target={null}
             onLocated={() => {}}
           />

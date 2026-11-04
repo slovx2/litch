@@ -79,7 +79,7 @@ export interface ManagerSeen {
   omittedActions: boolean
   itemReasons: boolean
   decisionJump: boolean
-  overviewUnique: boolean
+  overviewClean: boolean
   opening: boolean
   promptLocalized: boolean
   endedRow: boolean
@@ -277,17 +277,38 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   // 窄窗口中先切到看板；宽窗口同一组按钮不显示，不需要点。
   const narrow = one<HTMLButtonElement>('.mg-narrow button:last-child')
   if (narrow && narrow.getBoundingClientRect().height > 0) narrow.click()
-  await until('概览事项', () => one('[data-overview="blocked"] .mg-item'))
-  const overviewUnique =
-    document.querySelectorAll('[data-manager-item="I-4"]').length === 1 &&
-    !one('[data-overview="yours"] [data-manager-item="I-4"]') &&
-    !one('.mg-item > .pill')
+  // 概览只有控制台四类计数和 Markdown 现状；经理事项、时间线都不出现
+  await until('概览现状', () => one('[data-overview="situation"] .mg-markdown h3'))
+  const countKeys = () =>
+    [...document.querySelectorAll('[data-overview-count]')]
+      .map((element) => element.getAttribute('data-overview-count'))
+      .join(',')
+  let overviewClean =
+    countKeys() === 'decisions,requests,reports,suggestions' &&
+    Boolean(one('[data-overview-count="decisions"][data-pending] .mg-overview-num')) &&
+    Boolean(one('[data-overview="situation"] .mg-markdown li strong')) &&
+    !one('.mg-body .mg-item, .mg-body [data-activity], [data-overview="blocked"]')
+  // 四项各自切到控制台对应页签，跟点控制台里的类别按钮一样
+  for (const kind of ['decisions', 'requests', 'reports', 'suggestions']) {
+    await click('[data-board-tab="overview"]')
+    await click(`[data-overview-count="${kind}"]`)
+    overviewClean &&= Boolean(
+      await until(
+        `概览跳到${kind}`,
+        () =>
+          one(`[data-inbox-tab="${kind}"][aria-pressed="true"]`) &&
+          one('[data-board-tab="inbox"][aria-selected="true"]') &&
+          !one('.mg-overview'),
+      ),
+    )
+  }
+  await click('[data-board-tab="overview"]')
   const openingBody = await eventBody('manager-open')
   const opening =
     Boolean(openingBody.textContent?.includes('请负责「Litch 0.23」')) &&
     !one('.mg-chat')?.textContent?.includes('占位回答')
   let eventsClean = cleanChat()
-  await click('[data-overview="blocked"] [data-decision-link="D-16"]')
+  await click('[data-overview="situation"] [data-decision-link="D-16"]')
   const decisionJump = await until(
     '定位到关联决策',
     () =>
@@ -388,7 +409,11 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       directInput()?.getClientRects().length,
   )
   await click('[data-board-tab="overview"]')
-  paneSeen.tabCloses = !one('.mg-talk-pane')
+  // 分屏随页签变化在副作用里关上，比点击晚一拍
+  paneSeen.tabCloses = await until('换页签关分屏', () => !one('.mg-talk-pane')).then(
+    () => true,
+    () => false,
+  )
   await click('[data-board-tab="decisions"]')
   postCollapse &&= Boolean(one('[data-decision="D-15"][data-post-collapsed="true"]'))
   // 整卡点击：点卡里的输入框、卡里选着文字时点都不展开；点摘要（卡片空白处）展开
@@ -2000,7 +2025,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     omittedActions,
     itemReasons,
     decisionJump,
-    overviewUnique,
+    overviewClean,
     opening,
     promptLocalized,
     endedRow,
@@ -2099,7 +2124,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
     omittedActions: '仍显示第一版不支持的操作',
     itemReasons: '事项原因重复决策编号或状态标签',
     decisionJump: '点击决策编号没有切页并定位',
-    overviewUnique: '卡住的用户事项在概览重复出现',
+    overviewClean: '概览应只有控制台四类计数（可跳转）和 Markdown 现状，不含经理事项和时间线',
     opening: '经理对话仍使用 id 或占位回答开场',
     promptLocalized: '经理设定标签和占位提示没有跟随界面语言',
     endedRow: '已结束经理有无效占位或总结按钮错位',

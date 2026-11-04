@@ -490,26 +490,13 @@ try {
         await noOverflow()
         await shot(`board-${tab}-${skin}-${theme}`)
         if (tab === 'overview') {
-          assert.ok(
-            await read('document.querySelector(\'[data-activity="activity-0"] strong\') !== null'),
-          )
+          // 时间线不在概览上画；现状按 Markdown 排出小标题和列表
+          assert.ok(await read("document.querySelector('[data-activity]') === null"))
           assert.ok(
             await read(
-              "document.querySelector('[data-activity=\"activity-0\"] .mg-activity-source').textContent.includes('工作线')",
+              'document.querySelector(\'[data-overview="situation"] .mg-markdown h3\') !== null',
             ),
           )
-          await read(
-            "document.querySelector('[data-activity=\"activity-0\"]').scrollIntoView({block:'center'})",
-          )
-          await shot(`activity-collapsed-${skin}-${theme}`)
-          await click('[data-activity="activity-0"] [data-act="manager-activity-expand"]')
-          assert.equal(
-            await read(
-              'document.querySelector(\'[data-activity="activity-0"] .mg-activity-content\').dataset.expanded',
-            ),
-            'true',
-          )
-          await shot(`activity-expanded-${skin}-${theme}`)
         }
 
         if (['decisions', 'requests', 'reports'].includes(tab)) {

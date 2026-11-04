@@ -41,7 +41,12 @@ import { Issue } from './Issue'
 import { Markdown } from './IssueMarkdown'
 import { setIssueOrder, useIssueOrder } from './issue-order'
 import { ManagerLines } from './ManagerLines'
-import { ItemRow } from './ManagerOverview'
+import {
+  ItemRow,
+  ManagerOverview,
+  type OverviewCategory,
+  type OverviewCounts,
+} from './ManagerOverview'
 import { canAnimateToggle } from './presentation'
 import { useDraftVersion } from './use-draft-files'
 
@@ -53,6 +58,8 @@ export function PagedBoard({
   target,
   suggestions,
   onLine,
+  overviewCounts,
+  onCategory,
   onQuery,
   onDetail,
   locator,
@@ -67,6 +74,8 @@ export function PagedBoard({
   target: string | null
   suggestions: readonly SuggestionView[]
   onLine(id: string, title?: string): void
+  overviewCounts: OverviewCounts
+  onCategory(category: OverviewCategory): void
   onQuery(memory: BoardPageMemory, ready: boolean): void
   onDetail(y: number, relative?: boolean): void
   /** 底部提交条点草稿数时问这里：当前滚动位置之后下一张有草稿的卡在哪，到底了回到第一张 */
@@ -288,40 +297,39 @@ export function PagedBoard({
           {error || paging.error}
         </Text>
       ) : null}
-      <Button
-        kind="plain"
-        label={t('manager.paging.refresh')}
-        busy={paging.loading.includes('summary')}
-        onPress={() => invoke(channel.command('managers.board.refresh', address))}
-      />
       {tab === 'overview' ? (
-        <>
-          {paging.summary.situation ? <Markdown text={paging.summary.situation.text} /> : null}
-          {Object.entries(paging.summary.counts).map(([kind, counts]) => (
-            <Text key={kind} style={style}>
-              {t(
-                `manager.${kind === 'decision' ? 'decisions' : kind === 'item' ? 'items' : `${kind}s`}` as Parameters<
-                  typeof t
-                >[0],
-              )}{' '}
-              · {counts.pending ?? 0} / {counts.all ?? 0}
-            </Text>
-          ))}
-          {board.activities.map((activity) => (
-            <View key={activity.id}>
-              <Text style={style}>{new Date(activity.at).toLocaleString()}</Text>
-              <Markdown text={activity.text} />
-            </View>
-          ))}
-          <Button
-            testID="paging-items"
-            kind="plain"
-            label={t('manager.items')}
-            onPress={() => setItems(!items)}
+        // 概览贴着页面两边排，抵掉外层的留白；刷新是现状卡头上的小图标
+        <View style={{ marginHorizontal: -12, marginTop: -12 }}>
+          <ManagerOverview
+            situation={paging.summary.situation}
+            counts={overviewCounts}
+            onCategory={onCategory}
+            refresh={{
+              busy: paging.loading.includes('summary'),
+              run: () => invoke(channel.command('managers.board.refresh', address)),
+            }}
           />
-        </>
-      ) : null}
-      {tab === 'lines' || tab === 'overview' ? (
+          <Pressable
+            testID="paging-items"
+            accessibilityRole="button"
+            aria-expanded={items}
+            onPress={() => setItems(!items)}
+            style={{ minHeight: hit, justifyContent: 'center', paddingHorizontal: 16 }}
+          >
+            <Text style={{ color: c.ink2, fontSize: font.size.meta + 1, fontWeight: '600' }}>
+              {items ? '▾' : '▸'} {t('manager.items')}
+            </Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Button
+          kind="plain"
+          label={t('manager.paging.refresh')}
+          busy={paging.loading.includes('summary')}
+          onPress={() => invoke(channel.command('managers.board.refresh', address))}
+        />
+      )}
+      {tab === 'lines' ? (
         <>
           <Text style={style}>
             {lines.checkedAt === null
@@ -341,14 +349,12 @@ export function PagedBoard({
               invoke(channel.command('managers.board.refresh', { ...address, lines: true }))
             }
           />
-          {tab === 'lines' ? (
-            <ManagerLines
-              deviceId={manager.deviceId}
-              board={board}
-              lineHeads={lines.lines}
-              onOpen={onLine}
-            />
-          ) : null}
+          <ManagerLines
+            deviceId={manager.deviceId}
+            board={board}
+            lineHeads={lines.lines}
+            onOpen={onLine}
+          />
         </>
       ) : null}
       {list ? (

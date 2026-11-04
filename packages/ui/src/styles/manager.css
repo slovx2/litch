@@ -413,24 +413,6 @@
 .mg-unverified {
   color: var(--wait);
 }
-.mg-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-.mg-stats > button {
-  border: 1px solid var(--line-2);
-  border-radius: var(--r1);
-  background: var(--raised);
-  padding: 10px 5px;
-  color: var(--ink-2);
-}
-.mg-stats b {
-  display: block;
-  font-size: calc(22px * var(--fs));
-  color: var(--ink);
-  margin-bottom: 4px;
-}
 .mg-item {
   display: grid;
   gap: 14px;
@@ -584,41 +566,150 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.mg-activity {
+/* ---------- 概览：控制台四类一行，现状正文是主体 ---------- */
+.mg-overview {
+  container-type: inline-size;
   display: grid;
-  gap: 8px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--line-1);
+  gap: 14px;
   min-width: 0;
 }
-.mg-activity > header {
+/* 一行四格等宽，窄了两行两格；全为 0 时只是一排淡字 */
+.mg-overview-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+@container (max-width: 460px) {
+  .mg-overview-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.mg-overview-counts > button {
+  min-width: 0;
   display: flex;
-  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--ink-2);
+  text-align: left;
+  cursor: pointer;
+}
+.mg-overview-counts > button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.mg-overview-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mg-overview-num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.mg-overview-counts > button[data-pending] {
+  border-color: color-mix(in srgb, var(--wait) 45%, var(--line-2));
+  background: color-mix(in srgb, var(--wait) 8%, transparent);
+  color: var(--ink);
+}
+.mg-overview-counts > button[data-pending]:hover {
+  background: color-mix(in srgb, var(--wait) 14%, transparent);
+}
+.mg-overview-counts > button[data-pending] .mg-overview-num {
+  color: var(--wait);
+  font-weight: 700;
+}
+.mg-situation {
+  min-width: 0;
+  padding: 14px 18px 18px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r2);
+  background: var(--raised);
+  overflow-wrap: anywhere;
+}
+.mg-situation > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line-1);
+}
+.mg-situation > header h3 {
+  flex: 1;
+  margin: 0;
+  font-size: calc(12px * var(--fs));
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+}
+.mg-situation-at {
+  font-size: calc(12px * var(--fs));
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.mg-situation-empty {
+  margin: 0;
+  color: var(--ink-3);
+}
+/* 正文限行宽、放宽行距；小标题是带色条的小号粗字，把“正在做 / 等你 / 接下来”隔成几段 */
+.mg-situation .mg-markdown {
+  max-width: 44em;
+}
+.mg-situation .mg-markdown .md {
+  font-size: calc(14px * var(--fs));
+  line-height: 1.75;
+  color: var(--ink);
+}
+.mg-situation .md :is(h1, h2, h3, h4, h5, h6) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: calc(12.5px * var(--fs));
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--ink-2);
+}
+.mg-situation .md :is(h1, h2, h3, h4, h5, h6)::before {
+  content: "";
+  flex: none;
+  width: 3px;
+  height: 1em;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.mg-situation .md > :is(h1, h2, h3, h4, h5, h6):not(:first-child) {
+  margin-top: 18px;
+}
+.mg-situation .md > :is(h1, h2, h3, h4, h5, h6) + * {
+  margin-top: 6px;
+}
+.mg-situation .md :is(ul, ol) {
+  margin-block: 0;
+  padding-left: 1.3em;
+}
+.mg-situation .md li + li {
+  margin-top: 4px;
+}
+.mg-situation .md li::marker {
+  color: var(--ink-3);
+}
+.mg-lines-head {
   align-items: center;
   gap: 8px;
 }
-.mg-activity time {
-  white-space: nowrap;
-}
-.mg-activity-content {
-  line-height: 1.7;
-  max-height: 8.5em;
-  overflow: hidden;
-}
-.mg-activity-content[data-expanded="true"] {
-  max-height: none;
-}
-.mg-activity > .btn {
-  justify-self: start;
-}
-.mg-activity-source {
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.mg-activity-source:hover {
-  background: var(--hover);
-  color: var(--accent);
+.mg-stack .mg-lines-head h3 {
+  margin: 0;
+  font-size: calc(12px * var(--fs));
+  font-weight: 600;
+  color: var(--ink-2);
 }
 .mg-empty {
   text-align: center;
@@ -817,9 +908,6 @@
   }
   .mg-list-open > .grow {
     flex-basis: 100%;
-  }
-  .mg-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 /* 侧栏被拉宽时按主区剩余宽度收起，避免两栏最低宽度撑破窗口。 */

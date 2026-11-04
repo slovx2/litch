@@ -5,10 +5,11 @@ import { EnrichedMarkdownText } from 'react-native-enriched-markdown'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import { IssueContext } from './IssueRelations'
-import { issueMarkdownStyle } from './presentation'
+import { issueMarkdownStyle, situationMarkdownStyle } from './presentation'
 import { issueLinks } from './relations'
 
-export function Markdown({ text }: { text: string }) {
+/** situation：概览现状用的排版（小标题更醒目、行距更宽） */
+export function Markdown({ text, situation }: { text: string; situation?: boolean }) {
   const theme = useTheme()
   const t = useT()
   const context = useContext(IssueContext)
@@ -20,7 +21,7 @@ export function Markdown({ text }: { text: string }) {
     <EnrichedMarkdownText
       markdown={issueLinks(text, ids, context?.features.paging)}
       flavor="github"
-      markdownStyle={issueMarkdownStyle(theme)}
+      markdownStyle={situation ? situationMarkdownStyle(theme) : issueMarkdownStyle(theme)}
       onLinkLongPress={({ url }) => {
         if (!url.startsWith('litch-issue:')) return
         const id = url.slice('litch-issue:'.length)

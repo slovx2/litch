@@ -146,6 +146,28 @@ export function issueMarkdownStyle(theme: Theme) {
   }
 }
 
+/** 概览现状：小标题用强调色的小号粗字，把“正在做 / 等你 / 接下来”隔成几段，正文行距放宽 */
+export function situationMarkdownStyle(theme: Theme) {
+  const base = issueMarkdownStyle(theme)
+  const size = theme.font.size.body - 1
+  const heading = {
+    fontSize: size,
+    lineHeight: size + 12,
+    color: theme.c.accent,
+    fontWeight: '700' as const,
+    fontFamily: theme.font.ui,
+  }
+  return {
+    ...base,
+    paragraph: { ...base.paragraph, lineHeight: theme.font.size.body + 10 },
+    list: { ...base.list, lineHeight: theme.font.size.body + 10, bulletColor: theme.c.ink3 },
+    h1: heading,
+    h2: heading,
+    h3: heading,
+    h4: heading,
+  }
+}
+
 const LINE_MARK: Record<ManagerLineState, StatusKind> = {
   waiting: 'waiting',
   error: 'error',

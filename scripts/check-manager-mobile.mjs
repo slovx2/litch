@@ -672,27 +672,18 @@ try {
   await press('已复验')
   await until(() => read("document.body.innerText.includes('已交付')"), '交付请求')
   await shot('mobile-delivery')
-  // 概览：与桌面同样的两个数；受阻事项第二行“等待决策 #D-15”，编号可点
+  // 概览：与桌面一样只有控制台四类计数和现状，点计数到控制台那一类；受阻事项、时间线不再出现
   await tapId('manager-tab:overview')
   await wait('[data-testid="manager-overview"]')
   assert.ok(
     await read(
-      "['wait','done'].every(k=>document.querySelector(`[data-testid=\"manager-stat:${k}\"]`)) && !document.querySelector('[data-testid=\"manager-stat:lines\"]')",
+      "['decision','request','report','suggestion'].every(k=>document.querySelector(`[data-testid=\"overview-count:${k}\"]`)) && document.querySelector('[data-testid=\"overview-situation\"]') && !document.querySelector('[data-testid^=\"overview-blocked\"],[data-testid^=\"manager-activity\"],[data-testid^=\"manager-stat\"]')",
     ),
-    '概览数字与桌面一致',
+    '概览只有控制台四类计数和现状',
   )
-  assert.ok(
-    await read(
-      "document.querySelector('[data-testid=\"overview-blocked:I-2\"]').innerText.includes('等待决策')",
-    ),
-    '受阻事项写明等待决策',
-  )
-  await tapId('overview-blocked:I-2:D-15')
-  await wait('[data-testid="manager-issue:D-15"]')
-  assert.equal(await checked('manager-category:decision'), 'true', '编号跳到决策')
-  await tapId('manager-tab:overview')
-  await tapId('manager-stat:wait')
+  await tapId('overview-count:request')
   await wait('[data-testid="manager-issue-order"]')
+  assert.equal(await checked('manager-category:request'), 'true', '计数跳到请你做')
   // 比应用旧的设备服务（本机在跑旧版）：页顶写明哪些不可用、去设备详情升级；入口禁用并写原因，答复照常
   await call('Page.navigate', {
     url: url.replace('scene=manager-console', 'scene=manager-old-device'),
