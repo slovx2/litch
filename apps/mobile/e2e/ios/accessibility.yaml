@@ -1,0 +1,28 @@
+# 断言的是原生无障碍树里的回答正文；不能用空 answer 容器或截图代替。
+appId: dev.litch.app.dev
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- openLink: litch-dev://open?session=s3&device=local
+- extendedWaitUntil:
+    visible:
+      text: '(?s).*(This is a placeholder answer from the mock core|这是模拟核心给的占位回答).*'
+    timeout: 20000
+- longPressOn:
+    text: '(?s).*(This is a placeholder answer from the mock core|这是模拟核心给的占位回答).*'
+- assertVisible:
+    id: menu:copy-answer
+- tapOn:
+    id: menu:copy-answer
+- runFlow:
+    file: ../_shared/read-clipboard.yaml
+    env:
+      ACTION: read
+- assertTrue: ${output.clipboard.includes('placeholder answer') || output.clipboard.includes('占位回答')}
+- tapOn:
+    id: turn-menu
+- assertVisible:
+    id: menu:copy-answer

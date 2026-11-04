@@ -1,6 +1,9 @@
 {
-  "platforms": ["android"],
+  "platforms": ["android", "apple"],
   "android": {
     "modules": ["dev.litch.update.LitchUpdateModule"]
+  },
+  "apple": {
+    "modules": ["LitchUpdateModule"]
   }
 }

@@ -1,6 +1,6 @@
-# Phones (Android app, pairing by QR code)
+# Phones (Android and iOS, pairing by QR code)
 
-The Litch Android app connects over SSH to the same machines. Instead of copying keys by hand, a
+The Litch phone app connects over SSH to the same machines. Instead of copying keys by hand, a
 device the desktop already reaches can be added to the phone by scanning a QR code: the phone creates
 its own key, enrolls it on that machine, and the user confirms a matching code on the computer. The
 computer's keys never leave it, and each phone can be revoked on its own. Remote adapter 0.12.0 or
@@ -19,7 +19,7 @@ later.
 
 You can only open the dialog. Then the user:
 
-1. In the Android app: Add device → Scan to add, and scans the code (or pastes "Copy pairing text").
+1. In the phone app: Add device → Scan to add, and scan the code (or paste "Copy pairing text").
 2. On the computer, Litch shows "Phone '…' wants to pair" with a 6-digit code; if it matches the phone,
    the user clicks Allow.
 
@@ -90,6 +90,14 @@ battery use to keep connections in the background. The Standard battery optimiza
 only Android's exemption list, not every manufacturer's background permission.
 This section is hidden on iOS. These are phone settings; desktop `litch config` cannot change them.
 
+## iOS 后台连接与更新
+
+iOS 在五分钟期限或系统允许的后台执行时间先到期时关闭 SSH 连接，并暂停重连。
+返回 Litch 后恢复连接；断开期间电脑上的任务继续运行。Litch 不申请后台常驻。
+
+iOS 不能安装下载的 APK。设置页提示通过安装应用的 App Store 或 TestFlight 更新，开发包需重新构建安装。
+iOS 不运行 Android 更新清单检查、下载或安装流程，也不显示自动检查与安装权限开关。
+
 ## In a session on the phone
 
 手机上的运行记号会缓慢呼吸：会话列表（含首页最近会话、经理与工作线、子会话）、会话中的活动行、
@@ -154,7 +162,7 @@ or global Suggestions entry; it keeps its per-session suggestion list (`managers
   Tap the chip to change the note. Done leaves selecting. Comment, rename and message-edit dialogs,
   workspace forms and searchable pickers keep their content above the keyboard; long dialogs scroll
   within the available space, and buttons can be tapped while the keyboard is open.
-- **Updates**: the phone checks the GitHub release feed and shows a bar on the device and session lists;
+- **Android updates**: the phone checks the GitHub release feed and shows a bar on the device and session lists;
   the user taps Update, then confirms the system installer. If it says the new version is signed
   differently, the installed build was not a release build (for example one installed for testing):
   uninstall it and install the release APK once (this clears the phone app's data; devices must be added

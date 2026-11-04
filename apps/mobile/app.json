@@ -41,6 +41,20 @@
         }
       ]
     ],
-    "icon": "./assets/icon.png"
+    "icon": "./assets/icon.png",
+    "ios": {
+      "bundleIdentifier": "dev.litch.app",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Litch connects to your computers over SSH on your local network.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
+    "locales": {
+      "en": "./locales/ios-en.json",
+      "zh-Hans": "./locales/ios-zh-Hans.json"
+    }
   }
 }

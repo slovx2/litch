@@ -6,5 +6,6 @@ module.exports = ({ config }) =>
         name: 'Litch Dev',
         scheme: 'litch-dev',
         android: { ...config.android, package: 'dev.litch.app.dev' },
+        ios: { ...config.ios, bundleIdentifier: 'dev.litch.app.dev' },
       }
     : config

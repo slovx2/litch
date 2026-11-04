@@ -59,7 +59,7 @@ function serve(
   const [uiPort, corePort] = createPortPair()
   const unserve = serveChannel(corePort, core, { clock })
   const channel = connectChannel(uiPort)
-  const unwatch = Platform.OS === 'android' && pause ? watchConnections(pause) : () => {}
+  const unwatch = Platform.OS !== 'web' && pause ? watchConnections(pause) : () => {}
   start?.()
   return {
     channel,

@@ -1,6 +1,6 @@
 // 设置页“关于”里和更新有关的几行：眼下的更新状态、失败原因（失败只在这里说，不弹窗）、“检查更新”和“更新/安装”按钮、
 // “自动检查更新”开关（记在 prefs.autoUpdate）。状态从 src/update/store.ts 来。
-import { StyleSheet, Switch, Text, View } from 'react-native'
+import { Platform, StyleSheet, Switch, Text, View } from 'react-native'
 import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
@@ -15,6 +15,13 @@ export function UpdateStatus() {
   const { c } = theme
   const t = useT()
   const small = { fontSize: theme.font.size.meta, lineHeight: theme.font.size.meta + 5 }
+  if (Platform.OS === 'ios') {
+    return (
+      <Text testID="update:ios" style={[small, { color: c.ink2 }]}>
+        {t('update.ios')}
+      </Text>
+    )
+  }
   let line: string
   switch (state.phase) {
     case 'idle':
@@ -97,6 +104,7 @@ export function AutoUpdateSwitch() {
   const theme = useTheme()
   const { c } = theme
   const t = useT()
+  if (Platform.OS === 'ios') return null
   return (
     <View>
       <View

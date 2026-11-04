@@ -14,7 +14,7 @@ import {
   updateFor,
 } from '@litch/core'
 import { Directory, File, Paths } from 'expo-file-system'
-import { AppState } from 'react-native'
+import { AppState, Platform } from 'react-native'
 import app from '../../app.json'
 import { updater } from '../../modules/litch-update/src'
 import { feedOverride, onFeedOverride } from './override'
@@ -143,6 +143,7 @@ let checking: Promise<void> | null = null
 
 /** 查一次。正在下的时候不查；横条上有东西（有新版本、已下好、人点了更新后失败）时查的过程不把横条收起来 */
 export function checkForUpdate(): Promise<void> {
+  if (Platform.OS === 'ios') return Promise.resolve()
   if (snapshot.state.phase === 'downloading') return Promise.resolve()
   if (checking) return checking
   checking = (async () => {
@@ -189,6 +190,7 @@ export function checkForUpdate(): Promise<void> {
 
 /** 人点了“更新”（或下载断了之后点“重试”）：下到缓存目录、对大小和 SHA-256、看包名和签名，都对了就拉起系统安装器 */
 export async function downloadUpdate(): Promise<void> {
+  if (Platform.OS === 'ios') return
   const { state, offer } = snapshot
   if (state.phase === 'ready') return installUpdate()
   const retry = state.phase === 'failed' && state.reason === 'download'
@@ -249,6 +251,7 @@ export async function downloadUpdate(): Promise<void> {
 
 /** 拉起系统安装器；还没允许“安装未知应用”就先打开那一页设置，回到应用时接着装 */
 export function installUpdate(): void {
+  if (Platform.OS === 'ios') return
   const { state, apk, offer } = snapshot
   if (state.phase !== 'ready' || !apk) return
   try {
@@ -275,6 +278,7 @@ export function dismissFailure(): void {
  * 回到前台时还顺手接着装（刚从设置里允许了“安装未知应用”回来）。返回停下的函数
  */
 export function startUpdateSchedule(auto: () => boolean): () => void {
+  if (Platform.OS === 'ios') return () => {}
   // 启动时缓存里的安装包都是上一回的：装上了就没用了，没装上的下次再下
   if (snapshot.state.phase === 'idle') {
     try {

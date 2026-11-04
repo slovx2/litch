@@ -2,6 +2,8 @@
 import type { Entry } from '../../../../../packages/ui/src/i18n/types.ts'
 
 export const zhCN = {
+  'update.ios':
+    'iOS 不支持在应用内安装更新包。请通过安装此应用的 App Store 或 TestFlight 更新；开发版本需重新构建安装。',
   'update.banner.available': '有新版本 {version}',
   'update.banner.downloading': '正在下载 {version}',
   'update.banner.ready': '新版本 {version} 已下载',
@@ -35,6 +37,8 @@ export const zhCN = {
 } satisfies Record<`update.${string}`, Entry>
 
 export const en: Record<keyof typeof zhCN, Entry> = {
+  'update.ios':
+    'iOS updates cannot be installed in the app. Update through the App Store or TestFlight where you installed Litch. Development builds must be rebuilt and installed.',
   'update.banner.available': 'Version {version} is available',
   'update.banner.downloading': 'Downloading {version}',
   'update.banner.ready': 'Version {version} is downloaded',

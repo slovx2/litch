@@ -1,0 +1,51 @@
+# iOS 设置、中英切换、浅深两色和更新提示。
+appId: dev.litch.app.dev
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- scrollUntilVisible:
+    element:
+      id: devices:settings
+    direction: UP
+- tapOn:
+    id: devices:settings
+- tapOn:
+    id: settings:lang
+- tapOn:
+    id: settings:lang:zh-CN
+- assertVisible: 设置
+- tapOn:
+    id: settings:appearance
+- tapOn:
+    id: settings:appearance:dark
+- assertVisible:
+    id: settings:appearance
+    text: '.*深色.*'
+- tapOn:
+    id: settings:appearance
+- tapOn:
+    id: settings:appearance:light
+- assertVisible:
+    id: settings:appearance
+    text: '.*浅色.*'
+- tapOn:
+    id: settings:lang
+- tapOn:
+    id: settings:lang:en
+- assertVisible: Settings
+- scrollUntilVisible:
+    element:
+      id: update:ios
+    direction: DOWN
+- assertVisible:
+    id: update:ios
+    text: '.*App Store.*TestFlight.*'
+- assertNotVisible:
+    id: update:check
+- assertNotVisible:
+    id: update:auto
+- assertNotVisible:
+    id: settings:connection

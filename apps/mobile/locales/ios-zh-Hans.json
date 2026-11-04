@@ -1,0 +1,9 @@
+{
+  "ios": {
+    "NSLocalNetworkUsageDescription": "Litch 通过本地网络上的 SSH 连接您的电脑。",
+    "NSCameraUsageDescription": "Litch 使用相机扫描电脑上的配对码。",
+    "NSPhotoLibraryUsageDescription": "Litch 访问您选择的照片，以添加到消息中。",
+    "NSPhotoLibraryAddUsageDescription": "在您选择保存图片时，Litch 将图片保存到照片图库。",
+    "NSFaceIDUsageDescription": "Litch 使用面容 ID 确认您对电脑登录请求的批准。"
+  }
+}

@@ -15,6 +15,7 @@ import { memo, useEffect, useMemo, useState } from 'react'
 import {
   Image,
   type LayoutChangeEvent,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -342,6 +343,8 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
   return (
     <View>
       <Pressable
+        // Markdown 原生层提供段落与链接的读屏元素；外层合并会让 iOS 只剩一个没有文字的节点。
+        accessible={Platform.OS === 'ios' ? false : undefined}
         // 选字时这一层不接触摸：Pressable 一拿到 JS 的触摸响应，RN 就让它这一层拦下之后的移动事件，
         // 手指稍一抖，里面的文字就收到取消，系统的长按选字起不来（只有一点不动的长按才行）
         disabled={selecting}

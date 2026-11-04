@@ -1,0 +1,83 @@
+# 只用隔离 sshd 的参数；KEY 来自 fixture.mjs，不能传真实用户私钥。
+appId: dev.litch.app.dev
+---
+- launchApp:
+    clearState: true
+    stopApp: true
+- extendedWaitUntil:
+    visible:
+      id: devices
+    timeout: 30000
+- openLink: litch-dev://remote?adapter=${ADAPTER}&env=LITCH_FX_MODE=svc
+- tapOn:
+    id: devices:settings
+- scrollUntilVisible:
+    element:
+      id: update:ios
+    direction: DOWN
+- assertVisible:
+    id: update:ios
+- assertNotVisible:
+    id: update:check
+- assertNotVisible:
+    id: update:auto
+- openLink: litch-dev://home
+- tapOn:
+    id: devices:empty:add
+- tapOn:
+    id: add:host
+- inputText: 127.0.0.1
+- tapOn:
+    id: add:port
+- eraseText
+- inputText: ${PORT}
+- tapOn:
+    id: add:user
+- inputText: ${USER}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: key:import
+    direction: DOWN
+- tapOn:
+    id: key:import
+- tapOn:
+    id: key:paste
+- inputText: ${KEY}
+# 多行私钥的回车是换行；保持键盘展开，验证能滚动到导入按钮并直接提交。
+- scrollUntilVisible:
+    element:
+      id: key:doImport
+    direction: DOWN
+- tapOn:
+    id: key:doImport
+- extendedWaitUntil:
+    visible:
+      id: key:copy
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: add:check
+    direction: DOWN
+- tapOn:
+    id: add:check
+- extendedWaitUntil:
+    visible: 'Trust|信任'
+    timeout: 20000
+- tapOn: 'Trust|信任'
+- extendedWaitUntil:
+    visible:
+      id: check:service
+    timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: add:submit
+    direction: DOWN
+- tapOn:
+    id: add:submit
+- extendedWaitUntil:
+    visible:
+      id: sessions:list
+    timeout: 90000
+- assertNotVisible:
+    id: sessions:failure

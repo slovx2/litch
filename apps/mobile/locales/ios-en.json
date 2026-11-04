@@ -1,0 +1,9 @@
+{
+  "ios": {
+    "NSLocalNetworkUsageDescription": "Litch connects to your computers over SSH on your local network.",
+    "NSCameraUsageDescription": "Litch uses the camera to scan the pairing code on your computer.",
+    "NSPhotoLibraryUsageDescription": "Litch accesses selected photos to attach them to your messages.",
+    "NSPhotoLibraryAddUsageDescription": "Litch saves images to your photo library when you choose to save them.",
+    "NSFaceIDUsageDescription": "Litch uses Face ID to confirm sign-in approvals for your computer."
+  }
+}
