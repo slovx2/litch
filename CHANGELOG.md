@@ -5,6 +5,12 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 0.31.1（2026-11-04）
+
+- 决策卡收起时显示草稿摘要和状态，提交条固定在列表底部，手机也能批量提交。
+- 从“最近”打开经理对话不再跳到经理页，切换导航树不改变正在看的会话。
+- 修复切换导航树时可能取消正在打开的会话的问题。
+
 ## 0.31.0（2026-11-04）
 
 - “请你做”等控制台卡片改为原地展开，整张卡头都可点击。
