@@ -358,6 +358,11 @@ async function measure(
     return runSettingsChecks(window, mode, hooks)
   }
   if (mode === 'scroll') {
+    // 只给隔离滚动探针降速，复查慢机器上的布局与滚动事件顺序。
+    window.webContents.debugger.attach('1.3')
+    await window.webContents.debugger.sendCommand('Emulation.setCPUThrottlingRate', {
+      rate: Number(process.env.LITCH_SCROLL_CPU ?? '1'),
+    })
     const result = await runInPage(window, scrollProbe)
     // 命令输出很长的那一段接在后面，在同一个窗口里接着量。两个进程的内存只报数
     const before = processMemory(window)

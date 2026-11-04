@@ -591,8 +591,16 @@ export function useTranscriptScroll(
       // 滚动容器是几个会话共用的，上一个会话滚到哪儿还留着：没有记录就回到底部
       scroller.scrollTop = 0
     } else if (target) {
+      // 跳过排版的回合还只有占位高度，直接量内部的结尾会读到溢出占位框的坐标，
+      // 把恢复方向算反并夹到最底部。先把目标回合按真实高度排版，再量原文偏移。
+      const turn = target.closest('.turn')
+      turn?.setAttribute('data-scroll-restore', '')
       const viewTop = scroller.getBoundingClientRect().top
       scroller.scrollTop += target.getBoundingClientRect().top - viewTop - state.offset
+      // 经过一次绘制才让 content-visibility 接管，保证 auto 占位已经记住真实高度。
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => turn?.removeAttribute('data-scroll-restore')),
+      )
       // 滚到目标后，附近原本在屏外的回合才会取得真实高度，暂时守住这条原文。
       if (content.hasAttribute('data-windowed'))
         steadyOn({

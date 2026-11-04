@@ -309,6 +309,7 @@ const child = spawn(usePacked ? packedBinary() : electron, usePacked ? [] : [app
     CODEX_HOME: join(profile, 'codex'),
     CLAUDE_CONFIG_DIR: join(profile, 'claude'),
     LITCH_SMOKE: mode,
+    LITCH_SCROLL_CPU: process.env.LITCH_SCROLL_CPU ?? '1',
     LITCH_PROFILE: profile,
     // 上手功能：本机一个 harness 都没装的开局，首启引导照第一次启动那样出
     ...(probe === 'onboard' ? { LITCH_MOCK_SCENE: 'fresh', LITCH_ONBOARDING: '1' } : {}),

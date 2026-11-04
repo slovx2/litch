@@ -1,4 +1,9 @@
 {
   "extends": "../tsconfig.json",
-  "include": ["../src/**/*.ts", "../src/**/*.tsx", "live-process-fixture.tsx"]
+  "include": [
+    "../src/**/*.ts",
+    "../src/**/*.tsx",
+    "live-process-fixture.tsx",
+    "scroll-restore-fixture.tsx"
+  ]
 }

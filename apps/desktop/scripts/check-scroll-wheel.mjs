@@ -2,7 +2,7 @@
 // 先构建 UI。隐藏窗口、隔离 HOME、模拟核心；不连接真实设备。可用 LITCH_WHEEL_RESULT 保存测量结果。
 // LITCH_WHEEL_CPU=4 可在渲染进程中降速，复查绘制与取样的先后顺序。
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -12,6 +12,13 @@ import { fixtureEnvironment } from '../../../scripts/fixture-environment.mjs'
 
 const require = createRequire(import.meta.url)
 if (!process.versions.electron) {
+  execFileSync(
+    process.execPath,
+    [fileURLToPath(new URL('./check-scroll-restore.mjs', import.meta.url))],
+    {
+      stdio: 'inherit',
+    },
+  )
   const { preview } = await import('../../../packages/ui/node_modules/vite/dist/node/index.js')
   const scratch = mkdtempSync(join(tmpdir(), 'litch-scroll-wheel-'))
   const server = await preview({
@@ -91,7 +98,7 @@ if (!process.versions.electron) {
           const departed = await run(async () => {
             const p = window.wheelCheck
             await p.sleep(80)
-            const departed = p.mark()
+            const departed = await p.frameMark()
             await p.open(p.small)
             await p.sleep(100)
             p.row(p.large).click()
@@ -106,21 +113,23 @@ if (!process.versions.electron) {
           // aria-busy 只表示锚点所在的回合已挂载。content-visibility 的占位高度要到
           // 本帧布局、ResizeObserver 补偿后才成为画面；不能把尚未绘制的几何当作轻滚基线。
           // 只跨过首次绘制，不轮询到位置稳定；首帧恢复错了仍必须失败。
-          const restored = await run(async (anchor) => {
-            await new Promise((done) => requestAnimationFrame(() => setTimeout(done, 0)))
-            return window.wheelCheck.mark(anchor)
-          }, departed.anchor)
+          const restored = await run(
+            (anchor) => window.wheelCheck.frameMark(anchor),
+            departed.anchor,
+          )
           const restoreDrift = Math.abs(restored.offset - departed.offset)
           assert.ok(
             restoreDrift <= 3,
             `切回首帧原文移动了 ${restoreDrift}px：${JSON.stringify({ departed, restored })}`,
           )
           await run((delay) => window.wheelCheck.sleep(delay), delay)
-          const before = await run(() => window.wheelCheck.mark())
+          // 状态行在切回后延迟出现，会先增加 34px，再由 ResizeObserver 在上屏前补偿。
+          // 计时器结束时直接量可能恰好读到这段未绘制的位移，误报成滚轮多滚了 34px。
+          const before = await run(() => window.wheelCheck.frameMark())
           const deltaX = [0, 40, 64][round]
           await wheel(-48, deltaX)
           await run(() => window.wheelCheck.sleep(350))
-          const after = await run((anchor) => window.wheelCheck.mark(anchor), before.anchor)
+          const after = await run((anchor) => window.wheelCheck.frameMark(anchor), before.anchor)
           const drift = Math.abs(after.offset - before.offset - 48)
           const result = {
             round,
@@ -407,7 +416,19 @@ async function install() {
       turns: scroller.querySelectorAll('.turn').length,
     }
   }
-  window.wheelCheck = { sleep, until, row, open, say, mark, large, small }
+  // 新观察器必定收到下一次布局通知，且排在产品的尺寸补偿之后。必须在回调内取样：
+  // rAF 后的 setTimeout 与 React 提交交错时，回调外再量仍可能读到下一次补偿前的几何。
+  const frameMark = (anchor) =>
+    new Promise((resolve) => {
+      const observer = new ResizeObserver(() => {
+        observer.disconnect()
+        const sample = mark(anchor)
+        // 数值在通知内保存，后续切会话等操作则放到绘制后，避免在尺寸通知中再改 DOM。
+        setTimeout(() => resolve(sample), 0)
+      })
+      observer.observe(document.querySelector('.tr'))
+    })
+  window.wheelCheck = { sleep, until, row, open, say, mark, frameMark, large, small }
   await until(() => row(large))
   window.__litchLook.set({ skin: 'retro', chatText: 1.2, treeText: 1.2 })
   await open(large)

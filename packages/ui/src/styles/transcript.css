@@ -73,6 +73,9 @@
   content-visibility: auto;
   contain-intrinsic-block-size: auto 400px;
 }
+.tr[data-windowed] > .turn[data-scroll-restore] {
+  content-visibility: visible;
+}
 .mini {
   align-self: flex-start;
   height: calc(14px * var(--fs) + 8px);

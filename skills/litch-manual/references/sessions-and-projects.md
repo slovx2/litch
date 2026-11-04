@@ -222,6 +222,7 @@ original flow. Delegated answers leave an audit record in the child conversation
 Long desktop conversations load their history progressively so the sidebar stays responsive.
 When returning to an earlier reading position, the transcript briefly shows a loading message
 while restoring it. You can select another conversation during that time.
+切回长会话时，即使阅读位置落在部分露出的回合结尾、前面的长正文尚未排版，首个显示帧也保持离开前的位置。
 Scrolling while earlier turns are being filled in keeps your reading position; code blocks and
 other inner scroll areas retain their own scrolling.
 
