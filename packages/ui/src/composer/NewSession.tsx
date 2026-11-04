@@ -40,7 +40,11 @@ import {
   rememberPlace,
   useNewHarness,
 } from './remembered.ts'
-import { useComposeOptions, useNewSessionDefaults } from './SettingsBar.tsx'
+import {
+  prepareSessionComposeOptions,
+  useComposeOptions,
+  useNewSessionDefaults,
+} from './SettingsBar.tsx'
 import { rememberSubmitted } from './submitted-history.ts'
 import { useBranches } from './useBranches.ts'
 import { useDevices } from './useNewPlace.ts'
@@ -430,6 +434,13 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
           done()
         }
       })
+      // 会话能力可能覆盖新建页的 harness 能力，必须问新会话，不能沿用新建页的清单。
+      await prepareSessionComposeOptions(
+        { channel, replica },
+        deviceId,
+        sessionId,
+        AbortSignal.timeout(HANDOVER_MS),
+      )
       // 建会话的时候又写了、没收的那些（文字、图片、附带项、评论片）带进新会话的输入框，不自动发；新建页清空
       moveDraft('new', `${deviceId}:${sessionId}`)
       onCreated({ deviceId, sessionId })

@@ -91,6 +91,35 @@ test('会不会计划模式：聚合面上各 harness 各问各的', async () =>
   assert.deepEqual(asked, [{ harness: 'cc' }, { harness: 'plain' }])
 })
 
+test('会话的计划能力明确覆盖 harness，未声明的会话才问 harness 的协作模式清单', async () => {
+  for (const runtimePlan of [true, false]) {
+    const threads = [true, false, undefined].map((planMode, index) => {
+      const value = thread({ id: `plan-${index}`, turns: [] })
+      return planMode === undefined
+        ? value
+        : Object.assign(value, { litchCapabilities: { models: [], planMode } })
+    })
+    const world = deviceWorld([harness('agy', { threads })], {
+      extra: { 'collaborationMode/list': () => modes(...(runtimePlan ? ['plan'] : [])) },
+    })
+    world.core.start()
+    await settle()
+    const plan = async (sessionId: string | undefined) =>
+      (
+        (await world.command('device.composeOptions', {
+          harness: 'agy',
+          ...(sessionId ? { sessionId } : {}),
+        })) as ComposeOptions
+      ).plan
+    assert.equal(await plan('plan-0'), true)
+    assert.equal(await plan('plan-1'), false)
+    assert.equal(world.sent('collaborationMode/list').length, 0)
+    assert.equal(await plan('plan-2'), runtimePlan)
+    assert.equal(await plan(undefined), runtimePlan, '新建页没有会话时仍按 harness 查询')
+    assert.deepEqual(world.sent('collaborationMode/list'), [{ harness: 'agy' }, { harness: 'agy' }])
+  }
+})
+
 test('握手时声明了计划确认：Claude Code 和 Pi 交计划时由引擎在回合里问，界面不再问一次', async () => {
   const world = setup()
   world.core.start()

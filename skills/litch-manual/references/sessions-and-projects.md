@@ -250,6 +250,7 @@ explain it:
   (Read only / In project / Full access, or the harness's own presets) and optionally turn on the
   Plan mode switch → send the
   first message. `scripts/litch open new` brings the user to this page.
+  新建页开启的计划模式用于新会话的第一条消息。进入会话时按该会话的能力显示对话参数；会话未单独声明能力时沿用 harness 的能力。
 - **Worktrees**: on the New session page, when the project folder is in a git repository on a device
   that supports worktrees, "Where" offers Local (the project folder) or New worktree. A new worktree is
   created by the device service with its own branch (named from the first line of the message), so the

@@ -13,14 +13,47 @@ import {
 import { useEffect, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { downHarness } from '../app/device.ts'
-import { useKey, useServices } from '../app/services.tsx'
+import { type Services, useKey, useServices } from '../app/services.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 import { EFFORT_TEXT } from './efforts.ts'
 import { Picker, type PickerOption } from './Picker.tsx'
 import { type ProjectPermissionController, useProjectPermission } from './project-permission.ts'
 
-/** 问过的记着，切会话时底栏不用等一下才出来。一台设备上每个 harness 各记各的 */
+/** 按设备、harness、会话和设置版本缓存，不能把同一 harness 的不同后端混在一起。 */
 const known = new Map<string, ComposeOptions>()
+
+function composeOptionsKey(
+  deviceId: string,
+  harness: string | undefined,
+  sessionId: string | undefined,
+  settings: SessionSettings | undefined,
+  meta: SessionMeta | undefined,
+): string {
+  return `${deviceId}\n${harness ?? ''}\n${sessionId ?? ''}\n${JSON.stringify([settings, meta?.can])}`
+}
+
+/** 新会话内容已订阅后，切页前取好它自己的选择器；失败不影响已经建成的会话。 */
+export async function prepareSessionComposeOptions(
+  { channel, replica }: Pick<Services, 'channel' | 'replica'>,
+  deviceId: string,
+  sessionId: string,
+  signal: AbortSignal,
+): Promise<void> {
+  const meta = replica.store.get<SessionMeta>(keys.session(deviceId, sessionId))
+  if (!meta) return
+  const settings = replica.store.get<SessionSettings>(keys.settings(deviceId, sessionId))
+  const key = composeOptionsKey(deviceId, meta.harness, sessionId, settings, meta)
+  try {
+    const value = await channel.command(
+      'device.composeOptions',
+      { deviceId, harness: meta.harness, sessionId },
+      { signal },
+    )
+    known.set(key, value)
+  } catch {
+    // 进入会话后照常重问，不把选择器加载失败报成新建失败。
+  }
+}
 
 /**
  * 在这台设备的这个 harness 上发消息时能选什么。一台设备上有几个 harness 时各问各的：
@@ -38,8 +71,7 @@ export function useComposeOptions(
   const reachable = device?.connection === 'online' && !downHarness(device, harness)
   const meta = useKey<SessionMeta>(sessionId ? keys.session(deviceId, sessionId) : '')
   const settings = useKey<SessionSettings>(sessionId ? keys.settings(deviceId, sessionId) : '')
-  const revision = JSON.stringify([settings, meta?.can])
-  const key = `${deviceId}\n${harness ?? ''}\n${sessionId ?? ''}\n${revision}`
+  const key = composeOptionsKey(deviceId, harness, sessionId, settings, meta)
   const [asked, setAsked] = useState<{ key: string; value: ComposeOptions } | null>(null)
   useEffect(() => {
     if (!reachable) return
