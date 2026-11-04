@@ -36,20 +36,20 @@ test('对话和经理分别记住来源：切模式与窗口重渲染不重算�
   assert.equal(memory.rows.manager, managerRow)
 })
 
-test('模式切换保留未选中状态；跨模式点击恢复来源模式的原行，目标模式独立定位', () => {
+test('模式切换保留未选中状态；等待打开时切树不撤回来源行', () => {
   let memory = navigateRows(rowMemory('chat'), 'chat', session, false)
   memory = navigateRows(memory, 'manager', null, false)
   memory = navigateRows(memory, 'chat', session, false)
   assert.equal(memory.rows.chat, null)
   const manager = { ...session, sessionId: 'manager' }
   memory = navigateRows(clickedRow(memory, 'chat', manager, 'recent'), 'manager', manager, true)
-  assert.equal(memory.rows.chat, null)
+  assert.deepEqual(memory.rows.chat, { ...manager, source: 'recent' })
   assert.equal(memory.rows.manager.source, 'tree')
-  memory = navigateRows(memory, 'chat', session, true)
-  assert.equal(memory.rows.chat, null)
+  memory = navigateRows(memory, 'chat', manager, true)
+  assert.deepEqual(memory.rows.chat, { ...manager, source: 'recent' })
 })
 
-test('最近打开经理后切回普通对话，正文与高亮均恢复原会话的最近行', () => {
+test('最近打开经理后切树再切回，高亮仍是该经理的最近行', () => {
   const manager = { ...session, sessionId: 'manager' }
   let memory = navigateRows(
     clickedRow(rowMemory('chat'), 'chat', session, 'recent'),
@@ -57,10 +57,10 @@ test('最近打开经理后切回普通对话，正文与高亮均恢复原会�
     session,
     true,
   )
-  memory = navigateRows(clickedRow(memory, 'chat', manager, 'recent'), 'manager', manager, true)
-  assert.deepEqual(memory.rows.chat, recent)
-  memory = navigateRows(memory, 'chat', session, true)
-  assert.deepEqual(memory.rows.chat, recent)
+  memory = navigateRows(clickedRow(memory, 'chat', manager, 'recent'), 'chat', manager, true)
+  memory = navigateRows(memory, 'manager', manager, true)
+  memory = navigateRows(memory, 'chat', manager, true)
+  assert.deepEqual(memory.rows.chat, { ...manager, source: 'recent' })
   assert.equal(memory.request, null)
 })
 

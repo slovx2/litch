@@ -48,8 +48,8 @@ On desktop and phone, `@` searches unarchived conversations, sub-sessions, manag
 
 桌面「对话」视图在各设备前显示「未读」「最近」，两组可独立收起。
 点击会话时只高亮实际点击的那一行；同一会话在其他投影和对话树中的副本不高亮。上下方向键与读屏当前项跟随这一行。
-对话与经理模式各自记住选中位置；切换模式、切换窗口或列表重绘不会把投影选择移回设备树。
-Chat and manager modes remember their selected rows separately. Switching modes or windows does not move a projection selection to the device tree.
+对话与经理是两棵导航树，右侧只显示最后点开的会话。切树不换会话、不关闭侧面板或看板，也不取消正在等待身份确认的打开；再点另一个会话才替换上次选择。两棵树各自记住行来源，切回同一会话时不会把最近或未读中的选中行移到设备树。
+Chat and Managers are navigation trees. The content follows the last conversation you opened. Switching trees keeps the conversation, panels and pending open request. Selecting another conversation replaces the previous request. Each tree preserves the selected row's source.
 刷新列表、排序或新增副本不会转移选择；选中的投影项移除后，选择回到同一会话的对话树行。
 Only the clicked row is selected, including for keyboard navigation and screen readers. Other copies stay unselected.
 List updates preserve the selected location; removing that projection item selects the same conversation in the tree.
@@ -68,10 +68,10 @@ Opening a child keeps its whole tree in the Unread group, at the same position a
 经理也进入最近和未读。工作线及其后代归入所属经理，不单独列为主项；桌面默认收在“› N 个子会话”下，可展开。
 桌面上经理主项的记号列多一个细框（人文外观是圆圈），状态记号照常画在框里，读屏念“经理”；和侧栏经理一节的经理行同一画法。
 经理和普通对话一样：前台连续查看满 5 秒、或成功发送、答复、追问等操作进入最近；新结果沿用未读标记。读取、标记已读、失败或未受理的操作不计入最近。
-从最近、未读、搜索、通知或会话链接打开经理，均进入与经理目录相同的工作台（含看板）；手机也相同。工作线和普通子会话仍打开普通对话。身份尚未确认时等待目录或摘要，不先展示普通对话。经理模式仍不显示这两组。
+从最近、未读、搜索、通知或会话链接打开经理，均进入与经理目录相同的工作台（含看板）；桌面保留当前导航树，最近或未读中的直接点击保留该行选中。手机也打开完整工作台，返回一次回到来源页，不经过经理目录。工作线和普通子会话仍打开普通对话。身份尚未确认时等待目录或摘要，不先展示普通对话。经理树仍不显示这两组。
 Managers also appear in Recent and Unread. Their worklines are grouped beneath the manager and collapsed by default on desktop.
 Viewing a manager for five continuous foreground seconds or completing an explicit action records a recent interaction. Reading, marking read, failed and rejected actions do not.
-Opening a manager from Recent, Unread, search, a notification or a session link opens the same workbench and board as the Managers directory, on desktop and phone. Worklines and ordinary children keep their conversation view. Opening waits for session identity when needed. The projection groups remain hidden in manager mode.
+Opening a manager from Recent, Unread, search, a notification or a session link opens the same workbench and board as the Managers directory. Desktop keeps the current navigation tree and the clicked Recent or Unread row. On phone, Back returns directly to the source page without visiting the Managers directory. Worklines and ordinary children keep their conversation view. Opening waits for session identity when needed. The projection groups remain hidden in the Managers tree.
 
 手机首页在定时任务入口之后、各台设备之前显示「最近」，规则与桌面相同：应用在前台、会话页正显示该会话时连续停留满 5 秒才记录；
 切到后台、锁屏、下拉通知中心或离开会话页（回到列表、打开终端、文件、子代理页等）都会清零。在手机上发送、批准、停止等操作立即记录。
@@ -176,10 +176,10 @@ ancestor is revealed. Archived previews do not select a sidebar row.
 With this option off, opening a conversation still selects its existing row but does not expand
 groups or scroll the tree. Back/Forward navigation and notifications follow the same option.
 
-Chat and Managers remember separate open sessions/pages/panels until the app closes. Opening from
-an external entry switches to the session's owning view (manager and worklines → Managers, ordinary
-sessions → Chat) without overwriting the other view's location. Removed managers and archived or
-deleted sessions are not restored. These navigation behaviors have no setting to turn off.
+Chat and Managers only switch the sidebar tree. They share the same current session or page;
+switching trees leaves the content, panels and pending session opening unchanged. External entries
+also keep the current tree. Managers always open their full workbench, regardless of entry.
+Back/Forward changes the content without switching trees. Archived or deleted sessions are not restored.
 Managers and the global suggestion list: see [Managers and suggested tasks](managers-and-suggestions.md).
 
 直接点击侧栏“未读”“最近”中的经理时，进入经理工作台；工作线仍在原视图打开普通对话。

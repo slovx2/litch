@@ -12,7 +12,7 @@ export interface RowMemory {
   mode: Mode
   rows: Record<Mode, RowSelection | null>
   viewed: Record<Mode, Selection | null>
-  clicked: { mode: Mode; selection: Selection; previous: RowSelection | null } | null
+  clicked: { mode: Mode; selection: Selection } | null
   request: Selection | null
 }
 
@@ -35,26 +35,24 @@ export function clickedRow(
   return {
     ...was,
     rows: { ...was.rows, [mode]: { ...selection, source } },
-    clicked: { mode, selection, previous: was.rows[mode] },
+    clicked: { mode, selection },
     request: null,
   }
 }
 
-/** 模式切换复用该模式原有的导航对象；外部重开同一会话仍会给新对象，应继续定位。 */
+/** 切树保留同一会话的行来源；外部重开同一会话仍会给新对象，应继续定位。 */
 export function navigateRows(
   was: RowMemory,
   mode: Mode,
   selection: Selection | null,
   autoLocate: boolean,
 ): RowMemory {
-  const restored = was.mode !== mode && was.viewed[mode] === selection
+  const restored =
+    was.mode !== mode && (was.viewed[mode] === selection || sameSession(was.rows[mode], selection))
   const direct =
     selection !== null && was.clicked?.mode === mode && was.clicked.selection === selection
-  // 最近里的经理会跨模式打开。来源模式仍显示原会话，返回时不能高亮刚点过的经理。
-  const rows =
-    was.clicked && was.clicked.mode !== mode
-      ? { ...was.rows, [was.clicked.mode]: was.clicked.previous }
-      : was.rows
+  // 打开仍在等待身份时也可切树，不能撤回用户刚在来源树选中的那一行。
+  const rows = was.rows
   return {
     mode,
     rows:

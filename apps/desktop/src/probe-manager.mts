@@ -88,10 +88,10 @@ export interface ManagerSeen {
   managerRestored: boolean
   lineRestored: boolean
   settingsRestored: boolean
-  createdKeepsChat: boolean
-  archivedFallback: boolean
+  createdKeepsSession: boolean
+  archivedKeepsSession: boolean
   externalChat: boolean
-  externalKeepsManager: boolean
+  externalKeepsSession: boolean
   /**
    * 比应用旧的设备服务（本机在跑旧版）：控制台顶上写明哪些不可用、去设备详情升级；忽略、追问、
    * 请你做的交付与回复、报告已阅禁用并写原因；决策答复照常能交
@@ -133,6 +133,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
         page: one('[data-manager]')?.getAttribute('data-manager'),
         title: one('.mg-title')?.textContent,
         crumb: one('.crumb')?.textContent,
+        session: one('[data-composer-session]')?.getAttribute('data-composer-session'),
         error: one('.mg-form [role="alert"]')?.textContent,
         discussionError: one('.mg-post-discussion .err')?.textContent,
         discussionEntries: document.querySelectorAll('.mg-post-timeline li').length,
@@ -148,13 +149,34 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     if (!one(`${selector} .sev-body`)) await click(`${selector} button`)
     return until(`${kind} 事件正文`, () => one(`${selector} .sev-body`))
   }
+  const ordinarySession = '[data-composer-session=\'["local","p1"]\']'
   await click('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *)')
-  await until('普通会话选中', () =>
-    one('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *).sel'),
+  // 行高亮先于身份确认；等正文真正打开后再验证侧面板和切树。
+  await until(
+    '普通会话已打开并选中',
+    () =>
+      one(ordinarySession) &&
+      one('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *).sel'),
   )
   await click('.tb-side')
   await until('会话侧面板打开', () => one('.tb-side[aria-pressed="true"]'))
   await click('[data-sidebar-mode="manager"]')
+  await until(
+    '经理树保留普通会话和侧面板',
+    () => one(ordinarySession) && one('.tb-side[aria-pressed="true"]'),
+  )
+  await click('[data-sidebar-mode="chat"]')
+  const chatRestored = Boolean(
+    await until(
+      '切回对话树保留普通会话和侧面板',
+      () =>
+        one(ordinarySession) &&
+        one('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *).sel') &&
+        one('.tb-side[aria-pressed="true"]'),
+    ),
+  )
+  await click('[data-sidebar-mode="manager"]')
+  await click('.mg-sidebar-group header .ibtn')
   const list = Boolean(await until('全部经理页', () => one('[data-manager="list"]')))
   // 列表页先出来，经理那几行是随后到的：等已结束的那一行和它的总结按钮都在了再量
   const ended = await until('已结束的经理那一行', () =>
@@ -194,13 +216,11 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('[data-act="manager-board-toggle"]')
   await click('[data-board-tab="suggestions"]')
   await click('[data-sidebar-mode="chat"]')
-  const chatRestored = Boolean(
-    await until(
-      '切回普通会话和侧面板',
-      () =>
-        one('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *).sel') &&
-        one('.tb-side[aria-pressed="true"]'),
-    ),
+  await until(
+    '对话树保留当前经理和看板页签',
+    () =>
+      one('[data-manager="session"][data-manager-id="m1"]') &&
+      one('[data-board-tab="suggestions"][aria-pressed="true"]'),
   )
   await click('[data-sidebar-mode="manager"]')
   const managerRestored = Boolean(
@@ -216,30 +236,29 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('[data-process="mp-1"] .mach-proc-meta button')
   const externalChat = Boolean(
     await until(
-      '外部入口打开普通会话并切回对话栏',
+      '外部入口打开普通会话并保留经理树',
       () =>
-        one('[data-sidebar-mode="chat"][aria-pressed="true"]') &&
-        one('[data-session="b3"]:not(.projection-group *) .ss-row:not(.projection-group *).sel'),
+        one('[data-sidebar-mode="manager"][aria-pressed="true"]') &&
+        one('[data-composer-session=\'["build","b3"]\']'),
     ),
   )
-  await click('[data-sidebar-mode="manager"]')
-  const externalKeepsManager = Boolean(
+  await click('[data-sidebar-mode="chat"]')
+  const externalKeepsSession = Boolean(
     await until(
-      '外部跳转后仍恢复原经理和页签',
+      '外部跳转后切树仍保留当前普通会话',
       () =>
-        one('[data-manager="session"][data-manager-id="m1"]') &&
-        one('[data-board-tab="suggestions"][aria-pressed="true"]'),
+        one('[data-composer-session=\'["build","b3"]\']') &&
+        one('[data-session="b3"]:not(.projection-group *) .ss-row:not(.projection-group *).sel'),
     ),
   )
   await click('[data-sidebar-mode="chat"]')
   await click('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *)')
   await click('[data-sidebar-mode="manager"]')
+  await click('[data-manager-id="m1"] .mg-pick')
   await click('[data-act="manager-settings"]')
   await until('经理设置页', () => one('[data-manager="settings"]'))
   await click('[data-sidebar-mode="chat"]')
-  await until('设置页切到对话', () =>
-    one('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *).sel'),
-  )
+  await until('切对话树仍显示经理设置页', () => one('[data-manager="settings"]'))
   await click('[data-sidebar-mode="manager"]')
   const settingsRestored = Boolean(
     await until('恢复经理设置页', () => one('[data-manager="settings"]')),
@@ -1072,8 +1091,9 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     ?.closest('[data-session]:not(.projection-group *)')
     ?.getAttribute('data-session')
   await click('[data-sidebar-mode="chat"]')
-  await until('工作线切回对话', () =>
-    one('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *).sel'),
+  await until(
+    '切对话树仍显示工作线',
+    () => one('.mg-origin') && one('[data-composer-session=\'["local","manager-k1"]\']'),
   )
   await click('[data-sidebar-mode="manager"]')
   const lineRestored = Boolean(
@@ -1522,9 +1542,9 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     one(`[data-manager="session"][data-manager-id="${createdId}"]`),
   )
   await click('[data-sidebar-mode="chat"]')
-  const createdKeepsChat = Boolean(
-    await until('新建经理不覆盖原对话', () =>
-      one('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *).sel'),
+  const createdKeepsSession = Boolean(
+    await until('切对话树仍显示新建经理', () =>
+      one(`[data-manager="session"][data-manager-id="${createdId}"]`),
     ),
   )
   await click('[data-sidebar-mode="manager"]')
@@ -1702,7 +1722,11 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('[data-sidebar-mode="manager"]')
   await until('归档普通会话不影响经理', () => one('[data-manager="session"][data-manager-id="m1"]'))
   await click('[data-sidebar-mode="chat"]')
-  const archivedFallback = Boolean(await until('切回对话默认页', () => one('.new-page')))
+  const archivedKeepsSession = Boolean(
+    await until('归档其他会话后切树仍保留当前经理', () =>
+      one('[data-manager="session"][data-manager-id="m1"]'),
+    ),
+  )
 
   // 比应用旧的设备服务：在本机会话里说“服务旧而忙”，本机在跑的就成了旧版（模拟核心据此不宣告后加的经理能力）
   await click('[data-session="s4"]:not(.projection-group *) .ss-row:not(.projection-group *)')
@@ -1856,10 +1880,10 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     managerRestored,
     lineRestored,
     settingsRestored,
-    createdKeepsChat,
-    archivedFallback,
+    createdKeepsSession,
+    archivedKeepsSession,
     externalChat,
-    externalKeepsManager,
+    externalKeepsSession,
     oldDevice,
     oldDeviceDetail,
   }
@@ -1951,10 +1975,10 @@ export function judgeManager(seen: ManagerSeen): string[] {
     managerRestored: '切回经理后原经理或看板页签丢失',
     lineRestored: '切回经理后原工作线丢失',
     settingsRestored: '切回经理后设置页丢失',
-    createdKeepsChat: '新建经理覆盖了对话视图的位置',
-    archivedFallback: '已归档会话在切回对话后仍被恢复',
-    externalChat: '经理视图从外部打开普通会话后未切到对话栏',
-    externalKeepsManager: '外部跳转到普通会话后丢失了经理位置',
+    createdKeepsSession: '切换导航树后新建经理丢失',
+    archivedKeepsSession: '归档其他会话并切树后当前经理丢失',
+    externalChat: '外部打开普通会话失败或改变了导航树',
+    externalKeepsSession: '外部打开普通会话后切树改变了当前会话',
     oldDevice: `设备服务比应用旧时，控制台没写明不可用的功能与升级去处、忽略或追问没禁用写原因，或决策答复交不上：${seen.oldDeviceDetail}`,
   }
   return (Object.keys(messages) as (keyof typeof messages)[])

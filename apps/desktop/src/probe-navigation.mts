@@ -171,8 +171,18 @@ export async function navigationProbe() {
   must(picked() === aId, '模态开关污染导航历史')
   await forward()
   await click('[data-sidebar-mode="manager"]')
+  must(
+    one('.cmp-text')?.getAttribute('data-composer-session') === JSON.stringify(['local', bId]),
+    '切导航树改变了主对话',
+  )
+  await click('.mg-sidebar-group header .ibtn')
   must(rect() === origin, '经理标题栏的导航按钮发生移动')
   await back()
+  must(
+    one('[data-sidebar-mode="manager"]')?.getAttribute('aria-pressed') === 'true',
+    '内容后退改变了导航树',
+  )
+  await click('[data-sidebar-mode="chat"]')
   must(picked() === bId, '经理页未进入历史')
 
   // 设备列表与详情留在设置模态；归档入口才会跳到主窗口并进入历史。

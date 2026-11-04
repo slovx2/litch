@@ -4,7 +4,7 @@ import type { ManagerView } from '../../../core/src/model-manager.mts'
 import type { Selection } from './App.tsx'
 import { useKey } from './services.tsx'
 
-/** 隐藏视图也订阅摘要，归档、删除后立即忘记；首次摘要尚未到达时不误清。 */
+/** 归档、删除后立即忘记当前会话；首次摘要尚未到达时不误清。 */
 export function useSelectionLifetime(
   selection: Selection | null,
   managers: ManagerView[],

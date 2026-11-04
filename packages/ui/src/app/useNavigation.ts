@@ -11,7 +11,7 @@ export function useNavigation(valid: (location: ViewNavigation) => boolean) {
   const watched = [
     ...new Set(
       history.entries.flatMap((entry) => {
-        const { picked, page } = entry[entry.mode]
+        const { picked, page } = entry.location
         return picked && !page ? [keys.summary(picked.deviceId, picked.sessionId)] : []
       }),
     ),

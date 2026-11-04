@@ -2,7 +2,7 @@
 // 用法：node scripts/check-sidebar-projections.mjs；也可用 LITCH_PROJECTIONS_UI 指向已启动的回环夹具。
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
-import { globSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -412,15 +412,11 @@ try {
   assert.deepEqual(await currentRows(), [{ sessionId: 's3', source: 'recent', selected: true }])
   await click('[data-sidebar-mode=manager]')
   await until(() => run(() => !document.querySelector('[data-projection]')), '切到经理模式')
-  await click('[data-manager-id=m1] .mg-pick')
-  await until(
-    () =>
-      run(
-        () =>
-          document.querySelector('[data-manager-id=m1] .mg-pick')?.getAttribute('aria-current') ===
-          'page',
-      ),
-    '经理模式记住自己的选择',
+  assert.ok(
+    await run(
+      () => document.querySelector('.cmp-text')?.dataset.composerSession === '["local","s3"]',
+    ),
+    '切树仍显示原普通会话',
   )
   await click('[data-sidebar-mode=chat]')
   await until(() => run(() => !!document.querySelector('[data-projection=recent]')), '返回对话模式')
@@ -430,6 +426,7 @@ try {
     '切换模式仍保留实际点击的最近行',
   )
   await click('[data-sidebar-mode=manager]')
+  await click('[data-manager-id=m1] .mg-pick')
   await until(
     () =>
       run(
@@ -437,14 +434,19 @@ try {
           document.querySelector('[data-manager-id=m1] .mg-pick')?.getAttribute('aria-current') ===
           'page',
       ),
-    '再次进入经理模式恢复自己的选择',
+    '经理树明确选择经理',
   )
   await click('[data-sidebar-mode=chat]')
   await until(
     () => run(() => !!document.querySelector('[data-projection=recent]')),
     '再次返回对话模式',
   )
-  assert.deepEqual(await currentRows(), [{ sessionId: 's3', source: 'recent', selected: true }])
+  assert.ok(
+    await run(
+      () => !!document.querySelector('[data-manager="session"][data-manager-id=m1] .mg-board'),
+    ),
+    '切回对话树仍显示最后选中的经理',
+  )
   await click('.dev-group[data-device=local] [data-session=s3] .ss-row')
   await until(async () => (await currentRows())[0]?.source === 'tree', '树行唯一选中')
   assert.deepEqual(await currentRows(), [{ sessionId: 's3', source: 'tree', selected: true }])
@@ -837,7 +839,7 @@ try {
       () =>
         run(
           () =>
-            document.querySelector('[data-sidebar-mode=manager]')?.getAttribute('aria-pressed') ===
+            document.querySelector('[data-sidebar-mode=chat]')?.getAttribute('aria-pressed') ===
               'true' &&
             !!document.querySelector('[data-manager="session"][data-manager-id=m1] .mg-board') &&
             !!document.querySelector('[data-manager="session"][data-manager-id=m1] .mg-chat'),
@@ -868,7 +870,7 @@ try {
     '读完最后一条工作线后，仍在查看的树原位暂留',
   )
   await screenshot('manager-line-chat-from-unread.png')
-  // 经理入口仍在经理模式，切换不会覆盖对话模式保存的选中来源。
+  // 在经理树明确选中经理后，切回对话树也不能恢复之前的工作线正文。
   await click('[data-sidebar-mode=manager]')
   await click('[data-manager-id=m1] .mg-pick')
   await until(
@@ -878,12 +880,8 @@ try {
   await click('[data-sidebar-mode=chat]')
   await until(
     () =>
-      run(
-        () =>
-          document.querySelector('.cmp-text')?.dataset.composerSession ===
-          JSON.stringify(['local', 'manager-k2']),
-      ),
-    '切回恢复经理工作线对话',
+      run(() => !!document.querySelector('[data-manager="session"][data-manager-id=m1] .mg-board')),
+    '切树保留最后选中的经理工作台',
   )
   assert.equal(
     await run(() => !!document.querySelector('[data-projection=unread] [data-session=m1]')),
@@ -1118,5 +1116,6 @@ try {
   ])
   if (child.exitCode === null) child.kill('SIGKILL')
   vite?.kill('SIGTERM')
+  rmSync(work, { recursive: true, force: true })
 }
 console.log(JSON.stringify(report, null, 2))

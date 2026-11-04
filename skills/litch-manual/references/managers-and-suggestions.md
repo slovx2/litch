@@ -300,8 +300,8 @@ sessions remain. This does not authorize archiving unrelated sessions. There is 
 - **Where are the rules?** Put custom instructions in Settings → Basic information → Manager settings. Automatic
   operating rules come from Assignment and notifications. There is no separate editable Scope field.
 - **Why no notification?** See the manager-notification rules in `appearance-and-preferences.md`.
-- **Why did the sidebar switch?** Chat and Managers remember separate positions for this app run.
-  Opening a session from a notification, link or activity switches to its owning view. See
+- **Does opening a manager switch the sidebar?** No. Chat and Managers only choose the navigation tree.
+  The last opened session determines the content; managers always include their full board. Switching trees also preserves an opening request that is still waiting for session identity. See
   `sessions-and-projects.md` for revealing its row.
   从侧栏“未读”“最近”等任何会话入口打开经理都进入经理工作台；工作线仍保留普通对话页面。
 - **Cannot edit or create?** Connect the device and use a version supporting managers. The runtime
