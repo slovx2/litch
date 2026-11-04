@@ -416,6 +416,10 @@ export interface TopicOp {
 // ---------- 命令 ----------
 
 export interface Commands {
+  'managers.references.resolve': {
+    params: { deviceId: string; managerId: string; ids: string[] }
+    result: { ids: string[] }
+  }
   'files.readChunk': {
     params: { deviceId: string; root: string; path: string; offset: number; revision?: string }
     result: import('../../../protocol/src/file-download.mjs').FileReadChunk

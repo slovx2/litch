@@ -433,6 +433,43 @@ export function createManagers(host: ManagersHost) {
     return next
   }
   return {
+    async resolveReferences(managerId: string, ids: string[]) {
+      if (
+        !Array.isArray(ids) ||
+        ids.length > 100 ||
+        ids.some((id) => typeof id !== 'string' || !/^(?:[DIRP]-\d+|S-[\w]+(?:-[\w]+)*)$/.test(id))
+      )
+        throw new ChannelError('invalid', 'Invalid manager references')
+      if (!host.features().paging) {
+        const { board } = await host.request(MANAGER_METHOD.boardRead, { managerId })
+        const known = new Set(
+          [
+            ...board.decisions,
+            ...board.items,
+            ...(board.requests ?? []),
+            ...(board.posts ?? []),
+          ].map((object) => object.id),
+        )
+        return {
+          ids: ids.filter((id) => known.has(id as import('../model-manager.mjs').ManagerObjectId)),
+        }
+      }
+      // 仅校验正文中实际出现的编号，不污染看板分页状态或把缺失编号显示成加载错误。
+      const found = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const result = await host.request(MANAGER_PAGING_METHOD.detail, {
+              managerId,
+              id: id as import('../model-manager.mjs').ManagerObjectId,
+            })
+            return result.object || result.post ? id : null
+          } catch {
+            return null
+          }
+        }),
+      )
+      return { ids: found.filter((id): id is string => id !== null) }
+    },
     async page(managerId: string, query: ManagerPageQuery, more?: boolean) {
       requires('paging', MANAGER_PAGING_METHOD.page)
       await guarded(() => paging(managerId, boardEntry(managerId)).page(query, more))

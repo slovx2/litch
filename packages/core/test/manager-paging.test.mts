@@ -151,6 +151,22 @@ test('分页首屏不用旧整板；详情、历史按需；对账只重读已�
   assert.equal(view.paging?.pages['decision/open/newest']?.entries.length, 60)
 })
 
+test('正文编号先核对存在性，未加载编号可用、缺失编号不误链，不加载整板', async () => {
+  const f = fixture()
+  const service = createManagers(f.host)
+  assert.deepEqual(await service.resolveReferences(f.manager.id, ['D-60', 'D-999']), {
+    ids: ['D-60'],
+  })
+  assert.deepEqual(
+    f.calls.map((call) => call.method),
+    [METHOD.detail, METHOD.detail],
+  )
+  await assert.rejects(
+    service.resolveReferences(f.manager.id, ['../../other']),
+    /Invalid manager references/,
+  )
+})
+
 test('成功回包立即移出待定并改总数；在途旧摘要不覆盖回包，新摘要仅一次补读', async () => {
   const f = fixture()
   let view: Pick<ManagerBoardTopicView, 'board' | 'paging'> = { board: null }

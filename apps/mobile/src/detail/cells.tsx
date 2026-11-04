@@ -3,7 +3,14 @@
 // 长按菜单里点了“选择文字”的那条回答例外：它的几块能自由选字，系统的选字菜单里多一个“回复”（comments/hub.ts）。
 // 颜色、字号只从主题取。会长高的东西（流式的那一块）之外，行的高度在内容不变时不变。
 
-import { type FileScope, keys, parseAskReply, type SessionSummary } from '@litch/core'
+import {
+  type FileScope,
+  keys,
+  managerReferenceIds,
+  mapManagerMarkdown,
+  parseAskReply,
+  type SessionSummary,
+} from '@litch/core'
 import { memo, useEffect, useMemo, useState } from 'react'
 import {
   Image,
@@ -232,7 +239,35 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
   const theme = useTheme()
   const { c, font } = theme
   const t = useT()
-  const { scope, issues, openLink, turnMenu } = useTranscript()
+  const { scope, issues, resolveIssues, openLink, turnMenu } = useTranscript()
+  const [resolved, setResolved] = useState<{
+    resolver: typeof resolveIssues
+    ids: Set<string>
+  } | null>(null)
+  useEffect(() => {
+    if (!resolveIssues) return
+    const candidates: string[] = []
+    mapManagerMarkdown(row.text, (part) => {
+      candidates.push(...managerReferenceIds(part))
+      return part
+    })
+    if (!candidates.length) return
+    let live = true
+    void resolveIssues([...new Set(candidates)]).then((ids) => {
+      if (live) setResolved({ resolver: resolveIssues, ids })
+    })
+    return () => {
+      live = false
+    }
+  }, [row.text, resolveIssues])
+  const knownIssues = useMemo(
+    () =>
+      new Set([
+        ...(issues ?? []),
+        ...(resolved?.resolver === resolveIssues ? (resolved?.ids ?? []) : []),
+      ]),
+    [issues, resolved, resolveIssues],
+  )
   const hub = useComments()
   const flashed = useFlashedRow(row.key)
   // 长按菜单里点了“选择文字”：这条回答的每一块都能选字，长按不再出回合的菜单（长按是系统的选字）
@@ -240,7 +275,7 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
   // 紧跟在带评论的用户消息之后、同一回合里的回答：[N] 画成能点的“评论 N”
   const comments = hub && !row.plan ? hub.commentsOf(row.turnId) : null
   const refs = comments ? { count: comments.comments.length, t } : null
-  const markdown = linkedText(row, scope, refs, issues)
+  const markdown = linkedText(row, scope, refs, knownIssues)
   // 写完的 mermaid 块拆出来画成卡片，前后的字照旧交给 Markdown 组件
   const segments = useMemo(() => splitMermaid(markdown), [markdown])
   const whole = segments.length === 1 && segments[0]?.kind === 'md'

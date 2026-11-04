@@ -11,6 +11,7 @@ import { ITEM_ATTR } from './comments/text-range.ts'
 import { ExternalLink } from './ExternalLink.tsx'
 import { CodeSpan, Link, Prose } from './FileLinks.tsx'
 import { languageOf } from './highlight.tsx'
+import { TranscriptReferences, TranscriptReferencesContext } from './ManagerReferences.tsx'
 import { MermaidBlock } from './Mermaid.tsx'
 import { lex } from './markdown-lex.ts'
 import { MarkdownPolicyContext } from './markdown-policy.ts'
@@ -82,10 +83,17 @@ function inline(tokens: Token[] | undefined): ReactNode {
 function PolicyText({ text }: { text: string }) {
   const policy = useContext(MarkdownPolicyContext)
   if (policy) return policy.text?.(text) ?? text
-  return HAS_MENTION.test(text) ? (
-    <AnswerMentions text={text} plain={plainText} />
-  ) : (
-    plainText(text, 0)
+  return (
+    <TranscriptReferences
+      text={text}
+      plain={(text) =>
+        HAS_MENTION.test(text) ? (
+          <AnswerMentions text={text} plain={plainText} />
+        ) : (
+          plainText(text, 0)
+        )
+      }
+    />
   )
 }
 function PolicyCodeSpan({ text }: { text: string }) {
@@ -94,7 +102,13 @@ function PolicyCodeSpan({ text }: { text: string }) {
 }
 function PolicyLink({ href, children }: { href: string; children: ReactNode }) {
   const policy = useContext(MarkdownPolicyContext)
-  return policy ? policy.link(href, children) : <Link href={href}>{children}</Link>
+  return policy ? (
+    policy.link(href, children)
+  ) : (
+    <TranscriptReferencesContext.Provider value={null}>
+      <Link href={href}>{children}</Link>
+    </TranscriptReferencesContext.Provider>
+  )
 }
 function PolicyImage({ href, alt }: { href: string; alt: string }) {
   const policy = useContext(MarkdownPolicyContext)

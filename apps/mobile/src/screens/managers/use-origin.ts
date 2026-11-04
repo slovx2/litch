@@ -5,6 +5,7 @@ import {
   type ManagerBoardTopicView,
   type ManagerView,
   managerMark,
+  managerReferencesResolver,
   type SessionSummary,
 } from '@litch/core'
 import { CommonActions, useNavigation } from '@react-navigation/native'
@@ -12,7 +13,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useEffect, useMemo } from 'react'
 import type { IssueLinks } from '../../detail/issue-links'
 import type { ManagerTab, RootStackParamList } from '../../nav/routes'
-import { useKey, useReplica } from '../../shell/services'
+import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import type { SheetAction } from '../../ui/kit/overlays'
 import type { HeaderLink } from '../../ui/kit/Screen'
@@ -51,12 +52,23 @@ export function useManagerOrigin(
   const t = useT()
   const navigation = useNavigation<Navigation>()
   const replica = useReplica()
+  const channel = useChannel()
   const mark = summary ? managerMark(summary) : null
   const managerId = mark?.role === 'line' ? mark.managerId : null
+  const manager = useKey<ManagerView>(keys.manager(deviceId, managerId ?? ''))
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 看板变化后重新核对之前不存在的编号
+  const resolve = useMemo(
+    () =>
+      managerReferencesResolver(async (ids) =>
+        managerId
+          ? (await channel.command('managers.references.resolve', { deviceId, managerId, ids })).ids
+          : [],
+      ),
+    [channel, deviceId, managerId, manager?.updatedAt],
+  )
   useEffect(() => {
     if (managerId) return replica.openManagerBoard(deviceId, managerId)
   }, [replica, deviceId, managerId])
-  const manager = useKey<ManagerView>(keys.manager(deviceId, managerId ?? ''))
   const view = useKey<ManagerBoardTopicView>(keys.managerBoard(deviceId, managerId ?? ''))
   const board = view?.board
   const pagingOn = Boolean(view?.paging)
@@ -96,7 +108,7 @@ export function useManagerOrigin(
           onPress: () => open(id),
         })),
       ],
-      issues: ids.size ? { ids, open } : null,
+      issues: { ids, open, resolve },
     }
-  }, [managerId, manager?.name, navigation, deviceId, related, board, ids, t])
+  }, [managerId, manager?.name, navigation, deviceId, related, board, ids, t, resolve])
 }

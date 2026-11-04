@@ -9,6 +9,7 @@ import {
   type ManagerBoardTopicView,
   type ManagerView,
   managerAttentionCount,
+  managerReferencesResolver,
   type SessionSummary,
   type SuggestionView,
 } from '@litch/core'
@@ -234,6 +235,15 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const idsKey = board
     ? [...(board.posts ?? []).map((p) => p.id), ...board.items.map((i) => i.id)].join(',')
     : ''
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 看板变化后重新核对之前不存在的编号
+  const resolveReferences = useMemo(
+    () =>
+      managerReferencesResolver(
+        async (ids) =>
+          (await channel.command('managers.references.resolve', { deviceId, managerId, ids })).ids,
+      ),
+    [channel, deviceId, managerId, manager?.updatedAt],
+  )
   const issues = useMemo(() => {
     const ids = Object.assign(new Set(idsKey ? idsKey.split(',') : []), {
       deferred: pagingOn,
@@ -241,6 +251,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
     return ids.size || ids.deferred
       ? {
           ids,
+          resolve: resolveReferences,
           open: (id: string) => {
             // 输入框还拿着焦点时，面板关上后安卓会把焦点还给它、键盘又弹出来：先放掉
             Keyboard.dismiss()
@@ -249,7 +260,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
           },
         }
       : null
-  }, [idsKey, openIssue, pagingOn])
+  }, [idsKey, openIssue, pagingOn, resolveReferences])
   const page = useSessionPage({
     deviceId,
     sessionId: manager.threadId,

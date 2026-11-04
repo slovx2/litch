@@ -268,6 +268,15 @@ export function createMockManagers(host: MockManagerHost) {
           : t('经理已结束，看板只读', 'The manager has ended; the board is read-only'),
       )
     boardView(deviceId, managerId)
+    if (name === 'managers.references.resolve') {
+      const { ids } = params as Commands['managers.references.resolve']['params']
+      const known = new Set(
+        [...board.decisions, ...board.items, ...(board.requests ?? []), ...(board.posts ?? [])].map(
+          (object) => object.id as string,
+        ),
+      )
+      return { ids: ids.filter((id) => known.has(id)) }
+    }
     if (name === 'managers.reference.read')
       return {
         text: 'commit a9a85c1\n\n    Manager console update\n\n--- a/README.md\n+++ b/README.md\n@@ -1 +1 @@\n-Litch\n+Litch Console',
@@ -811,6 +820,7 @@ export function createMockManagers(host: MockManagerHost) {
     command(name: string, params: unknown): Promise<unknown> | undefined {
       return [
         'managers.reference.read',
+        'managers.references.resolve',
         'managers.post.forward',
         'managers.post.question',
         'managers.report.read',

@@ -1,3 +1,4 @@
+import { managerReferencePattern } from '../../../core/src/manager-references.mts'
 import type {
   ManagerDecisionId,
   ManagerItemId,
@@ -20,9 +21,12 @@ export function boardReferences(
   text: string,
   ids: ReadonlySet<BoardReference>,
   deferred = false,
+  prose = false,
 ): ReferencePart[] {
   const parts: ReferencePart[] = []
-  const pattern = /(?<!\w)#?[IDRP]-\d+(?!\w)/g
+  const pattern = prose
+    ? managerReferencePattern()
+    : /(?<!\w)#?(?:[IDRP]-\d+|S-[\w]+(?:-[\w]+)*)(?!\w)/g
   let start = 0
   for (const match of text.matchAll(pattern)) {
     const id = match[0].replace(/^#/, '') as BoardReference

@@ -235,6 +235,12 @@ export {
   DraftImages,
 } from './draft-images.mjs'
 export { observeFileChanges } from './file-changes.mjs'
+export {
+  managerReferenceIds,
+  managerReferencePattern,
+  managerReferencesResolver,
+  mapManagerMarkdown,
+} from './manager-references.mjs'
 export { createMockCore, type MockCore, type MockCoreOptions } from './mock/mock-core.mjs'
 export type { SampleLang } from './mock/sample-text.mjs'
 export type * from './model.mjs'

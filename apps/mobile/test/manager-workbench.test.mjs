@@ -5,17 +5,22 @@ import { linkIssues, parseIssueHref } from '../src/detail/issue-links.ts'
 import { lineIssues, managerRouteBelow } from '../src/screens/managers/origin.ts'
 import { lineRowParts } from '../src/screens/managers/presentation.ts'
 
-test('分页会话正文允许打开未加载的编号，代码和路径仍不改写', () => {
+test('分页会话正文未确认编号保持普通文字，代码和路径仍不改写', () => {
   const ids = Object.assign(new Set(), { deferred: true })
-  assert.equal(
-    linkIssues('D-60 `D-60` feat/D-60', ids),
-    '[D-60](litch-issue:D-60) `D-60` feat/D-60',
-  )
+  assert.equal(linkIssues('D-60 `D-60` feat/D-60', ids), 'D-60 `D-60` feat/D-60')
 })
 
 test('纯逻辑单测阻止引入 React，即使本地安装了手机依赖', async () => {
   await assert.rejects(() => import('react'), /手机纯逻辑单测不能加载 React/)
   await assert.rejects(() => import('react/jsx-runtime'), /手机纯逻辑单测不能加载 React/)
+})
+
+test('建议编号可跳转，未知编号和代码中的编号保持原文', () => {
+  const source = '#S-abc-def #P-1 #R-1 #I-1 #D-999\n    #P-1\n~~~\n#P-1\n~~~\n```\n#P-1'
+  const linked = linkIssues(source, new Set(['S-abc-def', 'P-1', 'R-1', 'I-1']))
+  assert.match(linked, /\[#S-abc-def\]\(litch-issue:S-abc-def\)/)
+  assert.match(linked, /#D-999\n {4}#P-1\n~~~\n#P-1\n~~~\n```\n#P-1$/)
+  assert.equal(linkIssues(source, new Set()), source, '普通会话不改写')
 })
 
 test('对话正文的看板编号改成链接：字形不变，只认看板上有的，代码与已有链接不动', () => {

@@ -62,6 +62,7 @@ import { Compaction, Notes, RestartNote } from './activity.tsx'
 import { CiteScope } from './comments/Cite.tsx'
 import { CommentLayer } from './comments/Layer.tsx'
 import { FileLinksProvider, useSessionFileLinks } from './FileLinks.tsx'
+import { ManagerReferencesScope } from './ManagerReferences.tsx'
 import { AgentAnswer, AnswerCopy, PlanCard, UserMessage } from './messages.tsx'
 import { ProcessHead, ProcessParts } from './process.tsx'
 import { Recovery } from './Recovery.tsx'
@@ -797,66 +798,72 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
           <PinProvider value={scroll.pin}>
             <FileLinksProvider value={fileLinks}>
               <ActionsProvider value={actions}>
-                {/* 选字加评论、原文上的标记。只读地看（已归档）时不加。排在最前面：它不占地方，
+                <ManagerReferencesScope deviceId={deviceId} sessionId={sessionId} onOpen={onOpen}>
+                  {/* 选字加评论、原文上的标记。只读地看（已归档）时不加。排在最前面：它不占地方，
                   放在回合后面的话 .turn:last-child 就认不出最后一个回合了 */}
-                {turnIds && !failure && !footer ? (
-                  <CommentLayer
-                    deviceId={deviceId}
-                    sessionId={sessionId}
-                    parentId={aside?.parentId ?? null}
-                  />
-                ) : null}
-                {turnIds && !failure && aside ? aside.lead : null}
-                {turnIds && !failure && !aside ? (
-                  <>
-                    <ForkedFrom deviceId={deviceId} sessionId={sessionId} onOpen={onOpen} />
-                    <LineageBar deviceId={deviceId} sessionId={sessionId} onOpen={onOpen} />
-                  </>
-                ) : null}
-                {turnIds && !failure ? (
-                  <TaskNote deviceId={deviceId} sessionId={sessionId} />
-                ) : null}
-                <DelegatedHistory deviceId={deviceId} sessionId={sessionId} />
-                {failure ? (
-                  <div className="errbox">
-                    <span>{t('transcript.loadFailed', { reason: failureText(failure, t) })}</span>
-                    <button type="button" className="mini" onClick={() => setAttempt((n) => n + 1)}>
-                      {t('transcript.retry')}
-                    </button>
-                  </div>
-                ) : !turnIds && down ? (
-                  <div className="dim harness-wait">{downText(down, 'transcript', t)}</div>
-                ) : !turnIds ? (
-                  <Delayed ms={300}>
-                    <div className="dim">{t('transcript.loading')}</div>
-                  </Delayed>
-                ) : turnIds.length === 0 ? (
-                  aside ? null : (
-                    <div className="dim">{t('transcript.empty')}</div>
-                  )
-                ) : (
-                  (drawn ?? turnIds).map((turnId) => (
-                    <Fragment key={turnId}>
-                      {searchGaps.has(turnId) ? (
-                        <div className="search-gap">
-                          {t('search.gap', { count: searchGaps.get(turnId) ?? 0 })}
-                        </div>
-                      ) : null}
-                      <TurnBoundary label={t('turn.broken')}>
-                        <Turn
-                          deviceId={deviceId}
-                          sessionId={sessionId}
-                          turnId={turnId}
-                          kept={turnId === target?.turnId || turnId === reading}
-                        />
-                      </TurnBoundary>
-                    </Fragment>
-                  ))
-                )}
-                {/* 这边重启设备服务时回合被打断了：最后说一句发消息继续 */}
-                {turnIds && !failure ? (
-                  <RestartNote deviceId={deviceId} sessionId={sessionId} />
-                ) : null}
+                  {turnIds && !failure && !footer ? (
+                    <CommentLayer
+                      deviceId={deviceId}
+                      sessionId={sessionId}
+                      parentId={aside?.parentId ?? null}
+                    />
+                  ) : null}
+                  {turnIds && !failure && aside ? aside.lead : null}
+                  {turnIds && !failure && !aside ? (
+                    <>
+                      <ForkedFrom deviceId={deviceId} sessionId={sessionId} onOpen={onOpen} />
+                      <LineageBar deviceId={deviceId} sessionId={sessionId} onOpen={onOpen} />
+                    </>
+                  ) : null}
+                  {turnIds && !failure ? (
+                    <TaskNote deviceId={deviceId} sessionId={sessionId} />
+                  ) : null}
+                  <DelegatedHistory deviceId={deviceId} sessionId={sessionId} />
+                  {failure ? (
+                    <div className="errbox">
+                      <span>{t('transcript.loadFailed', { reason: failureText(failure, t) })}</span>
+                      <button
+                        type="button"
+                        className="mini"
+                        onClick={() => setAttempt((n) => n + 1)}
+                      >
+                        {t('transcript.retry')}
+                      </button>
+                    </div>
+                  ) : !turnIds && down ? (
+                    <div className="dim harness-wait">{downText(down, 'transcript', t)}</div>
+                  ) : !turnIds ? (
+                    <Delayed ms={300}>
+                      <div className="dim">{t('transcript.loading')}</div>
+                    </Delayed>
+                  ) : turnIds.length === 0 ? (
+                    aside ? null : (
+                      <div className="dim">{t('transcript.empty')}</div>
+                    )
+                  ) : (
+                    (drawn ?? turnIds).map((turnId) => (
+                      <Fragment key={turnId}>
+                        {searchGaps.has(turnId) ? (
+                          <div className="search-gap">
+                            {t('search.gap', { count: searchGaps.get(turnId) ?? 0 })}
+                          </div>
+                        ) : null}
+                        <TurnBoundary label={t('turn.broken')}>
+                          <Turn
+                            deviceId={deviceId}
+                            sessionId={sessionId}
+                            turnId={turnId}
+                            kept={turnId === target?.turnId || turnId === reading}
+                          />
+                        </TurnBoundary>
+                      </Fragment>
+                    ))
+                  )}
+                  {/* 这边重启设备服务时回合被打断了：最后说一句发消息继续 */}
+                  {turnIds && !failure ? (
+                    <RestartNote deviceId={deviceId} sessionId={sessionId} />
+                  ) : null}
+                </ManagerReferencesScope>
               </ActionsProvider>
             </FileLinksProvider>
           </PinProvider>

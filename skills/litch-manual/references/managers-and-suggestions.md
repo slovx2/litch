@@ -16,6 +16,14 @@ and the limit. Existing longer situations remain readable in full.
 The overview no longer shows a timeline. There is no separate timeline tool or store. Board audit
 records and workline reports remain available for issue history, answer recovery and older clients.
 
+经理与能确定归属的工作线对话中，正文的 `#D-n`、`#I-n`、`#R-n`、`#P-n` 和 `#S-建议编号`
+可直接打开对应看板对象。仅链接该经理看板中确认存在的编号；代码和已有链接不改写，普通会话不受影响。
+桌面跳到看板对应分类，手机沿用议题卡和经理工作台的跳转。
+
+In manager and associated workline conversations, decision, item, request, report and suggestion
+references open their board objects. Only confirmed references become links. Code and explicit
+links remain unchanged, and ordinary conversations are unaffected.
+
 ### 工作线问题的代答与撤回 / Settling workline questions
 
 经理可通过 `litch_sessions.read` 查看 `pending_questions`，再以稳定的 `id` 调用

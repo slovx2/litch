@@ -1311,6 +1311,11 @@ export function createCore(options: CoreOptions): Core {
             params as Commands['managers.board.page']['params']
           return await deviceOf(deviceId).managers.page(managerId, query, more)
         }
+        case 'managers.references.resolve': {
+          const { deviceId, managerId, ids } =
+            params as Commands['managers.references.resolve']['params']
+          return await deviceOf(deviceId).managers.resolveReferences(managerId, ids)
+        }
         case 'managers.board.detail': {
           const { deviceId, managerId, id } = params as Commands['managers.board.detail']['params']
           return await deviceOf(deviceId).managers.detail(managerId, id)

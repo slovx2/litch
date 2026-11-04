@@ -28,6 +28,7 @@ export interface TranscriptActions {
   toggle(key: string, turnId: string): void
   /** 经理看板上的编号（经理和工作线的对话才有）：正文里的这些编号改写成链接 */
   issues: ReadonlySet<string> | null
+  resolveIssues?: ((ids: string[]) => Promise<Set<string>>) | undefined
   /** 点了链接：litch-file: 到文件页，litch-issue: 交给页面（半屏议题卡或经理页），http(s) 交给系统浏览器，别的不理 */
   openLink(url: string): void
   /** 长按一个回合里的东西。itemId 是被按的那条回答（复制它的全文），按的是别处时是 null */

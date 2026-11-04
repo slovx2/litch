@@ -207,6 +207,16 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('[data-manager-id="m1"] .mg-pick')
   const selected = Boolean(await until('经理页', () => one('[data-manager="session"]')))
   await until('首次打开控制台', () => one('[data-board-tab="inbox"][aria-selected="true"]'))
+  await click('[data-board-tab="reports"]')
+  const chatReference = await until('对话正文中的经理编号链接', () =>
+    one<HTMLButtonElement>('.tr [data-board-reference="D-15"]'),
+  )
+  chatReference.click()
+  await until(
+    '正文编号跳回对应决策',
+    () =>
+    one('[data-board-tab="decisions"][aria-pressed="true"]') && one('[data-decision="D-15"]'),
+  )
   if (
     [...document.querySelectorAll('.mg-board .side-tablist [data-board-tab]')]
       .map((element) => element.getAttribute('data-board-tab'))

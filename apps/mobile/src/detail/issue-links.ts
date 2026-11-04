@@ -3,8 +3,11 @@
 // 页面（经理页、工作线会话页）经上下文给出编号集合和点了之后做什么；普通会话没有这个上下文，什么都不改。
 export const ISSUE = 'litch-issue:'
 
+import { managerReferencePattern, mapManagerMarkdown } from '@litch/core'
+
 export interface IssueLinks {
   ids: ReadonlySet<string>
+  resolve?(ids: string[]): Promise<Set<string>>
   open(id: string): void
 }
 
@@ -13,20 +16,12 @@ export const parseIssueHref = (url: string): string | null =>
   url.startsWith(ISSUE) ? url.slice(ISSUE.length) : null
 
 /** 改写一块 Markdown：代码块、行内代码、已有的链接都不动 */
-export function linkIssues(
-  text: string,
-  ids: ReadonlySet<string> & { deferred?: boolean },
-): string {
-  // 分页只知道已经加载的编号，其他编号在打开详情时校验。
-  if ((!ids.deferred && ids.size === 0) || !/[DIRP]-\d/.test(text)) return text
-  return text
-    .split(/(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`|\[[^\]]*\]\([^)]*\)|<https?:[^>]*>)/g)
-    .map((part, index) =>
-      index % 2 === 1
-        ? part
-        : part.replace(/(?<![\w/#-])#?([DIRP]-\d+)(?![\w-])/g, (word, id: string) =>
-            ids.deferred || ids.has(id) ? `[${word}](${ISSUE}${id})` : word,
-          ),
-    )
-    .join('')
+export function linkIssues(text: string, ids: ReadonlySet<string>): string {
+  if (!ids.size) return text
+  return mapManagerMarkdown(text, (part) =>
+    part.replace(managerReferencePattern(), (word) => {
+      const id = word.replace(/^#/, '')
+      return ids.has(id) ? `[${word}](${ISSUE}${id})` : word
+    }),
+  )
 }

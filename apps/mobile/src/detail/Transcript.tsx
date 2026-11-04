@@ -192,6 +192,7 @@ function useActions(store: SessionStore) {
       scope,
       root,
       issues: issues?.ids ?? null,
+      resolveIssues: issues?.resolve,
       toggle: (key, turnId) => store.toggle(key, turnId),
       openLink: (url) => {
         const issue = parseIssueHref(url)
