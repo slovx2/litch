@@ -6,11 +6,10 @@ import {
   type ViewNavigation,
 } from './view-navigation.ts'
 
-/** 只比较正在看的位置；隐藏视图及页面背后的旧会话不构成新的访问。 */
+/** 只比较主区域的位置；切换左侧导航树不构成新的访问。 */
 const locationKey = (state: ViewNavigation): string => {
-  const { page, picked, wish, peek, managersRoute } = state[state.mode]
+  const { page, picked, wish, peek, managersRoute } = state.location
   return JSON.stringify([
-    state.mode,
     page,
     peek ? [peek.deviceId, peek.sessionId] : null,
     page
@@ -30,9 +29,12 @@ export function navigationHistory(
 ): History<ViewNavigation> {
   const current = was.entries[was.index] ?? initialNavigation
   const next = navigate(current, action)
+  // 侧栏模式独立于内容历史；后退、前进也不切换导航树。
+  if (action.type === 'switch')
+    return { ...was, entries: was.entries.map((entry) => navigate(entry, action)) }
   if (action.type === 'missing') {
     const pruned = without(was, (entry) => {
-      const location = entry[entry.mode]
+      const location = entry.location
       return (
         !!location.page ||
         location.picked?.deviceId !== action.selection.deviceId ||
@@ -42,7 +44,7 @@ export function navigationHistory(
     return {
       ...pruned,
       entries: pruned.entries.map((entry) => {
-        const picked = entry[action.mode].picked
+        const picked = entry.location.picked
         return picked?.deviceId === action.selection.deviceId &&
           picked.sessionId === action.selection.sessionId
           ? navigate(entry, { ...action, selection: picked })

@@ -59,12 +59,14 @@ async function selectionSeen() {
     throw new Error('工作线应默认收在经理下')
   manager()?.click()
   await until(() => !!document.querySelector('[data-manager="session"][data-manager-id=m1]'))
-  if (
-    document.querySelector('[data-sidebar-mode=manager]')?.getAttribute('aria-pressed') !== 'true'
-  )
-    throw new Error('点最近里的经理应进入同一经理工作台')
-  if (document.querySelector('[data-projection]')) throw new Error('经理模式不显示普通投影')
+  if (document.querySelector('[data-sidebar-mode=chat]')?.getAttribute('aria-pressed') !== 'true')
+    throw new Error('点最近里的经理应保留对话导航树')
+  await until(() => only(manager()))
+  document.querySelector<HTMLButtonElement>('[data-sidebar-mode=manager]')?.click()
+  await until(() => !document.querySelector('[data-projection]'))
+  if (!document.querySelector('[data-manager="session"][data-manager-id=m1] .mg-board'))
+    throw new Error('切树不应关闭当前经理看板')
   document.querySelector<HTMLButtonElement>('[data-sidebar-mode=chat]')?.click()
-  await until(() => only(recent()))
+  await until(() => only(manager()))
   return { recentOnly: true, treeOnly: true, modeRestored: true, managerEntry: true }
 }

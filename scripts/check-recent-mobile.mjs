@@ -3,7 +3,7 @@
 // 三种皮肤明暗均检查；仅显式设置 LITCH_RECENT_SHOTS 时保存截图。
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { globSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { globSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
@@ -41,6 +41,7 @@ const child = spawn(
   },
 )
 let endpoint = ''
+const exited = new Promise((resolve) => child.once('exit', resolve))
 child.stderr.on('data', (chunk) => {
   endpoint += String(chunk)
 })
@@ -244,6 +245,12 @@ try {
   )
   await sleep(5600)
   await tap('header:back')
+  await wait('devices')
+  assert.equal(
+    await read(`!!document.querySelector('[data-testid="managers"]')`),
+    false,
+    '最近打开经理后返回来源首页，不经过经理目录',
+  )
   await until(
     async () => (await recentIds())[0] === 'recent:local:m1',
     '经理页停满五秒刷新最近排序',
@@ -283,4 +290,6 @@ try {
 } finally {
   cdp?.ws.close()
   child.kill()
+  await exited
+  rmSync(work, { recursive: true, force: true })
 }

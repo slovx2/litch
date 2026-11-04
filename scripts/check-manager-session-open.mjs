@@ -2,7 +2,7 @@
 // node scripts/check-manager-session-open.mjs http://127.0.0.1:5199
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { globSync, mkdtempSync } from 'node:fs'
+import { globSync, mkdtempSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
@@ -41,6 +41,7 @@ const browser = spawn(
   },
 )
 let output = ''
+const exited = new Promise((resolve) => browser.once('exit', resolve))
 browser.stderr.on('data', (chunk) => {
   output += chunk
 })
@@ -89,13 +90,65 @@ try {
   }
   await call('Page.navigate', { url: `${base}/test/manager-open-fixture.html?lang=zh-CN` })
   await until(() => has('[data-projection="recent"] [data-session="m1"]'), '最近经理')
+  const p1Row = '[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *)'
+  const p1Composer = '[data-composer-session=\'["local","p1"]\']'
+  const catalogAvailable = (available) =>
+    run((value) => {
+      const { store, keys } = window.__managerOpen
+      store.set(keys.managersAvailable('local'), value)
+    }, available)
+  // 控制到达顺序，不靠启动耗时碰运气：点击已高亮，身份目录仍未就绪。
+  await catalogAvailable(null)
+  await click(p1Row)
+  await until(() => has(`${p1Row}.sel`), '普通会话行高亮')
+  assert.equal(await has(p1Composer), false, '行高亮不能证明普通会话正文已打开')
+  await click('[data-sidebar-mode="manager"]')
+  await catalogAvailable(true)
+  await until(() => has(p1Composer), '等待身份期间切树，目录到达后仍打开普通会话')
+  assert.ok(await has('[data-sidebar-mode="manager"][aria-pressed="true"]'), '完成打开不切回旧树')
+  await click('.tb-side')
+  await until(() => has('.tb-side[aria-pressed="true"]'), '普通会话侧面板')
+  await click('[data-sidebar-mode="chat"]')
+  assert.ok(await has(p1Composer), '切树保留普通会话正文')
+  assert.ok(await has(`${p1Row}.sel`), '保留原普通会话选中行')
+  assert.ok(await has('.tb-side[aria-pressed="true"]'), '保留原普通会话侧面板')
+  await click('[data-sidebar-mode="manager"]')
+  await click('[data-manager-id="m1"] .mg-pick')
+  await opened()
+  await click('[data-board-tab="overview"]')
+  await until(() => has('[data-board-tab="overview"][aria-selected="true"]'), '经理概览')
+  await click('[data-sidebar-mode="chat"]')
+  await opened()
+  assert.ok(await has('[data-board-tab="overview"][aria-selected="true"]'), '聊天树保留经理页签')
+  await click('[data-sidebar-mode="manager"]')
+  await opened()
+  assert.ok(await has('[data-board-tab="overview"][aria-selected="true"]'), '保留经理页签')
+
+  // 切树不取消打开；再次选择别的会话才取消上次打开，迟到目录只能完成最后一次选择。
+  await click('[data-sidebar-mode="chat"]')
+  await ordinary()
+  await catalogAvailable(null)
+  await click(p1Row)
+  await until(() => has(`${p1Row}.sel`), '待确认会话行高亮')
+  assert.ok(await has('[data-composer-session=\'["local","s2"]\']'), '原正文仍在')
+  await open('s3')
+  await click('[data-sidebar-mode="manager"]')
+  await catalogAvailable(true)
+  await until(() => has('[data-composer-session=\'["local","s3"]\']'), '最后点开的会话完成打开')
+  assert.ok(await has('[data-sidebar-mode="manager"][aria-pressed="true"]'), '异步完成仍留当前树')
+  await click('[data-sidebar-mode="chat"]')
+  assert.equal(await has(p1Composer), false, '迟到目录不能抢回已取消的导航')
   await click('[data-projection="recent"] [data-session="m1"] .ss-row')
   await opened()
+  assert.ok(await has('[data-sidebar-mode="chat"][aria-pressed="true"]'), '最近打开经理留在聊天树')
+  assert.ok(
+    await has('[data-projection="recent"] [data-session="m1"] .ss-row.sel'),
+    '经理仍选在最近',
+  )
   const shape = () =>
     run(() => ({
       board: !!document.querySelector('.mg-board'),
       chat: !!document.querySelector('.mg-chat'),
-      mode: document.querySelector('[data-sidebar-mode="manager"]')?.getAttribute('aria-pressed'),
     }))
   const recent = await shape()
   assert.ok(recent.board && recent.chat, '最近进入完整看板及对话布局')
@@ -219,9 +272,11 @@ try {
   await run(() => window.__restoreManager())
   await opened()
   console.log(
-    '桌面经理入口检查通过：最近、经理侧栏/目录、返回/前进、@、回报、会话/经理通知、搜索、普通对话/工作线、迟到目录。无截图。',
+    '桌面经理入口检查通过：等待身份时切树仍完成打开、再次选择以最后一次为准、切树保留会话/侧面板/看板页签、最近打开经理保留导航树及选中行、经理侧栏/目录、返回/前进、@、回报、通知、搜索、普通对话/工作线、迟到经理目录。无截图。',
   )
 } finally {
   cdp?.ws.close()
   browser.kill()
+  await exited
+  rmSync(work, { recursive: true, force: true })
 }

@@ -53,12 +53,7 @@ import { TitleBar } from './TitleBar.tsx'
 import { Toasts } from './toasts.tsx'
 import { useNavigation } from './useNavigation.ts'
 import { useSelectionLifetime } from './useSelectionLifetime.ts'
-import {
-  type NavigationAction,
-  sessionSelection,
-  type ViewMode,
-  type ViewNavigation,
-} from './view-navigation.ts'
+import type { NavigationAction, ViewNavigation } from './view-navigation.ts'
 
 /** 主页面与侧栏打开的模态入口。设置（含设备）、建议、定时任务不进入主导航历史。 */
 export type Page = 'archived' | 'devices' | 'settings' | 'tasks' | 'managers' | 'suggestions'
@@ -84,7 +79,7 @@ export function App() {
   const bindings = useRef(new Map<string, string>())
   const validLocation = useCallback(
     (state: ViewNavigation) => {
-      const location = state[state.mode]
+      const location = state.location
       return (
         !!location.page ||
         !location.picked ||
@@ -102,8 +97,8 @@ export function App() {
   useEffect(() => cancelOpening, [cancelOpening])
   const dispatch = useCallback(
     (action: NavigationAction) => {
-      // 隐藏视图清理失效会话不是用户改选，不能取消正在等待目录的打开请求。
-      if (action.type !== 'missing') cancelOpening()
+      // 切树和清理失效会话都不是改选，不能取消正在等待身份确认的打开请求。
+      if (action.type !== 'missing' && action.type !== 'switch') cancelOpening()
       visit(action)
     },
     [cancelOpening, visit],
@@ -120,14 +115,14 @@ export function App() {
   useLayoutEffect(() => cancelOpening(), [auxiliary, cancelOpening])
   const closeAuxiliary = useCallback(() => leaveThen(() => setAuxiliary(null)), [])
   const sidebarMode = navigation.mode
-  const { picked, wish, page, peek = null } = navigation[sidebarMode]
+  const { picked, wish, page, peek = null } = navigation.location
   const setPeek = useCallback(
     (selection: Selection | null) => dispatch({ type: 'peek', selection }),
     [dispatch],
   )
   const setWish = (wish: PlaceWish | null) => dispatch({ type: 'wish', wish })
   const [managerLocations, setManagerLocations] = useState<Record<string, ManagerPageLocation>>({})
-  const managersAt = navigation.manager.managersRoute ?? { view: 'list' as const }
+  const managersAt = navigation.location.managersRoute ?? { view: 'list' as const }
   /**
    * 新建对话页上明说的去处：从侧栏工作区行的加号带过来的，或者在页上自己换的。
    * null：按默认的来（上次用的设备和工作区）
@@ -170,18 +165,11 @@ export function App() {
         requestOpenSession({ deviceId: manager.deviceId, sessionId: manager.threadId })
     }
   }, [managerData.managers, picked])
-  const forgetChat = useCallback(
-    (selection: Selection) => dispatch({ type: 'missing', mode: 'chat', selection }),
+  const forgetSelection = useCallback(
+    (selection: Selection) => dispatch({ type: 'missing', selection }),
     [dispatch],
   )
-  const forgetManager = useCallback(
-    (selection: Selection) => {
-      dispatch({ type: 'missing', mode: 'manager', selection })
-    },
-    [dispatch],
-  )
-  useSelectionLifetime(navigation.chat.picked, managerData.managers, forgetChat)
-  useSelectionLifetime(navigation.manager.picked, managerData.managers, forgetManager)
+  useSelectionLifetime(picked, managerData.managers, forgetSelection)
   /** 正在写的新会话要建在哪。选中了会话就没有它；一台设备都没有的时候也是 null */
   const draft: Draft | null = picked ? null : place
   // 开着某一页的时候，侧栏里没有哪个会话是选中的
@@ -228,30 +216,21 @@ export function App() {
     [dispatch, auxiliary, cancelOpening],
   )
   const select = useCallback(
-    (next: Selection, mode?: ViewMode) =>
+    (next: Selection) =>
       leaveThen(() => {
         cancelOpening()
         opening.current = openSessionWhenKnown(
           replica.store,
           next.deviceId,
           next.sessionId,
-          (managerId) => {
-            const summary = replica.store.get<SessionSummary>(
-              keys.summary(next.deviceId, next.sessionId),
-            )
-            const managed = summary && managerMark(summary)
+          () => {
             setAuxiliary(null)
-            // 入口可以保留工作线所在的侧栏，但不能把经理工作台降为普通对话。
-            dispatch(sessionSelection(next, managerId, mode, !!managed))
+            dispatch({ type: 'select', selection: next })
           },
           next.managerId,
         )
       }),
     [replica, cancelOpening, dispatch],
-  )
-  const selectFromSidebar = useCallback(
-    (next: Selection) => select(next, sidebarMode),
-    [select, sidebarMode],
   )
   /** 到新建对话页去。next 是明说要建在哪；null 是按默认的来 */
   const compose = useCallback(
@@ -294,10 +273,7 @@ export function App() {
       setPeek,
     ],
   )
-  const switchSidebar = (mode: 'chat' | 'manager') =>
-    leaveThen(() => {
-      dispatch({ type: 'switch', mode })
-    })
+  const switchSidebar = (mode: 'chat' | 'manager') => dispatch({ type: 'switch', mode })
   const closePage = useCallback(() => openPage(null), [openPage])
   /** 别处要求直接进哪台设备的详情。seq 每次都变，同一台再要一次也重新进 */
   const [deviceAt, setDeviceAt] = useState<{
@@ -458,8 +434,7 @@ export function App() {
           else select(next)
         }}
       />
-      {page === 'managers' ||
-      (sidebarMode === 'manager' && !page && (pickedManager || waitingManager || owner)) ? (
+      {page === 'managers' || (!page && (pickedManager || waitingManager || owner)) ? (
         <ManagerTitleBar
           {...(page
             ? {}
@@ -488,7 +463,7 @@ export function App() {
         selection={selection}
         draft={page ? null : draft}
         page={auxiliary ?? page}
-        onSelect={selectFromSidebar}
+        onSelect={select}
         onCompose={compose}
         onPage={onPage}
       />
@@ -513,9 +488,8 @@ export function App() {
               initial={managersAt}
               onRoute={(route) => dispatch({ type: 'managers', route })}
               {...managerData}
-              onClose={() => (pickedManager ? closePage() : switchSidebar('chat'))}
-              // 新建应答可能先于目录摘要到达，经理入口明确保留所属视图。
-              onOpen={(next) => select(next, 'manager')}
+              onClose={closePage}
+              onOpen={select}
             />
           ) : selection && pickedManager ? (
             <ManagerPage
@@ -593,7 +567,7 @@ export function App() {
                     settings: false,
                   },
                 }))
-                select({ deviceId: manager.deviceId, sessionId: manager.threadId }, 'manager')
+                select({ deviceId: manager.deviceId, sessionId: manager.threadId })
               }}
               onClose={closeAuxiliary}
               onOpen={(next, archived) => {
