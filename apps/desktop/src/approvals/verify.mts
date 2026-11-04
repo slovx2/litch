@@ -21,6 +21,8 @@ import { approvalKeyFingerprint, type TrustedPhone, type TrustedPhones } from '.
  * 不用答复里带回来的。卡片号和随机数就是登录卡片的 id、nonce；桌面端号用这里记着的（approvalDesktopId）
  */
 export interface PhoneCard {
+  /** 自身访问不接受首次信任，只认扫码时人核对过的批准钥匙。 */
+  pairedOnly?: boolean
   id: string
   nonce: string
   /** 页面的真实源 */
@@ -37,6 +39,7 @@ export interface PhoneCard {
 
 /** 为什么不认 */
 export type PhoneRejection =
+  | 'pairingRequired'
   /** 主进程还没装好（没有数据目录） */
   | 'unavailable'
   /** 手机远程批准没开 */
@@ -140,6 +143,7 @@ export class PhoneApprovals {
     // 先验签名（用答复带的钥匙），再看认不认这把钥匙：签名都不对的不该动记下的东西
     if (!signatureOk(answer, card, this.store.desktopId)) return { ok: false, why: 'signature' }
     const known = this.store.get(answer.phoneId)
+    if (card.pairedOnly && known?.source !== 'pairing') return { ok: false, why: 'pairingRequired' }
     let firstSeen = false
     if (!known) {
       firstSeen = true

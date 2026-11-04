@@ -1,7 +1,7 @@
 // 设置页“Computer Use”那一组（只在 macOS、Windows 上的桌面外壳里有，见 computer-bridge.ts）。
 // macOS：两项系统权限（辅助功能、屏幕录制）给没给，没给的说明一句、给一个“打开系统设置”让用户自己去打开；
 // 屏幕录制授权之后要重启助手才生效，所以没给的时候还有“重启助手”；最后一句说明每台设备的开关在设备详情里。
-// 没有按应用的授权：所有应用都能操作。
+// 普通应用不按应用授权；正式版 Litch 自身的访问许可可在这里查询和撤销。
 //
 // 查权限会拉起助手，只在这一组打开时查（不在启动时、也不在设备详情里为看一眼去拉起）。用户从系统设置切回来时
 // 窗口重新拿到焦点，再问一次在跑的助手（不拉起）。应用从不替用户改系统设置，也不调会弹系统授权框的接口。
@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
+import { Close } from '../app/icons.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 import {
   type ComputerUseBridge,
@@ -48,6 +49,7 @@ export function ComputerSection({ onDevices }: { onDevices(): void }) {
   if (!bridge) return null
   return (
     <>
+      <SelfApproval bridge={bridge} />
       {bridge.platform === 'win32' ? (
         <HelperStatus bridge={bridge} />
       ) : (
@@ -64,6 +66,49 @@ export function ComputerSection({ onDevices }: { onDevices(): void }) {
         </div>
       </section>
     </>
+  )
+}
+
+function SelfApproval({ bridge }: { bridge: ComputerUseBridge }) {
+  const t = useT()
+  const [until, setUntil] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const refresh = useCallback(() => {
+    void bridge
+      .selfApproval()
+      .then(setUntil)
+      .catch((cause: unknown) => setError(reasonOf(cause, t)))
+  }, [bridge, t])
+  useEffect(() => {
+    refresh()
+    const timer = setInterval(refresh, 1000)
+    return () => clearInterval(timer)
+  }, [refresh])
+  return (
+    <section className="set-block">
+      <h3>{t('computerSelf.setting')}</h3>
+      <div className="set-row">
+        <span className="set-note">
+          {until
+            ? t('computerSelf.until', { time: new Date(until).toLocaleString() })
+            : t('computerSelf.none')}
+        </span>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => {
+            void bridge
+              .revokeSelfApproval()
+              .then(refresh)
+              .catch((cause: unknown) => setError(reasonOf(cause, t)))
+          }}
+        >
+          <Close />
+          {t('computerSelf.revoke')}
+        </button>
+      </div>
+      {error ? <div className="set-note err">{error}</div> : null}
+    </section>
   )
 }
 

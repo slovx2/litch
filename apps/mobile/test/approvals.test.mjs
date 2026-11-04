@@ -39,6 +39,39 @@ const signer = {
   sign: async (text) => sign(null, Buffer.from(text, 'utf8'), privateKey).toString('base64'),
 }
 
+test('自身访问三档签入 ref，不能跨档位重放签名，不使用 remember', async () => {
+  const self = {
+    ...card(),
+    kind: 'computerSelf',
+    summary: { origin: 'litch://computer-self', device: 'desktop' },
+  }
+  for (const ref of ['once', 'session', 'always', null]) {
+    const answer = await buildAnswer(self, { ref, remember: true }, signer)
+    assert.equal(answer.ref, ref)
+    assert.equal(answer.remember, false)
+    const identity = { ...self, origin: self.summary.origin }
+    assert.equal(
+      verify(
+        null,
+        Buffer.from(approvalSignedText(identity, answer)),
+        createPublicKey(privateKey),
+        Buffer.from(answer.signature, 'base64'),
+      ),
+      true,
+    )
+    assert.equal(
+      verify(
+        null,
+        Buffer.from(approvalSignedText(identity, { ...answer, ref: 'forged' })),
+        createPublicKey(privateKey),
+        Buffer.from(answer.signature, 'base64'),
+      ),
+      false,
+    )
+  }
+  await assert.rejects(buildAnswer(self, { ref: 'forever', remember: false }, signer))
+})
+
 const card = (over = {}) => ({
   id: 'Ap7cK2mQ9xW4rT6v',
   threadId: 't1',

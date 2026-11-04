@@ -248,6 +248,8 @@ function dispatch(method, params) {
       return {}
     case 'listApps':
       return { apps: APPS }
+    case 'inspectTarget':
+      return { self: false, pid: 11 }
     case 'getAppState': {
       const { app, windowId } = prepare(params)
       const window = app.windows.find((one) => one.id === windowId)

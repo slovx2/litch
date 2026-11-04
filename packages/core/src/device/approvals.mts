@@ -76,11 +76,21 @@ export interface Approvals {
  */
 export function phoneCardOf(place: ToolAskPlace, device: string): ApprovalCard | null {
   const ask = place.ask as unknown as Record<string, unknown>
-  if (ask.kind !== 'signIn') return null
+  if (ask.kind !== 'signIn' && ask.kind !== 'computerSelf') return null
   if (!isApprovalToken(ask.id) || !isApprovalToken(ask.nonce) || !isApprovalToken(ask.desktopId))
     return null
+  if (ask.kind === 'computerSelf')
+    return {
+      id: ask.id,
+      nonce: ask.nonce,
+      desktopId: ask.desktopId,
+      threadId: place.threadId,
+      kind: 'computerSelf',
+      summary: { origin: 'litch://computer-self', device },
+      expiresAt: null,
+    }
   if (typeof ask.origin !== 'string' || !ask.origin) return null
-  const accounts: ApprovalCard['summary']['accounts'] = []
+  const accounts: { ref: string; masked: string }[] = []
   for (const account of Array.isArray(ask.accounts) ? ask.accounts : []) {
     const { ref, masked } = (account ?? {}) as { ref?: unknown; masked?: unknown }
     if (!isApprovalRef(ref) || typeof masked !== 'string') return null

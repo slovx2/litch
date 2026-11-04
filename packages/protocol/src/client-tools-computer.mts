@@ -86,7 +86,7 @@ const SAFETY = `- Ask the user before anything irreversible or sensitive: deleti
 - Do not bypass security checks or solve CAPTCHAs.`
 
 const NAMESPACE_DESCRIPTION: Record<ComputerPlatform, string> = {
-  darwin: `Control running macOS apps through Litch, including apps without a window; there is no per-app approval.
+  darwin: `Control macOS apps through Litch, including apps without a window. Access to release Litch itself requires approval; never bypass refusal.
 
 ${HOW_TO_WORK}
 
@@ -95,7 +95,7 @@ ${SAFETY}`,
   // 3.6 节的 Windows 规矩：不按 Windows 键、不用“运行”、不在资源管理器地址栏或文件对话框里输入命令、
   // 管理员窗口请用户自己做、桌面锁着就停下请用户解锁。codex 限命名空间说明 1024 个字，所以比 macOS 那份写得紧，
   // 安全规矩一条不少
-  win32: `Control Windows apps through Litch. Any app with a window can be used; there is no per-app approval.
+  win32: `Control Windows apps. Access to release Litch itself requires approval; never bypass refusal.
 
 How to work: list_apps, then get_app_state BEFORE any action (screenshot + numbered elements like [12]). Act by element number, x/y only without one. Verify with returned tree changes; get_app_state for missing detail or a new screenshot. On "user is using", wait and retry; if the user stopped you, leave that app alone this turn. Dialogs are separate windows: pass window.
 
@@ -145,7 +145,7 @@ export function computerToolsSpec(
     type: 'function',
     name: COMPUTER_TOOL.runActions,
     description:
-      'Execute 1–12 known actions in order using the same tool names and arguments as individual actions. Observe each app with get_app_state first. Use this when the next steps are already known (e.g. select text, bold, save shortcut); use individual actions and observe first when the next step depends on new UI. No loops, nested batches or observations inside a batch. Actions have 60 seconds total; final observation has up to 10 seconds. Every step keeps normal permission, user-activity, stop and safety checks; there is no per-app approval. Stops on the first failure without rollback or retries. Returns short step results and one final full state of the last attempted app, with at most one screenshot. Element numbers and coordinates must come from an existing observation; stale references stop the batch. Never guess new numbers or reuse coordinates after a window change. Inspect the returned state and continue only unfinished work; a failed action may have partly executed. Ask for any necessary user approval before submitting the batch.',
+      'Execute 1–12 known actions in order using the same tool names and arguments as individual actions. Observe each app with get_app_state first. Use this when the next steps are already known (e.g. select text, bold, save shortcut); use individual actions and observe first when the next step depends on new UI. No loops, nested batches or observations inside a batch. Actions have 60 seconds total; final observation has up to 10 seconds. Every step keeps normal permission, user-activity, stop and safety checks; ordinary apps need no per-app approval. Observing or controlling the installed release of Litch itself requires user approval; never bypass a refusal. Stops on the first failure without rollback or retries. Returns short step results and one final full state of the last attempted app, with at most one screenshot. Element numbers and coordinates must come from an existing observation; stale references stop the batch. Never guess new numbers or reuse coordinates after a window change. Inspect the returned state and continue only unfinished work; a failed action may have partly executed. Ask for any necessary user approval before submitting the batch.',
     inputSchema: {
       type: 'object',
       properties: {

@@ -35,6 +35,8 @@ export interface ComputerUseState {
 }
 
 export interface ComputerUseBridge {
+  selfApproval(): Promise<number | null>
+  revokeSelfApproval(): Promise<boolean>
   /** 这台桌面的平台：darwin 是权限那一套，win32 是助手状态那一套 */
   readonly platform: 'darwin' | 'win32'
   /** launch：助手没在跑时要不要拉起它。设置页那一节要；设备详情里顺带看一眼不要（不为看一眼拉起助手） */

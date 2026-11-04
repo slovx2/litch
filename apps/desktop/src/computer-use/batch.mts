@@ -59,14 +59,7 @@ async function bounded(
   }
 }
 
-export async function runComputerActions(
-  invocation: ClientToolInvocation,
-  context: ClientToolContext,
-  run: Run,
-  // 测试可缩短时限；生产固定用协议中的上限。
-  limits = { actionMs: COMPUTER_BATCH_ACTION_MS, stateMs: COMPUTER_BATCH_STATE_MS },
-): Promise<ClientToolCallResponse> {
-  const args = invocation.arguments
+export function validateComputerActions(args: unknown): ClientToolCallResponse | null {
   if (
     !object(args) ||
     Object.keys(args).some((key) => key !== 'actions') ||
@@ -96,7 +89,19 @@ export async function runComputerActions(
       )
     }
   }
-  const actions = args.actions as Action[]
+  return null
+}
+
+export async function runComputerActions(
+  invocation: ClientToolInvocation,
+  context: ClientToolContext,
+  run: Run,
+  // 测试可缩短时限；生产固定用协议中的上限。
+  limits = { actionMs: COMPUTER_BATCH_ACTION_MS, stateMs: COMPUTER_BATCH_STATE_MS },
+): Promise<ClientToolCallResponse> {
+  const invalid = validateComputerActions(invocation.arguments)
+  if (invalid) return invalid
+  const actions = (invocation.arguments as { actions: Action[] }).actions
   const summaries: string[] = []
   let last: Action | undefined
   let failure: ClientToolCallResponse | null = null

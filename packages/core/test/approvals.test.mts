@@ -60,6 +60,22 @@ const answer: ApprovalAnswer = {
   signature: `${'A'.repeat(86)}==`,
 }
 
+test('自身访问卡通过设备转发三档签名答复，桌面完成后收卡', async () => {
+  const w = world()
+  w.core.start()
+  await settled()
+  await w.ask({ kind: 'computerSelf', ...ticket })
+  const [card] = w.seen('litch/approval/open') as unknown as ApprovalCard[]
+  assert.equal(card?.kind, 'computerSelf')
+  assert.deepEqual(card?.summary, { origin: 'litch://computer-self', device: 'song-debian' })
+  w.broadcast('litch/approval/answered', { ...answer, ref: 'always' })
+  await settled()
+  assert.equal(w.sent.filter((message) => message.op === 'phoneAnswer').length, 1)
+  w.reply({ op: 'askDone', askId: 'k1' })
+  await settled()
+  assert.deepEqual(w.seen('litch/approval/close'), [{ id: ticket.id }])
+})
+
 function world(extensions = ['harness', 'clientApprovals']) {
   const fake = fakeDevice([
     harness('pi', {
@@ -197,7 +213,11 @@ test('桌面端：人在桌面端答了也收掉；没有桌面端号、不是�
   await settled()
   await w.ask(signInAsk({ taskId: 'task-1', expiresAt: 99 }))
   const [card] = w.seen('litch/approval/open') as unknown as ApprovalCard[]
-  assert.deepEqual(card?.summary.task, { id: 'task-1', name: '' })
+  assert.equal(card?.kind, 'browserSignIn')
+  assert.deepEqual(card?.kind === 'browserSignIn' ? card.summary.task : null, {
+    id: 'task-1',
+    name: '',
+  })
   assert.equal(card?.expiresAt, 99)
   // 在对话里答这张卡片（界面的 session.respond）
   await w.core.command(

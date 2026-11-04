@@ -45,29 +45,40 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
     <Card
       testID="request:clientAsk"
       title={t(
-        ask.kind === 'chromeInstance'
-          ? 'chrome.instance'
-          : ask.kind === 'chromeSignIn'
-            ? 'chrome.signIn'
-            : ask.kind === 'site'
-              ? ask.browser === 'chrome'
-                ? 'chrome.approve'
-                : 'clientAsk.site'
-              : ask.kind === 'machine'
-                ? MACHINE_TITLE[ask.action]
-                : 'signInAsk.title',
+        ask.kind === 'computerSelf'
+          ? 'computerSelf.title'
+          : ask.kind === 'chromeInstance'
+            ? 'chrome.instance'
+            : ask.kind === 'chromeSignIn'
+              ? 'chrome.signIn'
+              : ask.kind === 'site'
+                ? ask.browser === 'chrome'
+                  ? 'chrome.approve'
+                  : 'clientAsk.site'
+                : ask.kind === 'machine'
+                  ? MACHINE_TITLE[ask.action]
+                  : 'signInAsk.title',
       )}
       waiting={waiting}
       error={error}
       actions={request.options.map((option) => (
         <CardButton
           key={option.id}
+          {...(ask.kind === 'computerSelf'
+            ? { symbol: option.role === 'decline' ? ('close' as const) : ('check' as const) }
+            : {})}
           kind={option === primary ? 'primary' : option.role === 'decline' ? 'ghost' : 'plain'}
           testID={`request:option:${option.id}`}
           label={t(
-            ask.kind === 'chromeSignIn' && option.role === 'accept'
-              ? 'chrome.signInDone'
-              : optionText[option.role],
+            ask.kind === 'computerSelf' && option.role === 'acceptAlways'
+              ? 'computerSelf.day'
+              : ask.kind === 'computerSelf' && option.role === 'accept'
+                ? 'computerSelf.once'
+                : ask.kind === 'computerSelf' && option.role === 'acceptSession'
+                  ? 'computerSelf.session'
+                  : ask.kind === 'chromeSignIn' && option.role === 'accept'
+                    ? 'chrome.signInDone'
+                    : optionText[option.role],
           )}
           disabled={busy}
           onPress={() => respond({ optionId: option.id })}
@@ -83,7 +94,9 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
         label={t('clientAsk.tool')}
         value={`${request.tool.namespace} · ${request.tool.name}`}
       />
-      {ask.kind === 'site' ? (
+      {ask.kind === 'computerSelf' ? (
+        <Why tone="err">{t('computerSelf.risk')}</Why>
+      ) : ask.kind === 'site' ? (
         <>
           <Meta label={t('clientAsk.origin')} value={ask.origin} />
           {ask.url && ask.url !== ask.origin ? <Well>{ask.url}</Well> : null}

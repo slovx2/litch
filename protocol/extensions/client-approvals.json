@@ -1,7 +1,7 @@
 {
   "extension": "clientApprovals",
   "status": "已定（2026-10-24，22 号设计第八节、决 415、决 422）",
-  "description": "手机上批准：桌面端要人点头的卡片经会话所在设备的设备服务转给绑了这台设备的手机，手机的答复带着批准钥匙（手机另生成的一把 ed25519，和 ssh 钥匙无关）的签名经设备服务交回发卡片的那条连接，由桌面端自己验签。设备服务不可信（代理就跑在那台设备上），只转交、不验签。第一版只有一种卡片：内置浏览器的代理登录（browserSignIn）。类型、签名内容、形状检查在 packages/protocol/src/client-approvals.mts。",
+  "description": "手机上批准：桌面端要人点头的卡片经会话所在设备的设备服务转给绑了这台设备的手机，手机的答复带着批准钥匙（手机另生成的一把 ed25519，和 ssh 钥匙无关）的签名经设备服务交回发卡片的那条连接，由桌面端自己验签。设备服务不可信（代理就跑在那台设备上），只转交、不验签。支持浏览器登录（browserSignIn）和正式版 Litch 自身访问（computerSelf）。类型、签名内容、形状检查在 packages/protocol/src/client-approvals.mts。",
   "appliesTo": "只有聚合面。兼容面上没有这个扩展的任何内容。",
   "declaration": {
     "description": "设备服务在 runtime/info 的 device.extensions 里列出 clientApprovals，表示支持。通知 litch/approval/changed 只发给握手时在 capabilities.litchExtensions 里列了 clientApprovals 的连接；litch/approval/open 要求发卡片的连接声明了它（答复只送给发卡片的那一条）。",
@@ -24,7 +24,8 @@
     "list：现在挂着的全部卡片（给了 threadId 只回这个会话的），先开的在前。",
     "answer：设备服务只查形状（isApprovalAnswer）和卡片还在不在，原样（只留定义里的键）发给发卡片的那条连接（litch/approval/answered），不验签名、不收掉卡片；桌面端验过签名、答完了自己 close，验不过的丢掉、卡片接着等。一张卡片最多转交 8 次答复，再答回 tooMany。",
     "签名：手机对 UTF-8( 'litch-approval-v1\\n' + 一行 JSON ) 做 ed25519 签名，JSON 的键按 id、nonce、desktopId、origin、ref、decision、remember、phoneId 的顺序（approvalSignedText）。桌面端只认：自己发出去的卡片号、随机数对得上（用一次作废）、没过期、签的源和账号和自己卡片上的一样、签名能用它记下的这台手机的批准公钥验过。算法、指纹和测试向量见 client-approvals.mts。",
-    "批准公钥怎么到桌面端：扫码绑定时手机在 pair-enroll 的输入里带上 approvalKey（二维码里有 a 时才带），确认码把它算进去，出码的桌面端在人核对过确认码、允许时记下（扫码时核对过）；以前绑的手机第一次答卡片时答复里带上，桌面端没记过这个手机号就验过签名后记下并当次生效（第一次批准时记下）。之后同一个手机号带来一把不一样的钥匙，两把都不认。记在桌面端自己的数据目录，不从设备上读。"
+    "批准公钥怎么到桌面端：扫码绑定时手机在 pair-enroll 的输入里带上 approvalKey（二维码里有 a 时才带），确认码把它算进去，出码的桌面端在人核对过确认码、允许时记下（扫码时核对过）；以前绑的手机第一次答卡片时答复里带上，桌面端没记过这个手机号就验过签名后记下并当次生效（第一次批准时记下）。之后同一个手机号带来一把不一样的钥匙，两把都不认。记在桌面端自己的数据目录，不从设备上读。",
+    "computerSelf：origin 固定为 litch://computer-self；ref 为 once（本次调用，含整批及最终观察）、session（来源设备上的本对话）或 always（这台桌面的所有对话 24 小时），拒绝为 null，remember 必须为 false。签名覆盖档位，桌面仅接受扫码配对核对过的手机钥匙，不接受首次信任；网站登录保持原规则。主进程保存授权并验签，设备仅转发。24 小时授权持久化在桌面用户数据目录，到期自动失效，可在设置查看和撤销。"
   ],
   "parts": [
     {
@@ -228,7 +229,20 @@
         }
       }
     },
+    "ComputerSelfSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "device"],
+      "properties": {
+        "origin": { "const": "litch://computer-self" },
+        "device": { "type": "string", "maxLength": 200 }
+      }
+    },
     "Card": {
+      "oneOf": [
+        { "properties": { "kind": { "const": "browserSignIn" }, "summary": { "$ref": "#/definitions/BrowserSignInSummary" } } },
+        { "properties": { "kind": { "const": "computerSelf" }, "summary": { "$ref": "#/definitions/ComputerSelfSummary" } } }
+      ],
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "threadId", "kind", "summary", "desktopId", "nonce", "expiresAt"],
@@ -241,10 +255,13 @@
           "minLength": 1
         },
         "kind": {
-          "const": "browserSignIn"
+          "enum": ["browserSignIn", "computerSelf"]
         },
         "summary": {
-          "$ref": "#/definitions/BrowserSignInSummary"
+          "oneOf": [
+            { "$ref": "#/definitions/BrowserSignInSummary" },
+            { "$ref": "#/definitions/ComputerSelfSummary" }
+          ]
         },
         "desktopId": {
           "$ref": "#/definitions/Token"
@@ -258,6 +275,10 @@
       }
     },
     "CardView": {
+      "oneOf": [
+        { "properties": { "kind": { "const": "browserSignIn" }, "summary": { "$ref": "#/definitions/BrowserSignInSummary" } } },
+        { "properties": { "kind": { "const": "computerSelf" }, "summary": { "$ref": "#/definitions/ComputerSelfSummary" } } }
+      ],
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -279,10 +300,13 @@
           "minLength": 1
         },
         "kind": {
-          "const": "browserSignIn"
+          "enum": ["browserSignIn", "computerSelf"]
         },
         "summary": {
-          "$ref": "#/definitions/BrowserSignInSummary"
+          "oneOf": [
+            { "$ref": "#/definitions/BrowserSignInSummary" },
+            { "$ref": "#/definitions/ComputerSelfSummary" }
+          ]
         },
         "desktopId": {
           "$ref": "#/definitions/Token"

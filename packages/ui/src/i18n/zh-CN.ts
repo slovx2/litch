@@ -1608,6 +1608,18 @@ export const zhCN = {
   'clientAsk.origin': '网站',
   'clientAsk.url': '网址',
   'clientAsk.tool': '工具',
+  'computerSelf.title': '允许代理访问 Litch 本身？',
+  'computerSelf.risk':
+    '代理将读取或操作 Litch 本身，可能看到其他对话、代替你批准请求或修改设置。授权适用于这台桌面的所有正式版 Litch 窗口。',
+  'computerSelf.once': '允许本次',
+  'computerSelf.session': '本对话内允许',
+  'computerSelf.day': '24 小时内对所有对话允许',
+  'computerSelf.setting': 'Litch 自身访问授权',
+  'computerSelf.phone':
+    '此授权只接受扫码配对时核对过的手机钥匙。首次批准时记下的旧钥匙需要重新配对才能在手机上批准这类请求，桌面端审批不受影响。',
+  'computerSelf.none': '未授予跨对话访问权限',
+  'computerSelf.until': '所有对话可访问，至 {time}',
+  'computerSelf.revoke': '撤销授权',
   'clientAsk.option.once': '本回合允许',
   'clientAsk.option.session': '本会话内允许',
   'clientAsk.option.always': '始终允许',

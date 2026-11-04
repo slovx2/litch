@@ -1,5 +1,5 @@
 // litch_computer 的执行器：模型的每次调用在这里过一遍检查，再交给助手执行。
-// 所有应用都能操作，不按应用审批，本机和远程设备的会话一样；
+// 普通应用不按应用审批；正式版 Litch 自身由主进程授权、助手复核，本机和远程会话一样。
 // 能不能用只看设备和 harness 两级的开关（核心在调用到这里之前查）。
 // 出错的说法两个平台共用；Windows 上找应用、编号、换算坐标、组装结果在 executor-win.mts（platform 为 win32 时）。
 //
@@ -27,6 +27,7 @@ import type {
 import { runComputerActions } from './batch.mjs'
 import { CALL_TIMEOUT, type HelperAccess, sessionKey, text } from './executor-shared.mjs'
 import { createWinRunner } from './executor-win.mjs'
+import type { ComputerSelfGuard } from './self-guard.mjs'
 import {
   type ActionResult,
   type AppMenuStateResult,
@@ -41,6 +42,7 @@ export type { HelperAccess, HelperRequester } from './executor-shared.mjs'
 export { sessionKey } from './executor-shared.mjs'
 
 export interface ComputerExecutorOptions {
+  selfGuard?: ComputerSelfGuard
   onInvocation?(invocation: ClientToolInvocation, session: string): void
   helper: HelperAccess
   /** 这台桌面的平台：win32 走 Windows 那一套，别的按 macOS */
@@ -79,7 +81,7 @@ export function permissionMessage(status: PermissionStatus): string {
 }
 
 export function createComputerExecutor(options: ComputerExecutorOptions): ComputerExecutor {
-  const { helper } = options
+  const helper = options.selfGuard?.wrap(options.helper) ?? options.helper
   const platform = options.platform === 'win32' ? 'win32' : 'darwin'
   const now = options.now ?? Date.now
   let lastRestart = 0
@@ -177,9 +179,20 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
   return {
     namespace: CLIENT_TOOL_NAMESPACE.computer,
     async call(invocation, context) {
-      return invocation.tool === COMPUTER_TOOL.runActions
-        ? runComputerActions(invocation, context, single)
-        : single(invocation, context)
+      const execute = () =>
+        invocation.tool === COMPUTER_TOOL.runActions
+          ? runComputerActions(invocation, context, single)
+          : single(invocation, context)
+      try {
+        return await (options.selfGuard
+          ? options.selfGuard.run(invocation, context, options.helper, execute)
+          : execute())
+      } catch (error) {
+        return failureOf(error, context.signal)
+      }
+    },
+    phoneAnswer(answer) {
+      options.selfGuard?.phoneAnswer(answer)
     },
     turnEnded(turn) {
       const session = sessionKey({ device: { id: turn.deviceId }, threadId: turn.threadId })

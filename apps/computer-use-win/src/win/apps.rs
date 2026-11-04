@@ -4,15 +4,17 @@
 // - UWP 应用的顶层窗口属于 ApplicationFrameHost.exe，真正的应用在它的子窗口里，按子窗口的进程认。
 // - 系统外壳（任务栏、桌面、开始菜单、输入法面板）和助手自己不列。
 use super::system::{self, from_wide, open_process, process_exe, window_pid};
-use crate::shell;
 use crate::fail;
 use crate::geometry::Rect;
 use crate::ident::{match_score, AppNames};
+use crate::shell;
 use crate::wire::RpcResult;
 use std::collections::HashMap;
 use windows::core::{BOOL, HSTRING, PWSTR};
 use windows::Win32::Foundation::{HWND, LPARAM, RECT, TRUE};
-use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS};
+use windows::Win32::Graphics::Dwm::{
+    DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS,
+};
 use windows::Win32::Storage::Packaging::Appx::GetApplicationUserModelId;
 use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::UI::Shell::{IShellItem, SHCreateItemFromParsingName, SIGDN_NORMALDISPLAY};
@@ -65,7 +67,12 @@ pub fn class(h: HWND) -> String {
 pub fn bounds(h: HWND) -> Rect {
     let mut r = RECT::default();
     let ok = unsafe {
-        DwmGetWindowAttribute(h, DWMWA_EXTENDED_FRAME_BOUNDS, &mut r as *mut RECT as *mut _, std::mem::size_of::<RECT>() as u32)
+        DwmGetWindowAttribute(
+            h,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            &mut r as *mut RECT as *mut _,
+            std::mem::size_of::<RECT>() as u32,
+        )
     };
     if ok.is_err() {
         unsafe {
@@ -160,7 +167,11 @@ fn frame_child_pid(h: HWND, host: u32) -> Option<u32> {
     }
     let mut state = (host, 0u32);
     unsafe {
-        let _ = EnumChildWindows(Some(h), Some(find), LPARAM(&mut state as *mut (u32, u32) as isize));
+        let _ = EnumChildWindows(
+            Some(h),
+            Some(find),
+            LPARAM(&mut state as *mut (u32, u32) as isize),
+        );
     }
     (state.1 != 0).then_some(state.1)
 }
@@ -168,15 +179,19 @@ fn frame_child_pid(h: HWND, host: u32) -> Option<u32> {
 fn aumid_of(process: &system::Handle) -> Option<String> {
     let mut buf = vec![0u16; 512];
     let mut len = buf.len() as u32;
-    let rc = unsafe { GetApplicationUserModelId(process.0, &mut len, Some(PWSTR(buf.as_mut_ptr()))) };
-    (rc.0 == 0).then(|| from_wide(&buf)).filter(|s| !s.is_empty())
+    let rc =
+        unsafe { GetApplicationUserModelId(process.0, &mut len, Some(PWSTR(buf.as_mut_ptr()))) };
+    (rc.0 == 0)
+        .then(|| from_wide(&buf))
+        .filter(|s| !s.is_empty())
 }
 
 /// 打包应用在开始菜单里的名字
 fn aumid_display_name(aumid: &str) -> Option<String> {
     unsafe {
         let item: IShellItem =
-            SHCreateItemFromParsingName(&HSTRING::from(format!("shell:AppsFolder\\{aumid}")), None).ok()?;
+            SHCreateItemFromParsingName(&HSTRING::from(format!("shell:AppsFolder\\{aumid}")), None)
+                .ok()?;
         let name = item.GetDisplayName(SIGDN_NORMALDISPLAY).ok()?;
         let text = name.to_string().ok();
         CoTaskMemFree(Some(name.0 as *const _));
@@ -227,11 +242,17 @@ pub fn list() -> Vec<App> {
         if pid == own {
             continue;
         }
-        let Some(mut identity) = identify(pid, &mut cache) else { continue };
+        let Some(mut identity) = identify(pid, &mut cache) else {
+            continue;
+        };
         if shell::file_name(&identity.exe) == "applicationframehost.exe" {
-            let Some(child) = frame_child_pid(h, pid) else { continue };
+            let Some(child) = frame_child_pid(h, pid) else {
+                continue;
+            };
             pid = child;
-            let Some(real) = identify(pid, &mut cache) else { continue };
+            let Some(real) = identify(pid, &mut cache) else {
+                continue;
+            };
             identity = real;
         }
         if shell::is_shell_exe(&identity.exe) {
@@ -248,7 +269,10 @@ pub fn list() -> Vec<App> {
             minimized: unsafe { IsIconic(h).as_bool() },
             owned,
         };
-        match apps.iter_mut().find(|a| a.app_id.eq_ignore_ascii_case(&identity.app_id)) {
+        match apps
+            .iter_mut()
+            .find(|a| a.app_id.eq_ignore_ascii_case(&identity.app_id))
+        {
             Some(app) => app.windows.push(win),
             None => {
                 identity.windows.push(win);
@@ -264,7 +288,14 @@ pub fn resolve(query: &str, window: Option<isize>) -> RpcResult<(App, Win)> {
     let apps = list();
     let mut best: Option<(u8, &App)> = None;
     for app in &apps {
-        let score = match_score(query, &AppNames { app_id: &app.app_id, name: &app.name, exe: &app.exe });
+        let score = match_score(
+            query,
+            &AppNames {
+                app_id: &app.app_id,
+                name: &app.name,
+                exe: &app.exe,
+            },
+        );
         if score > 0 && best.is_none_or(|(s, _)| score > s) {
             best = Some((score, app));
         }
@@ -281,7 +312,21 @@ pub fn resolve(query: &str, window: Option<isize>) -> RpcResult<(App, Win)> {
             fail!(NotFound, "{} has no open window.", app.name)
         })?,
     };
-    Ok((app.clone(), win))
+    // 同一路径可同时运行正式配置和隔离验收配置，安全判断必须用所选窗口的实际进程。
+    let pid = window_pid(hwnd(win.hwnd));
+    let mut selected = app.clone();
+    if shell::file_name(&selected.exe) == "litch.exe" {
+        if let Some(identity) = identify(pid, &mut HashMap::new()) {
+            selected.pid = identity.pid;
+            selected.integrity = identity.integrity;
+        } else {
+            return Err(fail!(
+                NotFound,
+                "The window's process is no longer available."
+            ));
+        }
+    }
+    Ok((selected, win))
 }
 
 /// 同一进程里盖在窗口上面的弹出层（菜单、下拉框、提示），截图时叠进去。按 Z 序从下到上给出

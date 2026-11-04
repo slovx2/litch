@@ -8,6 +8,8 @@ import { approvalsBridge } from './approvals/bridge.mjs'
 import { browserBridge } from './browser/bridge.mjs'
 import {
   ABOUT,
+  COMPUTER_SELF_REVOKE,
+  COMPUTER_SELF_STATUS,
   COMPUTER_USE_OPEN_SETTINGS,
   COMPUTER_USE_RESTART,
   COMPUTER_USE_STATUS,
@@ -158,6 +160,8 @@ contextBridge.exposeInMainWorld('litchUpdate', {
 if (process.platform === 'darwin' || process.platform === 'win32') {
   contextBridge.exposeInMainWorld('litchComputerUse', {
     platform: process.platform,
+    selfApproval: () => ipcRenderer.invoke(COMPUTER_SELF_STATUS),
+    revokeSelfApproval: () => ipcRenderer.invoke(COMPUTER_SELF_REVOKE),
     // launch：助手没在跑时要不要拉起它（设置页那一节要，设备详情里顺带看一眼不要）
     status: (launch: boolean) => ipcRenderer.invoke(COMPUTER_USE_STATUS, launch === true),
     openSettings: (pane: string) => ipcRenderer.invoke(COMPUTER_USE_OPEN_SETTINGS, pane),

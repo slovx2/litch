@@ -470,8 +470,11 @@ export class DeviceServer {
           kind: 'clientApproval',
           createdAt: card.openedAt,
           // 标题只放网站名，可以为空：客户端按 kind 写成本地语言的“登录 某网站”
-          title: card.summary.site.trim(),
-          summary: [card.summary.origin, card.summary.reason].filter(Boolean).join('\n'),
+          title: card.kind === 'computerSelf' ? 'Litch' : card.summary.site.trim(),
+          summary:
+            card.kind === 'computerSelf'
+              ? card.summary.origin
+              : [card.summary.origin, card.summary.reason].filter(Boolean).join('\n'),
           canRespond: false,
           reason: 'executor_required',
         })),

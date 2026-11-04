@@ -1,5 +1,5 @@
 // 客户端工具要用户点头的卡片。不是对面的请求：是这台桌面端在替某个会话执行工具时
-// 自己要问的（内置浏览器打开一个没去过的网站；Computer Use 不问）。样子和审批卡片一样、排在同一处；文字按结构在这里拼，
+// 自己要问的（内置浏览器访问网站、Computer Use 访问正式版 Litch 自身）。样子和审批卡片一样、排在同一处；文字按结构在这里拼，
 // 核心只给“问的是什么”。卡片上写明调用来自哪台设备：远程设备上的模型在用这台电脑时要显眼。
 // 网站的卡片上多一个“信任所有网站”：经外壳打开设置里的那个开关，再按“本回合允许”答这一张。
 // 远程设备操作这台电脑的命令与文件（ask.kind 是 machine）是另一个样子，和顶栏里的全局待处理共用
@@ -9,6 +9,7 @@ import type { ApprovalOption, ClientAskRequest } from '@litch/core'
 import { Fragment, useEffect, useRef } from 'react'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
+import { Check, Close, Icon } from '../app/icons.tsx'
 import { showToast } from '../app/toasts.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 import { MachineSessionCard } from '../machine/MachineCard.tsx'
@@ -44,13 +45,15 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
   const { ask, device } = request
   const remote = device.kind === 'ssh'
   const title = t(
-    ask.kind === 'chromeInstance'
-      ? 'chrome.instance'
-      : ask.kind === 'chromeSignIn'
-        ? 'chrome.signIn'
-        : ask.kind === 'site' && ask.browser === 'chrome'
-          ? 'chrome.approve'
-          : 'clientAsk.site',
+    ask.kind === 'computerSelf'
+      ? 'computerSelf.title'
+      : ask.kind === 'chromeInstance'
+        ? 'chrome.instance'
+        : ask.kind === 'chromeSignIn'
+          ? 'chrome.signIn'
+          : ask.kind === 'site' && ask.browser === 'chrome'
+            ? 'chrome.approve'
+            : 'clientAsk.site',
   )
   /** 信任所有网站要经外壳改设置；普通浏览器里（模拟核心）没有外壳，不出这个按钮 */
   const bridge = ask.kind === 'site' && ask.browser !== 'chrome' ? browserBridge() : undefined
@@ -83,6 +86,7 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!ownsKey(event, card.current)) return
+      if (ask.kind === 'computerSelf' && event.key === 'Enter') return
       if (event.key === 'Enter' && event.target instanceof HTMLButtonElement) return
       const option = event.key === 'Enter' ? primary : event.key === 'Escape' ? refuse : undefined
       if (!option) return
@@ -103,10 +107,16 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
       data-remote={remote}
     >
       <div className="req-head">
+        {ask.kind === 'computerSelf' ? <Icon name="info" /> : null}
         <i className="st wait" />
         <span>{title}</span>
       </div>
       <div className="req-body">
+        {ask.kind === 'computerSelf' ? (
+          <div className="req-why err" role="alert">
+            {t('computerSelf.risk')}
+          </div>
+        ) : null}
         {remote ? (
           <div className="req-why err" data-remote-note>
             {t('clientAsk.remote')}
@@ -182,12 +192,27 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
               data-option={option.id}
               onClick={() => respond({ optionId: option.id })}
             >
+              {ask.kind === 'computerSelf' ? (
+                option.role === 'decline' ? (
+                  <Close />
+                ) : (
+                  <Check />
+                )
+              ) : null}
               {t(
-                ask.kind === 'chromeSignIn' && option.role === 'accept'
-                  ? 'chrome.signInDone'
-                  : OPTION_TEXT[option.role],
+                ask.kind === 'computerSelf' && option.role === 'acceptAlways'
+                  ? 'computerSelf.day'
+                  : ask.kind === 'computerSelf' && option.role === 'accept'
+                    ? 'computerSelf.once'
+                    : ask.kind === 'computerSelf' && option.role === 'acceptSession'
+                      ? 'computerSelf.session'
+                      : ask.kind === 'chromeSignIn' && option.role === 'accept'
+                        ? 'chrome.signInDone'
+                        : OPTION_TEXT[option.role],
               )}
-              {option === primary ? <span className="kbd">↵</span> : null}
+              {option === primary && ask.kind !== 'computerSelf' ? (
+                <span className="kbd">↵</span>
+              ) : null}
               {option === refuse ? <span className="kbd">Esc</span> : null}
             </button>
           </Fragment>

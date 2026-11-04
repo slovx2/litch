@@ -12,7 +12,7 @@ export function portableComputerTools(): ClientToolNamespaceSpec {
   return {
     ...windows,
     description:
-      'Control apps on a connected Litch desktop (macOS or Windows). The desktop may differ from the session host. Call list_apps first and use its app identifiers; inspect get_app_state before acting. On Windows use window numbers from observations; omit window on macOS. If no desktop is connected, ask the user to open Litch desktop and connect this device before retrying.',
+      'Control apps on a connected Litch desktop (macOS or Windows). The desktop may differ from the session host. Call list_apps first and use its app identifiers; inspect get_app_state before acting. On Windows use window numbers from observations; omit window on macOS. Observing or controlling the installed release of Litch itself requires user approval; never bypass a refusal. If no desktop is connected, ask the user to open Litch desktop and connect this device before retrying.',
     tools: windows.tools.map((tool) => {
       const other = mac.tools.find((entry) => entry.name === tool.name)
       return other && other.description !== tool.description

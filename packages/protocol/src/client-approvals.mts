@@ -1,6 +1,6 @@
 // 手机上批准（扩展名 clientApprovals）：桌面端要人点头的卡片经会话所在设备的设备服务转给绑了这台设备的手机，
 // 手机的答复带着批准钥匙的签名经设备服务交回发卡片的那条连接。定义的原文在仓库根目录
-// protocol/extensions/client-approvals.json。第一版只有一种卡片：内置浏览器的代理登录（browserSignIn）。
+// protocol/extensions/client-approvals.json。支持浏览器登录（browserSignIn）和正式版 Litch 自身访问（computerSelf）。
 //
 // 这个文件不引用别的文件：设备进程（packages/device）、客户端核心（packages/core）、桌面端和移动端都直接引用它。
 // 移动端的核心跑在 Hermes 上，这里只能用纯 JS，不能用 node:crypto、Buffer、TextEncoder。
@@ -84,8 +84,14 @@ export function approvalSignedText(
 
 // ---------- 卡片 ----------
 
-/** 卡片的种类。以后加别的审批（网站审批之类）在这里加，第一版只有登录 */
-export type ApprovalKind = 'browserSignIn'
+/** 卡片的种类。自身访问签名中的固定 origin 与网站登录严格区分。 */
+export type ApprovalKind = 'browserSignIn' | 'computerSelf'
+
+/** 自身访问独立于网站登录；授权档位用已有签名字段 ref（once/session/always）传递，always 只代表 24 小时。 */
+export interface ComputerSelfSummary {
+  origin: 'litch://computer-self'
+  device: string
+}
 
 /** 卡片上的一个账号：只给打码的用户名，用 ref 指（ref 是这张卡片里随机的不透明编号，不是密码库的条目号） */
 export interface ApprovalAccount {
@@ -113,13 +119,11 @@ export interface BrowserSignInSummary {
 }
 
 /** 一张卡片。open 交的就是它；list、changed 里的多一个 openedAt */
-export interface ApprovalCard {
+export interface ApprovalCardBase {
   /** 桌面端出的卡片号，随机，至少 16 个字 */
   id: string
   /** 卡片挂在哪个会话上（发起调用的那个） */
   threadId: string
-  kind: ApprovalKind
-  summary: BrowserSignInSummary
   /** 出卡片的桌面端的标识（桌面端自己记着的随机号，验签时核对） */
   desktopId: string
   /** 桌面端给这张卡片出的随机数，签名里要带；用一次作废 */
@@ -128,7 +132,13 @@ export interface ApprovalCard {
   expiresAt: number | null
 }
 
-export interface ApprovalCardView extends ApprovalCard {
+export type ApprovalCard = ApprovalCardBase &
+  (
+    | { kind: 'browserSignIn'; summary: BrowserSignInSummary }
+    | { kind: 'computerSelf'; summary: ComputerSelfSummary }
+  )
+
+export type ApprovalCardView = ApprovalCard & {
   /** 设备服务收下这张卡片的时间，毫秒时间戳 */
   openedAt: number
 }

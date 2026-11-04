@@ -1,7 +1,8 @@
 // 手机批准测试用的一张卡片和一个答复（形状合扩展定义，签名是假的：设备进程不验签）
 import type { ApprovalAnswer, ApprovalCard } from '../../protocol/src/client-approvals.mjs'
 
-export const card = (more: Partial<ApprovalCard> = {}): ApprovalCard => ({
+type SignInCard = Extract<ApprovalCard, { kind: 'browserSignIn' }>
+export const card = (more: Partial<SignInCard> = {}): SignInCard => ({
   id: 'Ap7cK2mQ9xW4rT6v',
   threadId: 'thread-1',
   kind: 'browserSignIn',

@@ -40,6 +40,8 @@ import { installFileSave } from './file-save-main.mjs'
 import {
   ABOUT,
   ATTACH,
+  COMPUTER_SELF_REVOKE,
+  COMPUTER_SELF_STATUS,
   COMPUTER_USE_OPEN_SETTINGS,
   COMPUTER_USE_RESTART,
   COMPUTER_USE_STATUS,
@@ -690,6 +692,15 @@ const computerUseSettings = computerUse
       fakePermissions(process.env.LITCH_COMPUTER_USE_PERMISSIONS ?? (smoke ? 'none' : undefined)),
     )
   : null
+
+ipcMain.handle(COMPUTER_SELF_STATUS, (event) =>
+  fromUi(event) ? (computerUse?.selfGuard.expiresAt() ?? null) : null,
+)
+ipcMain.handle(COMPUTER_SELF_REVOKE, (event) => {
+  if (!fromUi(event) || !computerUse) return false
+  computerUse.selfGuard.revoke()
+  return true
+})
 
 /** litch config 里只有主进程做得了的几项：内置浏览器的网站和数据、Computer Use（config-main.mts） */
 const configMain = createConfigMain({

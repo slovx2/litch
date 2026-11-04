@@ -2,6 +2,21 @@
 // 方便模型照着 list_apps 的显示名来叫。完整性级别的名字也在这里。
 use crate::shell::file_name;
 
+/// 只认安装器登记的正式版可执行文件；开发构建、其他渠道和隔离配置不受限制。
+pub fn is_litch(exe: &str, installed: Option<&str>, isolated: bool) -> bool {
+    !isolated && installed.is_some_and(|path| !path.is_empty() && exe.eq_ignore_ascii_case(path))
+}
+
+pub fn isolated_environment(environment: &[u16]) -> bool {
+    environment.split(|unit| *unit == 0).any(|entry| {
+        let text = String::from_utf16_lossy(entry);
+        let upper = text.to_uppercase();
+        ["LITCH_PROFILE=", "LITCH_MOCK="]
+            .iter()
+            .any(|key| upper.starts_with(key) && text.len() > key.len())
+    })
+}
+
 /// 一个应用的几种叫法
 pub struct AppNames<'a> {
     pub app_id: &'a str,
@@ -41,19 +56,52 @@ mod tests {
     use super::*;
 
     #[test]
+    fn self_target() {
+        let installed = Some(r"C:\Programs\Litch\Litch.exe");
+        assert!(is_litch(r"c:\programs\litch\LITCH.exe", installed, false));
+        for exe in [
+            r"C:\dev\Electron.exe",
+            r"C:\test\Litch.exe",
+            r"C:\Litch-beta\Litch.exe",
+            "notepad.exe",
+        ] {
+            assert!(!is_litch(exe, installed, false));
+        }
+        assert!(!is_litch(installed.unwrap(), installed, true));
+        assert!(!is_litch("Litch.exe", None, false));
+        assert!(isolated_environment(
+            &"PATH=x\0LITCH_PROFILE=C:\\test\0\0"
+                .encode_utf16()
+                .collect::<Vec<_>>()
+        ));
+        assert!(!isolated_environment(
+            &"PATH=x\0LITCH_PROFILE=\0\0"
+                .encode_utf16()
+                .collect::<Vec<_>>()
+        ));
+    }
+
+    #[test]
     fn matches() {
         let notepad = AppNames {
             app_id: "Microsoft.WindowsNotepad_8wekyb3d8bbwe!App",
             name: "记事本",
             exe: r"C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2607.14.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe",
         };
-        assert_eq!(match_score("microsoft.windowsnotepad_8wekyb3d8bbwe!app", &notepad), 2);
+        assert_eq!(
+            match_score("microsoft.windowsnotepad_8wekyb3d8bbwe!app", &notepad),
+            2
+        );
         assert_eq!(match_score("记事本", &notepad), 1);
         assert_eq!(match_score("notepad", &notepad), 1);
         assert_eq!(match_score("Notepad.exe", &notepad), 1);
         assert_eq!(match_score("note", &notepad), 0);
         assert_eq!(match_score("", &notepad), 0);
-        let code = AppNames { app_id: r"C:\VS Code\Code.exe", name: "Visual Studio Code", exe: r"C:\VS Code\Code.exe" };
+        let code = AppNames {
+            app_id: r"C:\VS Code\Code.exe",
+            name: "Visual Studio Code",
+            exe: r"C:\VS Code\Code.exe",
+        };
         assert_eq!(match_score(r"c:\vs code\code.exe", &code), 2);
         assert_eq!(match_score("visual studio code", &code), 1);
     }

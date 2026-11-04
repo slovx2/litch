@@ -18,6 +18,7 @@ import { useChannel } from '../../shell/services'
 import { type Key, useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import { Card, CardButton, Meta, Why } from '../requests/Card'
+import { ComputerSelfApprovalCard } from './ComputerSelfApprovalCard'
 import {
   abilityOf,
   buildAnswer,
@@ -40,13 +41,25 @@ function useNow(ticking: boolean): number {
   return ticking ? now : Date.now()
 }
 
-export function SignInApprovalCard({
+export function SignInApprovalCard(props: {
+  deviceId: string
+  card: ApprovalCardView
+  waiting: number
+}) {
+  return props.card.kind === 'computerSelf' ? (
+    <ComputerSelfApprovalCard {...props} card={props.card} />
+  ) : (
+    <BrowserSignInApprovalCard {...props} card={props.card} />
+  )
+}
+
+function BrowserSignInApprovalCard({
   deviceId,
   card,
   waiting,
 }: {
   deviceId: string
-  card: ApprovalCardView
+  card: Extract<ApprovalCardView, { kind: 'browserSignIn' }>
   waiting: number
 }) {
   const t = useT()

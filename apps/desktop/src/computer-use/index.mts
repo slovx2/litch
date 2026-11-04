@@ -10,6 +10,7 @@ import type { ClientToolInvocation } from '../client-tools/types.mjs'
 import { createComputerExecutor } from './executor.mjs'
 import { MacLauncher } from './launcher-mac.mjs'
 import { WinLauncher, type WinLauncherOptions } from './launcher-win.mjs'
+import { ComputerSelfGuard } from './self-guard.mjs'
 import { type HelperLauncher, HelperSupervisor } from './supervisor.mjs'
 import {
   type HelperStopped,
@@ -84,6 +85,7 @@ export function locateHelper(where: {
 }
 
 export function createComputerUse(options: ComputerUseOptions) {
+  const selfGuard = new ComputerSelfGuard(join(options.userData, 'computer-self-approval.json'))
   let lang = options.lang
   const windows = options.platform === 'win32'
   const launcher: HelperLauncher = windows
@@ -111,12 +113,14 @@ export function createComputerUse(options: ComputerUseOptions) {
     },
   })
   const executor = createComputerExecutor({
+    selfGuard,
     helper: supervisor,
     platform: options.platform,
     ...(options.onInvocation ? { onInvocation: options.onInvocation } : {}),
   })
 
   return {
+    selfGuard,
     platform: windows ? ('win32' as const) : ('darwin' as const),
     executor,
     supervisor,

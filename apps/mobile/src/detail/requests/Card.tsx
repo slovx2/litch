@@ -135,12 +135,14 @@ export function Card({
 /** 卡片上的按钮。primary 实心（主要动作），danger 红框（拒绝并停下），别的只有边框 */
 export function CardButton({
   label,
+  symbol,
   onPress,
   kind = 'plain',
   disabled,
   testID,
 }: {
   label: string
+  symbol?: 'check' | 'close'
   onPress(): void
   kind?: 'primary' | 'plain' | 'danger' | 'ghost'
   disabled?: boolean
@@ -155,6 +157,7 @@ export function CardButton({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled }}
       disabled={disabled}
       testID={testID}
@@ -170,7 +173,10 @@ export function CardButton({
         },
       ]}
     >
-      <Text style={[styles.buttonText, { color: fg }]}>{label}</Text>
+      <Text style={[styles.buttonText, { color: fg }]}>
+        {symbol ? <Text accessible={false}>{symbol === 'check' ? '✓ ' : '× '}</Text> : null}
+        {label}
+      </Text>
     </Pressable>
   )
 }

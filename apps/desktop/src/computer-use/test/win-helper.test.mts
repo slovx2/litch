@@ -319,6 +319,8 @@ test('执行器（win32）：列应用、不问用户、取状态、编号换 re
       windowId: 1001,
       text: 'hello',
       ref: '1001.3',
+      selfAllowed: false,
+      targetPid: 11,
     })
     const clicks = sent('click')
     assert.equal(clicks[0]?.params.ref, '1001.2')
@@ -331,6 +333,8 @@ test('执行器（win32）：列应用、不问用户、取状态、编号换 re
       screenshotId: 'shot-4',
       from: { x: 400, y: 300 },
       to: { x: 10, y: 10 },
+      selfAllowed: false,
+      targetPid: 11,
     })
     assert.deepEqual(sent('pressKey')[0]?.params.modifiers, ['ctrl'])
     assert.equal(sent('pressKey').length, 2, '批量 ctrl+b 和单步 ctrl+s；Windows 键没交给助手')

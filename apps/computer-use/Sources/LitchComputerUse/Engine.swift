@@ -109,6 +109,9 @@ final class Engine: ConnectionHandler {
       preview.floating.setLanguage(Copy.language(params["lang"]?.stringValue))
       return [:]
     case "listApps": return ["apps": .array(Apps.list().map(\.json))]
+    case "inspectTarget":
+      let app = try Apps.resolve(try string(params, "app"))
+      return ["self": .bool(isSelf(app)), "pid": .int(Int(app.processIdentifier))]
     case "getAppState": return try getAppState(params)
     case "click": return try act(params) { try self.click($0, $1) }
     case "typeText": return try act(params) { try self.typeText($0, $1) }
@@ -220,7 +223,18 @@ final class Engine: ConnectionHandler {
         ["session": .string(session), "app": .string(name), "bundleId": .string(appKey)]))
   }
 
-  /// 动作和取状态之前的共同检查：找应用、停没停、权限
+  /// 只识别正式包，隔离实例从进程环境判断，不采用模型传来的标识。
+  func isSelf(_ app: NSRunningApplication) -> Bool {
+    guard app.bundleIdentifier == "io.github.slovx2.litch" else { return false }
+    var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, app.processIdentifier]
+    var count = 1024 * 1024
+    var buffer = [UInt8](repeating: 0, count: count)
+    let read = sysctl(&mib, UInt32(mib.count), &buffer, &count, nil, 0) == 0
+    return SelfTarget.matches(bundleId: app.bundleIdentifier,
+      isolated: read && SelfTarget.isolated(arguments: Array(buffer.prefix(count))))
+  }
+
+  /// 动作和取状态之前的共同检查：找应用、自身授权、停没停、权限。
   func prepare(_ params: JSONValue) throws -> (session: String, app: NSRunningApplication, key: String) {
     let session = try string(params, "session")
     let turn = params["turnId"]?.stringValue ?? ""
@@ -229,6 +243,12 @@ final class Engine: ConnectionHandler {
     lock.unlock()
     guard !alreadyEnded else { throw RPCError(.stopped, "This turn ended. Do not retry actions from this turn.") }
     let app = try Apps.resolve(try string(params, "app"))
+    if let expected = params["targetPid"]?.intValue, expected != Int(app.processIdentifier) {
+      throw RPCError(.stale, "The target application changed after approval. Observe it again.")
+    }
+    if isSelf(app), params["selfAllowed"]?.boolValue != true {
+      throw RPCError(.unauthorized, "Access to Litch itself requires user approval in Litch.")
+    }
     guard app.bundleIdentifier != nil else { throw RPCError(.notFound, "This app has no bundle identifier and cannot be controlled.") }
     let key = Engine.appKey(app)
     lock.lock()

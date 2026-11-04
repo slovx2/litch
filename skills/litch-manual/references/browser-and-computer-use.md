@@ -188,11 +188,25 @@ notice is shown; **Esc** (or Stop) takes control back and ends Computer Use for 
 - **Windows**: no system permission is needed; the helper starts when needed. Litch warns when it runs
   as administrator or UAC is off (the helper could then control elevated windows).
 - `scripts/litch computer status` reports the permission or helper state.
-- **No per-app approval**: once Computer Use is on for the device and harness, the agent can use any
-  running app, including an app without a window and sessions from remote devices; nothing asks first and there is no app
-  list to manage. On Windows, windows that run as administrator still cannot be controlled. The agent
+- **普通应用不逐个授权**：开启设备和 harness 的 Computer Use 后即可操作正在运行的普通应用，本机与远程会话遵循相同规则。
+  正式发布版 Litch 自身例外，见下文。On Windows, windows that run as administrator still cannot be controlled. The agent
   does not open apps that are not running; it asks the user to.
 - Not supported: Linux, a locked screen.
+
+### 访问正式版 Litch 本身
+
+读取窗口（截图和辅助功能树）及所有输入动作都需要授权，因为代理可能读取其他对话、替用户批准请求或修改设置。
+授权卡提供“允许本次”“本对话内允许”“24 小时内对所有对话允许”和“拒绝”。本次覆盖单次工具调用；批量中含自身动作时，
+在第一步前统一授权，覆盖整批及最终观察。本对话许可按来源设备和会话隔离，跨回合有效，桌面退出后失效。
+24 小时许可保存在执行桌面的用户数据目录，覆盖来自各设备的所有对话，重启仍有效，到期自动失效。
+在设置 → Computer Use → Litch 自身访问授权可查看截止时间和撤销；撤销同时清掉本对话许可，等待中的批准也失效。
+已绑定手机并开启手机远程批准后，手机显示相同风险说明和三档选项，批准需要系统验证，档位随答复签名交回桌面核验。
+自身授权只接受扫码配对时核对过的钥匙；首次批准网站登录时记下的旧钥匙不能用于此授权，需重新配对。
+拒绝或取消后不得换用其他应用或工具绕过。普通网页仍走 litch_browser，不受此项限制。
+
+只保护正式发布版：macOS 精确匹配正式包标识 `io.github.slovx2.litch`；Windows 按正式安装器登记的可执行路径识别。
+主窗口、DevTools 和浏览器面板等同进程窗口都包含在内。开发 Electron、其他渠道标识及 `LITCH_PROFILE` / `LITCH_MOCK`
+隔离实例不属于此项限制，开发与验收可继续直接操作。应用清单可用于找到目标，但不展示正式版 Litch 的窗口标题。
 
 ### Working with apps and save panels
 

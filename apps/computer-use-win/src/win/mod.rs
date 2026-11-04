@@ -9,5 +9,6 @@ pub mod hooks;
 pub mod input;
 pub mod overlay;
 pub mod server;
+pub mod self_target;
 pub mod system;
 pub mod uia;

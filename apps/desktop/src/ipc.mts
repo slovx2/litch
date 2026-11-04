@@ -62,6 +62,9 @@ export const COMPUTER_USE_STATUS = 'litch:computer-use:status'
 export const COMPUTER_USE_OPEN_SETTINGS = 'litch:computer-use:open-settings'
 /** 界面 → 主进程，等应答：重启助手（授完屏幕录制之后要重启才生效），回重启之后的状态 */
 export const COMPUTER_USE_RESTART = 'litch:computer-use:restart'
+/** 自身访问授权：只能查询或撤销，不能经配置命令授予。 */
+export const COMPUTER_SELF_STATUS = 'litch:computer-use:self-status'
+export const COMPUTER_SELF_REVOKE = 'litch:computer-use:self-revoke'
 // —— 应用自己的更新（updater.mts） ——
 /** 界面 → 主进程，等应答：这台机器出不出更新、现在的状态、自动检查开着没有 */
 export const UPDATE_GET = 'litch:update:get'

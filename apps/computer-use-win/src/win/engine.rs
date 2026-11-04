@@ -56,6 +56,12 @@ impl Engine {
                 Ok(json!({}))
             }
             "listApps" => self.list_apps(),
+            "inspectTarget" => {
+                self.require_handshake()?;
+                let (app, _) = apps::resolve(&req_str(params, "app")?, window_id(params))?;
+                let protected = self.is_self(&app);
+                Ok(json!({ "self": protected, "pid": app.pid }))
+            }
             "getAppState" => self.get_app_state(params),
             "click" => self.click(params),
             "typeText" => self.type_text(params),
@@ -78,7 +84,11 @@ impl Engine {
     fn hello(&mut self, p: &Value) -> RpcResult<Value> {
         let protocol = p.get("protocol").and_then(Value::as_u64).unwrap_or(0);
         if protocol != crate::wire::PROTOCOL {
-            return Err(fail!(Unauthorized, "helper protocol is {}, host asked for {protocol}", crate::wire::PROTOCOL));
+            return Err(fail!(
+                Unauthorized,
+                "helper protocol is {}, host asked for {protocol}",
+                crate::wire::PROTOCOL
+            ));
         }
         self.language = copy::language(str_of(p, "lang").as_deref());
         activity::set_language(self.language);
@@ -94,7 +104,10 @@ impl Engine {
     }
 
     fn diagnostics(&self) -> RpcResult<Value> {
-        let exe = std::env::current_exe().ok().and_then(|p| p.to_str().map(str::to_string)).unwrap_or_default();
+        let exe = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.to_str().map(str::to_string))
+            .unwrap_or_default();
         Ok(json!({
             "pid": std::process::id(),
             "parentPid": self.parent,
@@ -126,7 +139,7 @@ impl Engine {
                 let windows: Vec<Value> = a
                     .windows
                     .iter()
-                    .map(|w| json!({ "id": w.hwnd, "title": w.title, "active": w.active, "minimized": w.minimized }))
+                    .map(|w| json!({ "id": w.hwnd, "title": if super::self_target::protected(&a.exe, system::window_pid(apps::hwnd(w.hwnd))) { "" } else { &w.title }, "active": w.active, "minimized": w.minimized }))
                     .collect();
                 json!({
                     "appId": a.app_id, "name": a.name, "exe": a.exe, "aumid": a.aumid,
@@ -135,6 +148,29 @@ impl Engine {
             })
             .collect();
         Ok(json!({ "apps": apps }))
+    }
+
+    fn is_self(&self, app: &apps::App) -> bool {
+        super::self_target::protected(&app.exe, app.pid)
+    }
+
+    fn guard_self(&self, app: &apps::App, p: &Value) -> RpcResult<()> {
+        if p.get("targetPid")
+            .and_then(Value::as_u64)
+            .is_some_and(|pid| pid != app.pid as u64)
+        {
+            return Err(fail!(
+                Stale,
+                "The target application changed after approval. Observe it again."
+            ));
+        }
+        if self.is_self(app) && p.get("selfAllowed").and_then(Value::as_bool) != Some(true) {
+            return Err(fail!(
+                Unauthorized,
+                "Access to Litch itself requires user approval in Litch."
+            ));
+        }
+        Ok(())
     }
 
     /// 起 Esc 钩子和屏幕提示（只起一次）
@@ -150,6 +186,7 @@ impl Engine {
         self.require_handshake()?;
         let session = req_str(p, "session")?;
         let (app, win) = apps::resolve(&req_str(p, "appId")?, window_id(p))?;
+        self.guard_self(&app, p)?;
         self.ensure_watchers();
         activity::begin(&session, &app.app_id, &app.name, win.hwnd);
         let hwnd = apps::hwnd(win.hwnd);
@@ -168,7 +205,8 @@ impl Engine {
             match capture::window(hwnd, app.pid, &mut notes) {
                 Some((image, area)) => {
                     let map = ShotMap::for_window(area);
-                    let data = capture::jpeg(&image, &map).map_err(|e| fail!(Failed, "could not encode the screenshot: {e}"))?;
+                    let data = capture::jpeg(&image, &map)
+                        .map_err(|e| fail!(Failed, "could not encode the screenshot: {e}"))?;
                     let id = self.store_shot(&session, map, frame);
                     let shot = json!({ "id": id.to_string(), "mime": "image/jpeg", "data": STANDARD.encode(&data), "width": map.width, "height": map.height });
                     (map, shot)
@@ -183,7 +221,7 @@ impl Engine {
         };
 
         let (tree, truncated) = uia::read_tree(hwnd, &map, max_nodes, max_depth, &mut notes)?;
-        let windows: Vec<Value> = app.windows.iter().map(|w| json!({ "id": w.hwnd, "title": w.title })).collect();
+        let windows: Vec<Value> = app.windows.iter().map(|w| json!({ "id": w.hwnd, "title": if w.hwnd != win.hwnd && super::self_target::protected(&app.exe, system::window_pid(apps::hwnd(w.hwnd))) { "" } else { &w.title } })).collect();
         Ok(json!({
             "app": { "appId": app.app_id, "name": app.name, "exe": app.exe, "aumid": app.aumid, "pid": app.pid },
             "window": { "id": win.hwnd, "title": win.title, "width": map.width, "height": map.height },
@@ -198,7 +236,14 @@ impl Engine {
     fn store_shot(&mut self, session: &str, map: ShotMap, frame: Rect) -> u64 {
         let id = self.next_shot;
         self.next_shot += 1;
-        self.shots.insert(id.to_string(), Shot { session: session.into(), map, frame });
+        self.shots.insert(
+            id.to_string(),
+            Shot {
+                session: session.into(),
+                map,
+                frame,
+            },
+        );
         id
     }
 
@@ -207,18 +252,31 @@ impl Engine {
         self.require_handshake()?;
         let session = req_str(p, "session")?;
         let (app, win) = apps::resolve(&req_str(p, "appId")?, window_id(p))?;
+        self.guard_self(&app, p)?;
         if app.integrity > self.own_integrity {
             return Err(fail!(Elevated, "{} runs as administrator; Litch cannot control it. Ask the user to do it themselves.", app.name));
         }
         if activity::is_stopped(&session, &app.app_id) {
-            return Err(fail!(Stopped, "the user pressed Esc to stop Litch using {} this turn", app.name));
+            return Err(fail!(
+                Stopped,
+                "the user pressed Esc to stop Litch using {} this turn",
+                app.name
+            ));
         }
         if let Some(reason) = system::locked_reason() {
-            return Err(fail!(Locked, "the screen is not available ({reason}); ask the user to unlock it"));
+            return Err(fail!(
+                Locked,
+                "the screen is not available ({reason}); ask the user to unlock it"
+            ));
         }
         let hwnd = apps::hwnd(win.hwnd);
-        if hooks::last_user_input(win.hwnd, &apps::bounds(hwnd)).is_some_and(|t| t.elapsed() < USER_SILENCE) {
-            return Err(fail!(UserActive, "the user is interacting with this window; wait a moment and try again"));
+        if hooks::last_user_input(win.hwnd, &apps::bounds(hwnd))
+            .is_some_and(|t| t.elapsed() < USER_SILENCE)
+        {
+            return Err(fail!(
+                UserActive,
+                "the user is interacting with this window; wait a moment and try again"
+            ));
         }
         self.ensure_watchers();
         activity::begin(&session, &app.app_id, &app.name, win.hwnd);
@@ -228,9 +286,17 @@ impl Engine {
     /// 取某张截图的映射，并判 stale（窗口挪过、缩放过）
     fn shot(&self, p: &Value, hwnd: windows::Win32::Foundation::HWND) -> RpcResult<&Shot> {
         let id = shot_id(p)?;
-        let shot = self.shots.get(&id).ok_or_else(|| fail!(Stale, "screenshot {id} is unknown; read the window state again"))?;
+        let shot = self.shots.get(&id).ok_or_else(|| {
+            fail!(
+                Stale,
+                "screenshot {id} is unknown; read the window state again"
+            )
+        })?;
         if apps::bounds(hwnd) != shot.frame {
-            return Err(fail!(Stale, "the window moved or resized since the screenshot; read the window state again"));
+            return Err(fail!(
+                Stale,
+                "the window moved or resized since the screenshot; read the window state again"
+            ));
         }
         Ok(shot)
     }
@@ -252,7 +318,10 @@ impl Engine {
             foreground::hit_ok(hwnd, x, y)?;
             input::click(x, y, &button, count, &modifiers)?;
         } else {
-            let (x, y) = self.shot(p, hwnd)?.map.to_screen(req_f64(p, "x")?, req_f64(p, "y")?)?;
+            let (x, y) = self
+                .shot(p, hwnd)?
+                .map
+                .to_screen(req_f64(p, "x")?, req_f64(p, "y")?)?;
             foreground::ensure(hwnd)?;
             foreground::hit_ok(hwnd, x, y)?;
             input::click(x, y, &button, count, &modifiers)?;
@@ -312,7 +381,10 @@ impl Engine {
             foreground::ensure(hwnd)?;
             input::wheel(x, y, &direction, amount)?;
         } else if p.get("x").is_some() || p.get("y").is_some() {
-            let (x, y) = self.shot(p, hwnd)?.map.to_screen(req_f64(p, "x")?, req_f64(p, "y")?)?;
+            let (x, y) = self
+                .shot(p, hwnd)?
+                .map
+                .to_screen(req_f64(p, "x")?, req_f64(p, "y")?)?;
             foreground::ensure(hwnd)?;
             input::wheel(x, y, &direction, amount)?;
         } else {
@@ -377,7 +449,9 @@ fn str_of(p: &Value, key: &str) -> Option<String> {
 }
 
 fn req_str(p: &Value, key: &str) -> RpcResult<String> {
-    str_of(p, key).filter(|s| !s.is_empty()).ok_or_else(|| fail!(Invalid, "{key} is required"))
+    str_of(p, key)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| fail!(Invalid, "{key} is required"))
 }
 
 /// 截图号：主进程把助手给的号原样带回，字符串或数字都认
@@ -390,22 +464,32 @@ fn shot_id(p: &Value) -> RpcResult<String> {
 }
 
 fn req_f64(p: &Value, key: &str) -> RpcResult<f64> {
-    p.get(key).and_then(Value::as_f64).ok_or_else(|| fail!(Invalid, "{key} is required"))
+    p.get(key)
+        .and_then(Value::as_f64)
+        .ok_or_else(|| fail!(Invalid, "{key} is required"))
 }
 
 fn window_id(p: &Value) -> Option<isize> {
-    p.get("windowId").and_then(Value::as_i64).map(|n| n as isize)
+    p.get("windowId")
+        .and_then(Value::as_i64)
+        .map(|n| n as isize)
 }
 
 fn modifier_list(p: &Value) -> Vec<String> {
     p.get("modifiers")
         .and_then(Value::as_array)
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
 fn point(p: &Value, key: &str) -> RpcResult<(f64, f64)> {
-    let obj = p.get(key).ok_or_else(|| fail!(Invalid, "{key} is required"))?;
+    let obj = p
+        .get(key)
+        .ok_or_else(|| fail!(Invalid, "{key} is required"))?;
     let x = obj.get("x").and_then(Value::as_f64);
     let y = obj.get("y").and_then(Value::as_f64);
     match (x, y) {

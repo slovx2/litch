@@ -1679,6 +1679,18 @@ export const en: Record<MessageKey, Entry> = {
   'clientAsk.origin': 'Site',
   'clientAsk.url': 'Address',
   'clientAsk.tool': 'Tool',
+  'computerSelf.title': 'Allow the agent to access Litch itself?',
+  'computerSelf.risk':
+    'The agent can read or control Litch itself, including other conversations, approval requests and settings. This permission covers all release Litch windows on this desktop.',
+  'computerSelf.once': 'Allow once',
+  'computerSelf.session': 'Allow for this conversation',
+  'computerSelf.day': 'Allow all conversations for 24 hours',
+  'computerSelf.setting': 'Access to Litch itself',
+  'computerSelf.phone':
+    'This permission requires a phone key verified during pairing. If your key was trusted on first approval, pair again to approve these requests on your phone. Desktop approval is unaffected.',
+  'computerSelf.none': 'No permission for all conversations',
+  'computerSelf.until': 'Allowed for all conversations until {time}',
+  'computerSelf.revoke': 'Revoke access',
   'clientAsk.option.once': 'Allow this turn',
   'clientAsk.option.session': 'Allow for this session',
   'clientAsk.option.always': 'Always allow',

@@ -111,6 +111,7 @@ export type ApprovalAbility = 'fill' | 'noAccount' | 'blocked' | 'expired'
 
 export function abilityOf(card: ApprovalCard, now: number): ApprovalAbility {
   if (isExpired(card, now)) return 'expired'
+  if (card.kind === 'computerSelf') return 'fill'
   if (card.summary.fillBlocked) return 'blocked'
   return card.summary.accounts.length === 0 ? 'noAccount' : 'fill'
 }
@@ -139,12 +140,19 @@ export async function buildAnswer(
   signer: Signer,
 ): Promise<ApprovalAnswer> {
   const decision = choice.ref === null ? 'decline' : 'approve'
-  if (decision === 'approve' && !card.summary.accounts.some((each) => each.ref === choice.ref))
-    throw new Error('卡片上没有这个账号')
+  const valid =
+    card.kind === 'computerSelf'
+      ? ['once', 'session', 'always'].includes(choice.ref ?? '')
+      : card.summary.accounts.some((each) => each.ref === choice.ref)
+  if (decision === 'approve' && !valid) throw new Error('卡片上没有这个账号')
   const signed = {
     ref: choice.ref,
     decision,
-    remember: decision === 'approve' && card.summary.task !== null && choice.remember,
+    remember:
+      decision === 'approve' &&
+      card.kind === 'browserSignIn' &&
+      card.summary.task !== null &&
+      choice.remember,
     phoneId: signer.phoneId,
   } as const
   return {

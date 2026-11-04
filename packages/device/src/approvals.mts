@@ -183,8 +183,11 @@ export class DeviceApprovals {
       throw new ApprovalError(APPROVAL_ERROR.unknownApproval, `没有卡片 ${params.id}`)
     if (held.answers >= APPROVAL_ANSWERS_MAX)
       throw new ApprovalError(APPROVAL_ERROR.tooMany, '这张卡片答的次数太多了')
-    if (params.ref !== null && !held.card.summary.accounts.some((a) => a.ref === params.ref))
-      throw new ApprovalError(null, `卡片上没有账号 ${params.ref}`)
+    const valid =
+      held.card.kind === 'computerSelf'
+        ? ['once', 'session', 'always'].includes(params.ref ?? '') && !params.remember
+        : held.card.summary.accounts.some((a) => a.ref === params.ref)
+    if (params.ref !== null && !valid) throw new ApprovalError(null, `卡片上没有账号 ${params.ref}`)
     held.answers++
     held.owner.announce(APPROVAL_ANSWERED, answerOf(params), EXTENSION.clientApprovals)
     this.host.log(`卡片 ${params.id}：转交了手机 ${params.phoneId} 的答复（${params.decision}）`)
@@ -224,14 +227,17 @@ export class DeviceApprovals {
   }
 }
 
-const viewOf = (held: Held): ApprovalCardView => ({
-  ...held.card,
-  summary: {
-    ...held.card.summary,
-    accounts: held.card.summary.accounts.map((account) => ({ ...account })),
-    task: held.card.summary.task ? { ...held.card.summary.task } : null,
-  },
-})
+const viewOf = (held: Held): ApprovalCardView =>
+  held.card.kind === 'computerSelf'
+    ? { ...held.card, summary: { ...held.card.summary } }
+    : {
+        ...held.card,
+        summary: {
+          ...held.card.summary,
+          accounts: held.card.summary.accounts.map((account) => ({ ...account })),
+          task: held.card.summary.task ? { ...held.card.summary.task } : null,
+        },
+      }
 
 /** 只留定义里的键：设备进程转交的不多带别的东西 */
 function answerOf(answer: ApprovalAnswer): ApprovalAnswer {
@@ -260,9 +266,34 @@ function cardOf(value: unknown): ApprovalCard | null {
   if (!isObject(value)) return null
   const { id, threadId, kind, summary, desktopId, nonce, expiresAt } = value
   if (!isApprovalToken(id) || !isApprovalToken(desktopId) || !isApprovalToken(nonce)) return null
-  if (typeof threadId !== 'string' || threadId === '' || kind !== 'browserSignIn') return null
+  if (
+    typeof threadId !== 'string' ||
+    threadId === '' ||
+    (kind !== 'browserSignIn' && kind !== 'computerSelf')
+  )
+    return null
   if (expiresAt !== null && (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt)))
     return null
+  if (kind === 'computerSelf') {
+    if (
+      !isObject(summary) ||
+      summary.origin !== 'litch://computer-self' ||
+      typeof summary.device !== 'string'
+    )
+      return null
+    return {
+      id,
+      threadId,
+      kind,
+      summary: {
+        origin: 'litch://computer-self',
+        device: clean(summary.device, APPROVAL_TEXT_MAX.device),
+      },
+      desktopId,
+      nonce,
+      expiresAt,
+    }
+  }
   const parsed = summaryOf(summary)
   if (!parsed) return null
   return { id, threadId, kind, summary: parsed, desktopId, nonce, expiresAt }

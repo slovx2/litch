@@ -49,6 +49,41 @@ function rig() {
   return { clock, changed, approvals, fails }
 }
 
+test('自身访问卡接受三档与拒绝，不能带记住账号或伪造档位', () => {
+  const r = rig()
+  const desktop = new Peer(true)
+  const phone = new Peer(true)
+  const self = {
+    ...card(),
+    kind: 'computerSelf',
+    summary: { origin: 'litch://computer-self', device: 'desktop' },
+  }
+  r.approvals.call(desktop, 'litch/approval/open', self)
+  for (const ref of ['once', 'session', 'always'])
+    r.approvals.call(phone, 'litch/approval/answer', { ...answer(), ref })
+  r.approvals.call(phone, 'litch/approval/answer', { ...answer(), ref: null, decision: 'decline' })
+  assert.deepEqual(
+    desktop.got.map((message) => message.params.ref),
+    ['once', 'session', 'always', null],
+  )
+  assert.equal(
+    r.fails(phone, 'litch/approval/answer', { ...answer(), ref: 'forever' }).code,
+    -32602,
+  )
+  assert.equal(
+    r.fails(phone, 'litch/approval/answer', { ...answer(), ref: 'always', remember: true }).code,
+    -32602,
+  )
+  assert.equal(
+    r.fails(desktop, 'litch/approval/open', {
+      ...self,
+      summary: { ...self.summary, origin: 'https://example.com' },
+    }).code,
+    -32602,
+  )
+  r.approvals.shutdown()
+})
+
 test('open、list、answer、close：答复只转给发卡片的那条连接，changed 按会话发', () => {
   const r = rig()
   const desktop = new Peer(true)
@@ -59,7 +94,11 @@ test('open、list、answer、close：答复只转给发卡片的那条连接，c
   const listed = r.approvals.call(phone, 'litch/approval/list', {}) as { data: any[] }
   assert.equal(listed.data.length, 1)
   assert.equal(listed.data[0].openedAt, r.clock.now())
-  assert.equal(listed.data[0].summary.accounts[0].masked, 'so•••@gmail.com')
+  assert.equal(listed.data[0].kind, 'browserSignIn')
+  assert.equal(
+    listed.data[0].kind === 'browserSignIn' ? listed.data[0].summary.accounts[0].masked : null,
+    'so•••@gmail.com',
+  )
   assert.deepEqual(r.approvals.call(phone, 'litch/approval/list', { threadId: 'other' }), {
     data: [],
   })
