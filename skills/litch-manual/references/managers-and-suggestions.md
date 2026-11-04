@@ -2,11 +2,17 @@
 
 ## Managers
 
-经理负责维护「现状」，用 Markdown 分节概括正在做、等你和接下来的工作。
+经理负责维护「现状」，固定按顺序使用 `### 正在做`、`### 等你`、`### 接下来` 三个 Markdown 小节。
+没有内容的小节整节省略，需要时可加 `### 风险`。每条一行，约 40 字以内，开头的关键词加粗；
+细节用 `#D-n` / `#I-n` 编号指向看板，不在现状里重复。不写大段落，不用表格、代码块或一级、二级标题。
 每次写入最多 1000 个 Unicode 字符（含 Markdown 标记）；超限会提示当前长度和上限。
 已有长现状仍可完整读取，更新时须遵守上限。
 
-Managers maintain the situation in short Markdown sections: In progress, Waiting for you, and Next.
+Managers maintain the situation using these fixed level-3 Markdown headings, in order:
+`### 正在做`, `### 等你`, `### 接下来` (In progress, Waiting for you, Next).
+Omit empty sections and optionally add `### 风险` (Risks). Keep each item on one line, about 40
+characters or fewer, with its opening keyword in bold. Link to details with `#D-n` / `#I-n` board
+references instead of repeating them. Avoid long paragraphs, tables, code blocks and level-1 or level-2 headings.
 Updates accept at most 1000 Unicode characters including markup; longer updates report their length
 and the limit. Existing longer situations remain readable in full.
 

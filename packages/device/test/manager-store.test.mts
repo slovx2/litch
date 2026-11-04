@@ -60,6 +60,18 @@ test('现状：1000 字符边界、拒绝时报告长度、历史不截断、提
     assert.match(managerRoleRules(''), /Maintain the situation.*status/)
     assert.match(managerRoleRules(''), /1000 Unicode characters/)
     assert.match(managerRoleRules(''), /Markdown sections/)
+    assert.match(managerRoleRules(''), /"### 正在做", "### 等你", "### 接下来"/)
+    assert.match(
+      managerRoleRules(''),
+      /Omit any section with no content; optionally add "### 风险"/,
+    )
+    assert.match(managerRoleRules(''), /each item on one line, about 40 characters or fewer/)
+    assert.match(managerRoleRules(''), /bold its opening keyword/)
+    assert.match(managerRoleRules(''), /#D-n \/ #I-n board references instead of repeating/)
+    assert.match(
+      managerRoleRules(''),
+      /Do not write long paragraphs, tables, code blocks, or level-1 or level-2 headings/,
+    )
   } finally {
     db.close()
     rmSync(dir, { recursive: true, force: true })
