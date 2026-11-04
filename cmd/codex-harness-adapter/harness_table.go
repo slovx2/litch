@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -56,8 +57,7 @@ const acpAgentVariable = "CHA_ACP_AGENT"
 var harnessTable = []harnessSpec{
 	{
 		id: "claude-code", pkg: "claude", portFlag: "claude-port", defaultPort: 7331, cliVariable: "CHA_CLAUDE_CLI", homeVariable: "CHA_CLAUDE_HOME",
-		// 官方安装脚本（install.sh、install.ps1）装在 ~/.local/bin，常常不在 PATH 上：PATH 里找不到时由命令行找到它、
-		// 经 CHA_CLAUDE_CLI 交给引擎（configuration.environment），引擎自己只看这个变量和 PATH
+		// 官方脚本装在 ~/.local/bin，与 PATH 和 npm 全局目录一起参与版本择优。
 		commands: []string{"claude"}, fallbacks: []string{filepath.Join(".local", "bin", "claude")}, enable: enableAlways,
 		install: claudeInstall,
 	},
@@ -132,29 +132,14 @@ var harnessCLIVariable = func() map[string]string {
 	return variables
 }()
 
-// 这个 harness 装没装：设置了它的命令行变量（设置里的命令行路径也落到这个变量上）就认为用户要用它
-// （路径无效会在启动时告警），否则在现行环境的 PATH 里找，再看登记的固定位置。版本够不够由引擎启动前的检查判断。
+// 显式路径即表示用户要使用它（有效性留到启动时诊断）；自动探测与真正启动共用候选规则。
 func cliInstalled(c configuration, spec harnessSpec) bool {
-	env := map[string]string{}
-	for _, entry := range c.environment() {
-		name, value, _ := strings.Cut(entry, "=")
-		env[name] = value
-	}
-	if spec.cliVariable != "" && strings.TrimSpace(env[spec.cliVariable]) != "" {
+	env := c.baseEnvironment()
+	if strings.TrimSpace(envValue(env, spec.cliVariable)) != "" {
 		return true
 	}
-	search := env["PATH"]
-	if search == "" {
-		search = env["Path"]
-	}
-	if commandOnPath(search, spec) != "" {
-		return true
-	}
-	home := env["HOME"]
-	if home == "" {
-		home = env["USERPROFILE"]
-	}
-	return fallbackCLI(home, spec) != ""
+	_, found := locateCLI(spec.id, "", env)
+	return found
 }
 
 // PATH 里登记的命令名（Windows 上加 .exe、.cmd）找到的第一个，没有是空串。
@@ -172,45 +157,37 @@ func commandOnPath(search string, spec harnessSpec) string {
 	return executableOnPath(search, names)
 }
 
-// withFallbackCLI：这个 harness 的命令行变量没给、PATH 里也没有它的命令，而登记的固定位置有能执行的，
-// 就把那个路径作为命令行变量补进给它的环境。引擎只按这个变量和 PATH 找命令行，不认这些固定位置；
-// 版本一览（locateCLI）读的也是同一个变量，两边找到的就是同一份。
+// 受管引擎统一使用 Go 选择的入口，不在 Node 进程中再次按 PATH 选择。
 func withFallbackCLI(id string, env []string) []string {
 	spec := specOf(id)
-	if spec.native || spec.cliVariable == "" || len(spec.fallbacks) == 0 {
+	if spec.native || spec.cliVariable == "" {
 		return env
 	}
-	values := map[string]string{}
+	configured := ""
 	for _, entry := range env {
-		name, value, _ := strings.Cut(entry, "=")
-		values[name] = value
+		if name, value, _ := strings.Cut(entry, "="); name == spec.cliVariable {
+			configured = value
+		}
 	}
-	if strings.TrimSpace(values[spec.cliVariable]) != "" {
-		return env
+	candidates := harnessCLICandidates(id, configured, env)
+	path := configured
+	for _, candidate := range candidates {
+		if candidate.Selected {
+			path = candidate.Path
+		}
 	}
-	search := values["PATH"]
-	if search == "" {
-		search = values["Path"]
-	}
-	if commandOnPath(search, spec) != "" {
-		return env
-	}
-	home := values["HOME"]
-	if home == "" {
-		home = values["USERPROFILE"]
-	}
-	path := fallbackCLI(home, spec)
 	if path == "" {
 		return env
 	}
-	result := make([]string, 0, len(env)+1)
+	encoded, _ := json.Marshal(candidates)
+	result := make([]string, 0, len(env)+2)
 	for _, entry := range env {
-		// 去掉原来那条空值的，免得同名变量出现两次
-		if name, _, _ := strings.Cut(entry, "="); name != spec.cliVariable {
+		name, _, _ := strings.Cut(entry, "=")
+		if name != spec.cliVariable && name != "LITCH_HOST_CLI_CANDIDATES" {
 			result = append(result, entry)
 		}
 	}
-	return append(result, spec.cliVariable+"="+path)
+	return append(result, spec.cliVariable+"="+path, "LITCH_HOST_CLI_CANDIDATES="+string(encoded))
 }
 
 // 登记的固定位置（相对主目录）里第一个能执行的命令行，没有是空串。Windows 上依次试 .exe、.cmd 和原名。

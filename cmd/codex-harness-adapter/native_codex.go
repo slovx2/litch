@@ -86,17 +86,10 @@ func codexFailure(c configuration, kind string, text bilingual) error {
 	return diagnosticFailure(c, kind, text)
 }
 
-// 找用户装的 codex：设置里填了路径就用它，没填在 PATH 里找。
+// 找用户装的 codex：设置里填了路径就用它，未指定时按共同规则选最高版本。
 func locateCodex(c configuration) (string, error) {
-	if path := c.settings.text(cliPathKey(nativeCodex)); path != "" {
-		info, err := os.Stat(path)
-		if err != nil || info.IsDir() || (runtime.GOOS != "windows" && info.Mode()&0o111 == 0) {
-			return "", codexFailure(c, stateNotInstalled, cliMissing(c))
-		}
-		return path, nil
-	}
-	if path := executableOnPath(c.environmentValue("PATH", "Path"), codexNames()); path != "" {
-		return path, nil
+	if found, ok := locateCLI(nativeCodex, c.settings.text(cliPathKey(nativeCodex)), c.baseEnvironment()); ok {
+		return found.path, nil
 	}
 	return "", codexFailure(c, stateNotInstalled, cliMissing(c))
 }
@@ -114,7 +107,8 @@ var codexInstalled = func(c configuration) bool {
 	if c.settings.text(cliPathKey(nativeCodex)) != "" {
 		return true
 	}
-	return executableOnPath(c.environmentValue("PATH", "Path"), codexNames()) != ""
+	_, found := locateCLI(nativeCodex, "", c.baseEnvironment())
+	return found
 }
 
 var versionPattern = regexp.MustCompile(`(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z][0-9A-Za-z.-]*))?`)
@@ -178,7 +172,7 @@ func inspectCodex(ctx context.Context, c configuration) (path, version string, e
 	fmt.Fprintf(log, "%s\n", path)
 	probeCtx, cancel := context.WithTimeout(ctx, codexVersionTimeout)
 	defer cancel()
-	command := exec.CommandContext(probeCtx, path, "--version")
+	command := hostCLICommand(probeCtx, path, c.environment(), "--version")
 	hostplatform.Quiet(command)
 	command.Env = c.environment()
 	var output bytes.Buffer
@@ -197,10 +191,14 @@ func inspectCodex(ctx context.Context, c configuration) (path, version string, e
 		))
 	}
 	if order, _ := compareVersions(version, minimumCodexVersion); order < 0 {
-		return "", "", codexFailure(c, stateVersionTooLow, both(
-			"codex 的版本是 %s，低于要求的下限 %s，请升级后重试",
-			"codex is %s, older than the minimum %s required here; upgrade it and retry",
-		).with(version, minimumCodexVersion))
+		failure := both(
+			"codex 的版本是 %s，低于要求的下限 %s，实际路径 %s；请升级后重试",
+			"codex is %s, older than the minimum %s; selected path: %s; upgrade it and retry",
+		).with(version, minimumCodexVersion, path)
+		newer := newerCLINote(nativeCodex, path, version, c.baseEnvironment())
+		failure.ZH += newer.ZH
+		failure.EN += newer.EN
+		return "", "", codexFailure(c, stateVersionTooLow, failure)
 	}
 	return path, version, nil
 }
@@ -210,7 +208,7 @@ func inspectCodex(ctx context.Context, c configuration) (path, version string, e
 // 它只认 unix://，Windows 上也是（那边是 AF_UNIX，套接字放在哪见 codexSocketPath）。
 // 工作目录放在用户主目录：它不属于任何项目，不该捡到服务启动时所在目录里的项目配置。
 func codexCommand(c configuration, path string) *exec.Cmd {
-	process := exec.Command(path, "app-server", "--listen", "unix://"+codexSocketPath(c))
+	process := hostCLICommand(context.Background(), path, c.environment(), "app-server", "--listen", "unix://"+codexSocketPath(c))
 	process.Env = c.environment()
 	if home, err := os.UserHomeDir(); err == nil {
 		process.Dir = home
@@ -231,8 +229,8 @@ func codexSettingTexts() harnessTexts {
 			"Turning this on starts an app-server with the codex installed on this device, managed by this service; turning it off stops it, so this device no longer offers Codex. Sessions live in Codex's own data directory and are untouched either way. Requires codex %s or newer.",
 		).with(minimumCodexVersion, minimumCodexVersion),
 		cliPath: both(
-			"这台设备上 codex 命令行的绝对路径。留空就在 PATH 里找。",
-			"Absolute path of the codex command-line tool on this device. Leave empty to look it up on PATH.",
+			"这台设备上 codex 命令行的绝对路径。留空自动选择版本最高的安装。",
+			"Absolute path of the codex command-line tool on this device. Leave empty to select the newest installed version.",
 		),
 		env: both(
 			"只给这里起的这个 Codex 进程：代理、接口地址、密钥等。优先于启动服务的进程自己的环境，也优先于环境文件（状态目录下的 env）。想让它用另一份数据目录，在这里设 CODEX_HOME。",

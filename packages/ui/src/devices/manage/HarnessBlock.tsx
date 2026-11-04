@@ -6,10 +6,11 @@ import { type ReactNode, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { Confirm } from '../../app/Confirm.tsx'
 import { whyNot } from '../../app/errors.ts'
-import { stampFull } from '../../app/format.ts'
+import { Icon } from '../../app/icons.tsx'
 import { useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
 import { InstallRow } from '../../install/InstallRow.tsx'
+import { cliPresentation } from '../cli-presentation.ts'
 import { HarnessWhy } from '../HarnessList.tsx'
 
 const STATE_CLASS: Record<HarnessView['state'], string> = {
@@ -52,6 +53,11 @@ export function HarnessBlock(props: HarnessBlockProps) {
   const { channel } = useServices()
   const t = useT()
   const [restarting, setRestarting] = useState(false)
+  const [copiesOpen, setCopiesOpen] = useState(false)
+  const { selected, candidates } = cliPresentation(
+    harness?.cli,
+    install?.versions?.find((entry) => entry.harness === harnessId)?.candidates,
+  )
   /** 它有回合在跑，设备服务没有照做：问用户要不要仍然重启 */
   const [asking, setAsking] = useState(false)
   const deviceId = device.id
@@ -131,37 +137,84 @@ export function HarnessBlock(props: HarnessBlockProps) {
         ) : null}
         {toggle}
         {typeof settings === 'function' ? (
-          <button type="button" className="btn" data-act="harness-settings" onClick={settings}>
-            {t('hc.entry')}
+          <button
+            type="button"
+            className="ibtn"
+            title={t('hc.entry')}
+            aria-label={t('hc.entry')}
+            data-act="harness-settings"
+            onClick={settings}
+          >
+            <Icon name="tool" />
           </button>
         ) : null}
         {harness ? (
           <button
             type="button"
-            className="btn"
+            className="ibtn"
+            title={t(
+              restarting
+                ? 'manage.restarting'
+                : harness?.state === 'disabled'
+                  ? 'harness.state.disabled'
+                  : 'manage.restart',
+            )}
+            aria-label={t(restarting ? 'manage.restarting' : 'manage.restart')}
             data-act="restart"
             // 停用了的不会启动，没有什么可重启的
             disabled={restarting || harness.state === 'disabled'}
             onClick={() => void restart(false)}
           >
-            {t(restarting ? 'manage.restarting' : 'manage.restart')}
+            <Icon name="reload" />
           </button>
         ) : null}
       </header>
       <InstallRow device={device} harnessId={harnessId} view={install} name={name} />
       {detail ? (
         <div className="mng-h-body">
-          {harness?.cli ? (
-            <dl className="harness-runtime" data-harness-runtime>
-              <dt>{t('harness.runtime.path')}</dt>
-              <dd className="mono">{harness.cli.path}</dd>
-              <dt>{t('harness.runtime.version')}</dt>
-              <dd className="mono">{harness.cli.version || t('devices.harness.unknown')}</dd>
-              <dt>{t('harness.runtime.source')}</dt>
-              <dd>{t(`harness.runtime.source.${harness.cli.source}`)}</dd>
-              <dt>{t('harness.runtime.started')}</dt>
-              <dd>{stampFull(harness.cli.startedAt, t.lang)}</dd>
-            </dl>
+          {selected || candidates.length ? (
+            <div className="harness-runtime" data-harness-runtime>
+              <div className="harness-runtime-line">
+                <span className="dim">
+                  {t(harness?.cli ? 'harness.runtime.actual' : 'harness.runtime.selected')}
+                </span>
+                <span className="mono ell" title={selected?.path}>
+                  {selected
+                    ? `${selected.version || t('devices.harness.unknown')} · ${selected.path}`
+                    : t('harness.runtime.none')}
+                </span>
+                {candidates.length > 1 ? (
+                  <button
+                    type="button"
+                    className="ibtn"
+                    aria-label={t('harness.runtime.candidates')}
+                    title={t('harness.runtime.candidates')}
+                    aria-expanded={copiesOpen}
+                    onClick={() => setCopiesOpen(!copiesOpen)}
+                  >
+                    <Icon name={copiesOpen ? 'up' : 'down'} />
+                  </button>
+                ) : null}
+              </div>
+              {copiesOpen
+                ? candidates.map((candidate) => (
+                    <div
+                      className="harness-runtime-line"
+                      key={candidate.path}
+                      data-cli-selected={candidate.selected}
+                    >
+                      <span className="mono">
+                        {candidate.version || t('devices.harness.unknown')} · {candidate.path}
+                      </span>
+                      {candidate.selected ? (
+                        <span className="dim">
+                          {t(harness?.cli ? 'harness.runtime.inUse' : 'harness.runtime.chosen')}
+                        </span>
+                      ) : null}
+                    </div>
+                  ))
+                : null}
+            </div>
           ) : null}
           {/* 停用了的：开关就在标题行上，不用再解释 */}
           {harness && !ready && harness.state !== 'disabled' ? (

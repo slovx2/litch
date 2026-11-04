@@ -1,12 +1,18 @@
 import { execFileSync } from 'node:child_process'
-import { cliCommand, resolveHostCli } from '../../shared/src/host-cli.mjs'
+import { cliCommand, hostCliDiagnostic, resolveHostCli } from '../../shared/src/host-cli.mjs'
 import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
 
 // dsh 本体不随适配器分发：使用用户自己安装的可执行文件，默认从 PATH 查找，CHA_DSH_CLI 可指定路径。
 export function hostDshExecutable(env: NodeJS.ProcessEnv = process.env): string {
   const command = env.CHA_DSH_CLI?.trim() || 'dsh'
   try {
-    return resolveHostCli(command, '@deepseek-ai/dsh', 'lib/bin.js', env)
+    return resolveHostCli(
+      command,
+      '@deepseek-ai/dsh',
+      'lib/bin.js',
+      env,
+      Boolean(env.CHA_DSH_CLI?.trim()),
+    )
   } catch {
     throw new Error(
       `宿主 dsh CLI 不可执行或未找到: ${command}；请先安装 DeepSeek Harness，或配置 CHA_DSH_CLI 或当前用户 PATH`,
@@ -57,6 +63,8 @@ export function hostDshVersion(cli: string, minimum: string): string {
   }
   const version = /\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/.exec(output)?.[0]
   if (!dshVersionAtLeast(version, minimum))
-    throw new Error(`宿主 dsh CLI 版本不符: 需要 >= ${minimum}，实际 ${output.slice(0, 80)}`)
+    throw new Error(
+      `宿主 dsh CLI 版本不符: 需要 >= ${minimum}，实际 ${output.slice(0, 80)}${hostCliDiagnostic(cli, 'dsh', '@deepseek-ai/dsh', 'lib/bin.js')}`,
+    )
   return version as string
 }

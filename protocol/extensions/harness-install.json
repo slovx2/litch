@@ -193,6 +193,7 @@
         "manual"
       ],
       "properties": {
+        "candidates": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["path", "version", "selected"], "properties": { "path": { "type": "string" }, "version": { "type": "string" }, "selected": { "type": "boolean" } } } },
         "harness": {
           "type": "string",
           "description": "harness 标识"

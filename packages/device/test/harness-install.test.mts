@@ -101,6 +101,7 @@ test('三个方法转给主进程，应答原样交回；正在装别的、参�
     harness: 'pi',
     installable: true,
     method: 'npm',
+    candidates: [{ path: '/isolated/bin/pi', version: '0.99.1', selected: true }],
     installed: null,
     minimum: '0.99.1',
     verified: '0.99.1',
@@ -250,7 +251,7 @@ function startService(registry: string): Promise<Service> {
   // 假的 npm：打两行，把一个 --version 打 0.2.0-rc.2 的 dsh 放进 bin
   writeFileSync(
     join(tools, 'npm'),
-    `#!/bin/sh\necho "npm $*"\necho "added 1 package"\nprintf '#!/bin/sh\\necho "dsh 0.2.0-rc.2"\\n' > '${bin}/dsh'\nchmod +x '${bin}/dsh'\n`,
+    `#!/bin/sh\nif [ "$1" = prefix ]; then echo '${root}'; exit 0; fi\necho "npm $*"\necho "added 1 package"\nprintf '#!/bin/sh\\necho "dsh 0.2.0-rc.2"\\n' > '${bin}/dsh'\nchmod +x '${bin}/dsh'\n`,
   )
   chmodSync(join(tools, 'npm'), 0o755)
   const home = join(root, 'h')

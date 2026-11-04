@@ -65,6 +65,9 @@ export const projectVersion = (info: HarnessVersionInfo): HarnessVersionView => 
   installable: info.installable === true,
   method: info.method ?? null,
   installed: info.installed ?? null,
+  ...(info.candidates
+    ? { candidates: info.candidates.map((candidate) => ({ ...candidate })) }
+    : {}),
   minimum: info.minimum ?? null,
   verified: info.verified ?? null,
   latest: info.latest ?? null,

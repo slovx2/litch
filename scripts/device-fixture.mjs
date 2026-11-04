@@ -330,6 +330,8 @@ async function startService(spec) {
     {
       PATH: path.join(':'),
       HOME: dirs.userHome,
+      // CLI 还会扫描 npm 全局目录；固定到夹具空目录，不读取本机用户安装。
+      npm_config_prefix: join(root, 'npm-global'),
       TMPDIR: root,
       PI_CODING_AGENT_DIR: spec.agent,
       PI_CLI: piCli,

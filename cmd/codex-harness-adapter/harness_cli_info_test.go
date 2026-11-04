@@ -33,7 +33,15 @@ func TestHarnessCLISelectionAndRunningSnapshot(t *testing.T) {
 	}
 	plain := settingsTestConfiguration(t).forHarness("pi")
 	plain.userEnv = map[string]string{}
-	if got := selectedHarnessCLI(plain, filepath.Join(root, "path", "pi"), "0.72.0"); got.Source != "path" {
+	pathCLI := filepath.Join(root, "path", "pi")
+	if err := os.MkdirAll(filepath.Dir(pathCLI), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pathCLI, []byte("#!/bin/sh\necho 0.72.0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	plain.settingsEnv = map[string]string{"PATH": filepath.Dir(pathCLI), "HOME": root, "PI_CLI": ""}
+	if got := selectedHarnessCLI(plain, pathCLI, "0.72.0"); got.Source != "path" {
 		t.Fatal(got)
 	}
 }

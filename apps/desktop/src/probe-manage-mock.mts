@@ -387,6 +387,19 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   const envSecretShown = text(one('.env-kept .pill', envSecret))
   const envSecretHasInput = Boolean(one('.env-value', envSecret))
   await openRuntime('pi')
+  // 实际入口常驻一行，多份候选可展开，使用标记与启动时入口一致。
+  const cliSummary = await until('实际 CLI 入口', () => one('[data-harness-runtime]'))
+  if (!text(cliSummary).includes('0.99.1 · /opt/homebrew/bin/pi'))
+    throw new Error('实际 CLI 路径或版本缺失')
+  const copies = one<HTMLButtonElement>('button[aria-expanded="false"]', cliSummary)
+  if (!copies) throw new Error('多份 CLI 缺少展开按钮')
+  copies.click()
+  await until('CLI 候选列表', () => one('[data-cli-selected="true"]', cliSummary))
+  if (!text(cliSummary).includes('0.72.0 · /usr/local/bin/pi')) throw new Error('旧 CLI 候选缺失')
+  if (!text(one('[data-cli-selected="true"]', cliSummary)).includes('/opt/homebrew/bin/pi'))
+    throw new Error('CLI 使用标记错误')
+  copies.click()
+
   collectControls()
   const secretShown = text(one('[data-secret-state]', row('harness.pi.apiKey') as HTMLElement))
   // 切到英文看一眼，再切回来。换语言走界面给验收留的口子，不靠界面上哪个按钮

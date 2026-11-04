@@ -17,6 +17,8 @@ export interface HarnessVersionView {
   /** 能不能由 Litch 装。自填命令的 acp、这个系统上没有官方方式的都是 false */
   installable: boolean
   method: HarnessInstallMethod | null
+  /** 当前发现的安装；selected 表示按现行设置下次启动会选中的入口。 */
+  candidates?: { path: string; version: string; selected: boolean }[]
   /** 探测到的已装版本；没装、探测不出是 null */
   installed: string | null
   /** 适配器要求的最低版本；没有要求是 null */

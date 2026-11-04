@@ -267,7 +267,7 @@ export function writeEngineSettings({ home, root, modelUrl, engines }) {
 }
 
 /**
- * 交给服务的 PATH 里不能有用户装的 harness：引擎找命令行除了看那几个变量就是看 PATH，
+ * 交给服务的 PATH 里不能有用户装的 harness；调用方还必须把 npm_config_prefix 指到隔离目录，
  * 这里的隔离靠的就是“这几个目录里找不到”。找得到就报错退出，不往下走
  */
 export function refuseHarnessOnPath(directories) {

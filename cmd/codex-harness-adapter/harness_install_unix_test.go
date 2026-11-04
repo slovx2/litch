@@ -22,7 +22,6 @@ type installRig struct {
 	tools, bin, home string
 	env              []string
 	installer        *installer
-	settings         int
 	mu               sync.Mutex
 	notices          []installJob
 	found            []locatedCLI
@@ -62,7 +61,6 @@ func newInstallRig(t *testing.T, registry string) *installRig {
 		source: versionSource{
 			environment: func(string) []string { return rig.env },
 			configured:  func(string) string { rig.mu.Lock(); defer rig.mu.Unlock(); return rig.configured },
-			settings:    func() int { rig.mu.Lock(); defer rig.mu.Unlock(); return rig.settings },
 			registry:    registry,
 		},
 		notify: func(job installJob) {
@@ -82,7 +80,8 @@ func newInstallRig(t *testing.T, registry string) *installRig {
 
 // 假的 npm：把参数和看到的 CODEX_HOME 记下来，再按 body 做事。
 func (r *installRig) fakeNPM(t *testing.T, body string) {
-	writeScript(t, filepath.Join(r.tools, "npm"), `echo "npm $*"
+	writeScript(t, filepath.Join(r.tools, "npm"), `if [ "$1" = prefix ]; then echo "${FAKE_BIN%/bin}"; exit 0; fi
+echo "npm $*"
 echo "CODEX_HOME=${CODEX_HOME:-unset}"
 `+body)
 }
@@ -155,7 +154,7 @@ func TestInstallNPMSucceeds(t *testing.T) {
 	if !strings.Contains(log, "npm install -g @google/gemini-cli@0.10.0") || !strings.Contains(log, "CODEX_HOME=unset") || !strings.HasSuffix(log, "[litch] after gemini") {
 		t.Fatalf("日志不对（固定变量不该漏给安装命令，after 的话接在后面）:\n%s", log)
 	}
-	if len(rig.found) != 1 || rig.found[0].overrides || rig.found[0].path != filepath.Join(rig.bin, "gemini") {
+	if len(rig.found) != 1 || rig.found[0].path != filepath.Join(rig.bin, "gemini") {
 		t.Fatalf("交给 after 的命令行: %+v", rig.found)
 	}
 	jobs := rig.installer.jobs()
@@ -186,13 +185,13 @@ EOF
 	if data, _ := os.ReadFile(filepath.Join(rig.home, "curl-args")); strings.TrimSpace(string(data)) != "-fsSL https://claude.ai/install.sh" {
 		t.Fatalf("curl 的参数: %q", data)
 	}
-	if len(rig.found) != 1 || rig.found[0].overrides || rig.found[0].path != filepath.Join(rig.home, ".local", "bin", "claude") {
+	if len(rig.found) != 1 || rig.found[0].path != filepath.Join(rig.home, ".local", "bin", "claude") {
 		t.Fatalf("应在固定位置找到、不用盖过设置: %+v", rig.found)
 	}
 }
 
-// 原来给的命令行路径是坏的（指到不存在的文件，比如旧的设置、环境变量）：装完绕开它找，找到了标明要盖过它。
-func TestInstallScriptOverridesBrokenConfiguredPath(t *testing.T) {
+// 原来给的命令行路径是坏的（指到不存在的文件，比如旧的设置、环境变量）：装完提示修正，不绕开它。
+func TestInstallScriptKeepsBrokenConfiguredPath(t *testing.T) {
 	rig := newInstallRig(t, "")
 	rig.configured = filepath.Join(rig.home, "gone", "claude")
 	writeScript(t, filepath.Join(rig.tools, "curl"), `cat <<'EOF'
@@ -205,11 +204,8 @@ EOF
 		t.Fatal(err)
 	}
 	last := rig.finished(t, rig.start(t, "claude-code", installTargetVerified))
-	if last.State != installSucceeded || *last.Installed != "2.1.316" {
-		t.Fatalf("应装成: %+v", last)
-	}
-	if len(rig.found) != 1 || !rig.found[0].overrides || rig.found[0].path != filepath.Join(rig.home, ".local", "bin", "claude") {
-		t.Fatalf("应绕开坏的路径、在官方位置找到并标明要盖过: %+v", rig.found)
+	if last.State != installFailed || len(rig.found) != 0 {
+		t.Fatalf("显式路径无效时应提示修正，不自动覆盖设置: %+v", last)
 	}
 }
 
@@ -227,7 +223,7 @@ printf '#!/bin/sh\necho "%s"\n' > "%s/bin/pi"
 	return filepath.Join(prefix, "bin", "pi")
 }
 
-// PATH 上先找到的是旧的一份（另一个 npm 前缀装的），新装的在 npm 全局目录：改用新装的，标明要写进设置。
+// PATH 上先找到的是旧的一份（另一个 npm 前缀装的），新装的在 npm 全局目录：自动选中较新的，不写路径设置。
 func TestInstallNPMShadowedByOlderCopy(t *testing.T) {
 	rig := newInstallRig(t, "")
 	writeScript(t, filepath.Join(rig.bin, "pi"), "echo 0.99.1\n")
@@ -236,11 +232,11 @@ func TestInstallNPMShadowedByOlderCopy(t *testing.T) {
 	if last.State != installSucceeded || last.Installed == nil || *last.Installed != "1.4.0" {
 		t.Fatalf("应报新装的 1.4.0: %+v", last)
 	}
-	if len(rig.found) != 1 || !rig.found[0].overrides || rig.found[0].path != fresh {
-		t.Fatalf("应改用 npm 全局目录里的那份并标明要盖过: %+v", rig.found)
+	if len(rig.found) != 1 || rig.found[0].path != fresh {
+		t.Fatalf("应自动选择 npm 全局目录里的那份: %+v", rig.found)
 	}
-	if log := strings.Join(last.Log, "\n"); !strings.Contains(log, filepath.Join(rig.bin, "pi")+" 是 0.99.1") || !strings.Contains(log, "改用新装的这份") {
-		t.Fatalf("日志应交代为什么改用:\n%s", log)
+	if log := strings.Join(last.Log, "\n"); !strings.Contains(log, "实际选择：1.4.0 · "+fresh) {
+		t.Fatal(log)
 	}
 }
 
@@ -249,10 +245,10 @@ func TestInstallNPMGlobalNotOnPath(t *testing.T) {
 	rig := newInstallRig(t, "")
 	fresh := rig.fakeNPMWithPrefix(t, "1.4.0")
 	last := rig.finished(t, rig.start(t, "pi", installTargetVerified))
-	if last.State != installSucceeded || *last.Installed != "1.4.0" || len(rig.found) != 1 || !rig.found[0].overrides || rig.found[0].path != fresh {
+	if last.State != installSucceeded || *last.Installed != "1.4.0" || len(rig.found) != 1 || rig.found[0].path != fresh {
 		t.Fatalf("应装成并改用 npm 全局目录里的那份: %+v %+v", last, rig.found)
 	}
-	if log := strings.Join(last.Log, "\n"); !strings.Contains(log, "不在 PATH 上") {
+	if log := strings.Join(last.Log, "\n"); !strings.Contains(log, "实际选择：1.4.0 · "+fresh) {
 		t.Fatalf("日志应交代不在 PATH 上:\n%s", log)
 	}
 }
@@ -266,7 +262,7 @@ func TestInstallNPMKeepsSameCopy(t *testing.T) {
 			t.Fatal(err)
 		}
 		last := rig.finished(t, rig.start(t, "pi", installTargetVerified))
-		if last.State != installSucceeded || *last.Installed != "1.4.0" || len(rig.found) != 1 || rig.found[0].overrides || rig.found[0].path != filepath.Join(rig.bin, "pi") {
+		if last.State != installSucceeded || *last.Installed != "1.4.0" || len(rig.found) != 1 || rig.found[0].path != filepath.Join(rig.bin, "pi") {
 			t.Fatalf("链到同一个文件不该盖过: %+v %+v", last, rig.found)
 		}
 	})
@@ -275,7 +271,7 @@ func TestInstallNPMKeepsSameCopy(t *testing.T) {
 		writeScript(t, filepath.Join(rig.bin, "pi"), "echo 1.4.0\n")
 		rig.fakeNPMWithPrefix(t, "1.4.0")
 		last := rig.finished(t, rig.start(t, "pi", installTargetVerified))
-		if last.State != installSucceeded || len(rig.found) != 1 || rig.found[0].overrides || rig.found[0].path != filepath.Join(rig.bin, "pi") {
+		if last.State != installSucceeded || len(rig.found) != 1 || rig.found[0].path != filepath.Join(rig.bin, "pi") {
 			t.Fatalf("版本相同不该盖过: %+v %+v", last, rig.found)
 		}
 	})
@@ -381,7 +377,7 @@ sleep 0.5
 		t.Fatalf("已有任务在跑时应拒绝，并说正在装的是哪个: %+v", failure)
 	}
 	last := rig.finished(t, job)
-	if last.State != installSucceeded || len(last.Log) != installLogLines || last.Log[len(last.Log)-1] != "[litch] after pi" || last.Log[len(last.Log)-2] != "line 300" {
+	if last.State != installSucceeded || len(last.Log) != installLogLines || last.Log[len(last.Log)-1] != "[litch] after pi" || last.Log[len(last.Log)-3] != "line 300" {
 		t.Fatalf("日志应只留末尾 200 行: %d %v", len(last.Log), last.Log[len(last.Log)-3:])
 	}
 	rig.mu.Lock()
@@ -465,15 +461,18 @@ func TestHarnessVersions(t *testing.T) {
 	}
 	writeScript(t, filepath.Join(rig.bin, "gemini"), "echo 0.9.2\n")
 	found = byID(cache.versions(context.Background(), source, false))
-	if *found["gemini"].Installed != "0.9.1" || *found["claude-code"].Latest != "9.9.9" || found["gemini"].LatestError == nil {
-		t.Fatalf("设置没变时用缓存，最新版给上次的: %+v", found["gemini"])
+	if *found["gemini"].Installed != "0.9.2" || *found["claude-code"].Latest != "9.9.9" || found["gemini"].LatestError == nil {
+		t.Fatalf("文件更新时重探，最新版给上次的: %+v", found["gemini"])
 	}
+	pinned := filepath.Join(rig.bin, "custom-gemini")
+	writeScript(t, pinned, "echo 0.8.0\n")
 	rig.mu.Lock()
-	rig.settings++
+	rig.configured = pinned
 	rig.mu.Unlock()
-	if found = byID(cache.versions(context.Background(), source, false)); *found["gemini"].Installed != "0.9.2" {
-		t.Fatalf("设置变了要重探: %+v", found["gemini"])
+	if info := cache.info(context.Background(), source, "gemini", false); *info.Installed != "0.8.0" {
+		t.Fatal(info)
 	}
+
 }
 
 // 设置里的命令行路径：给了路径就看它，给了命令名就在 PATH 里找，给的不对就是没装。

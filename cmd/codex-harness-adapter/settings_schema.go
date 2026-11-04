@@ -258,8 +258,8 @@ func harnessSettingTexts(id string) harnessTexts {
 			"Turning this off stops the %s runtime, so this device no longer offers it. Sessions are kept and come back when you turn it on again.",
 		).with(name),
 		cliPath: both(
-			"这台设备上 %s 命令行的绝对路径。留空就在 PATH 里找。",
-			"Absolute path of the %s command-line tool on this device. Leave empty to look it up on PATH.",
+			"这台设备上 %s 命令行的绝对路径。留空自动选择版本最高的安装。",
+			"Absolute path of the %s command-line tool on this device. Leave empty to select the newest installed version.",
 		).with(name),
 		env: both(
 			"只给 %s 的运行时：代理、接口地址、密钥等。优先于启动服务的进程自己的环境，也优先于环境文件（状态目录下的 env）。",
@@ -277,8 +277,8 @@ func acpSettingTexts(id string) harnessTexts {
 		"Connected over ACP (Agent Client Protocol); off by default. Change the arguments with %s in the environment variables below (split on whitespace, double quotes supported).",
 	).with(args)
 	cliPath := both(
-		"这台设备上 %s 命令行的绝对路径，适配器以 ACP 方式起它。留空就用预设的命令，在 PATH 里找。",
-		"Absolute path of the %s command-line tool on this device; the adapter starts it in ACP mode. Leave empty to use the preset command, looked up on PATH.",
+		"这台设备上 %s 命令行的绝对路径，适配器以 ACP 方式起它。留空按预设命令自动选择版本最高的安装。",
+		"Absolute path of the %s command-line tool on this device; the adapter starts it in ACP mode. Leave empty to select the newest installation of the preset command.",
 	).with(name)
 	if spec.needsCLI {
 		cliPath = both(

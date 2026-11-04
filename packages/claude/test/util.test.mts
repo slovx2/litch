@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { syncBuiltinESMExports } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -35,14 +35,14 @@ test('未运行 adapter main 的 Claude 入口仍记录共享模块日志', asyn
   }
 })
 
-test('resolveCodexBinary prefers CODEX_REAL over PATH and homedir fallbacks', async () => {
+test('resolveCodexBinary 保留显式 CODEX_REAL', async () => {
   const previous = process.env.CODEX_REAL
   const directory = await mkdtemp(join(tmpdir(), 'codex-harness-adapter-util-'))
   const binary = join(directory, 'codex.real')
   await writeFile(binary, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
   process.env.CODEX_REAL = binary
   try {
-    assert.equal(resolveCodexBinary(), binary)
+    assert.equal(resolveCodexBinary(), await realpath(binary))
   } finally {
     if (previous == null) delete process.env.CODEX_REAL
     else process.env.CODEX_REAL = previous
@@ -159,5 +159,29 @@ process.exit(3)`
     )
   } finally {
     await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('Codex 代理也选择最高版本，并在探版本前排除自己的包装脚本', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'codex-choice-')))
+  const previous = { PATH: process.env.PATH, CODEX_REAL: process.env.CODEX_REAL }
+  try {
+    for (const [name, body] of [
+      ['shim', 'codex-harness-adapter'],
+      ['old', 'echo 1.0.0'],
+      ['new', 'echo 2.0.0'],
+    ]) {
+      await mkdir(join(root, name!))
+      await writeFile(join(root, name!, 'codex'), `#!/bin/sh\n${body}\n`, { mode: 0o700 })
+    }
+    process.env.PATH = ['shim', 'old', 'new'].map((name) => join(root, name)).join(':')
+    delete process.env.CODEX_REAL
+    assert.equal(resolveCodexBinary(), join(root, 'new', 'codex'))
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+    await rm(root, { recursive: true, force: true })
   }
 })

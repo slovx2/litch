@@ -1,9 +1,10 @@
 #!/usr/bin/env node
+
 import { spawnSync } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { backgroundShellEnabled } from '../../shared/src/background-shell.mjs'
-import { cliCommand } from '../../shared/src/host-cli.mjs'
+import { cliCommand, hostCliDiagnostic } from '../../shared/src/host-cli.mjs'
 import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
 import { ProcessRpc } from '../../shared/src/process-rpc.mjs'
 import { codexCliVersion } from '../../shared/src/runtime-version.mjs'
@@ -37,7 +38,9 @@ async function main(): Promise<void> {
       timeout: 10000,
     })
     if (cli.error || cli.status !== 0 || !isVersionAtLeast(cli.stdout.trim(), versions.cli))
-      throw new Error(`需要用户安装的 Pi CLI >= ${versions.cli}；可用 PI_CLI 指定路径`)
+      throw new Error(
+        `需要用户安装的 Pi CLI >= ${versions.cli}，实际 ${cli.stdout?.trim() || '版本未知'}${hostCliDiagnostic(hostPi().cli, 'pi', '@earendil-works/pi-coding-agent', 'dist/cli.js')}；可用 PI_CLI 指定路径`,
+      )
     process.stdout.write(
       `${JSON.stringify({ ...info, cliBuild: cli.stdout.trim(), cliPath: hostPi().cli })}\n`,
     )

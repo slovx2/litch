@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,10 +9,10 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -205,50 +206,19 @@ var versionProbeTimeout = 2 * time.Second
 // 找到的命令行在哪。
 type locatedCLI struct {
 	path string
-	// 设置或环境变量给的那一项指不到能跑的命令行，是绕开它找到的；或者是 npm 全局目录里新装的那份，
-	// 照常的次序找不到它、或先找到的是旧的另一份：harness 还会照原来的次序去找，
-	// 所以装完要把这里找到的写进设置里的命令行路径（设置排在环境变量前面）
-	overrides bool
 }
 
-// locateCLI 照 harness 自己找命令行的次序找：设置里的命令行路径（或它的环境变量），PATH 里的命令名，
-// 登记表里的固定位置（引擎经 withFallbackCLI 拿到的也是它）。configured 是设置或环境变量给的那一项。
+// 显式指定的路径严格保留；未指定时取候选中版本最高的一份。
 func locateCLI(id, configured string, env []string) (locatedCLI, bool) {
-	spec := specOf(id)
-	install := spec.install
-	if configured = strings.TrimSpace(configured); configured != "" {
-		if !strings.ContainsAny(configured, `/\`) {
-			// 只给了命令名（ACP 那几个可以这样写）：在 PATH 里找
-			if path := lookPath(envPath(env), configured); path != "" {
-				return locatedCLI{path: path}, true
-			}
-			return locatedCLI{}, false
-		}
-		if executableOnPath(filepath.Dir(configured), []string{filepath.Base(configured)}) != "" {
-			return locatedCLI{path: configured}, true
+	if strings.TrimSpace(configured) != "" {
+		if path := configuredCLIPath(strings.TrimSpace(configured), env); path != "" {
+			return locatedCLI{path: path}, true
 		}
 		return locatedCLI{}, false
 	}
-	names := append([]string{}, spec.commands...)
-	if install != nil {
-		names = append(names, install.commands...)
-	}
-	for _, name := range names {
-		if path := lookPath(envPath(env), name); path != "" {
-			return locatedCLI{path: path}, true
-		}
-	}
-	home := envHome(env)
-	if home == "" {
-		return locatedCLI{}, false
-	}
-	look := func(relative string) string {
-		path := filepath.Join(home, relative)
-		return lookPath(filepath.Dir(path), filepath.Base(path))
-	}
-	for _, fallback := range spec.fallbacks {
-		if path := look(fallback); path != "" {
-			return locatedCLI{path: path}, true
+	for _, candidate := range harnessCLICandidates(id, "", env) {
+		if candidate.Selected {
+			return locatedCLI{path: candidate.Path}, true
 		}
 	}
 	return locatedCLI{}, false
@@ -258,17 +228,22 @@ func locateCLI(id, configured string, env []string) (locatedCLI, bool) {
 func probeVersion(ctx context.Context, path string, env []string) string {
 	ctx, cancel := context.WithTimeout(ctx, versionProbeTimeout)
 	defer cancel()
-	command := exec.CommandContext(ctx, path, "--version")
+	command := hostCLICommand(ctx, path, env, "--version")
 	command.Env = env
 	// 超时连它起的子进程一起停掉，不等它们放开输出管道
 	hostplatform.Prepare(command)
 	command.Cancel = func() error { return hostplatform.Kill(command) }
 	command.WaitDelay = time.Second
-	output, _ := command.CombinedOutput()
-	if ctx.Err() != nil {
+	var stdout, stderr bytes.Buffer
+	command.Stdout, command.Stderr = &stdout, &stderr
+	err := command.Run()
+	if err != nil || ctx.Err() != nil {
 		return ""
 	}
-	return firstVersion(string(output))
+	if version := firstVersion(stdout.String()); version != "" {
+		return version
+	}
+	return firstVersion(stderr.String())
 }
 
 // 问 npm 全局目录最多等这么久。
@@ -280,9 +255,61 @@ func npmGlobalCLI(ctx context.Context, install *installSpec, npm string, env []s
 	if npm == "" {
 		return ""
 	}
+	prefix := npmGlobalPrefix(ctx, npm, env)
+	if prefix == "" {
+		return ""
+	}
+	bin := prefix
+	if installGOOS != "windows" {
+		bin = filepath.Join(prefix, "bin")
+	}
+	for _, name := range install.commands {
+		if path := lookPath(bin, name); path != "" {
+			return path
+		}
+	}
+	return ""
+}
+
+// npm 的配置查询单独短缓存；候选文件每次重新 stat，安装结束清掉前缀缓存。
+var npmPrefixes = struct {
+	sync.Mutex
+	values map[string]struct {
+		prefix string
+		at     time.Time
+	}
+}{values: map[string]struct {
+	prefix string
+	at     time.Time
+}{}}
+
+func npmGlobalPrefix(ctx context.Context, npm string, env []string) string {
+	ordered := []string{}
+	for _, value := range env {
+		name, _, _ := strings.Cut(value, "=")
+		if strings.HasPrefix(strings.ToLower(name), "npm_config_") || name == "PATH" || name == "Path" || name == "HOME" || name == "USERPROFILE" || name == "APPDATA" {
+			ordered = append(ordered, value)
+		}
+	}
+	sort.Strings(ordered)
+	key := npm + "\n" + strings.Join(ordered, "\n")
+	npmPrefixes.Lock()
+	defer npmPrefixes.Unlock()
+	if cached, ok := npmPrefixes.values[key]; ok && time.Since(cached.at) < 30*time.Second {
+		return cached.prefix
+	}
+	prefix := readNPMGlobalPrefix(ctx, npm, env)
+	npmPrefixes.values[key] = struct {
+		prefix string
+		at     time.Time
+	}{prefix, time.Now()}
+	return prefix
+}
+
+func readNPMGlobalPrefix(ctx context.Context, npm string, env []string) string {
 	ctx, cancel := context.WithTimeout(ctx, npmPrefixTimeout)
 	defer cancel()
-	command := exec.CommandContext(ctx, npm, "prefix", "-g")
+	command := hostCLICommand(ctx, npm, env, "prefix", "-g")
 	command.Env = env
 	if home := envHome(env); home != "" {
 		command.Dir = home
@@ -303,16 +330,7 @@ func npmGlobalCLI(ctx context.Context, install *installSpec, npm string, env []s
 	if !filepath.IsAbs(prefix) {
 		return ""
 	}
-	bin := prefix
-	if installGOOS != "windows" {
-		bin = filepath.Join(prefix, "bin")
-	}
-	for _, name := range install.commands {
-		if path := lookPath(bin, name); path != "" {
-			return path
-		}
-	}
-	return ""
+	return prefix
 }
 
 // 两个路径是不是同一个文件（顺着符号链接看，比如 /usr/local/bin/dsh 链到 npm 全局目录里的那份）。
@@ -381,16 +399,17 @@ func latestFailure(err error) bilingual {
 
 // litch/device/harness/versions 的一项（HarnessVersionInfo）。
 type harnessVersionInfo struct {
-	Harness     string     `json:"harness"`
-	Installable bool       `json:"installable"`
-	Method      *string    `json:"method"`
-	Installed   *string    `json:"installed"`
-	Minimum     *string    `json:"minimum"`
-	Verified    *string    `json:"verified"`
-	Latest      *string    `json:"latest"`
-	LatestError *bilingual `json:"latestError,omitempty"`
-	DocsURL     string     `json:"docsUrl"`
-	Manual      string     `json:"manual"`
+	Harness     string                `json:"harness"`
+	Candidates  []harnessCLICandidate `json:"candidates,omitempty"`
+	Installable bool                  `json:"installable"`
+	Method      *string               `json:"method"`
+	Installed   *string               `json:"installed"`
+	Minimum     *string               `json:"minimum"`
+	Verified    *string               `json:"verified"`
+	Latest      *string               `json:"latest"`
+	LatestError *bilingual            `json:"latestError,omitempty"`
+	DocsURL     string                `json:"docsUrl"`
+	Manual      string                `json:"manual"`
 }
 
 func optional(text string) *string {
@@ -406,55 +425,19 @@ type latestOutcome struct {
 	failure *bilingual
 }
 
-// 探测过的已装版本，和探测时设置的版本号：设置变了（命令行路径、环境变量）就要重探。
-type probedVersion struct {
-	version  string
-	settings int
-}
-
-// 版本的缓存：已装版本缓存到下次安装或设置变化，最新版记着上次查到的。
+// 最新版记着上次注册表查询；本机版本由可执行文件的 stat 缓存负责。
 type versionCache struct {
 	mu      sync.Mutex
-	probed  map[string]probedVersion
 	latests map[string]latestOutcome
 }
 
-func newVersionCache() *versionCache {
-	return &versionCache{probed: map[string]probedVersion{}, latests: map[string]latestOutcome{}}
-}
+func newVersionCache() *versionCache { return &versionCache{latests: map[string]latestOutcome{}} }
 
-func (v *versionCache) forget(id string) {
-	v.mu.Lock()
-	delete(v.probed, id)
-	v.mu.Unlock()
-}
-
-// 查版本要用到的现场：每个 harness 的环境、设置里给的命令行，设置现在的版本号。
+// 查版本要用到的现场：每个 harness 的环境、设置里给的命令行。
 type versionSource struct {
 	environment func(id string) []string
 	configured  func(id string) string
-	settings    func() int
 	registry    string
-}
-
-// installed 给出一个 harness 装的版本，先看缓存。
-func (v *versionCache) installed(ctx context.Context, source versionSource, id string) string {
-	settings := source.settings()
-	v.mu.Lock()
-	cached, found := v.probed[id]
-	v.mu.Unlock()
-	if found && cached.settings == settings {
-		return cached.version
-	}
-	version := ""
-	env := source.environment(id)
-	if located, ok := locateCLI(id, source.configured(id), env); ok {
-		version = probeVersion(ctx, located.path, env)
-	}
-	v.mu.Lock()
-	v.probed[id] = probedVersion{version: version, settings: settings}
-	v.mu.Unlock()
-	return version
 }
 
 // latest 现查一个包的最新版并记下；refresh 为 false 时只给上次查到的。
@@ -493,7 +476,13 @@ func (v *versionCache) versions(ctx context.Context, source versionSource, refre
 
 func (v *versionCache) info(ctx context.Context, source versionSource, id string, refresh bool) harnessVersionInfo {
 	install := specOf(id).install
-	info := harnessVersionInfo{Harness: id, Installed: optional(v.installed(ctx, source, id)), DocsURL: acpDocsURL}
+	info := harnessVersionInfo{Harness: id, DocsURL: acpDocsURL, Candidates: harnessCLICandidates(id, source.configured(id), source.environment(id))}
+	for _, candidate := range info.Candidates {
+		if candidate.Selected {
+			info.Installed = optional(candidate.Version)
+			break
+		}
+	}
 	if install == nil {
 		return info
 	}

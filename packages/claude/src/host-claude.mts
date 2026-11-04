@@ -1,6 +1,9 @@
-import { execFileSync } from 'node:child_process'
 import { statSync } from 'node:fs'
-import { cliCommand, resolveHostCli } from '../../shared/src/host-cli.mjs'
+import {
+  hostCliDiagnostic,
+  hostCliVersionOutput,
+  resolveHostCli,
+} from '../../shared/src/host-cli.mjs'
 import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
 
 // 入口自己用的一次性 CLI（追加上下文、读用量、起标题这类）不开本机收件箱（Claude Code 的跨会话消息）：
@@ -26,7 +29,13 @@ export function claudeBashTimeoutEnv(env: NodeJS.ProcessEnv): Readonly<Record<st
 export function hostClaudeExecutable(env: NodeJS.ProcessEnv = process.env): string {
   const command = env.CHA_CLAUDE_CLI?.trim() || 'claude'
   try {
-    return resolveHostCli(command, '@anthropic-ai/claude-code', 'bin/claude.exe', env)
+    return resolveHostCli(
+      command,
+      '@anthropic-ai/claude-code',
+      'bin/claude.exe',
+      env,
+      Boolean(env.CHA_CLAUDE_CLI?.trim()),
+    )
   } catch {
     throw new Error(
       `宿主 Claude CLI 不可执行或未找到: ${command}；请配置 CHA_CLAUDE_CLI 或当前用户 PATH`,
@@ -35,15 +44,12 @@ export function hostClaudeExecutable(env: NodeJS.ProcessEnv = process.env): stri
 }
 
 export function hostClaudeVersion(cli: string, minimum: string, env = process.env): string {
-  let actual: string
-  try {
-    const [command, ...args] = cliCommand(cli, ['--version'])
-    actual = execFileSync(command!, args, { env, encoding: 'utf8', timeout: 10_000 }).trim()
-  } catch {
-    throw new Error(`无法读取宿主 Claude CLI 版本: ${cli}`)
-  }
+  const actual = hostCliVersionOutput(cli, env)
+  if (!actual) throw new Error(`无法读取宿主 Claude CLI 版本: ${cli}`)
   if (!isVersionAtLeast(/^(\S+) \(Claude Code\)$/.exec(actual)?.[1], minimum))
-    throw new Error(`宿主 Claude CLI 版本不符: 需要 >= ${minimum} (Claude Code)，实际 ${actual}`)
+    throw new Error(
+      `宿主 Claude CLI 版本不符: 需要 >= ${minimum} (Claude Code)，实际 ${actual}${hostCliDiagnostic(cli, 'claude', '@anthropic-ai/claude-code', 'bin/claude.exe', env)}`,
+    )
   return actual
 }
 

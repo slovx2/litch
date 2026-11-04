@@ -22,9 +22,15 @@ Codex 历史刚写入时若暂报 `list_turns is not supported yet`，设备会�
 
 ## Seeing what is there
 
-The harness Settings → Runtime tab on desktop and phone shows a running harness's CLI entry, launch-time version, selection
-source and start time. It may be a wrapper script. A changed path is not shown as the running entry
-until the harness actually restarts; a stopped harness does not claim a new path is already running.
+桌面与手机的 harness「设置 → 运行」页用一行显示“实际使用：版本 · 路径”。有多份安装时，
+点展开图标查看全部路径和版本，当前使用的那份标为“使用中”。停止的 harness 显示“已选择”，
+不表示进程正在运行。修改路径后，正在运行的入口信息仍保留到实际重启。
+
+未指定命令行路径时，Litch 同时检查 PATH 中的全部同名命令、登记的固定位置（例如
+`~/.local/bin/claude`、`~/.opencode/bin/opencode`）和当前 npm 的全局目录，自动选择版本最高的一份。
+同版本优先保留 PATH 顺序；无法运行或读不出版本的排在最后，全部未知时仍取最先找到的命令。
+设置中的路径优先于对应环境变量；指定了路径或命令名就严格使用，不自动替换。
+运行中的进程在重启后使用重新选出的版本，原地更新会使版本探测缓存失效。
 
 - `scripts/litch harness list <device>` shows every harness on the device: enabled or not, ready or
   unavailable with the reason, and the version when known.
@@ -49,10 +55,9 @@ user. Litch has no command for it. Do it yourself with the user's OK, or give th
   Gemini CLI and Qwen Code have not been verified by Litch.
 - Never use sudo. If npm's global folder is not writable, tell the user (they can set an npm prefix in
   their home, or use a Node version manager); do not change system folders.
-- npm must be the one on the user's login `PATH`, the same one the harness will be found with.
-  Litch's own install and update buttons also check npm's global folder (`npm prefix -g`): if the new
-  copy is not on `PATH`, or an older copy from another Node installation comes first, Litch uses the
-  new one and writes it into `harness.<id>.cliPath` (the install log says so).
+- 官方脚本与 npm 安装完成后，Litch 都重新检测实际入口，并在安装日志中显示路径和版本。
+  若指定的旧路径仍生效，日志同时列出新安装的位置，提示修改或清空路径设置后重新检测；
+  不自动改写用户指定的路径。指定路径无效时安装任务提示修正，不能绕开它启动另一份。
 - For a remote device the command has to run on that machine: in a terminal there, or, with the user's
   OK, `ssh <alias> '<command>'` from here.
 - Afterwards make Litch pick it up: `scripts/litch harness restart <device> <id>` (it re-detects the
@@ -236,3 +241,10 @@ Antigravity 默认使用订阅（官方 ACP）。只装 `agy`、未配置 API ke
 登录按官方 `agy acp --login` 完成。订阅通过官方 ACP 使用 CLI 登录；第三方客户端在消费套餐下的
 适用范围仍需用户确认，存在账号限制风险。Litch 不读取或转存登录令牌。风险说明显示在“鉴权方式”
 设置项，不另弹确认。API key 模式为低优先级实验选项，只有用户主动选择后才使用 localharness。
+
+### 旧版 Claude Code 的自动压缩窗口
+
+Claude Code 低于 2.1.299 时，对话仍正常运行，本次启动不传入 Litch 配置的模型压缩窗口，
+其他设置保持生效。对话内提示实际路径、版本和未生效的设置，并指向设备详情的安装/更新入口。
+同一会话、同一路径与版本只提示一次；切换 CLI 或升级后重新判断。更新并重启后，保存的窗口设置生效。
+这项降级只针对自动压缩窗口，不改变其他功能各自的最低版本要求。

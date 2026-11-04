@@ -84,6 +84,10 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
           ...harness('pi'),
           cli: {
             path: '/opt/homebrew/bin/pi',
+            candidates: [
+              { path: '/usr/local/bin/pi', version: '0.72.0', selected: false },
+              { path: '/opt/homebrew/bin/pi', version: '0.99.1', selected: true },
+            ],
             version: '0.99.1',
             source: 'path',
             startedAt: now - HOUR,

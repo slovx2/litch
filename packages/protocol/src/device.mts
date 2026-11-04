@@ -224,6 +224,8 @@ export interface HarnessUnavailable {
 
 /** 一个 harness 的声明和现在的状态 */
 export interface HarnessRuntimeInfo {
+  /** 启动时的安装快照；selected 标记这次运行实际使用的入口。 */
+  candidates?: { path: string; version: string; selected: boolean }[]
   path: string
   version: string
   source: 'settings' | 'environment' | 'path' | 'default'

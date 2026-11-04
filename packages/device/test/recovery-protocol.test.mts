@@ -16,6 +16,10 @@ test('恢复方法与通知、运行CLI字段按投递连接声明隔离', async
     version: '0.99.1',
     source: 'path' as const,
     startedAt: 1000,
+    candidates: [
+      { path: '/isolated/old/pi', version: '0.72.0', selected: false },
+      { path: '/isolated/bin/pi', version: '0.99.1', selected: true },
+    ],
   }
   const control = new FakeControl([{ ...managed('pi'), cli }])
   const pi = new FakeUpstream('pi')

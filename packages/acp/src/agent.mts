@@ -110,7 +110,17 @@ export function resolveAgent(env: NodeJS.ProcessEnv = process.env): ResolvedAgen
     )
   let cli: string
   try {
-    cli = resolveHostCli(spec.command, spec.command, '', env)
+    cli = resolveHostCli(
+      spec.command,
+      spec.id === 'gemini'
+        ? '@google/gemini-cli'
+        : spec.id === 'qwen'
+          ? '@qwen-code/qwen-code'
+          : spec.command,
+      '',
+      env,
+      spec.source.command === 'env',
+    )
   } catch {
     throw new Error(
       `${spec.displayName} 的 CLI 不可执行或未找到: ${spec.command}；请先安装，或配置 ${variable} 或当前用户 PATH`,

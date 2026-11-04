@@ -18,7 +18,7 @@ import (
 
 // 安装任务：一台设备同一时刻只跑一个（npm 的全局目录并发写会坏），按用户的环境跑官方的命令，
 // 不提权、不用 sudo。输出留末尾 200 行，进度节流着推出去；装成后重探版本，再交给 after
-// （常驻服务里是：停用的写成启用、命令行不在 harness 找得到的地方就写进设置，然后照 harness.apply 重启它）。
+// （常驻服务里是：停用的写成启用、保留路径设置，然后照 harness.apply 重启它）。
 
 const (
 	installRunning   = "running"
@@ -240,38 +240,14 @@ func (i *installer) run(job *installJob, install *installSpec, resolved string) 
 		return
 	}
 	// 装成了：重探版本（缓存作废），找不到命令行就算没装成
-	i.cache.forget(id)
+	cliVersions.Lock()
+	clear(cliVersions.values)
+	cliVersions.Unlock()
+	npmPrefixes.Lock()
+	clear(npmPrefixes.values)
+	npmPrefixes.Unlock()
 	configured := i.hooks.source.configured(id)
 	found, ok := locateCLI(id, configured, env)
-	if !ok && strings.TrimSpace(configured) != "" {
-		// 给的那一项是坏的（旧的路径、指到不存在的文件）：照没给时的次序再找，找到了就让它盖过那一项
-		if found, ok = locateCLI(id, "", env); ok {
-			found.overrides = true
-		}
-	}
-	if install.methodHere() == installNPM {
-		// npm 装进的是它自己的全局目录，可能不在 PATH 上，也可能被 PATH 里更靠前的旧的一份挡住
-		// （两份 Node 各有各的前缀）：照常找到的那份跑出来的不是新装的版本，就改用 npm 全局目录里的这份
-		if fresh := npmGlobalCLI(ctx, install, lookPath(search, "npm"), env); fresh != "" {
-			switch {
-			case !ok:
-				found, ok = locatedCLI{path: fresh, overrides: true}, true
-				i.update(job, func() {
-					appendLog(job, both("[litch] %s 不在 PATH 上，改用 npm 全局目录里的这份", "[litch] %s is not on PATH; using the copy in the npm global directory").with(fresh).String())
-				})
-			case !sameFile(found.path, fresh):
-				if old, now := probeVersion(ctx, found.path, env), probeVersion(ctx, fresh, env); now != "" && old != now {
-					i.update(job, func() {
-						appendLog(job, both(
-							"[litch] 先找到的 %s 是 %s，新装的在 npm 全局目录 %s（%s），改用新装的这份",
-							"[litch] The first one found, %s, is %s; the new one is in the npm global directory at %s (%s), so that one is used instead",
-						).with(found.path, old, fresh, now).String())
-					})
-					found = locatedCLI{path: fresh, overrides: true}
-				}
-			}
-		}
-	}
 	if !ok {
 		failure := both(
 			"安装命令跑完了，但找不到 %s 的命令行：它装到的目录可能不在 PATH 上。把那个目录加进 PATH，或者在设置里填它的命令行路径，然后点“重新检测”",
@@ -288,12 +264,36 @@ func (i *installer) run(job *installJob, install *installSpec, resolved string) 
 		i.finish(job, "", &failure)
 		return
 	}
+	// 成功运行安装命令不等于实际入口已切换；显式路径绝不自动覆盖。
+	fresh := ""
+	if install.methodHere() == installNPM {
+		fresh = npmGlobalCLI(ctx, install, lookPath(search, "npm"), env)
+	} else {
+		fresh = fallbackCLI(envHome(env), specOf(id))
+	}
+	if install.methodHere() == installScript {
+		actual := cachedCLIVersion(ctx, fresh, env)
+		order, valid := compareVersions(actual, resolved)
+		if fresh == "" || !valid || order < 0 {
+			failure := both("官方安装命令已结束，但目标路径 %s 的版本是 %s，未确认安装到 %s；请检查安装日志后重试", "The official installer finished, but %s reports %s; installation of %s could not be confirmed. Check the install log and retry").with(fresh, actual, resolved)
+			i.finish(job, installed, &failure)
+			return
+		}
+	}
+	i.update(job, func() {
+		appendLog(job, both("[litch] 实际选择：%s · %s", "[litch] Selected CLI: %s · %s").with(installed, found.path).String())
+		if fresh != "" && !sameFile(found.path, fresh) {
+			appendLog(job, both(
+				"[litch] 新安装位于 %s（%s），实际选择仍是 %s（%s）；如需使用新安装，请修改或清空命令行路径设置后重新检测",
+				"[litch] Installed at %s (%s), but the selected CLI is %s (%s); to use the new installation, change or clear the CLI path setting and check again",
+			).with(fresh, cachedCLIVersion(ctx, fresh, env), found.path, installed).String())
+		}
+	})
 	if i.hooks.after != nil {
 		for _, line := range i.hooks.after(ctx, id, found) {
 			i.update(job, func() { appendLog(job, line) })
 		}
 	}
-	i.cache.forget(id)
 	i.finish(job, installed, nil)
 }
 
@@ -343,7 +343,7 @@ func splitLines(data []byte, atEOF bool) (int, []byte, error) {
 
 // execute 跑安装命令，输出进日志，按时推进度。成功返回 nil，否则是失败的原因。
 func (i *installer) execute(ctx context.Context, job *installJob, path string, args []string, env []string) *bilingual {
-	command := exec.Command(path, args...)
+	command := hostCLICommand(context.Background(), path, env, args...)
 	command.Env = env
 	if home := envHome(env); home != "" {
 		command.Dir = home

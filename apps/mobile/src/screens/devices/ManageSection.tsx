@@ -8,6 +8,7 @@ import {
   type ChannelErrorShape,
   type DeviceView,
   type HarnessView,
+  type InstallTopicView,
   keys,
   type ManageSchema,
   type SettingEditView,
@@ -20,7 +21,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
-import { stampFull } from '../../../../../packages/ui/src/app/format.ts'
+import { cliPresentation } from '../../../../../packages/ui/src/devices/cli-presentation.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useBusy, useChannel, useKey, useReplica } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
@@ -210,6 +211,7 @@ function HarnessHead({
   snapshot,
   entry,
   detail = false,
+  install,
 }: {
   deviceId: string
   harness: HarnessView
@@ -217,6 +219,7 @@ function HarnessHead({
   snapshot: SettingsSnapshotView
   entry: 'open' | 'unsupported' | null
   detail?: boolean
+  install?: InstallTopicView
 }) {
   const theme = useTheme()
   const t = useT()
@@ -225,6 +228,11 @@ function HarnessHead({
   const [writing, runWrite] = useBusy()
   const [restarting, runRestart] = useBusy()
   const [busyAsk, setBusyAsk] = useState(false)
+  const [copiesOpen, setCopiesOpen] = useState(false)
+  const { selected, candidates } = cliPresentation(
+    harness.cli,
+    install?.versions?.find((entry) => entry.harness === harness.id)?.candidates,
+  )
   const [said, setSaid] = useState<{ text: string; bad: boolean } | null>(null)
   const pending = snapshot.pendingRestart.includes(harness.id)
   const on = enable ? snapshot.values[enable.key] === true : null
@@ -284,11 +292,45 @@ function HarnessHead({
         </Text>
         <View style={styles.grow}>
           <Text style={[styles.name, { color: theme.c.ink }]}>
-            {harness.name}
+            {harness.name}{' '}
+            <Text style={[styles.small, { color: theme.c.ink2 }]}>
+              {t(`harness.state.${harness.state}`)}
+            </Text>
             {pending ? <Text style={{ color: theme.c.wait }}> · {t('manage.pending')}</Text> : null}
           </Text>
-          <Text style={[styles.small, { color: theme.c.ink2 }]}>{harnessLine(harness, t)}</Text>
+          {harness.reason ? (
+            <Text style={[styles.small, { color: theme.c.ink2 }]}>{t.text(harness.reason)}</Text>
+          ) : null}
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('manage.restart')}
+          accessibilityHint={on === false ? t('harness.state.disabled') : undefined}
+          accessibilityState={{ disabled: on === false || restarting, busy: restarting }}
+          disabled={on === false || restarting}
+          testID={`harness:${harness.id}:restart`}
+          onPress={() => void restart(false)}
+          style={{ padding: 8 }}
+        >
+          <Text style={{ color: on === false || restarting ? theme.c.ink3 : theme.c.ink }}>↻</Text>
+        </Pressable>
+        {entry === 'open' ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('hc.entry')}
+            testID={`harness:${harness.id}:settings`}
+            onPress={() =>
+              navigation.navigate('HarnessSettings', {
+                deviceId,
+                harness: harness.id,
+                name: harness.name,
+              })
+            }
+            style={{ padding: 8 }}
+          >
+            <Text style={{ color: theme.c.ink }}>⚙</Text>
+          </Pressable>
+        ) : null}
         {enable && on !== null ? (
           <Switch
             accessibilityLabel={t('devices.manage.enable')}
@@ -300,62 +342,49 @@ function HarnessHead({
           />
         ) : null}
       </View>
-      <View style={styles.actions}>
-        <Button
-          kind={pending ? 'solid' : 'plain'}
-          label={restarting ? t('manage.restarting') : t('manage.restart')}
-          busy={restarting}
-          disabled={on === false}
-          testID={`harness:${harness.id}:restart`}
-          onPress={() => void restart(false)}
-        />
-        {entry === 'open' ? (
-          <Button
-            kind="plain"
-            label={t('hc.entry')}
-            testID={`harness:${harness.id}:settings`}
-            onPress={() =>
-              navigation.navigate('HarnessSettings', {
-                deviceId,
-                harness: harness.id,
-                name: harness.name,
-              })
-            }
-          />
-        ) : null}
-      </View>
-      {detail && harness.cli ? (
+      {detail && (selected || candidates.length) ? (
         <View style={styles.runtime} testID={`harness:${harness.id}:runtime`}>
-          {/* 同桌面 HarnessBlock 的 CLI 信息：标签三级字色，值二级字色，路径和版本等宽 */}
-          {(
-            [
-              ['harness.runtime.path', harness.cli.path, true],
-              [
-                'harness.runtime.version',
-                harness.cli.version || t('devices.harness.unknown'),
-                Boolean(harness.cli.version),
-              ],
-              ['harness.runtime.source', t(`harness.runtime.source.${harness.cli.source}`), false],
-              ['harness.runtime.started', stampFull(harness.cli.startedAt, t.lang), false],
-            ] as const
-          ).map(([label, value, mono]) => (
-            <View key={label} style={styles.runtimeRow}>
-              <Text style={[styles.small, styles.runtimeLabel, { color: theme.c.ink3 }]}>
-                {t(label)}
-              </Text>
-              <Text
-                selectable
-                style={[
-                  styles.small,
-                  styles.runtimeValue,
-                  { color: theme.c.ink2 },
-                  mono ? { fontFamily: theme.font.mono } : null,
-                ]}
+          <View style={styles.runtimeRow}>
+            <Text
+              numberOfLines={1}
+              selectable
+              style={[
+                styles.small,
+                styles.grow,
+                { color: theme.c.ink2, fontFamily: theme.font.mono },
+              ]}
+            >
+              {t(harness.cli ? 'harness.runtime.actual' : 'harness.runtime.selected')}{' '}
+              {selected
+                ? `${selected.version || t('devices.harness.unknown')} · ${selected.path}`
+                : t('harness.runtime.none')}
+            </Text>
+            {candidates.length > 1 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('harness.runtime.candidates')}
+                accessibilityState={{ expanded: copiesOpen }}
+                onPress={() => setCopiesOpen(!copiesOpen)}
+                hitSlop={8}
               >
-                {value}
-              </Text>
-            </View>
-          ))}
+                <Text style={{ color: theme.c.ink2 }}>{copiesOpen ? '⌃' : '⌄'}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {copiesOpen
+            ? candidates.map((candidate) => (
+                <Text
+                  key={candidate.path}
+                  selectable
+                  style={[styles.small, { color: theme.c.ink2, fontFamily: theme.font.mono }]}
+                >
+                  {candidate.version || t('devices.harness.unknown')} · {candidate.path}
+                  {candidate.selected
+                    ? ` · ${t(harness.cli ? 'harness.runtime.inUse' : 'harness.runtime.chosen')}`
+                    : ''}
+                </Text>
+              ))
+            : null}
         </View>
       ) : null}
       {entry === 'unsupported' ? (
@@ -388,6 +417,25 @@ const belongsTo = (spec: SettingSpecView, harness: string) =>
   spec.scope.kind === 'harness' && spec.scope.harness === harness
 
 export function ManageSection({ device, harnessId }: { device: DeviceView; harnessId?: string }) {
+  const channel = useChannel()
+  const [install, setInstall] = useState<InstallTopicView>()
+  useEffect(() => {
+    if (!device.install || device.connection !== 'online') {
+      setInstall(undefined)
+      return
+    }
+    return channel.subscribe(
+      { kind: 'install', deviceId: device.id },
+      {
+        snapshot: setInstall,
+        delta: (ops) => {
+          const last = ops.at(-1)
+          if (last) setInstall(last.view)
+        },
+        error: () => setInstall(undefined),
+      },
+    )
+  }, [channel, device.id, device.install, device.connection])
   const replica = useReplica()
   const theme = useTheme()
   const t = useT()
@@ -449,6 +497,7 @@ export function ManageSection({ device, harnessId }: { device: DeviceView; harne
               snapshot={snapshot}
               entry={null}
               detail
+              install={install}
             />
           ) : null
         }

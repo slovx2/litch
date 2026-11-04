@@ -1,13 +1,17 @@
 package main
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+)
 
 // 启动这一轮时检查到的入口与版本，不根据后来改过的设置重新推测正在运行的进程。
 type harnessCLIInfo struct {
-	Path      string `json:"path"`
-	Version   string `json:"version"`
-	Source    string `json:"source"`
-	StartedAt int64  `json:"startedAt"`
+	Path       string                `json:"path"`
+	Version    string                `json:"version"`
+	Source     string                `json:"source"`
+	Candidates []harnessCLICandidate `json:"candidates,omitempty"`
+	StartedAt  int64                 `json:"startedAt"`
 }
 
 func selectedHarnessCLI(c configuration, path, version string) *harnessCLIInfo {
@@ -24,8 +28,27 @@ func selectedHarnessCLI(c configuration, path, version string) *harnessCLIInfo {
 		source = "settings"
 	} else if variable := harnessCLIVariable[c.harness]; variable != "" && strings.TrimSpace(env[variable]) != "" {
 		source = "environment"
-	} else if spec := specOf(c.harness); !spec.native && len(spec.fallbacks) > 0 && commandOnPath(c.environmentValue("PATH", "Path"), spec) == "" {
-		source = "default"
+	} else {
+		spec := specOf(c.harness)
+		names := append([]string{}, spec.commands...)
+		if spec.install != nil {
+			names = append(names, spec.install.commands...)
+		}
+		onPath := false
+		for _, directory := range filepath.SplitList(env["PATH"] + string(filepath.ListSeparator) + env["Path"]) {
+			if directory == "" {
+				continue
+			}
+			for _, name := range names {
+				candidate := hostCLIExecutable(lookPath(directory, name))
+				if candidate != "" && sameFile(candidate, path) {
+					onPath = true
+				}
+			}
+		}
+		if !onPath {
+			source = "default"
+		}
 	}
-	return &harnessCLIInfo{Path: path, Version: versionPattern.FindString(version), Source: source}
+	return &harnessCLIInfo{Path: path, Version: versionPattern.FindString(version), Source: source, Candidates: harnessCLICandidates(c.harness, path, c.baseEnvironment())}
 }

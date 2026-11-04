@@ -10,6 +10,7 @@ import {
 import { homedir } from 'node:os'
 import { join, relative } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
 import { ToolObservation } from './tool-observation.mjs'
 
 // 提示缓存时长（默认主对话 1h、子代理 5m；CHA_CLAUDE_PROMPT_CACHE_TTL=default 时不覆盖），CLI 继承这个进程的环境
@@ -377,6 +378,8 @@ const joinReminders = (...notes: Array<string | null>): string | null =>
 export class NativeClaudeRuntime implements ClaudeRuntime {
   private sdk: ClaudeSdk | null = null
   private turns = new Map<string, PendingTurn>()
+  // 同一会话同一入口/版本只提示一次，CLI 进程退出后仍保留，避免每回合刷屏。
+  private modelSettingsNotices = new Map<string, string>()
   private sessions = new Map<string, NativeSession>()
   private sessionHandlers: RuntimeSessionHandlers | null = null
   private turnSettingsReady = new Map<
@@ -899,7 +902,18 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         context.claudeBackend !== 'tui' && claudeCrossSessionInbox()
           ? await claimPeerInboxSocket(key, process.env)
           : null
-      const options = this.buildOptions(sdk, live, abort, current, key, inboxSocket, launch)
+      const cli = hostClaudeExecutable()
+      const supportedLaunch = await this.modelSettingsLaunch(context, launch, cli, handlers)
+      const options = this.buildOptions(
+        sdk,
+        live,
+        abort,
+        current,
+        key,
+        inboxSocket,
+        supportedLaunch,
+        cli,
+      )
       options.spawnClaudeCodeProcess = nativeProcess.spawn.bind(nativeProcess)
       options.mcpServers = await mcp.connect(
         context.mcpServers,
@@ -1642,6 +1656,31 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     options.mcpServers = servers
   }
 
+  private async modelSettingsLaunch(
+    context: RuntimeTurnContext,
+    launch: ProviderLaunch,
+    cli: string,
+    handlers: RuntimeHandlers,
+  ): Promise<ProviderLaunch> {
+    if (!Object.keys(launch.flagSettings?.modelSettings ?? {}).length) return launch
+    const version = hostClaudeVersion(cli, '0.0.0').split(' ')[0]!
+    const signature = `${cli}:${version}`
+    if (isVersionAtLeast(version, '2.1.299')) {
+      this.modelSettingsNotices.delete(context.threadId)
+      return launch
+    }
+    if (this.modelSettingsNotices.get(context.threadId) !== signature) {
+      await handlers.onEvent({
+        type: 'notice',
+        level: 'warning',
+        message: `Claude Code ${version} 低于 2.1.299，实际路径：${cli}。本次自动压缩窗口设置未生效，对话可继续。请在设备详情中安装或更新 Claude Code，更新并重启后生效。`,
+      })
+      this.modelSettingsNotices.set(context.threadId, signature)
+    }
+    const { modelSettings: _modelSettings, ...settings } = launch.flagSettings!
+    return { ...launch, flagSettings: settings }
+  }
+
   // context 是“当前回合”的视图：进程启动时取一次的项用的是第一个回合的值，
   // 回调里读到的则是调用时那个回合的值。
   private buildOptions(
@@ -1652,6 +1691,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     sessionKey: string,
     inboxSocket: string | null = null,
     launch: ProviderLaunch = contextLaunch(context.provider, context.model),
+    cli = hostClaudeExecutable(),
   ): Record<string, unknown> {
     const originalBashInputs: OriginalBashInputs = new Map()
     const reservedGoalTools = new Set<string>()
@@ -1666,9 +1706,6 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       }
       return pending
     }
-    // 会话所选型号的供应商：没填密钥、供应商被删了在这里报错，回合失败，绝不退回账号
-    if (Object.keys(launch.flagSettings?.modelSettings ?? {}).length)
-      hostClaudeVersion(hostClaudeExecutable(), '2.1.299')
     const childEnv = launch.env
     // 开着线程号开关时要给的 ANTHROPIC_CUSTOM_HEADERS：以 CLI 本来会用的那份为底（设置的 env 里配了的优先，
     // 没配用进程环境），下面同时放进进程环境和入口传的设置的 env。CLI 起来后会拿设置里的 env 盖进程环境，
@@ -1687,7 +1724,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     const inbox = context.claudeBackend !== 'tui' && claudeCrossSessionInbox()
     const opts: Record<string, unknown> = {
       abortController: abort,
-      pathToClaudeCodeExecutable: hostClaudeExecutable(),
+      pathToClaudeCodeExecutable: cli,
       includePartialMessages: true,
       includeHookEvents: true,
       // 子代理的正文与思考也带父工具调用 ID 转发，用于投影到子线程。

@@ -42,12 +42,12 @@ func TestWithFallbackCLI(t *testing.T) {
 			t.Fatalf("给了的不该换: %q", value)
 		}
 	})
-	t.Run("PATH 里有：不补，引擎自己在 PATH 里找", func(t *testing.T) {
+	t.Run("PATH 里有：传递选择结果", func(t *testing.T) {
 		writeScript(t, filepath.Join(bin, "claude"), "echo '2.1.290 (Claude Code)'\n")
 		defer func() { _ = os.Remove(filepath.Join(bin, "claude")) }()
 		env := withFallbackCLI("claude-code", []string{"PATH=" + bin, "HOME=" + home})
-		if _, count := envLookup(env, "CHA_CLAUDE_CLI"); count != 0 {
-			t.Fatal("PATH 里有的时候不该补")
+		if value, count := envLookup(env, "CHA_CLAUDE_CLI"); count != 1 || value != filepath.Join(bin, "claude") {
+			t.Fatal("应传递 PATH 里的最高版本")
 		}
 	})
 	t.Run("固定位置也没有：不补", func(t *testing.T) {
@@ -66,7 +66,7 @@ func TestWithFallbackCLI(t *testing.T) {
 	// 版本一览和引擎看到的是同一份：locateCLI 拿补好的变量当 configured
 	env := withFallbackCLI("claude-code", []string{"PATH=" + bin, "HOME=" + home})
 	configured, _ := envLookup(env, "CHA_CLAUDE_CLI")
-	if found, ok := locateCLI("claude-code", configured, env); !ok || found.path != official || found.overrides {
+	if found, ok := locateCLI("claude-code", configured, env); !ok || found.path != official {
 		t.Fatalf("版本一览应找到同一份: %+v %v", found, ok)
 	}
 }

@@ -14,6 +14,7 @@
 
 import { type ChildProcess, spawn } from 'node:child_process'
 import { createInterface, type Interface } from 'node:readline'
+import { cliCommand } from '../../shared/src/host-cli.mjs'
 import { ProtocolError } from './protocol-contract.mjs'
 import type { ClaudeRuntime, ImageInput, RuntimeHandlers, RuntimeTurnContext } from './types.mjs'
 import { debugLog, resolveCodexBinary } from './util.mjs'
@@ -105,7 +106,8 @@ export class CodexProxyRuntime implements ClaudeRuntime {
         turnId: context.turnId,
       })
 
-      const proc = spawn(binary, args, {
+      const [command, ...cliArgs] = cliCommand(binary, args)
+      const proc = spawn(command!, cliArgs, {
         stdio: ['ignore', 'pipe', 'pipe'],
         // 命令里调 litch-machine 时按它认会话。codex 自己注入的 CODEX_THREAD_ID 是它内部的会话号，
         // 不是这个入口的，litch-machine 先认这一个

@@ -185,6 +185,7 @@
       "additionalProperties": false,
       "required": ["path", "version", "source", "startedAt"],
       "properties": {
+        "candidates": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["path", "version", "selected"], "properties": { "path": { "type": "string" }, "version": { "type": "string" }, "selected": { "type": "boolean" } } } },
         "path": { "type": "string", "minLength": 1 },
         "version": { "type": "string" },
         "source": { "enum": ["settings", "environment", "path", "default"] },

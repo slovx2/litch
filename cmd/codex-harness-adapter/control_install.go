@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"strings"
 )
 
 // 控制通道上“给设备装 harness”的那一部分（harness.versions、harness.install、harness.install.read），
@@ -30,30 +31,30 @@ func (s *controlServer) newInstaller() *installer {
 // 查版本和跑安装命令用的现场：harness 起的时候看到的那份环境、设置里的命令行。
 func (s *controlServer) versionSource() versionSource {
 	return versionSource{
-		environment: func(id string) []string { return s.manager.base.forHarness(id).environment() },
+		environment: func(id string) []string { return s.manager.base.forHarness(id).baseEnvironment() },
 		configured: func(id string) string {
 			entry := s.manager.base.forHarness(id)
 			if id == nativeCodex {
 				return entry.settings.text(cliPathKey(nativeCodex))
 			}
-			return entry.environmentValue(specOf(id).cliVariable)
+			for _, value := range entry.baseEnvironment() {
+				if name, text, _ := strings.Cut(value, "="); name == specOf(id).cliVariable {
+					return text
+				}
+			}
+			return ""
 		},
-		settings: func() int { return s.manager.base.settings.currentVersion() },
 		registry: registryFrom(s.c),
 	}
 }
 
-// 装成以后：停用着的写成启用（装就是想用），原来给的命令行路径是坏的时把找到的写进设置盖过它，
+// 装成以后：停用着的写成启用（装就是想用），保留用户指定的命令行路径，
 // 然后照 harness.apply 重启它。它有回合在跑（或者判断不了）时不重启，新版下次重启生效。
 func (s *controlServer) afterInstall(ctx context.Context, id string, found locatedCLI) []string {
 	notes := []string{}
 	edits := []settingEdit{}
 	if enabled, state, _ := s.manager.wanted(id); !enabled && state == stateDisabled {
 		edits = append(edits, settingEdit{Key: enabledKey(id), Value: json.RawMessage("true")})
-	}
-	if found.overrides {
-		value, _ := json.Marshal(found.path)
-		edits = append(edits, settingEdit{Key: cliPathKey(id), Value: value})
 	}
 	if len(edits) > 0 {
 		var problem *settingsProblem

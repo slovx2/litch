@@ -1,6 +1,6 @@
 {
   "extension": "harnessRuntime",
-  "description": "设备服务启动当前 harness 时选择的 CLI 入口、版本、来源与启动时间。选择规则不变，只有正在运行的实例有此字段。",
+  "description": "设备服务启动当前 harness 时选择的 CLI 入口、版本、来源与启动时间。未指定路径时选择最高版本，只有正在运行的实例有此字段；candidates 是启动时发现的全部安装，selected 标记实际使用的安装。",
   "appliesTo": "有主进程管理的设备聚合面。",
   "declaration": { "where": "initialize.params.capabilities.litchExtensions", "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "harnessRuntime" } } },
   "undeclared": "runtime/info.harnesses 和 harness 状态通知中的 HarnessInfo 不带 cli。",

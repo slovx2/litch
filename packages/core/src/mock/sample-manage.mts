@@ -82,8 +82,8 @@ function baseSettings(
       restart: 'harness',
       title: both('命令行路径', 'CLI path'),
       description: both(
-        `这台设备上 ${name} 命令行的绝对路径。留空就到 PATH 里去找。`,
-        `Absolute path to the ${name} command-line tool on this device. Leave it empty to search PATH.`,
+        `这台设备上 ${name} 命令行的绝对路径。留空自动选择版本最高的安装。`,
+        `Absolute path to the ${name} command-line tool on this device. Leave empty to select the newest installed version.`,
       ),
     },
     {

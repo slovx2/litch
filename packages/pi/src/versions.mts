@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { hostCliDiagnostic } from '../../shared/src/host-cli.mjs'
 import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
 import { CODEX_PROTOCOL_VERSION } from '../../shared/src/runtime-version.mjs'
 import { harnessDeclaration } from './declaration.mjs'
@@ -19,7 +20,7 @@ export const versions = {
 export function requireMinimumPi(pi: HostPi): HostPi {
   if (!isVersionAtLeast(pi.version, versions.cli))
     throw new Error(
-      `需要用户安装的 Pi CLI >= ${versions.cli}，实际 ${pi.version}；请升级 Pi，或用 PI_CLI 指定路径`,
+      `需要用户安装的 Pi CLI >= ${versions.cli}，实际 ${pi.version}${hostCliDiagnostic(pi.cli, 'pi', '@earendil-works/pi-coding-agent', 'dist/cli.js')}；请升级 Pi，或用 PI_CLI 指定路径`,
     )
   return pi
 }

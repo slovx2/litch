@@ -32,6 +32,7 @@ export const isolatedEnv: NodeJS.ProcessEnv = {
     ),
   ),
   HOME: root,
+  npm_config_prefix: join(root, 'npm-global'),
   USERPROFILE: root,
   // CLI 的每用户临时根不看 TMPDIR，不设就落到本机共用的 /tmp/claude-<uid>
   CLAUDE_CODE_TMPDIR: join(root, 'ct'),

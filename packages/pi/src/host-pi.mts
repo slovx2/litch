@@ -40,7 +40,7 @@ export function locateHostPi(env: NodeJS.ProcessEnv = process.env): HostPi {
   const command = env.PI_CLI?.trim() || 'pi'
   let cli: string
   try {
-    cli = resolveHostCli(command, PI_PACKAGE, 'dist/cli.js', env)
+    cli = resolveHostCli(command, PI_PACKAGE, 'dist/cli.js', env, Boolean(env.PI_CLI?.trim()))
   } catch {
     throw new Error(`宿主 Pi CLI 不可执行或未找到: ${command}；请先安装 Pi，或用 PI_CLI 指定其路径`)
   }

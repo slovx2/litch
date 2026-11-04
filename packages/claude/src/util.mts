@@ -1,7 +1,18 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  statSync,
+} from 'node:fs'
 import { homedir, platform, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import { hostCliCandidates, resolveHostCli } from '../../shared/src/host-cli.mjs'
 import {
   CODEX_PROTOCOL_VERSION,
   codexCliVersion as formatCliVersion,
@@ -665,38 +676,32 @@ export function codexProxyModelOptions(): Array<{
   }))
 }
 
-// Resolve the real codex CLI binary — explicit CODEX_REAL wins; otherwise
-// walk PATH for an entry that isn't this very script (to avoid recursion if
-// our shim is also called `codex`). Returns null when nothing usable found.
+// Codex 代理也按共同规则选择最高版本；CODEX_REAL 优先，排除会递归启动本适配器的入口。
 export function resolveCodexBinary(): string | null {
-  const explicit = process.env.CODEX_REAL
-  if (explicit && explicit.trim()) return explicit.trim()
-  const knownCandidates = [
-    join(
-      homedir(),
-      '.local/node/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex.real',
-    ),
-  ]
-  for (const c of knownCandidates) {
-    if (existsSync(c)) return c
+  const explicit = process.env.CODEX_REAL?.trim()
+  try {
+    if (explicit)
+      return resolveHostCli(explicit, '@openai/codex', 'bin/codex.js', process.env, true)
+    return (
+      hostCliCandidates('codex', '@openai/codex', 'bin/codex.js', process.env, (path) => {
+        // 旧代理入口可能仍在 PATH 上；探版本之前就排除本适配器，避免递归启动自己。
+        let file: number | undefined
+        try {
+          file = openSync(path, 'r')
+          const head = Buffer.alloc(200)
+          const size = readSync(file, head, 0, head.length, 0)
+          const text = head.subarray(0, size).toString('utf8')
+          return !text.includes('CHA_CLAUDE_ADAPTER') && !text.includes('codex-harness-adapter')
+        } catch {
+          return false
+        } finally {
+          if (file !== undefined) closeSync(file)
+        }
+      }).find((candidate) => candidate.selected)?.path ?? null
+    )
+  } catch {
+    return null
   }
-  // PATH walk is mostly for dev — production deployments should set
-  // CODEX_REAL explicitly in the shim env (~/.zshenv).
-  const paths = (process.env.PATH ?? '').split(':').filter(Boolean)
-
-  for (const dir of paths) {
-    const candidate = `${dir}/codex`
-    try {
-      const st = statSync(candidate)
-      if (!st.isFile()) continue
-      // Skip our shim — a hashbang + 'CLAUDE_CODEX' header is a strong
-      // signal it's our codex-shim and would recurse.
-      const head = readFileSync(candidate, { encoding: 'utf8' }).slice(0, 200)
-      if (head.includes('CHA_CLAUDE_ADAPTER') || head.includes('codex-harness-adapter')) continue
-      return candidate
-    } catch {}
-  }
-  return null
 }
 
 export function sleep(ms: number): Promise<void> {
