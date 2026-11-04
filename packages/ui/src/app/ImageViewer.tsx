@@ -27,6 +27,10 @@ export function ImageViewer({ url, label, onClose }: ImageViewerProps) {
       className="viewer"
       aria-label={label}
       onClose={onClose}
+      onCancel={(event) => {
+        event.preventDefault()
+        onClose()
+      }}
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}

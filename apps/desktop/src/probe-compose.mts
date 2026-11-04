@@ -55,6 +55,7 @@ export interface ComposeProbe {
   imageShown: boolean
   /** 缩略图点开能看大图，能关上 */
   imageViewed: boolean
+  imageDraftViewed: boolean
   /** 回合结束之后缩略图还在：对面回显的消息里图没有丢 */
   imageKept: boolean
   /** 图有没有真的到了模型手里。只在真实入口上量 */
@@ -576,6 +577,62 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   await open(main)
   await until('输入框', area)
   const imageDraftKept = imageHidden && thumbs() === 1
+  // 用户在发送前检查粘贴的图片；原 imageViewed 只覆盖已发送的消息气泡。
+  const imageArea = await until('图片草稿输入框', area)
+  write(imageArea, '查看图片时保留的草稿')
+  await frame()
+  imageArea.focus()
+  imageArea.setSelectionRange(2, 5)
+  const draftImage = one<HTMLElement>('.cmp-att img')!
+  draftImage.click()
+  let draftViewer = await until('草稿图片大图', () => one<HTMLDialogElement>('dialog.viewer[open]'))
+  let imageDraftViewed =
+    draftViewer.querySelector('img')?.getAttribute('src') === draftImage.getAttribute('src')
+  draftViewer.dispatchEvent(new Event('cancel', { cancelable: true }))
+  await until(
+    'Esc 关闭草稿大图并回到输入框',
+    () => !one('dialog.viewer') && document.activeElement === area(),
+  )
+  draftImage.click()
+  draftViewer = await until('再次打开草稿大图', () => one<HTMLDialogElement>('dialog.viewer[open]'))
+  draftViewer.click()
+  await until(
+    '点外面关闭草稿大图并回到输入框',
+    () => !one('dialog.viewer') && document.activeElement === area(),
+  )
+  imageDraftViewed &&=
+    thumbs() === 1 &&
+    imageArea.value === '查看图片时保留的草稿' &&
+    imageArea.selectionStart === 2 &&
+    imageArea.selectionEnd === 5
+  // 拖入和文件选择共用附件列表；每条入口都要能预览，移除按钮不触发预览。
+  for (const source of ['drop', 'picker']) {
+    const files = new DataTransfer()
+    files.items.add(new File([png], `${source}.png`, { type: 'image/png' }))
+    if (source === 'drop')
+      imageArea.dispatchEvent(
+        new DragEvent('drop', { dataTransfer: files, bubbles: true, cancelable: true }),
+      )
+    else {
+      const picker = one<HTMLInputElement>('.cmp input[type="file"]')!
+      picker.files = files.files
+      picker.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+    await until(`${source} 图片已添加`, () => thumbs() === 2)
+    all('.cmp-att-view').at(-1)?.click()
+    const shown = await until(`${source} 图片可预览`, () =>
+      one<HTMLDialogElement>('dialog.viewer[open]'),
+    )
+    imageDraftViewed &&= shown.querySelector('img')?.alt === `${source}.png`
+    one<HTMLButtonElement>('.viewer-x')?.click()
+    await until(
+      `${source} 预览关闭`,
+      () => !one('dialog.viewer') && document.activeElement === imageArea,
+    )
+    all('.cmp-att-x').at(-1)?.click()
+    await until(`${source} 移除不预览`, () => thumbs() === 1 && !one('dialog.viewer'))
+  }
+  write(imageArea, '')
   let draftClearUndo: boolean | null = null
   if (/mac/i.test(navigator.platform)) {
     const draftArea = await until('输入框', area)
@@ -1392,6 +1449,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     imageDraftKept,
     imageShown,
     imageViewed,
+    imageDraftViewed,
     imageKept,
     imageDelivered,
     modelShown,
@@ -1452,6 +1510,7 @@ export function judgeCompose(probe: ComposeProbe): string[] {
   if (!probe.imageShown)
     failed.push('发出去的图片没有显示成固定大小的缩略图，或者输入区里的图没清掉')
   if (!probe.imageViewed) failed.push('缩略图点开看不到大图')
+  if (!probe.imageDraftViewed) failed.push('发送前的图片不能放大或关闭后没回到输入框')
   if (!probe.imageKept) failed.push('回合结束之后消息里的图片没了')
   if (probe.imageDelivered === false) failed.push('图片没有送到模型手里')
   if (!probe.modelShown) failed.push('底栏上没有显示当前的模型')

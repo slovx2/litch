@@ -28,6 +28,7 @@ import { requestNewSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { nameOf } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
+import { ImageViewer } from '../app/ImageViewer.tsx'
 import { Clip, Close, Icon, Send, Stop } from '../app/icons.tsx'
 import { currentPlatform } from '../app/platform.ts'
 import { useKey, useServices } from '../app/services.tsx'
@@ -172,6 +173,7 @@ export function Composer(props: ComposerProps) {
   const labelOf = useExtraLabel()
   const [text, setText] = useState(() => loadDraft(draftKey))
   const [images, setImages] = useState(() => loadDraftImages(draftKey))
+  const [viewingImage, setViewingImage] = useState<ImageAttachment | null>(null)
   /** 图片之外随消息带的：选中的技能、贴进来的长文字、提到的文件 */
   const [extras, setExtras] = useState(() => loadDraftExtras(draftKey))
   const [error, setError] = useState<string | null>(null)
@@ -879,11 +881,15 @@ export function Composer(props: ComposerProps) {
             {images.map((image, index) => (
               // biome-ignore lint/suspicious/noArrayIndexKey: 图片没有自己的标识，同一张图可以加两次
               <li key={index} className="cmp-att">
-                <img
-                  src={image.url}
-                  alt={image.name ?? t('attachment.image')}
-                  title={image.name ?? undefined}
-                />
+                <button
+                  type="button"
+                  className="cmp-att-view"
+                  title={t('tool.image.view')}
+                  aria-label={`${t('tool.image.view')} · ${image.name ?? t('attachment.image')}`}
+                  onClick={() => setViewingImage(image)}
+                >
+                  <img src={image.url} alt={image.name ?? t('attachment.image')} />
+                </button>
                 <button
                   type="button"
                   className="cmp-att-x"
@@ -896,6 +902,17 @@ export function Composer(props: ComposerProps) {
               </li>
             ))}
           </ul>
+        ) : null}
+        {viewingImage ? (
+          <ImageViewer
+            url={viewingImage.url}
+            label={viewingImage.name ?? t('attachment.image')}
+            onClose={() => {
+              setViewingImage(null)
+              // 等模态层卸载后再恢复编辑焦点，保留原有文字与选择区。
+              requestAnimationFrame(() => input.current?.focus({ preventScroll: true }))
+            }}
+          />
         ) : null}
         <div className="cmp-row">
           <textarea

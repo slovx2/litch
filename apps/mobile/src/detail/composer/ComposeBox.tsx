@@ -34,6 +34,7 @@ import { useTheme } from '../../ui/theme'
 import { CommentChips } from '../comments/CommentChips'
 import { FileCard } from '../FileCard'
 import { colors } from '../theme'
+import { ImageViewer } from '../turn-menu'
 import {
   dropDraft,
   flushDrafts,
@@ -265,6 +266,7 @@ export function ComposeBox({
   )
   const taken = useRef<object | null>(null)
   const own = useRef<TextInput>(null)
+  const [viewingImage, setViewingImage] = useState<string | null>(null)
   const input = inputRef ?? own
   const grow = useGrow(input, draft.text)
   /** 光标在哪：认 `@` 用。还没动过光标的当在末尾 */
@@ -469,7 +471,14 @@ export function ComposeBox({
               key={`${index}:${image.url.length}`}
               style={[styles.thumb, { borderColor: c.line2, borderRadius: theme.radius.s }]}
             >
-              <Image source={{ uri: image.url }} style={styles.thumbImage} resizeMode="cover" />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('tool.image.view')}
+                testID={`${testID}-image-view-${index}`}
+                onPress={() => setViewingImage(image.url)}
+              >
+                <Image source={{ uri: image.url }} style={styles.thumbImage} resizeMode="cover" />
+              </Pressable>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={t('composer.image.remove')}
@@ -589,6 +598,13 @@ export function ComposeBox({
           </Pressable>
         </View>
       </View>
+      <ImageViewer
+        url={viewingImage}
+        onClose={() => {
+          setViewingImage(null)
+          requestAnimationFrame(() => input.current?.focus())
+        }}
+      />
       <Sheet
         visible={moreOpen}
         title={t('compose.more.title')}

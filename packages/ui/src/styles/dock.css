@@ -244,6 +244,12 @@
   border-radius: var(--r2);
   background: var(--hover);
 }
+.cmp-att-view {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--r2);
+  cursor: zoom-in;
+}
 .cmp-att-x {
   position: absolute;
   top: -6px;
