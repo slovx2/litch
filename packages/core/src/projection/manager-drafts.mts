@@ -214,3 +214,96 @@ export function liveManagerDrafts<
     },
   }
 }
+
+/** 分页列表里的一张卡头：分页看板只带点开过的详情，其余对象的状态和版本只在卡头上 */
+export interface ManagerDraftHead {
+  id: string
+  kind: string
+  status: string
+  revision: number
+}
+
+/**
+ * 分页看板的草稿判断面：点开过的详情为准，没点开的用卡头补状态和版本（同一对象取版本最高的卡头）。
+ * 不补的话，没点开过的决策上的草稿会被当成 ended，提交条少算、卡头也标不出来。
+ */
+export function pagedDraftBoard(
+  board: ManagerDraftBoard,
+  heads: Iterable<ManagerDraftHead>,
+): ManagerDraftBoard {
+  const latest = new Map<string, ManagerDraftHead>()
+  for (const head of heads) {
+    const found = latest.get(head.id)
+    if (!found || head.revision > found.revision) latest.set(head.id, head)
+  }
+  const decisions = [...board.decisions]
+  const requests = [...(board.requests ?? [])]
+  const posts = [...(board.posts ?? [])]
+  for (const head of latest.values()) {
+    if (head.kind === 'decision' && !decisions.some((one) => one.id === head.id))
+      decisions.push({
+        id: head.id,
+        status: head.status as ManagerDecisionStatus,
+        revision: head.revision,
+      })
+    if (head.kind === 'request' && !requests.some((one) => one.id === head.id))
+      requests.push({
+        id: head.id,
+        status: head.status as ManagerRequest['status'],
+        revision: head.revision,
+      })
+    if (head.kind !== 'item' && !posts.some((one) => one.id === head.id))
+      posts.push({
+        id: head.id,
+        kind: head.kind as ManagerPostKind,
+        revision: head.revision,
+        // 卡头把“经理未审核”的待开始建议写成 review，帖子字段里仍是 pending
+        fields: { status: head.status === 'review' ? 'pending' : head.status },
+      })
+  }
+  return { ...board, decisions, requests, posts }
+}
+
+/** 收起的卡头上要说的草稿：写了哪几样，以及还能不能提交 */
+export interface ManagerDraftMark {
+  state: ManagerDraftState['state']
+  /** 选中的选项 id（决策） */
+  optionId: string | null
+  /** 写了补充说明或回复文字 */
+  text: boolean
+  /** 写了追问 */
+  question: boolean
+  /** 点了交付（请你做） */
+  delivered: boolean
+}
+
+/** 一个对象上全部本地草稿合成一个卡头标记；什么都没写返回 null */
+export function managerDraftMark(
+  board: ManagerDraftBoard,
+  id: string,
+  drafts: {
+    decision?: ManagerDecisionDraft | undefined
+    request?: ManagerRequestDraft | undefined
+    post?: ManagerPostDraft | undefined
+  },
+): ManagerDraftMark | null {
+  const { decision, request, post } = drafts
+  const mark: ManagerDraftMark = {
+    state: 'live',
+    optionId: decision?.optionId ?? null,
+    text: Boolean(decision?.text.trim() || request?.text.trim()),
+    question: Boolean(decision?.question?.trim() || post?.question.trim()),
+    delivered: Boolean(request?.delivered),
+  }
+  if (!mark.optionId && !mark.text && !mark.question && !mark.delivered) return null
+  const states = [
+    decision ? decisionDraftState(board, id, decision.revision).state : null,
+    request && (request.delivered || request.text.trim())
+      ? requestDraftState(board, id, request.revision).state
+      : null,
+    post?.question.trim() ? postDraftState(board, id, post.revision).state : null,
+  ].filter((state) => state !== null)
+  // 有一样还能交就不算失效；要先确认的优先提示
+  mark.state = states.includes('conflict') ? 'conflict' : states.includes('live') ? 'live' : 'ended'
+  return mark
+}

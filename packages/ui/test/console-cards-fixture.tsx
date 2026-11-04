@@ -1,5 +1,6 @@
 // 正式分页组件、模拟核心与隔离通道；不读取本机看板。
 import '../src/styles/index.css'
+import '../src/styles/manager.css'
 import {
   connectChannel,
   createMockCore,
@@ -40,6 +41,16 @@ Object.assign(window, {
   litchShell: { openExternal: (url: string) => window.__consoleCards.opened.push(url) },
 })
 onOpenSessionRequest((session) => window.__consoleCards.opened.push(session.sessionId))
+// ?tab=decisions 打开决策页；?drafts=1 预置草稿、?drafts=conflict 再加一条待确认（见核心夹具）；?width=、?height= 改列表尺寸
+const params = new URLSearchParams(location.search)
+if (params.has('drafts'))
+  localStorage.setItem(
+    `litch.manager.answers:${JSON.stringify([manager.deviceId, manager.id])}`,
+    JSON.stringify({
+      ...fixture.drafts.answers,
+      ...(params.get('drafts') === 'conflict' ? fixture.drafts.conflict : {}),
+    }),
+  )
 createRoot(document.getElementById('root')!).render(
   <ServicesProvider value={{ channel, replica, shell: 'browser' }}>
     <ManagerFeaturesContext.Provider value={view.features}>
@@ -50,11 +61,18 @@ createRoot(document.getElementById('root')!).render(
             open: (id) => window.__consoleCards.opened.push(id),
           }}
         >
-          <div className="mg-body" style={{ height: 500, overflow: 'auto', width: 800 }}>
+          <div
+            className="mg-body"
+            style={{
+              height: Number(params.get('height') ?? 500),
+              overflow: 'auto',
+              width: Number(params.get('width') ?? 800),
+            }}
+          >
             <PagedBoard
               manager={manager}
               view={view as any}
-              tab="requests"
+              tab={params.get('tab') ?? 'requests'}
               disabled={false}
               target={null}
               onLocated={() => {}}

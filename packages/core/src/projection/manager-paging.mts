@@ -12,7 +12,9 @@ export const managerPageStates: Record<ManagerPageKind, readonly [string, ...str
 }
 export const managerPageLabel = (kind: ManagerPageKind, status: string): string => {
   if (status === 'all' || status === 'pending') return `manager.paging.${status}`
-  if (kind === 'decision') return `manager.${status}`
+  // 卡头带的是原始状态：过期、撤回在列表上都算“已关闭”
+  if (kind === 'decision')
+    return `manager.${status === 'expired' || status === 'withdrawn' ? 'closed' : status}`
   if (kind === 'item') return `manager.status.${status}`
   if (kind === 'request') return `manager.request.${status}`
   if (kind === 'report') return status === 'unread' ? 'manager.reportUnread' : 'manager.reportRead'

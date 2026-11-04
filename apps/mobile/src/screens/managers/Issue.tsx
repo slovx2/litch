@@ -40,7 +40,6 @@ import {
 } from '../../../../../packages/ui/src/manager/post-presentation.ts'
 import { ProposalActs } from '../../detail/proposals/ProposalActs'
 import type { RootStackParamList } from '../../nav/routes'
-import { jsonFile } from '../../shell/json-file'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Empty } from '../../ui/kit/controls'
@@ -52,16 +51,13 @@ import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutc
 import { DiscussionDrawer } from './DiscussionDrawer'
 import { DiscussionHistory } from './DiscussionHistory'
 import { DraftEndedNote } from './DraftEndedNote'
+import { baseFile, questionFile as draftFile, replyFile } from './draft-files'
 import { Markdown } from './IssueMarkdown'
 import { IssueContext, IssueRelations } from './IssueRelations'
 import { setIssueOrder, useIssueOrder } from './issue-order'
 import { ManagerOverview } from './ManagerOverview'
 import { decisionActions, issueCounts, orderedIssues } from './presentation'
-
-const replyFile = jsonFile<Record<string, string>>('manager-replies.json')
-const draftFile = jsonFile<Record<string, string>>('manager-questions.json')
-/** 草稿开始写时议题的版本（同一个键）：议题在别处答复、关闭、忽略或取消后据此判断草稿已结束（core 的 *DraftState） */
-const baseFile = jsonFile<Record<string, number>>('manager-draft-revisions.json')
+import { useDraftsCleared } from './use-draft-files'
 
 /** 作答的一个选项：整块可点，选中画单选记号和强调边框；读屏角色是 radio */
 function OptionChoice({
@@ -243,6 +239,19 @@ export function Issue({
     }
   }, [hasDraft, draftKey, revision])
   const base = baseFile.read()?.[draftKey] ?? revision
+  // 底部提交条批量交出或清掉草稿后：丢掉卡片手里的旧草稿，重读文件；这张卡交掉了就退出修改状态
+  const cleared = useDraftsCleared()
+  const seenCleared = useRef(cleared)
+  useEffect(() => {
+    if (seenCleared.current === cleared) return
+    seenCleared.current = cleared
+    const nextReply = replyFile.read()?.[draftKey] ?? ''
+    const nextChoice = readChoice(draftKey, options)
+    setQuestion(draftFile.read()?.[draftKey] ?? '')
+    setReply(nextReply)
+    setChoiceState(nextChoice)
+    if (!nextChoice && !nextReply.trim()) setEditing(false)
+  }, [cleared, draftKey, options])
   const [confirmedRevision, setConfirmedRevision] = useState<number | null>(null)
   const [selectionReset, setSelectionReset] = useState(false)
   const resetSelection = Boolean(

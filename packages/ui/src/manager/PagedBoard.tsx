@@ -6,6 +6,11 @@ import type {
   ManagerView,
 } from '../../../core/src/model-manager.mts'
 import {
+  type ManagerDraftMark,
+  managerDraftMark,
+  pagedDraftBoard,
+} from '../../../core/src/projection/manager-drafts.mts'
+import {
   managerHistorySnapshot,
   managerPageKey,
   managerPageLabel,
@@ -22,10 +27,13 @@ import { Activity } from './Activity.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardPanels, Item } from './BoardPanels.tsx'
 import { Decisions } from './Decisions.tsx'
+import { useAnswerDrafts } from './drafts.ts'
 import { IssueOrderSelect, useIssueOrder } from './issue-order.tsx'
 import { InlinePostContext } from './PostCard.tsx'
+import { usePostDrafts } from './post-drafts.ts'
 import { Reports } from './Reports.tsx'
 import { Requests } from './Requests.tsx'
+import { useRequestDrafts } from './request-drafts.ts'
 
 const kinds: Record<string, ManagerPageKind> = {
   decisions: 'decision',
@@ -127,6 +135,43 @@ export function PagedBoard({
   const item = board.items.find((item) => item.id === active)
   const pages = managerBoardPages(board)
   const history = active ? paging.histories[active] : undefined
+  const { drafts: answerDrafts } = useAnswerDrafts(manager.deviceId, manager.id)
+  const { drafts: requestDrafts } = useRequestDrafts(manager.deviceId, manager.id)
+  const { drafts: postDrafts } = usePostDrafts(manager.deviceId, manager.id)
+  const draftBoard = useMemo(
+    () =>
+      pagedDraftBoard(
+        board,
+        Object.values(paging.pages).flatMap((one) => one.entries),
+      ),
+    [board, paging.pages],
+  )
+  // 草稿所在的对象不在任何已读的分页里（比如在后面的页），读一次详情，免得被当成失效、漏交
+  const fetched = useRef(new Set<string>())
+  useEffect(() => {
+    const known = new Set(
+      [...draftBoard.decisions, ...(draftBoard.requests ?? []), ...(draftBoard.posts ?? [])].map(
+        (one) => one.id,
+      ),
+    )
+    for (const id of new Set([
+      ...Object.keys(answerDrafts),
+      ...Object.keys(requestDrafts),
+      ...Object.keys(postDrafts),
+    ])) {
+      if (known.has(id) || fetched.current.has(id)) continue
+      fetched.current.add(id)
+      void channel
+        .command('managers.board.detail', { ...address, id: id as ManagerObjectId })
+        .catch(() => {})
+    }
+  }, [draftBoard, answerDrafts, requestDrafts, postDrafts, channel, address])
+  const markOf = (id: string) =>
+    managerDraftMark(draftBoard, id, {
+      decision: answerDrafts[id],
+      request: requestDrafts[id],
+      post: postDrafts[id],
+    })
   const focused = useRef<string | null>(null)
   useLayoutEffect(() => {
     if (!active) {
@@ -138,6 +183,12 @@ export function PagedBoard({
     if (linked)
       root.current?.querySelector('[data-paging-detail]')?.scrollIntoView({ block: 'nearest' })
   }, [active, post, item, linked])
+  const activeRevision =
+    page?.entries.find((head) => head.id === active)?.revision ??
+    post?.revision ??
+    draftBoard.decisions.find((one) => one.id === active)?.revision ??
+    // 版本不明（编号跳转来的、不在已读分页里）：照旧给出按钮
+    2
   const detail = active ? (
     <InlinePostContext.Provider value={true}>
       <section data-paging-detail={active}>
@@ -186,12 +237,16 @@ export function PagedBoard({
           target={null}
           onLocated={() => {}}
           onBusy={() => {}}
+          part="cards"
+          draftBoard={draftBoard}
         />
-        {active && kinds[tab] ? (
-          <section>
+        {/* 只有改过的对象才有旧版本可看；按钮放在卡内末尾，写明是看什么 */}
+        {active && kinds[tab] && (history || activeRevision > 1) ? (
+          <section className="mg-paging-history">
             {!history || history.nextCursor ? (
               <button
                 type="button"
+                className="btn ghost"
                 data-paging-history
                 disabled={paging.loading.includes(`history:${active}`)}
                 onClick={() =>
@@ -204,6 +259,7 @@ export function PagedBoard({
                   )
                 }
               >
+                <span aria-hidden="true">↺</span>{' '}
                 {t(history ? 'manager.paging.more' : 'manager.postHistory')}
               </button>
             ) : null}
@@ -334,32 +390,57 @@ export function PagedBoard({
             </p>
           ) : (
             <>
-              {page.entries.map((head) => (
-                <article className="mg-card" key={head.id} data-paging-object={head.id}>
-                  <button
-                    className="mg-paging-head"
-                    type="button"
-                    aria-expanded={active === head.id}
-                    onClick={(event) => {
-                      const card = event.currentTarget.closest('[data-paging-object]')
-                      if (card)
-                        anchor.current = { id: head.id, top: card.getBoundingClientRect().top }
-                      setLinked(false)
-                      if (active === head.id) setSelected(null)
-                      else open(head.id)
-                    }}
+              {page.entries.map((head) => {
+                const mark = markOf(head.id)
+                return (
+                  <article
+                    className="mg-card"
+                    key={head.id}
+                    data-paging-object={head.id}
+                    data-draft-mark={mark?.state}
+                    tabIndex={-1}
                   >
-                    <span aria-hidden="true">{active === head.id ? '▾' : '▸'}</span>{' '}
-                    <span className="mono">{head.id}</span> · {head.title} ·{' '}
-                    {t(managerPageLabel(kind, head.status) as Parameters<typeof t>[0])}
-                  </button>
-                  {active === head.id ? (
-                    detail
-                  ) : (
-                    <p className="mg-paging-preview">{head.preview}</p>
-                  )}
-                </article>
-              ))}
+                    <button
+                      className="mg-paging-head"
+                      type="button"
+                      aria-expanded={active === head.id}
+                      onClick={(event) => {
+                        const card = event.currentTarget.closest('[data-paging-object]')
+                        if (card)
+                          anchor.current = { id: head.id, top: card.getBoundingClientRect().top }
+                        setLinked(false)
+                        if (active === head.id) setSelected(null)
+                        else open(head.id)
+                      }}
+                    >
+                      <span aria-hidden="true">{active === head.id ? '▾' : '▸'}</span>{' '}
+                      <span className="mono">{head.id}</span> · {head.title} ·{' '}
+                      {t(managerPageLabel(kind, head.status) as Parameters<typeof t>[0])}
+                      {mark ? <DraftPill mark={mark} status={head.status} kind={kind} /> : null}
+                    </button>
+                    {active === head.id ? (
+                      detail
+                    ) : (
+                      <>
+                        {mark ? (
+                          <DraftSummary
+                            mark={mark}
+                            option={
+                              board.decisions
+                                .find((one) => one.id === head.id)
+                                ?.options.find((one) => one.id === mark.optionId)?.label ?? null
+                            }
+                            request={kind === 'request'}
+                          />
+                        ) : null}
+                        <p className="mg-paging-preview" data-short={Boolean(mark) || undefined}>
+                          {head.preview}
+                        </p>
+                      </>
+                    )}
+                  </article>
+                )
+              })}
               <p>{t('manager.paging.loaded', { n: page.entries.length, total: page.total })}</p>
               {page.nextCursor ? (
                 <button
@@ -379,6 +460,97 @@ export function PagedBoard({
           )}
         </>
       ) : null}
+      {/* 提交条只有一份，固定在列表可视区底部，不跟着某张卡走；有草稿才出现 */}
+      <Decisions
+        manager={manager}
+        posts={board.posts ?? []}
+        decisions={board.decisions}
+        changes={board.changes}
+        requests={board.requests ?? []}
+        groups={pages.decisions}
+        onlyId={null}
+        visible={false}
+        disabled={disabled}
+        target={null}
+        onLocated={() => {}}
+        onBusy={() => {}}
+        part="send"
+        draftBoard={draftBoard}
+      />
     </div>
+  )
+}
+
+/** 卡头末尾的草稿记号：照常、待确认、已失效三种，失效的悬停说明原因 */
+function DraftPill({
+  mark,
+  status,
+  kind,
+}: {
+  mark: ManagerDraftMark
+  status: string
+  kind: string
+}) {
+  const t = useT()
+  if (mark.state === 'live')
+    return (
+      <span className="pill wait" data-draft-pill="live">
+        {t('manager.draft')}
+      </span>
+    )
+  if (mark.state === 'conflict')
+    return (
+      <span className="pill err" data-draft-pill="conflict" title={t('manager.conflict')}>
+        {t('manager.draftMark.conflict')}
+      </span>
+    )
+  return (
+    <span
+      className="pill mute"
+      data-draft-pill="ended"
+      title={t(
+        kind === 'request'
+          ? status === 'cancelled'
+            ? 'manager.draftEnded.cancelled'
+            : 'manager.draftEnded.handled'
+          : kind !== 'decision'
+            ? 'manager.draftEnded.post'
+            : status === 'answered'
+              ? 'manager.draftEnded.answered'
+              : status === 'ignored'
+                ? 'manager.draftEnded.ignored'
+                : 'manager.draftEnded.closed',
+      )}
+    >
+      {t('manager.draftMark.ended')}
+    </span>
+  )
+}
+
+/** 收起时一行写草稿里有什么：选了哪项、写了说明或回复、写了追问；放不下截断 */
+function DraftSummary({
+  mark,
+  option,
+  request,
+}: {
+  mark: ManagerDraftMark
+  option: string | null
+  request: boolean
+}) {
+  const t = useT()
+  const parts = [
+    mark.optionId
+      ? option
+        ? t('manager.draftMark.chose', { option })
+        : t('manager.draftMark.chosen')
+      : null,
+    mark.delivered ? t('manager.draftMark.delivered') : null,
+    mark.text ? t(request ? 'manager.draftMark.reply' : 'manager.draftMark.text') : null,
+    mark.question ? t('manager.draftMark.question') : null,
+  ].filter(Boolean)
+  return (
+    <p className="mg-draft-summary ell" data-draft-summary={mark.state}>
+      <span aria-hidden="true">✎</span> {parts.join(' · ')}
+    </p>
   )
 }
