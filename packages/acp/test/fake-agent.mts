@@ -581,7 +581,12 @@ async function handle(method: string, params: any): Promise<unknown> {
       return { sessionId: created.sessionId, ...settings(created) }
     }
     case 'authenticate':
+      if (process.env.FAKE_ACP_AUTH_ERROR) throw { code: -32603, message: 'sign-in failed' }
+      process.env.FAKE_ACP_AUTH_REQUIRED = '0'
+      return {}
     case 'logout':
+      process.env.FAKE_ACP_AUTH_REQUIRED = '1'
+      return {}
     case 'session/close':
     case 'session/archive':
     case 'session/unarchive':
@@ -610,6 +615,9 @@ async function handle(method: string, params: any): Promise<unknown> {
       return settings(found)
     }
     case 'session/list':
+      if (process.env.FAKE_ACP_LIST_ERROR) throw { code: -32603, message: 'connection failed' }
+      if (process.env.FAKE_ACP_AUTH_REQUIRED === '1')
+        throw { code: -32000, message: 'Authentication required' }
       return {
         sessions: [...sessions.values()]
           .filter((entry) => entry.history.length)

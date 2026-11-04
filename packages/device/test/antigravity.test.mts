@@ -31,3 +31,35 @@ test('Antigravity 汇总保留后端命名空间，显式 agy 路由原样交给
     await env.close()
   }
 })
+
+test('ACP 账号控制要求最终客户端声明，设备上游握手也声明扩展', async () => {
+  const agy = new FakeUpstream('agy')
+  agy.handlers['litch/acp/auth/read'] = () => ({
+    methods: [],
+    logout: true,
+    instruction: 'agy acp --login',
+    status: 'signedOut',
+  })
+  agy.handlers['litch/acp/auth/authenticate'] = () => ({})
+  agy.handlers['litch/acp/auth/logout'] = () => ({})
+  const env = rig({ agy })
+  try {
+    const plain = env.connect()
+    await plain.initialize()
+    const failure = await plain.fails('litch/acp/auth/read', { harness: 'agy' })
+    assert.match(failure.message, /acpControls/)
+    const client = env.connect()
+    await client.initialize(['harness', 'acpControls'])
+    assert.equal((await client.call('litch/acp/auth/read', { harness: 'agy' })).status, 'signedOut')
+    await client.call('litch/acp/auth/authenticate', { harness: 'agy', methodId: 'oauth-personal' })
+    await client.call('litch/acp/auth/logout', { harness: 'agy' })
+    assert.ok(
+      agy.seen
+        .filter((m) => m.method === 'initialize')
+        .some((m) => m.params.capabilities.litchExtensions.includes('acpControls')),
+    )
+    assert.equal(agy.seen.filter((m) => m.method === 'litch/acp/auth/authenticate').length, 1)
+  } finally {
+    await env.close()
+  }
+})

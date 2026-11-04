@@ -15,6 +15,7 @@ import {
 } from '../../../protocol/src/thread-capabilities.mjs'
 import type { TitleSearchResult } from '../search/model.mjs'
 import { matchTitles } from '../search/titles.mjs'
+import { createAcpAuth } from './acp-auth.mjs'
 import { abilitiesOf } from './harness.mjs'
 import { createProjectPermissions, type ProjectPermissions } from './project-permissions.mjs'
 import type { SavedToolSwitches, ToolSwitchChange } from './remote.mjs'
@@ -449,6 +450,7 @@ export interface Device {
   /** 这台设备上设备层建的工作树：列表、分支、删、恢复（worktrees.mts） */
   readonly worktrees: Worktrees
   /** 这台设备上各 harness 的详情设置：配置项、账号与 provider、MCP、指令文件（harness-config.mts） */
+  readonly acpAuth: ReturnType<typeof createAcpAuth>
   readonly harnessConfig: HarnessConfig
   /** 这台设备上各 harness 的账号额度（account-limits.mts） */
   readonly accountLimits: AccountLimits
@@ -3102,6 +3104,13 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     approvals,
     install,
     worktrees,
+    acpAuth: createAcpAuth({
+      online: () => online,
+      supported: (harness) =>
+        terms.get(harness)?.extensions.includes(EXTENSION.acpControls) === true,
+      request: (method, params, options) => link.request(method, params, options),
+      fail,
+    }),
     harnessConfig,
     accountLimits,
     machineLink,

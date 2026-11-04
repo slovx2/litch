@@ -281,6 +281,7 @@ export class AntigravityRouter implements Backend {
       })
       return { ...result, version: this.settings.version(result.version) }
     }
+    if (method.startsWith('litch/acp/auth/')) return this.call('acp', peer, method, params)
     if (method === 'thread/list' || method === 'thread/loaded/list')
       return this.list(peer, method, params)
     const refs = threadReferences(params).map(decodeThread)
@@ -294,7 +295,12 @@ export class AntigravityRouter implements Backend {
         ...HARNESS_IDENTITY.agy,
         engine: 'agy',
         extensions: [
-          ...new Set([...(info.extensions ?? []), 'harnessConfig', 'threadCapabilities']),
+          ...new Set([
+            ...(info.extensions ?? []),
+            'harnessConfig',
+            'threadCapabilities',
+            'acpControls',
+          ]),
         ],
       }
     }

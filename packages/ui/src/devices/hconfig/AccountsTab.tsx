@@ -16,6 +16,7 @@ import { Confirm } from '../../app/Confirm.tsx'
 import { whyNot } from '../../app/errors.ts'
 import { useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
+import { AcpAccounts } from './AcpAccounts.tsx'
 import { HcControl } from './HcControl.tsx'
 import {
   type DiscoveredModel,
@@ -59,6 +60,8 @@ export function AccountsTab({ device, harnessId, view }: AccountsTabProps) {
   const [custom, setCustom] = useState<{ provider: HcProvider | null } | null>(null)
   const [showOthers, setShowOthers] = useState(false)
   const [filter, setFilter] = useState('')
+  if (harnessId === 'agy' && view.config.data?.values.authenticationMode === 'subscription')
+    return <AcpAccounts deviceId={device.id} harness={harnessId} />
   if (!data) {
     return (
       <SlotState

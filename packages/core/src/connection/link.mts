@@ -213,6 +213,7 @@ export function createLink(options: LinkOptions): Link {
               // deviceProcesses：声明了，起进程时的扩展参数才生效，才收得到设备上终端增减的通知
               litchExtensions: [
                 EXTENSION.threadCapabilities,
+                EXTENSION.acpControls,
                 EXTENSION.filePreview,
                 EXTENSION.fileDownload,
                 EXTENSION.fileAttachments,

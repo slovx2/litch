@@ -7,10 +7,18 @@ export interface AcpAuthMethod {
   args?: string[]
 }
 
+export interface AcpAuthView {
+  methods: AcpAuthMethod[]
+  logout: boolean
+  instruction: string | null
+  /** agy 的只读会话查询验证鉴权；其他 agent 没有状态接口时保持 unknown。 */
+  status?: 'signedIn' | 'signedOut' | 'unknown'
+}
+
 export interface AcpControlsRequests {
   'litch/acp/auth/read': {
     params: { harness?: string }
-    result: { methods: AcpAuthMethod[]; logout: boolean; instruction: string | null }
+    result: AcpAuthView
   }
   'litch/acp/auth/authenticate': {
     params: { harness?: string; methodId: string }

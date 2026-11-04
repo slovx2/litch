@@ -3,6 +3,22 @@
 import type { Entry } from './types.ts'
 
 export const zhHconfig = {
+  'hc.acp.title': 'Google 订阅',
+  'hc.acp.read': '正在读取登录状态…',
+  'hc.acp.login': '等待 agy 完成登录…',
+  'hc.acp.logout': '正在退出…',
+  'hc.acp.signedIn': '已登录',
+  'hc.acp.signedOut': '未登录',
+  'hc.acp.unknown': '登录状态未知',
+  'hc.acp.instruction':
+    '登录由会话所在设备的 agy 打开浏览器完成。未打开浏览器时，请在该设备运行 agy acp --login，完成后刷新状态。',
+  'hc.acp.failed':
+    '操作失败：{reason}。请检查该设备的 agy 安装与网络，或运行 agy acp --login 后刷新状态。',
+  'hc.acp.terminal': '此 agy 未提供可用的订阅登录方式，请运行 agy acp --login 后刷新状态。',
+  'hc.acp.personal': '登录 Google 账号',
+  'hc.acp.business': '登录 Gemini Enterprise',
+  'hc.acp.signOut': '退出登录',
+  'hc.acp.refresh': '刷新状态',
   'hc.action.unsaved': '请先保存或放弃未保存的修改',
   'hc.context.overridden': '窗口覆盖：{value}（来源：{by}；最终受模型容量限制）',
   'hc.entry': '详情设置',

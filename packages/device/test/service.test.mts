@@ -39,12 +39,13 @@ const READ = 'litch/device/settings/read'
 const WRITE = 'litch/device/settings/write'
 const RESTART = 'litch/device/harness/restart'
 const SECRET = 'TOP-SECRET-VALUE'
-// 2026-10-17 加的四个 harness 在这里的默认状况：隔离的 HOME 里没有 opencode，三个 ACP 入口默认停用
+// 额外入口的默认状况：隔离的 HOME 没装 OpenCode，ACP 与 Antigravity 入口默认停用
 const NEW_HARNESSES: [string, string][] = [
   ['opencode', 'notInstalled'],
   ['gemini', 'disabled'],
   ['qwen', 'disabled'],
   ['acp', 'disabled'],
+  ['agy', 'disabled'],
 ]
 /** 这里起不来的入口，给不出 ssh 配置片段 */
 const NOT_RUNNING = ['dsh', ...NEW_HARNESSES.map(([id]) => id)]
@@ -322,6 +323,7 @@ test('真的主进程加真的设备进程加假的运行时：一条聚合面�
           ['Gemini CLI', 'GE'],
           ['Qwen Code', 'QW'],
           ['ACP', 'AC'],
+          ['Antigravity', 'AG'],
           ['Codex', 'CX'],
         ],
       )
@@ -376,6 +378,7 @@ test('真的主进程加真的设备进程加假的运行时：一条聚合面�
         gemini: 'idle',
         qwen: 'idle',
         acp: 'idle',
+        agy: 'idle',
       })
       assert.equal(alive(before.pid), false, '原来的运行时进程停掉了')
       const after = await runtimeEnv(client as TestClient, 'pi', 'FIXTURE_MARK')

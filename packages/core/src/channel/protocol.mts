@@ -1,3 +1,4 @@
+import type { AcpAuthView } from '../../../protocol/src/acp-controls.mjs'
 import type {
   ChromeSettingsRequest,
   ChromeSettingsState,
@@ -1394,6 +1395,18 @@ export interface Commands {
     result: Record<string, never>
   }
   /** 手动重读。part 不给是全部 */
+  'acp.auth.read': {
+    params: { deviceId: string; harness: string }
+    result: AcpAuthView
+  }
+  'acp.auth.authenticate': {
+    params: { deviceId: string; harness: string; methodId: string }
+    result: Record<string, never>
+  }
+  'acp.auth.logout': {
+    params: { deviceId: string; harness: string }
+    result: Record<string, never>
+  }
   'harnessConfig.reload': {
     params: { deviceId: string; harness: string; part?: HcPart }
     result: Record<string, never>

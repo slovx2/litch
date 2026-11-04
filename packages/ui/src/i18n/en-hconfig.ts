@@ -6,6 +6,23 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
   `${n} ${Number(n) === 1 ? one : many}`
 
 export const enHconfig: Record<keyof typeof zhHconfig, Entry> = {
+  'hc.acp.title': 'Google subscription',
+  'hc.acp.read': 'Checking sign-in status…',
+  'hc.acp.login': 'Waiting for agy to finish signing in…',
+  'hc.acp.logout': 'Signing out…',
+  'hc.acp.signedIn': 'Signed in',
+  'hc.acp.signedOut': 'Not signed in',
+  'hc.acp.unknown': 'Sign-in status unknown',
+  'hc.acp.instruction':
+    'agy opens a browser on the session’s device to sign in. If no browser opens, run agy acp --login on that device, then refresh the status.',
+  'hc.acp.failed':
+    'Operation failed: {reason}. Check agy and the network on that device, or run agy acp --login and refresh the status.',
+  'hc.acp.terminal':
+    'This agy version does not offer subscription sign-in here. Run agy acp --login, then refresh the status.',
+  'hc.acp.personal': 'Sign in with Google',
+  'hc.acp.business': 'Sign in with Gemini Enterprise',
+  'hc.acp.signOut': 'Sign out',
+  'hc.acp.refresh': 'Refresh status',
   'hc.action.unsaved': 'Save or discard your changes first',
   'hc.context.overridden': 'Window override: {value} (from {by}; capped by model capacity)',
   'hc.entry': 'Settings',

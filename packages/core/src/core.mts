@@ -1517,6 +1517,18 @@ export function createCore(options: CoreOptions): Core {
           )
           return {}
         }
+        case 'acp.auth.read': {
+          const p = params as Commands['acp.auth.read']['params']
+          return deviceOf(p.deviceId).acpAuth.read(String(p.harness))
+        }
+        case 'acp.auth.authenticate': {
+          const p = params as Commands['acp.auth.authenticate']['params']
+          return deviceOf(p.deviceId).acpAuth.authenticate(String(p.harness), String(p.methodId))
+        }
+        case 'acp.auth.logout': {
+          const p = params as Commands['acp.auth.logout']['params']
+          return deviceOf(p.deviceId).acpAuth.logout(String(p.harness))
+        }
         case 'harnessConfig.reload': {
           const p = params as Commands['harnessConfig.reload']['params']
           await deviceOf(p.deviceId).harnessConfig.reload(String(p.harness), p.part)

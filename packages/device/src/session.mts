@@ -585,6 +585,8 @@ export class ClientSession implements ClientToolPeer {
       )
     if (typeof id === 'string' && id.startsWith(INTERNAL_ID_PREFIX))
       throw new ProtocolError(-32600, `请求号不能以 ${INTERNAL_ID_PREFIX} 开头`)
+    if (method.startsWith('litch/acp/') && !this.declared.has(EXTENSION.acpControls))
+      throw new DeviceError('extensionRequired', `${method} requires acpControls`)
     const route = classify(method, frame.params)
     switch (route.kind) {
       case 'device':

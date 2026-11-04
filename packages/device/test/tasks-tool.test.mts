@@ -58,6 +58,7 @@ test('适配器的引擎：litch_tasks 的调用由设备答，不转给客户�
         'litch_machine',
       ],
       computerActions: true,
+      browserActions: true,
       // 客户端自己的（浏览器）不算不看会话的，只有设备进程执行的
       anyThread: ['litch_tasks', 'litch_manager', 'litch_repository', 'litch_sessions'],
     })

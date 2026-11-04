@@ -210,3 +210,23 @@ test('默认订阅且没有 API key：新建、恢复、能力均只访问 ACP�
     await f.close()
   }
 })
+
+test('ACP 账号请求始终走订阅后端，默认 API key 时不落入 SDK', async () => {
+  const f = await setup()
+  try {
+    f.router.settings.write('apiKey')
+    assert.ok((await f.call('runtime/info')).extensions.includes('acpControls'))
+    for (const method of ['read', 'authenticate', 'logout'])
+      await f.call(
+        `litch/acp/auth/${method}`,
+        method === 'authenticate' ? { methodId: 'oauth-personal' } : {},
+      )
+    assert.equal(
+      f.sdk.calls.some((c) => c.method.startsWith('litch/acp/auth/')),
+      false,
+    )
+    assert.equal(f.acp.calls.filter((c) => c.method.startsWith('litch/acp/auth/')).length, 3)
+  } finally {
+    await f.close()
+  }
+})

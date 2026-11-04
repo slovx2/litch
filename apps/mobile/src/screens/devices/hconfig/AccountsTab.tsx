@@ -9,6 +9,7 @@ import { useChannel } from '../../../shell/services'
 import { useT } from '../../../ui/i18n'
 import { Button, Chip } from '../../../ui/kit/controls'
 import { useTheme } from '../../../ui/theme'
+import { AcpAccounts } from './AcpAccounts'
 import { CustomForm } from './CustomForm'
 import { splitProviders } from './logic'
 import { ProviderCard } from './ProviderCard'
@@ -33,6 +34,8 @@ export function AccountsTab({
   const [filter, setFilter] = useState('')
   const slot = view.providers
   const data = slot.data
+  if (harnessId === 'agy' && view.config.data?.values.authenticationMode === 'subscription')
+    return <AcpAccounts deviceId={deviceId} harness={harnessId} />
   if (!data) {
     return (
       <SlotState
