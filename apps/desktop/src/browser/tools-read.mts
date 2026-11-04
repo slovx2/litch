@@ -244,6 +244,8 @@ export const evaluate: Tool = async (call) => {
 
 export const wait: Tool = async (call) => {
   const page = call.pick()
+  const denied = await call.admitPage(page)
+  if (denied) return denied
   const kind = oneOf(call.args, 'for', ['load', 'selector', 'text', 'time'] as const, true)
   const signal = call.context.signal
   if (kind === 'time') {
@@ -253,6 +255,7 @@ export const wait: Tool = async (call) => {
   const limit = timeout(call.args, 'timeoutMs', 10_000, 30_000)
   if (kind === 'load') {
     const ok = await page.waitForLoad(limit, signal)
+    if (!ok) throw new Error(`Still loading after ${limit} ms.`)
     return call.done(
       page,
       `${ok ? 'Loaded.' : `Still loading after ${limit} ms.`}\n${pageLine(page)}`,
@@ -268,7 +271,7 @@ export const wait: Tool = async (call) => {
       : `!!(document.body && document.body.innerText.includes(${JSON.stringify(needle)}))`
   const until = Date.now() + limit
   for (;;) {
-    if (page.dialog()) return call.done(page, 'Stopped waiting: a dialog opened.')
+    if (page.dialog()) throw new Error('Stopped waiting: a dialog opened.')
     try {
       const found = await page.cdp<{ result: { value?: unknown } }>('Runtime.evaluate', {
         expression,
@@ -278,8 +281,7 @@ export const wait: Tool = async (call) => {
     } catch {
       // 页面正在换（跳转中），下一轮再看
     }
-    if (Date.now() >= until)
-      return call.done(page, `Not found after ${limit} ms.\n${pageLine(page)}`)
+    if (Date.now() >= until) throw new Error(`Not found after ${limit} ms.\n${pageLine(page)}`)
     await sleep(200, signal)
   }
 }

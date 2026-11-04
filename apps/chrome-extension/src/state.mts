@@ -4,6 +4,7 @@ import type {
   ChromeTabState,
 } from '../../../packages/protocol/src/chrome-browser.mjs'
 import { chromeOrigin } from './origin.mjs'
+import type { TabPresentation } from './presentation.mjs'
 
 export class ChromeFault extends Error {
   readonly code: ChromeErrorCode
@@ -15,6 +16,7 @@ export class ChromeFault extends Error {
 
 export interface ExtensionState {
   chrome: any
+  presentation: TabPresentation
   epoch: string
   grants: Map<string, ChromeGrant>
   tabLocks: Map<number, number>

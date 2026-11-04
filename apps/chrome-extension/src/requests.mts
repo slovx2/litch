@@ -28,6 +28,21 @@ function string(value: unknown): string {
 }
 
 export async function execute(state: ExtensionState, request: ChromeRequest): Promise<unknown> {
+  const grant = request.leaseId ? state.grants.get(request.leaseId) : undefined
+  const visible =
+    grant && ['command', 'pointer', 'navigate', 'history', 'show', 'console'].includes(request.op)
+  if (!visible) return executeRequest(state, request)
+  if (request.epoch !== state.epoch) throw new ChromeFault('staleLease', 'Chrome reconnected.')
+  await requireGrant(state, grant.leaseId, request.generation)
+  try {
+    await state.presentation.active(grant.tabId, grant.leaseId, true)
+    return await executeRequest(state, request)
+  } finally {
+    await state.presentation.active(grant.tabId, grant.leaseId, false).catch(() => {})
+  }
+}
+
+async function executeRequest(state: ExtensionState, request: ChromeRequest): Promise<unknown> {
   if (request.epoch !== state.epoch)
     throw new ChromeFault('staleLease', 'Chrome reconnected. List targets and claim again.')
   const args = request.args
@@ -92,9 +107,12 @@ export async function execute(state: ExtensionState, request: ChromeRequest): Pr
       await cdp(state, grant.tabId, 'Runtime.enable')
       const current = await tabState(state, grant.tabId)
       await requireGrant(state, grant.leaseId, args.expectedGeneration as number)
+      await state.presentation.claim(grant)
+      await requireGrant(state, grant.leaseId, args.expectedGeneration as number)
       return { tab: current, leaseId: grant.leaseId }
     } catch (error) {
       state.grants.delete(grant.leaseId)
+      await state.presentation.release(grant.tabId, grant.leaseId).catch(() => {})
       if (attached) await state.chrome.debugger.detach({ tabId: grant.tabId }).catch(() => {})
       await saveAttached(state)
       throw error
@@ -140,6 +158,7 @@ export async function execute(state: ExtensionState, request: ChromeRequest): Pr
       throw new ChromeFault('invalid', 'Invalid approved origins.')
     grant.origins = args.origins as string[]
     if (typeof args.keep === 'boolean') grant.keep = grant.original || args.keep
+    await state.presentation.keep(grant.tabId, grant.leaseId, grant.original || grant.keep)
     return null
   }
   if (request.op === 'freeze') {

@@ -57,7 +57,7 @@ async function loadInto(call: Call, page: BrowserPage, url: string) {
   lines.push(pageLine(page))
   const note = remoteNote(call, url)
   if (note) lines.push(note)
-  return call.done(page, lines.join('\n'))
+  return { ...call.done(page, lines.join('\n')), success: outcome.ok }
 }
 
 export const tabs: Tool = async (call) => {
@@ -140,7 +140,7 @@ export const navigate: Tool = async (call) => {
     const outcome = await page.history(action, LOAD_MS)
     const lines = [outcome.ok ? 'Done.' : `Did not finish: ${outcome.error ?? 'unknown error'}`]
     lines.push(pageLine(page))
-    return call.done(page, lines.join('\n'))
+    return { ...call.done(page, lines.join('\n')), success: outcome.ok }
   }
   if (raw === undefined) throw new BadArgs('give `url`, or `action` (back, forward, reload)')
   const resolved = await resolve(call, raw)

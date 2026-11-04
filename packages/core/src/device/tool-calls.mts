@@ -96,7 +96,11 @@ export interface ToolCallsHost {
    */
   allowed(namespace: string, harness: string | null): boolean
   /** 这个会话属于哪个 harness、工作目录在哪。不知道的是 null */
-  context(threadId: string): { harness: string | null; cwd: string | null }
+  context(threadId: string): {
+    harness: string | null
+    cwd: string | null
+    sessionTitle?: string | null
+  }
   /**
    * 在这个会话的对话里出一张卡片。用户答了、或者卡片被撤了（回合结束、连接断开，这时是 null）调 answer；
    * 返回的函数是“不用了”：撤掉卡片，不再调 answer
@@ -239,7 +243,7 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
       )
     }
     // 按会话所在的 harness 查：建会话之后才关掉的，已经建好的会话下一次调用就挡住
-    const { harness, cwd } = host.context(params.threadId)
+    const { harness, cwd, sessionTitle } = host.context(params.threadId)
     if (!host.allowed(namespace, harness)) {
       return Promise.resolve(
         clientToolFailure(
@@ -261,6 +265,7 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
       device: host.device(),
       harness,
       cwd,
+      sessionTitle: sessionTitle ?? null,
     }
     turns.set(turnKey(params.threadId, params.turnId), {
       threadId: params.threadId,

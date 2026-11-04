@@ -6,6 +6,7 @@ import type {
 import type { ClientToolCallResponse } from '../../../../packages/protocol/src/client-tools.mjs'
 import { chromeOrigin } from '../../../chrome-extension/src/origin.mjs'
 import { newRefBook } from '../browser/ax.mjs'
+import { runBrowserActions } from '../browser/batch.mjs'
 import type { BrowserExecutor, TabState } from '../browser/executor.mjs'
 import type { ClientToolContext, ClientToolInvocation } from '../client-tools/types.mjs'
 import { type ChromeBridge, ChromeBridgeError, incompatibleMessage } from './bridge.mjs'
@@ -260,6 +261,7 @@ export class ChromeExecutor implements BrowserExecutor {
         'Chrome reconnected or the tab listing expired during approval. List tabs again.',
       )
     const grant: ChromeGrant = {
+      ...(invocation.sessionTitle ? { sessionTitle: invocation.sessionTitle } : {}),
       leaseId: randomUUID(),
       tabId: token.tab.id,
       owner: {
@@ -375,6 +377,30 @@ export class ChromeExecutor implements BrowserExecutor {
       const args = invocation.arguments as Record<string, unknown>
       if (!args || typeof args !== 'object')
         throw new ChromeBridgeError('invalid', 'Expected an argument object.')
+      if (context.signal.aborted)
+        throw new ChromeBridgeError('cancelled', 'The call was cancelled.')
+      if (invocation.tool === 'run_actions') {
+        const generations = new Map<string, number>()
+        return runBrowserActions(invocation, context, this.call.bind(this), true, (action) => {
+          const id = action.arguments.tabId as string
+          const generation = this.pages.get(id)?.state.generation
+          if (generation === undefined) return null // 普通执行入口给出无租约错误。
+          const previous = generations.get(id)
+          if (
+            previous !== undefined &&
+            previous !== generation &&
+            ['click', 'type', 'press', 'scroll'].includes(action.tool)
+          )
+            return chromeFailure(
+              new ChromeBridgeError(
+                'staleDocument',
+                'The document changed during the batch. Take a fresh snapshot before further input.',
+              ),
+            )
+          if (previous === undefined) generations.set(id, generation)
+          return null
+        })
+      }
       if (invocation.tool === 'targets')
         return ok(
           JSON.stringify({

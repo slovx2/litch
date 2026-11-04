@@ -2077,6 +2077,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         machine: machineSpec(),
         desktopPlatform: options.tools?.platform?.() ?? null,
         computerActions: true,
+        browserActions: true,
       }),
     cwdOf: (threadId) => threads.get(threadId)?.cwd ?? null,
     log,
@@ -2162,6 +2163,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
           machine: machineSpec(),
           desktopPlatform: options.tools?.platform?.() ?? null,
           computerActions: true,
+          browserActions: true,
         },
         deviceMachineEnabled(toolSettings?.snapshot.values),
       ) as import('../../../protocol/src/client-tools.mjs').ClientToolNamespaceSpec[]
@@ -2199,6 +2201,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     context(threadId) {
       const thread = threads.get(threadId) ?? archived?.get(threadId)
       return {
+        sessionTitle:
+          thread && typeof threadTitle(thread) === 'string'
+            ? (threadTitle(thread) as string)
+            : null,
         harness: thread ? harnessOf(thread) : mode === 'full' ? null : (harnesses[0]?.id ?? null),
         cwd: thread?.cwd || null,
       }

@@ -127,6 +127,7 @@ test('另注册一个命名空间：每条通往引擎的连接都替它声明�
         'litch_machine',
       ],
       computerActions: true,
+      browserActions: true,
       anyThread: [
         'litch_tasks',
         'litch_manager',
@@ -170,6 +171,7 @@ test('另注册一个命名空间：每条通往引擎的连接都替它声明�
         'litch_demo',
       ],
       computerActions: true,
+      browserActions: true,
     })
     link.close()
   } finally {

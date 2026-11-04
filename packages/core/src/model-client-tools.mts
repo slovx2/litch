@@ -17,6 +17,8 @@ export const CLIENT_TOOL = 'clientTool'
 
 /** 交给执行器的一次调用：协议原有的参数，加上桌面端知道的上下文 */
 export interface ToolInvocation extends ClientToolCallParams {
+  /** 本地投影的会话标题，只用于显示。 */
+  sessionTitle?: string | null
   /** 核心给的标识，取消、答复都按它对 */
   id: string
   device: {

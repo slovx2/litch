@@ -180,7 +180,7 @@ void app.whenReady().then(async () => {
     reply = await run('wait', { for: 'selector', selector: '#late', timeoutMs: 5000 })
     check('等元素出现', textOf(reply).startsWith('Found'), textOf(reply))
     reply = await run('wait', { for: 'text', text: 'never-there', timeoutMs: 300 })
-    check('等不到会说没等到', textOf(reply).startsWith('Not found'), textOf(reply))
+    check('等不到返回失败', !reply.success && textOf(reply).includes('Not found'), textOf(reply))
     await run('navigate', { url: `${pages.local}/console` })
     reply = await run('console')
     const logs = textOf(reply)
@@ -193,6 +193,48 @@ void app.whenReady().then(async () => {
     )
     check('跑脚本', (await evalIn('1 + 1')).trim() === '2')
     check('脚本出错照实说', (await evalIn('nope()')).includes('threw'))
+
+    // ---------- 批量：真实 WebContentsView 与最终观察 ----------
+    await run('navigate', { url: `${pages.local}/form` })
+    const batchSnap = textOf(await run('snapshot'))
+    const batchName = refOf(batchSnap, /textbox "Name"/)
+    const batchSubmit = refOf(batchSnap, /button "Submit"/)
+    reply = await run('run_actions', {
+      actions: [
+        { tool: 'type', arguments: { tabId: tabA, ref: batchName, text: 'Batch', clear: true } },
+        { tool: 'click', arguments: { tabId: tabA, ref: batchSubmit } },
+      ],
+    })
+    check(
+      '内置批量连续输入提交并返回最终快照',
+      reply.success && /Final snapshot:[\s\S]*submitted Batch/.test(textOf(reply)),
+      textOf(reply),
+    )
+    reply = await run('run_actions', {
+      actions: [
+        { tool: 'click', arguments: { tabId: tabA, ref: 'e999999' } },
+        { tool: 'type', arguments: { tabId: tabA, ref: batchName, text: 'must-not-type' } },
+      ],
+    })
+    check(
+      '内置批量失败即停并保留前批效果',
+      !reply.success && (await evalIn("document.getElementById('name').value")).includes('Batch'),
+      textOf(reply),
+    )
+    reply = await run('run_actions', {
+      actions: [
+        { tool: 'navigate', arguments: { tabId: tabA, url: `${pages.local}/form?new-document` } },
+        { tool: 'click', arguments: { tabId: tabA, ref: batchSubmit } },
+      ],
+    })
+    check(
+      '内置批量导航后旧引用停止',
+      !reply.success &&
+        textOf(reply).includes('"completed":1') &&
+        textOf(reply).includes('waiting') &&
+        !(await evalIn("document.getElementById('out').textContent")).includes('submitted'),
+      textOf(reply),
+    )
 
     // ---------- 上传 ----------
     const file = join(work, 'hello.txt')

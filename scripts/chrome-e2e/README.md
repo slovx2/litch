@@ -6,6 +6,10 @@
 npm run client:check:chrome
 ```
 
+可用 `LITCH_CHROME_GO=/绝对路径/bin/go` 选择本机已安装、满足 go.mod 的 Go 工具链，避免隔离 HOME 再下载工具链；不改变隔离模块缓存和浏览器 profile。
+
+标签组/活动标记验收包括临时认领原组与固定标签、同会话归组、活动与异常恢复、扩展 reload、worker 强停、桥断线和停止控制后的日志清理。批量验收包括连续点击、失败停步、重复 callId 不重放、逐步来源拒绝和执行中撤租约；保留每步摘要和最后快照。辅助场景在 `ux.mjs`。
+
 脚本从源码构建固定 ID 的未打包扩展和 Native Messaging Go 宿主，默认使用本机 Playwright 缓存中的 Chrome for Testing。也可显式设置 `LITCH_CHROME_BINARY` 为已安装的 Chrome for Testing 可执行文件。桌面构建依赖缺失时按锁文件运行 `npm ci --ignore-scripts`；没有现成 CFT 时下载固定版本 151.0.7922.34 到工作树 `.local/chrome-e2e-bootstrap/`。不会使用日用 Chrome。准备时间单独计入总耗时。
 
 自动验收一律使用 Chrome for Testing，通过 `--load-extension` 加载未打包扩展，并用 CDP 在隔离的 `chrome://extensions` 开启开发者模式。没有开启开发者模式时 Chrome 会在 reload 后禁用未打包扩展，验收不跳过这一步。不使用系统级鼠标、键盘或 AX 操作安装界面；每次连接 CDP 前核对监听 PID 与本次启动参数中的隔离 user-data-dir。

@@ -80,6 +80,8 @@ export interface ChromeTabState {
 }
 
 export interface ChromeGrant {
+  /** 宿主从会话投影取得的标题，只用于 Chrome 分组显示。 */
+  sessionTitle?: string
   leaseId: string
   tabId: number
   owner: ChromeLeaseOwner

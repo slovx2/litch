@@ -281,3 +281,31 @@ The agent lists targets, asks permission to list tab titles and URLs in one Chro
 Chrome sign-in is manual. `request_sign_in` brings the tab forward and pauses agent observation and actions in that Chrome instance. Sign in yourself, then choose **Sign-in complete** in Litch. The page reloads and the agent must claim it again. Never provide passwords or one-time codes to the agent. Remote uploads and cross-device downloads are not supported.
 
 New popups are unclaimed and require source approval before observation or actions. This is not a network firewall: a page can already send cross-origin requests through images, forms and fetch. The first popup request may reach its destination with cookies, referrer or URL data before approval, and may trigger GET side effects. The enforced boundary is the agent's access to page content and controls, not preventing all requests to unapproved sites.
+
+### Chrome 标签组与操作标记
+
+代理打开或认领的标签按会话放进 `Litch · 会话标题简写` 标签组。同一会话跨多个 Chrome 窗口时，每个窗口各有一组，不搬动窗口。
+用户标签只临时归组；释放、回合结束、断开或停止控制后，恢复原组、位置和固定状态。原组最后一个标签被临时移走时，恢复会重新创建同名、同色、同折叠状态的组。
+用户控制期间自行移动了窗口或分组时，保留用户的新布局。代理临时标签仍在回合结束关闭；标记保留的标签交还给用户并移出代理组。
+
+空闲的代理组为蓝色；执行操作时组变橙色，组名显示 `▶ AI` 和正在操作的标签标题，当前标签对应的扩展工具栏图标显示 `AI`。网页的标题与 favicon 不会被改写。
+操作失败也会撤销活动标记。扩展启动时读取恢复记录，清理上次遗留分组和徽标；恢复未完成的记录保留并重试。点击扩展图标仍是停止控制。
+
+升级开发版扩展：先更新 Litch，在设置的 Chrome 页准备扩展，再到 `chrome://extensions` 重新加载 Litch Browser。新增 `tabGroups` 权限允许管理标签组；Chrome 如提示“查看和管理标签组”，确认后才能继续使用。重载会释放现有认领，代理需要重新列出并认领标签。
+
+### 浏览器批量动作（内置浏览器和 Chrome）
+
+`litch_browser.run_actions` 两条路径使用相同参数和执行规则。先观察标签；连续动作及其参数都已知时，优先合成一批：
+
+```json
+{"actions":[
+  {"tool":"type","arguments":{"tabId":"已观察的标签编号","ref":"e12","text":"查询词","clear":true}},
+  {"tool":"press","arguments":{"tabId":"已观察的标签编号","key":"Enter"}}
+]}
+```
+
+一批 1–12 步，支持 `click`、`type`、`press`、`scroll`、`navigate`、`wait`、`dialog`。每步必须给同一种浏览器的现有 `tabId`，参数与单步工具一致；不能创建标签、嵌套批量、执行脚本或登录。需要用户决定、需要读取新界面、跳转后需要新引用时结束当前批次。
+
+动作总预算 60 秒，最终快照另有 10 秒。导航和等待沿用单步上限；每一步仍检查来源审批、租约/会话所有权、文档和取消状态。失败即停，不回滚、不自动重试；结果给出已尝试各步的成功状态和摘要，以及最后尝试标签的快照。若标签被释放或登录冻结，最后观察明确失败，不绕过限制。失败的一步可能已经部分执行，继续时只做尚未完成的部分。
+
+执行桌面必须声明浏览器批量能力。升级后 Claude Code/Pi 会话恢复时可刷新工具；已有 Codex 会话需要新建才能获得新增工具。

@@ -12,6 +12,17 @@ export const BROWSER_NAMESPACE = 'litch_browser'
 /** 截图最长边的上限（像素），桌面端按它缩 */
 export const BROWSER_SCREENSHOT_MAX_EDGE = 1280
 
+export const BROWSER_BATCH_MAX_ACTIONS = 12
+export const BROWSER_BATCH_TOOLS = [
+  'click',
+  'type',
+  'press',
+  'scroll',
+  'navigate',
+  'wait',
+  'dialog',
+] as const
+
 const tabId = {
   type: 'string',
   description: 'Tab id from `tabs`. Omit to use the current tab of this conversation.',
@@ -332,4 +343,47 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
       { tabId },
     ),
   ],
+}
+
+/** 复用单步参数，批量执行仍逐步经过相同执行器。 */
+export function browserToolsSpec(batch = false): ClientToolNamespaceSpec {
+  if (!batch) return BROWSER_TOOLS
+  return {
+    ...BROWSER_TOOLS,
+    instructions:
+      'After observing a tab, prefer run_actions for two or more known actions. Stop before a choice that needs new UI. Every action needs the same approval as a separate call; never invent refs or batch sign-in. Inspect the final snapshot and continue only unfinished work.',
+    tools: [
+      ...BROWSER_TOOLS.tools,
+      fn(
+        'run_actions',
+        'Execute 1–12 known browser actions in order on an existing tab. Uses the same tool names and arguments as individual calls. No loops, nested batches, new tabs or sign-in. Each step keeps source approval, lease, document and stop checks. Stops at the first failure without rollback or retries; a failed step may have partly executed. Returns short step results and a final snapshot of the last attempted tab. Observe first and obtain necessary user approval before batching. Actions have 60 seconds total; final snapshot has up to 10 seconds.',
+        {
+          actions: {
+            type: 'array',
+            minItems: 1,
+            maxItems: BROWSER_BATCH_MAX_ACTIONS,
+            items: {
+              oneOf: BROWSER_TOOLS.tools
+                .filter((tool) => (BROWSER_BATCH_TOOLS as readonly string[]).includes(tool.name))
+                .map((tool) => ({
+                  type: 'object',
+                  properties: {
+                    tool: { type: 'string', enum: [tool.name] },
+                    arguments: {
+                      ...tool.inputSchema,
+                      required: [
+                        ...new Set([...((tool.inputSchema.required as string[]) ?? []), 'tabId']),
+                      ],
+                    },
+                  },
+                  required: ['tool', 'arguments'],
+                  additionalProperties: false,
+                })),
+            },
+          },
+        },
+        ['actions'],
+      ),
+    ],
+  }
 }

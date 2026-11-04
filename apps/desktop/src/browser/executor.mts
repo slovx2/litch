@@ -17,7 +17,9 @@ import type {
 } from '../client-tools/types.mjs'
 import { type Args, BadArgs, objectOf, str } from './args.mjs'
 import { newRefBook, type RefBook } from './ax.mjs'
+import { runBrowserActions } from './batch.mjs'
 import { CdpRefused } from './cdp-allow.mjs'
+import { guardedPage } from './guarded-page.mjs'
 import type { BrowserHost, BrowserPage, TabOwner } from './model.mjs'
 import type { FillFailure } from './passwords/fill-rules.mjs'
 import { type SiteBook, sessionKey } from './sites.mjs'
@@ -26,6 +28,7 @@ import { needsApproval, originOf } from './url.mjs'
 
 /** 每个标签上执行器自己记的东西 */
 export interface TabState {
+  documentStamp?: string
   /** 快照里的编号 */
   book: RefBook
   /** 上一次快照的行，给 diff 用 */
@@ -188,6 +191,7 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
   const currents = new Map<string, string>()
   /** 会话 → 正在进行的回合（导航闸门要按回合查“这一次”的允许） */
   const turns = new Map<string, string>()
+  const ended = new Set<string>()
 
   const ownerKey = (owner: TabOwner) => sessionKey(owner.deviceId, owner.threadId)
   const stateOf = (page: BrowserPage): TabState => {
@@ -227,6 +231,8 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
     if (invocation.namespace !== BROWSER_NAMESPACE) {
       return clientToolFailure('invalid', `unknown namespace ${String(invocation.namespace)}`)
     }
+    if (invocation.tool === 'run_actions')
+      return runBrowserActions(invocation, context, call, false)
     const tool = TOOLS[invocation.tool]
     if (!tool) {
       return clientToolFailure(
@@ -236,8 +242,11 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
     }
     const owner: TabOwner = { deviceId: invocation.device.id, threadId: invocation.threadId }
     const session = ownerKey(owner)
+    const turnKey = JSON.stringify([session, invocation.turnId])
+    if (ended.has(turnKey)) return clientToolFailure('failed', 'This turn has ended.')
     turns.set(session, invocation.turnId)
     const used = new Set<BrowserPage>()
+    const guarded = new Map<string, ReturnType<typeof guardedPage>>()
 
     const ensureAgent = (page: BrowserPage): BrowserPage => {
       const info = page.info()
@@ -253,7 +262,49 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
         used.add(page)
         page.setAgentActive(true)
       }
-      return page
+      let wrapped = guarded.get(page.id)
+      if (!wrapped) {
+        const input = ['click', 'type', 'press', 'scroll', 'upload'].includes(invocation.tool)
+        const observation =
+          !input ||
+          !(
+            invocation.browserBatch ||
+            callArgs.ref !== undefined ||
+            callArgs.x !== undefined ||
+            callArgs.y !== undefined
+          )
+        wrapped = guardedPage(
+          page,
+          async () => {
+            if (context.signal.aborted || ended.has(turnKey))
+              throw new Error('The call was cancelled.')
+            if (
+              host.page(page.id) !== page ||
+              ownerKey(page.info().owner) !== session ||
+              page.info().kind !== 'agent'
+            )
+              throw new BadArgs('The tab was released or closed.')
+            if (options.handover?.active(page.id)) throw new SigningIn()
+            const refusal = await admit(page.info().url)
+            if (refusal)
+              throw new Error(
+                refusal.contentItems
+                  .filter((item) => item.type === 'inputText')
+                  .map((item) => item.text)
+                  .join('\n'),
+              )
+          },
+          stateOf(page).documentStamp,
+          () => {
+            const state = stateOf(page)
+            state.book = newRefBook()
+            state.lastSnapshot = null
+          },
+          observation,
+        )
+        guarded.set(page.id, wrapped)
+      }
+      return wrapped.page
     }
 
     const currentPage = (): BrowserPage | null => {
@@ -375,30 +426,39 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
       handover: options.handover ?? null,
     }
 
+    let onCancel: (() => void) | undefined
     try {
       callArgs = objectOf(invocation.arguments)
       kit.args = callArgs
       if (context.signal.aborted) return clientToolFailure('failed', 'the call was cancelled')
       // 回合被打断、连接断了：当场回失败，不等手上那一步（加载、等元素）自己做完
       const cancelled = new Promise<ClientToolCallResponse>((resolve) => {
-        context.signal.addEventListener(
-          'abort',
-          () => resolve(clientToolFailure('failed', 'the call was cancelled')),
-          { once: true },
-        )
+        onCancel = () => resolve(clientToolFailure('failed', 'the call was cancelled'))
+        context.signal.addEventListener('abort', onCancel, { once: true })
       })
-      return await Promise.race([tool(kit), cancelled])
+      const result = await Promise.race([tool(kit), cancelled])
+      if (result.success && ['snapshot', 'screenshot'].includes(invocation.tool))
+        for (const [id, wrapped] of guarded) {
+          const page = host.page(id)
+          const stamp = wrapped.stamp()
+          if (page && stamp !== undefined) stateOf(page).documentStamp = stamp
+        }
+      return result
     } catch (error) {
       if (error instanceof SigningIn) return clientToolFailure('failed', SIGNING_IN)
       if (error instanceof BadArgs) return clientToolFailure('invalid', error.message)
       if (error instanceof CdpRefused) return clientToolFailure('failed', error.message)
       if (context.signal.aborted) return clientToolFailure('failed', 'the call was cancelled')
       return clientToolFailure('failed', error instanceof Error ? error.message : String(error))
+    } finally {
+      if (onCancel) context.signal.removeEventListener('abort', onCancel)
     }
   }
 
   function turnEnded(turn: { deviceId: string; threadId: string; turnId: string }): void {
     const session = sessionKey(turn.deviceId, turn.threadId)
+    ended.add(JSON.stringify([session, turn.turnId]))
+    if (ended.size > 512) ended.delete(ended.values().next().value ?? '')
     for (const page of host.pages()) {
       const info = page.info()
       if (ownerKey(info.owner) !== session) continue

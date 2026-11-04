@@ -216,6 +216,7 @@ export function declareDeviceTools(
         ...tools,
         namespaces: [...own, ...added],
         ...(forward.includes('litch_computer') ? { computerActions: true } : {}),
+        ...(forward.includes('litch_browser') ? { browserActions: true } : {}),
         anyThread: [...namespaces],
       },
     },

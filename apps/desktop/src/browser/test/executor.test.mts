@@ -170,6 +170,121 @@ function setup() {
 const text = (reply: ClientToolCallResponse) =>
   reply.contentItems.map((item) => (item.type === 'inputText' ? item.text : '')).join('\n')
 
+test('批量顺序执行后回最终快照；中途失败不重放或执行余下动作', async () => {
+  const { run, host } = setup()
+  await run('navigate', { url: 'http://localhost/' })
+  const tabId = host.pages()[0]?.id ?? assert.fail('missing test page')
+  await run('snapshot', { tabId })
+  const good = await run('run_actions', {
+    actions: [
+      { tool: 'press', arguments: { tabId, key: 'Tab' } },
+      { tool: 'press', arguments: { tabId, key: 'Enter' } },
+    ],
+  })
+  assert.equal(good.success, true, text(good))
+  assert.match(text(good), /"completed":2/)
+  assert.match(text(good), /Final snapshot:[\s\S]*button "OK"/)
+  const page = host.pages()[0] as FakePage
+  const before = page.sent.filter((method) => method === 'Input.dispatchKeyEvent').length
+  const failed = await run('run_actions', {
+    actions: [
+      { tool: 'press', arguments: { tabId, key: 'Tab' } },
+      { tool: 'click', arguments: { tabId, ref: 'e99999' } },
+      { tool: 'press', arguments: { tabId, key: 'Enter' } },
+    ],
+  })
+  assert.equal(failed.success, false)
+  assert.match(text(failed), /"completed":1/)
+  assert.equal(page.sent.filter((method) => method === 'Input.dispatchKeyEvent').length - before, 2)
+})
+
+test('批量每步独立来源审批；拒绝后停止且不导航到第三个来源', async () => {
+  const { run, host, answer, asked } = setup()
+  await run('navigate', { url: 'http://localhost/' })
+  const tabId = host.pages()[0]?.id ?? assert.fail('missing test page')
+  answer('once', 'decline')
+  const result = await run('run_actions', {
+    actions: [
+      { tool: 'navigate', arguments: { tabId, url: 'https://first.example/' } },
+      { tool: 'navigate', arguments: { tabId, url: 'https://second.example/' } },
+      { tool: 'navigate', arguments: { tabId, url: 'https://third.example/' } },
+    ],
+  })
+  assert.equal(result.success, false)
+  assert.equal(host.pages()[0]?.info().url, 'https://first.example/')
+  assert.equal(asked.length, 2)
+  assert.match(text(result), /"completed":1/)
+})
+
+test('批量导航后不沿用旧文档 ref；取消后异步尾巴不再输入', async () => {
+  const { run, host, executor } = setup()
+  await run('navigate', { url: 'http://localhost/' })
+  const page = host.pages()[0] as FakePage
+  await run('snapshot', { tabId: page.id })
+  const result = await run('run_actions', {
+    actions: [
+      { tool: 'navigate', arguments: { tabId: page.id, url: 'http://localhost/next' } },
+      { tool: 'press', arguments: { tabId: page.id, key: 'Enter' } },
+    ],
+  })
+  assert.equal(result.success, false)
+  assert.match(text(result), /document changed/)
+  const controller = new AbortController()
+  const original = page.cdp.bind(page)
+  page.cdp = async <T,>(method: string, args?: Record<string, unknown>): Promise<T> => {
+    if (method === 'Runtime.evaluate') controller.abort()
+    return original<T>(method, args)
+  }
+  const reply = await executor.call(
+    {
+      id: 'cancel',
+      callId: 'cancel',
+      namespace: 'litch_browser',
+      threadId: 'a',
+      turnId: 'turn-1',
+      device: { id: 'local', kind: 'local', name: 'test', target: null },
+      harness: null,
+      cwd: null,
+      tool: 'run_actions',
+      arguments: {
+        actions: [
+          { tool: 'press', arguments: { tabId: page.id, key: 'Tab' } },
+          { tool: 'press', arguments: { tabId: page.id, key: 'Enter' } },
+        ],
+      },
+    },
+    { signal: controller.signal, ask: async () => 'once' },
+  )
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  assert.equal(reply.success, false)
+  assert.equal(page.sent.filter((method) => method === 'Input.dispatchKeyEvent').length, 0)
+})
+
+test('批量拒绝跨浏览器、嵌套、新标签和超量动作；等待超时算失败', async () => {
+  const { run, host } = setup()
+  await run('navigate', { url: 'http://localhost/' })
+  const tabId = host.pages()[0]?.id ?? assert.fail('missing test page')
+  for (const actions of [
+    [],
+    Array(13).fill({ tool: 'press', arguments: { tabId, key: 'Tab' } }),
+    [{ tool: 'run_actions', arguments: { actions: [] } }],
+    [{ tool: 'press', arguments: { tabId: 'chrome:foreign', key: 'Tab' } }],
+    [{ tool: 'navigate', arguments: { tabId, url: 'about:blank', newTab: true } }],
+  ])
+    assert.equal((await run('run_actions', { actions })).success, false)
+  assert.equal(
+    (
+      await run('run_actions', {
+        actions: [
+          { tool: 'wait', arguments: { tabId, for: 'text', text: 'missing', timeoutMs: 1 } },
+          { tool: 'press', arguments: { tabId, key: 'Enter' } },
+        ],
+      })
+    ).success,
+    false,
+  )
+})
+
 test('不认识的工具、参数不对回 invalid', async () => {
   const { run } = setup()
   assert.match(text(await run('nope')), /^\[litch:invalid\] unknown tool nope/)

@@ -35,7 +35,7 @@ export function sessionClientTools(
         ...(switches.browser ? [CLIENT_TOOL_NAMESPACE.browser] : []),
         ...(switches.computer && context?.desktopPlatform ? [CLIENT_TOOL_NAMESPACE.computer] : []),
       ],
-      context,
+      { machine: null, ...context, browserActions: true },
     ),
     ...(switches.computer && !context?.desktopPlatform ? [portableComputerTools()] : []),
     ...(presentation ? [presentation] : []),

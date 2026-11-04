@@ -275,6 +275,7 @@ export function createLink(options: LinkOptions): Link {
                     [CLIENT_TOOLS_CAPABILITY]: {
                       namespaces: tools,
                       ...(tools.includes('litch_computer') ? { computerActions: true } : {}),
+                      ...(tools.includes('litch_browser') ? { browserActions: true } : {}),
                       ...(desktop ? { desktop: { ...desktop } } : {}),
                     },
                   }

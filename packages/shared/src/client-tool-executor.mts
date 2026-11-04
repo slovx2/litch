@@ -11,6 +11,7 @@ import {
   type ClientToolCallResponse,
   clientToolFailure,
   declaredAnyThreadNamespaces,
+  declaredBrowserActions,
   declaredClientToolNamespaces,
   declaredComputerActions,
 } from '../../protocol/src/client-tools.mjs'
@@ -22,20 +23,24 @@ export { isClientToolNamespace } from '../../protocol/src/client-tools.mjs'
 export class DeclaredClientTools extends Set<string> {
   readonly anyThread: ReadonlySet<string>
   readonly computerActions: boolean
+  readonly browserActions: boolean
   constructor(
     namespaces: Iterable<string> = [],
     anyThread: Iterable<string> = [],
     computerActions = false,
+    browserActions = false,
   ) {
     super(namespaces)
     this.anyThread = new Set(anyThread)
     this.computerActions = computerActions
+    this.browserActions = browserActions
   }
 
   supports(namespace: string, tool?: string): boolean {
     return (
       this.has(namespace) &&
-      (namespace !== 'litch_computer' || tool !== 'run_actions' || this.computerActions)
+      (namespace !== 'litch_computer' || tool !== 'run_actions' || this.computerActions) &&
+      (namespace !== 'litch_browser' || tool !== 'run_actions' || this.browserActions)
     )
   }
 }
@@ -58,6 +63,7 @@ export function clientToolNamespaces(initializeParams: unknown): DeclaredClientT
     declaredClientToolNamespaces(capabilities, declared),
     declaredAnyThreadNamespaces(capabilities, declared),
     declaredComputerActions(capabilities, declared),
+    declaredBrowserActions(capabilities, declared),
   )
 }
 

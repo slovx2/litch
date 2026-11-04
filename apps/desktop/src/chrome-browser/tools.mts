@@ -88,9 +88,10 @@ export async function executePageTool(
     }
   }
   if (tool === 'navigate' || (tool === 'tabs' && args.action === 'new')) {
-    if (args.action === 'back' || args.action === 'forward' || args.action === 'reload')
-      await page.history(args.action, 30_000)
-    else {
+    if (args.action === 'back' || args.action === 'forward' || args.action === 'reload') {
+      if (!(await page.history(args.action, 30_000)).ok)
+        throw new ChromeBridgeError('failed', 'Navigation did not finish within 30 seconds.')
+    } else {
       const address = typeof args.url === 'string' ? toAddress(args.url, false) : 'about:blank'
       if (!address || !isOpenable(address))
         throw new ChromeBridgeError('invalid', 'Only HTTP(S) and about:blank URLs are supported.')
@@ -98,7 +99,8 @@ export async function executePageTool(
       if (!origin) throw new ChromeBridgeError('invalid', 'Unsupported URL origin.')
       await executor.approve(invocation, context, page.instanceId, [origin])
       await page.authorize([...new Set([...page.grant.origins, origin])])
-      await page.load(address, 30_000)
+      if (!(await page.load(address, 30_000)).ok)
+        throw new ChromeBridgeError('failed', 'Navigation did not finish within 30 seconds.')
     }
     await page.cdp('Page.getFrameTree')
     return done(

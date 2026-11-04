@@ -34,6 +34,8 @@ export interface ClientToolsDeclaration {
   namespaces: string[]
   /** 明确声明可执行 litch_computer.run_actions；只声明命名空间不够 */
   computerActions?: boolean
+  /** 明确声明可执行 litch_browser.run_actions。 */
+  browserActions?: boolean
   /** Litch 桌面端报的自己是哪台（声明了 litch_machine 时带）。设备进程按它列出、挑选桌面端 */
   desktop?: ClientToolsDesktopInfo
 }
@@ -89,6 +91,21 @@ export function declaredComputerActions(
     unknown
   >
   return raw.computerActions === true
+}
+
+/** 批量浏览器动作只投递给明确声明能力的执行端。 */
+export function declaredBrowserActions(capabilities: unknown, extensionDeclared: boolean): boolean {
+  if (
+    !declaredClientToolNamespaces(capabilities, extensionDeclared).includes(
+      CLIENT_TOOL_NAMESPACE.browser,
+    )
+  )
+    return false
+  const raw = (capabilities as Record<string, unknown>)[CLIENT_TOOLS_CAPABILITY] as Record<
+    string,
+    unknown
+  >
+  return raw.browserActions === true
 }
 
 // —— 协议原有的形状（codex 0.157.1 起一致），这里抄一份最小的，免得设备进程去引 codex.mts ——

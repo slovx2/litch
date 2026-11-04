@@ -1,7 +1,12 @@
 // 工具表的跨 harness 约束；设备测试入口也加载本文件，保证常规测试覆盖协议防线。
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { CLIENT_TOOL_NAMESPACE, type ClientToolFunctionSpec } from '../src/client-tools.mjs'
+import {
+  CLIENT_TOOL_NAMESPACE,
+  type ClientToolFunctionSpec,
+  declaredBrowserActions,
+} from '../src/client-tools.mjs'
+import { browserToolsSpec } from '../src/client-tools-browser.mjs'
 import { clientToolSpecs } from '../src/client-tools-specs.mjs'
 
 test('所有客户端工具的顶层都是普通对象，不含 Claude 拒绝的组合关键字', () => {
@@ -11,6 +16,7 @@ test('所有客户端工具的顶层都是普通对象，不含 Claude 拒绝的
       machine: null,
       desktopPlatform,
       computerActions: true,
+      browserActions: true,
     })
     assert.deepEqual(
       specs.map((spec) => spec.name),
@@ -40,4 +46,25 @@ test('定时任务的 schedule 组合只在属性内部，不属于顶层禁用�
     assert.ok(Array.isArray(properties.schedule?.oneOf))
     assert.equal(Object.hasOwn(tool.inputSchema, 'oneOf'), false)
   }
+})
+
+test('浏览器批量声明与定义：逐动作要求现有标签，旧执行端不获得能力', () => {
+  assert.equal(
+    browserToolsSpec().tools.some((tool) => tool.name === 'run_actions'),
+    false,
+  )
+  const batch = browserToolsSpec(true).tools.find((tool) => tool.name === 'run_actions')
+  assert.ok(batch)
+  const actions = (batch.inputSchema.properties as any).actions
+  assert.equal(actions.minItems, 1)
+  assert.equal(actions.maxItems, 12)
+  for (const entry of actions.items.oneOf)
+    assert.ok(entry.properties.arguments.required.includes('tabId'))
+  const capabilities = { litchClientTools: { namespaces: ['litch_browser'], browserActions: true } }
+  assert.equal(declaredBrowserActions(capabilities, true), true)
+  assert.equal(declaredBrowserActions(capabilities, false), false)
+  assert.equal(
+    declaredBrowserActions({ litchClientTools: { namespaces: ['litch_browser'] } }, true),
+    false,
+  )
 })

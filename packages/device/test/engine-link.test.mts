@@ -22,6 +22,7 @@ test('ENGINE-LINK-001：openEngineLink 握手时声明设备注册的命名空�
       namespaces: [...Object.values(CLIENT_TOOL_NAMESPACE), 'litch_repository'],
       anyThread: ['litch_tasks', 'litch_manager', 'litch_repository', 'litch_sessions'],
       computerActions: true,
+      browserActions: true,
     })
     const { thread } = await link.request('thread/start', { cwd: '/work' })
     const running = runTurn(

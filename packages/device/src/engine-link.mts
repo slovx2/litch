@@ -310,6 +310,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
                   litchClientTools: {
                     namespaces: Object.values(CLIENT_TOOL_NAMESPACE),
                     computerActions: true,
+                    browserActions: true,
                   },
                 }
               : {}),

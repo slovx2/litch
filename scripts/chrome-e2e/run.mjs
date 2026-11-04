@@ -12,6 +12,7 @@ import { buildChromeExtension } from '../../apps/desktop/scripts/build-chrome.mj
 import { Cdp, until } from '../chrome-m0/cdp.mjs'
 import { fixtures } from './fixtures.mjs'
 import { remoteCheck } from './remote-check.mjs'
+import { chromeUx } from './ux.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const require = createRequire(new URL('../../apps/desktop/package.json', import.meta.url))
@@ -87,7 +88,9 @@ try {
     '<!doctype html><title>Isolated worker lifecycle fixture</title>',
   )
   const nativeBinary = join(work, 'litch')
-  const go = existsSync('/usr/local/go/bin/go') ? '/usr/local/go/bin/go' : 'go'
+  const go =
+    process.env.LITCH_CHROME_GO ??
+    (existsSync('/usr/local/go/bin/go') ? '/usr/local/go/bin/go' : 'go')
   execFileSync(go, ['build', '-o', nativeBinary, './cmd/codex-harness-adapter'], {
     cwd: root,
     stdio: 'pipe',
@@ -563,6 +566,23 @@ try {
     return (await cdp.call('Target.attachToTarget', { targetId: found.targetId, flatten: true }))
       .sessionId
   }
+  const assertPresentationCleared = async (nativeTab) => {
+    const sessionId = await workerSession()
+    try {
+      const result = await cdp.call(
+        'Runtime.evaluate',
+        {
+          expression: `(async()=>{const tab=await chrome.tabs.get(${nativeTab});return {groupId:tab.groupId,badge:await chrome.action.getBadgeText({tabId:${nativeTab}}),journal:Object.keys(await chrome.storage.local.get(null)).filter(key=>key==='litchTabPresentation:${nativeTab}')}})()`,
+          awaitPromise: true,
+          returnByValue: true,
+        },
+        sessionId,
+      )
+      assert.deepEqual(result.result.value, { groupId: -1, badge: '', journal: [] })
+    } finally {
+      await cdp.call('Target.detachFromTarget', { sessionId })
+    }
+  }
   await check('缩放后截图与 ref 坐标', async () => {
     const sessionId = await workerSession()
     const nativeTab = executor.pages.get(tabId).grant.tabId
@@ -581,8 +601,25 @@ try {
     await cdp.call('Target.detachFromTarget', { sessionId })
   })
   await check('扩展 reload 重新握手 / 旧租约失效', async () => {
+    const nativeTab = executor.pages.get(tabId).grant.tabId
     const epoch = bridge.instances()[0].epoch
     const sessionId = await workerSession()
+    const active = call('evaluate', {
+      tabId,
+      expression: 'new Promise(resolve=>setTimeout(()=>resolve(1),10000))',
+    })
+    await until(async () => {
+      const badge = await cdp.call(
+        'Runtime.evaluate',
+        {
+          expression: `chrome.action.getBadgeText({tabId:${nativeTab}})`,
+          awaitPromise: true,
+          returnByValue: true,
+        },
+        sessionId,
+      )
+      return badge.result.value === 'AI'
+    }, 'Active marker before extension reload')
     await cdp
       .call('Runtime.evaluate', { expression: 'chrome.runtime.reload()' }, sessionId)
       .catch(() => {})
@@ -616,6 +653,8 @@ try {
       throw error
     }
     assert.equal((await call('snapshot', { tabId })).success, false)
+    assert.equal((await active).success, false)
+    await assertPresentationCleared(nativeTab)
     const list = JSON.parse(text(await success('tabs', { action: 'list', targetId }))).tabs
     const tab = list.find((tab) => tab.url.endsWith('/frames'))
     tabId = JSON.parse(text(await success('claim', { claimToken: tab.claimToken }))).tabId
@@ -659,6 +698,7 @@ try {
         'Stopped worker handshake',
       )
       assert.equal((await call('snapshot', { tabId })).success, false)
+      await assertPresentationCleared(nativeTab)
       const worker = await workerSession()
       const targets = await cdp.call(
         'Runtime.evaluate',
@@ -681,6 +721,7 @@ try {
     }
   })
   await check('Native Messaging 桥断线重连撤销旧租约', async () => {
+    const nativeTab = executor.pages.get(tabId).grant.tabId
     const epoch = bridge.instances()[0].epoch
     await bridge.close()
     await bridge.start()
@@ -689,6 +730,7 @@ try {
       'Bridge reconnect',
     )
     assert.equal((await call('snapshot', { tabId })).success, false)
+    await assertPresentationCleared(nativeTab)
     const tab = JSON.parse(text(await success('tabs', { action: 'list', targetId }))).tabs.find(
       (tab) => tab.url.endsWith('/frames'),
     )
@@ -718,9 +760,11 @@ try {
     assert.match(text(await success('snapshot', { tabId })), new RegExp(`button "${count}"`))
   })
   await check('停止操作撤权 / 同回合不可再次认领', async () => {
+    const nativeTab = executor.pages.get(tabId).grant.tabId
     executor.stop()
     await until(() => !executor.pages.get(tabId)?.valid, 'Stop revoked lease')
     assert.equal((await call('snapshot', { tabId })).success, false)
+    await assertPresentationCleared(nativeTab)
     const tab = JSON.parse(text(await success('tabs', { action: 'list', targetId }))).tabs.find(
       (tab) => tab.url.endsWith('/frames'),
     )
@@ -728,6 +772,7 @@ try {
     assert.equal(denied.success, false)
     assert.match(text(denied), /cancelled/)
   })
+  await chromeUx({ check, cdp, workerSession, executor, targetId, site, invocation, context })
   if (process.argv.includes('--remote'))
     await check('真实 SSH / 远程 Pi / 核心审批 / 控制端 Chrome', async () => {
       report.remote = await remoteCheck({ ...driver, executor, origin: site.origin })

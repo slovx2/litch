@@ -23,7 +23,7 @@ async function ready(call: Call, page: BrowserPage) {
   const refusal = await call.admitPage(page)
   if (refusal) return refusal
   const blocked = blockedByDialog(page)
-  return blocked ? call.done(page, blocked) : null
+  return blocked ? clientToolFailure('failed', blocked) : null
 }
 
 /** 动完之后的那句话：页面跳了就写新地址，开了对话框由 done 带上 */
@@ -113,8 +113,8 @@ export const type: Tool = async (call) => {
       ).result.value
       if (prepared?.kind === 'select') {
         if (!prepared.ok) {
-          return call.done(
-            page,
+          return clientToolFailure(
+            'failed',
             `No option ${JSON.stringify(text)} in ${ref}. Options: ${JSON.stringify(prepared.options ?? [])}`,
           )
         }

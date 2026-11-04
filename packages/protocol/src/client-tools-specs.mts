@@ -10,7 +10,7 @@
 // 这个文件只引用 client-tools.mts 和各命名空间的定义，核心（packages/core）和桌面外壳都直接引用它。
 import { CLIENT_TOOL_NAMESPACE, type ClientToolNamespaceSpec } from './client-tools.mjs'
 
-import { BROWSER_TOOLS } from './client-tools-browser.mjs'
+import { BROWSER_TOOLS, browserToolsSpec } from './client-tools-browser.mjs'
 import { computerPlatform, computerToolsSpec } from './client-tools-computer.mjs'
 import { type MachineSpecContext, machineToolsSpec } from './client-tools-machine.mjs'
 import { MANAGER_TOOLS } from './client-tools-manager.mjs'
@@ -76,6 +76,7 @@ export interface ClientToolSpecContext {
   /** 执行客户端工具的那台桌面的平台（process.platform）：litch_computer 的说明按它出。没有按 macOS */
   desktopPlatform?: string | null
   computerActions?: boolean
+  browserActions?: boolean
 }
 
 /** 一个命名空间的定义。没有这一份（还没接上的、不认识的）是 null */
@@ -83,6 +84,8 @@ export function clientToolSpec(
   namespace: string,
   context: ClientToolSpecContext | null = null,
 ): ClientToolNamespaceSpec | null {
+  if (namespace === CLIENT_TOOL_NAMESPACE.browser)
+    return browserToolsSpec(context?.browserActions === true)
   if (namespace === CLIENT_TOOL_NAMESPACE.machine) return machineToolsSpec(context?.machine ?? null)
   if (namespace === CLIENT_TOOL_NAMESPACE.computer) {
     return computerToolsSpec(

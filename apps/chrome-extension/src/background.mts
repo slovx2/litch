@@ -8,6 +8,7 @@ import {
   type ChromeWelcome,
 } from '../../../packages/protocol/src/chrome-browser.mjs'
 import { cleanupPointer, disposePointer } from './pointer.mjs'
+import { TabPresentation } from './presentation.mjs'
 import { execute } from './requests.mjs'
 import {
   ChromeFault,
@@ -28,6 +29,7 @@ let ready = false
 let wire: number | null = null
 const state: ExtensionState = {
   chrome,
+  presentation: new TabPresentation(chrome),
   epoch: crypto.randomUUID(),
   grants: new Map(),
   tabLocks: new Map(),
@@ -52,6 +54,7 @@ const state: ExtensionState = {
     state.paused.delete(leaseId)
     state.console.delete(grant.tabId)
     try {
+      await state.presentation.release(grant.tabId, leaseId).catch(() => {})
       await disposePointer(state, grant)
       await chrome.debugger.detach({ tabId: grant.tabId }).catch(() => {})
       await saveAttached(state)
@@ -295,6 +298,7 @@ function schedule(): void {
 }
 
 async function start(): Promise<void> {
+  await state.presentation.recover()
   const saved = await chrome.storage.session.get([
     'litchAttached',
     'litchStoppedTurns',
@@ -314,6 +318,7 @@ async function start(): Promise<void> {
   setInterval(() => {
     for (const grant of state.grants.values())
       if (grant.expiresAt <= Date.now()) void state.revoke(grant.leaseId, 'expired')
+    void state.presentation.retry(new Set(state.grants.keys())).catch(() => {})
   }, 1000)
 }
 async function initialize(): Promise<void> {

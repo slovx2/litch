@@ -206,7 +206,10 @@ test('握手：主进程报了能执行的命名空间就声明 clientTools 扩�
   assert.ok(init)
   const capabilities = (init.params as { capabilities: Record<string, unknown> }).capabilities
   assert.ok((capabilities.litchExtensions as string[]).includes('clientTools'))
-  assert.deepEqual(capabilities.litchClientTools, { namespaces: ['litch_echo', 'litch_browser'] })
+  assert.deepEqual(capabilities.litchClientTools, {
+    namespaces: ['litch_echo', 'litch_browser'],
+    browserActions: true,
+  })
 
   for (const namespaces of [null, []]) {
     const bare = setup({ namespaces })

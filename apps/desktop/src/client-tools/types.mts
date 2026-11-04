@@ -27,6 +27,10 @@ export interface ClientToolDevice {
 
 /** 交给执行器的一次调用：协议原有的参数，加上桌面端知道的上下文 */
 export interface ClientToolInvocation extends ClientToolCallParams {
+  /** 桌面批量编排的内部子调用，沿用批次开始前的观察。 */
+  browserBatch?: boolean
+  /** 会话标题，仅供浏览器标签组显示；尚未命名时为空。 */
+  sessionTitle?: string | null
   /** 核心给的标识，取消、答复都按它对 */
   id: string
   device: ClientToolDevice

@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
+import { withDeveloperInstructions } from '../../protocol/src/codex-developer-instructions.mjs'
 import type { JsonRpcMessage, Thread } from '../../protocol/src/index.mjs'
 import { codexRejects } from '../../shared/test/codex-params.mjs'
 import { SENSITIVE_PRESETS, sensitivePresets } from '../src/device/machine/presets.mjs'
@@ -524,12 +525,18 @@ test('建会话：远程会话带上 litch_machine，说明开头写这个会话
   // 整份参数过得了原生 codex 对 thread/start 的校验（命名空间说明的上限就在这里面）。
   // 呈现风格只给不是原生 codex 的 harness（这里是 pi），原生 codex 不收没有工具的命名空间，核对时去掉
   assert.deepEqual(
-    codexRejects('thread/start', {
-      ...Object.fromEntries(
-        Object.entries(start.params as object).filter(([key]) => key !== 'harness'),
+    codexRejects(
+      'thread/start',
+      withDeveloperInstructions(
+        {
+          ...Object.fromEntries(
+            Object.entries(start.params as object).filter(([key]) => key !== 'harness'),
+          ),
+          dynamicTools: tools?.filter((entry) => entry.name !== 'litch_presentation'),
+        },
+        null,
       ),
-      dynamicTools: tools?.filter((entry) => entry.name !== 'litch_presentation'),
-    }),
+    ),
     [],
   )
 
