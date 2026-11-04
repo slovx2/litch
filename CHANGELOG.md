@@ -5,13 +5,18 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
-## 未发布
+## 0.32.0（2026-11-04）
 
 - Chrome 按会话分组标签，显示 AI 操作标记并自动修复分组；内置浏览器与 Chrome 支持批量动作。
 - ACP 补齐会话控制、表单征询和子代理能力，桌面与手机按每个会话的实际后端呈现功能。
-- 新增 Antigravity 双后端入口，默认使用官方 ACP 订阅；桌面与手机详情设置支持查看登录状态、发起登录和退出，并提供设备端登录的失败引导。
-
+- 新增 Antigravity 入口，支持官方 ACP 订阅和 API Key；桌面与手机支持查看登录状态、登录和退出。
 - 经理可代答或撤回自己子树的异步和收尾问题，立即清除桌面、手机的待答提示；原题保留处理记录，用户可重新回答覆盖。
+- 决策讨论可转交经理；经理更新决策后，输入框恢复可编辑。
+- 看板卡片整张可点击展开，展开、收起和移除时增加过渡动画。
+- 输入框中待发送的图片可点击预览。
+- 修复计划模式下新建会话失败，以及滚轮切回会话时首帧位置跳动的问题。
+- 同一设备装有多份 harness CLI 时自动选择版本最高的一份，设备详情显示实际路径及候选。
+- Claude Code 低于 2.1.299 时，配置了压缩窗口的会话仍可运行，并提示该设置未生效。
 
 ## 0.31.1（2026-11-04）
 
