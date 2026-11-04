@@ -30,12 +30,14 @@ import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
 import type { Palette } from '../../ui/palettes'
 import { useTheme } from '../../ui/theme'
+import { animateNextLayout } from './card-motion'
 import { draftMarks } from './draft-marks'
 import { Issue } from './Issue'
 import { Markdown } from './IssueMarkdown'
 import { setIssueOrder, useIssueOrder } from './issue-order'
 import { ManagerLines } from './ManagerLines'
 import { ItemRow } from './ManagerOverview'
+import { canAnimateToggle } from './presentation'
 import { useDraftVersion } from './use-draft-files'
 
 export function PagedBoard({
@@ -359,6 +361,8 @@ export function PagedBoard({
                       accessibilityState={{ expanded: active === head.id }}
                       aria-expanded={active === head.id}
                       onPress={() => {
+                        if (canAnimateToggle(active, head.id, positions.current))
+                          animateNextLayout()
                         focused.current = head.id
                         setLinked(false)
                         if (active === head.id) setSelected(null)

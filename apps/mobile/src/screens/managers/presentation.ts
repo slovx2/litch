@@ -186,3 +186,18 @@ export function lineRowParts(row: ManagerLineRow): {
     unverified: line.unverified.length,
   }
 }
+
+/**
+ * 分页看板点开一张卡时能不能做过渡：展开着的另一张在它上面时，收起会把它往上带，
+ * 现有的滚动补偿是瞬时的，和布局动画叠在一起会先跳再滑回，这种情况照旧瞬时完成。
+ */
+export function canAnimateToggle(
+  active: string | null,
+  pressed: string,
+  positions: ReadonlyMap<string, number>,
+): boolean {
+  if (!active || active === pressed) return true
+  const above = positions.get(active)
+  const at = positions.get(pressed)
+  return above !== undefined && at !== undefined && above > at
+}

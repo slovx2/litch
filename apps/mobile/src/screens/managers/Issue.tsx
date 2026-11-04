@@ -46,6 +46,7 @@ import { Button, Empty } from '../../ui/kit/controls'
 import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
+import { animateNextLayout } from './card-motion'
 import { readChoice, writeChoice } from './choice-drafts'
 import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutcome'
 import { DiscussionDrawer } from './DiscussionDrawer'
@@ -193,6 +194,11 @@ export function Issue({
     ),
   )
   const collapsed = inline ? false : savedCollapsed
+  const toggle = () => {
+    animateNextLayout()
+    rememberPostCollapsed(viewKey, !collapsed)
+    setCollapsed(!collapsed)
+  }
   /** 正在填忽略理由；null 是没在填 */
   const [ignoring, setIgnoring] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -590,10 +596,7 @@ export function Issue({
               alignItems: 'center',
               backgroundColor: pressed ? c.press : 'transparent',
             })}
-            onPress={() => {
-              rememberPostCollapsed(viewKey, !collapsed)
-              setCollapsed(!collapsed)
-            }}
+            onPress={toggle}
           >
             <Text style={{ color: c.ink2 }}>{collapsed ? '▸' : '▾'}</Text>
             <Text style={{ color: c.ink, fontSize: font.size.title, fontWeight: '600', flex: 1 }}>
@@ -635,9 +638,17 @@ export function Issue({
         />
       ) : null}
       {collapsed ? (
-        <Text numberOfLines={1} style={{ color: c.ink2, fontSize: font.size.body }}>
-          {postSummary(post.body)}
-        </Text>
+        // 收起时摘要也能点开（整张卡可点）；读屏和键盘走卡头按钮，这里不重复朗读
+        <Pressable
+          testID={`post-summary:${post.id}`}
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+          onPress={toggle}
+        >
+          <Text numberOfLines={1} style={{ color: c.ink2, fontSize: font.size.body }}>
+            {postSummary(post.body)}
+          </Text>
+        </Pressable>
       ) : null}
       {decision?.status === 'ignored' ? (
         <Pressable
@@ -645,10 +656,7 @@ export function Issue({
           accessibilityState={{ expanded: !collapsed }}
           testID={`decision-ignored-toggle:${decision.id}`}
           style={[styles.detailsRow, { minHeight: hit }]}
-          onPress={() => {
-            rememberPostCollapsed(viewKey, !collapsed)
-            setCollapsed(!collapsed)
-          }}
+          onPress={toggle}
         >
           <Text style={{ color: c.ink2 }}>
             {collapsed ? '▸' : '▾'} {t(collapsed ? 'mgr.ignored.show' : 'mgr.ignored.hide')}

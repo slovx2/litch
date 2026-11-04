@@ -7,7 +7,7 @@ import {
   questionMode,
   rememberPostCollapsed,
 } from '../../../packages/ui/src/manager/post-presentation.ts'
-import { issueMarkdownStyle } from '../src/screens/managers/presentation.ts'
+import { canAnimateToggle, issueMarkdownStyle } from '../src/screens/managers/presentation.ts'
 import { PALETTES } from '../src/ui/palettes.ts'
 
 test('手机讨论与桌面共用默认目标和会话内收起状态', () => {
@@ -36,4 +36,16 @@ test('手机议题正文沿用对话的主题字号', () => {
     }
     assert.equal(issueMarkdownStyle(theme).paragraph.fontSize, theme.font.size.body)
   }
+})
+
+test('分页卡开合：上方另有展开的卡时不做布局动画，免得和瞬时滚动补偿叠成先跳再滑', () => {
+  const positions = new Map([
+    ['D-1', 0],
+    ['D-2', 120],
+  ])
+  assert.equal(canAnimateToggle(null, 'D-2', positions), true)
+  assert.equal(canAnimateToggle('D-2', 'D-2', positions), true)
+  assert.equal(canAnimateToggle('D-2', 'D-1', positions), true)
+  assert.equal(canAnimateToggle('D-1', 'D-2', positions), false)
+  assert.equal(canAnimateToggle('D-9', 'D-2', positions), false)
 })
