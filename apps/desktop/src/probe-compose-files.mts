@@ -130,8 +130,16 @@ export async function filesStep(
     await frame()
     const cleared = all('.dock .cmp-atts > *').length === 0 && area()?.value === ''
     await idle()
-    await sleep(200)
-    return { turn: all('.turn').find((entry) => turnOf(entry) === sent), cleared }
+    // 回合结束后正文仍可能匀速放字；等该回合定稿显示，不能用固定延时截取附件回执。
+    const turn = await until('该回合正文显示完成', () => {
+      const current = all('.turn').find((entry) => turnOf(entry) === sent)
+      return current?.querySelector('.turn-foot') &&
+        current.querySelector('.agent-message .md') &&
+        !current.querySelector('.md.live')
+        ? current
+        : null
+    })
+    return { turn, cleared }
   }
   const NOTES = 'litch-notes.md'
   const BLOB = 'litch-blob.bin'
