@@ -13,6 +13,7 @@
   },
   "undeclared": "litch/manager/ 方法返回 extensionRequired，data.required=[\"litchManager\"]；会话对象不带 litchManager，不发送两个经理通知。标准会话、回合及通知照常可见，未修改的官方客户端可以使用这些普通会话。",
   "rules": [
+    "重置 waiting 阶段允许 thread/resume、历史读取、目标读取和附件监听；turn/start、turn/steer、thread/queue/add、thread/queue/start 自动取消等待并正常处理。新增 reset/cancel 只取消 waiting，回到 idle 且保留已安装指纹；无进行中重置时幂等。summarizing/applying 阶段不允许取消或新增写入，返回 data.litch=managerResetBusy；刷新仅等待当前回合，换会话仍等待后台任务、临时追问与其他交接约束。",
     "litchManagerPaging：设备在 runtime/info.device.extensions 宣告，客户端须另行声明才可调用 catalog/read、board/summary、objects/list、object/read、object/history、lines/read。旧 board/read 的形状和语义不变。新方法不新增主动通知，继续使用仅向声明 litchManager 的连接投递的 changed/boardChanged 失效通知。新客户端未发现分页能力时使用原完整看板接口。",
     "分页默认30条、最大100条；游标绑定经理、种类、状态、排序及创建上界。对象按创建时间与稳定标识排序，状态变化后重新对账当前已加载页；历史按 seq 倒序及读取时上界分页。未知或查询不匹配的游标明确拒绝。摘要不含正文、选项、依据、讨论或审计正文；详情与历史分别读取。工作线快照 checkedAt=null 表示尚未核对，刷新失败保留上次快照并报告 failed。没有新增修订序列或对象增量订阅。",
     "重置经理会话仅由客户端用户操作：reset 可选 boardOnly 只在摘要失败再次确认后使用。Manager.reset 返回当前/已安装工具与规则指纹、outdated、mode 和 phase；ready 表示设置已保存，Claude 下一轮加载。其他 harness 同引擎新建，交接提示优先于待投递事件；managerId 与看板不变，直接工作线和未投递回报改挂，旧临时追问退役。historyThreadIds 是只读历史，旧线程的改变状态操作在设备拒绝并给出当前经理线程。",
@@ -150,6 +151,12 @@
     },
     {
       "kind": "ClientRequest",
+      "method": "litch/manager/reset/cancel",
+      "params": { "$ref": "#/definitions/IdParams" },
+      "response": { "$ref": "#/definitions/ManagerResponse" }
+    },
+    {
+      "kind": "ClientRequest",
       "method": "litch/manager/board/read",
       "params": { "$ref": "#/definitions/IdParams" },
       "response": { "$ref": "#/definitions/BoardResponse" }
@@ -235,6 +242,7 @@
       "kind": "Error",
       "description": "error.data.litch 标识原因，message 为可操作的英文说明；未声明时用已有 extensionRequired。",
       "errors": [
+        { "litch": "managerResetBusy", "code": -32600, "description": "重置已进入摘要或应用阶段，暂时不能取消或写入；读取、订阅和附件监听仍可用" },
         { "litch": "unknownManager", "code": -32602, "description": "managerId 不存在" },
         {
           "litch": "managerEnded",

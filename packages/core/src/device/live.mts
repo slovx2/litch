@@ -82,6 +82,7 @@ import {
   harnessDownError,
   isHarnessDown,
   isHeldElsewhere,
+  isManagerResetWaiting,
   isSessionRecovering,
   lacksMethod,
 } from './faults.mjs'
@@ -97,6 +98,7 @@ import { resumeAfterRecovery } from './resume-retry.mjs'
 import { staleView, trimView, type ViewStore } from './view-store.mjs'
 
 export interface LiveHost {
+  beforeInput?(sessionId: string): Promise<void> | undefined
   recoverySupported?(): boolean
   deviceId: string
   clock: Clock
@@ -278,6 +280,7 @@ interface Waiting extends PendingRequest {
 }
 
 interface Live {
+  managerRevision: number
   recoveryRevision: number
   id: string
   sinks: Set<HostSink>
@@ -1307,7 +1310,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
               options,
             )
           } catch (error) {
-            if (!lacksPaging(error)) throw error
+            // 重置拒绝不是分页参数不支持；保留事件驱动恢复，不立刻再撞一次相同拒绝。
+            if (isManagerResetWaiting(error) || !lacksPaging(error)) throw error
             paging = false
             return withSpeed('thread/resume', { threadId: live.id }, options)
           }
@@ -1356,9 +1360,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         ...(await readOnly()),
         live: false,
         // 被别处的 codex 用着：说清楚是怎么回事、该怎么办，不甩一句原话
-        note: isHeldElsewhere(error)
-          ? phrase('session.heldElsewhere')
-          : phrase('session.readOnly', { message: error.message }),
+        note: isManagerResetWaiting(error)
+          ? phrase('manager.resetWaiting')
+          : isHeldElsewhere(error)
+            ? phrase('session.heldElsewhere')
+            : phrase('session.readOnly', { message: error.message }),
       }
     }
   }
@@ -1409,6 +1415,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
   /** 重新载入会话。返回的承诺在载入完（或放弃）时落定，不会失败 */
   const load = (live: Live): Promise<void> => {
+    const managerRevision = live.managerRevision
     cancelPage(live)
     for (const [clientId, entry] of live.steered) {
       if (!entry.tracked) continue
@@ -1480,6 +1487,16 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         const held = live.held
         live.held = []
         for (const entry of held) deliver(live, entry.method, entry.params, true)
+        // ready/取消通知可能先于被拒订阅的只读快照到达；这次载入结束后补订阅。
+        if (
+          !live.view.live &&
+          managerRevision !== live.managerRevision &&
+          managerStates.get(live.id) === 'active' &&
+          !host.shelved(live.id)
+        ) {
+          void load(live)
+          return
+        }
         pump(live)
         if (host.recoverySupported?.()) {
           const revision = live.recoveryRevision
@@ -1769,7 +1786,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           ...live.queued,
         ]
         emit(live, [{ op: 'queue.set', queued: live.queued }])
-        setNote(live, phrase('session.queueFailed', { message: failure(error).message }))
+        const reason = failure(error)
+        setNote(live, reason.text ?? phrase('session.queueFailed', { message: reason.message }))
       },
     )
   }
@@ -1811,6 +1829,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     paging: null,
     pageJob: null,
     recoveryRevision: 0,
+    managerRevision: 0,
     id,
     sinks: new Set(),
     view: null,
@@ -1895,8 +1914,17 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     managerStatus(sessionId, status) {
       managerStates.set(sessionId, status)
       const live = sessions.get(sessionId)
+      if (live) live.managerRevision++
       const note = managerNote(sessionId)
       if (live && note) emit(live, [{ op: 'session.state', live: false, note }])
+      else if (
+        live?.view &&
+        !live.view.live &&
+        !live.loading &&
+        host.online() &&
+        !host.shelved(sessionId)
+      )
+        void load(live)
     },
     loadOlder(sessionId) {
       const live = need(sessionId)
@@ -2357,6 +2385,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       const live = need(sessionId)
       if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
       mustReach(live)
+      const beforeInput = host.beforeInput?.(sessionId)
+      if (beforeInput) await beforeInput
       const pauseRevision = live.pauseRevision
       if (
         live.needsTurnCheck &&
@@ -2410,7 +2440,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           }
           await sessionsApi.steer(sessionId, id).catch((error: unknown) => {
             if (error instanceof ChannelError && error.code === 'unsupported') return
-            setNote(live, phrase('session.steerQueued', { message: failure(error).message }))
+            const reason = failure(error)
+            setNote(live, reason.text ?? phrase('session.steerQueued', { message: reason.message }))
           })
         }
         return

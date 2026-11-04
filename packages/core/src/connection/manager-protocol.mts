@@ -62,6 +62,10 @@ export interface ManagerRequests extends ManagerPagingRequests {
     params: import('../../../protocol/src/manager.mjs').ManagerResetParams
     result: ManagerEndResponse
   }
+  'litch/manager/reset/cancel': {
+    params: import('../../../protocol/src/manager.mjs').ManagerResetCancelParams
+    result: ManagerEndResponse
+  }
   'litch/manager/end': { params: ManagerEndParams; result: ManagerEndResponse }
   'litch/manager/board/read': { params: ManagerBoardReadParams; result: ManagerBoardReadResponse }
   'litch/manager/answers/submit': {

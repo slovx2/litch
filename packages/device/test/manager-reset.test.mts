@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { ATTACHMENT_WATCH_METHOD } from '../../protocol/src/file-attachments.mjs'
 import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
@@ -14,7 +15,7 @@ import { treeRig, until } from './tree-kit.mjs'
 async function setup(harness = 'pi', values: Record<string, unknown> = {}) {
   const env = treeRig({}, { values })
   const client = env.connect()
-  await client.initialize(['harness', 'litchManager', 'sessionTree'])
+  await client.initialize(['harness', 'litchManager', 'sessionTree', 'fileAttachments'])
   const result = await client.call(MANAGER_METHOD.create, {
     cwd: env.stateDir,
     harness,
@@ -394,23 +395,167 @@ test('候选创建失败不改绑定、父链和队列；摘要失败必须再�
   }
 })
 
-test('经理忙时等待，后台结束后刷新；工作线不需要停下', async () => {
+test('Claude 后台任务持续运行仍完成刷新，不等待旁问、目标或后台接续', async () => {
   const env = await setup('claude-code')
   try {
     const tree = env.device.sessionTree
-    let background = 1
-    tree.host.backgroundRunning = (id) => (id === env.oldId ? background : 0)
+    tree.host.backgroundRunning = () => 1
+    tree.host.continuationPending = () => true
+    env.device.managers.questions.busy = () => true
+    const link = await tree.link('claude-code')
+    assert.ok(link.runtime)
+    link.runtime.features = { goals: true }
+    env.engine.handlers['thread/goal/get'] = () => {
+      assert.fail('Claude 刷新不要求暂停目标')
+    }
     const managers = env.device.managers
     await env.client.call(MANAGER_METHOD.reset, { managerId: env.manager.id })
-    assert.equal(managers.manager(env.manager.id).reset?.phase, 'waiting')
-    await assert.rejects(env.client.call('turn/start', { threadId: env.oldId, input: [] }))
-    background = 0
     await until(
       () => managers.manager(env.manager.id).reset?.phase === 'ready',
-      '后台空闲后完成',
+      '后台仍运行时完成',
       5000,
     )
   } finally {
+    await env.close()
+  }
+})
+
+for (const harness of ['claude-code', 'pi']) {
+  test(`${harness} 等待期间订阅、附件监听放行，插话取消等待且正文只提交一次`, async () => {
+    const env = await setup(harness)
+    try {
+      const { turn } = await env.client.call('turn/start', { threadId: env.oldId, input: [] })
+      await env.client.call(MANAGER_METHOD.reset, { managerId: env.manager.id })
+      await env.client.call('thread/resume', { threadId: env.oldId })
+      await env.client.call(ATTACHMENT_WATCH_METHOD, { threadId: env.oldId, open: true })
+      assert.equal(env.device.managers.manager(env.manager.id).reset?.phase, 'waiting')
+      const input = [{ type: 'text', text: '继续完成用户的消息', text_elements: [] }]
+      await env.client.call('turn/steer', { threadId: env.oldId, expectedTurnId: turn.id, input })
+      assert.equal(env.device.managers.manager(env.manager.id).reset?.phase, 'idle')
+      assert.equal(
+        env.engine
+          .current(env.oldId)
+          ?.items.filter((item) => JSON.stringify(item.content) === JSON.stringify(input)).length,
+        1,
+      )
+      await env.client.call(ATTACHMENT_WATCH_METHOD, { threadId: env.oldId, open: false })
+    } finally {
+      await env.close()
+    }
+  })
+
+  test(`${harness} 取消或新消息可抢占正在查询空闲状态的重置，迟到结果不能恢复重置`, async () => {
+    for (const action of ['cancel', 'start']) {
+      const env = await setup(harness)
+      let release!: () => void
+      try {
+        const tree = env.device.sessionTree
+        const read = tree.read.bind(tree)
+        let entered = false
+        const gate = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        tree.read = async (...args) => {
+          const result = await read(...args)
+          if (args[0] === env.oldId && !entered) {
+            entered = true
+            await gate
+          }
+          return result
+        }
+        await env.client.call(MANAGER_METHOD.reset, { managerId: env.manager.id })
+        await until(() => entered, '重置正在查空闲')
+        const input = [{ type: 'text', text: '不能丢失的新消息', text_elements: [] }]
+        if (action === 'cancel') {
+          await env.client.call(MANAGER_METHOD.resetCancel, { managerId: env.manager.id })
+          await env.client.call(MANAGER_METHOD.resetCancel, { managerId: env.manager.id })
+        } else await env.client.call('turn/start', { threadId: env.oldId, input })
+        release()
+        await env.device.managers.resets.close()
+        assert.equal(env.device.managers.manager(env.manager.id).reset?.phase, 'idle')
+        assert.equal(env.device.managers.manager(env.manager.id).threadId, env.oldId)
+        if (action === 'start')
+          assert.deepEqual(env.engine.current(env.oldId)?.items[0]?.content, input)
+      } finally {
+        release?.()
+        await env.close()
+      }
+    }
+  })
+}
+
+test('换会话模式仍等待后台任务，但等待可取消；摘要开始后取消明确失败', async () => {
+  const env = await setup()
+  try {
+    let background = 1
+    env.device.sessionTree.host.backgroundRunning = () => background
+    await env.client.call(MANAGER_METHOD.reset, { managerId: env.manager.id })
+    await env.client.call('thread/resume', { threadId: env.oldId })
+    assert.equal(env.device.managers.manager(env.manager.id).reset?.phase, 'waiting')
+    await env.client.call(MANAGER_METHOD.resetCancel, { managerId: env.manager.id })
+    background = 0
+    await env.client.call(MANAGER_METHOD.reset, { managerId: env.manager.id })
+    await until(() => env.engine.running(env.oldId), '摘要开始', 5000)
+    await assert.rejects(
+      env.client.call(MANAGER_METHOD.resetCancel, { managerId: env.manager.id }),
+      (error: any) => error.data?.litch === 'managerResetBusy',
+    )
+    await env.client.call('thread/resume', { threadId: env.oldId })
+    await env.client.call(ATTACHMENT_WATCH_METHOD, { threadId: env.oldId, open: true })
+  } finally {
+    await env.close()
+  }
+})
+
+test('设备重启仍在 waiting 时可订阅，回合结束后后台任务不阻止 Claude 刷新', async () => {
+  const env = await setup('claude-code')
+  let restarted: ReturnType<typeof rig> | undefined
+  try {
+    await env.client.call('turn/start', { threadId: env.oldId, input: [] })
+    await env.client.call(MANAGER_METHOD.reset, { managerId: env.manager.id })
+    await env.device.close()
+    restarted = rig({ 'claude-code': env.engine }, {}, { stateDir: env.stateDir })
+    restarted.device.sessionTree.host.backgroundRunning = () => 1
+    const client = restarted.connect()
+    await client.initialize(['harness', 'litchManager', 'fileAttachments'])
+    await client.call('thread/resume', { threadId: env.oldId })
+    await client.call(ATTACHMENT_WATCH_METHOD, { threadId: env.oldId, open: true })
+    assert.equal(restarted.device.managers.manager(env.manager.id).reset?.phase, 'waiting')
+    env.engine.end(env.oldId, 'completed', '重启后回合结束')
+    await until(
+      () => restarted!.device.managers.manager(env.manager.id).reset?.phase === 'ready',
+      '恢复刷新',
+      5000,
+    )
+    await client.call('turn/start', { threadId: env.oldId, input: [] })
+  } finally {
+    await restarted?.device.close()
+    await env.close()
+  }
+})
+
+test('设备重启自动续做持久化 waiting，未有客户端连接也完成刷新', async () => {
+  const env = await setup('claude-code')
+  let restarted: ReturnType<typeof rig> | undefined
+  try {
+    const previous = env.device.managers.store.reset(env.manager.id)
+    env.device.managers.store.saveReset({
+      managerId: env.manager.id,
+      oldThreadId: env.oldId,
+      phase: 'waiting',
+      applied: previous?.applied ?? null,
+    })
+    await env.device.close()
+    // 先恢复设备但不建立客户端连接；构造后的微任务读取持久化意图。
+    restarted = rig({ 'claude-code': env.engine }, {}, { stateDir: env.stateDir })
+    restarted.device.sessionTree.host.backgroundRunning = () => 1
+    await until(
+      () => restarted?.device.managers.manager(env.manager.id).reset?.phase === 'ready',
+      '无需客户端询问的恢复',
+      5000,
+    )
+  } finally {
+    await restarted?.device.close()
     await env.close()
   }
 })

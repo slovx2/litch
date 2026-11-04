@@ -2109,6 +2109,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   })
 
   const live = createLiveSessions({
+    beforeInput: (sessionId) => managers.beforeInput(sessionId),
     recoverySupported: () => mode === 'full' && recoverySupported,
     deviceId: config.id,
     clock: options.clock,

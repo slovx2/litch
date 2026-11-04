@@ -24,14 +24,18 @@ export const enManager = {
     'This manager session was reset. This conversation is read-only history.',
 
   'manager.reset': 'Reset manager session',
-  'manager.resetWaiting': 'Waiting for the manager turn and background tasks to finish',
+  'manager.resetWaiting': 'Refreshing manager capabilities after the current turn finishes',
+  'manager.resetWaitingReplace':
+    'Waiting for the manager turn, background tasks and questions to finish. You can cancel the reset.',
+  'manager.resetApplying': 'The manager reset is being applied. Continue when it finishes.',
+  'manager.resetCancel': 'Cancel reset',
   'manager.resetOutdated': 'Reset manager session: new capabilities available',
   'manager.resetNote':
-    'Reset to install the latest tools and instructions. The reset waits for the manager’s turn and background tasks to finish. Worklines keep running.',
+    'Reset to install the latest tools and instructions. You can cancel while waiting; sending a message cancels the pending reset and continues the conversation. Worklines keep running.',
   'manager.resetRefresh':
-    'The current conversation and full history are preserved. New capabilities take effect on the next turn.',
+    'Keeps the conversation and full history. Only the current turn needs to finish; background tasks can keep running. New capabilities take effect on the next turn.',
   'manager.resetReplace':
-    'A new session will take over. The old conversation remains as read-only history. Only the handover summary and board carry over; other conversation details will not be included.',
+    'Waits for the manager turn, background tasks and questions to finish, then creates a new session. The old conversation remains read-only; only the handover summary and board carry over. Cancellation is unavailable once summarizing starts.',
   'manager.resetSummaryFailed': 'The handover summary failed. Continue using only the board?',
   'manager.resetBoardOnly': 'Continue with board only',
 

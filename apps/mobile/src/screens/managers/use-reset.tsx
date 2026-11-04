@@ -4,6 +4,7 @@ import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Confirm, type SheetAction } from '../../ui/kit/overlays'
+import type { HeaderAction } from '../../ui/kit/Screen'
 import { managerResetState } from './reset'
 
 export function useManagerReset(manager: ManagerView, online: boolean) {
@@ -49,7 +50,39 @@ export function useManagerReset(manager: ManagerView, online: boolean) {
       setOpen(true)
     },
   }
+  const cancel = async () => {
+    if (state.cancelDisabled || submitting.current) return
+    submitting.current = true
+    setSending(true)
+    setError('')
+    try {
+      await channel.command('managers.reset.cancel', {
+        deviceId: manager.deviceId,
+        managerId: manager.id,
+      })
+    } catch (cause) {
+      setError(whyNot(cause, t))
+      setOpen(true)
+    } finally {
+      submitting.current = false
+      setSending(false)
+    }
+  }
+  const cancelActions: HeaderAction[] = state.cancellable
+    ? [
+        {
+          label: '×',
+          accessibilityLabel: t('manager.resetCancel'),
+          testID: 'manager:reset-cancel',
+          disabled: state.cancelDisabled,
+          onPress: () => {
+            void cancel()
+          },
+        },
+      ]
+    : []
   return {
+    cancelActions,
     attention: state.attention,
     menu: manager.status === 'active' ? [action] : [],
     overlay: (
