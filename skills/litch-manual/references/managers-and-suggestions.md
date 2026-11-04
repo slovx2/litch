@@ -10,6 +10,12 @@ Managers maintain the situation in short Markdown sections: In progress, Waiting
 Updates accept at most 1000 Unicode characters including markup; longer updates report their length
 and the limit. Existing longer situations remain readable in full.
 
+概览不再显示时间线。时间线没有独立写入工具或数据表；看板审计和工作线报告继续保存，
+供问题历史、答复恢复和旧客户端读取。无需再要求经理维护时间线。
+
+The overview no longer shows a timeline. There is no separate timeline tool or store. Board audit
+records and workline reports remain available for issue history, answer recovery and older clients.
+
 ### 工作线问题的代答与撤回 / Settling workline questions
 
 经理可通过 `litch_sessions.read` 查看 `pending_questions`，再以稳定的 `id` 调用

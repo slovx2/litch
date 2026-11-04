@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import test from 'node:test'
-import { managerRoleRules } from '../../protocol/src/client-tools-manager.mjs'
+import { MANAGER_TOOLS, managerRoleRules } from '../../protocol/src/client-tools-manager.mjs'
 import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
@@ -34,6 +34,14 @@ const manager = (id: string): Manager => ({
   pendingDecisions: 0,
   runningLines: 0,
   latestActivity: null,
+})
+
+test('时间线没有独立写入工具；概览停用不影响审计契约', () => {
+  assert.equal(
+    MANAGER_TOOLS.tools.some((tool) => /timeline|activity/.test(tool.name)),
+    false,
+  )
+  assert.doesNotMatch(managerRoleRules(''), /maintain.*timeline/i)
 })
 
 test('现状：1000 字符边界、拒绝时报告长度、历史不截断、提示词要求维护', () => {
