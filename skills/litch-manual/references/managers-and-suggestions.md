@@ -528,6 +528,8 @@ same.
 
 桌面看板跟随“对话区字号”，包括概览、控制台、正文和追问。帖子标题旁的箭头可收起正文，保留标题、首行摘要和状态；已处理的决策、请你做、已阅报告和历史建议默认收起。开合选择在当前客户端会话中按帖子记住。帖子变更历史在展开时显示正文。
 
+桌面和手机的分页看板按设备、经理、页签、状态筛选和排序分别记住展开的卡片与滚动位置；切换后返回、离开经理再返回均会恢复。每个列表最多展开一张卡，列表和详情加载完成后恢复位置；原卡已处理或不在当前筛选中时保持收起，滚动到原位置附近。阅读位置与对话滚动一样仅保留在当前客户端会话内，重启后不保留；排序偏好仍保存在本机。
+
 控制台卡片标题行的讨论图标显示回复数；当前客户端内新到的回复、等待回复或未发出的追问带小点。点开后，全部问答按时间排在看板底部分屏，卡片列表独立滚动，当前卡片有选中记号。一次只打开一条讨论，换帖子会替换内容。拖动分隔条调整高度并保存在本机；聚焦分隔条后也可用上下方向键调整。点标题回到卡片，点关闭图标或按 Esc 关闭，未发出的草稿保留。窄窗口仍为卡片列表留出空间。
 
 手机使用半屏底部抽屉，向上拖把手或点展开图标可到全屏，向下拖可收回半屏、再拖关闭；点标题关闭并回到卡片。两端的讨论默认展开，也可手动收起并记住。追问默认发到已有临时会话，没有临时问答时发给经理，输入框旁可切换。原来的草稿计数、随答复提交和已结束议题的草稿规则不变。全局建议窗口中的内嵌讨论仍在超过 1200 字符时默认收起。
@@ -537,6 +539,8 @@ same.
 临时对话下方的“转给经理”按钮带发送图标，悬停说明会发送本议题的完整问答记录。转交的消息显示议题编号、标题和各方发言，请经理继续解答，不代表决策答复或执行授权。
 
 The desktop board follows the conversation text size, including overview, console, posts and questions. A chevron beside each post title collapses its body while keeping the title, first-line summary and status. Handled decisions and requests, read reports and historical suggestions start collapsed. Each choice is remembered for the current client session.
+
+On desktop and mobile, paged boards remember the expanded card and scroll position separately for each device, manager, tab, status filter and sort order. Returning to a tab or manager restores its position after the list and card details load. Each list keeps at most one card expanded. If the card is no longer in the list, it stays collapsed and the list returns as close as possible to the previous position. Like conversation scroll positions, this reading state lasts for the current client session; the sort preference remains saved locally.
 
 The discussion icon in each console card header shows its reply count. A dot indicates a new reply received in this client session, a pending reply or an unsent question. Open it to read all questions and answers chronologically in a pane below the board. The card list scrolls independently and highlights the selected card. Opening another post replaces the single pane. Drag its separator to resize it; the height is saved locally. The focused separator also accepts the Up and Down keys. Select the title to return to the card, or close with the icon or Esc. Drafts survive closing, and narrow windows retain space for the card list.
 

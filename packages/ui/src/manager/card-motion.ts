@@ -201,7 +201,10 @@ function play(root: HTMLElement, before: Snapshot, anchor: string | null) {
   }
   const node = anchor ? after.nodes.get(anchor)?.node : undefined
   const from = before.boxes.find(([key]) => key === anchor)?.[1]
-  if (!node || !from || !host) return
+  const cancel = () => {
+    for (const animation of running) animation.cancel()
+  }
+  if (!node || !from || !host) return cancel
   // 被点的卡留在原处：其他卡收起或展开时逐帧补偿滚动，接管期间关掉浏览器自带的滚动锚定免得补两次
   /** 最近一次补偿后的滚动位置：和它对不上说明用户自己滚了，停止补偿 */
   let held = host.scrollTop
@@ -235,11 +238,18 @@ function play(root: HTMLElement, before: Snapshot, anchor: string | null) {
   }
   requestAnimationFrame(tick)
   void Promise.allSettled(running.map((animation) => animation.finished)).then(() => {
+    if (done) return
     done = true
     hold()
     host.style.overflowAnchor = anchoring
     settle()
   })
+  return () => {
+    done = true
+    live = false
+    host.style.overflowAnchor = anchoring
+    cancel()
+  }
 }
 
 /**
@@ -252,22 +262,41 @@ export function useCardMotion(
   scope: string,
   signature: string,
   anchor?: { current: string | null },
+  enabled = true,
 ) {
   const last = useRef<{ scope: string; signature: string } | null>(null)
   const pending = useRef<Snapshot | null>(null)
+  const stop = useRef<(() => void) | undefined>(undefined)
   const previous = last.current
   if (!previous || previous.scope !== scope || previous.signature !== signature) {
     // 渲染时 DOM 还是上一版：在这里量旧几何（只读，重复渲染也无妨）
-    pending.current = previous?.scope === scope && root.current ? measure(root.current) : null
+    pending.current =
+      enabled && previous?.scope === scope && root.current ? measure(root.current) : null
     last.current = { scope, signature }
   }
   useLayoutEffect(() => {
+    if (!enabled) {
+      pending.current = null
+      last.current = null
+    }
     const snapshot = pending.current
     const held = anchor?.current ?? null
     pending.current = null
     if (anchor) anchor.current = null
-    if (snapshot && root.current) play(root.current, snapshot, held)
+    if (snapshot && root.current) {
+      stop.current?.()
+      stop.current = play(root.current, snapshot, held)
+    }
   })
+  // 切页签和卸载时结束旧补偿，不能在新页签恢复后继续修改共用滚动容器。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scope 是过渡的归属，不是回调内读取的数据。
+  useLayoutEffect(
+    () => () => {
+      stop.current?.()
+      stop.current = undefined
+    },
+    [scope],
+  )
 }
 
 /** 整卡点击里不算开合的部分：控件、链接、可编辑区和显式排除的元素 */

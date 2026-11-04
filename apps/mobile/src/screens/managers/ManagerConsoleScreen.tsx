@@ -24,6 +24,10 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native'
+import {
+  type BoardPageMemory,
+  managerBoardMemory,
+} from '../../../../../packages/core/src/manager-board-memory.mts'
 import { pagedDraftBoard } from '../../../../../packages/core/src/projection/manager-drafts.mts'
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
 import { sessionMark } from '../../../../../packages/ui/src/sidebar/session-mark.ts'
@@ -102,7 +106,16 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const device = useKey<{ connection?: string }>(keys.device(deviceId))
   const reset = useManagerReset(manager, device?.connection === 'online')
   const order = useIssueOrder()
-  const [kind, setKind] = useState<Category>('decision')
+  const memory = managerBoardMemory(deviceId, managerId)
+  const [, renderKind] = useState(0)
+  const kind = memory.category
+  const setKind = useCallback(
+    (kind: Category) => {
+      memory.category = kind
+      renderKind((value) => value + 1)
+    },
+    [memory],
+  )
   const [ordering, setOrdering] = useState(false)
   const [talkId, setTalkId] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
@@ -112,15 +125,45 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const itemsAt = useRef(0)
   const scroll = useRef<ScrollView>(null)
   const locator = useRef<((from: number) => number | null) | null>(null)
-  const pagingPositions = useRef(new Map<string, number>())
-  const pagingScroll = useRef({ key: '', y: 0 })
-  const pagingQuery = useCallback((key: string) => {
-    if (pagingScroll.current.key === key) return
-    pagingPositions.current.set(pagingScroll.current.key, pagingScroll.current.y)
-    const y = pagingPositions.current.get(key) ?? 0
-    pagingScroll.current = { key, y }
-    requestAnimationFrame(() => scroll.current?.scrollTo({ y, animated: false }))
+  const [restoringBoard, setRestoringBoard] = useState(false)
+  const pagingScroll = useRef<{
+    memory: BoardPageMemory | null
+    y: number
+    ready: boolean
+    pending: boolean
+  }>({ memory: null, y: 0, ready: false, pending: true })
+  // 对话页会隐藏并缩短看板容器；期间的原生滚动归零不是新的阅读位置。
+  if (tab === 'chat') {
+    pagingScroll.current.pending = true
+    pagingScroll.current.ready = false
+  }
+  const restoreBoard = useCallback(() => {
+    const state = pagingScroll.current
+    if (!state.pending || !state.ready || !state.memory) return
+    scroll.current?.scrollTo({ y: state.memory.y, animated: false })
+    // 原生布局完成再显露；异步 scroll 事件在恢复期间不能把旧页签的坐标写进新页签。
+    requestAnimationFrame(() => {
+      if (pagingScroll.current !== state || !state.ready) return
+      scroll.current?.scrollTo({ y: state.memory?.y ?? 0, animated: false })
+      state.y = state.memory?.y ?? 0
+      state.pending = false
+      setRestoringBoard(false)
+    })
   }, [])
+  const pagingQuery = useCallback(
+    (memory: BoardPageMemory, ready: boolean) => {
+      const state = pagingScroll.current
+      if (state.memory !== memory) {
+        pagingScroll.current = { memory, y: memory.y, ready, pending: true }
+        setRestoringBoard(true)
+      } else {
+        state.ready = ready
+        if (state.pending) setRestoringBoard(true)
+      }
+      requestAnimationFrame(restoreBoard)
+    },
+    [restoreBoard],
+  )
   useEffect(() => {
     if (!pagingOn || !sheet) return
     void channel
@@ -167,7 +210,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
       setTab('console')
       scroll.current?.scrollTo({ y: 0, animated: false })
     },
-    [setTab],
+    [setTab, setKind],
   )
   // 路由带来的议题（经理事件、工作线回经理、链接）：定位后清掉，免得返回时又跳一次
   const routeIssue = route.params.issue
@@ -451,9 +494,13 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
           <ScrollView
             testID="manager-board-scroll"
             ref={scroll}
-            style={styles.fill}
+            style={[styles.fill, restoringBoard && { opacity: 0 }]}
+            onContentSizeChange={restoreBoard}
             onScroll={(event) => {
-              pagingScroll.current.y = event.nativeEvent.contentOffset.y
+              const state = pagingScroll.current
+              if (state.pending) return
+              state.y = event.nativeEvent.contentOffset.y
+              if (state.memory) state.memory.y = state.y
             }}
             scrollEventThrottle={32}
           >

@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process'
 import { globSync, mkdtempSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { checkBoardMemory, checkMobileBoardMemory } from './check-board-memory.mjs'
 import { Cdp, until } from './chrome-m0/cdp.mjs'
 import { installManagerBoardMobileFixture } from './manager-board-mobile-fixture.mjs'
 
@@ -230,6 +231,7 @@ try {
     await click(selector)
     assert.equal(await read(`!!document.querySelector('[data-testid="manager-issue:R-2"]')`), false)
     console.log('手机正式页面：原位展开、卡头位置、内部控件、链接单处显示通过')
+    await checkMobileBoardMemory({ read, click })
   } else {
     await wait('[data-paging-object="R-2"]')
     const before = await read(
@@ -507,6 +509,7 @@ try {
       console.log('整卡点击、展开时被点的卡留在原处、提交后收拢补位、减少动态通过')
     }
   }
+  if (!mobile) await checkBoardMemory({ call, read, click })
 } finally {
   cdp?.close()
   for (const child of [browser, server])

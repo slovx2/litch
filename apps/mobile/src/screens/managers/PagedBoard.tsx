@@ -15,6 +15,11 @@ import {
 } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import {
+  type BoardPageMemory,
+  boardPageMemory,
+  managerBoardMemory,
+} from '../../../../../packages/core/src/manager-board-memory.mts'
+import {
   type ManagerDraftMark,
   pagedDraftBoard,
 } from '../../../../../packages/core/src/projection/manager-drafts.mts'
@@ -62,7 +67,7 @@ export function PagedBoard({
   target: string | null
   suggestions: readonly SuggestionView[]
   onLine(id: string, title?: string): void
-  onQuery(key: string): void
+  onQuery(memory: BoardPageMemory, ready: boolean): void
   onDetail(y: number, relative?: boolean): void
   /** 底部提交条点草稿数时问这里：当前滚动位置之后下一张有草稿的卡在哪，到底了回到第一张 */
   locator?: MutableRefObject<((from: number) => number | null) | null>
@@ -73,15 +78,37 @@ export function PagedBoard({
   const board = view.board
   const paging = view.paging
   const order = useIssueOrder()
-  const [items, setItems] = useState(false)
+  const memory = managerBoardMemory(manager.deviceId, manager.id)
+  const [, renderMemory] = useState(0)
+  const items = memory.items
+  const setItems = (value: boolean) => {
+    memory.items = value
+    renderMemory((value) => value + 1)
+  }
   const kind: ManagerPageKind = tab === 'overview' ? 'item' : category
-  const [filters, setFilters] = useState<Record<string, string>>({})
-  const status = filters[kind] ?? managerPageStates[kind][0]
+  const status = memory.filters[kind] ?? managerPageStates[kind][0]
   const query = useMemo(() => ({ kind, status, order }), [kind, status, order])
   const key = managerPageKey(query)
   const page = paging.pages[key]
-  const [selected, setSelected] = useState<ManagerObjectId | null>(null)
-  const [linked, setLinked] = useState(false)
+  const reading = boardPageMemory(
+    memory,
+    tab,
+    tab === 'console' || (tab === 'overview' && items) ? key : '',
+  )
+  const selected = reading.selected
+  const setSelected = useCallback(
+    (id: ManagerObjectId | null) => {
+      reading.selected = id
+      renderMemory((value) => value + 1)
+    },
+    [reading],
+  )
+  const [linkedPage, setLinkedPage] = useState<BoardPageMemory | null>(null)
+  const linked = linkedPage === reading
+  const setLinked = useCallback(
+    (value: boolean) => setLinkedPage(value ? reading : null),
+    [reading],
+  )
   const [talking, setTalking] = useState(false)
   const [error, setError] = useState('')
   const positions = useRef(new Map<string, number>())
@@ -101,7 +128,7 @@ export function PagedBoard({
       setSelected(id)
       invoke(channel.command('managers.board.detail', { ...address, id }))
     },
-    [invoke, channel, address],
+    [invoke, channel, address, setSelected],
   )
   const list = tab === 'console' || (tab === 'overview' && items)
   useLayoutEffect(() => {
@@ -109,20 +136,53 @@ export function PagedBoard({
     focused.current = null
     positions.current.clear()
     setLinked(false)
-    onQuery(`${tab}/${key}`)
     if (list) invoke(channel.command('managers.board.page', { ...address, ...query }))
-  }, [key, list, tab, onQuery, invoke, channel, address, query])
+  }, [list, tab, invoke, channel, address, query, setLinked])
+  const locatedTarget = useRef<string | null>(null)
   useEffect(() => {
-    if (target) {
+    if (target && locatedTarget.current !== target) {
+      // 先进入事项列表，再把目标写进该列表的记忆，不能写进概览摘要的格子。
+      if (target.startsWith('I-') && !items) {
+        memory.items = true
+        renderMemory((value) => value + 1)
+        return
+      }
       setLinked(true)
-      if (target.startsWith('I-')) setItems(true)
       open(target as ManagerObjectId)
     }
-  }, [target, open])
+    locatedTarget.current = target
+  }, [target, open, memory, setLinked, items])
   const active =
     selected && (linked || page?.entries.some((head) => head.id === selected)) ? selected : null
   const post = board.posts?.find((post) => post.id === active)
   const item = board.items.find((item) => item.id === active)
+  const [detailAttempt, setDetailAttempt] = useState<ManagerObjectId | null>(null)
+  useEffect(() => {
+    if (selected && page && !linked && !page.entries.some((head) => head.id === selected))
+      setSelected(null)
+  }, [selected, page, linked, setSelected])
+  useEffect(() => {
+    if (!active || post || item) return
+    let live = true
+    void channel.command('managers.board.detail', { ...address, id: active }).then(
+      () => {},
+      (error) => {
+        if (live) {
+          setError(String(error))
+          setDetailAttempt(active)
+        }
+      },
+    )
+    return () => {
+      live = false
+    }
+  }, [active, post, item, channel, address])
+  const ready =
+    (!list || Boolean(page) || Boolean(error || paging.error)) &&
+    (!active || Boolean(post || item) || detailAttempt === active)
+  useLayoutEffect(() => {
+    if (tab !== 'chat') onQuery(reading, ready)
+  }, [tab, reading, ready, onQuery])
   const history = active ? paging.histories[active] : undefined
   const draftBoard = useMemo(
     () =>
@@ -315,7 +375,8 @@ export function PagedBoard({
                 testID={`paging-filter:${filter}`}
                 onPress={() => {
                   setLinked(false)
-                  setFilters({ ...filters, [kind]: filter })
+                  memory.filters[kind] = filter
+                  renderMemory((value) => value + 1)
                 }}
                 style={{
                   minHeight: hit,

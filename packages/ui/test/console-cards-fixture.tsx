@@ -55,20 +55,69 @@ if (params.has('drafts'))
 /** ?settle=1：提交后像设备那样稍后推来新看板，交掉的决策离开待定 */
 function Board() {
   const [current, setCurrent] = useState(view)
+  const [tab, setTab] = useState(params.get('tab') ?? 'requests')
+  const [other, setOther] = useState(false)
+  const [mounted, setMounted] = useState(true)
   useEffect(() => {
     if (!params.has('settle')) return
     fixture.state.onSubmit = (ids) => setTimeout(() => setCurrent(fixture.settle(ids)), 50)
   }, [])
   return (
-    <PagedBoard
-      manager={manager}
-      view={current as any}
-      tab={params.get('tab') ?? 'requests'}
-      disabled={false}
-      target={null}
-      onLocated={() => {}}
-      onSuggestionSource={() => {}}
-    />
+    <>
+      {params.has('memory') ? (
+        <nav style={{ position: 'fixed', top: 520 }}>
+          <button type="button" data-memory-tab="decisions" onClick={() => setTab('decisions')}>
+            决策
+          </button>
+          <button type="button" data-memory-tab="requests" onClick={() => setTab('requests')}>
+            请求
+          </button>
+          <button type="button" data-memory-manager onClick={() => setOther(!other)}>
+            切经理
+          </button>
+          <button type="button" data-memory-mount onClick={() => setMounted(!mounted)}>
+            离开或返回
+          </button>
+          <button
+            type="button"
+            data-memory-delay
+            onClick={() => {
+              setMounted(false)
+              const missing = {
+                ...view,
+                board: { ...board, posts: [] },
+                paging: { ...view.paging, pages: {} },
+              }
+              setCurrent(missing as typeof view)
+              setTimeout(() => setMounted(true), 20)
+              setTimeout(() => setCurrent({ ...view, board: { ...board, posts: [] } }), 100)
+              setTimeout(() => setCurrent(view), 450)
+            }}
+          >
+            延迟列表与详情
+          </button>
+          <button
+            type="button"
+            data-memory-remove
+            onClick={() => setCurrent(fixture.settle(['D-2']))}
+          >
+            移除 D-2
+          </button>
+        </nav>
+      ) : null}
+      {mounted ? (
+        <PagedBoard
+          key={other ? 'other' : 'first'}
+          manager={other ? { ...manager, id: 'other-manager' } : manager}
+          view={current as any}
+          tab={tab}
+          disabled={false}
+          target={null}
+          onLocated={() => {}}
+          onSuggestionSource={() => {}}
+        />
+      ) : null}
+    </>
   )
 }
 createRoot(document.getElementById('root')!).render(

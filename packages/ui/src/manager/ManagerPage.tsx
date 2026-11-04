@@ -7,6 +7,7 @@ import {
   suggestionCount,
 } from '@litch/core'
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { managerBoardMemory } from '../../../core/src/manager-board-memory.mts'
 import type {
   ManagerDecisionId,
   ManagerItemId,
@@ -109,7 +110,7 @@ export function ManagerPage({
   const requestLocated = useCallback(() => setRequestTarget(null), [])
   const openReference = (id: BoardReference) => {
     if (view?.paging) setPagingTarget(id)
-    if (boardBody.current) boardBody.current.scrollTop = 0
+    if (boardBody.current && !view?.paging) boardBody.current.scrollTop = 0
     setBoardLayout({ open: true })
     if (id.startsWith('P-') || id.startsWith('S-')) {
       onLocation({
@@ -117,6 +118,7 @@ export function ManagerPage({
         tab: id.startsWith('P-') ? 'reports' : 'suggestions',
         narrow: 'board',
       })
+      if (view?.paging) return
       setTimeout(() => {
         const card = page.current?.querySelector<HTMLElement>(
           id.startsWith('P-') ? `[data-report="${id}"]` : `[data-proposal="${id.slice(2)}"]`,
@@ -146,9 +148,27 @@ export function ManagerPage({
     window.addEventListener('litch-manager-issue', listener)
     return () => window.removeEventListener('litch-manager-issue', listener)
   })
-  const [inboxTab, setInboxTab] = useState<'decisions' | 'suggestions' | 'requests' | 'reports'>(
-    'decisions',
-  )
+  const reading = managerBoardMemory(manager.deviceId, manager.id)
+  const [, renderCategory] = useState(0)
+  const inboxTab = (
+    {
+      decision: 'decisions',
+      suggestion: 'suggestions',
+      request: 'requests',
+      report: 'reports',
+    } as const
+  )[reading.category]
+  const setInboxTab = (tab: 'decisions' | 'suggestions' | 'requests' | 'reports') => {
+    reading.category = (
+      {
+        decisions: 'decision',
+        suggestions: 'suggestion',
+        requests: 'request',
+        reports: 'report',
+      } as const
+    )[tab]
+    renderCategory((value) => value + 1)
+  }
   const activeTab = tab === 'inbox' ? inboxTab : tab
   // 控制台帖子的讨论在看板底部分屏里看：一次只开一个，换帖子就换内容
   const [talk, setTalk] = useState<string | null>(null)

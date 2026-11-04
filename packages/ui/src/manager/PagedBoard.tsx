@@ -1,5 +1,6 @@
 import { managerBoardPages } from '@litch/core'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { boardPageMemory, managerBoardMemory } from '../../../core/src/manager-board-memory.mts'
 import type {
   ManagerBoardTopicView,
   ManagerObjectId,
@@ -26,6 +27,7 @@ import { ManagerSuggestions } from '../tree/SuggestionsPage.tsx'
 import { Activity } from './Activity.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardPanels, Item } from './BoardPanels.tsx'
+import { useBoardScroll } from './board-memory.ts'
 import { useCardMotion, useCardPress } from './card-motion.ts'
 import { Decisions } from './Decisions.tsx'
 import { useAnswerDrafts } from './drafts.ts'
@@ -69,19 +71,32 @@ export function PagedBoard({
   const board = view.board
   const order = useIssueOrder()
   const kind = kinds[tab] ?? 'decision'
-  const [filters, setFilters] = useState<Record<string, string>>({})
-  const status = filters[kind] ?? managerPageStates[kind][0]
+  const memory = managerBoardMemory(manager.deviceId, manager.id)
+  const [, renderMemory] = useState(0)
+  const status = memory.filters[kind] ?? managerPageStates[kind][0]
   const query = useMemo(() => ({ kind, status, order }), [kind, status, order])
   const key = managerPageKey(query)
   const page = paging.pages[key]
-  const [selected, setSelected] = useState<ManagerObjectId | null>(null)
-  const [linked, setLinked] = useState(false)
+  const reading = boardPageMemory(memory, tab, kinds[tab] ? key : '')
+  const selected = reading.selected
+  const setSelected = useCallback(
+    (id: ManagerObjectId | null) => {
+      reading.selected = id
+      renderMemory((value) => value + 1)
+    },
+    [reading],
+  )
+  const [linkedPage, setLinkedPage] = useState<typeof reading | null>(null)
+  const linked = linkedPage === reading
+  const setLinked = useCallback(
+    (value: boolean) => setLinkedPage(value ? reading : null),
+    [reading],
+  )
   const [error, setError] = useState('')
   const root = useRef<HTMLDivElement>(null)
   /** 点开或收起的那张卡：这一轮过渡让它留在原处 */
   const anchor = useRef<string | null>(null)
   const press = useCardPress()
-  const positions = useRef(new Map<string, number>())
   const address = useMemo(
     () => ({ deviceId: manager.deviceId, managerId: manager.id }),
     [manager.deviceId, manager.id],
@@ -100,34 +115,50 @@ export function PagedBoard({
       setSelected(id)
       invoke(channel.command('managers.board.detail', { ...address, id }))
     },
-    [invoke, channel, address],
+    [invoke, channel, address, setSelected],
   )
   useEffect(() => {
     setLinked(false)
     if (kinds[tab]) invoke(channel.command('managers.board.page', { ...address, ...query }))
-  }, [tab, invoke, channel, address, query])
+  }, [tab, invoke, channel, address, query, setLinked])
   useEffect(() => {
     if (target) {
       setLinked(true)
       open(target)
       onLocated()
     }
-  }, [target, open, onLocated])
-  useLayoutEffect(() => {
-    const host = root.current?.closest('.mg-body')
-    if (!host) return
-    const positionKey = `${tab}/${key}`
-    host.scrollTop = positions.current.get(positionKey) ?? 0
-    const remember = () => positions.current.set(positionKey, host.scrollTop)
-    host.addEventListener('scroll', remember)
-    return () => {
-      host.removeEventListener('scroll', remember)
-    }
-  }, [tab, key])
+  }, [target, open, onLocated, setLinked])
   const active =
     selected && (linked || page?.entries.some((head) => head.id === selected)) ? selected : null
   const post = board.posts?.find((post) => post.id === active)
   const item = board.items.find((item) => item.id === active)
+  const [detailAttempt, setDetailAttempt] = useState<ManagerObjectId | null>(null)
+  useEffect(() => {
+    if (selected && page && !linked && !page.entries.some((head) => head.id === selected))
+      setSelected(null)
+  }, [selected, page, linked, setSelected])
+  useEffect(() => {
+    if (!active || post || item) return
+    let live = true
+    void channel.command('managers.board.detail', { ...address, id: active }).then(
+      () => {},
+      (error) => {
+        if (live) {
+          setError(reasonOf(error, t))
+          setDetailAttempt(active)
+        }
+      },
+    )
+    return () => {
+      live = false
+    }
+  }, [active, post, item, channel, address, t])
+  const restoring = useBoardScroll(
+    root,
+    reading,
+    (!kinds[tab] || Boolean(page) || Boolean(error || paging.error)) &&
+      (!active || Boolean(post || item) || detailAttempt === active),
+  )
   const pages = managerBoardPages(board)
   const history = active ? paging.histories[active] : undefined
   const { drafts: answerDrafts } = useAnswerDrafts(manager.deviceId, manager.id)
@@ -181,7 +212,7 @@ export function PagedBoard({
   // 展开哪张、详情到没到、卡片增减都过渡；换页签或筛选不过渡
   useCardMotion(
     root,
-    `${tab}|${key}`,
+    JSON.stringify([manager.deviceId, manager.id, tab, key]),
     [
       active,
       Boolean(post || item),
@@ -189,6 +220,7 @@ export function PagedBoard({
       ...(page?.entries.map((head) => head.id) ?? []),
     ].join('|'),
     anchor,
+    !restoring,
   )
   const activeRevision =
     page?.entries.find((head) => head.id === active)?.revision ??
@@ -291,7 +323,12 @@ export function PagedBoard({
   ) : null
   const lines = paging.summary.lines
   return (
-    <div ref={root} className="mg-stack" data-manager-paging>
+    <div
+      ref={root}
+      className="mg-stack"
+      data-manager-paging
+      style={{ visibility: restoring ? 'hidden' : undefined }}
+    >
       {error || paging.error ? (
         <p role="alert" className="err">
           {error || paging.error}
@@ -373,7 +410,8 @@ export function PagedBoard({
                 data-paging-filter={filter}
                 aria-pressed={filter === status}
                 onClick={() => {
-                  setFilters({ ...filters, [kind]: filter })
+                  memory.filters[kind] = filter
+                  renderMemory((value) => value + 1)
                   setLinked(false)
                 }}
               >
