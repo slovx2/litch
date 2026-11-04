@@ -574,8 +574,13 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
   const { replica } = useServices()
   // 读取失败后点“重试”：把订阅关掉再开一次
   const [attempt, setAttempt] = useState(0)
+  // 新建页预取的内容在首帧就会显示；布局提交时先接手订阅，不能等被动 effect。
+  // 否则预取的零延时释放可能先归零引用，清空会话并卸载刚出现的提问卡。
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt 变了就是要重新订阅
-  useEffect(() => replica.openSession(deviceId, sessionId), [replica, deviceId, sessionId, attempt])
+  useLayoutEffect(
+    () => replica.openSession(deviceId, sessionId),
+    [replica, deviceId, sessionId, attempt],
+  )
   // 状态库的通知是同步更新。把历史渲染降为可中断任务，先让侧栏完成选中和后续点击。
   const loadedTurns = useKey<string[]>(keys.turnIds(deviceId, sessionId))
   const allTurns = useDeferredValue(loadedTurns)

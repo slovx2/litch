@@ -48,7 +48,15 @@ export interface PlanProbe {
    */
   engine: { card: boolean; noAsk: boolean; offAfterYes: boolean; quietAfterNo: boolean } | null
   /** 新建对话页上打开计划模式再发第一条：建出来的会话在计划模式里，出了计划。只在模拟核心上量 */
-  fresh: { button: boolean; planned: boolean; on: boolean } | null
+  fresh: {
+    button: boolean
+    planned: boolean
+    on: boolean
+    /** 新会话首帧出现后，订阅接手不能让正文与输入区中途消失 */
+    handoff: boolean
+    /** 引擎提问时必须收到具体答复的回显；引擎未提问则为 null */
+    replied: boolean | null
+  } | null
   /**
    * 样子，一种一行：“皮肤/明暗｜横向溢出的像素｜岔子｜对比度：开着的开关上的字、那一问的标题、那一问的说明”。
    * 只在模拟核心上量
@@ -442,15 +450,47 @@ export async function planProbe(real: boolean): Promise<PlanProbe> {
       60_000,
     )
     await until('新会话里的计划', () => plans() > 0, 60_000).catch(() => null)
-    fresh = { button: had, planned: plans() > 0, on: on() }
-    // 建在 Claude Code 上的话它会接着问：答掉，别留着
-    const pending = await until('这一轮停下来', () => one('.req') || !running(), 60_000)
-    if (pending instanceof HTMLElement && pending.classList.contains('req')) {
-      pending.focus()
-      press(pending, '2')
-      await until('提问卡片消失', () => !one('.req'), 60_000)
+    const turn = all('.turn').at(-1)
+    const composer = area()?.closest('[data-composer-session]')
+    let handoff = Boolean(turn && composer)
+    const checkHandoff = () => {
+      handoff &&= turn?.isConnected === true && composer?.isConnected === true
     }
-    await idle()
+    const observer = new MutationObserver(checkHandoff)
+    observer.observe(document.body, { childList: true, subtree: true })
+    fresh = { button: had, planned: plans() > 0, on: on(), handoff, replied: null }
+    try {
+      // 缺少运行标记可能只是视图在重新订阅，必须等提问卡或明确的回合结束标记。
+      const pending = await until(
+        '新会话的计划提问或结束标记',
+        () => card() || turn?.querySelector<HTMLElement>('.turn-foot'),
+        60_000,
+      )
+      if (pending.classList.contains('req')) {
+        fresh.replied = false
+        const choice = await until('继续规划选项可用', () => {
+          const option = pending.querySelector<HTMLButtonElement>('.opt[data-option="1"]')
+          return option && !option.disabled ? option : null
+        })
+        const label = text(choice.querySelector('b'))
+        // 新卡片的键盘 effect 可能还没装好；键盘另有验收，这里点正式按钮并等核心回执。
+        choice.click()
+        await until(
+          '新会话收到继续规划答复',
+          () =>
+            [...(turn?.querySelectorAll('.md') ?? [])].some((node) =>
+              text(node).includes(`→ ${label}`),
+            ),
+          60_000,
+        )
+        fresh.replied = true
+      }
+      await idle()
+    } finally {
+      checkHandoff()
+      fresh.handoff = handoff
+      observer.disconnect()
+    }
   }
 
   return {
@@ -538,6 +578,8 @@ export function judgePlan(probe: PlanProbe, real: boolean): string[] {
   }
   if (probe.fresh) {
     check(probe.fresh.button, '新建对话页上没有计划模式的开关')
+    check(probe.fresh.handoff, '新会话接手期间正文或输入区被卸载')
+    check(probe.fresh.replied !== false, '新会话的计划答复没有收到回执')
     check(
       probe.fresh.planned && probe.fresh.on,
       '新建对话页上开着计划模式发第一条，建出来的会话不在计划模式里',

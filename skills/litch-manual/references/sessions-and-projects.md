@@ -267,6 +267,7 @@ explain it:
   Plan mode switch → send the
   first message. `scripts/litch open new` brings the user to this page.
   新建页开启的计划模式用于新会话的第一条消息。进入会话时按该会话的能力显示对话参数；会话未单独声明能力时沿用 harness 的能力。
+  新建页进入会话时连续保留已收到的正文与提问卡，不因页面交接短暂清空；首个计划问题可直接作答。
 - **Worktrees**: on the New session page, when the project folder is in a git repository on a device
   that supports worktrees, "Where" offers Local (the project folder) or New worktree. A new worktree is
   created by the device service with its own branch (named from the first line of the message), so the
