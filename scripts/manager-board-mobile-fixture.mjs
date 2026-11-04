@@ -4,14 +4,18 @@ import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 
-export async function installManagerBoardMobileFixture({ consoleCards = false } = {}) {
+export async function installManagerBoardMobileFixture({
+  consoleCards = false,
+  drafts = false,
+  port: fixed = 0,
+} = {}) {
   const boot = new URL('../apps/mobile/src/shell/boot.ts', import.meta.url)
   const override = new URL('../apps/mobile/src/shell/boot.web.ts', import.meta.url)
   const fixture = new URL('../apps/mobile/src/preview/ManagerBoardFixture.web.ts', import.meta.url)
   if (existsSync(override) || existsSync(fixture))
     throw new Error('手机看板临时夹具已存在，请先结束上一轮验收')
   let source = readFileSync(boot, 'utf8')
-  source = `import { managerBoardFixture } from '../preview/ManagerBoardFixture.web'\n${source}`
+  source = `import { managerBoardFixture } from '../preview/ManagerBoardFixture.web'\n${drafts ? "import { jsonFile } from './json-file'\n" : ''}${source}`
   source = source.replace(
     'const served = serve(\n      createMockCore({',
     'const fixture = managerBoardFixture(\n      createMockCore({',
@@ -24,6 +28,7 @@ export async function installManagerBoardMobileFixture({ consoleCards = false } 
       }),
       ${consoleCards ? '' : "await fetch('/__manager_board_data').then(r => r.json()),"}
     )
+    ${drafts ? 'for (const [name, value] of Object.entries(fixture.drafts.mobile)) jsonFile(name).write(value)' : ''}
     Object.assign(globalThis, { __managerBoardFixture: fixture.state })
     const served = serve(fixture.core)`,
   )
@@ -52,7 +57,7 @@ export async function installManagerBoardMobileFixture({ consoleCards = false } 
   }
   // Metro 会缓存模块解析；夹具文件必须先创建，再起这一轮专用预览。
   const probe = createServer()
-  await new Promise((resolve) => probe.listen(0, '127.0.0.1', resolve))
+  await new Promise((resolve) => probe.listen(fixed, '127.0.0.1', resolve))
   const port = probe.address().port
   await new Promise((resolve) => probe.close(resolve))
   const server = spawn(

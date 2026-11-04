@@ -4,7 +4,7 @@ import {
   type ManagerBoardPages,
   sortManagerIssues,
 } from '@litch/core'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type {
   ManagerChangeView,
   ManagerDecisionId,
@@ -12,6 +12,7 @@ import type {
   ManagerRequestView,
   ManagerView,
 } from '../../../core/src/model-manager.mts'
+import type { ManagerDraftBoard } from '../../../core/src/projection/manager-drafts.mts'
 import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
@@ -51,6 +52,8 @@ export function Decisions({
   target,
   onLocated,
   onlyId,
+  part = 'all',
+  draftBoard,
 }: {
   manager: ManagerView
   posts: ManagerPost[]
@@ -64,6 +67,10 @@ export function Decisions({
   target: { id: ManagerDecisionId } | null
   onLocated(): void
   onlyId?: string | null
+  /** 分页看板把卡片和提交条分开放：卡片在展开的卡里，提交条固定在列表底部 */
+  part?: 'all' | 'cards' | 'send'
+  /** 分页看板只带点开过的详情，草稿状态改用补了卡头的判断面（core 的 pagedDraftBoard） */
+  draftBoard?: ManagerDraftBoard
 }) {
   const t = useT()
   const { channel } = useServices()
@@ -74,7 +81,7 @@ export function Decisions({
   )
   const { drafts: postDrafts, write: writePosts } = usePostDrafts(manager.deviceId, manager.id)
   // 议题在别处答复、关闭、忽略或取消后，草稿不计数、不提交（卡片上另有提示）；重新打开后自动回来
-  const board = { decisions, changes, requests, posts }
+  const board = draftBoard ?? { decisions, changes, requests, posts }
   const refreshed = refreshAnswerDrafts(board, savedDrafts)
   const drafts = refreshed.drafts
   const [clearedSelections, setClearedSelections] = useState<Set<string>>(new Set())
@@ -126,8 +133,36 @@ export function Decisions({
     onBusy(value)
   }
   const [error, setError] = useState('')
+  /** 刚交出去的项数：提交条留一会儿报“已提交”，再收起 */
+  const [sent, setSent] = useState(0)
+  useEffect(() => {
+    if (!sent) return
+    const timer = setTimeout(() => setSent(0), 2500)
+    return () => clearTimeout(timer)
+  }, [sent])
+  const footer = useRef<HTMLElement>(null)
+  const located = useRef<HTMLElement | null>(null)
+  /** 点草稿数：滚到当前位置之后的下一张有草稿的卡，到底了回到第一张 */
+  const locateDraft = () => {
+    const host = footer.current?.closest('.mg-body')
+    if (!host) return
+    const marked = [
+      ...host.querySelectorAll<HTMLElement>(
+        '[data-draft="true"], [data-draft-mark="live"], [data-draft-mark="conflict"]',
+      ),
+    ]
+    const top = host.getBoundingClientRect().top
+    let next =
+      marked.find((card) => card.getBoundingClientRect().top - top > 8) ?? marked[0] ?? null
+    // 列表末尾的卡滚不到顶：又落到上次那张时换下一张，到底了回到第一张
+    if (next && next === located.current)
+      next = marked[(marked.indexOf(next) + 1) % marked.length] ?? null
+    located.current = next
+    next?.scrollIntoView({ block: 'start' })
+    next?.focus({ preventScroll: true })
+  }
   useLayoutEffect(() => {
-    const refreshed = refreshAnswerDrafts({ decisions, changes }, savedDrafts)
+    const refreshed = refreshAnswerDrafts(board, savedDrafts)
     if (refreshed.drafts === savedDrafts) return
     try {
       write(refreshed.drafts)
@@ -135,7 +170,7 @@ export function Decisions({
     } catch {
       setError(t('manager.savedFail'))
     }
-  }, [savedDrafts, decisions, changes, write, t])
+  }, [savedDrafts, board, write, t])
   const answers = live.answers.map(({ question: _question, ...answer }) => answer)
   const questions = (features.feedback ? live.questions : []).map((draft) => ({
     decisionId: draft.decisionId,
@@ -177,6 +212,11 @@ export function Decisions({
       },
     })
   }
+  const endedCount = live.ended.decisions.size + live.ended.requests.size + live.ended.posts.size
+  const unsent =
+    new Set(pending.map((entry) => entry.decisionId)).size +
+    requestReplies.length +
+    postQuestions.length
   const submit = async () => {
     if (
       busy ||
@@ -245,6 +285,7 @@ export function Decisions({
         writePosts({ ...postNext })
       }
       const rejected = [...result.rejected, ...result.rejectedQuestions]
+      if (!rejected.length && !result.rejectedRequests.length) setSent(unsent)
       if (rejected.length || result.rejectedRequests.length)
         setError(
           t('manager.rejected', {
@@ -327,7 +368,7 @@ export function Decisions({
   }, [submittedFocus, busy, visible, filter, target, groups.pending])
   return (
     <>
-      <div hidden={!visible}>
+      <div hidden={!visible || part === 'send'}>
         {onlyId === undefined ? (
           <div className="mg-decision-filter" ref={listHead} tabIndex={-1}>
             {(['open', 'answered', 'closed', 'ignored'] as const).map((key) => (
@@ -683,15 +724,31 @@ export function Decisions({
           {error}
         </p>
       ) : null}
-      {pending.length || requestReplies.length || postQuestions.length || held || heldQuestions ? (
-        <footer className="mg-send">
+      {part !== 'cards' && !unsent && !held && !heldQuestions && sent ? (
+        <footer className="mg-send" ref={footer} data-sent role="status">
           <span className="grow">
-            {t('manager.unsent', {
-              n:
-                new Set(pending.map((entry) => entry.decisionId)).size +
-                requestReplies.length +
-                postQuestions.length,
-            })}
+            <span aria-hidden="true">✓</span> {t('manager.sent', { n: sent })}
+          </span>
+        </footer>
+      ) : null}
+      {part !== 'cards' && (unsent || held || heldQuestions) ? (
+        <footer className="mg-send" ref={footer}>
+          <span className="grow">
+            <button
+              type="button"
+              className="mg-send-count"
+              data-act="manager-locate-draft"
+              title={t('manager.locateDraft')}
+              onClick={locateDraft}
+            >
+              {t('manager.unsent', { n: unsent })} <span aria-hidden="true">↓</span>
+            </button>
+            {endedCount ? (
+              <span className="dim" data-ended-drafts>
+                {' · '}
+                {t('manager.endedDrafts', { n: endedCount })}
+              </span>
+            ) : null}
             {held || heldQuestions ? (
               <span className="dim" data-old-device-held>
                 {' · '}

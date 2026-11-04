@@ -4,8 +4,20 @@ import type {
   ManagerView,
   SuggestionView,
 } from '@litch/core'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  type MutableRefObject,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { Pressable, Text, View } from 'react-native'
+import {
+  type ManagerDraftMark,
+  pagedDraftBoard,
+} from '../../../../../packages/core/src/projection/manager-drafts.mts'
 import {
   managerHistorySnapshot,
   managerPageKey,
@@ -16,12 +28,15 @@ import type { ManagerPageKind } from '../../../../../packages/protocol/src/manag
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
+import type { Palette } from '../../ui/palettes'
 import { useTheme } from '../../ui/theme'
+import { draftMarks } from './draft-marks'
 import { Issue } from './Issue'
 import { Markdown } from './IssueMarkdown'
 import { setIssueOrder, useIssueOrder } from './issue-order'
 import { ManagerLines } from './ManagerLines'
 import { ItemRow } from './ManagerOverview'
+import { useDraftVersion } from './use-draft-files'
 
 export function PagedBoard({
   manager,
@@ -33,6 +48,7 @@ export function PagedBoard({
   onLine,
   onQuery,
   onDetail,
+  locator,
 }: {
   manager: ManagerView
   view: ManagerBoardTopicView & {
@@ -46,6 +62,8 @@ export function PagedBoard({
   onLine(id: string, title?: string): void
   onQuery(key: string): void
   onDetail(y: number, relative?: boolean): void
+  /** 底部提交条点草稿数时问这里：当前滚动位置之后下一张有草稿的卡在哪，到底了回到第一张 */
+  locator?: MutableRefObject<((from: number) => number | null) | null>
 }) {
   const channel = useChannel()
   const t = useT()
@@ -104,6 +122,37 @@ export function PagedBoard({
   const post = board.posts?.find((post) => post.id === active)
   const item = board.items.find((item) => item.id === active)
   const history = active ? paging.histories[active] : undefined
+  const draftBoard = useMemo(
+    () =>
+      pagedDraftBoard(
+        board,
+        Object.values(paging.pages).flatMap((one) => one.entries),
+      ),
+    [board, paging.pages],
+  )
+  // 收起的卡头标出草稿：每次重画读一遍手机上的草稿文件（展开、收起都会重画）
+  useDraftVersion()
+  const located = useRef<string | null>(null)
+  const marks = draftMarks(draftBoard, address, page?.entries ?? [])
+  if (locator)
+    locator.current = (from) => {
+      const heads = (page?.entries ?? []).flatMap((head) => {
+        const state = marks.get(head.id)?.state
+        const y = positions.current.get(head.id)
+        return (state === 'live' || state === 'conflict') && y !== undefined
+          ? [{ id: head.id, y }]
+          : []
+      })
+      let next = heads.find((head) => head.y > from + 8) ?? heads[0]
+      // 列表末尾的卡滚不到顶：又落到上次那张时换下一张，到底了回到第一张
+      if (next && next.id === located.current)
+        next = heads[(heads.indexOf(next) + 1) % heads.length]
+      located.current = next?.id ?? null
+      return next?.y ?? null
+    }
+  // 只有改过的对象才有旧版本可看
+  const activeRevision =
+    page?.entries.find((head) => head.id === active)?.revision ?? post?.revision ?? 2
   const lines = paging.summary.lines
   const style = { color: c.ink, fontSize: font.size.body }
   const detail = active ? (
@@ -138,7 +187,7 @@ export function PagedBoard({
         />
       ) : null}
       {item ? <ItemRow item={item} focused /> : null}
-      {!history || history.nextCursor ? (
+      {(history || activeRevision > 1) && (!history || history.nextCursor) ? (
         <Button
           testID="paging-history"
           kind="plain"
@@ -290,47 +339,65 @@ export function PagedBoard({
             />
           ) : (
             <>
-              {page.entries.map((head) => (
-                <View
-                  key={head.id}
-                  onLayout={(event) => {
-                    const y = event.nativeEvent.layout.y
-                    const previous = positions.current.get(head.id)
-                    positions.current.set(head.id, y)
-                    if (focused.current === head.id && previous !== undefined)
-                      onDetail(y - previous, true)
-                    if (linked && active === head.id) onDetail(y + 12)
-                  }}
-                >
-                  <Pressable
-                    testID={`paging-object:${head.id}`}
-                    accessibilityRole="button"
-                    accessibilityState={{ expanded: active === head.id }}
-                    aria-expanded={active === head.id}
-                    onPress={() => {
-                      focused.current = head.id
-                      setLinked(false)
-                      if (active === head.id) setSelected(null)
-                      else open(head.id)
+              {page.entries.map((head) => {
+                const mark = marks.get(head.id)
+                return (
+                  <View
+                    key={head.id}
+                    onLayout={(event) => {
+                      const y = event.nativeEvent.layout.y
+                      const previous = positions.current.get(head.id)
+                      positions.current.set(head.id, y)
+                      if (focused.current === head.id && previous !== undefined)
+                        onDetail(y - previous, true)
+                      if (linked && active === head.id) onDetail(y + 12)
                     }}
-                    style={({ pressed }) => ({
-                      minHeight: hit,
-                      padding: 12,
-                      backgroundColor: pressed ? c.press : c.panel,
-                      gap: 8,
-                    })}
                   >
-                    <Text style={style}>
-                      {active === head.id ? '▾' : '▸'} {head.id} · {head.title} ·{' '}
-                      {t(managerPageLabel(kind, head.status) as Parameters<typeof t>[0])}
-                    </Text>
-                    <Text numberOfLines={2} style={{ color: c.ink2 }}>
-                      {head.preview}
-                    </Text>
-                  </Pressable>
-                  {active === head.id ? detail : null}
-                </View>
-              ))}
+                    <Pressable
+                      testID={`paging-object:${head.id}`}
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: active === head.id }}
+                      aria-expanded={active === head.id}
+                      onPress={() => {
+                        focused.current = head.id
+                        setLinked(false)
+                        if (active === head.id) setSelected(null)
+                        else open(head.id)
+                      }}
+                      style={({ pressed }) => ({
+                        minHeight: hit,
+                        padding: 12,
+                        backgroundColor: pressed ? c.press : c.panel,
+                        gap: 8,
+                      })}
+                    >
+                      <Text style={style}>
+                        {active === head.id ? '▾' : '▸'} {head.id} · {head.title} ·{' '}
+                        {t(managerPageLabel(kind, head.status) as Parameters<typeof t>[0])}
+                        {mark ? <DraftPill mark={mark} c={c} size={font.size.meta} /> : null}
+                      </Text>
+                      {/* 有草稿：摘要占一行、预览让出一行，卡头高度不变 */}
+                      {mark && active !== head.id ? (
+                        <DraftSummary
+                          mark={mark}
+                          option={
+                            board.decisions
+                              .find((one) => one.id === head.id)
+                              ?.options.find((one) => one.id === mark.optionId)?.label ?? null
+                          }
+                          request={kind === 'request'}
+                          c={c}
+                          id={head.id}
+                        />
+                      ) : null}
+                      <Text numberOfLines={mark ? 1 : 2} style={{ color: c.ink2 }}>
+                        {head.preview}
+                      </Text>
+                    </Pressable>
+                    {active === head.id ? detail : null}
+                  </View>
+                )
+              })}
               <Text style={style}>
                 {t('manager.paging.loaded', { n: page.entries.length, total: page.total })}
               </Text>
@@ -351,5 +418,63 @@ export function PagedBoard({
         </>
       ) : null}
     </View>
+  )
+}
+
+/** 卡头末尾的草稿记号：照常、待确认、已失效 */
+function DraftPill({ mark, c, size }: { mark: ManagerDraftMark; c: Palette; size: number }) {
+  const t = useT()
+  return (
+    <Text
+      testID={`draft-pill:${mark.state}`}
+      style={{
+        color: mark.state === 'live' ? c.wait : mark.state === 'conflict' ? c.err : c.ink2,
+        fontSize: size,
+        fontWeight: '600',
+      }}
+    >
+      {'  '}
+      {mark.state === 'live'
+        ? t('manager.draft')
+        : t(mark.state === 'conflict' ? 'manager.draftMark.conflict' : 'manager.draftMark.ended')}
+    </Text>
+  )
+}
+
+/** 收起时一行写草稿里有什么；失效的划掉 */
+function DraftSummary({
+  mark,
+  option,
+  request,
+  c,
+  id,
+}: {
+  mark: ManagerDraftMark
+  option: string | null
+  request: boolean
+  c: Palette
+  id: string
+}) {
+  const t = useT()
+  const parts = [
+    mark.optionId
+      ? option
+        ? t('manager.draftMark.chose', { option })
+        : t('manager.draftMark.chosen')
+      : null,
+    mark.text ? t(request ? 'manager.draftMark.reply' : 'manager.draftMark.text') : null,
+    mark.question ? t('manager.draftMark.question') : null,
+  ].filter(Boolean)
+  return (
+    <Text
+      testID={`draft-summary:${id}`}
+      numberOfLines={1}
+      style={{
+        color: mark.state === 'live' ? c.wait : mark.state === 'conflict' ? c.err : c.ink2,
+        textDecorationLine: mark.state === 'ended' ? 'line-through' : 'none',
+      }}
+    >
+      ✎ {parts.join(' · ')}
+    </Text>
   )
 }

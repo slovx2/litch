@@ -234,6 +234,23 @@ export const enManager = {
   'manager.draftDiscardConfirm': 'Discard draft',
   'manager.unsent': ({ n }) => (n === 1 ? '1 draft' : `${n} drafts`),
   'manager.clear': 'Clear drafts',
+  'manager.sent': ({ n }) => (n === 1 ? 'Submitted 1 item' : `Submitted ${n} items`),
+  'manager.locateDraft': 'Go to the next draft',
+  'manager.endedDrafts': ({ n }) =>
+    n === 1 ? '1 draft no longer applies' : `${n} drafts no longer apply`,
+  'manager.endedShort': '{n} expired',
+  'manager.submitShort': 'Submit',
+  'manager.heldShort': '{n} need an update',
+  'manager.clearNote':
+    'Clears every draft for this manager, including expired ones. This cannot be undone.',
+  'manager.draftMark.chose': 'Chose “{option}”',
+  'manager.draftMark.chosen': 'Option chosen',
+  'manager.draftMark.text': 'Note',
+  'manager.draftMark.reply': 'Reply',
+  'manager.draftMark.question': 'Question',
+  'manager.draftMark.delivered': 'Marked done',
+  'manager.draftMark.conflict': 'Review draft',
+  'manager.draftMark.ended': 'Draft no longer applies',
   'manager.submit': 'Submit to manager',
   'manager.submitting': 'Submitting…',
   'manager.conflict':

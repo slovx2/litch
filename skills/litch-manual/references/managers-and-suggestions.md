@@ -22,6 +22,10 @@
 桌面控制台、经理事项和手机工作台的分类列表每页 30 条，以“加载更多”继续，切换状态和排序时保留各自的滚动位置。
 已答复、已关闭、已完成等状态在切换时读取。点击条目查看完整背景、选项、依据和讨论；版本历史独立展开，每次 30 条。
 已加载范围在后台对账后保留，读取失败可重试；答复失败保留条目和草稿。正文中的编号可直接打开尚未加载的详情。
+控制台卡片默认收起；有草稿的卡在卡头标“草稿”，下面一行写草稿里有什么（如“选了「…」 · 写了追问”）；
+决策改过、草稿要先核对的标“草稿待确认”，议题已在别处结束的标“草稿已失效”并划掉摘要。
+只要有能提交的草稿，“N 项草稿，尚未提交”提交条就固定在列表底部，不随卡片滚动；点草稿数依次跳到有草稿的卡，
+提交成功后短暂显示“已提交 N 项”。没点开过的议题上的草稿同样计数、同样提交。手机相同，手机清除草稿前先确认。
 
 A manager is a conversation that coordinates worklines (sub-sessions), maintains decisions and items
 on a board stored on its device, and reports progress. Repository changes remain the evidence for
@@ -202,6 +206,10 @@ Choose an option or write an answer. Answers are local drafts until **Submit to 
 not sync before submission. Submitting saves them to the device and asks the manager to handle them.
 Successful drafts clear; failed ones remain. If a decision changed, review its new version before
 confirming. **Clear drafts** clears local unsent answers, questions and For you responses. Closed decisions can be reopened.
+Collapsed cards mark drafts in the header (**Draft**, **Review draft** after the decision changed, or
+**Draft no longer applies** after it ended elsewhere) with a one-line summary of what was written.
+While submittable drafts exist, the submit bar stays pinned to the bottom of the list; select the
+draft count to jump between drafted cards. Drafts on issues that were never opened still count and submit.
 Submitting answers keeps the current decision filter. In **Open**, answered cards leave the list;
 focus continues to the next open decision in the displayed order, or the list header if none follows.
 Answered decisions offer **Edit answer**. Closed decisions offer **Reopen** and, when a previous
@@ -271,8 +279,9 @@ reverse links to related issues. Existing blocking links, evidence and repositor
 The manager supplies source/related when creating objects, or uses `relate` later. References such
 as #D-30, #I-12 and #P-3 become links; desktop hover and phone long press show title and status.
 
-The phone supports all four issue kinds, questions, edit history and links, with per-card submission.
-Phone drafts stay on the phone; desktop drafts support mixed submission across cards. User-created
+The phone supports all four issue kinds, questions, edit history and links. Each card can submit on
+its own, and a submit bar pinned below the console submits all drafts together, as on desktop; clearing
+asks for confirmation first. Phone drafts stay on the phone. User-created
 issues, derived-event cards in the timeline and embedded quick decisions are not part of this version.
 
 Submitting an answer includes the saved Q&A; long temporary conversations include a summary followed
@@ -409,7 +418,7 @@ the running mark a single ring.
 
 “概览”与桌面一致：现状、待用户决策与已完成两个数（分别点进控制台的决策和展开经理事项）、受阻事项（第二行写“等待决策 #D-n”，编号可点）、请你做和最近动态；长动态点“展开全文”看完整内容；最下面“经理事项 N”一节默认收起，展开后每项一行，点开看理由和关联。控制台在窄屏上把排序收成一个图标，与类别同一行。手机作答决策时先点选一项（单选），再点“提交给经理”（没选也没写时按钮下方写明“先选一项或写补充说明”，决策没有选项时写“先写补充说明”）；选中项和补充文字都存为本机草稿，离开再回来还在，卡片状态标“草稿”。修改答案时上方照样显示原来的答复，原来选的那一项已选中。控制台可阅读和操作四类议题，并提交经理或临时追问。
 手机沿用建议的开始/编辑/忽略，支持请求交付/文字回复、决策答复、报告已阅和讨论历史；创建经理、派活设置及完整经理事项看板仍在桌面。
-用户主动新建议题尚未开放。手机也提供只读经理事项供关联定位；目前按卡提交，桌面支持跨卡混合提交。
+用户主动新建议题尚未开放。手机也提供只读经理事项供关联定位；每张卡可单独提交，也可用控制台底部的提交条跨卡一起提交（同桌面）。
 
 议题关联栏按来源、派生、相关分组（只有一组时不写组名），宽卡在右侧，窄卡在顶部折叠。编号链接可跳到议题或经理事项，桌面悬停显示标题与状态；手机长按可查看。工作线打开会话，文件进入文件查看器，分支与提交打开只读仓库内容。经理事项和工作线也能回到相关议题。经理创建对象时可填写 source/related，之后可用 relate 补充。已有的阻塞关系、依据和链接也显示在关联栏。
 桌面经理模式的追问存为本地草稿，可与答案和交付同批提交；临时对话立即发起。问答、旧版本与关联存储在设备上，跨客户端可读；已处理建议的讨论保留在“已处理建议”分组。

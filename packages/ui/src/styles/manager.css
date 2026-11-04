@@ -1,6 +1,8 @@
 /* 经理：侧栏入口、对话与看板、设备列表和新建表单。颜色与表面均跟随皮肤。 */
 .mg-paging-head {
-  width: 100%;
+  /* 内边距只给悬停底色留位置，负外边距抵掉，文字和卡内摘要、正文左对齐 */
+  width: calc(100% + 20px);
+  margin: -10px -10px 0;
   text-align: start;
   font-weight: 600;
   cursor: pointer;
@@ -37,6 +39,71 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
   color: var(--ink-2);
+}
+/* 有草稿的收起卡：摘要占一行、预览让出一行，卡头高度不变 */
+.mg-paging-preview[data-short] {
+  -webkit-line-clamp: 1;
+}
+.mg-paging-head .pill {
+  margin-inline-start: 8px;
+  vertical-align: 1px;
+}
+.mg-card[data-draft-mark="live"] {
+  border-color: var(--wait);
+}
+.mg-card[data-draft-mark="conflict"] {
+  border-color: var(--err);
+}
+.mg-card[data-draft-mark="ended"] {
+  border-style: dashed;
+}
+.mg-card .mg-draft-summary {
+  margin: 0;
+  white-space: nowrap;
+  color: var(--wait);
+}
+.mg-card .mg-draft-summary + .mg-paging-preview {
+  margin-top: 2px;
+}
+.mg-card .mg-draft-summary[data-draft-summary="ended"] {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+.mg-card .mg-draft-summary[data-draft-summary="conflict"] {
+  color: var(--err);
+}
+.mg-paging-history {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--line-1);
+  padding-top: 8px;
+}
+.mg-paging-history > article {
+  align-self: stretch;
+}
+/* 分页列表至少撑满可视区，提交条落在可视区底部，卡片展开收起时不跳 */
+.mg-body > [data-manager-paging] {
+  min-height: 100%;
+}
+[data-manager-paging] > .mg-send {
+  margin-top: auto;
+  z-index: 1;
+}
+.mg-send-count {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px 4px;
+  margin-inline-start: -4px;
+  border-radius: var(--r1);
+}
+.mg-send-count:hover {
+  background: var(--hover);
+}
+.mg-send[data-sent] {
+  color: var(--ok);
 }
 .mg-questions {
   border-top: 1px solid var(--line);
@@ -410,6 +477,22 @@
 }
 .mg-item-links a {
   color: var(--accent);
+}
+/* 决策卡里打头的幽灵按钮（清除选择、忽略、追问）：同样抵掉内边距和透明边框，文字和卡内正文左对齐 */
+.mg-decision
+:is(
+  .mg-options > .btn.ghost,
+  .mg-actions > .btn.ghost:first-child,
+  .mg-post-discussion > .btn.ghost:first-child
+) {
+  margin-inline-start: -11px;
+}
+/* 依据里的链接是按钮：内边距和高度只给悬停底色，负外边距抵掉，文字和左侧标签、下一行的值对齐 */
+.mg-item-links .btn {
+  height: auto;
+  padding: 2px 10px;
+  /* 再多 1px 抵掉按钮的透明边框 */
+  margin: -3px 0 -3px -11px;
 }
 .mg-item-unverified {
   grid-column: 1 / -1;

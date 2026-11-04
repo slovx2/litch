@@ -8,9 +8,15 @@ import { Cdp, until } from './chrome-m0/cdp.mjs'
 import { installManagerBoardMobileFixture } from './manager-board-mobile-fixture.mjs'
 
 const repo = resolve(import.meta.dirname, '..')
+/** 页面 localStorage 里经理答复草稿那一项 */
+const answerDrafts = (dump) =>
+  Object.entries(JSON.parse(dump)).find(([key]) => key.startsWith('litch.manager.answers:'))?.[1] ??
+  '{}'
 const root = mkdtempSync(join(tmpdir(), 'console-cards-'))
 const mobile = process.argv.includes('--mobile')
-const mobileUi = mobile ? await installManagerBoardMobileFixture({ consoleCards: true }) : null
+const mobileUi = mobile
+  ? await installManagerBoardMobileFixture({ consoleCards: true, drafts: true })
+  : null
 const server = mobile
   ? null
   : spawn(
@@ -94,6 +100,90 @@ try {
     await read('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
   }
   if (mobile) {
+    // 决策页：卡头草稿标记、底部批量提交条（360×640）
+    await call('Emulation.setDeviceMetricsOverride', {
+      width: 360,
+      height: 640,
+      deviceScaleFactor: 1,
+      mobile: true,
+    })
+    const pause = (ms) => new Promise((r) => setTimeout(r, ms))
+    const text = (id) =>
+      read(`document.querySelector('[data-testid="${id}"]')?.textContent ?? null`)
+    await wait('[data-testid="draft-bar"]')
+    assert.equal(await text('draft-summary:D-2'), '✎ 选了「先发，补验放下一版」 · 写了追问')
+    assert.equal(await text('draft-summary:D-3'), '✎ 写了说明')
+    assert.equal(await text('draft-summary:D-5'), '✎ 写了追问')
+    assert.equal(await text('draft-summary:D-1'), null)
+    assert.match(await text('draft-bar'), /3 项草稿 ↓ · 1 项失效/)
+    // 提交条在滚动区下面贴底，不压在卡片上
+    const layout = await read(
+      `(()=>{const bar=document.querySelector('[data-testid="draft-bar"]').getBoundingClientRect();const list=document.querySelector('[data-testid="manager-board-scroll"]').getBoundingClientRect();return {bottom:Math.round(innerHeight-bar.bottom),seam:Math.round(bar.top-list.bottom)}})()`,
+    )
+    assert.deepEqual(layout, { bottom: 0, seam: 0 })
+    const scroller = `(e=>e.scrollHeight>e.clientHeight+5?e:[...e.querySelectorAll('div')].find(d=>d.scrollHeight>d.clientHeight+5))(document.querySelector('[data-testid="manager-board-scroll"]'))`
+    const located = []
+    for (let i = 0; i < 4; i++) {
+      await click('[data-testid="draft-bar-locate"]')
+      await pause(600)
+      located.push(await read(`Math.round(${scroller}.scrollTop)`))
+    }
+    assert.ok(located[1] > located[0] && located[3] === located[0], `依次定位 ${located}`)
+    await click('[data-testid="paging-filter:answered"]')
+    await wait('[data-testid="draft-pill:ended"]')
+    assert.equal(
+      await read(
+        `getComputedStyle(document.querySelector('[data-testid="draft-summary:D-7"]')).textDecorationLine`,
+      ),
+      'line-through',
+    )
+    await click('[data-testid="paging-filter:open"]')
+    await wait('[data-testid="paging-object:D-1"]')
+    // 先点开 D-3：批量交掉后，展开的卡里也清空
+    await click('[data-testid="paging-object:D-3"]')
+    await wait('[data-testid="manager-issue:D-3"] textarea')
+    await click('[data-testid="draft-bar-submit"]')
+    await wait('[data-testid="draft-bar-sent"]')
+    assert.match(await text('draft-bar-sent'), /已提交 3 项/)
+    const submitted = await read(
+      "window.__managerBoardFixture.calls.find(c=>c.name==='managers.feedback.submit').params",
+    )
+    assert.deepEqual(
+      submitted.answers.map((a) => [a.decisionId, a.optionId, a.text]),
+      [
+        ['D-2', 'b', ''],
+        ['D-3', null, '两个都算，但侧栏分开显示'],
+      ],
+    )
+    assert.deepEqual(
+      submitted.questions.map((q) => q.decisionId),
+      ['D-2', 'D-5'],
+    )
+    assert.equal(
+      await read(`document.querySelector('[data-testid="manager-issue:D-3"] textarea').value`),
+      '',
+    )
+    await until(
+      () => read(`!document.querySelector('[data-testid="draft-bar-sent"]')`),
+      '已提交收起',
+    )
+    assert.equal(await read(`!!document.querySelector('[data-testid="draft-bar"]')`), false)
+    // 新选一项又出条；清除先确认
+    await click('[data-testid="decision-choice:D-3:a"]')
+    await wait('[data-testid="draft-bar"]')
+    assert.match(await text('draft-bar'), /1 项草稿/)
+    await click('[data-testid="draft-bar-clear"]')
+    await click('[data-testid="draft-bar-clear-confirm"]')
+    assert.equal(await read(`!!document.querySelector('[data-testid="draft-bar"]')`), false)
+    assert.equal(
+      await read(
+        `document.querySelector('[data-testid="decision-choice:D-3:a"]').getAttribute('aria-checked')`,
+      ),
+      'false',
+    )
+    await click('[data-testid="paging-object:D-3"]')
+    await call('Emulation.clearDeviceMetricsOverride')
+    console.log('手机决策页：草稿标记、提交条贴底、定位、批量提交、清除确认通过')
     await click('[data-testid="manager-category:request"]')
     await wait('[data-testid="paging-object:R-2"]')
     const selector = '[data-testid="paging-object:R-2"]'
@@ -216,6 +306,124 @@ try {
         'Enter 展开、空格收起',
       )
       console.log('控制台原地展开、内部控件、文件/目录/失败提示、Git/看板链接、单处显示通过')
+      // 决策页：收起卡头的草稿标记、固定在列表底部的提交条、批量提交、清除、待确认
+      const decisions = (drafts) =>
+        `http://127.0.0.1:5297/test/console-cards-fixture.html?lang=zh-CN&tab=decisions&height=500&drafts=${drafts}`
+      const frame = () =>
+        read('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
+      const bar = () =>
+        read(`(()=>{const body=document.querySelector('.mg-body').getBoundingClientRect();const bars=document.querySelectorAll('.mg-send');const bar=bars[0];const b=bar?.getBoundingClientRect();
+          const cards=[...document.querySelectorAll('[data-paging-object]')];const loaded=[...document.querySelectorAll('[data-manager-paging] > p')].at(-1);
+          return {count:bars.length,inCard:!!bar?.closest('[data-paging-object]'),gap:b?Math.round(body.bottom-b.bottom):null,text:bar?.textContent??'',
+            lastCard:b?Math.round(b.top-cards.at(-1).getBoundingClientRect().bottom):null,loaded:b&&loaded?Math.round(b.top-loaded.getBoundingClientRect().bottom):null}})()`)
+      const pinned = async (label) => {
+        const found = await bar()
+        assert.equal(found.count, 1, `${label}：只有一条提交条`)
+        assert.equal(found.inCard, false, `${label}：提交条不在卡片里`)
+        assert.ok(Math.abs(found.gap) <= 1, `${label}：提交条贴着列表底部 ${found.gap}`)
+        return found
+      }
+      const marks = () =>
+        read(
+          `Object.fromEntries([...document.querySelectorAll('[data-paging-object]')].map(e=>[e.dataset.pagingObject,[e.dataset.draftMark??'',e.querySelector('[data-draft-summary]')?.textContent.trim()??'',e.querySelector('[data-draft-pill]')?.dataset.draftPill??'']]))`,
+        )
+      await call('Page.navigate', { url: decisions('1') })
+      await wait('[data-paging-object="D-1"]')
+      await wait('.mg-send')
+      assert.deepEqual(await marks(), {
+        'D-1': ['', '', ''],
+        'D-2': ['live', '✎ 选了「先发，补验放下一版」 · 写了追问', 'live'],
+        'D-3': ['live', '✎ 写了说明', 'live'],
+        'D-4': ['', '', ''],
+        'D-5': ['live', '✎ 写了追问', 'live'],
+        'D-6': ['', '', ''],
+      })
+      // 都没点开过：草稿照样计数；失效的单独写
+      const collapsed = await pinned('全部收起')
+      assert.match(collapsed.text, /3 项草稿，尚未提交/)
+      assert.match(collapsed.text, /1 项已失效，不会提交/)
+      // 依次定位有草稿的卡，末尾滚不到顶的也会往下走，到底回到第一张
+      const located = []
+      for (let i = 0; i < 4; i++) {
+        await click('[data-act="manager-locate-draft"]')
+        located.push(await read('document.activeElement?.dataset.pagingObject ?? null'))
+      }
+      assert.deepEqual(located, ['D-2', 'D-3', 'D-5', 'D-2'])
+      await read("document.querySelector('.mg-body').scrollTop=0")
+      await click('[data-paging-object="D-2"] > button')
+      await wait('[data-decision="D-2"]')
+      assert.equal(
+        await read('!!document.querySelector("[data-paging-history]")'),
+        false,
+        '没改过的决策不出旧版本按钮',
+      )
+      for (const where of ['0', 'host.scrollHeight / 2', 'host.scrollHeight']) {
+        await read(
+          `(()=>{const host=document.querySelector('.mg-body');host.scrollTop=${where}})()`,
+        )
+        await frame()
+        await pinned(`展开 D-2，滚到 ${where}`)
+      }
+      const bottom = await pinned('滚到底')
+      assert.ok(
+        bottom.lastCard >= 0 && bottom.loaded >= 0,
+        `最后一张卡不被挡住 ${JSON.stringify(bottom)}`,
+      )
+      // 内容不满一屏的分栏：提交条照样在底部；失效草稿标在卡头、摘要划掉
+      await click('[data-paging-filter="answered"]')
+      await wait('[data-paging-object="D-7"]')
+      assert.deepEqual((await marks())['D-7'], ['ended', '✎ 选了「照推荐做」', 'ended'])
+      await pinned('已答复（不满一屏）')
+      await click('[data-paging-filter="open"]')
+      await wait('[data-paging-object="D-1"]')
+      // 批量提交：没点开过的 D-3、D-5 一起交，失效的 D-7 不交
+      await read('window.__consoleCards.calls.length = 0')
+      await click('[data-act="manager-submit"]')
+      await wait('.mg-send[data-sent]')
+      assert.match(await read("document.querySelector('.mg-send').textContent"), /已提交 3 项/)
+      const submitted = await read(
+        "window.__consoleCards.calls.find(c=>c.name==='managers.feedback.submit').params",
+      )
+      assert.deepEqual(
+        submitted.answers.map((a) => [a.decisionId, a.optionId, a.text]),
+        [
+          ['D-2', 'b', ''],
+          ['D-3', null, '两个都算，但侧栏分开显示'],
+        ],
+      )
+      assert.deepEqual(
+        submitted.questions.map((q) => q.decisionId),
+        ['D-2', 'D-5'],
+      )
+      assert.deepEqual(
+        Object.keys(JSON.parse(answerDrafts(await read('JSON.stringify(localStorage)')))),
+        ['D-7'],
+        '交掉的清掉，失效的留着',
+      )
+      await until(() => read("!document.querySelector('.mg-send')"), '已提交提示收起', 10000)
+      assert.deepEqual(
+        Object.values(await marks()).filter(([mark]) => mark),
+        [],
+      )
+      // 清除草稿
+      await call('Page.navigate', { url: decisions('1') })
+      await wait('.mg-send')
+      await click('.mg-send .btn.ghost')
+      assert.equal(await read("!!document.querySelector('.mg-send')"), false)
+      assert.equal(await read("document.querySelectorAll('[data-draft-mark]').length"), 0)
+      // 待确认：卡头标出，提交按钮禁用并写明原因
+      await call('Page.navigate', { url: decisions('conflict') })
+      await wait('[data-draft-pill="conflict"]')
+      assert.deepEqual((await marks())['D-4'], ['conflict', '✎ 写了说明', 'conflict'])
+      assert.deepEqual(
+        await read(
+          '(()=>{const b=document.querySelector(\'[data-act="manager-submit"]\');return [b.disabled,b.title]})()',
+        ),
+        [true, '决策已更新，请核对最新内容后重新确认答复'],
+      )
+      console.log(
+        '决策页：收起草稿标记、提交条固定与不遮挡、定位、批量提交、清除、失效与待确认通过',
+      )
     }
   }
 } finally {

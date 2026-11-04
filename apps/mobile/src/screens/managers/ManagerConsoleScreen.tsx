@@ -24,6 +24,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native'
+import { pagedDraftBoard } from '../../../../../packages/core/src/projection/manager-drafts.mts'
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
 import { sessionMark } from '../../../../../packages/ui/src/sidebar/session-mark.ts'
 import { useSessionPage } from '../../detail/session-page'
@@ -35,6 +36,7 @@ import { Empty } from '../../ui/kit/controls'
 import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
+import { DraftSubmitBar } from './DraftSubmitBar'
 import { Issue } from './Issue'
 import { IssueContext } from './IssueRelations'
 import { IssueSheet } from './IssueSheet'
@@ -109,6 +111,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const positions = useRef(new Map<string, number>())
   const itemsAt = useRef(0)
   const scroll = useRef<ScrollView>(null)
+  const locator = useRef<((from: number) => number | null) | null>(null)
   const pagingPositions = useRef(new Map<string, number>())
   const pagingScroll = useRef({ key: '', y: 0 })
   const pagingQuery = useCallback((key: string) => {
@@ -481,6 +484,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                     suggestions={suggestions}
                     onLine={openSession}
                     onQuery={pagingQuery}
+                    locator={locator}
                     onDetail={(y, relative) => {
                       const next = relative ? pagingScroll.current.y + y : y
                       pagingScroll.current.y = next
@@ -546,6 +550,33 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
               <Empty title={t('manager.loading')} />
             )}
           </ScrollView>
+          {/* 批量提交条在滚动区下面，不随卡片滚动，也不挡住最后一张卡 */}
+          {tab === 'console' && board && view ? (
+            <DraftSubmitBar
+              manager={manager}
+              board={board}
+              draftBoard={
+                view.paging
+                  ? pagedDraftBoard(
+                      board,
+                      Object.values(view.paging.pages).flatMap((one) => one.entries),
+                    )
+                  : board
+              }
+              features={features}
+              disabled={device?.connection !== 'online' || manager.status !== 'active'}
+              onLocate={
+                view.paging
+                  ? () => {
+                      const y = locator.current?.(pagingScroll.current.y)
+                      if (y === null || y === undefined) return
+                      pagingScroll.current.y = y
+                      scroll.current?.scrollTo({ y, animated: true })
+                    }
+                  : undefined
+              }
+            />
+          ) : null}
         </View>
       </View>
       {page.overlays}

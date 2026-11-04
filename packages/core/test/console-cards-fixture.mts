@@ -30,6 +30,46 @@ export function consoleCardsFixture(mock: CoreHost) {
     links: links.filter((l) => !['issue', 'item'].includes(l.kind)),
     basis: [],
   })) as NonNullable<typeof board.requests>
+  // 决策页：八条，正文够长能滚动；D-7 草稿写在旧版本、后来在别处答复（失效），D-8 已关闭
+  const template = board.decisions.find((d) => d.options.length >= 3) ?? board.decisions[0]
+  if (!template) throw new Error('缺少模拟经理决策')
+  const titles = [
+    '发版前要不要在 Windows 真机补验',
+    '插话消息在不支持的 harness 上露不露编辑',
+    '子会话要不要算进后台任务',
+    'Pi 压缩失败要不要在网关兜底',
+    '定时任务回合里的审批没人答等多久',
+    '手机端要不要画 mermaid',
+    '旧版设备服务的草稿留多久',
+    '侧栏草稿数要不要算进待处理',
+  ]
+  board.decisions = titles.map((title, index) => {
+    const n = index + 1
+    const answered = n === 7
+    const closed = n === 8
+    return {
+      ...template,
+      id: `D-${n}` as const,
+      title,
+      background: `第 ${n} 条决策的背景。\n\n${'说明一段比较长的背景，让展开后的卡片超过一屏。\n\n'.repeat(6)}`,
+      options: [
+        { id: 'a', label: '照推荐做', description: '' },
+        { id: 'b', label: '先发，补验放下一版', description: '' },
+        { id: 'c', label: '不做', description: '' },
+      ],
+      recommend: 'a',
+      blocks: [],
+      links: [],
+      revision: answered ? 2 : 1,
+      status: answered ? ('answered' as const) : closed ? ('expired' as const) : ('open' as const),
+      answer: answered
+        ? { optionId: 'c', text: '', by: 'user-conversation', at: Date.now() }
+        : null,
+      closed: closed ? { reason: '不用再定', by: 'manager', at: Date.now() } : null,
+      createdAt: Date.now() - n * 60_000,
+      updatedAt: Date.now() - n * 60_000,
+    }
+  })
   board.posts = mockPosts(board)
   board.relations = links.map((to, n) => ({
     id: `rel-${n}`,
@@ -51,6 +91,38 @@ export function consoleCardsFixture(mock: CoreHost) {
     total: 3,
     nextCursor: null,
   }
+  const decisionPage = (status: string) => {
+    const entries = board.decisions
+      .filter(
+        (d) =>
+          status === 'all' ||
+          d.status === status ||
+          (status === 'closed' && ['expired', 'withdrawn'].includes(d.status)),
+      )
+      .map((d) => ({
+        id: d.id,
+        kind: 'decision',
+        title: d.title,
+        preview: `第 ${d.id.slice(2)} 条决策的背景摘要，收起时最多两行。`,
+        status: d.status,
+        pending: d.status === 'open',
+        revision: d.revision,
+        createdAt: d.createdAt,
+        updatedAt: d.updatedAt,
+      }))
+    return {
+      query: { kind: 'decision', status, order: 'newest' },
+      entries,
+      total: entries.length,
+      nextCursor: null,
+    }
+  }
+  const decisionPages = Object.fromEntries(
+    ['open', 'answered', 'closed', 'ignored', 'all'].map((status) => [
+      `decision/${status}/newest`,
+      decisionPage(status),
+    ]),
+  )
   const view = {
     deviceId: 'local',
     managerId: manager.id,
@@ -60,12 +132,18 @@ export function consoleCardsFixture(mock: CoreHost) {
       summary: {
         manager,
         situation: null,
-        counts: { request: { open: 3 }, decision: {}, item: {}, suggestion: {}, report: {} },
+        counts: {
+          request: { open: 3 },
+          decision: { open: 6, answered: 1, closed: 1, ignored: 0, all: 8 },
+          item: {},
+          suggestion: {},
+          report: {},
+        },
         initial: page,
         activities: [],
         lines: { lines: [], checkedAt: null, failed: 0 },
       },
-      pages: { 'request/open/newest': page },
+      pages: { 'request/open/newest': page, ...decisionPages },
       histories: {},
       loading: [],
       error: null,
@@ -88,6 +166,23 @@ export function consoleCardsFixture(mock: CoreHost) {
     async command(name: string, params: any, signal: any) {
       calls.push({ name, params })
       if (name.startsWith('managers.board.')) return {}
+      // 批量提交照单全收；看板不变，只看草稿清掉和提交条的反馈
+      if (name === 'managers.feedback.submit') {
+        const find = (id: string) => board.decisions.find((d) => d.id === id)
+        return {
+          accepted: params.answers.map((a: { decisionId: string }) => find(a.decisionId)),
+          rejected: [],
+          acceptedQuestions: params.questions.map((q: { decisionId: string }) =>
+            find(q.decisionId),
+          ),
+          rejectedQuestions: [],
+          acceptedRequests: params.requests.map((r: { requestId: string }) =>
+            board.requests?.find((one) => one.id === r.requestId),
+          ),
+          rejectedRequests: [],
+          delivery: 'none',
+        }
+      }
       if (name === 'files.read' && params.path.startsWith('/outside'))
         return params.path.endsWith('folder')
           ? { kind: 'directory', path: params.path }
@@ -119,5 +214,45 @@ export function consoleCardsFixture(mock: CoreHost) {
       return mock.command(name, params, signal)
     },
   }
-  return { core: host as CoreHost, manager, board, view, state: { calls } }
+  // 预置草稿（预览和验收按需写入）：D-2 选项加追问、D-3 文字、D-5 只有追问、D-7 写在旧版本（已在别处答复，失效）
+  const key = (id: string) => JSON.stringify([manager.deviceId, manager.id, id])
+  const drafts = {
+    answers: {
+      'D-2': {
+        decisionId: 'D-2',
+        revision: 1,
+        optionId: 'b',
+        text: '',
+        question: '为什么不先做 A？',
+      },
+      'D-3': { decisionId: 'D-3', revision: 1, optionId: null, text: '两个都算，但侧栏分开显示' },
+      'D-5': {
+        decisionId: 'D-5',
+        revision: 1,
+        optionId: null,
+        text: '',
+        question: '超时后怎么记录？',
+      },
+      'D-7': { decisionId: 'D-7', revision: 1, optionId: 'a', text: '' },
+    },
+    /** 加上这条就有一张“草稿待确认”：D-4 一直待定，草稿写在更早的版本上 */
+    conflict: {
+      'D-4': { decisionId: 'D-4', revision: 0, optionId: null, text: '先看清楚再答' },
+    },
+    mobile: {
+      'manager-choices.json': { [key('D-2')]: 'b', [key('D-7')]: 'a' },
+      'manager-replies.json': { [key('D-3')]: '两个都算，但侧栏分开显示' },
+      'manager-questions.json': {
+        [key('D-2')]: '为什么不先做 A？',
+        [key('D-5')]: '超时后怎么记录？',
+      },
+      'manager-draft-revisions.json': {
+        [key('D-2')]: 1,
+        [key('D-3')]: 1,
+        [key('D-5')]: 1,
+        [key('D-7')]: 1,
+      },
+    },
+  }
+  return { core: host as CoreHost, manager, board, view, drafts, state: { calls } }
 }
