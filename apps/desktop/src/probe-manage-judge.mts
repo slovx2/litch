@@ -252,7 +252,7 @@ export function judgeManage(probe: ManageProbe): string[] {
     `详情一打开不是“harness 各一行、设置项都收着”（露出来的设置项/标题行）：${probe.folded}`,
   )
   // 夹具里只有 Pi 装着：Claude Code、dsh、OpenCode 和原生 codex 都没装，所以不可用（后三个装了才默认启用）；
-  // 经 ACP 接的 Gemini CLI、Qwen Code、acp 默认不启用
+  // 经 ACP 接的 Gemini CLI、Qwen Code、acp，以及实验性的 Antigravity 默认不启用
   same(
     probe.harnesses,
     [
@@ -263,6 +263,7 @@ export function judgeManage(probe: ManageProbe): string[] {
       'gemini:disabled',
       'qwen:disabled',
       'acp:disabled',
+      'agy:disabled',
       'codex:unavailable',
     ],
     '详情页上的 harness 和状态不对',
@@ -273,7 +274,7 @@ export function judgeManage(probe: ManageProbe): string[] {
     `用不了的 harness 没有都写原因：${JSON.stringify(probe.downReasons)}`,
   )
   // 真的设备服务给每个 harness 的启用项都标了角色，标题行上各有一个开关（dsh、OpenCode、codex 没装，
-  // ACP 那三个默认不启用，都关着）
+  // ACP 那三个和 Antigravity 默认不启用，都关着）
   same(
     probe.leads,
     [
@@ -284,6 +285,7 @@ export function judgeManage(probe: ManageProbe): string[] {
       'gemini:false',
       'qwen:false',
       'acp:false',
+      'agy:false',
       'codex:false',
     ],
     '每个 harness 的标题行上的启用开关不对（标识:开着没有）',
@@ -349,6 +351,9 @@ export function judgeManage(probe: ManageProbe): string[] {
     probe.checks.length >= 3 && probe.checks.includes('pi:runtime:ok'),
     `诊断没有逐项给出结果：${probe.checks.join(' ')}`,
   )
+  for (const check of ['agy:runtime:skipped', 'agy:sshEntry:skipped']) {
+    must(probe.checks.includes(check), `停用的 Antigravity 应跳过诊断：${check}`)
+  }
   must(probe.deviceLog > 0, '设备进程的日志没读到')
   must(probe.runtimeLog > 0, 'Pi 的运行日志没读到')
   must(
