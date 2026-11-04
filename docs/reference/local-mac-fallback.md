@@ -4,11 +4,89 @@
 
 ## 首次配置（维护者操作）
 
-1. 保护 `main` 和用于发版的 `release/x.y.z` 分支，审阅修改工作流、检查脚本和依赖的提交。禁止来自 fork 和 PR 的本地兜底。
-2. 创建 `local-mac-fallback` environment，配置 required reviewers、禁止本人批准、禁止绕过审批，deployment branches 只允许上述受保护分支。接收工作流仅支持 workflow_dispatch，并检查 `github.ref_protected`。环境必须先配置好，不能依赖 GitHub 自动创建一个无保护的同名环境。
-3. 在可信 Mac 的专用测试用户下准备 Xcode（含模拟器 SDK）、Node **24.21.0**、Go **1.26.10**、Ruby **3.4.7** 和 `gh`。CocoaPods **1.16.2** 由脚本装到隔离 HOME，托管机通过固定提交的 ruby/setup-ruby 准备同版本 Ruby。使用单独测试账号更安全：隔离 HOME 不是操作系统沙箱，受测代码仍拥有当前用户的文件权限。
-4. 维护者生成独立 **Ed25519 PEM** 证明签名密钥，权限设为仅本人读写；它不应是 Apple 证书或 SSH 登录私钥。私钥只留可信本机，环境变量 `LITCH_LOCAL_MAC_SIGNING_KEY` 指向其绝对路径。把 PEM 公钥放在仓库 Actions variable `LITCH_LOCAL_MAC_PUBLIC_KEY`（不是 environment-only variable，路由也需要它）。不把私钥上传 GitHub，不传给测试子进程。
-5. `gh` 登录凭据需要读取 Actions/Checks/Contents、读取仓库 Actions variable，以及 dispatch 接收工作流的 Actions write。登录与密钥准备由本人完成，不输出令牌。
+本仓库由 `slovx2` 一人维护，直接推送 main 和 release/x.y.z。规则只禁止 force push 和删除，不要求 PR、状态检查或审阅。环境审批人只设本人，**允许本人批准，但禁止管理员绕过审批**。默认就在当前 macOS 用户下执行隔离 HOME 测试；专用测试账号只是可选建议。隔离 HOME 不是 OS 沙箱，运行前仍须本人确认源码可信。
+
+GitHub [上下文定义](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#github-context)规定：匹配 ref 配有 branch protection 或 ruleset 时 `github.ref_protected=true`，不要求同时开启 PR/状态检查；[Branches API](https://docs.github.com/en/rest/branches/branches#list-branches) 的 protected 也包括 rulesets。因此下面仅含两条规则的 active ruleset 满足现有门禁判断。尚未在本仓库实际配置及运行验证，不把文档定义当成实测。
+
+### 请用户做的清单（按顺序）
+
+**1. 准备 gh 权限。** GitHub → 头像 → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token：Resource owner 选 `slovx2`，Only select repositories 选 `litch`。日常兜底需要 **Actions: Read and write、Checks: Read-only、Contents: Read-only、Variables: Read-only**，Metadata 随选仓库自动授予。首次执行下面的远端配置还需 **Administration: Read and write、Variables: Read and write**；配置后可去掉 Administration，并把 Variables 降回只读。使用本人身份在终端运行 `gh auth login --hostname github.com --git-protocol https`，交互输入令牌；不要把令牌写进命令、文档或聊天。已有登录态足够时无需重新登录。规则集和环境管理的权限要求见 [Rules API](https://docs.github.com/en/rest/repos/rules#create-a-repository-ruleset) 与 [Environments API](https://docs.github.com/en/rest/deployments/environments#create-or-update-an-environment)。
+
+**2. 建最小规则集。** 以下只限制强推与删除，没有 PR、审阅、状态检查、创建限制或普通更新限制；`bypass_actors=[]` 使规则也约束管理员。仅首次创建时执行一次：
+
+```sh
+gh api --method POST repos/slovx2/litch/rulesets --input - <<'JSON'
+{
+  "name": "local-mac-protected-refs",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/main", "refs/heads/release/*"],
+      "exclude": []
+    }
+  },
+  "rules": [{"type": "non_fast_forward"}, {"type": "deletion"}]
+}
+JSON
+```
+
+**3. 建环境并指定本人审批。** `slovx2` 的用户 ID 是 `2713715`。先建环境，再加两个 branch（不是 tag）模式：
+
+```sh
+gh api --method PUT repos/slovx2/litch/environments/local-mac-fallback --input - <<'JSON'
+{
+  "wait_timer": 0,
+  "prevent_self_review": false,
+  "reviewers": [{"type": "User", "id": 2713715}],
+  "deployment_branch_policy": {
+    "protected_branches": false,
+    "custom_branch_policies": true
+  }
+}
+JSON
+gh api --method POST repos/slovx2/litch/environments/local-mac-fallback/deployment-branch-policies -f name=main -f type=branch
+gh api --method POST repos/slovx2/litch/environments/local-mac-fallback/deployment-branch-policies -f 'name=release/*' -f type=branch
+```
+
+随后打开 [Litch 环境设置](https://github.com/slovx2/litch/settings/environments) → `local-mac-fallback` → Deployment protection rules：Required reviewers 只留 `slovx2`；**不勾选 Prevent self-review**；**取消勾选 Allow administrators to bypass configured protection rules**；点击 **Save protection rules**。禁止绕过采用 GitHub [官方网页步骤](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)，不依赖 REST 文档未列出的参数。Deployment branches and tags 应为 Selected branches and tags，只有 main 和 release/* 两条 branch 规则。接收工作流仍另查 `github.ref_protected` 与分支名称。
+
+**4. 配置本机密钥路径和工具链。** 私钥已在此 Mac 生成，文件 `~/.config/litch-local-mac/signing-key.pem` 为 Ed25519 PKCS#8 PEM、权限 600，父目录权限 700；公钥为同目录 `signing-key.pub.pem`。私钥不进仓库、不打印、不上传、不传给受测子进程。执行：
+
+```sh
+export LITCH_LOCAL_MAC_SIGNING_KEY="$HOME/.config/litch-local-mac/signing-key.pem"
+export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
+node --version
+go version
+ruby -e 'puts RUBY_VERSION'
+xcodebuild -version
+xcrun --sdk iphonesimulator --show-sdk-version
+```
+
+Node 必须为 **24.21.0**、Go **1.26.10**、iOS 原生构建用 Ruby **3.4.7**，并需 Xcode 模拟器 SDK。版本不符时先由本人准备匹配工具链；脚本不升级全局环境。CocoaPods **1.16.2** 装在隔离 HOME。需要长期生效时，将第一条 export 手动加入 `~/.zshrc`；本次没有修改 shell 配置。
+
+**5. 设置仓库公钥变量。** 完成前面环境审批限制后再执行；仅以下公钥可以公开：
+
+```sh
+gh variable set LITCH_LOCAL_MAC_PUBLIC_KEY --repo slovx2/litch <<'PEM'
+-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAS7Il3YAUoMzX3pUBE51kG04h0d89MNLS/H5jg43Sxpk=
+-----END PUBLIC KEY-----
+PEM
+```
+
+**6. 只读核查配置。** 下面不触发 Full 或发版；应看到 protected=true、两条规则、本人审批且 prevent_self_review=false、两个 branch 模式和同一份公钥。管理员不能绕过的勾选状态另在环境网页核对：
+
+```sh
+gh api repos/slovx2/litch/branches --paginate --jq '.[] | select(.name == "main" or (.name | startswith("release/"))) | {name,protected}'
+gh api repos/slovx2/litch/rules/branches/main --jq '[.[].type]'
+gh api repos/slovx2/litch/environments/local-mac-fallback --jq '{protection_rules,deployment_branch_policy}'
+gh api repos/slovx2/litch/environments/local-mac-fallback/deployment-branch-policies --jq '.branch_policies | map({name,type})'
+gh variable get LITCH_LOCAL_MAC_PUBLIC_KEY --repo slovx2/litch
+```
+
+本线只提供这些远端写入命令，没有执行。配置后首次接收工作流还需确认 `github.ref_protected` 的实际运行值，以及本人正常批准能放行、绕过不能放行。
 
 未设置公钥时，CI 保持托管 Mac 路径。无需注册 self-hosted runner，无需在本机放 Apple 签名或公证凭据。
 
