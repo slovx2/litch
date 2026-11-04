@@ -1294,6 +1294,10 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId, managerId, patch } = params as Commands['managers.update']['params']
           return await deviceOf(deviceId).managers.update(managerId, patch)
         }
+        case 'managers.reset.cancel': {
+          const { deviceId, managerId } = params as Commands['managers.reset.cancel']['params']
+          return await deviceOf(deviceId).managers.cancelReset(managerId)
+        }
         case 'managers.reset': {
           const { deviceId, managerId, boardOnly } = params as Commands['managers.reset']['params']
           return await deviceOf(deviceId).managers.reset(managerId, boardOnly)

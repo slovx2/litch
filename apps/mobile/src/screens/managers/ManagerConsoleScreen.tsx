@@ -351,21 +351,24 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
       title={manager.name || t('manager.manager')}
       subtitle={t(stateKey, stateArgs)}
       wire={page.wire}
-      actions={page.actions.map((action) =>
-        action.testID === 'detail:menu'
-          ? {
-              ...action,
-              attention: reset.attention,
-              ...(reset.attention
-                ? {
-                    accessibilityLabel: t(
-                      manager.reset?.outdated ? 'manager.resetOutdated' : 'manager.reset',
-                    ),
-                  }
-                : {}),
-            }
-          : action,
-      )}
+      actions={[
+        ...reset.cancelActions,
+        ...page.actions.map((action) =>
+          action.testID === 'detail:menu'
+            ? {
+                ...action,
+                attention: reset.attention,
+                ...(reset.attention
+                  ? {
+                      accessibilityLabel: t(
+                        manager.reset?.outdated ? 'manager.resetOutdated' : 'manager.reset',
+                      ),
+                    }
+                  : {}),
+              }
+            : action,
+        ),
+      ]}
       testID="manager-console"
     >
       {/* 页签是下划线式，一排放不下（大字号）时横着滚，不换行。键盘弹着时第一下点击也要切页签，不只是收键盘 */}

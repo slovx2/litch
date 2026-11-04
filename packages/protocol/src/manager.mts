@@ -8,6 +8,7 @@ export const MANAGER_METHOD = {
   update: 'litch/manager/update',
   end: 'litch/manager/end',
   reset: 'litch/manager/reset',
+  resetCancel: 'litch/manager/reset/cancel',
   boardRead: 'litch/manager/board/read',
   answersSubmit: 'litch/manager/answers/submit',
   feedbackSubmit: 'litch/manager/feedback/submit',
@@ -274,6 +275,10 @@ export interface ManagerResetParams {
   managerId: string
   /** 仅摘要失败后二次确认允许；默认必须取得摘要。 */
   boardOnly?: boolean
+}
+/** 只取消 waiting；已开始摘要或提交时返回 managerResetBusy，已结束时幂等返回。 */
+export interface ManagerResetCancelParams {
+  managerId: string
 }
 export interface ManagerRequestFields {
   title: string

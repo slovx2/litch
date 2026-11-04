@@ -24,6 +24,14 @@ export const isHarnessDown = (error: unknown): boolean =>
 export const isSessionRecovering = (error: unknown): boolean =>
   deviceFault(error)?.litch === 'sessionRecovering'
 
+/** 0.31.1 的重置拒绝没有结构化原因；仅识别事故中这两条明确的暂态错误。 */
+export const isManagerResetWaiting = (error: unknown): boolean =>
+  error instanceof RpcError &&
+  [
+    'Manager reset is waiting for this session to settle.',
+    'Manager reset is in progress.',
+  ].includes(error.message)
+
 /**
  * 这个会话正被别处的 codex 进程用着。原生 codex 同一个会话同一时间只许一个进程写，
  * 用户在终端里（或者官方桌面端里）开着它的时候，这边恢复、归档、删除都会被这样拒掉
@@ -68,6 +76,8 @@ export const harnessDownError = (name: string): ChannelError =>
 
 function fromDevice(error: RpcError, fault: DeviceErrorData, nameOf: HarnessNamer): ChannelError {
   const reason: string = fault.litch
+  if (reason === 'managerResetBusy')
+    return new ChannelError('busy', error.message, phrase('manager.resetApplying'))
   if (reason === 'harnessUnavailable' && fault.harness) {
     const name = nameOf(fault.harness)
     return new ChannelError('remote', error.message, phrase('fault.harnessUnavailable', { name }))
@@ -107,6 +117,8 @@ function fromDevice(error: RpcError, fault: DeviceErrorData, nameOf: HarnessName
 export function channelFailure(error: unknown, nameOf: HarnessNamer = (id) => id): ChannelError {
   if (error instanceof ChannelError) return error
   if (error instanceof RpcError) {
+    if (isManagerResetWaiting(error))
+      return new ChannelError('busy', error.message, phrase('manager.resetWaiting'))
     // 被别处的 codex 用着：现在做不了，不是出了故障
     if (isHeldElsewhere(error)) {
       return new ChannelError('rejected', error.message, phrase('fault.heldElsewhere'))

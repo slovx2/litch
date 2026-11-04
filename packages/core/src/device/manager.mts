@@ -470,6 +470,21 @@ export function createManagers(host: ManagersHost) {
       )
       return { ids: found.filter((id): id is string => id !== null) }
     },
+    beforeInput(sessionId: string): Promise<void> | undefined {
+      const manager = [...managers.values()].find(
+        (entry) =>
+          entry.threadId === sessionId &&
+          entry.status === 'active' &&
+          entry.reset?.phase === 'waiting',
+      )
+      if (!manager) return
+      // 本机排队也算用户发送，不能等真正发 turn/start 时才取消等待。
+      return guarded(() =>
+        host.request(MANAGER_METHOD.resetCancel, { managerId: manager.id }),
+      ).then((result) => {
+        settle(result.manager)
+      })
+    },
     async page(managerId: string, query: ManagerPageQuery, more?: boolean) {
       requires('paging', MANAGER_PAGING_METHOD.page)
       await guarded(() => paging(managerId, boardEntry(managerId)).page(query, more))
@@ -583,6 +598,10 @@ export function createManagers(host: ManagersHost) {
       const result = await guarded(() =>
         host.request(MANAGER_METHOD.update, { managerId, ...patch }),
       )
+      return { manager: settle(result.manager) }
+    },
+    async cancelReset(managerId: string) {
+      const result = await guarded(() => host.request(MANAGER_METHOD.resetCancel, { managerId }))
       return { manager: settle(result.manager) }
     },
     async reset(managerId: string, boardOnly?: boolean) {

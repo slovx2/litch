@@ -13,6 +13,7 @@ import type {
   ManagerFeaturesView,
   ManagerView,
 } from '../model-manager.mjs'
+import { phrase } from '../phrase.mjs'
 import type { MockTasksHost } from './mock-tasks.mjs'
 import {
   type ManagerSessionSummary,
@@ -424,6 +425,11 @@ export function createMockManagers(host: MockManagerHost) {
         )
       }
       result = { manager }
+    } else if (name === 'managers.reset.cancel') {
+      if (manager.reset?.phase === 'waiting') manager.reset.phase = 'idle'
+      else if (['summarizing', 'applying'].includes(manager.reset?.phase ?? ''))
+        throw new ChannelError('busy', 'Manager reset is applying', phrase('manager.resetApplying'))
+      result = { manager }
     } else if (name === 'managers.reset') {
       manager.reset = {
         mode: manager.reset?.mode ?? (manager.harness === 'claude-code' ? 'refresh' : 'replace'),
@@ -828,6 +834,7 @@ export function createMockManagers(host: MockManagerHost) {
         'managers.update',
         'managers.end',
         'managers.reset',
+        'managers.reset.cancel',
         'managers.answers.submit',
         'managers.feedback.submit',
         'managers.decision.reopen',

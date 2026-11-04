@@ -10,6 +10,8 @@ export type PhraseKey =
   | 'permission.project.failedReason'
   | 'manager.endingNote'
   | 'manager.readOnly'
+  | 'manager.resetWaiting'
+  | 'manager.resetApplying'
   | 'background.native.unsupported'
   | 'background.native.unknown'
   | 'background.native.missing'

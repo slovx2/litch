@@ -23,13 +23,17 @@ export const zhManager = {
   'manager.resetHistoryReadOnly': '此经理会话已重置，旧对话仅供查阅。',
 
   'manager.reset': '重置经理会话',
-  'manager.resetWaiting': '等待经理回合和后台任务结束',
+  'manager.resetWaiting': '经理正在刷新能力，当前回合结束后生效',
+  'manager.resetWaitingReplace': '等待经理回合、后台任务和临时追问结束；可取消重置',
+  'manager.resetApplying': '经理正在应用重置，完成后可继续操作',
+  'manager.resetCancel': '取消重置',
   'manager.resetOutdated': '重置经理会话：有新版本能力可用',
   'manager.resetNote':
-    '重置可让经理获得新版本的工具和指令。经理忙碌时会等待回合和后台任务结束，工作线继续运行。',
-  'manager.resetRefresh': '保留当前会话和完整历史，新能力将在下一轮生效。',
+    '重置可让经理获得新版本的工具和指令。等待期间可取消重置；发送消息会自动取消等待并继续对话。工作线继续运行。',
+  'manager.resetRefresh':
+    '保留当前会话和完整历史，只等待当前回合结束，不等待后台任务。新能力将在下一轮生效。',
   'manager.resetReplace':
-    '将创建新会话，旧对话保留为只读历史。新经理只接收交接摘要和看板，其余对话细节不会传入新会话。',
+    '等待经理回合、后台任务和临时追问结束后创建新会话。旧对话保留为只读历史，新经理只接收交接摘要和看板。摘要开始后不能取消重置。',
   'manager.resetSummaryFailed': '交接摘要生成失败。是否仅根据看板接手？',
   'manager.resetBoardOnly': '仅根据看板接手',
 

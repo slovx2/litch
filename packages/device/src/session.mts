@@ -530,7 +530,8 @@ export class ClientSession implements ClientToolPeer {
         isObject(frame.params) &&
         typeof frame.params.threadId === 'string' &&
         (this.host.managers?.resets.refusal(frame.params.threadId) ||
-          this.host.managers?.resets.held(frame.params.threadId))
+          (this.host.managers &&
+            !this.host.managers.resets.toolsAllowed(frame.params.threadId, null, null)))
       )
         throw new ProtocolError(
           -32600,
@@ -570,8 +571,7 @@ export class ClientSession implements ClientToolPeer {
       const readOnly = ['thread/read', 'thread/turns/list', 'thread/unsubscribe'].includes(method)
       const refusal = this.host.managers?.resets.refusal(threadId)
       if (refusal && !readOnly) throw new ProtocolError(-32600, refusal)
-      if (this.host.managers?.resets.held(threadId) && !readOnly && method !== 'turn/interrupt')
-        throw new ProtocolError(-32600, 'Manager reset is waiting for this session to settle.')
+      this.host.managers?.resets.checkRequest(threadId, method)
     }
     // 旁问只由设备编排；普通客户端不能绕过卡片提升权限、发任意回合或复制成可写会话。
     if (
@@ -1083,12 +1083,15 @@ export class ClientSession implements ClientToolPeer {
         !['thread/read', 'thread/turns/list', 'thread/unsubscribe'].includes(method)
       ) {
         const refusal = this.host.managers?.resets.refusal(fields.threadId)
-        if (
-          refusal ||
-          (this.host.managers?.resets.held(fields.threadId) && method !== 'turn/interrupt')
-        ) {
+        if (refusal) {
           done()
-          throw new ProtocolError(-32600, refusal ?? 'Manager reset is in progress.')
+          throw new ProtocolError(-32600, refusal)
+        }
+        try {
+          this.host.managers?.resets.checkRequest(fields.threadId, method)
+        } catch (error) {
+          done()
+          throw error
         }
       }
       const refreshTools =

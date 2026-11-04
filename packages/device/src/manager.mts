@@ -91,6 +91,7 @@ export class DeviceManagers {
     this.unlisten = tree.onTurnEnded((threadId) => {
       const manager = this.lines.managerFor(threadId)
       if (manager) {
+        this.resets.tick(manager.id)
         this.changed(manager.id)
         this.kick(manager.id)
       }
@@ -107,6 +108,11 @@ export class DeviceManagers {
         this.kick(id)
     }, 1000)
     this.timer.unref()
+    // 持久化的 waiting 不依赖客户端重订阅；构造完成即可续做。
+    queueMicrotask(() => {
+      if (this.closed) return
+      for (const manager of this.store.managers()) this.resets.tick(manager.id)
+    })
   }
   manager(id: string): Manager {
     const manager = this.store.manager(id)
@@ -299,6 +305,10 @@ export class DeviceManagers {
       case MANAGER_METHOD.reset:
         keys(params, ['managerId', 'boardOnly'])
         this.resets.request(id, params.boardOnly === true)
+        return { manager: this.manager(id) }
+      case MANAGER_METHOD.resetCancel:
+        keys(params, ['managerId'])
+        this.resets.cancel(id)
         return { manager: this.manager(id) }
       case MANAGER_POST_METHOD.question: {
         keys(params, ['managerId', 'id', 'revision', 'question', 'mode'])

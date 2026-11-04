@@ -20,6 +20,7 @@ export class ManagerError extends Error {
         ? -32601
         : [
               'managerEnded',
+              'managerResetBusy',
               'decisionNotClosed',
               'decisionNotOpen',
               'decisionConflict',

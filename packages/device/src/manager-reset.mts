@@ -1,4 +1,8 @@
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
+import {
+  ATTACHMENT_STATUS_METHOD,
+  ATTACHMENT_WATCH_METHOD,
+} from '../../protocol/src/file-attachments.mjs'
 import type { Manager, ManagerResetState } from '../../protocol/src/manager.mjs'
 import type { DeviceManagers } from './manager.mjs'
 import {
@@ -18,6 +22,7 @@ import { isObject } from './wire.mjs'
 /** 只有用户 RPC 能排入重置。提交意图先耐久保存，跨库的路由更新随后幂等重放。 */
 export class ManagerResets {
   private readonly jobs = new Map<string, Promise<void>>()
+  private readonly revisions = new Map<string, number>()
   private closed = false
   readonly owner: DeviceManagers
   constructor(owner: DeviceManagers) {
@@ -55,6 +60,58 @@ export class ManagerResets {
       )
     )
   }
+  /** 等待阶段用户输入优先；使已经在读引擎状态的旧任务失效，不能随后覆盖取消。 */
+  cancel(id: string): void {
+    const record = this.owner.store.reset(id)
+    if (!record || !['waiting', 'summarizing', 'applying'].includes(record.phase)) return
+    if (record.phase !== 'waiting')
+      throw new ManagerError(
+        'managerResetBusy',
+        'Manager reset has started and cannot be cancelled.',
+      )
+    this.revisions.set(id, (this.revisions.get(id) ?? 0) + 1)
+    this.owner.store.saveReset({
+      managerId: id,
+      oldThreadId: record.oldThreadId,
+      applied: record.applied,
+      phase: 'idle',
+    })
+    this.owner.changed(id)
+    this.owner.kick(id)
+    this.owner.tree.check(record.oldThreadId)
+  }
+  /** 所有引擎的等待阶段都可取消；摘要和提交开始后仍保留写入边界。 */
+  beforeInput(threadId: string): void {
+    const manager = this.owner.store.forThread(threadId)
+    if (manager && this.owner.store.reset(manager.id)?.phase === 'waiting') this.cancel(manager.id)
+  }
+  busyError(): ManagerError {
+    return new ManagerError(
+      'managerResetBusy',
+      'Manager reset is applying; try again when it finishes.',
+    )
+  }
+  checkRequest(threadId: string, method: string): void {
+    if (['turn/start', 'turn/steer', 'thread/queue/add', 'thread/queue/start'].includes(method))
+      this.beforeInput(threadId)
+    if (!this.held(threadId)) return
+    // 订阅和附件观察不冻结；否则重连会把临时等待固化为只读视图。
+    if (
+      [
+        'thread/read',
+        'thread/turns/list',
+        'thread/unsubscribe',
+        'thread/resume',
+        'thread/goal/get',
+        'thread/queue/list',
+        'turn/interrupt',
+        ATTACHMENT_WATCH_METHOD,
+        ATTACHMENT_STATUS_METHOD,
+      ].includes(method)
+    )
+      return
+    throw this.busyError()
+  }
   refusal(threadId: string): string | null {
     const current = this.owner.store.historical(threadId)
     if (current)
@@ -82,6 +139,7 @@ export class ManagerResets {
         'invalidManager',
         'Board-only takeover is available only after summary failure.',
       )
+    this.revisions.set(id, (this.revisions.get(id) ?? 0) + 1)
     this.owner.store.saveReset({
       managerId: id,
       oldThreadId: manager.threadId,
@@ -96,9 +154,11 @@ export class ManagerResets {
     if (this.closed || this.jobs.has(id)) return
     const record = this.owner.store.reset(id)
     if (!record || !['waiting', 'summarizing', 'applying'].includes(record.phase)) return
-    const job = this.run(record)
+    const revision = this.revisions.get(id)
+    const cancelled = () => this.closed || this.revisions.get(id) !== revision
+    const job = this.run(record, cancelled)
       .catch((error: unknown) => {
-        if (this.closed) return
+        if (cancelled()) return
         const latest = this.owner.store.reset(id)
         // 提交后只向前恢复，绝不能再启第二个候选经理。
         if (record.phase === 'applying' && record.oldTools) return
@@ -121,6 +181,8 @@ export class ManagerResets {
   }
   private async safe(manager: Manager): Promise<boolean> {
     const tree = this.owner.tree
+    // Claude 只替换下轮加载的工具，不换线程；后台任务、旁问和目标不需要停下。
+    if (manager.harness === 'claude-code') return this.turnSettled(manager)
     const link = await tree.link(manager.harness)
     const features = isObject(link.runtime?.features) ? link.runtime.features : {}
     if (features.goals === true) {
@@ -137,6 +199,10 @@ export class ManagerResets {
       tree.host.continuationPending?.(manager.threadId)
     )
       return false
+    return this.turnSettled(manager)
+  }
+  private async turnSettled(manager: Manager): Promise<boolean> {
+    const tree = this.owner.tree
     const { thread } = await tree.read(manager.threadId, true)
     const turns = Array.isArray(thread.turns) ? thread.turns : []
     return (
@@ -146,7 +212,7 @@ export class ManagerResets {
       !tree.isActive(manager.threadId)
     )
   }
-  private async run(record: ResetRecord): Promise<void> {
+  private async run(record: ResetRecord, cancelled: () => boolean): Promise<void> {
     if (record.committed) {
       this.finish(record)
       const after = record.committed.manager
@@ -162,8 +228,9 @@ export class ManagerResets {
     const tree = this.owner.tree
     await this.owner.settleDeliveries(manager.id)
     await tree.settleManagerQueue(manager.threadId)
-    if (this.closed || !(await this.safe(manager))) return
+    if (cancelled() || !(await this.safe(manager)) || cancelled()) return
     const link = await tree.link(manager.harness)
+    if (cancelled()) return
     const bundle = managerBundle(manager, link.native, tree.host.taskCards(manager.harness))
     const names = new Set(bundle.map((spec) => spec.name))
     const known = new Set<string>(Object.values(CLIENT_TOOL_NAMESPACE))

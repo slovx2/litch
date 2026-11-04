@@ -9,8 +9,13 @@ export function managerResetState(
   const phase = manager.reset?.phase
   const busy = sending || ['waiting', 'summarizing', 'applying'].includes(phase ?? '')
   const boardOnly = phase === 'summaryFailed'
+  const replace = manager.reset
+    ? manager.reset.mode === 'replace'
+    : manager.harness !== 'claude-code'
   return {
-    replace: manager.reset ? manager.reset.mode === 'replace' : manager.harness !== 'claude-code',
+    replace,
+    cancellable: phase === 'waiting' && manager.status === 'active',
+    cancelDisabled: !online || sending,
     attention:
       manager.status === 'active' &&
       (manager.reset?.outdated === true || phase === 'failed' || boardOnly),
@@ -21,7 +26,11 @@ export function managerResetState(
         : !online
           ? ('manager.offline' as const)
           : busy
-            ? ('manager.resetWaiting' as const)
+            ? phase === 'waiting'
+              ? replace
+                ? ('manager.resetWaitingReplace' as const)
+                : ('manager.resetWaiting' as const)
+              : ('manager.resetApplying' as const)
             : null,
   }
 }

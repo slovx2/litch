@@ -24,14 +24,30 @@ test('更新或失败有醒目提示，完成后清除；结束的经理不提�
 
 test('等待、摘要、应用和正在提交时不重复发起；经理运行本身仍允许排队重置', () => {
   for (const phase of ['waiting', 'summarizing', 'applying'])
-    assert.equal(managerResetState(state(phase), true).disabled, 'manager.resetWaiting')
-  assert.equal(managerResetState(manager, true, true).disabled, 'manager.resetWaiting')
+    assert.equal(
+      managerResetState(state(phase), true).disabled,
+      phase === 'waiting' ? 'manager.resetWaiting' : 'manager.resetApplying',
+    )
+  assert.equal(managerResetState(manager, true, true).disabled, 'manager.resetApplying')
   assert.equal(managerResetState(manager, true).disabled, null)
   assert.equal(managerResetState(manager, false).disabled, 'manager.offline')
   assert.equal(
     managerResetState({ ...manager, status: 'ending' }, true).disabled,
     'manager.readOnly',
   )
+})
+
+test('手机标题栏只在 waiting 提供取消，离线和提交中禁用，区分刷新与换会话等待', () => {
+  assert.equal(managerResetState(state('waiting'), true).cancellable, true)
+  assert.equal(managerResetState(state('waiting'), true).cancelDisabled, false)
+  assert.equal(managerResetState(state('waiting'), false).cancelDisabled, true)
+  assert.equal(managerResetState(state('waiting'), true, true).cancelDisabled, true)
+  assert.equal(
+    managerResetState(state('waiting', { mode: 'replace' }), true).disabled,
+    'manager.resetWaitingReplace',
+  )
+  for (const phase of ['idle', 'summarizing', 'applying', 'failed', 'ready'])
+    assert.equal(managerResetState(state(phase), true).cancellable, false)
 })
 
 test('只有摘要失败的再次确认才允许仅凭看板接手', () => {

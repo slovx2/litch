@@ -25,8 +25,15 @@ export function ResetManager({ manager, disabled }: { manager: ManagerView; disa
   const busy = sending || ['waiting', 'summarizing', 'applying'].includes(state?.phase ?? '')
   const summaryFailed = state?.phase === 'summaryFailed'
   const replace = state ? state.mode === 'replace' : manager.harness !== 'claude-code'
+  const cancellable = state?.phase === 'waiting'
   const label = t(
-    busy ? 'manager.resetWaiting' : state?.outdated ? 'manager.resetOutdated' : 'manager.reset',
+    cancellable
+      ? 'manager.resetCancel'
+      : busy
+        ? 'manager.resetApplying'
+        : state?.outdated
+          ? 'manager.resetOutdated'
+          : 'manager.reset',
   )
   const submit = async () => {
     setSending(true)
@@ -44,16 +51,35 @@ export function ResetManager({ manager, disabled }: { manager: ManagerView; disa
       setSending(false)
     }
   }
+  const cancel = async () => {
+    setSending(true)
+    setError('')
+    try {
+      await channel.command('managers.reset.cancel', {
+        deviceId: manager.deviceId,
+        managerId: manager.id,
+      })
+    } catch (caught) {
+      setError(reasonOf(caught, t))
+      setOpen(true)
+    } finally {
+      setSending(false)
+    }
+  }
   return (
     <>
       <button
         type="button"
         className="btn ghost manager-reset"
-        data-act="manager-reset"
-        disabled={disabled || busy}
-        aria-label={t('manager.reset')}
-        title={label}
-        onClick={() => setOpen(true)}
+        data-act={cancellable ? 'manager-reset-cancel' : 'manager-reset'}
+        disabled={disabled || sending || (busy && !cancellable)}
+        aria-label={t(cancellable ? 'manager.resetCancel' : 'manager.reset')}
+        title={
+          cancellable
+            ? `${label} · ${t(replace ? 'manager.resetWaitingReplace' : 'manager.resetWaiting')}`
+            : label
+        }
+        onClick={() => (cancellable ? void cancel() : setOpen(true))}
       >
         <svg
           viewBox="0 0 20 20"
@@ -64,7 +90,7 @@ export function ResetManager({ manager, disabled }: { manager: ManagerView; disa
           strokeWidth="1.5"
           aria-hidden="true"
         >
-          <path d="M16 7a6.5 6.5 0 1 0 .3 5M16 3v4h-4" />
+          <path d={cancellable ? 'M5 5l10 10M15 5L5 15' : 'M16 7a6.5 6.5 0 1 0 .3 5M16 3v4h-4'} />
         </svg>
         {state?.outdated || state?.phase === 'failed' || summaryFailed ? (
           <i className="manager-reset-dot" />

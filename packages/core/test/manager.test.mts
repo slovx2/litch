@@ -26,8 +26,8 @@ import {
 } from '../src/index.mjs'
 import { sampleManagers } from '../src/mock/sample-manager.mjs'
 import { fakeDevice, harness } from './fake-device.mjs'
-import { fakeOpener, type Handler } from './fake-server.mjs'
-import { thread } from './fixtures.mjs'
+import { fakeOpener, type Handler, RpcFailure } from './fake-server.mjs'
+import { thread, turn } from './fixtures.mjs'
 import { fakeClock, settle } from './helpers.mjs'
 import { watchSession } from './wire.mjs'
 
@@ -100,6 +100,197 @@ function sample() {
   assert.ok(manager && board)
   return { manager: manager as Manager, board: board as ManagerBoard }
 }
+
+for (const recovery of ['ready', 'cancel', 'restart', 'inflight', 'repeated'] as const) {
+  test(`经理重置订阅被拒后由状态事件恢复，同连接不永久只读：${recovery}`, async () => {
+    const { manager } = sample()
+    manager.threadId = 'm1'
+    manager.status = 'active'
+    manager.reset = {
+      mode: 'refresh',
+      phase: 'waiting',
+      current: 'new',
+      applied: 'old',
+      outdated: true,
+    }
+    const fake = fakeDevice([harness('claude', { threads: [thread({ id: 'm1' })] })])
+    fake.device.extensions = ['harness', 'litchManager']
+    let blocked = recovery !== 'restart'
+    let resumes = 0
+    let failInflight: ((error: Error) => void) | undefined
+    const peer = fakeOpener({
+      ...fake.handlers,
+      [MANAGER_METHOD.list]: () => ({ managers: [manager] }),
+      [MANAGER_METHOD.resetCancel]: () => {
+        blocked = false
+        manager.reset!.phase = 'idle'
+        return { manager }
+      },
+      'thread/resume': (params) => {
+        resumes++
+        if (blocked) {
+          if (recovery === 'inflight')
+            return new Promise((_resolve, reject) => {
+              failInflight = reject
+            })
+          throw new RpcFailure(-32600, 'Manager reset is waiting for this session to settle.')
+        }
+        return fake.handlers['thread/resume']!(params)
+      },
+    })
+    const time = fakeClock()
+    const core = createCore({
+      clock: time.clock,
+      version: '1.0.0',
+      log() {},
+      devices: [
+        {
+          id: 'local',
+          name: '本机',
+          host: 'dev@mac',
+          kind: 'local',
+          target: null,
+          wire: 'green',
+          open: peer.open,
+        },
+      ],
+    })
+    core.start()
+    await settle()
+    const watched = watchSession(core, 'm1')
+    try {
+      await settle()
+      await settle()
+      if (recovery === 'restart') {
+        assert.equal(watched.seen.view?.live, true)
+        // 重启保留 waiting，新的设备连接首先拒绝订阅。
+        blocked = true
+        peer.last().drop()
+        await settle()
+        time.advance(500)
+        await settle()
+        await settle()
+      }
+      const connection = peer.last()
+      if (recovery !== 'inflight') {
+        assert.equal(watched.seen.view?.live, false)
+        assert.deepEqual(watched.seen.view?.note, { key: 'manager.resetWaiting' })
+      }
+      let before = resumes
+      // 数秒没有轮询；放行必须来自经理状态事件或取消操作的应答。
+      time.advance(4000)
+      await settle()
+      assert.equal(resumes, before)
+      if (recovery === 'repeated') {
+        connection.notify(MANAGER_NOTIFICATION.changed, { manager })
+        await settle()
+        await settle()
+        assert.equal(watched.seen.view?.live, false)
+        assert.equal(resumes, before + 1)
+        before = resumes
+      }
+      blocked = false
+      manager.reset!.phase = recovery === 'cancel' ? 'idle' : 'ready'
+      if (recovery === 'cancel') {
+        await core.command(
+          'managers.reset.cancel',
+          { deviceId: 'local', managerId: manager.id },
+          { aborted: false, addEventListener() {} },
+        )
+      } else {
+        connection.notify(MANAGER_NOTIFICATION.changed, { manager })
+        await settle()
+        failInflight?.(
+          new RpcFailure(-32600, 'Manager reset is waiting for this session to settle.'),
+        )
+      }
+      await settle()
+      await settle()
+      assert.equal(peer.last(), connection)
+      assert.equal(watched.seen.view?.live, true)
+      assert.equal(watched.seen.view?.note, null)
+      assert.equal(resumes, before + 1)
+    } finally {
+      watched.close()
+      core.stop()
+    }
+  })
+}
+
+test('等待重置时本机排队也立即取消重置，当前回合结束后消息原文只发送一次', async () => {
+  const { manager } = sample()
+  manager.threadId = 'm1'
+  manager.status = 'active'
+  manager.reset = {
+    mode: 'refresh',
+    phase: 'waiting',
+    current: 'new',
+    applied: 'old',
+    outdated: true,
+  }
+  const running = turn('running', [], { status: 'inProgress' })
+  const fake = fakeDevice([
+    harness('claude', { threads: [thread({ id: 'm1', turns: [running] })] }),
+  ])
+  fake.device.extensions = ['harness', 'litchManager']
+  let cancelled = 0
+  const inputs: unknown[] = []
+  const peer = fakeOpener({
+    ...fake.handlers,
+    [MANAGER_METHOD.list]: () => ({ managers: [manager] }),
+    [MANAGER_METHOD.resetCancel]: () => {
+      cancelled++
+      manager.reset!.phase = 'idle'
+      return { manager }
+    },
+    'turn/start': (params) => {
+      inputs.push(params)
+      return { turn: turn('new', [], { status: 'inProgress' }) }
+    },
+  })
+  const time = fakeClock()
+  const core = createCore({
+    clock: time.clock,
+    version: '1.0.0',
+    log() {},
+    devices: [
+      {
+        id: 'local',
+        name: '本机',
+        host: 'dev@mac',
+        kind: 'local',
+        target: null,
+        wire: 'green',
+        open: peer.open,
+      },
+    ],
+  })
+  core.start()
+  await settle()
+  const watched = watchSession(core, 'm1')
+  try {
+    await settle()
+    await core.command(
+      'session.send',
+      { deviceId: 'local', sessionId: 'm1', text: '排队的完整消息' },
+      { aborted: false, addEventListener() {} },
+    )
+    assert.equal(cancelled, 1)
+    assert.equal(inputs.length, 0)
+    assert.equal(watched.seen.view?.queued[0]?.text, '排队的完整消息')
+    peer
+      .last()
+      .notify('turn/completed', { threadId: 'm1', turn: { ...running, status: 'completed' } })
+    await settle()
+    await settle()
+    assert.equal(inputs.length, 1)
+    assert.match(JSON.stringify(inputs[0]), /排队的完整消息/)
+    assert.equal(watched.seen.view?.queued.length, 0)
+  } finally {
+    watched.close()
+    core.stop()
+  }
+})
 
 test('投影递归转换时间点，保留时长与审计原文，并提供四页分组', () => {
   const { manager, board } = sample()
