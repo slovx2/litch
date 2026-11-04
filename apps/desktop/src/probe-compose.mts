@@ -407,6 +407,10 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   }
   const order = users().slice(base)
   const streamed = answers.stop()
+  if (order.length !== sent.length || running() || one('.tray-row'))
+    throw new Error(
+      `排队未完成：${JSON.stringify({ order, running: running(), queued: all('.tray-row').map((row) => row.textContent) })}`,
+    )
   const echoed = real
     ? all('.turn')
         .slice(-sent.length)
@@ -440,7 +444,9 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   const turnsBefore = all('.turn').length
   await say('插进来的话')
   const steerButton = await until('托盘里的“立即插入”', () =>
-    one<HTMLButtonElement>('.tray-row .ibtn.steer'),
+    all('.tray-row')
+      .find((row) => row.querySelector('.ell')?.textContent === '插进来的话')
+      ?.querySelector<HTMLButtonElement>('.ibtn.steer'),
   )
   steerButton.click()
   await until('插进来的话出现在对话里', () => users().includes('插进来的话'))

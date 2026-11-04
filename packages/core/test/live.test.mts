@@ -1751,6 +1751,37 @@ for (const interruptedBy of ['通知', '超时'] as const) {
   })
 }
 
+test('上一回合的 idle 晚于下一回合开始：下一回合明确结束后继续排队', async () => {
+  const { core, handlers, peer, command, sent } = setup([
+    thread({ id: 'a', turns: [started('first')] }),
+  ])
+  let release!: () => void
+  handlers['turn/start'] = () =>
+    new Promise((done) => {
+      release = () => done({ turn: started('second') })
+    })
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  await command('session.send', { ...where, text: '第二条' })
+  await command('session.send', { ...where, text: '第三条' })
+  peer.last().notify('turn/completed', { threadId: 'a', turn: finished('first') })
+  await settle()
+  assert.equal(sent('turn/start').length, 1)
+  // 第一轮的 idle 到来时，第二轮的 turn/start 仍未应答。
+  peer.last().notify('thread/status/changed', { threadId: 'a', status: { type: 'idle' } })
+  await settle()
+  release()
+  await settle()
+  handlers['turn/start'] = () => ({ turn: started('third') })
+  peer.last().notify('turn/completed', { threadId: 'a', turn: finished('second') })
+  await settle()
+  assert.equal(sent('turn/start').length, 2, '明确终态不能仍被旧 idle 的核实标记阻塞')
+  assert.equal(session.seen.view?.queued.length, 0)
+  assert.deepEqual(session.texts().at(-1), ['第三条'])
+})
+
 for (const status of ['completed', 'interrupted'] as const) {
   test(`只收到 idle 广播：读取真实结局 ${status}，正常完成出队，停止仍须手动发送`, async () => {
     const { core, world, peer, command, sent } = setup([

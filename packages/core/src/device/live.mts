@@ -1092,6 +1092,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         void reconcileTurns(live).then((idle) => {
           if (idle) pump(live)
         })
+      // 迟到的 idle 可能在下一轮启动时留下核实标记；所有已知回合已有明确终态后不再阻塞队列。
+      else live.needsTurnCheck = false
       pump(live)
       // 开着的会话回合结束时也存一份：退出应用时开着的那个，下次打开也有东西先摆（没人看的在 release 里存）
       if (live.sinks.size > 0) remember(live)

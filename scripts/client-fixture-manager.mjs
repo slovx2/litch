@@ -28,7 +28,7 @@ export const MANAGER_SPACE = {
     reopen: 'Reopen a decision the user ignored, making it pending again.',
     answer:
       'Record or revise an answer the user already gave in conversation, as user-conversation.',
-    status: 'Replace the current situation with a short account of material progress;',
+    status: 'Replace the current situation with Markdown sections summarizing material progress,',
   },
 }
 
