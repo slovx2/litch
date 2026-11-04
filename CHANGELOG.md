@@ -5,6 +5,12 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 0.32.1（2026-11-04）
+
+- 修复经理重置时会话被锁住的问题：只等待当前回合结束，后台任务不再阻塞重置。
+- 等待重置期间仍可查看会话和附件；可手动取消重置，发送消息或插话也会自动取消，保留本次消息。
+- 设备服务重启后自动继续经理重置，桌面与手机自动恢复会话订阅。
+
 ## 0.32.0（2026-11-04）
 
 - Chrome 按会话分组标签，显示 AI 操作标记并自动修复分组；内置浏览器与 Chrome 支持批量动作。
