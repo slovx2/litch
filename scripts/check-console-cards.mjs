@@ -352,6 +352,8 @@ try {
       await read("document.querySelector('.mg-body').scrollTop=0")
       await click('[data-paging-object="D-2"] > button')
       await wait('[data-decision="D-2"]')
+      // 展开有 200 毫秒的高度过渡：等它走完再量滚到底
+      await until(() => read('document.getAnimations().length === 0'), '展开过渡结束')
       assert.equal(
         await read('!!document.querySelector("[data-paging-history]")'),
         false,
@@ -424,6 +426,85 @@ try {
       console.log(
         '决策页：收起草稿标记、提交条固定与不遮挡、定位、批量提交、清除、失效与待确认通过',
       )
+      // 整卡点击与过渡：点收起卡的空白处展开、选着文字时不展开；展开下面那张时上面那张收起，被点的卡逐帧留在原处；
+      // 提交后离开的卡收拢、下面的卡补到老位置；偏好减少动态时不做过渡，被点的卡照样留在原处
+      await read('localStorage.clear()')
+      await call('Page.navigate', {
+        url: 'http://127.0.0.1:5297/test/console-cards-fixture.html?lang=zh-CN&tab=decisions&height=500&settle=1',
+      })
+      await wait('[data-paging-object="D-1"]')
+      const expanded = (id) =>
+        read(
+          `document.querySelector('[data-paging-object="${id}"] > button').getAttribute('aria-expanded')`,
+        )
+      await read(
+        `(()=>{const p=document.querySelector('[data-paging-object="D-4"] .mg-paging-preview');const r=document.createRange();r.selectNodeContents(p);getSelection().removeAllRanges();getSelection().addRange(r);p.click();getSelection().removeAllRanges()})()`,
+      )
+      await frame()
+      assert.equal(await expanded('D-4'), 'false', '选着文字点击不展开')
+      await click('[data-paging-object="D-1"] .mg-paging-preview')
+      await wait('[data-decision="D-1"]')
+      assert.equal(await expanded('D-1'), 'true', '点卡片空白处展开')
+      await read('new Promise(r=>setTimeout(r,400))')
+      /** 点 id 那张卡的空白处，逐帧记它的纵坐标（排在过渡的补偿之后读），结束后再读一次 */
+      const track = (id, frames = 14) =>
+        read(`new Promise(done=>{const host=document.querySelector('.mg-body');const card=()=>document.querySelector('[data-paging-object="${id}"]');const list=card().parentElement;const top=()=>card().getBoundingClientRect().top;const rel=()=>top()-list.getBoundingClientRect().top;
+          const before=top();card().querySelector('.mg-paging-preview').click();
+          setTimeout(()=>{const anims=document.getAnimations().length;const tops=[];let n=0;const tick=()=>{tops.push(Math.round(top()-before));if(++n<${frames})requestAnimationFrame(tick);else setTimeout(()=>done({anims,tops,after:Math.round(top()-before),rel:rel(),scroll:host.scrollTop}),350)};requestAnimationFrame(tick)},0)})`)
+      await read(
+        `(()=>{const host=document.querySelector('.mg-body');const card=document.querySelector('[data-paging-object="D-3"]');host.scrollTop+=card.getBoundingClientRect().top-host.getBoundingClientRect().top-150})()`,
+      )
+      await frame()
+      const held = await track('D-3')
+      assert.ok(held.anims > 0, `展开时做过渡 ${JSON.stringify(held)}`)
+      assert.ok(
+        held.tops.every((dy) => Math.abs(dy) < 2) && Math.abs(held.after) < 2,
+        `被点的卡留在原处 ${JSON.stringify(held)}`,
+      )
+      assert.equal(await expanded('D-1'), 'false')
+      // 提交 D-3：离开待定后原处收拢，D-4 补到 D-3 的老位置
+      await click('[data-decision="D-3"] .mg-option input')
+      await wait('.mg-send')
+      const place = await read(
+        `(()=>{const list=document.querySelector('[data-paging-object="D-3"]').parentElement.getBoundingClientRect().top;return {d3:document.querySelector('[data-paging-object="D-3"]').getBoundingClientRect().top-list,d4:document.querySelector('[data-paging-object="D-4"]').getBoundingClientRect().top-list}})()`,
+      )
+      await click('[data-act="manager-submit"]')
+      await until(
+        () => read(`!document.querySelector('[data-paging-object="D-3"]')`),
+        'D-3 离开待定',
+      )
+      const leaving = await read(
+        `(()=>{const ghost=document.querySelector('[data-motion-ghost]');const list=document.querySelector('[data-paging-object="D-4"]').parentElement;return {ghost:!!ghost&&ghost.inert&&ghost.getAttribute('aria-hidden')==='true',d4:document.querySelector('[data-paging-object="D-4"]').getBoundingClientRect().top-list.getBoundingClientRect().top}})()`,
+      )
+      await read('new Promise(r=>setTimeout(r,450))')
+      const filled = await read(
+        `(()=>{const list=document.querySelector('[data-paging-object="D-4"]').parentElement;return {d4:document.querySelector('[data-paging-object="D-4"]').getBoundingClientRect().top-list.getBoundingClientRect().top,ghosts:document.querySelectorAll('[data-motion-ghost]').length}})()`,
+      )
+      assert.ok(leaving.ghost, '离开的卡原处收拢、不可交互、读屏跳过')
+      assert.ok(
+        leaving.d4 > place.d3 + 2,
+        `收拢开始时 D-4 还在下方 ${JSON.stringify({ place, leaving })}`,
+      )
+      assert.ok(
+        Math.abs(filled.d4 - place.d3) < 2 && filled.ghosts === 0,
+        `D-4 补到老位置、不留残影 ${JSON.stringify({ place, filled })}`,
+      )
+      // 偏好减少动态：不做过渡，被点的卡照样留在原处
+      await call('Emulation.setEmulatedMedia', {
+        features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
+      })
+      await read(
+        `(()=>{const host=document.querySelector('.mg-body');const card=document.querySelector('[data-paging-object="D-5"]');host.scrollTop+=card.getBoundingClientRect().top-host.getBoundingClientRect().top-150})()`,
+      )
+      await frame()
+      const still = await track('D-5', 4)
+      assert.equal(still.anims, 0, `减少动态时不做过渡 ${JSON.stringify(still)}`)
+      assert.ok(
+        still.tops.every((dy) => Math.abs(dy) < 2) && Math.abs(still.after) < 2,
+        `减少动态时被点的卡也留在原处 ${JSON.stringify(still)}`,
+      )
+      await call('Emulation.setEmulatedMedia', { features: [] })
+      console.log('整卡点击、展开时被点的卡留在原处、提交后收拢补位、减少动态通过')
     }
   }
 } finally {

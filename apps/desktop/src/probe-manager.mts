@@ -10,6 +10,12 @@ export interface ManagerSeen {
   discussionPane: boolean
   discussionPaneDetail: string
   postCollapse: boolean
+  /** 整卡点击：收起的卡点空白处展开；点卡里的控件、卡里选着文字时点击都不开合 */
+  wholeCard: boolean
+  wholeCardDetail: string
+  /** 离开的卡（这里用忽略）原处收拢淡出、不可交互，下面那张平滑上移，结束时落在老位置、不留残影 */
+  cardMotion: boolean
+  cardMotionDetail: string
   directFollowup: boolean
   revisionDrafts: boolean
   recommendationChoice: boolean
@@ -385,7 +391,39 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   paneSeen.tabCloses = !one('.mg-talk-pane')
   await click('[data-board-tab="decisions"]')
   postCollapse &&= Boolean(one('[data-decision="D-15"][data-post-collapsed="true"]'))
-  await click('[data-decision="D-15"] [data-act="post-collapse"]')
+  // 整卡点击：点卡里的输入框、卡里选着文字时点都不展开；点摘要（卡片空白处）展开
+  const press = (target: Element | null) =>
+    target?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+  press(one('[data-decision="D-15"] [data-act="manager-answer"]'))
+  const collapsedSummary = () => one('[data-decision="D-15"] .mg-post-summary')
+  const range = document.createRange()
+  const summaryNode = collapsedSummary()
+  if (summaryNode) range.selectNodeContents(summaryNode)
+  getSelection()?.removeAllRanges()
+  getSelection()?.addRange(range)
+  press(summaryNode)
+  getSelection()?.removeAllRanges()
+  await new Promise((resolve) => setTimeout(resolve, 80))
+  const wholeCardIgnored = Boolean(one('[data-decision="D-15"][data-post-collapsed="true"]'))
+  press(collapsedSummary())
+  await until('整卡点击展开', () =>
+    one('[data-decision="D-15"][data-post-collapsed="false"]'),
+  ).catch(() => null)
+  const wholeCard =
+    Boolean(summaryNode) &&
+    wholeCardIgnored &&
+    one('[data-decision="D-15"] [data-act="post-collapse"]')?.getAttribute('aria-expanded') ===
+      'true'
+  const wholeCardDetail = JSON.stringify({
+    summary: Boolean(summaryNode),
+    ignored: wholeCardIgnored,
+    collapsed: one('[data-decision="D-15"]')?.getAttribute('data-post-collapsed'),
+    press: one('[data-decision="D-15"]')?.hasAttribute('data-card-press'),
+    selection: getSelection()?.toString().slice(0, 20),
+  })
+  // 没点开时照旧用卡头按钮展开，后面的步骤不受影响
+  if (one('[data-decision="D-15"][data-post-collapsed="true"]'))
+    await click('[data-decision="D-15"] [data-act="post-collapse"]')
   await askBackground('还有哪些影响需要确认？', 2)
   await askBackground('第三轮：对手机有什么影响？', 3)
   await askBackground('第四轮：如何验证草稿保留？', 4)
@@ -884,11 +922,37 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     '网关不归这个项目管',
   )
   const ignoreNote = one('[data-decision="D-17"] [data-ignore-form]')?.textContent ?? ''
+  // 离开的卡原处收拢淡出，下面那张同步上移补位：过渡中途在新旧位置之间，结束时落在离开那张的老位置。
+  // 位置按列表顶端算：卡片少了、滚动到底被浏览器夹住时整列会一起下移，那不算错位
+  const leaving = one('[data-decision="D-17"]')
+  leaving?.scrollIntoView({ block: 'start' })
+  const below = leaving?.nextElementSibling as HTMLElement | null
+  const cardList = leaving?.parentElement
+  const listTop = () => cardList?.getBoundingClientRect().top ?? 0
+  const leftAt = (leaving?.getBoundingClientRect().top ?? 0) - listTop()
+  const belowAt = (below?.getBoundingClientRect().top ?? 0) - listTop()
   await click('[data-decision="D-17"] [data-act="manager-ignore-confirm"]')
   await until(
     '忽略后离开待定',
     () => !one('[data-decision="D-17"]') && count('ignored') === ignoredBefore + 1,
   )
+  const ghost = one('[data-motion-ghost]')
+  const ghostQuiet = Boolean(ghost?.inert && ghost.getAttribute('aria-hidden') === 'true')
+  await new Promise((resolve) => setTimeout(resolve, 90))
+  const midway = (below?.getBoundingClientRect().top ?? 0) - listTop()
+  await new Promise((resolve) => setTimeout(resolve, 400))
+  const settled = (below?.getBoundingClientRect().top ?? 0) - listTop()
+  const cardMotion =
+    Boolean(below?.isConnected) &&
+    ghostQuiet &&
+    midway < belowAt - 2 &&
+    midway > leftAt + 2 &&
+    Math.abs(settled - leftAt) < 2 &&
+    !one('[data-motion-ghost]') &&
+    document
+      .getAnimations()
+      .every((animation) => !(animation.effect as KeyframeEffect)?.target?.closest('.mg-body'))
+  const cardMotionDetail = JSON.stringify({ leftAt, belowAt, midway, settled, ghostQuiet })
   // 待处理数随经理对象的通知更新，等它跟上；跟不上的照实记进下面的明细
   await until('决策待处理数减一', () => decisionPill() === pillBefore - 1).catch(() => null)
   const ignoredCounts = `${openBefore}->${count('open')} ${ignoredBefore}->${count('ignored')} 决策待处理 ${pillBefore}->${decisionPill()}`
@@ -1875,6 +1939,10 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     discussionPaneDetail,
     questionEnter,
     postCollapse,
+    wholeCard,
+    wholeCardDetail,
+    cardMotion,
+    cardMotionDetail,
     directFollowup,
     revisionDrafts,
     recommendationChoice,
@@ -1965,6 +2033,8 @@ export function judgeManager(seen: ManagerSeen): string[] {
       | 'boardFontDetail'
       | 'groupHeadsDetail'
       | 'discussionPaneDetail'
+      | 'wholeCardDetail'
+      | 'cardMotionDetail'
     >,
     string
   > = {
@@ -1972,6 +2042,8 @@ export function judgeManager(seen: ManagerSeen): string[] {
     questionEnter: '追问 Enter / Shift+Enter / 输入法组词处理错误',
     discussionPane: `帖子讨论仍内嵌在卡片里，或底部分屏的打开、换帖子、Esc 关闭、草稿保留不对：${seen.discussionPaneDetail}`,
     postCollapse: '帖子收起没有保留摘要、会话状态或直接续问',
+    wholeCard: `收起的卡点空白处没展开，或点控件、选字时误开合：${seen.wholeCardDetail}`,
+    cardMotion: `离开的卡没有收拢补位，或结束时位置不对、留有残影：${seen.cardMotionDetail}`,
     directFollowup: '已有临时问答没有直接续问或默认目标错误',
     revisionDrafts: '新版本的选项清空、文字确认或空草稿跟随错误',
     recommendationChoice: '推荐标记丢失或采用推荐入口未移除',

@@ -554,8 +554,18 @@ When a decision changes, an old draft containing only an option selection is cle
 
 “决策未答复时持续等待”是固定选项；如果设备指出此项无效，表单定位到该项说明，并提示重新打开表单恢复默认值。
 
-控制台的决策、建议、请你做和报告可点击整行卡头在原位展开或收起；桌面也支持 Enter、空格。
-按钮、回复框与链接单独操作，不折叠卡片。请你做与事项的依据、相关链接统一显示在“关联”中，
-同一目标只显示一次。文件链接在所属设备的文件预览打开，仓库外绝对路径同样支持；目录定位到文件树。
+控制台的决策、建议、请你做和报告收起时点卡片任意空白处即可在原位展开，展开后点卡头收起；键盘在卡头上用 Enter、空格。
+按钮、回复框、选项与链接单独操作，不折叠卡片；拖选或双击选取卡片文字时也不会开合。
+控制台一次展开一张：点开另一张时，原来展开的收起，被点的卡留在原处不跳动；它展开后大半落在可视区外时，才平滑滚到能看见。
+展开、收起有短暂的过渡；桌面上，提交、忽略或在别处处理后离开当前列表的卡原处收拢淡出，下面的卡上移补位，新卡淡入。
+系统开启“减少动态效果”时不做这些过渡，状态立即切换。
+
+Console decisions, suggestions, requests and reports expand in place when you click anywhere on a collapsed card; click the header of an expanded card to collapse it. From the keyboard, use Enter or Space on the header.
+Buttons, reply boxes, options and links work on their own, and selecting card text by dragging or double-clicking does not toggle the card.
+The console expands one card at a time: opening another card collapses the previous one while the selected card stays where it was. It scrolls smoothly only when most of the expanded card would be out of view.
+Expanding and collapsing use a short transition. On desktop, cards that leave the current list after you submit, ignore or handle them elsewhere fold away in place while the cards below move up, and new cards fade in.
+With the system's reduce-motion setting on, these transitions are skipped and changes apply immediately.
+
+请你做与事项的依据、相关链接统一显示在“关联”中，同一目标只显示一次。文件链接在所属设备的文件预览打开，仓库外绝对路径同样支持；目录定位到文件树。
 网址沿用浏览器偏好，分支与提交显示 Git 原文，会话与看板编号跳到对应对象。
 桌面悬停显示完整目标，手机长按查看；无法读取时显示原因。

@@ -24,6 +24,28 @@
 .mg-post-toggle[hidden] {
   display: none;
 }
+/* 收起的卡整张可点开（键盘仍走卡头按钮）：指针和描边提示可点 */
+[data-card-press] {
+  cursor: pointer;
+}
+[data-card-press]:hover {
+  border-color: var(--line-3);
+}
+/* 展开的卡头空白处也能收起 */
+[data-post-collapsed="false"] > header:has(> .mg-post-toggle:not([hidden])) {
+  cursor: pointer;
+}
+/* 提交条出现、换成“已提交”时淡入，不突然闪出；位置不动 */
+@media (prefers-reduced-motion: no-preference) {
+  .mg-send {
+    animation: mg-send-in 160ms ease-out;
+  }
+}
+@keyframes mg-send-in {
+  from {
+    opacity: 0;
+  }
+}
 [data-paging-detail] .mg-card {
   border: 0;
 }

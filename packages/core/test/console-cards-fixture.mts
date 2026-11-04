@@ -91,8 +91,8 @@ export function consoleCardsFixture(mock: CoreHost) {
     total: 3,
     nextCursor: null,
   }
-  const decisionPage = (status: string) => {
-    const entries = board.decisions
+  const decisionPage = (status: string, decisions = board.decisions) => {
+    const entries = decisions
       .filter(
         (d) =>
           status === 'all' ||
@@ -117,12 +117,14 @@ export function consoleCardsFixture(mock: CoreHost) {
       nextCursor: null,
     }
   }
-  const decisionPages = Object.fromEntries(
-    ['open', 'answered', 'closed', 'ignored', 'all'].map((status) => [
-      `decision/${status}/newest`,
-      decisionPage(status),
-    ]),
-  )
+  const pagesOf = (decisions = board.decisions) =>
+    Object.fromEntries(
+      ['open', 'answered', 'closed', 'ignored', 'all'].map((status) => [
+        `decision/${status}/newest`,
+        decisionPage(status, decisions),
+      ]),
+    )
+  const decisionPages = pagesOf()
   const view = {
     deviceId: 'local',
     managerId: manager.id,
@@ -151,6 +153,21 @@ export function consoleCardsFixture(mock: CoreHost) {
     features: { feedback: true, posts: true, ignore: true, paging: true },
   }
   const calls: unknown[] = []
+  /** 提交后看板更新（?settle=1 时界面夹具接上）：交掉的决策改成已答复，离开待定分页 */
+  const state: { calls: unknown[]; onSubmit: ((ids: string[]) => void) | null } = {
+    calls,
+    onSubmit: null,
+  }
+  const settle = (ids: readonly string[]) => {
+    const decisions = board.decisions.map((d) =>
+      ids.includes(d.id) ? { ...d, status: 'answered' as const, revision: d.revision + 1 } : d,
+    )
+    return {
+      ...view,
+      board: { ...board, decisions },
+      paging: { ...view.paging, pages: { ...view.paging.pages, ...pagesOf(decisions) } },
+    }
+  }
   const host = {
     ...mock,
     subscribe(
@@ -169,6 +186,7 @@ export function consoleCardsFixture(mock: CoreHost) {
       // 批量提交照单全收；看板不变，只看草稿清掉和提交条的反馈
       if (name === 'managers.feedback.submit') {
         const find = (id: string) => board.decisions.find((d) => d.id === id)
+        state.onSubmit?.(params.answers.map((a: { decisionId: string }) => a.decisionId))
         return {
           accepted: params.answers.map((a: { decisionId: string }) => find(a.decisionId)),
           rejected: [],
@@ -254,5 +272,5 @@ export function consoleCardsFixture(mock: CoreHost) {
       },
     },
   }
-  return { core: host as CoreHost, manager, board, view, drafts, state: { calls } }
+  return { core: host as CoreHost, manager, board, view, drafts, settle, state }
 }

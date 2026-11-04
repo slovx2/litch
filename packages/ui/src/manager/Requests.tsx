@@ -10,6 +10,7 @@ import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
 import { useT } from '../app/appearance.ts'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
+import { useCardMotion } from './card-motion.ts'
 import { DraftEnded } from './DraftEnded.tsx'
 import { useManagerFeatures } from './data.ts'
 import { useIssueOrder } from './issue-order.tsx'
@@ -67,13 +68,15 @@ export function Requests({
       setError(t('manager.savedFail'))
     }
   }
+  const sorted = sortManagerIssues(requests, order, (r) => ({
+    at: r.createdAt,
+    pending: r.status === 'open',
+  }))
+  useCardMotion(root, order, sorted.map((request) => request.id).join('|'))
   return (
     <div className="mg-stack" ref={root}>
       {!requests.length ? <p className="mg-empty">{t('manager.none')}</p> : null}
-      {sortManagerIssues(requests, order, (r) => ({
-        at: r.createdAt,
-        pending: r.status === 'open',
-      })).map((request) => {
+      {sorted.map((request) => {
         const post = posts.find((post) => post.id === request.id)
         const draft = drafts[request.id]
         // 在别处交付、回复或已取消：草稿留着但不计数、不提交（规则见 core 的 requestDraftState）
@@ -105,6 +108,7 @@ export function Requests({
               <PostDiscussion compact={collapsed} manager={manager} post={post} disabled={locked} />
             )}
             data-manager-request={request.id}
+            data-motion-key={request.id}
             key={request.id}
             tabIndex={-1}
           >

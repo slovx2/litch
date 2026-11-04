@@ -26,6 +26,7 @@ import { ManagerSuggestions } from '../tree/SuggestionsPage.tsx'
 import { Activity } from './Activity.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardPanels, Item } from './BoardPanels.tsx'
+import { useCardMotion, useCardPress } from './card-motion.ts'
 import { Decisions } from './Decisions.tsx'
 import { useAnswerDrafts } from './drafts.ts'
 import { IssueOrderSelect, useIssueOrder } from './issue-order.tsx'
@@ -77,15 +78,9 @@ export function PagedBoard({
   const [linked, setLinked] = useState(false)
   const [error, setError] = useState('')
   const root = useRef<HTMLDivElement>(null)
-  const anchor = useRef<{ id: string; top: number } | null>(null)
-  useLayoutEffect(() => {
-    const saved = anchor.current
-    if (!saved) return
-    const card = root.current?.querySelector<HTMLElement>(`[data-paging-object="${saved.id}"]`)
-    const host = root.current?.closest('.mg-body')
-    if (card && host) host.scrollTop += card.getBoundingClientRect().top - saved.top
-    anchor.current = null
-  })
+  /** 点开或收起的那张卡：这一轮过渡让它留在原处 */
+  const anchor = useRef<string | null>(null)
+  const press = useCardPress()
   const positions = useRef(new Map<string, number>())
   const address = useMemo(
     () => ({ deviceId: manager.deviceId, managerId: manager.id }),
@@ -183,6 +178,18 @@ export function PagedBoard({
     if (linked)
       root.current?.querySelector('[data-paging-detail]')?.scrollIntoView({ block: 'nearest' })
   }, [active, post, item, linked])
+  // 展开哪张、详情到没到、卡片增减都过渡；换页签或筛选不过渡
+  useCardMotion(
+    root,
+    `${tab}|${key}`,
+    [
+      active,
+      Boolean(post || item),
+      paging.loading.includes(active ?? ''),
+      ...(page?.entries.map((head) => head.id) ?? []),
+    ].join('|'),
+    anchor,
+  )
   const activeRevision =
     page?.entries.find((head) => head.id === active)?.revision ??
     post?.revision ??
@@ -392,26 +399,29 @@ export function PagedBoard({
             <>
               {page.entries.map((head) => {
                 const mark = markOf(head.id)
+                const toggle = () => {
+                  anchor.current = head.id
+                  setLinked(false)
+                  if (active === head.id) setSelected(null)
+                  else open(head.id)
+                }
                 return (
+                  // 收起的卡整张代理鼠标点击；键盘由卡头按钮负责（Enter、空格，带 aria-expanded）
                   <article
                     className="mg-card"
                     key={head.id}
                     data-paging-object={head.id}
+                    data-motion-key={head.id}
                     data-draft-mark={mark?.state}
+                    data-card-press={active === head.id ? undefined : ''}
                     tabIndex={-1}
+                    {...(active === head.id ? {} : press(toggle))}
                   >
                     <button
                       className="mg-paging-head"
                       type="button"
                       aria-expanded={active === head.id}
-                      onClick={(event) => {
-                        const card = event.currentTarget.closest('[data-paging-object]')
-                        if (card)
-                          anchor.current = { id: head.id, top: card.getBoundingClientRect().top }
-                        setLinked(false)
-                        if (active === head.id) setSelected(null)
-                        else open(head.id)
-                      }}
+                      onClick={toggle}
                     >
                       <span aria-hidden="true">{active === head.id ? '▾' : '▸'}</span>{' '}
                       <span className="mono">{head.id}</span> · {head.title} ·{' '}

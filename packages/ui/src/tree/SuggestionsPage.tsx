@@ -10,6 +10,7 @@ import {
   suggestionCount,
   type WorkspaceView,
 } from '@litch/core'
+import { type ReactNode, useRef } from 'react'
 import type { ManagerView } from '../../../core/src/model-manager.mts'
 import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
 import type { Selection } from '../app/App.tsx'
@@ -19,6 +20,7 @@ import { ago } from '../app/format.ts'
 import { Close, Forward, Icon } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { BoardMarkdown } from '../manager/BoardMarkdown.tsx'
+import { useCardMotion } from '../manager/card-motion.ts'
 import { useIssueOrder } from '../manager/issue-order.tsx'
 import { PostCard } from '../manager/PostCard.tsx'
 import { PostDiscussion, PostHistory } from '../manager/PostDiscussion.tsx'
@@ -113,7 +115,7 @@ function SuggestionRow({
     </>
   )
   return manager ? (
-    <li className="suggestion-row">
+    <li className="suggestion-row" data-motion-key={proposal.id}>
       <PostCard
         manager={manager}
         id={`S-${proposal.id}`}
@@ -142,6 +144,25 @@ function SuggestionRow({
         {body}
       </div>
     </li>
+  )
+}
+
+/** 看板里的建议列表：开始、忽略后离开的卡收拢，下方的卡补位 */
+function SuggestionList({
+  entries,
+  scope,
+  children,
+}: {
+  entries: readonly SuggestionView[]
+  scope: string
+  children: ReactNode
+}) {
+  const root = useRef<HTMLUListElement>(null)
+  useCardMotion(root, scope, entries.map((row) => row.proposal.id).join('|'))
+  return (
+    <ul className="suggestions-list mg-suggestions-list" ref={root}>
+      {children}
+    </ul>
   )
 }
 
@@ -178,7 +199,7 @@ export function ManagerSuggestions({
     (post) => ({ at: post.createdAt }),
   )
   const cards = (entries: readonly SuggestionView[]) => (
-    <ul className="suggestions-list mg-suggestions-list">
+    <SuggestionList entries={entries} scope={order}>
       {entries.map((row) => (
         <SuggestionRow
           key={row.proposal.id}
@@ -188,7 +209,7 @@ export function ManagerSuggestions({
           onOpen={onOpen}
         />
       ))}
-    </ul>
+    </SuggestionList>
   )
   return (
     <div className="mg-stack">

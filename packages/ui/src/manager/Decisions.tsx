@@ -21,6 +21,7 @@ import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardLinks } from './BoardLinks.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardReferences } from './BoardReferences.tsx'
+import { useCardMotion } from './card-motion.ts'
 import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutcome.tsx'
 import { DraftEnded } from './DraftEnded.tsx'
 import { useManagerFeatures } from './data.ts'
@@ -366,6 +367,12 @@ export function Decisions({
     if (element) focusDecisionAfterSubmit(element)
     setSubmittedFocus(null)
   }, [submittedFocus, busy, visible, filter, target, groups.pending])
+  // 提交、忽略、重开后离开当前分栏的卡收拢，下方的卡补位；换分栏不过渡。放在接续焦点之后，先定焦点再过渡
+  useCardMotion(
+    cards,
+    `${filter}|${onlyId ?? ''}|${part}`,
+    displayed.map((decision) => decision.id).join('|'),
+  )
   return (
     <>
       <div hidden={!visible || part === 'send'}>
@@ -460,6 +467,7 @@ export function Decisions({
                   />
                 )}
                 data-decision={decision.id}
+                data-motion-key={decision.id}
                 key={decision.id}
                 data-draft={Boolean(draft) && !ended}
                 tabIndex={-1}

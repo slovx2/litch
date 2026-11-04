@@ -8,6 +8,7 @@ import {
   createReplica,
   serveChannel,
 } from '@litch/core'
+import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { consoleCardsFixture } from '../../core/test/console-cards-fixture.mts'
 import { onOpenSessionRequest } from '../src/app/actions.ts'
@@ -51,6 +52,25 @@ if (params.has('drafts'))
       ...(params.get('drafts') === 'conflict' ? fixture.drafts.conflict : {}),
     }),
   )
+/** ?settle=1：提交后像设备那样稍后推来新看板，交掉的决策离开待定 */
+function Board() {
+  const [current, setCurrent] = useState(view)
+  useEffect(() => {
+    if (!params.has('settle')) return
+    fixture.state.onSubmit = (ids) => setTimeout(() => setCurrent(fixture.settle(ids)), 50)
+  }, [])
+  return (
+    <PagedBoard
+      manager={manager}
+      view={current as any}
+      tab={params.get('tab') ?? 'requests'}
+      disabled={false}
+      target={null}
+      onLocated={() => {}}
+      onSuggestionSource={() => {}}
+    />
+  )
+}
 createRoot(document.getElementById('root')!).render(
   <ServicesProvider value={{ channel, replica, shell: 'browser' }}>
     <ManagerFeaturesContext.Provider value={view.features}>
@@ -69,15 +89,7 @@ createRoot(document.getElementById('root')!).render(
               width: Number(params.get('width') ?? 800),
             }}
           >
-            <PagedBoard
-              manager={manager}
-              view={view as any}
-              tab={params.get('tab') ?? 'requests'}
-              disabled={false}
-              target={null}
-              onLocated={() => {}}
-              onSuggestionSource={() => {}}
-            />
+            <Board />
           </div>
         </BoardReferencesContext.Provider>
       </RelationsContext.Provider>
