@@ -454,7 +454,8 @@ export function Decisions({
                     post={post}
                     disabled={disabled || busy}
                     question={draft?.question ?? ''}
-                    questionBlocked={Boolean(stale || ended)}
+                    questionBlocked={ended}
+                    questionStale={Boolean(stale)}
                     onQuestion={(question) => change(decision, { question })}
                   />
                 )}

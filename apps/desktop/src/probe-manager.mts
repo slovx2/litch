@@ -504,6 +504,16 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   }
   const backgroundQuestions =
     document.querySelectorAll('.mg-chat .turn').length === turnsBeforeQuestions
+  const forwardButton = one<HTMLButtonElement>(
+    `${talk('D-15')} [data-act="manager-question-forward"]`,
+  )
+  if (
+    !forwardButton?.textContent?.includes('转给经理') ||
+    !forwardButton.title.includes('完整问答记录') ||
+    !forwardButton.querySelector('svg') ||
+    forwardButton.getBoundingClientRect().height < 24
+  )
+    throw new Error('转给经理按钮缺少可见文字、图标、说明或点击区域')
   await click(`${talk('D-15')} [data-act="manager-question-forward"]`)
   const questionForwarded = Boolean(
     await until('问答已转给经理', () =>
@@ -511,6 +521,9 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
         ?.getAttribute('aria-label')
         ?.includes('已转给经理'),
     ),
+  )
+  await until('转交记录可阅读', () =>
+    one('.mg-chat')?.textContent?.includes('讨论记录 / Discussion'),
   )
   // 打开别的帖子的讨论换掉分屏内容，始终只有一个分屏；Esc 关闭并把焦点还给入口
   const other = await until('另一项决策的讨论入口', () =>
@@ -595,6 +608,50 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await askBackground(updateQuestion, 8)
   const emptyFollows = !one('.mg-conflict') && !one(UNSENT_BAR) && !answerInput().value
   const revisionDrafts = selectionReset && textKept && confirmed && emptyFollows
+  // 编辑时收到经理更新：两个页签都保留同一个输入节点、草稿、选择区和焦点，并能继续发送。
+  for (const mode of ['manager', 'temporary'] as const) {
+    await click(`${talk('D-15')} [data-question-mode="temporary"]`)
+    const input = directInput()!
+    fill(input, '请稍后更新这项决策（验收）')
+    await click(`${talk('D-15')} [data-act="post-question-send"]`)
+    await until('异步更新已安排', () => !input.disabled && input.value === '')
+    await click(`${talk('D-15')} [data-question-mode="${mode}"]`)
+    const text = `${mode}：更新前未发出的草稿`
+    fill(input, text)
+    input.focus()
+    input.setSelectionRange(2, 5)
+    const previous = one('[data-decision="D-15"] .mg-markdown')?.textContent
+    await until(
+      '经理更新背景和讨论记录',
+      () =>
+        one('[data-decision="D-15"] .mg-markdown')?.textContent !== previous &&
+        one(`${talk('D-15')} .mg-post-timeline`)?.textContent?.includes('经理已更新决策'),
+    )
+    if (
+      directInput() !== input ||
+      input.disabled ||
+      input.value !== text ||
+      document.activeElement !== input ||
+      input.selectionStart !== 2 ||
+      input.selectionEnd !== 5
+    )
+      throw new Error(
+        `${mode} 讨论更新后输入不可用：${JSON.stringify({ disabled: input.disabled, value: input.value, focused: document.activeElement === input })}`,
+      )
+    fill(input, `${text}，继续编辑`)
+    await until(
+      '更新后发送可用',
+      () => !one<HTMLButtonElement>(`${talk('D-15')} [data-act="post-question-send"]`)?.disabled,
+    )
+    await click(`${talk('D-15')} [data-act="post-question-send"]`)
+    await until(
+      '更新后追问已发送',
+      () =>
+        input.value === '' &&
+        !input.disabled &&
+        one(`${talk('D-15')} .mg-post-timeline`)?.textContent?.includes(`${text}，继续编辑`),
+    )
+  }
   ;(
     await until('选推荐选项', () =>
       one<HTMLInputElement>('[data-decision="D-15"] .mg-option:has(.mg-recommend) input'),

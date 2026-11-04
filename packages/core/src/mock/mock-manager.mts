@@ -286,7 +286,7 @@ export function createMockManagers(host: MockManagerHost) {
         host.say(
           deviceId,
           manager.threadId,
-          JSON.stringify(post.discussion),
+          forwardedManagerQuestion(post.id, post.title, post.discussion),
           t('已收到追问记录。', 'Received the discussion.'),
         )
         publish(deviceId, manager, board)
@@ -297,6 +297,27 @@ export function createMockManagers(host: MockManagerHost) {
         post.unread = false
       } else {
         if (!given.question?.trim()) throw new ChannelError('invalid', 'Question required.')
+        // 让验收在回复到达前写下一份草稿，覆盖编辑中收到原帖修订和讨论记录的情况。
+        if (given.question === '请稍后更新这项决策（验收）') {
+          host.clock.setTimer(() => {
+            const decision = board.decisions.find((entry) => entry.id === post.id)
+            if (!decision) return
+            decision.revision += 1
+            decision.background += `\n\n异步补充背景 v${decision.revision}`
+            decision.updatedAt = host.clock.now()
+            post.discussion.messages.push({
+              id: `post-question-${++seq}`,
+              question: '',
+              answer: '经理已更新决策，正在编辑的草稿应保留。',
+              mode: 'manager',
+              at: host.clock.now(),
+              answeredAt: host.clock.now(),
+              status: 'completed',
+              refreshed: false,
+            })
+            publish(deviceId, manager, board)
+          }, 1200)
+        }
         post.discussion.messages.push({
           id: `post-question-${++seq}`,
           question: given.question,

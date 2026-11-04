@@ -1448,8 +1448,11 @@
   padding-block: 8px 12px;
   background: var(--panel);
 }
-.mg-talk-body .mg-post-compose > .ic {
+.mg-talk-body .mg-post-send {
   justify-self: end;
+}
+.mg-post-forward {
+  margin-top: 8px;
 }
 /* 分屏矮时让问答多露几行：输入框起始高度收小，仍可往下拉 */
 .mg-talk-body textarea.mg-post-input {

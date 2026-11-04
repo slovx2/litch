@@ -507,7 +507,7 @@ export function Issue({
           accessibilityRole="button"
           accessibilityLabel={t('manager.postSubmit')}
           style={{ minHeight: hit, minWidth: hit, justifyContent: 'center', alignItems: 'center' }}
-          disabled={locked || !question.trim() || (mode === 'manager' && answerConflict)}
+          disabled={locked || !question.trim() || (mode === 'manager' && questionEnded)}
           onPress={() =>
             void run(async () => {
               await channel.command('managers.post.question', {
@@ -525,6 +525,9 @@ export function Issue({
           <Text style={{ color: c.accent, fontSize: font.size.title }}>↑</Text>
         </Pressable>
       </View>
+      {mode === 'manager' && answerConflict ? (
+        <Text style={{ color: c.ink2 }}>{t('manager.questionUpdated')}</Text>
+      ) : null}
     </View>
   ) : (
     <Text style={{ color: c.ink2 }}>{t('manager.oldDeviceShort')}</Text>

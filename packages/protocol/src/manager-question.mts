@@ -103,11 +103,16 @@ export function forwardedManagerQuestion(
   discussion: ManagerDiscussion,
 ): string {
   return [
-    `The user forwarded background questions about decision ${id}: ${title}.`,
-    'Clarify the context. This is not a decision answer or authorization to act.',
-    discussion.summary ? `Summary:\n${discussion.summary}` : '',
-    ...discussion.messages.map(
-      (entry) => `User: ${entry.question}\nAssistant: ${entry.answer ?? '(No answer)'}`,
+    `## 讨论记录 / Discussion · ${id}: ${title}`,
+    '用户将本议题的问答记录转给经理，请继续解答。此操作不代表决策答复或执行授权。\nThe user forwarded this discussion for clarification, not as a decision answer or authorization to act.',
+    discussion.summary ? `### 摘要 / Summary\n${discussion.summary}` : '',
+    ...discussion.messages.map((entry) =>
+      [
+        entry.question ? `### 用户 / User\n${entry.question}` : '',
+        `### ${entry.mode === 'manager' ? '经理 / Manager' : '临时助手 / Temporary assistant'}\n${entry.answer ?? '(暂无回答 / No answer)'}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
     ),
   ]
     .filter(Boolean)

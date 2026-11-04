@@ -134,6 +134,9 @@ export const enManager = {
   'manager.questionInput': 'What context would help?',
   'manager.questionSend': 'Ask',
   'manager.questionForward': 'Forward to manager',
+  'manager.questionForwardHint': 'Send this issue’s full discussion to the manager for follow-up',
+  'manager.questionUpdated':
+    'This post was updated. Your question is preserved and ready to edit or send.',
   'manager.questionForwarded': 'Forwarded to manager',
   'manager.questionWait': 'Wait for the background conversation to finish before submitting.',
   'manager.waitDecisions': ({ n }) =>

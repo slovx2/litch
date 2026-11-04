@@ -532,7 +532,9 @@ same.
 
 手机使用半屏底部抽屉，向上拖把手或点展开图标可到全屏，向下拖可收回半屏、再拖关闭；点标题关闭并回到卡片。两端的讨论默认展开，也可手动收起并记住。追问默认发到已有临时会话，没有临时问答时发给经理，输入框旁可切换。原来的草稿计数、随答复提交和已结束议题的草稿规则不变。全局建议窗口中的内嵌讨论仍在超过 1200 字符时默认收起。
 
-决策更新后，仅选了选项的旧草稿会清除选择，标题旁提示“已更新，原选项已清除”，不再计入待提交；没有填写的草稿静默清空。有自由文字（包括追问）时保留原文，先确认新版本后再提交。已结束的议题继续保留草稿查看和丢弃入口。手机采用相同规则。推荐选项保留“推荐”标记，直接点选项选择。
+决策更新后，仅选了选项的旧草稿会清除选择，标题旁提示“已更新，原选项已清除”，不再计入待提交；没有填写的草稿静默清空。有自由文字时保留原文，批量提交前先确认新版本。讨论输入框保留草稿和编辑位置，经理追问提示原帖已更新，两个页签都可继续编辑或单独发送，单独追问使用当前版本。已结束的议题继续保留草稿查看和丢弃入口。手机采用相同规则。推荐选项保留“推荐”标记，直接点选项选择。
+
+临时对话下方的“转给经理”按钮带发送图标，悬停说明会发送本议题的完整问答记录。转交的消息显示议题编号、标题和各方发言，请经理继续解答，不代表决策答复或执行授权。
 
 The desktop board follows the conversation text size, including overview, console, posts and questions. A chevron beside each post title collapses its body while keeping the title, first-line summary and status. Handled decisions and requests, read reports and historical suggestions start collapsed. Each choice is remembered for the current client session.
 

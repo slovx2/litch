@@ -65,6 +65,7 @@ export function PostDiscussion({
   question,
   onQuestion,
   questionBlocked = false,
+  questionStale = false,
   compact = false,
 }: {
   manager: ManagerView
@@ -72,6 +73,7 @@ export function PostDiscussion({
   disabled?: boolean
   compact?: boolean
   questionBlocked?: boolean
+  questionStale?: boolean
   question?: string
   onQuestion?(text: string): void
 }) {
@@ -168,8 +170,8 @@ export function PostDiscussion({
         deviceId: manager.deviceId,
         managerId: manager.id,
         id: post.id,
-        revision:
-          mode === 'manager' && !onQuestion ? (draft?.revision ?? post.revision) : post.revision,
+        // 追问不提交决策答案；旧草稿提示原帖已更新，发送时始终针对当前版本。
+        revision: post.revision,
         question: value.trim(),
         mode,
       })
@@ -290,6 +292,11 @@ export function PostDiscussion({
           </button>
         ) : null}
       </fieldset>
+      {mode === 'manager' && (questionStale || (draft && draft.revision !== post.revision)) ? (
+        <p className="dim" role="status" data-question-stale>
+          {t('manager.questionUpdated')}
+        </p>
+      ) : null}
       <textarea
         id={inputId}
         className="req-input mg-post-input"
@@ -316,22 +323,22 @@ export function PostDiscussion({
       />
       <button
         type="button"
-        className="ic"
+        className="ibtn mg-post-send"
         aria-label={t('manager.postSubmit')}
         title={t('manager.postSubmit')}
         disabled={locked || !value.trim() || (ended && mode === 'manager')}
         onClick={() => void send()}
         data-act="post-question-send"
       >
-        <span aria-hidden="true">↑</span>
+        <Icon name="send" small />
       </button>
     </div>
   )
   const forwardButton =
-    mode === 'temporary' && messages.length ? (
+    mode === 'temporary' && direct ? (
       <button
         type="button"
-        className="ic"
+        className="btn mg-post-forward"
         aria-label={t(
           post.discussion.forwarded === messages.length
             ? 'manager.questionForwarded'
@@ -345,12 +352,17 @@ export function PostDiscussion({
             : t(
                 post.discussion.forwarded === messages.length
                   ? 'manager.questionForwarded'
-                  : 'manager.questionForward',
+                  : 'manager.questionForwardHint',
               )
         }
         onClick={() => void forward()}
       >
-        <span aria-hidden="true">↗</span>
+        <Icon name="send" small />
+        {t(
+          post.discussion.forwarded === messages.length
+            ? 'manager.questionForwarded'
+            : 'manager.questionForward',
+        )}
       </button>
     ) : null
   const errorNote = error ? (

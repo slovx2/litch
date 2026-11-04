@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { forwardedManagerQuestion } from '../../protocol/src/manager-question.mjs'
 import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
 import type { SessionOp } from '../src/channel/protocol.mjs'
 import { createMockCore } from '../src/mock/mock-core.mjs'
@@ -13,6 +14,41 @@ import type {
   ManagerView,
 } from '../src/model-manager.mjs'
 import { fakeClock } from './helpers.mjs'
+
+test('转交讨论展示议题与各方发言，明确不是决策授权，不发送内部状态字段', () => {
+  const text = forwardedManagerQuestion('D-15', '确认范围', {
+    messages: [
+      {
+        id: 'q1',
+        question: '依据？',
+        answer: '临时核对结果',
+        mode: 'temporary',
+        at: 1,
+        status: 'completed',
+        refreshed: false,
+      },
+      {
+        id: 'q2',
+        question: '',
+        answer: '经理补充说明',
+        mode: 'manager',
+        at: 2,
+        status: 'completed',
+        refreshed: false,
+      },
+    ],
+    summary: '已确认的背景',
+    light: false,
+    forwarded: 0,
+  })
+  assert.match(text, /讨论记录 \/ Discussion · D-15: 确认范围/)
+  assert.match(text, /不代表决策答复或执行授权/)
+  assert.match(text, /摘要 \/ Summary\n已确认的背景/)
+  assert.match(text, /用户 \/ User\n依据？/)
+  assert.match(text, /临时助手 \/ Temporary assistant\n临时核对结果/)
+  assert.match(text, /经理 \/ Manager\n经理补充说明/)
+  assert.doesNotMatch(text, /"forwarded"|refreshed|"status"|q1|q2/)
+})
 
 for (const lang of ['zh-CN', 'en'] as const)
   test(`经理原型数据完整：${lang}`, () => {

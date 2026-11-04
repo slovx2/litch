@@ -126,6 +126,8 @@ export const zhManager = {
   'manager.questionInput': '想了解什么背景？',
   'manager.questionSend': '提问',
   'manager.questionForward': '转给经理',
+  'manager.questionForwardHint': '将本议题的完整问答记录发送给经理，请经理继续解答',
+  'manager.questionUpdated': '原帖已更新，追问草稿已保留，可继续编辑或发送。',
   'manager.questionForwarded': '已转给经理',
   'manager.questionWait': '请等待背景问答完成后再交答复。',
   'manager.waitDecisions': '等待决策',
