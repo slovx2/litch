@@ -35,9 +35,25 @@ export interface SessionDelegatedResponse {
 }
 
 export interface SessionPendingFields {
+  litchQuestionSettlements?: SessionQuestionSettlement[]
   litchIgnoredQuestions?: string[]
   litchPendingRequests?: SessionPendingRequest[]
   litchDelegatedResponses?: SessionDelegatedResponse[]
+}
+
+/** 按问题来源留痕；不会冒充用户答复，也不影响之后重新提出的同题。 */
+export interface SessionQuestionSettlement {
+  id: string
+  questionId: string
+  threadId: string
+  sourceIds: string[]
+  replyIds: string[]
+  title: string
+  action: 'answer' | 'withdraw'
+  text: string
+  sourceThreadId: string
+  sourceTitle: string
+  at: number
 }
 
 export interface SessionPendingChanged extends SessionPendingFields {

@@ -1202,6 +1202,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     // 会话树：这个会话上的提案变了（新提、开始、不要、撤回、过期），带着现在全部等着的和刚变的那几条
     'litch/thread/questions/changed': (live, { ignoredQuestions }) =>
       emit(live, [{ op: 'session.ignoredQuestions', sourceIds: ignoredQuestions }]),
+    'litch/thread/questionSettlements/changed': (live, { questionSettlements }) =>
+      emit(live, [{ op: 'session.questionSettlements', records: questionSettlements }]),
     'litch/sessionProposal/changed': (live, { proposals, changed }) => {
       if (!live.view) return
       const merged = mergeProposals(live.view.proposals, proposals, changed ?? [], host.clock.now())

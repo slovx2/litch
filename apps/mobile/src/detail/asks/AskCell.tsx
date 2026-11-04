@@ -1,14 +1,27 @@
 // 问用户的题在待答时只显示输入区的作答卡；已答、已忽略或已关闭的题在对话流里留痕。
 // 答完收起，标题行加一行答案摘要，点开看每题的回答。答复那条用户消息不再单独画（rows.ts 认出来跳过）。
 // 模型边干活边问的题（AskCell）和收尾的问题（WrapAskCell）共用 AskSheet，同桌面的 AskSheet
-import { type AskQuestion, type AskReply, distinctReplies, type ToolCallItem } from '@litch/core'
+import {
+  type AskQuestion,
+  type AskReply,
+  askReplyText,
+  distinctReplies,
+  type SessionQuestionSettlement,
+  type ToolCallItem,
+} from '@litch/core'
 import { memo, useState, useSyncExternalStore } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { historyQuestions } from '../../../../../packages/ui/src/transcript/ask-history.ts'
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
+import {
+  historyQuestions,
+  questionHistorySummary,
+} from '../../../../../packages/ui/src/transcript/ask-history.ts'
+import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import { useTranscript } from '../context'
 import { useSessionStore } from '../proposals/hooks'
+import { CardButton } from '../requests/Card'
 import { useCardOpen } from '../use-card-open'
 export function useAsks(itemId: string): readonly AskQuestion[] | undefined {
   const { deviceId, sessionId } = useTranscript()
@@ -45,10 +58,24 @@ export function AskSheet({
   const meta = useSyncExternalStore(store.subscribeMeta, store.getMeta)
   const questions = historyQuestions(allQuestions, meta?.pendingQuestions ?? [])
   const answered = questions.filter((q) => answers[q.id] !== undefined)
+  const recordFor = (id: string) =>
+    meta?.questionSettlements.find((record) => record.replyIds.includes(id))
+  const summary = questionHistorySummary(
+    questions,
+    answers,
+    meta?.questionSettlements ?? [],
+    (action) => t(`ask.manager.${action}`),
+  )
+  const firstRecord = questions[0] ? recordFor(questions[0].id) : null
   const open = opened
-  const source = `${t('ask.title')} · ${
-    answered.length > 0 ? t('ask.answeredCount', { count: answered.length }) : t('ask.state.closed')
-  }`
+  const source =
+    firstRecord && answered.length === 0
+      ? t(`ask.manager.${firstRecord.action}`)
+      : `${t('ask.title')} · ${
+          answered.length > 0
+            ? t('ask.answeredCount', { count: answered.length })
+            : t('ask.state.closed')
+        }`
   if (questions.length === 0) return null
   return (
     <View
@@ -66,13 +93,14 @@ export function AskSheet({
         waiting={false}
         source={source}
         title={open ? undefined : questions[0]?.title}
-        summary={answered.map((q) => answers[q.id]).join(' · ') || undefined}
+        summary={summary || undefined}
         open={open}
         onPress={toggle}
       />
       {open
         ? questions.map((q) => {
             const answer = answers[q.id]
+            const record = recordFor(q.id)
             return (
               <View
                 key={q.id}
@@ -81,6 +109,7 @@ export function AskSheet({
                 <Text style={[styles.title, { color: c.ink, fontSize: font.size.body }]}>
                   {q.title}
                 </Text>
+                {record ? <QuestionSettlement record={record} live={meta?.live === true} /> : null}
                 {answer !== undefined ? (
                   <Answer text={answer} />
                 ) : q.options.length > 0 ? (
@@ -108,6 +137,94 @@ export function AskSheet({
             )
           })
         : null}
+    </View>
+  )
+}
+
+function QuestionSettlement({
+  record,
+  live,
+}: {
+  record: SessionQuestionSettlement
+  live: boolean
+}) {
+  const t = useT()
+  const { c, font, hit, radius } = useTheme()
+  const { channel } = useServices()
+  const { deviceId, sessionId } = useTranscript()
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+  const send = async () => {
+    if (!live || !text.trim() || busy) return
+    setBusy(true)
+    setFailure(null)
+    try {
+      await channel.command('session.send', {
+        deviceId,
+        sessionId,
+        text: askReplyText(
+          record.replyIds.map((questionItemId) => ({
+            questionItemId,
+            question: record.title,
+            answer: text.trim(),
+          })),
+        ),
+      })
+      setEditing(false)
+      setText('')
+    } catch (error) {
+      setFailure(whyNot(error, t))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <View testID={`question-settlement:${record.action}`}>
+      <Text style={{ color: c.ink2, fontSize: font.size.meta }}>
+        {t(`ask.manager.${record.action}`)} · {record.sourceTitle}
+      </Text>
+      <Text selectable style={{ color: c.ink, fontSize: font.size.body }}>
+        {record.text}
+      </Text>
+      {live ? (
+        <CardButton label={t('ask.manager.override')} onPress={() => setEditing(!editing)} />
+      ) : null}
+      {editing ? (
+        <>
+          <TextInput
+            accessibilityLabel={t('ask.manager.override')}
+            value={text}
+            onChangeText={setText}
+            editable={live && !busy}
+            multiline
+            placeholder={t('ask.other')}
+            placeholderTextColor={c.ink3}
+            style={{
+              color: c.ink,
+              fontSize: font.size.body,
+              minHeight: hit,
+              borderWidth: 1,
+              borderColor: c.line2,
+              borderRadius: radius.s,
+              paddingHorizontal: 8,
+            }}
+          />
+          <CardButton
+            label={t('ask.answer')}
+            disabled={!live || busy || !text.trim()}
+            onPress={() => {
+              void send()
+            }}
+          />
+        </>
+      ) : null}
+      {failure ? (
+        <Text accessibilityRole="alert" style={{ color: c.ink2 }}>
+          {failure}
+        </Text>
+      ) : null}
     </View>
   )
 }

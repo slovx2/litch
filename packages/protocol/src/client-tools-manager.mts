@@ -75,6 +75,7 @@ export function managerSessionRules(maxRunningLines: number, taskCards = true): 
         : 'Task cards are disabled. Put work that needs user approval in a board decision before starting it. ') +
       'Items record progress; questions belong in decisions; actions only the user can perform belong in For you requests (kind=request). When the user asks to move the current task to another session, retain litch_sessions.hand_off.',
     FRESH_BRIEF,
+    'When a line’s asynchronous or wrap_up question has already been answered elsewhere, you can answer within your delegated authority, or it is obsolete, read pending_questions and use litch_sessions.settle_question with its stable id to answer or withdraw it. This immediately clears the user’s pending list and leaves a manager record. Do not answer decisions reserved for the user, secrets or approvals. Ordinary send does not settle questions. The user may override your answer in the child conversation.',
     WORKTREE_RULE,
     TITLE_LINE,
     'Once your lines are finished and their changes are landed (for example, merged) or discarded, archive them directly with litch_sessions.archive without asking the user, including on event turns. Other sessions still require explicit user agreement on the board or in chat.',

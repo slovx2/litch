@@ -93,6 +93,10 @@ const HELD_GRACE_MS = 300
 const HELD_RECHECK_MS = 5_000
 
 export interface EngineLinkOptions {
+  prepareQuestionInput?(
+    method: string,
+    params: Record<string, unknown>,
+  ): { params: Record<string, unknown>; accepted(): void } | null
   /** 设备级运行配额：在 turn/start 发送前占位，应答或失败后释放。 */
   reserveTurn?(threadId: string): Promise<() => void>
   turnStarted?(harness: string, threadId: string, turn: Record<string, unknown>): void
@@ -345,6 +349,8 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
             : null
         const release = threadId ? await options.reserveTurn?.(threadId) : undefined
         try {
+          const questions = isObject(ready) ? options.prepareQuestionInput?.(method, ready) : null
+          if (questions) ready = questions.params
           const outgoing = (isObject(ready) ? dialect.outgoing(method, ready) : null) ?? ready
           const ask = (remaining: number) => {
             // 每次写入协议前同步检查；恢复票可在排队或历史重试期间被用户停止撤销。
@@ -355,6 +361,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
             ? readCodexHistory(method, outgoing, timeoutMs, ask)
             : ask(timeoutMs))
           sped?.remember(result)
+          questions?.accepted()
           if (
             (method === 'thread/archive' || method === 'thread/delete') &&
             isObject(ready) &&

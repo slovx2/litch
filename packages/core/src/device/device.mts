@@ -571,6 +571,7 @@ type DirectoryMethod = Exclude<
   // 导进来的会话被别处占上、放开：只关系打开着的那个会话能不能写（live.mts）
   | 'litch/thread/nativeOwner/changed'
   | 'litch/thread/questions/changed'
+  | 'litch/thread/questionSettlements/changed'
   // harness 详情设置的通知不归会话目录（harness-config.mts）
   | 'litch/harness/config/changed'
   | 'litch/harness/auth/updated'

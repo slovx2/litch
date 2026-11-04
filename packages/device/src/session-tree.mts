@@ -34,6 +34,7 @@ import type {
 } from '../../protocol/src/session-pending.mjs'
 import {
   formatSessionEvent,
+  parseSessionEvent,
   SESSION_TREE_LIMITS,
   SESSION_TREE_NOTIFICATION,
   type SessionEventNote,
@@ -500,6 +501,56 @@ export class SessionTree {
     return { ignoredQuestions }
   }
 
+  questionsChanged(threadId: string): void {
+    this.host.announce(
+      'litch/thread/questionSettlements/changed',
+      {
+        threadId,
+        questionSettlements: this.store.questionSettlements(threadId),
+      },
+      EXTENSION.sessionTree,
+    )
+  }
+
+  /** 在实际发送前取待投递记录，失败保留；下一次用户回合、设备回合或唤醒都能收到。 */
+  prepareQuestionInput(method: string, params: Record<string, unknown>) {
+    if (
+      !['turn/start', 'turn/steer'].includes(method) ||
+      typeof params.threadId !== 'string' ||
+      !Array.isArray(params.input)
+    )
+      return null
+    const records = this.store.questionSettlements(params.threadId, true)
+    if (!records.length) return null
+    const input = params.input
+    const at = input.findIndex((item) => isObject(item) && item.type === 'text')
+    const first = at >= 0 ? input[at] : null
+    const original = typeof first?.text === 'string' ? first.text : ''
+    const { event, rest } = parseSessionEvent(original)
+    const prefix = formatSessionEvent({
+      ...(event ?? { kind: 'notes', notes: [] }),
+      questionSettlements: records,
+    })
+    const text = `${prefix}\n${rest}`
+    const shift = Buffer.byteLength(text) - Buffer.byteLength(original)
+    const part = {
+      ...first,
+      type: 'text',
+      text,
+      text_elements: Array.isArray(first?.text_elements)
+        ? first.text_elements.map((element: unknown) => shifted(element, shift))
+        : [],
+    }
+    return {
+      params: {
+        ...params,
+        input:
+          at >= 0 ? input.map((item, index) => (index === at ? part : item)) : [part, ...input],
+      },
+      accepted: () => this.store.deliveredQuestions(records.map((record) => record.id)),
+    }
+  }
+
   private async unanswered(threadId: string) {
     try {
       const questions = await this.questions.read(
@@ -507,11 +558,16 @@ export class SessionTree {
         async () => (await this.read(threadId, true)).thread,
       )
       const ignored = new Set(this.store.ignoredQuestions(threadId))
-      return questions.map(({ title, options, sourceIds }) => ({
-        title,
-        options,
-        ignored: sourceIds.every((id) => ignored.has(id)),
-      }))
+      const settled = new Set(
+        this.store.questionSettlements(threadId).flatMap((record) => record.sourceIds),
+      )
+      return questions
+        .filter((q) => !q.sourceIds.every((id) => settled.has(id)))
+        .map(({ title, options, sourceIds }) => ({
+          title,
+          options,
+          ignored: sourceIds.every((id) => ignored.has(id)),
+        }))
     } catch (error) {
       this.host.log(`会话 ${threadId} 未答题读取失败，跳过注入：${String(error)}`)
       return []
@@ -1334,6 +1390,7 @@ export class SessionTree {
   decorate(thread: Record<string, unknown>): void {
     if (typeof thread.id !== 'string') return
     thread.litchIgnoredQuestions = this.store.ignoredQuestions(thread.id)
+    thread.litchQuestionSettlements = this.store.questionSettlements(thread.id)
     thread.litchPendingRequests = this.pendingRequests(thread.id)
     thread.litchDelegatedResponses = this.store.responses(thread.id)
     const lineage = this.lineage(thread.id)
@@ -1662,6 +1719,7 @@ export class SessionTree {
     this.questions.clear(threadId)
     this.pending.ended(threadId)
     this.store.dropIgnoredQuestions(threadId)
+    this.store.dropQuestionSettlements(threadId)
     this.store.dropResponses(threadId)
     this.store.dropDirectStarts(threadId)
     this.store.dropChildStart(threadId)

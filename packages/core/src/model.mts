@@ -1,11 +1,13 @@
 import type {
   SessionDelegatedResponse,
   SessionPendingRequest,
+  SessionQuestionSettlement,
 } from '../../protocol/src/session-pending.mjs'
 
 export type {
   SessionDelegatedResponse,
   SessionPendingRequest,
+  SessionQuestionSettlement,
 } from '../../protocol/src/session-pending.mjs'
 
 // 界面看到的数据形状。界面不认识协议类型，只认识这里的类型，各种 harness 的差异在核心里消化掉。
@@ -1221,6 +1223,7 @@ export interface SessionHistory {
 }
 
 export interface SessionView {
+  questionSettlements?: SessionQuestionSettlement[]
   ignoredQuestions?: string[]
   deviceId: string
   sessionId: string

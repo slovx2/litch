@@ -1021,6 +1021,8 @@ export class DeviceServer {
               requestTimeoutMs: this.taskTiming.requestTimeoutMs,
               tools: this.deviceTools,
               clientTools: this.host.clientTools,
+              prepareQuestionInput: (method, params) =>
+                this.sessionTree.prepareQuestionInput(method, params),
               reserveTurn: async (threadId) => {
                 const hold = await this.managers?.lines.reserve(threadId, threadId)
                 return () => hold?.release()

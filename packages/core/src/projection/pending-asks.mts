@@ -21,6 +21,7 @@ export function changesQuestions(
     case 'turn.status':
     case 'queue.set':
     case 'session.ignoredQuestions':
+    case 'session.questionSettlements':
       return true
     case 'item.add':
       return relevant(op.item) || relevant(itemOf(op.item.id))

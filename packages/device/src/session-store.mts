@@ -6,7 +6,10 @@ import { closeSync, existsSync, openSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync, type StatementSync } from 'node:sqlite'
 import { bornThread } from '../../protocol/src/codex-developer-instructions.mjs'
-import type { SessionDelegatedResponse } from '../../protocol/src/session-pending.mjs'
+import type {
+  SessionDelegatedResponse,
+  SessionQuestionSettlement,
+} from '../../protocol/src/session-pending.mjs'
 import type {
   SessionEventNote,
   SessionLineage,
@@ -170,6 +173,10 @@ const MIGRATIONS: readonly string[] = [
   // 回报定位到原回合；重启之后仍可展开同一份回答。
   `ALTER TABLE notes ADD COLUMN turn_id TEXT;
    ALTER TABLE notes ADD COLUMN truncated INTEGER NOT NULL DEFAULT 0;`,
+  // 处理记录与待投递状态同一行提交；引擎确认收到后才清待投递标记。
+  `CREATE TABLE question_settlements(id TEXT PRIMARY KEY, thread_id TEXT NOT NULL,
+     record TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0);
+   CREATE INDEX question_settlements_by_thread ON question_settlements(thread_id);`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -1007,6 +1014,30 @@ export class SessionStore {
 
   dropIgnoredQuestions(threadId: string): void {
     this.db.prepare('DELETE FROM ignored_questions WHERE thread_id=?').run(threadId)
+  }
+
+  questionSettlements(threadId: string, undelivered = false): SessionQuestionSettlement[] {
+    return this.db
+      .prepare(
+        `SELECT record FROM question_settlements WHERE thread_id=?${undelivered ? ' AND delivered=0' : ''} ORDER BY rowid`,
+      )
+      .all(threadId)
+      .map((row) => JSON.parse(String(row.record)) as SessionQuestionSettlement)
+  }
+
+  settleQuestion(record: SessionQuestionSettlement): void {
+    this.db
+      .prepare('INSERT INTO question_settlements(id,thread_id,record) VALUES(?,?,?)')
+      .run(record.id, record.threadId, JSON.stringify(record))
+  }
+
+  deliveredQuestions(ids: string[]): void {
+    const update = this.db.prepare('UPDATE question_settlements SET delivered=1 WHERE id=?')
+    for (const id of ids) update.run(id)
+  }
+
+  dropQuestionSettlements(threadId: string): void {
+    this.db.prepare('DELETE FROM question_settlements WHERE thread_id=?').run(threadId)
   }
 
   ignoredQuestions(threadId: string): string[] {

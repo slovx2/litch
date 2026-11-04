@@ -1051,6 +1051,13 @@ export class ClientSession implements ClientToolPeer {
         this.host.attachments?.observe(link.harness, ready)
       // 先准备参数，再拿短期工作来源；准备失败不能遗留保活。
       let outgoing = ready
+      const questions = outgoing
+        ? this.host.sessionTree.prepareQuestionInput(method, outgoing)
+        : null
+      if (questions) {
+        outgoing = questions.params
+        afterwards.push(questions.accepted)
+      }
       if (outgoing) outgoing = link.dialect.outgoing(method, outgoing) ?? outgoing
       const text = outgoing === fields ? raw : JSON.stringify({ ...frame, params: outgoing })
       const release = method === 'turn/start' ? this.host.power()?.begin(link.harness) : undefined

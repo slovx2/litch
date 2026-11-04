@@ -160,6 +160,8 @@ export const keys = {
   /** string[]：设备确认的忽略来源键。 */
   ignoredQuestions: (deviceId: string, sessionId: string) =>
     `session:${deviceId}:${sessionId}:ignoredQuestions`,
+  questionSettlements: (deviceId: string, sessionId: string) =>
+    `session:${deviceId}:${sessionId}:questionSettlements`,
   /** PendingQuestion[]：输入框上方可见的跨回合待答集合。 */
   pendingQuestions: (deviceId: string, sessionId: string) =>
     `session:${deviceId}:${sessionId}:pendingQuestions`,
@@ -1147,6 +1149,9 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
       store.get<AskAnswers>(keys.answers(deviceId, sessionId)) ?? {},
       store.get<QueuedMessage[]>(keys.queued(deviceId, sessionId)) ?? [],
       store.get<string[]>(keys.ignoredQuestions(deviceId, sessionId)) ?? [],
+      store.get<import('../model.mjs').SessionQuestionSettlement[]>(
+        keys.questionSettlements(deviceId, sessionId),
+      ) ?? [],
     )
     store.set(
       keys.pendingQuestions(deviceId, sessionId),
@@ -1332,6 +1337,9 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
       case 'session.ignoredQuestions':
         store.set(keys.ignoredQuestions(deviceId, sessionId), op.sourceIds)
         return
+      case 'session.questionSettlements':
+        store.set(keys.questionSettlements(deviceId, sessionId), op.records)
+        return
       case 'session.proposals':
         store.set(keys.proposals(deviceId, sessionId), op.proposals satisfies SessionProposalView[])
         return
@@ -1471,6 +1479,10 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
                 )
                 store.set(keys.requests(deviceId, sessionId), view.requests)
                 store.set(keys.ignoredQuestions(deviceId, sessionId), view.ignoredQuestions ?? [])
+                store.set(
+                  keys.questionSettlements(deviceId, sessionId),
+                  view.questionSettlements ?? [],
+                )
                 store.set(keys.queued(deviceId, sessionId), view.queued)
                 store.set(keys.settings(deviceId, sessionId), view.settings)
                 store.set(keys.usage(deviceId, sessionId), view.usage)

@@ -721,6 +721,10 @@ export interface ServerNotifications {
   'litch/thread/queuedNotes/updated': QueuedNotesUpdatedNotification
   'litch/thread/turn/notice': import('./turn-notices.mjs').TurnNotice
   'litch/thread/questions/changed': { threadId: string; ignoredQuestions: string[] }
+  'litch/thread/questionSettlements/changed': {
+    threadId: string
+    questionSettlements: import('./session-pending.mjs').SessionQuestionSettlement[]
+  }
   'litch/thread/pending/changed': SessionPendingChanged
   /** 扩展，只发给握手时声明过 worktrees 的连接：设备层的一个工作树建成、换了主人、删了或恢复了 */
   'litch/worktree/changed': WorktreeChangedNotification

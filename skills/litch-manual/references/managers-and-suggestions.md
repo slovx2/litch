@@ -2,6 +2,25 @@
 
 ## Managers
 
+### 工作线问题的代答与撤回 / Settling workline questions
+
+经理可通过 `litch_sessions.read` 查看 `pending_questions`，再以稳定的 `id` 调用
+`litch_sessions.settle_question`，只处理自己子树里的异步提问或收尾问题。`action=answer`
+附 `answer` 代答，`action=withdraw` 附 `reason` 撤回。适用于用户已在别处回答、经理权限内
+可以决定或已经过期的问题；需要用户拍板、输入秘密或审批的事项不能代答。阻塞请求仍用 `respond`。
+桌面和手机的待答、侧栏记号及计数会立即更新。原问题收成简短记录，展开可见经理、答案或原因，
+并可点「重新回答」提交用户答复覆盖代答；经理记录保留。直接在工作线输入区说明修正也可以。
+处理记录保存在会话所在设备，重连和重启不丢失；子会话在下一回合或唤醒时收到，操作本身不强制启动回合。
+已有经理需要重置会话取得新增工具。普通 `send` 消息不会清除待答问题。
+
+Managers use `read.pending_questions[].id` with `settle_question` to answer or withdraw asynchronous
+and wrap-up questions in their own subtree. This is for answers already provided elsewhere, decisions
+within delegated authority, or obsolete questions; user-only decisions, secrets and approvals remain
+with the user. Pending indicators clear immediately on desktop and phone. Expand the original question
+to inspect the manager record or choose **Answer again** to override it. Records survive reconnects and
+device restarts; the child receives them on its next turn or wake, without starting a turn immediately.
+Reset existing manager sessions to load the new tool. Ordinary `send` messages do not settle questions.
+
 ### 会话边界
 
 - 经理输入区选定的模型和强度是当前会话的设置，后续看板事件沿用它们。

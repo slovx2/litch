@@ -123,6 +123,9 @@ export function reduceSession(view: SessionView, op: SessionOp): void {
     case 'session.ignoredQuestions':
       view.ignoredQuestions = [...op.sourceIds]
       return
+    case 'session.questionSettlements':
+      view.questionSettlements = [...op.records]
+      return
     case 'session.proposals':
       view.proposals = copyValue(op.proposals)
       return

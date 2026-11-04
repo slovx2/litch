@@ -323,6 +323,10 @@ export type SessionOp =
   | { op: 'session.can'; can: SessionAbilities }
   /** 这个会话上等着用户点的子会话提案整份换掉（会话树） */
   | { op: 'session.ignoredQuestions'; sourceIds: string[] }
+  | {
+      op: 'session.questionSettlements'
+      records: import('../../../protocol/src/session-pending.mjs').SessionQuestionSettlement[]
+    }
   | { op: 'session.proposals'; proposals: SessionProposalView[] }
   /** 这个会话的子代理（引擎自己派出的子线程）整份换掉：派了新的，或者哪个的状态变了 */
   | { op: 'session.agents'; agents: AgentThreadView[] }

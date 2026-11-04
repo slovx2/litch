@@ -7,6 +7,7 @@ import {
   questionSource,
   questionsOfView,
 } from './pending-asks.mjs'
+import type { SessionQuestionSettlement } from './session-pending.mjs'
 import { parseSessionEvent } from './session-tree.mjs'
 import { parseSessionMessage, parseSystemMessage } from './system-messages.mjs'
 
@@ -129,6 +130,12 @@ export function questionsOfHistory(
   thread: unknown,
   ignoredQuestions: string[] = [],
   queued: { text: string }[] = [],
+  questionSettlements: SessionQuestionSettlement[] = [],
 ) {
-  return questionsOfView({ ...pendingHistory(thread), ignoredQuestions, queued })
+  return questionsOfView({
+    ...pendingHistory(thread),
+    ignoredQuestions,
+    queued,
+    questionSettlements,
+  })
 }

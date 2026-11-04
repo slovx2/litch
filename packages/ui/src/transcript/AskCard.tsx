@@ -4,15 +4,20 @@ import {
   type AgentMessageItem,
   type AskAnswers,
   type AskReply,
+  askReplyText,
+  type DeviceView,
   distinctReplies,
   keys,
   type PendingQuestion,
+  type SessionMeta,
+  type SessionQuestionSettlement,
   type ToolCallItem,
 } from '@litch/core'
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { useT } from '../app/appearance.ts'
+import { whyNot } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
-import { historyQuestions } from './ask-history.ts'
+import { historyQuestions, questionHistorySummary } from './ask-history.ts'
 import { replySource, revealReplySource } from './ask-reveal.ts'
 import { CompactRow } from './CompactRow.tsx'
 import { type ItemRef, useItem } from './messages.tsx'
@@ -53,11 +58,17 @@ export function AskSheet({
   const answers = useKey<AskAnswers>(keys.answers(deviceId, sessionId)) ?? NO_ANSWERS
   const pending =
     useKey<PendingQuestion[]>(keys.pendingQuestions(deviceId, sessionId)) ?? NO_PENDING
+  const records =
+    useKey<SessionQuestionSettlement[]>(keys.questionSettlements(deviceId, sessionId)) ?? []
   const questions = historyQuestions(allQuestions, pending)
   const answered = questions.filter((q) => answers[q.id] !== undefined)
   const state = answered.length === questions.length ? 'answered' : 'closed'
   const open = toggled
   const first = questions[0]
+  const recordFor = (id: string) => records.find((record) => record.replyIds.includes(id))
+  const summary = questionHistorySummary(questions, answers, records, (action) =>
+    t(`ask.manager.${action}`),
+  )
   if (!first) return null
   return (
     <section
@@ -68,22 +79,30 @@ export function AskSheet({
       data-anchor={anchor}
     >
       <CompactRow
-        source={`${t('ask.title')} · ${
-          state === 'answered'
-            ? t('ask.answeredCount', { count: answered.length })
-            : t(`ask.state.${state}`)
-        }`}
+        source={
+          first && recordFor(first.id) && answered.length === 0
+            ? t(`ask.manager.${recordFor(first.id)!.action}`)
+            : `${t('ask.title')} · ${
+                state === 'answered'
+                  ? t('ask.answeredCount', { count: answered.length })
+                  : t(`ask.state.${state}`)
+              }`
+        }
         title={open ? undefined : first.title}
-        summary={answered.map((q) => answers[q.id]).join(' · ')}
+        summary={summary}
         open={open}
         onToggle={() => setToggled(!toggled)}
       />
       {open
         ? questions.map((q) => {
             const answer = answers[q.id]
+            const record = recordFor(q.id)
             return (
               <div className="ask-q" key={q.id}>
                 <div className="ask-text">{q.title}</div>
+                {record ? (
+                  <QuestionSettlement record={record} deviceId={deviceId} sessionId={sessionId} />
+                ) : null}
                 {answer !== undefined ? (
                   <Answer text={answer} />
                 ) : q.options.length > 0 ? (
@@ -99,6 +118,83 @@ export function AskSheet({
           })
         : null}
     </section>
+  )
+}
+
+/** 用户可从原题明确重答；发送的是真实用户答复，保留经理记录作为历史。 */
+function QuestionSettlement({
+  record,
+  deviceId,
+  sessionId,
+}: {
+  record: SessionQuestionSettlement
+  deviceId: string
+  sessionId: string
+}) {
+  const t = useT()
+  const { channel } = useServices()
+  const meta = useKey<SessionMeta>(keys.session(deviceId, sessionId))
+  const device = useKey<DeviceView>(keys.device(deviceId))
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+  const enabled = meta?.live === true && device?.connection === 'online'
+  return (
+    <div className="ask-answer" data-question-settlement={record.action}>
+      <span className="ask-answer-label">
+        {t(`ask.manager.${record.action}`)} · {record.sourceTitle}
+      </span>
+      <div>{record.text}</div>
+      {enabled ? (
+        <button className="btn" type="button" onClick={() => setEditing(!editing)}>
+          {t('ask.manager.override')}
+        </button>
+      ) : null}
+      {editing ? (
+        <form
+          className="pending-ask-row"
+          onSubmit={async (event) => {
+            event.preventDefault()
+            if (!enabled || !text.trim() || busy) return
+            setBusy(true)
+            setFailure(null)
+            try {
+              await channel.command('session.send', {
+                deviceId,
+                sessionId,
+                text: askReplyText(
+                  record.replyIds.map((questionItemId) => ({
+                    questionItemId,
+                    question: record.title,
+                    answer: text.trim(),
+                  })),
+                ),
+              })
+              setEditing(false)
+              setText('')
+            } catch (error) {
+              setFailure(whyNot(error, t))
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          <textarea
+            rows={1}
+            className="req-input"
+            aria-label={t('ask.manager.override')}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            disabled={!enabled || busy}
+          />
+          <button className="btn" type="submit" disabled={!enabled || busy || !text.trim()}>
+            {t('ask.answer')}
+          </button>
+        </form>
+      ) : null}
+      {failure ? <div role="alert">{failure}</div> : null}
+    </div>
   )
 }
 

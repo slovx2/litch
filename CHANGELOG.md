@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 经理可代答或撤回自己子树的异步和收尾问题，立即清除桌面、手机的待答提示；原题保留处理记录，用户可重新回答覆盖。
+
 ## 0.31.1（2026-11-04）
 
 - 决策卡收起时显示草稿摘要和状态，提交条固定在列表底部，手机也能批量提交。

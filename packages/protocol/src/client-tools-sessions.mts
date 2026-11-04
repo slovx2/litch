@@ -19,6 +19,7 @@ export const SESSION_TOOL = {
   read: 'read',
   setWake: 'set_wake',
   respond: 'respond',
+  settleQuestion: 'settle_question',
   /** 这台设备上能开子会话的 harness、各自的型号和强度、这个会话现在用的：换 harness 或型号之前先查 */
   options: 'options',
   start: 'start',
@@ -313,6 +314,8 @@ export interface SessionTurnSummary {
 }
 
 export interface SessionsReadResult {
+  pending_questions: import('./pending-asks.mjs').PendingQuestion[]
+  question_settlements: import('./session-pending.mjs').SessionQuestionSettlement[]
   session: SessionSummary
   turns: SessionTurnSummary[]
   /** 当前设备连接观察到的阻塞请求，不包含异步或收尾问题。 */
@@ -695,7 +698,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
         type: 'function',
         name: SESSION_TOOL.read,
         description:
-          'Read a session’s status, wake_parent, report_parent, recent turns, pending_requests and delegated_responses without opening it. report_parent=false means the user stopped automatic reports from this child; read it yourself when needed. Pending requests include current IDs, kinds, questions and permitted decisions for respond. This snapshot covers blocking requests observed by the device; an empty list does not rule out asynchronous questions or requests held by another executor.',
+          'Read status, recent turns, pending_requests, delegated_responses, pending_questions and question_settlements. pending_requests are blocking requests for respond; pending_questions are asynchronous and wrap_up questions with stable id values for settle_question. report_parent=false means automatic reports stopped. Requests held by another executor may be absent.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -723,6 +726,24 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
             },
           },
           required: ['thread_id', 'request_id', 'answer'],
+          additionalProperties: false,
+        },
+      },
+      {
+        type: 'function',
+        name: SESSION_TOOL.settleQuestion,
+        description:
+          'Managers only: settle a pending asynchronous or wrap_up question in your own subtree. First read pending_questions and use its stable id. Answer only when the user already answered elsewhere or your delegated authority permits it; withdraw obsolete questions with a reason. Never substitute for a decision only the user can make, a secret, or an approval. The user can override your answer. The record immediately clears the user’s pending question; the child receives it on its next turn or wake. Repeats return already_settled; answered or vanished questions return not_pending. Use respond for blocking requests.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            thread_id: THREAD_ID,
+            question_id: { type: 'string', description: 'Stable id from read.pending_questions.' },
+            action: { type: 'string', enum: ['answer', 'withdraw'] },
+            answer: { type: 'string', description: 'Required for answer.' },
+            reason: { type: 'string', description: 'Required for withdraw.' },
+          },
+          required: ['thread_id', 'question_id', 'action'],
           additionalProperties: false,
         },
       },

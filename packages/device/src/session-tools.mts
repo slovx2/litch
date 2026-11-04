@@ -36,6 +36,7 @@ import {
   textWidth,
   wrapUpAsk,
 } from '../../protocol/src/client-tools-sessions.mjs'
+import { questionsOfHistory } from '../../protocol/src/pending-history.mjs'
 import {
   parseSessionEvent,
   SESSION_TREE_LIMITS,
@@ -246,7 +247,66 @@ async function read(tree: SessionTree, args: Record<string, unknown>, call: Devi
     turns: turns.map((turn, at) => turnSummary(turn, at === turns.length - 1)),
     pending_requests: tree.pendingRequests(threadId),
     delegated_responses: tree.store.responses(threadId),
+    pending_questions: questionsOfHistory(
+      thread,
+      tree.store.ignoredQuestions(threadId),
+      [],
+      tree.store.questionSettlements(threadId),
+    ).map((question) => ({ ...question, id: question.sourceIds[0] })),
+    question_settlements: tree.store.questionSettlements(threadId),
   }
+}
+
+async function settleQuestion(
+  tree: SessionTree,
+  args: Record<string, unknown>,
+  call: DeviceToolCall,
+) {
+  const threadId = string(args, 'thread_id', true)
+  const questionId = string(args, 'question_id', true)
+  const action = string(args, 'action', true)
+  if (action !== 'answer' && action !== 'withdraw')
+    throw new Refused('invalid', 'action must be answer or withdraw.')
+  const text = string(args, action === 'answer' ? 'answer' : 'reason', true)
+  if (text.length > SESSION_TOOL_LIMITS.messageChars)
+    throw new Refused('invalid', 'Answer or reason is too long.')
+  const check = () => {
+    if (
+      !tree.managers?.store.forThread(call.threadId) ||
+      !tree.store.descends(threadId, call.threadId)
+    )
+      throw new Refused('blocked', 'Only a manager may settle questions in its own subtree.')
+    const refusal =
+      tree.managers.resets.refusal(call.threadId) ?? tree.managers.resets.refusal(threadId)
+    if (refusal || tree.managers.resets.held(call.threadId) || tree.managers.resets.held(threadId))
+      throw new Refused('blocked', refusal ?? 'Wait for manager reset to finish.')
+  }
+  check()
+  const { thread } = await found(tree, threadId)
+  check()
+  const records = tree.store.questionSettlements(threadId)
+  const previous = records.find((record) => record.sourceIds.includes(questionId))
+  if (previous) return { status: 'already_settled', settlement: previous }
+  const question = questionsOfHistory(thread, [], [], records).find((q) =>
+    q.sourceIds.includes(questionId),
+  )
+  if (!question) return { status: 'not_pending', thread_id: threadId, question_id: questionId }
+  const record: import('../../protocol/src/session-pending.mjs').SessionQuestionSettlement = {
+    id: randomUUID(),
+    questionId,
+    threadId,
+    sourceIds: question.sourceIds,
+    replyIds: question.replyIds,
+    title: question.title,
+    action,
+    text,
+    sourceThreadId: call.threadId,
+    sourceTitle: tree.managers!.store.forThread(call.threadId)!.name,
+    at: Date.now(),
+  }
+  tree.store.settleQuestion(record)
+  tree.questionsChanged(threadId)
+  return { status: 'settled', settlement: record, delivery: 'next_turn' }
 }
 
 /** 读一个会话；没有这个会话按参数不对回 */
@@ -1239,6 +1299,8 @@ export function sessionToolsHandler(
           return ok(await list(tree, args, call))
         case SESSION_TOOL.read:
           return ok(await read(tree, args, call))
+        case SESSION_TOOL.settleQuestion:
+          return ok(await settleQuestion(tree, args, call))
         case SESSION_TOOL.setWake: {
           const threadId = string(args, 'thread_id', true)
           if (tree.store.parentOf(threadId)?.parentThreadId !== call.threadId)

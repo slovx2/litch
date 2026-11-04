@@ -398,6 +398,7 @@ export interface SessionQueuedNote extends SessionEventNote {
 }
 
 export interface SessionEvent {
+  questionSettlements?: import('./session-pending.mjs').SessionQuestionSettlement[]
   /** manager-* 事件必带；其他事件不带，不改变原有回报的形状。 */
   manager?: ManagerEventData
   pendingQuestions?: {
@@ -550,6 +551,14 @@ export function formatSessionEvent(event: SessionEvent): string {
     `<${SESSION_EVENT_TAG} kind="${event.kind}">`,
     head,
     ...lines,
+    ...(event.questionSettlements?.length
+      ? [
+          '经理处理的问题 / Questions settled by your manager (not answers typed by the user). User corrections take precedence. Do not ask these again unless new information requires a new decision.',
+          ...event.questionSettlements.map((record) =>
+            JSON.stringify(record).replace(/</g, '\\u003c').replace(/>/g, '\\u003e'),
+          ),
+        ]
+      : []),
     tail,
     ...(event.pendingQuestions?.length
       ? [

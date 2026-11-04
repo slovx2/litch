@@ -66,6 +66,7 @@ export interface TailSnapshot {
 export interface SessionMeta {
   history?: SessionView['history']
   pendingQuestions: PendingQuestion[]
+  questionSettlements: NonNullable<SessionView['questionSettlements']>
   title: SessionView['title']
   harness: string
   cwd: string
@@ -482,6 +483,7 @@ export class SessionStore {
         mark(this.itemTurn.get(op.itemId))
         return
       case 'session.ignoredQuestions':
+      case 'session.questionSettlements':
         this.metaDirty = true
         return
       case 'session.proposals':
@@ -580,6 +582,7 @@ export class SessionStore {
       this.meta = {
         history: view.history,
         pendingQuestions: questionsOfView(view).filter((q) => !q.ignored),
+        questionSettlements: view.questionSettlements ?? [],
         title: view.title,
         harness: view.harness,
         cwd: view.cwd,

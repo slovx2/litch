@@ -1,5 +1,6 @@
 // 会话待答集合的纯派生，客户端与设备使用同一份，不依赖 Node 或核心。
 import { type AskAnswers, askReplyText, gatherAnswers, parseAskReply } from './async-asks.mjs'
+import type { SessionQuestionSettlement } from './session-pending.mjs'
 import { isUserReply } from './user-reply.mjs'
 
 export interface PendingItem {
@@ -86,7 +87,9 @@ export function pendingQuestions(
   answers: AskAnswers,
   queued: readonly { text: string }[] = [],
   ignoredIds: readonly string[] = [],
+  settlements: readonly SessionQuestionSettlement[] = [],
 ): PendingQuestion[] {
+  const settled = new Set(settlements.flatMap((record) => record.sourceIds))
   const answered = { ...answers }
   for (const message of queued)
     for (const reply of parseAskReply(message.text) ?? [])
@@ -141,6 +144,7 @@ export function pendingQuestions(
           questionIndex,
         ])
         const existing = pending.get(key)
+        if (settled.has(sourceId)) continue
         if (existing) {
           existing.replyIds.push(question.id)
           existing.sourceIds.push(sourceId)
@@ -169,6 +173,7 @@ export function questionsOfView(view: {
   items: Record<string, PendingItem>
   queued: readonly { text: string }[]
   ignoredQuestions?: readonly string[]
+  questionSettlements?: readonly SessionQuestionSettlement[]
 }): PendingQuestion[] {
   const ordered = view.turns.flatMap((turn) => turn.itemIds.flatMap((id) => view.items[id] ?? []))
   return pendingQuestions(
@@ -177,5 +182,6 @@ export function questionsOfView(view: {
     gatherAnswers({}, ordered),
     view.queued,
     view.ignoredQuestions,
+    view.questionSettlements,
   )
 }

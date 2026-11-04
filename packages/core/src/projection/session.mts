@@ -162,6 +162,7 @@ export function projectThread(
     deviceId: scope.deviceId,
     sessionId: thread.id,
     ignoredQuestions: (thread as Thread & SessionPendingFields).litchIgnoredQuestions ?? [],
+    questionSettlements: (thread as Thread & SessionPendingFields).litchQuestionSettlements ?? [],
     title: threadTitle(thread),
     harness: scope.harness,
     cwd: thread.cwd,
