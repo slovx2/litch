@@ -664,10 +664,13 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         id: stage-5
         with:
-          go-version: 1.26.10
+          go-version-file: mobile/go.mod
           cache-dependency-path: |
             go.sum
             mobile/go.sum
+      - name: 手机 Go 公共层测试
+        working-directory: mobile
+        run: go test ./...
       - name: 构建目录与 JDK 17
         id: phase-8
         run: |
@@ -704,9 +707,9 @@ jobs:
           path: |
             ${{ runner.temp }}/gradle/caches
             ${{ runner.temp }}/gradle/wrapper
-          key: gradle-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-go1.26.10-jdk${{ steps.android-tools.outputs.jdk }}-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'apps/mobile/android/*.gradle', 'apps/mobile/android/gradle.properties', 'apps/mobile/node_modules/react-native/gradle/libs.versions.toml', 'apps/mobile/plugins/**', 'apps/mobile/modules/**', 'mobile/**') }}-${{ needs.source.outputs.sha }}
+          key: gradle-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-go${{ hashFiles('mobile/go.mod') }}-jdk${{ steps.android-tools.outputs.jdk }}-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'apps/mobile/android/*.gradle', 'apps/mobile/android/gradle.properties', 'apps/mobile/node_modules/react-native/gradle/libs.versions.toml', 'apps/mobile/plugins/**', 'apps/mobile/modules/**', 'mobile/**') }}-${{ needs.source.outputs.sha }}
           restore-keys: |
-            gradle-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-go1.26.10-jdk${{ steps.android-tools.outputs.jdk }}-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'apps/mobile/android/*.gradle', 'apps/mobile/android/gradle.properties', 'apps/mobile/node_modules/react-native/gradle/libs.versions.toml', 'apps/mobile/plugins/**', 'apps/mobile/modules/**', 'mobile/**') }}-
+            gradle-v1-${{ runner.os }}-${{ runner.arch }}-x86_64-node24.21.0-go${{ hashFiles('mobile/go.mod') }}-jdk${{ steps.android-tools.outputs.jdk }}-${{ hashFiles('apps/mobile/package-lock.json', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'apps/mobile/android/*.gradle', 'apps/mobile/android/gradle.properties', 'apps/mobile/node_modules/react-native/gradle/libs.versions.toml', 'apps/mobile/plugins/**', 'apps/mobile/modules/**', 'mobile/**') }}-
       # Expo 在 CI 下不执行 RN 传来的 --reset-cache；Metro 自身按源码内容失效转换结果。
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: cache-metro

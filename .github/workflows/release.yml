@@ -401,7 +401,8 @@ jobs:
           cache: npm
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: 1.26.10
+          go-version-file: mobile/go.mod
+          cache-dependency-path: mobile/go.sum
       - name: JDK 17
         run: echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "${GITHUB_ENV}"
       - name: 取出签名钥匙
