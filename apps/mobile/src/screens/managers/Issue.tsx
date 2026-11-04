@@ -12,6 +12,7 @@ import {
   requestDraftState,
   resetDecisionSelection,
   type SuggestionView,
+  submitManagerRequest,
 } from '@litch/core'
 import { useIsFocused } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
@@ -52,7 +53,7 @@ import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutc
 import { DiscussionDrawer } from './DiscussionDrawer'
 import { DiscussionHistory } from './DiscussionHistory'
 import { DraftEndedNote } from './DraftEndedNote'
-import { baseFile, questionFile as draftFile, replyFile } from './draft-files'
+import { baseFile, clearDrafts, questionFile as draftFile, replyFile } from './draft-files'
 import { Markdown } from './IssueMarkdown'
 import { IssueContext, IssueRelations } from './IssueRelations'
 import { setIssueOrder, useIssueOrder } from './issue-order'
@@ -202,6 +203,7 @@ export function Issue({
   /** 正在填忽略理由；null 是没在填 */
   const [ignoring, setIgnoring] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const inFlight = useRef(false)
   const [error, setError] = useState('')
   const locked = busy || manager.status !== 'active' || device?.connection !== 'online'
   // 比应用旧的设备服务没宣告的能力：入口禁用，旁边写明原因（看板顶上另有一行说去设备详情升级）
@@ -219,6 +221,8 @@ export function Issue({
   const canTemporary =
     device?.harnesses.find((h) => h.id === manager.harness)?.abilities?.managerQuestions === true
   const run = async (work: () => Promise<unknown>) => {
+    if (inFlight.current) return
+    inFlight.current = true
     setBusy(true)
     setError('')
     try {
@@ -226,6 +230,7 @@ export function Issue({
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
@@ -352,16 +357,18 @@ export function Issue({
   }
   const submitReply = (delivered: boolean) =>
     run(async () => {
-      if (request) {
-        const result = await channel.command('managers.feedback.submit', {
-          deviceId: manager.deviceId,
-          managerId: manager.id,
-          answers: [],
-          questions: [],
-          requests: [{ requestId: request.id, revision: request.revision, delivered, text: reply }],
+      if (request && !answerConflict && !replyEnded) {
+        const accepted = await submitManagerRequest(channel, manager.deviceId, manager.id, {
+          requestId: request.id,
+          revision: request.revision,
+          delivered,
+          text: reply,
         })
-        if (result.rejectedRequests[0]) throw new Error(result.rejectedRequests[0].message)
-        writeReply('')
+        if (!accepted) throw new Error(t('manager.requestSubmitFailed'))
+        if (draftFile.read()?.[draftKey]?.trim())
+          baseFile.write({ ...baseFile.read(), [draftKey]: accepted.revision })
+        clearDrafts([draftKey], { reply: true })
+        setReply('')
         setEditing(false)
       }
     })
@@ -723,24 +730,37 @@ export function Issue({
               !replyEnded &&
               (request.status === 'open' || editing) ? (
                 <>
+                  {answerConflict ? (
+                    <View style={{ gap: 8 }}>
+                      <Text style={{ color: c.ink2 }}>{t('manager.requestConflict')}</Text>
+                      <Button
+                        label={t('manager.confirm')}
+                        disabled={locked}
+                        onPress={() => {
+                          baseFile.write({ ...baseFile.read(), [draftKey]: request.revision })
+                          setConfirmedRevision(request.revision)
+                        }}
+                      />
+                    </View>
+                  ) : null}
                   <TextInput
                     accessibilityLabel={t('manager.requestText')}
                     style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
                     multiline
-                    editable={features.feedback}
+                    editable={features.feedback && !locked}
                     value={reply}
                     onChangeText={writeReply}
                   />
                   <Button
                     testID={`request-deliver:${request.id}`}
-                    disabled={locked || !features.feedback}
+                    disabled={locked || !features.feedback || answerConflict}
                     label={request.buttonLabel ?? t('manager.requestDone')}
                     onPress={() => void submitReply(true)}
                   />
                   {reply.trim() ? (
                     <Button
                       kind="plain"
-                      disabled={locked || !features.feedback}
+                      disabled={locked || !features.feedback || answerConflict}
                       label={t('manager.submit')}
                       onPress={() => void submitReply(false)}
                     />

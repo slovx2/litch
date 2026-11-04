@@ -90,6 +90,7 @@ export const zhManager = {
   'manager.questionManagerSpeaker': '经理：',
   'manager.questionTemporarySpeaker': '助手（临时对话）：',
   'manager.requestDone': '标记完成',
+  'manager.requestSubmitFailed': '响应未提交，请重试。',
   'manager.requestText': '回复或备注（例如无法完成、需要帮助）',
   'manager.requestEdit': '修改回复',
   'manager.requestConflict': '这项请求已变化或取消，请核对后确认或清除草稿。',

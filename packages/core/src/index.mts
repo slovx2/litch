@@ -567,6 +567,7 @@ export {
 export { matchTitles } from './search/titles.mjs'
 export { searchTransferItem } from './search/transfer.mjs'
 export { searchableItems } from './search/visible.mjs'
+export { submitManagerRequest } from './submit-manager-request.mjs'
 export {
   base64Bytes,
   decodeBase64,

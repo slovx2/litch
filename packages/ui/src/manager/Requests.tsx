@@ -1,4 +1,4 @@
-import { requestDraftState, sortManagerIssues } from '@litch/core'
+import { requestDraftState, sortManagerIssues, submitManagerRequest } from '@litch/core'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type {
   ManagerRequestId,
@@ -8,6 +8,7 @@ import type {
 } from '../../../core/src/model-manager.mts'
 import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
 import { useT } from '../app/appearance.ts'
+import { useServices } from '../app/services.tsx'
 import { Stamp } from '../transcript/Stamp.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { useCardMotion } from './card-motion.ts'
@@ -16,6 +17,7 @@ import { useManagerFeatures } from './data.ts'
 import { useIssueOrder } from './issue-order.tsx'
 import { PostCard } from './PostCard.tsx'
 import { PostDiscussion, PostHistory } from './PostDiscussion.tsx'
+import { usePostDrafts } from './post-drafts.ts'
 import { Relations } from './Relations.tsx'
 import { useRequestDrafts } from './request-drafts.ts'
 
@@ -35,11 +37,15 @@ export function Requests({
   onLocated(): void
 }) {
   const t = useT()
-  const { drafts, write } = useRequestDrafts(manager.deviceId, manager.id)
+  const { channel } = useServices()
+  const { drafts, write, clear } = useRequestDrafts(manager.deviceId, manager.id)
+  const { advance } = usePostDrafts(manager.deviceId, manager.id)
+  const [submitting, setSubmitting] = useState<string | null>(null)
+  const inFlight = useRef(false)
   const [error, setError] = useState('')
   const root = useRef<HTMLDivElement>(null)
   const order = useIssueOrder()
-  // 交付与回复随“提交给经理”经 feedback/submit 交：比应用旧的设备服务没有，入口禁用并写明原因
+  // 单卡与批量提交都经 feedback/submit；没有该能力时禁用并说明。
   const old = !useManagerFeatures().feedback
   const oldTitle = old ? t('manager.oldDeviceShort') : undefined
   useLayoutEffect(() => {
@@ -68,6 +74,28 @@ export function Requests({
       setError(t('manager.savedFail'))
     }
   }
+  const submit = async (request: ManagerRequestView, delivered: boolean) => {
+    if (inFlight.current) return
+    inFlight.current = true
+    setSubmitting(request.id)
+    setError('')
+    try {
+      const accepted = await submitManagerRequest(channel, manager.deviceId, manager.id, {
+        requestId: request.id,
+        revision: drafts[request.id]?.revision ?? request.revision,
+        delivered,
+        text: drafts[request.id]?.text ?? '',
+      })
+      if (!accepted) throw new Error(t('manager.requestSubmitFailed'))
+      clear(request.id)
+      advance([accepted])
+    } catch (error) {
+      setError(error instanceof Error ? error.message : t('manager.savedFail'))
+    } finally {
+      inFlight.current = false
+      setSubmitting(null)
+    }
+  }
   const sorted = sortManagerIssues(requests, order, (r) => ({
     at: r.createdAt,
     pending: r.status === 'open',
@@ -86,7 +114,7 @@ export function Requests({
           : null
         const ended = state === 'ended' && Boolean(draft?.delivered || draft?.text.trim())
         const editing = request.status === 'open' || (Boolean(draft) && state !== 'ended')
-        const locked = disabled || request.status === 'cancelled'
+        const locked = disabled || submitting !== null || request.status === 'cancelled'
         return (
           <PostCard
             className="mg-card mg-request"
@@ -180,14 +208,30 @@ export function Requests({
                   type="button"
                   className="btn primary"
                   data-act="manager-request-deliver"
-                  disabled={locked || old}
-                  title={oldTitle}
-                  aria-pressed={draft?.delivered ?? false}
-                  onClick={() => change(request, { delivered: !draft?.delivered })}
+                  disabled={locked || old || state === 'conflict'}
+                  title={
+                    oldTitle ?? (state === 'conflict' ? t('manager.requestConflict') : undefined)
+                  }
+                  onClick={() => void submit(request, true)}
                 >
-                  {request.buttonLabel ?? t('manager.requestDone')}
-                  {draft?.delivered ? ` · ${t('manager.draft')}` : ''}
+                  {submitting === request.id
+                    ? t('manager.submitting')
+                    : (request.buttonLabel ?? t('manager.requestDone'))}
                 </button>
+                {draft?.text.trim() ? (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    data-act="manager-request-reply"
+                    disabled={locked || old || state === 'conflict'}
+                    title={
+                      oldTitle ?? (state === 'conflict' ? t('manager.requestConflict') : undefined)
+                    }
+                    onClick={() => void submit(request, false)}
+                  >
+                    {t('manager.submit')}
+                  </button>
+                ) : null}
                 {request.response && draft ? (
                   <button
                     type="button"

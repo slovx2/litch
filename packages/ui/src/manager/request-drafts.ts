@@ -41,7 +41,11 @@ export function useRequestDrafts(deviceId: string, managerId: string) {
     cache.set(key, next)
     for (const listener of listeners) listener()
   }
-  return { drafts, write }
+  const clear = (id: string) => {
+    const { [id]: _submitted, ...rest } = read(key)
+    write(rest)
+  }
+  return { drafts, write, clear }
 }
 export const submittedRequests = (drafts: RequestDrafts) =>
   Object.values(drafts).filter((draft) => draft.delivered || draft.text.trim())

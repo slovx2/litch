@@ -24,6 +24,15 @@ In manager and associated workline conversations, decision, item, request, repor
 references open their board objects. Only confirmed references become links. Code and explicit
 links remain unchanged, and ordinary conversations are unaffected.
 
+「请你做」卡片的响应按钮直接提交该卡：完成按钮提交完成状态与已填写的备注；
+「提交给经理」只提交文字回复。提交成功后清除该卡的响应草稿，其他卡片和讨论草稿保留；
+失败时保留原文并显示原因。桌面与手机行为一致，底部提交条仍可批量提交尚未提交的草稿。
+
+For you cards submit their response immediately: the completion button sends completion plus any
+note, while Submit to manager sends a written reply. Success clears that response draft only;
+failure keeps it and explains the error. Other cards and discussion drafts remain available for
+batch submission on desktop and phone.
+
 ### 工作线问题的代答与撤回 / Settling workline questions
 
 经理可通过 `litch_sessions.read` 查看 `pending_questions`，再以稳定的 `id` 调用

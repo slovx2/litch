@@ -93,6 +93,7 @@ export const enManager = {
   'manager.questionManagerSpeaker': 'Manager:',
   'manager.questionTemporarySpeaker': 'Assistant (temporary chat):',
   'manager.requestDone': 'Mark as done',
+  'manager.requestSubmitFailed': 'The response was not submitted. Try again.',
   'manager.requestText': 'Reply or add a note (for example, a blocker or help needed)',
   'manager.requestEdit': 'Edit reply',
   'manager.requestConflict': 'This request changed or was cancelled. Review it or clear the draft.',

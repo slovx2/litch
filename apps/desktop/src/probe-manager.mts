@@ -214,8 +214,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   chatReference.click()
   await until(
     '正文编号跳回对应决策',
-    () =>
-    one('[data-board-tab="decisions"][aria-pressed="true"]') && one('[data-decision="D-15"]'),
+    () => one('[data-board-tab="decisions"][aria-pressed="true"]') && one('[data-decision="D-15"]'),
   )
   if (
     [...document.querySelectorAll('.mg-board .side-tablist [data-board-tab]')]
@@ -840,6 +839,16 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     '交付后还需哪些验证？',
   )
   await click('[data-manager-request="R-1"] [data-act="manager-request-deliver"]')
+  await until('卡片响应按钮直接提交这一项', () =>
+    one('[data-manager-request="R-1"] .mg-request-response')?.textContent?.includes('真机已复验'),
+  )
+  const requestDrafts = JSON.parse(
+    localStorage.getItem('litch.manager.requests:["local","m1"]') ?? '{}',
+  )
+  if (requestDrafts['R-1']) throw new Error('单卡响应提交后仍留有请你做草稿')
+  if (one('[data-manager-request="R-1"] [data-act="manager-request-deliver"][aria-pressed]'))
+    throw new Error('响应按钮不应切换草稿状态')
+  // 其他卡片及讨论中的草稿仍由原提交条负责，单卡响应不顺带提交它们。
   await click('[data-act="manager-submit"]')
   await until(
     '交付写回请你做',

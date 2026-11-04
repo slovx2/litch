@@ -51,7 +51,9 @@ export function usePostDrafts(deviceId: string, managerId: string) {
     cache.set(key, next)
     publish()
   }
-  return { drafts, write }
+  const advance = (accepted: readonly { id: string; revision: number }[]) =>
+    write(advancePostDrafts(read(key), accepted))
+  return { drafts, write, advance }
 }
 
 /** 只跟随本次已成功交付的版本；其他变更仍要求用户重新核对。 */
