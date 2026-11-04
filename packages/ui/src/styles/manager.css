@@ -124,6 +124,18 @@
 .mg-send-count:hover {
   background: var(--hover);
 }
+/* “下一个”：强调色描边加淡底，积极但不抢提交的实心主色 */
+.mg-send .btn.mg-next {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.mg-send .btn.mg-next:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+[data-skin="retro"] .mg-send .btn.mg-next:not(:active) {
+  box-shadow: 2px 2px 0 var(--accent);
+}
 .mg-send[data-sent] {
   color: var(--ok);
 }

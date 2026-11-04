@@ -45,6 +45,7 @@ Reset existing manager sessions to load the new tool. Ordinary `send` messages d
 决策改过、草稿要先核对的标“草稿待确认”，议题已在别处结束的标“草稿已失效”并划掉摘要。
 只要有能提交的草稿，“N 项草稿，尚未提交”提交条就固定在列表底部，不随卡片滚动；点草稿数依次跳到有草稿的卡，
 提交成功后短暂显示“已提交 N 项”。没点开过的议题上的草稿同样计数、同样提交。手机相同，手机清除草稿前先确认。
+决策页的提交条上另有“下一个”：按当前列表顺序展开当前展开项后面第一个待定、还没写草稿的决策（没有展开项时从头找；草稿待确认的不跳过），原来展开的收起，卡头停在列表顶部；后面没有了就置灰，悬停写明原因。偏好减少动态时直接定位。手机相同。
 
 A manager is a conversation that coordinates worklines (sub-sessions), maintains decisions and items
 on a board stored on its device, and reports progress. Repository changes remain the evidence for
@@ -232,6 +233,11 @@ Collapsed cards mark drafts in the header (**Draft**, **Review draft** after the
 **Draft no longer applies** after it ended elsewhere) with a one-line summary of what was written.
 While submittable drafts exist, the submit bar stays pinned to the bottom of the list; select the
 draft count to jump between drafted cards. Drafts on issues that were never opened still count and submit.
+On the Decisions tab the bar also has **Next**: it opens the first open decision after the expanded
+one in the current list order (from the top when none is expanded), skipping decisions that already
+have a draft but not ones whose draft needs review, collapses the previous card and scrolls the new
+card's header to the top of the list. It is disabled, with a tooltip, when no open decision follows.
+With reduced motion it jumps without animation. The phone works the same way.
 Submitting answers keeps the current decision filter. In **Open**, answered cards leave the list;
 focus continues to the next open decision in the displayed order, or the list header if none follows.
 Answered decisions offer **Edit answer**. Closed decisions offer **Reopen** and, when a previous

@@ -23,6 +23,7 @@ import {
   type ManagerDraftMark,
   pagedDraftBoard,
 } from '../../../../../packages/core/src/projection/manager-drafts.mts'
+import { nextOpenDecision } from '../../../../../packages/core/src/projection/manager-next.mts'
 import {
   managerHistorySnapshot,
   managerPageKey,
@@ -50,6 +51,9 @@ import {
 import { canAnimateToggle } from './presentation'
 import { useDraftVersion } from './use-draft-files'
 
+/** “下一个”展开后卡头离可视区顶端的边距 */
+const PIN_MARGIN = 8
+
 export function PagedBoard({
   manager,
   view,
@@ -63,6 +67,8 @@ export function PagedBoard({
   onQuery,
   onDetail,
   locator,
+  nexter,
+  onNextChange,
 }: {
   manager: ManagerView
   view: ManagerBoardTopicView & {
@@ -80,6 +86,10 @@ export function PagedBoard({
   onDetail(y: number, relative?: boolean): void
   /** 底部提交条点草稿数时问这里：当前滚动位置之后下一张有草稿的卡在哪，到底了回到第一张 */
   locator?: MutableRefObject<((from: number) => number | null) | null>
+  /** 提交条点“下一个”时调这里：展开下一个待答的决策，卡头停在顶部 */
+  nexter?: MutableRefObject<(() => void) | null>
+  /** “下一个”能不能点：null 是这一页不适用（不是决策列表） */
+  onNextChange?(available: boolean | null): void
 }) {
   const channel = useChannel()
   const t = useT()
@@ -221,6 +231,38 @@ export function PagedBoard({
       located.current = next?.id ?? null
       return next?.y ?? null
     }
+  // 提交条上的“下一个”（规则同桌面）：展开后等这一轮布局排好，把卡头滚到顶部留一点边距
+  const pinned = useRef<string | null>(null)
+  const detailTo = useRef(onDetail)
+  detailTo.current = onDetail
+  const nextApplies = tab === 'console' && kind === 'decision' && Boolean(page)
+  const nextId = nextApplies
+    ? nextOpenDecision(page?.entries ?? [], active, (id) => marks.get(id)?.state === 'live')
+    : null
+  if (nexter)
+    nexter.current = () => {
+      if (!nextId) return
+      if (canAnimateToggle(active, nextId, positions.current)) animateNextLayout()
+      focused.current = null
+      pinned.current = nextId
+      setLinked(false)
+      open(nextId)
+    }
+  useEffect(
+    () => onNextChange?.(nextApplies ? Boolean(nextId) : null),
+    [nextApplies, nextId, onNextChange],
+  )
+  useEffect(() => () => onNextChange?.(null), [onNextChange])
+  useEffect(() => {
+    const id = pinned.current
+    if (!id || active !== id) return
+    const timer = setTimeout(() => {
+      pinned.current = null
+      const y = positions.current.get(id)
+      if (y !== undefined) detailTo.current(Math.max(0, y - PIN_MARGIN))
+    }, 120)
+    return () => clearTimeout(timer)
+  }, [active])
   // 只有改过的对象才有旧版本可看
   const activeRevision =
     page?.entries.find((head) => head.id === active)?.revision ?? post?.revision ?? 2

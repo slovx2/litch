@@ -11,6 +11,7 @@ import {
   managerDraftMark,
   pagedDraftBoard,
 } from '../../../core/src/projection/manager-drafts.mts'
+import { nextOpenDecision } from '../../../core/src/projection/manager-next.mts'
 import {
   managerHistorySnapshot,
   managerPageKey,
@@ -31,6 +32,7 @@ import { useCardMotion, useCardPress } from './card-motion.ts'
 import { Decisions } from './Decisions.tsx'
 import { useAnswerDrafts } from './drafts.ts'
 import { IssueOrderSelect, useIssueOrder } from './issue-order.tsx'
+import { pinToTop } from './next-decision.ts'
 import { Overview, type OverviewCategory, type OverviewCounts } from './Overview.tsx'
 import { InlinePostContext } from './PostCard.tsx'
 import { usePostDrafts } from './post-drafts.ts'
@@ -213,6 +215,28 @@ export function PagedBoard({
     if (linked)
       root.current?.querySelector('[data-paging-detail]')?.scrollIntoView({ block: 'nearest' })
   }, [active, post, item, linked])
+  // 提交条上的“下一个”：展开后把那张卡停在顶部。要在卡片过渡开始前量（过渡会改中间高度）
+  const pinned = useRef<string | null>(null)
+  const nextId =
+    kind === 'decision' && page
+      ? nextOpenDecision(page.entries, active, (id) => markOf(id)?.state === 'live')
+      : null
+  const goNext = () => {
+    if (!nextId) return
+    anchor.current = null
+    pinned.current = nextId
+    setLinked(false)
+    open(nextId)
+  }
+  useLayoutEffect(() => {
+    const id = pinned.current
+    if (!id || active !== id) return
+    pinned.current = null
+    const card = root.current?.querySelector<HTMLElement>(
+      `[data-paging-object="${CSS.escape(id)}"]`,
+    )
+    if (card) pinToTop(card)
+  }, [active])
   // 展开哪张、详情到没到、卡片增减都过渡；换页签或筛选不过渡
   useCardMotion(
     root,
@@ -521,6 +545,7 @@ export function PagedBoard({
         onBusy={() => {}}
         part="send"
         draftBoard={draftBoard}
+        next={kind === 'decision' && kinds[tab] ? { go: goNext, disabled: !nextId } : undefined}
       />
     </div>
   )

@@ -125,6 +125,9 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const itemsAt = useRef(0)
   const scroll = useRef<ScrollView>(null)
   const locator = useRef<((from: number) => number | null) | null>(null)
+  const nexter = useRef<(() => void) | null>(null)
+  /** 提交条“下一个”能不能点；null 是当前列表不适用 */
+  const [nextAvailable, setNextAvailable] = useState<boolean | null>(null)
   const [restoringBoard, setRestoringBoard] = useState(false)
   const pagingScroll = useRef<{
     memory: BoardPageMemory | null
@@ -553,6 +556,8 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                     onCategory={(category) => go('console', category)}
                     onQuery={pagingQuery}
                     locator={locator}
+                    nexter={nexter}
+                    onNextChange={setNextAvailable}
                     onDetail={(y, relative) => {
                       const next = relative ? pagingScroll.current.y + y : y
                       pagingScroll.current.y = next
@@ -631,6 +636,11 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                   : board
               }
               features={features}
+              next={
+                view.paging && nextAvailable !== null
+                  ? { go: () => nexter.current?.(), disabled: !nextAvailable }
+                  : undefined
+              }
               disabled={device?.connection !== 'online' || manager.status !== 'active'}
               onLocate={
                 view.paging

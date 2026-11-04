@@ -55,6 +55,7 @@ export function Decisions({
   onlyId,
   part = 'all',
   draftBoard,
+  next,
 }: {
   manager: ManagerView
   posts: ManagerPost[]
@@ -70,6 +71,8 @@ export function Decisions({
   onlyId?: string | null
   /** 分页看板把卡片和提交条分开放：卡片在展开的卡里，提交条固定在列表底部 */
   part?: 'all' | 'cards' | 'send'
+  /** 提交条上的“下一个”（分页看板的决策页签才有）：展开下一个待答的决策；没有时置灰 */
+  next?: { go(): void; disabled: boolean } | undefined
   /** 分页看板只带点开过的详情，草稿状态改用补了卡头的判断面（core 的 pagedDraftBoard） */
   draftBoard?: ManagerDraftBoard
 }) {
@@ -781,6 +784,18 @@ export function Decisions({
           >
             {t('manager.clear')}
           </button>
+          {next ? (
+            <button
+              type="button"
+              className="btn mg-next"
+              data-act="manager-next-decision"
+              disabled={next.disabled}
+              title={t(next.disabled ? 'manager.nextNone' : 'manager.nextHint')}
+              onClick={next.go}
+            >
+              {t('manager.nextDecision')} <span aria-hidden="true">↓</span>
+            </button>
+          ) : null}
           <button
             type="button"
             className={requestReplies.length && !pending.length ? 'btn' : 'btn primary'}

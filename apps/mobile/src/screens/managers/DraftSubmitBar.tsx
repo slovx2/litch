@@ -100,6 +100,7 @@ export function DraftSubmitBar({
   features,
   disabled,
   onLocate,
+  next,
 }: {
   manager: ManagerView
   board: Board
@@ -109,9 +110,11 @@ export function DraftSubmitBar({
   disabled: boolean
   /** 点草稿数：滚到下一张有草稿的卡 */
   onLocate?: (() => void) | undefined
+  /** “下一个”（分页看板的决策列表才有）：展开下一个待答的决策；没有时置灰 */
+  next?: { go(): void; disabled: boolean } | undefined
 }) {
   const t = useT()
-  const { c, font, hit } = useTheme()
+  const { c, font, hit, radius } = useTheme()
   const channel = useChannel()
   useDraftVersion()
   const keyboard = useKeyboardShown()
@@ -299,6 +302,35 @@ export function DraftSubmitBar({
         >
           <Text style={{ color: c.ink2, fontSize: font.size.title }}>✕</Text>
         </Pressable>
+        {next ? (
+          // 积极但不抢提交：强调色描边小按钮，只占一个触控高度
+          <Pressable
+            testID="draft-bar-next"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: next.disabled }}
+            accessibilityLabel={
+              next.disabled
+                ? `${t('manager.nextDecision')}，${t('manager.nextNone')}`
+                : t('manager.nextHint')
+            }
+            disabled={next.disabled}
+            onPress={next.go}
+            style={({ pressed }) => ({
+              minHeight: hit - 8,
+              paddingHorizontal: 10,
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderRadius: radius.s,
+              borderColor: next.disabled ? c.line2 : c.accent,
+              backgroundColor: pressed ? c.press : 'transparent',
+              opacity: next.disabled ? 0.5 : 1,
+            })}
+          >
+            <Text style={{ color: next.disabled ? c.ink3 : c.accent, fontSize: font.size.body }}>
+              {t('manager.nextDecision')} ↓
+            </Text>
+          </Pressable>
+        ) : null}
         <Button
           testID="draft-bar-submit"
           label={t(busy ? 'manager.submitting' : 'manager.submitShort')}

@@ -183,6 +183,31 @@ try {
       'false',
     )
     await click('[data-testid="paging-object:D-3"]')
+    // “下一个”：答了 D-1 后出条，点了依次展开 D-2…D-6，卡头停在滚动区顶部（留 8），最后一个后置灰
+    await click('[data-testid="paging-object:D-1"]')
+    await click('[data-testid="decision-choice:D-1:a"]')
+    await wait('[data-testid="draft-bar-next"]')
+    const openedCard = () =>
+      read(`(()=>{const host=document.querySelector('[data-testid="manager-board-scroll"]').getBoundingClientRect();
+        const head=[...document.querySelectorAll('[data-testid^="paging-object:"]')].find(e=>e.getAttribute('aria-expanded')==='true');
+        return head?{id:head.dataset.testid.slice('paging-object:'.length),top:Math.round(head.getBoundingClientRect().top-host.top)}:null})()`)
+    for (const expected of ['D-2', 'D-3', 'D-4', 'D-5', 'D-6']) {
+      await click('[data-testid="draft-bar-next"]')
+      await until(async () => {
+        const now = await openedCard()
+        return now?.id === expected && Math.abs(now.top - 8) <= 2
+      }, `手机下一个展开 ${expected} 并停在顶部`)
+    }
+    assert.equal(
+      await read(
+        `document.querySelector('[data-testid="draft-bar-next"]').getAttribute('aria-disabled')`,
+      ),
+      'true',
+      '手机后面没有待答的决策时“下一个”置灰',
+    )
+    await click('[data-testid="draft-bar-clear"]')
+    await click('[data-testid="draft-bar-clear-confirm"]')
+    await click('[data-testid="paging-object:D-6"]')
     await call('Emulation.clearDeviceMetricsOverride')
     console.log('手机决策页：草稿标记、提交条贴底、定位、批量提交、清除确认通过')
     await click('[data-testid="manager-category:request"]')
@@ -507,6 +532,67 @@ try {
       )
       await call('Emulation.setEmulatedMedia', { features: [] })
       console.log('整卡点击、展开时被点的卡留在原处、提交后收拢补位、减少动态通过')
+      // 提交条上的“下一个”：展开下一个待答且没草稿的决策，卡头停在列表顶部（留 8px）；后面没有了置灰
+      await call('Page.navigate', { url: decisions('1') })
+      await wait('[data-act="manager-next-decision"]')
+      const nextButton = () =>
+        read(
+          `(()=>{const b=document.querySelector('[data-act="manager-next-decision"]');return {disabled:b.disabled,title:b.title,text:b.textContent.trim()}})()`,
+        )
+      const opened = () =>
+        read(
+          `(()=>{const host=document.querySelector('.mg-body');const card=document.querySelector('.mg-paging-head[aria-expanded="true"]')?.closest('[data-paging-object]');
+            return card?{id:card.dataset.pagingObject,top:Math.round(card.getBoundingClientRect().top-host.getBoundingClientRect().top)}:null})()`,
+        )
+      assert.deepEqual(await nextButton(), {
+        disabled: false,
+        title: '展开下一个待答的决策',
+        text: '下一个 ↓',
+      })
+      const steps = []
+      for (const expected of ['D-1', 'D-4', 'D-6']) {
+        await click('[data-act="manager-next-decision"]')
+        const at = await until(async () => {
+          const now = await opened()
+          return now?.id === expected && Math.abs(now.top - 8) <= 1 ? now : null
+        }, `下一个展开 ${expected} 并停在顶部`)
+        steps.push(at.id)
+      }
+      // 有草稿的 D-2、D-3、D-5 跳过
+      assert.deepEqual(steps, ['D-1', 'D-4', 'D-6'])
+      assert.deepEqual(await nextButton(), {
+        disabled: true,
+        title: '后面没有待答的决策了',
+        text: '下一个 ↓',
+      })
+      // 键盘：聚焦后按 Enter 与点击相同；减少动态时直接定位，不做平滑滚动
+      await call('Emulation.setEmulatedMedia', {
+        features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
+      })
+      await click('[data-paging-object="D-1"] .mg-paging-head')
+      await until(async () => (await opened())?.id === 'D-1', '回到 D-1')
+      await read(`document.querySelector('[data-act="manager-next-decision"]').focus()`)
+      await call('Input.dispatchKeyEvent', {
+        type: 'keyDown',
+        key: 'Enter',
+        code: 'Enter',
+        windowsVirtualKeyCode: 13,
+        text: '\r',
+      })
+      await call('Input.dispatchKeyEvent', {
+        type: 'keyUp',
+        key: 'Enter',
+        code: 'Enter',
+        windowsVirtualKeyCode: 13,
+      })
+      await frame()
+      const instant = await opened()
+      assert.ok(
+        instant?.id === 'D-4' && Math.abs(instant.top - 8) <= 1,
+        `减少动态时一步定位 ${JSON.stringify(instant)}`,
+      )
+      await call('Emulation.setEmulatedMedia', { features: [] })
+      console.log('下一个：跳过草稿、停在顶部、末尾置灰、键盘与减少动态通过')
     }
   }
   if (!mobile) await checkBoardMemory({ call, read, click })
