@@ -90,7 +90,9 @@ jobs:
         id: phase-9
       - run: node scripts/ci/test-shard.mjs pi
         id: phase-8
-      - run: node scripts/ci/test-shard.mjs device
+      - run: |
+          node scripts/ci/test-shard.mjs device
+          npm run test:antigravity
         id: phase-7
       - run: go test ./...
         id: phase-6

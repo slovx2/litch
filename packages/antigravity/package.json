@@ -1,0 +1,21 @@
+{
+  "name": "@codex-harness-adapter/antigravity",
+  "version": "0.31.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check": "biome check src test",
+    "start": "node dist/antigravity/src/adapter.mjs",
+    "test": "npm run build && node --import ./dist/antigravity/test/setup.mjs --test dist/antigravity/test/router.test.mjs",
+    "test:runtime": "npm run build && node --import ./dist/antigravity/test/setup.mjs --test dist/antigravity/test/manual/gemini.integration.mjs",
+    "test:sdk": "npm run build && node --import ./dist/antigravity/test/setup.mjs --test dist/antigravity/test/manual/*.test.mjs"
+  }
+}

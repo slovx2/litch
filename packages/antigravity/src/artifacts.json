@@ -1,0 +1,48 @@
+{
+  "version": "0.1.23",
+  "sourceCommit": "75ba22bd00afae2f46393ff31f30c3f0df52982f",
+  "artifacts": {
+    "darwin-arm64": {
+      "url": "https://files.pythonhosted.org/packages/78/1e/71a0db889bdc339ae2ddbf7875366959660dc108c803c6b17242fcca41bc/google_antigravity-0.1.23-py3-none-macosx_11_0_arm64.whl",
+      "wheelSha256": "92dc71a52afde0ff8424534e728cc6e168489773b61457b88dcd1c634af4ff6c",
+      "binarySha256": "c76a1ec052a2eb3f2ffc1028e9d0e0d3bbabc821dbcdd1f6d3964050146b4c15",
+      "schemaSha256": "934d18e5023f65b26e784c146dc84808ffe0230415db76d7c84ddd3d931dfec1",
+      "member": "google/antigravity/bin/localharness"
+    },
+    "darwin-x64": {
+      "url": "https://files.pythonhosted.org/packages/fe/8d/2f489370d5c47c887ba5c9107f009f428eb6b7b9e2e5e96df0f4c8ace29c/google_antigravity-0.1.23-py3-none-macosx_11_0_x86_64.whl",
+      "wheelSha256": "5a99fd8993f13f03e43a7da9ba62b4114c05d952f6f933e86f33c3fc79e80b8e",
+      "binarySha256": "67ffd15a527277ae5477a2b07c152c19ac6d278b97364140da12051768bf3edb",
+      "schemaSha256": "934d18e5023f65b26e784c146dc84808ffe0230415db76d7c84ddd3d931dfec1",
+      "member": "google/antigravity/bin/localharness"
+    },
+    "linux-arm64": {
+      "url": "https://files.pythonhosted.org/packages/55/74/fe20c9b0301c9fd3fdaf4f4f92ed43fd3f1ab59c7c6b64ebbc793ec04578/google_antigravity-0.1.23-py3-none-manylinux_2_17_aarch64.musllinux_1_1_aarch64.whl",
+      "wheelSha256": "17b2d26575ef168bb3ccd74ddf39ebfe4c528ea426e4bedee8621ea7a41cf527",
+      "binarySha256": "5b909ea7538db0905bdcc8bd4d1c89ce82053f261867dd2ba9581db7ba547700",
+      "schemaSha256": "934d18e5023f65b26e784c146dc84808ffe0230415db76d7c84ddd3d931dfec1",
+      "member": "google/antigravity/bin/localharness"
+    },
+    "linux-x64": {
+      "url": "https://files.pythonhosted.org/packages/9a/53/ea087398e44a3deb216a7a87bb88832b182a4a66489ec6cb43db22b5abda/google_antigravity-0.1.23-py3-none-manylinux_2_17_x86_64.musllinux_1_1_x86_64.whl",
+      "wheelSha256": "6b1dfa14090ce8cf10395074eecab2bf20cb49ceed3a2603d39803951c9884e2",
+      "binarySha256": "f453dbc2d891136a50c56583c2a9d3e20c4593df647cf533b4bf92030760b267",
+      "schemaSha256": "934d18e5023f65b26e784c146dc84808ffe0230415db76d7c84ddd3d931dfec1",
+      "member": "google/antigravity/bin/localharness"
+    },
+    "win32-x64": {
+      "url": "https://files.pythonhosted.org/packages/47/77/53b2c4bd11df1ace856fd67ad2e378151193eb2f99e10dc6e6f46087fb82/google_antigravity-0.1.23-py3-none-win_amd64.whl",
+      "wheelSha256": "e587980e3e220b7f24fcddbaa8af55a7b46a9e59443c13e782458718a67c2fba",
+      "binarySha256": "265223007faf0dcebffca8279fd00513b29987693c4b2e8fcffd8e3f6efc406e",
+      "schemaSha256": "934d18e5023f65b26e784c146dc84808ffe0230415db76d7c84ddd3d931dfec1",
+      "member": "google/antigravity/bin/localharness.exe"
+    },
+    "win32-arm64": {
+      "url": "https://files.pythonhosted.org/packages/48/c1/af3a1354977e8d16fd3bbd2e4c9a5bd55f5963578d33eaa37b61965a7e66/google_antigravity-0.1.23-py3-none-win_arm64.whl",
+      "wheelSha256": "cbbcbf920b433b2c6db7ea9ed5b4b234a72f574647effa5e3e67f0d97c1793df",
+      "binarySha256": "58093ed2014d1ffae3ab96c59571ad7fd1ee6c94474509e3e7d7b63d0580f1f0",
+      "schemaSha256": "934d18e5023f65b26e784c146dc84808ffe0230415db76d7c84ddd3d931dfec1",
+      "member": "google/antigravity/bin/localharness.exe"
+    }
+  }
+}

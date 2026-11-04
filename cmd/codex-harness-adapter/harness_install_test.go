@@ -29,9 +29,9 @@ func TestInstallTable(t *testing.T) {
 	t.Cleanup(func() { installGOOS = saved })
 	for _, spec := range harnessTable {
 		install := spec.install
-		if spec.id == "acp" {
+		if spec.id == "acp" || spec.id == "agy" {
 			if install != nil {
-				t.Fatal("自填命令的 acp 不该能装")
+				t.Fatal("自填命令的 ACP 和引擎自行按需安装的 Antigravity 不走 CLI 安装表")
 			}
 			continue
 		}

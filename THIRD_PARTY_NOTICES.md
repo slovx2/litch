@@ -36,3 +36,8 @@ Windows 的安装程序里另有这两样（不在应用里）：
 运行包保留 node_modules 内的许可证。源码仓库不提交 node_modules、引擎二进制或用户凭据。
 
 Claude 可选 TUI 驱动包含 yetone/magpie（MIT，Copyright (c) 2026 yetone）提交 `647323409e888968c11a6f7ade7b11a573127057` 的 claudetui 及其完整包依赖。原始代码在 `third_party/magpie/`，完整 LICENSE、THIRD_PARTY_NOTICES 和逐文件 SHA-256 清单均保留；Litch 适配层在镜像之外。每个平台的 helper 随运行包附 `packages/claude/dist/claude/src/tui-helper/licenses/`，含 magpie 完整许可与 notices（包括 jieba 字典）、Go 及实际 Go 依赖的许可材料。镜像未做本地补丁，详见 PATCHES.md。
+
+Antigravity TS 引擎的协议字段依据 Google LLC 发布的 google-antigravity 0.1.23 SDK
+（https://github.com/google-antigravity/antigravity-sdk-python ，提交
+75ba22bd00afae2f46393ff31f30c3f0df52982f，Apache-2.0）重新实现，未复制应用代码。
+SDK localharness 不随 Litch 分发；用户启用后按需从官方 PyPI 获取并保留 wheel 中的 LICENSE。

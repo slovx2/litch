@@ -199,7 +199,7 @@ func TestDefaultNodePrefersTheBundledOne(t *testing.T) {
 }
 
 // OpenCode 和 ACP 那几个入口的端口参数排在原来三个的后面，没给时是各自的默认端口。
-var newerPorts = []string{"--opencode-port", "7334", "--gemini-port", "7335", "--qwen-port", "7336", "--acp-port", "7337"}
+var newerPorts = []string{"--opencode-port", "7334", "--gemini-port", "7335", "--qwen-port", "7336", "--acp-port", "7337", "--agy-port", "7338"}
 
 // 启动参数里当默认值用的那一部分，照命令行给的原样记下来。
 func TestLaunchOptionsAreRecordedAsGiven(t *testing.T) {
@@ -213,7 +213,7 @@ func TestLaunchOptionsAreRecordedAsGiven(t *testing.T) {
 		"--harness dsh --dsh-port 7600 --ssh=on": ports([]string{"--ssh=on", "--claude-port", "7331", "--pi-port", "7332", "--dsh-port", "7600"}, "--harness", "dsh", "--port", "7600"),
 		"--harness acp --acp-port 7700": {
 			"--ssh=on", "--claude-port", "7331", "--pi-port", "7332", "--dsh-port", "7333", "--opencode-port", "7334",
-			"--gemini-port", "7335", "--qwen-port", "7336", "--acp-port", "7700", "--harness", "acp", "--port", "7700",
+			"--gemini-port", "7335", "--qwen-port", "7336", "--acp-port", "7700", "--agy-port", "7338", "--harness", "acp", "--port", "7700",
 		},
 	}
 	for args, want := range cases {

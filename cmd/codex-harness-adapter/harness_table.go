@@ -75,6 +75,7 @@ var harnessTable = []harnessSpec{
 	{id: "gemini", pkg: "acp", portFlag: "gemini-port", defaultPort: 7335, cliVariable: "CHA_GEMINI_CLI", homeVariable: "CHA_GEMINI_HOME", enable: enableOptIn, acp: true, install: geminiInstall},
 	{id: "qwen", pkg: "acp", portFlag: "qwen-port", defaultPort: 7336, cliVariable: "CHA_QWEN_CLI", homeVariable: "CHA_QWEN_HOME", enable: enableOptIn, acp: true, install: qwenInstall},
 	{id: "acp", pkg: "acp", portFlag: "acp-port", defaultPort: 7337, cliVariable: "CHA_ACP_CLI", homeVariable: "CHA_ACP_HOME", enable: enableOptIn, acp: true, needsCLI: true},
+	{id: "agy", pkg: "antigravity", portFlag: "agy-port", defaultPort: 7338, cliVariable: "CHA_ANTIGRAVITY_CLI", homeVariable: "CHA_ANTIGRAVITY_HOME", enable: enableOptIn, experimental: true},
 	{id: nativeCodex, commands: []string{"codex"}, enable: enableWhenInstalled, native: true, install: codexInstall},
 }
 

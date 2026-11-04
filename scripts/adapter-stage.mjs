@@ -72,6 +72,7 @@ const PACKAGES = [
   { name: 'opencode', entry: 'dist/opencode/src/adapter.mjs', required: true, omit: ['dev'] },
   // 通用 ACP 引擎：一份代码扮演 gemini、qwen、acp 三个 harness（CHA_ACP_AGENT）
   { name: 'acp', entry: 'dist/acp/src/adapter.mjs', required: true, omit: ['dev'] },
+  { name: 'antigravity', entry: 'dist/antigravity/src/adapter.mjs', required: true, omit: ['dev'] },
   { name: 'device', entry: 'dist/device/src/main.mjs', required: true, omit: ['dev'] },
 ]
 

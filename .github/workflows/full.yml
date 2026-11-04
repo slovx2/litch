@@ -215,6 +215,7 @@ jobs:
         run: |
           node scripts/ci/test-shard.mjs pi
           node scripts/ci/test-shard.mjs device
+          npm run test:antigravity
           GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)" HOME="${RUNNER_TEMP}/adapter-test-home" go test ./...
       # 按模型窗口需要较新的 CLI；单独隔离，不改变其余测试的 2.1.282 基线。
       - name: Claude 按供应商与模型自动压缩窗口
@@ -348,6 +349,7 @@ jobs:
         run: |
           node scripts/ci/test-shard.mjs pi
           node scripts/ci/test-shard.mjs device
+          npm run test:antigravity
           GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)" HOME="${RUNNER_TEMP}/adapter-test-home" go test ./...
       # 按模型窗口需要较新的 CLI；单独隔离，不改变其余测试的 2.1.282 基线。
       - name: Claude 按供应商与模型自动压缩窗口

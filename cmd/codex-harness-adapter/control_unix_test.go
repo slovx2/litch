@@ -29,13 +29,13 @@ func TestControlTurnsHarnessOffAndOn(t *testing.T) {
 	// 已知的 harness 都在名单里（三个老引擎、OpenCode、ACP 那三个、原生 codex），没装的 dsh、OpenCode、原生 codex
 	// 说明了原因（用例里它们一律按没装），默认不启用的 ACP 那几个报停用。
 	dsh := first.harness("dsh")
-	if len(first.Harnesses) != 8 || dsh.State != stateNotInstalled || dsh.Text == nil || dsh.Text.ZH == "" || dsh.Text.EN == "" {
+	if len(first.Harnesses) != len(knownHarnesses) || dsh.State != stateNotInstalled || dsh.Text == nil || dsh.Text.ZH == "" || dsh.Text.EN == "" {
 		t.Fatalf("名单应列出全部已知的 harness: %+v", first.Harnesses)
 	}
 	if opencode := first.harness("opencode"); opencode.State != stateNotInstalled || opencode.Text == nil || !strings.Contains(opencode.Text.ZH, "CHA_OPENCODE_CLI") {
 		t.Fatalf("没装的 OpenCode 应报没装、提它自己的变量: %+v", opencode)
 	}
-	for _, id := range []string{"gemini", "qwen", "acp"} {
+	for _, id := range []string{"gemini", "qwen", "acp", "agy"} {
 		if view := first.harness(id); view.State != stateDisabled || view.Text == nil || !strings.Contains(view.Text.ZH, "默认不启用") {
 			t.Fatalf("%s 默认不启用: %+v", id, view)
 		}

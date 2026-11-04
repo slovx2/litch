@@ -12,6 +12,7 @@
 | `gemini` | Gemini CLI | Over ACP; off by default |
 | `qwen` | Qwen Code | Over ACP; off by default |
 | `acp` | ACP | Any agent that speaks the Agent Client Protocol; off by default, needs its command in `harness.acp.cliPath` |
+| `agy` | Antigravity | Experimental; API key uses the SDK runtime, subscription uses official `agy acp`; off by default |
 
 Litch never bundles a harness. Each device uses what is installed on it. Feature support differs: plan
 mode exists only where the harness supports it.
@@ -207,3 +208,30 @@ agy CLI 的具体能力以当前握手为准，不能套用独立 ACP 包的能�
 
 ACP 的 `allow_always` / `reject_always` 表示让 agent 记住选择，规范没有保证只作用于当前会话。
 选到此类选项时，Litch 会再明确说明实际范围并请求确认；未确认不会发送持久决定。
+## Antigravity（实验性）
+
+详情设置的“鉴权方式”选择 Gemini API key 或 Google 订阅（官方 ACP）。切换后按提示重启，
+只改变新建会话的默认后端；打开已有会话仍使用原后端。两边会话汇总显示，但不能互相恢复上下文。
+订阅模式使用用户安装并登录的官方 `agy` CLI，默认参数 `acp`；需要指定路径时使用环境设置
+`CHA_AGY_CLI`，参数覆盖为 `CHA_AGY_ARGS`。Litch 不提取 OAuth，也不把 SDK API key 注入订阅后端。
+会话能力随原后端显示；API key 模式的限制不代表订阅 ACP 的能力限制。
+
+设备上的 `agy` 对应 Antigravity，默认关闭。当前 API key 后端使用独立 TypeScript 引擎和
+SDK 0.1.23 的 localharness。第一次创建会话时从官方 PyPI 按需下载；Litch 不捆绑该程序，
+也不要求 Python。程序、wheel 和 schema 均按版本与 SHA-256 固定；损坏或未知版本会明确报错。
+已装 App、IDE 或 `agy` CLI 不代表已装 SDK runtime。
+
+在 Devices → Antigravity → Settings → Accounts 配置 `GEMINI_API_KEY`，保存后重启引擎。
+密钥只写不读回。默认模型和 Gemini API 地址在详情设置中修改，新建会话生效；自定义地址会
+收到 API key。API key 后端没有订阅登录按钮，不读取桌面或 CLI 的 OAuth 缓存。
+
+API key 后端支持文字流式、文件与同步命令工具、逐次审批、中断，以及自己创建的会话列表和恢复。
+没有操作系统沙箱，每个工具执行前都要批准；拒绝或取消不执行。只有完全访问这一档，不能把它当作
+只读或项目沙箱。第一期不支持计划、子代理、分叉、客户端工具或浏览器控制，模型切换需新建会话。
+SDK 会话与 App/CLI 会话不可互相恢复。鉴权失效时更新 key；下载校验失败时检查指定路径或重新安装，
+不要关闭校验或换未经核验的二进制。
+
+Antigravity 默认使用订阅（官方 ACP）。只装 `agy`、未配置 API key 的用户无需下载 SDK runtime。
+登录按官方 `agy acp --login` 完成。订阅通过官方 ACP 使用 CLI 登录；第三方客户端在消费套餐下的
+适用范围仍需用户确认，存在账号限制风险。Litch 不读取或转存登录令牌。风险说明显示在“鉴权方式”
+设置项，不另弹确认。API key 模式为低优先级实验选项，只有用户主动选择后才使用 localharness。
