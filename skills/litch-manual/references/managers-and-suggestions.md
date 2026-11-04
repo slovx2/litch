@@ -2,6 +2,14 @@
 
 ## Managers
 
+经理负责维护「现状」，用 Markdown 分节概括正在做、等你和接下来的工作。
+每次写入最多 1000 个 Unicode 字符（含 Markdown 标记）；超限会提示当前长度和上限。
+已有长现状仍可完整读取，更新时须遵守上限。
+
+Managers maintain the situation in short Markdown sections: In progress, Waiting for you, and Next.
+Updates accept at most 1000 Unicode characters including markup; longer updates report their length
+and the limit. Existing longer situations remain readable in full.
+
 ### 工作线问题的代答与撤回 / Settling workline questions
 
 经理可通过 `litch_sessions.read` 查看 `pending_questions`，再以稳定的 `id` 调用

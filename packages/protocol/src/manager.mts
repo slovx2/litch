@@ -191,6 +191,8 @@ export interface ManagerItem extends ManagerItemFields {
   createdAt: number
   updatedAt: number
 }
+/** 新写入的现状最多 1000 个 Unicode 字符；历史内容读取时不截断。 */
+export const MANAGER_SITUATION_LIMIT = 1000
 export interface ManagerSituation {
   text: string
   at: number

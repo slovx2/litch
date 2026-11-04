@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import test from 'node:test'
+import { managerRoleRules } from '../../protocol/src/client-tools-manager.mjs'
 import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
@@ -33,6 +34,28 @@ const manager = (id: string): Manager => ({
   pendingDecisions: 0,
   runningLines: 0,
   latestActivity: null,
+})
+
+test('现状：1000 字符边界、拒绝时报告长度、历史不截断、提示词要求维护', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'manager-situation-'))
+  const db = new ManagerStore(openManagerDatabase(dir))
+  try {
+    db.saveManager(manager('a'))
+    const writer = new ManagerBoardWriter(db, () => false)
+    const text = '😀'.repeat(1000)
+    writer.tool('a', 'status', { text })
+    assert.equal(db.situation('a')?.text, text)
+    assert.throws(() => writer.tool('a', 'status', { text: `${text}中` }), /1001.*1000/)
+    assert.equal(db.situation('a')?.text, text)
+    db.saveSituation('a', { text: '旧'.repeat(1200), at: 1 })
+    assert.equal(db.situation('a')?.text.length, 1200)
+    assert.match(managerRoleRules(''), /Maintain the situation.*status/)
+    assert.match(managerRoleRules(''), /1000 Unicode characters/)
+    assert.match(managerRoleRules(''), /Markdown sections/)
+  } finally {
+    db.close()
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 test('经理库：迁移、重开、计数隔离和事务回滚，不删审计记录', () => {

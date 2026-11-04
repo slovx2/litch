@@ -2,6 +2,7 @@
 import { Ajv } from 'ajv'
 import { MANAGER_TOOLS } from '../../protocol/src/client-tools-manager.mjs'
 import type { ManagerCreateParams, ManagerPatch } from '../../protocol/src/manager.mjs'
+import { MANAGER_SITUATION_LIMIT } from '../../protocol/src/manager.mjs'
 import {
   type ManagerValidationIssue,
   managerInputIssue,
@@ -80,6 +81,14 @@ const patchKeys = new Map(
   ]),
 )
 export function validateTool(tool: string, args: unknown): Record<string, unknown> {
+  if (tool === 'status' && isObject(args) && typeof args.text === 'string') {
+    const length = Array.from(args.text).length
+    if (length > MANAGER_SITUATION_LIMIT)
+      invalid(
+        `Situation contains ${length} characters; maximum is ${MANAGER_SITUATION_LIMIT}.`,
+        'text',
+      )
+  }
   const validator = validators.get(tool)
   if (!validator) invalid(`Unknown litch_manager tool: ${tool}.`)
   if (!validator(args)) invalid(`Invalid ${tool} arguments: ${ajv.errorsText(validator.errors)}.`)

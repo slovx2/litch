@@ -848,6 +848,7 @@
       "additionalProperties": false
     },
     "Situation": {
+      "description": "现状支持 Markdown；status 新写入最多 1000 个 Unicode 字符，超出时返回当前长度与上限。历史读取不截断。",
       "type": "object",
       "required": ["text", "at"],
       "properties": { "text": { "type": "string" }, "at": { "type": "number" } },
