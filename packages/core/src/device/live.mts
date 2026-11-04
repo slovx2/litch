@@ -1657,6 +1657,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
   /** 只读对账：idle 广播没有回合结局，不能据此把未完成的历史猜成成功。 */
   const reconcileTurns = async (live: Live): Promise<boolean> => {
+    // 超时或被较新的通知作废后，下一次手动发送仍须核实；不能再次等待旧回合的结束通知。
+    live.needsTurnCheck = true
     const view = live.view
     if (!view || live.loading || live.stale || live.starting || !reachable(live)) return false
     const revision = live.recoveryRevision
@@ -1666,9 +1668,58 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     try {
       const { thread } = await host.request(
         'thread/read',
-        { threadId: live.id, includeTurns: true },
+        { threadId: live.id, includeTurns: !view.history },
         { timeoutMs: 5000 },
       )
+      if (view.history) {
+        // 长会话只核对回合头，不为几个状态拉回整份历史里的工具输出。
+        const missing = new Set(
+          running.flatMap((entry) => (entry.serverId ? [entry.serverId] : [])),
+        )
+        const uncertain = new Set(
+          running.flatMap((entry) => {
+            const turn = view.turns.find((turn) => turn.id === entry.viewId)
+            return entry.serverId &&
+              turn?.itemIds.some((id) => {
+                const item = view.items[id]
+                return (
+                  item?.kind === 'userMessage' &&
+                  (item.delivery === 'queued' || item.delivery === 'unknown')
+                )
+              })
+              ? [entry.serverId]
+              : []
+          }),
+        )
+        const turns: Turn[] = []
+        let cursor: string | null = null
+        do {
+          let page: ClientRequests['thread/turns/list']['result'] = await host.request(
+            'thread/turns/list',
+            {
+              threadId: live.id,
+              cursor,
+              limit: 100,
+              sortDirection: 'desc',
+              itemsView: 'notLoaded',
+            },
+            { timeoutMs: 5000 },
+          )
+          if (page.nextCursor !== null && page.nextCursor === cursor)
+            throw new Error('回合核实的分页游标未前进')
+          // 只有交付结果仍未知的那一页需要消息正文，不能从回合终态猜测插话是否已被消费。
+          if (page.data.some((turn) => uncertain.has(turn.id)))
+            page = await host.request(
+              'thread/turns/list',
+              { threadId: live.id, cursor, limit: 100, sortDirection: 'desc', itemsView: 'full' },
+              { timeoutMs: LOAD_TIMEOUT },
+            )
+          turns.push(...page.data)
+          for (const turn of page.data) missing.delete(turn.id)
+          cursor = page.nextCursor
+        } while (cursor && missing.size)
+        thread.turns = turns.reverse()
+      }
       // 读期间有新的回合通知、换了连接或重新载入：旧快照不能覆盖新的活动状态。
       if (
         sessions.get(live.id) !== live ||
@@ -2500,16 +2551,19 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         // 没插成：原样退回队首；明确没有活动回合时先核实，不能无限等一个不会到来的结束通知。
         // 停止收尾或回显已经接管此输入，迟到的失败不能再恢复第二份。
         if (!live.steered.has(clientId)) return
-        const noActiveTurn =
-          error instanceof RpcError && error.message === 'no active turn to steer'
-        if (noActiveTurn) live.needsTurnCheck = true
+        const staleTurn =
+          error instanceof RpcError &&
+          (error.message === 'no active turn to steer' ||
+            (error.code === -32009 &&
+              ['指定回合与当前活动回合不一致', '指定回合与活动回合不一致'].includes(error.message)))
+        if (staleTurn) live.needsTurnCheck = true
         live.steered.delete(clientId)
         live.queued = [live.paused ? { ...message, delivery: 'held' } : message, ...live.queued]
         emit(live, [
           { op: 'item.remove', turnId: running.id, itemId: key },
           { op: 'queue.set', queued: live.queued },
         ])
-        if (noActiveTurn) {
+        if (staleTurn) {
           const idle = await reconcileTurns(live)
           // 用户可能在对账期间移除消息；不要把它恢复回来，也不要覆盖其他消息的结果。
           if (!live.queued.some((entry) => entry.id === message.id)) return

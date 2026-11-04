@@ -1478,12 +1478,11 @@ test('引导：排着的消息插进正在进行的回合，对面回显时不�
   assert.deepEqual(session.texts(), [['一', '二']])
   assert.equal(shown()?.unconfirmed, undefined)
 
-  // 对面不让插：消息回到队首，对话里撤掉，出错原因交给界面
+  // 对面报回合不一致：先核实；还不能确认终态时原文回到队首并暂停。
   world.steerFailure = new RpcFailure(-32009, '指定回合与活动回合不一致')
-  await assert.rejects(command('session.steer', { ...where, messageId: third.id }), {
-    code: 'remote',
-    message: '指定回合与活动回合不一致',
-  })
+  await command('session.steer', { ...where, messageId: third.id })
+  assert.equal(session.seen.view?.queued[0]?.delivery, 'held')
+  assert.deepEqual(session.seen.view?.note, { key: 'session.steerHeld' })
   assert.deepEqual(
     session.seen.view?.queued.map((entry) => entry.text),
     ['三'],
@@ -1669,6 +1668,88 @@ test('插话明确拒绝 no active turn：核实已完成后原文只作为一�
   assert.deepEqual(session.texts().at(-1), ['不能丢失的原文'])
   assert.equal(session.seen.view?.note, null)
 })
+
+for (const message of ['指定回合与当前活动回合不一致', '指定回合与活动回合不一致']) {
+  test(`插话回合不一致：${message} 后核实终态，原文只发送一次`, async () => {
+    const { core, world, command, sent } = setup([thread({ id: 'a', turns: [started('ghost')] })])
+    core.start()
+    await settle()
+    const session = watch(core)
+    await settle()
+    world.threads[0] = thread({ id: 'a', status: { type: 'idle' }, turns: [finished('ghost')] })
+    world.steerFailure = new RpcFailure(-32009, message)
+    await command('session.send', { ...where, text: '核实后再发', now: true })
+    await settle()
+    assert.equal(sent('thread/read').length, 1)
+    assert.equal(sent('turn/start').length, 1)
+    assert.equal(session.seen.view?.queued.length, 0)
+    assert.deepEqual(session.texts().at(-1), ['核实后再发'])
+  })
+}
+
+for (const interruptedBy of ['通知', '超时'] as const) {
+  test(`停止后的回合核实遇到${interruptedBy}：手动恢复待发先重查，不被旧回合永久挡住`, async () => {
+    const { core, world, handlers, peer, command, sent, time, logs } = setup([
+      thread({ id: 'a', turns: [started('ghost'), started('current')] }),
+    ])
+    runtime(handlers, 'claude')
+    core.start()
+    await settle()
+    const session = watch(core)
+    await settle()
+    await command('session.send', { ...where, text: '同步工具期间的插话', now: true })
+    const { clientUserMessageId } = sent('turn/steer')[0] as { clientUserMessageId: string }
+    const input = {
+      ...userText('steered', '同步工具期间的插话'),
+      clientId: clientUserMessageId,
+      litchInputDelivery: 'queued',
+    }
+    peer.last().notify('item/completed', { threadId: 'a', turnId: 'current', item: input })
+    await settle()
+    const reads: (() => void)[] = []
+    let delay = true
+    handlers['thread/read'] = () =>
+      delay
+        ? new Promise((resolve) => reads.push(() => resolve({ thread: world.threads[0] })))
+        : { thread: world.threads[0] }
+    await command('session.interrupt', where)
+    peer.last().notify('item/completed', {
+      threadId: 'a',
+      turnId: 'current',
+      item: { ...input, litchInputDelivery: 'held' },
+    })
+    world.threads[0] = thread({
+      id: 'a',
+      status: { type: 'idle' },
+      turns: [finished('ghost'), finished('current', { status: 'interrupted' })],
+    })
+    peer.last().notify('turn/completed', {
+      threadId: 'a',
+      turn: finished('current', { status: 'interrupted' }),
+    })
+    peer.last().notify('thread/status/changed', { threadId: 'a', status: { type: 'idle' } })
+    await settle()
+    assert.ok(reads.length > 0)
+    // 本次事故是全量历史超过 5 秒；新通知让快照作废也必须保留重查机会。
+    if (interruptedBy === '超时') time.advance(5001)
+    else
+      peer.last().notify('litch/turn/recovery/changed', {
+        threadId: 'a',
+        turnId: 'current',
+        recovery: null,
+      })
+    await settle()
+    if (interruptedBy === '超时') assert.ok(logs.some((line) => line.includes('5000 毫秒内未响应')))
+    for (const release of reads) release()
+    await settle()
+    assert.equal(sent('turn/start').length, 0, '停止后不自动重发')
+    delay = false
+    await command('session.resumeQueue', where)
+    await settle()
+    assert.equal(sent('turn/start').length, 1)
+    assert.deepEqual(session.texts().at(-1), ['同步工具期间的插话'])
+  })
+}
 
 for (const status of ['completed', 'interrupted'] as const) {
   test(`只收到 idle 广播：读取真实结局 ${status}，正常完成出队，停止仍须手动发送`, async () => {

@@ -329,7 +329,7 @@ explain it:
 
   编辑时若现有草稿容纳不下附件，消息仍留在待发列表。此阶段仅 Claude 提供交付状态，其他 harness 只统一停止后暂停队列。
   若界面误以为回合仍在运行、引擎明确拒绝插话，客户端会重新核对回合状态；确认已正常结束后，原消息作为新回合发送一次。
-  无法确认状态时，消息和附件保留为暂停待发，可在状态恢复后点击“发送”。用户在核对期间点停止，仍须明确恢复发送。
+  无法确认状态时，消息和附件保留为暂停待发，可在状态恢复后点击“发送”。停止后的核对若超时或被新通知打断，下次发送会重新核对；Claude Code 等引擎报告回合不一致时也会核对，不会一直等待旧回合结束。用户在核对期间点停止，仍须明确恢复发送。
 - Child sessions show their harness in the sidebar/list, cards and details. A successful user message
   during an automated turn makes that turn user-driven.
 - **Approvals and questions** appear as cards above the composer: commands, file changes, extra

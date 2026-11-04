@@ -48,6 +48,150 @@ function paging() {
   }
 }
 
+test('分页长会话：旧后台命令迟到后停止当前回合，只读回合头即可恢复待发', async () => {
+  const turns = Array.from({ length: 250 }, (_, index) => turn(`old-${index}`, []))
+  const current = turn('current', [], { status: 'inProgress' })
+  turns.push(current)
+  const app = setup([thread({ id: 'a' })], {
+    'thread/resume': () => ({
+      thread: thread({ id: 'a', turns: [] }),
+      initialTurnsPage: {
+        data: structuredClone(turns.slice(0, -1).slice(-10).reverse()),
+        nextCursor: '240',
+        backwardsCursor: null,
+      },
+    }),
+    'thread/read': (params) => {
+      assert.equal(
+        (params as { includeTurns: boolean }).includeTurns,
+        false,
+        '只核对状态，禁止读取长会话的整份正文',
+      )
+      return { thread: thread({ id: 'a', status: { type: 'idle' }, turns: [] }) }
+    },
+    'thread/turns/list': (params) => {
+      const { cursor, limit, itemsView } = params as {
+        cursor: string | null
+        limit: number
+        itemsView: string
+      }
+      assert.equal(itemsView, 'notLoaded')
+      const end = cursor === null ? turns.length : Number(cursor)
+      const start = Math.max(0, end - limit)
+      return {
+        data: structuredClone(turns.slice(start, end).reverse()),
+        nextCursor: start ? String(start) : null,
+        backwardsCursor: null,
+      }
+    },
+    'turn/steer': (params) => {
+      assert.equal((params as { expectedTurnId: string }).expectedTurnId, current.id)
+      return { turnId: current.id }
+    },
+    'turn/interrupt': () => ({}),
+  })
+  app.core.start()
+  try {
+    await settle()
+    const session = watch(app.core)
+    await settle()
+    // 旧回合已经不在首屏，背景任务才结束；条目通知没有携带回合终态。
+    app.peer.last().notify('item/completed', {
+      threadId: 'a',
+      turnId: 'old-0',
+      item: {
+        type: 'commandExecution',
+        id: 'background',
+        command: 'sleep 1',
+        cwd: '/tmp',
+        status: 'completed',
+        commandActions: [],
+        aggregatedOutput: '',
+        exitCode: 0,
+        durationMs: 1000,
+      },
+    })
+    app.peer.last().notify('turn/started', { threadId: 'a', turn: current })
+    await settle()
+    await app.command('session.send', { ...where, text: '停止后重新发送的插话', now: true })
+    await app.command('session.interrupt', where)
+    current.status = 'interrupted'
+    app.peer.last().notify('turn/completed', { threadId: 'a', turn: current })
+    app.peer.last().notify('thread/status/changed', { threadId: 'a', status: { type: 'idle' } })
+    for (let step = 0; step < 10; step++) await settle()
+    assert.equal(app.sent('turn/start').length, 0, '停止后不自动续发')
+    await app.command('session.resumeQueue', where)
+    for (let step = 0; step < 10; step++) await settle()
+    assert.equal(session.seen.view?.turns.find((turn) => turn.id === 'old-0')?.status, 'completed')
+    assert.equal(app.sent('turn/start').length, 1)
+    assert.equal(session.seen.view?.queued.length, 0)
+    assert.ok(app.sent('thread/turns/list').length >= 3, '跨页找到旧回合')
+  } finally {
+    app.core.stop()
+  }
+})
+
+test('分页核实仍待确认的插话：补读所在页的交付回执，明确取消后才允许重发', async () => {
+  const current = turn('current', [], { status: 'inProgress' })
+  const app = setup([thread({ id: 'a' })], {
+    'thread/resume': () => ({
+      thread: thread({ id: 'a', turns: [] }),
+      initialTurnsPage: {
+        data: [structuredClone(current)],
+        nextCursor: null,
+        backwardsCursor: null,
+      },
+    }),
+    'thread/read': () => ({ thread: thread({ id: 'a', status: { type: 'idle' }, turns: [] }) }),
+    'thread/turns/list': (params) => ({
+      data: [
+        {
+          ...structuredClone(current),
+          items: (params as { itemsView: string }).itemsView === 'full' ? current.items : [],
+        },
+      ],
+      nextCursor: null,
+      backwardsCursor: null,
+    }),
+    'turn/steer': () => ({ turnId: current.id }),
+    'turn/interrupt': () => ({}),
+  })
+  app.core.start()
+  try {
+    await settle()
+    const session = watch(app.core)
+    await settle()
+    await app.command('session.send', { ...where, text: '保留插话', now: true })
+    const { clientUserMessageId } = app.sent('turn/steer')[0] as { clientUserMessageId: string }
+    const input = {
+      ...userText('queued-input', '保留插话'),
+      clientId: clientUserMessageId,
+      litchInputDelivery: 'queued',
+    }
+    app.peer.last().notify('item/completed', { threadId: 'a', turnId: current.id, item: input })
+    await settle()
+    await app.command('session.interrupt', where)
+    current.status = 'interrupted'
+    const held = { ...input, litchInputDelivery: 'held' }
+    current.items = [held]
+    // 终态条目与 turn/completed 均丢失，只剩 idle 通知；不能凭 idle 猜输入是否已送达。
+    app.peer.last().notify('thread/status/changed', { threadId: 'a', status: { type: 'idle' } })
+    for (let step = 0; step < 10; step++) await settle()
+    assert.ok(
+      app
+        .sent('thread/turns/list')
+        .some((params) => (params as { itemsView: string }).itemsView === 'full'),
+    )
+    assert.equal(session.seen.view?.queued[0]?.delivery, 'held')
+    assert.equal(app.sent('turn/start').length, 0)
+    await app.command('session.resumeQueue', where)
+    await settle()
+    assert.equal(app.sent('turn/start').length, 1)
+  } finally {
+    app.core.stop()
+  }
+})
+
 test('首屏仅十回合；按游标向前、去重合并；重复加载请求共用同一页', async () => {
   const app = paging()
   app.core.start()
