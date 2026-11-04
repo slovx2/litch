@@ -423,16 +423,18 @@ export async function treeProbe(): Promise<TreeSeen> {
     (askBox()?.querySelectorAll('button[data-act]').length ?? 0) === 2 &&
     (askBox()?.textContent ?? '').includes('解析器的单测')
   askBox()?.querySelector<HTMLElement>('button[data-act="0"]')?.click()
-  // 答了之后：答案并进回合末尾那张问题卡（变成“已答”、收着时摘要里写着答案），不再另出一个答复的气泡
+  // 答了之后：原卡更新为已答；跨回合的答复仍在发送位置保留“题目 → 回答”。
   const askReplied = await until(
     () =>
       tailAsk()?.dataset.state === 'answered' &&
       (tailAsk()?.textContent ?? '').includes('在这里把解析器的单测补齐') &&
-      !$$('.main .umsg').some((bubble) =>
-        (bubble.textContent ?? '').includes('在这里把解析器的单测补齐'),
+      $$('.main .umsg').some(
+        (bubble) =>
+          (bubble.textContent ?? '').includes('要不要在这里先把解析器的单测补齐？') &&
+          (bubble.textContent ?? '').includes('在这里把解析器的单测补齐'),
       ),
   )
-  seen.ask = askBox()?.textContent ?? '没有'
+  seen.ask = tailAsk()?.textContent ?? '没有'
   await idle()
   const firstWrap = () => wrapBox()?.querySelector<HTMLElement>('[data-card="proposal"]')
   firstWrap()?.querySelector<HTMLElement>('[data-act="edit"]')?.click()
@@ -885,7 +887,7 @@ const LABELS: Record<Exclude<keyof TreeSeen, 'seen'>, string> = {
   wrapActual: '“改了再开始”能改完成后唤醒；换了 harness 开始后卡片写实际的 harness',
   tailBelow: '收尾区在回合最下方、回答下面，过程里那一步写“建议”',
   askShown: '收尾的问题带两个回复按钮',
-  askReplied: '点回复按钮发出按钮的话，答案并进回合末尾的问题卡，不另出答复气泡',
+  askReplied: '点回复按钮更新原问题卡，跨回合答复在发送位置保留题目和答案',
   pendingSurvived: '子会话回报唤醒后原问题仍在输入框上方且能答',
   pendingCoexist: '旧收尾问题与新的异步问题同时保留',
   pendingDeduped: '重复提出同一待答问题只显示一次',
