@@ -1738,10 +1738,12 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       Boolean(one('[data-event="manager-rules"]')),
   )
   const rulesBody = await eventBody('manager-rules')
+  // 事件正文经过 CardMarkdown；检查渲染出的段落，不把容器层级当成段落。
+  const rulesParagraphs = rulesBody.querySelectorAll('.card-md .md > p')
   const rulesEvent =
-    rulesBody.children.length === 2 &&
-    rulesBody.children[0]?.textContent === '修改后的经理设定' &&
-    rulesBody.children[1]?.textContent === '保留验收记录。'
+    rulesParagraphs.length === 2 &&
+    rulesParagraphs[0]?.textContent === '修改后的经理设定' &&
+    rulesParagraphs[1]?.textContent === '保留验收记录。'
   eventsClean = cleanChat() && eventsClean
   await click('[data-act="manager-settings"]')
   await tab('dispatch')
