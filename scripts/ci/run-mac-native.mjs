@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { cliInventory } from './install-test-clis.mjs'
+import { iosReadiness } from './ios-checks.mjs'
 import { nativePlan } from './mac-native-plan.mjs'
 import { isolatedEnvironment } from './run-checks.mjs'
 
@@ -31,8 +32,11 @@ const proof = {
   platform: process.platform,
   arch: process.arch,
   plan,
+  ios: plan.domains.includes('ios') ? iosReadiness() : null,
   clis: cliInventory(
-    plan.domains.includes('client-engines') ? ['CLAUDE', 'DSH'] : [],
+    plan.domains.some((name) => ['client-engines', 'adapters'].includes(name))
+      ? ['CLAUDE', 'DSH']
+      : [],
     JSON.parse(readFileSync('protocol/versions.json')),
   ),
   complete: false,

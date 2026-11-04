@@ -20,6 +20,7 @@ on:
 permissions:
   contents: read
   actions: read
+  checks: read
   issues: read
 concurrency:
   group: prepare-${{ github.sha }}
@@ -90,6 +91,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      checks: read
       issues: read
     uses: ./.github/workflows/gate.yml
     with:
@@ -461,6 +463,8 @@ jobs:
           path: ${{ runner.temp }}/android
           if-no-files-found: error
 
+  # iOS接入位置：未来独立archive/upload job，并扩展artifactKinds/provenance与seal依赖。
+  # 当前只有Gate的无签名模拟器构建与单测；没有IPA、TestFlight或App Store上传。
   seal:
     needs: [candidate, gate, adapter, cha, desktop-macos, desktop-windows, android]
     runs-on: ubuntu-24.04

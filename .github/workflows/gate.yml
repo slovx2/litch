@@ -38,6 +38,7 @@ on:
 permissions:
   contents: read
   actions: read
+  checks: read
   issues: read
 
 jobs:
@@ -89,6 +90,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      checks: read
     uses: ./.github/workflows/full.yml
     with:
       sha: ${{ needs.impact.outputs.sha }}

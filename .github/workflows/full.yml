@@ -84,6 +84,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      checks: read
     uses: ./.github/workflows/ci.yml
     with:
       sha: ${{ needs.source.outputs.sha }}
@@ -103,23 +104,13 @@ jobs:
             echo '::error::LITCH_RECOVERY_UPSTREAM_FAILURE'
             exit 1
           fi
-
-  mac-ready:
-    needs: source
-    permissions:
-      contents: read
-      actions: read
-    uses: ./.github/workflows/mac-priority.yml
-    with:
-      sha: ${{ needs.source.outputs.sha }}
-      after-signing: ${{ inputs.mac-after-signing || false }}
-
   native:
     needs: source
     if: ${{ needs.source.outputs.native-domains != '[]' }}
     permissions:
       contents: read
       actions: read
+      checks: read
     uses: ./.github/workflows/mac-native.yml
     with:
       sha: ${{ needs.source.outputs.sha }}
@@ -271,142 +262,15 @@ jobs:
         env:
           CI_STEPS: ${{ toJSON(steps) }}
 
-  # Computer Use 的原生助手（Swift）和主进程里接它的那一层：助手的单元测试、执行器与看护的单元测试（桩助手），
-  # 再真的经 LaunchServices 起一次临时签名的助手、握手、调不要系统授权的几样（不点、不截图）
+  # Mac适配器完整测试已纳入native证明，这里只为原有领域汇总保留依赖边。
   adapters-macos:
-    needs: [source, mac-ready]
+    needs: [source, native]
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'adapters') }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-15]
-        suite: [all]
-      max-parallel: 1
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        id: stage-1
-        with:
-          ref: ${{ needs.source.outputs.sha }}
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        id: stage-2
-        with:
-          node-version: 24.21.0
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cache-npm
-        with:
-          path: ${{ github.workspace }}/.artifacts/npm-cache
-          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
-        id: stage-4
-        with:
-          go-version: 1.26.10
-      - name: Linux 沙箱依赖
-        id: phase-17
-        if: runner.os == 'Linux'
-        run: |
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends bubblewrap=0.9.0-1ubuntu0.3
-      - run: npm ci --no-audit --no-fund
-        id: phase-16
-      - run: npm ci --prefix packages/claude --no-audit --no-fund
-        id: phase-15
-      - run: npm ci --prefix packages/pi --no-audit --no-fund
-        id: phase-14
-      - run: npm ci --prefix packages/dsh --no-audit --no-fund
-        id: phase-13
-      - run: npm ci --prefix packages/opencode --no-audit --no-fund
-        id: phase-12
-      - run: npm ci --prefix packages/acp --no-audit --no-fund
-        id: phase-11
-      - name: 安装隔离的测试 CLI
-        id: phase-10
-        run: |
-          npm install --prefix .artifacts/host-cli --save-exact @anthropic-ai/claude-code@2.1.282 --no-audit --no-fund
-          echo "CHA_CLAUDE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-cli/node_modules/.bin/claude" >> "${GITHUB_ENV}"
-      - if: (matrix.suite == 'platform' || matrix.suite == 'all')
-        id: stage-13
-        run: npm run check
-      - if: (matrix.suite == 'platform' || matrix.suite == 'all')
-        id: stage-14
-        run: npm run typecheck
-      - run: npm run build
-        id: phase-9
-      # 含协议兼容性的两项测试（回放、结构校验，各包的 upstream-compat.test.mts）：
-      # Claude Code、Pi 两个入口和设备聚合面在这里，dsh 入口的在下面的 dsh job 里
-      - name: 准备分片 HOME
-        id: stage-16
-        run: mkdir -p "${RUNNER_TEMP}/adapter-test-home"
-      - name: Claude 文件集合
-        id: phase-8
-        if: (matrix.suite == 'claude' || matrix.suite == 'all')
-        run: node scripts/ci/test-shard.mjs claude
-      - name: Pi、设备和 Go 包
-        id: phase-7
-        if: (matrix.suite == 'platform' || matrix.suite == 'all')
-        run: |
-          node scripts/ci/test-shard.mjs pi
-          node scripts/ci/test-shard.mjs device
-          npm run test:antigravity
-          GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)" HOME="${RUNNER_TEMP}/adapter-test-home" go test ./...
-      # 按模型窗口需要较新的 CLI；单独隔离，不改变其余测试的 2.1.282 基线。
-      - name: Claude 按供应商与模型自动压缩窗口
-        id: phase-6
-        if: (matrix.suite == 'platform' || matrix.suite == 'all')
-        run: |
-          npm install --prefix .artifacts/context-cli --save-exact "@anthropic-ai/claude-code@$(node -p 'require("./protocol/versions.json").claudeContextCli')" --no-audit --no-fund
-          CHA_CLAUDE_CLI="${GITHUB_WORKSPACE}/.artifacts/context-cli/node_modules/.bin/claude" node --import ./packages/claude/dist/claude/test/fixtures/isolate-process.mjs --test --test-force-exit packages/claude/dist/claude/test/context-window-cli/*.mjs
-      # TUI 专项暂停自动验收；上游完善并重新验收接入后再恢复，手动入口仍保留。
-      # 这里只跑手机纯逻辑单测；需要手机和 UI 依赖的 Markdown 测试在下面的 mobile 作业执行
-      - if: (matrix.suite == 'platform' || matrix.suite == 'all')
-        id: stage-21
-        run: npm run mobile:test
-      - if: (matrix.suite == 'platform' || matrix.suite == 'all')
-        id: stage-22
-        run: npm run test:local-ssh
-      - if: (matrix.suite == 'platform' || matrix.suite == 'all')
-        id: stage-23
-        run: npm run docs:build
-      # 独立发布包：安装脚本和包里的入口做静态检查；出一个本机平台的包，装进临时的主目录，确认装上的命令报得出版本。
-      # Linux 上再把完整的容器验证跑一遍（发版的流程里验的是要发的那一份，这里先拦住平时的改动把它弄坏）
-      - name: 安装脚本的静态检查
-        id: phase-4
-        if: (matrix.suite == 'platform' || matrix.suite == 'all')
-        run: |
-          sh -n scripts/install.sh
-          sh -n scripts/adapter-launcher.sh
-          node --test scripts/install-disk-space.test.mjs scripts/remote-upgrade-disk.test.mjs
-      - name: shellcheck
-        id: phase-3
-        if: runner.os == 'Linux' && (matrix.suite == 'platform' || matrix.suite == 'all')
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends shellcheck=0.9.0-1
-          shellcheck --shell=sh scripts/install.sh scripts/adapter-launcher.sh
-      - name: 出本机平台的发布包并试装
-        id: phase-2
-        timeout-minutes: 10
-        if: (matrix.suite == 'platform' || matrix.suite == 'all')
-        run: |
-          node scripts/package-adapter.mjs --target host --out "${RUNNER_TEMP}/release"
-          HOME="${RUNNER_TEMP}/home" sh "${RUNNER_TEMP}/release/install.sh" --from "${RUNNER_TEMP}"/release/codex-harness-adapter-*.tar.gz
-          "${RUNNER_TEMP}/home/.local/bin/codex-harness-adapter" version
-      - name: 发布包的容器验证
-        id: phase-1
-        if: runner.os == 'Linux' && (matrix.suite == 'platform' || matrix.suite == 'all')
-        run: node scripts/check-adapter-package.mjs
+      - run: echo 'Mac适配器完整集合已由native统一执行并出具证明'
 
-      - name: 缓存与首次失败
-        id: stage-28
-        if: always()
-        run: node scripts/ci/job-summary.mjs
-        env:
-          CI_STEPS: ${{ toJSON(steps) }}
 
-  # Computer Use 的原生助手（Swift）和主进程里接它的那一层：助手的单元测试、执行器与看护的单元测试（桩助手），
-  # 再真的经 LaunchServices 起一次临时签名的助手、握手、调不要系统授权的几样（不点、不截图）
   computer-use-windows:
     needs: source
     if: ${{ !inputs.domains || contains(fromJSON(inputs.domains), 'computer-use-windows') }}

@@ -122,7 +122,7 @@ export function affectedDomains(
       // 手机实际引用 UI 的 i18n、composer、tasks 等逻辑；只为纯桌面 CSS 缩小。
       if (!/^packages\/ui\/src\/styles\/.*\.css$/.test(path)) selected.add('mobile')
       reasons.push(`界面及共享手机逻辑：${path}`)
-    } else if (/^apps\/mobile\//.test(path)) {
+    } else if (/^(apps\/mobile\/|ios\/)/.test(path)) {
       selected.add('mobile')
       reasons.push(`手机完整领域：${path}`)
     } else if (/^apps\/computer-use-win\//.test(path)) {

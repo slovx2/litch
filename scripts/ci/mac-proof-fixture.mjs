@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { checkPlan, expectsNodeTests } from './check-catalog.mjs'
 import { cliPackages } from './install-test-clis.mjs'
+import { iosReadiness } from './ios-checks.mjs'
 import { linuxSources } from './linux-proof.mjs'
 import { nativeCliVersions, nativePlan, selectedNative } from './mac-native-plan.mjs'
 
@@ -116,6 +117,7 @@ export function fixtureMacProof(full) {
       complete: true,
       plan,
       clis: nativeCliVersions(plan.domains),
+      ios: plan.domains.includes('ios') ? iosReadiness() : null,
       results: plan.checks.map(({ id }) => ({ id, code: 0, signal: null })),
     },
   }

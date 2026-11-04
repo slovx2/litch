@@ -191,17 +191,14 @@ jobs:
   # 浏览器含真实Mac Keychain/Node-API用例，Linux证据不替代这些覆盖。
   browser:
     if: ${{ toJSON(inputs.include-browser) != 'false' }}
-    runs-on: macos-15
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ inputs.sha || github.sha }}
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        with:
-          node-version: 24.21.0
-      - run: npm ci --prefix apps/desktop --no-audit --no-fund
-      - run: npm run test:browser --prefix apps/desktop
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+    uses: ./.github/workflows/mac-native.yml
+    with:
+      sha: ${{ inputs.sha || github.sha }}
+      domains: '["browser","ios"]'
 
   protocol-fixtures:
     runs-on: ubuntu-24.04

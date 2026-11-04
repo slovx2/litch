@@ -14,6 +14,7 @@ on:
 permissions:
   contents: read
   actions: read
+  checks: read
 env:
   npm_config_cache: ${{ github.workspace }}/.artifacts/npm-cache
   electron_config_cache: ${{ github.workspace }}/.artifacts/electron-cache
@@ -23,76 +24,75 @@ jobs:
     with:
       sha: ${{ inputs.sha }}
       after-signing: ${{ inputs.after-signing }}
-  checks:
+  route:
     needs: priority
-    runs-on: macos-15
-    timeout-minutes: 45
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      runner: ${{ steps.route.outputs.runner }}
+      local: ${{ steps.route.outputs.local }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - id: route
+        run: node scripts/ci/local-mac-route.mjs route
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ inputs.sha }}
+          NATIVE_DOMAINS: ${{ inputs.domains }}
+          LITCH_LOCAL_MAC_PUBLIC_KEY: ${{ vars.LITCH_LOCAL_MAC_PUBLIC_KEY }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: mac-native-request-${{ github.run_attempt }}
+          path: mac-native-request.json
+          if-no-files-found: error
+          retention-days: 14
+  checks:
+    needs: route
+    runs-on: ${{ needs.route.outputs.runner }}
+    timeout-minutes: 150
     env:
       NATIVE_DOMAINS: ${{ inputs.domains }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cache-electron
-        with:
-          # 安装器用 electron_config_cache；packager 用 @electron/get 的平台默认目录。
-          path: |
-            ${{ github.workspace }}/.artifacts/electron-cache
-            ~/Library/Caches/electron
-            ~/.cache/electron
-            ~/AppData/Local/electron/Cache
-          key: electron-v2-${{ runner.os }}-${{ runner.arch }}-node24.21.0-${{ hashFiles('apps/desktop/package-lock.json') }}
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        id: stage-3
         with:
           node-version: 24.21.0
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cache-npm
-        with:
-          path: ${{ github.workspace }}/.artifacts/npm-cache
-          key: npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-node24.21.0-${{ hashFiles('package-lock.json', 'packages/*/package-lock.json', 'apps/*/package-lock.json') }}
+      - name: 核验本地签名、同SHA、完整集合与原始容量失败
+        if: needs.route.outputs.local == 'true'
+        run: node scripts/ci/local-mac-route.mjs import
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ inputs.sha }}
+          LITCH_LOCAL_MAC_PUBLIC_KEY: ${{ vars.LITCH_LOCAL_MAC_PUBLIC_KEY }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        if: needs.route.outputs.local != 'true'
         with:
           go-version: 1.26.10
-      - name: 共用依赖准备
-        run: |
-          npm ci --no-audit --no-fund
-          for package in claude pi dsh opencode acp; do
-            npm ci --prefix "packages/${package}" --no-audit --no-fund
-          done
-          npm run client:setup
-      - name: 引擎窗口检查的隔离CLI
-        if: contains(fromJSON(inputs.domains), 'client-engines')
-        run: node scripts/ci/install-test-clis.mjs client-engines
-      - run: npm run build
-      - if: contains(fromJSON(inputs.domains), 'client')
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cache-chrome
+      - uses: ruby/setup-ruby@efbf473cab83af4468e8606cc33eca9281bb213f
+        if: needs.route.outputs.local != 'true' && contains(fromJSON(inputs.domains), 'ios')
         with:
-          path: ${{ runner.temp }}/chrome-for-testing
-          key: chrome-v1-${{ runner.os }}-${{ runner.arch }}-151.0.7922.34-${{ hashFiles('apps/desktop/package-lock.json') }}
-      - name: 准备界面验收的 Chrome for Testing
-        if: contains(fromJSON(inputs.domains), 'client')
-        id: chrome
-        run: |
-          architecture="$(node -p "process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64'")"
-          directory="${RUNNER_TEMP}/chrome-for-testing"
-          binary="${directory}/chrome-${architecture}/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
-          if [ ! -x "${binary}" ]; then
-            mkdir -p "${directory}"
-            node scripts/ci/download.mjs chrome "https://storage.googleapis.com/chrome-for-testing-public/151.0.7922.34/${architecture}/chrome-${architecture}.zip" "${directory}/chrome.zip"
-            ditto -xk "${directory}/chrome.zip" "${directory}"
-          fi
-          "${binary}" --version | grep -F '151.0.7922.34'
-          echo "LITCH_CHROME_BINARY=${binary}" >> "${GITHUB_ENV}"
-      - name: UI与桌面只构建一次
-        if: contains(fromJSON(inputs.domains), 'client') || contains(fromJSON(inputs.domains), 'client-engines')
-        run: npm run client:build
-      - name: 按领域执行完整Mac检查，不重试
+          ruby-version: 3.4.7
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: needs.route.outputs.local != 'true'
+        with:
+          path: |
+            ${{ github.workspace }}/.artifacts/npm-cache
+            ${{ github.workspace }}/.artifacts/electron-cache
+          key: mac-native-v3-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/package-lock.json') }}
+      - name: 同一套准备与完整Mac检查，不重试
+        if: needs.route.outputs.local != 'true'
         env:
           LITCH_PROJECTIONS_OUTPUT: ${{ runner.temp }}/sidebar-projections
-        run: node scripts/ci/run-mac-native.mjs
+        run: node scripts/ci/prepare-mac-native.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
@@ -101,7 +101,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: 保存侧栏投影失败现场
-        if: failure()
+        if: failure() && needs.route.outputs.local != 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: sidebar-projections-${{ github.run_id }}-${{ github.run_attempt }}

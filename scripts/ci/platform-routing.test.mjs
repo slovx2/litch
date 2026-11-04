@@ -17,7 +17,7 @@ test('Linux只接已核实集合，浏览器和完整窗口组不能被调用方
 test('独立CI保留浏览器原生检查；Linux共享入口不接受skip或重试参数', () => {
   const ci = readFileSync('.github/workflows/ci.yml', 'utf8')
   assert.match(ci, /suites: '\["desktop-portable-unit","desktop-required"\]'/)
-  assert.match(ci, /npm run test:browser --prefix apps\/desktop/)
+  assert.match(ci, /domains: '\["browser","ios"\]'/)
   const workflow = readFileSync('.github/workflows/linux-desktop.yml', 'utf8')
   assert.match(workflow, /runs-on: ubuntu-24.04/)
   assert.match(workflow, /ref: \$\{\{ inputs.sha \}\}/)
@@ -30,11 +30,15 @@ test('候选补充Mac必须经过签名协调，Linux测试/出包不等待签�
   assert.match(release, /mac-after-signing: true/)
   assert.match(release, /desktop-macos:\n {4}needs: candidate/)
   assert.match(release, /gate:\n {4}needs: candidate/)
-  assert.match(read('full'), /adapters-macos:\n {4}needs: \[source, mac-ready\]/)
-  assert.match(read('mac-native'), /checks:\n {4}needs: priority\n {4}runs-on: macos-15/)
+  assert.match(read('full'), /adapters-macos:\n {4}needs: \[source, native\]/)
+  assert.match(
+    read('mac-native'),
+    /checks:\n {4}needs: route\n {4}runs-on: \$\{\{ needs.route.outputs.runner \}\}/,
+  )
   assert.match(read('mac-priority'), /runs-on: ubuntu-24.04/)
   assert.match(read('full'), /include-browser: false/)
-  assert.match(read('full'), /suite: \[all\]/)
-  assert.match(read('full'), /matrix.suite == 'claude' \|\| matrix.suite == 'all'/)
-  assert.match(read('full'), /matrix.suite == 'platform' \|\| matrix.suite == 'all'/)
+  const adapter = readFileSync('scripts/ci/mac-adapter-checks.mjs', 'utf8')
+  assert.match(adapter, /\['claude', 'pi', 'device'\]/)
+  assert.match(adapter, /context-window-cli/)
+  assert.match(adapter, /package-adapter.mjs/)
 })

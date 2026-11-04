@@ -13,7 +13,7 @@ import { fileHash, validateArtifact } from './release-artifacts.mjs'
 import { checkPatchRecord } from './release-patch-base.mjs'
 import { hasWindowsCoverage } from './windows-proof.mjs'
 
-export const policyVersion = 'candidate-v4-mac-consolidated'
+export const policyVersion = 'candidate-v5-local-mac-ios'
 export const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'))
 export const writeJson = (path, value) => writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`)
 

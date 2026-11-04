@@ -17,11 +17,11 @@ Prepare 固定到本次工作流 SHA，门禁与五类打包并行。macOS 必�
 
 候选内首先申请签名打包的 Mac；补充 Mac 检查由 Linux 协调作业等待同 run、同 SHA 的 `desktop-macos` 成功后放行。其余平台出包和 Linux 门禁仍并行。等待有70分钟上限，不触发任何重跑；签名失败/取消会拦住补充 Mac。若按既有规则恢复未获 runner 的签名片，须同时恢复失败的协调作业及其下游，不能只重跑签名后假定门禁会自动续接。
 
-完整非手机候选最多使用三个 Mac 作业：签名；浏览器/原生 Computer Use/完整客户端窗口/三引擎窗口的合并检查；两套适配器测试共用准备的 Mac 检查。普通 Full 只用后两台，独立 CI 保留浏览器 Mac。五个已完成双平台对照的子集在 Linux 执行；CI 已通过首回合时，Full 的 real-engines 只执行剩余工具检查，`run-ci=false` 时仍补齐完整入口。
+完整候选使用两个 Mac 作业：签名出包，以及浏览器/原生 Computer Use/完整客户端窗口/引擎窗口/适配器/iOS 的合并检查。普通 Full 只用合并检查，独立 CI 跑浏览器与 iOS。托管检查确因容量未获得 runner 时，可以使用[本地 Mac 兜底](local-mac-fallback.md)，但签名出包不在兜底范围。五个已完成双平台对照的子集仍在 Linux 执行；CI 已通过首回合时，Full 的 real-engines 只执行剩余工具检查，`run-ci=false` 时仍补齐完整入口。
 
 门禁必跑 CI 单测/契约/类型、桌面 smoke/critical/六入口首回合，另跑手机类型与原生 Markdown 单测。按 48 小时内全绿的祖先夜间选择完整领域；没有基线时跑全部非手机领域。
 
-用户决定：手机模拟器 24 条 E2E 不参与任何发版候选，包含手机/共享代码变更和无基线情形。它们仍在夜间/手动 Full。手机单测、类型、正式 APK 与包验证不豁免。普通 push/PR 不跑模拟器，保持原状。
+用户决定：Android/iOS 模拟器 E2E 不参与任何发版候选，包含手机/共享代码变更和无基线情形。Android E2E 只在 Full 手动显式开启。手机单测、类型、正式 APK 与包验证不豁免；iOS 原生模块齐备后必须通过无签名模拟器构建，不上传 TestFlight/App Store。当前模块未合入时的明确延后与集成契约见本地 Mac 兜底文档。
 
 成功的 `seal` 汇总生成 `verified-candidate-<attempt>`，保存 14 天；Summary 给出 source run、验证 attempt、SHA、artifact ID 和带 `sha256:` 的 archive digest。每个平台和门禁/Full 分别登记真实来源 attempt，成功包不重签、不重公证。已有成功候选时，同 SHA 再次 Prepare 会停止并提示晋级来源。
 

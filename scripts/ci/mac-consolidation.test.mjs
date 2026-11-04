@@ -82,8 +82,8 @@ test('合并保留25个窗口检查与原生CU；浏览器按CI覆盖，手机/�
     nativePlan(['client-engines']).checks.map((x) => x.id),
     ['client-engines:fixture', 'client-engines:windows'],
   )
-  assert.deepEqual(selectedNative('["mobile"]', false), [])
-  assert.deepEqual(selectedNative('["mobile"]', true), ['browser'])
+  assert.deepEqual(selectedNative('["mobile"]', false), ['ios'])
+  assert.deepEqual(selectedNative('["mobile"]', true), ['browser', 'ios'])
   assert.throws(() => nativePlan(['mobile']))
   assert.throws(() => nativePlan(['client', 'client']))
 })
