@@ -72,6 +72,9 @@ function Board() {
           <button type="button" data-memory-tab="requests" onClick={() => setTab('requests')}>
             请求
           </button>
+          <button type="button" data-memory-tab="overview" onClick={() => setTab('overview')}>
+            概览
+          </button>
           <button type="button" data-memory-manager onClick={() => setOther(!other)}>
             切经理
           </button>
@@ -115,6 +118,13 @@ function Board() {
           target={null}
           onLocated={() => {}}
           onSuggestionSource={() => {}}
+          overviewCounts={{
+            decisions: { pending: 6, total: 6 },
+            requests: { pending: 3, total: 3 },
+            reports: { pending: 0, total: 0 },
+            suggestions: { pending: 0, total: 0 },
+          }}
+          onInbox={setTab}
         />
       ) : null}
     </>

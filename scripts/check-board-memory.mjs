@@ -47,6 +47,13 @@ export async function checkMobileBoardMemory({ read, click }) {
   await restored(all, '手机对话往返')
   await click('[data-testid="manager-category:request"]')
   await restored(request, '手机请求')
+  // 概览四格沿用普通类别导航：不能覆盖已记住的筛选、展开卡片与滚动位置。
+  await click('[data-testid="manager-tab:overview"]')
+  await click('[data-testid="overview-count:decision"]')
+  await restored(all, '手机概览跳转决策')
+  await click('[data-testid="manager-tab:overview"]')
+  await click('[data-testid="overview-count:request"]')
+  await restored(request, '手机概览跳转请求')
   console.log('手机看板记忆：类别、状态筛选、对话页签往返通过')
 }
 
@@ -68,7 +75,11 @@ export async function checkBoardMemory({ call, read, click }) {
     read(`({
     selected: document.querySelector('[data-paging-detail]')?.dataset.pagingDetail ?? null,
     y: document.querySelector('.mg-body').scrollTop,
-    animations: document.querySelector('[data-manager-paging]').getAnimations({subtree:true}).length
+    // 提交条自身的淡入不改变卡片布局；这里只检查列表卡片的开合与离场过渡。
+    animations: [...document.querySelectorAll('[data-manager-paging] > [data-motion-key], [data-manager-paging] > [data-motion-ghost]')].flatMap(e => e.getAnimations()).map(a => ({
+      kind: a.constructor.name, target: a.effect?.target?.outerHTML.slice(0, 300),
+      frames: a.effect?.getKeyframes(), state: a.playState
+    }))
   })`)
   const scroll = async (y) => {
     await read(`document.querySelector('.mg-body').scrollTop = ${y}`)
@@ -88,7 +99,11 @@ export async function checkBoardMemory({ call, read, click }) {
       Math.abs(actual.y - expected.y) < 2,
       `${label}：滚动 ${JSON.stringify({ expected, actual })}`,
     )
-    assert.equal(actual.animations, 0, `${label}：恢复不播放开合动画`)
+    assert.equal(
+      actual.animations.length,
+      0,
+      `${label}：恢复不播放开合动画 ${JSON.stringify(actual.animations)}`,
+    )
   }
   await ready()
   await open('D-2')
@@ -111,6 +126,12 @@ export async function checkBoardMemory({ call, read, click }) {
   await restored(request, '请求页签')
   await click('[data-memory-tab="decisions"]')
   await restored(all, '状态筛选仍为全部')
+  await click('[data-memory-tab="overview"]')
+  await click('[data-overview-count="requests"]')
+  await restored(request, '概览跳转请求')
+  await click('[data-memory-tab="overview"]')
+  await click('[data-overview-count="decisions"]')
+  await restored(all, '概览跳转决策')
   await click('[data-memory-manager]')
   await restored({ selected: null, y: 0 }, '另一经理初始状态')
   await open('D-4')
