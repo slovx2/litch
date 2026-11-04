@@ -1446,6 +1446,8 @@ export const zhCN = {
   'composer.image.size': '单张图片不能超过 {max} MB。',
   'composer.image.count': '每条消息最多 {max} 张图片。',
   'composer.image.read': '无法读取该文件。',
+  'composer.image.draftSave':
+    '图片草稿未保存到磁盘，退出后可能丢失。图片草稿总上限为 128 MiB；请发送或删除其他图片草稿，并检查存储空间。',
   'composer.image.unsupported': '当前模型不支持图片。请更换模型或移除图片。',
   'composer.imageCount': '{n} 张图',
   'composer.attached': '本条消息的附件',

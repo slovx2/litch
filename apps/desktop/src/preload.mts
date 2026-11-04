@@ -47,6 +47,17 @@ ipcRenderer.on(CORE_PORT, (event) => {
 
 contextBridge.exposeInMainWorld('litchShell', {
   kind: 'electron',
+  draftImages: {
+    read: () => ipcRenderer.sendSync('litch:draft-images', 'read'),
+    write: (entries: unknown) => {
+      if (ipcRenderer.sendSync('litch:draft-images', 'write', entries) !== true)
+        throw new Error('Could not save draft images')
+    },
+    remove: () => {
+      if (ipcRenderer.sendSync('litch:draft-images', 'remove') !== true)
+        throw new Error('Could not remove draft images')
+    },
+  },
   platform: process.platform,
   requestCorePort: () => ipcRenderer.send(REQUEST_CORE_PORT),
   onForeground(handler: (foreground: boolean) => void) {

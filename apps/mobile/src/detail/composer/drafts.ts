@@ -1,10 +1,12 @@
 // 没发出去的草稿，按会话记：文字存进应用文档目录的 drafts.json（离开再进、杀掉应用重开都还在），
-// 图片只记在内存里（data URL 太大，不往文件里放；重开应用就没了，和桌面端一样），打 @ 提到的会话也是。
+// 图片另存 draft-images.json，发送或删除后立即清理；打 @ 提到的会话只在内存。
 // 选中回答加的评论另存一个文件 draft-comments.json，也落盘；对话区（全文页加评论）和输入区（评论片）
 // 两边都要改它，所以评论可以订阅（subscribeDraftComments），谁改了另一边跟着变。
 // 写文件攒一下再写：每敲一个字同步写一次文件会占 JS 线程。离开页面时当场写（flushDrafts）。
 import {
   type CommentExtra,
+  type DraftImageEntries,
+  DraftImages,
   type ImageAttachment,
   MAX_COMMENTS,
   type MessageExtra,
@@ -17,7 +19,7 @@ const WRITE_DELAY_MS = 600
 
 const file = jsonFile<[string, string][]>('drafts.json')
 let texts: Map<string, string> | null = null
-const images = new Map<string, ImageAttachment[]>()
+const images = new DraftImages(jsonFile<DraftImageEntries>('draft-images.json'))
 let timer: ReturnType<typeof setTimeout> | null = null
 
 const commentFile = jsonFile<[string, CommentExtra[]][]>('draft-comments.json')
@@ -71,12 +73,9 @@ export function flushDrafts(): void {
   }
 }
 
-export const loadDraftImages = (key: string): ImageAttachment[] => images.get(key) ?? []
+export const loadDraftImages = (key: string): ImageAttachment[] => images.load(key)
 
-export function saveDraftImages(key: string, list: ImageAttachment[]): void {
-  if (list.length) images.set(key, list)
-  else images.delete(key)
-}
+export const saveDraftImages = (key: string, list: ImageAttachment[]) => images.save(key, list)
 
 /** 打 @ 提到的会话（正文里是 @[标题]）：和图片一样只在内存里，按会话记 */
 export type SessionExtra = Extract<MessageExtra, { kind: 'session' }>
@@ -91,7 +90,7 @@ export function saveDraftSessions(key: string, list: SessionExtra[]): void {
 
 export function dropDraft(key: string): void {
   saveDraft(key, '')
-  images.delete(key)
+  saveDraftImages(key, [])
   sessions.delete(key)
   saveDraftComments(key, NONE)
 }

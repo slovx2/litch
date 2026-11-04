@@ -69,6 +69,7 @@ import { judgeSendMode, sendModeProbe } from './probe-compose-send.mjs'
 import { criticalProbe, judgeCritical } from './probe-critical.mjs'
 import { devicesProbe, judgeDevices, narrowDevicesProbe } from './probe-devices.mjs'
 import { type DiffMode, runDiffChecks } from './probe-diff-run.mjs'
+import { draftImageReloadProbe } from './probe-draft-images.mjs'
 import { runEnginesChecks } from './probe-engines-run.mjs'
 import { entryProbe, judgeEntry } from './probe-entry.mjs'
 import { type FilesMode, runFilesChecks } from './probe-files-run.mjs'
@@ -527,8 +528,10 @@ async function measure(
   const commentsFailed: string[] = []
   if (!real) {
     const probe = await runInPage(window, commentsProbe, COMMENT_SESSION)
+    await runInPage(window, draftImageReloadProbe, 'save')
     await hooks.load({ lang: 'zh-CN' })
     const reloaded = await runInPage(window, commentsReloaded, COMMENT_SESSION)
+    await runInPage(window, draftImageReloadProbe, 'restore')
     comments = { probe, reloaded }
     commentsFailed.push(...judgeComments(probe, reloaded))
   }

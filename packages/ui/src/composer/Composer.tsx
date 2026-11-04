@@ -177,6 +177,7 @@ export function Composer(props: ComposerProps) {
   /** 图片之外随消息带的：选中的技能、贴进来的长文字、提到的文件 */
   const [extras, setExtras] = useState(() => loadDraftExtras(draftKey))
   const [error, setError] = useState<string | null>(null)
+  const [imageStorageError, setImageStorageError] = useState(false)
   const [busy, setBusy] = useState(false)
   const [attaching, setAttaching] = useState(false)
   const attachingRef = useRef(false)
@@ -208,7 +209,7 @@ export function Composer(props: ComposerProps) {
     saveDraft(draftKey, text)
   }, [draftKey, text])
   useEffect(() => {
-    saveDraftImages(draftKey, images)
+    setImageStorageError(saveDraftImages(draftKey, images) !== null)
   }, [draftKey, images])
   useEffect(() => {
     saveDraftExtras(draftKey, extras)
@@ -1032,9 +1033,10 @@ export function Composer(props: ComposerProps) {
         </div>
       </div>
       {props.below}
-      {error || imagesRefused || blocked ? (
+      {error || imageStorageError || imagesRefused || blocked ? (
         <div className="cmp-hint err">
           {error ??
+            (imageStorageError ? t('composer.image.draftSave') : null) ??
             (imagesRefused
               ? t(noImages ? 'composer.image.harness' : 'composer.image.unsupported')
               : blocked)}

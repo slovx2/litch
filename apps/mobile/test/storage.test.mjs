@@ -48,7 +48,11 @@ test('草稿：攒一下才写文件，离开时当场写；重开应用还在�
   const reopened = await fresh('../src/detail/composer/drafts.ts')
   assert.equal(reopened.loadDraft(key), '写了一半')
   assert.equal(reopened.loadDraft(reopened.draftKey('dev', 's2')), '另一个')
-  assert.deepEqual(reopened.loadDraftImages(key), [], '图片只在内存里')
+  assert.deepEqual(
+    reopened.loadDraftImages(key),
+    [{ url: 'data:image/png;base64,AA', name: null }],
+    '图片随草稿落盘',
+  )
   reopened.dropDraft(key)
   reopened.flushDrafts()
   assert.equal((await fresh('../src/detail/composer/drafts.ts')).loadDraft(key), '')

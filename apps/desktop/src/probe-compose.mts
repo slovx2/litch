@@ -577,6 +577,18 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   await open(main)
   await until('输入框', area)
   const imageDraftKept = imageHidden && thumbs() === 1
+  const persistedImages = (
+    window as unknown as {
+      litchShell?: { draftImages?: { read(): [string, { url: string }[]][] | null } }
+    }
+  ).litchShell?.draftImages
+  if (
+    persistedImages &&
+    !persistedImages
+      .read()
+      ?.some(([, images]) => images.some((image) => image.url.startsWith('data:image/png')))
+  )
+    throw new Error('图片草稿未写入桌面应用数据目录')
   // 用户在发送前检查粘贴的图片；原 imageViewed 只覆盖已发送的消息气泡。
   const imageArea = await until('图片草稿输入框', area)
   write(imageArea, '查看图片时保留的草稿')
@@ -676,6 +688,8 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   const thumb = await until('气泡里的缩略图', pictured)
   const box = thumb.getBoundingClientRect()
   const imageShown = thumbs() === 0 && Math.round(box.width) === 96 && Math.round(box.height) === 96
+  if (persistedImages?.read()?.some(([, images]) => images.length > 0))
+    throw new Error('图片草稿发送后未清理持久存储')
   ;(thumb as HTMLElement).click()
   const viewer = await until('大图', () => one<HTMLDialogElement>('dialog.viewer[open]'))
   const seen = Boolean(

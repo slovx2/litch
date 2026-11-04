@@ -1514,6 +1514,8 @@ export const en: Record<MessageKey, Entry> = {
   'composer.image.size': 'Each image must be {max} MB or smaller.',
   'composer.image.count': 'Up to {max} images per message.',
   'composer.image.read': 'This file couldn’t be read.',
+  'composer.image.draftSave':
+    'Draft images could not be saved and may be lost on exit. The total limit is 128 MiB. Send or remove other image drafts and check available storage.',
   'composer.image.unsupported':
     'The selected model doesn’t accept images. Switch models or remove the images.',
   'composer.imageCount': ({ n }) => plural(n, 'image', 'images'),

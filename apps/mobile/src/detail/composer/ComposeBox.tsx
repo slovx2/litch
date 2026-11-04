@@ -2,7 +2,7 @@
 // “+”点开是一张单：添加图片，加上对话参数（模型、强度、速度、权限、计划模式，各写着现在的值）。参数不常改，
 // 收在这里不占屏幕高度；计划模式开着时“+”上有个强调色的点，读屏名称也说明。
 // 会话详情和新建会话页共用；发去哪、发成功没有由外面定，这里只管写、清空、没发成时还回来。
-// 草稿按会话记（drafts.ts）：文字落盘，图片只在内存里。回车在手机上是换行，发送只靠按钮。
+// 草稿按会话记（drafts.ts）：文字和图片落盘。回车在手机上是换行，发送只靠按钮。
 // 选中回答加的评论也是草稿的一部分（落盘），一条一片排在最上面；只有评论、没打字也能发。
 // 打 `@` 在输入框上面列这台设备上的会话（MentionList.tsx），点了写成 @[标题]，发出去时随消息带上是哪个会话。
 import {
@@ -61,6 +61,7 @@ import { sendButton, takesSend } from './send-mode'
 import { UsageRing } from './UsageRing'
 
 export interface Draft {
+  imageStorageError?: boolean
   text: string
   images: ImageAttachment[]
   /** 选中回答加的评论，按加的先后 */
@@ -87,6 +88,7 @@ export interface Draft {
 
 /** 一个会话的草稿。换了会话（键变了）就换一份 */
 export function useDraft(key: string): Draft {
+  const [imageStorageError, setImageStorageError] = useState(false)
   const [state, setState] = useState(() => ({
     key,
     text: loadDraft(key),
@@ -109,7 +111,7 @@ export function useDraft(key: string): Draft {
     saveDraft(key, current.text)
   }, [key, current.text])
   useEffect(() => {
-    saveDraftImages(key, current.images)
+    setImageStorageError(saveDraftImages(key, current.images) !== null)
   }, [key, current.images])
   useEffect(() => {
     saveDraftSessions(key, current.sessions)
@@ -177,6 +179,7 @@ export function useDraft(key: string): Draft {
     setState((s) => ({ ...s, text: '', images: [], sessions: [], files: [] }))
   }, [key])
   return {
+    imageStorageError,
     text: current.text,
     images: current.images,
     comments,
@@ -404,7 +407,7 @@ export function ComposeBox({
       : []),
   ]
 
-  const note = error ?? blocked
+  const note = error ?? (draft.imageStorageError ? t('composer.image.draftSave') : null) ?? blocked
   const sendLabel =
     mode === 'stop'
       ? t('composer.stop')

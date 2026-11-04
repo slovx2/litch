@@ -92,6 +92,15 @@ On phone, Recent shows ordinary children and manager worklines below their paren
 
 ## 输入历史与清空草稿
 
+桌面和手机的未发送图片随草稿保存在各自应用的数据目录，退出后重新打开会还原。
+发送、移除图片或清空草稿会同步清理存储。图片草稿总上限为 128 MiB（含 base64 编码），
+超限或磁盘写入失败会明确提示；当前窗口的图片仍可发送，其他草稿不会被自动删除。
+
+Unsent images are saved in the desktop or phone app’s own data directory and restored on restart.
+Sending, removing images or clearing a draft removes their stored copies. Image drafts have a total
+128 MiB limit including base64 encoding. A warning explains failed saves; images remain available
+in the current window and other drafts are never automatically evicted.
+
 桌面输入框在光标位于开头时用上、下方向键回忆本机输入框实际提交的原文；排队、停止或发送失败后仍可找回，新建会话首句也会记录。每会话保留最近 100 条（相同原文只留最近一次），本机最多保留 200 个会话的记录，重开应用仍可回忆。
 会话通信、经理事件、子会话回报、定时任务、后台通知和自动续跑指令不进入输入历史；技能、附件、评论与会话引用的协议展开也不写入。其他桌面、手机、CLI 及升级前的历史不会回填到上键记录中；手机输入框目前没有上键翻历史入口。
 仅 macOS：`Ctrl+C` 清空整份草稿（文字、图片、提及、技能、评论及差异批注），`Cmd+Z` 可撤销清空；不打断回合，输入法组字中不处理。Windows/Linux 的 `Ctrl+C` 保持原生复制行为。

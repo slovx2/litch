@@ -14,6 +14,7 @@ import {
 /** 桌面外壳的预加载脚本挂在 window 上的东西。只有这几项，没有别的权限 */
 export interface ShellBridge {
   kind: 'electron'
+  draftImages?: import('../../../core/src/draft-images.mts').DraftImageStorage
   platform: string
   /** 请外壳把一个连着核心的消息端口发到这个页面来 */
   requestCorePort(): void

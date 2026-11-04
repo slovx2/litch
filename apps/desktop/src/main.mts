@@ -36,6 +36,7 @@ import { CLIENT_TOOL, type ClientToolToMain } from './client-tools/types.mjs'
 import { createComputerUse, locateHelper } from './computer-use/index.mjs'
 import { createComputerUseSettings, fakePermissions } from './computer-use/settings.mjs'
 import { createConfigMain } from './config-main.mjs'
+import { draftImageFile } from './draft-images.mjs'
 import { installFileSave } from './file-save-main.mjs'
 import {
   ABOUT,
@@ -708,10 +709,29 @@ const configMain = createConfigMain({
   computer: computerUseSettings,
   chrome: () => chromeTargets,
 })
-const fromUi = (event: Electron.IpcMainInvokeEvent): boolean => {
+const fromUi = (event: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent): boolean => {
   const frame = event.senderFrame
   return !!frame && frame === event.sender.mainFrame && isUiUrl(frame.url)
 }
+const draftImages = draftImageFile(app.getPath('userData'))
+ipcMain.on('litch:draft-images', (event, action: unknown, entries: unknown) => {
+  if (!fromUi(event)) {
+    event.returnValue = false
+    return
+  }
+  try {
+    if (action === 'read') event.returnValue = draftImages.read()
+    else if (action === 'write' && Array.isArray(entries)) {
+      draftImages.write(entries)
+      event.returnValue = true
+    } else if (action === 'remove') {
+      draftImages.remove()
+      event.returnValue = true
+    } else event.returnValue = false
+  } catch {
+    event.returnValue = false
+  }
+})
 /** 手机批准钥匙：验签、扫码时记下、设置页列出和删掉（approvals/main.mts） */
 const approvalsMain = startApprovalsMain({
   dataDir: app.getPath('userData'),

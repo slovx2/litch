@@ -1,8 +1,8 @@
 // 没发出去的草稿，按会话存在浏览器的本地存储里：切走再回来、重开应用都还在。
 // 存取失败（存储被禁用、满了）时退回到只在内存里记。
-// 草稿里的图片和别的附带项只在内存里记：切走再回来还在，重开应用就没了（图片太大，不往本地存储里放；
-// 附带项指着设备上的东西，隔了一次重开未必还在）。
+// 图片由外壳存进应用数据目录；附带项指着设备上的东西，只保留在内存。
 import type { ImageAttachment, MessageExtra } from '@litch/core'
+import { DraftImages } from '../../../core/src/draft-images.mts'
 import { mergeExtras } from './extras.ts'
 
 const STORE_KEY = 'litch.drafts'
@@ -53,7 +53,10 @@ export function saveDraft(key: string, text: string): void {
   persist(drafts)
 }
 
-export const dropDraft = (key: string): void => saveDraft(key, '')
+export const dropDraft = (key: string): void => {
+  saveDraft(key, '')
+  saveDraftImages(key, [])
+}
 
 /** 开着的输入区：草稿的键 → 往它的输入框里放东西 */
 const refillers = new Map<
@@ -205,15 +208,19 @@ export function mentionInComposer(mention: Mention): boolean {
   return insert(mention) !== false
 }
 
-const images = new Map<string, ImageAttachment[]>()
-const NO_IMAGES: ImageAttachment[] = []
-
-export const loadDraftImages = (key: string): ImageAttachment[] => images.get(key) ?? NO_IMAGES
-
-export function saveDraftImages(key: string, list: ImageAttachment[]): void {
-  if (list.length > 0) images.set(key, list)
-  else images.delete(key)
+let images: DraftImages | null = null
+function imageStore(): DraftImages {
+  return (images ??= new DraftImages(
+    (typeof window !== 'undefined' && window.litchShell?.draftImages) || {
+      read: () => JSON.parse(localStorage.getItem('litch.drafts.images') ?? 'null'),
+      write: (entries) => localStorage.setItem('litch.drafts.images', JSON.stringify(entries)),
+      remove: () => localStorage.removeItem('litch.drafts.images'),
+    },
+  ))
 }
+export const loadDraftImages = (key: string): ImageAttachment[] => imageStore().load(key)
+export const saveDraftImages = (key: string, list: ImageAttachment[]) =>
+  imageStore().save(key, list)
 
 const extras = new Map<string, MessageExtra[]>()
 const NO_EXTRAS: MessageExtra[] = []
