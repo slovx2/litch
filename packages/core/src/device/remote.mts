@@ -264,7 +264,17 @@ export function checkTarget(value: unknown): RemoteTarget {
     }
     if (keyFile.length > 1024) refuse('密钥文件路径过长')
   }
-  return { kind: 'host', host, port, user, keyFile }
+  if (raw.tailscale !== undefined && typeof raw.tailscale !== 'boolean') {
+    refuse('Tailscale 连接开关必须为布尔值')
+  }
+  return {
+    kind: 'host',
+    host,
+    port,
+    user,
+    keyFile,
+    ...(typeof raw.tailscale === 'boolean' ? { tailscale: raw.tailscale } : {}),
+  }
 }
 
 /** 给人看的主机标识 */
@@ -285,7 +295,8 @@ export function sameTarget(a: RemoteTarget, b: RemoteTarget): boolean {
     a.host === b.host &&
     a.port === b.port &&
     a.user === b.user &&
-    a.keyFile === b.keyFile
+    a.keyFile === b.keyFile &&
+    (a.tailscale ?? false) === (b.tailscale ?? false)
   )
 }
 

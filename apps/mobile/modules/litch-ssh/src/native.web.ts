@@ -8,6 +8,11 @@ const PUBLIC_KEY =
 const unreachable = () => Promise.reject(new Error('[unreachable] 界面预览不连真实设备'))
 
 export const native: Native = {
+  tailscaleAvailable: () => false,
+  tailscaleLogin: unreachable,
+  tailscaleStatus: unreachable,
+  tailscaleLogout: unreachable,
+  tailscaleClear: unreachable,
   setBackgroundTimeout() {},
   connectionPolicyState: () => JSON.stringify({ revision: 0, background: false, suspended: false }),
   addListener: () => ({ remove() {} }),

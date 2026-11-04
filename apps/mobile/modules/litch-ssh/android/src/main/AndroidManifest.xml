@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
   <application>
     <receiver android:name="dev.litch.ssh.BackgroundDeadlineReceiver" android:exported="false" />
   </application>

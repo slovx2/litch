@@ -45,15 +45,16 @@ func main() {
 			reply(sshtransport.StreamState(c.ID))
 		case "probe":
 			var target struct {
-				Host string `json:"host"`
-				Port int    `json:"port"`
-				User string `json:"user"`
+				Host      string `json:"host"`
+				Port      int    `json:"port"`
+				User      string `json:"user"`
+				Tailscale bool   `json:"tailscale"`
 			}
 			if err := json.Unmarshal(c.Target, &target); err != nil {
 				reply("", err)
 				continue
 			}
-			reply(sshtransport.ProbeHost(target.Host, target.Port, target.User))
+			reply(sshtransport.ProbeHost(target.Host, target.Port, target.User, target.Tailscale))
 		case "generate":
 			reply(sshtransport.GenerateEd25519Key())
 		case "close":

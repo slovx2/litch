@@ -160,6 +160,8 @@ export type RemoteTarget =
       user: string | null
       /** 密钥文件的路径。只存路径 */
       keyFile: string | null
+      /** 手机内嵌的 Tailscale 网络通道；省略为普通 SSH。认证方式不变。 */
+      tailscale?: boolean
     }
 
 /**

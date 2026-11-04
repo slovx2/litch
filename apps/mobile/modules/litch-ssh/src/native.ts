@@ -1,7 +1,12 @@
 // 原生那一层的 SSH 模块（Expo 原生模块 LitchSsh）。网页预览里换成 native.web.ts 的替身
-import { requireNativeModule } from 'expo-modules-core'
+import { requireOptionalNativeModule } from 'expo-modules-core'
 
 export interface Native {
+  tailscaleAvailable(): boolean
+  tailscaleLogin(controlURL: string): Promise<string>
+  tailscaleStatus(): Promise<string>
+  tailscaleLogout(): Promise<void>
+  tailscaleClear(): Promise<void>
   setBackgroundTimeout(minutes: number): void
   connectionPolicyState(): string
   addListener(
@@ -10,7 +15,7 @@ export interface Native {
   ): { remove(): void }
   batteryOptimization(): 'exempt' | 'restricted' | 'unknown'
   openBackgroundSettings(): boolean
-  probeHost(host: string, port: number, user: string): Promise<string>
+  probeHost(host: string, port: number, user: string, tailscale: boolean): Promise<string>
   runScript(target: string, script: string, marker: string): Promise<string>
   openStream(id: string, target: string, script: string, marker: string): Promise<string>
   streamState(id: string): Promise<string>
@@ -25,4 +30,21 @@ export interface Native {
   approvalFingerprint(approvalKey: string): Promise<string>
 }
 
-export const native = requireNativeModule<Native>('LitchSsh')
+// 原生模块尚未提供的平台仍可打开设置；不能把不存在的能力报告成可用。
+const unavailable = () => {
+  throw new Error('[tailscaleUnavailable] Native SSH is unavailable')
+}
+export const native: Native =
+  requireOptionalNativeModule<Native>('LitchSsh') ??
+  new Proxy(
+    {
+      tailscaleAvailable: () => false,
+      setBackgroundTimeout() {},
+      connectionPolicyState: () =>
+        JSON.stringify({ revision: 0, background: false, suspended: false }),
+      addListener: () => ({ remove() {} }),
+      batteryOptimization: () => 'unknown',
+      openBackgroundSettings: () => false,
+    } as unknown as Native,
+    { get: (target, name) => target[name as keyof Native] ?? unavailable },
+  )

@@ -935,6 +935,10 @@ export function createCore(options: CoreOptions): Core {
             ...(target === undefined ? {} : { target: checkTarget(target) }),
           }
           const moved = !sameTarget(before.target, next.target)
+          const networkOnly =
+            before.target.kind === 'host' &&
+            next.target.kind === 'host' &&
+            sameTarget({ ...before.target, tailscale: next.target.tailscale ?? false }, next.target)
           if (
             moved &&
             saved.remotes.some(
@@ -948,7 +952,7 @@ export function createCore(options: CoreOptions): Core {
             remotes: saved.remotes.map((entry) => (entry.id === deviceId ? next : entry)),
           }
           // 换了一台机器：给手机用的地址是对着原来那台改的，不要了
-          if (moved) saved = withoutPairing(saved, deviceId)
+          if (moved && !networkOnly) saved = withoutPairing(saved, deviceId)
           persist()
           if (!moved) {
             device.update({ name: next.name, wire: next.wire })
@@ -960,7 +964,7 @@ export function createCore(options: CoreOptions): Core {
           wiring?.forget(deviceId)
           device.stop()
           device.terminals.dispose()
-          store?.forget(deviceId)
+          if (!networkOnly) store?.forget(deviceId)
           const fresh = build(remoteConfig(next))
           devices.set(deviceId, fresh)
           announce(fresh)

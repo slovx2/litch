@@ -11,7 +11,7 @@ import type { RootStackParamList } from '../../nav/routes'
 import type { BootMode } from '../../shell/boot'
 import { type Prefs, useServices } from '../../shell/services'
 import { type Key, useT } from '../../ui/i18n'
-import { SectionLabel, ValueRow } from '../../ui/kit/controls'
+import { Row, SectionLabel, ValueRow } from '../../ui/kit/controls'
 import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { SKINS, type Skin, useTheme } from '../../ui/theme'
@@ -88,7 +88,7 @@ const BOOT_LABEL: Record<BootMode, Key> = {
   fixture: 'sessions.settings.boot.fixture',
 }
 
-export function SettingsScreen(_props: Props) {
+export function SettingsScreen({ navigation }: Props) {
   const t = useT()
   const theme = useTheme()
   const { c } = theme
@@ -146,6 +146,12 @@ export function SettingsScreen(_props: Props) {
         </Group>
 
         <ConnectionSection />
+        <Row
+          title={t('tailscale.title')}
+          left={<Text style={{ color: c.ink2 }}>↗</Text>}
+          onPress={() => navigation.navigate('Tailscale')}
+          testID="settings:tailscale"
+        />
 
         <SectionLabel>{t('switches.col.taskCards')}</SectionLabel>
         <TaskCardsSection />

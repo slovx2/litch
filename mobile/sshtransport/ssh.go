@@ -19,6 +19,7 @@ import (
 
 // Target 是一台远程机器怎么连。界面传 JSON 进来
 type Target struct {
+	Tailscale       bool   `json:"tailscale"`
 	Host            string `json:"host"`
 	Port            int    `json:"port"`
 	User            string `json:"user"`
@@ -56,7 +57,12 @@ type hostDescription struct {
 }
 
 // ProbeHost 只读主机指纹，不认证（返回 JSON：hostDescription）。第一次连之前、指纹变了之后给人确认用
-func ProbeHost(host string, port int, user string) (string, error) {
+func ProbeHost(host string, port int, user string, tailscale bool) (string, error) {
+	ctx, finish, err := beginSSH(context.Background())
+	if err != nil {
+		return "", err
+	}
+	defer finish()
 	address, err := sshAddress(host, port)
 	if err != nil {
 		return "", err
@@ -73,10 +79,12 @@ func ProbeHost(host string, port int, user string) (string, error) {
 			return errors.New("只读指纹")
 		},
 	}
-	connection, err := (&net.Dialer{Timeout: 10 * time.Second}).Dial("tcp", address)
+	connection, err := dialSSH(ctx, host, port, tailscale)
 	if err != nil {
-		return "", kindf(kindUnreachable, "连接 SSH 主机: %w", err)
+		return "", withKind(kindUnreachable, err)
 	}
+	stopCancel := context.AfterFunc(ctx, func() { _ = connection.Close() })
+	defer stopCancel()
 	defer func() { _ = connection.Close() }()
 	_ = connection.SetDeadline(time.Now().Add(10 * time.Second))
 	clientConnection, _, _, handshakeErr := ssh.NewClientConn(connection, address, config)
@@ -141,9 +149,9 @@ func connectSSH(ctx context.Context, target Target) (*ssh.Client, error) {
 		}
 		config.HostKeyAlgorithms = algorithms
 	}
-	connection, err := (&net.Dialer{Timeout: 12 * time.Second}).DialContext(ctx, "tcp", address)
+	connection, err := dialSSH(ctx, target.Host, target.Port, target.Tailscale)
 	if err != nil {
-		return nil, kindf(kindUnreachable, "连接 SSH 主机: %w", err)
+		return nil, withKind(kindUnreachable, err)
 	}
 	// DialContext 只管拨号；后台到期还要能取消已拨通但卡在握手里的连接。
 	stopCancel := context.AfterFunc(ctx, func() { _ = connection.Close() })

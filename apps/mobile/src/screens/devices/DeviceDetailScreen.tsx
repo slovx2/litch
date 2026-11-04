@@ -13,6 +13,7 @@ import { Button, Empty, Row, SectionLabel } from '../../ui/kit/controls'
 import { Prompt } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
+import { TailscaleChoice } from '../settings/TailscaleChoice'
 import { shownState } from './failure'
 import { forgetUnusedKey } from './forget'
 import { HarnessList, ManageSection } from './ManageSection'
@@ -83,7 +84,7 @@ export function DeviceDetailScreen({ route, navigation }: Props) {
   const reconnect = () => run(channel.command('device.reconnect', { deviceId }))
   const retrust = async () => {
     if (!target) return
-    if (await trust.confirm(target.host, port, target.user ?? '')) {
+    if (await trust.confirm(target.host, port, target.user ?? '', target.tailscale ?? false)) {
       setTrusted((n) => n + 1)
       reconnect()
     }
@@ -98,6 +99,15 @@ export function DeviceDetailScreen({ route, navigation }: Props) {
     >
       <ScrollView keyboardShouldPersistTaps="handled">
         <SectionLabel>{t('devices.detail.connection')}</SectionLabel>
+        {target ? (
+          <TailscaleChoice
+            value={target.tailscale ?? false}
+            onChange={(tailscale) =>
+              run(channel.command('device.update', { deviceId, target: { ...target, tailscale } }))
+            }
+            configure={() => navigation.navigate('Tailscale')}
+          />
+        ) : null}
         <InfoLine
           label={t(`devices.state.${state}`)}
           value={

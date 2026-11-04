@@ -1,6 +1,7 @@
 // 认出手机端 SSH 模块报的是哪一种失败。Go 那头把种类写在错误文字开头的方括号里（mobile/sshtransport/errors.go），
 // 经 gomobile、Expo 一路包过来，前面会多出几层“调用被拒”之类的话，所以在整段字里找。
 import { ConnectError, phrase } from '@litch/core'
+import { tailscaleErrorKey } from './tailscale'
 
 export type SshKind =
   | 'unreachable'
@@ -37,6 +38,14 @@ export function sshProblem(error: unknown): SshProblem {
  * 由设备页按阶段和详情里的种类换掉（src/screens/devices/failure.ts）；原话放在详情里
  */
 export function sshFailure(error: unknown): ConnectError {
+  if (tailscaleErrorKey(error)) {
+    return new ConnectError(
+      'unreachable',
+      phrase('ssh.unreachable'),
+      false,
+      error instanceof Error ? error.message : String(error),
+    )
+  }
   const { kind, message } = sshProblem(error)
   switch (kind) {
     case 'hostKeyUnknown':

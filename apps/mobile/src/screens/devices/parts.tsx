@@ -7,6 +7,7 @@ import type { HostKey } from '../../../modules/litch-ssh/src'
 import { ssh } from '../../../modules/litch-ssh/src'
 import { knownHost, trustHost } from '../../platform/known-hosts'
 import { sshProblem } from '../../platform/ssh-errors'
+import { tailscaleErrorKey } from '../../platform/tailscale'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
 import { Confirm } from '../../ui/kit/overlays'
@@ -165,7 +166,7 @@ interface Pending {
  * 返回的 confirm 解析成“现在信任的是对面给的这一个”；dialog 要放进页面里
  */
 export function useHostTrust(): {
-  confirm(host: string, port: number, user: string): Promise<boolean>
+  confirm(host: string, port: number, user: string, tailscale?: boolean): Promise<boolean>
   dialog: ReactNode
   error: string | null
   notice: string | null
@@ -176,14 +177,15 @@ export function useHostTrust(): {
   const [notice, setNotice] = useState<string | null>(null)
   const current = useRef<Pending | null>(null)
   const confirm = useCallback(
-    async (host: string, port: number, user: string) => {
+    async (host: string, port: number, user: string, tailscale = false) => {
       setError(null)
       setNotice(null)
       let key: HostKey
       try {
-        key = await ssh.probeHost(host, port, user)
+        key = await ssh.probeHost(host, port, user, tailscale)
       } catch (failed) {
-        setError(t('devices.trust.failed', { reason: sshProblem(failed).message }))
+        const key = tailscaleErrorKey(failed)
+        setError(key ? t(key) : t('devices.trust.failed', { reason: sshProblem(failed).message }))
         return false
       }
       const known = knownHost(host, port)

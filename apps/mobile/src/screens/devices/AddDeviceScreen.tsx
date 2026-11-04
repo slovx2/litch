@@ -3,7 +3,7 @@
 // → 添加。添加之后核心就开始连，页面换成这台设备的会话。
 import type { RemoteCheck, RemoteTarget } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Keyboard, StyleSheet, Text, View } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import type { RootStackParamList } from '../../nav/routes'
@@ -13,6 +13,7 @@ import { useT } from '../../ui/i18n'
 import { Button, Field, SectionLabel } from '../../ui/kit/controls'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
+import { TailscaleChoice } from '../settings/TailscaleChoice'
 import { KeyPicker } from './KeyPicker'
 import { FailureCard, useHostTrust } from './parts'
 
@@ -61,6 +62,8 @@ export function AddDeviceScreen({ navigation }: Props) {
   const theme = useTheme()
   const channel = useChannel()
   const [host, setHost] = useState('')
+  const [tailscale, setTailscale] = useState(false)
+  const checkEpoch = useRef(0)
   const [port, setPort] = useState('22')
   const [user, setUser] = useState('')
   const [name, setName] = useState('')
@@ -84,15 +87,18 @@ export function AddDeviceScreen({ navigation }: Props) {
       port: portNumber === 22 ? null : portNumber,
       user: user.trim(),
       keyFile: keyId,
+      ...(tailscale ? { tailscale: true } : {}),
     }
   }
   // 改了怎么连，上一次的检查就不算数了
   const edit = (set: (value: string) => void) => (value: string) => {
+    checkEpoch.current++
     set(value)
     setResult(null)
   }
 
   const check = async () => {
+    const epoch = ++checkEpoch.current
     // 先收键盘、让输入框失焦：结果和下面的按钮露出来；首次连接的指纹确认框关掉时也就没有焦点可回，
     // 不会又把键盘弹出来盖住它们（没有硬键盘的手机上会这样）
     Keyboard.dismiss()
@@ -104,11 +110,12 @@ export function AddDeviceScreen({ navigation }: Props) {
       return
     }
     try {
-      const trusted = await trust.confirm(wanted.host, portNumber, wanted.user ?? '')
-      if (!trusted) return
-      setResult(await runCheck(channel.command('remote.check', { target: wanted })))
+      const trusted = await trust.confirm(wanted.host, portNumber, wanted.user ?? '', tailscale)
+      if (!trusted || epoch !== checkEpoch.current) return
+      const checked = await runCheck(channel.command('remote.check', { target: wanted }))
+      if (epoch === checkEpoch.current) setResult(checked)
     } catch (failed) {
-      setError(reasonOf(failed))
+      if (epoch === checkEpoch.current) setError(reasonOf(failed))
     }
   }
 
@@ -139,6 +146,16 @@ export function AddDeviceScreen({ navigation }: Props) {
           />
         </View>
         <SectionLabel>{t('devices.where')}</SectionLabel>
+        <TailscaleChoice
+          value={tailscale}
+          disabled={checking || adding}
+          onChange={(value) => {
+            checkEpoch.current++
+            setTailscale(value)
+            setResult(null)
+          }}
+          configure={() => navigation.navigate('Tailscale', { adding: true })}
+        />
         <View style={styles.form}>
           <Field
             label={t('devices.field.host')}
@@ -180,10 +197,12 @@ export function AddDeviceScreen({ navigation }: Props) {
           keys={keys}
           selected={keyId}
           onSelect={(id) => {
+            checkEpoch.current++
             setKeyId(id)
             setResult(null)
           }}
           onAdded={(key) => {
+            checkEpoch.current++
             setKeys(listKeys())
             setKeyId(key.id)
             setResult(null)

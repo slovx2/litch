@@ -3,6 +3,7 @@ package dev.litch.ssh
 import android.app.Application
 import android.os.SystemClock
 import android.util.Log
+import org.json.JSONObject
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -13,6 +14,11 @@ import sshtransport.Sshtransport
 class LitchSshModule : Module() {
   private val lifecycle = ConnectionLifecycle()
   private var application: Application? = null
+  private var tailscaleNetwork: TailscaleNetwork? = null
+
+  private fun prepareNetwork(target: String) {
+    if (JSONObject(target).optBoolean("tailscale", false)) tailscaleNetwork?.attach()
+  }
 
   override fun definition() = ModuleDefinition {
     Name("LitchSsh")
@@ -20,6 +26,19 @@ class LitchSshModule : Module() {
 
     OnCreate {
       application = appContext.reactContext?.applicationContext as? Application
+      application?.let { app ->
+        tailscaleNetwork = TailscaleNetwork(app)
+        // 可选网络的初始化失败不能阻止普通 SSH；实际选择内嵌网络时再重试并报告错误。
+        try { tailscaleNetwork?.attach() } catch (_: Exception) { }
+        val prefs = app.getSharedPreferences("tailscale", 0)
+        val hostname = prefs.getString("hostname", null) ?: ("litch-android-" + java.util.UUID.randomUUID().toString().take(8)).also {
+          prefs.edit().putString("hostname", it).commit()
+        }
+        // 解密失败不阻止整个应用启动，状态页仍可清除损坏的状态。
+        try {
+          Sshtransport.tailscaleInitialize(java.io.File(app.noBackupFilesDir, "tailscale-node").absolutePath, hostname, TailscaleStorage(app))
+        } catch (_: Exception) { }
+      }
       application?.let { lifecycle.attach(it) }
       Sshtransport.setConnectionPolicyObserver(object : ConnectionPolicyObserver {
         override fun onConnectionPolicy(state: String) {
@@ -31,6 +50,8 @@ class LitchSshModule : Module() {
     }
 
     OnDestroy {
+      tailscaleNetwork?.detach()
+      Sshtransport.tailscaleStop()
       lifecycle.detach()
       Sshtransport.setConnectionPolicyObserver(null)
     }
@@ -44,15 +65,27 @@ class LitchSshModule : Module() {
       openBackgroundSettings(appContext.reactContext ?: throw Exceptions.ReactContextLost())
     }
 
-    AsyncFunction("probeHost") { host: String, port: Int, user: String ->
-      Sshtransport.probeHost(host, port.toLong(), user)
+    Function("tailscaleAvailable") { tailscaleNetwork != null }
+    AsyncFunction("tailscaleStatus") { Sshtransport.tailscaleStatus() }
+    AsyncFunction("tailscaleLogin") { controlURL: String ->
+      tailscaleNetwork?.attach()
+      Sshtransport.tailscaleLogin(controlURL)
+    }
+    AsyncFunction("tailscaleLogout") { Sshtransport.tailscaleLogout() }
+    AsyncFunction("tailscaleClear") { Sshtransport.tailscaleClear() }
+
+    AsyncFunction("probeHost") { host: String, port: Int, user: String, tailscale: Boolean ->
+      if (tailscale) tailscaleNetwork?.attach()
+      Sshtransport.probeHost(host, port.toLong(), user, tailscale)
     }
 
     AsyncFunction("runScript") { target: String, script: String, marker: String ->
+      prepareNetwork(target)
       Sshtransport.runScript(target, script, marker)
     }
 
     AsyncFunction("openStream") { id: String, target: String, script: String, marker: String ->
+      prepareNetwork(target)
       Sshtransport.openStream(id, target, script, marker)
     }
 
@@ -73,6 +106,7 @@ class LitchSshModule : Module() {
     }
 
     AsyncFunction("enrollPair") { target: String, line: String ->
+      prepareNetwork(target)
       Sshtransport.enrollPair(target, line)
     }
 

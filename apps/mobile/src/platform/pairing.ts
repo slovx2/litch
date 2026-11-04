@@ -170,6 +170,8 @@ export type PairResult =
   | { ok: false; problem: PairProblem; detail: string | null }
 
 export interface PairDeps {
+  /** 内嵌 Tailscale 只改变网络通道，二维码仍提供普通 SSH 的一次性钥匙和固定指纹。 */
+  tailscale?: boolean
   /** 生成并存下手机自己的钥匙 */
   makeKey(): Promise<{ id: string; publicKey: string }>
   /** 登记没成时删掉刚生成的钥匙 */
@@ -206,7 +208,7 @@ export async function runPairing(
       if (privateKey === null)
         return { ok: false, problem: 'unknown', detail: '读不出刚生成的私钥' }
       line = await deps.enroll(
-        enrollTarget(payload, privateKey),
+        { ...enrollTarget(payload, privateKey), ...(deps.tailscale ? { tailscale: true } : {}) },
         enrollLine(key.publicKey, deps.phoneName, approvalKey),
       )
     } catch (error) {
@@ -229,6 +231,7 @@ export async function runPairing(
     port: payload.p === 22 ? null : payload.p,
     user: payload.u,
     keyFile: key.id,
+    ...(deps.tailscale ? { tailscale: true } : {}),
   }
   onStep({ step: 'check' })
   let checked = false

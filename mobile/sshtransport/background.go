@@ -45,7 +45,10 @@ func newBackgroundPolicy(pause func(bool)) *backgroundPolicy {
 	}
 }
 
-var mobileBackground = newBackgroundPolicy(setStreamsPaused)
+var mobileBackground = newBackgroundPolicy(func(paused bool) {
+	setStreamsPaused(paused)
+	pauseTailscale(paused)
+})
 
 func SetBackgroundScheduler(scheduler BackgroundScheduler) {
 	p := mobileBackground

@@ -17,6 +17,7 @@ import { ProposalStartScreen } from '../screens/proposals/ProposalStartScreen'
 import { ProposalsScreen } from '../screens/proposals/ProposalsScreen'
 import { SessionsScreen } from '../screens/sessions/SessionsScreen'
 import { SettingsScreen } from '../screens/settings/SettingsScreen'
+import { TailscaleScreen } from '../screens/settings/TailscaleScreen'
 import { TaskDetailScreen } from '../screens/tasks/TaskDetailScreen'
 import { TaskEditScreen } from '../screens/tasks/TaskEditScreen'
 import { TasksScreen } from '../screens/tasks/TasksScreen'
@@ -59,6 +60,7 @@ export function Navigator() {
       <Stack.Screen name="TaskEdit" component={TaskEditScreen} />
       <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="Tailscale" component={TailscaleScreen} />
       <Stack.Screen name="Bench" component={WebViewBenchScreen} />
     </Stack.Navigator>
   )

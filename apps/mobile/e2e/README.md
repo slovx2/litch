@@ -4,6 +4,12 @@
 
 ## 真机上与正式包并存
 
+`fixture/26-tailscale.yaml` 验内嵌节点初始化、可选引导、HTTPS 地址校验、清状态和未登录保护。
+控制服务器使用 `https://127.0.0.1:9`，不打开真实登录页、不需要账户。默认包名为 `dev.litch.app`；
+独立验收 dev 包可给 Maestro `-e APP_ID=dev.litch.app.dev`。
+macOS 上若驱动报告 `Connection refused: localhost/[::1]:7001`，仅给该次 Maestro 命令设置
+`JAVA_TOOL_OPTIONS=-Djava.net.preferIPv4Stack=true`，不要改机器全局 Java 设置或重启别人的 ADB。
+
 需要真机验收时，在 `apps/mobile` 以 `LITCH_MOBILE_DEV=1` 运行 prebuild 和构建，
 得到 `dev.litch.app.dev`（Litch Dev），深链为 `litch-dev://`。它的文件、钥匙、系统后台权限
 与正式包分开；只配对隔离设备服务，不复制正式应用的私钥。默认构建仍是正式包。

@@ -18,6 +18,7 @@ import {
   type RemoteTarget,
   type SavedDevices,
   type SidebarView,
+  sameTarget,
   type TransportOpener,
 } from '../src/index.mjs'
 import { fakeOpener } from './fake-server.mjs'
@@ -25,6 +26,55 @@ import { thread } from './fixtures.mjs'
 import { fakeClock, settle } from './helpers.mjs'
 
 const alias = (name: string): RemoteTarget => ({ kind: 'alias', alias: name })
+
+test('Tailscale 选路：省略为普通 SSH，持久化保留显式开关并拒绝非布尔值', () => {
+  const base = { kind: 'host' as const, host: 'work', port: null, user: 'user', keyFile: 'key' }
+  assert.deepEqual(checkTarget(base), base)
+  for (const tailscale of [true, false]) {
+    const target = { ...base, tailscale }
+    assert.deepEqual(checkTarget(target), target)
+    const saved = checkSaved({ remotes: [{ id: 'ssh-test', name: 'work', wire: 'blue', target }] })
+    assert.deepEqual(checkSaved(JSON.parse(JSON.stringify(saved))).remotes[0]?.target, target)
+  }
+  assert.equal(sameTarget(base, { ...base, tailscale: false }), true)
+  assert.equal(sameTarget(base, { ...base, tailscale: true }), false)
+  assert.throws(() => checkTarget({ ...base, tailscale: 'true' }))
+})
+
+test('修改设备 Tailscale 开关沿用同一 ID、保留缓存，重连不新增设备', async () => {
+  const { boot, saved, forgotten } = world()
+  const { core, command } = boot()
+  core.start()
+  const target = { kind: 'host' as const, host: 'work', port: null, user: 'user', keyFile: 'key' }
+  const { deviceId } = (await command('device.add', { name: 'work', target })) as {
+    deviceId: string
+  }
+  const address = { name: 'phone', host: '100.64.0.2', port: 22, user: 'user' }
+  await command('pairing.rememberAddress', { deviceId, address })
+  await settle()
+  for (const tailscale of [true, false, true]) {
+    await command('device.update', { deviceId, target: { ...target, tailscale } })
+    await command('device.reconnect', { deviceId })
+    await settle()
+    assert.equal(saved().remotes.length, 1)
+    assert.equal(saved().remotes[0]?.id, deviceId)
+    assert.deepEqual(saved().remotes[0]?.target, { ...target, tailscale })
+    assert.deepEqual(forgotten, [])
+    assert.deepEqual(saved().pairing?.[deviceId], address)
+  }
+  for (const changed of [
+    { ...target, host: 'other' },
+    { ...target, user: 'other' },
+    { ...target, keyFile: 'other' },
+  ]) {
+    await command('pairing.rememberAddress', { deviceId, address })
+    const count = forgotten.length
+    await command('device.update', { deviceId, target: changed })
+    assert.equal(forgotten.length, count + 1)
+    assert.equal(saved().pairing?.[deviceId], undefined)
+  }
+  core.stop()
+})
 
 test('连接配置：别名和手动填的主机都认；会被 ssh 当成选项的、带空白的一律拒绝', () => {
   assert.deepEqual(checkTarget({ kind: 'alias', alias: ' build-01 ' }), alias('build-01'))

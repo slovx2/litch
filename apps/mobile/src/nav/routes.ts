@@ -70,6 +70,7 @@ export type RootStackParamList = {
   TaskDetail: { deviceId: string; taskId: string; title?: string }
   /** 应用设置：语言、明暗、关于 */
   Settings: undefined
+  Tailscale: { adding?: boolean } | undefined
   /** 开发用：WebView 吞吐测试（scripts/bench.mjs 的 webview 场景） */
   Bench: undefined
 }

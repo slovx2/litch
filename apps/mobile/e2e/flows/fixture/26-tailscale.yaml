@@ -1,0 +1,80 @@
+# 仅连接回环上的无服务 HTTPS 地址；不打开真实登录页，不使用 Tailscale 账户。
+appId: '${typeof APP_ID === "undefined" ? "dev.litch.app" : APP_ID}'
+name: 内嵌 Tailscale 初始化与未登录保护
+tags: [fixture, native]
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: devices:add
+    timeout: 15000
+- tapOn:
+    id: devices:add
+- assertVisible:
+    id: tailscale:switch
+- tapOn:
+    id: tailscale:switch
+- tapOn:
+    id: tailscale:guide
+- assertVisible:
+    id: tailscale:state
+- assertNotVisible:
+    id: tailscale:unavailable
+- tapOn:
+    id: tailscale:control
+- inputText: http://127.0.0.1:9
+- hideKeyboard
+- tapOn:
+    id: tailscale:login
+- assertVisible:
+    id: tailscale:error
+- tapOn:
+    id: tailscale:control
+- eraseText: 100
+- inputText: https://127.0.0.1:9
+- hideKeyboard
+- tapOn:
+    id: tailscale:login
+- extendedWaitUntil:
+    visible:
+      text: 未登录|Signed out|连接中|Connecting
+    timeout: 15000
+- assertNotVisible:
+    id: tailscale:error
+- tapOn:
+    id: tailscale:clear
+- tapOn:
+    id: confirm:ok
+- extendedWaitUntil:
+    visible:
+      text: 未连接|Disconnected
+    timeout: 10000
+- tapOn:
+    id: tailscale:back
+- assertVisible:
+    id: add-device
+- tapOn:
+    id: add:host
+- inputText: 100.64.0.2
+- tapOn:
+    id: add:user
+- inputText: test
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: key:generate
+- tapOn:
+    id: key:generate
+- scrollUntilVisible:
+    element:
+      id: add:check
+- tapOn:
+    id: add:check
+- extendedWaitUntil:
+    visible:
+      text: .*Tailscale.*
+      id: add:error
+    timeout: 10000
+- assertVisible:
+    text: .*请先.*登录.*|.*Sign in in Tailscale settings.*

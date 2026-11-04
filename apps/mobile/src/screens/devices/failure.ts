@@ -4,6 +4,7 @@
 // SSH 模块报的原话在详情里，开头的方括号是种类（src/platform/ssh-errors.ts）。
 import type { ConnectFailureView, DeviceView, RemoteTarget } from '@litch/core'
 import { type GuideStep, guideOf } from '../../../../../packages/ui/src/devices/guide.ts'
+import { tailscaleErrorKey } from '../../platform/tailscale'
 import type { Key, Translator } from '../../ui/i18n'
 
 export type ShownState = DeviceView['connection']
@@ -18,6 +19,8 @@ const phraseKey = (failure: ConnectFailureView): string | null =>
 /** 手机上要换掉的那几种。别的照核心给的说 */
 export function mobileReason(failure: ConnectFailureView): Key | null {
   const detail = failure.detail ?? ''
+  const tailscale = tailscaleErrorKey(detail)
+  if (tailscale) return tailscale
   if (failure.stage === 'hostKey') {
     return phraseKey(failure) === 'ssh.hostKeyChanged'
       ? 'devices.why.hostKeyChanged'

@@ -101,7 +101,7 @@ func TestProbeHostReportsFingerprint(t *testing.T) {
 	client, _ := newKey(t)
 	server := startServer(t, client.PublicKey())
 	target := server.target(t, "", "")
-	encoded, err := ProbeHost(target.Host, target.Port, target.User)
+	encoded, err := ProbeHost(target.Host, target.Port, target.User, false)
 	if err != nil {
 		t.Fatal(err)
 	}

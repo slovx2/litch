@@ -23,11 +23,13 @@ import {
   phoneNameOf,
   runPairing,
 } from '../../platform/pairing'
+import { tailscaleErrorKey } from '../../platform/tailscale'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Field, SectionLabel } from '../../ui/kit/controls'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
+import { TailscaleChoice } from '../settings/TailscaleChoice'
 import { InfoLine } from './parts'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PairDevice'>
@@ -85,6 +87,7 @@ function Scanner({ onText }: { onText(text: string): boolean }) {
 }
 
 export function PairDeviceScreen({ navigation }: Props) {
+  const [tailscale, setTailscale] = useState(false)
   const t = useT()
   const theme = useTheme()
   const channel = useChannel()
@@ -117,6 +120,7 @@ export function PairDeviceScreen({ navigation }: Props) {
       return
     }
     const deps: PairDeps = {
+      tailscale,
       makeKey: generateKey,
       dropKey: forgetKey,
       privateKey: async (id) => (await keySecret(id))?.privateKey ?? null,
@@ -205,6 +209,11 @@ export function PairDeviceScreen({ navigation }: Props) {
 
         {phase.kind === 'confirm' ? (
           <View style={styles.form}>
+            <TailscaleChoice
+              value={tailscale}
+              onChange={setTailscale}
+              configure={() => navigation.navigate('Tailscale', { adding: true })}
+            />
             {phase.payload.m === 'tailscale' ? (
               <Text style={[styles.note, { color: theme.c.ink2 }]} testID="pair:tailscale">
                 {t('pair.tailscale')}
@@ -232,7 +241,10 @@ export function PairDeviceScreen({ navigation }: Props) {
           <View style={styles.form} testID={`pair:failed:${phase.problem}`}>
             <Text style={[styles.title, { color: theme.c.err }]}>{t('pair.failed')}</Text>
             <Text style={[styles.note, { color: theme.c.ink }]}>
-              {t(`pair.why.${phase.problem}`, { host: phase.payload.h, port: phase.payload.p })}
+              {t(tailscaleErrorKey(phase.detail) ?? `pair.why.${phase.problem}`, {
+                host: phase.payload.h,
+                port: phase.payload.p,
+              })}
             </Text>
             {phase.problem === 'verify' && phase.detail ? (
               <>

@@ -50,7 +50,30 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
   An offline device or an outdated device service shows the reason on each item and cannot be changed.
   任务卡每台设备一行“名称　N/M 已开 ›”，点开逐个勾，单不收起，末尾是全部开启或全部关闭。
 
-## Android background connections
+## 内嵌 Tailscale 网络
+
+添加设备或设备详情的“通过 Tailscale 连接”默认关闭。打开后仅此设备的 SSH 使用应用内的
+Tailscale 网络，不申请系统 VPN，不接管其他应用流量。SSH 仍使用原来的私钥与固定主机指纹；
+这不是 Tailscale SSH，也不替代服务器上的普通 sshd 与公钥授权。
+
+添加设备的可选入口可先进入 Tailscale 设置，登录后返回继续填写；也可以跳过并按原流程连接。
+扫码确认页同样可以选择内嵌网络，用二维码提供的一次性 SSH 钥匙登记。设备地址填写 MagicDNS
+名称或 tailnet IP。未登录、目标不在 tailnet 或后台已暂停时明确报错，不回退到公网连接。
+
+设置 → Tailscale 显示节点状态、节点名与 tailnet。点击登录后，出现登录 URL 时点“打开登录页面”，
+在系统浏览器完成后回到 Litch 等待连接。原生能力尚未提供的平台显示不可用。
+控制服务器留空使用 Tailscale，也可以填写 Headscale 的 HTTPS 地址；不接受带凭据或查询参数的地址。
+切换控制服务器前须清除状态，避免跨服务器复用节点身份。
+
+一个应用安装共享一个节点，每台设备分别选择网络。退出登录断开所有内嵌连接；清除状态还会删除
+本机节点身份与加密密钥，再登录将注册新节点，原节点需在控制台另行移除。普通 SSH 不受影响。
+Android 的状态由 Keystore 密钥加密并排除系统备份；节点状态不经过 JS，也不自动上传遥测日志。
+已有系统 VPN 仍可能影响底层网络可达性；不占 VPN 槽位不代表绕过系统 VPN。
+
+后台连接期限到达时内嵌节点也停止；前台的下一次连接或状态查询恢复它。iOS 可更早被系统挂起，
+不能保证长期后台保活。关闭此设备的开关会按同一个设备 ID 重连，不另建设备记录。
+
+## Android 后台期限
 
 Phone Settings → Connection → Disconnect in background defaults to **5 minutes**. Choose 1, 5, 10,
 30 or 60 minutes, or Never. Once due, Litch closes the phone's SSH connections and pauses retries;
