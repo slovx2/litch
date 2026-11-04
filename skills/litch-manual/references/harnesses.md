@@ -31,6 +31,8 @@ Codex 历史刚写入时若暂报 `list_turns is not supported yet`，设备会�
 同版本优先保留 PATH 顺序；无法运行或读不出版本的排在最后，全部未知时仍取最先找到的命令。
 设置中的路径优先于对应环境变量；指定了路径或命令名就严格使用，不自动替换。
 运行中的进程在重启后使用重新选出的版本，原地更新会使版本探测缓存失效。
+找不到 CLI 时，只有用户实际配置过命令行路径或对应环境变量，诊断才会提示修正该配置；
+自动选择并传给引擎的路径不视为用户配置。
 
 - `scripts/litch harness list <device>` shows every harness on the device: enabled or not, ready or
   unavailable with the reason, and the version when known.

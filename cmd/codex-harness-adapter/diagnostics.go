@@ -79,13 +79,15 @@ func diagnosticFailure(c configuration, kind string, text bilingual) error {
 func cliMissing(c configuration) bilingual {
 	id := c.harness
 	name, variable, key := harnessNames[id], harnessCLIVariable[id], cliPathKey(id)
+	// environment() 含自动选择后注入的 CLI 路径，不能据此判定用户配置过变量。
+	configured := strings.TrimSpace(envValue(c.baseEnvironment(), variable))
 	switch {
 	case c.settings.text(key) != "":
 		return both(
 			"设置里给 %s 填的“命令行路径”（%s）不是一个可执行的文件。改成它的命令行的绝对路径，或者清空这一项改在 PATH 里找",
 			"The \"CLI path\" set for %s in settings (%s) is not an executable file. Set it to the absolute path of its command-line tool, or clear it to look it up on PATH",
 		).with(name, key)
-	case specOf(id).needsCLI && c.environmentValue(variable) == "":
+	case specOf(id).needsCLI && configured == "":
 		// 没有预设命令：不是“没装”，是还没说要接哪个 agent
 		return both(
 			"%[1]s 没有预设的命令，要告诉它接哪个 ACP agent：在这台设备的设置里填“命令行路径”（%[2]s），或者用环境变量 %[3]s 指定命令；参数写在环境变量 %[4]s 里",
@@ -96,7 +98,7 @@ func cliMissing(c configuration) bilingual {
 			"没有找到 %s 的命令行。装好之后重新启动它；也可以在这台设备的设置里填“命令行路径”（%s）",
 			"The %s command-line tool was not found. Install it and start this harness again; you can also fill in \"CLI path\" (%s) in this device's settings",
 		).with(name, key)
-	case c.environmentValue(variable) != "":
+	case configured != "":
 		return both(
 			"环境变量 %[3]s 指的不是 %[1]s 的可执行的命令行。把它改对，或者去掉它改在 PATH 里找；也可以在这台设备的设置里填“命令行路径”（%[2]s）",
 			"The %[3]s environment variable does not point to an executable %[1]s command-line tool. Correct it, or remove it to look it up on PATH; you can also fill in \"CLI path\" (%[2]s) in this device's settings",

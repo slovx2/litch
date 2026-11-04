@@ -401,7 +401,7 @@ func (c configuration) environment() []string {
 	return withFallbackCLI(c.harness, c.baseEnvironment())
 }
 
-// 不含默认安装位置补出的 CLI 变量，用于准确标记选择来源。
+// 不含自动选择后注入的 CLI 变量，用于准确判断用户配置与选择来源。
 func (c configuration) baseEnvironment() []string {
 	values := map[string]string{
 		"CODEX_HOME":              filepath.Join(c.directory(), "codex"),
