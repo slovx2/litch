@@ -101,6 +101,9 @@ export interface ManagerSeen {
 }
 
 export async function managerProbe(captureQuestions = false): Promise<ManagerSeen> {
+  // 整个函数会序列化进页面里跑，用到的常量只能写在函数里
+  /** 还有未提交草稿的提交条；提交成功后短暂出现的“已提交 N 项”（data-sent）不算 */
+  const UNSENT_BAR = '.mg-send:not([data-sent])'
   const one = <T extends Element = HTMLElement>(selector: string) =>
     document.querySelector<T>(selector)
   const click = async (selector: string) => {
@@ -562,7 +565,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     () =>
       Boolean(one('[data-decision="D-15"] [data-selection-reset]')) &&
       !one('[data-decision="D-15"] input:checked') &&
-      !one('.mg-send') &&
+      !one(UNSENT_BAR) &&
       !one('.mg-conflict'),
   )
   fill(answerInput(), '新版仍需核对这段补充')
@@ -573,7 +576,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   })
   answerInput().dispatchEvent(answerEnter)
   questionEnter &&= !answerEnter.defaultPrevented
-  await until('文字草稿', () => one('.mg-send'))
+  await until('文字草稿', () => one(UNSENT_BAR))
   await askBackground(updateQuestion, 7)
   const textKept = await until(
     '新版保留文字要求确认',
@@ -588,9 +591,9 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     () => !one<HTMLButtonElement>('[data-act="manager-submit"]')?.disabled,
   )
   fill(answerInput(), '')
-  await until('清空文字草稿', () => !one('.mg-send'))
+  await until('清空文字草稿', () => !one(UNSENT_BAR))
   await askBackground(updateQuestion, 8)
-  const emptyFollows = !one('.mg-conflict') && !one('.mg-send') && !answerInput().value
+  const emptyFollows = !one('.mg-conflict') && !one(UNSENT_BAR) && !answerInput().value
   const revisionDrafts = selectionReset && textKept && confirmed && emptyFollows
   ;(
     await until('选推荐选项', () =>
@@ -619,7 +622,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   ).click()
   const submitted = await until(
     '答复写入看板',
-    () => !one('.mg-send') && Boolean(one('.mg-decision')),
+    () => !one(UNSENT_BAR) && Boolean(one('.mg-decision')),
   )
   const submitKeepsPending = Boolean(
     one('[data-filter="open"][aria-pressed="true"]') &&
@@ -651,13 +654,13 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     await until(
       '修改答案写回',
       () =>
-        !one('.mg-send') &&
+        !one(UNSENT_BAR) &&
         one('[data-filter="answered"][aria-pressed="true"]') &&
         one('[data-decision="D-15"]')?.textContent?.includes('修改后的答案'),
     ),
   )
   const draftCount = () =>
-    Number(one('.mg-send .grow')?.textContent?.match(/(\d+) 项草稿/)?.[1] ?? 0)
+    Number(one(`${UNSENT_BAR} .grow`)?.textContent?.match(/(\d+) 项草稿/)?.[1] ?? 0)
   const draftsBefore = draftCount()
   await openTalk('[data-decision="D-15"]', 'D-15')
   await click(`${talk('D-15')} [data-question-mode="manager"]`)
@@ -711,7 +714,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await until(
     '交付写回请你做',
     () =>
-      !one('.mg-send') && one('[data-manager-request="R-1"]')?.textContent?.includes('真机已复验'),
+      !one(UNSENT_BAR) && one('[data-manager-request="R-1"]')?.textContent?.includes('真机已复验'),
   )
   await openTalk('[data-manager-request="R-1"]', 'R-1')
   const userRequests = Boolean(
@@ -861,7 +864,12 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   // 有草稿的 D-17 被忽略（等同在别处答复或关闭）：底部和侧栏都不再算它，提交栏消失；忽略的卡片上说明草稿还在，
   // 可查看、可丢弃。撤销忽略后草稿自动回来、能直接提交（不要求先确认）；丢弃后撤销则什么都不剩。
   const sideDrafts = () => one('[data-manager-draft-count]')?.textContent?.trim() ?? ''
-  const sendBar = () => one('.mg-send .grow')?.textContent?.trim() ?? ''
+  // 比的是读屏念出来的字：去掉只给眼睛看的记号（草稿数后面的定位箭头）
+  const sendBar = () => {
+    const grow = one(`${UNSENT_BAR} .grow`)?.cloneNode(true) as HTMLElement | undefined
+    for (const glyph of grow?.querySelectorAll('[aria-hidden="true"]') ?? []) glyph.remove()
+    return grow?.textContent?.trim() ?? ''
+  }
   const draftArea = () =>
     one<HTMLTextAreaElement>('[data-decision="D-17"] [data-act="manager-answer"]')
   const hadBar = sendBar()
@@ -1669,7 +1677,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     () => !one<HTMLButtonElement>('[data-act="manager-submit"]')?.disabled,
   )
   await click('[data-act="manager-submit"]')
-  await until('批量答复完成', () => !one('.mg-send'))
+  await until('批量答复完成', () => !one(UNSENT_BAR))
   const nextDecision = one('[data-decision="D-16"]')
   const nextBox = nextDecision?.querySelector('header')?.getBoundingClientRect()
   const bodyBox = one('.mg-body')?.getBoundingClientRect()
@@ -1781,7 +1789,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await until(
     '旧设备答复后停在空待定栏',
     () =>
-      !one('.mg-send') &&
+      !one(UNSENT_BAR) &&
       Boolean(one('[data-filter="open"][aria-pressed="true"]')) &&
       !one('[data-decision="D-1"]') &&
       document.activeElement === one('.mg-decision-filter'),
@@ -1791,7 +1799,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     await until(
       '旧设备上的答复交上',
       () =>
-        !one('.mg-send') &&
+        !one(UNSENT_BAR) &&
         one('[data-filter="answered"][aria-pressed="true"]') &&
         one('[data-decision="D-1"]') &&
         !one('[data-decision="D-1"] [data-act="manager-answer"]'),
