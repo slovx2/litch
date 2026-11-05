@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react'
 import { AppState, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { ago } from '../../../../../packages/ui/src/app/format.ts'
 import type { RootStackParamList } from '../../nav/routes'
+import { useConnectionRoute } from '../../platform/connection-route'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Empty, Row, StatusMark } from '../../ui/kit/controls'
@@ -80,12 +81,14 @@ function DeviceRow({
   onMenu(device: DeviceView): void
 }) {
   const device = useKey<DeviceView>(keys.device(deviceId))
+  const network = useConnectionRoute(device?.target, device?.connection)
   const activity = useKey<DeviceActivity>(keys.activity(deviceId))
   const theme = useTheme()
   const t = useT()
   if (!device) return null
   const state = shownState(device)
   const parts = [t(`devices.state.${state}`)]
+  if (network && state === 'online') parts.push(t(`tailscale.route.${network}`))
   if (device.failure && state !== 'online') parts.push(reasonText(device.failure, t))
   else if (device.note && state !== 'online') parts.push(t.text(device.note))
   if (activity?.waiting) parts.push(t('devices.busy.waiting', { count: activity.waiting }))

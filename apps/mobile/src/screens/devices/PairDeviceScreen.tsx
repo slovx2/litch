@@ -87,7 +87,7 @@ function Scanner({ onText }: { onText(text: string): boolean }) {
 }
 
 export function PairDeviceScreen({ navigation }: Props) {
-  const [tailscale, setTailscale] = useState(false)
+  const [tailscale, setTailscale] = useState<'auto' | 'always' | 'never'>('auto')
   const t = useT()
   const theme = useTheme()
   const channel = useChannel()

@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.AtomicFile
+import android.util.Log
 import java.io.File
 import java.io.FileNotFoundException
 import java.security.KeyStore
@@ -39,7 +40,9 @@ class TailscaleStorage(context: Context) : sshtransport.TailscaleStorage {
     val cipher = Cipher.getInstance("AES/GCM/NoPadding")
     cipher.init(Cipher.DECRYPT_MODE, key(false), GCMParameterSpec(128, encoded.copyOfRange(1, 13)))
     cipher.updateAAD(aad)
-    return cipher.doFinal(encoded.copyOfRange(13, encoded.size)).toString(Charsets.UTF_8)
+    val state = cipher.doFinal(encoded.copyOfRange(13, encoded.size)).toString(Charsets.UTF_8)
+    Log.i("LitchTailscale", "encrypted state restored")
+    return state
   }
 
   @Synchronized override fun write(state: String) {
@@ -51,6 +54,7 @@ class TailscaleStorage(context: Context) : sshtransport.TailscaleStorage {
     try {
       stream.write(encoded)
       file.finishWrite(stream)
+      Log.i("LitchTailscale", "encrypted state saved")
     } catch (error: Exception) {
       file.failWrite(stream)
       throw error

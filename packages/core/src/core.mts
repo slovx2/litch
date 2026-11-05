@@ -938,7 +938,10 @@ export function createCore(options: CoreOptions): Core {
           const networkOnly =
             before.target.kind === 'host' &&
             next.target.kind === 'host' &&
-            sameTarget({ ...before.target, tailscale: next.target.tailscale ?? false }, next.target)
+            sameTarget(
+              { ...before.target, tailscale: next.target.tailscale ?? 'auto' },
+              next.target,
+            )
           if (
             moved &&
             saved.remotes.some(

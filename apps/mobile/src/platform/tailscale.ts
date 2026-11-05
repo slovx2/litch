@@ -45,6 +45,11 @@ const ERROR_KEYS = {
   tailscaleControl: 'tailscale.error.control',
   tailscaleStart: 'tailscale.error.start',
   tailscalePaused: 'tailscale.error.paused',
+  tailscaleApproval: 'tailscale.error.approval',
+  tailscaleConnecting: 'tailscale.error.connecting',
+  tailscaleConnect: 'tailscale.error.connect',
+  tailscaleLoginTimeout: 'tailscale.error.timeout',
+  tailscaleAutoLogin: 'tailscale.error.switch',
 } as const
 
 export function tailscaleErrorKey(error: unknown) {

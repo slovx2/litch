@@ -1,8 +1,12 @@
-import { StyleSheet, Switch, Text, View } from 'react-native'
+import { useState } from 'react'
+import { Text, View } from 'react-native'
 import { tailscaleAvailable } from '../../platform/tailscale'
 import { useT } from '../../ui/i18n'
-import { Row } from '../../ui/kit/controls'
+import { Row, ValueRow } from '../../ui/kit/controls'
+import { Sheet } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
+
+export type TailscaleMode = 'auto' | 'always' | 'never'
 
 export function TailscaleChoice({
   value,
@@ -10,42 +14,44 @@ export function TailscaleChoice({
   configure,
   disabled = false,
 }: {
-  value: boolean
-  onChange(value: boolean): void
+  value: TailscaleMode
+  onChange(value: TailscaleMode): void
   configure(): void
   disabled?: boolean
 }) {
   const t = useT()
-  const { c, font } = useTheme()
+  const { c } = useTheme()
+  const [open, setOpen] = useState(false)
   const available = tailscaleAvailable()
   return (
     <View>
-      <Row
+      <ValueRow
         title={t('tailscale.switch')}
-        right={
-          <Switch
-            value={value}
-            testID="tailscale:switch"
-            accessibilityLabel={t('tailscale.switch')}
-            disabled={disabled || (!available && !value)}
-            onValueChange={onChange}
-            trackColor={{ false: c.line3, true: c.accentSolid }}
-            thumbColor={c.raised}
-          />
-        }
+        value={t(`tailscale.mode.${value}`)}
+        onPress={() => {
+          if (!disabled) setOpen(true)
+        }}
+        testID="tailscale:mode"
       />
-      {!available ? (
-        <Text style={[styles.note, { color: c.ink3, fontFamily: font.ui }]}>
-          {t('tailscale.unavailable')}
-        </Text>
-      ) : null}
       <Row
         title={t('tailscale.guide')}
         left={<Text style={{ color: c.ink2 }}>↗</Text>}
         onPress={configure}
         testID="tailscale:guide"
       />
+      <Sheet
+        visible={open}
+        title={t('tailscale.switch')}
+        note={t('tailscale.mode.hint')}
+        onClose={() => setOpen(false)}
+        actions={(['auto', 'always', 'never'] as const).map((mode) => ({
+          label: t(`tailscale.mode.${mode}`),
+          selected: mode === value,
+          disabled: mode === 'always' && !available ? t('tailscale.unavailable') : undefined,
+          testID: `tailscale:mode:${mode}`,
+          onPress: () => onChange(mode),
+        }))}
+      />
     </View>
   )
 }
-const styles = StyleSheet.create({ note: { paddingHorizontal: 16, fontSize: 12, lineHeight: 17 } })

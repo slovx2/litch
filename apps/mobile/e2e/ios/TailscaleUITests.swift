@@ -34,6 +34,7 @@ final class TailscaleUITests: XCTestCase {
     XCTAssertTrue(state.waitForExistence(timeout: 10))
     XCTAssertFalse(app.staticTexts["tailscale:unavailable"].exists)
     try action("clear")
+    app.buttons["tailscale:advanced"].tap()
     let control = app.textFields["tailscale:control"]
     XCTAssertTrue(control.waitForExistence(timeout: 5))
     control.tap()
@@ -90,17 +91,13 @@ final class TailscaleUITests: XCTestCase {
   }
 
   private func inspectSwitch(toggle: Bool) throws {
-    let control = app.switches["tailscale:switch"]
+    let control = app.buttons["tailscale:mode"]
     XCTAssertTrue(control.waitForExistence(timeout: 10))
-    XCTAssertEqual(app.switches.matching(identifier: "tailscale:switch").count, 1)
-    XCTAssertFalse(control.label.isEmpty)
-    // 同一标题不应同时成为另一处可读文字，避免 VoiceOver 逐项读取时重复。
-    XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label == %@", control.label)).count, 0)
     XCTAssertTrue(control.isHittable)
     if toggle {
-      let before = control.value as? String
       control.tap()
-      XCTAssertNotEqual(control.value as? String, before)
+      app.buttons["tailscale:mode:always"].tap()
+      XCTAssertTrue(control.label.contains("总是") || control.label.contains("Always"))
     }
   }
 

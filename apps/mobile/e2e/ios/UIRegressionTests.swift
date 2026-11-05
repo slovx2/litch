@@ -114,9 +114,10 @@ final class UIRegressionTests: XCTestCase {
   func testManualTailscaleFieldsRetainInput() {
     app.open(URL(string: "litch-dev://home")!)
     tap("devices:add")
-    let toggle = app.switches["tailscale:switch"]
+    let toggle = app.buttons["tailscale:mode"]
     XCTAssertTrue(toggle.waitForExistence(timeout: 10))
     toggle.tap()
+    tap("tailscale:mode:always")
     tap("tailscale:guide")
     // 清空节点以保证最后应报未登录，而不是让网络环境决定断言。
     tap("tailscale:clear")

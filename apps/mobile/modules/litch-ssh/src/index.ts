@@ -3,7 +3,7 @@
 import { native } from './native'
 
 export interface SshTarget {
-  tailscale?: boolean
+  tailscale?: 'auto' | 'always' | 'never'
   host: string
   port: number
   user: string
@@ -60,7 +60,12 @@ export interface ApprovalKeyDescription {
 }
 
 export const ssh = {
-  async probeHost(host: string, port: number, user: string, tailscale = false): Promise<HostKey> {
+  async probeHost(
+    host: string,
+    port: number,
+    user: string,
+    tailscale: 'auto' | 'always' | 'never' = 'auto',
+  ): Promise<HostKey> {
     return JSON.parse(await native.probeHost(host, port, user, tailscale)) as HostKey
   },
   async runScript(target: SshTarget, script: string, marker: string): Promise<RunResult> {

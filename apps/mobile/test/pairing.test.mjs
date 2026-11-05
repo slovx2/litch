@@ -187,7 +187,7 @@ test('流程：生成钥匙 → 确认码 → 登记 → 记主机指纹 → 检
 test('内嵌 Tailscale：登记、检查、保存使用同一网络，仍用一次性 SSH 密钥与二维码指纹', async () => {
   const { deps } = fakeDeps()
   const targets = []
-  deps.tailscale = true
+  deps.tailscale = 'always'
   deps.enroll = async (target) => {
     targets.push(target)
     return '{"ok":true}'
@@ -203,7 +203,7 @@ test('内嵌 Tailscale：登记、检查、保存使用同一网络，仍用一�
   const result = await runPairing(payload, deps, () => {})
   assert.equal(result.ok, true)
   assert.equal(targets.length, 3)
-  assert.ok(targets.every((target) => target.tailscale === true))
+  assert.ok(targets.every((target) => target.tailscale === 'always'))
   assert.equal(targets[0].seed, payload.s)
   assert.equal(targets[0].hostFingerprint, payload.k.f)
   assert.equal(targets[0].enrollCommand, undefined)

@@ -19,11 +19,12 @@ Go `1.27.3`、`tailscale.com v1.104.1`，同一个 gomobile 库承载原有 SSH 
 
 状态 JSON：`{state,hostname,tailnet,authURL,controlURL}`。
 `state` 为 `stopped|starting|needsLogin|needsApproval|connected|suspended`。
-登录 URL 可能稍后出现，前台设置页查询并提供系统浏览器入口。只返回 HTTPS 登录 URL。
+登录 URL 可能稍后出现，前台设置页限时查询后自动打开系统浏览器。只返回 HTTPS 登录 URL。
+读取完成前界面显示正在读取；冷启动读取已启用的存储后，首次状态查询恢复节点。
 错误带 `[tailscaleLogin]` 等种类，UI 映射中英文；不要向界面输出原生秘密或网络调试日志。
 
-`Target` JSON 的可选 `tailscale:boolean` 决定网络；`ProbeHost(host,port,user,tailscale)`
-也必须传同一个选择。其余 SSH 导出方法签名不变。脚本、长流、登记、升级都经过 `connectSSH`。
+`Target` JSON 的可选 `tailscale:"auto"|"always"|"never"` 决定网络（省略为自动）；`ProbeHost(host,port,user,mode)`
+也必须传同一个选择；`ConnectionRoute(host,port,mode)` 返回最近实际选择的 system/tailscale。其余 SSH 导出方法签名不变。脚本、长流、登记、升级都经过 `connectSSH`。
 
 ## Android 网络与存储
 
@@ -35,11 +36,17 @@ Go `1.27.3`、`tailscale.com v1.104.1`，同一个 gomobile 库承载原有 SSH 
 
 数据必须由 Android 公开平台 API 获取。Go 注册 `netmon.RegisterInterfaceGetter` 并触发网络
 重新采样，避开 Android 普通应用无法使用的 netlink。不要传假接口或忽略解析失败。
+Android 还需通过 `SetTailscaleDefaultRouteInterface(name)` 提供默认接口。
+默认网络和底层网络集合变化时调用 `TailscaleNetworkChanged(identity,available)`；仅更新地址快照会漏掉
+VPN 接口地址不变的切网。iOS 通过 NWPathMonitor 调同一入口。它重绑 UDP/DERP 并重新探测，
+先关闭旧网络上的 DERP（缺少默认接口 IP 时仅调用 Rebind 不会关掉它），不启动或重建节点；
+重复 identity 不生效。与 netstack 拨号一样使用固定版本的 tsnet Sys 接口。
 Android 原生实现用 Keystore AES-256-GCM、每次随机 IV、固定 AAD 和 AtomicFile；密文在
 `noBackupFilesDir`，不随设备备份。iOS 用同一个存储接口接 Keychain 与平台文件保护。
 
 `SetAppBackground`、`BackgroundDeadline` 共用原有连接暂停策略。系统允许提前到期；
 不以实际经过五分钟为前提。暂停关闭节点和连接，前台的下一次拨号或状态查询恢复。
+交互登录为节点保留最多十分钟的后台认证窗口；SSH gate 仍按原期限关闭。
 
 ## 不允许公网回退
 

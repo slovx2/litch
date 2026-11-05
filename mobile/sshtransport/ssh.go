@@ -19,7 +19,7 @@ import (
 
 // Target 是一台远程机器怎么连。界面传 JSON 进来
 type Target struct {
-	Tailscale       bool   `json:"tailscale"`
+	Tailscale       string `json:"tailscale"`
 	Host            string `json:"host"`
 	Port            int    `json:"port"`
 	User            string `json:"user"`
@@ -57,7 +57,7 @@ type hostDescription struct {
 }
 
 // ProbeHost 只读主机指纹，不认证（返回 JSON：hostDescription）。第一次连之前、指纹变了之后给人确认用
-func ProbeHost(host string, port int, user string, tailscale bool) (string, error) {
+func ProbeHost(host string, port int, user string, tailscale string) (string, error) {
 	ctx, finish, err := beginSSH(context.Background())
 	if err != nil {
 		return "", err
@@ -94,7 +94,7 @@ func ProbeHost(host string, port int, user string, tailscale bool) (string, erro
 	if found != nil {
 		return marshalJSON(found)
 	}
-	return "", kindf(kindUnreachable, "读取 SSH 主机指纹: %w", handshakeErr)
+	return "", kindf(kindUnreachable, "读取 SSH 主机指纹: %w", systemTailFailure(connection, kindUnreachable, handshakeErr))
 }
 
 func connectSSH(ctx context.Context, target Target) (*ssh.Client, error) {
@@ -169,7 +169,8 @@ func connectSSH(ctx context.Context, target Target) (*ssh.Client, error) {
 			// 种类后面只放链接：界面拿它做一个能点开的按钮
 			return nil, kindf(kindVerify, "%s", verify.url)
 		}
-		return nil, kindf(handshakeKind(err), "SSH 握手失败: %w", err)
+		kind := handshakeKind(err)
+		return nil, kindf(kind, "SSH 握手失败: %w", systemTailFailure(connection, kind, err))
 	}
 	_ = connection.SetDeadline(time.Time{})
 	client := ssh.NewClient(clientConnection, channels, requests)

@@ -27,18 +27,27 @@ import { fakeClock, settle } from './helpers.mjs'
 
 const alias = (name: string): RemoteTarget => ({ kind: 'alias', alias: name })
 
-test('Tailscale 选路：省略为普通 SSH，持久化保留显式开关并拒绝非布尔值', () => {
+test('Tailscale 选路：省略为自动，持久化保留三档并迁移旧布尔值', () => {
   const base = { kind: 'host' as const, host: 'work', port: null, user: 'user', keyFile: 'key' }
   assert.deepEqual(checkTarget(base), base)
-  for (const tailscale of [true, false]) {
+  for (const tailscale of ['auto', 'always', 'never'] as const) {
     const target = { ...base, tailscale }
     assert.deepEqual(checkTarget(target), target)
     const saved = checkSaved({ remotes: [{ id: 'ssh-test', name: 'work', wire: 'blue', target }] })
     assert.deepEqual(checkSaved(JSON.parse(JSON.stringify(saved))).remotes[0]?.target, target)
   }
-  assert.equal(sameTarget(base, { ...base, tailscale: false }), true)
-  assert.equal(sameTarget(base, { ...base, tailscale: true }), false)
+  assert.equal(sameTarget(base, { ...base, tailscale: 'auto' }), true)
+  assert.equal(sameTarget(base, { ...base, tailscale: 'always' }), false)
   assert.throws(() => checkTarget({ ...base, tailscale: 'true' }))
+  for (const value of [true, false]) {
+    const saved = checkSaved({
+      remotes: [{ id: 'ssh-old', name: 'old', target: { ...base, tailscale: value } }],
+    })
+    assert.equal(
+      saved.remotes[0]?.target.kind === 'host' && saved.remotes[0].target.tailscale,
+      value ? 'always' : 'auto',
+    )
+  }
 })
 
 test('修改设备 Tailscale 开关沿用同一 ID、保留缓存，重连不新增设备', async () => {
@@ -52,7 +61,7 @@ test('修改设备 Tailscale 开关沿用同一 ID、保留缓存，重连不新
   const address = { name: 'phone', host: '100.64.0.2', port: 22, user: 'user' }
   await command('pairing.rememberAddress', { deviceId, address })
   await settle()
-  for (const tailscale of [true, false, true]) {
+  for (const tailscale of ['always', 'never', 'auto'] as const) {
     await command('device.update', { deviceId, target: { ...target, tailscale } })
     await command('device.reconnect', { deviceId })
     await settle()

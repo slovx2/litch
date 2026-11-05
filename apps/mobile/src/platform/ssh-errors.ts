@@ -42,7 +42,7 @@ export function sshFailure(error: unknown): ConnectError {
     return new ConnectError(
       'unreachable',
       phrase('ssh.unreachable'),
-      false,
+      /\[tailscale(Connecting|Connect)\]/.test(String(error)),
       error instanceof Error ? error.message : String(error),
     )
   }

@@ -42,7 +42,7 @@ export async function configFor(target: RemoteTarget): Promise<RemoteConfig> {
       user: target.user,
       privateKey: secret.privateKey,
       passphrase: secret.passphrase,
-      ...(target.tailscale ? { tailscale: true } : {}),
+      tailscale: target.tailscale ?? 'auto',
       // 没记下就是空的：SSH 模块会以“没确认过指纹”拒绝，界面引导用户去确认
       hostFingerprint: knownHost(target.host, port)?.fingerprint ?? '',
       ...(dev.env ? { env: dev.env } : {}),

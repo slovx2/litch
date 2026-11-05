@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import type { RootStackParamList } from '../../nav/routes'
+import { useConnectionRoute } from '../../platform/connection-route'
 import { keyInfo } from '../../platform/keys'
 import { knownHost } from '../../platform/known-hosts'
 import { useChannel, useKey } from '../../shell/services'
@@ -55,6 +56,7 @@ function TasksLine({ deviceId, onPress }: { deviceId: string; onPress(): void })
 export function DeviceDetailScreen({ route, navigation }: Props) {
   const { deviceId } = route.params
   const device = useKey<DeviceView>(keys.device(deviceId))
+  const network = useConnectionRoute(device?.target, device?.connection)
   const channel = useChannel()
   const theme = useTheme()
   const t = useT()
@@ -85,7 +87,7 @@ export function DeviceDetailScreen({ route, navigation }: Props) {
   const reconnect = () => run(channel.command('device.reconnect', { deviceId }))
   const retrust = async () => {
     if (!target) return
-    if (await trust.confirm(target.host, port, target.user ?? '', target.tailscale ?? false)) {
+    if (await trust.confirm(target.host, port, target.user ?? '', target.tailscale ?? 'auto')) {
       setTrusted((n) => n + 1)
       reconnect()
     }
@@ -102,7 +104,7 @@ export function DeviceDetailScreen({ route, navigation }: Props) {
         <SectionLabel>{t('devices.detail.connection')}</SectionLabel>
         {target ? (
           <TailscaleChoice
-            value={target.tailscale ?? false}
+            value={target.tailscale ?? 'auto'}
             onChange={(tailscale) =>
               run(channel.command('device.update', { deviceId, target: { ...target, tailscale } }))
             }
@@ -116,6 +118,19 @@ export function DeviceDetailScreen({ route, navigation }: Props) {
           }
           testID="detail:state"
         />
+        {network ? (
+          <Text
+            testID="detail:route"
+            style={{
+              color: theme.c.ink3,
+              fontFamily: theme.font.ui,
+              fontSize: theme.font.size.body,
+              paddingHorizontal: 16,
+            }}
+          >
+            {t(`tailscale.route.${network}`)}
+          </Text>
+        ) : null}
         {device.failure ? (
           <FailureCard failure={device.failure} target={device.target} publicKey={key?.publicKey} />
         ) : null}

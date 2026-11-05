@@ -17,6 +17,33 @@ var tailInterfaces struct {
 	list []netmon.Interface
 }
 
+// Android Network / iOS NWPath 改变时，即使接口地址相同，也必须重建底层 UDP 和 DERP。
+// 此接口不启动节点、不更换身份；网络 ID 只留内存，不经过 JS 或持久化。
+var tailNetworkIdentity string // 由 tailNode.Mutex 保护。
+
+func TailscaleNetworkChanged(identity string, available bool) {
+	tailNode.Lock()
+	defer tailNode.Unlock()
+	if identity == "" || identity == tailNetworkIdentity {
+		return
+	}
+	tailNetworkIdentity = identity
+	if tailNode.server == nil {
+		return
+	}
+	sys := tailNode.server.Sys()
+	sys.NetMon.Get().InjectEvent()
+	// Android VPN 的接口/IP 可以不变，旧 HTTPS/DERP socket 却已绑定失效的底层网络。
+	// 单独 Rebind 在拿不到默认接口 IP 时不会关闭 DERP，因此先显式撤销旧网络。
+	sys.MagicSock.Get().SetNetworkUp(false)
+	if !available {
+		return
+	}
+	sys.MagicSock.Get().Rebind()
+	sys.MagicSock.Get().SetNetworkUp(true)
+	sys.MagicSock.Get().ReSTUN("mobile-network-change")
+}
+
 // SetTailscaleInterfaces 接收 [{index,name,mtu,up,loopback,pointToPoint,multicast,addresses:[CIDR]}]。
 // 必须在首次 TailscaleLogin/拨号前调用；网络变化再次调用。iOS 不需要此接口。
 func SetTailscaleInterfaces(encoded string) error {

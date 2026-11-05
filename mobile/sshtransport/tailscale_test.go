@@ -111,6 +111,39 @@ func TestTailControlHTTPSOnly(t *testing.T) {
 	}
 }
 
+func TestTailStateErrorsDistinguishApprovalAndStartup(t *testing.T) {
+	for _, state := range []string{"Starting", "NoState", "Running"} {
+		if err := tailStateError(state); err != nil {
+			t.Fatal("启动过程不能误报未登录", state, err)
+		}
+	}
+	if err := tailStateError("NeedsMachineAuth"); err == nil || !strings.Contains(err.Error(), "[tailscaleApproval]") {
+		t.Fatal("审批原因丢失", err)
+	}
+	if err := tailStateError("NeedsLogin"); err == nil || !strings.Contains(err.Error(), "[tailscaleLogin]") {
+		t.Fatal("登录原因丢失", err)
+	}
+}
+
+func TestSystemTailHandshakeFailureSuggestsEmbeddedLogin(t *testing.T) {
+	left, right := net.Pipe()
+	defer left.Close()
+	defer right.Close()
+	err := errors.New("SSH handshake timed out")
+	wrapped := &systemTailConnection{Conn: left}
+	if !strings.Contains(systemTailFailure(wrapped, kindUnreachable, err).Error(), "[tailscaleAutoLogin]") {
+		t.Fatal("系统 VPN 接受 TCP 但握手超时，漏了登录提示")
+	}
+	for _, kind := range []string{kindAuth, kindHostKeyChanged, kindVerify} {
+		if systemTailFailure(wrapped, kind, err) != err {
+			t.Fatal("不应掩盖 SSH 认证或指纹错误", kind)
+		}
+	}
+	if systemTailFailure(left, kindUnreachable, err) != err {
+		t.Fatal("普通系统连接不应提示 Tailscale")
+	}
+}
+
 func TestTailnetAddressNeverResolvesPublicHost(t *testing.T) {
 	s := &ipnstate.Status{Peer: map[key.NodePublic]*ipnstate.PeerStatus{
 		key.NewNode().Public(): {DNSName: "work.tail.ts.net.", TailscaleIPs: []netip.Addr{netip.MustParseAddr("100.64.1.2")}},
@@ -128,6 +161,26 @@ func TestTailnetAddressNeverResolvesPublicHost(t *testing.T) {
 	}
 }
 
+func TestAutoRouteUsesAuthenticatedPeerMap(t *testing.T) {
+	s := &ipnstate.Status{BackendState: "Running", Peer: map[key.NodePublic]*ipnstate.PeerStatus{
+		key.NewNode().Public(): {HostName: "work", TailscaleIPs: []netip.Addr{netip.MustParseAddr("100.64.1.2")}},
+	}}
+	for _, host := range []string{"work", "100.64.0.1", "100.127.255.255", "fd7a:115c:a1e0::1", "work.tail.ts.net"} {
+		if !routeInTailnet(host, 22, s) {
+			t.Fatal("已登录节点未选内嵌", host)
+		}
+	}
+	for _, host := range []string{"100.63.1.1", "100.128.1.1", "unknown", "example.com"} {
+		if routeInTailnet(host, 22, s) {
+			t.Fatal("无关地址误选内嵌", host)
+		}
+	}
+	s.BackendState = "NeedsLogin"
+	if routeInTailnet("work", 22, s) || routeInTailnet("100.64.1.2", 22, s) {
+		t.Fatal("未登录时不能抢系统网络")
+	}
+}
+
 func TestTailDialRequiresLoginAndDirectStillWorks(t *testing.T) {
 	// 未登录、已暂停、清除状态均不能回退到本地监听端口。
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -138,6 +191,10 @@ func TestTailDialRequiresLoginAndDirectStillWorks(t *testing.T) {
 	port := listener.Addr().(*net.TCPAddr).Port
 	if err := TailscaleInitialize(t.TempDir(), "litch-test", &testTailStorage{}); err != nil {
 		t.Fatal(err)
+	}
+	TailscaleNetworkChanged("offline-test", false)
+	if tailNode.server != nil {
+		t.Fatal("网络通知不应自动注册节点")
 	}
 	buffer := &tailLogBuffer{}
 	log := logtail.NewLogger(logtail.Config{Collection: "test", BaseURL: "http://127.0.0.1:9", Buffer: buffer, Stderr: io.Discard}, logger.Discard)
@@ -156,23 +213,31 @@ func TestTailDialRequiresLoginAndDirectStillWorks(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if _, err := dialSSH(ctx, "127.0.0.1", port, true); err == nil || !strings.Contains(err.Error(), "[tailscaleLogin]") {
+	if _, err := dialSSH(ctx, "127.0.0.1", port, "always"); err == nil || !strings.Contains(err.Error(), "[tailscaleLogin]") {
 		t.Fatal(err)
 	}
-	direct, err := dialSSH(ctx, "127.0.0.1", port, false)
+	direct, err := dialSSH(ctx, "127.0.0.1", port, "never")
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = direct.Close()
+	auto, err := dialSSH(ctx, "127.0.0.1", port, "auto")
+	if err != nil {
+		t.Fatal("未登录自动模式应保留系统连接", err)
+	}
+	_ = auto.Close()
+	if ConnectionRoute("127.0.0.1", port, "auto") != "system" {
+		t.Fatal("系统路由记录丢失")
+	}
 	pauseTailscale(true)
-	if _, err := dialSSH(ctx, "127.0.0.1", port, true); err == nil || !strings.Contains(err.Error(), "[tailscalePaused]") {
+	if _, err := dialSSH(ctx, "127.0.0.1", port, "always"); err == nil || !strings.Contains(err.Error(), "[tailscalePaused]") {
 		t.Fatal(err)
 	}
 	pauseTailscale(false)
 	if err := TailscaleClear(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ProbeHost("127.0.0.1", port, "user", true); err == nil || !strings.Contains(err.Error(), "[tailscaleLogin]") {
+	if _, err := ProbeHost("127.0.0.1", port, "user", "always"); err == nil || !strings.Contains(err.Error(), "[tailscaleLogin]") {
 		t.Fatal(err)
 	}
 }

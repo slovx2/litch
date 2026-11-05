@@ -1,10 +1,13 @@
 // 设备几页共用的小块：没连上的原因卡、公钥卡、主机钥匙的确认、线色选择、一行“名字：值”。
 import { type ConnectFailureView, type RemoteTarget, WIRES, type WireColor } from '@litch/core'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import * as Clipboard from 'expo-clipboard'
 import { type ReactNode, useCallback, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { HostKey } from '../../../modules/litch-ssh/src'
 import { ssh } from '../../../modules/litch-ssh/src'
+import type { RootStackParamList } from '../../nav/routes'
 import { knownHost, trustHost } from '../../platform/known-hosts'
 import { sshProblem } from '../../platform/ssh-errors'
 import { tailscaleErrorKey } from '../../platform/tailscale'
@@ -108,6 +111,7 @@ export function FailureCard({
   const t = useT()
   const [open, setOpen] = useState(false)
   const steps = stepsOf(failure, target)
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   return (
     <View
       style={[
@@ -126,6 +130,14 @@ export function FailureCard({
       <Text style={[styles.note, { color: theme.c.ink }]} testID="failure:reason">
         {reasonText(failure, t)}
       </Text>
+      {/\[tailscale(AutoLogin|Login)\]/.test(failure.detail ?? '') ? (
+        <Button
+          label={`↗ ${t('tailscale.login')}`}
+          kind="plain"
+          testID="failure:tailscale"
+          onPress={() => navigation.navigate('Tailscale')}
+        />
+      ) : null}
       {steps.map((step) => (
         <View key={step.text} style={styles.block}>
           <Text style={[styles.note, { color: theme.c.ink2 }]}>{t(step.text)}</Text>
@@ -166,7 +178,12 @@ interface Pending {
  * 返回的 confirm 解析成“现在信任的是对面给的这一个”；dialog 要放进页面里
  */
 export function useHostTrust(): {
-  confirm(host: string, port: number, user: string, tailscale?: boolean): Promise<boolean>
+  confirm(
+    host: string,
+    port: number,
+    user: string,
+    tailscale?: 'auto' | 'always' | 'never',
+  ): Promise<boolean>
   dialog: ReactNode
   error: string | null
   notice: string | null
@@ -177,7 +194,12 @@ export function useHostTrust(): {
   const [notice, setNotice] = useState<string | null>(null)
   const current = useRef<Pending | null>(null)
   const confirm = useCallback(
-    async (host: string, port: number, user: string, tailscale = false) => {
+    async (
+      host: string,
+      port: number,
+      user: string,
+      tailscale: 'auto' | 'always' | 'never' = 'auto',
+    ) => {
       setError(null)
       setNotice(null)
       let key: HostKey

@@ -48,7 +48,7 @@ func main() {
 				Host      string `json:"host"`
 				Port      int    `json:"port"`
 				User      string `json:"user"`
-				Tailscale bool   `json:"tailscale"`
+				Tailscale string `json:"tailscale"`
 			}
 			if err := json.Unmarshal(c.Target, &target); err != nil {
 				reply("", err)

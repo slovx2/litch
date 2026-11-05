@@ -3,6 +3,7 @@ import { requireOptionalNativeModule } from 'expo-modules-core'
 
 export interface Native {
   tailscaleAvailable(): boolean
+  connectionRoute(host: string, port: number, mode: string): Promise<string>
   tailscaleLogin(controlURL: string): Promise<string>
   tailscaleStatus(): Promise<string>
   tailscaleLogout(): Promise<void>
@@ -15,7 +16,7 @@ export interface Native {
   ): { remove(): void }
   batteryOptimization(): 'exempt' | 'restricted' | 'unknown'
   openBackgroundSettings(): boolean
-  probeHost(host: string, port: number, user: string, tailscale: boolean): Promise<string>
+  probeHost(host: string, port: number, user: string, tailscale: string): Promise<string>
   runScript(target: string, script: string, marker: string): Promise<string>
   openStream(id: string, target: string, script: string, marker: string): Promise<string>
   streamState(id: string): Promise<string>

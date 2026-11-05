@@ -15,9 +15,21 @@ class LitchSshModule : Module() {
   private val lifecycle = ConnectionLifecycle()
   private var application: Application? = null
   private var tailscaleNetwork: TailscaleNetwork? = null
+  private var lastTailState: String? = null
+
+  private fun observeTailState(encoded: String): String {
+    val status = JSONObject(encoded)
+    // 只记录状态和是否已有登录入口，绝不记录 URL、网络图或节点秘密。
+    val state = "state=${status.optString("state")} authURL=${status.optString("authURL").isNotEmpty()}"
+    if (state != lastTailState) {
+      Log.i("LitchTailscale", state)
+      lastTailState = state
+    }
+    return encoded
+  }
 
   private fun prepareNetwork(target: String) {
-    if (JSONObject(target).optBoolean("tailscale", false)) tailscaleNetwork?.attach()
+    if (JSONObject(target).optString("tailscale", "auto") != "never") tailscaleNetwork?.attach()
   }
 
   override fun definition() = ModuleDefinition {
@@ -66,16 +78,19 @@ class LitchSshModule : Module() {
     }
 
     Function("tailscaleAvailable") { tailscaleNetwork != null }
-    AsyncFunction("tailscaleStatus") { Sshtransport.tailscaleStatus() }
+    AsyncFunction("connectionRoute") { host: String, port: Int, mode: String ->
+      Sshtransport.connectionRoute(host, port.toLong(), mode)
+    }
+    AsyncFunction("tailscaleStatus") { observeTailState(Sshtransport.tailscaleStatus()) }
     AsyncFunction("tailscaleLogin") { controlURL: String ->
       tailscaleNetwork?.attach()
-      Sshtransport.tailscaleLogin(controlURL)
+      observeTailState(Sshtransport.tailscaleLogin(controlURL))
     }
     AsyncFunction("tailscaleLogout") { Sshtransport.tailscaleLogout() }
     AsyncFunction("tailscaleClear") { Sshtransport.tailscaleClear() }
 
-    AsyncFunction("probeHost") { host: String, port: Int, user: String, tailscale: Boolean ->
-      if (tailscale) tailscaleNetwork?.attach()
+    AsyncFunction("probeHost") { host: String, port: Int, user: String, tailscale: String ->
+      if (tailscale != "never") tailscaleNetwork?.attach()
       Sshtransport.probeHost(host, port.toLong(), user, tailscale)
     }
 

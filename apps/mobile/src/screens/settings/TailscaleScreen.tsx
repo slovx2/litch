@@ -1,3 +1,4 @@
+import { type DeviceView, keys } from '@litch/core'
 import { useIsFocused } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -10,7 +11,8 @@ import {
   tailscaleAvailable,
   tailscaleErrorKey,
 } from '../../platform/tailscale'
-import { useChannel } from '../../shell/services'
+import { loginTailscale } from '../../platform/tailscale-login'
+import { useChannel, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Field, Row } from '../../ui/kit/controls'
 import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
@@ -24,12 +26,16 @@ export function TailscaleScreen({ navigation, route }: Props) {
   const t = useT()
   const theme = useTheme()
   const channel = useChannel()
+  const replica = useReplica()
   const focused = useIsFocused()
   const available = tailscaleAvailable()
   const [status, setStatus] = useState<TailscaleStatus | null>(null)
   const [server, setServer] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [waiting, setWaiting] = useState(false)
+  const [advanced, setAdvanced] = useState(false)
+  const login = useRef<AbortController | null>(null)
   const [confirm, setConfirm] = useState<'logout' | 'clear' | null>(null)
   const edited = useRef(false)
   const connected = useRef(false)
@@ -39,27 +45,34 @@ export function TailscaleScreen({ navigation, route }: Props) {
     alive.current = true
     return () => {
       alive.current = false
+      login.current?.abort()
     }
   }, [])
   const accept = useCallback(
     (next: TailscaleStatus) => {
       if (!alive.current) return
       setStatus(next)
+      if (next.state === 'connected' || next.state === 'needsApproval') {
+        setWaiting(false)
+        setError(null)
+      }
       if (!edited.current)
         setServer(next.controlURL === 'https://controlplane.tailscale.com' ? '' : next.controlURL)
       if (next.state === 'connected' && !connected.current) {
         for (const device of savedRemotes()) {
-          if (device.target.kind === 'host' && device.target.tailscale) {
+          if (device.target.kind === 'host' && device.target.tailscale !== 'never') {
+            if (replica.store.get<DeviceView>(keys.device(device.id))?.connection === 'online')
+              continue
             void channel.command('device.reconnect', { deviceId: device.id }).catch(() => {})
           }
         }
       }
       connected.current = next.state === 'connected'
     },
-    [channel],
+    [channel, replica],
   )
   const refresh = useCallback(async () => {
-    if (!available || refreshing.current) return
+    if (!available || refreshing.current || login.current) return
     refreshing.current = true
     try {
       accept(await tailscale.status())
@@ -87,8 +100,19 @@ export function TailscaleScreen({ navigation, route }: Props) {
     setError(null)
     setBusy(true)
     try {
-      if (action === 'login') accept(await tailscale.login(server))
-      else {
+      if (action === 'login') {
+        const controller = new AbortController()
+        login.current = controller
+        await loginTailscale(server, {
+          signal: controller.signal,
+          accept,
+          open: async (url) => {
+            await Linking.openURL(url)
+            if (alive.current) setWaiting(true)
+          },
+        })
+      } else {
+        setWaiting(false)
         await tailscale[action]()
         if (action === 'clear') {
           edited.current = false
@@ -99,6 +123,7 @@ export function TailscaleScreen({ navigation, route }: Props) {
     } catch (failed) {
       if (alive.current) setError(t(tailscaleErrorKey(failed) ?? 'tailscale.error.other'))
     } finally {
+      login.current = null
       if (alive.current) setBusy(false)
     }
   }
@@ -106,61 +131,67 @@ export function TailscaleScreen({ navigation, route }: Props) {
   return (
     <Screen title={t('tailscale.title')} testID="tailscale">
       <KeyboardFormScrollView contentContainerStyle={styles.body}>
-        <Text style={note}>{t('tailscale.scope')}</Text>
         {!available ? (
           <Text style={note} testID="tailscale:unavailable">
             {t('tailscale.unavailable')}
           </Text>
         ) : (
           <>
-            <Text
-              style={[note, { color: status?.state === 'connected' ? theme.c.ok : theme.c.ink }]}
-              testID="tailscale:state"
+            <View
+              style={[
+                styles.card,
+                {
+                  backgroundColor: theme.c.panel,
+                  borderColor: theme.c.line1,
+                  borderRadius: theme.radius.m,
+                },
+              ]}
             >
-              {t(`tailscale.state.${status?.state ?? 'stopped'}`)}
-            </Text>
-            {status?.hostname ? <Row title={t('tailscale.node')} detail={status.hostname} /> : null}
-            {status?.tailnet ? (
-              <Row title={t('tailscale.tailnet')} detail={status.tailnet} />
+              <Text
+                style={[note, { color: status?.state === 'connected' ? theme.c.ok : theme.c.ink }]}
+                testID="tailscale:state"
+              >
+                {status ? t(`tailscale.state.${status.state}`) : t('tailscale.checking')}
+              </Text>
+              {status?.hostname ? (
+                <Identity label={t('tailscale.node')} value={status.hostname} />
+              ) : null}
+              {status?.tailnet ? (
+                <Identity label={t('tailscale.tailnet')} value={status.tailnet} />
+              ) : null}
+            </View>
+            <Text style={note}>{t('tailscale.scope')}</Text>
+            {status?.state === 'needsApproval' ? (
+              <Text style={note}>{t('tailscale.error.approval')}</Text>
             ) : null}
-            <Field
-              label={t('tailscale.control')}
-              hint={t('tailscale.control.hint')}
-              value={server}
-              onChangeText={(value) => {
-                edited.current = true
-                setServer(value)
-              }}
-              keyboardType="url"
-              testID="tailscale:control"
-            />
+            {busy || waiting ? (
+              <Text style={note} testID="tailscale:progress">
+                {t(busy ? 'tailscale.preparing' : 'tailscale.waiting')}
+              </Text>
+            ) : null}
             <View style={styles.actions}>
-              {status?.state !== 'connected' ? (
+              {status && status.state !== 'connected' && status.state !== 'needsApproval' ? (
                 <Button
-                  label={`↗ ${t('tailscale.login')}`}
+                  label={`↗ ${t(waiting ? 'tailscale.open' : 'tailscale.login')}`}
                   busy={busy}
                   testID="tailscale:login"
-                  onPress={() => void act('login')}
+                  onPress={() => {
+                    if (waiting && status.authURL)
+                      void Linking.openURL(status.authURL).catch(() =>
+                        setError(t('tailscale.error.other')),
+                      )
+                    else void act('login')
+                  }}
                 />
               ) : null}
               <Button
                 label={`↻ ${t('tailscale.refresh')}`}
                 kind="plain"
+                disabled={busy}
                 onPress={() => void refresh()}
                 testID="tailscale:refresh"
               />
             </View>
-            {status?.authURL && status.state !== 'connected' ? (
-              <Button
-                label={`↗ ${t('tailscale.open')}`}
-                testID="tailscale:open"
-                onPress={() =>
-                  void Linking.openURL(status.authURL).catch(() =>
-                    setError(t('tailscale.error.other')),
-                  )
-                }
-              />
-            ) : null}
             <View style={styles.actions}>
               <Button
                 label={`↪ ${t('tailscale.logout')}`}
@@ -177,6 +208,26 @@ export function TailscaleScreen({ navigation, route }: Props) {
                 testID="tailscale:clear"
               />
             </View>
+            <Row
+              title={t('tailscale.control')}
+              left={<Text style={note}>{advanced ? '▾' : '▸'}</Text>}
+              onPress={() => setAdvanced(!advanced)}
+              testID="tailscale:advanced"
+            />
+            {advanced ? (
+              <Field
+                label={t('tailscale.control')}
+                hint={t('tailscale.control.hint')}
+                value={server}
+                onChangeText={(value) => {
+                  edited.current = true
+                  setServer(value)
+                }}
+                editable={!busy}
+                keyboardType="url"
+                testID="tailscale:control"
+              />
+            ) : null}
           </>
         )}
         {error ? (
@@ -207,7 +258,30 @@ export function TailscaleScreen({ navigation, route }: Props) {
     </Screen>
   )
 }
+
+function Identity({ label, value }: { label: string; value: string }) {
+  const { c, font } = useTheme()
+  return (
+    <View style={styles.identity}>
+      <Text style={{ color: c.ink3, fontFamily: font.ui, fontSize: font.size.body }}>{label}</Text>
+      <Text
+        selectable
+        style={{
+          color: c.ink,
+          fontFamily: font.ui,
+          fontSize: font.size.body,
+          flexShrink: 1,
+          textAlign: 'right',
+        }}
+      >
+        {value}
+      </Text>
+    </View>
+  )
+}
 const styles = StyleSheet.create({
-  body: { padding: 16, paddingBottom: 40, gap: 16 },
+  body: { padding: 16, paddingBottom: 40, gap: 12 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  card: { padding: 14, gap: 12, borderWidth: 1 },
+  identity: { flexDirection: 'row', justifyContent: 'space-between', gap: 16 },
 })

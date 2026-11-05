@@ -67,7 +67,8 @@ func TestTailnetSSHWithLocalControl(t *testing.T) {
 			}()
 		}
 	}()
-	if err := TailscaleInitialize(t.TempDir(), "client", &testTailStorage{}); err != nil {
+	directory, storage := t.TempDir(), &testTailStorage{}
+	if err := TailscaleInitialize(directory, "client", storage); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
@@ -107,7 +108,7 @@ func TestTailnetSSHWithLocalControl(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, err := ProbeHost("server", 2222, "test", true)
+	encoded, err := ProbeHost("server", 2222, "test", "always")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,10 +119,39 @@ func TestTailnetSSHWithLocalControl(t *testing.T) {
 	if host.Fingerprint != ssh.FingerprintSHA256(sshServer.host) {
 		t.Fatal("探测没有经过同一个 SSH 主机")
 	}
-	target := Target{Host: "server.litch.test", Port: 2222, User: "test", PrivateKey: private, HostFingerprint: host.Fingerprint, Tailscale: true}
+	// 自动档按网络图匹配短名/完整名，与系统 DNS 或外部 VPN 路由无关。
+	for _, name := range []string{"server", "server.litch.test", before.TailscaleIPs[0].String()} {
+		selected, err := selectTailRoute(ctx, name, 2222, "auto")
+		if err != nil || !selected {
+			t.Fatal("自动档未选内嵌网络", name, err)
+		}
+	}
+	if selected, err := selectTailRoute(ctx, "server", 2222, "never"); err != nil || selected {
+		t.Fatal("从不档仍走内嵌", err)
+	}
+	if selected, err := selectTailRoute(ctx, "example.com", 2222, "auto"); err != nil || selected {
+		t.Fatal("无关地址误入内嵌", err)
+	}
+	if _, err := ProbeHost("server", 2222, "test", "auto"); err != nil {
+		t.Fatal(err)
+	}
+	if ConnectionRoute("server", 2222, "auto") != "tailscale" {
+		t.Fatal("没有记录实际路由")
+	}
+	target := Target{Host: "server.litch.test", Port: 2222, User: "test", PrivateKey: private, HostFingerprint: host.Fingerprint, Tailscale: "always"}
 	client, err := connectSSH(ctx, target)
 	if err != nil {
 		t.Fatal(err)
+	}
+	serverBeforeNetworkChange := tailNode.server
+	for _, network := range []string{"wifi-vpn", "cellular-vpn", "cellular-vpn", "wifi-vpn-again"} {
+		TailscaleNetworkChanged(network, true)
+		if tailNode.server != serverBeforeNetworkChange {
+			t.Fatal("切网重建了节点")
+		}
+		if _, err := ProbeHost("server", 2222, "test", "auto"); err != nil {
+			t.Fatal("切网后连接失败", err)
+		}
 	}
 	wrong := target
 	wrong.HostFingerprint = "SHA256:wrong"
@@ -136,6 +166,19 @@ func TestTailnetSSHWithLocalControl(t *testing.T) {
 	}
 	done := make(chan struct{})
 	go func() { _ = client.Wait(); close(done) }()
+	// 登录跳浏览器时，后台期限只关 SSH gate，不得中断等待认证的节点。
+	tailNode.Lock()
+	protectTailLoginLocked()
+	server := tailNode.server
+	tailNode.Unlock()
+	pauseTailscale(true)
+	if tailNode.server != server {
+		t.Fatal("浏览器认证被后台暂停打断")
+	}
+	pauseTailscale(false)
+	tailNode.Lock()
+	tailNode.loginUntil = time.Time{}
+	tailNode.Unlock()
 	pauseTailscale(true)
 	select {
 	case <-done:
@@ -162,6 +205,34 @@ func TestTailnetSSHWithLocalControl(t *testing.T) {
 		select {
 		case <-ctx.Done():
 			t.Fatal("恢复超时")
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	// 模拟进程重启：丢掉所有内存状态，只用加密存储重建；状态查询自行恢复。
+	if err := TailscaleStop(); err != nil {
+		t.Fatal(err)
+	}
+	tailNode.Lock()
+	tailNode.storage, tailNode.store = nil, nil
+	tailNode.Unlock()
+	if err := TailscaleInitialize(directory, "client", storage); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := TailscaleStatus(); err != nil {
+		t.Fatal(err)
+	}
+	lc, _ = tailNode.server.LocalClient()
+	for {
+		after, err := lc.Status(ctx)
+		if err == nil && after.BackendState == "Running" && after.Self != nil {
+			if after.Self.ID != before.Self.ID || after.TailscaleIPs[0] != before.TailscaleIPs[0] {
+				t.Fatal("冷启动注册了新节点")
+			}
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("冷启动恢复超时", ctx.Err())
 		case <-time.After(20 * time.Millisecond):
 		}
 	}

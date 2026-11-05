@@ -63,7 +63,7 @@ export function AddDeviceScreen({ navigation }: Props) {
   const theme = useTheme()
   const channel = useChannel()
   const [host, setHost] = useState('')
-  const [tailscale, setTailscale] = useState(false)
+  const [tailscale, setTailscale] = useState<'auto' | 'always' | 'never'>('auto')
   const checkEpoch = useRef(0)
   const [port, setPort] = useState('22')
   const [user, setUser] = useState('')
@@ -95,7 +95,7 @@ export function AddDeviceScreen({ navigation }: Props) {
       port: portNumber === 22 ? null : portNumber,
       user: user.trim(),
       keyFile: keyId,
-      ...(tailscale ? { tailscale: true } : {}),
+      tailscale,
     }
   }
   // 改了怎么连，上一次的检查就不算数了
@@ -163,7 +163,9 @@ export function AddDeviceScreen({ navigation }: Props) {
               setTailscale(value)
               setResult(null)
             }}
-            configure={() => navigation.navigate('Tailscale', { adding: true })}
+            configure={() => {
+              navigation.navigate('Tailscale', { adding: true })
+            }}
           />
           <View style={styles.form}>
             <Field
@@ -227,6 +229,15 @@ export function AddDeviceScreen({ navigation }: Props) {
               <Text style={[styles.note, { color: theme.c.err }]} testID="add:error">
                 {trust.error ?? error}
               </Text>
+            ) : null}
+            {trust.error === t('tailscale.error.switch') ||
+            error?.includes('[tailscaleAutoLogin]') ? (
+              <Button
+                label={`↗ ${t('tailscale.login')}`}
+                kind="plain"
+                testID="add:tailscale-login"
+                onPress={() => navigation.navigate('Tailscale', { adding: true })}
+              />
             ) : null}
           </View>
           {result?.ok ? <CheckResult result={result} /> : null}

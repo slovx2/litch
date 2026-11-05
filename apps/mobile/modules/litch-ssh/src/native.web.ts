@@ -9,6 +9,7 @@ const unreachable = () => Promise.reject(new Error('[unreachable] 界面预览�
 
 export const native: Native = {
   tailscaleAvailable: () => false,
+  connectionRoute: async () => '',
   tailscaleLogin: unreachable,
   tailscaleStatus: unreachable,
   tailscaleLogout: unreachable,

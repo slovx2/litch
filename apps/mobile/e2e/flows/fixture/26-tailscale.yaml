@@ -12,15 +12,19 @@ tags: [fixture, native]
 - tapOn:
     id: devices:add
 - assertVisible:
-    id: tailscale:switch
+    id: tailscale:mode
 - tapOn:
-    id: tailscale:switch
+    id: tailscale:mode
+- tapOn:
+    id: tailscale:mode:always
 - tapOn:
     id: tailscale:guide
 - assertVisible:
     id: tailscale:state
 - assertNotVisible:
     id: tailscale:unavailable
+- tapOn:
+    id: tailscale:advanced
 - tapOn:
     id: tailscale:control
 - inputText: http://127.0.0.1:9
@@ -44,6 +48,10 @@ tags: [fixture, native]
     timeout: 15000
 - assertNotVisible:
     id: tailscale:error
+- extendedWaitUntil:
+    visible:
+      id: tailscale:error
+    timeout: 40000
 - tapOn:
     id: tailscale:clear
 - tapOn:

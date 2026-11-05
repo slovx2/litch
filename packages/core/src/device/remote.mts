@@ -264,8 +264,8 @@ export function checkTarget(value: unknown): RemoteTarget {
     }
     if (keyFile.length > 1024) refuse('密钥文件路径过长')
   }
-  if (raw.tailscale !== undefined && typeof raw.tailscale !== 'boolean') {
-    refuse('Tailscale 连接开关必须为布尔值')
+  if (raw.tailscale !== undefined && !['auto', 'always', 'never'].includes(String(raw.tailscale))) {
+    refuse('Tailscale 连接方式无效')
   }
   return {
     kind: 'host',
@@ -273,7 +273,9 @@ export function checkTarget(value: unknown): RemoteTarget {
     port,
     user,
     keyFile,
-    ...(typeof raw.tailscale === 'boolean' ? { tailscale: raw.tailscale } : {}),
+    ...(raw.tailscale !== undefined
+      ? { tailscale: raw.tailscale as 'auto' | 'always' | 'never' }
+      : {}),
   }
 }
 
@@ -296,7 +298,7 @@ export function sameTarget(a: RemoteTarget, b: RemoteTarget): boolean {
     a.port === b.port &&
     a.user === b.user &&
     a.keyFile === b.keyFile &&
-    (a.tailscale ?? false) === (b.tailscale ?? false)
+    (a.tailscale ?? 'auto') === (b.tailscale ?? 'auto')
   )
 }
 
@@ -311,7 +313,13 @@ export function checkSaved(value: unknown): SavedDevices {
       const { id, name, target, wire } = entry as Record<string, unknown>
       if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(id) || id === 'local') continue
       if (remotes.some((remote) => remote.id === id)) continue
-      const checked = checkTarget(target)
+      // 布尔连接选项迁移到三档：曾明确开启的保留总是，其余采用新的自动默认值。
+      const old = target as Record<string, unknown> | null
+      const migrated =
+        old?.kind === 'host' && typeof old.tailscale === 'boolean'
+          ? { ...old, tailscale: old.tailscale ? 'always' : 'auto' }
+          : target
+      const checked = checkTarget(migrated)
       remotes.push({
         id,
         name: typeof name === 'string' && name.trim() ? name.trim() : defaultName(checked),

@@ -10,6 +10,19 @@ import {
   tailscaleErrorKey,
 } from '../src/platform/tailscale.ts'
 
+test('审批、恢复中、网络失败与登录提示分别显示，只有暂时网络错误自动重试', () => {
+  for (const [code, key, retriable] of [
+    ['tailscaleApproval', 'approval', false],
+    ['tailscaleConnecting', 'connecting', true],
+    ['tailscaleConnect', 'connect', true],
+    ['tailscaleAutoLogin', 'switch', false],
+  ]) {
+    const error = new Error(`[unreachable] [${code}] test`)
+    assert.equal(tailscaleErrorKey(error), `tailscale.error.${key}`)
+    assert.equal(sshFailure(error).retriable, retriable)
+  }
+})
+
 test('Tailscale 控制地址：默认、HTTPS Headscale、拒绝明文与凭据', () => {
   assert.equal(controlURL(''), '')
   assert.equal(controlURL(' https://headscale.example/ '), 'https://headscale.example')
@@ -66,16 +79,16 @@ test('指纹探测与所有 SSH 操作传递同一网络选择，默认仍为直
     },
   }
   await ssh.probeHost('work', 22, 'user')
-  await ssh.probeHost('work', 22, 'user', true)
+  await ssh.probeHost('work', 22, 'user', 'always')
   assert.deepEqual(probes, [
-    ['work', 22, 'user', false],
-    ['work', 22, 'user', true],
+    ['work', 22, 'user', 'auto'],
+    ['work', 22, 'user', 'always'],
   ])
   const target = {
     host: 'work',
     port: 22,
     user: 'user',
-    tailscale: true,
+    tailscale: 'always',
     privateKey: 'test',
     passphrase: '',
     hostFingerprint: 'pinned',

@@ -25,6 +25,7 @@ public final class LitchSshModule: Module {
       SshtransportSetConnectionPolicyObserver(nil)
       self?.lifecycle.detach()
       self?.observer = nil
+      TailscaleRuntime.shared.stopNetworkMonitor()
       try? goVoid { SshtransportTailscaleStop($0) }
     }
     Function("setBackgroundTimeout") { (minutes: Int) in
@@ -34,6 +35,9 @@ public final class LitchSshModule: Module {
     Function("batteryOptimization") { "unknown" }
     Function("openBackgroundSettings") { false }
     Function("tailscaleAvailable") { true }
+    AsyncFunction("connectionRoute") { (host: String, port: Int, mode: String) in
+      SshtransportConnectionRoute(host, port, mode)
+    }
     AsyncFunction("tailscaleStatus") { try TailscaleRuntime.shared.status() }
     AsyncFunction("tailscaleLogin") { (controlURL: String) in
       try TailscaleRuntime.shared.prepare()
@@ -44,7 +48,7 @@ public final class LitchSshModule: Module {
       try TailscaleRuntime.shared.prepare()
       try goVoid { SshtransportTailscaleClear($0) }
     }
-    AsyncFunction("probeHost") { (host: String, port: Int, user: String, tailscale: Bool) in
+    AsyncFunction("probeHost") { (host: String, port: Int, user: String, tailscale: String) in
       try goString { SshtransportProbeHost(host, port, user, tailscale, $0) }
     }
     AsyncFunction("runScript") { (target: String, script: String, marker: String) in
