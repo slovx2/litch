@@ -1071,7 +1071,7 @@ async function send(tree: SessionTree, args: Record<string, unknown>, call: Devi
       // 回合刚好结束了：当新的一句发
     }
   }
-  await link.request('turn/start', { threadId, input })
+  await link.request('turn/start', { threadId, input }, { restartable: true })
   tree.store.addContact(call.threadId, threadId)
   return { thread_id: threadId, note: 'Sent; it started a new turn.' }
 }

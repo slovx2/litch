@@ -500,6 +500,8 @@ export class DeviceServer {
       backgroundWorking: (threadId) =>
         this.nativeBackground?.working(threadId) ?? this.background.running(threadId),
       continuationPending: (threadId) => this.nativeBackground?.pending(threadId) ?? false,
+      restarting: (id) => this.restart?.blocked(this.index.lookup(id) ?? '', id) ?? false,
+      restartInterrupted: (id, turn) => this.restart?.interrupting(id, turn) ?? false,
       backgroundRunning: (threadId) => this.background.running(threadId),
       backgroundTasks: (threadId) => this.background.tasks(threadId),
       backgroundWakes: (threadId) => this.background.wakes(threadId),
@@ -667,11 +669,18 @@ export class DeviceServer {
       open: (harness) => this.openEngineLink(harness, { waitMs: 20000, restarting: true }),
       excluded: (id) =>
         this.index.recent(id)?.archived === true ||
-        this.sessionTree.store.parentOf(id) !== null ||
-        this.managers.lines.mark(id) !== null ||
+        (this.managers.store.forThread(id)?.status ?? 'active') !== 'active' ||
+        this.managers.resets.held(id) ||
+        this.managers.resets.refusal(id) !== null ||
         this.sessionTree.pending.list(id).length > 0 ||
         this.approvals.list(id).length > 0 ||
         this.background.running(id) > 0,
+      resumed: (_harness, id) => this.sessionTree.restartContinuing(id),
+      settled: () => this.sessionTree.checkAll(),
+      event: (harness, method, params) => {
+        if (method === 'turn/started' || method === 'turn/completed')
+          this.sessionTree.turnEvent(harness, method, params)
+      },
       log,
     })
     this.host = {
@@ -1135,6 +1144,25 @@ export class DeviceServer {
         )
       )
         throw new Error('设备正在准备重启，暂不启动工作')
+      const threadId =
+        isObject(params) && typeof params.threadId === 'string' ? params.threadId : null
+      if (!restarting && threadId && method === 'turn/interrupt') this.restart?.cancel(threadId)
+      const token =
+        !restarting && threadId && method === 'turn/start' && options?.restartable
+          ? this.restart?.input(link.harness, threadId)
+          : undefined
+      // 配额等待期间也可能开始重启；真正写协议前再查，不能让已排队的经理事件越过屏障。
+      const guarded =
+        !restarting && ['turn/start', 'turn/steer', 'thread/resume'].includes(method)
+          ? {
+              ...options,
+              beforeSend: () => {
+                if (this.restart?.blocked(link.harness, threadId ?? undefined))
+                  throw new Error('设备正在准备重启，暂不启动工作')
+                options?.beforeSend?.()
+              },
+            }
+          : options
       const release = method === 'turn/start' ? this.power?.begin(link.harness) : undefined
       try {
         const ready =
@@ -1143,7 +1171,7 @@ export class DeviceServer {
             : params
         const result = link.native
           ? await this.nativeBackground.request(method, ready, (value) =>
-              request(method, value, options),
+              request(method, value, guarded),
             )
           : method === 'thread/resume' &&
               isObject(ready) &&
@@ -1151,11 +1179,12 @@ export class DeviceServer {
             ? await this.resumeTools.resume(
                 link.harness,
                 ready,
-                (asked, value) => request(asked, value, options),
+                (asked, value) => request(asked, value, guarded),
                 Array.isArray(ready.dynamicTools) &&
                   this.managers.resets.held(String(ready.threadId)),
               )
-            : await request(method, ready, options)
+            : await request(method, ready, guarded)
+        if (token && threadId) this.restart.accepted(threadId, token, result)
         if (isObject(ready))
           this.sessionTree.store.rememberCreatedTools(method, ready, result, link.native)
         if (link.native && isObject(ready)) {

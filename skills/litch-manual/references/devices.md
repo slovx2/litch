@@ -2,17 +2,18 @@
 
 ## 计划重启后的对话恢复
 
-Litch 发起升级、重启设备服务或强制重启一个 harness 时，会为符合条件的普通用户回合准备一次自动继续。
+Litch 发起升级、重启设备服务或强制重启一个 harness 时，会为符合条件的用户回合、Litch 子会话及运行中的经理回合准备一次自动继续。
 设备先中断旧回合并保存恢复记录；新服务启动后在原会话发消息，对话中显示“重启后自动继续”。桌面和手机都能看到，关闭客户端不影响已经准备好的恢复。
 
 设备恢复期间，客户端会自动重试订阅会话，不会将会话标成只读；待发消息在恢复后继续发送。
 重试仍失败时显示载入错误，可手动重试。
 
 工具结果未知也会继续，但自动消息要求模型先核实文件、进程与外部副作用，不得盲目重做；它不代表新的批准。
-用户停止、等待审批或回答、定时任务、子会话、经理、目标／队列续做和仍有后台任务的会话不自动恢复。
+用户停止、等待审批或回答、定时任务、目标／队列续做和仍有后台任务的会话不自动恢复。暂停、结束中、已结束或正在重置的经理不自动恢复；收尾事件仍由经理自己的流程处理。
+子会话恢复完成后，结果继续进入原父会话的回报队列。计划中断本身不产生完成回报，也不会另行重复唤醒父会话。
 不支持接回旧会话的 harness 保留中断状态；不能恢复的回合可由用户发送消息继续。
 
-每条用户工作最多自动续一次，恢复记录 24 小时过期。发送结果不明时不重试，避免重复执行。
+每条已授权工作最多自动续一次，恢复记录 24 小时过期。发送结果不明时不重试，避免重复执行。
 普通停止服务、退出应用时关闭后台服务、意外崩溃、强杀或断电不会新建恢复记录。
 命令行明确要在随后启动时恢复，可使用 `device-stop --resume-after-restart`；普通 `device-stop` 不续跑。
 
@@ -99,8 +100,8 @@ computer" 0.10.0, session trees and scheduled tasks 0.11.0, phone pairing 0.12.0
   commands to copy; a service run in the foreground or by a service manager (`brew services`, systemd)
   is installed but not restarted. This is desktop-only and not available through `scripts/litch`; the
   phone app only shows that the service is older.
-- **Restart device service** is in the device row's ⋯ menu in the sidebar (next to **Settings**, which
-  opens the device's detail page) and in the phone's device-list menu, for local and remote devices.
+- 本机设备服务等待换上应用自带版本时，设备详情的“设备服务”中同时提供“立即重试”和“立即换上”。“立即重试”只在空闲时更新；“立即换上”与远程设备使用同一确认框，列出被中断的工作，确认后停止旧进程并用自带版本重新启动。
+- **Restart device service** is in the device row's ⋯ menu in the sidebar, the desktop device details’ **Device service** section, and the phone's device-list menu, for local and remote devices.
   It asks the service to stop, waits until the old process has exited, starts it again and reconnects;
   the row shows "Restarting" and a note says whether it worked and why not. If any session is running a
   turn or a background task, Litch first lists the sessions that will be interrupted. 符合条件的普通回合

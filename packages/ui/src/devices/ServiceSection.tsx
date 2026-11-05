@@ -12,7 +12,8 @@ import { nameOf } from '../app/device.ts'
 import { Fold } from '../app/Fold.tsx'
 import { useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
-import { RemoteUpgradeNote } from './RemoteUpgrade.tsx'
+import { ForceConfirm, RemoteUpgradeNote } from './RemoteUpgrade.tsx'
+import { useRestart } from './RestartService.tsx'
 import {
   busyLine,
   endSteps,
@@ -23,6 +24,7 @@ import {
   pillOf,
   remotePillOf,
   replacedLine,
+  restartItemOf,
   type ServiceNotice,
   staleRemote,
   staleService,
@@ -56,6 +58,10 @@ interface NoteProps {
 /** 这一次连接换版本的结果：换上了新版，或者没换成的原因和该怎么办 */
 function UpgradeNote({ device, upgrade, notice, retrying, onRetry }: NoteProps) {
   const t = useT()
+  const { channel } = useServices()
+  const [forcing, setForcing] = useState(false)
+  const phase = device.restart?.phase.step
+  const canForce = device.restart?.blocked === null && phase !== 'starting' && phase !== 'stopping'
   if (notice === 'replaced') {
     const line = replacedLine(upgrade)
     return (
@@ -95,6 +101,15 @@ function UpgradeNote({ device, upgrade, notice, retrying, onRetry }: NoteProps) 
             >
               {t(retrying ? 'service.retrying' : 'service.retry')}
             </button>
+            <button
+              type="button"
+              className="mini"
+              data-act="service-force"
+              disabled={retrying || !canForce}
+              onClick={() => setForcing(true)}
+            >
+              {t('service.remote.force')}
+            </button>
           </div>
         </>
       ) : null}
@@ -109,6 +124,26 @@ function UpgradeNote({ device, upgrade, notice, retrying, onRetry }: NoteProps) 
         )
       ) : null}
       {notice === 'unsupported' || notice === 'failed' ? <Said detail={upgrade.detail} /> : null}
+      {forcing ? (
+        <ForceConfirm
+          device={device}
+          busy={upgrade.busy}
+          onClose={() => setForcing(false)}
+          onYes={() => {
+            setForcing(false)
+            channel
+              .command('device.restartService', { deviceId: device.id, mode: 'force' })
+              .catch((error: unknown) => {
+                showToast({
+                  id: 'service-force',
+                  tone: 'err',
+                  lifeMs: 6000,
+                  text: () => String(error),
+                })
+              })
+          }}
+        />
+      ) : null}
     </div>
   )
 }
@@ -124,6 +159,8 @@ export function ServiceSection({
   const { channel } = useServices()
   const t = useT()
   const id = useId()
+  const restart = useRestart(device.id, false)
+  const restartItem = restartItemOf(device)
   const { upgrade } = device
   const online = device.connection === 'online'
   // 没连着时在跑的是哪一份说不准：上次知道的不摆出来
@@ -291,6 +328,21 @@ export function ServiceSection({
               </>
             ) : null}
           </dl>
+          {restartItem ? (
+            <div className="cfail-acts">
+              <button
+                type="button"
+                className="mini"
+                data-act="service-restart"
+                disabled={!restartItem.enabled}
+                title={restartItem.note ? t(restartItem.note) : undefined}
+                onClick={restart.begin}
+              >
+                {t(restartItem.title)}
+              </button>
+            </div>
+          ) : null}
+          {restart.dialogs}
           {remote ? <RemoteUpgradeNote device={device} view={remote} /> : null}
           {upgrade && notice ? (
             <UpgradeNote

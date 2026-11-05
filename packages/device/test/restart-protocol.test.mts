@@ -148,3 +148,163 @@ test('真实内部连接在异步配额等待后再检查停止，撤票后没�
     await env.close()
   }
 })
+
+test('内部派出的子会话持久登记，重启只续一次，最终结果回报父会话', async () => {
+  const engine = new FakeEngine('claude-code')
+  const ctl = control(1, 'claude-code')
+  let env = rig({ 'claude-code': engine }, {}, { control: ctl, wrapUpReminder: false })
+  try {
+    const client = env.connect()
+    await client.initialize(['harness', 'sessionTree'])
+    const { thread: parent } = await client.call('thread/start', {
+      harness: 'claude-code',
+      cwd: env.stateDir,
+    })
+    const { threadId: child } = await client.call('litch/session/start', {
+      parentThreadId: parent.id,
+      kind: 'fresh',
+      title: '可恢复的子会话',
+      prompt: '继续任务',
+      wakeParent: true,
+    })
+    assert.deepEqual(await ctl.onAsk?.('restart.prepare'), { prepared: 1 })
+    assert.equal(
+      env.device.sessionTree.store.notes(parent.id).length,
+      0,
+      '计划中断不作为子会话完成回报',
+    )
+    await env.device.close()
+    env = rig(
+      { 'claude-code': engine },
+      {},
+      { stateDir: env.stateDir, control: control(2, 'claude-code'), wrapUpReminder: false },
+    )
+    for (let i = 0; i < 100 && engine.turns.get(child)?.length !== 2; i++) await settle()
+    assert.equal(engine.turns.get(child)?.length, 2)
+    const turn = engine.turns.get(child)?.at(-1)
+    assert.ok(turn)
+    engine.end(child, 'completed', '子会话恢复完成')
+    for (let i = 0; i < 100 && !env.device.sessionTree.store.notes(parent.id).length; i++)
+      await settle()
+    assert.ok(env.device.sessionTree.store.notes(parent.id).some((n) => n.threadId === child))
+    await env.device.restart.recover()
+    assert.equal(engine.turns.get(child)?.length, 2)
+  } finally {
+    await env.close()
+  }
+})
+
+test('内部连接显式停止撤销子会话资格；未标记的定时任务不登记', async () => {
+  const engine = new FakeEngine('pi')
+  const ctl = control(1)
+  const env = rig({ pi: engine }, {}, { control: ctl, wrapUpReminder: false })
+  try {
+    const link = await env.device.openEngineLink('pi')
+    const { thread } = await link.request('thread/start', { cwd: env.stateDir })
+    const { turn } = await link.request(
+      'turn/start',
+      { threadId: thread.id, input: [] },
+      { restartable: true },
+    )
+    await link.request('turn/interrupt', { threadId: thread.id, turnId: turn.id })
+    await link.request('turn/start', { threadId: thread.id, input: [] })
+    assert.deepEqual(await ctl.onAsk?.('restart.prepare'), { prepared: 0 })
+  } finally {
+    await env.close()
+  }
+})
+
+for (const status of ['active', 'paused', 'ending', 'ended', 'resetting'] as const) {
+  test(`经理恢复遵守状态：${status}；收尾与暂停不会被重启唤醒`, async () => {
+    const engine = new FakeEngine('claude-code')
+    const ctl = control(1, 'claude-code')
+    const env = rig({ 'claude-code': engine }, {}, { control: ctl, wrapUpReminder: false })
+    try {
+      const client = env.connect()
+      await client.initialize(['harness', 'litchManager'])
+      const { manager, threadId } = await client.call('litch/manager/create', {
+        cwd: env.stateDir,
+        harness: 'claude-code',
+        model: null,
+        effort: null,
+        name: '重启经理',
+        scope: '',
+        rules: '',
+        firstTask: '',
+        template: 'blank',
+        permission: null,
+        dispatch: {
+          harness: 'claude-code',
+          model: null,
+          effort: null,
+          worktree: false,
+          merge: 'manager',
+          maxRunningLines: 4,
+        },
+        contact: { desktopNotification: false, unanswered: 'wait' },
+      })
+      // 直接使用与经理持久事件相同的内部连接；不把 ending 的收尾事件算新授权。
+      const link = await env.device.openEngineLink('claude-code')
+      if (engine.current(threadId)) engine.end(threadId)
+      await link.request(
+        'turn/start',
+        { threadId, input: [{ type: 'text', text: '原任务' }] },
+        { restartable: true },
+      )
+      env.device.managers.store.saveManager({
+        ...manager,
+        status: status === 'resetting' ? 'active' : status,
+      })
+      if (status === 'resetting')
+        env.device.managers.store.saveReset({
+          managerId: manager.id,
+          oldThreadId: threadId,
+          applied: null,
+          phase: 'waiting',
+        })
+      assert.deepEqual(await ctl.onAsk?.('restart.prepare'), {
+        prepared: status === 'active' ? 1 : 0,
+      })
+    } finally {
+      await env.close()
+    }
+  })
+}
+
+test('经理事件已等配额时开始重启，排队请求不能越过准备屏障', async () => {
+  const engine = new FakeEngine('pi')
+  const ctl = control(1)
+  const env = rig({ pi: engine }, {}, { control: ctl, wrapUpReminder: false })
+  let release = () => {}
+  try {
+    const link = await env.device.openEngineLink('pi')
+    const { thread } = await link.request('thread/start', { cwd: env.stateDir })
+    let arrived = () => {}
+    const waiting = new Promise<void>((resolve) => {
+      arrived = resolve
+    })
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const reserve = env.device.managers.lines.reserve.bind(env.device.managers.lines)
+    env.device.managers.lines.reserve = async (...args) => {
+      arrived()
+      await gate
+      return reserve(...args)
+    }
+    const sending = link.request(
+      'turn/start',
+      { threadId: thread.id, input: [] },
+      { restartable: true },
+    )
+    const rejected = assert.rejects(sending, /设备正在准备重启/)
+    await waiting
+    await ctl.onAsk?.('restart.prepare')
+    release()
+    await rejected
+    assert.equal(engine.sent('turn/start').length, 0)
+  } finally {
+    release()
+    await env.close()
+  }
+})

@@ -73,6 +73,24 @@ export class RestartStore {
       }))
   }
 
+  interrupting(threadId: string, turnId: string): boolean {
+    return Boolean(
+      this.db
+        .prepare(
+          "SELECT 1 FROM restart_turns WHERE thread_id=? AND turn_id=? AND state IN ('preparing','ready','dispatching','sent')",
+        )
+        .get(threadId, turnId),
+    )
+  }
+
+  pending(threadId: string): boolean {
+    return Boolean(
+      this.db
+        .prepare("SELECT 1 FROM restart_turns WHERE thread_id=? AND state='ready'")
+        .get(threadId),
+    )
+  }
+
   state(row: RestartTurn): string | null {
     const result = this.db
       .prepare('SELECT state FROM restart_turns WHERE thread_id=? AND token=?')

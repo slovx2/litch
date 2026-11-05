@@ -1,7 +1,7 @@
 // 远程设备服务的一键升级：设备详情“设备服务”一节里远程设备的那一段，和它的两种确认。
 // 状态由核心记（DeviceView.remoteUpgrade），点了按钮、确认之后发 device.upgradeService；判断都在 service.ts 里。
 // 没确认就什么都不做；“立即换上”会打断进行中的事，要再确认一次，写明会打断什么（决 467）。
-import type { DeviceView, RemoteUpgradeView } from '@litch/core'
+import type { DeviceView, RemoteUpgradeView, ServiceUpgradeView } from '@litch/core'
 import { useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Confirm } from '../app/Confirm.tsx'
@@ -118,14 +118,14 @@ function UpgradeConfirm({
 }
 
 /** “立即换上”的第二次确认：会打断的事逐条写出来 */
-function ForceConfirm({
+export function ForceConfirm({
   device,
-  view,
+  busy,
   onYes,
   onClose,
 }: {
   device: DeviceView
-  view: RemoteUpgradeView
+  busy: ServiceUpgradeView['busy']
   onYes(): void
   onClose(): void
 }) {
@@ -140,7 +140,14 @@ function ForceConfirm({
     >
       <div className="svc-confirm" data-confirm="force">
         <span>{t('service.remote.force.note', { name: t.text(device.name) })}</span>
-        <BusyList device={device} view={view} />
+        <ul className="svc-busy">
+          {busy.map((entry) => {
+            const line = busyLine(entry, (id) => nameOf(device, id), t('list.comma'))
+            return (
+              <li key={`${entry.reason}:${entry.harnesses.join(',')}`}>{t(line.key, line.args)}</li>
+            )
+          })}
+        </ul>
         <span>{t('service.remote.force.clients')}</span>
       </div>
     </Confirm>
@@ -314,7 +321,7 @@ export function RemoteUpgradeNote({
       {forcing ? (
         <ForceConfirm
           device={device}
-          view={view}
+          busy={view.phase.step === 'waiting' ? view.phase.busy : []}
           onYes={() => {
             setForcing(false)
             upgrade('force')

@@ -290,3 +290,33 @@ test('恢复回合中的插话只撤销后续恢复资格，不擅自中断正�
     f.close()
   }
 })
+
+test('新进程启动先为全部 ready 票设屏障，尚未轮到的会话也不能被自动调度抢跑', async () => {
+  const f = fixture()
+  try {
+    f.userTurn()
+    await f.resume.prepare()
+    f.reboot()
+    assert.equal(f.resume.blocked('claude-code', 'thread'), true)
+    await f.resume.recover()
+    assert.equal(f.resume.blocked('claude-code', 'thread'), false)
+  } finally {
+    f.close()
+  }
+})
+
+test('准备阶段崩溃留下的 preparing 票不自动续，也不永久锁住手动订阅', async () => {
+  const f = fixture()
+  try {
+    f.userTurn()
+    const row = f.store.rows('observed')[0]
+    assert.ok(row)
+    f.store.prepare(row, 'old', 1000)
+    f.reboot()
+    await f.resume.recover()
+    assert.equal(f.sent.length, 0)
+    assert.equal(f.resume.blocked('claude-code', 'thread'), false)
+  } finally {
+    f.close()
+  }
+})

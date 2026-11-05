@@ -19,6 +19,9 @@ export interface RestartHost {
   service(): string
   open(harness: string): Promise<EngineLink>
   excluded(threadId: string): boolean
+  resumed?(harness: string, threadId: string): void
+  settled?(): void
+  event?(harness: string, method: string, params: Record<string, unknown>): void
   log(line: string): void
   now?(): number
 }
@@ -46,11 +49,19 @@ export class RestartResume {
     return !this.closed && this.host.store.move(row, from, to)
   }
 
+  interrupting(threadId: string, turnId: string): boolean {
+    return this.host.store.interrupting(threadId, turnId)
+  }
+
+  pending(threadId: string): boolean {
+    return this.restoring.has(threadId) || this.host.store.pending(threadId)
+  }
+
   blocked(harness: string, threadId?: string): boolean {
     return (
       this.scopes.has('*') ||
       this.scopes.has(harness) ||
-      (threadId !== undefined && this.restoring.has(threadId))
+      (threadId !== undefined && this.pending(threadId))
     )
   }
 
@@ -150,7 +161,6 @@ export class RestartResume {
       !thread ||
       thread.archived ||
       thread.ephemeral ||
-      thread.parentThreadId ||
       thread.litchNativeLineage ||
       (isObject(thread.source) && 'subAgent' in thread.source)
     )
@@ -199,7 +209,9 @@ export class RestartResume {
       .rows('observed')
       .filter((row) => !harness || row.harness === harness)
     const results = await Promise.all(rows.map((row) => this.prepareTurn(row)))
-    return { prepared: results.filter(Boolean).length }
+    const prepared = results.filter(Boolean).length
+    this.host.log(`计划重启准备（${scope}）：观察 ${rows.length}，可恢复 ${prepared}`)
+    return { prepared }
   }
 
   private async prepareTurn(row: RestartTurn): Promise<boolean> {
@@ -326,6 +338,7 @@ export class RestartResume {
       const ended = new Set<string>()
       let sentTurn: string | null = null
       watching.onNotification((method, params) => {
+        if (isObject(params)) this.host.event?.(row.harness, method, params)
         if (method !== 'turn/completed' || typeof params?.turn?.id !== 'string') return
         ended.add(params.turn.id)
         if (params.turn.id === sentTurn) {
@@ -349,13 +362,17 @@ export class RestartResume {
               !this.move(row, 'ready', 'dispatching')
             )
               throw new Error('恢复已被停止或新的用户输入取消')
+            this.host.resumed?.(row.harness, row.threadId)
           },
         },
       )
       if (typeof result?.turn?.id === 'string') {
         sentTurn = result.turn.id
         sent.turnId = result.turn.id
-        if (!this.closed) this.host.store.sent(row, result.turn.id)
+        if (!this.closed) {
+          this.host.store.sent(row, result.turn.id)
+          this.host.log(`重启恢复已发送（${row.harness}/${row.threadId}）：${result.turn.id}`)
+        }
         await this.interruptSending(sent)
       }
       // 保持设备连接观察恢复回合，避免没有客户端在线时设备工具和审批失去执行方。
@@ -390,6 +407,7 @@ export class RestartResume {
       this.host.log(`重启恢复未确认，不自动重试 (${row.harness}/${row.threadId}): ${String(error)}`)
     } finally {
       this.restoring.delete(row.threadId)
+      this.host.settled?.()
       if (link) {
         if (sending && this.sending.get(row.threadId) === sending) this.sending.delete(row.threadId)
         this.links.delete(link)
@@ -400,6 +418,7 @@ export class RestartResume {
 
   release(harness?: string): void {
     this.scopes.delete(harness ?? '*')
+    this.host.settled?.()
   }
 
   close(): void {

@@ -91,6 +91,8 @@ export interface SessionTreeHost {
   backgroundWorking?(threadId: string): number
   toolsBusy?(threadId: string): boolean
   continuationPending?(threadId: string): boolean
+  restarting?(threadId: string): boolean
+  restartInterrupted?(threadId: string, turnId: string): boolean
   /** 会话的后台任务集合（background.mts） */
   backgroundTasks(threadId: string): LitchBackgroundTask[]
   /** 后台任务跑完了引擎会不会自己接着做（background.mts 的 wakes） */
@@ -668,6 +670,17 @@ export class SessionTree {
       if (this.store.notes(threadId).length) this.check(threadId)
       return
     }
+    // 计划中断不是工作的终点，不产生失败回报、经理收尾或用户停止屏障。
+    // 新进程也按持久票识别，避免旧回合的迟到快照盖住已经恢复的状态。
+    if (turn.status === 'interrupted' && this.host.restartInterrupted?.(threadId, turn.id)) {
+      if (this.ended.size >= ENDED_LIMIT) this.ended.clear()
+      this.ended.add(key)
+      if (this.active.get(threadId) === turn.id) this.active.delete(threadId)
+      this.pending.ended(threadId, turn.id)
+      this.clientTurns.delete(`${harness}\u0000${turn.id}`)
+      this.wrapped.delete(key)
+      return
+    }
     // 定时任务的回合超时、出错不算（不是用户打断的，也不是父会话自己走岔了）
     if (this.host.taskTurn(threadId, turn.id)) {
     } else if (turn.status === 'interrupted' || turn.status === 'failed')
@@ -1003,6 +1016,7 @@ export class SessionTree {
    * 再提醒，最后唤醒：前一样开出回合之后会话就不闲了，后面的等它结束（turnEvent 再查）
    */
   check(parentId: string): void {
+    if (this.host.restarting?.(parentId)) return
     if (this.managers?.resets.held(parentId) || this.managers?.resets.refusal(parentId)) return
     const previous = this.checks.get(parentId) ?? Promise.resolve()
     const next = previous
@@ -1043,6 +1057,7 @@ export class SessionTree {
       .then(async () => {
         if (
           this.closed ||
+          this.host.restarting?.(threadId) ||
           this.managers?.resets.held(threadId) ||
           this.managers?.resets.refusal(threadId)
         )
@@ -1080,14 +1095,18 @@ export class SessionTree {
           // 线程设置是当前型号/强度的唯一权威，不用经理创建记录覆盖用户的选择。
           const settings = await link.request('thread/resume', { threadId, excludeTurns: true })
           const current = isObject(settings) ? settings : {}
-          const result = await link.request('turn/start', {
-            threadId,
-            input,
-            ...(typeof current.model === 'string' ? { model: current.model } : {}),
-            ...(typeof current.reasoningEffort === 'string'
-              ? { effort: current.reasoningEffort }
-              : {}),
-          })
+          const result = await link.request(
+            'turn/start',
+            {
+              threadId,
+              input,
+              ...(typeof current.model === 'string' ? { model: current.model } : {}),
+              ...(typeof current.reasoningEffort === 'string'
+                ? { effort: current.reasoningEffort }
+                : {}),
+            },
+            { restartable: !options.startOnly },
+          )
           if (isObject(result?.turn) && typeof result.turn.id === 'string') {
             options.onStarted?.(result.turn.id)
             this.turnEvent(harness, 'turn/started', { threadId, turn: result.turn })
@@ -1344,10 +1363,13 @@ export class SessionTree {
     return this.withNotes(threadId, input)
   }
 
-  /**
-   * 设备自己要给一个已有会话发起回合（定时任务）：排着的回报同样放在那条消息前面，
-   * 但不算用户说话，唤醒计数不清零。没有要附的返回原样的输入
-   */
+  /** 计划重启的新回合延续原工作；清除中断屏障，不重置用户唤醒预算或重发收尾。 */
+  restartContinuing(threadId: string): void {
+    this.cutShort.delete(threadId)
+    this.reminders.delete(threadId)
+  }
+
+  /** 设备回合带上排队回报，但不清零用户的唤醒预算。 */
   beforeDeviceTurn(threadId: string, input: unknown[]): unknown[] {
     return this.withNotes(threadId, input) ?? input
   }

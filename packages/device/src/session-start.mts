@@ -629,11 +629,15 @@ async function createChild(
     Boolean(spec.handOffBefore),
     spec.background ?? '',
   )
-  const begun = await link.request('turn/start', {
-    threadId,
-    input: [{ type: 'text', text, text_elements: [] }],
-    ...(effort ? { effort } : {}),
-  })
+  const begun = await link.request(
+    'turn/start',
+    {
+      threadId,
+      input: [{ type: 'text', text, text_elements: [] }],
+      ...(effort ? { effort } : {}),
+    },
+    { restartable: true },
+  )
   // 释放预占前采纳回合应答，避免通知稍迟时出现空档；turnEvent 自身去重且忽略已结束回合。
   if (isObject(begun) && isObject(begun.turn) && begun.turn.status === 'inProgress')
     tree.turnEvent(harness, 'turn/started', { threadId, turn: begun.turn })

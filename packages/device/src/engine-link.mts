@@ -45,12 +45,13 @@ export interface EngineLink {
   readonly closed: boolean
   /**
    * 发一个请求等应答。上游回了错误时抛 UpstreamRpcError；超时、断开抛普通的 Error。
-   * timeoutMs 不给用开连接时定的默认时限
+   * timeoutMs 不给用开连接时定的默认时限。restartable 仅由已授权的子会话和经理事件设置，
+   * 设备据此持久登记计划重启恢复；定时任务、目标、收尾和恢复消息自身不得设置。
    */
   request(
     method: string,
     params: unknown,
-    options?: { timeoutMs?: number; beforeSend?(): void },
+    options?: { timeoutMs?: number; beforeSend?(): void; restartable?: boolean },
   ): Promise<any>
   /** 收通知；返回取消订阅 */
   onNotification(listener: (method: string, params: any) => void): () => void

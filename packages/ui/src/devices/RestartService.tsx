@@ -8,7 +8,7 @@ import {
   type ServiceRestartPhase,
   type ServiceRestartSession,
 } from '@litch/core'
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useId, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Confirm } from '../app/Confirm.tsx'
 import { nameOf } from '../app/device.ts'
@@ -22,6 +22,8 @@ const LISTED = 8
 
 /** 已经提示过的结果（设备 + 那一刻）：侧栏重画、单独查看一组时组件换了一份，不再提示一次 */
 const told = new Set<string>()
+/** 同一设备可同时出现在侧栏和详情；忙碌确认交给本次操作的发起者。 */
+const owners = new Map<string, string>()
 
 type Mode = 'start' | 'force' | 'dismiss'
 
@@ -32,7 +34,15 @@ export interface RestartFlow {
   dialogs: ReactNode
 }
 
-export function useRestart(deviceId: string): RestartFlow {
+/** observe 指定无人认领操作时的默认观察者；结果按设备和时间去重。 */
+export function useRestart(deviceId: string, observe = true): RestartFlow {
+  const owner = useId()
+  useEffect(
+    () => () => {
+      if (owners.get(deviceId) === owner) owners.delete(deviceId)
+    },
+    [deviceId, owner],
+  )
   const { channel } = useServices()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const t = useT()
@@ -51,6 +61,7 @@ export function useRestart(deviceId: string): RestartFlow {
     channel.command('device.restartService', { deviceId, mode }).catch(rejected)
   }
   const begin = () => {
+    owners.set(deviceId, owner)
     channel.command('device.restartSessions', { deviceId }).then(({ sessions }) => {
       if (sessions.length > 0) setAsking(sessions)
       else send('start')
@@ -101,7 +112,8 @@ export function useRestart(deviceId: string): RestartFlow {
           </ul>
         </Confirm>
       ) : null}
-      {phase?.step === 'busy' ? (
+      {phase?.step === 'busy' &&
+      (owners.get(deviceId) === owner || (observe && !owners.has(deviceId))) ? (
         <Confirm
           title={t('restart.busy.title', { name })}
           note={t('restart.busy.note')}
