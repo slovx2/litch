@@ -23,6 +23,17 @@ export interface PairingAddress {
 /** 手机要连的地址里决定连到哪的三项（不含别名） */
 export type PairingTarget = Omit<PairingAddress, 'name'>
 
+/** 一次出码的风险确认；token 仅在当前核心内有效，不落盘。 */
+export interface PairingHostKeyWarning {
+  token: string
+  address: PairingTarget
+  reason: 'mismatch' | 'unknown' | 'unverified'
+  reported: PairHostKey[]
+  known: PairHostKey[]
+  entrance: PairHostKey[]
+  selected: PairHostKey
+}
+
 export interface PairingView {
   deviceId: string
   pairId: string
@@ -32,7 +43,7 @@ export interface PairingView {
   seed: string | null
   /** tailscale 方式的登记命令（PairPayload.c）；key 方式是 null */
   command: string | null
-  /** 出码前的自检做了没有：tailscale 方式下这台电脑连不到手机要连的地址时跳过 */
+  /** 出码前的自检做了没有；手机地址无法直达且用户确认本次风险时可跳过 */
   checked: boolean
   /** 设备开着 Tailscale SSH（设备自报） */
   tailscaleSsh: boolean

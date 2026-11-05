@@ -13,6 +13,7 @@ import {
   type DeviceStore,
   hostKeyTrusted,
   type PairEnrollTestInput,
+  type PairHostInspection,
   type PairingApprovalKey,
   type PairingOp,
   type PairingPlatform,
@@ -42,6 +43,8 @@ const RSA: PairHostKey = {
 }
 
 interface Options {
+  inspection?: PairHostInspection
+  reported?: PairHostKey[]
   extensions?: string[]
   kind?: 'local' | 'ssh'
   known?: string[]
@@ -84,8 +87,8 @@ function world(options: Options = {}) {
       const base = {
         pairId: `pair${n}`,
         expiresAt: 1_000_000 + n,
-        hostKey: ED,
-        hostKeys: [ED, RSA],
+        hostKey: options.reported?.[0] ?? ED,
+        hostKeys: options.reported ?? [ED, RSA],
         hostname: 'mac.lan',
         user: 'song',
       }
@@ -123,6 +126,18 @@ function world(options: Options = {}) {
   }
   const peer = fakeOpener({ ...fake.handlers, ...handlers })
   const platform: PairingPlatform = {
+    inspect: async () =>
+      options.inspection ?? {
+        known: (options.known ?? [RSA.publicKey]).map(
+          (publicKey) =>
+            [ED, RSA].find((key) => key.publicKey === publicKey) ?? {
+              type: 'ssh-ed25519',
+              publicKey,
+              fingerprint: 'SHA256:other',
+            },
+        ),
+        entrance: [ED, RSA],
+      },
     resolve: async () => options.resolved ?? { host: '10.0.0.5', port: 2222, user: 'dev' },
     knownKeys: async () => options.known ?? ['ssh-rsa AAAARSA'],
     localSsh: async () => {
@@ -248,7 +263,7 @@ test('ssh 设备出码：核对主机钥匙、按别名自检，地址预填原�
   const pairing = await started(w)
   assert.equal(pairing.pairId, 'pair1')
   assert.equal(pairing.seed, 'c2VlZA')
-  assert.deepEqual(pairing.hostKey, ED)
+  assert.deepEqual(pairing.hostKey, RSA)
   const original = { name: 'build-01', host: '10.0.0.5', port: 2222, user: 'dev' }
   assert.deepEqual(pairing.original, original)
   assert.deepEqual(pairing.address, original)
@@ -256,7 +271,7 @@ test('ssh 设备出码：核对主机钥匙、按别名自检，地址预填原�
   const [tested] = w.calls.tests
   assert.deepEqual(tested?.target, { kind: 'alias', alias: 'build-01' })
   assert.equal(tested?.seed, 'c2VlZA')
-  assert.equal(tested?.hostKeys.length, 2)
+  assert.deepEqual(tested?.hostKeys, [RSA])
   assert.equal(w.sent('litch/pair/cancel').length, 0)
 
   // 记住改过的地址：下一次预填它，原配置照旧
@@ -488,7 +503,7 @@ test('手机要连的地址是 Tailscale SSH：tailscale 方式建配对，自�
       port: 2222,
       user: 'dev',
       command: "'/x/adapter' pair-enroll pair1",
-      hostKeys: [ED, RSA],
+      hostKeys: [RSA],
     },
   ])
   // 横幅是别的：一次性钥匙
@@ -590,9 +605,21 @@ test('一次性钥匙自检没过、自检连的地址是 Tailscale SSH：报 ta
   const failure = await failureOf(
     w.command('pairing.start', { address: { host: 'lan-host', port: 22, user: 'dev' } }),
   )
-  assert.equal(failure.key, 'tailscale')
+  assert.equal(failure.key, 'selfTest')
+  assert.deepEqual(w.calls.tests[0]?.address, { host: 'lan-host', port: 22, user: 'dev' })
   assert.equal(failure.message, '一次性钥匙登录后无响应')
   assert.deepEqual(w.sent('litch/pair/cancel'), [{ pairId: 'pair1' }])
+  const forcedKey = world({
+    banners: { '10.0.0.5:2222': TS },
+    selfTest: () => ({ ok: false, said: '无响应' }),
+  })
+  forcedKey.core.start()
+  await settled()
+  assert.equal(
+    (await failureOf(forcedKey.command('pairing.start', { mode: 'key' }))).key,
+    'tailscale',
+  )
+  forcedKey.core.stop()
   // 自检连的地址不是 Tailscale：照旧是 selfTest
   const plain = world({
     banners: { '10.0.0.5:2222': OPENSSH },
@@ -738,4 +765,137 @@ test('批准公钥：设备列了 clientApprovals 才往二维码里放 a；允�
   const plain = await started(old)
   assert.equal(plain.approvals, false)
   assert.equal(pairingPayload(plain, plain.address).a, undefined)
+})
+
+test('入口密钥一致时自动通过，二维码只钉住实际核对过的钥匙', async () => {
+  const w = world({
+    inspection: {
+      known: [RSA],
+      entrance: [ED, RSA],
+      sshEndpoint: { host: '127.0.0.1', port: 2222 },
+    },
+  })
+  w.core.start()
+  await settled()
+  const result = await started(w)
+  assert.deepEqual(result.hostKey, RSA)
+  assert.deepEqual(w.calls.tests[0]?.hostKeys, [RSA])
+  assert.deepEqual(w.sent('litch/pair/start'), [{ sshEndpoint: { host: '127.0.0.1', port: 2222 } }])
+  w.core.stop()
+})
+
+test('不一致、未知、无法直读均需确认一次；取消时无自检、无存留配对', async () => {
+  const entry = { ...ED, publicKey: 'ssh-ed25519 ENTRY', fingerprint: 'SHA256:entry' }
+  for (const [reason, inspection] of [
+    ['mismatch', { known: [entry], entrance: [entry] }],
+    ['unknown', { known: [], entrance: [entry] }],
+    ['unverified', { known: [entry], entrance: [] }],
+  ] as const) {
+    const w = world({
+      inspection: { known: [...inspection.known], entrance: [...inspection.entrance] },
+    })
+    w.core.start()
+    await settled()
+    const failed = await failureOf(w.command('pairing.start'))
+    const warning = failed.pairingHostKey
+    assert.ok(warning)
+    assert.equal(warning.reason, reason)
+    assert.deepEqual(warning.reported, [ED, RSA])
+    assert.deepEqual(warning.selected, entry)
+    assert.equal(w.calls.tests.length, 0)
+    assert.equal(w.sent('litch/pair/cancel').length, 1)
+    const { pairing } = (await w.command('pairing.start', {
+      hostKeyConfirmation: warning.token,
+    })) as { pairing: PairingView }
+    assert.deepEqual(pairing.hostKey, entry)
+    assert.deepEqual(w.calls.tests[0]?.hostKeys, [entry])
+    assert.equal(pairingPayload(pairing, pairing.address).k.f, entry.fingerprint)
+    const replay = await failureOf(
+      w.command('pairing.start', { hostKeyConfirmation: warning.token }),
+    )
+    assert.ok(replay.pairingHostKey)
+    assert.notEqual(replay.pairingHostKey.token, warning.token)
+    assert.equal(w.calls.tests.length, 1)
+    w.core.stop()
+  }
+})
+
+test('确认期间地址或钥匙变化重新询问；伪造 token 不放行', async () => {
+  const inspection: PairHostInspection = { known: [], entrance: [ED] }
+  const w = world({ inspection })
+  w.core.start()
+  await settled()
+  let failed = await failureOf(w.command('pairing.start', { hostKeyConfirmation: 'forged' }))
+  const token = failed.pairingHostKey?.token
+  assert.ok(token)
+  inspection.entrance = [RSA]
+  failed = await failureOf(w.command('pairing.start', { hostKeyConfirmation: token }))
+  assert.deepEqual(failed.pairingHostKey?.selected, RSA)
+  const address = { host: '10.0.0.8', port: 2223, user: 'other' }
+  failed = await failureOf(
+    w.command('pairing.start', { hostKeyConfirmation: failed.pairingHostKey?.token, address }),
+  )
+  assert.deepEqual(failed.pairingHostKey?.address, address)
+  assert.equal(w.calls.tests.length, 0)
+  const { pairing } = (await w.command('pairing.start', {
+    hostKeyConfirmation: failed.pairingHostKey?.token,
+    address,
+  })) as { pairing: PairingView }
+  assert.deepEqual(w.calls.tests[0]?.address, address)
+  assert.deepEqual(pairing.address, { name: 'build-01', ...address })
+  w.core.stop()
+})
+
+test('确认不能绕过一次性钥匙认证失败；下一次出码仍需确认', async () => {
+  const w = world({
+    inspection: { known: [], entrance: [ED] },
+    selfTest: () => ({ ok: false, said: 'Permission denied' }),
+  })
+  w.core.start()
+  await settled()
+  const warning = (await failureOf(w.command('pairing.start'))).pairingHostKey
+  assert.ok(warning)
+  assert.equal(
+    (await failureOf(w.command('pairing.start', { hostKeyConfirmation: warning.token }))).key,
+    'selfTest',
+  )
+  assert.equal(w.sent('litch/pair/cancel').length, 2)
+  assert.ok((await failureOf(w.command('pairing.start'))).pairingHostKey)
+  w.core.stop()
+})
+
+test('手机地址桌面无法直达时确认后出码，标记未自检且不复用确认', async () => {
+  const w = world({ inspection: { known: [], entrance: [] } })
+  w.core.start()
+  await settled()
+  const address = { host: 'phone-only.lan', port: 2222, user: 'dev' }
+  const warning = (await failureOf(w.command('pairing.start', { address }))).pairingHostKey
+  assert.ok(warning)
+  assert.deepEqual(warning.selected, ED)
+  const { pairing } = (await w.command('pairing.start', {
+    address,
+    hostKeyConfirmation: warning.token,
+  })) as { pairing: PairingView }
+  assert.equal(pairing.checked, false)
+  assert.equal(w.calls.tests.length, 0)
+  assert.deepEqual(pairing.hostKey, ED)
+  assert.ok((await failureOf(w.command('pairing.start', { address }))).pairingHostKey)
+  w.core.stop()
+})
+
+test('确认超过两分钟后重新询问', async (context) => {
+  context.mock.timers.enable({ apis: ['Date'], now: 1_800_000_000_000 })
+  const w = world({ inspection: { known: [], entrance: [ED] } })
+  w.core.start()
+  await settled()
+  const warning = (await failureOf(w.command('pairing.start'))).pairingHostKey
+  assert.ok(warning)
+  context.mock.timers.tick(120_001)
+  const again = (
+    await failureOf(w.command('pairing.start', { hostKeyConfirmation: warning.token }))
+  ).pairingHostKey
+  assert.ok(again)
+  assert.notEqual(again.token, warning.token)
+  assert.equal(w.calls.tests.length, 0)
+  w.core.stop()
 })

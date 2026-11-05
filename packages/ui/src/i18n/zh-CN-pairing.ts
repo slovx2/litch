@@ -3,6 +3,21 @@
 import type { Entry } from './types.ts'
 
 export const zhPairing = {
+  'pairing.hostKey.title': '确认主机密钥',
+  'pairing.hostKey.mismatch': '入口主机密钥与设备自报或本机记录不一致。',
+  'pairing.hostKey.unknown': '本机没有此入口的已知主机密钥记录。',
+  'pairing.hostKey.unverified': '未能直接读取手机连接入口的主机密钥。',
+  'pairing.hostKey.risk':
+    '代理、跳板机或端口转发可能造成差异，也可能意味着手机将连接到其他机器。请核对地址和指纹后再继续。',
+  'pairing.hostKey.reported': '设备自报的密钥',
+  'pairing.hostKey.known': '本机已知的入口密钥',
+  'pairing.hostKey.entrance': '本次读取的入口密钥',
+  'pairing.hostKey.selected': '本次二维码和登录检查使用的密钥',
+  'pairing.hostKey.none': '未取得',
+  'pairing.hostKey.once':
+    '确认仅用于本次出码，不保存为信任设置。换码或地址、密钥变化后需要重新确认。',
+  'pairing.hostKey.cancel': '取消',
+  'pairing.hostKey.confirm': '确认并生成二维码',
   'pairing.use': '在手机上使用…',
   'pairing.title': '在手机上使用 {name}',
   'pairing.intro':

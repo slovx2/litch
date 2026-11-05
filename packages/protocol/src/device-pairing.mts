@@ -257,7 +257,16 @@ export type PairEnrollError = (typeof PAIR_ENROLL_ERROR)[keyof typeof PAIR_ENROL
 export const DEVICE_PAIR_START = 'litch/pair/start'
 
 /** 有效期固定 PAIR_TTL_MS。mode 不给是 key（一次性钥匙）；tailscale 不写一次性钥匙行 */
+export interface PairSshEndpoint {
+  host: string
+  port: number
+  /** 只探测客户端选中的算法，避免一次配对反复进行无认证握手。 */
+  keyType?: string
+}
+
 export interface DevicePairStartParams {
+  /** 本次 SSH 连接的服务端地址，由桌面端经已认证的连接取得；设备只探测本机地址。 */
+  sshEndpoint?: PairSshEndpoint
   mode?: PairMode
 }
 

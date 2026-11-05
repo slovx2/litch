@@ -4,13 +4,13 @@
 //   本机的 SSH 服务：连 127.0.0.1:22 读横幅；
 //   自检：把一次性私钥写成临时文件（600），用系统的 ssh 带 -i 和 IdentitiesOnly 登一次，往标准输入写自检那一行，
 //     看强制命令回不回 {"ok":true,"probe":true}。本机不读用户的 ssh 配置和 known_hosts（-F none，
-//     设备报的主机钥匙写进临时的 UserKnownHostsFile）。临时文件放在状态目录下，用完就删。
+//     本次核对或确认的入口钥匙写进临时 UserKnownHostsFile）。远程保留代理选项，但同样钉住这把钥匙。
 //   横幅：连手机要连的那个地址读 SSH 横幅（只连 TCP），核心拿它认是不是 Tailscale SSH；
-//   tailscale 方式的自检：用一把临时生成、谁都没登记过的钥匙登那个地址（不读用户的 ssh 配置，主机钥匙只认设备报的），
+//   tailscale 方式的自检：用一把临时生成、谁都没登记过的钥匙登那个地址（不读用户的 ssh 配置，主机钥匙只认本次核对或确认的），
 //     执行登记命令，标准输入写自检那一行。Tailscale 要浏览器验证时把链接交回去，不干等。
 // 这里绝不往用户的 ~/.ssh 里写任何东西。
 import { execFile, spawn } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
@@ -21,6 +21,7 @@ import {
   type PairHostKey,
   type PairingHostAddress,
   type PairingPlatform,
+  type PairingTarget,
   type PairSelfTestInput,
   type PairSelfTestResult,
   type RemoteTarget,
@@ -113,15 +114,33 @@ export interface DesktopPairingOptions {
 
 /** 自检那一次 ssh 的参数（不含 -i 那一截）。远程设备照它自己的 ssh 配置，只是不用它配的钥匙文件 */
 function testArgs(input: PairSelfTestInput, knownHosts: string): string[] {
+  if (input.address)
+    return bareArgs(input.address.host, input.address.port, input.address.user, knownHosts)
   const { target } = input
   if (target) {
     // 手填的主机带着用户自己的钥匙文件：自检要的是一次性钥匙，那一把不能先递上去
     const { options, destination } = sshBase(
       target.kind === 'host' ? { ...target, keyFile: null } : target,
     )
-    return [...options, '--', destination]
+    return [
+      '-o',
+      'StrictHostKeyChecking=yes',
+      '-o',
+      'HostKeyAlias=litch-pair-entry',
+      '-o',
+      `UserKnownHostsFile=${sshQuoted(knownHosts)}`,
+      '-o',
+      'GlobalKnownHostsFile=/dev/null',
+      '-o',
+      'CheckHostIP=no',
+      '-o',
+      'UpdateHostKeys=no',
+      ...options,
+      '--',
+      destination,
+    ]
   }
-  // 本机：不读用户的 ssh 配置，主机钥匙只认设备报的那几把
+  // 本机：不读用户的 ssh 配置，主机钥匙只认本次核对或确认的那几把
   return bareArgs('127.0.0.1', localPort(), input.user, knownHosts)
 }
 
@@ -185,6 +204,14 @@ const knownLines = (host: string, port: number, keys: readonly PairHostKey[]): s
   return keys.map((entry) => `${name} ${entry.publicKey}\n`).join('')
 }
 
+/** 和手机使用同一组算法；RSA 只用 SHA-2 签名，不能让桌面自检误放行仅支持 SHA-1 的入口。 */
+function hostAlgorithms(keys: readonly PairHostKey[]): string[] {
+  const algorithms = keys.flatMap((key) =>
+    key.type === 'ssh-rsa' ? ['rsa-sha2-512', 'rsa-sha2-256'] : [key.type],
+  )
+  return algorithms.length ? ['-o', `HostKeyAlgorithms=${algorithms.join(',')}`] : []
+}
+
 /**
  * 起一次 ssh 跑自检。key 是私钥文件的路径，command 是要对面执行的
  * （一次性钥匙方式是强制命令，写什么都一样；tailscale 方式是登记命令）
@@ -195,6 +222,10 @@ function runSelfTest(args: string[], key: string, command: string): Promise<Pair
       'ssh',
       [
         // 一次性钥匙排在最前面：用户配置里的钥匙文件 ssh 也会递，但轮不到它们就已经进去了
+        '-o',
+        'ControlMaster=no',
+        '-o',
+        'ControlPath=none',
         '-i',
         key,
         '-o',
@@ -281,6 +312,64 @@ function sshBanner(host: string, port: number): Promise<string | null> {
   })
 }
 
+/** 文件或 keyscan 的公钥行转成可展示的 SHA256 指纹；不接受证书和撤销标记。 */
+export function hostKeyOf(line: string): PairHostKey | null {
+  const [type, body] = line.trim().split(/\s+/)
+  if (
+    !type ||
+    !body ||
+    !(type === 'ssh-ed25519' || type === 'ssh-rsa' || type.startsWith('ecdsa-sha2-'))
+  )
+    return null
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(body)) return null
+  const blob = Buffer.from(body, 'base64')
+  if (blob.length < 4 || blob.subarray(4, 4 + blob.readUInt32BE(0)).toString() !== type) return null
+  return {
+    type,
+    publicKey: `${type} ${body}`,
+    fingerprint: `SHA256:${createHash('sha256').update(blob).digest('base64').replace(/=+$/, '')}`,
+  }
+}
+
+function publicKeys(lines: string[]): PairHostKey[] {
+  const keys = lines.map(hostKeyOf).filter((key): key is PairHostKey => key !== null)
+  return [...new Map(keys.map((key) => [key.publicKey, key])).values()]
+}
+
+/** 只握手、不登录；未被 known_hosts 核对的扫描结果必须经用户本次确认。 */
+async function scanHostKeys(address: PairingTarget, known: PairHostKey[]): Promise<PairHostKey[]> {
+  const preferred = known.find((key) => key.type === 'ssh-ed25519') ?? known[0]
+  const firstType =
+    preferred?.type === 'ssh-rsa'
+      ? 'rsa'
+      : preferred?.type.startsWith('ecdsa-')
+        ? 'ecdsa'
+        : 'ed25519'
+  const types = [...new Set([firstType, 'ed25519', 'ecdsa', 'rsa'])]
+  // 每次先探测一类钥匙。成功即停；总时限不随算法数量增加。
+  const deadline = Date.now() + 5000
+  for (const type of types) {
+    const timeout = deadline - Date.now()
+    if (timeout <= 0) break
+    const output = await new Promise<string>((resolve) => {
+      execFile(
+        'ssh-keyscan',
+        ['-T', '3', '-p', String(address.port), '-t', type, address.host],
+        { timeout, windowsHide: true, maxBuffer: 64 * 1024 },
+        (_error, stdout) => resolve(String(stdout ?? '')),
+      )
+    })
+    const found = publicKeys(
+      output
+        .split('\n')
+        .filter((line) => !line.startsWith('#'))
+        .map((line) => line.trim().split(/\s+/).slice(1).join(' ')),
+    )
+    if (found.length) return found
+  }
+  return []
+}
+
 export function desktopPairing(options: DesktopPairingOptions): PairingPlatform {
   /** 临时文件的上级目录：用户数据目录下的 pairing，只有自己能进 */
   const scratch = (): string => {
@@ -313,6 +402,57 @@ export function desktopPairing(options: DesktopPairingOptions): PairingPlatform 
       return found.flat()
     },
 
+    async inspect(target, address, resolved) {
+      const same = address.host === resolved.host && address.port === resolved.port
+      const known = publicKeys(
+        await this.knownKeys(
+          same
+            ? target
+            : {
+                kind: 'host',
+                host: address.host,
+                port: address.port,
+                user: address.user,
+                keyFile: null,
+              },
+        ),
+      )
+      const { options: args, destination } = sshBase(target)
+      // 每次通过当前连接取值；常驻设备进程继承的 SSH_CONNECTION 可能早已过时。
+      const connection = await new Promise<string>((resolve) => {
+        execFile(
+          'ssh',
+          [
+            '-o',
+            'ControlMaster=no',
+            '-o',
+            'ControlPath=none',
+            '-o',
+            'StrictHostKeyChecking=yes',
+            '-o',
+            'UpdateHostKeys=no',
+            ...args,
+            '--',
+            destination,
+            'printf "\\nLITCH_SSH_CONNECTION=%s\\n" "$SSH_CONNECTION"',
+          ],
+          { timeout: 10000, windowsHide: true },
+          (_error, stdout) => resolve(String(stdout ?? '')),
+        )
+      })
+      const match = /^LITCH_SSH_CONNECTION=\S+ \d+ (\S+) (\d+)$/m.exec(connection)
+      const entrance = await scanHostKeys(address, known)
+      const keyType = entrance[0]?.type ?? known[0]?.type
+      const sshEndpoint = match
+        ? { host: match[1] as string, port: Number(match[2]), ...(keyType ? { keyType } : {}) }
+        : undefined
+      return {
+        known,
+        entrance,
+        ...(sshEndpoint ? { sshEndpoint } : {}),
+      }
+    },
+
     localSsh: async () => (await sshBanner('127.0.0.1', localPort())) !== null,
 
     banner: (host, port) => sshBanner(host, port),
@@ -327,11 +467,20 @@ export function desktopPairing(options: DesktopPairingOptions): PairingPlatform 
         const key = join(dir, 'id')
         writeFileSync(key, opensshPrivateKey(Buffer.from(seed)), { mode: 0o600 })
         const knownHosts = join(dir, 'known_hosts')
-        writeFileSync(knownHosts, knownLines('127.0.0.1', localPort(), input.hostKeys), {
+        const lines = input.address
+          ? knownLines(input.address.host, input.address.port, input.hostKeys)
+          : input.target
+            ? input.hostKeys.map((key) => `litch-pair-entry ${key.publicKey}\n`).join('')
+            : knownLines('127.0.0.1', localPort(), input.hostKeys)
+        writeFileSync(knownHosts, lines, {
           mode: 0o600,
         })
         // 强制命令不看这一句；万一登进去的不是强制命令（sshd 认了别的钥匙），也只是什么都不做
-        return await runSelfTest(testArgs(input, knownHosts), key, 'true')
+        return await runSelfTest(
+          [...hostAlgorithms(input.hostKeys), ...testArgs(input, knownHosts)],
+          key,
+          'true',
+        )
       } finally {
         rmSync(dir, { recursive: true, force: true })
       }
@@ -348,7 +497,7 @@ export function desktopPairing(options: DesktopPairingOptions): PairingPlatform 
           mode: 0o600,
         })
         const args = bareArgs(input.host, input.port, input.user, knownHosts)
-        return await runSelfTest(args, key, input.command)
+        return await runSelfTest([...hostAlgorithms(input.hostKeys), ...args], key, input.command)
       } finally {
         rmSync(dir, { recursive: true, force: true })
       }

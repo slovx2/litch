@@ -5,6 +5,12 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+### 修复
+
+- 扫码配对按本次 SSH 连接的实际监听器核对主机密钥，支持独立 HostKey 和端口转发。密钥不一致或无法确认时展示指纹，由用户确认本次出码；二维码和自检使用同一把入口密钥。
+
 ## 0.34.0（2026-11-05）
 
 ### 新增功能

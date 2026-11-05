@@ -220,3 +220,14 @@
   line-height: 18px;
   color: var(--ink-3);
 }
+
+/* 指纹不能截断；窄窗口和长地址也可逐字核对。 */
+.pair-host-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pair-fingerprint {
+  overflow-wrap: anywhere;
+  user-select: text;
+}

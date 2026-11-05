@@ -166,6 +166,7 @@ export type { AuthForwardPlatform } from './device/harness-config.mjs'
 export {
   hostKeyTrusted,
   type PairEnrollTestInput,
+  type PairHostInspection,
   type PairingApprovalKey,
   type PairingHostAddress,
   type PairingPlatform,

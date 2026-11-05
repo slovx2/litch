@@ -1,9 +1,14 @@
 // 扫码绑定手机要知道的这台机器的事：主机钥匙、sshd 的版本、钥匙文件在哪、Windows 上是不是管理员账号。
 import { execFile, execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { isIP } from 'node:net'
+import { homedir, networkInterfaces } from 'node:os'
 import { join, win32 } from 'node:path'
-import type { PairHostKey, PairTailnet } from '../../protocol/src/device-pairing.mjs'
+import type {
+  PairHostKey,
+  PairSshEndpoint,
+  PairTailnet,
+} from '../../protocol/src/device-pairing.mjs'
 import { fingerprintOf } from './pair-keys.mjs'
 
 /** 测试用：钥匙文件换成这个路径（默认 ~/.ssh/authorized_keys） */
@@ -57,6 +62,76 @@ export function readHostKeys(directory: string): PairHostKey[] {
     if (blob.length < 4 || blob.subarray(4, 4 + blob.readUInt32BE(0)).toString() !== type) continue
     if (keys.some((key) => key.publicKey === `${type} ${base64}`)) continue
     keys.push({ type, fingerprint: fingerprintOf(blob), publicKey: `${type} ${base64}` })
+  }
+  return keys.sort((a, b) => rank(a.type) - rank(b.type))
+}
+
+/** 不用常驻进程继承的 SSH_CONNECTION：它可能来自另一条连接、另一个 sshd。 */
+export function localSshEndpoint(value: unknown): PairSshEndpoint | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const { host, port, keyType } = value as PairSshEndpoint
+  if (
+    typeof host !== 'string' ||
+    !isIP(host) ||
+    !Number.isInteger(port) ||
+    port < 1 ||
+    port > 65535
+  )
+    return undefined
+  const normalized = host.replace(/^::ffff:/, '')
+  const local =
+    host === '::1' ||
+    (isIP(normalized) === 4 && normalized.startsWith('127.')) ||
+    Object.values(networkInterfaces())
+      .flat()
+      .some((address) => address?.address === normalized)
+  return local
+    ? {
+        host,
+        port,
+        ...(typeof keyType === 'string' &&
+        [
+          'ssh-ed25519',
+          'ssh-rsa',
+          'ecdsa-sha2-nistp256',
+          'ecdsa-sha2-nistp384',
+          'ecdsa-sha2-nistp521',
+        ].includes(keyType)
+          ? { keyType }
+          : {}),
+      }
+    : undefined
+}
+
+/** 只握手、不认证；取实际监听器的公开钥匙，支持额外 sshd、容器和转发后的服务端端口。 */
+export async function listenerHostKeys(endpoint: PairSshEndpoint): Promise<PairHostKey[]> {
+  const checked = localSshEndpoint(endpoint)
+  if (!checked) return []
+  const keyscanType =
+    checked.keyType === 'ssh-ed25519'
+      ? 'ed25519'
+      : checked.keyType === 'ssh-rsa'
+        ? 'rsa'
+        : checked.keyType
+          ? 'ecdsa'
+          : 'ed25519,ecdsa,rsa'
+  const text = await new Promise<string>((resolve) => {
+    execFile(
+      'ssh-keyscan',
+      ['-T', '3', '-p', String(endpoint.port), '-t', keyscanType, endpoint.host],
+      { timeout: 5000, windowsHide: true, maxBuffer: 64 * 1024 },
+      (_error, stdout) => resolve(String(stdout ?? '')),
+    )
+  })
+  const keys: PairHostKey[] = []
+  for (const line of text.split('\n')) {
+    const [, type, body] = line.trim().split(/\s+/)
+    if (!type || !body || rank(type) > 2 || !/^[A-Za-z0-9+/]+={0,2}$/.test(body)) continue
+    const blob = Buffer.from(body, 'base64')
+    if (blob.length < 4 || blob.subarray(4, 4 + blob.readUInt32BE(0)).toString() !== type) continue
+    const publicKey = `${type} ${body}`
+    if (!keys.some((key) => key.publicKey === publicKey))
+      keys.push({ type, publicKey, fingerprint: fingerprintOf(blob) })
   }
   return keys.sort((a, b) => rank(a.type) - rank(b.type))
 }

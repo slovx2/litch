@@ -306,3 +306,21 @@ test('钥匙文件：别的 Litch 进程拿着锁时等，锁太旧了当它死�
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('配对监听地址只接受本机 IP 与有效端口，不接受主机名、外部地址或参数', async () => {
+  const { localSshEndpoint } = await import('../src/pair-host.mjs')
+  for (const host of ['127.0.0.1', '127.0.0.2', '::1', '::ffff:127.0.0.1']) {
+    assert.deepEqual(localSshEndpoint({ host, port: 2222 }), { host, port: 2222 })
+  }
+  for (const value of [
+    null,
+    {},
+    { host: 'example.com', port: 22 },
+    { host: '192.0.2.1', port: 22 },
+    { host: '-f/etc/passwd', port: 22 },
+    { host: '127.0.0.1', port: 0 },
+    { host: '::1', port: 65536 },
+  ]) {
+    assert.equal(localSshEndpoint(value), undefined)
+  }
+})
