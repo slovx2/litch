@@ -1,0 +1,11 @@
+# 接 navigation.yaml；先关闭工具。宿主将真实系统窗口收窄后执行 narrow.yaml。
+appId: ${APP_ID}
+name: tablet-window-prepare
+---
+- tapOn:
+    id: header:back:tool
+- assertNotVisible:
+    id: tablet:tool
+- assertVisible:
+    id: composer-input
+    text: tablet draft retained

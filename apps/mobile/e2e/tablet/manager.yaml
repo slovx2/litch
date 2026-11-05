@@ -1,0 +1,28 @@
+appId: ${APP_ID}
+name: tablet-manager
+---
+- assertVisible:
+    id: tablet:split
+- tapOn:
+    id: devices:managers
+- tapOn:
+    id: manager:m1
+- assertVisible:
+    id: tablet:navigation
+- assertVisible:
+    id: manager-issue:D-17
+- tapOn:
+    id: manager-tab:chat
+- tapOn:
+    id: composer-input
+- inputText: manager tablet draft
+- hideKeyboard
+- tapOn:
+    id: manager-tab:console
+- assertVisible:
+    id: manager-issue:D-17
+- tapOn:
+    id: manager-tab:chat
+- assertVisible:
+    id: composer-input
+    text: manager tablet draft

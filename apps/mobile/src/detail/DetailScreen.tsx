@@ -2,6 +2,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useEffect, useState } from 'react'
 import { Text } from 'react-native'
+import { usePane } from '../nav/pane'
 import type { RootStackParamList } from '../nav/routes'
 import { Screen } from '../ui/kit/Screen'
 import { useTheme } from '../ui/theme'
@@ -11,6 +12,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Detail'>
 
 export function DetailScreen({ route }: Props) {
   const { deviceId, sessionId, title } = route.params
+  const pane = usePane()
   const theme = useTheme()
   const [notice, setNotice] = useState(route.params.permissionNotice)
   useEffect(() => {
@@ -19,7 +21,7 @@ export function DetailScreen({ route }: Props) {
     const timer = setTimeout(() => setNotice(undefined), 8000)
     return () => clearTimeout(timer)
   }, [route.params.permissionNotice])
-  const page = useSessionPage({ deviceId, sessionId, title })
+  const page = useSessionPage({ deviceId, sessionId, title, active: pane?.visible ?? true })
   return (
     <Screen
       title={page.title}

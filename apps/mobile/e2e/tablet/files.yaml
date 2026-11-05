@@ -1,0 +1,16 @@
+appId: ${APP_ID}
+name: tablet-files
+---
+- tapOn:
+    id: detail:menu
+- tapOn:
+    id: detail:menu:files
+- assertVisible:
+    id: tablet:tool
+- assertVisible:
+    id: files:list
+- tapOn:
+    id: header:back:tool
+- assertVisible:
+    id: composer-input
+    text: tablet draft retained

@@ -34,6 +34,7 @@ import { pagedDraftBoard } from '../../../../../packages/core/src/projection/man
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
 import { sessionMark } from '../../../../../packages/ui/src/sidebar/session-mark.ts'
 import { useSessionPage } from '../../detail/session-page'
+import { usePane } from '../../nav/pane'
 import type { ManagerTab, RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -99,7 +100,9 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const theme = useTheme()
   const { c, radius, font, hit, marks } = theme
   const { width } = useWindowDimensions()
-  const focused = useIsFocused()
+  const pane = usePane()
+  const nativeFocused = useIsFocused()
+  const focused = pane?.visible ?? nativeFocused
   const view = useKey<ManagerBoardTopicView>(keys.managerBoard(deviceId, managerId))
   const board = view?.board ?? null
   const pagingOn = Boolean(view?.paging)

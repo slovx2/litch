@@ -4,6 +4,10 @@ import UIKit
 public final class LitchKeyboardModule: Module {
   public func definition() -> ModuleDefinition {
     Name("LitchKeyboard")
+    View(HardwareKeyboardView.self) {
+      Events("onSubmit")
+      Prop("submitEnabled") { (view, enabled: Bool) in view.submitEnabled = enabled }
+    }
     Function("show") { () -> Bool in
       // 页面由用户点击或公开 evaluateJavaScript 调用 focus。
       // 此处仅刷新已有第一响应者，不能用私有 WKContentView API 强制弹键盘。

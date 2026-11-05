@@ -3,7 +3,7 @@
     "name": "Litch",
     "slug": "litch",
     "version": "0.34.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "userInterfaceStyle": "automatic",
     "scheme": "litch",
     "android": {
@@ -45,13 +45,19 @@
     "icon": "./assets/icon.png",
     "ios": {
       "bundleIdentifier": "dev.litch.app",
-      "supportsTablet": false,
+      "supportsTablet": true,
       "entitlements": {
         "keychain-access-groups": ["$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)"]
       },
       "infoPlist": {
         "UISupportedInterfaceOrientations": [
           "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ],
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
           "UIInterfaceOrientationLandscapeLeft",
           "UIInterfaceOrientationLandscapeRight"
         ],

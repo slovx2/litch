@@ -1,0 +1,20 @@
+appId: ${APP_ID}
+name: tablet-hardware-keyboard-prepare
+---
+- launchApp:
+    stopApp: false
+- runFlow:
+    when:
+      visible:
+        id: devices:managers
+    commands:
+      - tapOn:
+          id: devices:managers
+      - tapOn:
+          id: manager:m1
+      - tapOn:
+          id: manager-tab:chat
+- tapOn:
+    id: composer-input
+- eraseText: 100
+- inputText: hardware first

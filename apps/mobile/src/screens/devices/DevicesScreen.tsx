@@ -10,6 +10,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useEffect, useState } from 'react'
 import { AppState, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { ago } from '../../../../../packages/ui/src/app/format.ts'
+import { usePane } from '../../nav/pane'
 import type { RootStackParamList } from '../../nav/routes'
 import { useConnectionRoute } from '../../platform/connection-route'
 import { useChannel, useKey, useReplica } from '../../shell/services'
@@ -80,6 +81,7 @@ function DeviceRow({
   onPress(device: DeviceView): void
   onMenu(device: DeviceView): void
 }) {
+  const pane = usePane()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const network = useConnectionRoute(device?.target, device?.connection)
   const activity = useKey<DeviceActivity>(keys.activity(deviceId))
@@ -100,7 +102,10 @@ function DeviceRow({
       testID={`device:${deviceId}`}
       title={t.text(device.name)}
       detail={[device.host, parts.join(' · ')].join('\n')}
-      meta={[badges, activity?.lastActiveAt ? ago(activity.lastActiveAt, now, t) : '']
+      meta={[
+        pane?.split ? '' : badges,
+        activity?.lastActiveAt ? ago(activity.lastActiveAt, now, t) : '',
+      ]
         .filter(Boolean)
         .join('  ')}
       left={

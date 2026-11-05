@@ -3,6 +3,7 @@
 import type { Entry } from '../../../../../packages/ui/src/i18n/types.ts'
 
 export const zhCN = {
+  'app.selectSession': '选择一个会话',
   'app.back': '返回',
   'app.cancel': '取消',
   'app.done': '完成',
@@ -19,6 +20,7 @@ export const zhCN = {
 } satisfies Record<`app.${string}`, Entry>
 
 export const en: Record<keyof typeof zhCN, Entry> = {
+  'app.selectSession': 'Select a conversation',
   'app.back': 'Back',
   'app.cancel': 'Cancel',
   'app.done': 'Done',

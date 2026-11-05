@@ -1,0 +1,63 @@
+# 专用平板模拟器：两栏导航、旋转、侧栏切换保留右侧草稿；收窄另由 window.yaml 验证。
+appId: ${APP_ID}
+name: tablet-navigation
+---
+- setOrientation: ${TALL_ORIENTATION}
+- launchApp:
+    clearState: true
+    stopApp: true
+- extendedWaitUntil:
+    visible:
+      id: devices
+    timeout: 30000
+- openLink: '${SCHEME}://boot?mode=mock&controlled=1'
+- runFlow:
+    when:
+      visible: '.*(在.*Litch.*中打开|Open in.*Litch).*'
+    commands:
+      - tapOn: '^(打开|Open)$'
+- extendedWaitUntil:
+    visible:
+      id: device:local
+    timeout: 30000
+- setOrientation: ${WIDE_ORIENTATION}
+- assertVisible:
+    id: tablet:split
+- tapOn:
+    id: device:local
+- tapOn:
+    id: session:s3
+- assertVisible:
+    id: sessions:list
+- assertVisible:
+    id: composer-input
+- tapOn:
+    id: composer-input
+- inputText: tablet draft retained
+- hideKeyboard
+- setOrientation: ${TALL_ORIENTATION}
+- assertVisible:
+    id: composer-input
+    text: tablet draft retained
+- setOrientation: ${WIDE_ORIENTATION}
+- assertVisible:
+    id: tablet:split
+- assertVisible:
+    id: composer-input
+    text: tablet draft retained
+- tapOn:
+    id: header:back:navigation
+- assertVisible:
+    id: device:local
+- assertVisible:
+    id: composer-input
+    text: tablet draft retained
+- tapOn:
+    id: detail:menu
+- tapOn:
+    id: detail:menu:terminal
+- assertVisible:
+    id: tablet:tool
+- assertVisible:
+    id: composer-input
+    text: tablet draft retained

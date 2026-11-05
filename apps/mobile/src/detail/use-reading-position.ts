@@ -12,6 +12,7 @@ export function useReadingPosition(
   list: RefObject<FlashListRef<Row> | null>,
   rows: readonly Row[],
   anchorFrom: number,
+  width?: number,
 ) {
   const pending = useRef(memory?.position ?? null)
   const loaded = useRef(false)
@@ -19,6 +20,13 @@ export function useReadingPosition(
   const alive = useRef(true)
   const attempt = useRef(0)
   const stable = useRef(0)
+  const previousWidth = useRef(width)
+  // 尺寸重排前锁住最后一次阅读锚点，不能把布局引发的滚动误当成用户翻页。
+  if (width !== previousWidth.current) {
+    previousWidth.current = width
+    pending.current = memory?.position ?? null
+    stable.current = 0
+  }
   const current = useRef({ rows, anchorFrom })
   current.current = { rows, anchorFrom }
   const capture = useCallback(() => {

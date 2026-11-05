@@ -26,6 +26,7 @@ import { nameOf } from '../../../../packages/ui/src/app/device.ts'
 import type { Row } from '../core/rows'
 import { growingRows, type SessionSnapshot, type SessionStore } from '../core/session-store'
 import { experiment } from '../experiment'
+import { usePane } from '../nav/pane'
 import type { RootStackParamList } from '../nav/routes'
 import { noteFirstContent, noteWork } from '../probe'
 import { useKey, useServices } from '../shell/services'
@@ -369,7 +370,8 @@ export function Transcript({ store, bottomOffset, markers, readingMemory }: Prop
   // 列表默认拿视觉上最下面那一行当锚，它自己长高不算位移，翻着看的内容会被新出的字一点点顶上去。
   // 锚点挑法在 FlashList 的补丁里（patches/），平时（不在流式）照旧
   const anchorFrom = growingRows(snapshot)
-  const reading = useReadingPosition(readingMemory, listRef, rows, anchorFrom)
+  const pane = usePane()
+  const reading = useReadingPosition(readingMemory, listRef, rows, anchorFrom, pane?.width)
   const { pending, layout: restoreReading } = reading
   useEffect(() => {
     const position = pending.current

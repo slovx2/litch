@@ -1,0 +1,29 @@
+# 13 英寸 iPad 商店素材；只使用模拟核心，不读取真实会话。
+appId: ${APP_ID}
+name: tablet-ipad-store-screenshots
+---
+- setOrientation: PORTRAIT
+- launchApp:
+    clearState: true
+    stopApp: true
+- extendedWaitUntil:
+    visible:
+      id: devices
+    timeout: 30000
+- openLink: '${SCHEME}://boot?mode=mock&controlled=1'
+- extendedWaitUntil:
+    visible:
+      id: devices:managers
+    timeout: 30000
+- tapOn:
+    id: devices:managers
+- tapOn:
+    id: manager:m1
+- assertVisible:
+    id: manager-issue:D-17
+- takeScreenshot: '${SCREENSHOTS}/zh-manager-portrait'
+- tapOn:
+    id: manager-tab:chat
+- assertVisible:
+    id: composer-input
+- takeScreenshot: '${SCREENSHOTS}/zh-conversation-portrait'

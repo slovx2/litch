@@ -10,6 +10,10 @@ import expo.modules.kotlin.modules.ModuleDefinition
 class LitchKeyboardModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("LitchKeyboard")
+    View(HardwareKeyboardView::class) {
+      Events("onSubmit")
+      Prop("submitEnabled") { view: HardwareKeyboardView, enabled: Boolean -> view.submitEnabled = enabled }
+    }
 
     /** 给眼下拿着焦点的视图弹出软键盘；没有拿着焦点的视图就什么都不做，返回 false */
     Function("show") {

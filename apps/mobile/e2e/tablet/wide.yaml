@@ -1,0 +1,12 @@
+appId: ${APP_ID}
+name: tablet-window-wide
+---
+- launchApp:
+    stopApp: false
+- assertVisible:
+    id: tablet:split
+- assertVisible:
+    id: tablet:navigation
+- assertVisible:
+    id: composer-input
+    text: tablet draft retained

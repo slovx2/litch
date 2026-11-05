@@ -14,6 +14,7 @@ import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
 import { readWhileOpen } from '../../../../packages/ui/src/app/read.ts'
 import { acquireStore, releaseStore } from '../core/store-cache'
 import { experiment } from '../experiment'
+import { usePane } from '../nav/pane'
 import type { RootStackParamList } from '../nav/routes'
 import { useManagerOrigin } from '../screens/managers/use-origin'
 import { ProposalsStrip } from '../screens/proposals/ProposalsStrip'
@@ -90,6 +91,7 @@ export function useSessionPage({
   menu: own = [],
   issues = null,
 }: SessionPageOptions): SessionPage {
+  const pane = usePane()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const channel = useChannel()
   const t = useT()
@@ -274,10 +276,10 @@ export function useSessionPage({
 
   const task = useSessionTask(deviceId, summary?.task)
   const markers = experiment.markers
-  const reading = manager ? readingMemory(channel, deviceId, sessionId) : undefined
+  const reading = manager || pane ? readingMemory(channel, deviceId, sessionId) : undefined
   // 隐藏页签的零尺寸会让虚拟列表按错误的可见区取锚点；只撤列表，输入草稿继续常驻。
   const transcript =
-    !manager || active ? (
+    !(manager || pane) || active ? (
       <Transcript
         store={store}
         bottomOffset={insets.bottom}

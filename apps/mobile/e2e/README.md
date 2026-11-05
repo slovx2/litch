@@ -173,7 +173,8 @@ echo no | avdmanager create avd -n <名字> --package 'system-images;android-35;
 - 入口脚本不能用同步的方式起 Maestro：流程里的 `runScript` 要连同一个进程里的小口。
 - 同一台电脑上同时只能跑一个 Maestro：2.3.0 在安卓上把驱动固定映射到电脑的 7001 口、没有参数能改，第二个会在启动应用时超时。
   入口脚本开头先看 7001 有没有被占，被占就直接报错。换 `--port` 只能让模拟器不撞，躲不开这一条。
-# 审核前专项
+
+## 审核前专项
 
 Release E2E 构建使用 `EXPO_PUBLIC_LITCH_E2E=1`，发布包为 `0`；不要仅用 `__DEV__` 判断。
 `scripts/e2e.mjs --build` 自动设置验收开关，iOS `LITCH_MOBILE_DEV=1 scripts/build-ios.sh` 同样设置。
@@ -186,3 +187,35 @@ Release E2E 构建使用 `EXPO_PUBLIC_LITCH_E2E=1`，发布包为 `0`；不要�
   开发设置隐藏、旧配置清理；结束关闭该专用模拟器。只能用 `Litch-iOS-Review` 前缀的模拟器。
 - `scripts/check-ios-terminal.mjs`：原有字符/中文/粘贴/旋转用例，以及 `testColdStartKeyboard`。
 - `scripts/audit-ios-review.mjs <.app> [--e2e]`：检查包内构建档位与所有原生主程序/framework。
+
+## 平板与窗口变化
+
+`node scripts/check-tablet.mjs <模拟器标识> tablet/navigation.yaml tablet/window.yaml` 只接受
+`litch_` AVD 和 `Litch-iOS-` iOS 模拟器，使用模拟核心、共享 Maestro 7001 锁，退出删除临时报告。
+iOS 安装开发包 `dev.litch.app.dev`，Android 安装普通包。两端都不使用真实设备或模型。
+
+- `navigation.yaml`：两栏选择会话、输入草稿、横竖旋转、浏览左侧目录、打开第三栏终端。
+- `window.yaml`：关闭工具栏，验证对话和草稿仍在；三个标题栏的返回键按栏命名，不能按位置序号点击。
+- `narrow.yaml` / `wide.yaml`：宿主先真实调整系统窗口，再分别验证退回单栏和展开两栏，草稿必须仍在。
+- 断点单测在 `test/tablet-layout.test.mjs`：840 点展开 240–300 点侧栏；1280 点且工具打开才显示 380 点第三栏。
+
+Android 平板 AVD 使用自然横屏 1280×800、160 dpi；Maestro 的 `PORTRAIT` 指自然方向，
+执行器在复制流程时将方向占位符转为各自枚举。自由窗口验收可在专用 AVD 上启用
+`settings put global enable_freeform_support 1`，用 `am start --windowingMode 5` 打开当前应用，
+从 `dumpsys activity activities` 取得任务号，再以 `am task resize` 调整窗口；
+恢复全屏用 `am start --windowingMode 1`。这测试系统分配的真实窗口，不改 JS 尺寸。
+
+同一执行器可以跑 `flows/mock/01-home.yaml`、`02-new-session.yaml`、`03-approvals.yaml`、
+`19-manager-workbench.yaml` 等手机回归。iOS 仅转换包名、深链确认、键盘完成按钮和系统返回操作，
+保留产品断言。平板流程独立于默认手机流程集合。
+
+`tablet/files.yaml` 验文件第三栏，`tablet/manager.yaml` 验经理目录与工作台并排及页签草稿；
+`tablet/keyboard-prepare.yaml` 准备硬件按键测试，`tablet/store.yaml` 保存纯模拟数据的 iPad 竖屏素材。
+设 `LITCH_TABLET_SCREENSHOTS` 为输出绝对目录可保留素材；默认写到临时目录并清理。
+
+iPadOS 26.5 模拟器拖动右下角系统把手可以进入真实自由窗口（`tablet/ios-narrow.yaml`）。
+当前 Maestro/Simulator 在此状态没有返回应用的无障碍节点，`narrow.yaml` 的自动断言未通过；
+不能把截图人工确认当作 Maestro 通过。恢复全屏后节点恢复。外接键盘的 iOS 合成事件同样
+需区分输入工具与产品：本机 `typeKey` 的 Command+A 无效，不能据其结果确认真实键盘行为。
+Android 可用 `adb shell input keycombination 59 66` 验 Shift+Enter，再以 `input keyevent 66` 验发送；
+必须核对多行输入和消息正文，不只检查输入框变空。

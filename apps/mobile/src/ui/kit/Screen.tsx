@@ -3,8 +3,9 @@
 // compact 是矮的一条（32 高，标题和副标题挤在一行，左右让开安全区）：横屏时屏幕矮，键盘一弹起来通用的 52 高太占地方。
 import { useNavigation } from '@react-navigation/native'
 import type { ReactNode } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { usePane } from '../../nav/pane'
 import { useT } from '../i18n'
 import { useTheme } from '../theme'
 import { KeyboardDismissBar } from './KeyboardForm'
@@ -56,6 +57,7 @@ export function Screen({
   children: ReactNode
   testID?: string
 }) {
+  const pane = usePane()
   const insets = useSafeAreaInsets()
   const theme = useTheme()
   const t = useT()
@@ -65,7 +67,10 @@ export function Screen({
     <View
       style={[
         styles.screen,
-        { backgroundColor: c.win, paddingTop: insets.top },
+        {
+          backgroundColor: c.win, // iPadOS 窗口化时状态栏不占 inset，但左上角窗口控件仍覆盖内容。
+          paddingTop: Platform.OS === 'ios' && Platform.isPad && insets.top === 0 ? 28 : insets.top,
+        },
         compact ? { paddingLeft: insets.left, paddingRight: insets.right } : null,
       ]}
       testID={testID}
@@ -82,10 +87,14 @@ export function Screen({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('app.back')}
-            testID="header:back"
+            testID={pane?.split ? `header:back:${pane.pane}` : 'header:back'}
             hitSlop={8}
             style={compact ? styles.sideCompact : styles.side}
-            onPress={() => navigation.goBack()}
+            onPress={() => {
+              if (pane?.split && pane.pane === 'navigation') navigation.navigate('Devices' as never)
+              else if (pane?.split) pane.back()
+              else navigation.goBack()
+            }}
           >
             <Text style={[compact ? styles.backTextCompact : styles.backText, { color: c.ink }]}>
               ‹
@@ -184,7 +193,7 @@ export function Screen({
         ))}
       </View>
       <View style={styles.body}>{children}</View>
-      <KeyboardDismissBar />
+      {!pane || (pane.visible && pane.pane !== 'navigation') ? <KeyboardDismissBar /> : null}
     </View>
   )
 }

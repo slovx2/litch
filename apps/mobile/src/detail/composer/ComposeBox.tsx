@@ -2,7 +2,7 @@
 // “+”点开是一张单：添加图片，加上对话参数（模型、强度、速度、权限、计划模式，各写着现在的值）。参数不常改，
 // 收在这里不占屏幕高度；计划模式开着时“+”上有个强调色的点，读屏名称也说明。
 // 会话详情和新建会话页共用；发去哪、发成功没有由外面定，这里只管写、清空、没发成时还回来。
-// 草稿按会话记（drafts.ts）：文字和图片落盘。回车在手机上是换行，发送只靠按钮。
+// 草稿按会话记（drafts.ts）：文字和图片落盘。软键盘回车换行；外接键盘 Enter 发送，Shift+Enter 换行。
 // 选中回答加的评论也是草稿的一部分（落盘），一条一片排在最上面；只有评论、没打字也能发。
 // 打 `@` 在输入框上面列这台设备上的会话（MentionList.tsx），点了写成 @[标题]，发出去时随消息带上是哪个会话。
 import {
@@ -26,6 +26,7 @@ import {
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { keepMentioned } from '../../../../../packages/ui/src/composer/session-hits.ts'
+import { HardwareKeyboard } from '../../../modules/litch-keyboard/src/HardwareKeyboard'
 import { navigationRef } from '../../shell/dev-links'
 import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -516,28 +517,34 @@ export function ComposeBox({
             />
           ) : null}
         </Pressable>
-        <TextInput
-          ref={input}
-          value={draft.text}
-          onChangeText={draft.setText}
-          onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
-          placeholder={placeholder}
-          placeholderTextColor={c.ink3}
-          multiline
-          {...grow}
-          testID={`${testID}-input`}
-          style={[
-            styles.input,
-            {
-              color: c.ink,
-              backgroundColor: c.raised,
-              borderColor: c.line2,
-              borderRadius: theme.radius.m,
-              fontSize: theme.font.size.body,
-              fontFamily: theme.font.ui,
-            },
-          ]}
-        />
+        <HardwareKeyboard
+          style={{ flex: 1 }}
+          submitEnabled={filled && !blocked && !uploading}
+          onSubmit={send}
+        >
+          <TextInput
+            ref={input}
+            value={draft.text}
+            onChangeText={draft.setText}
+            onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
+            placeholder={placeholder}
+            placeholderTextColor={c.ink3}
+            multiline
+            {...grow}
+            testID={`${testID}-input`}
+            style={[
+              styles.input,
+              {
+                color: c.ink,
+                backgroundColor: c.raised,
+                borderColor: c.line2,
+                borderRadius: theme.radius.m,
+                fontSize: theme.font.size.body,
+                fontFamily: theme.font.ui,
+              },
+            ]}
+          />
+        </HardwareKeyboard>
         {config.percent !== null ? (
           <UsageRing
             percent={config.percent}

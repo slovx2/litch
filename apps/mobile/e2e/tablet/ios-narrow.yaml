@@ -1,0 +1,11 @@
+# iPadOS 窗口模式：从全屏右下角系统把手向内拖动，实际收窄窗口。
+appId: ${APP_ID}
+name: tablet-ipad-window-resize
+---
+- assertVisible:
+    id: tablet:split
+- swipe:
+    start: 99%, 99%
+    end: 55%, 80%
+    duration: 1200
+- runFlow: narrow.yaml

@@ -1,0 +1,12 @@
+appId: ${APP_ID}
+name: tablet-window-narrow
+---
+- launchApp:
+    stopApp: false
+- assertVisible:
+    id: tablet:single
+- assertNotVisible:
+    id: tablet:navigation
+- assertVisible:
+    id: composer-input
+    text: tablet draft retained
