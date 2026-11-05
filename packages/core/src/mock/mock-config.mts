@@ -90,6 +90,10 @@ export function createMockConfig(host: MockConfigHost): MockConfig {
         policy.blocked =
           request.host === null ? [] : policy.blocked.filter((one) => one !== request.host)
         return { ok: true, data: { ...policy, blocked: [...policy.blocked] } }
+      case 'chrome.trust':
+      case 'chrome.block':
+      case 'chrome.unblock':
+      case 'chrome.forget':
       case 'chrome.status':
       case 'chrome.prepare':
       case 'chrome.extensions':

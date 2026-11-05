@@ -119,6 +119,44 @@ try {
       "[...document.querySelectorAll('.set-block,.req')].map(e=>({kind:e.className,width:e.clientWidth,scroll:e.scrollWidth})).filter(e=>e.scroll>e.width+1)",
     )
     if (overflow.length) throw new Error(`Horizontal overflow: ${JSON.stringify(overflow)}`)
+    if (test.state === 'connected' && !test.width) {
+      await until(
+        () => read("document.querySelector('[data-trust-all]')?.dataset.trustAll === 'off'"),
+        'Default site policy',
+      )
+      await read("document.querySelector('[data-act=trust-all-sites]').click()")
+      await until(
+        () => read("document.querySelector('[data-trust-all]')?.dataset.trustAll === 'on'"),
+        'Trust all enabled',
+      )
+      await read(`(() => {
+        const input = document.querySelector('[data-field=blocked-site]');
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'blocked.example');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      })()`)
+      await until(
+        () => read("!document.querySelector('[data-act=block-site]').disabled"),
+        'Block input ready',
+      )
+      await read("document.querySelector('[data-act=block-site]').click()")
+      await until(
+        () => read('!!document.querySelector(\'[data-blocked-site="blocked.example"]\')'),
+        'Blocklist updated',
+      )
+      await read("document.querySelector('[data-act=unblock-site]').click()")
+      await until(
+        () => read("document.querySelector('[data-blocked]')?.dataset.blocked === '0'"),
+        'Blocklist cleared',
+      )
+      await read("document.querySelector('[data-act=forget-all]').click()")
+      await until(
+        () => read("document.querySelector('[data-sites]')?.dataset.sites === 'empty'"),
+        'Saved sites cleared',
+      )
+      await read("document.querySelector('[data-act=trust-all-sites]').click()")
+      await until(() => read("!document.querySelector('[data-blocked]')"), 'Trust all disabled')
+      console.log('PASS Chrome site settings controls')
+    }
   }
   console.log(output)
 } finally {

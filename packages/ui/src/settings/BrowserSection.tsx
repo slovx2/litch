@@ -76,7 +76,12 @@ function LinkSwitch() {
  * 信任所有网站：开着时不再逐个网站问，只有黑名单里的不许开。黑名单只在开着时显示（关着时它不起作用）。
  * 审批卡片上、litch config 也能改，那边改了外壳会推过来
  */
-function TrustAll({ bridge }: { bridge: BrowserBridge }) {
+export type SiteSettingsBridge = Pick<
+  BrowserBridge,
+  'policy' | 'onPolicy' | 'setTrustAll' | 'block' | 'unblock' | 'sites'
+> & { forgetSite(origin: string | null): Promise<unknown> }
+
+export function TrustAll({ bridge }: { bridge: SiteSettingsBridge }) {
   const t = useT()
   /** null：在取 */
   const [policy, setPolicy] = useState<BrowserSitePolicy | null>(null)
@@ -233,7 +238,7 @@ function TrustAll({ bridge }: { bridge: BrowserBridge }) {
 }
 
 /** 一直允许的网站。这一组打开时取一次，删了之后照删完的样子再取 */
-function SavedSites({ bridge }: { bridge: BrowserBridge }) {
+export function SavedSites({ bridge }: { bridge: SiteSettingsBridge }) {
   const t = useT()
   /** null：在取 */
   const [sites, setSites] = useState<BrowserSavedSite[] | null>(null)

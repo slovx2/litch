@@ -25,6 +25,10 @@ export function createConfigMain(deps: ConfigMainDeps) {
   return async (request: ConfigMainRequest): Promise<ConfigMainResult> => {
     try {
       switch (request.kind) {
+        case 'chrome.trust':
+        case 'chrome.block':
+        case 'chrome.unblock':
+        case 'chrome.forget':
         case 'chrome.status':
         case 'chrome.prepare':
         case 'chrome.extensions':

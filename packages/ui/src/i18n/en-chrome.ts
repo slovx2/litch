@@ -1,11 +1,15 @@
 export const enChrome = {
+  'chrome.tab': 'Allow control of this Chrome tab?',
+  'chrome.tabAllow': 'Allow control',
+  'chrome.trustDone':
+    'All Chrome sites are trusted. Manage this and the blocklist in Settings → Chrome.',
   'chrome.instance': 'Allow access to this Chrome instance',
   'chrome.instanceLabel': 'Instance',
   'chrome.instanceNote':
-    'Allow the agent to list tab titles and URLs in this Chrome instance. Page content still requires origin approval.',
+    'Allow the agent to list tab titles and URLs in this Chrome instance. Page access follows Chrome site permissions; user tabs still require individual claims.',
   'chrome.title': 'Chrome',
   'chrome.note':
-    'Use signed-in websites in Chrome on this computer. Each origin requires approval.',
+    'Use signed-in websites in Chrome on this computer. Manage site permissions separately.',
   'chrome.enable': 'Allow agents to use Chrome',
   'chrome.unsupported': 'Not available on this platform.',
   'chrome.browsers.darwin': 'Supports Google Chrome.',
@@ -34,7 +38,7 @@ export const enChrome = {
   'chrome.version': 'Folder version {version}',
   'chrome.remote': 'Remote devices',
   'chrome.remoteNote':
-    'Selected devices may request control of Chrome on this computer. Each origin still requires approval.',
+    'Selected devices may request control of Chrome on this computer. Chrome site permissions still apply.',
   'chrome.signIn': 'Sign in with Chrome',
   'chrome.signInNote':
     'Complete sign-in in Chrome. The agent cannot read or operate this tab while you sign in. Returning control reloads the page.',

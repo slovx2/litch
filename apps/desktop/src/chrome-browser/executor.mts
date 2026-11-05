@@ -8,6 +8,7 @@ import { chromeOrigin } from '../../../chrome-extension/src/origin.mjs'
 import { newRefBook } from '../browser/ax.mjs'
 import { runBrowserActions } from '../browser/batch.mjs'
 import type { BrowserExecutor, TabState } from '../browser/executor.mjs'
+import { createSiteBook, type SiteBook } from '../browser/sites.mjs'
 import type { ClientToolContext, ClientToolInvocation } from '../client-tools/types.mjs'
 import { type ChromeBridge, ChromeBridgeError, incompatibleMessage } from './bridge.mjs'
 import { ChromePage } from './page.mjs'
@@ -26,6 +27,7 @@ interface ClaimToken {
 }
 export interface ChromeExecutorOptions {
   bridge: ChromeBridge
+  sites?: SiteBook
   allowed(invocation: ClientToolInvocation): boolean
 }
 const session = (invocation: ClientToolInvocation): string =>
@@ -52,10 +54,9 @@ export class ChromeExecutor implements BrowserExecutor {
   readonly pages = new Map<string, ChromePage>()
   private tokens = new Map<string, ClaimToken>()
   private states = new Map<string, TabState & { generation: number }>()
-  private approvals = new Map<string, Set<string>>()
+  readonly sites: SiteBook
   private instancePermits = new Map<string, Set<string>>()
   private deniedInstances = new Set<string>()
-  private denied = new Set<string>()
   private busy = new Set<string>()
   private calls = new Map<
     string,
@@ -67,6 +68,7 @@ export class ChromeExecutor implements BrowserExecutor {
   private options: ChromeExecutorOptions
   constructor(options: ChromeExecutorOptions) {
     this.options = options
+    this.sites = options.sites ?? createSiteBook(null)
     this.off = options.bridge.onEvent((instanceId, event) => {
       for (const page of this.pages.values()) {
         if (page.instanceId !== instanceId) continue
@@ -176,32 +178,35 @@ export class ChromeExecutor implements BrowserExecutor {
   async approve(
     invocation: ClientToolInvocation,
     context: ClientToolContext,
-    instanceId: string,
     origins: string[],
   ): Promise<void> {
     for (const origin of origins) {
       if (origin === 'about:blank') continue
       if (chromeOrigin(origin) !== origin)
         throw new ChromeBridgeError('invalid', 'Unsupported origin.')
-      const key = `${instanceId}:${session(invocation)}`
-      const once = `${key}:${invocation.turnId}`
-      if (this.approvals.get(key)?.has(origin) || this.approvals.get(once)?.has(origin)) continue
-      if (this.denied.has(`${once}:${origin}`))
+      const key = session(invocation)
+      const verdict = this.sites.verdict(key, invocation.turnId, origin)
+      if (verdict === 'allow') continue
+      if (verdict === 'decline' || verdict === 'blocked')
         throw new ChromeBridgeError(
           'originNotApproved',
-          'The user declined this origin for this turn. Do not bypass the decision.',
+          verdict === 'blocked'
+            ? `The user blocked ${origin}. Do not bypass the blocklist.`
+            : 'The user declined this origin for this turn. Do not bypass the decision.',
         )
       const answer = await context.ask({ kind: 'site', origin, url: origin, browser: 'chrome' })
-      if (answer === 'decline') this.denied.add(`${once}:${origin}`)
-      if (context.signal.aborted || !answer || answer === 'decline')
-        throw new ChromeBridgeError(
-          'originNotApproved',
-          `Access to ${origin} was not approved. Do not try to use another tab or tool to bypass the decision.`,
-        )
-      const scope = answer === 'once' ? once : key
-      const allowed = this.approvals.get(scope) ?? new Set<string>()
-      allowed.add(origin)
-      this.approvals.set(scope, allowed)
+      if (context.signal.aborted || !answer)
+        throw new ChromeBridgeError('cancelled', 'Site approval was cancelled.')
+      if (answer === 'decline') {
+        this.sites.decline(key, invocation.turnId, origin)
+        throw new ChromeBridgeError('originNotApproved', `Access to ${origin} was declined.`)
+      }
+      if (answer === 'always') this.sites.allowAlways(origin)
+      else if (answer === 'session') this.sites.allowSession(key, origin)
+      else this.sites.allowOnce(key, invocation.turnId, origin)
+      // 等审批时设置可能已改变；黑名单仍有最终决定权。
+      if (this.sites.verdict(key, invocation.turnId, origin) === 'blocked')
+        throw new ChromeBridgeError('originNotApproved', `The user blocked ${origin}.`)
     }
   }
   private page(invocation: ClientToolInvocation, id: unknown): ChromePage {
@@ -250,7 +255,19 @@ export class ChromeExecutor implements BrowserExecutor {
       await old.release()
     }
     await this.permitInstance(invocation, context, token.instanceId)
-    await this.approve(invocation, context, token.instanceId, token.tab.origins)
+    await this.approve(invocation, context, token.tab.origins)
+    if (original) {
+      const answer = await context.ask({
+        kind: 'chromeTab',
+        url: token.tab.url,
+        title: token.tab.title,
+      })
+      if (answer !== 'once' || context.signal.aborted)
+        throw new ChromeBridgeError(
+          'tabNotClaimed',
+          'The user did not approve control of this tab.',
+        )
+    }
     if (
       this.options.bridge.instances().find((instance) => instance.id === token.instanceId)
         ?.epoch !== token.epoch ||
@@ -528,9 +545,14 @@ export class ChromeExecutor implements BrowserExecutor {
       this.busy.add(page.id)
       page.bind(context.signal, page.state.generation)
       try {
+        // 每次操作重新判断，已发出的租约不能绕过用户刚设置的黑名单。
+        if (invocation.tool !== 'release')
+          await this.approve(invocation, context, page.grant.origins)
         return await executePageTool(this, page, invocation, context, args)
       } finally {
         page.unbind()
+        // 审批检查与实际请求之间也可能取消；这时桥还没有收到请求，需主动释放租约。
+        if (context.signal.aborted) await page.release().catch(() => {})
         this.busy.delete(page.id)
       }
     } catch (error) {
@@ -557,13 +579,10 @@ export class ChromeExecutor implements BrowserExecutor {
         })
     const ended = JSON.stringify([turn.deviceId, turn.threadId])
     for (const [id, token] of this.tokens) if (token.session === ended) this.tokens.delete(id)
-    for (const key of this.denied)
-      if (key.includes(`:${ended}:${turn.turnId}:`)) this.denied.delete(key)
+    this.sites.turnEnded(ended, turn.turnId)
     this.instancePermits.delete(`${ended}:${turn.turnId}`)
     for (const key of this.deniedInstances)
       if (key.startsWith(`${ended}:${turn.turnId}:`)) this.deniedInstances.delete(key)
-    for (const key of this.approvals.keys())
-      if (key.endsWith(`:${turn.turnId}`)) this.approvals.delete(key)
   }
   stop(deviceId?: string): void {
     for (const page of this.pages.values())

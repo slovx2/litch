@@ -9,6 +9,8 @@ import {
   chromeExtensionIds,
 } from '../../../../packages/protocol/src/chrome-browser.mjs'
 import type { BrowserExecutor } from '../browser/executor.mjs'
+import { createSiteBook } from '../browser/sites.mjs'
+import { blockedHostOf } from '../browser/url.mjs'
 import type { ClientToolExecutor, ClientToolInvocation } from '../client-tools/types.mjs'
 import { ChromeBridge } from './bridge.mjs'
 import { ChromeExecutor, chromeFailure } from './executor.mjs'
@@ -27,6 +29,7 @@ export interface BrowserTargetsOptions {
   openDirectory(directory: string): Promise<void>
 }
 export class BrowserTargets {
+  private sites
   private enabled = false
   private devices = new Set<string>()
   private lastError: string | null = null
@@ -38,6 +41,7 @@ export class BrowserTargets {
   private initialized: Promise<void>
   constructor(options: BrowserTargetsOptions) {
     this.options = options
+    this.sites = createSiteBook(join(options.root, 'sites.json'))
     this.initialized = this.initialize().catch((error) => {
       this.lastError = String(error)
     })
@@ -71,6 +75,7 @@ export class BrowserTargets {
     await this.bridge.start()
     this.chrome = new ChromeExecutor({
       bridge: this.bridge,
+      sites: this.sites,
       allowed: (invocation) => this.allowed(invocation),
     })
     // 已安装时更新宿主本次连接地址；扩展重连后必须重新认领，不恢复旧授权。
@@ -119,9 +124,19 @@ export class BrowserTargets {
         }
         await this.save()
       }
+      if (request.kind === 'chrome.trust') this.sites.setTrustAll(request.on)
+      if (request.kind === 'chrome.block') {
+        const host = blockedHostOf(request.site)
+        if (!host) throw new Error('Invalid website hostname.')
+        this.sites.block(host)
+      }
+      if (request.kind === 'chrome.unblock') this.sites.unblock(request.host ?? undefined)
+      if (request.kind === 'chrome.forget') this.sites.forget(request.origin ?? undefined)
       if (request.kind === 'chrome.stop') this.chrome.stop()
     }
     return {
+      sitePolicy: this.sites.policy(),
+      savedSites: this.sites.saved(),
       supported: SUPPORTED,
       platform: SUPPORTED ? (process.platform as 'darwin' | 'win32' | 'linux') : null,
       prepared: (await this.installer?.prepared()) ?? false,

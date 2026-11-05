@@ -47,17 +47,19 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
       title={t(
         ask.kind === 'computerSelf'
           ? 'computerSelf.title'
-          : ask.kind === 'chromeInstance'
-            ? 'chrome.instance'
-            : ask.kind === 'chromeSignIn'
-              ? 'chrome.signIn'
-              : ask.kind === 'site'
-                ? ask.browser === 'chrome'
-                  ? 'chrome.approve'
-                  : 'clientAsk.site'
-                : ask.kind === 'machine'
-                  ? MACHINE_TITLE[ask.action]
-                  : 'signInAsk.title',
+          : ask.kind === 'chromeTab'
+            ? 'chrome.tab'
+            : ask.kind === 'chromeInstance'
+              ? 'chrome.instance'
+              : ask.kind === 'chromeSignIn'
+                ? 'chrome.signIn'
+                : ask.kind === 'site'
+                  ? ask.browser === 'chrome'
+                    ? 'chrome.approve'
+                    : 'clientAsk.site'
+                  : ask.kind === 'machine'
+                    ? MACHINE_TITLE[ask.action]
+                    : 'signInAsk.title',
       )}
       waiting={waiting}
       error={error}
@@ -76,9 +78,11 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
                 ? 'computerSelf.once'
                 : ask.kind === 'computerSelf' && option.role === 'acceptSession'
                   ? 'computerSelf.session'
-                  : ask.kind === 'chromeSignIn' && option.role === 'accept'
-                    ? 'chrome.signInDone'
-                    : optionText[option.role],
+                  : ask.kind === 'chromeTab' && option.role === 'accept'
+                    ? 'chrome.tabAllow'
+                    : ask.kind === 'chromeSignIn' && option.role === 'accept'
+                      ? 'chrome.signInDone'
+                      : optionText[option.role],
           )}
           disabled={busy}
           onPress={() => respond({ optionId: option.id })}
@@ -103,6 +107,11 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
         </>
       ) : ask.kind === 'machine' ? (
         <MachineWhat ask={ask} />
+      ) : ask.kind === 'chromeTab' ? (
+        <>
+          <Why>{ask.title}</Why>
+          <Well>{ask.url}</Well>
+        </>
       ) : ask.kind === 'chromeInstance' ? (
         <>
           <Meta label={t('chrome.instanceLabel')} value={ask.name} />

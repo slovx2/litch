@@ -168,6 +168,8 @@ export type ChromeEvent =
     }
 
 export interface ChromeSettingsState {
+  sitePolicy: { trustAll: boolean; blocked: string[] }
+  savedSites: Array<{ origin: string; at: number }>
   supported: boolean
   /** 宿主登记方式和支持的浏览器按平台不同；不支持的平台为 null。 */
   platform: 'darwin' | 'win32' | 'linux' | null
@@ -188,6 +190,10 @@ export interface ChromeSettingsState {
 }
 
 export type ChromeSettingsRequest =
+  | { kind: 'chrome.trust'; on: boolean }
+  | { kind: 'chrome.block'; site: string }
+  | { kind: 'chrome.unblock'; host: string | null }
+  | { kind: 'chrome.forget'; origin: string | null }
   | { kind: 'chrome.status' }
   | { kind: 'chrome.prepare' }
   | { kind: 'chrome.extensions' }

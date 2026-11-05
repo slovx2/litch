@@ -5,10 +5,11 @@ import {
   type DeviceView,
   keys,
 } from '@litch/core'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useKeys, useServices } from '../app/services.tsx'
+import { SavedSites, type SiteSettingsBridge, TrustAll } from './BrowserSection.tsx'
 
 export function ChromeSection() {
   const t = useT()
@@ -52,6 +53,26 @@ export function ChromeSection() {
       clearInterval(timer)
     }
   }, [channel, shell])
+  const sites = useMemo<SiteSettingsBridge>(() => {
+    const request = (value: ChromeSettingsRequest) => channel.command('chrome.settings', value)
+    return {
+      policy: async () => (await request({ kind: 'chrome.status' })).sitePolicy,
+      onPolicy: (receive) => {
+        const timer = setInterval(() => {
+          void request({ kind: 'chrome.status' }).then(
+            (next) => receive(next.sitePolicy),
+            () => {},
+          )
+        }, 2500)
+        return () => clearInterval(timer)
+      },
+      setTrustAll: async (on) => (await request({ kind: 'chrome.trust', on })).sitePolicy,
+      block: async (site) => (await request({ kind: 'chrome.block', site })).sitePolicy,
+      unblock: async (host) => (await request({ kind: 'chrome.unblock', host })).sitePolicy,
+      sites: async () => (await request({ kind: 'chrome.status' })).savedSites,
+      forgetSite: (origin) => request({ kind: 'chrome.forget', origin }),
+    }
+  }, [channel])
   if (shell !== 'electron') return null
   const connected = (state?.instances.length ?? 0) > 0
   // 不兼容按哪一边该更新给出办法；商店装的和开发者模式加载的更新方式不同
@@ -199,6 +220,8 @@ export function ChromeSection() {
               </div>
             </>
           )}
+          <TrustAll bridge={sites} />
+          <SavedSites bridge={sites} />
           {devices.length ? (
             <>
               <h4>{t('chrome.remote')}</h4>

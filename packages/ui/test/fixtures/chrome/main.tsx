@@ -11,6 +11,8 @@ import { ChromeSection } from '../../../src/settings/ChromeSection.tsx'
 import '../../../src/app/appearance.ts'
 
 let state: ChromeSettingsState = {
+  sitePolicy: { trustAll: false, blocked: [] },
+  savedSites: [{ origin: 'https://saved.example', at: 1_760_000_000_000 }],
   supported: true,
   platform: 'darwin',
   prepared: true,
@@ -65,6 +67,14 @@ const services = {
   channel: {
     async command(name: string, request: Record<string, unknown>) {
       if (name !== 'chrome.settings') return {}
+      if (request.kind === 'chrome.trust') state.sitePolicy.trustAll = request.on === true
+      if (request.kind === 'chrome.block') state.sitePolicy.blocked.push(String(request.site))
+      if (request.kind === 'chrome.unblock')
+        state.sitePolicy.blocked = state.sitePolicy.blocked.filter((host) => host !== request.host)
+      if (request.kind === 'chrome.forget')
+        state.savedSites = state.savedSites.filter(
+          (site) => request.origin !== null && site.origin !== request.origin,
+        )
       if (request.kind === 'chrome.enable') state = { ...state, enabled: request.enabled === true }
       return structuredClone(state)
     },

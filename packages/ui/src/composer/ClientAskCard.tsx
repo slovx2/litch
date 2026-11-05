@@ -10,6 +10,7 @@ import { Fragment, useEffect, useRef } from 'react'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { Check, Close, Icon } from '../app/icons.tsx'
+import { useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 import { MachineSessionCard } from '../machine/MachineCard.tsx'
@@ -37,6 +38,7 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
 function SiteCard(props: CardProps<ClientAskRequest>) {
   const { request, waiting } = props
   const t = useT()
+  const { channel, shell } = useServices()
   const { busy, error, respond } = useRespond(props)
   const card = useRef<HTMLElement>(null)
   /** 回车选的那一项：头一个不是拒绝的 */
@@ -47,16 +49,28 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
   const title = t(
     ask.kind === 'computerSelf'
       ? 'computerSelf.title'
-      : ask.kind === 'chromeInstance'
-        ? 'chrome.instance'
-        : ask.kind === 'chromeSignIn'
-          ? 'chrome.signIn'
-          : ask.kind === 'site' && ask.browser === 'chrome'
-            ? 'chrome.approve'
-            : 'clientAsk.site',
+      : ask.kind === 'chromeTab'
+        ? 'chrome.tab'
+        : ask.kind === 'chromeInstance'
+          ? 'chrome.instance'
+          : ask.kind === 'chromeSignIn'
+            ? 'chrome.signIn'
+            : ask.kind === 'site' && ask.browser === 'chrome'
+              ? 'chrome.approve'
+              : 'clientAsk.site',
   )
   /** 信任所有网站要经外壳改设置；普通浏览器里（模拟核心）没有外壳，不出这个按钮 */
-  const bridge = ask.kind === 'site' && ask.browser !== 'chrome' ? browserBridge() : undefined
+  const bridge =
+    ask.kind === 'site'
+      ? ask.browser === 'chrome'
+        ? shell === 'electron'
+          ? {
+              setTrustAll: (on: boolean) =>
+                channel.command('chrome.settings', { kind: 'chrome.trust', on }),
+            }
+          : undefined
+        : browserBridge()
+      : undefined
   const once = request.options.find((option) => option.role === 'accept')
 
   const trustAll = () => {
@@ -66,7 +80,12 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
         showToast({
           id: 'browser-trust-all',
           lifeMs: 6000,
-          text: (tr) => tr('clientAsk.trustAll.done'),
+          text: (tr) =>
+            tr(
+              ask.kind === 'site' && ask.browser === 'chrome'
+                ? 'chrome.trustDone'
+                : 'clientAsk.trustAll.done',
+            ),
         })
         respond({ optionId: once.id })
       },
@@ -142,6 +161,14 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
             <div className="req-why">{t('chrome.instanceNote')}</div>
           </>
         ) : null}
+        {ask.kind === 'chromeTab' ? (
+          <>
+            <div className="req-why">{ask.title}</div>
+            <div className="well">
+              <pre>{ask.url}</pre>
+            </div>
+          </>
+        ) : null}
         {ask.kind === 'chromeSignIn' ? (
           <>
             <div className="req-meta">
@@ -206,9 +233,11 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
                     ? 'computerSelf.once'
                     : ask.kind === 'computerSelf' && option.role === 'acceptSession'
                       ? 'computerSelf.session'
-                      : ask.kind === 'chromeSignIn' && option.role === 'accept'
-                        ? 'chrome.signInDone'
-                        : OPTION_TEXT[option.role],
+                      : ask.kind === 'chromeTab' && option.role === 'accept'
+                        ? 'chrome.tabAllow'
+                        : ask.kind === 'chromeSignIn' && option.role === 'accept'
+                          ? 'chrome.signInDone'
+                          : OPTION_TEXT[option.role],
               )}
               {option === primary && ask.kind !== 'computerSelf' ? (
                 <span className="kbd">↵</span>

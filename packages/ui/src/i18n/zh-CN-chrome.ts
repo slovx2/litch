@@ -1,9 +1,13 @@
 export const zhChrome = {
+  'chrome.tab': '允许控制这个 Chrome 标签页？',
+  'chrome.tabAllow': '允许控制',
+  'chrome.trustDone': '已信任 Chrome 中的所有网站。可在“设置 → Chrome”中关闭或设置黑名单',
   'chrome.instance': '允许使用这个 Chrome',
   'chrome.instanceLabel': '实例',
-  'chrome.instanceNote': '允许代理列出此 Chrome 实例的标签标题和网址。访问页面内容仍需逐来源审批。',
+  'chrome.instanceNote':
+    '允许代理列出此 Chrome 实例的标签标题和网址。访问页面内容遵循 Chrome 站点权限设置，用户标签仍需单独认领。',
   'chrome.title': 'Chrome',
-  'chrome.note': '在这台电脑的 Chrome 中操作已登录的网站。每个来源单独审批。',
+  'chrome.note': '在这台电脑的 Chrome 中操作已登录的网站。站点权限单独设置。',
   'chrome.enable': '允许代理使用 Chrome',
   'chrome.unsupported': '此平台不支持。',
   'chrome.browsers.darwin': '支持 Google Chrome 正式版。',
@@ -28,7 +32,7 @@ export const zhChrome = {
     '在 Chrome 扩展页开启“开发者模式”，选择“加载已解压的扩展程序”，选取以下目录。更新 Litch 后请重新加载扩展。',
   'chrome.version': '扩展目录中的版本 {version}',
   'chrome.remote': '远程设备',
-  'chrome.remoteNote': '选中的设备可请求操作这台电脑的 Chrome，仍需逐来源批准。',
+  'chrome.remoteNote': '选中的设备可请求操作这台电脑的 Chrome，遵循此处站点权限设置。',
   'chrome.signIn': '在 Chrome 中登录',
   'chrome.signInNote':
     '请在 Chrome 中完成登录。等待期间，代理无法读取或操作此标签。完成后重新载入页面并交还控制。',

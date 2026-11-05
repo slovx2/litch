@@ -97,7 +97,7 @@ export async function executePageTool(
         throw new ChromeBridgeError('invalid', 'Only HTTP(S) and about:blank URLs are supported.')
       const origin = chromeOrigin(address)
       if (!origin) throw new ChromeBridgeError('invalid', 'Unsupported URL origin.')
-      await executor.approve(invocation, context, page.instanceId, [origin])
+      await executor.approve(invocation, context, [origin])
       await page.authorize([...new Set([...page.grant.origins, origin])])
       if (!(await page.load(address, 30_000)).ok)
         throw new ChromeBridgeError('failed', 'Navigation did not finish within 30 seconds.')

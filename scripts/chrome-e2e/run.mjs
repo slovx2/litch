@@ -773,6 +773,53 @@ try {
     assert.match(text(denied), /cancelled/)
   })
   await chromeUx({ check, cdp, workerSession, executor, targetId, site, invocation, context })
+  await check('站点设置：信任所有、多来源免审批、黑名单拦截及用户标签逐个认领', async () => {
+    const prior = { ...invocation }
+    Object.assign(invocation, { threadId: 'site-policy-thread', turnId: 'site-policy-turn' })
+    executor.sites.setTrustAll(true)
+    try {
+      const before = asks.filter((ask) => ask.kind === 'site').length
+      const opened = JSON.parse(
+        text(await success('navigate', { targetId, url: site.origin })).split('\n')[0],
+      )
+      await success('navigate', { tabId: opened.tabId, url: site.other })
+      await success('snapshot', { tabId: opened.tabId })
+      assert.equal(asks.filter((ask) => ask.kind === 'site').length, before)
+      executor.sites.block('b.test')
+      const blockedRead = await call('snapshot', { tabId: opened.tabId })
+      assert.equal(blockedRead.success, false)
+      assert.match(text(blockedRead), /blocked/)
+      const fresh = JSON.parse(
+        text(await success('navigate', { targetId, url: `${site.origin}/policy-user` })).split(
+          '\n',
+        )[0],
+      )
+      const requests = site.requests.length
+      const blocked = await call('navigate', {
+        tabId: fresh.tabId,
+        url: `${site.other}/blocked-policy`,
+      })
+      assert.equal(blocked.success, false)
+      assert.match(text(blocked), /blocked/)
+      assert.equal(site.requests.slice(requests).includes('/blocked-policy'), false)
+      assert.equal(asks.filter((ask) => ask.kind === 'site').length, before)
+      await success('release', { tabId: fresh.tabId })
+      const listed = JSON.parse(text(await success('tabs', { action: 'list', targetId }))).tabs
+      const user = listed.find((tab) => tab.url === `${site.origin}/policy-user`)
+      const claims = asks.filter((ask) => ask.kind === 'chromeTab').length
+      await success('claim', { claimToken: user.claimToken })
+      assert.equal(asks.filter((ask) => ask.kind === 'chromeTab').length, claims + 1)
+    } finally {
+      executor.turnEnded({
+        deviceId: invocation.device.id,
+        threadId: invocation.threadId,
+        turnId: invocation.turnId,
+      })
+      executor.sites.unblock()
+      executor.sites.setTrustAll(false)
+      Object.assign(invocation, prior)
+    }
+  })
   if (process.argv.includes('--remote'))
     await check('真实 SSH / 远程 Pi / 核心审批 / 控制端 Chrome', async () => {
       report.remote = await remoteCheck({ ...driver, executor, origin: site.origin })

@@ -995,6 +995,7 @@ export type ClientAskView =
   | { kind: 'computerSelf'; id: string; nonce: string; desktopId: string | null }
   | { kind: 'chromeSignIn'; origin: string; reason: string }
   | { kind: 'chromeInstance'; instanceId: string; name: string }
+  | { kind: 'chromeTab'; url: string; title: string }
   | {
       kind: 'site'
       /** 要访问的网站来源，比如 https://example.com */

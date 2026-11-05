@@ -156,12 +156,12 @@ const DISABLED: Record<string, string> = {
  * 卡片上的选项：网站是“这一次 / 这个会话 / 一直 / 拒绝”
  */
 export const clientAskOptions = (ask: ClientAskView): ApprovalOption[] =>
-  ask.kind === 'chromeSignIn'
+  ask.kind === 'chromeSignIn' || ask.kind === 'chromeTab'
     ? [
         { id: 'once', role: 'accept' },
         { id: 'decline', role: 'decline' },
       ]
-    : ask.kind === 'chromeInstance' || (ask.kind === 'site' && ask.browser === 'chrome')
+    : ask.kind === 'chromeInstance'
       ? [
           { id: 'once', role: 'accept' },
           { id: 'session', role: 'acceptSession' },
