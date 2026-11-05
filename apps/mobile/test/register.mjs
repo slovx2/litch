@@ -8,6 +8,8 @@ import { registerHooks } from 'node:module'
 import { fileURLToPath } from 'node:url'
 
 const here = new URL('./', import.meta.url)
+// 现有逻辑用例驱动验收入口；正式包用例显式设 0，不能以 __DEV__ 代替构建档位。
+process.env.EXPO_PUBLIC_LITCH_E2E ??= '1'
 const core = new URL('../../../packages/core/src/index.mts', import.meta.url)
 const stubs = {
   'expo-document-picker': new URL('stubs/expo-document-picker.mjs', here),

@@ -293,8 +293,6 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(
         textZoom={100}
         overScrollMode="never"
         setBuiltInZoomControls={false}
-        keyboardDisplayRequiresUserAction={false}
-        hideKeyboardAccessoryView
         style={[styles.web, { backgroundColor: theme.background }]}
         testID="terminal:web"
       />

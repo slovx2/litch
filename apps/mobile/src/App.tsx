@@ -17,6 +17,7 @@ import { Navigator } from './nav/Navigator'
 import { setBackgroundMinutes } from './platform/background'
 import { fileDeviceStore } from './platform/device-store'
 import { type Booted, boot, VERSION } from './shell/boot'
+import { devToolsEnabled } from './shell/build-mode'
 import { handleDevLink, navigationRef } from './shell/dev-links'
 import { jsonFile } from './shell/json-file'
 import { loadPrefs, type Prefs, type Services, ServicesProvider, savePrefs } from './shell/services'
@@ -106,6 +107,7 @@ export default function App() {
   // 启动应用的那个链接只处理一次：换了装法这里会重新挂一遍，再读一次就又换回去了
   const initialHandled = useRef(false)
   useEffect(() => {
+    if (!devToolsEnabled()) return
     // 现在做不了的（核心还在装、还没有设备）每 250 毫秒再交一次，最多 15 秒；后来的链接顶掉还在等的
     let retry: ReturnType<typeof setTimeout> | undefined
     const handle = (url: string | null, tries = 0) => {

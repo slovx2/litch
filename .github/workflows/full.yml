@@ -558,6 +558,8 @@ jobs:
       - name: 生成 Android 工程
         id: phase-2
         working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_LITCH_E2E: '1'
         run: npx expo prebuild --platform android --clean --no-install
       - name: Android 工具链指纹
         id: android-tools
@@ -587,6 +589,8 @@ jobs:
       - name: 打 release 包
         id: phase-1
         working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_LITCH_E2E: '1'
         run: npm run android:release -- --build-cache --max-workers=4 -PreactNativeArchitectures=x86_64
       - name: 封存唯一 APK
         id: apk

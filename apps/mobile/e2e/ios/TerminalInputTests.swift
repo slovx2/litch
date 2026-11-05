@@ -50,6 +50,22 @@ final class TerminalInputTests: XCTestCase {
     XCTAssertTrue(try commandWasReceived(command))
   }
 
+  func testColdStartKeyboard() throws {
+    app.terminate()
+    app.launch()
+    XCTAssertTrue(app.buttons["device:fixture"].waitForExistence(timeout: 20))
+    let file = Bundle(for: Self.self).url(forResource: "validation", withExtension: "json")!
+    let settings = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as! [String: String]
+    app.open(URL(string: settings["terminal"]!)!)
+    XCTAssertTrue(app.otherElements["terminal"].waitForExistence(timeout: 10))
+    // 冷启动后只点击一次，不靠重新点击或私有 WK 方法补救。
+    app.buttons["terminal:key:keyboard"].tap()
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+    for character in "echo cold-keyboard" { app.typeText(String(character)) }
+    app.typeText("\r")
+    XCTAssertTrue(try commandWasReceived("echo cold-keyboard"))
+  }
+
   func testTerminalRotation() throws {
     defer { XCUIDevice.shared.orientation = .portrait }
     XCUIDevice.shared.orientation = .landscapeLeft

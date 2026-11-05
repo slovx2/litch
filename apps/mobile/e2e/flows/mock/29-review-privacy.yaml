@@ -1,0 +1,99 @@
+appId: dev.litch.app
+name: 数据同意取消与允许、撤回及 Tailscale 说明
+tags: [mock, privacy]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- tapOn:
+    id: device:local
+- tapOn:
+    id: sessions:new
+- tapOn:
+    id: new-input
+- inputText: consent-e2e
+- tapOn:
+    id: new-send
+- extendedWaitUntil:
+    visible:
+      id: ai-consent:title
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: ai-consent:cancel
+- tapOn:
+    id: ai-consent:cancel
+- assertVisible:
+    id: new-input
+- assertNotVisible:
+    id: detail
+- tapOn:
+    id: new-send
+- extendedWaitUntil:
+    visible:
+      id: ai-consent:title
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: ai-consent:allow
+- tapOn:
+    id: ai-consent:allow
+- extendedWaitUntil:
+    visible:
+      id: detail
+    timeout: 20000
+- assertVisible:
+    id: user-message
+- openLink: 'litch://home'
+- tapOn:
+    id: devices:settings
+- scrollUntilVisible:
+    element:
+      id: settings:withdraw-consent
+- tapOn:
+    id: settings:withdraw-consent
+- tapOn:
+    id: confirm:ok
+- tapOn:
+    id: header:back
+- openLink: 'litch://new?device=local&prompt=consent-after-withdrawal'
+- extendedWaitUntil:
+    visible:
+      id: ai-consent:title
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: ai-consent:cancel
+- tapOn:
+    id: ai-consent:cancel
+- tapOn:
+    id: devices:settings
+- scrollUntilVisible:
+    element:
+      id: settings:feedback
+- assertVisible:
+    id: settings:licenses
+- scrollUntilVisible:
+    element:
+      id: settings:tailscale
+    direction: UP
+- tapOn:
+    id: settings:tailscale
+- extendedWaitUntil:
+    visible:
+      id: tailscale:login
+    timeout: 15000
+- tapOn:
+    id: tailscale:login
+- extendedWaitUntil:
+    visible:
+      id: tailscale:consent-cancel
+    timeout: 5000
+- tapOn:
+    id: tailscale:consent-cancel
+- assertVisible:
+    id: tailscale:login
+- assertNotVisible:
+    id: tailscale:progress

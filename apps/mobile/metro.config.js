@@ -6,6 +6,8 @@ const path = require('node:path')
 
 const repo = path.resolve(__dirname, '../..')
 const config = getDefaultConfig(__dirname)
+// E2E 与发布包不能复用已经内联另一档环境变量的转换缓存。
+config.cacheVersion = `litch-mobile-${process.env.EXPO_PUBLIC_LITCH_E2E === '1' ? 'e2e' : 'production'}`
 
 config.watchFolders = [
   path.join(repo, 'packages/core/src'),

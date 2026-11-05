@@ -23,6 +23,7 @@ import { seedSessions } from '../screens/sessions/seed'
 import { termStats } from '../screens/tools/tool-flags'
 import { setFeedOverride } from '../update/override'
 import type { BootMode } from './boot'
+import { devToolsEnabled } from './build-mode'
 import type { Services } from './services'
 import { injectTestAnr } from './test-anr'
 import { reportTestClipboard } from './test-clipboard'
@@ -53,7 +54,15 @@ let lastCreated: { deviceId: string; sessionId: string } | null = null
  * 由外面过一会儿再交一次（应用刚起来时发的第一个链接就是这种）
  */
 export function handleDevLink(url: string, services: Services | null): BootMode | 'later' | null {
-  const parsed = new URL(url)
+  if (!devToolsEnabled()) return null
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return null
+  }
+  if (!['litch:', 'litch-dev:'].includes(parsed.protocol) || parsed.username || parsed.password)
+    return null
   const params = parsed.searchParams
   applyExperiment(params)
   if (parsed.hostname === 'remote') {

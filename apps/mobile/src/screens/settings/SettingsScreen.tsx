@@ -8,11 +8,14 @@ import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-nat
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SEND_MODES } from '../../../../../packages/ui/src/composer/send-mode-logic.ts'
 import type { RootStackParamList } from '../../nav/routes'
+import { CONTENT_FEEDBACK_EMAIL, feedbackURL, LICENSES_URL } from '../../privacy/config'
+import { aiConsentRecords } from '../../privacy/storage'
 import type { BootMode } from '../../shell/boot'
+import { devToolsEnabled } from '../../shell/build-mode'
 import { type Prefs, useServices } from '../../shell/services'
 import { type Key, useT } from '../../ui/i18n'
 import { Row, SectionLabel, ValueRow } from '../../ui/kit/controls'
-import { Sheet } from '../../ui/kit/overlays'
+import { Confirm, Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { SKINS, type Skin, useTheme } from '../../ui/theme'
 import { CURRENT_VERSION } from '../../update/store'
@@ -95,6 +98,12 @@ export function SettingsScreen({ navigation }: Props) {
   const { prefs, setPrefs, booted } = useServices()
   const insets = useSafeAreaInsets()
   const [linkError, setLinkError] = useState(false)
+  const [feedback, setFeedback] = useState(false)
+  const [withdrawConsent, setWithdrawConsent] = useState(false)
+  const openLink = (url: string) => {
+    setLinkError(false)
+    void Linking.openURL(url).catch(() => setLinkError(true))
+  }
   const openAbout = (page: 'privacy' | 'support') => {
     setLinkError(false)
     void Linking.openURL(`https://github.com/slovx2/litch/blob/main/docs/ios-${page}.md`).catch(
@@ -191,27 +200,66 @@ export function SettingsScreen({ navigation }: Props) {
               onPress={() => openAbout('support')}
               testID="settings:support"
             />
-            {linkError ? <Note>{t('app.openLinkFailed')}</Note> : null}
           </>
         ) : null}
 
-        <SectionLabel>{t('sessions.settings.dev')}</SectionLabel>
-        <Group>
-          <Pick<BootMode>
-            name="boot"
-            title={t('sessions.settings.boot')}
-            value={prefs.boot}
-            options={(['stored', 'mock', 'fixture'] as const).map((mode) => ({
-              value: mode,
-              label: t(BOOT_LABEL[mode]),
-            }))}
-            onPick={(boot) => setPrefs({ boot })}
-          />
-        </Group>
-        <Note>
-          {t('sessions.settings.boot.note')}{' '}
-          {t('sessions.settings.mode', { mode: t(BOOT_LABEL[booted.mode]) })}
-        </Note>
+        <Row
+          title={t('privacy.feedback')}
+          testID="settings:feedback"
+          onPress={() =>
+            CONTENT_FEEDBACK_EMAIL
+              ? openLink(feedbackURL(t('privacy.feedback')))
+              : setFeedback(true)
+          }
+        />
+        <Row
+          title={t('privacy.licenses')}
+          testID="settings:licenses"
+          onPress={() => openLink(LICENSES_URL)}
+        />
+        {linkError ? <Note>{t('app.openLinkFailed')}</Note> : null}
+        <Row
+          title={t('privacy.ai.reset')}
+          testID="settings:withdraw-consent"
+          onPress={() => setWithdrawConsent(true)}
+        />
+        <Confirm
+          visible={withdrawConsent}
+          title={t('privacy.ai.reset')}
+          detail={t('privacy.ai.resetDetail')}
+          confirmLabel={t('privacy.continue')}
+          onClose={() => setWithdrawConsent(false)}
+          onConfirm={() => aiConsentRecords.remove()}
+        />
+        {devToolsEnabled() ? (
+          <>
+            <SectionLabel>{t('sessions.settings.dev')}</SectionLabel>
+            <Group>
+              <Pick<BootMode>
+                name="boot"
+                title={t('sessions.settings.boot')}
+                value={prefs.boot}
+                options={(['stored', 'mock', 'fixture'] as const).map((mode) => ({
+                  value: mode,
+                  label: t(BOOT_LABEL[mode]),
+                }))}
+                onPick={(boot) => setPrefs({ boot })}
+              />
+            </Group>
+            <Note>
+              {t('sessions.settings.boot.note')}{' '}
+              {t('sessions.settings.mode', { mode: t(BOOT_LABEL[booted.mode]) })}
+            </Note>
+          </>
+        ) : null}
+        <Confirm
+          visible={feedback}
+          title={t('privacy.feedback')}
+          detail={t('privacy.publicFeedback')}
+          confirmLabel={t('privacy.continue')}
+          onClose={() => setFeedback(false)}
+          onConfirm={() => openLink(feedbackURL(t('privacy.feedback')))}
+        />
       </ScrollView>
     </Screen>
   )

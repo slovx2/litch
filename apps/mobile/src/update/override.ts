@@ -1,6 +1,8 @@
 // 开发和验收用的更新清单地址：测试链接 litch://update?feed=<地址> 换成本机起的假清单（允许 http），
 // litch://update?reset=1 换回正式的那份。记在文档目录的一个 JSON 文件里，重启应用也还在。
 // 单独放一个文件：测试链接（src/shell/dev-links.ts）只引这里，不把下载、原生模块那一套带进单元测试。
+
+import { devToolsEnabled } from '../shell/build-mode'
 import { jsonFile } from '../shell/json-file'
 
 const file = jsonFile<{ feed: string }>('update-feed.json')
@@ -8,11 +10,19 @@ const listeners = new Set<() => void>()
 
 /** 换过的清单地址；没换过是 null */
 export function feedOverride(): string | null {
+  if (!devToolsEnabled()) {
+    file.remove()
+    return null
+  }
   return file.read()?.feed ?? null
 }
 
 /** 换清单地址（null 是换回正式的那份）；地址要是 http 或 https，不是就不换、返回 false */
 export function setFeedOverride(feed: string | null): boolean {
+  if (!devToolsEnabled()) {
+    file.remove()
+    return false
+  }
   if (feed === null) file.remove()
   else if (/^https?:\/\/\S+$/.test(feed)) file.write({ feed })
   else return false

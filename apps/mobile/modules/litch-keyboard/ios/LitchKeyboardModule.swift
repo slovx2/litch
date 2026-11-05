@@ -5,7 +5,7 @@ public final class LitchKeyboardModule: Module {
   public func definition() -> ModuleDefinition {
     Name("LitchKeyboard")
     Function("show") { () -> Bool in
-      // 终端的 WKWebView 已设置 keyboardDisplayRequiresUserAction=false，页面负责 focus。
+      // 页面由用户点击或公开 evaluateJavaScript 调用 focus。
       // 此处仅刷新已有第一响应者，不能用私有 WKContentView API 强制弹键盘。
       let show = {
         for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {

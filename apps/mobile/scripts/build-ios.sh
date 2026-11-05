@@ -3,6 +3,8 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
+# Release 模拟器验收包也需要测试入口，正式归档脚本明确拒绝此开关。
+if [[ "${LITCH_MOBILE_DEV:-0}" == 1 ]]; then export EXPO_PUBLIC_LITCH_E2E=1; fi
 npm run web:build
 bash "$SCRIPT_DIR/build-ssh-ios.sh"
 npx expo prebuild --platform ios --no-install

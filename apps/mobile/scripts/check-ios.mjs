@@ -16,6 +16,7 @@ import {
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { withConsentSteps } from './consent-flows.mjs'
 import { iosTestHelper } from './ios-test-helper.mjs'
 import { installTerminalAudit } from './terminal-audit.mjs'
 
@@ -75,80 +76,83 @@ try {
       else
         writeFileSync(
           to,
-          readFileSync(from, 'utf8')
-            .replace(/dev\.litch\.app(?!\.dev)/g, 'dev.litch.app.dev')
-            .replaceAll('litch://', 'litch-dev://')
-            // 两个开关已完整可见，但靠近列表边界，iOS 倒置列表无法把它们都居中。
-            // 保留 100% 可见与 checked 断言，只取消强制居中。
-            .replace(/^ {4}centerElement: true$/gm, (line) =>
-              entry.name === '15-worktrees.yaml' ? '    centerElement: false' : line,
-            )
-            // 会话行是单个无障碍按钮，分支文字在该行标签中；后续的分支值断言保持原样。
-            .replaceAll('id: session:s5:worktree', 'id: session:s5')
-            // iOS 只暴露整个图像按钮；它仅在 SVG/PNG 生成后启用，不能用仍在绘制的容器充数。
-            .replace(
-              /^( *)id: mermaid-card:image$/gm,
-              (_, indent) => `${indent}id: mermaid-card:open\n${indent}enabled: true`,
-            )
-            // iOS 把可点击 Row 的标题与详情合并；仍严格验证选中的起点控件及完整分支名。
-            .replace(
-              '- assertVisible:\n    text: release/0.18\n',
-              '- assertVisible:\n    id: new:from\n    text: "^(From|起点), release/0\\\\.18$"\n',
-            )
-            .replace(
-              'text: .*(Worktree|工作树)[:：] litch/.*',
-              'text: "(?s).*(Worktree: |工作树：)litch/.*"',
-            )
-            // 原生元素点击验证这些动作正常；iOS 滚动结束前的旧坐标会点到相邻控件。
-            .replace(
-              /^( *)- tapOn:\n\1 {4}id: (hc:attempt:\.\*:code|proposal:e2e-pr1:more|hc:models:add)\n/gm,
-              (line, indent) =>
-                `${indent}- waitForAnimationToEnd:\n${indent}    timeout: 3000\n${line}`,
-            )
-            // 填主机后键盘盖住用户名；像 XCTest 的元素点击一样，先把目标滚入可见区域。
-            .replace(
-              '- tapOn:\n    id: add:user\n',
-              '- scrollUntilVisible:\n    element:\n      id: add:user\n    centerElement: true\n' +
-                '- waitForAnimationToEnd:\n    timeout: 3000\n- tapOn:\n    id: add:user\n',
-            )
-            // iOS 的整句 XCTest 注入会产生虚拟 keyCode，终端按真实逐字输入验证。
-            .replace(
-              '- inputText: echo e2e-$((6*7)) > e2e-mark.txt',
-              '- evalScript: ${output.terminalCommand = "echo e2e-$((6*7)) > e2e-mark.txt"; output.terminalAt = 0}\n' +
-                '- repeat:\n    while:\n      true: ${output.terminalAt < output.terminalCommand.length}\n' +
-                '    commands:\n      - inputText: ${output.terminalCommand.charAt(output.terminalAt)}\n' +
-                '      - evalScript: ${output.terminalAt += 1}',
-            )
-            .replace(
-              '- tapOn:\n    id: pair:paste\n- inputText: ${output.pairText}\n- hideKeyboard',
-              '- runScript: ../ios/pair-clipboard.js\n- assertTrue: ${output.clipboardSet}\n' +
-                '- tapOn: "从剪贴板粘贴|Paste from clipboard"\n' +
-                '- runFlow:\n    when:\n      visible: "允许粘贴|Allow Paste"\n' +
-                '    commands:\n      - tapOn: "允许粘贴|Allow Paste"',
-            )
-            // iOS 没有系统返回键，用同一个页面的返回或关闭按钮。
-            .replace('- back\n- back\n', (steps) =>
-              entry.name === '15-worktrees.yaml'
-                ? '- tapOn:\n    id: worktree:scrim\n- back\n'
-                : steps,
-            )
-            .replace(
-              /^( *)- back$/gm,
-              (_, indent) =>
-                `${indent}- tapOn:\n${indent}    id: ${entry.name === '16-mermaid.yaml' ? 'mermaid-viewer:close' : 'header:back'}`,
-            )
-            .replace('    stopApp: true\n', () => `    stopApp: true\n${confirmLink()}\n`)
-            .replace(
-              /^( *)- openLink: (.+)$/gm,
-              (line, indent) => `${line}\n${confirmLink(indent)}`,
-            )
-            // iOS 数字/多行键盘不一定有系统收起动作，使用产品统一的完成按钮并验证已收起。
-            .replace(
-              /^( *)- hideKeyboard[ \t]*$/gm,
-              (_, indent) =>
-                `${indent}- tapOn:\n${indent}    id: keyboard:done\n` +
-                `${indent}- extendedWaitUntil:\n${indent}    notVisible:\n${indent}      id: keyboard:done\n${indent}    timeout: 5000`,
-            ),
+          withConsentSteps(
+            readFileSync(from, 'utf8')
+              .replace(/dev\.litch\.app(?!\.dev)/g, 'dev.litch.app.dev')
+              .replaceAll('litch://', 'litch-dev://')
+              // 两个开关已完整可见，但靠近列表边界，iOS 倒置列表无法把它们都居中。
+              // 保留 100% 可见与 checked 断言，只取消强制居中。
+              .replace(/^ {4}centerElement: true$/gm, (line) =>
+                entry.name === '15-worktrees.yaml' ? '    centerElement: false' : line,
+              )
+              // 会话行是单个无障碍按钮，分支文字在该行标签中；后续的分支值断言保持原样。
+              .replaceAll('id: session:s5:worktree', 'id: session:s5')
+              // iOS 只暴露整个图像按钮；它仅在 SVG/PNG 生成后启用，不能用仍在绘制的容器充数。
+              .replace(
+                /^( *)id: mermaid-card:image$/gm,
+                (_, indent) => `${indent}id: mermaid-card:open\n${indent}enabled: true`,
+              )
+              // iOS 把可点击 Row 的标题与详情合并；仍严格验证选中的起点控件及完整分支名。
+              .replace(
+                '- assertVisible:\n    text: release/0.18\n',
+                '- assertVisible:\n    id: new:from\n    text: "^(From|起点), release/0\\\\.18$"\n',
+              )
+              .replace(
+                'text: .*(Worktree|工作树)[:：] litch/.*',
+                'text: "(?s).*(Worktree: |工作树：)litch/.*"',
+              )
+              // 原生元素点击验证这些动作正常；iOS 滚动结束前的旧坐标会点到相邻控件。
+              .replace(
+                /^( *)- tapOn:\n\1 {4}id: (hc:attempt:\.\*:code|proposal:e2e-pr1:more|hc:models:add)\n/gm,
+                (line, indent) =>
+                  `${indent}- waitForAnimationToEnd:\n${indent}    timeout: 3000\n${line}`,
+              )
+              // 填主机后键盘盖住用户名；像 XCTest 的元素点击一样，先把目标滚入可见区域。
+              .replace(
+                '- tapOn:\n    id: add:user\n',
+                '- scrollUntilVisible:\n    element:\n      id: add:user\n    centerElement: true\n' +
+                  '- waitForAnimationToEnd:\n    timeout: 3000\n- tapOn:\n    id: add:user\n',
+              )
+              // iOS 的整句 XCTest 注入会产生虚拟 keyCode，终端按真实逐字输入验证。
+              .replace(
+                '- inputText: echo e2e-$((6*7)) > e2e-mark.txt',
+                '- evalScript: ${output.terminalCommand = "echo e2e-$((6*7)) > e2e-mark.txt"; output.terminalAt = 0}\n' +
+                  '- repeat:\n    while:\n      true: ${output.terminalAt < output.terminalCommand.length}\n' +
+                  '    commands:\n      - inputText: ${output.terminalCommand.charAt(output.terminalAt)}\n' +
+                  '      - evalScript: ${output.terminalAt += 1}',
+              )
+              .replace(
+                '- tapOn:\n    id: pair:paste\n- inputText: ${output.pairText}\n- hideKeyboard',
+                '- runScript: ../ios/pair-clipboard.js\n- assertTrue: ${output.clipboardSet}\n' +
+                  '- tapOn: "从剪贴板粘贴|Paste from clipboard"\n' +
+                  '- runFlow:\n    when:\n      visible: "允许粘贴|Allow Paste"\n' +
+                  '    commands:\n      - tapOn: "允许粘贴|Allow Paste"',
+              )
+              // iOS 没有系统返回键，用同一个页面的返回或关闭按钮。
+              .replace('- back\n- back\n', (steps) =>
+                entry.name === '15-worktrees.yaml'
+                  ? '- tapOn:\n    id: worktree:scrim\n- back\n'
+                  : steps,
+              )
+              .replace(
+                /^( *)- back$/gm,
+                (_, indent) =>
+                  `${indent}- tapOn:\n${indent}    id: ${entry.name === '16-mermaid.yaml' ? 'mermaid-viewer:close' : 'header:back'}`,
+              )
+              .replace('    stopApp: true\n', () => `    stopApp: true\n${confirmLink()}\n`)
+              .replace(
+                /^( *)- openLink: (.+)$/gm,
+                (line, indent) => `${line}\n${confirmLink(indent)}`,
+              )
+              // iOS 数字/多行键盘不一定有系统收起动作，使用产品统一的完成按钮并验证已收起。
+              .replace(
+                /^( *)- hideKeyboard[ \t]*$/gm,
+                (_, indent) =>
+                  `${indent}- tapOn:\n${indent}    id: keyboard:done\n` +
+                  `${indent}- extendedWaitUntil:\n${indent}    notVisible:\n${indent}      id: keyboard:done\n${indent}    timeout: 5000`,
+              ),
+            from,
+          ),
         )
     }
   }

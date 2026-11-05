@@ -16,7 +16,7 @@ import { useChannel, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Field, Row } from '../../ui/kit/controls'
 import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
-import { Confirm } from '../../ui/kit/overlays'
+import { Confirm, Dialog } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 
@@ -37,6 +37,7 @@ export function TailscaleScreen({ navigation, route }: Props) {
   const [advanced, setAdvanced] = useState(false)
   const login = useRef<AbortController | null>(null)
   const [confirm, setConfirm] = useState<'logout' | 'clear' | null>(null)
+  const [disclosure, setDisclosure] = useState(false)
   const edited = useRef(false)
   const connected = useRef(false)
   const alive = useRef(true)
@@ -131,6 +132,35 @@ export function TailscaleScreen({ navigation, route }: Props) {
   return (
     <Screen title={t('tailscale.title')} testID="tailscale">
       <KeyboardFormScrollView contentContainerStyle={styles.body}>
+        <Dialog visible={disclosure} onClose={() => setDisclosure(false)}>
+          <Text style={note}>{t('privacy.tailscale.title')}</Text>
+          <Text style={note}>{t('privacy.tailscale.detail')}</Text>
+          <Text style={note}>{server || 'https://controlplane.tailscale.com'}</Text>
+          {server ? <Text style={note}>{t('privacy.tailscale.custom')}</Text> : null}
+          <Button
+            kind="plain"
+            label={t('privacy.tailscale.policy')}
+            onPress={() =>
+              void Linking.openURL('https://tailscale.com/privacy-policy').catch(() =>
+                setError(t('app.openLinkFailed')),
+              )
+            }
+          />
+          <Button
+            kind="plain"
+            label={t('app.cancel')}
+            testID="tailscale:consent-cancel"
+            onPress={() => setDisclosure(false)}
+          />
+          <Button
+            label={t('privacy.continue')}
+            testID="tailscale:consent-allow"
+            onPress={() => {
+              setDisclosure(false)
+              void act('login')
+            }}
+          />
+        </Dialog>
         {!available ? (
           <Text style={note} testID="tailscale:unavailable">
             {t('tailscale.unavailable')}
@@ -180,7 +210,7 @@ export function TailscaleScreen({ navigation, route }: Props) {
                       void Linking.openURL(status.authURL).catch(() =>
                         setError(t('tailscale.error.other')),
                       )
-                    else void act('login')
+                    else setDisclosure(true)
                   }}
                 />
               ) : null}

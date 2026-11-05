@@ -1,8 +1,36 @@
 # Phones (Android and iOS, pairing by QR code)
 
 iOS 手机设置的“关于”提供“隐私政策”和“支持与反馈”，在系统浏览器打开公开页面。
-iOS 的更新由 App Store 或 TestFlight 管理。支持问题通过 GitHub issues 提交；该渠道公开，
-不要附带私钥、验证码、配对二维码或私人会话，隐私请求先询问私密联系方式。
+iOS 的更新由 App Store 或 TestFlight 管理。隐私查询、删除请求及内容举报发至 admin@datawake.cc。
+设置中的“反馈或举报内容”打开邮件，“第三方许可”打开许可说明；普通问题也可通过公开 GitHub issues 提交，
+不要附带私钥、验证码、配对二维码或私人会话。
+
+## 数据同意 / Data sharing consent
+
+手机首次向 AI 服务发起操作前，会说明消息、附件、代理读取的项目文件和会话上下文的数据去向。
+用户可以取消；取消不会发送本次内容。同意按设备与供应商配置保存，换供应商或配置变化后重新确认。
+若远端未上报完整供应商信息，界面明确提示先核实配置，本次许可不保存。文件附件先上传到选定设备，
+后续发送给模型仍须获得该服务的同意。经理操作同时说明其配置的派发服务。
+设置可“撤回 AI 数据同意”；这只影响手机今后的操作，不删除已经传出的内容，也不停止远端运行的任务。
+手机不控制已经自主运行的远程代理；在电脑上更改服务或要求代理使用其他服务前，应重新核实数据去向。
+
+Before an AI action from the phone, Litch explains where messages, attachments, project files and
+conversation context may be processed. You can cancel. Consent is saved per device and reported
+provider configuration; provider or configuration changes require confirmation. Unknown provider
+details are shown explicitly and permission is not saved. File attachments are uploaded to the
+selected device first; sending them to a model still requires consent for that service. Manager
+actions also disclose their configured dispatch service. Withdraw consent in Settings to be asked
+again. This does not delete data already sent or stop autonomous work on your remote computer.
+
+Tailscale 登录前说明控制服务器处理的节点/网络元数据，提供隐私政策链接和继续/取消。
+取消后仍可使用普通 SSH。自定义控制服务器的数据处理由其运营方负责。
+Before Tailscale sign-in, review the node and network metadata disclosure and privacy link, then
+continue or cancel. Direct SSH remains available. Custom control servers have their own operators.
+
+正式 iOS/Android 包不提供开发深链、模拟/夹具启动方式或测试更新源。升级时清除旧开发设置，
+设备、SSH 密钥和普通偏好保留。开发者的 Release E2E 包使用显式构建开关，不能作为发布包分发。
+Production iOS and Android builds do not expose development links, mock/fixture boot modes or test
+update feeds. Upgrades remove old development settings while retaining devices, SSH keys and normal preferences.
 
 The Litch phone app connects over SSH to the same machines. Instead of copying keys by hand, a
 device the desktop already reaches can be added to the phone by scanning a QR code: the phone creates

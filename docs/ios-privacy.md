@@ -10,6 +10,7 @@
 
 - 设备地址、用户名、偏好、会话摘要和待发送内容保存在应用本地存储中。SSH 私钥保存在 iOS 安全存储中，用于验证连接；SSH 私钥不会作为会话内容上传。
 - 您发送的消息、文件、图片、终端输入和审批操作会传到您选择的远程计算机。计算机上的 harness、模型供应商和工具可能继续处理这些内容；其保存、使用和删除方式由您或相应服务提供方决定。
+- 手机端会在发起 AI 数据操作前请求同意；远程机器上的代理仍按您在该机器上的配置调用服务，由您在远程设备上控制，手机不拦截这些自主请求。撤回手机端同意不会停止已经运行的远程任务，也不会删除已传出的内容。
 - Litch 的发布者不运营用于集中收集这些远程会话内容的 Litch 云端会话服务。应用没有用于跨应用广告跟踪的 SDK，也不出售用户数据。
 - 文件或消息内的远程资源可能向资源提供者发起网络请求。打开外部网页后，该网站适用自己的隐私政策。
 
@@ -49,6 +50,8 @@ This policy covers the Litch iOS app published by Shuneng Awakening (Shenzhen) T
 Device addresses, usernames, preferences, session summaries and pending inputs are stored locally. SSH private keys are kept in iOS secure storage for authentication, rather than uploaded as session content.
 
 Messages, attachments, images, terminal input and approval actions are sent to your selected computer. Harnesses, model providers and tools on that computer may process the content further. You or those service providers control its retention and deletion. The publisher does not operate a centralized Litch cloud service collecting these sessions. The app has no cross-app advertising tracking SDK and does not sell user data.
+
+The phone requests consent before initiating AI data actions. Agents on the remote machine continue to call services according to your configuration there; you control those agents on that machine. The phone does not intercept their autonomous requests. Withdrawing consent on the phone does not stop remote tasks already running or delete content already sent.
 
 Remote resources referenced in content may contact their providers. External websites have their own privacy policies.
 

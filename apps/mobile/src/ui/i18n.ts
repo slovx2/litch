@@ -17,6 +17,7 @@ import * as filePreview from './messages/file-preview'
 import * as hconfig from './messages/hconfig'
 import * as managers from './messages/managers'
 import * as pairing from './messages/pairing'
+import * as privacy from './messages/privacy'
 import * as proposals from './messages/proposals'
 import * as sessions from './messages/sessions'
 import * as tailscale from './messages/tailscale'
@@ -28,6 +29,7 @@ import * as usage from './messages/usage'
 export type { Lang } from '../../../../packages/ui/src/i18n/index.ts'
 
 const zhCN = {
+  ...privacy.zhCN,
   ...zhCNPathPicker,
   ...filePreview.zhCN,
   ...tailscale.zhCN,
@@ -50,6 +52,7 @@ const zhCN = {
 }
 type MobileKey = keyof typeof zhCN
 const en: Record<MobileKey, Entry> = {
+  ...privacy.en,
   ...enPathPicker,
   ...filePreview.en,
   ...tailscale.en,

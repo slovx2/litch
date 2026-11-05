@@ -4,7 +4,20 @@
 商店名称在 App Store Connect 创建记录时校验；不要用公开搜索判断是否可占用。
 中英文草稿见 [metadata.md](metadata.md)。发布前须审阅实际地区、隐私问卷、年龄分级和审核备注，上传 TestFlight 不等于提交 App Store 审核。
 
+目标年龄分级为 16+；问卷仍须按真实功能填写，并使用 App Store Connect 提供的提高分级方式。
+隐私请求、内容举报及审核联系邮箱为 admin@datawake.cc。正式审核资料说明 SSH/协议客户端、
+应用内 Tailscale 与用户自配 AI 服务的边界，不宣称手机拦截远端代理的自主请求。
+仓库文案更新不等于 App Store Connect 草稿已更新；内部 TestFlight 不提交外部 Beta 或正式审核。
+
 ## 构建与凭据
+
+正式包的 `EXPO_PUBLIC_LITCH_E2E` 固定为 `0`（不设置同样关闭）。Release E2E 包显式设为 `1`；
+Android E2E 执行器和 iOS `LITCH_MOBILE_DEV=1` 模拟器构建脚本会设置该值。
+正式签名构建拒绝 E2E 开关；Metro 缓存按两种构建档位隔离。不得把验收 APK/APP 当成发布产物。
+归档脚本还检查最终 IPA 的 Expo 档位与原生二进制，拒绝残留的 WebView 私有键盘路径。
+
+手机数据同意覆盖从手机发出的命令（含附件、新建、继续、重发、排队和经理/定时任务）。
+未知供应商逐次询问，不把型号名称当成已知的服务运营方。远端已有自主任务不受手机同意控制。
 
 Release 工作流的 `ios-testflight` 默认关闭；开启时另填递增的 `ios-build-number`，例如 `1.0.1`。
 它等待同一 SHA 的正式候选封存成功，禁止 `bypass-gate`，在固定 Xcode 的 macOS runner

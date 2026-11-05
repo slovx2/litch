@@ -26,10 +26,15 @@ import { AppState } from 'react-native'
 import type { SendMode } from '../../../../packages/ui/src/composer/send-mode-logic.ts'
 import { sendModeOf } from '../detail/composer/send-mode'
 import { backgroundMinutes } from '../platform/background'
-import type { Lang } from '../ui/i18n'
+import { ConsentDialog } from '../privacy/ConsentDialog'
+import { type ConsentRequest, consentChannel } from '../privacy/consent'
+import { aiConsentRecords } from '../privacy/storage'
+import { consentTargets } from '../privacy/targets'
+import { type Lang, useT } from '../ui/i18n'
 import type { Skin } from '../ui/theme'
 import { createMobileActivity, watchMobileActivity } from './activity'
 import { type Booted, type BootMode, clock } from './boot'
+import { devToolsEnabled, productionPrefs } from './build-mode'
 import { navigationRef } from './dev-links'
 import { jsonFile } from './json-file'
 
@@ -64,7 +69,12 @@ const DEFAULT_PREFS: Prefs = {
 const prefsFile = jsonFile<Partial<Prefs>>('prefs.json')
 
 export function loadPrefs(): Prefs {
-  const saved = prefsFile.read() ?? {}
+  const saved = productionPrefs(prefsFile.read() ?? {})
+  if (!devToolsEnabled()) {
+    prefsFile.write(saved)
+    jsonFile('remote-dev.json').remove()
+    jsonFile('update-feed.json').remove()
+  }
   return {
     ...DEFAULT_PREFS,
     ...saved,
@@ -74,7 +84,7 @@ export function loadPrefs(): Prefs {
 }
 
 export function savePrefs(prefs: Prefs): void {
-  prefsFile.write(prefs)
+  prefsFile.write(productionPrefs(prefs))
 }
 
 export interface Services {
@@ -101,6 +111,8 @@ export function ServicesProvider({
   onReady?(services: Services): void
   children: ReactNode
 }) {
+  const t = useT()
+  const [consentRequest, setConsentRequest] = useState<ConsentRequest | null>(null)
   // 记录按装法分开存：模拟核心的示例会话和真设备上的不混
   const activity = useMemo(
     () =>
@@ -108,6 +120,23 @@ export function ServicesProvider({
     [booted],
   )
   const replica = useMemo(() => createReplica(activity.channel, activity), [activity])
+  const consent = useMemo(
+    () =>
+      consentChannel(
+        activity.channel,
+        aiConsentRecords,
+        consentTargets(
+          activity.channel,
+          replica,
+          () => t.lang,
+          () => t('privacy.ai.unavailable'),
+        ),
+        setConsentRequest,
+        () => t('privacy.ai.cancelled'),
+      ),
+    [activity, replica, t],
+  )
+  useEffect(() => () => consent.dispose(), [consent])
   useEffect(() => replica.start(), [replica])
   useEffect(
     () =>
@@ -138,14 +167,19 @@ export function ServicesProvider({
     [activity, replica],
   )
   const value = useMemo(
-    () => ({ booted, channel: activity.channel, replica, prefs, setPrefs }),
-    [booted, activity, replica, prefs, setPrefs],
+    () => ({ booted, channel: consent.channel, replica, prefs, setPrefs }),
+    [booted, consent, replica, prefs, setPrefs],
   )
   // 花括号不能省：onReady 的返回值会被当成清理函数，设置一变就拿它去调
   useEffect(() => {
     onReady?.(value)
   }, [onReady, value])
-  return <ServicesContext.Provider value={value}>{children}</ServicesContext.Provider>
+  return (
+    <ServicesContext.Provider value={value}>
+      {children}
+      <ConsentDialog request={consentRequest} />
+    </ServicesContext.Provider>
+  )
 }
 
 export function useServices(): Services {

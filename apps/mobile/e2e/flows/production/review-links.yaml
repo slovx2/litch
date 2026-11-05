@@ -1,0 +1,46 @@
+appId: dev.litch.app
+name: 发布包开发深链负测
+tags: [privacy]
+---
+- launchApp:
+    clearState: false
+    stopApp: true
+- extendedWaitUntil:
+    visible:
+      id: devices
+    timeout: 30000
+- openLink: 'litch://boot?mode=mock'
+- runFlow:
+    when:
+      visible: '.*(在.*Litch.*中打开|Open in.*Litch).*'
+    commands:
+      - tapOn: '^(打开|Open)$'
+- assertVisible:
+    id: devices:empty:add
+- openLink: 'litch://boot?mode=fixture'
+- assertVisible:
+    id: devices:empty:add
+- openLink: 'litch://remote?adapter=review-test&env=TEST=1'
+- openLink: 'litch://update?feed=https://example.invalid/feed'
+- openLink: 'litch://new?prompt=should-not-send'
+- openLink: 'litch://send?text=should-not-send'
+- openLink: 'litch://spawn?parent=last&title=should-not-send'
+- openLink: 'litch://bench'
+- openLink: 'litch://test-anr'
+- assertVisible:
+    id: devices:empty:add
+- assertNotVisible:
+    id: ai-consent:title
+- tapOn:
+    id: devices:settings
+- scrollUntilVisible:
+    element:
+      id: settings:withdraw-consent
+- assertNotVisible:
+    id: settings:boot
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: devices:empty:add
+    timeout: 30000

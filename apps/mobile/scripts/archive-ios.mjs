@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { auditIOSReview } from './audit-ios-review.mjs'
 import { checkProfile, readProfile, withInstalledProfile } from './ios-profile.mjs'
 
 const root = resolve(fileURLToPath(new URL('../../..', import.meta.url)))
@@ -12,6 +13,7 @@ const mobile = join(root, 'apps/mobile')
 
 export function releaseOptions(env) {
   assert.notEqual(env.LITCH_MOBILE_DEV, '1', '正式归档不能使用开发包')
+  assert.notEqual(env.EXPO_PUBLIC_LITCH_E2E, '1', '正式归档不能包含 E2E 开发入口')
   const team = env.LITCH_IOS_TEAM_ID ?? ''
   const build = env.LITCH_IOS_BUILD_NUMBER ?? ''
   assert.match(team, /^[A-Z0-9]{10}$/, '必须指定 LITCH_IOS_TEAM_ID')
@@ -163,6 +165,7 @@ function buildArchive(env, signingProfile) {
   // 原生资源包必须随静态桥一起进入最终 IPA。
   assert.ok(readdirSync(app).includes('LitchSshPrivacy.bundle'), 'IPA 缺少 SSH 隐私资源包')
   plist(join(app, 'LitchSshPrivacy.bundle/PrivacyInfo.xcprivacy'))
+  auditIOSReview(app)
   const proof = {
     sha: sourceSHA,
     bundleId: 'dev.litch.app',

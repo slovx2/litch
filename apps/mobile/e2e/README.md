@@ -173,3 +173,16 @@ echo no | avdmanager create avd -n <名字> --package 'system-images;android-35;
 - 入口脚本不能用同步的方式起 Maestro：流程里的 `runScript` 要连同一个进程里的小口。
 - 同一台电脑上同时只能跑一个 Maestro：2.3.0 在安卓上把驱动固定映射到电脑的 7001 口、没有参数能改，第二个会在启动应用时超时。
   入口脚本开头先看 7001 有没有被占，被占就直接报错。换 `--port` 只能让模拟器不撞，躲不开这一条。
+# 审核前专项
+
+Release E2E 构建使用 `EXPO_PUBLIC_LITCH_E2E=1`，发布包为 `0`；不要仅用 `__DEV__` 判断。
+`scripts/e2e.mjs --build` 自动设置验收开关，iOS `LITCH_MOBILE_DEV=1 scripts/build-ios.sh` 同样设置。
+普通流程的执行器在遇到数据同意卡时显式点击“同意并继续”，然后仍执行原产品断言；
+带 `privacy` 标签的专项流程不自动同意，验证取消、允许、撤回与登录前披露。
+
+- `mock/29-review-privacy.yaml`：新建取消不发送、允许后继续、撤回后再问、Tailscale 取消。
+- `scripts/check-review-production.mjs <专用模拟器> <发布 .app 绝对路径>`：持有 Maestro 7001 共享锁，
+  向隔离应用种入旧开发配置后运行 `production/review-links.yaml`，验证正式 Bundle ID 的深链无效、
+  开发设置隐藏、旧配置清理；结束关闭该专用模拟器。只能用 `Litch-iOS-Review` 前缀的模拟器。
+- `scripts/check-ios-terminal.mjs`：原有字符/中文/粘贴/旋转用例，以及 `testColdStartKeyboard`。
+- `scripts/audit-ios-review.mjs <.app> [--e2e]`：检查包内构建档位与所有原生主程序/framework。

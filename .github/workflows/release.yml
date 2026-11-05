@@ -451,6 +451,8 @@ jobs:
       - run: npm ci --prefix apps/mobile --no-audit --no-fund
       - name: 打 release 包
         working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_LITCH_E2E: '0'
         run: |
           npx expo prebuild --platform android --clean --no-install
           npm run android:release -- --max-workers=4 -PreactNativeArchitectures=arm64-v8a

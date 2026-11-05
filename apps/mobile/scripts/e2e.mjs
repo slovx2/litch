@@ -51,6 +51,7 @@ import {
   recoverAdb,
 } from '../../../scripts/ci/maestro-infrastructure.mjs'
 import { mobileShards } from '../../../scripts/ci/mobile-shards.mjs'
+import { prepareConsentFlows } from './consent-flows.mjs'
 import { deviceRpc } from './device-rpc.mjs'
 import { installTerminalAudit, terminalEvidence } from './terminal-audit.mjs'
 
@@ -307,7 +308,11 @@ function setScreen(serial) {
 function buildApk() {
   const start = Date.now()
   const run = (command, list, cwd) => {
-    const done = spawnSync(command, list, { cwd, stdio: 'inherit', env: process.env })
+    const done = spawnSync(command, list, {
+      cwd,
+      stdio: 'inherit',
+      env: { ...process.env, EXPO_PUBLIC_LITCH_E2E: '1' },
+    })
     if (done.status !== 0) throw new Error(`${command} ${list.join(' ')} 失败`)
   }
   log('打 release 包：expo prebuild --clean，再 assembleRelease')
@@ -780,6 +785,8 @@ function freePort() {
 const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
 
 async function runMaestro(serial, flows, fixture, report, attemptDir, helper) {
+  const prepared = join(work, 'consent-flows')
+  prepareConsentFlows(flowsDir, prepared)
   const env = fixture
     ? {
         FIXTURE_PORT: String(fixture.config.target.port),
@@ -804,7 +811,7 @@ async function runMaestro(serial, flows, fixture, report, attemptDir, helper) {
     report,
     ...(helper ? ['-e', `HELPER=${helper}`, '-e', `HELPER_PORT=${new URL(helper).port}`] : []),
     ...Object.entries(env).flatMap(([name, value]) => ['-e', `${name}=${value}`]),
-    ...flows,
+    ...flows.map((file) => join(prepared, relative(flowsDir, file))),
   ]
   const start = Date.now()
   log(`跑 ${flows.length} 个流程：${flows.map((file) => relative(flowsDir, file)).join(' ')}`)

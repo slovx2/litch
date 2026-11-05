@@ -2,6 +2,8 @@
 // （夹具的 sshd 靠 LITCH_FX_MODE 区分情形）。和桌面端的 LITCH_REMOTE_ADAPTER、ssh 配置里的 SetEnv 是一回事。
 // 由测试链接写进 remote-dev.json（litch://remote?adapter=…&codex=…&env=名=值，env 可以给几个；
 // litch://remote?reset=1 清掉），平时没有这个文件，用的是正式的命令名。
+
+import { devToolsEnabled } from '../shell/build-mode'
 import { jsonFile } from '../shell/json-file'
 import { checkName } from './ssh-script'
 
@@ -13,10 +15,18 @@ export interface RemoteDev {
 
 const file = jsonFile<RemoteDev>('remote-dev.json')
 
-export const remoteDev = (): RemoteDev => file.read() ?? {}
+export const remoteDev = (): RemoteDev => {
+  if (devToolsEnabled()) return file.read() ?? {}
+  file.remove()
+  return {}
+}
 
 /** 按测试链接的参数改。名字不合规矩的不收 */
 export function setRemoteDev(params: URLSearchParams): void {
+  if (!devToolsEnabled()) {
+    file.remove()
+    return
+  }
   if (params.get('reset') === '1') {
     file.remove()
     return

@@ -19,7 +19,7 @@ import app from '../../app.json'
 import { mobilePlatform } from '../platform'
 import { watchConnections } from '../platform/background'
 import { type RemoteConfig, sshOpener } from '../platform/ssh-transport'
-
+import { devToolsEnabled } from './build-mode'
 import { createTestClock, testScenario } from './test-clock'
 
 export type BootMode = 'stored' | 'mock' | 'fixture'
@@ -75,6 +75,7 @@ function serve(
 const log = (line: string) => console.log(`[核心] ${line}`)
 
 export async function boot(mode: BootMode, lang: 'zh-CN' | 'en'): Promise<Booted> {
+  if (!devToolsEnabled()) mode = 'stored'
   if (mode === 'mock') {
     const controlled = testScenario.controlled ? createTestClock(Date.now()) : null
     const served = serve(
