@@ -1,10 +1,12 @@
 // 通用的小控件：按钮、列表行、分组标题、输入框、空状态、状态记号。圆角、字体、选中样式、记号都跟皮肤走（src/ui/theme.ts）。
 // 各页面共用；要加新的通用控件就加在 src/ui/kit/ 下（谁先要谁加，合并时由主线检查有没有重复）。
-import type { ReactNode } from 'react'
+import { isValidElement, type ReactNode } from 'react'
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   type TextInputProps,
@@ -13,6 +15,7 @@ import {
 import { useT } from '../i18n'
 import { type StatusKind, type Theme, useTheme } from '../theme'
 import { BreathingText } from './BreathingText'
+import { rowAccessibility } from './row-accessibility'
 
 export function Button({
   label,
@@ -96,8 +99,17 @@ export function Row({
   const theme = useTheme()
   const { c } = theme
   const ink = selected ? c.selFg : c.ink
+  const accessibility = rowAccessibility(
+    Platform.OS,
+    Boolean(onPress),
+    Boolean(onLongPress),
+    isValidElement<{ accessibilityLabel?: string }>(right) &&
+      right.type === Switch &&
+      right.props.accessibilityLabel === title,
+  )
   return (
     <Pressable
+      accessible={accessibility.accessible}
       accessibilityRole={onPress ? 'button' : undefined}
       aria-label={label}
       testID={testID}
@@ -116,6 +128,8 @@ export function Row({
       <View style={styles.rowText}>
         <View style={styles.rowTop}>
           <Text
+            accessible={accessibility.hideTitle ? false : undefined}
+            accessibilityElementsHidden={accessibility.hideTitle || undefined}
             numberOfLines={1}
             style={[
               styles.rowTitle,

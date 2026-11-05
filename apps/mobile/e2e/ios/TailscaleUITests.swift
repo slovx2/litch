@@ -56,6 +56,48 @@ final class TailscaleUITests: XCTestCase {
     XCTAssertFalse(app.staticTexts["tailscale:error"].exists)
   }
 
+  func testTailscaleSwitchAccessibility() throws {
+    app.buttons["devices:add"].tap()
+    try inspectSwitch(toggle: true)
+    app.buttons["header:back"].tap()
+    // 设备详情复用同一控件；夹具设备已有真实 SSH 通道。
+    let more = app.buttons["device:fixture:more"]
+    XCTAssertTrue(more.waitForExistence(timeout: 10))
+    more.tap()
+    app.buttons["menu:detail"].tap()
+    try inspectSwitch(toggle: false)
+    app.buttons["header:back"].tap()
+    app.buttons["devices:add"].tap()
+    app.buttons["add:pair"].tap()
+    let payload = try request("/pair", post: true)
+    _ = try request("/clipboard/set", post: true, body: payload)
+    let paste = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "从剪贴板粘贴", "Paste from clipboard")).firstMatch
+    for _ in 0..<4 {
+      if paste.isHittable { break }
+      app.swipeUp()
+    }
+    paste.tap()
+    let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "允许粘贴", "Allow Paste")).firstMatch
+    if allow.waitForExistence(timeout: 2) { allow.tap() }
+    app.buttons["pair:paste:go"].tap()
+    try inspectSwitch(toggle: true)
+  }
+
+  private func inspectSwitch(toggle: Bool) throws {
+    let control = app.switches["tailscale:switch"]
+    XCTAssertTrue(control.waitForExistence(timeout: 10))
+    XCTAssertEqual(app.switches.matching(identifier: "tailscale:switch").count, 1)
+    XCTAssertFalse(control.label.isEmpty)
+    // 同一标题不应同时成为另一处可读文字，避免 VoiceOver 逐项读取时重复。
+    XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label == %@", control.label)).count, 0)
+    XCTAssertTrue(control.isHittable)
+    if toggle {
+      let before = control.value as? String
+      control.tap()
+      XCTAssertNotEqual(control.value as? String, before)
+    }
+  }
+
   private func action(_ name: String) throws {
     let button = app.buttons["tailscale:\(name)"]
     for _ in 0..<4 {
@@ -80,12 +122,13 @@ final class TailscaleUITests: XCTestCase {
     wait(for: [done], timeout: 15)
   }
 
-  private func request(_ path: String, post: Bool = false) throws -> Data {
+  private func request(_ path: String, post: Bool = false, body: Data? = nil) throws -> Data {
     let done = expectation(description: "后台连接状态")
     var result = Data()
     var failure: Error?
     var request = URLRequest(url: URL(string: settings["helper"]! + path)!)
     request.httpMethod = post ? "POST" : "GET"
+    request.httpBody = body
     URLSession.shared.dataTask(with: request) { data, _, error in
       result = data ?? Data()
       failure = error

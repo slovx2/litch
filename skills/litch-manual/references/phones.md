@@ -92,6 +92,10 @@ This section is hidden on iOS. These are phone settings; desktop `litch config` 
 
 ## iOS 后台连接与更新
 
+iOS 的设备网络开关可由 VoiceOver 单独选中，标签与开关状态一起读取，不重复朗读标题。
+On iOS, VoiceOver can focus device network switches individually and read their label and state
+without repeating the row title.
+
 iOS 的 SSH 私钥保存在系统 Keychain。自建模拟器包应使用构建脚本默认的本地 ad-hoc 签名；
 无签名包只用于编译检查，不能验证密钥保存或配对。
 SSH private keys on iOS are stored in Keychain. Use the build script's default local ad-hoc
