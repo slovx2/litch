@@ -117,11 +117,13 @@ iOS 不运行 Android 更新清单检查、下载或安装流程，也不显示�
 
 iOS 终端底部的键盘按钮用于显示或收起系统键盘；“粘贴”从系统剪贴板插入文字。
 终端尚在启动时点击键盘按钮，会在终端可输入后显示键盘，无需重复点击。
+终端可横屏显示；离开终端后恢复竖屏。
 首次读取其他应用复制的内容时，iOS 可能要求允许粘贴。多行内容遵守终端程序的括号粘贴模式。
 
 In the iOS terminal, use the keyboard button to show or hide the system keyboard, and **Paste** to
 insert text from the system clipboard. iOS may ask for permission to paste from another app.
 If you tap the keyboard button while the terminal is starting, the keyboard opens when input is ready.
+The terminal supports landscape orientation; other screens return to portrait.
 Pasted text respects the terminal program's bracketed paste mode.
 
 ## In a session on the phone

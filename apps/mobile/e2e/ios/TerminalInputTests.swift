@@ -50,6 +50,28 @@ final class TerminalInputTests: XCTestCase {
     XCTAssertTrue(try commandWasReceived(command))
   }
 
+  func testTerminalRotation() throws {
+    defer { XCUIDevice.shared.orientation = .portrait }
+    XCUIDevice.shared.orientation = .landscapeLeft
+    let landscape = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+      self.app.frame.width > self.app.frame.height
+    }, object: app)
+    wait(for: [landscape], timeout: 10)
+    XCTAssertTrue(app.buttons["terminal:key:keyboard"].isHittable)
+    XCTAssertTrue(app.buttons["terminal:key:paste"].isHittable)
+    XCTAssertTrue(app.keyboards.firstMatch.exists)
+    XCTAssertLessThanOrEqual(app.buttons["terminal:key:paste"].frame.maxY, app.keyboards.firstMatch.frame.minY)
+    for character in "echo landscape" { app.typeText(String(character)) }
+    app.typeText("\r")
+    XCTAssertTrue(try commandWasReceived("echo landscape"))
+    app.buttons["header:back"].tap()
+    let portrait = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+      self.app.frame.width < self.app.frame.height
+    }, object: app)
+    wait(for: [portrait], timeout: 10)
+    XCTAssertTrue(app.otherElements["devices"].exists)
+  }
+
   func testSystemPaste() throws {
     _ = try request("/clipboard/set", method: "POST", body: "echo e2e-$((6*7)) > e2e-mark.txt")
     app.buttons["terminal:key:paste"].tap()

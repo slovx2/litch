@@ -49,6 +49,11 @@
         "keychain-access-groups": ["$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)"]
       },
       "infoPlist": {
+        "UISupportedInterfaceOrientations": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ],
         "NSLocalNetworkUsageDescription": "Litch connects to your computers over SSH on your local network.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
