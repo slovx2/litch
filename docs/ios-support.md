@@ -7,9 +7,9 @@ Litch 是免费、开源的远程开发客户端，由数能觉醒（深圳）�
 - [隐私政策 / Privacy policy](ios-privacy.md)
 - [源代码 / Source code](https://github.com/slovx2/litch)
 
-说明 iOS 版本、Litch 版本、设备型号、操作步骤与错误提示即可。请先删除截图中的地址、账户和私人会话；不要上传 SSH 私钥、密码、验证码、配对二维码或 API key。隐私问题可先提出不含个人资料的联系请求。
+隐私请求（包括查询、访问或删除数据）和内容举报，请发送邮件至 [admin@datawake.cc](mailto:admin@datawake.cc)。GitHub Issues 仍可用于公开的问题反馈。说明 iOS 版本、Litch 版本、设备型号、操作步骤与错误提示即可；请先删除截图中的地址、账户和私人会话，不要在 Issues 上传 SSH 私钥、密码、验证码、配对二维码、API key 或其他敏感信息。
 
-Include your iOS version, Litch version, device model, steps and the error message. GitHub issues are public. Remove private content from screenshots and never post keys, passwords, codes or pairing QR codes. For a privacy matter, request a private contact route without including personal information.
+For privacy requests, including inquiries, access or deletion requests, and content reports, email [admin@datawake.cc](mailto:admin@datawake.cc). GitHub Issues remain available for public feedback. Include your iOS version, Litch version, device model, steps and the error message. Issues are public: remove private content from screenshots and never post SSH keys, passwords, verification codes, pairing QR codes, API keys or other sensitive information.
 
 ## 连接问题 / Connection problems
 

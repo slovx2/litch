@@ -61,8 +61,9 @@ its Chrome-managed storage; turning off Chrome control stops new agent access.
 
 ## Contact
 
-For privacy questions, contact the project through
-[Litch's issue tracker](https://github.com/slovx2/litch/issues).
+For privacy requests, including inquiries, access or deletion requests, and content reports,
+email [admin@datawake.cc](mailto:admin@datawake.cc).
+[Litch's issue tracker](https://github.com/slovx2/litch/issues) remains available for public feedback.
 Issues are public: do not include passwords, tokens, private page content, or identity documents.
 
 ---
@@ -104,5 +105,7 @@ Litch 默认关闭 Chrome 控制。访问 Chrome 实例与网站来源需要批�
 你可以通过扩展图标、Chrome 调试提示条或 Litch 的 Chrome 设置停止控制。
 卸载扩展会删除 Chrome 管理的扩展存储；关闭 Chrome 控制会停止新的代理访问。
 
-隐私问题请通过 [Litch 问题反馈](https://github.com/slovx2/litch/issues) 联系项目。
-反馈内容公开，请勿附上密码、令牌、私人页面内容或身份证明文件。
+隐私请求（包括查询、访问或删除数据）和内容举报，请发送邮件至
+[admin@datawake.cc](mailto:admin@datawake.cc)。
+[Litch 问题反馈](https://github.com/slovx2/litch/issues) 仍可用于公开的问题反馈。
+Issues 内容公开，请勿附上密码、令牌、私人页面内容或身份证明文件。

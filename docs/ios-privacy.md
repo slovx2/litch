@@ -36,7 +36,7 @@ Tailscale 设置提供退出及清除本机节点身份的操作；原节点记�
 
 ### 联系与政策更新
 
-支持和隐私问题请通过 [Litch 支持页](ios-support.md) 联系维护者。GitHub issues 为公开渠道，请勿提交私钥、验证码、个人文件、完整会话或其他敏感资料；需要私密处理时先提出联系请求，不要公开请求涉及的数据。您主动在 GitHub 提交的内容由 GitHub 按其政策保存。
+隐私请求（包括查询、访问或删除数据）和内容举报，请发送邮件至 [admin@datawake.cc](mailto:admin@datawake.cc)。一般支持问题可查看 [Litch 支持页](ios-support.md)。GitHub issues 仍可用于公开的问题反馈，请勿提交私钥、验证码、个人文件、完整会话或其他敏感资料。您主动在 GitHub 提交的内容由 GitHub 按其政策保存。
 
 政策修改会在本页更新日期和内容。影响数据处理的重要变更会随应用版本说明披露。
 
@@ -70,6 +70,6 @@ Tailscale settings allow sign-out and clearing the local node identity. Remove t
 
 ### Contact and changes
 
-For support or privacy questions, use the [Litch support page](ios-support.md). GitHub issues are public: do not post secrets, verification codes, personal files or full session transcripts. Ask for a private contact route before sharing sensitive details. GitHub retains information you submit under its own policies.
+For privacy requests, including inquiries, access or deletion requests, and content reports, email [admin@datawake.cc](mailto:admin@datawake.cc). For general support, see the [Litch support page](ios-support.md). GitHub issues remain available for public feedback: do not post secrets, verification codes, personal files or full session transcripts. GitHub retains information you submit under its own policies.
 
 We update this page when the policy changes and describe significant changes to data handling in app release notes.
