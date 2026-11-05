@@ -17,7 +17,7 @@ export const CHROME_UNPACKED_EXTENSION_ID = 'fakgembkgnmeknpaegnneneockbjhaai'
  * 应用商店分配的扩展 ID。要先在开发者控制台上传一个不公开的草稿才知道，拿到后只改这一处；
  * 为 null 时只认开发者模式加载的扩展，设置页也只给开发者模式这一条路。
  */
-export const CHROME_STORE_EXTENSION_ID: string | null = null
+export const CHROME_STORE_EXTENSION_ID: string | null = 'ddnllmibgnhhiiaaidfamlknbnfjpnpo'
 export const CHROME_STORE_URL: string | null = CHROME_STORE_EXTENSION_ID
   ? `https://chromewebstore.google.com/detail/${CHROME_STORE_EXTENSION_ID}`
   : null
