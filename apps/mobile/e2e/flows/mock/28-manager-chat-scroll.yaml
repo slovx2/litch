@@ -1,0 +1,115 @@
+# 返回对话时直接检查末尾，不通过滚动寻找来掩盖位置丢失。
+appId: dev.litch.app
+name: mock-经理对话阅读位置
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- scrollUntilVisible:
+    element:
+      id: devices:managers
+    direction: UP
+    timeout: 10000
+- tapOn:
+    id: devices:managers
+- tapOn:
+    id: manager:m1
+- tapOn:
+    id: manager-tab:chat
+- tapOn:
+    id: composer-input
+- inputText: long report anchor-original
+- tapOn:
+    id: composer-send
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- extendedWaitUntil:
+    visible: '.*(以上是现状|That is the current state).*'
+    timeout: 60000
+- extendedWaitUntil:
+    notVisible: '停止|Stop'
+    timeout: 30000
+- assertNotVisible:
+    id: detail:toBottom
+- scrollUntilVisible:
+    element:
+      id: user-message
+      text: '.*anchor-original.*'
+    direction: UP
+    timeout: 30000
+    centerElement: true
+- assertVisible:
+    id: detail:toBottom
+- tapOn:
+    id: manager-tab:console
+- tapOn:
+    id: manager-tab:chat
+- assertVisible:
+    id: user-message
+    text: '.*anchor-original.*'
+- tapOn:
+    id: header:back
+- tapOn:
+    id: manager:m1
+- tapOn:
+    id: manager-tab:chat
+- assertVisible:
+    id: user-message
+    text: '.*anchor-original.*'
+# 历史阅读锚点也要扛住新消息插入和流式变高。
+- tapOn:
+    id: manager-tab:console
+- openLink: 'litch://test-send?device=local&session=m1&text=long%20report%20anchor-arrival'
+- tapOn:
+    id: manager-tab:chat
+- assertVisible:
+    id: user-message
+    text: '.*anchor-original.*'
+- extendedWaitUntil:
+    notVisible: '停止|Stop'
+    timeout: 60000
+- assertVisible:
+    id: user-message
+    text: '.*anchor-original.*'
+- tapOn:
+    id: detail:toBottom
+- assertVisible: '.*(以上是现状|That is the current state).*'
+# 离开时贴底，在其他页签接收新回合；返回时流式输出继续贴底。
+- tapOn:
+    id: manager-tab:console
+- openLink: 'litch://test-send?device=local&session=m1&text=long%20report%20while%20away'
+- tapOn:
+    id: manager-tab:chat
+- assertVisible: '停止|Stop'
+- assertNotVisible:
+    id: detail:toBottom
+- tapOn:
+    id: manager-tab:lines
+- tapOn:
+    id: manager-tab:chat
+- assertNotVisible:
+    id: detail:toBottom
+- extendedWaitUntil:
+    notVisible: '停止|Stop'
+    timeout: 60000
+- assertVisible: '.*(以上是现状|That is the current state).*'
+- assertNotVisible:
+    id: detail:toBottom
+- tapOn:
+    id: manager-tab:console
+- tapOn:
+    id: manager-tab:chat
+- assertVisible: '.*(以上是现状|That is the current state).*'
+- assertNotVisible:
+    id: detail:toBottom
+- tapOn:
+    id: header:back
+- tapOn:
+    id: manager:m1
+- tapOn:
+    id: manager-tab:chat
+- assertVisible: '.*(以上是现状|That is the current state).*'
+- assertNotVisible:
+    id: detail:toBottom

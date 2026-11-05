@@ -98,6 +98,7 @@ AVD、SDK 和 KVM 信息在 `android-host.json`，传输层 trace 在 `adb-serve
 | `mock/23-settings-keyboard` | 设备设置数字输入、目录浏览输入与选择、添加工作区的路径和名称、配对文本输入后首次点击校验 | 未计时 |
 | `mock/24-comment-keyboard` | 选取回答文字，在评论弹窗输入后直接提交，草稿评论片出现 | 未计时 |
 | `mock/25-discussion-keyboard` | 决策的临时对话、报告与建议的追问，键盘打开时直接发送 | 未计时 |
+| `mock/28-manager-chat-scroll` | 长经理对话在列表重进和切页签后保持底部；历史消息锚点在重进、后台新增消息和流式输出后保持；普通看板页签不参与对话恢复 | Android / iOS |
 | `fixture/01-home` | 夹具：首页列出设备，设备详情里 8 个 harness、Pi 就绪 → 会话列表 | 14 秒 |
 | `fixture/02-new-session` | 新建会话发第一句，收到假模型一段段发来的回答 | 17 秒 |
 | `fixture/03-tools` | 建在备好的 git 仓库里 → 终端敲命令真在远端跑了（入口脚本在电脑这边看文件）→ 差异的文件列表和单文件差异 → 文件页打开文件 | 72 秒 |

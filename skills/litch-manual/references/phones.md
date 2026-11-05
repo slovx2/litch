@@ -139,8 +139,12 @@ Pasted text respects the terminal program's bracketed paste mode.
 Pending questions are answered above the composer; settled questions leave a combined question/answer
 record in the conversation. Mid-turn messages say “Added to this turn” and divide folded activity into
 segments. The rules are shared with the desktop and described in `sessions-and-projects.md`.
-Manager events can be read as expandable system rows, but the phone has no manager board/settings
-or global Suggestions entry; it keeps its per-session suggestion list (`managers-and-suggestions.md`).
+Manager events can be read as expandable system rows. The manager page has Console, Chat, Lines
+and Overview tabs. Chat remembers whether you were at the bottom or reading a message: returning
+follows the latest bottom in the first case and restores that message in the second, including when
+messages arrived while you were away. Other board tabs retain their own scroll positions.
+手机经理的“对话”页签在离开时记住贴底状态或正在阅读的消息；返回时分别定位到最新底部或原消息。
+控制台、工作线和概览各自保留滚动位置。建议任务的操作见 `managers-and-suggestions.md`。
 
 - **Conversation settings**: the **+** button next to the input box opens Add images plus the model,
   effort, speed, permission and Plan mode, each showing its current value; tap one to change it. When

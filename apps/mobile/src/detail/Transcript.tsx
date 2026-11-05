@@ -65,18 +65,21 @@ import { HandoffCell } from './proposals/HandoffCell'
 import { flash, takeReveal, useRevealWaiting } from './proposals/hooks'
 import { ProposalCell } from './proposals/ProposalCell'
 import { WrapAskCell } from './proposals/WrapAskCell'
+import type { ReadingMemory } from './reading-position'
 import { SyncBar } from './SyncBar'
 import { SystemCell } from './SystemCell'
 import { GroupCell, GroupEndCell, ProcessCell, StepCell } from './steps'
 import { colors } from './theme'
 import { Away } from './to-bottom'
 import { Flash, ImageViewer, TurnMenu } from './turn-menu'
+import { useReadingPosition } from './use-reading-position'
 
 interface Props {
   store: SessionStore
   /** 列表底边到屏幕底边之间还有多高（输入区加底部安全区）：键盘升起时内容只需让出超出的那部分 */
   bottomOffset: number
   markers: boolean
+  readingMemory?: ReadingMemory
 }
 
 function renderRow(row: Row) {
@@ -320,15 +323,19 @@ function Footer({ guard, pad }: { guard: Guard; pad: number }) {
 /** 每次多排多少行已读取的历史；排到末尾后才向核心请求下一页。 */
 const PAGE = 40
 
-export function Transcript({ store, bottomOffset, markers }: Props) {
+export function Transcript({ store, bottomOffset, markers, readingMemory }: Props) {
   const { channel } = useServices()
   const history = useSyncExternalStore(store.subscribeMeta, () => store.getMeta()?.history)
   const listRef = useRef<FlashListRef<Row>>(null)
-  const pinnedRef = useRef(true)
+  const pinnedRef = useRef(readingMemory?.position.kind !== 'anchor')
   /** 刚离开底部、尾巴正从表头并回列表时是当时的内容总高（见 onScroll），平时是 0 */
   const unpinningRef = useRef(0)
   const guard = useMemo(() => new Guard(), [])
-  const away = useMemo(() => new Away(), [])
+  const away = useMemo(() => {
+    const away = new Away()
+    if (readingMemory?.position.kind === 'anchor') away.scrolled(49)
+    return away
+  }, [readingMemory])
   /** 滚动时让 mermaid 卡片量自己在不在屏幕上：进了屏幕才画图 */
   const inView = useMemo(() => new InView(), [])
   // 贴底时列表的数据变了（回合结束、尾巴并回列表，发了新的一句）：这一次别让“保持可见位置”去校正。
@@ -350,13 +357,50 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
   )
   const snapshot = useSyncExternalStore(subscribe, store.getSnapshot)
   useCommitTiming(snapshot)
-  const [limit, setLimit] = useState(PAGE)
+  const [limit, setLimit] = useState(() => {
+    const position = readingMemory?.position
+    const index =
+      position?.kind === 'anchor' ? snapshot.rows.findIndex((row) => row.key === position.key) : -1
+    return Math.max(PAGE, index + PAGE)
+  })
   const rows = useMemo(() => snapshot.rows.slice(0, limit), [snapshot.rows, limit])
   const more = snapshot.rows.length > limit
   // 往上翻着看时，回合里最底下会自己长高的行（状态行、正在流的那一块）不当“保持可见位置”的锚点：
   // 列表默认拿视觉上最下面那一行当锚，它自己长高不算位移，翻着看的内容会被新出的字一点点顶上去。
   // 锚点挑法在 FlashList 的补丁里（patches/），平时（不在流式）照旧
   const anchorFrom = growingRows(snapshot)
+  const reading = useReadingPosition(readingMemory, listRef, rows, anchorFrom)
+  const { pending, layout: restoreReading } = reading
+  useEffect(() => {
+    const position = pending.current
+    if (!position) return
+    if (position.kind === 'anchor') {
+      const index = snapshot.rows.findIndex((row) => row.key === position.key)
+      if (index >= limit) {
+        setLimit(index + PAGE)
+        return
+      }
+      if (index < 0) {
+        if (snapshot.stale || !store.getMeta()) return
+        if (history?.hasMore) {
+          if (!history.loading)
+            void channel
+              .command('session.loadOlder', {
+                deviceId: store.deviceId,
+                sessionId: store.sessionId,
+              })
+              .catch(() => {})
+          return
+        }
+        // 消息已被回退或删除，完整历史也找不到时回到底部。
+        pending.current = { kind: 'bottom' }
+        pinnedRef.current = true
+        store.setSplitTail(true)
+        away.scrolled(0)
+      }
+    }
+    restoreReading()
+  }, [snapshot.rows, snapshot.stale, limit, history, store, channel, pending, restoreReading, away])
   const visiblePosition = useMemo(() => ({ anchorFrom }), [anchorFrom])
   // 倒置列表的“末尾”在最上面：滑到最早的那一行附近时再接一页更早的
   const loadOlder = useCallback(() => {
@@ -425,8 +469,14 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
                 experiment.keyboard === 'chat' ? (ScrollComponent as never) : undefined
               }
               ListFooterComponent={footer}
+              onLoad={reading.load}
+              onCommitLayoutEffect={reading.layout}
+              onScrollBeginDrag={reading.interrupt}
+              onScrollEndDrag={reading.capture}
+              onMomentumScrollEnd={reading.capture}
               scrollEventThrottle={16}
               onScroll={(event) => {
+                if (reading.pending.current) return
                 noteWork('offset', event.nativeEvent.contentOffset.y)
                 inView.scrolled()
                 away.scrolled(event.nativeEvent.contentOffset.y)
@@ -440,12 +490,17 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
                   store.setSplitTail(next)
                   unpinningRef.current = 0
                 }
+                reading.capture()
               }}
               style={styles.list}
             />
             <ToBottom
               away={away}
-              onPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })}
+              onPress={() => {
+                reading.interrupt()
+                if (readingMemory) readingMemory.position = { kind: 'bottom' }
+                listRef.current?.scrollToOffset({ offset: 0, animated: true })
+              }}
             />
             <SyncBar store={store} />
             {actions.overlays}

@@ -67,7 +67,7 @@ tags: [mock]
 - tapOn:
     id: manager:reset
 - assertVisible: "(?s).*(新版本的工具和指令|latest tools and instructions).*"
-- assertVisible: "(?s).*(保留当前会话和完整历史|current conversation and full history are preserved).*"
+- assertVisible: "(?s).*(保留当前会话和完整历史|Keeps the conversation and full history).*"
 - tapOn: "取消|Cancel"
 # 取消没有执行重置，能力提示与原草稿都在
 - assertVisible:

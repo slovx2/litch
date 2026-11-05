@@ -83,6 +83,15 @@ export function handleDevLink(url: string, services: Services | null): BootMode 
     return ids[0] ?? null
   }
   switch (parsed.hostname) {
+    case 'test-send': {
+      // 仅给模拟核心注入后台消息，验离开对话期间增长的阅读位置，不打开目标页面。
+      const sessionId = params.get('session')
+      const deviceId = deviceOf()
+      const text = params.get('text')
+      if (booted.mode === 'mock' && sessionId && deviceId && text)
+        void channel.command('session.send', { deviceId, sessionId, text }).catch(console.warn)
+      return null
+    }
     case 'test-anr':
       injectTestAnr(booted.mode)
       return null

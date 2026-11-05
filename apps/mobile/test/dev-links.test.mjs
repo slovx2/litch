@@ -24,6 +24,18 @@ beforeEach(() => {
   navigationRef.back = false
 })
 
+test('后台注入消息仅限 mock：不导航、不向 fixture 或真实设备发送', async () => {
+  const sent = []
+  const channel = { command: async (...args) => sent.push(args) }
+  const link = 'litch://test-send?device=local&session=m1&text=while%20away'
+  for (const mode of ['fixture', 'stored', 'mock'])
+    handleDevLink(link, { ...services, channel, booted: { mode } })
+  assert.deepEqual(sent, [
+    ['session.send', { deviceId: 'local', sessionId: 'm1', text: 'while away' }],
+  ])
+  assert.deepEqual(navigated, [])
+})
+
 test('换装法：只认三种，换装法不需要核心已经装好', () => {
   assert.equal(handleDevLink('litch://boot?mode=fixture', null), 'fixture')
   assert.equal(handleDevLink('litch://boot?mode=stored', null), 'stored')

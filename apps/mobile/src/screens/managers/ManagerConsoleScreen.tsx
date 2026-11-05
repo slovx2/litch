@@ -432,7 +432,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
         })}
       </ScrollView>
       <View style={styles.fill}>
-        {/* 对话常驻：别的页签显示时只是不画，滚动位置、草稿、键盘前的状态都留着 */}
+        {/* 输入区常驻保留草稿；对话列表仅在可见时挂载，用贴底状态或消息锚点恢复阅读位置。 */}
         <View testID="manager-chat" style={[styles.fill, tab === 'chat' ? null : styles.hidden]}>
           {page.body}
         </View>

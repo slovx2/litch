@@ -32,6 +32,7 @@ import { SelectBar } from './comments/SelectBar'
 import { draftKey } from './composer/drafts'
 import type { IssueLinks } from './issue-links'
 import { IssueLinksContext } from './issue-links-context'
+import { readingMemory } from './reading-position'
 import { ChildRequests, DelegatedHistory } from './requests/ChildRequests'
 import { PendingQuestions } from './requests/PendingQuestions'
 import { RequestSlot } from './requests/RequestSlot'
@@ -273,6 +274,17 @@ export function useSessionPage({
 
   const task = useSessionTask(deviceId, summary?.task)
   const markers = experiment.markers
+  const reading = manager ? readingMemory(channel, deviceId, sessionId) : undefined
+  // 隐藏页签的零尺寸会让虚拟列表按错误的可见区取锚点；只撤列表，输入草稿继续常驻。
+  const transcript =
+    !manager || active ? (
+      <Transcript
+        store={store}
+        bottomOffset={insets.bottom}
+        markers={markers}
+        readingMemory={reading}
+      />
+    ) : null
   const error = snapshot.error ?? failure
   return {
     title: shownTitle,
@@ -320,15 +332,11 @@ export function useSessionPage({
               offset={{ closed: 0, opened: insets.bottom - accessory }}
               style={styles.list}
             >
-              <CommentsContext.Provider value={comments}>
-                <Transcript store={store} bottomOffset={insets.bottom} markers={markers} />
-              </CommentsContext.Provider>
+              <CommentsContext.Provider value={comments}>{transcript}</CommentsContext.Provider>
             </KeyboardStickyView>
           ) : (
             <View style={styles.list}>
-              <CommentsContext.Provider value={comments}>
-                <Transcript store={store} bottomOffset={insets.bottom} markers={markers} />
-              </CommentsContext.Provider>
+              <CommentsContext.Provider value={comments}>{transcript}</CommentsContext.Provider>
             </View>
           )}
           <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom - accessory }}>
