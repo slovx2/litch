@@ -3,7 +3,6 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { iosTestHelper } from './ios-test-helper.mjs'
 import { installTerminalAudit } from './terminal-audit.mjs'
@@ -25,16 +24,19 @@ try {
   writeFileSync(join(config.work, 'e2e-shell-commands.txt'), '')
   writeFileSync(join(config.work, 'e2e-mark.txt'), '')
   const settings = join(artifacts, 'validation.json')
-  writeFileSync(settings, JSON.stringify({ helper: helper.url, work: config.work }))
+  const link = new URL('litch-dev://terminal')
+  link.searchParams.set('device', 'fixture')
+  link.searchParams.set('root', config.work)
+  writeFileSync(
+    settings,
+    JSON.stringify({ helper: helper.url, work: config.work, terminal: link.href }),
+  )
   execFileSync('ruby', [
     join(mobile, 'scripts/ios-test-project.rb'),
     artifacts,
     join(mobile, 'e2e/ios/TerminalInputTests.swift'),
     settings,
   ])
-  const link = new URL('litch-dev://terminal')
-  link.searchParams.set('device', 'fixture')
-  link.searchParams.set('root', config.work)
   try {
     execFileSync('xcrun', ['simctl', 'terminate', simulator, 'dev.litch.app.dev'], {
       stdio: 'ignore',
@@ -42,8 +44,6 @@ try {
   } catch {
     // 测试开始前应用可以尚未启动。
   }
-  execFileSync('xcrun', ['simctl', 'openurl', simulator, link.href])
-  await sleep(1000)
   const args = [
     '-project',
     join(artifacts, 'TerminalTests.xcodeproj'),

@@ -7,7 +7,8 @@ import { iosTestHelper } from './ios-test-helper.mjs'
 
 const mobile = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const [simulator, fixturePath, tailnetPath, mode] = process.argv.slice(2)
-if (mode && mode !== 'ui') throw new Error('仅支持省略模式或 ui')
+if (mode && !['ui', 'pairing', 'cold', 'regression'].includes(mode))
+  throw new Error('仅支持省略模式、ui、pairing、cold 或 regression')
 const devices = JSON.parse(execFileSync('xcrun', ['simctl', 'list', 'devices', '--json']))
 const device = Object.values(devices.devices)
   .flat()
@@ -23,12 +24,15 @@ let child
 let helper
 try {
   const config = join(artifacts, 'validation.json')
-  if (mode === 'ui') helper = await iosTestHelper(fixture, artifacts, simulator)
+  if (mode) helper = await iosTestHelper(fixture, artifacts, simulator)
+  const remote = new URL('litch-dev://remote')
+  remote.searchParams.set('adapter', fixture.adapter)
+  remote.searchParams.set('env', 'LITCH_FX_MODE=svc')
   writeFileSync(
     config,
     JSON.stringify(
       helper
-        ? { helper: helper.url, controlURL: tailnet.controlURL }
+        ? { helper: helper.url, controlURL: tailnet.controlURL, remote: remote.href }
         : { target: fixture.target, controlURL: tailnet.controlURL },
     ),
     { mode: 0o600 },
@@ -56,27 +60,49 @@ try {
   )
   execFileSync(
     'ruby',
-    mode === 'ui'
+    mode
       ? [
           join(mobile, 'scripts/ios-test-project.rb'),
           artifacts,
-          join(mobile, 'e2e/ios/TailscaleUITests.swift'),
+          join(
+            mobile,
+            'e2e/ios',
+            {
+              ui: 'TailscaleUITests.swift',
+              pairing: 'PairingUITests.swift',
+              cold: 'TerminalColdStartTests.swift',
+              regression: 'UIRegressionTests.swift',
+            }[mode],
+          ),
           config,
         ]
       : [join(mobile, 'scripts/ios-network-test-project.rb'), artifacts, mobile, config],
   )
   execFileSync('xcrun', ['simctl', 'keychain', simulator, 'add-root-cert', tailnet.ca])
+  if (mode === 'pairing') {
+    // 配对从空设备列表开始，不能让上次失败留下的设备配置掩盖结果。
+    execFileSync('xcrun', ['simctl', 'uninstall', simulator, 'dev.litch.app.dev'])
+    execFileSync('xcrun', [
+      'simctl',
+      'install',
+      simulator,
+      join(mobile, 'ios/build/Build/Products/Release-iphonesimulator/LitchDev.app'),
+    ])
+  }
   child = spawn(
     'xcodebuild',
     [
       '-project',
-      join(artifacts, mode === 'ui' ? 'TerminalTests.xcodeproj' : 'NetworkTests.xcodeproj'),
+      join(artifacts, mode ? 'TerminalTests.xcodeproj' : 'NetworkTests.xcodeproj'),
       '-scheme',
-      mode === 'ui' ? 'TerminalTests' : 'NetworkTests',
+      mode ? 'TerminalTests' : 'NetworkTests',
       '-destination',
       `platform=iOS Simulator,id=${simulator}`,
       '-derivedDataPath',
       join(artifacts, 'build'),
+      ...(process.env.LITCH_IOS_TEST_ONLY
+        ? [`-only-testing:${process.env.LITCH_IOS_TEST_ONLY}`]
+        : []),
       'test',
     ],
     { stdio: 'inherit' },

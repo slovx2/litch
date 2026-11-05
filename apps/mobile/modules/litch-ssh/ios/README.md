@@ -40,9 +40,13 @@ Keychain/Go 桥代码与同一 XCFramework，覆盖 MagicDNS、SSH 凭据、后�
 该原生用例不是设置页面或真实 Apple 签名的替代；页面另用 Maestro 验收。
 给同一命令追加 `ui`，可用 XCUITest 在已安装的签名开发包里验证设置页和真实后台恢复，
 不占用 Maestro 端口；同样只操作专用网络模拟器并在退出时移除测试 CA。
-`fixture/26-tailscale.yaml` 验未登录与 HTTPS 输入保护；`ios/tailscale.yaml` 验本地控制面登录、
-真实后台到期恢复、退出和清除。后一条给 `check-ios.mjs` 设置 `LITCH_TEST_TAILNET=<tailnet.json>`，
-并先把 JSON 中的 CA 装入专用模拟器；用完必须删除模拟器或重置其 Keychain。
+`pairing` 模式会重新安装当前构建的开发包，验证配对确认码、系统模拟 Face ID、批准/拒绝的
+设备端验签，以及撤钥匙；账号均为夹具虚构数据。`cold` 模式连续冷启动并首次点击终端键盘。
+`regression` 模式按原生无障碍元素验授权码输入、提案菜单、模型添加表单和手填设备。
+可用 `LITCH_IOS_TEST_ONLY=TerminalTests/<测试类>/<测试方法>` 单独复跑一个方法。
+模拟的生物识别事件只能证明系统验证与签名链路接通，不能替代真机的 Face ID/Touch ID 验收。
+`fixture/26-tailscale.yaml` 验未登录与 HTTPS 输入保护；上述 `ui` 模式另验本地控制面登录、
+真实后台到期恢复、退出和清除，不依赖真实 Tailscale 账户。
 
 ## 内嵌网络的存储与披露
 

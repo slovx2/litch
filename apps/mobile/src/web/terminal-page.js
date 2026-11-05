@@ -293,6 +293,16 @@
 
   // 键盘焦点在不在终端上：输入条上那个键盘键据此画成按下或没按下
   const textarea = host.querySelector('textarea')
+  let pendingFocus = false
+  const prepareFocus = () => {
+    // 首次进入时终端可能尚未启动；xterm 的 disableStdin 会把 textarea 设为只读。
+    // iOS 只读输入仍能获得 DOM 焦点，却不会弹键盘；等可输入后再完成焦点握手。
+    if (!pendingFocus || !running) return
+    pendingFocus = false
+    term.blur()
+    textarea?.blur()
+    post({ t: 'focusReady' })
+  }
   textarea?.addEventListener('focus', () => post({ t: 'kb', on: true }))
   textarea?.addEventListener('blur', () => post({ t: 'kb', on: false }))
 
@@ -444,6 +454,7 @@
       case 'state':
         running = message.running
         term.options.disableStdin = !running
+        prepareFocus()
         break
       case 'key': {
         const text = keyText(message.k)
@@ -461,9 +472,8 @@
         ctrl = message.on
         break
       case 'prepareFocus':
-        term.blur()
-        textarea?.blur()
-        post({ t: 'focusReady' })
+        pendingFocus = true
+        prepareFocus()
         break
       case 'focus':
         // 焦点还在输入框上、键盘却被收了（关掉对话框之后常这样）：再 focus 一次系统不会弹键盘，
@@ -474,6 +484,7 @@
         } else term.focus()
         break
       case 'blur':
+        pendingFocus = false
         term.blur()
         textarea?.blur()
         break

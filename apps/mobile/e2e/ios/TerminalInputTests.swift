@@ -3,9 +3,23 @@ import XCTest
 final class TerminalInputTests: XCTestCase {
   private let app = XCUIApplication(bundleIdentifier: "dev.litch.app.dev")
 
-  override func setUp() {
+  override func setUpWithError() throws {
     continueAfterFailure = false
+    XCUIDevice.shared.orientation = .portrait
     app.activate()
+    XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+    // 首次启动先等 JS 监听器挂好，再切换核心，避免冷启动链接竞争。
+    if !app.otherElements["terminal"].exists {
+      app.open(URL(string: "litch-dev://home")!)
+      XCTAssertTrue(app.otherElements["devices"].waitForExistence(timeout: 15))
+    }
+    if !app.otherElements["terminal"].exists {
+      app.open(URL(string: "litch-dev://boot?mode=fixture")!)
+      XCTAssertTrue(app.buttons["device:fixture"].waitForExistence(timeout: 15))
+      let config = Bundle(for: Self.self).url(forResource: "validation", withExtension: "json")!
+      let settings = try JSONSerialization.jsonObject(with: Data(contentsOf: config)) as! [String: String]
+      app.open(URL(string: settings["terminal"]!)!)
+    }
     XCTAssertTrue(app.otherElements["terminal"].waitForExistence(timeout: 10))
     let input = app.webViews.textViews["Terminal input"]
     XCTAssertTrue(input.waitForExistence(timeout: 10))
@@ -14,6 +28,17 @@ final class TerminalInputTests: XCTestCase {
     if !keyboardShown { print("LITCH_KEYBOARD_FAILURE \(app.debugDescription)") }
     XCTAssertTrue(keyboardShown)
     if app.buttons["Continue"].exists { app.buttons["Continue"].tap() }
+    let globe = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "Next keyboard", "下一个键盘")).firstMatch
+    // 每个普通输入用例从英文键盘开始；拼音候选用例自己切换，不能污染后面的输入。
+    for _ in 0..<3 {
+      if !(globe.value as? String ?? "").contains("English") { break }
+      globe.tap()
+    }
+  }
+
+  override func tearDown() {
+    // XCTest 断言提前结束也要恢复方向，否则后续 Maestro 的手势坐标会沿用横屏。
+    XCUIDevice.shared.orientation = .portrait
   }
 
   func testIndividualCharacters() throws {

@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { encodePairPayload } from '../../../packages/protocol/src/device-pairing.mts'
 import { deviceRpc } from './device-rpc.mjs'
+import { iosTestApprovals } from './ios-test-approvals.mjs'
 import { terminalEvidence } from './terminal-audit.mjs'
 
 export async function iosTestHelper(config, artifacts, simulator) {
@@ -13,6 +14,9 @@ export async function iosTestHelper(config, artifacts, simulator) {
   if (!/^[0-9A-F-]{36}$/.test(simulator)) throw new Error('必须指定隔离模拟器')
   let rpc
   let current
+  let socket
+  let phone
+  let biometric = false
   let policyLog
   let policyBuffer = ''
   let policies = []
@@ -41,9 +45,17 @@ export async function iosTestHelper(config, artifacts, simulator) {
       .map((line) => JSON.parse(line))
       .find((line) => line.ready)
     if (!ready) throw new Error('隔离设备服务未就绪')
-    rpc = await deviceRpc(ready.socket)
+    socket = ready.socket
+    rpc = await deviceRpc(socket)
     return rpc
   }
+  const approvals = iosTestApprovals(
+    async () => {
+      await service()
+      return socket
+    },
+    () => phone,
+  )
   const pair = async (method, path) => {
     const device = await service()
     if (method === 'POST' && path === '/pair') {
@@ -77,7 +89,9 @@ export async function iosTestHelper(config, artifacts, simulator) {
         { pairId: current, since: 'waiting' },
         40_000,
       )
-      return result.state === 'requested' ? JSON.stringify(result.phone) : null
+      if (result.state !== 'requested') return null
+      phone = result.phone
+      return JSON.stringify(phone)
     }
     if (path === '/pair/allow') {
       const result = await device.call('litch/pair/decide', { pairId: current, allow: true })
@@ -94,7 +108,27 @@ export async function iosTestHelper(config, artifacts, simulator) {
       try {
         const url = new URL(request.url, 'http://localhost')
         let answer = null
-        if (url.pathname === '/background/start' && request.method === 'POST') {
+        if (url.pathname === '/cold/terminal' && request.method === 'POST') {
+          simctl('openurl', simulator, 'litch-dev://terminal?device=local')
+          answer = 'ok'
+        } else if (url.pathname === '/biometrics/enroll' && request.method === 'POST') {
+          biometric = body === '1'
+          simctl(
+            'spawn',
+            simulator,
+            'notifyutil',
+            '-s',
+            'com.apple.BiometricKit.enrollmentChanged',
+            biometric ? '1' : '0',
+          )
+          simctl('spawn', simulator, 'notifyutil', '-p', 'com.apple.BiometricKit.enrollmentChanged')
+          answer = 'ok'
+        } else if (url.pathname === '/biometrics/match' && request.method === 'POST') {
+          simctl('spawn', simulator, 'notifyutil', '-p', 'com.apple.BiometricKit_Sim.pearl.match')
+          answer = 'ok'
+        } else if (url.pathname.startsWith('/approval')) {
+          answer = await approvals.handle(request.method, url.pathname)
+        } else if (url.pathname === '/background/start' && request.method === 'POST') {
           policies = []
           policyBuffer = ''
           simctl(
@@ -197,6 +231,18 @@ export async function iosTestHelper(config, artifacts, simulator) {
       if (backgrounded) simctl('launch', simulator, 'dev.litch.app.dev')
       if (policyLog) policyLog.kill('SIGTERM')
       rpc?.close()
+      approvals.close()
+      if (biometric) {
+        simctl(
+          'spawn',
+          simulator,
+          'notifyutil',
+          '-s',
+          'com.apple.BiometricKit.enrollmentChanged',
+          '0',
+        )
+        simctl('spawn', simulator, 'notifyutil', '-p', 'com.apple.BiometricKit.enrollmentChanged')
+      }
       server.closeAllConnections()
       await new Promise((resolve) => server.close(resolve))
     },
