@@ -45,6 +45,9 @@
     "ios": {
       "bundleIdentifier": "dev.litch.app",
       "supportsTablet": false,
+      "entitlements": {
+        "keychain-access-groups": ["$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)"]
+      },
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Litch connects to your computers over SSH on your local network.",
         "NSAppTransportSecurity": {

@@ -9,9 +9,13 @@ cd apps/mobile
 LITCH_MOBILE_DEV=1 bash scripts/build-ios.sh
 ```
 
-脚本先生成 WebView 页面与 Go XCFramework，再运行 Expo prebuild、pod install 和无签名
-Release 模拟器构建。`LITCH_IOS_DESTINATION` 可以指定某台模拟器；真机签名在 Xcode 配置。
+脚本先生成 WebView 页面与 Go XCFramework，再运行 Expo prebuild、pod install 和本地 ad-hoc
+签名的 Release 模拟器构建，不需要 Apple 账号。`LITCH_IOS_DESTINATION` 可以指定某台模拟器；
+真机签名在 Xcode 配置。`LITCH_IOS_UNSIGNED=1` 只用于 CI 编译检查，不能验收 Keychain 流程。
 开发包使用 `dev.litch.app.dev` 和 `litch-dev://`，与正式应用隔离。
+
+Keychain access group 在 `app.json` 的 `ios.entitlements` 声明，经 prebuild 生成；使用
+`AppIdentifierPrefix` 与实际 bundle ID，因此正式签名会使用真实团队的前缀，开发包也不共用密钥。
 
 `ConnectionLifecycle` 使用应用级前后台通知，不把失焦当作后台。五分钟 Go deadline 与 iOS
 后台任务执行期限取先到者；提前到期也通过 Go 的 epoch 校验统一关闭连接并暂停重连。

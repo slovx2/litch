@@ -92,6 +92,11 @@ This section is hidden on iOS. These are phone settings; desktop `litch config` 
 
 ## iOS 后台连接与更新
 
+iOS 的 SSH 私钥保存在系统 Keychain。自建模拟器包应使用构建脚本默认的本地 ad-hoc 签名；
+无签名包只用于编译检查，不能验证密钥保存或配对。
+SSH private keys on iOS are stored in Keychain. Use the build script's default local ad-hoc
+signature for simulator testing; unsigned builds cannot validate key storage or pairing.
+
 iOS 在五分钟期限或系统允许的后台执行时间先到期时关闭 SSH 连接，并暂停重连。
 返回 Litch 后恢复连接；断开期间电脑上的任务继续运行。Litch 不申请后台常驻。
 
