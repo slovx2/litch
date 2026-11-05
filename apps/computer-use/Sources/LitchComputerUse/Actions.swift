@@ -1,6 +1,6 @@
 // 动作：点击、打字、按键、滚动、设值、拖动、选中文字。
-// 检查权限/观察窗口/租约；能后台做就定向投递，需要前台则等空闲并在结束后恢复。
-// 每个输入阶段检查取消与用户接管；结束后返回 AX 差异，不把连续预览塞入模型结果。
+// 检查权限/观察窗口/租约；后台定向投递不受用户活动影响，前台只等待正在冲突的输入。
+// 每个前台输入阶段检查取消与碰撞；结束后返回 AX 差异，不把连续预览塞入模型结果。
 // 元素按编号找（编号来自最近一次取状态或动作后的差异）；坐标是最近一次截图里的像素。
 import AppKit
 import ApplicationServices
@@ -252,7 +252,7 @@ extension Engine {
         Thread.sleep(forTimeInterval: 0.03)
       }
     }
-    // 没有窗口接收按键时，让应用菜单处理快捷键；仍走空闲等待与焦点恢复，不直接抢前台。
+    // 没有窗口接收按键时，让应用菜单处理快捷键；仍走输入冲突检查与焦点恢复。
     let remoteFocus = try KeyboardTarget.resolve(appPID: context.pid) != context.pid
     if InputPolicy.keyboardNeedsForeground(hasWindow: context.window != nil, flags: combo.flags, remoteFocus: remoteFocus) {
       try context.inForeground(kind: "semantic", send)

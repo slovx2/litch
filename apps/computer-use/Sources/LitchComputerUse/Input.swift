@@ -197,10 +197,9 @@ enum Input {
       repaired = true
       residual = io.flags() & mask
     }
-    if io.revision() != before {
-      throw RPCError(.userActive, "The user intervened during the shortcut. Targeted keys were released; no further input will be sent.")
-    }
-    if residual != 0 {
+    // 用户在其他应用输入时不修复全局键位，也不把这种活动当作本动作失败。
+    // 真正目标输入冲突由 ActionContext 的前台作用域检查。
+    if residual != 0, io.revision() == before {
       throw RPCError(.failed, "Modifier keys remained set after release and one recovery attempt. Stop and ask the user to press and release the modifier keys before continuing.")
     }
     if let error {

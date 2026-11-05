@@ -26,9 +26,9 @@ final class KeyboardReleaseTests: XCTestCase {
   func testConsecutiveCommandShortcutsReleaseBeforeForegroundRestoration() throws {
     let sink = Sink()
     for key in ["cmd+b", "cmd+s"] {
-      // 前一条留下 Command 时这里会失败；不靠降低 2 秒/8 秒的让行门槛放过。
+      // 前一条留下 Command 时这里会失败；必须先释放代理自己的修饰键。
       XCTAssertEqual(InputPolicy.waitResult(elapsed: 0,
-        idle: sink.globalFlags & Keys.command == 0 ? 3 : 0, cancelled: false), "ready")
+        blocked: sink.globalFlags & Keys.command != 0, cancelled: false), "ready")
       XCTAssertFalse(try Input.key(Keys.parse(key), pid: 1, io: sink.io))
       XCTAssertEqual(sink.privateFlags & Keys.command, 0)
       let restore = try XCTUnwrap(Input.pointerMove(to: .zero))
@@ -104,15 +104,13 @@ final class KeyboardReleaseTests: XCTestCase {
     XCTAssertEqual(sink.globalFlags, 0)
   }
 
-  func testRealUserInterventionIsNotReleasedGloballyOrIgnored() throws {
+  func testOtherUserInputDoesNotFailBackgroundKeyOrReleaseTheirModifiers() throws {
     let sink = Sink()
     var checks = 0
-    XCTAssertThrowsError(try Input.key(Keys.parse("cmd+b"), pid: 1, check: {
+    XCTAssertFalse(try Input.key(Keys.parse("cmd+b"), pid: 1, check: {
       checks += 1
       if checks == 2 { sink.revision += 1; sink.globalFlags = Keys.command }
-    }, io: sink.io)) { error in
-      XCTAssertEqual((error as? RPCError)?.kind, .userActive)
-    }
+    }, io: sink.io))
     XCTAssertTrue(sink.system.isEmpty)
     XCTAssertEqual(sink.globalFlags, Keys.command)
     XCTAssertEqual(sink.privateFlags, 0)

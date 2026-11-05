@@ -32,6 +32,7 @@ function save() {
     electron: process.versions.electron,
     chromium: process.versions.chrome,
     bundleId: 'com.github.Electron',
+    windowId: Number(win.getMediaSourceId().split(':')[1]),
   }
   fs.writeFileSync(path.join(directory, 'state.tmp'), JSON.stringify(data))
   fs.renameSync(path.join(directory, 'state.tmp'), path.join(directory, 'state.json'))
@@ -60,7 +61,7 @@ app.whenReady().then(async () => {
     save()
   })
   await win.loadFile(path.join(__dirname, 'fixture.html'))
-  win.showInactive()
+  if (process.env.LITCH_PROBE_HIDDEN !== '1') win.showInactive()
   timer = setInterval(() => {
     try {
       const command = JSON.parse(fs.readFileSync(path.join(directory, 'command.json'), 'utf8'))

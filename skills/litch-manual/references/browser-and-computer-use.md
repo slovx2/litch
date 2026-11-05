@@ -252,9 +252,17 @@ litch config operation: enable Computer Use with tools set and use its tool inte
 
 ### Background control and preview (macOS)
 
-Litch prefers background actions. Where foreground is needed, it waits for keyboard/mouse inactivity,
-briefly activates the target, performs the action and restores previous focus. The preview indicates
-this foreground visit. If the user takes over, it stops instead of overriding the user's focus.
+Litch prefers background actions, which are not blocked by user activity. Where foreground is needed,
+it briefly activates the target, performs the action and restores previous focus. It waits up to
+eight seconds only for held buttons/keys or a reported IME composition, not for global inactivity.
+Opening the target to look at it, moving the pointer and scrolling do not stop the agent. If input
+overlaps during a foreground step, only that step fails: inspect the state and retry its unfinished
+part. The session remains usable. Esc and the explicit Stop button still stop control for the turn.
+On Windows, UI Automation actions also ignore user activity; mouse and keyboard fallback uses a
+temporary foreground visit with the same step-scoped conflict rule. IME detection depends on the
+target exposing its composition range through accessibility; some applications do not expose it.
+The preview indicates foreground visits. Chromium/Electron clicks still need foreground fallback;
+macOS text input uses per-character background events when the focused control accepts them.
 
 Screen Recording's toggle can be on while first capture still needs a separate system confirmation.
 If macOS asks for screen/window access, the user clicks Allow; retry after handling it. Litch reports

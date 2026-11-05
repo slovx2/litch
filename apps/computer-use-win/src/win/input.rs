@@ -60,10 +60,12 @@ fn mouse(dx: i32, dy: i32, data: i32, flags: MOUSE_EVENT_FLAGS) -> INPUT {
     }
 }
 
-fn send(inputs: &[INPUT]) {
+fn send(inputs: &[INPUT]) -> RpcResult<()> {
     for chunk in inputs.chunks(BATCH) {
+        super::foreground::check_input()?;
         unsafe { SendInput(chunk, std::mem::size_of::<INPUT>() as i32) };
     }
+    super::foreground::check_completion()
 }
 
 /// 把光标移到屏幕坐标（绝对），作为一条输入
@@ -99,7 +101,7 @@ pub fn click(x: i32, y: i32, button: &str, count: u32, modifiers: &[u16]) -> Rpc
         inputs.push(mouse(0, 0, 0, up));
     }
     inputs.extend(mods_up(modifiers));
-    send(&inputs);
+    send(&inputs)?;
     Ok(())
 }
 
@@ -117,7 +119,7 @@ pub fn wheel(x: i32, y: i32, direction: &str, amount: i32) -> RpcResult<()> {
     for _ in 0..notches {
         inputs.push(mouse(0, 0, delta, flag));
     }
-    send(&inputs);
+    send(&inputs)?;
     Ok(())
 }
 
@@ -131,7 +133,7 @@ pub fn drag(from: (i32, i32), to: (i32, i32)) -> RpcResult<()> {
         inputs.push(move_to(x, y));
     }
     inputs.push(mouse(0, 0, 0, MOUSEEVENTF_LEFTUP));
-    send(&inputs);
+    send(&inputs)?;
     Ok(())
 }
 
@@ -149,22 +151,22 @@ enum Paste {
 /// 不统一（旧控制台要右键、各家终端不一），所以照旧逐字发。剪贴板不可用时退回逐字。
 /// `confirmed`：给了就用它判粘贴有没有落下（轮询目标元素文字变化），用来决定何时恢复剪贴板、要不要重发；
 /// 没给（焦点元素既没有值也没有文字）就固定等。回一个可选的 notes 提示：粘贴没确认落下时提醒模型去核对。
-pub fn enter_text(value: &str, window_class: &str, confirmed: Option<&dyn Fn() -> bool>) -> Option<&'static str> {
+pub fn enter_text(value: &str, window_class: &str, confirmed: Option<&dyn Fn() -> bool>) -> RpcResult<Option<&'static str>> {
     if value.is_empty() {
-        return None;
+        return Ok(None);
     }
     if is_console_class(window_class) {
-        type_per_char(value);
-        return None;
+        type_per_char(value)?;
+        return Ok(None);
     }
-    match paste_text(value, confirmed) {
+    Ok(match paste_text(value, confirmed)? {
         Paste::Ok => None,
         Paste::Unconfirmed => Some(PASTE_UNCONFIRMED_NOTE),
         Paste::ClipboardUnavailable => {
-            type_per_char(value);
+            type_per_char(value)?;
             None
         }
-    }
+    })
 }
 
 /// 控制台/终端类窗口（粘贴快捷键不统一，走逐字更稳）
@@ -182,20 +184,30 @@ fn is_console_class(class: &str) -> bool {
 /// 注意：粘贴期间剪贴板被临时占用（放的是要打的文字），落下后才会恢复成用户原来的内容。
 /// 有确认回调时：发一次等最多 800ms，没变化就再发一次（剪贴板里还是要打的文字）再等；两次都没变化回
 /// Unconfirmed。没有确认回调（焦点元素既没有值也没有文字）就固定等 PASTE_SETTLE_MS，当作已落下。
-fn paste_text(value: &str, confirmed: Option<&dyn Fn() -> bool>) -> Paste {
+fn paste_text(value: &str, confirmed: Option<&dyn Fn() -> bool>) -> RpcResult<Paste> {
     let saved = clipboard::get_text();
     if !clipboard::set_text(value) {
-        return Paste::ClipboardUnavailable;
+        return Ok(Paste::ClipboardUnavailable);
     }
     if clipboard::get_text().as_deref() != Some(value) {
         if let Some(prev) = &saved {
             clipboard::set_text(prev);
         }
-        return Paste::ClipboardUnavailable;
+        return Ok(Paste::ClipboardUnavailable);
     }
+    struct Restore { saved: Option<String>, written: String }
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            // 当前步骤让行时不覆盖用户期间复制的新内容。
+            if clipboard::get_text().as_deref() == Some(&self.written) {
+                if let Some(value) = &self.saved { clipboard::set_text(value); }
+            }
+        }
+    }
+    let _restore = Restore { saved, written: value.into() };
     // 刚写完剪贴板稍等再粘，躲开剪贴板被别的进程短暂占用导致 Ctrl+V 静默失败
     std::thread::sleep(Duration::from_millis(PRE_PASTE_MS));
-    send_paste();
+    send_paste()?;
     let result = match confirmed {
         None => {
             std::thread::sleep(Duration::from_millis(PASTE_SETTLE_MS));
@@ -206,7 +218,7 @@ fn paste_text(value: &str, confirmed: Option<&dyn Fn() -> bool>) -> Paste {
                 Paste::Ok
             } else {
                 // 没落下，剪贴板里还是要打的文字，再发一次
-                send_paste();
+                send_paste()?;
                 if wait_for_change(check) {
                     Paste::Ok
                 } else {
@@ -215,15 +227,12 @@ fn paste_text(value: &str, confirmed: Option<&dyn Fn() -> bool>) -> Paste {
             }
         }
     };
-    if let Some(prev) = saved {
-        clipboard::set_text(&prev);
-    }
-    result
+    Ok(result)
 }
 
 /// 发一次 Ctrl+V（带 INJECTED_TAG）
-fn send_paste() {
-    press_key(&KeyCombo { modifiers: vec![VK_CONTROL], key: VK_V, extended: false }, 1);
+fn send_paste() -> RpcResult<()> {
+    press_key(&KeyCombo { modifiers: vec![VK_CONTROL], key: VK_V, extended: false }, 1)
 }
 
 /// 轮询确认回调，最多等 PASTE_CONFIRM_MAX_MS；变化了回 true，超时回 false
@@ -241,7 +250,7 @@ fn wait_for_change(check: &dyn Fn() -> bool) -> bool {
 }
 
 /// 一次一个键击逐字发：每个字符（或回车、Tab）单独一次 SendInput、中间留间隔。代理对的两个码元同一次发。
-fn type_per_char(value: &str) {
+fn type_per_char(value: &str) -> RpcResult<()> {
     for stroke in text::keystrokes(value) {
         let mut inputs = vec![];
         match stroke {
@@ -257,13 +266,14 @@ fn type_per_char(value: &str) {
                 inputs.push(key(vk, 0, KEYEVENTF_KEYUP));
             }
         }
-        send(&inputs);
+        send(&inputs)?;
         std::thread::sleep(Duration::from_millis(TYPE_GAP_MS));
     }
+    Ok(())
 }
 
 /// 发一个组合键 repeat 次
-pub fn press_key(combo: &KeyCombo, repeat: u32) {
+pub fn press_key(combo: &KeyCombo, repeat: u32) -> RpcResult<()> {
     let extended = if combo.extended { KEYEVENTF_EXTENDEDKEY } else { KEYBD_EVENT_FLAGS(0) };
     let mut inputs = mods_down(&combo.modifiers);
     for _ in 0..repeat.clamp(1, 50) {
@@ -271,5 +281,5 @@ pub fn press_key(combo: &KeyCombo, repeat: u32) {
         inputs.push(key(combo.key, 0, extended | KEYEVENTF_KEYUP));
     }
     inputs.extend(mods_up(&combo.modifiers));
-    send(&inputs);
+    send(&inputs)
 }

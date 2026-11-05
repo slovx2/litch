@@ -108,6 +108,29 @@ for (const kind of ['stale', 'userActive', 'stopped', 'permission', 'failed'] as
   })
 }
 
+test('输入碰撞只结束当前批次，同一回合观察后可重试未完成步骤', async () => {
+  const { executor, methods } = rig(1, 'userActive')
+  const first = await executor.call(
+    call([action(), action('type_text', { text: 'later' })]),
+    context(),
+  )
+  assert.equal(first.success, false)
+  assert.match(textOf(first), /retry only the unfinished step; the session remains usable/)
+  assert.equal(methods.includes('typeText'), false)
+  const next = await executor.call(call([action()]), context())
+  assert.equal(next.success, true)
+  assert.equal(methods.filter((method) => method === 'pressKey').length, 2)
+})
+
+test('两平台的命名空间说明保留重试规则且不超过 Codex 长度上限', () => {
+  for (const platform of ['darwin', 'win32'] as const) {
+    const { description } = computerToolsSpec(platform)
+    assert.ok(description.length <= 1024)
+    assert.match(description, /retry.*unfinished step/)
+    assert.match(description, /explicit Stop\/Esc/)
+  }
+})
+
 test('权限在批内丢失时阻止下一步及最终观察，不补授权、不自动重试', async () => {
   let checks = 0,
     inputs = 0

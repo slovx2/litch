@@ -13,9 +13,6 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::time::Duration;
 
-/// 用户在目标窗口里动过后，多久内不动作（照 macOS 的 2 秒静默期）
-const USER_SILENCE: Duration = Duration::from_secs(2);
-
 /// 一张截图和它覆盖的窗口状态：坐标映射，加截图那一刻窗口的边界（判 stale 用）
 struct Shot {
     session: String,
@@ -247,7 +244,7 @@ impl Engine {
         id
     }
 
-    /// 动作前的统一关卡：管理员、被 Esc 停、锁屏、用户在动；过了就登记并回窗口句柄
+    /// 统一检查管理员、Esc 停止和锁屏；输入碰撞只在前台回退作用域内检查。
     fn guard(&mut self, p: &Value) -> RpcResult<(super::apps::App, super::apps::Win)> {
         self.require_handshake()?;
         let session = req_str(p, "session")?;
@@ -267,15 +264,6 @@ impl Engine {
             return Err(fail!(
                 Locked,
                 "the screen is not available ({reason}); ask the user to unlock it"
-            ));
-        }
-        let hwnd = apps::hwnd(win.hwnd);
-        if hooks::last_user_input(win.hwnd, &apps::bounds(hwnd))
-            .is_some_and(|t| t.elapsed() < USER_SILENCE)
-        {
-            return Err(fail!(
-                UserActive,
-                "the user is interacting with this window; wait a moment and try again"
             ));
         }
         self.ensure_watchers();
@@ -302,7 +290,7 @@ impl Engine {
     }
 
     fn click(&mut self, p: &Value) -> RpcResult<Value> {
-        let (_, win) = self.guard(p)?;
+        let (app, win) = self.guard(p)?;
         let hwnd = apps::hwnd(win.hwnd);
         let button = str_of(p, "button").unwrap_or_else(|| "left".into());
         let count = p.get("count").and_then(Value::as_u64).unwrap_or(1) as u32;
@@ -314,7 +302,7 @@ impl Engine {
                 return self.done();
             }
             let (x, y) = uia::element_center(&el)?;
-            foreground::ensure(hwnd)?;
+            let _input = foreground::Excursion::begin(hwnd, &req_str(p, "session")?, &app.app_id)?;
             foreground::hit_ok(hwnd, x, y)?;
             input::click(x, y, &button, count, &modifiers)?;
         } else {
@@ -322,7 +310,7 @@ impl Engine {
                 .shot(p, hwnd)?
                 .map
                 .to_screen(req_f64(p, "x")?, req_f64(p, "y")?)?;
-            foreground::ensure(hwnd)?;
+            let _input = foreground::Excursion::begin(hwnd, &req_str(p, "session")?, &app.app_id)?;
             foreground::hit_ok(hwnd, x, y)?;
             input::click(x, y, &button, count, &modifiers)?;
         }
@@ -330,10 +318,10 @@ impl Engine {
     }
 
     fn type_text(&mut self, p: &Value) -> RpcResult<Value> {
-        let (_, win) = self.guard(p)?;
+        let (app, win) = self.guard(p)?;
         let hwnd = apps::hwnd(win.hwnd);
         let text = req_str(p, "text")?;
-        foreground::ensure(hwnd)?;
+        let _input = foreground::Excursion::begin(hwnd, &req_str(p, "session")?, &app.app_id)?;
         // 确认粘贴落下的元素：带 ref 用 ref 并聚焦，否则用当前键盘焦点元素
         let el = match str_of(p, "ref") {
             Some(reference) => {
@@ -354,21 +342,21 @@ impl Engine {
             }
             _ => input::enter_text(&text, &class, None),
         };
-        self.done_with_notes(note)
+        self.done_with_notes(note?)
     }
 
     fn press_key(&mut self, p: &Value) -> RpcResult<Value> {
-        let (_, win) = self.guard(p)?;
+        let (app, win) = self.guard(p)?;
         let hwnd = apps::hwnd(win.hwnd);
         let combo = keys::parse(&req_str(p, "key")?, &modifier_list(p))?;
         let repeat = p.get("repeat").and_then(Value::as_u64).unwrap_or(1) as u32;
-        foreground::ensure(hwnd)?;
-        input::press_key(&combo, repeat);
+        let _input = foreground::Excursion::begin(hwnd, &req_str(p, "session")?, &app.app_id)?;
+        input::press_key(&combo, repeat)?;
         self.done()
     }
 
     fn scroll(&mut self, p: &Value) -> RpcResult<Value> {
-        let (_, win) = self.guard(p)?;
+        let (app, win) = self.guard(p)?;
         let hwnd = apps::hwnd(win.hwnd);
         let direction = req_str(p, "direction")?;
         let amount = p.get("amount").and_then(Value::as_i64).unwrap_or(5) as i32;
@@ -378,18 +366,18 @@ impl Engine {
                 return self.done();
             }
             let (x, y) = uia::element_center(&el)?;
-            foreground::ensure(hwnd)?;
+            let _input = foreground::Excursion::begin(hwnd, &req_str(p, "session")?, &app.app_id)?;
             input::wheel(x, y, &direction, amount)?;
         } else if p.get("x").is_some() || p.get("y").is_some() {
             let (x, y) = self
                 .shot(p, hwnd)?
                 .map
                 .to_screen(req_f64(p, "x")?, req_f64(p, "y")?)?;
-            foreground::ensure(hwnd)?;
+            let _input = foreground::Excursion::begin(hwnd, &req_str(p, "session")?, &app.app_id)?;
             input::wheel(x, y, &direction, amount)?;
         } else {
             let (x, y) = apps::bounds(hwnd).center();
-            foreground::ensure(hwnd)?;
+            let _input = foreground::Excursion::begin(hwnd, &req_str(p, "session")?, &app.app_id)?;
             input::wheel(x, y, &direction, amount)?;
         }
         self.done()
@@ -404,14 +392,14 @@ impl Engine {
     }
 
     fn drag(&mut self, p: &Value) -> RpcResult<Value> {
-        let (_, win) = self.guard(p)?;
+        let (app, win) = self.guard(p)?;
         let hwnd = apps::hwnd(win.hwnd);
         let (fx, fy) = point(p, "from")?;
         let (tx, ty) = point(p, "to")?;
         let shot = self.shot(p, hwnd)?;
         let from = shot.map.to_screen(fx, fy)?;
         let to = shot.map.to_screen(tx, ty)?;
-        foreground::ensure(hwnd)?;
+        let _input = foreground::Excursion::begin(hwnd, &req_str(p, "session")?, &app.app_id)?;
         foreground::hit_ok(hwnd, from.0, from.1)?;
         input::drag(from, to)?;
         self.done()
@@ -430,12 +418,14 @@ impl Engine {
 
     /// 动作后等界面稳定一下，再让主进程取树算差异
     fn done(&self) -> RpcResult<Value> {
+        foreground::check_completion()?;
         std::thread::sleep(Duration::from_millis(400));
         Ok(json!({}))
     }
 
     /// 带一条可选 notes 的 done（typeText 粘贴没确认落下时提醒模型去核对）
     fn done_with_notes(&self, note: Option<&str>) -> RpcResult<Value> {
+        foreground::check_completion()?;
         std::thread::sleep(Duration::from_millis(400));
         match note {
             Some(n) => Ok(json!({ "notes": [n] })),

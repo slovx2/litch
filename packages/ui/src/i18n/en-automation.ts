@@ -13,7 +13,7 @@ export const enAutomation = {
   'automation.local': 'This computer',
   'automation.background': 'Background operation',
   'automation.foreground': 'Briefly brought to the foreground',
-  'automation.waiting': 'Waiting for keyboard and mouse activity to stop…',
+  'automation.waiting': 'Waiting for held input or composition to finish…',
   'automation.restoreFailed': 'Could not restore the previous window. Please switch back manually.',
   'automation.image': 'Live preview of the controlled window',
   'automation.waitFrame': 'Waiting for the window…',

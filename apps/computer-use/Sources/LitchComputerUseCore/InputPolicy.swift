@@ -1,6 +1,5 @@
 // 后台能力与临时前台执行的纯决策，系统接口在可执行目标中。
 public enum InputPolicy {
-  public static let quietSeconds: Double = 2
   public static let waitSeconds: Double = 8
 
   /// AppKit 的菜单快捷键在后台可能被忽略；窗口缺失或使用 Command 时在受控前台发送。
@@ -21,9 +20,9 @@ public enum InputPolicy {
     }
   }
 
-  public static func waitResult(elapsed: Double, idle: Double, cancelled: Bool) -> String {
+  public static func waitResult(elapsed: Double, blocked: Bool, cancelled: Bool) -> String {
     if cancelled { return "cancelled" }
-    if idle >= quietSeconds { return "ready" }
+    if !blocked { return "ready" }
     return elapsed >= waitSeconds ? "userActive" : "waiting"
   }
 }

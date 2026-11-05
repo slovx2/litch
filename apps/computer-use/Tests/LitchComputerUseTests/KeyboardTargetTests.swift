@@ -7,8 +7,8 @@ final class KeyboardTargetTests: XCTestCase {
   func testRemotePlainKeysRequireProtectedForeground() {
     XCTAssertTrue(InputPolicy.keyboardNeedsForeground(hasWindow: true, flags: 0, remoteFocus: true))
     XCTAssertFalse(InputPolicy.keyboardNeedsForeground(hasWindow: true, flags: 0, remoteFocus: false))
-    XCTAssertEqual(InputPolicy.waitResult(elapsed: 8, idle: 0, cancelled: false), "userActive")
-    XCTAssertEqual(InputPolicy.waitResult(elapsed: 0, idle: 3, cancelled: true), "cancelled")
+    XCTAssertEqual(InputPolicy.waitResult(elapsed: 8, blocked: true, cancelled: false), "userActive")
+    XCTAssertEqual(InputPolicy.waitResult(elapsed: 0, blocked: false, cancelled: true), "cancelled")
   }
   func testRemotePanelUsesActualPIDInsteadOfProxyOwner() throws {
     let proxy = AXUIElementCreateApplication(100)

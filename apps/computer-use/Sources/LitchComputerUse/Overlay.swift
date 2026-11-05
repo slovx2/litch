@@ -3,49 +3,70 @@
 //
 // 提示显示期间同时监听用户的键鼠（全局监听，要辅助功能权限，动作本来就要这项权限）：
 //   - 用户按 Esc：停掉正在操作的全部应用，通知主进程，本回合不再操作它们
-//   - 用户在动键鼠：记下时间和当时在前台的应用。之后一小段时间里对同一个应用的动作被拒，告诉模型等一会儿
+//   - 按下键鼠：记录实际目标和按住状态，只用于当前前台动作的冲突判断；查看、移动、滚动不停止任务。
 // 我们自己发的事件带标记（Input.marker），不算用户在动。
 import AppKit
 import Foundation
 import LitchComputerUseCore
 
 enum UserActivity {
-  /// 用户动过键鼠之后多久之内不去动同一个应用
-  static let quietSeconds: TimeInterval = 2.0
   private static let lock = NSLock()
-  private static var lastAt = Date.distantPast
-  private static var lastPid: pid_t = 0
   private static var sequence: UInt64 = 0
+  private static var state = InputConflict()
+  private static var lastAt = Date.distantPast
 
-  static var revision: UInt64 { lock.lock(); defer { lock.unlock() }; return sequence }
-  static var idleSeconds: TimeInterval {
-    lock.lock(); defer { lock.unlock() }
-    if CGEventSource.buttonState(.combinedSessionState, button: .left) ||
-      CGEventSource.buttonState(.combinedSessionState, button: .right) ||
-      CGEventSource.flagsState(.combinedSessionState).intersection([.maskShift, .maskControl, .maskAlternate, .maskCommand]).rawValue != 0 { return 0 }
-    return Date().timeIntervalSince(lastAt)
-  }
-
+  // 全局版本仅供修饰键和光标收尾使用，不作为动作冲突判据。
+  static var revision: UInt64 { lock.withLock { sequence } }
+  static var idleSeconds: TimeInterval { lock.withLock { Date().timeIntervalSince(lastAt) } }
   static func seed() {
-    let idle = [CGEventType.keyDown, .flagsChanged, .mouseMoved, .leftMouseDown, .rightMouseDown, .scrollWheel]
-      .map { CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) }.min() ?? 0
-    lock.lock(); lastAt = Date().addingTimeInterval(-idle); lock.unlock()
+    let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
+    for code in 0..<128 where code != 57 && CGEventSource.keyState(.hidSystemState, key: CGKeyCode(code)) {
+      note(.keyDown, pid: pid, code: code)
+    }
+    for button in [CGMouseButton.left, .right, .center] where CGEventSource.buttonState(.hidSystemState, button: button) {
+      note(.mouseDown, pid: pid, code: Int(button.rawValue))
+    }
+  }
+  static func targetRevision(pid: pid_t) -> UInt64 { lock.withLock { state.revision(pid: pid) } }
+  static var hasHeldInput: Bool { lock.withLock { state.blocked(background: false) } }
+  static var hasHeldPointer: Bool { lock.withLock { state.pointerHeld } }
+
+  /// 公开 AX 属性只查询有没有组字范围，不读取内容；不支持该属性的应用无法据此判断 IME。
+  static var isComposing: Bool {
+    guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+      let focus: AXUIElement = AXReader.copy(AXReader.appElement(pid), kAXFocusedUIElementAttribute as String) else { return false }
+    var value: CFTypeRef?
+    return AXUIElementCopyAttributeValue(focus, "AXTextInputMarkedTextMarkerRange" as CFString, &value) == .success && value != nil
   }
 
-  static func note(pid: pid_t) {
-    lock.lock()
-    lastAt = Date()
-    lastPid = pid
-    sequence += 1
-    lock.unlock()
+  static func note(_ kind: InputConflict.Kind, pid: pid_t, code: Int = 0) {
+    lock.withLock {
+      sequence &+= 1
+      lastAt = Date()
+      state.note(kind, pid: pid, code: code)
+    }
   }
 
-  /// 用户最近是不是在动这个应用
-  static func isBusy(pid: pid_t) -> Bool {
-    lock.lock()
-    defer { lock.unlock() }
-    return lastPid == pid && Date().timeIntervalSince(lastAt) < quietSeconds
+  /// 只读取事件归属，不读取其他窗口的文字。鼠标不能按前台 PID 归因：后台窗口也能被点击。
+  static func recipient(_ event: NSEvent) -> pid_t {
+    // NSEvent 重建的 CGEvent 目标 PID 不保证是原始接收者，不能据此归因。
+    // 键盘以接收时的前台应用为准，鼠标用实际命中窗口，均不读窗口内容。
+    if [.keyDown, .keyUp, .flagsChanged].contains(event.type) {
+      return NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
+    }
+    guard let point = event.cgEvent?.location else { return 0 }
+    let rows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], 0)
+      as? [[String: Any]] ?? []
+    for row in rows {
+      guard (row[kCGWindowAlpha as String] as? Double ?? 1) > 0,
+        let bounds = row[kCGWindowBounds as String] as? [String: Any],
+        let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary), frame.contains(point),
+        let pid = row[kCGWindowOwnerPID as String] as? Int32 else { continue }
+      return pid
+    }
+    return 0
   }
+
 }
 
 final class Overlay {
@@ -179,7 +200,7 @@ final class Overlay {
     guard monitors.isEmpty else { return }
     UserActivity.seed()
     let mask: NSEvent.EventTypeMask = [
-      .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel, .mouseMoved,
+      .keyDown, .keyUp, .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp, .scrollWheel, .mouseMoved,
       .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .flagsChanged,
     ]
     if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] event in
@@ -209,8 +230,20 @@ final class Overlay {
       onStop?()
       return
     }
-    if let front = NSWorkspace.shared.frontmostApplication?.processIdentifier {
-      UserActivity.note(pid: front)
+    let kind: InputConflict.Kind
+    switch event.type {
+    case .keyDown: kind = .keyDown
+    case .keyUp: kind = .keyUp
+    case .flagsChanged:
+      if event.keyCode == 57 { return } // Caps Lock 是锁定状态，不是持续按住。
+      kind = CGEventSource.keyState(.hidSystemState, key: event.keyCode) ? .keyDown : .keyUp
+    case .leftMouseDown, .rightMouseDown, .otherMouseDown: kind = .mouseDown
+    case .leftMouseUp, .rightMouseUp, .otherMouseUp: kind = .mouseUp
+    case .scrollWheel: kind = .scroll
+    default: kind = .move
     }
+    // 修饰键的按住状态阻止中途切前台，但仅切应用的修饰键不使目标动作失效。
+    UserActivity.note(kind, pid: event.type == .flagsChanged ? 0 : UserActivity.recipient(event),
+      code: [.keyDown, .keyUp, .flagsChanged].contains(event.type) ? Int(event.keyCode) : event.buttonNumber)
   }
 }

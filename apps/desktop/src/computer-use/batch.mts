@@ -180,7 +180,7 @@ export async function runComputerActions(
     ...(success
       ? []
       : [
-          'Inspect the state before continuing only unfinished work. Do not replay the batch. On user stop, permission or login prompts, stop and ask the user; on user activity, wait.',
+          'Inspect the state before continuing only unfinished work. Do not replay the batch. On user stop, permission or login prompts, stop and ask the user; on input conflict, inspect state and retry only the unfinished step; the session remains usable.',
         ]),
     ...(state ? [] : ['Current state unavailable: the call was cancelled or no action started.']),
   ].join('\n')

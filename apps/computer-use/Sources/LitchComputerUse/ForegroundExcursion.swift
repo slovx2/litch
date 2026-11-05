@@ -1,4 +1,4 @@
-// 临时前台执行只在真实用户空闲后发生；用户中途接管时停止，不再抢回原窗口。
+// 前台执行只等待正在按住的输入或组字；查看、移动和滚动不构成接管。
 import AppKit
 import ApplicationServices
 import LitchComputerUseCore
@@ -11,10 +11,10 @@ enum ForegroundExcursion {
     waiting: while true {
       try check()
       switch InputPolicy.waitResult(elapsed: ProcessInfo.processInfo.systemUptime - started,
-        idle: UserActivity.idleSeconds, cancelled: false) {
+        blocked: UserActivity.hasHeldInput || UserActivity.isComposing, cancelled: false) {
       case "ready": break waiting
       case "userActive":
-        throw RPCError(.userActive, "The user is active. Timed out waiting for 2 seconds of idle time; no foreground action was performed.")
+        throw RPCError(.userActive, "A mouse button or key is held, or IME composition is active. No foreground input was sent. Retry this step after the input is released; the session is not stopped.")
       default: break
       }
       Thread.sleep(forTimeInterval: 0.05)
@@ -29,15 +29,16 @@ enum ForegroundExcursion {
     let oldFocus: AXUIElement? = AXReader.copy(oldApp, kAXFocusedUIElementAttribute as String)
     let cursor = CGEvent(source: nil)?.location
     let revision = UserActivity.revision
+    let targetRevision = UserActivity.targetRevision(pid: app.processIdentifier)
     var raised = false
     defer {
       // 用户已切到别处或开始输入时尊重接管，不用恢复动作覆盖用户的新选择。
-      if raised, UserActivity.revision == revision,
+      if raised, UserActivity.targetRevision(pid: app.processIdentifier) == targetRevision,
         NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier,
         !previous.isTerminated {
         do {
           try Apps.activate(previous, window: oldWindow)
-          if UserActivity.revision == revision,
+          if UserActivity.targetRevision(pid: app.processIdentifier) == targetRevision,
             NSWorkspace.shared.frontmostApplication?.processIdentifier == previous.processIdentifier {
             if let oldFocus { AXUIElementSetAttributeValue(oldFocus, kAXFocusedAttribute as CFString, kCFBooleanTrue) }
             // AX 调用返回成功也可能没有恢复焦点；分别核对窗口与元素，不把尝试当作成功。
@@ -48,10 +49,9 @@ enum ForegroundExcursion {
               let actual: AXUIElement? = AXReader.copy(oldApp, kAXFocusedUIElementAttribute as String)
               return actual.map { CFEqual($0, expected) } == true
             } ?? true
-            if UserActivity.revision == revision {
-              if let cursor { Input.move(to: cursor) }
-              notice(windowOK && focusOK ? "restored" : "restoreFailed")
-            } else { notice("yielded") }
+            // 用户移动过光标就保留其位置，但不因此放弃恢复应用焦点。
+            if UserActivity.revision == revision, let cursor, CGEvent(source: nil)?.location != cursor { Input.move(to: cursor) }
+            notice(windowOK && focusOK ? "restored" : "restoreFailed")
           } else { notice("yielded") }
         } catch { notice("restoreFailed") }
       } else if raised { notice("yielded") }
@@ -62,8 +62,9 @@ enum ForegroundExcursion {
     raised = true
     try Apps.activate(app, window: window)
     try check()
-    guard UserActivity.revision == revision else {
-      throw RPCError(.userActive, "The user took over while the app was being activated.")
+    guard UserActivity.targetRevision(pid: app.processIdentifier) == targetRevision,
+      !UserActivity.hasHeldInput, !UserActivity.isComposing else {
+      throw RPCError(.userActive, "Input overlapped while activating the target app. Call get_app_state, then retry this step; the session is not stopped.")
     }
     return try body()
   }

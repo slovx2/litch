@@ -20,6 +20,15 @@ thread_local! {
     static AUTOMATION: RefCell<Option<IUIAutomation>> = const { RefCell::new(None) };
 }
 
+/// 支持 TextEditPattern 的控件可报告组字范围；只查范围是否存在，不读取文字。
+pub fn composing() -> bool {
+    let Some(el) = focused_element() else { return false };
+    unsafe {
+        el.GetCurrentPatternAs::<IUIAutomationTextEditPattern>(UIA_TextEditPatternId)
+            .and_then(|p| p.GetActiveComposition()).is_ok()
+    }
+}
+
 /// 本线程的 IUIAutomation（COM 已在主线程按 MULTITHREADED 初始化）
 fn automation() -> RpcResult<IUIAutomation> {
     AUTOMATION.with(|cell| {

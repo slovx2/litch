@@ -11,6 +11,7 @@ final class ActionContext {
   let notice: (String, String, CGPoint?, Bool) -> Void
   var foreground = false
   var usedForeground = false
+  private var inputRevision: UInt64?
   var window: NativeWindow?
   var accessibleWindow: AXUIElement?
   var pid: pid_t { app.processIdentifier }
@@ -31,15 +32,20 @@ final class ActionContext {
   func check() throws {
     try checkBase()
     try window?.validate()
-    if UserActivity.isBusy(pid: pid) { throw RPCError(.userActive, "The user took over the target app. Call get_app_state before retrying.") }
   }
 
   func checkBase() throws {
     try checkLease()
     try Engine.requireDesktop()
     guard !app.isTerminated else { throw RPCError(.notFound, "The target app exited.") }
+    if let inputRevision, UserActivity.targetRevision(pid: pid) != inputRevision {
+      throw RPCError(.userActive, "Input overlapped in the target app; only this action stopped and it may be partially completed. Call get_app_state, then retry the unfinished step. The session is not stopped.")
+    }
+    if foreground, UserActivity.hasHeldPointer || UserActivity.isComposing {
+      throw RPCError(.userActive, "A pointer drag or IME composition overlaps this foreground step. Call get_app_state, then retry the unfinished step; the session is not stopped.")
+    }
     if foreground, NSWorkspace.shared.frontmostApplication?.processIdentifier != pid {
-      throw RPCError(.userActive, "The foreground changed during the action; input stopped.")
+      throw RPCError(.userActive, "The input destination changed during this foreground action. Call get_app_state, then retry the unfinished step; the session is not stopped.")
     }
   }
 
@@ -50,14 +56,11 @@ final class ActionContext {
         self.notice(state, kind, point, false)
       }) {
         self.foreground = true
-        defer { self.foreground = false }
-        // 等待空闲期间的输入不算动作中接管，以真正执行前的 revision 为准。
-        let executionRevision = UserActivity.revision
+        self.inputRevision = UserActivity.targetRevision(pid: self.pid)
+        defer { self.foreground = false; self.inputRevision = nil }
         self.notice("dispatched", kind, point, true)
         let value = try body()
-        guard UserActivity.revision == executionRevision else {
-          throw RPCError(.userActive, "The user intervened; the action may be partially completed.")
-        }
+        try self.checkBase()
         return value
       }
   }

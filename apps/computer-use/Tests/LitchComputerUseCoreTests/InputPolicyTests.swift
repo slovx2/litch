@@ -28,9 +28,9 @@ final class InputPolicyTests: XCTestCase {
     XCTAssertTrue(InputPolicy.needsForeground(action: "drag", chromium: false, mouseReady: true))
   }
   func testBoundedIdleAndCancellation() {
-    XCTAssertEqual(InputPolicy.waitResult(elapsed: 1, idle: 0, cancelled: false), "waiting")
-    XCTAssertEqual(InputPolicy.waitResult(elapsed: 8, idle: 1, cancelled: false), "userActive")
-    XCTAssertEqual(InputPolicy.waitResult(elapsed: 8, idle: 2, cancelled: false), "ready")
-    XCTAssertEqual(InputPolicy.waitResult(elapsed: 0, idle: 5, cancelled: true), "cancelled")
+    XCTAssertEqual(InputPolicy.waitResult(elapsed: 1, blocked: true, cancelled: false), "waiting")
+    XCTAssertEqual(InputPolicy.waitResult(elapsed: 8, blocked: true, cancelled: false), "userActive")
+    XCTAssertEqual(InputPolicy.waitResult(elapsed: 8, blocked: false, cancelled: false), "ready")
+    XCTAssertEqual(InputPolicy.waitResult(elapsed: 0, blocked: false, cancelled: true), "cancelled")
   }
 }

@@ -66,7 +66,7 @@ final class FloatingPreview: NSObject {
       statusLabel.stringValue = zh ? "画面已中断" : "Preview interrupted"
       statusLabel.textColor = .systemRed
     case "waitingForIdle":
-      statusLabel.stringValue = zh ? "等待键鼠空闲" : "Waiting for idle keyboard and mouse"
+      statusLabel.stringValue = zh ? "等待释放按键或完成组字" : "Waiting for held input or composition to finish"
       statusLabel.textColor = .systemOrange
     case "restoreFailed":
       statusLabel.stringValue = zh ? "请手动切回原窗口" : "Please switch back to the previous window"

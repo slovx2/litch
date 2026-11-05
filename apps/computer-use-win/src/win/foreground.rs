@@ -11,6 +11,76 @@ use windows::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, IsIconic, SetForegroundWindow, ShowWindow, WindowFromPoint, SW_RESTORE,
 };
 
+#[derive(Clone)]
+struct ActiveInput { target: isize, revision: u64, session: String, app_id: String }
+thread_local! {
+    static ACTIVE: std::cell::RefCell<Option<ActiveInput>> = const { std::cell::RefCell::new(None) };
+}
+
+pub struct Excursion { previous: HWND, target: HWND, revision: u64, sequence: u64, interactions: u64, cursor: POINT }
+impl Excursion {
+    pub fn begin(target: HWND, session: &str, app_id: &str) -> RpcResult<Self> {
+        let started = std::time::Instant::now();
+        while super::hooks::held() || super::uia::composing() {
+            if super::activity::is_stopped(session, app_id) { return Err(fail!(Stopped, "the user stopped this turn")); }
+            if started.elapsed() >= Duration::from_secs(8) {
+                return Err(fail!(UserActive, "a button/key is held or IME composition is active; no input sent. Retry this step after release; the session is not stopped"));
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        let revision = super::hooks::revision(target.0 as isize);
+        let mut cursor = POINT::default();
+        unsafe { let _ = windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut cursor); }
+        let scope = Self { previous: unsafe { GetForegroundWindow() }, target, revision, sequence: super::hooks::sequence(), interactions: super::hooks::interactions(), cursor };
+        ACTIVE.with(|cell| *cell.borrow_mut() = Some(ActiveInput { target: target.0 as isize, revision, session: session.into(), app_id: app_id.into() }));
+        ensure(target)?;
+        check_input()?;
+        Ok(scope)
+    }
+}
+impl Drop for Excursion {
+    fn drop(&mut self) {
+        ACTIVE.with(|cell| *cell.borrow_mut() = None);
+        // 只在目标仍是前台且没有目标输入碰撞时恢复；用户已换窗口就尊重其选择。
+        if self.previous != self.target && !self.previous.is_invalid() && same_foreground_process(self.target)
+            && super::hooks::interactions() == self.interactions
+            && super::hooks::revision(self.target.0 as isize) == self.revision {
+            let _ = ensure(self.previous);
+        }
+        if super::hooks::sequence() == self.sequence {
+            unsafe { let _ = windows::Win32::UI::WindowsAndMessaging::SetCursorPos(self.cursor.x, self.cursor.y); }
+        }
+    }
+}
+
+pub fn check_input() -> RpcResult<()> {
+    check(false)
+}
+
+/// 单次点击/快捷键可能打开同进程的新窗口；完成检查不把预期的窗口切换当作用户输入。
+pub fn check_completion() -> RpcResult<()> {
+    check(true)
+}
+
+fn same_foreground_process(target: HWND) -> bool {
+    let pid = super::system::window_pid(target);
+    pid != 0 && super::system::window_pid(unsafe { GetForegroundWindow() }) == pid
+}
+
+fn check(completed: bool) -> RpcResult<()> {
+    ACTIVE.with(|cell| {
+        let Some(active) = cell.borrow().clone() else { return Ok(()) };
+        if super::activity::is_stopped(&active.session, &active.app_id) { return Err(fail!(Stopped, "the user stopped this turn")); }
+        let target = apps::hwnd(active.target);
+        let destination_ok = if completed { same_foreground_process(target) } else { is_foreground(target) };
+        if super::hooks::revision(active.target) != active.revision || !destination_ok
+            || super::hooks::pointer_held() || super::uia::composing() {
+            return Err(fail!(UserActive, "input overlapped or the destination changed; only this action stopped and may be partially completed. Read get_app_state and retry the unfinished step; the session is not stopped"));
+        }
+        Ok(())
+    })
+}
+
 /// 把目标窗口切到前台。切不到回 foreground 错误
 pub fn ensure(target: HWND) -> RpcResult<()> {
     unsafe {

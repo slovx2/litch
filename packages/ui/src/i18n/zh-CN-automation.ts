@@ -13,7 +13,7 @@ export const zhAutomation = {
   'automation.local': '控制端电脑',
   'automation.background': '后台操作',
   'automation.foreground': '已短暂切到前台',
-  'automation.waiting': '等待键鼠空闲后执行…',
+  'automation.waiting': '等待释放按键或完成组字…',
   'automation.restoreFailed': '未能恢复原来的前台窗口，请手动切回。',
   'automation.image': '被操作窗口的实时预览',
   'automation.waitFrame': '等待窗口画面…',
