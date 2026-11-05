@@ -33,6 +33,10 @@ final class TailscaleNativeTests: XCTestCase {
     XCTAssertThrowsError(try TailscaleRuntime.shared.status())
     try goVoid { SshtransportTailscaleClear($0) }
     XCTAssertEqual(try json(TailscaleRuntime.shared.status())["state"] as? String, "stopped")
+    let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+    let root = support.appendingPathComponent("LitchEmbeddedNetwork")
+    XCTAssertEqual(try root.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
+    // 模拟器不返回 NSFileProtectionKey；硬件锁屏下的数据保护另列真机验收，不能假通过。
     defer {
       try? goVoid { SshtransportTailscaleClear($0) }
       SshtransportSetAppBackground(false)
