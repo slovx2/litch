@@ -70,6 +70,8 @@ export function iosCommands(root = 'apps/mobile') {
           'generic/platform=iOS Simulator',
           '-derivedDataPath',
           resolve(root, '.ci-ios-build'),
+          // Go桥只提供Apple Silicon模拟器切片，与本地构建脚本保持一致。
+          'ARCHS=arm64',
           'CODE_SIGNING_ALLOWED=NO',
           'build',
         ],

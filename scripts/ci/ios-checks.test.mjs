@@ -48,6 +48,7 @@ test('iOS原生未落地只延后构建；部分合入或缺podspec不能伪装�
         ([cmd, args]) =>
           cmd === 'xcodebuild' &&
           args.includes('CODE_SIGNING_ALLOWED=NO') &&
+          args.includes('ARCHS=arm64') &&
           args.includes('iphonesimulator'),
       ),
     )
