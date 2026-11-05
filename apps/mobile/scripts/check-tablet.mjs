@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { withConsentSteps } from './consent-flows.mjs'
 
 const mobile = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const [device, ...flows] = process.argv.slice(2)
@@ -61,7 +62,7 @@ function copy(from, to) {
             /^( *)- back$/gm,
             (_, indent) => `${indent}- tapOn:\n${indent}    id: header:back`,
           )
-      writeFileSync(target, text)
+      writeFileSync(target, withConsentSteps(text, source))
     }
   }
 }
@@ -85,7 +86,10 @@ try {
     try {
       mkdirSync('/tmp/litch-maestro-7001.lock')
       locked = true
-      writeFileSync('/tmp/litch-maestro-7001.lock/owner', `mobile-tablet PID=${process.pid}\n`)
+      writeFileSync(
+        '/tmp/litch-maestro-7001.lock/owner',
+        `mobile-tablet PID=${process.pid} started=${new Date().toISOString()}\n`,
+      )
     } catch (error) {
       if (error.code !== 'EEXIST') throw error
       console.log('等待 Maestro 共享锁')
