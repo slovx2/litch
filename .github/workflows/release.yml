@@ -17,6 +17,14 @@ on:
         description: 夜间失败与候选无关的已关闭分诊 issue 编号
         default: ''
         type: string
+      bypass-gate:
+        description: 本地检查通过后手动绕过检查门禁；不绕过签名、公证或同SHA产物核验
+        type: boolean
+        default: false
+      bypass-reason:
+        description: 开启bypass-gate时必填，记录本地检查和绕过原因
+        type: string
+        default: ''
 permissions:
   contents: read
   actions: read
@@ -31,7 +39,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       sha: ${{ steps.freeze.outputs.sha }}
-      packed-check: ${{ contains(fromJSON(steps.impact.outputs.domains), 'client') || contains(fromJSON(steps.impact.outputs.domains), 'adapters') || contains(fromJSON(steps.impact.outputs.domains), 'client-engines') }}
+      packed-check: ${{ inputs.bypass-gate || contains(fromJSON(steps.impact.outputs.domains || '[]'), 'client') || contains(fromJSON(steps.impact.outputs.domains || '[]'), 'adapters') || contains(fromJSON(steps.impact.outputs.domains || '[]'), 'client-engines') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -54,17 +62,20 @@ jobs:
       - name: 版本一致性及同 SHA 去重
         env:
           GH_TOKEN: ${{ github.token }}
+          BYPASS_GATE: ${{ inputs.bypass-gate }}
+          BYPASS_REASON: ${{ inputs.bypass-reason }}
         run: |
           node scripts/check-versions.mjs
           node scripts/ci/release-preflight.mjs
       - name: 只读展示夜间监测心跳
-        if: inputs.release-mode != 'patch'
+        if: inputs.release-mode != 'patch' && !inputs.bypass-gate
         run: node scripts/ci/nightly-status.mjs
         env:
           GH_TOKEN: ${{ github.token }}
       # 在候选阶段按同一规则计算，不等完整 Gate 结束，保持测试和出包并行。
       # 桌面、入口或未知影响加跑完整 packed；无可信夜间基线时规则会扩大到全量。
       - name: 判断完整签名包检查的影响范围
+        if: ${{ !inputs.bypass-gate }}
         id: impact
         env:
           GH_TOKEN: ${{ github.token }}
@@ -87,6 +98,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   gate:
+    if: ${{ !inputs.bypass-gate }}
     needs: candidate
     permissions:
       contents: read
@@ -464,15 +476,19 @@ jobs:
           if-no-files-found: error
 
   # iOS接入位置：未来独立archive/upload job，并扩展artifactKinds/provenance与seal依赖。
-  # 当前只有Gate的无签名模拟器构建与单测；没有IPA、TestFlight或App Store上传。
+  # iOS无签名模拟器构建仅在Full；没有IPA、TestFlight或App Store上传。
   seal:
     needs: [candidate, gate, adapter, cha, desktop-macos, desktop-windows, android]
+    if: ${{ !cancelled() && needs.candidate.result == 'success' && (needs.gate.result == 'success' || (inputs.bypass-gate && needs.gate.result == 'skipped')) && needs.adapter.result == 'success' && needs.cha.result == 'success' && needs.desktop-macos.result == 'success' && needs.desktop-windows.result == 'success' && needs.android.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       CANDIDATE_SHA: ${{ needs.candidate.outputs.sha }}
       NIGHTLY_TRIAGE: ${{ inputs.nightly-triage }}
       GH_TOKEN: ${{ github.token }}
+      BYPASS_GATE: ${{ inputs.bypass-gate }}
+      BYPASS_REASON: ${{ inputs.bypass-reason }}
+      RELEASE_MODE: ${{ inputs.release-mode || 'standard' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:

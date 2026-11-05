@@ -156,7 +156,16 @@ export async function releasePolicy(
   const mode = gate?.mode ?? 'standard'
   if (!['standard', 'patch'].includes(mode)) throw new Error('未知发版模式')
   let message
-  if (mode === 'patch') {
+  if (gate?.conclusion === 'bypassed') {
+    const { checkBypass } = await import('./ci/gate-bypass.mjs')
+    checkBypass(gate, {
+      repository: repo,
+      sha,
+      runId: candidateFull?.run.id,
+      attempt: candidateFull?.run.run_attempt,
+    })
+    message = `检查门禁已由 ${gate.bypass.actor} 手动绕过：${gate.bypass.reason}`
+  } else if (mode === 'patch') {
     const blockers = api(
       `repos/${repo}/issues?labels=release-blocker&state=open&per_page=100`,
       true,

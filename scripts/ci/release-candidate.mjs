@@ -8,12 +8,13 @@ import { checkCheckpoint } from '../../apps/desktop/scripts/macos-checkpoint.mjs
 import { mandatory, releaseDomains } from '../ci-impact.mjs'
 import { hasMacCoverage, hasReleaseCoverage } from '../full-proof.mjs'
 import { artifactKinds } from '../release-provenance.mjs'
+import { checkBypass } from './gate-bypass.mjs'
 import { hasLinuxCoverage } from './linux-proof.mjs'
 import { fileHash, validateArtifact } from './release-artifacts.mjs'
 import { checkPatchRecord } from './release-patch-base.mjs'
 import { hasWindowsCoverage } from './windows-proof.mjs'
 
-export const policyVersion = 'candidate-v5-local-mac-ios'
+export const policyVersion = 'candidate-v6-manual-gate'
 export const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'))
 export const writeJson = (path, value) => writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`)
 
@@ -127,6 +128,11 @@ export function checkNotarization(proof, context) {
 }
 
 export function checkGate(gate, full, context, now = Date.now()) {
+  if (gate.conclusion === 'bypassed') {
+    checkBypass(gate, context)
+    assert.equal(full, null, '手动绕过不能伪造Full检查结果')
+    return
+  }
   const mode = gate.mode ?? 'standard'
   assert.ok(['standard', 'patch'].includes(mode), '未知发版模式')
   assert.equal(gate.schema, 2, 'gate schema')
@@ -184,10 +190,11 @@ export function checkGate(gate, full, context, now = Date.now()) {
 
 export async function sealCandidate(dir, context, artifacts, policy, now = Date.now()) {
   const gate = readJson(join(dir, 'gate-proof.json'))
-  const full = readJson(join(dir, 'full-proof.json'))
+  const bypassed = gate.conclusion === 'bypassed'
+  const full = bypassed ? null : readJson(join(dir, 'full-proof.json'))
   checkGate(gate, full, context, now)
   // 验证原始平台清单，衍生文件在这之后才生成。
-  const raw = readdirSync(dir).filter((name) => !['full-proof.json'].includes(name))
+  const raw = readdirSync(dir).filter((name) => bypassed || name !== 'full-proof.json')
   // verifyProvenance 的严格文件白名单不接受 full-proof；由各份来源逐项核对。
   const proofs = artifactKinds.map((kind) => {
     const proof = readJson(join(dir, `release-provenance-${kind}.json`))
@@ -222,9 +229,13 @@ export async function sealCandidate(dir, context, artifacts, policy, now = Date.
     }
   }
   assert.deepEqual(raw.sort(), [...covered].sort(), '未登记文件')
-  assert.equal(gate.attempt, String(artifacts['gate-proof'].attempt))
-  assert.equal(full.attempt, artifacts['full-proof'].attempt)
-  assert.deepEqual(gate.fullArtifact, artifacts['full-proof'], 'Gate 未绑定这份 Full artifact')
+  if (bypassed) {
+    assert.deepEqual(Object.keys(artifacts).sort(), [...artifactKinds].sort())
+  } else {
+    assert.equal(gate.attempt, String(artifacts['gate-proof'].attempt))
+    assert.equal(full.attempt, artifacts['full-proof'].attempt)
+    assert.deepEqual(gate.fullArtifact, artifacts['full-proof'], 'Gate 未绑定这份 Full artifact')
+  }
   const manifest = {
     schema: 2,
     policy: policyVersion,
@@ -253,14 +264,19 @@ export async function verifyCandidate(dir, context, policy, now = Date.now()) {
     'candidate 文件/hash 不符',
   )
   assert.deepEqual(readJson(join(dir, 'gate-proof.json')), manifest.gate)
-  assert.deepEqual(readJson(join(dir, 'full-proof.json')), manifest.full)
-  assert.deepEqual(
-    manifest.gate.fullArtifact,
-    manifest.artifacts['full-proof'],
-    'Full artifact 不符',
-  )
-  assert.equal(manifest.gate.attempt, String(manifest.artifacts['gate-proof'].attempt))
-  for (const kind of [...artifactKinds, 'gate-proof', 'full-proof']) {
+  const bypassed = manifest.gate.conclusion === 'bypassed'
+  const kinds = bypassed ? artifactKinds : [...artifactKinds, 'gate-proof', 'full-proof']
+  assert.deepEqual(Object.keys(manifest.artifacts).sort(), [...kinds].sort())
+  if (!bypassed) {
+    assert.deepEqual(readJson(join(dir, 'full-proof.json')), manifest.full)
+    assert.deepEqual(
+      manifest.gate.fullArtifact,
+      manifest.artifacts['full-proof'],
+      'Full artifact 不符',
+    )
+    assert.equal(manifest.gate.attempt, String(manifest.artifacts['gate-proof'].attempt))
+  }
+  for (const kind of kinds) {
     const artifact = manifest.artifacts[kind]
     assert.ok(
       Number.isSafeInteger(artifact?.id) &&
@@ -294,10 +310,13 @@ export async function verifyCandidate(dir, context, policy, now = Date.now()) {
 }
 
 export function summary(manifest) {
+  const gateSummary =
+    manifest.gate.conclusion === 'bypassed'
+      ? `检查门禁已手动绕过；操作者：${manifest.gate.bypass.actor}；时间：${manifest.gate.createdAt}。\n\n原因：${manifest.gate.bypass.reason}\n\n`
+      : `领域：${manifest.gate.domains.join(', ')}；手机模拟器 E2E 与iOS原生构建不参与发版。\n\n${manifest.gate.mode === 'patch' ? '正式版修复基线' : '夜间基线'}：${manifest.gate.baseline?.url || '无，执行完整非手机领域'}\n\n`
   return (
     `## 候选 ${manifest.version}\n\nSHA：\`${manifest.sha}\`\n\n来源：[run ${manifest.runId}](https://github.com/${manifest.repository}/actions/runs/${manifest.runId}) / 验证 attempt ${manifest.attempt}\n\n` +
-    `领域：${manifest.gate.domains.join(', ')}；手机模拟器 E2E 按用户决定不参与发版。\n\n` +
-    `${manifest.gate.mode === 'patch' ? '正式版修复基线' : '夜间基线'}：${manifest.gate.baseline?.url || '无，执行完整非手机领域'}\n\n` +
+    gateSummary +
     `| 产物 | 来源 attempt | Artifact ID |\n|---|---|---|\n` +
     Object.entries(manifest.artifacts)
       .map(([kind, a]) => `| ${kind} | ${a.attempt} | ${a.id} |`)

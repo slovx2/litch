@@ -2,6 +2,7 @@
 import { appendFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { checkVersion } from '../release-policy.mjs'
+import { bypassReason } from './gate-bypass.mjs'
 import { api, pages } from './release-artifacts.mjs'
 import { readJson } from './release-candidate.mjs'
 
@@ -25,6 +26,7 @@ export function existingCandidate(runs, artifacts, { sha, currentRun }) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  bypassReason()
   const repo = process.env.GITHUB_REPOSITORY
   const version = readJson('package.json').version
   checkVersion(`v${version}`)

@@ -90,3 +90,43 @@ test('修复版政策不查询夜间，仍重查blocker与正式基线；没有p
   await assert.rejects(releasePolicy({ gate }, services), /release-blocker/)
   await assert.rejects(releasePolicy({}, services), /issues/)
 })
+
+test('显式手动绕过不查询检查门禁，仍拒绝标签SHA错配和覆盖已公开版本', async (t) => {
+  const { releasePolicy } = await import('./release-policy.mjs')
+  const { gateBypass } = await import('./ci/gate-bypass.mjs')
+  const context = { repository: 'fixture/repo', sha, runId: 42, attempt: 1 }
+  for (const [key, value] of Object.entries({
+    GITHUB_REPOSITORY: context.repository,
+    CANDIDATE_SHA: sha,
+    TAG: 'v1.2.3',
+  })) {
+    const old = process.env[key]
+    process.env[key] = value
+    t.after(() => {
+      if (old === undefined) delete process.env[key]
+      else process.env[key] = old
+    })
+  }
+  const gate = gateBypass(context, {
+    BYPASS_GATE: 'true',
+    BYPASS_REASON: '本地检查通过',
+    GITHUB_ACTOR: 'maintainer',
+  })
+  let actualSha = sha
+  let published = false
+  const services = {
+    api(path) {
+      if (path.includes('matching-refs')) return [{ ref: 'refs/tags/v1.2.3' }]
+      if (path.includes('/commits/')) return { sha: actualSha }
+      if (path.includes('/releases?')) return published ? [{ tag_name: 'v1.2.3' }] : []
+      throw new Error(`不应访问检查门禁：${path}`)
+    },
+  }
+  const input = { gate, candidateFull: { run: { id: 42, run_attempt: 1 } } }
+  assert.match(await releasePolicy(input, services), /手动绕过/)
+  actualSha = 'b'.repeat(40)
+  await assert.rejects(releasePolicy(input, services), /标签已移动/)
+  actualSha = sha
+  published = true
+  await assert.rejects(releasePolicy(input, services), /已经公开/)
+})

@@ -85,7 +85,6 @@ jobs:
         id: phase-11
       - run: npm run build
         id: phase-10
-      # 纯逻辑单测不需要手机依赖；原生 Markdown 与 WASM 对照在 full.yml 的 mobile 作业执行
       - run: npm run mobile:test
         id: phase-9
       - run: node scripts/ci/test-shard.mjs pi
@@ -198,7 +197,7 @@ jobs:
     uses: ./.github/workflows/mac-native.yml
     with:
       sha: ${{ inputs.sha || github.sha }}
-      domains: '["browser","ios"]'
+      domains: '["browser"]'
 
   protocol-fixtures:
     runs-on: ubuntu-24.04
@@ -235,9 +234,31 @@ jobs:
         env:
           CI_STEPS: ${{ toJSON(steps) }}
 
+  # 手机静态检查与长引擎单测并行；iOS模拟器构建只在Full执行。
+  mobile-static:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: mobile/go.mod
+          cache-dependency-path: mobile/go.sum
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/ui --no-audit --no-fund
+      - run: npm ci --prefix apps/mobile --no-audit --no-fund
+      - run: npm run typecheck --prefix apps/mobile
+      - run: npm run mobile:test:markdown
+      - run: cd mobile && go test ./...
+
   report:
     if: always()
-    needs: [windows, unit, unit-claude, client, browser, protocol-fixtures]
+    needs: [windows, unit, unit-claude, client, browser, protocol-fixtures, mobile-static]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

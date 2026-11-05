@@ -35,7 +35,7 @@ export function selectedNative(domains, runCi) {
     name === 'browser'
       ? runCi
       : name === 'ios'
-        ? runCi || selected.includes('mobile')
+        ? selected.includes('mobile')
         : selected.includes(name),
   )
 }

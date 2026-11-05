@@ -65,6 +65,7 @@ try {
   }
   proof.complete = true
 } finally {
-  writeFileSync('mac-native-proof.json', `${JSON.stringify(proof, null, 2)}\n`)
+  if (process.env.GITHUB_ACTIONS === 'true')
+    writeFileSync('mac-native-proof.json', `${JSON.stringify(proof, null, 2)}\n`)
   removeTestTree(home)
 }

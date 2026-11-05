@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { checkCheckpointJob } from '../../apps/desktop/scripts/macos-checkpoint.mjs'
 import { releasePolicy } from '../release-policy.mjs'
 import { artifactKinds } from '../release-provenance.mjs'
+import { bypassReason, gateBypass } from './gate-bypass.mjs'
 import { api, downloadArtifact, pages, validateArtifact } from './release-artifacts.mjs'
 import {
   checkJob,
@@ -32,7 +33,8 @@ sourceRun(api(base), context, { preparing: true })
 const listed = pages(`${base}/artifacts?per_page=100`, 'artifacts')
 const latestJobs = pages(`${base}/jobs?filter=latest&per_page=100`, 'jobs')
 const artifacts = {}
-for (const kind of [...artifactKinds, 'gate-proof', 'full-proof']) {
+const bypassed = bypassReason() !== null
+for (const kind of bypassed ? artifactKinds : [...artifactKinds, 'gate-proof', 'full-proof']) {
   const selected = chooseArtifact(listed, kind, context)
   const name =
     kind === 'gate-proof' ? 'gate / result' : kind === 'full-proof' ? 'gate / tests / report' : kind
@@ -47,6 +49,7 @@ for (const kind of [...artifactKinds, 'gate-proof', 'full-proof']) {
   )
   await downloadArtifact(context.repository, artifact, dir)
 }
+if (bypassed) writeJson(join(dir, 'gate-proof.json'), gateBypass(context))
 const manifest = await sealCandidate(dir, context, artifacts, policyHash())
 const notarization = checkNotarization(
   readJson(join(dir, 'release-provenance-desktop-macos.json')),

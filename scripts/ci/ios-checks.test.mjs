@@ -52,8 +52,14 @@ test('iOS原生未落地只延后构建；部分合入或缺podspec不能伪装�
     rmSync(root, { recursive: true, force: true })
   }
 })
-test('iOS在CI/Gate必跑，在只选手机的Full也跑；E2E仍不入门禁', () => {
-  assert.ok(selectedNative('[]', true).includes('ios'))
+test('iOS原生构建只在Full手机领域跑，CI与候选门禁不占模拟器构建资源', () => {
+  assert.deepEqual(selectedNative('[]', true), ['browser'])
+  assert.ok(
+    !selectedNative(
+      JSON.stringify(releaseImpact(affectedDomains(['apps/mobile/ios/App.swift'])).domains),
+      true,
+    ).includes('ios'),
+  )
   assert.deepEqual(selectedNative('["mobile"]', false), ['ios'])
   assert.equal(nativePlan(['ios']).checks[0].id, 'ios:build-unit')
   assert.deepEqual(releaseImpact(affectedDomains(['apps/mobile/ios/App.swift'])).domains, [
@@ -67,5 +73,5 @@ test('iOS在CI/Gate必跑，在只选手机的Full也跑；E2E仍不入门禁', 
     'apps/mobile/modules/litch-ssh/ios/Module.podspec',
   ])
     assert.ok(affectedDomains([path]).domains.includes('mobile'))
-  assert.match(readFileSync('.github/workflows/ci.yml', 'utf8'), /domains: '\["browser","ios"\]'/)
+  assert.match(readFileSync('.github/workflows/ci.yml', 'utf8'), /domains: '\["browser"\]'/)
 })

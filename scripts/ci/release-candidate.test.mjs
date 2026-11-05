@@ -9,6 +9,7 @@ import { affectedDomains, releaseDomains, releaseImpact } from '../ci-impact.mjs
 import { fullJobs, hasReleaseCoverage, isCompleteReleaseFull } from '../full-proof.mjs'
 import { checkNightly, checkVersion } from '../release-policy.mjs'
 import { artifactKinds, writeProvenance } from '../release-provenance.mjs'
+import { bypassReason, gateBypass } from './gate-bypass.mjs'
 import { fixtureLinuxProofs, fixtureMacProof, fixtureWindowsProof } from './mac-proof-fixture.mjs'
 import { checkApkManifest } from './release-apk.mjs'
 import { archiveNames, extractFlat, validateArtifact } from './release-artifacts.mjs'
@@ -21,6 +22,7 @@ import {
   requiredPackages,
   sealCandidate,
   sourceRun,
+  summary,
   verifyCandidate,
   writeJson,
 } from './release-candidate.mjs'
@@ -93,7 +95,7 @@ async function fixture(t, mode = 'standard') {
   }
   for (const kind of ['gate-proof', 'full-proof'])
     artifacts[kind] = { id: id++, name: `${kind}-3`, digest, attempt: 3, jobId: id + 100 }
-  const gate = {
+  let gate = {
     schema: 2,
     mode,
     repository: context.repository,
@@ -125,7 +127,7 @@ async function fixture(t, mode = 'standard') {
     fullArtifact: artifacts['full-proof'],
     createdAt: new Date().toISOString(),
   }
-  const full = {
+  let full = {
     schema: 1,
     repository: context.repository,
     runId: 42,
@@ -142,8 +144,18 @@ async function fixture(t, mode = 'standard') {
   full.macProof = fixtureMacProof(full)
   full.linuxProofs = fixtureLinuxProofs(full)
   full.windowsProof = fixtureWindowsProof(full)
+  if (mode === 'bypass') {
+    gate = gateBypass(context, {
+      BYPASS_GATE: 'true',
+      BYPASS_REASON: 'Mac容量不足；同SHA本地检查通过',
+      GITHUB_ACTOR: 'maintainer',
+    })
+    full = null
+    delete artifacts['gate-proof']
+    delete artifacts['full-proof']
+  }
   writeJson(join(dir, 'gate-proof.json'), gate)
-  writeJson(join(dir, 'full-proof.json'), full)
+  if (full) writeJson(join(dir, 'full-proof.json'), full)
   const manifest = await sealCandidate(dir, context, artifacts, policy)
   writeFileSync(join(dir, 'litch-update.json'), '{}')
   writeFileSync(join(dir, 'Litch-SHA256SUMS.txt'), 'fixture')
@@ -151,6 +163,39 @@ async function fixture(t, mode = 'standard') {
   writeJson(join(dir, 'candidate.json'), manifest)
   return { dir, manifest, gate, full, artifacts }
 }
+
+test('手动绕过必须写原因，封存保留决定但不能豁免签名、同SHA与产物摘要', async (t) => {
+  assert.equal(bypassReason({}), null)
+  assert.throws(() => bypassReason({ BYPASS_GATE: 'true', BYPASS_REASON: '  ' }), /bypass-reason/)
+  const f = await fixture(t, 'bypass')
+  const verified = await verifyCandidate(f.dir, context, policy)
+  assert.equal(verified.full, null)
+  assert.equal(verified.gate.conclusion, 'bypassed')
+  assert.deepEqual(Object.keys(verified.artifacts).sort(), [...artifactKinds].sort())
+  assert.match(summary(verified), /maintainer.*\n.*\n原因：Mac容量不足/s)
+  assert.throws(() => checkGate({ ...f.gate, sha: 'b'.repeat(40) }, null, context), /sha/)
+  assert.throws(
+    () => checkGate({ ...f.gate, bypass: { actor: 'a', reason: '' } }, null, context),
+    /原因/,
+  )
+  assert.throws(() => checkGate(f.gate, {}, context), /伪造/)
+  for (const change of [
+    { sha: 'b'.repeat(40) },
+    { signing: 'not-required' },
+    { notarization: null },
+  ]) {
+    const path = join(f.dir, 'release-provenance-desktop-macos.json')
+    const original = JSON.parse(readFileSync(path))
+    writeJson(path, { ...original, ...change })
+    await assert.rejects(sealCandidate(f.dir, context, f.artifacts, policy))
+    writeJson(path, original)
+  }
+  const missing = { ...f.artifacts }
+  delete missing.android
+  await assert.rejects(sealCandidate(f.dir, context, missing, policy))
+  writeFileSync(join(f.dir, requiredPackages(context.version).android[0]), 'changed')
+  await assert.rejects(verifyCandidate(f.dir, context, policy), /hash/)
+})
 
 test('跨 run 晋级可复用源 run 早期成功包，验证 attempt 与打包 attempt 不伪装相同', async (t) => {
   const { dir, manifest } = await fixture(t)
@@ -294,6 +339,7 @@ test('D-48：夜间仅手机红不挡；非手机红、未知证明、blocker �
     event: 'schedule',
     jobs: { ...full.jobs, mobile: 'failure', 'mobile-build': 'success' },
   }
+  proof.macProof = fixtureMacProof(proof)
   const qualifies = isCompleteReleaseFull(nightly, proof, sha, context.repository)
   assert.equal(qualifies, true)
   assert.equal(hasReleaseCoverage({ ...proof, domains: undefined }), false)
@@ -588,6 +634,21 @@ test('patch证明可只包含client且不受夜间48h限制，不能伪装普通
     )
   }
   assert.throws(() => checkGate({ ...f.gate, mode: 'unknown' }, f.full, context), /未知发版模式/)
+})
+
+test('手动绕过候选沿用原Promote校验五类产物，不要求伪造Gate或Full job', async (t) => {
+  const f = await serviceFixture(t, 'bypass')
+  f.services.releasePolicy = async (input) => {
+    assert.deepEqual(input.gate, f.gate)
+    assert.equal(input.candidateFull.proof, null)
+  }
+  await promote({ ...env, PROMOTE_OUTPUT: f.output }, f.services)
+  assert.deepEqual(f.commands, [])
+  await promote(
+    { ...env, PROMOTE_MODE: 'publish', CONFIRM_PUBLICATION: env.TAG, PROMOTE_OUTPUT: f.output },
+    f.services,
+  )
+  assert.equal(f.state().release.draft, false)
 })
 
 test('patch晋级verify及临公开的策略检查始终使用封存模式和基线，不能由输入覆盖', async (t) => {
