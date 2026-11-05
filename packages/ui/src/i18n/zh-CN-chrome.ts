@@ -13,8 +13,11 @@ export const zhChrome = {
   'chrome.browsers.darwin': '支持 Google Chrome 正式版。',
   'chrome.browsers.win32': '支持 Google Chrome 正式版；Edge 等其他浏览器暂不支持。',
   'chrome.browsers.linux': '支持 Google Chrome；已装 Chromium 的同时登记 Chromium。',
-  'chrome.unprepared': '尚未准备扩展',
-  'chrome.disconnected': '扩展未连接；加载或重新加载扩展后自动连接。',
+  'chrome.checking': '正在检查扩展连接…',
+  'chrome.unprepared': '尚未设置 Chrome 连接',
+  'chrome.disconnected': '等待扩展连接',
+  'chrome.waitingHelp':
+    '保持 Chrome 开启。若已安装扩展，请在扩展页确认 Litch Browser 已启用；连接后此处自动更新。',
   'chrome.extensionOutdated': '扩展版本过旧，与此版本的 Litch 不兼容。请在扩展页重新加载。',
   'chrome.extensionOutdatedStore':
     '扩展版本过旧，与此版本的 Litch 不兼容。请在扩展页点“更新”，或等待 Chrome 自动更新。',
@@ -24,8 +27,12 @@ export const zhChrome = {
   'chrome.prepare': '准备扩展',
   'chrome.extensions': '打开扩展页',
   'chrome.store': '在 Chrome 应用商店中打开',
-  'chrome.storeInstall': '先点“准备扩展”注册与 Chrome 的连接，再从 Chrome 应用商店安装扩展。',
-  'chrome.unpacked': '开发者模式加载（备选）',
+  'chrome.storeHeading': '安装 Litch Browser',
+  'chrome.storeInstallAction': '从 Chrome 应用商店安装',
+  'chrome.storeInstall':
+    '打开商店后，在 Chrome 中添加 Litch Browser。安装完成后自动连接，无需刷新此页。',
+  'chrome.unpacked': '备选：手动安装',
+  'chrome.manualPrepare': '无法使用应用商店时，可准备本地扩展并通过开发者模式加载。',
   'chrome.directory': '打开扩展目录',
   'chrome.stop': '停止全部 Chrome 操作',
   'chrome.install':

@@ -1,4 +1,4 @@
-// 只用于 headless 视觉预检：真实组件与样式，数据经模拟通道；不宣称验证了原生安装界面。
+// 隔离浏览器与隐藏 Electron 共用：真实组件和样式，数据经模拟通道；不读个人 Chrome 资料。
 import '@fontsource/jetbrains-mono/400.css'
 import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/literata/400.css'
@@ -58,6 +58,33 @@ if (requested === 'fresh') {
   state.enabled = false
   state.instances = []
 }
+const params = new URLSearchParams(location.search)
+const platform = params.get('platform')
+if (platform === 'darwin' || platform === 'win32' || platform === 'linux') state.platform = platform
+if (params.get('store') === '1') {
+  state.storeUrl = 'https://chromewebstore.google.com/detail/ddnllmibgnhhiiaaidfamlknbnfjpnpo'
+  state.allowedExtensionIds.push('ddnllmibgnhhiiaaidfamlknbnfjpnpo')
+  for (const instance of state.instances) instance.source = 'store'
+}
+const calls: string[] = []
+let failNext = false
+let holdNextStatus = false
+let releaseStatus: (() => void) | null = null
+Object.assign(window, {
+  __chromeFixture: {
+    calls,
+    patch: (next: Partial<ChromeSettingsState>) => {
+      state = { ...state, ...next }
+    },
+    fail: () => {
+      failNext = true
+    },
+    holdStatus: () => {
+      holdNextStatus = true
+    },
+    releaseStatus: () => releaseStatus?.(),
+  },
+})
 const values = new Map<string, unknown>([
   [keys.devices, ['local', 'remote']],
   [keys.device('remote'), { id: 'remote', name: 'Remote fixture', kind: 'ssh' }],
@@ -67,6 +94,22 @@ const services = {
   channel: {
     async command(name: string, request: Record<string, unknown>) {
       if (name !== 'chrome.settings') return {}
+      calls.push(String(request.kind))
+      if (request.kind === 'chrome.status' && holdNextStatus) {
+        holdNextStatus = false
+        const before = structuredClone(state)
+        await new Promise<void>((resolve) => {
+          releaseStatus = resolve
+        })
+        return before
+      }
+      if (request.kind === 'chrome.store' || request.kind === 'chrome.prepare') {
+        if (failNext) {
+          failNext = false
+          throw new Error('Fixture: connection setup failed')
+        }
+        state.prepared = true
+      }
       if (request.kind === 'chrome.trust') state.sitePolicy.trustAll = request.on === true
       if (request.kind === 'chrome.block') state.sitePolicy.blocked.push(String(request.site))
       if (request.kind === 'chrome.unblock')

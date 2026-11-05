@@ -5,7 +5,7 @@ import {
   type DeviceView,
   keys,
 } from '@litch/core'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useKeys, useServices } from '../app/services.tsx'
@@ -21,8 +21,13 @@ export function ChromeSection() {
   const [state, setState] = useState<ChromeSettingsState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // 安装/开关操作期间不轮询，操作前发出的旧状态也不能覆盖操作结果。
+  const revision = useRef(0)
+  const mutating = useRef(false)
   const run = useCallback(
     async (request: ChromeSettingsRequest) => {
+      revision.current++
+      mutating.current = true
       setBusy(true)
       try {
         setState(await channel.command('chrome.settings', request))
@@ -30,6 +35,8 @@ export function ChromeSection() {
       } catch (failure) {
         setError(reasonOf(failure, t))
       } finally {
+        revision.current++
+        mutating.current = false
         setBusy(false)
       }
     },
@@ -38,19 +45,28 @@ export function ChromeSection() {
   useEffect(() => {
     if (shell !== 'electron') return
     let live = true
+    let pending = false
     const refresh = () => {
+      if (pending || mutating.current) return
+      pending = true
+      const before = revision.current
       void channel.command('chrome.settings', { kind: 'chrome.status' }).then(
         (next) => {
-          if (live) setState(next)
+          pending = false
+          if (live && before === revision.current) setState(next)
         },
-        () => {},
+        () => {
+          pending = false
+        },
       )
     }
     refresh()
     const timer = setInterval(refresh, 2500)
+    window.addEventListener('focus', refresh)
     return () => {
       live = false
       clearInterval(timer)
+      window.removeEventListener('focus', refresh)
     }
   }, [channel, shell])
   const sites = useMemo<SiteSettingsBridge>(() => {
@@ -77,17 +93,19 @@ export function ChromeSection() {
   const connected = (state?.instances.length ?? 0) > 0
   // 不兼容按哪一边该更新给出办法；商店装的和开发者模式加载的更新方式不同
   const broken = state?.instances.find((instance) => instance.incompatible) ?? null
-  const status = !state?.prepared
-    ? 'chrome.unprepared'
-    : !connected
-      ? 'chrome.disconnected'
-      : !broken
-        ? 'chrome.connected'
-        : broken.incompatible === 'litchOutdated'
-          ? 'chrome.litchOutdated'
-          : broken.source === 'store'
-            ? 'chrome.extensionOutdatedStore'
-            : 'chrome.extensionOutdated'
+  const status = !state
+    ? 'chrome.checking'
+    : !state.prepared
+      ? 'chrome.unprepared'
+      : !connected
+        ? 'chrome.disconnected'
+        : !broken
+          ? 'chrome.connected'
+          : broken.incompatible === 'litchOutdated'
+            ? 'chrome.litchOutdated'
+            : broken.source === 'store'
+              ? 'chrome.extensionOutdatedStore'
+              : 'chrome.extensionOutdated'
   // 开发者模式加载的扩展不会自己更新：目录里换了新版本，提示去重新加载（兼容时不挡使用）
   const reload = state?.instances.some(
     (instance) =>
@@ -189,22 +207,39 @@ export function ChromeSection() {
           ) : null}
           {store ? (
             <>
-              {/* 上架后：商店安装为主，开发者模式加载收在下面作备选 */}
+              <h4>{t('chrome.storeHeading')}</h4>
               <p className="set-para">{t('chrome.storeInstall')}</p>
               <div className="set-actions chrome-actions">
-                {prepare}
                 <button
-                  className="btn"
+                  className="btn primary"
                   type="button"
+                  data-chrome-store
                   disabled={busy || !state}
                   onClick={() => void run({ kind: 'chrome.store' })}
                 >
-                  {t('chrome.store')}
+                  {t(connected ? 'chrome.store' : 'chrome.storeInstallAction')}
                 </button>
+                {state?.prepared && (!connected || broken?.incompatible === 'extensionOutdated') ? (
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void run({ kind: 'chrome.extensions' })}
+                  >
+                    {t('chrome.extensions')}
+                  </button>
+                ) : null}
                 {stop}
               </div>
+              {state?.prepared && !connected ? (
+                <p className="set-note" data-chrome-waiting>
+                  {t('chrome.waitingHelp')}
+                </p>
+              ) : null}
               <details className="chrome-unpacked" data-chrome-unpacked>
                 <summary>{t('chrome.unpacked')}</summary>
+                <p className="set-note">{t('chrome.manualPrepare')}</p>
+                <div className="set-actions chrome-actions">{prepare}</div>
                 {folder}
                 <div className="set-actions chrome-actions">{unpackedActions}</div>
               </details>

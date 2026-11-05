@@ -15,8 +15,11 @@ export const enChrome = {
   'chrome.browsers.darwin': 'Supports Google Chrome.',
   'chrome.browsers.win32': 'Supports Google Chrome. Edge and other browsers are not supported yet.',
   'chrome.browsers.linux': 'Supports Google Chrome, and Chromium when it is installed.',
-  'chrome.unprepared': 'Extension not prepared',
-  'chrome.disconnected': 'Extension disconnected. Load or reload it to connect.',
+  'chrome.checking': 'Checking extension connection…',
+  'chrome.unprepared': 'Chrome connection is not set up',
+  'chrome.disconnected': 'Waiting for the extension to connect',
+  'chrome.waitingHelp':
+    'Keep Chrome open. If the extension is already installed, check that Litch Browser is enabled on the extensions page. This status updates automatically.',
   'chrome.extensionOutdated':
     'The extension is too old for this version of Litch. Reload it on the extensions page.',
   'chrome.extensionOutdatedStore':
@@ -28,9 +31,13 @@ export const enChrome = {
   'chrome.prepare': 'Prepare extension',
   'chrome.extensions': 'Open extensions',
   'chrome.store': 'Open in Chrome Web Store',
+  'chrome.storeHeading': 'Install Litch Browser',
+  'chrome.storeInstallAction': 'Install from Chrome Web Store',
   'chrome.storeInstall':
-    'Choose Prepare extension to register the Chrome connection, then install the extension from the Chrome Web Store.',
-  'chrome.unpacked': 'Load unpacked (alternative)',
+    'Add Litch Browser in Chrome when the store opens. It connects automatically after installation; no refresh is needed here.',
+  'chrome.unpacked': 'Alternative: manual installation',
+  'chrome.manualPrepare':
+    'If the store is unavailable, prepare the local extension and load it using Developer mode.',
   'chrome.directory': 'Open extension folder',
   'chrome.stop': 'Stop all Chrome control',
   'chrome.install':

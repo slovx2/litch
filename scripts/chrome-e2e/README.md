@@ -6,6 +6,8 @@
 npm run client:check:chrome
 ```
 
+设置页安装引导另跑 `node scripts/chrome-e2e/settings.mjs`：隔离 HOME 中启动隐藏 Electron，加载正式 ChromeSection 和模拟设置通道，点击商店/手动入口，覆盖自动连接、聚焦刷新、失败重试、过期状态回包、版本不兼容及三平台中英文/三皮肤布局。要求根目录、界面和桌面依赖已安装，Electron 二进制已准备好；不接个人 Chrome、不打开真实商店，不保留截图或报告。宿主准备与打开商店的顺序由 `chrome-install.test.mts` 核对；这两项不能代替商店发布后的签名扩展安装验收。
+
 可用 `LITCH_CHROME_GO=/绝对路径/bin/go` 选择本机已安装、满足 go.mod 的 Go 工具链，避免隔离 HOME 再下载工具链；不改变隔离模块缓存和浏览器 profile。
 
 标签组/活动标记验收包括临时认领原组与固定标签、同会话归组、活动与异常恢复、扩展 reload、worker 强停、桥断线和停止控制后的日志清理。批量验收包括连续点击、失败停步、重复 callId 不重放、逐步来源拒绝和执行中撤租约；保留每步摘要和最后快照。辅助场景在 `ux.mjs`。

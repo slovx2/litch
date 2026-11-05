@@ -282,11 +282,13 @@ device. Enabling either requires a confirmation card in Litch. These switches do
 website or sign-in approval. Extension preparation/loading stays in Settings → Chrome;
 `scripts/litch open settings/chrome` opens it.
 
-Chrome uses the `litch_browser` tools with an explicit Chrome target. In **Settings → Chrome**, choose **Prepare extension** first: it registers the Native Messaging host and prepares an unpacked copy of the extension. When Settings shows **Open in Chrome Web Store**, install the extension from the store; otherwise (and as the alternative for development or self-built copies) open the extensions page, enable Developer mode and load the displayed unpacked extension folder. Keep that folder in place.
+Chrome uses the `litch_browser` tools with an explicit Chrome target. In **Settings → Chrome**, choose **Install from Chrome Web Store**: Litch prepares the local connection and opens the store in Chrome. Add Litch Browser there and keep Chrome open. The status updates automatically when the extension connects; returning to Litch also checks immediately. Installing does not enable agent control or grant website access.
+
+“等待扩展连接”表示尚未收到连接握手，不能据此断言扩展已经安装。若已安装，请打开扩展页确认 Litch Browser 已启用。无法使用商店时，展开默认收起的“备选：手动安装”，先准备扩展，再在 Chrome 扩展页开启开发者模式，加载所示目录；保留该目录，更新 Litch 后可再次准备并重新加载扩展。
 
 商店版扩展 ID 为 `ddnllmibgnhhiiaaidfamlknbnfjpnpo`。先升级 Litch，再在 Chrome 设置页准备扩展，
-宿主清单才会同时允许商店版和开发版连接。设置页默认提供商店入口；商店条目尚未发布或不可访问时，
-可展开“开发者模式加载（备选）”使用本地扩展。
+宿主清单才会同时允许商店版和开发版连接；商店安装按钮也会自动完成准备。设置页默认提供商店入口；商店条目尚未发布或不可访问时，
+可展开“备选：手动安装”使用本地扩展。
 
 Platforms: macOS, Windows and Linux desktops. **Prepare extension** registers the host for Google Chrome: on macOS in `~/Library/Application Support/Google/Chrome/NativeMessagingHosts`, on Windows in the registry key `HKCU\Software\Google\Chrome\NativeMessagingHosts\ai.litch.chrome` (the Litch uninstaller removes it), on Linux in `~/.config/google-chrome/NativeMessagingHosts` and also `~/.config/chromium/NativeMessagingHosts` when Chromium is installed. Edge, Brave and other Chromium-based browsers, and Chrome Beta/Canary, are not registered. The unpacked folder is under Litch's data folder (`~/Library/Application Support/Litch/chrome/extension`, `%APPDATA%\Litch\chrome\extension`, `~/.config/Litch/chrome/extension`). Litch must be running for the extension to connect; the extension retries on its own.
 

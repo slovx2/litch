@@ -107,6 +107,9 @@ export class BrowserTargets {
         await this.options.openInChrome('chrome://extensions')
       if (request.kind === 'chrome.store') {
         if (!CHROME_STORE_URL) throw new Error('The Chrome Web Store listing is not available yet.')
+        // 商店主路径自动登记本机宿主；准备失败时不打开商店，也不授予代理控制权限。
+        await this.installer.prepare()
+        this.lastError = null
         await this.options.openInChrome(CHROME_STORE_URL)
       }
       if (request.kind === 'chrome.directory')
