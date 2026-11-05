@@ -6,8 +6,9 @@ REPO_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 OUTPUT_DIR="$REPO_DIR/apps/mobile/modules/litch-ssh/ios/generated"
 mkdir -p "$OUTPUT_DIR"
 cd "$REPO_DIR/mobile"
+export GOTOOLCHAIN="go$(awk '$1 == "go" { print $2; exit }' go.mod)"
 export PATH="$(go env GOPATH)/bin:$PATH"
-go run golang.org/x/mobile/cmd/gomobile@v0.0.0-20260803200217-62cee1672c8e init
-go run golang.org/x/mobile/cmd/gomobile@v0.0.0-20260803200217-62cee1672c8e bind \
+go run golang.org/x/mobile/cmd/gomobile init
+go run golang.org/x/mobile/cmd/gomobile bind \
   -target=ios/arm64,iossimulator/arm64 -iosversion=16.4 \
   -o "$OUTPUT_DIR/Sshtransport.xcframework" ./sshtransport

@@ -30,8 +30,8 @@ public final class LitchSshModule: Module {
     Function("connectionPolicyState") { SshtransportConnectionPolicyState() }
     Function("batteryOptimization") { "unknown" }
     Function("openBackgroundSettings") { false }
-    AsyncFunction("probeHost") { (host: String, port: Int, user: String) in
-      try goString { SshtransportProbeHost(host, port, user, $0) }
+    AsyncFunction("probeHost") { (host: String, port: Int, user: String, tailscale: Bool) in
+      try goString { SshtransportProbeHost(host, port, user, tailscale, $0) }
     }
     AsyncFunction("runScript") { (target: String, script: String, marker: String) in
       try goString { SshtransportRunScript(target, script, marker, $0) }
