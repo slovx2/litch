@@ -3,17 +3,27 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { goEnvironment, goToolchain } from './go-toolchains.mjs'
 
 assert.equal(process.platform, 'darwin')
 assert.equal(process.arch, 'arm64')
 assert.equal(process.version, 'v24.21.0')
-assert.match(
-  execFileSync('go', ['version'], { encoding: 'utf8' }).trim(),
-  /^go version go1\.26\.10 darwin\/arm64$/,
+const env = goEnvironment()
+assert.equal(
+  execFileSync('go', ['version'], { env, encoding: 'utf8' }).trim(),
+  `go version ${goToolchain()} darwin/arm64`,
 )
 const selected = JSON.parse(process.env.NATIVE_DOMAINS)
 const needsAdapter = selected.some((name) => !['browser', 'ios'].includes(name))
-const env = { ...process.env }
+if (selected.includes('ios'))
+  assert.equal(
+    execFileSync('go', ['version'], {
+      cwd: 'mobile',
+      env: goEnvironment('mobile', env),
+      encoding: 'utf8',
+    }).trim(),
+    `go version ${goToolchain('mobile')} darwin/arm64`,
+  )
 const run = (command, args) => execFileSync(command, args, { env, stdio: 'inherit' })
 run('npm', ['ci', '--no-audit', '--no-fund'])
 if (needsAdapter)

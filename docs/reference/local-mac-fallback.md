@@ -58,13 +58,16 @@ gh api --method POST repos/slovx2/litch/environments/local-mac-fallback/deployme
 export LITCH_LOCAL_MAC_SIGNING_KEY="$HOME/.config/litch-local-mac/signing-key.pem"
 export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
 node --version
-go version
+GOTOOLCHAIN="go$(awk '$1 == "go" { print $2 }' go.mod)" go version
+GOTOOLCHAIN="go$(awk '$1 == "go" { print $2 }' mobile/go.mod)" go version
 ruby -e 'puts RUBY_VERSION'
 xcodebuild -version
 xcrun --sdk iphonesimulator --show-sdk-version
 ```
 
-Node 必须为 **24.21.0**、Go **1.26.10**、iOS 原生构建用 Ruby **3.4.7**，并需 Xcode 模拟器 SDK。版本不符时先由本人准备匹配工具链；脚本不升级全局环境。CocoaPods **1.16.2** 装在隔离 HOME。需要长期生效时，将第一条 export 手动加入 `~/.zshrc`；本次没有修改 shell 配置。
+Node 必须为 **24.21.0**，根模块 Go 按根 `go.mod`（当前 **1.26.10**），手机 Go 按 `mobile/go.mod`（当前 **1.27.3**）。本地和托管 Mac 共用准备脚本，给子进程显式选择各模块的精确工具链；需要下载时使用本次隔离的 Go 缓存，不升级全局环境。手机 Go 单测始终执行，iOS 的 CocoaPods、模拟器构建和原生测试也继承手机工具链；证明分别记录并校验根 Go 和手机 Go 指纹。
+
+iOS 原生构建用 Ruby **3.4.7**，并需 Xcode 模拟器 SDK；Node、Ruby、Xcode 不符时先由本人准备匹配工具链。CocoaPods **1.16.2** 装在隔离 HOME。需要长期生效时，将第一条 export 手动加入 `~/.zshrc`；本次没有修改 shell 配置。
 
 **5. 设置仓库公钥变量。** 完成前面环境审批限制后再执行；仅以下公钥可以公开：
 
@@ -109,7 +112,7 @@ node scripts/ci/local-mac-fallback.mjs --run 123456789
 
 - 必须同时有 `runner_id=0`、空 runner 名称、`steps=[]`、失败/取消结论，以及 GitHub Actions 的精确 `not acquired by Runner` failure 标注。只有 notice、人工取消、网络错误、产品断言失败或未知原因均不适用。
 - 每次都读取该 run 全部 attempts 的合并 Mac job。任何一次真实执行失败都拒绝，不能用后来的容量失败洗掉前面的产品失败。其他平台失败仍由原门禁阻断。
-- 签名证明绑定仓库、工作流 SHA、源码 SHA、原 run/attempt/job、完整命令集合、每项退出码、CLI 精确版本，以及 Node/Go/OS/Xcode/SDK 指纹；同 run 不同 SHA、集合缺漏和非全绿均拒绝。签名证明依赖可信签名者，没有声称能防御其主动造假或私钥被盗。
+- 签名证明绑定仓库、工作流 SHA、源码 SHA、原 run/attempt/job、完整命令集合、每项退出码、CLI 精确版本，以及 Node/根 Go/手机 Go/OS/Xcode/SDK 指纹；手机 Go 在选择 iOS 检查时必需。同 run 不同 SHA、集合缺漏和非全绿均拒绝。签名证明依赖可信签名者，没有声称能防御其主动造假或私钥被盗。
 - 为确保接收工作流也运行同 SHA，来源分支上传时不得已前移；Full 的自定义源码 SHA 与工作流 SHA 不同时不能用此兜底。仅给一个 SHA 不能证明容量故障，因此入口要求 `--run`。
 - 旧版 workflow 没有 `mac-native-request` 清单，不能追认历史旧版本的检查。分支前移后也不能随便换到最新脚本运行原候选。
 - 本机离线、接收审批未通过、证明过期或 API 不可读时保持阻断，可等托管容量恢复。没有自动重试或自动公开。

@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { generateKeyPairSync, sign } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { test } from 'node:test'
+import { goToolchain } from './go-toolchains.mjs'
+import { iosReadiness } from './ios-checks.mjs'
 import {
   capacityMessage,
   checkCapacity,
@@ -68,6 +73,44 @@ function accepted(payload = basePayload(), history = [job]) {
   return proof
 }
 test('容量失败且完整同SHA签名证明有效才通过', () => assert.equal(accepted().proof.complete, true))
+test('未配置公钥的路由不需要远端身份，默认请求托管 Mac', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'litch-mac-route-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const output = join(root, 'output')
+  execFileSync(process.execPath, [resolve('scripts/ci/local-mac-route.mjs'), 'route'], {
+    cwd: root,
+    env: {
+      PATH: '',
+      HOME: root,
+      GITHUB_REPOSITORY: context.repository,
+      CANDIDATE_SHA: context.sha,
+      GITHUB_RUN_ID: String(context.runId),
+      GITHUB_RUN_ATTEMPT: '1',
+      GITHUB_OUTPUT: output,
+      NATIVE_DOMAINS: '["browser","ios"]',
+    },
+  })
+  assert.equal(readFileSync(output, 'utf8'), 'runner=macos-15\nlocal=false\n')
+  assert.deepEqual(JSON.parse(readFileSync(join(root, 'mac-native-request.json'))), {
+    ...context,
+    attempt: 1,
+    selected: ['browser', 'ios'],
+  })
+})
+test('含手机检查的证明必须独立绑定手机 Go，不能拿根工具链冒充', () => {
+  const domains = ['ios']
+  const payload = basePayload()
+  payload.proof.plan = nativePlan(domains)
+  payload.proof.ios = iosReadiness()
+  payload.proof.results = payload.proof.plan.checks.map(({ id }) => ({ id, code: 0, signal: null }))
+  payload.environment.ruby = '3.4.7'
+  payload.environment.mobileGo = `go version ${goToolchain('mobile')} darwin/arm64`
+  assert.ok(checkEnvelope(envelope(payload), pem, context, domains))
+  for (const value of [undefined, payload.environment.go, 'go version go1.27.2 darwin/arm64']) {
+    payload.environment.mobileGo = value
+    assert.throws(() => checkEnvelope(envelope(payload), pem, context, domains))
+  }
+})
 test('同run的新attempt可以核验旧容量失败，但不能拿别的run或job凑证明', () => {
   assert.ok(
     accepted(basePayload(), [

@@ -1,6 +1,7 @@
 // 本地证明只是受信维护者的签名声明；GitHub 的原始失败证据必须另外读取。
 import assert from 'node:assert/strict'
 import { createPublicKey, verify } from 'node:crypto'
+import { goToolchain } from './go-toolchains.mjs'
 import { checkNativeProof } from './mac-native-plan.mjs'
 
 export const capacityMessage =
@@ -55,7 +56,9 @@ export function checkEnvelope(envelope, publicKey, context, selected) {
   assert.equal(payload.environment.platform, 'darwin')
   assert.equal(payload.environment.arch, 'arm64')
   assert.equal(payload.environment.node, 'v24.21.0')
-  assert.match(payload.environment.go, /^go version go1\.26\.10 darwin\/arm64$/)
+  assert.equal(payload.environment.go, `go version ${goToolchain()} darwin/arm64`)
+  if (selected.includes('ios'))
+    assert.equal(payload.environment.mobileGo, `go version ${goToolchain('mobile')} darwin/arm64`)
   for (const field of ['os', 'xcode', 'sdk']) assert.ok(payload.environment[field]?.trim())
   if (payload.proof.ios?.ready) assert.equal(payload.environment.ruby, '3.4.7')
   assert.ok(Number.isFinite(Date.parse(payload.startedAt)))

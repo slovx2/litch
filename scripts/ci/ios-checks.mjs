@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { goEnvironment } from './go-toolchains.mjs'
 
 export function iosReadiness(root = fileURLToPath(new URL('../../apps/mobile/', import.meta.url))) {
   const names = readdirSync(join(root, 'modules')).filter((name) => name.startsWith('litch-'))
@@ -36,6 +37,7 @@ export function iosReadiness(root = fileURLToPath(new URL('../../apps/mobile/', 
 export function iosCommands(root = 'apps/mobile') {
   const state = iosReadiness(root)
   const commands = [
+    ['go', ['test', './...'], 'mobile'],
     ['npm', ['ci', '--prefix', root, '--no-audit', '--no-fund']],
     ['npm', ['run', 'mobile:test']],
     ['npm', ['run', 'typecheck', '--prefix', root]],
@@ -96,7 +98,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const before = readFileSync(manifest, 'utf8')
   try {
     for (const [command, args, cwd] of commands) {
-      execFileSync(command, args, { cwd, env: { ...process.env, CI: '1' }, stdio: 'inherit' })
+      execFileSync(command, args, {
+        cwd,
+        env: goEnvironment('mobile', { ...process.env, CI: '1' }),
+        stdio: 'inherit',
+      })
       if (command === 'npx') {
         // Expo会补run:ios等脚本；允许生成工程，但不允许悄悄改动锁定的依赖。
         const original = JSON.parse(before)

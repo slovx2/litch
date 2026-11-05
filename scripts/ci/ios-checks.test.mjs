@@ -22,7 +22,8 @@ test('iOS原生未落地只延后构建；部分合入或缺podspec不能伪装�
       JSON.stringify({ scripts: { 'test:ios': 'native-unit-command' } }),
     )
     assert.equal(iosReadiness(root).ready, false)
-    assert.equal(iosCommands(root).commands.length, 4)
+    assert.equal(iosCommands(root).commands.length, 5)
+    assert.deepEqual(iosCommands(root).commands[0], ['go', ['test', './...'], 'mobile'])
     writeFileSync(
       join(root, 'modules/litch-ssh/expo-module.config.json'),
       JSON.stringify({ platforms: ['apple'] }),

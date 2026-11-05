@@ -6,6 +6,7 @@ import { createPrivateKey, sign } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { goEnvironment } from './go-toolchains.mjs'
 import { checkEnvelope, checkHistory } from './local-mac-policy.mjs'
 import { readSmallArtifact, sourceState } from './local-mac-remote.mjs'
 import { api, gh, pages, validateArtifact } from './release-artifacts.mjs'
@@ -85,10 +86,10 @@ Object.assign(env, {
   GOCACHE: join(temp, 'go-cache'),
   GOMODCACHE: join(temp, 'go-modules'),
 })
-const execute = (command, argv, capture = false) =>
+const execute = (command, argv, capture = false, module = '.') =>
   execFileSync(command, argv, {
     cwd: checkout,
-    env,
+    env: command === 'go' ? goEnvironment(module, env, checkout) : env,
     encoding: 'utf8',
     stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit',
   })
@@ -103,6 +104,9 @@ try {
     node: process.version,
     os: execute('sw_vers', ['-productVersion'], true).trim(),
     go: execute('go', ['version'], true).trim(),
+    ...(request.selected.includes('ios')
+      ? { mobileGo: execute('go', ['version'], true, 'mobile').trim() }
+      : {}),
     xcode: execute('xcodebuild', ['-version'], true).trim(),
     sdk: execute('xcrun', ['--sdk', 'iphonesimulator', '--show-sdk-version'], true).trim(),
     ruby: execute('ruby', ['-e', 'print RUBY_VERSION'], true).trim(),
