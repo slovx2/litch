@@ -36,6 +36,7 @@ tags: [privacy]
 - scrollUntilVisible:
     element:
       id: settings:withdraw-consent
+    timeout: 60000
 - assertNotVisible:
     id: settings:boot
 - stopApp

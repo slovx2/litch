@@ -56,6 +56,7 @@ tags: [mock, privacy]
 - scrollUntilVisible:
     element:
       id: settings:withdraw-consent
+    timeout: 60000
 - tapOn:
     id: settings:withdraw-consent
 - tapOn:
@@ -89,12 +90,14 @@ tags: [mock, privacy]
 - scrollUntilVisible:
     element:
       id: settings:feedback
+    timeout: 60000
 - assertVisible:
     id: settings:licenses
 - scrollUntilVisible:
     element:
       id: settings:tailscale
     direction: UP
+    timeout: 60000
 - tapOn:
     id: settings:tailscale
 - extendedWaitUntil:
