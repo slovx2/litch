@@ -3,9 +3,11 @@ import { execFileSync, spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { iosTestHelper } from './ios-test-helper.mjs'
 
 const mobile = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const [simulator, fixturePath, tailnetPath] = process.argv.slice(2)
+const [simulator, fixturePath, tailnetPath, mode] = process.argv.slice(2)
+if (mode && mode !== 'ui') throw new Error('仅支持省略模式或 ui')
 const devices = JSON.parse(execFileSync('xcrun', ['simctl', 'list', 'devices', '--json']))
 const device = Object.values(devices.devices)
   .flat()
@@ -18,11 +20,17 @@ if (!fixture.work?.startsWith('/tmp/litch-ssh-')) throw new Error('需要隔离 
 mkdirSync(join(mobile, '.artifacts'), { recursive: true })
 const artifacts = mkdtempSync(join(mobile, '.artifacts/ios-network-'))
 let child
+let helper
 try {
   const config = join(artifacts, 'validation.json')
+  if (mode === 'ui') helper = await iosTestHelper(fixture, artifacts, simulator)
   writeFileSync(
     config,
-    JSON.stringify({ target: fixture.target, controlURL: tailnet.controlURL }),
+    JSON.stringify(
+      helper
+        ? { helper: helper.url, controlURL: tailnet.controlURL }
+        : { target: fixture.target, controlURL: tailnet.controlURL },
+    ),
     { mode: 0o600 },
   )
   writeFileSync(
@@ -46,20 +54,25 @@ try {
 <string>$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 </array></dict></plist>`,
   )
-  execFileSync('ruby', [
-    join(mobile, 'scripts/ios-network-test-project.rb'),
-    artifacts,
-    mobile,
-    config,
-  ])
+  execFileSync(
+    'ruby',
+    mode === 'ui'
+      ? [
+          join(mobile, 'scripts/ios-test-project.rb'),
+          artifacts,
+          join(mobile, 'e2e/ios/TailscaleUITests.swift'),
+          config,
+        ]
+      : [join(mobile, 'scripts/ios-network-test-project.rb'), artifacts, mobile, config],
+  )
   execFileSync('xcrun', ['simctl', 'keychain', simulator, 'add-root-cert', tailnet.ca])
   child = spawn(
     'xcodebuild',
     [
       '-project',
-      join(artifacts, 'NetworkTests.xcodeproj'),
+      join(artifacts, mode === 'ui' ? 'TerminalTests.xcodeproj' : 'NetworkTests.xcodeproj'),
       '-scheme',
-      'NetworkTests',
+      mode === 'ui' ? 'TerminalTests' : 'NetworkTests',
       '-destination',
       `platform=iOS Simulator,id=${simulator}`,
       '-derivedDataPath',
@@ -74,6 +87,7 @@ try {
     child.on('error', fail)
   })
 } finally {
+  await helper?.stop()
   execFileSync('xcrun', ['simctl', 'keychain', simulator, 'reset'])
   try {
     execFileSync('xcrun', ['simctl', 'uninstall', simulator, 'dev.litch.networkhost'])

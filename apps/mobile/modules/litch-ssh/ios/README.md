@@ -38,6 +38,11 @@ Keychain access group 在 `app.json` 的 `ios.entitlements` 声明，经 prebuil
 脚本会安装临时 CA，结束后重置该模拟器的 Keychain 并卸载测试宿主。测试宿主使用生产
 Keychain/Go 桥代码与同一 XCFramework，覆盖 MagicDNS、SSH 凭据、后台暂停恢复和退出清理。
 该原生用例不是设置页面或真实 Apple 签名的替代；页面另用 Maestro 验收。
+给同一命令追加 `ui`，可用 XCUITest 在已安装的签名开发包里验证设置页和真实后台恢复，
+不占用 Maestro 端口；同样只操作专用网络模拟器并在退出时移除测试 CA。
+`fixture/26-tailscale.yaml` 验未登录与 HTTPS 输入保护；`ios/tailscale.yaml` 验本地控制面登录、
+真实后台到期恢复、退出和清除。后一条给 `check-ios.mjs` 设置 `LITCH_TEST_TAILNET=<tailnet.json>`，
+并先把 JSON 中的 CA 装入专用模拟器；用完必须删除模拟器或重置其 Keychain。
 
 ## 内嵌网络的存储与披露
 
