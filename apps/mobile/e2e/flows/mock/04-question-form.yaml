@@ -24,7 +24,6 @@ tags: [mock]
 - tapOn:
     id: request:other
 - inputText: e2e answer
-- hideKeyboard
 - tapOn:
     id: request:next
 # 第三道：等翻到它（标题栏右边写着第几题），选第一个，最后一道选了就交
@@ -38,6 +37,9 @@ tags: [mock]
     visible:
       id: request:form
     timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: form:region:ap-east
 - tapOn:
     id: form:region:ap-east
 - scrollUntilVisible:

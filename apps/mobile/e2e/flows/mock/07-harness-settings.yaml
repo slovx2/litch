@@ -104,7 +104,7 @@ tags: [mock]
 - tapOn:
     id: hc:attempt:.*:code
 - inputText: abc#def
-- hideKeyboard
+- runFlow: ../_shared/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       id: hc:attempt:.*:send
@@ -128,7 +128,7 @@ tags: [mock]
 - tapOn:
     id: hc:provider:work:form:apiKey
 - inputText: sk-e2e-1234
-- hideKeyboard
+- runFlow: ../_shared/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       id: hc:provider:work:form:submit

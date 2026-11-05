@@ -12,13 +12,14 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import { KeyboardAvoidingView, useKeyboardState } from 'react-native-keyboard-controller'
+import { useKeyboardState } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useKey, useReplica, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Empty } from '../../ui/kit/controls'
+import { KeyboardArea } from '../../ui/kit/KeyboardForm'
 import { Prompt, Sheet, type SheetAction } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { Frame } from './terminal/Frame'
@@ -247,7 +248,7 @@ export function TerminalScreen({ route, navigation }: Props) {
         { label: '⋯', testID: 'terminal:more', onPress: () => setSheet('more') },
       ]}
     >
-      <KeyboardAvoidingView behavior="padding" automaticOffset style={styles.body}>
+      <KeyboardArea>
         <View style={styles.term}>
           <TerminalView
             ref={view}
@@ -285,7 +286,7 @@ export function TerminalScreen({ route, navigation }: Props) {
           }}
           onKeyboard={() => send(keyboardOn ? { t: 'blur' } : { t: 'focus' })}
         />
-      </KeyboardAvoidingView>
+      </KeyboardArea>
       <Sheet
         visible={sheet === 'list'}
         title={t('tools.term.pick')}
@@ -380,7 +381,6 @@ function StatusStrip({
 }
 
 const styles = StyleSheet.create({
-  body: { flex: 1 },
   term: { flex: 1 },
   strip: {
     position: 'absolute',

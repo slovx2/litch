@@ -1,0 +1,72 @@
+# 终端只检查外层避让和补键条；不把 mock 输出当真实终端输入验收。
+appId: dev.litch.app
+name: mock-终端与编辑弹窗键盘
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- openLink: litch://terminal?device=local
+- extendedWaitUntil:
+    visible:
+      id: terminal:key:keyboard
+      enabled: true
+    timeout: 15000
+- tapOn:
+    id: terminal:key:keyboard
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: keyboard:done
+          timeout: 5000
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible:
+    id: terminal:key:ctrl
+- assertVisible:
+    id: header:back
+- tapOn:
+    id: terminal:key:ctrl
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- assertVisible:
+    id: terminal:key:ctrl
+- openLink: litch://open?session=s3&device=local
+- extendedWaitUntil:
+    visible:
+      id: user-message
+    timeout: 15000
+- longPressOn:
+    id: user-message
+- tapOn:
+    id: menu:edit
+- tapOn:
+    id: edit:input
+# Android 点击多行原文会把光标放在中间；先全选，避免只删掉光标前的文字。
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - longPressOn:
+          id: edit:input
+      - tapOn: '^(Select All|Select all|全选)$'
+- eraseText: 80
+- inputText: Keyboard edited message
+- assertVisible:
+    id: edit:input
+    text: Keyboard edited message
+- assertVisible:
+    id: edit:send
+- tapOn:
+    id: edit:send
+- extendedWaitUntil:
+    notVisible:
+      id: edit:input
+    timeout: 15000
+- assertVisible:
+    id: user-message
+    text: Keyboard edited message

@@ -3,11 +3,12 @@
 // 目录定了就不改（照桌面端，要换目录另加一个）。名字不填就用目录的最后一段。
 import type { WireColor, WorkspaceView } from '@litch/core'
 import { useEffect, useState } from 'react'
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import { useBusy, useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Field } from '../../ui/kit/controls'
+import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { ModalKeyboardArea } from '../../ui/kit/ModalKeyboardArea'
 import { PathPicker } from '../../ui/PathPicker'
 import { useTheme } from '../../ui/theme'
@@ -123,7 +124,10 @@ export function WorkspaceDialog({
             { backgroundColor: c.raised, borderColor: c.line3, borderRadius: theme.radius.l },
           ]}
         >
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
+          <KeyboardFormScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.body}
+          >
             <Text style={[styles.title, { color: c.ink }]}>
               {t(adding ? 'workspace.add.title' : 'workspace.edit.title')}
             </Text>
@@ -193,7 +197,7 @@ export function WorkspaceDialog({
                 onPress={submit}
               />
             </View>
-          </ScrollView>
+          </KeyboardFormScrollView>
         </View>
       </ModalKeyboardArea>
     </Modal>

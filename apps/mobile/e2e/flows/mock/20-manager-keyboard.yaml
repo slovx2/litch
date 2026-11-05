@@ -1,0 +1,100 @@
+# 所有提交都在键盘打开时点击；如果只把输入框滚出来而按钮仍被挡住，实际提交不会完成。
+appId: dev.litch.app
+name: mock-经理输入避让键盘
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- scrollUntilVisible:
+    element:
+      id: devices:managers
+    direction: UP
+- tapOn:
+    id: devices:managers
+- tapOn:
+    id: manager:m1
+- tapOn:
+    id: manager-tab:console
+- scrollUntilVisible:
+    element:
+      id: decision-input:D-17
+- tapOn:
+    id: decision-input:D-17
+- inputText: Keyboard decision answer
+- assertVisible:
+    id: manager-tab:console
+- assertVisible:
+    id: decision-input:D-17
+    text: Keyboard decision answer
+- assertVisible:
+    id: decision-submit:D-17
+- assertVisible:
+    id: draft-bar-submit
+- tapOn:
+    id: decision-submit:D-17
+- extendedWaitUntil:
+    notVisible:
+      id: decision-input:D-17
+    timeout: 10000
+# 请你做：输入与交付按钮同时可点。
+- tapOn:
+    id: manager-category:request
+- scrollUntilVisible:
+    element:
+      id: request-reply:R-1
+- tapOn:
+    id: request-reply:R-1
+- inputText: Keyboard request answer
+- assertVisible:
+    id: manager-tab:console
+- tapOn:
+    id: request-deliver:R-1
+- extendedWaitUntil:
+    notVisible:
+      id: request-reply:R-1
+    timeout: 10000
+# 议题讨论抽屉：展开到全屏也不让标题进入状态栏，发送后保持在抽屉中。
+- scrollUntilVisible:
+    element:
+      id: post-discussion:R-1
+    direction: UP
+- tapOn:
+    id: post-discussion:R-1
+- tapOn:
+    id: post-question:R-1
+- inputText: Keyboard follow up
+- assertVisible:
+    id: discussion-drawer:close
+- assertVisible:
+    id: post-question-submit:R-1
+- tapOn:
+    id: discussion-drawer:size
+- assertVisible:
+    id: discussion-drawer:close
+- tapOn:
+    id: post-question-submit:R-1
+- extendedWaitUntil:
+    notVisible:
+      id: post-question:R-1
+      text: Keyboard follow up
+    timeout: 10000
+- tapOn:
+    id: discussion-drawer:close
+# 切页签后对话输入仍使用原来的避让，收键盘后页签仍可切回。
+- tapOn:
+    id: manager-tab:chat
+- tapOn:
+    id: composer-input
+- inputText: Keyboard chat draft
+- assertVisible:
+    id: manager-tab:console
+- assertVisible:
+    id: composer-send
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- tapOn:
+    id: manager-tab:console
+- assertVisible:
+    id: manager-board-scroll

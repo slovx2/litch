@@ -32,8 +32,20 @@ tags: [mock]
     visible:
       id: proposal:.*:start
     timeout: 10000
+# iOS 的倒置列表会把视口外的卡片也报告为可见；先用手势翻回开头。
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - repeat:
+          times: 2
+          commands:
+            - swipe:
+                start: 50%, 35%
+                end: 50%, 75%
+                duration: 500
 # 三张卡排在提出它们的位置（回答上面），第一张带着背景、比较高，回答写完时列表贴着底，它可能在屏幕上面：
-# 先翻回到它，免得点成下面那张。它紧挨着对话顶端，翻不到屏幕正中，不要 centerElement
+# 先翻回到它，免得点成下面那张；第一张紧挨着列表开头，不强行居中。
 - scrollUntilVisible:
     element:
       text: (Tidy the CHANGELOG|整理 CHANGELOG)
@@ -65,6 +77,7 @@ tags: [mock]
 - scrollUntilVisible:
     element:
       id: proposal:e2e-pr3:more
+    centerElement: true
     direction: DOWN
     timeout: 10000
 - tapOn:
@@ -84,6 +97,7 @@ tags: [mock]
 - scrollUntilVisible:
     element:
       id: proposal:e2e-pr3:more
+    centerElement: true
     direction: UP
     timeout: 10000
 - tapOn:
@@ -100,13 +114,14 @@ tags: [mock]
 - scrollUntilVisible:
     element:
       id: proposal-start:title
+    centerElement: true
     direction: DOWN
     timeout: 10000
 - tapOn:
     id: proposal-start:title
 - eraseText: 80
 - inputText: e2e edited
-- hideKeyboard
+- runFlow: ../_shared/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       id: proposal-start:wake
@@ -116,8 +131,13 @@ tags: [mock]
     id: proposal-start:wake
 - scrollUntilVisible:
     element:
-      id: proposal-start:go
-    direction: DOWN
+      id: proposal-start:title
+    centerElement: true
+    direction: UP
+- tapOn:
+    id: proposal-start:title
+- assertVisible:
+    id: proposal-start:go
 - tapOn:
     id: proposal-start:go
 # 起出来的子会话那一行在卡片下面，窄屏上可能在屏幕外

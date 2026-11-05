@@ -321,7 +321,7 @@ function OptionPicker({
 
 const styles = StyleSheet.create({
   input: { borderWidth: 1, paddingHorizontal: 12, fontSize: 15 },
-  multi: { minHeight: 96, paddingVertical: 8, textAlignVertical: 'top' },
+  multi: { minHeight: 96, maxHeight: 160, paddingVertical: 8, textAlignVertical: 'top' },
   mono: { fontSize: 12 },
   small: { fontSize: 12, lineHeight: 17 },
   unknown: { gap: 4 },

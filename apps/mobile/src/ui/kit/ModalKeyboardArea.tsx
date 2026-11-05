@@ -2,7 +2,8 @@
 // 不依赖 Android Activity 的 adjustResize，也不叠加手算键盘高度。内层负责居中或贴底布局。
 import type { ReactNode } from 'react'
 import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native'
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { KeyboardArea, KeyboardDismissBar } from './KeyboardForm'
 
 export function ModalKeyboardArea({
   children,
@@ -11,17 +12,16 @@ export function ModalKeyboardArea({
   children: ReactNode
   style?: StyleProp<ViewStyle>
 }) {
+  const insets = useSafeAreaInsets()
   return (
-    <KeyboardAvoidingView
-      behavior="padding"
-      automaticOffset
-      style={styles.fill}
-      pointerEvents="box-none"
-    >
-      <View style={[styles.fill, style]} pointerEvents="box-none">
-        {children}
-      </View>
-    </KeyboardAvoidingView>
+    <>
+      <KeyboardArea style={{ paddingTop: insets.top }}>
+        <View style={[styles.fill, style]} pointerEvents="box-none">
+          {children}
+        </View>
+      </KeyboardArea>
+      <KeyboardDismissBar />
+    </>
   )
 }
 

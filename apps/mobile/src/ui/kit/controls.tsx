@@ -395,7 +395,7 @@ const styles = StyleSheet.create({
   field: { gap: 6 },
   fieldLabel: { fontSize: 13, fontWeight: '500' },
   fieldInput: { borderWidth: 1, paddingHorizontal: 12, fontSize: 15 },
-  fieldMulti: { minHeight: 120, paddingVertical: 10, textAlignVertical: 'top' },
+  fieldMulti: { minHeight: 120, maxHeight: 160, paddingVertical: 10, textAlignVertical: 'top' },
   fieldHint: { fontSize: 12 },
   empty: { alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
   emptyTitle: { fontSize: 16, fontWeight: '600', textAlign: 'center' },

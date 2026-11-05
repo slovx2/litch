@@ -1,0 +1,87 @@
+appId: dev.litch.app
+name: mock-报告建议追问与临时对话键盘
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      CONTROLLED: '1'
+      READY: device:local
+- scrollUntilVisible:
+    element:
+      id: devices:managers
+    direction: UP
+- tapOn:
+    id: devices:managers
+- tapOn:
+    id: manager:m1
+- tapOn:
+    id: manager-tab:console
+- tapOn:
+    id: post-discussion:D-17
+- tapOn: '^(Temporary chat|临时对话)$'
+- tapOn:
+    id: post-question:D-17
+- inputText: Temporary keyboard question
+- assertVisible:
+    id: discussion-drawer:close
+- tapOn:
+    id: post-question-submit:D-17
+- extendedWaitUntil:
+    notVisible:
+      id: post-question:D-17
+      text: Temporary keyboard question
+    timeout: 10000
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- tapOn:
+    id: discussion-drawer:close
+- swipe:
+    from:
+      id: manager-category:request
+    direction: LEFT
+- tapOn:
+    id: manager-category:report
+- tapOn:
+    id: post-discussion:P-1
+- tapOn:
+    id: post-question:P-1
+- inputText: Report keyboard question
+- tapOn:
+    id: post-question-submit:P-1
+- extendedWaitUntil:
+    notVisible:
+      id: post-question:P-1
+      text: Report keyboard question
+    timeout: 10000
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- tapOn:
+    id: discussion-drawer:close
+- tapOn:
+    id: manager-tab:chat
+- tapOn:
+    id: composer-input
+- inputText: propose a sub-session
+- tapOn:
+    id: composer-send
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- tapOn:
+    id: manager-tab:console
+- tapOn:
+    id: manager-category:suggestion
+- scrollUntilVisible:
+    element:
+      id: post-discussion:S-e2e-pr1
+    timeout: 20000
+- tapOn:
+    id: post-discussion:S-e2e-pr1
+- tapOn:
+    id: post-question:S-e2e-pr1
+- inputText: Suggestion keyboard question
+- tapOn:
+    id: post-question-submit:S-e2e-pr1
+- extendedWaitUntil:
+    notVisible:
+      id: post-question:S-e2e-pr1
+      text: Suggestion keyboard question
+    timeout: 10000

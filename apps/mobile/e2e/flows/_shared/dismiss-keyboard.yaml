@@ -1,0 +1,18 @@
+# 数字与多行键盘没有系统回车键；iOS 使用应用提供的统一完成入口。
+appId: dev.litch.app
+---
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          id: keyboard:done
+      - extendedWaitUntil:
+          notVisible:
+            id: keyboard:done
+          timeout: 5000
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard

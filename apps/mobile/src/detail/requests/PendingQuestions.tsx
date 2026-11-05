@@ -1,12 +1,13 @@
 // 和桌面共用待答集合；原回合移出屏幕后仍能直接回答。
 import { type DeviceView, keys, type PendingQuestion, pendingReplyText } from '@litch/core'
 import { useState, useSyncExternalStore } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { useQuestionAge } from '../../../../../packages/ui/src/composer/question-age.ts'
 import type { SessionStore } from '../../core/session-store'
 import { useKey, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { useTheme } from '../../ui/theme'
 import { sendFlags, whenRunning } from '../composer/send-mode'
 import { CardButton } from './Card'
@@ -45,11 +46,16 @@ export function PendingQuestions({ store, maxHeight }: { store: SessionStore; ma
         <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{expanded ? '▾' : '▸'}</Text>
       </Pressable>
       {expanded ? (
-        <ScrollView style={styles.body} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+        <KeyboardFormScrollView
+          keyboardHandled
+          style={styles.body}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+        >
           {questions.map((question, index) => (
             <PendingCard key={question.id} question={question} store={store} first={index === 0} />
           ))}
-        </ScrollView>
+        </KeyboardFormScrollView>
       ) : null}
     </View>
   )

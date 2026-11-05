@@ -2,7 +2,7 @@
 // 有草稿才出现；交完留一会儿报“已提交”。草稿判断用 core 的 liveManagerDrafts，失效的不计、不交。
 import type { ManagerBoardTopicView, ManagerView } from '@litch/core'
 import { useEffect, useState } from 'react'
-import { Keyboard, Pressable, Text, View } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
 import {
   liveManagerDrafts,
   type ManagerDraftBoard,
@@ -79,20 +79,6 @@ function collect(board: ManagerDraftBoard, full: Board, manager: ManagerView) {
   return { keys, drafts: { decisions, requests, posts } }
 }
 
-/** 键盘弹起时让出位置 */
-function useKeyboardShown() {
-  const [shown, setShown] = useState(false)
-  useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', () => setShown(true))
-    const hide = Keyboard.addListener('keyboardDidHide', () => setShown(false))
-    return () => {
-      show.remove()
-      hide.remove()
-    }
-  }, [])
-  return shown
-}
-
 export function DraftSubmitBar({
   manager,
   board,
@@ -117,7 +103,6 @@ export function DraftSubmitBar({
   const { c, font, hit, radius } = useTheme()
   const channel = useChannel()
   useDraftVersion()
-  const keyboard = useKeyboardShown()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [sent, setSent] = useState(0)
@@ -225,7 +210,6 @@ export function DraftSubmitBar({
       setBusy(false)
     }
   }
-  if (keyboard) return null
   const row = {
     flexDirection: 'row',
     alignItems: 'center',

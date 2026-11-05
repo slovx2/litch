@@ -326,5 +326,5 @@ const styles = StyleSheet.create({
   option: { borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8, justifyContent: 'center' },
   optionTitle: { fontSize: 15 },
   optionNote: { fontSize: 13, marginTop: 2 },
-  input: { borderWidth: 1, paddingHorizontal: 10, fontSize: 15 },
+  input: { borderWidth: 1, paddingHorizontal: 10, fontSize: 15, maxHeight: 160 },
 })

@@ -20,6 +20,7 @@ import { ProposalsStrip } from '../screens/proposals/ProposalsStrip'
 import { useSessionTask } from '../screens/tasks/session-task'
 import { useChannel, useKey, useServices } from '../shell/services'
 import { useT } from '../ui/i18n'
+import { useKeyboardAccessoryHeight } from '../ui/kit/KeyboardForm'
 import { Confirm, Prompt, Sheet, type SheetAction } from '../ui/kit/overlays'
 import type { HeaderAction, HeaderLink } from '../ui/kit/Screen'
 import { useTheme } from '../ui/theme'
@@ -92,6 +93,7 @@ export function useSessionPage({
   const channel = useChannel()
   const t = useT()
   const insets = useSafeAreaInsets()
+  const accessory = useKeyboardAccessoryHeight()
   const { height } = useWindowDimensions()
   const { c } = useTheme()
   const store = useMemo(
@@ -128,7 +130,7 @@ export function useSessionPage({
   // 卡片最高多少：屏幕减去状态栏、标题栏、键盘、输入区，再给对话区留一截
   const [composerHeight, setComposerHeight] = useState(0)
   const keyboard = useKeyboardState((state) => (state.isVisible ? state.height : 0))
-  const lifted = keyboard > 0 ? keyboard - insets.bottom : 0
+  const lifted = keyboard > 0 ? keyboard - insets.bottom + accessory : 0
   const cardMax = Math.max(
     140,
     Math.min(
@@ -314,7 +316,10 @@ export function useSessionPage({
           ) : null}
           {experiment.keyboard === 'sticky' ? (
             // 顶上移出去的那一截藏到标题栏后面（标题栏压在上面）
-            <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }} style={styles.list}>
+            <KeyboardStickyView
+              offset={{ closed: 0, opened: insets.bottom - accessory }}
+              style={styles.list}
+            >
               <CommentsContext.Provider value={comments}>
                 <Transcript store={store} bottomOffset={insets.bottom} markers={markers} />
               </CommentsContext.Provider>
@@ -326,7 +331,7 @@ export function useSessionPage({
               </CommentsContext.Provider>
             </View>
           )}
-          <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
+          <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom - accessory }}>
             <SelectBar hub={comments} />
             <RequestSlot
               store={store}

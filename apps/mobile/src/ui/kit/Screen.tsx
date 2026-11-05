@@ -7,6 +7,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useT } from '../i18n'
 import { useTheme } from '../theme'
+import { KeyboardDismissBar } from './KeyboardForm'
 
 export interface HeaderAction {
   label: string
@@ -183,6 +184,7 @@ export function Screen({
         ))}
       </View>
       <View style={styles.body}>{children}</View>
+      <KeyboardDismissBar />
     </View>
   )
 }

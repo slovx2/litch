@@ -12,7 +12,6 @@ import type {
 } from '@litch/core'
 import { useEffect, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { whyNot } from '../../../../../../packages/ui/src/app/errors.ts'
 import {
@@ -25,6 +24,7 @@ import {
 import { useChannel } from '../../../shell/services'
 import { useT } from '../../../ui/i18n'
 import { Button, Chip, SectionLabel } from '../../../ui/kit/controls'
+import { KeyboardFormScrollView } from '../../../ui/kit/KeyboardForm'
 import { Confirm } from '../../../ui/kit/overlays'
 import { useTheme } from '../../../ui/theme'
 import { HcControl, isInline } from './HcControl'
@@ -181,7 +181,7 @@ export function ConfigTab({
 
   return (
     <View style={styles.fill} testID="hc:tab:config">
-      <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" bottomOffset={24}>
+      <KeyboardFormScrollView keyboardShouldPersistTaps="handled">
         {moved ? (
           <View
             style={[styles.moved, { borderColor: c.wait, borderRadius: theme.radius.l }]}
@@ -233,7 +233,7 @@ export function ConfigTab({
           </View>
         ))}
         <Files files={data.files} />
-      </KeyboardAwareScrollView>
+      </KeyboardFormScrollView>
       {dirty.length === 0 && said ? (
         // 存好了、动作做完了：底下说一句（用户多半滚在页面中间，说在页尾看不见）
         <View

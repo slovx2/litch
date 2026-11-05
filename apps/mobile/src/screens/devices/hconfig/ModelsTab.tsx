@@ -7,7 +7,6 @@
 import type { ChannelErrorShape, HcModelEntry, HcModelsView, HcSlot } from '@litch/core'
 import { useEffect, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { whyNot } from '../../../../../../packages/ui/src/app/errors.ts'
 import { effectKey } from '../../../../../../packages/ui/src/devices/hconfig/logic.ts'
@@ -22,6 +21,7 @@ import {
 import { useChannel } from '../../../shell/services'
 import { useT } from '../../../ui/i18n'
 import { Button, Chip, Row, SectionLabel } from '../../../ui/kit/controls'
+import { KeyboardFormScrollView } from '../../../ui/kit/KeyboardForm'
 import { Confirm, Sheet } from '../../../ui/kit/overlays'
 import { useTheme } from '../../../ui/theme'
 import { useLeaveGuard } from './leave'
@@ -175,7 +175,7 @@ export function ModelsTab({
     const index = editing.index
     return (
       <View style={styles.fill} testID="hc:tab:models">
-        <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" bottomOffset={24}>
+        <KeyboardFormScrollView keyboardShouldPersistTaps="handled">
           <ModelForm
             bases={data.bases}
             entry={index === null ? null : (entries[index] ?? null)}
@@ -190,7 +190,7 @@ export function ModelsTab({
             }}
             onClose={() => setEditing(null)}
           />
-        </KeyboardAwareScrollView>
+        </KeyboardFormScrollView>
       </View>
     )
   }
@@ -206,7 +206,7 @@ export function ModelsTab({
 
   return (
     <View style={styles.fill} testID="hc:tab:models">
-      <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" bottomOffset={24}>
+      <KeyboardFormScrollView keyboardShouldPersistTaps="handled">
         <SectionLabel>
           {data.custom ? t('hc.models.state.custom') : t('hc.models.state.builtin', { name })}
         </SectionLabel>
@@ -332,7 +332,7 @@ export function ModelsTab({
           </View>
         ) : null}
         <View style={styles.tail} />
-      </KeyboardAwareScrollView>
+      </KeyboardFormScrollView>
 
       {draft !== null && (dirty || failure) ? (
         <View

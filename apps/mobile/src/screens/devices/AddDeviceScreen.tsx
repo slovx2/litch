@@ -3,14 +3,15 @@
 // → 添加。添加之后核心就开始连，页面换成这台设备的会话。
 import type { RemoteCheck, RemoteTarget } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Keyboard, StyleSheet, Text, View } from 'react-native'
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
+import type { KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller'
 import type { RootStackParamList } from '../../nav/routes'
 import { type KeyInfo, listKeys } from '../../platform/keys'
 import { useBusy, useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Field, SectionLabel } from '../../ui/kit/controls'
+import { KeyboardArea, KeyboardFormFooter, KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { TailscaleChoice } from '../settings/TailscaleChoice'
@@ -77,6 +78,13 @@ export function AddDeviceScreen({ navigation }: Props) {
   const [checking, runCheck] = useBusy()
   const [adding, runAdd] = useBusy()
   const trust = useHostTrust()
+  const scroll = useRef<KeyboardAwareScrollViewRef>(null)
+  useEffect(() => {
+    if (!result && !error && !trust.error && !trust.notice) return
+    // 操作固定在底栏后，检查可能从任意字段触发；结果出来时把结果区滚进视口。
+    const frame = requestAnimationFrame(() => scroll.current?.scrollToEnd({ animated: true }))
+    return () => cancelAnimationFrame(frame)
+  }, [result, error, trust.error, trust.notice])
 
   const portNumber = Number(port.trim() || '22')
   const target = (): RemoteTarget | null => {
@@ -135,112 +143,120 @@ export function AddDeviceScreen({ navigation }: Props) {
   const publicKey = keys.find((key) => key.id === keyId)?.publicKey ?? null
   return (
     <Screen title={t('add.title')} testID="add-device">
-      <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        <SectionLabel>{t('pair.entry')}</SectionLabel>
-        <View style={styles.form}>
-          <Text style={[styles.note, { color: theme.c.ink3 }]}>{t('pair.entry.hint')}</Text>
-          <Button
-            label={t('pair.entry')}
-            testID="add:pair"
-            onPress={() => navigation.navigate('PairDevice')}
+      <KeyboardArea>
+        <KeyboardFormScrollView ref={scroll} keyboardShouldPersistTaps="handled">
+          <SectionLabel>{t('pair.entry')}</SectionLabel>
+          <View style={styles.form}>
+            <Text style={[styles.note, { color: theme.c.ink3 }]}>{t('pair.entry.hint')}</Text>
+            <Button
+              label={t('pair.entry')}
+              testID="add:pair"
+              onPress={() => navigation.navigate('PairDevice')}
+            />
+          </View>
+          <SectionLabel>{t('devices.where')}</SectionLabel>
+          <TailscaleChoice
+            value={tailscale}
+            disabled={checking || adding}
+            onChange={(value) => {
+              checkEpoch.current++
+              setTailscale(value)
+              setResult(null)
+            }}
+            configure={() => navigation.navigate('Tailscale', { adding: true })}
           />
-        </View>
-        <SectionLabel>{t('devices.where')}</SectionLabel>
-        <TailscaleChoice
-          value={tailscale}
-          disabled={checking || adding}
-          onChange={(value) => {
-            checkEpoch.current++
-            setTailscale(value)
-            setResult(null)
-          }}
-          configure={() => navigation.navigate('Tailscale', { adding: true })}
-        />
-        <View style={styles.form}>
-          <Field
-            label={t('devices.field.host')}
-            hint={t('devices.field.host.hint')}
-            value={host}
-            onChangeText={edit(setHost)}
-            keyboardType="url"
-            testID="add:host"
+          <View style={styles.form}>
+            <Field
+              label={t('devices.field.host')}
+              hint={t('devices.field.host.hint')}
+              value={host}
+              onChangeText={edit(setHost)}
+              keyboardType="url"
+              testID="add:host"
+            />
+            <View style={styles.pair}>
+              <View style={styles.port}>
+                <Field
+                  label={t('devices.field.port')}
+                  value={port}
+                  onChangeText={edit(setPort)}
+                  keyboardType="number-pad"
+                  testID="add:port"
+                />
+              </View>
+              <View style={styles.user}>
+                <Field
+                  label={t('devices.field.user')}
+                  value={user}
+                  onChangeText={edit(setUser)}
+                  testID="add:user"
+                />
+              </View>
+            </View>
+            <Field
+              label={t('devices.field.name')}
+              hint={t('devices.field.name.hint')}
+              value={name}
+              onChangeText={setName}
+              testID="add:name"
+            />
+          </View>
+          <SectionLabel>{t('devices.key')}</SectionLabel>
+          <KeyPicker
+            keys={keys}
+            selected={keyId}
+            onSelect={(id) => {
+              checkEpoch.current++
+              setKeyId(id)
+              setResult(null)
+            }}
+            onAdded={(key) => {
+              checkEpoch.current++
+              setKeys(listKeys())
+              setKeyId(key.id)
+              setResult(null)
+            }}
           />
+          <SectionLabel>{t('devices.check')}</SectionLabel>
+          <View style={styles.form}>
+            <Text style={[styles.note, { color: theme.c.ink3 }]}>{t('devices.check.hint')}</Text>
+            {trust.notice ? (
+              <Text style={[styles.note, { color: theme.c.ink2 }]}>{trust.notice}</Text>
+            ) : null}
+            {trust.error || error ? (
+              <Text style={[styles.note, { color: theme.c.err }]} testID="add:error">
+                {trust.error ?? error}
+              </Text>
+            ) : null}
+          </View>
+          {result?.ok ? <CheckResult result={result} /> : null}
+          {result && !result.ok ? (
+            <FailureCard failure={result.failure} target={target()} publicKey={publicKey} />
+          ) : null}
+        </KeyboardFormScrollView>
+        <KeyboardFormFooter>
           <View style={styles.pair}>
-            <View style={styles.port}>
-              <Field
-                label={t('devices.field.port')}
-                value={port}
-                onChangeText={edit(setPort)}
-                keyboardType="number-pad"
-                testID="add:port"
+            <View style={styles.user}>
+              <Button
+                kind={result?.ok ? 'plain' : 'solid'}
+                label={t('devices.check')}
+                busy={checking}
+                testID="add:check"
+                onPress={() => void check()}
               />
             </View>
             <View style={styles.user}>
-              <Field
-                label={t('devices.field.user')}
-                value={user}
-                onChangeText={edit(setUser)}
-                testID="add:user"
+              <Button
+                label={t('devices.submit')}
+                disabled={!result?.ok}
+                busy={adding}
+                testID="add:submit"
+                onPress={() => void add()}
               />
             </View>
           </View>
-          <Field
-            label={t('devices.field.name')}
-            hint={t('devices.field.name.hint')}
-            value={name}
-            onChangeText={setName}
-            testID="add:name"
-          />
-        </View>
-        <SectionLabel>{t('devices.key')}</SectionLabel>
-        <KeyPicker
-          keys={keys}
-          selected={keyId}
-          onSelect={(id) => {
-            checkEpoch.current++
-            setKeyId(id)
-            setResult(null)
-          }}
-          onAdded={(key) => {
-            checkEpoch.current++
-            setKeys(listKeys())
-            setKeyId(key.id)
-            setResult(null)
-          }}
-        />
-        <SectionLabel>{t('devices.check')}</SectionLabel>
-        <View style={styles.form}>
-          <Text style={[styles.note, { color: theme.c.ink3 }]}>{t('devices.check.hint')}</Text>
-          <Button
-            kind={result?.ok ? 'plain' : 'solid'}
-            label={t('devices.check')}
-            busy={checking}
-            testID="add:check"
-            onPress={() => void check()}
-          />
-          {trust.notice ? (
-            <Text style={[styles.note, { color: theme.c.ink2 }]}>{trust.notice}</Text>
-          ) : null}
-          {trust.error || error ? (
-            <Text style={[styles.note, { color: theme.c.err }]} testID="add:error">
-              {trust.error ?? error}
-            </Text>
-          ) : null}
-        </View>
-        {result?.ok ? <CheckResult result={result} /> : null}
-        {result && !result.ok ? (
-          <FailureCard failure={result.failure} target={target()} publicKey={publicKey} />
-        ) : null}
-        <View style={styles.form}>
-          <Button
-            label={t('devices.submit')}
-            disabled={!result?.ok}
-            busy={adding}
-            testID="add:submit"
-            onPress={() => void add()}
-          />
-        </View>
-      </KeyboardAwareScrollView>
+        </KeyboardFormFooter>
+      </KeyboardArea>
       {trust.dialog}
     </Screen>
   )

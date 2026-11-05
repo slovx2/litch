@@ -1,7 +1,7 @@
 import { useIsFocused } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AppState, Linking, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { AppState, Linking, StyleSheet, Text, View } from 'react-native'
 import type { RootStackParamList } from '../../nav/routes'
 import { savedRemotes } from '../../platform/device-store'
 import {
@@ -13,6 +13,7 @@ import {
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Field, Row } from '../../ui/kit/controls'
+import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Confirm } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
@@ -104,7 +105,7 @@ export function TailscaleScreen({ navigation, route }: Props) {
   const note = { color: theme.c.ink2, fontFamily: theme.font.ui, fontSize: theme.font.size.body }
   return (
     <Screen title={t('tailscale.title')} testID="tailscale">
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <KeyboardFormScrollView contentContainerStyle={styles.body}>
         <Text style={note}>{t('tailscale.scope')}</Text>
         {!available ? (
           <Text style={note} testID="tailscale:unavailable">
@@ -191,7 +192,7 @@ export function TailscaleScreen({ navigation, route }: Props) {
             testID="tailscale:back"
           />
         ) : null}
-      </ScrollView>
+      </KeyboardFormScrollView>
       <Confirm
         visible={confirm !== null}
         danger

@@ -25,6 +25,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native'
+import type { KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller'
 import {
   type BoardPageMemory,
   managerBoardMemory,
@@ -38,6 +39,7 @@ import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { BreathingText } from '../../ui/kit/BreathingText'
 import { Empty } from '../../ui/kit/controls'
+import { KeyboardArea, KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
@@ -124,7 +126,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const [sheet, setSheet] = useState<string | null>(null)
   const positions = useRef(new Map<string, number>())
   const itemsAt = useRef(0)
-  const scroll = useRef<ScrollView>(null)
+  const scroll = useRef<KeyboardAwareScrollViewRef>(null)
   const locator = useRef<((from: number) => number | null) | null>(null)
   const nexter = useRef<(() => void) | null>(null)
   /** 提交条“下一个”能不能点；null 是当前列表不适用 */
@@ -434,7 +436,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
         <View testID="manager-chat" style={[styles.fill, tab === 'chat' ? null : styles.hidden]}>
           {page.body}
         </View>
-        <View style={[styles.fill, tab === 'chat' ? styles.hidden : null]}>
+        <KeyboardArea style={tab === 'chat' ? styles.hidden : undefined}>
           {tab === 'console' ? (
             // 类别胶囊放不下（窄屏、英文、大字号）时横着滚，排序固定在行尾
             <View style={styles.categories}>
@@ -527,7 +529,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
               })}
             </Text>
           ) : null}
-          <ScrollView
+          <KeyboardFormScrollView
             testID="manager-board-scroll"
             ref={scroll}
             style={[styles.fill, restoringBoard && { opacity: 0 }]}
@@ -635,7 +637,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
             ) : (
               <Empty title={t('manager.loading')} />
             )}
-          </ScrollView>
+          </KeyboardFormScrollView>
           {/* 批量提交条在滚动区下面，不随卡片滚动，也不挡住最后一张卡 */}
           {tab === 'console' && board && view ? (
             <DraftSubmitBar
@@ -668,7 +670,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
               }
             />
           ) : null}
-        </View>
+        </KeyboardArea>
       </View>
       {page.overlays}
       {sheet && view?.paging && !board?.posts?.some((post) => post.id === sheet) ? (

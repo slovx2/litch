@@ -504,6 +504,7 @@ export function Issue({
       </View>
       <View style={styles.askRow}>
         <TextInput
+          testID={`post-question:${post.id}`}
           multiline
           accessibilityLabel={questionPrompt}
           placeholder={questionPrompt}
@@ -519,6 +520,7 @@ export function Issue({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('manager.postSubmit')}
+          testID={`post-question-submit:${post.id}`}
           style={{ minHeight: hit, minWidth: hit, justifyContent: 'center', alignItems: 'center' }}
           disabled={locked || !question.trim() || (mode === 'manager' && questionEnded)}
           onPress={() =>
@@ -744,6 +746,7 @@ export function Issue({
                     </View>
                   ) : null}
                   <TextInput
+                    testID={`request-reply:${request.id}`}
                     accessibilityLabel={t('manager.requestText')}
                     style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
                     multiline
@@ -844,6 +847,7 @@ export function Issue({
                         ))}
                       </View>
                       <TextInput
+                        testID={`decision-input:${decision.id}`}
                         accessibilityLabel={t('manager.answer')}
                         placeholder={t('manager.answer')}
                         placeholderTextColor={c.ink3}
@@ -1014,7 +1018,7 @@ const styles = StyleSheet.create({
   cardNarrow: { padding: 12, margin: 8 },
   cardBare: { padding: 0, margin: 0, borderWidth: 0 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 8 },
-  input: { borderWidth: 1, minHeight: 80, padding: 10, textAlignVertical: 'top' },
+  input: { borderWidth: 1, minHeight: 80, maxHeight: 160, padding: 10, textAlignVertical: 'top' },
   options: { gap: 8 },
   choice: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 10 },
   choiceText: { flex: 1, gap: 6 },

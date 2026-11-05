@@ -23,7 +23,7 @@ tags: [mock]
     visible:
       id: prompt:input
     timeout: 5000
-- eraseText: 200
+- eraseText: 80
 - inputText: Keyboard visible rename
 - assertVisible:
     id: prompt:input
@@ -34,7 +34,8 @@ tags: [mock]
     notVisible:
       id: prompt:input
     timeout: 5000
-- assertVisible: Keyboard visible rename
+# iOS 标题容器的无障碍名称还包含副标题。
+- assertVisible: Keyboard visible rename.*
 - openLink: litch://open?session=b6&device=build
 # 对话参数收在输入框的“+”里
 - extendedWaitUntil:
@@ -58,4 +59,3 @@ tags: [mock]
 - tapOn:
     id: composer-more
 - assertVisible: .*GPT-5.5 mini.*
-- pressKey: back

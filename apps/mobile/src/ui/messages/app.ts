@@ -5,6 +5,7 @@ import type { Entry } from '../../../../../packages/ui/src/i18n/types.ts'
 export const zhCN = {
   'app.back': '返回',
   'app.cancel': '取消',
+  'app.done': '完成',
   'app.retry': '重试',
   'app.booting': '启动中…',
   'app.bootFailed': '核心启动失败：{error}',
@@ -17,6 +18,7 @@ export const zhCN = {
 export const en: Record<keyof typeof zhCN, Entry> = {
   'app.back': 'Back',
   'app.cancel': 'Cancel',
+  'app.done': 'Done',
   'app.retry': 'Retry',
   'app.booting': 'Starting…',
   'app.bootFailed': 'The core couldn’t start: {error}',

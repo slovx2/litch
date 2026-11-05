@@ -18,6 +18,7 @@ import {
 } from '../../../../../packages/ui/src/transcript/ask-history.ts'
 import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { Dialog } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { useTranscript } from '../context'
 import { useSessionStore } from '../proposals/hooks'
@@ -192,8 +193,12 @@ function QuestionSettlement({
         <CardButton label={t('ask.manager.override')} onPress={() => setEditing(!editing)} />
       ) : null}
       {editing ? (
-        <>
+        <Dialog visible onClose={() => setEditing(false)}>
+          <Text style={{ color: c.ink, fontSize: font.size.body }}>
+            {t('ask.manager.override')}
+          </Text>
           <TextInput
+            testID="question-override:input"
             accessibilityLabel={t('ask.manager.override')}
             value={text}
             onChangeText={setText}
@@ -205,6 +210,7 @@ function QuestionSettlement({
               color: c.ink,
               fontSize: font.size.body,
               minHeight: hit,
+              maxHeight: 160,
               borderWidth: 1,
               borderColor: c.line2,
               borderRadius: radius.s,
@@ -212,15 +218,22 @@ function QuestionSettlement({
             }}
           />
           <CardButton
+            testID="question-override:submit"
             label={t('ask.answer')}
             disabled={!live || busy || !text.trim()}
             onPress={() => {
               void send()
             }}
           />
-        </>
+          <CardButton label={t('app.cancel')} onPress={() => setEditing(false)} />
+          {failure ? (
+            <Text accessibilityRole="alert" style={{ color: c.ink2 }}>
+              {failure}
+            </Text>
+          ) : null}
+        </Dialog>
       ) : null}
-      {failure ? (
+      {failure && !editing ? (
         <Text accessibilityRole="alert" style={{ color: c.ink2 }}>
           {failure}
         </Text>

@@ -24,6 +24,8 @@ tags: [fixture, native]
 - tapOn:
     id: tailscale:control
 - inputText: http://127.0.0.1:9
+- assertVisible:
+    id: tailscale:login
 - hideKeyboard
 - tapOn:
     id: tailscale:login
@@ -60,6 +62,10 @@ tags: [fixture, native]
 - tapOn:
     id: add:user
 - inputText: test
+- assertVisible:
+    id: add:check
+- assertVisible:
+    id: add:submit
 - hideKeyboard
 - scrollUntilVisible:
     element:

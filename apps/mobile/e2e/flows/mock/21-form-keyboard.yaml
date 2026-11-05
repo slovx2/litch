@@ -1,0 +1,111 @@
+appId: dev.litch.app
+name: mock-数字多行表单收键盘与首次提交
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- tapOn:
+    id: devices:add
+- tapOn:
+    id: add:host
+- inputText: keyboard.invalid
+- assertVisible:
+    id: add:check
+- assertVisible:
+    id: add:submit
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      id: add:port
+- tapOn:
+    id: add:port
+- eraseText: 10
+- inputText: '22'
+- assertVisible:
+    id: header:back
+- assertVisible:
+    id: add:check
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      id: key:generate
+    centerElement: true
+- tapOn:
+    id: key:generate
+- scrollUntilVisible:
+    element:
+      id: key:copy
+    centerElement: true
+    timeout: 10000
+- assertNotVisible:
+    id: key:error
+- scrollUntilVisible:
+    element:
+      id: key:import
+    centerElement: true
+    direction: UP
+- tapOn:
+    id: key:import
+- scrollUntilVisible:
+    element:
+      id: key:paste
+    centerElement: true
+- tapOn:
+    id: key:paste
+- inputText: keyboard-invalid-key
+- assertVisible:
+    id: key:paste
+    text: keyboard-invalid-key
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      id: key:passphrase
+    centerElement: true
+- tapOn:
+    id: key:passphrase
+- inputText: keyboard-test
+# 不先收键盘；首次点击必须实际触发本地密钥校验。
+- assertVisible:
+    id: key:doImport
+- tapOn:
+    id: key:doImport
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- extendedWaitUntil:
+    visible:
+      id: key:error
+    timeout: 10000
+- tapOn:
+    id: header:back
+# iOS 的测试口令可能触发系统保存提示；拒绝保存，不让系统弹窗挡住后续步骤。
+- runFlow:
+    when:
+      platform: iOS
+      visible: '^(以后|Not Now)$'
+    commands:
+      - tapOn: '^(以后|Not Now)$'
+# 长任务表单：在上方填写时底部的保存也必须位于键盘上方。
+- scrollUntilVisible:
+    element:
+      id: devices:tasks
+    direction: UP
+- tapOn:
+    id: devices:tasks
+- tapOn:
+    id: tasks:new
+- tapOn:
+    id: task:name
+- inputText: Keyboard form task
+- tapOn:
+    id: task:prompt
+- inputText: Keyboard form prompt
+- assertVisible:
+    id: task:save
+- tapOn:
+    id: task:save
+- extendedWaitUntil:
+    visible:
+      id: task:detail:schedule
+    timeout: 10000

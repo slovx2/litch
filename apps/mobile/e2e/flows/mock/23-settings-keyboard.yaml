@@ -1,0 +1,94 @@
+appId: dev.litch.app
+name: mock-设备设置工作区与配对表单键盘
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- tapOn:
+    id: device:local:more
+- tapOn:
+    id: menu:detail
+- scrollUntilVisible:
+    element:
+      id: manage:group:terminal:fold
+- tapOn:
+    id: manage:group:terminal:fold
+- scrollUntilVisible:
+    element:
+      id: setting:terminal.scrollback
+- tapOn:
+    id: setting:terminal.scrollback
+- eraseText: 20
+- inputText: '20000'
+- assertVisible:
+    id: header:back
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      id: manage:group:terminal:save
+- tapOn:
+    id: manage:group:terminal:save
+- tapOn:
+    id: header:back
+- tapOn:
+    id: device:local
+- tapOn:
+    id: sessions:more
+- tapOn:
+    id: menu:screen:addWorkspace
+- tapOn:
+    id: path-picker:directory
+- tapOn:
+    id: path-picker:path
+- eraseText: 20
+- inputText: '~'
+- tapOn: '^(Go|前往)$'
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      id: path-picker:select
+- tapOn:
+    id: path-picker:select
+- extendedWaitUntil:
+    notVisible:
+      id: path-picker:path
+    timeout: 10000
+- tapOn:
+    id: workspace:root
+- eraseText: 40
+- inputText: /tmp/keyboard-workspace
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- tapOn:
+    id: workspace:name
+- inputText: Keyboard workspace
+- assertVisible:
+    id: workspace:ok
+- tapOn:
+    id: workspace:ok
+- extendedWaitUntil:
+    notVisible:
+      id: workspace:name
+    timeout: 10000
+- tapOn:
+    id: header:back
+- tapOn:
+    id: devices:add
+- tapOn:
+    id: add:pair
+- scrollUntilVisible:
+    element:
+      id: pair:paste
+- tapOn:
+    id: pair:paste
+- inputText: invalid-keyboard-pairing
+- assertVisible:
+    id: pair:paste:go
+- tapOn:
+    id: pair:paste:go
+- assertNotVisible:
+    id: keyboard:done
+- assertVisible:
+    id: pair:paste

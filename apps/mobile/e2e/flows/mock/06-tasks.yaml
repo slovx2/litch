@@ -36,7 +36,8 @@ tags: [mock]
     visible:
       id: task:said
     timeout: 10000
-- back
+- tapOn:
+    id: header:back
 # 新建：名字、提示词、每周一和周三 08:30，建在默认的项目里
 - tapOn:
     id: tasks:new
@@ -51,7 +52,7 @@ tags: [mock]
     id: task:prompt
 - inputText: say hi
 # 键盘开着时去点表单里的选项不一定点得上（CI 的模拟器上点了“每周”星期那一排却没出来），先收起来
-- hideKeyboard
+- runFlow: ../_shared/dismiss-keyboard.yaml
 - tapOn:
     id: task:type:weekly
 - scrollUntilVisible:
@@ -66,7 +67,7 @@ tags: [mock]
     id: task:time
 - eraseText: 10
 - inputText: '08:30'
-- hideKeyboard
+- runFlow: ../_shared/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       id: task:preview

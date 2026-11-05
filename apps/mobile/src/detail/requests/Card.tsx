@@ -3,10 +3,11 @@
 // 内容多的在里面自己滚，底下那排按钮一直贴着底，输入区不被挤走（和桌面端 Dock 的规矩一样）。
 import type { RequestView } from '@litch/core'
 import { createContext, type ReactNode, useContext, useRef, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { useTheme } from '../../ui/theme'
 
 export interface CardProps<R extends RequestView = RequestView> {
@@ -105,14 +106,15 @@ export function Card({
           </Text>
         ) : null}
       </View>
-      <ScrollView
+      <KeyboardFormScrollView
+        keyboardHandled
         style={styles.body}
         contentContainerStyle={styles.bodyIn}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
       >
         {children}
-      </ScrollView>
+      </KeyboardFormScrollView>
       <View style={[styles.actions, { borderTopColor: c.line1 }]}>{actions}</View>
       {error || waiting > 0 ? (
         <View style={styles.foot}>

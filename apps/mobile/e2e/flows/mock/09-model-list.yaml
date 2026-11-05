@@ -77,6 +77,7 @@ tags: [mock]
 - scrollUntilVisible:
     element:
       id: hc:model:o5-pro
+    centerElement: true
 - tapOn:
     id: hc:model:o5-pro
 - tapOn:
@@ -87,6 +88,7 @@ tags: [mock]
 - scrollUntilVisible:
     element:
       id: hc:model:gpt-5.4
+    centerElement: true
 - tapOn:
     id: hc:model:gpt-5.4
 - tapOn:
@@ -95,6 +97,7 @@ tags: [mock]
 - scrollUntilVisible:
     element:
       id: hc:models:add
+    centerElement: true
 - tapOn:
     id: hc:models:add
 - extendedWaitUntil:
@@ -115,21 +118,21 @@ tags: [mock]
 - scrollUntilVisible:
     element:
       id: hc:modelForm:id
+    centerElement: true
 - tapOn:
     id: hc:modelForm:id
 - eraseText: 20
 - inputText: team-long
-- hideKeyboard
+- runFlow: ../_shared/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       id: hc:modelForm:window
+    centerElement: true
 - tapOn:
     id: hc:modelForm:window
 - inputText: 1M
-- hideKeyboard
-- scrollUntilVisible:
-    element:
-      id: hc:modelForm:done
+- assertVisible:
+    id: hc:modelForm:done
 - tapOn:
     id: hc:modelForm:done
 - scrollUntilVisible:

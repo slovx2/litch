@@ -1,11 +1,12 @@
 // 浮层：底部动作单（长按一行出来的菜单）、确认框、单行输入框（改名）。都用 RN 自带的 Modal，
 // 系统返回键关掉。系统的 Alert 样式改不了、也不跟主题，所以不用它。
 import { type ReactNode, useEffect, useState } from 'react'
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useT } from '../i18n'
 import { useTheme } from '../theme'
 import { Button, sectionFont } from './controls'
+import { KeyboardFormScrollView } from './KeyboardForm'
 import { ModalKeyboardArea } from './ModalKeyboardArea'
 
 export interface SheetAction {
@@ -176,14 +177,13 @@ export function Dialog({
             { backgroundColor: c.raised, borderColor: c.line3, borderRadius: theme.radius.l },
           ]}
         >
-          <ScrollView
+          <KeyboardFormScrollView
             style={styles.dialogScroll}
             contentContainerStyle={styles.dialogBody}
             keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
           >
             {children}
-          </ScrollView>
+          </KeyboardFormScrollView>
         </View>
       </ModalKeyboardArea>
     </Modal>

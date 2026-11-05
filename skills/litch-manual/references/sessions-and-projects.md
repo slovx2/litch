@@ -1,5 +1,15 @@
 # Projects and sessions
 
+## 手机输入与键盘
+
+手机上的看板、设置和长表单会将正在编辑的输入框滚到键盘上方；标题和页签保持原位。添加设备、定时任务与建议任务编辑页的主操作固定在键盘上方，评论、改名和消息编辑弹窗也可直接提交。多行内容超过输入框高度后可在框内滚动。
+
+iOS 可点键盘上方的“完成”收起数字、多行及其他键盘，也可向下拖动表单收起；Android 可滚动表单或使用系统返回键收起。键盘打开时点击表单按钮会直接执行。经理代答后的“重新作答”在独立输入弹窗中编辑。
+
+On mobile, boards, settings and long forms scroll the focused field above the keyboard while keeping page titles and tabs in place. Device, task and proposal forms keep their primary action above the keyboard. Comment, rename and message-edit dialogs can be submitted without hiding the keyboard. Long multiline content scrolls inside its field.
+
+On iOS, tap Done above the keyboard, including numeric and multiline keyboards, or drag the form down to dismiss it. On Android, scroll the form or use the system Back action. Form buttons act on the first tap while the keyboard is open. Overriding a manager's answer opens a separate input dialog.
+
 ## 问题与答复记录
 
 答复问题后，原问题卡会更新为已回答。若答复与问题卡在同一回合紧挨着，答案只显示在卡片里；隔了回合、过程或其他消息时，答复也会在发送的位置显示为“题目 → 回答”，与跨会话消息分别保留。

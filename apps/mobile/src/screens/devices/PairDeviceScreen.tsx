@@ -7,7 +7,6 @@ import { CameraView, useCameraPermissions } from 'expo-camera'
 import * as Clipboard from 'expo-clipboard'
 import { useEffect, useRef, useState } from 'react'
 import { Keyboard, Linking, Platform, StyleSheet, Text, View } from 'react-native'
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { ssh } from '../../../modules/litch-ssh/src'
 import type { RootStackParamList } from '../../nav/routes'
 import { ensureApprovalKey } from '../../platform/approval-key'
@@ -27,6 +26,7 @@ import { tailscaleErrorKey } from '../../platform/tailscale'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Field, SectionLabel } from '../../ui/kit/controls'
+import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { TailscaleChoice } from '../settings/TailscaleChoice'
@@ -168,7 +168,7 @@ export function PairDeviceScreen({ navigation }: Props) {
 
   return (
     <Screen title={t('pair.title')} testID="pair-device">
-      <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" bottomOffset={24}>
+      <KeyboardFormScrollView keyboardShouldPersistTaps="handled">
         {phase.kind === 'scan' ? (
           <>
             <Scanner onText={take} />
@@ -276,7 +276,7 @@ export function PairDeviceScreen({ navigation }: Props) {
             />
           </View>
         ) : null}
-      </KeyboardAwareScrollView>
+      </KeyboardFormScrollView>
     </Screen>
   )
 }

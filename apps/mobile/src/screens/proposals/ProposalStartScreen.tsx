@@ -13,7 +13,6 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useState, useSyncExternalStore } from 'react'
 import { Keyboard, StyleSheet, Switch, Text, View } from 'react-native'
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { EFFORT_TEXT } from '../../../../../packages/ui/src/composer/efforts.ts'
 import {
@@ -35,6 +34,7 @@ import type { RootStackParamList } from '../../nav/routes'
 import { useBusy, useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Chip, Empty, Field, Row } from '../../ui/kit/controls'
+import { KeyboardArea, KeyboardFormFooter, KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Screen } from '../../ui/kit/Screen'
 import { PathPicker } from '../../ui/PathPicker'
 import { useTheme } from '../../ui/theme'
@@ -226,134 +226,138 @@ function StartForm({
       wire={device ? c.wire[device.wire] : undefined}
       testID="proposal-start"
     >
-      <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        <Row title={titleOf(parent, t)} detail={t('proposals.start.from')} />
-        <Row
-          testID="proposal-start:harness"
-          title={`${device?.harnesses.find((entry) => entry.id === fields.harness)?.badge ?? ''}  ${nameOf(fields.harness)}`.trim()}
-          detail={t('tree.dialog.harness')}
-          onPress={() => setPicking('harness')}
-        />
-        {wider ? (
-          <Text style={[styles.note, { color: c.wait }]} testID="proposal-start:wider">
-            {t('tree.spawn.wider', {
-              harness: nameOf(fields.harness),
-              level: t(SANDBOX_LEVEL[wider]),
-            })}
-          </Text>
-        ) : null}
-        <Row
-          testID="proposal-start:model"
-          title={model?.title ?? (fields.model || t('tree.dialog.modelDefault'))}
-          detail={t('tree.dialog.model')}
-          onPress={() => setPicking('model')}
-        />
-        {model && model.efforts.length > 0 ? (
+      <KeyboardArea>
+        <KeyboardFormScrollView>
+          <Row title={titleOf(parent, t)} detail={t('proposals.start.from')} />
           <Row
-            testID="proposal-start:effort"
-            title={fields.effort ? effortName(fields.effort) : t('tree.dialog.modelDefault')}
-            detail={t('tree.dialog.effort')}
-            onPress={() => setPicking('effort')}
+            testID="proposal-start:harness"
+            title={`${device?.harnesses.find((entry) => entry.id === fields.harness)?.badge ?? ''}  ${nameOf(fields.harness)}`.trim()}
+            detail={t('tree.dialog.harness')}
+            onPress={() => setPicking('harness')}
           />
-        ) : null}
-        {workspaces.length > 0 ? (
+          {wider ? (
+            <Text style={[styles.note, { color: c.wait }]} testID="proposal-start:wider">
+              {t('tree.spawn.wider', {
+                harness: nameOf(fields.harness),
+                level: t(SANDBOX_LEVEL[wider]),
+              })}
+            </Text>
+          ) : null}
           <Row
-            testID="proposal-start:workspace"
-            title={workspaceName ?? t('workspace.none')}
-            detail={t('tree.dialog.workspace')}
-            onPress={() => setPicking('workspace')}
+            testID="proposal-start:model"
+            title={model?.title ?? (fields.model || t('tree.dialog.modelDefault'))}
+            detail={t('tree.dialog.model')}
+            onPress={() => setPicking('model')}
           />
-        ) : null}
-        <Row
-          testID="proposal-start:sandbox"
-          title={fields.sandbox ? t(SANDBOX_LEVEL[fields.sandbox]) : t('tree.dialog.sandboxParent')}
-          detail={t('tree.dialog.sandbox')}
-          onPress={() => setPicking('sandbox')}
-        />
-        <View style={styles.fields}>
-          <Field
-            label={t('tree.dialog.cwd')}
-            value={fields.cwd}
-            placeholder={parent.cwd}
-            onChangeText={(cwd) => set({ cwd })}
-            testID="proposal-start:cwd"
-          />
-          <PathPicker
-            deviceId={deviceId}
-            value={fields.cwd || parent.cwd}
-            kind="directory"
-            onPick={(cwd) => set({ cwd })}
-          />
-          <View style={styles.kind}>
-            <Text style={[styles.label, { color: c.ink2 }]}>{t('tree.dialog.kind')}</Text>
-            <View style={styles.chips}>
-              <Chip
-                label={t('tree.dialog.fresh')}
-                on={shownKind === 'fresh'}
-                onPress={() => set({ kind: 'fresh' })}
-                testID="proposal-start:kind:fresh"
-              />
-              <Chip
-                label={t('proposal.fork')}
-                on={shownKind === 'fork'}
-                disabled={!sameHarness}
-                onPress={() => set({ kind: 'fork' })}
-                testID="proposal-start:kind:fork"
-              />
-            </View>
-            {sameHarness ? null : (
-              <Text style={[styles.hint, { color: c.ink3 }]}>{t('tree.dialog.forkOnly')}</Text>
-            )}
-          </View>
-          <Field
-            label={t('tree.dialog.name')}
-            value={fields.title}
-            onChangeText={(title) => set({ title })}
-            autoCorrect
-            testID="proposal-start:title"
-          />
-          <Field
-            label={t('tree.dialog.prompt')}
-            value={fields.prompt}
-            onChangeText={(prompt) => set({ prompt })}
-            multiline
-            autoCorrect
-            testID="proposal-start:prompt"
-          />
-          {shownKind === 'fresh' ? (
-            <Field
-              label={t('tree.dialog.background')}
-              value={fields.background}
-              onChangeText={(background) => set({ background })}
-              placeholder={t('tree.dialog.backgroundHint')}
-              multiline
-              autoCorrect
-              testID="proposal-start:background"
+          {model && model.efforts.length > 0 ? (
+            <Row
+              testID="proposal-start:effort"
+              title={fields.effort ? effortName(fields.effort) : t('tree.dialog.modelDefault')}
+              detail={t('tree.dialog.effort')}
+              onPress={() => setPicking('effort')}
             />
           ) : null}
-        </View>
-        <View style={styles.switchRow}>
-          <Text style={[styles.switchText, { color: c.ink }]}>{t('tree.dialog.wake')}</Text>
-          <Switch
-            testID="proposal-start:wake"
-            value={fields.wake}
-            onValueChange={(wake) => set({ wake })}
+          {workspaces.length > 0 ? (
+            <Row
+              testID="proposal-start:workspace"
+              title={workspaceName ?? t('workspace.none')}
+              detail={t('tree.dialog.workspace')}
+              onPress={() => setPicking('workspace')}
+            />
+          ) : null}
+          <Row
+            testID="proposal-start:sandbox"
+            title={
+              fields.sandbox ? t(SANDBOX_LEVEL[fields.sandbox]) : t('tree.dialog.sandboxParent')
+            }
+            detail={t('tree.dialog.sandbox')}
+            onPress={() => setPicking('sandbox')}
           />
-        </View>
-        <WorktreeSwitch
-          deviceId={deviceId}
-          value={fields.worktree}
-          onChange={(worktree) => set({ worktree })}
-          testID="proposal-start:worktree"
-          inset
-        />
-        {blocked ? (
-          <Text style={[styles.note, { color: c.err }]} testID="proposal-start:blocked">
-            {blocked}
-          </Text>
-        ) : null}
-        {failure ? <Text style={[styles.note, { color: c.err }]}>{failure}</Text> : null}
-        <View style={styles.save}>
+          <View style={styles.fields}>
+            <Field
+              label={t('tree.dialog.cwd')}
+              value={fields.cwd}
+              placeholder={parent.cwd}
+              onChangeText={(cwd) => set({ cwd })}
+              testID="proposal-start:cwd"
+            />
+            <PathPicker
+              deviceId={deviceId}
+              value={fields.cwd || parent.cwd}
+              kind="directory"
+              onPick={(cwd) => set({ cwd })}
+            />
+            <View style={styles.kind}>
+              <Text style={[styles.label, { color: c.ink2 }]}>{t('tree.dialog.kind')}</Text>
+              <View style={styles.chips}>
+                <Chip
+                  label={t('tree.dialog.fresh')}
+                  on={shownKind === 'fresh'}
+                  onPress={() => set({ kind: 'fresh' })}
+                  testID="proposal-start:kind:fresh"
+                />
+                <Chip
+                  label={t('proposal.fork')}
+                  on={shownKind === 'fork'}
+                  disabled={!sameHarness}
+                  onPress={() => set({ kind: 'fork' })}
+                  testID="proposal-start:kind:fork"
+                />
+              </View>
+              {sameHarness ? null : (
+                <Text style={[styles.hint, { color: c.ink3 }]}>{t('tree.dialog.forkOnly')}</Text>
+              )}
+            </View>
+            <Field
+              label={t('tree.dialog.name')}
+              value={fields.title}
+              onChangeText={(title) => set({ title })}
+              autoCorrect
+              testID="proposal-start:title"
+            />
+            <Field
+              label={t('tree.dialog.prompt')}
+              value={fields.prompt}
+              onChangeText={(prompt) => set({ prompt })}
+              multiline
+              autoCorrect
+              testID="proposal-start:prompt"
+            />
+            {shownKind === 'fresh' ? (
+              <Field
+                label={t('tree.dialog.background')}
+                value={fields.background}
+                onChangeText={(background) => set({ background })}
+                placeholder={t('tree.dialog.backgroundHint')}
+                multiline
+                autoCorrect
+                testID="proposal-start:background"
+              />
+            ) : null}
+          </View>
+          <View style={styles.switchRow}>
+            <Text style={[styles.switchText, { color: c.ink }]}>{t('tree.dialog.wake')}</Text>
+            <Switch
+              testID="proposal-start:wake"
+              value={fields.wake}
+              onValueChange={(wake) => set({ wake })}
+            />
+          </View>
+          <WorktreeSwitch
+            deviceId={deviceId}
+            value={fields.worktree}
+            onChange={(worktree) => set({ worktree })}
+            testID="proposal-start:worktree"
+            inset
+          />
+          {blocked ? (
+            <Text style={[styles.note, { color: c.err }]} testID="proposal-start:blocked">
+              {blocked}
+            </Text>
+          ) : null}
+          {failure ? <Text style={[styles.note, { color: c.err }]}>{failure}</Text> : null}
+        </KeyboardFormScrollView>
+        <KeyboardFormFooter>
           <Button
             label={t('proposal.start')}
             testID="proposal-start:go"
@@ -361,8 +365,8 @@ function StartForm({
             disabled={!text || blocked !== null}
             onPress={() => void start()}
           />
-        </View>
-      </KeyboardAwareScrollView>
+        </KeyboardFormFooter>
+      </KeyboardArea>
       <PickerSheet
         visible={picker !== null}
         title={picker?.title ?? ''}
@@ -392,5 +396,4 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   switchText: { fontSize: 15, flex: 1 },
-  save: { padding: 16 },
 })

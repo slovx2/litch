@@ -6,14 +6,15 @@ import {
   Modal,
   PanResponder,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from 'react-native'
+import type { KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useT } from '../../ui/i18n'
+import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { ModalKeyboardArea } from '../../ui/kit/ModalKeyboardArea'
 import { useTheme } from '../../ui/theme'
 
@@ -57,7 +58,7 @@ export function DiscussionDrawer({
   const { height } = useWindowDimensions()
   const [full, setFull] = useState(false)
   const [drag, setDrag] = useState(0)
-  const scroll = useRef<ScrollView>(null)
+  const scroll = useRef<KeyboardAwareScrollViewRef>(null)
   // 手势回调只建一次，读最新的档位和关闭函数用 ref
   const state = useRef({ full, onClose })
   state.current = { full, onClose }
@@ -160,7 +161,7 @@ export function DiscussionDrawer({
               <Text style={{ color: c.ink2, fontSize: font.size.body }}>✕</Text>
             </Pressable>
           </View>
-          <ScrollView
+          <KeyboardFormScrollView
             ref={scroll}
             style={styles.fill}
             contentContainerStyle={styles.body}
@@ -171,7 +172,7 @@ export function DiscussionDrawer({
             }}
           >
             {children}
-          </ScrollView>
+          </KeyboardFormScrollView>
           {footer ? <View style={[styles.foot, { borderTopColor: c.line1 }]}>{footer}</View> : null}
         </View>
       </ModalKeyboardArea>

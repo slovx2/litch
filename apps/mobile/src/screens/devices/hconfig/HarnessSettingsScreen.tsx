@@ -8,12 +8,13 @@ import type { DeviceView } from '@litch/core'
 import { keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useEffect, useRef, useState } from 'react'
-import { ScrollView, StyleSheet, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 import { whyNot } from '../../../../../../packages/ui/src/app/errors.ts'
 import type { RootStackParamList } from '../../../nav/routes'
 import { useChannel, useKey } from '../../../shell/services'
 import { useT } from '../../../ui/i18n'
 import { Button, Chip } from '../../../ui/kit/controls'
+import { KeyboardArea, KeyboardFormScrollView } from '../../../ui/kit/KeyboardForm'
 import { Confirm } from '../../../ui/kit/overlays'
 import { Screen } from '../../../ui/kit/Screen'
 import { useTheme } from '../../../ui/theme'
@@ -69,9 +70,9 @@ export function HarnessSettingsScreen({ route, navigation }: Props) {
   let body = null
   if (shown === 'runtime' && device) {
     body = (
-      <ScrollView>
+      <KeyboardFormScrollView>
         <ManageSection device={device} harnessId={harnessId} />
-      </ScrollView>
+      </KeyboardFormScrollView>
     )
   } else if (ready) {
     body =
@@ -133,9 +134,9 @@ export function HarnessSettingsScreen({ route, navigation }: Props) {
           </View>
         </>
       ) : null}
-      <View style={styles.fill}>
+      <KeyboardArea>
         <LeaveScope guards={guards}>{body}</LeaveScope>
-      </View>
+      </KeyboardArea>
       {dialog}
     </Screen>
   )

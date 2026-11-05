@@ -3,13 +3,14 @@
 import { type DeviceView, keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import type { RootStackParamList } from '../../nav/routes'
 import { keyInfo } from '../../platform/keys'
 import { knownHost } from '../../platform/known-hosts'
 import { useChannel, useKey } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
 import { Button, Empty, Row, SectionLabel } from '../../ui/kit/controls'
+import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Prompt } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
@@ -97,7 +98,7 @@ export function DeviceDetailScreen({ route, navigation }: Props) {
       wire={theme.c.wire[device.wire]}
       testID="device-detail"
     >
-      <ScrollView keyboardShouldPersistTaps="handled">
+      <KeyboardFormScrollView>
         <SectionLabel>{t('devices.detail.connection')}</SectionLabel>
         {target ? (
           <TailscaleChoice
@@ -201,7 +202,7 @@ export function DeviceDetailScreen({ route, navigation }: Props) {
             />
           </View>
         ) : null}
-      </ScrollView>
+      </KeyboardFormScrollView>
       {trust.dialog}
       <Prompt
         visible={renaming}

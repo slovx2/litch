@@ -33,6 +33,7 @@ import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Chip, Row, SectionLabel } from '../../ui/kit/controls'
+import { useKeyboardAccessoryHeight } from '../../ui/kit/KeyboardForm'
 import { Prompt } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
@@ -60,8 +61,9 @@ export function NewSessionScreen({ navigation, route }: Props) {
   const channel = useChannel()
   const t = useT()
   const insets = useSafeAreaInsets()
+  const accessory = useKeyboardAccessoryHeight()
   const keyboard = useKeyboardState((state) => (state.isVisible ? state.height : 0))
-  const lifted = keyboard > 0 ? keyboard - insets.bottom : 0
+  const lifted = keyboard > 0 ? keyboard - insets.bottom + accessory : 0
   const { c, font } = useTheme()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId))
@@ -252,7 +254,10 @@ export function NewSessionScreen({ navigation, route }: Props) {
       {/* 和详情页同一个做法：整块跟着键盘在 UI 线程上平移，移出去的那一截裁在标题栏下沿；
           键盘开着时选项上面垫出同样高，翻到顶还看得全 */}
       <View style={styles.clip}>
-        <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }} style={styles.body}>
+        <KeyboardStickyView
+          offset={{ closed: 0, opened: insets.bottom - accessory }}
+          style={styles.body}
+        >
           <ScrollView
             style={styles.body}
             contentContainerStyle={{ paddingTop: lifted }}

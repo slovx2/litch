@@ -4,10 +4,10 @@
 import type { HarnessConfigTopicView, HcProvider } from '@litch/core'
 import { useState } from 'react'
 import { StyleSheet, TextInput, View } from 'react-native'
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { useChannel } from '../../../shell/services'
 import { useT } from '../../../ui/i18n'
 import { Button, Chip } from '../../../ui/kit/controls'
+import { KeyboardFormScrollView } from '../../../ui/kit/KeyboardForm'
 import { useTheme } from '../../../ui/theme'
 import { AcpAccounts } from './AcpAccounts'
 import { CustomForm } from './CustomForm'
@@ -50,7 +50,7 @@ export function AccountsTab({
   }
   if (custom) {
     return (
-      <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" bottomOffset={24}>
+      <KeyboardFormScrollView keyboardShouldPersistTaps="handled">
         <CustomForm
           deviceId={deviceId}
           harnessId={harnessId}
@@ -58,7 +58,7 @@ export function AccountsTab({
           provider={custom.provider}
           onClose={() => setCustom(null)}
         />
-      </KeyboardAwareScrollView>
+      </KeyboardFormScrollView>
     )
   }
   const { primary, others, folded, shown } = splitProviders(
@@ -79,11 +79,7 @@ export function AccountsTab({
     />
   )
   return (
-    <KeyboardAwareScrollView
-      keyboardShouldPersistTaps="handled"
-      bottomOffset={24}
-      testID="hc:tab:accounts"
-    >
+    <KeyboardFormScrollView keyboardShouldPersistTaps="handled" testID="hc:tab:accounts">
       <Note text={t(data.switchable ? 'hc.accounts.note.switch' : 'hc.accounts.note')} tone="dim" />
       {primary.map(card)}
       {folded ? null : others.map(card)}
@@ -143,7 +139,7 @@ export function AccountsTab({
           />
         </View>
       ) : null}
-    </KeyboardAwareScrollView>
+    </KeyboardFormScrollView>
   )
 }
 

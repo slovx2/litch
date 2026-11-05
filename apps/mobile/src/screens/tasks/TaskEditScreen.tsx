@@ -6,7 +6,6 @@ import { type DeviceView, keys, type TaskView } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useState } from 'react'
 import { Keyboard, StyleSheet, Switch, Text, View } from 'react-native'
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { viewerZone } from '../../../../../packages/ui/src/tasks/describe.ts'
 import {
@@ -24,6 +23,7 @@ import type { RootStackParamList } from '../../nav/routes'
 import { useBusy, useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Empty, Field, Row, SectionLabel } from '../../ui/kit/controls'
+import { KeyboardArea, KeyboardFormFooter, KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { useNow } from '../sessions/clock'
@@ -148,74 +148,76 @@ export function TaskEditScreen({ route, navigation }: Props) {
       wire={device ? c.wire[device.wire] : undefined}
       testID="task-edit"
     >
-      <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        {!editing ? (
-          <Row
-            testID="task:device"
-            title={deviceName}
-            detail={t('tasks.form.device')}
-            onPress={pickDevice}
-          />
-        ) : null}
-        <View style={styles.fields}>
-          <Field
-            label={t('tasks.form.name')}
-            value={form.name}
-            placeholder={t('tasks.form.namePlaceholder')}
-            onChangeText={(name) => patch({ name })}
-            maxLength={NAME_MAX}
-            error={shown('name')}
-            testID="task:name"
-          />
-          <Field
-            label={t('tasks.form.prompt')}
-            value={form.prompt}
-            placeholder={t('tasks.form.promptPlaceholder')}
-            onChangeText={(prompt) => patch({ prompt })}
-            multiline
-            autoCorrect
-            error={shown('prompt')}
-            testID="task:prompt"
-          />
-        </View>
-        <SectionLabel>{t('tasks.form.schedule')}</SectionLabel>
-        <ScheduleFields
-          form={form}
-          onChange={patch}
-          problems={problems}
-          localZone={here}
-          deviceZone={deviceZone}
-          originalZone={start?.timezone ?? null}
-          editing={editing}
-          preview={preview}
-          now={now}
-        />
-        <SectionLabel>{t('tasks.form.target')}</SectionLabel>
-        <TargetFields
-          deviceId={deviceId}
-          form={form}
-          model={model}
-          locked={editing}
-          problem={tried && targetProblem ? t(targetProblem) : undefined}
-          onChange={patch}
-        />
-        {!editing ? (
-          <View style={styles.switchRow}>
-            <Text style={[styles.switchText, { color: c.ink }]}>{t('tasks.form.paused')}</Text>
-            <Switch
-              testID="task:paused"
-              value={form.paused}
-              onValueChange={(paused) => patch({ paused })}
+      <KeyboardArea>
+        <KeyboardFormScrollView>
+          {!editing ? (
+            <Row
+              testID="task:device"
+              title={deviceName}
+              detail={t('tasks.form.device')}
+              onPress={pickDevice}
+            />
+          ) : null}
+          <View style={styles.fields}>
+            <Field
+              label={t('tasks.form.name')}
+              value={form.name}
+              placeholder={t('tasks.form.namePlaceholder')}
+              onChangeText={(name) => patch({ name })}
+              maxLength={NAME_MAX}
+              error={shown('name')}
+              testID="task:name"
+            />
+            <Field
+              label={t('tasks.form.prompt')}
+              value={form.prompt}
+              placeholder={t('tasks.form.promptPlaceholder')}
+              onChangeText={(prompt) => patch({ prompt })}
+              multiline
+              autoCorrect
+              error={shown('prompt')}
+              testID="task:prompt"
             />
           </View>
-        ) : null}
-        {blocked ? <Text style={[styles.note, { color: c.err }]}>{blocked}</Text> : null}
-        {said && said !== blocked ? (
-          <Text testID="task:edit:said" style={[styles.note, { color: c.err }]}>
-            {said}
-          </Text>
-        ) : null}
-        <View style={styles.save}>
+          <SectionLabel>{t('tasks.form.schedule')}</SectionLabel>
+          <ScheduleFields
+            form={form}
+            onChange={patch}
+            problems={problems}
+            localZone={here}
+            deviceZone={deviceZone}
+            originalZone={start?.timezone ?? null}
+            editing={editing}
+            preview={preview}
+            now={now}
+          />
+          <SectionLabel>{t('tasks.form.target')}</SectionLabel>
+          <TargetFields
+            deviceId={deviceId}
+            form={form}
+            model={model}
+            locked={editing}
+            problem={tried && targetProblem ? t(targetProblem) : undefined}
+            onChange={patch}
+          />
+          {!editing ? (
+            <View style={styles.switchRow}>
+              <Text style={[styles.switchText, { color: c.ink }]}>{t('tasks.form.paused')}</Text>
+              <Switch
+                testID="task:paused"
+                value={form.paused}
+                onValueChange={(paused) => patch({ paused })}
+              />
+            </View>
+          ) : null}
+          {blocked ? <Text style={[styles.note, { color: c.err }]}>{blocked}</Text> : null}
+          {said && said !== blocked ? (
+            <Text testID="task:edit:said" style={[styles.note, { color: c.err }]}>
+              {said}
+            </Text>
+          ) : null}
+        </KeyboardFormScrollView>
+        <KeyboardFormFooter>
           <Button
             label={t(editing ? 'tasks.form.save' : 'tasks.form.create')}
             testID="task:save"
@@ -223,8 +225,8 @@ export function TaskEditScreen({ route, navigation }: Props) {
             disabled={blocked !== null}
             onPress={() => void save()}
           />
-        </View>
-      </KeyboardAwareScrollView>
+        </KeyboardFormFooter>
+      </KeyboardArea>
       <PickerSheet
         visible={picking !== null}
         title={t('tasks.form.device')}
@@ -266,5 +268,4 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   switchText: { fontSize: 15, flex: 1 },
-  save: { padding: 16, paddingBottom: 48 },
 })
