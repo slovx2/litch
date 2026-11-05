@@ -142,6 +142,27 @@ test('手机状态在气泡左边一窄列里，不在气泡里也不另起一�
   }
 })
 
+test('手机长用户消息保留全文，多空行和分隔线不触发行数截断', async () => {
+  const render = await component(
+    new URL('../../../apps/mobile/src/detail/cells.tsx', import.meta.url).pathname,
+    'UserCell',
+  )
+  for (const text of [
+    '较长的用户消息。'.repeat(200),
+    Array.from({ length: 20 }, () => '一段文字\n\n\n').join(''),
+    Array.from({ length: 10 }, () => '**问题**\n\n1. 保留全文\n-------\n').join(''),
+  ]) {
+    const tree = render({ row: { text, attachments: [] } })
+    const body = nodes(tree).find((node) => node.props?.text === text)
+    assert.ok(body, '正文完整传给提及渲染器，不切片或解析 Markdown')
+    const paragraph = nodes(tree).find((node) => node.type === 'Text' && nodes(node).includes(body))
+    assert.ok(paragraph)
+    assert.equal(paragraph.props.numberOfLines, undefined)
+    assert.equal(paragraph.props.ellipsizeMode, undefined)
+    assert.ok(paragraph.props.style.every((style) => style?.maxHeight === undefined))
+  }
+})
+
 test('手机交付记号：已发送不画；其余只画记号，读屏名称和点一下的说明是整句', async () => {
   const render = await component(
     new URL('../../../apps/mobile/src/detail/DeliveryMark.tsx', import.meta.url).pathname,

@@ -274,12 +274,9 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-/* 超过 20 行先收起来 */
+/* 限高只作用在外框，内层保持完整高度供 ResizeObserver 测量。 */
 .umsg-text.clamp {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 20;
-  line-clamp: 20;
+  max-height: 20lh;
   overflow: hidden;
 }
 .atts {
