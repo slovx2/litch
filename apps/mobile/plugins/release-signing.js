@@ -44,6 +44,12 @@ module.exports = function releaseSigning(config) {
       releaseUse,
       "$1signingConfig System.getenv('LITCH_ANDROID_KEYSTORE') ? signingConfigs.release : signingConfigs.debug",
     )
+    // 构建档位会内联进 JS；只切环境变量也必须重新打包，不能沿用另一档的 Hermes 产物。
+    text += `
+tasks.withType(com.facebook.react.tasks.BundleHermesCTask).configureEach {
+    inputs.property('litchE2E', providers.environmentVariable('EXPO_PUBLIC_LITCH_E2E').orElse('0'))
+}
+`
     gradle.modResults.contents = text
     return gradle
   })

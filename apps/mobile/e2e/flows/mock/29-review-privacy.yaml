@@ -47,6 +47,10 @@ tags: [mock, privacy]
 - assertVisible:
     id: user-message
 - openLink: 'litch://home'
+- extendedWaitUntil:
+    visible:
+      id: devices:settings
+    timeout: 10000
 - tapOn:
     id: devices:settings
 - scrollUntilVisible:
@@ -56,8 +60,16 @@ tags: [mock, privacy]
     id: settings:withdraw-consent
 - tapOn:
     id: confirm:ok
+- extendedWaitUntil:
+    notVisible:
+      id: confirm:ok
+    timeout: 10000
 - tapOn:
     id: header:back
+- extendedWaitUntil:
+    visible:
+      id: devices:settings
+    timeout: 10000
 - openLink: 'litch://new?device=local&prompt=consent-after-withdrawal'
 - extendedWaitUntil:
     visible:
@@ -68,6 +80,10 @@ tags: [mock, privacy]
       id: ai-consent:cancel
 - tapOn:
     id: ai-consent:cancel
+- extendedWaitUntil:
+    visible:
+      id: devices:settings
+    timeout: 10000
 - tapOn:
     id: devices:settings
 - scrollUntilVisible:
