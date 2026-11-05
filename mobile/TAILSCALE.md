@@ -56,6 +56,8 @@ Android 原生实现用 Keystore AES-256-GCM、每次随机 IV、固定 AAD 和 
 
 构建时运行 `node mobile/licenses.mjs <资源目录>/go-third-party.txt`，把生成的第三方完整
 许可随原生应用分发。Android 已接入 assets；iOS 桥的资源配置也须包含此文件。
+脚本会自行下载 `go.mod` 锁定的 `golang.org/x/mobile` 绑定运行时，再收集两平台的依赖许可，
+空模块缓存也可独立执行，不要求 Android 或 iOS 的 gomobile 编译先运行。
 
 `go test -race ./...` 使用临时目录、本地控制面与 DERP 验证真实 netstack、SSH 私钥和
 主机指纹校验及停止取消；不使用账户。真实控制服务器登录、平台网络切换仍需单独验收。
