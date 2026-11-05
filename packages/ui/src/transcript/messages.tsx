@@ -11,7 +11,7 @@ import {
   type UserAttachment,
   type UserMessageItem,
 } from '@litch/core'
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { ImageViewer } from '../app/ImageViewer.tsx'
 import { Icon } from '../app/icons.tsx'
@@ -27,12 +27,12 @@ import { Markdown } from './Markdown.tsx'
 import { MessageCopy } from './MessageCopy.tsx'
 import { MessageEdit } from './MessageEdit.tsx'
 import { PeerHead, PeerTag } from './PeerHead.tsx'
-import { MentionedText } from './SessionMentions.tsx'
 import { SystemCard } from './SystemCard.tsx'
 import { usePin } from './scroll.ts'
 import { SearchCodeContext } from './search/context.ts'
 import { useSmoothText, useToggle } from './state.ts'
 import { TurnActions } from './TurnActions.tsx'
+import { UserText } from './UserText.tsx'
 
 export interface ItemRef {
   deviceId: string
@@ -116,10 +116,8 @@ export const UserMessage = memo(function UserMessage({
 }: UserMessageProps) {
   const item = useItem<UserMessageItem>(ref)
   const [open, setOpen] = useToggle(sessionKeyOf(ref), `u:${ref.itemId}`, false)
-  const [long, setLong] = useState(false)
   /** 在原消息上编辑（MessageEdit.tsx）：气泡换成编辑框 */
   const [editing, setEditing] = useState(false)
-  const body = useRef<HTMLDivElement | null>(null)
   const bubble = useRef<HTMLDivElement | null>(null)
   const pin = usePin()
   const t = useT()
@@ -136,18 +134,6 @@ export const UserMessage = memo(function UserMessage({
   // 开头带着评论的：评论画成卡片，下面只出打的字
   const comments = replies || peer ? null : commentsOf(said)
   const text = comments ? comments.rest : said
-
-  // 是不是超过了 20 行，要画出来才知道，而且跟宽度有关：盯着这块文字的尺寸，变了就重新量
-  const hasText = text !== ''
-  useEffect(() => {
-    const element = body.current
-    if (!element || open || !hasText) return
-    const measure = () => setLong(element.scrollHeight > element.clientHeight + 1)
-    // ResizeObserver 首次观察也会回调；挂载时不逐条强制同步排版。
-    const observer = new ResizeObserver(measure)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [hasText, open])
 
   if (item?.kind !== 'userMessage') return null
   if (editing && turnId)
@@ -236,21 +222,16 @@ export const UserMessage = memo(function UserMessage({
         {replies ? (
           <AskReplyBody replies={replies} deviceId={ref.deviceId} sessionId={ref.sessionId} />
         ) : text ? (
-          <div className={open ? 'umsg-text' : 'umsg-text clamp'} ref={body}>
-            <MentionedText deviceId={ref.deviceId} text={text} sessions={item.sessions} />
-          </div>
-        ) : null}
-        {long ? (
-          <button
-            type="button"
-            className="mini"
-            onClick={() => {
+          <UserText
+            deviceId={ref.deviceId}
+            text={text}
+            sessions={item.sessions}
+            open={open}
+            onToggle={() => {
               pin(bubble.current)
               setOpen(!open)
             }}
-          >
-            {t(open ? 'message.collapse' : 'message.expand')}
-          </button>
+          />
         ) : null}
         {/* 交付状态（排队、停止待发、状态待确认）：气泡左边一个小图标，不占一行；说明在悬停提示和读屏名称里。
             已发送不显示 */}
