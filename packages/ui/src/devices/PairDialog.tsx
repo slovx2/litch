@@ -1,9 +1,9 @@
 // “在手机上使用…”的出码对话框（12 号设计第八节）：一打开就出码（核心一步做完设备上的配对、主机钥匙核对、自检），
-// 左边是二维码、倒计时和“复制配对文本”，右边是给手机用的地址四项（预填记住的或原配置，可改，改了二维码当场换，
+// 左边是二维码、倒计时和“复制配对文本”，右边是给手机用的地址四项（预填记住的或原配置，可改，改了地址先隐藏旧码并重新检查，
 // 旁边写着原配置、可一键恢复，改过的按设备记住）和状态一行：等扫码 → 手机“名字”请求绑定（确认码、允许、拒绝）→ 已绑定。
 // 码到期自动作废、重新出一张；关掉对话框时没用完的码作废掉。出不了码时按原因说人话，自检这类把 ssh 的原话摆出来。
 // 方式（一次性钥匙或 Tailscale，12 号设计第七之四节）由核心按手机要连的地址认：改了主机、端口时重新认一次，
-// 方式变了就换一张码；Tailscale 方式多一段说明（手机要装 Tailscale、ACL 说了算、撤销拦不住）。
+// 地址变化就换一张码并重新核对钥匙；Tailscale 方式多一段说明（手机要装 Tailscale、ACL 说了算、撤销拦不住）。
 // 设备报了 tailnet 时主机旁边有个下拉，在 tailnet IP、MagicDNS 全名、短名之间换（核心预填的是 IP）。
 import {
   type ChannelError,
@@ -38,7 +38,6 @@ import {
   finalState,
   HOST_KIND_LABEL,
   hostKind,
-  redetects,
   refreshes,
   sameAddress,
   showsSaid,
@@ -79,6 +78,7 @@ const payloadText = (pairing: PairingView, address: PairingAddress): string =>
 interface StartOptions {
   mode?: PairMode
   address?: PairingTarget
+  hostKeyConfirmation?: string
 }
 
 /** 一秒走一下的钟：倒计时要它 */
@@ -114,7 +114,7 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
   /** 预填只用在第一张码上：之后换码不再盖掉用户改过的 */
   const firstFill = useRef(prefill)
   /** 现在这张码的方式是按哪个地址认的：表单里的主机、端口和它不一样时重新认 */
-  const probed = useRef<{ host: string; port: number } | null>(null)
+  const probed = useRef<PairingTarget | null>(null)
   /** 换方式、改用 Tailscale 之后再换码（到期、重试）照这一次的来 */
   const lastOptions = useRef<StartOptions>({})
 
@@ -136,8 +136,11 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
   /** 出一张码。换码时先把旧的作废；表单里正在改的地址不动。不给 options 照上一次的 */
   const start = useCallback(
     (options?: StartOptions) => {
-      if (options) lastOptions.current = options
-      const given = lastOptions.current
+      if (options) {
+        const { hostKeyConfirmation: _confirmation, ...rememberedOptions } = options
+        lastOptions.current = rememberedOptions
+      }
+      const given = options ?? lastOptions.current
       const old = live.current
       if (old && !finalState(old.state)) discard(old.pairId)
       live.current = null
@@ -156,7 +159,7 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
           setDraft((was) => was ?? withPrefill(draftOf(next.address), firstFill.current))
           if (remembered.current === null) remembered.current = next.address
           const at = given.address ?? next.address
-          probed.current = { host: at.host, port: at.port }
+          probed.current = { host: at.host, port: at.port, user: at.user }
         },
         (error: unknown) => {
           if (closed.current || mine !== generation.current) return
@@ -198,9 +201,18 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
 
   const checked = draft ? checkDraft(draft) : null
   const address = checked && 'address' in checked ? checked.address : null
+  const verifiedAddress =
+    address &&
+    probed.current &&
+    address.host === probed.current.host &&
+    address.port === probed.current.port &&
+    address.user === probed.current.user
   const text = useMemo(
-    () => (pairing && address ? payloadText(pairing, address) : null),
-    [pairing, address],
+    () =>
+      pairing && address && verifiedAddress && !starting && !failure
+        ? payloadText(pairing, address)
+        : null,
+    [pairing, address, verifiedAddress, starting, failure],
   )
 
   // 改过的地址按设备记下来（停手一会儿再记）；改回原配置就忘掉
@@ -218,23 +230,14 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
     return () => clearTimeout(timer)
   }, [pairing, address, channel, deviceId])
 
-  // 改了主机或端口（停手一会儿）：重新认方式，变了就按新地址换一张码
+  // 主机、端口或用户变化后，重新检查入口钥匙；旧二维码立即隐藏。
   useEffect(() => {
     if (!pairing || !address || starting || finalState(state)) return
-    if (!redetects(probed.current, address)) return
+    if (verifiedAddress) return
     const at = { host: address.host, port: address.port, user: address.user }
-    const timer = setTimeout(() => {
-      probed.current = { host: at.host, port: at.port }
-      channel.command('pairing.detect', { deviceId, host: at.host, port: at.port }).then(
-        ({ mode }) => {
-          if (closed.current || mode === pairing.mode) return
-          start({ mode, address: at })
-        },
-        () => {},
-      )
-    }, REMEMBER_MS)
+    const timer = setTimeout(() => start({ address: at }), REMEMBER_MS)
     return () => clearTimeout(timer)
-  }, [pairing, address, starting, state, channel, deviceId, start])
+  }, [pairing, address, verifiedAddress, starting, state, start])
 
   const decide = (allow: boolean) => {
     if (!pairing) return
@@ -305,6 +308,14 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
               device={device}
               failure={failure}
               onRetry={() => start()}
+              onCancel={onClose}
+              onConfirm={() => {
+                if (failure.pairingHostKey)
+                  start({
+                    ...lastOptions.current,
+                    hostKeyConfirmation: failure.pairingHostKey.token,
+                  })
+              }}
               onTailscale={() => start({ mode: 'tailscale' })}
             />
           ) : (
@@ -386,6 +397,9 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
                     </div>
                   ) : null}
                   <div className="modal-note">{t('pairing.address.note')}</div>
+                  {pairing && !pairing.checked && pairing.mode === 'key' ? (
+                    <div className="modal-note">{t('pairing.tailscale.unchecked')}</div>
+                  ) : null}
                   {pairing?.mode === 'tailscale' ? (
                     <div className="modal-note pair-tailscale" data-pair-mode="tailscale">
                       <div>{t('pairing.tailscale.note', { user: address?.user ?? '' })}</div>
@@ -502,13 +516,58 @@ function Failure({
   failure,
   onRetry,
   onTailscale,
+  onCancel,
+  onConfirm,
 }: {
   device: DeviceView
   failure: ChannelError
   onRetry(): void
   onTailscale(): void
+  onCancel(): void
+  onConfirm(): void
 }) {
   const t = useT()
+  const warning = failure.pairingHostKey
+  if (warning)
+    return (
+      <div className="pair-host-warning" data-pair-host-warning role="alert">
+        <b>{t('pairing.hostKey.title')}</b>
+        <div className="modal-note">{t(`pairing.hostKey.${warning.reason}`)}</div>
+        <div className="modal-note">{t('pairing.hostKey.risk')}</div>
+        <div className="mono pair-fingerprint">{`${warning.address.user}@${warning.address.host}:${warning.address.port}`}</div>
+        {(['reported', 'known', 'entrance'] as const).map((source) => (
+          <div key={source}>
+            <div className="form-label">{t(`pairing.hostKey.${source}`)}</div>
+            {warning[source].length ? (
+              warning[source].map((key) => (
+                <div
+                  key={key.publicKey}
+                  className="mono pair-fingerprint"
+                >{`${key.type} ${key.fingerprint}`}</div>
+              ))
+            ) : (
+              <div className="modal-note">{t('pairing.hostKey.none')}</div>
+            )}
+          </div>
+        ))}
+        <div className="form-label">{t('pairing.hostKey.selected')}</div>
+        <div className="mono pair-fingerprint">{`${warning.selected.type} ${warning.selected.fingerprint}`}</div>
+        <div className="modal-note">{t('pairing.hostKey.once')}</div>
+        <div className="pair-acts">
+          <button type="button" className="btn" data-act="pair-host-cancel" onClick={onCancel}>
+            {t('pairing.hostKey.cancel')}
+          </button>
+          <button
+            type="button"
+            className="btn primary"
+            data-act="pair-host-confirm"
+            onClick={onConfirm}
+          >
+            {t('pairing.hostKey.confirm')}
+          </button>
+        </div>
+      </div>
+    )
   const kind = failureOf(failure)
   const said = failure.message.trim()
   const verifyUrl = kind === 'verify' && /^https?:\/\//.test(said) ? said : null

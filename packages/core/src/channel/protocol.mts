@@ -111,6 +111,7 @@ import type {
 } from '../model-manager.mjs'
 import type {
   PairingAddress,
+  PairingHostKeyWarning,
   PairingTarget,
   PairingTopicView,
   PairingView,
@@ -1217,7 +1218,12 @@ export interface Commands {
    * address 是手机要连的地址（表单里现在的），不给就用记住的或原配置；mode 不给就按这个地址认（pairModeOf）
    */
   'pairing.start': {
-    params: { deviceId: string; address?: PairingTarget; mode?: PairMode }
+    params: {
+      deviceId: string
+      address?: PairingTarget
+      mode?: PairMode
+      hostKeyConfirmation?: string
+    }
     result: { pairing: PairingView }
   }
   /** 手机要连的这个地址该用哪种方式出码（读横幅，读不到时看设备自报）。表单里改了主机、端口时问 */
@@ -1609,16 +1615,18 @@ export interface ChannelErrorShape {
   said?: Bilingual
   /** invalid：哪一项设置 */
   key?: string
+  pairingHostKey?: PairingHostKeyWarning
 }
 
 /** 错误上除了错误码和原因之外可以带的东西 */
-export type ChannelErrorExtra = Pick<ChannelErrorShape, 'said' | 'key'>
+export type ChannelErrorExtra = Pick<ChannelErrorShape, 'said' | 'key' | 'pairingHostKey'>
 
 export class ChannelError extends Error {
   readonly code: ChannelErrorShape['code']
   readonly text: Phrase | undefined
   readonly said: Bilingual | undefined
   readonly key: string | undefined
+  readonly pairingHostKey: PairingHostKeyWarning | undefined
 
   constructor(
     code: ChannelErrorShape['code'],
@@ -1632,6 +1640,7 @@ export class ChannelError extends Error {
     this.text = text
     this.said = extra.said
     this.key = extra.key
+    this.pairingHostKey = extra.pairingHostKey
   }
 
   toShape(): ChannelErrorShape {
@@ -1641,6 +1650,7 @@ export class ChannelError extends Error {
       ...(this.text ? { text: this.text } : {}),
       ...(this.said ? { said: this.said } : {}),
       ...(this.key === undefined ? {} : { key: this.key }),
+      ...(this.pairingHostKey ? { pairingHostKey: this.pairingHostKey } : {}),
     }
   }
 }

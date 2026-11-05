@@ -15,6 +15,7 @@ import {
   detectSshdVersion,
   detectTailnet,
   detectTailscaleSsh,
+  listenerHostKeys,
   readHostKeys,
   windowsAdmin,
 } from './pair-host.mjs'
@@ -55,7 +56,10 @@ function pairingConfig(stateDir: string): PairingConfig {
   const hostKeysDir = defaultHostKeysDir()
   return {
     keysFile: defaultAuthorizedKeys(),
-    hostKeys: () => readHostKeys(hostKeysDir),
+    hostKeys: async (endpoint) => {
+      const listening = endpoint ? await listenerHostKeys(endpoint) : []
+      return listening.length ? listening : readHostKeys(hostKeysDir)
+    },
     adapterCli: adapterCliPath(),
     adapterHome: dirname(stateDir),
     // OpenSSH for Windows 的管理员账号只认 administrators_authorized_keys，改它要管理员权限，第一版不支持

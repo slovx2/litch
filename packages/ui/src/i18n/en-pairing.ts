@@ -3,6 +3,23 @@ import type { Entry } from './types.ts'
 import type { zhPairing } from './zh-CN-pairing.ts'
 
 export const enPairing: Record<keyof typeof zhPairing, Entry> = {
+  'pairing.hostKey.title': 'Confirm host key',
+  'pairing.hostKey.mismatch':
+    'The entry host key differs from the device report or the key saved on this computer.',
+  'pairing.hostKey.unknown': 'This computer has no known host key for this entry.',
+  'pairing.hostKey.unverified':
+    'The host key at the phone’s connection address could not be read directly.',
+  'pairing.hostKey.risk':
+    'A proxy, jump host, or port forward may explain the difference. It could also mean that the phone will connect to another machine. Verify the address and fingerprints before continuing.',
+  'pairing.hostKey.reported': 'Keys reported by the device',
+  'pairing.hostKey.known': 'Known entry keys on this computer',
+  'pairing.hostKey.entrance': 'Entry keys read now',
+  'pairing.hostKey.selected': 'Key used for this QR code and login check',
+  'pairing.hostKey.none': 'Unavailable',
+  'pairing.hostKey.once':
+    'Confirmation applies to this QR code only. It is not saved as a trust setting. A new code or a change of address or keys requires confirmation again.',
+  'pairing.hostKey.cancel': 'Cancel',
+  'pairing.hostKey.confirm': 'Confirm and create code',
   'pairing.use': 'Use on phone…',
   'pairing.title': 'Use {name} on your phone',
   'pairing.intro':

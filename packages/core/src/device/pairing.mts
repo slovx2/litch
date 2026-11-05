@@ -1,9 +1,8 @@
 // 一台设备上的扫码绑定手机（协议扩展 devicePairing）在客户端这一头的样子。
 // 配对和钥匙行都在设备上，核心只是转运，再加上桌面端自己的两道把关：主机钥匙核对、一次性钥匙自检。
 //
-// 出码（start）一步做完：本机先看 127.0.0.1:22 有没有 SSH 服务 → 设备上建配对（litch/pair/start）→
-// ssh 设备拿这台桌面端 known_hosts 里这台主机的记录和设备自报的主机钥匙比（本机直接信设备报的）→
-// 经外壳用系统 ssh 拿一次性钥匙试登一次（不消耗配对）。哪一步没过都把配对作废、删掉一次性钥匙行，再报原因。
+// 出码先核对设备实际监听器、桌面已知记录与手机入口的钥匙。不一致或无法核实时返回一次性确认，
+// 本次用户确认后继续自检；二维码和自检钉住同一把入口钥匙。失败或等待确认时作废设备上的配对。
 // 先读手机要连的地址的 SSH 横幅定方式（pairModeOf）：是 Tailscale SSH 就用 tailscale 方式（设备不写一次性钥匙行，
 // 自检改成用一把临时钥匙登那个地址、执行登记命令）；读不到横幅时按设备自报的 tailscaleSsh 和地址再定一次。
 // 一次性钥匙的自检没过时再看自检连的那个地址是不是 Tailscale SSH，是就直接这样说（失败的 key 是 tailscale）。
@@ -31,6 +30,7 @@ import {
   type PairMode,
   type PairPayload,
   type PairPhone,
+  type PairSshEndpoint,
   type PairStatus,
   type PairTailnet,
   pairModeOf,
@@ -55,14 +55,22 @@ export interface PairingHostAddress {
   user: string
 }
 
+export interface PairHostInspection {
+  known: PairHostKey[]
+  entrance: PairHostKey[]
+  sshEndpoint?: PairSshEndpoint
+}
+
 export interface PairSelfTestInput {
+  /** 手机地址不同于原配置时直接自检此地址；否则保留原配置的跳板和代理。 */
+  address?: PairingTarget
   /** 远程设备的连接配置；本机是 null（连 127.0.0.1:22） */
   target: RemoteTarget | null
   /** 本机用哪个用户登；远程设备按它自己的 ssh 配置，不看这一项 */
   user: string
   /** 一次性私钥的种子（base64url） */
   seed: string
-  /** 设备报的全部主机钥匙：本机写进临时的 known_hosts */
+  /** 本次核对或确认的入口钥匙，写进临时 known_hosts；二维码钉住同一把。 */
   hostKeys: PairHostKey[]
 }
 
@@ -87,6 +95,12 @@ export type PairSelfTestResult = { ok: true } | { ok: false; said: string; verif
 export interface PairingPlatform {
   /** ssh 设备：用 ssh -G 解析出主机名、端口、用户 */
   resolve(target: RemoteTarget): Promise<PairingHostAddress>
+  /** 当前入口的公开钥匙和本次已认证连接的服务端地址，不写 known_hosts。 */
+  inspect(
+    target: RemoteTarget,
+    address: PairingTarget,
+    resolved: PairingHostAddress,
+  ): Promise<PairHostInspection>
   /** ssh 设备：这台桌面端 known_hosts 里这台主机的公钥，每把是“类型 base64”。没有记录是空的 */
   knownKeys(target: RemoteTarget): Promise<string[]>
   /** 本机：127.0.0.1:22 上有没有 SSH 服务（读得到 SSH- 开头的横幅） */
@@ -170,6 +184,7 @@ export interface PairingStartOptions {
   address?: PairingTarget
   /** 不给就按地址认 */
   mode?: PairMode
+  hostKeyConfirmation?: string
 }
 
 export interface Pairing {
@@ -299,6 +314,8 @@ export function createPairing(host: PairingHost): Pairing {
   const pairs = new Map<string, PairStatus>()
   /** 每次断开、重新认对面时换一个代号，在途的结果回来时对不上就作废 */
   let epoch = 0
+  let pendingTrust: { token: string; evidence: string; expiresAt: number; epoch: number } | null =
+    null
 
   const view = (): PairingTopicView => ({
     deviceId,
@@ -455,16 +472,70 @@ export function createPairing(host: PairingHost): Pairing {
     started: DevicePairStartResponse,
     phoneAt: PairingTarget,
     banner: string | null,
+    inspection: PairHostInspection,
+    confirmation: typeof pendingTrust,
   ): Promise<{ original: PairingAddress; checked: boolean }> => {
-    const known = await platform.knownKeys(target)
-    if (!hostKeyTrusted(started.hostKeys, known)) {
-      throw startFailure(
-        'hostKeyMismatch',
-        known.length === 0
-          ? '本机的 known_hosts 中没有该主机的记录'
-          : '本机连接到的主机密钥与该设备自报的不一致',
+    const known = inspection.known.map((key) => key.publicKey)
+    const knownKeys = inspection.known
+    const entrance = inspection.entrance
+    // 手机直连入口；二维码、自检与确认框必须钉住同一把入口钥匙。
+    const candidates = entrance.length ? entrance : knownKeys.length ? knownKeys : started.hostKeys
+    const selected =
+      candidates.find((key) =>
+        hostKeyTrusted(
+          [key],
+          knownKeys.map((entry) => entry.publicKey),
+        ),
+      ) ??
+      candidates[0] ??
+      started.hostKey
+    const trusted =
+      entrance.length > 0 &&
+      hostKeyTrusted([selected], known) &&
+      hostKeyTrusted(
+        [selected],
+        started.hostKeys.map((key) => key.publicKey),
       )
+    if (!trusted) {
+      const reason =
+        known.length === 0
+          ? ('unknown' as const)
+          : entrance.length === 0
+            ? ('unverified' as const)
+            : ('mismatch' as const)
+      const evidence = JSON.stringify({
+        target,
+        phoneAt,
+        mode: started.mode,
+        reported: started.hostKeys.map((key) => key.publicKey).sort(),
+        known: [...known].sort(),
+        entrance: entrance.map((key) => key.publicKey).sort(),
+        selected: selected.publicKey,
+      })
+      if (
+        !confirmation ||
+        confirmation.evidence !== evidence ||
+        confirmation.epoch !== epoch ||
+        confirmation.expiresAt < Date.now()
+      ) {
+        const warning = {
+          token: started.pairId,
+          address: phoneAt,
+          reason,
+          reported: started.hostKeys,
+          known: knownKeys,
+          entrance,
+          selected,
+        }
+        pendingTrust = { token: warning.token, evidence, epoch, expiresAt: Date.now() + 120_000 }
+        throw new ChannelError('rejected', '需要确认本次配对的主机钥匙', undefined, {
+          key: 'hostKeyMismatch',
+          pairingHostKey: warning,
+        })
+      }
     }
+    started.hostKey = selected
+    started.hostKeys = [selected]
     const original = {
       name: target.kind === 'alias' ? target.alias : host.displayName(),
       host: phoneHostOf(resolved.host, started),
@@ -474,17 +545,23 @@ export function createPairing(host: PairingHost): Pairing {
     if (started.mode === 'tailscale') {
       return { original, checked: await vetEnroll(platform, started, phoneAt, banner) }
     }
+    // 桌面端无法直达用户填写的手机地址时，由上面的本次确认决定出码；手机仍严格钉住展示的钥匙。
+    const changedAddress =
+      phoneAt.host !== resolved.host ||
+      phoneAt.port !== resolved.port ||
+      phoneAt.user !== resolved.user
+    if (!trusted && confirmation && changedAddress && banner === null && entrance.length === 0)
+      return { original, checked: false }
     const tested = await platform.selfTest({
       target,
+      ...(changedAddress ? { address: phoneAt } : {}),
       user: resolved.user,
       seed: started.seed,
       hostKeys: started.hostKeys,
     })
     if (tested.ok) return { original, checked: true }
-    // 自检连的是这台桌面端自己的配置：那个地址由 Tailscale SSH 接管时强制命令不生效，直接这样说
-    const same = resolved.host === phoneAt.host && resolved.port === phoneAt.port
-    const at = same ? banner : await platform.banner(resolved.host, resolved.port)
-    if (pairModeOf(at, started.tailscaleSsh === true, resolved.host) === 'tailscale') {
+    // 自检现在连手机的地址；不能用原配置的横幅误报另一个入口的失败。
+    if (pairModeOf(banner, started.tailscaleSsh === true, phoneAt.host) === 'tailscale') {
       throw startFailure('tailscale', tested.said)
     }
     throw startFailure('selfTest', tested.said)
@@ -518,9 +595,15 @@ export function createPairing(host: PairingHost): Pairing {
   }
 
   /** 设备上建一个配对。要 tailscale 方式而设备回的不是，说明设备服务太旧 */
-  const create = async (mode: PairMode | null): Promise<DevicePairStartResponse> => {
+  const create = async (
+    mode: PairMode | null,
+    sshEndpoint?: PairSshEndpoint,
+  ): Promise<DevicePairStartResponse> => {
     const started = await guarded(() =>
-      host.request(DEVICE_PAIR_START, mode === 'tailscale' ? { mode } : {}),
+      host.request(DEVICE_PAIR_START, {
+        ...(mode === 'tailscale' ? { mode } : {}),
+        ...(sshEndpoint ? { sshEndpoint } : {}),
+      }),
     )
     tailscale = started.tailscaleSsh === true
     if (mode === 'tailscale' && started.mode !== 'tailscale') {
@@ -547,6 +630,7 @@ export function createPairing(host: PairingHost): Pairing {
 
     resync() {
       epoch++
+      pendingTrust = null
       loading = null
       available = host.supported()
       phones = null
@@ -561,6 +645,7 @@ export function createPairing(host: PairingHost): Pairing {
 
     offline() {
       epoch++
+      pendingTrust = null
       loading = null
     },
 
@@ -579,6 +664,9 @@ export function createPairing(host: PairingHost): Pairing {
 
     async start(options = {}) {
       reachable()
+      const mine = epoch
+      const confirmation = options.hostKeyConfirmation === pendingTrust?.token ? pendingTrust : null
+      pendingTrust = null
       const { platform } = host
       if (!platform) {
         throw startFailure('unsupported', '此客户端无法生成二维码：没有可调用 ssh 的外壳')
@@ -607,12 +695,15 @@ export function createPairing(host: PairingHost): Pairing {
       if (host.kind === 'local' && mode === 'key' && !(await platform.localSsh())) {
         throw startFailure('sshOff', '127.0.0.1:22 上没有 SSH 服务')
       }
-      let started = await create(mode)
+      const inspection =
+        target && resolved ? await platform.inspect(target, phoneAt ?? resolved, resolved) : null
+      if (mine !== epoch) throw startFailure('offline', '连接已改变，请重新出码')
+      let started = await create(mode, inspection?.sshEndpoint)
       if (mode === null) {
         // 设备开着 Tailscale SSH：换成 tailscale 方式重新建
         if (tailscale === true) {
           discard(started.pairId)
-          started = await create('tailscale')
+          started = await create('tailscale', inspection?.sshEndpoint)
         } else if (host.kind === 'local' && !(await platform.localSsh())) {
           discard(started.pairId)
           throw startFailure('sshOff', '127.0.0.1:22 上没有 SSH 服务')
@@ -625,10 +716,21 @@ export function createPairing(host: PairingHost): Pairing {
         phone: null,
       })
       try {
+        if (mine !== epoch) throw startFailure('offline', '连接已改变，请重新出码')
         const vetted =
-          target && resolved
-            ? await vetRemote(platform, target, resolved, started, phoneAt ?? resolved, banner)
+          target && resolved && inspection
+            ? await vetRemote(
+                platform,
+                target,
+                resolved,
+                started,
+                phoneAt ?? resolved,
+                banner,
+                inspection,
+                confirmation,
+              )
             : await vetLocal(platform, started, phoneAt, banner)
+        if (mine !== epoch) throw startFailure('offline', '连接已改变，请重新出码')
         publish([{ op: 'pair.status', status: pairs.get(started.pairId) as PairStatus }])
         return {
           pairId: started.pairId,

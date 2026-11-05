@@ -25,6 +25,8 @@
     "check:ssh": "npm run build && node scripts/check-ssh.mjs",
     "check:upgrade": "npm run build && node scripts/check-upgrade.mjs",
     "check:pair": "npm run build && node scripts/check-pair.mjs",
+    "test:pair-hostkey": "node scripts/test-pair-hostkey.mjs",
+    "check:pair-hostkey-ui": "node scripts/check-pair-hostkey-ui.mjs",
     "check:client-tools": "npm run build && node scripts/check-client-tools.mjs",
     "check:machine-enable": "node scripts/check-machine-enable.mjs",
     "check:tools:remote": "node scripts/check-tools-remote.mjs",

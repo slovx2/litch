@@ -1418,12 +1418,16 @@ export function createCore(options: CoreOptions): Core {
           return {}
         }
         case 'pairing.start': {
-          const { deviceId, address, mode } = params as Commands['pairing.start']['params']
+          const { deviceId, address, mode, hostKeyConfirmation } =
+            params as Commands['pairing.start']['params']
           const remembered = saved.pairing?.[deviceId]
           const at = address ?? remembered
+          if (at && !checkPairingAddress({ ...at, name: 'pairing' }))
+            throw new ChannelError('invalid', '手机连接地址无效', undefined, { key: 'address' })
           const started = await deviceOf(deviceId).pairing.start({
             ...(at ? { address: { host: at.host, port: at.port, user: at.user } } : {}),
             ...(mode ? { mode } : {}),
+            ...(hostKeyConfirmation ? { hostKeyConfirmation } : {}),
           })
           const pairing: PairingView = {
             deviceId,
@@ -1435,7 +1439,7 @@ export function createCore(options: CoreOptions): Core {
             tailscaleSsh: started.tailscaleSsh,
             expiresAt: started.expiresAt,
             hostKey: started.hostKey,
-            address: remembered ? { ...remembered } : { ...started.original },
+            address: at ? { ...started.original, ...at } : { ...started.original },
             original: started.original,
             hosts: started.hosts,
             approvals: started.approvals,

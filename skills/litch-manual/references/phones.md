@@ -66,7 +66,7 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
   → Remote Login; Windows "OpenSSH Server" optional feature; Linux sshd. That is a system setting the user
   turns on.
 - Litch refuses to create a code (and says why) when `authorized_keys` is a symlink or read-only, sshd
-  does not accept keys, two-factor login is required, or the host key does not match.
+  does not accept keys, two-factor login is required, or the one-time key cannot be authenticated.
 - Windows administrator accounts cannot be paired by QR code yet (their keys live in
   `administrators_authorized_keys`); add the phone's public key there by hand.
 - On a machine without the desktop app, `codex-harness-adapter pair` shows the same QR code in a
@@ -302,3 +302,14 @@ logging in with its own key it enrolls itself; the confirmation code and Allow w
 旋转、分屏收窄或调整窗口尺寸不会重建会话；草稿和阅读位置保留。经理工作台继续用页签切换对话、控制台、工作线和概览。
 外接键盘在消息输入框中按 Enter 发送，Shift+Enter 换行；输入法组合文字和软键盘回车仍按原方式输入。
 手机继续使用单栏导航和原来的方向规则（终端可横屏），不显示平板侧栏。
+
+## 配对主机密钥确认 / Pairing host-key confirmation
+
+桌面端通过本次已认证 SSH 连接取得服务端地址，设备优先探测该地址实际监听的 SSH 密钥，支持另一个 sshd 使用独立 HostKey、容器及端口转发。
+入口密钥与设备自报、本机 known_hosts 不一致，或没有记录、无法直接核实时，会先显示地址、双方及入口的 SHA256 指纹与手机可能连到其他机器的风险。
+用户点击“确认并生成二维码”才继续，取消不出码。确认仅用于这一张码，不修改 known_hosts 或保存全局信任；到期换码、地址或密钥变化后重新确认。
+二维码和一次性钥匙登录检查使用同一把入口密钥。手机仍须能直接访问码中的地址；桌面端的 ProxyJump 不会复制到手机。
+
+The desktop obtains the server address through the current authenticated SSH connection. The device probes that listener’s public keys, including custom sshd HostKey files, containers, and forwarded ports.
+If the entry key differs, is unknown, or cannot be checked directly, Litch shows the address, fingerprints, and risk before creating a code. The user must explicitly confirm this code; cancelling creates no code.
+Confirmation is not saved, does not change known_hosts, and must be repeated for a new code or changed address or keys. The QR code and login check pin the same entry key. The phone must still reach that address directly; desktop ProxyJump settings are not transferred.

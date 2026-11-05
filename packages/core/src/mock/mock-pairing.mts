@@ -280,7 +280,7 @@ export function createMockPairing(host: MockPairingHost): MockPairing {
           tailscaleSsh: chosen === 'tailscale' || tailnetOf(deviceId),
           expiresAt: status.expiresAt,
           hostKey: { ...HOST_KEY },
-          address: state.remembered ? { ...state.remembered } : { ...original },
+          address: { ...original, ...state.remembered, ...address },
           original,
           hosts: tailnetHostsOf(device),
           approvals: true,

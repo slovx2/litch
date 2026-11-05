@@ -31,11 +31,12 @@ import {
   type PairHostKey,
   type PairMode,
   type PairPhoneRequest,
+  type PairSshEndpoint,
   type PairState,
   type PairStatus,
   type PairTailnet,
 } from '../../protocol/src/device-pairing.mjs'
-import { expiryTime, preferredHostKey, type SshdVersion } from './pair-host.mjs'
+import { expiryTime, localSshEndpoint, preferredHostKey, type SshdVersion } from './pair-host.mjs'
 import {
   AuthorizedKeys,
   cleanPhoneName,
@@ -85,7 +86,7 @@ export interface PairingConfig {
   /** authorized_keys 的路径 */
   keysFile: string
   /** 读主机钥匙 */
-  hostKeys(): PairHostKey[]
+  hostKeys(endpoint?: PairSshEndpoint): PairHostKey[] | Promise<PairHostKey[]>
   /** 适配器命令行的路径，一次性钥匙行的强制命令用它。拿不到是空的，这时不支持配对 */
   adapterCli: string
   /** 适配器的状态目录（设备进程的 --state 的上一级），强制命令带着它找设备服务 */
@@ -190,7 +191,7 @@ export class DevicePairing {
     const given = isObject(params) ? params : {}
     switch (method) {
       case DEVICE_PAIR_START:
-        return this.start(modeOf(given.mode))
+        return this.start(modeOf(given.mode), localSshEndpoint(given.sshEndpoint))
       case DEVICE_PAIR_CANCEL:
         this.cancel(pairIdOf(given))
         return {}
@@ -212,7 +213,10 @@ export class DevicePairing {
     }
   }
 
-  private async start(mode: PairMode): Promise<DevicePairStartResponse> {
+  private async start(
+    mode: PairMode,
+    endpoint?: PairSshEndpoint,
+  ): Promise<DevicePairStartResponse> {
     // Tailscale SSH 只在 Linux、macOS 上有；Windows 上要这种方式多半是出码的一方认错了
     if (mode === 'tailscale' && this.windows)
       throw new PairingError(DEVICE_PAIR_ERROR.unsupported, 'Windows 上没有 Tailscale SSH')
@@ -221,7 +225,7 @@ export class DevicePairing {
     } catch (error) {
       throw keysFileError(error)
     }
-    const hostKeys = this.config.hostKeys()
+    const hostKeys = await this.config.hostKeys(endpoint)
     const hostKey = preferredHostKey(hostKeys)
     if (!hostKey) throw new PairingError(DEVICE_PAIR_ERROR.noHostKey, '读不到这台机器的主机钥匙')
     this.version ??= this.config.sshdVersion().catch(() => null)

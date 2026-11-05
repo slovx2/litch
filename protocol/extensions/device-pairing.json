@@ -223,6 +223,23 @@
     "StartParams": {
       "type": "object",
       "properties": {
+        "sshEndpoint": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["host", "port"],
+          "properties": {
+            "keyType": { "type": "string", "enum": ["ssh-ed25519", "ssh-rsa", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521"] },
+            "host": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          },
+          "description": "本次已认证 SSH 连接的服务端地址。设备仅探测本机 IP；成功时使用该监听器的公开钥匙，失败时保留文件读取结果供客户端确认。"
+        },
         "mode": {
           "enum": ["key", "tailscale"]
         }
