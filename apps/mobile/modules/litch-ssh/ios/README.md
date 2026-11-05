@@ -69,6 +69,10 @@ Go 侧关闭日志上传。发布负责人仍须据正式依赖与控制服务�
 
 ## 分发准备
 
+正式 archive/export 脚本为 `apps/mobile/scripts/archive-ios.mjs`；CI 接线、凭据名称、商店文案和
+截图规格见 [`apps/mobile/store/README.md`](../../../store/README.md)。Release 工作流显式启用
+`ios-testflight` 后，仅在同 SHA 候选通过门禁并封存后上传，不自动提交 App Store 审核。
+
 模拟器构建不需要 Apple 证书，但不能交给 iPhone 用户安装。建议先通过 TestFlight 完成真机测试，
 正式长期分发使用 App Store。TestFlight 每个构建最多测试 90 天，支持最多 100 位内部测试者
 和 10,000 位外部测试者；首个外部测试构建需要审核，后续构建也可能需要审核。

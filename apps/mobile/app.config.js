@@ -1,6 +1,12 @@
 // 验收包与用户正式安装并存；深链也隔离，避免测试操作落到正式应用。
-module.exports = ({ config }) =>
-  process.env.LITCH_MOBILE_DEV === '1'
+module.exports = ({ config }) => {
+  // 发布构建号显式传入，重传同一版本时由发布负责人递增。
+  const buildNumber = process.env.LITCH_IOS_BUILD_NUMBER
+  if (buildNumber && !/^[1-9]\d{0,3}(?:\.\d{1,2}){0,2}$/.test(buildNumber)) {
+    throw new Error('LITCH_IOS_BUILD_NUMBER 必须是 Apple 构建号，例如 1.0.1')
+  }
+  if (buildNumber) config = { ...config, ios: { ...config.ios, buildNumber } }
+  return process.env.LITCH_MOBILE_DEV === '1'
     ? {
         ...config,
         name: 'Litch Dev',
@@ -9,3 +15,4 @@ module.exports = ({ config }) =>
         ios: { ...config.ios, bundleIdentifier: 'dev.litch.app.dev' },
       }
     : config
+}

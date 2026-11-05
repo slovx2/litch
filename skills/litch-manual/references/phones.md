@@ -1,5 +1,9 @@
 # Phones (Android and iOS, pairing by QR code)
 
+iOS 手机设置的“关于”提供“隐私政策”和“支持与反馈”，在系统浏览器打开公开页面。
+iOS 的更新由 App Store 或 TestFlight 管理。支持问题通过 GitHub issues 提交；该渠道公开，
+不要附带私钥、验证码、配对二维码或私人会话，隐私请求先询问私密联系方式。
+
 The Litch phone app connects over SSH to the same machines. Instead of copying keys by hand, a
 device the desktop already reaches can be added to the phone by scanning a QR code: the phone creates
 its own key, enrolls it on that machine, and the user confirms a matching code on the computer. The

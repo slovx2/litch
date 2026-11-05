@@ -13,6 +13,9 @@ export const zhCN = {
   'app.fixtureBadge': '测试夹具',
   'app.todo': '此页面尚未完成',
   'app.valued': '{name}：{value}',
+  'app.privacy': '隐私政策',
+  'app.support': '支持与反馈',
+  'app.openLinkFailed': '无法打开网页，请检查网络连接。',
 } satisfies Record<`app.${string}`, Entry>
 
 export const en: Record<keyof typeof zhCN, Entry> = {
@@ -26,4 +29,7 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'app.fixtureBadge': 'Test fixture',
   'app.todo': 'This page isn’t ready yet',
   'app.valued': '{name}: {value}',
+  'app.privacy': 'Privacy policy',
+  'app.support': 'Support',
+  'app.openLinkFailed': 'Could not open the page. Check your connection.',
 }

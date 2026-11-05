@@ -4,7 +4,7 @@
 // 几项里选一项的设置都是一行“名字　现在的值 ›”，点了出单选的选择单（Pick），和“后台断开连接”同一个样子。
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type ReactNode, useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SEND_MODES } from '../../../../../packages/ui/src/composer/send-mode-logic.ts'
 import type { RootStackParamList } from '../../nav/routes'
@@ -94,6 +94,13 @@ export function SettingsScreen({ navigation }: Props) {
   const { c } = theme
   const { prefs, setPrefs, booted } = useServices()
   const insets = useSafeAreaInsets()
+  const [linkError, setLinkError] = useState(false)
+  const openAbout = (page: 'privacy' | 'support') => {
+    setLinkError(false)
+    void Linking.openURL(`https://github.com/slovx2/litch/blob/main/docs/ios-${page}.md`).catch(
+      () => setLinkError(true),
+    )
+  }
   return (
     <Screen title={t('settings.title')} testID="settings">
       <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 32 }]}>
@@ -172,6 +179,21 @@ export function SettingsScreen({ navigation }: Props) {
           <UpdateStatus />
         </View>
         <AutoUpdateSwitch />
+        {Platform.OS === 'ios' ? (
+          <>
+            <Row
+              title={t('app.privacy')}
+              onPress={() => openAbout('privacy')}
+              testID="settings:privacy"
+            />
+            <Row
+              title={t('app.support')}
+              onPress={() => openAbout('support')}
+              testID="settings:support"
+            />
+            {linkError ? <Note>{t('app.openLinkFailed')}</Note> : null}
+          </>
+        ) : null}
 
         <SectionLabel>{t('sessions.settings.dev')}</SectionLabel>
         <Group>

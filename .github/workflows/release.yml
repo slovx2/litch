@@ -25,6 +25,14 @@ on:
         description: 开启bypass-gate时必填，记录本地检查和绕过原因
         type: string
         default: ''
+      ios-testflight:
+        description: 同 SHA 候选通过门禁后签名并上传 TestFlight（不提交 App Store 审核）
+        type: boolean
+        default: false
+      ios-build-number:
+        description: 上传 iOS 时必填且递增，例如 1.0.1
+        type: string
+        default: ''
 permissions:
   contents: read
   actions: read
@@ -475,8 +483,47 @@ jobs:
           path: ${{ runner.temp }}/android
           if-no-files-found: error
 
-  # iOS接入位置：未来独立archive/upload job，并扩展artifactKinds/provenance与seal依赖。
-  # iOS无签名模拟器构建仅在Full；没有IPA、TestFlight或App Store上传。
+  # iOS 经 App Store Connect 分发，不加入 GitHub Release 的五类公开资产。
+  # 首次接入放在 seal 后，禁止绕过 Gate 上传；导出、校验和上传使用同一份 IPA。
+  ios-testflight:
+    needs: [candidate, seal]
+    if: ${{ inputs.ios-testflight && !inputs.bypass-gate && needs.seal.result == 'success' }}
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      LITCH_IOS_BUILD_NUMBER: ${{ inputs.ios-build-number }}
+      LITCH_IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+      CANDIDATE_SHA: ${{ needs.candidate.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.candidate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: mobile/go.mod
+          cache-dependency-path: mobile/go.sum
+      - uses: ruby/setup-ruby@de492cf36cbab201753d720ce4f4e336cd688c94
+        with:
+          ruby-version: 3.4.7
+      - name: 安装锁定的构建依赖
+        run: |
+          npm ci --no-audit --no-fund
+          npm ci --prefix packages/ui --no-audit --no-fund
+          npm ci --prefix apps/mobile --no-audit --no-fund
+          gem install cocoapods --version 1.16.2 --no-document
+      - name: 正式归档、校验 IPA 并上传 TestFlight
+        env:
+          LITCH_ASC_PRIVATE_KEY: ${{ secrets.IOS_ASC_PRIVATE_KEY }}
+          LITCH_ASC_KEY_ID: ${{ secrets.IOS_ASC_KEY_ID }}
+          LITCH_ASC_ISSUER_ID: ${{ secrets.IOS_ASC_ISSUER_ID }}
+          LITCH_IOS_OUTPUT: ${{ runner.temp }}/litch-ios-release
+        run: node scripts/ci/ios-testflight.mjs
+
   seal:
     needs: [candidate, gate, adapter, cha, desktop-macos, desktop-windows, android]
     if: ${{ !cancelled() && needs.candidate.result == 'success' && (needs.gate.result == 'success' || (inputs.bypass-gate && needs.gate.result == 'skipped')) && needs.adapter.result == 'success' && needs.cha.result == 'success' && needs.desktop-macos.result == 'success' && needs.desktop-windows.result == 'success' && needs.android.result == 'success' }}
