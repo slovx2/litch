@@ -78,6 +78,27 @@ try {
           readFileSync(from, 'utf8')
             .replace(/dev\.litch\.app(?!\.dev)/g, 'dev.litch.app.dev')
             .replaceAll('litch://', 'litch-dev://')
+            // 两个开关已完整可见，但靠近列表边界，iOS 倒置列表无法把它们都居中。
+            // 保留 100% 可见与 checked 断言，只取消强制居中。
+            .replace(/^ {4}centerElement: true$/gm, (line) =>
+              entry.name === '15-worktrees.yaml' ? '    centerElement: false' : line,
+            )
+            // 会话行是单个无障碍按钮，分支文字在该行标签中；后续的分支值断言保持原样。
+            .replaceAll('id: session:s5:worktree', 'id: session:s5')
+            // iOS 只暴露整个图像按钮；它仅在 SVG/PNG 生成后启用，不能用仍在绘制的容器充数。
+            .replace(
+              /^( *)id: mermaid-card:image$/gm,
+              (_, indent) => `${indent}id: mermaid-card:open\n${indent}enabled: true`,
+            )
+            // iOS 把可点击 Row 的标题与详情合并；仍严格验证选中的起点控件及完整分支名。
+            .replace(
+              '- assertVisible:\n    text: release/0.18\n',
+              '- assertVisible:\n    id: new:from\n    text: "^(From|起点), release/0\\\\.18$"\n',
+            )
+            .replace(
+              'text: .*(Worktree|工作树)[:：] litch/.*',
+              'text: "(?s).*(Worktree: |工作树：)litch/.*"',
+            )
             // 原生元素点击验证这些动作正常；iOS 滚动结束前的旧坐标会点到相邻控件。
             .replace(
               /^( *)- tapOn:\n\1 {4}id: (hc:attempt:\.\*:code|proposal:e2e-pr1:more|hc:models:add)\n/gm,
@@ -106,6 +127,11 @@ try {
                 '    commands:\n      - tapOn: "允许粘贴|Allow Paste"',
             )
             // iOS 没有系统返回键，用同一个页面的返回或关闭按钮。
+            .replace('- back\n- back\n', (steps) =>
+              entry.name === '15-worktrees.yaml'
+                ? '- tapOn:\n    id: worktree:scrim\n- back\n'
+                : steps,
+            )
             .replace(
               /^( *)- back$/gm,
               (_, indent) =>
@@ -200,10 +226,27 @@ try {
         JAVA_TOOL_OPTIONS: `${process.env.JAVA_TOOL_OPTIONS ?? ''} -Djava.net.preferIPv4Stack=true`,
       },
     })
-    const code = await new Promise((resolve, reject) => {
-      child.on('error', reject)
-      child.on('exit', resolve)
+    const running = child
+    let expired = false
+    let force
+    // 驱动返回 500 后 JVM 可能仍不退出；保留失败并释放共享锁，不能无限挂住后续验收。
+    const deadline = setTimeout(() => {
+      expired = true
+      console.error(`iOS 验收超时：${flow}`)
+      running.kill('SIGTERM')
+      force = setTimeout(() => running.kill('SIGKILL'), 10_000)
+      force.unref()
+    }, 10 * 60_000)
+    deadline.unref()
+    const result = await new Promise((resolve, reject) => {
+      // 不把包含临时私钥的完整 spawnargs 打进启动失败日志。
+      running.on('error', (error) => reject(new Error(error.message)))
+      running.on('exit', resolve)
+    }).finally(() => {
+      clearTimeout(deadline)
+      clearTimeout(force)
     })
+    const code = expired ? 124 : result
     console.log(`iOS 验收结果：${flow} ${code === 0 ? '通过' : '失败'}`)
     if (code !== 0) {
       process.exitCode = code ?? 1
@@ -220,6 +263,16 @@ try {
           const label = attr.accessibilityText ?? ''
           if ((id || label) && !id.startsWith('key:') && !label.includes('PRIVATE KEY'))
             labels.add(`${id} ${label}`.trim().slice(0, 180))
+          if (/^proposal:.*:worktree$/.test(id))
+            labels.add(
+              JSON.stringify({
+                id,
+                checked: attr.checked,
+                selected: attr.selected,
+                value: ['0', '1'].includes(attr.value) ? attr.value : undefined,
+                bounds: attr.bounds,
+              }),
+            )
           for (const entry of node.children ?? []) walk(entry)
         }
         for (const entry of commands)

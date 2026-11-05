@@ -76,6 +76,41 @@ final class UIRegressionTests: XCTestCase {
     XCTAssertEqual(input.value as? String, "team-long")
   }
 
+  func testWorktreeDefaultsAndSheet() {
+    tap("device:local")
+    tap("sessions:new")
+    tap("new:where:litch")
+    tap("new:place:worktree")
+    tap("new:from")
+    let branch = app.descendants(matching: .any)["picker:option:branch:release/0.18"]
+    XCTAssertTrue(branch.waitForExistence(timeout: 10))
+    branch.tap()
+    XCTAssertTrue(app.buttons["new:from"].label.hasSuffix(", release/0.18"))
+    let input = app.textViews["new-input"]
+    input.tap()
+    input.typeText("propose a sub-session")
+    tap("new-send")
+    XCTAssertTrue(app.buttons["detail:proposals"].waitForExistence(timeout: 20))
+    let explicit = app.switches["proposal:e2e-pr3:worktree"]
+    XCTAssertTrue(explicit.waitForExistence(timeout: 10))
+    print("LITCH_WORKTREE_SWITCH explicit=\(explicit.value ?? "nil") enabled=\(explicit.isEnabled) frame=\(explicit.frame)")
+    XCTAssertEqual(explicit.value as? String, "0")
+    let inherited = app.switches["proposal:e2e-pr1:worktree"]
+    XCTAssertTrue(inherited.exists)
+    print("LITCH_WORKTREE_SWITCH inherited=\(inherited.value ?? "nil") enabled=\(inherited.isEnabled) frame=\(inherited.frame)")
+    XCTAssertEqual(inherited.value as? String, "1")
+    tap("detail:menu")
+    tap("detail:menu:worktree")
+    XCTAssertEqual(app.staticTexts["worktree:base"].label, "release/0.18")
+    tap("worktree:sync")
+    XCTAssertTrue(app.staticTexts["worktree:synced"].waitForExistence(timeout: 10))
+    app.descendants(matching: .any)["worktree:scrim"].tap()
+    tap("header:back")
+    let row = app.buttons["session:s5"]
+    reveal(row)
+    XCTAssertTrue(row.label.contains("litch/sidebar-tweaks-3f2a1c"))
+  }
+
   func testManualTailscaleFieldsRetainInput() {
     app.open(URL(string: "litch-dev://home")!)
     tap("devices:add")

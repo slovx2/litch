@@ -7,8 +7,8 @@ import { iosTestHelper } from './ios-test-helper.mjs'
 
 const mobile = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const [simulator, fixturePath, tailnetPath, mode] = process.argv.slice(2)
-if (mode && !['ui', 'pairing', 'cold', 'regression'].includes(mode))
-  throw new Error('仅支持省略模式、ui、pairing、cold 或 regression')
+if (mode && !['ui', 'pairing', 'cold', 'regression', 'manual'].includes(mode))
+  throw new Error('仅支持省略模式、ui、pairing、cold、regression 或 manual')
 const devices = JSON.parse(execFileSync('xcrun', ['simctl', 'list', 'devices', '--json']))
 const device = Object.values(devices.devices)
   .flat()
@@ -32,7 +32,12 @@ try {
     config,
     JSON.stringify(
       helper
-        ? { helper: helper.url, controlURL: tailnet.controlURL, remote: remote.href }
+        ? {
+            helper: helper.url,
+            controlURL: tailnet.controlURL,
+            remote: remote.href,
+            ...(mode === 'manual' ? { target: JSON.stringify(fixture.target) } : {}),
+          }
         : { target: fixture.target, controlURL: tailnet.controlURL },
     ),
     { mode: 0o600 },
@@ -72,6 +77,7 @@ try {
               pairing: 'PairingUITests.swift',
               cold: 'TerminalColdStartTests.swift',
               regression: 'UIRegressionTests.swift',
+              manual: 'ManualSshUITests.swift',
             }[mode],
           ),
           config,
@@ -79,8 +85,8 @@ try {
       : [join(mobile, 'scripts/ios-network-test-project.rb'), artifacts, mobile, config],
   )
   execFileSync('xcrun', ['simctl', 'keychain', simulator, 'add-root-cert', tailnet.ca])
-  if (mode === 'pairing') {
-    // 配对从空设备列表开始，不能让上次失败留下的设备配置掩盖结果。
+  if (mode === 'pairing' || mode === 'manual') {
+    // 配对和手填从空设备列表开始，不能让上次失败留下的设备配置掩盖结果。
     execFileSync('xcrun', ['simctl', 'uninstall', simulator, 'dev.litch.app.dev'])
     execFileSync('xcrun', [
       'simctl',

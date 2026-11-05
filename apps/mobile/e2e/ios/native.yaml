@@ -27,10 +27,17 @@ appId: dev.litch.app.dev
 - tapOn:
     id: add:host
 - inputText: 127.0.0.1
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: add:port
+    centerElement: true
+- waitForAnimationToEnd
 - tapOn:
     id: add:port
 - eraseText
 - inputText: ${PORT}
+- hideKeyboard
 - tapOn:
     id: add:user
 - inputText: ${USER}
@@ -39,18 +46,50 @@ appId: dev.litch.app.dev
     element:
       id: key:import
     direction: DOWN
+    centerElement: true
+- waitForAnimationToEnd
 - tapOn:
     id: key:import
+    retryTapIfNoChange: false
+- scrollUntilVisible:
+    element:
+      id: key:paste
+    direction: DOWN
+    centerElement: true
+- waitForAnimationToEnd
 - tapOn:
     id: key:paste
 - inputText: ${KEY}
-# 多行私钥的回车是换行；保持键盘展开，验证能滚动到导入按钮并直接提交。
-- scrollUntilVisible:
-    element:
-      id: key:doImport
-    direction: DOWN
+- assertVisible:
+    id: key:paste
+    text: '(?s)-----BEGIN OPENSSH PRIVATE KEY-----.*-----END OPENSSH PRIVATE KEY-----\s*'
+# 多行私钥的回车是换行。默认整屏滚动会落在键盘/完成条上；只在表单左侧留白区域滚动。
+# 保持键盘展开，并要求导入按钮位于固定操作栏上方，不能把被操作栏覆盖的 AX 节点当作可点击。
+- repeat:
+    times: 8
+    commands:
+      - runFlow:
+          when:
+            notVisible:
+              id: key:doImport
+              above:
+                id: add:check
+          commands:
+            - swipe:
+                start: 2%, 38%
+                end: 2%, 18%
+                duration: 500
+- waitForAnimationToEnd
+- assertVisible:
+    id: keyboard:done
+- assertVisible:
+    id: key:doImport
+    enabled: true
+    above:
+      id: add:check
 - tapOn:
     id: key:doImport
+    retryTapIfNoChange: false
 - extendedWaitUntil:
     visible:
       id: key:copy
