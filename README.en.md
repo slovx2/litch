@@ -9,7 +9,7 @@
 Litch aims to be a comfortable desktop client with a great remote-connection experience.
 
 - Direct SSH connections
-- Mobile (Android) connects straight to remote devices over SSH, no desktop needed
+- Mobile (Android and iOS) connects straight to remote devices over SSH, no desktop needed
 - Built-in browser + Computer Use (macOS and Windows)
 - While the desktop is connected, remote devices can use its browser and Computer Use, and, once you approve, run commands and read and write files on it
 - Session trees (spawn sub-sessions across harnesses, report back and wake the parent) and scheduled tasks (run on the device on schedule, even with the desktop closed)
@@ -39,29 +39,29 @@ The screenshots show demo data. Skin, light or dark, and language (中文 / Engl
 
 ## Features
 
-- **Remote connections.** Connect through your own ssh config and keys, with no port opened on either side; dropped connections reconnect by themselves and running turns are not lost.
+- **Remote connections.** Use your own SSH config and keys. The device's SSH server must be reachable; no additional Litch port needs to be exposed. Dropped connections reconnect automatically.
 - **Multiple harnesses.** Claude Code, Pi, Codex, plus experimental DeepSeek Harness (DSH), OpenCode and ACP agents (Gemini CLI, Qwen Code and more), all in one window.
-- **Built-in browser.** Shared by you and the agent; the remote machine's localhost is forwarded over ssh.
-- **Computer Use (macOS and Windows).** The agent operates any app on this computer without asking app by app; a notice shows on screen while it works, and Esc stops it.
+- **Browsers.** Share the built-in browser with your agent, with remote localhost forwarded over SSH. The Chrome extension also lets agents use tabs and sites you approve.
+- **Computer Use (macOS and Windows).** Once enabled, agents can operate ordinary apps; access to the released Litch app itself requires separate approval. An on-screen notice shows activity, and Esc stops it.
 - **Operate this computer.** Once you approve, agents on remote devices can run commands, read and write files, and copy files between the two machines on the desktop computer. Off by default, turned on per device.
 - **Session trees.** A session can spawn sub-sessions across harnesses (a Claude Code session can spawn Codex or Pi sub-sessions, and the other way round), shown nested under it; when a sub-session finishes it reports back, and the parent is woken to carry on when needed.
 - **Scheduled tasks.** Tasks live on the device and the device runs them on schedule, even while the desktop is closed or disconnected; each run starts a new session or continues an existing one.
 - **Pair a phone by QR code.** The desktop (or `litch pair` on that machine) shows a QR code; the phone scans it, creates its own key and enrolls it on that machine, and you confirm a matching code on the computer. The computer's keys never leave it, and each phone can be revoked on its own.
 - **Panels for coding.** A terminal that survives a dropped connection, a file tree, and diff review.
-- **Mobile (Android).** Connects straight to remote devices over SSH, with no desktop or relay in between: browse sessions, send messages, answer approvals, open terminals and manage scheduled tasks; pair a device the desktop already knows by scanning a QR code.
+- **Mobile (Android and iOS).** Connect directly over SSH to browse sessions, send messages, answer approvals, open terminals and manage scheduled tasks. QR pairing and tablet split views are supported.
+
+Android and iOS include Tailscale without occupying the system VPN, so it can coexist with your own VPN. Choose Auto, Always or Never; once the built-in node is signed in, Auto recognizes tailnet addresses without manual switching. See the [phone connection guide](skills/litch-manual/references/phones.md#内嵌-tailscale-网络).
 
 ## Status
 
 | Part | Status |
 |---|---|
-| Adapter `codex-harness-adapter` | Usable. Lets the Codex desktop app drive Claude Code, Pi and the experimental DSH, OpenCode and ACP agents directly; Litch also reaches all the harnesses on a machine through it. See [install and usage](ADAPTER.en.md) |
-| Desktop client Litch | Usable; verified stable on both macOS and Windows. Installers are available for macOS (Apple Silicon) and Windows (see Download below; a few features don't work on Windows yet), or run it from source. The app ships with its own copy of the adapter and gathers the harnesses installed on this machine under one device, Local. You can browse sessions, send messages (with images and attachments), queue, interrupt and steer, answer approvals and questions, and use plan mode, `/` commands and `@` to find files. When starting a session you pick the device, project and harness, and sessions from different harnesses in the same folder share one workspace. The side panel has a terminal, files and diff review. The Devices page can enable or disable a harness, change its settings, and show diagnostics and logs. It can also connect over SSH to the device service or native codex on a remote machine |
-| Built-in browser, Computer Use | Available since 0.8.0; Computer Use on macOS since 0.8.0 and on Windows since 0.10.0. Agents on remote devices can use both capabilities of the desktop (the adapter there needs 0.8.0 or later) |
-| Operate this computer | Available since 0.10.0; the desktop side is macOS only for now. Sessions on remote devices operate the desktop computer's commands and files once you approve; Codex, Claude Code and Pi sessions use the tools directly, other harnesses use the `litch-machine` command on that machine (the adapter there needs 0.10.0 or later) |
-| Android client | Available since 0.9.0, verified stable. Connects over SSH to remote machines with the adapter installed: browse sessions, send messages, answer approvals, open terminals; manages scheduled tasks since 0.11.0 |
-| Session trees | Available since 0.11.0. The model spawns sub-sessions and reads and writes its own sub-sessions through `litch_sessions`, and you can spawn them by hand in the UI. Available in Codex, Claude Code, Pi, dsh and OpenCode sessions; ACP agent sessions cannot spawn but can be sub-sessions (the adapter on that machine needs 0.11.0 or later) |
-| Scheduled tasks | Available since 0.11.0. Schedules follow the device's time zone, and the model can create tasks through `litch_tasks`; manage them from the desktop or the Android client (the adapter on that machine needs 0.11.0 or later) |
-| Pair a phone by QR code | Available since 0.12.0. Add the device in the Android client by scanning; you can change the address the phone uses before showing the code (the phone must reach it directly; jump hosts are not supported). For this computer itself, turn on the system SSH server first (Remote Login on macOS). The adapter on that machine needs 0.12.0 or later; Windows devices are not fully tested |
+| Adapter `codex-harness-adapter` | Connects multiple harnesses on one device. See [install and usage](ADAPTER.en.md) |
+| Desktop client | Installers for macOS (Apple Silicon) and Windows, with the adapter included. Supports local and remote sessions, browsers, Computer Use, and approved command and file operations on the desktop computer |
+| Android client | Available as an APK, with sessions, approvals, terminals, files, managers and scheduled tasks |
+| iOS client | Supports remote sessions, approvals, terminals, files, managers and scheduled tasks. Currently in internal TestFlight testing and being prepared for App Store submission; no public download is available. iOS releases separately from the desktop and Android apps |
+
+See the [product manual](skills/litch-manual/SKILL.md) for features and platform limitations.
 
 ## Download
 
@@ -70,7 +70,7 @@ Get it from the [releases page](https://github.com/slovx2/litch/releases/latest)
 | System | File | Notes |
 |---|---|---|
 | macOS (Apple Silicon) | `Litch-<version>-macos-arm64.dmg` | Signed and notarized by Apple. Open it and drag Litch into Applications |
-| Windows (x64) | `Litch-<version>-windows-x64-setup.exe` | Verified stable on Windows 11 (the terminal runs Windows PowerShell). **Operate this computer doesn't work on Windows yet**, and an administrator account on Windows can't pair a phone by QR code yet. The installer is not signed, so Windows warns that the publisher is unknown: click "More info", then "Run anyway". It installs for the current user only and does not need administrator rights |
+| Windows (x64) | `Litch-<version>-windows-x64-setup.exe` | Supports Windows 11 with Windows PowerShell terminals. Administrator accounts cannot yet pair phones by QR code. The installer is unsigned and installs for the current user without administrator rights |
 | Android (arm64, Android 7.0 or later) | `Litch-<version>-android-arm64.apk` | Install it directly; the first time, Android asks you to allow installing unknown apps. The app generates its own SSH key; add its public key to the remote machine's `authorized_keys` to connect |
 
 The app ships with its own copy of the adapter and, when opened, gathers the Claude Code, Pi, DSH, OpenCode and codex installed on this machine under the device named Local; install and sign in to those harnesses separately. There is no installer for Intel Macs yet; run it from source there.
@@ -84,6 +84,7 @@ Requires Node.js 24.
 ```sh
 git clone https://github.com/slovx2/litch.git
 cd litch
+npm ci
 npm run client:setup
 npm run client:start:mock
 ```
@@ -99,13 +100,7 @@ Replace `pi` with `claude-code`; use `~/.codex-harness-adapter/device/device.soc
 On macOS you can package it into an app you can open directly. It lands under `apps/desktop/out`. Run `npm run client:setup` from above first; the app ships with its own copy of the adapter, so the adapter has to be built too (this needs Go):
 
 ```sh
-npm ci
-npm ci --prefix packages/claude
-npm ci --prefix packages/pi
-npm ci --prefix packages/dsh
-npm ci --prefix packages/opencode
-npm ci --prefix packages/acp
-npm run build
+npm run setup
 npm run client:pack
 open apps/desktop/out/Litch-darwin-arm64/Litch.app
 ```
