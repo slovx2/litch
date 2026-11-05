@@ -38,6 +38,11 @@ test('iOS原生未落地只延后构建；部分合入或缺podspec不能伪装�
       writeFileSync(join(root, 'modules', name, 'ios/Module.podspec'), 'spec')
     const plan = iosCommands(root)
     assert.equal(plan.state.ready, true)
+    const bridge = plan.commands.findIndex(
+      ([cmd, args]) => cmd === 'bash' && args.includes('scripts/build-ssh-ios.sh'),
+    )
+    const pods = plan.commands.findIndex(([cmd]) => cmd === 'pod')
+    assert.ok(bridge >= 0 && bridge < pods, '生成Go桥和许可后才能读取podspec')
     assert.ok(
       plan.commands.some(
         ([cmd, args]) =>

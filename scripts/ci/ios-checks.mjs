@@ -46,6 +46,8 @@ export function iosCommands(root = 'apps/mobile') {
   if (state.ready) {
     commands.push(
       ['npm', ['run', 'web:build'], root],
+      // podspec引用生成的Go桥与许可，必须在pod install之前准备。
+      ['bash', ['scripts/build-ssh-ios.sh'], root],
       [
         'npx',
         ['--no-install', 'expo', 'prebuild', '--platform', 'ios', '--clean', '--no-install'],
