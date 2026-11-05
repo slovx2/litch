@@ -54,7 +54,7 @@ enum UserActivity {
     if [.keyDown, .keyUp, .flagsChanged].contains(event.type) {
       return NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
     }
-    let windowIDs = [
+    let windowIDs: [Int64] = [
       event.cgEvent?.getIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent) ?? 0,
       event.cgEvent?.getIntegerValueField(.mouseEventWindowUnderMousePointer) ?? 0,
       Int64(event.windowNumber),
