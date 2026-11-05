@@ -5,11 +5,12 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
-## 未发布
+## 0.34.1（2026-11-06）
 
 ### 修复
 
-- 扫码配对按本次 SSH 连接的实际监听器核对主机密钥，支持独立 HostKey 和端口转发。密钥不一致或无法确认时展示指纹，由用户确认本次出码；二维码和自检使用同一把入口密钥。
+- 修复长用户消息截断后缺少展开入口的问题，支持展开全文和重新收起。
+- 修复扫码配对误判主机密钥的问题；密钥不一致或无法确认时，展示指纹并在用户确认后生成配对码。
 
 ## 0.34.0（2026-11-05）
 
