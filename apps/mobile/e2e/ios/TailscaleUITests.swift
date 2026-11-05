@@ -13,6 +13,12 @@ final class TailscaleUITests: XCTestCase {
     app.launch()
     XCTAssertTrue(app.wait(for: .runningForeground, timeout: 15))
     XCTAssertTrue(app.otherElements["devices"].waitForExistence(timeout: 15))
+    app.open(URL(string: "litch-dev://boot?mode=fixture")!)
+    XCTAssertTrue(app.buttons["device:fixture"].waitForExistence(timeout: 15))
+  }
+
+  override func tearDown() {
+    if (testRun?.failureCount ?? 0) > 0 { print("LITCH_NETWORK_UI_FAILURE \(app.debugDescription)") }
   }
 
   func testTailscaleSettingsAndBackground() throws {

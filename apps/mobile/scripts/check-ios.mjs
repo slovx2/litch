@@ -78,6 +78,18 @@ try {
           readFileSync(from, 'utf8')
             .replace(/dev\.litch\.app(?!\.dev)/g, 'dev.litch.app.dev')
             .replaceAll('litch://', 'litch-dev://')
+            // 原生元素点击验证这些动作正常；iOS 滚动结束前的旧坐标会点到相邻控件。
+            .replace(
+              /^( *)- tapOn:\n\1 {4}id: (hc:attempt:\.\*:code|proposal:e2e-pr1:more|hc:models:add)\n/gm,
+              (line, indent) =>
+                `${indent}- waitForAnimationToEnd:\n${indent}    timeout: 3000\n${line}`,
+            )
+            // 填主机后键盘盖住用户名；像 XCTest 的元素点击一样，先把目标滚入可见区域。
+            .replace(
+              '- tapOn:\n    id: add:user\n',
+              '- scrollUntilVisible:\n    element:\n      id: add:user\n    centerElement: true\n' +
+                '- waitForAnimationToEnd:\n    timeout: 3000\n- tapOn:\n    id: add:user\n',
+            )
             // iOS 的整句 XCTest 注入会产生虚拟 keyCode，终端按真实逐字输入验证。
             .replace(
               '- inputText: echo e2e-$((6*7)) > e2e-mark.txt',
@@ -103,6 +115,13 @@ try {
             .replace(
               /^( *)- openLink: (.+)$/gm,
               (line, indent) => `${line}\n${confirmLink(indent)}`,
+            )
+            // iOS 数字/多行键盘不一定有系统收起动作，使用产品统一的完成按钮并验证已收起。
+            .replace(
+              /^( *)- hideKeyboard[ \t]*$/gm,
+              (_, indent) =>
+                `${indent}- tapOn:\n${indent}    id: keyboard:done\n` +
+                `${indent}- extendedWaitUntil:\n${indent}    notVisible:\n${indent}      id: keyboard:done\n${indent}    timeout: 5000`,
             ),
         )
     }
