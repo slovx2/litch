@@ -23,12 +23,19 @@ tags: [fixture, smoke]
     element:
       id: harness:pi
     direction: DOWN
-# Pi 概览那一行写着“版本 · 可用”；运行设置已移到详情页。
-# 整串匹配、要带版本号：“不可用”、没装的那几行（“不可用 · 没装”）都配不上
+# 概览显示名称和状态；版本与实际路径在详情的运行设置中。
 - assertVisible:
-    text: \d+\.\d+\.\d+ · (Ready|可用)
-    below:
-      text: Pi
+    text: Pi (Ready|可用)
+- tapOn:
+    id: harness:pi:settings
+- extendedWaitUntil:
+    visible:
+      id: harness:pi:runtime
+    timeout: 20000
+- assertVisible:
+    text: .*\d+\.\d+\.\d+ · .*
+- tapOn:
+    id: header:back
 - tapOn:
     id: header:back
 - scrollUntilVisible:
