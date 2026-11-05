@@ -12,3 +12,7 @@ go run golang.org/x/mobile/cmd/gomobile init
 go run golang.org/x/mobile/cmd/gomobile bind \
   -target=ios/arm64,iossimulator/arm64 -iosversion=16.4 \
   -o "$OUTPUT_DIR/Sshtransport.xcframework" ./sshtransport
+node "$REPO_DIR/mobile/licenses.mjs" "$OUTPUT_DIR/resources/go-third-party.txt"
+for SLICE in ios-arm64 ios-arm64-simulator; do
+  cp "$OUTPUT_DIR/../PrivacyInfo.xcprivacy" "$OUTPUT_DIR/Sshtransport.xcframework/$SLICE/Sshtransport.framework/PrivacyInfo.xcprivacy"
+done

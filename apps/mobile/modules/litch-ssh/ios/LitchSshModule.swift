@@ -17,12 +17,15 @@ public final class LitchSshModule: Module {
       }
       self.observer = observer
       SshtransportSetConnectionPolicyObserver(observer)
+      // 可选网络的存储错误不阻断普通 SSH；设置页可显示错误并清除状态。
+      try? TailscaleRuntime.shared.prepare()
       self.lifecycle.attach()
     }
     OnDestroy { [weak self] in
       SshtransportSetConnectionPolicyObserver(nil)
       self?.lifecycle.detach()
       self?.observer = nil
+      try? goVoid { SshtransportTailscaleStop($0) }
     }
     Function("setBackgroundTimeout") { (minutes: Int) in
       SshtransportSetBackgroundTimeout(minutes)
@@ -30,7 +33,17 @@ public final class LitchSshModule: Module {
     Function("connectionPolicyState") { SshtransportConnectionPolicyState() }
     Function("batteryOptimization") { "unknown" }
     Function("openBackgroundSettings") { false }
-    Function("tailscaleAvailable") { false }
+    Function("tailscaleAvailable") { true }
+    AsyncFunction("tailscaleStatus") { try TailscaleRuntime.shared.status() }
+    AsyncFunction("tailscaleLogin") { (controlURL: String) in
+      try TailscaleRuntime.shared.prepare()
+      return try goString { SshtransportTailscaleLogin(controlURL, $0) }
+    }
+    AsyncFunction("tailscaleLogout") { try goVoid { SshtransportTailscaleLogout($0) } }
+    AsyncFunction("tailscaleClear") {
+      try TailscaleRuntime.shared.prepare()
+      try goVoid { SshtransportTailscaleClear($0) }
+    }
     AsyncFunction("probeHost") { (host: String, port: Int, user: String, tailscale: Bool) in
       try goString { SshtransportProbeHost(host, port, user, tailscale, $0) }
     }
@@ -67,14 +80,6 @@ public final class LitchSshModule: Module {
       try goString { SshtransportApprovalFingerprint(key, $0) }
     }
   }
-}
-
-// C 函数不会自动桥接成 throws；不能把 Go 的失败误当成空字符串。
-func goString(_ call: (AutoreleasingUnsafeMutablePointer<NSError?>) -> String) throws -> String {
-  var error: NSError?
-  let result = call(&error)
-  if let error { throw error }
-  return result
 }
 
 private final class PolicyObserver: NSObject, SshtransportConnectionPolicyObserverProtocol {

@@ -97,6 +97,14 @@ iOS 的 SSH 私钥保存在系统 Keychain。自建模拟器包应使用构建�
 SSH private keys on iOS are stored in Keychain. Use the build script's default local ad-hoc
 signature for simulator testing; unsigned builds cannot validate key storage or pairing.
 
+iOS 内嵌 Tailscale 不占用系统 VPN，SSH 仍使用 Litch 的私钥与主机指纹校验。
+节点登录状态保存在不可迁移、不同步的 Keychain 中；换手机需重新登录。
+后台执行期限到期后节点暂停，回到前台恢复；退出或清除状态会断开内嵌网络连接。
+On iOS, embedded Tailscale leaves the system VPN available and keeps Litch's SSH key and host
+fingerprint checks. Node credentials stay in device-only Keychain storage and require a new login
+on another phone. The node pauses when background execution expires and resumes in the foreground.
+Signing out or clearing state disconnects embedded network connections.
+
 iOS 在五分钟期限或系统允许的后台执行时间先到期时关闭 SSH 连接，并暂停重连。
 返回 Litch 后恢复连接；断开期间电脑上的任务继续运行。Litch 不申请后台常驻。
 

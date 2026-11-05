@@ -33,9 +33,33 @@ Keychain access group 在 `app.json` 的 `ios.entitlements` 声明，经 prebuil
 两种执行器都只接受隔离夹具，并自动清理临时测试工程、截图和报告。不能同时操作同一台
 模拟器；Maestro 另通过全机 `/tmp/litch-maestro-7001.lock` 排队使用驱动端口。
 
+内嵌网络的原生连通性用 `scripts/check-ios-network.mjs <UDID> <fixture.json> <tailnet.json>`。
+先运行 `mobile/testfixture/tailnet` 中的本地 HTTPS 控制面；用单独的 `Litch-iOS-Network` 模拟器，
+脚本会安装临时 CA，结束后重置该模拟器的 Keychain 并卸载测试宿主。测试宿主使用生产
+Keychain/Go 桥代码与同一 XCFramework，覆盖 MagicDNS、SSH 凭据、后台暂停恢复和退出清理。
+该原生用例不是设置页面或真实 Apple 签名的替代；页面另用 Maestro 验收。
+
+## 内嵌网络的存储与披露
+
+节点完整 JSON 以 Keychain generic password 保存，属性为
+`AfterFirstUnlockThisDeviceOnly`、不参加 iCloud 同步；存储错误直接返回 Go。
+节点私有目录排除备份，使用首次解锁前不可访问的文件保护。回前台主动查询节点状态，恢复
+被系统后台期限暂停的节点；不申请 Network Extension 或系统 VPN 权限。
+
+`build-ssh-ios.sh` 从 Go 依赖清单生成完整第三方许可，写入 `LitchSshPrivacy.bundle`。
+两份 XCFramework 切片均附 `PrivacyInfo.xcprivacy`；podspec 另把隐私清单打进 App 的资源包，
+防止静态链接时丢失。理由声明对应应用私有文件元数据、连接计时和本应用 UserDefaults。
+理由代码以 [Apple required reason API 文档](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype) 为准。
+
+Tailscale 是可选网络服务：用户登录时，所选控制服务器接收节点标识、节点名称、网络地址等
+网络元数据，并可能与用户账号关联；中继服务器处理加密流量。清单按应用功能声明设备标识和
+其他数据，不用于跟踪。节点秘密仅存手机 Keychain，不经过 JS；SSH 凭据不交给控制服务器。
+Go 侧关闭日志上传。发布负责人仍须据正式依赖与控制服务政策完成 App Store 隐私问卷，不能
+把“不上传诊断日志”当成“第三方服务不收集任何数据”。
+
 ## 分发准备
 
-模拟器构建不需要签名，但不能交给 iPhone 用户安装。建议先通过 TestFlight 完成真机测试，
+模拟器构建不需要 Apple 证书，但不能交给 iPhone 用户安装。建议先通过 TestFlight 完成真机测试，
 正式长期分发使用 App Store。TestFlight 每个构建最多测试 90 天，支持最多 100 位内部测试者
 和 10,000 位外部测试者；首个外部测试构建需要审核，后续构建也可能需要审核。
 见 [Apple TestFlight 文档](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview/)。

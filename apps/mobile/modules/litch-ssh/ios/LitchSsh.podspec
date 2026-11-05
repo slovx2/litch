@@ -14,5 +14,7 @@ Pod::Spec.new do |s|
   s.dependency 'ExpoModulesCore', '57.0.23'
   s.source_files = '*.swift'
   s.vendored_frameworks = 'generated/Sshtransport.xcframework'
+  # 静态 XCFramework 的资源不会自动复制到 App，另打资源包供归档隐私报告与许可分发。
+  s.resource_bundles = { 'LitchSshPrivacy' => ['PrivacyInfo.xcprivacy', 'generated/resources/go-third-party.txt'] }
   s.frameworks = 'Security', 'SystemConfiguration', 'Network', 'CoreFoundation'
 end

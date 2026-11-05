@@ -19,6 +19,8 @@ final class ConnectionLifecycle: NSObject, SshtransportBackgroundSchedulerProtoc
         },
         center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in
           SshtransportSetAppBackground(false)
+          // 状态查询会恢复被后台期限暂停的节点；不在主线程等待网络后端。
+          DispatchQueue.global(qos: .utility).async { _ = try? TailscaleRuntime.shared.status() }
         },
       ]
       SshtransportSetAppBackground(UIApplication.shared.applicationState == .background)
