@@ -1,6 +1,7 @@
 # iOS 商店材料与发布
 
-正式包 `dev.litch.app`。商店名称在 App Store Connect 创建记录时校验；不要用公开搜索判断是否可占用。
+正式包 `dev.litch.app`。商店名称 `Litch — Remote Workspace`，安装后的名称仍为 `Litch`。
+商店名称在 App Store Connect 创建记录时校验；不要用公开搜索判断是否可占用。
 中英文草稿见 [metadata.md](metadata.md)。发布前须审阅实际地区、隐私问卷、年龄分级和审核备注，上传 TestFlight 不等于提交 App Store 审核。
 
 ## 构建与凭据

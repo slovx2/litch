@@ -2,7 +2,7 @@
 
 ## en-US
 
-- Name: Litch
+- Name: Litch — Remote Workspace
 - Subtitle: Your remote coding workspace
 - Promotional text: Follow your coding sessions, review changes and respond to approvals from your iPhone. Connect to the computers and tools you already use.
 - Keywords: ssh,terminal,coding,developer,remote,workspace,git,assistant
@@ -20,7 +20,7 @@ Commands and coding tools run on your remote computer. iOS may pause connections
 
 ## 简体中文
 
-- 名称：Litch
+- 名称：Litch — Remote Workspace
 - 副标题：连接你的远程开发工作区
 - 推广文本：在 iPhone 上查看编程会话、审阅修改并处理审批，连接你已有的电脑和开发工具。
 - 关键词：SSH,终端,编程,开发,远程,工作区,Git,助手
