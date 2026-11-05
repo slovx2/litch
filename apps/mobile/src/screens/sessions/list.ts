@@ -2,7 +2,7 @@
 // 顺序照桌面端侧栏：置顶、各个自定义分区、内置的“项目”组、不属于任何工作区的，最后是已归档。
 // 工作区排在它所在的那一组里（置顶的在置顶里、进了分区的在分区里，其余的都在“项目”里），收起一组连里面的工作区一起收起。
 // 会话树照桌面侧栏：父会话也在列表里的子会话挂到它下面、一层往里缩一级（depth），不在自己那一组里另占一行；
-// 父会话可以收起子会话（默认都展开），收起了仍露出等人和未读的直接子项。别的应用派出来的会话不显示时整个藏掉（等人和未读的照露）。
+// 父会话可以收起子会话（默认都展开），收起了仍露出等人、未读的后代及其父链。别的应用派出来的会话不显示时整个藏掉（等人和未读的照露）。
 // 这里只排行，不碰数据：会话行只带标识，各行自己订阅自己的摘要（keys.summary）。
 import {
   groupOfSection,
@@ -18,7 +18,7 @@ import {
   dropNativeChildren,
   workspaceShown,
 } from '../../../../../packages/ui/src/sidebar/filter.ts'
-import { nestedUnder } from '../../../../../packages/ui/src/sidebar/tree.ts'
+import { nestedUnder, withAncestors } from '../../../../../packages/ui/src/sidebar/tree.ts'
 import { sessionTree } from './tree'
 
 /**
@@ -87,7 +87,12 @@ export interface ListInput {
 }
 
 export function buildList(input: ListInput): ListItem[] {
-  const { groups, collapsed, workspaces, children, hidden, folded, always } = input
+  const { groups, collapsed, workspaces, children, hidden, folded } = input
+  const kept = withAncestors(
+    [...Object.values(groups).flat(), ...Object.values(children).flat()].filter(input.always),
+    children,
+  )
+  const always = (id: string) => kept.has(id) || input.always(id)
   const items: ListItem[] = []
   /** 一组里要画的会话：藏起来的去掉（还带着挂到别处的子会话） */
   const shown = (groupKey: string) => dropNativeChildren(groups[groupKey], hidden, always)
@@ -120,7 +125,9 @@ export function buildList(input: ListInput): ListItem[] {
     const count =
       shown(groupKey).length + inside.reduce((sum, entry) => sum + shown(entry.id).length, 0)
     const shut = collapsed.has(groupKey)
-    const tally = head.kind === 'projects' ? { tally: inside.map((entry) => entry.id) } : {}
+    const tally = {
+      tally: [...(head.kind === 'projects' ? [] : [groupKey]), ...inside.map((entry) => entry.id)],
+    }
     items.push({
       type: 'group',
       key: `g:${groupKey}`,

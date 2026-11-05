@@ -8,13 +8,16 @@ import {
   keys,
   managerMark,
   type SessionChildren,
+  type SessionGroups,
   type SessionSummary,
   type WireColor,
 } from '@litch/core'
 import { memo, type ReactNode, useCallback, useMemo, useSyncExternalStore } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { ago } from '../../../../../packages/ui/src/app/format.ts'
-import { useKey, useReplica } from '../../shell/services'
+import { dropNativeChildren } from '../../../../../packages/ui/src/sidebar/filter.ts'
+import { treeUnread, unreadIn, withAncestors } from '../../../../../packages/ui/src/sidebar/tree.ts'
+import { useKey, useReplica, useServices } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
 import { StatusMark } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
@@ -469,6 +472,19 @@ export const ArchivedRow = memo(function ArchivedRow({
  */
 function Tally({ deviceId, groupKeys }: { deviceId: string; groupKeys: readonly string[] }) {
   const tallies = useKey<GroupTallies>(keys.tallies(deviceId))
+  const groups = useKey<SessionGroups>(keys.groups(deviceId)) ?? {}
+  const children = useKey<SessionChildren>(keys.children(deviceId)) ?? {}
+  const unread = useKey<string[]>(keys.unread(deviceId)) ?? []
+  const pressing = useKey<string[]>(keys.pressing(deviceId)) ?? []
+  const native = useKey<string[]>(keys.nativeChildren(deviceId)) ?? []
+  const showNative = useServices().prefs.nativeChildren
+  const kept = withAncestors([...pressing, ...unread], children)
+  const shown = Object.fromEntries(
+    Object.entries(groups).map(([key, ids]) => [
+      key,
+      [...dropNativeChildren(ids, showNative ? [] : native, (id) => kept.has(id))],
+    ]),
+  )
   const theme = useTheme()
   const t = useT()
   const sum = { approval: 0, answer: 0, running: 0, unread: 0, background: 0 }
@@ -479,6 +495,7 @@ function Tally({ deviceId, groupKeys }: { deviceId: string; groupKeys: readonly 
     sum.unread += tally.unread
     sum.background += tally.background
   }
+  sum.unread = unreadIn(treeUnread(shown, children, unread), groupKeys)
   const parts = (['approval', 'answer', 'running', 'background', 'unread'] as const)
     .filter((kind) => sum[kind] > 0)
     .map((kind) => t(`sidebar.tally.${kind}`, { count: sum[kind] }))

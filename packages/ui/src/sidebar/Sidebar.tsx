@@ -105,8 +105,8 @@ import {
   useSidebarOpen,
   useSidebarShowActive,
 } from './state.ts'
-import { TallyMarks } from './TallyMarks.tsx'
-import { kidsShown, MAX_DEPTH, nestedUnder } from './tree.ts'
+import { TallyMarks, TreeUnreadContext } from './TallyMarks.tsx'
+import { kidsShown, MAX_DEPTH, nestedUnder, treeUnread, withAncestors } from './tree.ts'
 import { WorkspaceActions } from './WorkspaceActions.tsx'
 import { WorkspaceDialog } from './WorkspaceDialog.tsx'
 
@@ -1126,7 +1126,8 @@ function DeviceGroup(props: GroupProps) {
    * 收起的父会话、“展示更多”、藏起来的派出会话都藏不住的：非露出来不可的，加上未读的。
    * 角标数的是未读的会话，每一个都得在侧栏里找得到（harness 筛选另说，那是用户明着筛的）
    */
-  const unfolded = (id: string) => always(id) || unread.includes(id)
+  const reachable = withAncestors([...pressing, ...unread, ...(picked ? [picked] : [])], children)
+  const unfolded = (id: string) => reachable.has(id)
   /** 只看某几个 harness 时也筛不掉的：非露出来不可的，和开关开着时活动的那些 */
   const unfiltered = keptAnyway(always, showActive, active)
   /** 不显示别的应用派出来的会话时，这些藏起来（非露出来不可的照样露） */
@@ -1139,6 +1140,14 @@ function DeviceGroup(props: GroupProps) {
       harnessOf,
       unfiltered,
     )
+  const unreadCounts = {
+    shown: treeUnread(
+      Object.fromEntries(Object.keys(groups).map((group) => [group, [...shown(group)]])),
+      children,
+      unread,
+    ),
+    all: treeUnread(groups, children, unread),
+  }
   /** 一组里被 harness 筛选筛掉的会话有几个（藏起来的派出会话不算） */
   const filteredOut = (groupId: string) =>
     filter.length === 0
@@ -1687,7 +1696,7 @@ function DeviceGroup(props: GroupProps) {
           add={extra.add}
           menu={menu}
           drop={into(key)}
-          tally={extra.tally}
+          tally={extra.tally ?? [key, ...inside.map((entry) => entry.id)]}
           // 用户的组和“项目”拖标题行排先后；置顶总在最前
           onDrag={key === PINNED ? undefined : dragBand(key)}
         />
@@ -1905,125 +1914,130 @@ function DeviceGroup(props: GroupProps) {
   // 单独查看一组：顶上一行“返回”和它的名字，下面只有它里面的东西
   if (focus !== null && !gone) {
     return (
-      <section
-        ref={root}
-        className={offline ? 'dev-group focus off' : 'dev-group focus'}
-        data-device={deviceId}
-        data-focus={focus}
-        style={wireStyle(device.wire)}
-      >
-        <div className="row-line focus-bar" data-drop={into(focus) ? 'into' : undefined}>
-          <button type="button" className="focus-back" onClick={() => onFocus(null)}>
-            <Back />
-            <span>{t('sidebar.focus.back')}</span>
-          </button>
-          <span className="focus-title ell">{focusTitle(focus)}</span>
-          <span className="focus-device dim ell">{t.text(device.name)}</span>
-          {focusTools(focus)}
-        </div>
-        {dialogs}
-        <div className="dev-body">{focused(focus)}</div>
-      </section>
+      <TreeUnreadContext value={unreadCounts}>
+        <section
+          ref={root}
+          className={offline ? 'dev-group focus off' : 'dev-group focus'}
+          data-device={deviceId}
+          data-focus={focus}
+          style={wireStyle(device.wire)}
+        >
+          <div className="row-line focus-bar" data-drop={into(focus) ? 'into' : undefined}>
+            <button type="button" className="focus-back" onClick={() => onFocus(null)}>
+              <Back />
+              <span>{t('sidebar.focus.back')}</span>
+            </button>
+            <span className="focus-title ell">{focusTitle(focus)}</span>
+            <span className="focus-device dim ell">{t.text(device.name)}</span>
+            {focusTools(focus)}
+          </div>
+          {dialogs}
+          <div className="dev-body">{focused(focus)}</div>
+        </section>
+      </TreeUnreadContext>
     )
   }
 
   return (
-    <section
-      ref={root}
-      className={offline ? 'dev-group off' : 'dev-group'}
-      data-device={deviceId}
-      style={wireStyle(device.wire)}
-    >
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: 右键出的菜单和行尾“更多”按钮是同一份，键盘走那个按钮 */}
-      <div
-        className="row-line"
-        {...info.area}
-        onContextMenu={(event) => {
-          if (deviceActions.length === 0 || (event.target as Element).closest('.pick-pop')) return
-          event.preventDefault()
-          const box = event.currentTarget.getBoundingClientRect()
-          const keyed = event.clientX === 0 && event.clientY === 0
-          deviceMenu.current?.openAt(
-            keyed ? box.left + 24 : event.clientX,
-            keyed ? box.bottom : event.clientY,
-          )
-        }}
+    <TreeUnreadContext value={unreadCounts}>
+      <section
+        ref={root}
+        className={offline ? 'dev-group off' : 'dev-group'}
+        data-device={deviceId}
+        style={wireStyle(device.wire)}
       >
-        <button
-          type="button"
-          className="dev-row"
-          aria-expanded={open}
-          onClick={() => toggle('')}
-          {...info.anchor}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: 右键出的菜单和行尾“更多”按钮是同一份，键盘走那个按钮 */}
+        <div
+          className="row-line"
+          {...info.area}
+          onContextMenu={(event) => {
+            if (deviceActions.length === 0 || (event.target as Element).closest('.pick-pop')) return
+            event.preventDefault()
+            const box = event.currentTarget.getBoundingClientRect()
+            const keyed = event.clientX === 0 && event.clientY === 0
+            deviceMenu.current?.openAt(
+              keyed ? box.left + 24 : event.clientX,
+              keyed ? box.bottom : event.clientY,
+            )
+          }}
         >
-          <i className={offline ? 'wire-sq off' : 'wire-sq'} />
-          {/* 行上只留名字；主机、连接方式这些在信息卡里 */}
-          <span className="name ell">{t.text(device.name)}</span>
-          {flag ? (
-            <span className={flag} role="img" aria-label={t('sidebar.harnessDown')}>
-              <Notice />
-            </span>
-          ) : null}
-          {/* 升级记号的位置：按钮不能放进这个按钮里，摆在行外，用锚点定位贴到这里（shell.css 的 .dev-upg） */}
-          {stale ? <span className="dev-upg-slot" /> : null}
-          <span className="grow" />
-          {/* 整台设备收起来了：下面所有会话合起来的状况 */}
-          {open ? null : <TallyMarks deviceId={deviceId} group={null} />}
-          {pill ? <span className={pill[0]}>{pill[1]}</span> : null}
-          {only && !offline ? (
-            <span className="pill mute">{t('sidebar.single', { name: only.name })}</span>
-          ) : null}
-        </button>
-        {stale ? (
           <button
             type="button"
-            className="dev-upg"
-            data-flag="service"
-            title={t(stale)}
-            aria-label={t(stale)}
-            onClick={() => requestDevice(deviceId, 'service')}
+            className="dev-row"
+            aria-expanded={open}
+            onClick={() => toggle('')}
+            {...info.anchor}
           >
-            <Notice />
+            <i className={offline ? 'wire-sq off' : 'wire-sq'} />
+            {/* 行上只留名字；主机、连接方式这些在信息卡里 */}
+            <span className="name ell">{t.text(device.name)}</span>
+            {flag ? (
+              <span className={flag} role="img" aria-label={t('sidebar.harnessDown')}>
+                <Notice />
+              </span>
+            ) : null}
+            {/* 升级记号的位置：按钮不能放进这个按钮里，摆在行外，用锚点定位贴到这里（shell.css 的 .dev-upg） */}
+            {stale ? <span className="dev-upg-slot" /> : null}
+            <span className="grow" />
+            {/* 整台设备收起来了：下面所有会话合起来的状况 */}
+            {open ? null : <TallyMarks deviceId={deviceId} group={null} />}
+            {pill ? <span className={pill[0]}>{pill[1]}</span> : null}
+            {only && !offline ? (
+              <span className="pill mute">{t('sidebar.single', { name: only.name })}</span>
+            ) : null}
           </button>
-        ) : null}
-        {add(null)}
-        {deviceActions.length > 0 ? (
-          <RowMenu
-            handle={deviceMenu}
-            label={t('sidebar.deviceMenu')}
-            actions={deviceActions}
-            onAction={(id) => {
-              if (id === 'pair') setPairing(true)
-              else if (id === 'addSection') newSection()
-              else if (id === 'settings') requestDevice(deviceId)
-              else if (id === 'restart') restart.begin()
-              else setDialog({ workspace: null })
-            }}
-          />
-        ) : null}
-        {info.card}
-      </div>
-      {dialogs}
-      {open ? (
-        <div className="dev-body">
-          {device.failure ? (
-            <div className="dev-note">
-              <FailureNote failure={device.failure} target={device.target} onRetry={reconnect} />
-            </div>
-          ) : device.note ? (
-            <div className="dev-note">{t.text(device.note)}</div>
+          {stale ? (
+            <button
+              type="button"
+              className="dev-upg"
+              data-flag="service"
+              title={t(stale)}
+              aria-label={t(stale)}
+              onClick={() => requestDevice(deviceId, 'service')}
+            >
+              <Notice />
+            </button>
           ) : null}
-          {device.stale && offline && Object.keys(groups).length > 0 ? (
-            <div className="dev-note">{t('sidebar.stale')}</div>
+          {add(null)}
+          {deviceActions.length > 0 ? (
+            <RowMenu
+              handle={deviceMenu}
+              label={t('sidebar.deviceMenu')}
+              actions={deviceActions}
+              onAction={(id) => {
+                if (id === 'pair') setPairing(true)
+                else if (id === 'addSection') newSection()
+                else if (id === 'settings') requestDevice(deviceId)
+                else if (id === 'restart') restart.begin()
+                else setDialog({ workspace: null })
+              }}
+            />
           ) : null}
-          {/* 每一组的外框上写着它是哪一组（和数据副本里分组的键一样），自检按它找 */}
-          {filter.length > 0 && Object.keys(groups).every((group) => shown(group).length === 0) ? (
-            <div className="dev-none">{t('sidebar.filter.none')}</div>
-          ) : null}
-          {everything()}
+          {info.card}
         </div>
-      ) : null}
-    </section>
+        {dialogs}
+        {open ? (
+          <div className="dev-body">
+            {device.failure ? (
+              <div className="dev-note">
+                <FailureNote failure={device.failure} target={device.target} onRetry={reconnect} />
+              </div>
+            ) : device.note ? (
+              <div className="dev-note">{t.text(device.note)}</div>
+            ) : null}
+            {device.stale && offline && Object.keys(groups).length > 0 ? (
+              <div className="dev-note">{t('sidebar.stale')}</div>
+            ) : null}
+            {/* 每一组的外框上写着它是哪一组（和数据副本里分组的键一样），自检按它找 */}
+            {filter.length > 0 &&
+            Object.keys(groups).every((group) => shown(group).length === 0) ? (
+              <div className="dev-none">{t('sidebar.filter.none')}</div>
+            ) : null}
+            {everything()}
+          </div>
+        ) : null}
+      </section>
+    </TreeUnreadContext>
   )
 }
 

@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { groupOfSection, LOOSE, PINNED } from '@litch/core'
+import { treeUnread } from '../../../packages/ui/src/sidebar/tree.ts'
 import { buildList, groupKeyOf, PROJECTS } from '../src/screens/sessions/list.ts'
 import { rowsOf, splitPath } from '../src/screens/tools/diff/rows.ts'
 import { nextAfterClose, pickExisting, workspaceOf } from '../src/screens/tools/terminal/pick.ts'
@@ -15,6 +16,51 @@ const workspace = (id, roots = [`/w/${id}`], place = {}) => ({
   pinned: false,
   sectionId: null,
   ...place,
+})
+
+test('项目收起的未读与展开后的实际子树一致：跨项目孙项、隐藏原生项、归档和经理工作线', () => {
+  const groups = { stoneage: ['middle', 'child', 'ordinary'], wind: ['parent'] }
+  const children = { parent: ['middle'], middle: ['child'], manager: ['line'] }
+  const unread = ['child', 'archived', 'manager', 'line']
+  const source = {
+    groups,
+    children,
+    workspaces: [workspace('stoneage'), workspace('wind')],
+    sections: [],
+    hidden: ['middle', 'child'],
+    folded: new Set(['parent', 'middle']),
+    always: (id) => unread.includes(id),
+    archived: [],
+    archivedOpen: false,
+    offline: false,
+    organizable: true,
+  }
+  const closed = buildList({ ...source, collapsed: new Set(['stoneage', 'wind']) })
+  assert.equal(
+    closed.some((row) => row.type === 'session'),
+    false,
+  )
+  const open = buildList({ ...source, collapsed: new Set() })
+  const actual = {}
+  let group
+  for (const row of open) {
+    if (row.type === 'group') group = groupKeyOf(row.head)
+    if (row.type === 'session' && unread.includes(row.id)) actual[group] = (actual[group] ?? 0) + 1
+  }
+  assert.deepEqual(actual, { wind: 1 })
+  assert.deepEqual(treeUnread(groups, children, unread), actual)
+  assert.deepEqual(
+    open.filter((row) => row.type === 'session').map((row) => row.id),
+    ['ordinary', 'parent', 'middle', 'child'],
+  )
+  assert.deepEqual(
+    treeUnread(
+      groups,
+      children,
+      unread.filter((id) => id !== 'child'),
+    ),
+    {},
+  )
 })
 
 const input = (over = {}) => ({

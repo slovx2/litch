@@ -64,6 +64,8 @@ Chat and Managers are navigation trees. The content follows the last conversatio
 Only the clicked row is selected, including for keyboard navigation and screen readers. Other copies stay unselected.
 List updates preserve the selected location; removing that projection item selects the same conversation in the tree.
 未读沿用本机的新结果标记：未查看的对话从运行转为停止时标记，打开后清除；随侧栏缓存保存，重启保留。
+桌面和手机收起项目时，未读数按展开后的实际会话树汇总。跨项目的子会话计入它显示所在的父会话项目；父项被筛掉、子项单列时，计回子项所在项目。被筛掉、已归档及普通列表不显示的经理工作线不计入。未读后代所需的父链不会被子树折叠或“显示更多”藏住；打开未读子会话清除它自己的标记，打开父会话不会代清子会话。
+On desktop and phone, collapsed project unread counts follow the visible conversation tree. A nested child counts toward the parent's displayed project; if filtering leaves the child standalone, it counts toward its own project. Filtered, archived and manager workline rows absent from the ordinary list do not count. Unread descendants remain reachable through folded or paginated ancestors. Open the unread child to clear its mark; opening the parent does not clear its children.
 从未读组打开后，当前主项保留在原位置并恢复已读样式，切到其他主会话或离开对话后才移出，避免连续点击打开下一项。未读计数只计算仍未读的主项，最近组不显示总数。
 这条规则也适用于子会话：父会话已打开、子会话完成后才进入未读时，读完子会话仍保留整棵树和展开状态；在同棵树内切换不移出。切到其他树、新建对话、设置页或经理模式后释放暂留；清未读不会移除「最近」中的主项。
 Opening a child keeps its whole tree in the Unread group, at the same position and with its expansion unchanged, even when the child finishes after the parent was opened. Read rows use the normal style. The tree stays while you browse within it and leaves when you switch trees or leave the conversation. Marking it read does not remove it from Recent.
@@ -87,8 +89,8 @@ Opening a manager from Recent, Unread, search, a notification or a session link 
 切到后台、锁屏、下拉通知中心或离开会话页（回到列表、打开终端、文件、子代理页等）都会清零。在手机上发送、批准、停止等操作立即记录。
 手机只记录本机的查看和操作，与电脑上的「最近」各自独立。每行以设备色线区分设备，包含多台设备时远程设备的行第二行写设备名（本机的行不写）；
 普通子会话和经理工作线缩进显示在主项下面，不占主项分页名额，点击直接打开对应对话。行尾小箭头展开或收起，照桌面投影默认收起，开合独立记在手机上。
-收起时行尾动态点表示后代有未读、等待处理、运行或后台任务，读屏给出数量，包含更深层的后代。设备会话列表使用同样的提示，并让未读和待处理的直接子项在折叠时仍显示。
-On phone, Recent shows ordinary children and manager worklines below their parent. The compact arrow toggles children, collapsed by default, and remembers the state locally. Children do not count toward pagination. A dot on a folded parent indicates activity anywhere in its descendant tree, with its count available to screen readers. The device conversation list uses the same indicator and keeps unread and waiting direct children visible when folded.
+收起时行尾动态点表示后代有未读、等待处理、运行或后台任务，读屏给出数量，包含更深层的后代。设备会话列表使用同样的提示，并让未读和待处理的后代及其父链在折叠时仍显示。
+On phone, Recent shows ordinary children and manager worklines below their parent. The compact arrow toggles children, collapsed by default, and remembers the state locally. Children do not count toward pagination. A dot on a folded parent indicates activity anywhere in its descendant tree, with its count available to screen readers. The device conversation list uses the same indicator and keeps unread and waiting descendants, together with their ancestors, visible when folded.
 点组头收起或展开；组头「⋯」可切换按项目聚合，并选择默认显示 5 / 10 / 20 条，
 「显示更多」每次增加 10 条，设置记在手机上。手机暂不显示「未读」组，会话列表里的未读标记照旧。
 

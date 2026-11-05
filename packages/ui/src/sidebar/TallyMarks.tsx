@@ -1,10 +1,15 @@
 // 收起的工作区、设备那一行行尾的汇总，和信息卡里对应的那一行。
-// 各自订阅这台设备的汇总（keys.tallies）：里面的会话有动静时只有这一小块重画，整个侧栏不跟着动。
+// 忙闲订阅 keys.tallies；未读从设备树的可见目录汇总，避免跨项目子会话在原项目留下幽灵记号。
 import { type GroupTallies, keys } from '@litch/core'
+import { createContext, useContext } from 'react'
 import { useT } from '../app/appearance.ts'
 import { useKey } from '../app/services.tsx'
 import { useSidebarHarnesses, useSidebarShowActive } from './state.ts'
 import { isQuiet, tallyOf, tallyParts, waitLabel } from './tally.ts'
+import { type TreeUnread, unreadIn } from './tree.ts'
+
+/** 设备树提供同一份可见性计算；信息卡保留不按 harness 筛选的口径。 */
+export const TreeUnreadContext = createContext<{ shown: TreeUnread; all: TreeUnread } | null>(null)
 
 interface TallyProps {
   deviceId: string
@@ -21,7 +26,9 @@ export function TallyMarks({ deviceId, group }: TallyProps) {
   const harnesses = useSidebarHarnesses()
   // 永远显示活动对话时，别的 harness 在跑的、没看过的展开了也看得见：都算
   const only = useSidebarShowActive() ? [] : harnesses
-  const tally = tallyOf(useKey<GroupTallies>(keys.tallies(deviceId)), group, only)
+  const raw = tallyOf(useKey<GroupTallies>(keys.tallies(deviceId)), group, only)
+  const counts = useContext(TreeUnreadContext)
+  const tally = counts ? { ...raw, unread: unreadIn(counts.shown, group) } : raw
   const t = useT()
   if (isQuiet(tally)) return null
   const waiting = waitLabel(tally)
@@ -49,7 +56,9 @@ export function TallyMarks({ deviceId, group }: TallyProps) {
 
 /** 信息卡里的一行：现在里面各有几个。什么事都没有就不出这一行。说的是这一组全部的会话，不跟着筛选变 */
 export function TallyFact({ deviceId, group }: TallyProps) {
-  const tally = tallyOf(useKey<GroupTallies>(keys.tallies(deviceId)), group)
+  const raw = tallyOf(useKey<GroupTallies>(keys.tallies(deviceId)), group)
+  const counts = useContext(TreeUnreadContext)
+  const tally = counts ? { ...raw, unread: unreadIn(counts.all, group) } : raw
   const t = useT()
   if (isQuiet(tally)) return null
   return (
