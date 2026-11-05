@@ -34,7 +34,7 @@ const config = JSON.parse(readFileSync(configPath, 'utf8'))
 const base = join(mobile, '.artifacts')
 mkdirSync(base, { recursive: true })
 const artifacts = mkdtempSync(join(base, 'ios-validation-'))
-const helper = await iosTestHelper(config, artifacts)
+const helper = await iosTestHelper(config, artifacts, simulator)
 let child
 let stopping = false
 let locked = false
@@ -78,6 +78,27 @@ try {
           readFileSync(from, 'utf8')
             .replace(/dev\.litch\.app(?!\.dev)/g, 'dev.litch.app.dev')
             .replaceAll('litch://', 'litch-dev://')
+            // iOS 的整句 XCTest 注入会产生虚拟 keyCode，终端按真实逐字输入验证。
+            .replace(
+              '- inputText: echo e2e-$((6*7)) > e2e-mark.txt',
+              '- evalScript: ${output.terminalCommand = "echo e2e-$((6*7)) > e2e-mark.txt"; output.terminalAt = 0}\n' +
+                '- repeat:\n    while:\n      true: ${output.terminalAt < output.terminalCommand.length}\n' +
+                '    commands:\n      - inputText: ${output.terminalCommand.charAt(output.terminalAt)}\n' +
+                '      - evalScript: ${output.terminalAt += 1}',
+            )
+            .replace(
+              '- tapOn:\n    id: pair:paste\n- inputText: ${output.pairText}\n- hideKeyboard',
+              '- runScript: ../ios/pair-clipboard.js\n- assertTrue: ${output.clipboardSet}\n' +
+                '- tapOn: "从剪贴板粘贴|Paste from clipboard"\n' +
+                '- runFlow:\n    when:\n      visible: "允许粘贴|Allow Paste"\n' +
+                '    commands:\n      - tapOn: "允许粘贴|Allow Paste"',
+            )
+            // iOS 没有系统返回键，用同一个页面的返回或关闭按钮。
+            .replace(
+              /^( *)- back$/gm,
+              (_, indent) =>
+                `${indent}- tapOn:\n${indent}    id: ${entry.name === '16-mermaid.yaml' ? 'mermaid-viewer:close' : 'header:back'}`,
+            )
             .replace('    stopApp: true\n', () => `    stopApp: true\n${confirmLink()}\n`)
             .replace(
               /^( *)- openLink: (.+)$/gm,
@@ -144,16 +165,49 @@ try {
   for (const flow of flows) {
     if (stopping) break
     if (!/^(mock|fixture|ios)\/[\w-]+\.yaml$/.test(flow)) throw new Error(`无效流程：${flow}`)
+    // 终端可能复用还活着的 shell；每条流程只认这一轮新执行的命令和产物。
+    writeFileSync(join(config.work, 'e2e-shell-commands.txt'), '')
+    const mark = join(config.work, 'e2e-mark.txt')
+    if (existsSync(mark)) unlinkSync(mark)
+    if (flow === 'ios/terminal-paste.yaml')
+      execFileSync('xcrun', ['simctl', 'pbcopy', simulator], {
+        input: 'echo e2e-$((6*7)) > e2e-mark.txt',
+      })
     console.log(`iOS 验收开始：${flow}`)
     child = spawn(process.env.MAESTRO ?? 'maestro', [...args, join(artifacts, 'flows', flow)], {
       stdio: 'inherit',
+      env: {
+        ...process.env,
+        JAVA_TOOL_OPTIONS: `${process.env.JAVA_TOOL_OPTIONS ?? ''} -Djava.net.preferIPv4Stack=true`,
+      },
     })
     const code = await new Promise((resolve, reject) => {
       child.on('error', reject)
       child.on('exit', resolve)
     })
     console.log(`iOS 验收结果：${flow} ${code === 0 ? '通过' : '失败'}`)
-    if (code !== 0) process.exitCode = code ?? 1
+    if (code !== 0) {
+      process.exitCode = code ?? 1
+      // 清理临时报告前留下失败页的控件标签；不输出输入值或密钥文本。
+      const reports = readdirSync(artifacts, { recursive: true }).filter((name) =>
+        name.endsWith(`commands-(${flow.split('/').at(-1)}).json`),
+      )
+      for (const report of reports) {
+        const commands = JSON.parse(readFileSync(join(artifacts, report), 'utf8'))
+        const labels = new Set()
+        const walk = (node) => {
+          const attr = node.attributes ?? {}
+          const id = attr['resource-id'] ?? ''
+          const label = attr.accessibilityText ?? ''
+          if ((id || label) && !id.startsWith('key:') && !label.includes('PRIVATE KEY'))
+            labels.add(`${id} ${label}`.trim().slice(0, 180))
+          for (const entry of node.children ?? []) walk(entry)
+        }
+        for (const entry of commands)
+          if (entry.metadata?.error?.hierarchyRoot) walk(entry.metadata.error.hierarchyRoot)
+        console.log('失败页控件：', [...labels].slice(0, 100).join('\n'))
+      }
+    }
   }
 } finally {
   await cleanup()

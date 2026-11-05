@@ -296,6 +296,23 @@
   textarea?.addEventListener('focus', () => post({ t: 'kb', on: true }))
   textarea?.addEventListener('blur', () => post({ t: 'kb', on: false }))
 
+  if (config.ios) {
+    // iOS 的普通文字以 input 事件的提交值为准，不能先让 xterm 用虚拟 keyCode 猜字符。
+    // 组合输入、控制键和快捷键仍交给 xterm；只阻止文本键的事件传播，不取消浏览器输入。
+    const committedText = (event) => {
+      if (
+        !event.isComposing &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        event.key?.length === 1
+      )
+        event.stopPropagation()
+    }
+    host.addEventListener('keydown', committedText, true)
+    host.addEventListener('keypress', committedText, true)
+  }
+
   // ---------- 手指滚动 ----------
   // 这一版 xterm 在手机上划不动回滚区，这里自己接：手指上下划，平常的屏幕滚回滚区，
   // 全屏程序（vim、less、top，用的是另一块屏幕）里换成上下方向键，像桌面终端滚滚轮那样。
@@ -436,13 +453,22 @@
       case 'text':
         typed(message.d)
         break
+      case 'paste':
+        // xterm 按 shell 的 bracketed paste 模式封装，不能把整段粘贴当作逐字敲入。
+        if (running) term.paste(message.d)
+        break
       case 'ctrl':
         ctrl = message.on
+        break
+      case 'prepareFocus':
+        term.blur()
+        textarea?.blur()
+        post({ t: 'focusReady' })
         break
       case 'focus':
         // 焦点还在输入框上、键盘却被收了（关掉对话框之后常这样）：再 focus 一次系统不会弹键盘，
         // 先让开焦点、下一拍再拿回来
-        if (textarea && document.activeElement === textarea) {
+        if (!config.ios && textarea && document.activeElement === textarea) {
           textarea.blur()
           setTimeout(() => term.focus(), 0)
         } else term.focus()

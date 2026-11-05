@@ -1,5 +1,5 @@
 // iOS Maestro 使用的隔离夹具辅助口；只接 fixture.mjs 创建的临时 sshd，不接受真实设备配置。
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
@@ -8,10 +8,20 @@ import { encodePairPayload } from '../../../packages/protocol/src/device-pairing
 import { deviceRpc } from './device-rpc.mjs'
 import { terminalEvidence } from './terminal-audit.mjs'
 
-export async function iosTestHelper(config, artifacts) {
+export async function iosTestHelper(config, artifacts, simulator) {
   if (!/^\/tmp\/litch-ssh-[^/]+$/.test(config.root)) throw new Error('必须使用隔离 SSH 夹具')
+  if (!/^[0-9A-F-]{36}$/.test(simulator)) throw new Error('必须指定隔离模拟器')
   let rpc
   let current
+  let policyLog
+  let policyBuffer = ''
+  let policies = []
+  let backgrounded = false
+  const simctl = (...args) =>
+    execFileSync('xcrun', ['simctl', ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
   const clipboard = new Map()
   const service = async () => {
     if (rpc) return rpc
@@ -84,7 +94,59 @@ export async function iosTestHelper(config, artifacts) {
       try {
         const url = new URL(request.url, 'http://localhost')
         let answer = null
-        if (url.pathname.startsWith('/pair')) answer = await pair(request.method, url.pathname)
+        if (url.pathname === '/background/start' && request.method === 'POST') {
+          policies = []
+          policyBuffer = ''
+          simctl(
+            'spawn',
+            simulator,
+            'log',
+            'config',
+            '--subsystem',
+            'dev.litch.connection',
+            '--mode',
+            'level:info',
+          )
+          policyLog = spawn('xcrun', [
+            'simctl',
+            'spawn',
+            simulator,
+            'log',
+            'stream',
+            '--style',
+            'compact',
+            '--level',
+            'debug',
+            '--predicate',
+            'subsystem == "dev.litch.connection"',
+          ])
+          policyLog.stdout.on('data', (chunk) => {
+            policyBuffer += chunk.toString()
+            let newline
+            while ((newline = policyBuffer.indexOf('\n')) >= 0) {
+              const line = policyBuffer.slice(0, newline)
+              policyBuffer = policyBuffer.slice(newline + 1)
+              const state = /Connection policy: (\{.*\})/.exec(line)
+              if (state) policies.push(JSON.parse(state[1]))
+            }
+          })
+          await sleep(1000)
+          simctl('launch', simulator, 'com.apple.Preferences')
+          backgrounded = true
+          answer = 'ok'
+        } else if (url.pathname === '/background/status') {
+          if (!policies.some((state) => state.suspended)) await sleep(10_000)
+          answer = JSON.stringify({ paused: policies.some((state) => state.suspended), policies })
+        } else if (url.pathname === '/background/resume' && request.method === 'POST') {
+          simctl('launch', simulator, 'dev.litch.app.dev')
+          backgrounded = false
+          for (let i = 0; i < 40 && policies.at(-1)?.background !== false; i++) await sleep(250)
+          answer = JSON.stringify({ resumed: policies.at(-1)?.background === false, policies })
+        } else if (url.pathname === '/clipboard/set' && request.method === 'POST') {
+          execFileSync('xcrun', ['simctl', 'pbcopy', simulator], { input: body })
+          answer = 'ok'
+        } else if (url.pathname.startsWith('/pair'))
+          answer = await pair(request.method, url.pathname)
         else if (
           url.pathname === '/authorize' &&
           request.method === 'POST' &&
@@ -132,6 +194,8 @@ export async function iosTestHelper(config, artifacts) {
   return {
     url: `http://127.0.0.1:${server.address().port}`,
     async stop() {
+      if (backgrounded) simctl('launch', simulator, 'dev.litch.app.dev')
+      if (policyLog) policyLog.kill('SIGTERM')
       rpc?.close()
       server.closeAllConnections()
       await new Promise((resolve) => server.close(resolve))

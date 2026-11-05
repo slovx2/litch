@@ -2,7 +2,7 @@
 // 最左边是键盘键（弹出、收起键盘），接着是 Esc、Tab、Ctrl（按一下亮起，下一个字带上 Ctrl，用掉就灭）、
 // 方向键（按住连发），后面是一排常用符号，横着滑。键的字是通用的键名和符号，不用翻译。
 import { useEffect, useRef } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useT } from '../../../ui/i18n'
 import { useTheme } from '../../../ui/theme'
 
@@ -78,6 +78,15 @@ export function KeyBar({
         testID="terminal:key:keyboard"
         onPress={onKeyboard}
       />
+      {Platform.OS === 'ios' ? (
+        <Cap
+          label="⎘"
+          accessibilityLabel={t('tools.term.paste')}
+          testID="terminal:key:paste"
+          disabled={disabled}
+          onPress={() => onKey('paste')}
+        />
+      ) : null}
       <ScrollView
         horizontal
         keyboardShouldPersistTaps="always"

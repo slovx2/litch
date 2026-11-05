@@ -7,8 +7,9 @@
 // 页面只建一次：换终端时清屏、换一份订阅（核心补给它还留着的那一段），不重建 WebView。
 
 import type { TerminalOp } from '@litch/core'
+import * as Clipboard from 'expo-clipboard'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react'
-import { Linking, StyleSheet } from 'react-native'
+import { Linking, Platform, StyleSheet } from 'react-native'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 import { showKeyboard } from '../../../../modules/litch-keyboard/src'
 import { useChannel } from '../../../shell/services'
@@ -25,6 +26,7 @@ type PageMessage =
   | { t: 'redraw' }
   | { t: 'ctrl'; on: boolean }
   | { t: 'kb'; on: boolean }
+  | { t: 'focusReady' }
   | { t: 'link'; uri: string }
   | { t: 'error'; message: string }
   | { t: 'frames'; count: number; p95: number; max: number; bytes: number }
@@ -90,10 +92,33 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(
       ref,
       () => ({
         send(input: TerminalInput) {
+          if (input.t === 'key' && input.k === 'paste') {
+            const id = latest.current.terminalId
+            const device = latest.current.deviceId
+            void Clipboard.getStringAsync()
+              .then((text) => {
+                // 系统粘贴许可可能稍后才回答；期间换了终端就丢弃，不写入另一个 shell。
+                if (
+                  text &&
+                  id &&
+                  latest.current.terminalId === id &&
+                  latest.current.deviceId === device
+                )
+                  post({ t: 'paste', d: text })
+              })
+              // 拒绝系统粘贴许可与空剪贴板都不打断终端。
+              .catch(() => {})
+            return
+          }
           // WebView 在原生层没拿过焦点时，页面里 focus() 弹不出系统键盘：先让它拿焦点
           if (input.t === 'focus') {
-            view.current?.requestFocus()
             wantKeyboard.current = true
+            if (Platform.OS === 'ios') {
+              // 先提交一次失焦，再由页面回执触发新的原生脚本调用；后台恢复后不能复用旧输入会话。
+              post({ t: 'prepareFocus' })
+              return
+            }
+            view.current?.requestFocus()
           } else if (input.t === 'blur') wantKeyboard.current = false
           post(input)
         },
@@ -109,6 +134,7 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(
           fontSize: TERM_FONT_SIZE,
           text: { gap: latest.current.gapText, rejoined: latest.current.rejoinedText },
           stats: !!latest.current.stats,
+          ios: Platform.OS === 'ios',
         })};true;`,
       [],
     )
@@ -229,9 +255,16 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(
           // （页面会先让开焦点再拿回来，让开那一下的回报不算）
           if (message.on && wantKeyboard.current) {
             wantKeyboard.current = false
-            showKeyboard()
+            // WKWebView 在原生脚本调用中自行展示输入视图，不再重载同一个 UIKit 输入会话。
+            if (Platform.OS !== 'ios') showKeyboard()
           }
           now.onKeyboard(message.on)
+          break
+        case 'focusReady':
+          if (wantKeyboard.current) {
+            view.current?.requestFocus()
+            post({ t: 'focus' })
+          }
           break
         case 'link':
           if (/^https?:\/\//i.test(message.uri)) Linking.openURL(message.uri).catch(() => {})

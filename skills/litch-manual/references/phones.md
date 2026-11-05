@@ -98,6 +98,13 @@ iOS 在五分钟期限或系统允许的后台执行时间先到期时关闭 SSH
 iOS 不能安装下载的 APK。设置页提示通过安装应用的 App Store 或 TestFlight 更新，开发包需重新构建安装。
 iOS 不运行 Android 更新清单检查、下载或安装流程，也不显示自动检查与安装权限开关。
 
+iOS 终端底部的键盘按钮用于显示或收起系统键盘；“粘贴”从系统剪贴板插入文字。
+首次读取其他应用复制的内容时，iOS 可能要求允许粘贴。多行内容遵守终端程序的括号粘贴模式。
+
+In the iOS terminal, use the keyboard button to show or hide the system keyboard, and **Paste** to
+insert text from the system clipboard. iOS may ask for permission to paste from another app.
+Pasted text respects the terminal program's bracketed paste mode.
+
 ## In a session on the phone
 
 手机上的运行记号会缓慢呼吸：会话列表（含首页最近会话、经理与工作线、子会话）、会话中的活动行、
