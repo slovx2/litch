@@ -1,12 +1,13 @@
 // Mac检查只共用准备和构建，不改变每个探针的超时、断言或原有可选原生用例。
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { cliInventory } from './install-test-clis.mjs'
 import { iosReadiness } from './ios-checks.mjs'
 import { nativePlan } from './mac-native-plan.mjs'
+import { removeTestTree } from './remove-test-tree.mjs'
 import { isolatedEnvironment } from './run-checks.mjs'
 
 assert.equal(process.platform, 'darwin')
@@ -65,5 +66,5 @@ try {
   proof.complete = true
 } finally {
   writeFileSync('mac-native-proof.json', `${JSON.stringify(proof, null, 2)}\n`)
-  rmSync(home, { recursive: true, force: true })
+  removeTestTree(home)
 }

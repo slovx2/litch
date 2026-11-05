@@ -223,7 +223,7 @@ test('只收证明工作流有环境及受保护分支限制；签名出包不�
   assert.doesNotMatch(signing, /local-mac|fallback/)
   assert.match(
     readFileSync('scripts/ci/local-mac-fallback.mjs', 'utf8'),
-    /finally \{\s+rmSync\(temp/,
+    /finally \{\s+removeTestTree\(temp\)/,
   )
 })
 

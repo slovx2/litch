@@ -3,13 +3,14 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { createPrivateKey, sign } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { goEnvironment } from './go-toolchains.mjs'
 import { checkEnvelope, checkHistory } from './local-mac-policy.mjs'
 import { readSmallArtifact, sourceState } from './local-mac-remote.mjs'
 import { api, gh, pages, validateArtifact } from './release-artifacts.mjs'
+import { removeTestTree } from './remove-test-tree.mjs'
 import { isolatedEnvironment } from './run-checks.mjs'
 
 const args = process.argv.slice(2)
@@ -158,5 +159,5 @@ try {
     `证明已提交接收工作流，等待local-mac-fallback环境审批。通过后由维护者重跑原run ${runId} 的Mac路由及下游：gh api repos/${repository}/actions/jobs/${latest.routeId}/rerun --method POST。本命令不重跑发版。`,
   )
 } finally {
-  rmSync(temp, { recursive: true, force: true })
+  removeTestTree(temp)
 }
