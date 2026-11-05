@@ -57,6 +57,19 @@ export function checkDraft(release, tag, marker) {
   assert.ok(release.body?.includes(marker), '草稿不属于这个候选，禁止覆盖')
 }
 
+export function releaseNotes(changelog, version) {
+  const sections = [...changelog.matchAll(/^## ([^\r\n]+)\r?$/gm)]
+  const matches = sections.filter(
+    (section) => /^(\d+\.\d+\.\d+)(?=$|[\s（(])/.exec(section[1])?.[1] === version,
+  )
+  assert.equal(matches.length, 1, `CHANGELOG 必须且只能包含一个 ${version} 条目`)
+  const section = matches[0]
+  const next = sections[sections.indexOf(section) + 1]
+  const body = changelog.slice(section.index + section[0].length, next?.index).trim()
+  assert.ok(body, `CHANGELOG 的 ${version} 发布说明不能为空`)
+  return body
+}
+
 export function checkAssets(assets, expected, { complete = true } = {}) {
   const seen = new Set()
   for (const asset of assets) {
@@ -154,6 +167,14 @@ export async function promote(env = process.env, services = {}) {
     const marker = `<!-- litch-candidate:${context.runId}:${context.attempt}:${artifact.id}:${artifact.digest} -->`
     const report = `${summary(manifest)}\n封存 artifact：${artifact.id}，${artifact.digest}\n`
     if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, report)
+    // 按候选 SHA 读取已审阅文案，不能取晋级工作流所在分支或 GitHub 自动提交摘要。
+    const changelog = api(`${base}/contents/CHANGELOG.md?ref=${context.sha}`)
+    assert.equal(changelog.encoding, 'base64', '无法读取候选 CHANGELOG')
+    const notes = releaseNotes(
+      Buffer.from(changelog.content, 'base64').toString('utf8'),
+      context.version,
+    )
+    const body = `${notes}\n\n${marker}`
     if (env.PROMOTE_MODE === 'verify')
       return { mode: 'verify', sha: context.sha, artifact: artifact.id }
 
@@ -168,16 +189,13 @@ export async function promote(env = process.env, services = {}) {
     assert.ok(existing.length <= 1, '同标签存在多个 release')
     let release = existing[0]
     checkDraft(release, env.TAG, marker)
+    if (release) assert.equal(release.body, body, '草稿正文与候选 CHANGELOG 不一致')
     if (!release) {
-      const notes = api(`${base}/releases/generate-notes`, {
-        tag_name: env.TAG,
-        target_commitish: context.sha,
-      })
       release = api(`${base}/releases`, {
         tag_name: env.TAG,
         target_commitish: context.sha,
         name: env.TAG,
-        body: `${notes.body}\n\n${report}\n${marker}`,
+        body,
         draft: true,
         prerelease: false,
         make_latest: 'false',
@@ -237,7 +255,9 @@ export async function promote(env = process.env, services = {}) {
     sourceRun(api(runPath), context)
     await verifyCandidate(dir, context, policyHash())
     await releasePolicy(policyContext)
-    checkDraft(api(`${base}/releases/${release.id}`), env.TAG, marker)
+    const finalRelease = api(`${base}/releases/${release.id}`)
+    checkDraft(finalRelease, env.TAG, marker)
+    assert.equal(finalRelease.body, body, '回验后发布说明被修改，禁止公开')
     const finalAssets = pages(assetPath)
     checkAssets(finalAssets, expected)
     assert.deepEqual(

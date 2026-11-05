@@ -27,7 +27,13 @@ import {
   writeJson,
 } from './release-candidate.mjs'
 import { existingCandidate } from './release-preflight.mjs'
-import { checkAssets, checkDraft, promote, promotionInputs } from './release-promote.mjs'
+import {
+  checkAssets,
+  checkDraft,
+  promote,
+  promotionInputs,
+  releaseNotes,
+} from './release-promote.mjs'
 
 const sha = 'a'.repeat(40)
 const digest = `sha256:${'b'.repeat(64)}`
@@ -436,6 +442,13 @@ async function serviceFixture(t, mode = 'standard') {
   const services = {
     policyHash: () => policy,
     api(path, fields) {
+      if (path === `repos/${context.repository}/contents/CHANGELOG.md?ref=${sha}`)
+        return {
+          encoding: 'base64',
+          content: Buffer.from(
+            '# Changelog\n\n## 1.2.3（2026-11-05）\n\n### 新增功能\n\n- 支持保存草稿图片。\n\n## 1.2.2\n\n- 旧版内容。\n',
+          ).toString('base64'),
+        }
       if (path.endsWith('/actions/runs/42')) return run
       if (path.endsWith('/actions/artifacts/99')) return artifact
       if (path.endsWith('/actions/artifacts/88')) return { ...artifact, ...checkpoint.artifact }
@@ -450,7 +463,6 @@ async function serviceFixture(t, mode = 'standard') {
           tagExists = true
           return {}
         }
-        if (path.endsWith('/generate-notes')) return { body: 'fixture notes' }
         if (path.endsWith('/releases')) {
           release = { ...fields, id: 7, html_url: 'https://example.test/draft' }
           return release
@@ -522,6 +534,11 @@ test('晋级端到端替身演练：verify 零写入；draft 回验同一 bytes�
   await promote(input, f.services)
   assert.equal(f.state().release.draft, true)
   assert.equal(f.state().release.make_latest, 'false')
+  assert.match(
+    f.state().release.body,
+    /^### 新增功能\n\n- 支持保存草稿图片。\n\n<!-- litch-candidate:/,
+  )
+  assert.doesNotMatch(f.state().release.body, /旧版内容|封存 artifact|Gate|Full/)
   assert.equal(f.commands.filter((c) => c.args?.[0] === 'release').length, 1)
   await promote(input, f.services)
   assert.equal(f.commands.filter((c) => c.args?.[0] === 'release').length, 1)
@@ -536,6 +553,35 @@ test('晋级端到端替身演练：verify 零写入；draft 回验同一 bytes�
     f.commands.some((c) => c.args?.includes('PATCH')),
     false,
   )
+})
+
+test('发布说明保留本版分组，排除相邻版本；缺失、空白或重复条目拒绝', () => {
+  const current = '### 新增功能\n\n- 图片草稿。\n\n### 修复\n\n- 消息发送。'
+  const changelog = `# Changelog\n\n## 1.2.30\n\n- 新版。\n\n## 1.2.3（2026-11-05）\n\n${current}\n\n## 1.2.2\n\n- 旧版。\n`
+  assert.equal(releaseNotes(changelog, '1.2.3'), current)
+  assert.equal(
+    releaseNotes(changelog.replaceAll('\n', '\r\n'), '1.2.3'),
+    current.replaceAll('\n', '\r\n'),
+  )
+  assert.throws(() => releaseNotes(changelog, '1.2.4'), /只能包含一个/)
+  assert.throws(() => releaseNotes('## 1.2.3\n\n## 1.2.2\n旧版', '1.2.3'), /不能为空/)
+  assert.throws(() => releaseNotes(`${changelog}\n## 1.2.3\n重复`, '1.2.3'), /只能包含一个/)
+})
+
+test('候选缺少本版发布说明时，在创建标签或草稿前停止', async (t) => {
+  const f = await serviceFixture(t)
+  const services = {
+    ...f.services,
+    api: (path, fields) =>
+      path.includes('/contents/CHANGELOG.md?ref=')
+        ? { encoding: 'base64', content: Buffer.from('## 1.2.2\n旧版').toString('base64') }
+        : f.services.api(path, fields),
+  }
+  await assert.rejects(
+    promote({ ...env, PROMOTE_MODE: 'draft', PROMOTE_OUTPUT: f.output }, services),
+    /只能包含一个/,
+  )
+  assert.deepEqual(f.commands, [])
 })
 
 test('产品与基础设施混合失败不得晋级，旧成功 artifact 不能代替失败 job', async (t) => {
