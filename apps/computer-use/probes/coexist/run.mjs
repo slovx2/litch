@@ -4,6 +4,13 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { hidIdleSeconds } from './idle.mjs'
+
+const idle = hidIdleSeconds()
+if (idle < 60) {
+  console.log(JSON.stringify([{ discarded: true, reason: 'HIDIdleTime < 60s', idle }]))
+  process.exit(75)
+}
 
 const source = fileURLToPath(new URL('../background/', import.meta.url))
 const cu = resolve(source, '../..')
@@ -14,8 +21,16 @@ delete env.ELECTRON_RUN_AS_NODE
 for (const name of ['home', 'codex', 'appkit', 'guard', 'electron'])
   mkdirSync(join(root, name), { recursive: true })
 const children = []
+let cancelled = false
+process.on('SIGTERM', () => {
+  cancelled = true
+})
+process.on('SIGINT', () => {
+  cancelled = true
+})
 async function until(fn) {
   for (let i = 0; i < 600; i++) {
+    if (cancelled) throw new Error('验收已取消')
     try {
       const value = fn()
       if (value) return value
@@ -57,13 +72,26 @@ try {
   )
   children.push(electron.pid)
   await until(() => read('electron'))
-  open(join(cu, '.artifacts/integration/Litch Background Input Probe.app'), {
-    LITCH_CU_COEXIST_DIR: root,
-    LITCH_CU_PEEKABOO: process.env.LITCH_CU_PEEKABOO ?? '',
-  })
-  const result = await until(() => JSON.parse(readFileSync(join(root, 'result.json'), 'utf8')))
-  console.log(JSON.stringify(result, null, 2))
-  if (result.some((r) => r.error || r.passed === false)) process.exitCode = 1
+  const beforeProbeIdle = hidIdleSeconds()
+  if (beforeProbeIdle < 60) {
+    console.log(
+      JSON.stringify([
+        { discarded: true, reason: 'HID input during fixture setup', idle: beforeProbeIdle },
+      ]),
+    )
+    process.exitCode = 75
+  } else {
+    open(join(cu, '.artifacts/integration/Litch Background Input Probe.app'), {
+      LITCH_CU_COEXIST_DIR: root,
+      LITCH_CU_PEEKABOO: process.env.LITCH_CU_PEEKABOO ?? '',
+      LITCH_CU_GROUP: process.env.LITCH_CU_GROUP ?? 'coexist',
+    })
+    children.push(await until(() => Number(readFileSync(join(root, 'probe.pid'), 'utf8'))))
+    const result = await until(() => JSON.parse(readFileSync(join(root, 'result.json'), 'utf8')))
+    console.log(JSON.stringify(result, null, 2))
+    if (result.some((r) => r.discarded)) process.exitCode = 75
+    else if (result.some((r) => r.error || r.passed === false)) process.exitCode = 1
+  }
 } finally {
   for (const name of ['appkit', 'guard', 'electron']) {
     writeFileSync(

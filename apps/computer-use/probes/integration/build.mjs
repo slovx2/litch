@@ -40,7 +40,11 @@ execFileSync(
       .filter((n) => n.endsWith('.swift') && n !== 'main.swift')
       .map((n) => join(native, n)),
     ...(process.argv.includes('--coexist')
-      ? [join(here, '../coexist/main.swift'), join(here, '../background/ProbeInput.swift')]
+      ? [
+          join(here, '../coexist/main.swift'),
+          join(here, '../coexist/ElectronMatrix.swift'),
+          join(here, '../background/ProbeInput.swift'),
+        ]
       : [join(here, 'main.swift')]),
     ...readdirSync(core)
       .filter((n) => n.endsWith('.swift.o'))

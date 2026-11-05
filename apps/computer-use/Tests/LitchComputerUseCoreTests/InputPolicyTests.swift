@@ -2,6 +2,18 @@ import XCTest
 @testable import LitchComputerUseCore
 
 final class InputPolicyTests: XCTestCase {
+  func testMouseRecipientUsesTheEventWindowNotAnOverlappingWindow() {
+    let owners: [UInt32: Int32] = [10: 100, 20: 200]
+    XCTAssertEqual(InputPolicy.mouseRecipient(windowIDs: [10, 10, 10], owner: { owners[$0] }), 100)
+    XCTAssertEqual(InputPolicy.mouseRecipient(windowIDs: [0, 10], owner: { owners[$0] }), 100)
+  }
+  func testMouseRecipientRejectsInvalidOrMissingWindowIdentifiers() {
+    var queried: [UInt32] = []
+    XCTAssertNil(InputPolicy.mouseRecipient(windowIDs: [-1, 0, Int64(UInt32.max) + 1, 12, 12], owner: {
+      queried.append($0); return nil
+    }))
+    XCTAssertEqual(queried, [12])
+  }
   func testCommandShortcutsAndWindowlessKeysUseGuardedForeground() {
     XCTAssertTrue(InputPolicy.keyboardNeedsForeground(hasWindow: false, flags: 0))
     XCTAssertTrue(InputPolicy.keyboardNeedsForeground(hasWindow: true, flags: Keys.command))

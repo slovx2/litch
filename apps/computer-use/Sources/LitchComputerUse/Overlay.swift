@@ -54,16 +54,21 @@ enum UserActivity {
     if [.keyDown, .keyUp, .flagsChanged].contains(event.type) {
       return NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
     }
+    let windowIDs = [
+      event.cgEvent?.getIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent) ?? 0,
+      event.cgEvent?.getIntegerValueField(.mouseEventWindowUnderMousePointer) ?? 0,
+      Int64(event.windowNumber),
+    ]
+    if let pid = InputPolicy.mouseRecipient(windowIDs: windowIDs, owner: { id in
+      let rows = CGWindowListCopyWindowInfo(.optionIncludingWindow, id) as? [[String: Any]] ?? []
+      return rows.first { ($0[kCGWindowNumber as String] as? UInt32) == id }?[kCGWindowOwnerPID as String] as? Int32
+    }) { return pid }
+    // 没有有效窗口号时才按 AX 命中元素取归属，不能把透明/穿透浮层的矩形当作命中。
     guard let point = event.cgEvent?.location else { return 0 }
-    let rows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], 0)
-      as? [[String: Any]] ?? []
-    for row in rows {
-      guard (row[kCGWindowAlpha as String] as? Double ?? 1) > 0,
-        let bounds = row[kCGWindowBounds as String] as? [String: Any],
-        let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary), frame.contains(point),
-        let pid = row[kCGWindowOwnerPID as String] as? Int32 else { continue }
-      return pid
-    }
+    var element: AXUIElement?
+    var pid: pid_t = 0
+    if AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(point.x), Float(point.y), &element) == .success,
+      let element, AXUIElementGetPid(element, &pid) == .success { return pid }
     return 0
   }
 

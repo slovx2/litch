@@ -258,6 +258,7 @@ eight seconds only for held buttons/keys or a reported IME composition, not for 
 Opening the target to look at it, moving the pointer and scrolling do not stop the agent. If input
 overlaps during a foreground step, only that step fails: inspect the state and retry its unfinished
 part. The session remains usable. Esc and the explicit Stop button still stop control for the turn.
+Pointer conflicts follow the window that received the click; overlapping or click-through overlays do not change its target.
 On Windows, UI Automation actions also ignore user activity; mouse and keyboard fallback uses a
 temporary foreground visit with the same step-scoped conflict rule. IME detection depends on the
 target exposing its composition range through accessibility; some applications do not expose it.
