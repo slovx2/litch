@@ -1202,6 +1202,13 @@ export function createCore(options: CoreOptions): Core {
           return {}
         }
         // 文件面板。没做成的原因文件那一层已经换成给人看的了，原样过去
+        case 'files.localSource': {
+          const { deviceId, root, path } = params as Commands['files.localSource']['params']
+          const device = deviceOf(deviceId)
+          // 设备身份只信核心配置，不能由渲染进程用同名路径冒充本机。
+          if (device.view.kind !== 'local') return null
+          return { deviceId, ...device.files.locate(root, path) }
+        }
         case 'files.list': {
           const { deviceId, root, path, fresh } = params as Commands['files.list']['params']
           return await deviceOf(deviceId).files.list(root, path, fresh === true, signal)

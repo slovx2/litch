@@ -77,6 +77,9 @@ export interface FilesHost {
 }
 
 export interface Files {
+  /** 复用文件面板的路径范围校验；只返回规范路径，不读文件。 */
+  locate(root: string, path: string): { root: string; path: string }
+
   attachmentStatus(path: string, signal?: AbortSignalLike): Promise<{ state: AttachmentState }>
 
   upload(
@@ -355,6 +358,7 @@ export function createFiles(host: FilesHost): Files {
   }
 
   const files: Files = {
+    locate,
     async attachmentStatus(path, signal) {
       if (!host.online() || !host.attachmentsSupported?.()) return { state: 'unknown' }
       const response = await host.request(

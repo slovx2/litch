@@ -37,6 +37,7 @@ import { createComputerUse, locateHelper } from './computer-use/index.mjs'
 import { createComputerUseSettings, fakePermissions } from './computer-use/settings.mjs'
 import { createConfigMain } from './config-main.mjs'
 import { draftImageFile } from './draft-images.mjs'
+import { installFileReveal } from './file-reveal-main.mjs'
 import { installFileSave } from './file-save-main.mjs'
 import {
   ABOUT,
@@ -284,6 +285,14 @@ const clientTools = createClientToolHost(
 /** 核心连续几次刚起来就退出了。用来拉开重启的间隔，免得出错时原地打转 */
 let quickExits = 0
 
+const fileReveals = installFileReveal({
+  isUiUrl,
+  send(message) {
+    if (!core) return false
+    core.postMessage(message)
+    return true
+  },
+})
 const fileSaves = installFileSave({
   isUiUrl,
   send(message) {
@@ -321,7 +330,7 @@ function startCore(): void {
   child.postMessage({ type: CLIENT_TOOL, op: 'namespaces', namespaces: clientTools.namespaces() })
   // 核心往回发两种消息：客户端工具的调用和答复；退出前问它终端的事，它的回答
   child.on('message', (message: unknown) => {
-    if (core === child && fileSaves.receive(message)) return
+    if (core === child && (fileSaves.receive(message) || fileReveals.receive(message))) return
     const preview = message as {
       type?: string
       op?: string
@@ -381,7 +390,10 @@ function startCore(): void {
     askWaiting.get(data.id)?.(data.alive ?? null)
   })
   child.on('exit', (code) => {
-    if (core === child) fileSaves.disconnected()
+    if (core === child) {
+      fileSaves.disconnected()
+      fileReveals.disconnected()
+    }
     automationPreview?.disconnected(true)
     mainLog.write('core.exit', { code, quitting }, code === 0 || quitting ? 'info' : 'warn')
     if (core === child) core = null

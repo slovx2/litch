@@ -264,6 +264,14 @@ const fileSaves = createFileSaveCore(core, (progress) =>
 process.once('exit', () => fileSaves.dispose())
 
 process.parentPort.on('message', (event) => {
+  if (event.data?.type === 'file-reveal') {
+    const { id, source } = event.data
+    void core.command('files.localSource', source, new AbortController().signal).then(
+      (source) => process.parentPort.postMessage({ type: 'file-reveal', id, source }),
+      () => process.parentPort.postMessage({ type: 'file-reveal', id, error: true }),
+    )
+    return
+  }
   if (fileSaves.receive(event.data)) return
   if (previewPort.receive(event.data)) return
   if (event.data?.type === CLIENT_TOOL) {

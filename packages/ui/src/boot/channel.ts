@@ -58,7 +58,11 @@ export interface ShellBridge {
    * 选出来的是这台电脑上的路径。defaultPath 是从哪里开始找
    */
   pickFolder?(options: { defaultPath?: string; title?: string }): Promise<string | null>
-  /** 本机文件选择，取消返回 null；不能用于远程设备的路径。 */
+  /** 本机文件在系统文件管理器中显示；设备身份与路径由外壳再次核验。 */
+  revealFile?(
+    source: import('@litch/core').FileSaveSource,
+  ): Promise<import('@litch/core').FileRevealResult>
+  /** 远程设备文件另存到客户端电脑。 */
   saveFile?(request: import('@litch/core').FileSaveRequest): Promise<void>
   fileSaveAction?(id: string, action: 'cancel' | 'open' | 'reveal'): Promise<void>
   onFileSave?(handler: (progress: import('@litch/core').FileSaveProgress) => void): () => void

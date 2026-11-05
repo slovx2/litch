@@ -5,7 +5,9 @@ import {
   attachmentState,
   type DeviceView,
   isAbsolutePath,
+  joinPath,
   keys,
+  normalizePath,
   parentPath,
   type SessionSummary,
   type UserAttachment,
@@ -14,7 +16,8 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { Icon } from '../app/icons.tsx'
-import { useKey, useServices } from '../app/services.tsx'
+import { useKey, useKeys, useServices } from '../app/services.tsx'
+import { FileDestination } from '../files/FileDestination.tsx'
 import { FileLinkDialog } from '../files/FileLinkDialog.tsx'
 import { openInFiles } from '../files/state.ts'
 
@@ -36,8 +39,14 @@ export function FileCard({
   children?: ReactNode
 }) {
   const t = useT()
-  const { channel, replica } = useServices()
+  const { channel } = useServices()
   const device = useKey<DeviceView>(keys.device(deviceId ?? ''))
+  const ids = useKey<string[]>(keys.devices) ?? []
+  const devices = useKeys<DeviceView>(file.client ? ids.map((id) => keys.device(id)) : [])
+  const targetId = file.client ? devices.find((entry) => entry?.kind === 'local')?.id : deviceId
+  const summary = useKey<SessionSummary>(keys.summary(deviceId ?? '', sessionId ?? ''))
+  const path = file.path ? normalizePath(file.path) : ''
+  const root = path && isAbsolutePath(path) ? (parentPath(path) ?? path) : (cwd ?? summary?.cwd)
   const [state, setState] = useState<AttachmentState>('unknown')
   useEffect(() => {
     let active = true
@@ -67,22 +76,10 @@ export function FileCard({
     const next = await attachmentState(channel, deviceId, file)
     setState(next)
     if (next === 'cleaned') return
-    let targetId = deviceId
-    if (file.client) {
-      const ids = replica.store.get<string[]>(keys.devices) ?? []
-      targetId = ids.find((id) => replica.store.get<DeviceView>(keys.device(id))?.kind === 'local')
-    }
     if (!targetId) {
       setError(t('attachment.desktopRequired'))
       return
     }
-    const summary =
-      sessionId && deviceId
-        ? replica.store.get<SessionSummary>(keys.summary(deviceId, sessionId))
-        : null
-    const root = isAbsolutePath(file.path)
-      ? parentPath(file.path.replace(/[\\/]+$/, ''))
-      : (cwd ?? summary?.cwd)
     if (!root) {
       setError(t('attachment.noRoot'))
       return
@@ -127,6 +124,17 @@ export function FileCard({
             <small className="ell">{state === 'cleaned' ? t('attachment.cleaned') : detail}</small>
           </span>
         </button>
+        {targetId && root && file.path && state !== 'cleaned' ? (
+          <FileDestination
+            subject={{
+              deviceId: targetId,
+              root,
+              path: joinPath(root, file.path),
+              relative: file.path,
+              dir: file.kind === 'folder',
+            }}
+          />
+        ) : null}
         {children}
       </div>
       {error ? (

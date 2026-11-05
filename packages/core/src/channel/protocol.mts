@@ -416,6 +416,10 @@ export interface TopicOp {
 // ---------- 命令 ----------
 
 export interface Commands {
+  'files.localSource': {
+    params: import('../model-file-save.mjs').FileSaveSource
+    result: import('../model-file-save.mjs').FileSaveSource | null
+  }
   'managers.references.resolve': {
     params: { deviceId: string; managerId: string; ids: string[] }
     result: { ids: string[] }

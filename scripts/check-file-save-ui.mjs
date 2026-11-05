@@ -106,7 +106,7 @@ try {
     if (value.error) throw Error(value.error)
     console.log(name, JSON.stringify(value.value).slice(0, 700))
   }
-  const home = '设备进程的转发开销基准'
+  const home = '核对构建机上的 codex 配置'
   await read(`window.__saves=[];window.__saveActions=[];window.__saveListeners=new Set();window.litchShell={
   saveFile:async request=>{window.__saves.push(request);for(const fn of window.__saveListeners) fn({id:request.id,state:'saving',bytes:2,total:10,destination:'/client/report'});setTimeout(()=>{for(const fn of window.__saveListeners)fn({id:request.id,state:'saved',bytes:10,total:10,destination:'/client/report'})},30)},
   onFileSave:fn=>{window.__saveListeners.add(fn);return()=>window.__saveListeners.delete(fn)},fileSaveAction:async(id,action)=>{window.__saveActions.push(action)},onFileContextMenu:fn=>{window.__frameContext=fn;return()=>{window.__frameContext=null}}
@@ -127,9 +127,9 @@ try {
     () => read(`document.querySelector('.toast-text')?.textContent.includes('/client/report')`),
     'saved toast',
   )
-  assert.equal(await read(`window.__saves[0].path`), '~/work/litch/Makefile')
-  assert.equal(await read(`window.__saves[0].deviceId`), 'local')
-  assert.equal(await read(`window.__saves[0].root`), '~/work/litch')
+  assert.equal(await read(`window.__saves[0].path`), '/srv/work/litch/Makefile')
+  assert.equal(await read(`window.__saves[0].deviceId`), 'build')
+  assert.equal(await read(`window.__saves[0].root`), '/srv/work/litch')
   await read(
     `document.querySelectorAll('.toast-act')[0].click();document.querySelectorAll('.toast-act')[1].click()`,
   )
@@ -143,7 +143,7 @@ try {
   await read(`document.querySelector('[data-action="saveLocal"]').click()`)
   assert.equal(await read('window.__saves.length'), 2)
   await read(`document.querySelector('.fv-head [data-tool="save-local"]').click()`)
-  assert.equal(await read('window.__saves[2].path'), '~/work/litch/Makefile')
+  assert.equal(await read('window.__saves[2].path'), '/srv/work/litch/Makefile')
   await read(`void window.__filesKit.open('README.md')`)
   await until(
     () =>
@@ -155,7 +155,7 @@ try {
   await read(`window.__filesKit.context(document.querySelector('.fv-file'))`)
   assert.equal(await read(`!!document.querySelector('[data-action="saveLocal"]')`), true)
   await read(`document.querySelector('[data-action="saveLocal"]').click()`)
-  assert.equal(await read('window.__saves[3].path'), '~/work/litch/README.md')
+  assert.equal(await read('window.__saves[3].path'), '/srv/work/litch/README.md')
   console.log('PASS 文件树/预览右键另存、目录排除、来源设备路径、进度结果、打开与显示文件夹')
 } finally {
   cdp?.close()

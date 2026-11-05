@@ -301,6 +301,11 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
   const handlers: {
     [K in keyof Commands]?: (params: Commands[K]['params'], signal: AbortSignalLike) => unknown
   } = {
+    'files.localSource'({ deviceId, root, path }) {
+      const files = filesOf(deviceId, root)
+      if (host.device(deviceId)?.kind !== 'local') return null
+      return { deviceId, ...files.locate(expand(root), expand(path)) }
+    },
     async 'files.resolve'({ deviceId, root, ref, href }, signal) {
       const files = filesOf(deviceId, root)
       for (const known of host.rootsOf(deviceId)) filesOf(deviceId, known)

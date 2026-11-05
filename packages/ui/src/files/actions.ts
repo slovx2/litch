@@ -4,7 +4,7 @@ import { showToast } from '../app/toasts.tsx'
 import { mentionInComposer } from '../composer/drafts.ts'
 import { saveToLocal } from './save.ts'
 
-export type FileAction = 'mention' | 'copyRelative' | 'copyFull' | 'saveLocal'
+export type FileAction = 'mention' | 'copyRelative' | 'copyFull' | 'saveLocal' | 'revealLocal'
 
 export const FILE_ACTIONS: readonly FileAction[] = ['mention', 'copyRelative', 'copyFull']
 
@@ -18,12 +18,6 @@ export interface FileSubject {
   /** 是目录：加入对话时路径后面带一个斜杠，看得出是目录 */
   dir?: boolean
   line?: number | null
-}
-
-export function fileActions(subject: FileSubject): readonly FileAction[] {
-  return !subject.dir && subject.deviceId && subject.root && window.litchShell?.saveFile
-    ? [...FILE_ACTIONS, 'saveLocal']
-    : FILE_ACTIONS
 }
 
 function copy(text: string): void {
@@ -40,6 +34,31 @@ function copy(text: string): void {
 }
 
 export function runFileAction(action: FileAction, subject: FileSubject): void {
+  if (action === 'revealLocal') {
+    if (subject.deviceId && subject.root) {
+      const source = { deviceId: subject.deviceId, root: subject.root, path: subject.path }
+      void window.litchShell
+        ?.revealFile?.(source)
+        .then((result) => {
+          if (result !== 'opened')
+            showToast({
+              id: 'files-reveal',
+              tone: 'err',
+              lifeMs: 5000,
+              text: (t) => t(`files.reveal.${result}`),
+            })
+        })
+        .catch(() =>
+          showToast({
+            id: 'files-reveal',
+            tone: 'err',
+            lifeMs: 5000,
+            text: (t) => t('files.reveal.failed'),
+          }),
+        )
+    }
+    return
+  }
   if (action === 'saveLocal') {
     if (!subject.dir && subject.deviceId && subject.root)
       saveToLocal({ deviceId: subject.deviceId, root: subject.root, path: subject.path })

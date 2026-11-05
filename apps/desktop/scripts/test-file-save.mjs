@@ -10,7 +10,7 @@ const app = fileURLToPath(new URL('..', import.meta.url))
 const out = mkdtempSync(join(tmpdir(), 'litch-save-tests-'))
 try {
   await build({
-    entryPoints: ['file-save', 'file-save-main', 'file-save-device'].map((name) =>
+    entryPoints: ['file-save', 'file-save-main', 'file-save-device', 'file-reveal'].map((name) =>
       join(app, `src/test/${name}.test.mts`),
     ),
     outdir: out,
@@ -30,7 +30,7 @@ try {
     process.execPath,
     [
       '--test',
-      ...['file-save', 'file-save-main', 'file-save-device'].map((name) =>
+      ...['file-save', 'file-save-main', 'file-save-device', 'file-reveal'].map((name) =>
         join(out, `${name}.test.mjs`),
       ),
     ],

@@ -6,10 +6,11 @@ import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
 import { Close, Icon } from '../app/icons.tsx'
 import type { MessageKey } from '../i18n/index.ts'
-import { type FileAction, type FileSubject, fileActions, runFileAction } from './actions.ts'
+import { type FileAction, type FileSubject, runFileAction } from './actions.ts'
 import { CodeView } from './CodeView.tsx'
 import { ContextMenu } from './ContextMenu.tsx'
 import { useFileContent } from './content.ts'
+import { FileDestination, fileActionLabel, useFileActions } from './FileDestination.tsx'
 import { FileLinkDetails } from './FileLinkDetails.tsx'
 import { byteSize, splitLines } from './lines.ts'
 import { PreviewPanel } from './preview/PreviewPanel.tsx'
@@ -111,16 +112,9 @@ function SourceFileBody({
       data-kind={content?.kind ?? ''}
     >
       <div className="fv-head">
-        {window.litchShell?.saveFile ? (
-          <button
-            type="button"
-            className="mini"
-            data-tool="save-local"
-            onClick={() => act('saveLocal')}
-          >
-            {t('files.action.saveLocal')}
-          </button>
-        ) : null}
+        <FileDestination
+          subject={{ deviceId, root, path: tab.path, relative: relativeTo(root, tab.path) }}
+        />
         <span className="ell grow" title={tab.path}>
           {relative}
         </span>
@@ -248,6 +242,7 @@ export function FileViewer({
   const ui = useTreeUi(uiKey)
   const active = ui.tabs.find((tab) => tab.path === ui.active) ?? null
   const [menu, setMenu] = useState<{ x: number; y: number; subject: FileSubject } | null>(null)
+  const actions = useFileActions(menu?.subject ?? null)
   const openMenu = useCallback(
     (x: number, y: number, path: string) => {
       setMenu({ x, y, subject: { deviceId, root, path, relative: relativeTo(root, path) } })
@@ -289,7 +284,7 @@ export function FileViewer({
           x={menu.x}
           y={menu.y}
           label={baseName(menu.subject.path)}
-          items={fileActions(menu.subject).map((id) => ({ id, title: t(`files.action.${id}`) }))}
+          items={actions.map((id) => ({ id, title: t(fileActionLabel(id)) }))}
           onPick={(id) => runFileAction(id as FileAction, menu.subject)}
           onClose={() => setMenu(null)}
         />

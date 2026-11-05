@@ -14,6 +14,7 @@ import { useServices } from '../../app/services.tsx'
 import { type FileAction, runFileAction } from '../actions.ts'
 import { CodeView } from '../CodeView.tsx'
 import { useFileWatching } from '../content.ts'
+import { FileDestination } from '../FileDestination.tsx'
 import { byteSize, splitLines } from '../lines.ts'
 import { type OpenFile, openFile, retargetFile, setFileMode } from '../state.ts'
 import type { PreviewScope } from './contract.ts'
@@ -239,16 +240,9 @@ export function PreviewPanel({
       data-kind={content?.kind ?? ''}
     >
       <div className="fv-head">
-        {window.litchShell?.saveFile ? (
-          <button
-            type="button"
-            className="mini"
-            data-tool="save-local"
-            onClick={() => act('saveLocal')}
-          >
-            {t('files.action.saveLocal')}
-          </button>
-        ) : null}
+        <FileDestination
+          subject={{ deviceId, root, path: tab.path, relative: relativeTo(root, tab.path) }}
+        />
         <span className="ell grow" title={tab.path}>
           {relativeTo(root, tab.path)}
         </span>

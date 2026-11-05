@@ -21,12 +21,13 @@ async function renderFileCard(path) {
     useEffect: '()=>{}',
     useState:
       'x=>[x==="unknown"?globalThis.__attachmentShown:x,v=>{globalThis.__attachmentUpdated=v}]',
-    useKey: '()=>({connection:"online"})',
+    useKey: 'key=>key==="devices"?[]:({connection:"online"})',
+    useKeys: '()=>[]',
     useServices:
       '()=>({channel:{command:()=>{globalThis.__attachmentRequests++;throw new Error("不应打开已清理文件")}},replica:{store:{get:()=>null}}})',
     useT: '()=>key=>key',
     useTheme: '()=>({c:{},radius:{},font:{size:{}}})',
-    keys: '{device:x=>x}',
+    keys: '{device:x=>x,devices:"devices",summary:()=>"summary"}',
     StyleSheet: '{create:x=>x}',
     Pressable: '"Pressable"',
     Text: '"Text"',

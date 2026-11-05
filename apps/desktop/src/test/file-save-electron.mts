@@ -3,6 +3,7 @@ export const handlers = new Map<string, (...args: unknown[]) => unknown>()
 export const events = new Map<string, (...args: unknown[]) => unknown>()
 export const shown: unknown[] = []
 export const opened: string[] = []
+export const shellCalls: { method: string; path: string }[] = []
 let selection = '/local/output.txt'
 export const choose = (path: string) => {
   selection = path
@@ -30,10 +31,12 @@ export const dialog = {
 }
 export const shell = {
   async openPath(path: string) {
+    shellCalls.push({ method: 'openPath', path })
     opened.push(path)
     return ''
   },
   showItemInFolder(path: string) {
+    shellCalls.push({ method: 'showItemInFolder', path })
     opened.push(path)
   },
 }

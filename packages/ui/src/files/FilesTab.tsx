@@ -25,9 +25,10 @@ import { useT } from '../app/appearance.ts'
 import { Icon } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import type { SideTabProps } from '../side/tabs.ts'
-import { type FileAction, type FileSubject, fileActions, runFileAction } from './actions.ts'
+import { type FileAction, type FileSubject, runFileAction } from './actions.ts'
 import { ContextMenu } from './ContextMenu.tsx'
 import { FileWatching } from './content.ts'
+import { fileActionLabel, useFileActions } from './FileDestination.tsx'
 import { resultId, SearchResults, useFileSearch } from './FileSearch.tsx'
 import { FileTree, type RowContext } from './FileTree.tsx'
 import { FileViewer } from './FileViewer.tsx'
@@ -189,11 +190,8 @@ function Files({ deviceId, root, shown }: { deviceId: string; root: string; show
     event.preventDefault()
   }
 
-  const menuItems = useMemo(
-    () =>
-      (menu ? fileActions(menu.subject) : []).map((id) => ({ id, title: t(`files.action.${id}`) })),
-    [t, menu],
-  )
+  const actions = useFileActions(menu?.subject ?? null)
+  const menuItems = actions.map((id) => ({ id, title: t(fileActionLabel(id)) }))
   const offline = device !== undefined && device.connection !== 'online'
 
   return (

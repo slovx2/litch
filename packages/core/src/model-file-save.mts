@@ -1,4 +1,7 @@
 import type { Text } from './phrase.mjs'
+
+export type FileRevealResult = 'opened' | 'remote' | 'missing' | 'denied' | 'failed'
+
 /** 桌面外壳另存文件的元数据；文件字节不经过渲染进程或主进程。 */
 export interface FileSaveSource {
   deviceId: string

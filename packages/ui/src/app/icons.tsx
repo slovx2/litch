@@ -3,6 +3,7 @@
 const SEND = 'M8 13V3.5M4 7.5l4-4 4 4'
 
 const PATHS = {
+  download: <path d="M8 2v8M5 7l3 3 3-3M3 11v3h10v-3" />,
   plug: <path d="M5.5 2v3M10.5 2v3M4 5h8v2a4 4 0 0 1-8 0zM8 11v3" />,
   term: <path d="M3.5 5l3 3-3 3M8.5 11.5h4" />,
   edit: <path d="M3 13l.6-2.8L10.8 3 13 5.2 5.8 12.4z" />,
