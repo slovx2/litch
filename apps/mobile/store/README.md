@@ -15,20 +15,25 @@ Release 工作流的 `ios-testflight` 默认关闭；开启时另填递增的 `i
 仓库变量：`IOS_TEAM_ID`。专用团队 App Store Connect key 的 GitHub secrets：
 
 - `IOS_ASC_PRIVATE_KEY`：原始 `.p8` 内容，通过 stdin 重定向从文件读取，禁止回显。
-- `IOS_ASC_KEY_ID`、`IOS_ASC_ISSUER_ID`：对应标识。
+- `IOS_ASC_KEY_ID`、`IOS_ASC_ISSUER_ID`：对应标识，App Manager 角色只负责上传。
+- `IOS_DISTRIBUTION_P12`：专用 Apple Distribution 身份的加密 PKCS#12，以 base64 写入。
+- `IOS_DISTRIBUTION_PASSWORD`：随机 PKCS#12 密码。
+- `IOS_APP_STORE_PROFILE`：只绑定正式包和该证书的 App Store Connect 描述文件，以 base64 写入。
 
 用 `gh secret set IOS_ASC_PRIVATE_KEY --repo slovx2/litch < /绝对路径/AuthKey_标识.p8` 导入；
 下载后立即导入安全存储，不放仓库。确需本机留备份时由账号持有人明确指定保存位置，
 否则删除临时下载文件；CI 的临时副本始终清理。证书私钥只在钥匙串中生成/保存。
-CI 在独立临时钥匙串中自动签名，API key 明文只存在当前进程的私有临时目录，退出清理。
-初次自动签名仍要真实团队权限和 Apple 可用证书/描述文件，API key 本身不是签名证书。
+CI 将专用分发身份导入独立临时钥匙串，使用手动签名；不会请求云端签名权限。
+API key、加密 p12 与描述文件只存在当前进程的私有临时目录，退出清理；恢复原钥匙串列表。
+`ios-signing-identity.swift` 可在本机钥匙串生成 CSR，再导出加密 p12；密码由 stdin 提供，临时 p12 写入 secrets 后删除。
 不得为了首次签名重试而撤销团队已有证书。
 
 本地备用路径：先安装根目录、`packages/ui`、`apps/mobile` 的锁定 npm 依赖和 CocoaPods 1.16.2，
-用 Xcode 已登录账号或从安全存储临时提供 API key；设置 `LITCH_IOS_TEAM_ID`、`LITCH_IOS_BUILD_NUMBER`，
+先把专用分发身份装进本机钥匙串；设置 `LITCH_IOS_TEAM_ID`、`LITCH_IOS_BUILD_NUMBER`
+和外部描述文件绝对路径 `LITCH_IOS_PROFILE_PATH`，
 运行 `node apps/mobile/scripts/archive-ios.mjs`。脚本默认只导出，不上传。
 输出在 `apps/mobile/.release-ios`（应被 git 忽略），用 Xcode Organizer / Transporter 手动上传经校验的包。
-API 路径方式需同时提供 `LITCH_ASC_KEY_PATH`、`LITCH_ASC_KEY_ID`、`LITCH_ASC_ISSUER_ID`。
+用 `altool` 上传时单独提供 API Key ID、Issuer ID 和 `API_PRIVATE_KEYS_DIR`。签名不要求 Xcode 登录。
 密钥不能位于仓库内，不要将签名日志、archive、描述文件作为公开 Release 资产。
 
 `ITSAppUsesNonExemptEncryption` 未设为固定 false。先按实际依赖和地区完成加密分类与问卷；

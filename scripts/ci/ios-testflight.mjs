@@ -14,6 +14,9 @@ for (const name of [
   'LITCH_ASC_ISSUER_ID',
   'LITCH_IOS_TEAM_ID',
   'LITCH_IOS_BUILD_NUMBER',
+  'LITCH_DISTRIBUTION_P12',
+  'LITCH_DISTRIBUTION_PASSWORD',
+  'LITCH_APP_STORE_PROFILE',
   'CANDIDATE_SHA',
   'RUNNER_TEMP',
 ])
@@ -23,8 +26,13 @@ assert.equal(sha, process.env.CANDIDATE_SHA, 'iOS 必须使用通过门禁的源
 const temp = mkdtempSync(join(process.env.RUNNER_TEMP, 'litch-ios-signing-'))
 const keychain = join(temp, 'signing.keychain-db')
 const password = randomBytes(32).toString('hex')
-const security = (args, options = {}) =>
-  execFileSync('/usr/bin/security', args, { stdio: 'pipe', ...options })
+const security = (args, options = {}) => {
+  try {
+    return execFileSync('/usr/bin/security', args, { stdio: 'pipe', ...options })
+  } catch {
+    throw new Error(`钥匙串操作失败：${args[0]}（参数及输出已隐藏）`)
+  }
+}
 const original =
   security(['list-keychains', '-d', 'user'])
     .toString()
@@ -39,13 +47,44 @@ try {
   const keyPath = join(temp, `AuthKey_${process.env.LITCH_ASC_KEY_ID}.p8`)
   writeFileSync(keyPath, process.env.LITCH_ASC_PRIVATE_KEY, { mode: 0o600 })
   delete process.env.LITCH_ASC_PRIVATE_KEY
-  process.env.LITCH_ASC_KEY_PATH = keyPath
+  const p12Path = join(temp, 'distribution.p12')
+  const profilePath = join(temp, 'distribution.mobileprovision')
+  writeFileSync(p12Path, Buffer.from(process.env.LITCH_DISTRIBUTION_P12, 'base64'), { mode: 0o600 })
+  writeFileSync(profilePath, Buffer.from(process.env.LITCH_APP_STORE_PROFILE, 'base64'), {
+    mode: 0o600,
+  })
+  delete process.env.LITCH_DISTRIBUTION_P12
+  delete process.env.LITCH_APP_STORE_PROFILE
+  process.env.LITCH_IOS_PROFILE_PATH = profilePath
   security(['create-keychain', '-p', password, keychain])
   keychainCreated = true
   security(['set-keychain-settings', '-lut', '21600', keychain])
   security(['unlock-keychain', '-p', password, keychain])
   security(['list-keychains', '-d', 'user', '-s', keychain, ...original])
   security(['default-keychain', '-d', 'user', '-s', keychain])
+  security([
+    'import',
+    p12Path,
+    '-k',
+    keychain,
+    '-P',
+    process.env.LITCH_DISTRIBUTION_PASSWORD,
+    '-T',
+    '/usr/bin/codesign',
+    '-T',
+    '/usr/bin/security',
+  ])
+  delete process.env.LITCH_DISTRIBUTION_PASSWORD
+  security([
+    'set-key-partition-list',
+    '-S',
+    'apple-tool:,apple:,codesign:',
+    '-s',
+    '-k',
+    password,
+    keychain,
+  ])
+  rmSync(p12Path)
   const result = archive()
   // 上传刚验证并计算摘要的同一个 IPA，不重新构建或重新导出。
   execFileSync(

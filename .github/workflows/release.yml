@@ -521,6 +521,9 @@ jobs:
           LITCH_ASC_PRIVATE_KEY: ${{ secrets.IOS_ASC_PRIVATE_KEY }}
           LITCH_ASC_KEY_ID: ${{ secrets.IOS_ASC_KEY_ID }}
           LITCH_ASC_ISSUER_ID: ${{ secrets.IOS_ASC_ISSUER_ID }}
+          LITCH_DISTRIBUTION_P12: ${{ secrets.IOS_DISTRIBUTION_P12 }}
+          LITCH_DISTRIBUTION_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_PASSWORD }}
+          LITCH_APP_STORE_PROFILE: ${{ secrets.IOS_APP_STORE_PROFILE }}
           LITCH_IOS_OUTPUT: ${{ runner.temp }}/litch-ios-release
         run: node scripts/ci/ios-testflight.mjs
 

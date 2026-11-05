@@ -16,6 +16,7 @@
     },
     "plugins": [
       "./plugins/release-signing",
+      "./plugins/ios-release-signing",
       [
         "expo-camera",
         {

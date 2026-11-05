@@ -1,10 +1,11 @@
-// 正式归档与导出共用一条路径；API key 只从外部文件读取，不输出其内容。
+// 正式归档与导出共用手动签名路径；API key 仅用于后续上传。
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { checkProfile, readProfile, withInstalledProfile } from './ios-profile.mjs'
 
 const root = resolve(fileURLToPath(new URL('../../..', import.meta.url)))
 const mobile = join(root, 'apps/mobile')
@@ -15,29 +16,24 @@ export function releaseOptions(env) {
   const build = env.LITCH_IOS_BUILD_NUMBER ?? ''
   assert.match(team, /^[A-Z0-9]{10}$/, '必须指定 LITCH_IOS_TEAM_ID')
   assert.match(build, /^[1-9]\d{0,3}(?:\.\d{1,2}){0,2}$/, '必须指定有效的 iOS 构建号')
-  const auth = [env.LITCH_ASC_KEY_PATH, env.LITCH_ASC_KEY_ID, env.LITCH_ASC_ISSUER_ID]
-  assert.ok(
-    auth.every(Boolean) || auth.every((value) => !value),
-    'API key 路径、ID、Issuer 必须同时提供',
-  )
-  if (auth[0]) {
-    assert.ok(auth[0].startsWith('/'), 'API key 必须使用外部绝对路径')
-    assert.ok(!resolve(auth[0]).startsWith(`${root}/`), 'API key 不能放在仓库内')
-    assert.match(auth[1], /^[A-Z0-9]+$/)
-    assert.match(auth[2], /^[a-f0-9-]{36}$/i)
-  }
-  return { team, build, auth }
+  const profilePath = env.LITCH_IOS_PROFILE_PATH ?? ''
+  assert.ok(profilePath.startsWith('/'), '必须提供描述文件的绝对路径')
+  assert.ok(!resolve(profilePath).startsWith(`${root}/`), '描述文件不能放在仓库内')
+  return { team, build, profilePath }
 }
 
-export function exportPlist(team) {
+export function exportPlist(team, profile) {
   assert.match(team, /^[A-Z0-9]{10}$/)
+  checkProfile(profile, team)
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>method</key><string>app-store-connect</string>
 <key>destination</key><string>export</string>
 <key>teamID</key><string>${team}</string>
-<key>signingStyle</key><string>automatic</string>
+<key>signingStyle</key><string>manual</string>
+<key>signingCertificate</key><string>${profile.certificateSHA1}</string>
+<key>provisioningProfiles</key><dict><key>dev.litch.app</key><string>${profile.UUID}</string></dict>
 <key>manageAppVersionAndBuildNumber</key><false/>
 <key>uploadSymbols</key><true/>
 </dict></plist>\n`
@@ -75,22 +71,25 @@ export function verifyApp(info, entitlements, profile, expected) {
 
 export function archive(env = process.env) {
   assert.equal(process.platform, 'darwin', 'iOS 归档需要 macOS/Xcode')
-  const { team, build, auth } = releaseOptions(env)
+  const { team, profilePath } = releaseOptions(env)
+  const profile = readProfile(profilePath)
+  checkProfile(profile, team)
+  process.env.LITCH_IOS_PROFILE_UUID = profile.UUID
+  process.env.LITCH_IOS_CERT_SHA1 = profile.certificateSHA1
+  return withInstalledProfile(profilePath, profile, () => buildArchive(env, profile))
+}
+
+function buildArchive(env, signingProfile) {
+  const { team, build } = releaseOptions(env)
+  const sourceSHA = run('git', ['rev-parse', 'HEAD'], root, {
+    stdio: 'pipe',
+    encoding: 'utf8',
+  }).trim()
   const output = resolve(env.LITCH_IOS_OUTPUT ?? join(mobile, '.release-ios'))
   mkdirSync(output, { recursive: true })
   const archivePath = join(output, 'Litch.xcarchive')
   const exportPath = join(output, 'export')
   const exportOptions = join(output, 'ExportOptions.plist')
-  const authArgs = auth[0]
-    ? [
-        '-authenticationKeyPath',
-        auth[0],
-        '-authenticationKeyID',
-        auth[1],
-        '-authenticationKeyIssuerID',
-        auth[2],
-      ]
-    : []
   const version = JSON.parse(readFileSync(join(root, 'package.json'))).version
   const manifest = join(mobile, 'package.json')
   const before = readFileSync(manifest, 'utf8')
@@ -118,13 +117,9 @@ export function archive(env = process.env) {
     archivePath,
     '-derivedDataPath',
     join(output, 'DerivedData'),
-    '-allowProvisioningUpdates',
-    ...authArgs,
-    `DEVELOPMENT_TEAM=${team}`,
-    'CODE_SIGN_STYLE=Automatic',
     'archive',
   ])
-  writeFileSync(exportOptions, exportPlist(team))
+  writeFileSync(exportOptions, exportPlist(team, signingProfile))
   run('xcodebuild', [
     '-exportArchive',
     '-archivePath',
@@ -133,8 +128,6 @@ export function archive(env = process.env) {
     exportPath,
     '-exportOptionsPlist',
     exportOptions,
-    '-allowProvisioningUpdates',
-    ...authArgs,
   ])
   const files = readdirSync(exportPath).filter((name) => name.endsWith('.ipa'))
   assert.equal(files.length, 1, '必须恰好导出一份 IPA')
@@ -150,12 +143,6 @@ export function archive(env = process.env) {
     stdio: ['ignore', 'pipe', 'pipe'],
     encoding: 'utf8',
   })
-  const profileXML = run(
-    '/usr/bin/security',
-    ['cms', '-D', '-i', join(app, 'embedded.mobileprovision')],
-    mobile,
-    { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' },
-  )
   const parseXML = (xml) =>
     JSON.parse(
       run('/usr/bin/plutil', ['-convert', 'json', '-o', '-', '-'], mobile, {
@@ -164,27 +151,10 @@ export function archive(env = process.env) {
         encoding: 'utf8',
       }),
     )
-  // 描述文件含日期和证书 Data，不能整份转 JSON；只取用于校验的字段。
-  const field = (key, format = 'json', optional = false) => {
-    try {
-      const value = run('/usr/bin/plutil', ['-extract', key, format, '-o', '-', '-'], mobile, {
-        input: profileXML,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        encoding: 'utf8',
-      })
-      return format === 'json' ? JSON.parse(value) : value.trim()
-    } catch (error) {
-      if (optional && String(error.stderr).includes('No value at that key path')) return undefined
-      throw error
-    }
-  }
-  const profile = {
-    Entitlements: field('Entitlements'),
-    TeamIdentifier: field('TeamIdentifier'),
-    ExpirationDate: field('ExpirationDate', 'raw'),
-    ProvisionedDevices: field('ProvisionedDevices', 'json', true),
-    ProvisionsAllDevices: field('ProvisionsAllDevices', 'json', true),
-  }
+  const profile = readProfile(join(app, 'embedded.mobileprovision'))
+  checkProfile(profile, team)
+  assert.equal(profile.UUID, signingProfile.UUID, '导出描述文件被替换')
+  assert.equal(profile.certificateSHA1, signingProfile.certificateSHA1, '导出证书被替换')
   verifyApp(plist(join(app, 'Info.plist')), parseXML(entitlementXML), profile, {
     team,
     build,
@@ -194,7 +164,7 @@ export function archive(env = process.env) {
   assert.ok(readdirSync(app).includes('LitchSshPrivacy.bundle'), 'IPA 缺少 SSH 隐私资源包')
   plist(join(app, 'LitchSshPrivacy.bundle/PrivacyInfo.xcprivacy'))
   const proof = {
-    sha: run('git', ['rev-parse', 'HEAD'], root, { stdio: 'pipe', encoding: 'utf8' }).trim(),
+    sha: sourceSHA,
     bundleId: 'dev.litch.app',
     version,
     build,
