@@ -4,8 +4,23 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { affectedDomains, releaseImpact } from '../ci-impact.mjs'
-import { iosCommands, iosReadiness } from './ios-checks.mjs'
+import { iosCommands, iosEnvironment, iosReadiness } from './ios-checks.mjs'
 import { nativePlan, selectedNative } from './mac-native-plan.mjs'
+
+test('CI只给iOS子进程固定Xcode26.3，不改父进程与本地工具链', () => {
+  const parent = {
+    GITHUB_ACTIONS: 'true',
+    DEVELOPER_DIR: '/Applications/Xcode_16.4.app/Contents/Developer',
+  }
+  assert.equal(
+    iosEnvironment(parent).DEVELOPER_DIR,
+    '/Applications/Xcode_26.3.app/Contents/Developer',
+  )
+  assert.equal(parent.DEVELOPER_DIR, '/Applications/Xcode_16.4.app/Contents/Developer')
+  assert.equal(iosEnvironment({ DEVELOPER_DIR: '/local/Xcode' }).DEVELOPER_DIR, '/local/Xcode')
+  assert.equal(iosEnvironment({}).DEVELOPER_DIR, undefined)
+  assert.equal(iosEnvironment(parent).GOTOOLCHAIN, 'go1.27.3')
+})
 
 test('iOS原生未落地只延后构建；部分合入或缺podspec不能伪装成功', () => {
   const root = mkdtempSync(join(tmpdir(), 'litch-ios-plan-'))

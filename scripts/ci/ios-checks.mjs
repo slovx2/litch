@@ -6,6 +6,17 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { goEnvironment } from './go-toolchains.mjs'
 
+// Expo要求Swift tools 6.2；只给iOS子命令选固定Xcode，不改变同job的其他Mac检查。
+export function iosEnvironment(env = process.env) {
+  return goEnvironment('mobile', {
+    ...env,
+    CI: '1',
+    ...(env.GITHUB_ACTIONS === 'true'
+      ? { DEVELOPER_DIR: '/Applications/Xcode_26.3.app/Contents/Developer' }
+      : {}),
+  })
+}
+
 export function iosReadiness(root = fileURLToPath(new URL('../../apps/mobile/', import.meta.url))) {
   const names = readdirSync(join(root, 'modules')).filter((name) => name.startsWith('litch-'))
   assert.ok(names.length > 0, '缺少本地原生模块目录')
@@ -91,6 +102,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   process.env.GEM_PATH = gems
   process.env.PATH = `${join(gems, 'bin')}:${process.env.PATH}`
   const { state, commands } = iosCommands()
+  const env = iosEnvironment()
   if (state.ready)
     assert.equal(
       execFileSync('ruby', ['-e', 'print RUBY_VERSION'], { encoding: 'utf8' }),
@@ -98,13 +110,17 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       'iOS构建要求Ruby 3.4.7',
     )
   console.log(`IOS_BUILD_SCOPE ${JSON.stringify(state)}`)
+  if (state.ready)
+    console.log(
+      `IOS_XCODE ${execFileSync('xcodebuild', ['-version'], { env, encoding: 'utf8' }).trim()}`,
+    )
   const manifest = 'apps/mobile/package.json'
   const before = readFileSync(manifest, 'utf8')
   try {
     for (const [command, args, cwd] of commands) {
       execFileSync(command, args, {
         cwd,
-        env: goEnvironment('mobile', { ...process.env, CI: '1' }),
+        env,
         stdio: 'inherit',
       })
       if (command === 'npx') {
