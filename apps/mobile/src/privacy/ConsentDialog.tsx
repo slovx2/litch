@@ -11,7 +11,7 @@ export function ConsentDialog({ request }: { request: ConsentRequest | null }) {
   const theme = useTheme()
   const style = { color: theme.c.ink, fontFamily: theme.font.ui, fontSize: theme.font.size.body }
   return (
-    <Dialog visible={request !== null} onClose={() => request?.answer(false)}>
+    <Dialog visible={request !== null} consentHost={false} onClose={() => request?.answer(false)}>
       <Text style={style} testID="ai-consent:title">
         {t('privacy.ai.title')}
       </Text>

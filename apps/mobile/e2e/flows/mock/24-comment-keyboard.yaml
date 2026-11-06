@@ -25,6 +25,8 @@ tags: [mock]
 # 评论弹层自动聚焦并移动；等动画结束后再定位，避免点到移动前的坐标。
 - waitForAnimationToEnd:
     timeout: 3000
+- assertNotVisible:
+    id: ai-consent:title
 - tapOn:
     id: comment-editor:note
 - runFlow:

@@ -1,4 +1,4 @@
-// 同意框由最上层已打开的讨论抽屉承载；没有抽屉时回到页面根节点。
+// 同意框由最上层已打开的弹窗或讨论抽屉承载；没有承载点时回到页面根节点。
 export function createConsentHosts() {
   let entries: { id: string }[] = []
   const listeners = new Set<() => void>()

@@ -9,6 +9,10 @@ after the foreground turn ends.
 
 ## 手机输入与键盘
 
+评论和消息编辑弹窗在键盘上方滚动；添加评论只保存在草稿中，不请求 AI 数据同意。编辑消息发送等操作若需同意，会在当前弹窗上方展示，取消同意后保留编辑内容。
+
+Comment and message-edit dialogs scroll above the keyboard. Adding a comment only updates the draft and does not request AI data consent. Actions such as sending an edited message show any required consent above the current dialog; cancelling consent keeps the edited text.
+
 提问卡片与审批说明在键盘弹出后自动滚到完整输入框。空间不足时，按钮随卡片内容滚动，多行文字在输入框内滚动。滚动收起键盘的操作不变。
 
 Question cards and approval notes scroll the full focused field into view above the keyboard. When space is limited, buttons scroll with the card and multiline text scrolls inside its field. Scrolling to dismiss the keyboard works as before.

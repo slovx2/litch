@@ -10,10 +10,87 @@ test('普通 Maestro 等待先允许真实同意卡，原产品断言仍保留',
     'appId: dev.litch.app\n---\n- extendedWaitUntil:\n    visible:\n      id: detail\n    timeout: 20000\n'
   const output = withConsentSteps(input, 'chat.yaml')
   const steps = parseAllDocuments(output)[1].toJS()
-  assert.equal(steps.length, 3)
-  assert.equal(steps[1].runFlow.commands[1].tapOn.id, 'ai-consent:allow')
-  assert.deepEqual(steps[2], parseAllDocuments(input)[1].toJS()[0])
+  assert.equal(steps.length, 4)
+  assert.equal(steps[3].runFlow.commands[0].runFlow.commands[1].tapOn.id, 'ai-consent:allow')
+  assert.deepEqual(steps[3].runFlow.commands[1], parseAllDocuments(input)[1].toJS()[0])
   assert.doesNotMatch(output, /optional: true|retry|consent-seed/)
+})
+
+test('成功提示确认后即使消失也不重等；同意分支仍验证完整选择器', () => {
+  const input = `appId: dev.litch.app
+---
+- extendedWaitUntil:
+    visible:
+      id: hc:config:said
+      text: Saved
+    timeout: 10000
+`
+  const steps = parseAllDocuments(withConsentSteps(input, 'settings.yaml'))[1].toJS()
+  for (const scenario of ['transient', 'consent', 'wrong-text']) {
+    const state = { output: {} }
+    let target = scenario === 'transient'
+    let consent = !target
+    let allows = 0
+    let checks = 0
+    const evaluate = (script) => runInNewContext(script.slice(2, -1), state)
+    const visible = (selector) => {
+      if (selector.id === 'ai-consent:title') return consent
+      assert.deepEqual(selector, { id: 'hc:config:said', text: 'Saved' })
+      return target && scenario !== 'wrong-text'
+    }
+    const run = (commands) => {
+      for (const step of commands) {
+        if (step.evalScript) {
+          evaluate(step.evalScript)
+          // 首次完整观察成功后让提示消失，模拟 CI 的五秒提示与慢查询。
+          if (state.output.litchConsentTargetSeen) target = false
+        } else if (step.runFlow) {
+          const { when, commands } = step.runFlow
+          if (when.true ? evaluate(when.true) : visible(when.visible)) run(commands)
+        } else if (step.extendedWaitUntil) {
+          const selector = step.extendedWaitUntil.visible
+          if (selector.id.includes('(?:')) assert.ok(target || consent)
+          else {
+            checks++
+            assert.ok(visible(selector), '完整目标必须出现')
+          }
+        } else if (step.scrollUntilVisible) assert.ok(consent)
+        else if (step.tapOn) {
+          assert.equal(step.tapOn.id, 'ai-consent:allow')
+          allows++
+          consent = false
+          target = true
+        } else assert.fail(JSON.stringify(step))
+      }
+    }
+    if (scenario === 'wrong-text') assert.throws(() => run(steps), /完整目标必须出现/)
+    else run(steps)
+    assert.equal(allows, scenario === 'transient' ? 0 : 1)
+    assert.equal(checks, scenario === 'transient' ? 0 : 1)
+  }
+})
+
+test('提案首次 Pi 同意在滚动到子会话之前，隐私步骤不被自动批准', () => {
+  for (const flow of ['08-proposals', '12-offer-held']) {
+    const source = readFileSync(new URL(`../e2e/flows/mock/${flow}.yaml`, import.meta.url), 'utf8')
+    const steps = parseAllDocuments(withConsentSteps(source, `${flow}.yaml`))[1].toJS()
+    const consent = steps.findIndex((step) => step.runFlow === '../_shared/allow-pi-consent.yaml')
+    const child = steps.findIndex((step) =>
+      step.scrollUntilVisible?.element?.id?.endsWith(':child'),
+    )
+    assert.ok(consent > 0 && child > consent)
+  }
+  const source = readFileSync(
+    new URL('../e2e/flows/_shared/allow-pi-consent.yaml', import.meta.url),
+    'utf8',
+  )
+  assert.equal(withConsentSteps(source, 'allow-pi-consent.yaml'), source)
+  const steps = parseAllDocuments(source)[1].toJS()
+  assert.equal(steps.filter((step) => step.tapOn?.id === 'ai-consent:allow').length, 1)
+  assert.ok(
+    steps.findIndex((step) => step.assertNotVisible?.id === 'proposal:.*:child') <
+      steps.findIndex((step) => step.tapOn?.id === 'ai-consent:allow'),
+  )
 })
 
 test('隐私专项不得自动同意；辅助脚本不改写', () => {
@@ -72,6 +149,14 @@ test('反向等待处理稍晚出现的同意卡，保留复合选择器与最�
     steps[1].repeat.commands[2].runFlow.when.notVisible,
     original.extendedWaitUntil.notVisible,
   )
+})
+
+test('共享正反向选择器不产生 Maestro 会误读为文字的 YAML 别名', () => {
+  for (const source of [negativeFlow, negativeFlow.replace('notVisible:', 'visible:')]) {
+    const converted = withConsentSteps(source, 'selectors.yaml')
+    assert.doesNotMatch(converted, /(?:^|:\s*)[&*]a\d+\b/m)
+    assert.ok((converted.match(/id: post-question:D-17/g) ?? []).length >= 2)
+  }
 })
 
 test('立即的反向断言和嵌套等待也处理同意，但隐私专项仍不改写', () => {

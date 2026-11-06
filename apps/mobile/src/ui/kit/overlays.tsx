@@ -3,10 +3,11 @@
 import { type ReactNode, useEffect, useState } from 'react'
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { ModalConsentHost } from '../../privacy/ConsentPresentation'
 import { useT } from '../i18n'
 import { useTheme } from '../theme'
 import { Button, sectionFont } from './controls'
-import { KeyboardFormScrollView } from './KeyboardForm'
+import { KeyboardCardScrollView } from './KeyboardCardScrollView'
 import { ModalKeyboardArea } from './ModalKeyboardArea'
 
 export interface SheetAction {
@@ -151,12 +152,15 @@ export function Dialog({
   visible,
   onClose,
   onShow,
+  consentHost = true,
   children,
 }: {
   visible: boolean
   onClose(): void
   /** 对话框出来以后（安卓上这时才拿得到窗口焦点，输入框此时拿焦点键盘才会出来） */
   onShow?(): void
+  /** 同意框自身不能再次注册承载点；其他弹窗中的发送复用最上层原生窗口。 */
+  consentHost?: boolean
   children: ReactNode
 }) {
   const theme = useTheme()
@@ -177,15 +181,17 @@ export function Dialog({
             { backgroundColor: c.raised, borderColor: c.line3, borderRadius: theme.radius.l },
           ]}
         >
-          <KeyboardFormScrollView
+          <KeyboardCardScrollView
+            trackInputs
             style={styles.dialogScroll}
             contentContainerStyle={styles.dialogBody}
             keyboardShouldPersistTaps="handled"
           >
             {children}
-          </KeyboardFormScrollView>
+          </KeyboardCardScrollView>
         </View>
       </ModalKeyboardArea>
+      {consentHost ? <ModalConsentHost active={visible} /> : null}
     </Modal>
   )
 }

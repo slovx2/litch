@@ -69,6 +69,8 @@ tags: [mock]
     timeout: 10000
 - tapOn:
     id: proposal:.*:start
+# 按权限放行不等于批准向新的 Pi 服务发送数据。
+- runFlow: ../_shared/allow-pi-consent.yaml
 - scrollUntilVisible:
     element:
       id: proposal:.*:child

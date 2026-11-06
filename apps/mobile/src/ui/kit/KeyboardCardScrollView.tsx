@@ -2,6 +2,7 @@
 // 不让按屏幕键盘边缘计算的滚动再次移动它；键盘落定、换焦点和输入长高后再校正。
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import {
+  findNodeHandle,
   Platform,
   ScrollView,
   type ScrollViewProps,
@@ -14,9 +15,10 @@ import {
   KeyboardEvents,
   useFocusedInputHandler,
   useKeyboardState,
+  useReanimatedFocusedInput,
 } from 'react-native-keyboard-controller'
-import { runOnJS } from 'react-native-reanimated'
-import { cardInputMaxHeight, cardInputScroll } from './card-input-layout'
+import { runOnJS, useAnimatedReaction, useSharedValue } from 'react-native-reanimated'
+import { cardInputMaxHeight, cardInputScroll, viewportInput } from './card-input-layout'
 import { useKeyboardAccessoryHeight } from './KeyboardForm'
 
 const CardViewport = createContext<{
@@ -72,8 +74,9 @@ export function KeyboardCardScrollView({
   onLayout,
   onContentSizeChange,
   onScroll,
+  trackInputs = false,
   ...props
-}: ScrollViewProps) {
+}: ScrollViewProps & { trackInputs?: boolean }) {
   const scroll = useRef<ScrollView>(null)
   const [viewport, setViewport] = useState(Number.POSITIVE_INFINITY)
   const focusTarget = useRef(-1)
@@ -84,6 +87,8 @@ export function KeyboardCardScrollView({
   const keyboard = useKeyboardState((state) => (state.isVisible ? state.height : 0))
   const { height } = useWindowDimensions()
   const accessory = useKeyboardAccessoryHeight()
+  const { input } = useReanimatedFocusedInput()
+  const nativeTarget = useSharedValue(-1)
   const limits = useRef({ keyboard, bottom: height - keyboard - accessory })
   limits.current = { keyboard, bottom: height - keyboard - accessory }
 
@@ -124,6 +129,24 @@ export function KeyboardCardScrollView({
     },
     [reveal],
   )
+  const focus = useCallback(
+    (target: number) => {
+      if (target !== focusTarget.current) caret.current = null
+      focusTarget.current = target
+      reveal()
+    },
+    [reveal],
+  )
+  // 独立 Dialog 也使用实际视口滚动。只跟踪属于本滚动区的原生输入框，
+  // 不采纳底层页面或其他 Modal 的焦点；普通 TextInput 与 Field 无需各自接线。
+  useAnimatedReaction(
+    () => viewportInput(trackInputs ? input.value : null, nativeTarget.value),
+    (next, previous) => {
+      if (trackInputs && (next.target !== previous?.target || next.height !== previous?.height))
+        runOnJS(focus)(next.target)
+    },
+    [trackInputs, focus],
+  )
   useFocusedInputHandler({
     onSelectionChange: (event) => {
       'worklet'
@@ -152,6 +175,7 @@ export function KeyboardCardScrollView({
         onScroll?.(event)
       }}
       onLayout={(event) => {
+        nativeTarget.value = findNodeHandle(scroll.current) ?? -1
         setViewport(event.nativeEvent.layout.height)
         reveal()
         onLayout?.(event)

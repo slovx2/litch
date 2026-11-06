@@ -70,17 +70,30 @@ export function withConsentSteps(source, filename) {
       const alternative =
         kind === 'id' ? 'ai-consent:title' : '向 AI 服务发送数据|Share data with AI services'
       return [
+        { evalScript: '${output.litchConsentTargetSeen = false}' },
         {
           extendedWaitUntil: {
             visible: { [kind]: `(?:${selector[kind]})|(?:${alternative})` },
             timeout: step.extendedWaitUntil?.timeout ?? 10000,
           },
         },
-        allowConsent(),
-        step,
+        // 用完整选择器确认一次即可。不存在的同意框检查会耗时数秒，不能在其后重等短暂提示。
+        {
+          runFlow: {
+            when: { visible: selector },
+            commands: [{ evalScript: '${output.litchConsentTargetSeen = true}' }],
+          },
+        },
+        {
+          runFlow: {
+            when: { true: '${!output.litchConsentTargetSeen}' },
+            commands: [allowConsent(), step],
+          },
+        },
       ]
     })
-  return `${stringify(header)}---\n${stringify(walk(steps))}`
+  // Maestro 不展开 YAML 对象别名，会把 *a1 当成文字选择器；共享选择器必须完整输出。
+  return `${stringify(header)}---\n${stringify(walk(steps), { aliasDuplicateObjects: false })}`
 }
 
 export function prepareConsentFlows(source, destination) {

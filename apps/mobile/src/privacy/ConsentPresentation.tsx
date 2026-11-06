@@ -35,7 +35,7 @@ export function ConsentPresentation({
   )
 }
 
-/** 放在原生 Modal 内部，避免根控制器已有讨论抽屉时再次从根节点展示同意框。 */
+/** 放在原生 Modal 内部，让编辑弹窗与讨论抽屉里的同意框从当前窗口展示。 */
 export function ModalConsentHost({ active }: { active: boolean }) {
   const context = useContext(Context)
   if (!context) throw new Error('同意框承载点必须位于 ConsentPresentation 内')

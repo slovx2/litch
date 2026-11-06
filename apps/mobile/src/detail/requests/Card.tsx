@@ -111,6 +111,7 @@ export function Card({
       ]}
     >
       <View
+        testID={`${testID}:head`}
         onLayout={(event) => setHeadHeight(event.nativeEvent.layout.height)}
         style={[styles.head, { borderBottomColor: c.line1 }]}
       >
@@ -125,6 +126,7 @@ export function Card({
         ) : null}
       </View>
       <KeyboardCardScrollView
+        testID={`${testID}:body`}
         style={styles.body}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
@@ -135,6 +137,7 @@ export function Card({
       {scrollActions ? null : buttons}
       {error || waiting > 0 ? (
         <View
+          testID={`${testID}:foot`}
           onLayout={(event) => setFootHeight(event.nativeEvent.layout.height)}
           style={styles.foot}
         >

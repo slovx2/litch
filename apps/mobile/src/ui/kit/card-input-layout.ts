@@ -1,3 +1,14 @@
+/** 键盘焦点事件是全局的：尚未布局或属于另一窗口的输入框，不能驱动当前弹窗滚动。 */
+export function viewportInput(
+  field: { target: number; parentScrollViewTarget: number; layout: { height: number } } | null,
+  viewport: number,
+): { target: number; height: number } {
+  'worklet'
+  return viewport > 0 && field?.parentScrollViewTarget === viewport
+    ? { target: field.target, height: field.layout.height }
+    : { target: -1, height: 0 }
+}
+
 /** 输入框最多占视口减去上下内边距；长内容改在输入框内部滚动。 */
 export function cardInputMaxHeight(viewport: number, preferred: number, minimum: number): number {
   return Math.min(preferred, Math.max(minimum, viewport - 16))

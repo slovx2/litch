@@ -56,13 +56,27 @@ tags: [mock]
     visible:
       id: request:approval
     timeout: 15000
-- scrollUntilVisible:
-    element:
-      id: request:note-open
-    direction: DOWN
-    centerElement: false
+# 卡片正文在屏幕中心上方；默认全屏滚动会划到输入区或键盘，必须从卡片内部起手。
+- repeat:
+    times: 5
+    while:
+      notVisible:
+        id: request:note-open
+        above:
+          id: request:approval:foot
+        below:
+          id: request:approval:head
+    commands:
+      - swipe:
+          from:
+            id: request:approval:body
+          direction: UP
 - tapOn:
     id: request:note-open
+    above:
+      id: request:approval:foot
+    below:
+      id: request:approval:head
 - inputText: visible approval note
 - assertVisible:
     id: request:note

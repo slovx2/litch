@@ -140,6 +140,8 @@ tags: [mock]
     id: proposal-start:go
 - tapOn:
     id: proposal-start:go
+# Pi 是首次委派目标，且远端信息不完整；这次操作必须单独同意。
+- runFlow: ../_shared/allow-pi-consent.yaml
 # 起出来的子会话那一行在卡片下面，窄屏上可能在屏幕外
 - scrollUntilVisible:
     element:

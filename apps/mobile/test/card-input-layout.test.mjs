@@ -1,6 +1,25 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { cardInputMaxHeight, cardInputScroll } from '../src/ui/kit/card-input-layout.ts'
+import {
+  cardInputMaxHeight,
+  cardInputScroll,
+  viewportInput,
+} from '../src/ui/kit/card-input-layout.ts'
+
+test('弹窗只跟踪本滚动区的焦点，底层页面和另一弹窗不能使它滚动', () => {
+  const field = { target: 15, parentScrollViewTarget: 10, layout: { height: 44 } }
+  assert.deepEqual(viewportInput(field, 10), { target: 15, height: 44 })
+  assert.deepEqual(viewportInput(field, 20), { target: -1, height: 0 })
+  assert.deepEqual(viewportInput(null, 10), { target: -1, height: 0 })
+  assert.deepEqual(viewportInput({ ...field, parentScrollViewTarget: -1 }, -1), {
+    target: -1,
+    height: 0,
+  })
+  assert.deepEqual(viewportInput({ ...field, layout: { height: 160 } }, 10), {
+    target: 15,
+    height: 160,
+  })
+})
 
 const base = {
   offset: 0,
