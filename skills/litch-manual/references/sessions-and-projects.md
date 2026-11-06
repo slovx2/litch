@@ -2,10 +2,15 @@
 
 侧栏运行标识会随已打开会话的实时回合更新，选中或清除未读不会隐藏运行、等待和后台任务标识。
 回合结束后若仍有后台任务，继续显示后台任务标识。
+从经理建议卡开始的工作线遵循同样的规则；回合中收到追加消息不表示回合结束，运行标识保持到回合完成。
+切换到其他会话后，原会话的侧栏状态仍持续更新。
 
 Sidebar activity follows live turns in open conversations. Selecting a row or clearing unread
 does not hide running, waiting or background-task indicators. Background activity remains visible
 after the foreground turn ends.
+Worklines started from manager suggestions follow the same rules. Additional messages during
+a turn do not end it; the running indicator stays until the turn finishes.
+Switching to another conversation does not stop sidebar status updates for the previous one.
 
 ## 手机输入与键盘
 

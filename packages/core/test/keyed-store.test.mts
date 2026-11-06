@@ -2,6 +2,21 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { KeyedStore } from '../src/replica/keyed-store.mjs'
 
+test('旧订阅重复退订不能删除同一键后来建立的新订阅', () => {
+  const store = new KeyedStore()
+  const old = store.subscribe('summary:line', () => {})
+  old()
+  const seen: unknown[] = []
+  const current = store.subscribe('summary:line', () => seen.push(store.get('summary:line')))
+  old()
+  store.set('summary:line', 'running')
+  store.set('summary:line', 'waiting')
+  assert.deepEqual(seen, ['running', 'waiting'])
+  current()
+  store.set('summary:line', 'idle')
+  assert.equal(seen.length, 2)
+})
+
 test('清理大会话：多键订阅只读取一次完整清理后的状态', () => {
   const store = new KeyedStore()
   const keys = Array.from({ length: 4_000 }, (_, i) => `session:large:item:${i}`)

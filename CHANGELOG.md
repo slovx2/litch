@@ -5,6 +5,12 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+### 修复
+
+- 修复切换会话时旧导航重复退订误删侧栏订阅的问题，运行、等待与后台任务标识在切走后继续更新。
+
 ## 0.35.0（2026-11-07）
 
 ### 新增功能

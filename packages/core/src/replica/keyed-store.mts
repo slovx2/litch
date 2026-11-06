@@ -35,7 +35,11 @@ export class KeyedStore {
     const set = this.#listeners.get(key) ?? new Set<() => void>()
     this.#listeners.set(key, set)
     set.add(listener)
+    let subscribed = true
     return () => {
+      // 导航确认后会先退订，离开页面时还会再清理；旧清理不能删掉后来同键的新订阅。
+      if (!subscribed) return
+      subscribed = false
       set.delete(listener)
       if (set.size === 0) this.#listeners.delete(key)
     }

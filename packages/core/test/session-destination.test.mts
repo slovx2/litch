@@ -23,6 +23,32 @@ const catalog = (store: KeyedStore) => {
   })
 }
 
+test('建议工作线身份确认后再离开，旧导航清理不能撤掉侧栏的运行状态订阅', () => {
+  const store = new KeyedStore()
+  catalog(store)
+  const key = keys.summary('local', 'proposal-child')
+  store.set(key, {
+    ...plain,
+    id: 'proposal-child',
+    status: 'idle',
+    litchManager: { managerId: manager.id, role: 'line' },
+  })
+  let opened = 0
+  const leave = openSessionWhenKnown(store, 'local', 'proposal-child', () => opened++)
+  assert.equal(opened, 1)
+  // 身份确认已自动退订；随后挂载侧栏行，再切到另一条会话。
+  const seen: string[] = []
+  const stopRow = store.subscribe(key, () => {
+    const current = store.get<{ status: string }>(key)
+    assert.ok(current)
+    seen.push(current.status)
+  })
+  leave()
+  for (const status of ['running', 'waiting', 'idle']) store.set(key, { ...plain, status })
+  assert.deepEqual(seen, ['running', 'waiting', 'idle'])
+  stopRow()
+})
+
 test('会话标记先到即可确认经理；目录先到且摘要未到也可确认', () => {
   const store = new KeyedStore()
   assert.equal(sessionDestination(store, 'local', manager.threadId), undefined)

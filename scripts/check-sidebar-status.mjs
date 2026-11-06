@@ -1,4 +1,4 @@
-// 正式侧栏的选中工作线状态回归，隔离无头浏览器；先启动指定工作树的 Vite。
+// 正式侧栏的选中及未选中工作线状态回归，隔离无头浏览器；先启动指定工作树的 Vite。
 // node scripts/check-sidebar-status.mjs http://127.0.0.1:5199
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -81,66 +81,82 @@ try {
   await call('Page.navigate', { url: `${base}/test/manager-open-fixture.html?lang=zh-CN` })
   await click('[data-sidebar-mode="manager"]')
   await run(() => window.__managerOpen.open({ deviceId: 'local', sessionId: 'manager-k1' }))
-  const row = '[data-session="manager-k1"] .ss-row.sel'
-  await until(() => has(row), '选中当前工作线')
-  for (const skin of ['standard', 'human', 'retro']) {
-    for (const theme of ['light', 'dark']) {
-      await run((look) => window.__litchLook.set(look), { skin, theme })
-      await read('document.fonts.ready')
-      for (const [status, background, mark] of [
-        ['running', null, 'run'],
-        ['waiting', null, 'wait'],
-        ['idle', { running: 1 }, 'bg'],
-      ]) {
-        await run(
-          (status, background) => {
+  const row = '[data-session="manager-k1"] .ss-row'
+  await until(() => has(`${row}.sel`), '选中当前工作线')
+  for (const selected of [true, false]) {
+    if (!selected)
+      await run(() => window.__managerOpen.open({ deviceId: 'local', sessionId: 'manager-k2' }))
+    await until(() => has(`${row}${selected ? '.sel' : ':not(.sel)'}`), '工作线选中状态')
+    await until(
+      () =>
+        run(
+          (sessionId) => {
             const { store, keys } = window.__managerOpen
-            const key = keys.summary('local', 'manager-k1')
-            store.set(key, { ...store.get(key), status, background, unread: false })
+            return !!store.get(keys.session('local', sessionId))
           },
-          status,
-          background,
-        )
-        await until(() => has(`${row} .st.${mark}`), `${skin}/${theme}/${mark}`)
-        const painted = await run((selector) => {
-          const element = document.querySelector(selector)
-          // 取动画周期内可见的一帧，复古皮肤的运行光标本来会闪烁。
-          for (const animation of element.getAnimations({ subtree: true })) {
-            animation.pause()
-            animation.currentTime = 0
-          }
-          const style = getComputedStyle(element, '::before')
-          const rect = element.getBoundingClientRect()
-          return {
-            width: rect.width,
-            height: rect.height,
-            display: style.display,
-            visibility: style.visibility,
-            opacity: Number(style.opacity),
-            border: parseFloat(style.borderTopWidth),
-            color: style.backgroundColor,
-            shadow: style.boxShadow,
-            ink: style.color,
-            content: style.content,
-            row: getComputedStyle(element.closest('.ss-row')).backgroundColor,
-          }
-        }, `${row} .st.${mark}`)
-        assert.ok(painted.width > 0 && painted.height > 0)
-        assert.notEqual(painted.display, 'none')
-        assert.notEqual(painted.visibility, 'hidden')
-        assert.ok(painted.opacity > 0)
-        assert.ok(
-          painted.border > 0 ||
-            painted.shadow !== 'none' ||
-            painted.content !== '""' ||
-            (painted.color !== 'rgba(0, 0, 0, 0)' && painted.color !== painted.row),
-          JSON.stringify({ skin, theme, mark, ...painted }),
-        )
+          selected ? 'manager-k1' : 'manager-k2',
+        ),
+      '当前会话快照',
+    )
+    for (const skin of ['standard', 'human', 'retro']) {
+      for (const theme of ['light', 'dark']) {
+        await run((look) => window.__litchLook.set(look), { skin, theme })
+        await read('document.fonts.ready')
+        for (const [status, background, mark] of [
+          ['running', null, 'run'],
+          ['waiting', null, 'wait'],
+          ['idle', { running: 1 }, 'bg'],
+        ]) {
+          await run(
+            (status, background) => {
+              const { store, keys } = window.__managerOpen
+              const key = keys.summary('local', 'manager-k1')
+              store.set(key, { ...store.get(key), status, background, unread: false })
+            },
+            status,
+            background,
+          )
+          await until(() => has(`${row} .st.${mark}`), `${selected}/${skin}/${theme}/${mark}`)
+          const painted = await run((selector) => {
+            const element = document.querySelector(selector)
+            // 取动画周期内可见的一帧，复古皮肤的运行光标本来会闪烁。
+            for (const animation of element.getAnimations({ subtree: true })) {
+              animation.pause()
+              animation.currentTime = 0
+            }
+            const style = getComputedStyle(element, '::before')
+            const rect = element.getBoundingClientRect()
+            return {
+              width: rect.width,
+              height: rect.height,
+              display: style.display,
+              visibility: style.visibility,
+              opacity: Number(style.opacity),
+              border: parseFloat(style.borderTopWidth),
+              color: style.backgroundColor,
+              shadow: style.boxShadow,
+              ink: style.color,
+              content: style.content,
+              row: getComputedStyle(element.closest('.ss-row')).backgroundColor,
+            }
+          }, `${row} .st.${mark}`)
+          assert.ok(painted.width > 0 && painted.height > 0)
+          assert.notEqual(painted.display, 'none')
+          assert.notEqual(painted.visibility, 'hidden')
+          assert.ok(painted.opacity > 0)
+          assert.ok(
+            painted.border > 0 ||
+              painted.shadow !== 'none' ||
+              painted.content !== '""' ||
+              (painted.color !== 'rgba(0, 0, 0, 0)' && painted.color !== painted.row),
+            JSON.stringify({ skin, theme, mark, ...painted }),
+          )
+        }
       }
     }
   }
   console.log(
-    '当前选中的经理工作线：三种皮肤 × 明暗 × 运行/等待/后台任务，状态标识均可见；清未读不隐藏标识。',
+    '经理工作线：选中/未选中 × 三种皮肤 × 明暗 × 运行/等待/后台任务，状态标识均可见；清未读不隐藏标识。',
   )
 } finally {
   cdp?.ws.close()
