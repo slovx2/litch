@@ -115,6 +115,10 @@ function ManagerRow({
             }}
           >
             <i
+              className={device?.connection === 'online' ? 'dev-tick' : 'dev-tick off'}
+              aria-hidden="true"
+            />
+            <i
               className={mark && mark !== 'unread' ? `st mgr ${mark}` : 'st mgr'}
               {...(mark === 'bg'
                 ? {
@@ -124,7 +128,7 @@ function ManagerRow({
                 : {})}
             />
             <span className="title ell grow">{manager.name || t('manager.manager')}</span>
-            {/* 在哪台设备看左边竖线的颜色，名字在标签的提示里：行尾留给待处理与状态 */}
+            {/* 在哪台设备看行首色块的颜色，名字在标签的提示里：行尾留给待处理与状态 */}
             <span
               className="chip"
               title={[

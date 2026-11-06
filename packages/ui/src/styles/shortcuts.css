@@ -45,6 +45,11 @@
 .ws-row > .dev-tick {
   margin-inline-start: 0;
 }
+/* 会话行里的色块画在行首留白里，不推记号和标题：有没有色块，记号和标题都在同一列，
+   置顶区、最近、未读的顶层行和经理行、子会话行对得齐（往左让出 6 像素，宽 3，再抵掉 3 像素） */
+.ss-row > .dev-tick {
+  margin-inline-end: -3px;
+}
 /* 本机组里另有几个在置顶区：一行淡字，不占按钮 */
 .sc-note {
   padding: 2px 6px 4px 28px;
