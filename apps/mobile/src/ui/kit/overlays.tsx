@@ -236,6 +236,8 @@ export function Prompt({
   title,
   initial,
   placeholder,
+  note,
+  maxLength,
   submitLabel,
   onSubmit,
   onClose,
@@ -244,6 +246,9 @@ export function Prompt({
   title: string
   initial: string
   placeholder?: string
+  /** 输入框下的一句说明：存在哪里、有什么不明显的后果 */
+  note?: string
+  maxLength?: number
   submitLabel: string
   onSubmit(value: string): void
   onClose(): void
@@ -269,6 +274,7 @@ export function Prompt({
         onChangeText={setValue}
         placeholder={placeholder}
         placeholderTextColor={c.ink3}
+        maxLength={maxLength}
         onSubmitEditing={submit}
         // 填的是路径、目录、名字：不许输入法自作主张改字、改大小写（Gboard 曾把 …/s/work 改成 …/s/works ）
         autoCorrect={false}
@@ -286,6 +292,11 @@ export function Prompt({
           },
         ]}
       />
+      {note ? (
+        <Text testID="prompt:note" style={{ color: c.ink3, fontSize: theme.font.size.meta }}>
+          {note}
+        </Text>
+      ) : null}
       <View style={styles.dialogButtons}>
         <Button kind="plain" label={t('app.cancel')} onPress={onClose} />
         <Button label={submitLabel} testID="prompt:ok" onPress={submit} />

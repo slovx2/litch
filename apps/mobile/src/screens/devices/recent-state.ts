@@ -4,10 +4,17 @@ import { useSyncExternalStore } from 'react'
 import { jsonFile } from '../../shell/json-file'
 import { type RecentSettings, readRecentSettings } from './recent-settings'
 
-const file = jsonFile<RecentSettings>('recent-group.json')
-let settings: RecentSettings | null = null
+export type ProjectionKind = 'recent' | 'unread'
+
+// 「最近」「未读」各记一份（文件名沿用最近组原来那一份）
+const files = {
+  recent: jsonFile<RecentSettings>('recent-group.json'),
+  unread: jsonFile<RecentSettings>('unread-group.json'),
+}
+const settings: Partial<Record<ProjectionKind, RecentSettings>> = {}
 const listeners = new Set<() => void>()
-const current = (): RecentSettings => (settings ??= readRecentSettings(file.read()))
+const current = (kind: ProjectionKind): RecentSettings =>
+  (settings[kind] ??= readRecentSettings(files[kind].read()))
 const subscribe = (listener: () => void) => {
   listeners.add(listener)
   return () => {
@@ -15,12 +22,17 @@ const subscribe = (listener: () => void) => {
   }
 }
 
-export const useRecentSettings = (): RecentSettings => useSyncExternalStore(subscribe, current)
+export const useRecentSettings = (kind: ProjectionKind = 'recent'): RecentSettings =>
+  useSyncExternalStore(subscribe, () => current(kind))
 
-export function setRecentSettings(change: Partial<RecentSettings>): void {
-  settings = { ...current(), ...change }
+export function setRecentSettings(
+  change: Partial<RecentSettings>,
+  kind: ProjectionKind = 'recent',
+): void {
+  const next = { ...current(kind), ...change }
+  settings[kind] = next
   try {
-    file.write(settings)
+    files[kind].write(next)
   } catch {
     /* 写不下去也照样用这一次的设置。 */
   }

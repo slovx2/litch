@@ -37,6 +37,7 @@ export function useSheet({
   setWorkspaceEdit,
   navigation,
   nativeHere,
+  localEntries,
 }: {
   menu: Menu | null
   device: DeviceView | undefined
@@ -50,6 +51,8 @@ export function useSheet({
   navigation: NativeStackNavigationProp<RootStackParamList, 'Sessions'>
   /** 这台设备上有别的应用派出来的会话：有才出“显示 Claude Code 子对话”的开关（开着的照出，好关掉） */
   nativeHere: boolean
+  /** 加入、移出本机分组的几项（screens/devices/LocalJoin.tsx），接在置顶、移动后面 */
+  localEntries(ref: { deviceId: string; sessionId: string }): SheetAction[]
 }): { title?: string; actions: SheetAction[] } {
   const t = useT()
   const channel = useChannel()
@@ -88,16 +91,19 @@ export function useSheet({
         archive: () => act(channel.command('session.archive', target(summary))),
         delete: () => askDelete(summary),
       }
-      return {
-        title: titleOf(summary, t),
-        actions: entries.map((entry) => ({
-          label: entry.label,
-          danger: entry.danger,
-          disabled: entry.disabled,
-          testID: `menu:${entry.act}`,
-          onPress: run[entry.act],
-        })),
-      }
+      const actions: SheetAction[] = entries.map((entry) => ({
+        label: entry.label,
+        danger: entry.danger,
+        disabled: entry.disabled,
+        testID: `menu:${entry.act}`,
+        onPress: run[entry.act],
+      }))
+      // 本机分组不经过设备：接在整理类（置顶、移动）的后面、改名归档之前
+      const at = entries.findIndex(
+        (entry) => !['report', 'pin', 'unpin', 'unsection', 'move'].includes(entry.act),
+      )
+      actions.splice(at < 0 ? actions.length : at, 0, ...localEntries(target(summary)))
+      return { title: titleOf(summary, t), actions }
     }
     case 'move': {
       const { summary } = menu

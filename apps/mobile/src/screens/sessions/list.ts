@@ -1,6 +1,7 @@
 // 会话列表摊平成一维的行：FlashList 只画看得见的那几十行，分组标题也是其中的一行。
-// 顺序照桌面端侧栏：置顶、各个自定义分区、内置的“项目”组、不属于任何工作区的，最后是已归档。
-// 工作区排在它所在的那一组里（置顶的在置顶里、进了分区的在分区里，其余的都在“项目”里），收起一组连里面的工作区一起收起。
+// 顺序照桌面端侧栏：各个自定义分区、内置的“项目”组、不属于任何工作区的，最后是已归档。
+// 置顶的会话和项目在首页的全局置顶区（devices/PinsGroup.tsx），这里不再画（置顶只出现一次）。
+// 工作区排在它所在的那一组里（进了分区的在分区里，其余的都在“项目”里），收起一组连里面的工作区一起收起。
 // 会话树照桌面侧栏：父会话也在列表里的子会话挂到它下面、一层往里缩一级（depth），不在自己那一组里另占一行；
 // 父会话可以收起子会话（默认都展开），收起了仍露出等人、未读的后代及其父链。别的应用派出来的会话不显示时整个藏掉（等人和未读的照露）。
 // 这里只排行，不碰数据：会话行只带标识，各行自己订阅自己的摘要（keys.summary）。
@@ -78,6 +79,8 @@ export interface ListInput {
   organizable: boolean
   /** 父会话 → 挂在它下面的子会话（keys.children） */
   children: SessionChildren
+  /** 画在首页置顶区里的会话（keys.pinCover）：这里一个都不画 */
+  covered: ReadonlySet<string>
   /** 藏起来的会话：不显示别的应用派出来的会话时是 keys.nativeChildren，显示时是空的 */
   hidden: readonly string[]
   /** 收起了子会话的父会话 */
@@ -87,7 +90,14 @@ export interface ListInput {
 }
 
 export function buildList(input: ListInput): ListItem[] {
-  const { groups, collapsed, workspaces, children, hidden, folded } = input
+  const { collapsed, workspaces, hidden, folded, covered } = input
+  const away = (ids: readonly string[]) => ids.filter((id) => !covered.has(id))
+  const groups = Object.fromEntries(
+    Object.entries(input.groups).map(([key, ids]) => [key, away(ids)]),
+  )
+  const children = Object.fromEntries(
+    Object.entries(input.children).map(([key, ids]) => [key, away(ids)]),
+  )
   const kept = withAncestors(
     [...Object.values(groups).flat(), ...Object.values(children).flat()].filter(input.always),
     children,
@@ -141,12 +151,6 @@ export function buildList(input: ListInput): ListItem[] {
     sessions(groupKey)
     for (const entry of inside) workspace(entry, true)
   }
-  band(
-    PINNED,
-    { kind: 'pinned' },
-    workspaces.filter((entry) => entry.pinned),
-    false,
-  )
   for (const section of input.sections) {
     band(
       groupOfSection(section.id),

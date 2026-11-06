@@ -92,14 +92,14 @@ Managers also appear in Recent and Unread. Their worklines are grouped beneath t
 Viewing a manager for five continuous foreground seconds or completing an explicit action records a recent interaction. Reading, marking read, failed and rejected actions do not.
 Opening a manager from Recent, Unread, search, a notification or a session link opens the same workbench and board as the Managers directory. Desktop keeps the current navigation tree and the clicked Recent or Unread row. On phone, Back returns directly to the source page without visiting the Managers directory. Worklines and ordinary children keep their conversation view. Opening waits for session identity when needed. The projection groups remain hidden in the Managers tree.
 
-手机首页在定时任务入口之后、各台设备之前显示「最近」，规则与桌面相同：应用在前台、会话页正显示该会话时连续停留满 5 秒才记录；
+手机首页在定时任务入口之后依次显示「置顶」「本机分组」「最近」「未读」，然后是各台设备。「最近」规则与桌面相同：应用在前台、会话页正显示该会话时连续停留满 5 秒才记录；
 切到后台、锁屏、下拉通知中心或离开会话页（回到列表、打开终端、文件、子代理页等）都会清零。在手机上发送、批准、停止等操作立即记录。
-手机只记录本机的查看和操作，与电脑上的「最近」各自独立。每行以设备色线区分设备，包含多台设备时远程设备的行第二行写设备名（本机的行不写）；
+手机只记录本机的查看和操作，与电脑上的「最近」各自独立。每行以设备色线区分设备，登记了多台设备时第二行写设备名（离线时带“离线”），与置顶区、本机分组同一种行；
 普通子会话和经理工作线缩进显示在主项下面，不占主项分页名额，点击直接打开对应对话。行尾小箭头展开或收起，照桌面投影默认收起，开合独立记在手机上。
 收起时行尾动态点表示后代有未读、等待处理、运行或后台任务，读屏给出数量，包含更深层的后代。设备会话列表使用同样的提示，并让未读和待处理的后代及其父链在折叠时仍显示。
 On phone, Recent shows ordinary children and manager worklines below their parent. The compact arrow toggles children, collapsed by default, and remembers the state locally. Children do not count toward pagination. A dot on a folded parent indicates activity anywhere in its descendant tree, with its count available to screen readers. The device conversation list uses the same indicator and keeps unread and waiting descendants, together with their ancestors, visible when folded.
 点组头收起或展开；组头「⋯」可切换按项目聚合，并选择默认显示 5 / 10 / 20 条，
-「显示更多」每次增加 10 条，设置记在手机上。手机暂不显示「未读」组，会话列表里的未读标记照旧。
+「显示更多」每次增加 10 条，设置记在手机上。「未读」组没有未读对话时不显示，收起、聚合和条数与「最近」分开记。
 
 子会话符合条件时列出其主会话，展开主会话可查看整个子树，子会话不单独列出；父会话不在活动目录时不列出孤立子项。
 两组默认各显示 5 个主会话，「显示更多」每次增加 10 个，不限总数。组头菜单可分别选择按项目聚合、默认显示 5 / 10 / 20 条，设置在本机记住。
@@ -209,6 +209,12 @@ left untouched.
 置顶区在侧栏最上方，合并所有设备的置顶对话和项目，每行有设备色块和设备名；置顶资格仍存在各设备上，先后只在本机排序。
 「最近」「未读」的行用同一个设备标记（按项目聚合时项目行也带）；登记了多台设备时才写设备名，离线时带“离线”。
 本机分组只保存在此客户端（桌面、手机各一份，不同步），可混装各设备的对话，设备离线时也能整理；组里的对话照常显示在原设备下，已置顶的只在置顶区显示。
+手机不拖放：长按对话可「加入本机分组」、移出或上移、下移；首页本机分组一组一行，点进组详情，长按组或在组详情右上角「⋯」改名、调顺序、删除。平板上组详情在左栏，右栏保留当前对话。
+
+On phone there is no dragging: long-press a session to add it to a local group, remove it, or move it up
+or down. Each local group is one row on the home screen; tap it to open the group, and long-press it (or
+use **⋯** in the group) to rename, reorder or delete. On tablets the group opens in the left pane and the
+current conversation stays on the right.
 
 ## Sessions
 

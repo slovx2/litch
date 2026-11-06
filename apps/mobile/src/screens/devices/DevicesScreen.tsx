@@ -3,12 +3,13 @@
 // 一行只订阅它自己的两个键（keys.device、keys.activity），不遍历会话。
 // 应用回到前台时，没连着的设备立刻重连一次（手机切到后台时连接常被系统掐掉，不等退避的下一拍）。
 // 设备列表上面是经理的入口（待处理合计）和定时任务的入口（所有设备的任务、没看过的运行合计）；
-// 再往下是「最近」组（RecentGroup），然后才是各台设备。
+// 再往下是全局「置顶」、「本机分组」（Shortcuts）、「最近」「未读」（RecentGroup），然后才是各台设备。
 // 顶上有新版本时出更新的横条（UpdateBanner）；定时查更新也挂在这一页（首页一直在栈底）。
 import { type DeviceActivity, type DeviceView, keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AppState, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
+import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import { ago } from '../../../../../packages/ui/src/app/format.ts'
 import { usePane } from '../../nav/pane'
 import type { RootStackParamList } from '../../nav/routes'
@@ -21,12 +22,14 @@ import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { useUpdateSchedule } from '../../update/use-update'
 import { ManagersEntry } from '../managers/ManagersEntry'
+import { titleOf } from '../sessions/rows'
 import { reasonText, type ShownState, shownState } from './failure'
 import { forgetUnusedKey } from './forget'
 import { RecentGroup, SectionHead } from './RecentGroup'
 import { RemoveDevice } from './RemoveDevice'
 import { RestartDevice } from './RestartDevice'
 import { recentRoute } from './recent-route'
+import { LocalGroupsGroup, PinsGroup } from './Shortcuts'
 import { UpdateBanner } from './UpdateBanner'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Devices'>
@@ -156,6 +159,7 @@ function TasksEntry({ onPress }: { onPress(): void }) {
 
 export function DevicesScreen({ navigation }: Props) {
   const t = useT()
+  const { c } = useTheme()
   const channel = useChannel()
   const ids = useKey<string[]>(keys.devices) ?? []
   const now = useMinute()
@@ -163,6 +167,17 @@ export function DevicesScreen({ navigation }: Props) {
   const [renaming, setRenaming] = useState<DeviceView | null>(null)
   const [removing, setRemoving] = useState<DeviceView | null>(null)
   const [restartingId, setRestartingId] = useState<string | null>(null)
+  const [failure, setFailure] = useState<string | null>(null)
+  /** 置顶、本机分组的整理动作：没做成在列表顶上说一句 */
+  const act = useCallback(
+    (work: Promise<unknown>) => {
+      setFailure(null)
+      work.catch((error: unknown) =>
+        setFailure(t('session.failed', { reason: reasonOf(error, t) })),
+      )
+    },
+    [t],
+  )
   useForegroundReconnect()
   useUpdateSchedule()
   const add = () => navigation.navigate('AddDevice')
@@ -177,6 +192,17 @@ export function DevicesScreen({ navigation }: Props) {
       testID="devices"
     >
       <UpdateBanner />
+      {failure ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityHint={t('sessions.failed.dismiss')}
+          testID="devices:failure"
+          onPress={() => setFailure(null)}
+          style={[styles.failure, { backgroundColor: c.sunken, borderBottomColor: c.err }]}
+        >
+          <Text style={{ color: c.err, fontSize: 13 }}>{failure}</Text>
+        </Pressable>
+      ) : null}
       <FlatList
         data={ids}
         keyExtractor={(id) => id}
@@ -185,7 +211,28 @@ export function DevicesScreen({ navigation }: Props) {
             <>
               <ManagersEntry onPress={() => navigation.navigate('Managers')} />
               <TasksEntry onPress={() => navigation.navigate('Tasks', {})} />
+              <PinsGroup
+                act={act}
+                onOpen={(summary, deviceId) =>
+                  navigation.navigate('Detail', {
+                    deviceId,
+                    sessionId: summary.id,
+                    title: titleOf(summary, t),
+                  })
+                }
+                onDevice={(deviceId) => navigation.navigate('Sessions', { deviceId })}
+              />
+              <LocalGroupsGroup
+                act={act}
+                onGroup={(group) =>
+                  navigation.navigate('LocalGroup', { groupId: group.id, title: group.name })
+                }
+              />
               <RecentGroup
+                onOpen={(row, title) => navigation.navigate(...recentRoute(row, title))}
+              />
+              <RecentGroup
+                kind="unread"
                 onOpen={(row, title) => navigation.navigate(...recentRoute(row, title))}
               />
               <SectionHead label={t('sidebar.devices')} testID="devices:head" />
@@ -293,6 +340,7 @@ export function DevicesScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  failure: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 2 },
   left: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 6 },
   wire: { width: 3, alignSelf: 'stretch' },
   more: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
