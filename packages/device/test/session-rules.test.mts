@@ -72,6 +72,11 @@ test('RULES-003：给原生 codex 的约束：命名空间说明不超过 1024 �
     const startTool: any = spec.tools.find((tool) => tool.name === 'start')
     assert.match(startTool.description, /default to this session's current ones/)
     assert.match(startTool.inputSchema.properties.effort.description, /current effort/)
+    const listTool: any = spec.tools.find((tool) => tool.name === 'list')
+    assert.deepEqual(listTool.inputSchema.properties.archived.enum, ['exclude', 'only', 'include'])
+    assert.ok(!listTool.inputSchema.required?.includes('archived'), '旧调用不用补新参数')
+    assert.match(spec.description, /list excludes archived sessions by default/)
+    assert.match(rules, /list excludes archived sessions by default/)
   }
   assert.notEqual(FULL.split('. ')[0], PLAIN.split('. ')[0])
   assert.equal(SESSION_TOOL_LIMITS.proactivePerTurn, 3)

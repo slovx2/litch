@@ -66,7 +66,7 @@ export function managerQuestionTools(
           ? {
               description:
                 tool.name === 'list'
-                  ? 'List authorized sessions only. scope mine excludes the manager itself; cwd, harness and status narrow the list. No unrelated sessions are accessible.'
+                  ? 'List authorized sessions only. scope mine excludes the manager itself; cwd, harness and status narrow the list. Default excludes archived sessions; archived="only" or "include" finds them. No unrelated sessions are accessible.'
                   : 'Read a snapshot of an authorized session: recent turns, pending requests and delegated responses. Truncated text is not complete history; no final answer does not mean no progress.',
             }
           : {}),

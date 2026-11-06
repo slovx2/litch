@@ -564,7 +564,9 @@ woken to continue.
 - **By the model**: in sessions of every harness (Codex, Claude Code, Pi, DSH, OpenCode, Gemini CLI,
   Qwen Code, ACP) the model has `litch_sessions` tools: list and read sessions on the device, start
   sub-sessions, send to and interrupt its own sub-sessions, wait for them, and archive or restore
-  sessions. In a turn you started it may send to or interrupt any session. Once two sessions have
+  sessions. `list` now excludes archived sessions by default, including with `scope: "mine"`;
+  use `archived: "only"` to find sessions to restore, or `"include"` to list both. Every record
+  includes `archived: boolean`; existing arguments remain valid. In a turn you started it may send to or interrupt any session. Once two sessions have
   exchanged a message in any way (a message the model sent, an interruption, a session you mentioned
   with `@` in the other, a sub-session's brief and reports, a Claude Code inbox message), both may
   message each other at any time after that, also after archiving and restoring either (interrupting

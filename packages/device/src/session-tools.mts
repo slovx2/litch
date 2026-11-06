@@ -125,6 +125,7 @@ function summary(
     harness,
     cwd: typeof thread.cwd === 'string' ? thread.cwd : '',
     status: statusWord(tree, thread),
+    archived: tree.host.index.archived(id),
     updated_at: Number(thread.updatedAt) || 0,
     parent_thread_id: lineage?.parentThreadId ?? null,
     wake_parent: lineage?.wakeParent ?? null,
@@ -164,10 +165,13 @@ async function list(tree: SessionTree, args: Record<string, unknown>, call: Devi
   const harness = string(args, 'harness')
   const cwd = string(args, 'cwd')
   const status = string(args, 'status')
+  const archived = string(args, 'archived') ?? 'exclude'
+  if (!['exclude', 'only', 'include'].includes(archived))
+    throw new Refused('invalid', 'archived must be exclude, only or include.')
   if (status !== undefined && status !== 'running' && status !== 'idle')
     throw new Refused('invalid', 'status must be running or idle.')
   const limit = integer(args, 'limit', 20, SESSION_TOOL_LIMITS.listMax)
-  const rows: { harness: string; thread: Record<string, unknown> }[] = []
+  const rows: { harness: string; thread: Record<string, unknown>; archived?: boolean }[] = []
   const authorized = tree.managers?.questions.readableSessions(call.threadId)
   if (authorized) {
     const manager = tree.managers?.store.manager(
@@ -191,14 +195,28 @@ async function list(tree: SessionTree, args: Record<string, unknown>, call: Devi
       sources.map(async (source) => {
         try {
           const link = await tree.link(source.id)
-          const result = await link.request('thread/list', {
-            limit: SESSION_TOOL_LIMITS.listMax,
-            sortKey: 'updated_at',
-            sortDirection: 'desc',
-            ...(cwd ? { cwd } : {}),
-          })
-          const data = isObject(result) && Array.isArray(result.data) ? result.data : []
-          for (const thread of data) if (isObject(thread)) rows.push({ harness: source.id, thread })
+          // 引擎的列表按归档状态分开查询；include 要合并两组，不能依赖引擎的缺省行为。
+          for (const archivedOnly of archived === 'include'
+            ? [false, true]
+            : [archived === 'only']) {
+            const result = await link.request('thread/list', {
+              archived: archivedOnly,
+              limit: SESSION_TOOL_LIMITS.listMax,
+              sortKey: 'updated_at',
+              sortDirection: 'desc',
+              ...(cwd ? { cwd } : {}),
+            })
+            const data = isObject(result) && Array.isArray(result.data) ? result.data : []
+            for (const thread of data)
+              if (isObject(thread) && typeof thread.id === 'string') {
+                tree.host.index.see(
+                  { id: thread.id, updatedAt: thread.updatedAt, ephemeral: thread.ephemeral },
+                  source.id,
+                  archivedOnly,
+                )
+                rows.push({ harness: source.id, thread, archived: archivedOnly })
+              }
+          }
         } catch {
           // 这个 harness 现在不可用：它的会话这一次列不出来
         }
@@ -213,7 +231,11 @@ async function list(tree: SessionTree, args: Record<string, unknown>, call: Devi
     )
     .filter((row) => !harness || row.harness === harness)
     .filter((row) => !cwd || row.thread.cwd === cwd)
-    .map((row) => summary(tree, row.harness, row.thread, call.threadId))
+    .map((row) => ({
+      ...summary(tree, row.harness, row.thread, call.threadId),
+      archived: row.archived ?? tree.host.index.archived(String(row.thread.id)),
+    }))
+    .filter((one) => archived === 'include' || one.archived === (archived === 'only'))
     .filter(
       (one) => !status || (status === 'running' ? one.status !== 'idle' : one.status === 'idle'),
     )

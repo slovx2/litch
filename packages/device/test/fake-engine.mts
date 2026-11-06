@@ -110,6 +110,7 @@ export class FakeEngine extends FakeUpstream {
     }
     this.handlers['thread/list'] = (params) => ({
       data: this.threads
+        .filter((thread) => (thread.archived === true) === (params.archived === true))
         .filter((thread) => !params.cwd || thread.cwd === params.cwd)
         .map((thread) => withState(thread)),
       nextCursor: null,

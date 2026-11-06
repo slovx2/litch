@@ -153,6 +153,20 @@ for (const harness of ['claude-code', 'pi', 'opencode']) {
       )
       assert.deepEqual(value(await tool('list', { cwd: '/another' })).sessions, [])
       assert.equal(value(await tool('list', { limit: 1 })).truncated, true)
+      tree.host.index.setArchived(descendant, true)
+      assert.ok(
+        !value(await tool('list')).sessions.some(
+          (row: { thread_id: string }) => row.thread_id === descendant,
+        ),
+      )
+      const archived = value(await tool('list', { archived: 'only' })).sessions
+      assert.deepEqual(
+        archived.map((row: { thread_id: string }) => row.thread_id),
+        [descendant],
+      )
+      assert.equal(archived[0].archived, true)
+      assert.equal(value(await tool('list', { archived: 'include' })).sessions.length, 3)
+      tree.host.index.setArchived(descendant, false)
       for (const id of [threadId, line, descendant])
         assert.equal(value(await tool('read', { thread_id: id })).session.thread_id, id)
       for (const id of [other.threadId, foreign, unrelated, detached, question]) {

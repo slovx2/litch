@@ -30,6 +30,73 @@ async function family(env: ReturnType<typeof treeRig>) {
   return { client, threadId, childId }
 }
 
+test('归档列表：默认排除，only/include、组合过滤、恢复与旧调用都按当前归档状态返回', async () => {
+  const env = treeRig()
+  try {
+    const { client, threadId, childId } = await family(env)
+    env.claude.end(childId)
+    await until(() => !env.device.sessionTree.isActive(childId), '子会话停止')
+    await client.call('thread/archive', { threadId: childId })
+    await until(() => env.device.sessionTree.host.index.archived(childId), '索引记录归档')
+    const list = async (args: Record<string, unknown>) =>
+      resultOf((await env.pi.callTool(threadId, SESSIONS, 'list', args))?.answer)
+    for (const scope of ['mine', 'all']) {
+      const defaults = await list({ scope })
+      assert.ok(defaults.sessions.every((row: any) => row.archived === false))
+      assert.ok(!defaults.sessions.some((row: any) => row.thread_id === childId))
+      assert.deepEqual(await list({ scope, archived: 'exclude' }), defaults)
+      const archived = await list({ scope, archived: 'only' })
+      assert.deepEqual(
+        archived.sessions.map((row: any) => row.thread_id),
+        [childId],
+      )
+      assert.equal(archived.sessions[0].archived, true)
+      const both = await list({ scope, archived: 'include' })
+      assert.equal(both.sessions.find((row: any) => row.thread_id === childId)?.archived, true)
+      assert.equal(
+        new Set(both.sessions.map((row: any) => row.thread_id)).size,
+        both.sessions.length,
+      )
+      const limited = await list({ scope, archived: 'include', limit: 1 })
+      assert.deepEqual(limited.sessions, both.sessions.slice(0, 1))
+      assert.equal(limited.truncated, both.sessions.length > 1)
+      assert.equal((await list({ scope, archived: 'only', status: 'running' })).sessions.length, 0)
+      assert.equal(
+        (
+          await list({
+            scope,
+            archived: 'only',
+            status: 'idle',
+            cwd: '/work/app',
+            harness: 'claude-code',
+            limit: 1,
+          })
+        ).sessions.length,
+        1,
+      )
+      assert.equal((await list({ scope, archived: 'only', cwd: '/other' })).sessions.length, 0)
+    }
+    const read = resultOf(
+      (await env.pi.callTool(threadId, SESSIONS, 'read', { thread_id: childId }))?.answer,
+    )
+    assert.equal(read.session.archived, true)
+    assert.equal(
+      failureOf((await env.pi.callTool(threadId, SESSIONS, 'list', { archived: 'bad' }))?.answer),
+      'invalid',
+    )
+    await client.call('thread/unarchive', { threadId: childId })
+    await until(() => !env.device.sessionTree.host.index.archived(childId), '索引记录恢复')
+    const restored = await list({ scope: 'mine' })
+    assert.deepEqual(
+      restored.sessions.map((row: any) => [row.thread_id, row.archived]),
+      [[childId, false]],
+    )
+    assert.equal((await list({ scope: 'mine', archived: 'only' })).sessions.length, 0)
+  } finally {
+    await env.close()
+  }
+})
+
 test('SESSION-TOOLS-001：list、read 看这台设备上所有会话（mine 只看自己的子孙），读到的回合掐过、注入的那段去掉', async () => {
   const env = treeRig()
   try {

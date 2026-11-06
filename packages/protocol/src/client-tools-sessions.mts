@@ -87,6 +87,8 @@ export interface SessionsListArguments {
   cwd?: string
   /** 只列在跑的 / 停着的 */
   status?: 'running' | 'idle'
+  /** 默认排除归档；only 只列归档；include 同时列出两类。 */
+  archived?: 'exclude' | 'only' | 'include'
   limit?: number
 }
 
@@ -250,6 +252,7 @@ export interface SessionSummary {
   harness: string
   cwd: string
   status: SessionStatusWord
+  archived: boolean
   /** 秒 */
   updated_at: number
   /** Litch 父子关系里的父会话；没有是 null */
@@ -525,7 +528,7 @@ export const WORKTREE_RULE =
  * 子会话都跑完、结果到手之后可以提议归档它们，用户说好再归档。有收尾时用收尾的 ask 问
  */
 export function archiveRule(wrapUp: boolean): string {
-  return `Archiving: litch_sessions.archive moves a session to Archived, and litch_sessions.unarchive brings it back. Archive a session only after the user has explicitly agreed to archiving that specific session, never on your own or speculatively. When all of your sub-sessions have finished and you have their results, you may ask the user whether to archive them (${wrapUp ? "with wrap_up's ask and a reply button" : 'in one short question'}) and archive them when they say yes.`
+  return `Archiving: list excludes archived sessions by default; use archived="only" to find sessions to restore, or "include" for both. Each record has archived. litch_sessions.archive moves a session to Archived, and litch_sessions.unarchive brings it back. Archive a session only after the user has explicitly agreed to archiving that specific session, never on your own or speculatively. When all of your sub-sessions have finished and you have their results, you may ask the user whether to archive them (${wrapUp ? "with wrap_up's ask and a reply button" : 'in one short question'}) and archive them when they say yes.`
 }
 
 export const TITLE_LINE =
@@ -670,14 +673,14 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
   return {
     type: 'namespace',
     name: CLIENT_TOOL_NAMESPACE.sessions,
-    description: `Litch sessions on this device. A sub-session is a full, separate session the user can open and talk to; it is for a task of its own that the user may want to follow apart from this work, or for work that needs another harness, model or folder. Parts of the task at hand, however large, run here or in your own subagents. ${suggestionLine(wrapUp, taskCards)} Results of your sub-sessions arrive later as a <litch-session-event> message; do not poll. Send to/interrupt sub-sessions or any session on a user-started turn; also send to any with past messages either way; archive only when the user agreed. Use respond for delegated answers; secret inputs require the user. Send never answers. If these tools report an unsupported namespace or a missing tool, you are not in Litch: stop calling litch_* tools in this conversation.`,
+    description: `Litch sessions on this device. list excludes archived sessions by default; archived="only" or "include" finds them. A sub-session is a separate conversation for a task of its own or work needing another harness, model or folder. Parts of the task at hand, however large, run here or in your own subagents. ${suggestionLine(wrapUp, taskCards)} Results of your sub-sessions arrive later as a <litch-session-event> message; do not poll. Send to/interrupt sub-sessions or any session on a user-started turn; also send to any with past messages either way; archive only when the user agreed. Use respond for delegated answers; secret inputs require the user. Send never answers. If these tools report an unsupported namespace or a missing tool, you are not in Litch: stop calling litch_* tools in this conversation.`,
     instructions: sessionProposalRules(wrapUp, taskCards),
     tools: [
       {
         type: 'function',
         name: SESSION_TOOL.list,
         description:
-          'List sessions on this device, newest first, including wake_parent (null for sessions without a Litch parent). report_parent=false means the user stopped automatic reports from this child; read it yourself when needed.',
+          'List sessions on this device, newest first. Default excludes archived sessions; archived="only" lists archived sessions, "include" lists both. Each record includes archived and wake_parent (null for sessions without a Litch parent). report_parent=false means the user stopped automatic reports from this child; read it yourself when needed.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -689,6 +692,12 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
             harness: { type: 'string', description: 'Only this harness, e.g. claude-code, codex.' },
             cwd: { type: 'string', description: 'Only sessions in this folder.' },
             status: { type: 'string', enum: ['running', 'idle'] },
+            archived: {
+              type: 'string',
+              enum: ['exclude', 'only', 'include'],
+              description:
+                'Default exclude: omit archived sessions. only: archived sessions; include: both.',
+            },
             limit: { type: 'integer', minimum: 1, maximum: SESSION_TOOL_LIMITS.listMax },
           },
           additionalProperties: false,
