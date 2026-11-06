@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,6 +19,26 @@ import (
 	"tailscale.com/types/key"
 	"tailscale.com/types/logger"
 )
+
+func TestPairingTailHosts(t *testing.T) {
+	peer := &ipnstate.PeerStatus{
+		HostName: "Build", DNSName: "build.example.ts.net.",
+		TailscaleIPs: []netip.Addr{netip.MustParseAddr("100.100.10.20"), netip.MustParseAddr("fd7a:115c:a1e0::1")},
+	}
+	status := &ipnstate.Status{Self: peer, Peer: map[key.NodePublic]*ipnstate.PeerStatus{
+		key.NewNode().Public(): peer,
+		key.NewNode().Public(): nil,
+		key.NewNode().Public(): {HostName: "no-address"},
+	}}
+	got := tailHosts(status)
+	want := []string{"build", "build.example.ts.net", "100.100.10.20", "fd7a:115c:a1e0::1"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("节点表提示地址不符：%v", got)
+	}
+	if got := tailHosts(&ipnstate.Status{}); len(got) != 0 {
+		t.Fatalf("空节点表应无候选：%v", got)
+	}
+}
 
 type testTailStorage struct {
 	mu     sync.Mutex

@@ -42,6 +42,33 @@ const RSA: PairHostKey = {
   publicKey: 'ssh-rsa AAAARSA',
 }
 
+test('二维码 Tailscale 提示按地址、设备节点表和 SSH 方式生成，与钥匙方式独立', () => {
+  const address = { name: 'build', host: 'build.lan', port: 22, user: 'dev' }
+  const pairing: PairingView = {
+    deviceId: 'build',
+    pairId: 'pair',
+    mode: 'key',
+    seed: 'A'.repeat(43),
+    command: null,
+    checked: true,
+    tailscaleSsh: false,
+    expiresAt: 1_900_000_000_000,
+    hostKey: ED,
+    original: address,
+    address,
+    hosts: ['build', 'build.test.ts.net'],
+    approvals: false,
+  }
+  assert.equal(pairingPayload(pairing, address).ts, undefined)
+  for (const host of ['100.64.1.2', 'fd7a:115c:a1e0::1', 'BUILD.', 'node.ts.net']) {
+    const payload = pairingPayload(pairing, { ...address, host })
+    assert.equal(payload.ts, 1)
+    assert.equal(payload.m, undefined)
+    assert.equal(payload.k.f, ED.fingerprint)
+  }
+  assert.equal(pairingPayload({ ...pairing, mode: 'tailscale', command: 'enroll' }, address).ts, 1)
+})
+
 interface Options {
   inspection?: PairHostInspection
   reported?: PairHostKey[]

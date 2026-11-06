@@ -42,6 +42,9 @@ export function TailscaleScreen({ navigation, route }: Props) {
   const connected = useRef(false)
   const alive = useRef(true)
   const refreshing = useRef(false)
+  const pairingPrepared = useRef(false)
+  const pairingLogin = useRef(false)
+  const returned = useRef(false)
   useEffect(() => {
     alive.current = true
     return () => {
@@ -69,8 +72,17 @@ export function TailscaleScreen({ navigation, route }: Props) {
         }
       }
       connected.current = next.state === 'connected'
+      if (
+        route.params?.pairing &&
+        pairingLogin.current &&
+        next.state === 'connected' &&
+        !returned.current
+      ) {
+        returned.current = true
+        navigation.popTo('PairDevice', { tailscaleReady: true })
+      }
     },
-    [channel, replica],
+    [channel, replica, navigation, route.params?.pairing],
   )
   const refresh = useCallback(async () => {
     if (!available || refreshing.current || login.current) return
@@ -97,37 +109,53 @@ export function TailscaleScreen({ navigation, route }: Props) {
       subscription.remove()
     }
   }, [focused, available, refresh])
-  const act = async (action: 'login' | 'logout' | 'clear') => {
-    setError(null)
-    setBusy(true)
-    try {
-      if (action === 'login') {
-        const controller = new AbortController()
-        login.current = controller
-        await loginTailscale(server, {
-          signal: controller.signal,
-          accept,
-          open: async (url) => {
-            await Linking.openURL(url)
-            if (alive.current) setWaiting(true)
-          },
-        })
-      } else {
-        setWaiting(false)
-        await tailscale[action]()
-        if (action === 'clear') {
-          edited.current = false
-          setServer('')
+  const act = useCallback(
+    async (action: 'login' | 'logout' | 'clear') => {
+      setError(null)
+      setBusy(true)
+      try {
+        if (action === 'login') {
+          pairingLogin.current = true
+          const controller = new AbortController()
+          login.current = controller
+          await loginTailscale(server, {
+            signal: controller.signal,
+            accept,
+            open: async (url) => {
+              await Linking.openURL(url)
+              if (alive.current) setWaiting(true)
+            },
+          })
+        } else {
+          setWaiting(false)
+          await tailscale[action]()
+          if (action === 'clear') {
+            edited.current = false
+            setServer('')
+          }
+          accept(await tailscale.status())
         }
-        accept(await tailscale.status())
+        return true
+      } catch (failed) {
+        if (alive.current) setError(t(tailscaleErrorKey(failed) ?? 'tailscale.error.other'))
+        return false
+      } finally {
+        login.current = null
+        if (alive.current) setBusy(false)
       }
-    } catch (failed) {
-      if (alive.current) setError(t(tailscaleErrorKey(failed) ?? 'tailscale.error.other'))
-    } finally {
-      login.current = null
-      if (alive.current) setBusy(false)
-    }
-  }
+    },
+    [accept, server, t],
+  )
+  // 扫码页已明确选择登录或换号；沿用登录前的隐私说明，不把配对秘密放进路由。
+  useEffect(() => {
+    if (!route.params?.pairing || !status || pairingPrepared.current) return
+    pairingPrepared.current = true
+    if (route.params.pairing === 'switch') {
+      void act('logout').then((ok) => {
+        if (ok && alive.current) setDisclosure(true)
+      })
+    } else setDisclosure(true)
+  }, [route.params?.pairing, status, act])
   const note = { color: theme.c.ink2, fontFamily: theme.font.ui, fontSize: theme.font.size.body }
   return (
     <Screen title={t('tailscale.title')} testID="tailscale">

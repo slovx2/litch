@@ -94,6 +94,17 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
 添加设备的可选入口可先进入 Tailscale 设置，登录后返回继续填写；自动模式无需再次打开开关。
 扫码确认页使用同一套选路规则。内置网络选中后不会因失败回退公网，也不会将 MagicDNS 交给系统 DNS。
 
+扫码后，地址可能属于 Tailscale 时会先弹出“可能是 Tailscale”。判定结合电脑二维码中的提示、`100.64.0.0/10`、`fd7a:115c:a1e0::/48`、`*.ts.net` 和手机内置网络的节点表；共享地址段只能说明可能使用，不能证明。
+
+- 已登录：显示当前 tailnet，点击“确认正确”继续，或“更换 Tailscale 账号”退出旧账号并登录。
+- 未登录：选择“登录 Tailscale”，或在已有系统 VPN／外部 Tailscale 时选择“直接连接”。直接连接对该设备使用“从不”选路，避免错误地进入内置网络。
+- 登录或换号成功后自动继续绑定；取消、失败、等待管理员批准时不继续。登录期间二维码过期，需要重新生成。
+- 电脑收到手机的 SSH 登记请求后才出现确认按钮；在这之前仍显示等待连接，并提醒检查手机的 Tailscale 账号。二维码新增提示是可选项，新旧码仍可读取。
+
+设备名称行优先显示名字，过长时截断；引擎徽标放在已有地址行。主机密钥指纹留在设备详情的核对信息里，不与名称争用空间。
+
+After scanning, a **May use Tailscale** dialog appears when the QR hint, address range, MagicDNS suffix, or embedded node map suggests Tailscale. Signed-in users confirm the displayed tailnet or switch accounts. Signed-out users sign in or choose **Connect directly** for a system VPN or external Tailscale; direct connection sets this device’s route to **Never**. Successful sign-in resumes pairing automatically. Cancellation, failure, pending node approval, or an expired code does not continue pairing. The computer can show its confirmation only after the phone’s SSH enrollment request arrives. Older QR codes and phones remain supported.
+
 设置 → Tailscale 显示节点状态、节点名与 tailnet。点击登录后自动打开系统浏览器，
 30 秒未取得地址会提示检查网络后重试；回到 Litch 自动核对状态，不需要再次登录。
 已保存的节点在应用重启后自动恢复。管理员批准、节点恢复中和网络拨号失败分别提示。

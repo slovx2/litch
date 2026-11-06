@@ -26,6 +26,7 @@ config.resolver.nodeModulesPaths = [path.join(__dirname, 'node_modules')]
 // 网页上的界面预览（src/preview/）：react-native-webview 没有网页版，换成 iframe 的替身；
 // react-native-enriched-markdown 的网页版补上 onLayout。只在打网页包时换
 const WEB_STANDINS = {
+  'expo-secure-store': path.join(__dirname, 'src/preview/secure-store.web.ts'),
   'react-native-webview': path.join(__dirname, 'src/preview/webview.web.tsx'),
   'react-native-enriched-markdown': path.join(__dirname, 'src/preview/markdown.web.tsx'),
 }

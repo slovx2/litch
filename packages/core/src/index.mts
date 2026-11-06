@@ -14,6 +14,7 @@ export {
   PAIR_PAYLOAD_PREFIX,
   PAIR_TTL_MS,
   type PairPayload,
+  possibleTailnetHost,
   tailscaleVerifyUrl,
 } from '../../protocol/src/device-pairing.mjs'
 export type { AttachmentState } from '../../protocol/src/file-attachments.mjs'

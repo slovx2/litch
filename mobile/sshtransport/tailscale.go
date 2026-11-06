@@ -21,11 +21,12 @@ import (
 const defaultTailControl = "https://controlplane.tailscale.com"
 
 type tailStatus struct {
-	State      string `json:"state"`
-	Hostname   string `json:"hostname"`
-	Tailnet    string `json:"tailnet"`
-	AuthURL    string `json:"authURL"`
-	ControlURL string `json:"controlURL"`
+	State      string   `json:"state"`
+	Hostname   string   `json:"hostname"`
+	Tailnet    string   `json:"tailnet"`
+	AuthURL    string   `json:"authURL"`
+	ControlURL string   `json:"controlURL"`
+	Hosts      []string `json:"hosts"`
 }
 
 var tailNode = struct {
@@ -210,8 +211,38 @@ func statusTailLocked() (string, error) {
 		if s.CurrentTailnet != nil {
 			st.Tailnet = s.CurrentTailnet.Name
 		}
+		st.Hosts = tailHosts(s)
 	}
 	return marshalJSON(st)
+}
+
+// 连接前提示复用本机节点表，不查询系统 DNS，也不尝试连接目标。
+func tailHosts(status *ipnstate.Status) []string {
+	peers := []*ipnstate.PeerStatus{status.Self}
+	for _, peer := range status.Peer {
+		peers = append(peers, peer)
+	}
+	seen := map[string]bool{}
+	hosts := []string{}
+	add := func(host string) {
+		host = strings.TrimSuffix(strings.ToLower(host), ".")
+		if host != "" && !seen[host] {
+			seen[host] = true
+			hosts = append(hosts, host)
+		}
+	}
+	for _, peer := range peers {
+		if peer == nil || len(peer.TailscaleIPs) == 0 {
+			continue
+		}
+		add(peer.HostName)
+		add(peer.DNSName)
+		add(strings.SplitN(peer.DNSName, ".", 2)[0])
+		for _, ip := range peer.TailscaleIPs {
+			add(ip.String())
+		}
+	}
+	return hosts
 }
 
 func TailscaleStatus() (string, error) {

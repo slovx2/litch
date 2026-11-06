@@ -28,6 +28,20 @@ const say = (prompt: string) =>
 
 export const SCENES: Scene[] = [
   {
+    id: 'pair-ts-login',
+    group: '设备',
+    name: '扫码 · Tailscale 未登录',
+    note: '粘贴配对文本后提示登录或直接连接；模拟登录完成后自动继续配对，不连接真实网络',
+    steps: [nav('PairDevice', undefined)],
+  },
+  {
+    id: 'pair-ts-account',
+    group: '设备',
+    name: '扫码 · Tailscale 已登录',
+    note: '显示当前网络 personal.example，确认账号或更换为 engineering.example 后自动继续配对',
+    steps: [nav('PairDevice', undefined)],
+  },
+  {
     id: 'managers',
     group: '经理',
     name: '经理目录',

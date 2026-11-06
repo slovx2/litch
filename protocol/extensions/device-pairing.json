@@ -18,6 +18,7 @@
   },
   "undeclared": "没声明的连接收不到这两个通知，方法照样能调；命令行用 litch/pair/wait 长轮询代替通知。",
   "rules": [
+    "二维码可选 ts: 1 表示地址可能属于 Tailscale，只作手机连接前提示，不改变 m、密钥、SSH 验证或配对状态。出码端根据地址特征、Tailscale SSH 方式或设备自报的 tailnet 节点地址设置；手机与自己的地址特征、节点表判定取并集。仍使用 LITCHPAIR1 与 v: 1；旧码没有 ts，新手机自行判定；旧手机忽略未知键，新码仍可绑定。",
     "支持与否：设备服务启动时拿到了配置（钥匙文件、主机钥匙目录）、找得到适配器命令行（命令行经环境变量 CHA_ADAPTER_CLI 交过来；没人交时从设备包的位置往上找 bin/codex-harness-adapter），而且不是 Windows 的管理员账号（whoami /groups 里有 S-1-5-32-544；判断不了按是算），runtime/info 的 device.extensions 才列 devicePairing。不支持时 litch/pair/* 一律回 unsupported。",
     "钥匙文件：当前用户的 ~/.ssh/authorized_keys；环境变量 LITCH_AUTHORIZED_KEYS 给了就用它（测试用）。主机钥匙从 /etc/ssh 读（Windows 是 %ProgramData%\\ssh），环境变量 LITCH_SSH_HOST_KEYS_DIR 给了就用它（测试用）。",
     "改钥匙文件：先不加锁按原内容算一遍，不用改就什么都不碰（不建锁文件、不写）；要改时检查、加锁（同目录的 <文件名>.litch-lock，用 O_EXCL 建，超过 10 秒的算死锁删掉，最多等 3 秒），重读、只在末尾追加（原文件最后没有换行先补一个）或整行删掉带标记的行，其他字节不动；写同目录的临时文件（600）、fsync，改名前原文件被别的程序改过就重来（最多 3 次），再改名。目录不存在时建成 700，已有的目录不改权限。文件是符号链接、不是普通文件、属主不是当前用户、没有属主写权限（多半由配置管理工具管着）、不可写时不改，报 keysFile。Windows 上不看属主和权限位。",

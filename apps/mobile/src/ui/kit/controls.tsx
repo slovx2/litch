@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
   },
   rowText: { flex: 1, minWidth: 0 },
   rowTop: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  rowTitle: { flex: 1, fontWeight: '500' },
+  rowTitle: { flex: 1, minWidth: 0, fontWeight: '500' },
   rowMeta: { fontSize: 11 },
   rowDetail: { fontSize: 13, marginTop: 2 },
   valueRow: {

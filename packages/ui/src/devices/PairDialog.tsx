@@ -489,7 +489,13 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
                         {t('pairing.state.done', { name: phone?.name ?? '' })}
                       </div>
                     ) : state === 'waiting' ? (
-                      <div className="pair-line">{t('pairing.state.waiting')}</div>
+                      <div className="pair-line">
+                        {t(
+                          address && pairingPayload(pairing, address).ts === 1
+                            ? 'pairing.state.waitingTailscale'
+                            : 'pairing.state.waiting',
+                        )}
+                      </div>
                     ) : (
                       <div className="pair-line">{t(`pairing.state.${state}`)}</div>
                     )}

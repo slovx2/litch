@@ -84,6 +84,8 @@ interface PairPayloadBase {
    * 没有这一项时手机不带（老设备算确认码时不认它，带了两边的确认码就对不上）
    */
   a?: 1
+  /** 地址可能经 Tailscale 访问；仅作手机连接前提示，不改变 SSH 方式和主机钥匙核对。 */
+  ts?: 1
 }
 
 export interface PairKeyPayload extends PairPayloadBase {
@@ -100,7 +102,7 @@ export interface PairTailscalePayload extends PairPayloadBase {
 
 /**
  * 键的顺序是固定的（命令行的 Go 那份照同样的顺序拼，两边一字不差）：
- * 一次性钥匙方式 v n h p u k s i e；Tailscale 方式 v n h p u k m c i e；有 a 的接在最后
+ * 一次性钥匙方式 v n h p u k s i e；Tailscale 方式 v n h p u k m c i e；可选 a、ts 依次接在最后
  * （命令行出码时没有桌面端记批准公钥，不带 a）
  */
 export function encodePairPayload(payload: PairPayload): string {
@@ -109,7 +111,8 @@ export function encodePairPayload(payload: PairPayload): string {
     payload.m === 'tailscale'
       ? { ...head, m: payload.m, c: payload.c, i: payload.i, e: payload.e }
       : { ...head, s: payload.s, i: payload.i, e: payload.e }
-  const full = payload.a === 1 ? { ...body, a: 1 } : body
+  const approved = payload.a === 1 ? { ...body, a: 1 } : body
+  const full = payload.ts === 1 ? { ...approved, ts: 1 } : approved
   return PAIR_PAYLOAD_PREFIX + base64UrlEncode(utf8Encode(JSON.stringify(full)))
 }
 
@@ -159,6 +162,7 @@ export function decodePairPayload(text: string): PairPayload | null {
     i: v.i,
     e: v.e,
     ...(v.a === 1 ? { a: 1 as const } : {}),
+    ...(v.ts === 1 ? { ts: 1 as const } : {}),
   }
   if (v.m === 'tailscale') {
     // 命令原样交给对面的 shell：只许一行
@@ -173,14 +177,39 @@ export function decodePairPayload(text: string): PairPayload | null {
 
 // ---------- 用哪种方式（出码的一方定） ----------
 
-/** tailnet 的地址：MagicDNS 名字（*.ts.net）或者 CGNAT 段 100.64.0.0/10 的 IPv4 */
+/** 可能属于 tailnet 的地址；共享地址段也可能用于其他网络，不能当作已确认。 */
 export function isTailnetHost(host: string): boolean {
-  const name = host.trim().toLowerCase().replace(/\.$/, '')
+  const name = normalizeTailnetHost(host)
   if (name.endsWith('.ts.net')) return true
+  if (/^fd7a:115c:a1e0:/.test(name)) {
+    const halves = name.split('::')
+    const groups = name.split(':').filter(Boolean)
+    return (
+      halves.length <= 2 &&
+      !name.includes(':::') &&
+      (!name.endsWith(':') || name.endsWith('::')) &&
+      groups.every((part) => /^[0-9a-f]{1,4}$/.test(part)) &&
+      (halves.length === 2 ? groups.length < 8 : groups.length === 8)
+    )
+  }
   const parts = name.split('.')
-  if (parts.length !== 4 || !parts.every((part) => /^\d{1,3}$/.test(part))) return false
+  if (parts.length !== 4 || !parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255))
+    return false
   const [a, b] = parts.map(Number) as [number, number]
   return a === 100 && b >= 64 && b <= 127
+}
+
+export const normalizeTailnetHost = (host: string): string =>
+  host
+    .trim()
+    .toLowerCase()
+    .replace(/^\[([^\]]+)\]$/, '$1')
+    .replace(/\.$/, '')
+
+/** 节点表同时给全名、短名和 IP；不做 DNS 查询，也不把此提示当成网络选路。 */
+export function possibleTailnetHost(host: string, hosts: readonly string[] = []): boolean {
+  const name = normalizeTailnetHost(host)
+  return isTailnetHost(name) || hosts.some((candidate) => normalizeTailnetHost(candidate) === name)
 }
 
 /**

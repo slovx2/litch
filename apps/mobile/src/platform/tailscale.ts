@@ -6,6 +6,7 @@ export interface TailscaleStatus {
   tailnet: string
   authURL: string
   controlURL: string
+  hosts: string[] | null
 }
 
 export function tailscaleAvailable(): boolean {

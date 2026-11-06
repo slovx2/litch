@@ -52,6 +52,8 @@ export const zhPairing = {
   'pairing.copyFailed': '复制失败：{reason}',
   'pairing.qr': '配对二维码',
   'pairing.state.waiting': '等待手机扫码…',
+  'pairing.state.waitingTailscale':
+    '等待手机连接。此地址可能是 Tailscale；扫码后未出现确认时，请在手机上登录或核对 Tailscale 账号。',
   'pairing.state.requested': '手机“{name}”请求绑定',
   'pairing.code': '确认码',
   'pairing.code.note':

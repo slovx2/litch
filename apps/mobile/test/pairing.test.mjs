@@ -185,28 +185,30 @@ test('流程：生成钥匙 → 确认码 → 登记 → 记主机指纹 → 检
 })
 
 test('内嵌 Tailscale：登记、检查、保存使用同一网络，仍用一次性 SSH 密钥与二维码指纹', async () => {
-  const { deps } = fakeDeps()
-  const targets = []
-  deps.tailscale = 'always'
-  deps.enroll = async (target) => {
-    targets.push(target)
-    return '{"ok":true}'
+  for (const mode of ['auto', 'always', 'never']) {
+    const { deps } = fakeDeps()
+    const targets = []
+    deps.tailscale = mode
+    deps.enroll = async (target) => {
+      targets.push(target)
+      return '{"ok":true}'
+    }
+    deps.check = async (target) => {
+      targets.push(target)
+      return { ok: true }
+    }
+    deps.add = async (_name, target) => {
+      targets.push(target)
+      return 'embedded'
+    }
+    const result = await runPairing(payload, deps, () => {})
+    assert.equal(result.ok, true)
+    assert.equal(targets.length, 3)
+    assert.ok(targets.every((target) => target.tailscale === mode))
+    assert.equal(targets[0].seed, payload.s)
+    assert.equal(targets[0].hostFingerprint, payload.k.f)
+    assert.equal(targets[0].enrollCommand, undefined)
   }
-  deps.check = async (target) => {
-    targets.push(target)
-    return { ok: true }
-  }
-  deps.add = async (_name, target) => {
-    targets.push(target)
-    return 'embedded'
-  }
-  const result = await runPairing(payload, deps, () => {})
-  assert.equal(result.ok, true)
-  assert.equal(targets.length, 3)
-  assert.ok(targets.every((target) => target.tailscale === 'always'))
-  assert.equal(targets[0].seed, payload.s)
-  assert.equal(targets[0].hostFingerprint, payload.k.f)
-  assert.equal(targets[0].enrollCommand, undefined)
 })
 
 test('流程：二维码里有 a（设备认批准公钥）时登记带上批准公钥，确认码把它算进去；没有 a 不取也不带', async () => {

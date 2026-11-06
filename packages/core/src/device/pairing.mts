@@ -34,6 +34,7 @@ import {
   type PairStatus,
   type PairTailnet,
   pairModeOf,
+  possibleTailnetHost,
 } from '../../../protocol/src/device-pairing.mjs'
 import type { ClientRequestMethod, ClientRequests } from '../../../protocol/src/index.mjs'
 import { ChannelError, type PairingOp } from '../channel/protocol.mjs'
@@ -236,6 +237,9 @@ export function pairingPayload(pairing: PairingView, address: PairingAddress): P
     i: pairing.pairId,
     e: pairing.expiresAt,
     ...(pairing.approvals ? { a: 1 as const } : {}),
+    ...(pairing.mode === 'tailscale' || possibleTailnetHost(address.host, pairing.hosts)
+      ? { ts: 1 as const }
+      : {}),
   }
   return pairing.mode === 'tailscale'
     ? { ...base, m: 'tailscale', c: pairing.command ?? '' }

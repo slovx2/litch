@@ -7,6 +7,14 @@ export const zhCN = {
     '在电脑上 Litch 的设备详情中点击“在手机上使用…”，扫描显示的二维码。无需复制公钥或核对主机指纹。',
 
   'pair.title': '扫码添加',
+  'pair.network.title': '可能是 Tailscale',
+  'pair.network.account': '此设备可能通过 Tailscale 连接。请确认当前登录的网络“{identity}”正确。',
+  'pair.network.login':
+    '此设备可能通过 Tailscale 连接。请先登录；如已使用系统 VPN 或外部 Tailscale，可直接连接。',
+  'pair.network.correct': '确认正确',
+  'pair.network.switch': '更换 Tailscale 账号',
+  'pair.network.signIn': '登录 Tailscale',
+  'pair.network.direct': '直接连接',
   'pair.camera.why': '使用相机扫描电脑上的配对二维码，仅在此页面使用，不拍照、不录像。',
   'pair.camera.allow': '允许使用相机',
   'pair.camera.denied': '没有相机权限。可在系统设置中为 Litch 开启相机，或在下方粘贴配对文本。',
@@ -29,9 +37,10 @@ export const zhCN = {
   'pair.again': '重新扫码',
 
   'pair.step.key': '正在为此手机生成密钥…',
-  'pair.step.enroll': '请在电脑上点击“允许”',
+  'pair.step.enroll': '正在连接，等待电脑确认…',
   'pair.code': '确认码',
-  'pair.code.hint': '确认电脑上显示的确认码与此处一致后再点击允许。最多等待 2 分钟。',
+  'pair.code.hint':
+    '电脑收到请求后会显示确认码和“允许”按钮。请核对后允许；未出现时，请检查网络和 Tailscale 账号。最多等待 2 分钟。',
   'pair.step.check': '已绑定，正在使用此手机的密钥连接…',
   'pair.step.add': '正在添加…',
 
@@ -58,8 +67,7 @@ export const zhCN = {
   'pair.why.verify': 'Tailscale 要求在浏览器中完成一次验证。打开验证页面完成后点重试。',
   'pair.verify.open': '打开验证页面',
   'pair.retry': '重试',
-  'pair.tailscale':
-    '此设备经 Tailscale SSH 连接，请先打开手机上的 Tailscale 并登录。能否登录由 Tailscale ACL 决定。',
+  'pair.tailscale': '此设备使用 Tailscale SSH，能否登录由 Tailscale ACL 决定。',
   'pair.detail': '详情：{detail}',
 
   'pair.revoke': '同时在远程设备上撤销此手机的密钥',
@@ -77,6 +85,15 @@ export const en: Record<keyof typeof zhCN, Entry> = {
     'In Litch on your computer, open the device details, choose “Use on phone…” and scan the QR code. No public key to copy or fingerprint to check.',
 
   'pair.title': 'Scan to add',
+  'pair.network.title': 'May use Tailscale',
+  'pair.network.account':
+    'This device may connect through Tailscale. Confirm that the current network “{identity}” is correct.',
+  'pair.network.login':
+    'This device may connect through Tailscale. Sign in first, or connect directly if you already use a system VPN or an external Tailscale app.',
+  'pair.network.correct': 'Confirm account',
+  'pair.network.switch': 'Switch Tailscale account',
+  'pair.network.signIn': 'Sign in to Tailscale',
+  'pair.network.direct': 'Connect directly',
   'pair.camera.why':
     'Used only on this page to scan the pairing QR code on your computer. Nothing is photographed or recorded.',
   'pair.camera.allow': 'Allow camera',
@@ -101,9 +118,10 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'pair.again': 'Scan again',
 
   'pair.step.key': 'Generating a key for this phone…',
-  'pair.step.enroll': 'Tap “Allow” on the computer',
+  'pair.step.enroll': 'Connecting, waiting for the computer…',
   'pair.code': 'Confirmation code',
-  'pair.code.hint': 'Allow only if the computer shows the same code. Waits up to 2 minutes.',
+  'pair.code.hint':
+    'The computer shows a code and an Allow button once the request arrives. Check the codes before allowing. If neither appears, check the network and Tailscale account. Waits up to 2 minutes.',
   'pair.step.check': 'Paired. Connecting with this phone’s key…',
   'pair.step.add': 'Adding…',
 
@@ -135,7 +153,7 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'pair.verify.open': 'Open verification page',
   'pair.retry': 'Retry',
   'pair.tailscale':
-    'This device is reached over Tailscale SSH. Turn on Tailscale on this phone and sign in first. Your Tailscale ACL decides whether it can log in.',
+    'This device uses Tailscale SSH. Your Tailscale ACL decides whether it can log in.',
   'pair.detail': 'Details: {detail}',
 
   'pair.revoke': 'Also revoke this phone’s key on the remote device',

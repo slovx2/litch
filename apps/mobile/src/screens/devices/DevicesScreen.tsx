@@ -101,13 +101,12 @@ function DeviceRow({
     <Row
       testID={`device:${deviceId}`}
       title={t.text(device.name)}
-      detail={[device.host, parts.join(' · ')].join('\n')}
-      meta={[
-        pane?.split ? '' : badges,
-        activity?.lastActiveAt ? ago(activity.lastActiveAt, now, t) : '',
-      ]
-        .filter(Boolean)
-        .join('  ')}
+      // 名称行只留短时间；引擎徽标放在已有的地址行，指纹只在设备详情核对。
+      detail={[
+        [device.host, pane?.split ? '' : badges].filter(Boolean).join(' · '),
+        parts.join(' · '),
+      ].join('\n')}
+      meta={activity?.lastActiveAt ? ago(activity.lastActiveAt, now, t) : ''}
       left={
         <View style={styles.left}>
           <View style={[styles.wire, { backgroundColor: theme.c.wire[device.wire] }]} />

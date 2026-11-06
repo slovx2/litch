@@ -19,7 +19,7 @@ export type RootStackParamList = {
   /** 加一台设备：填主机、端口、用户，生成或导入密钥，核对主机指纹 */
   AddDevice: undefined
   /** 扫码添加：扫电脑上的配对二维码或者粘贴配对文本，确认后登记并添加。配对文本是秘密，不经路由传 */
-  PairDevice: undefined
+  PairDevice: { tailscaleReady?: boolean } | undefined
   /** 一台设备的详情：连接信息、密钥、重连、去掉；harness 的启用和设置（设备有设置接口时） */
   DeviceDetail: { deviceId: string }
   /** 一台设备上一个 harness 的详情设置：配置、账号（登录、API key、provider）、MCP 与指令文件（只读）。name 是 harness 的名字，首帧就画 */
@@ -70,7 +70,7 @@ export type RootStackParamList = {
   TaskDetail: { deviceId: string; taskId: string; title?: string }
   /** 应用设置：语言、明暗、关于 */
   Settings: undefined
-  Tailscale: { adding?: boolean } | undefined
+  Tailscale: { adding?: boolean; pairing?: 'login' | 'switch' } | undefined
   /** 开发用：WebView 吞吐测试（scripts/bench.mjs 的 webview 场景） */
   Bench: undefined
 }

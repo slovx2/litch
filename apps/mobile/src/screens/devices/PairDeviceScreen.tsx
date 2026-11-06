@@ -1,17 +1,23 @@
 // 扫码添加：扫电脑上的配对二维码（或者粘贴配对文本）→ 确认要加的设备（地址是电脑上定的，这里不能改）
 // → 添加：生成手机自己的钥匙、用一次性钥匙登记（显示确认码，等电脑上点允许）、记下主机指纹、用自己的钥匙检查并添加。
 // 流程本身在 src/platform/pairing.ts。配对文本是秘密（短时、一次），只放在这一页的状态里，不进路由参数、不落盘。
-// Tailscale 方式的码在确认页多一句“先打开手机上的 Tailscale”；Tailscale 要浏览器验证时给打开链接和重试。
+// 地址可能属于 Tailscale 时先确认账号或登录；登录页只回传完成标记，取消返回不自动连接。
+import { useIsFocused } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import * as Clipboard from 'expo-clipboard'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Keyboard, Linking, Platform, StyleSheet, Text, View } from 'react-native'
 import { ssh } from '../../../modules/litch-ssh/src'
 import type { RootStackParamList } from '../../nav/routes'
 import { ensureApprovalKey } from '../../platform/approval-key'
 import { forgetKey, generateKey, keySecret } from '../../platform/keys'
 import { trustHost } from '../../platform/known-hosts'
+import {
+  canResumePairing,
+  type PairNetworkPrompt,
+  pairNetworkPrompt,
+} from '../../platform/pair-network'
 import {
   looksLikePair,
   type PairDeps,
@@ -22,7 +28,12 @@ import {
   phoneNameOf,
   runPairing,
 } from '../../platform/pairing'
-import { tailscaleErrorKey } from '../../platform/tailscale'
+import {
+  type TailscaleStatus,
+  tailscale as tailnet,
+  tailscaleAvailable,
+  tailscaleErrorKey,
+} from '../../platform/tailscale'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Field, SectionLabel } from '../../ui/kit/controls'
@@ -30,6 +41,7 @@ import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { TailscaleChoice } from '../settings/TailscaleChoice'
+import { PairNetworkDialog } from './PairNetworkDialog'
 import { InfoLine } from './parts'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PairDevice'>
@@ -86,25 +98,34 @@ function Scanner({ onText }: { onText(text: string): boolean }) {
   )
 }
 
-export function PairDeviceScreen({ navigation }: Props) {
+export function PairDeviceScreen({ navigation, route }: Props) {
   const [tailscale, setTailscale] = useState<'auto' | 'always' | 'never'>('auto')
   const t = useT()
   const theme = useTheme()
   const channel = useChannel()
+  const focused = useIsFocused()
   const [phase, setPhase] = useState<Phase>({ kind: 'scan' })
   const [pasted, setPasted] = useState('')
   const [pasteError, setPasteError] = useState<string | null>(null)
   const alive = useRef(true)
-  useEffect(
-    () => () => {
+  const running = useRef(false)
+  const inspected = useRef<PairPayload | null>(null)
+  const currentPayload = useRef<PairPayload | null>(null)
+  const resume = useRef(false)
+  const [checking, setChecking] = useState(false)
+  const [network, setNetwork] = useState<PairNetworkPrompt>(null)
+  const [identity, setIdentity] = useState('')
+  useEffect(() => {
+    alive.current = true
+    return () => {
       alive.current = false
-    },
-    [],
-  )
+    }
+  }, [])
 
   const take = (text: string): boolean => {
     const parsed = parsePairText(text, Date.now())
     if (!parsed.ok) return false
+    currentPayload.current = parsed.payload
     setPhase({ kind: 'confirm', payload: parsed.payload, expired: parsed.expired })
     return true
   }
@@ -113,56 +134,109 @@ export function PairDeviceScreen({ navigation }: Props) {
     setPasteError(take(pasted) ? null : t('pair.notPair'))
   }
 
-  const add = async (payload: PairPayload) => {
-    // 停在确认页上的这段时间里可能过期了
-    if (payload.e <= Date.now()) {
-      setPhase({ kind: 'confirm', payload, expired: true })
-      return
+  const add = useCallback(
+    async (payload: PairPayload, mode = tailscale) => {
+      if (running.current) return
+      setNetwork(null)
+      // 停在确认页上的这段时间里可能过期了
+      if (payload.e <= Date.now()) {
+        setPhase({ kind: 'confirm', payload, expired: true })
+        return
+      }
+      running.current = true
+      setTailscale(mode)
+      const deps: PairDeps = {
+        tailscale: mode,
+        makeKey: generateKey,
+        dropKey: forgetKey,
+        privateKey: async (id) => (await keySecret(id))?.privateKey ?? null,
+        approvalKey: async () => (await ensureApprovalKey()).approvalKey,
+        confirmCode: ssh.pairConfirmCode,
+        enroll: ssh.enrollPair,
+        trust: trustHost,
+        check: (target) => channel.command('remote.check', { target }),
+        add: async (name, target) =>
+          (await channel.command('device.add', { name, target })).deviceId,
+        phoneName: phoneNameOf(
+          Platform.constants as unknown as Record<string, unknown>,
+          Platform.OS,
+        ),
+      }
+      const result = await runPairing(payload, deps, (step) => {
+        if (alive.current) setPhase({ kind: 'run', payload, step })
+      }).catch(
+        (error: unknown) =>
+          ({
+            ok: false,
+            problem: 'unknown',
+            detail: error instanceof Error ? error.message : String(error),
+          }) as const,
+      )
+      running.current = false
+      if (!alive.current) return
+      if (!result.ok) {
+        setPhase({ kind: 'failed', payload, problem: result.problem, detail: result.detail })
+        return
+      }
+      // 自己的钥匙没连上时去设备详情：那里有原因和重试；连上了直接进会话。
+      // 加设备页和这一页都不留在栈里：从那里返回就回到首页
+      navigation.reset({
+        index: 1,
+        routes: [
+          { name: 'Devices' },
+          result.checked
+            ? { name: 'Sessions', params: { deviceId: result.deviceId } }
+            : { name: 'DeviceDetail', params: { deviceId: result.deviceId } },
+        ],
+      })
+    },
+    [channel, navigation, tailscale],
+  )
+
+  const inspectNetwork = useCallback(
+    async (payload: PairPayload, connect: boolean, cancelled: () => boolean = () => false) => {
+      setChecking(true)
+      let status: TailscaleStatus | null = null
+      try {
+        if (tailscaleAvailable()) status = await tailnet.status()
+      } catch {
+        // 本机状态读不到时仍按二维码和地址提示，不能让预检失败直接开始连接。
+      }
+      if (!alive.current || cancelled() || currentPayload.current !== payload) return
+      setChecking(false)
+      if (resume.current && canResumePairing(status, route.params?.tailscaleReady === true)) {
+        resume.current = false
+        void add(payload, 'auto')
+        return
+      }
+      resume.current = false
+      const prompt = pairNetworkPrompt(payload, status)
+      setIdentity(status?.tailnet ?? '')
+      setNetwork(prompt)
+      if (!prompt && connect) void add(payload)
+    },
+    [add, route.params?.tailscaleReady],
+  )
+
+  useEffect(() => {
+    if (!focused || phase.kind !== 'confirm' || phase.expired) return
+    if (inspected.current === phase.payload && !resume.current) return
+    inspected.current = phase.payload
+    let cancelled = false
+    void inspectNetwork(phase.payload, false, () => cancelled)
+    return () => {
+      cancelled = true
+      inspected.current = null
     }
-    const deps: PairDeps = {
-      tailscale,
-      makeKey: generateKey,
-      dropKey: forgetKey,
-      privateKey: async (id) => (await keySecret(id))?.privateKey ?? null,
-      approvalKey: async () => (await ensureApprovalKey()).approvalKey,
-      confirmCode: ssh.pairConfirmCode,
-      enroll: ssh.enrollPair,
-      trust: trustHost,
-      check: (target) => channel.command('remote.check', { target }),
-      add: async (name, target) => (await channel.command('device.add', { name, target })).deviceId,
-      phoneName: phoneNameOf(Platform.constants as unknown as Record<string, unknown>, Platform.OS),
-    }
-    const result = await runPairing(payload, deps, (step) => {
-      if (alive.current) setPhase({ kind: 'run', payload, step })
-    }).catch(
-      (error: unknown) =>
-        ({
-          ok: false,
-          problem: 'unknown',
-          detail: error instanceof Error ? error.message : String(error),
-        }) as const,
-    )
-    if (!alive.current) return
-    if (!result.ok) {
-      setPhase({ kind: 'failed', payload, problem: result.problem, detail: result.detail })
-      return
-    }
-    // 自己的钥匙没连上时去设备详情：那里有原因和重试；连上了直接进会话。
-    // 加设备页和这一页都不留在栈里：从那里返回就回到首页
-    navigation.reset({
-      index: 1,
-      routes: [
-        { name: 'Devices' },
-        result.checked
-          ? { name: 'Sessions', params: { deviceId: result.deviceId } }
-          : { name: 'DeviceDetail', params: { deviceId: result.deviceId } },
-      ],
-    })
-  }
+  }, [focused, phase, inspectNetwork])
 
   const again = () => {
     setPasted('')
     setPasteError(null)
+    setNetwork(null)
+    inspected.current = null
+    currentPayload.current = null
+    resume.current = false
     setPhase({ kind: 'scan' })
   }
 
@@ -227,9 +301,9 @@ export function PairDeviceScreen({ navigation }: Props) {
             ) : null}
             <Button
               label={t('pair.add')}
-              disabled={phase.expired}
+              disabled={phase.expired || checking}
               testID="pair:add"
-              onPress={() => void add(phase.payload)}
+              onPress={() => void inspectNetwork(phase.payload, true)}
             />
             <Button kind="plain" label={t('pair.again')} onPress={again} />
           </View>
@@ -277,6 +351,20 @@ export function PairDeviceScreen({ navigation }: Props) {
           </View>
         ) : null}
       </KeyboardFormScrollView>
+      <PairNetworkDialog
+        prompt={phase.kind === 'confirm' ? network : null}
+        identity={identity}
+        onClose={() => setNetwork(null)}
+        onContinue={(direct) => {
+          if (phase.kind === 'confirm') void add(phase.payload, direct ? 'never' : tailscale)
+        }}
+        onLogin={(change) => {
+          setNetwork(null)
+          resume.current = true
+          navigation.setParams({ tailscaleReady: false })
+          navigation.navigate('Tailscale', { adding: true, pairing: change ? 'switch' : 'login' })
+        }}
+      />
     </Screen>
   )
 }

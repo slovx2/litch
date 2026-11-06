@@ -57,6 +57,8 @@ export const enPairing: Record<keyof typeof zhPairing, Entry> = {
   'pairing.copyFailed': 'Couldn’t copy: {reason}',
   'pairing.qr': 'Pairing QR code',
   'pairing.state.waiting': 'Waiting for the phone to scan…',
+  'pairing.state.waitingTailscale':
+    'Waiting for the phone to connect. This address may use Tailscale. If no confirmation appears after scanning, sign in to Tailscale or check the account on your phone.',
   'pairing.state.requested': 'Phone “{name}” is requesting to pair',
   'pairing.code': 'Confirmation code',
   'pairing.code.note':
