@@ -30,6 +30,7 @@ function actions({ manager = false, managerSource = false, busy = false, online 
     './WorktreeSwitch': { useWorktreesOn: () => false },
     '../../../../../packages/ui/src/tree/sandbox.ts': {},
     '../../ui/kit/controls': {},
+    '../../ui/kit/Icon': {},
     '../../ui/kit/overlays': {},
     '../../ui/theme': {},
     './logic': {},
