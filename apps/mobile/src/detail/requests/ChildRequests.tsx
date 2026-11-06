@@ -18,6 +18,7 @@ import { requestLabel } from '../../../../../packages/ui/src/composer/request-la
 import { useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Caret } from '../../ui/kit/Icon'
+import { StatusShape } from '../../ui/kit/marks'
 import { useTheme } from '../../ui/theme'
 import { Answer } from '../asks/AskCell'
 import { CompactRow } from '../CompactRow'
@@ -56,7 +57,7 @@ export function ChildRequests({
         onPress={() => setExpanded(!expanded)}
         style={({ pressed }) => [styles.head, { opacity: pressed ? 0.7 : 1 }]}
       >
-        <Text style={[styles.mark, { color: c.wait }]}>◆</Text>
+        <StatusShape status="waiting" size={12} />
         <Text style={[styles.grow, { color: c.ink2, fontSize: font.size.meta }]}>
           {t('ask.childrenCount', { count: waiting })}
         </Text>
@@ -194,7 +195,7 @@ export function DelegatedHistory({ deviceId, sessionId }: { deviceId: string; se
   return (
     <CompactRow
       testID="delegated-history"
-      mark="⇄"
+      mark="swap"
       source={t('ask.delegatedHistory', { count: records.length })}
       title={open ? undefined : by(latest)}
       summary={delegatedPairs(latest, t)
@@ -237,7 +238,6 @@ function Record({ record, by }: { record: SessionDelegatedResponse; by: string }
 const styles = StyleSheet.create({
   frame: { marginHorizontal: 8, marginBottom: 6, borderWidth: 1, borderLeftWidth: 3 },
   head: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, height: 36 },
-  mark: { fontSize: 12 },
   grow: { flex: 1 },
   child: { borderTopWidth: StyleSheet.hairlineWidth },
   line: { flexDirection: 'row', alignItems: 'center', paddingRight: 12 },

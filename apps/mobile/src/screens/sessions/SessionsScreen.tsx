@@ -19,14 +19,13 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { FlashList, type ListRenderItem } from '@shopify/flash-list'
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import { Pressable, StyleSheet, Text } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import { foldsKeep, foldsSettled } from '../../../../../packages/ui/src/sidebar/folds.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Empty } from '../../ui/kit/controls'
+import { Empty, ErrorBanner } from '../../ui/kit/controls'
 import { Confirm, Prompt, Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
@@ -301,15 +300,7 @@ export function SessionsScreen({ navigation, route }: Props) {
       <UpdateBanner />
       <DeviceBanner deviceId={deviceId} />
       {failure ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityHint={t('sessions.failed.dismiss')}
-          testID="sessions:failure"
-          onPress={() => setFailure(null)}
-          style={[styles.failure, { backgroundColor: c.sunken, borderBottomColor: c.err }]}
-        >
-          <Text style={{ color: c.err, fontSize: 13 }}>{failure}</Text>
-        </Pressable>
+        <ErrorBanner text={failure} testID="sessions:failure" onClose={() => setFailure(null)} />
       ) : null}
       <FlashList
         data={items}
@@ -363,7 +354,3 @@ export function SessionsScreen({ navigation, route }: Props) {
     </Screen>
   )
 }
-
-const styles = StyleSheet.create({
-  failure: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 2 },
-})

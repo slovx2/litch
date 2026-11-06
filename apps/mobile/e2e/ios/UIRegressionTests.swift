@@ -85,7 +85,7 @@ final class UIRegressionTests: XCTestCase {
     let branch = app.descendants(matching: .any)["picker:option:branch:release/0.18"]
     XCTAssertTrue(branch.waitForExistence(timeout: 10))
     branch.tap()
-    XCTAssertTrue(app.buttons["new:from"].label.hasSuffix(", release/0.18"))
+    XCTAssertTrue(app.buttons["new:from"].label.hasSuffix(": release/0.18"))
     let input = app.textViews["new-input"]
     input.tap()
     input.typeText("propose a sub-session")

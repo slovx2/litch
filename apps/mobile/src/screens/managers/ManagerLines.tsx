@@ -12,8 +12,9 @@ import { StyleSheet, Text, View } from 'react-native'
 import { ago } from '../../../../../packages/ui/src/app/format.ts'
 import { useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Empty, Row, StatusMark } from '../../ui/kit/controls'
+import { Empty, Row } from '../../ui/kit/controls'
 import { Fold } from '../../ui/kit/Icon'
+import { StatusMark } from '../../ui/kit/marks'
 import { useTheme } from '../../ui/theme'
 import { lineRowParts } from './presentation'
 
@@ -82,6 +83,7 @@ function LineRow({
       {...(meta ? { meta } : {})}
       label={[row.line.title, detail, unverified, meta].filter(Boolean).join(' · ')}
       left={<StatusMark status={parts.mark} />}
+      trail="forward"
       right={
         unverified ? (
           <Text

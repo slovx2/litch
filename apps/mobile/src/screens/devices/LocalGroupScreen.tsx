@@ -17,7 +17,7 @@ import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Empty } from '../../ui/kit/controls'
+import { Empty, ErrorBanner } from '../../ui/kit/controls'
 import { Sheet, type SheetAction } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
@@ -116,15 +116,7 @@ export function LocalGroupScreen({ navigation, route }: Props) {
       testID="localGroup"
     >
       {failure ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityHint={t('sessions.failed.dismiss')}
-          testID="localGroup:failure"
-          onPress={() => setFailure(null)}
-          style={[styles.failure, { backgroundColor: c.sunken, borderBottomColor: c.err }]}
-        >
-          <Text style={{ color: c.err, fontSize: 13 }}>{failure}</Text>
-        </Pressable>
+        <ErrorBanner text={failure} testID="localGroup:failure" onClose={() => setFailure(null)} />
       ) : null}
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}>
         {!group ? (
@@ -246,7 +238,6 @@ function Member({
 }
 
 const styles = StyleSheet.create({
-  failure: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 2 },
   note: { paddingHorizontal: 16, paddingVertical: 14, fontSize: 13 },
   ghost: {
     flexDirection: 'row',

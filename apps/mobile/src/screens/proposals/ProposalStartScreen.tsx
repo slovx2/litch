@@ -33,7 +33,7 @@ import { useWorktreesOn, WorktreeSwitch } from '../../detail/proposals/WorktreeS
 import type { RootStackParamList } from '../../nav/routes'
 import { useBusy, useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button, Chip, Empty, Field, Row } from '../../ui/kit/controls'
+import { Button, Chip, Empty, Field, Row, ValueRow } from '../../ui/kit/controls'
 import { KeyboardArea, KeyboardFormFooter, KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Screen } from '../../ui/kit/Screen'
 import { PathPicker } from '../../ui/PathPicker'
@@ -229,10 +229,10 @@ function StartForm({
       <KeyboardArea>
         <KeyboardFormScrollView>
           <Row title={titleOf(parent, t)} detail={t('proposals.start.from')} />
-          <Row
+          <ValueRow
             testID="proposal-start:harness"
-            title={`${device?.harnesses.find((entry) => entry.id === fields.harness)?.badge ?? ''}  ${nameOf(fields.harness)}`.trim()}
-            detail={t('tree.dialog.harness')}
+            title={t('tree.dialog.harness')}
+            value={nameOf(fields.harness)}
             onPress={() => setPicking('harness')}
           />
           {wider ? (
@@ -243,34 +243,34 @@ function StartForm({
               })}
             </Text>
           ) : null}
-          <Row
+          <ValueRow
             testID="proposal-start:model"
-            title={model?.title ?? (fields.model || t('tree.dialog.modelDefault'))}
-            detail={t('tree.dialog.model')}
+            title={t('tree.dialog.model')}
+            value={model?.title ?? (fields.model || t('tree.dialog.modelDefault'))}
             onPress={() => setPicking('model')}
           />
           {model && model.efforts.length > 0 ? (
-            <Row
+            <ValueRow
               testID="proposal-start:effort"
-              title={fields.effort ? effortName(fields.effort) : t('tree.dialog.modelDefault')}
-              detail={t('tree.dialog.effort')}
+              title={t('tree.dialog.effort')}
+              value={fields.effort ? effortName(fields.effort) : t('tree.dialog.modelDefault')}
               onPress={() => setPicking('effort')}
             />
           ) : null}
           {workspaces.length > 0 ? (
-            <Row
+            <ValueRow
               testID="proposal-start:workspace"
-              title={workspaceName ?? t('workspace.none')}
-              detail={t('tree.dialog.workspace')}
+              title={t('tree.dialog.workspace')}
+              value={workspaceName ?? t('workspace.none')}
               onPress={() => setPicking('workspace')}
             />
           ) : null}
-          <Row
+          <ValueRow
             testID="proposal-start:sandbox"
-            title={
+            title={t('tree.dialog.sandbox')}
+            value={
               fields.sandbox ? t(SANDBOX_LEVEL[fields.sandbox]) : t('tree.dialog.sandboxParent')
             }
-            detail={t('tree.dialog.sandbox')}
             onPress={() => setPicking('sandbox')}
           />
           <View style={styles.fields}>

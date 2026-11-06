@@ -47,6 +47,7 @@ import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Empty } from '../../ui/kit/controls'
 import { Caret, Fold, Icon, IconButton } from '../../ui/kit/Icon'
+import { ChoiceMark } from '../../ui/kit/marks'
 import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
@@ -82,7 +83,7 @@ function OptionChoice({
   onSelect(): void
 }) {
   const t = useT()
-  const { c, radius, radio, hit } = useTheme()
+  const { c, radius, hit } = useTheme()
   return (
     <Pressable
       role="radio"
@@ -104,7 +105,7 @@ function OptionChoice({
         },
       ]}
     >
-      <Text style={{ color: selected ? c.accent : c.ink3 }}>{selected ? radio.on : radio.off}</Text>
+      <ChoiceMark kind="radio" state={selected ? 'on' : 'off'} />
       <View style={styles.choiceText}>
         <Text style={{ color: c.ink, fontWeight: '600' }}>
           {option.label}

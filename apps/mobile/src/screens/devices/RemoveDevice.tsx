@@ -9,6 +9,7 @@ import { revokeOwnKey } from '../../platform/pairing'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
+import { ChoiceMark } from '../../ui/kit/marks'
 import { Dialog } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { shownState } from './failure'
@@ -92,9 +93,9 @@ export function RemoveDevice({
           style={styles.check}
           onPress={() => setRevoke((value) => !value)}
         >
-          <Text style={[styles.box, { color: theme.c.ink, fontFamily: theme.font.mono }]}>
-            {revoke ? theme.check.on : theme.check.off}
-          </Text>
+          <View style={styles.box}>
+            <ChoiceMark kind="check" state={revoke ? 'on' : 'off'} />
+          </View>
           <Text style={[styles.detail, styles.checkLabel, { color: theme.c.ink }]}>
             {t('pair.revoke')}
           </Text>
@@ -118,7 +119,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 17, fontWeight: '600' },
   detail: { fontSize: 14, lineHeight: 20 },
   check: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', paddingVertical: 4 },
-  box: { fontSize: 14, lineHeight: 20 },
+  // 框和第一行字对齐（字行高 20）
+  box: { height: 20, justifyContent: 'center' },
   checkLabel: { flex: 1 },
   buttons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
 })

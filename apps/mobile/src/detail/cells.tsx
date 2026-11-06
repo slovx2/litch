@@ -34,8 +34,8 @@ import { experiment } from '../experiment'
 import { noteWork } from '../probe'
 import { useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
-import { StatusMark } from '../ui/kit/controls'
 import { Caret, Icon } from '../ui/kit/Icon'
+import { StatusMark, TodoMark } from '../ui/kit/marks'
 import { plainLine } from '../ui/plain-text'
 import { type Palette, useTheme } from '../ui/theme'
 import { AskCell, AskReplyText, useAsks } from './asks/AskCell'
@@ -79,7 +79,7 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
     return (
       <CompactRow
         testID="peer-message"
-        mark="✉"
+        mark="mail"
         source={peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')}
         tag={peer.bypass ? { text: t('peer.bypass'), color: c.wait } : undefined}
         summary={row.text}
@@ -681,7 +681,7 @@ export const ForkedCell = memo(function ForkedCell({ row }: Props<'forked'>) {
  * 最近那份另在输入框上方有个小按钮（todo/TodoViews.tsx），对话里不再画整块
  */
 export const TodoCell = memo(function TodoCell({ row }: Props<'todo'>) {
-  const { c, font, todo } = useTheme()
+  const { c, font } = useTheme()
   const t = useT()
   const toggle = useToggleInPlace()
   const { done, total } = todoProgress(row.steps)
@@ -696,9 +696,9 @@ export const TodoCell = memo(function TodoCell({ row }: Props<'todo'>) {
       testID="todo:row"
     >
       <View style={styles.todoStep}>
-        <Text style={[styles.todoMark, { color: c.ink3, fontFamily: font.mono }]}>
-          {done === total ? todo.completed : todo.inProgress}
-        </Text>
+        <View style={styles.todoMark}>
+          <TodoMark state={done === total ? 'completed' : 'inProgress'} />
+        </View>
         <Text
           numberOfLines={1}
           style={[styles.grow, styles.todoLine, { color: c.ink2, fontSize: font.size.meta }]}
@@ -779,7 +779,7 @@ export const styles = StyleSheet.create({
   },
   todo: { paddingHorizontal: 16, paddingVertical: 4, minHeight: 28, justifyContent: 'center' },
   todoStep: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  todoMark: { fontSize: 13, lineHeight: 20 },
+  todoMark: { height: 20, justifyContent: 'center' },
   todoLine: { lineHeight: 20 },
   todoBody: { gap: 4, marginTop: 4, paddingLeft: 4 },
 })

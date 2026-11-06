@@ -12,7 +12,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import { reasonOf } from '../../../../packages/ui/src/app/errors.ts'
 import { useChannel } from '../shell/services'
 import { useT } from './i18n'
-import { Button, Field } from './kit/controls'
+import { Button, Field, Loading } from './kit/controls'
 import { Dialog } from './kit/overlays'
 import { useTheme } from './theme'
 
@@ -140,7 +140,7 @@ function Browser({
         />
       </View>
       {busy ? (
-        <Text style={{ color: theme.c.ink3 }}>{t('workspace.browse.loading')}</Text>
+        <Loading text={t('workspace.browse.loading')} />
       ) : error ? (
         <Text accessibilityRole="alert" style={{ color: theme.c.err }}>
           {error}

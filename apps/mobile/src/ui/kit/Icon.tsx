@@ -1,6 +1,6 @@
 // 手机端的图标：和桌面端（packages/ui/src/app/icons.tsx）同一套 16 像素网格的描边图标，
 // 路径照桌面画，线宽、端点也照桌面（1.4、方头）。控件上不要再用 ▾ ▸ ⌃ ✕ ↑ ↗ ⋯ 一类文字符号冒充图标：
-// 字体不同、皮肤不同时大小和位置都飘，读起来像乱码。状态记号（theme.marks）是另一回事，仍是文字。
+// 字体不同、皮肤不同时大小和位置都飘，读起来像乱码。状态、单选多选、待办的记号也是画的，见 marks.tsx。
 import type { ReactNode } from 'react'
 import {
   ActivityIndicator,
@@ -81,6 +81,18 @@ const PATHS = {
   right: 'M3 8h9.5M9 4.5l3.5 3.5L9 11.5',
   arrowUp: 'M8 13V3.5M4.5 7L8 3.5 11.5 7',
   arrowDown: 'M8 3v9.5M4.5 9L8 12.5 11.5 9',
+  /** 别的会话发来的话：一个信封 */
+  mail: 'M2.5 4h11v8h-11zM2.5 4.5L8 9l5.5-4.5',
+  /** 代答、转交：一来一回两支箭头 */
+  swap: 'M3 5.5h9.5M10.5 3.5l2 2-2 2M13 10.5H3.5M5.5 8.5l-2 2 2 2',
+  /** 停下待发：两道竖线 */
+  pause: 'M6 4v8M10 4v8',
+  /** 持续目标：靶心，两个同心圈 */
+  target: 'M8 13.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
+  /** 拒绝了：圈里一道斜线 */
+  ban: 'M8 13.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM4.2 4.2l7.6 7.6',
+  /** 在这里做：往下再拐进来的箭头 */
+  here: 'M4 3v5.5A1.5 1.5 0 0 0 5.5 10H12M9.5 7.5L12 10l-2.5 2.5',
 } as const
 
 export type IconName = keyof typeof PATHS
@@ -90,6 +102,7 @@ export function Icon({
   size = 18,
   color,
   rotate,
+  weight = 1.4,
 }: {
   name: IconName
   /** 画出来的边长；路径按 16 格缩放 */
@@ -97,6 +110,8 @@ export function Icon({
   /** 不给是次一级的墨色 */
   color?: string
   rotate?: number
+  /** 线宽（16 格里的单位）：控件一律 1.4；记号按皮肤加粗或减细 */
+  weight?: number
 }) {
   const { c } = useTheme()
   // 图标只是画，读屏读按钮的名称：外面这层 View 对读屏藏起来（Svg 在网页上会把读屏属性原样写进 DOM）
@@ -115,7 +130,7 @@ export function Icon({
         viewBox="0 0 16 16"
         fill="none"
         stroke={color ?? c.ink2}
-        strokeWidth={1.4}
+        strokeWidth={weight}
         strokeLinecap="square"
         strokeLinejoin="miter"
       >

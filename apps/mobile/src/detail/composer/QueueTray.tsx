@@ -73,11 +73,11 @@ export function QueueTray({
   const heldCount = queued.filter((entry) => entry.delivery === 'held').length
   return (
     <View testID="queue" style={[styles.tray, { borderBottomColor: c.line1 }]}>
-      {/* 停止后的待发：一行头“‖ N 条待发 · 全部发送”。只是排队时没有标题行，第一行前面写“◷ N” */}
+      {/* 停止后的待发：一行头“暂停图标 N 条待发 · 全部发送”。只是排队时没有标题行，第一行前面是钟和条数 */}
       {heldCount ? (
         <View style={styles.head}>
+          <Icon name="pause" size={12} color={c.ink2} />
           <Text style={[styles.headText, { color: c.ink2 }]}>
-            <Text style={{ fontFamily: theme.font.mono }}>‖ </Text>
             {t('composer.pendingCount', { n: heldCount })} ·
           </Text>
           <Pressable
@@ -105,14 +105,22 @@ export function QueueTray({
         return (
           <View key={message.id} style={styles.row} testID={`queue:${index}`}>
             {heldCount ? null : (
-              <Text
+              <View
+                accessible={index === 0}
                 accessibilityLabel={
                   index === 0 ? `${t('composer.queued')} ${queued.length}` : undefined
                 }
-                style={[styles.lead, { color: c.ink3, fontFamily: theme.font.mono }]}
+                style={styles.lead}
               >
-                {index === 0 ? `◷ ${queued.length}` : ''}
-              </Text>
+                {index === 0 ? (
+                  <>
+                    <Icon name="clock" size={12} color={c.ink3} />
+                    <Text style={{ color: c.ink3, fontSize: 12, fontFamily: theme.font.mono }}>
+                      {queued.length}
+                    </Text>
+                  </>
+                ) : null}
+              </View>
             )}
             <Text numberOfLines={1} style={[styles.text, { color: c.ink2 }]}>
               <Mentioned message={message} text={text} />
@@ -175,7 +183,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 36 },
-  lead: { width: 34, fontSize: 12 },
+  lead: { width: 34, flexDirection: 'row', alignItems: 'center', gap: 3 },
   text: { flex: 1, fontSize: 13, marginRight: 4 },
   act: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 })

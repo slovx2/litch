@@ -135,7 +135,7 @@ export function FilesScreen({ navigation, route }: Props) {
 
   const rel = relativeTo(root, path, pathTwin(device?.os ?? null))
   let body: React.ReactNode
-  if (loaded.kind === 'loading') body = <Empty title={t('files.tree.loading')} />
+  if (loaded.kind === 'loading') body = <Empty busy title={t('files.tree.loading')} />
   else if (loaded.kind === 'link')
     body = (
       <ScrollView>

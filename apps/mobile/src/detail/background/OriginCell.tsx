@@ -4,6 +4,7 @@ import { wokenBy } from '@litch/core'
 import { memo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { useT } from '../../ui/i18n'
+import { Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import type { Props } from '../cells'
 import { useBackgroundView } from '../context'
@@ -15,8 +16,8 @@ export const OriginCell = memo(function OriginCell({ row }: Props<'origin'>) {
   const by = row.origin === 'backgroundTask' ? wokenBy(background, row) : null
   return (
     <View style={styles.wrap} testID={`turn-origin:${row.origin}`}>
-      <Text numberOfLines={1} style={{ color: c.ink2, fontSize: font.size.meta }}>
-        <Text style={{ color: c.accent }}>↻ </Text>
+      <Icon name="reload" size={13} color={c.accent} />
+      <Text numberOfLines={1} style={{ flexShrink: 1, color: c.ink2, fontSize: font.size.meta }}>
         {t(`background.origin.${row.origin}`)}
         {by ? <Text style={{ fontFamily: font.mono }}>{` ${by.title}`}</Text> : null}
       </Text>
@@ -25,5 +26,12 @@ export const OriginCell = memo(function OriginCell({ row }: Props<'origin'>) {
 })
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 0 },
+  wrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 0,
+  },
 })

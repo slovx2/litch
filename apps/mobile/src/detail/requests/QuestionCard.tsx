@@ -17,7 +17,9 @@ import {
   saveQuestionDraft,
 } from '../../../../../packages/ui/src/composer/question-drafts.ts'
 import { useT } from '../../ui/i18n'
+import { Icon } from '../../ui/kit/Icon'
 import { CardTextInput } from '../../ui/kit/KeyboardCardScrollView'
+import { ChoiceMark } from '../../ui/kit/marks'
 import { useTheme } from '../../ui/theme'
 import { CardMarkdown } from '../CardMarkdown'
 import { Card, CardButton, type CardProps, useRespond, Why } from './Card'
@@ -25,7 +27,11 @@ import { Card, CardButton, type CardProps, useRespond, Why } from './Card'
 /** 选了一个选项之后隔这么久自己前进：够看清选中了哪个，又不用再点一下 */
 const ADVANCE_MS = 180
 
-const STEP_MARK: Record<QuestionState, string> = { open: '○', answered: '●', skipped: '–' }
+/** 题号后的小记号：答了一道勾，跳过一道横，没答只写题号 */
+const STEP_MARK = { open: null, answered: 'check', skipped: 'minus' } as const satisfies Record<
+  QuestionState,
+  'check' | 'minus' | null
+>
 
 function Option({
   title,
@@ -62,10 +68,10 @@ function Option({
         },
       ]}
     >
-      <Text style={[styles.optionTitle, { color: ink }]}>
-        {checked ? '◉ ' : '○ '}
-        {title}
-      </Text>
+      <View style={styles.optionHead}>
+        <ChoiceMark kind="radio" state={checked ? 'on' : 'off'} color={checked ? ink : c.ink3} />
+        <Text style={[styles.optionTitle, { color: ink }]}>{title}</Text>
+      </View>
       {note ? (
         <Text style={[styles.optionNote, { color: checked ? c.selFg : c.ink2 }]}>{note}</Text>
       ) : null}
@@ -253,8 +259,14 @@ export function QuestionCard(props: CardProps<QuestionRequest>) {
                   }}
                 >
                   {index + 1}
-                  {STEP_MARK[mark]}
                 </Text>
+                {STEP_MARK[mark] ? (
+                  <Icon
+                    name={STEP_MARK[mark]}
+                    size={11}
+                    color={index === page ? c.selFg : c.ink3}
+                  />
+                ) : null}
               </Pressable>
             )
           })}
@@ -324,10 +336,18 @@ export function QuestionCard(props: CardProps<QuestionRequest>) {
 
 const styles = StyleSheet.create({
   steps: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  step: { borderWidth: 1, paddingHorizontal: 8, height: 28, justifyContent: 'center' },
+  step: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    height: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
   question: { fontSize: 15, lineHeight: 21 },
   option: { borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8, justifyContent: 'center' },
-  optionTitle: { fontSize: 15 },
-  optionNote: { fontSize: 13, marginTop: 2 },
+  optionHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  optionTitle: { fontSize: 15, flexShrink: 1 },
+  optionNote: { fontSize: 13, marginTop: 2, marginLeft: 24 },
   input: { borderWidth: 1, paddingHorizontal: 10, fontSize: 15, maxHeight: 160 },
 })

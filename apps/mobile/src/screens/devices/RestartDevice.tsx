@@ -13,7 +13,7 @@ import {
 } from '../../../../../packages/ui/src/devices/service.ts'
 import { useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button } from '../../ui/kit/controls'
+import { Button, Loading } from '../../ui/kit/controls'
 import { Dialog } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 
@@ -181,10 +181,12 @@ export function RestartDevice({
     // 正在问、正在停、正在重连：关上不打断，进度在设备那一行上也看得到
     return [
       title(t('restart.menu')),
-      line(
-        checking ? t('restart.menu.busy') : t('devices.restart.running', { name }),
-        'restart:running',
-      ),
+      <View key="busy" style={styles.busy}>
+        <Loading
+          text={checking ? t('restart.menu.busy') : t('devices.restart.running', { name })}
+          testID="restart:running"
+        />
+      </View>,
       ok(t('devices.restart.close')),
     ]
   })()
@@ -201,5 +203,6 @@ export function RestartDevice({
 const styles = StyleSheet.create({
   title: { fontSize: 17, fontWeight: '600' },
   detail: { fontSize: 14, lineHeight: 20 },
+  busy: { minHeight: 20 },
   buttons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
 })

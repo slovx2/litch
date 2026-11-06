@@ -86,7 +86,7 @@ export function ManagerConsoleScreen({ route, navigation }: Props) {
   if (!manager)
     return (
       <Screen title={t('manager.title')} testID="manager-console">
-        <Empty title={t('manager.loading')} />
+        <Empty busy title={t('manager.loading')} />
       </Screen>
     )
   // 经理会话换了（接手）就整页重来：对话的仓库按会话取
@@ -661,7 +661,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                 )}
               </IssueContext.Provider>
             ) : (
-              <Empty title={t('manager.loading')} />
+              <Empty busy title={t('manager.loading')} />
             )}
           </KeyboardFormScrollView>
           {/* 批量提交条在滚动区下面，不随卡片滚动，也不挡住最后一张卡 */}

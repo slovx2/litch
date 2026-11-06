@@ -73,7 +73,8 @@ export function FilePreview({
       abort.abort()
     }
   }, [channel, focused, deviceId, root, path, format, attempt])
-  if (!focused || loaded.kind === 'loading') return <Empty title={t('mobilePreview.loading')} />
+  if (!focused || loaded.kind === 'loading')
+    return <Empty busy title={t('mobilePreview.loading')} />
   if (loaded.kind === 'failed')
     return (
       <PreviewNotice

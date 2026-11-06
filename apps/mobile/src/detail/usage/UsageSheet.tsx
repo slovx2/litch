@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNow } from '../../screens/sessions/clock'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button } from '../../ui/kit/controls'
+import { Button, Loading } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
 import { contextLine, limitLines, type UsageLine, usageLevel } from './logic'
 
@@ -107,9 +107,13 @@ export function UsageSheet({
           <Text style={[styles.group, { color: c.ink3 }]}>{t('usage.limits')}</Text>
           {limits.length > 0 ? (
             limits.map((line) => <Line key={line.id} line={line} testID="usage:limit" />)
+          ) : reading ? (
+            <View style={styles.busy}>
+              <Loading text={t('usage.reading')} testID="usage:reading" />
+            </View>
           ) : (
             <Text style={[styles.empty, { color: c.ink3 }]} testID="usage:noLimits">
-              {t(reading ? 'usage.reading' : 'usage.noLimits')}
+              {t('usage.noLimits')}
             </Text>
           )}
         </ScrollView>
@@ -176,6 +180,7 @@ const styles = StyleSheet.create({
   list: { flexGrow: 0 },
   group: { fontSize: 12, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 2 },
   empty: { fontSize: 13, paddingHorizontal: 16, paddingVertical: 8 },
+  busy: { paddingHorizontal: 16, paddingVertical: 4 },
   line: { paddingHorizontal: 16, paddingVertical: 8, gap: 6 },
   head: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   name: { flexShrink: 1, fontSize: 14 },

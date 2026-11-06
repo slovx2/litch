@@ -9,6 +9,7 @@ import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Icon } from '../../ui/kit/Icon'
 import { KeyboardCardScrollView } from '../../ui/kit/KeyboardCardScrollView'
+import { StatusShape } from '../../ui/kit/marks'
 import { useTheme } from '../../ui/theme'
 
 export interface CardProps<R extends RequestView = RequestView> {
@@ -116,7 +117,7 @@ export function Card({
         onLayout={(event) => setHeadHeight(event.nativeEvent.layout.height)}
         style={[styles.head, { borderBottomColor: c.line1 }]}
       >
-        <Text style={[styles.mark, { color: c.wait }]}>◆</Text>
+        <StatusShape status="waiting" size={12} />
         <Text numberOfLines={2} style={[styles.title, { color: c.ink }]}>
           {title}
         </Text>
@@ -267,7 +268,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  mark: { fontSize: 12 },
   title: { flex: 1, fontSize: 14, fontWeight: '600' },
   right: { fontSize: 11 },
   body: { flexGrow: 0, flexShrink: 1 },

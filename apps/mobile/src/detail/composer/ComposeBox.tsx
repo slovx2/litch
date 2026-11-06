@@ -30,6 +30,7 @@ import { HardwareKeyboard } from '../../../modules/litch-keyboard/src/HardwareKe
 import { navigationRef } from '../../shell/dev-links'
 import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { Loading } from '../../ui/kit/controls'
 import { Icon } from '../../ui/kit/Icon'
 import { Sheet, type SheetAction } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
@@ -432,11 +433,7 @@ export function ComposeBox({
     >
       {markers ? <View style={styles.mark} /> : null}
       {top}
-      {uploading ? (
-        <Text accessibilityRole="text" style={{ color: c.ink3 }}>
-          {t('composer.file.uploading')}
-        </Text>
-      ) : null}
+      {uploading ? <Loading text={t('composer.file.uploading')} /> : null}
       {draft.files.map((file, index) => (
         <FileCard
           key={file.path}

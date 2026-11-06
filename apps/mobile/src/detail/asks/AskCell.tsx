@@ -19,6 +19,7 @@ import {
 import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Caret } from '../../ui/kit/Icon'
+import { StatusShape } from '../../ui/kit/marks'
 import { Dialog } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { useTranscript } from '../context'
@@ -449,7 +450,7 @@ function Head({
       style={({ pressed }) => [styles.head, pressed ? { backgroundColor: c.press } : null]}
     >
       <View style={styles.headLine}>
-        {waiting ? <Text style={[size, { color: c.wait }]}>◆</Text> : null}
+        {waiting ? <StatusShape status="waiting" size={12} /> : null}
         <Text
           numberOfLines={1}
           style={[styles.source, size, { color: c.ink2 }, title ? styles.capped : styles.grow]}

@@ -14,7 +14,7 @@ import {
 import { loginTailscale } from '../../platform/tailscale-login'
 import { useChannel, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button, Field } from '../../ui/kit/controls'
+import { Button, Field, Loading } from '../../ui/kit/controls'
 import { Fold } from '../../ui/kit/Icon'
 import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Confirm, Dialog } from '../../ui/kit/overlays'
@@ -206,12 +206,16 @@ export function TailscaleScreen({ navigation, route }: Props) {
                 },
               ]}
             >
-              <Text
-                style={[note, { color: status?.state === 'connected' ? theme.c.ok : theme.c.ink }]}
-                testID="tailscale:state"
-              >
-                {status ? t(`tailscale.state.${status.state}`) : t('tailscale.checking')}
-              </Text>
+              {status ? (
+                <Text
+                  style={[note, { color: status.state === 'connected' ? theme.c.ok : theme.c.ink }]}
+                  testID="tailscale:state"
+                >
+                  {t(`tailscale.state.${status.state}`)}
+                </Text>
+              ) : (
+                <Loading text={t('tailscale.checking')} testID="tailscale:state" />
+              )}
               {status?.hostname ? (
                 <Identity label={t('tailscale.node')} value={status.hostname} />
               ) : null}

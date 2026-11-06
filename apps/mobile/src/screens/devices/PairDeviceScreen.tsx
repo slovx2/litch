@@ -7,7 +7,15 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import * as Clipboard from 'expo-clipboard'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Keyboard, Linking, Platform, StyleSheet, Text, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Keyboard,
+  Linking,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
 import { ssh } from '../../../modules/litch-ssh/src'
 import type { RootStackParamList } from '../../nav/routes'
 import { ensureApprovalKey } from '../../platform/approval-key'
@@ -402,7 +410,10 @@ function Progress({ step }: { step: PairStep }) {
   }[step.step]
   return (
     <View style={styles.form} testID={`pair:step:${step.step}`}>
-      <Text style={[styles.title, { color: theme.c.ink }]}>{label}</Text>
+      <View style={styles.progressHead}>
+        <ActivityIndicator color={theme.c.ink3} />
+        <Text style={[styles.title, styles.progressText, { color: theme.c.ink }]}>{label}</Text>
+      </View>
       {step.step === 'enroll' ? (
         <>
           <Text style={[styles.note, { color: theme.c.ink3 }]}>{t('pair.code')}</Text>
@@ -426,6 +437,8 @@ const styles = StyleSheet.create({
   note: { fontSize: 14, lineHeight: 20 },
   detail: { fontSize: 12, lineHeight: 18 },
   title: { fontSize: 17, fontWeight: '600' },
+  progressHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  progressText: { flexShrink: 1 },
   code: { fontSize: 36, letterSpacing: 4, textAlign: 'center', paddingVertical: 8 },
   cameraPad: { padding: 16 },
   camera: { width: '100%', aspectRatio: 1 },

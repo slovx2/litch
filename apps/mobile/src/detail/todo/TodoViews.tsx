@@ -9,6 +9,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import type { SessionStore } from '../../core/session-store'
 import { useT } from '../../ui/i18n'
 import { Icon } from '../../ui/kit/Icon'
+import { TodoMark } from '../../ui/kit/marks'
 import { useTheme } from '../../ui/theme'
 import { stepStatus, todoChipShown, todoProgress } from './logic'
 
@@ -22,7 +23,7 @@ export function TodoSteps({
   steps: readonly TodoStep[]
   running: boolean
 }) {
-  const { c, font, todo } = useTheme()
+  const { c, font } = useTheme()
   return (
     <>
       {note ? (
@@ -36,9 +37,9 @@ export function TodoSteps({
             key={index}
             style={styles.step}
           >
-            <Text style={[styles.mark, { color: c.ink3, fontFamily: font.mono }]}>
-              {todo[status]}
-            </Text>
+            <View style={styles.mark}>
+              <TodoMark state={status} />
+            </View>
             <Text
               style={[
                 styles.grow,
@@ -75,8 +76,7 @@ export function TodoChip({
   onToggle(): void
 }) {
   const t = useT()
-  const theme = useTheme()
-  const { c, font } = theme
+  const { c, radius } = useTheme()
   const todo = useLatestTodo(store)
   if (!todo || !todoChipShown(todo)) return null
   const { done, total } = todoProgress(todo.item.steps)
@@ -92,13 +92,11 @@ export function TodoChip({
         {
           borderColor: open ? c.ink2 : c.line2,
           backgroundColor: pressed ? c.press : open ? c.raised : 'transparent',
-          borderRadius: theme.radius.m,
+          borderRadius: radius.m,
         },
       ]}
     >
-      <Text style={{ color: c.ink3, fontFamily: font.mono, fontSize: 13 }}>
-        {done === total ? theme.todo.completed : theme.todo.inProgress}
-      </Text>
+      <TodoMark state={done === total ? 'completed' : 'inProgress'} />
       <Text style={[styles.chipText, { color: c.ink }]}>
         {t('detail.todo.chip', { done, total })}
       </Text>
@@ -152,7 +150,8 @@ export function TodoPanel({ store, onClose }: { store: SessionStore; onClose(): 
 const styles = StyleSheet.create({
   grow: { flex: 1 },
   step: { flexDirection: 'row', gap: 8 },
-  mark: { fontSize: 13, lineHeight: 20 },
+  // 记号和第一行字对齐（字行高 20）
+  mark: { height: 20, justifyContent: 'center' },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',

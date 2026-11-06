@@ -11,6 +11,7 @@ import { SEARCH_FROM } from '../../../../../packages/ui/src/composer/picker-sear
 import { useT } from '../../ui/i18n'
 import { sectionFont } from '../../ui/kit/controls'
 import { ModalKeyboardArea } from '../../ui/kit/ModalKeyboardArea'
+import { ChoiceMark } from '../../ui/kit/marks'
 import { useTheme } from '../../ui/theme'
 
 export interface PickerOption {
@@ -125,12 +126,14 @@ export function PickerSheet({
                     },
                   ]}
                 >
-                  <Text style={[styles.rowTitle, { color: ink }]}>
-                    <Text style={{ color: selected ? ink : c.ink3 }}>
-                      {selected ? theme.radio.on : theme.radio.off}{' '}
-                    </Text>
-                    {option.title}
-                  </Text>
+                  <View style={styles.rowHead}>
+                    <ChoiceMark
+                      kind="radio"
+                      state={selected ? 'on' : 'off'}
+                      color={selected ? ink : c.ink3}
+                    />
+                    <Text style={[styles.rowTitle, { color: ink }]}>{option.title}</Text>
+                  </View>
                   {option.note ? (
                     <Text style={[styles.rowNote, { color: selected ? c.selFg : c.ink3 }]}>
                       {option.note}
@@ -176,6 +179,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  rowTitle: { fontSize: 16 },
-  rowNote: { fontSize: 13, marginTop: 2 },
+  rowHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  rowTitle: { fontSize: 16, flexShrink: 1 },
+  rowNote: { fontSize: 13, marginTop: 2, marginLeft: 26 },
 })

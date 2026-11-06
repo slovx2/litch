@@ -1,4 +1,4 @@
-// 通用的小控件：按钮、列表行、分组标题、输入框、空状态、状态记号。圆角、字体、选中样式、记号都跟皮肤走（src/ui/theme.ts）。
+// 通用的小控件：按钮、列表行、分组标题、输入框、空状态。圆角、字体、选中样式都跟皮肤走（src/ui/theme.ts）；记号在 marks.tsx。
 // 各页面共用；要加新的通用控件就加在 src/ui/kit/ 下（谁先要谁加，合并时由主线检查有没有重复）。
 import { isValidElement, type ReactNode } from 'react'
 import {
@@ -13,9 +13,8 @@ import {
   View,
 } from 'react-native'
 import { useT } from '../i18n'
-import { type StatusKind, type Theme, useTheme } from '../theme'
-import { BreathingText } from './BreathingText'
-import { Icon } from './Icon'
+import { type Theme, useTheme } from '../theme'
+import { Icon, IconButton } from './Icon'
 import { rowAccessibility } from './row-accessibility'
 
 export function Button({
@@ -80,6 +79,7 @@ export function Row({
   onLongPress,
   selected,
   label,
+  trail,
   testID,
 }: {
   title: string
@@ -95,11 +95,18 @@ export function Row({
   selected?: boolean
   /** 读屏念的整行名称；不给就由各段文字拼成 */
   label?: string
+  /**
+   * 行尾记号：forward 进到别处（新页面、选择单），external 跳出应用，none 不画。
+   * 不给时：能点、没有 right、也不是选择项（selected 没给）就画 forward
+   */
+  trail?: 'forward' | 'external' | 'none'
   testID?: string
 }) {
   const theme = useTheme()
   const { c } = theme
   const ink = selected ? c.selFg : c.ink
+  const shownTrail =
+    trail ?? (onPress && right === undefined && selected === undefined ? 'forward' : 'none')
   const accessibility = rowAccessibility(
     Platform.OS,
     Boolean(onPress),
@@ -160,6 +167,13 @@ export function Row({
         ) : null}
       </View>
       {right}
+      {shownTrail === 'none' ? null : (
+        <Icon
+          name={shownTrail}
+          size={shownTrail === 'forward' ? 14 : 16}
+          color={selected ? c.selFg : c.ink3}
+        />
+      )}
     </Pressable>
   )
 }
@@ -211,6 +225,61 @@ export function ValueRow({
       </Text>
       <Icon name="forward" size={14} color={c.ink3} />
     </Pressable>
+  )
+}
+
+/** 正在读、正在连这类等待：小转圈加一句短字，不另占一大块。外边距由调用方给 */
+export function Loading({
+  text,
+  center,
+  testID,
+}: {
+  text: string
+  /** 居中（单独一块时）；缺省靠左跟着正文 */
+  center?: boolean
+  /** 挂在字上（原来这里就是一段字，测试按文字元素找它） */
+  testID?: string
+}) {
+  const { c, font } = useTheme()
+  return (
+    <View style={[styles.loading, center ? styles.loadingCenter : null]}>
+      <ActivityIndicator size="small" color={c.ink3} />
+      <Text
+        testID={testID}
+        style={[styles.loadingText, { color: c.ink3, fontSize: font.size.meta }]}
+      >
+        {text}
+      </Text>
+    </View>
+  )
+}
+
+/** 出错的横条：错误原文，行尾一个关闭图标（点了收起）。贴在页面顶上，红色下边线 */
+export function ErrorBanner({
+  text,
+  onClose,
+  testID,
+}: {
+  text: string
+  onClose(): void
+  testID?: string
+}) {
+  const t = useT()
+  const { c, font } = useTheme()
+  return (
+    <View
+      testID={testID}
+      style={[styles.banner, { backgroundColor: c.sunken, borderBottomColor: c.err }]}
+    >
+      <Text style={[styles.bannerText, { color: c.err, fontSize: font.size.meta }]}>{text}</Text>
+      <IconButton
+        icon="close"
+        label={t('app.dismiss')}
+        color={c.err}
+        onPress={onClose}
+        testID={testID ? `${testID}:close` : undefined}
+      />
+    </View>
   )
 }
 
@@ -266,14 +335,18 @@ export function Empty({
   title,
   detail,
   action,
+  busy,
 }: {
   title: string
   detail?: string
   action?: ReactNode
+  /** 在等（读取、连接）：标题上面一个转圈 */
+  busy?: boolean
 }) {
   const { c } = useTheme()
   return (
     <View style={styles.empty}>
+      {busy ? <ActivityIndicator color={c.ink3} /> : null}
       <Text style={[styles.emptyTitle, { color: c.ink }]}>{title}</Text>
       {detail ? <Text style={[styles.emptyDetail, { color: c.ink2 }]}>{detail}</Text> : null}
       {action}
@@ -335,30 +408,6 @@ export function Chip({
   )
 }
 
-/** 状态记号：用形状区分（设计稿：会话状态用形状，不只靠颜色），形状跟皮肤走 */
-export function StatusMark({ status }: { status: StatusKind }) {
-  const { c, marks } = useTheme()
-  const glyph = marks[status]
-  const color = {
-    idle: c.ink3,
-    running: c.accent,
-    waiting: c.wait,
-    error: c.err,
-    unread: c.seal,
-    offline: c.ink3,
-    background: c.accent,
-  }[status]
-  return (
-    <BreathingText
-      active={status === 'running' || status === 'background'}
-      testID={`mark:${status}`}
-      style={[styles.mark, { color }]}
-    >
-      {glyph}
-    </BreathingText>
-  )
-}
-
 /** 分组小标题的字：复古用等宽，人文用衬线并拉开字距，标准用系统字 */
 export function sectionFont(theme: Theme) {
   if (theme.skin === 'retro') return { fontFamily: theme.font.mono }
@@ -398,6 +447,17 @@ const styles = StyleSheet.create({
   },
   valueTitle: { flexShrink: 0, maxWidth: '60%' },
   value: { flex: 1, fontSize: 15, textAlign: 'right' },
+  loading: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 28 },
+  loadingCenter: { justifyContent: 'center' },
+  loadingText: { flexShrink: 1 },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 16,
+    paddingRight: 4,
+    borderBottomWidth: 2,
+  },
+  bannerText: { flex: 1, paddingVertical: 10 },
   section: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -415,7 +475,6 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
   emptyTitle: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
   emptyDetail: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  mark: { width: 16, textAlign: 'center', fontSize: 12 },
   chip: { borderWidth: 1, paddingHorizontal: 10, minHeight: 34, justifyContent: 'center' },
   chipText: { fontSize: 14 },
 })

@@ -25,7 +25,7 @@ import { cliPresentation } from '../../../../../packages/ui/src/devices/cli-pres
 import type { RootStackParamList } from '../../nav/routes'
 import { useBusy, useChannel, useKey, useReplica } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
-import { Button } from '../../ui/kit/controls'
+import { Button, Loading } from '../../ui/kit/controls'
 import { Caret, Fold, Icon } from '../../ui/kit/Icon'
 import { Confirm } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
@@ -465,7 +465,11 @@ export function ManageSection({ device, harnessId }: { device: DeviceView; harne
     )
   }
   if (!schema || !snapshot) {
-    return <Text style={[styles.note, { color: theme.c.ink3 }]}>{t('manage.loading')}</Text>
+    return (
+      <View style={styles.busy}>
+        <Loading text={t('manage.loading')} />
+      </View>
+    )
   }
   const setDraft = (key: string, draft: Draft) =>
     setDrafts((before) => {
@@ -593,4 +597,5 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: 10, paddingHorizontal: 16 },
   save: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, paddingHorizontal: 16 },
   note: { fontSize: 13, lineHeight: 18, paddingHorizontal: 16, paddingVertical: 6 },
+  busy: { paddingHorizontal: 16, paddingVertical: 2 },
 })

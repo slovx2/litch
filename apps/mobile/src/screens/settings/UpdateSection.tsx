@@ -3,7 +3,7 @@
 import { Platform, StyleSheet, Switch, Text, View } from 'react-native'
 import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button } from '../../ui/kit/controls'
+import { Button, Loading } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
 import { checkForUpdate, downloadUpdate, installUpdate } from '../../update/store'
 import { useUpdate } from '../../update/use-update'
@@ -51,12 +51,16 @@ export function UpdateStatus() {
   }
   return (
     <View style={{ gap: theme.space(2), marginTop: theme.space(1) }}>
-      <Text
-        testID={`update:state:${state.phase}`}
-        style={[small, { color: state.phase === 'failed' ? c.err : c.ink2 }]}
-      >
-        {line}
-      </Text>
+      {state.phase === 'checking' ? (
+        <Loading text={line} testID={`update:state:${state.phase}`} />
+      ) : (
+        <Text
+          testID={`update:state:${state.phase}`}
+          style={[small, { color: state.phase === 'failed' ? c.err : c.ink2 }]}
+        >
+          {line}
+        </Text>
+      )}
       {state.phase === 'failed' ? (
         <View testID={`update:failure:${state.reason}`} style={{ gap: theme.space(1) }}>
           <Text style={[small, { color: c.err }]}>{t(`update.fail.${state.reason}`)}</Text>

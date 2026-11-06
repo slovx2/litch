@@ -140,7 +140,7 @@ function EventBar({
   return (
     <CompactRow
       testID={testID}
-      mark="ⓘ"
+      mark="info"
       source={t(head)}
       summary={
         summary ??

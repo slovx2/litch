@@ -4,7 +4,7 @@
 // 展开后摘要不再显示，内容（children）排在下面。同桌面的 CompactRow
 import type { ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { Caret } from '../ui/kit/Icon'
+import { Caret, Icon, type IconName } from '../ui/kit/Icon'
 import { plainPreview } from '../ui/plain-text'
 import { useTheme } from '../ui/theme'
 
@@ -21,7 +21,8 @@ export function CompactRow({
   testID,
   children,
 }: {
-  mark: string
+  /** 种类图标（定时任务是钟、简报是分支、别的会话发来的是信封……） */
+  mark: IconName
   /** 标记的颜色，缺省是三级字色（还没答的问题用等待色） */
   markColor?: string
   source: string
@@ -50,9 +51,7 @@ export function CompactRow({
         style={({ pressed }) => [styles.press, pressed ? { backgroundColor: c.press } : null]}
       >
         <View style={styles.line}>
-          <Text style={[styles.mark, { color: markColor ?? c.ink3, fontFamily: font.mono }]}>
-            {mark}
-          </Text>
+          <Icon name={mark} size={14} color={markColor ?? c.ink3} />
           <Text
             numberOfLines={1}
             style={[styles.source, size, { color: c.ink2 }, title ? styles.capped : styles.shrink]}
@@ -93,7 +92,6 @@ const styles = StyleSheet.create({
   bar: { marginHorizontal: 16, marginVertical: 4, paddingLeft: 10, borderLeftWidth: 2 },
   press: { paddingVertical: 6, gap: 2 },
   line: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 20 },
-  mark: { fontSize: 12, width: 14 },
   source: { fontWeight: '500' },
   title: { fontWeight: '600' },
   capped: { flexShrink: 1, maxWidth: '45%' },

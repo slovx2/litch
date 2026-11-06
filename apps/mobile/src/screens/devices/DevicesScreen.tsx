@@ -8,7 +8,7 @@
 import { type DeviceActivity, type DeviceView, keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useEffect, useState } from 'react'
-import { AppState, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
+import { AppState, FlatList, Pressable, StyleSheet, View } from 'react-native'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import { ago } from '../../../../../packages/ui/src/app/format.ts'
 import { usePane } from '../../nav/pane'
@@ -16,8 +16,9 @@ import type { RootStackParamList } from '../../nav/routes'
 import { useConnectionRoute } from '../../platform/connection-route'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button, Empty, Row, StatusMark } from '../../ui/kit/controls'
+import { Button, Empty, ErrorBanner, Row } from '../../ui/kit/controls'
 import { Icon } from '../../ui/kit/Icon'
+import { StatusMark } from '../../ui/kit/marks'
 import { Prompt, Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
@@ -160,7 +161,6 @@ function TasksEntry({ onPress }: { onPress(): void }) {
 
 export function DevicesScreen({ navigation }: Props) {
   const t = useT()
-  const { c } = useTheme()
   const channel = useChannel()
   const ids = useKey<string[]>(keys.devices) ?? []
   const now = useMinute()
@@ -199,15 +199,7 @@ export function DevicesScreen({ navigation }: Props) {
     >
       <UpdateBanner />
       {failure ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityHint={t('sessions.failed.dismiss')}
-          testID="devices:failure"
-          onPress={() => setFailure(null)}
-          style={[styles.failure, { backgroundColor: c.sunken, borderBottomColor: c.err }]}
-        >
-          <Text style={{ color: c.err, fontSize: 13 }}>{failure}</Text>
-        </Pressable>
+        <ErrorBanner text={failure} testID="devices:failure" onClose={() => setFailure(null)} />
       ) : null}
       <FlatList
         data={ids}
@@ -346,7 +338,6 @@ export function DevicesScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  failure: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 2 },
   left: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 6 },
   wire: { width: 3, alignSelf: 'stretch' },
   more: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },

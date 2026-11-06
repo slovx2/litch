@@ -15,8 +15,8 @@ import { duration, elapsed } from '../../../../packages/ui/src/app/format.ts'
 import { processSummary, suggestTitles } from '../../../../packages/ui/src/transcript/steps-text.ts'
 import type { Row, StepState } from '../core/rows'
 import { type Translator, useT } from '../ui/i18n'
-import { StatusMark } from '../ui/kit/controls'
-import { Caret, Icon } from '../ui/kit/Icon'
+import { Caret, Icon, type IconName } from '../ui/kit/Icon'
+import { StatusMark } from '../ui/kit/marks'
 import { type Palette, useTheme } from '../ui/theme'
 import { styles as cellStyles, type Props, useLasting, useTicking } from './cells'
 import { useBackgroundView, useToggleInPlace, useTranscript } from './context'
@@ -34,7 +34,13 @@ const TOOL_CHARS = 1500
 const TOOL_PARTS = 16
 const TOOL_SHOTS = 3
 
-const MARK: Record<StepState, string> = { running: '…', done: '✓', failed: '✕', declined: '⊘' }
+/** 一步的结果：在做是三个点，做完一道勾，失败一个叉，被拒是圈里一道斜线 */
+const MARK = {
+  running: 'more',
+  done: 'check',
+  failed: 'close',
+  declined: 'ban',
+} as const satisfies Record<StepState, IconName>
 
 /** 回合里还在后台跑的步骤有几个（ids 是空格隔开的条目标识）：回合结束了才数 */
 function useInBackground(ended: boolean, ids: string): number {
@@ -288,9 +294,9 @@ export const StepCell = memo(function StepCell({ row }: Props<'step'>) {
           ]}
           testID={`step:${item.kind}`}
         >
-          <Text style={[styles.mark, { color: stateColor(row.state, c), fontFamily: font.mono }]}>
-            {MARK[row.state]}
-          </Text>
+          <View style={styles.mark}>
+            <Icon name={MARK[row.state]} size={13} color={stateColor(row.state, c)} />
+          </View>
           <Text
             style={[cellStyles.grow, styles.stepLabel, { color: c.ink, fontFamily: font.mono }]}
             numberOfLines={row.expanded ? 6 : 2}
@@ -590,7 +596,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     paddingRight: 12,
   },
-  mark: { fontSize: 13, lineHeight: 18, width: 14 },
+  // 记号和第一行字对齐（字行高 18）
+  mark: { height: 18, width: 14, justifyContent: 'center' },
   stepLabel: { fontSize: 13, lineHeight: 18 },
   stepState: { fontSize: 11, lineHeight: 18 },
   note: { fontSize: 11, lineHeight: 16, marginTop: 2 },

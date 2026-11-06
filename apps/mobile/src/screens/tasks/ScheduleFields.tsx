@@ -15,7 +15,7 @@ import {
 import type { Preview } from '../../../../../packages/ui/src/tasks/preview.ts'
 import { PickerSheet } from '../../detail/composer/PickerSheet'
 import { useT } from '../../ui/i18n'
-import { Chip, Field, Row } from '../../ui/kit/controls'
+import { Chip, Field, ValueRow } from '../../ui/kit/controls'
 import { Prompt } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { numberOf, textOf, tidyTime } from './time'
@@ -204,9 +204,9 @@ export function ScheduleFields({
         ))}
       </View>
       <View style={[styles.pad, styles.fields]}>{fields}</View>
-      <Row
+      <ValueRow
         title={t('tasks.form.timezone')}
-        detail={zoneLabel(form.timezone)}
+        value={zoneLabel(form.timezone)}
         testID="task:timezone"
         onPress={() => setZonePicking(true)}
       />

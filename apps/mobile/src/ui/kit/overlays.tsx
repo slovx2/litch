@@ -9,6 +9,7 @@ import { useTheme } from '../theme'
 import { Button, sectionFont } from './controls'
 import { KeyboardCardScrollView } from './KeyboardCardScrollView'
 import { ModalKeyboardArea } from './ModalKeyboardArea'
+import { ChoiceMark } from './marks'
 
 export interface SheetAction {
   label: string
@@ -111,19 +112,21 @@ export function Sheet({
               },
             ]}
           >
-            <Text
-              style={[
-                styles.sheetText,
-                action.value !== undefined ? styles.sheetGrow : null,
-                { color: action.disabled ? c.ink3 : action.danger ? c.err : c.ink },
-              ]}
-            >
-              {action.selected !== undefined
-                ? `${action.selected ? theme.radio.on : theme.radio.off} ${action.label}`
-                : action.checked !== undefined
-                  ? `${action.checked ? theme.check.on : theme.check.off} ${action.label}`
-                  : action.label}
-            </Text>
+            <View style={[styles.sheetLabel, action.value !== undefined ? styles.sheetGrow : null]}>
+              {action.selected !== undefined ? (
+                <ChoiceMark kind="radio" state={action.selected ? 'on' : 'off'} />
+              ) : action.checked !== undefined ? (
+                <ChoiceMark kind="check" state={action.checked ? 'on' : 'off'} />
+              ) : null}
+              <Text
+                style={[
+                  styles.sheetText,
+                  { color: action.disabled ? c.ink3 : action.danger ? c.err : c.ink },
+                ]}
+              >
+                {action.label}
+              </Text>
+            </View>
             {action.value !== undefined ? (
               <Text numberOfLines={1} style={[styles.sheetValue, { color: c.ink2 }]}>
                 {action.value}
@@ -332,7 +335,8 @@ const styles = StyleSheet.create({
   },
   sheetNote: { paddingHorizontal: 16, paddingVertical: 12, lineHeight: 18 },
   sheetNoteTitled: { paddingTop: 0 },
-  sheetText: { fontSize: 16 },
+  sheetLabel: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sheetText: { fontSize: 16, flexShrink: 1 },
   sheetValued: {
     flexDirection: 'row',
     alignItems: 'center',

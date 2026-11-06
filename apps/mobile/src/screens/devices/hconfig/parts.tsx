@@ -7,7 +7,7 @@ import { Linking, StyleSheet, Switch, Text, TextInput, View } from 'react-native
 import { whyNot } from '../../../../../../packages/ui/src/app/errors.ts'
 import { useChannel } from '../../../shell/services'
 import { useT } from '../../../ui/i18n'
-import { Button, Chip } from '../../../ui/kit/controls'
+import { Button, Chip, Loading } from '../../../ui/kit/controls'
 import { useTheme } from '../../../ui/theme'
 
 /** 订阅这个 harness 的详情设置（harnessConfig 主题）。开着这一页核心才去设备上读；订不上（设备没了）是 'error' */
@@ -74,13 +74,23 @@ export function useSaid(): {
 export function Note({
   text,
   tone = 'plain',
+  busy,
   testID,
 }: {
   text: string
   tone?: 'plain' | 'dim' | 'ok' | 'err' | 'wait'
+  /** 在读：前面一个小转圈 */
+  busy?: boolean
   testID?: string
 }) {
   const { c } = useTheme()
+  if (busy) {
+    return (
+      <View style={styles.busy}>
+        <Loading text={text} testID={testID} />
+      </View>
+    )
+  }
   const color = { plain: c.ink2, dim: c.ink3, ok: c.ok, err: c.err, wait: c.wait }[tone]
   return (
     <Text
@@ -116,7 +126,7 @@ export function SlotState({
       </View>
     )
   }
-  return <Note text={t('manage.loading')} tone="dim" testID="hc:slot:loading" />
+  return <Note text={t('manage.loading')} busy testID="hc:slot:loading" />
 }
 
 /** 这一块落在设备上哪些文件 */
@@ -260,6 +270,7 @@ export function openOutside(url: string): void {
 
 export const styles = StyleSheet.create({
   note: { fontSize: 13, lineHeight: 18, paddingHorizontal: 16, paddingVertical: 6 },
+  busy: { paddingHorizontal: 16, paddingVertical: 2 },
   small: { fontSize: 12, lineHeight: 17 },
   pad: { paddingBottom: 8 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 16 },
