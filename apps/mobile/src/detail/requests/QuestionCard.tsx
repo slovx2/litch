@@ -10,13 +10,14 @@ import {
   questionState,
 } from '@litch/core'
 import { useEffect, useRef, useState } from 'react'
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import {
   loadQuestionDraft,
   type QuestionDraft,
   saveQuestionDraft,
 } from '../../../../../packages/ui/src/composer/question-drafts.ts'
 import { useT } from '../../ui/i18n'
+import { CardTextInput } from '../../ui/kit/KeyboardCardScrollView'
 import { useTheme } from '../../ui/theme'
 import { Card, CardButton, type CardProps, useRespond, Why } from './Card'
 
@@ -281,7 +282,7 @@ export function QuestionCard(props: CardProps<QuestionRequest>) {
         />
       ) : null}
       {writing ? (
-        <TextInput
+        <CardTextInput
           key={question.id}
           autoFocus={options.length > 0}
           value={entry?.kind === 'other' ? entry.text : ''}

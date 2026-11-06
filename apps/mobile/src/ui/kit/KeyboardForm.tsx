@@ -143,14 +143,11 @@ export function KeyboardArea({
 export function KeyboardFormScrollView({
   ref,
   actionHeight,
-  keyboardHandled,
   onLayout,
   ...props
 }: Omit<KeyboardAwareScrollViewProps, 'bottomOffset' | 'extraKeyboardSpace'> & {
   ref?: Ref<KeyboardAwareScrollViewRef>
   actionHeight?: number
-  /** 外层已有 StickyView 和按键盘限高的卡片时，不再补底部键盘留白。 */
-  keyboardHandled?: boolean
 }) {
   const theme = useTheme()
   const contained = useContext(Contained)
@@ -229,7 +226,7 @@ export function KeyboardFormScrollView({
     // 库按光标而非输入框底边滚动；还要留出多行框、字段说明和下一行操作。
     actionHeight: actionHeight ?? theme.hit * 3 + 48,
     accessoryHeight: Platform.OS === 'ios' ? theme.hit : 0,
-    contained: keyboardHandled ?? contained,
+    contained,
   })
   return (
     <KeyboardAwareScrollView

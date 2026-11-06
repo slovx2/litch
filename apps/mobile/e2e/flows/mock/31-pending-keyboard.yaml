@@ -1,0 +1,40 @@
+appId: dev.litch.app
+name: mock-异步提问键盘避让
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+# s3 初始空闲；s1 的演示回合仍在运行，快速输入会变成插话而不触发新提问。
+- openLink: litch://open?session=s3&device=local
+- tapOn:
+    id: composer-input
+- inputText: ask while working
+- tapOn:
+    id: composer-send
+- extendedWaitUntil:
+    visible:
+      id: pending-questions
+    timeout: 15000
+# 同时有两道待答题；第一道的选项下方自填框在卡片缩高后仍应完整可见。
+- scrollUntilVisible:
+    element:
+      id: 'pending:.*:input'
+      index: 0
+    direction: DOWN
+    centerElement: false
+- tapOn:
+    id: 'pending:.*:input'
+    index: 0
+- inputText: visible pending answer
+- assertVisible:
+    id: 'pending:.*:input'
+    text: visible pending answer
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - assertVisible:
+          id: keyboard:done

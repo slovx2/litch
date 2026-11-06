@@ -9,6 +9,10 @@ after the foreground turn ends.
 
 ## 手机输入与键盘
 
+提问卡片与审批说明在键盘弹出后自动滚到完整输入框。空间不足时，按钮随卡片内容滚动，多行文字在输入框内滚动。滚动收起键盘的操作不变。
+
+Question cards and approval notes scroll the full focused field into view above the keyboard. When space is limited, buttons scroll with the card and multiline text scrolls inside its field. Scrolling to dismiss the keyboard works as before.
+
 手机上的看板、设置和长表单会将正在编辑的输入框滚到键盘上方；标题和页签保持原位。添加设备、定时任务与建议任务编辑页的主操作固定在键盘上方，评论、改名和消息编辑弹窗也可直接提交。多行内容超过输入框高度后可在框内滚动。
 
 iOS 可点键盘上方的“完成”收起数字、多行及其他键盘，也可向下拖动表单收起；Android 可滚动表单或使用系统返回键收起。键盘打开时点击表单按钮会直接执行。经理代答后的“重新作答”在独立输入弹窗中编辑。

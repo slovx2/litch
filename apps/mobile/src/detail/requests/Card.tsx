@@ -1,13 +1,13 @@
 // 请求卡片共用的部分：答复（session.respond，发出去到卡片消失之间不能再点第二次）、卡片的外框、
 // 底下那一行（没答复成的原因、后面还排着几个）。卡片排在输入区上面，最高到 maxHeight：
-// 内容多的在里面自己滚，底下那排按钮一直贴着底，输入区不被挤走（和桌面端 Dock 的规矩一样）。
+// 内容多的在里面自己滚；空间充足时按钮贴底，短卡片把按钮也放进滚动区，优先露出输入框。
 import type { RequestView } from '@litch/core'
 import { createContext, type ReactNode, useContext, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
+import { KeyboardCardScrollView } from '../../ui/kit/KeyboardCardScrollView'
 import { useTheme } from '../../ui/theme'
 
 export interface CardProps<R extends RequestView = RequestView> {
@@ -79,7 +79,22 @@ export function Card({
   const t = useT()
   const maxHeight = useContext(CardHeight)
   const nested = useContext(CardNested)
+  const [headHeight, setHeadHeight] = useState(40)
+  const [actionsHeight, setActionsHeight] = useState(60)
+  const [footHeight, setFootHeight] = useState(0)
+  // 按钮在窄屏会折成多行；短卡片若仍固定它们，正文可能连一行输入框都放不下。
+  const scrollActions =
+    maxHeight - headHeight - actionsHeight - (error || waiting > 0 ? footHeight : 0) <
+    theme.hit * 2 + 16
   const { c } = theme
+  const buttons = (
+    <View
+      onLayout={(event) => setActionsHeight(event.nativeEvent.layout.height)}
+      style={[styles.actions, { borderTopColor: c.line1 }]}
+    >
+      {actions}
+    </View>
+  )
   return (
     <View
       testID={testID}
@@ -95,7 +110,10 @@ export function Card({
             },
       ]}
     >
-      <View style={[styles.head, { borderBottomColor: c.line1 }]}>
+      <View
+        onLayout={(event) => setHeadHeight(event.nativeEvent.layout.height)}
+        style={[styles.head, { borderBottomColor: c.line1 }]}
+      >
         <Text style={[styles.mark, { color: c.wait }]}>◆</Text>
         <Text numberOfLines={2} style={[styles.title, { color: c.ink }]}>
           {title}
@@ -106,18 +124,20 @@ export function Card({
           </Text>
         ) : null}
       </View>
-      <KeyboardFormScrollView
-        keyboardHandled
+      <KeyboardCardScrollView
         style={styles.body}
-        contentContainerStyle={styles.bodyIn}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
       >
-        {children}
-      </KeyboardFormScrollView>
-      <View style={[styles.actions, { borderTopColor: c.line1 }]}>{actions}</View>
+        <View style={styles.bodyIn}>{children}</View>
+        {scrollActions ? buttons : null}
+      </KeyboardCardScrollView>
+      {scrollActions ? null : buttons}
       {error || waiting > 0 ? (
-        <View style={styles.foot}>
+        <View
+          onLayout={(event) => setFootHeight(event.nativeEvent.layout.height)}
+          style={styles.foot}
+        >
           {error ? (
             <Text testID={`${testID}:error`} style={[styles.footText, { color: c.err }]}>
               {error}

@@ -3,8 +3,9 @@
 // （和桌面端 packages/ui/src/composer/FormCard.tsx 同一套检查）。网页地址交给系统浏览器打开。
 import type { FormField, FormRequest } from '@litch/core'
 import { useState } from 'react'
-import { Linking, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import { Linking, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import { type Key, useT } from '../../ui/i18n'
+import { CardTextInput } from '../../ui/kit/KeyboardCardScrollView'
 import { useTheme } from '../../ui/theme'
 import { Card, CardButton, type CardProps, useRespond, Well, Why } from './Card'
 
@@ -86,7 +87,7 @@ function Control({
   }
   const numeric = field.kind === 'number' || field.kind === 'integer'
   return (
-    <TextInput
+    <CardTextInput
       value={typeof value === 'string' ? value : ''}
       onChangeText={onChange}
       testID={`form:${field.id}`}
