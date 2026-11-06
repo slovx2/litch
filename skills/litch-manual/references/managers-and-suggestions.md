@@ -25,10 +25,15 @@ records and workline reports remain available for issue history, answer recovery
 经理与能确定归属的工作线对话中，正文的 `#D-n`、`#I-n`、`#R-n`、`#P-n` 和 `#S-建议编号`
 可直接打开对应看板对象。仅链接该经理看板中确认存在的编号；代码和已有链接不改写，普通会话不受影响。
 桌面跳到看板对应分类，手机沿用议题卡和经理工作台的跳转。
+跳到分页看板时按对象当前状态选中分栏，滚动到卡片并高亮；详情稍后到达或状态更新后会调整位置。
+手动切换分类、状态或排序后停止跟随此次编号。
 
 In manager and associated workline conversations, decision, item, request, report and suggestion
 references open their board objects. Only confirmed references become links. Code and explicit
 links remain unchanged, and ordinary conversations are unaffected.
+Paged boards select the object's current status, scroll to its card and highlight it, including
+when details arrive later or its status changes. Selecting another category, filter or sort order
+ends following that reference.
 
 「请你做」卡片的响应按钮直接提交该卡：完成按钮提交完成状态与已填写的备注；
 「提交给经理」只提交文字回复。提交成功后清除该卡的响应草稿，其他卡片和讨论草稿保留；

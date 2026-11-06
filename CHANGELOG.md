@@ -5,6 +5,12 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+### 修复
+
+- 修复桌面和手机看板编号链接沿用旧状态筛选的问题；按对象当前状态定位并高亮，支持详情延迟到达和后续状态更新。
+
 ## 0.34.1（2026-11-06）
 
 ### 修复

@@ -14,6 +14,7 @@ import {
 import { nextOpenDecision } from '../../../core/src/projection/manager-next.mts'
 import {
   managerHistorySnapshot,
+  managerObjectLocation,
   managerPageKey,
   managerPageLabel,
   managerPageStates,
@@ -79,7 +80,14 @@ export function PagedBoard({
   const kind = kinds[tab] ?? 'decision'
   const memory = managerBoardMemory(manager.deviceId, manager.id)
   const [, renderMemory] = useState(0)
-  const status = memory.filters[kind] ?? managerPageStates[kind][0]
+  const scope = JSON.stringify([manager.deviceId, manager.id, tab, order])
+  const [link, setLink] = useState<{ id: ManagerObjectId; scope: string } | null>(null)
+  const linked = link?.scope === scope
+  const destination = linked ? managerObjectLocation(board, link.id) : null
+  const status =
+    destination?.kind === kind
+      ? destination.status
+      : (memory.filters[kind] ?? managerPageStates[kind][0])
   const query = useMemo(() => ({ kind, status, order }), [kind, status, order])
   const key = managerPageKey(query)
   const page = paging.pages[key]
@@ -92,12 +100,15 @@ export function PagedBoard({
     },
     [reading],
   )
-  const [linkedPage, setLinkedPage] = useState<typeof reading | null>(null)
-  const linked = linkedPage === reading
-  const setLinked = useCallback(
-    (value: boolean) => setLinkedPage(value ? reading : null),
-    [reading],
-  )
+  const clearLink = useCallback(() => setLink(null), [])
+  useLayoutEffect(() => {
+    if (!linked || !destination) return
+    memory.filters[kind] = status
+    reading.selected = link.id
+  }, [linked, destination, memory, kind, status, reading, link])
+  useEffect(() => {
+    if (link && !linked) setLink(null)
+  }, [link, linked])
   const [error, setError] = useState('')
   const root = useRef<HTMLDivElement>(null)
   /** 点开或收起的那张卡：这一轮过渡让它留在原处 */
@@ -124,18 +135,23 @@ export function PagedBoard({
     [invoke, channel, address, setSelected],
   )
   useEffect(() => {
-    setLinked(false)
     if (kinds[tab]) invoke(channel.command('managers.board.page', { ...address, ...query }))
-  }, [tab, invoke, channel, address, query, setLinked])
+  }, [tab, invoke, channel, address, query])
   useEffect(() => {
     if (target) {
-      setLinked(true)
-      open(target)
+      focused.current = null
+      setLink({ id: target, scope })
+      invoke(channel.command('managers.board.detail', { ...address, id: target }))
       onLocated()
     }
-  }, [target, open, onLocated, setLinked])
-  const active =
-    selected && (linked || page?.entries.some((head) => head.id === selected)) ? selected : null
+  }, [target, scope, invoke, channel, address, onLocated])
+  const active = linked
+    ? destination
+      ? link.id
+      : null
+    : selected && page?.entries.some((head) => head.id === selected)
+      ? selected
+      : null
   const post = board.posts?.find((post) => post.id === active)
   const item = board.items.find((item) => item.id === active)
   const [detailAttempt, setDetailAttempt] = useState<ManagerObjectId | null>(null)
@@ -210,11 +226,15 @@ export function PagedBoard({
       focused.current = null
       return
     }
-    if ((!post && !item) || focused.current === active) return
-    focused.current = active
-    if (linked)
-      root.current?.querySelector('[data-paging-detail]')?.scrollIntoView({ block: 'nearest' })
-  }, [active, post, item, linked])
+    const position = `${active}/${key}/${Boolean(page?.entries.some((head) => head.id === active))}`
+    if ((!post && !item) || restoring || focused.current === position) return
+    focused.current = position
+    if (linked) {
+      const card = root.current?.querySelector<HTMLElement>('[data-paging-detail]')
+      card?.scrollIntoView({ block: 'nearest' })
+      card?.focus({ preventScroll: true })
+    }
+  }, [active, post, item, linked, key, page, restoring])
   // 提交条上的“下一个”：展开后把那张卡停在顶部。要在卡片过渡开始前量（过渡会改中间高度）
   const pinned = useRef<string | null>(null)
   const nextId =
@@ -225,7 +245,7 @@ export function PagedBoard({
     if (!nextId) return
     anchor.current = null
     pinned.current = nextId
-    setLinked(false)
+    clearLink()
     open(nextId)
   }
   useLayoutEffect(() => {
@@ -258,7 +278,7 @@ export function PagedBoard({
     2
   const detail = active ? (
     <InlinePostContext.Provider value={true}>
-      <section data-paging-detail={active}>
+      <section data-paging-detail={active} data-linked={linked || undefined} tabIndex={-1}>
         {!post && !item && !paging.loading.includes(active) ? (
           <p role="alert">
             {error || paging.error}
@@ -433,7 +453,7 @@ export function PagedBoard({
                 onClick={() => {
                   memory.filters[kind] = filter
                   renderMemory((value) => value + 1)
-                  setLinked(false)
+                  clearLink()
                 }}
               >
                 {t(managerPageLabel(kind, filter) as Parameters<typeof t>[0])} ·{' '}
@@ -460,7 +480,7 @@ export function PagedBoard({
                 const mark = markOf(head.id)
                 const toggle = () => {
                   anchor.current = head.id
-                  setLinked(false)
+                  clearLink()
                   if (active === head.id) setSelected(null)
                   else open(head.id)
                 }

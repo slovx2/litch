@@ -125,6 +125,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const [ordering, setOrdering] = useState(false)
   const [talkId, setTalkId] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
+  const [targetVersion, setTargetVersion] = useState(0)
   const [focusItem, setFocusItem] = useState<string | null>(null)
   const [sheet, setSheet] = useState<string | null>(null)
   const positions = useRef(new Map<string, number>())
@@ -200,11 +201,14 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const openIssue = useCallback(
     (id: string, talk = false) => {
       setSheet(null)
+      setTargetVersion((value) => value + 1)
       if (id.startsWith('I-')) {
+        setSelected(null)
         setFocusItem(id)
         setTab('overview')
         return
       }
+      setFocusItem(null)
       setSelected(id)
       setKind(
         id.startsWith('R-')
@@ -569,6 +573,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                     tab={tab}
                     kind={kind}
                     target={selected ?? (focusItem === '*' ? null : focusItem)}
+                    targetVersion={targetVersion}
                     suggestions={suggestions}
                     onLine={openSession}
                     overviewCounts={overviewCounts}

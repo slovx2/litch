@@ -1,5 +1,6 @@
 import type { ManagerChange } from '../../../protocol/src/manager.mjs'
 import type { ManagerPageKind, ManagerPageQuery } from '../../../protocol/src/manager-paging.mjs'
+import type { ManagerBoardView } from '../model-manager.mjs'
 
 export const managerPageKey = (query: ManagerPageQuery) =>
   `${query.kind}/${query.status}/${query.order}`
@@ -9,6 +10,26 @@ export const managerPageStates: Record<ManagerPageKind, readonly [string, ...str
   suggestion: ['pending', 'review', 'started', 'here', 'dismissed', 'withdrawn', 'expired', 'all'],
   report: ['unread', 'read', 'all'],
   item: ['pending', 'backlog', 'running', 'review', 'blocked', 'done', 'deferred', 'all'],
+}
+
+/** 编号定位使用已读取对象的当前状态；详情未到时不把未知对象误归到默认分栏。 */
+export function managerObjectLocation(board: ManagerBoardView, id: string) {
+  const decision = board.decisions.find((one) => one.id === id)
+  if (decision)
+    return {
+      kind: 'decision' as const,
+      status: ['expired', 'withdrawn'].includes(decision.status) ? 'closed' : decision.status,
+    }
+  const request = board.requests?.find((one) => one.id === id)
+  if (request) return { kind: 'request' as const, status: request.status }
+  const item = board.items.find((one) => one.id === id)
+  if (item) return { kind: 'item' as const, status: item.status }
+  const post = board.posts?.find((one) => one.id === id)
+  if (post?.kind === 'report')
+    return { kind: 'report' as const, status: post.unread ? 'unread' : 'read' }
+  if (post?.kind === 'suggestion' && typeof post.fields.status === 'string')
+    return { kind: 'suggestion' as const, status: post.fields.status }
+  return null
 }
 export const managerPageLabel = (kind: ManagerPageKind, status: string): string => {
   if (status === 'all' || status === 'pending') return `manager.paging.${status}`

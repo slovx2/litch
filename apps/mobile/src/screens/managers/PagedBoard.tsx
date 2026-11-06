@@ -26,6 +26,7 @@ import {
 import { nextOpenDecision } from '../../../../../packages/core/src/projection/manager-next.mts'
 import {
   managerHistorySnapshot,
+  managerObjectLocation,
   managerPageKey,
   managerPageLabel,
   managerPageStates,
@@ -60,6 +61,7 @@ export function PagedBoard({
   tab,
   kind: category,
   target,
+  targetVersion,
   suggestions,
   onLine,
   overviewCounts,
@@ -78,6 +80,8 @@ export function PagedBoard({
   tab: string
   kind: Exclude<ManagerPageKind, 'item'>
   target: string | null
+  /** 再次点同一编号也属于一次新定位，不能被上次的目标吞掉。 */
+  targetVersion: number
   suggestions: readonly SuggestionView[]
   onLine(id: string, title?: string): void
   overviewCounts: OverviewCounts
@@ -105,7 +109,14 @@ export function PagedBoard({
     renderMemory((value) => value + 1)
   }
   const kind: ManagerPageKind = tab === 'overview' ? 'item' : category
-  const status = memory.filters[kind] ?? managerPageStates[kind][0]
+  const scope = JSON.stringify([manager.deviceId, manager.id, tab, kind, order])
+  const [link, setLink] = useState<{ id: ManagerObjectId; scope: string } | null>(null)
+  const linked = link?.scope === scope
+  const destination = linked ? managerObjectLocation(board, link.id) : null
+  const status =
+    destination?.kind === kind
+      ? destination.status
+      : (memory.filters[kind] ?? managerPageStates[kind][0])
   const query = useMemo(() => ({ kind, status, order }), [kind, status, order])
   const key = managerPageKey(query)
   const page = paging.pages[key]
@@ -122,12 +133,15 @@ export function PagedBoard({
     },
     [reading],
   )
-  const [linkedPage, setLinkedPage] = useState<BoardPageMemory | null>(null)
-  const linked = linkedPage === reading
-  const setLinked = useCallback(
-    (value: boolean) => setLinkedPage(value ? reading : null),
-    [reading],
-  )
+  const clearLink = useCallback(() => setLink(null), [])
+  useLayoutEffect(() => {
+    if (!linked || !destination) return
+    memory.filters[kind] = status
+    reading.selected = link.id
+  }, [linked, destination, memory, kind, status, reading, link])
+  useEffect(() => {
+    if (link && !linked) setLink(null)
+  }, [link, linked])
   const [talking, setTalking] = useState(false)
   const [error, setError] = useState('')
   const positions = useRef(new Map<string, number>())
@@ -154,25 +168,32 @@ export function PagedBoard({
     if (tab === 'chat') return
     focused.current = null
     positions.current.clear()
-    setLinked(false)
     if (list) invoke(channel.command('managers.board.page', { ...address, ...query }))
-  }, [list, tab, invoke, channel, address, query, setLinked])
+  }, [list, tab, invoke, channel, address, query])
   const locatedTarget = useRef<string | null>(null)
   useEffect(() => {
-    if (target && locatedTarget.current !== target) {
+    const request = target ? `${target}/${targetVersion}` : null
+    if (target && locatedTarget.current !== request) {
       // 先进入事项列表，再把目标写进该列表的记忆，不能写进概览摘要的格子。
       if (target.startsWith('I-') && !items) {
         memory.items = true
         renderMemory((value) => value + 1)
         return
       }
-      setLinked(true)
-      open(target as ManagerObjectId)
+      setLink({ id: target as ManagerObjectId, scope })
+      invoke(
+        channel.command('managers.board.detail', { ...address, id: target as ManagerObjectId }),
+      )
     }
-    locatedTarget.current = target
-  }, [target, open, memory, setLinked, items])
-  const active =
-    selected && (linked || page?.entries.some((head) => head.id === selected)) ? selected : null
+    locatedTarget.current = request
+  }, [target, targetVersion, scope, invoke, channel, address, memory, items])
+  const active = linked
+    ? destination
+      ? link.id
+      : null
+    : selected && page?.entries.some((head) => head.id === selected)
+      ? selected
+      : null
   const post = board.posts?.find((post) => post.id === active)
   const item = board.items.find((item) => item.id === active)
   const [detailAttempt, setDetailAttempt] = useState<ManagerObjectId | null>(null)
@@ -245,7 +266,7 @@ export function PagedBoard({
       if (canAnimateToggle(active, nextId, positions.current)) animateNextLayout()
       focused.current = null
       pinned.current = nextId
-      setLinked(false)
+      clearLink()
       open(nextId)
     }
   useEffect(
@@ -271,6 +292,7 @@ export function PagedBoard({
   const detail = active ? (
     <View
       testID={`paging-detail:${active}`}
+      style={linked ? { borderWidth: 2, borderColor: c.accent } : undefined}
       onLayout={(event) => {
         // 编号跳转可能不在当前分页里；只有这种导航才主动定位详情。
         if (linked && !page?.entries.some((head) => head.id === active))
@@ -422,7 +444,7 @@ export function PagedBoard({
                 accessibilityState={{ selected: status === filter }}
                 testID={`paging-filter:${filter}`}
                 onPress={() => {
-                  setLinked(false)
+                  clearLink()
                   memory.filters[kind] = filter
                   renderMemory((value) => value + 1)
                 }}
@@ -473,7 +495,7 @@ export function PagedBoard({
                         if (canAnimateToggle(active, head.id, positions.current))
                           animateNextLayout()
                         focused.current = head.id
-                        setLinked(false)
+                        clearLink()
                         if (active === head.id) setSelected(null)
                         else open(head.id)
                       }}

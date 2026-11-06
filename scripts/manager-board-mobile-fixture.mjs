@@ -7,6 +7,7 @@ import { createServer } from 'node:net'
 export async function installManagerBoardMobileFixture({
   consoleCards = false,
   drafts = false,
+  links = false,
   port: fixed = 0,
 } = {}) {
   const boot = new URL('../apps/mobile/src/shell/boot.ts', import.meta.url)
@@ -16,6 +17,7 @@ export async function installManagerBoardMobileFixture({
     throw new Error('手机看板临时夹具已存在，请先结束上一轮验收')
   let source = readFileSync(boot, 'utf8')
   source = `import { managerBoardFixture } from '../preview/ManagerBoardFixture.web'\n${drafts ? "import { jsonFile } from './json-file'\n" : ''}${source}`
+  if (links) source = `import { navigationRef } from './dev-links'\n${source}`
   source = source.replace(
     'const served = serve(\n      createMockCore({',
     'const fixture = managerBoardFixture(\n      createMockCore({',
@@ -26,24 +28,44 @@ export async function installManagerBoardMobileFixture({
     end,
     `...(controlled ? { scenarioClock: controlled.clock } : {}),
       }),
-      ${consoleCards ? '' : "await fetch('/__manager_board_data').then(r => r.json()),"}
+      ${consoleCards || links ? '' : "await fetch('/__manager_board_data').then(r => r.json()),"}
     )
     ${drafts ? 'for (const [name, value] of Object.entries(fixture.drafts.mobile)) jsonFile(name).write(value)' : ''}
     Object.assign(globalThis, { __managerBoardFixture: fixture.state })
+    ${links ? "Object.assign(globalThis, { __managerLinks: { ...fixture.state, jump: (issue: string) => navigationRef.navigate('ManagerConsole', { deviceId: 'local', managerId: 'm1', issue }) } })" : ''}
     const served = serve(fixture.core)`,
   )
-  const helper = readFileSync(
+  let helper = readFileSync(
     new URL(
-      consoleCards
-        ? '../packages/core/test/console-cards-fixture.mts'
-        : '../packages/core/test/manager-board-fixture.mts',
+      links
+        ? '../packages/core/test/manager-link-fixture.mts'
+        : consoleCards
+          ? '../packages/core/test/console-cards-fixture.mts'
+          : '../packages/core/test/manager-board-fixture.mts',
       import.meta.url,
     ),
     'utf8',
   )
     .replace('export function consoleCardsFixture', 'export function managerBoardFixture')
+    .replace('export function managerLinkFixture', 'export function managerBoardFixture')
+    .replace(
+      './console-cards-fixture.mjs',
+      '../../../../packages/core/test/console-cards-fixture.mts',
+    )
     .replaceAll('../src/', '../../../../packages/core/src/')
     .replaceAll('../../protocol/', '../../../../packages/protocol/')
+  // Metro 只观察 core/src；复用的测试夹具一起放进临时网页文件，不扩大正式包的观察目录。
+  if (links) {
+    const cards = readFileSync(
+      new URL('../packages/core/test/console-cards-fixture.mts', import.meta.url),
+      'utf8',
+    ).replace(/^import .*\n/gm, '')
+    helper = helper.replace(
+      "import { consoleCardsFixture } from '../../../../packages/core/test/console-cards-fixture.mts'",
+      "import { sampleManagers } from '../../../../packages/core/src/mock/sample-manager.mts'",
+    )
+    helper += `\n${cards}`
+  }
   writeFileSync(fixture, helper, { flag: 'wx' })
   try {
     writeFileSync(override, source, { flag: 'wx' })
@@ -65,7 +87,7 @@ export async function installManagerBoardMobileFixture({
     ['node_modules/expo/bin/cli', 'start', '--web', '--offline', '--port', String(port)],
     {
       cwd: new URL('../apps/mobile/', import.meta.url),
-      env: { ...process.env, CI: '1', EXPO_NO_TYPESCRIPT_SETUP: '1' },
+      env: { ...process.env, CI: '1', EXPO_NO_TYPESCRIPT_SETUP: '1', EXPO_PUBLIC_LITCH_E2E: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   )

@@ -570,7 +570,8 @@
   text-underline-offset: 2px;
 }
 .mg-decision:focus,
-.mg-item:focus {
+.mg-item:focus,
+[data-paging-detail][data-linked] {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
