@@ -317,10 +317,9 @@ function buildApk() {
   }
   log('打 release 包：expo prebuild --clean，再 assembleRelease')
   run('npx', ['expo', 'prebuild', '--platform', 'android', '--clean', '--no-install'], mobile)
-  cleanups.push(() =>
-    spawnSync('./gradlew', ['--stop'], { cwd: join(mobile, 'android'), stdio: 'ignore' }),
-  )
-  run('npm', ['run', 'android:release', '--', '--max-workers=4'], mobile)
+  // 单次构建不复用常驻 daemon；需要独立 JVM 时，Gradle 会在本次构建结束后自行退出。
+  // 保留依赖缓存复用，不执行会停掉同版本其他构建 daemon 的全局 --stop。
+  run('npm', ['run', 'android:release', '--', '--max-workers=4', '--no-daemon'], mobile)
   log(`包打好了（${since(start)}）`)
 }
 
