@@ -43,7 +43,7 @@ void app.whenReady().then(async () => {
   }, 120_000)
   protocol.handle('app', (request) => serveUiResource(uiRoot, request))
   const pages = await startPages()
-  const browser = installBrowser({
+  const browser = await installBrowser({
     isUiUrl: (url) => url.startsWith('app://ui/'),
     userData: app.getPath('userData'),
   })

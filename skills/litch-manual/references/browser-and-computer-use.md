@@ -104,9 +104,16 @@ Before importing:
 
 The result lists each kind with how many were imported, already there, invalid and failed. Nothing
 already in Litch is overwritten (same site, name and path for cookies; same site and user name for
-passwords). Invalid means expired or malformed cookies, partitioned cookies (the built-in browser
-cannot store them), or password entries that are not for a website (Android apps). The import itself
+passwords). Invalid means expired or malformed cookies, partitioned cookies (the import API
+cannot preserve their partition keys), or password entries that are not for a website (Android apps). The import itself
 never shows cookie values or passwords to agents or in the Litch window; only counts.
+
+Litch keeps session cookies across application restarts and updates using the system's secure
+storage. They remain session cookies; persistent cookies keep their original expiration dates.
+Signing out removes the saved state for those cookies, and **Clear browsing data** also deletes
+the saved session state. If secure storage is unavailable, session cookies are not saved to disk.
+Websites can still expire or revoke a login and require authentication again. Previously lost
+session cookies cannot be recovered; sign in again once after installing this fix.
 
 ### Saved passwords
 

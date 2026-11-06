@@ -73,7 +73,7 @@ void app.whenReady().then(async () => {
     if (!file.startsWith(uiRoot + sep)) return new Response('forbidden', { status: 403 })
     return net.fetch(pathToFileURL(file).toString())
   })
-  installBrowser({
+  await installBrowser({
     isUiUrl: (url) => url.startsWith('app://ui/'),
     userData: app.getPath('userData'),
   })

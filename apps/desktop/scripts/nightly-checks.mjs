@@ -2,6 +2,7 @@
 const desktop = 'apps/desktop/scripts/'
 export const nightlyChecks = [
   ['smoke', `${desktop}smoke.mjs`],
+  ['browser:persistence', `${desktop}check-browser-persistence.mjs`],
   ['scroll', `${desktop}smoke.mjs`, '--scroll'],
   ['scroll:wheel', `${desktop}check-scroll-wheel.mjs`],
   ['compose', `${desktop}smoke.mjs`, '--compose'],

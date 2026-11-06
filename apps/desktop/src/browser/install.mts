@@ -14,6 +14,7 @@ import {
 import { approvalDesktopId, phoneAnswerLanded, verifyPhoneAnswer } from '../approvals/verify.mjs'
 import { installBrowserImport } from '../browser-import/install.mjs'
 import { fileDeviceStore } from '../device-store.mjs'
+import { restoreBrowserCookies } from './cookie-session.mjs'
 import { createElectronHost, type ElectronBrowserHost, type Rect } from './electron-host.mjs'
 import { type BrowserExecutor, createBrowserExecutor } from './executor.mjs'
 import { type BrowserForwarding, createBrowserForwarding } from './forwarding.mjs'
@@ -66,6 +67,8 @@ export interface BrowserSettings {
 }
 
 export interface InstalledBrowser {
+  /** 退出或安装更新之前，保存会话 Cookie 并刷出 Chromium 的长期 Cookie。 */
+  flushData(): Promise<void>
   executor: BrowserExecutor
   host: ElectronBrowserHost
   sites: SiteBook
@@ -121,12 +124,14 @@ const isOwner = (value: unknown): value is TabOwner => {
   )
 }
 
-export function installBrowser(options: {
+export async function installBrowser(options: {
   /** 是不是界面自己的地址：只认界面主框架发来的消息 */
   isUiUrl(url: string): boolean
   /** 用户数据目录：“一直允许”存在这下面 */
   userData: string
-}): InstalledBrowser {
+}): Promise<InstalledBrowser> {
+  // 在登记导航 IPC、代理执行器和导入入口之前恢复，首页请求不能先带着半份登录态发出。
+  const cookies = await restoreBrowserCookies(options.userData)
   const host = createElectronHost()
   const sites = createSiteBook(sitesFile(options.userData))
   // 远端 localhost：会话在 ssh 设备上时经 ssh 转发到这台电脑的回环上再打开
@@ -234,7 +239,7 @@ export function installBrowser(options: {
   const settings: BrowserSettings = {
     listSites: () => sites.saved(),
     forgetSite: (origin) => sites.forget(origin),
-    clearData: () => host.clearData(),
+    clearData: () => cookies.clear(() => host.clearData()),
     policy: () => sites.policy(),
     setTrustAll(on) {
       sites.setTrustAll(on)
@@ -289,5 +294,13 @@ export function installBrowser(options: {
   // 从别的浏览器导入：window.litchBrowser.import 的几条消息（browser-import/install.mts）
   installBrowserImport({ fromUi, userData: options.userData, passwords })
 
-  return { executor, host, sites, settings, forwarding, passwords }
+  return {
+    executor,
+    host,
+    sites,
+    settings,
+    forwarding,
+    passwords,
+    flushData: () => cookies.flush(),
+  }
 }

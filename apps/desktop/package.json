@@ -54,6 +54,7 @@
     "test:computer-use": "node scripts/test-computer-use.mjs",
     "check:computer-use": "node scripts/check-computer-use.mjs",
     "test:browser": "node scripts/test-browser.mjs",
+    "check:browser:persistence": "node scripts/check-browser-persistence.mjs",
     "check:browser": "node scripts/check-browser.mjs && node scripts/check-browser.mjs --popups && node scripts/check-browser.mjs --popups-ui && node scripts/check-browser.mjs --ui",
     "test:manual-skill": "node scripts/test-manual-skill.mjs",
     "test:log-file": "node scripts/test-log-file.mjs",

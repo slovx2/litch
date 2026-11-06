@@ -829,6 +829,8 @@ async function installUpdate(): Promise<boolean> {
     (): QuitOutcome => ({ proceed: true, alive: null, asked: false, did: 'none' }),
   )
   if (!outcome.proceed) return false
+  await browser?.flushData()
+  browserDataFlushed = true
   quitSettled = true
   if (process.platform === 'darwin') {
     // 它会先关窗口，再走 before-quit（这时已经问过，直接把核心停掉）
@@ -1090,6 +1092,8 @@ ipcMain.on(SET_LANGUAGE, (event, lang: unknown) => {
 let quitSettled = false
 /** 正在问：这期间再按一次退出不重复问 */
 let quitAsking = false
+let browserDataFlushed = false
+let flushingBrowserData = false
 
 app.on('will-quit', () => {
   void chromeTargets?.dispose()
@@ -1128,6 +1132,16 @@ app.on('before-quit', (event) => {
       })
     return
   }
+  if (browser && !browserDataFlushed) {
+    event.preventDefault()
+    if (flushingBrowserData) return
+    flushingBrowserData = true
+    void browser.flushData().finally(() => {
+      browserDataFlushed = true
+      app.quit()
+    })
+    return
+  }
   quitting = true
   core?.kill()
   void computerUse?.dispose()
@@ -1153,7 +1167,7 @@ if (!smoke && !app.requestSingleInstanceLock()) {
     window.focus()
   })
   // 这里不能在模块顶层等待“就绪”：Electron 要等入口模块执行完才发出就绪事件，顶层一等就成了互相等
-  void app.whenReady().then(() => {
+  void app.whenReady().then(async () => {
     if (smoke) app.dock?.hide()
     // 没打包的时候程序坞上是 Electron 自己的图标，换成我们的，免得和别的 Electron 应用分不清
     else if (!app.isPackaged) app.dock?.setIcon(join(assetsDir, 'icon-dock.png'))
@@ -1164,7 +1178,7 @@ if (!smoke && !app.requestSingleInstanceLock()) {
       parseLook({ ...readLook(app.getPath('userData')), ...forcedLook }) ??
       readLook(app.getPath('userData'))
     // 内置浏览器：宿主、litch_browser 的执行器、界面和设置页用的消息（browser/install.mts）
-    browser = installBrowser({ isUiUrl, userData: app.getPath('userData') })
+    browser = await installBrowser({ isUiUrl, userData: app.getPath('userData') })
     chromeTargets = new BrowserTargets({
       root: join(app.getPath('userData'), 'chrome'),
       assets: fileURLToPath(new URL('./chrome-extension', import.meta.url)),
