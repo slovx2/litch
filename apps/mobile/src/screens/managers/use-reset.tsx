@@ -71,8 +71,8 @@ export function useManagerReset(manager: ManagerView, online: boolean) {
   const cancelActions: HeaderAction[] = state.cancellable
     ? [
         {
-          label: '×',
-          accessibilityLabel: t('manager.resetCancel'),
+          icon: 'close',
+          label: t('manager.resetCancel'),
           testID: 'manager:reset-cancel',
           disabled: state.cancelDisabled,
           onPress: () => {

@@ -1,9 +1,10 @@
 // 输入框上面的评论片：每条一片，写着编号、引用的开头和评论的开头；点片打开对话框改评论、删掉、定位原文，
-// 片上的 ✕ 直接删掉这一条。编号就是先后，删了一条后面的往前挪。
+// 片上的关闭图标直接删掉这一条。编号就是先后，删了一条后面的往前挪。
 import type { CommentExtra } from '@litch/core'
 import { useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native'
 import { useT } from '../../ui/i18n'
+import { Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { CommentEditor } from './CommentEditor'
 import { useComments } from './context'
@@ -69,7 +70,7 @@ export function CommentChips({
               onPress={() => remove(at)}
               style={styles.x}
             >
-              <Text style={{ color: c.ink3, fontSize: 12 }}>✕</Text>
+              <Icon name="close" size={12} color={c.ink3} />
             </Pressable>
           </Pressable>
         ))}

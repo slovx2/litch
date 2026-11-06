@@ -13,6 +13,7 @@ import { sshProblem } from '../../platform/ssh-errors'
 import { tailscaleErrorKey } from '../../platform/tailscale'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
+import { Fold } from '../../ui/kit/Icon'
 import { Confirm } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { authorizeCommand, hostKeyCommand, reasonText, stepsOf } from './failure'
@@ -132,7 +133,7 @@ export function FailureCard({
       </Text>
       {/\[tailscale(AutoLogin|Login)\]/.test(failure.detail ?? '') ? (
         <Button
-          label={`↗ ${t('tailscale.login')}`}
+          label={t('tailscale.login')}
           kind="plain"
           testID="failure:tailscale"
           onPress={() => navigation.navigate('Tailscale')}
@@ -147,10 +148,11 @@ export function FailureCard({
       {failure.stage === 'auth' && publicKey ? <PublicKeyCard publicKey={publicKey} /> : null}
       {actions}
       {failure.detail ? (
-        <Pressable accessibilityRole="button" onPress={() => setOpen(!open)} testID="failure:said">
-          <Text style={[styles.toggle, { color: theme.c.ink3 }]}>
-            {open ? '▾' : '▸'} {t('harness.said')}
-          </Text>
+        <View>
+          <Fold open={open} onToggle={() => setOpen(!open)} testID="failure:said">
+            <Text style={[styles.toggle, { color: theme.c.ink3 }]}>{t('harness.said')}</Text>
+          </Fold>
+          {/* 原话放在折叠行外面：选字时不会误触收起 */}
           {open ? (
             <Text
               selectable
@@ -159,7 +161,7 @@ export function FailureCard({
               {failure.detail}
             </Text>
           ) : null}
-        </Pressable>
+        </View>
       ) : null}
     </View>
   )
@@ -306,7 +308,7 @@ const styles = StyleSheet.create({
   note: { fontSize: 14, lineHeight: 20 },
   failure: { margin: 16, padding: 12, borderWidth: 1, gap: 10 },
   failureStage: { fontSize: 13, fontWeight: '600' },
-  toggle: { fontSize: 13, paddingVertical: 4 },
+  toggle: { fontSize: 13 },
   wires: {
     flexDirection: 'row',
     flexWrap: 'wrap',

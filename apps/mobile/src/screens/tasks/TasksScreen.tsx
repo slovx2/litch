@@ -110,7 +110,8 @@ export function TasksScreen({ route, navigation }: Props) {
       wire={only && device ? c.wire[device.wire] : undefined}
       actions={[
         {
-          label: '＋',
+          icon: 'plus',
+          label: t('tasks.new'),
           testID: 'tasks:new',
           disabled: ids.length === 0,
           onPress: () => {

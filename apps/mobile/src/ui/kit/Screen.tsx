@@ -8,18 +8,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { usePane } from '../../nav/pane'
 import { useT } from '../i18n'
 import { useTheme } from '../theme'
+import { Icon, type IconName } from './Icon'
 import { KeyboardDismissBar } from './KeyboardForm'
 
 export interface HeaderAction {
+  /** 有图标时是读屏名称；没图标时直接画成文字按钮 */
   label: string
+  /** 给了就只画图标（新建、设置、更多等），不再用 ＋ ⚙ ⋯ 一类字符 */
+  icon?: IconName
   onPress(): void
   /** 测试标识（Maestro、uiautomator 用） */
   testID?: string
   disabled?: boolean
-  /** 读屏名称：label 只是个记号（⋯、⏱）时给 */
+  /** 读屏名称和 label 不同时给（比如带上状态） */
   accessibilityLabel?: string
   /** 菜单内有需要用户处理的更新，读屏说明由调用方提供。 */
   attention?: boolean
+  /** 开关类的图标按钮（显示隐藏文件）：开着时画选中底色 */
+  selected?: boolean
 }
 
 /** 副标题前半段的链接（工作线的“↰ 经理名”）：整块标题都可点，点击区不小于标题栏高度，不另占一行 */
@@ -96,9 +102,7 @@ export function Screen({
               else navigation.goBack()
             }}
           >
-            <Text style={[compact ? styles.backTextCompact : styles.backText, { color: c.ink }]}>
-              ‹
-            </Text>
+            <Icon name="back" size={compact ? 18 : 22} color={c.ink} />
           </Pressable>
         ) : (
           <View style={styles.pad} />
@@ -161,24 +165,40 @@ export function Screen({
           <Pressable
             key={action.label}
             accessibilityRole="button"
-            {...(action.accessibilityLabel
-              ? { accessibilityLabel: action.accessibilityLabel }
+            {...(action.accessibilityLabel || action.icon
+              ? { accessibilityLabel: action.accessibilityLabel ?? action.label }
               : {})}
             testID={action.testID}
             disabled={action.disabled}
+            {...(action.selected === undefined
+              ? {}
+              : { accessibilityState: { selected: action.selected } })}
             hitSlop={8}
-            style={compact ? styles.actionCompact : styles.action}
+            style={({ pressed }) => [
+              compact ? styles.actionCompact : styles.action,
+              action.icon ? styles.iconAction : null,
+              action.selected ? { backgroundColor: c.selBg, borderRadius: theme.radius.s } : null,
+              pressed ? { backgroundColor: c.press, borderRadius: theme.radius.s } : null,
+            ]}
             onPress={action.onPress}
           >
-            <Text
-              style={[
-                styles.actionText,
-                compact ? styles.actionTextCompact : null,
-                { color: action.disabled ? c.ink3 : c.accent },
-              ]}
-            >
-              {action.label}
-            </Text>
+            {action.icon ? (
+              <Icon
+                name={action.icon}
+                size={compact ? 18 : 20}
+                color={action.disabled ? c.ink3 : action.selected ? c.selFg : c.ink2}
+              />
+            ) : (
+              <Text
+                style={[
+                  styles.actionText,
+                  compact ? styles.actionTextCompact : null,
+                  { color: action.disabled ? c.ink3 : c.accent },
+                ]}
+              >
+                {action.label}
+              </Text>
+            )}
             {action.attention ? (
               <View
                 testID={`${action.testID}:attention`}
@@ -213,17 +233,17 @@ const styles = StyleSheet.create({
   headerCompact: { height: 32 },
   side: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   sideCompact: { width: 40, height: 32, alignItems: 'center', justifyContent: 'center' },
-  backTextCompact: { fontSize: 24, lineHeight: 28, marginTop: -3 },
   titleCompact: { fontSize: 14, fontWeight: '600' },
   actionCompact: { height: 32, paddingHorizontal: 10, justifyContent: 'center' },
   actionTextCompact: { fontSize: 14 },
   pad: { width: 16 },
-  backText: { fontSize: 30, lineHeight: 34, marginTop: -4 },
   titles: { flex: 1, minWidth: 0 },
   titlesLink: { alignSelf: 'stretch', justifyContent: 'center' },
   title: { fontWeight: '600' },
   subtitle: { marginTop: 1 },
   action: { minHeight: 44, paddingHorizontal: 10, justifyContent: 'center' },
+  // 图标按钮：44 见方，图标居中
+  iconAction: { minWidth: 44, paddingHorizontal: 0, alignItems: 'center' },
   actionText: { fontSize: 15, fontWeight: '600' },
   body: { flex: 1 },
 })

@@ -17,6 +17,7 @@ import { useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { Icon } from '../../ui/kit/Icon'
 import { Sheet, type SheetAction } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { titleOf } from '../sessions/rows'
@@ -198,7 +199,7 @@ export function LocalGroupsGroup({ act, onGroup }: { act: Act; onGroup(group: Lo
               onPress={() => setAdding(true)}
               style={styles.headAction}
             >
-              <Text style={[styles.headActionText, { color: c.ink2 }]}>＋</Text>
+              <Icon name="plus" size={18} color={c.ink2} />
             </Pressable>
           )
         }
@@ -233,7 +234,7 @@ export function LocalGroupsGroup({ act, onGroup }: { act: Act; onGroup(group: Lo
               <Text style={[styles.count, { color: c.ink3, fontFamily: theme.font.mono }]}>
                 {group.members.length}
               </Text>
-              <Text style={[styles.count, { color: c.ink3 }]}>›</Text>
+              <Icon name="forward" size={14} color={c.ink3} />
             </Pressable>
           ))}
       <LocalGroupName
@@ -249,7 +250,6 @@ export function LocalGroupsGroup({ act, onGroup }: { act: Act; onGroup(group: Lo
 
 const styles = StyleSheet.create({
   headAction: { width: 44, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
-  headActionText: { fontSize: 18, fontWeight: '600' },
   note: { paddingHorizontal: 16, paddingVertical: 10, fontSize: 12 },
   group: {
     flexDirection: 'row',

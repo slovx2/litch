@@ -1,6 +1,6 @@
 // 控制台帖子讨论的底部抽屉：卡片上只留讨论入口，点开先占半屏，拖把手或点按钮到全屏，往下拖收回或关掉。
 // 内容和桌面看板底部的讨论分屏一致：标题（点了回到卡片）、按时间排的问答、追问输入。草稿和提交仍在卡片组件里。
-// 对话里点 #D-n 拉起的半屏议题卡（IssueSheet）也用它：标题和 ↗ 是“在控制台打开”，内容不自动滚到底。
+// 对话里点 #D-n 拉起的半屏议题卡（IssueSheet）也用它：标题和“在别处打开”图标是“在控制台打开”，内容不自动滚到底。
 import { type ReactNode, useRef, useState } from 'react'
 import {
   Modal,
@@ -15,6 +15,7 @@ import type { KeyboardAwareScrollViewRef } from 'react-native-keyboard-controlle
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ModalConsentHost } from '../../privacy/ConsentPresentation'
 import { useT } from '../../ui/i18n'
+import { IconButton } from '../../ui/kit/Icon'
 import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { ModalKeyboardArea } from '../../ui/kit/ModalKeyboardArea'
 import { useTheme } from '../../ui/theme'
@@ -46,7 +47,7 @@ export function DiscussionDrawer({
   footer?: ReactNode
   /** 标题的读屏名称前半句；不给是“回到卡片” */
   backLabel?: string
-  /** 标题行多一个 ↗ 图标（半屏议题卡的“在控制台打开”） */
+  /** 标题行多一个“在别处打开”图标（半屏议题卡的“在控制台打开”） */
   open?: { label: string; onPress(): void }
   /** 内容变高时滚到底（讨论是最新在下面）；半屏议题卡从头看 */
   stickToEnd?: boolean
@@ -130,37 +131,28 @@ export function DiscussionDrawer({
               </Text>
             </Pressable>
             {open ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={open.label}
+              <IconButton
+                icon="external"
+                label={open.label}
                 testID={`${testID}:open`}
                 onPress={() => {
                   setFull(false)
                   open.onPress()
                 }}
-                style={[styles.icon, { minHeight: hit, minWidth: hit }]}
-              >
-                <Text style={{ color: c.ink2, fontSize: font.size.body }}>↗</Text>
-              </Pressable>
+              />
             ) : null}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t(full ? 'mgr.discussion.half' : 'mgr.discussion.full')}
+            <IconButton
+              icon={full ? 'minimize' : 'maximize'}
+              label={t(full ? 'mgr.discussion.half' : 'mgr.discussion.full')}
               testID="discussion-drawer:size"
               onPress={() => setFull(!full)}
-              style={[styles.icon, { minHeight: hit, minWidth: hit }]}
-            >
-              <Text style={{ color: c.ink2, fontSize: font.size.body }}>{full ? '⌄' : '⌃'}</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('manager.discussionClose')}
+            />
+            <IconButton
+              icon="close"
+              label={t('manager.discussionClose')}
               testID="discussion-drawer:close"
               onPress={close}
-              style={[styles.icon, { minHeight: hit, minWidth: hit }]}
-            >
-              <Text style={{ color: c.ink2, fontSize: font.size.body }}>✕</Text>
-            </Pressable>
+            />
           </View>
           <KeyboardFormScrollView
             ref={scroll}
@@ -191,10 +183,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingLeft: 12,
+    paddingRight: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   title: { flex: 1, justifyContent: 'center' },
-  icon: { justifyContent: 'center', alignItems: 'center' },
   fill: { flex: 1 },
   body: { padding: 12, gap: 12 },
   foot: { padding: 8, borderTopWidth: StyleSheet.hairlineWidth },

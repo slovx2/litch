@@ -16,6 +16,7 @@ import { processSummary, suggestTitles } from '../../../../packages/ui/src/trans
 import type { Row, StepState } from '../core/rows'
 import { type Translator, useT } from '../ui/i18n'
 import { StatusMark } from '../ui/kit/controls'
+import { Caret, Icon } from '../ui/kit/Icon'
 import { type Palette, useTheme } from '../ui/theme'
 import { styles as cellStyles, type Props, useLasting, useTicking } from './cells'
 import { useBackgroundView, useToggleInPlace, useTranscript } from './context'
@@ -74,9 +75,7 @@ export const ProcessCell = memo(function ProcessCell({ row }: Props<'process'>) 
           ]}
           testID="process-head"
         >
-          <Text style={{ fontSize: font.size.body, color: c.ink2 }}>
-            {row.expanded ? '▾' : '▸'}
-          </Text>
+          <Caret open={row.expanded} size={16} color={c.ink2} />
           <View style={styles.processBody}>
             {/* 用时和统计写成一行（“已处理 41 秒 · 1 步”），太长就截断统计 */}
             <Text numberOfLines={1} style={{ color: c.ink2 }}>
@@ -149,6 +148,7 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
           testID="process-toggle"
         >
           {!row.ended && (row.running || working) ? <StatusMark status="running" /> : null}
+          <Caret open={row.expanded} size={12} />
           <Text
             style={{
               flex: 1,
@@ -157,7 +157,7 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
             }}
             numberOfLines={1}
           >
-            {row.expanded ? '▾' : '▸'} {t('detail.activity')} · {steps}
+            {t('detail.activity')} · {steps}
             {tail}
             {inBackground > 0 ? (
               <Text style={{ color: c.accent }}>
@@ -195,8 +195,9 @@ export const GroupEndCell = memo(function GroupEndCell({ row }: Props<'groupEnd'
         style={({ pressed }) => [styles.endButton, pressed ? { backgroundColor: c.press } : null]}
         testID="process-collapse"
       >
+        <Icon name="up" size={12} color={c.ink3} />
         <Text style={{ fontSize: font.size.meta, color: c.ink3 }}>
-          ▴ {t('detail.group.collapse')}
+          {t('detail.group.collapse')}
         </Text>
       </Pressable>
     </View>
@@ -571,7 +572,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   processBody: { flex: 1, gap: 4 },
-  groupHeader: { height: 32, flexDirection: 'row', alignItems: 'center' },
+  groupHeader: { height: 32, flexDirection: 'row', alignItems: 'center', gap: 4 },
   step: {
     marginLeft: 16,
     marginRight: 16,
@@ -581,7 +582,14 @@ const styles = StyleSheet.create({
   },
   stepHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingVertical: 4 },
   end: { marginBottom: 4 },
-  endButton: { height: 32, justifyContent: 'center', alignSelf: 'flex-start', paddingRight: 12 },
+  endButton: {
+    height: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    paddingRight: 12,
+  },
   mark: { fontSize: 13, lineHeight: 18, width: 14 },
   stepLabel: { fontSize: 13, lineHeight: 18 },
   stepState: { fontSize: 11, lineHeight: 18 },

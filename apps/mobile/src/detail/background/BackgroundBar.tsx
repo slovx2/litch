@@ -13,6 +13,7 @@ import type { SessionStore } from '../../core/session-store'
 import type { RootStackParamList } from '../../nav/routes'
 import { useT } from '../../ui/i18n'
 import { useBreath } from '../../ui/kit/breath'
+import { Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { useBackgroundEntries } from './state'
 
@@ -53,7 +54,7 @@ export function BackgroundBar({ store }: { store: SessionStore }) {
       />
       <Animated.View style={[styles.dot, { backgroundColor: c.accent, opacity: breath }]} />
       <Text style={[styles.lead, { color: c.ink, fontFamily: theme.font.mono }]}>{count}</Text>
-      <Text style={{ color: c.ink3 }}>›</Text>
+      <Icon name="forward" size={14} color={c.ink3} />
     </Pressable>
   )
 }

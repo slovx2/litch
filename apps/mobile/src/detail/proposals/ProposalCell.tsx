@@ -22,7 +22,9 @@ import { badgeOf } from '../../screens/sessions/rows'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Sheet } from '../../ui/kit/overlays'
+import { plainPreview } from '../../ui/plain-text'
 import { useTheme } from '../../ui/theme'
+import { CardMarkdown } from '../CardMarkdown'
 import type { Props } from '../cells'
 import { useTranscript } from '../context'
 import { useCardsOff } from './CardsOff'
@@ -171,12 +173,17 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
             onPress={() => setUnfolded(!unfolded)}
             testID={`proposal:${proposalId}:brief`}
           >
-            <Text
-              numberOfLines={long && !unfolded ? 4 : undefined}
-              style={[styles.brief, { color: c.ink2, fontSize: font.size.meta }]}
-            >
-              {prompt}
-            </Text>
+            {/* 简报是模型写的 Markdown：收着时截四行纯文字，展开（或本来就短）按 Markdown 画 */}
+            {long && !unfolded ? (
+              <Text
+                numberOfLines={4}
+                style={[styles.brief, { color: c.ink2, fontSize: font.size.meta }]}
+              >
+                {plainPreview(prompt)}
+              </Text>
+            ) : (
+              <CardMarkdown text={prompt} />
+            )}
             {long ? (
               <Text style={[styles.more, { color: c.accent, fontSize: font.size.meta }]}>
                 {t(unfolded ? 'proposal.brief.less' : 'proposal.brief.more')}

@@ -198,7 +198,9 @@ export function FilesScreen({ navigation, route }: Props) {
         loaded.kind === 'dir'
           ? [
               {
-                label: showHidden ? '.*✓' : '.*',
+                icon: 'eye',
+                label: t('files.hidden'),
+                selected: showHidden,
                 testID: 'files:hidden',
                 onPress: () => files.setShowHidden(!showHidden),
               },

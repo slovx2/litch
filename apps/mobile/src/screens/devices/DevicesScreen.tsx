@@ -17,6 +17,7 @@ import { useConnectionRoute } from '../../platform/connection-route'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Empty, Row, StatusMark } from '../../ui/kit/controls'
+import { Icon } from '../../ui/kit/Icon'
 import { Prompt, Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
@@ -133,7 +134,7 @@ function DeviceRow({
           style={styles.more}
           onPress={() => onMenu(device)}
         >
-          <Text style={[styles.moreText, { color: theme.c.ink2 }]}>⋯</Text>
+          <Icon name="more" size={18} color={theme.c.ink2} />
         </Pressable>
       }
       onPress={() => onPress(device)}
@@ -186,8 +187,13 @@ export function DevicesScreen({ navigation }: Props) {
       title="Litch"
       back={false}
       actions={[
-        { label: '＋', testID: 'devices:add', onPress: add },
-        { label: '⚙', testID: 'devices:settings', onPress: () => navigation.navigate('Settings') },
+        { icon: 'plus', label: t('devices.add'), testID: 'devices:add', onPress: add },
+        {
+          icon: 'gear',
+          label: t('settings.title'),
+          testID: 'devices:settings',
+          onPress: () => navigation.navigate('Settings'),
+        },
       ]}
       testID="devices"
     >
@@ -343,6 +349,5 @@ const styles = StyleSheet.create({
   failure: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 2 },
   left: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 6 },
   wire: { width: 3, alignSelf: 'stretch' },
-  more: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  moreText: { fontSize: 20 },
+  more: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 })

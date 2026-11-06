@@ -7,6 +7,8 @@ import type { ManagerItemView } from '../../../../../packages/core/src/model-man
 import type { ManagerPost } from '../../../../../packages/protocol/src/manager-posts.mjs'
 import { stamp } from '../../../../../packages/ui/src/app/format.ts'
 import { useT } from '../../ui/i18n'
+import { Caret, Fold, Icon } from '../../ui/kit/Icon'
+import { plainLine } from '../../ui/plain-text'
 import { useTheme } from '../../ui/theme'
 import { Markdown } from './IssueMarkdown'
 import { IssueRelations } from './IssueRelations'
@@ -48,14 +50,16 @@ export function ItemRow({ item, focused }: { item: ManagerItemView; focused: boo
           { minHeight: hit, backgroundColor: pressed ? c.press : 'transparent' },
         ]}
       >
-        <Text style={{ color: c.ink2 }}>{open ? '▾' : '▸'}</Text>
+        <Caret open={open} />
         <Text
           style={{ color: c.ink, fontSize: font.size.body, flex: 1 }}
           numberOfLines={open ? 0 : 1}
         >
-          #{item.id} · {item.title}
+          <Text style={{ color: c.ink3 }}>#{item.id}</Text> {plainLine(item.title)}
         </Text>
-        <Text style={{ color: c.ink3 }}>{t(`manager.status.${item.status}`)}</Text>
+        <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
+          {t(`manager.status.${item.status}`)}
+        </Text>
       </Pressable>
       {open ? (
         <View style={styles.itemBody}>
@@ -156,9 +160,7 @@ export function ManagerOverview({
                 { borderRadius: radius.s, backgroundColor: pressed ? c.press : 'transparent' },
               ]}
             >
-              <Text style={{ color: refresh.busy ? c.ink3 : c.ink2, fontSize: font.size.body }}>
-                ↻
-              </Text>
+              <Icon name="reload" size={16} color={refresh.busy ? c.ink3 : c.ink2} />
             </Pressable>
           ) : null}
         </View>
@@ -186,24 +188,23 @@ export function OverviewItems({
   onItemsAt(y: number): void
 }) {
   const t = useT()
-  const { c, font, hit } = useTheme()
+  const { c, font } = useTheme()
   const [open, setOpen] = useState(Boolean(focusItem))
   useEffect(() => {
     if (focusItem) setOpen(true)
   }, [focusItem])
   return (
     <View onLayout={(event) => onItemsAt(event.nativeEvent.layout.y)}>
-      <Pressable
-        accessibilityRole="button"
-        aria-expanded={open}
+      <Fold
+        open={open}
         testID="overview-items"
-        onPress={() => setOpen(!open)}
-        style={[styles.itemsHead, { minHeight: hit, backgroundColor: c.win }]}
+        onToggle={() => setOpen(!open)}
+        style={[styles.itemsHead, { backgroundColor: c.win }]}
       >
         <Text style={{ color: c.ink2, fontSize: font.size.meta + 1, fontWeight: '600' }}>
-          {open ? '▾' : '▸'} {t('mgr.items.count', { count: items.length })}
+          {t('mgr.items.count', { count: items.length })}
         </Text>
-      </Pressable>
+      </Fold>
       {open
         ? items.map((item) => <ItemRow key={item.id} item={item} focused={focusItem === item.id} />)
         : null}

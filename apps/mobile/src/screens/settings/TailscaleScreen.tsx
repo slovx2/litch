@@ -14,7 +14,8 @@ import {
 import { loginTailscale } from '../../platform/tailscale-login'
 import { useChannel, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button, Field, Row } from '../../ui/kit/controls'
+import { Button, Field } from '../../ui/kit/controls'
+import { Fold } from '../../ui/kit/Icon'
 import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Confirm, Dialog } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
@@ -230,7 +231,7 @@ export function TailscaleScreen({ navigation, route }: Props) {
             <View style={styles.actions}>
               {status && status.state !== 'connected' && status.state !== 'needsApproval' ? (
                 <Button
-                  label={`↗ ${t(waiting ? 'tailscale.open' : 'tailscale.login')}`}
+                  label={t(waiting ? 'tailscale.open' : 'tailscale.login')}
                   busy={busy}
                   testID="tailscale:login"
                   onPress={() => {
@@ -243,7 +244,7 @@ export function TailscaleScreen({ navigation, route }: Props) {
                 />
               ) : null}
               <Button
-                label={`↻ ${t('tailscale.refresh')}`}
+                label={t('tailscale.refresh')}
                 kind="plain"
                 disabled={busy}
                 onPress={() => void refresh()}
@@ -252,26 +253,29 @@ export function TailscaleScreen({ navigation, route }: Props) {
             </View>
             <View style={styles.actions}>
               <Button
-                label={`↪ ${t('tailscale.logout')}`}
+                label={t('tailscale.logout')}
                 kind="plain"
                 disabled={busy || !status || status.state === 'stopped'}
                 onPress={() => setConfirm('logout')}
                 testID="tailscale:logout"
               />
               <Button
-                label={`× ${t('tailscale.clear')}`}
+                label={t('tailscale.clear')}
                 kind="danger"
                 disabled={busy}
                 onPress={() => setConfirm('clear')}
                 testID="tailscale:clear"
               />
             </View>
-            <Row
-              title={t('tailscale.control')}
-              left={<Text style={note}>{advanced ? '▾' : '▸'}</Text>}
-              onPress={() => setAdvanced(!advanced)}
+            <Fold
+              open={advanced}
+              onToggle={() => setAdvanced(!advanced)}
               testID="tailscale:advanced"
-            />
+            >
+              <Text style={{ color: theme.c.ink, fontSize: theme.font.size.body }}>
+                {t('tailscale.control')}
+              </Text>
+            </Fold>
             {advanced ? (
               <Field
                 label={t('tailscale.control')}
@@ -296,7 +300,7 @@ export function TailscaleScreen({ navigation, route }: Props) {
         {route.params?.adding ? (
           <Button
             kind="plain"
-            label={`← ${t('tailscale.back')}`}
+            label={t('tailscale.back')}
             onPress={() => navigation.goBack()}
             testID="tailscale:back"
           />

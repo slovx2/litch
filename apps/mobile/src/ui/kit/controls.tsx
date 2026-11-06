@@ -15,6 +15,7 @@ import {
 import { useT } from '../i18n'
 import { type StatusKind, type Theme, useTheme } from '../theme'
 import { BreathingText } from './BreathingText'
+import { Icon } from './Icon'
 import { rowAccessibility } from './row-accessibility'
 
 export function Button({
@@ -164,7 +165,7 @@ export function Row({
 }
 
 /**
- * 一行设置：左边名字，右边现在的值和 ›，点了出选择单。设置页上几项里选一项的都用它，
+ * 一行设置：左边名字，右边现在的值和朝右的箭头，点了出选择单。设置页上几项里选一项的都用它，
  * 读屏名称是“名字：值”
  */
 export function ValueRow({
@@ -208,7 +209,7 @@ export function ValueRow({
       <Text numberOfLines={1} style={[styles.value, { color: c.ink2, fontFamily: theme.font.ui }]}>
         {value}
       </Text>
-      <Text style={{ color: c.ink3 }}>›</Text>
+      <Icon name="forward" size={14} color={c.ink3} />
     </Pressable>
   )
 }

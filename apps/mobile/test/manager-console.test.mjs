@@ -9,10 +9,10 @@ import {
   issueMarkdownStyle,
   managerRowState,
   orderedIssues,
-  plainLine,
 } from '../src/screens/managers/presentation.ts'
 import { issueLinks } from '../src/screens/managers/relations.ts'
 import { PALETTES } from '../src/ui/palettes.ts'
+import { plainLine, plainPreview } from '../src/ui/plain-text.ts'
 
 test('手机议题编号只链接存在对象，保留代码与明确链接', () => {
   const ids = new Set(['D-1', 'I-2', 'P-3'])
@@ -140,6 +140,10 @@ test('关闭决策无答案时仅可重开，有答案时保留修改与重开�
 test('经理目录行只显示一行纯文字；收起的长动态只取前几行并补齐代码块', () => {
   assert.equal(plainLine('\n**工作线回报**\n\n- 完成'), '工作线回报')
   assert.equal(plainLine('- 见 [核对记录](https://x) 与 `revision`'), '见 核对记录 与 revision')
+  assert.equal(
+    plainPreview('## 背景\n\n**所有用户都是第一次进经理**，先看\n- [说明](https://x)\n> 引用 **截'),
+    '背景 所有用户都是第一次进经理，先看 说明 引用 截',
+  )
   assert.equal(collapsedMarkdown('a\nb', 5), null)
   assert.equal(collapsedMarkdown('1\n2\n3\n4\n5\n6', 5), '1\n2\n3\n4\n5')
   assert.equal(collapsedMarkdown('x\n```\ncode\nmore\nend\n```', 4), 'x\n```\ncode\nmore\n```')

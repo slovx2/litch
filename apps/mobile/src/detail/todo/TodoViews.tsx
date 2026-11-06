@@ -8,6 +8,7 @@ import { useSyncExternalStore } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import type { SessionStore } from '../../core/session-store'
 import { useT } from '../../ui/i18n'
+import { Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { stepStatus, todoChipShown, todoProgress } from './logic'
 
@@ -101,7 +102,8 @@ export function TodoChip({
       <Text style={[styles.chipText, { color: c.ink }]}>
         {t('detail.todo.chip', { done, total })}
       </Text>
-      <Text style={{ color: c.ink3 }}>{open ? '▾' : '▴'}</Text>
+      {/* 浮窗开在片的上方：收着朝上，开着朝下 */}
+      <Icon name={open ? 'down' : 'up'} size={14} color={c.ink3} />
     </Pressable>
   )
 }

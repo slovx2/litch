@@ -17,6 +17,7 @@ import { useIsFocused } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ActivityIndicator,
   Keyboard,
   Pressable,
   ScrollView,
@@ -38,8 +39,8 @@ import { usePane } from '../../nav/pane'
 import type { ManagerTab, RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { BreathingText } from '../../ui/kit/BreathingText'
 import { Empty } from '../../ui/kit/controls'
+import { Icon } from '../../ui/kit/Icon'
 import { KeyboardArea, KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
@@ -73,6 +74,8 @@ const KINDS = {
 } as const
 /** 比这窄（320 一类的小屏），控制台的排序只画图标，和类别挤在一行 */
 const NARROW = 360
+/** 比这窄时排序只留图标，四个分类胶囊不被挤出屏 */
+const ORDER_TEXT = 400
 
 export function ManagerConsoleScreen({ route, navigation }: Props) {
   const { deviceId, managerId } = route.params
@@ -98,7 +101,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const tab: ManagerTab = route.params.tab ?? 'console'
   const t = useT()
   const theme = useTheme()
-  const { c, radius, font, hit, marks } = theme
+  const { c, radius, font, hit } = theme
   const { width } = useWindowDimensions()
   const pane = usePane()
   const nativeFocused = useIsFocused()
@@ -308,35 +311,34 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   }
   const missing = (['feedback', 'posts', 'ignore'] as const).filter((key) => !features[key])
   const chatMark = sessionMark(summary)
-  const linesWaiting = (board?.lines ?? []).some(
+  const waitingLines = (board?.lines ?? []).filter(
     (line) => line.status === 'waiting' || line.status === 'error',
-  )
+  ).length
+  const linesWaiting = waitingLines > 0
   const narrow = width < NARROW
 
-  /** 页签上的记号：对话是经理自己在跑/等人/有新回复，控制台是待处理数，工作线是在跑条数（有线等人时换等待色） */
+  /**
+   * 页签上的记号：对话是经理自己在跑（转圈）、等人（等待色圆点）、有新回复（未读色圆点）；
+   * 控制台是待处理数，工作线是在跑条数（有线等人时是等人的条数、换等待色）。数字一律带框，不用文字符号
+   */
   const badge = (
     key: ManagerTab,
-  ): { text: string; color: string; boxed: boolean; label: string } | null => {
+  ): { kind: 'count' | 'dot' | 'spin'; text?: string; color: string; label: string } | null => {
     if (key === 'chat') {
       if (chatMark === 'run')
-        return {
-          text: marks.running,
-          color: c.accent,
-          boxed: false,
-          label: t('mgr.tab.chatRunning'),
-        }
+        return { kind: 'spin', color: c.accent, label: t('mgr.tab.chatRunning') }
       if (chatMark === 'wait')
-        return { text: marks.waiting, color: c.wait, boxed: false, label: t('mgr.tab.chatRunning') }
+        return { kind: 'dot', color: c.wait, label: t('mgr.tab.chatRunning') }
       if (chatMark === 'unread' && tab !== 'chat')
-        return { text: marks.unread, color: c.seal, boxed: false, label: t('mgr.tab.chatUnread') }
+        return { kind: 'dot', color: c.seal, label: t('mgr.tab.chatUnread') }
       return null
     }
     if (key === 'console')
       return pending
         ? {
+            kind: 'count',
             text: String(pending),
             color: c.wait,
-            boxed: true,
             label: t('manager.pending', { n: pending }),
           }
         : null
@@ -344,9 +346,9 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
       const running = manager.runningLines
       if (!running && !linesWaiting) return null
       return {
-        text: linesWaiting ? marks.waiting : String(running),
-        color: linesWaiting ? c.wait : c.ink2,
-        boxed: false,
+        kind: 'count',
+        text: String(linesWaiting ? waitingLines : running),
+        color: linesWaiting ? c.wait : c.accent,
         label: linesWaiting
           ? t('mgr.tab.linesWaiting')
           : t('mgr.tab.linesRunning', { count: running }),
@@ -413,26 +415,34 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
               >
                 {t(TAB_LABEL[key])}
               </Text>
-              {mark ? (
-                <BreathingText
-                  active={
-                    (key === 'chat' && chatMark === 'run') ||
-                    (key === 'lines' && manager.runningLines > 0 && !linesWaiting)
-                  }
+              {mark?.kind === 'spin' ? (
+                <ActivityIndicator
+                  testID={`manager-tab-badge:${key}`}
+                  size="small"
+                  color={mark.color}
+                  style={styles.spin}
+                />
+              ) : mark?.kind === 'dot' ? (
+                <View
+                  testID={`manager-tab-badge:${key}`}
+                  style={[styles.dot, { backgroundColor: mark.color }]}
+                />
+              ) : mark ? (
+                <Text
                   testID={`manager-tab-badge:${key}`}
                   style={[
-                    mark.boxed ? styles.count : styles.glyph,
+                    styles.count,
                     // 选中页签上的计数跟随前景色（复古暗色的浅绿底上不放琥珀字，11.7）
                     {
-                      color: on && mark.boxed ? c.ink : mark.color,
-                      borderColor: on && mark.boxed ? c.ink : mark.color,
+                      color: on ? c.ink : mark.color,
+                      borderColor: on ? c.ink : mark.color,
                       borderRadius: radius.s,
                       fontFamily: font.mono,
                     },
                   ]}
                 >
                   {mark.text}
-                </BreathingText>
+                </Text>
               ) : null}
             </Pressable>
           )
@@ -505,15 +515,23 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
                 aria-label={`${t('manager.order')}: ${t(`manager.order.${order}`)}`}
                 testID="manager-issue-order"
                 onPress={() => setOrdering(true)}
-                style={[styles.order, { minHeight: hit, minWidth: narrow ? hit : undefined }]}
+                style={({ pressed }) => [
+                  styles.order,
+                  {
+                    minHeight: hit,
+                    minWidth: hit,
+                    borderRadius: radius.s,
+                    backgroundColor: pressed ? c.press : 'transparent',
+                  },
+                ]}
               >
-                <Text style={{ color: c.ink2, fontSize: font.size.meta + 1 }}>
-                  {narrow
-                    ? theme.skin === 'retro'
-                      ? '↕'
-                      : '⇅'
-                    : `${t(`manager.order.${order}`)} ▾`}
-                </Text>
+                {/* 窄屏只留排序图标；宽一些时图标后写当前排序 */}
+                <Icon name="sort" size={16} color={c.ink2} />
+                {width < ORDER_TEXT ? null : (
+                  <Text style={{ color: c.ink2, fontSize: font.size.meta + 1 }}>
+                    {t(`manager.order.${order}`)}
+                  </Text>
+                )}
               </Pressable>
             </View>
           ) : null}
@@ -747,8 +765,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
   },
   tabNarrow: { paddingHorizontal: 7 },
-  count: { borderWidth: 1, paddingHorizontal: 4, minWidth: 18, textAlign: 'center', fontSize: 11 },
-  glyph: { fontSize: 12 },
+  count: {
+    borderWidth: 1,
+    paddingHorizontal: 4,
+    minWidth: 18,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  spin: { transform: [{ scale: 0.7 }], width: 14, height: 14 },
   categories: { flexDirection: 'row', alignItems: 'center', paddingRight: 8 },
   // 滚动区会裁掉 hitSlop，上下留 6 让胶囊的点击区够高；整行高度由行尾 44 高的排序按钮定
   pills: { alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6 },
@@ -764,9 +790,11 @@ const styles = StyleSheet.create({
   pillNarrow: { paddingHorizontal: 7 },
   order: {
     marginLeft: 'auto',
+    flexDirection: 'row',
+    gap: 4,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
   },
   note: { padding: 12 },
 })

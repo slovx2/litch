@@ -11,6 +11,7 @@ import type { ManagerPostId } from '../../../../../packages/protocol/src/manager
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
+import { Icon, IconButton } from '../../ui/kit/Icon'
 import { Sheet } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { baseFile, choiceFile, clearDrafts, questionFile, replyFile } from './draft-files'
@@ -224,8 +225,9 @@ export function DraftSubmitBar({
   if (!count && !held)
     return sent ? (
       <View testID="draft-bar-sent" accessibilityRole="summary" style={row}>
+        <Icon name="check" size={16} color={c.ok} />
         <Text style={{ color: c.ok, fontSize: font.size.body }}>
-          ✓ {t('manager.sent', { n: sent })}
+          {t('manager.sent', { n: sent })}
         </Text>
       </View>
     ) : null
@@ -256,11 +258,16 @@ export function DraftSubmitBar({
           accessibilityLabel={`${t('manager.draftCount', { n: count })}，${t('manager.locateDraft')}`}
           onPress={onLocate}
           disabled={!onLocate}
-          style={{ flexShrink: 1, minHeight: hit, justifyContent: 'center' }}
+          style={{
+            flexShrink: 1,
+            minHeight: hit,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+          }}
         >
-          <Text numberOfLines={1} style={{ color: c.ink, fontSize: font.size.body }}>
+          <Text numberOfLines={1} style={{ flexShrink: 1, color: c.ink, fontSize: font.size.body }}>
             {t('manager.draftCount', { n: count })}
-            {onLocate ? ' ↓' : ''}
             {ended || held ? (
               <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
                 {ended ? ` · ${t('manager.endedShort', { n: ended })}` : ''}
@@ -268,24 +275,16 @@ export function DraftSubmitBar({
               </Text>
             ) : null}
           </Text>
+          {onLocate ? <Icon name="arrowDown" size={14} color={c.ink2} /> : null}
         </Pressable>
         <View style={{ flex: 1 }} />
-        <Pressable
+        <IconButton
+          icon="trash"
           testID="draft-bar-clear"
-          accessibilityRole="button"
-          accessibilityLabel={t('manager.clear')}
+          label={t('manager.clear')}
           disabled={busy}
           onPress={() => setConfirming(true)}
-          style={({ pressed }) => ({
-            minWidth: hit,
-            minHeight: hit,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: pressed ? c.press : 'transparent',
-          })}
-        >
-          <Text style={{ color: c.ink2, fontSize: font.size.title }}>✕</Text>
-        </Pressable>
+        />
         {next ? (
           // 积极但不抢提交：强调色描边小按钮，只占一个触控高度
           <Pressable
@@ -302,7 +301,9 @@ export function DraftSubmitBar({
             style={({ pressed }) => ({
               minHeight: hit - 8,
               paddingHorizontal: 10,
-              justifyContent: 'center',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
               borderWidth: 1,
               borderRadius: radius.s,
               borderColor: next.disabled ? c.line2 : c.accent,
@@ -311,8 +312,9 @@ export function DraftSubmitBar({
             })}
           >
             <Text style={{ color: next.disabled ? c.ink3 : c.accent, fontSize: font.size.body }}>
-              {t('manager.nextDecision')} ↓
+              {t('manager.nextDecision')}
             </Text>
+            <Icon name="down" size={14} color={next.disabled ? c.ink3 : c.accent} />
           </Pressable>
         ) : null}
         <Button

@@ -6,6 +6,7 @@ import { titleOf } from '../../screens/sessions/rows'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { StatusMark } from '../../ui/kit/controls'
+import { Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { useTranscript } from '../context'
 
@@ -54,8 +55,9 @@ export function ChildLine({
             </Text>
           </View>
           <Text style={[styles.childState, { color: c.ink3 }]}>
-            {t(`tree.status.${child.status}`)} ›
+            {t(`tree.status.${child.status}`)}
           </Text>
+          <Icon name="forward" size={14} color={c.ink3} />
         </>
       ) : (
         <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{t('tree.child.gone')}</Text>

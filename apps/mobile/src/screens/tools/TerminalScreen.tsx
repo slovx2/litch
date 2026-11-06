@@ -174,7 +174,8 @@ export function TerminalScreen({ route, navigation }: Props) {
       const name = terminalName(one, t)
       const state = one ? stateWord(one, t) : ''
       return {
-        label: t(id === current ? 'tools.term.itemHere' : 'tools.term.item', { name, state }),
+        label: t('tools.term.item', { name, state }),
+        selected: id === current,
         testID: `terminal:pick:${id}`,
         onPress: () => setCurrent(id),
       }
@@ -245,7 +246,12 @@ export function TerminalScreen({ route, navigation }: Props) {
           testID: 'terminal:list',
           onPress: () => setSheet('list'),
         },
-        { label: '⋯', testID: 'terminal:more', onPress: () => setSheet('more') },
+        {
+          icon: 'more',
+          label: t('tools.term.more'),
+          testID: 'terminal:more',
+          onPress: () => setSheet('more'),
+        },
       ]}
     >
       <KeyboardArea>

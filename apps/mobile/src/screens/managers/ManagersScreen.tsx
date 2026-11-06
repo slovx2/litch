@@ -8,8 +8,9 @@ import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Empty, Row, SectionLabel, StatusMark } from '../../ui/kit/controls'
 import { Screen } from '../../ui/kit/Screen'
+import { plainLine } from '../../ui/plain-text'
 import { useTheme } from '../../ui/theme'
-import { managerRowState, plainLine } from './presentation'
+import { managerRowState } from './presentation'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Managers'>
 function ManagerRow({

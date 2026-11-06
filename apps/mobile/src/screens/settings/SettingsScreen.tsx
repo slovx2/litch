@@ -15,6 +15,7 @@ import { devToolsEnabled } from '../../shell/build-mode'
 import { type Prefs, useServices } from '../../shell/services'
 import { type Key, useT } from '../../ui/i18n'
 import { Row, SectionLabel, ValueRow } from '../../ui/kit/controls'
+import { Icon } from '../../ui/kit/Icon'
 import { Confirm, Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { SKINS, type Skin, useTheme } from '../../ui/theme'
@@ -164,7 +165,7 @@ export function SettingsScreen({ navigation }: Props) {
         <ConnectionSection />
         <Row
           title={t('tailscale.title')}
-          left={<Text style={{ color: c.ink2 }}>↗</Text>}
+          right={<Icon name="forward" size={16} color={c.ink3} />}
           onPress={() => navigation.navigate('Tailscale')}
           testID="settings:tailscale"
         />
@@ -192,11 +193,13 @@ export function SettingsScreen({ navigation }: Props) {
           <>
             <Row
               title={t('app.privacy')}
+              right={<Icon name="external" size={16} color={c.ink3} />}
               onPress={() => openAbout('privacy')}
               testID="settings:privacy"
             />
             <Row
               title={t('app.support')}
+              right={<Icon name="external" size={16} color={c.ink3} />}
               onPress={() => openAbout('support')}
               testID="settings:support"
             />
@@ -214,6 +217,7 @@ export function SettingsScreen({ navigation }: Props) {
         />
         <Row
           title={t('privacy.licenses')}
+          right={<Icon name="external" size={16} color={c.ink3} />}
           testID="settings:licenses"
           onPress={() => openLink(LICENSES_URL)}
         />

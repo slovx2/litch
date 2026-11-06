@@ -6,18 +6,19 @@ import type { ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { mentionRanges } from '../../../../../packages/ui/src/composer/mention-field.ts'
 import { useT } from '../../ui/i18n'
+import { Icon, type IconName } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { DeliveryMark } from '../DeliveryMark'
 
 /** 行尾的图标按钮：记号 36 见方，四边放 4，可点 44；读屏名称写动作 */
 function Act({
-  glyph,
+  icon,
   label,
   onPress,
   testID,
   muted,
 }: {
-  glyph: string
+  icon: IconName
   label: string
   onPress(): void
   testID: string
@@ -36,7 +37,7 @@ function Act({
         { borderRadius: radius.s, backgroundColor: pressed ? c.press : 'transparent' },
       ]}
     >
-      <Text style={[styles.actText, { color: muted ? c.ink3 : c.ink2 }]}>{glyph}</Text>
+      <Icon name={icon} size={16} color={muted ? c.ink3 : c.ink2} />
     </Pressable>
   )
 }
@@ -124,7 +125,7 @@ export function QueueTray({
             {message.delivery === 'held' ? (
               <Act
                 testID={`queue:${index}:send`}
-                glyph="↑"
+                icon="send"
                 label={t('composer.send')}
                 onPress={() => onResume(message.id)}
               />
@@ -132,8 +133,8 @@ export function QueueTray({
             {running && canSteer && !message.delivery ? (
               <Act
                 testID={`queue:${index}:steer`}
-                // 插进当前回合：拐角回车，和待发那一行的“发送”（↑）分开（桌面同样）
-                glyph="⏎"
+                // 插进当前回合：拐进去的回车箭头，和待发那一行的“发送”（直箭头）分开（桌面同样）
+                icon="steer"
                 label={t('composer.steer')}
                 muted={stuck}
                 onPress={() => (stuck ? onRefused() : onSteer(message))}
@@ -141,13 +142,13 @@ export function QueueTray({
             ) : null}
             <Act
               testID={`queue:${index}:edit`}
-              glyph="✎"
+              icon="pencil"
               label={t('composer.editQueued')}
               onPress={() => onEdit(message)}
             />
             <Act
               testID={`queue:${index}:remove`}
-              glyph="✕"
+              icon="close"
               label={t('composer.unqueue')}
               onPress={() => onRemove(message)}
             />
@@ -177,7 +178,6 @@ const styles = StyleSheet.create({
   lead: { width: 34, fontSize: 12 },
   text: { flex: 1, fontSize: 13, marginRight: 4 },
   act: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  actText: { fontSize: 17 },
 })
 
 /** 排着的那句话：提到的会话（@[标题]）和对话里一样写成强调色的 ＠标题 */

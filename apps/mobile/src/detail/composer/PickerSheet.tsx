@@ -126,7 +126,9 @@ export function PickerSheet({
                   ]}
                 >
                   <Text style={[styles.rowTitle, { color: ink }]}>
-                    {selected ? '▸ ' : ''}
+                    <Text style={{ color: selected ? ink : c.ink3 }}>
+                      {selected ? theme.radio.on : theme.radio.off}{' '}
+                    </Text>
                     {option.title}
                   </Text>
                   {option.note ? (

@@ -8,11 +8,12 @@ import {
   type SessionSummary,
 } from '@litch/core'
 import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { ago } from '../../../../../packages/ui/src/app/format.ts'
 import { useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Empty, Row, StatusMark } from '../../ui/kit/controls'
+import { Fold } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { lineRowParts } from './presentation'
 
@@ -116,7 +117,7 @@ export function ManagerLines({
   lineHeads?: import('../../../../../packages/protocol/src/manager-paging.mts').ManagerLineHead[]
 }) {
   const t = useT()
-  const { c, hit } = useTheme()
+  const { c } = useTheme()
   const [showEnded, setShowEnded] = useState(false)
   const summaryOf = useLineSummaries(
     deviceId,
@@ -139,17 +140,14 @@ export function ManagerLines({
     <View testID="manager-lines">
       {active.map(row)}
       {ended.length ? (
-        <Pressable
-          accessibilityRole="button"
-          aria-expanded={showEnded}
+        <Fold
+          open={showEnded}
           testID="manager-lines:ended"
-          onPress={() => setShowEnded(!showEnded)}
-          style={[styles.group, { minHeight: hit, backgroundColor: c.win }]}
+          onToggle={() => setShowEnded(!showEnded)}
+          style={[styles.group, { backgroundColor: c.win }]}
         >
-          <Text style={{ color: c.ink2 }}>
-            {showEnded ? '▾' : '▸'} {t('mgr.lines.ended', { count: ended.length })}
-          </Text>
-        </Pressable>
+          <Text style={{ color: c.ink2 }}>{t('mgr.lines.ended', { count: ended.length })}</Text>
+        </Fold>
       ) : null}
       {showEnded ? ended.map(row) : null}
     </View>

@@ -19,6 +19,7 @@ import {
 import { useT } from '../../ui/i18n'
 import { CardTextInput } from '../../ui/kit/KeyboardCardScrollView'
 import { useTheme } from '../../ui/theme'
+import { CardMarkdown } from '../CardMarkdown'
 import { Card, CardButton, type CardProps, useRespond, Why } from './Card'
 
 /** 选了一个选项之后隔这么久自己前进：够看清选中了哪个，又不用再点一下 */
@@ -186,14 +187,14 @@ export function QuestionCard(props: CardProps<QuestionRequest>) {
               <CardButton
                 kind="ghost"
                 testID="request:back"
-                label={`‹ ${t('request.back')}`}
+                label={t('request.back')}
                 disabled={busy || page === 0}
                 onPress={() => goto(page - 1)}
               />
               <CardButton
                 kind="ghost"
                 testID="request:next"
-                label={`${t('request.next')} ›`}
+                label={t('request.next')}
                 disabled={busy || last}
                 onPress={() => goto(page + 1)}
               />
@@ -259,7 +260,8 @@ export function QuestionCard(props: CardProps<QuestionRequest>) {
           })}
         </View>
       ) : null}
-      <Text style={[styles.question, { color: c.ink }]}>{question.question}</Text>
+      {/* 题目是模型写的，常带反引号和列表：按 Markdown 画 */}
+      <CardMarkdown text={question.question} />
       {options.map((option, index) => (
         <Option
           // biome-ignore lint/suspicious/noArrayIndexKey: 对面给的标签可能重复，一道题的选项不会增删换位

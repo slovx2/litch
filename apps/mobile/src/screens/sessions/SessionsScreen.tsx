@@ -283,11 +283,17 @@ export function SessionsScreen({ navigation, route }: Props) {
       wire={device ? c.wire[device.wire] : undefined}
       actions={[
         {
-          label: '＋',
+          icon: 'plus',
+          label: t('newSession.title'),
           testID: 'sessions:new',
           onPress: () => navigation.navigate('NewSession', { deviceId }),
         },
-        { label: '⋯', testID: 'sessions:more', onPress: () => setMenu({ kind: 'screen' }) },
+        {
+          icon: 'more',
+          label: t('sessions.more'),
+          testID: 'sessions:more',
+          onPress: () => setMenu({ kind: 'screen' }),
+        },
       ]}
       testID="sessions"
     >

@@ -233,7 +233,7 @@ export function AddDeviceScreen({ navigation }: Props) {
             {trust.error === t('tailscale.error.switch') ||
             error?.includes('[tailscaleAutoLogin]') ? (
               <Button
-                label={`↗ ${t('tailscale.login')}`}
+                label={t('tailscale.login')}
                 kind="plain"
                 testID="add:tailscale-login"
                 onPress={() => navigation.navigate('Tailscale', { adding: true })}

@@ -35,6 +35,8 @@ import { noteWork } from '../probe'
 import { useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { StatusMark } from '../ui/kit/controls'
+import { Caret, Icon } from '../ui/kit/Icon'
+import { plainLine } from '../ui/plain-text'
 import { type Palette, useTheme } from '../ui/theme'
 import { AskCell, AskReplyText, useAsks } from './asks/AskCell'
 import { CardMarkdown } from './CardMarkdown'
@@ -427,20 +429,32 @@ export const ReasoningCell = memo(function ReasoningCell({ row }: Props<'reasoni
   return (
     <Pressable
       onPress={() => toggle(row.key, row.turnId)}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: row.expanded }}
       accessibilityHint={row.expanded ? undefined : t('detail.reasoning.tap')}
-      style={({ pressed: down }) => [styles.reasoning, down ? pressed(c) : null]}
+      style={({ pressed: down }) => [styles.reasoning, styles.caretRow, down ? pressed(c) : null]}
       testID="reasoning-toggle"
     >
+      <View style={styles.caretBox}>
+        <Caret open={row.expanded} size={12} />
+      </View>
       {row.expanded ? (
-        <Text style={[styles.reasoningText, { color: c.ink3, fontSize: font.size.meta }]}>
-          ▾ {row.text}
+        <Text
+          style={[styles.reasoningText, styles.grow, { color: c.ink3, fontSize: font.size.meta }]}
+        >
+          {row.text}
         </Text>
       ) : (
         <Text
-          style={[styles.meta, styles.thought, { color: c.ink3, fontSize: font.size.meta }]}
+          style={[
+            styles.meta,
+            styles.thought,
+            styles.grow,
+            { color: c.ink3, fontSize: font.size.meta },
+          ]}
           numberOfLines={1}
         >
-          ▸ {row.text}
+          {row.text}
         </Text>
       )}
     </Pressable>
@@ -537,7 +551,7 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
             style={({ pressed: down }) => [styles.more, down ? pressed(c) : null]}
             testID="turn-menu"
           >
-            <Text style={[styles.meta, { color: c.ink3, fontFamily: font.mono }]}>⋯</Text>
+            <Icon name="more" size={16} color={c.ink3} />
           </Pressable>
         )}
       </View>
@@ -683,15 +697,16 @@ export const TodoCell = memo(function TodoCell({ row }: Props<'todo'>) {
     >
       <View style={styles.todoStep}>
         <Text style={[styles.todoMark, { color: c.ink3, fontFamily: font.mono }]}>
-          {row.expanded ? '▾' : done === total ? todo.completed : todo.inProgress}
+          {done === total ? todo.completed : todo.inProgress}
         </Text>
         <Text
           numberOfLines={1}
           style={[styles.grow, styles.todoLine, { color: c.ink2, fontSize: font.size.meta }]}
         >
           {t('todo.title')} · {t('todo.count', { done, total })}
-          {now && !row.expanded ? ` · ${now.text}` : ''}
+          {now && !row.expanded ? ` · ${plainLine(now.text)}` : ''}
         </Text>
+        <Caret open={row.expanded} size={12} />
       </View>
       {row.expanded ? (
         <View style={styles.todoBody}>
@@ -703,6 +718,9 @@ export const TodoCell = memo(function TodoCell({ row }: Props<'todo'>) {
 })
 
 export const styles = StyleSheet.create({
+  caretRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+  // 箭头和第一行字对齐
+  caretBox: { height: 18, justifyContent: 'center' },
   grow: { flex: 1 },
   meta: { fontSize: 13 },
   userWrap: {
@@ -740,7 +758,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  more: { paddingHorizontal: 8, height: 26, justifyContent: 'center' },
+  more: { paddingHorizontal: 8, height: 26, justifyContent: 'center', alignItems: 'center' },
   error: { marginHorizontal: 16, marginVertical: 4, borderWidth: 1, padding: 10 },
   notice: { paddingHorizontal: 16, paddingVertical: 4 },
   compaction: {
@@ -760,7 +778,7 @@ export const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   todo: { paddingHorizontal: 16, paddingVertical: 4, minHeight: 28, justifyContent: 'center' },
-  todoStep: { flexDirection: 'row', gap: 8 },
+  todoStep: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   todoMark: { fontSize: 13, lineHeight: 20 },
   todoLine: { lineHeight: 20 },
   todoBody: { gap: 4, marginTop: 4, paddingLeft: 4 },

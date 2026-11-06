@@ -18,6 +18,7 @@ import {
 } from '../../../../../packages/ui/src/transcript/ask-history.ts'
 import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { Caret } from '../../ui/kit/Icon'
 import { Dialog } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { useTranscript } from '../context'
@@ -348,10 +349,15 @@ export const AskedCell = memo(function AskedCell({ item }: { item: ToolCallItem 
                     accessibilityRole="button"
                     accessibilityState={{ expanded: !!expanded[at] }}
                     onPress={() => setExpanded((before) => ({ ...before, [at]: !before[at] }))}
-                    style={{ minHeight: theme.hit, justifyContent: 'center' }}
+                    style={{
+                      minHeight: theme.hit,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
                   >
+                    <Caret open={!!expanded[at]} />
                     <Text style={{ color: c.ink2, fontSize: font.size.meta }}>
-                      {expanded[at] ? '▾ ' : '▸ '}
                       {t(question.answer === null ? 'ask.optionsAll' : 'ask.options')}
                     </Text>
                   </Pressable>
@@ -455,7 +461,7 @@ function Head({
             {title}
           </Text>
         ) : null}
-        {fixed ? null : <Text style={[size, { color: c.ink3 }]}>{open ? '▾' : '▸'}</Text>}
+        {fixed ? null : <Caret open={open} />}
       </View>
       {!open && summary ? (
         <Text numberOfLines={1} style={[size, { color: c.ink3 }]}>

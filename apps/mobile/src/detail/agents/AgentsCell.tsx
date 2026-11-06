@@ -16,6 +16,7 @@ import type { RootStackParamList } from '../../nav/routes'
 import { useChannel } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
 import { BreathingText } from '../../ui/kit/BreathingText'
+import { Icon } from '../../ui/kit/Icon'
 import { type Palette, type Theme, useTheme } from '../../ui/theme'
 import { type Props, useTicking } from '../cells'
 import { useTranscript } from '../context'
@@ -141,7 +142,7 @@ function AgentLine({
       >
         {stateText(state, t, theme)}
       </Text>
-      {threadId ? <Text style={[styles.go, { color: c.ink3 }]}>›</Text> : null}
+      {threadId ? <Icon name="forward" size={14} color={c.ink3} /> : null}
     </Pressable>
   )
 }
@@ -210,5 +211,4 @@ const styles = StyleSheet.create({
   desc: { flex: 1, fontSize: 13 },
   time: { fontSize: 11 },
   state: { fontSize: 11, fontWeight: '500' },
-  go: { fontSize: 15, marginLeft: 2 },
 })

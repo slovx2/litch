@@ -9,6 +9,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { RootStackParamList } from '../../nav/routes'
 import { useT } from '../../ui/i18n'
+import { Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { bannerFailure } from '../../update/banner'
 import { dismissFailure, downloadUpdate, installUpdate } from '../../update/store'
@@ -63,8 +64,9 @@ export function UpdateBanner() {
           testID="update:banner:dismiss"
           hitSlop={theme.space(2)}
           onPress={dismissFailure}
+          style={{ minWidth: 32, minHeight: 32, alignItems: 'center', justifyContent: 'center' }}
         >
-          <Text style={{ color: c.ink3, fontSize: theme.font.size.meta }}>✕</Text>
+          <Icon name="close" size={14} color={c.ink3} />
         </Pressable>
       </Pressable>
     )

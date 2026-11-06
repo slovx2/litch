@@ -16,6 +16,7 @@ import { type ReactNode, useCallback, useRef, useState, useSyncExternalStore } f
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { Caret, Icon } from '../../ui/kit/Icon'
 import { Sheet } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { titleOf } from '../sessions/rows'
@@ -74,9 +75,7 @@ export function SectionHead({
   const { c } = theme
   const text = (
     <>
-      <Text style={[styles.chevron, { color: c.ink3, fontFamily: theme.font.mono }]}>
-        {onToggle ? (collapsed ? '▸' : '▾') : ''}
-      </Text>
+      <View style={styles.chevron}>{onToggle ? <Caret open={!collapsed} size={12} /> : null}</View>
       <Text
         role="heading"
         style={[styles.headName, { color: c.ink2, fontFamily: theme.font.mono }]}
@@ -147,7 +146,7 @@ export function RecentGroup({
             onPress={() => setMenu(true)}
             style={styles.headAction}
           >
-            <Text style={[styles.headActionText, { color: c.ink2 }]}>⋯</Text>
+            <Icon name="more" size={18} color={c.ink2} />
           </Pressable>
         }
       />
@@ -305,10 +304,9 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingLeft: 12,
   },
-  chevron: { width: 14, fontSize: 12 },
+  chevron: { width: 14, alignItems: 'center' },
   headName: { flexShrink: 1, fontSize: 13, fontWeight: '600' },
   headAction: { width: 44, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
-  headActionText: { fontSize: 18, fontWeight: '600' },
   project: { paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 4, fontSize: 11 },
   grow: { flex: 1 },
   empty: { paddingHorizontal: 16, paddingVertical: 14, fontSize: 13 },

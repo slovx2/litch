@@ -17,6 +17,7 @@ import { imageInfo } from '../../../../../packages/core/src/image-info.mts'
 import { PreviewResources } from '../../../../../packages/ui/src/files/preview/resources'
 import { useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { Icon } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { TranscriptContext, useTranscript } from '../context'
 import { ImageSurface } from './ImageSurface'
@@ -224,9 +225,9 @@ function MediaImage({ image, resources }: { image: ImageSegment; resources: Prev
               accessibilityLabel={t('viewer.close')}
               testID="media:close"
               onPress={() => setFull(false)}
-              style={{ padding: 16 }}
+              style={{ padding: 12, alignSelf: 'flex-end' }}
             >
-              <Text style={{ color: c.ink, fontSize: font.size.body }}>×</Text>
+              <Icon name="close" size={20} color={c.ink} />
             </Pressable>
             <ImageSurface data={data} onFail={fail} />
           </View>

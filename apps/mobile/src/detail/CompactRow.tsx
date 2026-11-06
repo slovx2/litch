@@ -1,9 +1,11 @@
 // 默认收起的卡片共用的样子（系统消息、子会话回报、别的会话发来的话、问题卡）：左边一道细线，
-// 第一行是标记、来源、标题、小标签（手动运行、对方跳过确认，不另占一行）、末尾的 ▸/▾；
-// 收着的时候下面一行是正文摘要（只占一行），点一下展开，
+// 第一行是标记、来源、标题、小标签（手动运行、对方跳过确认，不另占一行）、末尾的展开箭头；
+// 收着的时候下面一行是正文摘要（只占一行，去掉 Markdown 记号），点一下展开，
 // 展开后摘要不再显示，内容（children）排在下面。同桌面的 CompactRow
 import type { ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Caret } from '../ui/kit/Icon'
+import { plainPreview } from '../ui/plain-text'
 import { useTheme } from '../ui/theme'
 
 export function CompactRow({
@@ -71,12 +73,14 @@ export function CompactRow({
             </Text>
           ) : null}
           {fixed ? null : (
-            <Text style={[size, styles.caret, { color: c.ink3 }]}>{open ? '▾' : '▸'}</Text>
+            <View style={styles.caret}>
+              <Caret open={open} />
+            </View>
           )}
         </View>
         {!open && summary ? (
           <Text numberOfLines={1} style={[styles.sum, size, { color: c.ink3 }]}>
-            {summary}
+            {plainPreview(summary)}
           </Text>
         ) : null}
       </Pressable>

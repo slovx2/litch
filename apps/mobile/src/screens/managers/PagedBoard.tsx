@@ -13,7 +13,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import {
   type BoardPageMemory,
   boardPageMemory,
@@ -34,8 +34,10 @@ import {
 import type { ManagerPageKind } from '../../../../../packages/protocol/src/manager-paging.mts'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { Button } from '../../ui/kit/controls'
+import { Button, Chip } from '../../ui/kit/controls'
+import { Caret, Fold, IconButton } from '../../ui/kit/Icon'
 import type { Palette } from '../../ui/palettes'
+import { plainLine, plainPreview } from '../../ui/plain-text'
 import { useTheme } from '../../ui/theme'
 import { animateNextLayout } from './card-motion'
 import { draftMarks } from './draft-marks'
@@ -373,46 +375,43 @@ export function PagedBoard({
               run: () => invoke(channel.command('managers.board.refresh', address)),
             }}
           />
-          <Pressable
+          <Fold
             testID="paging-items"
-            accessibilityRole="button"
-            aria-expanded={items}
-            onPress={() => setItems(!items)}
-            style={{ minHeight: hit, justifyContent: 'center', paddingHorizontal: 16 }}
+            open={items}
+            onToggle={() => setItems(!items)}
+            style={{ paddingHorizontal: 16 }}
           >
             <Text style={{ color: c.ink2, fontSize: font.size.meta + 1, fontWeight: '600' }}>
-              {items ? '▾' : '▸'} {t('manager.items')}
+              {t('manager.items')}
             </Text>
-          </Pressable>
+          </Fold>
         </View>
-      ) : (
-        <Button
-          kind="plain"
-          label={t('manager.paging.refresh')}
-          busy={paging.loading.includes('summary')}
-          onPress={() => invoke(channel.command('managers.board.refresh', address))}
-        />
-      )}
+      ) : null}
       {tab === 'lines' ? (
         <>
-          <Text style={style}>
-            {lines.checkedAt === null
-              ? t('manager.paging.unchecked')
-              : `${t('manager.paging.checked')} · ${new Date(lines.checkedAt).toLocaleString()}`}
-          </Text>
+          {/* 核对时间和重新核对放一行：时间是小字，重新核对是行尾的小图标 */}
+          <View style={styles.bar}>
+            <Text style={[styles.meta, { color: c.ink3, fontSize: font.size.meta }]}>
+              {lines.checkedAt === null
+                ? t('manager.paging.unchecked')
+                : `${t('manager.paging.checked')} ${new Date(lines.checkedAt).toLocaleString()}`}
+            </Text>
+            <IconButton
+              icon="reload"
+              testID="paging-lines-refresh"
+              label={t('manager.paging.refresh')}
+              busy={paging.loading.includes('lines') || paging.loading.includes('summary')}
+              onPress={() => {
+                invoke(channel.command('managers.board.refresh', address))
+                invoke(channel.command('managers.board.refresh', { ...address, lines: true }))
+              }}
+            />
+          </View>
           {lines.failed ? (
             <Text accessibilityRole="alert" style={{ color: c.err }}>
               {t('manager.paging.failed', { n: lines.failed })}
             </Text>
           ) : null}
-          <Button
-            kind="plain"
-            label={t('manager.paging.refresh')}
-            busy={paging.loading.includes('lines')}
-            onPress={() =>
-              invoke(channel.command('managers.board.refresh', { ...address, lines: true }))
-            }
-          />
           <ManagerLines
             deviceId={manager.deviceId}
             board={board}
@@ -424,43 +423,80 @@ export function PagedBoard({
       {list ? (
         <>
           {tab === 'overview' ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            <View
+              role="radiogroup"
+              aria-label={t('manager.order')}
+              style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}
+            >
               {(['newest', 'oldest', 'pending'] as const).map((sort) => (
-                <Button
+                <Chip
                   key={sort}
+                  radio
+                  on={order === sort}
                   testID={`paging-order:${sort}`}
-                  kind="plain"
                   label={t(`manager.order.${sort}`)}
                   onPress={() => setIssueOrder(sort)}
                 />
               ))}
             </View>
           ) : null}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {managerPageStates[kind].map((filter) => (
-              <Pressable
-                key={filter}
-                accessibilityRole="button"
-                accessibilityState={{ selected: status === filter }}
-                testID={`paging-filter:${filter}`}
-                onPress={() => {
-                  clearLink()
-                  memory.filters[kind] = filter
-                  renderMemory((value) => value + 1)
-                }}
-                style={{
-                  minHeight: hit,
-                  justifyContent: 'center',
-                  borderBottomWidth: status === filter ? 2 : 0,
-                  borderBottomColor: c.accent,
-                }}
-              >
-                <Text style={style}>
-                  {t(managerPageLabel(kind, filter) as Parameters<typeof t>[0])} ·{' '}
-                  {paging.summary.counts[kind][filter] ?? 0}
-                </Text>
-              </Pressable>
-            ))}
+          {/* 窄屏放不下时筛选横着滑，刷新固定在右端 */}
+          <View style={styles.bar}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.filters}
+              contentContainerStyle={styles.filterRow}
+            >
+              {managerPageStates[kind].map((filter) => (
+                <Pressable
+                  key={filter}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: status === filter }}
+                  testID={`paging-filter:${filter}`}
+                  onPress={() => {
+                    clearLink()
+                    memory.filters[kind] = filter
+                    renderMemory((value) => value + 1)
+                  }}
+                  style={[
+                    styles.filter,
+                    {
+                      minHeight: hit,
+                      borderBottomColor: status === filter ? c.accent : 'transparent',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color: status === filter ? c.ink : c.ink2,
+                      fontSize: font.size.body,
+                      fontWeight: status === filter ? '600' : '400',
+                    }}
+                  >
+                    {t(managerPageLabel(kind, filter) as Parameters<typeof t>[0])}
+                  </Text>
+                  <Text
+                    style={{
+                      color: c.ink3,
+                      fontSize: font.size.meta,
+                      fontVariant: ['tabular-nums'],
+                    }}
+                  >
+                    {paging.summary.counts[kind][filter] ?? 0}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            {tab === 'console' ? (
+              <IconButton
+                icon="reload"
+                testID="paging-refresh"
+                label={t('manager.paging.refresh')}
+                busy={paging.loading.includes('summary')}
+                onPress={() => invoke(channel.command('managers.board.refresh', address))}
+              />
+            ) : null}
           </View>
           {linked && active && !page?.entries.some((head) => head.id === active) ? detail : null}
           {!page ? (
@@ -503,14 +539,23 @@ export function PagedBoard({
                         minHeight: hit,
                         padding: 12,
                         backgroundColor: pressed ? c.press : c.panel,
-                        gap: 8,
+                        gap: 6,
                       })}
                     >
-                      <Text style={style}>
-                        {active === head.id ? '▾' : '▸'} {head.id} · {head.title} ·{' '}
-                        {t(managerPageLabel(kind, head.status) as Parameters<typeof t>[0])}
-                        {mark ? <DraftPill mark={mark} c={c} size={font.size.meta} /> : null}
-                      </Text>
+                      <View style={styles.head}>
+                        <View style={styles.caret}>
+                          <Caret open={active === head.id} />
+                        </View>
+                        <Text style={[style, styles.title, { fontWeight: '600' }]}>
+                          <Text style={{ color: c.ink3, fontWeight: '400' }}>{head.id}</Text>{' '}
+                          {plainLine(head.title)}
+                        </Text>
+                        <StatusTag
+                          text={t(managerPageLabel(kind, head.status) as Parameters<typeof t>[0])}
+                          pending={PENDING.has(head.status)}
+                        />
+                      </View>
+                      {mark ? <DraftPill mark={mark} c={c} size={font.size.meta} /> : null}
                       {/* 有草稿：摘要占一行、预览让出一行，卡头高度不变 */}
                       {mark && active !== head.id ? (
                         <DraftSummary
@@ -525,9 +570,15 @@ export function PagedBoard({
                           id={head.id}
                         />
                       ) : null}
-                      <Text numberOfLines={mark ? 1 : 2} style={{ color: c.ink2 }}>
-                        {head.preview}
-                      </Text>
+                      {/* 展开后正文就在下面，摘要不再重复 */}
+                      {active === head.id ? null : (
+                        <Text
+                          numberOfLines={mark ? 1 : 2}
+                          style={[styles.preview, { color: c.ink2 }]}
+                        >
+                          {plainPreview(head.preview)}
+                        </Text>
+                      )}
                     </Pressable>
                     {active === head.id ? detail : null}
                   </View>
@@ -562,13 +613,16 @@ function DraftPill({ mark, c, size }: { mark: ManagerDraftMark; c: Palette; size
   return (
     <Text
       testID={`draft-pill:${mark.state}`}
-      style={{
-        color: mark.state === 'live' ? c.wait : mark.state === 'conflict' ? c.err : c.ink2,
-        fontSize: size,
-        fontWeight: '600',
-      }}
+      style={[
+        styles.tag,
+        {
+          color: mark.state === 'live' ? c.wait : mark.state === 'conflict' ? c.err : c.ink2,
+          borderColor: mark.state === 'live' ? c.wait : mark.state === 'conflict' ? c.err : c.line2,
+          fontSize: size - 1,
+          marginLeft: 20,
+        },
+      ]}
     >
-      {'  '}
       {mark.state === 'live'
         ? t('manager.draft')
         : t(mark.state === 'conflict' ? 'manager.draftMark.conflict' : 'manager.draftMark.ended')}
@@ -605,11 +659,55 @@ function DraftSummary({
       testID={`draft-summary:${id}`}
       numberOfLines={1}
       style={{
+        marginLeft: 20,
         color: mark.state === 'live' ? c.wait : mark.state === 'conflict' ? c.err : c.ink2,
         textDecorationLine: mark.state === 'ended' ? 'line-through' : 'none',
       }}
     >
-      ✎ {parts.join(' · ')}
+      {parts.join(' · ')}
     </Text>
   )
 }
+
+/** 待处理的状态：卡头的状态标签用等待色 */
+const PENDING = new Set(['open', 'unread', 'pending', 'review'])
+
+/** 卡头行尾的状态：小框里一个词，待处理的用等待色 */
+function StatusTag({ text, pending }: { text: string; pending: boolean }) {
+  const { c, font, radius } = useTheme()
+  return (
+    <Text
+      style={[
+        styles.tag,
+        {
+          color: pending ? c.wait : c.ink3,
+          borderColor: pending ? c.wait : c.line2,
+          borderRadius: radius.s,
+          fontSize: font.size.small,
+        },
+      ]}
+    >
+      {text}
+    </Text>
+  )
+}
+
+const styles = StyleSheet.create({
+  bar: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  filters: { flex: 1 },
+  filterRow: { alignItems: 'center', columnGap: 14 },
+  meta: { flex: 1 },
+  filter: { flexDirection: 'row', alignItems: 'center', gap: 4, borderBottomWidth: 2 },
+  head: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  // 箭头和标题第一行对齐
+  caret: { height: 20, justifyContent: 'center' },
+  title: { flex: 1, minWidth: 0 },
+  preview: { marginLeft: 20 },
+  tag: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    overflow: 'hidden',
+  },
+})

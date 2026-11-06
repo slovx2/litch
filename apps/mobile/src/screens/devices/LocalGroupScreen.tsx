@@ -103,7 +103,14 @@ export function LocalGroupScreen({ navigation, route }: Props) {
       subtitle={t('local.title')}
       actions={
         group && !blocked
-          ? [{ label: '⋯', testID: 'localGroup:more', onPress: () => groupMenu.open(group) }]
+          ? [
+              {
+                icon: 'more' as const,
+                label: t('sessions.more'),
+                testID: 'localGroup:more',
+                onPress: () => groupMenu.open(group),
+              },
+            ]
           : []
       }
       testID="localGroup"

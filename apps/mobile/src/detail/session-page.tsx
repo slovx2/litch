@@ -304,15 +304,16 @@ export function useSessionPage({
       ...(task
         ? [
             {
-              label: '⏱',
-              accessibilityLabel: task.label,
+              icon: 'clock' as const,
+              label: task.label,
               testID: 'detail:task',
               onPress: task.open,
             },
           ]
         : []),
       {
-        label: '⋯',
+        icon: 'more' as const,
+        label: t('sessions.more'),
         testID: 'detail:menu',
         onPress: () => setMenu(true),
       },

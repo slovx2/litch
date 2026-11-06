@@ -7,7 +7,9 @@ import { useQuestionAge } from '../../../../../packages/ui/src/composer/question
 import type { SessionStore } from '../../core/session-store'
 import { useKey, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { Caret } from '../../ui/kit/Icon'
 import { CardTextInput, KeyboardCardScrollView } from '../../ui/kit/KeyboardCardScrollView'
+import { plainPreview } from '../../ui/plain-text'
 import { useTheme } from '../../ui/theme'
 import { sendFlags, whenRunning } from '../composer/send-mode'
 import { CardButton } from './Card'
@@ -43,7 +45,7 @@ export function PendingQuestions({ store, maxHeight }: { store: SessionStore; ma
         <Text style={[styles.count, { color: c.ink2, fontSize: font.size.meta }]}>
           {t('ask.pendingCount', { count: questions.length })}
         </Text>
-        <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{expanded ? '▾' : '▸'}</Text>
+        <Caret open={expanded} />
       </Pressable>
       {expanded ? (
         <KeyboardCardScrollView
@@ -122,7 +124,7 @@ function PendingCard({
       testID={`pending:${question.id}`}
     >
       <Text style={[styles.title, { color: c.ink, fontSize: font.size.body }]}>
-        {question.title}
+        {plainPreview(question.title)}
       </Text>
       <View style={styles.row}>
         <Text style={{ flex: 1, color: c.ink3, fontSize: font.size.small }}>

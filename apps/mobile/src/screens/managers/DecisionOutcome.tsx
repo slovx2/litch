@@ -1,16 +1,17 @@
 // 手机上已答、已关闭、重新打开的决策：答复与关闭记录各占一块，没选中的选项默认收起（与桌面同一规则）。
 import { decisionAnswerParts } from '@litch/core'
 import { useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import type { ManagerDecisionView as ManagerDecision } from '../../../../../packages/core/src/model-manager.mts'
 import type {
   ManagerActor,
   ManagerClosed,
   ManagerDecisionOption,
 } from '../../../../../packages/protocol/src/manager.mjs'
-import { stamp } from '../../../../../packages/ui/src/app/format.ts'
 import { useT } from '../../ui/i18n'
+import { Fold } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
+import { Byline } from './Byline'
 import { Markdown } from './IssueMarkdown'
 
 const closerKey = (by: ManagerActor) =>
@@ -54,19 +55,16 @@ export function DecisionAnswer({ decision }: { decision: ManagerDecision }) {
         },
       ]}
     >
-      <Text style={{ color: c.ink2 }}>
-        <Text style={{ color: c.ink, fontWeight: '600' }}>
-          {t(
-            parts.answerKind === 'previous'
-              ? 'manager.answerPrevious'
-              : parts.answer.by === 'user-conversation'
-                ? 'manager.answerConversation'
-                : 'manager.answerYours',
-          )}
-        </Text>
-        {' · '}
-        {stamp(parts.answer.at, Date.now(), t.lang)}
-      </Text>
+      <Byline
+        who={t(
+          parts.answerKind === 'previous'
+            ? 'manager.answerPrevious'
+            : parts.answer.by === 'user-conversation'
+              ? 'manager.answerConversation'
+              : 'manager.answerYours',
+        )}
+        at={parts.answer.at}
+      />
       {parts.chosen ? (
         <Option option={parts.chosen} recommend={decision.recommend === parts.chosen.id} />
       ) : null}
@@ -89,26 +87,20 @@ function ClosedNote({
   kind: 'closed' | 'ignored' | 'previous' | 'reopened'
 }) {
   const t = useT()
-  const { c, radius, hit } = useTheme()
+  const { c, radius } = useTheme()
   const previous = kind === 'previous' || kind === 'reopened'
   // 经理重开的理由是请你重看的原因，默认展开；上次关闭只作历史，默认收起
   const [open, setOpen] = useState(kind !== 'previous')
-  const who = { who: t(`manager.closer.${closerKey(closed.by)}`) }
-  const head = (
-    <Text style={{ color: c.ink2 }}>
-      {previous ? `${open ? '▾' : '▸'} ` : ''}
-      <Text style={{ color: c.ink, fontWeight: '600' }}>
-        {kind === 'previous'
-          ? t('manager.closedPrevious', who)
-          : kind === 'reopened'
-            ? t('manager.reopenedBy')
-            : kind === 'ignored'
-              ? t('manager.ignoredBy')
-              : t('manager.closedBy', who)}
-      </Text>
-      {' · '}
-      {stamp(closed.at, Date.now(), t.lang)}
-    </Text>
+  const closer = { who: t(`manager.closer.${closerKey(closed.by)}`) }
+  const who = t(
+    kind === 'previous'
+      ? 'manager.closedPrevious'
+      : kind === 'reopened'
+        ? 'manager.reopenedBy'
+        : kind === 'ignored'
+          ? 'manager.ignoredBy'
+          : 'manager.closedBy',
+    closer,
   )
   return (
     <View
@@ -119,16 +111,11 @@ function ClosedNote({
       ]}
     >
       {previous ? (
-        <Pressable
-          accessibilityRole="button"
-          aria-expanded={open}
-          onPress={() => setOpen(!open)}
-          style={[styles.head, { minHeight: hit }]}
-        >
-          {head}
-        </Pressable>
+        <Fold open={open} onToggle={() => setOpen(!open)}>
+          <Byline who={who} at={closed.at} />
+        </Fold>
       ) : (
-        head
+        <Byline who={who} at={closed.at} />
       )}
       {open && closed.reason ? <Markdown text={closed.reason} /> : null}
     </View>
@@ -152,7 +139,7 @@ export function DecisionHistory({ decision }: { decision: ManagerDecision }) {
 
 export function DecisionOutcome({ decision }: { decision: ManagerDecision }) {
   const t = useT()
-  const { c, hit } = useTheme()
+  const { c } = useTheme()
   const [open, setOpen] = useState(false)
   const parts = decisionAnswerParts(decision)
   return (
@@ -167,20 +154,17 @@ export function DecisionOutcome({ decision }: { decision: ManagerDecision }) {
       ) : null}
       {parts.others.length ? (
         <>
-          <Pressable
-            accessibilityRole="button"
-            aria-expanded={open}
+          <Fold
+            open={open}
             testID={`decision-others:${decision.id}`}
-            onPress={() => setOpen(!open)}
-            style={[styles.toggle, { minHeight: hit }]}
+            onToggle={() => setOpen(!open)}
           >
             <Text style={{ color: c.ink2 }}>
-              {open ? '▾' : '▸'}{' '}
               {t(parts.chosen ? 'manager.otherOptions' : 'manager.allOptions', {
                 n: parts.others.length,
               })}
             </Text>
-          </Pressable>
+          </Fold>
           {open
             ? parts.others.map((option) => (
                 <Option
@@ -199,6 +183,4 @@ export function DecisionOutcome({ decision }: { decision: ManagerDecision }) {
 const styles = StyleSheet.create({
   block: { borderLeftWidth: 3, padding: 12, gap: 8 },
   option: { borderWidth: 1, padding: 10, gap: 6 },
-  toggle: { alignSelf: 'stretch', justifyContent: 'center' },
-  head: { justifyContent: 'center' },
 })

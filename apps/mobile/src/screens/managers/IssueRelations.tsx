@@ -14,17 +14,18 @@ import type { RootStackParamList } from '../../nav/routes'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
+import { Fold, Icon, type IconName } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 
 const ICONS = {
-  issue: '○',
-  item: '▤',
-  thread: '↗',
-  file: '▱',
-  branch: '⑂',
-  commit: '◇',
-  url: '↗',
-} as const
+  issue: 'note',
+  item: 'list',
+  thread: 'external',
+  file: 'file',
+  branch: 'branch',
+  commit: 'commit',
+  url: 'external',
+} as const satisfies Record<string, IconName>
 export const IssueContext = createContext<{
   board: ManagerBoardView
   manager: ManagerView
@@ -118,19 +119,17 @@ export function IssueRelations({
   }
   return (
     <View>
-      <Pressable
-        accessibilityRole="button"
+      <Fold
+        open={expanded}
         testID={`relations:${id}`}
-        accessibilityState={{ expanded }}
-        onPress={() => setExpanded(!expanded)}
-        style={{ alignSelf: 'flex-start', paddingVertical: 8 }}
+        onToggle={() => setExpanded(!expanded)}
+        style={{ alignSelf: 'flex-start' }}
       >
         <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
-          {expanded ? '▾' : '▸'}{' '}
           {t(kind === 'issue' ? 'manager.relations' : 'manager.relatedIssues')}{' '}
           {Object.values(groups).flat().length}
         </Text>
-      </Pressable>
+      </Fold>
       {expanded
         ? (Object.entries(groups) as [keyof typeof groups, ManagerRelationTarget[]][]).map(
             ([group, targets]) =>
@@ -149,9 +148,12 @@ export function IssueRelations({
                       onPress={() => void open(target)}
                       style={{ paddingVertical: 8, gap: 3 }}
                     >
-                      <Text style={{ color: c.ink3, fontSize: font.size.small }}>
-                        {ICONS[target.kind]} {t(`manager.relationKind.${target.kind}`)}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Icon name={ICONS[target.kind]} size={13} color={c.ink3} />
+                        <Text style={{ color: c.ink3, fontSize: font.size.small }}>
+                          {t(`manager.relationKind.${target.kind}`)}
+                        </Text>
+                      </View>
                       <Text
                         style={{
                           color: c.accent,

@@ -12,6 +12,7 @@ import { useSyncExternalStore } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { Caret } from '../../ui/kit/Icon'
 import { useTheme } from '../../ui/theme'
 import { foldsOf, subscribeFolds, toggleFolded } from '../sessions/folds'
 import { ChildLine, SessionFold, SummaryLine } from '../sessions/rows'
@@ -213,9 +214,9 @@ export function ShortcutWorkspace({
         <View
           style={[styles.headWire, { backgroundColor: device ? c.wire[device.wire] : c.line2 }]}
         />
-        <Text style={[styles.chevron, { color: c.ink3, fontFamily: theme.font.mono }]}>
-          {open ? '▾' : '▸'}
-        </Text>
+        <View style={styles.chevron}>
+          <Caret open={open} size={12} />
+        </View>
         <Text numberOfLines={1} style={[styles.name, { color: c.ink }]}>
           {workspace.name}
         </Text>
@@ -257,7 +258,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headWire: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
-  chevron: { width: 14, fontSize: 12 },
+  chevron: { width: 14, alignItems: 'center' },
   name: { flexShrink: 1, fontSize: 14, fontWeight: '600' },
   meta: { flex: 1, fontSize: 11, textAlign: 'right' },
 })

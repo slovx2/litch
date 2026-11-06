@@ -30,13 +30,13 @@ export function PairNetworkDialog({
         {t(account ? 'pair.network.account' : 'pair.network.login', { identity })}
       </Text>
       <Button
-        label={`${account ? '✓' : '↗'} ${t(account ? 'pair.network.correct' : 'pair.network.signIn')}`}
+        label={t(account ? 'pair.network.correct' : 'pair.network.signIn')}
         testID="pair:network:primary"
         onPress={() => (account ? onContinue(false) : onLogin(false))}
       />
       <Button
         kind="plain"
-        label={`${account ? '↻' : '→'} ${t(account ? 'pair.network.switch' : 'pair.network.direct')}`}
+        label={t(account ? 'pair.network.switch' : 'pair.network.direct')}
         testID="pair:network:secondary"
         onPress={() => (account ? onLogin(true) : onContinue(true))}
       />

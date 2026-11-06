@@ -7,12 +7,11 @@ import { FlatList, Pressable, StyleSheet, Text } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useT } from '../../ui/i18n'
 import { Empty } from '../../ui/kit/controls'
+import { Icon } from '../../ui/kit/Icon'
 import { Sheet } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 
 const ROW_H = 48
-
-const GLYPH = { dir: '▸', file: '·', other: '~' } as const
 
 export function DirList({
   view,
@@ -54,9 +53,7 @@ export function DirList({
             { borderBottomColor: c.line1, backgroundColor: pressed ? c.press : c.panel },
           ]}
         >
-          <Text style={[styles.glyph, { color: c.ink3, fontFamily: theme.font.mono }]}>
-            {GLYPH[item.kind]}
-          </Text>
+          <Icon name={item.kind === 'dir' ? 'folder' : 'file'} size={14} color={c.ink3} />
           <Text
             numberOfLines={1}
             style={[
@@ -126,7 +123,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  glyph: { width: 14, fontSize: 13, textAlign: 'center' },
   name: { flex: 1, fontSize: 14 },
   note: { paddingHorizontal: 16, paddingVertical: 14, fontSize: 13 },
 })

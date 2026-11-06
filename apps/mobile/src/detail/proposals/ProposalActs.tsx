@@ -22,6 +22,7 @@ import type { RootStackParamList } from '../../nav/routes'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
+import { Icon } from '../../ui/kit/Icon'
 import { Sheet, type SheetAction } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { useProposalAct, useSessionStore } from './hooks'
@@ -164,7 +165,7 @@ export function ProposalActsRow({
 
 /** 小的“⋯”按钮：点了出动作单 */
 export function MoreButton({ onPress, testID }: { onPress(): void; testID: string }) {
-  const { c, font } = useTheme()
+  const { c } = useTheme()
   const t = useT()
   return (
     <Pressable
@@ -175,7 +176,7 @@ export function MoreButton({ onPress, testID }: { onPress(): void; testID: strin
       style={({ pressed }) => [styles.more, pressed ? { backgroundColor: c.press } : null]}
       testID={testID}
     >
-      <Text style={{ color: c.ink3, fontFamily: font.mono }}>⋯</Text>
+      <Icon name="more" size={16} color={c.ink3} />
     </Pressable>
   )
 }

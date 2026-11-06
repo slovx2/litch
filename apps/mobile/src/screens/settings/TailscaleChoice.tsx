@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Text, View } from 'react-native'
+import { View } from 'react-native'
 import { tailscaleAvailable } from '../../platform/tailscale'
 import { useT } from '../../ui/i18n'
 import { Row, ValueRow } from '../../ui/kit/controls'
+import { Icon } from '../../ui/kit/Icon'
 import { Sheet } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 
@@ -35,7 +36,7 @@ export function TailscaleChoice({
       />
       <Row
         title={t('tailscale.guide')}
-        left={<Text style={{ color: c.ink2 }}>↗</Text>}
+        right={<Icon name="forward" size={16} color={c.ink3} />}
         onPress={configure}
         testID="tailscale:guide"
       />

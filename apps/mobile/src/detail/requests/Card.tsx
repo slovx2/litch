@@ -7,6 +7,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
+import { Icon } from '../../ui/kit/Icon'
 import { KeyboardCardScrollView } from '../../ui/kit/KeyboardCardScrollView'
 import { useTheme } from '../../ui/theme'
 
@@ -198,10 +199,8 @@ export function CardButton({
         },
       ]}
     >
-      <Text style={[styles.buttonText, { color: fg }]}>
-        {symbol ? <Text accessible={false}>{symbol === 'check' ? '✓ ' : '× '}</Text> : null}
-        {label}
-      </Text>
+      {symbol ? <Icon name={symbol === 'check' ? 'check' : 'close'} size={14} color={fg} /> : null}
+      <Text style={[styles.buttonText, { color: fg }]}>{label}</Text>
     </Pressable>
   )
 }
@@ -286,6 +285,8 @@ const styles = StyleSheet.create({
   button: {
     paddingHorizontal: 12,
     borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
