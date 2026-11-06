@@ -1,18 +1,25 @@
 import type {
   AutomationPointerSample,
   AutomationSurface,
-} from '../../../packages/protocol/src/automation-surface.mjs'
-import type { ChromeGrant } from '../../../packages/protocol/src/chrome-browser.mjs'
+} from '../../automation-contracts/src/automation-surface.mjs'
+import type { ChromeGrant } from '../../automation-contracts/src/litch/chrome-browser.mjs'
 import { ChromeFault, cdp, documentStamp, type ExtensionState, requireGrant } from './state.mjs'
 
-declare const __LITCH_POINTER_SOURCE__: string
 interface PointerWorld {
   contextId: number
   generation: number
   seq: number
   sample?: AutomationPointerSample
 }
-const worlds = new Map<string, PointerWorld>()
+const runtimeWorlds = new WeakMap<ExtensionState, Map<string, PointerWorld>>()
+function worldsOf(state: ExtensionState): Map<string, PointerWorld> {
+  let worlds = runtimeWorlds.get(state)
+  if (!worlds) {
+    worlds = new Map()
+    runtimeWorlds.set(state, worlds)
+  }
+  return worlds
+}
 
 async function bounded<T>(work: Promise<T>): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -60,7 +67,7 @@ async function evaluate<T>(
 }
 async function worldOf(state: ExtensionState, grant: ChromeGrant): Promise<PointerWorld> {
   const generation = state.generations.get(grant.tabId) ?? 0
-  const old = worlds.get(grant.leaseId)
+  const old = worldsOf(state).get(grant.leaseId)
   if (old?.generation === generation) return old
   if (old) await disposePointer(state, grant)
   const { frameTree } = await cdp(state, grant.tabId, 'Page.getFrameTree')
@@ -70,8 +77,8 @@ async function worldOf(state: ExtensionState, grant: ChromeGrant): Promise<Point
     grantUniveralAccess: false,
   })
   const world: PointerWorld = { contextId: executionContextId, generation, seq: 0 }
-  worlds.set(grant.leaseId, world)
-  await evaluate(state, grant, world, __LITCH_POINTER_SOURCE__)
+  worldsOf(state).set(grant.leaseId, world)
+  await evaluate(state, grant, world, state.pointerSource)
   await evaluate(
     state,
     grant,
@@ -183,7 +190,7 @@ export async function pointerCommand(
 ): Promise<unknown> {
   if (!method.startsWith('Input.')) return dispatch()
   const mouse = method === 'Input.dispatchMouseEvent'
-  let world = worlds.get(grant.leaseId)
+  let world = worldsOf(state).get(grant.leaseId)
   let x = typeof params.x === 'number' ? params.x : undefined
   let y = typeof params.y === 'number' ? params.y : undefined
   if (!mouse) {
@@ -211,7 +218,7 @@ export async function pointerCommand(
       y,
       !mouse ? 'semantic' : params.type === 'mouseWheel' ? 'scroll' : 'click',
     )
-    world = worlds.get(grant.leaseId)
+    world = worldsOf(state).get(grant.leaseId)
   }
   if (!world?.sample) throw new ChromeFault('staleDocument', 'Pointer state expired.')
   await verifyPointer(state, grant, world)
@@ -243,7 +250,7 @@ export async function withoutPointer<T>(
   grant: ChromeGrant,
   capture: () => Promise<T>,
 ): Promise<T> {
-  const world = worlds.get(grant.leaseId)
+  const world = worldsOf(state).get(grant.leaseId)
   if (!world) return capture()
   try {
     await evaluate(state, grant, world, '__litchChromePointer.hide()')
@@ -258,8 +265,8 @@ export async function disposePointer(
   grant: ChromeGrant,
   phase: 'failed' | 'cancelled' = 'cancelled',
 ): Promise<void> {
-  const world = worlds.get(grant.leaseId)
-  worlds.delete(grant.leaseId)
+  const world = worldsOf(state).get(grant.leaseId)
+  worldsOf(state).delete(grant.leaseId)
   if (!world) return
   if (world.sample && world.sample.phase !== 'completed') {
     world.sample = {

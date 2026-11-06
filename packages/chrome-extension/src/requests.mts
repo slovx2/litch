@@ -1,5 +1,8 @@
-import type { ChromeGrant, ChromeRequest } from '../../../packages/protocol/src/chrome-browser.mjs'
-import { isAllowedCdp } from '../../desktop/src/browser/cdp-allow.mjs'
+import type {
+  ChromeGrant,
+  ChromeRequest,
+} from '../../automation-contracts/src/litch/chrome-browser.mjs'
+import { isAllowedCdp } from '../../browser/src/browser/cdp-allow.mjs'
 import { chromeOrigin } from './origin.mjs'
 import { disposePointer, planPointer, pointerCommand, withoutPointer } from './pointer.mjs'
 import {
@@ -14,6 +17,7 @@ import {
   requireGrant,
   saveAttached,
   tabState,
+  targetIdOf,
 } from './state.mjs'
 
 function number(value: unknown): number {
@@ -50,11 +54,16 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
     throw new ChromeFault('signingIn', 'The user is signing in. This Chrome instance is paused.')
   if (request.op === 'list') {
     const tabs = await state.chrome.tabs.query({})
+    const targets: Array<{ tabId?: number; id: string }> = await state.chrome.debugger.getTargets()
     const result = await Promise.all(
       tabs
+        .filter((tab: any) =>
+          targets.some((target) => target.tabId === tab.id && /^[a-fA-F0-9]{32}$/.test(target.id)),
+        )
         .filter((tab: any) => !tab.incognito && chromeOrigin(tab.pendingUrl || tab.url || ''))
         .map(async (tab: any) => ({
           ...(await tabState(state, tab.id)),
+          targetId: targets.find((target) => target.tabId === tab.id)?.id,
           origins: await inspectOrigins(state, tab.id).catch(() => []),
           busy: [...state.grants.values()].some((grant) => grant.tabId === tab.id),
         })),
@@ -69,9 +78,10 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
     for (let attempt = 0; attempt < 50; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 20))
       const current = await tabState(state, tab.id)
-      if (!current.loading && current.generation > 0) return current
+      if (!current.loading && current.generation > 0)
+        return { ...current, targetId: await targetIdOf(state, tab.id) }
     }
-    return tabState(state, tab.id)
+    return { ...(await tabState(state, tab.id)), targetId: await targetIdOf(state, tab.id) }
   }
   if (request.op === 'claim') {
     const grant = args.grant as ChromeGrant
@@ -98,7 +108,11 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
         throw new ChromeFault('staleDocument', 'The selected tab changed. List tabs again.')
       await saveAttached(state)
       await documentStamp(state, grant)
-      await attach(state, grant.tabId)
+      await attach(
+        state,
+        grant.tabId,
+        typeof args.targetId === 'string' ? args.targetId : undefined,
+      )
       attached = true
       await requireGrant(state, grant.leaseId, args.expectedGeneration as number)
       grant.expiresAt = Date.now() + 15_000
@@ -130,7 +144,7 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
     if (request.op === 'stop') {
       state.stoppedTurns.add(ownerKey(grant.owner))
       await state.chrome.storage.session.set({
-        litchStoppedTurns: [...state.stoppedTurns].slice(-100),
+        [state.keys.stopped]: [...state.stoppedTurns].slice(-100),
       })
     }
     await state.revoke(grant.leaseId, request.op)
