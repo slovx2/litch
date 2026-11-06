@@ -385,6 +385,18 @@ test('经理扩展：声明、路由、创建工具/规则、每条投递连接�
     )
     const sessions = specs.find((spec) => spec.name === 'litch_sessions')
     assert.ok(sessions.instructions.includes('Manager sessions'))
+    assert.match(sessions.description, /Delegate user-requested or approved in-scope work/)
+    assert.match(sessions.description, /Scope alone does not authorize self-discovered work/)
+    const startDescription = sessions.tools.find((item: any) => item.name === 'start').description
+    assert.match(startDescription, /Start user-requested or approved in-scope work/)
+    assert.match(startDescription, /self-discovered work the user has not requested or approved/)
+    assert.match(startDescription, /initiation propose with a complete brief/)
+    assert.match(
+      startDescription,
+      /close any corresponding open item as deferred and reference the card/,
+    )
+    assert.match(startDescription, /Out-of-scope work requires a board decision first/)
+    assert.match(startDescription, /Do not use cards for already-authorized work/)
     assert.ok(
       sessions.tools
         .find((item: any) => item.name === 'start')
@@ -491,6 +503,10 @@ test('经理：事件回合直接派线、子树标记、默认 harness、并发
     assert.match(
       childTools.find((spec) => spec.name === 'litch_sessions').instructions,
       /Do not send progress messages to the manager during work unless/,
+    )
+    assert.match(
+      childTools.find((spec) => spec.name === 'litch_sessions').instructions,
+      /outside this assignment.*initiation "propose".*without waiting for the manager/,
     )
     assert.deepEqual(
       (await connection.call('thread/read', { threadId: childId })).thread.litchManager,

@@ -2,6 +2,28 @@
 
 ## Managers
 
+用户要求过或已批准的范围内任务，经理直接开工作线；经理自行发现、用户尚未要求或批准的工作
+（如回报中顺带发现的问题、审查改进点、可选后续工作），会附完整简报放到「建议」页，由用户决定是否开始。
+这些工作不会只留在待排事项中；已有对应事项会标为暂缓并注明建议卡。范围外工作先提看板决策。
+关闭任务卡时，自行发现的工作改记看板决策或事项，需要批准的仍先等用户答复。
+
+Managers directly start in-scope work you requested or approved. Self-discovered work you have not
+requested or approved, such as incidental findings, review improvements or optional follow-ups,
+appears in Suggestions with a full brief for you to start. It is not left only in the backlog;
+any corresponding open item is deferred with a reference to the card. Out-of-scope work first
+requires a board decision. With task cards disabled, findings go into board decisions or items,
+and work requiring approval waits for your answer.
+
+工作线也可以直接为任务外的新发现提建议卡，不必先请经理转提。卡片出现在经理的建议页，经理可推荐，
+也可写明理由忽略无用或重复的卡片。提卡通知只进入回报队列，不单独唤醒或插话打断经理；随后随正常回报
+投递或下一回合带入，读取时也可查看。工作线仍须完成已授权任务，不能把未完成部分改成建议。
+
+Worklines can directly propose out-of-assignment findings. Their cards appear in the manager's
+Suggestions tab for endorsement or dismissal with a reason; the manager does not recreate them.
+Proposal notifications queue without starting or interrupting a manager turn. They travel with
+later report delivery or the next turn and remain readable while queued. Assigned work still
+belongs to the workline and must not be replaced by a suggestion.
+
 经理负责维护「现状」，固定按顺序使用 `### 正在做`、`### 等你`、`### 接下来` 三个 Markdown 小节。
 没有内容的小节整节省略，需要时可加 `### 风险`。每条一行，约 40 字以内，开头的关键词加粗；
 细节用 `#D-n` / `#I-n` 编号指向看板，不在现状里重复。不写大段落，不用表格、代码块或一级、二级标题。

@@ -1530,10 +1530,10 @@ export class SessionTree {
             status: 'completed',
             excerpt: `Workline suggestion awaiting manager review. Use litch_manager.endorse or dismiss with a reason. ${JSON.stringify(proposal)}`,
           },
-          true,
+          false,
         )
+        // 建议随下一次回报投递或经理回合带入，不单独唤醒或插话打断经理。
         this.notesChanged(manager.threadId)
-        this.check(manager.threadId)
       }
     }
     this.scheduleExpiry()

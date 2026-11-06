@@ -204,8 +204,10 @@ function childTools(
           spec.name !== NATIVE_BACKGROUND_NAMESPACE)),
   )
   const manager = tree.managers?.lines.managerFor(parentId)
-  const sessions = sessionTools(tree.host.wrapUp(), tree.host.taskCards(harness))
-  if (manager) sessions.instructions = `${sessions.instructions}\n\n${lineInstructions(manager)}`
+  const taskCards = tree.host.taskCards(harness)
+  const sessions = sessionTools(tree.host.wrapUp(), taskCards)
+  if (manager)
+    sessions.instructions = `${sessions.instructions}\n\n${lineInstructions(manager, taskCards)}`
   return [
     ...inherited,
     ...(tree.host.tasksEnabled?.() &&
