@@ -28,7 +28,7 @@
     "setup": "npm ci && npm ci --prefix packages/claude && npm ci --prefix packages/pi && npm ci --prefix packages/dsh && npm ci --prefix packages/opencode && npm ci --prefix packages/acp && npm ci --prefix packages/antigravity && npm run build",
     "dev": "tsx packages/claude/src/adapter.mts",
     "build": "npm run build --prefix packages/claude && npm run build --prefix packages/pi && npm run build --prefix packages/dsh && npm run build --prefix packages/opencode && npm run build --prefix packages/acp && npm run build --prefix packages/antigravity && npm run build --prefix packages/device && node scripts/build-cli.mjs",
-    "typecheck": "npm run typecheck --prefix packages/claude && npm run typecheck --prefix packages/pi && npm run typecheck --prefix packages/dsh && npm run typecheck --prefix packages/opencode && npm run typecheck --prefix packages/acp && npm run typecheck --prefix packages/antigravity && npm run typecheck --prefix packages/device",
+    "typecheck": "npm run typecheck --prefix packages/claude && npm run typecheck --prefix packages/pi && npm run typecheck --prefix packages/dsh && npm run typecheck --prefix packages/opencode && npm run typecheck --prefix packages/acp && npm run typecheck --prefix packages/antigravity && npm run typecheck --prefix packages/device && npm run typecheck --prefix packages/computer-use",
     "lint": "biome lint packages apps scripts",
     "format": "biome format --write packages apps scripts",
     "check": "biome check packages apps scripts && node scripts/check-versions.mjs && node scripts/check-manual.mjs && node scripts/check-text-sizes.mjs && npm run test:protocol:unit && npm run check:automation-contracts",
@@ -135,6 +135,7 @@
     "client:installer": "npm run installer --prefix apps/desktop",
     "client:check:packed": "npm run check:packed --prefix apps/desktop",
     "test:antigravity": "npm run test --prefix packages/antigravity",
+    "test:computer-use-sdk": "npm run test --prefix packages/computer-use",
     "test:antigravity-sdk": "npm run test:sdk --prefix packages/antigravity",
     "generate:automation-contracts": "node scripts/generate-automation-contracts.mjs --write",
     "check:automation-contracts": "node scripts/check-automation-contracts.mjs"

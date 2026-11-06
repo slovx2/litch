@@ -46,6 +46,9 @@ test('引擎变更覆盖两端集成，原生助手覆盖所属平台', () => {
   assert.ok(
     affectedDomains(['apps/computer-use/Sources/main.swift']).domains.includes('computer-use'),
   )
+  for (const domain of ['client', 'computer-use', 'computer-use-windows']) {
+    assert.ok(affectedDomains(['packages/computer-use/src/runtime.mts']).domains.includes(domain))
+  }
 })
 test('缺失基线或历史分叉不能缩小范围', () => {
   assert.deepEqual(gitImpact('', 'a'.repeat(40)).domains, domains)

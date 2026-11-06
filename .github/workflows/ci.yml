@@ -92,6 +92,7 @@ jobs:
       - run: |
           node scripts/ci/test-shard.mjs device
           npm run test:antigravity
+          npm run test:computer-use-sdk
         id: phase-7
       - run: go test ./...
         id: phase-6
