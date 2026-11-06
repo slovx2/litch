@@ -3,7 +3,7 @@
 // 导航完成后面板上出“要保存……吗？”那一条；界面上没有密码；密码库目录写不进去时点“保存”，提示留着、说原因；
 // 能写了再点，那一条没了、库里多了一条，来源是在内置浏览器里保存的；钥匙串不可用的那种提示只说明、只能关掉。
 // 再登录一次留一条提示，返回的 afterClose 在标签关掉之后核对提示跟着没了。
-// 登录页在回环上，自己起、自己关；safeStorage 在钥匙串里那一条按自检的应用名起名，check-browser.mjs 跑完删掉。
+// 登录页在回环上，自己起、自己关；调用方使用模拟钥匙串，不碰系统条目。
 import { chmodSync, mkdirSync } from 'node:fs'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -43,10 +43,8 @@ export async function checkSavePrompt(options: {
   )
   const nothing = { afterClose: async () => {} }
   const folder = join(app.getPath('userData'), 'browser')
-  // 窗口藏着时合成的鼠标事件进不了网页：这一段起不抢焦点地显示出来，之后也不藏回去（藏回去之后页面算不可见，
-  // requestAnimationFrame 不再跑，后面几段要等它）
-  if (!window.isVisible()) window.showInactive()
-  await sleep(300)
+  // 隐藏窗口也要继续绘制；受信任点击经 CDP 进入页面，不占用用户前台。
+  window.webContents.setBackgroundThrottling(false)
   try {
     const tab = browser.host.page(tabId) as HostTab | undefined
     if (!tab) {
@@ -54,21 +52,27 @@ export async function checkSavePrompt(options: {
       return nothing
     }
     const contents = tab.view.webContents
+    contents.setBackgroundThrottling(false)
     const login = async (username: string, password: string) => {
       await tab.load(`http://127.0.0.1:${port}/login`, 10_000)
+      await tab.cdp('Runtime.evaluate', { expression: 'document.readyState' })
+      await sleep(100)
       const [x, y] = (await contents.executeJavaScript(
         `user.value = ${JSON.stringify(username)}; pass.value = ${JSON.stringify(password)};
         (() => { const r = go.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] })()`,
       )) as [number, number]
-      // 不在前台的窗口偶尔吞掉一次点击：没跳页就再点一次
-      for (let tries = 0; tries < 3 && contents.getURL().endsWith('/login'); tries++) {
-        contents.sendInputEvent({ type: 'mouseMove', x: x - 1, y })
-        contents.sendInputEvent({ type: 'mouseMove', x, y })
-        contents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 })
-        contents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 })
-        const end = Date.now() + 3000
-        while (Date.now() < end && contents.getURL().endsWith('/login')) await sleep(100)
+      for (const type of ['mousePressed', 'mouseReleased']) {
+        await tab.cdp('Input.dispatchMouseEvent', {
+          type,
+          x: Math.round(x),
+          y: Math.round(y),
+          button: 'left',
+          clickCount: 1,
+        })
       }
+      const end = Date.now() + 3000
+      while (Date.now() < end && contents.getURL().endsWith('/login')) await sleep(100)
+      check('保存提示：受信任点击完成登录导航', contents.getURL().endsWith('/welcome'))
     }
 
     // 脚本自己 requestSubmit（会导航）：不算登录提交，不出提示
@@ -90,6 +94,14 @@ export async function checkSavePrompt(options: {
         10_000,
       ),
     )
+    check('保存提示：窗口保持隐藏', !window.isVisible())
+    const hasSave = await until('!!document.querySelector(\'.bw-save [data-act="save-password"]\')')
+    check(
+      '保存提示：存在保存按钮',
+      hasSave,
+      await page("document.querySelector('.bw-save')?.outerHTML ?? null"),
+    )
+    if (!hasSave) return nothing
     check(
       '保存提示：界面上没有密码',
       (await page("document.body.innerText.includes('probe-pass-7')")) === false,

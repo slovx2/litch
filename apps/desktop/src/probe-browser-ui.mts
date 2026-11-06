@@ -13,8 +13,15 @@ import { checkSavePrompt } from './probe-browser-save-prompt.mjs'
 import { checkSignInCard } from './probe-browser-sign-in.mjs'
 import { serveUiResource } from './ui-protocol.mjs'
 
-// 保存提示那一段会用到 safeStorage：钥匙串里那把钥匙按应用名起名，用测试专用的（check-browser.mjs 跑完删掉）
+// 保存提示使用模拟钥匙串，不申请系统授权，也不创建或删除真实钥匙串条目。
 app.setName('Litch Autofill Probe')
+app.commandLine.appendSwitch('use-mock-keychain')
+// 在调用原生显示方法之前阻断；后续子检查不能悄悄把隐藏验收变成前台操作。
+const refuseShow = () => {
+  throw new Error('浏览器面板验收不得显示窗口')
+}
+BrowserWindow.prototype.show = refuseShow
+BrowserWindow.prototype.showInactive = refuseShow
 if (process.env.LITCH_PROFILE) app.setPath('userData', process.env.LITCH_PROFILE)
 const uiRoot = normalize(process.env.LITCH_UI_ROOT ?? '')
 const preload = process.env.LITCH_PROBE_PRELOAD ?? ''
@@ -51,7 +58,13 @@ void app.whenReady().then(async () => {
     width: 1400,
     height: 900,
     show: false,
-    webPreferences: { preload, sandbox: true, contextIsolation: true, nodeIntegration: false },
+    webPreferences: {
+      preload,
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
   })
   const page = (code: string) => window.webContents.executeJavaScript(code)
   /** 等页面里一个条件成立；到点回 false */

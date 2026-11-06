@@ -5,7 +5,7 @@
 //   node scripts/check-browser.mjs --popups-ui 新标签到真实面板的接线（隐藏窗口；先构建 packages/ui）
 //   node scripts/check-browser.mjs --v0     实测：WebContentsView 在面板关着的各种挂法下截图、输入能不能用
 //   node scripts/check-browser.mjs --ui     浏览器面板：真的界面（先构建 packages/ui）对着页面里的模拟核心，
-//                                          量矩形、叠上去、收起摘下、浮层撤下、show 打开面板
+//                                          全程隐藏窗口，CDP 受信任点击，模拟钥匙串；量矩形、收起摘下、浮层撤下、show 打开面板
 //   加 --shown                             V0 那一项改成窗口透明度 0、不接鼠标地显示（对照窗口在屏幕上的情形）
 //   node scripts/check-browser.mjs --autofill
 //                                          用户标签的自动填充和代理读不到密码（src/probe-browser-autofill.mts）：窗口显示在屏幕上，
@@ -150,8 +150,8 @@ const limit = setTimeout(() => child.kill('SIGKILL'), 240_000)
 const code = await new Promise((resolve) => child.on('exit', (exitCode) => resolve(exitCode)))
 clearTimeout(limit)
 rmSync(work, { recursive: true, force: true })
-// 自动填充、面板（保存提示）两项用的 safeStorage 在 macOS 钥匙串里留下的那把钥匙（按自检的应用名起的名，不是 Litch 的）
-if ((autofill || (ui && !popupsUi)) && process.platform === 'darwin') {
+// 自动填充用的测试钥匙串；面板使用模拟钥匙串，不碰系统条目。
+if (autofill && process.platform === 'darwin') {
   spawnSync('security', [
     'delete-generic-password',
     '-s',
