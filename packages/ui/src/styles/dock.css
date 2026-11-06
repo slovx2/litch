@@ -286,18 +286,10 @@
   padding: 0;
   border: 0;
   outline: 0;
-  resize: none;
   background: none;
   color: var(--ink);
   font: inherit;
   font-size: calc(14px * var(--fs));
-  /* 行高写整数像素：输入框的高度跟着内容长，带零头会让下面的对话区跟着抖 */
-  line-height: round(calc(24px * var(--fs)), 1px);
-  /* 跟着内容长高由浏览器做（field-sizing）。以前每打一个字先收成 auto 再量 scrollHeight，
-     会让整页重新布局两次，会话很长时打字跟着卡 */
-  field-sizing: content;
-  /* 矮窗口里给换行的选项条、请求卡片和终端留空间；长草稿在输入框内滚动。 */
-  max-height: min(220px, 30vh);
 }
 .cmp-text::placeholder {
   color: var(--ink-3);
@@ -1167,6 +1159,19 @@ textarea.req-input {
   min-height: calc(72px * var(--fs));
   resize: vertical;
   line-height: 1.5;
+}
+
+/* 主输入框与帖子追问共用浏览器增高，不在输入或组字期间反复收缩、测量再撑开。 */
+.cmp-text,
+textarea.grow-input {
+  height: auto;
+  field-sizing: content;
+  resize: none;
+  overflow-y: auto;
+  /* 整数行高避免内容换行时零头像素带动相邻区域抖动。 */
+  line-height: round(calc(24px * var(--fs)), 1px);
+  /* 矮窗口保留其他操作空间，超过上限才在输入框里滚动。 */
+  max-height: min(220px, 30vh);
 }
 
 /* ---------- 子会话待处理（composer/ChildRequests.tsx）：和待答问题同一种卡片，一个子会话一行 ---------- */

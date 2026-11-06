@@ -364,6 +364,29 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       paneBox.querySelector('[data-act="discussion-close"]')?.getAttribute('aria-label'),
   )
   const cardHeight = d15.getBoundingClientRect().height
+  const growInput = await until('追问自动增高输入框', () =>
+    one<HTMLTextAreaElement>(`${talk('D-15')} [data-act="manager-question-input"]`),
+  )
+  fill(growInput, '短句')
+  await until('追问短句已写入', () => growInput.value === '短句')
+  const minimum = growInput.getBoundingClientRect().height
+  fill(growInput, '第一行\n第二行\n第三行\n第四行')
+  await until('四行追问增高', () => growInput.getBoundingClientRect().height > minimum + 10)
+  paneSeen.growFourLines = growInput.scrollHeight <= growInput.clientHeight + 1
+  const composingHeight = growInput.getBoundingClientRect().height
+  growInput.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
+  growInput.dispatchEvent(new CompositionEvent('compositionupdate', { bubbles: true, data: '中' }))
+  paneSeen.growComposition = growInput.getBoundingClientRect().height === composingHeight
+  growInput.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '中' }))
+  fill(growInput, Array.from({ length: 40 }, (_, i) => `第 ${i} 行`).join('\n'))
+  await until('长追问达到上限', () => growInput.scrollHeight > growInput.clientHeight + 1)
+  paneSeen.growCapped =
+    growInput.getBoundingClientRect().height <= Math.min(220, innerHeight * 0.3) + 1 &&
+    getComputedStyle(growInput).overflowY === 'auto' &&
+    getComputedStyle(growInput).resize === 'none'
+  fill(growInput, '')
+  await until('追问清空恢复高度', () => growInput.getBoundingClientRect().height <= minimum + 1)
+  paneSeen.growCleared = growInput.value === ''
   await click(`${talk('D-15')} [data-question-mode="temporary"]`)
   let questionEnter = true
   const askBackground = async (value: string, count: number) => {
@@ -371,6 +394,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     const input = await until('背景问题输入框', () =>
       one<HTMLTextAreaElement>(`${talk('D-15')} .mg-post-discussion textarea`),
     )
+    const emptyHeight = input.getBoundingClientRect().height
     fill(input, value)
     await until(
       '背景提问按钮可用',
@@ -400,6 +424,8 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
         input.value === '' &&
         !input.disabled,
     )
+    paneSeen.growSent =
+      paneSeen.growSent !== false && input.getBoundingClientRect().height <= emptyHeight + 1
   }
   const turnsBeforeQuestions = document.querySelectorAll('.mg-chat .turn').length
   await askBackground('为什么推荐这个选项？', 1)

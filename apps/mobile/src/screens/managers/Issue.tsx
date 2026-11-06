@@ -23,6 +23,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type TextInputProps,
   useWindowDimensions,
   View,
 } from 'react-native'
@@ -39,6 +40,7 @@ import {
   questionMode,
   rememberPostCollapsed,
 } from '../../../../../packages/ui/src/manager/post-presentation.ts'
+import { useGrow } from '../../detail/composer/grow'
 import { ProposalActs } from '../../detail/proposals/ProposalActs'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useReplica } from '../../shell/services'
@@ -110,6 +112,13 @@ function OptionChoice({
       </View>
     </Pressable>
   )
+}
+
+// 抽屉打开才挂载输入框；增高钩子随输入框挂载，重开已有草稿也会立即测量。
+function QuestionInput(props: TextInputProps) {
+  const input = useRef<TextInput>(null)
+  const grow = useGrow(input, props.value ?? '')
+  return <TextInput {...props} ref={input} {...grow} />
 }
 
 export function Issue({
@@ -503,7 +512,7 @@ export function Issue({
         ) : null}
       </View>
       <View style={styles.askRow}>
-        <TextInput
+        <QuestionInput
           testID={`post-question:${post.id}`}
           multiline
           accessibilityLabel={questionPrompt}

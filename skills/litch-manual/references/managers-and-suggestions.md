@@ -456,6 +456,8 @@ the running mark a single ring.
 取消答案修改也保留同一决策的追问草稿。追问入口旁的草稿标记表示有尚未提交的追问。
 写了草稿还没提交，议题却在别处结束了（决策被经理记下答复、关闭、忽略或撤回，请你做在别处交付、回复或被取消，建议已处理），草稿不删，但不再计入底部“N 项草稿，尚未提交”和侧栏的草稿数，也不会随“提交给经理”发出。卡片上先是答复、关闭或忽略的记录，再写明草稿还在，可“查看草稿”或“丢弃”；丢弃要再点一次“确认丢弃”，丢了不能恢复。决策重新打开（含撤销忽略）且问题本身没改时，草稿自动恢复、可直接提交；问题改过的仍要先确认。手机相同。
 原帖操作留在议题卡中，追问时间线通过卡片标题行的讨论入口打开，追问方式可切换，记录标明发言人。
+追问输入框随内容自动增高，达到上限后在框内滚动；发送或清空后收回，不需手动拖拽。桌面上限与主输入框一致，手机沿用手机主输入框的增高方式。
+Follow-up inputs grow with their content up to a limit, then scroll internally. Sending or clearing the text shrinks them again; no manual resizing is needed. Desktop uses the main composer’s height limit, and mobile uses its main composer’s growth behavior.
 动态时间沿用消息时间格式，非当天显示星期或日期，悬停查看完整日期与时刻。
 
 看板挤压对话时，输入框底栏保持单行，模型、权限等选项文字按可用宽度省略，完整当前值可通过悬停或读屏查看。

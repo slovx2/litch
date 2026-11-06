@@ -1577,7 +1577,7 @@
 .mg-post-forward {
   margin-top: 8px;
 }
-/* 分屏矮时让问答多露几行：输入框起始高度收小，仍可往下拉 */
+/* 分屏输入从两行起，随内容增长到主输入框的上限。 */
 .mg-talk-body textarea.mg-post-input {
   min-height: calc(48px * var(--fs));
 }
