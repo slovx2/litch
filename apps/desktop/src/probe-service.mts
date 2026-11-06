@@ -229,8 +229,24 @@ export async function mockServiceProbe(): Promise<MockServiceProbe> {
   const busyFolds = `${folded}>${section()?.dataset.open}`
 
   // ---- 三、现在再试一次：回合还停着，照旧没换，原因换成现在的 ----
+  // 记下点之前和之后的样子：CI 上偶发等不到时，失败信息里能看出是没点到、被拒还是一闪而过
+  const retryTrace: string[] = []
+  const traceRetry = (when: string) => {
+    const button = retryButton()
+    const toasts = all('.toast .toast-text').map(text).join('/')
+    retryTrace.push(
+      `${when}=${button ? `${button.disabled}:${text(button)}` : '没有按钮'}|${note('busy') ? 'busy' : '-'}|${toasts}`,
+    )
+  }
+  traceRetry('点前')
   retryButton()?.click()
-  await until('按钮变成“正在重新连接”', () => retryButton()?.disabled)
+  await until('按钮变成“正在重新连接”', () => {
+    if (retryButton()?.disabled) return true
+    if (retryTrace.length < 12) traceRetry(`${retryTrace.length}`)
+    return false
+  }).catch((error: Error) => {
+    throw new Error(`${error.message}；${retryTrace.join('；')}`)
+  })
   const retrying = `${retryButton()?.disabled}:${text(retryButton())}`
   const stillToast = await until('“还不闲”的提示', toast)
   await until('按钮回来', () => retryButton()?.disabled === false)
