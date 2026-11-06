@@ -1,0 +1,58 @@
+# 模拟核心：首页的全局置顶区；设备会话列表里长按一个会话，新建本机分组把它放进去，
+# 回首页点进组详情看到它，长按移出后组空了。手机不拖放，全靠长按的动作单
+appId: dev.litch.app
+name: mock-置顶与本机分组
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+# 置顶的会话在首页最上面的置顶区，设备会话列表里不再出现
+- scrollUntilVisible:
+    element:
+      id: pins:local:p1
+    direction: UP
+- scrollUntilVisible:
+    element:
+      id: device:local
+    direction: DOWN
+- tapOn:
+    id: device:local
+- extendedWaitUntil:
+    visible:
+      id: sessions:list
+    timeout: 15000
+- assertNotVisible:
+    id: session:p1
+- longPressOn:
+    id: session:s2
+- tapOn:
+    id: menu:local
+- tapOn:
+    id: menu:local:new
+- tapOn:
+    id: prompt:input
+- inputText: 发版跟进
+- tapOn:
+    id: prompt:ok
+- back
+- scrollUntilVisible:
+    element:
+      text: 发版跟进
+    direction: DOWN
+- tapOn:
+    text: 发版跟进
+- extendedWaitUntil:
+    visible:
+      id: localGroup:local:s2
+    timeout: 15000
+- longPressOn:
+    id: localGroup:local:s2
+- tapOn:
+    id: menu:member:leave
+- extendedWaitUntil:
+    visible:
+      id: localGroup:empty
+    timeout: 10000
