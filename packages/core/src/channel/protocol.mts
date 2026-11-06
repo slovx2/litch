@@ -1126,6 +1126,11 @@ export interface Commands {
     params: { deviceId: string; root: string; path: string; format: PreviewKind }
     result: FilePreview
   }
+  /** 显式 Markdown 图片：新设备内容探测/受控公网下载；旧设备只走有界本地预览。 */
+  'media.image': {
+    params: { deviceId: string; source: string }
+    result: FilePreview
+  }
   /**
    * 在根下面模糊找文件，最多几十条。同一个根上后来的一次会让前一次以 cancelled 结束；
    * 界面自己取消（用户接着打字了）也是 cancelled

@@ -39,6 +39,7 @@
     "expo-secure-store": "57.0.4",
     "expo-status-bar": "57.0.1",
     "katex": "0.16.47",
+    "marked": "18.0.14",
     "react": "19.2.3",
     "react-native": "0.86.3",
     "react-native-enriched-markdown": "1.1.0",

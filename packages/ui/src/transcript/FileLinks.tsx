@@ -33,12 +33,15 @@ import { openInFiles } from '../files/state.ts'
 import { ExternalLink } from './ExternalLink.tsx'
 
 export interface FileLinks {
+  deviceId?: string
+  connection?: DeviceView['connection'] | undefined
   scope: FileScope
   resolve?(ref: FileRef, href: string): Promise<FileLinkResolution>
   open(ref: FileRef, target?: FileLinkTarget, result?: FileLinkResolution): void
 }
 
 const Context = createContext<FileLinks | null>(null)
+export const useFileLinks = () => useContext(Context)
 
 export const FileLinksProvider = Context.Provider
 
@@ -52,7 +55,9 @@ export function useSessionFileLinks(
 ): FileLinks | null {
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId))
   const { channel } = useServices()
-  const os = useKey<DeviceView>(keys.device(deviceId))?.os
+  const device = useKey<DeviceView>(keys.device(deviceId))
+  const os = device?.os
+  const connection = device?.connection
   const workspaceId = summary?.workspaceId ?? null
   const cwd = summary?.cwd ?? ''
   const roots = workspaces?.find((entry) => entry.id === workspaceId)?.roots ?? []
@@ -65,6 +70,8 @@ export function useSessionFileLinks(
     if (!scope) return null
     const root = scope.root
     return {
+      deviceId,
+      connection,
       scope,
       resolve: (ref, href) => channel.command('files.resolve', { deviceId, root, ref, href }),
       open: (ref, target, result) =>
@@ -80,7 +87,17 @@ export function useSessionFileLinks(
           ...(ref.fragment ? { fragment: ref.fragment } : {}),
         }),
     }
-  }, [deviceId, summary !== undefined, summary?.worktree, workspaceId, cwd, rootsKey, os, channel])
+  }, [
+    deviceId,
+    summary !== undefined,
+    summary?.worktree,
+    workspaceId,
+    cwd,
+    rootsKey,
+    os,
+    channel,
+    connection,
+  ])
 }
 
 function FileLink({

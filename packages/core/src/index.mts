@@ -243,6 +243,7 @@ export {
   managerReferencesResolver,
   mapManagerMarkdown,
 } from './manager-references.mjs'
+export { type ImageTarget, transcriptImageTarget } from './media.mjs'
 export { createMockCore, type MockCore, type MockCoreOptions } from './mock/mock-core.mjs'
 export type { SampleLang } from './mock/sample-text.mjs'
 export type * from './model.mjs'

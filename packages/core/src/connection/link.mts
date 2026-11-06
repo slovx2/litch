@@ -215,6 +215,7 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.threadCapabilities,
                 EXTENSION.acpControls,
                 EXTENSION.filePreview,
+                EXTENSION.mediaImages,
                 EXTENSION.fileDownload,
                 EXTENSION.fileAttachments,
                 EXTENSION.harness,

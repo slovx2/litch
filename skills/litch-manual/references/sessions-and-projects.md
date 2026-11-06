@@ -437,6 +437,17 @@ explain it:
 - **文件自动刷新**：桌面和手机打开文件页时，展开目录中的新增、删除和重命名自动更新，保留展开和选中状态。当前预览随文件改写重新读取；删除或重命名后原路径显示不存在。收起目录、关闭面板或离开手机文件页时停止相关监听；重新打开或重连后重新读取。批量变化会合并；设备不支持 `fs/watch` 时仍可手动刷新。
 - **在文件管理器中打开本机文件**：本机文件不显示另存操作。文件树的右键菜单、源码和渲染预览的标题栏与右键菜单、附件卡片提供此入口；对话中的文件链接打开预览后也可使用。macOS 显示“在 Finder 中打开”，Windows 和 Linux 显示“在文件管理器中打开”。文件会打开所在目录并选中，目录则打开自身；文件已删除或无法访问时会明确提示。远程会话中标为本机的附件仍按本机文件处理。
 - **远程文件另存到本地电脑**：远程设备的文件树右键菜单、当前预览的右键菜单及标题栏、附件卡片均可选择“另存到本地…”。系统保存对话框的目标属于运行客户端的这台电脑，默认使用原文件名，重名确认由系统处理。传输显示进度并可取消；完成后可打开文件或显示所在文件夹。只支持单个普通文件，需要设备服务提供 `fileDownload`；不支持时提示升级，不回退整文件读取。大文件按 256 KiB 分块读取和落盘；来源变化会停止，完成前不覆盖目标。手机尚无系统导出入口。
+- **Images in replies (desktop and phone)**: `![description](path-or-url)` displays a thumbnail.
+  Relative paths use the conversation's working directory; absolute paths may point anywhere on
+  its device. Paths containing `..` and network shares are rejected. The device probes content before
+  reading the image, so a renamed non-image does not become a preview. Click to enlarge: desktop
+  supports zoom, drag, previous/next, copy, save and Show in file browser; phone supports pinch and drag.
+  HTTP/HTTPS images are lazily downloaded by the conversation's device, without cookies or Referer,
+  using public-IP-only DNS-pinned connections. Private addresses and unsafe redirects are rejected.
+  Old devices and failed external downloads remain links; the viewing app never downloads directly.
+  Static PNG/JPEG/GIF/WebP and safe SVG are supported, with 8 MiB/image and 1 MiB/SVG limits. Corrupt,
+  animated or oversized images become file cards. Plain links, code and HTML do not embed media.
+  Audio/video embedding and tool-image history recovery are not part of this first image release.
 - **File previews (desktop)**: the Files tab opens tree/search results and file links read-only.
   Markdown renders by default (Source is available; line-number links open source). Static images
   and SVG can zoom. PDF supports pages, scroll, zoom and text selection. CSV/TSV shows strings, never

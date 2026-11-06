@@ -30,7 +30,12 @@ import type {
   FileSearchView,
   FolderListing,
 } from '../model-files.mjs'
-import { type FilePreview, PREVIEW_LIMIT, type PreviewKind } from '../model-preview.mjs'
+import {
+  type FilePreview,
+  PREVIEW_LIMIT,
+  type PreviewKind,
+  previewKind,
+} from '../model-preview.mjs'
 import { phrase } from '../phrase.mjs'
 import type { FileRef } from '../projection/file-refs.mjs'
 import {
@@ -55,6 +60,7 @@ import { resolveFileLink } from './file-links.mjs'
 import { createFileWatches } from './file-watches.mjs'
 
 export interface FilesHost {
+  imagesSupported?(): boolean
   attachmentsSupported?(): boolean
   previewSupported?(): boolean
   downloadSupported?(): boolean
@@ -77,6 +83,7 @@ export interface FilesHost {
 }
 
 export interface Files {
+  image(source: string, signal?: AbortSignalLike): Promise<FilePreview>
   /** 复用文件面板的路径范围校验；只返回规范路径，不读文件。 */
   locate(root: string, path: string): { root: string; path: string }
 
@@ -358,6 +365,53 @@ export function createFiles(host: FilesHost): Files {
   }
 
   const files: Files = {
+    async image(source, signal) {
+      mustBeOnline()
+      const remote = /^https?:\/\//i.test(source)
+      if (
+        !remote &&
+        (!isAbsolutePath(source) ||
+          /^[\\/]{2}/.test(source) ||
+          /[\u0000-\u001f\u007f]/.test(source) ||
+          source.split(/[\\/]/).includes('..'))
+      )
+        return { kind: 'invalid', path: source }
+      if (host.imagesSupported?.()) {
+        const result = await host.request(
+          'litch/media/readImage',
+          { source },
+          { timeoutMs: 20_000, ...(signal ? { signal } : {}) },
+        )
+        if (
+          result.kind === 'ready' &&
+          (!['image', 'svg'].includes(result.format) ||
+            !Number.isSafeInteger(result.bytes) ||
+            result.bytes < 1 ||
+            typeof result.dataBase64 !== 'string' ||
+            result.dataBase64.length % 4 !== 0 ||
+            !/^[A-Za-z0-9+/]*={0,2}$/.test(result.dataBase64) ||
+            base64Bytes(result.dataBase64) !== result.bytes)
+        )
+          return { kind: 'invalid', path: source }
+        if (
+          result.kind === 'ready' &&
+          (result.bytes > PREVIEW_LIMIT[result.format] ||
+            result.dataBase64.length > Math.ceil(PREVIEW_LIMIT[result.format] / 3) * 4)
+        )
+          return {
+            kind: 'tooLarge',
+            path: source,
+            bytes: result.bytes,
+            limit: PREVIEW_LIMIT[result.format],
+          }
+        return { ...result, path: source }
+      }
+      const format = previewKind(source)
+      if (remote || (format !== 'image' && format !== 'svg'))
+        return { kind: 'unsupported', path: source }
+      const root = /^[a-z]:[\\/]/i.test(source) ? `${source.slice(0, 2)}/` : '/'
+      return files.preview(root, source, format, signal)
+    },
     locate,
     async attachmentStatus(path, signal) {
       if (!host.online() || !host.attachmentsSupported?.()) return { state: 'unknown' }

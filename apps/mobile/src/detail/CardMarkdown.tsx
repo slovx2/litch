@@ -3,11 +3,11 @@
 // 不在对话区里的（输入框上方排着的回报）没有对话区：只认网址
 import { useContext, useMemo } from 'react'
 import { Linking } from 'react-native'
-import { EnrichedMarkdownText } from 'react-native-enriched-markdown'
 import { useTheme } from '../ui/theme'
 import { TranscriptContext } from './context'
 import { isWebUrl, linkify } from './links'
 import { cardMarkdownStyleOf } from './markdownStyle'
+import { EnrichedMarkdownText } from './media/MediaMarkdown'
 
 export function CardMarkdown({ text }: { text: string }) {
   const theme = useTheme()

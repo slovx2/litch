@@ -1253,6 +1253,10 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId, root, path, format } = params as Commands['files.preview']['params']
           return await deviceOf(deviceId).files.preview(root, path, format, signal)
         }
+        case 'media.image': {
+          const { deviceId, source } = params as Commands['media.image']['params']
+          return await deviceOf(deviceId).files.image(source, signal)
+        }
         case 'files.readChunk': {
           const { deviceId, root, path, offset, revision } =
             params as Commands['files.readChunk']['params']

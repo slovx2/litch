@@ -1,4 +1,11 @@
 export const zhPreview = {
+  'media.enlarge': '放大图片：{name}',
+  'media.previous': '上一张',
+  'media.next': '下一张',
+  'media.fit': '适应窗口',
+  'media.copy': '复制图片',
+  'media.save': '保存图片',
+  'media.reveal': '在文件浏览器中显示',
   'preview.zoomIn': '放大',
   'preview.zoomOut': '缩小',
   'preview.view': '预览',

@@ -647,6 +647,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let fileAttachmentsSupported = false
   let fileDownloadSupported = false
   let filePreviewSupported = false
+  let mediaImagesSupported = false
   let powerSupported = false
   let recoverySupported = false
   /** 对面有没有可重连的终端（deviceProcesses 扩展）。认出来之前、对面不是设备服务时都是没有 */
@@ -1801,6 +1802,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     fileAttachmentsSupported = false
     fileDownloadSupported = false
     filePreviewSupported = false
+    mediaImagesSupported = false
     turnNotices = false
     pathsSupported = false
     try {
@@ -1827,6 +1829,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
           info.device.extensions?.includes(EXTENSION.fileAttachments) === true
         fileDownloadSupported = info.device.extensions?.includes(EXTENSION.fileDownload) === true
         filePreviewSupported = info.device.extensions?.includes(EXTENSION.filePreview) === true
+        mediaImagesSupported = info.device.extensions?.includes(EXTENSION.mediaImages) === true
         configurable = info.device.extensions?.includes(EXTENSION.harnessConfig) === true
         harnesses = info.harnesses.map((entry) => withConfig(harnessFromInfo(entry)))
         for (const entry of info.harnesses) remember(entry.id, termsOf(entry))
@@ -2710,6 +2713,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   })
   const files = createFiles({
     previewSupported: () => filePreviewSupported,
+    imagesSupported: () => mediaImagesSupported,
     downloadSupported: () => fileDownloadSupported,
     attachmentsSupported: () => fileAttachmentsSupported,
     clock: options.clock,

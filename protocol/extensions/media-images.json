@@ -1,0 +1,68 @@
+{
+  "extension": "mediaImages",
+  "description": "显式对话图片的设备侧有界内容探测与受控公网下载。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "mediaImages" }
+    }
+  },
+  "undeclared": "请求返回 extensionRequired；没有主动通知或标准条目形状变化。旧设备回到 filePreview 的本地扩展名限量读取，外网退回链接。",
+  "rules": [
+    "调用端必须经现有认证连接，双方都声明 mediaImages。接口不注册为模型工具。",
+    "source 是设备绝对路径或 http/https 地址。相对路径由核心按会话 cwd 解析。拒绝 .. 段、UNC、控制字符和 URL 凭据。",
+    "本地先验证普通文件和大小，再探测最多 4096 字节文件头；不是图片则不读取正文。读取后复验路径与文件身份。",
+    "外网仅允许公网 IP；DNS 全部结果检查后固定到其中一个 IP 连接，保留 Host/SNI 与证书验证；每次跳转重新检查，最多四次。禁止 Cookie/Referer/Authorization 和压缩传输。",
+    "单图 8 MiB，SVG 1 MiB，整个下载最长 15 秒。全设备最多四次并发，连接关闭取消下载。客户端还要核验像素、完整格式和 SVG 静态子集。",
+    "字节只在请求应答中返回，不进入设备历史、不广播；标准 fs/readFile 完全不改。"
+  ],
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "method": "litch/media/readImage",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source"],
+        "properties": { "source": { "type": "string", "minLength": 1, "maxLength": 8192 } }
+      },
+      "response": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "format", "dataBase64", "bytes"],
+            "properties": {
+              "kind": { "const": "ready" },
+              "format": { "enum": ["image", "svg"] },
+              "dataBase64": { "type": "string" },
+              "bytes": { "type": "integer", "minimum": 0, "maximum": 8388608 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind"],
+            "properties": {
+              "kind": {
+                "enum": ["unsupported", "missing", "invalid", "notFile", "changed", "busy"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "bytes", "limit"],
+            "properties": {
+              "kind": { "const": "tooLarge" },
+              "bytes": { "type": "integer" },
+              "limit": { "type": "integer" }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

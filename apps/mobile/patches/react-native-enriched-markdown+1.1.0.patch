@@ -1391,3 +1391,28 @@ diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/c
    customSelectionActionModeCallback = createSelectionActionModeCallback(this)
    // SmartSelectSprite crashes with "Center point is not inside any of the
    // rectangles!" when Layout.getSelection returns empty rects near an
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/ImageSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/ImageSpan.kt
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/ImageSpan.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/ImageSpan.kt
+@@ -109,4 +109,6 @@
+   private fun loadImage() {
++    // Litch 图片只经设备受控下载和独立媒体组件显示，原生 Markdown 不读任何 URL。
++    if (imageUrl.isNotEmpty()) return
+     val scheme = Uri.parse(imageUrl).scheme?.lowercase()
+     if (scheme == "http" || scheme == "https") {
+       ImageDownloader.download(context, imageUrl, requestHeaders) { bitmap ->
+diff --git a/node_modules/react-native-enriched-markdown/ios/utils/ENRMImageDownloader.m b/node_modules/react-native-enriched-markdown/ios/utils/ENRMImageDownloader.m
+--- a/node_modules/react-native-enriched-markdown/ios/utils/ENRMImageDownloader.m
++++ b/node_modules/react-native-enriched-markdown/ios/utils/ENRMImageDownloader.m
+@@ -70,6 +70,11 @@
+             headers:(NSDictionary<NSString *, NSString *> *)headers
+          completion:(ENRMImageDownloadCompletion)completion
+ {
++  // Litch 图片只经设备受控下载和独立媒体组件显示，禁止原生 Markdown 旁路读取。
++  if (url.length > 0) {
++    completion(nil);
++    return;
++  }
+   if (url.length == 0) {
+     completion(nil);
+     return;

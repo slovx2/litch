@@ -13,6 +13,7 @@ import {
   DEVICE_PROCESS_LIST,
   DEVICE_PROCESS_REMOVE,
 } from '../../protocol/src/device-processes.mjs'
+import { MEDIA_IMAGE_METHOD, MEDIA_IMAGES_EXTENSION } from '../../protocol/src/media-images.mjs'
 import { PATH_PICKER_EXTENSION, PATH_PICKER_METHOD } from '../../protocol/src/path-picker.mjs'
 import { FilesystemRpc } from '../../shared/src/filesystem-rpc.mjs'
 import { FuzzyFileSearch, FuzzySearchSessions } from '../../shared/src/fuzzy-session.mjs'
@@ -28,6 +29,7 @@ import {
   type ProcessLimits,
 } from './device-processes.mjs'
 import { ConnectionFlow, DEFAULT_FLOW, type FlowLimits } from './flow.mjs'
+import { MediaImages } from './media-images.mjs'
 import { listDevicePaths } from './path-picker.mjs'
 import { DeviceError, isObject } from './wire.mjs'
 
@@ -46,6 +48,7 @@ export class DeviceLayer {
   // command/exec 在聚合面不提供，命令策略用不上
   readonly processes = new ProcessRpc((command) => command)
   readonly files = new FilesystemRpc()
+  readonly images = new MediaImages()
   /** 属于设备的进程。起进程用的是上面那一份实现，所以设备进程退出时它们一起结束 */
   readonly deviceProcesses: DeviceProcesses
   readonly flow: FlowLimits
@@ -62,12 +65,14 @@ export class DeviceLayer {
 
   /** 一条连接断了：它自己的进程结束，它挂着的设备进程只是解除挂接 */
   closePeer(peerId: string): void {
+    this.images.close(peerId)
     this.processes.closePeer(peerId)
     this.files.closePeer(peerId)
     this.deviceProcesses.closeConnection(peerId)
   }
 
   async close(): Promise<void> {
+    this.images.close()
     this.files.close()
     this.deviceProcesses.close()
     // 连接自己的和属于设备的进程都在这一份里，一起结束并等它们退出，不留孤儿
@@ -115,6 +120,13 @@ export class DeviceCalls {
   call(method: string, params: unknown): unknown {
     const raw = isObject(params) ? params : {}
     const fields = nativeWirePaths(raw)
+    if (method === MEDIA_IMAGE_METHOD) {
+      if (!this.connection.declares(MEDIA_IMAGES_EXTENSION))
+        throw new DeviceError('extensionRequired', 'Declare mediaImages to load images.', {
+          required: [MEDIA_IMAGES_EXTENSION],
+        })
+      return this.layer.images.read(this.connection.id, raw.source)
+    }
     if (method === PATH_PICKER_METHOD) {
       if (!this.connection.declares(PATH_PICKER_EXTENSION))
         throw new DeviceError('extensionRequired', 'Declare devicePaths to browse paths.', {

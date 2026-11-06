@@ -22,7 +22,6 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native'
-import { EnrichedMarkdownText } from 'react-native-enriched-markdown'
 import {
   duration,
   elapsed,
@@ -51,6 +50,7 @@ import { linkIssues } from './issue-links'
 import { fileHref, linkify } from './links'
 import { MessageCopy } from './MessageCopy'
 import { markdownStyleOf } from './markdownStyle'
+import { EnrichedMarkdownText } from './media/MediaMarkdown'
 import { MermaidCard } from './mermaid/MermaidCard'
 import { splitMermaid } from './mermaid/segments'
 import { Recovery } from './Recovery'
@@ -286,7 +286,7 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
   const known = whole ? frozen.get(row) : undefined
   const height = !row.open && known?.width === width ? known.height : null
   const freeze =
-    !whole || row.open || height !== null || !experiment.freeze
+    !whole || markdown.includes('![') || row.open || height !== null || !experiment.freeze
       ? undefined
       : (event: LayoutChangeEvent) => {
           frozen.set(row, { width, height: event.nativeEvent.layout.height })
@@ -302,6 +302,7 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
     <EnrichedMarkdownText
       key={key}
       markdown={text}
+      streaming={row.open}
       flavor="github"
       markdownStyle={markdownStyleOf(theme)}
       selectable={selecting}

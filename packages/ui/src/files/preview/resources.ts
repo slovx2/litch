@@ -12,19 +12,54 @@ export class PreviewResources {
   private images = new Set<string>()
   private imageBytes = 0
   private pixels = new Map<string, number>()
+  private urls = new Map<
+    string,
+    { image: { url: string; width: number; height: number }; refs: number; revoke(): void }
+  >()
+  /** 同一消息重复引用同一图片时共用一个 Blob URL，避免重复解码绕过像素预算。 */
+  imageLease(
+    key: string,
+    create: () => { url: string; width: number; height: number },
+    revoke: (url: string) => void,
+  ) {
+    let entry = this.urls.get(key)
+    if (!entry) {
+      const image = create()
+      entry = { image, refs: 0, revoke: () => revoke(image.url) }
+      this.urls.set(key, entry)
+    }
+    const owned = entry
+    owned.refs++
+    let released = false
+    return {
+      image: owned.image,
+      release: () => {
+        if (released) return
+        released = true
+        if (this.urls.get(key) !== owned) return
+        if (--owned.refs === 0) {
+          owned.revoke()
+          this.urls.delete(key)
+        }
+      },
+    }
+  }
   /** 同一文档的解码像素总额，防止小压缩图累计占用大量显存。 */
   claimPixels(key: string, count: number): boolean {
     if (this.pixels.has(key)) return true
-    if (count + [...this.pixels.values()].reduce((sum, n) => sum + n, 0) > 40_000_000) return false
+    if (count + [...this.pixels.values()].reduce((sum, n) => sum + n, 0) > this.pixelLimit)
+      return false
     this.pixels.set(key, count)
     return true
   }
   readonly abort = new AbortController()
 
-  constructor(privateRead: Read) {
+  constructor(privateRead: Read, pixelLimit = 40_000_000) {
     this.read = privateRead
+    this.pixelLimit = pixelLimit
   }
   private read: Read
+  private pixelLimit: number
 
   async load(scope: PreviewScope, format: PreviewKind, image = false): Promise<FilePreview> {
     const key = JSON.stringify([scope.deviceId, scope.root, scope.path, format])
@@ -45,7 +80,8 @@ export class PreviewResources {
     image: boolean,
     key: string,
   ): Promise<FilePreview> {
-    if (this.abort.signal.aborted) throw new DOMException('Cancelled', 'AbortError')
+    if (this.abort.signal.aborted)
+      throw Object.assign(new Error('Cancelled'), { name: 'AbortError' })
     const cached = this.cache.get(key)
     if (cached) return cached
     if (image && !this.images.has(key)) {
@@ -55,7 +91,8 @@ export class PreviewResources {
     }
     if (this.running >= 2) await new Promise<void>((resolve) => this.queue.push(resolve))
     else this.running++
-    if (this.abort.signal.aborted) throw new DOMException('Cancelled', 'AbortError')
+    if (this.abort.signal.aborted)
+      throw Object.assign(new Error('Cancelled'), { name: 'AbortError' })
     try {
       if (image && this.imageBytes >= 16 * 1024 * 1024)
         return {
@@ -65,7 +102,8 @@ export class PreviewResources {
           limit: 16 * 1024 * 1024,
         }
       const content = await this.read(scope, format, this.abort.signal)
-      if (this.abort.signal.aborted) throw new DOMException('Cancelled', 'AbortError')
+      if (this.abort.signal.aborted)
+        throw Object.assign(new Error('Cancelled'), { name: 'AbortError' })
       if (content.kind === 'ready') {
         if (image) {
           this.imageBytes += content.bytes
@@ -105,6 +143,8 @@ export class PreviewResources {
     this.cache.clear()
     this.pending.clear()
     this.pixels.clear()
+    for (const entry of this.urls.values()) entry.revoke()
+    this.urls.clear()
     this.used = 0
   }
 }

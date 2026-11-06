@@ -19,6 +19,7 @@ import { encodeBase64, textToBase64 } from '../text/bytes.mjs'
 import { insideRoot, normalizePath, relativeTo } from '../text/paths.mjs'
 import { OUTSIDE_FILE_DATA, OUTSIDE_FILE_ROOT } from './sample-file-links.mjs'
 import { type SampleFiles, sampleFiles } from './sample-files.mjs'
+import { sampleImage } from './sample-media.mjs'
 import type { SampleLang } from './sample-text.mjs'
 
 export interface MockFilesHost {
@@ -371,6 +372,14 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
         signal,
       )
       return { ...content, path: outward(root, content.path) }
+    },
+    async 'media.image'({ deviceId, source }, signal) {
+      const sample = sampleImage(source)
+      if (sample) return sample
+      if (/^https?:\/\//i.test(source)) return { kind: 'unsupported' as const, path: source }
+      for (const known of host.rootsOf(deviceId)) filesOf(deviceId, known)
+      const root = /^[a-z]:/i.test(source) ? `${source.slice(0, 2)}/` : '/'
+      return filesOf(deviceId, root).image(expand(source), signal)
     },
 
     async 'files.attachmentStatus'() {

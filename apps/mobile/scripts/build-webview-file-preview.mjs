@@ -28,7 +28,8 @@ const page = (code, module = false) =>
 const imageHtml = page(
   [
     `const IMAGE_BYTES = ${PREVIEW_LIMIT.image};`,
-    shared('image-info.ts'),
+    stripTypeScriptTypes(read(resolve(ui, '../core/src/image-info.mts'))),
+    shared('image-info.ts').replace(/^import .*\n|^export \{ imageInfo \}.*\n/gm, ''),
     source('file-preview-gestures.js'),
     source('file-preview-image.js'),
   ].join('\n'),
