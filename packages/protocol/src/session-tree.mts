@@ -146,9 +146,9 @@ export const SESSION_TREE_LIMITS = {
   proposalTtlSeconds: 7 * 24 * 3600,
   /** 一条用户消息之后最多自动唤醒父会话几次 */
   wakesPerUserMessage: 50,
-  /** 一个会话同时最多有几个没结束的子会话（直接子女） */
+  /** 普通会话的默认直接子会话并发保护；经理子树由 dispatch.maxRunningLines 覆盖 */
   liveChildren: 8,
-  /** 同一棵树同时运行/启动的会话数（含根会话） */
+  /** 普通会话树同时占槽的上限（含根会话）；经理子树由 dispatch.maxRunningLines 覆盖 */
   liveTree: 24,
   /** 子会话最深层级，根为第 0 层 */
   maxDepth: 4,

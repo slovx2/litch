@@ -62,12 +62,7 @@ export class ManagerLines {
             ? thread.status.activeFlags
             : []
         const waiting = this.tree.pendingRequests(child.threadId).length > 0 || flags.length > 0
-        const active = this.tree.isActive(child.threadId) || state === 'active'
-        const running =
-          active ||
-          waiting ||
-          this.tree.host.backgroundRunning(child.threadId) > 0 ||
-          this.tree.host.continuationPending?.(child.threadId) === true
+        const running = this.tree.occupiesSlot(child.threadId)
         const worktree =
           this.tree.host.worktrees?.forThread(child.threadId) ??
           (typeof thread?.cwd === 'string'
@@ -138,18 +133,23 @@ export class ManagerLines {
       throw new ManagerError('managerEnded', 'This manager has ended.')
     const lines = this.lines(manager.id)
     if (threadId && lines.some((line) => line.threadId === threadId && line.running)) return noop
-    const held = [...this.reserved.values()].filter(
-      (entry) =>
-        entry.managerId === manager.id &&
-        !lines.some((line) => line.threadId === entry.threadId && line.running),
-    ).length
-    const running = lines.filter((line) => line.running).length + held
+    const occupied = new Set(lines.filter((line) => line.running).map((line) => line.threadId))
+    for (const hold of this.tree.store.childStarts())
+      if (this.managerFor(hold.parentId)?.id === manager.id) occupied.add(hold.threadId)
+    let unnamed = 0
+    for (const entry of this.reserved.values()) {
+      if (entry.managerId !== manager.id) continue
+      if (entry.threadId) occupied.add(entry.threadId)
+      else unnamed++
+    }
+    if (threadId && occupied.has(threadId)) return noop
+    const running = occupied.size + unnamed
     const limit =
       this.store.manager(manager.id)?.dispatch.maxRunningLines ?? manager.dispatch.maxRunningLines
     if (running >= limit)
       throw new ManagerError(
         'lineLimitReached',
-        `This manager already has ${running} running lines (limit ${limit}). Finish or stop a line before starting more work.`,
+        `Manager workline capacity: ${running} running or starting lines (limit ${limit}, dispatch.maxRunningLines). Finish or stop a line before starting more work.`,
         { limit, runningLines: running },
       )
     const key = randomUUID()

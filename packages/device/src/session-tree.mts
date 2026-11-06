@@ -447,6 +447,21 @@ export class SessionTree {
     return this.active.has(threadId)
   }
 
+  /** 统一并发口径：运行回合、待答、后台任务和已排定的接续各占一位。 */
+  occupiesSlot(threadId: string): boolean {
+    const status = this.managers?.lines.snapshots.get(threadId)?.status
+    return (
+      this.isActive(threadId) ||
+      status === 'active' ||
+      (isObject(status) &&
+        (status.type === 'active' ||
+          (Array.isArray(status.activeFlags) && status.activeFlags.length > 0))) ||
+      this.pendingRequests(threadId).length > 0 ||
+      this.host.backgroundRunning(threadId) > 0 ||
+      this.host.continuationPending?.(threadId) === true
+    )
+  }
+
   /** 原生后台接续不属于用户回合；停止、失败、待答与经理暂停仍然约束它。 */
   canAutoContinue(threadId: string): boolean {
     const manager =

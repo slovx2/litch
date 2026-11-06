@@ -69,7 +69,7 @@ export function managerRoleRules(scope: string): string {
 export function managerSessionRules(maxRunningLines: number, taskCards = true): string {
   return [
     'Manager sessions (Litch). For in-scope items, call litch_sessions.start with initiation "user_asked" directly: creating this manager authorized this delegation, including event turns. Raise out-of-scope work as a board decision first.',
-    `Keep at most ${maxRunningLines} lines running across your entire subtree, including waiting approvals and background work. The device rejects starts or resumes beyond this limit; finish or stop an existing line first.`,
+    `Keep at most ${maxRunningLines} lines running across your entire subtree, including starting sessions, waiting approvals, background work and pending continuations (each line counts once). This configured limit replaces the ordinary 8/24 concurrency limits. The device rejects starts or new turns, including resumes and send, beyond this limit; finish or stop an existing line first.`,
     'Do not call wrap_up. ' +
       (taskCards
         ? 'For work that needs the user to initiate or approve before it starts, call start with initiation "propose" and a full brief: the card appears in the board Suggestions tab and starts a line only when the user clicks Start. Never replace already-authorized direct delegation with a card. '

@@ -28,6 +28,15 @@ import {
 import type { Worktree, WorktreeFrom } from '../../protocol/src/worktrees.mjs'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { EngineLink } from './engine-link.mjs'
+import {
+  reserveSessionWork,
+  StartRefused,
+  sessionParents,
+  treePosition,
+} from './session-capacity.mjs'
+
+export { StartRefused } from './session-capacity.mjs'
+
 import { lineInstructions } from './manager-rules.mjs'
 import {
   childPermissions,
@@ -66,16 +75,6 @@ export interface ChildSpec {
   handOffBefore?: string | null
   /** 要不要自己的工作树：真开新的，假共用父会话的目录，不给照宿主算（placement） */
   worktree?: boolean | null
-}
-
-/** 派不出来：说明是给人（或模型）看的 */
-export class StartRefused extends Error {
-  readonly kind: 'invalid' | 'blocked' | 'forbidden'
-
-  constructor(kind: 'invalid' | 'blocked' | 'forbidden', message: string) {
-    super(message)
-    this.kind = kind
-  }
 }
 
 const SANDBOX_RANK: Record<string, number> = {
@@ -318,29 +317,6 @@ export function placement(
   }
 }
 
-// 同一个设备进程里的所有启动入口共用名额；已登记的子会话只计一次。
-const startingChildren = new WeakMap<SessionTree, Map<string, Set<{ threadId: string | null }>>>()
-
-function treePosition(
-  threadId: string,
-  parentOf: Map<string, string>,
-): { root: string; depth: number } {
-  let root = threadId
-  let depth = 0
-  const seen = new Set<string>()
-  while (parentOf.has(root)) {
-    if (seen.has(root))
-      throw new StartRefused(
-        'forbidden',
-        'The session tree contains a cycle; cannot start another session.',
-      )
-    seen.add(root)
-    root = parentOf.get(root) as string
-    depth++
-  }
-  return { root, depth }
-}
-
 export async function startChild(
   tree: SessionTree,
   parentId: string,
@@ -348,108 +324,50 @@ export async function startChild(
   origin: SessionLineageOrigin,
   directTurnId?: string,
 ): Promise<{ threadId: string; harness: string; branch: string | null }> {
-  let parents = startingChildren.get(tree)
-  if (!parents) startingChildren.set(tree, (parents = new Map()))
-  const pending = parents.get(parentId) ?? new Set<{ threadId: string | null }>()
-  const holds = tree.store.childStarts()
-  const lineage = tree.store.children()
-  const parentOf = new Map(holds.map((row) => [row.threadId, row.parentId]))
-  for (const row of lineage) parentOf.set(row.threadId, row.parentThreadId)
-  const position = treePosition(parentId, parentOf)
-  if (position.depth >= SESSION_TREE_LIMITS.maxDepth)
+  const parentOf = sessionParents(tree)
+  if (treePosition(parentId, parentOf).depth >= SESSION_TREE_LIMITS.maxDepth)
     throw new StartRefused(
       'forbidden',
       `Cannot start a child beyond depth ${SESSION_TREE_LIMITS.maxDepth}; the root is depth 0.`,
     )
-  const liveTree = new Set(
-    [position.root, ...parentOf.keys()].filter(
-      (id) => tree.isActive(id) && treePosition(id, parentOf).root === position.root,
-    ),
-  )
-  for (const hold of holds)
-    if (treePosition(hold.parentId, parentOf).root === position.root) liveTree.add(hold.threadId)
-  let unnamed = 0
-  for (const [parent, slots] of parents) {
-    if (treePosition(parent, parentOf).root !== position.root) continue
-    for (const slot of slots) {
-      if (slot.threadId) liveTree.add(slot.threadId)
-      else unnamed++
-    }
-  }
-  if (liveTree.size + unnamed >= SESSION_TREE_LIMITS.liveTree)
-    throw new StartRefused(
-      'forbidden',
-      `This session tree already has ${liveTree.size + unnamed} sessions running or starting (limit ${SESSION_TREE_LIMITS.liveTree}, including the root). Wait for work to finish.`,
-    )
-  const live = new Set(
-    tree.store
-      .childrenOf(parentId)
-      .filter((child) => tree.isActive(child.threadId))
-      .map((child) => child.threadId),
-  )
-  for (const hold of holds) if (hold.parentId === parentId) live.add(hold.threadId)
-  const occupied =
-    live.size + [...pending].filter((one) => !one.threadId || !live.has(one.threadId)).length
-  if (occupied >= SESSION_TREE_LIMITS.liveChildren)
-    throw new StartRefused(
-      'blocked',
-      `This session already has ${occupied} sub-sessions running or starting (the limit is ${SESSION_TREE_LIMITS.liveChildren}). Wait for one to finish first.`,
-    )
-  if (directTurnId !== undefined) {
-    if (!directTurnId.trim())
-      throw new StartRefused('invalid', 'Direct starts require a current turn ID.')
-    if (
-      !tree.store.reserveDirectStart(
-        parentId,
-        directTurnId,
-        SESSION_TOOL_LIMITS.directStartsPerTurn,
-      )
-    )
-      throw new StartRefused(
-        'blocked',
-        `This turn has reached the limit of ${SESSION_TOOL_LIMITS.directStartsPerTurn} direct starts. Do not retry or create proposal cards to bypass it.`,
-      )
-  }
-  const slot = { threadId: null as string | null }
-  pending.add(slot)
-  parents.set(parentId, pending)
+  const reservation = await reserveSessionWork(tree, parentId, null)
+  let directReserved = false
+  let createdId: string | null = null
   try {
-    const child = await startReservedChild(tree, parentId, spec, origin, (id) => {
-      slot.threadId = id
+    if (directTurnId !== undefined) {
+      if (!directTurnId.trim())
+        throw new StartRefused('invalid', 'Direct starts require a current turn ID.')
+      if (
+        !tree.store.reserveDirectStart(
+          parentId,
+          directTurnId,
+          SESSION_TOOL_LIMITS.directStartsPerTurn,
+        )
+      )
+        throw new StartRefused(
+          'blocked',
+          `This turn has reached the limit of ${SESSION_TOOL_LIMITS.directStartsPerTurn} direct starts. Do not retry or create proposal cards to bypass it.`,
+        )
+    }
+    directReserved = directTurnId !== undefined
+    const child = await createChild(tree, parentId, spec, origin, (id) => {
+      createdId = id
+      reservation.bind(id)
       tree.store.holdChildStart(id, parentId)
     })
     tree.store.dropChildStart(child.threadId)
     return child
   } catch (error) {
-    if (directTurnId !== undefined && slot.threadId === null)
+    if (directReserved && directTurnId !== undefined && createdId === null)
       tree.store.releaseDirectStart(parentId, directTurnId)
-    if (slot.threadId !== null)
+    if (createdId !== null)
       throw new StartRefused(
         'blocked',
-        `Sub-session ${slot.threadId} was created but its start was not confirmed. Its quota remains counted; inspect or reuse it, or archive it to release the running slot. ${error instanceof Error ? error.message : String(error)}`,
+        `Sub-session ${createdId} was created but its start was not confirmed. Its quota remains counted; inspect or reuse it, or archive it to release the running slot. ${error instanceof Error ? error.message : String(error)}`,
       )
     throw error
   } finally {
-    pending.delete(slot)
-    if (pending.size === 0) parents.delete(parentId)
-  }
-}
-
-async function startReservedChild(
-  tree: SessionTree,
-  parentId: string,
-  spec: ChildSpec,
-  origin: SessionLineageOrigin,
-  registered: (threadId: string) => void,
-): Promise<{ threadId: string; harness: string; branch: string | null }> {
-  // 经理线的名额覆盖建工作树、建会话、开回合全过程；失败也释放。
-  const reservation = await tree.managers?.lines.reserve(parentId, null)
-  try {
-    return await createChild(tree, parentId, spec, origin, registered, (id) =>
-      reservation?.bind(id),
-    )
-  } finally {
-    reservation?.release()
+    reservation.release()
   }
 }
 
@@ -459,7 +377,6 @@ async function createChild(
   spec: ChildSpec,
   origin: SessionLineageOrigin,
   registered: (threadId: string) => void,
-  bind: (threadId: string) => void,
 ): Promise<{ threadId: string; harness: string; branch: string | null }> {
   const title = spec.title.trim().slice(0, 120)
   if (!title) throw new StartRefused('invalid', 'title must not be empty.')
@@ -614,7 +531,6 @@ async function createChild(
     createdAt: Math.floor(Date.now() / 1000),
     ...(spec.proposalId ? { proposalId: spec.proposalId } : {}),
   })
-  bind(threadId)
   tree.host.threadStarted(harness, { ...thread })
   tree.lineageChanged(threadId)
   const text = briefing(

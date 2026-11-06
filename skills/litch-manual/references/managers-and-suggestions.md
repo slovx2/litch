@@ -633,3 +633,9 @@ With the system's reduce-motion setting on, these transitions are skipped and ch
 请你做与事项的依据、相关链接统一显示在“关联”中，同一目标只显示一次。文件链接在所属设备的文件预览打开，仓库外绝对路径同样支持；目录定位到文件树。
 网址沿用浏览器偏好，分支与提交显示 Git 原文，会话与看板编号跳到对应对象。
 桌面悬停显示完整目标，手机长按查看；无法读取时显示原因。
+
+### 工作线并发上限
+
+经理的 `dispatch.maxRunningLines` 是整个经理子树的并发上限，替代普通会话的直接子会话 8 条、整树 24 条默认保护；不计经理自身。新建工作线、恢复后开始新回合、`send` 唤起已结束的工作线执行同一检查。启动中、运行回合、等待审批或输入、后台任务、待接续都占一个名额，同一工作线只计一次；插话不重复占位，仅加载历史不占位。非经理会话仍使用 8/24 的默认上限；深度和单回合直接启动次数限制不变。超限错误会显示限制来源、当前数量和上限。
+
+A manager's `dispatch.maxRunningLines` replaces the ordinary 8-direct-child / 24-session-tree concurrency defaults for its entire subtree, excluding the manager itself. Starting a line, starting a new turn after resume, and waking an idle line with `send` share the same check. Starting sessions, active turns, waiting approvals or input, background work, and pending continuations each occupy one slot per line. Steering an active turn adds no slot; loading history alone adds none. Ordinary sessions retain the 8/24 defaults. Depth and per-turn direct-start limits still apply. Capacity errors identify the limit, current occupancy, and maximum.

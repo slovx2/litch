@@ -85,6 +85,7 @@ import type { RestartResume } from './restart-resume.mjs'
 import { classify } from './routes.mjs'
 import { describeDevice } from './service-info.mjs'
 import type { SessionArchives } from './session-archive.mjs'
+import { reserveSessionWork } from './session-capacity.mjs'
 import { sessionTreeCall } from './session-methods.mjs'
 import {
   requireSupportedPermission,
@@ -1180,13 +1181,9 @@ export class ClientSession implements ClientToolPeer {
             })
         })
       }
-      if (
-        method === 'turn/start' &&
-        typeof given?.threadId === 'string' &&
-        this.host.managers?.lines.mark(given.threadId)?.role === 'line'
-      ) {
+      if (method === 'turn/start' && typeof given?.threadId === 'string') {
         const threadId = given.threadId
-        return this.host.managers.lines.reserve(threadId, threadId).then((hold) => {
+        return reserveSessionWork(this.host.sessionTree, threadId, threadId).then((hold) => {
           afterwards.push((result) => {
             if (isObject(result) && isObject(result.turn))
               this.host.sessionTree.turnEvent(link.harness, 'turn/started', {
