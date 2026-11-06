@@ -182,6 +182,9 @@ Release E2E 构建使用 `EXPO_PUBLIC_LITCH_E2E=1`，发布包为 `0`；不要�
 `scripts/e2e.mjs --build` 自动设置验收开关，iOS `LITCH_MOBILE_DEV=1 scripts/build-ios.sh` 同样设置。
 普通流程的执行器在遇到数据同意卡时显式点击“同意并继续”，然后仍执行原产品断言；
 带 `privacy` 标签的专项流程不自动同意，验证取消、允许、撤回与登录前披露。
+等待元素消失（例如发送后草稿清空）也会在有界轮询中处理同意卡，不重复发送操作，
+最终仍执行完整的原选择器和断言。25 号流程首次讨论发送显式要求同意框出现并点击允许，
+用于发现讨论抽屉打开时同意框无法显示或无法点击的问题。
 
 - `mock/29-review-privacy.yaml`：新建取消不发送、允许后继续、撤回后再问、Tailscale 取消。
 - `scripts/check-review-production.mjs <专用模拟器> <发布 .app 绝对路径>`：持有 Maestro 7001 共享锁，

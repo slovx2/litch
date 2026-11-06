@@ -28,6 +28,18 @@ tags: [mock]
     id: discussion-drawer:close
 - tapOn:
     id: post-question-submit:D-17
+# 全新状态的首次讨论必须真正展示同意框；可见、可点之后才允许等待草稿清空。
+- extendedWaitUntil:
+    visible:
+      id: ai-consent:title
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: ai-consent:allow
+    direction: DOWN
+    timeout: 5000
+- tapOn:
+    id: ai-consent:allow
 - extendedWaitUntil:
     notVisible:
       id: post-question:D-17
