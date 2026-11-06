@@ -19,17 +19,24 @@ enum UserActivity {
   static var revision: UInt64 { lock.withLock { sequence } }
   static var idleSeconds: TimeInterval { lock.withLock { Date().timeIntervalSince(lastAt) } }
   static func seed() {
-    let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
-    for code in 0..<128 where code != 57 && CGEventSource.keyState(.hidSystemState, key: CGKeyCode(code)) {
-      note(.keyDown, pid: pid, code: code)
-    }
-    for button in [CGMouseButton.left, .right, .center] where CGEventSource.buttonState(.hidSystemState, button: button) {
-      note(.mouseDown, pid: pid, code: Int(button.rawValue))
-    }
+    _ = heldInput()
   }
   static func targetRevision(pid: pid_t) -> UInt64 { lock.withLock { state.revision(pid: pid) } }
-  static var hasHeldInput: Bool { lock.withLock { state.blocked(background: false) } }
-  static var hasHeldPointer: Bool { lock.withLock { state.pointerHeld } }
+  static var hasHeldInput: Bool { heldInput().blocked }
+  static var hasHeldPointer: Bool { heldInput().pointer }
+
+  /// 不依赖 keyUp/mouseUp 必然送达；只查物理输入源，代理的私有事件源不算用户按住。
+  static func heldInput(
+    keyDown: (Int) -> Bool = { CGEventSource.keyState(.hidSystemState, key: CGKeyCode($0)) },
+    buttonDown: (Int) -> Bool = { CGEventSource.buttonState(.hidSystemState, button: CGMouseButton(rawValue: UInt32($0))!) }
+  ) -> (blocked: Bool, pointer: Bool) {
+    lock.withLock {
+      let keys = Set((0..<128).filter { $0 != 57 && keyDown($0) })
+      let buttons = Set((0..<32).filter(buttonDown))
+      state.refreshHeld(keys: keys, buttons: buttons)
+      return (state.blocked(background: false), state.pointerHeld)
+    }
+  }
 
   /// 公开 AX 属性只查询有没有组字范围，不读取内容；不支持该属性的应用无法据此判断 IME。
   static var isComposing: Bool {

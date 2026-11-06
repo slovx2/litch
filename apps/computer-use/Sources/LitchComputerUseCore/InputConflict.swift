@@ -19,6 +19,12 @@ public struct InputConflict {
     }
   }
   public func revision(pid: Int32) -> UInt64 { revisions[pid, default: 0] }
+  /// 事件监听可能漏掉释放（焦点切换、IME 或监听暂停）；执行时用硬件快照替换按住集合。
+  /// 校准不等于新输入，不能增加目标冲突版本。
+  public mutating func refreshHeld(keys: Set<Int>, buttons: Set<Int>) {
+    self.keys = keys
+    self.buttons = buttons
+  }
   public var pointerHeld: Bool { !buttons.isEmpty }
   public func blocked(background: Bool, composing: Bool = false) -> Bool {
     !background && (!buttons.isEmpty || !keys.isEmpty || composing)

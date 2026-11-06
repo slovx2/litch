@@ -258,7 +258,7 @@ export function createWinRunner(deps: WinRunnerDeps) {
     if (halted.get(session)?.has(app.appId.toLowerCase())) {
       return clientToolFailure(
         'failed',
-        `The user stopped you from controlling ${app.name} for the rest of this turn. Do not try again in this turn; summarize what you did and what is left.`,
+        `The user stopped you from controlling ${app.name} for the rest of this turn. Releasing keys or retrying does not clear an explicit stop. End this turn and ask the user to send a new message to continue; the new turn can observe the app again. Do not retry control in this turn.`,
       )
     }
 

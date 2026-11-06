@@ -10,11 +10,14 @@ enum ForegroundExcursion {
     notice("waitingForIdle")
     waiting: while true {
       try check()
+      let held = UserActivity.heldInput()
+      let composing = UserActivity.isComposing
       switch InputPolicy.waitResult(elapsed: ProcessInfo.processInfo.systemUptime - started,
-        blocked: UserActivity.hasHeldInput || UserActivity.isComposing, cancelled: false) {
+        blocked: held.blocked || composing, cancelled: false) {
       case "ready": break waiting
       case "userActive":
-        throw RPCError(.userActive, "A mouse button or key is held, or IME composition is active. No foreground input was sent. Retry this step after the input is released; the session is not stopped.")
+        let reason = held.blocked ? "A physical mouse button or key is currently held" : "The currently focused control reports active IME composition"
+        throw RPCError(.userActive, "\(reason). No foreground input was sent. Release the input or finish composing, then call get_app_state and retry this step in the same turn; input state is checked again on every attempt. The session is not stopped.")
       default: break
       }
       Thread.sleep(forTimeInterval: 0.05)

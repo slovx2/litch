@@ -265,6 +265,10 @@ eight seconds only for held buttons/keys or a reported IME composition, not for 
 Opening the target to look at it, moving the pointer and scrolling do not stop the agent. If input
 overlaps during a foreground step, only that step fails: inspect the state and retry its unfinished
 part. The session remains usable. Esc and the explicit Stop button still stop control for the turn.
+macOS checks held keys and buttons against their current hardware state on every attempt, so a
+missed release event does not leave control blocked. An input-conflict error can be retried after
+releasing the input or finishing composition. An explicit Stop remains effective even after keys
+are released: end the turn and send a new user message to continue in a new turn.
 Pointer conflicts follow the window that received the click; overlapping or click-through overlays do not change its target.
 On Windows, UI Automation actions also ignore user activity; mouse and keyboard fallback uses a
 temporary foreground visit with the same step-scoped conflict rule. IME detection depends on the

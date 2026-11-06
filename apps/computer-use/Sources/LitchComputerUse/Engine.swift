@@ -234,6 +234,19 @@ final class Engine: ConnectionHandler {
       isolated: read && SelfTarget.isolated(arguments: Array(buffer.prefix(count))))
   }
 
+  /// 明确停止保持到回合结束；新回合可恢复，旧回合迟到不能借此恢复控制。
+  func checkTurn(session: String, turn: String, key: String, name: String) throws {
+    lock.lock()
+    let ended = endedTurns.contains("\(session)|\(turn)")
+    if !ended, turns[session] != turn { stopped[session] = nil; turns[session] = turn; preview.resume(session) }
+    let isStopped = stopped[session]?.contains(key) == true || stopped[session]?.contains("*") == true || ended
+    lock.unlock()
+    if isStopped {
+      throw RPCError(.stopped,
+        "The user stopped you from controlling \(name) for the rest of this turn. Releasing keys or retrying does not clear an explicit stop. End this turn and ask the user to send a new message to continue; the new turn can observe the app again. Do not retry control in this turn.")
+    }
+  }
+
   /// 动作和取状态之前的共同检查：找应用、自身授权、停没停、权限。
   func prepare(_ params: JSONValue) throws -> (session: String, app: NSRunningApplication, key: String) {
     let session = try string(params, "session")
@@ -251,17 +264,7 @@ final class Engine: ConnectionHandler {
     }
     guard app.bundleIdentifier != nil else { throw RPCError(.notFound, "This app has no bundle identifier and cannot be controlled.") }
     let key = Engine.appKey(app)
-    lock.lock()
-    let ended = endedTurns.contains("\(session)|\(turn)")
-    if !ended, turns[session] != turn { stopped[session] = nil; turns[session] = turn; preview.resume(session) }
-    let isStopped = stopped[session]?.contains(key) == true || stopped[session]?.contains("*") == true || ended
-    lock.unlock()
-    if isStopped {
-      throw RPCError(
-        .stopped,
-        "The user stopped you from controlling \(Engine.name(app)) for the rest of this turn. Do not try again in this turn; summarize what you did and what is left."
-      )
-    }
+    try checkTurn(session: session, turn: turn, key: key, name: Engine.name(app))
     try Permissions.require()
     try Engine.requireDesktop()
     withState(session, key) { state in
