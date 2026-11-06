@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { fakeHealthAdb } from './android-health-fake.mjs'
 import { infrastructureRetryReason, recoverAdb } from './maestro-infrastructure.mjs'
 
@@ -108,6 +108,26 @@ for (const [mode, attempts, exitCode, clipboard = false, restoreReverse = true] 
     const reverseState = join(directory, 'reverse.json')
     const apk = join(directory, 'input.apk')
     writeFileSync(apk, 'fake')
+    // 这三项验显式掉线恢复，不验每两秒的映射看护。只冻结执行器进程的 interval，
+    // 不推进虚拟时间；setTimeout、ADB/Maestro 子进程和健康监测仍照常运行。
+    // 避免慢机器上看护先补过一次，使“初始化 + 显式恢复”的计数混入第三次。
+    const clock = join(directory, 'reverse-clock.mjs')
+    if (clipboard)
+      writeFileSync(
+        clock,
+        `
+      import { appendFileSync } from 'node:fs';
+      import { mock } from 'node:test';
+      mock.timers.enable({ apis: ['setInterval'] });
+      const schedule = mock.method(globalThis, 'setInterval');
+      const clear = mock.method(globalThis, 'clearInterval');
+      process.on('exit', () => appendFileSync(process.env.EVENTS, JSON.stringify({
+        kind: 'reverse-clock',
+        intervals: schedule.mock.calls.map(call => call.arguments[1]),
+        cleared: clear.mock.callCount(),
+      }) + '\\n'));
+    `,
+      )
     executable(
       join(android, 'platform-tools/adb'),
       `
@@ -154,6 +174,7 @@ for (const [mode, attempts, exitCode, clipboard = false, restoreReverse = true] 
     const result = spawnSync(
       process.execPath,
       [
+        ...(clipboard ? ['--import', pathToFileURL(clock).href] : []),
         join(repo, 'apps/mobile/scripts/e2e.mjs'),
         '--serial',
         'emulator-5554',
@@ -199,6 +220,11 @@ for (const [mode, attempts, exitCode, clipboard = false, restoreReverse = true] 
       (event) => event.args?.[2] === 'reverse' && event.args[3]?.startsWith('tcp:'),
     )
     if (clipboard) {
+      assert.deepEqual(
+        observed.filter((event) => event.kind === 'reverse-clock'),
+        [{ kind: 'reverse-clock', intervals: [2000], cleared: 1 }],
+        '映射看护仍注册并清理，但虚拟时钟没有触发它',
+      )
       assert.equal(mappings.length, 2, '初始化一次，掉线后恢复同一条映射一次')
       assert.deepEqual(mappings[0].args, mappings[1].args)
       if (!restoreReverse) {

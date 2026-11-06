@@ -17,6 +17,9 @@ entry point; the full contributor guide lives in [docs/contributing.md](docs/con
 
 Run the checks that match your change:
 
+`npm run check` 包含 `packages/protocol/test/*.test.mts` 的全部协议单测；可单独运行
+`npm run test:protocol:unit`。CI unit 同样执行 check，协议源码或用例变化按跨领域规则纳入检查。
+
 ```bash
 npm run typecheck
 npm run check
@@ -27,6 +30,11 @@ npm run docs:build
 For runtime or protocol changes, include focused tests under `test/` and run the
 full `npm test` suite. For docs-only changes, run `npm run docs:build` and note
 whether any link-checking gap remains.
+
+桌面 smoke、管理页及其他使用 `packages/ui/dist` 的验收会先核对 UI 构建记录。
+缺少产物或源码、跨包依赖、资源、构建配置与锁文件发生变化时，先运行
+`npm run client:build`。只构建 desktop 不会更新 UI。检查按内容判断，不因 CI
+检出或复制文件改变时间戳而误报，也不会为每项验收重复构建。开发服务器直接读取源码的验收不受此检查影响。
 
 ## Project layout
 

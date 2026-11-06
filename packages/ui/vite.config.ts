@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 import { uiResourcePolicy } from '../../apps/desktop/src/ui-security.mts'
+import { uiBuildStatePlugin } from '../../scripts/ui-build-state.mjs'
 
 // 正式构建不含开发放开项；开发只额外允许 React refresh 的内联前言和本机 HMR 连接。
 const CSP = [
@@ -67,7 +68,7 @@ const cspOnBuild = (): Plugin => {
 export default defineConfig({
   // 相对路径：桌面外壳用自己的协议从安装目录里取这些文件
   base: './',
-  plugins: [react(), cspOnBuild()],
+  plugins: [react(), cspOnBuild(), uiBuildStatePlugin()],
   resolve: {
     alias: {
       '@litch/core': fileURLToPath(new URL('../core/src/index.mts', import.meta.url)),

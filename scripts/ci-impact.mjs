@@ -109,6 +109,7 @@ export function affectedDomains(
     }
     if (/^(docs\/|skills\/|README\.md$|CHANGELOG\.md$|LICENSE$)/.test(path)) continue
     // 锁文件、包配置、共享协议/核心、设备/SSH、构建脚本都跨领域，宁可多跑。
+    // protocol 的 src 和 test 都在范围内；CI unit 的 npm run check 执行全部协议单测。
     if (
       /(^|\/)(package(-lock)?\.json|Cargo\.lock|go\.(mod|sum))$/.test(path) ||
       /^(packages\/(shared|core|protocol|device)\/|protocol\/|cmd\/|sshserver\/|\.github\/|scripts\/)/.test(

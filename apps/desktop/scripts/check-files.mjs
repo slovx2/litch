@@ -19,6 +19,7 @@
 // 时间上的线（展开大目录、帧间隔、开大文件、定位到行）有严和宽两套（src/probe-files-judge.mts）：
 // 平时按严的；LITCH_CHECK_LENIENT=1 或者在流水线上（CI=true）按宽的，只报数，只拦“卡死了”。
 // 功能对不对的检查两套一样严。
+import './require-ui-build.mjs'
 import { spawn } from 'node:child_process'
 import {
   closeSync,

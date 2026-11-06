@@ -19,6 +19,8 @@ for (const path of [
   'packages/shared/src/message.mts',
   'packages/core/src/connection.mts',
   'packages/protocol/src/types.mts',
+  'packages/protocol/test/automation-surface.test.mts',
+  'packages/protocol/test/new-contract.test.mts',
   'protocol/versions.json',
   'packages/device/src/server.mts',
   'sshserver/session.go',

@@ -11,6 +11,7 @@
 //   npm run check:onboard  上手功能（对着模拟核心的 fresh 开局）：首启引导两步、装 harness 成与不成、配置助手预填、litch config
 //   npm run check:harness-settings  harness 详情设置（对着模拟核心）：配置、冲突、各种登录、MCP、指令文件与统一模式
 //   加 --packed            不用开发时的外壳，改成起装好的应用（先 npm run pack），验的是打包出来的那一份
+import './require-ui-build.mjs'
 import { execFile, execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'

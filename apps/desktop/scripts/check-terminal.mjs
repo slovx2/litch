@@ -13,6 +13,7 @@
 // 断线是真的断：外壳连的不是夹具的套接字，是这里起的一个转发口，页面打一行 LITCH_SIGNAL link down
 // 就把转发着的连接掐掉、之后的也不接，直到 LITCH_SIGNAL link up。只有验收这样连，产品里没有这一层。
 // 夹具起的 shell 用的是夹具自己的临时主目录，不读用户的 shell 配置和历史。
+import './require-ui-build.mjs'
 import { spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'

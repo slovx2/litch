@@ -1,6 +1,7 @@
 // 回到底部、轻滚、切会话再切回、再次轻滚：必须用真实滚轮输入，直接改 scrollTop 抓不到合成线程的坐标错位。
 // 先构建 UI。隐藏窗口、隔离 HOME、模拟核心；不连接真实设备。可用 LITCH_WHEEL_RESULT 保存测量结果。
 // LITCH_WHEEL_CPU=4 可在渲染进程中降速，复查绘制与取样的先后顺序。
+import './require-ui-build.mjs'
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'

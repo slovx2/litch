@@ -22,9 +22,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
+import { assertUiBuildFresh } from '../../../scripts/ui-build-state.mjs'
 
 const require = createRequire(import.meta.url)
-const electron = require('electron')
 const appDir = fileURLToPath(new URL('..', import.meta.url))
 const v0 = process.argv.includes('--v0')
 const imports = process.argv.includes('--import')
@@ -47,10 +47,8 @@ const entry = popups
             ? 'src/probe-browser-fill.mts'
             : 'src/probe-browser.mts'
 const uiRoot = fileURLToPath(new URL('../../../packages/ui/dist', import.meta.url))
-if (ui && !existsSync(join(uiRoot, 'index.html'))) {
-  console.error('没有界面的构建产物，先 npm run build --prefix packages/ui')
-  process.exit(1)
-}
+if (ui) assertUiBuildFresh()
+const electron = require('electron')
 const marker = v0 ? 'LITCH_V0 ' : 'LITCH_BROWSER '
 
 const work = mkdtempSync(join(tmpdir(), 'litch-browser-check-'))
