@@ -30,6 +30,7 @@ import type { HostTab } from '../electron-tab.mjs'
 import type { BrowserHandover, SignInOutcome } from '../executor.mjs'
 import type { BrowserHost, BrowserPage } from '../model.mjs'
 import { type DomNode, hasClosedShadowFields } from './dom-tree.mjs'
+import { refreshHandoverPage } from './handover-refresh.mjs'
 import { AUTOFILL_CLEAR, AUTOFILL_CLEARED } from './ipc.mjs'
 import { fillableOrigin } from './origin.mjs'
 import {
@@ -121,35 +122,6 @@ async function unreachableFields(contents: WebContents): Promise<boolean> {
       } catch {
         // 已经断开了
       }
-    }
-  }
-}
-
-/**
- * 换一个新文档，回换成了没有。网页的用 GET 打开当前地址：不重复提交 POST，没换成也不退回重新载入；
- * 别的（about:blank 之类，没有 POST）重新载入。网页装的 beforeunload 拦不住（will-prevent-unload 放行），
- * 不然代理用脚本装一个就能让这一页一直不换、把它的监听留过整个交接
- */
-async function refresh(page: BrowserPage, contents: WebContents): Promise<boolean> {
-  if (contents.isDestroyed()) return false
-  let navigated = false
-  const on = () => {
-    navigated = true
-  }
-  const allow = (event: Electron.Event) => event.preventDefault()
-  contents.on('did-navigate', on)
-  contents.on('will-prevent-unload', allow)
-  try {
-    const url = contents.getURL()
-    if (originOf(url)) await page.load(url, RELOAD_MS)
-    else await page.history('reload', RELOAD_MS)
-    return navigated && !contents.isDestroyed()
-  } catch {
-    return false
-  } finally {
-    if (!contents.isDestroyed()) {
-      contents.removeListener('did-navigate', on)
-      contents.removeListener('will-prevent-unload', allow)
     }
   }
 }
@@ -416,7 +388,7 @@ export function createHandover(options: HandoverOptions): BrowserHandover {
         return next.id
       }
       if (scripted.has(page.id)) {
-        if (!(await refresh(page, contents))) return fail()
+        if (!(await refreshHandoverPage(host, page, contents, RELOAD_MS))) return fail()
         scripted.delete(page.id)
         // 重新载入后编号的标记没了：按 Litch 自己的识别
         hintToken = null
@@ -614,7 +586,7 @@ export function createHandover(options: HandoverOptions): BrowserHandover {
         // 代理不等了：不悄悄交还。卡片变成“代理已收回”；先清一遍框，再重新打开这一页，丢掉人输到一半的东西
         signIns.withdraw(begun.id)
         await clearFrames(contents, since)
-        if (!(await refresh(page, contents))) return fail()
+        if (!(await refreshHandoverPage(host, page, contents, RELOAD_MS))) return fail()
         unfreeze()
         return 'aborted'
       }
@@ -624,7 +596,7 @@ export function createHandover(options: HandoverOptions): BrowserHandover {
       const cleared = await clearFrames(contents, since)
       if (contents.isDestroyed()) return gone()
       if (!cleared || (await unreachableFields(contents))) {
-        if (!(await refresh(page, contents))) return fail()
+        if (!(await refreshHandoverPage(host, page, contents, RELOAD_MS))) return fail()
       }
       if (contents.isDestroyed()) return gone()
       unfreeze()

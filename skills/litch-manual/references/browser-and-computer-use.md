@@ -160,6 +160,12 @@ that page, the page is reloaded first.
 - Optional: Settings → Built-in browser → Saved passwords → **Require Touch ID before filling**
   (macOS only, off by default).
 
+代理撤回登录请求后，Litch 会继续清理登录页；“代理已收回”提示可点“知道了”关闭。只有页面确实无法安全重新打开时，才关闭标签并显示“标签已关掉”；“知道了”关闭对应提示，不会重新开始登录。
+
+After an agent withdraws a sign-in request, Litch still cleans up the page. Dismiss the withdrawn
+notice with **Got it**. A **Tab closed** notice appears only when the page cannot be safely
+reopened; **Got it** dismisses that notice without starting another sign-in.
+
 If the user asks you (as the agent) to sign in somewhere, use `request_sign_in` rather than asking
 for their password.
 
