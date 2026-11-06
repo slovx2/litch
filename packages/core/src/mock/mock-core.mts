@@ -2807,6 +2807,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     }
     if (name === 'device.restartService') {
       const { deviceId, mode } = params as Commands['device.restartService']['params']
+      // 因为忙没换版本的本机，“现在再试一次”发的是 start：和真的一样再问一遍闲不闲，闲了才换成应用自带的
+      if (mode === 'start' && service.retry(deviceId)) return {}
       restart.run(deviceId, mode)
       return {}
     }

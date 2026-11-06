@@ -7,7 +7,7 @@
 //   服务太旧（service is too old）              在跑的不认识停止的请求，要手工结束一次
 //   服务没停成（service would not stop）        去停了，没停成
 //   服务比应用新（service is newer）            在跑的比应用带的新，不打扰
-// “现在再试一次”就是重新连这台设备（device.reconnect）。和真的一样，只在它闲着时才换：
+// “现在再试一次”（device.restartService 的 start，设备行上的 device.reconnect 也走这里）。和真的一样，只在它闲着时才换：
 // 本机上还有回合在跑、有请求停着等人，就照旧没换；都闲了才换成应用自带的。
 import type { Clock } from '../channel/protocol.mjs'
 import type { DeviceView } from '../model.mjs'
