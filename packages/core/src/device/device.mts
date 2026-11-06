@@ -2168,6 +2168,20 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       })
     },
     started: (thread) => upsertThread(thread),
+    turnStateChanged(sessionId, running) {
+      const known = threads.get(sessionId)
+      if (!known || (known.status?.type === 'active') === running) return
+      // 已有 active 中的审批/提问标记更具体，运行回合不能把它覆盖成普通运行。
+      // 这里只同步目录；工具调用仍由原始完成事件按回合收尾，不能提前按整条会话撤销。
+      if (running) {
+        peeks.forget(sessionId)
+        restarted.delete(sessionId)
+      } else if (!live.watched(sessionId)) unread.add(sessionId)
+      patchThread(sessionId, {
+        status: running ? { type: 'active', activeFlags: [] } : { type: 'idle' },
+        updatedAt: Math.floor(options.clock.now() / 1000),
+      })
+    },
     rememberCapabilities,
     threadScoped: (id) => capabilitiesFor(id) != null,
     ...(options.views ? { views: options.views } : {}),

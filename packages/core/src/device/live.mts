@@ -131,6 +131,8 @@ export interface LiveHost {
   touched(sessionId: string, said?: string): void
   /** 刚建了一个会话。设备据此把它放进侧栏，不等对面的通知 */
   started(thread: Thread): void
+  /** 已载入的实时回合状态改变，同步侧栏摘要，不依赖另一条状态广播的到达顺序。 */
+  turnStateChanged?(sessionId: string, running: boolean): void
   rememberCapabilities?(thread: Thread): void
   threadScoped?(sessionId: string): boolean
   agentParent?(sessionId: string): string | null
@@ -545,6 +547,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       ops.push(...removed)
     }
     for (const sink of live.sinks) sink.delta(ops)
+    if (view.live && ops.some((op) => op.op === 'turn.add' || op.op === 'turn.status'))
+      host.turnStateChanged?.(live.id, Boolean(isRunning(view)))
   }
 
   const persistInputs = (live: Live): boolean => {
@@ -1489,6 +1493,9 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         const held = live.held
         live.held = []
         for (const entry of held) deliver(live, entry.method, entry.params, true)
+        // 打开正在跑的会话时，目录可能还留着载入前的空闲摘要。只用确定的运行回合补状态；
+        // 历史分页中没有运行回合不代表整个会话已结束，不能据此清除目录状态。
+        if (live.view.live && isRunning(live.view)) host.turnStateChanged?.(live.id, true)
         // ready/取消通知可能先于被拒订阅的只读快照到达；这次载入结束后补订阅。
         if (
           !live.view.live &&

@@ -1,5 +1,12 @@
 # Projects and sessions
 
+侧栏运行标识会随已打开会话的实时回合更新，选中或清除未读不会隐藏运行、等待和后台任务标识。
+回合结束后若仍有后台任务，继续显示后台任务标识。
+
+Sidebar activity follows live turns in open conversations. Selecting a row or clearing unread
+does not hide running, waiting or background-task indicators. Background activity remains visible
+after the foreground turn ends.
+
 ## 手机输入与键盘
 
 手机上的看板、设置和长表单会将正在编辑的输入框滚到键盘上方；标题和页签保持原位。添加设备、定时任务与建议任务编辑页的主操作固定在键盘上方，评论、改名和消息编辑弹窗也可直接提交。多行内容超过输入框高度后可在框内滚动。

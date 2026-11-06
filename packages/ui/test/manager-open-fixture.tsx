@@ -22,6 +22,8 @@ localStorage.setItem('litch.onboarding', 'done')
 const listeners = new Set<(id: string) => void>()
 Object.assign(window, {
   litchShell: {
+    setLanguage() {},
+    setLook() {},
     notify() {},
     onNotifyClick(fn: (id: string) => void) {
       listeners.add(fn)
