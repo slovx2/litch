@@ -28,6 +28,8 @@ npm run client:check:chrome
 
 默认主要场景为 headless，生命周期输入使用最小化窗口。加 `--focus-windows` 会执行双后台窗口场景：两个窗口均保持最小化，参考窗口只使用 Chrome 内部的活动标签，不获取 macOS 前台。在 navigate、newTab、claim、click、type、run_actions 和登录卡等待前后核对窗口及活动标签，并监听中途激活事件。无打扰验收不执行 `show`，因为该工具本来就会激活系统窗口。
 
+双窗口场景还核对 `tabs(action:list)` 的每项 `current` 与扩展 `getLastFocused` / `tab.active` 的只读状态一致，列举前后及期间窗口、活动标签和系统前台均不变；终端输出 `CURRENT_TAB_EVIDENCE`，仅含隔离夹具的标题、网址和标记。
+
 headed CFT 经 `open -g -n -W` 后台启动，显式等待窗口最小化；隐藏 Electron 宿主禁止参与应用激活。不用 `open -j` 隐藏整个应用，避免把应用隐藏和窗口最小化混为一种验收条件。Swift `NSWorkspace.frontmostApplication` 监视器在整个 headed 生命周期记录激活通知并每 20ms 采样，逐步及退出后检查用户前台应用 PID 没有变化，不在事后恢复焦点掩盖切换。双窗口验收不需要前台时段：`npm run client:check:chrome -- --no-evidence --focus-windows`。不要与其他会切换应用的验收并行，用户自行换应用也会明确报错。独立 `focus-probe.mjs` 同样使用后台启动与监视器；关闭模拟的对照记录实际结果，不强制要求不同系统焦点条件都丢输入。
 
 如果需要观看主要场景，仍须获准前台时段后显式运行：

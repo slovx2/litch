@@ -175,7 +175,7 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
     ]),
     fn(
       'tabs',
-      'List, open, select, close or keep browser tabs of this conversation. Tabs you open are temporary and are closed when your turn ends unless you keep them (keep:true here or in `navigate`). `list` also shows tabs the user opened (owner "user"); you can read their URL and title but can only operate your own tabs. `keep` marks one of your tabs to stay open for the user after your turn.',
+      'List, open, select, close or keep browser tabs of this conversation. Tabs you open are temporary and are closed when your turn ends unless you keep them (keep:true here or in `navigate`). `list` also shows tabs the user opened (owner "user"); you can read their URL and title but can only operate your own tabs. For Chrome, current:true marks the active tab in its last-focused window; when the user says "this page" or "current tab", prefer claiming that tab. Listing does not focus windows or switch tabs. `keep` marks one of your tabs to stay open for the user after your turn.',
       {
         action: { type: 'string', enum: ['list', 'new', 'select', 'close', 'keep'] },
         targetId,

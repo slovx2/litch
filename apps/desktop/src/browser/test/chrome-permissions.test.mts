@@ -20,7 +20,7 @@ const invocation: ClientToolInvocation = {
 const text = (result: { contentItems: unknown[] }): string =>
   (result.contentItems[0] as { text: string }).text
 
-function fixture() {
+function fixture(listedTabs?: unknown[]) {
   let enabled = true
   let seq = 0
   let failList = false
@@ -51,7 +51,7 @@ function fixture() {
         instance.epoch = 'reconnected'
         throw new ChromeBridgeError('staleLease', 'Chrome reconnected')
       }
-      return request.op === 'list' ? [tab] : { tab }
+      return request.op === 'list' ? (listedTabs ?? [tab]) : { tab }
     },
   } as unknown as ChromeBridge
   let executor = new ChromeExecutor({ bridge, allowed: () => enabled })
@@ -89,6 +89,54 @@ function fixture() {
     close: () => executor.dispose(),
   }
 }
+
+test('列表只标记最后获得焦点窗口的活动标签，保留原有字段', async () => {
+  const tabs = [
+    { active: false, lastFocusedWindow: true },
+    { active: true, lastFocusedWindow: true },
+    { active: true, lastFocusedWindow: false },
+    { active: false, lastFocusedWindow: false },
+    {},
+  ].map((flags, id) => ({
+    id,
+    title: `Tab ${id}`,
+    url: `https://example.com/${id}`,
+    origins: ['https://example.com'],
+    busy: id === 1,
+    ...flags,
+  }))
+  const f = fixture(tabs)
+  try {
+    const result = await f.list()
+    assert.equal(result.success, true)
+    const listed = JSON.parse(text(result)).tabs
+    assert.deepEqual(
+      listed.map((tab: { current: boolean }) => tab.current),
+      [false, true, false, false, false],
+    )
+    assert.equal(
+      new Set(listed.map((tab: { claimToken: string }) => tab.claimToken)).size,
+      tabs.length,
+    )
+    for (const [id, tab] of listed.entries()) {
+      const original = tabs[id]
+      assert.ok(original)
+      assert.equal(typeof tab.claimToken, 'string')
+      assert.deepEqual(tab, {
+        title: original.title,
+        url: original.url,
+        claimToken: tab.claimToken,
+        busy: original.busy,
+        origins: original.origins,
+        current: id === 1,
+      })
+    }
+    assert.deepEqual(f.calls, ['list'])
+    assert.deepEqual(f.asks, [])
+  } finally {
+    f.close()
+  }
+})
 
 test('总开关关时不读 Chrome；开启后跨会话、扩展编号、代次、桌面重启都不弹实例或标签卡', async () => {
   const f = fixture()

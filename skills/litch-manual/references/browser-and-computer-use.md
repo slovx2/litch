@@ -352,6 +352,10 @@ When a site needs approval, Litch displays a card in the calling conversation an
 
 The agent uses targets → tabs → claim. Claim tokens and leases still prevent stale or concurrent control, but do not create an extra approval. User tabs are released when the turn ends and are never closed by the agent. Agent tabs are temporary unless kept. Reconnection, extension reload and ended turns invalidate leases and references. Listing retries once if the same instance reconnects during the request; otherwise the tool tells the agent to list targets and claim again. Input actions are never replayed automatically because an interrupted action may already have executed.
 
+Chrome 标签列表的 `current: true` 表示该实例最后获得焦点的窗口中的活动标签。用户说“这个页面”或“当前标签”时，代理优先认领这一项。列举只读取状态，不抢焦点、不切换标签；Chrome 在后台时仍按最后获得焦点的窗口判断。没有可用的窗口信息、当前页不支持控制，或扩展尚未更新时，列表可能没有 `current: true`，代理应根据用户指定的网址或标题确认目标。
+
+In Chrome tab lists, `current: true` identifies the active tab in that instance's last-focused window. When you say “this page” or “current tab,” the agent prefers that tab. Listing only reads state and never focuses a window or switches tabs. When Chrome is in the background, the marker still refers to its last-focused window. If window information is unavailable, the active page cannot be controlled, or the extension has not updated yet, no tab may be marked current; the agent should use the URL or title you specified to identify the target.
+
 点击扩展图标会停止此 profile 的控制；图标显示 OFF，停止状态跨 Chrome 和 Litch 重启保留。工具会明确提示用户点击扩展重新打开，代理不能自行恢复。再次点击扩展才重新开启，不会清除网站名单。Litch 设置页也会显示停止提示。“停止所有 Chrome 控制”释放当前租约；关闭总开关可阻止后续调用。
 
 Click the extension icon to stop control of that profile. Its OFF badge and stopped state persist across Chrome and Litch restarts. Tools ask the user to click the extension again to resume; the agent cannot resume control itself. Site permissions remain saved. Litch Settings also shows the stopped state. **Stop all Chrome control** releases current leases; turn off the master switch to prevent further calls.

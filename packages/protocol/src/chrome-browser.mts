@@ -83,6 +83,15 @@ export interface ChromeTabState {
   openerTabId?: number
 }
 
+export interface ChromeListedTab extends ChromeTabState {
+  origins: string[]
+  busy: boolean
+  /** 列举时在所在窗口中是否为活动标签。增量字段不要求商店扩展同步更新。 */
+  active?: boolean
+  /** 所在窗口是否为此 Chrome 实例最后获得焦点的窗口，不代表系统当前前台。 */
+  lastFocusedWindow?: boolean
+}
+
 export interface ChromeGrant {
   /** 宿主从会话投影取得的标题，只用于 Chrome 分组显示。 */
   sessionTitle?: string

@@ -51,10 +51,12 @@ export async function backgroundChecks({
     )
     await evaluate(`chrome.windows.update(${first.id},{state:'minimized'})`)
     // 参考活动标签只在测试 Chrome 内部切换，代理页面保持后台；不激活系统窗口。
-    await evaluate(`chrome.tabs.create({windowId:${first.id},url:'about:blank',active:true})`)
+    await evaluate(
+      `chrome.tabs.create({windowId:${first.id},url:${JSON.stringify(`${origin}/input?current-first`)},active:true})`,
+    )
     const tabId = await checkAndClaim(first.tabs[0].id)
     front = await evaluate(
-      `chrome.windows.create({url:'about:blank',type:'normal',focused:false,state:'minimized'})`,
+      `chrome.windows.create({url:${JSON.stringify(`${origin}/input?current-reference`)},type:'normal',focused:false,state:'minimized'})`,
     )
     await evaluate(`chrome.windows.update(${front.id},{state:'minimized'})`)
     await until(
@@ -97,6 +99,34 @@ export async function backgroundChecks({
       assert.ok(value, snapshot)
       return value
     }
+    await check(
+      '多窗口标签列表：current 与最后焦点窗口的活动页一致，列举全程不抢焦点或切换标签',
+      async () => {
+        const before = await evaluate(
+          `(async()=>({last:(await chrome.windows.getLastFocused()).id,tabs:await chrome.tabs.query({})}))()`,
+        )
+        const listed = JSON.parse(await run('tabs', { action: 'list', targetId })).tabs
+        const eligible = before.tabs.filter(
+          (tab) => !tab.incognito && /^(https?:\/\/|about:blank$)/.test(tab.url || ''),
+        )
+        assert.ok(eligible.filter((tab) => tab.active).length >= 2)
+        assert.equal(listed.length, eligible.length)
+        for (const tab of eligible) {
+          const entry = listed.find((item) => item.url === tab.url)
+          assert.ok(entry, JSON.stringify(tab))
+          assert.equal(entry.current, tab.active && tab.windowId === before.last, tab.url)
+        }
+        assert.equal(
+          listed.filter((tab) => tab.current).length,
+          eligible.filter((tab) => tab.active && tab.windowId === before.last).length,
+        )
+        assert.equal(await evaluate('chrome.windows.getLastFocused().then(w=>w.id)'), before.last)
+        await verify()
+        console.log(
+          `CURRENT_TAB_EVIDENCE ${JSON.stringify(listed.map(({ title, url, current }) => ({ title, url, current })))}`,
+        )
+      },
+    )
     await check(
       '双后台窗口：navigate/newTab/claim/click/type/run_actions 不改变参考窗口或活动标签',
       async () => {

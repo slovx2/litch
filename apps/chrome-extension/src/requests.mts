@@ -1,4 +1,8 @@
-import type { ChromeGrant, ChromeRequest } from '../../../packages/protocol/src/chrome-browser.mjs'
+import type {
+  ChromeGrant,
+  ChromeListedTab,
+  ChromeRequest,
+} from '../../../packages/protocol/src/chrome-browser.mjs'
 import { isAllowedCdp } from '../../desktop/src/browser/cdp-allow.mjs'
 import { isInputCommand } from '../../desktop/src/browser/input-command.mjs'
 import { createBackgroundTab } from './background-tab.mjs'
@@ -56,14 +60,21 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
   if (state.paused.size && !['renew', 'release', 'stop', 'unfreeze'].includes(request.op))
     throw new ChromeFault('signingIn', 'The user is signing in. This Chrome instance is paused.')
   if (request.op === 'list') {
+    // Chrome 在后台时仍返回最后获得焦点的窗口；没有窗口时只缺少标记，不妨碍列举。
+    const lastFocused = await state.chrome.windows.getLastFocused().catch(() => null)
     const tabs = await state.chrome.tabs.query({})
-    const result = await Promise.all(
+    const result: ChromeListedTab[] = await Promise.all(
       tabs
         .filter((tab: any) => !tab.incognito && chromeOrigin(tab.pendingUrl || tab.url || ''))
         .map(async (tab: any) => ({
           ...(await tabState(state, tab.id)),
           origins: await inspectOrigins(state, tab.id).catch(() => []),
           busy: [...state.grants.values()].some((grant) => grant.tabId === tab.id),
+          active: tab.active === true,
+          lastFocusedWindow:
+            typeof lastFocused?.id === 'number' &&
+            lastFocused.id >= 0 &&
+            tab.windowId === lastFocused.id,
         })),
     )
     if (state.paused.size)

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import type {
   ChromeGrant,
+  ChromeListedTab,
   ChromeTabState,
 } from '../../../../packages/protocol/src/chrome-browser.mjs'
 import type { ClientToolCallResponse } from '../../../../packages/protocol/src/client-tools.mjs'
@@ -14,14 +15,10 @@ import { type ChromeBridge, ChromeBridgeError, incompatibleMessage } from './bri
 import { ChromePage } from './page.mjs'
 import { executePageTool } from './tools.mjs'
 
-interface ListedTab extends ChromeTabState {
-  origins: string[]
-  busy: boolean
-}
 interface ClaimToken {
   instanceId: string
   epoch: string
-  tab: ListedTab
+  tab: ChromeListedTab
   session: string
   expires: number
 }
@@ -138,9 +135,9 @@ export class ChromeExecutor implements BrowserExecutor {
       throw new ChromeBridgeError('versionMismatch', incompatibleMessage(found))
     return id
   }
-  private async listTabs(instanceId: string, signal: AbortSignal): Promise<ListedTab[]> {
+  private async listTabs(instanceId: string, signal: AbortSignal): Promise<ChromeListedTab[]> {
     const list = () =>
-      this.options.bridge.call<ListedTab[]>(instanceId, { op: 'list', args: {} }, signal)
+      this.options.bridge.call<ChromeListedTab[]>(instanceId, { op: 'list', args: {} }, signal)
     try {
       return await list()
     } catch (error) {
@@ -467,6 +464,7 @@ export class ChromeExecutor implements BrowserExecutor {
               claimToken,
               busy: tab.busy,
               origins: tab.origins,
+              current: tab.active === true && tab.lastFocusedWindow === true,
             }
           })
         return ok(JSON.stringify({ tabs: list }))
