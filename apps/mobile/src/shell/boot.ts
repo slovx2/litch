@@ -16,8 +16,10 @@ import {
 } from '@litch/core'
 import { Platform } from 'react-native'
 import app from '../../app.json'
+import { native } from '../../modules/litch-ssh/src/native'
 import { mobilePlatform } from '../platform'
 import { watchConnections } from '../platform/background'
+import { connectionTrace } from '../platform/connection-trace'
 import { type RemoteConfig, sshOpener } from '../platform/ssh-transport'
 import { devToolsEnabled } from './build-mode'
 import { createTestClock, testScenario } from './test-clock'
@@ -73,6 +75,7 @@ function serve(
 }
 
 const log = (line: string) => console.log(`[核心] ${line}`)
+const trace = connectionTrace((line) => native.connectionDiagnostic(line))
 
 export async function boot(mode: BootMode, lang: 'zh-CN' | 'en'): Promise<Booted> {
   if (!devToolsEnabled()) mode = 'stored'
@@ -113,7 +116,7 @@ export async function boot(mode: BootMode, lang: 'zh-CN' | 'en'): Promise<Booted
       wire: 'orange',
       open: sshOpener(config),
     }
-    const core = createCore({ clock, version: VERSION, devices: [device], log })
+    const core = createCore({ clock, version: VERSION, devices: [device], log, trace })
     const served = serve(
       core,
       () => core.start(),
@@ -130,6 +133,7 @@ export async function boot(mode: BootMode, lang: 'zh-CN' | 'en'): Promise<Booted
     ...(platform.remote ? { remote: platform.remote } : {}),
     ...(platform.store ? { store: platform.store } : {}),
     log,
+    trace,
   })
   const served = serve(
     core,

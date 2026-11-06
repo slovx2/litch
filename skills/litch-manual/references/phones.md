@@ -60,6 +60,16 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
 
 ## Requirements and problems
 
+- 会话输入区会持续显示不可用 harness 的具体原因和下一步（安装、启用、升级或重启）；恢复后自动收起。
+  设备断线时显示连接提示，目录刷新不会延迟或重放 harness 的旧状态。
+  An unavailable harness shows its reason and next step above the composer until it recovers.
+  A device disconnection shows a connection notice; refreshing sessions does not replay stale harness status.
+- 手机系统日志只记连接阶段、harness 可用性与目录对账的开始和结束。iOS 按
+  `subsystem == "dev.litch.connection"` 查看，Android 按 `LitchConnection` 标签查看。
+  `d1`、`d2` 是应用本次启动内的设备编号，不包含主机地址、钥匙或会话正文。
+  Connection diagnostics use iOS subsystem `dev.litch.connection` and Android tag `LitchConnection`.
+  Device labels such as `d1` are local to the current app launch; host addresses, keys and messages are omitted.
+
 - The phone must reach the address in the code directly (no jump hosts). If the phone cannot connect,
   re-open the dialog with an address the phone can reach (for example the machine's LAN or VPN address).
 - Pairing **this computer** (Local) needs its SSH server on: macOS System Settings → General → Sharing

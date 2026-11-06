@@ -6,10 +6,15 @@ import Sshtransport
 public final class LitchSshModule: Module {
   private let lifecycle = ConnectionLifecycle()
   private var observer: PolicyObserver?
+  private let connectionLogger = Logger(subsystem: "dev.litch.connection", category: "core")
 
   public func definition() -> ModuleDefinition {
     Name("LitchSsh")
     Events("onConnectionPolicy")
+    Function("connectionDiagnostic") { (line: String) in
+      // JS 仅传固定枚举和进程内设备编号；notice 保留到系统日志，Release 包也能回溯。
+      self.connectionLogger.notice("\(line, privacy: .public)")
+    }
     OnCreate { [weak self] in
       guard let self else { return }
       let observer = PolicyObserver { [weak self] state in

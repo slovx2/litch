@@ -1,0 +1,54 @@
+# 隔离 iPad 两栏：未安装持续提示，真实状态恢复才收起，重复掉线不残留旧提示。
+appId: ${APP_ID}
+name: tablet-harness-status
+---
+- launchApp:
+    clearState: true
+    stopApp: true
+- extendedWaitUntil:
+    visible:
+      id: devices
+    timeout: 30000
+- openLink: '${SCHEME}://boot?mode=mock&controlled=1'
+- extendedWaitUntil:
+    visible:
+      id: device:local
+    timeout: 30000
+- setOrientation: ${WIDE_ORIENTATION}
+- tapOn:
+    id: device:local
+- openLink: '${SCHEME}://open?device=local&session=d4'
+- extendedWaitUntil:
+    visible:
+      id: composer-note
+    timeout: 10000
+- assertVisible:
+    id: tablet:split
+- assertVisible: '(?s).*Codex.*(安装|install).*'
+- takeScreenshot: ${SCREENSHOTS}/harness-not-installed
+- openLink: '${SCHEME}://test-clock?ms=60000'
+- assertVisible:
+    id: composer-note
+- openLink: '${SCHEME}://open?device=build&session=b6'
+- extendedWaitUntil:
+    visible:
+      id: composer-input
+    timeout: 10000
+- assertNotVisible:
+    id: composer-note
+- repeat:
+    times: 2
+    commands:
+      - openLink: '${SCHEME}://test-send?device=build&session=b6&text=go%20offline'
+      - extendedWaitUntil:
+          visible:
+            id: composer-note
+          timeout: 15000
+      - assertVisible: '(?s).*(自动重连|reconnect).*'
+      - takeScreenshot: ${SCREENSHOTS}/harness-disconnected
+      - openLink: '${SCHEME}://test-clock?ms=10000'
+      - extendedWaitUntil:
+          notVisible:
+            id: composer-note
+          timeout: 10000
+- takeScreenshot: ${SCREENSHOTS}/harness-recovered

@@ -47,6 +47,8 @@ export interface RpcRequestOptions {
   signal?: AbortSignalLike
   /** 不给就用连接的默认值；给 0 表示不设超时 */
   timeoutMs?: number
+  /** 成功应答收到的同步边界：用于快照与通知排序，不能等到 Promise 的微任务。 */
+  received?(): void
 }
 
 export interface RpcOptions {
@@ -79,6 +81,7 @@ interface Pending {
   resolve(value: unknown): void
   reject(error: Error): void
   stopTimer: (() => void) | null
+  received?: () => void
 }
 
 export function createRpc(transport: Transport, options: RpcOptions): Rpc {
@@ -166,7 +169,12 @@ export function createRpc(transport: Transport, options: RpcOptions): Rpc {
         const { code, message: text, data } = message.error
         entry.reject(new RpcError(code, text, data))
       } else {
-        entry.resolve(message.result)
+        try {
+          entry.received?.()
+          entry.resolve(message.result)
+        } catch (error) {
+          entry.reject(error instanceof Error ? error : new Error(String(error)))
+        }
       }
     }
   }
@@ -193,7 +201,13 @@ export function createRpc(transport: Transport, options: RpcOptions): Rpc {
       const id = nextId++
       const timeoutMs = requestOptions?.timeoutMs ?? defaultTimeout
       const sent = new Promise<unknown>((resolve, reject) => {
-        const entry: Pending = { method, resolve, reject, stopTimer: null }
+        const entry: Pending = {
+          method,
+          resolve,
+          reject,
+          stopTimer: null,
+          ...(requestOptions?.received ? { received: requestOptions.received } : {}),
+        }
         if (timeoutMs > 0) {
           entry.stopTimer = options.clock.setTimer(() => {
             if (settle(id))

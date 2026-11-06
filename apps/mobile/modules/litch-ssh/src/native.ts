@@ -2,6 +2,7 @@
 import { requireOptionalNativeModule } from 'expo-modules-core'
 
 export interface Native {
+  connectionDiagnostic(line: string): void
   tailscaleAvailable(): boolean
   connectionRoute(host: string, port: number, mode: string): Promise<string>
   tailscaleLogin(controlURL: string): Promise<string>
@@ -40,6 +41,7 @@ export const native: Native =
   new Proxy(
     {
       tailscaleAvailable: () => false,
+      connectionDiagnostic() {},
       setBackgroundTimeout() {},
       connectionPolicyState: () =>
         JSON.stringify({ revision: 0, background: false, suspended: false }),

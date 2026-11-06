@@ -559,7 +559,7 @@ const AGENT_RECHECK_MS = 2000
 const PEEK_TIMEOUT_MS = 3000
 
 /**
- * 会话目录这一层处理的通知：会话和工作区的增减改，加上完整模式下 harness 的状态变化。
+ * 会话目录这一层处理的通知：会话和工作区的增减改。harness 状态独立处理，不参与目录积压。
  * 回合、条目、上下文占用、历史被改写那些只有订阅了会话才收得到的，归 live.mts
  */
 type DirectoryMethod = Exclude<
@@ -584,6 +584,7 @@ type DirectoryMethod = Exclude<
   // harness 详情设置的通知不归会话目录（harness-config.mts）
   | 'litch/harness/config/changed'
   | 'litch/harness/auth/updated'
+  | 'litch/harness/status/changed'
 >
 type Routes = { [M in DirectoryMethod]: (params: ServerNotifications[M]) => void }
 
@@ -621,6 +622,21 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let nativeDirect = false
   /** 这台设备上的 harness。单 harness 模式下只有对面那一个；完整模式下是设备服务声明的，带着各自的状态 */
   let harnesses: HarnessView[] = []
+  const tracedHarnesses = new Map<string, string>()
+  const traceHarnesses = () => {
+    if (!trace) return
+    for (const entry of harnesses) {
+      const state = `${entry.state}:${entry.down ?? ''}`
+      if (tracedHarnesses.get(entry.id) === state) continue
+      tracedHarnesses.set(entry.id, state)
+      trace('harness.state', { harness: entry.id, state: entry.state, reason: entry.down })
+    }
+  }
+  // 身份识别尚未完成时，只保留每个运行时的最新状态；目录对账不能阻塞可用性。
+  const pendingHarnesses = new Map<
+    HarnessId,
+    ServerNotifications['litch/harness/status/changed']['info']
+  >()
   /** 对面有没有设备配置接口（deviceSettings 扩展）。认出来之前、对面不是设备服务时都是没有 */
   let manageable = false
   const attachmentViews = new Map<string, number>()
@@ -1008,6 +1024,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         nextFailure.guide === failure.guide &&
         sameText(nextFailure.text, failure.text))
     if (next === connection && sameText(nextNote, note) && sameFailure) return
+    if (connection !== next) trace?.('connection', { state: next })
     connection = next
     note = nextNote
     failure = nextFailure
@@ -1456,6 +1473,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
    */
   const recover = async (id: HarnessId) => {
     const mine = session
+    const started = options.clock.now()
+    let result = 'ok'
+    trace?.('catalog', { phase: 'start', harness: id })
     composeCache.delete(id)
     live.harnessUp(id)
     hold()
@@ -1468,11 +1488,18 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       hooks.sidebar(sidebar())
       saveSoon()
     } catch (error) {
+      result = 'failed'
       if (mine !== session) return
       const message = error instanceof Error ? error.message : String(error)
       log(`补取 ${id} 的会话失败：${message}`)
       gaps.set(id, { harness: id, reason: 'failed', message })
     } finally {
+      trace?.('catalog', {
+        phase: 'end',
+        harness: id,
+        result: mine === session ? result : 'superseded',
+        elapsedMs: options.clock.now() - started,
+      })
       unhold(mine)
       if (mine === session) syncDevice()
     }
@@ -1499,6 +1526,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     const at = harnesses.findIndex((entry) => entry.id === id)
     const wasReady = harnesses[at]?.state === 'ready'
     harnesses = at < 0 ? [...harnesses, next] : harnesses.with(at, next)
+    traceHarnesses()
     if (next.state === 'ready') {
       // 取目录时它被跳过了的话，就算我们这边一直当它可用，也要补取
       if (!wasReady || gaps.has(id)) void recover(id)
@@ -1602,7 +1630,6 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     'litch/threadSection/changed': () => {
       if (hasProjects === true) void refreshProjects()
     },
-    'litch/harness/status/changed': harnessChanged,
     // 会话树：一个会话的 Litch 父子关系建立了、脱离了。只发给声明了 sessionTree 的连接
     'litch/thread/lineage/updated': ({ threadId, lineage }) =>
       patchThread(threadId, { litchLineage: lineage ?? undefined }),
@@ -1647,6 +1674,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
 
   const reconcile = async () => {
     const mine = session
+    const started = options.clock.now()
+    let result = 'ok'
+    trace?.('catalog', { phase: 'start' })
     hold()
     try {
       const projects = await loadProjects()
@@ -1668,6 +1698,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       syncDevice(fresh)
       saveSoon()
     } catch (error) {
+      result = 'failed'
       if (mine !== session) return
       log(`取会话目录失败：${String(error)}`)
       catalogError = phrase('device.catalogFailed', {
@@ -1675,6 +1706,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       })
       syncDevice()
     } finally {
+      trace?.('catalog', {
+        phase: 'end',
+        result: mine === session ? result : 'superseded',
+        elapsedMs: options.clock.now() - started,
+      })
       unhold(mine)
     }
   }
@@ -1768,7 +1804,16 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     turnNotices = false
     pathsSupported = false
     try {
-      const info = await link.request('runtime/info', {})
+      const info = await link.request(
+        'runtime/info',
+        {},
+        {
+          // SSH 一批数据可能带着应答及后续通知；必须在应答帧处截断，不能等 await 恢复。
+          received: () => {
+            if (mine === session) pendingHarnesses.clear()
+          },
+        },
+      )
       if (mine !== session) return
       if (isDeviceRuntime(info)) {
         // 设备服务：一条连接里有多个 harness，各自的名字、版本、状态由它声明
@@ -1901,6 +1946,16 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (mine !== session) return
       if (latestToolSnapshot) acceptToolSettings(latestToolSnapshot)
     }
+    if (mode === 'full') {
+      for (const [id, info] of pendingHarnesses) {
+        const next = withConfig(harnessFromInfo(info))
+        const at = harnesses.findIndex((entry) => entry.id === id)
+        harnesses = at < 0 ? [...harnesses, next] : harnesses.with(at, next)
+        remember(id, termsOf(info))
+      }
+    }
+    pendingHarnesses.clear()
+    traceHarnesses()
     online = true
     everConnected = true
     if (options.machine) {
@@ -1959,6 +2014,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       session++
       const dropped = online
       online = false
+      pendingHarnesses.clear()
       held = null
       holders = 0
       askingService?.()
@@ -2034,6 +2090,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     state: onState,
     notification(method, params) {
+      if (method === 'litch/harness/status/changed') {
+        const update = params as ServerNotifications['litch/harness/status/changed']
+        if (online) harnessChanged(update)
+        else pendingHarnesses.set(update.harness, update.info)
+        return
+      }
       // 引擎撤回了一个请求（别处答了、作废了）：正在执行的客户端工具调用不等了。会话里的卡片照常由下面撤
       if (method === 'serverRequest/resolved') {
         const requestId = (params as { requestId?: unknown } | null)?.requestId

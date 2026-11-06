@@ -461,7 +461,7 @@ export function ComposeBox({
       {note ? (
         <Text
           testID={`${testID}-note`}
-          numberOfLines={3}
+          numberOfLines={blocked ? undefined : 3}
           style={[styles.note, { color: error ? c.err : c.ink2 }]}
         >
           {note}

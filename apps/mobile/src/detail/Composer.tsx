@@ -15,6 +15,7 @@ import {
   MAX_IMAGES,
   type MessageExtra,
   type QueuedMessage,
+  type SessionSummary,
 } from '@litch/core'
 import { type RefObject, useEffect, useState, useSyncExternalStore } from 'react'
 import { StyleSheet, type TextInput, View } from 'react-native'
@@ -24,9 +25,10 @@ import type { SessionStore } from '../core/session-store'
 import { useKey, useServices } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { BackgroundBar } from './background/BackgroundBar'
+import { downHarness, harnessNotice } from './composer/availability'
 import { ComposeBox, useDraft } from './composer/ComposeBox'
 import { draftKey, type SessionExtra } from './composer/drafts'
-import { downHarness, useComposeOptions } from './composer/options'
+import { useComposeOptions } from './composer/options'
 import { ProviderSwitch } from './composer/ProviderSwitch'
 import { ProviderSwitchDialog } from './composer/ProviderSwitchDialog'
 
@@ -65,6 +67,7 @@ export function Composer({
   const { channel, prefs } = useServices()
   const meta = useSyncExternalStore(store.subscribeMeta, store.getMeta)
   const device = useKey<DeviceView>(keys.device(deviceId))
+  const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const draft = useDraft(draftKey(deviceId, sessionId))
   const options = useComposeOptions(deviceId, meta?.harness, sessionId)
   const [error, setError] = useState<string | null>(null)
@@ -95,20 +98,18 @@ export function Composer({
   )
   const running = meta?.running ?? false
   const heldCount = meta?.queued.filter((entry) => entry.delivery === 'held').length ?? 0
-  const down = downHarness(device, meta?.harness)
+  const down = downHarness(device, meta?.harness ?? summary?.harness)
   const blocked =
     device && device.connection !== 'online'
       ? t('composer.offline')
-      : !meta
-        ? null
-        : !meta.live
-          ? meta.note
-            ? t.text(meta.note)
-            : t('composer.offline')
-          : down
-            ? t(down.state === 'disabled' ? 'composer.harnessOff' : 'composer.harnessDown', {
-                name: down.name,
-              })
+      : down
+        ? harnessNotice(down, t)
+        : !meta
+          ? null
+          : !meta.live
+            ? meta.note
+              ? t.text(meta.note)
+              : t('composer.offline')
             : null
   const harness = device?.harnesses.find((entry) => entry.id === meta?.harness)
   const model = options?.models.find((entry) => entry.id === meta?.settings.model)

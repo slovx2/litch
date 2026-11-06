@@ -21,6 +21,7 @@ const tailStatus = () =>
   })
 
 export const native: Native = {
+  connectionDiagnostic() {},
   tailscaleAvailable: () => pairingScene,
   connectionRoute: async () => '',
   tailscaleLogin: async () => {

@@ -35,6 +35,10 @@ class LitchSshModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("LitchSsh")
     Events("onConnectionPolicy")
+    Function("connectionDiagnostic") { line: String ->
+      // 与 iOS 相同的脱敏连接摘要，不转发普通核心日志或 RPC 正文。
+      Log.i("LitchConnection", line)
+    }
 
     OnCreate {
       application = appContext.reactContext?.applicationContext as? Application

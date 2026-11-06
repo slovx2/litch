@@ -3,7 +3,6 @@
 import {
   type ComposeOptions,
   type DeviceView,
-  type HarnessView,
   keys,
   type SessionDefaults,
   type SessionMeta,
@@ -11,16 +10,7 @@ import {
 } from '@litch/core'
 import { useEffect, useState } from 'react'
 import { useChannel, useKey } from '../../shell/services'
-
-/** 会话所属的 harness 现在用不了（不可用或停用了）。设备上没有这个 harness 的记录时不算 */
-export function downHarness(
-  device: DeviceView | undefined,
-  harness: string | undefined,
-): HarnessView | null {
-  if (!device || !harness) return null
-  const found = device.harnesses.find((entry) => entry.id === harness)
-  return found && found.state !== 'ready' ? found : null
-}
+import { downHarness } from './availability'
 
 /** 问过的记着，进同一台设备的另一个会话时设置条不用等一下才出来。每个 harness 各记各的 */
 const known = new Map<string, ComposeOptions>()

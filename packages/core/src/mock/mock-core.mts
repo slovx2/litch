@@ -2467,7 +2467,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       })
       if (running(view)?.id === turnId) endTurn(view, turnId, null, 'interrupted')
     }
-    dropped.set(key, clock.setTimer(back, Math.max(chunkMs * 60, 1)))
+    dropped.set(key, scenarioClock.setTimer(back, Math.max(chunkMs * 60, 1)))
     return true
   }
 
