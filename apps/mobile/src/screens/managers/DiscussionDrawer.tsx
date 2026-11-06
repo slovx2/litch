@@ -13,6 +13,7 @@ import {
 } from 'react-native'
 import type { KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { ModalConsentHost } from '../../privacy/ConsentPresentation'
 import { useT } from '../../ui/i18n'
 import { KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { ModalKeyboardArea } from '../../ui/kit/ModalKeyboardArea'
@@ -176,6 +177,7 @@ export function DiscussionDrawer({
           {footer ? <View style={[styles.foot, { borderTopColor: c.line1 }]}>{footer}</View> : null}
         </View>
       </ModalKeyboardArea>
+      <ModalConsentHost active={visible} />
     </Modal>
   )
 }

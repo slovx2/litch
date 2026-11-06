@@ -9,6 +9,7 @@ iOS 的更新由 App Store 或 TestFlight 管理。隐私查询、删除请求�
 
 手机首次向 AI 服务发起操作前，会说明消息、附件、代理读取的项目文件和会话上下文的数据去向。
 用户可以取消；取消不会发送本次内容。同意按设备与供应商配置保存，换供应商或配置变化后重新确认。
+讨论抽屉打开时，同意框显示在抽屉上方；取消后保留追问草稿，允许后完成发送并清空输入框。
 若远端未上报完整供应商信息，界面明确提示先核实配置，本次许可不保存。文件附件先上传到选定设备，
 后续发送给模型仍须获得该服务的同意。经理操作同时说明其配置的派发服务。
 设置可“撤回 AI 数据同意”；这只影响手机今后的操作，不删除已经传出的内容，也不停止远端运行的任务。
@@ -17,7 +18,9 @@ iOS 的更新由 App Store 或 TestFlight 管理。隐私查询、删除请求�
 Before an AI action from the phone, Litch explains where messages, attachments, project files and
 conversation context may be processed. You can cancel. Consent is saved per device and reported
 provider configuration; provider or configuration changes require confirmation. Unknown provider
-details are shown explicitly and permission is not saved. File attachments are uploaded to the
+details are shown explicitly and permission is not saved. When a discussion drawer is open,
+consent appears above it. Cancelling keeps the draft; agreeing sends the question and clears
+the input after submission succeeds. File attachments are uploaded to the
 selected device first; sending them to a model still requires consent for that service. Manager
 actions also disclose their configured dispatch service. Withdraw consent in Settings to be asked
 again. This does not delete data already sent or stop autonomous work on your remote computer.

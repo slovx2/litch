@@ -186,6 +186,12 @@ Release E2E 构建使用 `EXPO_PUBLIC_LITCH_E2E=1`，发布包为 `0`；不要�
 最终仍执行完整的原选择器和断言。25 号流程首次讨论发送显式要求同意框出现并点击允许，
 用于发现讨论抽屉打开时同意框无法显示或无法点击的问题。
 
+`e2e/ios/DiscussionConsentTests.swift` 使用独立 XCUITest 检查讨论内同意、取消保留草稿、
+允许后消息出现且输入清空，以及关闭抽屉后主输入框的同意。先在专用模拟器卸载、重装
+Litch Dev 验收包，保证没有已保存的同意记录；使用模拟核心，不连接真实模型。
+用 `scripts/ios-test-project.rb` 生成独立测试工程，在 iPhone 和 iPad 各跑一次，
+结束立即关闭模拟器。XCUITest 不使用 Maestro 的 7001 端口。
+
 - `mock/29-review-privacy.yaml`：新建取消不发送、允许后继续、撤回后再问、Tailscale 取消。
 - `scripts/check-review-production.mjs <专用模拟器> <发布 .app 绝对路径>`：持有 Maestro 7001 共享锁，
   向隔离应用种入旧开发配置后运行 `production/review-links.yaml`，验证正式 Bundle ID 的深链无效、

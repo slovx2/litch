@@ -26,7 +26,7 @@ import { AppState } from 'react-native'
 import type { SendMode } from '../../../../packages/ui/src/composer/send-mode-logic.ts'
 import { sendModeOf } from '../detail/composer/send-mode'
 import { backgroundMinutes } from '../platform/background'
-import { ConsentDialog } from '../privacy/ConsentDialog'
+import { ConsentPresentation } from '../privacy/ConsentPresentation'
 import { type ConsentRequest, consentChannel } from '../privacy/consent'
 import { aiConsentRecords } from '../privacy/storage'
 import { consentTargets } from '../privacy/targets'
@@ -176,8 +176,7 @@ export function ServicesProvider({
   }, [onReady, value])
   return (
     <ServicesContext.Provider value={value}>
-      {children}
-      <ConsentDialog request={consentRequest} />
+      <ConsentPresentation request={consentRequest}>{children}</ConsentPresentation>
     </ServicesContext.Provider>
   )
 }
