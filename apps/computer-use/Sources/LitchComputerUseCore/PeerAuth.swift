@@ -49,7 +49,7 @@ public enum PeerAuth {
   }
 
   /// 判定。通过回 nil，不通过回给对面看的原因
-  public static func check(mode: Mode, ownUid: UInt32, peer: Peer, offeredToken: String?)
+  public static func check(mode: Mode, ownUid: UInt32, peer: Peer, offeredToken: String?, allowedIdentifiers: Set<String> = litchIdentifiers, productName: String = "Litch")
     -> String?
   {
     guard let uid = peer.uid, uid == ownUid else {
@@ -57,7 +57,7 @@ public enum PeerAuth {
     }
     switch mode {
     case .closed:
-      return "this helper was started without a launch token and is not signed; restart it from Litch"
+      return "this helper was started without a launch token and is not signed; restart it from \(productName)"
     case .token(let expected):
       guard let offered = offeredToken, constantTimeEqual(offered, expected) else {
         return "launch token missing or wrong"
@@ -67,8 +67,8 @@ public enum PeerAuth {
       guard peer.signatureValid, peer.teamId == team else {
         return "the connecting process is not signed by team \(team)"
       }
-      guard let identifier = peer.identifier, litchIdentifiers.contains(identifier) else {
-        return "the connecting process is not Litch"
+      guard let identifier = peer.identifier, allowedIdentifiers.contains(identifier) else {
+        return "the connecting process is not \(productName)"
       }
       return nil
     }

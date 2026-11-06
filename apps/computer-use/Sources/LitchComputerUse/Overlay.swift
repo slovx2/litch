@@ -190,7 +190,7 @@ final class Overlay {
 
   private func refresh() {
     guard !names.isEmpty else { return }
-    titleField?.stringValue = Copy.banner(language, app: Copy.apps(language, names: names))
+    titleField?.stringValue = Copy.banner(language, app: Copy.apps(language, names: names), productName: NativeHost.identity.productName)
     hintField?.stringValue = capturePending ? Copy.captureNotice(language) : Copy.hint(language)
     stopButton?.title = Copy.stop(language)
   }

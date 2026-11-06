@@ -12,5 +12,23 @@ fn main() {
         .and_then(|rest| rest.split('"').nth(1))
         .unwrap_or("0.0.0")
         .to_string();
+    let version = setting("CU_HELPER_VERSION", &version);
     println!("cargo:rustc-env=LITCH_VERSION={version}");
+    for (name, default) in [
+        ("CU_HOST_PRODUCT", "Litch"),
+        ("CU_HOST_REGISTRY_KEY", r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{86165537-655A-4F60-847F-94A1A6C622F4}_is1"),
+        ("CU_HOST_EXECUTABLE", "Litch.exe"),
+        ("CU_HOST_ISOLATION_KEYS", "LITCH_PROFILE;LITCH_MOCK"),
+    ] {
+        let value = setting(name, default);
+        println!("cargo:rustc-env={name}={value}");
+    }
+}
+
+// 仅构建期读取，编译进组件；模型/运行时环境不能改变受保护目标。
+fn setting(name: &str, default: &str) -> String {
+    println!("cargo:rerun-if-env-changed={name}");
+    let value = std::env::var(name).unwrap_or_else(|_| default.to_string());
+    assert!(!value.is_empty() && !value.chars().any(char::is_control), "invalid build identity: {name}");
+    value
 }
