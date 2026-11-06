@@ -1,0 +1,33 @@
+{
+  "name": "chrome-extension-internal",
+  "version": "0.34.1",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "可嵌入的 Chrome 扩展运行时",
+  "exports": {
+    ".": {
+      "types": "./dist/chrome-extension/src/index.d.mts",
+      "import": "./dist/chrome-extension/src/index.mjs"
+    },
+    "./pointer-world": {
+      "types": "./dist/chrome-extension/src/pointer-world.d.mts",
+      "import": "./dist/chrome-extension/src/pointer-world.mjs"
+    },
+    "./build": "./build.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "build.mjs"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.mts"
+  },
+  "dependencies": {
+    "esbuild": "0.28.2"
+  }
+}

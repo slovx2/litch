@@ -1,6 +1,5 @@
 import { execFile } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
-import { chmod, mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import { stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -23,8 +22,6 @@ export interface ChromeInstallOptions {
  */
 export const CHROME_HOST_REGISTRY_KEY = `HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\${CHROME_HOST_NAME}`
 
-const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`
-
 /**
  * 宿主清单放哪：macOS 是 Chrome 正式版的每用户目录；Linux 是 google-chrome，装过 Chromium 的再加它的目录；
  * Windows 放在 Litch 自己的目录里，再登记到注册表。
@@ -45,81 +42,51 @@ async function manifestDirectories(root: string): Promise<string[]> {
   ]
 }
 
-/** Chrome 在 Windows 上经 cmd.exe 起宿主，所以启动脚本是 .bat；% 在批处理里要写成 %%。 */
-function launcherOf(root: string, binary: string, config: string): { path: string; text: string } {
-  if (process.platform === 'win32') {
-    const bat = (value: string) => `"${value.replaceAll('%', '%%')}"`
-    return {
-      path: join(root, 'native-host.bat'),
-      text: `@echo off\r\n${bat(binary)} chrome-host --config ${bat(config)} %*\r\n`,
-    }
-  }
-  return {
-    path: join(root, 'native-host'),
-    text: `#!/bin/sh\nexec ${quote(binary)} chrome-host --config ${quote(config)} "$@"\n`,
-  }
-}
-async function privateJson(file: string, value: unknown): Promise<void> {
-  const temporary = `${file}.new`
-  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 })
-  await chmod(temporary, 0o600)
-  await rename(temporary, file)
-}
+// 路径选择和系统登记属于 Litch 外壳，库只接显式的存储端口。
+import { ChromeInstaller as Installer } from '../../../../packages/chrome-bridge/src/installer.mjs'
+import { FileRegistrationStore } from '../../../../packages/chrome-bridge/src/registration.mjs'
 
-/**
- * 打包后扩展在 app.asar 里，Electron 的 asar 补丁不支持 fs.cp，只能逐个文件读写。
- * 构建产物是平铺的几个文件，遇到子目录直接报错，免得漏拷。
- */
-async function copyExtension(from: string, to: string): Promise<void> {
-  await mkdir(to, { recursive: true, mode: 0o700 })
-  for (const entry of await readdir(from, { withFileTypes: true })) {
-    if (!entry.isFile()) throw new Error(`Unexpected entry in Chrome extension: ${entry.name}`)
-    await writeFile(join(to, entry.name), await readFile(join(from, entry.name)))
-  }
-}
-
-export async function chromeIdentity(assets: string): Promise<{ id: string; version: string }> {
-  return JSON.parse(await readFile(join(assets, 'identity.json'), 'utf8'))
-}
+export { chromeIdentity } from '../../../../packages/chrome-bridge/src/installer.mjs'
 
 export class ChromeInstaller {
-  readonly token = randomBytes(32).toString('hex')
-  readonly extensionDirectory: string
-  readonly configPath: string
   private options: ChromeInstallOptions
+  private directories: Promise<string[]>
   constructor(options: ChromeInstallOptions) {
     this.options = options
-    this.extensionDirectory = join(options.root, 'extension')
-    this.configPath = join(options.root, 'native-config.json')
+    this.directories = options.manifestDirectories
+      ? Promise.resolve(options.manifestDirectories)
+      : manifestDirectories(options.root)
+    // 随机令牌和原有目录形状不变；存储目录的异步探测延到 prepare。
+    this.base = new Installer({
+      ...options,
+      identity: {
+        hostName: CHROME_HOST_NAME,
+        extensionIds: options.extensionIds,
+        productName: 'Litch',
+      },
+      nativeArgs: ['chrome-host'],
+      registrations: async () =>
+        (await this.directories).map(
+          (directory) => new FileRegistrationStore(directory, 'Litch Chrome bridge'),
+        ),
+    })
   }
-  async prepared(): Promise<boolean> {
-    return stat(join(this.extensionDirectory, 'manifest.json')).then(
-      () => true,
-      () => false,
-    )
+  private base: Installer
+  get token(): string {
+    return this.base.token
+  }
+  get extensionDirectory(): string {
+    return this.base.extensionDirectory
+  }
+  get configPath(): string {
+    return this.base.configPath
+  }
+  prepared(): Promise<boolean> {
+    return this.base.prepared()
   }
   async prepare(): Promise<void> {
-    const { root, assets, nativeBinary, socketPath, extensionIds } = this.options
-    if (!nativeBinary || !(await stat(nativeBinary)).isFile())
-      throw new Error('Litch native host executable is missing.')
-    await mkdir(root, { recursive: true, mode: 0o700 })
-    await copyExtension(assets, this.extensionDirectory)
-    await privateJson(this.configPath, { socketPath, token: this.token, extensionIds })
-    const launcher = launcherOf(root, nativeBinary, this.configPath)
-    await writeFile(launcher.path, launcher.text, { mode: 0o700 })
-    await chmod(launcher.path, 0o700)
-    const manifest = {
-      name: CHROME_HOST_NAME,
-      description: 'Litch Chrome bridge',
-      path: launcher.path,
-      type: 'stdio',
-      allowed_origins: extensionIds.map((id) => `chrome-extension://${id}/`),
-    }
-    const directories = this.options.manifestDirectories ?? (await manifestDirectories(root))
-    for (const directory of directories) {
-      await mkdir(directory, { recursive: true, mode: 0o700 })
-      await privateJson(join(directory, `${CHROME_HOST_NAME}.json`), manifest)
-    }
+    // 同一实例的 token 必须稳定；只替换登记端口。
+    await this.base.prepare()
     if (process.platform === 'win32' && !this.options.manifestDirectories)
       await promisify(execFile)(
         'reg.exe',
@@ -130,7 +97,7 @@ export class ChromeInstaller {
           '/t',
           'REG_SZ',
           '/d',
-          join(root, `${CHROME_HOST_NAME}.json`),
+          join(this.options.root, `${CHROME_HOST_NAME}.json`),
           '/f',
         ],
         { windowsHide: true },

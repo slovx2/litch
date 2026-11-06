@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { targetsChrome } from '../../../../packages/chrome-bridge/src/dispatcher.mjs'
 import {
   CHROME_STORE_URL,
   type ChromeSettingsRequest,
@@ -158,18 +159,7 @@ export class BrowserTargets {
     return {
       namespace: 'litch_browser',
       call: async (invocation, context) => {
-        const args = invocation.arguments as Record<string, unknown> | null
-        const explicit =
-          ['targets', 'claim', 'release'].includes(invocation.tool) ||
-          (invocation.tool === 'run_actions' &&
-            Array.isArray(args?.actions) &&
-            args.actions.some(
-              (action) =>
-                typeof action?.arguments?.tabId === 'string' &&
-                action.arguments.tabId.startsWith('chrome:'),
-            )) ||
-          typeof args?.targetId === 'string' ||
-          (typeof args?.tabId === 'string' && args.tabId.startsWith('chrome:'))
+        const explicit = targetsChrome(invocation)
         if (!explicit) return builtin.call(invocation, context)
         await this.initialized
         if (!this.chrome)

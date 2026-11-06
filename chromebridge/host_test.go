@@ -1,4 +1,4 @@
-package main
+package chromebridge
 
 import (
 	"bytes"
@@ -16,14 +16,14 @@ func TestChromeNativeFraming(t *testing.T) {
 	}
 	input.Write(payload)
 	var wire bytes.Buffer
-	if err := chromeNativeToBridge(&input, &wire); !errors.Is(err, io.EOF) {
+	if err := NativeToBridge(&input, &wire); !errors.Is(err, io.EOF) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(wire.Bytes(), append(payload, '\n')) {
 		t.Fatal("native frame changed")
 	}
 	var back bytes.Buffer
-	if err := chromeBridgeToNative(&wire, &back); !errors.Is(err, io.EOF) {
+	if err := BridgeToNative(&wire, &back); !errors.Is(err, io.EOF) {
 		t.Fatal(err)
 	}
 	if binary.LittleEndian.Uint32(back.Bytes()[:4]) != uint32(len(payload)) || !bytes.Equal(back.Bytes()[4:], payload) {
@@ -35,7 +35,7 @@ func TestChromeRejectsMalformedFrames(t *testing.T) {
 	cases := [][]byte{{0, 0, 0, 0}, {1, 0, 0, 2}, {3, 0, 0, 0, 'b', 'a', 'd'}, {4, 0, 0, 0, '{', '}'}}
 	for _, data := range cases {
 		var output bytes.Buffer
-		if err := chromeNativeToBridge(bytes.NewReader(data), &output); err == nil {
+		if err := NativeToBridge(bytes.NewReader(data), &output); err == nil {
 			t.Fatal("accepted invalid input")
 		}
 		if output.Len() != 0 {
@@ -43,7 +43,7 @@ func TestChromeRejectsMalformedFrames(t *testing.T) {
 		}
 	}
 	var output bytes.Buffer
-	if err := chromeBridgeToNative(bytes.NewBufferString("invalid\n"), &output); err == nil {
+	if err := BridgeToNative(bytes.NewBufferString("invalid\n"), &output); err == nil {
 		t.Fatal("accepted invalid JSON")
 	}
 	if output.Len() != 0 {
@@ -54,12 +54,12 @@ func TestChromeRejectsMalformedFrames(t *testing.T) {
 func TestChromeHostOrigin(t *testing.T) {
 	origin := "chrome-extension://fakgembkgnmeknpaegnneneockbjhaai/"
 	for _, args := range [][]string{{origin}, {origin, "--parent-window=0"}, {origin, "--parent-window=133742"}} {
-		if got, err := chromeHostOrigin(args); err != nil || got != origin {
+		if got, err := HostOrigin(args); err != nil || got != origin {
 			t.Fatalf("%v: %q %v", args, got, err)
 		}
 	}
 	for _, args := range [][]string{{}, {origin, "--other"}, {origin, "--parent-window=x"}, {origin, "--parent-window=1", "x"}} {
-		if _, err := chromeHostOrigin(args); err == nil {
+		if _, err := HostOrigin(args); err == nil {
 			t.Fatalf("accepted %v", args)
 		}
 	}
