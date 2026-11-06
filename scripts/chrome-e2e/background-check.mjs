@@ -2,7 +2,15 @@
 import assert from 'node:assert/strict'
 import { until } from '../chrome-m0/cdp.mjs'
 
-export async function backgroundChecks({ cdp, send, targetId, origin, check, waitSignIn }) {
+export async function backgroundChecks({
+  cdp,
+  send,
+  targetId,
+  origin,
+  check,
+  waitSignIn,
+  foreground,
+}) {
   const fixtureUrl = `${origin}/input?background-window-fixture`
   const worker = (await cdp.call('Target.getTargets')).targetInfos.find(
     (t) => t.type === 'service_worker',
@@ -37,18 +45,27 @@ export async function backgroundChecks({ cdp, send, targetId, origin, check, wai
     )
   let first, front
   try {
-    // 已授权前台验收时段中的隔离窗口；不访问、移动或激活用户真实 Chrome。
+    // 两个窗口都最小化。参考窗口仅有 Chrome 内部活动标签，不请求 macOS 前台。
     first = await evaluate(
-      `chrome.windows.create({url:${JSON.stringify(fixtureUrl)},type:'normal',focused:false,left:0,top:0,width:640,height:480})`,
+      `chrome.windows.create({url:${JSON.stringify(fixtureUrl)},type:'normal',focused:false,state:'minimized'})`,
     )
+    await evaluate(`chrome.windows.update(${first.id},{state:'minimized'})`)
+    // 参考活动标签只在测试 Chrome 内部切换，代理页面保持后台；不激活系统窗口。
+    await evaluate(`chrome.tabs.create({windowId:${first.id},url:'about:blank',active:true})`)
     const tabId = await checkAndClaim(first.tabs[0].id)
     front = await evaluate(
-      `chrome.windows.create({url:'about:blank',type:'normal',focused:true,left:40,top:40,width:640,height:480})`,
+      `chrome.windows.create({url:'about:blank',type:'normal',focused:false,state:'minimized'})`,
     )
+    await evaluate(`chrome.windows.update(${front.id},{state:'minimized'})`)
     await until(
-      async () => (await active()).windows.find((w) => w.id === front.id)?.focused,
-      'isolated foreground window',
+      () =>
+        evaluate(
+          `chrome.windows.getAll({windowTypes:['normal']}).then(windows=>windows.every(window=>window.state==='minimized'))`,
+        ),
+      'two minimized Chrome windows',
     )
+    await foreground.check('two minimized Chrome windows created')
+    assert.ok((await active()).windows.every((window) => !window.focused))
     await evaluate(
       `globalThis.__litchFocusEvents=[];globalThis.__litchActivated=t=>__litchFocusEvents.push({tab:t.tabId,window:t.windowId});globalThis.__litchFocused=w=>{if(w>=0)__litchFocusEvents.push({window:w})};chrome.tabs.onActivated.addListener(__litchActivated);chrome.windows.onFocusChanged.addListener(__litchFocused)`,
     )
@@ -64,6 +81,12 @@ export async function backgroundChecks({ cdp, send, targetId, origin, check, wai
         [],
         'no transient tab/window activation',
       )
+      await foreground.check('background window action')
+      const windows = await evaluate('chrome.windows.getAll({windowTypes:["normal"]})')
+      assert.ok(
+        windows.every((window) => window.state === 'minimized'),
+        `all Chrome windows remain minimized: ${JSON.stringify(windows.map((window) => ({ id: window.id, state: window.state, focused: window.focused })))}`,
+      )
     }
     const ref = async (role, name) => {
       const snapshot = await run('snapshot', { tabId })
@@ -75,7 +98,7 @@ export async function backgroundChecks({ cdp, send, targetId, origin, check, wai
       return value
     }
     await check(
-      '非活动窗口：navigate/newTab/claim/click/type/run_actions 均不改变前台或活动标签',
+      '双后台窗口：navigate/newTab/claim/click/type/run_actions 不改变参考窗口或活动标签',
       async () => {
         await run('navigate', { tabId, url: fixtureUrl })
         await verify()
@@ -126,16 +149,10 @@ export async function backgroundChecks({ cdp, send, targetId, origin, check, wai
       assert.equal(result.success, true, text(result))
       await verify()
     })
-    // 重新认领发生在前台窗口已经建立之后，也纳入事件断言。
-    const reclaimed = await checkAndClaim(first.tabs[0].id)
-    await verify()
-    await check('只有显式 show 才激活指定标签与窗口', async () => {
-      await run('show', { tabId: reclaimed })
-      await until(
-        async () => (await active()).windows.find((w) => w.id === first.id)?.focused,
-        'explicit show',
-      )
-      assert.ok((await active()).tabs.some((t) => t.id === first.tabs[0].id))
+    // show 的语义就是激活系统窗口，不能在无打扰验收中执行该对照。
+    await check('后台重新认领不激活窗口或切换活动标签', async () => {
+      await checkAndClaim(first.tabs[0].id)
+      await verify()
     })
   } finally {
     await evaluate(

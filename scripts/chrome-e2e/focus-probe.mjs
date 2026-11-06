@@ -1,11 +1,12 @@
-// 因果对照：真实 headed CFT 的最小化窗口，不激活用户窗口，不保留 profile 或页面证据。
+// 焦点对照：真实 headed CFT 的最小化窗口，不激活用户窗口，不保留 profile 或页面证据。
 import assert from 'node:assert/strict'
-import { execFileSync, spawn } from 'node:child_process'
-import { globSync, mkdtempSync, rmSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { globSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Cdp, until } from '../chrome-m0/cdp.mjs'
+import { foregroundGuard, launchBackgroundChrome, minimizeTarget } from './background-runtime.mjs'
 
 const binary =
   process.env.LITCH_CHROME_BINARY ??
@@ -24,11 +25,12 @@ const server = createServer((_req, res) =>
 <button id="click" style="width:120px;height:60px" onclick="this.textContent=String(++window.count)">Count</button>
 <input id="field"><button id="next">Next</button><script>window.count=0</script>`),
 )
-let child, cdp
+let child, cdp, foreground
 try {
+  foreground = await foregroundGuard(home)
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const url = `http://127.0.0.1:${server.address().port}`
-  child = spawn(
+  child = await launchBackgroundChrome(
     binary,
     [
       '--no-startup-window',
@@ -41,17 +43,16 @@ try {
       '--disable-background-networking',
       '--disable-sync',
     ],
-    {
-      env: { PATH: process.env.PATH, HOME: home, TMPDIR: home },
-      stdio: ['ignore', 'ignore', 'pipe'],
-    },
+    { PATH: process.env.PATH, HOME: home, TMPDIR: home },
+    join(home, 'profile'),
   )
-  let address = ''
-  child.stderr.on('data', (data) => {
-    address ||= String(data).match(/DevTools listening on (ws:\/\/[^\s]+)/)?.[1] ?? ''
-  })
-  await until(() => address, 'isolated CFT')
-  const port = new URL(address).port
+  const port = await until(
+    () => readFileSync(join(home, 'profile', 'DevToolsActivePort'), 'utf8').split('\n')[0],
+    'isolated CFT port',
+  )
+  const address = (await (await fetch(`http://127.0.0.1:${port}/json/version`)).json())
+    .webSocketDebuggerUrl
+  await foreground.check('focus-probe background launch')
   assert.equal(
     execFileSync('/usr/sbin/lsof', ['-t', '-nP', `-iTCP:${port}`, '-sTCP:LISTEN'], {
       encoding: 'utf8',
@@ -67,6 +68,7 @@ try {
       background: true,
       windowState: 'minimized',
     })
+    await minimizeTarget(cdp, targetId)
     const { windowId, bounds } = await cdp.call('Browser.getWindowForTarget', { targetId })
     assert.equal(bounds.windowState, 'minimized', 'fixture must remain hidden')
     const { sessionId } = await cdp.call('Target.attachToTarget', { targetId, flatten: true })
@@ -115,11 +117,15 @@ try {
       'minimized',
     )
     await cdp.call('Target.closeTarget', { targetId })
+    await foreground.check('focus-probe minimized input')
   }
   for (const observed of observations) {
-    assert.equal(observed.clicked.count, observed.emulation ? 1 : 0)
-    assert.equal(observed.tabbed[0].active, observed.emulation ? 'field' : 'BODY')
-    assert.equal(observed.tabbed[1].active, observed.emulation ? 'next' : 'BODY')
+    // Launch Services 后台启动改变了系统焦点条件；关闭模拟只记录对照，不假定必定丢输入。
+    if (observed.emulation) {
+      assert.equal(observed.clicked.count, 1)
+      assert.equal(observed.tabbed[0].active, 'field')
+      assert.equal(observed.tabbed[1].active, 'next')
+    }
     assert.equal(observed.typed.value, 'fixture')
   }
   console.log(
@@ -136,5 +142,11 @@ try {
     await new Promise((resolve) => child.once('exit', resolve))
   }
   await new Promise((resolve) => server.close(resolve))
-  rmSync(home, { recursive: true, force: true })
+  try {
+    await foreground?.check('focus-probe cleanup')
+    console.log('PASS NSWorkspace：焦点对照全过程前台应用未变')
+  } finally {
+    await foreground?.close()
+    rmSync(home, { recursive: true, force: true })
+  }
 }

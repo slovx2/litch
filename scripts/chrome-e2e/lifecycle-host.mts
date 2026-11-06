@@ -18,6 +18,8 @@ const [root, assets, profile, nativeBinary] = process.argv.slice(2) as [
   string,
 ]
 app.setPath('userData', join(root, 'electron'))
+// 隐藏验收宿主不参与 macOS 的应用激活，避免启动/退出影响用户前台。
+app.setActivationPolicy('prohibited')
 void app
   .whenReady()
   .then(async () => {

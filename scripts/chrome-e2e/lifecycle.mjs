@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { Cdp, until } from '../chrome-m0/cdp.mjs'
 import { backgroundChecks } from './background-check.mjs'
+import { foregroundGuard, launchBackgroundChrome, minimizeTarget } from './background-runtime.mjs'
 import { inputChecks } from './input-check.mjs'
 
 export async function chromeLifecycle({
@@ -46,6 +47,7 @@ export async function chromeLifecycle({
   mkdirSync(profile)
   let host,
     chrome,
+    foreground,
     cdp,
     extensionDirectory,
     seq = 0
@@ -136,7 +138,7 @@ export async function chromeLifecycle({
     const port = server.address().port
     await new Promise((resolve) => server.close(resolve))
     assert.notEqual(port, 9333)
-    chrome = spawn(
+    chrome = await launchBackgroundChrome(
       binary,
       [
         '--no-startup-window',
@@ -154,8 +156,10 @@ export async function chromeLifecycle({
         '--no-proxy-server',
         '--host-resolver-rules=MAP a.test 127.0.0.1,MAP b.test 127.0.0.1',
       ],
-      { env, stdio: 'ignore' },
+      env,
+      profile,
     )
+    await foreground.check('headed Chrome background launch')
     const version = await until(
       async () => (await fetch(`http://127.0.0.1:${port}/json/version`)).json(),
       'Lifecycle Chrome startup',
@@ -182,6 +186,7 @@ export async function chromeLifecycle({
       targetId: settings.targetId,
       flatten: true,
     })
+    await minimizeTarget(cdp, settings.targetId)
     await until(
       async () =>
         (
@@ -209,6 +214,7 @@ export async function chromeLifecycle({
       background: true,
       windowState: 'minimized',
     })
+    await minimizeTarget(cdp, userTab.targetId)
     assert.equal(
       (await cdp.call('Browser.getWindowForTarget', { targetId: userTab.targetId })).bounds
         .windowState,
@@ -266,7 +272,9 @@ export async function chromeLifecycle({
     await cdp.call('Target.detachFromTarget', { sessionId })
   }
   try {
+    foreground = await foregroundGuard(base)
     await startHost()
+    await foreground.check('hidden Electron launch')
     await startChrome()
     await check('隐藏 Electron：网站审批真实等待 31 秒后成功，无实例卡和标签卡', async () => {
       const start = Date.now()
@@ -315,6 +323,7 @@ export async function chromeLifecycle({
                 .windowState,
               'minimized',
             )
+          await foreground.check(`minimized headed: ${name}`)
         }),
     })
     if (focusWindows)
@@ -324,6 +333,7 @@ export async function chromeLifecycle({
         targetId: `chrome:${(await connected()).id}`,
         origin: site.origin,
         check,
+        foreground,
         waitSignIn: () =>
           until(() => waiting.at(-1)?.kind === 'chromeSignIn', 'sign-in card waiting'),
       })
@@ -377,5 +387,13 @@ export async function chromeLifecycle({
     await stop(chrome)
     await stop(host)
     for (const call of pending.values()) clearTimeout(call.timer)
+    if (foreground) {
+      try {
+        await foreground.check('headed lifecycle cleanup')
+        console.log('PASS NSWorkspace：headed 生命周期及清理全过程前台应用未变')
+      } finally {
+        await foreground.close()
+      }
+    }
   }
 }

@@ -33,10 +33,7 @@ if (!binary || !existsSync(binary) || !binary.includes('for Testing'))
   throw new Error(
     'Set LITCH_CHROME_BINARY to an installed Chrome for Testing binary. Daily Chrome is never used.',
   )
-if (
-  (process.argv.includes('--shown') || process.argv.includes('--focus-windows')) &&
-  process.env.LITCH_CHROME_GUI_SLOT !== 'approved'
-)
+if (process.argv.includes('--shown') && process.env.LITCH_CHROME_GUI_SLOT !== 'approved')
   throw new Error('GUI checks need an approved foreground slot and LITCH_CHROME_GUI_SLOT=approved.')
 const started = Date.now()
 const work = mkdtempSync(join(tmpdir(), 'litch-chrome-e2e-'))

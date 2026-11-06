@@ -8,7 +8,7 @@ npm run client:check:chrome
 
 加 `-- --no-evidence` 不写截图、报告或浏览器日志，结束后只保留终端验收结果。生命周期场景使用隐藏 Electron 窗口中的正式 Chrome 桥与执行器：网站审批实际等待 31 秒，重启隔离 Chrome、重启 Electron 宿主、更换隔离扩展副本/profile；同一会话不出现实例或标签审批。扩展停止控制在两端重启后仍生效，只能通过扩展工具栏的用户回调恢复。自动验收只在临时扩展副本捕获该回调，发布扩展没有测试入口。
 
-输入场景同时跑默认 headless 和 headed CFT 最小化窗口，后者以 `--no-startup-window` 启动，显式创建 `windowState:minimized` 的隔离窗口并在每项检查后核对未恢复显示；新建工具标签仍为 `active:false`。覆盖点击/焦点/字段回读、同源导航、SPA 延迟提交、同值输入、批量中途失败及签名 URL/验证码脱敏。`focus-probe.mjs` 是独立因果对照：交替关闭/开启焦点模拟，各用全新最小化页面，记录并断言按钮计数及逐次 Tab 焦点。它不用用户资料、不激活日用窗口，不保留截图或报告。
+输入场景同时跑默认 headless 和 headed CFT 最小化窗口，后者以 `--no-startup-window` 启动，显式创建 `windowState:minimized` 的隔离窗口并在每项检查后核对未恢复显示；新建工具标签仍为 `active:false`。覆盖点击/焦点/字段回读、同源导航、SPA 延迟提交、同值输入、批量中途失败及签名 URL/验证码脱敏。`focus-probe.mjs` 是独立焦点对照：交替关闭/开启焦点模拟，各用全新最小化页面，记录按钮计数及逐次 Tab 焦点，开启模拟时必须生效。它不用用户资料、不激活日用窗口，不保留截图或报告。
 
 设置页安装引导另跑 `node scripts/chrome-e2e/settings.mjs`：隔离 HOME 中启动隐藏 Electron，加载正式 ChromeSection 和模拟设置通道，点击商店/手动入口，覆盖自动连接、聚焦刷新、失败重试、过期状态回包、版本不兼容及三平台中英文/三皮肤布局。要求根目录、界面和桌面依赖已安装，Electron 二进制已准备好；不接个人 Chrome、不打开真实商店，不保留截图或报告。宿主准备与打开商店的顺序由 `chrome-install.test.mts` 核对；这两项不能代替商店发布后的签名扩展安装验收。
 
@@ -24,7 +24,11 @@ npm run client:check:chrome
 
 场景用回环 HTTP 夹具提供登录 Cookie、弹窗、跨来源 iframe 和输入控件；操作经正式 `ChromeExecutor → ChromeBridge → Go Native Messaging → MV3` 路径，审批由脚本答复。CDP 只用于验收侧检查 PID、改变缩放和触发扩展生命周期，不替代模型业务工具。脚本化的 remote invocation 只验证控制端语义，不能代替真实 SSH 设备验收。
 
-默认主要场景为 headless，生命周期输入使用最小化窗口。获准前台验收后加 `--focus-windows`，`background-check.mjs` 会短暂打开两个隔离 headed 窗口，在 navigate、newTab、claim、click、type、run_actions 和登录卡等待前后核对所有窗口焦点及活动标签，并监听中途激活事件；显式 show 是对照组。结束后关闭隔离窗口，不操作日用 Chrome。运行 `LITCH_CHROME_GUI_SLOT=approved npm run client:check:chrome -- --no-evidence --focus-windows` 可完整执行上述场景。如果要观看主要场景，获准前台时段后运行：
+默认主要场景为 headless，生命周期输入使用最小化窗口。加 `--focus-windows` 会执行双后台窗口场景：两个窗口均保持最小化，参考窗口只使用 Chrome 内部的活动标签，不获取 macOS 前台。在 navigate、newTab、claim、click、type、run_actions 和登录卡等待前后核对窗口及活动标签，并监听中途激活事件。无打扰验收不执行 `show`，因为该工具本来就会激活系统窗口。
+
+headed CFT 经 `open -g -n -W` 后台启动，显式等待窗口最小化；隐藏 Electron 宿主禁止参与应用激活。不用 `open -j` 隐藏整个应用，避免把应用隐藏和窗口最小化混为一种验收条件。Swift `NSWorkspace.frontmostApplication` 监视器在整个 headed 生命周期记录激活通知并每 20ms 采样，逐步及退出后检查用户前台应用 PID 没有变化，不在事后恢复焦点掩盖切换。双窗口验收不需要前台时段：`npm run client:check:chrome -- --no-evidence --focus-windows`。不要与其他会切换应用的验收并行，用户自行换应用也会明确报错。独立 `focus-probe.mjs` 同样使用后台启动与监视器；关闭模拟的对照记录实际结果，不强制要求不同系统焦点条件都丢输入。
+
+如果需要观看主要场景，仍须获准前台时段后显式运行：
 
 ```sh
 LITCH_CHROME_GUI_SLOT=approved npm run client:check:chrome -- --shown
