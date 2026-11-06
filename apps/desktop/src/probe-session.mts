@@ -322,6 +322,13 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   const spawnable = names.includes('派出子会话…')
   const schedulable = names.includes('为此会话创建定时任务')
   const quotable = names.includes('在输入框里引用')
+  // 本机分组只记在这台客户端上，和设备能不能整理无关：单独核对，不算进设备的整理项
+  const localGroup = (name: string | null) =>
+    name === '加入本机分组' ||
+    name === '上移' ||
+    name === '下移' ||
+    (name?.startsWith('从“') === true && name.endsWith('”移出'))
+  const joinable = names.includes('加入本机分组')
   const organizing = names
     .slice(0, -3)
     .filter(
@@ -329,13 +336,15 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
         name !== '派出子会话…' &&
         name !== '为此会话创建定时任务' &&
         name !== '在输入框里引用' &&
-        name !== '删除工作树',
+        name !== '删除工作树' &&
+        !localGroup(name),
     )
     .join('|')
   const contextMenu: SessionProbe['contextMenu'] = {
     opened:
       click.handled &&
       quotable &&
+      (real || joinable) &&
       names.slice(-3).join('|') === '重命名|归档|删除' &&
       (real || (spawnable && schedulable)) &&
       (real
