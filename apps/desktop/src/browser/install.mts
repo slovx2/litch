@@ -22,6 +22,10 @@ import {
   BROWSER_BLOCK,
   BROWSER_CLEAR_DATA,
   BROWSER_CLOSE,
+  BROWSER_DOWNLOAD_ANSWER,
+  BROWSER_DOWNLOAD_REVEAL,
+  BROWSER_DOWNLOADS,
+  BROWSER_DOWNLOADS_CHANGED,
   BROWSER_EXTERNAL,
   BROWSER_FORGET_SITE,
   BROWSER_NAVIGATE,
@@ -173,6 +177,24 @@ export async function installBrowser(options: {
   }
   host.onChange((tabs) => broadcast(BROWSER_STATE, tabs))
   host.onShow((tab) => broadcast(BROWSER_SHOW, tab))
+  host.downloads?.onChange(() => broadcast(BROWSER_DOWNLOADS_CHANGED, host.downloads?.list()))
+  ipcMain.handle(BROWSER_DOWNLOADS, (event) =>
+    fromUi(event) ? (host.downloads?.list() ?? []) : [],
+  )
+  ipcMain.handle(BROWSER_DOWNLOAD_ANSWER, (event, payload: unknown) => {
+    if (!fromUi(event)) return false
+    const { id, allow } = (payload ?? {}) as { id?: unknown; allow?: unknown }
+    return (
+      typeof id === 'string' &&
+      typeof allow === 'boolean' &&
+      host.downloads?.answer(id, allow) === true
+    )
+  })
+  ipcMain.on(BROWSER_DOWNLOAD_REVEAL, (event, id: unknown) => {
+    if (!fromUi(event) || typeof id !== 'string') return
+    const download = host.downloads?.list().find((one) => one.id === id)
+    if (download?.status === 'completed' && download.path) shell.showItemInFolder(download.path)
+  })
 
   ipcMain.on(BROWSER_PLACE, (event, payload: unknown) => {
     if (!fromUi(event)) return

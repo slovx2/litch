@@ -33,3 +33,8 @@ export const BROWSER_BLOCK = 'litch:browser:block'
 export const BROWSER_UNBLOCK = 'litch:browser:unblock'
 /** 主进程 → 界面：开关或黑名单变了（卡片上点的、litch config 改的），带着新的 */
 export const BROWSER_POLICY_CHANGED = 'litch:browser:policy-changed'
+
+export const BROWSER_DOWNLOADS = 'litch:browser:downloads'
+export const BROWSER_DOWNLOADS_CHANGED = 'litch:browser:downloads-changed'
+export const BROWSER_DOWNLOAD_ANSWER = 'litch:browser:download-answer'
+export const BROWSER_DOWNLOAD_REVEAL = 'litch:browser:download-reveal'

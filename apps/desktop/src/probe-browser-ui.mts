@@ -7,6 +7,7 @@ import { join, normalize } from 'node:path'
 import { app, BrowserWindow, protocol } from 'electron'
 import type { HostTab } from './browser/electron-tab.mjs'
 import { installBrowser } from './browser/install.mjs'
+import { checkDownloads } from './probe-browser-downloads.mjs'
 import { checkLinks } from './probe-browser-links.mjs'
 import { startPages } from './probe-browser-pages.mjs'
 import { checkSavePrompt } from './probe-browser-save-prompt.mjs'
@@ -50,6 +51,9 @@ void app.whenReady().then(async () => {
   }, 120_000)
   protocol.handle('app', (request) => serveUiResource(uiRoot, request))
   const pages = await startPages()
+  const downloadDirectory = join(app.getPath('userData'), 'Downloads')
+  mkdirSync(downloadDirectory, { recursive: true })
+  app.setPath('downloads', downloadDirectory)
   const browser = await installBrowser({
     isUiUrl: (url) => url.startsWith('app://ui/'),
     userData: app.getPath('userData'),
@@ -216,6 +220,8 @@ void app.whenReady().then(async () => {
     await pause(400)
     check('show 之后网页又叠上去', attached())
 
+    if (tab) await checkDownloads({ browser, tabId: tab.id, page, until, check })
+
     // 登录之后面板上的保存提示（probe-browser-save-prompt.mts）
     const savePrompt = await checkSavePrompt({
       window,
@@ -289,6 +295,7 @@ void app.whenReady().then(async () => {
   }
   clearTimeout(limit)
   pages.close()
+  browser.host.downloads?.dispose()
   const ok = checks.every((one) => one.ok)
   console.log(
     `LITCH_BROWSER ${JSON.stringify({ ok, passed: checks.filter((one) => one.ok).length, checks: checks.filter((one) => !one.ok) })}`,

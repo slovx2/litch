@@ -186,6 +186,12 @@ export interface BrowserSignInBridge {
 }
 
 export interface BrowserBridge {
+  downloads?: {
+    list(): Promise<BrowserDownload[]>
+    answer(id: string, allow: boolean): Promise<boolean>
+    reveal(id: string): void
+    onChanged(handler: (items: BrowserDownload[]) => void): () => void
+  }
   /** 这个窗口里、这块矩形（页面里的 CSS 像素）上显示哪个标签。都给 null 就是什么都不显示 */
   place(
     tabId: string | null,
@@ -223,6 +229,19 @@ export interface BrowserBridge {
   signIn: BrowserSignInBridge
   /** 从别的浏览器导入 */
   import: BrowserImportBridge
+}
+
+export interface BrowserDownload {
+  id: string
+  owner: BrowserOwner
+  tabId: string
+  filename: string
+  origin: string
+  totalBytes: number | null
+  receivedBytes: number
+  status: 'pending' | 'receiving' | 'completed' | 'declined' | 'failed'
+  path?: string
+  error?: string
 }
 
 // ---------- 从别的浏览器导入（主进程 apps/desktop/src/browser-import/types.mts，改一边改另一边） ----------

@@ -992,6 +992,7 @@ export interface FormRequest {
 
 /** 客户端工具要用户点头的事：文字由界面按结构和语言拼（和桌面端的 ClientToolAsk 同形） */
 export type ClientAskView =
+  | { kind: 'browserDownload'; filename: string; origin: string; totalBytes: number | null }
   | { kind: 'computerSelf'; id: string; nonce: string; desktopId: string | null }
   | { kind: 'chromeSignIn'; origin: string; reason: string }
   | { kind: 'chromeInstance'; instanceId: string; name: string }

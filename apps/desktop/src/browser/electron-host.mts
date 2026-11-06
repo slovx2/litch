@@ -6,7 +6,9 @@
 // 后台节流（electron-tab.mts 的 setAgentActive），这时页面算看得见、rAF 照跑。截图一律用 CDP，
 // 不用 capturePage（关了节流的摘下视图上它会超时）。
 
-import { type BrowserWindow, session } from 'electron'
+import { join } from 'node:path'
+import { app, type BrowserWindow, session } from 'electron'
+import { BrowserDownloads } from './downloads.mjs'
 import { createTab, HIDDEN_BOUNDS, type HostTab, PARTITION } from './electron-tab.mjs'
 import type { BrowserHost, BrowserPage, OpenOptions, TabInfo, TabKind, TabOwner } from './model.mjs'
 import { blockGatedPopup, handoverOf, isHandedOver, notePopup } from './passwords/tabs.mjs'
@@ -42,8 +44,11 @@ export interface ElectronBrowserHost extends BrowserHost {
 
 let partitionReady = false
 
-/** 共用分区的安全设置：网页的权限一律拒绝，下载不做，屏幕共享不给 */
-function guardPartition(tabOf: (contentsId: number) => HostTab | undefined): void {
+/** 共用分区的安全设置：网页权限和屏幕共享拒绝，下载只能经过受控队列。 */
+function guardPartition(
+  tabOf: (contentsId: number) => HostTab | undefined,
+  downloads: BrowserDownloads,
+): void {
   if (partitionReady) return
   partitionReady = true
   const shared = session.fromPartition(PARTITION)
@@ -53,15 +58,24 @@ function guardPartition(tabOf: (contentsId: number) => HostTab | undefined): voi
   shared.setDisplayMediaRequestHandler((_request, callback) => callback(null))
   shared.setPreloads([])
   shared.on('will-download', (event, item, contents) => {
-    event.preventDefault()
-    item.cancel()
-    tabOf(contents.id)?.notice(
-      `A download (${item.getFilename()}) was blocked: the Litch browser does not download files.`,
+    const tab = contents && tabOf(contents.id)
+    if (!tab) {
+      event.preventDefault()
+      return
+    }
+    downloads.capture(item, tab.info())
+    tab.notice(
+      'A download was detected. Call downloads to review its approval, progress and final local path. Do not click again or retry a one-time link.',
     )
   })
 }
 
 export function createElectronHost(): ElectronBrowserHost {
+  const downloads = new BrowserDownloads({
+    stagingRoot: join(app.getPath('userData'), 'browser', 'download-staging'),
+    downloadsDirectory: app.getPath('downloads'),
+  })
+  app.on('will-quit', () => downloads.dispose())
   const tabs = new Map<string, HostTab>()
   let seq = 0
   let gate: (page: BrowserPage, url: string) => boolean = () => false
@@ -72,8 +86,9 @@ export function createElectronHost(): ElectronBrowserHost {
   const shown = new Map<BrowserWindow, string>()
   let pending = false
 
-  guardPartition((contentsId) =>
-    [...tabs.values()].find((tab) => tab.view.webContents.id === contentsId),
+  guardPartition(
+    (contentsId) => [...tabs.values()].find((tab) => tab.view.webContents.id === contentsId),
+    downloads,
   )
 
   const list = () => [...tabs.values()].map((tab) => tab.info())
@@ -151,11 +166,13 @@ export function createElectronHost(): ElectronBrowserHost {
     if (!tab) return
     detach(tab)
     tabs.delete(id)
+    downloads.closeTab(id)
     tab.destroy()
     changed()
   }
 
   return {
+    downloads,
     pages: () => [...tabs.values()],
     page: (id) => tabs.get(id),
     open,

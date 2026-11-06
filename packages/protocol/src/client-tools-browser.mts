@@ -154,6 +154,11 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
   description: GUIDE,
   tools: [
     fn(
+      'downloads',
+      'Built-in browser only: list this conversation’s downloads and ask the user to approve pending files. Downloads are received once into a private temporary area; approval publishes them to the controlling desktop’s system Downloads folder (not the remote session device). No arbitrary save paths. Pending paths/content are never exposed. Completed results include the local path; do not execute files automatically. Rejection, 10-minute timeout or shutdown deletes temporary files. Limits: 1 GiB/file, 2 GiB temporary data, 4 active files. Call after a download click and again for delayed/large transfers; never repeat a one-time download link. User-owned tabs save automatically; agent-owned tabs always require approval.',
+      {},
+    ),
+    fn(
       'targets',
       'List connected Chrome instances. Chrome: call targets, then tabs(action:list,targetId), then claim(claimToken) for a user tab. For a new Chrome tab use navigate(targetId,url). Always keep the returned chrome: tabId in subsequent calls. Chrome runs on the controlling computer; localhost refers to that computer even in a remote session. Chrome uses its own saved site permissions, including localhost; user tabs always require individual claim approval. Popups are unclaimed; list and claim them separately. release returns a user tab without closing it. Old leases and refs expire on reconnect or turn end; list and claim again. request_sign_in pauses all observation while the user signs in manually, then requires a fresh claim. Do not switch browser or tab to bypass a refusal.',
       {},
@@ -208,7 +213,7 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
     ),
     fn(
       'click',
-      'Click an element by ref, or a point by x/y. Scrolls the element into view first.',
+      'Click an element by ref, or a point by x/y. Scrolls the element into view first. Built-in browser downloads require individual approval before saving to Downloads; call downloads for progress/path and limits. Never repeat one-time download links.',
       {
         tabId,
         ref,

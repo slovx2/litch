@@ -2,6 +2,18 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { clientAskOptions } from '../src/device/tool-calls.mjs'
 
+test('下载审批只允许当前文件，不提供会话或永久授权', () => {
+  assert.deepEqual(
+    clientAskOptions({
+      kind: 'browserDownload',
+      filename: 'key.p8',
+      origin: 'https://example.com',
+      totalBytes: null,
+    }).map((option) => option.id),
+    ['once', 'decline'],
+  )
+})
+
 test('Chrome 站点提供持久许可，用户标签仅提供单次认领', () => {
   assert.deepEqual(
     clientAskOptions({

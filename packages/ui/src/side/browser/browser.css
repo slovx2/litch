@@ -161,3 +161,17 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+.bw-downloads {
+  max-height: 220px;
+  overflow: auto;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--line-1);
+}
+.bw-download {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  overflow-wrap: anywhere;
+  font-size: inherit;
+}

@@ -15,6 +15,7 @@ import { showToast } from '../app/toasts.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 import { MachineSessionCard } from '../machine/MachineCard.tsx'
 import { browserBridge } from '../side/browser/bridge.ts'
+import { downloadSize } from '../side/browser/Downloads.tsx'
 import { useCardFocus } from './focus.ts'
 import { type CardProps, Foot, ownsKey, useRespond } from './respond.tsx'
 import { SignInAskCard } from './SignInAskCard.tsx'
@@ -47,17 +48,19 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
   const { ask, device } = request
   const remote = device.kind === 'ssh'
   const title = t(
-    ask.kind === 'computerSelf'
-      ? 'computerSelf.title'
-      : ask.kind === 'chromeTab'
-        ? 'chrome.tab'
-        : ask.kind === 'chromeInstance'
-          ? 'chrome.instance'
-          : ask.kind === 'chromeSignIn'
-            ? 'chrome.signIn'
-            : ask.kind === 'site' && ask.browser === 'chrome'
-              ? 'chrome.approve'
-              : 'clientAsk.site',
+    ask.kind === 'browserDownload'
+      ? 'browser.download.title'
+      : ask.kind === 'computerSelf'
+        ? 'computerSelf.title'
+        : ask.kind === 'chromeTab'
+          ? 'chrome.tab'
+          : ask.kind === 'chromeInstance'
+            ? 'chrome.instance'
+            : ask.kind === 'chromeSignIn'
+              ? 'chrome.signIn'
+              : ask.kind === 'site' && ask.browser === 'chrome'
+                ? 'chrome.approve'
+                : 'clientAsk.site',
   )
   /** 信任所有网站要经外壳改设置；普通浏览器里（模拟核心）没有外壳，不出这个按钮 */
   const bridge =
@@ -131,6 +134,18 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
         <span>{title}</span>
       </div>
       <div className="req-body">
+        {ask.kind === 'browserDownload' ? (
+          <>
+            <div className="req-why">{ask.filename}</div>
+            <div className="req-meta">
+              {ask.origin} ·{' '}
+              {ask.totalBytes === null
+                ? t('browser.download.unknown')
+                : downloadSize(ask.totalBytes)}
+            </div>
+            <div className="req-why">{t('browser.download.note')}</div>
+          </>
+        ) : null}
         {ask.kind === 'computerSelf' ? (
           <div className="req-why err" role="alert">
             {t('computerSelf.risk')}
@@ -227,17 +242,19 @@ function SiteCard(props: CardProps<ClientAskRequest>) {
                 )
               ) : null}
               {t(
-                ask.kind === 'computerSelf' && option.role === 'acceptAlways'
-                  ? 'computerSelf.day'
-                  : ask.kind === 'computerSelf' && option.role === 'accept'
-                    ? 'computerSelf.once'
-                    : ask.kind === 'computerSelf' && option.role === 'acceptSession'
-                      ? 'computerSelf.session'
-                      : ask.kind === 'chromeTab' && option.role === 'accept'
-                        ? 'chrome.tabAllow'
-                        : ask.kind === 'chromeSignIn' && option.role === 'accept'
-                          ? 'chrome.signInDone'
-                          : OPTION_TEXT[option.role],
+                ask.kind === 'browserDownload' && option.role === 'accept'
+                  ? 'browser.download.allow'
+                  : ask.kind === 'computerSelf' && option.role === 'acceptAlways'
+                    ? 'computerSelf.day'
+                    : ask.kind === 'computerSelf' && option.role === 'accept'
+                      ? 'computerSelf.once'
+                      : ask.kind === 'computerSelf' && option.role === 'acceptSession'
+                        ? 'computerSelf.session'
+                        : ask.kind === 'chromeTab' && option.role === 'accept'
+                          ? 'chrome.tabAllow'
+                          : ask.kind === 'chromeSignIn' && option.role === 'accept'
+                            ? 'chrome.signInDone'
+                            : OPTION_TEXT[option.role],
               )}
               {option === primary && ask.kind !== 'computerSelf' ? (
                 <span className="kbd">↵</span>
