@@ -283,6 +283,15 @@ export class ClientSession implements ClientToolPeer {
     this.host = host
     this.wire = wire
     this.relay = new Relay({
+      prepareMedia: async (link, frame, request) => {
+        if (frame.id != null && typeof frame.method === 'string') return false
+        return (
+          host.layer.toolImages?.decorate(
+            frame.params ?? frame.result,
+            `${link.harness}:${request?.threadId ?? ''}`,
+          ) ?? false
+        )
+      },
       send: (text) => this.send(text),
       optedOut: (method) => this.optOut.has(method),
       declares: (extension) => this.declared.has(extension),
@@ -1126,7 +1135,11 @@ export class ClientSession implements ClientToolPeer {
         if (expectation) this.relay.expect(link, id, expectation)
         // 仍走同一条 relay：恢复的订阅记账、后台来源和扩展声明过滤都不能绕开。
         const respond = (response: Frame): typeof HANDLED => {
-          this.relay.upstream(link, response, JSON.stringify(response), { id, method })
+          this.relay.upstream(link, response, JSON.stringify(response), {
+            id,
+            method,
+            ...(typeof outgoing?.threadId === 'string' ? { threadId: outgoing.threadId } : {}),
+          })
           return HANDLED
         }
         // 大会话恢复可能远长于 probeTimeoutMs；沿用客户端转发原有的等待语义。
@@ -1141,7 +1154,14 @@ export class ClientSession implements ClientToolPeer {
           (error) => respond({ id, error: toRpcError(error) }),
         )
       }
-      if (!link.forward(id, method, text)) {
+      if (
+        !link.forward(
+          id,
+          method,
+          text,
+          typeof outgoing?.threadId === 'string' ? outgoing.threadId : undefined,
+        )
+      ) {
         done()
         throw this.unavailable(link, method)
       }

@@ -780,3 +780,27 @@ External navigation selects the tree row when automatic location is enabled. Whe
 上传从选定文件时开始，完成前不能发送。文件存放在会话设备主目录的 `.litch/attachments/<独立编号>/` 下，不同附件不覆盖同名文件；上传失败会尝试清除本次目录。设备服务启动时清理一次，之后每 24 小时清理修改时间超过 30 天的附件编号目录。会话仍打开、回合或后台任务仍在运行时保留；重新引用、打开附件会刷新目录修改时间。无法确认会话状态时暂不清理。清理不跟随软链，不触及附件根目录之外的路径。已自动清理的附件在桌面和手机显示“已清理”，不能再打开；历史中的文件名保留。上传副本不包含后续对源文件的修改。
 
 手机可打开会话设备上的附件；属于控制端电脑的附件需要回到该电脑打开。新发送的文件卡信息保存在消息文本中，重新读取原生历史仍能恢复；既有历史中的裸路径不作猜测转换。
+## AI 读取的图片 / Images read by AI
+
+工具读取图片、MCP 返回图片或浏览器和 Computer Use 截图时，对话的工具摘要右侧会显示一排小图。
+组折叠时显示最近三张和“+N”，展开后按工具显示；窄屏只显示最后一张。点击可浏览同组全部图片，
+用左右按钮或方向键切换、Home/End 跳首尾、点击图片放大或还原、放大后拖动，Ctrl+滚轮调整缩放。
+右上关闭或 Esc 返回；点击背景时，已放大先还原，再点击关闭。
+
+设备设置的“隐私 → 在对话里显示 AI 读取的图片”默认开启。关闭后不再保存、传输或显示工具图片，
+不影响模型读取图片。原图保存在会话设备，按需加载；单张上限 8MiB，设备图片内容缓存上限 512MiB，
+30 天未使用失效，既有缓存定期清理。旧历史仅有文件路径时，第一次打开取的是当前文件；源文件已删除、
+缓存已清理、格式不支持或上游没保留图片时不能恢复。Codex 已截成文字的大 MCP 结果不能补回。
+
+Images returned by Read, MCP, browser and Computer Use tools appear beside the tool summary.
+Collapsed groups show the latest three thumbnails and “+N”; expanded groups show each tool’s images.
+Narrow screens show the last image. Click to browse the whole group, use arrows or Home/End to navigate,
+click to zoom, drag while zoomed, and Ctrl+scroll to adjust zoom. Close with the top-right button or Escape;
+a background click first resets zoom, then closes the viewer.
+
+**Device settings → Privacy → Show images read by AI in conversations** is on by default. Turning it off
+stops saving, transferring and displaying tool images without changing what the model receives.
+Originals load on demand from the session device: up to 8MiB each, within a 512MiB image-content cache,
+expiring after 30 days without use. Existing cached data is cleaned periodically. Old history containing
+only a path reads the current file on first view. Deleted files, evicted images and media omitted by the
+harness cannot be recovered; this includes large Codex MCP results already truncated to text.

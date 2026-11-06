@@ -28,6 +28,7 @@ import { openAgent } from '../tree/agents.ts'
 import { commandLook, commandState } from './command-state.ts'
 import { Diff } from './Diff.tsx'
 import { ToolPath } from './FileLinks.tsx'
+import { ToolImageGroup, ToolImageStrip, ToolImageSummary } from './media/ToolImages.tsx'
 import { type ItemRef, sessionKeyOf, useItem } from './messages.tsx'
 import { desktopSessionLink, PeerLinks } from './PeerHead.tsx'
 import { usePin } from './scroll.ts'
@@ -40,6 +41,7 @@ interface RowProps {
   verb: string
   target: ReactNode
   meta?: ReactNode
+  media?: ReactNode
   /** 还在进行：行首显示转动的记号 */
   busy?: boolean
   /** 没有详情的行不能点开 */
@@ -49,31 +51,34 @@ interface RowProps {
 }
 
 /** 步骤组里的一行：动词、对象、右边的元信息；有详情时点一下展开 */
-function Row({ itemRef, icon, verb, target, meta, busy, detail, tone }: RowProps) {
+function Row({ itemRef, icon, verb, target, meta, media, busy, detail, tone }: RowProps) {
   const [open, setOpen] = useFold(sessionKeyOf(itemRef), `i:${itemRef.itemId}`, false)
   const head = useRef<HTMLButtonElement | null>(null)
   const pin = usePin()
   const touch = useContext(TurnTouch)
   return (
     <div className="item" data-tone={tone} data-search-item={itemRef.itemId}>
-      <button
-        type="button"
-        className="item-head"
-        data-anchor={`i:${itemRef.itemId}`}
-        ref={head}
-        aria-expanded={detail ? open : undefined}
-        disabled={!detail}
-        onClick={() => {
-          pin(head.current)
-          if (!open) touch()
-          setOpen(!open)
-        }}
-      >
-        {busy ? <i className="st run" /> : <Icon name={icon} small />}
-        {verb ? <span className="verb">{verb}</span> : null}
-        <span className="tgt ell">{target}</span>
-        {meta ? <span className="meta">{meta}</span> : null}
-      </button>
+      <ToolImageSummary active={!!media}>
+        <button
+          type="button"
+          className="item-head"
+          data-anchor={`i:${itemRef.itemId}`}
+          ref={head}
+          aria-expanded={detail ? open : undefined}
+          disabled={!detail}
+          onClick={() => {
+            pin(head.current)
+            if (!open) touch()
+            setOpen(!open)
+          }}
+        >
+          {busy ? <i className="st run" /> : <Icon name={icon} small />}
+          {verb ? <span className="verb">{verb}</span> : null}
+          <span className="tgt ell">{target}</span>
+          {meta ? <span className="meta">{meta}</span> : null}
+        </button>
+        {!open ? media : null}
+      </ToolImageSummary>
       {open && detail ? <div className="item-detail">{detail()}</div> : null}
     </div>
   )
@@ -373,6 +378,9 @@ const ToolCall = memo(function ToolCall(ref: ItemRef) {
     <Row
       itemRef={ref}
       icon={message ? 'note' : 'tool'}
+      media={
+        item.images?.length ? <ToolImageStrip deviceId={ref.deviceId} images={item.images} /> : null
+      }
       verb={t(message ? 'tool.message.verb' : 'tool.verb')}
       target={
         message ? messageTarget(item, t) : item.source ? `${t.text(item.source)} · ${tool}` : tool
@@ -433,6 +441,7 @@ const ToolCall = memo(function ToolCall(ref: ItemRef) {
                     <PartsWell parts={input} />
                   </div>
                 ) : null}
+                <ToolImageStrip deviceId={ref.deviceId} images={item.images ?? []} />
                 {error !== null ? (
                   <div className="io">
                     <div className="io-label">{t('tool.error')}</div>
@@ -648,59 +657,66 @@ export const Steps = memo(function Steps({
     )
   }
   return (
-    <div className="steps" data-running={current ? '' : undefined}>
-      <button
-        type="button"
-        className="steps-head"
-        data-anchor={`g:${groupKey}`}
-        ref={head}
-        aria-expanded={open}
-        onClick={() => {
-          pin(head.current)
-          if (!open) touch()
-          setOpen(!open)
-        }}
-      >
-        {now ? <i className="st run" /> : <Caret />}
-        <span className="sum">{now ? now.label : stepsSummary(tally, t)}</span>
-        {now?.target ? <span className="now ell">{now.target}</span> : null}
-        <span className="meta">
-          {tally.declined > 0 ? (
-            <span className="bad">{t('activity.declined', { n: tally.declined })}</span>
-          ) : null}
-          {now || tally.added + tally.removed === 0 ? null : (
-            <span>
-              <span className="plus">+{tally.added}</span>
-              <span className="minus">−{tally.removed}</span>
+    <ToolImageGroup items={items}>
+      <div className="steps" data-running={current ? '' : undefined}>
+        <ToolImageSummary
+          active={items.some((item) => item.kind === 'toolCall' && !!item.images?.length)}
+        >
+          <button
+            type="button"
+            className="steps-head"
+            data-anchor={`g:${groupKey}`}
+            ref={head}
+            aria-expanded={open}
+            onClick={() => {
+              pin(head.current)
+              if (!open) touch()
+              setOpen(!open)
+            }}
+          >
+            {now ? <i className="st run" /> : <Caret />}
+            <span className="sum">{now ? now.label : stepsSummary(tally, t)}</span>
+            {now?.target ? <span className="now ell">{now.target}</span> : null}
+            <span className="meta">
+              {tally.declined > 0 ? (
+                <span className="bad">{t('activity.declined', { n: tally.declined })}</span>
+              ) : null}
+              {now || tally.added + tally.removed === 0 ? null : (
+                <span>
+                  <span className="plus">+{tally.added}</span>
+                  <span className="minus">−{tally.removed}</span>
+                </span>
+              )}
+              {current ? (
+                <NowTime
+                  deviceId={deviceId}
+                  sessionId={sessionId}
+                  itemId={current.id}
+                  item={current}
+                  since={spanFrom(items)}
+                />
+              ) : tally.durationMs ? (
+                <span>{duration(tally.durationMs, t)}</span>
+              ) : null}
             </span>
-          )}
-          {current ? (
-            <NowTime
-              deviceId={deviceId}
-              sessionId={sessionId}
-              itemId={current.id}
-              item={current}
-              since={spanFrom(items)}
-            />
-          ) : tally.durationMs ? (
-            <span>{duration(tally.durationMs, t)}</span>
-          ) : null}
-        </span>
-      </button>
-      {open ? (
-        <div className="steps-body">
-          {shown.map((item) => (
-            <StepItem
-              key={item.id}
-              deviceId={deviceId}
-              sessionId={sessionId}
-              itemId={item.id}
-              kind={item.kind}
-              suggest={isSuggest(item)}
-            />
-          ))}
-        </div>
-      ) : null}
-    </div>
+          </button>
+          {!open ? <ToolImageStrip deviceId={deviceId} /> : null}
+        </ToolImageSummary>
+        {open ? (
+          <div className="steps-body">
+            {shown.map((item) => (
+              <StepItem
+                key={item.id}
+                deviceId={deviceId}
+                sessionId={sessionId}
+                itemId={item.id}
+                kind={item.kind}
+                suggest={isSuggest(item)}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </ToolImageGroup>
   )
 })

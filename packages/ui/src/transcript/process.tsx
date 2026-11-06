@@ -20,6 +20,7 @@ import { useSessionBackground } from '../background/state.ts'
 import { useAgents } from '../tree/agent-view.tsx'
 import { TreeCard } from '../tree/TreeCards.tsx'
 import { Steps } from './activity.tsx'
+import { ToolImageGroup, ToolImageStrip, ToolImageSummary } from './media/ToolImages.tsx'
 import { AgentAnswer } from './messages.tsx'
 import { usePin } from './scroll.ts'
 import { processSummary } from './steps-text.ts'
@@ -95,33 +96,42 @@ export const ProcessHead = memo(function ProcessHead({
       ? 0
       : itemIds.filter((id) => taskOfItem(background, id)?.status === 'running').length
   return (
-    <button
-      type="button"
-      className="proc-head"
-      data-anchor={anchor}
-      ref={head}
-      aria-expanded={open}
-      aria-label={[
-        ...plain,
-        ...bad,
-        ...(inBackground > 0 ? [t('background.inTurn', { count: inBackground })] : []),
-      ].join(' · ')}
-      onClick={() => {
-        pin(head.current)
-        onToggle(!open)
-      }}
-    >
-      <Caret />
-      <span className="proc-title">{plain[0]}</span>
-      {plain.length > 1 ? <span className="proc-counts">{plain.slice(1).join(' · ')}</span> : null}
-      {bad.length > 0 ? <span className="bad">{bad.join(' · ')}</span> : null}
-      {/* 这一轮起的后台任务还在跑：末尾一个呼吸点加个数 */}
-      {inBackground > 0 ? (
-        <span className="bgmark" data-background={inBackground}>
-          <i className="pulse" aria-hidden="true" />
-          {t('background.inTurn', { count: inBackground })}
-        </span>
-      ) : null}
-    </button>
+    <ToolImageGroup items={values.filter((value): value is ItemView => value !== undefined)}>
+      <ToolImageSummary
+        active={values.some((item) => item?.kind === 'toolCall' && !!item.images?.length)}
+      >
+        <button
+          type="button"
+          className="proc-head"
+          data-anchor={anchor}
+          ref={head}
+          aria-expanded={open}
+          aria-label={[
+            ...plain,
+            ...bad,
+            ...(inBackground > 0 ? [t('background.inTurn', { count: inBackground })] : []),
+          ].join(' · ')}
+          onClick={() => {
+            pin(head.current)
+            onToggle(!open)
+          }}
+        >
+          <Caret />
+          <span className="proc-title">{plain[0]}</span>
+          {plain.length > 1 ? (
+            <span className="proc-counts">{plain.slice(1).join(' · ')}</span>
+          ) : null}
+          {bad.length > 0 ? <span className="bad">{bad.join(' · ')}</span> : null}
+          {/* 这一轮起的后台任务还在跑：末尾一个呼吸点加个数 */}
+          {inBackground > 0 ? (
+            <span className="bgmark" data-background={inBackground}>
+              <i className="pulse" aria-hidden="true" />
+              {t('background.inTurn', { count: inBackground })}
+            </span>
+          ) : null}
+        </button>
+        {!open ? <ToolImageStrip deviceId={deviceId} /> : null}
+      </ToolImageSummary>
+    </ToolImageGroup>
   )
 })

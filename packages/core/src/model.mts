@@ -212,6 +212,7 @@ export interface ConnectFailureView {
 }
 
 export interface DeviceView {
+  toolImagesEnabled?: boolean
   id: string
   name: Text
   /** 给人看的主机标识，例如 dev@build-01 */
@@ -725,6 +726,7 @@ export type ToolPart =
   | { kind: 'gap'; chars: number; bytes: number; parts: number }
 
 export interface ToolCallItem {
+  images?: import('../../protocol/src/tool-images.mjs').ToolImage[]
   id: string
   kind: 'toolCall'
   /** 工具从哪来，例如一个 MCP 服务的名字。说不出来就是 null */

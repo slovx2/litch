@@ -446,6 +446,8 @@ export class Projection {
       const item = spec
         ? dynamicItem(itemId, spec, update.rawInput)
         : toolItem(itemId, update, this.thread.cwd, this.server)
+      // 历史可能只回放一帧 completed；仍先登记调用，再由 mergeTool 提取这帧的结果。
+      if (item.type === 'mcpToolCall') item.status = 'inProgress'
       state = {
         item,
         turn,
@@ -475,6 +477,9 @@ export class Projection {
     const done = update.status === 'completed' || update.status === 'failed'
     // 收过尾的不再改（有的 agent 收尾之后还会再推一遍）
     if (item.status !== 'inProgress') return
+    // ACP 的更新可以只含 status，不能用末帧的缺省 content 擦掉先前收到的图片。
+    if (item.type === 'mcpToolCall' && Array.isArray(update.content))
+      item.result = mcpResult(update)
     if (typeof update.title === 'string' && item.type === 'mcpToolCall') item.tool = update.title
     if (update.rawInput !== undefined && item.type === 'mcpToolCall')
       item.arguments = update.rawInput
@@ -508,7 +513,7 @@ export class Projection {
       item.contentItems = text ? [{ type: 'inputText', text }] : []
       item.durationMs = Math.max(0, Date.now() - state.startedMs)
     } else {
-      item.result = mcpResult(update)
+      item.result = Array.isArray(update.content) || !item.result ? mcpResult(update) : item.result
       item.error = failed ? { message: contentText(update.content) || '工具调用失败' } : null
       item.durationMs = Math.max(0, Date.now() - state.startedMs)
     }

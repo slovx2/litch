@@ -1,5 +1,7 @@
 # 第三方来源与许可
 
+- 设备端工具图片缩略图使用 `pngjs 7.0.0`（MIT，Copyright Luke Page、Kuba Niegowski 及贡献者）和 `jpeg-js 0.4.4`（BSD-3-Clause，Copyright Eugene Ware）；纯 JavaScript 解码器及原始许可随适配器 node_modules 分发。
+
 - macOS/Linux 伪终端使用 `github.com/creack/pty v1.1.24`，MIT，Copyright (c) 2011 Keith Rarick。
 - Windows ConPTY 使用 `github.com/UserExistsError/conpty v0.1.4`，MIT，Copyright (c) 2020 UserExistsError。
 - Windows 命名管道使用 `github.com/Microsoft/go-winio v0.6.2`，MIT，版权归 Microsoft Corporation。

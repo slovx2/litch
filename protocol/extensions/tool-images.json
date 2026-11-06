@@ -1,0 +1,61 @@
+{
+  "extension": "toolImages",
+  "description": "工具读入图片的有界缩略图和设备资产引用。",
+  "declaration": {
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "toolImages" }
+    }
+  },
+  "undeclared": "标准条目保持不变，不发送 litchToolImages；资产读取返回 extensionRequired。",
+  "rules": [
+    "仅设备聚合面支持。工具结果完成/历史中的图片内容块和 imageView.path 经设备统一提取。只声明 toolImages 的连接将原始大图块换成 litchToolImages；不改变模型的工具应答。",
+    "litchToolImages 每条最多16张，id为原图SHA256，tool为来源工具，mime/bytes/width/height描述原图；thumbnail为最长边160像素的PNG，或不支持缩略时null。",
+    "原图复用 litch/media/readImage，source=litch-tool-image:<id>，同时要求 mediaImages 和 toolImages。不是模型工具，不解释为任意文件路径。",
+    "单图8MiB、20M像素、单边16384；PNG/JPEG在限时worker中解码生成缩略图，GIF/WebP暂保留占位按需查看。",
+    "内容寻址缓存在设备私有数据库，最多512MiB/30天，稳定条目绑定用于历史恢复。淘汰后读取回missing，不能借旧id重读已改变路径。",
+    "privacy.toolImages默认true；false时不保存新资产、不向UI传输图片块/元数据、拒绝原图读取。两端收到设置变化后隐藏已有缩略图并关闭查看器。"
+  ],
+  "parts": [
+    {
+      "kind": "ItemField",
+      "name": "litchToolImages",
+      "on": "mcpToolCall、dynamicToolCall、functionCallOutput、imageView 条目；实时与历史同形",
+      "schema": {
+        "type": "array",
+        "maxItems": 16,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "tool", "mime", "bytes", "width", "height", "thumbnail"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "tool": { "type": "string", "maxLength": 256 },
+            "mime": { "enum": ["image/png", "image/jpeg", "image/gif", "image/webp"] },
+            "bytes": { "type": "integer", "minimum": 1, "maximum": 8388608 },
+            "width": { "type": "integer", "minimum": 1, "maximum": 16384 },
+            "height": { "type": "integer", "minimum": 1, "maximum": 16384 },
+            "thumbnail": {
+              "oneOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["mime", "dataBase64", "width", "height"],
+                  "properties": {
+                    "mime": { "const": "image/png" },
+                    "dataBase64": { "type": "string", "maxLength": 98304 },
+                    "width": { "type": "integer", "minimum": 1, "maximum": 160 },
+                    "height": { "type": "integer", "minimum": 1, "maximum": 160 }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

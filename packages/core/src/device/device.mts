@@ -864,6 +864,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     remoteUpgrade: upgrader?.view() ?? null,
     restart: restarter?.view() ?? null,
     tools: toolSwitchesView(),
+    toolImagesEnabled:
+      (toolSettings?.snapshot ?? latestToolSnapshot)?.values['privacy.toolImages'] !== false,
     // 远程设备“操作这台电脑”：本机设备、执行不了的桌面端是 null
     machine: options.machine?.view() ?? null,
     sessionTree,

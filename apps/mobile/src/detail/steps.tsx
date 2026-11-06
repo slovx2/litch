@@ -21,6 +21,7 @@ import { styles as cellStyles, type Props, useLasting, useTicking } from './cell
 import { useBackgroundView, useToggleInPlace, useTranscript } from './context'
 import { keepPlace, rowBelow } from './keep-place'
 import { fileHref, isWebUrl } from './links'
+import { ToolImages } from './media/ToolImages'
 
 /** 命令的输出最多露出末尾多少行 */
 const OUTPUT_LINES = 40
@@ -60,35 +61,42 @@ export const ProcessCell = memo(function ProcessCell({ row }: Props<'process'>) 
   const backgroundText = inBackground > 0 ? t('background.inTurn', { count: inBackground }) : null
   return (
     <View style={styles.group}>
-      <Pressable
-        onPress={() => toggle(row.key, row.turnId)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: row.expanded }}
-        accessibilityLabel={[...plain, ...bad, backgroundText].filter(Boolean).join(' · ')}
-        style={({ pressed }) => [
-          styles.processHeader,
-          { minHeight: hit, borderBottomColor: c.line2 },
-          pressed ? { backgroundColor: c.press } : null,
-        ]}
-        testID="process-head"
-      >
-        <Text style={{ fontSize: font.size.body, color: c.ink2 }}>{row.expanded ? '▾' : '▸'}</Text>
-        <View style={styles.processBody}>
-          {/* 用时和统计写成一行（“已处理 41 秒 · 1 步”），太长就截断统计 */}
-          <Text numberOfLines={1} style={{ color: c.ink2 }}>
-            <Text style={{ fontSize: font.size.body, fontFamily: font.ui }}>{plain[0]}</Text>
-            {plain.length > 1 ? (
-              <Text style={{ fontSize: font.size.meta }}>{` · ${plain.slice(1).join(' · ')}`}</Text>
-            ) : null}
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Pressable
+          onPress={() => toggle(row.key, row.turnId)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: row.expanded }}
+          accessibilityLabel={[...plain, ...bad, backgroundText].filter(Boolean).join(' · ')}
+          style={({ pressed }) => [
+            styles.processHeader,
+            { flex: 1, minHeight: hit, borderBottomColor: c.line2 },
+            pressed ? { backgroundColor: c.press } : null,
+          ]}
+          testID="process-head"
+        >
+          <Text style={{ fontSize: font.size.body, color: c.ink2 }}>
+            {row.expanded ? '▾' : '▸'}
           </Text>
-          {bad.length > 0 ? (
-            <Text style={{ fontSize: font.size.meta, color: c.err }}>{bad.join(' · ')}</Text>
-          ) : null}
-          {backgroundText ? (
-            <Text style={{ fontSize: font.size.meta, color: c.accent }}>{backgroundText}</Text>
-          ) : null}
-        </View>
-      </Pressable>
+          <View style={styles.processBody}>
+            {/* 用时和统计写成一行（“已处理 41 秒 · 1 步”），太长就截断统计 */}
+            <Text numberOfLines={1} style={{ color: c.ink2 }}>
+              <Text style={{ fontSize: font.size.body, fontFamily: font.ui }}>{plain[0]}</Text>
+              {plain.length > 1 ? (
+                <Text
+                  style={{ fontSize: font.size.meta }}
+                >{` · ${plain.slice(1).join(' · ')}`}</Text>
+              ) : null}
+            </Text>
+            {bad.length > 0 ? (
+              <Text style={{ fontSize: font.size.meta, color: c.err }}>{bad.join(' · ')}</Text>
+            ) : null}
+            {backgroundText ? (
+              <Text style={{ fontSize: font.size.meta, color: c.accent }}>{backgroundText}</Text>
+            ) : null}
+          </View>
+        </Pressable>
+        {!row.expanded && row.images ? <ToolImages images={row.images} /> : null}
+      </View>
     </View>
   )
 })
@@ -128,31 +136,38 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
         : ''
   return (
     <View style={styles.group}>
-      <Pressable
-        onPress={() => toggle(row.key, row.turnId)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: row.expanded }}
-        style={({ pressed }) => [styles.groupHeader, pressed ? { backgroundColor: c.press } : null]}
-        testID="process-toggle"
-      >
-        {!row.ended && (row.running || working) ? <StatusMark status="running" /> : null}
-        <Text
-          style={{
-            flex: 1,
-            fontSize: font.size.meta,
-            color: c.ink3,
-          }}
-          numberOfLines={1}
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Pressable
+          onPress={() => toggle(row.key, row.turnId)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: row.expanded }}
+          style={({ pressed }) => [
+            styles.groupHeader,
+            { flex: 1 },
+            pressed ? { backgroundColor: c.press } : null,
+          ]}
+          testID="process-toggle"
         >
-          {row.expanded ? '▾' : '▸'} {t('detail.activity')} · {steps}
-          {tail}
-          {inBackground > 0 ? (
-            <Text style={{ color: c.accent }}>
-              {` · ${t('background.inTurn', { count: inBackground })}`}
-            </Text>
-          ) : null}
-        </Text>
-      </Pressable>
+          {!row.ended && (row.running || working) ? <StatusMark status="running" /> : null}
+          <Text
+            style={{
+              flex: 1,
+              fontSize: font.size.meta,
+              color: c.ink3,
+            }}
+            numberOfLines={1}
+          >
+            {row.expanded ? '▾' : '▸'} {t('detail.activity')} · {steps}
+            {tail}
+            {inBackground > 0 ? (
+              <Text style={{ color: c.accent }}>
+                {` · ${t('background.inTurn', { count: inBackground })}`}
+              </Text>
+            ) : null}
+          </Text>
+        </Pressable>
+        {!row.expanded && row.images ? <ToolImages images={row.images} /> : null}
+      </View>
     </View>
   )
 })
@@ -260,27 +275,39 @@ export const StepCell = memo(function StepCell({ row }: Props<'step'>) {
   const state = stateText(row, t, spent)
   return (
     <View style={[styles.step, { borderLeftColor: c.line2 }]}>
-      <Pressable
-        onPress={press}
-        disabled={!press}
-        accessibilityState={expandable ? { expanded: row.expanded } : undefined}
-        style={({ pressed }) => [styles.stepHead, pressed ? { backgroundColor: c.press } : null]}
-        testID={`step:${item.kind}`}
-      >
-        <Text style={[styles.mark, { color: stateColor(row.state, c), fontFamily: font.mono }]}>
-          {MARK[row.state]}
-        </Text>
-        <Text
-          style={[cellStyles.grow, styles.stepLabel, { color: c.ink, fontFamily: font.mono }]}
-          numberOfLines={row.expanded ? 6 : 2}
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Pressable
+          onPress={press}
+          disabled={!press}
+          accessibilityState={expandable ? { expanded: row.expanded } : undefined}
+          style={({ pressed }) => [
+            styles.stepHead,
+            { flex: 1 },
+            pressed ? { backgroundColor: c.press } : null,
+          ]}
+          testID={`step:${item.kind}`}
         >
-          {label}
-        </Text>
-        {state ? (
-          <Text style={[styles.stepState, { color: stateColor(row.state, c) }]}>{state}</Text>
+          <Text style={[styles.mark, { color: stateColor(row.state, c), fontFamily: font.mono }]}>
+            {MARK[row.state]}
+          </Text>
+          <Text
+            style={[cellStyles.grow, styles.stepLabel, { color: c.ink, fontFamily: font.mono }]}
+            numberOfLines={row.expanded ? 6 : 2}
+          >
+            {label}
+          </Text>
+          {state ? (
+            <Text style={[styles.stepState, { color: stateColor(row.state, c) }]}>{state}</Text>
+          ) : null}
+        </Pressable>
+        {!row.expanded && item.kind === 'toolCall' && item.images ? (
+          <ToolImages images={item.images} gallery={row.gallery ?? item.images} />
         ) : null}
-      </Pressable>
+      </View>
       {row.expanded ? <StepDetail row={row} /> : null}
+      {row.expanded && item.kind === 'toolCall' && item.images ? (
+        <ToolImages images={item.images} gallery={row.gallery ?? item.images} />
+      ) : null}
     </View>
   )
 })

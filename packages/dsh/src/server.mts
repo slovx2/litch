@@ -516,6 +516,12 @@ export class DshServer {
           } else if (!live) mismatch('dsh 的 session/follow 首帧不是适配器认识的会话快照')
           else if (value.type === 'event') {
             live.projection.apply(value.event, notify)
+            if (live.projection.unfetched.length) {
+              const current = live
+              void this.restoreImages(remote, live.projection, (method, params) => {
+                if (this.live.get(id) === current) notify(method, params)
+              })
+            }
             if (value.event.type === 'user/message' || value.event.type === 'session/title')
               this.display(id, live.projection)
           } else if (value.type === 'assistant-stream') live.projection.stream(value.frame, notify)
@@ -576,20 +582,45 @@ export class DshServer {
 
   // 没有记录的用户消息（Projection.unfetched）里的图片从 dsh 取回来：它按附件号给得出存下的那一份，
   // 以带地址的图片补在那句话后面。取不到的那一张就没有，不为它让会话打不开。
-  private async restoreImages(remote: WebRemote, projection: Projection): Promise<void> {
+  private async restoreImages(
+    remote: WebRemote,
+    projection: Projection,
+    notify?: (method: string, params: any) => void,
+  ): Promise<void> {
     const wanted = projection.unfetched.splice(0)
-    const fetched = await Promise.all(
-      wanted.map(({ attachmentId }) =>
-        remote
-          .rpc('session/attachment', { request: { sessionId: projection.thread.id, attachmentId } })
-          .catch(() => null),
-      ),
-    )
-    wanted.forEach(({ content }, index) => {
+    const fetched: any[] = []
+    for (let start = 0; start < wanted.length; start += 4)
+      fetched.push(
+        ...(await Promise.all(
+          wanted.slice(start, start + 4).map(({ attachmentId }) =>
+            remote
+              .rpc('session/attachment', {
+                request: { sessionId: projection.thread.id, attachmentId },
+              })
+              .catch(() => null),
+          ),
+        )),
+      )
+    const changed = new Map<string, { turnId: string; item: any }>()
+    wanted.forEach(({ content, item, turnId }, index) => {
       const { attachment, data } = fetched[index] ?? {}
-      if (typeof data === 'string' && typeof attachment?.mediaType === 'string')
-        content.push({ type: 'image', url: `data:${attachment.mediaType};base64,${data}` })
+      if (
+        typeof data === 'string' &&
+        data.length <= 12 * 1024 * 1024 &&
+        typeof attachment?.mediaType === 'string'
+      ) {
+        const url = `data:${attachment.mediaType};base64,${data}`
+        content.push(
+          item
+            ? item.type === 'dynamicToolCall'
+              ? { type: 'inputImage', imageUrl: url }
+              : { type: 'image', mimeType: attachment.mediaType, data }
+            : { type: 'image', url },
+        )
+        if (item && turnId) changed.set(item.id, { turnId, item })
+      }
     })
+    for (const params of changed.values()) notify?.('item/completed', params)
   }
 
   // dsh 没有不落盘的会话，这里只建内存里的线程：不调用 dsh，线程列表和 dsh 的会话存储里都不会出现。

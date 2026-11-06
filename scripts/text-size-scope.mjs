@@ -2,6 +2,7 @@
 // 不把差异、文件、终端、信息栏等独立工具纳入检查。
 export const chatPortals = ['cmt-pop', 'cmt-edit', 'cmt-peek']
 export const textFiles = [
+  '../transcript/media/tool-images.css',
   'tree.css',
   'transcript.css',
   'transcript-prose.css',

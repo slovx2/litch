@@ -31,6 +31,7 @@ export interface UpstreamFacts {
 export interface ForwardedRequest {
   id: RpcId
   method: string
+  threadId?: string
 }
 
 export interface LinkOptions {
@@ -189,9 +190,9 @@ export class UpstreamLink {
   }
 
   /** 把客户端的一个请求原样转给上游。上游不可用时返回 false，什么都没发 */
-  forward(id: RpcId, method: string, raw: string): boolean {
+  forward(id: RpcId, method: string, raw: string, threadId?: string): boolean {
     if (!this.ready || !this.wire) return false
-    this.forwarded.set(idKey(id), { id, method })
+    this.forwarded.set(idKey(id), { id, method, ...(threadId ? { threadId } : {}) })
     this.wire.send(raw)
     return true
   }

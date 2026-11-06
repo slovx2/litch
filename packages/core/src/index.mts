@@ -52,6 +52,12 @@ export {
   type TaskScheduleProblem,
   validateTaskSchedule,
 } from '../../protocol/src/task-schedule.mjs'
+export {
+  TOOL_IMAGE_PREFIX,
+  TOOL_IMAGES_SETTING,
+  type ToolImage,
+  toolImagesOf,
+} from '../../protocol/src/tool-images.mjs'
 export { attachmentState } from './attachment-state.mjs'
 export { withAutomationPreview } from './automation-preview/host.mjs'
 export type {

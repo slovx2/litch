@@ -39,6 +39,7 @@ export const EXTENSION = {
   /** 受根目录与字节预算约束的 fs/readFile，见 file-preview.mts。 */
   filePreview: 'filePreview',
   mediaImages: 'mediaImages',
+  toolImages: 'toolImages',
   fileDownload: 'fileDownload',
   fileAttachments: 'fileAttachments',
   /**

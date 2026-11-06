@@ -368,8 +368,10 @@ export function createFiles(host: FilesHost): Files {
     async image(source, signal) {
       mustBeOnline()
       const remote = /^https?:\/\//i.test(source)
+      const toolImage = /^litch-tool-image:[a-f0-9]{64}$/.test(source)
       if (
         !remote &&
+        !toolImage &&
         (!isAbsolutePath(source) ||
           /^[\\/]{2}/.test(source) ||
           /[\u0000-\u001f\u007f]/.test(source) ||

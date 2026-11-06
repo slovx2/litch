@@ -21,6 +21,7 @@ import { OUTSIDE_FILE_DATA, OUTSIDE_FILE_ROOT } from './sample-file-links.mjs'
 import { type SampleFiles, sampleFiles } from './sample-files.mjs'
 import { sampleImage } from './sample-media.mjs'
 import type { SampleLang } from './sample-text.mjs'
+import { sampleToolImage } from './sample-tool-images.mjs'
 
 export interface MockFilesHost {
   clock: Clock
@@ -374,6 +375,8 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
       return { ...content, path: outward(root, content.path) }
     },
     async 'media.image'({ deviceId, source }, signal) {
+      const tool = sampleToolImage(source)
+      if (tool) return tool
       const sample = sampleImage(source)
       if (sample) return sample
       if (/^https?:\/\//i.test(source)) return { kind: 'unsupported' as const, path: source }

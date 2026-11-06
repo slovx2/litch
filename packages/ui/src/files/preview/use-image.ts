@@ -6,7 +6,7 @@ import type { PreviewResources } from './resources.ts'
 
 export function usePreviewImage(
   content: FilePreview | null,
-  resources: PreviewResources,
+  resources: PreviewResources | null,
   key: string,
 ) {
   const [image, setImage] = useState<{ url: string; width: number; height: number } | null>(null)
@@ -14,7 +14,7 @@ export function usePreviewImage(
   useEffect(() => {
     setImage(null)
     setFailure(null)
-    if (content?.kind !== 'ready') return
+    if (content?.kind !== 'ready' || !resources) return
     const parsed = checkedImage(content)
     if (!parsed) {
       setFailure('preview.imageInvalid')
