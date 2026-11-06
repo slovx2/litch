@@ -108,11 +108,11 @@ export function affectedDomains(
       continue
     }
     if (/^(docs\/|skills\/|README\.md$|CHANGELOG\.md$|LICENSE$)/.test(path)) continue
-    // 锁文件、包配置、共享协议/核心、设备/SSH、构建脚本都跨领域，宁可多跑。
+    // 锁文件、包配置、共享协议/核心、设备/SSH、适配器里的 Chrome 转发库、构建脚本都跨领域，宁可多跑。
     // protocol 的 src 和 test 都在范围内；CI unit 的 npm run check 执行全部协议单测。
     if (
       /(^|\/)(package(-lock)?\.json|Cargo\.lock|go\.(mod|sum))$/.test(path) ||
-      /^(packages\/(shared|core|protocol|device)\/|protocol\/|cmd\/|sshserver\/|\.github\/|scripts\/)/.test(
+      /^(packages\/(shared|core|protocol|device)\/|protocol\/|cmd\/|chromebridge\/|sshserver\/|\.github\/|scripts\/)/.test(
         path,
       )
     ) {
@@ -133,6 +133,11 @@ export function affectedDomains(
       selected.add('computer-use')
       selected.add('client')
       reasons.push(`macOS 原生助手：${path}`)
+    } else if (/^packages\/chrome-(extension|bridge)\//.test(path)) {
+      // Chrome 扩展库与 Node 桥：Litch 的扩展和桌面外壳从源码引用。
+      selected.add('client')
+      selected.add('client-engines')
+      reasons.push(`Chrome 扩展与桥包：${path}`)
     } else if (/^packages\/browser\//.test(path)) {
       // 可嵌入的浏览器运行时：桌面外壳与 Chrome 扩展都从源码引用。
       selected.add('client')

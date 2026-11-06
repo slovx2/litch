@@ -30,6 +30,7 @@ for (const path of [
   'scripts/update-manifest.mjs',
   '.github/workflows/gate.yml',
   'unknown/new-module.mts',
+  'chromebridge/claims.go',
   'package.json',
 ]) {
   test(`跨领域或无法判断时全量：${path}`, () => {
@@ -51,6 +52,14 @@ test('引擎变更覆盖两端集成，原生助手覆盖所属平台', () => {
   }
   for (const domain of ['client', 'client-engines']) {
     assert.ok(affectedDomains(['packages/browser/src/driver.mts']).domains.includes(domain))
+  }
+  for (const path of [
+    'packages/chrome-extension/src/state.mts',
+    'packages/chrome-bridge/src/index.mts',
+  ]) {
+    for (const domain of ['client', 'client-engines']) {
+      assert.ok(affectedDomains([path]).domains.includes(domain))
+    }
   }
 })
 test('缺失基线或历史分叉不能缩小范围', () => {

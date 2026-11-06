@@ -95,6 +95,8 @@ jobs:
           npm run test:computer-use-sdk
           npm ci --ignore-scripts --prefix packages/browser --no-audit --no-fund
           npm run test:browser-package
+          npm run test:chrome-packages
+          npm run build:automation-packages
         id: phase-7
       - run: go test ./...
         id: phase-6
