@@ -1,4 +1,4 @@
-// 工具表的跨 harness 约束；设备测试入口也加载本文件，保证常规测试覆盖协议防线。
+// 工具表的跨 harness 约束；根 check 执行全部协议单测，设备测试入口也加载本文件。
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {

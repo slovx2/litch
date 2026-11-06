@@ -17,6 +17,9 @@ entry point; the full contributor guide lives in [docs/contributing.md](docs/con
 
 Run the checks that match your change:
 
+`npm run check` 包含 `packages/protocol/test/*.test.mts` 的全部协议单测；可单独运行
+`npm run test:protocol:unit`。CI unit 同样执行 check，协议源码或用例变化按跨领域规则纳入检查。
+
 ```bash
 npm run typecheck
 npm run check
