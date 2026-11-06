@@ -43,6 +43,8 @@ export interface SuggestHost {
   onNew?: (() => void) | undefined
   /** 把输入框里的字换掉，光标落到 caret */
   edit(text: string, caret: number): void
+  /** 插入提到的会话：走输入框自己的编辑（撤销得回来）。不给就用 edit */
+  mention?(text: string, caret: number): void
   addExtra(extra: MessageExtra): void
 }
 
@@ -248,9 +250,10 @@ export function useSuggest(host: SuggestHost): SuggestControl {
       const extra = sessions.extraOf(entry.id)
       if (!extra) return
       const next = insertMention(text, trigger, extra.title)
-      host.edit(next.text, next.caret)
-      setCaret(next.caret)
       host.addExtra(extra)
+      if (host.mention) host.mention(next.text, next.caret)
+      else host.edit(next.text, next.caret)
+      setCaret(next.caret)
       return
     }
     const cut = cutTrigger(text, trigger)

@@ -1521,6 +1521,7 @@ export const zhCN = {
   'at.group.sessions': '会话',
   'mention.open': '打开会话：{about}',
   'mention.gone': '这个会话已不在列表中',
+  'mention.chip': '会话：{title}',
   'at.sessions.full': '一条消息最多提到 {max} 个会话',
   'at.hint': '输入名称，搜索工作目录中的文件和目录',
   'at.searching': '正在搜索…',

@@ -1591,6 +1591,7 @@ export const en: Record<MessageKey, Entry> = {
   'at.group.sessions': 'Sessions',
   'mention.open': 'Open session: {about}',
   'mention.gone': 'This session is no longer in the list',
+  'mention.chip': 'Session: {title}',
   'at.sessions.full': 'A message can mention at most {max} sessions',
   'at.hint': 'Type to search files and folders in the working directory',
   'at.searching': 'Searching…',

@@ -2,7 +2,9 @@
 // 立即插入（插进正在跑的回合，harness 会引导的话）、编辑（拿回输入框）、移除；停止后的待发多一个“发送”。
 // 排着的消息归核心管，这里只发命令、不自己记。“连同待发一起发”是输入框发送键旁的小开关（ComposeBox）。
 import type { QueuedMessage } from '@litch/core'
+import type { ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { mentionRanges } from '../../../../../packages/ui/src/composer/mention-field.ts'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import { DeliveryMark } from '../DeliveryMark'
@@ -112,9 +114,10 @@ export function QueueTray({
               </Text>
             )}
             <Text numberOfLines={1} style={[styles.text, { color: c.ink2 }]}>
+              <Mentioned message={message} text={text} />
               {message.images.length > 0 && message.text
-                ? `${text}  [${t('composer.imageCount', { n: message.images.length })}]`
-                : text}
+                ? `  [${t('composer.imageCount', { n: message.images.length })}]`
+                : null}
             </Text>
             {/* 状态只在“说不准”时标一下：排队、停止待发已经写在头上，不每行重复 */}
             {message.delivery === 'unknown' ? <DeliveryMark delivery="unknown" /> : null}
@@ -176,3 +179,26 @@ const styles = StyleSheet.create({
   act: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   actText: { fontSize: 17 },
 })
+
+/** 排着的那句话：提到的会话（@[标题]）和对话里一样写成强调色的 ＠标题 */
+function Mentioned({ message, text }: { message: QueuedMessage; text: string }) {
+  const { c } = useTheme()
+  const ranges = mentionRanges(
+    text,
+    message.extras.flatMap((extra) => (extra.kind === 'session' ? [extra] : [])),
+  )
+  if (ranges.length === 0) return <>{text}</>
+  const parts: ReactNode[] = []
+  let at = 0
+  for (const range of ranges) {
+    if (range.start > at) parts.push(text.slice(at, range.start))
+    parts.push(
+      <Text key={`m${range.start}`} style={{ color: c.accent, fontWeight: '600' }}>
+        {`＠${range.title}`}
+      </Text>,
+    )
+    at = range.end
+  }
+  if (at < text.length) parts.push(text.slice(at))
+  return <>{parts}</>
+}

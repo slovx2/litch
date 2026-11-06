@@ -56,6 +56,7 @@ import { type FileExtra, pickFile } from './files'
 import { useGrow } from './grow'
 import { MAX_IMAGE_MB, MAX_IMAGES, pickImages, REFUSAL_TEXT } from './images'
 import { rowLayout } from './layout'
+import { useMentionInput } from './MentionInput'
 import { MentionList, mentionTrigger } from './MentionList'
 import { type SettingsProps, useComposeSettings } from './SettingsBar'
 import { sendButton, takesSend } from './send-mode'
@@ -276,6 +277,14 @@ export function ComposeBox({
   /** 光标在哪：认 `@` 用。还没动过光标的当在末尾 */
   const [caret, setCaret] = useState<number | null>(null)
   const trigger = mentions ? mentionTrigger(draft.text, caret) : null
+  // 提到的会话在输入框里画成片（MentionInput.tsx）
+  const chipped = useMentionInput({
+    input,
+    text: draft.text,
+    setText: draft.setText,
+    sessions: draft.sessions,
+    onSelect: (selection) => setCaret(selection.end),
+  })
   const filled =
     draft.text.trim().length > 0 ||
     draft.images.length > 0 ||
@@ -524,9 +533,7 @@ export function ComposeBox({
         >
           <TextInput
             ref={input}
-            value={draft.text}
-            onChangeText={draft.setText}
-            onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
+            {...chipped.props}
             placeholder={placeholder}
             placeholderTextColor={c.ink3}
             multiline
@@ -543,7 +550,9 @@ export function ComposeBox({
                 fontFamily: theme.font.ui,
               },
             ]}
-          />
+          >
+            {chipped.children}
+          </TextInput>
         </HardwareKeyboard>
         {config.percent !== null ? (
           <UsageRing

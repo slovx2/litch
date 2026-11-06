@@ -5,12 +5,14 @@
 // - 回退成了、发送没成：原消息已经撤掉，编辑后的文字、图片、评论放回输入框，提示原因（和以前回退一样）。
 // 评论不在这里改，原样带上；能显示的图片带上；带不上的附件写明（core 的 editableOf / resendOf）。
 import { editableOf, type ItemView, keys, resendOf, type SessionMeta } from '@litch/core'
-import { type KeyboardEvent, useLayoutEffect, useRef, useState } from 'react'
+import { type KeyboardEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import { editDraftComments, refillDraft } from '../composer/drafts.ts'
+import { MentionMirror, useMentionGuard } from '../composer/MentionField.tsx'
+import { mentionRanges } from '../composer/mention-field.ts'
 import { useActions } from './actions.tsx'
 import { SentComments } from './comments/Cards.tsx'
 import { commentsOf } from './comments/Cite.tsx'
@@ -48,6 +50,10 @@ export function MessageEdit({
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const area = useRef<HTMLTextAreaElement | null>(null)
+  // 提到的会话和输入框里一样画成片
+  const sessions = user?.sessions
+  const ranges = useMemo(() => mentionRanges(text, sessions ?? []), [text, sessions])
+  const guard = useMentionGuard({ area, ranges, deviceId, replace: (next) => setText(next) })
 
   // 打开时光标放在最后；字多了框跟着长，到顶了在框里滚
   useLayoutEffect(() => {
@@ -106,7 +112,8 @@ export function MessageEdit({
               key,
               text,
               message.images,
-              message.extras.filter((extra) => extra.kind === 'file'),
+              // 提到的会话一起放回去，输入框里还是片、发出去还带着
+              message.extras.filter((extra) => extra.kind === 'file' || extra.kind === 'session'),
             )
             showToast({
               id: 'turn-action',
@@ -125,6 +132,7 @@ export function MessageEdit({
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (guard.onKeyDown(event)) return
     if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
@@ -151,15 +159,23 @@ export function MessageEdit({
       {start.kept.length > 0 ? (
         <UserAttachments attachments={start.kept} deviceId={deviceId} sessionId={sessionId} />
       ) : null}
-      <textarea
-        ref={area}
-        className="umsg-edit"
-        aria-label={t('turn.edit.editing')}
-        value={text}
-        disabled={working}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={onKeyDown}
-      />
+      <div className="men-field">
+        <textarea
+          ref={area}
+          className={ranges.length > 0 ? 'umsg-edit men-on' : 'umsg-edit'}
+          aria-label={t('turn.edit.editing')}
+          value={text}
+          disabled={working}
+          {...guard.props}
+          onChange={(event) => setText(event.target.value)}
+          onSelect={guard.onSelect}
+          onKeyDown={onKeyDown}
+          onPaste={guard.onPaste}
+        />
+        {ranges.length > 0 ? (
+          <MentionMirror area={area} text={text} ranges={ranges} describedBy={guard.describedBy} />
+        ) : null}
+      </div>
       {start.dropped.length > 0 ? (
         <div className="umsg-edit-note">
           {t('turn.edit.dropped', {

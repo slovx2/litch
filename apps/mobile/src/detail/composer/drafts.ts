@@ -1,5 +1,6 @@
 // 没发出去的草稿，按会话记：文字存进应用文档目录的 drafts.json（离开再进、杀掉应用重开都还在），
-// 图片另存 draft-images.json，发送或删除后立即清理；打 @ 提到的会话只在内存。
+// 图片另存 draft-images.json，发送或删除后立即清理；打 @ 提到的会话（会话号和标题）另存 draft-sessions.json，
+// 重开应用后输入框里还是片。
 // 选中回答加的评论另存一个文件 draft-comments.json，也落盘；对话区（全文页加评论）和输入区（评论片）
 // 两边都要改它，所以评论可以订阅（subscribeDraftComments），谁改了另一边跟着变。
 // 写文件攒一下再写：每敲一个字同步写一次文件会占 JS 线程。离开页面时当场写（flushDrafts）。
@@ -65,6 +66,13 @@ export function flushDrafts(): void {
   flushComments()
   if (timer !== null) clearTimeout(timer)
   timer = null
+  if (sessions) {
+    try {
+      sessionFile.write([...sessions])
+    } catch {
+      // 写不进去不影响这次使用
+    }
+  }
   if (!texts) return
   try {
     file.write([...texts])
@@ -77,21 +85,47 @@ export const loadDraftImages = (key: string): ImageAttachment[] => images.load(k
 
 export const saveDraftImages = (key: string, list: ImageAttachment[]) => images.save(key, list)
 
-/** 打 @ 提到的会话（正文里是 @[标题]）：和图片一样只在内存里，按会话记 */
+/** 打 @ 提到的会话（正文里是 @[标题]）：按会话记，随文字一起写进文件 */
 export type SessionExtra = Extract<MessageExtra, { kind: 'session' }>
-const sessions = new Map<string, SessionExtra[]>()
+const sessionFile = jsonFile<[string, SessionExtra[]][]>('draft-sessions.json')
+let sessions: Map<string, SessionExtra[]> | null = null
 
-export const loadDraftSessions = (key: string): SessionExtra[] => sessions.get(key) ?? []
+function allSessions(): Map<string, SessionExtra[]> {
+  if (sessions) return sessions
+  sessions = new Map()
+  const stored = sessionFile.read()
+  for (const entry of Array.isArray(stored) ? stored : []) {
+    if (!Array.isArray(entry) || typeof entry[0] !== 'string' || !Array.isArray(entry[1])) continue
+    const list = entry[1].flatMap((one: unknown): SessionExtra[] => {
+      const { threadId, title } = (one ?? {}) as { threadId?: unknown; title?: unknown }
+      return typeof threadId === 'string' && typeof title === 'string'
+        ? [{ kind: 'session', threadId, title }]
+        : []
+    })
+    if (list.length) sessions.set(entry[0], list)
+  }
+  return sessions
+}
+
+export const loadDraftSessions = (key: string): SessionExtra[] => allSessions().get(key) ?? []
 
 export function saveDraftSessions(key: string, list: SessionExtra[]): void {
-  if (list.length) sessions.set(key, list)
-  else sessions.delete(key)
+  const map = allSessions()
+  if (JSON.stringify(map.get(key) ?? []) === JSON.stringify(list)) return
+  map.delete(key)
+  if (list.length) map.set(key, list)
+  while (map.size > LIMIT) {
+    const oldest = map.keys().next().value
+    if (oldest === undefined) break
+    map.delete(oldest)
+  }
+  if (timer === null) timer = setTimeout(flushDrafts, WRITE_DELAY_MS)
 }
 
 export function dropDraft(key: string): void {
   saveDraft(key, '')
   saveDraftImages(key, [])
-  sessions.delete(key)
+  saveDraftSessions(key, [])
   saveDraftComments(key, NONE)
 }
 

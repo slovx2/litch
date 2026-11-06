@@ -55,6 +55,14 @@ import {
 import { composeProbe, judgeCompose } from './probe-compose.mjs'
 import { askProbe, judgeAsk } from './probe-compose-ask.mjs'
 import { type AttachLook, attachLook, attachProbe, judgeAttach } from './probe-compose-attach.mjs'
+import {
+  CHIP_SESSION,
+  CHIP_TARGET,
+  chipDraft,
+  chipProbe,
+  chipReloaded,
+  judgeChip,
+} from './probe-compose-chip.mjs'
 import { runComposeFilesChecks } from './probe-compose-files.mjs'
 import { judgeMention, mentionProbe } from './probe-compose-mention.mjs'
 import {
@@ -526,10 +534,18 @@ async function measure(
   // 选中回答加评论排最后，只对着模拟核心量：要它按评论逐条回应。量完重新加载页面，看留下的草稿还在不在
   let comments: object | null = null
   const commentsFailed: string[] = []
+  // 输入框里提到的会话画成片（只对着模拟核心）：留一句带片的草稿，下面重新加载页面后再看
+  let chip: object | null = null
+  const chipFailed: string[] = []
   if (!real) {
+    const chipped = await runInPage(window, chipProbe, CHIP_SESSION, CHIP_TARGET)
+    await runInPage(window, chipDraft, CHIP_SESSION, CHIP_TARGET)
     const probe = await runInPage(window, commentsProbe, COMMENT_SESSION)
     await runInPage(window, draftImageReloadProbe, 'save')
     await hooks.load({ lang: 'zh-CN' })
+    const chipKept = await runInPage(window, chipReloaded, CHIP_SESSION)
+    chip = { ...chipped, reloaded: chipKept }
+    chipFailed.push(...judgeChip(chipped, chipKept))
     const reloaded = await runInPage(window, commentsReloaded, COMMENT_SESSION)
     await runInPage(window, draftImageReloadProbe, 'restore')
     comments = { probe, reloaded }
@@ -556,6 +572,7 @@ async function measure(
       mentionLooks,
       ask,
       sendMode,
+      chip,
       comments,
     },
     [
@@ -573,6 +590,7 @@ async function measure(
       ...judgeAsk(ask),
       ...judgeSendMode(sendMode),
       ...judgeSheetLook('找文件的单子', mentionLooks),
+      ...chipFailed,
       ...commentsFailed,
     ],
   ]

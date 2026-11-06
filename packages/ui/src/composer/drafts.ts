@@ -1,6 +1,7 @@
 // 没发出去的草稿，按会话存在浏览器的本地存储里：切走再回来、重开应用都还在。
 // 存取失败（存储被禁用、满了）时退回到只在内存里记。
 // 图片由外壳存进应用数据目录；附带项指着设备上的东西，只保留在内存。
+// 提到的会话（正文里的 @[标题]）例外：只是会话号和标题，随正文一起存，重开应用后输入框里还是片。
 import type { ImageAttachment, MessageExtra } from '@litch/core'
 import { DraftImages } from '../../../core/src/draft-images.mts'
 import { mergeExtras } from './extras.ts'
@@ -225,11 +226,63 @@ export const saveDraftImages = (key: string, list: ImageAttachment[]) =>
 const extras = new Map<string, MessageExtra[]>()
 const NO_EXTRAS: MessageExtra[] = []
 
-export const loadDraftExtras = (key: string): MessageExtra[] => extras.get(key) ?? NO_EXTRAS
+type SessionExtra = Extract<MessageExtra, { kind: 'session' }>
+
+const SESSIONS_KEY = 'litch.drafts.sessions'
+let sessionCache: Map<string, SessionExtra[]> | null = null
+
+/** 存着的提到的会话：草稿的键 → 会话号和标题 */
+function sessionDrafts(): Map<string, SessionExtra[]> {
+  if (sessionCache) return sessionCache
+  sessionCache = new Map()
+  try {
+    const raw = localStorage.getItem(SESSIONS_KEY)
+    const parsed: unknown = raw ? JSON.parse(raw) : null
+    for (const entry of Array.isArray(parsed) ? parsed : []) {
+      if (!Array.isArray(entry) || typeof entry[0] !== 'string' || !Array.isArray(entry[1]))
+        continue
+      const list = (entry[1] as unknown[]).flatMap((one): SessionExtra[] => {
+        const { threadId, title } = (one ?? {}) as { threadId?: unknown; title?: unknown }
+        return typeof threadId === 'string' && typeof title === 'string'
+          ? [{ kind: 'session', threadId, title }]
+          : []
+      })
+      if (list.length > 0) sessionCache.set(entry[0], list)
+    }
+  } catch {
+    // 读不出来就当没有
+  }
+  return sessionCache
+}
+
+function saveSessions(key: string, list: MessageExtra[]): void {
+  const drafts = sessionDrafts()
+  const sessions = list.flatMap((one): SessionExtra[] =>
+    one.kind === 'session' ? [{ kind: 'session', threadId: one.threadId, title: one.title }] : [],
+  )
+  const before = JSON.stringify(drafts.get(key) ?? [])
+  if (before === JSON.stringify(sessions)) return
+  drafts.delete(key)
+  if (sessions.length > 0) drafts.set(key, sessions)
+  while (drafts.size > LIMIT) {
+    const oldest = drafts.keys().next().value
+    if (oldest === undefined) break
+    drafts.delete(oldest)
+  }
+  try {
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify([...drafts]))
+  } catch {
+    // 存不进去不影响这次使用
+  }
+}
+
+export const loadDraftExtras = (key: string): MessageExtra[] =>
+  extras.get(key) ?? sessionDrafts().get(key) ?? NO_EXTRAS
 
 export function saveDraftExtras(key: string, list: MessageExtra[]): void {
   if (list.length > 0) extras.set(key, list)
   else extras.delete(key)
+  saveSessions(key, list)
 }
 
 // ---------- 评论（选中回答里的一段加的） ----------

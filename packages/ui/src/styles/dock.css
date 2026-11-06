@@ -1243,3 +1243,61 @@ textarea.req-input {
 .child-reqs .child-req-body .req-frame::after {
   display: none;
 }
+
+/* 输入框里提到的会话画成片（composer/MentionField.tsx）：textarea 的字透明，下面垫一层同样排版的字，
+   对上了的 @[标题] 在这层画成片。片和原文一样宽：左右的内边距、边框用负外边距抵掉，@[ 的位置放图标 */
+.men-field {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.men-field > textarea {
+  position: relative;
+  z-index: 1;
+}
+.men-field > textarea.men-on {
+  color: transparent;
+  caret-color: var(--ink);
+}
+.men-mirror {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  color: var(--ink);
+}
+.men-chip {
+  position: relative;
+  margin: 0 -2px;
+  padding: 0 1px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--hover);
+  color: var(--accent);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.men-sig {
+  position: relative;
+  color: transparent;
+}
+.men-sig > .ic {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  color: var(--accent);
+}
+.men-desc {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

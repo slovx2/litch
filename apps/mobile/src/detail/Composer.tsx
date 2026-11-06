@@ -84,7 +84,7 @@ export function Composer({
   useEffect(
     () =>
       onRefill(deviceId, sessionId, (message) =>
-        refill(message.text, message.images, message.comments, [], message.files),
+        refill(message.text, message.images, message.comments, message.sessions, message.files),
       ),
     [deviceId, sessionId, refill],
   )

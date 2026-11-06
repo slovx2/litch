@@ -9,6 +9,8 @@ export interface RefillMessage {
   /** 那条消息带的评论（从正文开头认回来的），放回输入框上面 */
   comments?: CommentExtra[]
   files?: Extract<MessageExtra, { kind: 'file' }>[]
+  /** 那条消息提到的会话：输入框里还是片，发出去还带着 */
+  sessions?: Extract<MessageExtra, { kind: 'session' }>[]
 }
 
 type Listener = (message: RefillMessage) => void

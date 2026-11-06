@@ -4,7 +4,7 @@
 // - 回退没成：编辑框和里面的字都留着，下面写原因；
 // - 回退成了、发送没成：原消息已经撤掉，编辑后的文字、图片、评论放回输入框，提示原因。
 import { editableOf, parseComments, resendOf, type UserMessageItem } from '@litch/core'
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { StyleSheet, Text, TextInput, View } from 'react-native'
 import type { SessionStore } from '../core/session-store'
 import { useChannel } from '../shell/services'
@@ -13,6 +13,7 @@ import { Button } from '../ui/kit/controls'
 import { Dialog } from '../ui/kit/overlays'
 import { useTheme } from '../ui/theme'
 import { UNKNOWN_ITEM } from './comments/refs'
+import { useMentionInput } from './composer/MentionInput'
 import { refillDraft } from './refill'
 
 /** 要编辑的那条：哪一回合、切在哪条插进来的话之前（没有 itemId 是整个回合）、原消息 */
@@ -26,6 +27,8 @@ const reasonOf = (error: unknown): string => {
   const { message, text } = (error ?? {}) as { message?: string; text?: unknown }
   return message || (text ? String(text) : String(error))
 }
+
+const NO_SESSIONS: never[] = []
 
 export function EditMessage({
   store,
@@ -48,6 +51,14 @@ export function EditMessage({
   const [text, setText] = useState('')
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 提到的会话和输入框里一样画成片
+  const input = useRef<TextInput>(null)
+  const chipped = useMentionInput({
+    input,
+    text,
+    setText,
+    sessions: target?.user.sessions ?? NO_SESSIONS,
+  })
   useEffect(() => {
     setText(start?.text ?? '')
     setError(null)
@@ -93,6 +104,7 @@ export function EditMessage({
             text,
             images: message.images,
             files: message.extras.filter((extra) => extra.kind === 'file'),
+            sessions: message.extras.filter((extra) => extra.kind === 'session'),
             comments: (parseComments(target.user.text)?.comments ?? []).map(({ quote, note }) => ({
               kind: 'comment',
               itemId: UNKNOWN_ITEM,
@@ -118,11 +130,11 @@ export function EditMessage({
         {t('turn.edit')}
       </Text>
       <TextInput
+        ref={input}
         autoFocus
         multiline
-        value={text}
         editable={!working}
-        onChangeText={setText}
+        {...chipped.props}
         accessibilityLabel={t('turn.edit.editing')}
         testID="edit:input"
         style={[
@@ -135,7 +147,9 @@ export function EditMessage({
             fontSize: theme.font.size.body,
           },
         ]}
-      />
+      >
+        {chipped.children}
+      </TextInput>
       {start.comments > 0 ? note(t('comment.sent', { n: start.comments })) : null}
       {start.kept.length > 0
         ? note(start.kept.map((one) => one.label ?? t('attachment.image')).join(t('list.comma')))
