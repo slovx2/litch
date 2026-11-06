@@ -23,8 +23,14 @@ tags: [mock]
     text: (Send|发送)
 - tapOn:
     id: composer-send
+# 先完成首次数据许可并确认发送，再处理键盘；返回键不能代替同意。
+- extendedWaitUntil:
+    notVisible:
+      id: composer-input
+      text: 'steer e2e'
+    timeout: 10000
 # 没有硬键盘时（CI 的模拟器）软键盘还弹着，320×640 上它和审批卡片把对话区挤没了，插进去的那句在键盘后面
-- hideKeyboard
+- runFlow: ../_shared/dismiss-keyboard.yaml
 - extendedWaitUntil:
     visible:
       text: steer e2e
@@ -75,7 +81,7 @@ tags: [mock]
     timeout: 10000
 - assertVisible:
     text: queue e2e
-- hideKeyboard
+- runFlow: ../_shared/dismiss-keyboard.yaml
 
 # 停止只暂停待发，不自动续发；已经插进回合的第一句保留，排队的第二句还不能出现在对话气泡里。
 - tapOn:
@@ -95,7 +101,7 @@ tags: [mock]
     id: composer-pending
     checked: true
 - eraseText: 20
-- hideKeyboard
+- runFlow: ../_shared/dismiss-keyboard.yaml
 - assertVisible:
     id: queue:0
 - assertNotVisible:

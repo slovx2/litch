@@ -71,6 +71,10 @@ On desktop and phone, `@` searches unarchived conversations, sub-sessions, manag
 
 选中后，输入框里的引用显示为会话标签（图标加标题），排队消息、编辑已发消息和对话中的用户消息也显示为同样的标签，点击打开该会话。标签整体删除：光标不会停在标签内部，紧挨标签按退格或删除会删掉整个标签。桌面端可以撤销恢复；复制含标签的文字后，粘贴到同一设备的输入框仍是标签；悬停显示全称，读屏读作“会话：标题”。草稿关闭或重开应用后标签仍在。发给模型的内容不变：正文写作 `＠[标题]`，末尾附会话列表。
 
+手机上长按已发送消息里的会话引用，会打开该消息的操作菜单；短按仍打开被引用的会话。
+
+On the phone, long-pressing a session mention in a sent message opens the message actions; tapping still opens the referenced session.
+
 After you pick one, the composer shows the mention as a session chip (icon and title). Queued messages, the edit box for a sent message and sent user messages show the same chip; clicking it opens the session. A chip is deleted as a whole: the caret never lands inside it, Backspace or Delete next to it removes the chip. On desktop, undo brings it back and copied text keeps its chips when pasted into a composer on the same device; hovering shows the full title and screen readers read "Session: title". Chips survive closing the draft and restarting the app. What the model receives is unchanged: `＠[title]` in the text plus the session list at the end.
 
 ## 侧栏「未读 / 最近」

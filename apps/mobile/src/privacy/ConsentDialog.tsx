@@ -1,17 +1,37 @@
-import { Linking, Text } from 'react-native'
+import { useLayoutEffect, useMemo } from 'react'
+import { Keyboard, Linking, Text } from 'react-native'
+import { KeyboardController } from 'react-native-keyboard-controller'
 import { useT } from '../ui/i18n'
 import { Button } from '../ui/kit/controls'
 import { Dialog } from '../ui/kit/overlays'
 import { useTheme } from '../ui/theme'
 import { PRIVACY_URL } from './config'
 import { type ConsentRequest, consentKey } from './consent'
+import { consentKeyboard } from './consent-keyboard'
 
 export function ConsentDialog({ request }: { request: ConsentRequest | null }) {
   const t = useT()
   const theme = useTheme()
+  const keyboard = useMemo(
+    () =>
+      consentKeyboard({
+        visible: () => Keyboard.isVisible(),
+        dismiss: () => KeyboardController.dismiss(),
+        cancel: () => request?.answer(false),
+      }),
+    [request],
+  )
+  useLayoutEffect(() => {
+    if (request) void keyboard.hide()
+  }, [request, keyboard])
   const style = { color: theme.c.ink, fontFamily: theme.font.ui, fontSize: theme.font.size.body }
   return (
-    <Dialog visible={request !== null} consentHost={false} onClose={() => request?.answer(false)}>
+    <Dialog
+      visible={request !== null}
+      consentHost={false}
+      onClose={() => request?.answer(false)}
+      onRequestClose={() => void keyboard.back()}
+    >
       <Text style={style} testID="ai-consent:title">
         {t('privacy.ai.title')}
       </Text>

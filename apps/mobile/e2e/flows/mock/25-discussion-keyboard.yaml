@@ -24,6 +24,24 @@ tags: [mock]
 - tapOn:
     id: post-question:D-17
 - inputText: Temporary keyboard question
+# 返回只关闭抽屉，重开仍保留草稿；不能以清空草稿修复收键盘失败。
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          id: discussion-drawer:close
+- tapOn:
+    id: post-discussion:D-17
+- assertVisible:
+    id: post-question:D-17
+    text: Temporary keyboard question
 - assertVisible:
     id: discussion-drawer:close
 - tapOn:

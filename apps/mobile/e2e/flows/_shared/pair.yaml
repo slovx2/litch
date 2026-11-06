@@ -32,13 +32,10 @@ appId: dev.litch.app
 - tapOn:
     id: pair:paste
 - inputText: ${output.pairText}
-- hideKeyboard
-- scrollUntilVisible:
-    element:
-      id: pair:paste:go
-    direction: DOWN
-    centerElement: true
+- runFlow: dismiss-keyboard.yaml
 - waitForAnimationToEnd
+- assertVisible:
+    id: pair:paste:go
 - tapOn:
     id: pair:paste:go
 - extendedWaitUntil:
@@ -47,6 +44,10 @@ appId: dev.litch.app
     timeout: 10000
 - assertVisible:
     text: 127.0.0.1
+- scrollUntilVisible:
+    element:
+      id: pair:add
+    direction: DOWN
 - tapOn:
     id: pair:add
 - extendedWaitUntil:

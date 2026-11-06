@@ -151,12 +151,15 @@ export function Sheet({
 export function Dialog({
   visible,
   onClose,
+  onRequestClose = onClose,
   onShow,
   consentHost = true,
   children,
 }: {
   visible: boolean
   onClose(): void
+  /** 系统返回可先收键盘；遮罩与明确取消仍走 onClose。 */
+  onRequestClose?(): void
   /** 对话框出来以后（安卓上这时才拿得到窗口焦点，输入框此时拿焦点键盘才会出来） */
   onShow?(): void
   /** 同意框自身不能再次注册承载点；其他弹窗中的发送复用最上层原生窗口。 */
@@ -170,7 +173,7 @@ export function Dialog({
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={onRequestClose}
       onShow={onShow}
     >
       <Pressable style={styles.scrim} onPress={onClose} />

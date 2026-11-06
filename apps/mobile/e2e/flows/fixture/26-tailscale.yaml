@@ -28,38 +28,78 @@ tags: [fixture, native]
 - tapOn:
     id: tailscale:control
 - inputText: http://127.0.0.1:9
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      id: tailscale:login
+    direction: UP
 - assertVisible:
     id: tailscale:login
-- hideKeyboard
 - tapOn:
     id: tailscale:login
+- runFlow: ../_shared/allow-tailscale-consent.yaml
+- scrollUntilVisible:
+    element:
+      id: tailscale:error
+    direction: DOWN
 - assertVisible:
     id: tailscale:error
-- tapOn:
+# 点字段后光标可能在中间；全选替换并校验完整地址，避免保留右侧的端口后缀。
+- longPressOn:
     id: tailscale:control
-- eraseText: 100
+# Android 的 URL 长按会直接选中整段，此时菜单没有“全选”。其他选择状态才点全选。
+- runFlow:
+    when:
+      visible: '^(Select All|Select all|全选)$'
+    commands:
+      - tapOn: '^(Select All|Select all|全选)$'
 - inputText: https://127.0.0.1:9
-- hideKeyboard
+- assertVisible:
+    id: tailscale:control
+    text: 'https://127\.0\.0\.1:9'
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      id: tailscale:login
+    direction: UP
 - tapOn:
     id: tailscale:login
+- runFlow: ../_shared/allow-tailscale-consent.yaml
+- scrollUntilVisible:
+    element:
+      id: tailscale:state
+    direction: UP
 - extendedWaitUntil:
     visible:
       text: 未登录|Signed out|连接中|Connecting
     timeout: 15000
 - assertNotVisible:
     id: tailscale:error
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: tailscale:error
+    direction: DOWN
     timeout: 40000
+- scrollUntilVisible:
+    element:
+      id: tailscale:clear
+    direction: UP
 - tapOn:
     id: tailscale:clear
 - tapOn:
     id: confirm:ok
+- scrollUntilVisible:
+    element:
+      id: tailscale:state
+    direction: UP
 - extendedWaitUntil:
     visible:
       text: 未连接|Disconnected
     timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: tailscale:back
+    direction: DOWN
 - tapOn:
     id: tailscale:back
 - assertVisible:
@@ -74,7 +114,7 @@ tags: [fixture, native]
     id: add:check
 - assertVisible:
     id: add:submit
-- hideKeyboard
+- runFlow: ../_shared/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       id: key:generate

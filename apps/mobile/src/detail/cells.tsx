@@ -144,7 +144,7 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
               { color: c.ink, fontSize: font.size.body, fontFamily: font.ui },
             ]}
           >
-            <MentionedText text={text} sessions={row.sessions} />
+            <MentionedText text={text} sessions={row.sessions} onLongPress={menu} />
           </Text>
         ) : null}
       </Pressable>

@@ -34,16 +34,16 @@ tags: [mock]
     id: menu:local:new
 - tapOn:
     id: prompt:input
-- inputText: 发版跟进
+- inputText: Release follow-up
 - tapOn:
     id: prompt:ok
 - back
 - scrollUntilVisible:
     element:
-      text: 发版跟进
+      text: Release follow-up
     direction: DOWN
 - tapOn:
-    text: 发版跟进
+    text: Release follow-up
 - extendedWaitUntil:
     visible:
       id: localGroup:local:s2

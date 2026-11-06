@@ -190,3 +190,52 @@ test('讨论首次发送显式要求同意框，在批准后才断言草稿清�
   assert.ok(send >= 0 && title > send && allow > title && clear > allow)
   assert.equal(steps.filter((step) => step.tapOn?.id === 'post-question-submit:D-17').length, 1)
 })
+
+test('收键盘辅助流程只在键盘存在时返回一次，不自动批准数据许可', () => {
+  const source = readFileSync(
+    new URL('../e2e/flows/_shared/dismiss-keyboard.yaml', import.meta.url),
+    'utf8',
+  )
+  assert.equal(withConsentSteps(source, 'dismiss-keyboard.yaml'), source)
+  const steps = parseAllDocuments(source)[1].toJS()
+  const android = steps.find((step) => step.runFlow.when.platform === 'Android').runFlow.commands[0]
+    .runFlow
+  assert.match(android.when.visible.id, /keyboard_holder$/)
+  assert.deepEqual(android.commands[0], { pressKey: 'BACK' })
+  assert.equal(android.commands[1].extendedWaitUntil.notVisible.id, android.when.visible.id)
+  assert.doesNotMatch(source, /^\s*- hideKeyboard/m)
+  const ios = steps.find((step) => step.runFlow.when.platform === 'iOS').runFlow
+  assert.equal(ios.when.visible.id, 'keyboard:done')
+})
+
+test('发送流程在收键盘前等待草稿清空，首次数据许可仍由转换器正常处理', () => {
+  for (const flow of ['13-send-mode', '11-goal', '28-manager-chat-scroll', '33-mention-chip']) {
+    const source = readFileSync(new URL(`../e2e/flows/mock/${flow}.yaml`, import.meta.url), 'utf8')
+    const steps = parseAllDocuments(source)[1].toJS()
+    const send = steps.findIndex((step) => step.tapOn?.id === 'composer-send')
+    const clear = steps[send + 1].extendedWaitUntil
+    assert.equal(clear.notVisible.id, 'composer-input')
+    assert.ok(clear.notVisible.text)
+    assert.ok(String(steps[send + 2].runFlow).endsWith('dismiss-keyboard.yaml'))
+    const converted = withConsentSteps(source, `${flow}.yaml`)
+    assert.match(converted, /id: ai-consent:allow/)
+  }
+})
+
+test('Tailscale 每次连接都先明确确认服务说明，普通 AI 同意转换不能跳过它', () => {
+  const source = readFileSync(
+    new URL('../e2e/flows/fixture/26-tailscale.yaml', import.meta.url),
+    'utf8',
+  )
+  const steps = parseAllDocuments(source)[1].toJS()
+  const logins = steps.flatMap((step, i) => (step.tapOn?.id === 'tailscale:login' ? [i] : []))
+  assert.equal(logins.length, 2)
+  for (const i of logins)
+    assert.equal(steps[i + 1].runFlow, '../_shared/allow-tailscale-consent.yaml')
+  const allow = readFileSync(
+    new URL('../e2e/flows/_shared/allow-tailscale-consent.yaml', import.meta.url),
+    'utf8',
+  )
+  assert.equal(withConsentSteps(allow, 'allow-tailscale-consent.yaml'), allow)
+  assert.equal(parseAllDocuments(allow)[1].toJS().at(-1).tapOn.id, 'tailscale:consent-allow')
+})

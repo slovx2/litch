@@ -20,6 +20,18 @@ tags: [mock, privacy]
     visible:
       id: ai-consent:title
     timeout: 20000
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          notVisible:
+            id: com.google.android.inputmethod.latin:id/keyboard_holder
+          timeout: 5000
+# 同意框已经主动收键盘；重复收键盘不能当作取消许可。
+- runFlow: ../_shared/dismiss-keyboard.yaml
+- assertVisible:
+    id: ai-consent:title
 - scrollUntilVisible:
     element:
       id: ai-consent:cancel
@@ -91,6 +103,10 @@ tags: [mock, privacy]
     element:
       id: settings:feedback
     timeout: 60000
+- scrollUntilVisible:
+    element:
+      id: settings:licenses
+    direction: DOWN
 - assertVisible:
     id: settings:licenses
 - scrollUntilVisible:
@@ -106,9 +122,10 @@ tags: [mock, privacy]
     timeout: 15000
 - tapOn:
     id: tailscale:login
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: tailscale:consent-cancel
+    direction: DOWN
     timeout: 5000
 - tapOn:
     id: tailscale:consent-cancel

@@ -10,6 +10,7 @@ iOS 的更新由 App Store 或 TestFlight 管理。隐私查询、删除请求�
 手机首次向 AI 服务发起操作前，会说明消息、附件、代理读取的项目文件和会话上下文的数据去向。
 用户可以取消；取消不会发送本次内容。同意按设备与供应商配置保存，换供应商或配置变化后重新确认。
 讨论抽屉打开时，同意框显示在抽屉上方；取消后保留追问草稿，允许后完成发送并清空输入框。
+同意框弹出时主动收起键盘；键盘正在收起或再次打开时，系统返回只收键盘，不取消本次许可。键盘收起后再次返回或点击取消，才取消发送并保留草稿。
 若远端未上报完整供应商信息，界面明确提示先核实配置，本次许可不保存。文件附件先上传到选定设备，
 后续发送给模型仍须获得该服务的同意。经理操作同时说明其配置的派发服务。
 设置可“撤回 AI 数据同意”；这只影响手机今后的操作，不删除已经传出的内容，也不停止远端运行的任务。
@@ -20,7 +21,9 @@ conversation context may be processed. You can cancel. Consent is saved per devi
 provider configuration; provider or configuration changes require confirmation. Unknown provider
 details are shown explicitly and permission is not saved. When a discussion drawer is open,
 consent appears above it. Cancelling keeps the draft; agreeing sends the question and clears
-the input after submission succeeds. File attachments are uploaded to the
+the input after submission succeeds. The consent dialog dismisses the keyboard when it opens.
+Back only dismisses a visible or closing keyboard; once it is hidden, Back or Cancel cancels
+the send and keeps the draft. File attachments are uploaded to the
 selected device first; sending them to a model still requires consent for that service. Manager
 actions also disclose their configured dispatch service. Withdraw consent in Settings to be asked
 again. This does not delete data already sent or stop autonomous work on your remote computer.
@@ -52,9 +55,11 @@ later.
 
 ## What the user does (exception E2)
 
+粘贴配对文本时，提交按钮固定在键盘上方，文本区域可以滚动。
+
 You can only open the dialog. Then the user:
 
-1. In the phone app: Add device → Scan to add, and scan the code (or paste "Copy pairing text").
+1. In the phone app: Add device → Scan to add, and scan the code (or paste "Copy pairing text"). The pasted-text submit button stays above the keyboard, while the text area scrolls.
 2. On the computer, Litch shows "Phone '…' wants to pair" with a 6-digit code; if it matches the phone,
    the user clicks Allow.
 
