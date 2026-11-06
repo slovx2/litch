@@ -1,9 +1,30 @@
+import { createHash } from 'node:crypto'
 import { createServer } from 'node:http'
 export async function fixtures() {
   const requests = []
   const server = createServer((req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`)
     requests.push(url.pathname)
+    if (url.pathname === '/upload-body') {
+      const hash = createHash('sha256')
+      let size = 0
+      req.on('data', (bytes) => {
+        hash.update(bytes)
+        size += bytes.length
+      })
+      req.on('end', () => {
+        res.setHeader('Content-Type', 'application/json')
+        res.end(
+          JSON.stringify({
+            size,
+            hash: hash.digest('hex'),
+            name: decodeURIComponent(req.headers['x-name']),
+            type: req.headers['content-type'],
+          }),
+        )
+      })
+      return
+    }
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
     if (url.pathname === '/login')
       res.setHeader('Set-Cookie', 'session=isolated-fixture; SameSite=Lax')
@@ -16,6 +37,23 @@ export async function fixtures() {
       <h1>Chrome acceptance</h1><p>${req.headers.cookie?.includes('session=isolated-fixture') ? 'SESSION OK' : 'NO SESSION'}</p>
       <button id="count" onclick="this.textContent=String(Number(this.textContent)+1)">0</button>
       <input placeholder="Fixture input"><input type="password" value="fixture-secret">
+      <input type="file" multiple aria-label="Upload fixture">
+      ${url.pathname === '/upload-frame' ? '<iframe src="/upload" title="Upload frame"></iframe>' : ''}
+      ${
+        url.pathname === '/upload'
+          ? `<div role="button" tabindex="0" aria-label="Drop fixture" id="drop">Drop files</div>
+      <script>
+        window.uploadResults=[]; window.uploadEvents=[];
+        const send=async files=>{for(const file of files) {
+          const response=await fetch('/upload-body',{method:'POST',headers:{'x-name':encodeURIComponent(file.name),'Content-Type':file.type||'application/octet-stream'},body:file});
+          window.uploadResults.push({...await response.json(),lastModified:file.lastModified});
+        }};
+        const input=document.querySelector('input[type=file]');
+        for(const type of ['input','change'])input.addEventListener(type,event=>{uploadEvents.push({type,trusted:event.isTrusted});if(type==='change')send(input.files)});
+        for(const type of ['dragenter','dragover','drop'])document.querySelector('#drop').addEventListener(type,event=>{event.preventDefault();uploadEvents.push({type,trusted:event.isTrusted});if(type==='drop')send(event.dataTransfer.files)});
+      </script>`
+          : ''
+      }
       <button id="popup" onclick="window.open('${other}/popup')">Open popup</button>
       ${
         url.pathname.startsWith('/input')

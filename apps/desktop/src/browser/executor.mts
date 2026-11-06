@@ -67,6 +67,14 @@ export interface Call {
   done(page: BrowserPage | null, text: string, images?: string[]): ClientToolCallResponse
   /** 查一个本机文件（上传用） */
   statFile(path: string): { file: boolean; size: number } | null
+  /** 外部 Chrome 通过有界分块传文件内容，不要求扩展读取 file://。 */
+  uploadFiles?(
+    page: BrowserPage,
+    node: number,
+    paths: string[],
+    mode: 'input' | 'drop',
+  ): Promise<void>
+  uploadMaxBytes?: number
   /** 交给人登录；没装（测试的宿主）是 null */
   handover: BrowserHandover | null
 }

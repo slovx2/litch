@@ -218,11 +218,20 @@ const uploadAction: Tool = async (call) => {
   if (stop) return stop
   const ref = str(call.args, 'ref', true)
   const paths = strings(call.args, 'paths')
+  const mode = oneOf(call.args, 'mode', ['input', 'drop'] as const) ?? 'input'
+  if (mode === 'drop' && !call.uploadFiles)
+    throw new BadArgs(
+      'Drop upload is only supported in Chrome. Use a file input or ask the user to choose the file on the page.',
+    )
+  const limit = call.uploadMaxBytes ?? UPLOAD_MAX_BYTES
   for (const path of paths) {
     if (!isAbsolute(path)) throw new BadArgs(`not an absolute path: ${path}`)
     const stat = call.statFile(path)
     if (!stat?.file) throw new BadArgs(`not a file: ${path}`)
-    if (stat.size > UPLOAD_MAX_BYTES) throw new BadArgs(`file is larger than 100 MB: ${path}`)
+    if (stat.size > limit)
+      throw new BadArgs(
+        `file is larger than ${limit / 1024 / 1024} MiB: ${path}. Ask the user to choose the file on the page; do not start a local file server.`,
+      )
   }
   const backendNodeId = nodeOf(call, page, ref)
   const described = await page.cdp<{ node: { nodeName?: string; attributes?: string[] } }>(
@@ -238,9 +247,16 @@ const uploadAction: Tool = async (call) => {
   const isFile =
     described.node.nodeName?.toUpperCase() === 'INPUT' &&
     attributes[typeAt + 1]?.toLowerCase() === 'file'
-  if (!isFile) throw new BadArgs(`${ref} is not an <input type="file">`)
-  await page.cdp('DOM.setFileInputFiles', { files: paths, backendNodeId })
-  return call.done(page, `Set ${paths.length} file(s) on ${ref}.`)
+  if (mode === 'input' && !isFile) throw new BadArgs(`${ref} is not an <input type="file">`)
+  if (call.uploadFiles) await call.uploadFiles(page, backendNodeId, paths, mode)
+  else await page.cdp('DOM.setFileInputFiles', { files: paths, backendNodeId })
+  return call.done(
+    page,
+    `${mode === 'drop' ? 'Dispatched a drop with' : 'Set'} ${paths.length} file(s) on ${ref}.` +
+      (call.uploadFiles
+        ? ' Chrome used synthetic events. Verify the page accepted the files; if it rejects them, ask the user to choose the file on the page. Do not start a local file server or change extension permissions.'
+        : ''),
+  )
 }
 
 const dialogAction: Tool = async (call) => {

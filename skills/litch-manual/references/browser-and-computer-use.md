@@ -364,6 +364,14 @@ Chrome 登录由用户手动完成。`request_sign_in` 显示登录卡并暂停�
 
 Chrome sign-in is manual. `request_sign_in` displays a sign-in card and pauses agent observation and actions in that Chrome instance without switching windows. Open the `Litch · session title` tab group yourself, sign in, then choose **Sign-in complete** in Litch. The page reloads and the agent must claim it again. Never provide passwords or one-time codes to the agent. Remote uploads and cross-device downloads are not supported.
 
+Chrome 上传本地文件不需要“允许访问文件网址”。本机会话可用 `upload` 把控制端绝对路径的文件交给文件输入框；拖放区域用 `mode: "drop"` 和区域的 ref。每次最多 32 个文件、总计 512 MiB，内置浏览器仍为单文件 100 MiB。Chrome 上传按 192 KiB 分块，先在隔离上下文组装文件，再向输入框派发 input/change，或向拖放区域派发 dragenter/dragover/drop。分块期间继续检查网站权限、租约和文档；中断不会自动重传。文件名、常见格式 MIME 和修改时间随文件传入页面，本机完整路径不传给页面。
+
+网页可能拒绝合成事件。工具成功仅说明已派发，代理应核对页面上的文件名、进度或成功提示；做不到时请用户自己在页面上选择文件。不要要求用户寻找文件网址开关、修改扩展权限，或启动本地文件服务器绕过限制。上传会发送数据，仍须取得用户授权。
+
+Chrome uploads do not require **Allow access to file URLs**. In a local session, use `upload` with absolute paths on the controlling computer and a file input ref, or `mode: "drop"` with a drop-zone ref. Each call accepts up to 32 files totaling 512 MiB; the built-in browser retains its 100 MiB per-file limit. Chrome transfers 192 KiB chunks into an isolated context, then dispatches input/change or dragenter/dragover/drop. Site permissions, leases and document checks apply throughout; interrupted uploads are not replayed. The page receives file names, MIME types for common formats and modification times, without local absolute paths.
+
+Sites may reject synthetic events. Tool success confirms dispatch only; verify the page's file name, progress or success message. If upload fails or the site rejects it, ask the user to choose the file on the page. Do not ask them to find a file-URL switch, change extension permissions or start a local file server to bypass the failure. Uploading sends data and still requires user authorization.
+
 隐私政策见仓库 `docs/chrome-extension-privacy.md`。获批页面内容会作为工具结果交给当前代理，
 可能发送到用户配置的模型服务商或远程执行设备，并留在代理会话记录中。卸载扩展不会删除这些
 独立记录；标签组恢复记录则在扩展本地存储中保存，恢复成功后清除。不要向公开 Issues 提交敏感信息。

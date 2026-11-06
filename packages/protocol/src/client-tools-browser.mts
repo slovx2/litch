@@ -295,11 +295,17 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
     ),
     fn(
       'upload',
-      'Set files on an <input type="file"> element (by ref). Paths are absolute paths on the computer running the Litch desktop app. Only available when the conversation runs on that same computer. Uploading is sending data: confirm with the user first unless they asked for it.',
+      'Set files on an <input type="file"> element (by ref); Chrome also supports mode="drop" on a drop zone ref. Paths are absolute paths on the computer running Litch; local sessions only. Chrome streams up to 32 files totaling 512 MiB without file-URL permission; built-in browser limit is 100 MiB per file. Uploading is sending data: confirm first unless requested. If unsupported or rejected, ask the user to choose the file on the page; do not start a local file server or bypass permissions. Synthetic events may be rejected by the site; verify its response before retrying.',
       {
         tabId,
         ref,
         paths: { type: 'array', items: { type: 'string' } },
+        mode: {
+          type: 'string',
+          enum: ['input', 'drop'],
+          description:
+            'Default input. Chrome only: drop sends dragenter, dragover and drop to this ref.',
+        },
       },
       ['ref', 'paths'],
     ),

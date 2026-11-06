@@ -109,7 +109,7 @@ export const observedInput =
                   : null
               if (
                 method === 'Runtime.callFunctionOn' &&
-                (prepared?.kind !== 'select' || prepared.ok !== true)
+                (!['select', 'upload'].includes(prepared?.kind ?? '') || prepared?.ok !== true)
               )
                 attempted--
               else dispatched++

@@ -12,6 +12,7 @@ const ALLOWED: ReadonlySet<string> = new Set([
   'Page.getLayoutMetrics',
   'Page.handleJavaScriptDialog',
   'Page.getFrameTree',
+  'Page.createIsolatedWorld',
   // 跑脚本、在元素上调函数（清空输入框、选下拉项）、释放对象
   'Runtime.enable',
   'Runtime.evaluate',

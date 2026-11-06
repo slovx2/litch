@@ -14,6 +14,8 @@ import { fixtures } from './fixtures.mjs'
 import { inputChecks } from './input-check.mjs'
 import { chromeLifecycle } from './lifecycle.mjs'
 import { remoteCheck } from './remote-check.mjs'
+import { uploadChecks } from './upload.mjs'
+import { uploadBoundaries } from './upload-boundaries.mjs'
 import { chromeUx } from './ux.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -260,6 +262,19 @@ try {
     return result
   }
   let tabId
+  report.upload = await uploadChecks({
+    cdp,
+    identity,
+    executor,
+    bridge,
+    targetId,
+    success,
+    text,
+    check,
+    work,
+    origin: site.origin,
+  })
+  await uploadBoundaries({ executor, targetId, success, run: call, text, check, work, site })
   await check('固定 ID / Native Messaging / 正式 executor', async () => {
     assert.equal(identity.id, 'fakgembkgnmeknpaegnneneockbjhaai')
     // 协议协商与安装来源：开发者模式加载报 unpacked，协商出当前协议号

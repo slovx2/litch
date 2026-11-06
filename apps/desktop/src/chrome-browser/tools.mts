@@ -9,6 +9,7 @@ import type { ClientToolContext, ClientToolInvocation } from '../client-tools/ty
 import { ChromeBridgeError } from './bridge.mjs'
 import type { ChromeExecutor } from './executor.mjs'
 import type { ChromePage } from './page.mjs'
+import { CHROME_UPLOAD_MAX_BYTES, uploadChromeFiles } from './upload.mjs'
 
 const done = (text: string, images: string[] = []): ClientToolCallResponse => ({
   success: true,
@@ -174,6 +175,8 @@ export async function executePageTool(
       }
     },
     handover: null,
+    uploadFiles: uploadChromeFiles,
+    uploadMaxBytes: CHROME_UPLOAD_MAX_BYTES,
   }
   const result = await handler(call)
   // 输入已附带独立观察回执；不能用又一次读页失败覆盖已派发的结果。
