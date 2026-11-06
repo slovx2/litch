@@ -79,25 +79,29 @@ export function ProposalActs({
         >
           {t('proposal.start')}
         </button>
-        <button
-          type="button"
-          className="btn"
-          data-act="here"
-          disabled={off}
-          onClick={() => act.here()}
-        >
-          {t(inbox ? 'suggestions.here' : 'proposal.here')}
-        </button>
-        <button
-          type="button"
-          className="btn"
-          data-act="edit"
-          // 弹窗要父会话的摘要（harness、项目、标题）
-          disabled={off || !parent}
-          onClick={() => setEditing(true)}
-        >
-          {t('proposal.edit')}
-        </button>
+        {!proposal.sourceIsManager ? (
+          <button
+            type="button"
+            className="btn"
+            data-act="here"
+            disabled={off}
+            onClick={() => act.here()}
+          >
+            {t(inbox ? 'suggestions.here' : 'proposal.here')}
+          </button>
+        ) : null}
+        {!proposal.sourceIsManager ? (
+          <button
+            type="button"
+            className="btn"
+            data-act="edit"
+            // 弹窗要父会话的摘要（harness、项目、标题）
+            disabled={off || !parent}
+            onClick={() => setEditing(true)}
+          >
+            {t('proposal.edit')}
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn ghost"

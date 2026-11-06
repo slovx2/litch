@@ -6,7 +6,13 @@
 // “开始”“新会话”照它带上。
 // 目标 harness 收不到父会话那么严（widerSandbox）、父会话现在仍比它严时开不成：“开始”换成不能点的边框样式，
 // 读屏名称写明原因；“在这里做”和“编辑后开始”照常（改了 harness 或放宽父会话权限就能开）。
-import { type DeviceView, keys, type SandboxLevel, type SessionSummary } from '@litch/core'
+import {
+  type DeviceView,
+  keys,
+  managerMark,
+  type SandboxLevel,
+  type SessionSummary,
+} from '@litch/core'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type ReactNode, useState, useSyncExternalStore } from 'react'
@@ -29,12 +35,15 @@ export function useProposalActs(
   proposalId: string,
   /** 工作树开关的初值：模型定的，没定是设备照父会话算的 */
   initial: boolean,
+  managerSource = false,
 ) {
   const t = useT()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const device = useKey<DeviceView>(keys.device(deviceId))
   // “编辑后开始”那一页要父会话的摘要（harness、项目、目录）
   const parent = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
+  const sourceIsManager =
+    managerSource || (parent ? managerMark(parent)?.role === 'manager' : false)
   const act = useProposalAct(deviceId, sessionId, proposalId)
   const offline = device?.connection !== 'online'
   const off = act.busy || offline
@@ -47,7 +56,7 @@ export function useProposalActs(
   const menu: SheetAction[] = act.busy
     ? []
     : [
-        ...(parent
+        ...(parent && !sourceIsManager
           ? [
               {
                 label: t('proposal.edit'),
@@ -65,7 +74,7 @@ export function useProposalActs(
           ...gate,
         },
       ]
-  return { deviceId, proposalId, act, off, worktree, setWorktree, worktrees, menu }
+  return { deviceId, proposalId, act, off, worktree, setWorktree, worktrees, menu, sourceIsManager }
 }
 
 export type ProposalActsState = ReturnType<typeof useProposalActs>
@@ -120,13 +129,15 @@ export function ProposalActsRow({
           onPress={() => act.accept(worktrees ? { worktree } : undefined)}
           testID={`proposal:${proposalId}:start`}
         />
-        <Button
-          kind="plain"
-          label={t('proposal.here')}
-          disabled={off}
-          onPress={() => act.here()}
-          testID={`proposal:${proposalId}:here`}
-        />
+        {!acts.sourceIsManager ? (
+          <Button
+            kind="plain"
+            label={t('proposal.here')}
+            disabled={off}
+            onPress={() => act.here()}
+            testID={`proposal:${proposalId}:here`}
+          />
+        ) : null}
         <View style={styles.tail}>
           <WorktreeSwitch
             deviceId={deviceId}
@@ -175,6 +186,7 @@ export function ProposalActs(props: {
   sessionId: string
   proposalId: string
   worktree: boolean
+  sourceIsManager?: boolean
   /** 提案上的 widerSandbox：父会话现在比它严就开不成，原因写在按钮下面 */
   wider: SandboxLevel | null
 }) {
@@ -190,6 +202,7 @@ function WiderActs(props: {
   sessionId: string
   proposalId: string
   worktree: boolean
+  sourceIsManager?: boolean
   wider: SandboxLevel
 }) {
   const blocked = useBlocked(props.deviceId, props.sessionId, props.wider)
@@ -202,14 +215,16 @@ function ListActs({
   proposalId,
   worktree,
   blocked,
+  sourceIsManager,
 }: {
   deviceId: string
   sessionId: string
   proposalId: string
   worktree: boolean
+  sourceIsManager?: boolean
   blocked: string | null
 }) {
-  const acts = useProposalActs(deviceId, sessionId, proposalId, worktree)
+  const acts = useProposalActs(deviceId, sessionId, proposalId, worktree, sourceIsManager)
   const [open, setOpen] = useState(false)
   return (
     <>
@@ -242,12 +257,14 @@ export function OfferActs({
   sessionId,
   proposalId,
   worktree: initial,
+  sourceIsManager = false,
 }: {
   deviceId: string
   sessionId: string
   proposalId: string
   /** 选新会话时的工作树开关初值 */
   worktree: boolean
+  sourceIsManager?: boolean
 }) {
   const { c, font } = useTheme()
   const t = useT()
@@ -266,13 +283,15 @@ export function OfferActs({
           onPress={() => act.answer('session', worktrees ? worktree : undefined)}
           testID={`proposal:${proposalId}:session`}
         />
-        <Button
-          kind="plain"
-          label={t('proposals.offer.here')}
-          disabled={off}
-          onPress={() => act.answer('here')}
-          testID={`proposal:${proposalId}:here`}
-        />
+        {!sourceIsManager ? (
+          <Button
+            kind="plain"
+            label={t('proposals.offer.here')}
+            disabled={off}
+            onPress={() => act.answer('here')}
+            testID={`proposal:${proposalId}:here`}
+          />
+        ) : null}
         <View style={styles.tail}>
           <WorktreeSwitch
             deviceId={deviceId}

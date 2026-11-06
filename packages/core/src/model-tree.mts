@@ -53,6 +53,8 @@ export type ProposalStatus =
  * 对话流里的卡片翻到老的也要写对状态，侧面板的“建议任务”列全部
  */
 export interface SessionProposalView {
+  /** 发起者是经理会话，不包括经理下面的工作线。 */
+  sourceIsManager?: boolean
   permission?: string | null
   id: string
   title: string

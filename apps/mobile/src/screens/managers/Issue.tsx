@@ -727,6 +727,7 @@ export function Issue({
               deviceId={manager.deviceId}
               sessionId={suggestion.source.threadId}
               proposalId={suggestion.proposal.id}
+              sourceIsManager={suggestion.proposal.sourceIsManager}
               worktree={suggestion.proposal.worktree ?? false}
               wider={suggestion.proposal.widerSandbox}
             />

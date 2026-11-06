@@ -731,6 +731,14 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     // 和设备那边一样，添加条目时记上开始、结束的时刻（步骤组的时长用）
     const now = clock.now()
     const ops = given.map((op) => {
+      if (op.op === 'session.proposals') {
+        const sourceIsManager =
+          managerMark(findSummary(view.deviceId, view.sessionId))?.role === 'manager'
+        op = {
+          ...op,
+          proposals: op.proposals.map((proposal) => ({ ...proposal, sourceIsManager })),
+        }
+      }
       const stamped = spanOp(view, op, now)
       reduceSession(view, stamped)
       return stamped
@@ -2932,8 +2940,16 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (composed !== undefined) return composed
       const reviewed = diffs.command(name, params, signal)
       if (reviewed !== undefined) return reviewed
+      if (name === 'session.proposal.answer') {
+        const { deviceId, sessionId, choice } =
+          params as Commands['session.proposal.answer']['params']
+        if (choice === 'here' && managerMark(findSummary(deviceId, sessionId))?.role === 'manager')
+          throw new ChannelError('invalid', '经理的建议不能在经理会话中执行，请开始工作线或忽略。')
+      }
       if (name === 'session.proposal.here') {
         const { deviceId, sessionId } = params as Commands['session.proposal.here']['params']
+        if (managerMark(findSummary(deviceId, sessionId))?.role === 'manager')
+          throw new ChannelError('invalid', '经理的建议不能在经理会话中执行，请开始工作线或忽略。')
         if (shelved.get(deviceId)?.some((s) => s.id === sessionId))
           restoreSuggestionSource(deviceId, sessionId)
       }

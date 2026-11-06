@@ -59,15 +59,17 @@ export function OfferActs({
         >
           {t('proposal.offer.session')}
         </button>
-        <button
-          type="button"
-          className="btn"
-          data-act="here"
-          disabled={off}
-          onClick={() => act.answer('here')}
-        >
-          {t('proposal.offer.here')}
-        </button>
+        {!proposal.sourceIsManager ? (
+          <button
+            type="button"
+            className="btn"
+            data-act="here"
+            disabled={off}
+            onClick={() => act.answer('here')}
+          >
+            {t('proposal.offer.here')}
+          </button>
+        ) : null}
         <WorktreeCheck
           deviceId={deviceId}
           checked={worktree}

@@ -1546,15 +1546,41 @@ export class SessionTree {
    */
   proposals(threadId: string, includeSettled = false): SessionProposal[] {
     this.expire()
-    return includeSettled
+    const proposals = includeSettled
       ? this.store.recent(threadId, SESSION_TREE_LIMITS.proposalListMax)
       : this.store.pending(threadId)
+    return proposals.map((proposal) => this.proposalForClient(proposal))
+  }
+
+  /** 来源身份由经理登记决定，不信任调用参数，也不把工作线误当经理。 */
+  proposalForClient(proposal: SessionProposal): SessionProposal {
+    return {
+      ...proposal,
+      sourceIsManager: Boolean(
+        this.managers?.store.forThread(proposal.threadId) ??
+          this.managers?.store.historical(proposal.threadId),
+      ),
+    }
+  }
+
+  private requireProposalHere(proposal: SessionProposal): void {
+    if (this.proposalForClient(proposal).sourceIsManager)
+      throw new ProtocolError(
+        -32602,
+        '经理的建议不能在经理会话中执行，请选择“开始”创建工作线，或“忽略”。 Manager suggestions cannot run here; start a workline or dismiss the suggestion.',
+      )
+  }
+
+  assertProposalHere(proposalId: string): void {
+    const proposal = this.proposal(proposalId)
+    if (proposal) this.requireProposalHere(proposal)
   }
 
   /** 拿一个提案（先把到期的收掉）。没有是 null */
   proposal(proposalId: string): SessionProposal | null {
     this.expire()
-    return this.store.proposal(proposalId)
+    const proposal = this.store.proposal(proposalId)
+    return proposal ? this.proposalForClient(proposal) : null
   }
 
   /**
@@ -1589,6 +1615,7 @@ export class SessionTree {
    * 不发，那句话交回给客户端自己排进输入队列。返回那句话
    */
   proposalHere(proposalId: string, lead?: string, send = true): string {
+    this.assertProposalHere(proposalId)
     // markHere 的应答丢了（超时）客户端会再问一遍：已经由 markHere 了结的回同一句话
     const marked = send ? undefined : this.marked.get(proposalId)
     if (marked !== undefined) return marked
@@ -1662,6 +1689,7 @@ export class SessionTree {
   answerOffer(proposalId: string, choice: 'session' | 'here', worktree?: boolean): void {
     const proposal = this.proposal(proposalId)
     if (!proposal) throw new ProtocolError(-32602, `没有提案 ${proposalId}`)
+    if (choice === 'here') this.requireProposalHere(proposal)
     if (!proposal.offer)
       throw new ProtocolError(-32602, `提案 ${proposalId} 不是“新会话 / 在这里做”的卡`)
     if (proposal.status !== 'offered')
@@ -1788,7 +1816,11 @@ export class SessionTree {
     if (manager) this.managers?.changed(manager.id)
     this.host.announce(
       SESSION_TREE_NOTIFICATION.proposalChanged,
-      { threadId, proposals: this.store.pending(threadId), changed },
+      {
+        threadId,
+        proposals: this.store.pending(threadId).map((proposal) => this.proposalForClient(proposal)),
+        changed: changed.map((proposal) => this.proposalForClient(proposal)),
+      },
       EXTENSION.sessionTree,
     )
   }

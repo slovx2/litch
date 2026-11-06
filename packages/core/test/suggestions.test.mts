@@ -49,6 +49,14 @@ const row = (id: string): SuggestionEntry => ({
   managerId: 'm1',
 })
 
+test('提案投影保留经理来源；同一经理下面的普通工作线不因分组失去在这里做', () => {
+  for (const sourceIsManager of [true, false]) {
+    const projected = projectProposal({ ...row('p').proposal, sourceIsManager }, 0)
+    assert.equal(projected?.sourceIsManager, sourceIsManager)
+  }
+  assert.equal(projectProposal(row('old').proposal, 0)?.sourceIsManager, false)
+})
+
 test('全局建议按设备和经理归组，普通建议独立，最近一条在前且不改输入', () => {
   const make = (
     id: string,

@@ -107,7 +107,7 @@ export class SuggestionInbox {
         ? { managerId: historical.id, role: 'manager' }
         : this.tree.managers?.lines.mark(proposal.threadId)
       next.set(proposal.id, {
-        proposal,
+        proposal: this.tree.proposalForClient(proposal),
         source,
         managerId: mark?.managerId ?? null,
         ...(mark

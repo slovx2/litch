@@ -154,6 +154,7 @@ function ProposalRow({
             deviceId={deviceId}
             sessionId={sessionId}
             proposalId={proposal.id}
+            sourceIsManager={proposal.sourceIsManager}
             worktree={proposal.worktree ?? proposal.worktreeDefault}
             wider={proposal.widerSandbox}
           />
@@ -165,6 +166,7 @@ function ProposalRow({
             deviceId={deviceId}
             sessionId={sessionId}
             proposalId={proposal.id}
+            sourceIsManager={proposal.sourceIsManager}
             worktree={proposal.worktree ?? proposal.worktreeDefault}
           />
         </View>

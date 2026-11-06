@@ -81,6 +81,8 @@ export type SessionProposalStatus =
 
 /** 模型提的“要不要另起一个子会话”，用户点了才起 */
 export interface SessionProposal {
+  /** 发起者是经理会话（不包括工作线）；客户端只提供开始新线和忽略，不提供在这里做。 */
+  sourceIsManager?: boolean
   id: string
   /** 提案挂在哪个会话上（就是将来的父会话） */
   threadId: string
