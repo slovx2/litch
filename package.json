@@ -76,8 +76,8 @@
     "package:adapter": "node scripts/package-adapter.mjs",
     "check:adapter-package": "node scripts/check-adapter-package.mjs",
     "test:dsh-ssh": "npm run build --prefix packages/dsh && node scripts/dsh-poc-serve.mjs --verify",
-    "client:setup": "npm ci --prefix packages/ui && npm ci --prefix apps/desktop",
-    "client:typecheck": "npm run typecheck --prefix packages/core && npm run typecheck --prefix packages/ui && npm run typecheck --prefix apps/desktop",
+    "client:setup": "npm ci --ignore-scripts --prefix packages/browser && npm ci --prefix packages/ui && npm ci --prefix apps/desktop",
+    "client:typecheck": "npm run typecheck --prefix packages/core && npm run typecheck --prefix packages/browser && npm run typecheck --prefix packages/ui && npm run typecheck --prefix apps/desktop",
     "client:test": "npm run test --prefix packages/core",
     "client:diagnose:files-refresh": "node --import tsx --test packages/core/diagnostics/files-refresh-disk.mts",
     "client:test:ui": "npm run test --prefix packages/ui",
@@ -136,6 +136,7 @@
     "client:check:packed": "npm run check:packed --prefix apps/desktop",
     "test:antigravity": "npm run test --prefix packages/antigravity",
     "test:computer-use-sdk": "npm run test --prefix packages/computer-use",
+    "test:browser-package": "npm run test --prefix packages/browser && npm run check:package --prefix packages/browser",
     "test:antigravity-sdk": "npm run test:sdk --prefix packages/antigravity",
     "generate:automation-contracts": "node scripts/generate-automation-contracts.mjs --write",
     "check:automation-contracts": "node scripts/check-automation-contracts.mjs"

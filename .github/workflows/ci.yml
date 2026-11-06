@@ -93,6 +93,8 @@ jobs:
           node scripts/ci/test-shard.mjs device
           npm run test:antigravity
           npm run test:computer-use-sdk
+          npm ci --ignore-scripts --prefix packages/browser --no-audit --no-fund
+          npm run test:browser-package
         id: phase-7
       - run: go test ./...
         id: phase-6

@@ -1,12 +1,13 @@
 // 此 bundle 只注入顶层文档的 isolated world；没有网页消息入口，也不派发输入。
+
+import {
+  type AutomationPointerRenderer,
+  createAutomationPointer,
+} from '../../../packages/browser/src/pointer-renderer.mjs'
 import type {
   AutomationPointerSample,
   AutomationSurface,
 } from '../../../packages/protocol/src/automation-surface.mjs'
-import {
-  type AutomationPointerRenderer,
-  createAutomationPointer,
-} from '../../../packages/ui/src/automation-preview/pointer-renderer.ts'
 
 let renderer: AutomationPointerRenderer | null = null
 let surface: AutomationSurface | null = null

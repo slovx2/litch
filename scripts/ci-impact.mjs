@@ -133,6 +133,11 @@ export function affectedDomains(
       selected.add('computer-use')
       selected.add('client')
       reasons.push(`macOS 原生助手：${path}`)
+    } else if (/^packages\/browser\//.test(path)) {
+      // 可嵌入的浏览器运行时：桌面外壳与 Chrome 扩展都从源码引用。
+      selected.add('client')
+      selected.add('client-engines')
+      reasons.push(`浏览器运行时包：${path}`)
     } else if (/^packages\/computer-use\//.test(path)) {
       // 可嵌入的 CU 执行器：桌面外壳从源码引用，两个平台的原生助手都经它驱动。
       for (const domain of ['client', 'computer-use', 'computer-use-windows']) selected.add(domain)
