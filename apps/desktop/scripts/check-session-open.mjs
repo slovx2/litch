@@ -1,5 +1,6 @@
 // 隔离隐藏窗口验证长会话切换：测事件循环延迟、侧栏响应、滚动恢复和连续切换。
 // 先 npm run client:build，再 node apps/desktop/scripts/check-session-open.mjs。
+import './require-ui-build.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { mkdtempSync, writeFileSync } from 'node:fs'

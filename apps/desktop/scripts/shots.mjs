@@ -1,6 +1,7 @@
 // 重新生成 README 用的界面截图：两种语言各起一次外壳，对着模拟核心，窗口不显示。
 //   npm run shots            （在 apps/desktop 里；根目录用 npm run client:shots，会先构建界面）
 // 图片写到仓库的 docs/images/zh 和 docs/images/en。
+import './require-ui-build.mjs'
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'

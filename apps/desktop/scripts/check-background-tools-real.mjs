@@ -1,6 +1,7 @@
 // 正式隐藏桌面 + 隔离设备 + Claude 父/Codex 子 + 回环假模型，真实浏览器与 CU list_apps。
 // 先构建 UI、desktop、device、claude、pi，并提供隔离 CLI 与已构建助手 LITCH_COMPUTER_USE_APP。
 // 本引导直接用 webContents 驱动自己的窗口，不启用 CDP，也不接管用户的窗口或端口。
+import './require-ui-build.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'

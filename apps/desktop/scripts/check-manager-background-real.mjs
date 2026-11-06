@@ -3,6 +3,7 @@
 //   npm run client:check:manager-background-real -- [--show]
 // 判定：经理自己有后台命令时侧栏用后台记号、对话页有后台任务行，右侧页能看到命令、用时、停止；
 // 只有工作线在跑时经理行不画成“运行中”，而是写明几条工作线在跑。
+import './require-ui-build.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { accessSync, constants, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'

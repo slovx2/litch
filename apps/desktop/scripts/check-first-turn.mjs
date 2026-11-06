@@ -14,6 +14,7 @@
 //   --skip-missing                             缺命令行的那几家跳过去，最后一行写明“不完整”
 //   --verbose                                  把外壳的输出原样带出来
 // 要先在根目录 npm run build（引擎包、设备进程和命令行），本机要有 go。
+import './require-ui-build.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import { accessSync, constants, mkdtempSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'

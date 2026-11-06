@@ -1,5 +1,6 @@
 // 对话字号回归：隐藏窗口、浏览器模拟核心、隔离配置，不启动真实设备。
 // 可选 LITCH_TEXT_SHOTS 指定截图目录。运行前 npm run client:build。
+import './require-ui-build.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'

@@ -10,6 +10,7 @@
 //
 // “关于”里的许可文本：装好的应用是从资源目录读的。这里用打包时的那个函数（scripts/licenses.mjs）现收一份到临时目录，
 // 经 LITCH_LICENSES_DIR 交给外壳，所以量到的是“真的许可目录到界面”这一整条路，只差打包器把目录放进应用那一步。
+import './require-ui-build.mjs'
 import { spawn } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'

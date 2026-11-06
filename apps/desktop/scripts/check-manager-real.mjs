@@ -3,6 +3,7 @@
 // Claude 必须给 CHA_CLAUDE_CLI 隔离副本；Codex 用 CHA_CODEX_CLI 或 PATH。
 // 默认隐藏窗口，--show 显示同一个真实窗口。缺 CLI 默认失败，显式跳过会标明不完整。
 // 不启用 CDP：独立引导程序加载正式 dist/main.mjs，经 webContents 操作界面并截图。
+import './require-ui-build.mjs'
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
 import { accessSync, constants, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'

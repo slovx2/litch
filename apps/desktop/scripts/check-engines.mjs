@@ -16,6 +16,7 @@
 //                             这样跑出来的不算一遍完整的验收，最后那一行会写明
 //   --verbose                 把外壳的输出原样带出来
 //   --json                    最后把量到的东西整份打出来
+import './require-ui-build.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import { accessSync, constants, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
