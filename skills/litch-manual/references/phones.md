@@ -305,6 +305,18 @@ logging in with its own key it enrolls itself; the confirmation code and Allow w
 
 ## 配对主机密钥确认 / Pairing host-key confirmation
 
+出码前，桌面端用一次性钥匙直连可探测的手机入口，验证它确实执行配对强制命令；此检查在主机密钥确认之前，成功后仍须核对有差异的指纹。
+不读取设备的 `~/.ssh/authorized_keys`、使用独立钥匙库或不支持 `command=` 的 SSH 服务不能以一次性钥匙绑定手机，例如 Tyrs Hand Worker 的内置 SSH 入口。
+认证策略拒绝一次性钥匙也会阻止绑定；这不是网络错误。请换成系统 OpenSSH 的端口，必要时给 sshd 配置独立端口。
+失败后地址表单仍可编辑，修改主机、端口或用户会重新检查，不需要先生成二维码。网络不通／响应超时、钥匙文件无法写入及适配器执行失败分别提示。
+Tailscale SSH 保留专用配对方式。仅凭通用的 `SSH-2.0-Go` 横幅无法认定服务就是 Tyrs Hand Worker；不按服务名猜测支持情况。
+此检查不要求设备新增协议能力，旧设备仍沿用原有配对方法。桌面端无法直接探测手机入口时保留原有主机密钥确认及自检流程，不能将未检查的入口标为已通过。
+
+Before asking you to confirm a host-key difference, the desktop tests a reachable phone endpoint with only the one-time key and checks that its forced enrollment command runs. A successful test does not replace host-key confirmation.
+SSH services with a separate key store or no forced-command support, including the Tyrs Hand Worker SSH server, cannot use this pairing method. Authentication policies can also reject the one-time key.
+Use the system OpenSSH port, adding a separate sshd port if necessary. The address form stays editable after a failure, and changing the host, port or user runs the checks again before showing a code.
+Network failures, key-file write failures and enrollment-command failures have separate messages. Tailscale SSH keeps its dedicated flow. Older device services require no new protocol method; endpoints the desktop cannot probe retain the existing confirmation and check flow.
+
 桌面端通过本次已认证 SSH 连接取得服务端地址，设备优先探测该地址实际监听的 SSH 密钥，支持另一个 sshd 使用独立 HostKey、容器及端口转发。
 入口密钥与设备自报、本机 known_hosts 不一致，或没有记录、无法直接核实时，会先显示地址、双方及入口的 SHA256 指纹与手机可能连到其他机器的风险。
 用户点击“确认并生成二维码”才继续，取消不出码。确认仅用于这一张码，不修改 known_hosts 或保存全局信任；到期换码、地址或密钥变化后重新确认。

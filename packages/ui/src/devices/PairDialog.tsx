@@ -166,10 +166,18 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
           setPairing(null)
           setStarting(false)
           setFailure(error as ChannelError)
+          const failed = error as ChannelError
+          const at =
+            failed.pairingAddress ??
+            (failed.pairingHostKey ? { name: device.host, ...failed.pairingHostKey.address } : null)
+          if (at) {
+            probed.current = at
+            setDraft((was) => was ?? withPrefill(draftOf(at), firstFill.current))
+          }
         },
       )
     },
-    [channel, deviceId, discard],
+    [channel, deviceId, discard, device.host],
   )
 
   // 打开就出码；关掉时把没用完的那张作废
@@ -232,12 +240,20 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
 
   // 主机、端口或用户变化后，重新检查入口钥匙；旧二维码立即隐藏。
   useEffect(() => {
-    if (!pairing || !address || starting || finalState(state)) return
+    if (!address || starting || finalState(state)) return
+    if (
+      !pairing &&
+      (!failure ||
+        (probed.current?.host === address.host &&
+          probed.current.port === address.port &&
+          probed.current.user === address.user))
+    )
+      return
     if (verifiedAddress) return
     const at = { host: address.host, port: address.port, user: address.user }
     const timer = setTimeout(() => start({ address: at }), REMEMBER_MS)
     return () => clearTimeout(timer)
-  }, [pairing, address, verifiedAddress, starting, state, start])
+  }, [pairing, address, verifiedAddress, starting, state, start, failure])
 
   const decide = (allow: boolean) => {
     if (!pairing) return
@@ -307,7 +323,7 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
             <Failure
               device={device}
               failure={failure}
-              onRetry={() => start()}
+              onRetry={() => start(address ? { ...lastOptions.current, address } : undefined)}
               onCancel={onClose}
               onConfirm={() => {
                 if (failure.pairingHostKey)
@@ -316,33 +332,36 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
                     hostKeyConfirmation: failure.pairingHostKey.token,
                   })
               }}
-              onTailscale={() => start({ mode: 'tailscale' })}
+              onTailscale={() => start({ mode: 'tailscale', ...(address ? { address } : {}) })}
             />
-          ) : (
-            <div className="pair-main">
-              <div className="pair-code" data-pair-ready={text ? 'true' : 'false'}>
-                {text && pairing && !finalState(state) ? (
-                  <QrCode text={text} label={t('pairing.qr')} />
-                ) : (
-                  <div className="qr qr-empty" aria-hidden="true" />
-                )}
-                <div className="pair-timer mono" data-pair-timer>
-                  {starting
-                    ? t(pairing ? 'pairing.refreshing' : 'pairing.starting')
-                    : pairing && state === 'waiting'
-                      ? t('pairing.expires', { time: countdown(remaining) })
-                      : null}
+          ) : null}
+          {draft || starting ? (
+            <div className={failure ? 'pair-main pair-main-failed' : 'pair-main'}>
+              {!failure ? (
+                <div className="pair-code" data-pair-ready={text ? 'true' : 'false'}>
+                  {text && pairing && !finalState(state) ? (
+                    <QrCode text={text} label={t('pairing.qr')} />
+                  ) : (
+                    <div className="qr qr-empty" aria-hidden="true" />
+                  )}
+                  <div className="pair-timer mono" data-pair-timer>
+                    {starting
+                      ? t(pairing ? 'pairing.refreshing' : 'pairing.starting')
+                      : pairing && state === 'waiting'
+                        ? t('pairing.expires', { time: countdown(remaining) })
+                        : null}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    data-act="copy-pair"
+                    disabled={!text || finalState(state)}
+                    onClick={copy}
+                  >
+                    {t('pairing.copy')}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="btn ghost"
-                  data-act="copy-pair"
-                  disabled={!text || finalState(state)}
-                  onClick={copy}
-                >
-                  {t('pairing.copy')}
-                </button>
-              </div>
+              ) : null}
               <div className="pair-side">
                 <fieldset className="pair-address" disabled={!draft || finalState(state)}>
                   <legend className="form-label">{t('pairing.address')}</legend>
@@ -483,7 +502,7 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
                 ) : null}
               </div>
             </div>
-          )}
+          ) : null}
           <div className="modal-note pair-warn">{t('pairing.shared')}</div>
         </div>
         <div className="modal-foot">

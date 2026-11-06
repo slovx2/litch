@@ -49,6 +49,15 @@ if (!process.versions.electron) {
       webPreferences: { sandbox: true, backgroundThrottling: false },
     })
     try {
+      for (const failure of ['entryUnsupported', 'network', 'keysFile']) {
+        await win.loadURL(
+          `${process.env.LITCH_PAIR_URL}test/pair-hostkey-fixture.html?failure=${failure}`,
+        )
+        assert.equal(
+          await win.webContents.executeJavaScript(`(${failureProbe})(${JSON.stringify(failure)})`),
+          true,
+        )
+      }
       for (const reason of ['mismatch', 'unknown', 'unverified']) {
         await win.loadURL(
           `${process.env.LITCH_PAIR_URL}test/pair-hostkey-fixture.html?reason=${reason}`,
@@ -72,7 +81,7 @@ if (!process.versions.electron) {
       assert.equal(await win.webContents.executeJavaScript(`(${expiryProbe})()`), true)
       assert.equal(win.isVisible(), false)
       console.log(
-        'PASS 隐藏窗口：三种风险、取消、一次确认出码、中英三皮肤、改地址隐藏旧码、到期重新确认',
+        'PASS 隐藏窗口：三种入口失败、失败后改端口重新检查、三种风险、取消、一次确认出码、中英三皮肤、改地址隐藏旧码、到期重新确认',
       )
       app.exit(0)
     } catch (error) {
@@ -80,6 +89,40 @@ if (!process.versions.electron) {
       app.exit(1)
     }
   })
+}
+
+async function failureProbe(failure) {
+  const wait = async (predicate) => {
+    for (let i = 0; i < 100; i++) {
+      if (predicate()) return
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    throw new Error(`失败界面等待超时：${document.body.innerText}`)
+  }
+  await wait(() => document.querySelector(`[data-pair-failure="${failure}"]`))
+  if (document.querySelector('[data-pair-host-warning], [data-pair-ready="true"]'))
+    throw new Error('失败时仍显示确认或二维码')
+  for (const lang of ['zh-CN', 'en']) {
+    window.__litchLook.set({ lang })
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+    const text = document.querySelector('[data-pair-failure]').textContent
+    if (failure === 'entryUnsupported' && !text.includes('OpenSSH')) throw new Error('缺少解决办法')
+    if (failure === 'network' && !text.includes(lang === 'en' ? 'network' : '网络'))
+      throw new Error('网络提示未翻译')
+  }
+  const input = document.querySelector('[data-field="port"] input')
+  if (!input || input.matches(':disabled') || input.value !== '2222')
+    throw new Error('失败后无法修改端口')
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+  setter.call(input, '2224')
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+  await wait(() => document.querySelector('[data-pair-host-warning]'))
+  const start = window.pairHostFixture.calls.filter((call) => call.name === 'pairing.start').at(-1)
+  if (start.args.address.port !== 2224 || start.args.hostKeyConfirmation)
+    throw new Error('未使用修改的端口重新检查')
+  document.querySelector('[data-act="pair-host-confirm"]').click()
+  await wait(() => document.querySelector('[data-pair-ready="true"]'))
+  return true
 }
 
 async function probe() {

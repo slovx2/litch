@@ -1,8 +1,8 @@
 // 一台设备上的扫码绑定手机（协议扩展 devicePairing）在客户端这一头的样子。
 // 配对和钥匙行都在设备上，核心只是转运，再加上桌面端自己的两道把关：主机钥匙核对、一次性钥匙自检。
 //
-// 出码先核对设备实际监听器、桌面已知记录与手机入口的钥匙。不一致或无法核实时返回一次性确认，
-// 本次用户确认后继续自检；二维码和自检钉住同一把入口钥匙。失败或等待确认时作废设备上的配对。
+// 可直达入口先用一次性钥匙检查强制命令，再核对设备、桌面记录与入口的钥匙。不一致时仍需一次性确认；
+// 无法探测的入口沿用确认后自检。二维码和自检钉住同一把入口钥匙。失败或等待确认时作废设备上的配对。
 // 先读手机要连的地址的 SSH 横幅定方式（pairModeOf）：是 Tailscale SSH 就用 tailscale 方式（设备不写一次性钥匙行，
 // 自检改成用一把临时钥匙登那个地址、执行登记命令）；读不到横幅时按设备自报的 tailscaleSsh 和地址再定一次。
 // 一次性钥匙的自检没过时再看自检连的那个地址是不是 Tailscale SSH，是就直接这样说（失败的 key 是 tailscale）。
@@ -86,7 +86,9 @@ export interface PairEnrollTestInput extends PairingTarget {
  * 自检的结果。没过时 said 是 ssh 的原话（或者登记命令回的那一行）；
  * verifyUrl 是 Tailscale 要求在浏览器里再验证一次时给的链接（ACL 的 check 模式）
  */
-export type PairSelfTestResult = { ok: true } | { ok: false; said: string; verifyUrl?: string }
+export type PairSelfTestResult =
+  | { ok: true }
+  | { ok: false; said: string; verifyUrl?: string; reason?: 'entryUnsupported' | 'network' }
 
 /**
  * 出码要碰 ssh、文件、端口的那几样，由外壳给（apps/desktop/src/pairing.mts）。
@@ -111,6 +113,8 @@ export interface PairingPlatform {
   localName(): string
   /** 用一次性钥匙试登一次：标准输入写自检那一行，等 pair-enroll 回 {"ok":true,"probe":true} */
   selfTest(input: PairSelfTestInput): Promise<PairSelfTestResult>
+  /** 确认前只用一次性钥匙直连手机入口，检查强制命令；不读取用户的登录钥匙，不发送登记请求。 */
+  entryTest?(input: PairSelfTestInput & { address: PairingTarget }): Promise<PairSelfTestResult>
   /** tailscale 方式：用临时钥匙登地址、执行登记命令，标准输入写自检那一行，等回 {"ok":true,"probe":true} */
   enrollTest(input: PairEnrollTestInput): Promise<PairSelfTestResult>
   /**
@@ -180,7 +184,7 @@ export interface PairingStarted {
 }
 
 export interface PairingStartOptions {
-  /** 手机要连的地址：按它认方式、tailscale 方式的自检也连它。不给就用原配置 */
+  /** 手机要连的地址：按它认方式并检查入口。不给就用原配置 */
   address?: PairingTarget
   /** 不给就按地址认 */
   mode?: PairMode
@@ -496,6 +500,27 @@ export function createPairing(host: PairingHost): Pairing {
         [selected],
         started.hostKeys.map((key) => key.publicKey),
       )
+    // 这里只递一次性钥匙，且仅请求无副作用的 true；成功仍不能替代人的主机身份确认。
+    // 无法扫描入口或旧外壳没有此能力时保留原自检路径，不凭横幅猜服务是否支持。
+    let entryChecked = false
+    if (started.mode !== 'tailscale' && entrance.length && platform.entryTest) {
+      const tested = await platform.entryTest({
+        target,
+        address: phoneAt,
+        user: phoneAt.user,
+        seed: started.seed,
+        hostKeys: [selected],
+      })
+      if (!tested.ok) {
+        if (pairModeOf(banner, started.tailscaleSsh === true, phoneAt.host) === 'tailscale')
+          throw startFailure('tailscale', tested.said)
+        throw startFailure(
+          tested.reason ?? 'selfTest',
+          banner ? `${banner}\n${tested.said}` : tested.said,
+        )
+      }
+      entryChecked = true
+    }
     if (!trusted) {
       const reason =
         known.length === 0
@@ -545,6 +570,7 @@ export function createPairing(host: PairingHost): Pairing {
     if (started.mode === 'tailscale') {
       return { original, checked: await vetEnroll(platform, started, phoneAt, banner) }
     }
+    if (entryChecked) return { original, checked: true }
     // 桌面端无法直达用户填写的手机地址时，由上面的本次确认决定出码；手机仍严格钉住展示的钥匙。
     const changedAddress =
       phoneAt.host !== resolved.host ||
@@ -564,10 +590,10 @@ export function createPairing(host: PairingHost): Pairing {
     if (pairModeOf(banner, started.tailscaleSsh === true, phoneAt.host) === 'tailscale') {
       throw startFailure('tailscale', tested.said)
     }
-    throw startFailure('selfTest', tested.said)
+    throw startFailure(tested.reason ?? 'selfTest', tested.said)
   }
 
-  /** 出码时本机那一段：主机钥匙直接信设备报的，一次性钥匙的自检连 127.0.0.1:22 */
+  /** 本机默认检查 127.0.0.1:22；填写了手机地址就检查该入口，主机钥匙仍钉住设备报告值。 */
   const vetLocal = async (
     platform: PairingPlatform,
     started: DevicePairStartResponse,
@@ -586,11 +612,12 @@ export function createPairing(host: PairingHost): Pairing {
     }
     const tested = await platform.selfTest({
       target: null,
+      ...(phoneAt ? { address: phoneAt } : {}),
       user: started.user,
       seed: started.seed,
       hostKeys: started.hostKeys,
     })
-    if (!tested.ok) throw startFailure('selfTest', tested.said)
+    if (!tested.ok) throw startFailure(tested.reason ?? 'selfTest', tested.said)
     return { original, checked: true }
   }
 
@@ -683,6 +710,16 @@ export function createPairing(host: PairingHost): Pairing {
       }
       // 手机要连的地址：给了就用，否则原配置。本机的原配置要等设备报主机名，这时先不认方式
       const phoneAt = options.address ?? resolved
+      let failureAddress: PairingAddress | null = phoneAt
+        ? { name: host.displayName(), ...phoneAt }
+        : null
+      const addressed = (error: unknown): unknown => {
+        if (!(error instanceof ChannelError) || !failureAddress) return error
+        return new ChannelError(error.code, error.message, error.text, {
+          ...error.toShape(),
+          pairingAddress: failureAddress,
+        })
+      }
       const banner = phoneAt ? await bannerOf(platform, phoneAt) : null
       // 横幅读不到、地址又是 tailnet 的：要看设备自报，先按一次性钥匙建，回来再定
       const mode: PairMode | null =
@@ -692,19 +729,30 @@ export function createPairing(host: PairingHost): Pairing {
           : phoneAt && isTailnetHost(phoneAt.host)
             ? null
             : 'key')
-      if (host.kind === 'local' && mode === 'key' && !(await platform.localSsh())) {
+      if (host.kind === 'local' && !phoneAt && mode === 'key' && !(await platform.localSsh())) {
         throw startFailure('sshOff', '127.0.0.1:22 上没有 SSH 服务')
       }
       const inspection =
         target && resolved ? await platform.inspect(target, phoneAt ?? resolved, resolved) : null
       if (mine !== epoch) throw startFailure('offline', '连接已改变，请重新出码')
-      let started = await create(mode, inspection?.sshEndpoint)
+      let started: DevicePairStartResponse
+      try {
+        started = await create(mode, inspection?.sshEndpoint)
+      } catch (error) {
+        throw addressed(error)
+      }
+      failureAddress ??= {
+        name: platform.localName(),
+        host: started.hostname,
+        port: 22,
+        user: started.user,
+      }
       if (mode === null) {
         // 设备开着 Tailscale SSH：换成 tailscale 方式重新建
         if (tailscale === true) {
           discard(started.pairId)
           started = await create('tailscale', inspection?.sshEndpoint)
-        } else if (host.kind === 'local' && !(await platform.localSsh())) {
+        } else if (host.kind === 'local' && !phoneAt && !(await platform.localSsh())) {
           discard(started.pairId)
           throw startFailure('sshOff', '127.0.0.1:22 上没有 SSH 服务')
         }
@@ -748,8 +796,10 @@ export function createPairing(host: PairingHost): Pairing {
       } catch (error) {
         pairs.delete(started.pairId)
         discard(started.pairId)
-        if (error instanceof ChannelError) throw error
-        throw startFailure('selfTest', error instanceof Error ? error.message : String(error))
+        if (error instanceof ChannelError) throw addressed(error)
+        throw addressed(
+          startFailure('selfTest', error instanceof Error ? error.message : String(error)),
+        )
       }
     },
 

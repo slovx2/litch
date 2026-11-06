@@ -3,6 +3,10 @@
 import type { Entry } from './types.ts'
 
 export const zhPairing = {
+  'pairing.fail.entryUnsupported':
+    '此端口的 SSH 服务无法完成手机绑定：未接受一次性钥匙或未执行强制命令，可能不读取设备的 ~/.ssh/authorized_keys，或受认证策略限制。请改用系统 OpenSSH 的端口；必要时为 sshd 配置独立端口。出码前可在此对话框修改地址和端口。',
+  'pairing.fail.network':
+    '无法连接手机使用的 SSH 入口，或服务响应超时。请检查地址、端口、网络和防火墙；出码前可在此对话框修改地址。',
   'pairing.hostKey.title': '确认主机密钥',
   'pairing.hostKey.mismatch': '入口主机密钥与设备自报或本机记录不一致。',
   'pairing.hostKey.unknown': '本机没有此入口的已知主机密钥记录。',
@@ -70,7 +74,7 @@ export const zhPairing = {
   'pairing.fail.hostKeyMismatch':
     '本机连接到的主机钥匙与设备报告的不一致，可能中间经过了端口转发或跳板机。出于安全考虑，不生成二维码。',
   'pairing.fail.selfTest':
-    '一次性密钥无法登录此设备：sshd 可能不读取 authorized_keys、只允许部分用户，或要求双因素认证。请在手机上手动添加此设备。',
+    '设备未完成配对自检。请检查 SSH 输出及设备上的适配器命令是否可执行，然后重试。',
   'pairing.fail.sshOff': '本机未开启 SSH 服务，手机无法连接。',
   'pairing.fail.sshOff.macos':
     '在“系统设置 → 通用 → 共享”中打开“远程登录”，确认当前用户在允许列表中，然后点重试。',

@@ -36,6 +36,13 @@ core.command = async (name, given, signal) => {
       address?: { host: string; port: number; user: string }
       hostKeyConfirmation?: string
     }
+    const failure = params.get('failure')
+    if (failure && args.address?.port !== 2224) {
+      throw new ChannelError('rejected', 'fixture SSH output', undefined, {
+        key: failure,
+        pairingAddress: { name: '配对夹具', host: '127.0.0.1', port: 2222, user: 'dev' },
+      })
+    }
     const accepted = !!token && args.hostKeyConfirmation === token
     token = null
     if (!accepted) {

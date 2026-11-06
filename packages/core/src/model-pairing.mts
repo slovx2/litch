@@ -66,7 +66,8 @@ export interface PairingView {
 /**
  * pairing.start 失败时 ChannelError 的 key：
  * keysFile（authorized_keys 改不了）、noHostKey、hostKeyMismatch（设备自报的主机钥匙和桌面端 known_hosts 里的对不上）、
- * selfTest（一次性钥匙登不进去：sshd 不认 authorized_keys、只放行部分用户、要双因素……text 里带 ssh 的原话）、
+ * entryUnsupported（一次性钥匙被拒或强制命令未执行）、network（连接或响应超时）、
+ * selfTest（未分类的自检失败或适配器执行错误，message 里带 ssh 的原话）、
  * sshOff（本机没开 SSH 服务）、unsupported（设备服务太旧、Windows 管理员账号）、offline、
  * tailscale（一次性钥匙自检没过，自检连的地址由 Tailscale SSH 接管：它不认强制命令，要改用 tailscale 方式出码）、
  * verify（tailscale 方式自检时 Tailscale 要求在浏览器里再验证一次：message 是 tailscaled 给的链接）
@@ -76,6 +77,8 @@ export type PairingStartFailure =
   | 'noHostKey'
   | 'hostKeyMismatch'
   | 'selfTest'
+  | 'entryUnsupported'
+  | 'network'
   | 'sshOff'
   | 'unsupported'
   | 'offline'

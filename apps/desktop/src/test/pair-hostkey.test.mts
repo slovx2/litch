@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { connect, createServer } from 'node:net'
 import { tmpdir, userInfo } from 'node:os'
@@ -13,7 +14,8 @@ import {
   readHostKeys,
 } from '../../../../packages/device/src/pair-host.mjs'
 import { DevicePairing } from '../../../../packages/device/src/pairing.mjs'
-import { desktopPairing } from '../pairing.mjs'
+import { desktopPairing, pairTestFailure } from '../pairing.mjs'
+import { publicLine } from '../pairing-key.mjs'
 
 const freePort = () =>
   new Promise<number>((resolve) => {
@@ -23,6 +25,16 @@ const freePort = () =>
       server.close(() => resolve(address.port))
     })
   })
+
+test('自检区分认证、网络、强制命令与适配器执行错误', () => {
+  assert.equal(pairTestFailure('Permission denied (publickey).', 255, 'true'), 'entryUnsupported')
+  assert.equal(pairTestFailure('', 0, 'true'), 'entryUnsupported')
+  assert.equal(pairTestFailure('Connection refused', 255, 'true'), 'network')
+  assert.equal(pairTestFailure('Could not resolve hostname x', 255, 'true'), 'network')
+  assert.equal(pairTestFailure('Host key verification failed.', 255, 'true'), undefined)
+  assert.equal(pairTestFailure('adapter: command not found', 127, 'true'), undefined)
+  assert.equal(pairTestFailure('', 0, 'pair-enroll'), undefined)
+})
 
 for (const hostType of ['ed25519', 'rsa'])
   test(`非标准 HostKey（${hostType}）与 TCP 转发：旧读取路径误判，known_hosts 查名正常`, {
@@ -141,7 +153,7 @@ for (const hostType of ['ed25519', 'rsa'])
         { announce() {}, log() {} },
       )
       stops.push(() => device.close())
-      const pairingFor = (alias: string) =>
+      const pairingFor = (alias: string, service = device) =>
         createPairing({
           deviceId: alias,
           kind: 'ssh',
@@ -152,7 +164,7 @@ for (const hostType of ['ed25519', 'rsa'])
           approvals: () => false,
           platform,
           request: (async (method, params) =>
-            device.call(method, params)) as PairingHost['request'],
+            service.call(method, params)) as PairingHost['request'],
           fail: (error) =>
             error instanceof ChannelError ? error : new ChannelError('remote', String(error)),
           log() {},
@@ -193,6 +205,94 @@ for (const hostType of ['ed25519', 'rsa'])
           }),
         )
       }
+      // 真 sshd 只读自己的钥匙库：设备写入成功，但入口不会接受一次性钥匙。
+      // 同时制造钥匙不一致，确保先报告入口不支持，不弹主机确认。
+      const separate = new DevicePairing(
+        {
+          keysFile: join(root, 'ignored_authorized_keys'),
+          adapterCli: probe,
+          adapterHome: root,
+          unsupported: null,
+          hostKeys: () => readHostKeys(system),
+          sshdVersion: async () => version,
+          tailscaleSsh: async () => false,
+        },
+        { announce() {}, log() {} },
+      )
+      stops.push(() => separate.close())
+      const rejected = pairingFor('direct', separate)
+      await assert.rejects(rejected.start(), (error: ChannelError) => {
+        assert.equal(error.key, 'entryUnsupported')
+        assert.equal(error.pairingHostKey, undefined)
+        assert.equal(error.pairingAddress?.port, port)
+        return true
+      })
+      assert.equal(
+        readFileSync(join(root, 'ignored_authorized_keys'), 'utf8').includes('litch-pair:'),
+        false,
+      )
+
+      // 原入口可配对，用户改成另一端口；新端口只读独立钥匙表，不能偷用原入口的成功结果。
+      const gatewayPort = await freePort()
+      writeFileSync(join(root, 'gateway_keys'), readFileSync(join(root, 'client.pub')))
+      writeFileSync(
+        join(root, 'gateway_config'),
+        readFileSync(join(root, 'sshd_config'), 'utf8')
+          .replace(`Port ${port}`, `Port ${gatewayPort}`)
+          .replace(
+            `AuthorizedKeysFile ${root}/authorized_keys`,
+            `AuthorizedKeysFile ${root}/gateway_keys`,
+          ),
+      )
+      const gateway = spawn('/usr/sbin/sshd', ['-D', '-e', '-f', join(root, 'gateway_config')])
+      gateway.stderr.resume()
+      stops.push(() => gateway.kill())
+      for (let i = 0; i < 50 && !(await platform.banner('127.0.0.1', gatewayPort)); i++)
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      assert.ok(await platform.banner('127.0.0.1', gatewayPort))
+      await assert.rejects(
+        pairingFor('direct').start({
+          address: { host: '127.0.0.1', port: gatewayPort, user: userInfo().username },
+        }),
+        (error: ChannelError) => {
+          assert.equal(error.key, 'entryUnsupported')
+          assert.equal(error.pairingAddress?.port, gatewayPort)
+          return true
+        },
+      )
+      assert.equal(
+        readFileSync(join(root, 'authorized_keys'), 'utf8').includes('litch-pair:'),
+        false,
+      )
+
+      const seed = randomBytes(32)
+      // 认公钥但不执行 command= 的入口：普通 true 退出不能算探测成功。
+      const previousKeys = readFileSync(join(root, 'authorized_keys'), 'utf8')
+      writeFileSync(join(root, 'authorized_keys'), `${previousKeys}\n${publicLine(seed)}\n`)
+      const input = {
+        target: null,
+        address: { host: '127.0.0.1', port, user: userInfo().username },
+        user: userInfo().username,
+        seed: seed.toString('base64url'),
+        hostKeys: [
+          {
+            type: hostType === 'rsa' ? 'ssh-rsa' : 'ssh-ed25519',
+            publicKey: actual,
+            fingerprint: '',
+          },
+        ],
+      }
+      const ignored = await platform.entryTest?.(input)
+      assert.ok(ignored && !ignored.ok)
+      assert.equal(ignored.reason, 'entryUnsupported')
+      writeFileSync(join(root, 'authorized_keys'), previousKeys)
+      const unreachable = await platform.entryTest?.({
+        ...input,
+        address: { ...input.address, port: await freePort() },
+      })
+      assert.ok(unreachable && !unreachable.ok)
+      assert.equal(unreachable.reason, 'network')
+
       // 模拟旧设备仍自报文件里的另一把钥匙：确认后仍钉住入口、自检不再沿用原 known_hosts。
       useListener = false
       for (const missing of [false, true]) {

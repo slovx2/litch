@@ -74,6 +74,8 @@ const FAILURES: readonly PairingStartFailure[] = [
   'noHostKey',
   'hostKeyMismatch',
   'selfTest',
+  'entryUnsupported',
+  'network',
   'sshOff',
   'unsupported',
   'offline',
@@ -102,6 +104,8 @@ export const sshOffHint = (os: string | null): MessageKey =>
 export const showsSaid = (failure: PairingStartFailure | null): boolean =>
   failure === null ||
   failure === 'selfTest' ||
+  failure === 'entryUnsupported' ||
+  failure === 'network' ||
   failure === 'keysFile' ||
   failure === 'hostKeyMismatch' ||
   failure === 'tailscale' ||

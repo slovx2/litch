@@ -11,6 +11,9 @@
   gap: 20px;
   align-items: flex-start;
 }
+.pair-main-failed {
+  grid-template-columns: minmax(0, 1fr);
+}
 .pair-code {
   flex: none;
   width: 248px;

@@ -38,6 +38,28 @@ const BANNER_MS = 3000
 /** 自检时写进标准输入的那一行，和期望回来的那一行 */
 const PROBE = '{"v":1,"probe":true}\n'
 
+/** 只按明确的 SSH 失败证据分类，适配器执行错误不冒充认证或网络错误。 */
+export function pairTestFailure(
+  stderr: string,
+  code: number | null,
+  command: string,
+): 'entryUnsupported' | 'network' | undefined {
+  if (
+    /Permission denied|No supported authentication methods|Too many authentication failures/i.test(
+      stderr,
+    )
+  )
+    return 'entryUnsupported'
+  if (
+    /Connection refused|Connection timed out|Operation timed out|No route to host|Network is unreachable|Could not resolve hostname|Connection reset|Connection closed/i.test(
+      stderr,
+    )
+  )
+    return 'network'
+  if (command === 'true' && code === 0) return 'entryUnsupported'
+  return undefined
+}
+
 /** 本机的 SSH 端口。只给开发和自检用（对着用户态的 sshd 夹具），平时就是 22 */
 const localPort = (): number => {
   const given = Number(process.env.LITCH_LOCAL_SSH_PORT)
@@ -237,7 +259,7 @@ function runSelfTest(args: string[], key: string, command: string): Promise<Pair
         ...args,
         command,
       ],
-      { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true },
+      { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: { ...process.env, LC_ALL: 'C' } },
     )
     let stdout = ''
     let stderr = ''
@@ -252,6 +274,7 @@ function runSelfTest(args: string[], key: string, command: string): Promise<Pair
       child.kill('SIGKILL')
       settle({
         ok: false,
+        reason: 'network',
         said: tailOf(stderr) ?? `一次性钥匙登录在 ${SELF_TEST_MS / 1000} 秒内无结果`,
       })
     }, SELF_TEST_MS)
@@ -268,11 +291,13 @@ function runSelfTest(args: string[], key: string, command: string): Promise<Pair
       }
     })
     child.on('error', (error) => settle({ ok: false, said: `无法启动 ssh：${error.message}` }))
-    child.on('close', () => {
+    child.on('close', (code) => {
       const found = verdict(stdout)
       if (found) return settle(found)
+      const reason = pairTestFailure(stderr, code, command)
       settle({
         ok: false,
+        ...(reason ? { reason } : {}),
         said:
           tailOf(stderr) ??
           (stdout.trim()
@@ -380,7 +405,9 @@ export function desktopPairing(options: DesktopPairingOptions): PairingPlatform 
     return mkdtempSync(join(base, 'p-'))
   }
 
-  return {
+  const platform: PairingPlatform = {
+    // 直连探测不读用户配置，因此不会混入配置中的其他身份或复用已认证连接。
+    entryTest: (input) => platform.selfTest(input),
     async resolve(target): Promise<PairingHostAddress> {
       const config = await sshConfigOf(target)
       const host = first(config, 'hostname')
@@ -503,4 +530,5 @@ export function desktopPairing(options: DesktopPairingOptions): PairingPlatform 
       }
     },
   }
+  return platform
 }

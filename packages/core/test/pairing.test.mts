@@ -49,7 +49,8 @@ interface Options {
   kind?: 'local' | 'ssh'
   known?: string[]
   sshOn?: boolean
-  selfTest?: (input: PairSelfTestInput) => { ok: true } | { ok: false; said: string }
+  selfTest?: (input: PairSelfTestInput) => PairSelfTestResult
+  entryTest?: (input: PairSelfTestInput) => PairSelfTestResult
   enrollTest?: (input: PairEnrollTestInput) => PairSelfTestResult
   startError?: RpcFailure
   store?: DeviceStore
@@ -125,7 +126,9 @@ function world(options: Options = {}) {
     },
   }
   const peer = fakeOpener({ ...fake.handlers, ...handlers })
+  const entryTest = options.entryTest
   const platform: PairingPlatform = {
+    ...(entryTest ? { entryTest: async (input: PairSelfTestInput) => entryTest(input) } : {}),
     inspect: async () =>
       options.inspection ?? {
         known: (options.known ?? [RSA.publicKey]).map(
@@ -314,6 +317,76 @@ test('主机钥匙对不上、自检没过：配对作废，报对应的 key，�
   assert.deepEqual(denied.sent('litch/pair/cancel'), [{ pairId: 'pair1' }])
 })
 
+test('可直达入口先探测：不支持与网络失败不弹主机确认，错误保留可修改的地址', async () => {
+  for (const reason of ['entryUnsupported', 'network'] as const) {
+    const calls: PairSelfTestInput[] = []
+    const w = world({
+      known: [],
+      entryTest: (input) => {
+        calls.push(input)
+        return { ok: false, said: '探测失败', reason }
+      },
+    })
+    w.core.start()
+    await settled()
+    const address = { host: 'phone.example', port: 2223, user: 'phone' }
+    const failure = await failureOf(w.command('pairing.start', { address }))
+    assert.equal(failure.key, reason)
+    assert.equal(failure.pairingHostKey, undefined)
+    assert.deepEqual(failure.pairingAddress, { name: 'build-01', ...address })
+    assert.deepEqual(calls[0]?.address, address)
+    assert.equal(w.calls.tests.length, 0)
+    assert.deepEqual(w.sent('litch/pair/cancel'), [{ pairId: 'pair1' }])
+    w.core.stop()
+  }
+})
+
+test('旧设备也能做入口探测；探测成功仍需主机确认，Tailscale 不走一次性钥匙探测', async () => {
+  let calls = 0
+  const entryTest = () => {
+    calls++
+    return { ok: true as const }
+  }
+  const w = world({ oldDevice: true, known: [], entryTest })
+  w.core.start()
+  await settled()
+  const failure = await failureOf(w.command('pairing.start'))
+  assert.equal(failure.key, 'hostKeyMismatch')
+  assert.equal(calls, 1)
+  const result = (await w.command('pairing.start', {
+    hostKeyConfirmation: failure.pairingHostKey?.token,
+  })) as { pairing: PairingView }
+  assert.equal(result.pairing.checked, true)
+  assert.equal(calls, 2)
+  assert.equal(w.calls.tests.length, 0)
+  w.core.stop()
+  const ts = world({ entryTest, banners: { '10.0.0.5:2222': 'SSH-2.0-Tailscale' } })
+  ts.core.start()
+  await settled()
+  assert.equal((await started(ts)).mode, 'tailscale')
+  assert.equal(calls, 2)
+  assert.equal(ts.calls.enrollTests.length, 1)
+  ts.core.stop()
+})
+
+test('本机失败后仍提供地址；改端口时自检使用用户填写的入口', async () => {
+  const w = world({ kind: 'local', selfTest: () => ({ ok: false, said: 'probe failed' }) })
+  w.core.start()
+  await settled()
+  const failure = await failureOf(w.command('pairing.start'))
+  assert.deepEqual(failure.pairingAddress, {
+    name: 'Song 的 MacBook',
+    host: 'mac.lan',
+    port: 22,
+    user: 'song',
+  })
+  const address = { host: 'mac.lan', port: 2224, user: 'song' }
+  await failureOf(w.command('pairing.start', { address }))
+  assert.deepEqual(w.calls.tests.at(-1)?.address, address)
+  assert.equal(w.calls.localSsh, 1)
+  w.core.stop()
+})
+
 test('设备回的 keysFile、noHostKey 换成同名的 key', async () => {
   for (const reason of ['keysFile', 'noHostKey'] as const) {
     const w = world({ startError: new RpcFailure(-32000, `坏了：${reason}`, { reason }) })
@@ -322,6 +395,7 @@ test('设备回的 keysFile、noHostKey 换成同名的 key', async () => {
     const failure = await failureOf(w.command('pairing.start'))
     assert.equal(failure.key, reason)
     assert.equal(failure.message, `坏了：${reason}`)
+    assert.equal(failure.pairingAddress?.port, 2222)
   }
 })
 
@@ -689,12 +763,18 @@ test('本机：不读自己 tailnet 地址的横幅（回环到的是系统的 s
   assert.deepEqual(await w.command('pairing.detect', { host: 'mac.tail1.ts.net', port: 22 }), {
     mode: 'tailscale',
   })
-  // 设备没开 Tailscale SSH：还是一次性钥匙，这时要系统的 SSH 服务，没开就作废刚建的配对
-  const off = world({ kind: 'local', sshOn: false })
+  // 设备没开 Tailscale SSH：检查用户选的地址，不以回环 22 端口的状态替代它。
+  const off = world({
+    kind: 'local',
+    sshOn: false,
+    selfTest: () => ({ ok: false, reason: 'network', said: 'Connection refused' }),
+  })
   off.core.start()
   await settled()
   const failure = await failureOf(off.command('pairing.start', { address }))
-  assert.equal(failure.key, 'sshOff')
+  assert.equal(failure.key, 'network')
+  assert.deepEqual(off.calls.tests[0]?.address, address)
+  assert.equal(off.calls.localSsh, 0)
   assert.deepEqual(off.sent('litch/pair/cancel'), [{ pairId: 'pair1' }])
 })
 

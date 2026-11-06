@@ -1616,10 +1616,15 @@ export interface ChannelErrorShape {
   /** invalid：哪一项设置 */
   key?: string
   pairingHostKey?: PairingHostKeyWarning
+  /** 出码失败时仍允许用户修改手机入口。 */
+  pairingAddress?: PairingAddress
 }
 
 /** 错误上除了错误码和原因之外可以带的东西 */
-export type ChannelErrorExtra = Pick<ChannelErrorShape, 'said' | 'key' | 'pairingHostKey'>
+export type ChannelErrorExtra = Pick<
+  ChannelErrorShape,
+  'said' | 'key' | 'pairingHostKey' | 'pairingAddress'
+>
 
 export class ChannelError extends Error {
   readonly code: ChannelErrorShape['code']
@@ -1627,6 +1632,7 @@ export class ChannelError extends Error {
   readonly said: Bilingual | undefined
   readonly key: string | undefined
   readonly pairingHostKey: PairingHostKeyWarning | undefined
+  readonly pairingAddress: PairingAddress | undefined
 
   constructor(
     code: ChannelErrorShape['code'],
@@ -1641,6 +1647,7 @@ export class ChannelError extends Error {
     this.said = extra.said
     this.key = extra.key
     this.pairingHostKey = extra.pairingHostKey
+    this.pairingAddress = extra.pairingAddress
   }
 
   toShape(): ChannelErrorShape {
@@ -1651,6 +1658,7 @@ export class ChannelError extends Error {
       ...(this.said ? { said: this.said } : {}),
       ...(this.key === undefined ? {} : { key: this.key }),
       ...(this.pairingHostKey ? { pairingHostKey: this.pairingHostKey } : {}),
+      ...(this.pairingAddress ? { pairingAddress: this.pairingAddress } : {}),
     }
   }
 }

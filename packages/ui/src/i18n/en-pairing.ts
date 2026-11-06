@@ -3,6 +3,10 @@ import type { Entry } from './types.ts'
 import type { zhPairing } from './zh-CN-pairing.ts'
 
 export const enPairing: Record<keyof typeof zhPairing, Entry> = {
+  'pairing.fail.entryUnsupported':
+    'This SSH endpoint cannot pair a phone: it rejected the one-time key or did not run its forced command. It may use a different authorized_keys file or restrict authentication. Use the system OpenSSH port, configuring a separate sshd port if needed. You can edit the address and port in this dialog before creating a code.',
+  'pairing.fail.network':
+    'The phone’s SSH endpoint could not be reached or did not respond in time. Check the address, port, network and firewall. You can edit the address in this dialog before creating a code.',
   'pairing.hostKey.title': 'Confirm host key',
   'pairing.hostKey.mismatch':
     'The entry host key differs from the device report or the key saved on this computer.',
@@ -75,7 +79,7 @@ export const enPairing: Record<keyof typeof zhPairing, Entry> = {
   'pairing.fail.hostKeyMismatch':
     'The host key this computer sees differs from the one the device reports, likely due to a port forward or jump host. For security, no code is generated.',
   'pairing.fail.selfTest':
-    'The one-time key couldn’t log in: sshd may ignore authorized_keys, allow only some users, or require a second factor. Add this device manually on the phone.',
+    'The device did not complete the pairing check. Review the SSH output, check that the adapter command can run on the device, then retry.',
   'pairing.fail.sshOff': 'This computer isn’t running an SSH server, so the phone can’t connect.',
   'pairing.fail.sshOff.macos':
     'Turn on Remote Login in System Settings → General → Sharing, make sure your user is allowed, then retry.',

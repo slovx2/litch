@@ -64,6 +64,10 @@ test('倒计时、确认码', () => {
 
 test('出码失败：认得的 key 照说，不认识的是 null；哪几种摆原话；没开 SSH 服务按系统说', () => {
   assert.equal(failureOf({ key: 'selfTest' }), 'selfTest')
+  for (const key of ['entryUnsupported', 'network', 'keysFile']) {
+    assert.equal(failureOf({ key }), key)
+    assert.equal(showsSaid(key), true)
+  }
   assert.equal(failureOf({ key: 'sshOff' }), 'sshOff')
   assert.equal(failureOf({ key: 'address' }), null)
   assert.equal(failureOf(null), null)
