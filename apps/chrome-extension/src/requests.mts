@@ -1,6 +1,7 @@
 import type { ChromeGrant, ChromeRequest } from '../../../packages/protocol/src/chrome-browser.mjs'
 import { isAllowedCdp } from '../../desktop/src/browser/cdp-allow.mjs'
 import { isInputCommand } from '../../desktop/src/browser/input-command.mjs'
+import { createBackgroundTab } from './background-tab.mjs'
 import { chromeOrigin } from './origin.mjs'
 import { disposePointer, planPointer, pointerCommand, withoutPointer } from './pointer.mjs'
 import {
@@ -70,7 +71,7 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
     return result
   }
   if (request.op === 'new') {
-    const tab = await state.chrome.tabs.create({ url: 'about:blank', active: false })
+    const tab = await createBackgroundTab(state.chrome)
     // 等新建空白页的首次提交完成，避免马上 claim 拿到上一代文档。
     for (let attempt = 0; attempt < 50; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 20))
@@ -177,8 +178,7 @@ async function executeRequest(state: ExtensionState, request: ChromeRequest): Pr
     await cdp(state, grant.tabId, 'Emulation.setFocusEmulationEnabled', { enabled: false })
     state.console.clear()
     await disposePointer(state, grant)
-    const tab = await state.chrome.tabs.update(grant.tabId, { active: true })
-    await state.chrome.windows.update(tab.windowId, { focused: true })
+    // 登录卡尚未被用户处理：只暂停控制，不擅自切换用户窗口或标签。
     return null
   }
   if (request.op === 'unfreeze') {

@@ -24,7 +24,7 @@ npm run client:check:chrome
 
 场景用回环 HTTP 夹具提供登录 Cookie、弹窗、跨来源 iframe 和输入控件；操作经正式 `ChromeExecutor → ChromeBridge → Go Native Messaging → MV3` 路径，审批由脚本答复。CDP 只用于验收侧检查 PID、改变缩放和触发扩展生命周期，不替代模型业务工具。脚本化的 remote invocation 只验证控制端语义，不能代替真实 SSH 设备验收。
 
-默认 headless，不占前台。仅在已获得前台时段后可运行：
+默认主要场景为 headless，生命周期输入使用最小化窗口。获准前台验收后加 `--focus-windows`，`background-check.mjs` 会短暂打开两个隔离 headed 窗口，在 navigate、newTab、claim、click、type、run_actions 和登录卡等待前后核对所有窗口焦点及活动标签，并监听中途激活事件；显式 show 是对照组。结束后关闭隔离窗口，不操作日用 Chrome。运行 `LITCH_CHROME_GUI_SLOT=approved npm run client:check:chrome -- --no-evidence --focus-windows` 可完整执行上述场景。如果要观看主要场景，获准前台时段后运行：
 
 ```sh
 LITCH_CHROME_GUI_SLOT=approved npm run client:check:chrome -- --shown

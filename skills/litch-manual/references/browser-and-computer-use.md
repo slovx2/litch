@@ -360,7 +360,9 @@ Click the extension icon to stop control of that profile. Its OFF badge and stop
 
 The connection boundary uses a Native Messaging extension ID allowlist, a host token generated when the desktop starts, and private per-user configuration and socket access. These do not defend against malicious software running as the same OS user with arbitrary execution and access to the configuration. An unpacked extension's fixed ID does not attest that its code came from the official store. Enable control only when you trust the software and extensions running under that OS account.
 
-Chrome sign-in is manual. `request_sign_in` brings the tab forward and pauses agent observation and actions in that Chrome instance. Sign in yourself, then choose **Sign-in complete** in Litch. The page reloads and the agent must claim it again. Never provide passwords or one-time codes to the agent. Remote uploads and cross-device downloads are not supported.
+Chrome 登录由用户手动完成。`request_sign_in` 显示登录卡并暂停此 Chrome 实例中的代理观察与操作，不自动切换窗口。请自行打开 Chrome 的 `Litch · 会话标题简写` 标签组，完成登录后在 Litch 选择“登录已完成”。页面重新载入后，代理必须重新认领。不要向代理提供密码或验证码。
+
+Chrome sign-in is manual. `request_sign_in` displays a sign-in card and pauses agent observation and actions in that Chrome instance without switching windows. Open the `Litch · session title` tab group yourself, sign in, then choose **Sign-in complete** in Litch. The page reloads and the agent must claim it again. Never provide passwords or one-time codes to the agent. Remote uploads and cross-device downloads are not supported.
 
 隐私政策见仓库 `docs/chrome-extension-privacy.md`。获批页面内容会作为工具结果交给当前代理，
 可能发送到用户配置的模型服务商或远程执行设备，并留在代理会话记录中。卸载扩展不会删除这些
@@ -371,6 +373,10 @@ New popups are unclaimed and require source approval before observation or actio
 ### Chrome 标签组与操作标记
 
 代理打开或认领的标签按会话放进 `Litch · 会话标题简写` 标签组。同一会话跨多个 Chrome 窗口时，每个窗口各有一组，不搬动窗口。
+
+新标签默认在现有普通窗口的后台创建，不切换当前标签；没有普通窗口时新建不获取焦点的窗口。认领、导航、点击、输入和批量操作不主动激活 Chrome。可自行点开标签组查看，或在对话里明确要求“显示给我看”，代理才调用 `show` 激活对应窗口与标签。后台输入不需要通过 `show` 才能生效。
+
+New tabs open in the background of an existing normal window without switching its active tab. If none exists, Litch creates an unfocused window. Claiming, navigation, clicks, typing and batches do not activate Chrome. Open the `Litch · session title` group yourself, or explicitly ask the agent to show the page; only then should it call `show` to activate that tab and window. Background input does not require `show`.
 用户标签只临时归组；释放、回合结束、断开或停止控制后，恢复原组、位置和固定状态。原组最后一个标签被临时移走时，恢复会重新创建同名、同色、同折叠状态的组。
 用户控制期间自行移动了窗口或分组时，保留用户的新布局。代理临时标签仍在回合结束关闭；标记保留的标签交还给用户并移出代理组。
 

@@ -7,9 +7,11 @@ import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { Cdp, until } from '../chrome-m0/cdp.mjs'
+import { backgroundChecks } from './background-check.mjs'
 import { inputChecks } from './input-check.mjs'
 
 export async function chromeLifecycle({
+  focusWindows = false,
   root,
   work,
   assets,
@@ -315,6 +317,16 @@ export async function chromeLifecycle({
             )
         }),
     })
+    if (focusWindows)
+      await backgroundChecks({
+        cdp,
+        send,
+        targetId: `chrome:${(await connected()).id}`,
+        origin: site.origin,
+        check,
+        waitSignIn: () =>
+          until(() => waiting.at(-1)?.kind === 'chromeSignIn', 'sign-in card waiting'),
+      })
     await check('隔离 Chrome 重启，同会话按已保存网站许可直接认领', async () => {
       cdp.close()
       await stop(chrome)

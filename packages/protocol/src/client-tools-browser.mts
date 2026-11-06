@@ -54,7 +54,7 @@ const fn = (
 
 const GUIDE = `A real web browser in the Litch desktop app's side panel, for opening and checking web pages (especially local dev servers), filling forms and taking screenshots.
 
-How to use: start with \`navigate\`, read the page with \`snapshot\` (elements have refs like [e12]) and act by ref; use x/y only without a ref. Work in the background; call \`show\` only when the user should look.
+How to use: start with \`navigate\`, read the page with \`snapshot\` (elements have refs like [e12]) and act by ref; use x/y only without a ref. Work in the background; call \`show\` only when the user explicitly asks to see the page. Background input does not require \`show\`; never use it to fix focus or make input work.
 
 Input tools return inputReceipt: dispatch and observed page changes are separate, and businessOutcome is unknown. Verify expected confirmation text or objects, using wait for a selector, text or URL when needed. An unchanged page does not prove failure; never blindly repeat an input that may have executed. Navigation recovery reads the new document without replaying input.
 
@@ -350,7 +350,7 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
     ),
     fn(
       'show',
-      'Open the browser panel in the Litch app and show a tab to the user. Use when the user wants to see the page or watch; otherwise work in the background.',
+      'Show a tab to the user (Chrome activates its tab and window). Call only when the user explicitly asks to see the page or watch. Background clicks and typing do not need show; never call it to fix input focus.',
       { tabId },
     ),
   ],

@@ -52,7 +52,7 @@ export const enChrome = {
     'This is the device scope of the Chrome master switch. Only selected remote devices can use Chrome on this computer. They need no instance or tab approval and follow the same site permissions as local conversations.',
   'chrome.signIn': 'Sign in with Chrome',
   'chrome.signInNote':
-    'Complete sign-in in Chrome. The agent cannot read or operate this tab while you sign in. Returning control reloads the page.',
+    'Open the Litch tab group in Chrome and sign in yourself. This card does not switch windows. Agent observation and actions in this Chrome instance are paused. Returning control reloads the page.',
   'chrome.signInDone': 'Sign-in complete',
   'chrome.approve': 'Allow access to a Chrome website',
 } as const

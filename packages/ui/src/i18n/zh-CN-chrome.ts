@@ -46,7 +46,7 @@ export const zhChrome = {
     '这是 Chrome 总开关的设备范围：只允许勾选的远程设备使用这台电脑的 Chrome，不再弹实例或标签卡。网站权限与本机会话相同。',
   'chrome.signIn': '在 Chrome 中登录',
   'chrome.signInNote':
-    '请在 Chrome 中完成登录。等待期间，代理无法读取或操作此标签。完成后重新载入页面并交还控制。',
+    '请自行打开 Chrome 的 Litch 标签组并完成登录。此卡片不会切换窗口。等待期间，代理无法读取或操作此 Chrome 实例。完成后重新载入页面并交还控制。',
   'chrome.signInDone': '登录已完成',
   'chrome.approve': '允许访问 Chrome 网站',
 } as const
