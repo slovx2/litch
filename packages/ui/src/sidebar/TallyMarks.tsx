@@ -1,6 +1,6 @@
 // 收起的工作区、设备那一行行尾的汇总，和信息卡里对应的那一行。
 // 忙闲订阅 keys.tallies；未读从设备树的可见目录汇总，避免跨项目子会话在原项目留下幽灵记号。
-import { type GroupTallies, keys } from '@litch/core'
+import { type GroupTallies, type GroupTally, keys } from '@litch/core'
 import { createContext, useContext } from 'react'
 import { useT } from '../app/appearance.ts'
 import { useKey } from '../app/services.tsx'
@@ -29,6 +29,11 @@ export function TallyMarks({ deviceId, group }: TallyProps) {
   const raw = tallyOf(useKey<GroupTallies>(keys.tallies(deviceId)), group, only)
   const counts = useContext(TreeUnreadContext)
   const tally = counts ? { ...raw, unread: unreadIn(counts.shown, group) } : raw
+  return <TallyView tally={tally} />
+}
+
+/** 汇总的画法：快捷区（置顶、本机分组）收起时按自己算的数也用它 */
+export function TallyView({ tally }: { tally: GroupTally }) {
   const t = useT()
   if (isQuiet(tally)) return null
   const waiting = waitLabel(tally)

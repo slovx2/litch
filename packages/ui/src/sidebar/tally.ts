@@ -1,6 +1,6 @@
 // 收起的工作区、设备那一行上的汇总：里面有没有在等人的、在跑的、只剩后台任务在跑的、没看过的。
 // 数是数据副本按组、按 harness 算好的（keys.tallies），这里只管合计和“该怎么说”。不碰页面，好单独测。
-import type { GroupTallies, GroupTally } from '@litch/core'
+import type { GroupTallies, GroupTally, SessionSummary } from '@litch/core'
 
 export const NO_TALLY: GroupTally = {
   approval: 0,
@@ -75,4 +75,22 @@ export function tallyParts(tally: GroupTally): TallyPart[] {
     { key: 'sidebar.tally.unread', count: tally.unread },
   ]
   return parts.filter((part) => part.count > 0)
+}
+
+/** 几个会话合起来的状况：快捷区（置顶、本机分组）跨设备，没有按组算好的键，按摘要现数 */
+export function tallySummaries(
+  summaries: readonly (
+    | Pick<SessionSummary, 'status' | 'waitingFor' | 'unread' | 'background'>
+    | undefined
+  )[],
+): GroupTally {
+  const sum = { ...NO_TALLY }
+  for (const session of summaries) {
+    if (!session) continue
+    if (session.status === 'waiting') sum[session.waitingFor === 'answer' ? 'answer' : 'approval']++
+    else if (session.status === 'running') sum.running++
+    else if ((session.background?.running ?? 0) > 0) sum.background++
+    if (session.unread) sum.unread++
+  }
+  return sum
 }

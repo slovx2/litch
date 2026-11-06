@@ -41,8 +41,9 @@ sidebar location are in [Projects and sessions](sessions-and-projects.md).
 - **Sidebar** (left): **New session** button, a harness filter and a "more" menu at the top (the menu's
   **Always show active conversations**, on by default, keeps running, unread and waiting sessions listed
   while the filter is on; **Show Claude Code sub-sessions** shows sessions the Claude desktop app
-  started from another session); then one block per device
-  (device row with status, then Pinned, your groups, the built-in Projects group, and "No project"
+  started from another session); then **Pinned** (pinned sessions and projects of all devices in one
+  list), **Local groups** (only when you have some), Unread and Recent, and one block per device
+  (device row with status, then your device groups, the built-in Projects group, and "No project"
   sessions); at the bottom: **Suggestions** (pending suggestions across devices), **Schedule** (scheduled tasks), **Appearance** (a
   popover for skin, theme and language, with a link to Settings → Appearance) and **Settings** (Devices
   opens inside the Settings window; Archived sessions opens in the main view).

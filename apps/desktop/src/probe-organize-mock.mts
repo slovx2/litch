@@ -6,7 +6,7 @@
 export interface OrganizeMockProbe {
   /** 置顶组和分区组 */
   groups: {
-    /** 本机下面最前头是“置顶”，里面是那两个置顶的会话，先置顶的在前 */
+    /** 侧栏最上面是全局“置顶”区（在本机上面，本机下面不再有置顶组），里面是那两个置顶的会话，先置顶的在前 */
     pinnedFirst: boolean
     /** 接着是别处建的分区“稍后看”，里面是放进去的那一个 */
     sectionNext: boolean
@@ -129,8 +129,13 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
     rowOf(title)?.closest<HTMLElement>('[data-group]')?.dataset.group
   /** 本机下面各组的键，从上到下 */
   const groupKeys = () => all('[data-group]', local()).map((group) => group.dataset.group ?? '')
+  /** 置顶在侧栏最上面的全局置顶区，别的组在本机下面 */
   const titlesIn = (group: string) =>
-    all(`[data-group="${group}"] .ss-row:not(.projection-group *) .title`, local()).map(text)
+    all(
+      `[data-group="${group}"] .ss-row:not(.projection-group *) .title`,
+      group === ':pinned' ? document : local(),
+    ).map(text)
+  const pinsArea = () => one('[data-shortcuts="pins"]')
   /** 项目那一行（按名字找） */
   const workspaceLine = (name: string) =>
     all('[data-workspace]', local()).find((line) => text(one('.name', line)) === name)
@@ -194,11 +199,12 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   await card.close()
   const groups: OrganizeMockProbe['groups'] = {
     pinnedFirst:
-      keys[0] === ':pinned' &&
-      labelOf(':pinned') === '置顶' &&
+      !keys.includes(':pinned') &&
+      text(one('[data-shortcut-head="pins"] .name', pinsArea() ?? undefined)) === '置顶' &&
+      Boolean(pinsArea()?.compareDocumentPosition(local()) === Node.DOCUMENT_POSITION_FOLLOWING) &&
       titlesIn(':pinned').join('|') === `${P1}|${P2}`,
     sectionNext:
-      keys[1] === sectionKey &&
+      keys[0] === sectionKey &&
       labelOf(sectionKey) === '稍后看' &&
       titlesIn(sectionKey).join('|') === K1,
     shownOnce: [P1, P2, K1].every((title) => rowsOf(title).length === 1),
@@ -402,7 +408,7 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
     // 模拟核心的本机声明了会话树：能派子会话；harness 可用，能在输入框里引用
     noDelete:
       seen.dshMenu ===
-      '置顶|移到组…|移到项目…|在输入框里引用|为此会话创建定时任务|派出子会话…|重命名|归档',
+      '置顶|移到组…|移到项目…|加入本机分组|在输入框里引用|为此会话创建定时任务|派出子会话…|重命名|归档',
     presetNotes: dsh.read.length === 3 && Boolean(dsh.read[0]?.startsWith('只读：不能改文件')),
     solePreset:
       pi.read.length === 1 &&

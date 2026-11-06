@@ -176,7 +176,8 @@ export async function organizeProbe(second: string): Promise<OrganizeProbe> {
   // ---- 五、置顶、取消置顶；harness 掉线的时候也置得了 ----
   await choose(lineOf(TIMEOUT), TIMEOUT, 'pin')
   await until('它到了置顶组里', () => groupOf(TIMEOUT) === ':pinned')
-  const pinned = groupKeys()[0] === ':pinned'
+  // 置顶画在侧栏最上面的全局置顶区，本机下面不再有置顶组
+  const pinned = !groupKeys().includes(':pinned') && Boolean(one('[data-shortcuts="pins"]'))
   await choose(lineOf(TIMEOUT), TIMEOUT, 'unpin')
   const unpinned = Boolean(await until('它回到项目里', () => groupOf(TIMEOUT) === appKey))
   const isDown = () => Boolean(rowOf(TIMEOUT)?.classList.contains('down'))
@@ -184,7 +185,7 @@ export async function organizeProbe(second: string): Promise<OrganizeProbe> {
   await until('这一行显示成用不了', isDown)
   const downPop = await menuOf(lineOf(TIMEOUT), TIMEOUT)
   seen.downMenu = items(downPop)
-  const downMenu = seen.downMenu === '置顶|移到组…'
+  const downMenu = seen.downMenu === '置顶|移到组…|加入本机分组'
   one<HTMLButtonElement>('.pick-opt[data-action="pin"]', downPop)?.click()
   const pinnedWhileDown =
     Boolean(await until('掉线的时候置了顶', () => groupOf(TIMEOUT) === ':pinned')) && isDown()
