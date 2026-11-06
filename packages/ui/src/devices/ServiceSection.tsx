@@ -190,20 +190,23 @@ export function ServiceSection({
     target?.focus({ preventScroll: true })
   }, [reveal])
 
-  /** 点了“再试一次”，还没有结果 */
-  const [retrying, setRetrying] = useState(false)
-  /** 点了之后看到过它在重新连接：再回到一个定下来的状态，就是这一次有了结果 */
+  /** 点了“再试一次”，还没有结果：sent 是命令还没回，answered 是命令回了、等重启定下来 */
+  const [retrying, setRetrying] = useState<false | 'sent' | 'answered'>(false)
+  /** 点了之后看到过它在停、在起或在重新连接：再回到一个定下来的状态，就是这一次有了结果 */
   const left = useRef(false)
   const linking =
     (device.connection === 'connecting' || device.connection === 'reconnecting') && !device.failure
+  const restartStep = device.restart?.phase.step
+  const restarting = restartStep === 'stopping' || restartStep === 'starting'
   const to = upgrade?.bundled.version ?? ''
   useEffect(() => {
     if (!retrying) return
-    if (linking) {
+    if (linking || restarting) {
       left.current = true
       return
     }
-    if (!left.current) return
+    // 命令回了却没见到重启的任何一步，也算有了结果，按钮不能一直停在“正在重新连接”
+    if (!left.current && retrying !== 'answered') return
     left.current = false
     setRetrying(false)
     // 没连上的话原因在上面“这台设备”一节里；别的没换成的情形这一节自己会说。这里只报两种：还是忙，换成了
@@ -217,20 +220,22 @@ export function ServiceSection({
         text: (say) => say('service.retry.done', { to }),
       })
     }
-  }, [retrying, linking, online, notice, to])
+  }, [retrying, linking, restarting, online, notice, to])
 
   /**
    * 明确重试走安全停止与重连；普通连接不会越过本次应用运行中的暂不升级选择。
+   * 命令只是把重启开了个头，按钮等重启定下来（上面的 effect）才回来。
    */
   const retry = () => {
     left.current = false
-    setRetrying(true)
-    channel
-      .command('device.restartService', { deviceId: device.id, mode: 'start' })
-      .catch((error: unknown) =>
-        showToast({ id: 'service-retry', tone: 'err', lifeMs: 6000, text: () => String(error) }),
-      )
-      .finally(() => setRetrying(false))
+    setRetrying('sent')
+    channel.command('device.restartService', { deviceId: device.id, mode: 'start' }).then(
+      () => setRetrying((now) => (now === 'sent' ? 'answered' : now)),
+      (error: unknown) => {
+        setRetrying(false)
+        showToast({ id: 'service-retry', tone: 'err', lifeMs: 6000, text: () => String(error) })
+      },
+    )
   }
 
   if (!online && !retrying && remote === null && !queued) return null
@@ -378,7 +383,7 @@ export function ServiceSection({
                   : upgrade
               }
               notice={notice}
-              retrying={retrying}
+              retrying={retrying !== false}
               onRetry={retry}
             />
           ) : null}
