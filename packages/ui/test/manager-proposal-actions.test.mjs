@@ -51,14 +51,14 @@ new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(
 )
 
 for (const inbox of [false, true]) {
-  test(`对话/侧栏与看板共用按钮 inbox=${inbox}：经理只有开始和忽略，普通卡保留原地执行和编辑`, () => {
+  test(`对话/侧栏与看板共用按钮 inbox=${inbox}：经理保留开始、编辑和忽略，普通卡还可原地执行`, () => {
     const actions = (sourceIsManager) =>
       [
         ...module.exports
           .render(sourceIsManager, inbox)
           .matchAll(/data-act="(start|here|edit|dismiss)"/g),
       ].map((match) => match[1])
-    assert.deepEqual(actions(true), ['start', 'dismiss'])
+    assert.deepEqual(actions(true), ['start', 'edit', 'dismiss'])
     assert.deepEqual(actions(false), ['start', 'here', 'edit', 'dismiss'])
   })
 }

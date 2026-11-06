@@ -24,9 +24,9 @@ Proposal notifications queue without starting or interrupting a manager turn. Th
 later report delivery or the next turn and remain readable while queued. Assigned work still
 belongs to the workline and must not be replaced by a suggestion.
 
-经理自己提出的建议卡只提供“开始”（创建工作线）和“忽略”，不提供“在这里做”或“编辑后开始”。普通会话和工作线提出的建议保持原有操作。旧客户端请求在经理会话执行建议时，设备会拒绝并提示开始工作线或忽略。
+经理自己提出的建议卡提供“开始”（创建工作线）、“编辑后开始”（修改简报后创建工作线）和“忽略”，不提供“在这里做”。普通会话和工作线提出的建议保持原有操作。旧客户端请求在经理会话执行建议时，设备会拒绝并提示开始工作线或忽略。
 
-Suggestions proposed by a manager offer **Start** (create a workline) and **Dismiss**, without **Do it here** or **Edit before starting**. Suggestions from ordinary sessions and worklines keep their usual actions. Requests from older clients to run a manager’s suggestion in place are rejected with guidance to start a workline or dismiss it.
+Suggestions proposed by a manager offer **Start** (create a workline), **Edit before starting** (revise the brief and create a workline), and **Dismiss**, without **Do it here**. Suggestions from ordinary sessions and worklines keep their usual actions. Requests from older clients to run a manager’s suggestion in place are rejected with guidance to start a workline or dismiss it.
 
 经理负责维护「现状」，固定按顺序使用 `### 正在做`、`### 等你`、`### 接下来` 三个 Markdown 小节。
 没有内容的小节整节省略，需要时可加 `### 风险`。每条一行，约 40 字以内，开头的关键词加粗；

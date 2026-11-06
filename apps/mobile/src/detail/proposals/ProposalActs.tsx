@@ -56,7 +56,7 @@ export function useProposalActs(
   const menu: SheetAction[] = act.busy
     ? []
     : [
-        ...(parent && !sourceIsManager
+        ...(parent
           ? [
               {
                 label: t('proposal.edit'),
