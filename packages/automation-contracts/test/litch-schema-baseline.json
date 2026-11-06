@@ -1,0 +1,13 @@
+{
+  "commit": "a686bcea14410f34b386a03fda0e611de7e9e303",
+  "sha256": {
+    "browser": "57f3aa6b13d466eb1bfd5dd3bcf768f0a1d289011c4752e4ed205fcb95d81a0e",
+    "browserBatch": "2148487a19063a3f93d8060321fef58c271615b2e68bc1c2178afa3e4d5ef0ae",
+    "mac": "cf21e7e617e68d7cb5aa95ac5a21d140c720972ac87a581bee08b6e898bc30d2",
+    "macBatch": "3c5db2dda758b07e233fc1ed3bfc98bea06e9b4319496c512e43fe26028570bd",
+    "windows": "7b478e52c3d54ab38a2ec2577117d5bc2ecad29eee2876d83387658bd21337da",
+    "windowsBatch": "26d9a9df20bad511d5fadc8abb9d4953483d9543b473a27da741bcb763b1e2a3",
+    "portable": "70b36db2bdf625d389874d593e4bc4d83ddbf2599f863c7db044cc269dad2c0c",
+    "signInFailures": "8a16a7f0f36d4a0e4dbb2bcb4416949914e09e296bc21f523c70de524fe7b1e9"
+  }
+}

@@ -3,8 +3,8 @@
 // 引擎向客户端发 `item/tool/call`，客户端执行后答复。这里只有协议里没有的那部分：谁能执行、交给谁、
 // 没人能执行时怎么回。定义的原文在仓库根目录 protocol/extensions/client-tools.json。
 //
-// 这个文件不引用别的文件：设备进程（packages/device）、引擎入口（packages/claude、packages/pi）、
-// 客户端核心（packages/core）和桌面外壳都直接引用它。
+// 只引用本目录的自包含工具类型投影；设备进程、引擎入口、核心和外壳均可直接使用，
+// 不需要安装公共合同包或导入 codex.mts。
 
 /** 握手时 `capabilities` 里声明“我能执行哪些命名空间”的键（和 litchExtensions 并列） */
 export const CLIENT_TOOLS_CAPABILITY = 'litchClientTools'
@@ -131,26 +131,8 @@ export interface ClientToolCallResponse {
   success: boolean
 }
 
-/** 动态工具的定义（`thread/start.dynamicTools` 的一项）。我们只用命名空间这种 */
-export interface ClientToolFunctionSpec {
-  type: 'function'
-  name: string
-  description: string
-  inputSchema: Record<string, unknown>
-}
-
-export interface ClientToolNamespaceSpec {
-  type: 'namespace'
-  name: string
-  description: string
-  tools: ClientToolFunctionSpec[]
-  /**
-   * 挂上这个命名空间时要加进系统提示（或开发者指令）的一段话：什么时候该用这些工具。工具说明里放不下、
-   * 又要模型每回合都记着的规矩写在这里。引擎能加就加在自己的系统提示末尾（不覆盖用户自己的指令），
-   * 加不了的忽略；原生 codex 不认这个字段，设备进程转发前摘掉、并进 developerInstructions。
-   */
-  instructions?: string
-}
+// 类型也来自公共合同的自包含投影，不给设备包引入 SDK 或 Node 依赖。
+export type { ClientToolFunctionSpec, ClientToolNamespaceSpec } from './automation-tool-spec.mjs'
 
 /** 失败答复的原因分类，放在文字的开头一行里给人和模型看，也方便测试认 */
 export type ClientToolFailureKind =
