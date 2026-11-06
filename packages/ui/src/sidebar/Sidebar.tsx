@@ -299,6 +299,8 @@ const SessionRow = memo(function SessionRow({
     : undefined
   // 所属的 harness 现在用不了：这一行是上次留下的。行上不加字，徽标换个画法，为什么用不了在提示和设备信息卡里
   const down = downHarness(device, summary.harness)
+  // 带设备色块的行（快捷区、最近、未读）里设备离线
+  const offline = tick && device?.connection !== 'online'
   const classes = ['ss-row', selected ? 'sel' : '', unread ? 'is-unread' : '', down ? 'down' : '']
   // 改名、归档、删除、换工作区都要够得着它所属的 harness：设备没连着、或者那个 harness 用不了，都不出。
   // 它声明了自己不会的那几样也不出（没有声明的照旧都出）
@@ -620,10 +622,17 @@ const SessionRow = memo(function SessionRow({
             {badgeOf(device, summary.harness)}
           </span>
           {deviceLabel ? (
-            <span className="projection-device ell dim" title={deviceLabel}>
-              {tick && device?.connection !== 'online'
+            <span
+              className="projection-device ell dim"
+              title={offline ? `${deviceLabel} · ${t('sidebar.offline')}` : deviceLabel}
+            >
+              {offline && !projectionTime
                 ? `${deviceLabel} · ${t('sidebar.offline')}`
                 : deviceLabel}
+              {/* 最近、未读的行窄：离线只靠虚线色块和淡色画出来，“离线”留给悬停和读屏，不挤标题 */}
+              {offline && projectionTime ? (
+                <span className="projection-offline">{` · ${t('sidebar.offline')}`}</span>
+              ) : null}
             </span>
           ) : null}
           {nested ? null : (

@@ -48,6 +48,15 @@
   max-width: 10ch;
   font-size: calc(11px * var(--fs));
 }
+/* 最近、未读行里的“离线”：不占宽度，只给读屏念（看得见的是虚线色块和淡色） */
+.projection-offline {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .pick-opt[aria-checked] > b {
   display: flex;
   align-items: center;

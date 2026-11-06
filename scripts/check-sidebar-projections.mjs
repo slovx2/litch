@@ -697,6 +697,32 @@ try {
         ),
         '窄侧栏中的常见设备名完整可读',
       )
+      // 离线不在行上写字：标题不被挤，“离线”留在悬停提示和读屏名称里
+      const narrow = await run(() =>
+        [...document.querySelectorAll('[data-projection=recent] [data-depth="0"] .ss-row')].map(
+          (row) => ({
+            title: row.querySelector('.title')?.getBoundingClientRect().width ?? 0,
+            offline: !!row.querySelector('.dev-tick.off'),
+            name: row.textContent ?? '',
+            hint: row.querySelector('.projection-device')?.getAttribute('title') ?? '',
+            shown: row.querySelector('.projection-device')?.getBoundingClientRect().width ?? 0,
+            label: row.querySelector('.projection-device')?.firstChild?.textContent ?? '',
+          }),
+        ),
+      )
+      assert.ok(
+        narrow.every((row) => row.title >= 40),
+        `窄侧栏标题不被设备名挤压：${JSON.stringify(narrow.map((row) => Math.round(row.title)))}`,
+      )
+      const away = narrow.filter((row) => row.offline)
+      assert.ok(away.length > 0, '有离线设备的行')
+      assert.ok(
+        away.every(
+          (row) =>
+            !row.label.includes('离线') && row.name.includes('离线') && row.hint.includes('离线'),
+        ),
+        `离线行不显示“离线”，读屏名称和悬停提示里有：${JSON.stringify(away)}`,
+      )
       assert.ok(
         await run(() =>
           [...document.querySelectorAll('[data-projection=recent] [data-depth="0"] .ss-row')].every(
