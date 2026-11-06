@@ -1,0 +1,97 @@
+# 模拟核心：输入框里 @ 一个会话画成片。打 @ 选中 s3 → 字是 @[标题] → 退格删到片尾的 ] 整片删掉 →
+# 再选一次、光标左移进片里会挪到片头，打的字落在片前面 → 杀掉应用重开，草稿和提到的会话都还在 →
+# 发出去，对话里是 ＠标题（核心认出了会话，没有方括号）→ 编辑这条消息，编辑框里还是 @[标题]。
+# 片的样子（嵌套 Text 的颜色和底色）Maestro 看不见，看截图
+appId: dev.litch.app
+name: mock-输入框里的会话片
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- openLink: litch://open?session=p2&device=local
+- extendedWaitUntil:
+    visible:
+      id: composer-input
+    timeout: 15000
+- tapOn:
+    id: composer-input
+- inputText: see @Pi
+- extendedWaitUntil:
+    visible:
+      id: composer-mention-s3
+    timeout: 10000
+- tapOn:
+    id: composer-mention-s3
+- assertVisible:
+    id: composer-input
+    text: 'see @\[Pi[^\]]*\] '
+
+# 退格：先删掉后面的空格，再删一下碰到片尾，整片一起删掉
+- eraseText: 1
+- assertVisible:
+    id: composer-input
+    text: 'see @\[Pi[^\]]*\]'
+- eraseText: 1
+- assertVisible:
+    id: composer-input
+    text: 'see '
+
+# 再选一次；光标从片尾左移一格进了片里，挪到片头，打的字落在片前面
+- inputText: '@Pi'
+- extendedWaitUntil:
+    visible:
+      id: composer-mention-s3
+    timeout: 10000
+- tapOn:
+    id: composer-mention-s3
+- pressKey: Remote Dpad Left
+- pressKey: Remote Dpad Left
+- inputText: X
+- assertVisible:
+    id: composer-input
+    text: 'see X@\[Pi[^\]]*\] '
+
+# 杀掉应用重开：草稿的字和提到的会话都从文件里读回来
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: devices
+    timeout: 30000
+- openLink: litch://open?session=p2&device=local
+- extendedWaitUntil:
+    visible:
+      id: composer-input
+      text: 'see X@\[Pi[^\]]*\] '
+    timeout: 15000
+
+# 发出去：提到的会话随消息带上，对话里写成 ＠标题
+- tapOn:
+    id: composer-send
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
+      id: user-message
+      text: 'see X＠Pi[^\[\]]*'
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      text: .*(mock core answering|模拟核心的回答).*
+    timeout: 15000
+
+# 编辑这条消息：编辑框里还是 @[标题]
+- longPressOn:
+    id: user-message
+    text: 'see X＠Pi[^\[\]]*'
+- tapOn:
+    id: menu:edit
+- extendedWaitUntil:
+    visible:
+      id: edit:input
+      text: 'see X@\[Pi[^\]]*\] ?'
+    timeout: 5000
+- tapOn:
+    id: edit:cancel
