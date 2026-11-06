@@ -44,12 +44,19 @@ export function createExtensionRuntime(options: ExtensionOptions) {
   let active = false
   let generation = 0
   let initializing: Promise<void> | null = null
+  let stopping: Promise<void> | null = null
+  const pending = new Set<Promise<unknown>>()
   let interval: ReturnType<typeof setInterval> | null = null
   let retry: ReturnType<typeof setTimeout> | null = null
-  const listeners: Array<() => void> = []
-  function listen(event: any, listener: (...args: any[]) => any): void {
+  const listeners = new Set<() => void>()
+  function listen(event: any, listener: (...args: any[]) => any): () => void {
     event.addListener(listener)
-    listeners.push(() => event.removeListener(listener))
+    const off = () => {
+      event.removeListener(listener)
+      listeners.delete(off)
+    }
+    listeners.add(off)
+    return off
   }
   let port: any = null
   let reconnect: ReturnType<typeof setTimeout> | null = null
@@ -233,7 +240,9 @@ export function createExtensionRuntime(options: ExtensionOptions) {
     }
     port = current
     state.epoch = crypto.randomUUID()
-    current.onDisconnect.addListener(() => {
+    let offPort = () => {}
+    const offDisconnect = listen(current.onDisconnect, () => {
+      offPort()
       void chrome.runtime.lastError
       if (port !== current) return
       port = null
@@ -242,10 +251,15 @@ export function createExtensionRuntime(options: ExtensionOptions) {
       for (const id of [...state.grants.keys()]) void state.revoke(id, 'bridgeDisconnected')
       schedule()
     })
-    current.onMessage.addListener((message: ChromeRequest | ChromeWelcome) => {
+    const offMessage = listen(current.onMessage, (message: ChromeRequest | ChromeWelcome) => {
       if (!active || current !== port) return
       if (message?.kind === 'welcome') {
-        wire = message.protocol
+        wire =
+          message.protocol !== null &&
+          message.protocol >= options.protocol.min &&
+          message.protocol <= options.protocol.max
+            ? message.protocol
+            : null
         void showCompatibility(message)
         return
       }
@@ -256,8 +270,19 @@ export function createExtensionRuntime(options: ExtensionOptions) {
         typeof message.args !== 'object'
       )
         return
-      void execute(state, message).then(
-        (result) => respond(current, { kind: 'result', id: message.id, result }),
+      if (wire === null) return
+      const operation = execute(state, message).then(
+        async (result) => {
+          if (
+            !active &&
+            message.op === 'new' &&
+            result &&
+            typeof result === 'object' &&
+            'id' in result
+          )
+            await chrome.tabs.remove(result.id).catch(() => {})
+          respond(current, { kind: 'result', id: message.id, result })
+        },
         (error: unknown) =>
           respond(current, {
             kind: 'result',
@@ -268,7 +293,13 @@ export function createExtensionRuntime(options: ExtensionOptions) {
             },
           }),
       )
+      pending.add(operation)
+      void operation.finally(() => pending.delete(operation)).catch(() => {})
     })
+    offPort = () => {
+      offDisconnect()
+      offMessage()
+    }
     const saved = await chrome.storage.local.get(keys.instance)
     const instanceId =
       typeof saved[keys.instance] === 'string' ? saved[keys.instance] : crypto.randomUUID()
@@ -361,6 +392,7 @@ export function createExtensionRuntime(options: ExtensionOptions) {
   }
   return {
     async start(): Promise<void> {
+      if (stopping) await stopping
       if (active) return initializing ?? undefined
       if (!options.identity.extensionIds.includes(chrome.runtime.id))
         throw new Error('Extension identity is not authorized')
@@ -377,22 +409,33 @@ export function createExtensionRuntime(options: ExtensionOptions) {
       initializing = begin()
       await initializing
     },
-    async stop(): Promise<void> {
+    stop(): Promise<void> {
+      if (stopping) return stopping
       active = false
       generation++
       ready = false
-      for (const off of listeners.splice(0)) off()
+      for (const off of [...listeners]) off()
       if (reconnect) clearTimeout(reconnect)
       if (retry) clearTimeout(retry)
       if (interval) clearInterval(interval)
       reconnect = retry = interval = null
-      await initializing
-      initializing = null
-      await Promise.all([...state.grants.keys()].map((id) => state.revoke(id, 'runtimeStopped')))
-      const current = port
-      port = null
-      wire = null
-      current?.disconnect()
+      stopping = (async () => {
+        await initializing
+        initializing = null
+        await Promise.all([...state.grants.keys()].map((id) => state.revoke(id, 'runtimeStopped')))
+        await Promise.allSettled([...pending])
+        const current = port
+        port = null
+        wire = null
+        current?.disconnect()
+      })()
+      const finished = stopping
+      void finished
+        .finally(() => {
+          if (stopping === finished) stopping = null
+        })
+        .catch(() => {})
+      return finished
     },
   }
 }

@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { approvalDecision } from '../../automation-contracts/src/approval.mjs'
 import type {
+  ApprovalAnswer,
   ApprovalPort,
   ApprovalRequest,
+  FileAccess,
   InvocationScope,
   SessionScope,
   ToolExecutor,
-  ToolInvocation,
   ToolResult,
   TurnScope,
 } from '../../automation-contracts/src/runtime.mjs'
@@ -17,20 +18,43 @@ export interface ChromeRuntimeOptions extends Omit<ChromeExecutorOptions, 'allow
   hostId: string
   /** 运行浏览器的本机设备；来源和租户的访问控制由 allowed 决定。 */
   allowed(scope: InvocationScope): boolean
+  /** 没有文件授权端口时不开放 upload。 */
+  files?: FileAccess
 }
 const turnKey = (scope: TurnScope): string =>
   JSON.stringify([scope.hostId, scope.deviceId, scope.sessionId, scope.turnId])
 const threadKey = (scope: SessionScope): string => JSON.stringify([scope.hostId, scope.sessionId])
-const failure = (code: string, message: string): ToolResult => ({
+const failure = (code: string, message: string, mayHaveExecuted = false): ToolResult => ({
   success: false,
   content: [{ type: 'text', text: message }],
-  error: { code, message, mayHaveExecuted: false },
+  error: { code, message, mayHaveExecuted },
 })
+
+async function answerOrCancelled(
+  work: Promise<ApprovalAnswer | null>,
+  signal: AbortSignal,
+): Promise<ApprovalAnswer | null> {
+  let off = () => {}
+  try {
+    return await Promise.race([
+      work,
+      new Promise<null>((resolve) => {
+        const abort = () => resolve(null)
+        signal.addEventListener('abort', abort, { once: true })
+        off = () => signal.removeEventListener('abort', abort)
+        if (signal.aborted) abort()
+      }),
+    ])
+  } finally {
+    off()
+  }
+}
 
 /** 绑定可信 scope 的 SDK 入口；不要求 Litch 会话/设备对象。 */
 export function createChromeExecutor(options: ChromeRuntimeOptions): ToolExecutor {
   const executor = new ChromeExecutor({ ...options, allowed: () => true })
   const spec = chromeToolsSpec(options.namespace, options.productName)
+  if (!options.files) spec.tools = spec.tools.filter((tool) => tool.name !== 'upload')
   const tools = new Set(spec.tools.map((tool) => tool.name))
   const pending = new Map<
     string,
@@ -47,7 +71,7 @@ export function createChromeExecutor(options: ChromeRuntimeOptions): ToolExecuto
     const calls = [...pending.values()].filter((call) => turnKey(call.scope) === key)
     for (const call of calls) call.abort.abort()
     const turn = turns.get(key)
-    await Promise.all([...(turn?.approvals ?? [])].map((port) => port.dismiss(scope)))
+    await Promise.allSettled([...(turn?.approvals ?? [])].map((port) => port.dismiss(scope)))
     await Promise.allSettled(calls.map((call) => call.done))
     await Promise.all(
       [...executor.pages.values()]
@@ -83,8 +107,12 @@ export function createChromeExecutor(options: ChromeRuntimeOptions): ToolExecuto
       if (context.signal.aborted) return failure('cancelled', 'The call was cancelled.')
       if (call.namespace !== options.namespace || !tools.has(call.tool))
         return failure('invalid', 'Unknown Chrome tool.')
-      if (!options.allowed(call.scope))
-        return failure('denied', 'Chrome access is not permitted for this scope.')
+      try {
+        if (!options.allowed(call.scope))
+          return failure('denied', 'Chrome access is not permitted for this scope.')
+      } catch {
+        return failure('denied', 'Chrome access policy could not authorize this scope.')
+      }
       const scope = Object.freeze({ ...call.scope })
       const key = turnKey(scope)
       const turn = turns.get(key) ?? { scope, approvals: new Set<ApprovalPort>() }
@@ -94,6 +122,20 @@ export function createChromeExecutor(options: ChromeRuntimeOptions): ToolExecuto
       const abort = new AbortController()
       const signal = AbortSignal.any([context.signal, abort.signal])
       const done = (async (): Promise<ToolResult> => {
+        let args = call.arguments
+        if (call.tool === 'upload') {
+          const value = args as { paths?: unknown }
+          if (
+            !value ||
+            !Array.isArray(value.paths) ||
+            !value.paths.every((path) => typeof path === 'string')
+          )
+            return failure('invalid', 'Upload requires local file paths.')
+          args = {
+            ...value,
+            paths: [...(await options.files!.authorizeUpload(value.paths, scope, signal))],
+          }
+        }
         const response = await executor.call(
           {
             id,
@@ -103,7 +145,7 @@ export function createChromeExecutor(options: ChromeRuntimeOptions): ToolExecuto
             callId: scope.callId,
             namespace: call.namespace,
             tool: call.tool,
-            arguments: call.arguments,
+            arguments: args,
             harness: null,
             cwd: null,
           },
@@ -137,7 +179,7 @@ export function createChromeExecutor(options: ChromeRuntimeOptions): ToolExecuto
               try {
                 return approvalDecision(
                   request,
-                  await context.approvals.request(request, signal),
+                  await answerOrCancelled(context.approvals.request(request, signal), signal),
                   Date.now(),
                   signal,
                 )
@@ -159,7 +201,11 @@ export function createChromeExecutor(options: ChromeRuntimeOptions): ToolExecuto
           }),
         }
       })().catch(() =>
-        failure('failed', 'Chrome operation failed. Inspect the current page before retrying.'),
+        failure(
+          'failed',
+          'Chrome operation failed. Inspect the current page before retrying.',
+          true,
+        ),
       )
       pending.set(id, { scope, abort, done })
       try {

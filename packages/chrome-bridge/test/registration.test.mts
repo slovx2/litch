@@ -23,6 +23,7 @@ test('第二身份登记使用独立 host、ID、token、启动器，不改变 L
       nativeBinary: binary,
       nativeArgs: [],
       socketPath: join(root, `${app}.sock`),
+      claimLockDirectory: join(root, 'shared-claims'),
       identity: { hostName, extensionIds: [id], productName: app },
       registrations: [store],
     })

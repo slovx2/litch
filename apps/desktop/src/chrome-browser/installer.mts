@@ -10,6 +10,7 @@ export interface ChromeInstallOptions {
   assets: string
   nativeBinary: string
   socketPath: string
+  claimLockDirectory?: string
   /** 宿主清单 allowed_origins 与原生宿主都认的扩展 ID（chromeExtensionIds）。 */
   extensionIds: readonly string[]
   /** 只给隔离验收指定：清单写到这些目录，不写系统位置（Windows 照样写注册表）。 */
@@ -42,6 +43,7 @@ async function manifestDirectories(root: string): Promise<string[]> {
   ]
 }
 
+import { chromeClaimDirectory } from '../../../../packages/chrome-bridge/src/claim-directory.mjs'
 // 路径选择和系统登记属于 Litch 外壳，库只接显式的存储端口。
 import { ChromeInstaller as Installer } from '../../../../packages/chrome-bridge/src/installer.mjs'
 import { FileRegistrationStore } from '../../../../packages/chrome-bridge/src/registration.mjs'
@@ -59,6 +61,11 @@ export class ChromeInstaller {
     // 随机令牌和原有目录形状不变；存储目录的异步探测延到 prepare。
     this.base = new Installer({
       ...options,
+      claimLockDirectory:
+        options.claimLockDirectory ??
+        (options.manifestDirectories
+          ? join(options.root, 'claims')
+          : chromeClaimDirectory(homedir(), process.platform, process.env.LOCALAPPDATA)),
       identity: {
         hostName: CHROME_HOST_NAME,
         extensionIds: options.extensionIds,

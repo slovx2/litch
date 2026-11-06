@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { chmod, mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import {
   type ChromeHostIdentity,
   type RegistrationPolicy,
@@ -14,6 +14,8 @@ export interface ChromeInstallOptions {
   assets: string
   nativeBinary: string
   socketPath: string
+  /** 合作宿主必须传同一每用户目录；测试只传隔离目录。 */
+  claimLockDirectory: string
   identity: ChromeHostIdentity
   /** 完整 CHA 用 ['chrome-host']；独立 Go 入口用 []。 */
   nativeArgs: readonly string[]
@@ -72,6 +74,8 @@ export class ChromeInstaller {
   private options: ChromeInstallOptions
   constructor(options: ChromeInstallOptions) {
     validateChromeIdentity(options.identity)
+    if (!isAbsolute(options.claimLockDirectory))
+      throw new Error('Chrome claim lock directory must be absolute')
     this.options = options
     this.extensionDirectory = join(options.root, 'extension')
     this.configPath = join(options.root, 'native-config.json')
@@ -115,6 +119,7 @@ export class ChromeInstaller {
       socketPath,
       token: this.token,
       extensionIds: identity.extensionIds,
+      claimLockDirectory: this.options.claimLockDirectory,
     })
     await writeFile(launcher.path, launcher.text, { mode: 0o700 })
     await chmod(launcher.path, 0o700)

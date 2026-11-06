@@ -84,11 +84,24 @@ test('导入与创建无副作用；显式启动只连自己的 host，停止只
   assert.equal(f.sent[0].minProtocol, 1)
   assert.equal(f.events[0]!.listeners.size, 2)
   await runtime.stop()
+  assert.equal(f.ports[0].onMessage.listeners.size, 0)
+  assert.equal(f.ports[0].onDisconnect.listeners.size, 0)
   assert.deepEqual([...f.events[0]!.listeners], [unrelated])
   assert.ok(f.events.slice(1).every((event) => event.listeners.size === 0))
   await runtime.start()
   assert.equal(f.hosts.length, 2)
   await runtime.stop()
+})
+
+test('断链撤掉旧 port 监听，停止后不重连', async () => {
+  const f = fixture()
+  const runtime = createExtensionRuntime(f.options)
+  await runtime.start()
+  f.ports[0].disconnect()
+  assert.equal(f.ports[0].onMessage.listeners.size, 0)
+  assert.equal(f.ports[0].onDisconnect.listeners.size, 0)
+  await runtime.stop()
+  assert.equal(f.hosts.length, 1)
 })
 
 test('两个身份并存，协议不变，产品展示和持久状态各自独立', async () => {

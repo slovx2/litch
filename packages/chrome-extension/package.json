@@ -14,13 +14,18 @@
       "types": "./dist/chrome-extension/src/pointer-world.d.mts",
       "import": "./dist/chrome-extension/src/pointer-world.mjs"
     },
-    "./build": "./build.mjs"
+    "./build": {
+      "types": "./build.d.mts",
+      "import": "./build.mjs"
+    }
   },
   "files": [
     "dist",
     "README.md",
+    "COMPATIBILITY.md",
     "LICENSE",
-    "build.mjs"
+    "build.mjs",
+    "build.d.mts"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

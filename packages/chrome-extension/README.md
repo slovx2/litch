@@ -2,7 +2,7 @@
 
 这是 MV3 service worker、标签租约、受限 CDP 执行器和 isolated-world 光标的库。它不交付商店扩展，不注册 native host，也不在 import 时启动。Litch 的实例位于 `apps/chrome-extension`。
 
-内部包名 `chrome-extension-internal` 尚未决定公开 npm 作用域。版本跟仓库统一；先 `npm run build --prefix packages/chrome-extension`、`npm pack --prefix packages/chrome-extension` 生成 tarball，用精确制品安装，例如 `npm install --save-exact ./chrome-extension-internal-0.34.1.tgz`。构建入口依赖精确的 esbuild 0.28.2；运行入口不加载 Node/Electron。
+内部包名 `chrome-extension-internal` 尚未决定公开 npm 作用域。版本跟仓库统一；先 `npm run build --prefix packages/chrome-extension`、`npm pack ./packages/chrome-extension` 生成 tarball，用精确制品安装，例如 `npm install --save-exact ./chrome-extension-internal-0.34.1.tgz`。构建入口依赖精确的 esbuild 0.28.2；运行入口不加载 Node/Electron。
 
 ```ts
 import { createExtensionRuntime } from 'chrome-extension-internal'
@@ -11,7 +11,7 @@ const runtime = createExtensionRuntime({
   chrome,
   identity: {
     hostName: 'example.automation',
-    extensionIds: [chrome.runtime.id], // 实际集成应使用构建时固定的允许列表
+    extensionIds: [EXTENSION_ID], // 构建时固定的允许列表
     productName: 'Example',
   },
   protocol: { min: 1, max: 1 },
@@ -31,6 +31,8 @@ await runtime.stop()
 
 AI 工具定义与宿主侧执行器在 `chrome-bridge-internal`，不是通过网页消息调用本库。wire 类型来自 automation-contracts 唯一源；v1 中 `litchVersion`/`litchOutdated` 字段名是既有线上协议，不代表默认信任 Litch 身份。光标的 isolated-world 私有符号也保留原名以保持页面观察语义，不作为跨扩展信任凭证。
 
-测试：`npm run test --prefix packages/chrome-extension`；完整隔离 Chrome 链路见 `scripts/chrome-e2e/README.md`。正式 Chrome 商店签名安装、其他宿主产品打包和真实用户 profile 不在这些测试内。不同扩展不能同时 attach 同一标签的 debugger，失败应交还用户，不能强抢。
+测试：`npm run test --prefix packages/chrome-extension`；完整隔离 Chrome 链路见 `scripts/chrome-e2e/README.md`。正式 Chrome 商店签名安装、其他宿主产品打包和真实用户 profile 不在这些测试内。Chrome 实际允许多个扩展 attach 同一标签；库先用 getTargets 拒绝已附着的目标，attach 后验证目标仍存在并附着。没有其他调试器时，单个 Litch 的正常认领不受影响。
 
 按随包 LICENSE 的 MIT 条款分发。未包含他人产品素材或私钥；宿主自己发布和审核其扩展实例。
+
+**互斥前提：两个宿主都使用新组件，且显式配置同一共享文件锁目录。** `list/new` 的真实 targetId 元数据在已有 claim.args 中传给 Go，原生 host 先持有系统锁才转发 claim；失败返回 busy。attach 前仍核对目标没有变化及没有已有调试器。只用 getTargets 的旧方案已复现 5 轮中 4 轮双方成功；后置 attached 布尔值无法辨识连接者，不能代替系统锁。旧扩展没有 metadata 时保留原协议行为，未加入锁约定的扩展/DevTools 不受文件锁仲裁。路径、生命周期和 WakeQora 接线见 chrome-bridge 包 README，最终测试与哈希见 [COMPATIBILITY.md](./COMPATIBILITY.md)。[Chrome API](https://developer.chrome.com/docs/extensions/reference/api/debugger#type-TargetInfo)

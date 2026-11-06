@@ -131,10 +131,49 @@ export async function requireGrant(
   return grant
 }
 
-export async function attach(state: ExtensionState, tabId: number): Promise<void> {
+export async function targetIdOf(state: ExtensionState, tabId: number): Promise<string> {
+  const targets: Array<{ tabId?: number; id: string }> = await state.chrome.debugger.getTargets()
+  const target = targets.find((target) => target.tabId === tabId)
+  if (!target || !/^[a-fA-F0-9]{32}$/.test(target.id))
+    throw new ChromeFault(
+      'staleDocument',
+      'Chrome target identity is unavailable. List tabs again.',
+    )
+  return target.id
+}
+
+export async function attach(
+  state: ExtensionState,
+  tabId: number,
+  expectedTargetId?: string,
+): Promise<void> {
+  // Chrome 可让多个扩展同时 attach；不能依靠 attach 自动拒绝已经存在的调试器。
+  // 合作宿主先在原生层取得文件锁；此检查同时保护未加入锁约定的其他调试器。
+  const targets: Array<{ tabId?: number; attached: boolean; id?: string }> =
+    await state.chrome.debugger.getTargets()
+  if (
+    expectedTargetId &&
+    !targets.some((target) => target.tabId === tabId && target.id === expectedTargetId)
+  )
+    throw new ChromeFault(
+      'staleDocument',
+      'Chrome target changed before attaching. List tabs again.',
+    )
+  if (targets.some((target) => target.tabId === tabId && target.attached))
+    throw new ChromeFault(
+      'busy',
+      'Another debugger is already attached to this Chrome tab. Release it before claiming; do not take over its connection.',
+    )
+  let attached = false
   try {
     await state.chrome.debugger.attach({ tabId }, '1.3')
+    attached = true
+    const current: Array<{ tabId?: number; attached: boolean }> =
+      await state.chrome.debugger.getTargets()
+    if (!current.some((target) => target.tabId === tabId && target.attached))
+      throw new Error('Chrome target disappeared after attach')
   } catch {
+    if (attached) await state.chrome.debugger.detach({ tabId }).catch(() => {})
     throw new ChromeFault(
       'targetUnavailable',
       'Chrome cannot attach to this tab. Close its DevTools or another debugger, then claim again.',

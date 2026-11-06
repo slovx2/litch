@@ -1,5 +1,6 @@
 export type { BridgeOptions } from './bridge.mjs'
 export { ChromeBridge, ChromeBridgeError, incompatibleMessage } from './bridge.mjs'
+export { chromeClaimDirectory } from './claim-directory.mjs'
 export { createBrowserDispatcher, targetsChrome } from './dispatcher.mjs'
 export type { ChromeExecutorOptions } from './executor.mjs'
 export { ChromeExecutor, chromeFailure } from './executor.mjs'

@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/slovx2/litch/internal/hostplatform"
 )
@@ -28,9 +29,10 @@ func socketPathValid(path string) bool {
 }
 
 type Config struct {
-	SocketPath   string   `json:"socketPath"`
-	Token        string   `json:"token"`
-	ExtensionIDs []string `json:"extensionIds"`
+	SocketPath         string   `json:"socketPath"`
+	Token              string   `json:"token"`
+	ExtensionIDs       []string `json:"extensionIds"`
+	ClaimLockDirectory string   `json:"claimLockDirectory,omitempty"`
 }
 
 var extensionIDPattern = regexp.MustCompile(`^[a-p]{32}$`)
@@ -86,13 +88,31 @@ func Run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 		return errors.New("Chrome bridge is not running")
 	}
 	defer conn.Close()
+	locks, err := newClaimLocks(config.ClaimLockDirectory)
+	if err != nil {
+		return errors.New("Chrome native host claim lock directory is unavailable")
+	}
+	defer locks.close()
 	hello, _ := json.Marshal(map[string]string{"kind": "nativeHello", "token": config.Token, "origin": origin})
 	if _, err = conn.Write(append(hello, '\n')); err != nil {
 		return errors.New("Chrome bridge handshake failed")
 	}
 	done := make(chan error, 2)
-	go func() { done <- NativeToBridge(input, conn) }()
-	go func() { done <- BridgeToNative(conn, output) }()
+	writer := &serialWriter{output: conn}
+	go func() { done <- nativeToBridge(input, writer, locks.after) }()
+	go func() {
+		done <- bridgeToNative(conn, output, func(frame []byte) (bool, error) {
+			reply, err := locks.before(frame)
+			if err != nil {
+				return false, err
+			}
+			if reply != nil {
+				_, err = writer.Write(append(reply, '\n'))
+				return false, err
+			}
+			return true, nil
+		})
+	}()
 	select {
 	case err = <-done:
 	case <-ctx.Done():
@@ -105,6 +125,21 @@ func Run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 }
 
 func NativeToBridge(input io.Reader, output io.Writer) error {
+	return nativeToBridge(input, output, nil)
+}
+
+type serialWriter struct {
+	mu     sync.Mutex
+	output io.Writer
+}
+
+func (writer *serialWriter) Write(data []byte) (int, error) {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	return writer.output.Write(data)
+}
+
+func nativeToBridge(input io.Reader, output io.Writer, after func([]byte)) error {
 	for {
 		var header [4]byte
 		if _, err := io.ReadFull(input, header[:]); err != nil {
@@ -121,6 +156,9 @@ func NativeToBridge(input io.Reader, output io.Writer) error {
 		if !json.Valid(frame) {
 			return errors.New("invalid Chrome native JSON")
 		}
+		if after != nil {
+			after(frame)
+		}
 		if _, err := output.Write(append(frame, '\n')); err != nil {
 			return err
 		}
@@ -128,12 +166,25 @@ func NativeToBridge(input io.Reader, output io.Writer) error {
 }
 
 func BridgeToNative(input io.Reader, output io.Writer) error {
+	return bridgeToNative(input, output, nil)
+}
+
+func bridgeToNative(input io.Reader, output io.Writer, before func([]byte) (bool, error)) error {
 	scanner := bufio.NewScanner(input)
 	scanner.Buffer(make([]byte, 4096), 512*1024+1)
 	for scanner.Scan() {
 		frame := scanner.Bytes()
 		if !json.Valid(frame) {
 			return errors.New("invalid Chrome bridge JSON")
+		}
+		if before != nil {
+			forward, err := before(frame)
+			if err != nil {
+				return err
+			}
+			if !forward {
+				continue
+			}
 		}
 		var header [4]byte
 		binary.LittleEndian.PutUint32(header[:], uint32(len(frame)))

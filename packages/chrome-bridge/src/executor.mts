@@ -18,6 +18,7 @@ import { ChromePage } from './page.mjs'
 import { executePageTool } from './tools.mjs'
 
 interface ListedTab extends ChromeTabState {
+  targetId?: string
   origins: string[]
   busy: boolean
 }
@@ -304,7 +305,12 @@ export class ChromeExecutor implements BrowserExecutor {
       token.instanceId,
       {
         op: 'claim',
-        args: { grant, expectedUrl: token.tab.url, expectedGeneration: token.tab.generation },
+        args: {
+          grant,
+          expectedUrl: token.tab.url,
+          expectedGeneration: token.tab.generation,
+          ...(token.tab.targetId ? { targetId: token.tab.targetId } : {}),
+        },
       },
       context.signal,
     )
@@ -528,7 +534,7 @@ export class ChromeExecutor implements BrowserExecutor {
       ) {
         const instanceId = this.instance(args.targetId)
         await this.permitInstance(invocation, context, instanceId)
-        const tab = await this.options.bridge.call<ChromeTabState>(
+        const tab = await this.options.bridge.call<ChromeTabState & { targetId?: string }>(
           instanceId,
           { op: 'new', args: {} },
           context.signal,

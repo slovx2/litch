@@ -31,6 +31,16 @@ test('原生握手验证 token/来源，协议 1 往返与重连撤销在途调�
     await rm(root, { recursive: true, force: true })
   })
   await bridge.start()
+  const other = new ChromeBridge({
+    socketPath: path,
+    token,
+    extensionIds: [id],
+    version: '0.34.1',
+    productName: 'Other',
+    protocol: { min: 1, max: 1 },
+  })
+  await assert.rejects(other.start(), /EADDRINUSE/)
+  await other.close() // 启动失败的实例不能 unlink 第一实例的套接字。
   const open = async () => {
     const socket = connect(path)
     sockets.push(socket)

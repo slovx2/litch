@@ -1,5 +1,5 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto'
-import { chmod, mkdir, rm } from 'node:fs/promises'
+import { chmod, mkdir } from 'node:fs/promises'
 import { createServer, type Server, type Socket } from 'node:net'
 import { dirname } from 'node:path'
 import {
@@ -92,16 +92,22 @@ export class ChromeBridge {
   }
 
   async start(): Promise<void> {
+    if (this.server) throw new Error('Chrome bridge is already started')
     // Windows 上是命名管道，不是文件：不建目录、不改权限，靠连接令牌鉴权
     const pipe = isPipe(this.options.socketPath)
     if (!pipe) await mkdir(dirname(this.options.socketPath), { recursive: true, mode: 0o700 })
     // socketPath 属于本次桌面实例，安装配置始终指向这一份；不删除别的服务路径。
     const server = createServer((socket) => this.accept(socket))
     this.server = server
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject)
-      server.listen(this.options.socketPath, resolve)
-    })
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject)
+        server.listen(this.options.socketPath, resolve)
+      })
+    } catch (error) {
+      this.server = null
+      throw error
+    }
     if (!pipe) await chmod(this.options.socketPath, 0o600)
   }
 
@@ -305,6 +311,6 @@ export class ChromeBridge {
     const server = this.server
     this.server = null
     if (server) await new Promise<void>((resolve) => server.close(() => resolve()))
-    if (!isPipe(this.options.socketPath)) await rm(this.options.socketPath, { force: true })
+    // Node 关闭自己监听的 Unix socket 时会 unlink；再按路径删可能删到刚重启的另一个宿主。
   }
 }
