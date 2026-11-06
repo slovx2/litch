@@ -34,6 +34,8 @@ import { GuideSteps } from './status.tsx'
 
 /** “再试一次”有了结果之后的那条提示留多久 */
 const TOLD_MS = 6000
+/** 重启命令回了以后，等停止或重连的状态推过来最多这么久；推送可能晚于命令的回复 */
+const ANSWER_GRACE_MS = 2000
 
 /** 命令行的原话，照原样摆出来 */
 function Said({ detail }: { detail: string | null }) {
@@ -190,8 +192,11 @@ export function ServiceSection({
     target?.focus({ preventScroll: true })
   }, [reveal])
 
-  /** 点了“再试一次”，还没有结果：sent 是命令还没回，answered 是命令回了、等重启定下来 */
-  const [retrying, setRetrying] = useState<false | 'sent' | 'answered'>(false)
+  /**
+   * 点了“再试一次”，还没有结果：sent 是命令还没回，answered 是命令回了、等重启的状态推过来，
+   * expired 是回了之后一直没见到重启的任何一步
+   */
+  const [retrying, setRetrying] = useState<false | 'sent' | 'answered' | 'expired'>(false)
   /** 点了之后看到过它在停、在起或在重新连接：再回到一个定下来的状态，就是这一次有了结果 */
   const left = useRef(false)
   const linking =
@@ -205,8 +210,8 @@ export function ServiceSection({
       left.current = true
       return
     }
-    // 命令回了却没见到重启的任何一步，也算有了结果，按钮不能一直停在“正在重新连接”
-    if (!left.current && retrying !== 'answered') return
+    // 命令回了、等够了也没见到重启的任何一步，也算有了结果，按钮不能一直停在“正在重新连接”
+    if (!left.current && retrying !== 'expired') return
     left.current = false
     setRetrying(false)
     // 没连上的话原因在上面“这台设备”一节里；别的没换成的情形这一节自己会说。这里只报两种：还是忙，换成了
@@ -221,6 +226,15 @@ export function ServiceSection({
       })
     }
   }, [retrying, linking, restarting, online, notice, to])
+  // 回复先到、重启的状态还没推过来时不急着收尾，等一会儿；看到了就交给上面按状态收尾
+  useEffect(() => {
+    if (retrying !== 'answered' || left.current || linking || restarting) return
+    const timer = setTimeout(
+      () => setRetrying((now) => (now === 'answered' ? 'expired' : now)),
+      ANSWER_GRACE_MS,
+    )
+    return () => clearTimeout(timer)
+  }, [retrying, linking, restarting])
 
   /**
    * 明确重试走安全停止与重连；普通连接不会越过本次应用运行中的暂不升级选择。
