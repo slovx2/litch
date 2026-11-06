@@ -1,3 +1,4 @@
+// 由 scripts/generate-automation-contracts.mjs 生成；请修改 automation-contracts/src/litch/client-tools-computer.mts。
 // Computer Use 的工具定义（命名空间 litch_computer），建会话时放进 `thread/start.dynamicTools`。
 // 执行方是 Litch 桌面端（apps/desktop/src/computer-use/），macOS 和 Windows 各有一个助手。
 // 说明是写给模型看的，用英文。
@@ -6,9 +7,9 @@
 // 命名空间的总说明、app 参数的说明不同；Windows 多一个可选的 window（窗口号）。平台由核心按桌面报的挑
 // （client-tools-specs.mts 的 ClientToolSpecContext.desktopPlatform），认不出的平台按 macOS。
 //
-// 这个文件只引用 client-tools.mts，设备进程和核心也能直接引用它。
+// 只引用公共工具类型；设备进程和核心消费由它生成的 protocol 自包含投影。
 
-import { CLIENT_TOOL_NAMESPACE, type ClientToolNamespaceSpec } from './client-tools.mjs'
+import type { ClientToolNamespaceSpec } from './automation-tool-spec.mjs'
 
 /** 各工具的名字（执行器按它分派） */
 export const COMPUTER_TOOL = {
@@ -179,7 +180,7 @@ function discreteComputerToolsSpec(platform: ComputerPlatform): ClientToolNamesp
   const win = platform === 'win32'
   return {
     type: 'namespace',
-    name: CLIENT_TOOL_NAMESPACE.computer,
+    name: 'litch_computer',
     description: NAMESPACE_DESCRIPTION[platform],
     tools: [
       {
