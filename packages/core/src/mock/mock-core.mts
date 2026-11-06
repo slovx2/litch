@@ -2814,6 +2814,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       const { deviceId } = params as Commands['device.restartSessions']['params']
       return { sessions: restart.sessions(deviceId) }
     }
+    if (name === 'device.serviceActivity') {
+      const { deviceId } = params as Commands['device.serviceActivity']['params']
+      return { busy: app.devices.find((device) => device.id === deviceId)?.upgrade?.busy ?? [] }
+    }
     if (name === 'device.upgradeService') {
       const { deviceId, mode } = params as Commands['device.upgradeService']['params']
       remoteUpgrade.run(deviceId, mode)

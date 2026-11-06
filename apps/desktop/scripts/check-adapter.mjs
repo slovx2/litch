@@ -657,7 +657,7 @@ try {
         detail,
         pid: old.pid,
       })
-      // 同一次运行里再打开一次：不闲的不记仇，再问一遍（闲了就能换）
+      // 同一次运行里普通重连不再隐式停止，等待用户在升级提示中选择。
       const again = lines.find((line) => line.reopened).reopened
       assert.equal(again.upgrade.reason, 'busy')
       assert.deepEqual([again.view.reason, again.view.busy], ['busy', upgrade.busy])
@@ -665,7 +665,6 @@ try {
         startArgs(old.home, '--ssh=off'),
         stopArgs(old.home),
         startArgs(old.home, '--ssh=off'),
-        stopArgs(old.home),
       ])
     },
   )

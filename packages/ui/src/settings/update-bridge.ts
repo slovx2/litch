@@ -4,6 +4,7 @@
 import type { UpdateState } from '@litch/core'
 
 export interface UpdateView {
+  version?: string
   /** 这台机器出不出更新：没打包的开发版本、清单里没有这个平台的（Linux、Intel 的 Mac）都是 false */
   supported: boolean
   /** 设置里“自动检查更新”开着没有 */

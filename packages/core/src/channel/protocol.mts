@@ -888,13 +888,18 @@ export interface Commands {
   }
   /** 立刻重连一台设备。正在等重连或已经失败时才有效果 */
   'device.reconnect': { params: { deviceId: string }; result: Record<string, never> }
+  /** 设备权威的只读忙闲；未声明能力时 busy 为 null。 */
+  'device.serviceActivity': {
+    params: { deviceId: string }
+    result: { busy: import('../model-service.mjs').ServiceBusyView[] | null }
+  }
   /**
    * 远程设备服务的一键升级（界面上用户确认过才发）。start：在那台机器上装应用的这一版、空闲时换上
-   * （装着的已经不旧时只换）；retry：等空闲时现在再请一次；force：立即换上，进行中的事会被打断。
+   * （装着的已经不旧时只换）；retry：等空闲时现在再请一次；cancel：取消等待。force 明确拒绝。
    * 立刻返回，进度和结果在设备显示数据的 remoteUpgrade 里；做不了（本机设备、认不出安装方式、上一步没做完）是 rejected
    */
   'device.upgradeService': {
-    params: { deviceId: string; mode: 'start' | 'retry' | 'force' }
+    params: { deviceId: string; mode: 'start' | 'retry' | 'force' | 'cancel' }
     result: Record<string, never>
   }
   /**
@@ -903,7 +908,7 @@ export interface Commands {
    * 立刻返回，进度和结果在设备显示数据的 restart 里；现在不能做（没连上、有别的东西管着服务、上一次没做完）是 rejected
    */
   'device.restartService': {
-    params: { deviceId: string; mode: 'start' | 'force' | 'dismiss' }
+    params: { deviceId: string; mode: 'start' | 'force' | 'dismiss' | 'auto' | 'cancel' }
     result: Record<string, never>
   }
   /** 现在重启设备服务会打断哪些会话：回合在跑（包括停下来等人的）、有后台任务在跑。界面在确认框里列出来 */

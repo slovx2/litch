@@ -1136,7 +1136,13 @@ export function createCore(options: CoreOptions): Core {
           return {}
         case 'device.restartService': {
           const { deviceId, mode } = params as Commands['device.restartService']['params']
-          if (mode !== 'start' && mode !== 'force' && mode !== 'dismiss') {
+          if (
+            mode !== 'start' &&
+            mode !== 'force' &&
+            mode !== 'dismiss' &&
+            mode !== 'auto' &&
+            mode !== 'cancel'
+          ) {
             throw new ChannelError('rejected', '不认识的做法')
           }
           deviceOf(deviceId).restartService(mode)
@@ -1146,9 +1152,13 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId } = params as Commands['device.restartSessions']['params']
           return { sessions: deviceOf(deviceId).restartSessions() }
         }
+        case 'device.serviceActivity': {
+          const { deviceId } = params as Commands['device.serviceActivity']['params']
+          return { busy: await deviceOf(deviceId).serviceActivity() }
+        }
         case 'device.upgradeService': {
           const { deviceId, mode } = params as Commands['device.upgradeService']['params']
-          if (mode !== 'start' && mode !== 'retry' && mode !== 'force') {
+          if (mode !== 'start' && mode !== 'retry' && mode !== 'force' && mode !== 'cancel') {
             throw new ChannelError('rejected', '不认识的做法')
           }
           deviceOf(deviceId).upgradeService(mode)

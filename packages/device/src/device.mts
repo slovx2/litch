@@ -360,6 +360,7 @@ export class DeviceServer {
     if (this.control) info.extensions.push(EXTENSION.deviceSettings)
     if (this.control) info.extensions.push(EXTENSION.harnessRuntime)
     // 服务的来历也是主进程给的：有它在管，声明过的客户端才问得到“在跑的是哪一份”
+    if (this.control) info.extensions.push(EXTENSION.serviceActivity)
     if (this.control) info.extensions.push(EXTENSION.deviceService)
     if (this.control) info.extensions.push(EXTENSION.devicePower)
     // 给设备装 harness：装的事在主进程里做（登记表、用户的环境、装完重启它），也是有它在管才有
@@ -702,6 +703,7 @@ export class DeviceServer {
       stateDir: options.stateDir,
       info,
       service: () => serviceInfo(this.control?.state ?? null),
+      activity: () => this.activity(),
       index: this.index,
       workspaces: this.workspaces,
       catalog: new HarnessCatalog(),
@@ -973,11 +975,16 @@ export class DeviceServer {
   private async activity(): Promise<DeviceActivity> {
     const running = this.harnesses().filter((source) => source.managed?.state === 'running')
     const busy = await Promise.all(running.map((source) => this.busy(source.id)))
+    const background = this.background
+      .runningThreads()
+      .flatMap((id) => this.background.tasks(id).filter((task) => task.status === 'running'))
     return {
       turns: running.filter((_, index) => busy[index]).map((source) => source.id),
       processes: this.layer.deviceProcesses.running,
       connections: this.sessions.size,
       tasks: this.tasks?.running ?? 0,
+      background: background.length,
+      backgroundNames: background.slice(0, 8).map((task) => task.title.slice(0, 160)),
     }
   }
 

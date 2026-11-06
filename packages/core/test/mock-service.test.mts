@@ -206,11 +206,11 @@ test('别的没换成的情形没有“再试一次”：重新连接不会把�
   }
 })
 
-test('远程设备的一键升级四出：马上换上、等空闲（还有回合等人就照旧等，立即换上不等）、下载失败、配方没跟上', async () => {
+test('远程设备的一键升级四出：马上换上、等空闲与取消（拒绝远程强制）、下载失败、配方没跟上', async () => {
   const { channel, devices, flush, say } = setup()
   await settle()
   const build = () => devices.get('build') as DeviceView
-  const run = (mode: 'start' | 'retry' | 'force') =>
+  const run = (mode: 'start' | 'retry' | 'force' | 'cancel') =>
     channel.command('device.upgradeService', { deviceId: 'build', mode })
   const until = async (step: string) => {
     for (let n = 0; n < 40 && build().remoteUpgrade?.phase.step !== step; n++) await flush(200)
@@ -243,8 +243,9 @@ test('远程设备的一键升级四出：马上换上、等空闲（还有回�
   await flush()
   await until('waiting')
   assert.equal(build().service?.version, '0.6.0', '还在等：旧的接着用')
-  await run('force')
-  await until('done')
+  await assert.rejects(run('force'), /远程升级只允许空闲时换上/)
+  await run('cancel')
+  await until('idle')
 
   await say('b2', '远程下载失败', 'build')
   await flush()

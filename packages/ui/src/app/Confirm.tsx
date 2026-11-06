@@ -1,12 +1,13 @@
 import { type ReactNode, useEffect, useRef } from 'react'
 
 interface ConfirmProps {
+  className?: string
   title: string
   note?: string
   /** 一句话说不完的（几件事、一条命令、一串原因）放在这里，排在 note 后面 */
   children?: ReactNode
-  yes: string
-  no: string
+  yes: ReactNode
+  no: ReactNode
   /** “是”那个按钮的样子：danger 是做了找不回来、会打断什么的；primary 只是要人点头。默认 danger */
   tone?: 'danger' | 'primary'
   onYes(): void
@@ -19,6 +20,7 @@ interface ConfirmProps {
  * 一打开焦点在“取消”上：顺手按回车不会把事做了。
  */
 export function Confirm({
+  className,
   title,
   note,
   children,
@@ -39,7 +41,7 @@ export function Confirm({
   return (
     <dialog
       ref={dialog}
-      className="modal confirm"
+      className={`modal confirm ${className ?? ''}`}
       aria-label={title}
       onClose={onClose}
       onClick={(event) => {

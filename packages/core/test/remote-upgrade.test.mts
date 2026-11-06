@@ -54,6 +54,7 @@ interface WorldOptions {
   stops?: (RemoteStopResult | Error)[]
   /** 不给能力（手机端） */
   incapable?: boolean
+  reconnectFailure?: boolean
   /** 连不上的原因：给了就一直连不上 */
   failure?: ConnectError
 }
@@ -94,6 +95,8 @@ function world(options: WorldOptions = {}) {
   const remote: RemotePlatform = {
     opener: () => async (signal) => {
       if (options.failure) throw options.failure
+      if (options.reconnectFailure && calls.stop.length > 0)
+        throw new ConnectError('unreachable', phrase('ssh.unreachable'), true)
       return far.open(signal)
     },
     discover: async () => [],
@@ -141,7 +144,7 @@ function world(options: WorldOptions = {}) {
     return view
   }
   const upgradeView = (): RemoteUpgradeView | null => device().remoteUpgrade
-  const run = (mode: 'start' | 'retry' | 'force') =>
+  const run = (mode: 'start' | 'retry' | 'force' | 'cancel') =>
     core.command('device.upgradeService', { deviceId: 'ssh-1', mode }, never)
   return { core, fake: fake.device, far, time, calls, device, upgradeView, run }
 }
@@ -220,19 +223,21 @@ test('不闲：装好了等着换，每次连上、连着时每 5 分钟再请�
   assert.equal(w.calls.stop.length, 4, '换上了：不再等')
 })
 
-test('立即换上：不等它闲，不带 --if-idle 地停；只能在等空闲时用', async () => {
+test('远程拒绝强制升级；取消等待后不再停止服务', async () => {
   const busy = { result: 'busy' as const, busy: [{ reason: 'clients', harnesses: [], count: 2 }] }
   const w = world({ stops: [busy] })
   w.core.start()
   await flush()
-  await assert.rejects(w.run('force'), /没有在等服务空闲/)
+  await assert.rejects(w.run('force'), /远程升级只允许空闲时换上/)
   await w.run('start')
   await flush()
   assert.equal(w.upgradeView()?.phase.step, 'waiting')
-  await w.run('force')
+  await assert.rejects(w.run('force'), /远程升级只允许空闲时换上/)
+  await w.run('cancel')
+  w.time.advance(SWAP_RETRY_MS * 2)
   await flush()
-  assert.deepEqual(w.calls.stop, [true, false])
-  assert.equal(w.upgradeView()?.phase.step, 'done')
+  assert.deepEqual(w.calls.stop, [true])
+  assert.equal(w.upgradeView()?.phase.step, 'idle')
 })
 
 test('现在再试一次：等空闲时马上再请一次，还忙就接着等', async () => {
@@ -438,4 +443,39 @@ test('旧到连不上（upgradeService）：按命令的位置认安装方式，
   assert.equal(view?.method, 'script')
   assert.equal(view?.action, 'upgrade')
   assert.equal(w.calls.inspect, 1)
+})
+
+test('一台远程安装失败不会阻塞另一台升级', async () => {
+  const bad = world({ install: () => ({ ok: false, at: 'download', code: 22, said: 'offline' }) })
+  const good = world()
+  bad.core.start()
+  good.core.start()
+  try {
+    await flush()
+    await Promise.all([bad.run('start'), good.run('start')])
+    await flush()
+    assert.equal(bad.upgradeView()?.phase.step, 'failed')
+    assert.equal(good.upgradeView()?.phase.step, 'done')
+    assert.deepEqual(bad.calls.stop, [])
+    assert.deepEqual(good.calls.stop, [true])
+  } finally {
+    bad.core.stop()
+    good.core.stop()
+  }
+})
+
+test('停服务后重连超时，给该设备失败结果而不是永久停在重连中', async () => {
+  const w = world({ reconnectFailure: true })
+  w.core.start()
+  try {
+    await flush()
+    await w.run('start')
+    await flush()
+    assert.equal(w.upgradeView()?.phase.step, 'reconnecting')
+    w.time.advance(120_000)
+    await flush()
+    assert.equal(w.upgradeView()?.phase.step, 'failed')
+  } finally {
+    w.core.stop()
+  }
 })

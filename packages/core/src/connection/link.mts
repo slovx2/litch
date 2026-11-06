@@ -225,6 +225,7 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.deviceProcesses,
                 // deviceService：声明了，runtime/info 的 device.service 里才有“在跑的是哪一份服务”
                 EXTENSION.deviceService,
+                EXTENSION.serviceActivity,
                 EXTENSION.devicePower,
                 EXTENSION.turnNotices,
                 // planConfirmation：声明了，Claude Code 和 Pi 的引擎在交计划时自己在回合里问要不要执行，

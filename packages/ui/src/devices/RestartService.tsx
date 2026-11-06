@@ -113,6 +113,7 @@ export function useRestart(deviceId: string, observe = true): RestartFlow {
         </Confirm>
       ) : null}
       {phase?.step === 'busy' &&
+      !device?.restart?.autoUpgrade &&
       (owners.get(deviceId) === owner || (observe && !owners.has(deviceId))) ? (
         <Confirm
           title={t('restart.busy.title', { name })}

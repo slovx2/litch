@@ -3,7 +3,7 @@
 //   1. 用户点“升级”、确认之后，经 ssh 在那台机器上装应用的这一版（安装脚本 --version，或者 brew upgrade）；
 //   2. 装好了马上请服务空闲时停下（device-stop --if-idle）。停了就重连，重连时 device-start 起的就是新版；
 //   3. 不闲就留着旧的接着用，记下“装好了、等着换”：之后每次连上、以及连着时每 5 分钟再请一次，换上了就清掉；
-//   4. 不闲时用户可以选“立即换上”，界面再确认一次（写明会打断什么）才不带 --if-idle 地停。
+//   4. 不闲时可取消等待；远程升级不提供强制停止。
 // 服务由前台或者服务管理器管着的（detached 为 false），只替用户装，不替用户换。认不出是怎么装的，不给按钮。
 // “等着换”只记在应用里（这个对象里），不进设备；应用退出就不等了，下次打开时装着的已经不旧，按钮叫“换上新版”。
 // 在那台机器上动手的是外壳（RemoteUpgradePlatform）；用户没确认过，这里不会叫 install 和 stop。
@@ -54,8 +54,8 @@ export interface ServiceUpgradeSeen {
   guide: ConnectGuide | null
 }
 
-/** 界面上的三种做法：start 升级（或者换上新版）；retry 现在再请一次空闲时停；force 立即换上（会打断） */
-export type UpgradeMode = 'start' | 'retry' | 'force'
+/** start 升级；retry 再检查空闲；cancel 取消等待。旧调用的 force 明确拒绝。 */
+export type UpgradeMode = 'start' | 'retry' | 'force' | 'cancel'
 
 export interface ServiceUpgrader {
   view(): RemoteUpgradeView | null
@@ -90,10 +90,15 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
   let job: Promise<void> | null = null
   /** 等空闲时下一次再请的定时器 */
   let retryTimer: (() => void) | null = null
+  let reconnectTimer: (() => void) | null = null
   const cancel = createCancel()
 
   const set = (next: RemoteUpgradePhase) => {
     phase = next
+    if (next.step !== 'reconnecting') {
+      reconnectTimer?.()
+      reconnectTimer = null
+    }
     options.changed()
   }
 
@@ -156,6 +161,7 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
       .catch((error: unknown) => log(`意外的错误：${String(error)}`))
       .finally(() => {
         job = null
+        if (phase.step === 'waiting') scheduleRetry()
       })
   }
 
@@ -201,6 +207,11 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
       case 'stopped':
         stopRetry()
         set({ step: 'reconnecting' })
+        reconnectTimer?.()
+        reconnectTimer = clock.setTimer(() => {
+          reconnectTimer = null
+          if (phase.step === 'reconnecting') failed('connect', null)
+        }, 120_000)
         options.reconnect()
         return
       case 'busy':
@@ -292,6 +303,10 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
         facts = null
       }
       const old = older()
+      if (state.online && !old) {
+        reconnectTimer?.()
+        reconnectTimer = null
+      }
       if (state.online && !old && phase.step !== 'idle' && phase.step !== 'done') {
         // 在跑的已经不旧了：换上了（不管是这边停的，还是用户自己换的）。之前没做成的那句也不用再说
         stopRetry()
@@ -313,8 +328,14 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
 
     run(mode) {
       if (!platform) throw new ChannelError('rejected', '这一端不能替用户升级远程设备的服务')
+      if (mode === 'force') throw new ChannelError('rejected', '远程升级只允许空闲时换上')
       if (job) throw new ChannelError('rejected', '上一步还没有做完')
-      if (mode === 'retry' || mode === 'force') {
+      if (mode === 'cancel') {
+        stopRetry()
+        set({ step: 'idle' })
+        return
+      }
+      if (mode === 'retry') {
         if (phase.step !== 'waiting') throw new ChannelError('rejected', '没有在等服务空闲')
         stopRetry()
         begin(() => stop(mode === 'retry', mode === 'retry'))
@@ -333,6 +354,7 @@ export function createServiceUpgrader(options: ServiceUpgraderOptions): ServiceU
     },
 
     dispose() {
+      reconnectTimer?.()
       stopRetry()
       cancel.abort()
     },

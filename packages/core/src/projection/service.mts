@@ -51,6 +51,7 @@ export function projectUpgrade(
             reason: entry.reason,
             harnesses: [...entry.harnesses],
             count: entry.count,
+            ...(entry.details ? { details: [...entry.details] } : {}),
           }))
         : [],
     detail: report.detail,

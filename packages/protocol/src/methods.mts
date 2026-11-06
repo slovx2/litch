@@ -427,6 +427,16 @@ export interface ClientRequests extends AcpControlsRequests {
    * 扩展。应答有两种形状：适配器的单个入口报它自己那个引擎（extensions.mts），
    * 设备服务的聚合面报设备和上面的各个 harness（device.mts）。原生 codex 不认识这个方法
    */
+  'litch/device/service/activity': {
+    params: Record<string, never>
+    result: {
+      turns: string[]
+      processes: number
+      tasks: number
+      background: number
+      backgroundNames: string[]
+    }
+  }
   'runtime/info': {
     params: Record<string, never>
     result: RuntimeInfoResponse | DeviceRuntimeInfo

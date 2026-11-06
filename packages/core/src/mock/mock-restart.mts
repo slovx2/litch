@@ -41,13 +41,20 @@ export interface MockRestart {
   sessions(deviceId: string): ServiceRestartSession[]
   /** 设备行下面点了“重试”：停了没连回来的那一台重新连上。不是这种情况返回 false */
   reconnect(deviceId: string): boolean
-  run(deviceId: string, mode: 'start' | 'force' | 'dismiss'): void
+  run(deviceId: string, mode: 'start' | 'force' | 'dismiss' | 'auto' | 'cancel'): void
 }
 
 export function createMockRestart(host: MockRestartHost): MockRestart {
   const { clock } = host
   const phases = new Map<string, ServiceRestartPhase>()
   const scenes = new Map<string, Scene>()
+  const automatic = new Set<string>()
+  const retries = new Map<string, () => void>()
+  const cancelAuto = (id: string) => {
+    automatic.delete(id)
+    retries.get(id)?.()
+    retries.delete(id)
+  }
   const later = (run: () => void, steps = 10) =>
     clock.setTimer(run, Math.max(host.stepMs * steps, 1))
 
@@ -72,10 +79,15 @@ export function createMockRestart(host: MockRestartHost): MockRestart {
       phase = { step: 'idle' }
       phases.delete(device.id)
     }
-    return { blocked: blockedOf(device), phase }
+    return {
+      blocked: blockedOf(device),
+      phase,
+      ...(automatic.has(device.id) ? { autoUpgrade: true } : {}),
+    }
   }
 
   const stopped = (deviceId: string, caught: string[]) => {
+    cancelAuto(deviceId)
     if (caught.length > 0) host.interrupt(deviceId, caught)
     set(
       deviceId,
@@ -120,7 +132,7 @@ export function createMockRestart(host: MockRestartHost): MockRestart {
     }, 20)
   }
 
-  return {
+  const result: MockRestart = {
     viewOf,
 
     sessions: (deviceId) => host.sessions(deviceId),
@@ -144,6 +156,12 @@ export function createMockRestart(host: MockRestartHost): MockRestart {
       const device = host.device(deviceId)
       if (!device) throw new ChannelError('notFound', `没有这台设备：${deviceId}`)
       const phase = phases.get(deviceId) ?? { step: 'idle' }
+      if (mode === 'cancel') {
+        cancelAuto(deviceId)
+        phases.delete(deviceId)
+        host.patch(deviceId, {})
+        return
+      }
       if (mode === 'dismiss') {
         if (phase.step === 'busy' || phase.step === 'done' || phase.step === 'failed') {
           set(deviceId, { step: 'idle' })
@@ -155,19 +173,31 @@ export function createMockRestart(host: MockRestartHost): MockRestart {
       }
       const why = blockedOf(device)
       if (why !== null) throw new ChannelError('rejected', `现在不能重启设备服务：${why}`)
+      cancelAuto(deviceId)
+      if (mode === 'auto') automatic.add(deviceId)
       const caught = mode === 'force' ? host.sessions(deviceId).map((entry) => entry.id) : []
       set(deviceId, { step: 'stopping' })
       later(() => {
-        if (mode === 'start' && scenes.get(deviceId) === 'busy') {
+        if (
+          mode !== 'force' &&
+          (scenes.get(deviceId) === 'busy' ||
+            (mode === 'auto' && host.sessions(deviceId).length > 0))
+        ) {
           scenes.delete(deviceId)
           set(deviceId, {
             step: 'busy',
             busy: [{ reason: 'deviceProcesses', harnesses: [], count: 1 }],
           })
+          if (automatic.has(deviceId))
+            retries.set(
+              deviceId,
+              clock.setTimer(() => result.run(deviceId, 'auto'), 30_000),
+            )
           return
         }
         stopped(deviceId, caught)
       })
     },
   }
+  return result
 }

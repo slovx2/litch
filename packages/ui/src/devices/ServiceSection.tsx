@@ -10,6 +10,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { nameOf } from '../app/device.ts'
 import { Fold } from '../app/Fold.tsx'
+import { Close } from '../app/icons.tsx'
 import { useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import { ForceConfirm, RemoteUpgradeNote } from './RemoteUpgrade.tsx'
@@ -165,13 +166,14 @@ export function ServiceSection({
   const online = device.connection === 'online'
   // 没连着时在跑的是哪一份说不准：上次知道的不摆出来
   const service = online ? device.service : null
+  const queued = device.restart?.autoUpgrade === true
   const remote = device.remoteUpgrade
   const notice = noticeOf(upgrade)
   /** 远程设备的一键升级在进行中，或者有没做成、换上了要说的 */
   const remoteBusy = remote !== null && remote.phase.step !== 'idle'
   const stale = staleService(device) || staleRemote(device) || remoteBusy
   /** 开没开。有“没换成”要说的时候默认开着；之后听用户的，那件事了结了也不自己合上 */
-  const [open, setOpen] = useState(stale || reveal)
+  const [open, setOpen] = useState(stale || reveal || queued)
   useEffect(() => {
     if (stale) setOpen(true)
   }, [stale])
@@ -218,17 +220,21 @@ export function ServiceSection({
   }, [retrying, linking, online, notice, to])
 
   /**
-   * 现在再试一次：就是重新连一次。外壳每次连本机都会比一遍版本，在跑的旧而且闲着才换；
-   * 不闲就照旧连上它，不打断谁
+   * 明确重试走安全停止与重连；普通连接不会越过本次应用运行中的暂不升级选择。
    */
   const retry = () => {
     left.current = false
     setRetrying(true)
-    channel.command('device.reconnect', { deviceId: device.id }).catch(() => setRetrying(false))
+    channel
+      .command('device.restartService', { deviceId: device.id, mode: 'start' })
+      .catch((error: unknown) =>
+        showToast({ id: 'service-retry', tone: 'err', lifeMs: 6000, text: () => String(error) }),
+      )
+      .finally(() => setRetrying(false))
   }
 
-  if (!online && !retrying && remote === null) return null
-  if (service === null && notice === null && remote === null) return null
+  if (!online && !retrying && remote === null && !queued) return null
+  if (service === null && notice === null && remote === null && !queued) return null
   const origin = service === null ? null : originOf(service, upgrade)
   const pill = remote ? remotePillOf(remote) : pillOf(upgrade)
   return (
@@ -342,12 +348,35 @@ export function ServiceSection({
               </button>
             </div>
           ) : null}
+          {device.restart?.autoUpgrade ? (
+            <div className="cfail-acts">
+              <span className="set-note">{t('service.batch.waiting')}</span>
+              <button
+                type="button"
+                className="mini"
+                disabled={device.restart.phase.step === 'stopping'}
+                onClick={() =>
+                  void channel.command('device.restartService', {
+                    deviceId: device.id,
+                    mode: 'cancel',
+                  })
+                }
+              >
+                <Close />
+                {t('service.batch.cancel')}
+              </button>
+            </div>
+          ) : null}
           {restart.dialogs}
           {remote ? <RemoteUpgradeNote device={device} view={remote} /> : null}
           {upgrade && notice ? (
             <UpgradeNote
               device={device}
-              upgrade={upgrade}
+              upgrade={
+                device.restart?.phase.step === 'busy'
+                  ? { ...upgrade, busy: device.restart.phase.busy }
+                  : upgrade
+              }
               notice={notice}
               retrying={retrying}
               onRetry={retry}

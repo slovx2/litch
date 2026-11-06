@@ -800,6 +800,7 @@ function createAppUpdater(): Updater | null {
 }
 
 const updateView = () => ({
+  version: app.getVersion(),
   supported: updater !== null && updatePlatform() !== null,
   auto: autoUpdateOn(),
   state: updater?.state() ?? ({ phase: 'idle' } as UpdateState),

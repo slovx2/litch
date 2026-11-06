@@ -7,7 +7,7 @@
 // 换版本的规矩（版本怎么比在 adapter-upgrade.mts）：
 //   - 在跑的和自带的一样、比自带的新、版本号比不出先后：直接用，绝不降级。
 //   - 在跑的比自带的旧（或者它没报自己的来历）：请它闲着的话停下（device-stop --if-idle），停了就用自带的重新拉起；
-//     不闲就照旧连它，下一次打开时再问。一次打开只试一回。
+//     不闲就照旧连它，交给用户选择；本次应用运行内普通重连不会越过这个选择。
 //   - 只替 device-start 拉起的服务换。前台运行的、brew services 或 systemd 管着的不动：
 //     停了它，管它的那一方会把旧的再拉起来，或者用户终端里的服务平白没了。
 //   - 重新拉起时，旧服务启动时带的参数（SSH 入口开没开、端口）原样带上，不替用户改主意。
@@ -434,6 +434,7 @@ export function localDevice(options: LocalDeviceOptions): LocalDevice {
   let last: DeviceStartResult | null = null
   let launched: DeviceStartResult | null = null
   let upgrade: UpgradeOutcome | null = null
+  let deferred: { key: string | null; busy: BusyReason[]; detail: string | null } | null = null
   const state = { last: () => last, launched: () => launched, upgrade: () => upgrade }
   if (options.entry) {
     return { open: unixSocketOpener(options.entry.replace(/^unix:\/\//, '')), ...state }
@@ -460,7 +461,7 @@ export function localDevice(options: LocalDeviceOptions): LocalDevice {
   /**
    * 试过、换不了的那几份服务，和当时的原因。同一份服务不再去请它停：
    * 它不认识这个请求的话问多少遍都一样，停到一半卡住的再来一遍只会让每次重连都多等上一阵。
-   * 不闲的不记：下一次打开时再问，闲了就换。
+   * 不闲的另记 deferred：本次应用运行内由明确升级动作处理。
    */
   const gaveUp = new Map<string, { reason: KeptReason; detail: string | null }>()
 
@@ -500,10 +501,13 @@ export function localDevice(options: LocalDeviceOptions): LocalDevice {
     // 不是 device-start 拉起的：有别的东西管着它的生死，不替它换
     if (found.service && !found.service.detached) return outcome(found, { reason: 'foreground' })
     const key = serviceKey(found)
+    if (deferred && deferred.key === key)
+      return outcome(found, { reason: 'busy', busy: deferred.busy, detail: deferred.detail })
     const before = key === null ? undefined : gaveUp.get(key)
     if (before) return outcome(found, before)
     const stop = await stopIdleDevice(adapter, home, env, signal, options.stopTimeoutMs)
     if (stop.kind === 'busy') {
+      deferred = { key, busy: stop.busy, detail: stop.detail }
       return outcome(found, { reason: 'busy', busy: stop.busy, detail: stop.detail })
     }
     if (stop.kind === 'unsupported') {

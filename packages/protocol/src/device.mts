@@ -74,6 +74,7 @@ export const EXTENSION = {
    * 设备信息的 `extensions` 里列了它，而且这条连接声明了它，才有这个字段。
    */
   deviceService: 'deviceService',
+  serviceActivity: 'serviceActivity',
   /** 本机服务的电源申请状态，定义在 device-power.mts。 */
   devicePower: 'devicePower',
   /**

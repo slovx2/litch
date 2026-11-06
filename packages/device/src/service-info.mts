@@ -24,6 +24,9 @@ export interface DeviceActivity {
   connections: number
   /** 在跑的定时任务运行有几个（tasks.mts）。换版本时不打断它们 */
   tasks: number
+  /** 已跟踪的后台工作；摘要限量返回，完整计数参与空闲判断 */
+  background: number
+  backgroundNames: string[]
 }
 
 /**

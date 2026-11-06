@@ -171,6 +171,13 @@ export interface SessionHost {
   info: DeviceInfo
   /** 正在运行的那份适配器服务的来历（service-info.mts）。没有主进程在管、它没报，都是 null */
   service(): DeviceInfo['service'] | null
+  activity?(): Promise<{
+    turns: string[]
+    processes: number
+    tasks: number
+    background: number
+    backgroundNames: string[]
+  }>
   index: ThreadIndex
   /** 设备级的工作区、会话归属、分区与置顶 */
   workspaces: Workspaces
@@ -550,6 +557,19 @@ export class ClientSession implements ClientToolPeer {
       return this.host.pairing.call(method, frame.params)
     }
     if (this.state !== 'ready') throw new ProtocolError(-32600, 'Not initialized')
+    if (method === 'litch/device/service/activity') {
+      if (!this.declared.has(EXTENSION.serviceActivity) || !this.host.activity)
+        throw new ProtocolError(-32601, 'Method not found')
+      return this.host
+        .activity()
+        .then(({ turns, processes, tasks, background, backgroundNames }) => ({
+          turns,
+          processes,
+          tasks,
+          background,
+          backgroundNames,
+        }))
+    }
     if (isObject(frame.params) && typeof frame.params.threadId === 'string') {
       const threadId = frame.params.threadId
       const manager = this.host.managers?.store.forThread(threadId)

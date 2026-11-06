@@ -621,3 +621,45 @@
   font-size: 12px;
   color: var(--ink-3);
 }
+
+/* 批量升级每台设备一行，状态与版本同行；窄窗口允许换行。 */
+.modal.confirm.upgrade-prompt {
+  width: min(calc(720px * var(--fs)), calc(100vw - 48px));
+}
+.upgrade-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 55vh;
+  overflow: auto;
+}
+.upgrade-device-row {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.upgrade-device-row label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.upgrade-device-row strong {
+  overflow-wrap: anywhere;
+}
+.upgrade-device-row .upgrade-state {
+  flex: 1 1 120px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.upgrade-device-row > .set-note {
+  flex: none;
+}
+.upgrade-device-row select {
+  margin-left: auto;
+  color: var(--ink);
+  background: var(--sunken);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+}

@@ -321,7 +321,9 @@ export interface Device {
   setConnectionPaused(paused: boolean): void
   /** 立刻重连。连着的时候是丢掉现在这条连接、从头再连一次 */
   retry(): void
-  /** 远程设备服务的一键升级：升级（或换上新版）、现在再请一次空闲时停、立即换上。做不了的抛 ChannelError */
+  /** 只读忙闲；旧服务未声明能力时为 null，不猜为空闲。 */
+  serviceActivity(): Promise<import('../model-service.mjs').ServiceBusyView[] | null>
+  /** 远程升级、重试与取消等待。做不了的抛 ChannelError。 */
   upgradeService(mode: UpgradeMode): void
   /** 重启设备服务：先空闲时停、确认过之后直接停、收起结果。做不了的抛 ChannelError */
   restartService(mode: RestartMode): void
@@ -670,6 +672,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let askingService: (() => void) | null = null
   /** 对面说了会报服务的来历，这一次却还没给：这时在跑的是哪一版还不知道 */
   let serviceDue = false
+  let activitySupported = false
   /**
    * 远程设备服务的一键升级：在跑的比应用旧时设备详情里那个“升级”背后的状态（service-upgrade.mts）。
    * 本机设备、核心没给这项能力时没有
@@ -724,6 +727,15 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     : null
   /** 把现在的连接状态告诉重启那一头 */
   function tellRestarter() {
+    // 其他客户端已换上目标版本时撤销本机排队，避免再次重启同一版本。
+    if (
+      online &&
+      upgrade &&
+      restarter?.view().autoUpgrade &&
+      !(upgrade.action === 'kept' && ['older', 'rebuilt', 'unknown'].includes(upgrade.order))
+    ) {
+      restarter.run('cancel')
+    }
     const step = upgrader?.view()?.phase.step
     restarter?.seen({
       online,
@@ -1800,6 +1812,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         installable = info.device.extensions?.includes(EXTENSION.harnessInstall) === true
         worktreesOn = info.device.extensions?.includes(EXTENSION.worktrees) === true
         // 在跑的是哪一份服务：握手时声明过才给，旧版的设备服务不报
+        activitySupported = info.device.extensions?.includes(EXTENSION.serviceActivity) === true
         service = projectService(info.device.service)
         serviceDue =
           service === null && info.device.extensions?.includes(EXTENSION.deviceService) === true
@@ -1812,6 +1825,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         if (mode === 'full') hasProjects = null
         remember(harnessFromRuntimeInfo(info).id, termsOf(info))
         mode = 'single'
+        activitySupported = false
         fileDownloadSupported = info.extensions?.includes(EXTENSION.fileDownload) === true
         filePreviewSupported = info.extensions?.includes(EXTENSION.filePreview) === true
         harnesses = [harnessFromRuntimeInfo(info)]
@@ -2801,11 +2815,37 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     // 连着的时候也照做：丢掉这条连接重新连一次，对面换了东西（装上了设备服务）就此换过去
     retry,
+    async serviceActivity() {
+      if (!online) return null
+      if (!activitySupported) return null
+      const activity = await link.request('litch/device/service/activity', {})
+      return [
+        ...(activity.turns.length
+          ? [{ reason: 'activeTurns', harnesses: activity.turns, count: 0 }]
+          : []),
+        ...(activity.processes
+          ? [{ reason: 'deviceProcesses', harnesses: [], count: activity.processes }]
+          : []),
+        ...(activity.tasks ? [{ reason: 'tasks', harnesses: [], count: activity.tasks }] : []),
+        ...(activity.background
+          ? [
+              {
+                reason: 'backgroundTasks',
+                harnesses: [],
+                count: activity.background,
+                details: activity.backgroundNames,
+              },
+            ]
+          : []),
+      ]
+    },
     upgradeService(mode) {
       if (!upgrader) throw new ChannelError('rejected', '只有远程设备能一键升级设备服务')
       upgrader.run(mode)
     },
     restartService(mode) {
+      if (mode === 'auto' && config.kind !== 'local')
+        throw new ChannelError('rejected', '自动换上仅用于本机升级')
       if (!restarter) throw new ChannelError('rejected', '这一端不能重启这台设备的服务')
       restarter.run(mode)
     },

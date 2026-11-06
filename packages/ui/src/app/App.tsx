@@ -16,6 +16,7 @@ import type { PlaceWish } from '../composer/new-place.ts'
 import { useNewPlace } from '../composer/useNewPlace.ts'
 import { ApprovalNotices } from '../devices/ApprovalNotices.tsx'
 import { DevicesPage } from '../devices/DevicesPage.tsx'
+import { UpgradeDevices } from '../devices/UpgradeDevices.tsx'
 import { useManagers } from '../manager/data.ts'
 import { ManagerOrigin, ManagerPage, type ManagerPageLocation } from '../manager/ManagerPage.tsx'
 import { ManagersPage } from '../manager/ManagersPage.tsx'
@@ -471,6 +472,7 @@ export function App() {
         <main className="main">
           <Toasts />
           <ApprovalNotices />
+          <UpgradeDevices />
           <TaskNotices onOpen={select} />
           <SessionNotices onOpen={select} selection={auxiliary ? null : selection} />
           {(page === 'archived' || page === 'suggestions' || (!page && pickedManager)) && peek ? (

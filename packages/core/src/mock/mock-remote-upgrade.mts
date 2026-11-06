@@ -43,7 +43,7 @@ export interface MockRemoteUpgradeHost {
 export interface MockRemoteUpgrade {
   /** 话里带着哪一出的关键字就演哪一出。只在连着的远程设备上演 */
   stage(deviceId: string, text: string): void
-  run(deviceId: string, mode: 'start' | 'retry' | 'force'): void
+  run(deviceId: string, mode: 'start' | 'retry' | 'force' | 'cancel'): void
 }
 
 const ROOTS = {
@@ -135,16 +135,16 @@ export function createMockRemoteUpgrade(host: MockRemoteUpgradeHost): MockRemote
     },
 
     run(deviceId, mode) {
+      if (mode === 'force') throw new ChannelError('rejected', '远程升级只允许空闲时换上')
+      if (mode === 'cancel') {
+        set(deviceId, { step: 'idle' })
+        return
+      }
       const view = remote(deviceId)?.remoteUpgrade
       if (!view) throw new ChannelError('rejected', '在跑的服务不比应用旧')
       const scene = scenes.get(deviceId) ?? 'swap'
       if (mode !== 'start') {
         if (view.phase.step !== 'waiting') throw new ChannelError('rejected', '没有在等服务空闲')
-        if (mode === 'force') {
-          set(deviceId, { step: 'stopping', force: true })
-          later(() => swapIn(deviceId))
-          return
-        }
         set(deviceId, { step: 'waiting', busy: view.phase.busy, checking: true })
         later(() => {
           // 那个终端这时已经关了，只看还有没有回合

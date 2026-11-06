@@ -471,6 +471,19 @@ export const zhCN = {
   'manage.logs.empty': '日志为空，或设备上尚无此文件。',
 
   // ---- 设备详情：设备服务是哪一版，这次连接换没换版本 ----
+  'service.batch.title': '升级设备服务',
+  'service.batch.note': '应用已更新。为每台设备选择升级方式；空闲升级不会打断工作。',
+  'service.batch.none': '不升级',
+  'service.batch.idle': '空闲时自动升级',
+  'service.batch.force': '强制升级',
+  'service.batch.unknown': '忙闲未知；执行前由设备检查。',
+  'service.batch.idleState': '空闲',
+  'service.batch.forceNote': '会打断进行中的工作。符合条件的普通回合将在重启后自动恢复。',
+  'service.batch.failure': '可在设备详情重试。',
+  'service.batch.details': '设备详情',
+  'service.batch.apply': '应用选择',
+  'service.batch.cancel': '取消等待',
+  'service.batch.waiting': '等待空闲后升级',
   'service.title': '设备服务',
   'service.version': '版本',
   'service.version.unknown': '未报告版本',
@@ -503,6 +516,8 @@ export const zhCN = {
   'service.busy.clients': '另有 {count} 个客户端已连接',
   'service.busy.undetermined': '设备进程无响应，无法判断 {names} 是否有回合正在运行',
   'service.busy.undeterminedUnnamed': '设备进程无响应，无法判断是否有回合正在运行',
+  'service.busy.backgroundTasks': '{count} 个后台任务正在运行：{names}',
+  'service.busy.tasks': '{count} 次定时任务正在运行',
   'service.busy.other': '其他原因：{reason}',
   'service.busy.next':
     '空闲后，下次重新连接时会更新为应用自带的版本。也可以立即重试：仅在空闲时更新，不会中断正在运行的回合。',

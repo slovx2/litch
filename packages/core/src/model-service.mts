@@ -50,6 +50,8 @@ export type ServiceKeptReason =
 
 /** 服务不闲的一条原因 */
 export interface ServiceBusyView {
+  /** 后台工作名称或命令摘要 */
+  details?: string[]
   /**
    * activeTurns 这几个 harness 有回合在跑（或者判断不了）；deviceProcesses 有属于设备的终端在跑；
    * clients 有别的客户端连着；undetermined 设备进程没有应答，判断不了。以后可能有别的值，界面照原样说
@@ -102,7 +104,12 @@ export interface ServiceUpgradeReport {
   bundled: { version: string; root: string }
   order: ServiceOrder
   reason: ServiceKeptReason | null
-  busy: readonly { reason: string; harnesses: readonly string[]; count: number }[]
+  busy: readonly {
+    reason: string
+    harnesses: readonly string[]
+    count: number
+    details?: readonly string[]
+  }[]
   detail: string | null
   pid: number | null
 }
@@ -268,6 +275,8 @@ export type ServiceRestartPhase =
 
 /** 重启设备服务：能不能做、做到哪了。这一端做不了（另外指定了入口的本机、手机端没有这项能力）时设备上没有这一项 */
 export interface ServiceRestartView {
+  /** 本机已选择空闲时升级；仅在当前应用运行期间排队 */
+  autoUpgrade?: boolean
   blocked: ServiceRestartBlock | null
   phase: ServiceRestartPhase
 }

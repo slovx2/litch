@@ -150,7 +150,7 @@ test('主进程问忙不忙：答的是有回合在跑的 harness、属于设备
   try {
     assert.deepEqual(
       await activity(),
-      { turns: [], processes: 0, connections: 0, tasks: 0 },
+      { turns: [], processes: 0, connections: 0, tasks: 0, background: 0, backgroundNames: [] },
       '闲着',
     )
     assert.equal(fakes.dsh?.connections.length, 0, '没在跑的运行时不去问')
@@ -164,6 +164,8 @@ test('主进程问忙不忙：答的是有回合在跑的 harness、属于设备
       processes: 0,
       connections: 0,
       tasks: 0,
+      background: 0,
+      backgroundNames: [],
     })
     // 问不出来的按有算，顺序照对外报告的顺序
     const listing = pi.handlers['thread/list'] as NonNullable<(typeof pi.handlers)[string]>
@@ -180,7 +182,14 @@ test('主进程问忙不忙：答的是有回合在跑的 harness、属于设备
     await first.initialize(['harness', 'deviceProcesses'])
     const second = connect()
     await second.initialize()
-    assert.deepEqual(await activity(), { turns: [], processes: 0, connections: 2, tasks: 0 })
+    assert.deepEqual(await activity(), {
+      turns: [],
+      processes: 0,
+      connections: 2,
+      tasks: 0,
+      background: 0,
+      backgroundNames: [],
+    })
     second.close()
     await idle(async () => (await activity()).connections === 1, '第二条连接走了')
 
@@ -194,10 +203,24 @@ test('主进程问忙不忙：答的是有回合在跑的 harness、属于设备
     })
     // 属于连接的进程不另数：它随连接走，有连接在就已经算忙了
     await first.call('process/spawn', { processHandle: 'own', command: SLEEP, cwd: stateDir })
-    assert.deepEqual(await activity(), { turns: [], processes: 1, connections: 1, tasks: 0 })
+    assert.deepEqual(await activity(), {
+      turns: [],
+      processes: 1,
+      connections: 1,
+      tasks: 0,
+      background: 0,
+      backgroundNames: [],
+    })
     first.close()
     await idle(async () => (await activity()).connections === 0, '起它的那条连接走了')
-    assert.deepEqual(await activity(), { turns: [], processes: 1, connections: 0, tasks: 0 })
+    assert.deepEqual(await activity(), {
+      turns: [],
+      processes: 1,
+      connections: 0,
+      tasks: 0,
+      background: 0,
+      backgroundNames: [],
+    })
 
     const again = connect()
     await again.initialize(['harness', 'deviceProcesses'])
@@ -209,7 +232,7 @@ test('主进程问忙不忙：答的是有回合在跑的 harness、属于设备
     }, '终端结束了，连接也走了')
     assert.deepEqual(
       await activity(),
-      { turns: [], processes: 0, connections: 0, tasks: 0 },
+      { turns: [], processes: 0, connections: 0, tasks: 0, background: 0, backgroundNames: [] },
       '又闲了',
     )
   } finally {
@@ -226,4 +249,49 @@ test('主进程问了不认识的事：答不上，不是随便给一个', async
   }
   // 设备关了以后没有人接
   await assert.rejects(control.ask('activity'), /没有人接/)
+})
+
+test('客户端只读忙闲复用控制通道 activity，未声明连接不能调用', async () => {
+  const w = setup({ pi: 'running' }, SERVICE)
+  try {
+    const client = w.connect()
+    await client.initialize([...AWARE, 'serviceActivity'])
+    const expected = await w.activity()
+    assert.deepEqual(await client.call('litch/device/service/activity'), {
+      turns: expected.turns,
+      processes: expected.processes,
+      tasks: expected.tasks,
+      background: expected.background,
+      backgroundNames: expected.backgroundNames,
+    })
+    const plain = w.connect()
+    await plain.initialize(AWARE)
+    await assert.rejects(plain.call('litch/device/service/activity'), { code: -32601 })
+  } finally {
+    await w.close()
+  }
+})
+
+test('回合已结束但开发服务器仍运行：activity 和客户端提示都保留后台原因与命令摘要', async () => {
+  const w = setup({ pi: 'running' }, SERVICE)
+  const task = { id: 'dev', kind: 'command', status: 'running', title: 'npm run dev' }
+  try {
+    w.device.background.reportedChanged({ threadId: 'background', tasks: [task] })
+    const busy = await w.activity()
+    assert.deepEqual(busy.turns, [])
+    assert.equal(busy.background, 1)
+    assert.deepEqual(busy.backgroundNames, ['npm run dev'])
+    const client = w.connect()
+    await client.initialize([...AWARE, 'serviceActivity'])
+    const view = await client.call('litch/device/service/activity')
+    assert.equal(view.background, 1)
+    assert.deepEqual(view.backgroundNames, ['npm run dev'])
+    w.device.background.reportedChanged({
+      threadId: 'background',
+      tasks: [{ ...task, status: 'completed' }],
+    })
+    assert.equal((await w.activity()).background, 0)
+  } finally {
+    await w.close()
+  }
 })

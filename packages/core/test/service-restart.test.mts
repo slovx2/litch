@@ -158,7 +158,7 @@ test('没有会话在跑：空闲时停，停了重连，连回来换了一份�
   const w = world()
   w.core.start()
   await flush()
-  assert.deepEqual(w.restart(), { blocked: null, phase: { step: 'idle' } })
+  assert.deepEqual(w.restart(), { blocked: null, phase: { step: 'idle' }, autoUpgrade: false })
   assert.deepEqual((await w.sessions()).sessions, [])
   await w.run('start')
   await flush()

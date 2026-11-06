@@ -95,8 +95,7 @@ computer" 0.10.0, session trees and scheduled tasks 0.11.0, phone pairing 0.12.0
   there (the install script with `--version`, or `brew upgrade codex-harness-adapter`) and ask the
   service to stop when idle (`device-stop --if-idle`); the reconnect then starts the new version. While
   the service is busy the old one keeps running and Litch retries on every connection and every 5
-  minutes until the app quits; **Switch Now** stops it right away after a second confirmation that lists
-  what gets interrupted. If the adapter's install method can't be recognized, Litch only shows the
+  minutes until the app quits. **Cancel pending upgrade** stops future attempts; remote upgrades never force a stop. If the adapter's install method can't be recognized, Litch only shows the
   commands to copy; a service run in the foreground or by a service manager (`brew services`, systemd)
   is installed but not restarted. This is desktop-only and not available through `scripts/litch`; the
   phone app only shows that the service is older.
@@ -124,3 +123,15 @@ computer" 0.10.0, session trees and scheduled tasks 0.11.0, phone pairing 0.12.0
 设备列表、设备详情以及 harness 详情都在设置模态窗口中，左侧设置导航始终保留。主窗口继续显示原对话。
 侧栏设备菜单、升级提示和 `litch open device` 直接打开窗口内对应设备/章节；服务升级、配置助手和设备操作入口照常可用。
 关闭窗口、切换设置分组或离开有未保存配置的详情时，仍会询问保存、放弃或取消。
+
+### 应用更新后的设备服务升级
+
+应用重启完成后，等待设备连接完成（最多十五秒），再并行查询忙闲（最多五秒），按新应用版本弹一次升级提示。已是当前版本、离线或由外部服务管理器管理的设备不列入。第一次安装本功能也适用；同一应用版本不重复弹。
+
+- 本机空闲时自动换上自带版本；忙时可选“不升级”“空闲时自动升级”“强制升级”。强制升级复用重启恢复：符合条件的普通回合自动继续，后台任务、待答和定时任务不会自动重跑。
+- 远程只提供“不升级”“空闲时自动升级”。下载安装后由现有 `device-stop --if-idle` 检查决定何时切换，不提供强制升级。
+- 等待由当前应用运行期间的核心维护：本机每三十秒重试，远程每五分钟及重新连接时重试；设备详情显示等待状态，可取消。取消不会撤销已安装的文件。退出应用会结束等待。
+- 忙闲来自设备的空闲检查；旧设备不支持只读状态查询时显示未知，执行切换前仍进行空闲检查。
+- 每台设备独立升级。远程失败单独显示原因和“设备详情”入口，可在详情中重试，不影响应用或其他设备。
+
+后台开发服务器等长期任务也会使设备保持忙碌。设备详情和提示框显示后台任务数及命令摘要；本机可明确选择强制升级，远程只能继续等待或取消。现有的远程一键升级也采用这条更完整的空闲检查。旧服务仍执行它原有的空闲判断；更新服务后才具备新增的后台保护。

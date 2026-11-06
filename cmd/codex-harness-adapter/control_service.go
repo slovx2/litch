@@ -30,6 +30,7 @@ type busyReason struct {
 	Reason    string   `json:"reason"`
 	Harnesses []string `json:"harnesses,omitempty"`
 	Count     int      `json:"count,omitempty"`
+	Details   []string `json:"details,omitempty"`
 }
 
 // service.stop 的应答。这是跨版本的接口：新版的 device-stop 会拿它去停旧版的服务，形状只增不改。
@@ -53,6 +54,9 @@ type deviceActivity struct {
 	Connections int `json:"connections"`
 	// 在跑的定时任务运行。旧版的设备进程不报，按 0 算。
 	Tasks int `json:"tasks"`
+	// 回合结束后仍在运行的后台工作。
+	Background      int      `json:"background"`
+	BackgroundNames []string `json:"backgroundNames"`
 }
 
 type askAnswer struct {
@@ -148,6 +152,9 @@ func (s *controlServer) busy(requester net.Conn) []busyReason {
 		}
 		if activity.Processes > 0 {
 			reasons = append(reasons, busyReason{Reason: "deviceProcesses", Count: activity.Processes})
+		}
+		if activity.Background > 0 {
+			reasons = append(reasons, busyReason{Reason: "backgroundTasks", Count: activity.Background, Details: activity.BackgroundNames})
 		}
 		if activity.Tasks > 0 {
 			reasons = append(reasons, busyReason{Reason: "tasks", Count: activity.Tasks})

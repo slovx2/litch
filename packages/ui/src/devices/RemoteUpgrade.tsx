@@ -1,11 +1,12 @@
-// 远程设备服务的一键升级：设备详情“设备服务”一节里远程设备的那一段，和它的两种确认。
+// 远程设备服务的一键升级，以及本机强制换上共用的确认框。
 // 状态由核心记（DeviceView.remoteUpgrade），点了按钮、确认之后发 device.upgradeService；判断都在 service.ts 里。
-// 没确认就什么都不做；“立即换上”会打断进行中的事，要再确认一次，写明会打断什么（决 467）。
+// 远程仅在空闲时换上；本机强制操作由调用方显式确认。
 import type { DeviceView, RemoteUpgradeView, ServiceUpgradeView } from '@litch/core'
 import { useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Confirm } from '../app/Confirm.tsx'
 import { nameOf } from '../app/device.ts'
+import { Close } from '../app/icons.tsx'
 import { useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import {
@@ -19,7 +20,7 @@ import {
 } from './service.ts'
 import { GuideSteps } from './status.tsx'
 
-type Mode = 'start' | 'retry' | 'force'
+type Mode = 'start' | 'retry' | 'cancel'
 
 /** 发一次 device.upgradeService。被拒（上一步没做完之类）时提示原因 */
 function useUpgrade(deviceId: string): (mode: Mode) => void {
@@ -203,7 +204,6 @@ export function RemoteUpgradeNote({
 }) {
   const t = useT()
   const upgrade = useUpgrade(device.id)
-  const [forcing, setForcing] = useState(false)
   /** 远端的原话摆没摆出来：默认收着，点“详情”才摆 */
   const [said, setSaid] = useState(false)
   const notice = remoteNoticeOf(view)
@@ -270,11 +270,12 @@ export function RemoteUpgradeNote({
             <button
               type="button"
               className="mini"
-              data-act="remote-force"
+              data-act="remote-cancel"
               disabled={phase.checking}
-              onClick={() => setForcing(true)}
+              onClick={() => upgrade('cancel')}
             >
-              {t('service.remote.force')}
+              <Close />
+              {t('service.batch.cancel')}
             </button>
           </div>
         </>
@@ -317,17 +318,6 @@ export function RemoteUpgradeNote({
       ) : null}
       {said && phase.step === 'failed' && phase.detail ? (
         <pre className="cfail-detail mono">{phase.detail}</pre>
-      ) : null}
-      {forcing ? (
-        <ForceConfirm
-          device={device}
-          busy={view.phase.step === 'waiting' ? view.phase.busy : []}
-          onYes={() => {
-            setForcing(false)
-            upgrade('force')
-          }}
-          onClose={() => setForcing(false)}
-        />
       ) : null}
     </div>
   )

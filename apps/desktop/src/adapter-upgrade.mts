@@ -107,6 +107,7 @@ export function compareService(running: ServiceFacts | null, bundled: CliFacts):
 
 /** 服务不闲的一条原因，device-stop --if-idle 报的 */
 export interface BusyReason {
+  details?: string[]
   /**
    * activeTurns 这几个 harness 有回合在跑（或者判断不了）；deviceProcesses 有属于设备的终端在跑；
    * clients 有别的客户端连着；undetermined 设备进程没有应答，判断不了。以后可能有别的值
@@ -130,6 +131,13 @@ export function parseBusy(stdout: string): BusyReason[] {
                 ? item.harnesses.filter((name): name is string => typeof name === 'string')
                 : [],
               count: typeof item.count === 'number' ? item.count : 0,
+              ...(Array.isArray(item.details)
+                ? {
+                    details: item.details.filter(
+                      (detail): detail is string => typeof detail === 'string',
+                    ),
+                  }
+                : {}),
             },
           ]
         : [],

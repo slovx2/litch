@@ -61,7 +61,7 @@ export interface ServiceRestartSeen {
 }
 
 /** start：先带 ifIdle 停；force：用户确认过会打断什么，直接停；dismiss：收起 busy、done、failed */
-export type RestartMode = 'start' | 'force' | 'dismiss'
+export type RestartMode = 'start' | 'force' | 'dismiss' | 'auto' | 'cancel'
 
 export interface ServiceRestarter {
   view(): ServiceRestartView
@@ -95,10 +95,29 @@ export function createServiceRestarter(options: ServiceRestarterOptions): Servic
   /** 停了之后等连回来的定时器 */
   let waitTimer: (() => void) | null = null
   let job: Promise<void> | null = null
+  let autoUpgrade = false
+  let retryTimer: (() => void) | null = null
+  const cancelRetry = () => {
+    retryTimer?.()
+    retryTimer = null
+  }
+  const schedule = () => {
+    cancelRetry()
+    if (!autoUpgrade) return
+    retryTimer = clock.setTimer(() => {
+      retryTimer = null
+      if (!blocked() && !job && autoUpgrade) run('auto')
+      else schedule()
+    }, 30_000)
+  }
   const cancel = createCancel()
 
   const set = (next: ServiceRestartPhase) => {
     phase = next
+    if (next.step === 'failed') {
+      autoUpgrade = false
+      cancelRetry()
+    }
     options.changed()
   }
 
@@ -144,6 +163,8 @@ export function createServiceRestarter(options: ServiceRestarterOptions): Servic
     if (cancel.signal.aborted) return
     switch (result.result) {
       case 'stopped':
+        autoUpgrade = false
+        cancelRetry()
         set({ step: 'starting' })
         waitTimer = clock.setTimer(() => {
           waitTimer = null
@@ -158,6 +179,7 @@ export function createServiceRestarter(options: ServiceRestarterOptions): Servic
       case 'busy':
         caught = []
         set({ step: 'busy', busy: result.busy })
+        schedule()
         return
       case 'legacy':
         set(failed('legacy', null, result.said))
@@ -170,8 +192,39 @@ export function createServiceRestarter(options: ServiceRestarterOptions): Servic
     }
   }
 
+  function run(mode: RestartMode) {
+    if (mode === 'cancel') {
+      autoUpgrade = false
+      cancelRetry()
+      if (phase.step === 'busy') phase = { step: 'idle' }
+      options.changed()
+      return
+    }
+    if (mode === 'dismiss') {
+      if (phase.step === 'busy' || phase.step === 'done' || phase.step === 'failed') {
+        set({ step: 'idle' })
+      }
+      return
+    }
+    if (job || phase.step === 'stopping' || phase.step === 'starting') {
+      throw new ChannelError('rejected', '上一次重启还没有做完')
+    }
+    const why = blocked()
+    if (why !== null) throw new ChannelError('rejected', `现在不能重启设备服务：${why}`)
+    autoUpgrade = mode === 'auto'
+    cancelRetry()
+    before = keyOf(seen.service)
+    caught = mode === 'force' ? options.sessions().map((entry) => entry.id) : []
+    log(mode === 'force' ? `不等空闲，打断 ${caught.length} 个会话` : '空闲时停')
+    job = stop(mode !== 'force')
+      .catch((error: unknown) => log(`意外的错误：${String(error)}`))
+      .finally(() => {
+        job = null
+      })
+  }
+
   return {
-    view: () => ({ blocked: blocked(), phase }),
+    view: () => ({ blocked: blocked(), phase, autoUpgrade }),
 
     seen(state) {
       seen = state
@@ -193,29 +246,10 @@ export function createServiceRestarter(options: ServiceRestarterOptions): Servic
       }
     },
 
-    run(mode) {
-      if (mode === 'dismiss') {
-        if (phase.step === 'busy' || phase.step === 'done' || phase.step === 'failed') {
-          set({ step: 'idle' })
-        }
-        return
-      }
-      if (job || phase.step === 'stopping' || phase.step === 'starting') {
-        throw new ChannelError('rejected', '上一次重启还没有做完')
-      }
-      const why = blocked()
-      if (why !== null) throw new ChannelError('rejected', `现在不能重启设备服务：${why}`)
-      before = keyOf(seen.service)
-      caught = mode === 'force' ? options.sessions().map((entry) => entry.id) : []
-      log(mode === 'force' ? `不等空闲，打断 ${caught.length} 个会话` : '空闲时停')
-      job = stop(mode === 'start')
-        .catch((error: unknown) => log(`意外的错误：${String(error)}`))
-        .finally(() => {
-          job = null
-        })
-    },
+    run,
 
     dispose() {
+      cancelRetry()
       stopWaiting()
       cancel.abort()
     },

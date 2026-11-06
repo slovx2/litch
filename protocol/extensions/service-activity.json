@@ -1,0 +1,22 @@
+{
+  "extension": "serviceActivity",
+  "description": "只读查询设备服务的忙闲，复用 device-stop --if-idle 的 activity 判定。连接本身不计为工作。旧服务未声明时客户端显示未知，不推断为空闲；升级仍须经过设备侧空闲停止检查。",
+  "declaration": { "where": "initialize.params.capabilities.litchExtensions" },
+  "undeclared": "未声明的连接调用此方法返回 Method not found，不发送任何新增通知。",
+  "parts": [{
+    "kind": "ClientRequest",
+    "method": "litch/device/service/activity",
+    "params": { "type": "object", "additionalProperties": false },
+    "response": {
+      "type": "object",
+      "required": ["turns", "processes", "tasks", "background", "backgroundNames"],
+      "properties": {
+        "turns": { "type": "array", "items": { "type": "string" } },
+        "processes": { "type": "integer", "minimum": 0 },
+        "tasks": { "type": "integer", "minimum": 0 },
+        "background": { "type": "integer", "minimum": 0 },
+        "backgroundNames": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }]
+}

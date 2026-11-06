@@ -126,6 +126,13 @@ export function busyLine(
         : { key: 'service.busy.turnsUnnamed', args: {} }
     case 'deviceProcesses':
       return { key: 'service.busy.terminals', args: { count: entry.count } }
+    case 'backgroundTasks':
+      return {
+        key: 'service.busy.backgroundTasks',
+        args: { count: entry.count, names: entry.details?.join(comma) ?? '' },
+      }
+    case 'tasks':
+      return { key: 'service.busy.tasks', args: { count: entry.count } }
     case 'clients':
       return { key: 'service.busy.clients', args: { count: entry.count } }
     case 'undetermined':

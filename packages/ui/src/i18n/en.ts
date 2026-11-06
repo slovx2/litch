@@ -494,6 +494,21 @@ export const en: Record<MessageKey, Entry> = {
   'manage.logs.empty': 'The log is empty, or the file doesn’t exist yet.',
 
   // ---- 设备详情：设备服务是哪一版，这次连接换没换版本 ----
+  'service.batch.title': 'Upgrade device services',
+  'service.batch.note':
+    'The app has been updated. Choose how to upgrade each device. Idle upgrades do not interrupt work.',
+  'service.batch.none': 'Do not upgrade',
+  'service.batch.idle': 'Upgrade when idle',
+  'service.batch.force': 'Force upgrade',
+  'service.batch.unknown': 'Activity unknown; the device will check before switching. ',
+  'service.batch.idleState': 'Idle',
+  'service.batch.forceNote':
+    'Interrupts ongoing work. Eligible regular turns resume automatically after restart.',
+  'service.batch.failure': 'Retry in device details.',
+  'service.batch.details': 'Device details',
+  'service.batch.apply': 'Apply choices',
+  'service.batch.cancel': 'Cancel pending upgrade',
+  'service.batch.waiting': 'Waiting to upgrade when idle',
   'service.title': 'Device service',
   'service.version': 'Version',
   'service.version.unknown': 'Version not reported',
@@ -533,6 +548,8 @@ export const en: Record<MessageKey, Entry> = {
     'The device process didn’t respond, so it’s unclear whether a turn is in progress on {names}',
   'service.busy.undeterminedUnnamed':
     'The device process didn’t respond, so it’s unclear whether a turn is in progress',
+  'service.busy.backgroundTasks': '{count} background tasks running: {names}',
+  'service.busy.tasks': '{count} scheduled task runs in progress',
   'service.busy.other': 'Other reason: {reason}',
   'service.busy.next':
     'It will be updated to the bundled version on the next reconnect once idle. You can also try now: it only updates when idle, so no turn is interrupted.',
