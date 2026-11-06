@@ -12,7 +12,8 @@ import {
 } from '../../protocol/src/media-images.mjs'
 import { readPreview } from '../../shared/src/file-preview.mjs'
 
-/** 保守的公网白名单：IPv6 只接受全球单播，并排除文档/隧道/转换地址。 */
+/** 保守的公网白名单：IPv6 只接受全球单播 2000::/3，并排除 IETF 协议段（2001::/23，含 Teredo）、
+ *  文档段（2001:db8::/32、3fff::/20）和 6to4（2002::/16）；2001::/16 的其余部分是正常公网分配。 */
 export function publicAddress(address: string): boolean {
   if (isIP(address) === 4) {
     const [a = 0, b = 0, c = 0] = address.split('.').map(Number)
@@ -32,7 +33,12 @@ export function publicAddress(address: string): boolean {
   if (isIP(address) !== 6) return false
   // WHATWG URL 将 IPv6 正规化，避免 2001:0db8 等拼写绕过保留前缀。
   const ip = new URL(`http://[${address}]/`).hostname.slice(1, -1).toLowerCase()
-  return /^[23][0-9a-f]{3}:/.test(ip) && !/^2001:|^2002:|^3fff:/.test(ip)
+  const [first = '', second = ''] = ip.split(':')
+  const a = Number.parseInt(first, 16)
+  const b = second ? Number.parseInt(second, 16) : 0
+  if (!(a >= 0x2000 && a <= 0x3fff) || a === 0x2002) return false
+  if (a === 0x2001 && (b < 0x200 || b === 0xdb8)) return false
+  return !(a === 0x3fff && b < 0x1000)
 }
 
 const imageNetwork = { lookup, httpRequest, httpsRequest }
