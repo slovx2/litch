@@ -17,7 +17,7 @@
     "smoke:ssh": "node scripts/ssh-smoke.mjs",
     "e2e": "node scripts/e2e.mjs",
     "test": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./test/register.mjs --test test/*.test.mjs",
-    "test:markdown": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./test/register.mjs --test test/native/markdown-cjk.test.mjs",
+    "test:markdown": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./test/register.mjs --test test/native/markdown-cjk.test.mjs test/native/media.test.mjs",
     "test:selection": "cd android && ./gradlew -I ../test/native/selection-scroll.init.gradle :react-native-enriched-markdown:testReleaseUnitTest --tests '*SelectionScrollTest'",
     "postinstall": "patch-package"
   },

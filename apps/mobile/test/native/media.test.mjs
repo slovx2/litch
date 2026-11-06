@@ -1,7 +1,8 @@
+// 依赖手机包里的 marked：CI 的 unit 作业不装手机依赖，由装了依赖的 test:markdown 跑
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { mediaBlocks } from '../src/detail/media/segments.ts'
+import { mediaBlocks } from '../../src/detail/media/segments.ts'
 
 test('手机图片由 AST 提取，代码/HTML/普通链接不触发加载，引用式图片保留', () => {
   const source =
@@ -34,7 +35,7 @@ test('未闭合图片不读取；列表和表格中的图也由受控组件接�
 
 test('原生 Markdown 两端封闭 URL 读取旁路，实际补丁纳入安装流程', () => {
   const patch = readFileSync(
-    new URL('../patches/react-native-enriched-markdown+1.1.0.patch', import.meta.url),
+    new URL('../../patches/react-native-enriched-markdown+1.1.0.patch', import.meta.url),
     'utf8',
   )
   assert.match(patch, /\+ {4}if \(imageUrl\.isNotEmpty\(\)\) return/)
