@@ -7,7 +7,7 @@
 //     ref；drag 的 from_element / to_element 换成元素中心的截图坐标；坐标动作带上最近一次截图的截图号。
 //   - 助手的动作只回 {}，这边接着用 getAppState{screenshot:false} 取树算差异，和 macOS 一样附在结果里。
 //   - 结果里写窗口号、这个应用的其他窗口（弹出的对话框是另一个窗口）。
-//   - 用户按了物理 Esc，助手只发 stopped 通知，“本回合不再操作这个应用”记在这边，回合结束时清掉。
+//   - 用户按了物理 Esc，助手停止输入并发 stopped 通知；这边取消在途请求并拒绝本回合后续操作。
 // 编号、截图、停止的记录都按“会话 + 应用”记，回合结束时清掉（和 macOS 助手一样）。
 
 import type { ClientToolCallResponse } from '../../../../packages/protocol/src/client-tools.mjs'
@@ -54,6 +54,12 @@ export function createWinRunner(deps: WinRunnerDeps) {
   const books = new Map<string, Map<string, AppBook>>()
   /** 会话 → 用户按了停止的应用号（小写） */
   const halted = new Map<string, Set<string>>()
+  const active = new Set<{
+    session: string
+    turnId: string
+    appId: string | null
+    controller: AbortController
+  }>()
 
   function bookOf(session: string, appId: string): AppBook {
     let apps = books.get(session)
@@ -215,9 +221,10 @@ export function createWinRunner(deps: WinRunnerDeps) {
     }
   }
 
-  async function run(
+  async function runAction(
     invocation: ClientToolInvocation,
     context: ClientToolContext,
+    pending: { appId: string | null },
   ): Promise<ClientToolCallResponse> {
     const { tool } = invocation
     const params = invocation.arguments as Record<string, unknown>
@@ -248,6 +255,8 @@ export function createWinRunner(deps: WinRunnerDeps) {
       )
     }
     const session = sessionKey(invocation)
+    pending.appId = app.appId.toLowerCase()
+    signal.throwIfAborted()
     // 管理员窗口发不进输入：先说清楚
     if (RANK[app.integrity] > RANK[helperIntegrity()]) {
       return clientToolFailure(
@@ -273,6 +282,8 @@ export function createWinRunner(deps: WinRunnerDeps) {
       action.method,
       {
         session,
+        actionId: invocation.id,
+        turnId: invocation.turnId,
         appId: app.appId,
         ...(windowId !== null ? { windowId } : {}),
         ...action.params,
@@ -280,12 +291,30 @@ export function createWinRunner(deps: WinRunnerDeps) {
       CALL_TIMEOUT,
       signal,
     )
+    signal.throwIfAborted()
     return afterAction(session, app, windowId, action.summary, signal)
   }
 
   return {
-    run,
-    turnEnded(session: string): void {
+    async run(invocation: ClientToolInvocation, context: ClientToolContext) {
+      const pending = {
+        session: sessionKey(invocation),
+        turnId: invocation.turnId,
+        appId: null as string | null,
+        controller: new AbortController(),
+      }
+      active.add(pending)
+      const signal = AbortSignal.any([context.signal, pending.controller.signal])
+      try {
+        return await runAction(invocation, { ...context, signal }, pending)
+      } finally {
+        active.delete(pending)
+      }
+    },
+    turnEnded(session: string, turnId: string): void {
+      for (const pending of active) {
+        if (pending.session === session && pending.turnId === turnId) pending.controller.abort()
+      }
       books.delete(session)
       halted.delete(session)
     },
@@ -293,6 +322,11 @@ export function createWinRunner(deps: WinRunnerDeps) {
       let set = halted.get(session)
       if (!set) halted.set(session, (set = new Set()))
       set.add(appId.toLowerCase())
+      for (const pending of active) {
+        if (pending.session === session && pending.appId === appId.toLowerCase()) {
+          pending.controller.abort()
+        }
+      }
     },
   }
 }

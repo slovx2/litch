@@ -1,12 +1,12 @@
-// 进程的骨架：参数、单实例、DPI、COM，标准输入上逐帧读请求、在主线程上依次处理，应答和通知写到标准输出。
+// 进程的骨架：参数、单实例、DPI、COM。读线程即时处理取消，其余请求在主线程依次执行；应答和通知写标准输出。
 // 退出的几种情况：标准输入读到结尾、父进程没了（--parent-pid）、60 秒没有请求、主进程发 shutdown。
 use super::engine::Engine;
 use super::system::{self, log};
-use crate::wire::{self, Incoming};
+use crate::{action::{Actions, Scope}, dispatch, wire};
 use serde_json::Value;
 use std::io::{self, BufReader, BufWriter, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{mpsc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use windows::Win32::Foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
@@ -19,6 +19,9 @@ const IDLE_EXIT: Duration = Duration::from_secs(60);
 static OUT: Mutex<Option<BufWriter<io::Stdout>>> = Mutex::new(None);
 static LAST_REQUEST: Mutex<Option<Instant>> = Mutex::new(None);
 static BUSY: AtomicBool = AtomicBool::new(false);
+static ACTIONS: OnceLock<Actions> = OnceLock::new();
+
+pub fn actions() -> &'static Actions { ACTIONS.get_or_init(Actions::default) }
 
 /// 往标准输出写一帧（应答和通知共用，加锁）
 fn send(value: &Value) {
@@ -81,37 +84,33 @@ pub fn run(args: Vec<String>) -> i32 {
     watch_idle();
 
     let mut engine = Engine::new(parent);
-    let mut input = BufReader::new(io::stdin());
-    loop {
-        let frame = match wire::read_frame(&mut input) {
-            Ok(Some(frame)) => frame,
-            Ok(None) => {
-                log("标准输入结束，退出");
-                return 0;
-            }
-            Err(error) => {
-                log(format!("读请求出错：{error}；退出"));
-                return 1;
-            }
-        };
-        let Some(message) = Incoming::parse(frame) else { continue };
-        let Incoming::Request { id, method, params } = message else { continue };
+    let (queue, requests) = mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        dispatch::read_requests(&mut BufReader::new(io::stdin()), actions(), queue, send)
+    });
+    for request in requests {
+        let dispatch::Request { id, method, params, action } = request;
         BUSY.store(true, Ordering::SeqCst);
         let started = Instant::now();
-        let outcome = engine.handle(&method, &params);
+        let _scope = Scope::enter(action);
+        let outcome = crate::action::check().and_then(|()| engine.handle(&method, &params));
         *LAST_REQUEST.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
         BUSY.store(false, Ordering::SeqCst);
         match outcome {
-            Ok(result) => send(&wire::response(&id, result)),
+            Ok(result) => { if let Some(id) = &id { send(&wire::response(id, result)); } }
             Err(error) => {
                 log(format!("{method} 失败（{} ms）：{error}", started.elapsed().as_millis()));
-                send(&wire::error_response(&id, &error));
+                if let Some(id) = &id { send(&wire::error_response(id, &error)); }
             }
         }
         if method == "shutdown" {
             log("主进程要求退出");
             return 0;
         }
+    }
+    match reader.join() {
+        Ok(Ok(())) => { log("标准输入结束，退出"); 0 }
+        other => { log(format!("读请求出错：{other:?}；退出")); 1 }
     }
 }
 

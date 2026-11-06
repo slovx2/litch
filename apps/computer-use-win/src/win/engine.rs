@@ -246,6 +246,7 @@ impl Engine {
 
     /// 统一检查管理员、Esc 停止和锁屏；输入碰撞只在前台回退作用域内检查。
     fn guard(&mut self, p: &Value) -> RpcResult<(super::apps::App, super::apps::Win)> {
+        crate::action::check()?;
         self.require_handshake()?;
         let session = req_str(p, "session")?;
         let (app, win) = apps::resolve(&req_str(p, "appId")?, window_id(p))?;
@@ -419,14 +420,14 @@ impl Engine {
     /// 动作后等界面稳定一下，再让主进程取树算差异
     fn done(&self) -> RpcResult<Value> {
         foreground::check_completion()?;
-        std::thread::sleep(Duration::from_millis(400));
+        crate::action::sleep(Duration::from_millis(400))?;
         Ok(json!({}))
     }
 
     /// 带一条可选 notes 的 done（typeText 粘贴没确认落下时提醒模型去核对）
     fn done_with_notes(&self, note: Option<&str>) -> RpcResult<Value> {
         foreground::check_completion()?;
-        std::thread::sleep(Duration::from_millis(400));
+        crate::action::sleep(Duration::from_millis(400))?;
         match note {
             Some(n) => Ok(json!({ "notes": [n] })),
             None => Ok(json!({})),

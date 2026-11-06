@@ -92,6 +92,10 @@ export async function checkWindowsHelper({ helper, require }) {
     lines.push(
       `hello：协议 ${hello.protocol}，版本 ${hello.version}，完整性 ${hello.integrity}，UAC ${hello.uacEnabled ? '开' : '关'}`,
     )
+    // 不注入任何输入，验证新增控制消息不必进入动作执行器，未知动作取消是幂等的。
+    await first.request('cancelAction', { actionId: 'self-check-no-action' })
+    await first.request('turnEnded', { session: 'self-check', turnId: 'self-check-turn' })
+    lines.push('cancelAction、turnEnded：空动作取消成功')
     const diagnostics = await first.request('diagnostics')
     if (diagnostics?.pid !== first.child.pid) {
       throw new Error(`diagnostics 的结果不对：${JSON.stringify(diagnostics)}`)

@@ -193,6 +193,8 @@ Preferences (Settings → Built-in browser):
 The model operates apps on this computer: screenshots, clicks, typing. While it works an on-screen
 notice is shown; **Esc** (or Stop) takes control back and ends Computer Use for that app in this turn.
 
+Windows 上，停止、Esc 和回合结束会取消进行中及排队中的动作。逐字输入、拖拽和连续按键在输入步骤之间停止，并释放本次动作已按下的键和鼠标按钮。已经送进应用的输入（包括整段粘贴）不会撤回；取消后应重新观察应用，再继续未完成部分。旧版助手仍只支持停止等待结果，需要更新助手才能中止正在执行的输入。
+
 - **macOS permissions**: the separate helper app "Litch Computer Use" needs **Accessibility** and
   **Screen Recording**. Agents cannot grant these (exception E1). Tell the user: Litch → Settings →
   Computer Use → "Open System Settings", or System Settings → Privacy & Security → Accessibility, and

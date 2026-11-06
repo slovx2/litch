@@ -85,6 +85,7 @@ pub fn stop_all() {
         return;
     }
     for e in &stopped {
+        super::server::actions().cancel_app(&e.session, &e.app_id);
         super::server::notify("stopped", json!({ "session": e.session, "appId": e.app_id }));
     }
     super::system::log(format!("用户按了 Esc，停止了 {} 项操作", stopped.len()));
