@@ -37,7 +37,10 @@ interface Scope {
 
 export interface SelfGuardOptions {
   productName: string
-  storage?: { read(): number | null; write(expiresAt: number | null): void }
+  storage?: {
+    read(): number | null | Promise<number | null>
+    write(expiresAt: number | null): void | Promise<void>
+  }
   now?(): number
   remote?: {
     desktopId(): string | null
@@ -60,20 +63,41 @@ export class ComputerSelfGuard {
   private generation = 0
   private readonly now: () => number
   private readonly options: SelfGuardOptions
+  private ready: Promise<void> | null = null
   constructor(options: SelfGuardOptions) {
     this.options = options
     this.now = options.now ?? Date.now
-    try {
-      const until = options.storage?.read()
+    const generation = this.generation
+    const restore = (until: number | null | undefined) => {
       if (
+        generation === this.generation &&
         typeof until === 'number' &&
         Number.isFinite(until) &&
         until > this.now() &&
         until <= this.now() + DAY
       )
         this.until = until
+    }
+    try {
+      const value = options.storage?.read()
+      if (value instanceof Promise) this.ready = value.then(restore).catch(() => {})
+      else restore(value)
     } catch {
       // 存储不可读不能产生授权。
+    }
+  }
+
+  private async waitForStorage(value: void | Promise<void>, signal: AbortSignal): Promise<void> {
+    if (signal.aborted) throw new HelperError('failed', 'The call was cancelled.')
+    let cancel: () => void = () => {}
+    const aborted = new Promise<never>((_resolve, reject) => {
+      cancel = () => reject(new HelperError('failed', 'The call was cancelled.'))
+      signal.addEventListener('abort', cancel, { once: true })
+    })
+    try {
+      await Promise.race([value, aborted])
+    } finally {
+      signal.removeEventListener('abort', cancel)
     }
   }
   private message(text: string): string {
@@ -90,15 +114,15 @@ export class ComputerSelfGuard {
   expiresAt(): number | null {
     return this.until !== null && this.until > this.now() ? this.until : null
   }
-  revoke(): void {
+  revoke(): void | Promise<void> {
     this.generation++
     this.until = null
     this.sessions.clear()
     for (const waiting of this.pending.values()) waiting.answer('decline')
-    this.save()
+    return this.ready ? this.ready.then(() => this.save()) : this.save()
   }
-  private save(): void {
-    this.options.storage?.write(this.until)
+  private save(): void | Promise<void> {
+    return this.options.storage?.write(this.until)
   }
 
   phoneAnswer(raw: unknown): void {
@@ -167,12 +191,15 @@ export class ComputerSelfGuard {
       if (answer === 'always') {
         this.until = this.now() + DAY
         try {
-          this.save()
+          await this.waitForStorage(this.save(), scope.context.signal)
         } catch (error) {
           this.until = null
           throw error
         }
       }
+      // 异步存储期间可能撤销或结束回合；持久化完成不等于仍获准输入。
+      if (scope.context.signal.aborted || scope.generation !== this.generation)
+        throw new HelperError('unauthorized', this.message(DENIED))
       scope.approved = true
     } finally {
       drop?.()
@@ -226,6 +253,7 @@ export class ComputerSelfGuard {
     helper: HelperAccess,
     body: () => Promise<T>,
   ): Promise<T> {
+    if (this.ready) await this.waitForStorage(this.ready, context.signal)
     return this.scopes.run(
       { call, context, approved: false, generation: this.generation, preflightDone: false },
       async () => {

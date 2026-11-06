@@ -3,7 +3,7 @@
 use crate::shell::file_name;
 
 /// 只认安装器登记的正式版可执行文件；开发构建、其他渠道和隔离配置不受限制。
-pub fn is_litch(exe: &str, installed: Option<&str>, isolated: bool) -> bool {
+pub fn is_protected_target(exe: &str, installed: Option<&str>, isolated: bool) -> bool {
     !isolated && installed.is_some_and(|path| !path.is_empty() && exe.eq_ignore_ascii_case(path))
 }
 
@@ -11,9 +11,10 @@ pub fn isolated_environment(environment: &[u16]) -> bool {
     environment.split(|unit| *unit == 0).any(|entry| {
         let text = String::from_utf16_lossy(entry);
         let upper = text.to_uppercase();
-        ["LITCH_PROFILE=", "LITCH_MOCK="]
-            .iter()
-            .any(|key| upper.starts_with(key) && text.len() > key.len())
+        env!("CU_HOST_ISOLATION_KEYS")
+            .split(';')
+            .map(|key| format!("{}=", key.to_uppercase()))
+            .any(|key| upper.starts_with(&key) && text.len() > key.len())
     })
 }
 
@@ -58,24 +59,24 @@ mod tests {
     #[test]
     fn self_target() {
         let installed = Some(r"C:\Programs\Litch\Litch.exe");
-        assert!(is_litch(r"c:\programs\litch\LITCH.exe", installed, false));
+        assert!(is_protected_target(r"c:\programs\litch\LITCH.exe", installed, false));
         for exe in [
             r"C:\dev\Electron.exe",
             r"C:\test\Litch.exe",
             r"C:\Litch-beta\Litch.exe",
             "notepad.exe",
         ] {
-            assert!(!is_litch(exe, installed, false));
+            assert!(!is_protected_target(exe, installed, false));
         }
-        assert!(!is_litch(installed.unwrap(), installed, true));
-        assert!(!is_litch("Litch.exe", None, false));
+        assert!(!is_protected_target(installed.unwrap(), installed, true));
+        assert!(!is_protected_target("Litch.exe", None, false));
         assert!(isolated_environment(
-            &"PATH=x\0LITCH_PROFILE=C:\\test\0\0"
+            &format!("PATH=x\0{}=C:\\test\0\0", env!("CU_HOST_ISOLATION_KEYS").split(';').next().unwrap())
                 .encode_utf16()
                 .collect::<Vec<_>>()
         ));
         assert!(!isolated_environment(
-            &"PATH=x\0LITCH_PROFILE=\0\0"
+            &format!("PATH=x\0{}=\0\0", env!("CU_HOST_ISOLATION_KEYS").split(';').next().unwrap())
                 .encode_utf16()
                 .collect::<Vec<_>>()
         ));

@@ -13,10 +13,10 @@ public enum Copy {
   }
 
   /// 提示的标题：正在操作哪个应用
-  public static func banner(_ language: Language, app: String) -> String {
+  public static func banner(_ language: Language, app: String, productName: String = "Litch") -> String {
     switch language {
-    case .zh: return "Litch 正在操作「\(app)」"
-    case .en: return "Litch is controlling \(app)"
+    case .zh: return "\(productName) 正在操作「\(app)」"
+    case .en: return "\(productName) is controlling \(app)"
     }
   }
 

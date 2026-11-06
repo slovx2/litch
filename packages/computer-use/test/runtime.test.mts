@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { computerToolsSpec } from '../../automation-contracts/src/litch/client-tools-computer.mjs'
 import { portableComputerTools } from '../../automation-contracts/src/litch/client-tools-computer-portable.mjs'
 import type { InvocationContext, ToolInvocation } from '../../automation-contracts/src/runtime.mjs'
-import { createComputerUse, type HelperRequester } from '../src/index.mjs'
+import { type ComputerUseOptions, createComputerUse, type HelperRequester } from '../src/index.mjs'
 import { computerTools } from '../src/tools.mjs'
 
 const scope = { hostId: 'host-a', deviceId: 'device-a', sessionId: 's', turnId: 't', callId: 'c' }
@@ -13,7 +13,7 @@ const call = (tool = 'click'): ToolInvocation => ({
   tool,
   arguments: { app: 'fixture', x: 1, y: 1 },
 })
-function fixture() {
+function fixture(extra: Partial<ComputerUseOptions> = {}) {
   const requests: { method: string; params: Record<string, unknown> }[] = []
   let disposed = 0
   let approved = 0
@@ -45,6 +45,7 @@ function fixture() {
     disposeHelper: async () => {
       disposed++
     },
+    ...extra,
   })
   const context: InvocationContext = {
     signal: new AbortController().signal,
@@ -151,7 +152,7 @@ test('结束回合取消审批、撤卡并发送单个收尾帧；迟到许可�
     ready()
     await new Promise<void>((resolve) => {
       release = resolve
-      signal.addEventListener('abort', resolve.bind(null), { once: true })
+      signal.addEventListener('abort', () => resolve(), { once: true })
     })
     return { requestId: request.id, nonce: request.nonce, scope: request.scope, decision: 'always' }
   }
@@ -212,7 +213,7 @@ test('截图按公共 ToolResult 返回，目标内容中的产品名不被替�
   await f.runtime.dispose()
 })
 
-test('未知工具和无效批次拒绝，不发输入；批次首步失败不重放', async () => {
+test('未知工具和无效批次拒绝，不发输入', async () => {
   const f = fixture()
   assert.equal((await f.runtime.executor.execute(call('unknown'), f.context)).success, false)
   assert.equal(
@@ -225,5 +226,85 @@ test('未知工具和无效批次拒绝，不发输入；批次首步失败不�
     false,
   )
   assert.equal(f.requests.length, 0)
+  await f.runtime.dispose()
+})
+
+test('M2 StateStore 在输入前原子保存许可；写失败不能执行，恢复和撤销沿相同宿主键', async () => {
+  const values = new Map<string, { revision: string; value: { expiresAt: number | null } }>()
+  let failWrite = true
+  const state = {
+    async read(key: string) {
+      return values.get(key)
+    },
+    async compareAndSet(key: string, revision: string | undefined, value: unknown) {
+      assert.equal(revision, values.get(key)?.revision)
+      if (failWrite) throw new Error('storage unavailable')
+      const next = String(Number(revision ?? 0) + 1)
+      values.set(key, { revision: next, value: value as { expiresAt: number | null } })
+      return next
+    },
+  }
+  const f = fixture({ state })
+  f.context.approvals.request = async (request) => ({
+    requestId: request.id,
+    nonce: request.nonce,
+    scope: request.scope,
+    decision: 'always',
+  })
+  assert.equal((await f.runtime.executor.execute(call(), f.context)).success, false)
+  assert.equal(f.requests.filter((item) => item.method === 'click').length, 0)
+  failWrite = false
+  assert.equal((await f.runtime.executor.execute(call(), f.context)).success, true)
+  await f.runtime.dispose()
+  const restored = fixture({ state })
+  assert.equal((await restored.runtime.executor.execute(call(), restored.context)).success, true)
+  assert.equal(restored.approved(), 0)
+  await restored.runtime.selfGuard.revoke()
+  assert.equal([...values.values()][0]?.value.expiresAt, null)
+  await restored.runtime.dispose()
+})
+
+test('持久化等待期间结束回合，迟到写入完成不能执行输入', async () => {
+  let writing: () => void = () => {}
+  let saved: () => void = () => {}
+  const started = new Promise<void>((resolve) => {
+    writing = resolve
+  })
+  const storageDone = new Promise<void>((resolve) => {
+    saved = resolve
+  })
+  const f = fixture({
+    state: {
+      read: async () => undefined,
+      async compareAndSet() {
+        writing()
+        await storageDone
+        return '1'
+      },
+    },
+  })
+  f.context.approvals.request = async (request) => ({
+    requestId: request.id,
+    nonce: request.nonce,
+    scope: request.scope,
+    decision: 'always',
+  })
+  const result = f.runtime.executor.execute(call(), f.context)
+  await started
+  await f.runtime.executor.endTurn(scope)
+  saved()
+  assert.equal((await result).success, false)
+  assert.equal(f.requests.filter((item) => item.method === 'click').length, 0)
+  await f.runtime.dispose()
+})
+
+test('存储读取一直未返回也可取消调用与销毁，不等待外部存储', async () => {
+  const f = fixture({
+    state: { read: async () => new Promise(() => {}), compareAndSet: async () => '1' },
+  })
+  const pending = f.runtime.executor.execute(call(), f.context)
+  await f.runtime.executor.endTurn(scope)
+  assert.equal((await pending).success, false)
+  assert.equal(f.requests.filter((item) => item.method === 'click').length, 0)
   await f.runtime.dispose()
 })

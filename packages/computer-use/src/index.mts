@@ -2,6 +2,7 @@ import { approvalDecision } from '../../automation-contracts/src/approval.mjs'
 import type {
   InvocationContext,
   SessionScope,
+  StateStore,
   ToolExecutor,
   ToolInvocation,
   ToolResult,
@@ -9,7 +10,7 @@ import type {
 } from '../../automation-contracts/src/runtime.mjs'
 import { createComputerExecutor as createRunner } from './executor.mjs'
 import type { HelperAccess } from './executor-shared.mjs'
-import { ComputerSelfGuard, type SelfGuardOptions } from './self-guard.mjs'
+import { ComputerSelfGuard } from './self-guard.mjs'
 import { type ComputerToolsOptions, computerTools } from './tools.mjs'
 import type { HelperStopped, PermissionStatus } from './wire.mjs'
 
@@ -28,7 +29,8 @@ export interface ComputerUseOptions extends ComputerToolsOptions {
   /** 一个 runtime 只属于一个可信宿主实例。 */
   hostId: string
   helper: HelperAccess
-  selfApprovalStorage?: SelfGuardOptions['storage']
+  /** M2 原子状态端口；键按 hostId 隔离。 */
+  state?: StateStore
   now?(): number
   onInvocation?(call: ToolInvocation, nativeSession: string): void
   /** 由宿主收尾传输；不会寻找其他宿主或路径。 */
@@ -43,9 +45,31 @@ const turnId = (scope: TurnScope) =>
 export function createComputerUse(options: ComputerUseOptions) {
   if (options.platform === 'portable') throw new Error('An executor requires darwin or win32')
   if (!options.hostId || !options.namespace) throw new Error('hostId and namespace are required')
+  let revision: string | undefined
+  const state = options.state
+  const storageKey = `computer-use/self-approval/${JSON.stringify(options.hostId)}`
   const guard = new ComputerSelfGuard({
     productName: options.productName,
-    ...(options.selfApprovalStorage ? { storage: options.selfApprovalStorage } : {}),
+    ...(state
+      ? {
+          storage: {
+            async read() {
+              const record = await state.read(storageKey)
+              revision = record?.revision
+              const value = record?.value
+              return value &&
+                typeof value === 'object' &&
+                !Array.isArray(value) &&
+                typeof value.expiresAt === 'number'
+                ? value.expiresAt
+                : null
+            },
+            async write(expiresAt: number | null) {
+              revision = await state.compareAndSet(storageKey, revision, { expiresAt })
+            },
+          },
+        }
+      : {}),
     ...(options.now ? { now: options.now } : {}),
   })
   const runner = createRunner({
@@ -128,6 +152,7 @@ export function createComputerUse(options: ComputerUseOptions) {
             },
           },
         )
+        if (controller.signal.aborted) return failure('The call was cancelled.')
         return {
           success: result.success,
           content: result.contentItems.map((item) => {

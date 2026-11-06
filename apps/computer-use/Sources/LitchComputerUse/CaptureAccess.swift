@@ -18,7 +18,7 @@ enum CaptureAccess {
     if let rpc = error as? RPCError { return rpc }
     let ns = error as NSError
     if ns.domain == SCStreamErrorDomain && [SCStreamError.Code.userDeclined.rawValue, SCStreamError.Code.userStopped.rawValue].contains(ns.code) {
-      return RPCError(.captureDenied, "macOS denied or stopped screen capture. Ask the user to allow Litch Computer Use in the system prompt or Screen Recording settings, then retry. Do not bypass the prompt.")
+      return RPCError(.captureDenied, "macOS denied or stopped screen capture. Ask the user to allow \(NativeHost.identity.helperName) in the system prompt or Screen Recording settings, then retry. Do not bypass the prompt.")
     }
     return RPCError(.captureFailed, "Window capture failed (\(ns.domain), \(ns.code)). No usable frame was received; retry after the user checks the screen capture prompt and window.")
   }

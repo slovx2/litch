@@ -75,6 +75,12 @@ export class WinLauncher implements HelperLauncher {
       }
     } catch (error) {
       client.close()
+      await this.afterShutdown()
+      if (child.exitCode === 3)
+        throw new HelperError(
+          'failed',
+          'Computer Use is busy: another helper owns the input mutex for this Windows user session. Close that host before retrying; do not start another helper to bypass it.',
+        )
       throw error instanceof HelperError
         ? error
         : new HelperError('failed', `helper did not start: ${(error as Error).message}`)

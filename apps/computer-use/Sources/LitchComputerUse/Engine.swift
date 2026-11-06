@@ -162,7 +162,8 @@ final class Engine: ConnectionHandler {
     }
     let peer = PeerVerifier.peer(fd: connection.fd, team: ownTeam)
     if let reason = PeerAuth.check(
-      mode: mode, ownUid: getuid(), peer: peer, offeredToken: params["token"]?.stringValue)
+      mode: mode, ownUid: getuid(), peer: peer, offeredToken: params["token"]?.stringValue,
+      allowedIdentifiers: Set(NativeHost.identity.allowedPeerIds), productName: NativeHost.identity.productName)
     {
       Log.write(
         "连接 #\(connection.id) 没通过校验：\(reason)（对面 团队=\(peer.teamId ?? "无") 标识=\(peer.identifier ?? "无")）")
@@ -225,13 +226,14 @@ final class Engine: ConnectionHandler {
 
   /// 只识别正式包，隔离实例从进程环境判断，不采用模型传来的标识。
   func isSelf(_ app: NSRunningApplication) -> Bool {
-    guard app.bundleIdentifier == "io.github.slovx2.litch" else { return false }
+    guard let bundleId = app.bundleIdentifier, NativeHost.identity.protectedTargetIds.contains(bundleId) else { return false }
     var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, app.processIdentifier]
     var count = 1024 * 1024
     var buffer = [UInt8](repeating: 0, count: count)
     let read = sysctl(&mib, UInt32(mib.count), &buffer, &count, nil, 0) == 0
     return SelfTarget.matches(bundleId: app.bundleIdentifier,
-      isolated: read && SelfTarget.isolated(arguments: Array(buffer.prefix(count))))
+      isolated: read && SelfTarget.isolated(arguments: Array(buffer.prefix(count)), environmentKeys: NativeHost.identity.isolationEnvironmentKeys),
+      protectedIds: Set(NativeHost.identity.protectedTargetIds))
   }
 
   /// 明确停止保持到回合结束；新回合可恢复，旧回合迟到不能借此恢复控制。
@@ -260,7 +262,7 @@ final class Engine: ConnectionHandler {
       throw RPCError(.stale, "The target application changed after approval. Observe it again.")
     }
     if isSelf(app), params["selfAllowed"]?.boolValue != true {
-      throw RPCError(.unauthorized, "Access to Litch itself requires user approval in Litch.")
+      throw RPCError(.unauthorized, "Access to \(NativeHost.identity.productName) itself requires user approval in \(NativeHost.identity.productName).")
     }
     guard app.bundleIdentifier != nil else { throw RPCError(.notFound, "This app has no bundle identifier and cannot be controlled.") }
     let key = Engine.appKey(app)

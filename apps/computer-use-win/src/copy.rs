@@ -17,8 +17,8 @@ pub fn language(raw: Option<&str>) -> Language {
 /// 提示条上的一行字：正在操作哪些应用、怎么停
 pub fn banner(language: Language, apps: &[String]) -> String {
     match language {
-        Language::Zh => format!("Litch 正在操作「{}」 · 按 Esc 停止", apps.join("、")),
-        Language::En => format!("Litch is controlling {} · Press Esc to stop", apps.join(", ")),
+        Language::Zh => format!("{} 正在操作「{}」 · 按 Esc 停止", env!("CU_HOST_PRODUCT"), apps.join("、")),
+        Language::En => format!("{} is controlling {} · Press Esc to stop", env!("CU_HOST_PRODUCT"), apps.join(", ")),
     }
 }
 
@@ -37,7 +37,7 @@ mod tests {
     #[test]
     fn banners() {
         let apps = vec!["记事本".to_string(), "画图".to_string()];
-        assert_eq!(banner(Language::Zh, &apps), "Litch 正在操作「记事本、画图」 · 按 Esc 停止");
-        assert_eq!(banner(Language::En, &apps[..1]), "Litch is controlling 记事本 · Press Esc to stop");
+        assert_eq!(banner(Language::Zh, &apps), format!("{} 正在操作「记事本、画图」 · 按 Esc 停止", env!("CU_HOST_PRODUCT")));
+        assert_eq!(banner(Language::En, &apps[..1]), format!("{} is controlling 记事本 · Press Esc to stop", env!("CU_HOST_PRODUCT")));
     }
 }
