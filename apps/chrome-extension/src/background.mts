@@ -36,6 +36,7 @@ const state: ExtensionState = {
   paused: new Set(),
   generations: new Map(),
   stoppedTurns: new Set(),
+  stopped: false,
   console: new Map(),
   send(message) {
     if (port) {
@@ -66,14 +67,43 @@ const state: ExtensionState = {
 }
 
 async function stopAll(): Promise<void> {
+  state.stopped = true
+  await chrome.storage.local.set({ litchControlStopped: true })
+  state.send({ kind: 'control', stopped: true })
+  await controlLabel()
   for (const grant of state.grants.values()) state.stoppedTurns.add(ownerKey(grant.owner))
   await chrome.storage.session.set({ litchStoppedTurns: [...state.stoppedTurns].slice(-100) })
   await Promise.all([...state.grants.keys()].map((id) => state.revoke(id, 'userStopped')))
 }
 
 chrome.action.onClicked.addListener(() => {
-  void stopAll()
+  if (!ready) return
+  if (state.stopped) void resumeControl()
+  else void stopAll()
 })
+
+async function controlLabel(): Promise<void> {
+  const zh = chrome.i18n.getUILanguage().startsWith('zh')
+  await chrome.action.setTitle({
+    title: state.stopped
+      ? zh
+        ? 'Litch — 控制已停止，点击重新打开'
+        : 'Litch — Control stopped; click to resume'
+      : zh
+        ? 'Litch — 点击停止控制'
+        : 'Litch — Click to stop control',
+  })
+  await chrome.action.setBadgeText({ text: state.stopped ? 'OFF' : '' })
+}
+
+async function resumeControl(): Promise<void> {
+  await chrome.storage.local.set({ litchControlStopped: false })
+  state.stoppedTurns.clear()
+  await chrome.storage.session.remove('litchStoppedTurns')
+  state.stopped = false
+  state.send({ kind: 'control', stopped: false })
+  await controlLabel()
+}
 chrome.runtime.onInstalled.addListener(() => {
   void connect()
 })
@@ -97,6 +127,7 @@ chrome.runtime.onMessage.addListener(
         version: chrome.runtime.getManifest().version,
         protocol: wire,
         claimed: state.grants.size,
+        stopped: state.stopped,
       })
       return false
     }
@@ -243,6 +274,7 @@ async function connect(): Promise<void> {
       instanceId,
       epoch: state.epoch,
       name: 'Chrome',
+      stopped: state.stopped,
     })
     attempt = 0
   }
@@ -258,6 +290,7 @@ async function installSource(): Promise<ChromeExtensionSource | undefined> {
 
 /** 不兼容时在工具栏图标上标出来；详细原因和办法在 Litch 设置页。 */
 async function showCompatibility(welcome: ChromeWelcome | null): Promise<void> {
+  if (!welcome?.incompatible) return controlLabel()
   const title =
     welcome?.incompatible === 'litchOutdated'
       ? `Litch — Update Litch (${welcome.litchVersion}) to use this extension`
@@ -298,6 +331,9 @@ function schedule(): void {
 }
 
 async function start(): Promise<void> {
+  state.stopped =
+    (await chrome.storage.local.get('litchControlStopped')).litchControlStopped === true
+  await controlLabel()
   await state.presentation.recover()
   const saved = await chrome.storage.session.get([
     'litchAttached',

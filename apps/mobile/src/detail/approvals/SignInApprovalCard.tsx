@@ -46,6 +46,20 @@ export function SignInApprovalCard(props: {
   card: ApprovalCardView
   waiting: number
 }) {
+  const t = useT()
+  if (props.card.kind === 'browserSite')
+    return (
+      <Card
+        title={t('clientAsk.site')}
+        waiting={props.waiting}
+        actions={null}
+        error={null}
+        testID="request:browserSite"
+      >
+        <Why>{props.card.summary.origin}</Why>
+        <Why>{t('approval.siteDesktop')}</Why>
+      </Card>
+    )
   return props.card.kind === 'computerSelf' ? (
     <ComputerSelfApprovalCard {...props} card={props.card} />
   ) : (

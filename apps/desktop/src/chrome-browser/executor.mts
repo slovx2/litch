@@ -55,8 +55,6 @@ export class ChromeExecutor implements BrowserExecutor {
   private tokens = new Map<string, ClaimToken>()
   private states = new Map<string, TabState & { generation: number }>()
   readonly sites: SiteBook
-  private instancePermits = new Map<string, Set<string>>()
-  private deniedInstances = new Set<string>()
   private busy = new Set<string>()
   private calls = new Map<
     string,
@@ -75,6 +73,7 @@ export class ChromeExecutor implements BrowserExecutor {
         if (
           event.kind === 'hello' ||
           event.kind === 'disconnected' ||
+          (event.kind === 'control' && event.stopped) ||
           (event.kind === 'removed' && event.tabId === page.grant.tabId) ||
           (event.kind === 'revoked' && event.leaseId === page.grant.leaseId)
         )
@@ -129,57 +128,42 @@ export class ChromeExecutor implements BrowserExecutor {
         'disconnected',
         'This Chrome instance disconnected. List targets again.',
       )
+    if (found.stopped)
+      throw new ChromeBridgeError(
+        'userStopped',
+        'The user stopped Chrome control. Ask the user to click the Litch extension to resume control.',
+      )
     if (found.incompatible)
       throw new ChromeBridgeError('versionMismatch', incompatibleMessage(found))
     return id
   }
-  private async permitInstance(
-    invocation: ClientToolInvocation,
-    context: ClientToolContext,
-    instanceId: string,
-  ): Promise<void> {
-    const instance = this.options.bridge.instances().find((item) => item.id === instanceId)
-    if (!instance)
-      throw new ChromeBridgeError('disconnected', 'Chrome disconnected. List targets again.')
-    const identity = `${instanceId}:${instance.epoch}`
-    const key = session(invocation)
-    const once = `${key}:${invocation.turnId}`
-    if (
-      this.instancePermits.get(key)?.has(identity) ||
-      this.instancePermits.get(once)?.has(identity)
-    )
-      return
-    if (this.deniedInstances.has(`${once}:${identity}`))
-      throw new ChromeBridgeError(
-        'originNotApproved',
-        'The user declined access to this Chrome instance. Do not switch targets to bypass the decision.',
+  private async listTabs(instanceId: string, signal: AbortSignal): Promise<ListedTab[]> {
+    const list = () =>
+      this.options.bridge.call<ListedTab[]>(instanceId, { op: 'list', args: {} }, signal)
+    try {
+      return await list()
+    } catch (error) {
+      // 仅重试无副作用的枚举，且不能把另一个 profile 当成原实例。输入失败绝不盲重放。
+      if (
+        !(error instanceof ChromeBridgeError) ||
+        !['staleLease', 'disconnected'].includes(error.code) ||
+        signal.aborted
       )
-    const answer = await context.ask({
-      kind: 'chromeInstance',
-      instanceId,
-      name: `${instance.name} · ${instanceId.slice(0, 8)}`,
-    })
-    if (answer === 'decline') this.deniedInstances.add(`${once}:${identity}`)
-    if (!answer || answer === 'decline' || context.signal.aborted)
-      throw new ChromeBridgeError('originNotApproved', 'Chrome instance access was not approved.')
-    if (
-      this.options.bridge.instances().find((item) => item.id === instanceId)?.epoch !==
-      instance.epoch
-    )
-      throw new ChromeBridgeError(
-        'staleLease',
-        'Chrome reconnected during approval. List targets again.',
-      )
-    const scope = answer === 'session' ? key : once
-    const permitted = this.instancePermits.get(scope) ?? new Set<string>()
-    permitted.add(identity)
-    this.instancePermits.set(scope, permitted)
+        throw error
+      this.instance(`chrome:${instanceId}`)
+      return list()
+    }
   }
   async approve(
     invocation: ClientToolInvocation,
     context: ClientToolContext,
     origins: string[],
   ): Promise<void> {
+    if (!this.options.allowed(invocation))
+      throw new ChromeBridgeError(
+        'targetUnavailable',
+        'Chrome control is disabled in Litch Settings → Chrome.',
+      )
     for (const origin of origins) {
       if (origin === 'about:blank') continue
       if (chromeOrigin(origin) !== origin)
@@ -197,6 +181,11 @@ export class ChromeExecutor implements BrowserExecutor {
       const answer = await context.ask({ kind: 'site', origin, url: origin, browser: 'chrome' })
       if (context.signal.aborted || !answer)
         throw new ChromeBridgeError('cancelled', 'Site approval was cancelled.')
+      if (!this.options.allowed(invocation))
+        throw new ChromeBridgeError(
+          'targetUnavailable',
+          'Chrome control was disabled while awaiting website approval.',
+        )
       if (answer === 'decline') {
         this.sites.decline(key, invocation.turnId, origin)
         throw new ChromeBridgeError('originNotApproved', `Access to ${origin} was declined.`)
@@ -219,6 +208,7 @@ export class ChromeExecutor implements BrowserExecutor {
         'tabNotClaimed',
         'This tab is not claimed by this conversation. List tabs and claim first.',
       )
+    this.instance(`chrome:${page.instanceId}`)
     if (!page.valid || page.grant.owner.turnId !== invocation.turnId)
       throw new ChromeBridgeError(
         'staleLease',
@@ -254,28 +244,22 @@ export class ChromeExecutor implements BrowserExecutor {
       keep = old.grant.keep
       await old.release()
     }
-    await this.permitInstance(invocation, context, token.instanceId)
+    this.instance(`chrome:${token.instanceId}`)
     await this.approve(invocation, context, token.tab.origins)
-    if (original) {
-      const answer = await context.ask({
-        kind: 'chromeTab',
-        url: token.tab.url,
-        title: token.tab.title,
-      })
-      if (answer !== 'once' || context.signal.aborted)
-        throw new ChromeBridgeError(
-          'tabNotClaimed',
-          'The user did not approve control of this tab.',
-        )
-    }
+    // 等网站审批期间可能关闭总开关或手动停止；不能把迟到的答复当成恢复控制。
+    if (!this.options.allowed(invocation))
+      throw new ChromeBridgeError(
+        'targetUnavailable',
+        'Chrome control was disabled while awaiting website approval.',
+      )
+    this.instance(`chrome:${token.instanceId}`)
     if (
       this.options.bridge.instances().find((instance) => instance.id === token.instanceId)
-        ?.epoch !== token.epoch ||
-      token.expires < Date.now()
+        ?.epoch !== token.epoch
     )
       throw new ChromeBridgeError(
         'staleLease',
-        'Chrome reconnected or the tab listing expired during approval. List tabs again.',
+        'Chrome reconnected during website approval. The approval is saved. Call targets, then tabs(action:list,targetId) and claim with a fresh token.',
       )
     const grant: ChromeGrant = {
       ...(invocation.sessionTitle ? { sessionTitle: invocation.sessionTitle } : {}),
@@ -317,7 +301,7 @@ export class ChromeExecutor implements BrowserExecutor {
       return chromeFailure(
         new ChromeBridgeError(
           'targetUnavailable',
-          'Chrome control is disabled for this source device.',
+          `Device ${invocation.device.name} is not allowed to use this computer's Chrome. Ask the user to enable Chrome control and allow this device in Litch Settings → Chrome.`,
         ),
       )
     const args = invocation.arguments as Record<string, unknown> | null
@@ -389,7 +373,7 @@ export class ChromeExecutor implements BrowserExecutor {
       if (!this.options.allowed(invocation))
         throw new ChromeBridgeError(
           'targetUnavailable',
-          'Chrome control is disabled for this source device. Enable it in Litch Settings → Browser → Chrome.',
+          `Device ${invocation.device.name} is not allowed to use this computer's Chrome. Ask the user to enable Chrome control and allow this device in Litch Settings → Chrome.`,
         )
       const args = invocation.arguments as Record<string, unknown>
       if (!args || typeof args !== 'object')
@@ -453,12 +437,7 @@ export class ChromeExecutor implements BrowserExecutor {
         )
       if (invocation.tool === 'tabs' && args.action === 'list') {
         const instanceId = this.instance(args.targetId)
-        await this.permitInstance(invocation, context, instanceId)
-        const tabs = await this.options.bridge.call<ListedTab[]>(
-          instanceId,
-          { op: 'list', args: {} },
-          context.signal,
-        )
+        const tabs = await this.listTabs(instanceId, context.signal)
         const list = tabs
           .filter(
             (tab) =>
@@ -518,7 +497,6 @@ export class ChromeExecutor implements BrowserExecutor {
         (invocation.tool === 'tabs' && args.action === 'new')
       ) {
         const instanceId = this.instance(args.targetId)
-        await this.permitInstance(invocation, context, instanceId)
         const tab = await this.options.bridge.call<ChromeTabState>(
           instanceId,
           { op: 'new', args: {} },
@@ -548,6 +526,11 @@ export class ChromeExecutor implements BrowserExecutor {
         // 每次操作重新判断，已发出的租约不能绕过用户刚设置的黑名单。
         if (invocation.tool !== 'release')
           await this.approve(invocation, context, page.grant.origins)
+        if (!this.options.allowed(invocation))
+          throw new ChromeBridgeError(
+            'targetUnavailable',
+            'Chrome control is disabled in Litch Settings → Chrome.',
+          )
         return await executePageTool(this, page, invocation, context, args)
       } finally {
         page.unbind()
@@ -580,10 +563,14 @@ export class ChromeExecutor implements BrowserExecutor {
     const ended = JSON.stringify([turn.deviceId, turn.threadId])
     for (const [id, token] of this.tokens) if (token.session === ended) this.tokens.delete(id)
     this.sites.turnEnded(ended, turn.turnId)
-    this.instancePermits.delete(`${ended}:${turn.turnId}`)
-    for (const key of this.deniedInstances)
-      if (key.startsWith(`${ended}:${turn.turnId}:`)) this.deniedInstances.delete(key)
   }
+  releaseAll(): void {
+    for (const page of this.pages.values()) {
+      void page.release().catch(() => {})
+      page.valid = false
+    }
+  }
+
   stop(deviceId?: string): void {
     for (const page of this.pages.values())
       if (page.valid && (!deviceId || page.grant.owner.deviceId === deviceId))
@@ -596,7 +583,7 @@ export class ChromeExecutor implements BrowserExecutor {
   }
   dispose(): void {
     clearInterval(this.timer)
-    this.stop()
+    this.releaseAll()
     this.off()
   }
 }

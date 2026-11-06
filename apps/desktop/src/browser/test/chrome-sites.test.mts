@@ -144,7 +144,7 @@ test('Chrome 本回合清理、本会话跨回合；拒绝不反复弹卡', asyn
   }
 })
 
-test('Chrome 信任所有网站仍逐个审批用户标签；重连不恢复租约', async () => {
+test('Chrome 信任所有网站不弹实例和标签卡；重连不恢复租约', async () => {
   const f = fixture()
   try {
     f.sites.setTrustAll(true)
@@ -170,7 +170,8 @@ test('Chrome 信任所有网站仍逐个审批用户标签；重连不恢复租�
       assert.equal(claimed.success, true)
       f.reconnect()
     }
-    assert.equal(f.asks.filter((kind) => kind === 'chromeTab').length, 2)
+    assert.equal(f.asks.filter((kind) => kind === 'chromeTab').length, 0)
+    assert.equal(f.asks.filter((kind) => kind === 'chromeInstance').length, 0)
     assert.equal(f.asks.filter((kind) => kind === 'site').length, 0)
   } finally {
     f.executor.dispose()
@@ -197,6 +198,28 @@ test('Chrome 设置入口写入独立持久策略，重启读取并可撤销', a
     assert.equal(initial.lastError, null)
     assert.deepEqual(initial.sitePolicy, { trustAll: false, blocked: [] })
     assert.deepEqual(initial.savedSites, [])
+    const routed = targets.dispatch({
+      namespace: 'litch_browser',
+      call: async () => assert.fail('不得转到内置浏览器'),
+      turnEnded: () => {},
+      currentTab: () => null,
+    })
+    const context: ClientToolContext = {
+      signal: new AbortController().signal,
+      ask: async () => assert.fail('总开关不弹卡'),
+    }
+    const remote: ClientToolInvocation = {
+      ...invocation,
+      tool: 'targets',
+      device: { id: 'remote', name: 'Remote test', kind: 'ssh', target: 'fixture' },
+    }
+    assert.equal((await routed.call(remote, context)).success, false)
+    await targets.settings({ kind: 'chrome.enable', enabled: true })
+    const blocked = await routed.call(remote, context)
+    assert.equal(blocked.success, false)
+    assert.match(JSON.stringify(blocked), /Remote test.*Settings → Chrome/)
+    await targets.settings({ kind: 'chrome.device', deviceId: 'remote', enabled: true })
+    assert.equal((await routed.call(remote, context)).success, true)
     await targets.settings({ kind: 'chrome.trust', on: true })
     await targets.settings({ kind: 'chrome.block', site: 'https://Blocked.Example/path' })
     await assert.rejects(targets.settings({ kind: 'chrome.block', site: 'bad host' }))

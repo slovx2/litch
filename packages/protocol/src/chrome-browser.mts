@@ -62,6 +62,8 @@ export interface ChromeInstance {
   source: ChromeExtensionSource | null
   /** 连上来的扩展 ID（允许列表中的一个）。 */
   extensionId: string
+  /** 用户在扩展中主动停止，必须由用户手动恢复。 */
+  stopped?: boolean
 }
 
 export interface ChromeLeaseOwner {
@@ -92,6 +94,7 @@ export interface ChromeGrant {
 }
 
 export type ChromeErrorCode =
+  | 'userStopped'
   | 'disconnected'
   | 'versionMismatch'
   | 'staleLease'
@@ -156,7 +159,9 @@ export type ChromeEvent =
       instanceId: string
       epoch: string
       name: string
+      stopped?: boolean
     }
+  | { kind: 'control'; stopped: boolean }
   | { kind: 'tab'; tab: ChromeTabState }
   | { kind: 'revoked'; leaseId: string; reason: string }
   | { kind: 'removed'; tabId: number }

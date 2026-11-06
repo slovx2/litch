@@ -2,6 +2,7 @@
 import type { Entry } from '../../../../../packages/ui/src/i18n/types.ts'
 
 export const zhCN = {
+  'approval.siteDesktop': '请在执行浏览器操作的 Litch 桌面端打开此会话，处理网站审批。',
   'approval.title': '代理请求登录 {domain}',
   'approval.origin': '网址',
   'approval.site': '代理说的站名',
@@ -43,6 +44,8 @@ export const zhCN = {
 } satisfies Record<`approval.${string}`, Entry>
 
 export const en: Record<keyof typeof zhCN, Entry> = {
+  'approval.siteDesktop':
+    'Open this conversation in the Litch desktop running the browser to approve website access.',
   'approval.title': 'Agent wants to sign in to {domain}',
   'approval.origin': 'Address',
   'approval.site': 'Site (per the agent)',

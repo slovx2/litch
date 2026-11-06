@@ -11,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { buildChromeExtension } from '../../apps/desktop/scripts/build-chrome.mjs'
 import { Cdp, until } from '../chrome-m0/cdp.mjs'
 import { fixtures } from './fixtures.mjs'
+import { chromeLifecycle } from './lifecycle.mjs'
 import { remoteCheck } from './remote-check.mjs'
 import { chromeUx } from './ux.mjs'
 
@@ -35,9 +36,10 @@ if (process.argv.includes('--shown') && process.env.LITCH_CHROME_GUI_SLOT !== 'a
   throw new Error('GUI checks need an approved foreground slot and LITCH_CHROME_GUI_SLOT=approved.')
 const started = Date.now()
 const work = mkdtempSync(join(tmpdir(), 'litch-chrome-e2e-'))
+const noEvidence = process.argv.includes('--no-evidence')
 const outputBase = join(root, '.local/chrome-e2e')
 const output = join(outputBase, `${started}-${process.pid}`)
-mkdirSync(output, { recursive: true })
+if (!noEvidence) mkdirSync(output, { recursive: true })
 const report = { binary, checks: [], elapsedMs: 0, success: false }
 let child, bridge, executor, cdp, site
 let browserLog = ''
@@ -66,8 +68,12 @@ for (const signal of ['SIGINT', 'SIGTERM'])
     report.error = `Interrupted by ${signal}`
     void cleanup().finally(() => {
       report.elapsedMs = Date.now() - started
-      writeFileSync(join(output, 'report.json'), JSON.stringify(report, null, 2))
-      writeFileSync(join(outputBase, 'report.json'), JSON.stringify({ ...report, output }, null, 2))
+      if (!noEvidence) writeFileSync(join(output, 'report.json'), JSON.stringify(report, null, 2))
+      if (!noEvidence)
+        writeFileSync(
+          join(outputBase, 'report.json'),
+          JSON.stringify({ ...report, output }, null, 2),
+        )
       process.exit(signal === 'SIGINT' ? 130 : 143)
     })
   })
@@ -299,7 +305,8 @@ try {
     const result = await success('screenshot', { tabId, format: 'png' })
     const image = result.contentItems.find((item) => item.type === 'inputImage')
     assert.ok(image)
-    writeFileSync(join(output, 'page.png'), Buffer.from(image.imageUrl.split(',')[1], 'base64'))
+    if (!noEvidence)
+      writeFileSync(join(output, 'page.png'), Buffer.from(image.imageUrl.split(',')[1], 'base64'))
   })
   await check('isolated world 公共光标 / 截图不含光标 / AX 无光标', async () => {
     const page = executor.pages.get(tabId)
@@ -377,8 +384,10 @@ try {
     const removed = await capture()
     assert.equal(clean, removed, 'Product screenshot equals the image with the renderer removed')
     assert.notEqual(decorated, clean, 'Raw browser screenshot includes the visible renderer')
-    writeFileSync(join(output, 'pointer-visible.png'), Buffer.from(decorated, 'base64'))
-    writeFileSync(join(output, 'pointer-excluded.png'), Buffer.from(clean, 'base64'))
+    if (!noEvidence)
+      writeFileSync(join(output, 'pointer-visible.png'), Buffer.from(decorated, 'base64'))
+    if (!noEvidence)
+      writeFileSync(join(output, 'pointer-excluded.png'), Buffer.from(clean, 'base64'))
     await cdp.call('Target.detachFromTarget', { sessionId })
     // 测试销毁了 world 内 renderer，重新认领后继续其余业务检查。
     await success('release', { tabId })
@@ -773,7 +782,7 @@ try {
     assert.match(text(denied), /cancelled/)
   })
   await chromeUx({ check, cdp, workerSession, executor, targetId, site, invocation, context })
-  await check('站点设置：信任所有、多来源免审批、黑名单拦截及用户标签逐个认领', async () => {
+  await check('站点设置：信任所有、多来源免审批、黑名单拦截及用户标签免审批', async () => {
     const prior = { ...invocation }
     Object.assign(invocation, { threadId: 'site-policy-thread', turnId: 'site-policy-turn' })
     executor.sites.setTrustAll(true)
@@ -808,7 +817,7 @@ try {
       const user = listed.find((tab) => tab.url === `${site.origin}/policy-user`)
       const claims = asks.filter((ask) => ask.kind === 'chromeTab').length
       await success('claim', { claimToken: user.claimToken })
-      assert.equal(asks.filter((ask) => ask.kind === 'chromeTab').length, claims + 1)
+      assert.equal(asks.filter((ask) => ask.kind === 'chromeTab').length, claims)
     } finally {
       executor.turnEnded({
         deviceId: invocation.device.id,
@@ -820,6 +829,7 @@ try {
       Object.assign(invocation, prior)
     }
   })
+  await chromeLifecycle({ root, work, assets, nativeBinary, binary, site, build, check })
   if (process.argv.includes('--remote'))
     await check('真实 SSH / 远程 Pi / 核心审批 / 控制端 Chrome', async () => {
       report.remote = await remoteCheck({ ...driver, executor, origin: site.origin })
@@ -832,10 +842,11 @@ try {
 } finally {
   await cleanup()
   report.elapsedMs = Date.now() - started
-  writeFileSync(join(output, 'report.json'), JSON.stringify(report, null, 2))
-  writeFileSync(join(outputBase, 'report.json'), JSON.stringify({ ...report, output }, null, 2))
-  if (!report.success) writeFileSync(join(output, 'chrome.log'), browserLog)
+  if (!noEvidence) writeFileSync(join(output, 'report.json'), JSON.stringify(report, null, 2))
+  if (!noEvidence)
+    writeFileSync(join(outputBase, 'report.json'), JSON.stringify({ ...report, output }, null, 2))
+  if (!report.success && !noEvidence) writeFileSync(join(output, 'chrome.log'), browserLog)
   console.log(
-    `Chrome acceptance: ${report.success ? 'PASS' : 'FAIL'} in ${report.elapsedMs} ms; ${output}`,
+    `Chrome acceptance: ${report.success ? 'PASS' : 'FAIL'} in ${report.elapsedMs} ms; ${noEvidence ? 'no evidence retained' : output}`,
   )
 }

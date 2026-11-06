@@ -43,6 +43,11 @@ export async function execute(state: ExtensionState, request: ChromeRequest): Pr
 }
 
 async function executeRequest(state: ExtensionState, request: ChromeRequest): Promise<unknown> {
+  if (state.stopped && !['release', 'stop'].includes(request.op))
+    throw new ChromeFault(
+      'userStopped',
+      'The user stopped Chrome control. Ask the user to click the Litch extension to resume control.',
+    )
   if (request.epoch !== state.epoch)
     throw new ChromeFault('staleLease', 'Chrome reconnected. List targets and claim again.')
   const args = request.args

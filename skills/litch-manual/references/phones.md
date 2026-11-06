@@ -268,8 +268,10 @@ messages arrived while you were away. Other board tabs retain their own scroll p
 
 ## Approving the agent's sign-ins on the phone
 
-Chrome requests have their own cards: instance access shows the Chrome instance name, website access
-shows the origin, and sign-in shows the website and reason. For Chrome sign-in, finish signing in on
+Chrome instance and tab access need no separate approval when Chrome control is enabled. Website approval shows the origin; phones show a read-only notice to handle it in the controlling desktop conversation. Sign-in shows the website and reason.
+Chrome 总开关开启后不再逐个审批实例或标签。网站审批在手机上显示只读提示，请在控制端桌面的对应会话中处理。
+
+For Chrome sign-in, finish signing in on
 the computer and then choose **Sign-in complete**; this is separate from the built-in browser's
 saved-account sign-in flow below.
 

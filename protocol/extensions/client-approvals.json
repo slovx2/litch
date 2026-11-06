@@ -18,6 +18,7 @@
   },
   "undeclared": "没声明的连接（官方 Codex 桌面端、旧版 Litch、旧版手机）收不到 litch/approval/changed，open 回 undeclared；list、answer、close 照样能调。没改过的官方桌面端看不到任何变化。",
   "rules": [
+    "browserSite：桌面站点审批的只读等待状态。设备据此投影会话树、经理看板和 needsUser；手机只能提示回到执行操作的 Litch 会话处理。answer 对此种类一律拒绝，设备侧和手机不能授予站点许可。卡片的 nonce、desktopId 只作标识，不是授权凭据。",
     "卡片只放在设备服务的内存里，按卡片号记，带着发卡片的那条连接。那条连接断了、过了 expiresAt、它 close 了就收掉，收掉时给这个会话发一次 litch/approval/changed。设备服务重启后一张都没有。",
     "open：同一条连接用同一个卡片号再开一次是换掉内容（openedAt 不变）；别的连接已经用了这个号回 duplicate。expiresAt 已经过了回 expired。一条连接最多挂 32 张，再开回 tooMany。摘要里的文字去掉控制字符、按 APPROVAL_TEXT_MAX 截断，账号最多 50 个。",
     "close：只有发卡片的那条连接能收；不是它开的、或者没有这张卡片都回成功、什么都不做。",
@@ -229,6 +230,15 @@
         }
       }
     },
+    "BrowserSiteSummary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["origin", "device", "browser"],
+      "properties": {
+        "origin": { "type": "string", "maxLength": 2048 },
+        "device": { "type": "string", "maxLength": 200 },
+        "browser": { "enum": ["chrome", "builtin"] }
+      }
+    },
     "ComputerSelfSummary": {
       "type": "object",
       "additionalProperties": false,
@@ -241,7 +251,8 @@
     "Card": {
       "oneOf": [
         { "properties": { "kind": { "const": "browserSignIn" }, "summary": { "$ref": "#/definitions/BrowserSignInSummary" } } },
-        { "properties": { "kind": { "const": "computerSelf" }, "summary": { "$ref": "#/definitions/ComputerSelfSummary" } } }
+        { "properties": { "kind": { "const": "computerSelf" }, "summary": { "$ref": "#/definitions/ComputerSelfSummary" } } },
+        { "properties": { "kind": { "const": "browserSite" }, "summary": { "$ref": "#/definitions/BrowserSiteSummary" } } }
       ],
       "type": "object",
       "additionalProperties": false,
@@ -255,12 +266,13 @@
           "minLength": 1
         },
         "kind": {
-          "enum": ["browserSignIn", "computerSelf"]
+          "enum": ["browserSignIn", "computerSelf", "browserSite"]
         },
         "summary": {
           "oneOf": [
             { "$ref": "#/definitions/BrowserSignInSummary" },
-            { "$ref": "#/definitions/ComputerSelfSummary" }
+            { "$ref": "#/definitions/ComputerSelfSummary" },
+            { "$ref": "#/definitions/BrowserSiteSummary" }
           ]
         },
         "desktopId": {
@@ -277,7 +289,8 @@
     "CardView": {
       "oneOf": [
         { "properties": { "kind": { "const": "browserSignIn" }, "summary": { "$ref": "#/definitions/BrowserSignInSummary" } } },
-        { "properties": { "kind": { "const": "computerSelf" }, "summary": { "$ref": "#/definitions/ComputerSelfSummary" } } }
+        { "properties": { "kind": { "const": "computerSelf" }, "summary": { "$ref": "#/definitions/ComputerSelfSummary" } } },
+        { "properties": { "kind": { "const": "browserSite" }, "summary": { "$ref": "#/definitions/BrowserSiteSummary" } } }
       ],
       "type": "object",
       "additionalProperties": false,
@@ -300,12 +313,13 @@
           "minLength": 1
         },
         "kind": {
-          "enum": ["browserSignIn", "computerSelf"]
+          "enum": ["browserSignIn", "computerSelf", "browserSite"]
         },
         "summary": {
           "oneOf": [
             { "$ref": "#/definitions/BrowserSignInSummary" },
-            { "$ref": "#/definitions/ComputerSelfSummary" }
+            { "$ref": "#/definitions/ComputerSelfSummary" },
+            { "$ref": "#/definitions/BrowserSiteSummary" }
           ]
         },
         "desktopId": {

@@ -335,14 +335,30 @@ Platforms: macOS, Windows and Linux desktops. **Prepare extension** registers th
 
 The extension and Litch check a wire protocol range instead of requiring the same version, so a store copy that updates on its own schedule keeps working with adjacent Litch versions. Settings shows connected instances and, when they do not fit, which side to update: **The extension is too old** (store copy: click Update on the extensions page or wait for Chrome; unpacked copy: reload it) or **is newer than this Litch supports** (update Litch). An unpacked copy that still works but is older than the folder shows a reload hint. The toolbar icon shows `!` while incompatible.
 
-Chrome control is off by default. Enable it separately and choose which remote devices may request access to this computer. Browser feature switches for the device and harness still apply. Chrome has its own site permissions, including localhost; it does not inherit the built-in browser's saved site approvals or “trust all” setting. Remote sessions operate Chrome on the controlling computer: localhost refers to that computer. Operating Chrome on the remote execution device is not supported in this version.
+Chrome control is off by default. Enable it and select its remote-device scope: only checked remote devices can use this computer’s Chrome. This is part of the master switch, not an additional approval card. An unchecked device receives an immediate error directing the user to Settings → Chrome. Browser feature switches for the device and harness still apply. Chrome has its own site permissions, including localhost; it does not inherit the built-in browser's saved site approvals or “trust all” setting. Remote sessions operate Chrome on the controlling computer: localhost refers to that computer. Operating Chrome on the remote execution device is not supported in this version.
 
 Chrome 的站点权限在 **设置 → Chrome**：默认关闭“信任所有网站”，黑名单和“一直允许的网站”为空。
 审批可选本回合、本会话、一直允许或拒绝，也可直接开启“信任所有网站”。本回合许可和拒绝在回合结束清除；本会话许可保留到 Litch 退出；一直允许、信任开关和黑名单存在 Litch 的 `chrome/sites.json`，跨回合、Chrome 重连和 Litch 重启保留，对控制端所有已启用的设备会话生效。
 黑名单与内置浏览器一致：只在信任所有网站开启时生效，按主机名匹配并包含子域名。可逐项删除黑名单、逐项或全部删除一直允许的网站。
-Chrome 的 localhost 仍检查站点权限，因为它位于控制端并可能带有登录态；信任所有网站或记住该来源后无需再问。实例授权、逐个用户标签认领、登录及密码和支付安全规则仍独立执行。
+Chrome 的 localhost 仍检查站点权限，因为它位于控制端并可能带有登录态；信任所有网站或记住该来源后无需再问。总开关开启后不再单独审批 Chrome 实例或标签；登录及密码和支付安全规则仍独立执行。
 
-The agent lists targets, asks permission to list tab titles and URLs in one Chrome instance, and then requests individual approval to claim a user tab with a short-lived claim token. Site trust never skips this tab approval. Instance permission and website origin approval are separate; reconnecting requires a new instance permission. User tabs are released when the turn ends and are never closed by the agent. New agent tabs are temporary unless kept. Reconnection, extension reload and ended turns invalidate leases and references; list and claim again. If a debugger cannot attach, close that tab's DevTools or other debugger and retry. Click the extension toolbar action or **Stop all Chrome control** in Litch to revoke control.
+Chrome 总开关包含远程设备范围：只有下方勾选的远程设备可以使用，未勾选时立即返回提示，不会弹卡或等待。开启 Chrome 总开关后，所有获准使用此控制端的会话都可列出已连接 profile 的标签标题和网址，认领用户标签无需另批。页面访问只由 Chrome 的站点许可控制，用户已登录的标签和代理新开的标签遵循相同的站点规则；开启“信任所有网站”后，除黑名单以外的已登录网站都可被操作。网站许可不等于网络防火墙，也不替代发送、购买等具体操作所需的用户指令。
+
+With Chrome control enabled, conversations allowed to use this controller can list titles and URLs across its connected profiles and claim user tabs without a separate instance or tab approval. Chrome site permissions control page access for both signed-in user tabs and agent-created tabs. With **Trust all websites** enabled, signed-in sites outside the blocklist are accessible. Site permission is not a network firewall or authorization to send messages or make purchases without the user's instruction.
+
+网站需要批准时，平台会在发起调用的会话中显示站点卡并继续等待。等待不计入桥请求的 30 秒超时，批准后无需代理重试。侧栏显示等待，父会话的子会话待处理区和经理看板也显示审批；系统通知遵循现有通知设置。手机显示只读提示，须在执行操作的 Litch 桌面会话中处理。
+
+When a site needs approval, Litch displays a card in the calling conversation and waits. Human approval time does not count toward the bridge's 30-second request timeout. The sidebar, parent conversation and manager board show the pending approval; notifications follow your notification preferences. Phones show a read-only notice directing you to that conversation on the controlling desktop.
+
+The agent uses targets → tabs → claim. Claim tokens and leases still prevent stale or concurrent control, but do not create an extra approval. User tabs are released when the turn ends and are never closed by the agent. Agent tabs are temporary unless kept. Reconnection, extension reload and ended turns invalidate leases and references. Listing retries once if the same instance reconnects during the request; otherwise the tool tells the agent to list targets and claim again. Input actions are never replayed automatically because an interrupted action may already have executed.
+
+点击扩展图标会停止此 profile 的控制；图标显示 OFF，停止状态跨 Chrome 和 Litch 重启保留。工具会明确提示用户点击扩展重新打开，代理不能自行恢复。再次点击扩展才重新开启，不会清除网站名单。Litch 设置页也会显示停止提示。“停止所有 Chrome 控制”释放当前租约；关闭总开关可阻止后续调用。
+
+Click the extension icon to stop control of that profile. Its OFF badge and stopped state persist across Chrome and Litch restarts. Tools ask the user to click the extension again to resume; the agent cannot resume control itself. Site permissions remain saved. Litch Settings also shows the stopped state. **Stop all Chrome control** releases current leases; turn off the master switch to prevent further calls.
+
+连接边界：Native Messaging 的扩展 ID 白名单、每次桌面启动生成的宿主令牌，以及用户私有配置和 socket 限制连接来源。它们不能防御同一操作系统用户下可读取配置并执行任意程序的恶意软件；开发者模式扩展的固定 ID 也不证明代码来自官方商店。启用前应信任该操作系统账号下运行的软件和安装的扩展。
+
+The connection boundary uses a Native Messaging extension ID allowlist, a host token generated when the desktop starts, and private per-user configuration and socket access. These do not defend against malicious software running as the same OS user with arbitrary execution and access to the configuration. An unpacked extension's fixed ID does not attest that its code came from the official store. Enable control only when you trust the software and extensions running under that OS account.
 
 Chrome sign-in is manual. `request_sign_in` brings the tab forward and pauses agent observation and actions in that Chrome instance. Sign in yourself, then choose **Sign-in complete** in Litch. The page reloads and the agent must claim it again. Never provide passwords or one-time codes to the agent. Remote uploads and cross-device downloads are not supported.
 

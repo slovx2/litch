@@ -11,6 +11,7 @@ import { formatSessionEvent, parseSessionEvent } from '../../protocol/src/sessio
 import { prepareInstructions } from '../src/codex-instructions.mjs'
 import { managerTools } from '../src/manager-rules.mjs'
 import { startChild } from '../src/session-start.mjs'
+import { card } from './approvals-kit.mjs'
 import type { TestClient } from './helpers.mjs'
 import { brief, parent, plain, refuseSteer, treeRig, until } from './tree-kit.mjs'
 
@@ -57,6 +58,56 @@ const value = (response: any) => {
   assert.equal(response.success, true, JSON.stringify(response))
   return JSON.parse(response.contentItems[0].text)
 }
+
+test('工作线等待 Chrome 站点审批时看板立即标记等待，并发出原有经理变更通知', async () => {
+  const env = treeRig()
+  try {
+    const connection = await client(env, [
+      'harness',
+      'litchManager',
+      'sessionTree',
+      'clientApprovals',
+    ])
+    const { manager, threadId } = await create(env, connection)
+    const child = await startChild(
+      env.device.sessionTree,
+      threadId,
+      {
+        kind: 'fresh',
+        title: '浏览器工作线',
+        prompt: '检查页面',
+        worktree: false,
+        wakeParent: true,
+      },
+      'model',
+    )
+    const state = () =>
+      env.device.managers.board(manager.id).lines.find((line) => line.threadId === child.threadId)
+        ?.status
+    assert.equal(state(), 'running')
+    const before = connection.notifications.length
+    const site = {
+      ...card({ threadId: child.threadId }),
+      kind: 'browserSite',
+      summary: {
+        origin: 'https://example.com',
+        device: 'Isolated desktop',
+        browser: 'chrome',
+      },
+    }
+    await connection.call('litch/approval/open', site)
+    assert.equal(state(), 'waiting')
+    await until(
+      () =>
+        connection.notifications.slice(before).some((n) => n.method === 'litch/manager/changed'),
+      '经理收到审批变更',
+    )
+    await connection.call('litch/approval/close', { id: site.id })
+    assert.equal(state(), 'running')
+  } finally {
+    await env.close()
+  }
+})
 
 test('经理归档别的会话：看板答复回合放行，wake 与其他事件仍拦，旧答复不授权后续回合', async () => {
   const env = treeRig()

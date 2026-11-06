@@ -17,6 +17,7 @@ export const enAsks: Record<keyof typeof zhAsks, Entry> = {
   'ask.childrenCount': ({ count }) =>
     Number(count) === 1 ? '1 sub-session is waiting' : `${count} sub-sessions are waiting`,
   'ask.requestFallback': 'Pending request',
+  'ask.clientApproval': 'Approval needed: {site}',
   'ask.signIn': 'Sign in to {site}',
   'ask.signInFallback': 'Browser sign-in',
   'ask.childUnavailable': 'Loading the request. Open the sub-session if it cannot be handled here.',

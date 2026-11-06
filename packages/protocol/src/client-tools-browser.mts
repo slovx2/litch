@@ -160,12 +160,12 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
     ),
     fn(
       'targets',
-      'List connected Chrome instances. Chrome: call targets, then tabs(action:list,targetId), then claim(claimToken) for a user tab. For a new Chrome tab use navigate(targetId,url). Always keep the returned chrome: tabId in subsequent calls. Chrome runs on the controlling computer; localhost refers to that computer even in a remote session. Chrome uses its own saved site permissions, including localhost; user tabs always require individual claim approval. Popups are unclaimed; list and claim them separately. release returns a user tab without closing it. Old leases and refs expire on reconnect or turn end; list and claim again. request_sign_in pauses all observation while the user signs in manually, then requires a fresh claim. Do not switch browser or tab to bypass a refusal.',
+      'List connected Chrome instances. Chrome: call targets, then tabs(action:list,targetId), then claim(claimToken) for a user tab. For a new Chrome tab use navigate(targetId,url). Always keep the returned chrome: tabId in subsequent calls. Chrome runs on the controlling computer; localhost refers to that computer even in a remote session. Chrome uses its own saved site permissions, including localhost; Chrome control must be enabled in Litch Settings; instance and tab access do not require separate approval. Site permissions still apply. If the user stopped control, ask them to click the extension to resume. Popups are unclaimed; list and claim them separately. release returns a user tab without closing it. Old leases and refs expire on reconnect or turn end; list and claim again. request_sign_in pauses all observation while the user signs in manually, then requires a fresh claim. Do not switch browser or tab to bypass a refusal.',
       {},
     ),
     fn(
       'claim',
-      'Request approval to control one Chrome tab after its site permissions are checked. Use a fresh claimToken from tabs.',
+      'Claim one Chrome tab after its site permissions are checked. Use a fresh claimToken from tabs.',
       { claimToken: { type: 'string' } },
       ['claimToken'],
     ),

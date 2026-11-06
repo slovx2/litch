@@ -14,6 +14,7 @@ export const zhAsks = {
   'ask.children': '子会话待处理',
   'ask.childrenCount': '{count} 个子会话待处理',
   'ask.requestFallback': '待处理请求',
+  'ask.clientApproval': '需要批准：{site}',
   'ask.signIn': '登录 {site}',
   'ask.signInFallback': '浏览器登录',
   'ask.childUnavailable': '正在读取请求；若无法在此处理，请打开子会话。',

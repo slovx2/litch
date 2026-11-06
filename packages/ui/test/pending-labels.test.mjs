@@ -33,7 +33,7 @@ test('英文时长与回报数的单复数、中英文登录审批标签', () =>
   assert.equal(t('en')('ask.reportsAfter', { count: 2 }), '2 updates since')
   assert.equal(
     requestLabel({ kind: 'clientApproval', title: ' GitHub ' }, t('zh-CN')),
-    '登录 GitHub',
+    '需要批准：GitHub',
   )
   assert.equal(requestLabel({ kind: 'clientApproval', title: ' ' }, t('zh-CN')), '浏览器登录')
   assert.equal(requestLabel({ kind: 'clientApproval', title: '' }, t('en')), 'Browser sign-in')

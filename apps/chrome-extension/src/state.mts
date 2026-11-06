@@ -23,6 +23,7 @@ export interface ExtensionState {
   paused: Set<string>
   generations: Map<number, number>
   stoppedTurns: Set<string>
+  stopped: boolean
   console: Map<number, Array<{ level: string; text: string; source: string; at: number }>>
   send(message: unknown): void
   revoke(leaseId: string, reason: string): Promise<void>
@@ -104,6 +105,11 @@ export async function requireGrant(
   leaseId?: string,
   generation?: number,
 ): Promise<ChromeGrant> {
+  if (state.stopped)
+    throw new ChromeFault(
+      'userStopped',
+      'The user stopped Chrome control. Ask the user to click the Litch extension to resume control.',
+    )
   const grant = leaseId ? state.grants.get(leaseId) : null
   if (!grant || grant.expiresAt <= Date.now())
     throw new ChromeFault(

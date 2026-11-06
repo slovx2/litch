@@ -6,6 +6,8 @@
 npm run client:check:chrome
 ```
 
+加 `-- --no-evidence` 不写截图、报告或浏览器日志，结束后只保留终端验收结果。生命周期场景使用隐藏 Electron 窗口中的正式 Chrome 桥与执行器：网站审批实际等待 31 秒，重启隔离 Chrome、重启 Electron 宿主、更换隔离扩展副本/profile；同一会话不出现实例或标签审批。扩展停止控制在两端重启后仍生效，只能通过扩展工具栏的用户回调恢复。自动验收只在临时扩展副本捕获该回调，发布扩展没有测试入口。
+
 设置页安装引导另跑 `node scripts/chrome-e2e/settings.mjs`：隔离 HOME 中启动隐藏 Electron，加载正式 ChromeSection 和模拟设置通道，点击商店/手动入口，覆盖自动连接、聚焦刷新、失败重试、过期状态回包、版本不兼容及三平台中英文/三皮肤布局。要求根目录、界面和桌面依赖已安装，Electron 二进制已准备好；不接个人 Chrome、不打开真实商店，不保留截图或报告。宿主准备与打开商店的顺序由 `chrome-install.test.mts` 核对；这两项不能代替商店发布后的签名扩展安装验收。
 
 可用 `LITCH_CHROME_GO=/绝对路径/bin/go` 选择本机已安装、满足 go.mod 的 Go 工具链，避免隔离 HOME 再下载工具链；不改变隔离模块缓存和浏览器 profile。

@@ -100,3 +100,45 @@ test('SESSION-PENDING-CLIENT-003：空白提问的标题和摘要都有兜底', 
     await env.close()
   }
 })
+
+test('Chrome 站点审批进入父会话等待状态，拒绝设备代答，关闭后清除', async () => {
+  const env = codexRig({ toolSettings: { 'tools.browser': true } })
+  try {
+    env.device.sessionTree.host.needsUserMs = 0
+    const client = env.connect()
+    await client.initialize(['harness', 'sessionTree', 'clientApprovals'])
+    const value = {
+      ...card({ threadId }),
+      kind: 'browserSite',
+      summary: { origin: 'https://example.com', device: 'Isolated desktop', browser: 'chrome' },
+    }
+    await client.call('litch/approval/open', value)
+    const snapshot = (await client.call('thread/read', { threadId })).thread.litchPendingRequests
+    assert.equal(env.device.sessionTree.waitingOnUser(threadId), true)
+    assert.equal(snapshot[0].kind, 'clientApproval')
+    assert.equal(snapshot[0].title, 'https://example.com')
+    assert.equal(snapshot[0].canRespond, false)
+    assert.equal(snapshot[0].reason, 'executor_required')
+    await assert.rejects(
+      client.call('litch/approval/answer', {
+        id: value.id,
+        ref: 'session',
+        decision: 'approve',
+        remember: false,
+        phoneId: 'f83898df0bef57a4',
+        approvalKey: `${'A'.repeat(43)}=`,
+        signature: `${'A'.repeat(86)}==`,
+      }),
+      (error: unknown) => {
+        assert.match((error as { message: string }).message, /桌面会话/)
+        return true
+      },
+    )
+    assert.equal(env.device.sessionTree.waitingOnUser(threadId), true)
+    await client.call('litch/approval/close', { id: value.id })
+    assert.equal(env.device.sessionTree.waitingOnUser(threadId), false)
+    assert.deepEqual(env.device.sessionTree.pendingRequests(threadId), [])
+  } finally {
+    await env.close()
+  }
+})

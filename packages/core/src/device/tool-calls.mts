@@ -290,6 +290,9 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
         result: (response) => finish(entry, response),
         ask(askId, ask) {
           if (running.get(id) !== entry) return
+          host.log(
+            `客户端工具等待审批：会话 ${params.threadId}，调用 ${params.callId}，卡片 ${askId}，类型 ${ask.kind}`,
+          )
           // 等人答的时候不计时
           entry.stopTimer?.()
           entry.stopTimer = null
@@ -303,6 +306,9 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
             ask,
           }
           const drop = host.showAsk(place, (answer) => {
+            host.log(
+              `客户端工具审批已处理：会话 ${params.threadId}，卡片 ${askId}，答复 ${answer ?? 'cancelled'}`,
+            )
             entry.asks.delete(askId)
             host.hub.answer(askId, answer)
             resume(entry)
