@@ -1900,6 +1900,13 @@ export const en: Record<MessageKey, Entry> = {
   'fault.organizeUnsupported': 'this device doesn’t support organizing projects or pinning',
   'fault.workspaceName': 'enter a project name',
   'fault.sectionName': 'enter a group name',
+  'fault.organizerBlocked':
+    'the local organizer file is damaged; saving is paused and the original file is kept in the app data folder',
+  'fault.organizerNewer': 'the local organizer file was written by a newer Litch; saving is paused',
+  'fault.organizerSave': 'couldn’t save the local organizer ({reason})',
+  'fault.organizerConflict': 'another window just changed the order; try again',
+  'fault.localGroupName': 'enter a group name of up to 80 characters',
+  'fault.localGroupGone': 'this local group no longer exists',
   'fault.workspaceRoot': 'the folder must be a full path on the device, e.g. /home/me/project',
   'fault.workspaceGone': 'this project no longer exists. It may have been deleted elsewhere',
   'connect.noEntry':

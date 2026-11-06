@@ -1817,6 +1817,12 @@ export const zhCN = {
   'fault.organizeUnsupported': '此设备不支持整理项目和置顶',
   'fault.workspaceName': '请填写项目名称',
   'fault.sectionName': '请填写组名称',
+  'fault.organizerBlocked': '本机整理文件已损坏，已停止写入；原文件保留在应用数据目录',
+  'fault.organizerNewer': '本机整理文件来自更新版本的 Litch，已停止写入',
+  'fault.organizerSave': '本机整理未能保存（{reason}）',
+  'fault.organizerConflict': '整理已在另一个窗口更新，请重试',
+  'fault.localGroupName': '组名不能为空，最多 80 个字',
+  'fault.localGroupGone': '该本机分组已不存在',
   'fault.workspaceRoot': '目录须为设备上的完整路径，例如 /home/me/project',
   'fault.workspaceGone': '该项目已不存在，可能已在其他位置删除',
   'connect.noEntry':

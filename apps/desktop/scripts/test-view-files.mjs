@@ -1,4 +1,5 @@
-// 存在这台电脑上的会话视图（src/view-files.mts）的单元测试：src/test/view-files.test.mts 打成一个文件放进临时目录，
+// 存在这台电脑上的会话视图（src/view-files.mts）和本机整理文件（src/organizer-store.mts）的单元测试：
+// src/test/ 下对应的两份用例各打成一个文件放进临时目录，
 // 再交给 node --test。文件都写在临时目录里，不碰真实的用户数据目录。
 //   node scripts/test-view-files.mjs
 import { spawnSync } from 'node:child_process'
@@ -12,7 +13,10 @@ const appDir = fileURLToPath(new URL('..', import.meta.url))
 const out = mkdtempSync(join(tmpdir(), 'litch-view-tests-'))
 try {
   await build({
-    entryPoints: [join(appDir, 'src/test/view-files.test.mts')],
+    entryPoints: [
+      join(appDir, 'src/test/view-files.test.mts'),
+      join(appDir, 'src/test/organizer-store.test.mts'),
+    ],
     outdir: out,
     outExtension: { '.js': '.mjs' },
     bundle: true,
@@ -22,9 +26,13 @@ try {
     external: ['node:*'],
     logLevel: 'warning',
   })
-  const result = spawnSync(process.execPath, ['--test', join(out, 'view-files.test.mjs')], {
-    stdio: 'inherit',
-  })
+  const result = spawnSync(
+    process.execPath,
+    ['--test', join(out, 'view-files.test.mjs'), join(out, 'organizer-store.test.mjs')],
+    {
+      stdio: 'inherit',
+    },
+  )
   process.exitCode = result.status ?? 1
 } finally {
   rmSync(out, { recursive: true, force: true })

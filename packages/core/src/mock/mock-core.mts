@@ -46,6 +46,11 @@ import type {
 } from '../model.mjs'
 import type { TerminalsAlive } from '../model-terminal.mjs'
 import type { SessionEventView } from '../model-tree.mjs'
+import {
+  createOrganizerHost,
+  memoryOrganizerStore,
+  type OrganizerStore,
+} from '../organizer/host.mjs'
 import { phrase } from '../phrase.mjs'
 import { projectItem } from '../projection/items.mjs'
 import { managerMark } from '../projection/manager.mjs'
@@ -133,6 +138,8 @@ export interface MockCoreOptions {
    * 不给是平常那一套示例
    */
   scene?: 'fresh'
+  /** 本机整理存在哪（界面预览可以给浏览器存储）。不给就只记在内存里 */
+  organizer?: OrganizerStore
 }
 
 const topicKey = (topic: Extract<Topic, { kind: 'app' | 'sidebar' | 'session' }>): string =>
@@ -453,6 +460,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     setTimer: (run, ms) => options.clock.setTimer(run, ms),
   }
   let proposalSeq = 0
+  const organizer = createOrganizerHost(options.organizer ?? memoryOrganizerStore(), clock.now)
   const chunkMs = options.chunkMs ?? 60
   const lang = options.lang ?? 'zh-CN'
   const app: AppView = sampleApp(lang, clock.now())
@@ -2851,6 +2859,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (name === 'core.info') {
         return { version: options.version ?? '0.0.0', mock: true }
       }
+      if (name === 'organizer.apply')
+        return organizer.apply((params as Commands['organizer.apply']['params']).action)
       const handled = deviceCommand(name, params)
       if (handled !== undefined) return handled
       const operated = machine.command(name, params)
@@ -3645,6 +3655,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
 
     subscribe(topic, sink) {
+      if (topic.kind === 'organizer') return organizer.subscribe(sink)
       if (topic.kind === 'suggestions') {
         const listeners = suggestionSinks.get(topic.deviceId) ?? new Set<HostSink>()
         suggestionSinks.set(topic.deviceId, listeners)

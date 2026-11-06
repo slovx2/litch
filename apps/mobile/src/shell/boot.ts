@@ -22,6 +22,7 @@ import { watchConnections } from '../platform/background'
 import { connectionTrace } from '../platform/connection-trace'
 import { type RemoteConfig, sshOpener } from '../platform/ssh-transport'
 import { devToolsEnabled } from './build-mode'
+import { organizerStore } from './organizer-file'
 import { createTestClock, testScenario } from './test-clock'
 
 export type BootMode = 'stored' | 'mock' | 'fixture'
@@ -86,6 +87,7 @@ export async function boot(mode: BootMode, lang: 'zh-CN' | 'en'): Promise<Booted
         clock,
         version: VERSION,
         lang,
+        organizer: organizerStore(mode),
         ...(controlled ? { scenarioClock: controlled.clock } : {}),
       }),
     )
@@ -116,7 +118,14 @@ export async function boot(mode: BootMode, lang: 'zh-CN' | 'en'): Promise<Booted
       wire: 'orange',
       open: sshOpener(config),
     }
-    const core = createCore({ clock, version: VERSION, devices: [device], log, trace })
+    const core = createCore({
+      clock,
+      version: VERSION,
+      devices: [device],
+      organizer: organizerStore(mode),
+      log,
+      trace,
+    })
     const served = serve(
       core,
       () => core.start(),
@@ -130,6 +139,7 @@ export async function boot(mode: BootMode, lang: 'zh-CN' | 'en'): Promise<Booted
     clock,
     version: VERSION,
     devices: [],
+    organizer: organizerStore(mode),
     ...(platform.remote ? { remote: platform.remote } : {}),
     ...(platform.store ? { store: platform.store } : {}),
     log,

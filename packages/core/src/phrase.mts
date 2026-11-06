@@ -51,6 +51,13 @@ export type PhraseKey =
   | 'fault.workspaceRoot'
   | 'fault.workspaceGone'
   | 'fault.sectionName'
+  // 本机整理：文件坏了或版本更高时停用、存盘失败、别的窗口先改过、组名不合格
+  | 'fault.organizerBlocked'
+  | 'fault.organizerNewer'
+  | 'fault.organizerSave'
+  | 'fault.organizerConflict'
+  | 'fault.localGroupName'
+  | 'fault.localGroupGone'
   // 连接
   | 'connect.noEntry'
   // 本机内置的适配器：启动它的设备服务这一步，和没起来的几种原因
