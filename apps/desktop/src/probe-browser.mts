@@ -122,7 +122,14 @@ void app.whenReady().then(async () => {
     reply = await run('type', { ref: nameRef, text: 'Grace', clear: true })
     check('清空后输入', textOf(reply).includes('"Grace"'), textOf(reply))
     reply = await run('type', { ref: colorRef, text: 'Green' })
-    check('下拉框按字选', textOf(reply).includes('Selected "Green"'), textOf(reply))
+    check(
+      '下拉框按字选',
+      textOf(reply).includes('Selection command dispatched "Green"') &&
+        (await evalIn("document.querySelector('select').selectedOptions[0].textContent")).includes(
+          'Green',
+        ),
+      textOf(reply),
+    )
     await run('click', { ref: agreeRef })
     await run('click', { ref: goRef })
     reply = await run('snapshot', { diff: true })

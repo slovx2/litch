@@ -166,6 +166,7 @@ export class ChromeBridge {
                     : null,
                 extensionId,
                 stopped: message.stopped === true,
+                inputReceipts: message.inputReceipts === true,
               },
             }
             const welcome: ChromeWelcome = {

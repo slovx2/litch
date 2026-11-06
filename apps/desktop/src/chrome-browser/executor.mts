@@ -53,7 +53,7 @@ export class ChromeExecutor implements BrowserExecutor {
   readonly namespace = 'litch_browser'
   readonly pages = new Map<string, ChromePage>()
   private tokens = new Map<string, ClaimToken>()
-  private states = new Map<string, TabState & { generation: number }>()
+  private states = new Map<string, TabState & { generation: number; url: string }>()
   readonly sites: SiteBook
   private busy = new Set<string>()
   private calls = new Map<
@@ -106,13 +106,14 @@ export class ChromeExecutor implements BrowserExecutor {
   }
   state(page: ChromePage): TabState {
     let state = this.states.get(page.id)
-    if (!state || state.generation !== page.state.generation) {
+    if (!state || state.generation !== page.state.generation || state.url !== page.state.url) {
       state = {
         book: newRefBook(),
         lastSnapshot: null,
         shotScale: 1,
         forwardNote: null,
         generation: page.state.generation,
+        url: page.state.url,
       }
       this.states.set(page.id, state)
     }
@@ -381,10 +382,13 @@ export class ChromeExecutor implements BrowserExecutor {
       if (context.signal.aborted)
         throw new ChromeBridgeError('cancelled', 'The call was cancelled.')
       if (invocation.tool === 'run_actions') {
-        const generations = new Map<string, number>()
+        const generations = new Map<string, string>()
         return runBrowserActions(invocation, context, this.call.bind(this), true, (action) => {
           const id = action.arguments.tabId as string
-          const generation = this.pages.get(id)?.state.generation
+          const pageState = this.pages.get(id)?.state
+          const generation = pageState
+            ? JSON.stringify([pageState.generation, pageState.url])
+            : undefined
           if (generation === undefined) return null // 普通执行入口给出无租约错误。
           const previous = generations.get(id)
           if (

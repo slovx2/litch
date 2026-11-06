@@ -64,6 +64,8 @@ export interface ChromeInstance {
   extensionId: string
   /** 用户在扩展中主动停止，必须由用户手动恢复。 */
   stopped?: boolean
+  /** 支持按命令返回输入派发回执；商店扩展可能晚于桌面更新。 */
+  inputReceipts?: boolean
 }
 
 export interface ChromeLeaseOwner {
@@ -135,6 +137,7 @@ export interface ChromeRequest {
     | 'stop'
     | 'authorize'
     | 'console'
+    | 'refresh'
   leaseId?: string
   generation?: number
   args: Record<string, unknown>
@@ -160,6 +163,7 @@ export type ChromeEvent =
       epoch: string
       name: string
       stopped?: boolean
+      inputReceipts?: boolean
     }
   | { kind: 'control'; stopped: boolean }
   | { kind: 'tab'; tab: ChromeTabState }

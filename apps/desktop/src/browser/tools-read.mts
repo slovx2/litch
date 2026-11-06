@@ -246,13 +246,22 @@ export const wait: Tool = async (call) => {
   const page = call.pick()
   const denied = await call.admitPage(page)
   if (denied) return denied
-  const kind = oneOf(call.args, 'for', ['load', 'selector', 'text', 'time'] as const, true)
+  const kind = oneOf(
+    call.args,
+    'for',
+    ['load', 'selector', 'text', 'time', 'url', 'dialog'] as const,
+    true,
+  )
   const signal = call.context.signal
   if (kind === 'time') {
     await sleep(timeout(call.args, 'ms', 1000, 30_000), signal)
     return call.done(page, `Waited.\n${pageLine(page)}`)
   }
   const limit = timeout(call.args, 'timeoutMs', 10_000, 30_000)
+  if (kind === 'dialog') {
+    await within(page.dialogOpened(), limit, `No dialog appeared within ${limit} ms.`)
+    return call.done(page, 'A dialog opened. Handle it before continuing.')
+  }
   if (kind === 'load') {
     const ok = await page.waitForLoad(limit, signal)
     if (!ok) throw new Error(`Still loading after ${limit} ms.`)
@@ -263,12 +272,14 @@ export const wait: Tool = async (call) => {
   }
   const refusal = await call.admitPage(page)
   if (refusal) return refusal
-  const needle = str(call.args, kind === 'selector' ? 'selector' : 'text')
+  const needle = str(call.args, kind === 'selector' ? 'selector' : kind === 'url' ? 'url' : 'text')
   if (!needle) throw new BadArgs(`\`${kind}\` is required for for:"${kind}"`)
   const expression =
-    kind === 'selector'
-      ? `!!document.querySelector(${JSON.stringify(needle)})`
-      : `!!(document.body && document.body.innerText.includes(${JSON.stringify(needle)}))`
+    kind === 'url'
+      ? `location.href.includes(${JSON.stringify(needle)})`
+      : kind === 'selector'
+        ? `!!document.querySelector(${JSON.stringify(needle)})`
+        : `!!(document.body && document.body.innerText.includes(${JSON.stringify(needle)}))`
   const until = Date.now() + limit
   for (;;) {
     if (page.dialog()) throw new Error('Stopped waiting: a dialog opened.')
@@ -278,8 +289,11 @@ export const wait: Tool = async (call) => {
         returnByValue: true,
       })
       if (found.result.value === true) return call.done(page, `Found.\n${pageLine(page)}`)
-    } catch {
-      // 页面正在换（跳转中），下一轮再看
+    } catch (error) {
+      // 只恢复观察；新来源、撤销与停止仍会拒绝，不用旧文档继续输入。
+      if (page.prepareObservation) await page.prepareObservation()
+      if (error instanceof Error && /origin|stopped|revoked|lease|signing/i.test(error.message))
+        throw error
     }
     if (Date.now() >= until) throw new Error(`Not found after ${limit} ms.\n${pageLine(page)}`)
     await sleep(200, signal)

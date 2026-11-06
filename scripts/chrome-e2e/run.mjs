@@ -11,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { buildChromeExtension } from '../../apps/desktop/scripts/build-chrome.mjs'
 import { Cdp, until } from '../chrome-m0/cdp.mjs'
 import { fixtures } from './fixtures.mjs'
+import { inputChecks } from './input-check.mjs'
 import { chromeLifecycle } from './lifecycle.mjs'
 import { remoteCheck } from './remote-check.mjs'
 import { chromeUx } from './ux.mjs'
@@ -828,6 +829,23 @@ try {
       executor.sites.setTrustAll(false)
       Object.assign(invocation, prior)
     }
+  })
+  await inputChecks({
+    targetId,
+    origin: site.origin,
+    check,
+    run: (tool, args) =>
+      executor.call(
+        {
+          ...invocation,
+          threadId: 'input-receipts',
+          turnId: 'input-turn',
+          callId: unique(),
+          tool,
+          arguments: args,
+        },
+        context,
+      ),
   })
   await chromeLifecycle({ root, work, assets, nativeBinary, binary, site, build, check })
   if (process.argv.includes('--remote'))

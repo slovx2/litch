@@ -381,6 +381,18 @@ New popups are unclaimed and require source approval before observation or actio
 
 ### 浏览器批量动作（内置浏览器和 Chrome）
 
+点击、输入、按键、滚动、上传和对话框操作会返回 `inputReceipt`，区分 `dispatch`（未派发、已派发或不能确认）与 `observation`（观察到变化、未观察到变化或无法观察）。回执提供操作前后的地址、标题、焦点、非敏感字段值及变化种类；密码和验证码遮罩，地址去掉查询、片段及长凭据段，不输出 DOM 正文或哈希。工具的 `success` 只说明这次工具处理是否完成，不代表提交、保存或付款成功，`businessOutcome` 始终为 `unknown`。
+
+已派发输入触发同一已授权来源的跳转时，平台恢复新文档的观察并清理旧引用，不重放输入。跨来源、停止控制、撤销租约和登录接管仍受原有检查保护。输入前页面一秒内未完成绘制准备会明确失败，不继续派发。Chrome 已认领的后台标签启用焦点模拟，不自动显示窗口；释放租约或交还用户登录后不保留模拟焦点。
+
+输入后最多用约 2.5 秒观察 URL、DOM、焦点与字段是否稳定；这不等于业务完成，也不等待可能永不停止的后台网络轮询。SPA 表单应显式调用 `wait` 等待具体 `selector`、`text`、`url` 子串或 `dialog`，再检查确认页或对象。没有变化可能是合法的同值输入或下载，派发状态不确定时不要直接重试写操作。
+
+Click, type, press, scroll, upload and dialog tools return an `inputReceipt`. `dispatch` distinguishes not dispatched, dispatched and unknown; `observation` distinguishes changed, unchanged and unavailable. Receipts compare URLs, titles, focus and non-sensitive field values. Passwords and one-time codes are masked; query strings, fragments and long credential-like path segments are omitted. DOM text and hashes are not exposed. Tool `success` is not proof that a save, submission or purchase succeeded: `businessOutcome` remains `unknown`.
+
+After input navigates within an approved origin, Litch recovers observation of the new document and discards stale references without replaying input. Origin permissions, stopped control, revoked leases and sign-in pauses still apply. A page that cannot become ready to paint within one second receives no further input. Claimed Chrome tabs use focus emulation for background input without showing the window; releasing the lease or handing the tab to the user for sign-in ends it.
+
+Post-input observation is bounded to about 2.5 seconds. It watches URL, DOM, focus and field stability, not endless background polling or business completion. For SPAs, use `wait` with a specific `selector`, `text`, `url` substring or `dialog`, then verify the confirmation or resulting object. Unchanged output may be legitimate; never blindly repeat an input with unknown dispatch status.
+
 `litch_browser.run_actions` 两条路径使用相同参数和执行规则。先观察标签；连续动作及其参数都已知时，优先合成一批：
 
 ```json
@@ -393,5 +405,9 @@ New popups are unclaimed and require source approval before observation or actio
 一批 1–12 步，支持 `click`、`type`、`press`、`scroll`、`navigate`、`wait`、`dialog`。每步必须给同一种浏览器的现有 `tabId`，参数与单步工具一致；不能创建标签、嵌套批量、执行脚本或登录。需要用户决定、需要读取新界面、跳转后需要新引用时结束当前批次。
 
 动作总预算 60 秒，最终快照另有 10 秒。导航和等待沿用单步上限；每一步仍检查来源审批、租约/会话所有权、文档和取消状态。失败即停，不回滚、不自动重试；结果给出已尝试各步的成功状态和摘要，以及最后尝试标签的快照。若标签被释放或登录冻结，最后观察明确失败，不绕过限制。失败的一步可能已经部分执行，继续时只做尚未完成的部分。
+
+批量回执按步骤给出耗时、派发与观察状态和 `mayHaveExecuted`；`firstFailedStep` 指出首个失败动作。`actionsStatus` 与 `observationStatus` 分开：所有步骤已返回、仅最后快照失败时，动作状态仍为 `completed`、`stopped:false`，并明确提示不要重做已派发的输入。总结果可能仍为 `success:false`，此时应先读取这两个状态。
+
+Batch receipts include each step's duration, dispatch/observation status and `mayHaveExecuted`, plus `firstFailedStep`. `actionsStatus` and `observationStatus` are separate. If only the final snapshot fails, actions remain `completed` with `stopped:false`; do not repeat completed inputs. The overall result can still be `success:false`, so inspect both statuses before deciding what remains to do.
 
 执行桌面必须声明浏览器批量能力。升级后 Claude Code/Pi 会话恢复时可刷新工具；已有 Codex 会话需要新建才能获得新增工具。

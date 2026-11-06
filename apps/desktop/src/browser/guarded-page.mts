@@ -32,6 +32,14 @@ export function guardedPage(
   }
   const proxy = new Proxy(page, {
     get(target, key) {
+      if (key === 'prepareObservation')
+        return async () => {
+          await guard(false)
+          const current = await stamp()
+          if (baseline !== undefined && current !== baseline) changed()
+          baseline = current
+          observed = current
+        }
       if (key === 'cdp')
         return async (method: string, params?: Record<string, unknown>) => {
           await guard(true)

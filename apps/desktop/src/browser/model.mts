@@ -60,6 +60,8 @@ export interface BrowserPage {
   waitForLoad(timeoutMs: number, signal: AbortSignal): Promise<boolean>
   /** 发一条 CDP 命令。只许白名单里的（cdp-allow.mts），名单外的抛 CdpRefused。需要时自动挂上调试器 */
   cdp<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>
+  /** 已派发输入后重建观察基线；只准恢复读操作，不能重放原输入。来源/租约检查照旧。 */
+  prepareObservation?(): Promise<void>
   /** 最近的控制台消息（最多留 200 条） */
   consoleEntries(): ConsoleEntry[]
   clearConsole(): void

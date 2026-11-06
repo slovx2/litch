@@ -7,6 +7,7 @@ import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { Cdp, until } from '../chrome-m0/cdp.mjs'
+import { inputChecks } from './input-check.mjs'
 
 export async function chromeLifecycle({
   root,
@@ -136,7 +137,7 @@ export async function chromeLifecycle({
     chrome = spawn(
       binary,
       [
-        '--headless=new',
+        '--no-startup-window',
         `--user-data-dir=${profile}`,
         `--load-extension=${extensionDirectory}`,
         `--remote-debugging-port=${port}`,
@@ -149,7 +150,7 @@ export async function chromeLifecycle({
         '--disable-component-update',
         '--disable-sync',
         '--no-proxy-server',
-        site.origin,
+        '--host-resolver-rules=MAP a.test 127.0.0.1,MAP b.test 127.0.0.1',
       ],
       { env, stdio: 'ignore' },
     )
@@ -169,7 +170,12 @@ export async function chromeLifecycle({
       }).includes(`--user-data-dir=${profile}`),
     )
     cdp = await Cdp.connect(version.webSocketDebuggerUrl)
-    const settings = await cdp.call('Target.createTarget', { url: 'chrome://extensions/' })
+    const settings = await cdp.call('Target.createTarget', {
+      url: 'chrome://extensions/',
+      newWindow: true,
+      background: true,
+      windowState: 'minimized',
+    })
     const { sessionId } = await cdp.call('Target.attachToTarget', {
       targetId: settings.targetId,
       flatten: true,
@@ -195,6 +201,37 @@ export async function chromeLifecycle({
     )
     await cdp.call('Target.closeTarget', { targetId: settings.targetId })
     await connected()
+    const userTab = await cdp.call('Target.createTarget', {
+      url: site.origin,
+      newWindow: true,
+      background: true,
+      windowState: 'minimized',
+    })
+    assert.equal(
+      (await cdp.call('Browser.getWindowForTarget', { targetId: userTab.targetId })).bounds
+        .windowState,
+      'minimized',
+    )
+    const attached = await cdp.call('Target.attachToTarget', {
+      targetId: userTab.targetId,
+      flatten: true,
+    })
+    await until(
+      async () =>
+        (
+          await cdp.call(
+            'Runtime.evaluate',
+            {
+              expression:
+                'document.readyState === "complete" && !!document.querySelector("#count")',
+              returnByValue: true,
+            },
+            attached.sessionId,
+          )
+        ).result?.value,
+      'Lifecycle fixture loaded',
+    )
+    await cdp.call('Target.detachFromTarget', { sessionId: attached.sessionId })
   }
   const invoke = async (tool, args, delay = 0) => {
     const value = await send({ op: 'invoke', tool, args, delay })
@@ -235,6 +272,48 @@ export async function chromeLifecycle({
       assert.ok(Date.now() - start >= 31_000)
       assert.deepEqual(result.asks, ['site'])
       assert.equal(waiting.at(-1)?.kind, 'site')
+    })
+    await inputChecks({
+      targetId: `chrome:${(await connected()).id}`,
+      origin: site.origin,
+      run: async (tool, args) => (await send({ op: 'invoke', tool, args })).result,
+      check: async (name, body) =>
+        check(`Headed 最小化窗口 / ${name}`, async () => {
+          await body()
+          const targets = (await cdp.call('Target.getTargets')).targetInfos
+          const worker = targets.find(
+            (target) =>
+              target.type === 'service_worker' && target.url.startsWith('chrome-extension://'),
+          )
+          assert.ok(worker)
+          const attached = await cdp.call('Target.attachToTarget', {
+            targetId: worker.targetId,
+            flatten: true,
+          })
+          const background = await cdp.call(
+            'Runtime.evaluate',
+            {
+              expression: `(async()=> (await chrome.tabs.query({})).filter(t=>/\\/(input|blocked-input)/.test(t.url||'')).map(t=>({active:t.active})))()`,
+              awaitPromise: true,
+              returnByValue: true,
+            },
+            attached.sessionId,
+          )
+          await cdp.call('Target.detachFromTarget', { sessionId: attached.sessionId })
+          assert.ok(background.result.value.length > 0)
+          assert.ok(
+            background.result.value.every((tab) => tab.active === false),
+            'agent tabs remain background tabs',
+          )
+          for (const target of (await cdp.call('Target.getTargets')).targetInfos.filter(
+            (t) => t.type === 'page',
+          ))
+            assert.equal(
+              (await cdp.call('Browser.getWindowForTarget', { targetId: target.targetId })).bounds
+                .windowState,
+              'minimized',
+            )
+        }),
     })
     await check('隔离 Chrome 重启，同会话按已保存网站许可直接认领', async () => {
       cdp.close()

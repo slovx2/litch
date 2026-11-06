@@ -3,18 +3,11 @@ import { isAbsolute } from 'node:path'
 import { clientToolFailure } from '../../../../packages/protocol/src/client-tools.mjs'
 import { BadArgs, bool, num, oneOf, str, strings, target } from './args.mjs'
 import type { Call, Tool } from './executor.mjs'
+import { INPUT_PREPARE_MARK } from './input-command.mjs'
+import { observedInput } from './input-receipt.mjs'
 import { parseKey } from './keys.mjs'
 import type { BrowserPage } from './model.mjs'
-import {
-  blockedByDialog,
-  guarded,
-  inputReady,
-  nodeOf,
-  pageLine,
-  pointOf,
-  settle,
-} from './page-ops.mjs'
-import { READ_FIELD_VALUE } from './passwords/mask.mjs'
+import { blockedByDialog, guarded, inputReady, nodeOf, pageLine, pointOf } from './page-ops.mjs'
 
 /** 上传的文件一个最大多少 */
 const UPLOAD_MAX_BYTES = 100 * 1024 * 1024
@@ -27,12 +20,11 @@ async function ready(call: Call, page: BrowserPage) {
 }
 
 /** 动完之后的那句话：页面跳了就写新地址，开了对话框由 done 带上 */
-async function after(call: Call, page: BrowserPage, what: string, dialog: boolean) {
-  if (!dialog) await settle(page, call.context.signal)
+function after(call: Call, page: BrowserPage, what: string, _dialog: boolean) {
   return call.done(page, `${what}\n${pageLine(page)}`)
 }
 
-export const click: Tool = async (call) => {
+const clickAction: Tool = async (call) => {
   const page = call.pick()
   const stop = await ready(call, page)
   if (stop) return stop
@@ -63,9 +55,11 @@ export const click: Tool = async (call) => {
 
 /** 在元素上调的函数：下拉框按字选项；别的聚焦，要清空就全选（接着插入的字会替掉它） */
 const PREPARE = `function (text, clear) {
+  ${INPUT_PREPARE_MARK}
   if (this.tagName === 'SELECT') {
     const option = Array.from(this.options).find((one) => one.label === text || one.value === text || one.text.trim() === text)
     if (!option) return { kind: 'select', ok: false, options: Array.from(this.options).map((one) => one.label).slice(0, 50) }
+    this.focus()
     this.value = option.value
     this.dispatchEvent(new Event('input', { bubbles: true }))
     this.dispatchEvent(new Event('change', { bubbles: true }))
@@ -79,7 +73,7 @@ const PREPARE = `function (text, clear) {
   return { kind: 'field', ok: document.activeElement === this || this.contains(document.activeElement) }
 }`
 
-export const type: Tool = async (call) => {
+const typeAction: Tool = async (call) => {
   const page = call.pick()
   const stop = await ready(call, page)
   if (stop) return stop
@@ -111,6 +105,10 @@ export const type: Tool = async (call) => {
           returnByValue: true,
         })
       ).result.value
+      if (!prepared?.ok && prepared?.kind !== 'select')
+        throw new BadArgs(
+          'The field could not receive focus; no text was inserted. Take a fresh snapshot.',
+        )
       if (prepared?.kind === 'select') {
         if (!prepared.ok) {
           return clientToolFailure(
@@ -135,22 +133,11 @@ export const type: Tool = async (call) => {
         }
       })(),
     )
-    let now = ''
-    if (objectId && !('dialog' in raced) && !submit) {
-      const value = await page.cdp<{ result: { value?: unknown } }>('Runtime.callFunctionOn', {
-        objectId,
-        // 密码框只回遮罩，不把值交给模型
-        functionDeclaration: READ_FIELD_VALUE,
-        returnByValue: true,
-      })
-      if (typeof value.result.value === 'string')
-        now = ` Its value is now ${JSON.stringify(value.result.value.slice(0, 500))}.`
-    }
     const where = ref ? ` into ${ref}` : ' into the focused element'
     return after(
       call,
       page,
-      `Typed${where}${submit ? ' and pressed Enter' : ''}.${now}`,
+      `Typed${where}${submit ? ' and pressed Enter' : ''}.`,
       'dialog' in raced,
     )
   } finally {
@@ -158,7 +145,7 @@ export const type: Tool = async (call) => {
   }
 }
 
-export const press: Tool = async (call) => {
+const pressAction: Tool = async (call) => {
   const page = call.pick()
   const stop = await ready(call, page)
   if (stop) return stop
@@ -179,7 +166,7 @@ export const press: Tool = async (call) => {
   return after(call, page, `Pressed ${combo}.`, 'dialog' in raced)
 }
 
-export const scroll: Tool = async (call) => {
+const scrollAction: Tool = async (call) => {
   const page = call.pick()
   const stop = await ready(call, page)
   if (stop) return stop
@@ -219,7 +206,7 @@ export const scroll: Tool = async (call) => {
   )
 }
 
-export const upload: Tool = async (call) => {
+const uploadAction: Tool = async (call) => {
   if (call.invocation.device.kind !== 'local') {
     return clientToolFailure(
       'invalid',
@@ -256,7 +243,7 @@ export const upload: Tool = async (call) => {
   return call.done(page, `Set ${paths.length} file(s) on ${ref}.`)
 }
 
-export const dialog: Tool = async (call) => {
+const dialogAction: Tool = async (call) => {
   const page = call.pick()
   const open = page.dialog()
   if (!open) return call.done(page, 'No dialog is open.')
@@ -269,3 +256,12 @@ export const dialog: Tool = async (call) => {
   })
   return after(call, page, `${accept ? 'Accepted' : 'Dismissed'} the ${open.type} dialog.`, false)
 }
+
+export const click = observedInput(clickAction)
+export const type = observedInput(typeAction)
+export const press = observedInput(pressAction)
+export const scroll = observedInput(scrollAction)
+const observedUpload = observedInput(uploadAction)
+export const upload: Tool = (call) =>
+  call.invocation.device.kind === 'local' ? observedUpload(call) : uploadAction(call)
+export const dialog = observedInput(dialogAction)

@@ -275,6 +275,7 @@ async function connect(): Promise<void> {
       epoch: state.epoch,
       name: 'Chrome',
       stopped: state.stopped,
+      inputReceipts: true,
     })
     attempt = 0
   }

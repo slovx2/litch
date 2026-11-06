@@ -176,6 +176,8 @@ export async function executePageTool(
     handover: null,
   }
   const result = await handler(call)
-  await page.cdp('Page.getFrameTree')
+  // 输入已附带独立观察回执；不能用又一次读页失败覆盖已派发的结果。
+  if (!['click', 'type', 'press', 'scroll', 'upload', 'dialog'].includes(tool))
+    await page.cdp('Page.getFrameTree')
   return result
 }

@@ -69,3 +69,43 @@ test('批量每步重新传入信号与独立调用号，取消后不取快照',
   assert.equal(seen.length, 1)
   assert.notEqual(seen[0], invocation.callId)
 })
+
+test('步骤均已派发而最终观察失败：不标成动作中途停止，不建议重放', async () => {
+  const result = await runBrowserActions(
+    invocation,
+    context,
+    async (call) =>
+      call.tool === 'snapshot'
+        ? { success: false, contentItems: [{ type: 'inputText', text: 'staleDocument' }] }
+        : {
+            success: true,
+            contentItems: [
+              {
+                type: 'inputText',
+                text: JSON.stringify({
+                  inputReceipt: {
+                    dispatch: 'dispatched',
+                    observation: 'unchanged',
+                    mayHaveExecuted: true,
+                  },
+                }),
+              },
+            ],
+          },
+    false,
+  )
+  assert.equal(result.success, false)
+  const first = result.contentItems[0]
+  assert.equal(first?.type, 'inputText')
+  if (first?.type !== 'inputText') throw Error('missing receipt')
+  const receipt = JSON.parse(first.text)
+  assert.equal(receipt.completed, 2)
+  assert.equal(receipt.actionsStatus, 'completed')
+  assert.equal(receipt.observationStatus, 'failed')
+  assert.equal(receipt.stopped, false)
+  assert.equal(receipt.firstFailedStep, null)
+  assert.equal(receipt.mayHaveExecuted, true)
+  assert.equal(receipt.steps[0].dispatch, 'dispatched')
+  assert.match(receipt.note, /only the final observation failed/)
+  assert.equal(receipt.businessOutcome, 'unknown')
+})
