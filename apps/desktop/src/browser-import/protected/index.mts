@@ -1,6 +1,12 @@
-import type { ProtectedReader } from '../protected-types.mjs'
-import { readerForPlatform } from './reader.mjs'
+// Litch 的接线入口；实现只在通用浏览器包维护。
 
-export function createProtectedReader(): ProtectedReader {
-  return readerForPlatform(process.platform)
+import { systemSecrets } from '../../../../../packages/browser/src/browser-import/protected/chromium-crypto.mjs'
+import { createProtectedReader as createReader } from '../../../../../packages/browser/src/browser-import/protected/index.mjs'
+import { defaultRuntime } from './mac-keychain.mjs'
+import { runCommand } from './process.mjs'
+export function createProtectedReader() {
+  return createReader({
+    platform: process.platform,
+    secrets: systemSecrets(runCommand, defaultRuntime()),
+  })
 }

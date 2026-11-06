@@ -1,4 +1,5 @@
 import type { BrowserDriver } from '../../automation-contracts/src/browser.mjs'
+import type { BrowserHandover } from './browser/executor.mjs'
 import type { BrowserHost, BrowserPage } from './browser/model.mjs'
 import type { SiteBook } from './browser/sites.mjs'
 
@@ -8,6 +9,11 @@ export interface CdpDriverOptions {
   host: BrowserHost
   /** 可信宿主验证输入的 owner，驱动不会从模型参数学习新的设备身份。 */
   sites: SiteBook
+  /** Chrome 的 localhost 也需审批；调用方可注入比默认更严格的判断。 */
+  requiresApproval?(url: string): boolean
+  statFile?(path: string): { file: boolean; size: number } | null
+  /** 与工具执行器共用的脚本标记/登录闸。 */
+  browserHandover?: BrowserHandover
   /** 登录冻结由宿主控制，缺钩子时 driver 不宣告登录能力。 */
   handover?: {
     active(pageId: string): boolean

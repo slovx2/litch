@@ -1,2 +1,2 @@
-/** 只在浏览器网页的隔离预加载与它自己的 WebContents 之间传递。 */
-export const POPUP_GESTURE = 'litch:browser:popup-gesture'
+// Litch 的接线入口；实现只在通用浏览器包维护。
+export * from '../../../../packages/browser/src/browser/popup-gesture.mjs'
