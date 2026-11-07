@@ -195,7 +195,7 @@ test('最终回答的认定：有 final 取最后一条 final；分不清阶段�
     undefined,
   )
   assert.equal(answerOf([{ id: 'c', kind: 'command' }]), undefined)
-  // 分不清阶段的：前面几条都是说明，进过程
+  // 分不清阶段的：每条都留在原位，不靠最后一条推断前面的文字是过程
   assert.deepEqual(
     bucketItems([
       { id: 'u', kind: 'userMessage' },
@@ -205,15 +205,13 @@ test('最终回答的认定：有 final 取最后一条 final；分不清阶段�
     ]),
     [
       { type: 'user', itemId: 'u' },
+      { type: 'answer', itemId: 'm1', unphased: true },
       {
         type: 'process',
-        key: 'm1',
-        parts: [
-          { type: 'note', itemId: 'm1' },
-          { type: 'steps', key: 't', itemIds: ['t'] },
-        ],
+        key: 't',
+        parts: [{ type: 'steps', key: 't', itemIds: ['t'] }],
       },
-      { type: 'answer', itemId: 'm2' },
+      { type: 'answer', itemId: 'm2', unphased: true },
     ],
   )
   // 中断了的回合：只有说明，没有最终回答，都在过程里

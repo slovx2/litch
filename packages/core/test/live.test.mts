@@ -243,6 +243,47 @@ function runtime(handlers: Record<string, Handler>, engine: string) {
 }
 
 for (const engine of ['claude', 'codex', 'pi']) {
+  test(`${engine} 的实时与回合补齐文字统一按阶段来源投影`, async () => {
+    const { core, handlers, peer } = setup()
+    runtime(handlers, engine)
+    core.start()
+    await settle()
+    const session = watch(core)
+    await settle()
+    const expected = engine === 'codex' ? 'commentary' : 'unknown'
+    const phase = (id: string) => {
+      const item = session.seen.view?.items[id]
+      return item?.kind === 'agentMessage' ? item.phase : undefined
+    }
+    peer.last().notify('turn/started', {
+      threadId: 'a',
+      turn: turn('current', [], { status: 'inProgress' }),
+    })
+    peer.last().notify('item/completed', {
+      threadId: 'a',
+      turnId: 'current',
+      item: agentText('live', '实时结论', 'commentary'),
+    })
+    await settle()
+    assert.equal(phase('current:live'), expected)
+    peer.last().notify('turn/completed', {
+      threadId: 'a',
+      turn: turn('current', [agentText('late', '结束补齐的结论', 'commentary')]),
+    })
+    await settle()
+    assert.equal(phase('current:late'), expected)
+    // 新回合直接带完整条目时也经过同一投影。
+    peer.last().notify('turn/started', {
+      threadId: 'a',
+      turn: turn('new', [agentText('start', '开始时的文字', 'commentary')], {
+        status: 'inProgress',
+      }),
+    })
+    await settle()
+    assert.equal(phase('new:start'), expected)
+    core.stop()
+  })
+
   test(`立即停止 ${engine}：首条应答未到时冻结后排，取得回合号后停止`, async () => {
     const { core, handlers, command, sent, peer } = setup()
     runtime(handlers, engine)

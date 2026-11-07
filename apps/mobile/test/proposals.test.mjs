@@ -191,8 +191,8 @@ test('收尾区：带建议、留了问题的收尾在过程里只留一步，�
     ),
     'all',
   )
-  // 过程收成一行，问题照样排在回答下面
-  assert.deepEqual(types(askOnly), ['user', 'process', 'md', 'wrapAsk', 'status'])
+  // 没有阶段的正文保留，工具组摘要也留在原位，问题照样排在回答下面
+  assert.deepEqual(types(askOnly), ['user', 'process', 'group', 'md', 'wrapAsk', 'status'])
 })
 
 test('收尾区：回合还在跑时收尾带的卡片和问题先不排，过程里那一步照留；中途 start 的提案排在调用的位置', () => {
@@ -251,12 +251,15 @@ test('中途 start 的提案不钉在回合末尾：后面的过程和回答接�
     'group',
     'status',
   ])
-  // 回合结束：几段过程收成第一段开头的一行，点开了照原样排
+  // 回合结束：未知阶段正文前后的工具组摘要保留，中途 start 卡仍在原处
   assert.deepEqual(types(new RowBuilder().build(view, 'all')), [
     'user',
     'process',
+    'group',
     'proposal',
+    'group',
     'md',
+    'group',
     'status',
   ])
   assert.deepEqual(types(opened(view)), [

@@ -747,7 +747,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     const viewId = bind(live, turn.id)
     const existing = live.view?.turns.find((entry) => entry.id === viewId)
     if (!existing) {
-      const projected = projectTurn(turn, viewId)
+      const projected = projectTurn(turn, viewId, ownerOf(live) === 'codex')
       emit(live, [
         { op: 'turn.add', turn: projected.turn },
         ...projected.items.map((item): SessionOp => ({ op: 'item.add', turnId: viewId, item })),
@@ -773,7 +773,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         ops.push({
           op: 'item.add',
           turnId: viewId,
-          item: { ...projectItem(item, false), id: key },
+          item: { ...projectItem(item, false, ownerOf(live) === 'codex'), id: key },
         })
       }
       // 助手消息和推理自己不带状态。回合结束了它们还显示“进行中”就不对了
@@ -856,7 +856,10 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (echoed) live.itemAlias.set(own, echoed)
     }
     const key = echoed ?? viewItem(live, viewId, item.id, position)
-    const view: ItemView = { ...projectItem(item, streaming), id: key }
+    const view: ItemView = {
+      ...projectItem(item, streaming, ownerOf(live) === 'codex'),
+      id: key,
+    }
     if (
       (view.kind === 'agentMessage' && view.questions?.length) ||
       (view.kind === 'toolCall' && view.wrapUp)
@@ -2016,7 +2019,9 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           if (!current()) return
           if (page.nextCursor !== null && page.nextCursor === cursor)
             throw new Error('历史分页游标未前进')
-          const older = [...page.data].reverse().map((turn) => projectTurn(turn))
+          const older = [...page.data]
+            .reverse()
+            .map((turn) => projectTurn(turn, turn.id, ownerOf(live) === 'codex'))
           live.historyCursor = page.nextCursor
           emit(live, [
             {

@@ -50,6 +50,55 @@ function viewOf(turns, items) {
 
 const types = (rows) => rows.map((row) => row.type)
 
+for (const phase of ['unknown', 'commentary']) {
+  test(`回合结束的文字与工具：${phase} 按原生阶段决定是否整段折叠`, () => {
+    const builder = new RowBuilder()
+    const items = [
+      user('u', '检查'),
+      { ...answer('n1', '开始检查'), phase },
+      command('c1', 'completed', 0),
+      { ...answer('n2', '中间的重要结论'), phase },
+      command('c2', 'completed', 0),
+      answer('final', '完成'),
+    ]
+    const view = viewOf([{ id: 't', status: 'completed', itemIds: items.map((i) => i.id) }], items)
+    const rows = builder.build(view, 'all')
+    const content = rows.filter((row) => row.type === 'md' || row.type === 'group')
+    assert.deepEqual(
+      content.map((row) => (row.type === 'md' ? row.itemId : 'tools')),
+      phase === 'unknown' ? ['n1', 'tools', 'n2', 'tools', 'final'] : ['final'],
+    )
+    assert.ok(rows.filter((row) => row.type === 'group').every((row) => !row.expanded))
+    builder.toggle('t:process', 't')
+    assert.deepEqual(
+      builder
+        .build(view, 'all')
+        .filter((row) => row.type === 'md')
+        .map((r) => r.itemId),
+      ['n1', 'n2', 'final'],
+    )
+  })
+}
+
+test('混合阶段回合只隐藏明确 commentary，unknown 正文前后工具摘要都保留', () => {
+  const items = [
+    user('u', '检查'),
+    { ...answer('note', '明确的过程说明'), phase: 'commentary' },
+    command('c1', 'completed', 0),
+    { ...answer('finding', '重要结论'), phase: 'unknown' },
+    command('c2', 'completed', 0),
+    answer('final', '完成'),
+  ]
+  const view = viewOf([{ id: 't', status: 'completed', itemIds: items.map((i) => i.id) }], items)
+  assert.deepEqual(
+    new RowBuilder()
+      .build(view, 'all')
+      .filter((row) => row.type === 'md' || row.type === 'group')
+      .map((row) => (row.type === 'md' ? row.itemId : 'tools')),
+    ['tools', 'finding', 'tools', 'final'],
+  )
+})
+
 for (const scenario of ['插话', '压缩', '插话和压缩']) {
   test(`进行中的最后一段保持展开：${scenario}后继续说明和调用工具`, () => {
     const builder = new RowBuilder()
@@ -1004,13 +1053,14 @@ test('被打断的回合不收（照 Codex 桌面端）：中途插的话之间�
     'md',
     'status',
   ])
-  // 同样的条目、回合正常结束：有最终回答，按补充位置收成两段
+  // 同样的条目、回合正常结束：按补充位置分段，unknown 正文所在段保留工具摘要
   const done = viewOf([{ id: 't', status: 'completed', itemIds: ids }], items)
   assert.deepEqual(types(new RowBuilder().build(done, 'all')), [
     'user',
     'process',
     'user',
     'process',
+    'group',
     'md',
     'status',
   ])

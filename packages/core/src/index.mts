@@ -403,6 +403,7 @@ export {
   thoughtShown,
   toolKind,
   turnAddition,
+  visibleProcessParts,
 } from './projection/blocks.mjs'
 export {
   type CommentExtra,

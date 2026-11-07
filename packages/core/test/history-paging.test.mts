@@ -48,6 +48,33 @@ function paging() {
   }
 }
 
+test('推断的 commentary 在首屏与加载旧回合后均按正文保留', async () => {
+  const app = paging()
+  app.replace(
+    Array.from({ length: 30 }, (_, i) =>
+      turn(`t${i}`, [agentText(`a${i}`, '重要结论', 'commentary')]),
+    ),
+  )
+  app.core.start()
+  try {
+    await settle()
+    const session = watch(app.core)
+    await settle()
+    assert.equal(session.seen.view?.harness, 'pi')
+    const phase = (id: string) => {
+      const item = session.seen.view?.items[id]
+      return item?.kind === 'agentMessage' ? item.phase : undefined
+    }
+    assert.equal(phase('t29:a29'), 'unknown')
+    await app.command('session.loadOlder', where)
+    await settle()
+    assert.equal(phase('t10:a10'), 'unknown')
+    session.close()
+  } finally {
+    app.core.stop()
+  }
+})
+
 test('分页长会话：旧后台命令迟到后停止当前回合，只读回合头即可恢复待发', async () => {
   const turns = Array.from({ length: 250 }, (_, index) => turn(`old-${index}`, []))
   const current = turn('current', [], { status: 'inProgress' })

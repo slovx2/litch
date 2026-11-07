@@ -103,7 +103,11 @@ export const originOf = (turn: Turn): { origin?: NonNullable<TurnView['origin']>
   return origin ? { origin } : {}
 }
 
-export function projectTurn(turn: Turn, viewId = turn.id): { turn: TurnView; items: ItemView[] } {
+export function projectTurn(
+  turn: Turn,
+  viewId = turn.id,
+  nativePhase = true,
+): { turn: TurnView; items: ItemView[] } {
   const running = turn.status === 'inProgress'
   const last = (turn.items?.length ?? 0) - 1
   const origin = originOf(turn)
@@ -113,7 +117,7 @@ export function projectTurn(turn: Turn, viewId = turn.id): { turn: TurnView; ite
     // 持续目标的续跑回合里那句“接着做”是入口替 harness 说的（Claude 入口），不是用户说的：不画成用户消息
     if (origin.origin === 'goal' && index === 0 && item.type === 'userMessage') return []
     // 回合还在进行时，只有最后一个条目可能还在往外出字
-    const view = projectItem(item, running && index === last)
+    const view = projectItem(item, running && index === last, nativePhase)
     if (view.kind === 'compaction' && manual) view.source = 'manual'
     return [
       {
@@ -150,7 +154,7 @@ export function projectThread(
   const turns: TurnView[] = []
   const items: Record<string, ItemView> = {}
   for (const source of thread.turns ?? []) {
-    const projected = projectTurn(source)
+    const projected = projectTurn(source, source.id, scope.harness === 'codex')
     turns.push(projected.turn)
     for (const item of projected.items) items[item.id] = item
   }

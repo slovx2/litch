@@ -1110,7 +1110,7 @@ test('分块：回合还在跑时收尾带的卡片和问题先不进收尾区�
     { type: 'process', key: 'c1', parts: [{ type: 'steps', key: 'c1', itemIds: ['c1'] }] },
     { type: 'card', itemId: 's' },
     { type: 'process', key: 'c2', parts: [{ type: 'steps', key: 'c2', itemIds: ['c2', 'w'] }] },
-    { type: 'answer', itemId: 'a' },
+    { type: 'answer', itemId: 'a', unphased: true },
   ])
   // 回合结束（不传、传 false 都一样）：收尾带的排进来，start 的卡还在原处
   const ended = bucketItems(items, { turnRunning: false })
