@@ -38,6 +38,8 @@ const required = [
   'src/preview/Index.web.tsx',
   'src/preview/webview.web.tsx',
   'src/preview/markdown.web.tsx',
+  'src/preview/KeyboardCardScrollView.web.tsx',
+  'src/ui/kit/KeyboardCardScrollView.web.tsx',
   'src/shell/json-file.web.ts',
   'modules/litch-ssh/src/native.web.ts',
 ]
@@ -52,8 +54,12 @@ try {
   }
   if (!android.includes('src/App.tsx'))
     problems.push('安卓包的 source map 里找不到 src/App.tsx，路径对不上')
+  if (!android.includes('src/ui/kit/KeyboardCardScrollView.tsx'))
+    problems.push('安卓包未保留原生键盘卡片滚动组件')
   const web = modulesOf('web', join(work, 'web'))
   for (const path of required) if (!web.includes(path)) problems.push(`网页包里没有 ${path}`)
+  if (web.includes('src/ui/kit/KeyboardCardScrollView.tsx'))
+    problems.push('网页包里仍有原生键盘卡片滚动组件')
   console.log(`安卓包 ${android.length} 个模块，网页包 ${web.length} 个模块`)
 } finally {
   rmSync(work, { recursive: true, force: true })
