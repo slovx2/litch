@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { auditApkBuildMode } from './apk-build-mode.mjs'
 
 export function checkApkManifest(badging, version, packageName) {
   const [major, minor, patch] = version.split('.').map(Number)
@@ -28,5 +29,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const { expo } = JSON.parse(readFileSync('apps/mobile/app.json', 'utf8'))
   assert.equal(expo.version, version, '手机版本必须与候选相同')
   checkApkManifest(badging, version, expo.android.package)
+  auditApkBuildMode(process.argv[2], false)
   console.log(`APK manifest/版本/ABI 已验证：${expo.android.package} ${version}`)
 }

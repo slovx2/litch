@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { auditApkBuildMode } from './apk-build-mode.mjs'
 
 export function checkManifest(badging, expected) {
   const pkg = badging.match(/^package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'/m)
@@ -34,6 +35,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     readFileSync(new URL('../../apps/mobile/app.json', import.meta.url), 'utf8'),
   )
   checkManifest(badging, { package: expo.android.package, version: expo.version })
+  auditApkBuildMode(resolve(apk), true)
   console.log(
     `测试 APK 签名与 manifest 通过：${expo.android.package} ${expo.version} x86_64；不作为正式发布证书证明`,
   )

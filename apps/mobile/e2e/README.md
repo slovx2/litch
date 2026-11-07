@@ -180,6 +180,19 @@ echo no | avdmanager create avd -n <名字> --package 'system-images;android-35;
 
 Release E2E 构建使用 `EXPO_PUBLIC_LITCH_E2E=1`，发布包为 `0`；不要仅用 `__DEV__` 判断。
 `scripts/e2e.mjs --build` 自动设置验收开关，iOS `LITCH_MOBILE_DEV=1 scripts/build-ios.sh` 同样设置。
+Android 执行器及 CI 从 APK 的 `assets/app.config` 核对档位；release/非 debuggable 本身不能证明入口已关闭。
+Android 换源正测 `mock/33-update-links.yaml` 随默认全集运行：假更新源确实收到请求、横条出现且重启后仍有效，
+没有点击下载就不能请求 APK。它只适用于 Android；iOS 不提供 APK 更新。
+发布包负测需单独构建（两步均传 `EXPO_PUBLIC_LITCH_E2E=0`：`expo prebuild` 与 `npm run android:release`），运行：
+
+```sh
+node scripts/e2e.mjs --apk /绝对路径/发布包.apk --only e2e/flows/production/android-dev-links.yaml
+```
+
+负测覆盖冷/热启动的 `litch://update?feed=`、mock/fixture 启动和 remote 参数链接；必须保持真实设备首页，
+开发设置隐藏，且宿主假更新源的请求数为 **0**。执行器保留 `update-link.json` 和 Maestro JUnit，
+用 `LITCH_E2E_ARTIFACTS` 指定持久证据目录；不靠更新横条缺失推断无网络副作用。
+
 普通流程的执行器在遇到数据同意卡时显式点击“同意并继续”，然后仍执行原产品断言；
 带 `privacy` 标签的专项流程不自动同意，验证取消、允许、撤回与登录前披露。
 等待元素消失（例如发送后草稿清空）也会在有界轮询中处理同意卡，不重复发送操作，

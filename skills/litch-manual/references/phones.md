@@ -34,8 +34,10 @@ continue or cancel. Direct SSH remains available. Custom control servers have th
 
 正式 iOS/Android 包不提供开发深链、模拟/夹具启动方式或测试更新源。升级时清除旧开发设置，
 设备、SSH 密钥和普通偏好保留。开发者的 Release E2E 包使用显式构建开关，不能作为发布包分发。
+Android 发布产物还会检查包内构建档位，拒绝误用 E2E 包；深链不能在运行时开启该开关。
 Production iOS and Android builds do not expose development links, mock/fixture boot modes or test
 update feeds. Upgrades remove old development settings while retaining devices, SSH keys and normal preferences.
+Android release validation also rejects E2E artifacts. A link cannot enable the build-time switch.
 
 The Litch phone app connects over SSH to the same machines. Instead of copying keys by hand, a
 device the desktop already reaches can be added to the phone by scanning a QR code: the phone creates

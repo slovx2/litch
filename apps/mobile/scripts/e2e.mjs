@@ -46,6 +46,7 @@ import {
   startAnrWatch,
   waitAndroidReady,
 } from '../../../scripts/ci/android-health.mjs'
+import { auditApkBuildMode } from '../../../scripts/ci/apk-build-mode.mjs'
 import {
   infrastructureRetryReason,
   recoverAdb,
@@ -54,6 +55,7 @@ import { mobileShards } from '../../../scripts/ci/mobile-shards.mjs'
 import { prepareConsentFlows } from './consent-flows.mjs'
 import { deviceRpc } from './device-rpc.mjs'
 import { installTerminalAudit, terminalEvidence } from './terminal-audit.mjs'
+import { startUpdateLinkProbe } from './update-link-probe.mjs'
 
 const mobile = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repo = resolve(mobile, '../..')
@@ -85,6 +87,7 @@ const debugDir = artifacts ?? join(work, 'debug')
 const reverseLosses = []
 let diagnostics = null
 let anrWatch = null
+let updateProbe = null
 const anrMonitorMessages = []
 const log = (line) => console.log(`[e2e] ${line}`)
 const summary = (text) => {
@@ -808,6 +811,7 @@ async function runMaestro(serial, flows, fixture, report, attemptDir, helper) {
     'JUNIT',
     '--output',
     report,
+    ...(updateProbe ? ['-e', `UPDATE_FEED=${updateProbe.url}`] : []),
     ...(helper ? ['-e', `HELPER=${helper}`, '-e', `HELPER_PORT=${new URL(helper).port}`] : []),
     ...Object.entries(env).flatMap(([name, value]) => ['-e', `${name}=${value}`]),
     ...flows.map((file) => join(prepared, relative(flowsDir, file))),
@@ -885,6 +889,13 @@ async function main() {
   if (flag('--build')) await phase('构建 APK', buildApk)
   if (!flag('--no-install') && !existsSync(apk))
     throw new Error(`没有安装包 ${apk}：加 --build，或者用 --apk 指过去`)
+  if (!flag('--no-install')) {
+    const productionFlow = (file) => dirname(file) === join(flowsDir, 'production')
+    const production = flows.every(productionFlow)
+    if (!production && flows.some(productionFlow))
+      throw new Error('发布包负测必须与 E2E 流程分开运行')
+    auditApkBuildMode(apk, !production)
+  }
   const serial = await phase('模拟器连接/启动', startEmulator)
   if (process.env.LITCH_E2E_DIAGNOSTICS === '1') {
     try {
@@ -900,8 +911,17 @@ async function main() {
   const fixture = needsFixture ? await phase('夹具就绪', () => startFixture(serial)) : null
   const helper = fixture?.helper ?? (needsClipboard ? await startHelper(null, serial) : null)
   const reverseRules = fixture?.reverseRules ?? []
-  // 普通 mock 不依赖助手；fixture 的宿主查询也不需要手机映射。
-  // 只有原生剪贴板探针会从手机回传，才建立并恢复这条 reverse。
+  if (flows.some((file) => tagsOf(file).includes('update-gate'))) {
+    updateProbe = await startUpdateLinkProbe()
+    cleanups.push(() => updateProbe.stop())
+    const rule = [`tcp:${updateProbe.port}`, `tcp:${updateProbe.port}`]
+    adb(serial, 'reverse', ...rule)
+    reverseRules.push(rule)
+    cleanups.push(() =>
+      spawnSync(adbBin, ['-s', serial, 'reverse', '--remove', rule[0]], { stdio: 'ignore' }),
+    )
+  }
+  // 普通 mock 不依赖助手；原生剪贴板探针需要从手机回传。
   if (needsClipboard) {
     const port = new URL(helper).port
     const rule = [`tcp:${port}`, `tcp:${port}`]
@@ -929,6 +949,7 @@ async function main() {
       const report = join(attemptDir, 'junit.xml')
       const reverseMark = reverseLosses.length
       const start = Date.now()
+      const updateRequests = updateProbe?.count()
       diagnostics?.mark('flow-start', { flow: name, attempt })
       if (fixture && name === 'fixture/03-tools.yaml') {
         for (const file of ['e2e-mark.txt', 'e2e-terminal-ready.txt', 'e2e-shell-commands.txt'])
@@ -937,6 +958,14 @@ async function main() {
       try {
         status = await runMaestro(serial, [flow], fixture, report, attemptDir, helper)
         await anrWatch.checkpoint()
+        if (status === 0 && tagsOf(flow).includes('update-gate')) {
+          const production = dirname(flow) === join(flowsDir, 'production')
+          // 跨过启动后 30 秒的自动检查，避免漏掉只持久写入、稍后才请求的换源回归。
+          if (production) await sleep(35000)
+          await anrWatch.checkpoint()
+          const evidence = updateProbe.verify(updateRequests, production)
+          writeFileSync(join(attemptDir, 'update-link.json'), JSON.stringify(evidence, null, 2))
+        }
       } catch (error) {
         status = 1
         writeFileSync(join(attemptDir, 'runner-error.txt'), error.message)
