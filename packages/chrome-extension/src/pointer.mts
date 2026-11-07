@@ -32,7 +32,7 @@ async function bounded<T>(work: Promise<T>): Promise<T> {
             reject(
               new ChromeFault(
                 'targetUnavailable',
-                'The page did not respond to pointer preparation. No input was dispatched.',
+                'The page did not respond to pointer preparation. Wait for load and take a fresh snapshot; if it remains unresponsive, reload it. Foreground focus is not required. Check the input receipt before retrying.',
               ),
             ),
           1200,
@@ -126,17 +126,25 @@ async function preparePointer(
     pressed: false,
   }
   world.sample = sample
-  const receipt = await evaluate<{ sample: AutomationPointerSample; result: string }>(
+  type Receipt = { sample: AutomationPointerSample; result: string }
+  let receipt = await evaluate<Receipt>(
     state,
     grant,
     world,
-    `__litchChromePointer.update(${JSON.stringify(sample)})`,
+    `__litchChromePointer.prepare(${JSON.stringify(sample)})`,
   )
+  // 动画与页面计时器都可能因后台节流停住。由扩展计时，只轮询同步状态；
+  // 到点跳过呈现等待，随后照常核对文档、租约与几何，不吞页面/CDP 错误。
+  const deadline = performance.now() + 200
+  while (receipt?.result === 'pending' && performance.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    receipt = await evaluate<Receipt>(state, grant, world, '__litchChromePointer.arrival()')
+  }
   if (
     !receipt ||
     receipt.sample.actionId !== sample.actionId ||
     receipt.sample.seq !== sample.seq ||
-    !['arrived', 'hidden', 'timedOut'].includes(receipt.result)
+    !['arrived', 'hidden', 'timedOut', 'pending'].includes(receipt.result)
   )
     throw new ChromeFault(
       'staleDocument',
@@ -237,7 +245,7 @@ export async function pointerCommand(
       state,
       grant,
       world,
-      `__litchChromePointer.update(${JSON.stringify(world.sample)})`,
+      `void __litchChromePointer.update(${JSON.stringify(world.sample)}); true`,
     ).catch(() => {})
     return result
   } catch (error) {
@@ -280,7 +288,7 @@ export async function disposePointer(
       state,
       grant,
       world,
-      `__litchChromePointer.update(${JSON.stringify(world.sample)})`,
+      `void __litchChromePointer.update(${JSON.stringify(world.sample)}); true`,
     ).catch(() => {})
   }
   await evaluate(state, grant, world, '__litchChromePointer.dispose()').catch(() => {})

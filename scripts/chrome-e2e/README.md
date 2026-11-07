@@ -1,5 +1,9 @@
 # Chrome 自动验收
 
+局部后台输入回归：`node scripts/chrome-e2e/background-input.mjs --expect-fixed`。只构建扩展与原生桥，不跑 Full；默认使用最小化隔离 CFT，检查后台标签、首次认领、导航、登录暂停/交还后重新认领，以及页面 rAF 和指针 world 的 rAF/计时器不回调。每次打印完整回执、页面值及窗口状态，退出清理 profile、浏览器、桥和站点夹具。冻结命令的结果以报告中的 `tab.frozen` 为准，不能把发出了命令等同于 Chrome 真的冻结。
+
+获准使用隔离可见窗口后，可运行 `LITCH_CHROME_GUI_SLOT=approved node scripts/chrome-e2e/background-input.mjs --shown --expect-fixed`，增加前台和完全遮挡对照；通过 CGWindowList 的顺序和边框包含关系确认覆盖，不读取用户窗口。`LITCH_CHROME_EXTENSION_SOURCE` 可指向历史版本的源码导出目录（保留 `apps/desktop/scripts/build-chrome.mjs` 及其依赖），`LITCH_CHROME_DRIVER_SOURCE` 可指向历史执行器源码；只用于复现前后对照，不修改或安装用户扩展。需要本机 Node 24、Go 和桌面构建依赖。
+
 在 macOS、Node 24、Go 环境运行：
 
 ```sh

@@ -41,6 +41,17 @@ function setup(extra = {}) {
   return { dom, renderer }
 }
 
+test('Chrome 同步隐藏不依赖帧与页面计时器，捕获结束仍恢复', async () => {
+  const { dom, renderer } = setup()
+  let captured = false
+  await renderer.withoutPointer(async () => {
+    assert.equal(dom.host.style.visibility, 'hidden')
+    captured = true
+  }, false)
+  assert.equal(captured, true)
+  assert.equal(dom.host.style.visibility, '')
+})
+
 test('宿主隔离、鼠标穿透和 AX 隐藏；可见回执等待绘制机会', async () => {
   const { dom, renderer } = setup()
   assert.equal(dom.host.shadowMode, 'closed')

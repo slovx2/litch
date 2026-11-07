@@ -50,20 +50,56 @@ export async function guarded<T>(
   return raced
 }
 
-/**
- * 发输入事件之前等页面画出两帧。实测（自检里比过几种做法）：页面刚加载完时，第一下鼠标事件会丢，
- * 等过一次绘制就不丢了；焦点模拟让后台标签也能绘制。超时不能继续把未就绪页面当成可输入。
- */
+/** 页面响应与绘制是两件事：后台可停帧，不能据此拒绝输入。 */
 export async function inputReady(page: BrowserPage): Promise<void> {
+  // 每次输入都确认模拟焦点；导航或交还登录控制后也不依赖认领时的状态。
   await within(
-    page.cdp('Runtime.evaluate', {
-      expression:
-        'new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(true))))',
-      awaitPromise: true,
-    }),
-    1000,
-    'Input was not dispatched: the page did not become ready to paint within 1000 ms. Take a fresh snapshot and check page readiness.',
+    page.cdp('Emulation.setFocusEmulationEnabled', { enabled: true }),
+    1200,
+    'The browser did not confirm input focus. Take a fresh snapshot and check the browser connection; bringing Chrome to the foreground is not required.',
   )
+  const probe = async () => {
+    const reply = await within(
+      page.cdp<{ result?: { value?: number }; exceptionDetails?: unknown }>('Runtime.evaluate', {
+        expression:
+          'document.documentElement && document.documentElement.getBoundingClientRect().width > 0 ? performance.timeOrigin : null',
+        returnByValue: true,
+        timeout: 1000,
+      }),
+      1200,
+      'The page is not responding to input preparation. Wait for it to load, then take a fresh snapshot; if it remains unresponsive, reload it. Bringing Chrome to the foreground is not required.',
+    )
+    if (reply.exceptionDetails || typeof reply.result?.value !== 'number')
+      throw new BadArgs(
+        'The page has no usable document yet. Wait for load and take a fresh snapshot before input.',
+      )
+    return reply.result.value
+  }
+  const before = await probe()
+  // 首次绘制能减少刚加载页面丢输入的概率，但只作短暂优化。上限由宿主计时，
+  // 不依赖同样可能被节流的页面 setTimeout；迟到的回调只观察，不会派发输入。
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      page.cdp('Runtime.evaluate', {
+        expression: `new Promise((done) => {
+          let frame;
+          const finish = () => { cancelAnimationFrame(frame); clearTimeout(timer); done(true); };
+          const timer = setTimeout(finish, 160);
+          frame = requestAnimationFrame(() => { frame = requestAnimationFrame(finish); });
+        })`,
+        awaitPromise: true,
+      }),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, 200)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+  // 超时仅降级绘制等待；新的同步探测仍经来源/租约/文档闸，真正卡死不能放行。
+  if (before !== (await probe()))
+    throw new BadArgs('The document changed while preparing input. Take a fresh snapshot.')
 }
 
 /** 页面开着对话框时先让模型答它：除了 dialog 工具，别的都动不了页面 */

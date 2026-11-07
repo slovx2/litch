@@ -25,7 +25,7 @@ export interface AutomationPointerRenderer {
   readonly element: HTMLElement
   geometry(surface: AutomationSurface, frame: AutomationFrameGeometry): void
   update(sample: AutomationPointerSample): Promise<PointerArrival>
-  withoutPointer<T>(capture: () => Promise<T>): Promise<T>
+  withoutPointer<T>(capture: () => Promise<T>, waitForPaint?: boolean): Promise<T>
   dispose(): void
 }
 
@@ -187,20 +187,21 @@ export function createAutomationPointer(
         animation = win.requestAnimationFrame(step)
       })
     },
-    async withoutPointer<T>(capture: () => Promise<T>): Promise<T> {
+    async withoutPointer<T>(capture: () => Promise<T>, waitForPaint = true): Promise<T> {
       hidden++
       host.style.visibility = 'hidden'
       finish('hidden')
       try {
-        await new Promise<void>((resolve) => {
-          const timeout = win.setTimeout(resolve, 120)
-          win.requestAnimationFrame(() =>
-            win.requestAnimationFrame(() => {
-              win.clearTimeout(timeout)
-              resolve()
-            }),
-          )
-        })
+        if (waitForPaint)
+          await new Promise<void>((resolve) => {
+            const timeout = win.setTimeout(resolve, 120)
+            win.requestAnimationFrame(() =>
+              win.requestAnimationFrame(() => {
+                win.clearTimeout(timeout)
+                resolve()
+              }),
+            )
+          })
         return await capture()
       } finally {
         hidden--

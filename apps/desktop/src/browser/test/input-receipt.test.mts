@@ -139,11 +139,11 @@ test('点击已跳转后旧文档失败恢复为导航回执，不执行第二�
   assert.equal(f.sent(), 1)
 })
 
-test('输入就绪超时不吞掉；URL 长凭据段不出回执', async (t) => {
+test('焦点确认超时不吞掉；URL 长凭据段不出回执', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const pending = inputReady({ cdp: () => new Promise(() => {}) } as unknown as BrowserPage)
-  const rejected = assert.rejects(pending, /Input was not dispatched/)
-  t.mock.timers.tick(1000)
+  const rejected = assert.rejects(pending, /did not confirm input focus/)
+  t.mock.timers.tick(1200)
   await rejected
   assert.equal(
     receiptUrl(`https://a.test/${'s'.repeat(40)}?sig=secret`),

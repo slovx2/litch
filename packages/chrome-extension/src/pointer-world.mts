@@ -6,6 +6,7 @@ import type {
 import {
   type AutomationPointerRenderer,
   createAutomationPointer,
+  type PointerArrival,
 } from '../../browser/src/pointer-renderer.mjs'
 
 export function installPointerWorld(): void {
@@ -16,6 +17,10 @@ export function installPointerWorld(): void {
   let releaseCapture: (() => void) | null = null
   let capture: Promise<unknown> | null = null
   let last: AutomationPointerSample | null = null
+  let arrival: {
+    sample: AutomationPointerSample
+    result: PointerArrival['result'] | 'pending'
+  } | null = null
 
   function geometry() {
     const view = visualViewport
@@ -53,6 +58,7 @@ export function installPointerWorld(): void {
       stamp = ''
       revision = 0
       last = null
+      arrival = null
       const current = geometry()
       renderer = createAutomationPointer(document.documentElement, {
         ...current,
@@ -79,12 +85,23 @@ export function installPointerWorld(): void {
       if (rect.width <= 0 || rect.height <= 0) return null
       return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
     },
-    async update(sample: AutomationPointerSample) {
+    update(sample: AutomationPointerSample) {
       const current = geometry()
       if (sample.geometryRevision !== current.surface.geometryRevision)
         throw new Error('Pointer geometry changed')
       last = sample
       return renderer?.update(sample)
+    },
+    prepare(sample: AutomationPointerSample) {
+      const work = api.update(sample)
+      arrival = { sample, result: 'pending' }
+      void work?.then((receipt) => {
+        if (arrival?.sample === sample) arrival = receipt
+      })
+      return arrival
+    },
+    arrival() {
+      return arrival
     },
     async hide() {
       if (!renderer || releaseCapture) throw new Error('Pointer capture is unavailable or busy')
@@ -95,10 +112,11 @@ export function installPointerWorld(): void {
       const release = new Promise<void>((resolve) => {
         releaseCapture = resolve
       })
+      // CDP 会在捕获时更新样式；后台无帧时不把快照也卡在隐藏动画上。
       capture = renderer.withoutPointer(async () => {
         ready()
         await release
-      })
+      }, false)
       await begun
     },
     async restore() {
@@ -114,6 +132,7 @@ export function installPointerWorld(): void {
       renderer = null
       surface = null
       last = null
+      arrival = null
     },
     // 只有隔离验收的 CDP 能观察这个 world，产品页面的主 world 看不到。
     status() {

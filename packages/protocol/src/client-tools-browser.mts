@@ -356,7 +356,7 @@ export const BROWSER_TOOLS: ClientToolNamespaceSpec = {
     ),
     fn(
       'show',
-      'Show a tab to the user (Chrome activates its tab and window). Call only when the user explicitly asks to see the page or watch. Background clicks and typing do not need show; never call it to fix input focus.',
+      'Show a tab to the user (Chrome activates its tab and window). Call only when the user explicitly asks to see the page or watch. Background tabs, covered windows and minimized windows support clicks and typing without show. A missing paint frame does not mean Chrome needs foreground focus. If input preparation reports an unresponsive page, wait for load and take a fresh snapshot; do not use show to fix input focus. Follow sign-in, lease and site-permission errors separately.',
       { tabId },
     ),
   ],
