@@ -11,19 +11,23 @@ iOS 的更新由 App Store 或 TestFlight 管理。隐私查询、删除请求�
 
 ## 数据同意 / Data sharing consent
 
-手机首次向 AI 服务发起操作前，会说明消息、附件、代理读取的项目文件和会话上下文的数据去向。
+Android 不显示 AI 数据同意框，发送不经过此闸门；隐私政策仍可从设置访问。
+
+Android does not show the AI data consent dialog or gate sending on it. The privacy policy remains available in Settings.
+
+iOS 首次向 AI 服务发起操作前，会说明消息、附件、代理读取的项目文件和会话上下文的数据去向。
 用户可以取消；取消不会发送本次内容。同意按设备与供应商配置保存，换供应商或配置变化后重新确认。
 讨论抽屉打开时，同意框显示在抽屉上方；取消后保留追问草稿，允许后完成发送并清空输入框。
 同意框弹出时主动收起键盘；键盘正在收起或再次打开时，系统返回只收键盘，不取消本次许可。键盘收起后再次返回或点击取消，才取消发送并保留草稿。
-若远端未上报完整供应商信息，界面明确提示先核实配置，本次许可不保存。文件附件先上传到选定设备，
+若远端未上报完整供应商信息，界面提示先核实配置，同意仍按设备、harness 和已知配置保存；检测到供应商或配置变化时重新询问。文件附件先上传到选定设备，
 后续发送给模型仍须获得该服务的同意。经理操作同时说明其配置的派发服务。
 设置可“撤回 AI 数据同意”；这只影响手机今后的操作，不删除已经传出的内容，也不停止远端运行的任务。
 手机不控制已经自主运行的远程代理；在电脑上更改服务或要求代理使用其他服务前，应重新核实数据去向。
 
-Before an AI action from the phone, Litch explains where messages, attachments, project files and
+Before the first AI action on iOS, Litch explains where messages, attachments, project files and
 conversation context may be processed. You can cancel. Consent is saved per device and reported
-provider configuration; provider or configuration changes require confirmation. Unknown provider
-details are shown explicitly and permission is not saved. When a discussion drawer is open,
+provider configuration; detected provider or configuration changes require confirmation. Unknown provider
+details are shown explicitly; consent is still saved per device, harness and known configuration. When a discussion drawer is open,
 consent appears above it. Cancelling keeps the draft; agreeing sends the question and clears
 the input after submission succeeds. The consent dialog dismisses the keyboard when it opens.
 Back only dismisses a visible or closing keyboard; once it is hidden, Back or Cancel cancels

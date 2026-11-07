@@ -183,11 +183,15 @@ export function consentTargets(
       const list = config?.providers.data
       const prefix = providerOf(selectedModel)
       const active = list?.providers.filter((p) => p.active) ?? []
+      const claudeDefault =
+        !prefix && (engine === 'claude-code' || engine === 'claude') && list?.switchable === false
+          ? (list.providers.find((p) => p.id === 'native') ??
+            list.providers.find((p) => p.id === 'anthropic'))
+          : null
+      // Claude 的供应商按会话型号选择，全部 active=false；无前缀时遵循设备的 native/账号路由。
       const provider = prefix
         ? list?.providers.find((p) => p.id === prefix)
-        : active.length === 1
-          ? active[0]
-          : null
+        : (claudeDefault ?? (active.length === 1 ? active[0] : null))
       // 只取公开服务地址，不存 definition（可能含账号或密钥状态）。
       const endpoints = Object.entries(provider?.definition ?? {})
         .flatMap(([key, value]) => {
@@ -209,7 +213,9 @@ export function consentTargets(
         label: [label, ...endpoints].join('\n'),
         model: selectedModel,
         revision: JSON.stringify([device.host, provider?.id, list?.version, endpoints]),
-        remember: !!provider && !!list?.version && name !== 'files.uploadAttachment',
+        // 未完整上报时也按设备、harness 和已知配置记忆；新供应商/配置指纹到达后重新询问。
+        remember: true,
+        incomplete: !provider || !list?.version,
         delegated,
       }
     }

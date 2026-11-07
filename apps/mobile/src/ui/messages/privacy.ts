@@ -11,7 +11,8 @@ export const zhCN = {
     '远程代理按您在该机器上的配置调用服务，由您在远程设备上控制；手机不拦截其自主请求。',
   'privacy.ai.upload':
     '所选文件将先上传到以下设备。发送给 AI 模型时会另行确认数据同意；取消则不上传本次文件。',
-  'privacy.ai.unknown': '远端未提供完整的供应商信息。请先核实该设备的服务配置；本次许可不会保存。',
+  'privacy.ai.unknown':
+    '远端未提供完整的供应商信息。请先核实该设备的服务配置。同意将按设备和工具保存；检测到供应商或配置变化后重新询问。您也可在设置中撤回同意。',
   'privacy.ai.delegate':
     '经理或子会话可能继续处理这些内容。下列服务是当前配置；在电脑上更改配置或指示代理选择其他服务前，请重新核实数据去向。',
   'privacy.ai.allow': '同意并继续',
@@ -41,7 +42,7 @@ export const en: Record<keyof typeof zhCN, string> = {
   'privacy.ai.upload':
     'The selected file will first be uploaded to the device below. Consent for the AI service is checked separately when sending it to a model. Cancel to avoid uploading this file.',
   'privacy.ai.unknown':
-    'The remote device has not provided complete provider information. Verify its service configuration first. This permission will not be saved.',
+    'The remote device has not provided complete provider information. Verify its service configuration first. Consent is saved for this device and tool; detected provider or configuration changes require consent again. You can withdraw consent in Settings.',
   'privacy.ai.delegate':
     'Managers or child sessions may continue processing this content. The services below reflect current settings. Before changing settings on the computer or asking an agent to use another service, verify where your data will go.',
   'privacy.ai.allow': 'Agree and continue',

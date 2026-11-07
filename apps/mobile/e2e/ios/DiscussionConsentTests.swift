@@ -53,6 +53,15 @@ final class DiscussionConsentTests: XCTestCase {
     wait(for: [cleared], timeout: 10)
     XCTAssertTrue(app.otherElements.matching(NSPredicate(format: "label == %@", "Temporary keyboard question")).firstMatch.waitForExistence(timeout: 10))
     capture("discussion-consent-complete")
+    // 同一设备和工具的第二条追问沿用许可，不能再弹同意框；切换工具在下方另验。
+    field.tap()
+    app.typeText("Second question with saved consent")
+    app.buttons["post-question-submit:D-17"].tap()
+    let secondCleared = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+      field.exists && (field.value as? String) != "Second question with saved consent"
+    }, object: field)
+    wait(for: [secondCleared], timeout: 10)
+    XCTAssertFalse(allow.exists)
     XCTAssertTrue(app.buttons["discussion-drawer:close"].isHittable)
     app.buttons["discussion-drawer:close"].tap()
 

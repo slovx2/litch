@@ -1,12 +1,13 @@
 appId: dev.litch.app
 name: mock-报告建议追问与临时对话键盘
-tags: [mock]
+tags:
+  - mock
 ---
 - runFlow:
     file: ../_shared/fresh.yaml
     env:
       MODE: mock
-      CONTROLLED: '1'
+      CONTROLLED: "1"
       READY: device:local
 - scrollUntilVisible:
     element:
@@ -20,11 +21,10 @@ tags: [mock]
     id: manager-tab:console
 - tapOn:
     id: post-discussion:D-17
-- tapOn: '^(Temporary chat|临时对话)$'
+- tapOn: ^(Temporary chat|临时对话)$
 - tapOn:
     id: post-question:D-17
 - inputText: Temporary keyboard question
-# 返回只关闭抽屉，重开仍保留草稿；不能以清空草稿修复收键盘失败。
 - runFlow: ../_shared/dismiss-keyboard.yaml
 - runFlow:
     when:
@@ -46,18 +46,27 @@ tags: [mock]
     id: discussion-drawer:close
 - tapOn:
     id: post-question-submit:D-17
-# 全新状态的首次讨论必须真正展示同意框；可见、可点之后才允许等待草稿清空。
-- extendedWaitUntil:
-    visible:
-      id: ai-consent:title
-    timeout: 10000
-- scrollUntilVisible:
-    element:
-      id: ai-consent:allow
-    direction: DOWN
-    timeout: 5000
-- tapOn:
-    id: ai-consent:allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: ai-consent:title
+          timeout: 10000
+      - scrollUntilVisible:
+          element:
+            id: ai-consent:allow
+          direction: DOWN
+          timeout: 5000
+      - tapOn:
+          id: ai-consent:allow
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - assertNotVisible:
+          id: ai-consent:title
 - extendedWaitUntil:
     notVisible:
       id: post-question:D-17

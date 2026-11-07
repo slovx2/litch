@@ -1,7 +1,7 @@
-# 终端只检查外层避让和补键条；不把 mock 输出当真实终端输入验收。
 appId: dev.litch.app
 name: mock-终端与编辑弹窗键盘
-tags: [mock]
+tags:
+  - mock
 ---
 - runFlow:
     file: ../_shared/fresh.yaml
@@ -46,14 +46,13 @@ tags: [mock]
     id: menu:edit
 - tapOn:
     id: edit:input
-# Android 点击多行原文会把光标放在中间；先全选，避免只删掉光标前的文字。
 - runFlow:
     when:
       platform: Android
     commands:
       - longPressOn:
           id: edit:input
-      - tapOn: '^(Select All|Select all|全选)$'
+      - tapOn: ^(Select All|Select all|全选)$
 - eraseText: 80
 - inputText: Keyboard edited message
 - assertVisible:
@@ -63,33 +62,42 @@ tags: [mock]
     id: edit:send
 - tapOn:
     id: edit:send
-# 消息编辑仍在原生弹窗里；首次发送必须在它上方显示数据同意，取消后保留草稿。
-- extendedWaitUntil:
-    visible:
-      id: ai-consent:title
-    timeout: 10000
-- scrollUntilVisible:
-    element:
-      id: ai-consent:cancel
-- tapOn:
-    id: ai-consent:cancel
-- assertVisible:
-    id: edit:input
-    text: Keyboard edited message
-- scrollUntilVisible:
-    element:
-      id: edit:send
-- tapOn:
-    id: edit:send
-- extendedWaitUntil:
-    visible:
-      id: ai-consent:title
-    timeout: 10000
-- scrollUntilVisible:
-    element:
-      id: ai-consent:allow
-- tapOn:
-    id: ai-consent:allow
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: ai-consent:title
+          timeout: 10000
+      - scrollUntilVisible:
+          element:
+            id: ai-consent:cancel
+      - tapOn:
+          id: ai-consent:cancel
+      - assertVisible:
+          id: edit:input
+          text: Keyboard edited message
+      - scrollUntilVisible:
+          element:
+            id: edit:send
+      - tapOn:
+          id: edit:send
+      - extendedWaitUntil:
+          visible:
+            id: ai-consent:title
+          timeout: 10000
+      - scrollUntilVisible:
+          element:
+            id: ai-consent:allow
+      - tapOn:
+          id: ai-consent:allow
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - assertNotVisible:
+          id: ai-consent:title
 - extendedWaitUntil:
     notVisible:
       id: edit:input
