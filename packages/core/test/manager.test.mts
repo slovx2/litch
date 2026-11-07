@@ -998,3 +998,19 @@ test('控制台通道：报告显式已阅只清未读徽标、不改变待处�
     server()
   }
 })
+
+test('旧服务没有请求忽略能力时不能把理由偷偷发成普通回复', async () => {
+  const world = serviceWorld({})
+  await assert.rejects(
+    world.service.feedback({
+      managerId: 'm',
+      answers: [],
+      questions: [],
+      requests: [
+        { requestId: 'R-1', revision: 1, delivered: false, ignored: true, text: '不用做了' },
+      ],
+    }),
+    /not supported|older/,
+  )
+  assert.ok(!world.calls.includes(MANAGER_METHOD.feedbackSubmit))
+})

@@ -66,7 +66,7 @@ export function createMockManagers(host: MockManagerHost) {
     const [a = 0, b = 0, c = 0] = version ? parts(version) : []
     const [x = 0, y = 0, z = 0] = parts(SERVICE_VERSIONS.bundled)
     const old = version !== undefined && (a - x || b - y || c - z) < 0
-    return { feedback: !old, posts: !old, ignore: !old }
+    return { feedback: !old, posts: !old, ignore: !old, requestIgnore: !old }
   }
   const oldDevice = () =>
     new ChannelError(
@@ -586,7 +586,9 @@ export function createMockManagers(host: MockManagerHost) {
           !request ||
           request.revision !== entry.revision ||
           request.status === 'cancelled' ||
-          (!entry.delivered && !entry.text.trim())
+          (!entry.delivered && !entry.ignored && !entry.text.trim()) ||
+          (entry.ignored === true && entry.delivered) ||
+          (entry.ignored !== undefined && typeof entry.ignored !== 'boolean')
         ) {
           submitted.rejectedRequests.push({
             requestId: entry.requestId,
@@ -601,7 +603,12 @@ export function createMockManagers(host: MockManagerHost) {
           })
           continue
         }
-        request.response = { delivered: entry.delivered, text: entry.text, at: host.clock.now() }
+        request.response = {
+          delivered: entry.delivered,
+          text: entry.text,
+          at: host.clock.now(),
+          ...(entry.ignored ? { ignored: true } : {}),
+        }
         request.status = entry.delivered ? 'delivered' : 'replied'
         request.revision++
         request.updatedAt = host.clock.now()
@@ -719,6 +726,7 @@ export function createMockManagers(host: MockManagerHost) {
                 title: request.title,
                 buttonLabel: request.buttonLabel,
                 delivered: request.response?.delivered ?? false,
+                ...(request.response?.ignored ? { ignored: true } : {}),
                 text: request.response?.text ?? '',
               })),
               questions: submitted.acceptedQuestions.map((decision) => ({

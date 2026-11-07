@@ -20,7 +20,7 @@
     "第三轮：控制台投影 posts 和 relations；report/post_get/post_reply/relate 工具只授权经理，临时追问只能 patch 本帖。manager-answers.manager 新增可选 postQuestions=[{id,revision,title,question}]，旧 questions 继续只表示决策。报告 P-n 用 revision/readRevision 显式标已阅；通用追问与关联记录留存在 manager.sqlite 追加迁移 v5/v6。",
     "D-28：v6 追加 manager_relations；新增 relate 与建对象 source/related，来源/派生/相关正反向投影，旧 blocks/blockedBy/basis/links 不迁移。reference/read 仅在经理 cwd 内读取明确 git ref，不执行模型提供命令。",
     "第三轮：控制台统一四类议题，新增 report/post_get/post_reply 工具；post/question 复用讨论，report/read 按版本标已阅。未阅报告与已审待开始建议计入待处理；议题 author 为未来用户创建预留。manager.sqlite v5 追加报告与建议版本表，不删库。",
-    "请你做：R-n 为用户亲手操作项目；add(kind=request) 需 revision=0 和 why，update/close 需当前 revision 及 why/reason。经理只能维护内容或取消，不能替用户交付。feedback/submit 可选 requests 数组，成功项进入同一 manager-answers 的 requests；delivered=true 为交付，否则非空文字为回复。允许修改已交付/已回复项目，已取消不可提交。",
+    "请你做：R-n 为用户亲手操作项目；add(kind=request) 需 revision=0 和 why，update/close 需当前 revision 及 why/reason。经理只能维护内容或取消，不能替用户交付。feedback/submit 可选 requests 数组，成功项进入同一 manager-answers 的 requests；delivered=true 为交付，否则非空文字为回复；可选 ignored=true 表示用户忽略（delivered 必须 false，text 为选填理由），响应在原有 replied 状态上加 response.ignored，显示/计数/筛选独立归为 ignored。允许修改已交付/已回复项目，已取消不可提交。",
     "建议审核：经理工具 endorse(proposalId,reason?)、dismiss(proposalId,reason) 只处理自己整棵工作线子树的 pending 普通卡；经理自己的卡默认审核。审核持久化并更新 suggestionInbox，忽略沿用 dismissed 并记经理忽略及理由。新线卡经既有备注/回报路径提醒经理审核。",
     "第二轮：事项 add/update 拒绝显式 owner.kind=user；旧对象保留。经理可用 start initiation=propose 提供带完整简报的建议卡。",
     "feedback/submit 将答案和经理追问同批保存，追问不改变决策状态；仅成功项合为一条 manager-answers 事件，questions 字段携带 decisionId/revision/title/question。reply 工具校验当前决策 revision，将文字回写待答追问并增加 revision。",
@@ -239,10 +239,20 @@
       "description": "设备支持 decision/ignore（用户忽略决策）及撤销忽略时宣告。没有时客户端禁用“忽略”并写明原因。"
     },
     {
+      "kind": "Capability",
+      "name": "litchManagerRequestIgnore",
+      "on": "runtime/info.device.extensions",
+      "description": "支持 feedback/submit 的 requests[].ignored 及独立忽略结果计数/筛选；字段与事件仍以 litchManager 声明为门禁。未宣告时客户端不能把忽略当普通文字回复发送。"
+    },
+    {
       "kind": "Error",
       "description": "error.data.litch 标识原因，message 为可操作的英文说明；未声明时用已有 extensionRequired。",
       "errors": [
-        { "litch": "managerResetBusy", "code": -32600, "description": "重置已进入摘要或应用阶段，暂时不能取消或写入；读取、订阅和附件监听仍可用" },
+        {
+          "litch": "managerResetBusy",
+          "code": -32600,
+          "description": "重置已进入摘要或应用阶段，暂时不能取消或写入；读取、订阅和附件监听仍可用"
+        },
         { "litch": "unknownManager", "code": -32602, "description": "managerId 不存在" },
         {
           "litch": "managerEnded",
@@ -481,6 +491,7 @@
       "required": ["delivered", "text", "at"],
       "properties": {
         "delivered": { "type": "boolean" },
+        "ignored": { "type": "boolean" },
         "text": { "type": "string" },
         "at": { "type": "number" }
       },
@@ -535,6 +546,7 @@
         "requestId": { "$ref": "#/definitions/RequestId" },
         "revision": { "type": "integer", "minimum": 1 },
         "delivered": { "type": "boolean" },
+        "ignored": { "type": "boolean" },
         "text": { "type": "string" }
       },
       "additionalProperties": false

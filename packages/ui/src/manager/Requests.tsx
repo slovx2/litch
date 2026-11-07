@@ -1,4 +1,9 @@
-import { requestDraftState, sortManagerIssues, submitManagerRequest } from '@litch/core'
+import {
+  managerRequestStatus,
+  requestDraftState,
+  sortManagerIssues,
+  submitManagerRequest,
+} from '@litch/core'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type {
   ManagerRequestId,
@@ -40,13 +45,17 @@ export function Requests({
   const { channel } = useServices()
   const { drafts, write, clear } = useRequestDrafts(manager.deviceId, manager.id)
   const { advance } = usePostDrafts(manager.deviceId, manager.id)
+  const [ignoring, setIgnoring] = useState<{ id: string; revision: number; reason: string } | null>(
+    null,
+  )
   const [submitting, setSubmitting] = useState<string | null>(null)
   const inFlight = useRef(false)
   const [error, setError] = useState('')
   const root = useRef<HTMLDivElement>(null)
   const order = useIssueOrder()
   // 单卡与批量提交都经 feedback/submit；没有该能力时禁用并说明。
-  const old = !useManagerFeatures().feedback
+  const features = useManagerFeatures()
+  const old = !features.feedback
   const oldTitle = old ? t('manager.oldDeviceShort') : undefined
   useLayoutEffect(() => {
     if (!target) return
@@ -74,7 +83,7 @@ export function Requests({
       setError(t('manager.savedFail'))
     }
   }
-  const submit = async (request: ManagerRequestView, delivered: boolean) => {
+  const submit = async (request: ManagerRequestView, delivered: boolean, ignored = false) => {
     if (inFlight.current) return
     inFlight.current = true
     setSubmitting(request.id)
@@ -82,12 +91,16 @@ export function Requests({
     try {
       const accepted = await submitManagerRequest(channel, manager.deviceId, manager.id, {
         requestId: request.id,
-        revision: drafts[request.id]?.revision ?? request.revision,
+        revision: ignored
+          ? (ignoring?.revision ?? request.revision)
+          : (drafts[request.id]?.revision ?? request.revision),
         delivered,
-        text: drafts[request.id]?.text ?? '',
+        text: ignored ? (ignoring?.reason ?? '') : (drafts[request.id]?.text ?? ''),
+        ...(ignored ? { ignored: true } : {}),
       })
       if (!accepted) throw new Error(t('manager.requestSubmitFailed'))
-      clear(request.id)
+      if (!ignored) clear(request.id)
+      setIgnoring(null)
       advance([accepted])
     } catch (error) {
       setError(error instanceof Error ? error.message : t('manager.savedFail'))
@@ -127,7 +140,7 @@ export function Requests({
                 <span className="mono dim">{request.id}</span>
                 <h3 className="grow">{request.title}</h3>
                 <span className={request.status === 'open' ? 'pill wait' : 'pill mute'}>
-                  {t(`manager.request.${request.status}`)}
+                  {t(`manager.request.${managerRequestStatus(request)}`)}
                 </span>
                 {draft && !ended ? <span className="pill wait">{t('manager.draft')}</span> : null}
               </>
@@ -190,6 +203,52 @@ export function Requests({
                   {t('manager.confirm')}
                 </button>
               </div>
+            ) : null}
+            {request.status === 'open' ? (
+              <button
+                type="button"
+                className="btn ghost"
+                data-act="manager-request-ignore"
+                disabled={locked || !features.requestIgnore}
+                title={!features.requestIgnore ? t('manager.oldDeviceShort') : undefined}
+                onClick={() =>
+                  setIgnoring({ id: request.id, revision: request.revision, reason: '' })
+                }
+              >
+                {t('manager.ignore')}
+              </button>
+            ) : null}
+            {request.status === 'open' && ignoring?.id === request.id ? (
+              <section className="mg-conflict" data-request-ignore-form>
+                <p>{t('manager.requestIgnoreNote')}</p>
+                <textarea
+                  className="req-input"
+                  rows={2}
+                  data-act="manager-request-ignore-reason"
+                  aria-label={t('manager.ignoreReason')}
+                  placeholder={t('manager.ignoreReason')}
+                  disabled={locked}
+                  value={ignoring.reason}
+                  onChange={(event) => setIgnoring({ ...ignoring, reason: event.target.value })}
+                />
+                <button
+                  type="button"
+                  className="btn"
+                  data-act="manager-request-ignore-confirm"
+                  disabled={locked || !features.requestIgnore}
+                  onClick={() => void submit(request, false, true)}
+                >
+                  {t('manager.ignoreConfirm')}
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  disabled={locked}
+                  onClick={() => setIgnoring(null)}
+                >
+                  {t('manager.cancel')}
+                </button>
+              </section>
             ) : null}
             {request.status !== 'cancelled' && editing ? (
               <>

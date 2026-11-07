@@ -138,6 +138,7 @@ export function submitManagerFeedback(
                 title: request.title,
                 buttonLabel: request.buttonLabel,
                 delivered: request.response.delivered,
+                ...(request.response.ignored ? { ignored: true } : {}),
                 text: request.response.text,
               }
             }),

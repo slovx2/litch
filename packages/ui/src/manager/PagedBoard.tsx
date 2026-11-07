@@ -444,22 +444,26 @@ export function PagedBoard({
       {kinds[tab] ? (
         <>
           <div className="mg-decision-filter">
-            {managerPageStates[kind].map((filter) => (
-              <button
-                type="button"
-                key={filter}
-                data-paging-filter={filter}
-                aria-pressed={filter === status}
-                onClick={() => {
-                  memory.filters[kind] = filter
-                  renderMemory((value) => value + 1)
-                  clearLink()
-                }}
-              >
-                {t(managerPageLabel(kind, filter) as Parameters<typeof t>[0])} ·{' '}
-                {paging.summary.counts[kind][filter] ?? 0}
-              </button>
-            ))}
+            {managerPageStates[kind]
+              .filter(
+                (state) => kind !== 'request' || state !== 'ignored' || view.features.requestIgnore,
+              )
+              .map((filter) => (
+                <button
+                  type="button"
+                  key={filter}
+                  data-paging-filter={filter}
+                  aria-pressed={filter === status}
+                  onClick={() => {
+                    memory.filters[kind] = filter
+                    renderMemory((value) => value + 1)
+                    clearLink()
+                  }}
+                >
+                  {t(managerPageLabel(kind, filter) as Parameters<typeof t>[0])} ·{' '}
+                  {paging.summary.counts[kind][filter] ?? 0}
+                </button>
+              ))}
           </div>
           {linked && active && !page?.entries.some((head) => head.id === active) ? detail : null}
           {!page ? (

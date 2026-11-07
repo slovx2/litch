@@ -618,6 +618,8 @@ export function createManagers(host: ManagersHost) {
       return { manager: settle(result.manager) }
     },
     async feedback(params: ManagerFeedbackSubmitParams) {
+      if (params.requests?.some((request) => request.ignored))
+        requires('requestIgnore', MANAGER_METHOD.feedbackSubmit)
       // 旧设备没有 feedback/submit：只有决策答复时改走 answers/submit（经理第一版就有），有追问或交付的不发
       if (host.online() && host.supported() && !host.features().feedback) {
         if (params.questions.length || params.requests?.length)

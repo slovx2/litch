@@ -35,6 +35,7 @@ import {
   type ManagerBoard,
   type ManagerCreateParams,
   type ManagerDecision,
+  managerRequestStatus,
 } from '../../protocol/src/manager.mjs'
 import { MANAGER_PAGING_METHOD } from '../../protocol/src/manager-paging.mjs'
 import { dynamicToolProblems } from '../../shared/test/codex-params.mjs'
@@ -410,4 +411,27 @@ test('经理、工作线和普通会话共用建议摘要规则；关闭卡片�
     assert.ok(!rules.includes(PROPOSAL_SUMMARY_RULE))
   assert.match(PROPOSAL_SUMMARY_RULE, /first sentence of background.*problem.*worth doing/)
   assert.match(PROPOSAL_SUMMARY_RULE, /Keep generic working rules out of the brief/)
+})
+
+test('请求忽略只加可选字段，原字段和状态枚举不变；展示状态独立且取消优先', () => {
+  const legacy = { requestId: 'R-1', revision: 1, delivered: false, text: '回复' }
+  assert.ok(validate('SubmittedRequest', legacy))
+  assert.ok(validate('SubmittedRequest', { ...legacy, ignored: true, text: '' }))
+  assert.ok(validate('RequestResponse', { delivered: false, text: '', at: 1, ignored: true }))
+  assert.equal(validate('SubmittedRequest', { ...legacy, ignored: 'yes' }), false)
+  const response = { delivered: false, text: '', at: 1, ignored: true }
+  assert.equal(managerRequestStatus({ status: 'replied', response }), 'ignored')
+  assert.equal(managerRequestStatus({ status: 'cancelled', response }), 'cancelled')
+  assert.equal(managerRequestStatus({ status: 'open', response: null }), 'open')
+  assert.equal(
+    managerRequestStatus({
+      status: 'delivered',
+      response: { ...response, ignored: false, delivered: true },
+    }),
+    'delivered',
+  )
+  assert.equal(
+    managerRequestStatus({ status: 'replied', response: { ...response, ignored: false } }),
+    'replied',
+  )
 })

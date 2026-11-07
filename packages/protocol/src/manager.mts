@@ -291,7 +291,8 @@ export interface ManagerRequest extends ManagerRequestFields {
   id: ManagerRequestId
   revision: number
   status: 'open' | 'delivered' | 'replied' | 'cancelled'
-  response: { delivered: boolean; text: string; at: number } | null
+  /** ignored 只增加结果信息；底层 status 仍用 replied，既有字段与枚举保持不变。 */
+  response: { delivered: boolean; text: string; at: number; ignored?: boolean } | null
   cancelled: { reason: string; at: number } | null
   createdAt: number
   updatedAt: number
@@ -301,6 +302,16 @@ export interface ManagerSubmittedRequest {
   revision: number
   delivered: boolean
   text: string
+  /** 用户忽略请求；delivered 必须为 false，text 是选填理由。 */
+  ignored?: boolean
+}
+/** 展示、计数与筛选使用同一结果：经理取消优先于历史中的用户答复。 */
+export function managerRequestStatus(
+  request: Pick<ManagerRequest, 'status' | 'response'>,
+): ManagerRequest['status'] | 'ignored' {
+  return request.status === 'replied' && request.response?.ignored === true
+    ? 'ignored'
+    : request.status
 }
 export interface ManagerRequestFailure {
   requestId: ManagerRequestId

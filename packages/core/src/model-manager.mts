@@ -97,6 +97,8 @@ export interface ManagerBoardView
  * 没有的是比应用旧的设备服务：界面禁用对应入口并写明原因，核心也不发这些请求。
  */
 export interface ManagerFeaturesView {
+  /** 用户忽略请你做请求 */
+  requestIgnore?: boolean
   paging?: boolean
   /** 答复、决策追问、请你做交付同批提交（feedback/submit）；没有时只能交决策答复 */
   feedback: boolean

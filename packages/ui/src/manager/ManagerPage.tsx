@@ -71,9 +71,16 @@ export function ManagerPage({
   const t = useT()
   const { channel } = useServices()
   const { view, pages, error } = useManagerBoard(manager)
-  const features = view?.features ?? { feedback: true, posts: true, ignore: true }
+  const features = view?.features ?? {
+    feedback: true,
+    posts: true,
+    ignore: true,
+    requestIgnore: true,
+  }
   /** 设备服务比应用旧、没宣告的后加能力（按功能列出，写进看板顶上的说明） */
-  const missing = (['feedback', 'posts', 'ignore'] as const).filter((key) => !features[key])
+  const missing = (['feedback', 'posts', 'ignore', 'requestIgnore'] as const).filter(
+    (key) => !features[key],
+  )
   const allSuggestions = useKey<readonly SuggestionView[]>(keys.suggestions) ?? []
   const suggestions = filterSuggestions(allSuggestions, {
     deviceId: manager.deviceId,

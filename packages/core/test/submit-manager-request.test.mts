@@ -42,3 +42,28 @@ test('冲突和缺失回执不能被当成成功清理草稿', async () => {
   assert.equal(await submitManagerRequest(missing, 'd', 'm', request), null)
   assert.equal(request.text, '保留备注')
 })
+
+test('忽略单卡带显式 ignored，空理由仍有效，不夹带交付或其他草稿', async () => {
+  const request = {
+    requestId: 'R-2' as const,
+    revision: 1,
+    delivered: false,
+    ignored: true,
+    text: '',
+  }
+  const channel = {
+    command: async (_: unknown, params: any) => {
+      assert.deepEqual(params.requests, [request])
+      assert.deepEqual(params.answers, [])
+      assert.deepEqual(params.questions, [])
+      return {
+        acceptedRequests: [{ id: 'R-2', response: { ignored: true } }],
+        rejectedRequests: [],
+      }
+    },
+  } as unknown as Pick<CoreChannel, 'command'>
+  assert.equal(
+    (await submitManagerRequest(channel, 'device', 'manager', request))?.response?.ignored,
+    true,
+  )
+})

@@ -667,3 +667,8 @@ With the system's reduce-motion setting on, these transitions are skipped and ch
 经理的 `dispatch.maxRunningLines` 是整个经理子树的并发上限，替代普通会话的直接子会话 8 条、整树 24 条默认保护；不计经理自身。新建工作线、恢复后开始新回合、`send` 唤起已结束的工作线执行同一检查。启动中、运行回合、等待审批或输入、后台任务、待接续都占一个名额，同一工作线只计一次；插话不重复占位，仅加载历史不占位。非经理会话仍使用 8/24 的默认上限；深度和单回合直接启动次数限制不变。超限错误会显示限制来源、当前数量和上限。
 
 A manager's `dispatch.maxRunningLines` replaces the ordinary 8-direct-child / 24-session-tree concurrency defaults for its entire subtree, excluding the manager itself. Starting a line, starting a new turn after resume, and waking an idle line with `send` share the same check. Starting sessions, active turns, waiting approvals or input, background work, and pending continuations each occupy one slot per line. Steering an active turn adds no slot; loading history alone adds none. Ordinary sessions retain the 8/24 defaults. Depth and per-turn direct-start limits still apply. Capacity errors identify the limit, current occupancy, and maximum.
+
+
+“请你做”请求可以选择“忽略”，填写选填理由后确认。忽略会移出待处理并进入“已忽略”分栏，经理会收到答复事件，明确知道您不准备做这件事；忽略不代表完成，也不同于经理取消。原有完成按钮和文字回复仍可使用，已处理请求可通过修改回复更新结果。旧设备不支持忽略时，入口禁用并提示升级设备服务。
+
+For you requests have an Ignore action with an optional reason. Confirming removes the request from pending and puts it under Ignored. The manager receives a response event stating that you chose not to do it; ignoring is neither completion nor cancellation by the manager. The existing completion button and text replies remain available. Edit a handled request’s response to update its outcome. On older devices, Ignore is disabled with an upgrade explanation.

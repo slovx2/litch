@@ -8,6 +8,7 @@ import {
   type ManagerBoardTopicView,
   type ManagerView,
   managerAttentionCount,
+  managerRequestStatus,
   postDraftState,
   requestDraftState,
   resetDecisionSelection,
@@ -215,6 +216,9 @@ export function Issue({
     setCollapsed(!collapsed)
   }
   /** 正在填忽略理由；null 是没在填 */
+  const [requestIgnore, setRequestIgnore] = useState<{ revision: number; reason: string } | null>(
+    null,
+  )
   const [ignoring, setIgnoring] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const inFlight = useRef(false)
@@ -223,6 +227,7 @@ export function Issue({
   // 比应用旧的设备服务没宣告的能力：入口禁用，旁边写明原因（看板顶上另有一行说去设备详情升级）
   const features = useContext(IssueContext)?.features ?? {
     feedback: true,
+    requestIgnore: true,
     posts: true,
     ignore: true,
   }
@@ -416,7 +421,7 @@ export function Issue({
                 : 'manager.closed',
       )
     : request
-      ? t(`manager.request.${request.status}`)
+      ? t(`manager.request.${managerRequestStatus(request)}`)
       : post.kind === 'report'
         ? t(post.unread ? 'manager.reportUnread' : 'manager.reportRead')
         : ''
@@ -806,6 +811,63 @@ export function Issue({
               {request.response ? <Markdown text={request.response.text} /> : null}
               {/* 先是你的回复，再说留着的草稿怎么办 */}
               {endedNote}
+              {request.status === 'open' ? (
+                <>
+                  <Button
+                    kind="plain"
+                    testID={`request-ignore:${request.id}`}
+                    label={t('manager.ignore')}
+                    disabled={locked || !features.requestIgnore}
+                    onPress={() => setRequestIgnore({ revision: request.revision, reason: '' })}
+                  />
+                  {oldReason('requestIgnore')}
+                </>
+              ) : null}
+              {request.status === 'open' && requestIgnore ? (
+                <View testID={`request-ignore-form:${request.id}`} style={styles.askComposer}>
+                  <Text style={{ color: c.ink2 }}>{t('manager.requestIgnoreNote')}</Text>
+                  <TextInput
+                    testID={`request-ignore-reason:${request.id}`}
+                    accessibilityLabel={t('manager.ignoreReason')}
+                    placeholder={t('manager.ignoreReason')}
+                    placeholderTextColor={c.ink3}
+                    multiline
+                    style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
+                    value={requestIgnore.reason}
+                    editable={!locked}
+                    onChangeText={(reason) => setRequestIgnore({ ...requestIgnore, reason })}
+                  />
+                  <Button
+                    testID={`request-ignore-confirm:${request.id}`}
+                    label={t('manager.ignoreConfirm')}
+                    disabled={locked || !features.requestIgnore}
+                    onPress={() =>
+                      void run(async () => {
+                        const accepted = await submitManagerRequest(
+                          channel,
+                          manager.deviceId,
+                          manager.id,
+                          {
+                            requestId: request.id,
+                            revision: requestIgnore.revision,
+                            delivered: false,
+                            text: requestIgnore.reason,
+                            ignored: true,
+                          },
+                        )
+                        if (!accepted) throw new Error(t('manager.requestSubmitFailed'))
+                        setRequestIgnore(null)
+                      })
+                    }
+                  />
+                  <Button
+                    kind="plain"
+                    label={t('app.cancel')}
+                    disabled={locked}
+                    onPress={() => setRequestIgnore(null)}
+                  />
+                </View>
+              ) : null}
               {request.status !== 'cancelled' &&
               !replyEnded &&
               (request.status === 'open' || editing) ? (

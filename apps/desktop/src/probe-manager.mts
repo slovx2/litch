@@ -851,6 +851,25 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       '请补充影响范围' &&
     one(`${talk('D-15')} [data-question-mode="manager"][aria-pressed="true"]`) !== null
   await click('[data-board-tab="requests"]')
+  await click('[data-manager-request="R-1"] [data-act="manager-request-ignore"]')
+  fill(
+    await until('忽略请求理由', () =>
+      one<HTMLTextAreaElement>('[data-act="manager-request-ignore-reason"]'),
+    ),
+    '这事不用管了',
+  )
+  await click('[data-manager-request="R-1"] [data-act="manager-request-ignore-confirm"]')
+  const requestIgnored = Boolean(
+    await until('请求单独显示已忽略及理由', () => {
+      const card = one('[data-manager-request="R-1"]')
+      return (
+        card?.textContent?.includes('已忽略') &&
+        card.textContent.includes('这事不用管了') &&
+        !card.querySelector('[data-act="manager-request-deliver"]')
+      )
+    }),
+  )
+  await click('[data-manager-request="R-1"] [data-act="manager-request-edit"]')
   fill(
     await until('请你做备注', () =>
       one<HTMLTextAreaElement>('[data-manager-request="R-1"] [data-act="manager-request-text"]'),
@@ -882,11 +901,13 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       !one(UNSENT_BAR) && one('[data-manager-request="R-1"]')?.textContent?.includes('真机已复验'),
   )
   await openTalk('[data-manager-request="R-1"]', 'R-1')
-  const userRequests = Boolean(
-    await until('追问写回请你做的讨论', () =>
-      one(`${talk('R-1')} .mg-post-timeline`)?.textContent?.includes('交付后还需哪些验证'),
-    ),
-  )
+  const userRequests =
+    requestIgnored &&
+    Boolean(
+      await until('追问写回请你做的讨论', () =>
+        one(`${talk('R-1')} .mg-post-timeline`)?.textContent?.includes('交付后还需哪些验证'),
+      ),
+    )
   await click('[data-board-tab="decisions"]')
   await openTalk('[data-decision="D-15"]', 'D-15')
   const managerQuestionDrafts = Boolean(
@@ -2162,7 +2183,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
     consoleReports: '控制台报告与帖子追问未完成',
     issueRelations: '议题关联与编号预览未完成',
     managerQuestionDrafts: '经理追问草稿与回复记录未完成',
-    userRequests: '请你做交付未写回',
+    userRequests: '请你做忽略或交付未写回',
     backgroundQuestions: '五轮背景问答没有保持在独立线程',
     questionForwarded: '背景问答没有转给经理',
     revisedAnswer: '已答复决策没有保存修改后的答案',
