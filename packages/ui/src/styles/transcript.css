@@ -457,8 +457,10 @@ button.smen:focus-visible {
   background: var(--hover);
   color: var(--ink-2);
 }
+/* 窄对话区里工具组标题留在原位（不整段收起）时，摘要先省略，不把右侧的增删和用时挤出去 */
 .steps-head .sum {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 70%;
   overflow: hidden;
   text-overflow: ellipsis;
