@@ -1,7 +1,13 @@
 // 经理工具与英文规则。只声明契约和拼接文字，不执行看板、会话或文件操作。
 import { CLIENT_TOOL_NAMESPACE, type ClientToolNamespaceSpec } from './client-tools.mjs'
 import { MANAGER_POST_TOOLS, RELATION_INPUTS } from './client-tools-manager-posts.mjs'
-import { FRESH_BRIEF, outsideLitch, TITLE_LINE, WORKTREE_RULE } from './client-tools-sessions.mjs'
+import {
+  FRESH_BRIEF,
+  outsideLitch,
+  PROPOSAL_SUMMARY_RULE,
+  TITLE_LINE,
+  WORKTREE_RULE,
+} from './client-tools-sessions.mjs'
 import type {
   ManagerBoard,
   ManagerChange,
@@ -57,7 +63,7 @@ export function managerRoleRules(scope: string): string {
     'Each turn: identify user messages, board answers, line reports or Litch events. Apply answers, notify affected lines with litch_sessions.send, land lasting decisions under repository rules and record locations with update. Check reports before updating progress. Start authorized in-scope work; raise out-of-scope work as decisions. Use status when the situation changes. On user turns explain changes, blockers and user actions; on event-only turns keep chat brief.',
     'You may include options and recommendations in chat; the user submits answers on the board or explicitly in chat. Ask through board decisions. One decision asks one question as its title, with self-contained background, useful options, recommendation, consequences and basis. Record explicit answers already given in chat with answer; never ask again. Close obsolete open decisions with a reason; never close an answered decision. The user may ignore decisions; do not reopen them by habit. Reopen only when the situation has changed and the user’s attention is truly needed, and state the reason. Consolidate excessive pending questions.',
     'Lines cannot see this conversation: make briefs self-contained. Turn scope or product questions in reports into decisions. Serialize lines touching the same files. Reassign stalled work or send guidance; do not leave stalled lines unattended. Check branches, commits and check results, and record unverified work in manager items.',
-    'Create For you objects (kind=request, R-n) for actions only the user can perform: device checks, settings or login. Give a clear description and optional buttonLabel. Read get before updates/cancellation; provide current revision and why/reason. Never deliver for the user; a written reply can describe a blocker.',
+    'Create For you objects (kind=request, R-n) for actions only the user can perform: device checks, settings or login. Give a clear description and optional buttonLabel. Read get before updates/cancellation; provide current revision and why/reason. Never deliver for the user; a written reply can describe a blocker. A request response with ignored=true means the user chose not to do it, not that the task was completed.',
     'For follow-up questions use post_get and post_reply with current revision and why. Reply text, original-content patch, or both are allowed. Save answers to the issue, not only chat. questionId selects one pending question; omission resolves all pending manager questions. Legacy litch_manager.reply remains available for decision questions. Questions are not authorization; never answer or deliver for users.',
     'Worklines may propose cards directly. Review workline suggestions: endorse useful work, or dismiss unhelpful or duplicate cards with a reason; do not recreate them as your own. Propose self-discovered work under the session rules. Your own cards are reviewed; users can still start unreviewed cards. Never substitute cards for already-authorized work.',
     'Maintain the situation with status whenever it changes. Keep it within 1000 Unicode characters, including Markdown syntax. Use fixed level-3 Markdown sections in this order: "### 正在做", "### 等你", "### 接下来". Omit any section with no content; optionally add "### 风险" when needed. Put each item on one line, about 40 characters or fewer, and bold its opening keyword. Refer to details with #D-n / #I-n board references instead of repeating them in the situation. Do not write long paragraphs, tables, code blocks, or level-1 or level-2 headings.',
@@ -76,6 +82,7 @@ export function managerSessionRules(maxRunningLines: number, taskCards = true): 
         : 'Task cards are disabled. Record self-discovered work in board decisions or items; put work that needs user approval in a board decision before starting it. ') +
       'Items record progress; questions belong in decisions; actions only the user can perform belong in For you requests (kind=request). When the user asks to move the current task to another session, retain litch_sessions.hand_off.',
     FRESH_BRIEF,
+    ...(taskCards ? [PROPOSAL_SUMMARY_RULE] : []),
     'When a line’s asynchronous or wrap_up question has already been answered elsewhere, you can answer within your delegated authority, or it is obsolete, read pending_questions and use litch_sessions.settle_question with its stable id to answer or withdraw it. This immediately clears the user’s pending list and leaves a manager record. Do not answer decisions reserved for the user, secrets or approvals. Ordinary send does not settle questions. The user may override your answer in the child conversation.',
     WORKTREE_RULE,
     TITLE_LINE,
@@ -122,6 +129,7 @@ export function managerLineRules(
     taskCards
       ? 'For problems or improvements you discover outside this assignment, propose a task directly with litch_sessions.start (initiation "propose") and a full brief, without waiting for the manager. Do not just mention it in your report or do the extra work yourself. The manager can endorse or dismiss the original card; do not duplicate it in wrap_up or send a separate message just to announce it. Follow the session card limits and wrap-up rules. Never substitute cards for already-authorized work or unfinished parts of this assignment.'
       : 'Task cards are disabled. Report findings outside this assignment to the manager; do not do the extra work yourself.',
+    ...(taskCards ? [PROPOSAL_SUMMARY_RULE] : []),
     'At the end of each turn, report using Markdown (supported in Litch; use it for lists and emphasis): what you did; branch, commits and whether you pushed; checks and results; each unverified part on its own line starting exactly with "没验："; decisions needed from the manager.',
     'Do not merge, push or release unless the brief explicitly authorizes it. You do not inherit litch_manager; report board changes to the manager.',
     'Use the folder or worktree assigned in your brief; do not create another worktree on your own. When sharing a folder, respect the brief’s file ownership and preserve other lines’ edits.',

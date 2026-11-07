@@ -6,7 +6,15 @@ import {
   type SuggestionView,
   suggestionCount,
 } from '@litch/core'
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { managerBoardMemory } from '../../../core/src/manager-board-memory.mts'
 import type {
   ManagerDecisionId,
@@ -52,6 +60,7 @@ export interface ManagerPageLocation {
     | 'inbox'
   narrow: 'chat' | 'board'
   settings: boolean
+  draftFocus?: number
 }
 const defaultLocation: ManagerPageLocation = { tab: 'inbox', narrow: 'board', settings: false }
 
@@ -71,9 +80,16 @@ export function ManagerPage({
   const t = useT()
   const { channel } = useServices()
   const { view, pages, error } = useManagerBoard(manager)
-  const features = view?.features ?? { feedback: true, posts: true, ignore: true }
+  const features = view?.features ?? {
+    feedback: true,
+    posts: true,
+    ignore: true,
+    requestIgnore: true,
+  }
   /** 设备服务比应用旧、没宣告的后加能力（按功能列出，写进看板顶上的说明） */
-  const missing = (['feedback', 'posts', 'ignore'] as const).filter((key) => !features[key])
+  const missing = (['feedback', 'posts', 'ignore', 'requestIgnore'] as const).filter(
+    (key) => !features[key],
+  )
   const allSuggestions = useKey<readonly SuggestionView[]>(keys.suggestions) ?? []
   const suggestions = filterSuggestions(allSuggestions, {
     deviceId: manager.deviceId,
@@ -230,6 +246,24 @@ export function ManagerPage({
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState('')
   const board = view?.board
+  const focusedDraft = useRef<number | undefined>(undefined)
+  useLayoutEffect(() => {
+    if (!location.draftFocus || location.draftFocus === focusedDraft.current || tab !== 'decisions')
+      return
+    if (!layout.open) {
+      setBoardLayout({ open: true })
+      return
+    }
+    if (!view?.board) return
+    const bar = page.current?.querySelector<HTMLElement>('.mg-send:not([data-sent])')
+    if (!bar) return
+    bar.scrollIntoView({ block: 'end' })
+    bar
+      .querySelector<HTMLElement>('[data-act="manager-locate-draft"]')
+      ?.focus({ preventScroll: true })
+    focusedDraft.current = location.draftFocus
+  }, [location.draftFocus, tab, view, layout.open])
+
   const attention = managerAttentionCount(manager)
   const attentionTitle = t('manager.pendingDetail', {
     decisions: manager.pendingDecisions,

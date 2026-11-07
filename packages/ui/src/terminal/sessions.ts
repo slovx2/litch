@@ -121,13 +121,13 @@ export function createTerminalSessions(options: {
         })
       },
     })
-    session.setState(info.state)
+    session.setState(info.state, info.inputBlocked)
     stage.appendChild(session.host)
     // 列表里这一项变了就跟着变；没了（关掉、在别处被清掉）就把这一头的也拆掉
     const unwatch = replica.store.subscribe(infoKey, () => {
       const next = replica.store.get<TerminalInfo>(infoKey)
       if (!next) remove(key)
-      else session.setState(next.state)
+      else session.setState(next.state, next.inputBlocked)
     })
     const entry: Entry = { session, deviceId, terminalId, unwatch }
     entries.set(key, entry)

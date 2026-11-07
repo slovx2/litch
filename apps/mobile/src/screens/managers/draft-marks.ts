@@ -8,7 +8,7 @@ import {
   managerDraftMark,
 } from '../../../../../packages/core/src/projection/manager-drafts.mts'
 import type { ManagerObjectHead } from '../../../../../packages/protocol/src/manager-paging.mts'
-import { baseFile, choiceFile, questionFile, replyFile } from './draft-files'
+import { baseFile, choiceFile, editFile, questionFile, replyFile } from './draft-files'
 
 /** 一页卡头的草稿标记，文件每次只读一遍 */
 export function draftMarks(
@@ -33,6 +33,7 @@ export function draftMarks(
         ? {
             decision: {
               decisionId: head.id,
+              editingRevision: editFile.read()?.[key],
               revision,
               optionId: choices[key] ?? null,
               text,

@@ -18,6 +18,7 @@ export interface ManagerSeen {
   cardMotionDetail: string
   directFollowup: boolean
   revisionDrafts: boolean
+  sidebarDrafts: boolean
   recommendationChoice: boolean
   linesState: boolean
   /** 经理行和普通对话的父子树同一套：默认收起、下面一行“› N 个子会话”，点开展开；行高、记号缩进与工作线行一致 */
@@ -158,6 +159,23 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     if (!one(`${selector} .sev-body`)) await click(`${selector} button`)
     return until(`${kind} 事件正文`, () => one(`${selector} .sev-body`))
   }
+  // 在第一次打开经理树之前留下跨状态草稿，验证侧栏自己订阅读板，不依赖进过经理页面。
+  localStorage.setItem(
+    'litch.manager.answers:["local","m1"]',
+    JSON.stringify(
+      Object.fromEntries(
+        ['D-15', 'D-13', 'D-12', 'D-999'].map((id) => [
+          id,
+          {
+            decisionId: id,
+            revision: 1,
+            optionId: null,
+            text: '启动时留存的草稿',
+          },
+        ]),
+      ),
+    ),
+  )
   const ordinarySession = '[data-composer-session=\'["local","p1"]\']'
   await click('[data-session="p1"]:not(.projection-group *) .ss-row:not(.projection-group *)')
   // 行高亮先于身份确认；等正文真正打开后再验证侧面板和切树。
@@ -170,6 +188,12 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('.tb-side')
   await until('会话侧面板打开', () => one('.tb-side[aria-pressed="true"]'))
   await click('[data-sidebar-mode="manager"]')
+  await until(
+    '未打开看板时侧栏只计待定草稿',
+    () =>
+      one('[data-manager-id="m1"] [data-manager-draft-count]')?.textContent?.trim() === '1 项草稿',
+  )
+
   await until(
     '经理树保留普通会话和侧面板',
     () => one(ordinarySession) && one('.tb-side[aria-pressed="true"]'),
@@ -207,6 +231,23 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('[data-manager-id="m1"] .mg-pick')
   const selected = Boolean(await until('经理页', () => one('[data-manager="session"]')))
   await until('首次打开控制台', () => one('[data-board-tab="inbox"][aria-selected="true"]'))
+  await click('[data-manager-id="m1"] [data-manager-draft-count]')
+  const sidebarDrafts = Boolean(
+    await until(
+      '草稿数跳到决策提交条并交付键盘焦点',
+      () =>
+        one('[data-board-tab="decisions"][aria-pressed="true"]') &&
+        document.activeElement === one('[data-act="manager-locate-draft"]') &&
+        one(UNSENT_BAR)?.textContent?.includes('1 项'),
+    ),
+  )
+  const clearInitial = [
+    ...document.querySelectorAll<HTMLButtonElement>(`${UNSENT_BAR} button`),
+  ].find((button) => button.textContent?.trim() === '清除草稿')
+  if (!clearInitial) throw new Error('缺少清除草稿入口')
+  clearInitial.click()
+  await until('清除启动草稿', () => !one(UNSENT_BAR))
+
   await click('[data-board-tab="reports"]')
   const chatReference = await until('对话正文中的经理编号链接', () =>
     one<HTMLButtonElement>('.tr [data-board-reference="D-15"]'),
@@ -672,12 +713,12 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
   await click('[data-decision="D-15"] .mg-option:has(.mg-recommend) input')
   await askBackground(updateQuestion, 6)
   const selectionReset = await until(
-    '新版清掉仅选项草稿',
+    '新版保留选项草稿并要求确认',
     () =>
-      Boolean(one('[data-decision="D-15"] [data-selection-reset]')) &&
-      !one('[data-decision="D-15"] input:checked') &&
-      !one(UNSENT_BAR) &&
-      !one('.mg-conflict'),
+      Boolean(one('[data-decision="D-15"] input:checked')) &&
+      Boolean(one(UNSENT_BAR)) &&
+      Boolean(one('.mg-conflict')) &&
+      one<HTMLButtonElement>('[data-act="manager-submit"]')?.disabled === true,
   )
   fill(answerInput(), '新版仍需核对这段补充')
   const answerEnter = new KeyboardEvent('keydown', {
@@ -701,6 +742,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     '确认新版后文字可交',
     () => !one<HTMLButtonElement>('[data-act="manager-submit"]')?.disabled,
   )
+  await click('[data-decision="D-15"] [data-act="manager-clear-option"]')
   fill(answerInput(), '')
   await until('清空文字草稿', () => !one(UNSENT_BAR))
   await askBackground(updateQuestion, 8)
@@ -851,6 +893,25 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       '请补充影响范围' &&
     one(`${talk('D-15')} [data-question-mode="manager"][aria-pressed="true"]`) !== null
   await click('[data-board-tab="requests"]')
+  await click('[data-manager-request="R-1"] [data-act="manager-request-ignore"]')
+  fill(
+    await until('忽略请求理由', () =>
+      one<HTMLTextAreaElement>('[data-act="manager-request-ignore-reason"]'),
+    ),
+    '这事不用管了',
+  )
+  await click('[data-manager-request="R-1"] [data-act="manager-request-ignore-confirm"]')
+  const requestIgnored = Boolean(
+    await until('请求单独显示已忽略及理由', () => {
+      const card = one('[data-manager-request="R-1"]')
+      return (
+        card?.textContent?.includes('已忽略') &&
+        card.textContent.includes('这事不用管了') &&
+        !card.querySelector('[data-act="manager-request-deliver"]')
+      )
+    }),
+  )
+  await click('[data-manager-request="R-1"] [data-act="manager-request-edit"]')
   fill(
     await until('请你做备注', () =>
       one<HTMLTextAreaElement>('[data-manager-request="R-1"] [data-act="manager-request-text"]'),
@@ -882,11 +943,13 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       !one(UNSENT_BAR) && one('[data-manager-request="R-1"]')?.textContent?.includes('真机已复验'),
   )
   await openTalk('[data-manager-request="R-1"]', 'R-1')
-  const userRequests = Boolean(
-    await until('追问写回请你做的讨论', () =>
-      one(`${talk('R-1')} .mg-post-timeline`)?.textContent?.includes('交付后还需哪些验证'),
-    ),
-  )
+  const userRequests =
+    requestIgnored &&
+    Boolean(
+      await until('追问写回请你做的讨论', () =>
+        one(`${talk('R-1')} .mg-post-timeline`)?.textContent?.includes('交付后还需哪些验证'),
+      ),
+    )
   await click('[data-board-tab="decisions"]')
   await openTalk('[data-decision="D-15"]', 'D-15')
   const managerQuestionDrafts = Boolean(
@@ -1188,8 +1251,36 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
       document.activeElement?.getAttribute('data-decision') === 'D-15' &&
       !one('[data-decision="D-15"] [data-act="manager-answer"]'),
   )
+  // 当前夹具没有预置建议，先通过经理真实输入入口生成一张，再检查看板摘要。
+  await click('[data-act="manager-board-toggle"]')
+  const proposalInput = await until('经理提卡输入框', () =>
+    one<HTMLTextAreaElement>('.main .dock textarea.cmp-text'),
+  )
+  fill(proposalInput, '提个子会话')
+  await new Promise((resolve) => setTimeout(resolve, 80))
+  proposalInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  await until('经理生成建议卡', () => one('.main [data-card="proposal"]'))
+  await click('[data-act="manager-board-toggle"]')
   await click('[data-board-tab="suggestions"]')
+  const suggestionCard = await until(
+    '看板建议卡',
+    () => one('.suggestion-row [data-proposal]') ?? one('.suggestion-row[data-proposal]'),
+  )
+  const briefSummary = suggestionCard?.querySelector('[data-part="summary"]')?.textContent
+  const briefClosed = Boolean(briefSummary) && !suggestionCard?.querySelector('[data-part="task"]')
+  suggestionCard?.querySelector<HTMLElement>('.prop-more')?.click()
+  const briefOpened = await until('建议完整简报展开', () =>
+    suggestionCard?.querySelector('[data-part="task"]'),
+  )
+  suggestionCard?.querySelector<HTMLElement>('.prop-more')?.click()
+  const briefRefolded = await until(
+    '建议简报收回摘要',
+    () => !suggestionCard?.querySelector('[data-part="task"]'),
+  )
   const panels =
+    briefClosed &&
+    Boolean(briefOpened) &&
+    Boolean(briefRefolded) &&
     !one('[data-board-tab="lines"]') &&
     !one('[data-overview="yours"]') &&
     Boolean(one('[data-board-tab="suggestions"]'))
@@ -2017,6 +2108,7 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     cardMotionDetail,
     directFollowup,
     revisionDrafts,
+    sidebarDrafts,
     recommendationChoice,
     linesState,
     treeShape: treeShape && rootAligned,
@@ -2117,7 +2209,8 @@ export function judgeManager(seen: ManagerSeen): string[] {
     wholeCard: `收起的卡点空白处没展开，或点控件、选字时误开合：${seen.wholeCardDetail}`,
     cardMotion: `离开的卡没有收拢补位，或结束时位置不对、留有残影：${seen.cardMotionDetail}`,
     directFollowup: '已有临时问答没有直接续问或默认目标错误',
-    revisionDrafts: '新版本的选项清空、文字确认或空草稿跟随错误',
+    revisionDrafts: '新版本的选项/文字保留与确认、空草稿跟随错误',
+    sidebarDrafts: '未打开看板时草稿计数不正确或草稿入口未定位提交条',
     recommendationChoice: '推荐标记丢失或采用推荐入口未移除',
     linesState:
       '经理自己只有后台命令、工作线在跑时，经理行仍画成运行中，或没有后台记号、没写明工作线',
@@ -2134,7 +2227,7 @@ export function judgeManager(seen: ManagerSeen): string[] {
     consoleReports: '控制台报告与帖子追问未完成',
     issueRelations: '议题关联与编号预览未完成',
     managerQuestionDrafts: '经理追问草稿与回复记录未完成',
-    userRequests: '请你做交付未写回',
+    userRequests: '请你做忽略或交付未写回',
     backgroundQuestions: '五轮背景问答没有保持在独立线程',
     questionForwarded: '背景问答没有转给经理',
     revisedAnswer: '已答复决策没有保存修改后的答案',

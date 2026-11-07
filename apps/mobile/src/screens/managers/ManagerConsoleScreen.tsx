@@ -109,7 +109,12 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
   const view = useKey<ManagerBoardTopicView>(keys.managerBoard(deviceId, managerId))
   const board = view?.board ?? null
   const pagingOn = Boolean(view?.paging)
-  const features = view?.features ?? { feedback: true, posts: true, ignore: true }
+  const features = view?.features ?? {
+    feedback: true,
+    posts: true,
+    ignore: true,
+    requestIgnore: true,
+  }
   const suggestions = useKey<readonly SuggestionView[]>(keys.suggestions) ?? []
   const summary = useKey<SessionSummary>(keys.summary(deviceId, manager.threadId))
   const device = useKey<{ connection?: string }>(keys.device(deviceId))
@@ -309,7 +314,9 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
       total: totals?.suggestion.all ?? postsOf('suggestion'),
     },
   }
-  const missing = (['feedback', 'posts', 'ignore'] as const).filter((key) => !features[key])
+  const missing = (['feedback', 'posts', 'ignore', 'requestIgnore'] as const).filter(
+    (key) => !features[key],
+  )
   const chatMark = sessionMark(summary)
   const waitingLines = (board?.lines ?? []).filter(
     (line) => line.status === 'waiting' || line.status === 'error',
@@ -667,6 +674,7 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
           {/* 批量提交条在滚动区下面，不随卡片滚动，也不挡住最后一张卡 */}
           {tab === 'console' && board && view ? (
             <DraftSubmitBar
+              paged={Boolean(view.paging)}
               manager={manager}
               board={board}
               draftBoard={

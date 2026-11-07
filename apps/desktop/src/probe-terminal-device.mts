@@ -89,6 +89,7 @@ export async function realBasics(): Promise<RealBasics> {
 }
 
 export interface DeviceDrop {
+  inputProtected: boolean
   /** 断线之后：标签说没连上，状态条说它还在设备上跑，原来的内容还在 */
   awayNote: string
   contentKept: boolean
@@ -112,6 +113,26 @@ export interface DeviceDrop {
 export async function deviceDrop(): Promise<DeviceDrop> {
   const kit = (window as unknown as { __termKit: TerminalKit }).__termKit
   const { until, one, text, sleep } = kit
+  // 在真 shell 只收到前半行时掐断转发口。断线中的后半行及重连后的回车都不能补发。
+  kit.type('echo partial-$((6*7))')
+  await until('前半行已经回显', () => kit.lastLine().includes('partial-$((6*7))'))
+  kit.signal('link down')
+  await until('输入中途断线', () => kit.tabs()[0]?.state === 'away', 30_000)
+  kit.type('-missing')
+  kit.signal('link up')
+  await until('输入中途断线后重连', () => kit.tabs()[0]?.state === 'running', 90_000)
+  await until('提示输入状态不确定', () => one('[data-tool="resume-input"]'))
+  kit.enter()
+  await sleep(500)
+  if (/\npartial-42/.test(kit.screen())) throw new Error('重连后的回车执行了半行命令')
+  one<HTMLElement>('[data-tool="resume-input"]')?.click()
+  await until('用户确认恢复输入', () => !one('[data-tool="resume-input"]'))
+  kit.ctrl('c')
+  await kit.prompt()
+  kit.run('echo full-$((6*7))')
+  await kit.see('重新输入的完整命令执行', /\nfull-42/)
+  await kit.prompt()
+  const inputProtected = !/\npartial-42/.test(kit.screen())
   // 前面刷屏的时候已经说过好些次“略过了”，从现在数起
   const gapsBefore = Number(one('.term-host.on')?.dataset.gaps ?? 0)
   const gaps = () => Number(one('.term-host.on')?.dataset.gaps ?? 0) - gapsBefore
@@ -130,7 +151,9 @@ export async function deviceDrop(): Promise<DeviceDrop> {
   await until('接回来了', () => kit.tabs()[0]?.state === 'running', 90_000)
   await kit.see('断线期间的输出补上了', /\nafter-drop-42/, 30_000)
   await kit.prompt()
-  const rejoined = !one('.term-status')
+  const rejoined = Boolean(one('[data-tool="resume-input"]'))
+  one<HTMLElement>('[data-tool="resume-input"]')?.click()
+  await until('确认短断后的输入', () => !one('[data-tool="resume-input"]'))
   const replayedOnce = kit.screen().split('\nafter-drop-42').length === 2
   const gapsAfterShortDrop = gaps()
   kit.run('echo still-$((1+1))')
@@ -157,8 +180,11 @@ export async function deviceDrop(): Promise<DeviceDrop> {
   const backlogLine = kit.rows().find((row) => row.includes('略过了')) ?? ''
   const gapsAfterLongDrop = gaps() - gapsAfterShortDrop
   const tailShown = kit.rows().includes('0123456789') && kit.rows().includes('gap-23')
+  one<HTMLElement>('[data-tool="resume-input"]')?.click()
+  await until('确认长断后的输入', () => !one('[data-tool="resume-input"]'))
 
   return {
+    inputProtected,
     awayNote,
     contentKept,
     notYet,
@@ -243,6 +269,8 @@ export async function deviceRestored(session: string): Promise<Restored> {
   await kit.pick(1)
   await kit.see('第二个的内容', /\nsecond-22/, 30_000).catch(() => {})
   const secondContent = /\nsecond-22/.test(kit.screen())
+  one<HTMLElement>('[data-tool="resume-input"]')?.click()
+  await until('确认恢复的终端输入', () => !one('[data-tool="resume-input"]'))
   kit.run('echo alive-$((5+5))')
   await kit.see('接着用', /\nalive-10/, 30_000).catch(() => {})
   const alive = /\nalive-10/.test(kit.screen())

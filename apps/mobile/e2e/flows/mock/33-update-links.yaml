@@ -1,0 +1,22 @@
+appId: dev.litch.app
+name: Release E2E 更新深链接受
+tags: [update-gate]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- openLink: 'litch://update?feed=${UPDATE_FEED}'
+- extendedWaitUntil:
+    visible:
+      id: update:banner:available
+    timeout: 15000
+- assertVisible: '.*99.0.0.*'
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: update:banner:available
+    timeout: 45000
+- assertVisible: '.*99.0.0.*'

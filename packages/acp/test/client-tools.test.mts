@@ -225,6 +225,11 @@ test('各家报调用的样子：先问权限的不转给用户、认不出标�
     const cases: Array<[string, string, (item: any) => boolean]> = [
       // 先问权限：直接允许这一次，用户那里没有审批卡
       ['ask', 'echo_echo {"text":"a"}', (item) => item.id.endsWith(':tool:call-echo_echo')],
+      [
+        'ask-id',
+        'echo_echo {"text":"new"}',
+        (item) => item.id.endsWith(':tool:mcp_litch_echo_echo__model-call-1'),
+      ],
       // 标题是参数里的命令（Gemini CLI）：普通条目改画成动态工具
       [
         'command',
@@ -252,6 +257,21 @@ test('各家报调用的样子：先问权限的不转给用户、认不出标�
     }
     assert.ok(!desktop.requests.some((r) => /requestApproval$/.test(r.method)))
     assert.deepEqual([...violations], [])
+  } finally {
+    await dispose(s)
+  }
+})
+
+test('普通工具即使标题、调用 ID 后缀和参数提到 Litch 工具，仍须审批；拒绝后不执行', async () => {
+  const s = await scene()
+  try {
+    const desktop = await litch(s)
+    desktop.onRequest(() => ({ decision: 'decline' }))
+    const { thread } = await desktop.call('thread/start', { cwd: s.cwd, dynamicTools: TOOLS })
+    const done = await turn({ ...s, desktop }, thread.id, text('tool ask-foreign echo_echo {}'))
+    assert.equal(desktop.requests.filter((r) => /requestApproval$/.test(r.method)).length, 1)
+    assert.ok(!desktop.requests.some((r) => r.method === 'item/tool/call'))
+    assert.equal(said(done), '没让调')
   } finally {
     await dispose(s)
   }
@@ -385,7 +405,64 @@ test('认标题：几家 agent 写 MCP 工具的样子都认得，名字是别�
   assert.equal(name('litch_echo_echo_more'), null)
   assert.equal(name('echo_echo'), null)
   assert.equal(name('ls -la'), null)
+  for (const title of [
+    'echo mcp_litch_echo_echo',
+    'echo_echo (litch-other MCP Server)',
+    'echo_echo (litch)',
+    'mcp_litch_echo_echo --help',
+    'mcp_litch_echo_echo\nls',
+    'mcp_other_echo_echo',
+    'other_litch_echo_echo',
+  ])
+    assert.equal(name(title), null, title)
   assert.equal(matchDynamicTool(specs, {}), null)
+})
+
+test('Gemini 新格式按调用 ID 的完整工具名识别，不依赖标题或参数，不搜索原始 ID', () => {
+  const specs = dynamicToolSpecs(TOOLS)
+  for (const title of ['回声', 'echo_echo', 'ls -la', '']) {
+    assert.equal(
+      matchDynamicTool(specs, {
+        toolCallId: 'mcp_litch_echo_echo__opaque-model-id',
+        title,
+        kind: 'other',
+      })?.mcpName,
+      'echo_echo',
+    )
+  }
+  for (const toolCallId of [
+    'mcp_litch_echo_echo_extra__id',
+    'mcp_other_echo_echo__id',
+    'mcp_litch_missing__id',
+    'run_shell_command__mcp_litch_echo_echo__id',
+    'mcp_litch_echo_echo__',
+    'prefix_mcp_litch_echo_echo__id',
+    'mcp_litch_echo_echo-id',
+  ])
+    assert.equal(matchDynamicTool(specs, { toolCallId, title: 'echo_echo' }), null, toolCallId)
+  assert.equal(
+    matchDynamicTool(specs, {
+      toolCallId: 'run_shell_command__id',
+      title: 'mcp_litch_echo_echo',
+    }),
+    null,
+  )
+  assert.equal(matchDynamicTool([], { toolCallId: 'mcp_litch_echo_echo__id' }), null)
+  for (const kind of ['execute', 'edit', 'read'])
+    assert.equal(
+      matchDynamicTool(specs, {
+        title: 'mcp_litch_echo_echo',
+        kind,
+      }),
+      null,
+    )
+  assert.equal(
+    matchDynamicTool(specs, {
+      title: '回声',
+      rawInput: { toolCallId: 'mcp_litch_echo_echo__id', name: 'mcp_litch_echo_echo' },
+    }),
+    null,
+  )
 })
 
 test('request_sign_in 加的可选提示参数（origin、三个 ref）在新会话里原样交给 agent，必填仍只有 reason', () => {

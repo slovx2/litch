@@ -5,6 +5,13 @@ import type { zhOnboard } from './zh-CN-onboard.ts'
 export const enOnboard: Record<keyof typeof zhOnboard, Entry> = {
   'install.installed': 'Installed {version}',
   'install.notInstalled': 'Not installed',
+  'install.latestOnlyBtn': 'Install latest',
+  'install.checkAgain': 'Check again',
+  'install.agy.installed': 'agy CLI {version} installed',
+  'install.agy.missing': 'agy CLI not detected',
+  'install.agy.note':
+    'Subscription mode requires the separate official agy CLI; Antigravity App or IDE does not replace it. Install latest runs the official installer on this device and verifies the download. Then sign in on the Accounts tab or run agy acp --login. API key mode does not require this CLI.',
+  'install.agy.disabled': 'Antigravity is disabled. Turn on Enabled in device settings to use it.',
   'install.verified': 'Verified {version}',
   'install.latest': 'Latest {version}',
   'install.checkingLatest': 'Checking for the latest version…',
@@ -52,7 +59,9 @@ export const enOnboard: Record<keyof typeof zhOnboard, Entry> = {
   'onboard.intro.opencode': 'An open-source coding assistant that supports many model providers.',
   'onboard.intro.gemini': 'Google’s CLI assistant, connected over ACP.',
   'onboard.intro.qwen': 'Qwen’s CLI assistant, connected over ACP.',
-  'onboard.intro.acp': 'Any ACP agent connected with a custom command.',
+  'harness.otherAcp': 'Other ACP agent',
+  'onboard.intro.acp':
+    'Connect ACP-compatible agents without a dedicated integration, such as Gemini, Qwen, or a custom command.',
   'onboard.intro.other': 'A harness on this computer.',
   'onboard.assist.title': 'Set up Litch with the config assistant',
   'onboard.assist.lead':

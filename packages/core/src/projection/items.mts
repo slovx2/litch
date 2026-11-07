@@ -737,8 +737,9 @@ export function settledItem(item: ItemView, turnCompleted: boolean): ItemView | 
 /**
  * 一个协议条目对应一个显示条目，标识不变。
  * streaming 表示这个条目所在的回合还在进行：助手消息和推理本身不带状态，要靠它判断。
+ * nativePhase 表示阶段来自 harness 本身；直接投影 Codex 协议默认原生，会话入口须按所属 harness 传入。
  */
-export function projectItem(item: ThreadItem, streaming = false): ItemView {
+export function projectItem(item: ThreadItem, streaming = false, nativePhase = true): ItemView {
   const images = toolImagesOf((item as { litchToolImages?: unknown }).litchToolImages).map(
     (image) => {
       if (!image.thumbnail) return image
@@ -757,6 +758,10 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
     },
   )
   const projected = projectPlainItem(item, streaming)
+  // 只有 Codex 原生提供阶段；其他入口依据工具调用、停止原因或消息位置推断的 commentary
+  // 不能用来隐藏正文。final 仍保留，协议条目本身不改（其他客户端可能依赖入口的阶段）。
+  if (!nativePhase && projected.kind === 'agentMessage' && projected.phase === 'commentary')
+    projected.phase = 'unknown'
   if (!images.length) return projected
   if (projected.kind === 'toolCall') return { ...projected, images }
   if (item.type === 'imageView')

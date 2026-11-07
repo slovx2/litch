@@ -46,6 +46,36 @@ const topic = (versions, jobs = []) => ({
   jobs,
 })
 
+test('Antigravity 官方 CLI：只给安装最新版，不选择版本；已装不提示升级', () => {
+  const agy = info({
+    harness: 'agy',
+    installable: true,
+    method: 'script',
+    verified: null,
+    latest: null,
+    minimum: null,
+    manual: 'curl -fsSL https://antigravity.google/cli/install.sh | bash',
+  })
+  assert.equal(phaseOf(topic([agy]), 'agy'), 'offer')
+  assert.deepEqual(installChoice(agy), {
+    primary: { target: 'latest', version: '', update: false, unverified: false },
+    more: null,
+  })
+  assert.equal(phaseOf(topic([{ ...agy, installed: '1.4.12' }]), 'agy'), 'current')
+  assert.deepEqual(installChoice({ ...agy, installed: '1.4.12', latest: '1.5.0' }), {
+    primary: null,
+    more: null,
+  })
+  for (const locale of ['zh-CN', 'en']) {
+    assert.match(translate(locale, 'install.agy.note'), /agy CLI/)
+    assert.match(translate(locale, 'install.agy.note'), /agy acp --login/)
+    assert.notEqual(
+      translate(locale, 'install.agy.missing'),
+      translate(locale, 'install.agy.disabled'),
+    )
+  }
+})
+
 test('比版本：按数字段比，预发布版比同号的正式版旧', () => {
   assert.ok(compareVersions('2.1.303', '2.1.282') > 0)
   assert.ok(compareVersions('1.0.3', '0.99.1') > 0)

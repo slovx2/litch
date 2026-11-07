@@ -5,6 +5,13 @@ import type { Entry } from './types.ts'
 export const zhOnboard = {
   'install.installed': '已安装 {version}',
   'install.notInstalled': '未安装',
+  'install.latestOnlyBtn': '安装最新版',
+  'install.checkAgain': '重新检测',
+  'install.agy.installed': '已安装 agy CLI {version}',
+  'install.agy.missing': '未检测到 agy CLI',
+  'install.agy.note':
+    '订阅模式需要单独安装官方 agy CLI；Antigravity App 或 IDE 不能代替 CLI。点击“安装最新版”在此设备安装，官方脚本会校验下载内容。完成后在账号页登录，或运行 agy acp --login。API key 模式无需此 CLI。',
+  'install.agy.disabled': 'Antigravity 已停用；要使用此引擎，请在设备设置中开启“启用”。',
   'install.verified': '验证版 {version}',
   'install.latest': '最新版 {version}',
   'install.checkingLatest': '正在检查最新版本…',
@@ -48,7 +55,9 @@ export const zhOnboard = {
   'onboard.intro.opencode': '开源的编程助手，支持多家模型。',
   'onboard.intro.gemini': 'Google 的命令行助手（通过 ACP 接入）。',
   'onboard.intro.qwen': '通义千问的命令行助手（通过 ACP 接入）。',
-  'onboard.intro.acp': '通过自定义命令接入的 ACP 助手。',
+  'harness.otherAcp': '其他 ACP Agent',
+  'onboard.intro.acp':
+    '接入没有单独适配的、支持 ACP 协议的 Agent，比如 Gemini、Qwen 或自定义命令。',
   'onboard.intro.other': '本机上的 harness。',
   'onboard.assist.title': '使用配置助手设置 Litch',
   'onboard.assist.lead':

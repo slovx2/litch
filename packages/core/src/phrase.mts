@@ -118,6 +118,7 @@ export type PhraseKey =
   | 'terminal.limit'
   | 'terminal.unsupported'
   | 'terminal.notRunning'
+  | 'terminal.inputBlocked'
   | 'terminal.endOffline'
   // 文件面板：路径不在工作区里、根不认识、对面不会、网络共享上的目录还不支持
   | 'files.outside'

@@ -33,7 +33,7 @@ import type {
   TerminalsView,
 } from '../model-terminal.mjs'
 import { phrase } from '../phrase.mjs'
-import { base64Bytes, dropBase64Head } from '../text/bytes.mjs'
+import { base64Bytes, decodeBase64, dropBase64Head, encodeBase64 } from '../text/bytes.mjs'
 import {
   launchPlan,
   makeTag,
@@ -91,6 +91,7 @@ export interface Terminals {
   regroup(): void
   open(workspaceId: string | null, cwd: string | null, rows: number, cols: number): Promise<string>
   write(terminalId: string, data: string): void
+  resumeInput(terminalId: string): void
   resize(terminalId: string, rows: number, cols: number): void
   redraw(terminalId: string): void
   rename(terminalId: string, title: string): void
@@ -109,7 +110,7 @@ export interface Terminals {
 export const PARK_BYTES = 512 * 1024
 /** 因为要写输入而挂回去之后，这么久之内不解除：免得刚敲完键又解除，下一个键又得等 */
 const HOLD_MS = 1000
-/** 挂回去之前攒着的输入最多这么多字节。再多就不收了 */
+/** 等待挂接或上一批确认的输入最多这么多字节。超过后暂停，不能静默丢掉中段 */
 const INPUT_MAX = 1024 * 1024
 /** 起进程要先在对面起伪终端的桥，给宽一点 */
 const SPAWN_TIMEOUT_MS = 20_000
@@ -151,9 +152,12 @@ interface Term {
    * 设备先回应答、紧跟着就回放，两样可能在同一拍里到，而应答的后续要晚一步才跑：先留着，后续跑完再按原来的先后处理
    */
   early: (() => void)[]
-  /** 挂回去之前攒着的输入，base64 */
+  /** 等待挂接或上一批确认的输入，base64 */
   input: string[]
   inputBytes: number
+  inputBlocked: boolean
+  /** 每批输入有自己的身份，断线后晚到的确认不能放行下一批 */
+  writing: object | null
   /** 这个时刻之前不解除挂接：刚写过输入 */
   holdUntil: number
   /** 界面要的行列数。和对面现在的不一样、又还没发出去的时候 dirty 为真 */
@@ -215,6 +219,7 @@ export function createTerminals(host: TerminalsHost): Terminals {
     seq: term.seq,
     cwd: term.cwd ?? term.root ?? host.home(),
     state: term.state,
+    inputBlocked: term.inputBlocked,
     exitCode: term.exitCode,
     durable: term.durable,
     shown: term.shown,
@@ -290,6 +295,8 @@ export function createTerminals(host: TerminalsHost): Terminals {
       early: [],
       input: [],
       inputBytes: 0,
+      inputBlocked: fields.restored,
+      writing: null,
       holdUntil: 0,
       want: fields.size,
       dirty: false,
@@ -305,6 +312,9 @@ export function createTerminals(host: TerminalsHost): Terminals {
 
   const drop = (term: Term) => {
     term.gen++
+    term.writing = null
+    term.input = []
+    term.inputBytes = 0
     term.stream.dispose()
     terms.delete(term.id)
     if (byHandle.get(term.handle) === term) byHandle.delete(term.handle)
@@ -340,10 +350,44 @@ export function createTerminals(host: TerminalsHost): Terminals {
     if (changed) announce(term)
   }
 
-  const send = (term: Term, data: string) => {
-    host
-      .request('process/writeStdin', { processHandle: term.handle, deltaBase64: data })
-      .catch((error: unknown) => host.log(`往终端里写输入失败：${String(error)}`))
+  const blockInput = (term: Term) => {
+    term.inputBlocked = true
+    term.input = []
+    term.inputBytes = 0
+    term.writing = null
+    announce(term)
+  }
+
+  /** 一批确认后再送下一批。等待期间合并按键，避免每个字都承担一轮网络延迟。 */
+  const flushInput = (term: Term) => {
+    if (term.inputBlocked || term.writing || !term.input.length || !host.online()) return
+    if (term.state !== 'running' || (term.durable && term.link !== 'attached')) return
+    const chunks = term.input
+    const bytes = new Uint8Array(term.inputBytes)
+    let offset = 0
+    for (const chunk of chunks) {
+      const part = decodeBase64(chunk)
+      bytes.set(part, offset)
+      offset += part.length
+    }
+    const data = chunks.length === 1 ? (chunks[0] ?? '') : encodeBase64(bytes)
+    term.input = []
+    term.inputBytes = 0
+    const token = {}
+    term.writing = token
+    host.request('process/writeStdin', { processHandle: term.handle, deltaBase64: data }).then(
+      () => {
+        if (term.writing !== token) return
+        term.writing = null
+        flushInput(term)
+        settle(term)
+      },
+      (error: unknown) => {
+        if (term.writing !== token) return
+        host.log(`往终端里写输入失败：${String(error)}`)
+        blockInput(term)
+      },
+    )
   }
 
   /** 把界面要的行列数告诉对面。同时只发一个；发的过程中又变了，发完再发一次 */
@@ -401,19 +445,15 @@ export function createTerminals(host: TerminalsHost): Terminals {
       term.rejoining = false
       for (const run of term.early.splice(0)) run()
       absorb(term, reply.process)
-      const input = term.input
-      term.input = []
-      term.inputBytes = 0
       // 挂回来是为了写这些输入：写完一小会儿之内不解除
-      if (input.length > 0) term.holdUntil = clock.now() + HOLD_MS
-      for (const data of input) send(term, data)
+      if (term.input.length > 0) term.holdUntil = clock.now() + HOLD_MS
+      flushInput(term)
       flushSize(term)
     } catch (error) {
       if (mine !== term.gen) return
       term.link = 'parked'
       term.early = []
-      term.input = []
-      term.inputBytes = 0
+      if (term.input.length > 0) blockInput(term)
       if (isGone(error)) {
         term.state = 'lost'
         announce(term)
@@ -442,7 +482,7 @@ export function createTerminals(host: TerminalsHost): Terminals {
 
   /** 没人消费的输出攒够了，而且眼下没有输入要写：该让设备先别发了 */
   const overdue = (term: Term): boolean => {
-    const busy = term.input.length > 0 || clock.now() < term.holdUntil
+    const busy = term.writing !== null || term.input.length > 0 || clock.now() < term.holdUntil
     return !busy && term.stream.lag() >= PARK_BYTES
   }
 
@@ -714,6 +754,8 @@ export function createTerminals(host: TerminalsHost): Terminals {
         term.early = []
         term.input = []
         term.inputBytes = 0
+        term.writing = null
+        term.inputBlocked = true
         term.holdUntil = 0
         // 发到一半的改行列数不知道成没成：挂回去之后再对一遍
         if (term.resizing) term.dirty = true
@@ -767,19 +809,32 @@ export function createTerminals(host: TerminalsHost): Terminals {
       if (term.state !== 'running') {
         throw new ChannelError('rejected', '这个终端不在运行', phrase('terminal.notRunning'))
       }
-      term.holdUntil = clock.now() + HOLD_MS
-      if (!term.durable || term.link === 'attached') {
-        send(term, data)
-        return
+      if (term.inputBlocked) {
+        throw new ChannelError('rejected', '终端输入需要确认', phrase('terminal.inputBlocked'))
       }
-      // 没挂着的时候协议原有的写输入落不到它上面：先攒着，挂回去之后按先后写
+      term.holdUntil = clock.now() + HOLD_MS
+      // 挂接或上一批确认之前先攒着，任何失败都不能继续发送后面的回车。
       const bytes = base64Bytes(data)
       if (term.inputBytes + bytes > INPUT_MAX) {
-        throw new ChannelError('rejected', '终端尚未重新连接，缓存的输入过多')
+        blockInput(term)
+        throw new ChannelError(
+          'rejected',
+          '等待发送的终端输入过多',
+          phrase('terminal.inputBlocked'),
+        )
       }
       term.input.push(data)
       term.inputBytes += bytes
+      flushInput(term)
       settle(term)
+    },
+
+    resumeInput(terminalId) {
+      const term = find(terminalId)
+      if (!host.online()) throw offlineError()
+      if (term.state !== 'running') throw new ChannelError('rejected', '这个终端不在运行')
+      term.inputBlocked = false
+      announce(term)
     },
 
     resize(terminalId, rows, cols) {
@@ -900,6 +955,8 @@ export function createTerminals(host: TerminalsHost): Terminals {
       term.early = []
       term.input = []
       term.inputBytes = 0
+      term.inputBlocked = false
+      term.writing = null
       term.resizing = false
       term.dirty = false
       term.want = sizeOf(rows, cols)
@@ -957,7 +1014,11 @@ export function createTerminals(host: TerminalsHost): Terminals {
     },
 
     dispose() {
-      for (const term of terms.values()) term.stream.dispose()
+      for (const term of terms.values()) {
+        term.writing = null
+        term.input = []
+        term.stream.dispose()
+      }
       terms.clear()
       byHandle.clear()
       sinks.clear()

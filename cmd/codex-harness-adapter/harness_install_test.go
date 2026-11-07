@@ -22,6 +22,7 @@ func TestInstallTable(t *testing.T) {
 		"opencode":    {installScript, "opencode-ai", baseline.Verified("opencodeVerified"), "1.18.0"},
 		"gemini":      {installNPM, "@google/gemini-cli", "", ""},
 		"qwen":        {installNPM, "@qwen-code/qwen-code", "", ""},
+		"agy":         {installScript, "", "", ""},
 		nativeCodex:   {installNPM, "@openai/codex", baseline.Verified("codexVerified"), minimumCodexVersion},
 	}
 	saved := installGOOS
@@ -29,9 +30,9 @@ func TestInstallTable(t *testing.T) {
 	t.Cleanup(func() { installGOOS = saved })
 	for _, spec := range harnessTable {
 		install := spec.install
-		if spec.id == "acp" || spec.id == "agy" {
+		if spec.id == "acp" {
 			if install != nil {
-				t.Fatal("自填命令的 ACP 和引擎自行按需安装的 Antigravity 不走 CLI 安装表")
+				t.Fatal("自填命令的 ACP 不走 CLI 安装表")
 			}
 			continue
 		}

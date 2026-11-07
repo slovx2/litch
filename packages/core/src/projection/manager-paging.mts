@@ -1,4 +1,4 @@
-import type { ManagerChange } from '../../../protocol/src/manager.mjs'
+import { type ManagerChange, managerRequestStatus } from '../../../protocol/src/manager.mjs'
 import type { ManagerPageKind, ManagerPageQuery } from '../../../protocol/src/manager-paging.mjs'
 import type { ManagerBoardView } from '../model-manager.mjs'
 
@@ -6,7 +6,7 @@ export const managerPageKey = (query: ManagerPageQuery) =>
   `${query.kind}/${query.status}/${query.order}`
 export const managerPageStates: Record<ManagerPageKind, readonly [string, ...string[]]> = {
   decision: ['open', 'answered', 'closed', 'ignored', 'all'],
-  request: ['open', 'replied', 'delivered', 'cancelled', 'all'],
+  request: ['open', 'replied', 'delivered', 'ignored', 'cancelled', 'all'],
   suggestion: ['pending', 'review', 'started', 'here', 'dismissed', 'withdrawn', 'expired', 'all'],
   report: ['unread', 'read', 'all'],
   item: ['pending', 'backlog', 'running', 'review', 'blocked', 'done', 'deferred', 'all'],
@@ -21,7 +21,7 @@ export function managerObjectLocation(board: ManagerBoardView, id: string) {
       status: ['expired', 'withdrawn'].includes(decision.status) ? 'closed' : decision.status,
     }
   const request = board.requests?.find((one) => one.id === id)
-  if (request) return { kind: 'request' as const, status: request.status }
+  if (request) return { kind: 'request' as const, status: managerRequestStatus(request) }
   const item = board.items.find((one) => one.id === id)
   if (item) return { kind: 'item' as const, status: item.status }
   const post = board.posts?.find((one) => one.id === id)

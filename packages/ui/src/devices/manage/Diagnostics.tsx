@@ -35,7 +35,7 @@ function Check({ device, check }: { device: DeviceView; check: DiagnosticCheckVi
       {scope ? <span className="chip">{badgeOf(device, scope)}</span> : null}
       <span className="diag-text">
         <span>
-          {scope ? <span className="dim">{nameOf(device, scope)} · </span> : null}
+          {scope ? <span className="dim">{nameOf(device, scope, t)} · </span> : null}
           {t.said(check.title)}
         </span>
         {check.detail ? <span className="diag-detail">{t.said(check.detail)}</span> : null}
@@ -195,7 +195,7 @@ export function Logs({ device }: { device: DeviceView }) {
               .filter((harness) => kind.when?.(harness.id) ?? true)
               .map((harness) => (
                 <option key={`${kind.source}:${harness.id}`} value={`${kind.source}:${harness.id}`}>
-                  {t(kind.label, { name: harness.name })}
+                  {t(kind.label, { name: t.harness(harness.id, harness.name) })}
                 </option>
               )),
           )}

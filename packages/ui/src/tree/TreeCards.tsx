@@ -79,7 +79,7 @@ const SpawnCard = memo(function SpawnCard(ref: ItemRef) {
         <i className={mark ? `st ${mark}` : 'st'} />
         <b className="ell grow">{title}</b>
         {harness ? (
-          <span className="chip" title={nameOf(device, harness)}>
+          <span className="chip" title={nameOf(device, harness, t)}>
             {badgeOf(device, harness)}
           </span>
         ) : null}

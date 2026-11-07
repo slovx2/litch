@@ -156,3 +156,129 @@ test('请你做：版本校验、混合提交、文字回复与修改交付、�
     await env.close()
   }
 })
+
+test('忽略请求：理由选填、事件明确、分页计数独立，不能同时声明交付或替代经理取消', async () => {
+  const env = treeRig()
+  try {
+    const client = env.connect()
+    await client.initialize(['harness', 'litchManager', 'litchManagerPaging'])
+    const { manager, threadId } = await client.call(MANAGER_METHOD.create, {
+      cwd: env.stateDir,
+      harness: 'pi',
+      model: null,
+      effort: null,
+      name: '忽略请求',
+      scope: '',
+      rules: '',
+      template: 'blank',
+      firstTask: '',
+      dispatch: MANAGER_DEFAULT_DISPATCH,
+      contact: MANAGER_DEFAULT_CONTACT,
+    })
+    await until(() => env.pi.running(threadId), '经理开始')
+    const owner = env.device.managers
+    const tool = (name: string, args: any): any => owner.writer.tool(manager.id, name, args)
+    for (let i = 1; i <= 5; i++)
+      tool('add', {
+        kind: 'request',
+        revision: 0,
+        why: '用户操作',
+        request: { title: `请求${i}`, description: '检查设备' },
+      })
+    tool('close', {
+      kind: 'request',
+      id: 'R-4',
+      revision: 1,
+      status: 'cancelled',
+      reason: '经理取消',
+    })
+    const feedback = (requests: unknown[]) =>
+      client.call(MANAGER_METHOD.feedbackSubmit, {
+        managerId: manager.id,
+        answers: [],
+        questions: [],
+        requests,
+      })
+    assert.equal(
+      (
+        await feedback([
+          { requestId: 'R-1', revision: 1, delivered: true, ignored: true, text: '' },
+        ])
+      ).rejectedRequests[0].code,
+      'invalidRequest',
+    )
+    assert.equal(
+      (
+        await feedback([
+          { requestId: 'R-1', revision: 1, delivered: false, ignored: 'yes', text: '' },
+        ])
+      ).rejectedRequests[0].code,
+      'invalidRequest',
+    )
+    const result = await feedback([
+      { requestId: 'R-1', revision: 1, delivered: false, ignored: true, text: '' },
+      { requestId: 'R-2', revision: 1, delivered: false, ignored: true, text: '这事不用管了' },
+      { requestId: 'R-3', revision: 1, delivered: true, text: '' },
+      { requestId: 'R-4', revision: 2, delivered: false, ignored: true, text: '' },
+      { requestId: 'R-5', revision: 1, delivered: false, text: '暂时无法操作' },
+    ])
+    assert.equal(result.acceptedRequests.length, 4)
+    assert.equal(result.rejectedRequests[0].code, 'requestCancelled')
+    assert.equal(result.acceptedRequests[0].status, 'replied', '不改变已有 status 枚举')
+    assert.equal(result.acceptedRequests[0].response.ignored, true)
+    assert.equal(result.acceptedRequests[0].response.text, '')
+    assert.equal(result.acceptedRequests[1].response.text, '这事不用管了')
+    assert.equal(owner.manager(manager.id).pendingRequests, 0)
+    const counts = owner.paging.summary(manager.id).counts.request
+    assert.deepEqual(
+      {
+        ignored: counts.ignored,
+        delivered: counts.delivered,
+        cancelled: counts.cancelled,
+        replied: counts.replied,
+        pending: counts.pending,
+        all: counts.all,
+      },
+      { ignored: 2, delivered: 1, cancelled: 1, replied: 1, pending: 0, all: 5 },
+    )
+    const query = owner.paging.queries.page(
+      { managerId: manager.id, kind: 'request', status: 'ignored', order: 'newest' },
+      [],
+    )
+    assert.deepEqual(query.entries.map((entry) => entry.id).sort(), ['R-1', 'R-2'])
+    assert.ok(query.entries.every((entry) => entry.status === 'ignored' && !entry.pending))
+    const events = [
+      ...owner.store.deliveries(manager.id).map((entry) => entry.text),
+      ...env.pi.seen
+        .filter((entry) => ['turn/start', 'turn/steer'].includes(entry.method))
+        .map((entry) => entry.params.input?.[0]?.text ?? ''),
+    ]
+    const event = events
+      .map((text) => parseSessionEvent(text).event)
+      .find(
+        (event) =>
+          event?.kind === 'manager-answers' && event.manager?.requests?.some((r) => r.ignored),
+      )
+    assert.equal(event?.manager?.requests?.filter((r) => r.ignored).length, 2)
+    assert.ok(events.some((text) => text.includes('ignored=true (the user chose not to do this)')))
+    assert.equal(
+      tool('get', { id: 'R-2' }).changes.find((change: any) => change.after?.response?.ignored).by,
+      'user',
+    )
+    assert.equal(
+      (
+        await feedback([
+          { requestId: 'R-1', revision: 1, delivered: false, ignored: true, text: '' },
+        ])
+      ).rejectedRequests[0].code,
+      'requestConflict',
+    )
+    const changed = await feedback([
+      { requestId: 'R-1', revision: 2, delivered: true, text: '后来完成了' },
+    ])
+    assert.equal(changed.acceptedRequests[0].response.ignored, undefined)
+    assert.equal(owner.paging.summary(manager.id).counts.request.ignored, 1)
+  } finally {
+    await env.close()
+  }
+})

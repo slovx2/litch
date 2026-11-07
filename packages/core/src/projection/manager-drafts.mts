@@ -40,11 +40,18 @@ export function decisionDraftState(
   board: ManagerDraftBoard,
   id: string,
   revision: number,
+  editingRevision?: number,
 ): ManagerDraftState {
   const decision = board.decisions.find((one) => one.id === id)
   if (!decision) return { state: 'ended', revision }
+  // 非待定草稿只有用户明确点过“修改答复”、且仍是同一版时才有效。
+  if (decision.status !== 'open')
+    return {
+      state:
+        editingRevision === decision.revision && revision === decision.revision ? 'live' : 'ended',
+      revision,
+    }
   if (decision.revision === revision) return { state: 'live', revision }
-  if (decision.status !== 'open') return { state: 'ended', revision }
   const later = board.changes.filter(
     (change) =>
       change.objectId === id &&
@@ -83,7 +90,7 @@ export function postDraftState(
 ): ManagerDraftState {
   const post = board.posts?.find((one) => one.id === id)
   if (!post) return { state: 'ended', revision }
-  if (post.kind === 'decision') return decisionDraftState(board, id, revision)
+  if (post.kind === 'decision') return decisionDraftState(board, id, revision, revision)
   // 交付、回复过的请你做照样可以追问，取消了才算结束
   const request = board.requests?.find((one) => one.id === id)
   if (post.kind === 'request' && (!request || request.status === 'cancelled'))
@@ -99,16 +106,20 @@ export interface ManagerDecisionDraft {
   optionId: string | null
   text: string
   question?: string
+  /** 用户对着此版本主动修改已有答复；不能靠版本相同猜测编辑意图。 */
+  editingRevision?: number | undefined
 }
-/** 仅选项的旧版本草稿直接清掉；自由文字（包括追问）要保留给用户核对。结束的草稿仍走 ended。 */
+/** 只清空白的过期草稿；选项、文字和追问一律保留，版本变化后由用户确认。 */
 export function resetDecisionSelection(
   board: ManagerDraftBoard,
   draft: ManagerDecisionDraft,
 ): boolean {
   return (
+    draft.optionId === null &&
     !draft.text.trim() &&
     !draft.question?.trim() &&
-    decisionDraftState(board, draft.decisionId, draft.revision).state === 'conflict'
+    decisionDraftState(board, draft.decisionId, draft.revision, draft.editingRevision).state ===
+      'conflict'
   )
 }
 export interface ManagerRequestDraft {
@@ -138,7 +149,12 @@ export function liveManagerDrafts<
   const live: ManagerDraftState = { state: 'live', revision: 0 }
   const decisionState = (draft: D) =>
     board
-      ? decisionDraftState(board, draft.decisionId, draft.revision)
+      ? decisionDraftState(board, draft.decisionId, draft.revision, draft.editingRevision)
+      : { ...live, revision: draft.revision }
+  // 已结束议题仍可主动追问；追问的同版草稿沿用原有规则，不借此恢复旧答案。
+  const questionState = (draft: D) =>
+    board
+      ? decisionDraftState(board, draft.decisionId, draft.revision, draft.revision)
       : { ...live, revision: draft.revision }
   const requestState = (draft: R) =>
     board
@@ -166,7 +182,7 @@ export function liveManagerDrafts<
   )
   const asked = keep(
     drafts.decisions.filter((draft) => draft.question?.trim()),
-    decisionState,
+    questionState,
   )
   const requests = keep(
     drafts.requests.filter((draft) => draft.delivered || draft.text.trim()),
@@ -194,7 +210,8 @@ export function liveManagerDrafts<
           .filter(
             (draft) =>
               (draft.optionId !== null || draft.text.trim() || draft.question?.trim()) &&
-              decisionState(draft).state === 'ended',
+              decisionState(draft).state === 'ended' &&
+              (!draft.question?.trim() || questionState(draft).state === 'ended'),
           )
           .map((draft) => draft.decisionId),
       ),
@@ -297,7 +314,12 @@ export function managerDraftMark(
   }
   if (!mark.optionId && !mark.text && !mark.question && !mark.delivered) return null
   const states = [
-    decision ? decisionDraftState(board, id, decision.revision).state : null,
+    decision && (decision.optionId !== null || decision.text.trim())
+      ? decisionDraftState(board, id, decision.revision, decision.editingRevision).state
+      : null,
+    decision?.question?.trim()
+      ? decisionDraftState(board, id, decision.revision, decision.revision).state
+      : null,
     request && (request.delivered || request.text.trim())
       ? requestDraftState(board, id, request.revision).state
       : null,

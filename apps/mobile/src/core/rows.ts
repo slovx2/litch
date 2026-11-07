@@ -58,6 +58,7 @@ import {
   spanOf,
   thoughtShown,
   turnAddition,
+  visibleProcessParts,
   workingShown,
 } from '@litch/core'
 import { cardsOf, eventKind, handOffOf, isOfferCall } from '../detail/proposals/logic'
@@ -516,8 +517,8 @@ export class RowBuilder {
           if (settled && block.key === segment.key)
             out.push(this.process(view, turn, processKey, open, segment.itemIds, divided))
           // 每段只在自己的第一块过程处显示摘要，开关互不影响。
-          if (settled && !open) return
-          for (const part of block.parts) this.part(out, view, turn, part, reportedOf)
+          for (const part of visibleProcessParts(block.parts, settled && !open, segment.keepSteps))
+            this.part(out, view, turn, part, reportedOf)
           return
         }
       }

@@ -673,6 +673,10 @@ export const en: Record<MessageKey, Entry> = {
   'undo.failed': ({ count, reason }) =>
     `Couldn’t restore ${count} ${count === 1 ? 'conversation' : 'conversations'}: ${reason}. Try again from Archived sessions.`,
   'terminal.panel': 'Terminal',
+  'terminal.inputBlocked':
+    'Input paused: some input may not have arrived. Unconfirmed input will not be resent. Check the current command. After resuming, you can press Ctrl+C to cancel partial input and type the full command again.',
+  'terminal.resumeInput': 'Acknowledge and resume',
+  'terminal.failed.write': 'Could not resume input: {reason}',
   'terminal.toggle': 'Terminal (Ctrl+`)',
   'terminal.tabs': 'Terminal tabs',
   'terminal.defaultName': 'Terminal {n}',

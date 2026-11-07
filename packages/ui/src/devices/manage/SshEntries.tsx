@@ -49,7 +49,7 @@ function Entry({ device, entry }: { device: DeviceView; entry: SshEntryView }) {
     <li className="ssh-entry" data-ssh-entry={entry.harness} data-state={entry.state}>
       <span className="ssh-entry-line">
         <span className="chip">{badgeOf(device, entry.harness)}</span>
-        <span className="ell">{nameOf(device, entry.harness)}</span>
+        <span className="ell">{nameOf(device, entry.harness, t)}</span>
         <span className={state.pill}>{t(state.label)}</span>
         <span className="mono dim">{t('manage.ssh.port', { port: entry.port })}</span>
       </span>

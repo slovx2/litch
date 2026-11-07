@@ -244,7 +244,8 @@ export class PagedManagerBoard {
   private async fetchDetail(id: ManagerObjectId) {
     const detail = await this.host.request(METHOD.detail, { managerId: this.managerId, id })
     const old = this.details.get(id)
-    if ((old?.object?.revision ?? 0) > (detail.object?.revision ?? 0)) return
+    // 明确不存在的详情必须替换缓存；否则重置/删除后的旧决策和草稿会永久留在看板。
+    if (detail.object && (old?.object?.revision ?? 0) > detail.object.revision) return
     this.details.set(id, detail)
   }
   detail(id: ManagerObjectId) {

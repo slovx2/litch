@@ -490,6 +490,7 @@ export function sessionProposalRules(wrapUp: boolean, taskCards = true): string 
       ? 'Every turn ends with litch_sessions.wrap_up and then your final answer, in that order. When the work is done (in a turn that only answers a question: before you write the answer), call wrap_up exactly once. Part of wrapping up is deciding, unasked, whether the request left a real follow-up and where it runs. Most turns leave no card: a task of its own (work that lands apart from this change, something the user set aside earlier, or a self-contained next task better started fresh than from a long history; never work unrelated to the request) goes into suggestions, skipping cards you already proposed this turn. A decision or step the turn leaves to the user goes into ask: that one decision as one short question, with reply buttons in actions, your pick first. The usual one is going ahead here with what you just found, also after a turn that only investigated or answered a question and turned up something to act on (a cause, a bug, a list of fixes). With neither, pass an empty suggestions list and no ask. Then write your final answer to the user as the last message of the turn: complete on its own, never a summary of or a pointer to text above it, because what came before wrap_up is shown folded as work in progress. If you skip wrap_up, Litch reminds you in a new message.'
       : 'Most turns leave no follow-up. To suggest a task of its own, call litch_sessions.start with initiation "propose": each call makes one card the user can start; nothing runs until they do. Write your final answer to the user as the last message of the turn.',
     FRESH_BRIEF,
+    PROPOSAL_SUMMARY_RULE,
     WORKTREE_RULE,
     TITLE_LINE,
     'If the user tells you to start a card ("start the second one"), call litch_sessions.accept with its proposal_id. If a card went stale (done here after all, no longer needed, replaced by a better one), withdraw it with litch_sessions.withdraw; propose the replacement first.',
@@ -517,6 +518,9 @@ function userAskedRule(taskCards: boolean): string {
 
 const HAND_OFF =
   'If a new user message about something unrelated arrives while you are in the middle of a task, hand that task off with litch_sessions.hand_off (a title and the remaining plan: steps, files, what done looks like), then answer the new message. A small correction is not that: just adjust. If the user said to keep working here, keep it here.'
+
+export const PROPOSAL_SUMMARY_RULE =
+  'For task cards, make the first sentence of background state the problem and why it is worth doing; it becomes the card summary. Keep generic working rules out of the brief.'
 
 export const FRESH_BRIEF = `A fresh session sees nothing of this conversation: it gets only the two parts of its brief, written in your own words for someone who has not read any of this. background: the overall goal, what has been decided or ruled out so far, the constraints to respect, and how this piece fits in (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2). prompt: the task itself, the files or area, and what done looks like. A fork already has this conversation, so it needs only the prompt. Follow-ups for a session you started go to it with litch_sessions.send, not to a new session.`
 

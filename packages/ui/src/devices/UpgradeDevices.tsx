@@ -66,7 +66,7 @@ function UpgradeRow({
               : ''}
           {reasons
             .map((reason) => {
-              const line = busyLine(reason, (id) => nameOf(device, id), t('list.comma'))
+              const line = busyLine(reason, (id) => nameOf(device, id, t), t('list.comma'))
               return t(line.key, line.args)
             })
             .join(t('list.comma'))}

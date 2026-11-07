@@ -39,6 +39,7 @@ export function HarnessWhy({ harness, brief = false }: { harness: HarnessView; b
 
 /** 一个 harness 的徽标、名字、版本 */
 function Entry({ harness, children }: { harness: HarnessView; children?: ReactNode }) {
+  const t = useT()
   const ready = harness.state === 'ready'
   return (
     <span
@@ -49,7 +50,7 @@ function Entry({ harness, children }: { harness: HarnessView; children?: ReactNo
       data-state={harness.state}
     >
       <span className={ready ? 'chip' : 'chip off'}>{harness.badge}</span>
-      {harness.name}
+      {t.harness(harness.id, harness.name)}
       {harness.version ? <span className="mono dim">{harness.version}</span> : null}
       {children}
     </span>

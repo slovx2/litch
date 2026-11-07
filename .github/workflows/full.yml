@@ -471,6 +471,9 @@ jobs:
           echo "CHA_OPENCODE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-opencode/node_modules/.bin/opencode" >> "${GITHUB_ENV}"
       - run: npm run test:opencode
         id: phase-1
+      - run: npm ci --prefix packages/acp --no-audit --no-fund
+      # Gemini 与 OpenCode 的 ACP 工具审批回归；脚本从 versions.json 读取各自精确版本。
+      - run: npm run smoke:acp
 
       - name: 缓存与首次失败
         id: stage-9

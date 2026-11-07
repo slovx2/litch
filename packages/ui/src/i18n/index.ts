@@ -29,6 +29,8 @@ export interface Translator {
    * 只给了一句原话的照出
    */
   said(value: Said): string
+  /** 通用 ACP 的展示名按界面语言显示，其他厂商名保持设备声明。 */
+  harness(id: string, name?: string): string
   lang: Lang
 }
 
@@ -36,6 +38,7 @@ export function translator(lang: Lang): Translator {
   const t = ((key, args) => translate(lang, key, args)) as Translator
   t.text = (value) => (typeof value === 'string' ? value : translate(lang, value.key, value.args))
   t.said = (value) => (typeof value === 'string' ? value : value[lang])
+  t.harness = (id, name) => (id === 'acp' ? t('harness.otherAcp') : name || id)
   t.lang = lang
   return t
 }

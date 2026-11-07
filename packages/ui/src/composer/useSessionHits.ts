@@ -70,7 +70,9 @@ export function useSessionHits(
     id: idOf(one.id),
     kind: 'session',
     title: one.title,
-    note: [one.typeLabel, one.workspace, nameOf(device, one.harness)].filter(Boolean).join(' · '),
+    note: [one.typeLabel, one.workspace, nameOf(device, one.harness, t)]
+      .filter(Boolean)
+      .join(' · '),
     // 行上写了工作区和 harness，底下那一栏只补目录
     ...(one.cwd ? { facts: [{ label: t('at.path'), value: one.cwd }] } : {}),
     words: [],

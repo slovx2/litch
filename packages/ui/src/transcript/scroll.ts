@@ -295,7 +295,9 @@ export function useTranscriptScroll(
     const fold = folding.current
     if (
       fold &&
-      !fold.body.isConnected &&
+      // 原生 commentary 会卸载过程正文；unknown 只收工具，容器仍在，但已退出运行态。
+      // 两种情况都可能因新增摘要标题而增高，须守住之前记录的正文，不能靠高度变化方向判断。
+      (!fold.body.isConnected || !fold.body.closest('.proc.live')) &&
       fold.turn.querySelector('.proc-head[aria-expanded="false"]')
     ) {
       const delta = grown(fold.after)

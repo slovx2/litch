@@ -154,7 +154,7 @@ export function OfferCard({ deviceId, sessionId, itemId, item }: ItemRef & { ite
         {held ? (
           <p className="prop-wider" data-held="true" data-wider={held.widerSandbox ?? ''}>
             {t('proposal.offer.held', {
-              harness: nameOf(device, held.harness ?? parent?.harness ?? ''),
+              harness: nameOf(device, held.harness ?? parent?.harness ?? '', t),
               level: held.widerSandbox ? t(SANDBOX_LEVEL[held.widerSandbox]) : '',
             })}
           </p>

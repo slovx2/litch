@@ -95,7 +95,7 @@ export function judgeRemoteService(seen: ServiceSeen, aliases: ServiceAliases): 
   must(session.terminalOpened && session.echoed, '在远程设备上开的终端里，命令没有结果')
   must(!session.ephemeral, '远程设备服务上的终端被标成了“随连接结束”')
   must(session.awayNote.length > 0, '断线的时候终端没有说它没连上')
-  must(session.rejoined, '连回来之后终端还挂着没连上的说明')
+  must(session.rejoined, '连回来之后终端没有提示确认输入')
   must(session.earlierKept, '终端接回来之后，断线之前的内容没了')
   must(session.replayedOnce, '断线前后那段输出没有正好出现一次')
   must(session.usable, '终端接回来之后不能接着用')

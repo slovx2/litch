@@ -660,7 +660,13 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   /** 对面声明 litchManager 后才读取看板、接受经理通知与会话标记。 */
   let managersOn = false
   /** 设备宣告的后加经理能力；没宣告的是比应用旧的设备服务 */
-  let managerFeatures = { feedback: false, posts: false, ignore: false, paging: false }
+  let managerFeatures = {
+    feedback: false,
+    posts: false,
+    ignore: false,
+    paging: false,
+    requestIgnore: false,
+  }
   /**
    * 对面有没有会话树（sessionTree 扩展：Litch 子会话、提案、litch_sessions）。认出来之前、对面不是设备服务时都是没有；
    * 断开之后留着断开前知道的
@@ -1851,6 +1857,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
           feedback: info.device.extensions?.includes(EXTENSION.managerFeedback) === true,
           posts: info.device.extensions?.includes(EXTENSION.managerPosts) === true,
           ignore: info.device.extensions?.includes(EXTENSION.managerIgnore) === true,
+          requestIgnore: info.device.extensions?.includes(EXTENSION.managerRequestIgnore) === true,
         }
         sessionTree = info.device.extensions?.includes(EXTENSION.sessionTree) === true
         reportControl =
@@ -1886,7 +1893,13 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         pathsSupported = false
         projectPermissionsOn = false
         managersOn = false
-        managerFeatures = { feedback: false, posts: false, ignore: false, paging: false }
+        managerFeatures = {
+          feedback: false,
+          posts: false,
+          ignore: false,
+          paging: false,
+          requestIgnore: false,
+        }
         sessionTree = false
         ignoreQuestions = false
         reportControl = false

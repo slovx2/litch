@@ -368,10 +368,7 @@ test('解除期间敲了键：先挂回去再按先后写，写完一小会儿�
   assert.equal(world.procs.writes.length, 0, '没挂着的时候写了也落不到进程上，先攒着')
   await world.idle(6)
   assert.equal(world.sent('litch/process/attach').length, 1)
-  assert.deepEqual(
-    world.procs.writes.map((entry) => entry.text),
-    ['\u0003', 'q'],
-  )
+  assert.deepEqual(world.procs.writes.map((entry) => entry.text).join(''), '\u0003q')
   assert.equal(view.received > 0, true)
 
   // 界面还是没处理、积压还在线以上，但刚写过输入：不解除

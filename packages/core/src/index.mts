@@ -28,6 +28,7 @@ export {
   permissionLevel,
   permissionRank,
 } from '../../protocol/src/harness-project-permissions.mjs'
+export { managerRequestStatus } from '../../protocol/src/manager.mjs'
 // 输入框里 @ 的会话：正文里的写法、对上、切段（协议包里的同一份，设备进程也用）
 export {
   type MentionSegment,
@@ -402,6 +403,7 @@ export {
   thoughtShown,
   toolKind,
   turnAddition,
+  visibleProcessParts,
 } from './projection/blocks.mjs'
 export {
   type CommentExtra,

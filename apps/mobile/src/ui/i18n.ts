@@ -89,6 +89,7 @@ export interface Translator {
   (key: Key, args?: Args): string
   text(value: import('@litch/core').Text): string
   said(value: import('@litch/core').Said): string
+  harness(id: string, name?: string): string
   lang: Lang
 }
 
@@ -100,6 +101,7 @@ export function translator(lang: Lang): Translator {
       : translate(lang, key as MessageKey, args)) as Translator
   t.text = (value) => (typeof value === 'string' ? value : translate(lang, value.key, value.args))
   t.said = (value) => (typeof value === 'string' ? value : value[lang])
+  t.harness = (id, name) => (id === 'acp' ? t('harness.otherAcp') : name || id)
   t.lang = lang
   return t
 }

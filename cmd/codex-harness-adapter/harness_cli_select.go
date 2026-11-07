@@ -109,13 +109,10 @@ func harnessCLICandidates(id, configured string, env []string) []harnessCLICandi
 			}
 		}
 	}
-	if home := envHome(env); home != "" {
-		for _, fallback := range spec.fallbacks {
-			path := filepath.Join(home, fallback)
-			add(lookPath(filepath.Dir(path), filepath.Base(path)))
-		}
+	for _, path := range cliFallbackPaths(spec, env) {
+		add(lookPath(filepath.Dir(path), filepath.Base(path)))
 	}
-	if spec.install != nil {
+	if spec.install != nil && spec.install.npmPackage != "" {
 		add(npmGlobalCLI(context.Background(), spec.install, lookPath(envPath(env), "npm"), env))
 	}
 	configured = strings.TrimSpace(configured)
@@ -156,6 +153,28 @@ func harnessCLICandidates(id, configured string, env []string) []harnessCLICandi
 		candidates[best].Selected = true
 	}
 	return candidates
+}
+
+// 官方 CLI 的固定安装目录。Windows 的 agy 跟随 LOCALAPPDATA，不猜测桌面应用入口。
+func cliFallbackPaths(spec harnessSpec, env []string) []string {
+	home := envHome(env)
+	if spec.id == "agy" && installGOOS == "windows" {
+		local := envValue(env, "LOCALAPPDATA", "LocalAppData")
+		if local == "" && home != "" {
+			local = filepath.Join(home, "AppData", "Local")
+		}
+		if local == "" {
+			return nil
+		}
+		return []string{filepath.Join(local, "agy", "bin", "agy")}
+	}
+	paths := []string{}
+	if home != "" {
+		for _, fallback := range spec.fallbacks {
+			paths = append(paths, filepath.Join(home, fallback))
+		}
+	}
+	return paths
 }
 
 func newerCLINote(id, path, version string, env []string) bilingual {

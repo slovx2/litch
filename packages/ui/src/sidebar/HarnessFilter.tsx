@@ -27,7 +27,9 @@ export function HarnessFilter() {
     ...choices,
     ...current.filter((entry) => !choices.some((choice) => choice.id === entry.id)),
   ]
-  const names = current.map((entry) => entry.name).join(t('sidebar.filter.join'))
+  const names = current
+    .map((entry) => t.harness(entry.id, entry.name))
+    .join(t('sidebar.filter.join'))
   return (
     <>
       <div className="sb-filter" ref={root}>
@@ -86,7 +88,7 @@ export function HarnessFilter() {
                     <b>
                       <span className="pick-mark">{on ? <Check /> : null}</span>
                       <span className="chip">{choice.badge}</span>
-                      {choice.name}
+                      {t.harness(choice.id, choice.name)}
                     </b>
                   </button>
                 )

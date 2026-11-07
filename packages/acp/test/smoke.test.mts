@@ -172,6 +172,10 @@ test('冒烟：真的 opencode acp，回环上的假模型', { skip: !opencode, 
     assert.equal(dynamic.length, 1, JSON.stringify(echoed.items))
     assert.equal(dynamic[0].id, call.params.callId)
     assert.equal(dynamic[0].success, true)
+    assert.ok(
+      !litch.requests.some((r) => /requestApproval$/.test(r.method)),
+      'Litch 工具没有额外审批',
+    )
     const sent = JSON.stringify(model.requests.at(-1)?.messages ?? [])
     assert.ok(sent.includes('回声：冒烟'), '工具结果交回了模型')
     // 命名空间的 instructions 到了模型面前（OpenCode 把 MCP 的 instructions 放进系统提示）
@@ -214,13 +218,20 @@ test('冒烟：真的 gemini --acp 经 MCP 桥调客户端工具，假模型', {
   timeout: 180_000,
 }, async () => {
   const box = await sandbox()
-  // Gemini CLI 0.38 给模型的名字是 mcp_litch_echo_echo
-  const model = await startFakeGemini((name) => /litch_+echo_echo$/.test(name), { text: '冒烟' })
+  let requestedTool = 'mcp_litch_echo_echo'
+  const args: Record<string, string> = { text: '冒烟' }
+  // 模型给 shell 的原始 ID 也冒充 Litch 工具；Gemini 必须补真实工具名前缀，入口不能搜索 ID 后缀。
+  const model = await startFakeGemini(
+    (name) => name === requestedTool,
+    args,
+    'mcp_litch_echo_echo__model-id',
+  )
   await mkdir(join(box.root, '.gemini'), { recursive: true })
   await writeFile(
     join(box.root, '.gemini', 'settings.json'),
     JSON.stringify({
-      security: { auth: { selectedType: 'gemini-api-key' } },
+      // 只关闭本次临时 HOME 的目录信任提示，否则新版 Gemini 不会加载测试 MCP 服务。
+      security: { auth: { selectedType: 'gemini-api-key' }, folderTrust: { enabled: false } },
       privacy: { usageStatisticsEnabled: false },
       general: { disableAutoUpdate: true, disableUpdateNag: true },
     }),
@@ -262,8 +273,9 @@ test('冒烟：真的 gemini --acp 经 MCP 桥调客户端工具，假模型', {
       input: text('调一下回声'),
     })
     const done = (await desktop.until('turn/completed', (p) => p.turn.id === started.id)).turn
+    assert.equal(done.status, 'completed', JSON.stringify(done.error))
     const call = desktop.requests.find((r) => r.method === 'item/tool/call')
-    assert.ok(call, '收到了 item/tool/call')
+    assert.ok(call, JSON.stringify({ done, requests: desktop.requests, urls: model.urls }))
     assert.deepEqual(
       { namespace: call.params.namespace, tool: call.params.tool, args: call.params.arguments },
       { namespace: 'litch_echo', tool: 'echo', args: { text: '冒烟' } },
@@ -272,14 +284,33 @@ test('冒烟：真的 gemini --acp 经 MCP 桥调客户端工具，假模型', {
     assert.equal(tools.length, 1)
     assert.equal(tools[0].id, call.params.callId)
     assert.equal(tools[0].success, true)
+    assert.match(call.params.callId, /:tool:mcp_litch_echo_echo__model-id$/)
     // 用户那里没有审批卡（Gemini CLI 对 MCP 工具要问权限，入口替它允许了这一次）
     assert.ok(!desktop.requests.some((r) => /requestApproval$/.test(r.method)))
     // 工具结果交回了模型
     const answered = JSON.stringify(model.requests.at(-1)?.contents ?? [])
     assert.ok(answered.includes('回声：冒烟'), answered.slice(-500))
-    // 命名空间的 instructions 到了模型面前（Gemini CLI 把 MCP 的 instructions 拼进系统提示）
-    const system = JSON.stringify(model.requests[0]?.systemInstruction ?? '')
-    assert.ok(system.includes('要回声时调 litch_echo'), '系统提示里有 instructions')
+    // 新版 Gemini 把 MCP instructions 放在上下文消息里；核对模型输入，不绑定提示所在层级。
+    const instructions = JSON.stringify(
+      model.requests.map(({ systemInstruction, contents }) => ({ systemInstruction, contents })),
+    )
+    assert.ok(instructions.includes('要回声时调 litch_echo'), '模型上下文里有 instructions')
+    requestedTool = 'run_shell_command'
+    delete args.text
+    args.command = 'mcp_litch_echo_echo'
+    desktop.onRequest(() => ({ decision: 'decline' }))
+    const second = await desktop.call('turn/start', {
+      threadId: thread.id,
+      input: text('再试普通命令'),
+    })
+    await desktop.until('turn/completed', (p) => p.turn.id === second.turn.id)
+    const approval = desktop.requests.filter((r) => /requestApproval$/.test(r.method))
+    assert.equal(approval.length, 1, '普通工具仍交给用户审批')
+    assert.match(
+      approval[0].params.itemId,
+      /:tool:run_shell_command__mcp_litch_echo_echo__model-id$/,
+    )
+    assert.equal(desktop.requests.filter((r) => r.method === 'item/tool/call').length, 1)
   } finally {
     await server.close()
     await model.close()

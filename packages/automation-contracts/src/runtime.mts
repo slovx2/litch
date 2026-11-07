@@ -43,6 +43,8 @@ export type ApprovalSubject =
   | { kind: 'browserInstance'; instanceId: string; name: string }
   | { kind: 'browserTab'; tabId: string; origin: string; title: string }
   | { kind: 'computerSelf'; targetId: string }
+  /** 受控下载：文件已收进私有暂存区，批准后才发布到宿主的下载目录；拒绝即删除。 */
+  | { kind: 'download'; filename: string; origin: string; totalBytes: number | null }
   | { kind: 'action'; description: string }
 
 export type ApprovalDecision = 'once' | 'session' | 'always' | 'decline'

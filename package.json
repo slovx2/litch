@@ -1,6 +1,6 @@
 {
   "name": "codex-harness-adapter",
-  "version": "0.35.1",
+  "version": "0.36.0",
   "private": true,
   "description": "在 Codex 桌面端连接各种 harness",
   "license": "MIT",
@@ -57,6 +57,7 @@
     "test:dsh": "npm run test --prefix packages/dsh",
     "test:opencode": "npm run test --prefix packages/opencode",
     "test:acp": "npm run test --prefix packages/acp",
+    "smoke:acp": "npm run build --prefix packages/acp && node scripts/build-cli.mjs && node scripts/smoke-acp.mjs",
     "test:device": "npm run test --prefix packages/device",
     "mobile:test": "npm run test --prefix apps/mobile",
     "mobile:test:markdown": "npm run test:markdown --prefix apps/mobile",

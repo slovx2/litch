@@ -101,6 +101,9 @@ export const zhManager = {
   'manager.request.open': '待做',
   'manager.request.delivered': '已交付',
   'manager.request.replied': '已回复',
+  'manager.request.ignored': '已忽略',
+  'manager.requestIgnoreNote': '忽略后离开待处理。经理会收到通知，知道您不准备执行这项请求。',
+  'manager.feature.requestIgnore': '忽略请你做请求',
   'manager.request.cancelled': '已取消',
 
   'manager.responseTabs': '答复方式',

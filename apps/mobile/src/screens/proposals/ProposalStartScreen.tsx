@@ -107,7 +107,8 @@ function StartForm({
   const models = options?.models ?? []
   const model = models.find((entry) => entry.id === fields.model)
   const ready = (device?.harnesses ?? []).filter((entry) => entry.state === 'ready')
-  const nameOf = (id: string) => device?.harnesses.find((entry) => entry.id === id)?.name ?? id
+  const nameOf = (id: string) =>
+    t.harness(id, device?.harnesses.find((entry) => entry.id === id)?.name)
   const sameHarness = fields.harness === parent.harness
   const shownKind = kindOf(fields, parent)
   const wider = widerLevel(
@@ -159,7 +160,10 @@ function StartForm({
             ...(ready.some((entry) => entry.id === fields.harness)
               ? []
               : [{ id: fields.harness, title: nameOf(fields.harness) }]),
-            ...ready.map((entry) => ({ id: entry.id, title: `${entry.badge}  ${entry.name}` })),
+            ...ready.map((entry) => ({
+              id: entry.id,
+              title: `${entry.badge}  ${t.harness(entry.id, entry.name)}`,
+            })),
           ],
         }
       case 'model':

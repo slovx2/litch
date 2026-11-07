@@ -8,6 +8,7 @@ import {
   type ManagerBoardTopicView,
   type ManagerView,
   managerAttentionCount,
+  managerRequestStatus,
   postDraftState,
   requestDraftState,
   resetDecisionSelection,
@@ -40,8 +41,10 @@ import {
   questionMode,
   rememberPostCollapsed,
 } from '../../../../../packages/ui/src/manager/post-presentation.ts'
+import { proposalSummary } from '../../../../../packages/ui/src/tree/proposal-brief.ts'
 import { useGrow } from '../../detail/composer/grow'
 import { ProposalActs } from '../../detail/proposals/ProposalActs'
+import { ProposalBrief } from '../../detail/proposals/ProposalBrief'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -58,7 +61,14 @@ import { DecisionAnswer, DecisionHistory, DecisionOutcome } from './DecisionOutc
 import { DiscussionDrawer } from './DiscussionDrawer'
 import { DiscussionHistory } from './DiscussionHistory'
 import { DraftEndedNote } from './DraftEndedNote'
-import { baseFile, clearDrafts, questionFile as draftFile, replyFile } from './draft-files'
+import {
+  baseFile,
+  choiceFile,
+  clearDrafts,
+  questionFile as draftFile,
+  editFile,
+  replyFile,
+} from './draft-files'
 import { Markdown } from './IssueMarkdown'
 import { IssueContext, IssueRelations } from './IssueRelations'
 import { setIssueOrder, useIssueOrder } from './issue-order'
@@ -188,8 +198,12 @@ export function Issue({
         found &&
         found.status !== 'open' &&
         (readChoice(draftKey, found.options) || replyFile.read()?.[draftKey]?.trim()) &&
-        decisionDraftState(board, found.id, baseFile.read()?.[draftKey] ?? found.revision).state !==
-          'ended',
+        decisionDraftState(
+          board,
+          found.id,
+          baseFile.read()?.[draftKey] ?? found.revision,
+          editFile.read()?.[draftKey],
+        ).state !== 'ended',
     )
   })
   const [unreviewed, setUnreviewed] = useState(false)
@@ -213,6 +227,9 @@ export function Issue({
     setCollapsed(!collapsed)
   }
   /** 正在填忽略理由；null 是没在填 */
+  const [requestIgnore, setRequestIgnore] = useState<{ revision: number; reason: string } | null>(
+    null,
+  )
   const [ignoring, setIgnoring] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const inFlight = useRef(false)
@@ -221,6 +238,7 @@ export function Issue({
   // 比应用旧的设备服务没宣告的能力：入口禁用，旁边写明原因（看板顶上另有一行说去设备详情升级）
   const features = useContext(IssueContext)?.features ?? {
     feedback: true,
+    requestIgnore: true,
     posts: true,
     ignore: true,
   }
@@ -283,7 +301,7 @@ export function Issue({
       resetDecisionSelection(board, {
         decisionId: decision.id,
         revision: base,
-        optionId: choice,
+        optionId: choiceFile.read()?.[draftKey] ?? choice,
         text: reply,
         question,
       }),
@@ -303,7 +321,7 @@ export function Issue({
   const answerState = !board
     ? null
     : decision
-      ? decisionDraftState(board, decision.id, base).state
+      ? decisionDraftState(board, decision.id, base, editFile.read()?.[draftKey]).state
       : request
         ? requestDraftState(board, request.id, base).state
         : null
@@ -414,7 +432,7 @@ export function Issue({
                 : 'manager.closed',
       )
     : request
-      ? t(`manager.request.${request.status}`)
+      ? t(`manager.request.${managerRequestStatus(request)}`)
       : post.kind === 'report'
         ? t(post.unread ? 'manager.reportUnread' : 'manager.reportRead')
         : ''
@@ -722,7 +740,12 @@ export function Issue({
           onPress={toggle}
         >
           <Text numberOfLines={1} style={{ color: c.ink2, fontSize: font.size.body }}>
-            {postSummary(post.body)}
+            {post.kind === 'suggestion'
+              ? proposalSummary(
+                  suggestion?.proposal.background,
+                  suggestion?.proposal.prompt ?? post.body,
+                )
+              : postSummary(post.body)}
           </Text>
         </Pressable>
       ) : null}
@@ -736,7 +759,16 @@ export function Issue({
       {(!pendingReview || unreviewed) && !collapsed ? (
         <>
           <IssueRelations id={post.id} />
-          <Markdown text={post.body} />
+          {post.kind === 'suggestion' ? (
+            <ProposalBrief
+              prompt={suggestion?.proposal.prompt ?? post.body}
+              background={suggestion?.proposal.background}
+              testID={`proposal:${post.proposalId ?? post.id}:brief`}
+              renderText={Markdown}
+            />
+          ) : (
+            <Markdown text={post.body} />
+          )}
           {post.versions.length ? (
             <>
               <Button
@@ -790,6 +822,63 @@ export function Issue({
               {request.response ? <Markdown text={request.response.text} /> : null}
               {/* 先是你的回复，再说留着的草稿怎么办 */}
               {endedNote}
+              {request.status === 'open' ? (
+                <>
+                  <Button
+                    kind="plain"
+                    testID={`request-ignore:${request.id}`}
+                    label={t('manager.ignore')}
+                    disabled={locked || !features.requestIgnore}
+                    onPress={() => setRequestIgnore({ revision: request.revision, reason: '' })}
+                  />
+                  {oldReason('requestIgnore')}
+                </>
+              ) : null}
+              {request.status === 'open' && requestIgnore ? (
+                <View testID={`request-ignore-form:${request.id}`} style={styles.askComposer}>
+                  <Text style={{ color: c.ink2 }}>{t('manager.requestIgnoreNote')}</Text>
+                  <TextInput
+                    testID={`request-ignore-reason:${request.id}`}
+                    accessibilityLabel={t('manager.ignoreReason')}
+                    placeholder={t('manager.ignoreReason')}
+                    placeholderTextColor={c.ink3}
+                    multiline
+                    style={[styles.input, { color: c.ink, borderColor: c.line1 }]}
+                    value={requestIgnore.reason}
+                    editable={!locked}
+                    onChangeText={(reason) => setRequestIgnore({ ...requestIgnore, reason })}
+                  />
+                  <Button
+                    testID={`request-ignore-confirm:${request.id}`}
+                    label={t('manager.ignoreConfirm')}
+                    disabled={locked || !features.requestIgnore}
+                    onPress={() =>
+                      void run(async () => {
+                        const accepted = await submitManagerRequest(
+                          channel,
+                          manager.deviceId,
+                          manager.id,
+                          {
+                            requestId: request.id,
+                            revision: requestIgnore.revision,
+                            delivered: false,
+                            text: requestIgnore.reason,
+                            ignored: true,
+                          },
+                        )
+                        if (!accepted) throw new Error(t('manager.requestSubmitFailed'))
+                        setRequestIgnore(null)
+                      })
+                    }
+                  />
+                  <Button
+                    kind="plain"
+                    label={t('app.cancel')}
+                    disabled={locked}
+                    onPress={() => setRequestIgnore(null)}
+                  />
+                </View>
+              ) : null}
               {request.status !== 'cancelled' &&
               !replyEnded &&
               (request.status === 'open' || editing) ? (
@@ -1017,6 +1106,7 @@ export function Issue({
                       label={t('manager.editAnswer')}
                       onPress={() => {
                         // 对着当前这一版改：留着的旧草稿版本不算数
+                        editFile.write({ ...editFile.read(), [draftKey]: decision.revision })
                         baseFile.write({ ...baseFile.read(), [draftKey]: decision.revision })
                         writeReply(decision.answer?.text ?? '')
                         setChoice(decision.answer?.optionId ?? null)

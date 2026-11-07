@@ -107,7 +107,7 @@ export function MentionList({
             {one.title}
           </Text>
           <Text numberOfLines={1} style={[styles.meta, { color: c.ink3 }]}>
-            {[one.typeLabel, one.workspace, nameOf(device, one.harness)]
+            {[one.typeLabel, one.workspace, nameOf(device, one.harness, t)]
               .filter(Boolean)
               .join(' · ')}
           </Text>

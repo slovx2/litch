@@ -38,7 +38,7 @@ const NAMES: Record<string, string> = {
   opencode: 'OpenCode',
   gemini: 'Gemini CLI',
   qwen: 'Qwen Code',
-  acp: 'ACP',
+  acp: 'Other ACP agent',
 }
 
 const EXAMPLES: readonly MessageKey[] = [
@@ -58,7 +58,7 @@ function HarnessEntry(props: {
   const { device, id, info, view } = props
   const t = useT()
   const harness = device.harnesses.find((entry) => entry.id === id)
-  const name = harness?.name ?? NAMES[id] ?? id
+  const name = t.harness(id, harness?.name ?? NAMES[id])
   const intro = INTROS[id] ?? 'onboard.intro.other'
   const ready = harness?.state === 'ready'
   const failed = view?.jobs.some(

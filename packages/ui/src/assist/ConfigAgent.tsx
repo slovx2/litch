@@ -149,8 +149,9 @@ function ConfirmCard({
     const element = dialog.current
     if (element && !element.open) element.showModal()
   }, [])
-  const harness =
-    local?.harnesses.find((entry) => entry.id === card.harness)?.name ?? card.harness ?? null
+  const harness = card.harness
+    ? t.harness(card.harness, local?.harnesses.find((entry) => entry.id === card.harness)?.name)
+    : null
   const where = card.session
     ? t('assist.confirm.session', {
         title: card.session.title || t('assist.confirm.untitled'),

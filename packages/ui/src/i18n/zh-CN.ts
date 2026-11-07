@@ -636,6 +636,10 @@ export const zhCN = {
   'undo.actionAll': '全部撤销',
   'undo.failed': '{count} 个对话恢复失败：{reason}。可在“已归档对话”中重试。',
   'terminal.panel': '终端',
+  'terminal.inputBlocked':
+    '输入已暂停：部分输入可能未送达，未确认的内容不会重发。请检查当前命令；恢复后可先按 Ctrl+C 取消残留输入，再重新输入完整命令。',
+  'terminal.resumeInput': '已知悉，恢复输入',
+  'terminal.failed.write': '无法恢复输入：{reason}',
   'terminal.toggle': '终端（Ctrl+`）',
   'terminal.tabs': '终端标签',
   'terminal.defaultName': '终端 {n}',

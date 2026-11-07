@@ -43,6 +43,7 @@ export function useManagerBoard(manager: ManagerView) {
  */
 export const ManagerFeaturesContext = createContext<ManagerFeaturesView>({
   feedback: true,
+  requestIgnore: true,
   posts: true,
   ignore: true,
 })

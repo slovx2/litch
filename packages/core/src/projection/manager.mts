@@ -8,6 +8,7 @@ import type {
   ManagerDecision,
   ManagerRequest,
 } from '../../../protocol/src/manager.mjs'
+import { managerRequestStatus } from '../../../protocol/src/manager.mjs'
 import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
 import type { SessionSummary } from '../model.mjs'
 import type {
@@ -204,7 +205,7 @@ export function managerBoardPages(board: ManagerBoardView) {
         totalItems: board.items.length,
       },
       requests: (board.requests ?? []).filter((request) =>
-        ['open', 'replied'].includes(request.status),
+        ['open', 'replied'].includes(managerRequestStatus(request)),
       ),
       blocked: items.blocked,
       waitingForYou,

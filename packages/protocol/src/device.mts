@@ -34,6 +34,7 @@ export const EXTENSION = {
   managerFeedback: 'litchManagerFeedback',
   managerPosts: 'litchManagerPosts',
   managerIgnore: 'litchManagerIgnore',
+  managerRequestIgnore: 'litchManagerRequestIgnore',
   managerPaging: 'litchManagerPaging',
   suggestionInbox: 'suggestionInbox',
   /** 受根目录与字节预算约束的 fs/readFile，见 file-preview.mts。 */

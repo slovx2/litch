@@ -83,7 +83,7 @@ function UpgradeNote({ device, upgrade, notice, retrying, onRetry }: NoteProps) 
         <>
           <ul className="svc-busy">
             {upgrade.busy.map((entry) => {
-              const line = busyLine(entry, (id) => nameOf(device, id), t('list.comma'))
+              const line = busyLine(entry, (id) => nameOf(device, id, t), t('list.comma'))
               return (
                 <li key={`${entry.reason}:${entry.harnesses.join(',')}`} data-busy={entry.reason}>
                   {t(line.key, line.args)}

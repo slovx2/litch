@@ -60,7 +60,9 @@ export function HarnessList({ device }: { device: DeviceView }) {
         {harness.badge}
       </Text>
       <View style={styles.grow}>
-        <Text style={[styles.name, { color: theme.c.ink }]}>{harness.name}</Text>
+        <Text style={[styles.name, { color: theme.c.ink }]}>
+          {t.harness(harness.id, harness.name)}
+        </Text>
         <Text style={[styles.small, { color: theme.c.ink2 }]}>{harnessLine(harness, t)}</Text>
       </View>
     </View>
@@ -259,10 +261,13 @@ function HarnessHead({
       )
       setSaid(
         result.running
-          ? { text: t('manage.restart.done', { name: harness.name }), bad: false }
+          ? {
+              text: t('manage.restart.done', { name: t.harness(harness.id, harness.name) }),
+              bad: false,
+            }
           : {
               text: t('manage.restart.down', {
-                name: harness.name,
+                name: t.harness(harness.id, harness.name),
                 reason: result.text ? t.said(result.text) : '',
               }),
               bad: true,
@@ -274,7 +279,10 @@ function HarnessHead({
         return
       }
       setSaid({
-        text: t('manage.restart.failed', { name: harness.name, reason: whyNot(failed, t) }),
+        text: t('manage.restart.failed', {
+          name: t.harness(harness.id, harness.name),
+          reason: whyNot(failed, t),
+        }),
         bad: true,
       })
     }
@@ -292,7 +300,7 @@ function HarnessHead({
         </Text>
         <View style={styles.grow}>
           <Text style={[styles.name, { color: theme.c.ink }]}>
-            {harness.name}{' '}
+            {t.harness(harness.id, harness.name)}{' '}
             <Text style={[styles.small, { color: theme.c.ink2 }]}>
               {t(`harness.state.${harness.state}`)}
             </Text>
@@ -327,7 +335,7 @@ function HarnessHead({
               navigation.navigate('HarnessSettings', {
                 deviceId,
                 harness: harness.id,
-                name: harness.name,
+                name: t.harness(harness.id, harness.name),
               })
             }
             style={styles.iconHit}
@@ -397,7 +405,7 @@ function HarnessHead({
       ) : null}
       {pending ? (
         <Text style={[styles.note, { color: theme.c.wait }]}>
-          {t('manage.pending.note', { name: harness.name })}
+          {t('manage.pending.note', { name: t.harness(harness.id, harness.name) })}
         </Text>
       ) : null}
       {said ? (
@@ -408,7 +416,7 @@ function HarnessHead({
       <Confirm
         visible={busyAsk}
         danger
-        title={t('manage.restart.busy.title', { name: harness.name })}
+        title={t('manage.restart.busy.title', { name: t.harness(harness.id, harness.name) })}
         detail={t('manage.restart.busy.note')}
         confirmLabel={t('manage.restart.busy.yes')}
         onConfirm={() => void restart(true)}
@@ -484,7 +492,8 @@ export function ManageSection({ device, harnessId }: { device: DeviceView; harne
       for (const key of keys) delete next[key]
       return next
     })
-  const nameOf = (id: string) => device.harnesses.find((harness) => harness.id === id)?.name ?? id
+  const nameOf = (id: string) =>
+    t.harness(id, device.harnesses.find((harness) => harness.id === id)?.name)
   const shared = { deviceId, nameOf, snapshot, drafts, setDraft, clear }
   if (harnessId) {
     const harness = device.harnesses.find((entry) => entry.id === harnessId)

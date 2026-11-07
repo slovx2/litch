@@ -20,7 +20,7 @@ import { Caret } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import type { SideTabProps } from '../side/tabs.ts'
 import { OfferActs } from './OfferCard.tsx'
-import { ProposalActs } from './ProposalCard.tsx'
+import { Brief, ProposalActs } from './ProposalCard.tsx'
 import {
   arrange,
   flash,
@@ -78,7 +78,7 @@ function ProposalRow({
         </span>
         <span className="prop-row-line dim">
           {harness ? (
-            <span className="chip" title={nameOf(device, harness)}>
+            <span className="chip" title={nameOf(device, harness, t)}>
               {badgeOf(device, harness)}
             </span>
           ) : null}
@@ -88,11 +88,10 @@ function ProposalRow({
             </span>
           ) : proposal.offer && !proposal.prompt ? (
             <span className="ell grow">{t(OFFER_LINE[status] ?? 'proposal.offer.ask')}</span>
-          ) : (
-            <span className="ell grow">{proposal.prompt}</span>
-          )}
+          ) : null}
         </span>
       </button>
+      <Brief prompt={proposal.prompt} background={proposal.background} />
       {status === 'pending' ? (
         <ProposalActs deviceId={deviceId} sessionId={sessionId} proposal={proposal} small />
       ) : null}

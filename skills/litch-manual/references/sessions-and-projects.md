@@ -149,7 +149,12 @@ in the current window and other drafts are never automatically evicted.
 
 ## 过程开合
 
+桌面和手机只把 harness 原生标明为过程说明（commentary）的文字随过程收起，Codex 保持这一行为。
+Claude、Pi、OpenCode、ACP、DSH 等入口推断的阶段不用于隐藏文字；未标明阶段的文字始终按原序显示，中间的工具步骤组各自收起。
+回合结束仍可显示“已处理”的用时与步数摘要。桌面详细视图仍默认展开过程和工具详情。
+
 桌面对话展开或收起过程、步骤组和命令时，保持被点击行的位置；滚到顶部收起时也保持该位置。
+回合结束自动收起时，正在阅读的回答保持原位；Claude 等保留正文的回合也遵循此规则，贴底阅读时继续跟随底部。
 
 桌面的用户消息超过 20 行时显示「展开全部」，展开后显示全文并可「收起」。切换会话保留展开状态；编辑取消、正文更新或窗口宽度变化后仍可展开。用户消息按原文显示，保留空行、编号和 Markdown 标记。手机用户消息直接显示全文。
 
@@ -445,7 +450,7 @@ explain it:
   staged / unstaged, stage, unstage, discard, comment on lines; comments go with the next message),
   Browser, Suggested tasks, Background tasks, Goal, Side chat.
   从回答里的文件改动点“在差异里看”可定位该文件；连续打开不同文件时，会分别确认各自的最新改动。
-- **文件自动刷新**：桌面和手机打开文件页时，展开目录中的新增、删除和重命名自动更新，保留展开和选中状态。当前预览随文件改写重新读取；删除或重命名后原路径显示不存在。收起目录、关闭面板或离开手机文件页时停止相关监听；重新打开或重连后重新读取。批量变化会合并；设备不支持 `fs/watch` 时仍可手动刷新。
+- **文件自动刷新**：桌面和手机打开文件页时，展开目录中的新增、删除和重命名自动更新，保留展开和选中状态。当前预览随文件改写重新读取；删除或重命名后原路径显示不存在。可见目录和当前文件每轮对账完成后隔 5 秒核对元数据，变化后补读，补回缺失或迟到的监听通知；不扫描收起的子目录。桌面窗口重新获得焦点时补读一次。关闭面板、隐藏窗口或离开手机文件页时停止相关监听和对账，重新打开或重连后重新读取。批量变化会合并；设备不支持 `fs/watch` 时对账仍工作，也可手动刷新。设备繁忙、后台调度或连接较慢时刷新可能延后。
 - **在文件管理器中打开本机文件**：本机文件不显示另存操作。文件树的右键菜单、源码和渲染预览的标题栏与右键菜单、附件卡片提供此入口；对话中的文件链接打开预览后也可使用。macOS 显示“在 Finder 中打开”，Windows 和 Linux 显示“在文件管理器中打开”。文件会打开所在目录并选中，目录则打开自身；文件已删除或无法访问时会明确提示。远程会话中标为本机的附件仍按本机文件处理。
 - **远程文件另存到本地电脑**：远程设备的文件树右键菜单、当前预览的右键菜单及标题栏、附件卡片均可选择“另存到本地…”。系统保存对话框的目标属于运行客户端的这台电脑，默认使用原文件名，重名确认由系统处理。传输显示进度并可取消；完成后可打开文件或显示所在文件夹。只支持单个普通文件，需要设备服务提供 `fileDownload`；不支持时提示升级，不回退整文件读取。大文件按 256 KiB 分块读取和落盘；来源变化会停止，完成前不覆盖目标。手机尚无系统导出入口。
 - **Images in replies (desktop and phone)**: `![description](path-or-url)` displays a thumbnail.
@@ -800,3 +805,12 @@ Originals load on demand from the session device: up to 8MiB each, within a 512M
 expiring after 30 days without use. Existing cached data is cleaned periodically. Old history containing
 only a path reads the current file on first view. Deleted files, evicted images and media omitted by the
 harness cannot be recovered; this includes large Codex MCP results already truncated to text.
+
+
+建议卡在桌面和手机的对话、看板及建议列表中默认只展示标题与背景首句摘要；没有背景时取任务首句。点击“展开简报”查看完整背景和任务，点击“收起简报”返回摘要。开始、编辑后开始和忽略仍在原来的操作区，展开不会执行任务。
+
+Suggestion cards in desktop and phone conversations, boards and suggestion lists show the title and the first sentence of the background by default, falling back to the task when there is no background. Show full brief reveals the complete background and task; Show less restores the summary. Start, Edit and start, and Dismiss remain in their existing action area. Expanding never starts work.
+
+提卡时，背景第一句写清问题及值得处理的理由；这是用户看到的卡片摘要。简报只写该任务的背景、目标与约束，不重复通用工作规矩。
+
+When proposing a card, make the first background sentence explain the problem and why it is worth addressing. This is the visible summary. Keep the brief specific to the task’s context, goal and constraints; omit generic working rules.

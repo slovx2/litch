@@ -66,7 +66,7 @@ export function ToolSwitches({ device, reveal = false }: { device: DeviceView; r
       </div>
       {rows.length > 0 ? <div className="devp-note">{t('switches.detail.note')}</div> : null}
       {rows.map(({ column, title }) => {
-        const summary = summaryOf(device, column)
+        const summary = summaryOf(device, column, t.harness)
         return (
           <div
             key={column}

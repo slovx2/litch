@@ -56,10 +56,13 @@ test('讨论新回复以首次历史为基线，阅读后清除，并按帖子�
   assert.equal(newReplies(key, 6), false)
   assert.equal(newReplies(key, 7), true)
 })
-test('选项过期删除草稿并提示；空稿静默删除；文字、追问及结束的草稿保持', () => {
+test('版本更新保留选项、文字和追问；只清空稿；结束的草稿保持', () => {
   const base = { decisionId: 'D-1', revision: 1, optionId: 'a', text: '' }
   const board = { decisions: [{ id: 'D-1', revision: 2, status: 'open' }], changes: [] }
-  assert.deepEqual(refreshAnswerDrafts(board, { 'D-1': base }), { drafts: {}, cleared: ['D-1'] })
+  assert.deepEqual(refreshAnswerDrafts(board, { 'D-1': base }), {
+    drafts: { 'D-1': base },
+    cleared: [],
+  })
   assert.deepEqual(refreshAnswerDrafts(board, { 'D-1': { ...base, optionId: null } }), {
     drafts: {},
     cleared: [],

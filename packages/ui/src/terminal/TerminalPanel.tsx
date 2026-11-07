@@ -72,15 +72,33 @@ function StatusStrip({
   online,
   restarting,
   onRestart,
+  onResumeInput,
 }: {
   info: TerminalInfo
   online: boolean
   /** 人刚点了重开、还没发出去：先按“正在启动”画（不占地方），终端好按腾出来的高度量大小 */
   restarting: boolean
   onRestart(): void
+  onResumeInput(): void
 }) {
   const t = useT()
-  if (info.state === 'running') return null
+  if (info.state === 'running') {
+    if (!info.inputBlocked) return null
+    return (
+      <div className="term-status" role="alert" data-state="input-blocked">
+        <span>{t('terminal.inputBlocked')}</span>
+        <button
+          type="button"
+          className="btn"
+          data-tool="resume-input"
+          disabled={!online}
+          onClick={onResumeInput}
+        >
+          {t('terminal.resumeInput')}
+        </button>
+      </div>
+    )
+  }
   const state = restarting ? 'starting' : info.state
   const text =
     state === 'starting'
@@ -400,6 +418,11 @@ export function TerminalPanel({
             online={online}
             restarting={restarting === active.id}
             onRestart={restart}
+            onResumeInput={() => {
+              channel
+                .command('terminal.resumeInput', { deviceId, terminalId: active.id })
+                .catch((error: unknown) => fail('terminal.failed.write', error))
+            }}
           />
         ) : null}
       </div>

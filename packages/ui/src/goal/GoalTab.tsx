@@ -24,7 +24,7 @@ export function GoalTab({ place }: SideTabProps) {
     const harness = device?.harnesses.find((entry) => entry.id === meta.harness)
     return (
       <div className="side-none dim" data-goal-unsupported>
-        {t('goal.tab.unsupported', { harness: harness?.name ?? meta.harness })}
+        {t('goal.tab.unsupported', { harness: t.harness(meta.harness, harness?.name) })}
       </div>
     )
   }

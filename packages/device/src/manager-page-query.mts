@@ -18,7 +18,7 @@ export interface ManagerPagingSuggestion extends ManagerObjectHead {
 
 const states: Record<ManagerPageKind, readonly string[]> = {
   decision: ['all', 'pending', 'open', 'answered', 'closed', 'expired', 'withdrawn', 'ignored'],
-  request: ['all', 'pending', 'open', 'replied', 'delivered', 'cancelled'],
+  request: ['all', 'pending', 'open', 'replied', 'delivered', 'ignored', 'cancelled'],
   item: ['all', 'pending', 'backlog', 'running', 'review', 'done', 'deferred', 'blocked'],
   report: ['all', 'pending', 'unread', 'read'],
   suggestion: ['all', 'pending', 'review', 'started', 'dismissed', 'withdrawn', 'expired', 'here'],
@@ -78,7 +78,9 @@ const source = (kind: Exclude<ManagerPageKind, 'suggestion'>) => {
   const report = kind === 'report'
   const status = report
     ? "CASE WHEN json_extract(body,'$.readRevision')=json_extract(body,'$.revision') THEN 'read' ELSE 'unread' END"
-    : "json_extract(body,'$.status')"
+    : kind === 'request'
+      ? "CASE WHEN json_extract(body,'$.status')='replied' AND json_extract(body,'$.response.ignored')=1 THEN 'ignored' ELSE json_extract(body,'$.status') END"
+      : "json_extract(body,'$.status')"
   return {
     table: report ? 'manager_reports' : 'objects',
     prefix: report ? 'P-%' : kind === 'decision' ? 'D-%' : kind === 'request' ? 'R-%' : 'I-%',

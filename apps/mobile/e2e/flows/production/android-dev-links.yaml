@@ -1,0 +1,35 @@
+appId: dev.litch.app
+name: Android 发布包拒绝测试深链
+tags: [update-gate, privacy]
+---
+- launchApp:
+    clearState: true
+    stopApp: true
+- extendedWaitUntil:
+    visible:
+      id: devices:empty:add
+    timeout: 30000
+- openLink: 'litch://update?feed=${UPDATE_FEED}'
+- openLink: 'litch://boot?mode=mock&markers=1'
+- assertVisible:
+    id: devices:empty:add
+- openLink: 'litch://boot?mode=fixture'
+- assertVisible:
+    id: devices:empty:add
+- openLink: 'litch://remote?adapter=review-test&env=TEST=1'
+- openLink: 'litch://new?prompt=should-not-send'
+- assertNotVisible:
+    id: update:banner:available
+- tapOn:
+    id: devices:settings
+- assertNotVisible:
+    id: settings:boot
+- stopApp
+# 冷启动也携带攻击链接，不能只证明已启动应用的 URL 监听被关闭。
+- openLink: 'litch://update?feed=${UPDATE_FEED}'
+- extendedWaitUntil:
+    visible:
+      id: devices:empty:add
+    timeout: 30000
+- assertNotVisible:
+    id: update:banner:available

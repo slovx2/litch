@@ -83,7 +83,7 @@ export function TargetFields({
     sessions,
     (title) => t.text(title),
     (kind) => t(`session.kind.${kind}`),
-    (harness) => nameOf(device, harness),
+    (harness) => nameOf(device, harness, t),
   )
 
   return (
@@ -134,7 +134,7 @@ export function TargetFields({
           <div className="form-field">
             <span className="form-label">{t('tasks.form.harness')}</span>
             {editing ? (
-              <span>{nameOf(device, form.harness)}</span>
+              <span>{nameOf(device, form.harness, t)}</span>
             ) : harnessOptions.length > 0 ? (
               <Picker
                 kind="harness"

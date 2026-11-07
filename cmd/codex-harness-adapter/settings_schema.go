@@ -252,6 +252,19 @@ func harnessSettingTexts(id string) harnessTexts {
 	if specOf(id).acp {
 		return acpSettingTexts(id)
 	}
+	if id == "agy" {
+		texts := acpSettingTexts(id)
+		group := both(
+			"默认停用。订阅模式需要另行安装官方 agy CLI；Antigravity App 和 IDE 不能代替 CLI。请在安装区域点击“安装最新版”。API key 模式的 SDK runtime 由引擎按需安装。",
+			"Off by default. Subscription mode requires the separate official agy CLI; Antigravity App and IDE do not replace it. Choose Install latest in the installation section. API key mode installs its SDK runtime on demand.",
+		)
+		texts.group = &group
+		texts.cliPath = both(
+			"官方 agy CLI 的绝对路径（CHA_AGY_CLI），用于订阅模式。留空自动查找 PATH 和官方安装目录。此项不设置 SDK runtime；自定义 SDK 路径请使用环境变量 CHA_ANTIGRAVITY_CLI。",
+			"Absolute path to the official agy CLI (CHA_AGY_CLI), used for subscription mode. Leave empty to search PATH and the official install directory. For a custom SDK runtime, use the CHA_ANTIGRAVITY_CLI environment variable instead.",
+		)
+		return texts
+	}
 	return harnessTexts{
 		enabled: both(
 			"关掉后停掉 %s 的运行时，这台设备上不再提供它；会话都还在，再打开就回来。",
@@ -281,6 +294,10 @@ func acpSettingTexts(id string) harnessTexts {
 		"Absolute path of the %s command-line tool on this device; the adapter starts it in ACP mode. Leave empty to select the newest installation of the preset command.",
 	).with(name)
 	if spec.needsCLI {
+		group = both(
+			"接入没有单独适配的、支持 ACP 协议的 Agent，比如 Gemini、Qwen 或自定义命令。默认停用；参数通过 %s 设置（按空白切分，支持双引号）。",
+			"Connect ACP-compatible agents without a dedicated integration, such as Gemini, Qwen, or a custom command. Off by default; set arguments with %s (split on whitespace, double quotes supported).",
+		).with(args)
 		cliPath = both(
 			"要接的 ACP agent 的命令行（绝对路径）。没有预设，不填就起不来；参数写在环境变量 %s 里。",
 			"Command-line tool (absolute path) of the ACP agent to connect. There is no preset; it cannot start without this. Put its arguments in the %s environment variable.",
@@ -322,8 +339,12 @@ func buildSettingsSchema(c configuration) settingsSchema {
 	for _, id := range knownHarnesses {
 		name, group := harnessNames[id], "harness."+id
 		texts := harnessSettingTexts(id)
+		title := verbatim(name)
+		if id == "acp" {
+			title = both("其他 ACP Agent", "Other ACP agent")
+		}
 		schema.Groups = append(schema.Groups, settingGroup{
-			ID: group, Title: verbatim(name), Scope: harnessScope(id), Description: texts.group,
+			ID: group, Title: title, Scope: harnessScope(id), Description: texts.group,
 		})
 		schema.Settings = append(schema.Settings,
 			settingSpec{

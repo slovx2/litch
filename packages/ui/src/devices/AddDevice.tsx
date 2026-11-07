@@ -45,7 +45,7 @@ function peerNote(name: string, check: Extract<RemoteCheck, { ok: true }>, t: Tr
   if (ready.length === 0) return t('add.note.service.down', { name })
   return t('add.note.service', {
     name,
-    names: ready.map((harness) => harness.name).join(t('list.comma')),
+    names: ready.map((harness) => t.harness(harness.id, harness.name)).join(t('list.comma')),
   })
 }
 

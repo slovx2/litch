@@ -155,6 +155,90 @@ try {
       }
     }
   }
+  // 从经理建议页真实点击开始；只订阅父会话，子会话一次都不打开。
+  await run(() => window.__managerOpen.open({ deviceId: 'local', sessionId: 'm1' }))
+  await until(() => has('[data-manager="session"][data-manager-id="m1"]'), '经理来源会话')
+  if (await has('[data-act="manager-board-toggle"][aria-expanded="true"]'))
+    await click('[data-act="manager-board-toggle"]')
+  await until(() => has('.main .dock textarea.cmp-text'), '经理输入框')
+  await run(() => {
+    const input = document.querySelector('.main .dock textarea.cmp-text')
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(
+      input,
+      '提个子会话',
+    )
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await until(
+    () =>
+      run(() => document.querySelector('.main .dock textarea.cmp-text')?.value === '提个子会话'),
+    '输入进入草稿',
+  )
+  await run(() =>
+    document
+      .querySelector('.main .dock textarea.cmp-text')
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+  )
+  await until(() => has('.main [data-card="proposal"]'), '经理生成建议')
+  await click('[data-act="manager-board-toggle"]')
+  if (!(await has('[data-board-tab="suggestions"]'))) await click('[data-board-tab="inbox"]')
+  await click('[data-board-tab="suggestions"]')
+  const manager = '.mg-sidebar-manager[data-manager-id="m1"]'
+  if (await has(`${manager} .row-line > .tree-fold[aria-expanded="false"]`))
+    await click(`${manager} .row-line > .tree-fold[aria-expanded="false"]`)
+  const before = await run(() => {
+    const { store, keys } = window.__managerOpen
+    return store.get(keys.children('local'))?.m1 ?? []
+  })
+  // Pi 示例刻意超出父会话权限；选择同 harness 的 CHANGELOG 卡，验真实可启动路径。
+  const proposal = await until(
+    () =>
+      run(() => {
+        const title = [...document.querySelectorAll('.suggestion-row .prop-title')].find(
+          (node) => node.textContent === '整理 CHANGELOG',
+        )
+        return title?.closest('[data-proposal]')?.getAttribute('data-proposal')
+      }),
+    '可开始的 CHANGELOG 建议',
+  )
+  await click(`.suggestion-row [data-proposal="${proposal}"] [data-act="start"]`)
+  const child = await until(
+    () =>
+      run((old) => {
+        const { store, keys } = window.__managerOpen
+        return (store.get(keys.children('local'))?.m1 ?? []).find((id) => !old.includes(id))
+      }, before),
+    '新建议工作线',
+  )
+  const unopenedRow = `${manager} [data-session="${child}"] .ss-row`
+  const unopened = () =>
+    run((id) => {
+      const { store, keys } = window.__managerOpen
+      return (
+        !store.get(keys.session('local', id)) &&
+        document.querySelector('[data-composer-session]')?.getAttribute('data-composer-session') ===
+          '["local","m1"]'
+      )
+    }, child)
+  await until(() => has(`${unopenedRow} .st.run`), '从未打开的工作线出现运行标识')
+  assert.equal(await unopened(), true)
+  await until(async () => {
+    assert.equal(await unopened(), true, '验收期间不能打开子会话补齐状态')
+    return run(
+      (id, selector) => {
+        const { store, keys } = window.__managerOpen
+        return (
+          store.get(keys.summary('local', id))?.status === 'idle' &&
+          !!document.querySelector(selector) &&
+          !document.querySelector(`${selector} .st.run`)
+        )
+      },
+      child,
+      unopenedRow,
+    )
+  }, '从未打开的工作线完成后移除运行标识')
+  assert.equal(await unopened(), true)
+  console.log('经理建议页点击开始：从未打开子会话，正式侧栏仍呈现运行→空闲，父会话选择保持不变。')
   console.log(
     '经理工作线：选中/未选中 × 三种皮肤 × 明暗 × 运行/等待/后台任务，状态标识均可见；清未读不隐藏标识。',
   )

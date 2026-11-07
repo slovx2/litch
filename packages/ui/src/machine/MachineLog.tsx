@@ -142,7 +142,7 @@ function LogRow({ entry }: { entry: MachineLogEntry }) {
         </span>
       </span>
       <span className="mach-who ell">
-        {entry.harness ? `${nameOf(device, entry.harness)} · ` : ''}
+        {entry.harness ? `${nameOf(device, entry.harness, t)} · ` : ''}
         {session}
       </span>
       {entry.flagged ? <span className="mach-flag-mark">{t('machine.flagged')}</span> : null}

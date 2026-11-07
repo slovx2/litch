@@ -125,7 +125,7 @@ export function useRestart(deviceId: string, observe = true): RestartFlow {
         >
           <ul className="svc-busy" data-restart="busy">
             {phase.busy.map((entry) => {
-              const line = busyLine(entry, (id) => nameOf(device, id), t('list.comma'))
+              const line = busyLine(entry, (id) => nameOf(device, id, t), t('list.comma'))
               return (
                 <li key={`${entry.reason}:${entry.harnesses.join(',')}`} data-busy={entry.reason}>
                   {t(line.key, line.args)}

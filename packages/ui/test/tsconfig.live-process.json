@@ -4,6 +4,7 @@
     "../src/**/*.ts",
     "../src/**/*.tsx",
     "live-process-fixture.tsx",
+    "message-phase-fixture.tsx",
     "scroll-restore-fixture.tsx"
   ]
 }

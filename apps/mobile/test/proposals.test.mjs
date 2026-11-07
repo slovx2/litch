@@ -13,7 +13,6 @@ import {
   cardsOf,
   eventKind,
   handOffOf,
-  isLongBrief,
   isOfferCall,
   nextExpiry,
   overridesFor,
@@ -192,8 +191,8 @@ test('收尾区：带建议、留了问题的收尾在过程里只留一步，�
     ),
     'all',
   )
-  // 过程收成一行，问题照样排在回答下面
-  assert.deepEqual(types(askOnly), ['user', 'process', 'md', 'wrapAsk', 'status'])
+  // 没有阶段的正文保留，工具组摘要也留在原位，问题照样排在回答下面
+  assert.deepEqual(types(askOnly), ['user', 'process', 'group', 'md', 'wrapAsk', 'status'])
 })
 
 test('收尾区：回合还在跑时收尾带的卡片和问题先不排，过程里那一步照留；中途 start 的提案排在调用的位置', () => {
@@ -252,12 +251,15 @@ test('中途 start 的提案不钉在回合末尾：后面的过程和回答接�
     'group',
     'status',
   ])
-  // 回合结束：几段过程收成第一段开头的一行，点开了照原样排
+  // 回合结束：未知阶段正文前后的工具组摘要保留，中途 start 卡仍在原处
   assert.deepEqual(types(new RowBuilder().build(view, 'all')), [
     'user',
     'process',
+    'group',
     'proposal',
+    'group',
     'md',
+    'group',
     'status',
   ])
   assert.deepEqual(types(opened(view)), [
@@ -459,12 +461,6 @@ test('改了再开始：什么都没改是空的；改了唤醒、标题、简�
     overridesFor({ ...fields, harness: 'pi', model: '', kind: 'fork' }, parent, base),
     { harness: 'pi', model: '' },
   )
-})
-
-test('简报长了才折：超过 160 字或者超过 3 行', () => {
-  assert.equal(isLongBrief('短'), false)
-  assert.equal(isLongBrief('字'.repeat(161)), true)
-  assert.equal(isLongBrief('一\n二\n三\n四'), true)
 })
 
 test('接在模拟核心上：说“提个子会话”出三张卡；点“不要”那张变成不要了，回合不用重开', async () => {

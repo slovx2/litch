@@ -175,7 +175,9 @@ export function Decisions({
       setError(t('manager.savedFail'))
     }
   }, [savedDrafts, board, write, t])
-  const answers = live.answers.map(({ question: _question, ...answer }) => answer)
+  const answers = live.answers.map(
+    ({ question: _question, editingRevision: _editingRevision, ...answer }) => answer,
+  )
   const questions = (features.feedback ? live.questions : []).map((draft) => ({
     decisionId: draft.decisionId,
     revision: draft.revision,
@@ -405,7 +407,9 @@ export function Decisions({
             const post = posts.find((post) => post.id === decision.id)
             const ended = live.ended.decisions.has(decision.id)
             const stale =
-              draft && decisionDraftState(board, decision.id, draft.revision).state === 'conflict'
+              draft &&
+              decisionDraftState(board, decision.id, draft.revision, draft.editingRevision)
+                .state === 'conflict'
             const chosen = decision.options.find((option) => option.id === draft?.optionId)
             const endedNote =
               ended && draft ? (
@@ -678,6 +682,7 @@ export function Decisions({
                             // 对着当前这一版改：留着的旧草稿版本不算数
                             change(decision, {
                               revision: decision.revision,
+                              editingRevision: decision.revision,
                               optionId: decision.answer?.optionId ?? null,
                               text: decision.answer?.text ?? '',
                             })

@@ -622,7 +622,7 @@ same.
 
 手机使用半屏底部抽屉，向上拖把手或点展开图标可到全屏，向下拖可收回半屏、再拖关闭；点标题关闭并回到卡片。两端的讨论默认展开，也可手动收起并记住。追问默认发到已有临时会话，没有临时问答时发给经理，输入框旁可切换。原来的草稿计数、随答复提交和已结束议题的草稿规则不变。全局建议窗口中的内嵌讨论仍在超过 1200 字符时默认收起。
 
-决策更新后，仅选了选项的旧草稿会清除选择，标题旁提示“已更新，原选项已清除”，不再计入待提交；没有填写的草稿静默清空。有自由文字时保留原文，批量提交前先确认新版本。讨论输入框保留草稿和编辑位置，经理追问提示原帖已更新，两个页签都可继续编辑或单独发送，单独追问使用当前版本。已结束的议题继续保留草稿查看和丢弃入口。手机采用相同规则。推荐选项保留“推荐”标记，直接点选项选择。
+待定决策更新后，已选的选项和已写的文字都保留，提示“决策已更新”，批量提交前先核对并确认新版本；没有填写的草稿静默清空。讨论输入框保留草稿和编辑位置，经理追问提示原帖已更新，两个页签都可继续编辑或单独发送，单独追问使用当前版本。已结束的议题继续保留草稿查看和丢弃入口。手机采用相同规则。推荐选项保留“推荐”标记，直接点选项选择。
 
 临时对话下方的“转给经理”按钮带发送图标，悬停说明会发送本议题的完整问答记录。转交的消息显示议题编号、标题和各方发言，请经理继续解答，不代表决策答复或执行授权。
 
@@ -634,7 +634,7 @@ The discussion icon in each console card header shows its reply count. A dot ind
 
 On phone, discussions open in a half-screen bottom drawer. Drag the handle up or use the expand icon for full screen; drag down to return to half screen, then again to close. Selecting the title closes the drawer and returns to its card. Discussions start expanded on both platforms and remember manual collapse choices. Follow-ups default to the existing temporary conversation, or to the manager when there is none; switch targets beside the input. Draft counts, submission with answers and ended-issue draft rules are unchanged. Inline discussions in the global suggestions window still start collapsed above 1,200 characters.
 
-When a decision changes, an old draft containing only an option selection is cleared with a compact hint beside the title and no longer counts as pending. Empty drafts clear silently. Drafts containing free text, including questions, retain their text and require confirmation of the new version before submission. Ended issues retain their existing draft review/discard flow. The phone follows the same rules. Recommended options retain their marker; select the option directly.
+When an open decision changes, existing choices and text are kept with a review prompt. Confirm the new version before submitting. Empty drafts clear silently. Ended issues retain their existing draft review/discard flow. The phone follows the same rules. Recommended options retain their marker; select the option directly.
 
 新建经理入口没有明确指定项目时，项目与目录一起恢复上次保存值；进入表单后仍可手动选择“无项目”。
 
@@ -667,3 +667,14 @@ With the system's reduce-motion setting on, these transitions are skipped and ch
 经理的 `dispatch.maxRunningLines` 是整个经理子树的并发上限，替代普通会话的直接子会话 8 条、整树 24 条默认保护；不计经理自身。新建工作线、恢复后开始新回合、`send` 唤起已结束的工作线执行同一检查。启动中、运行回合、等待审批或输入、后台任务、待接续都占一个名额，同一工作线只计一次；插话不重复占位，仅加载历史不占位。非经理会话仍使用 8/24 的默认上限；深度和单回合直接启动次数限制不变。超限错误会显示限制来源、当前数量和上限。
 
 A manager's `dispatch.maxRunningLines` replaces the ordinary 8-direct-child / 24-session-tree concurrency defaults for its entire subtree, excluding the manager itself. Starting a line, starting a new turn after resume, and waking an idle line with `send` share the same check. Starting sessions, active turns, waiting approvals or input, background work, and pending continuations each occupy one slot per line. Steering an active turn adds no slot; loading history alone adds none. Ordinary sessions retain the 8/24 defaults. Depth and per-turn direct-start limits still apply. Capacity errors identify the limit, current occupancy, and maximum.
+
+
+“请你做”请求可以选择“忽略”，填写选填理由后确认。忽略会移出待处理并进入“已忽略”分栏，经理会收到答复事件，明确知道您不准备做这件事；忽略不代表完成，也不同于经理取消。原有完成按钮和文字回复仍可使用，已处理请求可通过修改回复更新结果。旧设备不支持忽略时，入口禁用并提示升级设备服务。
+
+For you requests have an Ignore action with an optional reason. Confirming removes the request from pending and puts it under Ignored. The manager receives a response event stating that you chose not to do it; ignoring is neither completion nor cancellation by the manager. The existing completion button and text replies remain available. Edit a handled request’s response to update its outcome. On older devices, Ignore is disabled with an upgrade explanation.
+
+### 有效草稿与定位 / Active drafts
+
+侧栏和提交条只统计当前仍有效的草稿。决策已答复、关闭或删除时，遗留草稿保留在本机，但不计数、不提交；用户主动选择“修改答复”后写的当前版本草稿仍可提交。待定决策版本变化时保留选项和文字，提示“决策已更新”，核对确认后才能提交。点击桌面侧栏的草稿数量会打开决策页并定位底部提交条。手机使用相同的草稿状态规则。
+
+Sidebar and submit-bar counts include only active drafts. Drafts for answered, closed or deleted decisions stay locally but are neither counted nor submitted; an explicit edit of the current answer remains available. When an open decision changes, choices and text are kept for review before submission. Click the desktop sidebar draft count to open Decisions and focus the submit bar. Mobile uses the same draft-state rules.

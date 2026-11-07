@@ -104,6 +104,10 @@ export const enManager = {
   'manager.request.open': 'Open',
   'manager.request.delivered': 'Delivered',
   'manager.request.replied': 'Replied',
+  'manager.request.ignored': 'Ignored',
+  'manager.requestIgnoreNote':
+    'This request will leave the pending list. The manager will be told that you chose not to do it.',
+  'manager.feature.requestIgnore': 'Ignore For you requests',
   'manager.request.cancelled': 'Cancelled',
 
   'manager.responseTabs': 'Decision response',

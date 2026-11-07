@@ -65,8 +65,10 @@ function Versions({ info, loading }: { info: HarnessVersionView; loading: boolea
   const t = useT()
   const parts = [
     info.installed
-      ? t('install.installed', { version: info.installed })
-      : t('install.notInstalled'),
+      ? t(info.harness === 'agy' ? 'install.agy.installed' : 'install.installed', {
+          version: info.installed,
+        })
+      : t(info.harness === 'agy' ? 'install.agy.missing' : 'install.notInstalled'),
     info.verified ? t('install.verified', { version: info.verified }) : null,
     info.latest ? t('install.latest', { version: info.latest }) : null,
   ].filter((part): part is string => part !== null)
@@ -147,6 +149,7 @@ function Fallback(props: {
 }
 
 function offerLabel(offer: InstallOffer, t: ReturnType<typeof useT>): string {
+  if (offer.target === 'latest' && !offer.version) return t('install.latestOnlyBtn')
   if (offer.update) return t('install.update', { version: offer.version })
   return t(offer.target === 'verified' ? 'install.verifiedBtn' : 'install.latestBtn', {
     version: offer.version,
@@ -245,6 +248,30 @@ export function InstallRow({ device, harnessId, view, name, compact = false }: I
       {compact && phase !== 'failed' && phase !== 'manual' ? null : (
         <Versions info={info} loading={view.loading === 'latest'} />
       )}
+      {harnessId === 'agy' && !info.installed ? (
+        <div className="dim" data-agy-install-note>
+          {t('install.agy.note')}
+        </div>
+      ) : null}
+      {harnessId === 'agy' &&
+      device.harnesses.some(
+        (harness) => harness.id === harnessId && harness.state === 'disabled',
+      ) ? (
+        <div className="dim" data-agy-disabled>
+          {t('install.agy.disabled')}
+        </div>
+      ) : null}
+      {harnessId === 'agy' && info.installed && phase !== 'running' && phase !== 'failed' ? (
+        <button
+          type="button"
+          className="btn"
+          data-act="install-recheck"
+          disabled={rechecking}
+          onClick={() => void recheck()}
+        >
+          {t(rechecking ? 'install.rechecking' : 'install.checkAgain')}
+        </button>
+      ) : null}
       {phase === 'running' && job ? (
         <div className="inst-running" data-install-running>
           <span className="inst-now">

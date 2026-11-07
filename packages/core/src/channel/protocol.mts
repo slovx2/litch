@@ -1031,7 +1031,12 @@ export interface Commands {
     }
     result: { terminalId: string }
   }
-  /** 往终端里写：data 是 base64 的字节（键盘输入、粘贴的内容）。不等对面应答，按发的先后写进去 */
+  /** 用户确认输入状态不确定的提示后，恢复接受新的输入；不重放旧输入 */
+  'terminal.resumeInput': {
+    params: { deviceId: string; terminalId: string }
+    result: Record<string, never>
+  }
+  /** 往终端里写：data 是 base64 的字节；核心排队并逐批等对面确认，失败会暂停输入 */
   'terminal.write': {
     params: { deviceId: string; terminalId: string; data: string }
     result: Record<string, never>
@@ -1146,6 +1151,11 @@ export interface Commands {
   'files.requests': {
     params: { deviceId: string }
     result: { lists: Record<string, number>; reads: Record<string, number> }
+  }
+  /** 面板重新获得焦点：只补读仍在订阅的路径。 */
+  'files.reconcile': {
+    params: { deviceId: string; root: string }
+    result: undefined
   }
   // ---------- 差异面板 ----------
   // root 和文件面板的一样；path 是相对于根的路径（概况里给的那种）。核心自己核对路径落在根里面。

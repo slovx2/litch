@@ -448,45 +448,50 @@ export function PagedBoard({
               style={styles.filters}
               contentContainerStyle={styles.filterRow}
             >
-              {managerPageStates[kind].map((filter) => (
-                <Pressable
-                  key={filter}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: status === filter }}
-                  testID={`paging-filter:${filter}`}
-                  onPress={() => {
-                    clearLink()
-                    memory.filters[kind] = filter
-                    renderMemory((value) => value + 1)
-                  }}
-                  style={[
-                    styles.filter,
-                    {
-                      minHeight: hit,
-                      borderBottomColor: status === filter ? c.accent : 'transparent',
-                    },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      color: status === filter ? c.ink : c.ink2,
-                      fontSize: font.size.body,
-                      fontWeight: status === filter ? '600' : '400',
+              {managerPageStates[kind]
+                .filter(
+                  (state) =>
+                    kind !== 'request' || state !== 'ignored' || view.features.requestIgnore,
+                )
+                .map((filter) => (
+                  <Pressable
+                    key={filter}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: status === filter }}
+                    testID={`paging-filter:${filter}`}
+                    onPress={() => {
+                      clearLink()
+                      memory.filters[kind] = filter
+                      renderMemory((value) => value + 1)
                     }}
+                    style={[
+                      styles.filter,
+                      {
+                        minHeight: hit,
+                        borderBottomColor: status === filter ? c.accent : 'transparent',
+                      },
+                    ]}
                   >
-                    {t(managerPageLabel(kind, filter) as Parameters<typeof t>[0])}
-                  </Text>
-                  <Text
-                    style={{
-                      color: c.ink3,
-                      fontSize: font.size.meta,
-                      fontVariant: ['tabular-nums'],
-                    }}
-                  >
-                    {paging.summary.counts[kind][filter] ?? 0}
-                  </Text>
-                </Pressable>
-              ))}
+                    <Text
+                      style={{
+                        color: status === filter ? c.ink : c.ink2,
+                        fontSize: font.size.body,
+                        fontWeight: status === filter ? '600' : '400',
+                      }}
+                    >
+                      {t(managerPageLabel(kind, filter) as Parameters<typeof t>[0])}
+                    </Text>
+                    <Text
+                      style={{
+                        color: c.ink3,
+                        fontSize: font.size.meta,
+                        fontVariant: ['tabular-nums'],
+                      }}
+                    >
+                      {paging.summary.counts[kind][filter] ?? 0}
+                    </Text>
+                  </Pressable>
+                ))}
             </ScrollView>
             {tab === 'console' ? (
               <IconButton

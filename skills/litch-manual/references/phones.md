@@ -34,8 +34,10 @@ continue or cancel. Direct SSH remains available. Custom control servers have th
 
 正式 iOS/Android 包不提供开发深链、模拟/夹具启动方式或测试更新源。升级时清除旧开发设置，
 设备、SSH 密钥和普通偏好保留。开发者的 Release E2E 包使用显式构建开关，不能作为发布包分发。
+Android 发布产物还会检查包内构建档位，拒绝误用 E2E 包；深链不能在运行时开启该开关。
 Production iOS and Android builds do not expose development links, mock/fixture boot modes or test
 update feeds. Upgrades remove old development settings while retaining devices, SSH keys and normal preferences.
+Android release validation also rejects E2E artifacts. A link cannot enable the build-time switch.
 
 The Litch phone app connects over SSH to the same machines. Instead of copying keys by hand, a
 device the desktop already reaches can be added to the phone by scanning a QR code: the phone creates
@@ -180,6 +182,7 @@ iOS 不能安装下载的 APK。设置页提示通过安装应用的 App Store �
 iOS 不运行 Android 更新清单检查、下载或安装流程，也不显示自动检查与安装权限开关。
 
 iOS 终端底部的键盘按钮用于显示或收起系统键盘；“粘贴”从系统剪贴板插入文字。
+桌面和手机终端在断线、输入发送失败或重新接回已有终端时会暂停输入，提示部分输入可能未送达。未确认的输入不会自动重发，回车也不会继续发送。检查当前命令后点“已知悉，恢复输入”；若 shell 留有残缺命令，可先按 Ctrl+C 取消，再输入完整命令。恢复输入本身不会取消设备上正在运行的程序。
 终端尚在启动时点击键盘按钮，会在终端可输入后显示键盘，无需重复点击。
 终端可横屏显示；离开终端后恢复竖屏。
 首次读取其他应用复制的内容时，iOS 可能要求允许粘贴。多行内容遵守终端程序的括号粘贴模式。

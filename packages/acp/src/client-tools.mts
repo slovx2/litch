@@ -125,27 +125,32 @@ export function toolInstructions(raw: unknown): string {
   return sections.join('\n\n')
 }
 
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
 /**
- * agent 报的一次工具调用（tool_call，或权限请求里带的 toolCall）是不是这个会话的动态工具。ACP 不给工具名，
- * 只能看标题：各家把 MCP 工具写成“litch_<工具>”（OpenCode 等，和模型看到的名字一样）、
- * “<工具> (litch MCP Server)”（Gemini CLI、Qwen Code）、“mcp_litch_<工具>”“mcp__litch__<工具>”这几种。
- * 认不出的（比如 Gemini CLI 在参数里有 command 时把命令当标题）按普通工具画，调用进来时再认领（claimDynamic）。
+ * Gemini CLI 0.66 的标题不再带服务名；它在工具分派前把调用 ID 规范为“真实工具名__原始 ID”。
+ * 只认 ID 开头的完整工具名，不能从原始 ID、标题描述或参数里搜索名字；工具还必须属于当前会话。
+ * 没有这种 ID 时按旧 agent 的完整 MCP 标题认。身份无法确定的照普通工具审批，实际调用再认领。
  */
 export function matchDynamicTool(
   specs: readonly DynamicToolSpec[],
   toolCall: any,
 ): DynamicToolSpec | null {
+  // Litch MCP 工具都以 other 上报。命令和改文件即使标题碰巧同名，也不能借此免审批。
+  if (toolCall?.kind != null && toolCall.kind !== 'other') return null
+  const callId = typeof toolCall?.toolCallId === 'string' ? toolCall.toolCallId : ''
+  const identity = /^([A-Za-z0-9_-]+?)__(.+)$/s.exec(callId)
+  if (identity)
+    return specs.find((spec) => identity[1] === `mcp_${MCP_SERVER_NAME}_${spec.mcpName}`) ?? null
   const title = typeof toolCall?.title === 'string' ? toolCall.title : ''
-  if (!title.includes(MCP_SERVER_NAME)) return null
-  const server = escapeRegExp(MCP_SERVER_NAME)
   for (const spec of specs) {
-    const name = escapeRegExp(spec.mcpName)
-    const pattern = new RegExp(
-      `(?:^|[^A-Za-z0-9_-])(?:(?:mcp_{1,2})?${server}(?:__|_|\\.|/|:)${name}(?![A-Za-z0-9_-])|${name} \\(${server}\\b)`,
-    )
-    if (pattern.test(title)) return spec
+    const names = [
+      `${spec.mcpName} (${MCP_SERVER_NAME} MCP Server)`,
+      `mcp_${MCP_SERVER_NAME}_${spec.mcpName}`,
+      `mcp__${MCP_SERVER_NAME}__${spec.mcpName}`,
+      ...['_', '__', '.', '/', ':'].map(
+        (separator) => `${MCP_SERVER_NAME}${separator}${spec.mcpName}`,
+      ),
+    ]
+    if (names.includes(title)) return spec
   }
   return null
 }
@@ -306,7 +311,7 @@ export class ClientTools {
     return specs
   }
 
-  /** agent 报的这次工具调用是不是这个会话的动态工具（看标题，见 matchDynamicTool） */
+  /** agent 报的这次工具调用是不是这个会话的动态工具（调用 ID 或完整标题，见 matchDynamicTool） */
   detect(threadId: string, toolCall: unknown): DynamicToolSpec | null {
     const specs = this.specs(threadId)
     return specs.length ? matchDynamicTool(specs, toolCall) : null

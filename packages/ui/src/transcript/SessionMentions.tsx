@@ -72,7 +72,7 @@ export function SessionPill({
     )
   }
   const workspace = workspaces?.find((one) => one.id === summary.workspaceId)?.name
-  const about = [t.text(summary.title), nameOf(device, summary.harness), workspace]
+  const about = [t.text(summary.title), nameOf(device, summary.harness, t), workspace]
     .filter(Boolean)
     .join(' · ')
   return (

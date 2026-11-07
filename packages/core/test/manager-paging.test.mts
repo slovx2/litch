@@ -308,3 +308,20 @@ test('另一已加载页已经见到更高版本时，迟到答复不能倒退�
   assert.equal(view.paging?.summary.counts.decision.open, 65)
   assert.equal(view.paging?.pages['decision/all/newest']?.entries[0]?.revision, first.revision + 2)
 })
+
+test('删除已读决策后清掉详情缓存，页外草稿读取后可核对当前状态', async () => {
+  const f = fixture()
+  let view: Pick<ManagerBoardTopicView, 'board' | 'paging'> = { board: null }
+  const service = new PagedManagerBoard(f.host, f.manager.id, (next) => {
+    view = next
+  })
+  await service.refresh()
+  await service.detail('D-60')
+  assert.equal(view.board?.decisions[0]?.id, 'D-60')
+  f.decisions.splice(
+    f.decisions.findIndex((d) => d.id === 'D-60'),
+    1,
+  )
+  await service.refresh()
+  assert.equal(view.board?.decisions.length, 0, '已删除详情不能被旧 revision 拦住')
+})

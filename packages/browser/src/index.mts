@@ -6,6 +6,7 @@ export type {
   SignInPort,
 } from '../../automation-contracts/src/browser.mjs'
 export { browserToolsSpec } from '../../automation-contracts/src/litch/client-tools-browser.mjs'
+export { browserApprovalSubject } from './approval-subject.mjs'
 export { runBrowserActions } from './browser/batch.mjs'
 export { CdpRefused, isAllowedCdp } from './browser/cdp-allow.mjs'
 export type {

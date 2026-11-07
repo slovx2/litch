@@ -124,6 +124,7 @@ export function TerminalScreen({ route, navigation }: Props) {
   }, [channel, deviceId, current, size, info?.state, info?.rows, info?.cols])
 
   const running = info?.state === 'running'
+  const writable = running && !info?.inputBlocked
   const look = useMemo(() => termTheme(theme), [theme])
   const onSize = useCallback((rows: number, cols: number) => setSize({ rows, cols }), [])
   const onCtrlUsed = useCallback(() => setCtrl(false), [])
@@ -260,7 +261,7 @@ export function TerminalScreen({ route, navigation }: Props) {
             ref={view}
             deviceId={deviceId}
             terminalId={current}
-            running={running}
+            running={writable}
             theme={look}
             gapText={t('terminal.gap', { size: '{size}' })}
             rejoinedText={t('terminal.gap.rejoined', { size: '{size}' })}
@@ -275,13 +276,22 @@ export function TerminalScreen({ route, navigation }: Props) {
             online={online}
             failure={failure}
             onRestart={restart}
+            onResumeInput={() => {
+              if (!current) return
+              setFailure(null)
+              channel
+                .command('terminal.resumeInput', { deviceId, terminalId: current })
+                .catch((error: unknown) =>
+                  setFailure(t('terminal.failed.write', { reason: reasonOf(error, t) })),
+                )
+            }}
             onRetry={() => void open()}
           />
         </View>
         <KeyBar
           ctrl={ctrl}
           keyboard={keyboardOn}
-          disabled={!running}
+          disabled={!writable}
           bottom={keyboardShown ? 0 : insets.bottom}
           onKey={(k) => send({ t: 'key', k })}
           onText={(d) => send({ t: 'text', d })}
@@ -332,6 +342,7 @@ function StatusStrip({
   failure,
   onRestart,
   onRetry,
+  onResumeInput,
 }: {
   info: TerminalInfo | undefined
   hasTerminal: boolean
@@ -339,10 +350,12 @@ function StatusStrip({
   failure: string | null
   onRestart(): void
   onRetry(): void
+  onResumeInput(): void
 }) {
   const theme = useTheme()
   const t = useT()
   const { c } = theme
+  const inputPaused = info?.state === 'running' && info.inputBlocked
   let text: string | null = null
   /** 正在打开、正在启动：字前面一个小转圈 */
   let busy = false
@@ -350,6 +363,8 @@ function StatusStrip({
   if (failure) {
     text = failure
     if (!hasTerminal && online) action = { label: t('tools.term.retry'), onPress: onRetry }
+    else if (inputPaused && online)
+      action = { label: t('terminal.resumeInput'), onPress: onResumeInput }
   } else if (!hasTerminal) {
     if (!online) {
       return (
@@ -360,6 +375,9 @@ function StatusStrip({
     }
     text = t('tools.term.opening')
     busy = true
+  } else if (info?.state === 'running' && info.inputBlocked) {
+    text = t('terminal.inputBlocked')
+    if (online) action = { label: t('terminal.resumeInput'), onPress: onResumeInput }
   } else if (info && info.state !== 'running') {
     busy = info.state === 'starting'
     text =
@@ -379,11 +397,21 @@ function StatusStrip({
   if (!text) return null
   return (
     <View
-      style={[styles.strip, { backgroundColor: c.panel, borderTopColor: c.line2 }]}
+      style={[
+        styles.strip,
+        inputPaused && styles.inputPaused,
+        { backgroundColor: c.panel, borderTopColor: c.line2 },
+      ]}
       testID="terminal:status"
     >
       {busy ? <ActivityIndicator size="small" color={c.ink3} /> : null}
-      <Text style={[styles.stripText, { color: c.ink2, fontSize: theme.font.size.meta }]}>
+      <Text
+        style={[
+          styles.stripText,
+          inputPaused && styles.inputPausedText,
+          { color: c.ink2, fontSize: theme.font.size.meta },
+        ]}
+      >
         {text}
       </Text>
       {action ? <Button kind="plain" label={action.label} onPress={action.onPress} /> : null}
@@ -406,5 +434,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   stripText: { flex: 1 },
+  inputPaused: { flexDirection: 'column', alignItems: 'stretch' },
+  inputPausedText: { flex: 0 },
   cover: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center' },
 })

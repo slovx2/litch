@@ -1,3 +1,4 @@
+import { managerRequestStatus } from '@litch/core'
 // 议题正文：沿用对话 Markdown，#D-n 等编号点按跳转、长按看标题与状态。
 import { useContext } from 'react'
 import { Alert, Linking } from 'react-native'
@@ -32,7 +33,7 @@ export function Markdown({ text, situation }: { text: string; situation?: boolea
         const status = item
           ? t(`manager.status.${item.status}`)
           : request
-            ? t(`manager.request.${request.status}`)
+            ? t(`manager.request.${managerRequestStatus(request)}`)
             : decision
               ? t(
                   decision.status === 'open'

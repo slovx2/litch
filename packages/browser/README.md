@@ -50,6 +50,7 @@ const cookies = await restoreBrowserCookies({
 const host = createElectronHost({
   partition, autofillPreload: preloadPath, failurePage,
   blockedDownload: name => `Downloads are not supported: ${name}`,
+  // downloads: { stagingRoot, downloadsDirectory }：开启受控下载，不给就一律拦下
   // navigation: { rewrite: (page, url) => resolver.rewrite(page, url) },
 })
 const executor = createBrowserExecutor({
@@ -65,7 +66,7 @@ const executor = createBrowserExecutor({
 // 退出：await cookies.flush(); cookies.dispose(); host.dispose()。
 ```
 
-`partition` 必须专供本组件；该 session 会拒绝页面权限、下载与屏幕共享，并清空 session 级 preloads。不要传应用主界面的 session。这里复用 Chromium CDP 与 Electron session；不会把旧应用的 Cookie/密码目录迁移到新应用。Cookie 快照保留 session Cookie 和 CHIPS 键，使用私有控制页访问 Network，模型工具仍不能读取 Network/Storage。
+`partition` 必须专供本组件；该 session 会拒绝页面权限与屏幕共享，没开 `downloads` 时也拒绝下载，并清空 session 级 preloads。开了 `downloads` 时，下载先收进 `stagingRoot` 下的私有目录，`context.ask` 收到 `browserDownload` 审批，批准后才发布到 `downloadsDirectory`；接通用 `ApprovalPort` 的宿主用 `browserApprovalSubject` 转成 `{ kind: 'download' }`。退出前调用 `host.downloads?.dispose()` 清掉暂存区。不要传应用主界面的 session。这里复用 Chromium CDP 与 Electron session；不会把旧应用的 Cookie/密码目录迁移到新应用。Cookie 快照保留 session Cookie 和 CHIPS 键，使用私有控制页访问 Network，模型工具仍不能读取 Network/Storage。
 
 默认 Cookie 加密使用 Electron `safeStorage`，不可用时不保存明文。测试或有自己的密钥库的宿主可注入 `cipher`。日志钩子只通知保存失败，不携带 Cookie。站点策略可以传文件或 `SitePersistence`；不同产品必须使用不同实例和目录，禁止通过共用文件继承另一宿主的授权。
 

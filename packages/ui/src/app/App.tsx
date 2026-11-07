@@ -36,6 +36,7 @@ import {
   type ManagersRoute,
   onAssistantRequest,
   onDeviceRequest,
+  onManagerDraftsRequest,
   onManagersRequest,
   onNewSessionRequest,
   onOpenSessionRequest,
@@ -373,6 +374,23 @@ export function App() {
 
   // 别处要打开某个会话（浏览器的 show 留在别的会话上的提示，点“去看”）
   useEffect(() => onOpenSessionRequest(select), [select])
+  useEffect(
+    () =>
+      onManagerDraftsRequest((route) => {
+        const key = `${route.deviceId}:${route.managerId}`
+        setManagerLocations((was) => ({
+          ...was,
+          [key]: {
+            tab: 'decisions',
+            narrow: 'board',
+            settings: false,
+            draftFocus: (was[key]?.draftFocus ?? 0) + 1,
+          },
+        }))
+        select(route)
+      }),
+    [select],
+  )
 
   // 别处要直接进某台设备的详情（顶栏弹层里“不确认”那一行的“去设置”、侧栏设备行上的升级记号）
   useEffect(

@@ -35,6 +35,8 @@ export const replyFile = watched<Record<string, string>>('manager-replies.json')
 export const questionFile = watched<Record<string, string>>('manager-questions.json')
 /** 草稿开始写时议题的版本：议题在别处答复、关闭、忽略或取消后据此判断草稿已结束（core 的 *DraftState） */
 export const baseFile = watched<Record<string, number>>('manager-draft-revisions.json')
+/** 用户主动修改已有答复时的版本，普通遗留草稿不能借同版状态冒充修改。 */
+export const editFile = watched<Record<string, number>>('manager-answer-edits.json')
 
 /** 任一草稿文件写过就变 */
 export const draftVersion = () => version
@@ -50,7 +52,9 @@ export function clearDrafts(
   const replies = { ...replyFile.read() }
   const questions = { ...questionFile.read() }
   const bases = { ...baseFile.read() }
+  const edits = { ...editFile.read() }
   for (const key of keys) {
+    if (parts.choice || parts.reply) delete edits[key]
     if (parts.choice) delete choices[key]
     if (parts.reply) delete replies[key]
     if (parts.question) delete questions[key]
@@ -61,4 +65,5 @@ export function clearDrafts(
   replyFile.write(replies)
   questionFile.write(questions)
   baseFile.write(bases)
+  editFile.write(edits)
 }

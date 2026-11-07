@@ -21,6 +21,7 @@ import {
   type TurnStatus,
   type TurnView,
   turnAddition,
+  visibleProcessParts,
   workingShown,
 } from '@litch/core'
 import {
@@ -255,7 +256,8 @@ function SegmentBlock({
   const foldKey = first ? `p:${turn.id}` : `p:${turn.id}:${segment.key}`
   const [open, setOpen] = useFold(`${ref.deviceId}:${ref.sessionId}`, foldKey, autoOpen)
   const head = block.key === segment.key
-  if (settled && !open && !head) return null
+  const parts = visibleProcessParts(block.parts, settled && !open, segment.keepSteps)
+  if (parts.length === 0 && !head) return null
   return (
     <div className={settled ? 'proc' : 'proc live'}>
       {settled && head ? (
@@ -269,10 +271,10 @@ function SegmentBlock({
           onToggle={setOpen}
         />
       ) : null}
-      {settled && !open ? null : (
+      {parts.length === 0 ? null : (
         <div className="proc-body">
           <CiteScope {...ref} userId={userId}>
-            <ProcessParts {...ref} parts={block.parts} live={turn.status === 'running'} />
+            <ProcessParts {...ref} parts={parts} live={turn.status === 'running'} />
           </CiteScope>
         </div>
       )}
@@ -441,7 +443,7 @@ const Turn = memo(function Turn({
             aria-hidden={!working && !retry}
           >
             <i className="st run" />
-            <span>{t('turn.working', { name: nameOf(device, meta?.harness ?? '') })}</span>
+            <span>{t('turn.working', { name: nameOf(device, meta?.harness ?? '', t) })}</span>
             <TurnElapsed since={turn.startedAt} />
             {retry ? <span className="running-retry">{retryText(retry, t)}</span> : null}
           </div>

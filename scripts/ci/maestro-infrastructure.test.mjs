@@ -8,6 +8,19 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { fakeHealthAdb } from './android-health-fake.mjs'
 import { infrastructureRetryReason, recoverAdb } from './maestro-infrastructure.mjs'
 
+// 执行器会先读包内的 Expo 配置核对 E2E 档位：替身包要是带 assets/app.config 的真 ZIP。
+function fakeApk(apk) {
+  const staging = mkdtempSync(join(tmpdir(), 'litch-fake-apk-'))
+  mkdirSync(join(staging, 'assets'))
+  writeFileSync(
+    join(staging, 'assets', 'app.config'),
+    JSON.stringify({ extra: { litchE2E: true } }),
+  )
+  const zipped = spawnSync('zip', ['-q', '-X', '-r', apk, 'assets'], { cwd: staging })
+  rmSync(staging, { recursive: true, force: true })
+  assert.equal(zipped.status, 0, String(zipped.stderr))
+}
+
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 function temporary(t) {
   const directory = mkdtempSync(join(tmpdir(), 'litch-infra-test-'))
@@ -107,7 +120,7 @@ for (const [mode, attempts, exitCode, clipboard = false, restoreReverse = true] 
     const artifacts = join(directory, 'artifacts')
     const reverseState = join(directory, 'reverse.json')
     const apk = join(directory, 'input.apk')
-    writeFileSync(apk, 'fake')
+    fakeApk(apk)
     // 这三项验显式掉线恢复，不验每两秒的映射看护。只冻结执行器进程的 interval，
     // 不推进虚拟时间；setTimeout、ADB/Maestro 子进程和健康监测仍照常运行。
     // 避免慢机器上看护先补过一次，使“初始化 + 显式恢复”的计数混入第三次。
@@ -285,7 +298,7 @@ for (const mode of [
     const events = join(directory, 'events')
     writeFileSync(events, '')
     const apk = join(directory, 'app.apk')
-    writeFileSync(apk, 'fake')
+    fakeApk(apk)
     executable(
       join(android, 'platform-tools/adb'),
       `${fakeHealthAdb}\nhealthAdb(process.argv.slice(2));`,
@@ -355,7 +368,7 @@ test('模拟执行器保留首次失败，下一 flow 通过也不变绿，不�
   const summary = join(directory, 'summary.md')
   const artifacts = join(directory, 'artifacts')
   const apk = join(directory, 'input.apk')
-  writeFileSync(apk, 'fake')
+  fakeApk(apk)
   executable(
     join(android, 'platform-tools/adb'),
     `

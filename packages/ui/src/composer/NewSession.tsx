@@ -150,7 +150,7 @@ function PlaceBar({
         ? {
             note: t('newSession.looseNote', {
               device: t.text(device.name),
-              harness: nameOf(device, harness.id),
+              harness: nameOf(device, harness.id, t),
             }),
           }
         : {}),
@@ -282,7 +282,7 @@ function HarnessesDown({ device }: { device: DeviceView }) {
   return device.harnesses.map((entry) => (
     <div key={entry.id} className="new-why-row" data-harness={entry.id}>
       <span className="chip off">{entry.badge}</span>
-      <b>{entry.name}</b>
+      <b>{t.harness(entry.id, entry.name)}</b>
       <span className="grow">
         {t('harness.whyNext', {
           reason: entry.reason ? t.text(entry.reason) : t(`harness.state.${entry.state}`),
@@ -293,7 +293,7 @@ function HarnessesDown({ device }: { device: DeviceView }) {
             device={device}
             harnessId={entry.id}
             view={install}
-            name={entry.name}
+            name={t.harness(entry.id, entry.name)}
             compact
           />
         ) : null}
@@ -467,7 +467,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
         value={harness.id}
         options={offered.map((entry) => ({
           id: entry.id,
-          title: entry.name,
+          title: t.harness(entry.id, entry.name),
           ...(entry.state === 'ready'
             ? {}
             : entry.down === 'notInstalled'

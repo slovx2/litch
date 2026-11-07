@@ -45,10 +45,10 @@ export type ProcessPart =
 export type Block =
   | { type: 'user'; itemId: string }
   /**
-   * 最终回答：所有明确标为 final 的都保留；分不清阶段的取回合里最后一条助手消息。
-   * 空收尾前后的回答（answersAroundQuietWrapUp）可能是几条，每条一块
+   * 正文：所有明确标为 final 或分不清阶段的助手消息都保留在原位。
+   * 收尾前后的回答（answersAroundWrapUp）可能是几条，每条一块
    */
-  | { type: 'answer'; itemId: string }
+  | { type: 'answer'; itemId: string; unphased?: true }
   | { type: 'plan'; itemId: string }
   | { type: 'todo'; itemId: string }
   /** 上下文压缩：一条分隔线，一直露在外面（官方桌面端也是），压的时候写“正在压缩”，压完写“已压缩” */
@@ -117,17 +117,15 @@ export function bucketItems(items: BlockInput[], options: BucketOptions = {}): B
   // 只留收尾带出来的卡片（建议、问题）
   if (shown[0]?.kind === 'userMessage' && shown[0].remind === true)
     return remindBlocks(shown, options)
-  // 同一回合里可能先给出结论，再处理插入的会话消息并补一句回答。
-  // 后一条 final 不能把此前的正式结论降为过程说明。
+  // 没有原生 commentary 标记的文字都留作正文，不能靠末尾短答推断前面的内容是过程。
   const answers = new Set(
     shown
       .filter(
-        (item) => item.kind === 'agentMessage' && item.phase === 'final' && item.card === undefined,
+        (item) =>
+          item.kind === 'agentMessage' && item.phase !== 'commentary' && item.card === undefined,
       )
       .map((item) => item.id),
   )
-  const last = answerOf(shown)
-  if (last !== undefined) answers.add(last)
   for (const id of answersAroundWrapUp(items)) answers.add(id)
   const blocks: Block[] = []
   const tail: string[] = []
@@ -152,7 +150,11 @@ export function bucketItems(items: BlockInput[], options: BucketOptions = {}): B
     } else if (item.card === 'outside') {
       blocks.push({ type: 'card', itemId: item.id })
     } else if (answers.has(item.id)) {
-      blocks.push({ type: 'answer', itemId: item.id })
+      blocks.push({
+        type: 'answer',
+        itemId: item.id,
+        ...(item.phase !== 'final' && item.phase !== 'commentary' ? { unphased: true } : {}),
+      })
     } else if (item.card === 'inline') {
       process(item.id).push({ type: 'card', itemId: item.id })
     } else if (item.kind === 'agentMessage') {
@@ -204,23 +206,42 @@ export interface ProcessSegment {
   answerIds: string[]
   /** 后面已经出现新的用户消息。压缩、计划等分隔不结束这一段。 */
   closed: boolean
+  /** 本段有阶段不明的正文：工具组留在原位，仅各组内容收起，不能整段隐藏。 */
+  keepSteps: boolean
 }
 
 /** 只在用户消息处断开。待办、卡片等仍露在原处，不增加摘要行。 */
 export function processSegments(blocks: Block[]): Map<string, ProcessSegment> {
   const segments = new Map<string, ProcessSegment>()
   let current: ProcessSegment | undefined
+  let keepSteps = false
   for (const block of blocks) {
     if (block.type === 'user') {
       if (current) current.closed = true
       current = undefined
+      keepSteps = false
     } else if (block.type === 'process') {
-      current ??= { key: block.key, itemIds: [], answerIds: [], closed: false }
+      current ??= { key: block.key, itemIds: [], answerIds: [], closed: false, keepSteps }
       current.itemIds.push(...processItemIds(block.parts))
       segments.set(block.key, current)
-    } else if (block.type === 'answer') current?.answerIds.push(block.itemId)
+    } else if (block.type === 'answer') {
+      keepSteps ||= block.unphased === true
+      if (current) {
+        current.keepSteps = keepSteps
+        current.answerIds.push(block.itemId)
+      }
+    }
   }
   return segments
+}
+
+/** 收起过程时，阶段不明的正文之间仍保留各工具组摘要；明确的过程说明照旧隐藏。 */
+export function visibleProcessParts(
+  parts: ProcessPart[],
+  folded: boolean,
+  keepSteps: boolean,
+): ProcessPart[] {
+  return folded ? (keepSteps ? parts.filter((part) => part.type === 'steps') : []) : parts
 }
 
 /** 分段后只用完整记录的条目时间，不拿整回合耗时充当每段耗时。 */

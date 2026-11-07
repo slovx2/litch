@@ -324,7 +324,7 @@ function TitleDialog({
                 </span>
                 <span className="dim search-result-meta" title={session.cwd}>
                   {device ? t.text(device.name) : deviceId} · {project} ·{' '}
-                  {nameOf(device, session.harness)}
+                  {nameOf(device, session.harness, t)}
                 </span>
               </button>
             )

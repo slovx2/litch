@@ -65,7 +65,7 @@ export function ManagerTitleBar({
           </>
         ) : null}
         {manager ? (
-          <span className="chip" title={nameOf(device, child?.harness ?? manager.harness)}>
+          <span className="chip" title={nameOf(device, child?.harness ?? manager.harness, t)}>
             {badgeOf(device, child?.harness ?? manager.harness)}
           </span>
         ) : null}

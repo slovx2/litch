@@ -4,6 +4,7 @@ import { appendFileSync, readFileSync } from 'node:fs'
 import { posix } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
+import { toolingDomains } from './ci/impact-tooling.mjs'
 import { verifyPatchBase } from './ci/release-patch-base.mjs'
 import { selectNightlyBase } from './ci-nightly-base.mjs'
 
@@ -37,6 +38,8 @@ const patchPolicyFiles = new Set([
   '.github/workflows/gate.yml',
   'scripts/ci-impact.mjs',
   'scripts/ci-impact.test.mjs',
+  'scripts/ci/impact-tooling.mjs',
+  'scripts/ci/impact-history.json',
   'scripts/release-policy.mjs',
   'scripts/release-policy.test.mjs',
   'scripts/ci/release-patch-base.mjs',
@@ -49,17 +52,10 @@ const patchPolicyFiles = new Set([
 ])
 
 // 客户端权限记忆只消费设备协议，不实现设备持久化或引擎权限执行。
-// 精确到模块及其验收；其他 core 文件仍按跨领域处理。
-const patchClientFiles = new Set([
-  'packages/core/src/device/project-permissions.mts',
-  'packages/core/test/project-permissions.test.mts',
-  'packages/core/test/project-permission-failures.test.mts',
-  'scripts/check-permission-ui.mjs',
-  // 只构造客户端差异测试输入，不改差异实现或设备文件访问。
-  'packages/core/test/diff-cap.test.mts',
-])
+// 精确到产品模块；测试、夹具和验收入口统一由 toolingDomains 归属。
+const patchClientFiles = new Set(['packages/core/src/device/project-permissions.mts'])
 
-export function patchAffectedDomains(paths, { trustedBase, versionOnly = [] }) {
+export function patchAffectedDomains(paths, { trustedBase, versionOnly = [] } = {}) {
   if (!trustedBase) throw new Error('修复版必须有已核验的正式祖先基线')
   const selected = new Set()
   const reasons = []
@@ -108,11 +104,25 @@ export function affectedDomains(
       continue
     }
     if (/^(docs\/|skills\/|README\.md$|CHANGELOG\.md$|LICENSE$)/.test(path)) continue
-    // 锁文件、包配置、共享协议/核心、设备/SSH、适配器里的 Chrome 转发库、构建脚本都跨领域，宁可多跑。
+    // 先守住包配置，再识别测试归属，不能因 package.json 位于 test/ 下面就豁免依赖。
+    if (/(^|\/)(package(-lock)?\.json|Cargo\.lock|go\.(mod|sum))$/.test(path)) {
+      all(`依赖或包配置：${path}`)
+      continue
+    }
+    const tooling = toolingDomains(path)
+    if (tooling) {
+      for (const domain of tooling) selected.add(domain)
+      reasons.push(`测试、夹具或验收归属（${tooling.join('、')}）：${path}`)
+      continue
+    }
+    if (path.startsWith('scripts/')) {
+      all(`共享或未明确归属的脚本，保守全量：${path}`)
+      continue
+    }
+    // 共享协议/核心产品代码、自动化公共合同、设备/SSH、适配器里的 Chrome 转发库、构建脚本都跨领域，宁可多跑。
     // protocol 的 src 和 test 都在范围内；CI unit 的 npm run check 执行全部协议单测。
     if (
-      /(^|\/)(package(-lock)?\.json|Cargo\.lock|go\.(mod|sum))$/.test(path) ||
-      /^(packages\/(shared|core|protocol|device)\/|protocol\/|cmd\/|chromebridge\/|sshserver\/|\.github\/|scripts\/)/.test(
+      /^(packages\/(shared|core|protocol|device|automation-contracts)\/|protocol\/|cmd\/|chromebridge\/|sshserver\/|\.github\/)/.test(
         path,
       )
     ) {

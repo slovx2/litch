@@ -3,17 +3,22 @@ import {
   keys,
   liveManagerDrafts,
   managerAttentionCount,
+  pagedDraftBoard,
   type SessionChildren,
   type SessionSummary,
 } from '@litch/core'
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
-import type { ManagerBoardTopicView, ManagerView } from '../../../core/src/model-manager.mts'
+import type {
+  ManagerBoardTopicView,
+  ManagerObjectId,
+  ManagerView,
+} from '../../../core/src/model-manager.mts'
 import type { Selection } from '../app/App.tsx'
-import { requestManagers } from '../app/actions.ts'
+import { requestManagerDrafts, requestManagers } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { badgeOf, nameOf, wireStyle } from '../app/device.ts'
 import { Caret, Forward } from '../app/icons.tsx'
-import { useKey, useKeys } from '../app/services.tsx'
+import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { containsSession, revealRow } from '../sidebar/reveal.ts'
 import { useSidebarReveal } from '../sidebar/reveal-context.ts'
 import { managerPendingTitle, managerStateText, sessionMark } from '../sidebar/session-mark.ts'
@@ -38,6 +43,7 @@ function ManagerRow({
   reveal: Selection | null
 }) {
   const t = useT()
+  const { replica, channel } = useServices()
   const kids = useKey<SessionChildren>(keys.children(manager.deviceId))
   const lines = kids?.[manager.threadId]?.length ?? 0
   // 和普通对话的父子树一样默认收起，下面一行“› N 个子会话”。展开了哪些照“最近 / 未读”的投影记在侧栏状态里
@@ -74,11 +80,54 @@ function ManagerRow({
     requests: Object.values(requests),
     posts: Object.values(posts),
   }
-  // 有本地草稿时才读看板：议题在别处答复、关闭、忽略或取消后，那份草稿不算（看板没到时先全算）
+  // 键订阅只读副本缓存，不会打开看板。即使从没进入经理页，也要为草稿持有实时看板订阅。
+  const hasDrafts = liveManagerDrafts(null, local).count > 0
+  useEffect(() => {
+    if (hasDrafts) return replica.openManagerBoard(manager.deviceId, manager.id)
+  }, [hasDrafts, replica, manager.deviceId, manager.id])
   const [view] = useKeys<ManagerBoardTopicView>(
-    liveManagerDrafts(null, local).count ? [keys.managerBoard(manager.deviceId, manager.id)] : [],
+    hasDrafts ? [keys.managerBoard(manager.deviceId, manager.id)] : [],
   )
-  const count = liveManagerDrafts(view?.board, local).count
+  const draftBoard = view?.board
+    ? view.paging
+      ? pagedDraftBoard(
+          view.board,
+          Object.values(view.paging.pages).flatMap((page) => page.entries),
+        )
+      : view.board
+    : null
+  // 页外草稿按对象补读；未知时不计数，但绝不删除本地内容。已读详情由核心随看板通知对账。
+  const fetched = useRef(new Set<string>())
+  useEffect(() => {
+    if (!view?.paging || !draftBoard || device?.connection !== 'online') return
+    const known = new Set(
+      [...draftBoard.decisions, ...(draftBoard.requests ?? []), ...(draftBoard.posts ?? [])].map(
+        (one) => one.id,
+      ),
+    )
+    for (const id of [...Object.keys(drafts), ...Object.keys(requests), ...Object.keys(posts)]) {
+      if (known.has(id) || fetched.current.has(id)) continue
+      fetched.current.add(id)
+      void channel
+        .command('managers.board.detail', {
+          deviceId: manager.deviceId,
+          managerId: manager.id,
+          id: id as ManagerObjectId,
+        })
+        .catch(() => {})
+    }
+  }, [
+    view?.paging,
+    draftBoard,
+    device?.connection,
+    drafts,
+    requests,
+    posts,
+    channel,
+    manager.deviceId,
+    manager.id,
+  ])
+  const count = draftBoard ? liveManagerDrafts(draftBoard, local).count : 0
   const attention = managerAttentionCount(manager)
   // 记号只说经理会话自己（回合、后台任务），和普通会话行同一套；工作线在跑另用文字写明，
   // 不借用经理自己的“运行中”（工作线各自的记号在下面的子行上）。
@@ -132,7 +181,7 @@ function ManagerRow({
             <span
               className="chip"
               title={[
-                nameOf(device, manager.harness),
+                nameOf(device, manager.harness, t),
                 device ? t.text(device.name) : manager.deviceId,
               ]
                 .filter(Boolean)
@@ -164,13 +213,25 @@ function ManagerRow({
                   {state}
                 </span>
               ) : null}
-              {count ? (
-                <span className="mg-attention" data-manager-draft-count>
-                  {t('manager.draftCount', { n: count })}
-                </span>
-              ) : null}
             </small>
           </button>
+          {count ? (
+            <button
+              type="button"
+              className="mg-sidebar-drafts mg-attention"
+              data-manager-draft-count
+              title={t('manager.locateDraft')}
+              onClick={() =>
+                requestManagerDrafts({
+                  deviceId: manager.deviceId,
+                  sessionId: manager.threadId,
+                  managerId: manager.id,
+                })
+              }
+            >
+              {t('manager.draftCount', { n: count })}
+            </button>
+          ) : null}
           {lines > 0 ? (
             <button
               type="button"

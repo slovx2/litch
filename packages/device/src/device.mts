@@ -570,6 +570,7 @@ export class DeviceServer {
       EXTENSION.managerFeedback,
       EXTENSION.managerPosts,
       EXTENSION.managerIgnore,
+      EXTENSION.managerRequestIgnore,
       EXTENSION.managerPaging,
       EXTENSION.suggestionInbox,
     )

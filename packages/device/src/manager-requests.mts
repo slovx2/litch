@@ -97,7 +97,9 @@ export function submitRequests(
           : !Number.isSafeInteger(entry.revision) ||
               typeof entry.delivered !== 'boolean' ||
               typeof entry.text !== 'string' ||
-              (!entry.delivered && !entry.text.trim()) ||
+              (entry.ignored !== undefined && typeof entry.ignored !== 'boolean') ||
+              (entry.ignored === true && entry.delivered) ||
+              (!entry.delivered && !entry.ignored && !entry.text.trim()) ||
               entries.filter((one) => one.requestId === entry.requestId).length !== 1
             ? 'invalidRequest'
             : null
@@ -116,7 +118,12 @@ export function submitRequests(
       ...request,
       revision: request.revision + 1,
       status: entry.delivered ? 'delivered' : 'replied',
-      response: { delivered: entry.delivered, text: entry.text, at },
+      response: {
+        delivered: entry.delivered,
+        text: entry.text,
+        at,
+        ...(entry.ignored ? { ignored: true } : {}),
+      },
       updatedAt: at,
     }
     result.acceptedRequests.push(
@@ -126,7 +133,11 @@ export function submitRequests(
         request,
         after,
         'user',
-        entry.delivered ? 'User delivered the request' : 'User replied to the request',
+        entry.ignored
+          ? 'User ignored the request'
+          : entry.delivered
+            ? 'User delivered the request'
+            : 'User replied to the request',
       ).object,
     )
   }

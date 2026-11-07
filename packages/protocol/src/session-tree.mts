@@ -512,7 +512,7 @@ export function formatSessionEvent(event: SessionEvent): string {
       ),
       ...(manager.requests ?? []).map(
         (request) =>
-          `For you ${request.requestId} ${JSON.stringify(request.title)}: delivered=${request.delivered}; ${JSON.stringify(request.text)}`,
+          `For you ${request.requestId} ${JSON.stringify(request.title)}: delivered=${request.delivered};${request.ignored ? ' ignored=true (the user chose not to do this);' : ''} ${JSON.stringify(request.text)}`,
       ),
       manager.text,
       `<!-- ${JSON.stringify(event).replace(/>/g, '\\u003e')} -->`,
@@ -654,7 +654,9 @@ function validManagerEvent(event: SessionEvent): boolean {
             typeof request.title === 'string' &&
             (request.buttonLabel === null || typeof request.buttonLabel === 'string') &&
             typeof request.text === 'string' &&
-            typeof request.delivered === 'boolean',
+            typeof request.delivered === 'boolean' &&
+            (request.ignored === undefined || typeof request.ignored === 'boolean') &&
+            !(request.ignored && request.delivered),
         ))) &&
     (data.questions === undefined ||
       (Array.isArray(data.questions) &&

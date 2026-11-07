@@ -78,7 +78,11 @@ export const editable = (device: DeviceView, _column: SwitchColumn, state: CellS
 /** 设备详情里一行摘要：全开、全关、只对哪几个开着；不知道是 null */
 export type Summary = { kind: 'all' } | { kind: 'none' } | { kind: 'some'; names: string[] } | null
 
-export function summaryOf(device: DeviceView, column: SwitchColumn): Summary {
+export function summaryOf(
+  device: DeviceView,
+  column: SwitchColumn,
+  label: (id: string, name: string) => string = (_id, name) => name,
+): Summary {
   const state = deviceCell(device, column)
   if (state === 'unknown') return null
   if (state === 'on') return { kind: 'all' }
@@ -87,6 +91,6 @@ export function summaryOf(device: DeviceView, column: SwitchColumn): Summary {
     kind: 'some',
     names: harnessRows(device)
       .filter((row) => row.switches[column] === true)
-      .map((row) => row.name),
+      .map((row) => label(row.id, row.name)),
   }
 }

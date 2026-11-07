@@ -173,7 +173,9 @@ export async function serviceSession(svc: string, opening: string): Promise<Serv
   await until('接回来了', () => kit.tabs()[0]?.state === 'running', 90_000)
   await kit.see('断线前后的输出都在', /\nafter-drop-42/, 60_000)
   await kit.prompt()
-  const rejoined = !one('.term-status')
+  const rejoined = Boolean(one('[data-tool="resume-input"]'))
+  one<HTMLElement>('[data-tool="resume-input"]')?.click()
+  await until('确认重连后的终端输入', () => !one('[data-tool="resume-input"]'))
   const earlierKept = kit.rows().includes('Hello-42') && kit.rows().includes('go-2')
   const replayedOnce = kit.screen().split('\nafter-drop-42').length === 2
   kit.run('echo still-$((1+1))')
