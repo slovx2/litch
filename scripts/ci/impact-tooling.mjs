@@ -45,6 +45,7 @@ for (const path of [
 ])
   add(owners, path, client)
 add(owners, 'scripts/check-manager-session-open.mjs', ['client'])
+add(owners, 'scripts/check-sidebar-projections.mjs', ['client'])
 add(owners, 'scripts/check-recent-mobile.mjs', ['mobile'])
 
 export function toolingDomains(path) {

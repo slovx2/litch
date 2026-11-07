@@ -244,3 +244,22 @@ test('提交的真实账本有效，手机排除不污染审批次数', () => {
   )
   validateLedger(data)
 })
+
+test('侧栏投影按用户批准退出 Full：保留历史，后续登记也不再计数', () => {
+  const data = JSON.parse(
+    readFileSync(new URL('../../docs/ci/flaky-ledger.json', import.meta.url), 'utf8'),
+  )
+  const item = data.cases.find(
+    (one) => one.job === 'native / checks' && one.test === 'client:projections',
+  )
+  assert.ok(item)
+  assert.equal(item.status, 'excluded')
+  assert.match(item.exclusion.reason, /已移出 Full（用户 D-98 批准，2026-11-07）/)
+  assert.ok(item.events.length >= 4, '保留原有失败与重跑记录')
+  assert.equal(counts(item).count, 0)
+  const next = recordEvent(data, entry())
+  const updated = next.cases.find((one) => one.job === item.job && one.test === item.test)
+  assert.equal(updated.status, 'excluded')
+  assert.equal(counts(updated).count, 0)
+  assert.match(summary(next), /client:projections：0 次；待核实 0 次；已排除，不计数/)
+})

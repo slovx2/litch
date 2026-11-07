@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
+import { nightlyChecks } from '../../apps/desktop/scripts/nightly-checks.mjs'
 import { hasMacCoverage } from '../full-proof.mjs'
 import { checkNativeProof, nativePlan, selectedNative } from './mac-native-plan.mjs'
 import { signingState, waitForSigning } from './mac-priority.mjs'
@@ -76,7 +78,7 @@ test('等待有界，不重跑签名或产品检查；完成后才返回', async
 })
 
 test('合并保留窗口检查与原生CU；浏览器按CI覆盖，手机/未知域不能混入Mac', () => {
-  assert.equal(nativePlan(['client']).checks.length, 28)
+  assert.equal(nativePlan(['client']).checks.length, 27)
   assert.ok(
     nativePlan(['client']).checks.some((check) => check.id === 'client:browser:persistence'),
   )
@@ -242,4 +244,38 @@ test('签名一直queued或执行不结束，聚合状态queued也须在固定�
     assert.equal(time, 30_000)
     assert.equal(reads, 2)
   }
+})
+
+test('侧栏投影只保留本地命令，Full 与夜间清单均不执行，其他窗口验收仍在', () => {
+  const plan = nativePlan(['client']).checks
+  assert.ok(!plan.some((check) => check.id === 'client:projections'))
+  assert.ok(
+    !nightlyChecks.some(
+      ([id, ...args]) =>
+        id === 'projections' || args.includes('scripts/check-sidebar-projections.mjs'),
+    ),
+  )
+  for (const id of [
+    'client:sidebar',
+    'client:compose',
+    'client:user-bubble',
+    'client:remote:service',
+  ])
+    assert.ok(
+      plan.some((check) => check.id === id),
+      id,
+    )
+  const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
+  assert.equal(
+    pkg.scripts['client:check:projections'],
+    'node scripts/check-sidebar-projections.mjs',
+  )
+  assert.match(
+    readFileSync(new URL('../check-sidebar-projections.mjs', import.meta.url), 'utf8'),
+    /侧栏投影验收/,
+  )
+  assert.doesNotMatch(
+    readFileSync(new URL('../../.github/workflows/mac-native.yml', import.meta.url), 'utf8'),
+    /LITCH_PROJECTIONS_OUTPUT|sidebar-projections/,
+  )
 })

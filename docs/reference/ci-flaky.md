@@ -70,3 +70,20 @@ node --test scripts/ci/flaky-ledger.test.mjs
 核对 #33–#36，以及 API 返回的全部五次夜间 Full（2026-11-03 至 2026-11-06 UTC）。
 不是所有历史手动 Full 的完整普查。实际记录、来源及待核实情况见账本 `audit` 和各事件。
 投影的不同 CDP 失败按 `native / checks + client:projections` 归并，重跑不重复计数。
+
+
+## 侧栏投影改为本地按需验收
+
+2026-11-07 用户在 D-98 批准移出 `client:projections`。它原由 Full 的
+`native / checks` → `nativePlan(['client'])` → `nightlyChecks` 进入固定窗口检查，
+`check:nightly` 也复用这份清单；现从清单移除，仅保留脚本与
+`npm run client:check:projections` 本地入口。其余窗口检查与门禁不变。
+账本保留全部历史，标记 `excluded` 并记录批准依据，不再累计审批次数。
+
+改动**侧栏、会话树、未读、运行中标识、置顶分组、设备色块**相关代码后，
+在本地运行 `npm run client:check:projections`。先安装根目录与 UI 依赖
+（`npm ci`、`npm ci --prefix packages/ui`），准备隔离的 Chrome for Testing；
+可以用 `LITCH_CHROME_BINARY` 指定路径，否则脚本查找本机 Playwright 缓存中的 CFT。
+脚本自动启动回环 Vite，使用独立临时 profile 和隐藏浏览器，不操作用户浏览器。
+也可以用 `LITCH_PROJECTIONS_UI` 指向已启动的回环夹具。
+此调整只改变运行位置，不删除或放宽验收断言；本地失败仍须排查后交付。

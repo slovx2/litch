@@ -259,7 +259,7 @@
     {
       "job": "native / checks",
       "test": "client:projections",
-      "status": "active",
+      "status": "excluded",
       "events": [
         {
           "runId": 42232742291,
@@ -334,6 +334,10 @@
           }
         }
       ],
+      "exclusion": {
+        "reason": "已移出 Full（用户 D-98 批准，2026-11-07）；保留本地按需验收，历史不再计数。",
+        "reference": "docs/reference/ci-flaky.md#侧栏投影改为本地按需验收"
+      },
       "issues": ["https://github.com/slovx2/litch/issues/34"]
     }
   ],

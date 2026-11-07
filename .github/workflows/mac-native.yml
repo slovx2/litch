@@ -52,8 +52,6 @@ jobs:
             ${{ github.workspace }}/.artifacts/electron-cache
           key: mac-native-v3-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/package-lock.json') }}
       - name: 同一套准备与完整Mac检查，不重试
-        env:
-          LITCH_PROJECTIONS_OUTPUT: ${{ runner.temp }}/sidebar-projections
         run: node scripts/ci/prepare-mac-native.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
@@ -62,11 +60,3 @@ jobs:
           path: mac-native-proof.json
           if-no-files-found: error
           retention-days: 14
-      - name: 保存侧栏投影失败现场
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: sidebar-projections-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/sidebar-projections
-          if-no-files-found: warn
-          retention-days: 7

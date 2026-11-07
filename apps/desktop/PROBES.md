@@ -15,15 +15,18 @@
 
 原 `client:check:packed` 仍保留完整的包内启动、长发送探针和远程连接；打包、入口与远程相关变更可继续跑它。小门禁的最小要求是上表的签名后启动命令，由发布工作流负责接入。
 
+## 本地按需验收
+
+`npm run client:check:projections` 不再进入 Full 或 `check:nightly`。改动侧栏、会话树、未读、运行中标识、置顶分组或设备色块后，在本地运行此命令；原脚本与断言保持不变。依赖和隔离 Chrome for Testing 的准备方式见 [侧栏投影本地验收](../../docs/reference/ci-flaky.md#侧栏投影改为本地按需验收)。
+
 ## 夜间全量或按影响范围
 
-以下原命令继续保留完整断言。`node apps/desktop/scripts/check-nightly.mjs` 按 Full 的 client job 顺序运行同一组窗口检查，只构建 UI/桌面一次；不自动重试，逐项报告失败和耗时。依赖、Pi、device、Go CLI 及隔离 Chrome 须事先准备。
+以下原命令继续保留完整断言。`node apps/desktop/scripts/check-nightly.mjs` 按 Full 的 native / checks 中 client 领域顺序运行同一组窗口检查，只构建 UI/桌面一次；不自动重试，逐项报告失败和耗时。依赖、Pi、device、Go CLI 及隔离 Chrome 须事先准备。
 
 | 命令 `client:check:*` | 受影响时至少加跑 |
 | --- | --- |
 | `scroll`、`scroll:entry` | Transcript、窗口化/分页、流式增量、布局和滚动补偿 |
 | `compose`、`compose:entry` | 输入框、请求卡片、草稿、附件、提问、计划、分叉/编辑、评论 |
-| `projections` | 侧栏投影、未读/最近/活动、选中与跨组定位 |
 | `full`、`sidebar` | 聚合设备、多 harness、侧栏/工作区/菜单、声明能力 |
 | `manage`、`harness-settings` | 设备设置、harness 开关/重启、设置冲突、运行时信息 |
 | `settings`、`text-scale` | 主题/字号/缩放、菜单、语言、布局边界 |

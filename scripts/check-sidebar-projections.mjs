@@ -1,4 +1,6 @@
 // 侧栏投影验收。自动启动回环 Vite，只控制自己创建的 headless CFT。
+// 不进 Full/check:nightly。改动侧栏、会话树、未读、运行中标识、置顶分组或设备色块后，
+// 在本地运行 npm run client:check:projections；准备方式见 docs/reference/ci-flaky.md。
 // 用法：node scripts/check-sidebar-projections.mjs；也可用 LITCH_PROJECTIONS_UI 指向已启动的回环夹具。
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
