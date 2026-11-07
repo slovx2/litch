@@ -1273,17 +1273,25 @@ export async function managerProbe(captureQuestions = false): Promise<ManagerSee
     '看板建议卡',
     () => one('.suggestion-row [data-proposal]') ?? one('.suggestion-row[data-proposal]'),
   )
-  const briefSummary = suggestionCard?.querySelector('[data-part="summary"]')?.textContent
-  const briefClosed = Boolean(briefSummary) && !suggestionCard?.querySelector('[data-part="task"]')
-  suggestionCard?.querySelector<HTMLElement>('.prop-more')?.click()
-  const briefOpened = await until('建议完整简报展开', () =>
-    suggestionCard?.querySelector('[data-part="task"]'),
+  // 看板建议卡是 PostCard：收起时只有一行摘要、正文隐藏；卡头按钮开合，展开后背景、任务分段显示
+  const postToggle = () =>
+    suggestionCard?.querySelector<HTMLElement>('[data-act="post-collapse"]')?.click()
+  const postFolded = () =>
+    suggestionCard?.getAttribute('data-post-collapsed') === 'true' &&
+    Boolean(suggestionCard.querySelector('.mg-post-summary')?.textContent?.trim()) &&
+    Boolean(suggestionCard.querySelector<HTMLElement>('.mg-post-body')?.hidden)
+  if (suggestionCard?.getAttribute('data-post-collapsed') !== 'true') postToggle()
+  const briefClosed = Boolean(await until('建议卡收起只剩摘要', postFolded))
+  postToggle()
+  const briefOpened = await until(
+    '建议完整简报展开',
+    () =>
+      suggestionCard?.getAttribute('data-post-collapsed') === 'false' &&
+      !suggestionCard.querySelector<HTMLElement>('.mg-post-body')?.hidden &&
+      suggestionCard.querySelector('[data-part="task"]'),
   )
-  suggestionCard?.querySelector<HTMLElement>('.prop-more')?.click()
-  const briefRefolded = await until(
-    '建议简报收回摘要',
-    () => !suggestionCard?.querySelector('[data-part="task"]'),
-  )
+  postToggle()
+  const briefRefolded = await until('建议简报收回摘要', postFolded)
   const panels =
     briefClosed &&
     Boolean(briefOpened) &&
