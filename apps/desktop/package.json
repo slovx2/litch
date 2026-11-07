@@ -58,6 +58,7 @@
     "check:browser": "node scripts/check-browser.mjs && node scripts/check-browser.mjs --popups && node scripts/check-browser.mjs --popups-ui && node scripts/check-browser.mjs --ui",
     "test:manual-skill": "node scripts/test-manual-skill.mjs",
     "test:log-file": "node scripts/test-log-file.mjs",
+    "test:updater": "node scripts/test-updater.mjs",
     "test:file-save": "node scripts/test-file-save.mjs",
     "test:view-files": "node scripts/test-view-files.mjs",
     "test:approvals": "node scripts/test-approvals.mjs",

@@ -82,22 +82,21 @@ export function UpdateBlock() {
             >
               {t('settings.update.install')}
             </button>
-          ) : (
-            <button
-              type="button"
-              className="mini"
-              data-act="update-check"
-              disabled={busy}
-              onClick={() => {
-                void bridge.check().then(
-                  (got) => got && setView(got),
-                  () => {},
-                )
-              }}
-            >
-              {t('settings.update.check')}
-            </button>
-          )}
+          ) : null}
+          <button
+            type="button"
+            className="mini"
+            data-act="update-check"
+            disabled={busy}
+            onClick={() => {
+              void bridge.check().then(
+                (got) => got && setView(got),
+                () => {},
+              )
+            }}
+          >
+            {t('settings.update.check')}
+          </button>
         </div>
         <div className="set-row">
           <div className="set-switch-text">

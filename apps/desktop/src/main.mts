@@ -866,7 +866,8 @@ async function installOnQuit(installer: string): Promise<boolean> {
   }
   const args = ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART']
   if (relaunchAfterInstall) args.push('/LITCHRELAUNCH')
-  spawn(installer, args, { detached: true, stdio: 'ignore' }).unref()
+  // 等设备空闲期间后台可能已验证并换上更新的安装程序，启动前取最终那份。
+  spawn(updater?.installer() ?? installer, args, { detached: true, stdio: 'ignore' }).unref()
   return true
 }
 

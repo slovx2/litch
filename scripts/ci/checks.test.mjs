@@ -30,10 +30,11 @@ test('多领域复用首回合/原生工具检查，不允许未知、空或重�
   for (const names of [[], ['typo'], ['dsh', 'dsh']]) assert.throws(() => checkPlan(names))
 })
 
-test('可移植子集明确排除浏览器，原完整桌面集合仍包含所有九项', () => {
+test('可移植子集明确排除浏览器，桌面集合包含更新回归与原有检查', () => {
   const full = checkPlan(['desktop-unit']).checks.map((check) => check.id)
   const portable = checkPlan(['desktop-portable-unit']).checks.map((check) => check.id)
-  assert.equal(full.length, 9)
+  assert.equal(full.length, 10)
+  assert.ok(full.includes('desktop:test:updater'))
   assert.ok(full.includes('desktop:test:browser'))
   assert.deepEqual(
     portable,

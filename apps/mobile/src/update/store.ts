@@ -45,7 +45,7 @@ export interface UpdateSnapshot {
   state: MobileUpdateState
   /** 眼下要装的那一版（清单里给安卓的那一项）；没有新版本时是 null */
   offer: UpdateOffer | null
-  /** 下好、校验过的安装包（file:// 地址）；phase 是 ready 时才有 */
+  /** 下好、校验过的安装包（file:// 地址）；替换下载期间仍保留 ready 与旧安装入口 */
   apk: string | null
   /** 等人去系统设置里允许“安装未知应用”，回到应用时接着装 */
   needsPermission: boolean
@@ -140,11 +140,12 @@ async function fetchFeed() {
 }
 
 let checking: Promise<void> | null = null
+let downloading = false
 
 /** 查一次。正在下的时候不查；横条上有东西（有新版本、已下好、人点了更新后失败）时查的过程不把横条收起来 */
 export function checkForUpdate(): Promise<void> {
   if (Platform.OS === 'ios') return Promise.resolve()
-  if (snapshot.state.phase === 'downloading') return Promise.resolve()
+  if (downloading) return Promise.resolve()
   if (checking) return checking
   checking = (async () => {
     lastCheckAt = Date.now()
@@ -156,8 +157,12 @@ export function checkForUpdate(): Promise<void> {
     if (!quiet) set({ state: { phase: 'checking' } })
     try {
       const feed = await fetchFeed()
-      const offer = updateFor(feed, CURRENT_VERSION, PLATFORM)
+      const readyVersion =
+        before.state.phase === 'ready' && before.apk ? before.state.version : null
+      const ready = readyVersion !== null
+      const offer = updateFor(feed, readyVersion ?? CURRENT_VERSION, PLATFORM)
       if (!offer) {
+        if (ready) return
         set({
           state: { phase: 'latest', version: feed.version, checkedAt: Date.now() },
           offer: null,
@@ -166,12 +171,15 @@ export function checkForUpdate(): Promise<void> {
         return
       }
       if (offer.asset.sha256 === broken?.sha256) {
+        if (ready) return
         set({ state: broken.state, offer: null, apk: null })
         return
       }
-      // 已经下好了同一版：留着，不用重下
-      if (before.state.phase === 'ready' && before.offer?.asset.sha256 === offer.asset.sha256)
+      // 用户已经下载过更新：新版在后台替换，下载与校验期间仍可安装旧包。
+      if (ready) {
+        await fetchUpdate(offer, false)
         return
+      }
       set({
         state: { phase: 'available', version: offer.version, notesUrl: offer.notesUrl },
         offer,
@@ -193,17 +201,23 @@ export async function downloadUpdate(): Promise<void> {
   if (Platform.OS === 'ios') return
   const { state, offer } = snapshot
   if (state.phase === 'ready') return installUpdate()
+  if (downloading) return
   const retry = state.phase === 'failed' && state.reason === 'download'
   if ((state.phase !== 'available' && !retry) || !offer) return
+  return fetchUpdate(offer, true)
+}
+
+async function fetchUpdate(offer: UpdateOffer, install: boolean): Promise<void> {
+  downloading = true
+  const previous = snapshot.state.phase === 'ready' ? snapshot : null
   const { version, notesUrl, asset } = offer
-  set({ state: { phase: 'downloading', version, notesUrl, progress: 0 } })
+  if (!previous) set({ state: { phase: 'downloading', version, notesUrl, progress: 0 } })
   let shown = 0
   let target: File | null = null
   try {
-    clearDownloads()
     const dir = downloads()
     dir.create({ intermediates: true, idempotent: true })
-    target = new File(dir, `Litch-${version}-${PLATFORM}.apk`)
+    target = new File(dir, `Litch-${version}-${asset.sha256}-${PLATFORM}.apk`)
     const file = await File.downloadFileAsync(asset.url, target, {
       idempotent: true,
       onProgress: ({ bytesWritten, totalBytes }) => {
@@ -212,7 +226,7 @@ export async function downloadUpdate(): Promise<void> {
         // 百分之一以上才换一次，免得每一小块都重画
         if (progress - shown < 0.01 && progress < 1) return
         shown = progress
-        set({ state: { phase: 'downloading', version, notesUrl, progress } })
+        if (!previous) set({ state: { phase: 'downloading', version, notesUrl, progress } })
       },
     })
     target = file
@@ -231,10 +245,23 @@ export async function downloadUpdate(): Promise<void> {
       const detail = `versionCode ${info.versionCode} ≤ ${info.installedVersionCode}`
       throw updateError('package', detail)
     }
+    if (asset.versionCode !== undefined && info.versionCode !== asset.versionCode) {
+      throw updateError('package', `versionCode ${info.versionCode} ≠ ${asset.versionCode}`)
+    }
+    if (info.versionName !== version) {
+      throw updateError('package', `versionName ${info.versionName} ≠ ${version}`)
+    }
     if (info.sameSigner === false) {
       throw updateError('signature', '')
     }
-    set({ state: { phase: 'ready', version, notesUrl }, apk: file.uri })
+    set({ state: { phase: 'ready', version, notesUrl }, offer, apk: file.uri })
+    // 指针切换成功后再回收旧包；清理失败不能把有效的新包标成失败。
+    if (previous?.apk && previous.apk !== file.uri) {
+      try {
+        const old = new File(previous.apk)
+        if (old.exists) old.delete()
+      } catch {}
+    }
   } catch (error) {
     // 下坏了、对不上的不留着
     try {
@@ -242,11 +269,20 @@ export async function downloadUpdate(): Promise<void> {
     } catch {}
     // 没带种类的是下载本身抛的（断网、超时、状态码不对）
     const reason = reasonOf(error, 'download')
-    fail(reason, errorText(error), asset.sha256)
-    if (reason !== 'download') broken = { sha256: asset.sha256, state: snapshot.state }
+    const failure: MobileUpdateState = {
+      phase: 'failed',
+      reason,
+      message: errorText(error),
+      checkedAt: Date.now(),
+      download: asset.sha256,
+    }
+    if (!previous) fail(reason, errorText(error), asset.sha256)
+    if (reason !== 'download') broken = { sha256: asset.sha256, state: failure }
     return
+  } finally {
+    downloading = false
   }
-  return installUpdate()
+  if (install) return installUpdate()
 }
 
 /** 拉起系统安装器；还没允许“安装未知应用”就先打开那一页设置，回到应用时接着装 */
@@ -287,9 +323,13 @@ export function startUpdateSchedule(auto: () => boolean): () => void {
   }
   // 启动时 AppState 也会报一次 active：头 30 秒不按前台查，免得一启动就查
   let started = false
+  let interval: ReturnType<typeof setInterval> | undefined
   const first = setTimeout(() => {
     started = true
     if (auto()) void checkForUpdate()
+    interval = setInterval(() => {
+      if (AppState.currentState === 'active' && auto()) void checkForUpdate()
+    }, UPDATE_CHECK_INTERVAL_MS)
   }, FIRST_CHECK_DELAY_MS)
   const subscription = AppState.addEventListener('change', (next) => {
     if (next !== 'active') return
@@ -301,6 +341,7 @@ export function startUpdateSchedule(auto: () => boolean): () => void {
   })
   return () => {
     clearTimeout(first)
+    clearInterval(interval)
     subscription.remove()
   }
 }

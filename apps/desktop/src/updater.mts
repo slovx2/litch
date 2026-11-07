@@ -1,6 +1,6 @@
 // 应用自己的更新。清单的读法、版本比较在核心里（update-feed.mts），
 // 这里管取清单、下载、到点换：
-//   macOS    Electron 自带的 autoUpdater（Squirrel.Mac，JSON 格式）照同一份清单下 zip；它会核对新应用的签名满足
+//   macOS    Electron 自带的 autoUpdater（Squirrel.Mac）按本次固定的版本下 zip；它会核对新应用的签名满足
 //            眼前这个应用的指定要求（同一个开发者身份），不满足就不装。下好后点“重启以更新”换，不点的话下次退出时它自己换。
 //   Windows  自己下安装程序到用户数据目录的 updates/，边下边算 SHA-256、对清单；退出时（点了“重启以更新”或者平常退出）
 //            由主进程先请本机的设备服务闲着就停下，再静默跑安装程序（见 main.mts 的 will-quit 和 packaging/litch.iss）。
@@ -17,6 +17,7 @@ import {
   rmSync,
 } from 'node:fs'
 import { join } from 'node:path'
+import { pipeline } from 'node:stream/promises'
 import {
   parseUpdateFeed,
   UPDATE_CHECK_INTERVAL_MS,
@@ -26,6 +27,7 @@ import {
   updateFor,
 } from '@litch/core'
 import { autoUpdater, net } from 'electron'
+import { downloadMacUpdate, relaunchMacUpdate } from './updater-mac.mjs'
 
 /** 启动后等多久查第一次：别和启动时的一堆事挤在一起 */
 const FIRST_CHECK_MS = 30_000
@@ -34,7 +36,7 @@ export interface UpdaterOptions {
   version: string
   /** 这个平台出不出更新；null 是不出 */
   platform: UpdatePlatform | null
-  /** 用户数据目录：Windows 的安装程序下到这里的 updates/ */
+  /** 用户数据目录：Windows 安装程序、macOS 待装保护副本放在 updates/ */
   dataDir: string
   feedUrl: string
   /** 允许 http 的清单和下载地址（只在 LITCH_UPDATE_FEED 换成本机假服务时） */
@@ -49,7 +51,7 @@ export interface Updater {
   state(): UpdateState
   /** 开始按间隔自动查（开关关着时到点也不查） */
   start(): void
-  /** 现在查一次；已经在查、在下、下好了就不重来 */
+  /** 现在查一次；已经在查、在下时合并，已下载时继续查更新的版本 */
   check(): Promise<void>
   /** Windows：下好了的安装程序在哪，退出时由主进程去跑。别的平台是 null */
   installer(): string | null
@@ -64,7 +66,9 @@ export function createUpdater(options: UpdaterOptions): Updater {
   const { platform, version } = options
   let state: UpdateState = { phase: 'idle' }
   let timer: NodeJS.Timeout | null = null
-  let squirrelReady = false
+  let ready: Extract<UpdateState, { phase: 'ready' }> | null = null
+  let checking: Promise<void> | null = null
+  let nativeReady = false
   let installerPath: string | null = null
   const updatesDir = join(options.dataDir, 'updates')
 
@@ -74,23 +78,14 @@ export function createUpdater(options: UpdaterOptions): Updater {
   }
   const fail = (error: unknown) => {
     options.log(`更新没成：${message(error)}`)
-    set({ phase: 'failed', message: message(error), checkedAt: Date.now() })
+    set(ready ?? { phase: 'failed', message: message(error), checkedAt: Date.now() })
   }
-  const busy = () =>
-    state.phase === 'checking' || state.phase === 'downloading' || state.phase === 'ready'
 
   if (platform === 'macos-arm64') {
-    autoUpdater.on('error', (error) => {
-      if (state.phase === 'downloading' || state.phase === 'checking') fail(error)
-    })
-    autoUpdater.on('update-downloaded', (_event, _notes, name) => {
-      squirrelReady = true
-      if (state.phase === 'downloading') set({ ...state, phase: 'ready' })
-      options.log(`新版本已下好：${name}`)
-    })
+    // 下载期间的失败由 downloadMacUpdate 接回；安装失败也需要日志监听，不能成为未处理的 error。
+    autoUpdater.on('error', (error) => options.log(`Squirrel：${message(error)}`))
     autoUpdater.on('update-not-available', () => {
-      // 清单说有新的、Squirrel 却说没有：清单和它读的那两项对不上（不该发生），照实报
-      if (state.phase === 'downloading') fail(new Error('更新清单与 Squirrel 读取的版本不一致'))
+      nativeReady = false
     })
   }
 
@@ -104,39 +99,38 @@ export function createUpdater(options: UpdaterOptions): Updater {
   async function download(offer: UpdateOffer): Promise<string> {
     mkdirSync(updatesDir, { recursive: true })
     const target = join(updatesDir, `Litch-${offer.version}-setup.exe`)
-    // 别的版本留下的都清掉，只留要装的这一份
-    for (const name of readdirSync(updatesDir)) {
-      if (join(updatesDir, name) !== target) rmSync(join(updatesDir, name), { force: true })
-    }
     if (existsSync(target)) {
-      const sum = createHash('sha256').update(readFileSync(target)).digest('hex')
-      if (sum === offer.asset.sha256) return target
+      const bytes = readFileSync(target)
+      const sum = createHash('sha256').update(bytes).digest('hex')
+      if (bytes.length === offer.asset.size && sum === offer.asset.sha256) return target
       rmSync(target, { force: true })
     }
     const response = await net.fetch(offer.asset.url, { cache: 'no-store' })
     if (!response.ok || !response.body) throw new Error(`下载失败：HTTP ${response.status}`)
     const part = `${target}.part`
     const hash = createHash('sha256')
-    const out = createWriteStream(part)
     let received = 0
     let shown = -1
     try {
-      for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
-        hash.update(chunk)
-        received += chunk.byteLength
-        if (!out.write(chunk)) await new Promise<void>((resolve) => out.once('drain', resolve))
-        const progress = Math.min(1, received / offer.asset.size)
-        // 百分之一报一次，别每块都发给界面
-        if (Math.floor(progress * 100) !== shown) {
-          shown = Math.floor(progress * 100)
-          set({ phase: 'downloading', version: offer.version, notesUrl: offer.notesUrl, progress })
+      await pipeline(async function* () {
+        for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
+          hash.update(chunk)
+          received += chunk.byteLength
+          const progress = Math.min(1, received / offer.asset.size)
+          // 已有待装包时静默下载，旧版本的安装入口保持可用。
+          if (!ready && Math.floor(progress * 100) !== shown) {
+            shown = Math.floor(progress * 100)
+            set({
+              phase: 'downloading',
+              version: offer.version,
+              notesUrl: offer.notesUrl,
+              progress,
+            })
+          }
+          yield chunk
         }
-      }
-      await new Promise<void>((resolve, reject) =>
-        out.end((error?: Error | null) => (error ? reject(error) : resolve())),
-      )
+      }, createWriteStream(part))
     } catch (error) {
-      out.destroy()
       rmSync(part, { force: true })
       throw error
     }
@@ -149,31 +143,51 @@ export function createUpdater(options: UpdaterOptions): Updater {
     return target
   }
 
-  async function check(): Promise<void> {
-    if (!platform || busy()) return
-    set({ phase: 'checking' })
+  async function runCheck(): Promise<void> {
+    if (!platform) return
+    if (!ready) set({ phase: 'checking' })
     try {
       const feed = await fetchFeed()
-      const offer = updateFor(feed, version, platform)
+      const offer = updateFor(feed, ready?.version ?? version, platform)
       if (!offer) {
-        set({ phase: 'latest', version: feed.version, checkedAt: Date.now() })
+        if (!ready) set({ phase: 'latest', version: feed.version, checkedAt: Date.now() })
         return
       }
-      set({ phase: 'downloading', version: offer.version, notesUrl: offer.notesUrl })
+      if (!ready) set({ phase: 'downloading', version: offer.version, notesUrl: offer.notesUrl })
       if (platform === 'macos-arm64') {
-        if (squirrelReady) {
-          set({ phase: 'ready', version: offer.version, notesUrl: offer.notesUrl })
-          return
-        }
-        autoUpdater.setFeedURL({ url: options.feedUrl, serverType: 'json' })
-        autoUpdater.checkForUpdates()
-        return
+        await downloadMacUpdate(offer, options.dataDir, ready !== null, options.log)
+        nativeReady = true
+      } else {
+        installerPath = await download(offer)
       }
-      installerPath = await download(offer)
-      set({ phase: 'ready', version: offer.version, notesUrl: offer.notesUrl })
+      ready = { phase: 'ready', version: offer.version, notesUrl: offer.notesUrl }
+      set(ready)
+      options.log(`新版本已下好：${offer.version}`)
+      // 新包已校验且安装指针已切换，才删除其他版本。清理失败不影响安装。
+      if (platform === 'windows-x64') {
+        for (const name of readdirSync(updatesDir)) {
+          if (
+            /^Litch-.*-setup\.exe(?:\.part)?$/.test(name) &&
+            join(updatesDir, name) !== installerPath
+          ) {
+            try {
+              rmSync(join(updatesDir, name), { force: true })
+            } catch (error) {
+              options.log(`清理旧更新失败：${message(error)}`)
+            }
+          }
+        }
+      }
     } catch (error) {
       fail(error)
     }
+  }
+
+  function check(): Promise<void> {
+    checking ??= runCheck().finally(() => {
+      checking = null
+    })
+    return checking
   }
 
   return {
@@ -189,9 +203,14 @@ export function createUpdater(options: UpdaterOptions): Updater {
       }, FIRST_CHECK_MS)
     },
     check,
-    installer: () => (state.phase === 'ready' ? installerPath : null),
+    installer: () => installerPath,
     quitAndInstall() {
-      if (platform === 'macos-arm64' && squirrelReady) autoUpdater.quitAndInstall()
+      if (platform !== 'macos-arm64' || !ready) return
+      if (nativeReady) autoUpdater.quitAndInstall()
+      else
+        void relaunchMacUpdate(options.dataDir).catch((error) =>
+          options.log(`重启更新失败：${message(error)}`),
+        )
     },
     stop() {
       if (timer) clearTimeout(timer)

@@ -125,6 +125,8 @@ switch and whether the decision is newly open. A missing notice does not mean th
   `suggestions` or `new`. Use `scripts/litch open --help` for section names.
 - Shortcuts are read-only in Settings → Shortcuts. Litch updates are user-controlled in
   Settings → About → Updates and are outside the configuration command.
+  已下载待重启时仍会自动检查，也可在“关于”或应用菜单手动检查。发现更新的版本后在后台下载，
+  校验成功才替换待装包并更新提示版本号；下载期间或失败后，原来的安装入口仍可用。
 
 ## 设置窗口
 

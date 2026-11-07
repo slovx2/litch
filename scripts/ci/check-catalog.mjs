@@ -18,9 +18,15 @@ export const checks = [
   npm('client:typecheck', 'client:typecheck'),
   npm('client:test', 'client:test'),
   npm('client:test:ui', 'client:test:ui'),
-  ...['browser', 'manual-skill', 'log-file', 'view-files', 'approvals', 'computer-use'].map(
-    (name) => npm(`desktop:test:${name}`, `test:${name}`, 'apps/desktop'),
-  ),
+  ...[
+    'browser',
+    'manual-skill',
+    'log-file',
+    'view-files',
+    'approvals',
+    'computer-use',
+    'updater',
+  ].map((name) => npm(`desktop:test:${name}`, `test:${name}`, 'apps/desktop')),
   node('smoke', `${desktop}smoke.mjs`),
   node('smoke:entry', `${desktop}smoke.mjs`, '--entry'),
   node('critical', `${desktop}smoke.mjs`, '--critical'),
@@ -47,7 +53,12 @@ export const checks = [
   node('manager-fixture', 'scripts/check-manager-fixture.mjs'),
   node('client:test:windows-native', 'scripts/ci/core-tests.mjs', 'windows-native'),
 ]
-const units = checks.slice(0, 9).map((check) => check.id)
+const units = checks
+  .slice(
+    0,
+    checks.findIndex((check) => check.id === 'smoke'),
+  )
+  .map((check) => check.id)
 const engineTools = [
   'background-client-tools',
   'native-codex-background-wake',

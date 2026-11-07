@@ -89,6 +89,7 @@ test('E2E 换源后仍依次检查大小、摘要、包名、版本和签名，�
       inspected = 0
       installed = 0
       info = {
+        versionName: '99.0.0',
         packageName: failure === 'package' ? 'unrelated.app' : app.expo.android.package,
         versionCode: failure === 'version' ? 1 : 2,
         installedVersionCode: 1,

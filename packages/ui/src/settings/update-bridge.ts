@@ -14,7 +14,7 @@ export interface UpdateView {
 
 export interface UpdateBridge {
   get(): Promise<UpdateView | null>
-  /** 现在查一次，回查完的样子（查到了新版本时它还在下，之后的变化从 onState 来） */
+  /** 现在查一次，回本轮检查/下载结束的状态；过程中的变化从 onState 来 */
   check(): Promise<UpdateView | null>
   /** 重启以更新。先照退出的规矩问终端怎么办，用户点了“不退了”回 false */
   install(): Promise<boolean>

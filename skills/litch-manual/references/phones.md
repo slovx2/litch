@@ -269,6 +269,8 @@ messages arrived while you were away. Other board tabs retain their own scroll p
   uninstall it and install the release APK once (this clears the phone app's data; devices must be added
   again), after which updates work. If the download breaks off, the bar offers Retry; any failure bar can
   be closed with ✕ and stays closed for that package until a newer one is released.
+  已下载但尚未安装时，定时或手动检查发现更高版本，会在后台下载并校验后替换；旧包在此期间和失败后仍可安装。
+  后台替换成功会更新横条的版本号，不会自动打开系统安装器。
 
 ## Approving the agent's sign-ins on the phone
 
