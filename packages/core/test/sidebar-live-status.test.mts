@@ -59,6 +59,78 @@ test('从经理建议卡开始的子会话，打开运行历史后补齐目录�
   }
 })
 
+test('经理建议页连续开始四条工作线，始终不打开子会话也能同步运行和结束', async () => {
+  const codex = harness('codex', { threads: [thread({ id: 'manager', name: '经理' })] })
+  const children: string[] = []
+  const world = deviceWorld([codex], {
+    prepare: (device) => device.extensions.push('sessionTree'),
+    extra: {
+      'litch/sessionProposal/accept': () => {
+        const id = `unopened-${children.length}`
+        const child = thread({ id, name: '未打开的建议工作线', status: { type: 'idle' } })
+        children.push(id)
+        codex.threads.push(child)
+        const peer = world.peer.last()
+        peer.notify('thread/started', { thread: child })
+        peer.notify('litch/thread/lineage/updated', {
+          threadId: id,
+          lineage: {
+            parentThreadId: 'manager',
+            kind: 'fresh',
+            origin: 'proposal',
+            title: child.name,
+            wakeParent: true,
+            reportParent: true,
+            createdAt: 1,
+          },
+        })
+        return { threadId: id }
+      },
+    },
+  })
+  world.core.start()
+  await settle()
+  try {
+    for (let index = 0; index < 4; index++) {
+      const { sessionId } = (await world.command('session.proposal.accept', {
+        sessionId: 'manager',
+        proposalId: `proposal-${index}`,
+      })) as { sessionId: string }
+      assert.equal(world.side.sessions.get(sessionId)?.lineage?.parentId, 'manager')
+      assert.equal(world.side.sessions.get(sessionId)?.status, 'idle')
+      // 设备面向所有客户端的状态广播，不依赖打开详情后的 turn/resume。
+      world.peer.last().notify('thread/status/changed', {
+        threadId: sessionId,
+        status: { type: 'active', activeFlags: [] },
+      })
+      world.peer.last().notify('turn/started', {
+        threadId: sessionId,
+        turn: turn(`work-${index}`, [], { status: 'inProgress' }),
+      })
+      await settle()
+      assert.equal(world.side.sessions.get(sessionId)?.status, 'running')
+    }
+    assert.ok(children.every((id) => world.side.sessions.get(id)?.status === 'running'))
+    for (const [index, id] of children.entries()) {
+      world.peer.last().notify('turn/completed', { threadId: id, turn: turn(`work-${index}`, []) })
+      world.peer.last().notify('thread/status/changed', { threadId: id, status: { type: 'idle' } })
+      await settle()
+      assert.equal(world.side.sessions.get(id)?.status, 'idle')
+      assert.equal(world.side.sessions.get(id)?.unread, true)
+      assert.ok(
+        children
+          .slice(index + 1)
+          .every((other) => world.side.sessions.get(other)?.status === 'running'),
+      )
+    }
+    assert.equal(world.sent('litch/sessionProposal/accept').length, 4)
+    assert.deepEqual(world.sent('thread/resume'), [], '不能通过打开子会话补齐状态')
+    assert.deepEqual(world.sent('thread/turns/list'), [], '不能靠加载详情历史补齐状态')
+  } finally {
+    world.core.stop()
+  }
+})
+
 test('运行回合收到经理两次追加消息，侧栏保持运行直到该回合真正完成', async () => {
   const child = thread({ id: 'line', name: '工作线', status: { type: 'idle' } })
   const world = deviceWorld([harness('codex', { threads: [child] })])
