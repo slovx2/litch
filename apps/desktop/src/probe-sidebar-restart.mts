@@ -192,13 +192,9 @@ export function judgeRestart(seen: RestartSeen, title: string): string[] {
     if (!ok) failed.push(message)
   }
   const tail = (menu: string | undefined) => (menu ?? '').split('|').slice(-2).join('|')
+  must(tail(seen.menus.local) === '设置|强制重启', `本机菜单的最后两项不对：${seen.menus.local}`)
   must(
-    tail(seen.menus.local) === '设置|强制重启',
-    `本机菜单的最后两项不对：${seen.menus.local}`,
-  )
-  must(
-    tail(seen.menus.build) ===
-      '设置|强制重启（服务由前台或服务管理器启动，请用原来的方式重启）',
+    tail(seen.menus.build) === '设置|强制重启（服务由前台或服务管理器启动，请用原来的方式重启）',
     `build-01 的服务是前台的，“强制重启”该淡下去、写原因：${seen.menus.build}`,
   )
   must(
@@ -240,9 +236,6 @@ export function judgeRestart(seen: RestartSeen, title: string): string[] {
     `没能连回来的提示不对：${seen.failToast}`,
   )
   must(seen.backOnline, '设备行下面点了“重试”，本机没有连回来')
-  must(
-    seen.english === 'Settings|Force restart',
-    `英文菜单的最后两项不对：${seen.english}`,
-  )
+  must(seen.english === 'Settings|Force restart', `英文菜单的最后两项不对：${seen.english}`)
   return failed
 }
