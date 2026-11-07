@@ -134,6 +134,7 @@ export function createMockTerminals(host: MockTerminalsHost): MockTerminals {
           seq: next,
           cwd: cwd ?? root ?? '~',
           state: 'running',
+          inputBlocked: false,
           exitCode: null,
           // 设备服务上的终端属于设备；别的对面上的随连接结束
           durable: device.mode === 'full',
@@ -147,6 +148,13 @@ export function createMockTerminals(host: MockTerminalsHost): MockTerminals {
       announce(term)
       start(term, device)
       return { terminalId: term.info.id }
+    },
+    'terminal.resumeInput'({ deviceId, terminalId }) {
+      const term = find(deviceId, terminalId)
+      online(deviceId)
+      term.info.inputBlocked = false
+      announce(term)
+      return {}
     },
     'terminal.write'({ deviceId, terminalId, data }) {
       const term = find(deviceId, terminalId)

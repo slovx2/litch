@@ -152,7 +152,9 @@ test('应用重开：设备上活着的终端按标记恢复成标签，名字�
   assert.deepEqual(view.view, { viewer: 1, epoch: 0, from: 36, missed: 0, truncated: true })
   assert.equal(view.text, 'xxxxtail of the first terminal\r\n')
   assert.deepEqual(view.marks, [])
-  // 接回来的终端照常能写
+  // 应用重开不知道之前的输入是否完整，确认提示后才能继续写。
+  assert.equal(list.get(first).inputBlocked, true)
+  await world.command('terminal.resumeInput', { terminalId: first })
   await world.command('terminal.write', { terminalId: first, data: btoa('ls\r') })
   await world.idle()
   assert.deepEqual(world.procs.writes.at(-1), { handle: first, text: 'ls\r' })

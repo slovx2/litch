@@ -1186,6 +1186,11 @@ export function createCore(options: CoreOptions): Core {
           const { terminals } = deviceOf(deviceId)
           return { terminalId: await terminals.open(workspaceId ?? null, cwd ?? null, rows, cols) }
         }
+        case 'terminal.resumeInput': {
+          const { deviceId, terminalId } = params as Commands['terminal.resumeInput']['params']
+          deviceOf(deviceId).terminals.resumeInput(terminalId)
+          return {}
+        }
         case 'terminal.write': {
           const { deviceId, terminalId, data } = params as Commands['terminal.write']['params']
           deviceOf(deviceId).terminals.write(terminalId, data)

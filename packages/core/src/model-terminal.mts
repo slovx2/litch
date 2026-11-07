@@ -22,6 +22,8 @@ export interface TerminalInfo {
   /** 起的时候去的目录（请求的那个）。给人看的；实际落在哪要看对面那个目录在不在 */
   cwd: string | null
   state: TerminalState
+  /** 输入送达状态不确定；用户确认之前不得继续写入，包括回车 */
+  inputBlocked: boolean
   /** state 是 exited 时才有 */
   exitCode: number | null
   /** 属于设备：这边断线、退出应用它都还在跑。false：随连接结束，断线就没了 */

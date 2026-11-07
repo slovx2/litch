@@ -9,7 +9,7 @@ import { deviceRpc } from './device-rpc.mjs'
 import { iosTestApprovals } from './ios-test-approvals.mjs'
 import { terminalEvidence } from './terminal-audit.mjs'
 
-export async function iosTestHelper(config, artifacts, simulator) {
+export async function iosTestHelper(config, artifacts, simulator, terminalRelay = null) {
   if (!/^\/tmp\/litch-ssh-[^/]+$/.test(config.root)) throw new Error('必须使用隔离 SSH 夹具')
   if (!/^[0-9A-F-]{36}$/.test(simulator)) throw new Error('必须指定隔离模拟器')
   let rpc
@@ -108,7 +108,17 @@ export async function iosTestHelper(config, artifacts, simulator) {
       try {
         const url = new URL(request.url, 'http://localhost')
         let answer = null
-        if (url.pathname === '/cold/terminal' && request.method === 'POST') {
+        if (url.pathname === '/terminal/link/down' && request.method === 'POST' && terminalRelay) {
+          terminalRelay.down()
+          answer = 'ok'
+        } else if (
+          url.pathname === '/terminal/link/up' &&
+          request.method === 'POST' &&
+          terminalRelay
+        ) {
+          terminalRelay.up()
+          answer = 'ok'
+        } else if (url.pathname === '/cold/terminal' && request.method === 'POST') {
           simctl('openurl', simulator, 'litch-dev://terminal?device=local')
           answer = 'ok'
         } else if (url.pathname === '/biometrics/enroll' && request.method === 'POST') {

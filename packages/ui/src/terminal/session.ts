@@ -60,6 +60,7 @@ export class TerminalSession {
   #opened = false
   #disposed = false
   #state: TerminalState = 'running'
+  #inputBlocked = false
   #stop: (() => void) | null = null
   #viewer = 0
   #epoch = 0
@@ -132,10 +133,11 @@ export class TerminalSession {
     return this.#opened
   }
 
-  setState(state: TerminalState): void {
+  setState(state: TerminalState, inputBlocked: boolean): void {
     this.#state = state
+    this.#inputBlocked = inputBlocked
     // 没在跑的时候敲键不该有反应
-    this.term.options.disableStdin = state !== 'running'
+    this.term.options.disableStdin = state !== 'running' || inputBlocked
   }
 
   /** 换配色。颜色和字体分开换：颜色马上就能换，字体要等字体文件到了（见 sessions.ts 的 restyle） */
@@ -302,7 +304,7 @@ export class TerminalSession {
   // ---------- 输入 ----------
 
   #send(data: string): void {
-    if (this.#state !== 'running') return
+    if (this.#state !== 'running' || this.#inputBlocked) return
     const { channel, deviceId, terminalId } = this.#owner
     // 写不进去（刚好断线、刚好退出）不用单独说：状态条会跟着变
     channel.command('terminal.write', { deviceId, terminalId, data }).catch(() => {})

@@ -1031,7 +1031,12 @@ export interface Commands {
     }
     result: { terminalId: string }
   }
-  /** 往终端里写：data 是 base64 的字节（键盘输入、粘贴的内容）。不等对面应答，按发的先后写进去 */
+  /** 用户确认输入状态不确定的提示后，恢复接受新的输入；不重放旧输入 */
+  'terminal.resumeInput': {
+    params: { deviceId: string; terminalId: string }
+    result: Record<string, never>
+  }
+  /** 往终端里写：data 是 base64 的字节；核心排队并逐批等对面确认，失败会暂停输入 */
   'terminal.write': {
     params: { deviceId: string; terminalId: string; data: string }
     result: Record<string, never>

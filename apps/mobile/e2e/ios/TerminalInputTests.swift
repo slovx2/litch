@@ -164,6 +164,37 @@ final class TerminalInputTests: XCTestCase {
     XCTAssertTrue(try commandWasReceived("echo foreground"))
   }
 
+  func testInputDisconnect() throws {
+    let before = try evidence()["commands"] as? String ?? ""
+    for character in "echo partial-$((6*7))" { app.typeText(String(character)) }
+    let partial = XCTAttachment(screenshot: app.screenshot())
+    partial.name = "terminal-before-disconnect"
+    partial.lifetime = .keepAlways
+    add(partial)
+    _ = try request("/terminal/link/down", method: "POST")
+    XCTAssertTrue(app.otherElements["terminal:status"].waitForExistence(timeout: 10))
+    app.typeText("-missing")
+    _ = try request("/terminal/link/up", method: "POST")
+    let resume = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@",
+      "已知悉，恢复输入", "Acknowledge and resume")).firstMatch
+    XCTAssertTrue(resume.waitForExistence(timeout: 60))
+    let paused = XCTAttachment(screenshot: app.screenshot())
+    paused.name = "terminal-input-paused"
+    paused.lifetime = .keepAlways
+    add(paused)
+    app.typeText("\r")
+    Thread.sleep(forTimeInterval: 1)
+    XCTAssertEqual(try evidence()["commands"] as? String ?? "", before)
+    resume.tap()
+    app.buttons["terminal:key:ctrl"].tap()
+    app.typeText("c")
+    for character in "echo intact-$((6*7)) > e2e-mark.txt" { app.typeText(String(character)) }
+    app.typeText("\r")
+    XCTAssertTrue(try commandWasReceived("echo intact-$((6*7)) > e2e-mark.txt"))
+    XCTAssertEqual(try evidence()["file"] as? String, "intact-42\n")
+    XCTAssertFalse((try evidence()["commands"] as? String ?? "").contains("echo partial"))
+  }
+
   private func request(_ path: String, method: String = "GET", body: String? = nil) throws -> Data {
     let config = Bundle(for: Self.self).url(forResource: "validation", withExtension: "json")!
     let settings = try JSONSerialization.jsonObject(with: Data(contentsOf: config)) as! [String: String]
