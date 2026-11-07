@@ -42,6 +42,8 @@ export const zhProposals = {
   'proposal.brief.less': '收起简报',
   'proposal.brief.background': '背景',
   'proposal.brief.task': '任务',
+  'proposal.brief.unfold': '展开全文',
+  'proposal.brief.fold': '收起',
   'proposal.wider': '此 harness 要求「{level}」。请更换 harness 或调整父会话权限后再开始。',
   'proposal.state.pending': '待开始',
   'proposal.state.started': '已开始',

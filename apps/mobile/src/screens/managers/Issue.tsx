@@ -41,10 +41,12 @@ import {
   questionMode,
   rememberPostCollapsed,
 } from '../../../../../packages/ui/src/manager/post-presentation.ts'
-import { proposalSummary } from '../../../../../packages/ui/src/tree/proposal-brief.ts'
+import {
+  proposalSummary,
+  shortObjectId,
+} from '../../../../../packages/ui/src/tree/proposal-brief.ts'
 import { useGrow } from '../../detail/composer/grow'
 import { ProposalActs } from '../../detail/proposals/ProposalActs'
-import { ProposalBrief } from '../../detail/proposals/ProposalBrief'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -74,6 +76,8 @@ import { IssueContext, IssueRelations } from './IssueRelations'
 import { setIssueOrder, useIssueOrder } from './issue-order'
 import { ManagerOverview } from './ManagerOverview'
 import { decisionActions, issueCounts, orderedIssues } from './presentation'
+import { SuggestionBrief } from './SuggestionBrief'
+import { SuggestionMeta } from './SuggestionMeta'
 import { useDraftsCleared } from './use-draft-files'
 
 /** 作答的一个选项：整块可点，选中画单选记号和强调边框；读屏角色是 radio */
@@ -694,7 +698,8 @@ export function Issue({
               <Caret open={!collapsed} />
             </View>
             <Text style={{ color: c.ink, fontSize: font.size.title, fontWeight: '600', flex: 1 }}>
-              {post.kind === 'suggestion' ? t('manager.suggestions') : post.id} · {post.title}
+              <Text style={{ color: c.ink3, fontWeight: '400' }}>{shortObjectId(post.id)}</Text>{' '}
+              {post.title}
             </Text>
             {stateLabel ? (
               <Text
@@ -758,9 +763,10 @@ export function Issue({
       ) : null}
       {(!pendingReview || unreviewed) && !collapsed ? (
         <>
+          {suggestion ? <SuggestionMeta row={suggestion} /> : null}
           <IssueRelations id={post.id} />
           {post.kind === 'suggestion' ? (
-            <ProposalBrief
+            <SuggestionBrief
               prompt={suggestion?.proposal.prompt ?? post.body}
               background={suggestion?.proposal.background}
               testID={`proposal:${post.proposalId ?? post.id}:brief`}

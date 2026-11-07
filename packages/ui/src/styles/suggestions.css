@@ -24,21 +24,137 @@
   padding: 0 24px 16px;
 }
 
-.suggestion-row .prop-meta {
-  flex-wrap: wrap;
-}
-
 .suggestion-row .prop-body {
+  container: sg / inline-size;
   min-width: 0;
 }
 
-.suggestion-row .suggestion-source {
+/* 建议卡的元信息：来源、设备、目录、多久以前排成一行小字；放不下时来源标题和目录先省略 */
+.sg-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-  max-width: 100%;
+  font-size: calc(12px * var(--fs));
+  line-height: round(calc(18px * var(--fs)), 1px);
+  color: var(--ink-3);
+}
+.sg-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  /* 来源标题比目录名先让位 */
+  flex: 0 3 auto;
+  min-width: 4em;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  cursor: pointer;
+}
+.sg-source:not(:disabled) > span {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.sg-source:hover:not(:disabled) {
+  color: var(--accent);
+}
+.sg-source:disabled {
+  cursor: default;
+}
+.sg-fixed,
+.sg-dot,
+.sg-meta > .pill {
+  flex: none;
+  white-space: nowrap;
+}
+/* 设备、目录、时间是一组：窄了整组换行，组里目录先省略 */
+.sg-where {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.sg-dot::before {
+  content: "·";
+}
+.sg-folder {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
-.suggestion-source .ell {
+/* 窄了来源标题单占一行，设备、目录、时间换到下一行，不把标题挤成几个字 */
+@container sg (max-width: 420px) {
+  .sg-meta {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .sg-source {
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+  .sg-dot[data-lead] {
+    display: none;
+  }
+}
+
+/* 看板建议卡展开后的正文：元信息、背景、任务、操作，从上往下排，不再套一层卡 */
+.sg-body {
+  container: sg / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   min-width: 0;
+  padding-top: 6px;
+}
+.sg-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+.sg-label {
+  margin: 0;
+  font-size: calc(11px * var(--fs));
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.sg-text {
+  align-self: stretch;
+  min-width: 0;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.sg-text > :first-child {
+  margin-top: 0;
+}
+.sg-text > :last-child {
+  margin-bottom: 0;
+}
+/* 长的先露六行左右，“展开全文”看全 */
+.sg-text[data-folded] {
+  max-height: 9.5lh;
+  overflow: hidden;
+}
+.suggestion-card .prop-acts {
+  align-items: center;
+  margin-top: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-1);
+}
+[data-skin="retro"] .suggestion-card .prop-acts {
+  border-top-style: dashed;
+}
+/* 收起时摘要给两行：背景首句常常一行放不下 */
+.suggestion-card > .mg-post-summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin-top: 4px;
+  white-space: normal;
 }
 .mg-suggestions-list {
   padding: 0;

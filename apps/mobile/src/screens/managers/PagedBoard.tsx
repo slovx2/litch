@@ -31,7 +31,14 @@ import {
   managerPageLabel,
   managerPageStates,
 } from '../../../../../packages/core/src/projection/manager-paging.mts'
-import type { ManagerPageKind } from '../../../../../packages/protocol/src/manager-paging.mts'
+import type {
+  ManagerObjectHead,
+  ManagerPageKind,
+} from '../../../../../packages/protocol/src/manager-paging.mts'
+import {
+  proposalSummary,
+  shortObjectId,
+} from '../../../../../packages/ui/src/tree/proposal-brief.ts'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Chip } from '../../ui/kit/controls'
@@ -197,6 +204,16 @@ export function PagedBoard({
       ? selected
       : null
   const post = board.posts?.find((post) => post.id === active)
+  // 建议收起时写背景首句，和桌面端、整份看板一致；列表里没有这条时退回分页预览
+  const previewOf = (head: ManagerObjectHead) => {
+    const row =
+      head.kind === 'suggestion'
+        ? suggestions.find((one) => `S-${one.proposal.id}` === head.id)
+        : undefined
+    return row
+      ? proposalSummary(row.proposal.background, row.proposal.prompt)
+      : plainPreview(head.preview)
+  }
   const item = board.items.find((item) => item.id === active)
   const [detailAttempt, setDetailAttempt] = useState<ManagerObjectId | null>(null)
   useEffect(() => {
@@ -552,7 +569,9 @@ export function PagedBoard({
                           <Caret open={active === head.id} />
                         </View>
                         <Text style={[style, styles.title, { fontWeight: '600' }]}>
-                          <Text style={{ color: c.ink3, fontWeight: '400' }}>{head.id}</Text>{' '}
+                          <Text style={{ color: c.ink3, fontWeight: '400' }}>
+                            {shortObjectId(head.id)}
+                          </Text>{' '}
                           {plainLine(head.title)}
                         </Text>
                         <StatusTag
@@ -581,7 +600,7 @@ export function PagedBoard({
                           numberOfLines={mark ? 1 : 2}
                           style={[styles.preview, { color: c.ink2 }]}
                         >
-                          {plainPreview(head.preview)}
+                          {previewOf(head)}
                         </Text>
                       )}
                     </Pressable>

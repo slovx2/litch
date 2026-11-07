@@ -1,4 +1,4 @@
-import { managerBoardPages } from '@litch/core'
+import { keys, managerBoardPages, type SuggestionView } from '@litch/core'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { boardPageMemory, managerBoardMemory } from '../../../core/src/manager-board-memory.mts'
 import type {
@@ -19,12 +19,13 @@ import {
   managerPageLabel,
   managerPageStates,
 } from '../../../core/src/projection/manager-paging.mts'
-import type { ManagerPageKind } from '../../../protocol/src/manager-paging.mts'
+import type { ManagerObjectHead, ManagerPageKind } from '../../../protocol/src/manager-paging.mts'
 import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
-import { useServices } from '../app/services.tsx'
+import { useKey, useServices } from '../app/services.tsx'
 import { Stamp } from '../transcript/Stamp.tsx'
+import { proposalSummary, shortObjectId } from '../tree/proposal-brief.ts'
 import { ManagerSuggestions } from '../tree/SuggestionsPage.tsx'
 import { BoardMarkdown } from './BoardMarkdown.tsx'
 import { BoardPanels, Item } from './BoardPanels.tsx'
@@ -154,6 +155,13 @@ export function PagedBoard({
       : null
   const post = board.posts?.find((post) => post.id === active)
   const item = board.items.find((item) => item.id === active)
+  // 建议收起时和整份看板一样写背景首句（做不做的依据）；分页预览是任务开头，只在列表里没有这条时兜底
+  const suggestions = useKey<readonly SuggestionView[]>(keys.suggestions)
+  const previewOf = (head: ManagerObjectHead) => {
+    if (head.kind !== 'suggestion') return head.preview
+    const row = suggestions?.find((one) => `S-${one.proposal.id}` === head.id)
+    return row ? proposalSummary(row.proposal.background, row.proposal.prompt) : head.preview
+  }
   const [detailAttempt, setDetailAttempt] = useState<ManagerObjectId | null>(null)
   useEffect(() => {
     if (selected && page && !linked && !page.entries.some((head) => head.id === selected))
@@ -506,9 +514,18 @@ export function PagedBoard({
                       aria-expanded={active === head.id}
                       onClick={toggle}
                     >
-                      <span aria-hidden="true">{active === head.id ? '▾' : '▸'}</span>{' '}
-                      <span className="mono">{head.id}</span> · {head.title} ·{' '}
-                      {t(managerPageLabel(kind, head.status) as Parameters<typeof t>[0])}
+                      <span className="mg-paging-caret" aria-hidden="true">
+                        {active === head.id ? '▾' : '▸'}
+                      </span>
+                      <span className="mg-paging-title">
+                        <span className="mono mg-paging-id" title={head.id}>
+                          {shortObjectId(head.id)}
+                        </span>{' '}
+                        {head.title}
+                      </span>
+                      <span className="mg-paging-state" data-pending={head.pending || undefined}>
+                        {t(managerPageLabel(kind, head.status) as Parameters<typeof t>[0])}
+                      </span>
                       {mark ? <DraftPill mark={mark} status={head.status} kind={kind} /> : null}
                     </button>
                     {active === head.id ? (
@@ -527,7 +544,7 @@ export function PagedBoard({
                           />
                         ) : null}
                         <p className="mg-paging-preview" data-short={Boolean(mark) || undefined}>
-                          {head.preview}
+                          {previewOf(head)}
                         </p>
                       </>
                     )}

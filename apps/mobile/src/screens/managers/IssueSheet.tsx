@@ -7,6 +7,7 @@ import type {
   SuggestionView,
 } from '@litch/core'
 import { useEffect, useRef } from 'react'
+import { shortObjectId } from '../../../../../packages/ui/src/tree/proposal-brief.ts'
 import { useT } from '../../ui/i18n'
 import { DiscussionDrawer } from './DiscussionDrawer'
 import { Issue } from './Issue'
@@ -45,7 +46,7 @@ export function IssueSheet({
   return (
     <DiscussionDrawer
       visible
-      id={post.kind === 'suggestion' ? t('manager.suggestions') : post.id}
+      id={shortObjectId(post.id)}
       title={post.title}
       testID={`issue-sheet:${post.id}`}
       backLabel={t('mgr.sheet.console')}

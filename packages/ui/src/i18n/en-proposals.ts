@@ -31,6 +31,8 @@ export const enProposals: Record<keyof typeof zhProposals, Entry> = {
   'proposal.brief.less': 'Show less',
   'proposal.brief.background': 'Background',
   'proposal.brief.task': 'Task',
+  'proposal.brief.unfold': 'Show all',
+  'proposal.brief.fold': 'Show less',
   'proposal.wider':
     'This harness requires “{level}”. Change the harness or parent permission before starting.',
   'proposal.state.pending': 'Pending',

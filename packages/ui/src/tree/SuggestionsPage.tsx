@@ -17,7 +17,7 @@ import type { ManagerPost } from '../../../protocol/src/manager-posts.mjs'
 import type { Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { useNow } from '../app/clock.ts'
-import { ago } from '../app/format.ts'
+import { ago, agoLong, stampFull } from '../app/format.ts'
 import { Close, Forward, Icon } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { BoardMarkdown } from '../manager/BoardMarkdown.tsx'
@@ -27,11 +27,65 @@ import { PostCard } from '../manager/PostCard.tsx'
 import { PostDiscussion, PostHistory } from '../manager/PostDiscussion.tsx'
 import { Relations } from '../manager/Relations.tsx'
 import { FileLinksProvider, useSessionFileLinks } from '../transcript/FileLinks.tsx'
+import { BriefSections } from './BriefSections.tsx'
 import { Brief, ProposalActs } from './ProposalCard.tsx'
-import { proposalSummary } from './proposal-brief.ts'
+import { proposalSummary, shortObjectId } from './proposal-brief.ts'
 import { SANDBOX_LEVEL } from './sandbox.ts'
 
 const NONE: readonly SuggestionView[] = []
+
+/** 来源会话（可点进去）、设备、目录、多久以前：一行小字，放不下时来源标题和目录先省略 */
+function SuggestionMeta({
+  row,
+  workspace,
+  online,
+  onOpen,
+}: {
+  row: SuggestionView
+  workspace: { name: string } | undefined
+  online: boolean
+  onOpen(selection: Selection, archived: boolean): void
+}) {
+  const t = useT()
+  const now = useNow()
+  const { deviceId, proposal, source } = row
+  const device = useKey<DeviceView>(keys.device(deviceId))
+  const folder = workspace?.name ?? source.cwd.split(/[\\/]/).filter(Boolean).at(-1) ?? source.cwd
+  return (
+    <div className="sg-meta">
+      <button
+        type="button"
+        className="sg-source"
+        data-act="open-source"
+        disabled={!online}
+        title={!online ? t('suggestions.offline') : t('suggestions.openSource')}
+        onClick={() => onOpen({ deviceId, sessionId: source.threadId }, source.archived)}
+      >
+        {/* 标题会被省略：在线时悬停看全名，离线时让出按钮上的离线原因 */}
+        <span className="ell" title={online ? source.title : undefined}>
+          {source.title}
+        </span>
+      </button>
+      {source.archived ? <span className="pill mute">{t('suggestions.archived')}</span> : null}
+      <span className="sg-dot" data-lead="" aria-hidden="true" />
+      <span className="sg-where">
+        <span className="sg-fixed">{device ? t.text(device.name) : deviceId}</span>
+        <span className="sg-dot" aria-hidden="true" />
+        <span className="sg-folder ell" title={source.cwd}>
+          {folder}
+        </span>
+        <span className="sg-dot" aria-hidden="true" />
+        <time
+          className="sg-fixed"
+          dateTime={new Date(proposal.createdAt).toISOString()}
+          title={stampFull(proposal.createdAt, t.lang)}
+        >
+          {agoLong(proposal.createdAt, now, t.lang)}
+        </time>
+      </span>
+    </div>
+  )
+}
 
 function SuggestionRow({
   row,
@@ -45,7 +99,6 @@ function SuggestionRow({
   onOpen(selection: Selection, archived: boolean): void
 }) {
   const t = useT()
-  const now = useNow()
   const { deviceId, proposal, source } = row
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? []
@@ -56,52 +109,12 @@ function SuggestionRow({
     deviceId,
     useKey<SessionSummary>(keys.summary(deviceId, source.threadId)),
   )
-  const heading = (
+  const id = `S-${proposal.id}`
+  const review = !reviewedSuggestion(row) ? (
+    <span className="pill mute suggestion-review-label">{t('suggestions.unreviewed')}</span>
+  ) : null
+  const notes = (
     <>
-      <b className="prop-title grow">{proposal.title}</b>
-      {!reviewedSuggestion(row) ? (
-        <span className="pill mute suggestion-review-label">{t('suggestions.unreviewed')}</span>
-      ) : null}
-    </>
-  )
-  const body = (
-    <>
-      <div className="prop-meta">
-        <button
-          type="button"
-          className="btn ghost suggestion-source"
-          data-act="open-source"
-          disabled={!online}
-          title={!online ? t('suggestions.offline') : t('suggestions.openSource')}
-          onClick={() => onOpen({ deviceId, sessionId: source.threadId }, source.archived)}
-        >
-          <span className="ell">{source.title}</span>
-          <Forward />
-        </button>
-        {source.archived ? <span className="pill mute">{t('suggestions.archived')}</span> : null}
-        <span>{device ? t.text(device.name) : deviceId}</span>
-        <span className="mono ell" title={source.cwd}>
-          {workspace?.name ?? source.cwd}
-        </span>
-        <time
-          dateTime={new Date(proposal.createdAt).toISOString()}
-          title={new Date(proposal.createdAt).toLocaleString()}
-        >
-          {ago(proposal.createdAt, now, t)}
-        </time>
-      </div>
-      {manager ? <Relations id={`S-${proposal.id}`} /> : null}
-      {manager ? (
-        <Brief
-          prompt={proposal.prompt}
-          background={proposal.background}
-          renderText={BoardMarkdown}
-        />
-      ) : (
-        <FileLinksProvider value={fileLinks}>
-          <Brief prompt={proposal.prompt} background={proposal.background} />
-        </FileLinksProvider>
-      )}
       <PostHistory post={post} />
       {proposal.widerSandbox ? (
         <p className="prop-wider">
@@ -110,40 +123,65 @@ function SuggestionRow({
       ) : null}
       {!online ? <p className="dim">{t('suggestions.offline')}</p> : null}
       {source.archived ? <p className="dim">{t('suggestions.restore')}</p> : null}
-      <ProposalActs
-        deviceId={deviceId}
-        sessionId={source.threadId}
-        proposal={proposal}
-        inbox
-        sourceParent={{
-          id: source.threadId,
-          harness: source.harness,
-          title: source.title,
-          cwd: source.cwd,
-          workspaceId: workspace?.id ?? null,
-        }}
-      />
     </>
   )
-  return manager ? (
-    <li className="suggestion-row" data-motion-key={proposal.id}>
-      <PostCard
-        manager={manager}
-        id={`S-${proposal.id}`}
-        text={proposalSummary(proposal.background, proposal.prompt)}
-        className="tree-card prop-card"
-        data-state={proposal.status}
-        data-proposal={proposal.id}
-        tabIndex={-1}
-        heading={heading}
-        discussion={(collapsed) => (
-          <PostDiscussion compact={collapsed} manager={manager} post={post} disabled={!online} />
-        )}
-      >
-        <div className="prop-body">{body}</div>
-      </PostCard>
-    </li>
-  ) : (
+  const acts = (small: boolean) => (
+    <ProposalActs
+      deviceId={deviceId}
+      sessionId={source.threadId}
+      proposal={proposal}
+      inbox
+      small={small}
+      sourceParent={{
+        id: source.threadId,
+        harness: source.harness,
+        title: source.title,
+        cwd: source.cwd,
+        workspaceId: workspace?.id ?? null,
+      }}
+    />
+  )
+  const meta = <SuggestionMeta row={row} workspace={workspace} online={online} onOpen={onOpen} />
+  // 看板里：和决策、请求同一种卡，一个卡头（编号加标题），展开只是往下多出元信息、背景、任务和操作
+  if (manager)
+    return (
+      <li className="suggestion-row" data-motion-key={proposal.id}>
+        <PostCard
+          manager={manager}
+          id={id}
+          text={proposalSummary(proposal.background, proposal.prompt)}
+          className="mg-card suggestion-card"
+          data-state={proposal.status}
+          data-proposal={proposal.id}
+          tabIndex={-1}
+          heading={
+            <>
+              <span className="mono dim" title={id}>
+                {shortObjectId(id)}
+              </span>
+              <h3 className="grow">{proposal.title}</h3>
+              {review}
+            </>
+          }
+          discussion={(collapsed) => (
+            <PostDiscussion compact={collapsed} manager={manager} post={post} disabled={!online} />
+          )}
+        >
+          <div className="sg-body">
+            {meta}
+            <Relations id={id} />
+            <BriefSections
+              prompt={proposal.prompt}
+              background={proposal.background}
+              renderText={BoardMarkdown}
+            />
+            {notes}
+            {acts(true)}
+          </div>
+        </PostCard>
+      </li>
+    )
+  return (
     <li
       className="tree-card prop-card suggestion-row"
       data-state={proposal.status}
@@ -151,8 +189,14 @@ function SuggestionRow({
       tabIndex={-1}
     >
       <div className="prop-body">
-        {heading}
-        {body}
+        <b className="prop-title grow">{proposal.title}</b>
+        {review}
+        {meta}
+        <FileLinksProvider value={fileLinks}>
+          <Brief prompt={proposal.prompt} background={proposal.background} />
+        </FileLinksProvider>
+        {notes}
+        {acts(false)}
       </div>
     </li>
   )
@@ -222,19 +266,47 @@ export function ManagerSuggestions({
       ))}
     </SuggestionList>
   )
+  // 已了结的建议只剩看板帖子：同一种卡，正文是任务原文
+  const historyCards = history.map((post) => (
+    <PostCard
+      manager={manager}
+      id={post.id}
+      text={post.body}
+      closed
+      className="mg-card suggestion-card"
+      key={post.id}
+      data-proposal={post.proposalId}
+      tabIndex={-1}
+      heading={
+        <>
+          <span className="mono dim" title={post.id}>
+            {shortObjectId(post.id)}
+          </span>
+          <h3 className="grow">{post.title}</h3>
+        </>
+      }
+      discussion={(collapsed) => (
+        <PostDiscussion compact={collapsed} manager={manager} post={post} />
+      )}
+    >
+      <div className="sg-body">
+        <Relations id={post.id} />
+        <BriefSections prompt={post.body} renderText={BoardMarkdown} />
+        <PostHistory post={post} />
+      </div>
+    </PostCard>
+  ))
+  // 分页详情只放这一张：卡头已在分页那一行，不再包“经理未审核”“建议历史”的分组
+  if (onlyId !== undefined) return rows.length ? cards(rows) : historyCards
   return (
     <div className="mg-stack">
       {reviewed.length ? (
         cards(reviewed)
-      ) : onlyId === undefined ? (
+      ) : (
         <p className="mg-empty">{t('suggestions.noReviewed')}</p>
-      ) : null}
+      )}
       {pending.length ? (
-        <details
-          className="mg-suggestion-review"
-          data-suggestions-unreviewed
-          open={onlyId !== undefined}
-        >
+        <details className="mg-suggestion-review" data-suggestions-unreviewed>
           <summary>
             {t('suggestions.unreviewed')} {pending.length}
           </summary>
@@ -242,30 +314,11 @@ export function ManagerSuggestions({
         </details>
       ) : null}
       {history.length ? (
-        <details className="mg-suggestion-history" open={onlyId !== undefined}>
+        <details className="mg-suggestion-history">
           <summary>
             {t('manager.suggestionHistory')} · {history.length}
           </summary>
-          {history.map((post) => (
-            <PostCard
-              manager={manager}
-              id={post.id}
-              text={post.body}
-              closed
-              className="mg-card"
-              key={post.id}
-              data-proposal={post.proposalId}
-              tabIndex={-1}
-              heading={<h3 className="grow">{post.title}</h3>}
-              discussion={(collapsed) => (
-                <PostDiscussion compact={collapsed} manager={manager} post={post} />
-              )}
-            >
-              <Relations id={post.id} />
-              <Brief prompt={post.body} renderText={BoardMarkdown} />
-              <PostHistory post={post} />
-            </PostCard>
-          ))}
+          {historyCards}
         </details>
       ) : null}
     </div>

@@ -16,3 +16,10 @@ test('摘要选背景首句，缺背景退回任务；去排版、保留文件�
   assert.equal(proposalSummary('', ''), '')
   assert.equal(Array.from(proposalSummary('😀'.repeat(220), '')).length, 201)
 })
+
+test('看板编号：建议的 uuid 只留前 8 位，其他编号原样', async () => {
+  const { shortObjectId } = await import('../src/tree/proposal-brief.ts')
+  assert.equal(shortObjectId('S-315bc783-7161-441d-bab0-33c9a2c855eb'), 'S-315bc783')
+  assert.equal(shortObjectId('S-pr9'), 'S-pr9')
+  assert.equal(shortObjectId('D-17'), 'D-17')
+})

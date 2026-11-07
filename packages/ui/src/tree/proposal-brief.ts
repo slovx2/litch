@@ -1,3 +1,8 @@
+/** 看板编号的显示写法：建议的编号是 S- 加提案 uuid，太长，只留前 8 位（完整编号放悬停提示）；其他编号原样 */
+export function shortObjectId(id: string): string {
+  return id.startsWith('S-') && id.length > 10 ? id.slice(0, 10) : id
+}
+
 /** 背景首句用作做/不做的判断依据；没有背景的 fork/旧卡退回任务首句。 */
 export function proposalSummary(background: string | undefined, prompt: string): string {
   const text = (background?.trim() || prompt.trim())

@@ -29,6 +29,26 @@ export function ago(timestamp: number, now: number, t: Translator): string {
   return `${date.getMonth() + 1}/${date.getDate()}`
 }
 
+/** 卡片上不那么挤的“多久以前”：刚刚、7 分钟前、3 小时前、2 天前；一周以上写日期时刻 */
+export function agoLong(timestamp: number, now: number, lang: string): string {
+  const diff = Math.max(0, now - timestamp)
+  if (diff >= 7 * DAY) return stamp(timestamp, now, lang)
+  const relative = relativeFormat(lang)
+  if (diff < MINUTE) return relative.format(0, 'second')
+  if (diff < HOUR) return relative.format(-Math.floor(diff / MINUTE), 'minute')
+  if (diff < DAY) return relative.format(-Math.floor(diff / HOUR), 'hour')
+  return relative.format(-Math.floor(diff / DAY), 'day')
+}
+const relatives = new Map<string, Intl.RelativeTimeFormat>()
+function relativeFormat(lang: string): Intl.RelativeTimeFormat {
+  let format = relatives.get(lang)
+  if (!format) {
+    format = new Intl.RelativeTimeFormat(lang, { numeric: 'auto' })
+    relatives.set(lang, format)
+  }
+  return format
+}
+
 /** 两个时刻差几个自然日（按本地时间，0 是同一天） */
 function daysApart(earlier: number, later: number): number {
   const a = new Date(earlier)

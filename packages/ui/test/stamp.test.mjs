@@ -34,3 +34,13 @@ test('回合结束的时刻：开始加用时；在跑的、缺一样的是 null
   assert.equal(turnEnded({ status: 'completed', startedAt: null, durationMs: 5 }), null)
   assert.equal(turnEnded({ status: 'completed', startedAt: start, durationMs: null }), null)
 })
+
+test('卡片上的多久以前写全：分钟前、小时前、天前，一周以上换成日期时刻', async () => {
+  const { agoLong } = await import('../src/app/format.ts')
+  const minute = 60_000
+  assert.equal(agoLong(now - 7 * minute, now, 'zh-CN'), '7分钟前')
+  assert.equal(agoLong(now - 7 * minute, now, 'en'), '7 minutes ago')
+  assert.equal(agoLong(now - 3 * 60 * minute, now, 'zh-CN'), '3小时前')
+  assert.equal(agoLong(now - 10_000, now, 'en'), 'now')
+  assert.equal(agoLong(at(2026, 10, 20), now, 'zh-CN'), stamp(at(2026, 10, 20), now, 'zh-CN'))
+})

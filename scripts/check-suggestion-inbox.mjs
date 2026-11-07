@@ -798,7 +798,7 @@ try {
   await click('.sb-btn.suggestions')
   await wait('.suggestion-row')
   // 来源点击沿用会话导航；不能留在集中页面。
-  await click('.suggestion-row .prop-meta button')
+  await click('.suggestion-row [data-act="open-source"]')
   await wait(
     '.row-line[data-session="s6"]:not(.projection-group *) .ss-row:not(.projection-group *).sel',
   )

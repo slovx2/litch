@@ -7,6 +7,34 @@
   font-weight: 600;
   cursor: pointer;
   padding: 10px;
+  /* 箭头、编号加标题、状态一行排开；标题长了自己折行，状态贴右不跟着折 */
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.mg-paging-caret {
+  flex: none;
+  color: var(--ink-3);
+}
+.mg-paging-title {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mg-paging-id {
+  color: var(--ink-3);
+  font-weight: 400;
+  font-size: calc(11px * var(--fs));
+}
+.mg-paging-state {
+  flex: none;
+  font-weight: 400;
+  font-size: calc(12px * var(--fs));
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.mg-paging-state[data-pending] {
+  color: var(--accent);
 }
 .mg-paging-head:hover,
 .mg-post-toggle:hover {
@@ -49,6 +77,12 @@
 [data-paging-detail] .mg-card {
   border: 0;
 }
+/* 分页里展开的建议：卡头就是分页那一行，正文直接接在下面，和标题左对齐 */
+[data-paging-detail] .suggestion-card {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
 .mg-item-links a,
 .mg-relations a,
 .mg-relations button[data-relation-target] {
@@ -67,8 +101,8 @@
   -webkit-line-clamp: 1;
 }
 .mg-paging-head .pill {
-  margin-inline-start: 8px;
-  vertical-align: 1px;
+  flex: none;
+  font-weight: 400;
 }
 .mg-card[data-draft-mark="live"] {
   border-color: var(--wait);
@@ -1431,14 +1465,6 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-.mg-board .suggestion-row > .tree-card {
-  display: block;
-}
-.mg-board .suggestion-row > .tree-card > header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 /* ---------- 控制台讨论：卡片上的入口与看板底部分屏 ---------- */
