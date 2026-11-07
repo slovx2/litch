@@ -92,13 +92,17 @@ const textOf = (content) =>
     ? content
     : (content ?? []).map((part) => (typeof part?.text === 'string' ? part.text : '')).join('')
 
-/** 在工具表里按说明找 <命名空间>.<tool>：tools 是 [{ name, description }]，找不到是 null */
+/**
+ * 在工具表里按说明找 <命名空间>.<tool>：tools 是 [{ name, description }]，找不到是 null。
+ * Claude CLI 把说明按 NFKC 规范化后再发给模型（全角括号、分号、逗号变成半角），两边都规范化后再比。
+ */
 function findByMark(tools, space, tool) {
-  const marks = [space.marks[tool]].flat()
+  const marks = [space.marks[tool]].flat().map((mark) => mark.normalize('NFKC'))
   return (
     tools.find(
       (one) =>
-        typeof one.description === 'string' && marks.some((mark) => one.description.includes(mark)),
+        typeof one.description === 'string' &&
+        marks.some((mark) => one.description.normalize('NFKC').includes(mark)),
     )?.name ?? null
   )
 }
