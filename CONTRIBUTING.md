@@ -59,6 +59,8 @@ coding conventions.
 
 ## 发版
 
+Full 偶发失败按[记账与审批规则](docs/reference/ci-flaky.md)留证据；同一作业中的同一用例累计三个独立 run 后，由经理交用户审批是否移出，批准前保留原覆盖。
+
 发版由维护者做。整个仓库只有一个版本号，根包、各包/锁、mobile app.json 和更新日志在冻结候选前一起同步，`npm run check` 会检查版本一致性。
 
 标准流程见[候选准备与产物晋级](docs/reference/release-candidates.md)：先在候选分支运行 `release.yml`（Prepare），并行完成门禁与正式签名出包；随后用 `promote.yml` 指定 source run/attempt、候选 SHA、artifact ID 和 digest，只晋级已验文件。标签不再触发测试或打包。独立 Gate 仅用于诊断，不是标准发版的重复前置步骤。
