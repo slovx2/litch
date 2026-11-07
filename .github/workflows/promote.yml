@@ -107,3 +107,64 @@ jobs:
           path: ${{ runner.temp }}/promotion
           if-no-files-found: error
           retention-days: 14
+  chrome-store:
+    name: Submit Chrome extension after desktop publication
+    needs: promote
+    if: inputs.mode == 'publish'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.21.0
+      - name: 检查可选商店配置
+        id: config
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFileSync } from 'node:fs'
+          const ready = Boolean(process.env.CWS_SERVICE_ACCOUNT_JSON && process.env.CWS_PUBLISHER_ID)
+          appendFileSync(process.env.GITHUB_OUTPUT, `ready=${ready}\n`)
+          if (!ready) appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            '\nChrome Web Store：未配置仓库机密，已跳过自动上传；需要更新扩展时请使用手动流程。\n')
+          JS
+        env:
+          CWS_SERVICE_ACCOUNT_JSON: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: steps.config.outputs.ready == 'true'
+        with:
+          ref: ${{ inputs.candidate-sha }}
+          path: store-source
+          persist-credentials: false
+      - name: 安装候选提交锁定的构建依赖（不安装 Electron 二进制）
+        if: steps.config.outputs.ready == 'true'
+        run: npm ci --ignore-scripts --prefix store-source/apps/desktop
+      - name: 从候选源码打商店 ZIP
+        if: steps.config.outputs.ready == 'true'
+        run: node scripts/ci/chrome-store-package.mjs store-source "$RUNNER_TEMP/chrome-store"
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate-sha }}
+      - name: 比较商店交付内容并提交审核
+        if: steps.config.outputs.ready == 'true'
+        run: node scripts/ci/chrome-store-publish.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CWS_SERVICE_ACCOUNT_JSON: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          CWS_PACKAGE_DIR: ${{ runner.temp }}/chrome-store
+          CANDIDATE_SHA: ${{ inputs.candidate-sha }}
+          TAG: ${{ inputs.tag }}
+          PROMOTE_MODE: ${{ inputs.mode }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always() && steps.config.outputs.ready == 'true'
+        with:
+          name: chrome-store-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/chrome-store
+          if-no-files-found: ignore
+          retention-days: 14

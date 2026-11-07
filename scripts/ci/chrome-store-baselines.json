@@ -1,0 +1,12 @@
+{
+  "0.36.0": {
+    "schema": 1,
+    "itemId": "ddnllmibgnhhiiaaidfamlknbnfjpnpo",
+    "version": "0.36.0",
+    "sha": "89bf6a310def0daaecc19115b49dde6a1a1b2172",
+    "contentHash": "6ffb20d08acfc5004a7f64f997d93e72f6e1ab5c9b76edb2ac4680d1ec34b2c1",
+    "zipName": "litch-browser-0.36.0.zip",
+    "zipSha256": "4b23a6e5a4a64f8d1b9a9c27c3031c7eabb8761f29e577a048510e3de42e042a",
+    "provenance": "用户实际手动上传送审的 ZIP；与 v0.36.0 之间扩展输入未改。"
+  }
+}

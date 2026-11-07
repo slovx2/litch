@@ -67,6 +67,8 @@ gh workflow run promote.yml --ref <已推送验证分支> \
 
 草稿/公开后生成 `promotion-<attempt>`，含 `promotion.json` 和 `tap-inputs.json`。后者包含版本、真实标签源码 tar URL/hash、formula 路径及源 run/artifact 参数，可直接用于 Homebrew PR；不会自动修改或发布 tap。源码 hash 是标签 URL 的真实 bytes，不拿安装包 hash 或 commit tar hash 替代。
 
+桌面公开成功后，独立的 `chrome-store` 作业按商店当前公开版本比较扩展交付内容；有变化才上传并送审，通过后自动公开。它从同一候选 SHA 构建商店 ZIP，不重建任何桌面资产。缺少商店机密时跳过并在 Summary 提醒手动处理。一次性设置、基准和失败恢复见 [Chrome Web Store 自动提交](chrome-store.md)。
+
 ## 4. 失败、补验和证明边界
 
 - 任何测试、出包或验证失败，都不封存可晋级候选。部分 Full、缺 run-ci、实际检出错误、未知证明不能冒充完整。

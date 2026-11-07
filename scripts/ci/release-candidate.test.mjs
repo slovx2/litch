@@ -4,6 +4,7 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { test } from 'node:test'
+import { parse } from 'yaml'
 import { acceptedStep, uploadStep } from '../../apps/desktop/scripts/macos-checkpoint.mjs'
 import { affectedDomains, releaseDomains, releaseImpact } from '../ci-impact.mjs'
 import { fullJobs, hasReleaseCoverage, isCompleteReleaseFull } from '../full-proof.mjs'
@@ -650,7 +651,7 @@ test('重复 Prepare 复用现有候选提示；原 run 的失败重跑和过期
   )
 })
 
-test('晋级工作流没有构建/测试调用，标签不会启动第二轮 Prepare', () => {
+test('桌面晋级不构建/测试，独立商店打包只能在公开后运行，标签不启动第二轮 Prepare', () => {
   const prepare = readFileSync(
     new URL('../../.github/workflows/release.yml', import.meta.url),
     'utf8',
@@ -661,7 +662,25 @@ test('晋级工作流没有构建/测试调用，标签不会启动第二轮 Pre
   )
   assert.doesNotMatch(prepare, /^ {2}push:/m)
   assert.doesNotMatch(promotion, /uses: \.\/\.github\/workflows\/(gate|full|release)\.yml/)
-  assert.doesNotMatch(promotion, /run:.*(?:npm|make-installer|notarytool|stapler|codesign)/)
+  const jobs = parse(promotion).jobs
+  for (const [name, job] of Object.entries(jobs)) {
+    if (name === 'chrome-store') {
+      assert.equal(job.needs, 'promote')
+      assert.equal(job.if, "inputs.mode == 'publish'")
+      // 唯一例外只构建 Chrome 商店包，不允许重建桌面候选或重做签名/公证。
+      for (const step of job.steps ?? []) {
+        if (step.run?.includes('npm'))
+          assert.equal(step.run, 'npm ci --ignore-scripts --prefix store-source/apps/desktop')
+        assert.doesNotMatch(
+          step.run ?? '',
+          /make-installer|notarytool|stapler|codesign|npm.*(?:build|test)/,
+        )
+      }
+      continue
+    }
+    for (const step of job.steps ?? [])
+      assert.doesNotMatch(step.run ?? '', /npm|make-installer|notarytool|stapler|codesign/)
+  }
   assert.match(prepare, /make-installer\.mjs --require-signing/)
   assert.doesNotMatch(prepare, /临时签名的 dmg|用调试钥匙签/)
 })
