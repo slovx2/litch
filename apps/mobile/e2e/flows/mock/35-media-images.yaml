@@ -46,6 +46,26 @@ tags: [mock]
 - assertVisible:
     id: media:zoom-value
     text: '100%'
+# 单击即关闭（放大后也一样）；双击必须留在查看器并放大，拖动松手不关。
+- doubleTapOn:
+    id: media:fullscreen-web
+- extendedWaitUntil:
+    visible:
+      id: media:zoom-value
+      text: '250%'
+    timeout: 5000
+- tapOn:
+    id: media:fullscreen-web
+- extendedWaitUntil:
+    notVisible:
+      id: media:fullscreen-web
+    timeout: 5000
+- tapOn:
+    id: 'media:thumbnail:P1 图片'
+- extendedWaitUntil:
+    visible:
+      id: media:fullscreen-web
+    timeout: 15000
 - tapOn:
     id: media:close
 - assertNotVisible:

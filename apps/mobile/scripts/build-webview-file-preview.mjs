@@ -15,6 +15,10 @@ const pdf = join(ui, 'node_modules/pdfjs-dist')
 const pdfBuild = join(pdf, 'legacy/build')
 const read = (path) => readFileSync(path, 'utf8')
 const source = (name) => read(join(mobile, 'src/web', name))
+const gestures = [
+  stripTypeScriptTypes(read(join(mobile, 'src/detail/media/image-taps.ts'))),
+  source('file-preview-gestures.js').replace(/^import .*\n/gm, ''),
+].join('\n')
 const shared = (name) => stripTypeScriptTypes(read(join(ui, 'src/files/preview', name)))
 const inline = (code) => code.replaceAll(/<\//g, '<\\/')
 const styles =
@@ -30,7 +34,7 @@ const imageHtml = page(
     `const IMAGE_BYTES = ${PREVIEW_LIMIT.image};`,
     stripTypeScriptTypes(read(resolve(ui, '../core/src/image-info.mts'))),
     shared('image-info.ts').replace(/^import .*\n|^export \{ imageInfo \}.*\n/gm, ''),
-    source('file-preview-gestures.js'),
+    gestures,
     source('file-preview-image.js'),
   ].join('\n'),
   true,
@@ -55,7 +59,7 @@ const payload = {
   main: [
     read(join(pdfBuild, 'pdf.min.mjs')),
     shared('pdf/policy.ts'),
-    source('file-preview-gestures.js'),
+    gestures,
     source('file-preview-pdf.js'),
   ].join('\n'),
 }

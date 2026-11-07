@@ -145,7 +145,7 @@ in the current window and other drafts are never automatically evicted.
 会话通信、经理事件、子会话回报、定时任务、后台通知和自动续跑指令不进入输入历史；技能、附件、评论与会话引用的协议展开也不写入。其他桌面、手机、CLI 及升级前的历史不会回填到上键记录中；手机输入框目前没有上键翻历史入口。
 仅 macOS：`Ctrl+C` 清空整份草稿（文字、图片、提及、技能、评论及差异批注），`Cmd+Z` 可撤销清空；不打断回合，输入法组字中不处理。Windows/Linux 的 `Ctrl+C` 保持原生复制行为。
 
-发送前可点输入框中的图片缩略图查看大图，适用于粘贴、拖放和选择的图片。桌面按 Esc、点图片外部或关闭按钮返回，焦点回到输入框，草稿和光标位置保留；右上角的移除按钮只移除附件。手机也可点草稿缩略图查看，关闭后返回输入框。已发送消息中的图片仍可点开查看。
+发送前可点输入框中的图片缩略图查看大图，适用于粘贴、拖放和选择的图片。桌面按 Esc、点图片外部或关闭按钮返回，焦点回到输入框，草稿和光标位置保留；右上角的移除按钮只移除附件。手机也可点草稿缩略图全屏查看，双指缩放、双击放大，单击关闭后返回输入框。已发送消息中的图片仍可点开查看。
 
 ## 过程开合
 
@@ -786,7 +786,7 @@ External navigation selects the tree row when automatic location is enabled. Whe
 工具读取图片、MCP 返回图片或浏览器和 Computer Use 截图时，对话的工具摘要右侧会显示一排小图。
 组折叠时显示最近三张和“+N”，展开后按工具显示；窄屏只显示最后一张。点击可浏览同组全部图片，
 用左右按钮或方向键切换、Home/End 跳首尾、点击图片放大或还原、放大后拖动，Ctrl+滚轮调整缩放。
-右上关闭或 Esc 返回；点击背景时，已放大先还原，再点击关闭。
+桌面以半透明深色遮罩覆盖窗口，图片浮在对话上；点击图片以外的遮罩直接关闭，拖动松手不会误关。右上关闭或 Esc 返回。
 
 设备设置的“隐私 → 在对话里显示 AI 读取的图片”默认开启。关闭后不再保存、传输或显示工具图片，
 不影响模型读取图片。原图保存在会话设备，按需加载；单张上限 8MiB，设备图片内容缓存上限 512MiB，
@@ -797,7 +797,8 @@ Images returned by Read, MCP, browser and Computer Use tools appear beside the t
 Collapsed groups show the latest three thumbnails and “+N”; expanded groups show each tool’s images.
 Narrow screens show the last image. Click to browse the whole group, use arrows or Home/End to navigate,
 click to zoom, drag while zoomed, and Ctrl+scroll to adjust zoom. Close with the top-right button or Escape;
-a background click first resets zoom, then closes the viewer.
+The desktop viewer floats over a dark translucent backdrop. Clicking that backdrop closes immediately;
+clicking the image or releasing a drag does not close it.
 
 **Device settings → Privacy → Show images read by AI in conversations** is on by default. Turning it off
 stops saving, transferring and displaying tool images without changing what the model receives.

@@ -11,6 +11,7 @@ import { StrictMode, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ServicesProvider } from '../src/app/services.tsx'
 import { browserClock } from '../src/boot/channel.ts'
+import { treeKey, treeUiNow } from '../src/files/state.ts'
 import { FileLinksProvider } from '../src/transcript/FileLinks.tsx'
 import { Markdown } from '../src/transcript/Markdown.tsx'
 
@@ -37,7 +38,9 @@ URL.revokeObjectURL = (url) => {
   urls.delete(url)
   revoke(url)
 }
-Object.assign(window, { mediaFixture: { calls, urls } })
+Object.assign(window, {
+  mediaFixture: { calls, urls, fileState: () => treeUiNow(treeKey('local', '/work/media-p1')) },
+})
 
 function Fixture() {
   const [shown, show] = useState(true)
@@ -49,7 +52,11 @@ function Fixture() {
       {shown ? (
         <main style={{ padding: 20, width: 900 }}>
           <FileLinksProvider
-            value={{ deviceId: 'local', scope: { root: '/work', cwd: '/work' }, open() {} }}
+            value={{
+              deviceId: 'local',
+              scope: { root: '/work', cwd: '/work' },
+              open() {},
+            }}
           >
             <h2>本机图片</h2>
             <Markdown

@@ -16,6 +16,7 @@ export function ImageSurface({
   onFail,
   claimPixels,
   onRaster,
+  onClose,
 }: {
   data: Extract<FilePreview, { kind: 'ready' }>
   thumbnail?: boolean
@@ -23,12 +24,14 @@ export function ImageSurface({
   onFail(): void
   claimPixels?(width: number, height: number): boolean
   onRaster?(uri: string): void
+  onClose?(): void
 }) {
   const { c, font } = useTheme()
   const t = useT()
   const [zoom, setZoom] = useState<number | null>(null)
   const web = useRef<WebView>(null)
   const checkBudget = !!claimPixels
+  const dismissOnTap = !!onClose
   const html = useMemo(() => {
     const config = JSON.stringify({
       data: data.dataBase64,
@@ -37,9 +40,10 @@ export function ImageSurface({
       background: c.sunken,
       thumbnail: !!thumbnail,
       checkBudget,
+      dismissOnTap,
     }).replaceAll('<', '\\u003c')
     return IMAGE_HTML.replace('<body>', `<body><script>window.__litchPreview=${config}</script>`)
-  }, [data, c.sunken, thumbnail, checkBudget])
+  }, [data, c.sunken, thumbnail, checkBudget, dismissOnTap])
   return (
     <View style={{ flex: 1 }}>
       {!thumbnail ? (
@@ -102,6 +106,10 @@ export function ImageSurface({
         onMessage={({ nativeEvent }) => {
           try {
             const info = JSON.parse(nativeEvent.data)
+            if (info.kind === 'dismiss' && !thumbnail && onClose) {
+              onClose()
+              return
+            }
             if (
               info.kind === 'zoom' &&
               Number.isInteger(info.percent) &&

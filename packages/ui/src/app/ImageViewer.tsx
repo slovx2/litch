@@ -13,6 +13,7 @@ interface ImageViewerProps {
 export function ImageViewer({ url, label, onClose }: ImageViewerProps) {
   const t = useT()
   const dialog = useRef<HTMLDialogElement>(null)
+  const press = useRef<{ blank: boolean; x: number; y: number; moved: boolean } | null>(null)
 
   // 用模态方式打开：焦点留在里面，Esc 由浏览器处理
   useEffect(() => {
@@ -31,8 +32,25 @@ export function ImageViewer({ url, label, onClose }: ImageViewerProps) {
         event.preventDefault()
         onClose()
       }}
+      onPointerDown={(event) => {
+        press.current = {
+          blank: event.target === event.currentTarget,
+          x: event.clientX,
+          y: event.clientY,
+          moved: false,
+        }
+      }}
+      onPointerMove={(event) => {
+        const start = press.current
+        if (start) start.moved ||= Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4
+      }}
+      onPointerCancel={() => {
+        press.current = null
+      }}
       onClick={(event) => {
-        if (event.target === event.currentTarget) onClose()
+        if (event.target === event.currentTarget && press.current?.blank && !press.current.moved)
+          onClose()
+        press.current = null
       }}
     >
       <img src={url} alt={label} />

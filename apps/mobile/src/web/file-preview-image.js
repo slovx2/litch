@@ -44,7 +44,13 @@
         const height = config.format === 'svg' ? info.height : image.naturalHeight
         image.width = width
         image.height = height
-        release = previewGestures(image, width, height, config.thumbnail)
+        release = previewGestures(
+          image,
+          width,
+          height,
+          config.thumbnail,
+          config.dismissOnTap ? () => post({ kind: 'dismiss' }) : undefined,
+        )
         if (config.thumbnail) {
           const scale = Math.min(1, 512 / width, 360 / height)
           const canvas = document.createElement('canvas')

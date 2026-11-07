@@ -1,5 +1,7 @@
 // 图片与 PDF 共用的视口；只变换一张图/画布，不因缩放重新分配大位图。
-export function previewGestures(stage, width, height, thumbnail = false) {
+import { imageTaps } from '../detail/media/image-taps.ts'
+
+export function previewGestures(stage, width, height, thumbnail = false, onTap) {
   let view = { x: 0, y: 0, scale: 1 }
   let fitted = 1
   const points = new Map()
@@ -7,6 +9,13 @@ export function previewGestures(stage, width, height, thumbnail = false) {
   let moved = false
   let lastTap = 0
   let reported = 0
+  const taps = imageTaps(
+    () => onTap?.(),
+    () => {
+      if (view.scale > fitted * 1.05) fit()
+      else zoom(2.5)
+    },
+  )
   const paint = () => {
     stage.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.scale})`
     const percent = Math.round((view.scale / fitted) * 100)
@@ -31,6 +40,10 @@ export function previewGestures(stage, width, height, thumbnail = false) {
   const down = (event) => {
     if (!points.size) moved = false
     points.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    if (points.size > 1) {
+      moved = true
+      taps.cancel()
+    }
     document.body.setPointerCapture(event.pointerId)
     restart()
   }
@@ -60,14 +73,22 @@ export function previewGestures(stage, width, height, thumbnail = false) {
       moved ||= Math.hypot(dx, dy) > 8
       view = { ...start.view, x: start.view.x + dx, y: start.view.y + dy }
     }
+    if (moved) taps.cancel()
     paint()
   }
   const up = (event) => {
     if (!points.delete(event.pointerId)) return
+    if (event.type === 'pointercancel') {
+      moved = true
+      taps.cancel()
+    }
     if (!points.size && !moved && event.type === 'pointerup') {
-      const now = Date.now()
-      if (now - lastTap < 300) fit()
-      lastTap = now
+      if (onTap) taps.tap()
+      else {
+        const now = Date.now()
+        if (now - lastTap < 300) fit()
+        lastTap = now
+      }
     }
     restart()
   }
@@ -91,6 +112,7 @@ export function previewGestures(stage, width, height, thumbnail = false) {
     for (const [name, handler] of Object.entries(events))
       document.removeEventListener(name, handler)
     window.removeEventListener('resize', fit)
+    taps.cancel()
     points.clear()
     if (window.__litchImageZoom === zoom) delete window.__litchImageZoom
   }

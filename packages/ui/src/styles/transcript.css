@@ -324,7 +324,7 @@
   place-items: center;
 }
 .viewer::backdrop {
-  background: rgb(0 0 0 / 72%);
+  background: var(--image-viewer-backdrop);
 }
 .viewer img {
   max-width: 100%;

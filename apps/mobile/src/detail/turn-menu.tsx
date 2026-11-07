@@ -6,7 +6,7 @@
 // 和“评论这条回答”（打开全文页选一段加评论，comments/）。
 import * as Clipboard from 'expo-clipboard'
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import type { SessionStore } from '../core/session-store'
 import { useChannel } from '../shell/services'
 import { useT } from '../ui/i18n'
@@ -134,22 +134,7 @@ export function TurnMenu({
   )
 }
 
-/** 看大图：点哪里都关上 */
-export function ImageViewer({ url, onClose }: { url: string | null; onClose(): void }) {
-  const t = useT()
-  return (
-    <Modal visible={url !== null} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable
-        style={styles.viewer}
-        onPress={onClose}
-        accessibilityLabel={t('detail.image.close')}
-        testID="image-viewer"
-      >
-        {url ? <Image source={{ uri: url }} style={styles.full} resizeMode="contain" /> : null}
-      </Pressable>
-    </Modal>
-  )
-}
+export { ImageViewer } from './media/AttachmentViewer'
 
 /** 对话区底部一闪而过的一句话，同一时间只有一句，新的顶掉旧的 */
 export function Flash({ text, onDone }: { text: string | null; onDone(): void }) {
@@ -175,13 +160,6 @@ export function Flash({ text, onDone }: { text: string | null; onDone(): void })
 }
 
 const styles = StyleSheet.create({
-  viewer: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.92)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  full: { width: '100%', height: '100%' },
   flashWrap: { position: 'absolute', left: 16, right: 16, bottom: 16, alignItems: 'center' },
   flash: { paddingHorizontal: 14, paddingVertical: 8, maxWidth: '100%' },
 })

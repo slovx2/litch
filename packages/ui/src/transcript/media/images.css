@@ -33,20 +33,30 @@
   font-size: 0.85em;
 }
 .media-lightbox {
-  width: 92vw;
-  height: 90vh;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
   max-width: none;
   max-height: none;
-  padding: 12px;
-  border: 1px solid var(--line-1);
-  border-radius: var(--r2);
-  background: var(--panel);
+  padding: 16px;
+  border: 0;
+  background: transparent;
+  overflow: hidden;
   color: var(--ink);
 }
 .media-lightbox::backdrop {
-  background: var(--overlay);
+  background: var(--image-viewer-backdrop);
 }
 .media-lightbox-tools {
+  position: relative;
+  z-index: 1;
+  margin: 0 auto 8px;
+  max-width: 960px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--raised);
+  box-shadow: var(--shadow);
   display: flex;
   align-items: center;
   gap: 8px;

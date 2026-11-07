@@ -165,6 +165,7 @@ function ToolImageViewer({
   const [zoom, setZoom] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const drag = useRef<{ x: number; y: number; origin: typeof offset; moved: boolean } | null>(null)
+  const blankPress = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const [loaded, setLoaded] = useState<{ id: string; value: FilePreview } | null>(null)
   const [lease, setLease] = useState<{ id: string; resources: PreviewResources } | null>(null)
   const entry = entries[index]!
@@ -210,10 +211,6 @@ function ToolImageViewer({
     setIndex(Math.max(0, Math.min(entries.length - 1, at)))
     reset()
   }
-  const backdrop = () => {
-    if (zoom !== 1) reset()
-    else close()
-  }
   return (
     <dialog
       ref={dialog}
@@ -245,7 +242,22 @@ function ToolImageViewer({
         className="tool-image-backdrop"
         tabIndex={-1}
         aria-label={t('viewer.close')}
-        onClick={backdrop}
+        onPointerDown={(event) => {
+          blankPress.current = { x: event.clientX, y: event.clientY, moved: false }
+          event.currentTarget.setPointerCapture(event.pointerId)
+        }}
+        onPointerMove={(event) => {
+          const start = blankPress.current
+          if (start)
+            start.moved ||= Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4
+        }}
+        onPointerCancel={() => {
+          blankPress.current = null
+        }}
+        onClick={(event) => {
+          if (event.detail === 0 || (blankPress.current && !blankPress.current.moved)) close()
+          blankPress.current = null
+        }}
       />
       <button
         type="button"
@@ -293,7 +305,7 @@ function ToolImageViewer({
             onPointerMove={(event) => {
               const start = drag.current
               if (start && event.buttons && zoom > 1) {
-                start.moved =
+                start.moved ||=
                   Math.abs(event.clientX - start.x) + Math.abs(event.clientY - start.y) > 3
                 setOffset({
                   x: start.origin.x + event.clientX - start.x,

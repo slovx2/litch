@@ -378,11 +378,12 @@ Confirmation is not saved, does not change known_hosts, and must be repeated for
 ## 工具图片 / Tool images
 
 手机在工具摘要右侧显示 AI 读取的图片；窄屏保留最后一张，“+N”打开同组图库。点击后全屏查看，
-可前后切换、捏合缩放，关闭返回原位置。原图只在查看时从会话设备读取；单图解码上限为 400 万像素。
+可前后切换、双指缩放、双击放大或还原；单击图片直接关闭（放大后也一样），拖动或缩放松手不会误关。关闭返回原位置。原图只在查看时从会话设备读取；单图解码上限为 400 万像素。
 设备隐私开关“在对话里显示 AI 读取的图片”同时适用于手机；关闭会隐藏小图并关闭查看器。
 
 The phone shows images read by AI beside tool summaries. Narrow screens keep the last thumbnail;
 “+N” opens the group gallery. Tap for full-screen viewing, previous/next navigation and pinch zoom.
+Double-tap to zoom or reset; a single tap closes even while zoomed. Releasing a drag or pinch does not close it.
 Originals load from the session device only when opened, with a four-million-pixel limit per image.
 The device’s **Show images read by AI in conversations** privacy setting also applies to the phone;
 turning it off hides the thumbnails and closes the viewer.

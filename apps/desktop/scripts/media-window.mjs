@@ -73,6 +73,70 @@ app.whenReady().then(async () => {
     }
     await read('document.querySelector(".transcript-image-open").click()')
     await wait('document.querySelector(".media-lightbox[open] img")?.complete')
+    const clickAt = async (x, y) => {
+      window.webContents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 })
+      window.webContents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 })
+      await read(
+        'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))',
+      )
+    }
+    for (const skin of ['standard', 'retro', 'human'])
+      for (const theme of ['light', 'dark']) {
+        await read(`window.__litchLook.set({skin: '${skin}', theme: '${theme}'})`)
+        await read('document.fonts.ready')
+        await read(
+          'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))',
+        )
+        const style = await read(`(() => {
+        const dialog = document.querySelector('.media-lightbox')
+        const rect = dialog.getBoundingClientRect()
+        return { width: rect.width, height: rect.height, windowWidth: innerWidth, windowHeight: innerHeight,
+          fill: getComputedStyle(dialog).backgroundColor, backdrop: getComputedStyle(dialog, '::backdrop').backgroundColor }
+      })()`)
+        assert.equal(style.width, style.windowWidth)
+        assert.equal(style.height, style.windowHeight)
+        assert.equal(style.fill, 'rgba(0, 0, 0, 0)')
+        assert.equal(style.backdrop, 'rgba(0, 0, 0, 0.8)')
+        writeFileSync(
+          join(output, `lightbox-${skin}-${theme}.png`),
+          (await window.webContents.capturePage()).toPNG(),
+        )
+      }
+    const center = await read(
+      `(() => { const r = document.querySelector('.media-lightbox img').getBoundingClientRect(); return {x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2)} })()`,
+    )
+    await clickAt(center.x, center.y)
+    assert.equal(
+      await read('!!document.querySelector(".media-lightbox[open]")'),
+      true,
+      '点图片不关',
+    )
+    // 空白处按下后拖动，松手不能当成点击遮罩。
+    window.webContents.sendInputEvent({
+      type: 'mouseDown',
+      x: 20,
+      y: 100,
+      button: 'left',
+      clickCount: 1,
+    })
+    window.webContents.sendInputEvent({ type: 'mouseMove', x: 60, y: 140 })
+    window.webContents.sendInputEvent({
+      type: 'mouseUp',
+      x: 60,
+      y: 140,
+      button: 'left',
+      clickCount: 1,
+    })
+    await read('new Promise(resolve => requestAnimationFrame(resolve))')
+    assert.equal(
+      await read('!!document.querySelector(".media-lightbox[open]")'),
+      true,
+      '拖动松手不关',
+    )
+    await clickAt(20, 100)
+    await wait('!document.querySelector(".media-lightbox")')
+    await read('document.querySelector(".transcript-image-open").click()')
+    await wait('document.querySelector(".media-lightbox[open] img")?.complete')
     const original = await read('document.querySelector(".media-lightbox img").clientWidth')
     await read('document.querySelector("[aria-label=放大]").click()')
     await wait(`document.querySelector('.media-lightbox img').clientWidth > ${original}`)
@@ -94,6 +158,52 @@ app.whenReady().then(async () => {
     await wait(
       'document.querySelector(".media-lightbox img").style.transform !== "translate(0px, 0px)"',
     )
+    for (let n = 0; n < 8; n++) await read('document.querySelector("[aria-label=放大]").click()')
+    await wait('document.querySelector(".media-lightbox img").clientWidth > innerWidth')
+    window.webContents.sendInputEvent({
+      type: 'mouseDown',
+      x: 500,
+      y: 500,
+      button: 'left',
+      clickCount: 1,
+    })
+    window.webContents.sendInputEvent({ type: 'mouseMove', x: 650, y: 650 })
+    window.webContents.sendInputEvent({
+      type: 'mouseUp',
+      x: 650,
+      y: 650,
+      button: 'left',
+      clickCount: 1,
+    })
+    await wait(
+      'document.querySelector(".media-lightbox img").style.transform !== "translate(60px, 30px)"',
+    )
+    assert.equal(await read('!!document.querySelector(".media-lightbox[open]")'), true)
+    window.webContents.sendInputEvent({
+      type: 'mouseDown',
+      x: 500,
+      y: 500,
+      button: 'left',
+      clickCount: 2,
+    })
+    window.webContents.sendInputEvent({
+      type: 'mouseUp',
+      x: 500,
+      y: 500,
+      button: 'left',
+      clickCount: 2,
+    })
+    await wait(
+      'document.querySelector(".media-lightbox img").style.transform === "translate(0px, 0px)"',
+    )
+    await read('document.querySelector("[aria-label=缩小]").click()')
+    await read('document.querySelector("[aria-label=原始尺寸]").click()')
+    await read(
+      'Array.from(document.querySelectorAll(".media-lightbox-tools button")).find(b => b.textContent === "适应窗口").click()',
+    )
+    await wait(
+      'document.querySelector(".media-lightbox img").style.transform === "translate(0px, 0px)"',
+    )
     await read('document.querySelector("[aria-label=复制图片]").click()')
     const until = Date.now() + 10000
     while (!(await clipboard.has('image/png')) && Date.now() < until)
@@ -110,6 +220,11 @@ app.whenReady().then(async () => {
     window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
     await wait('!document.querySelector(".media-lightbox")')
     assert.equal(await read('document.activeElement.className'), 'transcript-image-open')
+    await read('document.querySelector(".transcript-image-open").click()')
+    await wait('document.querySelector(".media-lightbox[open] img")?.complete')
+    await read('document.querySelector("[aria-label=在文件浏览器中显示]").click()')
+    await wait('!document.querySelector(".media-lightbox")')
+    assert.equal(await read('window.mediaFixture.fileState().active?.endsWith("photo.png")'), true)
     await read('document.querySelector("#toggle").click()')
     await wait('window.mediaFixture.urls.size === 0')
     assert.deepEqual(forbidden, [])

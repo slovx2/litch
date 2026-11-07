@@ -35,7 +35,14 @@ export function Lightbox({
   const [scale, setScale] = useState<number | null>(null)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [error, setError] = useState(false)
-  const drag = useRef<{ x: number; y: number; origin: typeof offset } | null>(null)
+  const drag = useRef<{
+    x: number
+    y: number
+    origin: typeof offset
+    pointerId: number
+    moved: boolean
+    blank: boolean
+  } | null>(null)
   const entry = entries[index]
   useEffect(() => {
     const element = dialog.current
@@ -92,6 +99,55 @@ export function Lightbox({
       ref={dialog}
       className="media-lightbox"
       aria-label={entry.label}
+      onPointerDown={(event) => {
+        if (
+          event.button !== 0 ||
+          (event.target instanceof Element && event.target.closest('.media-lightbox-tools'))
+        )
+          return
+        if (drag.current) {
+          drag.current.moved = true
+          return
+        }
+        event.currentTarget.setPointerCapture(event.pointerId)
+        drag.current = {
+          x: event.clientX,
+          y: event.clientY,
+          origin: offset,
+          pointerId: event.pointerId,
+          moved: false,
+          blank: event.target !== img.current,
+        }
+      }}
+      onPointerMove={(event) => {
+        const start = drag.current
+        if (!start || start.pointerId !== event.pointerId) return
+        const dx = event.clientX - start.x,
+          dy = event.clientY - start.y
+        start.moved ||= Math.hypot(dx, dy) > 4
+        if (start.moved) setOffset({ x: start.origin.x + dx, y: start.origin.y + dy })
+      }}
+      onPointerUp={(event) => {
+        const start = drag.current
+        if (!start || start.pointerId !== event.pointerId) return
+        drag.current = null
+        if (
+          start.blank &&
+          !start.moved &&
+          Math.hypot(event.clientX - start.x, event.clientY - start.y) <= 4
+        )
+          close()
+      }}
+      onPointerCancel={() => {
+        drag.current = null
+      }}
+      onLostPointerCapture={() => {
+        drag.current = null
+      }}
+      onDoubleClick={(event) => {
+        if (!(event.target instanceof Element && event.target.closest('.media-lightbox-tools')))
+          reset()
+      }}
       onCancel={(event) => {
         event.preventDefault()
         close()
@@ -185,32 +241,13 @@ export function Lightbox({
         </button>
       </div>
       {error ? <small role="alert">{t('message.copy.failed')}</small> : null}
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: 拖拽区域另有完整键盘缩放与切图按钮 */}
       <div
         ref={stage}
         className="media-lightbox-stage"
         onWheel={(event) => {
           event.preventDefault()
+          if (drag.current) drag.current.moved = true
           zoom(event.deltaY < 0 ? 1.15 : 1 / 1.15)
-        }}
-        onDoubleClick={reset}
-        onPointerDown={(event) => {
-          event.currentTarget.setPointerCapture(event.pointerId)
-          drag.current = { x: event.clientX, y: event.clientY, origin: offset }
-        }}
-        onPointerMove={(event) => {
-          const start = drag.current
-          if (start)
-            setOffset({
-              x: start.origin.x + event.clientX - start.x,
-              y: start.origin.y + event.clientY - start.y,
-            })
-        }}
-        onPointerUp={() => {
-          drag.current = null
-        }}
-        onPointerCancel={() => {
-          drag.current = null
         }}
       >
         <img

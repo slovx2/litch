@@ -102,7 +102,12 @@ export function ToolImages({
             >
               <Text style={{ color: c.ink, fontSize: font.size.title }}>×</Text>
             </Pressable>
-            <Original key={gallery[index]!.id} deviceId={deviceId} image={gallery[index]!} />
+            <Original
+              key={gallery[index]!.id}
+              deviceId={deviceId}
+              image={gallery[index]!}
+              onClose={() => select(null)}
+            />
             <View
               style={{
                 flexDirection: 'row',
@@ -141,7 +146,15 @@ export function ToolImages({
   )
 }
 
-function Original({ deviceId, image }: { deviceId: string; image: ToolImage }) {
+function Original({
+  deviceId,
+  image,
+  onClose,
+}: {
+  deviceId: string
+  image: ToolImage
+  onClose(): void
+}) {
   const channel = useChannel()
   const t = useT()
   const { c } = useTheme()
@@ -180,6 +193,7 @@ function Original({ deviceId, image }: { deviceId: string; image: ToolImage }) {
   return (
     <ImageSurface
       data={data}
+      onClose={onClose}
       onFail={() => fail(true)}
       claimPixels={(w, h) => w * h <= 4_000_000}
     />

@@ -229,7 +229,7 @@ function MediaImage({ image, resources }: { image: ImageSegment; resources: Prev
             >
               <Icon name="close" size={20} color={c.ink} />
             </Pressable>
-            <ImageSurface data={data} onFail={fail} />
+            <ImageSurface data={data} onFail={fail} onClose={() => setFull(false)} />
           </View>
         </Modal>
       ) : null}

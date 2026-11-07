@@ -2,6 +2,9 @@
 // 手机上描边比桌面略重一档：小屏上很淡的线分不清边界。
 import type { WireColor } from '@litch/core'
 
+// 全屏图片始终使用深底，避免浅色皮肤改变照片的视觉对比。
+export const IMAGE_VIEWER_COLORS = { background: '#101010', ink: '#ffffff' } as const
+
 export interface Palette {
   /** 页面底色（窗口） */
   win: string
