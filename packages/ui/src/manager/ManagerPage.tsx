@@ -15,7 +15,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { managerBoardMemory } from '../../../core/src/manager-board-memory.mts'
+import { boardPageMemory, managerBoardMemory } from '../../../core/src/manager-board-memory.mts'
 import type {
   ManagerDecisionId,
   ManagerItemId,
@@ -33,6 +33,7 @@ import { BoardGrip } from './BoardGrip.tsx'
 import { BoardPanels } from './BoardPanels.tsx'
 import { BoardReferencesContext } from './BoardReferences.tsx'
 import { BOARD_GRIP, CHAT_MIN, setBoardLayout, useBoardLayout } from './board-layout.ts'
+import { useBoardScroll } from './board-memory.ts'
 import { Decisions } from './Decisions.tsx'
 import { DiscussionPane } from './DiscussionPane.tsx'
 import { ManagerFeaturesContext, useManagerBoard } from './data.ts'
@@ -188,6 +189,13 @@ export function ManagerPage({
     renderCategory((value) => value + 1)
   }
   const activeTab = tab === 'inbox' ? inboxTab : tab
+  // 未分页看板同样在离开/返回时恢复阅读位置；分页看板继续使用自身的筛选记忆。
+  useBoardScroll(
+    boardBody,
+    boardPageMemory(reading, `unpaged:${activeTab}`),
+    !!view?.board,
+    !view?.paging,
+  )
   // 控制台帖子的讨论在看板底部分屏里看：一次只开一个，换帖子就换内容
   const [talk, setTalk] = useState<string | null>(null)
   const [talkHost, setTalkHost] = useState<HTMLElement | null>(null)

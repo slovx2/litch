@@ -52,7 +52,7 @@ export function navigationHistory(
       }),
     }
   }
-  if (action.type === 'wish')
+  if (action.type === 'wish' || action.type === 'manager-location')
     return {
       ...was,
       entries: was.entries.map((entry, index) => (index === was.index ? next : entry)),

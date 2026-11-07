@@ -59,6 +59,8 @@ test('记忆位置等摘要首次到达，之后归档、删除或移除所属�
     assert.equal(missing.length, 1, '换目标时不能沿用旧目标的已见记录')
     const manager = { deviceId: 'local', id: 'm1', threadId: 'manager-thread' }
     render(selectedManager, {}, [manager])
+    render(selectedManager, undefined, [manager])
+    assert.deepEqual(missing, [chat], '经理目录仍在时，摘要缓存消失不能清掉看板历史')
     render(selectedManager, {}, [])
     assert.deepEqual(missing, [chat, selectedManager], '经理目录已移除，即使摘要仍在也清理')
 

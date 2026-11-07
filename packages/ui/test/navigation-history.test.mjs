@@ -55,3 +55,40 @@ test('经理列表与新建路由分别恢复，归档来源只记录实际预�
   assert.equal(h.entries.length, size + 1)
   assert.equal(current(h).location.peek, a)
 })
+
+test('看板标签更新当前历史项，来源/决策/事项链接跳出后返回恢复当时标签', () => {
+  for (const tab of ['suggestions', 'decisions', 'items']) {
+    let h = select(historyOf(initialNavigation), manager)
+    const size = h.entries.length
+    h = navigationHistory(h, {
+      type: 'manager-location',
+      key: 'local:m1',
+      location: { tab, narrow: 'board', settings: false },
+    })
+    assert.equal(h.entries.length, size, '切标签不多压一层')
+    h = select(h, a)
+    assert.equal(h.entries.length, size + 1, '会话链接压入历史')
+    h = travel(h, -1, () => true)
+    assert.equal(current(h).location.picked, manager)
+    assert.equal(current(h).location.managerPage.location.tab, tab)
+    h = travel(h, 1, () => true)
+    assert.equal(current(h).location.picked, a)
+  }
+})
+test('多次访问同一经理保留各自的标签，后一次改标签不污染较早历史', () => {
+  let h = select(historyOf(initialNavigation), manager)
+  const location = (tab) => ({
+    type: 'manager-location',
+    key: 'local:m1',
+    location: { tab, narrow: 'board', settings: false },
+  })
+  h = navigationHistory(h, location('suggestions'))
+  h = select(select(h, a), manager)
+  h = navigationHistory(h, location('decisions'))
+  h = travel(
+    travel(h, -1, () => true),
+    -1,
+    () => true,
+  )
+  assert.equal(current(h).location.managerPage.location.tab, 'suggestions')
+})

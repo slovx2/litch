@@ -15,7 +15,7 @@ import {
 } from '@litch/core'
 import { useIsFocused } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Keyboard,
@@ -29,6 +29,7 @@ import {
 import type { KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller'
 import {
   type BoardPageMemory,
+  boardPageMemory,
   managerBoardMemory,
 } from '../../../../../packages/core/src/manager-board-memory.mts'
 import { pagedDraftBoard } from '../../../../../packages/core/src/projection/manager-drafts.mts'
@@ -45,6 +46,7 @@ import { KeyboardArea, KeyboardFormScrollView } from '../../ui/kit/KeyboardForm'
 import { Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
+import { rememberBoardScroll } from './board-return'
 import { DraftSubmitBar } from './DraftSubmitBar'
 import { Issue } from './Issue'
 import { IssueContext } from './IssueRelations'
@@ -155,13 +157,16 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
     pagingScroll.current.pending = true
     pagingScroll.current.ready = false
   }
+  const boardVisible = useRef(focused && tab !== 'chat')
+  boardVisible.current = focused && tab !== 'chat'
   const restoreBoard = useCallback(() => {
+    if (!boardVisible.current) return
     const state = pagingScroll.current
     if (!state.pending || !state.ready || !state.memory) return
     scroll.current?.scrollTo({ y: state.memory.y, animated: false })
     // 原生布局完成再显露；异步 scroll 事件在恢复期间不能把旧页签的坐标写进新页签。
     requestAnimationFrame(() => {
-      if (pagingScroll.current !== state || !state.ready) return
+      if (!boardVisible.current || pagingScroll.current !== state || !state.ready) return
       scroll.current?.scrollTo({ y: state.memory?.y ?? 0, animated: false })
       state.y = state.memory?.y ?? 0
       state.pending = false
@@ -182,6 +187,16 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
     },
     [restoreBoard],
   )
+  useLayoutEffect(() => {
+    const state = pagingScroll.current
+    state.pending = true
+    if (focused && tab !== 'chat') requestAnimationFrame(restoreBoard)
+  }, [focused, tab, restoreBoard])
+  const boardReady = !!view?.board
+  useLayoutEffect(() => {
+    if (!pagingOn && tab !== 'chat')
+      pagingQuery(boardPageMemory(memory, `mobile-unpaged:${tab}:${kind}`), boardReady)
+  }, [pagingOn, tab, kind, memory, boardReady, pagingQuery])
   useEffect(() => {
     if (!pagingOn || !sheet) return
     void channel
@@ -567,10 +582,11 @@ function Workbench({ manager, route, navigation }: Props & { manager: ManagerVie
             style={[styles.fill, restoringBoard && { opacity: 0 }]}
             onContentSizeChange={restoreBoard}
             onScroll={(event) => {
-              const state = pagingScroll.current
-              if (state.pending) return
-              state.y = event.nativeEvent.contentOffset.y
-              if (state.memory) state.memory.y = state.y
+              rememberBoardScroll(
+                pagingScroll.current,
+                event.nativeEvent.contentOffset.y,
+                boardVisible.current,
+              )
             }}
             scrollEventThrottle={32}
           >

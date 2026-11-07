@@ -620,6 +620,10 @@ same.
 
 ### 看板阅读与新版本草稿
 
+从看板的建议来源、决策、事项等会话链接打开对话后，可用后退按钮、快捷键、鼠标侧键或手机返回回到原看板标签和滚动位置；未分页看板也保留阅读位置。
+
+Opening a conversation from a suggestion source, decision, item or other board link adds a navigation entry. Use Back, the navigation shortcut, a mouse back button or the phone’s back action to return to the original board tab and scroll position. Unpaged boards also preserve their reading position.
+
 桌面看板跟随“对话区字号”，包括概览、控制台、正文和追问。帖子标题旁的箭头可收起正文，保留标题、首行摘要和状态；已处理的决策、请你做、已阅报告和历史建议默认收起。开合选择在当前客户端会话中按帖子记住。帖子变更历史在展开时显示正文。
 
 桌面和手机的分页看板按设备、经理、页签、状态筛选和排序分别记住展开的卡片与滚动位置；切换后返回、离开经理再返回均会恢复。每个列表最多展开一张卡，列表和详情加载完成后恢复位置；原卡已处理或不在当前筛选中时保持收起，滚动到原位置附近。阅读位置与对话滚动一样仅保留在当前客户端会话内，重启后不保留；排序偏好仍保存在本机。

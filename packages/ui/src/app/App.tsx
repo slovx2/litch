@@ -85,10 +85,15 @@ export function App() {
       return (
         !!location.page ||
         !location.picked ||
-        !!replica.store.get(keys.summary(location.picked.deviceId, location.picked.sessionId))
+        !!replica.store.get(keys.summary(location.picked.deviceId, location.picked.sessionId)) ||
+        managerData.managers.some(
+          (manager) =>
+            manager.deviceId === location.picked?.deviceId &&
+            manager.threadId === location.picked.sessionId,
+        )
       )
     },
-    [replica],
+    [replica, managerData.managers],
   )
   const { navigation, dispatch: visit, go: travel, back, forward } = useNavigation(validLocation)
   const opening = useRef<(() => void) | null>(null)
@@ -100,7 +105,7 @@ export function App() {
   const dispatch = useCallback(
     (action: NavigationAction) => {
       // 切树和清理失效会话都不是改选，不能取消正在等待身份确认的打开请求。
-      if (action.type !== 'missing' && action.type !== 'switch') cancelOpening()
+      if (!['missing', 'switch', 'manager-location'].includes(action.type)) cancelOpening()
       visit(action)
     },
     [cancelOpening, visit],
@@ -519,13 +524,18 @@ export function App() {
                 if (archived) setPeek(next)
                 else select(next)
               }}
-              location={managerLocations[`${pickedManager.deviceId}:${pickedManager.id}`]}
-              onLocation={(location) =>
-                setManagerLocations((was) => ({
-                  ...was,
-                  [`${pickedManager.deviceId}:${pickedManager.id}`]: location,
-                }))
+              location={
+                navigation.location.managerPage?.key ===
+                `${pickedManager.deviceId}:${pickedManager.id}`
+                  ? navigation.location.managerPage.location
+                  : managerLocations[`${pickedManager.deviceId}:${pickedManager.id}`]
               }
+              onLocation={(location) => {
+                const key = `${pickedManager.deviceId}:${pickedManager.id}`
+                setManagerLocations((was) => ({ ...was, [key]: location }))
+                // 页签本身不增加访问，但离开后的历史项要保留当时位置。
+                dispatch({ type: 'manager-location', key, location })
+              }}
               onOpen={select}
             />
           ) : selection && waitingManager ? (

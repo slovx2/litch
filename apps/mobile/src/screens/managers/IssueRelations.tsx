@@ -82,7 +82,7 @@ export function IssueRelations({
         return context.open(target.target)
       }
       if (target.kind === 'thread')
-        return navigation.navigate('Detail', {
+        return navigation.push('Detail', {
           deviceId: manager.deviceId,
           sessionId: target.target,
           title: title(target),

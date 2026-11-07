@@ -1,4 +1,5 @@
 import type { PlaceWish } from '../composer/new-place.ts'
+import type { ManagerPageLocation } from '../manager/ManagerPage.tsx'
 import type { Page, Selection } from './App.tsx'
 import type { ManagersRoute } from './actions.ts'
 
@@ -9,6 +10,7 @@ interface ViewLocation {
   wish: PlaceWish | null
   peek?: Selection | null
   managersRoute?: ManagersRoute
+  managerPage?: { key: string; location: ManagerPageLocation }
 }
 export interface ViewNavigation {
   mode: ViewMode
@@ -22,6 +24,7 @@ export type NavigationAction =
   | { type: 'switch'; mode: ViewMode }
   | { type: 'select'; selection: Selection }
   | { type: 'compose'; wish: PlaceWish | null }
+  | { type: 'manager-location'; key: string; location: ManagerPageLocation }
   | { type: 'wish'; wish: PlaceWish | null }
   | { type: 'page'; page: Page | null; peek?: Selection | null }
   | { type: 'missing'; selection: Selection }
@@ -32,6 +35,11 @@ export type NavigationAction =
 export function navigate(state: ViewNavigation, action: NavigationAction): ViewNavigation {
   const { location } = state
   switch (action.type) {
+    case 'manager-location':
+      return {
+        ...state,
+        location: { ...location, managerPage: { key: action.key, location: action.location } },
+      }
     case 'peek':
       if ((location.peek ?? null) === action.selection) return state
       return { ...state, location: { ...location, peek: action.selection } }

@@ -17,17 +17,18 @@ export function useSelectionLifetime(
   const seenManager = useRef<Selection | null>(null)
   useEffect(() => {
     if (!selection) return
-    if (summary) seen.current = selection
-    else if (seen.current === selection) {
-      onMissing(selection)
-      return
-    }
     const mark = summary ? managerMark(summary) : null
     const manager = managers.find(
       (entry) =>
         entry.deviceId === selection.deviceId &&
         (entry.threadId === selection.sessionId || entry.id === mark?.managerId),
     )
+    // 经理目录确认的当前会话不依赖侧栏摘要缓存；清缓存不是删除看板。
+    if (summary) seen.current = selection
+    else if (seen.current === selection && manager?.threadId !== selection.sessionId) {
+      onMissing(selection)
+      return
+    }
     if (manager) seenManager.current = selection
     else if (seenManager.current === selection) onMissing(selection)
   }, [selection, summary, managers, onMissing])
