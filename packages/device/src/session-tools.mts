@@ -1245,6 +1245,7 @@ async function archive(
   notSubagent(thread, threadId)
   if (tree.host.index.archived(threadId))
     return { thread_id: threadId, note: 'It is already archived. Nothing to do.' }
+  // 后代检查不包含目标自身：没有后代或后代全停时，仍须阻止归档正在工作的目标。
   if (await archives.working(threadId))
     throw new Refused(
       'blocked',

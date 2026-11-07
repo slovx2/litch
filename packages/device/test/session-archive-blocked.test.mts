@@ -5,6 +5,68 @@ import { startChild } from '../src/session-start.mjs'
 import { failureOf } from './fake-engine.mjs'
 import { litch, parent, treeRig, until } from './tree-kit.mjs'
 
+for (const hasChild of [false, true]) {
+  for (const state of ['running', 'waiting', 'background'] as const) {
+    test(`目标自身仍在工作：${hasChild ? '后代全停' : '没有后代'} ${state} 保留 still working 拒绝`, async () => {
+      const env = treeRig()
+      try {
+        const client = await litch(env)
+        const { threadId } = await parent(client)
+        const tree = env.device.sessionTree
+        const spawn = (source: string) =>
+          startChild(
+            tree,
+            source,
+            {
+              title: '归档目标',
+              prompt: '隔离验收',
+              kind: 'fresh',
+              worktree: false,
+              wakeParent: false,
+            },
+            'user',
+          )
+        const target = await spawn(threadId)
+        const child = hasChild ? await spawn(target.threadId) : null
+        if (child) {
+          env.pi.end(child.threadId)
+          await until(() => !tree.isActive(child.threadId), '后代停止')
+        }
+        if (state !== 'running') {
+          env.pi.end(target.threadId)
+          await until(() => !tree.isActive(target.threadId), '目标回合停止')
+        }
+        const originalRead = env.pi.handlers['thread/read']
+        assert.ok(originalRead)
+        if (state === 'waiting')
+          env.pi.handlers['thread/read'] = (params, connection) => {
+            const result = originalRead(params, connection) as any
+            if (params.threadId === target.threadId)
+              result.thread.status = { type: 'idle', activeFlags: ['waitingOnUserInput'] }
+            return result
+          }
+        if (state === 'background')
+          env.device.background.reportedChanged({
+            threadId: target.threadId,
+            tasks: [{ id: 'bg', kind: 'shell', title: '后台命令', status: 'running' }],
+          })
+        await env.device.archives.assertChildrenStopped(target.threadId)
+        const answer = await env.pi.callTool(threadId, 'litch_sessions', 'archive', {
+          thread_id: target.threadId,
+        })
+        assert.equal(failureOf(answer?.answer), 'blocked')
+        assert.match(
+          answer?.answer.result.contentItems[0].text,
+          new RegExp(`^\\[litch:blocked\\] Session ${target.threadId} is still working`),
+        )
+        assert.equal(env.pi.sent('thread/archive').length, 0, '拒绝时不得归档目标或已停止的后代')
+      } finally {
+        await env.close()
+      }
+    })
+  }
+}
+
 for (const manager of [false, true]) {
   for (const state of ['running', 'waiting', 'background'] as const) {
     test(`归档完整后代树：${manager ? '经理' : '普通'} ${state} 在所有入口阻止整次归档并列名单`, async () => {
