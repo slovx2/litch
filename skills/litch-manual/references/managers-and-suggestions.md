@@ -678,3 +678,8 @@ For you requests have an Ignore action with an optional reason. Confirming remov
 侧栏和提交条只统计当前仍有效的草稿。决策已答复、关闭或删除时，遗留草稿保留在本机，但不计数、不提交；用户主动选择“修改答复”后写的当前版本草稿仍可提交。待定决策版本变化时保留选项和文字，提示“决策已更新”，核对确认后才能提交。点击桌面侧栏的草稿数量会打开决策页并定位底部提交条。手机使用相同的草稿状态规则。
 
 Sidebar and submit-bar counts include only active drafts. Drafts for answered, closed or deleted decisions stay locally but are neither counted nor submitted; an explicit edit of the current answer remains available. When an open decision changes, choices and text are kept for review before submission. Click the desktop sidebar draft count to open Decisions and focus the submit bar. Mobile uses the same draft-state rules.
+
+
+经理事项（item）是经理自己的记录本，不应期待用户查看。需要用户注意、决定或处理的事，经理应提出决策（decision）或“请你做”（request）；新建事项的工具回执也会提醒这一点。
+
+Manager items are the manager’s own notebook; the manager must not rely on the user reading them. Anything requiring the user’s attention, decision or action belongs in a decision or a For you request. The tool repeats this reminder after creating an item.

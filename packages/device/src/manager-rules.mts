@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto'
 import type { ClientToolNamespaceSpec } from '../../protocol/src/client-tools.mjs'
 import {
+  MANAGER_ITEM_NOTE,
   MANAGER_TOOLS,
   managerLineRules,
   managerRoleRules,
@@ -74,7 +75,7 @@ export function managerTools(manager: RuleSettings, taskCards = true): ClientToo
                   (taskCards
                     ? 'For self-discovered work the user has not requested or approved, use initiation propose with a complete brief; the card starts only after the user clicks Start. Do not leave it only as a backlog item; close any corresponding open item as deferred and reference the card in the reason. Do not use cards for already-authorized work. '
                     : 'Task cards are disabled. Record self-discovered work in board decisions or items; obtain required user approval through a board decision before starting. ') +
-                  'Supply a self-contained brief. Out-of-scope work requires a board decision first. Permissions and the running-line limit are enforced by the device.',
+                  `Supply a self-contained brief. Out-of-scope work requires a board decision first. Permissions and the running-line limit are enforced by the device. ${MANAGER_ITEM_NOTE}`,
               }
             : tool.name === SESSION_TOOL.archive
               ? {
