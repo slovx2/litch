@@ -14,6 +14,7 @@ import {
 } from 'react-native'
 import { useT } from '../i18n'
 import { type Theme, useTheme } from '../theme'
+import { ActionRow } from './ActionRow'
 import { Icon, IconButton } from './Icon'
 import { rowAccessibility } from './row-accessibility'
 
@@ -115,8 +116,27 @@ export function Row({
       right.type === Switch &&
       right.props.accessibilityLabel === title,
   )
+  const trailIcon =
+    shownTrail === 'none' ? null : (
+      <Icon
+        name={shownTrail}
+        size={shownTrail === 'forward' ? 14 : 16}
+        color={selected ? c.selFg : c.ink3}
+      />
+    )
   return (
-    <Pressable
+    <ActionRow
+      actionGap={12}
+      action={
+        right ? (
+          <>
+            {right}
+            {trailIcon}
+          </>
+        ) : undefined
+      }
+      containerStyle={{ backgroundColor: selected ? c.selBg : c.panel, borderBottomColor: c.line1 }}
+      actionStyle={styles.rowAction}
       accessible={accessibility.accessible}
       accessibilityRole={onPress ? 'button' : undefined}
       aria-label={label}
@@ -166,15 +186,8 @@ export function Row({
           </Text>
         ) : null}
       </View>
-      {right}
-      {shownTrail === 'none' ? null : (
-        <Icon
-          name={shownTrail}
-          size={shownTrail === 'forward' ? 14 : 16}
-          color={selected ? c.selFg : c.ink3}
-        />
-      )}
-    </Pressable>
+      {right ? null : trailIcon}
+    </ActionRow>
   )
 }
 
@@ -434,6 +447,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rowText: { flex: 1, minWidth: 0 },
+  rowAction: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingRight: 16 },
   rowTop: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   rowTitle: { flex: 1, minWidth: 0, fontWeight: '500' },
   rowMeta: { fontSize: 11 },

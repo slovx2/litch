@@ -19,6 +19,7 @@ import { dropNativeChildren } from '../../../../../packages/ui/src/sidebar/filte
 import { treeUnread, unreadIn, withAncestors } from '../../../../../packages/ui/src/sidebar/tree.ts'
 import { useKey, useReplica, useServices } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
+import { ActionRow } from '../../ui/kit/ActionRow'
 import { Caret, Icon } from '../../ui/kit/Icon'
 import { StatusMark } from '../../ui/kit/marks'
 import { useTheme } from '../../ui/theme'
@@ -94,7 +95,10 @@ export function SummaryLine({
       ? t(summary.waitingFor === 'answer' ? 'sidebar.waitAnswer' : 'sidebar.waitApproval')
       : null
   return (
-    <Pressable
+    <ActionRow
+      actionGap={8}
+      action={fold}
+      containerStyle={{ borderBottomColor: c.line1, backgroundColor: c.panel }}
       accessibilityRole="button"
       testID={testID}
       onPress={onPress}
@@ -204,8 +208,7 @@ export function SummaryLine({
           </Text>
         </View>
       </View>
-      {fold}
-    </Pressable>
+    </ActionRow>
   )
 }
 
@@ -231,7 +234,10 @@ export function ChildLine({
   const t = useT()
   const { c } = theme
   return (
-    <Pressable
+    <ActionRow
+      actionGap={8}
+      action={fold}
+      containerStyle={{ borderBottomColor: c.line1, backgroundColor: c.panel }}
       accessibilityRole="button"
       testID={testID}
       onPress={onPress}
@@ -312,8 +318,7 @@ export function ChildLine({
       {summary.lineage?.wakeParent === false ? (
         <Text style={[styles.meta, { color: c.ink3 }]}>{t('tree.lineage.noWake')}</Text>
       ) : null}
-      {fold}
-    </Pressable>
+    </ActionRow>
   )
 }
 
