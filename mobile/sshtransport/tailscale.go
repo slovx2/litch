@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +53,7 @@ func TailscaleInitialize(directory, hostname string, storage TailscaleStorage) e
 	if tailNode.storage != nil {
 		return fmt.Errorf("[tailscaleUnavailable] Tailscale 已初始化")
 	}
+	configureTailNetwork(runtime.GOOS)
 	envknob.SetNoLogsNoSupport()
 	// tsnet 自建 Logger，不经过读取环境开关的 logpolicy.New；同时使用进程级禁用闸门。
 	logtail.Disable()

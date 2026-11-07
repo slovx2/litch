@@ -22,6 +22,16 @@ import (
 
 // 真正的 tsnet + WireGuard/netstack + 原有 Go SSH；控制面、DERP、SSH 均在回环，无真实账户。
 func TestTailnetSSHWithLocalControl(t *testing.T) {
+	runTailnetSSHWithLocalControl(t, false)
+}
+
+func TestTailnetSSHWithoutDirectUDP(t *testing.T) {
+	// 上游开关只在本进程丢弃 UDP 直连探测；不改变宿主防火墙或其他进程网络。
+	envknob.SetenvForTest(t, "TS_DEBUG_NEVER_DIRECT_UDP", "true")
+	runTailnetSSHWithLocalControl(t, true)
+}
+
+func runTailnetSSHWithLocalControl(t *testing.T, onlyDERP bool) {
 	t.Setenv("HOME", t.TempDir())
 	for _, name := range []string{"TS_AUTHKEY", "TS_CLIENT_SECRET", "TS_CLIENT_ID", "TS_ID_TOKEN", "TS_AUDIENCE"} {
 		t.Setenv(name, "")
@@ -118,6 +128,17 @@ func TestTailnetSSHWithLocalControl(t *testing.T) {
 	}
 	if host.Fingerprint != ssh.FingerprintSHA256(sshServer.host) {
 		t.Fatal("探测没有经过同一个 SSH 主机")
+	}
+	if onlyDERP {
+		remoteIP, _ := remote.TailscaleIPs()
+		pong, err := lc.Ping(ctx, remoteIP, tailcfg.PingDisco)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if pong.Err != "" || pong.DERPRegionID == 0 || pong.Endpoint != "" {
+			t.Fatalf("禁用 UDP 直连后没有通过 DERP: %+v", pong)
+		}
+		t.Logf("SSH 指纹已核对，DERP region=%d，direct endpoint=%q", pong.DERPRegionID, pong.Endpoint)
 	}
 	// 自动档按网络图匹配短名/完整名，与系统 DNS 或外部 VPN 路由无关。
 	for _, name := range []string{"server", "server.litch.test", before.TailscaleIPs[0].String()} {

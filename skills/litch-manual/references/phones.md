@@ -134,6 +134,10 @@ After scanning, a **May use Tailscale** dialog appears when the QR hint, address
 本机节点身份与加密密钥，再登录将注册新节点，原节点需在控制台另行移除。普通 SSH 不受影响。
 Android 的状态由 Keystore 密钥加密并排除系统备份；节点状态不经过 JS，也不自动上传遥测日志。
 已有系统 VPN 仍可能影响底层网络可达性；不占 VPN 槽位不代表绕过系统 VPN。
+iOS 内置节点遵循系统路由，可通过现有 VPN 访问控制服务器和中继。UDP 无法直连时可使用
+DERP 中继；VPN 仍须允许控制服务器和 DERP 的 TCP/HTTPS 连接。
+On iOS, the embedded node follows system routing, including an active VPN. DERP can carry
+connections when direct UDP is unavailable; the VPN must still allow control and DERP TCP/HTTPS traffic.
 
 后台连接期限到达时内嵌节点也停止；浏览器登录期间为节点保留最长十分钟，SSH 仍按原期限断开。
 前台的下一次连接或状态查询恢复同一身份。iOS 可更早被系统挂起，

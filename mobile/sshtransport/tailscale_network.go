@@ -8,7 +8,19 @@ import (
 	"sync"
 
 	"tailscale.com/net/netmon"
+	"tailscale.com/net/netns"
 )
+
+func configureTailNetwork(goos string) {
+	if goos == "ios" {
+		// 内嵌 tsnet 没有系统 TUN，不需要为防止回环绑定底层物理接口。
+		// Darwin 默认会解开 utun 的 delegated interface，绕过其他 VPN 的路由，
+		// 使 VPN 提供的 fake-IP 或仅能经 VPN 访问的控制面/DERP 无法连通。
+		// 与 tailscaled 的 userspace-networking 模式一致，关闭进程内 netns。
+		// 不能只 SetDisableBindConnToInterface：收到网络图后上游会按能力位重置它。
+		netns.SetEnabled(false)
+	}
+}
 
 // Android 通过公开平台 API 提供快照；Go 不再调用受 SELinux 限制的 netlink。
 var tailInterfaces struct {

@@ -3,6 +3,14 @@
 Go `1.27.3`、`tailscale.com v1.104.1`，同一个 gomobile 库承载原有 SSH 与 tsnet。
 不使用系统 VPN，不实现 Tailscale SSH；认证仍由 `x/crypto/ssh` 的私钥和固定主机指纹完成。
 
+iOS 初始化时关闭上游 Darwin 的显式网卡绑定：内嵌节点没有系统 TUN，不需要通过绑定物理
+接口防止回环。控制面、DERP 和 UDP socket 交由系统路由选择，允许走其他 VPN 的 utun。
+不绕过系统 DNS、不过滤 fake-IP；代理 DNS 返回的地址应由同一代理网络处理。
+此开关仅影响应用进程里的 Tailscale netns，不修改系统 VPN、路由、DNS 或 Android 的绑定行为。
+使用 `netns.SetEnabled(false)`，与上游 userspace-networking 模式一致；不能只设置禁用绑定的
+调试开关，该开关会在每次收到网络图时被控制面能力位覆盖。iOS 本身不编入 netns 的 SOCKS 包装。
+升级上游时须复验 TCP/UDP 的 IPv4/IPv6 socket 未绑定物理接口，以及 UDP 不可直连时的 DERP。
+
 ## 原生桥约定
 
 - `TailscaleInitialize(directory, hostname string, storage TailscaleStorage) error`：应用启动时调用，
