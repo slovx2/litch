@@ -852,6 +852,23 @@ export class ClientSession implements ClientToolPeer {
     raw: string,
     keepHarness = false,
   ): typeof HANDLED | Promise<typeof HANDLED> {
+    const threadId = isObject(frame.params) ? frame.params.threadId : null
+    if (method === 'thread/archive' && typeof threadId === 'string')
+      return this.host.archives
+        .assertChildrenStopped(threadId)
+        .then(() => this.forwardReady(link, id, method, frame, raw, keepHarness))
+    return this.forwardReady(link, id, method, frame, raw, keepHarness)
+  }
+
+  /** 归档检查完成后才允许记录用户停止、取消重启或转发请求。 */
+  private forwardReady(
+    link: UpstreamLink,
+    id: RpcId,
+    method: string,
+    frame: Frame,
+    raw: string,
+    keepHarness: boolean,
+  ): typeof HANDLED | Promise<typeof HANDLED> {
     const fields = isObject(frame.params) ? frame.params : null
     if (fields && link.dialect.clientToolsByDevice)
       this.host.nativeBackground?.input(method, fields, true)

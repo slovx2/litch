@@ -1,3 +1,4 @@
+import { assertArchiveChildrenStopped } from '../archive.mjs'
 import { matchTitles } from '../search/titles.mjs'
 import { OUTSIDE_FILE_REPLY } from './sample-file-links.mjs'
 import { MEDIA_REPLY } from './sample-media.mjs'
@@ -565,7 +566,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
 
   /**
    * 归档一个会话：从列表拿到已归档里，内容留着（恢复之后还是原来那些）。它已经停下、没置顶的子会话跟着归档，
-   * 在干活的、置顶的连同底下的留在列表里（照设备的 session-archive.mts）
+   * 有活跃后代时入口拒绝整次归档；置顶子树保留（照设备的 session-archive.mts）
    */
   const shelveOne = (deviceId: string, summary: SessionSummary) => {
     const sidebar = sidebars.get(deviceId)
@@ -3115,6 +3116,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           return {}
         }
         if (name === 'session.archive') {
+          assertArchiveChildrenStopped(sessionId, [...(sidebar?.sessions ?? []), ...list])
           shelveOne(deviceId, summary)
           return {}
         }

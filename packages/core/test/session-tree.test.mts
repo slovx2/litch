@@ -2268,3 +2268,44 @@ test('模拟工作线提卡：归属经理、保留来源，开始后为同级�
   )
   stop()
 })
+
+test('模拟归档：运行子会话阻止父会话离开列表，全部停止后仍连带归档', async () => {
+  const world = mockWorld(60)
+  await settle()
+  const parent = world.watch('s6')
+  await settle()
+  await world.channel.command('session.send', {
+    deviceId: 'local',
+    sessionId: 's6',
+    text: '派子会话去查',
+  })
+  await world.until(
+    () =>
+      world.children('s6').length === 2 &&
+      world.children('s6').every((row) => row.status === 'running'),
+    '两条运行子会话',
+  )
+  const children = world.children('s6').map((row) => row.id)
+  await assert.rejects(
+    world.channel.command('session.archive', { deviceId: 'local', sessionId: 's6' }),
+    (error: any) => {
+      assert.equal(error.code, 'busy')
+      assert.equal(error.text.key, 'session.archiveChildrenRunning')
+      for (const id of children) assert.ok(error.text.args.sessions.includes(id))
+      return true
+    },
+  )
+  assert.equal(world.children('s6').length, 2)
+  assert.ok(world.sidebar.view?.sessions.some((row) => row.id === 's6'))
+  await world.until(
+    () =>
+      world.children('s6').every((row) => row.status === 'idle') &&
+      parent.view?.turns.at(-1)?.status === 'completed',
+    '所有会话停止',
+  )
+  await world.channel.command('session.archive', { deviceId: 'local', sessionId: 's6' })
+  await world.until(
+    () => !world.sidebar.view?.sessions.some((row) => ['s6', ...children].includes(row.id)),
+    '停止后全部归档',
+  )
+})

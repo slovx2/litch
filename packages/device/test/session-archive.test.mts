@@ -1,4 +1,4 @@
-// 会话归档（照 Claude 桌面端）：用户归档父会话时已经停下的子会话跟着归档，在干活的、置顶的留着；
+// 会话归档（照 Claude 桌面端）：用户归档父会话时活跃后代阻止整次归档，停止后子会话跟着归档，置顶的留着；
 // 模型的 litch_sessions.archive / unarchive：只在用户发起的回合里归档，在干活的、置顶的不归档，self 等回合结束再归档，
 // 模型归档的子会话回报照常唤醒（不算用户停的）；子会话的工作树照归档规则处理。
 import assert from 'node:assert/strict'
@@ -42,7 +42,7 @@ const archivedIn = (env: Env, threadId: string) =>
 
 const notesOf = (env: Env, threadId: string) => env.device.sessionTree.store.notes(threadId)
 
-test('SESSION-ARCHIVE-001：用户归档父会话：已经停下的子孙会话跟着归档（算用户归档的），在跑的、置顶的留着，各客户端连接都收到', async () => {
+test('SESSION-ARCHIVE-001：用户归档父会话：活跃后代阻止整次归档；全停后子孙连带归档，置顶的保留，各端收到通知', async () => {
   const env = treeRig()
   refuseSteer(env.pi)
   try {
@@ -74,16 +74,23 @@ test('SESSION-ARCHIVE-001：用户归档父会话：已经停下的子孙会话�
       if (env.claude.running(done)) env.claude.end(done, 'completed', '收到')
       await settle(50)
     }
-    env.pi.end(threadId)
     await until(
       () => ![done, grandchild].some((id) => env.device.sessionTree.isActive(id)),
       '子孙的回合结束',
     )
 
+    const blocked = await client.fails('thread/archive', { threadId })
+    assert.equal(blocked.data.litch, 'archiveBlocked')
+    assert.equal(blocked.data.blockingSessions[0].threadId, busy)
+    assert.match(blocked.message, /还在跑的/)
+    assert.equal(archivedIn(env, threadId), false)
+    assert.equal(archivedIn(env, done), false)
+    env.claude.end(busy, 'completed', '好了')
+    await until(() => !env.device.sessionTree.isActive(busy), '最后一个子会话停止')
     await client.call('thread/archive', { threadId })
     await until(() => archivedIn(env, done) && archivedIn(env, grandchild), '停下的子孙跟着归档')
     await settle(50)
-    assert.equal(archivedIn(env, busy), false, '在跑的留着')
+    assert.equal(archivedIn(env, busy), true, '停止后跟着归档')
     assert.equal(archivedIn(env, pinned), false, '置顶的留着')
     assert.equal(
       env.device.sessionTree.store.parentOf(done)?.parentThreadId,

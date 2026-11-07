@@ -1858,6 +1858,7 @@ export const zhCN = {
   'fault.unknownThread': '此设备上找不到该会话',
   'fault.unknownThreadMaybe': '找不到该会话。它可能在暂不可用的 {names} 中，请在恢复后重试',
   'fault.noHarness': '此设备上暂无可用的 harness',
+  'session.archiveChildrenRunning': '先停止子会话再归档。仍在运行：{sessions}',
   'fault.heldElsewhere': '此会话正在其他位置的 Codex 中使用（其他终端或客户端）。在那边结束后再试',
   'session.heldElsewhere':
     '此会话正在其他位置的 Codex 中使用，当前只读。在那边结束后重新打开即可继续。',

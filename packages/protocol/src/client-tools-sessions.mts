@@ -373,8 +373,10 @@ export interface SessionsArchiveResult {
   thread_id: string
   /** 跟着它一起归档的子孙会话（已经停下的） */
   archived_with?: string[]
-  /** 还在干活、留在列表里的子孙会话 */
+  /** 旧结果字段；活跃后代现在阻止整次归档，不再返回 left_live。 */
   left_live?: string[]
+  /** 全部停止后，因置顶或归档失败而保留的子孙会话。 */
+  left_unarchived?: string[]
   note: string
 }
 
@@ -975,7 +977,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
       {
         type: 'function',
         name: SESSION_TOOL.archive,
-        description: `Archive a session on this device: it leaves the session list and stays in Archived with its conversation intact, where the user (or unarchive) can bring it back. A clean git worktree Litch created for it is removed (the branch stays); one with uncommitted changes is kept. Its sub-sessions that have stopped are archived with it; ones still working stay in the list. Pass "${SESSION_SELF}" to archive this session itself when this turn ends. Only call it after the user has explicitly agreed to archive that specific session, in a message they typed (refused on turns the user did not start); never speculatively. When your sub-sessions have all finished, you may ask the user whether to archive them and wait for their yes. A session that is still working (a turn running, waiting for the user, or background tasks running) or pinned is not archived, and the result says so.`,
+        description: `Archive a session on this device: it leaves the session list and stays in Archived with its conversation intact, where the user (or unarchive) can bring it back. A clean git worktree Litch created for it is removed (the branch stays); one with uncommitted changes is kept. Any still-working descendant (at any depth: a running turn, waiting for the user, or background tasks) blocks the whole archive; stop them first. The refusal lists their names and IDs. Once all have stopped, sub-sessions are archived with it; pinned subtrees remain. Pass "${SESSION_SELF}" to archive this session itself when this turn ends. Only call it after the user has explicitly agreed to archive that specific session, in a message they typed (refused on turns the user did not start); never speculatively. When your sub-sessions have all finished, you may ask the user whether to archive them and wait for their yes. A session that is still working (a turn running, waiting for the user, or background tasks running) or pinned is not archived, and the result says so.`,
         inputSchema: {
           type: 'object',
           properties: {

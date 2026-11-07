@@ -385,11 +385,20 @@ export const DEVICE_ERROR_CODE = {
   harnessUnavailable: -32050,
   /** 重启恢复暂时占用会话；订阅可退避重试，不能降级成永久只读 */
   sessionRecovering: -32051,
+  /** 任意层级的子会话仍在运行，不能归档父会话。 */
+  archiveBlocked: -32600,
 } as const
 
 export type DeviceErrorReason = keyof typeof DEVICE_ERROR_CODE
 
+export interface ArchiveBlockingSession {
+  threadId: string
+  title: string
+}
+
 export interface DeviceErrorData {
+  /** archiveBlocked：仍在运行的后代，包含标题和标识。 */
+  blockingSessions?: ArchiveBlockingSession[]
   litch: DeviceErrorReason
   method?: string
   harness?: string

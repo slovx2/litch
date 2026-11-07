@@ -1,13 +1,14 @@
 // 会话归档在设备层要做的事，照 Claude 桌面端：
-// - 一个会话归档了，它已经停下的 Litch 子孙会话跟着归档；还在干活的、置顶的（连同它们底下的）留在列表里。
+// - 归档前检查所有层级的后代：任何一个还在干活就拒绝。全部停止后照常连带归档，置顶子树保留。
 //   客户端发的 thread/archive（侧栏、手机）和模型的 litch_sessions.archive 都走这里。放回来时不带子会话。
 // - 模型的 litch_sessions.archive、unarchive，以及跟着归档的子会话：用设备进程自己的连接发 thread/archive、
 //   thread/unarchive，再补上客户端的请求经过设备时会做的几件事：索引记下归档没有、工作树照归档规则处理
 //  （worktree-life.mts：干净的删目录留分支、有改动的留着、有共用的转给它）、告诉每条客户端连接。
 // - 谁归档的：跟着用户归档的父会话一起归档的算用户归档（会话树把它的回报注明“被用户归档”、不唤醒）；
 //   模型归档的不算用户停的（SessionTree.modelArchived），回报照常。
+import type { ArchiveBlockingSession } from '../../protocol/src/device.mjs'
 import type { SessionTree } from './session-tree.mjs'
-import { isObject } from './wire.mjs'
+import { DeviceError, isObject } from './wire.mjs'
 import type { WorktreeLife } from './worktree-life.mjs'
 
 export interface SessionArchiveHost {
@@ -32,6 +33,16 @@ export interface Cascade {
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
+export class ArchiveBlocked extends DeviceError {
+  constructor(threadId: string, blockingSessions: ArchiveBlockingSession[]) {
+    super(
+      'archiveBlocked',
+      `Stop sub-sessions before archiving: ${blockingSessions.map((one) => `${one.title} (${one.threadId})`).join(', ')}`,
+      { threadId, blockingSessions },
+    )
+  }
+}
+
 export class SessionArchives {
   private readonly host: SessionArchiveHost
   /** 模型要在这个回合结束时归档的会话自己（litch_sessions.archive 的 self） */
@@ -48,12 +59,53 @@ export class SessionArchives {
   /** 会话还在干活：有回合在跑、在等用户答、有后台任务在跑 */
   async working(threadId: string): Promise<boolean> {
     const tree = this.tree
-    if (tree.isActive(threadId) || tree.waitingOnUser(threadId)) return true
+    if (tree.occupiesSlot(threadId) || tree.waitingOnUser(threadId)) return true
     if (tree.host.backgroundRunning(threadId) > 0) return true
     const found = await tree.read(threadId, false).catch(() => null)
     const status = isObject(found?.thread.status) ? found.thread.status : null
     const flags = Array.isArray(status?.activeFlags) ? status.activeFlags : []
     return status?.type === 'active' || flags.length > 0
+  }
+
+  /** 必须在任何归档副作用前执行；已归档的中间节点也不能遮住仍活跃的孙会话。 */
+  async assertChildrenStopped(threadId: string): Promise<void> {
+    const descendants = []
+    const visited = new Set([threadId])
+    const queue = [threadId]
+    for (const current of queue) {
+      for (const child of this.tree.store.childrenOf(current)) {
+        if (visited.has(child.threadId)) continue
+        visited.add(child.threadId)
+        queue.push(child.threadId)
+        descendants.push(child)
+      }
+    }
+    const snapshots = await Promise.all(
+      descendants.map(async (child) => {
+        const id = child.threadId
+        const cached = this.tree.managers?.lines.snapshots.get(id)?.name
+        const knownTitle = typeof cached === 'string' && cached.trim() ? cached : child.title || id
+        // 已确认活跃的会话无需等繁忙或断开的引擎回复，直接列入阻止名单。
+        if (this.tree.occupiesSlot(id)) return { threadId: id, title: knownTitle, active: true }
+        if (this.tree.host.index.archived(id))
+          return { threadId: id, title: knownTitle, active: false }
+        // 未知不等于停止：读不到状态就保留父会话，交原错误给调用者重试。
+        const { thread } = await this.tree.read(id, false)
+        const status = isObject(thread.status) ? thread.status : null
+        const active =
+          thread.status === 'active' ||
+          status?.type === 'active' ||
+          (Array.isArray(status?.activeFlags) && status.activeFlags.length > 0)
+        const title =
+          typeof thread.name === 'string' && thread.name.trim() ? thread.name : knownTitle
+        return { threadId: id, title, active }
+      }),
+    )
+    // 所有读取结束后再看通知更新，避免其他分支的等待覆盖刚开始的回合。
+    const blockers = snapshots
+      .filter((one) => one.active || this.tree.occupiesSlot(one.threadId))
+      .map(({ threadId, title }) => ({ threadId, title }))
+    if (blockers.length) throw new ArchiveBlocked(threadId, blockers)
   }
 
   pinned(threadId: string): boolean {
@@ -121,6 +173,7 @@ export class SessionArchives {
   /** 设备进程自己的连接归档一个会话，补上经过设备时会做的事，再带上它的子会话 */
   async archive(threadId: string, by: ArchivedBy): Promise<Cascade> {
     const tree = this.tree
+    await this.assertChildrenStopped(threadId)
     const harness = await tree.owner(threadId)
     const link = await tree.link(harness)
     // 引擎的 thread/archived 通知可能比应答先到：先记下是模型归档的

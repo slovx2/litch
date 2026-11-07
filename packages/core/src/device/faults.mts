@@ -2,6 +2,7 @@
 // 设备服务（聚合面）自己回的错误在 error.data.litch 里带着原因（packages/protocol/src/device.mts），
 // 这几种核心说得出是哪一句；上游引擎回的错误没有这个字段，原话照给。
 import { type DeviceErrorData, RPC_ERROR } from '../../../protocol/src/index.mjs'
+import { archiveChildrenFailure } from '../archive.mjs'
 import { ChannelError } from '../channel/protocol.mjs'
 import { RpcAbortError, RpcError } from '../connection/rpc.mjs'
 import type { HarnessId } from '../model.mjs'
@@ -76,6 +77,8 @@ export const harnessDownError = (name: string): ChannelError =>
 
 function fromDevice(error: RpcError, fault: DeviceErrorData, nameOf: HarnessNamer): ChannelError {
   const reason: string = fault.litch
+  if (reason === 'archiveBlocked' && fault.blockingSessions)
+    return archiveChildrenFailure(fault.blockingSessions)
   if (reason === 'managerResetBusy')
     return new ChannelError('busy', error.message, phrase('manager.resetApplying'))
   if (reason === 'harnessUnavailable' && fault.harness) {

@@ -150,6 +150,11 @@
           "description": "请求要发给的 harness 现在不可用，或者等应答的时候它断开了"
         },
         {
+          "litch": "archiveBlocked",
+          "code": -32600,
+          "description": "任意层级后代仍在运行、等待用户或有后台任务，归档尚未执行。data.blockingSessions 列出 threadId 与 title；先停止这些子会话再归档。"
+        },
+        {
           "litch": "sessionRecovering",
           "code": -32051,
           "description": "设备正在重启或恢复此会话，暂时不能执行 thread/resume 或 turn/steer。data 带 method、harness 和已知的 threadId。客户端可对订阅请求做有限次退避重试，不应将会话降级为永久只读；不得因此自动重发写操作。"
@@ -166,12 +171,21 @@
               "unknownHarness",
               "unknownThread",
               "harnessUnavailable",
-              "sessionRecovering"
+              "sessionRecovering",
+              "archiveBlocked"
             ]
           },
           "method": { "type": "string" },
           "harness": { "type": "string" },
           "threadId": { "type": "string" },
+          "blockingSessions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["threadId", "title"],
+              "properties": { "threadId": { "type": "string" }, "title": { "type": "string" } }
+            }
+          },
           "required": { "type": "array", "items": { "type": "string" } },
           "supported": { "type": "array", "items": { "type": "string" } },
           "unavailable": { "type": "array", "items": { "type": "string" } }
@@ -185,7 +199,19 @@
       "additionalProperties": false,
       "required": ["path", "version", "source", "startedAt"],
       "properties": {
-        "candidates": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["path", "version", "selected"], "properties": { "path": { "type": "string" }, "version": { "type": "string" }, "selected": { "type": "boolean" } } } },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "version", "selected"],
+            "properties": {
+              "path": { "type": "string" },
+              "version": { "type": "string" },
+              "selected": { "type": "boolean" }
+            }
+          }
+        },
         "path": { "type": "string", "minLength": 1 },
         "version": { "type": "string" },
         "source": { "enum": ["settings", "environment", "path", "default"] },

@@ -13,6 +13,7 @@ import {
   type ThreadCapabilities,
   threadCapabilities,
 } from '../../../protocol/src/thread-capabilities.mjs'
+import { assertArchiveChildrenStopped } from '../archive.mjs'
 import type { TitleSearchResult } from '../search/model.mjs'
 import { matchTitles } from '../search/titles.mjs'
 import { createAcpAuth } from './acp-auth.mjs'
@@ -3035,6 +3036,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (thread) upsertThread({ ...thread, name })
     },
     async archive(sessionId) {
+      assertArchiveChildrenStopped(
+        sessionId,
+        [...threads.values(), ...(archived?.values() ?? [])].map(summaryOf),
+      )
       await guarded(() => link.request('thread/archive', { threadId: sessionId }))
       shelve(sessionId)
     },

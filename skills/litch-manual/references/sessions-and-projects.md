@@ -583,9 +583,12 @@ explain it:
   (switch and conditions in `harnesses.md`). Interrupting the turn does not cancel naming. A name
   the user sets by hand is never replaced.
 - **Archived sessions** page: restore, open read-only, delete.
-- **Archiving with sub-sessions**: archiving a session (sub-sessions included) also archives its
-  sub-sessions that have stopped, and theirs; ones still working (a turn running, waiting for you,
-  background tasks) or pinned stay in the list. Restoring a session brings back only that one.
+- **归档与子会话**：任意层级的子会话仍有回合在跑、等待用户或后台任务时，整次归档会被阻止，并列出会话名称和标识。先停止子会话再归档。全部停止后照常连带归档，置顶子树仍保留；恢复只恢复选中的会话。此规则同样适用于桌面、手机、经理看板和 `litch_sessions.archive`（含 self）。
+- **Archiving with sub-sessions**: any descendant with a running turn, a pending user request or
+  background work blocks the entire archive. The error lists its name and ID; stop the listed
+  sub-sessions first. Once all have stopped, they are archived together, except pinned subtrees.
+  Restoring brings back only the selected session. This applies to desktop, mobile, manager boards
+  and `litch_sessions.archive`, including self.
 - **Reply style**: sessions that Litch starts (including sub-sessions and scheduled tasks) tell the model
   that replies appear in Litch, which renders Markdown and Mermaid diagrams, and to answer
   conversationally rather than like a terminal. Codex sessions do not get this (Codex keeps its own

@@ -46,7 +46,7 @@ import {
 } from '../../protocol/src/session-tree.mjs'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { DeviceToolCall, DeviceToolHandler } from './device-tools.mjs'
-import type { Cascade, SessionArchives } from './session-archive.mjs'
+import { ArchiveBlocked, type Cascade, type SessionArchives } from './session-archive.mjs'
 import { checkHarness, modelFor, sessionOptions } from './session-options.mjs'
 import { PendingRefused } from './session-pending.mjs'
 import {
@@ -1228,6 +1228,7 @@ async function archive(
       'blocked',
       `Session ${threadId} is pinned, so it was not archived. Ask the user to unpin it or archive it themselves.`,
     )
+  await archives.assertChildrenStopped(threadId)
   if (self) {
     if (tree.host.backgroundRunning(threadId) > 0)
       throw new Refused(
@@ -1253,15 +1254,16 @@ async function archive(
   try {
     cascade = await archives.archive(threadId, 'model')
   } catch (error) {
+    if (error instanceof ArchiveBlocked) throw error
     throw new Refused('failed', `Could not archive session ${threadId}: ${messageOf(error)}`)
   }
   const left = cascade.left.length
-    ? ` ${cascade.left.length} of its sub-sessions are still working or pinned and stay in the list.`
+    ? ` ${cascade.left.length} of its stopped sub-sessions are pinned or could not be archived and stay in the list.`
     : ''
   return {
     thread_id: threadId,
     ...(cascade.archived.length ? { archived_with: cascade.archived } : {}),
-    ...(cascade.left.length ? { left_live: cascade.left } : {}),
+    ...(cascade.left.length ? { left_unarchived: cascade.left } : {}),
     note: `Archived. The user can restore it from Archived${cascade.archived.length ? `; ${cascade.archived.length} of its stopped sub-sessions were archived with it` : ''}.${left}`,
   }
 }
@@ -1405,6 +1407,7 @@ export function sessionToolsHandler(
           return clientToolFailure('invalid', `litch_sessions has no tool "${call.tool}".`)
       }
     } catch (error) {
+      if (error instanceof ArchiveBlocked) return clientToolFailure('blocked', error.message)
       if (error instanceof PendingRefused)
         return { ...ok({ error: { code: error.code, message: error.message } }), success: false }
       if (error instanceof ProtocolError) return clientToolFailure('invalid', error.message)
