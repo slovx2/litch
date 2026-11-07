@@ -106,5 +106,6 @@ try {
   child.kill('SIGKILL')
   await stopped
   await vite.close()
-  rmSync(work, { recursive: true, force: true })
+  // Chrome 被杀后辅助进程可能还在写 profile，删目录会撞上 ENOTEMPTY，稍等重试
+  rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
 }
