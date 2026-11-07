@@ -1,4 +1,4 @@
-// 侧栏验收：设备那一行“⋯”里的“设置”和“重启设备服务”。对着模拟核心（packages/core/src/mock/mock-restart.mts）：
+// 侧栏验收：设备那一行“⋯”里的“设置”和“强制重启”（重启设备服务）。对着模拟核心（packages/core/src/mock/mock-restart.mts）：
 // 各台设备的菜单里有这两项，做不了的那一项淡下去、写原因；“设置”进这台设备的详情；
 // 本机有会话在跑时先列出来确认，确认之后行上写“重启中”、做完出提示，被打断的会话末尾说一句“发消息继续”，
 // 再说一句就没了；服务说不闲时列出原因再问；停了没能连回来时提示原因、带“重试”。
@@ -193,21 +193,21 @@ export function judgeRestart(seen: RestartSeen, title: string): string[] {
   }
   const tail = (menu: string | undefined) => (menu ?? '').split('|').slice(-2).join('|')
   must(
-    tail(seen.menus.local) === '设置|重启设备服务',
+    tail(seen.menus.local) === '设置|强制重启',
     `本机菜单的最后两项不对：${seen.menus.local}`,
   )
   must(
     tail(seen.menus.build) ===
-      '设置|重启设备服务（服务由前台或服务管理器启动，请用原来的方式重启）',
-    `build-01 的服务是前台的，“重启设备服务”该淡下去、写原因：${seen.menus.build}`,
+      '设置|强制重启（服务由前台或服务管理器启动，请用原来的方式重启）',
+    `build-01 的服务是前台的，“强制重启”该淡下去、写原因：${seen.menus.build}`,
   )
   must(
-    tail(seen.menus.nas) === '设置|重启设备服务（只连接了单个 harness，没有设备服务）',
-    `nas 只连着一个 harness，“重启设备服务”该淡下去、写原因：${seen.menus.nas}`,
+    tail(seen.menus.nas) === '设置|强制重启（只连接了单个 harness，没有设备服务）',
+    `nas 只连着一个 harness，“强制重启”该淡下去、写原因：${seen.menus.nas}`,
   )
   must(
-    tail(seen.menus.gpu) === '设置|重启设备服务（设备未连接）',
-    `gpu 没连上，“重启设备服务”该淡下去、写原因：${seen.menus.gpu}`,
+    tail(seen.menus.gpu) === '设置|强制重启（设备未连接）',
+    `gpu 没连上，“强制重启”该淡下去、写原因：${seen.menus.gpu}`,
   )
   must(seen.settingsAt === 'build', `“设置”该进 build 的详情：${seen.settingsAt}`)
   must(
@@ -241,7 +241,7 @@ export function judgeRestart(seen: RestartSeen, title: string): string[] {
   )
   must(seen.backOnline, '设备行下面点了“重试”，本机没有连回来')
   must(
-    seen.english === 'Settings|Restart device service',
+    seen.english === 'Settings|Force restart',
     `英文菜单的最后两项不对：${seen.english}`,
   )
   return failed
