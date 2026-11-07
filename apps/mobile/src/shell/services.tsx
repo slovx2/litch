@@ -119,7 +119,10 @@ export function ServicesProvider({
       createMobileActivity(booted.channel, clock, jsonFile(`${booted.mode}-sidebar-activity.json`)),
     [booted],
   )
-  const replica = useMemo(() => createReplica(activity.channel, activity), [activity])
+  const replica = useMemo(
+    () => createReplica(activity.channel, activity, { globalPins: false }),
+    [activity],
+  )
   const consent = useMemo(
     () =>
       consentChannel(

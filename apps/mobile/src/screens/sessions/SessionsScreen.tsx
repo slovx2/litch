@@ -30,7 +30,6 @@ import { Empty } from '../../ui/kit/controls'
 import { Confirm, Prompt, Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
-import { useLocalJoin } from '../devices/LocalJoin'
 import { UpdateBanner } from '../devices/UpdateBanner'
 import { DeviceBanner } from './Banner'
 import { foldsOf, pruneFolded, subscribeFolds, toggleFolded } from './folds'
@@ -69,9 +68,6 @@ export function SessionsScreen({ navigation, route }: Props) {
   /** 停下来等人的会话：藏不掉，收起的父会话下面也露着 */
   const pressing = useKey<string[]>(keys.pressing(deviceId)) ?? NO_IDS
   const unread = useKey<string[]>(keys.unread(deviceId)) ?? NO_IDS
-  /** 画在首页置顶区里的会话：这里不再画 */
-  const coverIds = useKey<string[]>(keys.pinCover(deviceId)) ?? NO_IDS
-  const covered = useMemo(() => new Set(coverIds), [coverIds])
   const online = device?.connection === 'online'
   // 工作区那一行的“＋”要设备连着；“⋯”里的事要连着或者能整理，一件都做不了就不出
   const organizable = device?.organizable === true
@@ -100,7 +96,6 @@ export function SessionsScreen({ navigation, route }: Props) {
         offline: !online,
         organizable,
         children,
-        covered,
         hidden: showNative ? NO_IDS : nativeChildren,
         folded,
         always: (id) => pressing.includes(id) || unread.includes(id),
@@ -115,7 +110,6 @@ export function SessionsScreen({ navigation, route }: Props) {
       online,
       organizable,
       children,
-      covered,
       showNative,
       nativeChildren,
       folded,
@@ -260,7 +254,6 @@ export function SessionsScreen({ navigation, route }: Props) {
     ],
   )
 
-  const join = useLocalJoin(act)
   const sheet = useSheet({
     menu,
     device,
@@ -273,7 +266,6 @@ export function SessionsScreen({ navigation, route }: Props) {
     setWorkspaceEdit,
     navigation,
     nativeHere: nativeChildren.length > 0,
-    localEntries: join.entries,
   })
 
   return (
@@ -348,7 +340,6 @@ export function SessionsScreen({ navigation, route }: Props) {
         onConfirm={() => ask?.run()}
         onClose={() => setAsk(null)}
       />
-      {join.overlays}
       <WorkspaceDialog
         deviceId={deviceId}
         edit={workspaceEdit}

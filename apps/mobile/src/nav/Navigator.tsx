@@ -10,7 +10,6 @@ import { AddDeviceScreen } from '../screens/devices/AddDeviceScreen'
 import { DeviceDetailScreen } from '../screens/devices/DeviceDetailScreen'
 import { DevicesScreen } from '../screens/devices/DevicesScreen'
 import { HarnessSettingsScreen } from '../screens/devices/hconfig/HarnessSettingsScreen'
-import { LocalGroupScreen } from '../screens/devices/LocalGroupScreen'
 import { PairDeviceScreen } from '../screens/devices/PairDeviceScreen'
 import { FilesScreen } from '../screens/files/FilesScreen'
 import { ManagerConsoleScreen } from '../screens/managers/ManagerConsoleScreen'
@@ -70,11 +69,6 @@ export function Navigator() {
       <Stack.Screen name="PairDevice" component={PairDeviceScreen} />
       <Stack.Screen name="DeviceDetail" component={DeviceDetailScreen} />
       <Stack.Screen name="HarnessSettings" component={HarnessSettingsScreen} />
-      <Stack.Screen
-        name="LocalGroup"
-        getId={({ params }) => (tablet ? params.groupId : undefined)}
-        component={LocalGroupScreen}
-      />
       <Stack.Screen
         name="Sessions"
         getId={({ params }) => (tablet ? params.deviceId : undefined)}

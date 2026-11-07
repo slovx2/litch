@@ -67,10 +67,3 @@ test('侧栏浏览不改变返回的对话，目录和会话对象都保留', as
   assert.equal(ordered.at(-1), chat)
   assert.equal(tabletLayout(600, ordered, ordered.length - 1).panes.content, chat.key)
 })
-
-test('本机分组详情是左栏的目录页：切组只换左栏，右栏留着当前会话', () => {
-  const group = { key: 'group', name: 'LocalGroup' }
-  const stack = [devices, chat, group]
-  assert.deepEqual(tabletLayout(1024, stack, 2).panes, { navigation: 'group', content: 'chat' })
-  assert.deepEqual(tabletLayout(700, stack, 2).panes, { content: 'group' })
-})

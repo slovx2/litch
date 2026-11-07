@@ -568,7 +568,11 @@ function sameHarnesses(a: SessionHarnesses, b: SessionHarnesses): boolean {
   return ids.length === Object.keys(b).length && ids.every((id) => a[id] === b[id])
 }
 
-export function createReplica(channel: CoreChannel, activity?: SidebarActivity): Replica {
+export function createReplica(
+  channel: CoreChannel,
+  activity?: SidebarActivity,
+  options: { globalPins?: boolean } = {},
+): Replica {
   const store = new KeyedStore()
   const decisionListeners = new Set<(manager: ManagerView, decision: ManagerDecisionView) => void>()
   const managerLists = new Map<string, { stop(): void; rows: Map<string, ManagerView> }>()
@@ -865,7 +869,9 @@ export function createReplica(channel: CoreChannel, activity?: SidebarActivity):
   // 投影的主项、项目或排序依据没变就不通知；正文流式增量不经过侧栏目录。
   const refreshProjections = (deviceId: string, sessions: Map<string, SessionSummary>) => {
     // 画在置顶区里的不进最近、未读（置顶只出现一次）
-    const covered = new Set(store.get<string[]>(keys.pinCover(deviceId)) ?? [])
+    const covered = new Set(
+      options.globalPins === false ? [] : (store.get<string[]>(keys.pinCover(deviceId)) ?? []),
+    )
     const next = projectSidebarGroups(
       deviceId,
       sessions,

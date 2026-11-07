@@ -29,22 +29,6 @@ const open = (deviceId: string, sessionId: string) =>
 const say = (prompt: string) =>
   link(`litch://new?device=local&prompt=${encodeURIComponent(prompt)}`)
 
-/** 一组混着三台设备：本机的、远程的、离线设备上的、置顶了的（只数）、已经不在的 */
-const LOCAL_GROUPS: LocalGroup[] = [
-  {
-    id: 'g-release',
-    name: '发版跟进',
-    members: [
-      { deviceId: 'build', sessionId: 'b1' },
-      { deviceId: 'local', sessionId: 's2' },
-      { deviceId: 'gpu', sessionId: 'g1' },
-      { deviceId: 'local', sessionId: 'p1' },
-      { deviceId: 'local', sessionId: 'gone' },
-    ],
-  },
-  { id: 'g-research', name: '调研', members: [{ deviceId: 'local', sessionId: 's4' }] },
-]
-
 export const SCENES: Scene[] = [
   {
     id: 'pair-ts-login',
@@ -160,22 +144,6 @@ export const SCENES: Scene[] = [
     name: '首页',
     note: '设备列表、定时任务入口、离线设备的原因',
     steps: [],
-  },
-  {
-    id: 'home-local',
-    group: '设备',
-    name: '首页 · 置顶与本机分组',
-    note: '各台设备的置顶并成一个区，本机分组一组一行；行首线色、第二行设备名。长按出动作单',
-    steps: [],
-    localGroups: LOCAL_GROUPS,
-  },
-  {
-    id: 'local-group',
-    group: '设备',
-    name: '本机分组详情',
-    note: '成员混着各台设备；置顶了的只数一下，已经不在的留一行说明，长按可移出',
-    steps: [nav('LocalGroup', { groupId: 'g-release', title: '发版跟进' })],
-    localGroups: LOCAL_GROUPS,
   },
   {
     id: 'home-recent',
