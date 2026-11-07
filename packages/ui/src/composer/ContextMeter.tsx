@@ -50,7 +50,7 @@ function Ring({ percent }: { percent: number | null }) {
 /**
  * 上下文占用：一个小圆环加百分比，快满的时候换成提醒的颜色。
  * 给了 compact 的话它是个按钮，点开能手动压缩上下文；这时对面没报过占用也显示（一个空的圆环）。
- * 没给 compact 时，对面没报过、或者没报窗口有多大（算不出占比）就不显示。
+ * 有账号额度入口时，即使还没报告上下文或不支持压缩，也能打开弹层查看额度。
  * 给了 limits（会话在哪台设备、哪个 harness 上）时，弹层里另有一段账号额度，没有额度时不出。
  */
 export function ContextMeter({
@@ -67,7 +67,7 @@ export function ContextMeter({
   const percent = usage?.windowTokens
     ? Math.min(100, Math.round((usage.usedTokens / usage.windowTokens) * 100))
     : null
-  if (percent === null && !compact) return null
+  if (percent === null && !compact && !limits) return null
   const level = percent === null ? '' : percent >= 90 ? ' full' : percent >= 70 ? ' high' : ''
   const label =
     percent === null || !usage?.windowTokens
@@ -77,7 +77,7 @@ export function ContextMeter({
           used: shortTokens(usage.usedTokens),
           window: shortTokens(usage.windowTokens),
         })
-  if (!compact) {
+  if (!compact && !limits) {
     return (
       <span className={`ctx${level}`} role="img" title={label} aria-label={label}>
         <Ring percent={percent} />
@@ -85,14 +85,15 @@ export function ContextMeter({
     )
   }
   /** 现在为什么压不了（按钮下面一行小字）。能压就是 null */
-  const blocked = !compact.able
-    ? t('context.compactUnsupported')
-    : compact.busy
-      ? t('context.compactBusy')
-      : null
+  const blocked =
+    compact && !compact.able
+      ? t('context.compactUnsupported')
+      : compact?.busy
+        ? t('context.compactBusy')
+        : null
   const run = () => {
     // 压不了的时候点了不关弹层：原因就写在按钮下面
-    if (blocked) return
+    if (blocked || !compact) return
     close(true)
     compact.run().catch((error: unknown) =>
       showToast({
@@ -136,14 +137,16 @@ export function ContextMeter({
           />
           {limits ? <OpenLimits deviceId={limits.deviceId} harness={limits.harness} /> : null}
           {/* 压不了的时候不用 disabled：还能聚焦、悬停，下面写着为什么 */}
-          <button
-            type="button"
-            className="btn ctx-compact"
-            aria-disabled={blocked !== null}
-            onClick={run}
-          >
-            {t('context.compact')}
-          </button>
+          {compact ? (
+            <button
+              type="button"
+              className="btn ctx-compact"
+              aria-disabled={blocked !== null}
+              onClick={run}
+            >
+              {t('context.compact')}
+            </button>
+          ) : null}
           {blocked !== null ? <div className="ctx-why">{blocked}</div> : null}
         </div>
       ) : null}

@@ -1,4 +1,4 @@
-// 经理工具与英文规则。只声明契约和拼接文字，不执行看板、会话或文件操作。
+// 经理工具与规则。只声明契约和拼接文字，不执行看板、会话或文件操作。
 import { CLIENT_TOOL_NAMESPACE, type ClientToolNamespaceSpec } from './client-tools.mjs'
 import { MANAGER_POST_TOOLS, RELATION_INPUTS } from './client-tools-manager-posts.mjs'
 import {
@@ -26,7 +26,6 @@ import type {
   ManagerSituation,
   ManagerTemplate,
 } from './manager.mjs'
-import { MANAGER_NAMES } from './manager-posts.mjs'
 
 export const MANAGER_TOOL = {
   report: 'report',
@@ -47,6 +46,10 @@ export const MANAGER_TOOL = {
   dismiss: 'dismiss',
 } as const
 
+/** 事项的定位提示：工具说明、经理规则和创建回执共用，避免把用户待办藏进内部记录。 */
+export const MANAGER_ITEM_NOTE =
+  '事项（item）是经理自己的记录本，用户不会看；需要用户注意或处理的事，请提决策（decision）或发“请你做”（request）。 Items are the manager’s own notebook; the user will not read them. Use a decision or a For you request for anything requiring the user’s attention or action.'
+
 /** 第 6 层答复事件的指令；实际成功项由设备放到 SessionEvent.manager.answers。 */
 export const MANAGER_ANSWERS_TEXT =
   'Apply these board answers to the plan, notify affected lines with litch_sessions.send, land lasting decisions under project rules, record their locations, and update items and the situation. Do not ask these questions again.'
@@ -59,7 +62,7 @@ export const MANAGER_IGNORED_TEXT =
 export function managerRoleRules(scope: string): string {
   return [
     `You are a Litch manager. Delegate implementation to sub-sessions. ${scope.trim() ? `Your scope: ${scope}. ` : ''}Keep lasting information in the board or repository. Do not implement code yourself; start a line. Read code and documents to brief and review.`,
-    `The progress-only item ledger is ${MANAGER_NAMES.work.en} (${MANAGER_NAMES.work['zh-CN']}); never assign new items to users. ${MANAGER_NAMES.inbox.en} contains issues: decisions, suggestions for agent work, For you for human actions, and reports. Publish long updates, limitations and release notes with report, not long chat messages. Link derived work using source/related on creation, or relate later; keep provenance on issues and manager items.`,
+    `Items are the manager’s notebook; users will not read them. Never assign items to users. Use decisions or For you requests for user attention or action. The Console contains decisions, suggestions, For you requests and reports. Publish long updates, limitations and release notes with report, not long chat messages. Link derived work using source/related on creation, or relate later; keep provenance on issues and manager items.`,
     'Each turn: identify user messages, board answers, line reports or Litch events. Apply answers, notify affected lines with litch_sessions.send, land lasting decisions under repository rules and record locations with update. Check reports before updating progress. Start authorized in-scope work; raise out-of-scope work as decisions. Use status when the situation changes. On user turns explain changes, blockers and user actions; on event-only turns keep chat brief.',
     'You may include options and recommendations in chat; the user submits answers on the board or explicitly in chat. Ask through board decisions. One decision asks one question as its title, with self-contained background, useful options, recommendation, consequences and basis. Record explicit answers already given in chat with answer; never ask again. Close obsolete open decisions with a reason; never close an answered decision. The user may ignore decisions; do not reopen them by habit. Reopen only when the situation has changed and the user’s attention is truly needed, and state the reason. Consolidate excessive pending questions.',
     'Lines cannot see this conversation: make briefs self-contained. Turn scope or product questions in reports into decisions. Serialize lines touching the same files. Reassign stalled work or send guidance; do not leave stalled lines unattended. Check branches, commits and check results, and record unverified work in manager items.',
@@ -263,7 +266,11 @@ export interface ManagerToolResults {
     ignoredDecisions?: { id: ManagerDecisionId; title: string }[]
   }
   get: { object: ManagerDecision | ManagerItem | ManagerRequest; changes: ManagerChange[] }
-  add: { id: ManagerObjectId; object: ManagerDecision | ManagerItem | ManagerRequest }
+  add: {
+    id: ManagerObjectId
+    object: ManagerDecision | ManagerItem | ManagerRequest
+    note?: string
+  }
   update: { object: ManagerDecision | ManagerItem | ManagerRequest }
   verify: { object: ManagerDecision | ManagerItem | ManagerRequest }
   close: { object: ManagerDecision | ManagerItem | ManagerRequest }
@@ -278,7 +285,11 @@ export interface ManagerToolResults {
 // 顶层保持普通对象，避免 Claude 丢弃工具；kind 对应关系、跨字段引用与状态流转由设备校验。
 const STRING = { type: 'string' }
 const MARKDOWN = { ...STRING, description: 'Markdown supported; use it for lists and emphasis.' }
-const KIND = { type: 'string', enum: ['decision', 'item', 'request'] }
+const KIND = {
+  type: 'string',
+  enum: ['decision', 'item', 'request'],
+  description: MANAGER_ITEM_NOTE,
+}
 const NULLABLE_STRING = { type: ['string', 'null'] }
 const STRINGS = { type: 'array', items: STRING }
 const ID = { type: 'string', description: 'Board object id: D-<n>, I-<n> or R-<n>.' }
@@ -374,18 +385,16 @@ export const MANAGER_TOOLS: ClientToolNamespaceSpec = {
     {
       type: 'function',
       name: MANAGER_TOOL.add,
-      description:
-        'Add a decision or item; returns its id and object. Items must belong to the manager or a line; use a suggestion card for work awaiting user initiation. Decision basis: the files, commits, branches or sessions it relies on. Defaults: arrays empty; decision open, recommend null, default ask; item backlog, owner manager, why empty.',
+      description: `${MANAGER_ITEM_NOTE} Add a decision, item or request; returns its id and object. Items must belong to the manager or a line; use a suggestion card for work awaiting user initiation. Decision basis: the files, commits, branches or sessions it relies on. Defaults: arrays empty; decision open, recommend null, default ask; item backlog, owner manager, why empty.`,
       inputSchema: object(
         {
           ...RELATION_INPUTS,
           kind: {
             ...KIND,
-            description:
-              'Supply only the matching decision, item or request field. For request, also provide revision=0 and why.',
+            description: `${MANAGER_ITEM_NOTE} Supply only the matching decision, item or request field. For request, also provide revision=0 and why.`,
           },
           decision: object(DECISION_FIELDS, ['title', 'background']),
-          item: object(ITEM_FIELDS, ['title']),
+          item: { ...object(ITEM_FIELDS, ['title']), description: MANAGER_ITEM_NOTE },
           request: object(REQUEST_FIELDS, ['title', 'description']),
           revision: { type: 'integer', minimum: 0 },
           why: MARKDOWN,

@@ -5,6 +5,7 @@ import { isRequest, requestTool } from './manager-requests.mjs'
 import {
   MANAGER_ANSWERS_TEXT,
   MANAGER_IGNORED_TEXT,
+  MANAGER_ITEM_NOTE,
 } from '../../protocol/src/client-tools-manager.mjs'
 import type {
   ManagerActor,
@@ -212,6 +213,7 @@ export class ManagerBoardWriter {
         return {
           id: object.id,
           object,
+          ...(args.kind === 'item' ? { note: MANAGER_ITEM_NOTE } : {}),
           ...(isDecision(object) && object.basis.length === 0
             ? {
                 note: 'Decision basis is empty; use update to add the files, commits, branches or sessions it relies on.',

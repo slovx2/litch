@@ -1,0 +1,417 @@
+{
+  "version": 1,
+  "repository": "slovx2/litch",
+  "workflow": ".github/workflows/full.yml",
+  "cases": [
+    {
+      "job": "client",
+      "test": "client:remote:service",
+      "status": "active",
+      "events": [
+        {
+          "runId": 41560624582,
+          "attempt": 1,
+          "jobId": 125670130732,
+          "sha": "167020f1492d0117085e662c52e7186a007bd1b7",
+          "date": "2026-11-03T01:34:53Z",
+          "trigger": "schedule",
+          "url": "https://github.com/slovx2/litch/actions/runs/41560624582/job/125670130732",
+          "failure": "remote:service 保存到仍在读取项目权限的 stillBlocked 旧样本；其后创建、恢复、发送等均通过，最后 judge 失败。",
+          "evidence": {
+            "kind": "pending",
+            "note": "原分诊支持探针提前采样的竞态，但只列出不同 SHA 的历史通过和修复后通过，未取得同 SHA 或未改代码的本地复跑通过证明；暂不计数。参见 issue #16 和修复 d8de8b3c。"
+          }
+        }
+      ],
+      "issues": ["https://github.com/slovx2/litch/issues/16"]
+    },
+    {
+      "job": "gate / unit",
+      "test": "dsh 子代理：派出去是子代理条目、接收方是子会话号；子会话按父地址打开、可继续的能接着发消息；分叉不当子代理",
+      "status": "active",
+      "events": [
+        {
+          "runId": 42313765563,
+          "attempt": 1,
+          "jobId": 128221349965,
+          "sha": "e65721d49373c6f766cf2b9bb933a25725f5a8eb",
+          "date": "2026-11-06T23:43:37Z",
+          "trigger": "schedule",
+          "url": "https://github.com/slovx2/litch/actions/runs/42313765563/job/128221349965",
+          "failure": "packages/dsh/test/subagents.test.mts 对应子代理用例等待 turn/completed 超时；issue #36。",
+          "evidence": {
+            "kind": "same-sha-pass",
+            "runId": 42306476692,
+            "attempt": 1,
+            "jobId": 128197073943,
+            "sha": "e65721d49373c6f766cf2b9bb933a25725f5a8eb",
+            "reference": "https://github.com/slovx2/litch/actions/runs/42306476692/job/128197073943",
+            "note": "同 SHA 的 gate / unit 日志确认该用例通过"
+          }
+        }
+      ],
+      "issues": ["https://github.com/slovx2/litch/issues/36"]
+    },
+    {
+      "job": "gate / unit",
+      "test": "回合停在审批上：任务和运行都标等你处理，运行的每条审批一行，自动拒绝的说等了多久",
+      "status": "active",
+      "events": [
+        {
+          "runId": 41743227253,
+          "attempt": 1,
+          "jobId": 126289800518,
+          "sha": "21edf60cd4f7f55b84160479613784b7aef626d7",
+          "date": "2026-11-03T23:58:20Z",
+          "trigger": "schedule",
+          "url": "https://github.com/slovx2/litch/actions/runs/41743227253/job/126289800518",
+          "failure": "apps/mobile/test/tasks.test.mjs:193 固定要求今天，UTC 跨午夜实际昨天 23:59；issue #28。此为手机 JS 单测，不是已排除的模拟器 E2E。",
+          "evidence": {
+            "kind": "same-sha-pass",
+            "runId": 41729417966,
+            "attempt": 1,
+            "jobId": 126242703217,
+            "sha": "21edf60cd4f7f55b84160479613784b7aef626d7",
+            "reference": "https://github.com/slovx2/litch/actions/runs/41729417966/job/126242703217",
+            "note": "同 SHA 的 gate / unit 日志确认该用例通过"
+          }
+        }
+      ],
+      "issues": ["https://github.com/slovx2/litch/issues/28"]
+    },
+    {
+      "job": "mobile (1)",
+      "test": "模拟器启动与 ADB 连接（作业基础设施）",
+      "status": "excluded",
+      "events": [
+        {
+          "runId": 42270738266,
+          "attempt": 1,
+          "jobId": 128078305923,
+          "sha": "0959b27e37859bd9d9318c48484d6fdc3b742ba6",
+          "date": "2026-11-06T18:34:19Z",
+          "trigger": "workflow_dispatch",
+          "url": "https://github.com/slovx2/litch/actions/runs/42270738266/job/128078305923",
+          "failure": "issue #33：启动失败、ADB reverse 丢失/连接断开，导致分片超时取消。",
+          "evidence": {
+            "kind": "same-sha-pass",
+            "runId": 42258758453,
+            "attempt": 1,
+            "jobId": 128038711003,
+            "sha": "0959b27e37859bd9d9318c48484d6fdc3b742ba6",
+            "reference": "https://github.com/slovx2/litch/actions/runs/42258758453/job/128038711003",
+            "note": "issue #33 的同 SHA 交叉分片完整通过，已核对作业结论和 source checkout；该项为基础设施失败，不是业务用例断言。"
+          }
+        },
+        {
+          "runId": 42296690129,
+          "attempt": 1,
+          "jobId": 128172917501,
+          "sha": "81c5d490f236bb7478ec3413f6810bc1a55a4d85",
+          "date": "2026-11-06T21:45:59Z",
+          "trigger": "workflow_dispatch",
+          "url": "https://github.com/slovx2/litch/actions/runs/42296690129/job/128172917501",
+          "failure": "issue #33 评论：mobile (3) 桌面启动 ANR，mobile (1) 中途掉线后超过作业时限；没有业务断言首败。",
+          "evidence": {
+            "kind": "pending",
+            "note": "已排除的基础设施历史；issue #33/旧夜间分诊有掉线、启动超时事实，没有该提交此分片完整通过的证据，不用于计数。"
+          }
+        }
+      ],
+      "exclusion": {
+        "reason": "用户已决定手机模拟器 E2E 不进默认 Full/schedule，mobile-e2e 默认 false；2026-11-07 重申。",
+        "reference": "docs/reference/ci-flaky.md#认定和计数"
+      },
+      "issues": ["https://github.com/slovx2/litch/issues/33"]
+    },
+    {
+      "job": "mobile (2)",
+      "test": "模拟器启动与 ADB 连接（作业基础设施）",
+      "status": "excluded",
+      "events": [
+        {
+          "runId": 41560624582,
+          "attempt": 1,
+          "jobId": 125676312088,
+          "sha": "167020f1492d0117085e662c52e7186a007bd1b7",
+          "date": "2026-11-03T01:52:40Z",
+          "trigger": "schedule",
+          "url": "https://github.com/slovx2/litch/actions/runs/41560624582/job/125676312088",
+          "failure": "mobile (2) 多次 device offline，mock13 的 Maestro gRPC 断开最终失败；issue #7。",
+          "evidence": {
+            "kind": "pending",
+            "note": "已排除的基础设施历史；issue #33/旧夜间分诊有掉线、启动超时事实，没有该提交此分片完整通过的证据，不用于计数。"
+          }
+        },
+        {
+          "runId": 42258758453,
+          "attempt": 1,
+          "jobId": 128038710937,
+          "sha": "0959b27e37859bd9d9318c48484d6fdc3b742ba6",
+          "date": "2026-11-06T17:18:45Z",
+          "trigger": "workflow_dispatch",
+          "url": "https://github.com/slovx2/litch/actions/runs/42258758453/job/128038710937",
+          "failure": "issue #33：启动失败、ADB reverse 丢失/连接断开，导致分片超时取消。",
+          "evidence": {
+            "kind": "same-sha-pass",
+            "runId": 42270738266,
+            "attempt": 1,
+            "jobId": 128078305831,
+            "sha": "0959b27e37859bd9d9318c48484d6fdc3b742ba6",
+            "reference": "https://github.com/slovx2/litch/actions/runs/42270738266/job/128078305831",
+            "note": "issue #33 的同 SHA 交叉分片完整通过，已核对作业结论和 source checkout；该项为基础设施失败，不是业务用例断言。"
+          }
+        },
+        {
+          "runId": 42258758453,
+          "attempt": 2,
+          "jobId": 128073993072,
+          "sha": "0959b27e37859bd9d9318c48484d6fdc3b742ba6",
+          "date": "2026-11-06T18:25:59Z",
+          "trigger": "workflow_dispatch",
+          "url": "https://github.com/slovx2/litch/actions/runs/42258758453/job/128073993072",
+          "failure": "issue #33：启动失败、ADB reverse 丢失/连接断开，导致分片超时取消。",
+          "evidence": {
+            "kind": "same-sha-pass",
+            "runId": 42270738266,
+            "attempt": 1,
+            "jobId": 128078305831,
+            "sha": "0959b27e37859bd9d9318c48484d6fdc3b742ba6",
+            "reference": "https://github.com/slovx2/litch/actions/runs/42270738266/job/128078305831",
+            "note": "issue #33 的同 SHA 交叉分片完整通过，已核对作业结论和 source checkout；该项为基础设施失败，不是业务用例断言。"
+          }
+        }
+      ],
+      "exclusion": {
+        "reason": "用户已决定手机模拟器 E2E 不进默认 Full/schedule，mobile-e2e 默认 false；2026-11-07 重申。",
+        "reference": "docs/reference/ci-flaky.md#认定和计数"
+      },
+      "issues": ["https://github.com/slovx2/litch/issues/33"]
+    },
+    {
+      "job": "mobile (3)",
+      "test": "模拟器启动与 ADB 连接（作业基础设施）",
+      "status": "excluded",
+      "events": [
+        {
+          "runId": 42258758453,
+          "attempt": 1,
+          "jobId": 128038710912,
+          "sha": "0959b27e37859bd9d9318c48484d6fdc3b742ba6",
+          "date": "2026-11-06T17:18:45Z",
+          "trigger": "workflow_dispatch",
+          "url": "https://github.com/slovx2/litch/actions/runs/42258758453/job/128038710912",
+          "failure": "issue #33：启动失败、ADB reverse 丢失/连接断开，导致分片超时取消。",
+          "evidence": {
+            "kind": "same-sha-pass",
+            "runId": 42270738266,
+            "attempt": 1,
+            "jobId": 128078305886,
+            "sha": "0959b27e37859bd9d9318c48484d6fdc3b742ba6",
+            "reference": "https://github.com/slovx2/litch/actions/runs/42270738266/job/128078305886",
+            "note": "issue #33 的同 SHA 交叉分片完整通过，已核对作业结论和 source checkout；该项为基础设施失败，不是业务用例断言。"
+          }
+        },
+        {
+          "runId": 42296690129,
+          "attempt": 1,
+          "jobId": 128172917827,
+          "sha": "81c5d490f236bb7478ec3413f6810bc1a55a4d85",
+          "date": "2026-11-06T21:45:59Z",
+          "trigger": "workflow_dispatch",
+          "url": "https://github.com/slovx2/litch/actions/runs/42296690129/job/128172917827",
+          "failure": "issue #33 评论：mobile (3) 桌面启动 ANR，mobile (1) 中途掉线后超过作业时限；没有业务断言首败。",
+          "evidence": {
+            "kind": "pending",
+            "note": "已排除的基础设施历史；issue #33/旧夜间分诊有掉线、启动超时事实，没有该提交此分片完整通过的证据，不用于计数。"
+          }
+        }
+      ],
+      "exclusion": {
+        "reason": "用户已决定手机模拟器 E2E 不进默认 Full/schedule，mobile-e2e 默认 false；2026-11-07 重申。",
+        "reference": "docs/reference/ci-flaky.md#认定和计数"
+      },
+      "issues": ["https://github.com/slovx2/litch/issues/33"]
+    },
+    {
+      "job": "native / checks",
+      "test": "client:adapter",
+      "status": "active",
+      "events": [
+        {
+          "runId": 42349922482,
+          "attempt": 1,
+          "jobId": 128335752582,
+          "sha": "167015c74c055487f9cdcbb9ad8dca13638ce277",
+          "date": "2026-11-07T07:07:48Z",
+          "trigger": "workflow_dispatch",
+          "url": "https://github.com/slovx2/litch/actions/runs/42349922482/job/128335752582",
+          "failure": "普通停止及退出关闭服务：check-adapter.mjs:902，alive(old.pid) 仍为 true。",
+          "evidence": {
+            "kind": "local-rerun",
+            "reference": "https://github.com/slovx2/litch/issues/35",
+            "note": "维护者在 issue #35 记录本机完整脚本连跑三次、每次 30 项全过；原报告未记录本地 SHA/命令输出。夜间另一 SHA 的通过仅作背景，不作为同 SHA 证据。停止与进程退出的竞态仍是推测。"
+          }
+        }
+      ],
+      "issues": ["https://github.com/slovx2/litch/issues/35"]
+    },
+    {
+      "job": "native / checks",
+      "test": "client:projections",
+      "status": "active",
+      "events": [
+        {
+          "runId": 42232742291,
+          "attempt": 1,
+          "jobId": 127942707903,
+          "sha": "f52b0dbe40be68ae9d0063dfef7d323e81240c46",
+          "date": "2026-11-06T14:19:02Z",
+          "trigger": "workflow_dispatch",
+          "url": "https://github.com/slovx2/litch/actions/runs/42232742291/job/127942707903",
+          "failure": "Runtime.evaluate 超时，等待打开普通父会话；check-sidebar-projections.mjs:947。issue #34 的概述称截图超时，但本次原日志是 evaluate。",
+          "evidence": {
+            "kind": "same-sha-pass",
+            "runId": 42232742291,
+            "attempt": 2,
+            "jobId": 127975421369,
+            "sha": "f52b0dbe40be68ae9d0063dfef7d323e81240c46",
+            "reference": "https://github.com/slovx2/litch/actions/runs/42232742291/job/127975421369",
+            "note": "同 SHA 的 native / checks 日志确认该用例通过"
+          }
+        },
+        {
+          "runId": 42296690129,
+          "attempt": 1,
+          "jobId": 128163868018,
+          "sha": "81c5d490f236bb7478ec3413f6810bc1a55a4d85",
+          "date": "2026-11-06T21:26:49Z",
+          "trigger": "workflow_dispatch",
+          "url": "https://github.com/slovx2/litch/actions/runs/42296690129/job/128163868018",
+          "failure": "Page.captureScreenshot 超时；check-sidebar-projections.mjs:897，业务断言后截图失败。",
+          "evidence": {
+            "kind": "local-rerun",
+            "reference": "https://github.com/slovx2/litch/issues/34",
+            "note": "维护者在 issue #34 正文记录本机该项通过，后续评论记录本机连续两次约 27 秒通过。原报告未保存本地 SHA/命令/完整日志；按用户允许的本地复跑依据登记，未声称本线重新实跑。"
+          }
+        },
+        {
+          "runId": 42306476692,
+          "attempt": 1,
+          "jobId": 128197157928,
+          "sha": "e65721d49373c6f766cf2b9bb933a25725f5a8eb",
+          "date": "2026-11-06T22:40:56Z",
+          "trigger": "workflow_dispatch",
+          "url": "https://github.com/slovx2/litch/actions/runs/42306476692/job/128197157928",
+          "failure": "Runtime.evaluate 超时，等待已读子会话重新打开；check-sidebar-projections.mjs:1100。",
+          "evidence": {
+            "kind": "same-sha-pass",
+            "runId": 42313765563,
+            "attempt": 1,
+            "jobId": 128221427401,
+            "sha": "e65721d49373c6f766cf2b9bb933a25725f5a8eb",
+            "reference": "https://github.com/slovx2/litch/actions/runs/42313765563/job/128221427401",
+            "note": "同 SHA 的 native / checks 日志确认该用例通过"
+          }
+        },
+        {
+          "runId": 42306476692,
+          "attempt": 2,
+          "jobId": 128221287984,
+          "sha": "e65721d49373c6f766cf2b9bb933a25725f5a8eb",
+          "date": "2026-11-06T23:43:28Z",
+          "trigger": "workflow_dispatch",
+          "url": "https://github.com/slovx2/litch/actions/runs/42306476692/job/128221287984",
+          "failure": "同一 run 第二次执行仍报告 client:projections 失败；保留 attempt 2，但不增加独立 run 次数。",
+          "evidence": {
+            "kind": "same-sha-pass",
+            "runId": 42313765563,
+            "attempt": 1,
+            "jobId": 128221427401,
+            "sha": "e65721d49373c6f766cf2b9bb933a25725f5a8eb",
+            "reference": "https://github.com/slovx2/litch/actions/runs/42313765563/job/128221427401",
+            "note": "同 SHA 的 native / checks 日志确认该用例通过"
+          }
+        }
+      ],
+      "issues": ["https://github.com/slovx2/litch/issues/34"]
+    }
+  ],
+  "audit": {
+    "checkedAt": "2026-11-07T08:48:55.385Z",
+    "scope": "首次补账：issue #33–#36 及 API 返回的全部 5 次 schedule Full，2026-11-03 至 2026-11-06 UTC；不是全部历史手动 Full 普查。",
+    "sources": [
+      "https://github.com/slovx2/litch/issues/33",
+      "https://github.com/slovx2/litch/issues/34",
+      "https://github.com/slovx2/litch/issues/35",
+      "https://github.com/slovx2/litch/issues/36",
+      "https://github.com/slovx2/litch/issues/28"
+    ],
+    "notes": [
+      "job/test 为计数键，独立 run ID 为次数。投影 42306476692 的两次真实失败只计一次。",
+      "42258758453 attempt 2 的 mobile (3) 是 GitHub 重跑快照复制的旧结果（开始时间与 attempt 1 相同），不补造第二次执行。只有 mobile (2) 实际重跑。",
+      "模拟器在业务用例执行前发生启动/ADB 基础设施失败，按具体分片+基础设施条目留档，全部已排除，不虚构每个 flow 的产品断言失败。",
+      "手机同 SHA 分片通过依据来自作业结果与 source checkout；非手机确认来自用例日志或明确标注的维护者本地复跑报告。",
+      "issue #34 的本地复跑报告及 #35 未保存本地 SHA/完整日志，保留报告来源和缺项；本线没有重新执行这些 UI 探针。",
+      "0.36.0 Full 42349922482 attempt 2 在本次取证时仍运行，未预记通过或新增失败。"
+    ],
+    "nightlies": [
+      {
+        "runId": 42313765563,
+        "sha": "e65721d49373c6f766cf2b9bb933a25725f5a8eb",
+        "date": "2026-11-06T23:43:20Z",
+        "conclusion": "failure",
+        "url": "https://github.com/slovx2/litch/actions/runs/42313765563",
+        "review": "gate / unit 的 DSH 子代理等待 turn/completed 超时，同 SHA 手动 Full 42306476692 的同用例通过，记 1 次（issue #36）。native / checks 全绿也为投影历史提供同 SHA 通过证据。"
+      },
+      {
+        "runId": 42135299521,
+        "sha": "917f08bf1fe573fed0c3b174a60ea01637909fc2",
+        "date": "2026-11-06T00:13:53Z",
+        "conclusion": "success",
+        "url": "https://github.com/slovx2/litch/actions/runs/42135299521",
+        "review": "全绿，无失败记录。"
+      },
+      {
+        "runId": 41940827133,
+        "sha": "3b5d3a5c247f799c4970b9a7f5c436d00afe79df",
+        "date": "2026-11-05T00:22:20Z",
+        "conclusion": "failure",
+        "url": "https://github.com/slovx2/litch/actions/runs/41940827133",
+        "review": "不计入偶发：mobile-build 缺 golang.org/x/mobile 依赖源码；native / checks 的 ruby/setup-ruby 不识别 3.4.7。其后上传证明缺文件及 adapters/report 只是上游失败连带。不具备复跑通过证据。"
+      },
+      {
+        "runId": 41743227253,
+        "sha": "21edf60cd4f7f55b84160479613784b7aef626d7",
+        "date": "2026-11-03T23:58:02Z",
+        "conclusion": "failure",
+        "url": "https://github.com/slovx2/litch/actions/runs/41743227253",
+        "review": "gate / unit 手机审批时间单测跨 UTC 午夜失败；同 SHA 手动 Full 41729417966 的同用例通过，记 1 次（issue #28）。"
+      },
+      {
+        "runId": 41560624582,
+        "sha": "167020f1492d0117085e662c52e7186a007bd1b7",
+        "date": "2026-11-03T01:34:39Z",
+        "conclusion": "failure",
+        "url": "https://github.com/slovx2/litch/actions/runs/41560624582",
+        "review": "client:remote:service 暂存待核实：分诊判探针采样竞态，但没有同 SHA/未改代码本地通过证据。mobile (2) 掉线已排除；不把后续修复成功算偶发证明。"
+      }
+    ],
+    "nonFlakyEvidence": [
+      {
+        "runId": 41940827133,
+        "job": "mobile-build",
+        "jobId": 126960979730,
+        "url": "https://github.com/slovx2/litch/actions/runs/41940827133/job/126960979730",
+        "failure": "mobile/licenses.mjs:50 未取得依赖源码：golang.org/x/mobile"
+      },
+      {
+        "runId": 41940827133,
+        "job": "native / checks",
+        "jobId": 126961188084,
+        "url": "https://github.com/slovx2/litch/actions/runs/41940827133/job/126961188084",
+        "failure": "ruby/setup-ruby: Unknown version 3.4.7 for ruby on macos-15"
+      }
+    ]
+  }
+}

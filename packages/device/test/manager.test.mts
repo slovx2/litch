@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import '../../protocol/test/client-tools-schema.test.mjs'
+import { MANAGER_ITEM_NOTE } from '../../protocol/src/client-tools-manager.mjs'
 import {
   MANAGER_DEFAULT_CONTACT,
   MANAGER_DEFAULT_DISPATCH,
@@ -246,7 +247,7 @@ test('经理在 wake 回合自行归档整棵线子树，不能归档别的经�
   }
 })
 
-test('新增决策缺依据仍保存并提示 update；有依据的决策和事项不提示', async () => {
+test('新增事项返回记录本提示；决策保留依据提醒，请你做不带事项提示', async () => {
   const env = treeRig()
   try {
     const connection = await client(env)
@@ -260,6 +261,7 @@ test('新增决策缺依据仍保存并提示 update；有依据的决策和事�
         }),
       )
       assert.deepEqual(env.device.managers.store.object(manager.id, added.id), added.object)
+      assert.notEqual(added.note, MANAGER_ITEM_NOTE)
       if (added.object.basis.length === 0) {
         assert.match(added.note, /basis is empty; use update/)
         const updated = value(
@@ -274,7 +276,18 @@ test('新增决策缺依据仍保存并提示 update；有依据的决策和事�
       } else assert.equal(added.note, undefined)
     }
     const item = value(await tool(env, threadId, 'add', { kind: 'item', item: { title: '待办' } }))
-    assert.equal(item.note, undefined)
+    assert.equal(item.note, MANAGER_ITEM_NOTE)
+    assert.deepEqual(env.device.managers.store.object(manager.id, item.id), item.object)
+    assert.equal(Object.hasOwn(item.object, 'note'), false, '提示仅在回执，不写进事项正文')
+    const request = value(
+      await tool(env, threadId, 'add', {
+        kind: 'request',
+        request: { title: '请验证', description: '手机上检查显示' },
+        revision: 0,
+        why: '需要用户操作',
+      }),
+    )
+    assert.equal(request.note, undefined)
   } finally {
     await env.close()
   }

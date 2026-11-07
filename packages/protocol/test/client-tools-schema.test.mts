@@ -7,6 +7,7 @@ import {
   declaredBrowserActions,
 } from '../src/client-tools.mjs'
 import { browserToolsSpec } from '../src/client-tools-browser.mjs'
+import { MANAGER_ITEM_NOTE, MANAGER_TOOLS, managerRoleRules } from '../src/client-tools-manager.mjs'
 import { clientToolSpecs } from '../src/client-tools-specs.mjs'
 
 test('所有客户端工具的顶层都是普通对象，不含 Claude 拒绝的组合关键字', () => {
@@ -67,4 +68,22 @@ test('浏览器批量声明与定义：逐动作要求现有标签，旧执行�
     declaredBrowserActions({ litchClientTools: { namespaces: ['litch_browser'] } }, true),
     false,
   )
+})
+
+test('经理事项提示显式区分内部记录与用户决策/请求，中英说明覆盖创建和种类入口', () => {
+  assert.match(MANAGER_ITEM_NOTE, /经理自己的记录本，用户不会看/)
+  assert.match(MANAGER_ITEM_NOTE, /decision.*request/)
+  assert.match(MANAGER_ITEM_NOTE, /the user will not read them/)
+  const add = MANAGER_TOOLS.tools.find((tool) => tool.name === 'add')
+  assert.ok(add)
+  assert.ok(add.description.startsWith(MANAGER_ITEM_NOTE))
+  const properties = add.inputSchema.properties as Record<string, { description?: string }>
+  assert.ok(properties.kind?.description?.startsWith(MANAGER_ITEM_NOTE))
+  assert.equal(properties.item?.description, MANAGER_ITEM_NOTE)
+  for (const tool of MANAGER_TOOLS.tools) {
+    const kind = (tool.inputSchema.properties as Record<string, { description?: string }>).kind
+    if (kind) assert.ok(kind.description?.includes(MANAGER_ITEM_NOTE), tool.name)
+  }
+  assert.match(managerRoleRules(''), /notebook; users will not read them/)
+  assert.match(managerRoleRules(''), /decisions or For you requests for user attention or action/)
 })

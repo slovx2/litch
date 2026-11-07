@@ -1,4 +1,4 @@
-// 用量页：从底部弹出，上下文用了多少、账号的订阅额度（Claude Code 的 Anthropic 订阅、Codex 的 ChatGPT 登录才有）
+// 用量页：从底部弹出，上下文用了多少、账号的订阅额度（Claude Code、Codex、Antigravity 等）
 // 各用了多少、多久后重置，下面一个“压缩上下文”。点输入区下面的“上下文 N%”或会话菜单里的“用量与额度”打开。
 // 照桌面端用量环的弹层（packages/ui/src/composer/ContextMeter.tsx）：开着才订阅额度（accountLimits 主题），
 // 核心那时才去读（Claude Code 每读一次要起一个 CLI，两次之间至少隔 30 秒），之后跟着更新通知走。
@@ -106,7 +106,7 @@ export function UsageSheet({
           <Line line={contextLine(usage, t)} testID="usage:context" />
           <Text style={[styles.group, { color: c.ink3 }]}>{t('usage.limits')}</Text>
           {limits.length > 0 ? (
-            limits.map((line) => <Line key={line.id} line={line} testID="usage:limit" />)
+            limits.map((line) => <Line key={line.id} line={line} quota testID="usage:limit" />)
           ) : reading ? (
             <View style={styles.busy}>
               <Loading text={t('usage.reading')} testID="usage:reading" />
@@ -140,7 +140,15 @@ export function UsageSheet({
 }
 
 /** 一行：名字靠左，补充的那句和百分比靠右，下面一条细进度条；快用完换提醒的颜色 */
-function Line({ line, testID }: { line: UsageLine; testID: string }) {
+function Line({
+  line,
+  testID,
+  quota = false,
+}: {
+  line: UsageLine
+  testID: string
+  quota?: boolean
+}) {
   const theme = useTheme()
   const { c } = theme
   const level = usageLevel(line.percent)
@@ -149,10 +157,13 @@ function Line({ line, testID }: { line: UsageLine; testID: string }) {
   return (
     <View style={styles.line} testID={testID}>
       <View style={styles.head}>
-        <Text numberOfLines={1} style={[styles.name, { color: c.ink }]}>
+        <Text
+          numberOfLines={quota ? undefined : 1}
+          style={[styles.name, quota && styles.quotaName, { color: c.ink }]}
+        >
           {line.label}
         </Text>
-        {line.detail ? (
+        {line.detail && !quota ? (
           <Text numberOfLines={1} style={[styles.detail, { color: c.ink3 }]}>
             {line.detail}
           </Text>
@@ -161,6 +172,9 @@ function Line({ line, testID }: { line: UsageLine; testID: string }) {
           {line.percent === null ? '—' : `${line.percent}%`}
         </Text>
       </View>
+      {quota && line.detail ? (
+        <Text style={[styles.quotaDetail, { color: c.ink3 }]}>{line.detail}</Text>
+      ) : null}
       <View style={[styles.track, { backgroundColor: c.press, borderRadius: theme.radius.s }]}>
         <View
           style={[
@@ -184,6 +198,8 @@ const styles = StyleSheet.create({
   line: { paddingHorizontal: 16, paddingVertical: 8, gap: 6 },
   head: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   name: { flexShrink: 1, fontSize: 14 },
+  quotaName: { flex: 1 },
+  quotaDetail: { fontSize: 12 },
   detail: { flex: 1, fontSize: 12, textAlign: 'right' },
   percent: { fontSize: 13, minWidth: 40, textAlign: 'right' },
   track: { height: 4, overflow: 'hidden' },

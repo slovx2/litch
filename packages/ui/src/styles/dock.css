@@ -434,6 +434,20 @@
   font-size: calc(11px * var(--fs));
   color: var(--ink);
 }
+/* 模型组名称比普通窗口长，独占一行，避免把 5 小时和每周额度都截成相同的字。 */
+.meter-named .meter-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 8px;
+}
+.meter-named .meter-name {
+  grid-column: 1 / -1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.meter-named .meter-pct {
+  grid-column: 2;
+}
 .meter-bar {
   display: block;
   height: 4px;

@@ -47,12 +47,20 @@ const CLAUDE = {
 } as unknown as GetAccountRateLimitsResponse
 
 function world() {
-  const fake = fakeDevice([harness('claude-code'), harness('codex'), harness('pi')])
+  const fake = fakeDevice([harness('claude-code'), harness('codex'), harness('pi'), harness('agy')])
   const peer = fakeOpener({
     ...fake.handlers,
     'account/rateLimits/read': (params) => {
       const which = (params as { harness?: string }).harness
       if (which === 'claude-code') return CLAUDE
+      if (which === 'agy')
+        return {
+          rateLimits: snapshot('agy', null, null),
+          rateLimitsByLimitId: {
+            'agy:gemini-5h': snapshot('agy:gemini-5h', 'Gemini Models', [25, 300]),
+            'agy:gemini-weekly': snapshot('agy:gemini-weekly', 'Gemini Models', [64, 10080]),
+          },
+        }
       throw new RpcFailure(-32601, 'Method not found')
     },
   })
@@ -160,4 +168,51 @@ test('对面不认识这个方法（Pi 之类）就是没有额度，订阅照�
   await settle()
   assert.deepEqual(w.reads(), [{ harness: 'pi' }])
   assert.deepEqual(pi.seen.view, { deviceId: 'dev', harness: 'pi', rows: [] })
+})
+
+test('agy 的失效 bucket 撤下，其他 harness 保持原来的稀疏更新语义', async () => {
+  const w = world()
+  w.core.start()
+  await settle()
+  const watched = w.watch('agy')
+  const claude = w.watch('claude-code')
+  await settle()
+  await settle()
+  assert.equal(watched.seen.view?.rows.length, 2)
+  for (const id of ['agy:gemini-5h', 'agy:gemini-weekly'])
+    w.broadcast('account/rateLimits/updated', {
+      harness: 'agy',
+      rateLimits: snapshot(id, null, null, null),
+    })
+  await settle()
+  assert.deepEqual(watched.seen.view?.rows, [])
+  w.broadcast('account/rateLimits/updated', {
+    harness: 'claude-code',
+    rateLimits: snapshot('claude-code', null, null, null),
+  })
+  await settle()
+  assert.equal(claude.seen.view?.rows.length, 3)
+})
+
+test('Antigravity 的具名 bucket 保留模型组、窗口与重置时间，更新不影响其他组', async () => {
+  const w = world()
+  w.core.start()
+  await settle()
+  const watched = w.watch('agy')
+  await settle()
+  await settle()
+  assert.deepEqual(brief(watched.seen.view), [
+    ['Gemini Models', 300, 25],
+    ['Gemini Models', 10080, 64],
+  ])
+  assert.equal(watched.seen.view?.rows[0]?.window.resetsAt, RESET * 1000)
+  w.broadcast('account/rateLimits/updated', {
+    harness: 'agy',
+    rateLimits: snapshot('agy:gemini-5h', 'Gemini Models', [90, 300]),
+  })
+  await settle()
+  assert.deepEqual(brief(watched.seen.view), [
+    ['Gemini Models', 300, 90],
+    ['Gemini Models', 10080, 64],
+  ])
 })
