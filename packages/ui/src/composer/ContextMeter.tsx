@@ -21,6 +21,12 @@ export interface Compaction {
   run(): Promise<unknown>
 }
 
+/**
+ * 有订阅额度可看的 harness。不能压缩、也没报上下文时，只有它们的圆环是打开额度弹层的按钮；
+ * 别的 harness 照旧按声明（报了上下文才显示、能压缩才可点），不出空的入口。
+ */
+const QUOTA_HARNESSES = new Set(['claude-code', 'codex', 'agy'])
+
 /** 弹层里的账号额度：弹层开着才订阅 */
 function OpenLimits({ deviceId, harness }: { deviceId: string; harness: string }) {
   return <AccountLimits rows={useAccountLimits(deviceId, harness)} />
@@ -50,7 +56,7 @@ function Ring({ percent }: { percent: number | null }) {
 /**
  * 上下文占用：一个小圆环加百分比，快满的时候换成提醒的颜色。
  * 给了 compact 的话它是个按钮，点开能手动压缩上下文；这时对面没报过占用也显示（一个空的圆环）。
- * 有账号额度入口时，即使还没报告上下文或不支持压缩，也能打开弹层查看额度。
+ * 有订阅额度的 harness（QUOTA_HARNESSES）即使还没报告上下文或不支持压缩，也能打开弹层查看额度。
  * 给了 limits（会话在哪台设备、哪个 harness 上）时，弹层里另有一段账号额度，没有额度时不出。
  */
 export function ContextMeter({
@@ -67,7 +73,8 @@ export function ContextMeter({
   const percent = usage?.windowTokens
     ? Math.min(100, Math.round((usage.usedTokens / usage.windowTokens) * 100))
     : null
-  if (percent === null && !compact && !limits) return null
+  const quota = limits && QUOTA_HARNESSES.has(limits.harness)
+  if (percent === null && !compact && !quota) return null
   const level = percent === null ? '' : percent >= 90 ? ' full' : percent >= 70 ? ' high' : ''
   const label =
     percent === null || !usage?.windowTokens
@@ -77,7 +84,7 @@ export function ContextMeter({
           used: shortTokens(usage.usedTokens),
           window: shortTokens(usage.windowTokens),
         })
-  if (!compact && !limits) {
+  if (!compact && !quota) {
     return (
       <span className={`ctx${level}`} role="img" title={label} aria-label={label}>
         <Ring percent={percent} />
